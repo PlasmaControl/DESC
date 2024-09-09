@@ -727,28 +727,29 @@ def _unchunk(x):
 
 
 @_treeify
-def _chunk(x, chunk_size=None):
-    # chunk_size=None -> add just a dummy chunk dimension, same as np.expand_dims(x, 0)
+def _chunk(x, jac_chunk_size=None):
+    # jac_chunk_size=None -> add just a dummy chunk dimension,
+    #  same as np.expand_dims(x, 0)
     if x.ndim == 0:
         raise ValueError("x cannot be chunked as it has 0 dimensions.")
     n = x.shape[0]
-    if chunk_size is None:
-        chunk_size = n
+    if jac_chunk_size is None:
+        jac_chunk_size = n
 
-    n_chunks, residual = divmod(n, chunk_size)
+    n_chunks, residual = divmod(n, jac_chunk_size)
     if residual != 0:
         raise ValueError(
-            "The first dimension of x must be divisible by chunk_size."
-            + f"\n            Got x.shape={x.shape} but chunk_size={chunk_size}."
+            "The first dimension of x must be divisible by jac_chunk_size."
+            + f"\n        Got x.shape={x.shape} but jac_chunk_size={jac_chunk_size}."
         )
-    return x.reshape((n_chunks, chunk_size) + x.shape[1:])
+    return x.reshape((n_chunks, jac_chunk_size) + x.shape[1:])
 
 
-def _chunk_size(x):
+def _jac_chunk_size(x):
     b = set(map(lambda x: x.shape[:2], jax.tree_util.tree_leaves(x)))
     if len(b) != 1:
         raise ValueError(
-            "The arrays in x have inconsistent chunk_size or number of chunks"
+            "The arrays in x have inconsistent jac_chunk_size or number of chunks"
         )
     return b.pop()[1]
 
@@ -768,27 +769,27 @@ def unchunk(x_chunked):
 
     """
     return _unchunk(x_chunked), functools.partial(
-        _chunk, chunk_size=_chunk_size(x_chunked)
+        _chunk, jac_chunk_size=_jac_chunk_size(x_chunked)
     )
 
 
-def chunk(x, chunk_size=None):
+def chunk(x, jac_chunk_size=None):
     """Split an array (or a pytree of arrays) into chunks along the first axis.
 
     Parameters
     ----------
         x: an array (or pytree of arrays)
-        chunk_size: an integer or None (default)
-            The first axis in x must be a multiple of chunk_size
+        jac_chunk_size: an integer or None (default)
+            The first axis in x must be a multiple of jac_chunk_size
 
     Returns
     -------
     (x_chunked, unchunk_fn): tuple
-        - x_chunked is x reshaped to (-1, chunk_size)+x.shape[1:]
-          if chunk_size is None then it defaults to x.shape[0], i.e. just one chunk
+        - x_chunked is x reshaped to (-1, jac_chunk_size)+x.shape[1:]
+          if jac_chunk_size is None then it defaults to x.shape[0], i.e. just one chunk
         - unchunk_fn is a function which restores x given x_chunked
     """
-    return _chunk(x, chunk_size), _unchunk
+    return _chunk(x, jac_chunk_size), _unchunk
 
 
 ####
@@ -947,11 +948,11 @@ def _scanmap(fun, scan_fun, argnums=0):
 # Licensed under the Apache License, Version 2.0 (the "License");
 
 
-def _eval_fun_in_chunks(vmapped_fun, chunk_size, argnums, *args, **kwargs):
+def _eval_fun_in_chunks(vmapped_fun, jac_chunk_size, argnums, *args, **kwargs):
     n_elements = jax.tree_util.tree_leaves(args[argnums[0]])[0].shape[0]
-    n_chunks, n_rest = divmod(n_elements, chunk_size)
+    n_chunks, n_rest = divmod(n_elements, jac_chunk_size)
 
-    if n_chunks == 0 or chunk_size >= n_elements:
+    if n_chunks == 0 or jac_chunk_size >= n_elements:
         y = vmapped_fun(*args, **kwargs)
     else:
         # split inputs
@@ -959,7 +960,7 @@ def _eval_fun_in_chunks(vmapped_fun, chunk_size, argnums, *args, **kwargs):
             x_chunks = jax.tree_util.tree_map(
                 lambda x_: x_[: n_elements - n_rest, ...], x
             )
-            x_chunks = _chunk(x_chunks, chunk_size)
+            x_chunks = _chunk(x_chunks, jac_chunk_size)
             return x_chunks
 
         def _get_rest(x):
@@ -989,16 +990,16 @@ def _eval_fun_in_chunks(vmapped_fun, chunk_size, argnums, *args, **kwargs):
 
 def _chunk_vmapped_function(
     vmapped_fun: Callable,
-    chunk_size: Optional[int],
+    jac_chunk_size: Optional[int],
     argnums=0,
 ) -> Callable:
     """Takes a vmapped function and computes it in chunks."""
-    if chunk_size is None:
+    if jac_chunk_size is None:
         return vmapped_fun
 
     if isinstance(argnums, int):
         argnums = (argnums,)
-    return functools.partial(_eval_fun_in_chunks, vmapped_fun, chunk_size, argnums)
+    return functools.partial(_eval_fun_in_chunks, vmapped_fun, jac_chunk_size, argnums)
 
 
 def _parse_in_axes(in_axes):
@@ -1018,7 +1019,7 @@ def apply_chunked(
     f: Callable,
     in_axes=0,
     *,
-    chunk_size: Optional[int],
+    jac_chunk_size: Optional[int],
 ) -> Callable:
     """Compute f in smaller chunks over axis 0.
 
@@ -1045,14 +1046,14 @@ def apply_chunked(
     ----------
         f: A function that satisfies the condition above
         in_axes: The axes that should be scanned along. Only supports `0` or `None`
-        chunk_size: The maximum size of the chunks to be used. If it is `None`,
+        jac_chunk_size: The maximum size of the chunks to be used. If it is `None`,
            chunking is disabled
 
     """
     _, argnums = _parse_in_axes(in_axes)
     return _chunk_vmapped_function(
         f,
-        chunk_size,
+        jac_chunk_size,
         argnums,
     )
 
@@ -1061,7 +1062,7 @@ def vmap_chunked(
     f: Callable,
     in_axes=0,
     *,
-    chunk_size: Optional[int],
+    jac_chunk_size: Optional[int],
 ) -> Callable:
     """Behaves like jax.vmap but uses scan to chunk the computations in smaller chunks.
 
@@ -1069,7 +1070,7 @@ def vmap_chunked(
 
     .. code-block:: python
 
-        nk.jax.apply_chunked(jax.vmap(f, in_axes), in_axes, chunk_size)
+        nk.jax.apply_chunked(jax.vmap(f, in_axes), in_axes, jac_chunk_size)
 
     Some limitations to `in_axes` apply.
 
@@ -1077,7 +1078,7 @@ def vmap_chunked(
     ----------
         f: The function to be vectorised.
         in_axes: The axes that should be scanned along. Only supports `0` or `None`
-        chunk_size: The maximum size of the chunks to be used. If it is `None`,
+        jac_chunk_size: The maximum size of the chunks to be used. If it is `None`,
             chunking is disabled
 
 
@@ -1087,10 +1088,12 @@ def vmap_chunked(
     """
     in_axes, argnums = _parse_in_axes(in_axes)
     vmapped_fun = jax.vmap(f, in_axes=in_axes)
-    return _chunk_vmapped_function(vmapped_fun, chunk_size, argnums)
+    return _chunk_vmapped_function(vmapped_fun, jac_chunk_size, argnums)
 
 
-def batched_vectorize(pyfunc, *, excluded=frozenset(), signature=None, chunk_size=None):
+def batched_vectorize(
+    pyfunc, *, excluded=frozenset(), signature=None, jac_chunk_size=None
+):
     """Define a vectorized function with broadcasting and batching.
 
     below is taken from JAX
@@ -1120,7 +1123,7 @@ def batched_vectorize(pyfunc, *, excluded=frozenset(), signature=None, chunk_siz
         provided, ``pyfunc`` will be called with (and expected to return) arrays
         with shapes given by the size of corresponding core dimensions. By
         default, pyfunc is assumed to take scalars arrays as input and output.
-        chunk_size: the size of the batches to pass to vmap. if 1, will only
+        jac_chunk_size: the size of the batches to pass to vmap. if 1, will only
 
     Returns
     -------
@@ -1202,7 +1205,7 @@ def batched_vectorize(pyfunc, *, excluded=frozenset(), signature=None, chunk_siz
             else:
                 # change the vmap here to chunked_vmap
                 vectorized_func = vmap_chunked(
-                    vectorized_func, in_axes, chunk_size=chunk_size
+                    vectorized_func, in_axes, jac_chunk_size=jac_chunk_size
                 )
         result = vectorized_func(*squeezed_args)
 

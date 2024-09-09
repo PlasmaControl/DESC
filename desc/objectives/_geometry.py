@@ -53,18 +53,18 @@ class AspectRatio(_Objective):
         or ``LinearGrid(M=2*eq.M, N=2*eq.N)`` for ``FourierRZToroidalSurface``.
     name : str, optional
         Name of the objective function.
-    chunk_size : int, optional
-        If `"blocked"` deriv_mode is used in the ObjectiveFunction, will
-        calculate the Jacobian for this objective ``chunk_size`` columns at a time,
-        instead of all at once.  The memory usage of the Jacobian calculation is
-        linearly proportional to ``chunk_size``: the smaller the ``chunk_size``, the
-        less memory the Jacobian calculation will require (with some baseline memory
-        usage). The time to compute the Jacobian is roughly ``t ~1/chunk_size``
-        with some baseline time, so the larger the ``chunk_size``, the faster the
-        calculation takes, at the cost of requiring more memory. A ``chunk_size``
-        of 1 corresponds to the least memory intensive,  but slowest method of
-        calculating the Jacobian.
-        If None, it will default to the largest possible `chunk_size` i.e. ``dim_x``
+    jac_chunk_size : int, optional
+        Will calculate the Jacobian for this objective ``jac_chunk_size``
+        columns at a time, instead of all at once.  The memory usage of the
+        Jacobian calculation is roughly ``memory usage = m0 + m1*jac_chunk_size``:
+        the higher the chunk size, the less memory the Jacobian calculation
+        will require (with some baseline memory usage). The time to compute the
+        Jacobian is roughly ``t=t0 +t1/jac_chunk_size``, so the larger the
+        ``jac_chunk_size``, the faster the calculation takes, at the cost of
+        requiring more memory. A ``jac_chunk_size`` of 1 corresponds to the least
+        memory intensive,  but slowest method of calculating the Jacobian.
+        If None, it will default to the largest possible
+        `jac_chunk_size` i.e. ``np.ceil(dim_x/4)``
 
 
     """
@@ -85,7 +85,7 @@ class AspectRatio(_Objective):
         deriv_mode="auto",
         grid=None,
         name="aspect ratio",
-        chunk_size=None,
+        jac_chunk_size=None,
     ):
         if target is None and bounds is None:
             target = 2
@@ -100,7 +100,7 @@ class AspectRatio(_Objective):
             loss_function=loss_function,
             deriv_mode=deriv_mode,
             name=name,
-            chunk_size=chunk_size,
+            jac_chunk_size=jac_chunk_size,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -230,18 +230,18 @@ class Elongation(_Objective):
         or ``LinearGrid(M=2*eq.M, N=2*eq.N)`` for ``FourierRZToroidalSurface``.
     name : str, optional
         Name of the objective function.
-    chunk_size : int, optional
-        If `"blocked"` deriv_mode is used in the ObjectiveFunction, will
-        calculate the Jacobian for this objective ``chunk_size`` columns at a time,
-        instead of all at once.  The memory usage of the Jacobian calculation is
-        linearly proportional to ``chunk_size``: the smaller the ``chunk_size``, the
-        less memory the Jacobian calculation will require (with some baseline memory
-        usage). The time to compute the Jacobian is roughly ``t ~1/chunk_size``
-        with some baseline time, so the larger the ``chunk_size``, the faster the
-        calculation takes, at the cost of requiring more memory. A ``chunk_size``
-        of 1 corresponds to the least memory intensive,  but slowest method of
-        calculating the Jacobian.
-        If None, it will default to the largest possible `chunk_size` i.e. ``dim_x``
+    jac_chunk_size : int, optional
+        Will calculate the Jacobian for this objective ``jac_chunk_size``
+        columns at a time, instead of all at once.  The memory usage of the
+        Jacobian calculation is roughly ``memory usage = m0 + m1*jac_chunk_size``:
+        the higher the chunk size, the less memory the Jacobian calculation
+        will require (with some baseline memory usage). The time to compute the
+        Jacobian is roughly ``t=t0 +t1/jac_chunk_size``, so the larger the
+        ``jac_chunk_size``, the faster the calculation takes, at the cost of
+        requiring more memory. A ``jac_chunk_size`` of 1 corresponds to the least
+        memory intensive,  but slowest method of calculating the Jacobian.
+        If None, it will default to the largest possible
+        `jac_chunk_size` i.e. ``np.ceil(dim_x/4)``
 
 
     """
@@ -262,7 +262,7 @@ class Elongation(_Objective):
         deriv_mode="auto",
         grid=None,
         name="elongation",
-        chunk_size=None,
+        jac_chunk_size=None,
     ):
         if target is None and bounds is None:
             target = 1
@@ -277,7 +277,7 @@ class Elongation(_Objective):
             loss_function=loss_function,
             deriv_mode=deriv_mode,
             name=name,
-            chunk_size=chunk_size,
+            jac_chunk_size=jac_chunk_size,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -406,18 +406,18 @@ class Volume(_Objective):
         or ``LinearGrid(M=2*eq.M, N=2*eq.N)`` for ``FourierRZToroidalSurface``.
     name : str, optional
         Name of the objective function.
-    chunk_size : int, optional
-        If `"blocked"` deriv_mode is used in the ObjectiveFunction, will
-        calculate the Jacobian for this objective ``chunk_size`` columns at a time,
-        instead of all at once.  The memory usage of the Jacobian calculation is
-        linearly proportional to ``chunk_size``: the smaller the ``chunk_size``, the
-        less memory the Jacobian calculation will require (with some baseline memory
-        usage). The time to compute the Jacobian is roughly ``t ~1/chunk_size``
-        with some baseline time, so the larger the ``chunk_size``, the faster the
-        calculation takes, at the cost of requiring more memory. A ``chunk_size``
-        of 1 corresponds to the least memory intensive,  but slowest method of
-        calculating the Jacobian.
-        If None, it will default to the largest possible `chunk_size` i.e. ``dim_x``
+    jac_chunk_size : int, optional
+        Will calculate the Jacobian for this objective ``jac_chunk_size``
+        columns at a time, instead of all at once.  The memory usage of the
+        Jacobian calculation is roughly ``memory usage = m0 + m1*jac_chunk_size``:
+        the higher the chunk size, the less memory the Jacobian calculation
+        will require (with some baseline memory usage). The time to compute the
+        Jacobian is roughly ``t=t0 +t1/jac_chunk_size``, so the larger the
+        ``jac_chunk_size``, the faster the calculation takes, at the cost of
+        requiring more memory. A ``jac_chunk_size`` of 1 corresponds to the least
+        memory intensive,  but slowest method of calculating the Jacobian.
+        If None, it will default to the largest possible
+        `jac_chunk_size` i.e. ``np.ceil(dim_x/4)``
 
 
     """
@@ -438,7 +438,7 @@ class Volume(_Objective):
         deriv_mode="auto",
         grid=None,
         name="volume",
-        chunk_size=None,
+        jac_chunk_size=None,
     ):
         if target is None and bounds is None:
             target = 1
@@ -453,7 +453,7 @@ class Volume(_Objective):
             loss_function=loss_function,
             deriv_mode=deriv_mode,
             name=name,
-            chunk_size=chunk_size,
+            jac_chunk_size=jac_chunk_size,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -631,18 +631,18 @@ class PlasmaVesselDistance(_Objective):
         more accurate approximation of the true min.
     name : str, optional
         Name of the objective function.
-    chunk_size : int, optional
-        If `"blocked"` deriv_mode is used in the ObjectiveFunction, will
-        calculate the Jacobian for this objective ``chunk_size`` columns at a time,
-        instead of all at once.  The memory usage of the Jacobian calculation is
-        linearly proportional to ``chunk_size``: the smaller the ``chunk_size``, the
-        less memory the Jacobian calculation will require (with some baseline memory
-        usage). The time to compute the Jacobian is roughly ``t ~1/chunk_size``
-        with some baseline time, so the larger the ``chunk_size``, the faster the
-        calculation takes, at the cost of requiring more memory. A ``chunk_size``
-        of 1 corresponds to the least memory intensive,  but slowest method of
-        calculating the Jacobian.
-        If None, it will default to the largest possible `chunk_size` i.e. ``dim_x``
+    jac_chunk_size : int, optional
+        Will calculate the Jacobian for this objective ``jac_chunk_size``
+        columns at a time, instead of all at once.  The memory usage of the
+        Jacobian calculation is roughly ``memory usage = m0 + m1*jac_chunk_size``:
+        the higher the chunk size, the less memory the Jacobian calculation
+        will require (with some baseline memory usage). The time to compute the
+        Jacobian is roughly ``t=t0 +t1/jac_chunk_size``, so the larger the
+        ``jac_chunk_size``, the faster the calculation takes, at the cost of
+        requiring more memory. A ``jac_chunk_size`` of 1 corresponds to the least
+        memory intensive,  but slowest method of calculating the Jacobian.
+        If None, it will default to the largest possible
+        `jac_chunk_size` i.e. ``np.ceil(dim_x/4)``
 
     """
 
@@ -669,7 +669,7 @@ class PlasmaVesselDistance(_Objective):
         softmin_alpha=1.0,
         name="plasma-vessel distance",
         use_signed_distance=False,
-        chunk_size=None,
+        jac_chunk_size=None,
         **kwargs,
     ):
         if target is None and bounds is None:
@@ -709,7 +709,7 @@ class PlasmaVesselDistance(_Objective):
             loss_function=loss_function,
             deriv_mode=deriv_mode,
             name=name,
-            chunk_size=chunk_size,
+            jac_chunk_size=jac_chunk_size,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -984,18 +984,18 @@ class MeanCurvature(_Objective):
         or ``LinearGrid(M=2*eq.M, N=2*eq.N)`` for ``FourierRZToroidalSurface``.
     name : str, optional
         Name of the objective function.
-    chunk_size : int, optional
-        If `"blocked"` deriv_mode is used in the ObjectiveFunction, will
-        calculate the Jacobian for this objective ``chunk_size`` columns at a time,
-        instead of all at once.  The memory usage of the Jacobian calculation is
-        linearly proportional to ``chunk_size``: the smaller the ``chunk_size``, the
-        less memory the Jacobian calculation will require (with some baseline memory
-        usage). The time to compute the Jacobian is roughly ``t ~1/chunk_size``
-        with some baseline time, so the larger the ``chunk_size``, the faster the
-        calculation takes, at the cost of requiring more memory. A ``chunk_size``
-        of 1 corresponds to the least memory intensive,  but slowest method of
-        calculating the Jacobian.
-        If None, it will default to the largest possible `chunk_size` i.e. ``dim_x``
+    jac_chunk_size : int, optional
+        Will calculate the Jacobian for this objective ``jac_chunk_size``
+        columns at a time, instead of all at once.  The memory usage of the
+        Jacobian calculation is roughly ``memory usage = m0 + m1*jac_chunk_size``:
+        the higher the chunk size, the less memory the Jacobian calculation
+        will require (with some baseline memory usage). The time to compute the
+        Jacobian is roughly ``t=t0 +t1/jac_chunk_size``, so the larger the
+        ``jac_chunk_size``, the faster the calculation takes, at the cost of
+        requiring more memory. A ``jac_chunk_size`` of 1 corresponds to the least
+        memory intensive,  but slowest method of calculating the Jacobian.
+        If None, it will default to the largest possible
+        `jac_chunk_size` i.e. ``np.ceil(dim_x/4)``
 
 
     """
@@ -1016,7 +1016,7 @@ class MeanCurvature(_Objective):
         deriv_mode="auto",
         grid=None,
         name="mean curvature",
-        chunk_size=None,
+        jac_chunk_size=None,
     ):
         if target is None and bounds is None:
             bounds = (-np.inf, 0)
@@ -1031,7 +1031,7 @@ class MeanCurvature(_Objective):
             loss_function=loss_function,
             deriv_mode=deriv_mode,
             name=name,
-            chunk_size=chunk_size,
+            jac_chunk_size=jac_chunk_size,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -1159,18 +1159,18 @@ class PrincipalCurvature(_Objective):
         or ``LinearGrid(M=2*eq.M, N=2*eq.N)`` for ``FourierRZToroidalSurface``.
     name : str, optional
         Name of the objective function.
-    chunk_size : int, optional
-        If `"blocked"` deriv_mode is used in the ObjectiveFunction, will
-        calculate the Jacobian for this objective ``chunk_size`` columns at a time,
-        instead of all at once.  The memory usage of the Jacobian calculation is
-        linearly proportional to ``chunk_size``: the smaller the ``chunk_size``, the
-        less memory the Jacobian calculation will require (with some baseline memory
-        usage). The time to compute the Jacobian is roughly ``t ~1/chunk_size``
-        with some baseline time, so the larger the ``chunk_size``, the faster the
-        calculation takes, at the cost of requiring more memory. A ``chunk_size``
-        of 1 corresponds to the least memory intensive,  but slowest method of
-        calculating the Jacobian.
-        If None, it will default to the largest possible `chunk_size` i.e. ``dim_x``
+    jac_chunk_size : int, optional
+        Will calculate the Jacobian for this objective ``jac_chunk_size``
+        columns at a time, instead of all at once.  The memory usage of the
+        Jacobian calculation is roughly ``memory usage = m0 + m1*jac_chunk_size``:
+        the higher the chunk size, the less memory the Jacobian calculation
+        will require (with some baseline memory usage). The time to compute the
+        Jacobian is roughly ``t=t0 +t1/jac_chunk_size``, so the larger the
+        ``jac_chunk_size``, the faster the calculation takes, at the cost of
+        requiring more memory. A ``jac_chunk_size`` of 1 corresponds to the least
+        memory intensive,  but slowest method of calculating the Jacobian.
+        If None, it will default to the largest possible
+        `jac_chunk_size` i.e. ``np.ceil(dim_x/4)``
 
 
     """
@@ -1191,7 +1191,7 @@ class PrincipalCurvature(_Objective):
         deriv_mode="auto",
         grid=None,
         name="principal-curvature",
-        chunk_size=None,
+        jac_chunk_size=None,
     ):
         if target is None and bounds is None:
             target = 1
@@ -1206,7 +1206,7 @@ class PrincipalCurvature(_Objective):
             loss_function=loss_function,
             deriv_mode=deriv_mode,
             name=name,
-            chunk_size=chunk_size,
+            jac_chunk_size=jac_chunk_size,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -1329,18 +1329,18 @@ class BScaleLength(_Objective):
         ``LinearGrid(M=eq.M_grid, N=eq.N_grid)``.
     name : str, optional
         Name of the objective function.
-    chunk_size : int, optional
-        If `"blocked"` deriv_mode is used in the ObjectiveFunction, will
-        calculate the Jacobian for this objective ``chunk_size`` columns at a time,
-        instead of all at once.  The memory usage of the Jacobian calculation is
-        linearly proportional to ``chunk_size``: the smaller the ``chunk_size``, the
-        less memory the Jacobian calculation will require (with some baseline memory
-        usage). The time to compute the Jacobian is roughly ``t ~1/chunk_size``
-        with some baseline time, so the larger the ``chunk_size``, the faster the
-        calculation takes, at the cost of requiring more memory. A ``chunk_size``
-        of 1 corresponds to the least memory intensive,  but slowest method of
-        calculating the Jacobian.
-        If None, it will default to the largest possible `chunk_size` i.e. ``dim_x``
+    jac_chunk_size : int, optional
+        Will calculate the Jacobian for this objective ``jac_chunk_size``
+        columns at a time, instead of all at once.  The memory usage of the
+        Jacobian calculation is roughly ``memory usage = m0 + m1*jac_chunk_size``:
+        the higher the chunk size, the less memory the Jacobian calculation
+        will require (with some baseline memory usage). The time to compute the
+        Jacobian is roughly ``t=t0 +t1/jac_chunk_size``, so the larger the
+        ``jac_chunk_size``, the faster the calculation takes, at the cost of
+        requiring more memory. A ``jac_chunk_size`` of 1 corresponds to the least
+        memory intensive,  but slowest method of calculating the Jacobian.
+        If None, it will default to the largest possible
+        `jac_chunk_size` i.e. ``np.ceil(dim_x/4)``
 
 
     """
@@ -1361,7 +1361,7 @@ class BScaleLength(_Objective):
         deriv_mode="auto",
         grid=None,
         name="B-scale-length",
-        chunk_size=None,
+        jac_chunk_size=None,
     ):
         if target is None and bounds is None:
             bounds = (1, np.inf)
@@ -1376,7 +1376,7 @@ class BScaleLength(_Objective):
             loss_function=loss_function,
             deriv_mode=deriv_mode,
             name=name,
-            chunk_size=chunk_size,
+            jac_chunk_size=jac_chunk_size,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -1495,18 +1495,18 @@ class GoodCoordinates(_Objective):
         Collocation grid containing the nodes to evaluate at.
     name : str, optional
         Name of the objective function.
-    chunk_size : int, optional
-        If `"blocked"` deriv_mode is used in the ObjectiveFunction, will
-        calculate the Jacobian for this objective ``chunk_size`` columns at a time,
-        instead of all at once.  The memory usage of the Jacobian calculation is
-        linearly proportional to ``chunk_size``: the smaller the ``chunk_size``, the
-        less memory the Jacobian calculation will require (with some baseline memory
-        usage). The time to compute the Jacobian is roughly ``t ~1/chunk_size``
-        with some baseline time, so the larger the ``chunk_size``, the faster the
-        calculation takes, at the cost of requiring more memory. A ``chunk_size``
-        of 1 corresponds to the least memory intensive,  but slowest method of
-        calculating the Jacobian.
-        If None, it will default to the largest possible `chunk_size` i.e. ``dim_x``
+    jac_chunk_size : int, optional
+        Will calculate the Jacobian for this objective ``jac_chunk_size``
+        columns at a time, instead of all at once.  The memory usage of the
+        Jacobian calculation is roughly ``memory usage = m0 + m1*jac_chunk_size``:
+        the higher the chunk size, the less memory the Jacobian calculation
+        will require (with some baseline memory usage). The time to compute the
+        Jacobian is roughly ``t=t0 +t1/jac_chunk_size``, so the larger the
+        ``jac_chunk_size``, the faster the calculation takes, at the cost of
+        requiring more memory. A ``jac_chunk_size`` of 1 corresponds to the least
+        memory intensive,  but slowest method of calculating the Jacobian.
+        If None, it will default to the largest possible
+        `jac_chunk_size` i.e. ``np.ceil(dim_x/4)``
 
 
     """
@@ -1528,7 +1528,7 @@ class GoodCoordinates(_Objective):
         deriv_mode="auto",
         grid=None,
         name="coordinate goodness",
-        chunk_size=None,
+        jac_chunk_size=None,
     ):
         if target is None and bounds is None:
             target = 0
@@ -1544,7 +1544,7 @@ class GoodCoordinates(_Objective):
             loss_function=loss_function,
             deriv_mode=deriv_mode,
             name=name,
-            chunk_size=chunk_size,
+            jac_chunk_size=jac_chunk_size,
         )
 
     def build(self, use_jit=True, verbose=1):

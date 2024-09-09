@@ -1284,7 +1284,7 @@ def test_derivative_modes():
     surf = FourierRZToroidalSurface()
     obj1 = ObjectiveFunction(
         [
-            PlasmaVesselDistance(eq, surf, chunk_size=1),
+            PlasmaVesselDistance(eq, surf, jac_chunk_size=1),
             MagneticWell(eq),
         ],
         deriv_mode="batched",
@@ -1292,11 +1292,11 @@ def test_derivative_modes():
     )
     obj2 = ObjectiveFunction(
         [
-            PlasmaVesselDistance(eq, surf, chunk_size=2),
+            PlasmaVesselDistance(eq, surf, jac_chunk_size=2),
             MagneticWell(eq),
         ],
         deriv_mode="blocked",
-        chunk_size=10,
+        jac_chunk_size=10,
         use_jit=False,
     )
     obj3 = ObjectiveFunction(
@@ -1307,12 +1307,12 @@ def test_derivative_modes():
         deriv_mode="looped",
         use_jit=False,
     )
-    with pytest.warns(UserWarning, match="chunk_size"):
+    with pytest.warns(UserWarning, match="jac_chunk_size"):
         obj1.build()
-    with pytest.warns(UserWarning, match="chunk_size"):
+    with pytest.warns(UserWarning, match="jac_chunk_size"):
         obj2.build()
     # check that default size works for blocked
-    assert obj2.objectives[1].chunk_size == np.ceil(
+    assert obj2.objectives[1].jac_chunk_size == np.ceil(
         sum(t.dim_x for t in obj2.objectives[1].things) / 4
     )
     obj3.build()

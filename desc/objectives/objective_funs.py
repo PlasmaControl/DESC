@@ -34,26 +34,26 @@ class ObjectiveFunction(IOAble):
     deriv_mode : {"auto", "batched", "blocked", "looped"}
         Method for computing Jacobian matrices. "batched" uses forward mode, applied to
         the entire objective at once, and is generally the fastest for vector valued
-        objectives, though most memory intensive. "blocked" builds the Jacobian for each
-        objective separately, using each objective's preferred AD mode (and
-        each objective's `chunk_size`). Generally the most efficient option when mixing
-        scalar and vector valued objectives. "looped" uses forward mode jacobian vector
-        products in a loop to build the Jacobian column by column. Generally the
+        objectives, though most memory intensive. "blocked" builds the Jacobian for
+        each objective separately, using each objective's preferred AD mode (and
+        each objective's `jac_chunk_size`). Generally the most efficient option when
+        mixing scalar and vector valued objectives. "looped" uses forward mode jacobian
+        vector products in a loop to build the Jacobian column by column. Generally the
         slowest, but most memory efficient.
         "auto" defaults to "batched" if all sub-objectives are set to "fwd",
         otherwise "blocked".
     name : str
         Name of the objective function.
-    chunk_size : int, optional
+    jac_chunk_size : int, optional
         If `"batched"` deriv_mode is used, will calculate the Jacobian
-        ``chunk_size`` columns at a time, instead of all at once. A
-        ``chunk_size`` of 1 is equivalent to using `"looped"` deriv_mode.
-        The memory usage of the Jacobian calculation is linearly proportional to
-        ``chunk_size``: the smaller the ``chunk_size``, the less memory the Jacobian
-        calculation will require (with some baseline memory usage). The time it takes
-        to compute the Jacobian is roughly ``t ~1/chunk_size` with some baseline time,
-        so the larger the ``chunk_size``, the faster the calculation takes, at the cost
-        of requiring more memory.
+        ``jac_chunk_size`` columns at a time, instead of all at once. A
+        ``jac_chunk_size`` of 1 is equivalent to using `"looped"` deriv_mode.
+        The memory usage of the Jacobian calculation is roughly
+        ``memory usage = m0 + m1*jac_chunk_size``: the higher the chunk size,
+        the less memory the Jacobian calculation will require (with some baseline
+        memory usage). The time it takes to compute the Jacobian is roughly
+        ``t= t0 + t1/jac_chunk_size` so the larger the ``jac_chunk_size``, the faster
+        the calculation takes, at the cost of requiring more memory.
         If None, it will default to ``np.ceil(dim_x/4)``
 
     """
@@ -66,7 +66,7 @@ class ObjectiveFunction(IOAble):
         use_jit=True,
         deriv_mode="auto",
         name="ObjectiveFunction",
-        chunk_size=None,
+        jac_chunk_size=None,
     ):
         if not isinstance(objectives, (tuple, list)):
             objectives = (objectives,)
@@ -76,8 +76,7 @@ class ObjectiveFunction(IOAble):
         assert use_jit in {True, False}
         assert deriv_mode in {"auto", "batched", "looped", "blocked"}
 
-        self.chunk_size = chunk_size
-
+        self._jac_chunk_size = jac_chunk_size
         self._objectives = objectives
         self._use_jit = use_jit
         self._deriv_mode = deriv_mode
@@ -151,43 +150,43 @@ class ObjectiveFunction(IOAble):
             self._scalar = False
 
         self._set_derivatives()
-        sub_obj_chunk_sizes = [obj.chunk_size for obj in self.objectives]
+        sub_obj_jac_chunk_sizes = [obj._jac_chunk_size for obj in self.objectives]
         warnif(
-            np.any(sub_obj_chunk_sizes) and self._deriv_mode != "blocked",
+            np.any(sub_obj_jac_chunk_sizes) and self._deriv_mode != "blocked",
             UserWarning,
-            "'chunk_size' was passed into one or more sub-objectives, but the"
+            "'jac_chunk_size' was passed into one or more sub-objectives, but the"
             "ObjectiveFunction is  using 'batched' deriv_mode, so sub-objective "
-            "'chunk_size' will be ignored in favor of the ObjectiveFunction's "
-            f"'chunk_size' of {self.chunk_size}."
+            "'jac_chunk_size' will be ignored in favor of the ObjectiveFunction's "
+            f"'jac_chunk_size' of {self._jac_chunk_size}."
             " Specify 'blocked' deriv_mode if each sub-objective is desired to have a "
-            "different 'chunk_size' for its Jacobian computation.",
+            "different 'jac_chunk_size' for its Jacobian computation.",
         )
         warnif(
-            self.chunk_size is not None and self._deriv_mode == "blocked",
+            self._jac_chunk_size is not None and self._deriv_mode == "blocked",
             UserWarning,
-            "'chunk_size' was passed into ObjectiveFunction, but the"
+            "'jac_chunk_size' was passed into ObjectiveFunction, but the"
             "ObjectiveFunction is using 'blocked' deriv_mode, so sub-objective "
-            "'chunk_size' are used to compute each sub-objective's Jacobian, "
-            "`ignoring the ObjectiveFunction's 'chunk_size'.",
+            "'jac_chunk_size' are used to compute each sub-objective's Jacobian, "
+            "`ignoring the ObjectiveFunction's 'jac_chunk_size'.",
         )
 
         if not self.use_jit:
             self._unjit()
 
         self._set_things()
-        if self.chunk_size is None and self._deriv_mode == "batched":
-            # set chunk_size to 1/4 of number columns of Jacobian
+        if self._jac_chunk_size is None and self._deriv_mode == "batched":
+            # set jac_chunk_size to 1/4 of number columns of Jacobian
             # as the default for batched deriv_mode
-            self.chunk_size = int(np.ceil(self.dim_x / 4))
+            self._jac_chunk_size = int(np.ceil(self.dim_x / 4))
         if self._deriv_mode == "blocked":
-            # set chunk_size for each sub-objective
+            # set jac_chunk_size for each sub-objective
             # to 1/4 of number columns of Jacobian
             # as the default for batched deriv_mode
             for obj in self.objectives:
-                obj.chunk_size = (
+                obj._jac_chunk_size = (
                     int(np.ceil(sum(t.dim_x for t in obj.things) / 4))
-                    if obj.chunk_size is None
-                    else obj.chunk_size
+                    if obj._jac_chunk_size is None
+                    else obj._jac_chunk_size
                 )
 
         self._built = True
@@ -558,19 +557,21 @@ class ObjectiveFunction(IOAble):
         if len(v) == 1:
             jvpfun = lambda dx: Derivative.compute_jvp(fun, 0, dx, x)
             return batched_vectorize(
-                jvpfun, signature="(n)->(k)", chunk_size=self.chunk_size
+                jvpfun, signature="(n)->(k)", jac_chunk_size=self._jac_chunk_size
             )(v[0])
         elif len(v) == 2:
             jvpfun = lambda dx1, dx2: Derivative.compute_jvp2(fun, 0, 0, dx1, dx2, x)
             return batched_vectorize(
-                jvpfun, signature="(n),(n)->(k)", chunk_size=self.chunk_size
+                jvpfun, signature="(n),(n)->(k)", jac_chunk_size=self._jac_chunk_size
             )(v[0], v[1])
         elif len(v) == 3:
             jvpfun = lambda dx1, dx2, dx3: Derivative.compute_jvp3(
                 fun, 0, 0, 0, dx1, dx2, dx3, x
             )
             return batched_vectorize(
-                jvpfun, signature="(n),(n),(n)->(k)", chunk_size=self.chunk_size
+                jvpfun,
+                signature="(n),(n),(n)->(k)",
+                jac_chunk_size=self._jac_chunk_size,
             )(v[0], v[1], v[2])
         else:
             raise NotImplementedError("Cannot compute JVP higher than 3rd order.")
@@ -908,7 +909,7 @@ class _Objective(IOAble, ABC):
         loss_function=None,
         deriv_mode="auto",
         name=None,
-        chunk_size=None,
+        jac_chunk_size=None,
     ):
         if self._scalar:
             assert self._coordinates == ""
@@ -919,7 +920,7 @@ class _Objective(IOAble, ABC):
         assert (bounds is None) or (target is None), "Cannot use both bounds and target"
         assert loss_function in [None, "mean", "min", "max"]
         assert deriv_mode in {"auto", "fwd", "rev"}
-        self.chunk_size = chunk_size
+        self._jac_chunk_size = jac_chunk_size
 
         self._target = target
         self._bounds = bounds
@@ -1160,7 +1161,9 @@ class _Objective(IOAble, ABC):
         fun = lambda *x: getattr(self, op)(*x, constants=constants)
         jvpfun = lambda *dx: Derivative.compute_jvp(fun, tuple(range(len(x))), dx, *x)
         sig = ",".join(f"(n{i})" for i in range(len(x))) + "->(k)"
-        return batched_vectorize(jvpfun, signature=sig, chunk_size=self.chunk_size)(*v)
+        return batched_vectorize(
+            jvpfun, signature=sig, jac_chunk_size=self._jac_chunk_size
+        )(*v)
 
     @jit
     def jvp_scaled(self, v, x, constants=None):

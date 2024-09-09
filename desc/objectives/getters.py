@@ -44,7 +44,9 @@ _PROFILE_CONSTRAINTS = {
 }
 
 
-def get_equilibrium_objective(eq, mode="force", normalize=True, **kwargs):
+def get_equilibrium_objective(
+    eq, mode="force", normalize=True, jac_chunk_size=None, **kwargs
+):
     """Get the objective function for a typical force balance equilibrium problem.
 
     Parameters
@@ -57,6 +59,8 @@ def get_equilibrium_objective(eq, mode="force", normalize=True, **kwargs):
         for minimizing MHD energy.
     normalize : bool
         Whether to normalize units of objective.
+    jac_chunk_size : int, optional
+
 
     Returns
     -------
@@ -76,7 +80,7 @@ def get_equilibrium_objective(eq, mode="force", normalize=True, **kwargs):
         objectives = (RadialForceBalance(**kwargs), HelicalForceBalance(**kwargs))
     else:
         raise ValueError("got an unknown equilibrium objective type '{}'".format(mode))
-    return ObjectiveFunction(objectives, chunk_size=kwargs.get("chunk_size", None))
+    return ObjectiveFunction(objectives, jac_chunk_size=jac_chunk_size)
 
 
 def get_fixed_axis_constraints(eq, profiles=True, normalize=True):

@@ -21,6 +21,9 @@ from .bounce_integral import bounce_integral, get_pitch
 from .data_index import register_compute_fun
 from .utils import cross, dot, safediv
 
+import matplotlib.pyplot as plt
+import numpy as np
+
 
 def _vec_quadax(quad, **kwargs):
     """Vectorize an adaptive quadrature method from quadax.
@@ -415,7 +418,7 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
                 )
             )
             return jnp.squeeze(jnp.sum(v_tau * gamma_c**2, axis=-1))
-
+       
         args = [
             f.reshape(g.num_rho, g.num_alpha, g.num_zeta)
             for f in [
@@ -900,12 +903,14 @@ def _Gamma_d(params, transforms, profiles, data, **kwargs):
 
     adaptive = kwargs.get("adaptive", False)
 
-    num_pitch = kwargs.get("num_pitch", 25)
-    # Select pitch angles between min(|B|) and max(|B|)
-    pitch = _get_pitch(g, data["min_tz |B|"], data["max_tz |B|"], num_pitch, adaptive)
+    num_pitch = kwargs.get("num_pitch", 100)
+    pitch = np.linspace(0.35,0.47,100) #this is the range used in Velasco demo 
 
     num_rho = g.num_rho
     num_alpha = g.num_alpha
+    num_zeta = g.num_zeta
+    
+    alphas = g.nodes[g.unique_poloidal_idx,1]
 
     def d_v_tau(B, pitch):
         return safediv(2, jnp.sqrt(jnp.abs(1 - pitch * B)))
@@ -917,13 +922,12 @@ def _Gamma_d(params, transforms, profiles, data, **kwargs):
         bounce_integrate, _ = bounce_integral(
             data["B^zeta"], data["|B|"], data["|B|_z|r,a"], knots, quad
         )
+        
+        gamma_d_evals =[] # store gamma_d evaluations of the pitch 
 
-        def d_Gamma_d(pitch, thresh=0.2):
-            # Return ∑ⱼ [v τ γ_c²]ⱼ evaluated at λ = pitch.
-            # Note v τ = 4λ⁻²B₀⁻¹ ∂I/∂((λB₀)⁻¹) where v is the particle velocity,
-            # τ is the bounce time, and I is defined in Nemov eq. 36.
+        for p in pitch:
             v_tau = bounce_integrate(
-                d_v_tau, [], pitch, batch=batch, num_wells=num_wells
+                d_v_tau, [], p, batch=batch, num_wells=num_wells
             )
             gamma_d = (
                 2
@@ -933,14 +937,14 @@ def _Gamma_d(params, transforms, profiles, data, **kwargs):
                         bounce_integrate(
                             d_gamma_d,
                             data["cvdrift0"],
-                            pitch,
+                            p,
                             batch=batch,
                             num_wells=num_wells,
                         ),
                         bounce_integrate(
                             d_gamma_d,
                             data["gbdrift"],
-                            pitch,
+                            p,
                             batch=batch,
                             num_wells=num_wells,
                         ),
@@ -950,18 +954,32 @@ def _Gamma_d(params, transforms, profiles, data, **kwargs):
 
             # summing bounce integrals over all wells for a given pitch
             gamma_d = jnp.sum(v_tau * gamma_d, axis=-1)
+            gamma_d_reshaped = jnp.reshape(gamma_d, (num_rho, num_alpha)).squeeze()
 
-            gamma_d_reshaped = jnp.reshape(gamma_d, (num_rho, num_alpha))
+            gamma_d_evals.append(gamma_d)  # Append results to list
 
-            H = jax.nn.relu(gamma_d_reshaped - thresh)
+        # Convert to a numpy array after the loop finishes
+        gamma_d_evals = np.array(gamma_d_evals)
+        
+        print(gamma_d_evals.size())
+        
+        plt.contourf(pitch, alphas ,gamma_d_evals.T,cmap='JET')
+        plt.colorbar(label="Gamma_d")
+        plt.xlabel("r'%\lamda$")
+        plt.ylabel("r'$\frac{\alpha}{2}$")
+        plt.save()
+ 
+        H = jax.nn.relu(gamma_d_reshaped - thresh)
 
-            return jnp.reshape(H, (1, num_rho * num_alpha))
+        return jnp.reshape(H, (1, num_rho * num_alpha))
+    
+    
 
         # The integrand is piecewise continuous and likely poorly approximated by a
         # polynomial. Composite quadrature should perform better than higher order
         # methods.
         Gamma_d = trapezoid(y=imap(d_Gamma_d, pitch).squeeze(axis=1), x=pitch, axis=0)
-
+        
     data["Gamma_d"] = (
         jnp.pi
         / (8 * 2**0.5)

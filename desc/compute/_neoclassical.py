@@ -903,14 +903,15 @@ def _Gamma_d(params, transforms, profiles, data, **kwargs):
 
     adaptive = kwargs.get("adaptive", False)
 
-    num_pitch = kwargs.get("num_pitch", 100)
-    pitch = np.linspace(0.35,0.47,100) #this is the range used in Velasco demo 
+    num_pitch = kwargs.get("num_pitch", 80)
+    pitch = np.linspace(0.35,0.47,80) #this is the range used in Velasco demo 
 
     num_rho = g.num_rho
     num_alpha = g.num_alpha
     num_zeta = g.num_zeta
     
     alphas = g.nodes[g.unique_poloidal_idx,1]
+    #alphas = g.alpha
 
     def d_v_tau(B, pitch):
         return safediv(2, jnp.sqrt(jnp.abs(1 - pitch * B)))
@@ -954,20 +955,30 @@ def _Gamma_d(params, transforms, profiles, data, **kwargs):
 
             # summing bounce integrals over all wells for a given pitch
             gamma_d = jnp.sum(v_tau * gamma_d, axis=-1)
-            gamma_d_reshaped = jnp.reshape(gamma_d, (num_rho, num_alpha)).squeeze()
+            gamma_d_reshaped = jnp.reshape(gamma_d, (num_rho, num_alpha))
+           # gamma_d_reshaped = np.squeeze(gamma_d_reshaped)
 
-            gamma_d_evals.append(gamma_d)  # Append results to list
+            gamma_d_evals.append(gamma_d_reshaped)  # Append results to list
 
         # Convert to a numpy array after the loop finishes
         gamma_d_evals = np.array(gamma_d_evals)
+       
+
+        # Squeeze out singleton dimensions
+        gamma_d_evals = np.squeeze(gamma_d_evals)  # This should reduce shape from (100, 1, 7) to (100, 7)
+
         
-        print(gamma_d_evals.size())
+        print(f"alphas shape: {alphas.shape}")
+        print(f"pitch shape: {pitch.shape}")
+        print(f"gamma_d_evals shape: {gamma_d_evals.shape}")
         
-        plt.contourf(pitch, alphas ,gamma_d_evals.T,cmap='JET')
-        plt.colorbar(label="Gamma_d")
-        plt.xlabel("r'%\lamda$")
-        plt.ylabel("r'$\frac{\alpha}{2}$")
-        plt.save()
+        contour = plt.contourf(alphas, pitch ,gamma_d_evals,cmap='jet')
+        cbar = plt.colorbar(contour)
+        cbar.set_label(r"$\gamma^*_{c}$", fontsize=12)
+        plt.xlabel(r"$\alpha$")
+        plt.ylabel(r"$\lambda$")
+        plt.savefig("plot_alpha_lambda.png")
+
  
         H = jax.nn.relu(gamma_d_reshaped - thresh)
 

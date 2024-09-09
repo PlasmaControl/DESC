@@ -201,7 +201,6 @@ def run_qh_step(n, eq):
             QuasisymmetryTwoTerm(eq=eq, helicity=(1, eq.NFP), grid=grid),
             AspectRatio(eq=eq, target=8, weight=1e2),
         ),
-        chunk_size=1000,
     )
     R_modes = np.vstack(
         (
@@ -1041,7 +1040,7 @@ def test_freeb_vacuum():
         FixPsi(eq=eq),
     )
     objective = ObjectiveFunction(
-        VacuumBoundaryError(eq=eq, field=ext_field, field_fixed=True)
+        VacuumBoundaryError(eq=eq, field=ext_field, field_fixed=True), chunk_size=1000
     )
     eq, _ = eq.optimize(
         objective,

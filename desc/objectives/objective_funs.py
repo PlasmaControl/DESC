@@ -12,7 +12,6 @@ from desc.optimizable import Optimizable
 from desc.utils import (
     PRINT_WIDTH,
     Timer,
-    batched_vectorize,
     errorif,
     flatten_list,
     is_broadcastable,
@@ -20,6 +19,7 @@ from desc.utils import (
     unique_list,
     warnif,
 )
+from desc.utils_batched_vectorize import batched_vectorize
 
 
 class ObjectiveFunction(IOAble):

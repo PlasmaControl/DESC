@@ -18,6 +18,9 @@ Bug Fixes
 - Fixes bugs that occur when saving asymmetric equilibria as wout files
 - Fixes bug that occurs when using ``VMECIO.plot_vmec_comparison`` to compare to an asymmetric wout file
 
+Deprecations
+
+- ``deriv_mode="looped"`` in ``ObjectiveFunction`` is deprecated and will be removed in a future version in favored of ``deriv_mode="batched"`` with ``jac_chunk_size=1``,
 
 
 v0.12.1

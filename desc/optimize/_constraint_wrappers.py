@@ -1059,7 +1059,7 @@ class ProximalProjection(ObjectiveFunction):
             ]
         )
         tangent = self._unfixed_idx_mat @ dfdc - dxdcv
-        if self._objective._deriv_mode in ["batched", "looped"]:
+        if self._objective._deriv_mode in ["batched"]:
             out = getattr(self._objective, "jvp_" + op)(tangent, xg, constants[0])
         else:  # deriv_mode == "blocked"
             vgs = jnp.split(tangent, np.cumsum(self._dimx_per_thing))

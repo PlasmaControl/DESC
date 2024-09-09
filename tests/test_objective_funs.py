@@ -1299,14 +1299,15 @@ def test_derivative_modes():
         jac_chunk_size=10,
         use_jit=False,
     )
-    obj3 = ObjectiveFunction(
-        [
-            PlasmaVesselDistance(eq, surf),
-            MagneticWell(eq),
-        ],
-        deriv_mode="looped",
-        use_jit=False,
-    )
+    with pytest.warns(DeprecationWarning, match="looped"):
+        obj3 = ObjectiveFunction(
+            [
+                PlasmaVesselDistance(eq, surf),
+                MagneticWell(eq),
+            ],
+            deriv_mode="looped",
+            use_jit=False,
+        )
     with pytest.warns(UserWarning, match="jac_chunk_size"):
         obj1.build()
     with pytest.warns(UserWarning, match="jac_chunk_size"):

@@ -31,23 +31,21 @@ class ObjectiveFunction(IOAble):
         List of objectives to be minimized.
     use_jit : bool, optional
         Whether to just-in-time compile the objectives and derivatives.
-    deriv_mode : {"auto", "batched", "blocked", "looped"}
+    deriv_mode : {"auto", "batched", "blocked"}
         Method for computing Jacobian matrices. "batched" uses forward mode, applied to
         the entire objective at once, and is generally the fastest for vector valued
-        objectives, though most memory intensive. "blocked" builds the Jacobian for
+        objectives. Its memory intensity vs. speed may be traded off through the
+        ``jac_chunk_size`` keyword argument. "blocked" builds the Jacobian for
         each objective separately, using each objective's preferred AD mode (and
         each objective's `jac_chunk_size`). Generally the most efficient option when
-        mixing scalar and vector valued objectives. "looped" uses forward mode jacobian
-        vector products in a loop to build the Jacobian column by column. Generally the
-        slowest, but most memory efficient.
+        mixing scalar and vector valued objectives.
         "auto" defaults to "batched" if all sub-objectives are set to "fwd",
         otherwise "blocked".
     name : str
         Name of the objective function.
     jac_chunk_size : int, optional
         If `"batched"` deriv_mode is used, will calculate the Jacobian
-        ``jac_chunk_size`` columns at a time, instead of all at once. A
-        ``jac_chunk_size`` of 1 is equivalent to using `"looped"` deriv_mode.
+        ``jac_chunk_size`` columns at a time, instead of all at once.
         The memory usage of the Jacobian calculation is roughly
         ``memory usage = m0 + m1*jac_chunk_size``: the higher the chunk size,
         the less memory the Jacobian calculation will require (with some baseline
@@ -74,7 +72,17 @@ class ObjectiveFunction(IOAble):
             isinstance(obj, _Objective) for obj in objectives
         ), "members of ObjectiveFunction should be instances of _Objective"
         assert use_jit in {True, False}
-        assert deriv_mode in {"auto", "batched", "looped", "blocked"}
+        warnif(
+            deriv_mode == "looped",
+            DeprecationWarning,
+            '``deriv_mode="looped"`` is deprecated in favor of'
+            ' ``deriv_mode="batched"`` with ``jac_chunk_size=1``.',
+        )
+        if deriv_mode == "looped":
+            # overwrite the user inputs if deprecated "looped" was given
+            deriv_mode = "batched"
+            jac_chunk_size = 1
+        assert deriv_mode in {"auto", "batched", "blocked"}
 
         self._jac_chunk_size = jac_chunk_size
         self._objectives = objectives
@@ -513,8 +521,6 @@ class ObjectiveFunction(IOAble):
 
         if self._deriv_mode == "batched":
             J = Derivative(self.compute_scaled, mode="fwd")(x, constants)
-        if self._deriv_mode == "looped":
-            J = Derivative(self.compute_scaled, mode="looped")(x, constants)
         if self._deriv_mode == "blocked":
             J = self._jac_blocked("jac_scaled", x, constants)
 
@@ -528,8 +534,6 @@ class ObjectiveFunction(IOAble):
 
         if self._deriv_mode == "batched":
             J = Derivative(self.compute_scaled_error, mode="fwd")(x, constants)
-        if self._deriv_mode == "looped":
-            J = Derivative(self.compute_scaled_error, mode="looped")(x, constants)
         if self._deriv_mode == "blocked":
             J = self._jac_blocked("jac_scaled_error", x, constants)
 
@@ -543,8 +547,6 @@ class ObjectiveFunction(IOAble):
 
         if self._deriv_mode == "batched":
             J = Derivative(self.compute_unscaled, mode="fwd")(x, constants)
-        if self._deriv_mode == "looped":
-            J = Derivative(self.compute_unscaled, mode="looped")(x, constants)
         if self._deriv_mode == "blocked":
             J = self._jac_blocked("jac_unscaled", x, constants)
 

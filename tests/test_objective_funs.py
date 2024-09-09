@@ -1312,7 +1312,7 @@ def test_derivative_modes():
     with pytest.warns(UserWarning, match="jac_chunk_size"):
         obj2.build()
     # check that default size works for blocked
-    assert obj2.objectives[1].jac_chunk_size == np.ceil(
+    assert obj2.objectives[1]._jac_chunk_size == np.ceil(
         sum(t.dim_x for t in obj2.objectives[1].things) / 4
     )
     obj3.build()

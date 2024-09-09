@@ -898,7 +898,6 @@ def scan_append_reduce(f, x, append_cond, op=_tree_add, zero_fun=_tree_zeros_lik
 
 
 scan_append = functools.partial(scan_append_reduce, append_cond=True)
-scan_reduce = functools.partial(scan_append_reduce, append_cond=False)
 
 
 # TODO in_axes a la vmap?
@@ -1015,49 +1014,6 @@ def _parse_in_axes(in_axes):
     return in_axes, argnums
 
 
-def apply_chunked(
-    f: Callable,
-    in_axes=0,
-    *,
-    jac_chunk_size: Optional[int],
-) -> Callable:
-    """Compute f in smaller chunks over axis 0.
-
-    Takes an implicitly vmapped function over the axis 0 and uses scan to
-    do the computations in smaller chunks over the 0-th axis of all input arguments.
-
-    For this to work, the function `f` should be `vectorized` along the `in_axes`
-    of the arguments. This means that the function `f` should respect the following
-    condition:
-
-    .. code-block:: python
-
-        assert f(x) == jnp.concatenate([f(x_i) for x_i in x], axis=0)
-
-    which is automatically satisfied if `f` is obtained by vmapping a function,
-    such as:
-
-    .. code-block:: python
-
-        f = jax.vmap(f_orig)
-
-
-    Parameters
-    ----------
-        f: A function that satisfies the condition above
-        in_axes: The axes that should be scanned along. Only supports `0` or `None`
-        jac_chunk_size: The maximum size of the chunks to be used. If it is `None`,
-           chunking is disabled
-
-    """
-    _, argnums = _parse_in_axes(in_axes)
-    return _chunk_vmapped_function(
-        f,
-        jac_chunk_size,
-        argnums,
-    )
-
-
 def vmap_chunked(
     f: Callable,
     in_axes=0,
@@ -1065,14 +1021,6 @@ def vmap_chunked(
     jac_chunk_size: Optional[int],
 ) -> Callable:
     """Behaves like jax.vmap but uses scan to chunk the computations in smaller chunks.
-
-    This function is essentially equivalent to:
-
-    .. code-block:: python
-
-        nk.jax.apply_chunked(jax.vmap(f, in_axes), in_axes, jac_chunk_size)
-
-    Some limitations to `in_axes` apply.
 
     Parameters
     ----------

@@ -9,7 +9,12 @@ import pytest
 
 from desc.__main__ import main
 from desc.backend import sign
-from desc.equilibrium import EquilibriaFamily, Equilibrium
+from desc.equilibrium import (
+    EquilibriaFamily,
+    Equilibrium,
+    contract_equilibrium,
+    scale_profile,
+)
 from desc.examples import get
 from desc.grid import Grid, LinearGrid
 from desc.io import InputReader
@@ -376,3 +381,67 @@ def test_backward_compatible_load_and_resolve():
     f_obj = ForceBalance(eq=eq)
     obj = ObjectiveFunction(f_obj, use_jit=False)
     eq.solve(maxiter=1, objective=obj)
+
+
+@pytest.mark.unit
+def test_contract_equilibrium():
+    """Test contract_equilibrium utility function."""
+    eq = get("ESTELL")
+    rho = 0.5
+    eq_half_rho = contract_equilibrium(eq, rho)
+
+    # ensure the new surface is the same as the desired inner surface
+    surf_inner = eq.get_surface_at(rho)
+    np.testing.assert_allclose(surf_inner.R_lmn, eq_half_rho.surface.R_lmn, err_msg="R")
+    np.testing.assert_allclose(surf_inner.Z_lmn, eq_half_rho.surface.Z_lmn, err_msg="Z")
+    np.testing.assert_allclose(surf_inner.NFP, eq_half_rho.surface.NFP, err_msg="NFP")
+
+    # test geometry, profiles, |B| and |F| match btwn orig eq and new contracted eq
+    data_keys = ["|B|", "|F|", "R", "Z", "lambda", "p", "iota"]
+    contract_grid = LinearGrid(
+        rho=np.linspace(0, 1.0, eq.L),
+        M=eq.M_grid,
+        N=eq.N_grid,
+        NFP=eq.NFP,
+    )
+    grid = LinearGrid(
+        rho=np.linspace(0, rho, eq.L),
+        M=eq.M_grid,
+        N=eq.N_grid,
+        NFP=eq.NFP,
+    )
+    contract_data = eq_half_rho.compute(data_keys, grid=contract_grid)
+    data = eq.compute(data_keys, grid=grid)
+    for key in data_keys:
+        if key != "|F|":
+            np.testing.assert_allclose(contract_data[key], data[key], err_msg=key)
+    np.testing.assert_allclose(
+        contract_data["|F|"], data["|F|"], rtol=2e-4, err_msg="|F|"
+    )
+
+
+@pytest.mark.unit
+def test_scale_profile():
+    """Test scale_profile utility function."""
+    eq = get("SOLOVEV")
+    p = eq.pressure
+    p_spline = p.to_spline(method="cubic2")
+    p_zern = p.to_fourierzernike()
+    p_mtanh = p.to_mtanh(order=4, ftol=1e-12, xtol=1e-12)
+    inner_rho = 0.5
+    p_scaled_spline = scale_profile(p_spline, inner_rho=inner_rho, eq=eq)
+    p_scaled_power = scale_profile(p, inner_rho=inner_rho, eq=eq)
+    p_scaled_zern = scale_profile(p_zern, inner_rho=inner_rho, eq=eq)
+    p_scaled_mtanh = scale_profile(p_mtanh, inner_rho=inner_rho, eq=eq)
+
+    rho = np.linspace(0, 1, 10, endpoint=True)
+
+    np.testing.assert_allclose(p_scaled_power(rho), p_scaled_spline(rho))
+    np.testing.assert_allclose(p_scaled_zern(rho), p_scaled_spline(rho))
+    # test for mtanh not near edge bc is not a good fit there
+    rho_not_at_edge = np.linspace(0, 0.8, 10, endpoint=True)
+    np.testing.assert_allclose(
+        p_scaled_mtanh(rho_not_at_edge), p_scaled_spline(rho_not_at_edge), rtol=1e-3
+    )
+
+    np.testing.assert_allclose(p(rho / 2), p_scaled_power(rho))

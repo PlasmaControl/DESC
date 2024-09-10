@@ -11,12 +11,13 @@ expensive computations.
 
 from functools import partial
 
+# --no-verify from numpy.polynomial.legendre import leggauss_opt
+from orthax.legendre import leggauss
 from quadax import simpson
 
 from desc.backend import jit, jnp
 
 from ..integrals.bounce_integral import Bounce1D
-from ..integrals.quad_utils import leggauss_lob
 from ..utils import map2, safediv
 from .data_index import register_compute_fun
 from .utils import _get_pitch_inv, _poloidal_mean
@@ -147,7 +148,8 @@ def _effective_ripple(params, transforms, profiles, data, **kwargs):
     V. V. Nemov, S. V. Kasilov, W. Kernbichler, M. F. Heyn.
     Phys. Plasmas 1 December 1999; 6 (12): 4622–4632.
     """
-    quad = leggauss_lob(kwargs.get("num_quad", 32))
+    # --no-verifyquad = leggauss_lob(kwargs.get("num_quad", 32))
+    quad = leggauss(kwargs.get("num_quad", 32))
     num_pitch = kwargs.get("num_pitch", 125)
     num_well = kwargs.get("num_well", None)
     batch = kwargs.get("batch", True)

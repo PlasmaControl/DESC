@@ -5,7 +5,7 @@ from abc import ABC, abstractmethod
 import numpy as np
 from scipy import optimize, special
 
-from desc.backend import fori_loop, jnp, put
+from desc.backend import fori_loop, jnp, put, repeat, take
 from desc.io import IOAble
 from desc.utils import Index, check_nonnegint, check_posint, errorif
 
@@ -34,12 +34,16 @@ class _Grid(IOAble, ABC):
         "_weights",
         "_axis",
         "_node_pattern",
+        "_coordinates",
+        "_period",
+        "_source_grid",
         "_unique_rho_idx",
-        "_unique_theta_idx",
+        "_unique_poloidal_idx",
         "_unique_zeta_idx",
         "_inverse_rho_idx",
-        "_inverse_theta_idx",
+        "_inverse_poloidal_idx",
         "_inverse_zeta_idx",
+        "_is_meshgrid",
     ]
 
     @abstractmethod
@@ -54,6 +58,12 @@ class _Grid(IOAble, ABC):
         self._M = int(self._M)
         self._N = int(self._N)
         self._NFP = int(self._NFP)
+        if hasattr(self, "_inverse_theta_idx"):
+            self._inverse_poloidal_idx = self._inverse_theta_idx
+            del self._inverse_theta_idx
+        if hasattr(self, "_unique_theta_idx"):
+            self._unique_poloidal_idx = self._unique_theta_idx
+            del self._unique_theta_idx
 
     def _enforce_symmetry(self):
         """Enforce stellarator symmetry.
@@ -61,13 +71,14 @@ class _Grid(IOAble, ABC):
         1. Remove nodes with theta > pi.
         2. Rescale theta spacing to preserve dtheta weight.
             Need to rescale on each theta coordinate curve by a different factor.
-            dtheta should = 2pi / number of nodes remaining on that theta curve.
+            dtheta should = 2π / number of nodes remaining on that theta curve.
             Nodes on the symmetry line should not be rescaled.
 
         """
         if not self.sym:
             return
-        # indices where theta coordinate is off the symmetry line of theta=0 or pi
+        # indices where poloidal coordinate is off the symmetry line of
+        # poloidal coord=0 or pi
         off_sym_line_idx = self.nodes[:, 1] % np.pi != 0
         __, inverse, off_sym_line_per_rho_surf_count = np.unique(
             self.nodes[off_sym_line_idx, 0], return_inverse=True, return_counts=True
@@ -83,7 +94,7 @@ class _Grid(IOAble, ABC):
             >= to_delete_per_rho_surf_count.size
         )
         if off_sym_line_per_rho_surf_count.size > to_delete_per_rho_surf_count.size:
-            # edge case where surfaces closest to axis lack theta > pi nodes
+            # edge case where surfaces closest to axis lack theta > π nodes
             # The number of nodes to delete on those surfaces is zero.
             pad_count = (
                 off_sym_line_per_rho_surf_count.size - to_delete_per_rho_surf_count.size
@@ -94,12 +105,12 @@ class _Grid(IOAble, ABC):
         # The computation of this scale factor assumes
         # 1. number of nodes to delete is constant over zeta
         # 2. number of nodes off symmetry line is constant over zeta
-        # 3. uniform theta spacing between nodes
-        # The first two assumptions let _per_theta_curve = _per_rho_surf.
+        # 3. uniform poloidal spacing between nodes
+        # The first two assumptions let _per_poloidal_curve = _per_rho_surf.
         # The third assumption lets the scale factor be constant over a
         # particular theta curve, so that each node in the open interval
         # (0, pi) has its spacing scaled up by the same factor.
-        # Nodes at endpoints 0, pi should not be scaled.
+        # Nodes at endpoints 0, π should not be scaled.
         scale = off_sym_line_per_rho_surf_count / (
             off_sym_line_per_rho_surf_count - to_delete_per_rho_surf_count
         )
@@ -127,7 +138,7 @@ class _Grid(IOAble, ABC):
         __, unique_rho_idx, inverse_rho_idx = np.unique(
             self.nodes[:, 0], return_index=True, return_inverse=True
         )
-        __, unique_theta_idx, inverse_theta_idx = np.unique(
+        __, unique_poloidal_idx, inverse_poloidal_idx = np.unique(
             self.nodes[:, 1], return_index=True, return_inverse=True
         )
         __, unique_zeta_idx, inverse_zeta_idx = np.unique(
@@ -136,8 +147,8 @@ class _Grid(IOAble, ABC):
         return (
             unique_rho_idx,
             inverse_rho_idx,
-            unique_theta_idx,
-            inverse_theta_idx,
+            unique_poloidal_idx,
+            inverse_poloidal_idx,
             unique_zeta_idx,
             inverse_zeta_idx,
         )
@@ -171,7 +182,6 @@ class _Grid(IOAble, ABC):
         # Because a surface integral always ignores 1 column, with this approach,
         # duplicates nodes are scaled down properly regardless of which two columns
         # span the surface.
-
         return weights
 
     @property
@@ -200,6 +210,36 @@ class _Grid(IOAble, ABC):
         return self.__dict__.setdefault("_sym", False)
 
     @property
+    def is_meshgrid(self):
+        """bool: Whether this grid is a tensor-product grid.
+
+        Let the tuple (r, p, t) ∈ R³ denote a radial, poloidal, and toroidal
+        coordinate value. The is_meshgrid flag denotes whether any coordinate
+        can be iterated over along the relevant axis of the reshaped grid:
+        nodes.reshape((num_poloidal, num_radial, num_toroidal, 3), order="F").
+        """
+        return self.__dict__.setdefault("_is_meshgrid", False)
+
+    @property
+    def coordinates(self):
+        """Coordinates specified by the nodes.
+
+        Examples
+        --------
+        raz : rho, alpha, zeta
+        rvp : rho, theta_PEST, phi
+        rtz : rho, theta, zeta
+        """
+        return self.__dict__.setdefault("_coordinates", "rtz")
+
+    @property
+    def period(self):
+        """Periodicity of coordinates."""
+        return self.__dict__.setdefault(
+            "_period", (np.inf, 2 * np.pi, 2 * np.pi / self.NFP)
+        )
+
+    @property
     def num_nodes(self):
         """int: Total number of nodes."""
         return self.nodes.shape[0]
@@ -210,9 +250,27 @@ class _Grid(IOAble, ABC):
         return self.unique_rho_idx.size
 
     @property
+    def num_poloidal(self):
+        """int: Number of unique poloidal angle coordinates."""
+        return self.unique_poloidal_idx.size
+
+    @property
+    def num_alpha(self):
+        """ndarray: Number of unique field line poloidal angles."""
+        errorif(self.coordinates[1] != "a", AttributeError)
+        return self.num_poloidal
+
+    @property
     def num_theta(self):
-        """int: Number of unique theta coordinates."""
-        return self.unique_theta_idx.size
+        """ndarray: Number of unique theta coordinates."""
+        errorif(self.coordinates[1] != "t", AttributeError)
+        return self.num_poloidal
+
+    @property
+    def num_theta_PEST(self):
+        """ndarray: Number of unique straight field line poloidal angles."""
+        errorif(self.coordinates[1] != "v", AttributeError)
+        return self.num_poloidal
 
     @property
     def num_zeta(self):
@@ -225,19 +283,39 @@ class _Grid(IOAble, ABC):
         errorif(
             not hasattr(self, "_unique_rho_idx"),
             AttributeError,
-            "jit compatible Grid objects do not have unique indices assigned.",
+            f"{self} does not have unique indices assigned. "
+            "It is not possible to do this automatically on grids made under JIT.",
         )
         return self._unique_rho_idx
 
     @property
+    def unique_poloidal_idx(self):
+        """ndarray: Indices of unique poloidal angle coordinates."""
+        errorif(
+            not hasattr(self, "_unique_poloidal_idx"),
+            AttributeError,
+            f"{self} does not have unique indices assigned. "
+            "It is not possible to do this automatically on grids made under JIT.",
+        )
+        return self._unique_poloidal_idx
+
+    @property
+    def unique_alpha_idx(self):
+        """ndarray: Indices of unique field line poloidal angles."""
+        errorif(self.coordinates[1] != "a", AttributeError)
+        return self.unique_poloidal_idx
+
+    @property
     def unique_theta_idx(self):
         """ndarray: Indices of unique theta coordinates."""
-        errorif(
-            not hasattr(self, "_unique_theta_idx"),
-            AttributeError,
-            "jit compatible Grid objects do not have unique indices assigned.",
-        )
-        return self._unique_theta_idx
+        errorif(self.coordinates[1] != "t", AttributeError)
+        return self.unique_poloidal_idx
+
+    @property
+    def unique_theta_PEST_idx(self):
+        """ndarray: Indices of unique straight field line poloidal angles."""
+        errorif(self.coordinates[1] != "v", AttributeError)
+        return self.unique_poloidal_idx
 
     @property
     def unique_zeta_idx(self):
@@ -245,7 +323,8 @@ class _Grid(IOAble, ABC):
         errorif(
             not hasattr(self, "_unique_zeta_idx"),
             AttributeError,
-            "jit compatible Grid objects do not have unique indices assigned.",
+            f"{self} does not have unique indices assigned. "
+            "It is not possible to do this automatically on grids made under JIT.",
         )
         return self._unique_zeta_idx
 
@@ -255,19 +334,39 @@ class _Grid(IOAble, ABC):
         errorif(
             not hasattr(self, "_inverse_rho_idx"),
             AttributeError,
-            "jit compatible Grid objects do not have inverse indices assigned.",
+            f"{self} does not have inverse indices assigned. "
+            "It is not possible to do this automatically on grids made under JIT.",
         )
         return self._inverse_rho_idx
 
     @property
-    def inverse_theta_idx(self):
-        """ndarray: Indices of unique_theta_idx that recover the theta coordinates."""
+    def inverse_poloidal_idx(self):
+        """ndarray: Indices that recover the unique poloidal coordinates."""
         errorif(
-            not hasattr(self, "_inverse_theta_idx"),
+            not hasattr(self, "_inverse_poloidal_idx"),
             AttributeError,
-            "jit compatible Grid objects do not have inverse indices assigned.",
+            f"{self} does not have inverse indices assigned. "
+            "It is not possible to do this automatically on grids made under JIT.",
         )
-        return self._inverse_theta_idx
+        return self._inverse_poloidal_idx
+
+    @property
+    def inverse_alpha_idx(self):
+        """ndarray: Indices that recover field line poloidal angles."""
+        errorif(self.coordinates[1] != "a", AttributeError)
+        return self.inverse_poloidal_idx
+
+    @property
+    def inverse_theta_idx(self):
+        """ndarray: Indices that recover unique theta coordinates."""
+        errorif(self.coordinates[1] != "t", AttributeError)
+        return self.inverse_poloidal_idx
+
+    @property
+    def inverse_theta_PEST_idx(self):
+        """ndarray: Indices that recover unique straight field line poloidal angles."""
+        errorif(self.coordinates[1] != "v", AttributeError)
+        return self.inverse_poloidal_idx
 
     @property
     def inverse_zeta_idx(self):
@@ -275,7 +374,8 @@ class _Grid(IOAble, ABC):
         errorif(
             not hasattr(self, "_inverse_zeta_idx"),
             AttributeError,
-            "jit compatible Grid objects do not have inverse indices assigned.",
+            f"{self} does not have inverse indices assigned. "
+            "It is not possible to do this automatically on grids made under JIT.",
         )
         return self._inverse_zeta_idx
 
@@ -296,9 +396,29 @@ class _Grid(IOAble, ABC):
 
     @property
     def spacing(self):
-        """ndarray: Node spacing, in (rho,theta,zeta)."""
+        """Quadrature weights for integration over surfaces.
+
+        This is typically the distance between nodes when ``NFP=1``, as the quadrature
+        weight is by default a midpoint rule. The returned matrix has three columns,
+        corresponding to the radial, poloidal, and toroidal coordinate, respectively.
+        Each element of the matrix specifies the quadrature area associated with a
+        particular node for each coordinate. I.e. on a grid with coordinates
+        of "rtz", the columns specify dρ, dθ, dζ, respectively. An integration
+        over a ρ flux surface will assign quadrature weight dθ*dζ to each node.
+        Note that dζ is the distance between toroidal surfaces multiplied by ``NFP``.
+
+        On a LinearGrid with duplicate nodes, the columns of spacing no longer
+        specify dρ, dθ, dζ. Rather, the product of each adjacent column specifies
+        dρ*dθ, dθ*dζ, dζ*dρ, respectively.
+
+        Returns
+        -------
+        spacing : ndarray
+            Quadrature weights for integration over surface.
+
+        """
         errorif(
-            not hasattr(self, "_spacing"),
+            self._spacing is None,
             AttributeError,
             "Custom grids must have spacing specified by user.",
         )
@@ -308,7 +428,7 @@ class _Grid(IOAble, ABC):
     def weights(self):
         """ndarray: Weight for each node, either exact quadrature or volume based."""
         errorif(
-            not hasattr(self, "_weights"),
+            self._weights is None,
             AttributeError,
             "Custom grids must have weights specified by user.",
         )
@@ -320,10 +440,29 @@ class _Grid(IOAble, ABC):
             type(self).__name__
             + " at "
             + str(hex(id(self)))
-            + " (L={}, M={}, N={}, NFP={}, sym={}, node_pattern={})".format(
-                self.L, self.M, self.N, self.NFP, self.sym, self.node_pattern
+            + (
+                " (L={}, M={}, N={}, NFP={}, sym={}, is_meshgrid={},"
+                " node_pattern={}, coordinates={})"
+            ).format(
+                self.L,
+                self.M,
+                self.N,
+                self.NFP,
+                self.sym,
+                self.is_meshgrid,
+                self.node_pattern,
+                self.coordinates,
             )
         )
+
+    def get_label(self, label):
+        """Get general label that specifies direction given label."""
+        if label in {"rho", "poloidal", "zeta"}:
+            return label
+        rad = {"r": "rho"}[self.coordinates[0]]
+        pol = {"a": "alpha", "t": "theta", "v": "theta_PEST"}[self.coordinates[1]]
+        tor = {"z": "zeta"}[self.coordinates[2]]
+        return {rad: "rho", pol: "poloidal", tor: "zeta"}[label]
 
     def compress(self, x, surface_label="rho"):
         """Return elements of ``x`` at indices of unique surface label values.
@@ -334,8 +473,8 @@ class _Grid(IOAble, ABC):
             The array to compress.
             Should usually represent a surface function (constant over a surface)
             in an array that matches the grid's pattern.
-        surface_label : {"rho", "theta", "zeta"}
-            The surface label of rho, theta, or zeta.
+        surface_label : {"rho", "poloidal", "zeta"}
+            The surface label of rho, poloidal, or zeta.
 
         Returns
         -------
@@ -345,29 +484,11 @@ class _Grid(IOAble, ABC):
             corresponds to the value associated with the largest surface.
 
         """
-        assert surface_label in {"rho", "theta", "zeta"}
-        assert len(x) == self.num_nodes
-        if surface_label == "rho":
-            errorif(
-                not hasattr(self, "_unique_rho_idx"),
-                AttributeError,
-                "compress operation undefined for jit compatible grids",
-            )
-            return x[self.unique_rho_idx]
-        if surface_label == "theta":
-            errorif(
-                not hasattr(self, "_unique_theta_idx"),
-                AttributeError,
-                "compress operation undefined for jit compatible grids",
-            )
-            return x[self.unique_theta_idx]
-        if surface_label == "zeta":
-            errorif(
-                not hasattr(self, "_unique_zeta_idx"),
-                AttributeError,
-                "compress operation undefined for jit compatible grids",
-            )
-            return x[self.unique_zeta_idx]
+        surface_label = self.get_label(surface_label)
+        errorif(len(x) != self.num_nodes)
+        return take(
+            x, getattr(self, f"unique_{surface_label}_idx"), axis=0, unique_indices=True
+        )
 
     def expand(self, x, surface_label="rho"):
         """Expand ``x`` by duplicating elements to match the grid's pattern.
@@ -382,8 +503,8 @@ class _Grid(IOAble, ABC):
             that the first element corresponds to the value associated with the
             smallest surface, and the last element corresponds to the value
             associated with the largest surface.
-        surface_label : {"rho", "theta", "zeta"}
-            The surface label of rho, theta, or zeta.
+        surface_label : {"rho", "poloidal", "zeta"}
+            The surface label of rho, poloidal, or zeta.
 
         Returns
         -------
@@ -391,31 +512,9 @@ class _Grid(IOAble, ABC):
             ``x`` expanded to match the grid's pattern.
 
         """
-        assert surface_label in {"rho", "theta", "zeta"}
-        if surface_label == "rho":
-            errorif(
-                not hasattr(self, "_inverse_rho_idx"),
-                AttributeError,
-                "expand operation undefined for jit compatible grids",
-            )
-            assert len(x) == self.num_rho
-            return x[self.inverse_rho_idx]
-        if surface_label == "theta":
-            errorif(
-                not hasattr(self, "_inverse_theta_idx"),
-                AttributeError,
-                "expand operation undefined for jit compatible grids",
-            )
-            assert len(x) == self.num_theta
-            return x[self.inverse_theta_idx]
-        if surface_label == "zeta":
-            errorif(
-                not hasattr(self, "_inverse_zeta_idx"),
-                AttributeError,
-                "expand operation undefined for jit compatible grids",
-            )
-            assert len(x) == self.num_zeta
-            return x[self.inverse_zeta_idx]
+        surface_label = self.get_label(surface_label)
+        errorif(len(x) != getattr(self, f"num_{surface_label}"))
+        return x[getattr(self, f"inverse_{surface_label}_idx")]
 
     def copy_data_from_other(self, x, other_grid, surface_label="rho", tol=1e-14):
         """Copy data x from other_grid to this grid at matching surface label.
@@ -426,11 +525,11 @@ class _Grid(IOAble, ABC):
         Parameters
         ----------
         x : ndarray, shape(other_grid.num_nodes,...)
-            Data to copy
+            Data to copy. Assumed to be constant over the specified surface.
         other_grid: Grid
             Grid to copy from.
-        surface_label : {"rho", "theta", "zeta"}
-            The surface label of rho, theta, or zeta.
+        surface_label : {"rho", "poloidal", "zeta"}
+            The surface label of rho, poloidal, or zeta.
         tol : float
             tolerance for considering nodes the same.
 
@@ -439,20 +538,24 @@ class _Grid(IOAble, ABC):
         y : ndarray, shape(grid2.num_nodes, ...)
             Data copied to grid2
         """
+        sl1 = self.get_label(surface_label)
+        sl2 = other_grid.get_label(surface_label)
+        axis = {"rho": 0, "poloidal": 1, "zeta": 2}
+        errorif(self.coordinates[axis[sl1]] != other_grid.coordinates[axis[sl2]])
+        axis = axis[sl1]
+
         x = jnp.asarray(x)
-        assert surface_label in {"rho", "theta", "zeta"}
         try:
             xc = other_grid.compress(x, surface_label)
             y = self.expand(xc, surface_label)
         except AttributeError:
-            self_nodes = jnp.asarray(self.nodes)
-            other_nodes = jnp.asarray(other_grid.nodes)
-            axis = {"rho": 0, "theta": 1, "zeta": 2}[surface_label]
+            self_nodes = jnp.asarray(self.nodes[:, axis])
+            other_nodes = jnp.asarray(other_grid.nodes[:, axis])
             y = jnp.zeros((self.num_nodes, *x.shape[1:]))
 
             def body(i, y):
                 y = jnp.where(
-                    jnp.abs(self_nodes[:, axis] - other_nodes[i, axis]) <= tol,
+                    jnp.abs(self_nodes - other_nodes[i]) <= tol,
                     x[i],
                     y,
                 )
@@ -488,9 +591,59 @@ class _Grid(IOAble, ABC):
         if self.axis.size:
             if callable(y):
                 y = y(**kwargs)
-            return put(
-                x.copy() if copy else x, self.axis, y[self.axis] if jnp.ndim(y) else y
+            x = put(
+                x.copy() if copy else x,
+                self.axis,
+                y[self.axis] if jnp.ndim(y) else y,
             )
+        return x
+
+    def meshgrid_reshape(self, x, order):
+        """Reshape data to match grid coordinates.
+
+        Given flattened data on a tensor product grid, reshape the data such that
+        the axes of the array correspond to coordinate values on the grid.
+
+        Parameters
+        ----------
+        x : ndarray, shape(N,) or shape(N,3)
+            Data to reshape.
+        order : str
+            Desired order of axes for returned data. Should be a permutation of
+            ``grid.coordinates``, eg ``order="rtz"`` has the first axis of the returned
+            data correspond to different rho coordinates, the second axis to different
+            theta, etc.  ``order="trz"`` would have the first axis correspond to theta,
+            and so on.
+
+        Returns
+        -------
+        x : ndarray
+            Data reshaped to align with grid nodes.
+
+        """
+        errorif(
+            not self.is_meshgrid,
+            ValueError,
+            "grid is not a tensor product grid, so meshgrid_reshape doesn't "
+            "make any sense",
+        )
+        errorif(
+            sorted(order) != sorted(self.coordinates),
+            ValueError,
+            f"order should be a permutation of {self.coordinates}, got {order}",
+        )
+        shape = (self.num_poloidal, self.num_rho, self.num_zeta)
+        vec = False
+        if x.ndim > 1:
+            vec = True
+            shape += (-1,)
+        x = x.reshape(shape, order="F")
+        # swap to change shape from trz/arz to rtz/raz etc.
+        x = jnp.swapaxes(x, 1, 0)
+        newax = tuple(self.coordinates.index(c) for c in order)
+        if vec:
+            newax += (3,)
+        x = jnp.transpose(x, newax)
         return x
 
 
@@ -508,67 +661,99 @@ class Grid(_Grid):
         Spacing between nodes in each direction.
     weights : ndarray of float, size(num_nodes, )
         Quadrature weights for each node.
+    coordinates : str
+        Coordinates that are specified by the nodes.
+        raz : rho, alpha, zeta
+        rvp : rho, theta_PEST, phi
+        rtz : rho, theta, zeta
+    period : tuple of float
+        Assumed periodicity for each coordinate.
+        Use np.inf to denote no periodicity.
+    NFP : int
+        Number of field periods (Default = 1).
+    source_grid : Grid
+        Grid from which coordinates were mapped from.
     sort : bool
         Whether to sort the nodes for use with FFT method.
+    is_meshgrid : bool
+        Whether this grid is a tensor-product grid.
+        Let the tuple (r, p, t) ∈ R³ denote a radial, poloidal, and toroidal
+        coordinate value. The is_meshgrid flag denotes whether any coordinate
+        can be iterated over along the relevant axis of the reshaped grid:
+        nodes.reshape((num_poloidal, num_radial, num_toroidal, 3), order="F").
     jitable : bool
         Whether to skip certain checks and conditionals that don't work under jit.
         Allows grid to be created on the fly with custom nodes, but weights, symmetry
-        etc may be wrong if grid contains duplicate nodes.
+        etc. may be wrong if grid contains duplicate nodes.
     """
 
     def __init__(
-        self, nodes, spacing=None, weights=None, sort=False, jitable=False, **kwargs
+        self,
+        nodes,
+        spacing=None,
+        weights=None,
+        coordinates="rtz",
+        period=(np.inf, 2 * np.pi, 2 * np.pi),
+        NFP=1,
+        source_grid=None,
+        sort=False,
+        is_meshgrid=False,
+        jitable=False,
+        **kwargs,
     ):
         # Python 3.3 (PEP 412) introduced key-sharing dictionaries.
         # This change measurably reduces memory usage of objects that
         # define all attributes in their __init__ method.
-        self._NFP = 1
+        self._NFP = check_posint(NFP, "NFP", False)
         self._sym = False
         self._node_pattern = "custom"
+        self._coordinates = coordinates
+        self._period = period
+        self._source_grid = source_grid
+        self._is_meshgrid = bool(is_meshgrid)
         self._nodes = self._create_nodes(nodes)
-        if spacing is not None:
-            spacing = (
-                jnp.atleast_2d(jnp.asarray(spacing))
-                .reshape(self.nodes.shape)
-                .astype(float)
-            )
-            self._spacing = spacing
-        if weights is None and spacing is not None:
-            self._weights = self._spacing.prod(axis=1)
-        elif weights is not None:
-            weights = (
-                jnp.atleast_1d(jnp.asarray(weights))
-                .reshape(self.nodes.shape[0])
-                .astype(float)
-            )
-            self._weights = weights
+        self._spacing = (
+            jnp.atleast_2d(jnp.asarray(spacing)).reshape(self.nodes.shape).astype(float)
+            if spacing is not None
+            else None
+        )
+        self._weights = (
+            jnp.atleast_1d(jnp.asarray(weights))
+            .reshape(self.nodes.shape[0])
+            .astype(float)
+            if weights is not None
+            else None
+        )
         if sort:
             self._sort_nodes()
+        setable_attr = [
+            "_unique_rho_idx",
+            "_unique_poloidal_idx",
+            "_unique_zeta_idx",
+            "_inverse_rho_idx",
+            "_inverse_poloidal_idx",
+            "_inverse_zeta_idx",
+        ]
         if jitable:
-            # dont do anything with symmetry since that changes # of nodes
-            # avoid point at the axis, for now. FIXME: make axis boolean mask?
+            # Don't do anything with symmetry since that changes # of nodes
+            # avoid point at the axis, for now.
             r, t, z = self._nodes.T
             r = jnp.where(r == 0, 1e-12, r)
-            self._nodes = jnp.array([r, t, z]).T
+            self._nodes = jnp.column_stack([r, t, z])
             self._axis = np.array([], dtype=int)
             # allow for user supplied indices/inverse indices for special cases
-            for attr in [
-                "_unique_rho_idx",
-                "_unique_theta_idx",
-                "_unique_zeta_idx",
-                "_inverse_rho_idx",
-                "_inverse_theta_idx",
-                "_inverse_zeta_idx",
-            ]:
+            for attr in setable_attr:
                 if attr in kwargs:
                     setattr(self, attr, jnp.asarray(kwargs.pop(attr)))
         else:
+            for attr in setable_attr:
+                kwargs.pop(attr, None)
             self._axis = self._find_axis()
             (
                 self._unique_rho_idx,
                 self._inverse_rho_idx,
-                self._unique_theta_idx,
-                self._inverse_theta_idx,
+                self._unique_poloidal_idx,
+                self._inverse_poloidal_idx,
                 self._unique_zeta_idx,
                 self._inverse_zeta_idx,
             ) = self._find_unique_inverse_nodes()
@@ -577,6 +762,104 @@ class Grid(_Grid):
         self._M = self.num_nodes
         self._N = self.num_nodes
         errorif(len(kwargs), ValueError, f"Got unexpected kwargs {kwargs.keys()}")
+
+    @staticmethod
+    def create_meshgrid(
+        nodes,
+        spacing=None,
+        coordinates="rtz",
+        period=(np.inf, 2 * np.pi, 2 * np.pi),
+        NFP=1,
+        **kwargs,
+    ):
+        """Create a tensor-product grid from the given coordinates in a jitable manner.
+
+        Parameters
+        ----------
+        nodes : list of ndarray
+            Three arrays, one for each coordinate.
+            Sorted unique values of each coordinate.
+        spacing : list of ndarray
+            Three arrays, one for each coordinate.
+            Weights for integration. Defaults to a midpoint rule.
+        coordinates : str
+            Coordinates that are specified by the ``nodes[0]``, ``nodes[1]``,
+            and ``nodes[2]``, respectively.
+            raz : rho, alpha, zeta
+            rvp : rho, theta_PEST, phi
+            rtz : rho, theta, zeta
+        period : tuple of float
+            Assumed periodicity for each coordinate.
+            Use ``np.inf`` to denote no periodicity.
+        NFP : int
+            Number of field periods (Default = 1).
+            Only makes sense to change from 1 if last coordinate is periodic
+            with some constant divided by ``NFP``.
+
+        Returns
+        -------
+        grid : Grid
+            Meshgrid.
+
+        """
+        NFP = check_posint(NFP, "NFP", False)
+        a, b, c = jnp.atleast_1d(*nodes)
+        if spacing is None:
+            errorif(coordinates[0] != "r", NotImplementedError)
+            da = _midpoint_spacing(a)
+            db = _periodic_spacing(b, period[1])[1]
+            dc = _periodic_spacing(c, period[2])[1] * NFP
+        else:
+            da, db, dc = spacing
+
+        bb, aa, cc = jnp.meshgrid(b, a, c, indexing="ij")
+
+        nodes = jnp.column_stack(
+            [aa.flatten(order="F"), bb.flatten(order="F"), cc.flatten(order="F")]
+        )
+        bb, aa, cc = jnp.meshgrid(db, da, dc, indexing="ij")
+
+        spacing = jnp.column_stack(
+            [aa.flatten(order="F"), bb.flatten(order="F"), cc.flatten(order="F")]
+        )
+        weights = (
+            spacing.prod(axis=1)
+            if period[1] * period[2] == 4 * np.pi**2 / NFP
+            # Doesn't make sense to assign weights if the coordinates aren't periodic
+            # since it's not clear how to form a surface and hence its enclosed volume.
+            else None
+        )
+
+        unique_a_idx = jnp.arange(a.size) * b.size
+        unique_b_idx = jnp.arange(b.size)
+        unique_c_idx = jnp.arange(c.size) * a.size * b.size
+        inverse_a_idx = jnp.tile(
+            repeat(unique_a_idx // b.size, b.size, total_repeat_length=a.size * b.size),
+            c.size,
+        )
+        inverse_b_idx = jnp.tile(
+            unique_b_idx,
+            a.size * c.size,
+        )
+        inverse_c_idx = repeat(unique_c_idx // (a.size * b.size), (a.size * b.size))
+        return Grid(
+            nodes=nodes,
+            spacing=spacing,
+            weights=weights,
+            coordinates=coordinates,
+            period=period,
+            NFP=NFP,
+            sort=False,
+            is_meshgrid=True,
+            jitable=True,
+            _unique_rho_idx=unique_a_idx,
+            _unique_poloidal_idx=unique_b_idx,
+            _unique_zeta_idx=unique_c_idx,
+            _inverse_rho_idx=inverse_a_idx,
+            _inverse_poloidal_idx=inverse_b_idx,
+            _inverse_zeta_idx=inverse_c_idx,
+            **kwargs,
+        )
 
     def _sort_nodes(self):
         """Sort nodes for use with FFT."""
@@ -607,11 +890,14 @@ class Grid(_Grid):
         """
         nodes = jnp.atleast_2d(jnp.asarray(nodes)).reshape((-1, 3)).astype(float)
         # Do not alter nodes given by the user for custom grids.
-        # In particular, do not modulo nodes by 2pi or 2pi/NFP.
-        # This may cause the surface_integrals() function to fail recognizing
-        # surfaces outside the interval [0, 2pi] as duplicates. However, most
-        # surface integral computations are done with LinearGrid anyway.
+        # In particular, do not modulo nodes by 2π or 2π/NFP.
         return nodes
+
+    @property
+    def source_grid(self):
+        """Coordinates from which this grid was mapped from."""
+        errorif(self._source_grid is None, AttributeError)
+        return self._source_grid
 
 
 class LinearGrid(_Grid):
@@ -671,7 +957,12 @@ class LinearGrid(_Grid):
         self._NFP = check_posint(NFP, "NFP", False)
         self._sym = sym
         self._endpoint = bool(endpoint)
+        self._poloidal_endpoint = False
+        self._toroidal_endpoint = False
         self._node_pattern = "linear"
+        self._coordinates = "rtz"
+        self._is_meshgrid = True
+        self._period = (np.inf, 2 * np.pi, 2 * np.pi / self._NFP)
         self._nodes, self._spacing = self._create_nodes(
             L=L,
             M=M,
@@ -689,8 +980,8 @@ class LinearGrid(_Grid):
         (
             self._unique_rho_idx,
             self._inverse_rho_idx,
-            self._unique_theta_idx,
-            self._inverse_theta_idx,
+            self._unique_poloidal_idx,
+            self._inverse_poloidal_idx,
             self._unique_zeta_idx,
             self._inverse_zeta_idx,
         ) = self._find_unique_inverse_nodes()
@@ -745,10 +1036,11 @@ class LinearGrid(_Grid):
 
         """
         self._NFP = check_posint(NFP, "NFP", False)
+        self._period = (np.inf, 2 * np.pi, 2 * np.pi / self._NFP)
         axis = bool(axis)
         endpoint = bool(endpoint)
-        THETA_ENDPOINT = 2 * np.pi
-        ZETA_ENDPOINT = 2 * np.pi / NFP
+        theta_period = self.period[1]
+        zeta_period = self.period[2]
 
         # rho
         if L is not None:
@@ -761,17 +1053,8 @@ class LinearGrid(_Grid):
             # choose dr such that each node has the same weight
             dr = np.ones_like(r) / r.size
         else:
-            # need to sort to compute correct spacing
             r = np.sort(np.atleast_1d(rho))
-            dr = np.zeros_like(r)
-            if r.size > 1:
-                # choose dr such that cumulative sums of dr[] are node midpoints
-                # and the total sum is 1
-                dr[0] = (r[0] + r[1]) / 2
-                dr[1:-1] = (r[2:] - r[:-2]) / 2
-                dr[-1] = 1 - (r[-2] + r[-1]) / 2
-            else:
-                dr = np.array([1.0])
+            dr = _midpoint_spacing(r, jnp=np)
 
         # theta
         if M is not None:
@@ -782,20 +1065,20 @@ class LinearGrid(_Grid):
         if np.isscalar(theta) and (int(theta) == theta) and theta > 0:
             theta = int(theta)
             if self.sym and theta > 1:
-                # Enforce that no node lies on theta=0 or theta=2pi, so that
+                # Enforce that no node lies on theta=0 or theta=2π, so that
                 # each node has a symmetric counterpart, and that, for all i,
-                # t[i]-t[i-1] = 2 t[0] = 2 (pi - t[last node before pi]).
+                # t[i]-t[i-1] = 2 t[0] = 2 (π - t[last node before π]).
                 # Both conditions necessary to evenly space nodes with constant dt.
                 # This can be done by making (theta + endpoint) an even integer.
                 if (theta + endpoint) % 2 != 0:
                     theta += 1
-                t = np.linspace(0, THETA_ENDPOINT, theta, endpoint=endpoint)
+                t = np.linspace(0, theta_period, theta, endpoint=endpoint)
                 t += t[1] / 2
-                # delete theta > pi nodes
+                # delete theta > π nodes
                 t = t[: np.searchsorted(t, np.pi, side="right")]
             else:
-                t = np.linspace(0, THETA_ENDPOINT, theta, endpoint=endpoint)
-            dt = THETA_ENDPOINT / t.size * np.ones_like(t)
+                t = np.linspace(0, theta_period, theta, endpoint=endpoint)
+            dt = theta_period / t.size * np.ones_like(t)
             if (endpoint and not self.sym) and t.size > 1:
                 # increase node weight to account for duplicate node
                 dt *= t.size / (t.size - 1)
@@ -804,64 +1087,54 @@ class LinearGrid(_Grid):
         else:
             t = np.atleast_1d(theta).astype(float)
             # enforce periodicity
-            t[t != THETA_ENDPOINT] %= THETA_ENDPOINT
+            t[t != theta_period] %= theta_period
             # need to sort to compute correct spacing
             t = np.sort(t)
             if self.sym:
-                # cut domain to relevant subdomain: delete theta > pi nodes
+                # cut domain to relevant subdomain: delete theta > π nodes
                 t = t[: np.searchsorted(t, np.pi, side="right")]
-            dt = np.zeros_like(t)
             if t.size > 1:
-                # choose dt to be the cyclic distance of the surrounding two nodes
-                dt[1:-1] = t[2:] - t[:-2]
                 if not self.sym:
-                    dt[0] = t[1] + (THETA_ENDPOINT - t[-1]) % THETA_ENDPOINT
-                    dt[-1] = t[0] + (THETA_ENDPOINT - t[-2]) % THETA_ENDPOINT
-                    dt /= 2  # choose dt to be half the cyclic distance
-                    if t.size == 2:
-                        assert dt[0] == np.pi and dt[-1] == 0
-                        dt[-1] = dt[0]
-                    if t[0] == 0 and t[-1] == THETA_ENDPOINT:
-                        # The cyclic distance algorithm above correctly weights
-                        # the duplicate endpoint node spacing at theta = 0 and 2pi
+                    dt = _periodic_spacing(t, theta_period, jnp=np)[1]
+                    if t[0] == 0 and t[-1] == theta_period:
+                        # _periodic_spacing above correctly weights
+                        # the duplicate endpoint node spacing at theta = 0 and 2π
                         # to be half the weight of the other nodes.
                         # However, scale_weights() is not aware of this, so we
                         # counteract the reduction that will be done there.
                         dt[0] += dt[-1]
                         dt[-1] = dt[0]
                 else:
+                    dt = np.zeros(t.shape)
+                    dt[1:-1] = t[2:] - t[:-2]
                     first_positive_idx = np.searchsorted(t, 0, side="right")
+                    # total spacing of nodes at theta=0 should be half the
+                    # distance between first positive node and its
+                    # reflection across the theta=0 line.
+                    dt[0] = t[first_positive_idx]
                     if first_positive_idx == 0:
                         # then there are no nodes at theta=0
-                        dt[0] = t[0] + t[1]
+                        dt[0] += t[1]
                     else:
-                        # total spacing of nodes at theta=0 should be half the
-                        # distance between first positive node and its
-                        # reflection across the theta=0 line.
-                        dt[0] = t[first_positive_idx]
-                        assert (first_positive_idx == 1) or (
-                            dt[0] == dt[first_positive_idx - 1]
-                        )
-                        # If the first condition is false and the latter true,
+                        assert dt[0] == dt[first_positive_idx - 1]
+                        # If first_positive_idx != 1,
                         # then both of those dt should be halved.
                         # The scale_weights() function will handle this.
                     first_pi_idx = np.searchsorted(t, np.pi, side="left")
+                    # total spacing of nodes at theta=π should be half the
+                    # distance between first node < π and its
+                    # reflection across the theta=π line.
                     if first_pi_idx == t.size:
-                        # then there are no nodes at theta=pi
-                        dt[-1] = (THETA_ENDPOINT - t[-1]) - t[-2]
+                        # then there are no nodes at theta=π
+                        dt[-1] = (theta_period - t[-1]) - t[-2]
                     else:
-                        # total spacing of nodes at theta=pi should be half the
-                        # distance between first node < pi and its
-                        # reflection across the theta=pi line.
-                        dt[-1] = (THETA_ENDPOINT - t[-1]) - t[first_pi_idx - 1]
-                        assert (first_pi_idx == t.size - 1) or (
-                            dt[first_pi_idx] == dt[-1]
-                        )
-                        # If the first condition is false and the latter true,
+                        dt[-1] = (theta_period - t[-1]) - t[first_pi_idx - 1]
+                        assert dt[first_pi_idx] == dt[-1]
+                        # If first_pi_idx != t.size - 1,
                         # then both of those dt should be halved.
                         # The scale_weights() function will handle this.
             else:
-                dt = np.array([THETA_ENDPOINT])
+                dt = np.array([theta_period])
 
         # zeta
         # note: dz spacing should not depend on NFP
@@ -873,7 +1146,7 @@ class LinearGrid(_Grid):
         else:
             self._N = len(np.atleast_1d(zeta))
         if np.isscalar(zeta) and (int(zeta) == zeta) and zeta > 0:
-            z = np.linspace(0, ZETA_ENDPOINT, int(zeta), endpoint=endpoint)
+            z = np.linspace(0, zeta_period, int(zeta), endpoint=endpoint)
             dz = 2 * np.pi / z.size * np.ones_like(z)
             if endpoint and z.size > 1:
                 # increase node weight to account for duplicate node
@@ -881,63 +1154,36 @@ class LinearGrid(_Grid):
                 # scale_weights() will reduce endpoint (dz[0] and dz[-1])
                 # duplicate node weight
         else:
-            z = np.atleast_1d(zeta).astype(float)
-            # enforce periodicity
-            z[z != ZETA_ENDPOINT] %= ZETA_ENDPOINT
-            # need to sort to compute correct spacing
-            z = np.sort(z)
-            dz = np.zeros_like(z)
-            if z.size > 1:
-                # choose dz to be half the cyclic distance of the surrounding two nodes
-                dz[0] = z[1] + (ZETA_ENDPOINT - z[-1]) % ZETA_ENDPOINT
-                dz[1:-1] = z[2:] - z[:-2]
-                dz[-1] = z[0] + (ZETA_ENDPOINT - z[-2]) % ZETA_ENDPOINT
-                dz /= 2
-                dz *= NFP
-                if z.size == 2:
-                    dz[-1] = dz[0]
-                if z[0] == 0 and z[-1] == ZETA_ENDPOINT:
-                    # The cyclic distance algorithm above correctly weights
-                    # the duplicate node spacing at zeta = 0 and 2pi / NFP.
-                    # However, scale_weights() is not aware of this, so we
-                    # counteract the reduction that will be done there.
-                    dz[0] += dz[-1]
-                    dz[-1] = dz[0]
-            else:
-                dz = np.array([ZETA_ENDPOINT])
+            z, dz = _periodic_spacing(zeta, zeta_period, sort=True, jnp=np)
+            dz = dz * NFP
+            if z[0] == 0 and z[-1] == zeta_period:
+                # _periodic_spacing above correctly weights
+                # the duplicate node spacing at zeta = 0 and 2π/NFP.
+                # However, scale_weights() is not aware of this, so we
+                # counteract the reduction that will be done there.
+                dz[0] += dz[-1]
+                dz[-1] = dz[0]
 
-        self._endpoint = (
+        self._poloidal_endpoint = (
             t.size > 0
-            and z.size > 0
-            and (
-                (
-                    np.isclose(t[0], 0, atol=1e-12)
-                    and np.isclose(t[-1], THETA_ENDPOINT, atol=1e-12)
-                )
-                or (t.size == 1 and z.size > 1)
-            )
-            and (
-                (
-                    np.isclose(z[0], 0, atol=1e-12)
-                    and np.isclose(z[-1], ZETA_ENDPOINT, atol=1e-12)
-                )
-                or (z.size == 1 and t.size > 1)
-            )
-        )  # if only one theta or one zeta point, can have endpoint=True
+            and np.isclose(t[0], 0, atol=1e-12)
+            and np.isclose(t[-1], theta_period, atol=1e-12)
+        )
+        self._toroidal_endpoint = (
+            z.size > 0
+            and np.isclose(z[0], 0, atol=1e-12)
+            and np.isclose(z[-1], zeta_period, atol=1e-12)
+        )
+        # if only one theta or one zeta point, can have endpoint=True
         # if the other one is a full array
+        self._endpoint = (self._poloidal_endpoint or (t.size == 1 and z.size > 1)) and (
+            self._toroidal_endpoint or (z.size == 1 and t.size > 1)
+        )
 
-        r, t, z = np.meshgrid(r, t, z, indexing="ij")
-        r = r.flatten()
-        t = t.flatten()
-        z = z.flatten()
-
-        dr, dt, dz = np.meshgrid(dr, dt, dz, indexing="ij")
-        dr = dr.flatten()
-        dt = dt.flatten()
-        dz = dz.flatten()
-
-        nodes = np.stack([r, t, z]).T
-        spacing = np.stack([dr, dt, dz]).T
+        r, t, z = map(np.ravel, np.meshgrid(r, t, z, indexing="ij"))
+        dr, dt, dz = map(np.ravel, np.meshgrid(dr, dt, dz, indexing="ij"))
+        nodes = np.column_stack([r, t, z])
+        spacing = np.column_stack([dr, dt, dz])
 
         return nodes, spacing
 
@@ -968,8 +1214,8 @@ class LinearGrid(_Grid):
             (
                 self._unique_rho_idx,
                 self._inverse_rho_idx,
-                self._unique_theta_idx,
-                self._inverse_theta_idx,
+                self._unique_poloidal_idx,
+                self._inverse_poloidal_idx,
                 self._unique_zeta_idx,
                 self._inverse_zeta_idx,
             ) = self._find_unique_inverse_nodes()
@@ -1007,6 +1253,9 @@ class QuadratureGrid(_Grid):
         self._NFP = check_posint(NFP, "NFP", False)
         self._sym = False
         self._node_pattern = "quad"
+        self._coordinates = "rtz"
+        self._is_meshgrid = True
+        self._period = (np.inf, 2 * np.pi, 2 * np.pi / self._NFP)
         self._nodes, self._spacing = self._create_nodes(L=L, M=M, N=N, NFP=NFP)
         # symmetry is never enforced for Quadrature Grid
         self._sort_nodes()
@@ -1014,8 +1263,8 @@ class QuadratureGrid(_Grid):
         (
             self._unique_rho_idx,
             self._inverse_rho_idx,
-            self._unique_theta_idx,
-            self._inverse_theta_idx,
+            self._unique_poloidal_idx,
+            self._inverse_poloidal_idx,
             self._unique_zeta_idx,
             self._inverse_zeta_idx,
         ) = self._find_unique_inverse_nodes()
@@ -1048,7 +1297,11 @@ class QuadratureGrid(_Grid):
         self._M = check_nonnegint(M, "M", False)
         self._N = check_nonnegint(N, "N", False)
         self._NFP = check_posint(NFP, "NFP", False)
-        L = L + 1
+        self._period = (np.inf, 2 * np.pi, 2 * np.pi / self._NFP)
+        # floor divide (L+2) by 2 bc only need (L+1)/2  points to
+        # integrate L-th order jacobi polynomial exactly, so this
+        # ensures we have enough pts for both odd and even L
+        L = (L + 2) // 2
         M = 2 * M + 1
         N = 2 * N + 1
 
@@ -1064,18 +1317,11 @@ class QuadratureGrid(_Grid):
         z = np.linspace(0, 2 * np.pi / NFP, N, endpoint=False)
         dz = 2 * np.pi / N * np.ones_like(z)
 
-        r, t, z = np.meshgrid(r, t, z, indexing="ij")
-        r = r.flatten()
-        t = t.flatten()
-        z = z.flatten()
+        r, t, z = map(np.ravel, np.meshgrid(r, t, z, indexing="ij"))
+        dr, dt, dz = map(np.ravel, np.meshgrid(dr, dt, dz, indexing="ij"))
 
-        dr, dt, dz = np.meshgrid(dr, dt, dz, indexing="ij")
-        dr = dr.flatten()
-        dt = dt.flatten()
-        dz = dz.flatten()
-
-        nodes = np.stack([r, t, z]).T
-        spacing = np.stack([dr, dt, dz]).T
+        nodes = np.column_stack([r, t, z])
+        spacing = np.column_stack([dr, dt, dz])
 
         return nodes, spacing
 
@@ -1103,8 +1349,8 @@ class QuadratureGrid(_Grid):
             (
                 self._unique_rho_idx,
                 self._inverse_rho_idx,
-                self._unique_theta_idx,
-                self._inverse_theta_idx,
+                self._unique_poloidal_idx,
+                self._inverse_poloidal_idx,
                 self._unique_zeta_idx,
                 self._inverse_zeta_idx,
             ) = self._find_unique_inverse_nodes()
@@ -1152,6 +1398,9 @@ class ConcentricGrid(_Grid):
         self._NFP = check_posint(NFP, "NFP", False)
         self._sym = sym
         self._node_pattern = node_pattern
+        self._coordinates = "rtz"
+        self._is_meshgrid = False
+        self._period = (np.inf, 2 * np.pi, 2 * np.pi / self._NFP)
         self._nodes, self._spacing = self._create_nodes(
             L=L, M=M, N=N, NFP=NFP, axis=axis, node_pattern=node_pattern
         )
@@ -1161,8 +1410,8 @@ class ConcentricGrid(_Grid):
         (
             self._unique_rho_idx,
             self._inverse_rho_idx,
-            self._unique_theta_idx,
-            self._inverse_theta_idx,
+            self._unique_poloidal_idx,
+            self._inverse_poloidal_idx,
             self._unique_zeta_idx,
             self._inverse_zeta_idx,
         ) = self._find_unique_inverse_nodes()
@@ -1206,6 +1455,7 @@ class ConcentricGrid(_Grid):
         self._M = check_nonnegint(M, "M", False)
         self._N = check_nonnegint(N, "N", False)
         self._NFP = check_posint(NFP, "NFP", False)
+        self._period = (np.inf, 2 * np.pi, 2 * np.pi / self._NFP)
 
         def ocs(L):
             # Ramos-Lopez, et al. “Optimal Sampling Patterns for Zernike Polynomials.”
@@ -1232,13 +1482,7 @@ class ConcentricGrid(_Grid):
         elif rho[0] == 0:
             rho[0] = rho[1] / 10
 
-        drho = np.zeros_like(rho)
-        if rho.size > 1:
-            drho[0] = (rho[0] + rho[1]) / 2
-            drho[1:-1] = (rho[2:] - rho[:-2]) / 2
-            drho[-1] = 1 - (rho[-2] + rho[-1]) / 2
-        else:
-            drho = np.array([1.0])
+        drho = _midpoint_spacing(rho, jnp=np)
         r = []
         t = []
         dr = []
@@ -1278,8 +1522,8 @@ class ConcentricGrid(_Grid):
         dr = np.tile(dr, 2 * N + 1)
         dt = np.tile(dt, 2 * N + 1)
         dz = np.ones_like(z) * dz
-        nodes = np.stack([r, t, z]).T
-        spacing = np.stack([dr, dt, dz]).T
+        nodes = np.column_stack([r, t, z])
+        spacing = np.column_stack([dr, dt, dz])
 
         return nodes, spacing
 
@@ -1315,8 +1559,8 @@ class ConcentricGrid(_Grid):
             (
                 self._unique_rho_idx,
                 self._inverse_rho_idx,
-                self._unique_theta_idx,
-                self._inverse_theta_idx,
+                self._unique_poloidal_idx,
+                self._inverse_poloidal_idx,
                 self._unique_zeta_idx,
                 self._inverse_zeta_idx,
             ) = self._find_unique_inverse_nodes()
@@ -1617,3 +1861,70 @@ def find_least_rational_surfaces(
     io = find_most_distant(io_rat, n, a, b, tol=atol, **kwargs)
     rho = _find_rho(iota, io, tol=atol)
     return rho, io
+
+
+def _periodic_spacing(x, period=2 * jnp.pi, sort=False, jnp=jnp):
+    """Compute dx between points in x assuming periodicity.
+
+    Parameters
+    ----------
+    x : Array
+        Points, assumed sorted in the cyclic domain [0, period], unless
+        specified otherwise.
+    period : float
+        Number such that f(x + period) = f(x) for any function f on this domain.
+    sort : bool
+        Set to true if x is not sorted in the cyclic domain [0, period].
+
+    Returns
+    -------
+    x, dx : Array
+        Points in [0, period] and assigned spacing.
+
+    """
+    x = jnp.atleast_1d(x)
+    x = jnp.where(x == period, x, x % period)
+    if sort:
+        x = jnp.sort(x, axis=0)
+    # choose dx to be half the distance between its neighbors
+    if x.size > 1:
+        if np.isfinite(period):
+            dx_0 = x[1] + (period - x[-1]) % period
+            dx_1 = x[0] + (period - x[-2]) % period
+        else:
+            # just set to 0 to stop nan gradient, even though above gives expected value
+            dx_0 = 0
+            dx_1 = 0
+        if x.size == 2:
+            # then dx[0] == period and dx[-1] == 0, so fix this
+            dx_1 = dx_0
+        dx = jnp.hstack([dx_0, x[2:] - x[:-2], dx_1]) / 2
+    else:
+        dx = jnp.array([period])
+    return x, dx
+
+
+def _midpoint_spacing(x, jnp=jnp):
+    """Compute dx between points in x in [0, 1].
+
+    Parameters
+    ----------
+    x : Array
+        Points in [0, 1], assumed sorted.
+
+    Returns
+    -------
+    dx : Array
+        Spacing assigned to points in x.
+
+    """
+    x = jnp.atleast_1d(x)
+    if x.size > 1:
+        # choose dx such that cumulative sums of dx[] are node midpoints
+        # and the total sum is 1
+        dx_0 = (x[0] + x[1]) / 2
+        dx_1 = 1 - (x[-2] + x[-1]) / 2
+        dx = jnp.hstack([dx_0, (x[2:] - x[:-2]) / 2, dx_1])
+    else:
+        dx = jnp.array([1.0])
+    return dx

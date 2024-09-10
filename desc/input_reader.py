@@ -826,7 +826,7 @@ class InputReader:
             Fourier coefficients below this value will be set to 0.
         """
         from desc.grid import LinearGrid
-        from desc.io.equilibrium_io import load
+        from desc.io.optimizable_io import load
         from desc.profiles import PowerSeriesProfile
         from desc.utils import copy_coeffs
 
@@ -1335,26 +1335,7 @@ class InputReader:
                         )
                         inputs["axis"][-1, :] = np.array([n, -numbers[k], 0.0])
             match = re.search(
-                r"ZAXIS(_CC)?\s*=(\s*" + num_form + r"\s*,?)*", command, re.IGNORECASE
-            )
-            if match:
-                numbers = [
-                    float(x)
-                    for x in re.findall(num_form, match.group(0))
-                    if re.search(r"\d", x)
-                ]
-                for k in range(len(numbers)):
-                    n = k
-                    idx = np.where(inputs["axis"][:, 0] == n)[0]
-                    if np.size(idx):
-                        inputs["axis"][idx[0], 2] = numbers[k]
-                    else:
-                        inputs["axis"] = np.pad(
-                            inputs["axis"], ((0, 1), (0, 0)), mode="constant"
-                        )
-                        inputs["axis"][-1, :] = np.array([n, 0.0, numbers[k]])
-            match = re.search(
-                r"ZAXIS_CS\s*=(\s*" + num_form + r"\s*,?)*", command, re.IGNORECASE
+                r"ZAXIS(_CS)?\s*=(\s*" + num_form + r"\s*,?)*", command, re.IGNORECASE
             )
             if match:
                 numbers = [
@@ -1373,6 +1354,25 @@ class InputReader:
                             inputs["axis"], ((0, 1), (0, 0)), mode="constant"
                         )
                         inputs["axis"][-1, :] = np.array([n, 0.0, -numbers[k]])
+            match = re.search(
+                r"ZAXIS_CC\s*=(\s*" + num_form + r"\s*,?)*", command, re.IGNORECASE
+            )
+            if match:
+                numbers = [
+                    float(x)
+                    for x in re.findall(num_form, match.group(0))
+                    if re.search(r"\d", x)
+                ]
+                for k in range(len(numbers)):
+                    n = k
+                    idx = np.where(inputs["axis"][:, 0] == n)[0]
+                    if np.size(idx):
+                        inputs["axis"][idx[0], 2] = numbers[k]
+                    else:
+                        inputs["axis"] = np.pad(
+                            inputs["axis"], ((0, 1), (0, 0)), mode="constant"
+                        )
+                        inputs["axis"][-1, :] = np.array([n, 0.0, numbers[k]])
 
             # boundary shape
             # RBS*sin(m*t-n*p) = RBS*sin(m*t)*cos(n*p) - RBS*cos(m*t)*sin(n*p)

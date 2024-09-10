@@ -12,8 +12,8 @@ expensive computations.
 from desc.backend import jnp
 
 from ..integrals.surface_integral import line_integrals, surface_integrals
+from ..utils import cross, dot, safenorm
 from .data_index import register_compute_fun
-from .utils import cross, dot, safenorm
 
 
 @register_compute_fun(

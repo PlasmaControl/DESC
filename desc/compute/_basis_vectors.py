@@ -11,8 +11,8 @@ expensive computations.
 
 from desc.backend import jnp
 
+from ..utils import cross, dot, safediv
 from .data_index import register_compute_fun
-from .utils import cross, dot, safediv
 
 
 @register_compute_fun(

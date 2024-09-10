@@ -4,6 +4,21 @@ Changelog
 New Features
 
 - Add ``use_signed_distance`` flag to ``PlasmaVesselDistance`` which will use a signed distance as the target, which is positive when the plasma is inside of the vessel surface and negative if the plasma is outside of the vessel surface, to allow optimizer to distinguish if the equilbrium surface exits the vessel surface and guard against it by targeting a positive signed distance.
+- Add ``VectorPotentialField`` class to allow calculation of magnetic fields from a user-specified
+  vector potential function.
+- Add ``compute_magnetic_vector_potential`` methods to most ``MagneticField`` objects to allow vector potential
+  computation.
+- Add ability to save and load vector potential information from ``mgrid`` files.
+- Changes ``ToroidalFlux`` objective to default using a 1D loop integral of the vector potential
+to compute the toroidal flux when possible, as opposed to a 2D surface integral of the magnetic field dotted with ``n_zeta``.
+- Allow specification of Nyquist spectrum maximum modenumbers when using ``VMECIO.save`` to save a DESC .h5 file as a VMEC-format wout file
+
+Bug Fixes
+
+- Fixes bugs that occur when saving asymmetric equilibria as wout files
+- Fixes bug that occurs when using ``VMECIO.plot_vmec_comparison`` to compare to an asymmetric wout file
+
+
 
 v0.12.1
 -------

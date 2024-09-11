@@ -14,6 +14,7 @@ from desc.objectives import (
 )
 from desc.objectives.utils import factorize_linear_constraints
 from desc.utils import Timer, errorif, get_instance, setdefault
+from desc.utils_batched_vectorize import batched_vectorize
 
 from .utils import f_where_x
 
@@ -978,7 +979,9 @@ class ProximalProjection(ObjectiveFunction):
         constants = setdefault(constants, self.constants)
         xg, xf = self._update_equilibrium(x, store=True)
         jvpfun = lambda u: self._jvp(u, xf, xg, constants, op="scaled")
-        return jnp.vectorize(jvpfun, signature="(n)->(k)")(v)
+        return batched_vectorize(
+            jvpfun, signature="(n)->(k)", chunk_size=self._objective._jac_chunk_size
+        )(v)
 
     def jvp_scaled_error(self, v, x, constants=None):
         """Compute Jacobian-vector product of self.compute_scaled_error.
@@ -998,7 +1001,9 @@ class ProximalProjection(ObjectiveFunction):
         constants = setdefault(constants, self.constants)
         xg, xf = self._update_equilibrium(x, store=True)
         jvpfun = lambda u: self._jvp(u, xf, xg, constants, op="scaled_error")
-        return jnp.vectorize(jvpfun, signature="(n)->(k)")(v)
+        return batched_vectorize(
+            jvpfun, signature="(n)->(k)", chunk_size=self._objective._jac_chunk_size
+        )(v)
 
     def jvp_unscaled(self, v, x, constants=None):
         """Compute Jacobian-vector product of self.compute_unscaled.
@@ -1018,7 +1023,9 @@ class ProximalProjection(ObjectiveFunction):
         constants = setdefault(constants, self.constants)
         xg, xf = self._update_equilibrium(x, store=True)
         jvpfun = lambda u: self._jvp(u, xf, xg, constants, op="unscaled")
-        return jnp.vectorize(jvpfun, signature="(n)->(k)")(v)
+        return batched_vectorize(
+            jvpfun, signature="(n)->(k)", chunk_size=self._objective._jac_chunk_size
+        )(v)
 
     def _jvp(self, v, xf, xg, constants, op):
         # we're replacing stuff like this with jvps

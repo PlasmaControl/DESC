@@ -559,12 +559,12 @@ class ObjectiveFunction(IOAble):
         if len(v) == 1:
             jvpfun = lambda dx: Derivative.compute_jvp(fun, 0, dx, x)
             return batched_vectorize(
-                jvpfun, signature="(n)->(k)", jac_chunk_size=self._jac_chunk_size
+                jvpfun, signature="(n)->(k)", chunk_size=self._jac_chunk_size
             )(v[0])
         elif len(v) == 2:
             jvpfun = lambda dx1, dx2: Derivative.compute_jvp2(fun, 0, 0, dx1, dx2, x)
             return batched_vectorize(
-                jvpfun, signature="(n),(n)->(k)", jac_chunk_size=self._jac_chunk_size
+                jvpfun, signature="(n),(n)->(k)", chunk_size=self._jac_chunk_size
             )(v[0], v[1])
         elif len(v) == 3:
             jvpfun = lambda dx1, dx2, dx3: Derivative.compute_jvp3(
@@ -573,7 +573,7 @@ class ObjectiveFunction(IOAble):
             return batched_vectorize(
                 jvpfun,
                 signature="(n),(n),(n)->(k)",
-                jac_chunk_size=self._jac_chunk_size,
+                chunk_size=self._jac_chunk_size,
             )(v[0], v[1], v[2])
         else:
             raise NotImplementedError("Cannot compute JVP higher than 3rd order.")
@@ -1164,7 +1164,7 @@ class _Objective(IOAble, ABC):
         jvpfun = lambda *dx: Derivative.compute_jvp(fun, tuple(range(len(x))), dx, *x)
         sig = ",".join(f"(n{i})" for i in range(len(x))) + "->(k)"
         return batched_vectorize(
-            jvpfun, signature=sig, jac_chunk_size=self._jac_chunk_size
+            jvpfun, signature=sig, chunk_size=self._jac_chunk_size
         )(*v)
 
     @jit

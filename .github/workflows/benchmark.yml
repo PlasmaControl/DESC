@@ -171,3 +171,4 @@ jobs:
         with:
           name: benchmark_artifact_${{ matrix.group }}
           path: tests/benchmarks/.benchmarks
+          include-hidden-files: true

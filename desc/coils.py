@@ -19,7 +19,6 @@ from desc.backend import (
 from desc.compute import get_params, rpz2xyz, rpz2xyz_vec, xyz2rpz, xyz2rpz_vec
 from desc.compute.geom_utils import reflection_matrix
 from desc.compute.utils import _compute as compute_fun
-from desc.compute.utils import safenorm
 from desc.geometry import (
     FourierPlanarCurve,
     FourierRZCurve,
@@ -30,7 +29,7 @@ from desc.geometry import (
 from desc.grid import LinearGrid
 from desc.magnetic_fields import _MagneticField
 from desc.optimizable import Optimizable, OptimizableCollection, optimizable_parameter
-from desc.utils import equals, errorif, flatten_list, warnif
+from desc.utils import equals, errorif, flatten_list, safenorm, warnif
 
 
 @jit

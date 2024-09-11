@@ -45,6 +45,7 @@ from desc.utils import (
     check_posint,
     copy_coeffs,
     errorif,
+    is_any_instance,
     only1,
     setdefault,
     warnif,
@@ -2240,6 +2241,10 @@ class Equilibrium(IOAble, Optimizable):
             options=options,
             copy=copy,
         )
+        from desc.objectives import FixSectionR
+
+        if not is_any_instance(constraints, FixSectionR):
+            things[0].xsection = things[0].get_surface_at(zeta=self.xsection.zeta)
 
         return things[0], result
 

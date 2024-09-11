@@ -122,10 +122,8 @@ _tree_zeros_like = functools.partial(
 # TODO put it somewhere
 def _multimap(f, *args):
     try:
-        print("one")
         return tuple(map(lambda a: f(*a), zip(*args)))
     except TypeError:
-        print("two")
         return f(*args)
 
 

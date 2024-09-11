@@ -136,17 +136,6 @@ jobs:
           pattern: benchmark_artifact_*
           path: tests/benchmarks
 
-      - name: Unzip artifacts if downloaded
-        if: always() && env.has_changes == 'true'
-        run: |
-          cd tests/benchmarks
-          ls
-          if [ -f tests/benchmarks/benchmark_artifact_*.zip ]; then
-            unzip tests/benchmarks/benchmark_artifact_*.zip -d tests/benchmarks
-          else
-            echo "No benchmark artifact file found."
-          fi
-
       - name: Compare latest commit results to the master branch results
         if: env.has_changes == 'true'
         run: |

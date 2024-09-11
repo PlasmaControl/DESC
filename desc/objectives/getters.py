@@ -362,18 +362,37 @@ def maybe_add_self_consistency(thing, constraints):
         constraints, AxisZSelfConsistency
     ):
         constraints += (AxisZSelfConsistency(eq=thing),)
-    if {"R_lmn", "Rp_lmn"} <= params and not is_any_instance(
-        constraints, SectionRSelfConsistency
+
+    if (
+        {"R_lmn", "Rp_lmn"} <= params
+        and not is_any_instance(constraints, SectionRSelfConsistency)
+        and is_any_instance(constraints, FixSectionR)
     ):
         constraints += (SectionRSelfConsistency(eq=thing),)
-    if {"Z_lmn", "Zp_lmn"} <= params and not is_any_instance(
-        constraints, SectionZSelfConsistency
+    elif {"R_lmn", "Rp_lmn"} <= params and not is_any_instance(
+        constraints, FixSectionR
+    ):
+        constraints += (FixSectionR(eq=thing),)
+    if (
+        {"Z_lmn", "Zp_lmn"} <= params
+        and not is_any_instance(constraints, SectionZSelfConsistency)
+        and is_any_instance(constraints, FixSectionZ)
     ):
         constraints += (SectionZSelfConsistency(eq=thing),)
-    if {"L_lmn", "Lp_lmn"} <= params and not is_any_instance(
-        constraints, SectionLambdaSelfConsistency
+    elif {"Z_lmn", "Zp_lmn"} <= params and not is_any_instance(
+        constraints, FixSectionZ
+    ):
+        constraints += (FixSectionZ(eq=thing),)
+    if (
+        {"L_lmn", "Lp_lmn"} <= params
+        and not is_any_instance(constraints, SectionLambdaSelfConsistency)
+        and is_any_instance(constraints, FixSectionLambda)
     ):
         constraints += (SectionLambdaSelfConsistency(eq=thing),)
+    elif {"L_lmn", "Lp_lmn"} <= params and not is_any_instance(
+        constraints, FixSectionLambda
+    ):
+        constraints += (FixSectionLambda(eq=thing),)
 
     # Curve
     if {"shift"} <= params and not is_any_instance(constraints, FixCurveShift):

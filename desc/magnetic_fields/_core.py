@@ -2313,6 +2313,7 @@ def trace_particles(
     m=4,
     q=2,
     E=3.52e6,
+    gyrophase=0.0,
     mode="gc-vac",
     params=None,
     source_grid=None,
@@ -2345,9 +2346,10 @@ def trace_particles(
         Charge of particles, in units of elementary charge.
     E : float or array-like, shape(num_particles,)
         Kinetic energy of particles, in eV.
-    mode : {"gc-vac"}
-        Set of equations to solve. Currently only vacuum guiding center equations
-        are available.
+    gyrophase : float or array-like, shape(num_particles,)
+        Initial gyrophase of particles in [0, 2pi]. Only used if ``mode="full-orbit"``
+    mode : {"gc-vac", "full-orbit"}
+        Set of equations to solve.
     params: dict, optional
         Parameters passed to field
     source_grid : Grid, optional
@@ -2377,21 +2379,22 @@ def trace_particles(
     x : ndarray, shape(num_particles, num_timesteps, 3)
         Position of each particle at each requested time, in
         either r,phi,z or x,y,z depending on basis argument.
-    v : ndarray, shape(num_particles, num_timesteps)
-        Parallel velocity of each particle at specified times.
-    mu : ndarray, shape(num_particles,)
-        Magnetic moment of each particle.
+    v : ndarray
+        Velocity of each particle at specified times. For ``mode="gc-vac"`` this is
+        the parallel velocity of shape shape(num_particles, num_timesteps, 1), for
+        ``mode="full-orbit"`` this is the velocity vector in whichever basis was
+        specified, of shape(num_particles, num_timesteps, 3).
 
     """
     errorif(
-        mode != "gc-vac",
+        mode not in ["gc-vac", "full-orbit"],
         ValueError,
-        "Only vacuum guiding center equations are currently implemented",
+        f"mode should be one of 'gc-vac' or 'full-orbit', got {mode}",
     )
     x0, lambda0, m, q, E = map(jnp.asarray, (x0, lambda0, m, q, E))
     n_particles = x0.shape[0]
-    lambda0, m, q, E = map(
-        lambda x: jnp.broadcast_to(x, n_particles), (lambda0, m, q, E)
+    lambda0, m, q, E, gyrophase = map(
+        lambda x: jnp.broadcast_to(x, n_particles), (lambda0, m, q, E, gyrophase)
     )
 
     @jit
@@ -2404,18 +2407,24 @@ def trace_particles(
     q *= physical_constants["elementary charge"][0]
     E *= physical_constants["electron volt"][0]
 
-    v0 = jnp.sqrt((1 - lambda0) * 2 * E / m)
-    y0 = jnp.hstack([x0, v0[:, None]])
-
+    modv0 = jnp.sqrt(2 * E / m)  # speed |v|
+    vperp0 = jnp.sqrt(lambda0) * modv0
+    vpar0 = jnp.sqrt(modv0**2 - vperp0**2)
     B = field_compute(x0)
-    modB = jnp.linalg.norm(B, axis=-1)
-    mu = (E / m - 1 / 2 * v0**2) / modB
 
-    args = (m / q, mu)
-
-    odefun = functools.partial(
-        _guiding_center, field_compute=field_compute, basis=basis
-    )
+    if mode == "gc-vac":
+        y0 = jnp.hstack([x0, vpar0[:, None]])
+        modB = jnp.linalg.norm(B, axis=-1)
+        mu = vperp0**2 / (2 * modB)
+        args = (m / q, mu)
+        odefun = functools.partial(
+            _guiding_center_vacuum, field_compute=field_compute, basis=basis
+        )
+    elif mode == "full-orbit":
+        x0, v0 = _full_orbit_ic_from_gc(x0, vpar0, vperp0, B, gyrophase, m, q)
+        y0 = jnp.hstack([x0, v0])
+        args = q / m
+        odefun = functools.partial(_full_orbit, field_compute=field_compute)
 
     # diffrax parameters
 
@@ -2459,12 +2468,12 @@ def trace_particles(
     yt = jnp.where(jnp.isinf(yt), jnp.nan, yt)
 
     x = yt[:, :, :3]
-    v = yt[:, :, 3]
+    v = yt[:, :, 3:]
 
-    return x, v, mu
+    return x, v
 
 
-def _guiding_center(t, y, args, field_compute, basis):
+def _guiding_center_vacuum(t, y, args, field_compute, basis):
     # this is the one implemented in simsopt for method="gc_vac"
     # should be equivalent to full lagrangian from Cary & Brizard in vacuum
     m_over_q, mu = args
@@ -2497,6 +2506,50 @@ def _guiding_center(t, y, args, field_compute, basis):
     dvdt = -mu * dot(b, grad_B)
     dxdt = jnp.append(dRdt, dvdt)
     return dxdt.flatten()
+
+
+def _full_orbit(t, y, args, field_compute, basis):
+    q_over_m = args[0]
+    x, v = y[:3], y[3:]
+    B = field_compute(x)
+    dx = v
+    dv = q_over_m * cross(v, B)
+    return jnp.concatenate([dx, dv]).flatten()
+
+
+def _gc_radius(vperp, modB, m, q):
+    """Radius of guiding center orbit."""
+    return m * vperp / (jnp.abs(q) * modB)
+
+
+def _full_orbit_ic_from_gc(x0, vpar, vperp, B, eta, m, q):
+    modB = jnp.linalg.norm(B)
+    b = B / modB
+    # heavily borrowed from simsopt
+    # https://github.com/hiddenSymmetries/simsopt/blob/
+    # 3362805d306dff96de099da3c576850e1ec603f2/src/simsopt/field/tracing.py#L40
+
+    # construct 3 unit vectors, not necessarily orthogonal
+    # (but at least linearly independent)
+    p1 = b
+    # anything other than b
+    # note this is ok in rpz or xyz, since b shouldn't be purely in R or X directions
+    # (if it is, something else is probably wrong)
+    p2 = jnp.array([1, 0, 0])
+    p3 = -jnp.cross(p1, p2)  # some third vector not parallel to p1 or p2
+    p3 /= jnp.linalg.norm(p3)
+    # now do Gram-Schmidt to find orthogonal basis around B
+    q1 = p1  # b
+    q2 = p2 - dot(q1, p2) * q1
+    q2 /= jnp.linalg.norm(q2)
+    q3 = p3 - dot(q1, p3) * q1 - dot(q2, p3) * q2
+    q3 /= jnp.linalg.norm(q3)
+    r = _gc_radius(vperp, modB, m, q)
+
+    # transform from guiding center frame to particle frame
+    x0 = x0 + r * jnp.sin(eta) * q2 + r * jnp.cos(eta) * q3
+    v0 = vpar * q1 + vperp * (-jnp.cos(eta) * q2 + jnp.sin(eta) * q3)
+    return x0, v0
 
 
 class OmnigenousField(Optimizable, IOAble):

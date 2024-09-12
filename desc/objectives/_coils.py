@@ -59,7 +59,7 @@ class _CoilObjective(_Objective):
         If a list, must have the same structure as coil.
     name : str, optional
         Name of the objective function.
-    jac_chunk_size : int, optional
+    jac_chunk_size : int or "auto", optional
         Will calculate the Jacobian for this objective ``jac_chunk_size``
         columns at a time, instead of all at once. The memory usage of the
         Jacobian calculation is roughly ``memory usage = m0 + m1*jac_chunk_size``:
@@ -69,8 +69,9 @@ class _CoilObjective(_Objective):
         ``jac_chunk_size``, the faster the calculation takes, at the cost of
         requiring more memory. A ``jac_chunk_size`` of 1 corresponds to the least
         memory intensive, but slowest method of calculating the Jacobian.
-        If None, it will default to a conservative default
-        `jac_chunk_size` i.e. ``np.ceil(dim_x/4)``
+        If None, it will use the largest size i.e ``obj.dim_x``.
+        Defaults to ``chunk_size="auto"`` which will use a conservative
+        size of 1000.
 
 
     """
@@ -88,7 +89,7 @@ class _CoilObjective(_Objective):
         deriv_mode="auto",
         grid=None,
         name=None,
-        jac_chunk_size=None,
+        jac_chunk_size="auto",
     ):
         self._grid = grid
         self._data_keys = data_keys
@@ -269,7 +270,7 @@ class CoilLength(_CoilObjective):
         Defaults to ``LinearGrid(N=2 * coil.N + 5)``
     name : str, optional
         Name of the objective function.
-    jac_chunk_size : int, optional
+    jac_chunk_size : int or "auto", optional
         Will calculate the Jacobian for this objective ``jac_chunk_size``
         columns at a time, instead of all at once. The memory usage of the
         Jacobian calculation is roughly ``memory usage = m0 + m1*jac_chunk_size``:
@@ -279,8 +280,9 @@ class CoilLength(_CoilObjective):
         ``jac_chunk_size``, the faster the calculation takes, at the cost of
         requiring more memory. A ``jac_chunk_size`` of 1 corresponds to the least
         memory intensive, but slowest method of calculating the Jacobian.
-        If None, it will default to a conservative default
-        `jac_chunk_size` i.e. ``np.ceil(dim_x/4)``
+        If None, it will use the largest size i.e ``obj.dim_x``.
+        Defaults to ``chunk_size="auto"`` which will use a conservative
+        size of 1000.
 
 
     """
@@ -301,7 +303,7 @@ class CoilLength(_CoilObjective):
         deriv_mode="auto",
         grid=None,
         name="coil length",
-        jac_chunk_size=None,
+        jac_chunk_size="auto",
     ):
         if target is None and bounds is None:
             target = 2 * np.pi
@@ -409,7 +411,7 @@ class CoilCurvature(_CoilObjective):
         Defaults to ``LinearGrid(N=2 * coil.N + 5)``
     name : str, optional
         Name of the objective function.
-    jac_chunk_size : int, optional
+    jac_chunk_size : int or "auto", optional
         Will calculate the Jacobian for this objective ``jac_chunk_size``
         columns at a time, instead of all at once. The memory usage of the
         Jacobian calculation is roughly ``memory usage = m0 + m1*jac_chunk_size``:
@@ -419,8 +421,9 @@ class CoilCurvature(_CoilObjective):
         ``jac_chunk_size``, the faster the calculation takes, at the cost of
         requiring more memory. A ``jac_chunk_size`` of 1 corresponds to the least
         memory intensive, but slowest method of calculating the Jacobian.
-        If None, it will default to a conservative default
-        `jac_chunk_size` i.e. ``np.ceil(dim_x/4)``
+        If None, it will use the largest size i.e ``obj.dim_x``.
+        Defaults to ``chunk_size="auto"`` which will use a conservative
+        size of 1000.
 
 
     """
@@ -441,7 +444,7 @@ class CoilCurvature(_CoilObjective):
         deriv_mode="auto",
         grid=None,
         name="coil curvature",
-        jac_chunk_size=None,
+        jac_chunk_size="auto",
     ):
         if target is None and bounds is None:
             bounds = (0, 1)
@@ -544,7 +547,7 @@ class CoilTorsion(_CoilObjective):
         Defaults to ``LinearGrid(N=2 * coil.N + 5)``
     name : str, optional
         Name of the objective function.
-    jac_chunk_size : int, optional
+    jac_chunk_size : int or "auto", optional
         Will calculate the Jacobian for this objective ``jac_chunk_size``
         columns at a time, instead of all at once. The memory usage of the
         Jacobian calculation is roughly ``memory usage = m0 + m1*jac_chunk_size``:
@@ -554,8 +557,9 @@ class CoilTorsion(_CoilObjective):
         ``jac_chunk_size``, the faster the calculation takes, at the cost of
         requiring more memory. A ``jac_chunk_size`` of 1 corresponds to the least
         memory intensive, but slowest method of calculating the Jacobian.
-        If None, it will default to a conservative default
-        `jac_chunk_size` i.e. ``np.ceil(dim_x/4)``
+        If None, it will use the largest size i.e ``obj.dim_x``.
+        Defaults to ``chunk_size="auto"`` which will use a conservative
+        size of 1000.
 
 
     """
@@ -576,7 +580,7 @@ class CoilTorsion(_CoilObjective):
         deriv_mode="auto",
         grid=None,
         name="coil torsion",
-        jac_chunk_size=None,
+        jac_chunk_size="auto",
     ):
         if target is None and bounds is None:
             target = 0
@@ -679,7 +683,7 @@ class CoilCurrentLength(CoilLength):
         Defaults to ``LinearGrid(N=2 * coil.N + 5)``
     name : str, optional
         Name of the objective function.
-    jac_chunk_size : int, optional
+    jac_chunk_size : int or "auto", optional
         Will calculate the Jacobian for this objective ``jac_chunk_size``
         columns at a time, instead of all at once. The memory usage of the
         Jacobian calculation is roughly ``memory usage = m0 + m1*jac_chunk_size``:
@@ -689,8 +693,9 @@ class CoilCurrentLength(CoilLength):
         ``jac_chunk_size``, the faster the calculation takes, at the cost of
         requiring more memory. A ``jac_chunk_size`` of 1 corresponds to the least
         memory intensive, but slowest method of calculating the Jacobian.
-        If None, it will default to a conservative default
-        `jac_chunk_size` i.e. ``np.ceil(dim_x/4)``
+        If None, it will use the largest size i.e ``obj.dim_x``.
+        Defaults to ``chunk_size="auto"`` which will use a conservative
+        size of 1000.
 
 
     """
@@ -711,7 +716,7 @@ class CoilCurrentLength(CoilLength):
         deriv_mode="auto",
         grid=None,
         name="coil current length",
-        jac_chunk_size=None,
+        jac_chunk_size="auto",
     ):
         if target is None and bounds is None:
             target = 0
@@ -822,7 +827,7 @@ class CoilSetMinDistance(_Objective):
         If a list, must have the same structure as coils.
     name : str, optional
         Name of the objective function.
-    jac_chunk_size : int, optional
+    jac_chunk_size : int or "auto", optional
         Will calculate the Jacobian for this objective ``jac_chunk_size``
         columns at a time, instead of all at once. The memory usage of the
         Jacobian calculation is roughly ``memory usage = m0 + m1*jac_chunk_size``:
@@ -832,8 +837,9 @@ class CoilSetMinDistance(_Objective):
         ``jac_chunk_size``, the faster the calculation takes, at the cost of
         requiring more memory. A ``jac_chunk_size`` of 1 corresponds to the least
         memory intensive, but slowest method of calculating the Jacobian.
-        If None, it will default to a conservative default
-        `jac_chunk_size` i.e. ``np.ceil(dim_x/4)``
+        If None, it will use the largest size i.e ``obj.dim_x``.
+        Defaults to ``chunk_size="auto"`` which will use a conservative
+        size of 1000.
 
 
     """
@@ -854,7 +860,7 @@ class CoilSetMinDistance(_Objective):
         deriv_mode="auto",
         grid=None,
         name="coil-coil minimum distance",
-        jac_chunk_size=None,
+        jac_chunk_size="auto",
     ):
         from desc.coils import CoilSet
 
@@ -1011,7 +1017,7 @@ class PlasmaCoilSetMinDistance(_Objective):
         False by default, so that self.things = [coil, eq].
     name : str, optional
         Name of the objective function.
-    jac_chunk_size : int, optional
+    jac_chunk_size : int or "auto", optional
         Will calculate the Jacobian for this objective ``jac_chunk_size``
         columns at a time, instead of all at once. The memory usage of the
         Jacobian calculation is roughly ``memory usage = m0 + m1*jac_chunk_size``:
@@ -1021,8 +1027,9 @@ class PlasmaCoilSetMinDistance(_Objective):
         ``jac_chunk_size``, the faster the calculation takes, at the cost of
         requiring more memory. A ``jac_chunk_size`` of 1 corresponds to the least
         memory intensive, but slowest method of calculating the Jacobian.
-        If None, it will default to a conservative default
-        `jac_chunk_size` i.e. ``np.ceil(dim_x/4)``
+        If None, it will use the largest size i.e ``obj.dim_x``.
+        Defaults to ``chunk_size="auto"`` which will use a conservative
+        size of 1000.
 
 
     """
@@ -1047,7 +1054,7 @@ class PlasmaCoilSetMinDistance(_Objective):
         eq_fixed=False,
         coils_fixed=False,
         name="plasma-coil minimum distance",
-        jac_chunk_size=None,
+        jac_chunk_size="auto",
     ):
         if target is None and bounds is None:
             bounds = (1, np.inf)
@@ -1256,7 +1263,7 @@ class QuadraticFlux(_Objective):
         plasma currents) is set to zero.
     name : str
         Name of the objective function.
-    jac_chunk_size : int, optional
+    jac_chunk_size : int or "auto", optional
         Will calculate the Jacobian for this objective ``jac_chunk_size``
         columns at a time, instead of all at once. The memory usage of the
         Jacobian calculation is roughly ``memory usage = m0 + m1*jac_chunk_size``:
@@ -1266,8 +1273,9 @@ class QuadraticFlux(_Objective):
         ``jac_chunk_size``, the faster the calculation takes, at the cost of
         requiring more memory. A ``jac_chunk_size`` of 1 corresponds to the least
         memory intensive, but slowest method of calculating the Jacobian.
-        If None, it will default to a conservative default
-        `jac_chunk_size` i.e. ``np.ceil(dim_x/4)``
+        If None, it will use the largest size i.e ``obj.dim_x``.
+        Defaults to ``chunk_size="auto"`` which will use a conservative
+        size of 1000.
 
     """
 
@@ -1291,7 +1299,7 @@ class QuadraticFlux(_Objective):
         field_grid=None,
         vacuum=False,
         name="Quadratic flux",
-        jac_chunk_size=None,
+        jac_chunk_size="auto",
     ):
         if target is None and bounds is None:
             target = 0
@@ -1480,7 +1488,7 @@ class ToroidalFlux(_Objective):
         zeta=jnp.array(0.0), NFP=eq.NFP).
     name : str, optional
         Name of the objective function.
-    jac_chunk_size : int, optional
+    jac_chunk_size : int or "auto", optional
         Will calculate the Jacobian for this objective ``jac_chunk_size``
         columns at a time, instead of all at once. The memory usage of the
         Jacobian calculation is roughly ``memory usage = m0 + m1*jac_chunk_size``:
@@ -1490,8 +1498,9 @@ class ToroidalFlux(_Objective):
         ``jac_chunk_size``, the faster the calculation takes, at the cost of
         requiring more memory. A ``jac_chunk_size`` of 1 corresponds to the least
         memory intensive, but slowest method of calculating the Jacobian.
-        If None, it will default to a conservative default
-        `jac_chunk_size` i.e. ``np.ceil(dim_x/4)``
+        If None, it will use the largest size i.e ``obj.dim_x``.
+        Defaults to ``chunk_size="auto"`` which will use a conservative
+        size of 1000.
 
 
 
@@ -1515,7 +1524,7 @@ class ToroidalFlux(_Objective):
         field_grid=None,
         eval_grid=None,
         name="toroidal-flux",
-        jac_chunk_size=None,
+        jac_chunk_size="auto",
     ):
         if target is None and bounds is None:
             target = eq.Psi

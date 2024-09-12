@@ -15,6 +15,7 @@ from desc.utils import (
     errorif,
     flatten_list,
     is_broadcastable,
+    isposint,
     setdefault,
     unique_list,
     warnif,
@@ -43,16 +44,18 @@ class ObjectiveFunction(IOAble):
         otherwise "blocked".
     name : str
         Name of the objective function.
-    jac_chunk_size : int, optional
+    jac_chunk_size : int or "auto", optional
         If `"batched"` deriv_mode is used, will calculate the Jacobian
         ``jac_chunk_size`` columns at a time, instead of all at once.
-       The memory usage of the Jacobian calculation is roughly
+        The memory usage of the Jacobian calculation is roughly
         ``memory usage = m0 + m1*jac_chunk_size``: the smaller the chunk size,
         the less memory the Jacobian calculation will require (with some baseline
         memory usage). The time it takes to compute the Jacobian is roughly
         ``t= t0 + t1/jac_chunk_size` so the larger the ``jac_chunk_size``, the faster
         the calculation takes, at the cost of requiring more memory.
-        If None, it will default to ``np.ceil(dim_x/4)``
+        If None, it will use the largest size i.e ``obj.dim_x``.
+        Defaults to ``chunk_size="auto"`` which will use a conservative
+        size of 1000.
 
     """
 
@@ -64,7 +67,7 @@ class ObjectiveFunction(IOAble):
         use_jit=True,
         deriv_mode="auto",
         name="ObjectiveFunction",
-        jac_chunk_size=None,
+        jac_chunk_size="auto",
     ):
         if not isinstance(objectives, (tuple, list)):
             objectives = (objectives,)
@@ -83,6 +86,7 @@ class ObjectiveFunction(IOAble):
             deriv_mode = "batched"
             jac_chunk_size = 1
         assert deriv_mode in {"auto", "batched", "blocked"}
+        assert jac_chunk_size in ["auto", None] or isposint(jac_chunk_size)
 
         self._jac_chunk_size = jac_chunk_size
         self._objectives = objectives
@@ -158,9 +162,11 @@ class ObjectiveFunction(IOAble):
             self._scalar = False
 
         self._set_derivatives()
-        sub_obj_jac_chunk_sizes = [obj._jac_chunk_size for obj in self.objectives]
+        sub_obj_jac_chunk_sizes_are_ints = [
+            isposint(obj._jac_chunk_size) for obj in self.objectives
+        ]
         warnif(
-            np.any(sub_obj_jac_chunk_sizes) and self._deriv_mode != "blocked",
+            any(sub_obj_jac_chunk_sizes_are_ints) and self._deriv_mode != "blocked",
             UserWarning,
             "'jac_chunk_size' was passed into one or more sub-objectives, but the"
             " ObjectiveFunction is  using 'batched' deriv_mode, so sub-objective "
@@ -170,7 +176,8 @@ class ObjectiveFunction(IOAble):
             "different 'jac_chunk_size' for its Jacobian computation.",
         )
         warnif(
-            self._jac_chunk_size is not None and self._deriv_mode == "blocked",
+            self._jac_chunk_size not in ["auto", None]
+            and self._deriv_mode == "blocked",
             UserWarning,
             "'jac_chunk_size' was passed into ObjectiveFunction, but the "
             "ObjectiveFunction is using 'blocked' deriv_mode, so sub-objective "
@@ -182,19 +189,17 @@ class ObjectiveFunction(IOAble):
             self._unjit()
 
         self._set_things()
-        if self._jac_chunk_size is None and self._deriv_mode == "batched":
-            # set jac_chunk_size to 1/4 of number columns of Jacobian
+        if self._jac_chunk_size == "auto" and self._deriv_mode == "batched":
+            # set jac_chunk_size to 1000 columns of Jacobian
             # as the default for batched deriv_mode
-            self._jac_chunk_size = int(np.ceil(self.dim_x / 4))
+            self._jac_chunk_size = 1000
         if self._deriv_mode == "blocked":
             # set jac_chunk_size for each sub-objective
-            # to 1/4 of number columns of Jacobian
+            # to 1000 columns of Jacobian
             # as the default for batched deriv_mode
             for obj in self.objectives:
                 obj._jac_chunk_size = (
-                    int(np.ceil(sum(t.dim_x for t in obj.things) / 4))
-                    if obj._jac_chunk_size is None
-                    else obj._jac_chunk_size
+                    1000 if obj._jac_chunk_size == "auto" else obj._jac_chunk_size
                 )
 
         self._built = True
@@ -881,6 +886,18 @@ class _Objective(IOAble, ABC):
         reverse mode and forward over reverse mode respectively.
     name : str, optional
         Name of the objective.
+    jac_chunk_size : int or "auto", optional
+        Will calculate the Jacobian
+        ``jac_chunk_size`` columns at a time, instead of all at once.
+        The memory usage of the Jacobian calculation is roughly
+        ``memory usage = m0 + m1*jac_chunk_size``: the smaller the chunk size,
+        the less memory the Jacobian calculation will require (with some baseline
+        memory usage). The time it takes to compute the Jacobian is roughly
+        ``t= t0 + t1/jac_chunk_size` so the larger the ``jac_chunk_size``, the faster
+        the calculation takes, at the cost of requiring more memory.
+        If None, it will use the largest size i.e ``obj.dim_x``.
+        Defaults to ``chunk_size="auto"`` which will use a conservative
+        size of 1000.
 
     """
 
@@ -911,7 +928,7 @@ class _Objective(IOAble, ABC):
         loss_function=None,
         deriv_mode="auto",
         name=None,
-        jac_chunk_size=None,
+        jac_chunk_size="auto",
     ):
         if self._scalar:
             assert self._coordinates == ""
@@ -922,6 +939,8 @@ class _Objective(IOAble, ABC):
         assert (bounds is None) or (target is None), "Cannot use both bounds and target"
         assert loss_function in [None, "mean", "min", "max"]
         assert deriv_mode in {"auto", "fwd", "rev"}
+        assert jac_chunk_size in ["auto", None] or isposint(jac_chunk_size)
+
         self._jac_chunk_size = jac_chunk_size
 
         self._target = target

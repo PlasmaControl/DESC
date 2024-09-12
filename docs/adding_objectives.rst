@@ -70,7 +70,7 @@ A full example objective with comments describing the key points is given below:
             Collocation grid containing the nodes to evaluate at.
         name : str, optional
             Name of the objective function.
-        jac_chunk_size : int, optional
+        jac_chunk_size : int or "auto", optional
             Will calculate the Jacobian for this objective ``jac_chunk_size``
             columns at a time, instead of all at once. The memory usage of the
             Jacobian calculation is roughly ``memory usage = m0 + m1*jac_chunk_size``:
@@ -100,7 +100,7 @@ A full example objective with comments describing the key points is given below:
             normalize_target=True,
             grid=None,
             name="QS triple product",
-            jac_chunk_size=None,
+            jac_chunk_size="auto",
         ):
             # we don't have to do much here, mostly just call ``super().__init__()``
             if target is None and bounds is None:

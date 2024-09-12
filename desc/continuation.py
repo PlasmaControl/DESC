@@ -29,7 +29,7 @@ def _solve_axisym(
     maxiter=100,
     verbose=1,
     checkpoint_path=None,
-    jac_chunk_size=None,
+    jac_chunk_size="auto",
 ):
     """Solve initial axisymmetric case with adaptive step sizing."""
     timer = Timer()
@@ -199,7 +199,7 @@ def _add_pressure(
     maxiter=100,
     verbose=1,
     checkpoint_path=None,
-    jac_chunk_size=None,
+    jac_chunk_size="auto",
 ):
     """Add pressure with adaptive step sizing."""
     timer = Timer()
@@ -330,7 +330,7 @@ def _add_shaping(
     maxiter=100,
     verbose=1,
     checkpoint_path=None,
-    jac_chunk_size=None,
+    jac_chunk_size="auto",
 ):
     """Add 3D shaping with adaptive step sizing."""
     timer = Timer()
@@ -460,7 +460,7 @@ def solve_continuation_automatic(  # noqa: C901
     maxiter=100,
     verbose=1,
     checkpoint_path=None,
-    jac_chunk_size=None,
+    jac_chunk_size="auto",
     **kwargs,
 ):
     """Solve for an equilibrium using an automatic continuation method.
@@ -640,7 +640,7 @@ def solve_continuation(  # noqa: C901
     maxiter=100,
     verbose=1,
     checkpoint_path=None,
-    jac_chunk_size=None,
+    jac_chunk_size="auto",
 ):
     """Solve for an equilibrium by continuation method.
 

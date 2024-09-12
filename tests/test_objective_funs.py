@@ -1286,6 +1286,7 @@ def test_derivative_modes():
         [
             PlasmaVesselDistance(eq, surf, jac_chunk_size=1),
             MagneticWell(eq),
+            AspectRatio(eq),
         ],
         deriv_mode="batched",
         use_jit=False,
@@ -1294,6 +1295,7 @@ def test_derivative_modes():
         [
             PlasmaVesselDistance(eq, surf, jac_chunk_size=2),
             MagneticWell(eq),
+            AspectRatio(eq, jac_chunk_size=None),
         ],
         deriv_mode="blocked",
         jac_chunk_size=10,
@@ -1304,6 +1306,7 @@ def test_derivative_modes():
             [
                 PlasmaVesselDistance(eq, surf),
                 MagneticWell(eq),
+                AspectRatio(eq),
             ],
             deriv_mode="looped",
             use_jit=False,
@@ -1313,9 +1316,9 @@ def test_derivative_modes():
     with pytest.warns(UserWarning, match="jac_chunk_size"):
         obj2.build()
     # check that default size works for blocked
-    assert obj2.objectives[1]._jac_chunk_size == np.ceil(
-        sum(t.dim_x for t in obj2.objectives[1].things) / 4
-    )
+    assert obj2.objectives[1]._jac_chunk_size == 1000
+    assert obj2.objectives[2]._jac_chunk_size is None
+    assert obj1._jac_chunk_size == 1000
     obj3.build()
     x = obj1.x(eq, surf)
     g1 = obj1.grad(x)

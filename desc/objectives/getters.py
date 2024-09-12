@@ -44,7 +44,7 @@ _PROFILE_CONSTRAINTS = {
 }
 
 
-def get_equilibrium_objective(eq, mode="force", normalize=True, jac_chunk_size=None):
+def get_equilibrium_objective(eq, mode="force", normalize=True, jac_chunk_size="auto"):
     """Get the objective function for a typical force balance equilibrium problem.
 
     Parameters
@@ -57,7 +57,7 @@ def get_equilibrium_objective(eq, mode="force", normalize=True, jac_chunk_size=N
         for minimizing MHD energy.
     normalize : bool
         Whether to normalize units of objective.
-    jac_chunk_size : int, optional
+    jac_chunk_size : int or "auto", optional
 
 
     Returns

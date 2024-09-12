@@ -15,7 +15,7 @@ in a slightly slower, but more memory-efficient manner. The memory usage of the 
 will require (with some baseline memory usage). The time to compute the Jacobian is roughly ``t=t0 +t1/jac_chunk_size``
 with some baseline time, so the larger the ``jac_chunk_size``, the faster the calculation takes,
 at the cost of requiring more memory. A ``jac_chunk_size`` of 1 corresponds to the least memory intensive,
-but slowest method of calculating the Jacobian. If ``jac_chunk_size=None``, it will default to ``obj.dim_x/4``.
+but slowest method of calculating the Jacobian. If ``jac_chunk_size="auto"``, it will default to ``obj.dim_x/4``.
 
 If ``deriv_mode="blocked"`` is specified when the ``ObjectiveFunction`` is created, then the Jacobian will
 be calculated individually for each of the sub-objectives inside of the ``ObjectiveFunction``, and in that case

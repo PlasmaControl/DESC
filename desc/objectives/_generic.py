@@ -59,15 +59,15 @@ class GenericObjective(_Objective):
         Name of the objective function.
     jac_chunk_size : int, optional
         Will calculate the Jacobian for this objective ``jac_chunk_size``
-        columns at a time, instead of all at once.  The memory usage of the
+        columns at a time, instead of all at once. The memory usage of the
         Jacobian calculation is roughly ``memory usage = m0 + m1*jac_chunk_size``:
-        the higher the chunk size, the less memory the Jacobian calculation
+        the smaller the chunk size, the less memory the Jacobian calculation
         will require (with some baseline memory usage). The time to compute the
         Jacobian is roughly ``t=t0 +t1/jac_chunk_size``, so the larger the
         ``jac_chunk_size``, the faster the calculation takes, at the cost of
         requiring more memory. A ``jac_chunk_size`` of 1 corresponds to the least
-        memory intensive,  but slowest method of calculating the Jacobian.
-        If None, it will default to the largest possible
+        memory intensive, but slowest method of calculating the Jacobian.
+        If None, it will default to a conservative default
         `jac_chunk_size` i.e. ``np.ceil(dim_x/4)``
 
 
@@ -361,15 +361,15 @@ class ObjectiveFromUser(_Objective):
         Name of the objective function.
     jac_chunk_size : int, optional
         Will calculate the Jacobian for this objective ``jac_chunk_size``
-        columns at a time, instead of all at once.  The memory usage of the
+        columns at a time, instead of all at once. The memory usage of the
         Jacobian calculation is roughly ``memory usage = m0 + m1*jac_chunk_size``:
-        the higher the chunk size, the less memory the Jacobian calculation
+        the smaller the chunk size, the less memory the Jacobian calculation
         will require (with some baseline memory usage). The time to compute the
         Jacobian is roughly ``t=t0 +t1/jac_chunk_size``, so the larger the
         ``jac_chunk_size``, the faster the calculation takes, at the cost of
         requiring more memory. A ``jac_chunk_size`` of 1 corresponds to the least
-        memory intensive,  but slowest method of calculating the Jacobian.
-        If None, it will default to the largest possible
+        memory intensive, but slowest method of calculating the Jacobian.
+        If None, it will default to a conservative default
         `jac_chunk_size` i.e. ``np.ceil(dim_x/4)``
 
 

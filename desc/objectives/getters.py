@@ -44,9 +44,7 @@ _PROFILE_CONSTRAINTS = {
 }
 
 
-def get_equilibrium_objective(
-    eq, mode="force", normalize=True, jac_chunk_size=None, **kwargs
-):
+def get_equilibrium_objective(eq, mode="force", normalize=True, jac_chunk_size=None):
     """Get the objective function for a typical force balance equilibrium problem.
 
     Parameters
@@ -68,10 +66,7 @@ def get_equilibrium_objective(
         An objective function with default force balance objectives.
 
     """
-    kwargs = {
-        **{"eq": eq, "normalize": normalize, "normalize_target": normalize},
-        **kwargs,
-    }
+    kwargs = {"eq": eq, "normalize": normalize, "normalize_target": normalize}
     if mode == "energy":
         objectives = Energy(**kwargs)
     elif mode == "force":

@@ -89,9 +89,9 @@ def chunk(x, chunk_size=None):
 
     Parameters
     ----------
-        x: an array (or pytree of arrays)
-        chunk_size: an integer or None (default)
-            The first axis in x must be a multiple of chunk_size
+    x: an array (or pytree of arrays)
+    chunk_size: an integer or None (default)
+        The first axis in x must be a multiple of chunk_size
 
     Returns
     -------
@@ -108,10 +108,6 @@ def chunk(x, chunk_size=None):
 # The following section of this code is derived from the NetKet project
 # https://github.com/netket/netket/blob/9881c9fb217a2ac4dc9274a054bf6e6a2993c519/
 # netket/jax/_scanmap.py
-#
-# The original copyright notice is as follows
-# Copyright 2021 The NetKet Authors - All rights reserved.
-# Licensed under the Apache License, Version 2.0 (the "License");
 
 
 def scan_append(f, x):
@@ -119,13 +115,13 @@ def scan_append(f, x):
 
     Parameters
     ----------
-        f: a function that takes elements of the leading dimension of x
-        x: a pytree where each leaf array has the same leading dimension
+    f: a function that takes elements of the leading dimension of x
+    x: a pytree where each leaf array has the same leading dimension
 
     Returns
     -------
-        a (pytree of) array(s) with leading dimension same as x,
-        containing the evaluation of f at each element in x
+    a (pytree of) array(s) with leading dimension same as x,
+    containing the evaluation of f at each element in x
     """
     carry_init = True
 
@@ -153,10 +149,6 @@ def _scanmap(fun, scan_fun, argnums=0):
 # The following section of this code is derived from the NetKet project
 # https://github.com/netket/netket/blob/9881c9fb217a2ac4dc9274a054bf6e6a2993c519/
 # netket/jax/_vmap_chunked.py
-#
-# The original copyright notice is as follows
-# Copyright 2021 The NetKet Authors - All rights reserved.
-# Licensed under the Apache License, Version 2.0 (the "License");
 
 
 def _eval_fun_in_chunks(vmapped_fun, chunk_size, argnums, *args, **kwargs):
@@ -236,15 +228,15 @@ def vmap_chunked(
 
     Parameters
     ----------
-        f: The function to be vectorised.
-        in_axes: The axes that should be scanned along. Only supports `0` or `None`
-        chunk_size: The maximum size of the chunks to be used. If it is `None`,
-            chunking is disabled
+    f: The function to be vectorised.
+    in_axes: The axes that should be scanned along. Only supports `0` or `None`
+    chunk_size: The maximum size of the chunks to be used. If it is `None`,
+        chunking is disabled
 
 
     Returns
     -------
-        f: A vectorised and chunked function
+    f: A vectorised and chunked function
     """
     in_axes, argnums = _parse_in_axes(in_axes)
     vmapped_fun = jax.vmap(f, in_axes=in_axes)
@@ -254,8 +246,6 @@ def vmap_chunked(
 def batched_vectorize(pyfunc, *, excluded=frozenset(), signature=None, chunk_size=None):
     """Define a vectorized function with broadcasting and batching.
 
-    below is taken from JAX
-    FIXME: change restof docstring
     :func:`vectorize` is a convenience wrapper for defining vectorized
     functions with broadcasting, in the style of NumPy's
     `generalized universal functions
@@ -272,20 +262,21 @@ def batched_vectorize(pyfunc, *, excluded=frozenset(), signature=None, chunk_siz
 
     Parameters
     ----------
-        pyfunc: function to vectorize.
-        excluded: optional set of integers representing positional arguments for
-        which the function will not be vectorized. These will be passed directly
-        to ``pyfunc`` unmodified.
-        signature: optional generalized universal function signature, e.g.,
-        ``(m,n),(n)->(m)`` for vectorized matrix-vector multiplication. If
-        provided, ``pyfunc`` will be called with (and expected to return) arrays
-        with shapes given by the size of corresponding core dimensions. By
-        default, pyfunc is assumed to take scalars arrays as input and output.
-        chunk_size: the size of the batches to pass to vmap. if 1, will only
+    pyfunc: function to vectorize.
+    excluded: optional set of integers representing positional arguments for
+    which the function will not be vectorized. These will be passed directly
+    to ``pyfunc`` unmodified.
+    signature: optional generalized universal function signature, e.g.,
+    ``(m,n),(n)->(m)`` for vectorized matrix-vector multiplication. If
+    provided, ``pyfunc`` will be called with (and expected to return) arrays
+    with shapes given by the size of corresponding core dimensions. By
+    default, pyfunc is assumed to take scalars arrays as input and output.
+    chunk_size: the size of the batches to pass to vmap. If None, defaults to
+    the largest possible chunk_size (like the default behavior of ``vectorize11)
 
     Returns
     -------
-        Vectorized version of the given function.
+    Batch-vectorized version of the given function.
 
     """
     if any(not isinstance(exclude, (str, int)) for exclude in excluded):

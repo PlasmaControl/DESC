@@ -11,7 +11,7 @@ matrix of shape [``obj.dim_f`` x ``obj.dim_x``], and the calculation of the Jaco
 the columns (the ``obj.dim_x`` dimension), where ``obj`` is the ``ObjectiveFunction`` object. Passing in the ``jac_chunk_size`` attribute allows one to split up
 the vectorized computation into chunks of ``jac_chunk_size`` columns at a time, allowing one to compute the Jacobian
 in a slightly slower, but more memory-efficient manner. The memory usage of the Jacobian calculation is
-``memory usage = m0 + m1*jac_chunk_size``: the higher the chunk size, the less memory the Jacobian calculation
+``memory usage = m0 + m1*jac_chunk_size``: the smaller the chunk size, the less memory the Jacobian calculation
 will require (with some baseline memory usage). The time to compute the Jacobian is roughly ``t=t0 +t1/jac_chunk_size``
 with some baseline time, so the larger the ``jac_chunk_size``, the faster the calculation takes,
 at the cost of requiring more memory. A ``jac_chunk_size`` of 1 corresponds to the least memory intensive,

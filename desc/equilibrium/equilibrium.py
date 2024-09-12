@@ -2243,6 +2243,7 @@ class Equilibrium(IOAble, Optimizable):
         )
         from desc.objectives import FixSectionR
 
+        # TODO: make this more general and probably put it somewhere else
         if not is_any_instance(constraints, FixSectionR):
             things[0].xsection = things[0].get_surface_at(zeta=self.xsection.zeta)
 

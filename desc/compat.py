@@ -119,7 +119,7 @@ def flip_theta(eq):
     Parameters
     ----------
     eq : Equilibrium or iterable of Equilibrium
-        Equilibria to flip the helicity of.
+        Equilibria to redefine the poloidal angle of.
 
     Returns
     -------

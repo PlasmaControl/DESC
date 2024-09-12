@@ -188,13 +188,12 @@ def test_flip_theta_nonaxisym():
 
     data_old = eq.compute(data_keys, grid=grid, helicity=(1, eq.NFP))
     eq = flip_theta(eq)
-    data_new = eq.compute(data_keys, grid=grid, helicity=(1, eq.NFP))
-    data_flip = eq.compute(data_keys, grid=grid_flip, helicity=(1, eq.NFP))
+    data_new = eq.compute(data_keys, grid=grid_flip, helicity=(1, eq.NFP))
 
     # check that basis vectors did not change
-    np.testing.assert_allclose(data_old["e_rho"], data_flip["e_rho"], atol=1e-15)
-    np.testing.assert_allclose(data_old["e_theta"], data_flip["e_theta"], atol=1e-15)
-    np.testing.assert_allclose(data_old["e^zeta"], data_flip["e^zeta"], atol=1e-15)
+    np.testing.assert_allclose(data_old["e_rho"], data_new["e_rho"], atol=1e-15)
+    np.testing.assert_allclose(data_old["e_theta"], data_new["e_theta"], atol=1e-15)
+    np.testing.assert_allclose(data_old["e^zeta"], data_new["e^zeta"], atol=1e-15)
 
     # check that Jacobian is still positive
     np.testing.assert_array_less(0, grid.compress(data_new["sqrt(g)"]))
@@ -208,11 +207,11 @@ def test_flip_theta_nonaxisym():
 
     # check that the total force balance error on each surface did not change
     # (equivalent collocation points now corresond to theta + pi)
-    np.testing.assert_allclose(data_old["|F|"], data_flip["|F|"], rtol=1e-3)
+    np.testing.assert_allclose(data_old["|F|"], data_new["|F|"], rtol=1e-3)
 
     # check that the QH helicity did not change
     # (equivalent collocation points now corresond to theta + pi)
-    np.testing.assert_allclose(data_old["f_C"], data_flip["f_C"], atol=1e-8)
+    np.testing.assert_allclose(data_old["f_C"], data_new["f_C"], atol=1e-8)
 
 
 @pytest.mark.unit

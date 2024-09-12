@@ -372,29 +372,19 @@ def maybe_add_self_consistency(thing, constraints):  # noqa: C901
         constraints, FixBoundaryR
     ):
         mode = "poincare"
+    elif not is_any_instance(constraints, FixBoundaryR) and not is_any_instance(
+        constraints, FixSectionR
+    ):
+        mode = "lcfs"
 
-    if (
-        {"R_lmn", "Rb_lmn"} <= params
-        and not is_any_instance(constraints, BoundaryRSelfConsistency)
-        and is_any_instance(constraints, FixBoundaryR)
-        and mode == "lcfs"
+    if {"R_lmn", "Rb_lmn"} <= params and not is_any_instance(
+        constraints, BoundaryRSelfConsistency
     ):
         constraints += (BoundaryRSelfConsistency(eq=thing),)
-    elif {"R_lmn", "Rb_lmn"} <= params and not is_any_instance(
-        constraints, FixBoundaryR
-    ):
-        constraints += (FixBoundaryR(eq=thing),)
-    if (
-        {"Z_lmn", "Zb_lmn"} <= params
-        and not is_any_instance(constraints, BoundaryZSelfConsistency)
-        and is_any_instance(constraints, FixBoundaryZ)
-        and mode == "lcfs"
+    if {"Z_lmn", "Zb_lmn"} <= params and not is_any_instance(
+        constraints, BoundaryZSelfConsistency
     ):
         constraints += (BoundaryZSelfConsistency(eq=thing),)
-    elif {"Z_lmn", "Zb_lmn"} <= params and not is_any_instance(
-        constraints, FixBoundaryZ
-    ):
-        constraints += (FixBoundaryZ(eq=thing),)
 
     if {"L_lmn"} <= params and not is_any_instance(constraints, FixLambdaGauge):
         constraints += (FixLambdaGauge(eq=thing),)

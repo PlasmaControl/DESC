@@ -845,45 +845,6 @@ class Equilibrium(IOAble, Optimizable):
         axis = FourierRZCurve(R_n, Z_n, modes_R, modes_Z, NFP=self.NFP, sym=self.sym)
         return axis
 
-    def set_poincare_equilibrium(self, zeta=0):
-        """Sets the equilibrium for solving Poincare BC from an existing equilibrium.
-
-        Parameters
-        ----------
-        self : Equilibrium
-            Some equilibrium to be used for creating Poincare equilibrium
-        zeta : float (optional)
-            Zeta angle at which the Poincare section will be fixed
-            Only 0 and Pi is supported for now
-
-        Returns
-        -------
-        eq_poincare : Equilibrium
-            Separate Equilibrium object to be used for Poincare BC problem
-        """
-        xsection = self.get_surface_at(zeta=zeta)
-
-        eq_poincare = Equilibrium(
-            xsection=xsection,
-            pressure=self.pressure,
-            iota=self.iota,
-            Psi=self.Psi,  # flux (in Webers) within the last closed flux surface
-            NFP=self.NFP,  # number of field periods
-            L=self.L,  # radial spectral resolution
-            M=self.M,  # poloidal spectral resolution
-            N=self.N,  # toroidal spectral resolution
-            L_grid=self.L_grid,  # real space radial resolution, slightly oversampled
-            M_grid=self.M_grid,  # real space poloidal resolution, slightly oversampled
-            N_grid=self.N_grid,  # real space toroidal resolution
-            sym=self.sym,  # explicitly enforce stellarator symmetry
-            spectral_indexing=self._spectral_indexing,
-        )
-
-        eq_poincare.change_resolution(self.L, self.M, self.N)
-        eq_poincare.axis = eq_poincare.get_axis()
-        eq_poincare.surface = eq_poincare.get_surface_at(rho=1)
-        return eq_poincare
-
     def compute(  # noqa: C901
         self,
         names,

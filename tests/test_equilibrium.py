@@ -308,15 +308,35 @@ def test_poincare_bc():
     eq = get("HELIOTRON")
 
     print("Creating equilibrium...")
-    eq_poin = eq.set_poincare_equilibrium()
+    xsection = eq.get_surface_at(zeta=0)
+
+    eq_poincare = Equilibrium(
+        xsection=xsection,
+        pressure=eq.pressure,
+        iota=eq.iota,
+        Psi=eq.Psi,  # flux (in Webers) within the last closed flux surface
+        NFP=eq.NFP,  # number of field periods
+        L=eq.L,  # radial spectral resolution
+        M=eq.M,  # poloidal spectral resolution
+        N=eq.N,  # toroidal spectral resolution
+        L_grid=eq.L_grid,  # real space radial resolution, slightly oversampled
+        M_grid=eq.M_grid,  # real space poloidal resolution, slightly oversampled
+        N_grid=eq.N_grid,  # real space toroidal resolution
+        sym=eq.sym,  # explicitly enforce stellarator symmetry
+        spectral_indexing=eq._spectral_indexing,
+    )
+
+    eq_poincare.change_resolution(eq.L, eq.M, eq.N)
+    eq_poincare.axis = eq_poincare.get_axis()
+    eq_poincare.surface = eq_poincare.get_surface_at(rho=1)
 
     for n in range(1, eq.N + 1):
         print(f"\nSolving N={n}")
-        eq_poin.change_resolution(N=n, N_grid=2 * n)
-        solve_poincare(eq_poin)
+        eq_poincare.change_resolution(N=n, N_grid=2 * n)
+        solve_poincare(eq_poincare)
 
     Rr1, Zr1, Rv1, Zv1 = compute_coords(eq, Nz=6)
-    Rr2, Zr2, Rv2, Zv2 = compute_coords(eq_poin, Nz=6)
+    Rr2, Zr2, Rv2, Zv2 = compute_coords(eq_poincare, Nz=6)
     rho_err, theta_err = area_difference(Rr1, Rr2, Zr1, Zr2, Rv1, Rv2, Zv1, Zv2)
     np.testing.assert_allclose(rho_err, 0, atol=5e-2)
     np.testing.assert_allclose(theta_err, 0, atol=5e-2)

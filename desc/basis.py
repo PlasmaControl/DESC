@@ -1846,7 +1846,9 @@ def get_basis_poincare(X_lmn_3D, basis_3D, zeta=0):
     errorif(
         not (0 == zeta or zeta == np.pi),
         ValueError,
-        f"Toroidal angle must be between 0 or pi, got {zeta}",
+        f"Toroidal angle must be either 0 or pi, got {zeta} "
+        "This function takes the zeta value as zeta*eq.NFP such that maximum value pi "
+        "is equivalent to physical angle zeta=pi/eq.NFP",
     )
     # Add up all the X_lm(n>=0) modes
     # so that the quantity at the zeta=0 surface is described with just lm modes

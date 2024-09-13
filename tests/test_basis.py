@@ -428,9 +428,19 @@ def test_get_basis_poincare():
     """Test FourierZernike to ZernikePolynomial utility function."""
     eq = get("HELIOTRON")
     eq.L_lmn = np.random.rand(*np.shape(eq.L_lmn))
-    L_lmn_2d, L_ZP_zeta0_basis = get_basis_poincare(eq.L_lmn, eq.L_basis)
+    Lp0_lmn, Lp0_basis = get_basis_poincare(eq.L_lmn, eq.L_basis)
     grid = LinearGrid(L=50, M=50, zeta=0)
-    transf = Transform(grid=grid, basis=L_ZP_zeta0_basis, derivs=0)
-    L_2D = transf.transform(L_lmn_2d)
+    transf = Transform(grid=grid, basis=Lp0_basis, derivs=0)
+    L_2D = transf.transform(Lp0_lmn)
     L_3D = eq.compute("lambda", grid=grid)["lambda"]
     np.testing.assert_allclose(L_2D, L_3D, atol=1e-14)
+
+    Lpp_lmn, Lpp_basis = get_basis_poincare(eq.L_lmn, eq.L_basis, zeta=np.pi)
+    grid = LinearGrid(L=50, M=50, zeta=np.pi, NFP=eq.NFP)
+    transf = Transform(grid=grid, basis=Lpp_basis, derivs=0)
+    L_2D = transf.transform(Lpp_lmn)
+    L_3D = eq.compute("lambda", grid=grid)["lambda"]
+    np.testing.assert_allclose(L_2D, L_3D, atol=1e-12)
+
+    with pytest.raises(ValueError):
+        _, _ = get_basis_poincare(eq.L_lmn, eq.L_basis, zeta=np.pi / eq.NFP)

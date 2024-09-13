@@ -488,7 +488,7 @@ class SectionRSelfConsistency(_Objective):
                     )
                 )
                 self._A[i, j] = 1
-        elif eq.xsection.zeta == np.pi:
+        elif eq.xsection.zeta == np.pi / eq.NFP:
             for i, (l, m, n) in enumerate(modes):
                 j1 = np.argwhere(
                     np.logical_and(
@@ -513,6 +513,8 @@ class SectionRSelfConsistency(_Objective):
         else:
             raise ValueError(
                 f"Zeta value must be 0 or pi. The given value is {eq.xsection.zeta}"
+                "This constraint takes the zeta value as zeta*eq.NFP such that maximum "
+                "value pi is equivalent to physical angle zeta=pi/eq.NFP"
             )
 
         super().build(use_jit=use_jit, verbose=verbose)
@@ -605,7 +607,7 @@ class SectionZSelfConsistency(_Objective):
                     )
                 )
                 self._A[i, j] = 1
-        elif eq.xsection.zeta == np.pi:
+        elif eq.xsection.zeta == np.pi / eq.NFP:
             for i, (l, m, n) in enumerate(modes):
                 j1 = np.argwhere(
                     np.logical_and(
@@ -630,6 +632,8 @@ class SectionZSelfConsistency(_Objective):
         else:
             raise ValueError(
                 f"Zeta value must be 0 or pi. The given value is {eq.xsection.zeta}"
+                "This constraint takes the zeta value as zeta*eq.NFP such that maximum "
+                "value pi is equivalent to physical angle zeta=pi/eq.NFP"
             )
 
         super().build(use_jit=use_jit, verbose=verbose)
@@ -710,7 +714,7 @@ class SectionLambdaSelfConsistency(_Objective):
                     )
                 )
                 self._A[i, j] = 1
-        elif eq.xsection.zeta == np.pi:
+        elif eq.xsection.zeta == np.pi / eq.NFP:
             for i, (l, m, n) in enumerate(Lp_modes):
                 j1 = np.argwhere(
                     np.logical_and(
@@ -734,8 +738,9 @@ class SectionLambdaSelfConsistency(_Objective):
                 self._A[i, j2] = 1
         else:
             raise ValueError(
-                "Unvalid zeta value! Only 0 or pi is supported! zeta ="
-                + f"{eq.xsection.zeta} is given!"
+                f"Zeta value must be 0 or pi. The given value is {eq.xsection.zeta}"
+                "This constraint takes the zeta value as zeta*eq.NFP such that maximum "
+                "value pi is equivalent to physical angle zeta=pi/eq.NFP"
             )
 
         if self.target is not None:

@@ -189,7 +189,7 @@ class ObjectiveFunction(IOAble):
             self._unjit()
 
         self._set_things()
-        if self._jac_chunk_size == "auto" and self._deriv_mode == "batched":
+        if self._jac_chunk_size == "auto":
             # set jac_chunk_size to 1000 columns of Jacobian
             # as the default for batched deriv_mode
             self._jac_chunk_size = 1000
@@ -201,6 +201,8 @@ class ObjectiveFunction(IOAble):
                 obj._jac_chunk_size = (
                     1000 if obj._jac_chunk_size == "auto" else obj._jac_chunk_size
                 )
+                print(obj._jac_chunk_size)
+        print(self._jac_chunk_size)
 
         self._built = True
         timer.stop("Objective build")

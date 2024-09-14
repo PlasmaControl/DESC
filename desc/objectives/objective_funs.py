@@ -201,8 +201,6 @@ class ObjectiveFunction(IOAble):
                 obj._jac_chunk_size = (
                     1000 if obj._jac_chunk_size == "auto" else obj._jac_chunk_size
                 )
-                print(obj._jac_chunk_size)
-        print(self._jac_chunk_size)
 
         self._built = True
         timer.stop("Objective build")

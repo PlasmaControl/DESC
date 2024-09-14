@@ -3,7 +3,8 @@ name: Cache dependencies
 # and pip dependencies cache
 on:
   schedule:
-    - cron: '30 4 */2 * *'  # This triggers the workflow at 4:30 AM every 2 days
+    - cron: '30 8 */2 * *'  # This triggers the workflow at 4:30 AM ET every 2 days
+    # cron syntax uses UTC time, so 4:30 AM ET is 8:30 AM UTC (for daylight time)
   workflow_dispatch:
 
 jobs:

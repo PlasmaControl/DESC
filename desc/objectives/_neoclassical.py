@@ -173,12 +173,11 @@ class EffectiveRipple(_Objective):
             )
         else:
             rho = self._grid_1dr.compress(self._grid_1dr.nodes[:, 0])
-        self.constants["rho"] = rho
-        self.constants["quad"] = get_quadrature(
+        self._constants["rho"] = rho
+        self._constants["quad"] = get_quadrature(
             leggauss_lob(self._hyperparameters.pop("num_quad")),
             Bounce1D._default_automorphism,
         )
-
         self._dim_f = rho.size
         self._target, self._bounds = _parse_callable_target_bounds(
             self._target, self._bounds, rho

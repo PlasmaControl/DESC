@@ -11,13 +11,12 @@ expensive computations.
 
 from functools import partial
 
-from orthax.legendre import leggauss
 from quadax import simpson
 
 from desc.backend import jit, jnp, trapezoid
 
 from ..integrals.bounce_integral import Bounce1D
-from ..integrals.quad_utils import leggauss_lob
+from ..integrals.quad_utils import get_quadrature, leggauss_lob
 from ..utils import cross, dot, map2, safediv
 from .data_index import register_compute_fun
 from .utils import _get_pitch_inv, _poloidal_mean
@@ -106,12 +105,12 @@ def _G_ra_fsa(data, transforms, profiles, **kwargs):
     + Bounce1D.required_names,
     resolution_requirement="z",
     source_grid_requirement={"coordinates": "raz", "is_meshgrid": True},
-    num_quad="int : Resolution for quadrature of bounce integrals. Default is 32.",
+    quad="jnp.ndarray : Optional, quadrature points and weights for bounce integrals.",
     num_pitch=(
         "int : Resolution for quadrature over velocity coordinate, preferably odd. "
-        "Default is 125. Profile will look smoother at high values. "
-        "(If computed on many flux surfaces and small oscillations is seen "
-        "between neighboring surfaces, increasing this will smooth the profile)."
+        "Default is 75. Profile will look smoother at high values."
+        # If computed on many flux surfaces and small oscillations are seen
+        # between neighboring surfaces, increasing this will smooth the profile.
     ),
     num_well=(
         "int : Maximum number of wells to detect for each pitch and field line. "
@@ -140,7 +139,7 @@ def _G_ra_fsa(data, transforms, profiles, **kwargs):
     #  required for sufficient coverage of the surface. This requires many knots to
     #  for the spline of the magnetic field to capture fine ripples in a large interval.
 )
-@partial(jit, static_argnames=["num_quad", "num_pitch", "num_well", "batch"])
+@partial(jit, static_argnames=["num_pitch", "num_well", "batch"])
 def _effective_ripple(params, transforms, profiles, data, **kwargs):
     """https://doi.org/10.1063/1.873749.
 
@@ -148,8 +147,12 @@ def _effective_ripple(params, transforms, profiles, data, **kwargs):
     V. V. Nemov, S. V. Kasilov, W. Kernbichler, M. F. Heyn.
     Phys. Plasmas 1 December 1999; 6 (12): 4622–4632.
     """
-    quad = leggauss_lob(kwargs.get("num_quad", 32))
-    num_pitch = kwargs.get("num_pitch", 125)
+    quad = (
+        kwargs["quad"]
+        if "quad" in kwargs
+        else get_quadrature(leggauss_lob(32), Bounce1D._default_automorphism)
+    )
+    num_pitch = kwargs.get("num_pitch", 75)
     num_well = kwargs.get("num_well", None)
     batch = kwargs.get("batch", True)
     grid = transforms["grid"].source_grid
@@ -169,7 +172,7 @@ def _effective_ripple(params, transforms, profiles, data, **kwargs):
 
     def compute(data):
         """(∂ψ/∂ρ)⁻² B₀⁻² ∫ dλ ∑ⱼ Hⱼ²/Iⱼ."""
-        bounce = Bounce1D(grid, data, quad, is_reshaped=True)
+        bounce = Bounce1D(grid, data, quad, automorphism=None, is_reshaped=True)
         # Interpolate |∇ρ| κ_g since it is smoother than κ_g alone.
         H = bounce.integrate(
             dH,
@@ -230,10 +233,10 @@ def _effective_ripple(params, transforms, profiles, data, **kwargs):
     ]
     + Bounce1D.required_names,
     source_grid_requirement={"coordinates": "raz", "is_meshgrid": True},
-    num_quad="int : Resolution for quadrature of bounce integrals. Default is 32.",
+    quad="jnp.ndarray : Optional, quadrature points and weights for bounce integrals.",
     num_pitch=(
         "int : Resolution for quadrature over velocity coordinate, preferably odd. "
-        "Default is 125."
+        "Default is 75."
     ),
     num_well=(
         "int : Maximum number of wells to detect for each pitch and field line. "
@@ -243,7 +246,7 @@ def _effective_ripple(params, transforms, profiles, data, **kwargs):
     ),
     batch="bool : Whether to vectorize part of the computation. Default is true.",
 )
-@partial(jit, static_argnames=["num_quad", "num_pitch", "num_well", "batch"])
+@partial(jit, static_argnames=["num_pitch", "num_well", "batch"])
 def _Gamma_c(params, transforms, profiles, data, **kwargs):
     """Energetic ion confinement proxy as defined by Velasco et al.
 
@@ -258,8 +261,12 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
     https://doi.org/10.1063/1.2912456.
     Equation 61, using Velasco's γ_c from equation 15 of the above paper.
     """
-    quad = leggauss(kwargs.get("num_quad", 32))
-    num_pitch = kwargs.get("num_pitch", 125)
+    quad = (
+        kwargs["quad"]
+        if "quad" in kwargs
+        else get_quadrature(leggauss_lob(32), Bounce1D._default_automorphism)
+    )
+    num_pitch = kwargs.get("num_pitch", 75)
     num_well = kwargs.get("num_well", None)
     batch = kwargs.get("batch", True)
     grid = transforms["grid"].source_grid
@@ -274,7 +281,7 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
         """∫ dλ ∑ⱼ [v τ γ_c²]ⱼ."""
         # Note v τ = 4λ⁻²B₀⁻¹ ∂I/∂((λB₀)⁻¹) where v is the particle velocity,
         # τ is the bounce time, and I is defined in Nemov eq. 36.
-        bounce = Bounce1D(grid, data, quad, is_reshaped=True)
+        bounce = Bounce1D(grid, data, quad, automorphism=None, is_reshaped=True)
         v_tau = bounce.integrate(
             d_v_tau, data["pitch_inv"], batch=batch, num_well=num_well
         )
@@ -349,10 +356,10 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
     ]
     + Bounce1D.required_names,
     source_grid_requirement={"coordinates": "raz", "is_meshgrid": True},
-    num_quad="int : Resolution for quadrature of bounce integrals. Default is 32.",
+    quad="jnp.ndarray : Optional, quadrature points and weights for bounce integrals.",
     num_pitch=(
         "int : Resolution for quadrature over velocity coordinate, preferably odd. "
-        "Default is 125."
+        "Default is 75."
     ),
     num_well=(
         "int : Maximum number of wells to detect for each pitch and field line. "
@@ -362,7 +369,7 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
     ),
     batch="bool : Whether to vectorize part of the computation. Default is true.",
 )
-@partial(jit, static_argnames=["num_quad", "num_pitch", "num_well", "batch"])
+@partial(jit, static_argnames=["num_pitch", "num_well", "batch"])
 def _Gamma_c_Nemov(params, transforms, profiles, data, **kwargs):
     """Energetic ion confinement proxy as defined by Nemov et al.
 
@@ -375,8 +382,12 @@ def _Gamma_c_Nemov(params, transforms, profiles, data, **kwargs):
     The radial electric field has a negligible effect on alpha particle confinement,
     so it is assumed to be zero.
     """
-    quad = leggauss(kwargs.get("num_quad", 32))
-    num_pitch = kwargs.get("num_pitch", 125)
+    quad = (
+        kwargs["quad"]
+        if "quad" in kwargs
+        else get_quadrature(leggauss_lob(32), Bounce1D._default_automorphism)
+    )
+    num_pitch = kwargs.get("num_pitch", 75)
     num_well = kwargs.get("num_well", None)
     batch = kwargs.get("batch", True)
     grid = transforms["grid"].source_grid
@@ -413,7 +424,7 @@ def _Gamma_c_Nemov(params, transforms, profiles, data, **kwargs):
         """∫ dλ ∑ⱼ [v τ γ_c²]ⱼ."""
         # Note v τ = 4λ⁻²B₀⁻¹ ∂I/∂((λB₀)⁻¹) where v is the particle velocity,
         # τ is the bounce time, and I is defined in Nemov eq. 36.
-        bounce = Bounce1D(grid, data, quad, is_reshaped=True)
+        bounce = Bounce1D(grid, data, quad, automorphism=None, is_reshaped=True)
         v_tau = bounce.integrate(
             d_v_tau, data["pitch_inv"], batch=batch, num_well=num_well
         )

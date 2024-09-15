@@ -598,8 +598,8 @@ def to_sfl(
     M_grid = M_grid or int(2 * M)
     N_grid = N_grid or int(2 * N)
 
-    grid = ConcentricGrid(L_grid, M_grid, N_grid, node_pattern="ocs")
-    bdry_grid = LinearGrid(M=M, N=N, rho=1.0)
+    grid = ConcentricGrid(L_grid, M_grid, N_grid, node_pattern="ocs", NFP=eq.NFP)
+    bdry_grid = LinearGrid(M=M, N=N, rho=1.0, NFP=eq.NFP)
 
     toroidal_coords = eq.compute(["R", "Z", "lambda"], grid=grid)
     theta = grid.nodes[:, 1]

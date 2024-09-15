@@ -7,6 +7,8 @@ from desc.compute.utils import _compute as compute_fun
 from desc.grid import LinearGrid
 from desc.utils import Timer
 
+from ..integrals import Bounce1D
+from ..integrals.quad_utils import get_quadrature, leggauss_lob
 from .objective_funs import _Objective
 from .utils import _parse_callable_target_bounds
 
@@ -66,18 +68,18 @@ class EffectiveRipple(_Objective):
         Should have poloidal and toroidal resolution.
     alpha : ndarray
         Unique coordinate values for field line poloidal angle label alpha.
-    zeta : ndarray
-        Unique coordinate values for field line following coordinate zeta. Must be
-        strictly increasing. A good reference density is 100 knots per toroidal transit.
-        For axisymmetric devices only one toroidal transit is necessary. Otherwise,
-        more toroidal transits will give more accurate result, with diminishing returns.
+    num_transit : int
+        Number of toroidal transits to follow field line.
+        For axisymmetric devices, one poloidal transit is sufficient. Otherwise,
+        more transits will give more accurate result, with diminishing returns.
+    knots_per_transit : int
+        Number of points per toroidal transit at which to sample data along field
+        line. Default is 100.
     num_quad : int
         Resolution for quadrature of bounce integrals. Default is 32.
     num_pitch : int
         Resolution for quadrature over velocity coordinate, preferably odd.
-        Default is 99. Profile will look smoother at high values.
-        (If computed on many flux surfaces and small oscillations is seen
-        between neighboring surfaces, increasing this will smooth the profile).
+        Default is 75. Profile will look smoother at high values.
     batch : bool
         Whether to vectorize part of the computation. Default is true.
     num_well : int
@@ -97,7 +99,7 @@ class EffectiveRipple(_Objective):
     def __init__(
         self,
         eq,
-        target=0,
+        target=0.0,
         bounds=None,
         weight=1,
         normalize=True,
@@ -106,9 +108,10 @@ class EffectiveRipple(_Objective):
         deriv_mode="auto",
         grid=None,
         alpha=np.array([0]),
-        zeta=np.linspace(0, 2 * np.pi, 100),
+        num_transit=10,
+        knots_per_transit=100,
         num_quad=32,
-        num_pitch=99,
+        num_pitch=75,
         batch=True,
         num_well=None,
         name="Effective ripple",
@@ -116,14 +119,6 @@ class EffectiveRipple(_Objective):
         if bounds is not None:
             target = None
 
-        # Assign in build.
-        self._grid_1dr = grid
-        self._constants = {"quad_weights": 1}
-        self._dim_f = 1
-        self._rho = np.array([1.0])
-        # Assign here.
-        self._alpha = alpha
-        self._zeta = zeta
         self._keys_1dr = [
             "iota",
             "iota_r",
@@ -132,13 +127,20 @@ class EffectiveRipple(_Objective):
             "max_tz |B|",
             "R0",  # TODO: GitHub PR #1094
         ]
-        self._keys = ["effective ripple"]
+        self._constants = {
+            "quad_weights": 1,
+            "alpha": alpha,
+            "zeta": np.linspace(
+                0, 2 * np.pi * num_transit, knots_per_transit * num_transit
+            ),
+        }
         self._hyperparameters = {
             "num_quad": num_quad,
             "num_pitch": num_pitch,
             "batch": batch,
             "num_well": num_well,
         }
+        self._grid_1dr = grid
 
         super().__init__(
             things=eq,
@@ -165,15 +167,21 @@ class EffectiveRipple(_Objective):
         """
         eq = self.things[0]
         if self._grid_1dr is None:
-            self._rho = np.linspace(0.1, 1, 5)
+            rho = np.linspace(0.5, 1, 3)
             self._grid_1dr = LinearGrid(
-                rho=self._rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym
+                rho=rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym
             )
         else:
-            self._rho = self._grid_1dr.compress(self._grid_1dr.nodes[:, 0])
-        self._dim_f = self._rho.size
+            rho = self._grid_1dr.compress(self._grid_1dr.nodes[:, 0])
+        self.constants["rho"] = rho
+        self.constants["quad"] = get_quadrature(
+            leggauss_lob(self._hyperparameters.pop("num_quad")),
+            Bounce1D._default_automorphism,
+        )
+
+        self._dim_f = rho.size
         self._target, self._bounds = _parse_callable_target_bounds(
-            self._target, self._bounds, self._rho
+            self._target, self._bounds, rho
         )
 
         timer = Timer()
@@ -185,7 +193,7 @@ class EffectiveRipple(_Objective):
             self._keys_1dr, eq, self._grid_1dr
         )
         self._constants["profiles"] = get_profiles(
-            self._keys_1dr + self._keys, eq, self._grid_1dr
+            self._keys_1dr + ["effective ripple"], eq, self._grid_1dr
         )
 
         timer.stop("Precomputing transforms")
@@ -215,6 +223,7 @@ class EffectiveRipple(_Objective):
         if constants is None:
             constants = self.constants
         eq = self.things[0]
+        # TODO: compute all deps of effective ripple here
         data = compute_fun(
             eq,
             self._keys_1dr,
@@ -222,10 +231,11 @@ class EffectiveRipple(_Objective):
             constants["transforms_1dr"],
             constants["profiles"],
         )
+        # TODO: interpolate all deps to this grid with fft utilities from fourier bounce
         grid = eq.get_rtz_grid(
-            self._rho,
-            self._alpha,
-            self._zeta,
+            constants["rho"],
+            constants["alpha"],
+            constants["zeta"],
             coordinates="raz",
             period=(np.inf, 2 * np.pi, np.inf),
             iota=self._grid_1dr.compress(data["iota"]),
@@ -241,11 +251,12 @@ class EffectiveRipple(_Objective):
         }
         data = compute_fun(
             eq,
-            self._keys,
+            "effective ripple",
             params,
-            get_transforms(self._keys, eq, grid, jitable=True),
+            get_transforms("effective ripple", eq, grid, jitable=True),
             constants["profiles"],
             data=data,
+            quad=constants["quad"],
             **self._hyperparameters,
         )
         return grid.compress(data["effective ripple"])
@@ -298,18 +309,18 @@ class GammaC(_Objective):
         Should have poloidal and toroidal resolution.
     alpha : ndarray
         Unique coordinate values for field line poloidal angle label alpha.
-    zeta : ndarray
-        Unique coordinate values for field line following coordinate zeta. Must be
-        strictly increasing. A good reference density is 100 knots per toroidal transit.
-        For axisymmetric devices only one toroidal transit is necessary. Otherwise,
-        more toroidal transits will give more accurate result, with diminishing returns.
+    num_transit : int
+        Number of toroidal transits to follow field line.
+        For axisymmetric devices, one poloidal transit is sufficient. Otherwise,
+        more transits will give more accurate result, with diminishing returns.
+    knots_per_transit : int
+        Number of points per toroidal transit at which to sample data along field
+        line. Default is 100.
     num_quad : int
         Resolution for quadrature of bounce integrals. Default is 32.
     num_pitch : int
         Resolution for quadrature over velocity coordinate, preferably odd.
-        Default is 99. Profile will look smoother at high values.
-        (If computed on many flux surfaces and small oscillations is seen
-        between neighboring surfaces, increasing this will smooth the profile).
+        Default is 75. Profile will look smoother at high values.
     batch : bool
         Whether to vectorize part of the computation. Default is true.
     num_well : int
@@ -338,9 +349,10 @@ class GammaC(_Objective):
         deriv_mode="auto",
         grid=None,
         alpha=np.array([0]),
-        zeta=np.linspace(0, 2 * np.pi, 100),
+        num_transit=10,
+        knots_per_transit=100,
         num_quad=32,
-        num_pitch=99,
+        num_pitch=75,
         batch=True,
         num_well=None,
         name="Gamma_c",
@@ -348,22 +360,21 @@ class GammaC(_Objective):
         if bounds is not None:
             target = None
 
-        # Assign in build.
-        self._grid_1dr = grid
-        self._constants = {"quad_weights": 1}
-        self._dim_f = 1
-        self._rho = np.array([1.0])
-        # Assign here.
-        self._alpha = alpha
-        self._zeta = zeta
         self._keys_1dr = ["iota", "iota_r", "min_tz |B|", "max_tz |B|"]
-        self._keys = ["Gamma_c"]
+        self._constants = {
+            "quad_weights": 1,
+            "alpha": alpha,
+            "zeta": np.linspace(
+                0, 2 * np.pi * num_transit, knots_per_transit * num_transit
+            ),
+        }
         self._hyperparameters = {
             "num_quad": num_quad,
             "num_pitch": num_pitch,
             "batch": batch,
             "num_well": num_well,
         }
+        self._grid_1dr = grid
 
         super().__init__(
             things=eq,
@@ -390,15 +401,20 @@ class GammaC(_Objective):
         """
         eq = self.things[0]
         if self._grid_1dr is None:
-            self._rho = np.linspace(0.1, 1, 5)
+            rho = np.linspace(0.5, 1, 3)
             self._grid_1dr = LinearGrid(
-                rho=self._rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym
+                rho=rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym
             )
         else:
-            self._rho = self._grid_1dr.compress(self._grid_1dr.nodes[:, 0])
-        self._dim_f = self._rho.size
+            rho = self._grid_1dr.compress(self._grid_1dr.nodes[:, 0])
+        self._constants["rho"] = rho
+        self._constants["quad"] = get_quadrature(
+            leggauss_lob(self._hyperparameters.pop("num_quad")),
+            Bounce1D._default_automorphism,
+        )
+        self._dim_f = rho.size
         self._target, self._bounds = _parse_callable_target_bounds(
-            self._target, self._bounds, self._rho
+            self._target, self._bounds, rho
         )
 
         timer = Timer()
@@ -410,7 +426,7 @@ class GammaC(_Objective):
             self._keys_1dr, eq, self._grid_1dr
         )
         self._constants["profiles"] = get_profiles(
-            self._keys_1dr + self._keys, eq, self._grid_1dr
+            self._keys_1dr + ["Gamma_c"], eq, self._grid_1dr
         )
 
         timer.stop("Precomputing transforms")
@@ -440,6 +456,7 @@ class GammaC(_Objective):
         if constants is None:
             constants = self.constants
         eq = self.things[0]
+        # TODO: compute all deps of gamma here
         data = compute_fun(
             eq,
             self._keys_1dr,
@@ -447,10 +464,11 @@ class GammaC(_Objective):
             constants["transforms_1dr"],
             constants["profiles"],
         )
+        # TODO: interpolate all deps to this grid with fft utilities from fourier bounce
         grid = eq.get_rtz_grid(
-            self._rho,
-            self._alpha,
-            self._zeta,
+            constants["rho"],
+            constants["alpha"],
+            constants["zeta"],
             coordinates="raz",
             period=(np.inf, 2 * np.pi, np.inf),
             iota=self._grid_1dr.compress(data["iota"]),
@@ -462,11 +480,12 @@ class GammaC(_Objective):
         }
         data = compute_fun(
             eq,
-            self._keys,
+            "Gamma_c",
             params,
-            get_transforms(self._keys, eq, grid, jitable=True),
+            get_transforms("Gamma_c", eq, grid, jitable=True),
             constants["profiles"],
             data=data,
+            quad=constants["quad"],
             **self._hyperparameters,
         )
         return grid.compress(data["Gamma_c"])

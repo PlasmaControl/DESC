@@ -73,7 +73,8 @@ class EffectiveRipple(_Objective):
         For axisymmetric devices only one toroidal transit is necessary. Otherwise,
         more toroidal transits will give more accurate result, with diminishing returns.
     knots_per_transit : int
-        Number of points per toroidal transit to sample data. Default is 100.
+        Number of points per toroidal transit at which to sample data along field
+        line. Default is 100.
     num_quad : int
         Resolution for quadrature of bounce integrals. Default is 32.
     num_pitch : int
@@ -166,7 +167,7 @@ class EffectiveRipple(_Objective):
         """
         eq = self.things[0]
         if self._grid_1dr is None:
-            rho = np.linspace(0.1, 1, 5)
+            rho = np.linspace(0.5, 1, 3)
             self._grid_1dr = LinearGrid(
                 rho=rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym
             )

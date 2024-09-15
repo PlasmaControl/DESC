@@ -2805,7 +2805,9 @@ class TestObjectiveNaNGrad:
         eq = get("ESTELL")
         with pytest.warns(UserWarning, match="Reducing radial"):
             eq.change_resolution(2, 2, 2, 4, 4, 4)
-        obj = ObjectiveFunction([EffectiveRipple(eq)])
+        obj = ObjectiveFunction(
+            [EffectiveRipple(eq, num_transit=3, knots_per_transit=50)]
+        )
         obj.build(verbose=0)
         g = obj.grad(obj.x())
         assert not np.any(np.isnan(g))
@@ -2816,7 +2818,7 @@ class TestObjectiveNaNGrad:
         eq = get("ESTELL")
         with pytest.warns(UserWarning, match="Reducing radial"):
             eq.change_resolution(2, 2, 2, 4, 4, 4)
-        obj = ObjectiveFunction([GammaC(eq)])
+        obj = ObjectiveFunction([GammaC(eq, num_transit=3, knots_per_transit=50)])
         obj.build(verbose=0)
         g = obj.grad(obj.x())
         assert not np.any(np.isnan(g))

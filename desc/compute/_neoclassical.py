@@ -11,6 +11,7 @@ expensive computations.
 
 from functools import partial
 
+from orthax.legendre import leggauss
 from quadax import simpson
 
 from desc.backend import jit, jnp, trapezoid
@@ -210,7 +211,7 @@ def _effective_ripple(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
-    name="Gamma_c",
+    name="Gamma_c Velasco",
     label=(
         # Γ_c = π/(8√2) ∫dλ 〈 ∑ⱼ [v τ γ_c²]ⱼ 〉
         "\\Gamma_c = \\frac{\\pi}{8 \\sqrt{2}} "
@@ -247,24 +248,18 @@ def _effective_ripple(params, transforms, profiles, data, **kwargs):
     batch="bool : Whether to vectorize part of the computation. Default is true.",
 )
 @partial(jit, static_argnames=["num_pitch", "num_well", "batch"])
-def _Gamma_c(params, transforms, profiles, data, **kwargs):
+def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
     """Energetic ion confinement proxy as defined by Velasco et al.
 
     A model for the fast evaluation of prompt losses of energetic ions in stellarators.
     J.L. Velasco et al. 2021 Nucl. Fusion 61 116059.
     https://doi.org/10.1088/1741-4326/ac2994.
     Equation 16.
-
-    Poloidal motion of trapped particle orbits in real-space coordinates.
-    V. V. Nemov, S. V. Kasilov, W. Kernbichler, G. O. Leitold.
-    Phys. Plasmas 1 May 2008; 15 (5): 052501.
-    https://doi.org/10.1063/1.2912456.
-    Equation 61, using Velasco's γ_c from equation 15 of the above paper.
     """
     quad = (
         kwargs["quad"]
         if "quad" in kwargs
-        else get_quadrature(leggauss_lob(32), Bounce1D._default_automorphism)
+        else get_quadrature(leggauss(32), Bounce1D._default_automorphism)
     )
     num_pitch = kwargs.get("num_pitch", 75)
     num_well = kwargs.get("num_well", None)
@@ -274,13 +269,11 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
     def d_v_tau(B, pitch):
         return safediv(2, jnp.sqrt(jnp.abs(1 - pitch * B)))
 
-    def d_gamma_c(f, B, pitch):
+    def drift(f, B, pitch):
         return safediv(f * (1 - pitch * B / 2), jnp.sqrt(jnp.abs(1 - pitch * B)))
 
     def compute(data):
         """∫ dλ ∑ⱼ [v τ γ_c²]ⱼ."""
-        # Note v τ = 4λ⁻²B₀⁻¹ ∂I/∂((λB₀)⁻¹) where v is the particle velocity,
-        # τ is the bounce time, and I is defined in Nemov eq. 36.
         bounce = Bounce1D(grid, data, quad, automorphism=None, is_reshaped=True)
         v_tau = bounce.integrate(
             d_v_tau, data["pitch_inv"], batch=batch, num_well=num_well
@@ -291,14 +284,14 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
             * jnp.arctan(
                 safediv(
                     bounce.integrate(
-                        d_gamma_c,
+                        drift,
                         data["pitch_inv"],
                         data["cvdrift0"],
                         batch=batch,
                         num_well=num_well,
                     ),
                     bounce.integrate(
-                        d_gamma_c,
+                        drift,
                         data["pitch_inv"],
                         data["gbdrift"],
                         batch=batch,
@@ -319,12 +312,12 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
     }
     _data["pitch_inv"] = _get_pitch_inv(grid, data, num_pitch)
     out = _poloidal_mean(grid, map2(compute, _data))
-    data["Gamma_c"] = jnp.pi / (8 * 2**0.5) * grid.expand(out) / data["<L|r,a>"]
+    data["Gamma_c Velasco"] = jnp.pi / (8 * 2**0.5) * grid.expand(out) / data["<L|r,a>"]
     return data
 
 
 @register_compute_fun(
-    name="Gamma_c Nemov",
+    name="Gamma_c",
     label=(
         # Γ_c = π/(8√2) ∫dλ 〈 ∑ⱼ [v τ γ_c²]ⱼ 〉
         "\\Gamma_c = \\frac{\\pi}{8 \\sqrt{2}} "
@@ -370,7 +363,7 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
     batch="bool : Whether to vectorize part of the computation. Default is true.",
 )
 @partial(jit, static_argnames=["num_pitch", "num_well", "batch"])
-def _Gamma_c_Nemov(params, transforms, profiles, data, **kwargs):
+def _Gamma_c(params, transforms, profiles, data, **kwargs):
     """Energetic ion confinement proxy as defined by Nemov et al.
 
     Poloidal motion of trapped particle orbits in real-space coordinates.
@@ -385,7 +378,7 @@ def _Gamma_c_Nemov(params, transforms, profiles, data, **kwargs):
     quad = (
         kwargs["quad"]
         if "quad" in kwargs
-        else get_quadrature(leggauss_lob(32), Bounce1D._default_automorphism)
+        else get_quadrature(leggauss(32), Bounce1D._default_automorphism)
     )
     num_pitch = kwargs.get("num_pitch", 75)
     num_well = kwargs.get("num_well", None)
@@ -406,14 +399,14 @@ def _Gamma_c_Nemov(params, transforms, profiles, data, **kwargs):
     def d_v_tau(B, pitch):
         return safediv(2, jnp.sqrt(jnp.abs(1 - pitch * B)))
 
-    def num(grad_rho_norm_kappa_g, B, pitch):
+    def drift_radial(grad_rho_norm_kappa_g, B, pitch):
         return (
             safediv(1 - pitch * B / 2, jnp.sqrt(jnp.abs(1 - pitch * B)))
             * grad_rho_norm_kappa_g
             / B
         )
 
-    def den(B_psi, K, B, pitch):
+    def drift_poloidal(B_psi, K, B, pitch):
         return (
             jnp.sqrt(jnp.abs(1 - pitch * B))
             * (safediv(1 - pitch * B / 2, 1 - pitch * B) * B_psi + K)
@@ -434,14 +427,14 @@ def _Gamma_c_Nemov(params, transforms, profiles, data, **kwargs):
             * jnp.arctan(
                 safediv(
                     bounce.integrate(
-                        num,
+                        drift_radial,
                         data["pitch_inv"],
                         data["|grad(rho)|*kappa_g"],
                         batch=batch,
                         num_well=num_well,
                     ),
                     bounce.integrate(
-                        den,
+                        drift_poloidal,
                         data["pitch_inv"],
                         [data["|B|_psi|v,p"], data["K"]],
                         batch=batch,
@@ -476,7 +469,7 @@ def _Gamma_c_Nemov(params, transforms, profiles, data, **kwargs):
         #  If not, should spline separately.
         data["iota_r"] * dot(cross(data["e^rho"], data["b"]), data["grad(phi)"])
         # Behaves as log derivative if one ignores the issue of an argument with units.
-        # Smoothness guaranteed by + lower bound of argument ∂log(|B|²/B^ϕ)/∂ψ |B|.
+        # Smoothness determined by + lower bound of argument ∂log(|B|²/B^ϕ)/∂ψ |B|.
         # Note that Nemov assumes B^ϕ > 0; this is not true in DESC, but we account
         # for that in this computation.
         - (2 * data["|B|_r|v,p"] - data["|B|"] * data["B^phi_r|v,p"] / data["B^phi"])
@@ -484,5 +477,5 @@ def _Gamma_c_Nemov(params, transforms, profiles, data, **kwargs):
     )
     _data["pitch_inv"] = _get_pitch_inv(grid, data, num_pitch)
     out = _poloidal_mean(grid, map2(compute, _data))
-    data["Gamma_c Nemov"] = jnp.pi / (8 * 2**0.5) * grid.expand(out) / data["<L|r,a>"]
+    data["Gamma_c"] = jnp.pi / (8 * 2**0.5) * grid.expand(out) / data["<L|r,a>"]
     return data

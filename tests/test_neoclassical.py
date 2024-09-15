@@ -63,8 +63,28 @@ def test_effective_ripple():
 
 @pytest.mark.unit
 @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
-def test_Gamma_c():
+def test_Gamma_c_Velasco():
     """Test Γ_c with W7-X."""
+    eq = get("W7-X")
+    rho = np.linspace(0, 1, 10)
+    grid = eq.get_rtz_grid(
+        rho,
+        np.array([0]),
+        np.linspace(0, 20 * np.pi, 1000),
+        coordinates="raz",
+        period=(np.inf, 2 * np.pi, np.inf),
+    )
+    data = eq.compute("Gamma_c Velasco", grid=grid)
+    assert np.isfinite(data["Gamma_c Velasco"]).all()
+    fig, ax = plt.subplots()
+    ax.plot(rho, grid.compress(data["Gamma_c Velasco"]), marker="o")
+    return fig
+
+
+@pytest.mark.unit
+@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
+def test_Gamma_c():
+    """Test Γ_c Nemov with W7-X."""
     eq = get("W7-X")
     rho = np.linspace(0, 1, 10)
     grid = eq.get_rtz_grid(
@@ -78,24 +98,4 @@ def test_Gamma_c():
     assert np.isfinite(data["Gamma_c"]).all()
     fig, ax = plt.subplots()
     ax.plot(rho, grid.compress(data["Gamma_c"]), marker="o")
-    return fig
-
-
-@pytest.mark.unit
-@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
-def test_Gamma_c_Nemov():
-    """Test Γ_c Nemov with W7-X."""
-    eq = get("W7-X")
-    rho = np.linspace(0, 1, 10)
-    grid = eq.get_rtz_grid(
-        rho,
-        np.array([0]),
-        np.linspace(0, 20 * np.pi, 1000),
-        coordinates="raz",
-        period=(np.inf, 2 * np.pi, np.inf),
-    )
-    data = eq.compute("Gamma_c Nemov", grid=grid)
-    assert np.isfinite(data["Gamma_c Nemov"]).all()
-    fig, ax = plt.subplots()
-    ax.plot(rho, grid.compress(data["Gamma_c Nemov"]), marker="o")
     return fig

@@ -1,6 +1,7 @@
 """Objectives for targeting neoclassical transport."""
 
 import numpy as np
+from orthax.legendre import leggauss
 
 from desc.compute import get_profiles, get_transforms
 from desc.compute.utils import _compute as compute_fun
@@ -266,10 +267,16 @@ class GammaC(_Objective):
 
     References
     ----------
-    https://doi.org/10.1088/1741-4326/ac2994.
-    Equation 16.
+    Poloidal motion of trapped particle orbits in real-space coordinates.
+    V. V. Nemov, S. V. Kasilov, W. Kernbichler, G. O. Leitold.
+    Phys. Plasmas 1 May 2008; 15 (5): 052501.
+    https://doi.org/10.1063/1.2912456.
+    Equation 61.
+
     A model for the fast evaluation of prompt losses of energetic ions in stellarators.
     J.L. Velasco et al. 2021 Nucl. Fusion 61 116059.
+    https://doi.org/10.1088/1741-4326/ac2994.
+    Equation 16.
 
     Parameters
     ----------
@@ -329,6 +336,9 @@ class GammaC(_Objective):
         the number of wells will increase performance.
     name : str, optional
         Name of the objective function.
+    Nemov : bool
+        Whether to use the Γ_c as defined by Nemov et al. or Velasco et al.
+        Default is Nemov.
 
     """
 
@@ -339,7 +349,7 @@ class GammaC(_Objective):
     def __init__(
         self,
         eq,
-        target=0,
+        target=0.0,
         bounds=None,
         weight=1,
         normalize=True,
@@ -355,11 +365,13 @@ class GammaC(_Objective):
         batch=True,
         num_well=None,
         name="Gamma_c",
+        Nemov=True,
     ):
         if bounds is not None:
             target = None
 
         self._keys_1dr = ["iota", "iota_r", "min_tz |B|", "max_tz |B|"]
+        self._key = "Gamma_c" if Nemov else "Gamma_c Velasco"
         self._constants = {
             "quad_weights": 1,
             "alpha": alpha,
@@ -408,7 +420,7 @@ class GammaC(_Objective):
             rho = self._grid_1dr.compress(self._grid_1dr.nodes[:, 0])
         self._constants["rho"] = rho
         self._constants["quad"] = get_quadrature(
-            leggauss_lob(self._hyperparameters.pop("num_quad")),
+            leggauss(self._hyperparameters.pop("num_quad")),
             Bounce1D._default_automorphism,
         )
         self._dim_f = rho.size
@@ -425,7 +437,7 @@ class GammaC(_Objective):
             self._keys_1dr, eq, self._grid_1dr
         )
         self._constants["profiles"] = get_profiles(
-            self._keys_1dr + ["Gamma_c"], eq, self._grid_1dr
+            self._keys_1dr + [self._key], eq, self._grid_1dr
         )
 
         timer.stop("Precomputing transforms")
@@ -479,12 +491,12 @@ class GammaC(_Objective):
         }
         data = compute_fun(
             eq,
-            "Gamma_c",
+            self._key,
             params,
-            get_transforms("Gamma_c", eq, grid, jitable=True),
+            get_transforms(self._key, eq, grid, jitable=True),
             constants["profiles"],
             data=data,
             quad=constants["quad"],
             **self._hyperparameters,
         )
-        return grid.compress(data["Gamma_c"])
+        return grid.compress(data[self._key])

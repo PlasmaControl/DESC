@@ -16,7 +16,7 @@ from quadax import simpson
 from desc.backend import jit, jnp
 
 from ..integrals.bounce_integral import Bounce1D
-from ..integrals.quad_utils import leggauss_lob
+from ..integrals.quad_utils import get_quadrature, leggauss_lob
 from ..utils import map2, safediv
 from .data_index import register_compute_fun
 from .utils import _get_pitch_inv, _poloidal_mean
@@ -105,12 +105,12 @@ def _G_ra_fsa(data, transforms, profiles, **kwargs):
     + Bounce1D.required_names,
     resolution_requirement="z",
     source_grid_requirement={"coordinates": "raz", "is_meshgrid": True},
-    num_quad="int : Resolution for quadrature of bounce integrals. Default is 32.",
+    quad="jnp.ndarray : Optional, quadrature points and weights for bounce integrals.",
     num_pitch=(
         "int : Resolution for quadrature over velocity coordinate, preferably odd. "
-        "Default is 125. Profile will look smoother at high values. "
-        "(If computed on many flux surfaces and small oscillations is seen "
-        "between neighboring surfaces, increasing this will smooth the profile)."
+        "Default is 75. Profile will look smoother at high values."
+        # If computed on many flux surfaces and small oscillations are seen
+        # between neighboring surfaces, increasing this will smooth the profile.
     ),
     num_well=(
         "int : Maximum number of wells to detect for each pitch and field line. "
@@ -139,7 +139,7 @@ def _G_ra_fsa(data, transforms, profiles, **kwargs):
     #  required for sufficient coverage of the surface. This requires many knots to
     #  for the spline of the magnetic field to capture fine ripples in a large interval.
 )
-@partial(jit, static_argnames=["num_quad", "num_pitch", "num_well", "batch"])
+@partial(jit, static_argnames=["num_pitch", "num_well", "batch"])
 def _effective_ripple(params, transforms, profiles, data, **kwargs):
     """https://doi.org/10.1063/1.873749.
 
@@ -147,8 +147,12 @@ def _effective_ripple(params, transforms, profiles, data, **kwargs):
     V. V. Nemov, S. V. Kasilov, W. Kernbichler, M. F. Heyn.
     Phys. Plasmas 1 December 1999; 6 (12): 4622–4632.
     """
-    quad = leggauss_lob(kwargs.get("num_quad", 32))
-    num_pitch = kwargs.get("num_pitch", 125)
+    quad = (
+        kwargs["quad"]
+        if "quad" in kwargs
+        else get_quadrature(leggauss_lob(32), Bounce1D._default_automorphism)
+    )
+    num_pitch = kwargs.get("num_pitch", 75)
     num_well = kwargs.get("num_well", None)
     batch = kwargs.get("batch", True)
     grid = transforms["grid"].source_grid
@@ -168,7 +172,7 @@ def _effective_ripple(params, transforms, profiles, data, **kwargs):
 
     def compute(data):
         """(∂ψ/∂ρ)⁻² B₀⁻² ∫ dλ ∑ⱼ Hⱼ²/Iⱼ."""
-        bounce = Bounce1D(grid, data, quad, is_reshaped=True)
+        bounce = Bounce1D(grid, data, quad, automorphism=None, is_reshaped=True)
         # Interpolate |∇ρ| κ_g since it is smoother than κ_g alone.
         H = bounce.integrate(
             dH,

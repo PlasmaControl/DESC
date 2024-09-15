@@ -372,7 +372,7 @@ def _bounce_quadrature(
             plot=plot,
         )
     else:
-        # TODO: Use batched vmap.
+
         def loop(z):  # over num well axis
             z1, z2 = z
             # Need to return tuple because input was tuple; artifact of JAX map.
@@ -387,10 +387,11 @@ def _bounce_quadrature(
                 method=method,
                 check=False,
                 plot=False,
-                batch=True,
+                batch=False,
             )
 
         result = jnp.moveaxis(
+            # TODO: Use batch_size arg of imap after increasing JAX version requirement.
             imap(loop, (jnp.moveaxis(z1, -1, 0), jnp.moveaxis(z2, -1, 0)))[1],
             source=0,
             destination=-1,
@@ -410,7 +411,7 @@ def _interpolate_and_integrate(
     method,
     check,
     plot,
-    batch=False,
+    batch=True,
 ):
     """Interpolate given functions to points ``Q`` and perform quadrature.
 
@@ -431,11 +432,11 @@ def _interpolate_and_integrate(
 
     """
     assert w.ndim == 1 and Q.shape[-1] == w.size
-    assert Q.shape[-3 + batch] == pitch_inv.shape[-1]
+    assert Q.shape[-3 + (not batch)] == pitch_inv.shape[-1]
     assert data["|B|"].shape[-1] == knots.size
 
     shape = Q.shape
-    if not batch:
+    if batch:
         Q = flatten_matrix(Q)
     b_sup_z = interp1d_Hermite_vec(
         Q,

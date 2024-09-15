@@ -6,16 +6,19 @@ import pytest
 from tests.test_plotting import tol_1d
 
 from desc.examples import get
+from desc.grid import LinearGrid
 
 
 @pytest.mark.unit
 def test_field_line_average():
     """Test that field line average converges to surface average."""
-    # For axisymmetric devices, one toroidal transit must be exact.
     rho = np.array([1])
     alpha = np.array([0])
-    zeta = np.linspace(0, 2 * np.pi, 20)
     eq = get("DSHAPE")
+    iota_grid = LinearGrid(rho=rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
+    iota = iota_grid.compress(eq.compute("iota", grid=iota_grid)["iota"]).item()
+    # For axisymmetric devices, one poloidal transit must be exact.
+    zeta = np.linspace(0, 2 * np.pi / iota, 25)
     grid = eq.get_rtz_grid(
         rho, alpha, zeta, coordinates="raz", period=(np.inf, 2 * np.pi, np.inf)
     )

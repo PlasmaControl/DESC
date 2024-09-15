@@ -2,7 +2,7 @@
 
 from orthax.legendre import legder, legval
 
-from desc.backend import eigh_tridiagonal, jnp, put
+from desc.backend import eigh_tridiagonal, execute_on_cpu, jnp, put
 from desc.utils import errorif
 
 
@@ -139,6 +139,7 @@ def tanh_sinh(deg, m=10):
     return x, w
 
 
+@execute_on_cpu  # JAX implementation of eigh_tridiagonal is not differentiable on gpu.
 def leggauss_lob(deg, interior_only=False):
     """Lobatto-Gauss-Legendre quadrature.
 

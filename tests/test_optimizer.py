@@ -732,7 +732,7 @@ def test_bounded_optimization():
         return 1 / 2 * f.dot(f)
 
     def grad(x):
-        f = fun(x)  # noqa: F841
+        f = fun(x)
         J = jac(x)
         return f.dot(J)
 

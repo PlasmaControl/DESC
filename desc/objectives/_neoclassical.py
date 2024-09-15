@@ -70,8 +70,8 @@ class EffectiveRipple(_Objective):
         Unique coordinate values for field line poloidal angle label alpha.
     num_transit : int
         Number of toroidal transits to follow field line.
-        For axisymmetric devices only one toroidal transit is necessary. Otherwise,
-        more toroidal transits will give more accurate result, with diminishing returns.
+        For axisymmetric devices, one poloidal transit is sufficient. Otherwise,
+        more transits will give more accurate result, with diminishing returns.
     knots_per_transit : int
         Number of points per toroidal transit at which to sample data along field
         line. Default is 100.

@@ -336,7 +336,7 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
         This routine may be used on over or under-determined systems, in which case it
         will solve it in a least squares / least norm sense.
         """
-        from desc.compute.utils import safenorm
+        from desc.utils import safenorm
 
         if fixup is None:
             fixup = lambda x, *args: x

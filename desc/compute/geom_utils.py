@@ -6,8 +6,7 @@ from termcolor import colored
 
 from desc.backend import jnp
 
-from ..utils import ResolutionWarning, errorif, warnif
-from .utils import safenorm, safenormalize
+from ..utils import ResolutionWarning, errorif, safenorm, safenormalize, warnif
 
 
 def warnif_sym(grid, name):

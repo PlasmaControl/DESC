@@ -28,12 +28,31 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Filter changes
+        id: changes
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            has_changes:
+              - 'desc/**'
+              - 'docs/notebooks/**'
+              - 'requirements.txt'
+              - 'devtools/dev-requirements.txt'
+              - 'setup.cfg'
+              - '.github/workflows/notebook_tests.yml'
+
+      - name: Check for relevant changes
+        id: check_changes
+        run: echo "has_changes=${{ steps.changes.outputs.has_changes }}" >> $GITHUB_ENV
+
+
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
 
       - name: Restore Python environment cache
+        if: env.has_changes == 'true'
         id: restore-env
         uses: actions/cache/restore@v4
         with:
@@ -41,7 +60,7 @@ jobs:
           key: ${{ runner.os }}-venv-${{ matrix.python-version }}-${{ hashFiles('devtools/dev-requirements.txt', 'requirements.txt') }}
 
       - name: Set up virtual environment if not restored from cache
-        if: steps.restore-env.outputs.cache-hit != 'true'
+        if: steps.restore-env.outputs.cache-hit != 'true' && env.has_changes == 'true'
         run: |
           gh cache list
           python -m venv .venv-${{ matrix.python-version }}
@@ -50,6 +69,7 @@ jobs:
           pip install -r devtools/dev-requirements.txt
 
       - name: Test notebooks with pytest and nbmake
+        if: env.has_changes == 'true'
         run: |
           source .venv-${{ matrix.python-version }}/bin/activate
           pwd

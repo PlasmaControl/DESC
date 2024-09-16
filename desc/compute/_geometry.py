@@ -13,9 +13,9 @@ from desc.backend import jnp, trapezoid
 
 from ..grid import QuadratureGrid
 from ..integrals.surface_integral import line_integrals, surface_integrals
+from ..utils import cross, dot, safenorm
 from .data_index import register_compute_fun
 from .geom_utils import warnif_sym
-from .utils import cross, dot, safenorm
 
 
 @register_compute_fun(

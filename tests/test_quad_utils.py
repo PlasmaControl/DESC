@@ -2,7 +2,9 @@
 
 import numpy as np
 import pytest
+import scipy
 from jax import grad
+from orthax.chebyshev import chebgauss
 
 from desc.backend import jnp
 from desc.integrals.quad_utils import (
@@ -10,6 +12,7 @@ from desc.integrals.quad_utils import (
     automorphism_sin,
     bijection_from_disc,
     bijection_to_disc,
+    chebgauss_uniform,
     composite_linspace,
     grad_automorphism_arcsin,
     grad_automorphism_sin,
@@ -101,3 +104,20 @@ def test_leggauss_lobatto():
     # make sure differentiable
     # https://github.com/PlasmaControl/DESC/pull/854#discussion_r1733323161
     assert np.isfinite(grad(fun)(jnp.arange(10) * np.pi)).all()
+
+
+@pytest.mark.unit
+def test_chebgauss_uniform():
+    """Test uniform Chebyshev quadrature."""
+
+    def f(y):
+        return 5.2 * y**7 - 3.6 * y**3 + y**4
+
+    truth = scipy.integrate.quad(lambda y: f(y) / np.sqrt(1 - y**2), -1, 1)[0]
+    deg = 4
+    yk, _ = chebgauss(deg)
+    x, w = chebgauss_uniform(deg)
+    np.testing.assert_array_equal(np.sign(x), np.sign(yk))
+    np.testing.assert_allclose(np.diff(x), x[1] - x[0])
+    np.testing.assert_allclose(yk, automorphism_sin(x))
+    np.testing.assert_allclose(f(yk).dot(w), 2 * truth / jnp.pi)

@@ -14,6 +14,7 @@ from desc.integrals.interp_utils import (
 )
 from desc.integrals.quad_utils import (
     bijection_from_disc,
+    chebgauss_uniform,
     composite_linspace,
     grad_bijection_from_disc,
 )
@@ -37,7 +38,7 @@ def get_pitch_inv(min_B, max_B, num, relative_shift=1e-6):
     max_B : jnp.ndarray
         Maximum |B| value.
     num : int
-        Number of values, not including endpoints.
+        Number of values.
     relative_shift : float
         Relative amount to shift maxima down and minima up to avoid floating point
         errors in downstream routines.
@@ -45,18 +46,51 @@ def get_pitch_inv(min_B, max_B, num, relative_shift=1e-6):
     Returns
     -------
     pitch_inv : jnp.ndarray
-        Shape (*min_B.shape, num + 2).
+        Shape (*min_B.shape, num).
         1/λ values.
 
     """
     # Floating point error impedes consistent detection of bounce points riding
     # extrema. Shift values slightly to resolve this issue.
-    min_B = (1 + relative_shift) * min_B
-    max_B = (1 - relative_shift) * max_B
+    min_B = (1.0 + relative_shift) * min_B
+    max_B = (1.0 - relative_shift) * max_B
     # Samples should be uniformly spaced in |B| and not λ (GitHub issue #1228).
-    pitch_inv = jnp.moveaxis(composite_linspace(jnp.stack([min_B, max_B]), num), 0, -1)
-    assert pitch_inv.shape == (*min_B.shape, num + 2)
+    pitch_inv = jnp.moveaxis(
+        composite_linspace(jnp.stack([min_B, max_B]), num - 2), 0, -1
+    )
+    assert pitch_inv.shape == (*min_B.shape, num)
     return pitch_inv
+
+
+def get_pitch_inv_chebgauss(min_B, max_B, num, relative_shift=1e-6):
+    """Return Chebyshev quadrature with 1/λ uniform in ``min_B`` and ``max_B``.
+
+    Parameters
+    ----------
+    min_B : jnp.ndarray
+        Minimum |B| value.
+    max_B : jnp.ndarray
+        Maximum |B| value.
+    num : int
+        Number of values.
+    relative_shift : float
+        Relative amount to shift maxima down and minima up to avoid floating point
+        errors in downstream routines.
+
+    Returns
+    -------
+    pitch_inv, weight : (jnp.ndarray, jnp.ndarray)
+        Shape (*min_B.shape, num).
+        1/λ values and weights.
+
+    """
+    min_B = (1.0 + relative_shift) * min_B
+    max_B = (1.0 - relative_shift) * max_B
+    # Samples should be uniformly spaced in |B| (GitHub issue #1228).
+    x, w = chebgauss_uniform(num)
+    pitch_inv = bijection_from_disc(x, min_B[..., jnp.newaxis], max_B[..., jnp.newaxis])
+    w = w * grad_bijection_from_disc(min_B, max_B)[..., jnp.newaxis]
+    return pitch_inv, w
 
 
 def _check_spline_shape(knots, g, dg_dz, pitch_inv=None):

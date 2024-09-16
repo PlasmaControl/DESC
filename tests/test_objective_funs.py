@@ -2522,8 +2522,17 @@ class TestComputeScalarResolution:
                 M_grid=int(self.eq.M * res),
                 N_grid=int(self.eq.N * res),
             )
-
-            obj = ObjectiveFunction(objective(eq=self.eq), use_jit=False)
+            if objective in {EffectiveRipple, GammaC}:
+                obj = ObjectiveFunction(
+                    [
+                        objective(
+                            self.eq, knots_per_transit=50, num_transit=2, num_pitch=25
+                        )
+                    ],
+                    use_jit=False,
+                )
+            else:
+                obj = ObjectiveFunction(objective(eq=self.eq), use_jit=False)
             obj.build(verbose=0)
             f[i] = obj.compute_scalar(obj.x())
         np.testing.assert_allclose(f, f[-1], rtol=5e-2)
@@ -2806,7 +2815,7 @@ class TestObjectiveNaNGrad:
         with pytest.warns(UserWarning, match="Reducing radial"):
             eq.change_resolution(2, 2, 2, 4, 4, 4)
         obj = ObjectiveFunction(
-            [EffectiveRipple(eq, num_transit=3, knots_per_transit=50)]
+            [EffectiveRipple(eq, knots_per_transit=50, num_transit=2, num_pitch=25)]
         )
         obj.build(verbose=0)
         g = obj.grad(obj.x())
@@ -2818,7 +2827,9 @@ class TestObjectiveNaNGrad:
         eq = get("ESTELL")
         with pytest.warns(UserWarning, match="Reducing radial"):
             eq.change_resolution(2, 2, 2, 4, 4, 4)
-        obj = ObjectiveFunction([GammaC(eq, num_transit=3, knots_per_transit=50)])
+        obj = ObjectiveFunction(
+            [GammaC(eq, knots_per_transit=50, num_transit=2, num_pitch=25)]
+        )
         obj.build(verbose=0)
         g = obj.grad(obj.x())
         assert not np.any(np.isnan(g))

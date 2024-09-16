@@ -43,7 +43,7 @@ class EffectiveRipple(_Objective):
         locations. Defaults to 0.
     bounds : tuple of {float, ndarray, callable}, optional
         Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to Objective.dim_f
+        Both bounds must be broadcastable to Objective.dim_f.
         If a callable, each should take a single argument ``rho`` and return the
         desired bound (lower or upper) of the profile at those locations.
     weight : {float, ndarray}, optional
@@ -69,18 +69,17 @@ class EffectiveRipple(_Objective):
         Should have poloidal and toroidal resolution.
     alpha : ndarray
         Unique coordinate values for field line poloidal angle label alpha.
+    knots_per_transit : int
+        Number of points per toroidal transit at which to sample data along field
+        line. Default is 100.
     num_transit : int
         Number of toroidal transits to follow field line.
         For axisymmetric devices, one poloidal transit is sufficient. Otherwise,
         more transits will give more accurate result, with diminishing returns.
-    knots_per_transit : int
-        Number of points per toroidal transit at which to sample data along field
-        line. Default is 100.
     num_quad : int
         Resolution for quadrature of bounce integrals. Default is 32.
     num_pitch : int
-        Resolution for quadrature over velocity coordinate, preferably odd.
-        Default is 75. Profile will look smoother at high values.
+        Resolution for quadrature over velocity coordinate. Default is 50.
     batch : bool
         Whether to vectorize part of the computation. Default is true.
     num_well : int
@@ -100,7 +99,7 @@ class EffectiveRipple(_Objective):
     def __init__(
         self,
         eq,
-        target=0.0,
+        target=None,
         bounds=None,
         weight=1,
         normalize=True,
@@ -109,16 +108,17 @@ class EffectiveRipple(_Objective):
         deriv_mode="auto",
         grid=None,
         alpha=np.array([0]),
-        num_transit=10,
+        *,
         knots_per_transit=100,
+        num_transit=10,
         num_quad=32,
-        num_pitch=75,
+        num_pitch=50,
         batch=True,
         num_well=None,
         name="Effective ripple",
     ):
-        if bounds is not None:
-            target = None
+        if target is None and bounds is None:
+            target = 0.0
 
         self._keys_1dr = [
             "iota",
@@ -289,7 +289,7 @@ class GammaC(_Objective):
         locations. Defaults to 0.
     bounds : tuple of {float, ndarray, callable}, optional
         Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to Objective.dim_f
+        Both bounds must be broadcastable to Objective.dim_f.
         If a callable, each should take a single argument ``rho`` and return the
         desired bound (lower or upper) of the profile at those locations.
     weight : {float, ndarray}, optional
@@ -325,8 +325,7 @@ class GammaC(_Objective):
     num_quad : int
         Resolution for quadrature of bounce integrals. Default is 32.
     num_pitch : int
-        Resolution for quadrature over velocity coordinate, preferably odd.
-        Default is 75. Profile will look smoother at high values.
+        Resolution for quadrature over velocity coordinate. Default is 64.
     batch : bool
         Whether to vectorize part of the computation. Default is true.
     num_well : int
@@ -349,7 +348,7 @@ class GammaC(_Objective):
     def __init__(
         self,
         eq,
-        target=0.0,
+        target=None,
         bounds=None,
         weight=1,
         normalize=True,
@@ -358,17 +357,18 @@ class GammaC(_Objective):
         deriv_mode="auto",
         grid=None,
         alpha=np.array([0]),
+        *,
         num_transit=10,
         knots_per_transit=100,
         num_quad=32,
-        num_pitch=75,
+        num_pitch=64,
         batch=True,
         num_well=None,
         name="Gamma_c",
         Nemov=True,
     ):
-        if bounds is not None:
-            target = None
+        if target is None and bounds is None:
+            target = 0.0
 
         self._keys_1dr = ["iota", "iota_r", "min_tz |B|", "max_tz |B|"]
         self._key = "Gamma_c" if Nemov else "Gamma_c Velasco"

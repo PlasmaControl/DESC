@@ -203,13 +203,8 @@ def _root_cubic(C, sentinel, eps, distinct):
 
     def irreducible(Q, R, b, mask):
         # Three irrational real roots.
-        theta = jnp.arccos(
-            jnp.clip(
-                R / jnp.sqrt(jnp.where(mask, Q**3, 1.0)),
-                -1.0 + 0.01 * eps,
-                +1.0 - 0.01 * eps,
-            )
-        )
+        theta = R / jnp.sqrt(jnp.where(mask, Q**3, 1.0))
+        theta = jnp.arccos(jnp.where(jnp.abs(theta) < 1.0, theta, 0.0))
         return jnp.moveaxis(
             -2
             * jnp.sqrt(Q)

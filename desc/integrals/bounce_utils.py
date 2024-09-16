@@ -539,7 +539,7 @@ def _check_interp(shape, Q, f, b_sup_z, B, result, plot):
         Q = Q.reshape(shape)
         _plot_check_interp(Q, B.reshape(shape), name=r"$\vert B \vert$")
         _plot_check_interp(
-            Q, b_sup_z.reshape(shape), name=r"$ (B / \vert B \vert) \cdot e^{\zeta}$"
+            Q, b_sup_z.reshape(shape), name=r"$(B / \vert B \vert) \cdot e^{\zeta}$"
         )
 
 

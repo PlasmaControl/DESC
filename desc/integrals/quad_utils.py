@@ -245,29 +245,3 @@ def get_quadrature(quad, automorphism):
         # Recall bijection_from_disc(auto(x), ζ₁, ζ₂) = ζ.
         x = auto(x)
     return x, w
-
-
-def composite_linspace(x, num):
-    """Returns linearly spaced values between every pair of values in ``x``.
-
-    Parameters
-    ----------
-    x : jnp.ndarray
-        First axis has values to return linearly spaced values between. The remaining
-        axes are batch axes. Assumes input is sorted along first axis.
-    num : int
-        Number of values between every pair of values in ``x``.
-
-    Returns
-    -------
-    vals : jnp.ndarray
-        Shape ((x.shape[0] - 1) * num + x.shape[0], *x.shape[1:]).
-        Linearly spaced values between ``x``.
-
-    """
-    x = jnp.atleast_1d(x)
-    vals = jnp.linspace(x[:-1], x[1:], num + 1, endpoint=False)
-    vals = jnp.swapaxes(vals, 0, 1).reshape(-1, *x.shape[1:])
-    vals = jnp.append(vals, x[jnp.newaxis, -1], axis=0)
-    assert vals.shape == ((x.shape[0] - 1) * num + x.shape[0], *x.shape[1:])
-    return vals

@@ -14,13 +14,13 @@ from functools import partial
 from orthax.legendre import leggauss
 from quadax import simpson
 
-from desc.backend import jit, jnp, trapezoid
+from desc.backend import jit, jnp
 
 from ..integrals.bounce_integral import Bounce1D
 from ..integrals.quad_utils import get_quadrature, leggauss_lob
 from ..utils import cross, dot, map2, safediv
 from .data_index import register_compute_fun
-from .utils import _get_pitch_inv, _get_pitch_inv_chebgauss, _poloidal_mean
+from .utils import _get_pitch_inv_quad, _poloidal_mean
 
 
 @register_compute_fun(
@@ -198,7 +198,7 @@ def _effective_ripple(params, transforms, profiles, data, **kwargs):
     _data["|grad(rho)|*kappa_g"] = Bounce1D.reshape_data(
         grid, data["|grad(rho)|"] * data["kappa_g"]
     )
-    _data = _get_pitch_inv_chebgauss(grid, data, num_pitch, _data)
+    _data = _get_pitch_inv_quad(grid, data, num_pitch, _data)
     B0 = data["max_tz |B|"]
     data["effective ripple"] = (
         jnp.pi
@@ -291,19 +291,17 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
                 )
             )
         )
-        return trapezoid(
-            # The integrand is piecewise continuous and likely poorly approximated by a
-            # polynomial. Composite quadrature should perform better than higher order
-            # methods.
-            y=data["pitch_inv"] ** (-2) * (v_tau * gamma_c**2).sum(axis=-1),
-            x=data["pitch_inv"],
-        )
+        return (
+            (v_tau * gamma_c**2).sum(axis=-1)
+            * data["pitch_inv"] ** (-2)
+            * data["pitch_inv weight"]
+        ).sum(axis=-1)
 
     _data = {  # noqa: unused dependency
         name: Bounce1D.reshape_data(grid, data[name])
         for name in Bounce1D.required_names + ["cvdrift0", "gbdrift"]
     }
-    _data = _get_pitch_inv(grid, data, num_pitch, _data)
+    _data = _get_pitch_inv_quad(grid, data, num_pitch, _data)
     data["Gamma_c Velasco"] = (
         jnp.pi
         / (8 * 2**0.5)
@@ -438,13 +436,11 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
                 )
             )
         )
-        return trapezoid(
-            # The integrand is piecewise continuous and likely poorly approximated by a
-            # polynomial. Composite quadrature should perform better than higher order
-            # methods.
-            y=data["pitch_inv"] ** (-2) * (v_tau * gamma_c**2).sum(axis=-1),
-            x=data["pitch_inv"],
-        )
+        return (
+            (v_tau * gamma_c**2).sum(axis=-1)
+            * data["pitch_inv"] ** (-2)
+            * data["pitch_inv weight"]
+        ).sum(axis=-1)
 
     _data = {  # noqa: unused dependency
         name: Bounce1D.reshape_data(grid, data[name])
@@ -471,7 +467,7 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
         - (2 * data["|B|_r|v,p"] - data["|B|"] * data["B^phi_r|v,p"] / data["B^phi"])
         / data["psi_r"],
     )
-    _data = _get_pitch_inv(grid, data, num_pitch, _data)
+    _data = _get_pitch_inv_quad(grid, data, num_pitch, _data)
     data["Gamma_c"] = (
         jnp.pi
         / (8 * 2**0.5)

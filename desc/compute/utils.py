@@ -8,7 +8,7 @@ import numpy as np
 from desc.backend import execute_on_cpu, jnp
 from desc.grid import Grid
 
-from ..integrals.bounce_utils import get_pitch_inv, get_pitch_inv_chebgauss
+from ..integrals.bounce_utils import get_pitch_inv_quad
 from ..utils import errorif
 from .data_index import allowed_kwargs, data_index
 
@@ -728,23 +728,9 @@ def _poloidal_mean(grid, f):
     return f.T.dot(dp) / jnp.sum(dp)
 
 
-def _get_pitch_inv(grid, data, num_pitch, _data):
-    _data["pitch_inv"] = jnp.broadcast_to(
-        get_pitch_inv(
-            grid.compress(data["min_tz |B|"]),
-            grid.compress(data["max_tz |B|"]),
-            num_pitch,
-        )[jnp.newaxis],
-        (grid.num_alpha, grid.num_rho, num_pitch),
-    )
-    return _data
-
-
-def _get_pitch_inv_chebgauss(grid, data, num_pitch, _data):
-    p, w = get_pitch_inv_chebgauss(
-        grid.compress(data["min_tz |B|"]),
-        grid.compress(data["max_tz |B|"]),
-        num_pitch,
+def _get_pitch_inv_quad(grid, data, num_pitch, _data):
+    p, w = get_pitch_inv_quad(
+        grid.compress(data["min_tz |B|"]), grid.compress(data["max_tz |B|"]), num_pitch
     )
     _data["pitch_inv"] = jnp.broadcast_to(
         p[jnp.newaxis], (grid.num_alpha, grid.num_rho, num_pitch)

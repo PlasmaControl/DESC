@@ -19,7 +19,7 @@ from ..integrals.bounce_integral import Bounce1D
 from ..integrals.quad_utils import get_quadrature, leggauss_lob
 from ..utils import map2, safediv
 from .data_index import register_compute_fun
-from .utils import _get_pitch_inv, _poloidal_mean
+from .utils import _get_pitch_inv_chebgauss, _poloidal_mean
 
 
 @register_compute_fun(
@@ -79,10 +79,10 @@ def _G_ra_fsa(data, transforms, profiles, **kwargs):
 @register_compute_fun(
     name="effective ripple",  # this is ε¹ᐧ⁵
     label=(
-        # ε¹ᐧ⁵ = π/(8√2) (R₀/〈|∇ψ|〉)² ∫dλ λ⁻²B₀⁻¹ 〈 ∑ⱼ Hⱼ²/Iⱼ 〉
+        # ε¹ᐧ⁵ = π/(8√2) (R₀/〈|∇ψ|〉)² B₀⁻¹ ∫dλ λ⁻² 〈 ∑ⱼ Hⱼ²/Iⱼ 〉
         "\\epsilon^{3/2} = \\frac{\\pi}{8 \\sqrt{2}} "
         "(R_0 / \\langle \\vert\\nabla \\psi\\vert \\rangle)^2 "
-        "\\int d\\lambda \\lambda^{-2} B_0^{-1} "
+        "B_0^{-1} \\int d\\lambda \\lambda^{-2} "
         "\\langle \\sum_j H_j^2 / I_j \\rangle"
     ),
     units="~",
@@ -106,12 +106,7 @@ def _G_ra_fsa(data, transforms, profiles, **kwargs):
     resolution_requirement="z",
     source_grid_requirement={"coordinates": "raz", "is_meshgrid": True},
     quad="jnp.ndarray : Optional, quadrature points and weights for bounce integrals.",
-    num_pitch=(
-        "int : Resolution for quadrature over velocity coordinate, preferably odd. "
-        "Default is 75. Profile will look smoother at high values."
-        # If computed on many flux surfaces and small oscillations are seen
-        # between neighboring surfaces, increasing this will smooth the profile.
-    ),
+    num_pitch="int : Resolution for quadrature over velocity coordinate. Default 50.",
     num_well=(
         "int : Maximum number of wells to detect for each pitch and field line. "
         "Default is to detect all wells, but due to limitations in JAX this option "
@@ -152,7 +147,7 @@ def _effective_ripple(params, transforms, profiles, data, **kwargs):
         if "quad" in kwargs
         else get_quadrature(leggauss_lob(32), Bounce1D._default_automorphism)
     )
-    num_pitch = kwargs.get("num_pitch", 75)
+    num_pitch = kwargs.get("num_pitch", 50)
     num_well = kwargs.get("num_well", None)
     batch = kwargs.get("batch", True)
     grid = transforms["grid"].source_grid
@@ -171,24 +166,29 @@ def _effective_ripple(params, transforms, profiles, data, **kwargs):
         return jnp.sqrt(jnp.abs(1 - pitch * B)) / B
 
     def compute(data):
-        """(∂ψ/∂ρ)⁻² B₀⁻² ∫ dλ ∑ⱼ Hⱼ²/Iⱼ."""
+        """Return (∂ψ/∂ρ)⁻² B₀⁻² ∫ dλ λ⁻² ∑ⱼ Hⱼ²/Iⱼ.
+
+        Notes
+        -----
+        B₀ has units of λ⁻¹.
+        Nemov's ∑ⱼ Hⱼ²/Iⱼ = (∂ψ/∂ρ)² (λB₀)³ ``(H**2 / I).sum(axis=-1)``.
+        (λB₀)³ d(λB₀)⁻¹ = B₀² λ³ d(λ⁻¹) = -B₀² λ dλ.
+        """
         bounce = Bounce1D(grid, data, quad, automorphism=None, is_reshaped=True)
-        # Interpolate |∇ρ| κ_g since it is smoother than κ_g alone.
         H = bounce.integrate(
             dH,
             data["pitch_inv"],
+            # Interpolate |∇ρ| κ_g since it is smoother than κ_g alone.
             data["|grad(rho)|*kappa_g"],
             num_well=num_well,
             batch=batch,
         )
         I = bounce.integrate(dI, data["pitch_inv"], num_well=num_well, batch=batch)
-        # Note B₀ has units of λ⁻¹.
-        # Nemov's ∑ⱼ Hⱼ²/Iⱼ = (∂ψ/∂ρ)² (λB₀)³ ``(H**2 / I).sum(axis=-1)``.
-        # (λB₀)³ db = λ³B₀² d(λ⁻¹) = λB₀² (-dλ).
-        y = data["pitch_inv"] ** (-3) * safediv(H**2, I).sum(axis=-1)
-        return simpson(y=y, x=data["pitch_inv"])
-        # TODO: Try Gauss-Chebyshev quadrature after automorphism arcsin to
-        #   make nodes more evenly spaced.
+        return (
+            safediv(H**2, I).sum(axis=-1)
+            * data["pitch_inv"] ** (-3)
+            * data["pitch_inv weight"]
+        ).sum(axis=-1)
 
     _data = {  # noqa: unused dependency
         name: Bounce1D.reshape_data(grid, data[name])
@@ -197,13 +197,13 @@ def _effective_ripple(params, transforms, profiles, data, **kwargs):
     _data["|grad(rho)|*kappa_g"] = Bounce1D.reshape_data(
         grid, data["|grad(rho)|"] * data["kappa_g"]
     )
-    _data["pitch_inv"] = _get_pitch_inv(grid, data, num_pitch)
-    out = _poloidal_mean(grid, map2(compute, _data))
+    _data = _get_pitch_inv_chebgauss(grid, data, num_pitch, _data)
+    B0 = data["max_tz |B|"]
     data["effective ripple"] = (
         jnp.pi
         / (8 * 2**0.5)
-        * (data["max_tz |B|"] * data["R0"] / data["<|grad(rho)|>"]) ** 2
-        * grid.expand(out)
+        * (B0 * data["R0"] / data["<|grad(rho)|>"]) ** 2
+        * grid.expand(_poloidal_mean(grid, map2(compute, _data)))
         / data["<L|r,a>"]
     )
     return data

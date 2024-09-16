@@ -1,8 +1,9 @@
 """Utilities for quadratures."""
 
+from orthax.chebyshev import chebgauss
 from orthax.legendre import legder, legval
 
-from desc.backend import eigh_tridiagonal, execute_on_cpu, jnp, put
+from desc.backend import eigh_tridiagonal, jnp, put
 from desc.utils import errorif
 
 
@@ -139,7 +140,6 @@ def tanh_sinh(deg, m=10):
     return x, w
 
 
-@execute_on_cpu  # JAX implementation of eigh_tridiagonal is not differentiable on gpu.
 def leggauss_lob(deg, interior_only=False):
     """Lobatto-Gauss-Legendre quadrature.
 
@@ -189,6 +189,31 @@ def leggauss_lob(deg, interior_only=False):
 
     assert x.size == w.size == deg
     return x, w
+
+
+def chebgauss_uniform(deg):
+    """Gauss-Chebyshev quadrature with uniformly spaced nodes.
+
+    Returns quadrature points xₖ and weights wₖ for the approximate evaluation of the
+    integral ∫₋₁¹ f(x) dx ≈ ∑ₖ wₖ f(xₖ).
+
+    Parameters
+    ----------
+    deg : int
+        Number of quadrature points.
+
+    Returns
+    -------
+    x, w : (jnp.ndarray, jnp.ndarray)
+        Shape (deg, ).
+        Quadrature points and weights.
+    """
+    # Define x = 2/π arcsin y and g : y ↦ f(x(y)).
+    #   ∫₋₁¹ f(x) dx = 2/π ∫₋₁¹ (1−y²)⁻⁰ᐧ⁵ g(y) dy
+    # ∑ₖ wₖ f(x(yₖ)) = 2/π ∑ₖ ωₖ g(yₖ)
+    # Given roots yₖ of Chebyshev polynomial, x(yₖ) is uniform in (-1, 1).
+    y, w = chebgauss(deg)
+    return automorphism_arcsin(y), 2 * w / jnp.pi
 
 
 def get_quadrature(quad, automorphism):

@@ -19,7 +19,7 @@ from ..integrals.bounce_integral import Bounce1D
 from ..integrals.quad_utils import get_quadrature, leggauss_lob
 from ..utils import map2, safediv
 from .data_index import register_compute_fun
-from .utils import _get_pitch_inv_chebgauss, _poloidal_mean
+from .utils import _get_pitch_inv_quad, _poloidal_mean
 
 
 @register_compute_fun(
@@ -197,7 +197,7 @@ def _effective_ripple(params, transforms, profiles, data, **kwargs):
     _data["|grad(rho)|*kappa_g"] = Bounce1D.reshape_data(
         grid, data["|grad(rho)|"] * data["kappa_g"]
     )
-    _data = _get_pitch_inv_chebgauss(grid, data, num_pitch, _data)
+    _data = _get_pitch_inv_quad(grid, data, num_pitch, _data)
     B0 = data["max_tz |B|"]
     data["effective ripple"] = (
         jnp.pi

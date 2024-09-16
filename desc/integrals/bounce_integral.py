@@ -9,7 +9,7 @@ from desc.integrals.bounce_utils import (
     _check_bounce_points,
     _set_default_plot_kwargs,
     bounce_points,
-    get_pitch_inv,
+    get_pitch_inv_quad,
     interp_to_argmin,
     plot_ppoly,
 )
@@ -97,7 +97,7 @@ class Bounce1D(IOAble):
     """
 
     required_names = ["B^zeta", "B^zeta_z|r,a", "|B|", "|B|_z|r,a"]
-    get_pitch_inv = staticmethod(get_pitch_inv)
+    get_pitch_inv_quad = staticmethod(get_pitch_inv_quad)
     _default_automorphism = (automorphism_sin, grad_automorphism_sin)
 
     def __init__(

@@ -36,7 +36,7 @@ from desc.integrals import (
 from desc.integrals.bounce_utils import (
     _get_extrema,
     bounce_points,
-    get_pitch_inv,
+    get_pitch_inv_quad,
     interp_to_argmin,
     interp_to_argmin_hard,
 )
@@ -1098,7 +1098,7 @@ class TestBounce1D:
             quad=leggauss(3),  # not checking quadrature accuracy in this test
             check=True,
         )
-        pitch_inv = bounce.get_pitch_inv(
+        pitch_inv, _ = bounce.get_pitch_inv_quad(
             grid.compress(data["min_tz |B|"]), grid.compress(data["max_tz |B|"]), 10
         )
         num = bounce.integrate(
@@ -1264,7 +1264,7 @@ class TestBounce1D:
 
         # Exclude singularity not captured by analytic approximation for pitch near
         # the maximum |B|. (This is captured by the numerical integration).
-        pitch_inv = get_pitch_inv(np.min(B), np.max(B), 100)[:-1]
+        pitch_inv = get_pitch_inv_quad(np.min(B), np.max(B), 100)[0][:-1]
         k2 = 0.5 * ((1 - B0 / pitch_inv) / (epsilon * B0 / pitch_inv) + 1)
         I_0, I_1, I_2, I_3, I_4, I_5, I_6, I_7 = (
             TestBounce1DQuadrature.elliptic_incomplete(k2)
@@ -1352,12 +1352,7 @@ class TestBounce1D:
         drift_analytic, cvdrift, gbdrift, pitch_inv = TestBounce1D.drift_analytic(data)
         # Compute numerical result.
         bounce = Bounce1D(
-            grid.source_grid,
-            data,
-            quad=leggauss(28),  # converges to absolute and relative tolerance of 1e-7
-            Bref=data["Bref"],
-            Lref=data["a"],
-            check=True,
+            grid.source_grid, data, Bref=data["Bref"], Lref=data["a"], check=True
         )
         bounce.check_points(*bounce.points(pitch_inv), pitch_inv, plot=False)
 
@@ -1460,4 +1455,4 @@ class TestBounce1D:
         # It is expected that this is much larger because the integrand is singular
         # wrt λ but the boundary derivative: f(λ,ζ₂) (∂ζ₂/∂λ)(λ) - f(λ,ζ₁) (∂ζ₁/∂λ)(λ).
         # smooths out because the bounce points ζ₁ and ζ₂ are smooth functions of λ.
-        np.testing.assert_allclose(fun2(pitch), -131750, rtol=1e-1)
+        np.testing.assert_allclose(fun2(pitch), -171500, rtol=1e-1)

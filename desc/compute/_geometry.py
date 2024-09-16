@@ -37,7 +37,7 @@ def _V(params, transforms, profiles, data, **kwargs):
         data["V"] = jnp.sum(data["sqrt(g)"] * transforms["grid"].weights)
     else:
         # To approximate volume at ρ ~ 1, we scale by ρ⁻², assuming the integrand
-        # varies little from ρ = max_rho to ρ = 1 and a roughly circular cross-section.
+        # varies little from max ρ to ρ = 1 and a roughly circular cross-section.
         data["V"] = jnp.max(data["V(r)"]) / jnp.max(data["rho"]) ** 2
     return data
 
@@ -58,7 +58,7 @@ def _V(params, transforms, profiles, data, **kwargs):
 )
 def _V_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs):
     # To approximate volume at ρ ~ 1, we scale by ρ⁻², assuming the integrand
-    # varies little from ρ = max_rho to ρ = 1 and a roughly circular cross-section.
+    # varies little from max ρ to ρ = 1 and a roughly circular cross-section.
     data["V"] = jnp.max(data["V(r)"]) / jnp.max(data["rho"]) ** 2
     return data
 
@@ -202,7 +202,7 @@ def _A_of_z(params, transforms, profiles, data, **kwargs):
             expand_out=True,
         )
         # To approximate area at ρ ~ 1, we scale by ρ⁻², assuming the integrand
-        # varies little from ρ = max_rho to ρ = 1 and a roughly circular cross-section.
+        # varies little from max ρ to ρ = 1 and a roughly circular cross-section.
         / max_rho**2
     )
     return data
@@ -252,7 +252,7 @@ def _A(params, transforms, profiles, data, **kwargs):
             expand_out=False,
         )
         # To approximate area at ρ ~ 1, we scale by ρ⁻², assuming the integrand
-        # varies little from ρ = max_rho to ρ = 1 and a roughly circular cross-section.
+        # varies little from max ρ to ρ = 1 and a roughly circular cross-section.
         / max_rho**2
     )
     phi = transforms["grid"].compress(data["phi"], "zeta")
@@ -297,7 +297,7 @@ def _A_of_r(params, transforms, profiles, data, **kwargs):
 )
 def _S(params, transforms, profiles, data, **kwargs):
     # To approximate surface are at ρ ~ 1, we scale by ρ⁻¹, assuming the integrand
-    # varies little from ρ = max_rho to ρ = 1.
+    # varies little from max ρ to ρ = 1.
     data["S"] = jnp.max(data["S(r)"]) / jnp.max(data["rho"])
     return data
 
@@ -469,7 +469,7 @@ def _perimeter_of_z(params, transforms, profiles, data, **kwargs):
             expand_out=True,
         )
         # To approximate perimeter at ρ ~ 1, we scale by ρ⁻¹, assuming the integrand
-        # varies little from ρ = max_rho to ρ = 1.
+        # varies little from max ρ to ρ = 1.
         / max_rho
     )
     return data

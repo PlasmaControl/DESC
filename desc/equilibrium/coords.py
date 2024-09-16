@@ -598,8 +598,8 @@ def to_sfl(
     M_grid = M_grid or int(2 * M)
     N_grid = N_grid or int(2 * N)
 
-    grid = ConcentricGrid(L_grid, M_grid, N_grid, node_pattern="ocs")
-    bdry_grid = LinearGrid(M=M, N=N, rho=1.0)
+    grid = ConcentricGrid(L_grid, M_grid, N_grid, node_pattern="ocs", NFP=eq.NFP)
+    bdry_grid = LinearGrid(M=M, N=N, rho=1.0, NFP=eq.NFP)
 
     toroidal_coords = eq.compute(["R", "Z", "lambda"], grid=grid)
     theta = grid.nodes[:, 1]
@@ -685,12 +685,12 @@ def get_rtz_grid(
         rvp : rho, theta_PEST, phi
         rtz : rho, theta, zeta
     period : tuple of float
-        Assumed periodicity for each quantity in inbasis.
+        Assumed periodicity for functions of the given coordinates.
         Use ``np.inf`` to denote no periodicity.
     jitable : bool, optional
         If false the returned grid has additional attributes.
         Required to be false to retain nodes at magnetic axis.
-    kwargs : dict
+    kwargs
         Additional parameters to supply to the coordinate mapping function.
         See ``desc.equilibrium.coords.map_coordinates``.
 

@@ -638,7 +638,8 @@ class _Grid(IOAble, ABC):
             vec = True
             shape += (-1,)
         x = x.reshape(shape, order="F")
-        x = jnp.swapaxes(x, 1, 0)  # now shape rtz/raz etc
+        # swap to change shape from trz/arz to rtz/raz etc.
+        x = jnp.swapaxes(x, 1, 0)
         newax = tuple(self.coordinates.index(c) for c in order)
         if vec:
             newax += (3,)

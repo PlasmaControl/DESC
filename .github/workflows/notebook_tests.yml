@@ -1,0 +1,83 @@
+name: Notebook tests
+
+on:
+  push:
+    branches:
+      - master
+      - dev
+  pull_request:
+    branches:
+      - master
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  notebook_tests:
+
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    strategy:
+      matrix:
+        python-version: ['3.10']
+        group: [1, 2, 3]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Filter changes
+        id: changes
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            has_changes:
+              - 'desc/**'
+              - 'docs/notebooks/**'
+              - 'requirements.txt'
+              - 'devtools/dev-requirements.txt'
+              - 'setup.cfg'
+              - '.github/workflows/notebook_tests.yml'
+
+      - name: Check for relevant changes
+        id: check_changes
+        run: echo "has_changes=${{ steps.changes.outputs.has_changes }}" >> $GITHUB_ENV
+
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Restore Python environment cache
+        if: env.has_changes == 'true'
+        id: restore-env
+        uses: actions/cache/restore@v4
+        with:
+          path: .venv-${{ matrix.python-version }}
+          key: ${{ runner.os }}-venv-${{ matrix.python-version }}-${{ hashFiles('devtools/dev-requirements.txt', 'requirements.txt') }}
+
+      - name: Set up virtual environment if not restored from cache
+        if: steps.restore-env.outputs.cache-hit != 'true' && env.has_changes == 'true'
+        run: |
+          gh cache list
+          python -m venv .venv-${{ matrix.python-version }}
+          source .venv-${{ matrix.python-version }}/bin/activate
+          python -m pip install --upgrade pip
+          pip install -r devtools/dev-requirements.txt
+
+      - name: Test notebooks with pytest and nbmake
+        if: env.has_changes == 'true'
+        run: |
+          source .venv-${{ matrix.python-version }}/bin/activate
+          pwd
+          lscpu
+          export PYTHONPATH=$(pwd)
+          pytest -v --nbmake "./docs/notebooks" \
+            --nbmake-timeout=2000 \
+            --ignore=./docs/notebooks/zernike_eval.ipynb \
+            --splits 3 \
+            --group ${{ matrix.group }} \
+            --splitting-algorithm least_duration

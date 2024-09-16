@@ -19,7 +19,7 @@ def bijection_from_disc(x, a, b):
 
 
 def grad_bijection_from_disc(a, b):
-    """Gradient of affine bijection from disc."""
+    """Gradient wrt ``x`` of ``bijection_from_disc``."""
     dy_dx = 0.5 * (b - a)
     return dy_dx
 
@@ -151,7 +151,7 @@ def leggauss_lob(deg, interior_only=False):
         Number of quadrature points.
     interior_only : bool
         Whether to exclude the points and weights at -1 and 1;
-        useful if f(-1) = f(1) = 0. If ``True``, then ``deg`` points are still
+        useful if f(-1) = f(1) = 0. If true, then ``deg`` points are still
         returned; these are the interior points for lobatto quadrature of ``deg+2``.
 
     Returns
@@ -213,10 +213,9 @@ def get_quadrature(quad, automorphism):
     x, w = quad
     assert x.ndim == w.ndim == 1
     if automorphism is not None:
-        # Apply automorphisms to supress singularities.
         auto, grad_auto = automorphism
         w = w * grad_auto(x)
-        # Recall bijection_from_disc(auto(x), ζ_b₁, ζ_b₂) = ζ.
+        # Recall bijection_from_disc(auto(x), ζ₁, ζ₂) = ζ.
         x = auto(x)
     return x, w
 

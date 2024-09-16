@@ -5,12 +5,12 @@ import pytest
 from scipy.signal import convolve2d
 
 from desc.compute import rpz2xyz_vec
-from desc.compute.utils import dot
 from desc.equilibrium import Equilibrium
 from desc.examples import get
 from desc.geometry import FourierRZToroidalSurface
 from desc.grid import LinearGrid
 from desc.io import load
+from desc.utils import dot
 
 # convolve kernel is reverse of FD coeffs
 FD_COEF_1_2 = np.array([-1 / 2, 0, 1 / 2])[::-1]
@@ -1131,6 +1131,24 @@ def test_boozer_transform():
         booz_xform,
         rtol=1e-3,
         atol=1e-4,
+    )
+
+
+@pytest.mark.unit
+def test_boozer_transform_multiple_surfaces():
+    """Test that computing over multiple surfaces is the same as over 1 at a time."""
+    eq = get("HELIOTRON")
+    grid1 = LinearGrid(rho=0.6, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
+    grid2 = LinearGrid(rho=0.8, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
+    grid3 = LinearGrid(rho=np.array([0.6, 0.8]), M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
+    data1 = eq.compute("|B|_mn", grid=grid1, M_booz=eq.M, N_booz=eq.N)
+    data2 = eq.compute("|B|_mn", grid=grid2, M_booz=eq.M, N_booz=eq.N)
+    data3 = eq.compute("|B|_mn", grid=grid3, M_booz=eq.M, N_booz=eq.N)
+    np.testing.assert_allclose(
+        data1["|B|_mn"], data3["|B|_mn"].reshape((grid3.num_rho, -1))[0]
+    )
+    np.testing.assert_allclose(
+        data2["|B|_mn"], data3["|B|_mn"].reshape((grid3.num_rho, -1))[1]
     )
 
 

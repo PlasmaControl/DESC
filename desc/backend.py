@@ -71,7 +71,7 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
     imap = jax.lax.map
     from jax.experimental.ode import odeint
     from jax.lax import cond, fori_loop, scan, switch, while_loop
-    from jax.nn import softmax
+    from jax.nn import softmax as softargmax
     from jax.numpy import bincount, flatnonzero, repeat, take
     from jax.numpy.fft import irfft, rfft, rfft2
     from jax.scipy.fft import dct, idct
@@ -336,7 +336,7 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
         This routine may be used on over or under-determined systems, in which case it
         will solve it in a least squares / least norm sense.
         """
-        from desc.compute.utils import safenorm
+        from desc.utils import safenorm
 
         if fixup is None:
             fixup = lambda x, *args: x
@@ -422,7 +422,8 @@ else:  # pragma: no cover
         qr,
         solve_triangular,
     )
-    from scipy.special import gammaln, logsumexp, softmax  # noqa: F401
+    from scipy.special import gammaln, logsumexp  # noqa: F401
+    from scipy.special import softmax as softargmax  # noqa: F401
 
     trapezoid = np.trapezoid if hasattr(np, "trapezoid") else np.trapz
 

@@ -47,15 +47,11 @@ def _subtract(c, k):
 
 
 @partial(jnp.vectorize, signature="(m),(m)->(m)")
-def _in_epigraph_and(is_intersect, df_dy_sign):
+def _in_epigraph_and(is_intersect, df_dy_sign, /):
     """Set and epigraph of function f with the given set of points.
 
     Used to return only intersects where the straight line path between
     adjacent intersects resides in the epigraph of a continuous map ``f``.
-
-    Warnings
-    --------
-    Does not support keyword arguments.
 
     Parameters
     ----------
@@ -71,6 +67,11 @@ def _in_epigraph_and(is_intersect, df_dy_sign):
         Boolean array indicating whether element is an intersect
         and satisfies the stated condition.
 
+    Examples
+    --------
+    See ``desc/integrals/bounce_utils.py::bounce_points``.
+    This is used there to ensure the domains of integration are magnetic wells.
+
     """
     # The pairs ``y1`` and ``y2`` are boundaries of an integral only if ``y1 <= y2``.
     # For the integrals to be over wells, it is required that the first intersect
@@ -80,7 +81,7 @@ def _in_epigraph_and(is_intersect, df_dy_sign):
     # must be at the first pair. To correct the inversion, it suffices to disqualify the
     # first intersect as a right boundary, except under an edge case of a series of
     # inflection points.
-    idx = flatnonzero(is_intersect, size=2, fill_value=-1)  # idx of first 2 intersects
+    idx = flatnonzero(is_intersect, size=2, fill_value=-1)
     edge_case = (
         (df_dy_sign[idx[0]] == 0)
         & (df_dy_sign[idx[1]] < 0)
@@ -700,9 +701,9 @@ def _plot_intersect(ax, legend, z1, z2, k, k_transparency, klabel):
     for i in range(k.size):
         _z1, _z2 = z1[i], z2[i]
         if _z1.size == _z2.size:
-            mask = (z1 - z2) != 0.0
-            _z1 = z1[mask]
-            _z2 = z2[mask]
+            mask = (_z1 - _z2) != 0.0
+            _z1 = _z1[mask]
+            _z2 = _z2[mask]
         _add2legend(
             legend,
             ax.scatter(

@@ -693,12 +693,8 @@ def broadcast_tree(tree_in, tree_out, dtype=int):
 
 
 @partial(jnp.vectorize, signature="(m),(m)->(n)", excluded={"size", "fill_value"})
-def take_mask(a, mask, size=None, fill_value=None):
+def take_mask(a, mask, /, *, size=None, fill_value=None):
     """JIT compilable method to return ``a[mask][:size]`` padded by ``fill_value``.
-
-    Warnings
-    --------
-    The parameters ``size`` and ``fill_value`` must be specified as keyword arguments.
 
     Parameters
     ----------
@@ -741,34 +737,193 @@ def flatten_matrix(y):
 
 # TODO: Eventually remove and use numpy's stuff.
 # https://github.com/numpy/numpy/issues/25805
-def atleast_nd(ndmin, *arys):
+def atleast_nd(ndmin, ary):
     """Adds dimensions to front if necessary."""
-    if ndmin == 1:
-        return jnp.atleast_1d(*arys)
-    if ndmin == 2:
-        return jnp.atleast_2d(*arys)
-    tup = tuple(jnp.array(ary, ndmin=ndmin) for ary in arys)
-    if len(tup) == 1:
-        tup = tup[0]
-    return tup
-
-
-def atleast_3d_mid(*arys):
-    """Like np.atleast3d but if adds dim at axis 1 for 2d arrays."""
-    arys = jnp.atleast_2d(*arys)
-    tup = tuple(ary[:, jnp.newaxis] if ary.ndim == 2 else ary for ary in arys)
-    if len(tup) == 1:
-        tup = tup[0]
-    return tup
-
-
-def atleast_2d_end(*arys):
-    """Like np.atleast2d but if adds dim at axis 1 for 1d arrays."""
-    arys = jnp.atleast_1d(*arys)
-    tup = tuple(ary[:, jnp.newaxis] if ary.ndim == 1 else ary for ary in arys)
-    if len(tup) == 1:
-        tup = tup[0]
-    return tup
+    return jnp.array(ary, ndmin=ndmin) if jnp.ndim(ary) < ndmin else ary
 
 
 PRINT_WIDTH = 60  # current longest name is BootstrapRedlConsistency with pre-text
+
+
+def dot(a, b, axis=-1):
+    """Batched vector dot product.
+
+    Parameters
+    ----------
+    a : array-like
+        First array of vectors.
+    b : array-like
+        Second array of vectors.
+    axis : int
+        Axis along which vectors are stored.
+
+    Returns
+    -------
+    y : array-like
+        y = sum(a*b, axis=axis)
+
+    """
+    return jnp.sum(a * b, axis=axis, keepdims=False)
+
+
+def cross(a, b, axis=-1):
+    """Batched vector cross product.
+
+    Parameters
+    ----------
+    a : array-like
+        First array of vectors.
+    b : array-like
+        Second array of vectors.
+    axis : int
+        Axis along which vectors are stored.
+
+    Returns
+    -------
+    y : array-like
+        y = a x b
+
+    """
+    return jnp.cross(a, b, axis=axis)
+
+
+def safenorm(x, ord=None, axis=None, fill=0, threshold=0):
+    """Like jnp.linalg.norm, but without nan gradient at x=0.
+
+    Parameters
+    ----------
+    x : ndarray
+        Vector or array to norm.
+    ord : {non-zero int, inf, -inf, 'fro', 'nuc'}, optional
+        Order of norm.
+    axis : {None, int, 2-tuple of ints}, optional
+        Axis to take norm along.
+    fill : float, ndarray, optional
+        Value to return where x is zero.
+    threshold : float >= 0
+        How small is x allowed to be.
+
+    """
+    is_zero = (jnp.abs(x) <= threshold).all(axis=axis, keepdims=True)
+    y = jnp.where(is_zero, jnp.ones_like(x), x)  # replace x with ones if is_zero
+    n = jnp.linalg.norm(y, ord=ord, axis=axis)
+    n = jnp.where(is_zero.squeeze(), fill, n)  # replace norm with zero if is_zero
+    return n
+
+
+def safenormalize(x, ord=None, axis=None, fill=0, threshold=0):
+    """Normalize a vector to unit length, but without nan gradient at x=0.
+
+    Parameters
+    ----------
+    x : ndarray
+        Vector or array to norm.
+    ord : {non-zero int, inf, -inf, 'fro', 'nuc'}, optional
+        Order of norm.
+    axis : {None, int, 2-tuple of ints}, optional
+        Axis to take norm along.
+    fill : float, ndarray, optional
+        Value to return where x is zero.
+    threshold : float >= 0
+        How small is x allowed to be.
+
+    """
+    is_zero = (jnp.abs(x) <= threshold).all(axis=axis, keepdims=True)
+    y = jnp.where(is_zero, jnp.ones_like(x), x)  # replace x with ones if is_zero
+    n = safenorm(x, ord, axis, fill, threshold) * jnp.ones_like(x)
+    # return unit vector with equal components if norm <= threshold
+    return jnp.where(n <= threshold, jnp.ones_like(y) / jnp.sqrt(y.size), y / n)
+
+
+def safediv(a, b, fill=0, threshold=0):
+    """Divide a/b with guards for division by zero.
+
+    Parameters
+    ----------
+    a, b : ndarray
+        Numerator and denominator.
+    fill : float, ndarray, optional
+        Value to return where b is zero.
+    threshold : float >= 0
+        How small is b allowed to be.
+    """
+    mask = jnp.abs(b) <= threshold
+    num = jnp.where(mask, fill, a)
+    den = jnp.where(mask, 1, b)
+    return num / den
+
+
+def cumtrapz(y, x=None, dx=1.0, axis=-1, initial=None):
+    """Cumulatively integrate y(x) using the composite trapezoidal rule.
+
+    Taken from SciPy, but changed NumPy references to JAX.NumPy:
+        https://github.com/scipy/scipy/blob/v1.10.1/scipy/integrate/_quadrature.py
+
+    Parameters
+    ----------
+    y : array_like
+        Values to integrate.
+    x : array_like, optional
+        The coordinate to integrate along. If None (default), use spacing `dx`
+        between consecutive elements in `y`.
+    dx : float, optional
+        Spacing between elements of `y`. Only used if `x` is None.
+    axis : int, optional
+        Specifies the axis to cumulate. Default is -1 (last axis).
+    initial : scalar, optional
+        If given, insert this value at the beginning of the returned result.
+        Typically, this value should be 0. Default is None, which means no
+        value at ``x[0]`` is returned and `res` has one element less than `y`
+        along the axis of integration.
+
+    Returns
+    -------
+    res : ndarray
+        The result of cumulative integration of `y` along `axis`.
+        If `initial` is None, the shape is such that the axis of integration
+        has one less value than `y`. If `initial` is given, the shape is equal
+        to that of `y`.
+
+    """
+    y = jnp.asarray(y)
+    if x is None:
+        d = dx
+    else:
+        x = jnp.asarray(x)
+        if x.ndim == 1:
+            d = jnp.diff(x)
+            # reshape to correct shape
+            shape = [1] * y.ndim
+            shape[axis] = -1
+            d = d.reshape(shape)
+        elif len(x.shape) != len(y.shape):
+            raise ValueError("If given, shape of x must be 1-D or the " "same as y.")
+        else:
+            d = jnp.diff(x, axis=axis)
+
+        if d.shape[axis] != y.shape[axis] - 1:
+            raise ValueError(
+                "If given, length of x along axis must be the " "same as y."
+            )
+
+    def tupleset(t, i, value):
+        l = list(t)
+        l[i] = value
+        return tuple(l)
+
+    nd = len(y.shape)
+    slice1 = tupleset((slice(None),) * nd, axis, slice(1, None))
+    slice2 = tupleset((slice(None),) * nd, axis, slice(None, -1))
+    res = jnp.cumsum(d * (y[slice1] + y[slice2]) / 2.0, axis=axis)
+
+    if initial is not None:
+        if not jnp.isscalar(initial):
+            raise ValueError("`initial` parameter should be a scalar.")
+
+        shape = list(res.shape)
+        shape[axis] = 1
+        res = jnp.concatenate(
+            [jnp.full(shape, initial, dtype=res.dtype), res], axis=axis
+        )
+
+    return res

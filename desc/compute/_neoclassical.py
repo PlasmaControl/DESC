@@ -225,13 +225,7 @@ def _effective_ripple(params, transforms, profiles, data, **kwargs):
     transforms={"grid": []},
     profiles=[],
     coordinates="r",
-    data=[
-        "min_tz |B|",
-        "max_tz |B|",
-        "cvdrift0",
-        "gbdrift",
-        "<L|r,a>",
-    ]
+    data=["min_tz |B|", "max_tz |B|", "cvdrift0", "gbdrift", "<L|r,a>"]
     + Bounce1D.required_names,
     source_grid_requirement={"coordinates": "raz", "is_meshgrid": True},
     quad="jnp.ndarray : Optional, quadrature points and weights for bounce integrals.",
@@ -264,10 +258,10 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
     grid = transforms["grid"].source_grid
 
     def d_v_tau(B, pitch):
-        return safediv(2, jnp.sqrt(jnp.abs(1 - pitch * B)))
+        return safediv(2.0, jnp.sqrt(jnp.abs(1 - pitch * B)))
 
     def drift(f, B, pitch):
-        return safediv(f * (1 - pitch * B / 2), jnp.sqrt(jnp.abs(1 - pitch * B)))
+        return safediv(f * (1 - 0.5 * pitch * B), jnp.sqrt(jnp.abs(1 - pitch * B)))
 
     def compute(data):
         """∫ dλ ∑ⱼ [v τ γ_c²]ⱼ."""
@@ -397,11 +391,11 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
     # (|∇ρ| ‖e_α|ρ,ϕ‖)ᵢ ∫ dℓ √(1 − λ|B|) [ (1 − λ|B|/2)/(1 − λ|B|) ∂|B|/∂ψ + K ] / |B|
 
     def d_v_tau(B, pitch):
-        return safediv(2, jnp.sqrt(jnp.abs(1 - pitch * B)))
+        return safediv(2.0, jnp.sqrt(jnp.abs(1 - pitch * B)))
 
     def drift_radial(grad_rho_norm_kappa_g, B, pitch):
         return (
-            safediv(1 - pitch * B / 2, jnp.sqrt(jnp.abs(1 - pitch * B)))
+            safediv(1 - 0.5 * pitch * B, jnp.sqrt(jnp.abs(1 - pitch * B)))
             * grad_rho_norm_kappa_g
             / B
         )
@@ -409,7 +403,7 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
     def drift_poloidal(B_psi, K, B, pitch):
         return (
             jnp.sqrt(jnp.abs(1 - pitch * B))
-            * (safediv(1 - pitch * B / 2, 1 - pitch * B) * B_psi + K)
+            * (safediv(1 - 0.5 * pitch * B, 1 - pitch * B) * B_psi + K)
             / B
         )
 

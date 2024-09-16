@@ -1,6 +1,5 @@
 """Utilities for quadratures."""
 
-from orthax.chebyshev import chebgauss
 from orthax.legendre import legder, legval
 
 from desc.backend import eigh_tridiagonal, jnp, put
@@ -28,9 +27,10 @@ def grad_bijection_from_disc(a, b):
 def automorphism_arcsin(x):
     """[-1, 1] ∋ x ↦ y ∈ [−1, 1].
 
-    The arcsin transformation introduces a singularity that augments the singularity
-    in the bounce integral, so the quadrature scheme used to evaluate the integral must
-    work well on functions with large derivative near the boundary.
+    The arcsin transformation introduces a singularity at the boundaries,
+    so the quadrature scheme used to evaluate the integral must work well
+    on functions with large derivative near the boundary. Also, the nodes
+    are pulled away from the boundary.
 
     Parameters
     ----------
@@ -59,14 +59,14 @@ grad_automorphism_arcsin.__doc__ += "\n" + automorphism_arcsin.__doc__
 def automorphism_sin(x, s=0, m=10):
     """[-1, 1] ∋ x ↦ y ∈ [−1, 1].
 
-    When used as the change of variable map for the bounce integral, the Lipschitzness
-    of the sin transformation prevents generation of new singularities. Furthermore,
-    its derivative vanishes to zero slowly near the boundary, which will suppress the
-    large derivatives near the boundary of singular integrals.
+    When used as the change of variable map, the Lipschitzness of the sin transformation
+    prevents generation of new singularities. Furthermore, its derivative vanishes to
+    zero slowly near the boundary, which will suppress the large derivatives near the
+    boundary of singular integrands. Also, the nodes are pushed toward the boundary.
 
     In effect, this map pulls the mass of the integral away from the singularities,
     which should improve convergence if the quadrature performs better on less singular
-    integrands. Pairs well with Gauss-Legendre quadrature.
+    integrands.
 
     Parameters
     ----------
@@ -212,8 +212,9 @@ def chebgauss_uniform(deg):
     #   ∫₋₁¹ f(x) dx = 2/π ∫₋₁¹ (1−y²)⁻⁰ᐧ⁵ g(y) dy
     # ∑ₖ wₖ f(x(yₖ)) = 2/π ∑ₖ ωₖ g(yₖ)
     # Given roots yₖ of Chebyshev polynomial, x(yₖ) is uniform in (-1, 1).
-    y, w = chebgauss(deg)
-    return automorphism_arcsin(y), 2 * w / jnp.pi
+    x = jnp.arange(-deg + 1, deg + 1, 2) / deg
+    w = 2 / deg * jnp.ones(deg)
+    return x, w
 
 
 def get_quadrature(quad, automorphism):

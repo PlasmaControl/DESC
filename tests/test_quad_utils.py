@@ -113,11 +113,13 @@ def test_chebgauss_uniform():
     def f(y):
         return 5.2 * y**7 - 3.6 * y**3 + y**4
 
-    truth = scipy.integrate.quad(lambda y: f(y) / np.sqrt(1 - y**2), -1, 1)[0]
     deg = 4
-    yk, _ = chebgauss(deg)
+    yk, wk = chebgauss(deg)
     x, w = chebgauss_uniform(deg)
-    np.testing.assert_array_equal(np.sign(x), np.sign(yk))
+    np.testing.assert_allclose(yk[::-1], automorphism_sin(x))
+    np.testing.assert_allclose(wk, 0.5 * jnp.pi * w)
     np.testing.assert_allclose(np.diff(x), x[1] - x[0])
-    np.testing.assert_allclose(yk, automorphism_sin(x))
-    np.testing.assert_allclose(f(yk).dot(w), 2 * truth / jnp.pi)
+    np.testing.assert_allclose(
+        f(automorphism_sin(x)).dot(w),
+        2 / jnp.pi * scipy.integrate.quad(lambda y: f(y) / np.sqrt(1 - y**2), -1, 1)[0],
+    )

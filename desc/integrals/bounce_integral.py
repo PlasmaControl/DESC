@@ -98,14 +98,13 @@ class Bounce1D(IOAble):
 
     required_names = ["B^zeta", "B^zeta_z|r,a", "|B|", "|B|_z|r,a"]
     get_pitch_inv_quad = staticmethod(get_pitch_inv_quad)
-    _default_automorphism = (automorphism_sin, grad_automorphism_sin)
 
     def __init__(
         self,
         grid,
         data,
         quad=leggauss(32),
-        automorphism=_default_automorphism,
+        automorphism=(automorphism_sin, grad_automorphism_sin),
         Bref=1.0,
         Lref=1.0,
         *,

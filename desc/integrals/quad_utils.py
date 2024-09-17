@@ -27,10 +27,8 @@ def grad_bijection_from_disc(a, b):
 def automorphism_arcsin(x):
     """[-1, 1] ∋ x ↦ y ∈ [−1, 1].
 
-    The arcsin transformation introduces a singularity at the boundaries,
-    so the quadrature scheme used to evaluate the integral must work well
-    on functions with large derivative near the boundary. Also, the nodes
-    are pulled away from the boundary.
+    This map decreases node density near the boundary by the asymptotic factor
+    1/√(1−x²) and adds a √(1−x²) factor to the integrand.
 
     Parameters
     ----------
@@ -59,14 +57,8 @@ grad_automorphism_arcsin.__doc__ += "\n" + automorphism_arcsin.__doc__
 def automorphism_sin(x, s=0, m=10):
     """[-1, 1] ∋ x ↦ y ∈ [−1, 1].
 
-    When used as the change of variable map, the Lipschitzness of the sin transformation
-    prevents generation of new singularities. Furthermore, its derivative vanishes to
-    zero slowly near the boundary, which will suppress the large derivatives near the
-    boundary of singular integrands. Also, the nodes are pushed toward the boundary.
-
-    In effect, this map pulls the mass of the integral away from the singularities,
-    which should improve convergence if the quadrature performs better on less singular
-    integrands.
+    This map increases node density near the boundary by the asymptotic factor
+    1/√(1−x²) and adds a √(1−x²) factor to the integrand.
 
     Parameters
     ----------
@@ -214,6 +206,31 @@ def chebgauss_uniform(deg):
     # Given roots yₖ of Chebyshev polynomial, x(yₖ) is uniform in (-1, 1).
     x = jnp.arange(-deg + 1, deg + 1, 2) / deg
     w = 2 / deg * jnp.ones(deg)
+    return x, w
+
+
+def chebgauss2(deg):
+    """Gauss-Chebyshev quadrature of the second kind.
+
+    Returns quadrature points xₖ and weights wₖ for the approximate evaluation of the
+    integral ∫₋₁¹ f(x) dx ≈ ∑ₖ wₖ f(xₖ) where f(x) = g(x) √(1−x²).
+
+    Parameters
+    ----------
+    deg : int
+        Number of quadrature points.
+
+    Returns
+    -------
+    x, w : (jnp.ndarray, jnp.ndarray)
+        Shape (deg, ).
+        Quadrature points and weights.
+    """
+    # Adapted from
+    # github.com/scipy/scipy/blob/v1.14.1/scipy/special/_orthogonal.py#L1803-L1851.
+    t = jnp.arange(deg, 0, -1) * jnp.pi / (deg + 1)
+    x = jnp.cos(t)
+    w = jnp.pi * jnp.abs(jnp.sin(t)) / (deg + 1)
     return x, w
 
 

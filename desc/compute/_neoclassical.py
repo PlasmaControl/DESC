@@ -16,7 +16,7 @@ from quadax import simpson
 from desc.backend import jit, jnp
 
 from ..integrals.bounce_integral import Bounce1D
-from ..integrals.quad_utils import get_quadrature, leggauss_lob
+from ..integrals.quad_utils import chebgauss2
 from ..utils import map2, safediv
 from .data_index import register_compute_fun
 from .utils import _get_pitch_inv_quad, _poloidal_mean
@@ -115,24 +115,19 @@ def _G_ra_fsa(data, transforms, profiles, **kwargs):
     ),
     batch="bool : Whether to vectorize part of the computation. Default is true.",
     # Some notes on choosing the resolution hyperparameters:
-    # The default settings above were chosen such that the effective ripple profile on
+    # The default settings were chosen such that the effective ripple profile on
     # the W7-X stellarator looks similar to the profile computed at higher resolution,
-    # indicating convergence. The final resolution parameter to keep in mind is that
-    # the supplied grid should sufficiently cover the flux surfaces. At/above the
-    # num_quad and num_pitch parameters chosen above, the grid coverage should be the
-    # parameter that has the strongest effect on the profile.
-    # As a reference for W7-X, when computing the effective ripple by tracing a single
-    # field line on each flux surface, a density of 100 knots per toroidal transit
-    # accurately reconstructs the ripples along the field line. Truncating the field
-    # line to [0, 20π] offers good convergence (after [0, 30π] the returns diminish).
-    # Note that when further truncating the field line to [0, 10π], a dip/cusp appears
-    # between the rho=0.7 and rho=0.8 surfaces, indicating that more coverage is
-    # required to resolve the effective ripple in this region.
-    # TODO: Improve performance... related to GitHub issue #1045.
-    #  The difficulty is computing the magnetic field is expensive:
-    #  the ripples along field lines are fine compared to the length of the field line
-    #  required for sufficient coverage of the surface. This requires many knots to
-    #  for the spline of the magnetic field to capture fine ripples in a large interval.
+    # indicating convergence. The parameters ``num_transit`` and ``knots_per_transit``
+    # have a stronger effect on the result. As a reference for W7-X, when computing the
+    # effective ripple by tracing a single field line on each flux surface, a density of
+    # 100 knots per toroidal transit accurately reconstructs the ripples along the field
+    # line. After 10 toroidal transits convergence is apparent (after 15 the returns
+    # diminish). Dips in the resulting profile indicates insufficient ``num_transit``.
+    # Unreasonably high values indicates insufficient ``knots_per_transit``.
+    # One can plot the field line with ``Bounce1D.plot`` to see if the number of knots
+    # was sufficient to reconstruct the field line.
+    # TODO: Improve performance... see GitHub issue #1045.
+    #  Need more efficient function approximation of |B|(α, ζ).
 )
 @partial(jit, static_argnames=["num_pitch", "num_well", "batch"])
 def _effective_ripple(params, transforms, profiles, data, **kwargs):
@@ -142,11 +137,7 @@ def _effective_ripple(params, transforms, profiles, data, **kwargs):
     V. V. Nemov, S. V. Kasilov, W. Kernbichler, M. F. Heyn.
     Phys. Plasmas 1 December 1999; 6 (12): 4622–4632.
     """
-    quad = (
-        kwargs["quad"]
-        if "quad" in kwargs
-        else get_quadrature(leggauss_lob(32), Bounce1D._default_automorphism)
-    )
+    quad = kwargs["quad"] if "quad" in kwargs else chebgauss2(32)
     num_pitch = kwargs.get("num_pitch", 50)
     num_well = kwargs.get("num_well", None)
     batch = kwargs.get("batch", True)

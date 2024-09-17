@@ -4,7 +4,8 @@ import numpy as np
 import pytest
 import scipy
 from jax import grad
-from orthax.chebyshev import chebgauss
+from numpy.polynomial.chebyshev import chebgauss, chebweight
+from scipy.special import roots_chebyu
 
 from desc.backend import jnp
 from desc.integrals.quad_utils import (
@@ -12,6 +13,7 @@ from desc.integrals.quad_utils import (
     automorphism_sin,
     bijection_from_disc,
     bijection_to_disc,
+    chebgauss2,
     chebgauss_uniform,
     grad_automorphism_arcsin,
     grad_automorphism_sin,
@@ -93,8 +95,8 @@ def test_leggauss_lobatto():
 
 
 @pytest.mark.unit
-def test_chebgauss_uniform():
-    """Test uniform Chebyshev quadrature."""
+def test_chebgauss():
+    """Test Chebyshev quadratures."""
 
     def f(y):
         return 5.2 * y**7 - 3.6 * y**3 + y**4
@@ -109,3 +111,6 @@ def test_chebgauss_uniform():
         f(automorphism_sin(x)).dot(w),
         2 / jnp.pi * scipy.integrate.quad(lambda y: f(y) / np.sqrt(1 - y**2), -1, 1)[0],
     )
+    x, w = roots_chebyu(deg)
+    w *= chebweight(x)
+    np.testing.assert_allclose(chebgauss2(deg), (x, w))

@@ -7,8 +7,7 @@ from desc.compute.utils import _compute as compute_fun
 from desc.grid import LinearGrid
 from desc.utils import Timer
 
-from ..integrals import Bounce1D
-from ..integrals.quad_utils import get_quadrature, leggauss_lob
+from ..integrals.quad_utils import chebgauss2
 from .objective_funs import _Objective
 from .utils import _parse_callable_target_bounds
 
@@ -133,9 +132,9 @@ class EffectiveRipple(_Objective):
             "zeta": np.linspace(
                 0, 2 * np.pi * num_transit, knots_per_transit * num_transit
             ),
+            "quad": chebgauss2(num_quad),
         }
         self._hyperparameters = {
-            "num_quad": num_quad,
             "num_pitch": num_pitch,
             "batch": batch,
             "num_well": num_well,
@@ -174,10 +173,6 @@ class EffectiveRipple(_Objective):
         else:
             rho = self._grid_1dr.compress(self._grid_1dr.nodes[:, 0])
         self._constants["rho"] = rho
-        self._constants["quad"] = get_quadrature(
-            leggauss_lob(self._hyperparameters.pop("num_quad")),
-            Bounce1D._default_automorphism,
-        )
         self._dim_f = rho.size
         self._target, self._bounds = _parse_callable_target_bounds(
             self._target, self._bounds, rho

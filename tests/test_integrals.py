@@ -910,14 +910,13 @@ class TestBounce1DQuadrature:
         [
             (True, tanh_sinh(40), None),
             (False, tanh_sinh(20), None),
-            # Node density near boundary is (1−x²)⁻¹.
+            # Node density near boundary is 1/(1−x²).
             (True, leggauss(25), auto_sin),
             (True, _chebgauss1(30), auto_sin),
             # Lobatto nodes
-            (False, leggauss_lob(10), auto_sin),
-            (False, chebgauss2(10), auto_sin),
-            # Node density near boundary is (1−x²)⁻⁰ᐧ⁵.
-            (False, leggauss_lob(14), None),
+            (False, leggauss_lob(8, interior_only=True), auto_sin),
+            # Node density near boundary is 1/√(1−x²).
+            (False, leggauss_lob(13, interior_only=True), None),
             (False, chebgauss2(8), None),
         ],
     )
@@ -968,7 +967,7 @@ class TestBounce1DQuadrature:
             automorphism,
             check=True,
         )
-        result = bounce.integrate(integrand, pitch_inv, check=True, plot=True)
+        result = bounce.integrate(integrand, pitch_inv, check=True, plot=False)
         assert np.count_nonzero(result) == 1
         np.testing.assert_allclose(result.sum(), truth, rtol=1e-4)
 

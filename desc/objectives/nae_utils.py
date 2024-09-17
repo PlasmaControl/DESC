@@ -1090,7 +1090,7 @@ def _calc_2nd_order_constraints(  # noqa: C901 - FIXME - simplify
         target = NAEcoeff * r
         for k in range(1, int(desc_eq.L / 2) + 1):
             modes.append([2 * k, 0, n])
-            sum_weights.append([(-1) ** k * k * (k + 1)])
+            sum_weights.append((-1) ** k * k * (k + 1))
         modes = np.atleast_2d(modes)
         sum_weights = -np.atleast_1d(sum_weights)
         Rcon = FixSumModesR(
@@ -1104,7 +1104,7 @@ def _calc_2nd_order_constraints(  # noqa: C901 - FIXME - simplify
         target = NAEcoeff * r
         for k in range(1, int(desc_eq.L / 2) + 1):
             modes.append([2 * k, 2, n])
-            sum_weights.append([(-1) ** k * k * (k + 1)])
+            sum_weights.append((-1) ** k * k * (k + 1))
         modes = np.atleast_2d(modes)
         sum_weights = -np.atleast_1d(sum_weights) / 2
         Rcon = FixSumModesR(
@@ -1118,7 +1118,7 @@ def _calc_2nd_order_constraints(  # noqa: C901 - FIXME - simplify
         target = NAEcoeff * r
         for k in range(1, int(desc_eq.L / 2) + 1):
             modes.append([2 * k, -2, n])
-            sum_weights.append([(-1) ** k * k * (k + 1)])
+            sum_weights.append((-1) ** k * k * (k + 1))
         modes = np.atleast_2d(modes)
         sum_weights = -np.atleast_1d(sum_weights) / 2
         Rcon = FixSumModesR(
@@ -1132,7 +1132,7 @@ def _calc_2nd_order_constraints(  # noqa: C901 - FIXME - simplify
         target = NAEcoeff * r
         for k in range(1, int(desc_eq.L / 2) + 1):
             modes.append([2 * k, 0, n])
-            sum_weights.append([(-1) ** k * k * (k + 1)])
+            sum_weights.append((-1) ** k * k * (k + 1))
         modes = np.atleast_2d(modes)
         sum_weights = -np.atleast_1d(sum_weights)
         Zcon = FixSumModesZ(
@@ -1146,7 +1146,7 @@ def _calc_2nd_order_constraints(  # noqa: C901 - FIXME - simplify
         target = NAEcoeff * r
         for k in range(1, int(desc_eq.M / 2) + 1):
             modes.append([2 * k, -2, n])
-            sum_weights.append([(-1) ** k * k * (k + 1)])
+            sum_weights.append((-1) ** k * k * (k + 1))
         modes = np.atleast_2d(modes)
         sum_weights = -np.atleast_1d(sum_weights) / 2
         Zcon = FixSumModesZ(
@@ -1160,7 +1160,7 @@ def _calc_2nd_order_constraints(  # noqa: C901 - FIXME - simplify
         target = NAEcoeff * r
         for k in range(1, int(desc_eq.M / 2) + 1):
             modes.append([2 * k, 2, n])
-            sum_weights.append([(-1) ** k * k * (k + 1)])
+            sum_weights.append((-1) ** k * k * (k + 1))
         modes = np.atleast_2d(modes)
         sum_weights = -np.atleast_1d(sum_weights) / 2
         Zcon = FixSumModesZ(
@@ -1178,7 +1178,7 @@ def _calc_2nd_order_constraints(  # noqa: C901 - FIXME - simplify
         target = NAEcoeff * r
         for k in range(1, int(desc_eq.L / 2) + 1):
             modes.append([2 * k, 0, n])
-            sum_weights.append([(-1) ** k * k * (k + 1)])
+            sum_weights.append((-1) ** k * k * (k + 1))
         modes = np.atleast_2d(modes)
         sum_weights = -np.atleast_1d(sum_weights)
         Lcon = FixSumModesLambda(
@@ -1192,7 +1192,7 @@ def _calc_2nd_order_constraints(  # noqa: C901 - FIXME - simplify
         target = NAEcoeff * r
         for k in range(1, int(desc_eq.M / 2) + 1):
             modes.append([2 * k, -2, n])
-            sum_weights.append([(-1) ** k * k * (k + 1)])
+            sum_weights.append((-1) ** k * k * (k + 1))
         modes = np.atleast_2d(modes)
         sum_weights = -np.atleast_1d(sum_weights) / 2
         Lcon = FixSumModesLambda(
@@ -1206,7 +1206,7 @@ def _calc_2nd_order_constraints(  # noqa: C901 - FIXME - simplify
         target = NAEcoeff * r
         for k in range(1, int(desc_eq.M / 2) + 1):
             modes.append([2 * k, 2, n])
-            sum_weights.append([(-1) ** k * k * (k + 1)])
+            sum_weights.append((-1) ** k * k * (k + 1))
         modes = np.atleast_2d(modes)
         sum_weights = -np.atleast_1d(sum_weights) / 2
         Lcon = FixSumModesLambda(

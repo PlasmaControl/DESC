@@ -1,0 +1,56 @@
+name: Cache dependencies
+# This workflow is triggered every 2 days and updates the Python
+# and pip dependencies cache
+on:
+  schedule:
+    - cron: '30 8 */2 * *'  # This triggers the workflow at 4:30 AM ET every 2 days
+    # cron syntax uses UTC time, so 4:30 AM ET is 8:30 AM UTC (for daylight time)
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    strategy:
+      matrix:
+        python-version: ['3.9', '3.10', '3.11', '3.12']
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Delete old cached file with same python version
+        run: |
+          echo "Current Cached files list"
+          gh cache list
+          echo "Deleting cached files with pattern: ${{ runner.os }}-venv-${{ matrix.python-version }}-"
+          for cache_key in $(gh cache list --json key -q ".[] | select(.key | startswith(\"${{ runner.os }}-venv-${{ matrix.python-version }}-\")) | .key"); do
+            echo "Deleting cache with key: $cache_key"
+            gh cache delete "$cache_key"
+          done
+
+      - name: Set up virtual environment
+        run: |
+          python -m venv .venv-${{ matrix.python-version }}
+          source .venv-${{ matrix.python-version }}/bin/activate
+          python -m pip install --upgrade pip
+          pip install -r devtools/dev-requirements.txt
+
+      - name: Cache Python environment
+        id: cache-env
+        uses: actions/cache@v4
+        with:
+          path: .venv-${{ matrix.python-version }}
+          key: ${{ runner.os }}-venv-${{ matrix.python-version }}-${{ hashFiles('devtools/dev-requirements.txt', 'requirements.txt') }}
+
+      - name: Verify virtual environment activation
+        run: |
+          source .venv-${{ matrix.python-version }}/bin/activate
+          python --version
+          pip --version
+          pip list

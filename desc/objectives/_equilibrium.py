@@ -557,7 +557,7 @@ class HelicalForceBalance(_Objective):
     _equilibrium = True
     _coordinates = "rtz"
     _units = "(N)"
-    _print_value_fmt = "Helical force error: {:10.3e}, "
+    _print_value_fmt = "Helical force error: "
 
     def __init__(
         self,

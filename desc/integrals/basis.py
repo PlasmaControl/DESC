@@ -8,6 +8,7 @@ from matplotlib import pyplot as plt
 from desc.backend import dct, flatnonzero, idct, irfft, jnp, put, rfft
 from desc.integrals.interp_utils import (
     _filter_distinct,
+    _subtract_first,
     cheb_from_dct,
     cheb_pts,
     chebroots_vec,
@@ -27,23 +28,6 @@ from desc.utils import (
     setdefault,
     take_mask,
 )
-
-
-def _subtract(c, k):
-    """Subtract ``k`` from first index of last axis of ``c``.
-
-    Semantically same as ``return c.copy().at[...,0].add(-k)``,
-    but allows dimension to increase.
-    """
-    c_0 = c[..., 0] - k
-    c = jnp.concatenate(
-        [
-            c_0[..., jnp.newaxis],
-            jnp.broadcast_to(c[..., 1:], (*c_0.shape, c.shape[-1] - 1)),
-        ],
-        axis=-1,
-    )
-    return c
 
 
 @partial(jnp.vectorize, signature="(m),(m)->(m)")
@@ -162,12 +146,11 @@ class FourierChebyshevBasis:
     @staticmethod
     def _fast_transform(f, lobatto):
         N = f.shape[-1]
-        c = rfft(
+        return rfft(
             dct(f, type=2 - lobatto, axis=-1) / (N - lobatto),
             axis=-2,
             norm="forward",
         )
-        return c
 
     @staticmethod
     def nodes(M, N, L=None, domain=(-1, 1), lobatto=False):
@@ -204,8 +187,9 @@ class FourierChebyshevBasis:
             coords = (jnp.atleast_1d(L), x, y)
         else:
             coords = (x, y)
-        coords = list(map(jnp.ravel, jnp.meshgrid(*coords, indexing="ij")))
-        coords = jnp.column_stack(coords)
+        coords = jnp.column_stack(
+            list(map(jnp.ravel, jnp.meshgrid(*coords, indexing="ij")))
+        )
         return coords
 
     def evaluate(self, M, N):
@@ -424,7 +408,7 @@ class ChebyshevBasisSet:
             Sign of ∂f/∂y (x, yᵢ).
 
         """
-        c = _subtract(_chebcast(self.cheb, k), k)
+        c = _subtract_first(_chebcast(self.cheb, k), k)
         # roots yᵢ of f(x, y) = ∑ₙ₌₀ᴺ⁻¹ αₙ(x) Tₙ(y) - k(x)
         y = chebroots_vec(c)
         assert y.shape == (*c.shape[:-1], self.N - 1)
@@ -432,9 +416,9 @@ class ChebyshevBasisSet:
         # Intersects must satisfy y ∈ [-1, 1].
         # Pick sentinel such that only distinct roots are considered intersects.
         y = _filter_distinct(y, sentinel=-2.0, eps=eps)
-        is_intersect = (jnp.abs(y.imag) <= eps) & (jnp.abs(y.real) <= 1.0)
-        # Ensure y is in domain of arcos; choose 1 because kernel probably cheaper.
-        y = jnp.where(is_intersect, y.real, 1.0)
+        is_intersect = (jnp.abs(y.imag) <= eps) & (jnp.abs(y.real) < 1.0)
+        # Ensure y is in differentiable domain of arcos: (-1, 1).
+        y = jnp.where(is_intersect, y.real, 0)
 
         # TODO: Multipoint evaluation with FFT.
         #   Chapter 10, https://doi.org/10.1017/CBO9781139856065.
@@ -473,7 +457,7 @@ class ChebyshevBasisSet:
         z1, z2 : (jnp.ndarray, jnp.ndarray)
             Shape broadcasts with (..., *self.cheb.shape[:-2], num_intersect).
             ``z1`` and ``z2`` are intersects satisfying ∂f/∂y <= 0 and ∂f/∂y >= 0,
-            respectively. The points are grouped and ordered such that the straight
+            respectively. The points are ordered and grouped such that the straight
             line path between ``z1`` and ``z2`` resides in the epigraph of f.
 
         """
@@ -500,7 +484,9 @@ class ChebyshevBasisSet:
         # this, for those subset of pitch values the integrations will be done in
         # the hypograph of |B|, which will yield zero. If in far future decide to
         # not ignore this, note the solution is to disqualify intersects within
-        # ``_eps`` from ``domain[-1]``.
+        # ``_eps`` from ``domain[-1]``. Edit: For differentiability, we cannot
+        # consider intersects at boundary of Chebyshev polynomial. Again, cases
+        # where this would be incorrect have measure zero.
         is_z1 = (df_dy_sign <= 0) & is_intersect
         is_z2 = (df_dy_sign >= 0) & _in_epigraph_and(is_intersect, df_dy_sign)
 
@@ -519,7 +505,8 @@ class ChebyshevBasisSet:
         # Ensure pitch batch dim exists and add back dim to broadcast with wells.
         k = atleast_nd(self.cheb.ndim - 1, k)[..., jnp.newaxis]
         # Same but back dim already exists.
-        z1, z2 = atleast_nd(self.cheb.ndim, z1, z2)
+        z1 = atleast_nd(self.cheb.ndim, z1)
+        z2 = atleast_nd(self.cheb.ndim, z2)
         # Cheb has shape    (..., M, N) and others
         #     have shape (K, ..., W)
         errorif(not (z1.ndim == z2.ndim == k.ndim == self.cheb.ndim))
@@ -533,7 +520,7 @@ class ChebyshevBasisSet:
         z1, z2 : jnp.ndarray
             Shape must broadcast with (*self.cheb.shape[:-2], W).
             ``z1`` and ``z2`` are intersects satisfying ∂f/∂y <= 0 and ∂f/∂y >= 0,
-            respectively. The points are grouped and ordered such that the straight
+            respectively. The points are ordered and grouped such that the straight
             line path between ``z1`` and ``z2`` resides in the epigraph of f.
         k : jnp.ndarray
             Shape must broadcast with *self.cheb.shape[:-2].
@@ -560,8 +547,8 @@ class ChebyshevBasisSet:
 
         # Ensure l axis exists for iteration in below loop.
         cheb = atleast_nd(3, self.cheb)
-        mask, z1, z2, f_midpoint = atleast_3d_mid(mask, z1, z2, f_midpoint)
-        err_1, err_2, err_3 = atleast_2d_end(err_1, err_2, err_3)
+        mask, z1, z2, f_midpoint = map(atleast_3d_mid, (mask, z1, z2, f_midpoint))
+        err_1, err_2, err_3 = map(atleast_2d_end, (err_1, err_2, err_3))
 
         for l in np.ndindex(cheb.shape[:-2]):
             for p in range(k.shape[0]):
@@ -610,6 +597,7 @@ class ChebyshevBasisSet:
         hlabel=r"$z$",
         vlabel=r"$f$",
         show=True,
+        include_legend=True,
     ):
         """Plot the piecewise Chebyshev series.
 
@@ -641,6 +629,8 @@ class ChebyshevBasisSet:
             Vertical axis label.
         show : bool
             Whether to show the plot. Default is true.
+        include_legend : bool
+            Whether to include the legend in the plot. Default is true.
 
         Returns
         -------
@@ -666,7 +656,8 @@ class ChebyshevBasisSet:
         )
         ax.set_xlabel(hlabel)
         ax.set_ylabel(vlabel)
-        ax.legend(legend.values(), legend.keys(), loc="lower right")
+        if include_legend:
+            ax.legend(legend.values(), legend.keys(), loc="lower right")
         ax.set_title(title)
         plt.tight_layout()
         if show:

@@ -104,8 +104,8 @@ def _transform_to_desc(grid, f):
 #  After GitHub issue #1034 is resolved, we should pass in the previous
 #  θ(α) coordinates as an initial guess for the next coordinate mapping.
 #  Perhaps tell the optimizer to perturb the coefficients of the
-#  |B|(α, ζ) directly? Maybe auto diff to see change on |B|(θ, ζ)
-#  and hence stream functions. Not sure how feasible...
+#  |B|(α, ζ) directly? think perturbing alpha is equivalent to perturbing
+#  lambda. Not sure if possible..
 
 # TODO: Allow multiple starting labels for near-rational surfaces.
 #  can just concatenate along second to last axis of cheb, but will
@@ -115,12 +115,12 @@ def _transform_to_desc(grid, f):
 class Bounce2D:
     """Computes bounce integrals using two-dimensional pseudo-spectral methods.
 
-    The bounce integral is defined as ∫ f(ℓ) dℓ, where
+    The bounce integral is defined as ∫ f(λ, ℓ) dℓ, where
         dℓ parameterizes the distance along the field line in meters,
-        f(ℓ) is the quantity to integrate along the field line,
-        and the boundaries of the integral are bounce points ζ₁, ζ₂ s.t. λ|B|(ζᵢ) = 1,
-        where λ is a constant proportional to the magnetic moment over energy
-        and |B| is the norm of the magnetic field.
+        f(λ, ℓ) is the quantity to integrate along the field line,
+        and the boundaries of the integral are bounce points ℓ₁, ℓ₂ s.t. λ|B|(ℓᵢ) = 1,
+        where λ is a constant defining the integral proportional to the magnetic moment
+        over energy and |B| is the norm of the magnetic field.
 
     For a particle with fixed λ, bounce points are defined to be the location on the
     field line such that the particle's velocity parallel to the magnetic field is zero.
@@ -290,11 +290,17 @@ class Bounce2D:
         quad : (jnp.ndarray, jnp.ndarray)
             Quadrature points xₖ and weights wₖ for the approximate evaluation of an
             integral ∫₋₁¹ g(x) dx = ∑ₖ wₖ g(xₖ). Default is 32 points.
+            For weak singular integrals, use ``chebgauss2`` from
+            ``desc.integrals.quad_utils``.
+            For strong singular integrals, use ``leggauss``.
         automorphism : (Callable, Callable) or None
             The first callable should be an automorphism of the real interval [-1, 1].
             The second callable should be the derivative of the first. This map defines
             a change of variable for the bounce integral. The choice made for the
             automorphism will affect the performance of the quadrature method.
+            For weak singular integrals, use ``None``.
+            For strong singular integrals, use ``automorphism_sin`` from
+            ``desc.integrals.quad_utils``.
         Bref : float
             Optional. Reference magnetic field strength for normalization.
         Lref : float
@@ -421,17 +427,16 @@ class Bounce2D:
         """int: Number of flux surfaces to compute on."""
         return self._B.cheb.shape[0]
 
-    def bounce_points(self, pitch, num_well=None):
+    def bounce_points(self, pitch_inv, num_well=None):
         """Compute bounce points.
 
         Parameters
         ----------
-        pitch : jnp.ndarray
-            Shape (P, L).
-            λ values to evaluate the bounce integral at each field line. λ(ρ) is
-            specified by ``pitch[...,ρ]`` where in the latter the labels ρ are
-            interpreted as the index into the last axis that corresponds to that field
-            line. If two-dimensional, the first axis is the batch axis.
+        pitch_inv : jnp.ndarray
+            Shape (M, L, P).  # TODO: right now set up is (P, L).
+            1/λ values to compute the bounce integrals. 1/λ(α,ρ) is specified by
+            ``pitch_inv[α,ρ]`` where in the latter the labels are interpreted
+            as the indices that correspond to that field line.
         num_well : int or None
             Specify to return the first ``num_well`` pairs of bounce points for each
             pitch along each field line. This is useful if ``num_well`` tightly
@@ -451,9 +456,9 @@ class Bounce2D:
             epigraph of |B|.
 
         """
-        return self._B.intersect1d(1 / jnp.atleast_2d(pitch), num_well)
+        return self._B.intersect1d(jnp.atleast_2d(pitch_inv), num_well)
 
-    def check_bounce_points(self, z1, z2, pitch, plot=True, **kwargs):
+    def check_bounce_points(self, z1, z2, pitch_inv, plot=True, **kwargs):
         """Check that bounce points are computed correctly.
 
         Parameters
@@ -463,12 +468,11 @@ class Bounce2D:
             ζ coordinates of bounce points. The points are grouped and ordered such
             that the straight line path between ``z1`` and ``z2`` resides in the
             epigraph of |B|.
-        pitch : jnp.ndarray
-            Shape (P, L).
-            λ values to evaluate the bounce integral at each field line. λ(ρ) is
-            specified by ``pitch[...,ρ]`` where in the latter the labels ρ are
-            interpreted as the index into the last axis that corresponds to that field
-            line. If two-dimensional, the first axis is the batch axis.
+        pitch_inv : jnp.ndarray
+            Shape (M, L, P).  # TODO: right now set up is (P, L).
+            1/λ values to compute the bounce integrals. 1/λ(α,ρ) is specified by
+            ``pitch_inv[α,ρ]`` where in the latter the labels are interpreted
+            as the indices that correspond to that field line.
         plot : bool
             Whether to plot stuff.
         kwargs : dict
@@ -483,22 +487,21 @@ class Bounce2D:
         kwargs.setdefault("klabel", r"$1/\lambda$")
         kwargs.setdefault("hlabel", r"$\zeta$")
         kwargs.setdefault("vlabel", r"$\vert B \vert$")
-        self._B.check_intersect1d(z1, z2, 1 / pitch, plot, **kwargs)
+        self._B.check_intersect1d(z1, z2, pitch_inv, plot, **kwargs)
 
-    def integrate(self, pitch, integrand, f, weight=None, num_well=None):
-        """Bounce integrate ∫ f(ℓ) dℓ.
+    def integrate(self, pitch_inv, integrand, f, weight=None, num_well=None):
+        """Bounce integrate ∫ f(λ, ℓ) dℓ.
 
-        Computes the bounce integral ∫ f(ℓ) dℓ for every specified field line
+        Computes the bounce integral ∫ f(λ, ℓ) dℓ for every specified field line
         for every λ value in ``pitch``.
 
         Parameters
         ----------
-        pitch : jnp.ndarray
-            Shape (P, L).
-            λ values to evaluate the bounce integral at each field line. λ(ρ) is
-            specified by ``pitch[...,ρ]`` where in the latter the labels ρ are
-            interpreted as the index into the last axis that corresponds to that field
-            line. If two-dimensional, the first axis is the batch axis.
+        pitch_inv : jnp.ndarray
+            Shape (M, L, P).  # TODO: right now set up is (P, L).
+            1/λ values to compute the bounce integrals. 1/λ(α,ρ) is specified by
+            ``pitch_inv[α,ρ]`` where in the latter the labels are interpreted
+            as the indices that correspond to that field line.
         integrand : callable
             The composition operator on the set of functions in ``f`` that maps the
             functions in ``f`` to the integrand f(ℓ) in ∫ f(ℓ) dℓ. It should accept the
@@ -514,7 +517,7 @@ class Bounce2D:
         weight : jnp.ndarray
             Shape (L, 1, m, n).
             If supplied, the bounce integral labeled by well j is weighted such that
-            the returned value is w(j) ∫ f(ℓ) dℓ, where w(j) is ``weight``
+            the returned value is w(j) ∫ f(λ, ℓ) dℓ, where w(j) is ``weight``
             interpolated to the deepest point in the magnetic well. Use the method
             ``self.reshape_data`` to reshape the data into the expected shape.
         num_well : int or None
@@ -535,9 +538,9 @@ class Bounce2D:
             Last axis enumerates the bounce integrals.
 
         """
-        pitch = jnp.atleast_2d(pitch)
-        z1, z2 = self.bounce_points(pitch, num_well)
-        result = self._integrate(z1, z2, pitch, integrand, f)
+        pitch_inv = jnp.atleast_2d(pitch_inv)
+        z1, z2 = self.bounce_points(pitch_inv, num_well)
+        result = self._integrate(z1, z2, pitch_inv, integrand, f)
         errorif(weight is not None, NotImplementedError)
         return result
 

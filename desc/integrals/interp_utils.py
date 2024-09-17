@@ -20,6 +20,7 @@ from desc.utils import Index, errorif, safediv
 # TODO: Boyd's method 𝒪(N²) instead of Chebyshev companion matrix 𝒪(N³).
 #  John P. Boyd, Computing real roots of a polynomial in Chebyshev series
 #  form through subdivision. https://doi.org/10.1016/j.apnum.2005.09.007.
+#  This is likely the bottleneck.
 chebroots_vec = jnp.vectorize(chebroots, signature="(m)->(n)")
 
 
@@ -143,10 +144,11 @@ def harmonic_vander(x, M):
 # TODO: For inverse transforms, do multipoint evaluation with FFT.
 #   FFT cost is 𝒪(M N log[M N]) while direct evaluation is 𝒪(M² N²).
 #   Chapter 10, https://doi.org/10.1017/CBO9781139856065.
-#   Right now we just do an MMT with the Vandermode matrix.
-#   Multipoint is likely better than using NFFT to evaluate f(xq) given fourier
-#   coefficients because evaluation points are quadratically packed near edges as
-#   required by quadrature to avoid runge. NFFT is only approximation anyway.
+#   Right now we do an MMT with the Vandermode matrix.
+#   Multipoint is likely better than using NFFT (for strong singular bounce
+#   integrals) to evaluate f(xq) given fourier coefficients because evaluation
+#   points are quadratically packed near edges for efficient quadrature. For
+#   weak singularities (e.g. effective ripple) NFFT should work well.
 #   https://github.com/flatironinstitute/jax-finufft.
 
 
@@ -449,6 +451,23 @@ def polyval_vec(*, x, c):
 
 
 # TODO: Eventually do a PR to move this stuff into interpax.
+
+
+def _subtract_first(c, k):
+    """Subtract ``k`` from first index of last axis of ``c``.
+
+    Semantically same as ``return c.copy().at[...,0].add(-k)``,
+    but allows dimension to increase.
+    """
+    c_0 = c[..., 0] - k
+    c = jnp.concatenate(
+        [
+            c_0[..., jnp.newaxis],
+            jnp.broadcast_to(c[..., 1:], (*c_0.shape, c.shape[-1] - 1)),
+        ],
+        axis=-1,
+    )
+    return c
 
 
 def _subtract_last(c, k):

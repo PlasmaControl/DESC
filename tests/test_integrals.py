@@ -1635,7 +1635,7 @@ class TestBounce2D:
 
         normalization = -np.sign(data["psi"]) * data["Bref"] * data["a"] ** 2
         drift_numerical_num = bounce.integrate(
-            pitch=pitch[:, np.newaxis],
+            pitch_inv=pitch[:, np.newaxis],
             integrand=integrand_num,
             f=Bounce2D.reshape_data(
                 grid,
@@ -1645,7 +1645,7 @@ class TestBounce2D:
             num_well=1,
         )
         drift_numerical_den = bounce.integrate(
-            pitch=pitch[:, np.newaxis],
+            pitch_inv=pitch[:, np.newaxis],
             integrand=integrand_den,
             f=[],
             num_well=1,

@@ -456,7 +456,7 @@ def make_RZ_cons_1st_order(qsc, desc_eq, fix_lambda=False, N=None):
 """ Order (rho^2)"""
 
 
-def _calc_2nd_order_NAE_coeffs(qsc, desc_eq, N=None):
+def _calc_2nd_order_NAE_coeffs(qsc, desc_eq, N=None, use_simple=True):
     """Calculate 2nd order NAE coefficients' Fourier representations.
 
     Description
@@ -971,6 +971,157 @@ def _calc_2nd_order_NAE_coeffs(qsc, desc_eq, N=None):
     aux3 = ((R0) * ((tauphi) * (Y2s))) + ((bphi) * ((R0) * (Z2sNAE)))
     aux4 = ((kphi) * aux2) + (-2.0 * (aux3 - ((tauphi) * ((tauR) * ((Y1c) * (Y1s))))))
     L_2_neg2 = 0.5 * (qsc.iota * (((R0) ** -2.0) * (aux0 + aux4)))
+
+    stel = qsc
+    R0 = stel.R0
+    dR0 = stel.R0p
+    ddR0 = stel.R0pp
+    dZ0 = stel.Z0p
+    ddZ0 = stel.Z0pp
+
+    x1_cos = (
+        stel.X1c * stel.normal_cylindrical.transpose()
+        + stel.Y1c * stel.binormal_cylindrical.transpose()
+    )
+    x1_sin = stel.Y1s * stel.binormal_cylindrical.transpose()
+
+    x2_0 = (
+        stel.X20 * stel.normal_cylindrical.transpose()
+        + stel.Y20 * stel.binormal_cylindrical.transpose()
+        + stel.Z20 * stel.tangent_cylindrical.transpose()
+    )
+    x2_cos = (
+        stel.X2c * stel.normal_cylindrical.transpose()
+        + stel.Y2c * stel.binormal_cylindrical.transpose()
+        + stel.Z2c * stel.tangent_cylindrical.transpose()
+    )
+    x2_sin = (
+        stel.X2s * stel.normal_cylindrical.transpose()
+        + stel.Y2s * stel.binormal_cylindrical.transpose()
+        + stel.Z2s * stel.tangent_cylindrical.transpose()
+    )
+
+    X1Rc = x1_cos[0, :]
+    dX1Rc = np.matmul(stel.d_d_phi, X1Rc)
+    X1Rs = x1_sin[0, :]
+    dX1Rs = np.matmul(stel.d_d_phi, X1Rs)
+    X1phic = x1_cos[1, :]
+    dX1phic = np.matmul(stel.d_d_phi, X1phic)
+    X1phis = x1_sin[1, :]
+    dX1phis = np.matmul(stel.d_d_phi, X1phis)
+    X1zc = x1_cos[2, :]
+    dX1zc = np.matmul(stel.d_d_phi, X1zc)
+    X1zs = x1_sin[2, :]
+    dX1zs = np.matmul(stel.d_d_phi, X1zs)
+    X2R0 = x2_0[0, :]
+    X2phi0 = x2_0[1, :]
+    X2z0 = x2_0[2, :]
+    X2Rs = x2_sin[0, :]
+    X2phis = x2_sin[1, :]
+    X2zs = x2_sin[2, :]
+    X2Rc = x2_cos[0, :]
+    X2phic = x2_cos[1, :]
+    X2zc = x2_cos[2, :]
+
+    if use_simple:
+        R_2_0 = (
+            X2R0
+            - dR0**2 * (X1phic**2 + X1phis**2) / 2 / R0**3
+            + 1
+            / 4
+            / R0
+            * (
+                X1phic**2
+                + X1phis**2
+                - 4 * X2phi0 * dR0
+                - 2 * X1phic * dX1Rc
+                - 2 * X1phis * dX1Rs
+            )
+            + 1
+            / 4
+            / R0**2
+            * (
+                2 * X1Rc * X1phic * dR0
+                + 2 * X1Rs * X1phis * dR0
+                + 2 * X1phic * dR0 * dX1phic
+                + 2 * X1phis * dR0 * dX1phis
+                + 3 * (X1phic**2 + X1phis**2) * ddR0
+            )
+        )
+
+        R_2_neg2 = (
+            X2Rs
+            - X1phic * X1phis * dR0**2 / R0**3
+            - (2 * X2phis * dR0 + X1phis * dX1Rc + X1phic * (-X1phis + dX1Rs))
+            / (2 * R0)
+            + (
+                X1Rs * X1phic * dR0
+                + X1Rc * X1phis * dR0
+                + X1phis * dR0 * dX1phic
+                + X1phic * dR0 * dX1phis
+                + X1phic * X1phis * ddR0
+            )
+            / (2 * R0**2)
+        )
+        R_2_2 = (
+            X2Rc
+            + (-(X1phic**2) + X1phis**2) * dR0**2 / (2 * R0**3)
+            + 1
+            / 4
+            / R0
+            * (
+                X1phic**2
+                - X1phis**2
+                - 4 * X2phic * dR0
+                - 2 * X1phic * dX1Rc
+                + 2 * X1phis * dX1Rs
+            )
+            + 1
+            / 4
+            / R0**2
+            * (
+                2 * X1Rc * X1phic * dR0
+                - 2 * X1Rs * X1phis * dR0
+                + 2 * X1phic * dR0 * dX1phic
+                - 2 * X1phis * dR0 * dX1phis
+                + (X1phic**2 - X1phis**2) * ddR0
+            )
+        )
+
+        Z_2_0 = (
+            X2z0
+            - (X1phic * dX1zc + X1phis * dX1zs + 2 * X2phi0 * dZ0) / 2 / R0
+            + (X1Rc * X1phic + X1Rs * X1phis + X1phic * dX1phic + X1phis * dX1phis)
+            * dZ0
+            / 2
+            / R0**2
+            + (X1phic**2 + X1phis**2) * ddZ0 / 4 / R0**2
+            - (X1phic**2 + X1phis**2) * dR0 * dZ0 / 2 / R0**3
+        )
+
+        Z_2_neg2 = (
+            X2zs
+            - (X1phis * dX1zc + X1phic * dX1zs + 2 * X2phis * dZ0) / 2 / R0
+            + (
+                (X1Rs * X1phic + X1Rc * X1phis + X1phis * dX1phic + X1phic * dX1phis)
+                * dZ0
+                + X1phic * X1phis * ddZ0
+            )
+            / 2
+            / R0**2
+            - (X1phic * X1phis * dR0 * dZ0) / R0**3
+        )
+
+        Z_2_2 = (
+            X2zc
+            - (X1phic * dX1zc - X1phis * dX1zs + 2 * X2phic * dZ0) / 2 / R0
+            + (X1Rc * X1phic - X1Rs * X1phis + X1phic * dX1phic - X1phis * dX1phis)
+            * dZ0
+            / 2
+            / R0**2
+            - +(X1phic**2 - X1phis**2) * ddZ0 / 4 / R0**2
+            - (X1phic**2 - X1phis**2) * dR0 * dZ0 / 2 / R0**3
+        )
 
     # Fourier Transform in toroidal angle phi
     coeffs = {}

@@ -28,7 +28,7 @@ def automorphism_arcsin(x):
     """[-1, 1] ∋ x ↦ y ∈ [−1, 1].
 
     This map decreases node density near the boundary by the asymptotic factor
-    1/√(1−x²) and adds a √(1−x²) factor to the integrand.
+    √(1−x²) and adds a 1/√(1−x²) factor to the integrand.
 
     Parameters
     ----------

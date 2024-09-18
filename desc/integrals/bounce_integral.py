@@ -237,8 +237,7 @@ class Bounce2D(IOAble):
         data,
         desc_from_clebsch,
         # TODO: Allow multiple starting labels for near-rational surfaces.
-        #  think can just concatenate along second to last axis of cheb, but will
-        #  do in later pull request.
+        #  think can just concatenate along second to last axis of cheb
         alpha=0.0,
         num_transit=32,
         quad=leggauss(32),
@@ -325,13 +324,14 @@ class Bounce2D(IOAble):
             grid, desc_from_clebsch, data["|B|"] / Bref, is_reshaped
         )
         # peel off field lines
+        iota = data["iota"].ravel()
         alphas = get_alpha(
             alpha,
             iota=(
-                grid.compress(data["iota"].ravel())
-                if data["iota"].size == grid.num_nodes
+                grid.compress(iota)
+                if iota.size == grid.num_nodes
                 # assume passed in reshaped data over flux surface
-                else jnp.atleast_1d(data["iota"][0, 0])
+                else jnp.array(iota[0])
             ),
             num_transit=num_transit,
             period=2 * jnp.pi,
@@ -340,10 +340,9 @@ class Bounce2D(IOAble):
         # Set of 1D Chebyshev spectral coefficients of |B| along field line.
         # {|B|_α : ζ ↦ |B|(α, ζ) | α ∈ A } where A = (α₀, α₁, …, αₘ₋₁) is the
         # sequence of poloidal coordinates that specify the field line.
-        self._B = B.compute_cheb(alphas)
-        # Likewise with θ.
         # Evaluating set of Chebyshev series more efficient than evaluating
         # Fourier Chebyshev series, so we project θ to Chebyshev series as well.
+        self._B = B.compute_cheb(alphas)
         self._T = T.compute_cheb(alphas)
         assert self._B.M == self._T.M == num_transit
         assert self._B.N == self._T.N == desc_from_clebsch.shape[-2]
@@ -369,8 +368,7 @@ class Bounce2D(IOAble):
             Preferably power of 2.
         clebsch : jnp.ndarray
             Optional, Clebsch coordinate tensor-product grid (ρ, α, ζ).
-            ``FourierChebyshevBasis.nodes(M,N,L,domain=FourierBounce.domain)``.
-            If given, ``L``, ``M``, and ``N`` are ignored.
+            ``FourierChebyshevBasis.nodes(M,N,L,domain=(0,2*jnp.pi))``.
         kwargs : dict
             Additional parameters to supply to the coordinate mapping function.
             See ``desc.equilibrium.Equilibrium.map_coordinates``.
@@ -378,7 +376,7 @@ class Bounce2D(IOAble):
         Returns
         -------
         desc_coords : jnp.ndarray
-            Shape (L * M * N, 3).
+            Shape (L, M, N, 3).
             DESC coordinate grid (ρ, θ, ζ) sourced from the Clebsch coordinate
             tensor-product grid (ρ, α, ζ).
 
@@ -390,7 +388,7 @@ class Bounce2D(IOAble):
             inbasis=("rho", "alpha", "zeta"),
             period=(jnp.inf, 2 * jnp.pi, jnp.inf),
             **kwargs,
-        )
+        ).reshape(-1, M, N, 3)
         return desc_coords
 
     @staticmethod
@@ -569,7 +567,8 @@ class Bounce2D(IOAble):
         # Expects pitch_inv shape (P, L) if B.cheb.shape[0] is L.
         z1, z2 = self._B.intersect1d(pitch_inv, num_intersect=num_well)
         result = self._integrate(z1, z2, integrand, pitch_inv, f, check, plot)
-        return Bounce2D._swap_pl(result)
+        result = Bounce2D._swap_pl(result)
+        return result
 
     def _integrate(self, z1, z2, integrand, pitch_inv, f, check, plot):
         """Bounce integrate ∫ f(λ, ℓ) dℓ.

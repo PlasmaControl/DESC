@@ -1583,9 +1583,7 @@ class TestBounce2D:
 
         # Compute numerical result.
         M, N = 8, 8
-        desc_from_clebsch = Bounce2D.desc_from_clebsch(eq, data["rho"], M, N).reshape(
-            M, N, 3
-        )
+        desc_from_clebsch = Bounce2D.desc_from_clebsch(eq, data["rho"], M, N)
         bounce = Bounce2D(
             grid=grid,
             data=grid_data,

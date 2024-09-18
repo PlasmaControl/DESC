@@ -27,6 +27,34 @@ from desc.utils import (
 )
 
 
+# TODO: Generalize this beyond ζ = ϕ or just map to Clebsch with ϕ.
+def get_alpha(alpha_0, iota, num_transit, period):
+    """Get sequence of poloidal coordinates A = (α₀, α₁, …, αₘ₋₁) of field line.
+
+    Parameters
+    ----------
+    alpha_0 : float
+        Starting field line poloidal label.
+    iota : jnp.ndarray
+        Shape (iota.size, ).
+        Rotational transform normalized by 2π.
+    num_transit : float
+        Number of ``period``s to follow field line.
+    period : float
+        Toroidal period after which to update label.
+
+    Returns
+    -------
+    alpha : jnp.ndarray
+        Shape (iota.size, num_transit).
+        Sequence of poloidal coordinates A = (α₀, α₁, …, αₘ₋₁) that specify field line.
+
+    """
+    # Δϕ (∂α/∂ϕ) = Δϕ ι̅ = Δϕ ι/2π = Δϕ data["iota"]
+    alpha = alpha_0 + period * iota[:, jnp.newaxis] * jnp.arange(num_transit)
+    return alpha
+
+
 def get_pitch_inv(min_B, max_B, num, relative_shift=1e-6):
     """Return 1/λ values for quadrature between ``min_B`` and ``max_B``.
 
@@ -57,34 +85,6 @@ def get_pitch_inv(min_B, max_B, num, relative_shift=1e-6):
     pitch_inv = jnp.moveaxis(composite_linspace(jnp.stack([min_B, max_B]), num), 0, -1)
     assert pitch_inv.shape == (*min_B.shape, num + 2)
     return pitch_inv
-
-
-# TODO: Generalize this beyond ζ = ϕ or just map to Clebsch with ϕ.
-def get_alpha(alpha_0, iota, num_transit, period):
-    """Get sequence of poloidal coordinates A = (α₀, α₁, …, αₘ₋₁) of field line.
-
-    Parameters
-    ----------
-    alpha_0 : float
-        Starting field line poloidal label.
-    iota : jnp.ndarray
-        Shape (iota.size, ).
-        Rotational transform normalized by 2π.
-    num_transit : float
-        Number of ``period``s to follow field line.
-    period : float
-        Toroidal period after which to update label.
-
-    Returns
-    -------
-    alpha : jnp.ndarray
-        Shape (iota.size, num_transit).
-        Sequence of poloidal coordinates A = (α₀, α₁, …, αₘ₋₁) that specify field line.
-
-    """
-    # Δϕ (∂α/∂ϕ) = Δϕ ι̅ = Δϕ ι/2π = Δϕ data["iota"]
-    alpha = alpha_0 + period * iota[:, jnp.newaxis] * jnp.arange(num_transit)
-    return alpha
 
 
 def _check_spline_shape(knots, g, dg_dz, pitch_inv=None):
@@ -249,15 +249,14 @@ def _set_default_plot_kwargs(kwargs):
 
 def _check_bounce_points(z1, z2, pitch_inv, knots, B, plot=True, **kwargs):
     """Check that bounce points are computed correctly."""
-    z1 = atleast_nd(4, z1)
-    z2 = atleast_nd(4, z2)
-    pitch_inv = atleast_nd(3, pitch_inv)
-    B = atleast_nd(4, B)
-
     kwargs = _set_default_plot_kwargs(kwargs)
     plots = []
 
     assert z1.shape == z2.shape
+    z1 = atleast_nd(4, z1)
+    z2 = atleast_nd(4, z2)
+    pitch_inv = atleast_nd(3, pitch_inv)
+    B = atleast_nd(4, B)
     mask = (z1 - z2) != 0.0
     z1 = jnp.where(mask, z1, jnp.nan)
     z2 = jnp.where(mask, z2, jnp.nan)
@@ -731,7 +730,7 @@ def interp_to_argmin_hard(h, z1, z2, knots, g, dg_dz, method="cubic"):
         h[..., jnp.newaxis, :],
         method=method,
     )
-    assert h.shape == z1.shape, h.shape
+    assert h.shape == z1.shape
     return h
 
 

@@ -7,6 +7,7 @@ from matplotlib import pyplot as plt
 
 from desc.backend import dct, flatnonzero, idct, irfft, jnp, put, rfft
 from desc.integrals.interp_utils import (
+    _eps,
     _filter_distinct,
     _subtract_first,
     cheb_from_dct,
@@ -18,6 +19,7 @@ from desc.integrals.interp_utils import (
     irfft_non_uniform,
 )
 from desc.integrals.quad_utils import bijection_from_disc, bijection_to_disc
+from desc.io import IOAble
 from desc.utils import (
     atleast_2d_end,
     atleast_3d_mid,
@@ -83,8 +85,11 @@ def _in_epigraph_and(is_intersect, df_dy_sign, /):
 
 
 def _chebcast(cheb, arr):
-    # Input should not have rightmost dimension of cheb that iterates coefficients,
-    # but may have additional leftmost dimension for batch operation.
+    """Add leftmost axis to ``cheb`` depending on ``arr.ndim``.
+
+    Input ``arr`` should not have rightmost dimension of cheb that iterates
+    coefficients, but may have additional leftmost dimension for batch operation.
+    """
     errorif(
         jnp.ndim(arr) > cheb.ndim,
         NotImplementedError,
@@ -94,7 +99,7 @@ def _chebcast(cheb, arr):
     return cheb if jnp.ndim(arr) < cheb.ndim else cheb[jnp.newaxis]
 
 
-class FourierChebyshevBasis:
+class FourierChebyshevBasis(IOAble):
     """Fourier-Chebyshev series.
 
     f(x, y) = ∑ₘₙ aₘₙ ψₘ(x) Tₙ(y)
@@ -112,11 +117,11 @@ class FourierChebyshevBasis:
         Fourier spectral resolution.
     N : int
         Chebyshev spectral resolution.
+    domain : (float, float)
+        Domain for y coordinates.
     lobatto : bool
         Whether ``f`` was sampled on the Gauss-Lobatto (extrema-plus-endpoint)
         instead of the interior roots grid for Chebyshev points.
-    domain : (float, float)
-        Domain for y coordinates.
 
     """
 
@@ -249,14 +254,14 @@ class FourierChebyshevBasis:
             Chebyshev coefficients αₙ(x=``x``) for f(x, y) = ∑ₙ₌₀ᴺ⁻¹ αₙ(x) Tₙ(y).
 
         """
-        # Always add new axis to broadcast against Chebyshev coefficients.
+        # Add axis to broadcast against Chebyshev coefficients.
         x = jnp.atleast_1d(x)[..., jnp.newaxis]
         cheb = cheb_from_dct(irfft_non_uniform(x, self._c, self.M, axis=-2), axis=-1)
         assert cheb.shape[-2:] == (x.shape[-2], self.N)
         return ChebyshevBasisSet(cheb, self.domain)
 
 
-class ChebyshevBasisSet:
+class ChebyshevBasisSet(IOAble):
     """Chebyshev series.
 
     { fₓ | fₓ : y ↦ ∑ₙ₌₀ᴺ⁻¹ aₙ(x) Tₙ(y) }
@@ -275,8 +280,6 @@ class ChebyshevBasisSet:
         Domain for y coordinates.
 
     """
-
-    _eps = min(jnp.finfo(jnp.array(1.0).dtype).eps * 1e2, 1e-10)
 
     def __init__(self, cheb, domain=(-1, 1)):
         """Make Chebyshev series basis from given coefficients.
@@ -384,7 +387,7 @@ class ChebyshevBasisSet:
         assert f.shape == z.shape
         return f
 
-    def intersect2d(self, k=0.0, eps=_eps):
+    def intersect2d(self, k=0.0, *, eps=_eps):
         """Coordinates yᵢ such that f(x, yᵢ) = k(x).
 
         Parameters
@@ -417,8 +420,8 @@ class ChebyshevBasisSet:
         # Pick sentinel such that only distinct roots are considered intersects.
         y = _filter_distinct(y, sentinel=-2.0, eps=eps)
         is_intersect = (jnp.abs(y.imag) <= eps) & (jnp.abs(y.real) < 1.0)
-        # Ensure y is in differentiable domain of arcos: (-1, 1).
-        y = jnp.where(is_intersect, y.real, 0)
+        # Ensure y ∈ (-1, 1), i.e. where arccos is differentiable.
+        y = jnp.where(is_intersect, y.real, 0.0)
 
         # TODO: Multipoint evaluation with FFT.
         #   Chapter 10, https://doi.org/10.1017/CBO9781139856065.
@@ -434,7 +437,7 @@ class ChebyshevBasisSet:
         y = bijection_from_disc(y, self.domain[0], self.domain[-1])
         return y, is_intersect, df_dy_sign
 
-    def intersect1d(self, k=0.0, num_intersect=None, pad_value=0.0):
+    def intersect1d(self, k=0.0, *, num_intersect=None, pad_value=0.0):
         """Coordinates z(x, yᵢ) such that fₓ(yᵢ) = k for every x.
 
         Parameters
@@ -456,9 +459,9 @@ class ChebyshevBasisSet:
         -------
         z1, z2 : (jnp.ndarray, jnp.ndarray)
             Shape broadcasts with (..., *self.cheb.shape[:-2], num_intersect).
-            ``z1`` and ``z2`` are intersects satisfying ∂f/∂y <= 0 and ∂f/∂y >= 0,
-            respectively. The points are ordered and grouped such that the straight
-            line path between ``z1`` and ``z2`` resides in the epigraph of f.
+            Coordinates of intersects. The points are ordered and grouped such
+            that the straight line path between ``z1`` and ``z2`` resides in
+            the epigraph of f.
 
         """
         errorif(
@@ -468,11 +471,11 @@ class ChebyshevBasisSet:
             f"but got N = {self.N}.",
         )
 
-        # Add axis to use same k over all Chebyshev series of the piecewise object.
+        # Add axis to use same k over all Chebyshev series of the piecewise spline.
         y, is_intersect, df_dy_sign = self.intersect2d(
             jnp.atleast_1d(k)[..., jnp.newaxis]
         )
-        # Flatten so that last axis enumerates intersects along the piecewise object.
+        # Flatten so that last axis enumerates intersects along the piecewise spline.
         y, is_intersect, df_dy_sign = map(
             flatten_matrix, (self.isomorphism_to_C1(y), is_intersect, df_dy_sign)
         )
@@ -502,6 +505,7 @@ class ChebyshevBasisSet:
 
     def _check_shape(self, z1, z2, k):
         """Return shapes that broadcast with (k.shape[0], *self.cheb.shape[:-2], W)."""
+        assert z1.shape == z2.shape
         # Ensure pitch batch dim exists and add back dim to broadcast with wells.
         k = atleast_nd(self.cheb.ndim - 1, k)[..., jnp.newaxis]
         # Same but back dim already exists.
@@ -519,31 +523,36 @@ class ChebyshevBasisSet:
         ----------
         z1, z2 : jnp.ndarray
             Shape must broadcast with (*self.cheb.shape[:-2], W).
-            ``z1`` and ``z2`` are intersects satisfying ∂f/∂y <= 0 and ∂f/∂y >= 0,
-            respectively. The points are ordered and grouped such that the straight
-            line path between ``z1`` and ``z2`` resides in the epigraph of f.
+            Coordinates of intersects. The points are ordered and grouped such
+            that the straight line path between ``z1`` and ``z2`` resides in
+            the epigraph of f.
         k : jnp.ndarray
-            Shape must broadcast with *self.cheb.shape[:-2].
+            Shape must broadcast with self.cheb.shape[:-2].
             k such that fₓ(yᵢ) = k.
         plot : bool
-            Whether to plot stuff. Default is true.
+            Whether to plot the piecewise spline and intersects for the given ``k``.
         kwargs : dict
             Keyword arguments into ``self.plot``.
 
+        Returns
+        -------
+        plots : list
+            Matplotlib (fig, ax) tuples for the 1D plot of each field line.
+
         """
-        assert z1.shape == z2.shape
+        plots = []
+        z1, z2, k = self._check_shape(z1, z2, k)
         mask = (z1 - z2) != 0.0
         z1 = jnp.where(mask, z1, jnp.nan)
         z2 = jnp.where(mask, z2, jnp.nan)
-        z1, z2, k = self._check_shape(z1, z2, k)
 
         err_1 = jnp.any(z1 > z2, axis=-1)
         err_2 = jnp.any(z1[..., 1:] < z2[..., :-1], axis=-1)
         f_midpoint = self.eval1d((z1 + z2) / 2)
-        assert f_midpoint.shape == z1.shape
-        err_3 = jnp.any(f_midpoint > k + self._eps, axis=-1)
+        eps = kwargs.pop("eps", jnp.finfo(jnp.array(1.0).dtype).eps * 10)
+        err_3 = jnp.any(f_midpoint > k + eps, axis=-1)
         if not (plot or jnp.any(err_1 | err_2 | err_3)):
-            return
+            return plots
 
         # Ensure l axis exists for iteration in below loop.
         cheb = atleast_nd(3, self.cheb)
@@ -563,6 +572,10 @@ class ChebyshevBasisSet:
                         z1=_z1,
                         z2=_z2,
                         k=k[idx],
+                        title=kwargs.pop(
+                            "title", r"Intersects $z$ in epigraph($f$) s.t. $f(z) = k$"
+                        )
+                        + f", (p,l)={idx}",
                         **kwargs,
                     )
                 print("      z1    |    z2")
@@ -570,19 +583,22 @@ class ChebyshevBasisSet:
                 assert not err_1[idx], "Intersects have an inversion.\n"
                 assert not err_2[idx], "Detected discontinuity.\n"
                 assert not err_3[idx], (
-                    "Detected f > k in well, implying the straight line path between "
-                    "z1 and z2 is in hypograph(f). Increase spectral resolution.\n"
-                    f"{f_midpoint[idx][mask[idx]]} > {k[idx] + self._eps}"
+                    f"Detected f = {f_midpoint[idx][mask[idx]]} > {k[idx] + _eps} = k"
+                    "in well, implying the straight line path between z1 and z2 is in"
+                    "hypograph(f). Increase spectral resolution.\n"
                 )
             idx = (slice(None), *l)
             if plot:
-                self.plot1d(
-                    cheb=cheb[l],
-                    z1=z1[idx],
-                    z2=z2[idx],
-                    k=k[idx],
-                    **kwargs,
+                plots.append(
+                    self.plot1d(
+                        cheb=cheb[l],
+                        z1=z1[idx],
+                        z2=z2[idx],
+                        k=k[idx],
+                        **kwargs,
+                    )
                 )
+        return plots
 
     def plot1d(
         self,
@@ -599,7 +615,7 @@ class ChebyshevBasisSet:
         show=True,
         include_legend=True,
     ):
-        """Plot the piecewise Chebyshev series.
+        """Plot the piecewise Chebyshev series ``cheb``.
 
         Parameters
         ----------
@@ -634,7 +650,8 @@ class ChebyshevBasisSet:
 
         Returns
         -------
-        fig, ax : matplotlib figure and axes
+        fig, ax
+            Matplotlib (fig, ax) tuple.
 
         """
         fig, ax = plt.subplots()

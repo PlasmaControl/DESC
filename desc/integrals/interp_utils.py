@@ -20,7 +20,6 @@ from desc.utils import Index, errorif, safediv
 # TODO: Boyd's method 𝒪(N²) instead of Chebyshev companion matrix 𝒪(N³).
 #  John P. Boyd, Computing real roots of a polynomial in Chebyshev series
 #  form through subdivision. https://doi.org/10.1016/j.apnum.2005.09.007.
-#  This is likely the bottleneck.
 chebroots_vec = jnp.vectorize(chebroots, signature="(m)->(n)")
 
 
@@ -296,7 +295,7 @@ def irfft2_non_uniform(xq, a, M, N, axes=(-2, -1)):
             + (n * xq[..., idx[1], jnp.newaxis])[..., jnp.newaxis, :]
         )
     )
-    fq = 2.0 * jnp.real(basis * a).sum(axis=(-2, -1))
+    fq = 2.0 * (basis * a).real.sum(axis=(-2, -1))
     return fq
 
 
@@ -496,7 +495,10 @@ def _filter_distinct(r, sentinel, eps):
     return r
 
 
-_roots = jnp.vectorize(partial(jnp.roots, strip_zeros=False), signature="(m)->(n)")
+_polyroots_vec = jnp.vectorize(
+    partial(jnp.roots, strip_zeros=False), signature="(m)->(n)"
+)
+_eps = max(jnp.finfo(jnp.array(1.0).dtype).eps, 2.5e-12)
 
 
 def polyroot_vec(
@@ -506,7 +508,7 @@ def polyroot_vec(
     a_max=None,
     sort=False,
     sentinel=jnp.nan,
-    eps=max(jnp.finfo(jnp.array(1.0).dtype).eps, 2.5e-12),
+    eps=_eps,
     distinct=False,
 ):
     """Roots of polynomial with given coefficients.
@@ -564,7 +566,7 @@ def polyroot_vec(
         distinct = distinct and num_coef > 3
     else:
         # Compute from eigenvalues of polynomial companion matrix.
-        r = _roots(c)
+        r = _polyroots_vec(c)
 
     if get_only_real_roots:
         a_min = -jnp.inf if a_min is None else a_min[..., jnp.newaxis]

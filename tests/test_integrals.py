@@ -1522,6 +1522,7 @@ class TestBounce2D:
     )
     def test_alpha_sequence(self, alpha_0, iota, num_period, period):
         """Test field line poloidal label tracking."""
+        # skeleton test to be done later when one zeta != phi.
         iota = np.atleast_1d(iota)
         alphas = get_alpha(alpha_0, iota, num_period, period)
         assert alphas.shape == (iota.size, num_period)

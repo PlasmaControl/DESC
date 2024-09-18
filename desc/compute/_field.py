@@ -13,14 +13,14 @@ from scipy.constants import mu_0
 
 from desc.backend import jnp
 
-from ..integrals import (
+from ..integrals.surface_integral import (
     surface_averages,
     surface_integrals_map,
     surface_max,
     surface_min,
 )
+from ..utils import cross, dot, safediv, safenorm
 from .data_index import register_compute_fun
-from .utils import cross, dot, safediv, safenorm
 
 
 @register_compute_fun(
@@ -1644,7 +1644,7 @@ def _B_sub_zeta(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="B_phi|r,t",
-    label="B_{\\phi} = B \\dot \\mathbf{e}_{\\phi} |_{\\rho, \\theta}",
+    label="B_{\\phi} = B \\cdot \\mathbf{e}_{\\phi} |_{\\rho, \\theta}",
     units="T \\cdot m",
     units_long="Tesla * meters",
     description="Covariant toroidal component of magnetic field in (ρ,θ,ϕ) "
@@ -2269,7 +2269,7 @@ def _B_sub_zeta_rz(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="<|B|>_axis",
-    label="\\lange |\\mathbf{B}| \\rangle_{axis}",
+    label="\\langle |\\mathbf{B}| \\rangle_{axis}",
     units="T",
     units_long="Tesla",
     description="Average magnitude of magnetic field on the magnetic axis",

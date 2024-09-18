@@ -521,18 +521,21 @@ def _check_interp(shape, Q, f, b_sup_z, B, result, plot):
     for f_i in f:
         assert goal == (marked & jnp.isfinite(f_i).reshape(shape).all(axis=-1)).sum()
 
-    # Number of those integrals that were computed.
-    actual = (marked & jnp.isfinite(result)).sum()
-    assert goal == actual, (
-        f"Lost {goal - actual} integrals from NaN generation in the integrand. This "
-        "is caused by floating point error, usually due to a poor quadrature choice."
-    )
     if plot:
         Q = Q.reshape(shape)
         _plot_check_interp(Q, B.reshape(shape), name=r"$\vert B \vert$")
         _plot_check_interp(
             Q, b_sup_z.reshape(shape), name=r"$(B / \vert B \vert) \cdot e^{\zeta}$"
         )
+        for i, f_i in enumerate(f):
+            _plot_check_interp(Q, f_i.reshape(shape), name=f"f_{i}")
+
+    # Number of those integrals that were computed.
+    actual = (marked & jnp.isfinite(result)).sum()
+    assert goal == actual, (
+        f"Lost {goal - actual} integrals from NaN generation in the integrand. This "
+        "is caused by floating point error, usually due to a poor quadrature choice."
+    )
 
 
 def _plot_check_interp(Q, V, name=""):

@@ -1062,11 +1062,11 @@ class TestBounce1D:
     @staticmethod
     def _example_numerator(g_zz, B, pitch):
         f = (1 - 0.5 * pitch * B) * g_zz
-        return safediv(f, jnp.sqrt(jnp.abs(1 - pitch * B)))
+        return safediv(f, jnp.sqrt(1 - pitch * B))
 
     @staticmethod
     def _example_denominator(B, pitch):
-        return safediv(1, jnp.sqrt(jnp.abs(1 - pitch * B)))
+        return safediv(1, jnp.sqrt(1 - pitch * B))
 
     @pytest.mark.unit
     @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d * 4)
@@ -1186,6 +1186,58 @@ class TestBounce1D:
         assert result.shape == z1.shape
         np.testing.assert_allclose(h_min, result, rtol=1e-3)
 
+    @staticmethod
+    def get_drift_analytic_data():
+        """Get data to compute bounce averaged binormal drift analytically."""
+        eq = Equilibrium.load(".//tests//inputs//low-beta-shifted-circle.h5")
+        psi_boundary = eq.Psi / (2 * np.pi)
+        psi = 0.25 * psi_boundary
+        rho = np.sqrt(psi / psi_boundary)
+        np.testing.assert_allclose(rho, 0.5)
+
+        # Make a set of nodes along a single fieldline.
+        grid_fsa = LinearGrid(rho=rho, M=eq.M_grid, N=eq.N_grid, sym=eq.sym, NFP=eq.NFP)
+        data = eq.compute(["iota"], grid=grid_fsa)
+        iota = grid_fsa.compress(data["iota"]).item()
+        alpha = 0
+        zeta = np.linspace(-np.pi / iota, np.pi / iota, (2 * eq.M_grid) * 4 + 1)
+        grid = get_rtz_grid(
+            eq,
+            rho,
+            alpha,
+            zeta,
+            coordinates="raz",
+            period=(np.inf, 2 * np.pi, np.inf),
+            iota=iota,
+        )
+        data = eq.compute(
+            Bounce1D.required_names
+            + [
+                "cvdrift",
+                "gbdrift",
+                "grad(psi)",
+                "grad(alpha)",
+                "shear",
+                "iota",
+                "psi",
+                "a",
+            ],
+            grid=grid,
+        )
+        np.testing.assert_allclose(data["psi"], psi)
+        np.testing.assert_allclose(data["iota"], iota)
+        assert np.all(data["B^zeta"] > 0)
+        data["Bref"] = 2 * np.abs(psi_boundary) / data["a"] ** 2
+        data["rho"] = rho
+        data["alpha"] = alpha
+        data["zeta"] = zeta
+        data["psi"] = grid.compress(data["psi"])
+        data["iota"] = grid.compress(data["iota"])
+        data["shear"] = grid.compress(data["shear"])
+
+        things = {"grid": grid, "eq": eq}
+        return data, things
+
     # TODO: stellarator geometry test with ripples
     @staticmethod
     def drift_analytic(data):
@@ -1225,9 +1277,9 @@ class TestBounce1D:
         np.testing.assert_allclose(gradpar, gradpar_analytic, atol=5e-3)
 
         # Comparing coefficient calculation here with coefficients from compute/_metric
-        normalization = -np.sign(data["psi"]) * data["Bref"] * data["a"] ** 2
-        cvdrift = data["cvdrift"] * normalization
-        gbdrift = data["gbdrift"] * normalization
+        data["normalization"] = -np.sign(data["psi"]) * data["Bref"] * data["a"] ** 2
+        cvdrift = data["cvdrift"] * data["normalization"]
+        gbdrift = data["gbdrift"] * data["normalization"]
         dPdrho = np.mean(-0.5 * (cvdrift - gbdrift) * data["|B|"] ** 2)
         alpha_MHD = -0.5 * dPdrho / data["iota"] ** 2
         gds21 = (
@@ -1294,78 +1346,33 @@ class TestBounce1D:
     @staticmethod
     def drift_num_integrand(cvdrift, gbdrift, B, pitch):
         """Integrand of numerator of bounce averaged binormal drift."""
-        g = jnp.sqrt(1 - pitch * B)
+        g = jnp.sqrt(jnp.abs(1 - pitch * B))
         return (cvdrift * g) - (0.5 * g * gbdrift) + (0.5 * gbdrift / g)
 
     @staticmethod
     def drift_den_integrand(B, pitch):
         """Integrand of denominator of bounce averaged binormal drift."""
-        return 1 / jnp.sqrt(1 - pitch * B)
+        return 1 / jnp.sqrt(jnp.abs(1 - pitch * B))
 
     @pytest.mark.unit
     @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
     def test_binormal_drift_bounce1d(self):
         """Test bounce-averaged drift with analytical expressions."""
-        eq = Equilibrium.load(".//tests//inputs//low-beta-shifted-circle.h5")
-        psi_boundary = eq.Psi / (2 * np.pi)
-        psi = 0.25 * psi_boundary
-        rho = np.sqrt(psi / psi_boundary)
-        np.testing.assert_allclose(rho, 0.5)
-
-        # Make a set of nodes along a single fieldline.
-        grid_fsa = LinearGrid(rho=rho, M=eq.M_grid, N=eq.N_grid, sym=eq.sym, NFP=eq.NFP)
-        data = eq.compute(["iota"], grid=grid_fsa)
-        iota = grid_fsa.compress(data["iota"]).item()
-        alpha = 0
-        zeta = np.linspace(-np.pi / iota, np.pi / iota, (2 * eq.M_grid) * 4 + 1)
-        grid = get_rtz_grid(
-            eq,
-            rho,
-            alpha,
-            zeta,
-            coordinates="raz",
-            period=(np.inf, 2 * np.pi, np.inf),
-            iota=iota,
-        )
-        data = eq.compute(
-            Bounce1D.required_names
-            + [
-                "cvdrift",
-                "gbdrift",
-                "grad(psi)",
-                "grad(alpha)",
-                "shear",
-                "iota",
-                "psi",
-                "a",
-            ],
-            grid=grid,
-        )
-        np.testing.assert_allclose(data["psi"], psi)
-        np.testing.assert_allclose(data["iota"], iota)
-        assert np.all(data["B^zeta"] > 0)
-        data["Bref"] = 2 * np.abs(psi_boundary) / data["a"] ** 2
-        data["rho"] = rho
-        data["alpha"] = alpha
-        data["zeta"] = zeta
-        data["psi"] = grid.compress(data["psi"])
-        data["iota"] = grid.compress(data["iota"])
-        data["shear"] = grid.compress(data["shear"])
-
+        data, things = TestBounce1D.get_drift_analytic_data()
         # Compute analytic approximation.
         drift_analytic, cvdrift, gbdrift, pitch_inv = TestBounce1D.drift_analytic(data)
+
         # Compute numerical result.
         bounce = Bounce1D(
-            grid.source_grid,
+            things["grid"].source_grid,
             data,
-            quad=leggauss(28),  # converges to absolute and relative tolerance of 1e-7
             Bref=data["Bref"],
             Lref=data["a"],
             check=True,
         )
         bounce.check_points(*bounce.points(pitch_inv), pitch_inv, plot=False)
 
-        f = Bounce1D.reshape_data(grid.source_grid, cvdrift, gbdrift)
+        f = Bounce1D.reshape_data(things["grid"].source_grid, cvdrift, gbdrift)
         drift_numerical_num = bounce.integrate(
             integrand=TestBounce1D.drift_num_integrand,
             pitch_inv=pitch_inv,
@@ -1377,7 +1384,7 @@ class TestBounce1D:
             integrand=TestBounce1D.drift_den_integrand,
             pitch_inv=pitch_inv,
             num_well=1,
-            weight=np.ones(zeta.size),
+            weight=np.ones(data["zeta"].size),
             check=True,
         )
         drift_numerical = np.squeeze(drift_numerical_num / drift_numerical_den)
@@ -1391,7 +1398,7 @@ class TestBounce1D:
             bounce,
             TestBounce1D.drift_num_integrand,
             f=f,
-            weight=np.ones(zeta.size),
+            weight=np.ones(data["zeta"].size),
         )
 
         fig, ax = plt.subplots()
@@ -1464,7 +1471,7 @@ class TestBounce1D:
         # It is expected that this is much larger because the integrand is singular
         # wrt λ but the boundary derivative: f(λ,ζ₂) (∂ζ₂/∂λ)(λ) - f(λ,ζ₁) (∂ζ₁/∂λ)(λ).
         # smooths out because the bounce points ζ₁ and ζ₂ are smooth functions of λ.
-        np.testing.assert_allclose(fun2(pitch), -131750, rtol=1e-1)
+        np.testing.assert_allclose(fun2(pitch), -171500, rtol=1e-1)
 
 
 class TestBounce2DPoints:
@@ -1540,17 +1547,17 @@ class TestBounce2D:
             clebsch,
             inbasis=("rho", "alpha", "zeta"),
             period=(np.inf, 2 * np.pi, np.inf),
-        )
+        ).reshape(-1, M, N, 3)
         grid = LinearGrid(
             rho=rho, M=eq.M_grid, N=eq.N_grid, sym=False, NFP=eq.NFP
         )  # check if NFP!=1 works
         data = eq.compute(
-            names=Bounce2D.required_names() + ["min_tz |B|", "max_tz |B|"], grid=grid
+            names=Bounce2D.required_names + ["min_tz |B|", "max_tz |B|"], grid=grid
         )
         fb = Bounce2D(
-            grid, data, M, N, desc_from_clebsch, check=True, warn=False
+            grid, data, desc_from_clebsch, check=True, warn=False
         )  # TODO check true
-        pitch = get_pitch_inv(
+        pitch, _ = get_pitch_inv(
             grid.compress(data["min_tz |B|"]), grid.compress(data["max_tz |B|"]), 10
         )
         result = fb.integrate(f, [], pitch)  # noqa: F841
@@ -1559,97 +1566,55 @@ class TestBounce2D:
     @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
     def test_drift(self):
         """Test bounce-averaged drift with analytical expressions."""
-        eq = Equilibrium.load(".//tests//inputs//low-beta-shifted-circle.h5")
-        psi_boundary = eq.Psi / (2 * np.pi)
-        psi = 0.25 * psi_boundary
-        rho = np.sqrt(psi / psi_boundary)
-        np.testing.assert_allclose(rho, 0.5)
-
-        # Make a set of nodes along a single fieldline.
-        grid_fsa = LinearGrid(rho=rho, M=eq.M_grid, N=eq.N_grid, sym=eq.sym, NFP=eq.NFP)
-        data = eq.compute(["iota"], grid=grid_fsa)
-        iota = grid_fsa.compress(data["iota"]).item()
-        alpha = 0
-        zeta = np.linspace(-np.pi / iota, np.pi / iota, (2 * eq.M_grid) * 4 + 1)
-        grid = get_rtz_grid(
-            eq,
-            rho,
-            alpha,
-            zeta,
-            coordinates="raz",
-            period=(np.inf, 2 * np.pi, np.inf),
-            iota=np.array([iota]),
-        )
-        data = eq.compute(
-            Bounce2D.required_names()
-            + [
-                "cvdrift",
-                "gbdrift",
-                "grad(psi)",
-                "grad(alpha)",
-                "shear",
-                "iota",
-                "psi",
-                "a",
-            ],
-            grid=grid,
-        )
-        np.testing.assert_allclose(data["psi"], psi)
-        np.testing.assert_allclose(data["iota"], iota)
-        assert np.all(data["B^zeta"] > 0)
-        data["Bref"] = 2 * np.abs(psi_boundary) / data["a"] ** 2
-        data["rho"] = rho
-        data["alpha"] = alpha
-        data["zeta"] = zeta
-        data["psi"] = grid.compress(data["psi"])
-        data["iota"] = grid.compress(data["iota"])
-        data["shear"] = grid.compress(data["shear"])
-
+        data, things = TestBounce1D.get_drift_analytic_data()
         # Compute analytic approximation.
-        drift_analytic, cvdrift, gbdrift, pitch = TestBounce1D.drift_analytic(data)
-        # Compute numerical result.
-        grid = LinearGrid(rho=rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
-        data_2 = eq.compute(
-            names=Bounce2D.required_names() + ["cvdrift", "gbdrift"], grid=grid
+        drift_analytic, _, _, pitch_inv = TestBounce1D.drift_analytic(data)
+
+        # Recompute on non-symmetric, fft compatible grid.
+        eq = things["eq"]
+        grid = LinearGrid(
+            rho=data["rho"], M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False
         )
-        M, N = eq.M_grid, 20
+        grid_data = eq.compute(
+            names=Bounce2D.required_names + ["cvdrift", "gbdrift"], grid=grid
+        )
+        grid_data["cvdrift"] = grid_data["cvdrift"] * data["normalization"]
+        grid_data["gbdrift"] = grid_data["gbdrift"] * data["normalization"]
+
+        # Compute numerical result.
+        M, N = 8, 8
+        desc_from_clebsch = Bounce2D.desc_from_clebsch(eq, data["rho"], M, N).reshape(
+            M, N, 3
+        )
         bounce = Bounce2D(
             grid=grid,
-            data=data_2,
-            desc_from_clebsch=Bounce2D.desc_from_clebsch(eq, rho, M, N),
-            M=M,
-            N=N,
-            alpha_0=data["alpha"],
-            num_transit=1,
+            data=grid_data,
+            desc_from_clebsch=desc_from_clebsch,
+            alpha=data["alpha"],
+            num_transit=3,
+            quad=_mod_cheb_gauss(64),
+            automorphism=None,
             Bref=data["Bref"],
             Lref=data["a"],
             check=True,
             plot=True,
         )
+        bounce.check_points(*bounce.points(pitch_inv), pitch_inv, plot=True)
 
-        def integrand_num(cvdrift, gbdrift, B, pitch):
-            g = jnp.sqrt(1 - pitch * B)
-            return (cvdrift * g) - (0.5 * g * gbdrift) + (0.5 * gbdrift / g)
-
-        def integrand_den(B, pitch):
-            return 1 / jnp.sqrt(1 - pitch * B)
-
-        normalization = -np.sign(data["psi"]) * data["Bref"] * data["a"] ** 2
+        f = Bounce2D.reshape_data(grid, grid_data["cvdrift"], grid_data["gbdrift"])
         drift_numerical_num = bounce.integrate(
-            pitch_inv=pitch[:, np.newaxis],
-            integrand=integrand_num,
-            f=Bounce2D.reshape_data(
-                grid,
-                data_2["cvdrift"] * normalization,
-                data_2["gbdrift"] * normalization,
-            ),
+            integrand=TestBounce1D.drift_num_integrand,
+            pitch_inv=pitch_inv,
+            f=f,
             num_well=1,
+            check=True,
+            plot=True,
         )
         drift_numerical_den = bounce.integrate(
-            pitch_inv=pitch[:, np.newaxis],
-            integrand=integrand_den,
-            f=[],
+            integrand=TestBounce1D.drift_den_integrand,
+            pitch_inv=pitch_inv,
             num_well=1,
+            check=True,
         )
         drift_numerical = np.squeeze(drift_numerical_num / drift_numerical_den)
         msg = "There should be one bounce integral per pitch in this example."
@@ -1659,7 +1624,7 @@ class TestBounce2D:
         )
 
         fig, ax = plt.subplots()
-        ax.plot(1 / pitch, drift_analytic)
-        ax.plot(1 / pitch, drift_numerical)
+        ax.plot(pitch_inv, drift_analytic)
+        ax.plot(pitch_inv, drift_numerical)
         plt.show()
         return fig

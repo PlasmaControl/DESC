@@ -457,8 +457,8 @@ class Bounce2D(IOAble):
         pitch_inv = atleast_nd(self._B.cheb.ndim - 1, pitch_inv).T
         # Expects pitch_inv shape (P, L) if B.cheb.shape[0] is L.
         z1, z2 = self._B.intersect1d(pitch_inv, num_intersect=num_well)
-        z1 = self._swap_pl(z1)
-        z2 = self._swap_pl(z2)
+        z1 = Bounce2D._swap_pl(z1)
+        z2 = Bounce2D._swap_pl(z2)
         return z1, z2
 
     def check_points(self, z1, z2, pitch_inv, *, plot=True, **kwargs):
@@ -489,8 +489,8 @@ class Bounce2D(IOAble):
 
         """
         return self._B.check_intersect1d(
-            z1=self._swap_pl(z1),
-            z2=self._swap_pl(z2),
+            z1=Bounce2D._swap_pl(z1),
+            z2=Bounce2D._swap_pl(z2),
             k=atleast_nd(self._B.cheb.ndim - 1, pitch_inv).T,
             plot=plot,
             **_set_default_plot_kwargs(kwargs),
@@ -529,13 +529,13 @@ class Bounce2D(IOAble):
             Real scalar-valued (2π × 2π) periodic in (θ, ζ) functions evaluated
             on the ``grid`` supplied to construct this object. These functions
             should be arguments to the callable ``integrand``. Use the method
-            ``self.reshape_data`` to reshape the data into the expected shape.
+            ``Bounce2D.reshape_data`` to reshape the data into the expected shape.
         weight : jnp.ndarray
             Shape (L, m, n).
             If supplied, the bounce integral labeled by well j is weighted such that
             the returned value is w(j) ∫ f(λ, ℓ) dℓ, where w(j) is ``weight``
             interpolated to the deepest point in that magnetic well. Use the method
-            ``self.reshape_data`` to reshape the data into the expected shape.
+            ``Bounce2D.reshape_data`` to reshape the data into the expected shape.
         num_well : int or None
             Specify to return the first ``num_well`` pairs of bounce points for each
             pitch along each field line. This is useful if ``num_well`` tightly
@@ -569,7 +569,7 @@ class Bounce2D(IOAble):
         # Expects pitch_inv shape (P, L) if B.cheb.shape[0] is L.
         z1, z2 = self._B.intersect1d(pitch_inv, num_intersect=num_well)
         result = self._integrate(z1, z2, integrand, pitch_inv, f, check, plot)
-        return self._swap_pl(result)
+        return Bounce2D._swap_pl(result)
 
     def _integrate(self, z1, z2, integrand, pitch_inv, f, check, plot):
         """Bounce integrate ∫ f(λ, ℓ) dℓ.
@@ -591,6 +591,9 @@ class Bounce2D(IOAble):
         )
         # quadrature points in (θ, ζ) coordinates
         Q = jnp.stack([self._T.eval1d(Q_zeta), Q_zeta], axis=-1)
+        # FIXME: theta is discontinuous due to modding by 2pi in map coordinates.
+        #        This breaks convergence of Fourier series and maps positive definite
+        #        quantities like b_sup_z and others in f through 0.
 
         # interpolate and integrate
         b_sup_z = irfft2_non_uniform(
@@ -613,9 +616,12 @@ class Bounce2D(IOAble):
             shape = list(shape)
             shape[0] = shape[-2]
             shape[-2] = p
-            _check_interp(
-                shape, *map(Bounce2D._swap_pl, (Q_zeta, f, b_sup_z, B, result)), plot
+            shape.insert(0, 1)
+            Q_zeta, b_sup_z, B, result = map(
+                Bounce2D._swap_pl, (Q_zeta, b_sup_z, B, result)
             )
+            f = list(map(Bounce2D._swap_pl, f))
+            _check_interp(shape, Q_zeta, f, b_sup_z, B, result, plot)
 
         return result
 
@@ -953,14 +959,14 @@ class Bounce1D(IOAble):
             Shape (M, L, N).
             Real scalar-valued functions evaluated on the ``grid`` supplied to
             construct this object. These functions should be arguments to the callable
-            ``integrand``. Use the method ``self.reshape_data`` to reshape the data
+            ``integrand``. Use the method ``Bounce1D.reshape_data`` to reshape the data
             into the expected shape.
         weight : jnp.ndarray
             Shape (M, L, N).
             If supplied, the bounce integral labeled by well j is weighted such that
             the returned value is w(j) ∫ f(λ, ℓ) dℓ, where w(j) is ``weight``
             interpolated to the deepest point in that magnetic well. Use the method
-            ``self.reshape_data`` to reshape the data into the expected shape.
+            ``Bounce1D.reshape_data`` to reshape the data into the expected shape.
         num_well : int or None
             Specify to return the first ``num_well`` pairs of bounce points for each
             pitch along each field line. This is useful if ``num_well`` tightly

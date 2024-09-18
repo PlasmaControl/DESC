@@ -113,6 +113,46 @@ def flip_helicity(eq):
     return eq
 
 
+def flip_theta(eq):
+    """Change the gauge freedom of the poloidal angle of an Equilibrium.
+
+    Equivalent to redefining theta_new = theta_old + π
+
+    Parameters
+    ----------
+    eq : Equilibrium or iterable of Equilibrium
+        Equilibria to redefine the poloidal angle of.
+
+    Returns
+    -------
+    eq : Equilibrium or iterable of Equilibrium
+        Same as input, but with the poloidal angle redefined.
+
+    """
+    # maybe it's iterable:
+    if hasattr(eq, "__len__"):
+        for e in eq:
+            flip_theta(e)
+        return eq
+
+    rone = np.ones_like(eq.R_lmn)
+    rone[eq.R_basis.modes[:, 1] % 2 == 1] *= -1
+    eq.R_lmn *= rone
+
+    zone = np.ones_like(eq.Z_lmn)
+    zone[eq.Z_basis.modes[:, 1] % 2 == 1] *= -1
+    eq.Z_lmn *= zone
+
+    lone = np.ones_like(eq.L_lmn)
+    lone[eq.L_basis.modes[:, 1] % 2 == 1] *= -1
+    eq.L_lmn *= lone
+
+    eq.axis = eq.get_axis()
+    eq.surface = eq.get_surface_at(rho=1)
+
+    return eq
+
+
 def rescale(
     eq, L=("R0", None), B=("B0", None), scale_pressure=True, copy=False, verbose=0
 ):

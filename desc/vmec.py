@@ -1664,7 +1664,7 @@ class VMECIO:
     def compute_theta_coords(
         cls, lmns, xm, xn, s, theta_star, zeta, si=None, lmnc=None
     ):
-        """Find θ (theta_DESC) for given straight field line ϑ (theta_star).
+        """Find θ (theta_DESC) for given PEST straight field line ϑ (theta_star).
 
         Parameters
         ----------
@@ -1704,23 +1704,23 @@ class VMECIO:
             lmbda_mnc = interpolate.CubicSpline(si, lmnc)
 
         # Root finding for θₖ such that r(θₖ) = ϑₖ(ρ, θₖ, ζ) − ϑ = 0.
-        def root_fun(theta_DESC):
+        def root_fun(theta):
             lmbda = np.sum(
                 lmbda_mns(s)
                 * np.sin(
-                    xm[np.newaxis] * theta_DESC[:, np.newaxis]
+                    xm[np.newaxis] * theta[:, np.newaxis]
                     - xn[np.newaxis] * zeta[:, np.newaxis]
                 ),
                 axis=-1,
             ) + np.sum(
                 lmbda_mnc(s)
                 * np.cos(
-                    xm[np.newaxis] * theta_DESC[:, np.newaxis]
+                    xm[np.newaxis] * theta[:, np.newaxis]
                     - xn[np.newaxis] * zeta[:, np.newaxis]
                 ),
                 axis=-1,
             )
-            theta_PEST_k = theta_DESC + lmbda
+            theta_PEST_k = theta + lmbda
             r = theta_PEST_k - theta_PEST
             return r
 
@@ -1786,7 +1786,11 @@ class VMECIO:
 
         # find theta angles corresponding to desired theta* angles
         v_grid = Grid(
-            equil.map_coordinates(t_grid.nodes, inbasis=("rho", "theta_PEST", "zeta"))
+            equil.map_coordinates(
+                t_grid.nodes,
+                inbasis=("rho", "theta_PEST", "zeta"),
+                period=(np.inf, 2 * np.pi, np.inf),
+            )
         )
         r_coords_desc = equil.compute(["R", "Z"], grid=r_grid)
         v_coords_desc = equil.compute(["R", "Z"], grid=v_grid)

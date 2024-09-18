@@ -16,6 +16,12 @@ def _periodic(x, period):
     return jnp.where(jnp.isfinite(period), x % period, x)
 
 
+def _fixup_residual(r, period):
+    r = _periodic(r, period)
+    # r should be between -period and period
+    return jnp.where((r > period / 2) & jnp.isfinite(period), -period + r, r)
+
+
 def map_coordinates(  # noqa: C901
     eq,
     coords,
@@ -23,7 +29,7 @@ def map_coordinates(  # noqa: C901
     outbasis=("rho", "theta", "zeta"),
     guess=None,
     params=None,
-    period=(np.inf, np.inf, np.inf),
+    period=None,
     tol=1e-6,
     maxiter=30,
     full_output=False,
@@ -87,9 +93,9 @@ def map_coordinates(  # noqa: C901
         ValueError,
         f"tol must be a positive float, got {tol}",
     )
-    params = setdefault(params, eq.params_dict)
     inbasis = tuple(inbasis)
     outbasis = tuple(outbasis)
+    params = setdefault(params, eq.params_dict)
 
     basis_derivs = tuple(f"{X}_{d}" for X in inbasis for d in ("r", "t", "z"))
     for key in basis_derivs:
@@ -111,25 +117,27 @@ def map_coordinates(  # noqa: C901
                     profiles["iota"] = eq.get_profile(["iota", "iota_r"], params=params)
                 iota = profiles["iota"].compute(Grid(coords, sort=False, jitable=True))
             return _map_clebsch_coordinates(
-                coords,
-                iota,
-                params["L_lmn"],
-                eq.L_basis,
-                guess[:, 1] if guess is not None else None,
-                tol,
-                maxiter,
-                full_output,
+                coords=coords,
+                iota=iota,
+                L_lmn=params["L_lmn"],
+                L_basis=eq.L_basis,
+                guess=guess[:, 1] if guess is not None else None,
+                period=period[1] if period is not None else np.inf,
+                tol=tol,
+                maxiter=maxiter,
+                full_output=full_output,
                 **kwargs,
             )
         if inbasis == ("rho", "theta_PEST", "zeta"):
             return _map_PEST_coordinates(
-                coords,
-                params["L_lmn"],
-                eq.L_basis,
-                guess[:, 1] if guess is not None else None,
-                tol,
-                maxiter,
-                full_output,
+                coords=coords,
+                L_lmn=params["L_lmn"],
+                L_basis=eq.L_basis,
+                guess=guess[:, 1] if guess is not None else None,
+                period=period[1] if period is not None else 2 * np.pi,
+                tol=tol,
+                maxiter=maxiter,
+                full_output=full_output,
                 **kwargs,
             )
 
@@ -139,7 +147,7 @@ def map_coordinates(  # noqa: C901
         params["i_l"] = profiles["iota"].params
 
     rhomin = kwargs.pop("rhomin", tol / 10)
-    period = np.asarray(period)
+    period = np.asarray(setdefault(period, (np.inf, np.inf, np.inf)))
     coords = _periodic(coords, period)
 
     p = "desc.equilibrium.equilibrium.Equilibrium"
@@ -164,13 +172,10 @@ def map_coordinates(  # noqa: C901
     @jit
     def residual(y, coords):
         xk = compute(y, inbasis)
-        r = _periodic(xk, period) - _periodic(coords, period)
-        return jnp.where((r > period / 2) & jnp.isfinite(period), -period + r, r)
+        return _fixup_residual(xk - coords, period)
 
     @jit
     def jac(y, coords):
-        # Valid everywhere except periodic boundaries, e.g. for period=2π
-        # everywhere except θ such that θ+λ = k 2π where k ∈ ℤ.
         J = compute(y, basis_derivs)
         J = J.reshape((3, 3))
         return J
@@ -213,7 +218,6 @@ def map_coordinates(  # noqa: C901
     yk, (res, niter) = vecroot(yk, coords)
 
     out = compute(yk, outbasis)
-
     if full_output:
         return out, (res, niter)
     return out
@@ -285,6 +289,7 @@ def _map_PEST_coordinates(
     L_lmn,
     L_basis,
     guess,
+    period=2 * np.pi,
     tol=1e-6,
     maxiter=30,
     full_output=False,
@@ -305,6 +310,9 @@ def _map_PEST_coordinates(
     guess : jnp.ndarray
         Shape (k, ).
         Optional initial guess for the computational coordinates.
+    period : float
+        Assumed periodicity for ϑ. Default is 2π.
+        Use ``np.inf`` to denote no periodicity.
     tol : float
         Stopping tolerance.
     maxiter : int
@@ -326,26 +334,25 @@ def _map_PEST_coordinates(
         Only returned if ``full_output`` is True.
 
     """
-    rho, theta_PEST, zeta = coords.T
+    # noqa: D202
 
     # Root finding for θₖ such that r(θₖ) = ϑₖ(ρ, θₖ, ζ) − ϑ = 0.
-    def rootfun(theta_DESC, theta_PEST, rho, zeta):
-        nodes = jnp.array(
-            [rho.squeeze(), theta_DESC.squeeze(), zeta.squeeze()], ndmin=2
-        )
+    def rootfun(theta, theta_PEST, rho, zeta):
+        nodes = jnp.array([rho.squeeze(), theta.squeeze(), zeta.squeeze()], ndmin=2)
         A = L_basis.evaluate(nodes)
         lmbda = A @ L_lmn
-        theta_PEST_k = theta_DESC + lmbda
-        r = theta_PEST_k - theta_PEST
-        return r.squeeze()
+        theta_PEST_k = theta + lmbda
+        return _fixup_residual(theta_PEST_k - theta_PEST, period).squeeze()
 
-    def jacfun(theta_DESC, theta_PEST, rho, zeta):
-        nodes = jnp.array(
-            [rho.squeeze(), theta_DESC.squeeze(), zeta.squeeze()], ndmin=2
-        )
+    def jacfun(theta, theta_PEST, rho, zeta):
+        # Valid everywhere except θ such that θ+λ = k period where k ∈ ℤ.
+        nodes = jnp.array([rho.squeeze(), theta.squeeze(), zeta.squeeze()], ndmin=2)
         A1 = L_basis.evaluate(nodes, (0, 1, 0))
         lmbda_t = jnp.dot(A1, L_lmn)
         return 1 + lmbda_t.squeeze()
+
+    def fixup(x, *args):
+        return _periodic(x, period)
 
     vecroot = jit(
         vmap(
@@ -354,18 +361,22 @@ def _map_PEST_coordinates(
                 x0,
                 jac=jacfun,
                 args=p,
+                fixup=fixup,
                 tol=tol,
                 maxiter=maxiter,
                 **kwargs,
             )
         )
     )
-    # Assume λ=0 for initial guess.
-    guess = setdefault(guess, theta_PEST)
-    theta_DESC, (res, niter) = vecroot(guess, theta_PEST, rho, zeta)
-
-    out = jnp.column_stack([rho, jnp.atleast_1d(theta_DESC.squeeze()), zeta])
-
+    rho, theta_PEST, zeta = coords.T
+    theta, (res, niter) = vecroot(
+        # Assume λ=0 for default initial guess.
+        setdefault(guess, theta_PEST),
+        theta_PEST,
+        rho,
+        zeta,
+    )
+    out = jnp.column_stack([rho, jnp.atleast_1d(theta.squeeze()), zeta])
     if full_output:
         return out, (res, niter)
     return out
@@ -378,6 +389,7 @@ def _map_clebsch_coordinates(
     L_lmn,
     L_basis,
     guess=None,
+    period=np.inf,
     tol=1e-6,
     maxiter=30,
     full_output=False,
@@ -401,6 +413,9 @@ def _map_clebsch_coordinates(
     guess : jnp.ndarray
         Shape (k, ).
         Optional initial guess for the computational coordinates.
+    period : float
+        Assumed periodicity for α.
+        Use ``np.inf`` to denote no periodicity.
     tol : float
         Stopping tolerance.
     maxiter : int
@@ -422,7 +437,7 @@ def _map_clebsch_coordinates(
         Only returned if ``full_output`` is True.
 
     """
-    rho, alpha, zeta = coords.T
+    # noqa: D202
 
     # Root finding for θₖ such that r(θₖ) = αₖ(ρ, θₖ, ζ) − α = 0.
     def rootfun(theta, alpha, rho, zeta, iota):
@@ -430,14 +445,17 @@ def _map_clebsch_coordinates(
         A = L_basis.evaluate(nodes)
         lmbda = A @ L_lmn
         alpha_k = theta + lmbda - iota * zeta
-        r = alpha_k - alpha
-        return r.squeeze()
+        return _fixup_residual(alpha_k - alpha, period).squeeze()
 
     def jacfun(theta, alpha, rho, zeta, iota):
+        # Valid everywhere except θ such that θ+λ = k period where k ∈ ℤ.
         nodes = jnp.array([rho.squeeze(), theta.squeeze(), zeta.squeeze()], ndmin=2)
         A1 = L_basis.evaluate(nodes, (0, 1, 0))
         lmbda_t = jnp.dot(A1, L_lmn)
         return 1 + lmbda_t.squeeze()
+
+    def fixup(x, *args):
+        return _periodic(x, period)
 
     vecroot = jit(
         vmap(
@@ -446,18 +464,20 @@ def _map_clebsch_coordinates(
                 x0,
                 jac=jacfun,
                 args=p,
+                fixup=fixup,
                 tol=tol,
                 maxiter=maxiter,
                 **kwargs,
             )
         )
     )
+    rho, alpha, zeta = coords.T
     if guess is None:
-        # Assume λ=0 for initial guess.
+        # Assume λ=0 for default initial guess.
         guess = alpha + iota * zeta
     theta, (res, niter) = vecroot(guess, alpha, rho, zeta, iota)
-    out = jnp.column_stack([rho, jnp.atleast_1d(theta.squeeze()), zeta])
 
+    out = jnp.column_stack([rho, jnp.atleast_1d(theta.squeeze()), zeta])
     if full_output:
         return out, (res, niter)
     return out
@@ -646,7 +666,14 @@ def to_sfl(
 
 
 def get_rtz_grid(
-    eq, radial, poloidal, toroidal, coordinates, period, jitable=True, **kwargs
+    eq,
+    radial,
+    poloidal,
+    toroidal,
+    coordinates,
+    period=(np.inf, np.inf, np.inf),
+    jitable=True,
+    **kwargs,
 ):
     """Return DESC grid in rtz (rho, theta, zeta) coordinates from given coordinates.
 
@@ -669,7 +696,7 @@ def get_rtz_grid(
         rvp : rho, theta_PEST, phi
         rtz : rho, theta, zeta
     period : tuple of float
-        Assumed periodicity for functions of the given coordinates.
+        Assumed periodicity of the given coordinates.
         Use ``np.inf`` to denote no periodicity.
     jitable : bool, optional
         If false the returned grid has additional attributes.

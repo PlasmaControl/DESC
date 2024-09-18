@@ -1151,7 +1151,7 @@ class Equilibrium(IOAble, Optimizable):
         outbasis=("rho", "theta", "zeta"),
         guess=None,
         params=None,
-        period=(np.inf, np.inf, np.inf),
+        period=None,
         tol=1e-6,
         maxiter=30,
         full_output=False,
@@ -1262,10 +1262,11 @@ class Equilibrium(IOAble, Optimizable):
         )
         return map_coordinates(
             self,
-            flux_coords,
+            coords=flux_coords,
             inbasis=("rho", "theta_PEST", "zeta"),
             outbasis=("rho", "theta", "zeta"),
             params=self.params_dict if L_lmn is None else {"L_lmn": L_lmn},
+            period=(np.inf, 2 * np.pi, np.inf),
             tol=tol,
             maxiter=maxiter,
             full_output=full_output,

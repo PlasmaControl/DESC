@@ -327,8 +327,6 @@ def _map_PEST_coordinates(
 
     """
     rho, theta_PEST, zeta = coords.T
-    # Assume λ=0 for initial guess.
-    guess = setdefault(guess, theta_PEST)
 
     # Root finding for θₖ such that r(θₖ) = ϑₖ(ρ, θₖ, ζ) − ϑ = 0.
     def rootfun(theta_DESC, theta_PEST, rho, zeta):
@@ -362,6 +360,8 @@ def _map_PEST_coordinates(
             )
         )
     )
+    # Assume λ=0 for initial guess.
+    guess = setdefault(guess, theta_PEST)
     theta_DESC, (res, niter) = vecroot(guess, theta_PEST, rho, zeta)
 
     out = jnp.column_stack([rho, jnp.atleast_1d(theta_DESC.squeeze()), zeta])
@@ -423,9 +423,6 @@ def _map_clebsch_coordinates(
 
     """
     rho, alpha, zeta = coords.T
-    if guess is None:
-        # Assume λ=0 for initial guess.
-        guess = alpha + iota * zeta
 
     # Root finding for θₖ such that r(θₖ) = αₖ(ρ, θₖ, ζ) − α = 0.
     def rootfun(theta, alpha, rho, zeta, iota):
@@ -455,6 +452,9 @@ def _map_clebsch_coordinates(
             )
         )
     )
+    if guess is None:
+        # Assume λ=0 for initial guess.
+        guess = alpha + iota * zeta
     theta, (res, niter) = vecroot(guess, alpha, rho, zeta, iota)
     out = jnp.column_stack([rho, jnp.atleast_1d(theta.squeeze()), zeta])
 

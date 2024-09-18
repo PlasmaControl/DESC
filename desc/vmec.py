@@ -1664,7 +1664,7 @@ class VMECIO:
     def compute_theta_coords(
         cls, lmns, xm, xn, s, theta_star, zeta, si=None, lmnc=None
     ):
-        """Find theta such that theta + lambda(theta) == theta_star.
+        """Find θ (theta_DESC) for given straight field line ϑ (theta_star).
 
         Parameters
         ----------
@@ -1693,6 +1693,7 @@ class VMECIO:
             theta such that theta + lambda(theta) == theta_star
 
         """
+        theta_PEST = theta_star
         if si is None:
             si = np.linspace(0, 1, lmns.shape[0])
             si[1:] = si[0:-1] + 0.5 / (lmns.shape[0] - 1)
@@ -1702,31 +1703,29 @@ class VMECIO:
         else:
             lmbda_mnc = interpolate.CubicSpline(si, lmnc)
 
-        # Note: theta* (also known as vartheta) is the poloidal straight field line
-        # angle in PEST-like flux coordinates
-
-        def root_fun(theta):
+        # Root finding for θₖ such that r(θₖ) = ϑₖ(ρ, θₖ, ζ) − ϑ = 0.
+        def root_fun(theta_DESC):
             lmbda = np.sum(
                 lmbda_mns(s)
                 * np.sin(
-                    xm[np.newaxis] * theta[:, np.newaxis]
+                    xm[np.newaxis] * theta_DESC[:, np.newaxis]
                     - xn[np.newaxis] * zeta[:, np.newaxis]
                 ),
                 axis=-1,
             ) + np.sum(
                 lmbda_mnc(s)
                 * np.cos(
-                    xm[np.newaxis] * theta[:, np.newaxis]
+                    xm[np.newaxis] * theta_DESC[:, np.newaxis]
                     - xn[np.newaxis] * zeta[:, np.newaxis]
                 ),
                 axis=-1,
             )
-            theta_star_k = theta + lmbda  # theta* = theta + lambda
-            err = theta_star - theta_star_k  # FIXME: mod by 2pi
-            return err
+            theta_PEST_k = theta_DESC + lmbda
+            r = theta_PEST_k - theta_PEST
+            return r
 
         out = optimize.root(
-            root_fun, x0=theta_star, method="diagbroyden", options={"ftol": 1e-6}
+            root_fun, x0=theta_PEST, method="diagbroyden", options={"ftol": 1e-6}
         )
         return out.x
 

@@ -1722,7 +1722,7 @@ class VMECIO:
             )
             theta_PEST_k = theta + lmbda
             r = theta_PEST_k - theta_PEST
-            return r
+            return -r  # the negative sign is necessary
 
         out = optimize.root(
             root_fun, x0=theta_PEST, method="diagbroyden", options={"ftol": 1e-6}
@@ -1786,11 +1786,7 @@ class VMECIO:
 
         # find theta angles corresponding to desired theta* angles
         v_grid = Grid(
-            equil.map_coordinates(
-                t_grid.nodes,
-                inbasis=("rho", "theta_PEST", "zeta"),
-                period=(np.inf, 2 * np.pi, np.inf),
-            )
+            equil.map_coordinates(t_grid.nodes, inbasis=("rho", "theta_PEST", "zeta"))
         )
         r_coords_desc = equil.compute(["R", "Z"], grid=r_grid)
         v_coords_desc = equil.compute(["R", "Z"], grid=v_grid)

@@ -134,7 +134,7 @@ def map_coordinates(  # noqa: C901
                 L_lmn=params["L_lmn"],
                 L_basis=eq.L_basis,
                 guess=guess[:, 1] if guess is not None else None,
-                period=period[1] if period is not None else 2 * np.pi,
+                period=period[1] if period is not None else np.inf,
                 tol=tol,
                 maxiter=maxiter,
                 full_output=full_output,
@@ -289,7 +289,7 @@ def _map_PEST_coordinates(
     L_lmn,
     L_basis,
     guess,
-    period=2 * np.pi,
+    period=np.inf,
     tol=1e-6,
     maxiter=30,
     full_output=False,
@@ -311,7 +311,7 @@ def _map_PEST_coordinates(
         Shape (k, ).
         Optional initial guess for the computational coordinates.
     period : float
-        Assumed periodicity for ϑ. Default is 2π.
+        Assumed periodicity for ϑ.
         Use ``np.inf`` to denote no periodicity.
     tol : float
         Stopping tolerance.

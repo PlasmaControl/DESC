@@ -1266,7 +1266,6 @@ class Equilibrium(IOAble, Optimizable):
             inbasis=("rho", "theta_PEST", "zeta"),
             outbasis=("rho", "theta", "zeta"),
             params=self.params_dict if L_lmn is None else {"L_lmn": L_lmn},
-            period=(np.inf, 2 * np.pi, np.inf),
             tol=tol,
             maxiter=maxiter,
             full_output=full_output,

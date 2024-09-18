@@ -1494,7 +1494,7 @@ def _Z_zzz(params, transforms, profiles, data, **kwargs):
     label="\\alpha",
     units="~",
     units_long="None",
-    description="Field line label, defined on [0, 2pi)",
+    description="Field line label",
     dim=1,
     params=[],
     transforms={},
@@ -1503,7 +1503,7 @@ def _Z_zzz(params, transforms, profiles, data, **kwargs):
     data=["theta_PEST", "phi", "iota"],
 )
 def _alpha(params, transforms, profiles, data, **kwargs):
-    data["alpha"] = (data["theta_PEST"] - data["iota"] * data["phi"]) % (2 * jnp.pi)
+    data["alpha"] = data["theta_PEST"] - data["iota"] * data["phi"]
     return data
 
 
@@ -3077,7 +3077,7 @@ def _theta(params, transforms, profiles, data, **kwargs):
     data=["theta", "lambda"],
 )
 def _theta_PEST(params, transforms, profiles, data, **kwargs):
-    data["theta_PEST"] = (data["theta"] + data["lambda"]) % (2 * jnp.pi)
+    data["theta_PEST"] = data["theta"] + data["lambda"]
     return data
 
 

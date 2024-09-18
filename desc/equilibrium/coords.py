@@ -23,7 +23,7 @@ def map_coordinates(  # noqa: C901
     outbasis=("rho", "theta", "zeta"),
     guess=None,
     params=None,
-    period=None,
+    period=(np.inf, np.inf, np.inf),
     tol=1e-6,
     maxiter=30,
     full_output=False,
@@ -139,8 +139,7 @@ def map_coordinates(  # noqa: C901
         params["i_l"] = profiles["iota"].params
 
     rhomin = kwargs.pop("rhomin", tol / 10)
-    warnif(period is None, msg="Assuming no periodicity.")
-    period = np.asarray(setdefault(period, (np.inf, np.inf, np.inf)))
+    period = np.asarray(period)
     coords = _periodic(coords, period)
 
     p = "desc.equilibrium.equilibrium.Equilibrium"
@@ -170,6 +169,8 @@ def map_coordinates(  # noqa: C901
 
     @jit
     def jac(y, coords):
+        # Valid everywhere except periodic boundaries, e.g. for period=2π
+        # everywhere except θ such that θ+λ = k 2π where k ∈ ℤ.
         J = compute(y, basis_derivs)
         J = J.reshape((3, 3))
         return J
@@ -253,7 +254,7 @@ def _initial_guess_heuristic(yk, coords, inbasis, eq, profiles):
         zero = jnp.zeros_like(rho)
         grid = Grid(nodes=jnp.column_stack([rho, zero, zero]), sort=False, jitable=True)
         iota = profiles["iota"].compute(grid)
-        theta = (alpha + iota * zeta) % (2 * jnp.pi)
+        theta = alpha + iota * zeta
 
     yk = jnp.column_stack([rho, theta, zeta])
     return yk
@@ -326,7 +327,6 @@ def _map_PEST_coordinates(
 
     """
     rho, theta_PEST, zeta = coords.T
-    theta_PEST = theta_PEST % (2 * np.pi)
     # Assume λ=0 for initial guess.
     guess = setdefault(guess, theta_PEST)
 
@@ -337,24 +337,17 @@ def _map_PEST_coordinates(
         )
         A = L_basis.evaluate(nodes)
         lmbda = A @ L_lmn
-        theta_PEST_k = (theta_DESC + lmbda) % (2 * np.pi)
+        theta_PEST_k = theta_DESC + lmbda
         r = theta_PEST_k - theta_PEST
-        # r should be between -pi and pi
-        r = jnp.where(r > np.pi, r - 2 * np.pi, r)
-        r = jnp.where(r < -np.pi, r + 2 * np.pi, r)
         return r.squeeze()
 
     def jacfun(theta_DESC, theta_PEST, rho, zeta):
-        # Valid everywhere except θ such that θ+λ = k 2π where k ∈ ℤ.
         nodes = jnp.array(
             [rho.squeeze(), theta_DESC.squeeze(), zeta.squeeze()], ndmin=2
         )
         A1 = L_basis.evaluate(nodes, (0, 1, 0))
         lmbda_t = jnp.dot(A1, L_lmn)
         return 1 + lmbda_t.squeeze()
-
-    def fixup(x, *args):
-        return x % (2 * np.pi)
 
     vecroot = jit(
         vmap(
@@ -363,7 +356,6 @@ def _map_PEST_coordinates(
                 x0,
                 jac=jacfun,
                 args=p,
-                fixup=fixup,
                 tol=tol,
                 maxiter=maxiter,
                 **kwargs,
@@ -433,7 +425,7 @@ def _map_clebsch_coordinates(
     rho, alpha, zeta = coords.T
     if guess is None:
         # Assume λ=0 for initial guess.
-        guess = (alpha + iota * zeta) % (2 * np.pi)
+        guess = alpha + iota * zeta
 
     # Root finding for θₖ such that r(θₖ) = αₖ(ρ, θₖ, ζ) − α = 0.
     def rootfun(theta, alpha, rho, zeta, iota):
@@ -441,21 +433,14 @@ def _map_clebsch_coordinates(
         A = L_basis.evaluate(nodes)
         lmbda = A @ L_lmn
         alpha_k = theta + lmbda - iota * zeta
-        r = (alpha_k - alpha) % (2 * np.pi)
-        # r should be between -pi and pi
-        r = jnp.where(r > np.pi, r - 2 * np.pi, r)
-        r = jnp.where(r < -np.pi, r + 2 * np.pi, r)
+        r = alpha_k - alpha
         return r.squeeze()
 
     def jacfun(theta, alpha, rho, zeta, iota):
-        # Valid everywhere except θ such that θ+λ = k 2π where k ∈ ℤ.
         nodes = jnp.array([rho.squeeze(), theta.squeeze(), zeta.squeeze()], ndmin=2)
         A1 = L_basis.evaluate(nodes, (0, 1, 0))
         lmbda_t = jnp.dot(A1, L_lmn)
         return 1 + lmbda_t.squeeze()
-
-    def fixup(x, *args):
-        return x % (2 * np.pi)
 
     vecroot = jit(
         vmap(
@@ -464,7 +449,6 @@ def _map_clebsch_coordinates(
                 x0,
                 jac=jacfun,
                 args=p,
-                fixup=fixup,
                 tol=tol,
                 maxiter=maxiter,
                 **kwargs,

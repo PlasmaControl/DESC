@@ -129,11 +129,17 @@ class Bounce1D(IOAble):
         quad : (jnp.ndarray, jnp.ndarray)
             Quadrature points xₖ and weights wₖ for the approximate evaluation of an
             integral ∫₋₁¹ g(x) dx = ∑ₖ wₖ g(xₖ). Default is 32 points.
+            For weak singular integrals, use ``chebgauss2`` from
+            ``desc.integrals.quad_utils``.
+            For strong singular integrals, use ``leggauss``.
         automorphism : (Callable, Callable) or None
             The first callable should be an automorphism of the real interval [-1, 1].
             The second callable should be the derivative of the first. This map defines
             a change of variable for the bounce integral. The choice made for the
             automorphism will affect the performance of the quadrature method.
+            For weak singular integrals, use ``None``.
+            For strong singular integrals, use ``automorphism_sin`` from
+            ``desc.integrals.quad_utils``.
         Bref : float
             Optional. Reference magnetic field strength for normalization.
         Lref : float

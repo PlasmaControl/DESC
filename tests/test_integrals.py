@@ -967,7 +967,7 @@ class TestBounce1DQuadrature:
             automorphism,
             check=True,
         )
-        result = bounce.integrate(integrand, pitch_inv, check=True, plot=False)
+        result = bounce.integrate(integrand, pitch_inv, check=True, plot=True)
         assert np.count_nonzero(result) == 1
         np.testing.assert_allclose(result.sum(), truth, rtol=1e-4)
 

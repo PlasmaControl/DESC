@@ -208,12 +208,13 @@ class Bounce2D(IOAble):
     may allow earlier truncation of the series without loss of accuracy. Another
     option with faster convergence still is to use a filtered Fourier series
     with a non-periodic basis in the Gibbs layer. An example is given at
-    doi.org/10.1016/j.aml.2006.10.001. Empirically, we observe that the convergence
-    of the Chebyshev series is satisfactory. It is particularly fast for θ(α, ζ).
-    Furthermore, for near omnigenous configurations, Fourier series converges rapidly
-    for |B|(α, ζ) because (∂‖B‖/∂α)|ρ,ζ vanishes. However, the Fourier series of
-    θ(α, ζ) converges slower than desired; we must accept this because no basis
-    supports a larger convergence region in the complex plane than do Fourier series.
+    doi.org/10.1016/j.aml.2006.10.001. Empirically, we observe that the
+    Chebyshev series has satisfactory convergence. It is particularly fast for
+    θ(α, ζ). Furthermore, the Fourier series converges rapidly for |B|(α, ζ)
+    in near omnigenous configurations because (∂|B|/∂α)|ρ,ζ vanishes. However,
+    the Fourier series of θ(α, ζ) converges slower than desired; we must accept
+    this because no basis supports a larger convergence region in the complex
+    plane than do Fourier series.
 
     After obtaining the bounce points, the supplied quadrature is performed.
     By default, this is a Gauss quadrature after removing the singularity.
@@ -247,7 +248,7 @@ class Bounce2D(IOAble):
     """
 
     required_names = ["B^zeta", "|B|", "iota"]
-    get_pitch_inv = staticmethod(get_pitch_inv)
+    get_pitch_inv_quad = staticmethod(get_pitch_inv)
 
     def __init__(
         self,
@@ -378,8 +379,8 @@ class Bounce2D(IOAble):
             May also be an array of non-uniform coordinates.
         M : int
             Grid resolution in poloidal direction for Clebsch coordinate grid.
-            Preferably power of 2. A good choice is double ``m``. If the Fourier
-            spectrum of θ is wide, then a larger number may be beneficial.
+            Preferably power of 2. If the Fourier spectrum of θ is wide, then
+            a large number is recommended.
         N : int
             Grid resolution in toroidal direction for Clebsch coordinate grid.
             Preferably power of 2.

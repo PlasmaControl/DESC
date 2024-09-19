@@ -309,8 +309,9 @@ def test_fixed_axis_and_theta_SFL_solve():
     orig_R_val = eq.axis.R_n
     orig_Z_val = eq.axis.Z_n
 
-    constraints = (FixThetaSFL(eq=eq),)
-    +get_NAE_constraints(eq, None, order=0, fix_lambda=False)
+    constraints = (FixThetaSFL(eq=eq),) + get_NAE_constraints(
+        eq, None, order=0, fix_lambda=False
+    )
 
     eq.solve(
         verbose=3,

@@ -3249,7 +3249,11 @@ class FixNearAxisR(_FixedObjective):
                 self._A = np.vstack([self._A, con._A]).squeeze() if self._A else con._A
                 axis_con = con
 
-        self._target = np.concatenate([con.target for con in cons_that_fix_near_axis])
+        self._target = (
+            np.concatenate([con.target for con in cons_that_fix_near_axis])
+            if cons_that_fix_near_axis
+            else None
+        )
         if axis_con:
             if self._nae_eq is not None:
                 # use NAE axis as target

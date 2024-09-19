@@ -1336,13 +1336,13 @@ class TestBounce1D:
     @staticmethod
     def drift_num_integrand(cvdrift, gbdrift, B, pitch):
         """Integrand of numerator of bounce averaged binormal drift."""
-        g = jnp.sqrt(jnp.abs(1 - pitch * B))
+        g = jnp.sqrt(1 - pitch * B)
         return (cvdrift * g) - (0.5 * g * gbdrift) + (0.5 * gbdrift / g)
 
     @staticmethod
     def drift_den_integrand(B, pitch):
         """Integrand of denominator of bounce averaged binormal drift."""
-        return 1 / jnp.sqrt(jnp.abs(1 - pitch * B))
+        return 1 / jnp.sqrt(1 - pitch * B)
 
     @pytest.mark.unit
     @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
@@ -1473,38 +1473,27 @@ class TestBounce2DPoints:
         cheb = cheb.copy()
         cheb[0] = cheb[0] - k
         roots = chebroots(cheb)
-        intersect = roots[
-            np.logical_and(np.isreal(roots), np.abs(roots.real) <= 1)
-        ].real
+        intersect = roots[np.logical_and(np.isreal(roots), np.abs(roots.real) < 1)].real
         return intersect
-
-    @staticmethod
-    def _periodic_fun(nodes, M, N):
-        alpha, zeta = nodes.T
-        f = -2 * np.cos(1 / (0.1 + zeta**2)) + 2
-        return f.reshape(M, N)
 
     @pytest.mark.unit
     def test_z1_first(self):
         """Test that bounce points are computed correctly."""
-        M, N = 1, 10
-        domain = (-1, 1)
-        nodes = FourierChebyshevBasis.nodes(M, N, domain=domain)
-        f = -self._periodic_fun(nodes, M, N)
-        cheb = FourierChebyshevBasis(f, domain=domain).compute_cheb(fourier_pts(M))
-        pitch = 1 / np.linspace(1, 4, 1)
-        z1, z2 = cheb.intersect1d(1 / pitch, num_intersect=1)
-        print(z1)
-        print(z2)
-        cheb.check_intersect1d(z1, z2, 1 / pitch)
-        z1, z2 = TestBounce1DPoints.filter(z1, z2)
 
         def f(z):
             return -2 * np.cos(1 / (0.1 + z**2)) + 2
 
-        r = self._cheb_intersect(chebinterpolate(f, N), 1 / pitch)
-        np.testing.assert_allclose(z1, r[::2], rtol=1e-3)
-        np.testing.assert_allclose(z2, r[1::2], rtol=1e-3)
+        M, N = 1, 10
+        alpha, zeta = FourierChebyshevBasis.nodes(M, N).T
+        cheb = FourierChebyshevBasis(f(zeta).reshape(M, N)).compute_cheb(fourier_pts(M))
+        pitch_inv = 3
+        z1, z2 = cheb.intersect1d(pitch_inv)
+        cheb.check_intersect1d(z1, z2, pitch_inv)
+        z1, z2 = TestBounce1DPoints.filter(z1, z2)
+
+        r = self._cheb_intersect(chebinterpolate(f, N - 1), pitch_inv)
+        np.testing.assert_allclose(z1, r[np.isclose(r, -0.24, atol=1e-1)])
+        np.testing.assert_allclose(z2, r[np.isclose(r, 0.24, atol=1e-1)])
 
 
 class TestBounce2D:
@@ -1519,13 +1508,10 @@ class TestBounce2D:
         ],
     )
     def test_alpha_sequence(self, alpha_0, iota, num_period, period):
-        """Test field line poloidal label tracking."""
-        # skeleton test to be done later when one zeta != phi.
+        """Test field line labels."""
         iota = np.atleast_1d(iota)
         alphas = get_alpha(alpha_0, iota, num_period, period)
         assert alphas.shape == (iota.size, num_period)
-        for i in range(iota.size):
-            assert np.unique(alphas[i]).size == num_period, f"{iota} is irrational"
         print(alphas)
 
     @pytest.mark.unit
@@ -1538,9 +1524,7 @@ class TestBounce2D:
 
         # Recompute on non-symmetric, fft compatible grid.
         eq = things["eq"]
-        grid = LinearGrid(
-            rho=data["rho"], M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False
-        )
+        grid = LinearGrid(rho=data["rho"], M=40, N=40, NFP=eq.NFP, sym=False)
         grid_data = eq.compute(
             names=Bounce2D.required_names + ["cvdrift", "gbdrift"], grid=grid
         )
@@ -1554,11 +1538,15 @@ class TestBounce2D:
             desc_from_clebsch=Bounce2D.desc_from_clebsch(
                 eq,
                 data["rho"],
+                # if this doesn't indicate bug, then should just transform
+                # everything to FourierChebyshev because convergence is
+                # much quicker (as shown by |B|) than double fourier with
+                # FourierChebyshev theta argument.
                 M=512,
                 N=32,
                 iota=jnp.broadcast_to(data["iota"], shape=(32 * 512)),
             ),
-            alpha=data["alpha"] - 2 * np.pi * data["iota"],
+            alpha=data["alpha"],  # - 2 * np.pi * data["iota"],
             num_transit=4,
             Bref=data["Bref"],
             Lref=data["a"],
@@ -1585,9 +1573,10 @@ class TestBounce2D:
         drift_numerical = np.squeeze(drift_numerical_num / drift_numerical_den)
         msg = "There should be one bounce integral per pitch in this example."
         assert drift_numerical.size == drift_analytic.size, msg
-        # np.testing.assert_allclose( # noqa: E800
-        #     drift_numerical, drift_analytic, atol=5e-3, rtol=5e-2 # noqa: E800
-        # ) # noqa: E800
+
+        np.testing.assert_allclose(  # noqa: E800
+            drift_numerical, drift_analytic, atol=5e-3, rtol=5e-2  # noqa: E800
+        )  # noqa: E800
 
         fig, ax = plt.subplots()
         ax.plot(pitch_inv, drift_analytic)

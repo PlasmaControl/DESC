@@ -495,7 +495,11 @@ def get_params(keys, obj, has_axis=False, basis="rpz"):
         if isinstance(p, dict):
             temp_params[name] = p.copy()
         else:
-            temp_params[name] = jnp.atleast_1d(p)
+            try:  # maybe we can make it an array
+                temp_params[name] = jnp.atleast_1d(jnp.asarray(p))
+            except TypeError:
+                # it probably was a class instance instead, copy it
+                temp_params[name] = p.copy()
     return temp_params
 
 

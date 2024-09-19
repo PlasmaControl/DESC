@@ -1222,7 +1222,14 @@ class Equilibrium(IOAble, Optimizable):
         )
 
     def get_rtz_grid(
-        self, radial, poloidal, toroidal, coordinates, period, jitable=True, **kwargs
+        self,
+        radial,
+        poloidal,
+        toroidal,
+        coordinates,
+        period=(np.inf, np.inf, np.inf),
+        jitable=True,
+        **kwargs,
     ):
         """Return DESC grid in (rho, theta, zeta) coordinates from given coordinates.
 
@@ -1243,8 +1250,8 @@ class Equilibrium(IOAble, Optimizable):
             rvp : rho, theta_PEST, phi
             rtz : rho, theta, zeta
         period : tuple of float
-            Assumed periodicity for each quantity in inbasis.
-            Use np.inf to denote no periodicity.
+            Assumed periodicity of the given coordinates.
+            Use ``np.inf`` to denote no periodicity.
         jitable : bool, optional
             If false the returned grid has additional attributes.
             Required to be false to retain nodes at magnetic axis.

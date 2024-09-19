@@ -1548,12 +1548,20 @@ class TestBounce2D:
         grid_data["gbdrift"] = grid_data["gbdrift"] * data["normalization"]
 
         # Compute numerical result.
+        zeta_0 = 0  # np.pi / data["iota"].item()
         bounce = Bounce2D(
             grid=grid,
             data=grid_data,
-            desc_from_clebsch=Bounce2D.desc_from_clebsch(eq, data["rho"], 32, 16),
+            desc_from_clebsch=Bounce2D.desc_from_clebsch(
+                eq,
+                data["rho"],
+                M=64,
+                N=64,
+                zeta_0=zeta_0,
+                iota=jnp.broadcast_to(data["iota"], shape=(64**2)),
+            ),
             alpha=data["alpha"],
-            zeta_0=-np.pi / data["iota"].item(),
+            zeta_0=zeta_0,
             num_transit=3,
             Bref=data["Bref"],
             Lref=data["a"],

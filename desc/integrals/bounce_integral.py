@@ -76,7 +76,7 @@ def _transform_to_clebsch(grid, desc_from_clebsch, B, zeta_0=0.0, is_reshaped=Fa
     desc_from_clebsch : jnp.ndarray
         Shape (L, M, N, 3).
         DESC coordinates (ρ, θ, ζ) sourced from the Clebsch coordinates
-        ``FourierChebyshevBasis.nodes(M,N,L,domain=(0,2*jnp.pi))``.
+        ``FourierChebyshevBasis.nodes(M,N,L,domain=(zeta_0,zeta_0+2*jnp.pi))``.
     B : jnp.ndarray
         |B| evaluated on ``grid``.
     zeta_0 : float
@@ -280,7 +280,7 @@ class Bounce2D(IOAble):
         desc_from_clebsch : jnp.ndarray
             Shape (L, M, N, 3).
             DESC coordinates (ρ, θ, ζ) sourced from the Clebsch coordinates
-            ``FourierChebyshevBasis.nodes(M,N,L,domain=(0,2*jnp.pi))``.
+            ``FourierChebyshevBasis.nodes(M,N,L,domain=(zeta_0,zeta_0+2*jnp.pi))``.
         alpha : float
             Starting field line poloidal label.
         zeta_0 : float
@@ -317,6 +317,8 @@ class Bounce2D(IOAble):
 
         """
         errorif(grid.sym, NotImplementedError, msg="Need grid that works with FFTs.")
+        # think coordinates assume something inconsistent with this
+        errorif(zeta_0 != 0, NotImplementedError)
         # Strictly increasing zeta knots enforces dζ > 0.
         # To retain dℓ = (|B|/B^ζ) dζ > 0 after fixing dζ > 0, we require
         # B^ζ = B⋅∇ζ > 0. This is equivalent to changing the sign of ∇ζ or [∂ℓ/∂ζ]|ρ,a.
@@ -386,8 +388,8 @@ class Bounce2D(IOAble):
             Default is 0.
         clebsch : jnp.ndarray
             Optional, Clebsch coordinate tensor-product grid (ρ, α, ζ).
-            ``FourierChebyshevBasis.nodes(M,N,L,domain=(0,2*jnp.pi))``.
-        kwargs : dict
+            ``FourierChebyshevBasis.nodes(M,N,L,domain=(zeta_0,zeta_0+2*jnp.pi))``.
+        kwargs
             Additional parameters to supply to the coordinate mapping function.
             See ``desc.equilibrium.Equilibrium.map_coordinates``.
 

@@ -62,7 +62,7 @@ def _transform_to_desc(grid, f, is_reshaped=False):
     return a
 
 
-def _transform_to_clebsch(grid, desc_from_clebsch, B, zeta_0=0.0, is_reshaped=False):
+def _transform_to_clebsch(grid, desc_from_clebsch, B, is_reshaped=False):
     """Transform to Clebsch spectral domain.
 
     Parameters
@@ -76,12 +76,9 @@ def _transform_to_clebsch(grid, desc_from_clebsch, B, zeta_0=0.0, is_reshaped=Fa
     desc_from_clebsch : jnp.ndarray
         Shape (L, M, N, 3).
         DESC coordinates (ρ, θ, ζ) sourced from the Clebsch coordinates
-        ``FourierChebyshevBasis.nodes(M,N,L,domain=(zeta_0,zeta_0+2*jnp.pi))``.
+        ``FourierChebyshevBasis.nodes(M,N,L,domain=(0,2*jnp.pi))``.
     B : jnp.ndarray
         |B| evaluated on ``grid``.
-    zeta_0 : float
-        ζ coordinate to begin branch cut of (α, ζ) spline.
-        Default is 0.
 
     Returns
     -------
@@ -89,7 +86,7 @@ def _transform_to_clebsch(grid, desc_from_clebsch, B, zeta_0=0.0, is_reshaped=Fa
         Spectral coefficients of θ(α, ζ) and |B|(α, ζ).
 
     """
-    domain = (zeta_0, zeta_0 + 2 * jnp.pi)
+    domain = (0, 2 * jnp.pi)
     M, N = desc_from_clebsch.shape[-3:-1]
     # θ is computed on the optimal nodes in Clebsch space,
     # which is a tensor product node set in Clebsch space.
@@ -225,7 +222,6 @@ class Bounce2D(IOAble):
         An advantage of ``Bounce2D`` over ``Bounce1D`` is that the coordinates on
         which the root-finding must be done to map from DESC to Clebsch coords is
         fixed to ``L*M*N``, independent of the number of toroidal transits.
-        Also, the function approximation of |B|(ζ) converges faster.
 
     Warnings
     --------
@@ -249,7 +245,6 @@ class Bounce2D(IOAble):
         # TODO: Allow multiple starting labels for near-rational surfaces.
         #  think can just concatenate along second to last axis of cheb
         alpha=0.0,
-        zeta_0=0.0,
         num_transit=32,
         quad=leggauss(32),
         automorphism=(automorphism_sin, grad_automorphism_sin),
@@ -280,12 +275,9 @@ class Bounce2D(IOAble):
         desc_from_clebsch : jnp.ndarray
             Shape (L, M, N, 3).
             DESC coordinates (ρ, θ, ζ) sourced from the Clebsch coordinates
-            ``FourierChebyshevBasis.nodes(M,N,L,domain=(zeta_0,zeta_0+2*jnp.pi))``.
+            ``FourierChebyshevBasis.nodes(M,N,L,domain=(0,2*jnp.pi))``.
         alpha : float
             Starting field line poloidal label.
-        zeta_0 : float
-            Optional. ζ coordinate to begin branch cut of (α, ζ) spline.
-            Default is 0.
         num_transit : int
             Number of toroidal transits to follow field line.
         quad : (jnp.ndarray, jnp.ndarray)
@@ -317,8 +309,6 @@ class Bounce2D(IOAble):
 
         """
         errorif(grid.sym, NotImplementedError, msg="Need grid that works with FFTs.")
-        # think coordinates assume something inconsistent with this
-        errorif(zeta_0 != 0, NotImplementedError)
         # Strictly increasing zeta knots enforces dζ > 0.
         # To retain dℓ = (|B|/B^ζ) dζ > 0 after fixing dζ > 0, we require
         # B^ζ = B⋅∇ζ > 0. This is equivalent to changing the sign of ∇ζ or [∂ℓ/∂ζ]|ρ,a.
@@ -337,7 +327,7 @@ class Bounce2D(IOAble):
             grid, jnp.abs(data["B^zeta"]) / data["|B|"] * Lref, is_reshaped
         )
         T, B = _transform_to_clebsch(
-            grid, desc_from_clebsch, data["|B|"] / Bref, zeta_0, is_reshaped
+            grid, desc_from_clebsch, data["|B|"] / Bref, is_reshaped
         )
         # peel off field lines
         iota = data["iota"].ravel()
@@ -364,7 +354,7 @@ class Bounce2D(IOAble):
         assert self._B.N == self._T.N == desc_from_clebsch.shape[-2]
 
     @staticmethod
-    def desc_from_clebsch(eq, L, M, N, zeta_0=0.0, clebsch=None, **kwargs):
+    def desc_from_clebsch(eq, L, M, N, clebsch=None, **kwargs):
         """Return DESC coordinates of optimal Fourier Chebyshev basis nodes.
 
         Parameters
@@ -376,19 +366,15 @@ class Bounce2D(IOAble):
             May also be an array of non-uniform coordinates.
         M : int
             Grid resolution in poloidal direction for Clebsch coordinate grid.
-            Preferably power of 2. A good choice is ``m``. If the poloidal stream
-            function condenses the Fourier spectrum of |B| significantly, then a
-            larger number may be beneficial. For near omnigenous configurations,
-            low resolution will be sufficient because (∂‖B‖/∂α)|ρ,ζ vanishes.
+            Preferably power of 2. A good choice is double ``m``. If the poloidal
+            stream function condenses the Fourier spectrum of |B| significantly,
+            then a larger number may be beneficial.
         N : int
             Grid resolution in toroidal direction for Clebsch coordinate grid.
             Preferably power of 2.
-        zeta_0 : float
-            ζ coordinate to begin branch cut of (α, ζ) spline.
-            Default is 0.
         clebsch : jnp.ndarray
             Optional, Clebsch coordinate tensor-product grid (ρ, α, ζ).
-            ``FourierChebyshevBasis.nodes(M,N,L,domain=(zeta_0,zeta_0+2*jnp.pi))``.
+            ``FourierChebyshevBasis.nodes(M,N,L,domain=(0,2*jnp.pi))``.
         kwargs
             Additional parameters to supply to the coordinate mapping function.
             See ``desc.equilibrium.Equilibrium.map_coordinates``.
@@ -403,10 +389,7 @@ class Bounce2D(IOAble):
         """
         if clebsch is None:
             clebsch = FourierChebyshevBasis.nodes(
-                check_posint(M),
-                check_posint(N),
-                L,
-                domain=(zeta_0, zeta_0 + 2 * jnp.pi),
+                check_posint(M), check_posint(N), L, domain=(0, 2 * jnp.pi)
             )
         desc_coords = eq.map_coordinates(
             coords=clebsch,
@@ -614,8 +597,7 @@ class Bounce2D(IOAble):
         zeta = flatten_matrix(
             bijection_from_disc(self._x, z1[..., jnp.newaxis], z2[..., jnp.newaxis])
         )
-        theta = self._T.eval1d(zeta)
-        Q = jnp.stack([theta, zeta], axis=-1)
+        Q = jnp.stack([self._T.eval1d(zeta), zeta], axis=-1)
 
         b_sup_z = irfft2_non_uniform(
             xq=Q,
@@ -637,7 +619,6 @@ class Bounce2D(IOAble):
             num_rho = shape[-3]
             shape[0] = num_rho
             shape[-3] = num_pitch
-            f.insert(0, theta)
             _check_interp(
                 # num_alpha, num_rho, num_pitch, num_well, num_quad
                 (1, *shape),

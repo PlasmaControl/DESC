@@ -108,6 +108,13 @@ def _transform_to_clebsch(grid, desc_from_clebsch, B, is_reshaped=False):
     return T, B
 
 
+def _swap_pl(f):
+    # Given shape (L, num_pitch, -1) or (num_pitch, L, -1) or (num_pitch, -1)
+    # swap L and num_pitch axes.
+    assert f.ndim <= 3
+    return jnp.swapaxes(f, 0, -2)
+
+
 # TODO: After GitHub issue #1034 is resolved, we should pass in the previous
 #  θ(α) coordinates as an initial guess for the next coordinate mapping.
 #  Perhaps tell the optimizer to perturb the coefficients of the
@@ -191,17 +198,22 @@ class Bounce2D(IOAble):
     coordinate ϕ, but this balloons the frequency, and hence the degree of the
     series.
 
-    (Although, because Fourier series may converge faster than Chebyshev,
-    an alternate strategy is to interpolate |B| to a double  Fourier series in
+    One may note that because Fourier series converge faster than Chebyshev,
+    an alternate strategy is to interpolate |B| to a double Fourier series in
     (ϑ, ϕ), then apply bisection methods to find roots of f with mesh size
     inversely proportional to the max frequency along the field line: M ι + N.
     ``Bounce2D`` does not use that approach because that root-finding scheme is
     inferior. Note that if the Chebyshev series convergence is not satisfactory,
-    an option with faster convergence would be to use a filtered Fourier series
+    we can implement a change of variables for the Chebyshev interpolation that
+    may allow earlier truncation of the series without loss of accuracy. Another
+    option with faster convergence still is to use a filtered Fourier series
     with a non-periodic basis in the Gibbs layer. An example is given at
-    doi.org/10.1016/j.aml.2006.10.001. Before choosing that option however,
-    one should test a few change of variables for the Chebyshev interpolation
-    that may allow earlier truncation of the series without loss of accuracy.)
+    doi.org/10.1016/j.aml.2006.10.001. Empirically, we observe that the convergence
+    of the Chebyshev series is satisfactory. It is particularly fast for θ(α, ζ).
+    Furthermore, for near omnigenous configurations, Fourier series converges rapidly
+    for |B|(α, ζ) because (∂‖B‖/∂α)|ρ,ζ vanishes. However, the Fourier series of
+    θ(α, ζ) converges slower than desired; we must accept this because no basis
+    supports a larger convergence region in the complex plane than do Fourier series.
 
     After obtaining the bounce points, the supplied quadrature is performed.
     By default, this is a Gauss quadrature after removing the singularity.
@@ -366,9 +378,8 @@ class Bounce2D(IOAble):
             May also be an array of non-uniform coordinates.
         M : int
             Grid resolution in poloidal direction for Clebsch coordinate grid.
-            Preferably power of 2. A good choice is double ``m``. If the poloidal
-            stream function condenses the Fourier spectrum of |B| significantly,
-            then a larger number may be beneficial.
+            Preferably power of 2. A good choice is double ``m``. If the Fourier
+            spectrum of θ is wide, then a larger number may be beneficial.
         N : int
             Grid resolution in toroidal direction for Clebsch coordinate grid.
             Preferably power of 2.
@@ -420,13 +431,6 @@ class Bounce2D(IOAble):
         f = [grid.meshgrid_reshape(d, "rtz") for d in arys]
         return f if len(f) > 1 else f[0]
 
-    @staticmethod
-    def _swap_pl(f):
-        # Given shape (L, num_pitch, -1) or (num_pitch, L, -1) or (num_pitch, -1)
-        # swap L and num_pitch axes.
-        assert f.ndim <= 3
-        return jnp.swapaxes(f, 0, -2)
-
     def points(self, pitch_inv, *, num_well=None):
         """Compute bounce points.
 
@@ -464,9 +468,7 @@ class Bounce2D(IOAble):
         pitch_inv = atleast_nd(self._B.cheb.ndim - 1, pitch_inv).T
         # Expects pitch_inv shape (num_pitch, L) if B.cheb.shape[0] is L.
         z1, z2 = self._B.intersect1d(pitch_inv, num_intersect=num_well)
-        z1 = Bounce2D._swap_pl(z1)
-        z2 = Bounce2D._swap_pl(z2)
-        return z1, z2
+        return _swap_pl(z1), _swap_pl(z2)
 
     def check_points(self, z1, z2, pitch_inv, *, plot=True, **kwargs):
         """Check that bounce points are computed correctly.
@@ -496,8 +498,8 @@ class Bounce2D(IOAble):
 
         """
         return self._B.check_intersect1d(
-            z1=Bounce2D._swap_pl(z1),
-            z2=Bounce2D._swap_pl(z2),
+            z1=_swap_pl(z1),
+            z2=_swap_pl(z2),
             k=atleast_nd(self._B.cheb.ndim - 1, pitch_inv).T,
             plot=plot,
             **_set_default_plot_kwargs(kwargs),
@@ -576,7 +578,6 @@ class Bounce2D(IOAble):
         # Expects pitch_inv shape (num_pitch, L) if B.cheb.shape[0] is L.
         z1, z2 = self._B.intersect1d(pitch_inv, num_intersect=num_well)
         result = self._integrate(z1, z2, integrand, pitch_inv, f, check, plot)
-        result = Bounce2D._swap_pl(result)
         return result
 
     def _integrate(self, z1, z2, integrand, pitch_inv, f, check, plot):
@@ -608,7 +609,7 @@ class Bounce2D(IOAble):
         )
         B = self._B.eval1d(zeta)
         f = [interp_rfft2(Q, f_i[..., jnp.newaxis, :, :], axes=(-1, -2)) for f_i in f]
-        result = (
+        result = _swap_pl(
             (integrand(*f, B=B, pitch=1 / pitch_inv[..., jnp.newaxis]) / b_sup_z)
             .reshape(shape)
             .dot(self._w)
@@ -622,8 +623,9 @@ class Bounce2D(IOAble):
             _check_interp(
                 # num_alpha, num_rho, num_pitch, num_well, num_quad
                 (1, *shape),
-                *map(Bounce2D._swap_pl, (zeta, b_sup_z, B, result)),
-                list(map(Bounce2D._swap_pl, f)),
+                *map(_swap_pl, (zeta, b_sup_z, B)),
+                result,
+                list(map(_swap_pl, f)),
                 plot,
             )
         return result

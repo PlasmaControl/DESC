@@ -1524,7 +1524,18 @@ class TestBounce2D:
 
         # Recompute on non-symmetric, fft compatible grid.
         eq = things["eq"]
-        grid = LinearGrid(rho=data["rho"], M=40, N=40, NFP=eq.NFP, sym=False)
+        grid = LinearGrid(
+            rho=data["rho"], M=eq.M_grid, N=eq.N_grid, sym=False, NFP=eq.NFP
+        )
+        # noqa: E800
+        # grid = Grid.create_meshgrid( # noqa: E800
+        #     [ # noqa: E800
+        #         data["rho"], # noqa: E800
+        #         fourier_pts(eq._M_grid), # noqa: E800
+        #         fourier_pts(eq.N_grid + 1) / eq.NFP, # noqa: E800
+        #     ], # noqa: E800
+        #     NFP=eq.NFP, # noqa: E800
+        # ) # noqa: E800
         grid_data = eq.compute(
             names=Bounce2D.required_names + ["cvdrift", "gbdrift"], grid=grid
         )
@@ -1538,9 +1549,9 @@ class TestBounce2D:
             desc_from_clebsch=Bounce2D.desc_from_clebsch(
                 eq,
                 data["rho"],
-                # if this doesn't indicate bug, then should just transform
-                # everything to FourierChebyshev because convergence is
-                # much quicker (as shown by |B|) than double fourier with
+                # if this doesn't indicate bug with numpy, then should just
+                # transform everything to FourierChebyshev because convergence
+                # is much quicker (as shown by |B|) than double fourier with
                 # FourierChebyshev theta argument.
                 M=512,
                 N=32,

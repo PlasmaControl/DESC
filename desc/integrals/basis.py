@@ -186,16 +186,14 @@ class FourierChebyshevBasis(IOAble):
         """
         x = fourier_pts(M)
         y = cheb_pts(N, lobatto, domain)
-        if L is not None:
+        if L is None:
+            coords = (x, y)
+        else:
             if isposint(L):
                 L = jnp.flipud(jnp.linspace(1, 0, L, endpoint=False))
             coords = (jnp.atleast_1d(L), x, y)
-        else:
-            coords = (x, y)
-        coords = jnp.column_stack(
-            list(map(jnp.ravel, jnp.meshgrid(*coords, indexing="ij")))
-        )
-        return coords
+        coords = tuple(map(jnp.ravel, jnp.meshgrid(*coords, indexing="ij")))
+        return jnp.column_stack(coords)
 
     def evaluate(self, M, N):
         """Evaluate Fourier-Chebyshev series.

@@ -106,7 +106,7 @@ def _check_spline_shape(knots, g, dg_dz, pitch_inv=None):
         Last axis enumerates the coefficients of power series. Second to
         last axis enumerates the polynomials that compose a particular spline.
     pitch_inv : jnp.ndarray
-        Shape (..., P).
+        Shape (..., num_pitch).
         1/λ values. 1/λ(α,ρ) is specified by ``pitch_inv[α,ρ]`` where in
         the latter the labels are interpreted as the indices that correspond
         to that field line.
@@ -144,7 +144,7 @@ def bounce_points(
     Parameters
     ----------
     pitch_inv : jnp.ndarray
-        Shape (..., P).
+        Shape (..., num_pitch).
         1/λ values to compute the bounce points.
     knots : jnp.ndarray
         Shape (N, ).
@@ -179,7 +179,7 @@ def bounce_points(
     Returns
     -------
     z1, z2 : (jnp.ndarray, jnp.ndarray)
-        Shape (..., P, num_well).
+        Shape (..., num_pitch, num_well).
         ζ coordinates of bounce points. The points are ordered and grouped such
         that the straight line path between ``z1`` and ``z2`` resides in the
         epigraph of |B|.
@@ -327,13 +327,13 @@ def _bounce_quadrature(
     Parameters
     ----------
     x : jnp.ndarray
-        Shape (w.size, ).
+        Shape (num_quad, ).
         Quadrature points in [-1, 1].
     w : jnp.ndarray
-        Shape (w.size, ).
+        Shape (num_quad, ).
         Quadrature weights.
     z1, z2 : jnp.ndarray
-        Shape (..., P, num_well).
+        Shape (..., num_pitch, num_well).
         ζ coordinates of bounce points. The points are ordered and grouped such
         that the straight line path between ``z1`` and ``z2`` resides in the
         epigraph of |B|.
@@ -344,7 +344,7 @@ def _bounce_quadrature(
         arguments: ``B`` and ``pitch``. A quadrature will be performed to
         approximate the bounce integral of ``integrand(*f,B=B,pitch=pitch)``.
     pitch_inv : jnp.ndarray
-        Shape (..., P).
+        Shape (..., num_pitch).
         1/λ values to compute the bounce integrals.
     f : list[jnp.ndarray]
         Shape (..., N).
@@ -373,7 +373,7 @@ def _bounce_quadrature(
     Returns
     -------
     result : jnp.ndarray
-        Shape (..., P, num_well).
+        Shape (..., num_pitch, num_well).
         Last axis enumerates the bounce integrals for a field line,
         flux surface, and pitch.
 
@@ -444,10 +444,10 @@ def _interpolate_and_integrate(
     Parameters
     ----------
     w : jnp.ndarray
-        Shape (w.size, ).
+        Shape (num_quad, ).
         Quadrature weights.
     Q : jnp.ndarray
-        Shape (..., P, Q.shape[-2], w.size).
+        Shape (..., num_pitch, num_well, num_quad).
         Quadrature points in ζ coordinates.
 
     Returns
@@ -481,28 +481,28 @@ def _interpolate_and_integrate(
         .dot(w)
     )
     if check:
-        _check_interp(shape, Q, f, b_sup_z, B, result, plot)
+        _check_interp(shape, Q, b_sup_z, B, result, f, plot)
 
     return result
 
 
-def _check_interp(shape, Q, f, b_sup_z, B, result, plot):
+def _check_interp(shape, Q, b_sup_z, B, result, f, plot):
     """Check for interpolation failures and floating point issues.
 
     Parameters
     ----------
     shape : tuple
-        (..., P, Q.shape[-2], w.size).
+        (..., num_pitch, num_well, num_quad).
     Q : jnp.ndarray
         Quadrature points in ζ coordinates.
-    f : list[jnp.ndarray]
-        Arguments to the integrand, interpolated to Q.
     b_sup_z : jnp.ndarray
         Contravariant toroidal component of magnetic field, interpolated to Q.
     B : jnp.ndarray
         Norm of magnetic field, interpolated to Q.
     result : jnp.ndarray
         Output of ``_interpolate_and_integrate``.
+    f : list[jnp.ndarray]
+        Arguments to the integrand, interpolated to Q.
     plot : bool
         Whether to plot stuff.
 
@@ -540,17 +540,27 @@ def _check_interp(shape, Q, f, b_sup_z, B, result, plot):
 
 def _plot_check_interp(Q, V, name=""):
     """Plot V[..., λ, (ζ₁, ζ₂)](Q)."""
-    for idx in np.ndindex(Q.shape[:3]):
+    if Q.shape[-2] == 1:
+        # Just one well along the field line, so plot
+        # interpolations for every pitch simultaneously.
+        Q = Q.squeeze(axis=-2)
+        V = V.squeeze(axis=-2)
+        label = "(m,l)"
+        shape = Q.shape[:2]
+    else:
+        label = "(m,l,p)"
+        shape = Q.shape[:3]
+    for idx in np.ndindex(shape):
         marked = jnp.nonzero(jnp.any(Q[idx] != 0.0, axis=-1))[0]
         if marked.size == 0:
             continue
         fig, ax = plt.subplots()
         ax.set_xlabel(r"$\zeta$")
         ax.set_ylabel(name)
-        ax.set_title(f"Interpolation of {name} to quadrature points, (m,l,p)={idx}")
+        ax.set_title(f"Interpolation of {name} to quadrature points, {label}={idx}")
         for i in marked:
             ax.plot(Q[(*idx, i)], V[(*idx, i)], marker="o")
-        fig.text(0.01, 0.01, "Each color specifies a particular integral.")
+        fig.text(0.01, 0.01, "Each color specifies a bounce integral.")
         plt.tight_layout()
         plt.show()
 
@@ -617,7 +627,7 @@ def interp_to_argmin(
         Shape (..., N).
         Values evaluated on ``knots`` to interpolate.
     z1, z2 : jnp.ndarray
-        Shape (..., P, W).
+        Shape (..., num_pitch, W).
         Boundaries to detect argmin between.
     knots : jnp.ndarray
         Shape (N, ).
@@ -654,7 +664,7 @@ def interp_to_argmin(
     Returns
     -------
     h : jnp.ndarray
-        Shape (..., P, W).
+        Shape (..., num_pitch, W).
 
     """
     assert z1.ndim == z2.ndim >= 2 and z1.shape == z2.shape
@@ -691,7 +701,7 @@ def interp_to_argmin_hard(h, z1, z2, knots, g, dg_dz, method="cubic"):
         Shape (..., N).
         Values evaluated on ``knots`` to interpolate.
     z1, z2 : jnp.ndarray
-        Shape (..., P, W).
+        Shape (..., num_pitch, W).
         Boundaries to detect argmin between.
     knots : jnp.ndarray
         Shape (N, ).
@@ -714,7 +724,7 @@ def interp_to_argmin_hard(h, z1, z2, knots, g, dg_dz, method="cubic"):
     Returns
     -------
     h : jnp.ndarray
-        Shape (..., P, W).
+        Shape (..., num_pitch, W).
 
     """
     assert z1.ndim == z2.ndim >= 2 and z1.shape == z2.shape

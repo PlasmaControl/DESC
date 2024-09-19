@@ -26,7 +26,14 @@ from desc.integrals.quad_utils import (
     grad_automorphism_sin,
 )
 from desc.io import IOAble
-from desc.utils import atleast_nd, errorif, flatten_matrix, setdefault, warnif
+from desc.utils import (
+    atleast_nd,
+    check_posint,
+    errorif,
+    flatten_matrix,
+    setdefault,
+    warnif,
+)
 
 
 def _transform_to_desc(grid, f, is_reshaped=False):
@@ -55,7 +62,7 @@ def _transform_to_desc(grid, f, is_reshaped=False):
     return a
 
 
-def _transform_to_clebsch(grid, desc_from_clebsch, B, is_reshaped=False):
+def _transform_to_clebsch(grid, desc_from_clebsch, B, zeta_0=0.0, is_reshaped=False):
     """Transform to Clebsch spectral domain.
 
     Parameters
@@ -72,6 +79,9 @@ def _transform_to_clebsch(grid, desc_from_clebsch, B, is_reshaped=False):
         ``FourierChebyshevBasis.nodes(M,N,L,domain=(0,2*jnp.pi))``.
     B : jnp.ndarray
         |B| evaluated on ``grid``.
+    zeta_0 : float
+        ζ coordinate to begin branch cut of (α, ζ) spline.
+        Default is 0.
 
     Returns
     -------
@@ -79,7 +89,7 @@ def _transform_to_clebsch(grid, desc_from_clebsch, B, is_reshaped=False):
         Spectral coefficients of θ(α, ζ) and |B|(α, ζ).
 
     """
-    domain = (0, 2 * jnp.pi)
+    domain = (zeta_0, zeta_0 + 2 * jnp.pi)
     M, N = desc_from_clebsch.shape[-3:-1]
     # θ is computed on the optimal nodes in Clebsch space,
     # which is a tensor product node set in Clebsch space.
@@ -212,10 +222,10 @@ class Bounce2D(IOAble):
     --------
     Bounce1D
         Uses one-dimensional local spline methods for the same task.
-        Advantages of ``Bounce2D`` over ``Bounce1D`` is that the coordinates on
+        An advantage of ``Bounce2D`` over ``Bounce1D`` is that the coordinates on
         which the root-finding must be done to map from DESC to Clebsch coords is
-        fixed to ``L*M*N``, independent of the number of toroidal transits, and
-        the function approximation of |B|(ζ) converges faster.
+        fixed to ``L*M*N``, independent of the number of toroidal transits.
+        Also, the function approximation of |B|(ζ) converges faster.
 
     Warnings
     --------
@@ -239,6 +249,7 @@ class Bounce2D(IOAble):
         # TODO: Allow multiple starting labels for near-rational surfaces.
         #  think can just concatenate along second to last axis of cheb
         alpha=0.0,
+        zeta_0=0.0,
         num_transit=32,
         quad=leggauss(32),
         automorphism=(automorphism_sin, grad_automorphism_sin),
@@ -272,6 +283,9 @@ class Bounce2D(IOAble):
             ``FourierChebyshevBasis.nodes(M,N,L,domain=(0,2*jnp.pi))``.
         alpha : float
             Starting field line poloidal label.
+        zeta_0 : float
+            Optional. ζ coordinate to begin branch cut of (α, ζ) spline.
+            Default is 0.
         num_transit : int
             Number of toroidal transits to follow field line.
         quad : (jnp.ndarray, jnp.ndarray)
@@ -321,7 +335,7 @@ class Bounce2D(IOAble):
             grid, jnp.abs(data["B^zeta"]) / data["|B|"] * Lref, is_reshaped
         )
         T, B = _transform_to_clebsch(
-            grid, desc_from_clebsch, data["|B|"] / Bref, is_reshaped
+            grid, desc_from_clebsch, data["|B|"] / Bref, zeta_0, is_reshaped
         )
         # peel off field lines
         iota = data["iota"].ravel()
@@ -348,7 +362,7 @@ class Bounce2D(IOAble):
         assert self._B.N == self._T.N == desc_from_clebsch.shape[-2]
 
     @staticmethod
-    def desc_from_clebsch(eq, L, M, N, clebsch=None, **kwargs):
+    def desc_from_clebsch(eq, L, M, N, zeta_0=0.0, clebsch=None, **kwargs):
         """Return DESC coordinates of optimal Fourier Chebyshev basis nodes.
 
         Parameters
@@ -362,10 +376,14 @@ class Bounce2D(IOAble):
             Grid resolution in poloidal direction for Clebsch coordinate grid.
             Preferably power of 2. A good choice is ``m``. If the poloidal stream
             function condenses the Fourier spectrum of |B| significantly, then a
-            larger number may be beneficial.
+            larger number may be beneficial. For near omnigenous configurations,
+            low resolution will be sufficient because (∂‖B‖/∂α)|ρ,ζ vanishes.
         N : int
             Grid resolution in toroidal direction for Clebsch coordinate grid.
             Preferably power of 2.
+        zeta_0 : float
+            ζ coordinate to begin branch cut of (α, ζ) spline.
+            Default is 0.
         clebsch : jnp.ndarray
             Optional, Clebsch coordinate tensor-product grid (ρ, α, ζ).
             ``FourierChebyshevBasis.nodes(M,N,L,domain=(0,2*jnp.pi))``.
@@ -382,11 +400,16 @@ class Bounce2D(IOAble):
 
         """
         if clebsch is None:
-            clebsch = FourierChebyshevBasis.nodes(M, N, L, domain=(0, 2 * jnp.pi))
+            clebsch = FourierChebyshevBasis.nodes(
+                check_posint(M),
+                check_posint(N),
+                L,
+                domain=(zeta_0, zeta_0 + 2 * jnp.pi),
+            )
         desc_coords = eq.map_coordinates(
             coords=clebsch,
             inbasis=("rho", "alpha", "zeta"),
-            period=(jnp.inf, 2 * jnp.pi, jnp.inf),
+            period=(jnp.inf, jnp.inf, jnp.inf),
             **kwargs,
         ).reshape(-1, M, N, 3)
         return desc_coords
@@ -414,7 +437,8 @@ class Bounce2D(IOAble):
 
     @staticmethod
     def _swap_pl(f):
-        """Given shape (L, P, -1) or (P, L, -1) or (P, -1) swap L and P."""
+        # Given shape (L, num_pitch, -1) or (num_pitch, L, -1) or (num_pitch, -1)
+        # swap L and num_pitch axes.
         assert f.ndim <= 3
         return jnp.swapaxes(f, 0, -2)
 
@@ -424,7 +448,7 @@ class Bounce2D(IOAble):
         Parameters
         ----------
         pitch_inv : jnp.ndarray
-            Shape (L, P).
+            Shape (L, num_pitch).
             1/λ values to compute the bounce integrals. 1/λ(ρ) is specified by
             ``pitch_inv[ρ]`` where in the latter the labels are interpreted
             as the indices that correspond to that field line.
@@ -442,7 +466,7 @@ class Bounce2D(IOAble):
         Returns
         -------
         z1, z2 : (jnp.ndarray, jnp.ndarray)
-            Shape (L, P, num_well).
+            Shape (L, num_pitch, num_well).
             ζ coordinates of bounce points. The points are ordered and grouped such
             that the straight line path between ``z1`` and ``z2`` resides in the
             epigraph of |B|.
@@ -453,7 +477,7 @@ class Bounce2D(IOAble):
 
         """
         pitch_inv = atleast_nd(self._B.cheb.ndim - 1, pitch_inv).T
-        # Expects pitch_inv shape (P, L) if B.cheb.shape[0] is L.
+        # Expects pitch_inv shape (num_pitch, L) if B.cheb.shape[0] is L.
         z1, z2 = self._B.intersect1d(pitch_inv, num_intersect=num_well)
         z1 = Bounce2D._swap_pl(z1)
         z2 = Bounce2D._swap_pl(z2)
@@ -465,12 +489,12 @@ class Bounce2D(IOAble):
         Parameters
         ----------
         z1, z2 : jnp.ndarray
-            Shape (L, P, num_well).
+            Shape (L, num_pitch, num_well).
             ζ coordinates of bounce points. The points are ordered and grouped such
             that the straight line path between ``z1`` and ``z2`` resides in the
             epigraph of |B|.
         pitch_inv : jnp.ndarray
-            Shape (L, P).
+            Shape (L, num_pitch).
             1/λ values to compute the bounce integrals. 1/λ(ρ) is specified by
             ``pitch_inv[ρ]`` where in the latter the labels are interpreted
             as the indices that correspond to that field line.
@@ -518,7 +542,7 @@ class Bounce2D(IOAble):
             arguments: ``B`` and ``pitch``. A quadrature will be performed to
             approximate the bounce integral of ``integrand(*f,B=B,pitch=pitch)``.
         pitch_inv : jnp.ndarray
-            Shape (L, P).
+            Shape (L, num_pitch).
             1/λ values to compute the bounce integrals. 1/λ(ρ) is specified by
             ``pitch_inv[ρ]`` where in the latter the labels are interpreted
             as the indices that correspond to that field line.
@@ -553,7 +577,7 @@ class Bounce2D(IOAble):
         Returns
         -------
         result : jnp.ndarray
-            Shape (L, P, num_well).
+            Shape (L, num_pitch, num_well).
             Last axis enumerates the bounce integrals for a given field line,
             flux surface, and pitch value.
 
@@ -564,7 +588,7 @@ class Bounce2D(IOAble):
             f = [f] if isinstance(f, (jnp.ndarray, np.ndarray)) else list(f)
 
         pitch_inv = atleast_nd(self._B.cheb.ndim - 1, pitch_inv).T
-        # Expects pitch_inv shape (P, L) if B.cheb.shape[0] is L.
+        # Expects pitch_inv shape (num_pitch, L) if B.cheb.shape[0] is L.
         z1, z2 = self._B.intersect1d(pitch_inv, num_intersect=num_well)
         result = self._integrate(z1, z2, integrand, pitch_inv, f, check, plot)
         result = Bounce2D._swap_pl(result)
@@ -576,25 +600,21 @@ class Bounce2D(IOAble):
         Parameters
         ----------
         z1, z2 : jnp.ndarray
-            Shape (P, num_well) or (P, L, num_well).
+            Shape (num_pitch, num_well) or (num_pitch, L, num_well).
         pitch_inv : jnp.ndarray
-            Shape (P, ) or (P, L).
+            Shape (num_pitch, ) or (num_pitch, L).
         f : list[jnp.ndarray]
             Shape (m, n) or (L, m, n).
 
         """
-        shape = (*z1.shape, self._x.size)
-        # quadrature points parameterized by ζ for each pitch and flux surface
-        Q_zeta = flatten_matrix(
+        shape = [*z1.shape, self._x.size]
+
+        zeta = flatten_matrix(
             bijection_from_disc(self._x, z1[..., jnp.newaxis], z2[..., jnp.newaxis])
         )
-        # quadrature points in (θ, ζ) coordinates
-        Q = jnp.stack([self._T.eval1d(Q_zeta), Q_zeta], axis=-1)
-        # FIXME: theta is discontinuous due to modding by 2pi in map coordinates.
-        #        This breaks convergence of Fourier series and maps positive definite
-        #        quantities like b_sup_z and others in f through 0.
+        theta = self._T.eval1d(zeta)
+        Q = jnp.stack([theta, zeta], axis=-1)
 
-        # interpolate and integrate
         b_sup_z = irfft2_non_uniform(
             xq=Q,
             a=self._b_sup_z[..., jnp.newaxis, :, :],
@@ -602,7 +622,7 @@ class Bounce2D(IOAble):
             N=self._m,
             axes=(-1, -2),
         )
-        B = self._B.eval1d(Q_zeta)
+        B = self._B.eval1d(zeta)
         f = [interp_rfft2(Q, f_i[..., jnp.newaxis, :, :], axes=(-1, -2)) for f_i in f]
         result = (
             (integrand(*f, B=B, pitch=1 / pitch_inv[..., jnp.newaxis]) / b_sup_z)
@@ -611,17 +631,18 @@ class Bounce2D(IOAble):
         )
 
         if check:
-            p = shape[0]
-            shape = list(shape)
-            shape[0] = shape[-2]
-            shape[-2] = p
-            shape.insert(0, 1)
-            Q_zeta, b_sup_z, B, result = map(
-                Bounce2D._swap_pl, (Q_zeta, b_sup_z, B, result)
+            num_pitch = shape[0]
+            num_rho = shape[-3]
+            shape[0] = num_rho
+            shape[-3] = num_pitch
+            f.insert(0, theta)
+            _check_interp(
+                # num_alpha, num_rho, num_pitch, num_well, num_quad
+                (1, *shape),
+                *map(Bounce2D._swap_pl, (zeta, b_sup_z, B, result)),
+                list(map(Bounce2D._swap_pl, f)),
+                plot,
             )
-            f = list(map(Bounce2D._swap_pl, f))
-            _check_interp(shape, Q_zeta, f, b_sup_z, B, result, plot)
-
         return result
 
     def plot(self, l, pitch_inv=None, **kwargs):
@@ -633,7 +654,7 @@ class Bounce2D(IOAble):
             Index into the nodes of the grid supplied to make this object.
             ``rho=grid.meshgrid_reshape(grid.nodes[:,0],"rtz")[l,0,0]``.
         pitch_inv : jnp.ndarray
-            Shape (P, ).
+            Shape (num_pitch, ).
             Optional, 1/λ values whose corresponding bounce points on the field line
             specified by Clebsch coordinate ρ(l) will be plotted.
         kwargs : dict
@@ -858,7 +879,7 @@ class Bounce1D(IOAble):
         Parameters
         ----------
         pitch_inv : jnp.ndarray
-            Shape (M, L, P).
+            Shape (M, L, num_pitch).
             1/λ values to compute the bounce points at each field line. 1/λ(α,ρ) is
             specified by ``pitch_inv[α,ρ]`` where in the latter the labels
             are interpreted as the indices that correspond to that field line.
@@ -876,7 +897,7 @@ class Bounce1D(IOAble):
         Returns
         -------
         z1, z2 : (jnp.ndarray, jnp.ndarray)
-            Shape (M, L, P, num_well).
+            Shape (M, L, num_pitch, num_well).
             ζ coordinates of bounce points. The points are ordered and grouped such
             that the straight line path between ``z1`` and ``z2`` resides in the
             epigraph of |B|.
@@ -894,12 +915,12 @@ class Bounce1D(IOAble):
         Parameters
         ----------
         z1, z2 : (jnp.ndarray, jnp.ndarray)
-            Shape (M, L, P, num_well).
+            Shape (M, L, num_pitch, num_well).
             ζ coordinates of bounce points. The points are ordered and grouped such
             that the straight line path between ``z1`` and ``z2`` resides in the
             epigraph of |B|.
         pitch_inv : jnp.ndarray
-            Shape (M, L, P).
+            Shape (M, L, num_pitch).
             1/λ values to compute the bounce points at each field line. 1/λ(α,ρ) is
             specified by ``pitch_inv[α,ρ]`` where in the latter the labels
             are interpreted as the indices that correspond to that field line.
@@ -950,7 +971,7 @@ class Bounce1D(IOAble):
             arguments: ``B`` and ``pitch``. A quadrature will be performed to
             approximate the bounce integral of ``integrand(*f,B=B,pitch=pitch)``.
         pitch_inv : jnp.ndarray
-            Shape (M, L, P).
+            Shape (M, L, num_pitch).
             1/λ values to compute the bounce integrals. 1/λ(α,ρ) is specified by
             ``pitch_inv[α,ρ]`` where in the latter the labels are interpreted
             as the indices that correspond to that field line.
@@ -991,7 +1012,7 @@ class Bounce1D(IOAble):
         Returns
         -------
         result : jnp.ndarray
-            Shape (M, L, P, num_well).
+            Shape (M, L, num_pitch, num_well).
             Last axis enumerates the bounce integrals for a given field line,
             flux surface, and pitch value.
 
@@ -1034,7 +1055,7 @@ class Bounce1D(IOAble):
             Indices into the nodes of the grid supplied to make this object.
             ``alpha,rho=grid.meshgrid_reshape(grid.nodes[:,:2],"arz")[m,l,0]``.
         pitch_inv : jnp.ndarray
-            Shape (P, ).
+            Shape (num_pitch, ).
             Optional, 1/λ values whose corresponding bounce points on the field line
             specified by Clebsch coordinate α(m), ρ(l) will be plotted.
         kwargs

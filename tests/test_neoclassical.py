@@ -19,9 +19,7 @@ def test_field_line_average():
     iota = iota_grid.compress(eq.compute("iota", grid=iota_grid)["iota"]).item()
     # For axisymmetric devices, one poloidal transit must be exact.
     zeta = np.linspace(0, 2 * np.pi / iota, 25)
-    grid = eq.get_rtz_grid(
-        rho, alpha, zeta, coordinates="raz", period=(np.inf, 2 * np.pi, np.inf)
-    )
+    grid = eq.get_rtz_grid(rho, alpha, zeta, coordinates="raz")
     data = eq.compute(["<L|r,a>", "<G|r,a>", "V_r(r)"], grid=grid)
     np.testing.assert_allclose(
         data["<L|r,a>"] / data["<G|r,a>"], data["V_r(r)"] / (4 * np.pi**2), rtol=1e-3
@@ -32,9 +30,7 @@ def test_field_line_average():
     # Otherwise, many toroidal transits are necessary to sample surface.
     eq = get("W7-X")
     zeta = np.linspace(0, 40 * np.pi, 300)
-    grid = eq.get_rtz_grid(
-        rho, alpha, zeta, coordinates="raz", period=(np.inf, 2 * np.pi, np.inf)
-    )
+    grid = eq.get_rtz_grid(rho, alpha, zeta, coordinates="raz")
     data = eq.compute(["<L|r,a>", "<G|r,a>", "V_r(r)"], grid=grid)
     np.testing.assert_allclose(
         data["<L|r,a>"] / data["<G|r,a>"], data["V_r(r)"] / (4 * np.pi**2), rtol=1e-3
@@ -51,9 +47,7 @@ def test_effective_ripple():
     rho = np.linspace(0, 1, 10)
     alpha = np.array([0])
     zeta = np.linspace(0, 20 * np.pi, 1000)
-    grid = eq.get_rtz_grid(
-        rho, alpha, zeta, coordinates="raz", period=(np.inf, 2 * np.pi, np.inf)
-    )
+    grid = eq.get_rtz_grid(rho, alpha, zeta, coordinates="raz")
     data = eq.compute("effective ripple", grid=grid)
     assert np.isfinite(data["effective ripple"]).all()
     fig, ax = plt.subplots()
@@ -68,11 +62,7 @@ def test_Gamma_c_Velasco():
     eq = get("W7-X")
     rho = np.linspace(0, 1, 10)
     grid = eq.get_rtz_grid(
-        rho,
-        np.array([0]),
-        np.linspace(0, 20 * np.pi, 1000),
-        coordinates="raz",
-        period=(np.inf, 2 * np.pi, np.inf),
+        rho, np.array([0]), np.linspace(0, 20 * np.pi, 1000), coordinates="raz"
     )
     data = eq.compute("Gamma_c Velasco", grid=grid)
     assert np.isfinite(data["Gamma_c Velasco"]).all()
@@ -88,11 +78,7 @@ def test_Gamma_c():
     eq = get("W7-X")
     rho = np.linspace(0, 1, 10)
     grid = eq.get_rtz_grid(
-        rho,
-        np.array([0]),
-        np.linspace(0, 20 * np.pi, 1000),
-        coordinates="raz",
-        period=(np.inf, 2 * np.pi, np.inf),
+        rho, np.array([0]), np.linspace(0, 20 * np.pi, 1000), coordinates="raz"
     )
     data = eq.compute("Gamma_c", grid=grid)
     assert np.isfinite(data["Gamma_c"]).all()

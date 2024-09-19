@@ -237,7 +237,6 @@ class EffectiveRipple(_Objective):
             constants["alpha"],
             constants["zeta"],
             coordinates="raz",
-            period=(np.inf, 2 * np.pi, np.inf),
             iota=self._grid_1dr.compress(data["iota"]),
             params=params,
         )

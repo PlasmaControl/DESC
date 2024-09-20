@@ -1084,9 +1084,7 @@ class TestBounce1D:
 
         eq = get("HELIOTRON")
         # 3. Convert above coordinates to DESC computational coordinates.
-        grid = get_rtz_grid(
-            eq, rho, alpha, zeta, coordinates="raz", period=(np.inf, 2 * np.pi, np.inf)
-        )
+        grid = get_rtz_grid(eq, rho, alpha, zeta, coordinates="raz")
         # 4. Compute input data.
         data = eq.compute(
             Bounce1D.required_names + ["min_tz |B|", "max_tz |B|", "g_zz"], grid=grid
@@ -1314,15 +1312,7 @@ class TestBounce1D:
         iota = grid_fsa.compress(data["iota"]).item()
         alpha = 0
         zeta = np.linspace(-np.pi / iota, np.pi / iota, (2 * eq.M_grid) * 4 + 1)
-        grid = get_rtz_grid(
-            eq,
-            rho,
-            alpha,
-            zeta,
-            coordinates="raz",
-            period=(np.inf, 2 * np.pi, np.inf),
-            iota=iota,
-        )
+        grid = get_rtz_grid(eq, rho, alpha, zeta, coordinates="raz", iota=iota)
         data = eq.compute(
             Bounce1D.required_names
             + [

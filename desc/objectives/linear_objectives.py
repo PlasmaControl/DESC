@@ -3246,7 +3246,11 @@ class FixNearAxisR(_FixedObjective):
         axis_con = None
         for con in cons:
             if isinstance(con, AxisRSelfConsistency):
-                self._A = np.vstack([self._A, con._A]).squeeze() if self._A else con._A
+                self._A = (
+                    np.vstack([self._A, con._A]).squeeze()
+                    if np.any(self._A)
+                    else con._A
+                )
                 axis_con = con
 
         self._target = (
@@ -3272,7 +3276,7 @@ class FixNearAxisR(_FixedObjective):
                 axis_target = self._eq.Ra_n
             self._target = (
                 np.append(self._target, axis_target).squeeze()
-                if self._target
+                if np.any(self._target)
                 else axis_target
             )
         self._dim_f = self.target.size
@@ -3392,7 +3396,11 @@ class FixNearAxisZ(_FixedObjective):
         axis_con = None
         for con in cons:
             if isinstance(con, AxisZSelfConsistency):
-                self._A = np.vstack([self._A, con._A]).squeeze() if self._A else con._A
+                self._A = (
+                    np.vstack([self._A, con._A]).squeeze()
+                    if np.any(self._A)
+                    else con._A
+                )
                 axis_con = con
         self._target = (
             np.concatenate([con.target for con in cons_that_fix_near_axis])
@@ -3417,7 +3425,7 @@ class FixNearAxisZ(_FixedObjective):
                 axis_target = self._eq.Za_n
             self._target = (
                 np.append(self._target, axis_target).squeeze()
-                if self._target
+                if np.any(self._target)
                 else axis_target
             )
 

@@ -229,6 +229,11 @@ class Equilibrium(IOAble, Optimizable):
             ValueError,
             f"sym should be one of True, False, None, got {sym}",
         )
+        errorif(
+            surface is not None and xsection is not None,
+            ValueError,
+            "Cannot specify both surface and xsection",
+        )
         if surface is not None:
             self._sym = bool(setdefault(sym, getattr(surface, "sym", False)))
         elif xsection is not None:
@@ -237,14 +242,8 @@ class Equilibrium(IOAble, Optimizable):
             self._sym = bool(setdefault(sym, False))
         self._R_sym = "cos" if self.sym else False
         self._Z_sym = "sin" if self.sym else False
-
-        errorif(
-            surface is not None and xsection is not None,
-            ValueError,
-            "Cannot specify both surface and xsection",
-        )
         # Parse surface, magnetic axis and cross-section
-        if xsection is not None and surface is None:
+        if xsection is not None:
             self._xsection = parse_section(xsection, self.sym)
             self._surface = parse_surface(
                 surface, self.NFP, self.sym, self.spectral_indexing
@@ -268,7 +267,7 @@ class Equilibrium(IOAble, Optimizable):
         self._N = int(setdefault(N, self.surface.N))
         self._M = (
             int(setdefault(M, self.surface.M))
-            if not (xsection is not None and surface is None)
+            if surface is not None
             else int(setdefault(M, self.xsection.M))
         )
         self._L = int(

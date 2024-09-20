@@ -1314,7 +1314,7 @@ class Equilibrium(IOAble, Optimizable):
         )
         return map_coordinates(
             self,
-            flux_coords,
+            coords=flux_coords,
             inbasis=("rho", "theta_PEST", "zeta"),
             outbasis=("rho", "theta", "zeta"),
             params=self.params_dict if L_lmn is None else {"L_lmn": L_lmn},

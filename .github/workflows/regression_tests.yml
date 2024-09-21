@@ -107,7 +107,7 @@ jobs:
         id : codecov
         uses: Wandalen/wretry.action@v3.5.0
         with:
-          action: codecov/codecov-action@v3
+          action: codecov/codecov-action@v4
           with: |
             token: ${{ secrets.CODECOV_TOKEN }}
             name: codecov-umbrella

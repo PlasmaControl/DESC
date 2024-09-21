@@ -176,7 +176,7 @@ class TestFastInterp:
         """Test we use Chebyshev points compatible with standard definition of DCT."""
         np.testing.assert_allclose(cheb_pts(N), chebpts1(N)[::-1], atol=1e-15)
         np.testing.assert_allclose(
-            cheb_pts(N, lobatto=True, domain=(-np.pi, np.pi)),
+            cheb_pts(N, domain=(-np.pi, np.pi), lobatto=True),
             np.pi * chebpts2(N)[::-1],
             atol=1e-15,
         )
@@ -266,10 +266,10 @@ class TestFastInterp:
         # Need to test fft used in Fourier Chebyshev interpolation due to issues like
         # https://github.com/scipy/scipy/issues/15033
         # https://github.com/scipy/scipy/issues/21198
-        # https://github.com/google/jax/issues/22466,
+        # https://github.com/google/jax/issues/22466.
         domain = (0, 2 * np.pi)
-        m = cheb_pts(M, lobatto, domain)
-        n = cheb_pts(m.size * 10, lobatto, domain)
+        m = cheb_pts(M, domain, lobatto)
+        n = cheb_pts(m.size * 10, domain, lobatto)
         norm = (n.size - lobatto) / (m.size - lobatto)
 
         dct_type = 2 - lobatto

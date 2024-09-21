@@ -13,6 +13,7 @@ from desc.integrals.interp_utils import (
     cheb_from_dct,
     cheb_pts,
     chebroots_vec,
+    dct_from_cheb,
     fourier_pts,
     harmonic,
     idct_non_uniform,
@@ -185,7 +186,7 @@ class FourierChebyshevBasis(IOAble):
 
         """
         x = fourier_pts(M)
-        y = cheb_pts(N, lobatto, domain)
+        y = cheb_pts(N, domain, lobatto)
         if L is None:
             coords = (x, y)
         else:
@@ -234,7 +235,7 @@ class FourierChebyshevBasis(IOAble):
             Real valued spectral coefficients for Fourier-Chebyshev basis.
 
         """
-        a_mn = harmonic(cheb_from_dct(self._c, axis=-1), self.M, axis=-2)
+        a_mn = harmonic(cheb_from_dct(self._c), self.M, axis=-2)
         assert a_mn.shape[-2:] == (self.M, self.N)
         return a_mn
 
@@ -254,7 +255,7 @@ class FourierChebyshevBasis(IOAble):
         """
         # Add axis to broadcast against Chebyshev coefficients.
         x = jnp.atleast_1d(x)[..., jnp.newaxis]
-        cheb = cheb_from_dct(irfft_non_uniform(x, self._c, self.M, axis=-2), axis=-1)
+        cheb = cheb_from_dct(irfft_non_uniform(x, self._c, self.M, axis=-2))
         assert cheb.shape[-2:] == (x.shape[-2], self.N)
         return ChebyshevBasisSet(cheb, self.domain)
 
@@ -304,6 +305,27 @@ class ChebyshevBasisSet(IOAble):
     def N(self):
         """Chebyshev spectral resolution."""
         return self.cheb.shape[-1]
+
+    def evaluate(self, N):
+        """Evaluate Chebyshev series at N Chebyshev points.
+
+        Evaluate each function in this set
+        { fₓ | fₓ : y ↦ ∑ₙ₌₀ᴺ⁻¹ aₙ(x) Tₙ(y) }
+        at y points given by the N Chebyshev points.
+
+        Parameters
+        ----------
+        N : int
+            Grid resolution in y direction. Preferably power of 2.
+
+        Returns
+        -------
+        fq : jnp.ndarray
+            Shape (..., M, N)
+            Chebyshev series evaluated at N Chebyshev points.
+
+        """
+        return idct(dct_from_cheb(self.cheb), type=2, n=N, axis=-1) * N
 
     def isomorphism_to_C1(self, y):
         """Return coordinates z ∈ ℂ isomorphic to (x, y) ∈ ℂ².

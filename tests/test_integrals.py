@@ -956,7 +956,7 @@ class TestBounce1DQuadrature:
             check=True,
             **kwargs,
         )
-        result = bounce.integrate(integrand, pitch_inv, check=True)
+        result = bounce.integrate(integrand, pitch_inv, check=True, plot=True)
         assert np.count_nonzero(result) == 1
         np.testing.assert_allclose(result.sum(), truth, rtol=1e-4)
 
@@ -1062,11 +1062,11 @@ class TestBounce1D:
     @staticmethod
     def _example_numerator(g_zz, B, pitch):
         f = (1 - 0.5 * pitch * B) * g_zz
-        return safediv(f, jnp.sqrt(1 - pitch * B))
+        return safediv(f, jnp.sqrt(jnp.abs(1 - pitch * B)))
 
     @staticmethod
     def _example_denominator(B, pitch):
-        return safediv(1, jnp.sqrt(1 - pitch * B))
+        return safediv(1, jnp.sqrt(jnp.abs(1 - pitch * B)))
 
     @pytest.mark.unit
     @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d * 4)
@@ -1369,7 +1369,6 @@ class TestBounce1D:
             f=f,
             num_well=1,
             check=True,
-            plot=True,
         )
         drift_numerical_den = bounce.integrate(
             integrand=TestBounce1D.drift_den_integrand,
@@ -1543,7 +1542,7 @@ class TestBounce2D:
         grid_data["gbdrift"] = grid_data["gbdrift"] * data["normalization"]
 
         # Compute numerical result.
-        M, N = 512, 8
+        M, N = 512, 16
         # Neo does 200 x 200 for their algorithm, so I suppose this isn't too weird.
         # I have concern that numpy computes Nyquist frequency component incorrectly,
         # and the reason high Fourier resolution is required is that with large sample
@@ -1552,7 +1551,7 @@ class TestBounce2D:
         bounce = Bounce2D(
             grid=grid,
             data=grid_data,
-            desc_from_clebsch=Bounce2D.desc_from_clebsch(
+            theta=Bounce2D.compute_theta(
                 eq,
                 data["rho"],
                 M=M,

@@ -29,7 +29,7 @@ chebroots_vec = jnp.vectorize(chebroots, signature="(m)->(n)")
 #  series truncation, not the infinite limit).
 
 
-def cheb_pts(N, lobatto=False, domain=(-1, 1)):
+def cheb_pts(N, domain=(-1, 1), lobatto=False):
     """Get ``N`` Chebyshev points mapped to given domain.
 
     Warnings
@@ -45,11 +45,11 @@ def cheb_pts(N, lobatto=False, domain=(-1, 1)):
     ----------
     N : int
         Number of points.
+    domain : (float, float)
+        Domain for points.
     lobatto : bool
         Whether to return the Gauss-Lobatto (extrema-plus-endpoint)
         instead of the interior roots for Chebyshev points.
-    domain : (float, float)
-        Domain for points.
 
     Returns
     -------
@@ -321,6 +321,26 @@ def cheb_from_dct(a, axis=-1):
     """
     cheb = a.copy().at[Index.get(0, axis, a.ndim)].divide(2.0)
     return cheb
+
+
+def dct_from_cheb(cheb, axis=-1):
+    """Get discrete cosine transform from discrete Chebyshev transform.
+
+    Parameters
+    ----------
+    cheb : jnp.ndarray
+        Discrete Chebyshev transform coefficients, e.g.``cheb_from_dct(a)``.
+    axis : int
+        Axis along which to transform.
+
+    Returns
+    -------
+    a : jnp.ndarray
+        Chebyshev coefficients along ``axis``.
+
+    """
+    a = cheb.copy().at[Index.get(0, axis, cheb.ndim)].multiply(2.0)
+    return a
 
 
 def interp_dct(xq, f, lobatto=False, axis=-1):

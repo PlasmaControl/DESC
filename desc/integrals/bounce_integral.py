@@ -5,7 +5,7 @@ from interpax import CubicHermiteSpline, PPoly
 from numpy.fft import rfft2
 from orthax.legendre import leggauss
 
-from desc.backend import jnp
+from desc.backend import dct, jnp
 from desc.integrals.basis import ChebyshevBasisSet, FourierChebyshevBasis
 from desc.integrals.bounce_utils import (
     _bounce_quadrature,
@@ -18,7 +18,13 @@ from desc.integrals.bounce_utils import (
     interp_to_argmin,
     plot_ppoly,
 )
-from desc.integrals.interp_utils import interp_rfft2, irfft2_non_uniform, polyder_vec
+from desc.integrals.interp_utils import (
+    cheb_from_dct,
+    cheb_pts,
+    interp_rfft2,
+    irfft2_non_uniform,
+    polyder_vec,
+)
 from desc.integrals.quad_utils import (
     automorphism_sin,
     bijection_from_disc,
@@ -44,6 +50,7 @@ def _transform_to_desc(grid, f, is_reshaped=False):
     grid : Grid
         Tensor-product grid in (θ, ζ) with uniformly spaced nodes in
         (2π × 2π) poloidal and toroidal coordinates.
+        Preferably power of 2 for ``grid.num_theta`` and ``grid.num_zeta``.
     f : jnp.ndarray
         Function evaluated on ``grid``.
 
@@ -57,54 +64,95 @@ def _transform_to_desc(grid, f, is_reshaped=False):
     if not is_reshaped:
         f = grid.meshgrid_reshape(f, "rtz")
     # real fft over poloidal since usually m > n
-    a = rfft2(f, axes=(-1, -2), norm="forward")
-    assert a.shape[-2:] == (grid.num_theta // 2 + 1, grid.num_zeta)
-    return a
+    return rfft2(f, axes=(-1, -2), norm="forward")
 
 
-def _transform_to_clebsch(grid, desc_from_clebsch, B, is_reshaped=False):
+def _transform_to_clebsch(grid, nodes, f, is_reshaped=False):
     """Transform to Clebsch spectral domain.
 
     Parameters
     ----------
     grid : Grid
-        Tensor-product grid in (ρ, θ, ζ) with uniformly spaced nodes in
+        Tensor-product grid in (θ, ζ) with uniformly spaced nodes in
         (2π × 2π) poloidal and toroidal coordinates.
-        Note that below shape notation defines
-        L = ``grid.num_rho``, m = ``grid.num_theta``, and n = ``grid.num_zeta``.
-        Preferably power of 2 for ``m`` and ``n``.
-    desc_from_clebsch : jnp.ndarray
-        Shape (L, M, N, 3).
-        DESC coordinates (ρ, θ, ζ) sourced from the Clebsch coordinates
-        ``FourierChebyshevBasis.nodes(M,N,L,domain=(0,2*jnp.pi))``.
-    B : jnp.ndarray
-        |B| evaluated on ``grid``.
+        Preferably power of 2 for ``grid.num_theta`` and ``grid.num_zeta``.
+    nodes : jnp.ndarray
+        Shape (L, M, N, 2) or (M, N, 2).
+        DESC coordinates (θ, ζ) sourced from the Clebsch coordinates
+        ``FourierChebyshevBasis.nodes(M,N,domain=(0,2*jnp.pi))``.
+    f : jnp.ndarray
+        Function evaluated on ``grid``.
 
     Returns
     -------
-    T, B : (FourierChebyshevBasis, FourierChebyshevBasis)
-        Spectral coefficients of θ(α, ζ) and |B|(α, ζ).
+    a : FourierChebyshevBasis
+        Spectral coefficients of f(α, ζ).
 
     """
-    domain = (0, 2 * jnp.pi)
-    M, N = desc_from_clebsch.shape[-3:-1]
-    # θ is computed on the optimal nodes in Clebsch space,
-    # which is a tensor product node set in Clebsch space.
-    T = FourierChebyshevBasis(f=desc_from_clebsch[..., 1], domain=domain)
+    assert nodes.shape[-1] == 2
+    if not is_reshaped:
+        f = grid.meshgrid_reshape(f, "rtz")
 
+    M, N = nodes.shape[-3], nodes.shape[-2]
+    return FourierChebyshevBasis(
+        f=interp_rfft2(
+            # Interpolate to nodes in Clebsch space,
+            # which is not a tensor product node set in DESC space.
+            xq=nodes.reshape(*nodes.shape[:-3], M * N, 2),
+            f=f[..., jnp.newaxis, :, :],
+            axes=(-1, -2),
+        ).reshape(*nodes.shape[:-3], M, N),
+        domain=(0, 2 * jnp.pi),
+    )
+
+
+def _transform_to_clebsch_1d(grid, alpha, theta, B, N_B, is_reshaped=False):
+    """Transform to single variable Clebsch spectral domain.
+
+    Parameters
+    ----------
+    grid : Grid
+        Tensor-product grid in (θ, ζ) with uniformly spaced nodes in
+        (2π × 2π) poloidal and toroidal coordinates.
+        Preferably power of 2 for ``grid.num_theta`` and ``grid.num_zeta``.
+    alpha : jnp.ndarray
+        Shape (L, num_transit) or (num_transit, ).
+        Sequence of poloidal coordinates A = (α₀, α₁, …, αₘ₋₁) that specify field line.
+    theta : jnp.ndarray
+        Shape (L, M, N) or (M, N).
+        DESC coordinates θ sourced from the Clebsch coordinates
+        ``FourierChebyshevBasis.nodes(M,N,domain=(0,2*jnp.pi))``.
+    B : jnp.ndarray
+        |B| evaluated on ``grid``.
+    N_B : int
+        Desired Chebyshev spectral resolution for |B|. Preferably power of 2.
+
+    Returns
+    -------
+    T, B : (ChebyshevBasisSet, ChebyshevBasisSet)
+        Set of 1D Chebyshev spectral coefficients of |B| along field line.
+        {|B|_α : ζ ↦ |B|(α, ζ) | α ∈ A } where A = (α₀, α₁, …, αₘ₋₁) is the
+        sequence of poloidal coordinates that specify the field line.
+        Likewise with θ.
+
+    """
     if not is_reshaped:
         B = grid.meshgrid_reshape(B, "rtz")
-    # Interpolate to optimal nodes in Clebsch space,
-    # which is not a tensor product node set in DESC space.
+
+    # Evaluating set of single variable maps is more efficient than evaluating
+    # multivariable map, so we project θ to a set of Chebyshev series.
+    T = FourierChebyshevBasis(f=theta, domain=(0, 2 * jnp.pi)).compute_cheb(alpha)
+    theta = T.evaluate(N_B)
+    xq = jnp.stack(
+        [theta, jnp.broadcast_to(cheb_pts(N_B, domain=T.domain), theta.shape)], axis=-1
+    ).reshape(*alpha.shape[:-1], alpha.shape[-1] * N_B, 2)
     B = interp_rfft2(
-        xq=desc_from_clebsch[..., 1:].reshape(-1, M * N, 2),
+        xq=xq,
         f=B[..., jnp.newaxis, :, :],
         axes=(-1, -2),
-    ).reshape(-1, M, N)
-    B = FourierChebyshevBasis(
-        f=B if desc_from_clebsch.ndim == 4 else B.squeeze(axis=0),
-        domain=domain,
-    )
+    ).reshape(*alpha.shape, N_B)
+    # Need |B| parameterized by single variable to compute roots.
+    B = ChebyshevBasisSet(cheb_from_dct(dct(B, type=2, axis=-1)) / N_B, T.domain)
     return T, B
 
 
@@ -116,10 +164,9 @@ def _swap_pl(f):
 
 
 # TODO: After GitHub issue #1034 is resolved, we should pass in the previous
-#  θ(α) coordinates as an initial guess for the next coordinate mapping.
+#  θ(α, ζ) coordinates as an initial guess for the next coordinate mapping.
 #  Perhaps tell the optimizer to perturb the coefficients of the
-#  |B|(α, ζ) directly? think perturbing alpha is equivalent to perturbing
-#  lambda. Not sure if possible..
+#  θ(α, ζ) directly? think this is equivalent to perturbing lambda.
 
 
 class Bounce2D(IOAble):
@@ -140,56 +187,68 @@ class Bounce2D(IOAble):
 
     Notes
     -----
-    Brief motivation and description of algorithm for developers.
+    Brief description of algorithm.
+
+    Magnetic field line with label α, defined by B = ∇ρ × ∇α, is determined from
+        α : ρ, θ, ζ ↦ θ + λ(ρ,θ,ζ) − ι(ρ) [ζ + ω(ρ,θ,ζ)]
+    Interpolate Fourier-Chebyshev series to DESC poloidal coordinate.
+        θ : α, ζ ↦ tₘₙ exp(jmα) Tₙ(ζ)
+      |B| : α, ζ ↦  bₙ(θ(α, ζ)) Tₙ(ζ)
+    Compute bounce points.
+      r(ζₖ) = |B|(ζₖ) − 1/λ = 0
+    Interpolate smooth components of integrand with FFTs.
+      G : α, ζ ↦ gₘₙ exp(j [m θ(α,ζ) + n ζ] )
+    Perform Gaussian quadrature after removing singularities.
+      Fᵢ : λ, ζ₁, ζ₂ ↦  ∫ᵢ f(λ, ζ, {Gⱼ}) dζ
+
+    Longer description for developers.
 
     For applications which reduce to computing a nonlinear function of distance
     along field lines between bounce points, it is required to identify these
     points with field-line-following coordinates. (In the special case of a linear
     function summing integrals between bounce points over a flux surface, arbitrary
-    coordinate systems may be used as this operation reduces to a surface integral,
+    coordinate systems may be used as that task reduces to a surface integral,
     which is invariant to the order of summation).
 
     The DESC coordinate system is related to field-line-following coordinate
     systems by a relation whose solution is best found with Newton iteration.
-    There is a unique real solution to this equation, so Newton iteration is a
+    There is a unique real solution to that relation, so Newton iteration is a
     globally convergent root-finding algorithm here. For the task of finding
-    bounce points, even if the inverse map: θ(α, ζ) was known, Newton iteration
-    is not a globally convergent algorithm to find the real roots of
-    f : ζ ↦ |B|(ζ) − 1/λ where ζ is a field-line-following coordinate.
-    For this, function approximation of |B| is necessary.
+    bounce points, Newton iteration is not a globally convergent algorithm to
+    find the real roots of r : ζ ↦ |B|(ζ) − 1/λ where ζ is a field-line-following
+    coordinate. For this, function approximation of |B| is necessary.
 
     Therefore, to compute bounce points {(ζ₁, ζ₂)}, we approximate |B| by a
-    series expansion of basis functions in (α, ζ) coordinates, restricting the
-    class of basis functions to low order (e.g. N = 2ᵏ where k is small)
-    algebraic or trigonometric polynomial with integer frequencies. These are
-    the two classes useful for function approximation and for which there exists
-    globally convergent root-finding algorithms. We require low order because
-    the computation expenses grow with the number of potential roots, and the
-    theorem of algebra states that number is N (2N) for algebraic
+    series expansion of basis functions parameterized by a single variable ζ,
+    restricting the class of basis functions to low order (e.g. N = 2ᵏ where
+    k is small) algebraic or trigonometric polynomial with integer frequencies.
+    These are the two classes useful for function approximation and for which
+    there exists globally convergent root-finding algorithms. We require low
+    order because the computation expenses grow with the number of potential
+    roots, and the theorem of algebra states that number is N (2N) for algebraic
     (trigonometric) polynomials of degree N.
 
     The frequency transform of a map under the chosen basis must be concentrated
-    at low frequencies for the series to converge to the true function fast.
-    For periodic (non-periodic) maps, the best basis is a Fourier (Chebyshev)
-    series. Both converge exponentially, but the larger region of convergence in
-    the complex plane of Fourier series make it preferable in practice to choose
-    coordinate systems such that the function to approximate is periodic. The
-    Chebyshev series is preferred to other orthogonal polynomial series since
+    at low frequencies for the series to converge fast. For periodic
+    (non-periodic) maps, the best basis is a Fourier (Chebyshev) series. Both
+    converge exponentially, but the larger region of convergence in the complex
+    plane of Fourier series make it preferable in practice to choose coordinate
+    systems such that the function to approximate is periodic. The Chebyshev
+    polynomials are preferred to other orthogonal polynomial series since
     fast discrete polynomial transforms (DPT) are implemented via fast transform
     to Chebyshev then DCT. Although nothing prohibits a direct DPT, we want to
-    rely on existing, optimized libraries. There are other reasons to prefer
-    Chebyshev series not discussed here. Therefore, |B| is interpolated to a
-    Fourier-Chebyshev series in (α, ζ).
+    rely on existing libraries. There are other reasons to prefer Chebyshev series
+    not discussed here. Therefore, a Fourier-Chebyshev series is chosen to
+    interpolate θ(α,ζ), and a piecewise Chebyshev series interpolates |B|(ζ).
 
     Computing accurate series expansions in (α, ζ) coordinates demands
     particular interpolation points in that coordinate system. Newton iteration
-    is used to compute θ at these interpolation points. Note that interpolation
-    is necessary because there is no transformation that converts series
-    coefficients in periodic coordinates, e.g. (ϑ, ϕ), to a low order
-    polynomial basis in non-periodic coordinates. For example, one can obtain
-    series coefficients in (α, ϕ) coordinates from those in (ϑ, ϕ) as follows
+    is used to compute θ at these points. Note that interpolation is necessary
+    because there is no transformation that converts series coefficients in
+    periodic coordinates, e.g. (ϑ, ϕ), to a low order polynomial basis in
+    non-periodic coordinates. For example, one can obtain series coefficients in
+    (α, ϕ) coordinates from those in (ϑ, ϕ) as follows
         g : ϑ, ϕ ↦ ∑ₘₙ aₘₙ exp(j [mϑ + nϕ])
-
         g : α, ϕ ↦ ∑ₘₙ aₘₙ exp(j [mα + (m ι + n)ϕ])
     However, the basis for the latter are trigonometric functions with
     irrational frequencies, courtesy of the irrational rotational transform.
@@ -198,35 +257,29 @@ class Bounce2D(IOAble):
     coordinate ϕ, but this balloons the frequency, and hence the degree of the
     series.
 
-    One may note that because Fourier series converge faster than Chebyshev,
-    an alternate strategy is to interpolate |B| to a double Fourier series in
-    (ϑ, ϕ), then apply bisection methods to find roots of f with mesh size
-    inversely proportional to the max frequency along the field line: M ι + N.
-    ``Bounce2D`` does not use that approach because that root-finding scheme is
-    inferior. Note that if the Chebyshev series convergence is not satisfactory,
-    we can implement a change of variables for the Chebyshev interpolation that
-    may allow earlier truncation of the series without loss of accuracy. Another
-    option with faster convergence still is to use a filtered Fourier series
-    with a non-periodic basis in the Gibbs layer. An example is given at
-    doi.org/10.1016/j.aml.2006.10.001. Empirically, we observe that the
-    Chebyshev series has satisfactory convergence. It is particularly fast for
-    θ(α, ζ). Furthermore, the Fourier series converges rapidly for |B|(α, ζ)
-    in near omnigenous configurations because (∂|B|/∂α)|ρ,ζ vanishes. However,
-    the Fourier series of θ(α, ζ) converges slower than desired; we must accept
-    this because no basis supports a larger convergence region in the complex
-    plane than do Fourier series.
+    Recall that periodicity enables faster convergence, motivating the desire
+    to instead interpolate |B|(ϑ, ϕ) with a double Fourier series and applying
+    bisection methods to find bounce points with mesh size inversely
+    proportional to the max frequency along the field line: M ι + N. ``Bounce2D``
+    does not use that approach as that root-finding scheme is inferior.
+    The reason θ is not interpolated with a double Fourier series θ(ϑ, ζ) is
+    because quadrature points along |B|(α=α₀, ζ) can be identified by a single
+    variable; evaluating the multivariable map θ(ϑ(α, ζ), ζ) is expensive
+    compared to evaluating the single variable map θ(α=α₀, ζ).
+    Another option is to use a filtered Fourier series,
+    doi.org/10.1016/j.aml.2006.10.001. Empirically the Chebyshev series
+    θ(α=α₀, ζ) converges fast.
 
-    After obtaining the bounce points, the supplied quadrature is performed.
+    After computing the bounce points, the supplied quadrature is performed.
     By default, this is a Gauss quadrature after removing the singularity.
     Fast fourier transforms interpolate functions in the integrand to the
     quadrature nodes.
 
-    Fast transforms are used where possible, though fast multipoint methods
-    are not yet implemented. For non-uniform interpolation, Vandermode MMT with
-    the linear algebra libraries of JAX are used. It should be worthwhile to use
-    the inverse non-uniform fast transforms. Fast multipoint methods are
-    preferable because they are exact, but this requires more development work.
-    Future work may implement these techniques.
+    Fast transforms are used where possible. Fast multipoint methods are not
+    implemented. For non-uniform interpolation, MMTs are used. It should be
+    worthwhile to use the inverse non-uniform fast transforms, so long as the
+    quadrature packs nodes at reasonable density. Fast multipoint methods are
+    preferable because they are exact, but that requires more development work.
 
     See Also
     --------
@@ -235,10 +288,6 @@ class Bounce2D(IOAble):
         An advantage of ``Bounce2D`` over ``Bounce1D`` is that the coordinates on
         which the root-finding must be done to map from DESC to Clebsch coords is
         fixed to ``L*M*N``, independent of the number of toroidal transits.
-
-    Warnings
-    --------
-    It is currently assumed that ζ = ϕ.
 
     Attributes
     ----------
@@ -254,11 +303,12 @@ class Bounce2D(IOAble):
         self,
         grid,
         data,
-        desc_from_clebsch,
+        theta,
         # TODO: Allow multiple starting labels for near-rational surfaces.
         #  think can just concatenate along second to last axis of cheb
         alpha=0.0,
         num_transit=32,
+        N_B=32,
         quad=leggauss(32),
         automorphism=(automorphism_sin, grad_automorphism_sin),
         Bref=1.0,
@@ -285,14 +335,16 @@ class Bounce2D(IOAble):
         data : dict[str, jnp.ndarray]
             Data evaluated on ``grid``.
             Must include names in ``Bounce2D.required_names``.
-        desc_from_clebsch : jnp.ndarray
-            Shape (L, M, N, 3).
-            DESC coordinates (ρ, θ, ζ) sourced from the Clebsch coordinates
+        theta : jnp.ndarray
+            Shape (L, M, N).
+            DESC coordinates θ sourced from the Clebsch coordinates
             ``FourierChebyshevBasis.nodes(M,N,L,domain=(0,2*jnp.pi))``.
         alpha : float
             Starting field line poloidal label.
         num_transit : int
             Number of toroidal transits to follow field line.
+        N_B : int
+            Desired Chebyshev spectral resolution for |B|. Preferably power of 2.
         quad : (jnp.ndarray, jnp.ndarray)
             Quadrature points xₖ and weights wₖ for the approximate evaluation of an
             integral ∫₋₁¹ g(x) dx = ∑ₖ wₖ g(xₖ). Default is 32 points.
@@ -335,16 +387,9 @@ class Bounce2D(IOAble):
         self._n = grid.num_zeta
         self._x, self._w = get_quadrature(quad, automorphism)
 
-        # Compute spectral coefficients.
-        self._b_sup_z = _transform_to_desc(
-            grid, jnp.abs(data["B^zeta"]) / data["|B|"] * Lref, is_reshaped
-        )
-        T, B = _transform_to_clebsch(
-            grid, desc_from_clebsch, data["|B|"] / Bref, is_reshaped
-        )
         # peel off field lines
         iota = data["iota"].ravel()
-        alphas = get_alpha(
+        alpha = get_alpha(
             alpha,
             iota=(
                 grid.compress(iota)
@@ -355,20 +400,28 @@ class Bounce2D(IOAble):
             num_transit=num_transit,
             period=2 * jnp.pi,
         )
+        # Compute spectral coefficients.
+        self._T, self._B = _transform_to_clebsch_1d(
+            grid, alpha, theta, data["|B|"] / Bref, N_B, is_reshaped
+        )
+        self._b_sup_z = _transform_to_desc(
+            grid, jnp.abs(data["B^zeta"]) / data["|B|"] * Lref, is_reshaped
+        )
+        assert self._T.M == self._B.M == num_transit
+        assert self._T.N == theta.shape[-1]
+        assert self._B.N == N_B
 
-        # Set of 1D Chebyshev spectral coefficients of |B| along field line.
-        # {|B|_α : ζ ↦ |B|(α, ζ) | α ∈ A } where A = (α₀, α₁, …, αₘ₋₁) is the
-        # sequence of poloidal coordinates that specify the field line.
-        # Evaluating set of Chebyshev series more efficient than evaluating
-        # Fourier Chebyshev series, so we project θ to Chebyshev series as well.
-        self._B = B.compute_cheb(alphas)
-        self._T = T.compute_cheb(alphas)
-        assert self._B.M == self._T.M == num_transit
-        assert self._B.N == self._T.N == desc_from_clebsch.shape[-2]
-
+    # The Fourier series converges fast for |B|(α, ζ);
+    # for near omnigenous configurations in particular, (∂|B|/∂α)|ρ,ζ vanishes.
+    # However, the Fourier series of θ(α, ζ) converges slower than desired.
+    # Small discontinuities of quantities evaluated between adjacent cuts of a
+    # field line vanish at M > 256.
     @staticmethod
-    def desc_from_clebsch(eq, L, M, N, clebsch=None, **kwargs):
-        """Return DESC coordinates of optimal Fourier Chebyshev basis nodes.
+    def compute_theta(eq, L, M=512, N=16, clebsch=None, **kwargs):
+        """Return DESC coordinates θ of Fourier Chebyshev basis nodes.
+
+        The Fourier spectrum of θ in α is wider than the Chebyshev spectrum
+        of θ in ζ, so M > N is recommended.
 
         Parameters
         ----------
@@ -379,8 +432,7 @@ class Bounce2D(IOAble):
             May also be an array of non-uniform coordinates.
         M : int
             Grid resolution in poloidal direction for Clebsch coordinate grid.
-            Preferably power of 2. If the Fourier spectrum of θ is wide, then
-            a large number is recommended.
+            Preferably power of 2.
         N : int
             Grid resolution in toroidal direction for Clebsch coordinate grid.
             Preferably power of 2.
@@ -393,23 +445,22 @@ class Bounce2D(IOAble):
 
         Returns
         -------
-        desc_coords : jnp.ndarray
-            Shape (L, M, N, 3).
-            DESC coordinate grid (ρ, θ, ζ) sourced from the Clebsch coordinate
-            tensor-product grid (ρ, α, ζ).
+        theta : jnp.ndarray
+            Shape (L, M, N).
+            DESC coordinates θ sourced from the Clebsch coordinates
+            ``FourierChebyshevBasis.nodes(M,N,L,domain=(0,2*jnp.pi))``.
 
         """
         if clebsch is None:
             clebsch = FourierChebyshevBasis.nodes(
                 check_posint(M), check_posint(N), L, domain=(0, 2 * jnp.pi)
             )
-        desc_coords = eq.map_coordinates(
+        return eq.map_coordinates(
             coords=clebsch,
             inbasis=("rho", "alpha", "zeta"),
             period=(jnp.inf, jnp.inf, jnp.inf),
             **kwargs,
-        ).reshape(-1, M, N, 3)
-        return desc_coords
+        ).reshape(-1, M, N, 3)[..., 1]
 
     @staticmethod
     def reshape_data(grid, *arys):
@@ -693,17 +744,16 @@ class Bounce1D(IOAble):
     along field lines between bounce points, it is required to identify these
     points with field-line-following coordinates. (In the special case of a linear
     function summing integrals between bounce points over a flux surface, arbitrary
-    coordinate systems may be used as this operation reduces to a surface integral,
+    coordinate systems may be used as that task reduces to a surface integral,
     which is invariant to the order of summation).
 
     The DESC coordinate system is related to field-line-following coordinate
     systems by a relation whose solution is best found with Newton iteration.
-    There is a unique real solution to this equation, so Newton iteration is a
+    There is a unique real solution to that relation, so Newton iteration is a
     globally convergent root-finding algorithm here. For the task of finding
-    bounce points, even if the inverse map: θ(α, ζ) was known, Newton iteration
-    is not a globally convergent algorithm to find the real roots of
-    f : ζ ↦ |B|(ζ) − 1/λ where ζ is a field-line-following coordinate.
-    For this, function approximation of |B| is necessary.
+    bounce points, Newton iteration is not a globally convergent algorithm to
+    find the real roots of r : ζ ↦ |B|(ζ) − 1/λ where ζ is a field-line-following
+    coordinate. For this, function approximation of |B| is necessary.
 
     The function approximation in ``Bounce1D`` is ignorant that the objects to
     approximate are defined on a bounded subset of ℝ². Instead, the domain is
@@ -711,9 +761,8 @@ class Bounce1D(IOAble):
     cannot support reconstruction of the function near the origin. As the
     functions of interest do not vanish at infinity, pseudo-spectral techniques
     are not used. Instead, function approximation is done with local splines.
-    This is useful if one can efficiently obtain data along field lines and
-    most efficient if the number of toroidal transits to follow a field line is
-    not too large.
+    This is useful if one can efficiently obtain data along field lines the
+    number of toroidal transits to follow a field line is not large.
 
     After computing the bounce points, the supplied quadrature is performed.
     By default, this is a Gauss quadrature after removing the singularity.

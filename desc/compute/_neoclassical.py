@@ -340,7 +340,10 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
     ]
     + Bounce1D.required_names,
     source_grid_requirement={"coordinates": "raz", "is_meshgrid": True},
-    quad="jnp.ndarray : Optional, quadrature points and weights for bounce integrals.",
+    quad="jnp.ndarray : Optional, quadrature points and weights for strongly singular "
+    "bounce integrals.",
+    quad2="jnp.ndarray : Optional, quadrature points and weights for weakly singular "
+    "bounce integrals.",
     num_pitch="int : Resolution for quadrature over velocity coordinate. Default 64.",
     num_well=(
         "int : Maximum number of wells to detect for each pitch and field line. "

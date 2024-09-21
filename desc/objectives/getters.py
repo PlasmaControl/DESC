@@ -171,10 +171,10 @@ def get_fixed_xsection_constraints(
     constraints = (
         FixSectionR(**kwargs),
         FixSectionZ(**kwargs),
-        FixPsi(**kwargs),
     )
     if fix_lambda:
         constraints += (FixSectionLambda(**kwargs),)
+    constraints += (FixPsi(**kwargs),)
     if profiles:
         for name, con in _PROFILE_CONSTRAINTS.items():
             if getattr(eq, name) is not None:

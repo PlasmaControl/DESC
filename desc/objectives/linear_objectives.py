@@ -257,13 +257,13 @@ class BoundaryRSelfConsistency(_Objective):
     _linear = True
     _fixed = False  # not "diagonal", since it is fixing a sum
     _units = "(m)"
-    _print_value_fmt = "R boundary self consistency error: "
+    _print_value_fmt = "LCFS R self consistency error: "
 
     def __init__(
         self,
         eq,
         surface_label=None,
-        name="self_consistency boundary R",
+        name="self_consistency lcfs R",
     ):
         self._surface_label = surface_label
         super().__init__(
@@ -351,13 +351,13 @@ class BoundaryZSelfConsistency(_Objective):
     _linear = True
     _fixed = False  # not "diagonal", since it is fixing a sum
     _units = "(m)"
-    _print_value_fmt = "Z boundary self consistency error: "
+    _print_value_fmt = "LCFS Z self consistency error: "
 
     def __init__(
         self,
         eq,
         surface_label=None,
-        name="self_consistency boundary Z",
+        name="self_consistency lcfs Z",
     ):
         self._surface_label = surface_label
         super().__init__(
@@ -446,7 +446,7 @@ class SectionRSelfConsistency(_Objective):
     _linear = True
     _fixed = False
     _units = "(m)"
-    _print_value_fmt = "R cross-section self consistency error: "
+    _print_value_fmt = "Cross-section R self consistency error: "
 
     def __init__(
         self,
@@ -563,7 +563,7 @@ class SectionZSelfConsistency(_Objective):
     _linear = True
     _fixed = False
     _units = "(m)"
-    _print_value_fmt = "Z cross-section self consistency error: "
+    _print_value_fmt = "Cross-section Z self consistency error: "
 
     def __init__(
         self,
@@ -666,13 +666,13 @@ class SectionLambdaSelfConsistency(_Objective):
     _linear = True
     _fixed = False
     _units = "(dimensionless)"
-    _print_value_fmt = "Lambda section self consistency error: "
+    _print_value_fmt = "Cross-section λ self consistency error: "
 
     def __init__(
         self,
         eq,
         surface_label=None,
-        name="self_consistency section Lambda",
+        name="self_consistency section λ",
     ):
         self._surface_label = surface_label
         super().__init__(
@@ -772,7 +772,7 @@ class AxisRSelfConsistency(_Objective):
     _linear = True
     _fixed = False  # not "diagonal", since it is fixing a sum
     _units = "(m)"
-    _print_value_fmt = "R axis self consistency error: "
+    _print_value_fmt = "Axis R self consistency error: "
 
     def __init__(
         self,
@@ -860,7 +860,7 @@ class AxisZSelfConsistency(_Objective):
     _linear = True
     _fixed = False  # not "diagonal", since it is fixing a sum
     _units = "(m)"
-    _print_value_fmt = "Z axis self consistency error: "
+    _print_value_fmt = "Axis Z self consistency error: "
 
     def __init__(
         self,
@@ -962,7 +962,7 @@ class FixBoundaryR(FixParameters):
     """
 
     _units = "(m)"
-    _print_value_fmt = "R boundary error: "
+    _print_value_fmt = "LCFS R error: "
 
     def __init__(
         self,
@@ -973,7 +973,7 @@ class FixBoundaryR(FixParameters):
         normalize=True,
         normalize_target=True,
         modes=True,
-        name="lcfs R",
+        name="fixed LCFS R",
     ):
         if isinstance(modes, bool):
             indices = modes
@@ -1043,7 +1043,7 @@ class FixBoundaryZ(FixParameters):
     """
 
     _units = "(m)"
-    _print_value_fmt = "Z boundary error: "
+    _print_value_fmt = "LCFS Z error: "
 
     def __init__(
         self,
@@ -1054,7 +1054,7 @@ class FixBoundaryZ(FixParameters):
         normalize=True,
         normalize_target=True,
         modes=True,
-        name="lcfs Z",
+        name="fixed LCFS Z",
     ):
         if isinstance(modes, bool):
             indices = modes
@@ -1124,7 +1124,7 @@ class FixSectionR(FixParameters):
     """
 
     _units = "(m)"
-    _print_value_fmt = "R cross-section error: "
+    _print_value_fmt = "Cross-section R error: "
 
     def __init__(
         self,
@@ -1135,7 +1135,7 @@ class FixSectionR(FixParameters):
         normalize=True,
         normalize_target=True,
         modes=True,
-        name="poincare R",
+        name="fixed cross-section R",
     ):
         if isinstance(modes, bool):
             indices = modes
@@ -1205,7 +1205,7 @@ class FixSectionZ(FixParameters):
     """
 
     _units = "(m)"
-    _print_value_fmt = "Z cross-section error: "
+    _print_value_fmt = "Cross-section Z error: "
 
     def __init__(
         self,
@@ -1216,7 +1216,7 @@ class FixSectionZ(FixParameters):
         normalize=True,
         normalize_target=True,
         modes=True,
-        name="poincare Z",
+        name="fixed cross-section Z",
     ):
         if isinstance(modes, bool):
             indices = modes
@@ -1286,7 +1286,7 @@ class FixSectionLambda(FixParameters):
     """
 
     _units = "(m)"
-    _print_value_fmt = "Lambda cross-section error: "
+    _print_value_fmt = "Cross-section λ error: "
 
     def __init__(
         self,
@@ -1297,7 +1297,7 @@ class FixSectionLambda(FixParameters):
         normalize=True,
         normalize_target=True,
         modes=True,
-        name="poincare Lambda",
+        name="fixed cross-section λ",
     ):
         if isinstance(modes, bool):
             indices = modes

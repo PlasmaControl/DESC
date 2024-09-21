@@ -1318,6 +1318,8 @@ def test_derivative_modes():
     # check that default size works for blocked
     assert obj2.objectives[1]._jac_chunk_size == 1000
     assert obj2.objectives[2]._jac_chunk_size is None
+    # hard to say what size auto will give, just check it is >0
+    assert obj1._jac_chunk_size > 0
     obj3.build()
     x = obj1.x(eq, surf)
     g1 = obj1.grad(x)

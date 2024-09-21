@@ -30,6 +30,7 @@ from desc.integrals.quad_utils import (
     bijection_from_disc,
     get_quadrature,
     grad_automorphism_sin,
+    grad_bijection_from_disc,
 )
 from desc.io import IOAble
 from desc.utils import (
@@ -267,8 +268,7 @@ class Bounce2D(IOAble):
     variable; evaluating the multivariable map θ(ϑ(α, ζ), ζ) is expensive
     compared to evaluating the single variable map θ(α=α₀, ζ).
     Another option is to use a filtered Fourier series,
-    doi.org/10.1016/j.aml.2006.10.001. Empirically the Chebyshev series
-    θ(α=α₀, ζ) converges fast.
+    doi.org/10.1016/j.aml.2006.10.001.
 
     After computing the bounce points, the supplied quadrature is performed.
     By default, this is a Gauss quadrature after removing the singularity.
@@ -304,11 +304,11 @@ class Bounce2D(IOAble):
         grid,
         data,
         theta,
+        N_B,
         # TODO: Allow multiple starting labels for near-rational surfaces.
         #  think can just concatenate along second to last axis of cheb
         alpha=0.0,
         num_transit=32,
-        N_B=32,
         quad=leggauss(32),
         automorphism=(automorphism_sin, grad_automorphism_sin),
         Bref=1.0,
@@ -339,12 +339,12 @@ class Bounce2D(IOAble):
             Shape (L, M, N).
             DESC coordinates θ sourced from the Clebsch coordinates
             ``FourierChebyshevBasis.nodes(M,N,L,domain=(0,2*jnp.pi))``.
+        N_B : int
+            Desired Chebyshev spectral resolution for |B|. Preferably power of 2.
         alpha : float
             Starting field line poloidal label.
         num_transit : int
             Number of toroidal transits to follow field line.
-        N_B : int
-            Desired Chebyshev spectral resolution for |B|. Preferably power of 2.
         quad : (jnp.ndarray, jnp.ndarray)
             Quadrature points xₖ and weights wₖ for the approximate evaluation of an
             integral ∫₋₁¹ g(x) dx = ∑ₖ wₖ g(xₖ). Default is 32 points.
@@ -665,6 +665,7 @@ class Bounce2D(IOAble):
             (integrand(*f, B=B, pitch=1 / pitch_inv[..., jnp.newaxis]) / b_sup_z)
             .reshape(shape)
             .dot(self._w)
+            * grad_bijection_from_disc(z1, z2)
         )
 
         if check:

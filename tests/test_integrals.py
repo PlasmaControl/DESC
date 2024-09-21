@@ -1369,6 +1369,7 @@ class TestBounce1D:
             f=f,
             num_well=1,
             check=True,
+            # plot=True, # noqa: E800
         )
         drift_numerical_den = bounce.integrate(
             integrand=TestBounce1D.drift_den_integrand,
@@ -1523,18 +1524,16 @@ class TestBounce2D:
 
         # Recompute on non-symmetric, fft compatible grid.
         eq = things["eq"]
-        grid = LinearGrid(
-            rho=data["rho"], M=eq.M_grid, N=eq.N_grid, sym=False, NFP=eq.NFP
+        # FIXME: Change LinearGrid to default to Fourier points nodes. Interpolation
+        #        fails on LinearGrid.
+        grid = Grid.create_meshgrid(
+            [
+                data["rho"],
+                fourier_pts(4 * eq._M_grid),
+                fourier_pts(1) / eq.NFP,
+            ],
+            NFP=eq.NFP,
         )
-        # noqa: E800
-        # grid = Grid.create_meshgrid( # noqa: E800
-        #     [ # noqa: E800
-        #         data["rho"], # noqa: E800
-        #         fourier_pts(eq._M_grid), # noqa: E800
-        #         fourier_pts(eq.N_grid + 1) / eq.NFP, # noqa: E800
-        #     ], # noqa: E800
-        #     NFP=eq.NFP, # noqa: E800
-        # ) # noqa: E800
         grid_data = eq.compute(
             names=Bounce2D.required_names + ["cvdrift", "gbdrift"], grid=grid
         )
@@ -1558,6 +1557,7 @@ class TestBounce2D:
                 N=N,
                 iota=jnp.broadcast_to(data["iota"], shape=(M * N)),
             ),
+            N_B=2 * N,
             alpha=data["alpha"],  # - 2 * np.pi * data["iota"],
             num_transit=4,
             Bref=data["Bref"],
@@ -1581,6 +1581,7 @@ class TestBounce2D:
             pitch_inv=pitch_inv,
             num_well=1,
             check=True,
+            plot=True,
         )
         drift_numerical = np.squeeze(drift_numerical_num / drift_numerical_den)
         msg = "There should be one bounce integral per pitch in this example."

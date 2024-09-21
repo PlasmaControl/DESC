@@ -5,7 +5,15 @@ from abc import ABC, abstractmethod
 
 import numpy as np
 
-from desc.backend import execute_on_cpu, jit, jnp, tree_flatten, tree_unflatten, use_jax
+from desc.backend import (
+    desc_config,
+    execute_on_cpu,
+    jit,
+    jnp,
+    tree_flatten,
+    tree_unflatten,
+    use_jax,
+)
 from desc.derivatives import Derivative
 from desc.io import IOAble
 from desc.optimizable import Optimizable
@@ -55,7 +63,7 @@ class ObjectiveFunction(IOAble):
         the calculation takes, at the cost of requiring more memory.
         If None, it will use the largest size i.e ``obj.dim_x``.
         Defaults to ``chunk_size="auto"`` which will use a conservative
-        size of 1000.
+        chunk size based off of a heuristic estimate of the memory usage.
 
     """
 
@@ -189,10 +197,18 @@ class ObjectiveFunction(IOAble):
             self._unjit()
 
         self._set_things()
+        self._built = True
+
         if self._jac_chunk_size == "auto":
-            # set jac_chunk_size to 1000 columns of Jacobian
-            # as the default for batched deriv_mode
-            self._jac_chunk_size = 1000
+            # Heuristic estimates of fwd mode Jacobian memory usage,
+            # slightly conservative, based on using ForceBalance as the objective
+            estimated_memory_usage = 2.4e-7 * self.dim_f * self.dim_x + 1  # in GB
+            max_chunk_size = round(
+                (desc_config.get("avail_mem") / estimated_memory_usage - 0.22)
+                / 0.85
+                * self.dim_x
+            )
+            self._jac_chunk_size = max([1, max_chunk_size])
         if self._deriv_mode == "blocked":
             # set jac_chunk_size for each sub-objective
             # to 1000 columns of Jacobian
@@ -201,8 +217,6 @@ class ObjectiveFunction(IOAble):
                 obj._jac_chunk_size = (
                     1000 if obj._jac_chunk_size == "auto" else obj._jac_chunk_size
                 )
-
-        self._built = True
         timer.stop("Objective build")
         if verbose > 1:
             timer.disp("Objective build")

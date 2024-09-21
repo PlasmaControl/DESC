@@ -1,6 +1,7 @@
 """Base classes for objectives."""
 
 import functools
+import re
 from abc import ABC, abstractmethod
 
 import numpy as np
@@ -8,6 +9,7 @@ import numpy as np
 from desc.backend import execute_on_cpu, jit, jnp, tree_flatten, tree_unflatten, use_jax
 from desc.derivatives import Derivative
 from desc.io import IOAble
+from desc.io.optimizable_io import _CombinedMeta
 from desc.optimizable import Optimizable
 from desc.utils import (
     PRINT_WIDTH,
@@ -784,7 +786,50 @@ class ObjectiveFunction(IOAble):
         return self._things
 
 
-class _Objective(IOAble, ABC):
+class DocInheritMeta(type):
+    """Metaclass to inherit docstrings from parent classes."""
+
+    def __new__(cls, name, bases, dct):
+        """Create a new class with inherited docstrings."""
+        # Collect the child's docstring
+        child_doc = dct.get("__doc__", "") or ""
+
+        # Find the immediate parent class that uses DocInheritMeta metaclass
+        for base in bases:
+            if isinstance(
+                base, DocInheritMeta
+            ):  # Ensure it's from a class with DocInheritMeta
+                parent_doc = base.__doc__ or ""
+
+                # find the "Parameters" section in the parent's docstring
+                parameters_section = re.search(
+                    r"(Parameters\s*-+\s*.+)", parent_doc, re.DOTALL
+                )
+
+                if parameters_section:
+                    # Get only the "Parameters" part of the parent's docstring
+                    parameters_text = parameters_section.group(0)
+                else:
+                    parameters_text = ""
+
+                # Combine the child docstring with only the parent's parameters section
+                full_doc = (
+                    child_doc + "\n    " + parameters_text
+                    if parameters_text
+                    else child_doc
+                )
+                dct["__doc__"] = full_doc
+
+                break  # Only consider the first base class using DocInheritMeta
+
+        return super().__new__(cls, name, bases, dct)
+
+
+class _CombinedMeta2(DocInheritMeta, _CombinedMeta):
+    pass
+
+
+class _Objective(IOAble, ABC, metaclass=_CombinedMeta2):
     """Objective (or constraint) used in the optimization of an Equilibrium.
 
     Parameters

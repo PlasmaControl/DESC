@@ -107,7 +107,7 @@ jobs:
       - name: Upload coverage
         if: env.has_changes == 'true'
         id : codecov
-        uses: Wandalen/wretry.action@v1.3.0
+        uses: Wandalen/wretry.action@v3.5.0
         with:
           action: codecov/codecov-action@v3
           with: |

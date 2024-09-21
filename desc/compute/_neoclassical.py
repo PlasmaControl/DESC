@@ -368,6 +368,7 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
         if "quad" in kwargs
         else get_quadrature(leggauss(32), (automorphism_sin, grad_automorphism_sin))
     )
+    quad2 = kwargs["quad2"] if "quad2" in kwargs else chebgauss2(quad[0].size)
     num_pitch = kwargs.get("num_pitch", 64)
     num_well = kwargs.get("num_well", None)
     batch = kwargs.get("batch", True)
@@ -382,7 +383,7 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
     # tan(π/2 γ_c) =
     #              ∫ dℓ (1 − λ|B|/2) / √(1 − λ|B|) |∇ρ| κ_g / |B|
     #              ----------------------------------------------
-    # (|∇ρ| ‖e_α|ρ,ϕ‖)ᵢ ∫ dℓ √(1 − λ|B|) [ (1 − λ|B|/2)/(1 − λ|B|) ∂|B|/∂ψ + K ] / |B|
+    # (|∇ρ| ‖e_α|ρ,ϕ‖)ᵢ ∫ dℓ [ (1 − λ|B|/2)/√(1 − λ|B|) ∂|B|/∂ψ + √(1 − λ|B|) K ] / |B|
 
     def d_v_tau(B, pitch):
         return safediv(2.0, jnp.sqrt(jnp.abs(1 - pitch * B)))
@@ -394,12 +395,13 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
             / B
         )
 
-    def drift_poloidal(B_psi, K, B, pitch):
+    def drift_poloidal_1(B_psi, B, pitch):
         return (
-            jnp.sqrt(jnp.abs(1 - pitch * B))
-            * (safediv(1 - 0.5 * pitch * B, 1 - pitch * B) * B_psi + K)
-            / B
+            safediv(1 - 0.5 * pitch * B, jnp.sqrt(jnp.abs(1 - pitch * B))) * B_psi / B
         )
+
+    def drift_poloidal_2(K, B, pitch):
+        return jnp.sqrt(jnp.abs(1 - pitch * B)) * K / B
 
     def compute(data):
         """∫ dλ ∑ⱼ [v τ γ_c²]ⱼ."""
@@ -422,12 +424,13 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
                         num_well=num_well,
                     ),
                     bounce.integrate(
-                        drift_poloidal,
+                        [drift_poloidal_1, drift_poloidal_2],
                         data["pitch_inv"],
                         [data["|B|_psi|v,p"], data["K"]],
                         batch=batch,
                         num_well=num_well,
                         weight=data["weight"],
+                        quad2=quad2,
                     ),
                 )
             )

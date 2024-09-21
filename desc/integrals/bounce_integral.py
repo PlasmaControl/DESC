@@ -304,6 +304,7 @@ class Bounce1D(IOAble):
         batch=True,
         check=False,
         plot=False,
+        quad2=None,
     ):
         """Bounce integrate ∫ f(λ, ℓ) dℓ.
 
@@ -364,15 +365,24 @@ class Bounce1D(IOAble):
             flux surface, and pitch value.
 
         """
+        if isinstance(integrand, (list, tuple)):
+            integrand_0 = integrand[0]
+            integrand_1 = integrand[1]
+            f_0 = f[0]
+            f_1 = f[1]
+        else:
+            integrand_0 = integrand
+            f_0 = f
+            f_1 = integrand_1 = None
         z1, z2 = self.points(pitch_inv, num_well=num_well)
         result = _bounce_quadrature(
             x=self._x,
             w=self._w,
             z1=z1,
             z2=z2,
-            integrand=integrand,
+            integrand=integrand_0,
             pitch_inv=pitch_inv,
-            f=setdefault(f, []),
+            f=setdefault(f_0, []),
             data=self._data,
             knots=self._zeta,
             method=method,
@@ -380,6 +390,22 @@ class Bounce1D(IOAble):
             check=check,
             plot=plot,
         )
+        if integrand_1 is not None:
+            result += _bounce_quadrature(
+                x=self._x if quad2 is None else quad2[0],
+                w=self._w if quad2 is None else quad2[1],
+                z1=z1,
+                z2=z2,
+                integrand=integrand_1,
+                pitch_inv=pitch_inv,
+                f=setdefault(f_1, []),
+                data=self._data,
+                knots=self._zeta,
+                method=method,
+                batch=batch,
+                check=check,
+                plot=plot,
+            )
         if weight is not None:
             result *= interp_to_argmin(
                 weight,

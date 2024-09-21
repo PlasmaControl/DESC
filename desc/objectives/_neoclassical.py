@@ -369,8 +369,6 @@ class GammaC(_Objective):
         if target is None and bounds is None:
             target = 0.0
 
-        self._keys_1dr = ["iota", "iota_r", "min_tz |B|", "max_tz |B|"]
-        self._key = "Gamma_c" if Nemov else "Gamma_c Velasco"
         self._constants = {
             "quad_weights": 1,
             "alpha": alpha,
@@ -385,6 +383,12 @@ class GammaC(_Objective):
             "num_well": num_well,
         }
         self._grid_1dr = grid
+        self._keys_1dr = ["iota", "iota_r", "min_tz |B|", "max_tz |B|"]
+        if Nemov:
+            self._key = "Gamma_c"
+            self._constants["quad2"] = chebgauss2(num_pitch)
+        else:
+            self._key = "Gamma_c Velasco"
 
         super().__init__(
             things=eq,
@@ -487,6 +491,9 @@ class GammaC(_Objective):
             key: grid.copy_data_from_other(data[key], self._grid_1dr)
             for key in self._keys_1dr
         }
+        quad2 = {}
+        if "quad2" in constants:
+            quad2["quad2"] = constants["quad2"]
         data = compute_fun(
             eq,
             self._key,
@@ -495,6 +502,7 @@ class GammaC(_Objective):
             constants["profiles"],
             data=data,
             quad=constants["quad"],
+            **quad2,
             **self._hyperparameters,
         )
         return grid.compress(data[self._key])

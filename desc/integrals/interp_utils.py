@@ -24,9 +24,8 @@ chebroots_vec = jnp.vectorize(chebroots, signature="(m)->(n)")
 
 
 # TODO: Transformation to make nodes more uniform Boyd eq. 16.46 pg. 336.
-#  Have a hunch it won't change locations of complex poles much, so using
-#  more uniformly spaced nodes could speed up convergence (wrt early
-#  series truncation, not the infinite limit).
+#  Have a hunch more uniformly spaced nodes could speed up convergence
+#  Edit: Seems unnecessary for now. Chebyshev part converges fine.
 
 
 def cheb_pts(N, domain=(-1, 1), lobatto=False):
@@ -208,7 +207,6 @@ def irfft_non_uniform(xq, a, n, axis=-1):
     m = jnp.fft.rfftfreq(n, d=1 / n)
     basis = jnp.exp(-1j * m * xq[..., jnp.newaxis])
     fq = 2.0 * jnp.linalg.vecdot(basis, a).real
-    # TODO: Test JAX does this optimization automatically.
     # ℜ〈 basis, a 〉= cos(m xq)⋅ℜ(a) − sin(m xq)⋅ℑ(a)
     return fq
 

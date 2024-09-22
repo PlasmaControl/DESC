@@ -14,7 +14,7 @@ from desc.integrals.bounce_utils import (
     _set_default_plot_kwargs,
     bounce_points,
     get_alpha,
-    get_pitch_inv,
+    get_pitch_inv_quad,
     interp_to_argmin,
     plot_ppoly,
 )
@@ -297,7 +297,7 @@ class Bounce2D(IOAble):
     """
 
     required_names = ["B^zeta", "|B|", "iota"]
-    get_pitch_inv_quad = staticmethod(get_pitch_inv)
+    get_pitch_inv_quad = staticmethod(get_pitch_inv_quad)
 
     def __init__(
         self,
@@ -457,7 +457,7 @@ class Bounce2D(IOAble):
             clebsch = FourierChebyshevSeries.nodes(
                 check_posint(M),
                 check_posint(N),
-                check_posint(L),
+                L,
                 domain=(0, 2 * jnp.pi),
             )
         return eq.map_coordinates(
@@ -794,7 +794,7 @@ class Bounce1D(IOAble):
     """
 
     required_names = ["B^zeta", "B^zeta_z|r,a", "|B|", "|B|_z|r,a"]
-    get_pitch_inv = staticmethod(get_pitch_inv)
+    get_pitch_inv_quad = staticmethod(get_pitch_inv_quad)
 
     def __init__(
         self,
@@ -826,11 +826,17 @@ class Bounce1D(IOAble):
         quad : (jnp.ndarray, jnp.ndarray)
             Quadrature points xₖ and weights wₖ for the approximate evaluation of an
             integral ∫₋₁¹ g(x) dx = ∑ₖ wₖ g(xₖ). Default is 32 points.
+            For weak singular integrals, use ``chebgauss2`` from
+            ``desc.integrals.quad_utils``.
+            For strong singular integrals, use ``leggauss``.
         automorphism : (Callable, Callable) or None
             The first callable should be an automorphism of the real interval [-1, 1].
             The second callable should be the derivative of the first. This map defines
             a change of variable for the bounce integral. The choice made for the
             automorphism will affect the performance of the quadrature method.
+            For weak singular integrals, use ``None``.
+            For strong singular integrals, use ``automorphism_sin`` from
+            ``desc.integrals.quad_utils``.
         Bref : float
             Optional. Reference magnetic field strength for normalization.
         Lref : float

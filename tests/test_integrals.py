@@ -10,7 +10,7 @@ from numpy.polynomial.chebyshev import chebgauss, chebinterpolate, chebroots, ch
 from numpy.polynomial.legendre import leggauss
 from scipy import integrate
 from scipy.interpolate import CubicHermiteSpline
-from scipy.special import ellipe, ellipkm1, roots_chebyu
+from scipy.special import ellipe, ellipkm1
 from tests.test_plotting import tol_1d
 
 from desc.backend import jnp
@@ -39,7 +39,7 @@ from desc.integrals.bounce_utils import (
     _get_extrema,
     bounce_points,
     get_alpha,
-    get_pitch_inv,
+    get_pitch_inv_quad,
     interp_to_argmin,
     interp_to_argmin_hard,
 )
@@ -47,6 +47,7 @@ from desc.integrals.interp_utils import fourier_pts
 from desc.integrals.quad_utils import (
     automorphism_sin,
     bijection_from_disc,
+    chebgauss2,
     get_quadrature,
     grad_automorphism_sin,
     grad_bijection_from_disc,
@@ -925,36 +926,56 @@ class TestBouncePoints:
         np.testing.assert_allclose(z2, r[np.isclose(r, 0.24, atol=1e-1)])
 
 
-def _mod_cheb_gauss(deg):
+def _chebgauss1(deg):
     x, w = chebgauss(deg)
     w /= chebweight(x)
-    return x, w
-
-
-def _mod_chebu_gauss(deg):
-    x, w = roots_chebyu(deg)
-    w *= chebweight(x)
     return x, w
 
 
 class TestBounceQuadrature:
     """Test bounce quadrature."""
 
+    auto_sin = (automorphism_sin, grad_automorphism_sin)
+
     @pytest.mark.unit
     @pytest.mark.parametrize(
         "is_strong, quad, automorphism",
         [
             (True, tanh_sinh(40), None),
-            (True, leggauss(25), "default"),
             (False, tanh_sinh(20), None),
-            (False, leggauss_lob(10), "default"),
-            # sin automorphism still helps out chebyshev quadrature
-            (True, _mod_cheb_gauss(30), "default"),
-            (False, _mod_chebu_gauss(10), "default"),
+            # Node density near boundary is 1/(1−x²).
+            (True, leggauss(25), auto_sin),
+            (True, _chebgauss1(30), auto_sin),
+            # Lobatto nodes
+            (False, leggauss_lob(8, interior_only=True), auto_sin),
+            # Node density near boundary is 1/√(1−x²).
+            (False, leggauss_lob(13, interior_only=True), None),
+            (False, chebgauss2(8), None),
         ],
     )
     def test_bounce_quadrature(self, is_strong, quad, automorphism):
-        """Test quadrature matches singular (strong and weak) elliptic integrals."""
+        """Test quadrature matches singular (strong and weak) elliptic integrals.
+
+        Notes
+        -----
+        Empirical testing shows asymptotic density of nodes needs to be at least
+        1/√(1−x²) and quadrature needs √(1−x²) factor in Jacobian for accurate
+        bounce integrals. This is satisfied by ``chebgauss2`` and ``leggauss`` with
+        the sin automorphism. The former has less clustering near boundary by a factor
+        of 1/√(1−x²), so we choose it for weakly singular bounce integrals. This will
+        capture more features in the integral, especially the W shaped wells. Less
+        clustering will also make non-uniform FFTs more accurate.
+
+        For the strongly singular bounce integrals, another √(1−x²) factor is preferred
+        to supress the derivative (as expected from chain rule), so we need to use the
+        sin automorphism. We choose to apply that map to ``leggauss`` instead of
+        ``_chebgauss1`` because the extra cosine term in ``_chebgauss1`` increases the
+        polynomial complexity of the integrand and suppresses the derivative too strong
+        for a quadrature that already clusters near edge with density 1/(1−x²). This is
+        why ``_chebgauss1`` required more nodes in this test, and in general would
+        require more nodes for functions with more features.
+
+        """
         p = 1e-4
         m = 1 - p
         # Some prime number that doesn't appear anywhere in calculation.
@@ -975,15 +996,12 @@ class TestBounceQuadrature:
         else:
             integrand = lambda B, pitch: jnp.sqrt(1 - m * pitch * B)
             truth = v * 2 * ellipe(m)
-        kwargs = {}
-        if automorphism != "default":
-            kwargs["automorphism"] = automorphism
         bounce = Bounce1D(
             Grid.create_meshgrid([1, 0, knots], coordinates="raz"),
             data,
             quad,
+            automorphism,
             check=True,
-            **kwargs,
         )
         points = bounce.points(pitch_inv, num_well=1)
         np.testing.assert_allclose(points[0], z1)
@@ -1101,7 +1119,7 @@ class TestBounce1D:
         return safediv(1, jnp.sqrt(jnp.abs(1 - pitch * B)))
 
     @pytest.mark.unit
-    @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d * 4)
+    @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d * 3)
     def test_bounce1d_checks(self):
         """Test that all the internal correctness checks pass for real example."""
         # noqa: D202
@@ -1127,7 +1145,7 @@ class TestBounce1D:
         )
         # 5. Make the bounce integration operator.
         bounce = Bounce1D(grid.source_grid, data, quad=leggauss(3), check=True)
-        pitch_inv = bounce.get_pitch_inv(
+        pitch_inv, _ = bounce.get_pitch_inv_quad(
             min_B=grid.compress(data["min_tz |B|"]),
             max_B=grid.compress(data["max_tz |B|"]),
             num_pitch=10,
@@ -1335,7 +1353,7 @@ class TestBounce1D:
 
         # Exclude singularity not captured by analytic approximation for pitch near
         # the maximum |B|. (This is captured by the numerical integration).
-        pitch_inv = get_pitch_inv(np.min(B), np.max(B), 100)[:-1]
+        pitch_inv = get_pitch_inv_quad(np.min(B), np.max(B), 100)[0][:-1]
         k2 = 0.5 * ((1 - B0 / pitch_inv) / (epsilon * B0 / pitch_inv) + 1)
         I_0, I_1, I_2, I_3, I_4, I_5, I_6, I_7 = (
             TestBounceQuadrature.elliptic_incomplete(k2)

@@ -47,17 +47,16 @@ class Bounce1D(IOAble):
     along field lines between bounce points, it is required to identify these
     points with field-line-following coordinates. (In the special case of a linear
     function summing integrals between bounce points over a flux surface, arbitrary
-    coordinate systems may be used as this operation reduces to a surface integral,
+    coordinate systems may be used as that task reduces to a surface integral,
     which is invariant to the order of summation).
 
     The DESC coordinate system is related to field-line-following coordinate
     systems by a relation whose solution is best found with Newton iteration.
-    There is a unique real solution to this equation, so Newton iteration is a
+    There is a unique real solution to that relation, so Newton iteration is a
     globally convergent root-finding algorithm here. For the task of finding
-    bounce points, even if the inverse map: θ(α, ζ) was known, Newton iteration
-    is not a globally convergent algorithm to find the real roots of
-    f : ζ ↦ |B|(ζ) − 1/λ where ζ is a field-line-following coordinate.
-    For this, function approximation of |B| is necessary.
+    bounce points, Newton iteration is not a globally convergent algorithm to
+    find the real roots of r : ζ ↦ |B|(ζ) − 1/λ where ζ is a field-line-following
+    coordinate. For this, function approximation of |B| is necessary.
 
     The function approximation in ``Bounce1D`` is ignorant that the objects to
     approximate are defined on a bounded subset of ℝ². Instead, the domain is
@@ -65,9 +64,8 @@ class Bounce1D(IOAble):
     cannot support reconstruction of the function near the origin. As the
     functions of interest do not vanish at infinity, pseudo-spectral techniques
     are not used. Instead, function approximation is done with local splines.
-    This is useful if one can efficiently obtain data along field lines and
-    most efficient if the number of toroidal transits to follow a field line is
-    not too large.
+    This is useful if one can efficiently obtain data along field lines the
+    number of toroidal transits to follow a field line is not large.
 
     After computing the bounce points, the supplied quadrature is performed.
     By default, this is a Gauss quadrature after removing the singularity.
@@ -105,9 +103,9 @@ class Bounce1D(IOAble):
         data,
         quad=leggauss(32),
         automorphism=(automorphism_sin, grad_automorphism_sin),
+        *,
         Bref=1.0,
         Lref=1.0,
-        *,
         is_reshaped=False,
         check=False,
         **kwargs,
@@ -117,7 +115,7 @@ class Bounce1D(IOAble):
         Parameters
         ----------
         grid : Grid
-            Clebsch coordinate (ρ, α, ζ) tensor-product grid.
+            Tensor-product grid in (ρ, α, ζ) Clebsch coordinates.
             The ζ coordinates (the unique values prior to taking the tensor-product)
             must be strictly increasing and preferably uniformly spaced. These are used
             as knots to construct splines. A reference knot density is 100 knots per
@@ -142,9 +140,8 @@ class Bounce1D(IOAble):
             Whether the arrays in ``data`` are already reshaped to the expected form of
             shape (..., N) or (..., L, N) or (M, L, N). This option can be used to
             iteratively compute bounce integrals one field line or one flux surface
-            at a time, respectively, potentially reducing memory usage. To do so,
-            set to true and provide only those axes of the reshaped data.
-            Default is false.
+            at a time, respectively, reducing memory usage. To do so, set to true and
+            provide only those axes of the reshaped data. Default is false.
         check : bool
             Flag for debugging. Must be false for JAX transformations.
 
@@ -200,7 +197,7 @@ class Bounce1D(IOAble):
         Parameters
         ----------
         grid : Grid
-            Clebsch coordinate (ρ, α, ζ) tensor-product grid.
+            Tensor-product grid in (ρ, α, ζ) Clebsch coordinates.
         arys : jnp.ndarray
             Data evaluated on grid.
 
@@ -220,7 +217,7 @@ class Bounce1D(IOAble):
         Parameters
         ----------
         pitch_inv : jnp.ndarray
-            Shape (M, L, P).
+            Shape (M, L, num_pitch).
             1/λ values to compute the bounce points at each field line. 1/λ(α,ρ) is
             specified by ``pitch_inv[α,ρ]`` where in the latter the labels
             are interpreted as the indices that correspond to that field line.
@@ -237,8 +234,8 @@ class Bounce1D(IOAble):
 
         Returns
         -------
-        z1, z2 : (jnp.ndarray, jnp.ndarray)
-            Shape (M, L, P, num_well).
+        z1, z2 : tuple[jnp.ndarray]
+            Shape (M, L, num_pitch, num_well).
             ζ coordinates of bounce points. The points are ordered and grouped such
             that the straight line path between ``z1`` and ``z2`` resides in the
             epigraph of |B|.
@@ -250,18 +247,18 @@ class Bounce1D(IOAble):
         """
         return bounce_points(pitch_inv, self._zeta, self.B, self._dB_dz, num_well)
 
-    def check_points(self, z1, z2, pitch_inv, *, plot=True, **kwargs):
+    def check_points(self, points, pitch_inv, *, plot=True, **kwargs):
         """Check that bounce points are computed correctly.
 
         Parameters
         ----------
-        z1, z2 : (jnp.ndarray, jnp.ndarray)
-            Shape (M, L, P, num_well).
+        points : tuple[jnp.ndarray]
+            Shape (M, L, num_pitch, num_well).
             ζ coordinates of bounce points. The points are ordered and grouped such
             that the straight line path between ``z1`` and ``z2`` resides in the
             epigraph of |B|.
         pitch_inv : jnp.ndarray
-            Shape (M, L, P).
+            Shape (M, L, num_pitch).
             1/λ values to compute the bounce points at each field line. 1/λ(α,ρ) is
             specified by ``pitch_inv[α,ρ]`` where in the latter the labels
             are interpreted as the indices that correspond to that field line.
@@ -277,8 +274,8 @@ class Bounce1D(IOAble):
 
         """
         return _check_bounce_points(
-            z1=z1,
-            z2=z2,
+            z1=points[0],
+            z2=points[1],
             pitch_inv=pitch_inv,
             knots=self._zeta,
             B=self.B,
@@ -289,11 +286,11 @@ class Bounce1D(IOAble):
     def integrate(
         self,
         integrand,
+        points,
         pitch_inv,
         f=None,
         weight=None,
         *,
-        num_well=None,
         method="cubic",
         batch=True,
         check=False,
@@ -311,8 +308,13 @@ class Bounce1D(IOAble):
             accept the arrays in ``f`` as arguments as well as the additional keyword
             arguments: ``B`` and ``pitch``. A quadrature will be performed to
             approximate the bounce integral of ``integrand(*f,B=B,pitch=pitch)``.
+        points : tuple[jnp.ndarray]
+            Shape (M, L, num_pitch, num_well).
+            ζ coordinates of bounce points. The points are ordered and grouped such
+            that the straight line path between ``z1`` and ``z2`` resides in the
+            epigraph of |B|.
         pitch_inv : jnp.ndarray
-            Shape (M, L, P).
+            Shape (M, L, num_pitch).
             1/λ values to compute the bounce integrals. 1/λ(α,ρ) is specified by
             ``pitch_inv[α,ρ]`` where in the latter the labels are interpreted
             as the indices that correspond to that field line.
@@ -320,24 +322,14 @@ class Bounce1D(IOAble):
             Shape (M, L, N).
             Real scalar-valued functions evaluated on the ``grid`` supplied to
             construct this object. These functions should be arguments to the callable
-            ``integrand``. Use the method ``self.reshape_data`` to reshape the data
+            ``integrand``. Use the method ``Bounce1D.reshape_data`` to reshape the data
             into the expected shape.
         weight : jnp.ndarray
             Shape (M, L, N).
             If supplied, the bounce integral labeled by well j is weighted such that
             the returned value is w(j) ∫ f(λ, ℓ) dℓ, where w(j) is ``weight``
             interpolated to the deepest point in that magnetic well. Use the method
-            ``self.reshape_data`` to reshape the data into the expected shape.
-        num_well : int or None
-            Specify to return the first ``num_well`` pairs of bounce points for each
-            pitch along each field line. This is useful if ``num_well`` tightly
-            bounds the actual number. As a reference, there are typically 20 wells
-            per toroidal transit for a given pitch. You can check this by plotting
-            the field lines with the ``check_points`` method.
-
-            If not specified, then all bounce points are returned. If there were fewer
-            wells detected along a field line than the size of the last axis of the
-            returned arrays, then that axis is padded with zero.
+            ``Bounce1D.reshape_data`` to reshape the data into the expected shape.
         method : str
             Method of interpolation.
             See https://interpax.readthedocs.io/en/latest/_api/interpax.interp1d.html.
@@ -353,18 +345,16 @@ class Bounce1D(IOAble):
         Returns
         -------
         result : jnp.ndarray
-            Shape (M, L, P, num_well).
+            Shape is same as input points.
             Last axis enumerates the bounce integrals for a given field line,
             flux surface, and pitch value.
 
         """
-        z1, z2 = self.points(pitch_inv, num_well=num_well)
         result = _bounce_quadrature(
             x=self._x,
             w=self._w,
-            z1=z1,
-            z2=z2,
             integrand=integrand,
+            points=points,
             pitch_inv=pitch_inv,
             f=setdefault(f, []),
             data=self._data,
@@ -377,17 +367,16 @@ class Bounce1D(IOAble):
         if weight is not None:
             result *= interp_to_argmin(
                 weight,
-                z1,
-                z2,
+                points,
                 self._zeta,
                 self.B,
                 self._dB_dz,
                 method,
             )
-        assert result.shape == z1.shape
+        assert result.shape == points[0].shape
         return result
 
-    def plot(self, m, l, pitch_inv=None, /, **kwargs):
+    def plot(self, m, l, pitch_inv=None, **kwargs):
         """Plot the field line and bounce points of the given pitch angles.
 
         Parameters
@@ -396,7 +385,7 @@ class Bounce1D(IOAble):
             Indices into the nodes of the grid supplied to make this object.
             ``alpha,rho=grid.meshgrid_reshape(grid.nodes[:,:2],"arz")[m,l,0]``.
         pitch_inv : jnp.ndarray
-            Shape (P, ).
+            Shape (num_pitch, ).
             Optional, 1/λ values whose corresponding bounce points on the field line
             specified by Clebsch coordinate α(m), ρ(l) will be plotted.
         kwargs

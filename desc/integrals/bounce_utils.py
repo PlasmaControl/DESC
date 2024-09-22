@@ -27,7 +27,7 @@ from desc.utils import (
 )
 
 
-def get_pitch_inv(min_B, max_B, num, relative_shift=1e-6):
+def get_pitch_inv(min_B, max_B, num_pitch, relative_shift=1e-6):
     """Return 1/λ values for quadrature between ``min_B`` and ``max_B``.
 
     Parameters
@@ -36,7 +36,7 @@ def get_pitch_inv(min_B, max_B, num, relative_shift=1e-6):
         Minimum |B| value.
     max_B : jnp.ndarray
         Maximum |B| value.
-    num : int
+    num_pitch : int
         Number of values, not including endpoints.
     relative_shift : float
         Relative amount to shift maxima down and minima up to avoid floating point
@@ -54,8 +54,10 @@ def get_pitch_inv(min_B, max_B, num, relative_shift=1e-6):
     min_B = (1 + relative_shift) * min_B
     max_B = (1 - relative_shift) * max_B
     # Samples should be uniformly spaced in |B| and not λ (GitHub issue #1228).
-    pitch_inv = jnp.moveaxis(composite_linspace(jnp.stack([min_B, max_B]), num), 0, -1)
-    assert pitch_inv.shape == (*min_B.shape, num + 2)
+    pitch_inv = jnp.moveaxis(
+        composite_linspace(jnp.stack([min_B, max_B]), num_pitch), 0, -1
+    )
+    assert pitch_inv.shape == (*min_B.shape, num_pitch + 2)
     return pitch_inv
 
 
@@ -78,7 +80,7 @@ def _check_spline_shape(knots, g, dg_dz, pitch_inv=None):
         Last axis enumerates the coefficients of power series. Second to
         last axis enumerates the polynomials that compose a particular spline.
     pitch_inv : jnp.ndarray
-        Shape (..., P).
+        Shape (..., num_pitch).
         1/λ values. 1/λ(α,ρ) is specified by ``pitch_inv[α,ρ]`` where in
         the latter the labels are interpreted as the indices that correspond
         to that field line.
@@ -116,7 +118,7 @@ def bounce_points(
     Parameters
     ----------
     pitch_inv : jnp.ndarray
-        Shape (..., P).
+        Shape (..., num_pitch).
         1/λ values to compute the bounce points.
     knots : jnp.ndarray
         Shape (N, ).
@@ -151,7 +153,7 @@ def bounce_points(
     Returns
     -------
     z1, z2 : (jnp.ndarray, jnp.ndarray)
-        Shape (..., P, num_well).
+        Shape (..., num_pitch, num_well).
         ζ coordinates of bounce points. The points are ordered and grouped such
         that the straight line path between ``z1`` and ``z2`` resides in the
         epigraph of |B|.
@@ -221,15 +223,14 @@ def _set_default_plot_kwargs(kwargs):
 
 def _check_bounce_points(z1, z2, pitch_inv, knots, B, plot=True, **kwargs):
     """Check that bounce points are computed correctly."""
-    z1 = atleast_nd(4, z1)
-    z2 = atleast_nd(4, z2)
-    pitch_inv = atleast_nd(3, pitch_inv)
-    B = atleast_nd(4, B)
-
     kwargs = _set_default_plot_kwargs(kwargs)
     plots = []
 
     assert z1.shape == z2.shape
+    z1 = atleast_nd(4, z1)
+    z2 = atleast_nd(4, z2)
+    pitch_inv = atleast_nd(3, pitch_inv)
+    B = atleast_nd(4, B)
     mask = (z1 - z2) != 0.0
     z1 = jnp.where(mask, z1, jnp.nan)
     z2 = jnp.where(mask, z2, jnp.nan)
@@ -283,13 +284,13 @@ def _check_bounce_points(z1, z2, pitch_inv, knots, B, plot=True, **kwargs):
 def _bounce_quadrature(
     x,
     w,
-    z1,
-    z2,
     integrand,
+    points,
     pitch_inv,
     f,
     data,
     knots,
+    *,
     method="cubic",
     batch=True,
     check=False,
@@ -300,24 +301,24 @@ def _bounce_quadrature(
     Parameters
     ----------
     x : jnp.ndarray
-        Shape (w.size, ).
+        Shape (num_quad, ).
         Quadrature points in [-1, 1].
     w : jnp.ndarray
-        Shape (w.size, ).
+        Shape (num_quad, ).
         Quadrature weights.
-    z1, z2 : jnp.ndarray
-        Shape (..., P, num_well).
-        ζ coordinates of bounce points. The points are ordered and grouped such
-        that the straight line path between ``z1`` and ``z2`` resides in the
-        epigraph of |B|.
     integrand : callable
         The composition operator on the set of functions in ``f`` that maps the
         functions in ``f`` to the integrand f(λ, ℓ) in ∫ f(λ, ℓ) dℓ. It should
         accept the arrays in ``f`` as arguments as well as the additional keyword
         arguments: ``B`` and ``pitch``. A quadrature will be performed to
         approximate the bounce integral of ``integrand(*f,B=B,pitch=pitch)``.
+    points : jnp.ndarray
+        Shape (..., num_pitch, num_well).
+        ζ coordinates of bounce points. The points are ordered and grouped such
+        that the straight line path between ``z1`` and ``z2`` resides in the
+        epigraph of |B|.
     pitch_inv : jnp.ndarray
-        Shape (..., P).
+        Shape (..., num_pitch).
         1/λ values to compute the bounce integrals.
     f : list[jnp.ndarray]
         Shape (..., N).
@@ -346,12 +347,13 @@ def _bounce_quadrature(
     Returns
     -------
     result : jnp.ndarray
-        Shape (..., P, num_well).
+        Shape (..., num_pitch, num_well).
         Last axis enumerates the bounce integrals for a field line,
         flux surface, and pitch.
 
     """
     errorif(x.ndim != 1 or x.shape != w.shape)
+    z1, z2 = points
     errorif(z1.ndim < 2 or z1.shape != z2.shape)
     pitch_inv = jnp.atleast_1d(pitch_inv)
     if not isinstance(f, (list, tuple)):
@@ -362,8 +364,8 @@ def _bounce_quadrature(
         result = _interpolate_and_integrate(
             w=w,
             Q=bijection_from_disc(x, z1[..., jnp.newaxis], z2[..., jnp.newaxis]),
-            pitch_inv=pitch_inv,
             integrand=integrand,
+            pitch_inv=pitch_inv,
             f=f,
             data=data,
             knots=knots,
@@ -379,8 +381,8 @@ def _bounce_quadrature(
             return None, _interpolate_and_integrate(
                 w=w,
                 Q=bijection_from_disc(x, z1[..., jnp.newaxis], z2[..., jnp.newaxis]),
-                pitch_inv=pitch_inv,
                 integrand=integrand,
+                pitch_inv=pitch_inv,
                 f=f,
                 data=data,
                 knots=knots,
@@ -402,8 +404,8 @@ def _bounce_quadrature(
 def _interpolate_and_integrate(
     w,
     Q,
-    pitch_inv,
     integrand,
+    pitch_inv,
     f,
     data,
     knots,
@@ -417,10 +419,10 @@ def _interpolate_and_integrate(
     Parameters
     ----------
     w : jnp.ndarray
-        Shape (w.size, ).
+        Shape (num_quad, ).
         Quadrature weights.
     Q : jnp.ndarray
-        Shape (..., P, Q.shape[-2], w.size).
+        Shape (..., num_pitch, num_well, num_quad).
         Quadrature points in ζ coordinates.
 
     Returns
@@ -454,28 +456,28 @@ def _interpolate_and_integrate(
         .dot(w)
     )
     if check:
-        _check_interp(shape, Q, f, b_sup_z, B, result, plot)
+        _check_interp(shape, Q, b_sup_z, B, result, f, plot)
 
     return result
 
 
-def _check_interp(shape, Q, f, b_sup_z, B, result, plot):
+def _check_interp(shape, Q, b_sup_z, B, result, f, plot):
     """Check for interpolation failures and floating point issues.
 
     Parameters
     ----------
     shape : tuple
-        (..., P, Q.shape[-2], w.size).
+        (..., num_pitch, num_well, num_quad).
     Q : jnp.ndarray
         Quadrature points in ζ coordinates.
-    f : list[jnp.ndarray]
-        Arguments to the integrand, interpolated to Q.
     b_sup_z : jnp.ndarray
         Contravariant toroidal component of magnetic field, interpolated to Q.
     B : jnp.ndarray
         Norm of magnetic field, interpolated to Q.
     result : jnp.ndarray
         Output of ``_interpolate_and_integrate``.
+    f : list[jnp.ndarray]
+        Arguments to the integrand, interpolated to Q.
     plot : bool
         Whether to plot stuff.
 
@@ -494,33 +496,46 @@ def _check_interp(shape, Q, f, b_sup_z, B, result, plot):
     for f_i in f:
         assert goal == (marked & jnp.isfinite(f_i).reshape(shape).all(axis=-1)).sum()
 
+    if plot:
+        Q = Q.reshape(shape)
+        _plot_check_interp(Q, B.reshape(shape), name=r"$\vert B \vert$")
+        _plot_check_interp(
+            Q, b_sup_z.reshape(shape), name=r"$(B / \vert B \vert) \cdot e^{\zeta}$"
+        )
+        for i, f_i in enumerate(f):
+            _plot_check_interp(Q, f_i.reshape(shape), name=f"f_{i}")
+
     # Number of those integrals that were computed.
     actual = (marked & jnp.isfinite(result)).sum()
     assert goal == actual, (
         f"Lost {goal - actual} integrals from NaN generation in the integrand. This "
         "is caused by floating point error, usually due to a poor quadrature choice."
     )
-    if plot:
-        Q = Q.reshape(shape)
-        _plot_check_interp(Q, B.reshape(shape), name=r"$\vert B \vert$")
-        _plot_check_interp(
-            Q, b_sup_z.reshape(shape), name=r"$ (B / \vert B \vert) \cdot e^{\zeta}$"
-        )
 
 
 def _plot_check_interp(Q, V, name=""):
     """Plot V[..., λ, (ζ₁, ζ₂)](Q)."""
-    for idx in np.ndindex(Q.shape[:3]):
+    if Q.shape[-2] == 1:
+        # Just one well along the field line, so plot
+        # interpolations for every pitch simultaneously.
+        Q = Q.squeeze(axis=-2)
+        V = V.squeeze(axis=-2)
+        label = "(m,l)"
+        shape = Q.shape[:2]
+    else:
+        label = "(m,l,p)"
+        shape = Q.shape[:3]
+    for idx in np.ndindex(shape):
         marked = jnp.nonzero(jnp.any(Q[idx] != 0.0, axis=-1))[0]
         if marked.size == 0:
             continue
         fig, ax = plt.subplots()
         ax.set_xlabel(r"$\zeta$")
         ax.set_ylabel(name)
-        ax.set_title(f"Interpolation of {name} to quadrature points, (m,l,p)={idx}")
+        ax.set_title(f"Interpolation of {name} to quadrature points, {label}={idx}")
         for i in marked:
             ax.plot(Q[(*idx, i)], V[(*idx, i)], marker="o")
-        fig.text(0.01, 0.01, "Each color specifies a particular integral.")
+        fig.text(0.01, 0.01, "Each color specifies a bounce integral.")
         plt.tight_layout()
         plt.show()
 
@@ -575,7 +590,7 @@ def _where_for_argmin(z1, z2, ext, g_ext, upper_sentinel):
 
 
 def interp_to_argmin(
-    h, z1, z2, knots, g, dg_dz, method="cubic", beta=-100, upper_sentinel=1e2
+    h, points, knots, g, dg_dz, method="cubic", beta=-100, upper_sentinel=1e2
 ):
     """Interpolate ``h`` to the deepest point of ``g`` between ``z1`` and ``z2``.
 
@@ -586,9 +601,10 @@ def interp_to_argmin(
     h : jnp.ndarray
         Shape (..., N).
         Values evaluated on ``knots`` to interpolate.
-    z1, z2 : jnp.ndarray
-        Shape (..., P, W).
+    points : jnp.ndarray
+        Shape (..., num_pitch, W).
         Boundaries to detect argmin between.
+        First (second) element stores left (right) boundaries.
     knots : jnp.ndarray
         Shape (N, ).
         z coordinates of spline knots. Must be strictly increasing.
@@ -624,9 +640,10 @@ def interp_to_argmin(
     Returns
     -------
     h : jnp.ndarray
-        Shape (..., P, W).
+        Shape (..., num_pitch, W).
 
     """
+    z1, z2 = points
     assert z1.ndim == z2.ndim >= 2 and z1.shape == z2.shape
     ext, g_ext = _get_extrema(knots, g, dg_dz, sentinel=0)
     # Our softargmax(x) does the proper shift to compute softargmax(x - max(x)),
@@ -644,7 +661,7 @@ def interp_to_argmin(
     return h
 
 
-def interp_to_argmin_hard(h, z1, z2, knots, g, dg_dz, method="cubic"):
+def interp_to_argmin_hard(h, points, knots, g, dg_dz, method="cubic"):
     """Interpolate ``h`` to the deepest point of ``g`` between ``z1`` and ``z2``.
 
     Let E = {ζ ∣ ζ₁ < ζ < ζ₂} and A ∈ argmin_E g(ζ). Returns h(A).
@@ -660,9 +677,10 @@ def interp_to_argmin_hard(h, z1, z2, knots, g, dg_dz, method="cubic"):
     h : jnp.ndarray
         Shape (..., N).
         Values evaluated on ``knots`` to interpolate.
-    z1, z2 : jnp.ndarray
-        Shape (..., P, W).
+    points : jnp.ndarray
+        Shape (..., num_pitch, W).
         Boundaries to detect argmin between.
+        First (second) element stores left (right) boundaries.
     knots : jnp.ndarray
         Shape (N, ).
         z coordinates of spline knots. Must be strictly increasing.
@@ -684,9 +702,10 @@ def interp_to_argmin_hard(h, z1, z2, knots, g, dg_dz, method="cubic"):
     Returns
     -------
     h : jnp.ndarray
-        Shape (..., P, W).
+        Shape (..., num_pitch, W).
 
     """
+    z1, z2 = points
     assert z1.ndim == z2.ndim >= 2 and z1.shape == z2.shape
     ext, g_ext = _get_extrema(knots, g, dg_dz, sentinel=0)
     # We can use the non-differentiable max because we actually want the gradients
@@ -703,7 +722,7 @@ def interp_to_argmin_hard(h, z1, z2, knots, g, dg_dz, method="cubic"):
         h[..., jnp.newaxis, :],
         method=method,
     )
-    assert h.shape == z1.shape, h.shape
+    assert h.shape == z1.shape
     return h
 
 

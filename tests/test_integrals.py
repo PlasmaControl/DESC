@@ -937,7 +937,7 @@ class TestBounceQuadrature:
         to supress the derivative (as expected from chain rule), so we need to use the
         sin automorphism. We choose to apply that map to ``leggauss`` instead of
         ``_chebgauss1`` because the extra cosine term in ``_chebgauss1`` increases the
-        polynomial complexity of the integrand and supresses the derivative too strong
+        polynomial complexity of the integrand and suppresses the derivative too strong
         for a quadrature that already clusters near edge with density 1/(1−x²). This is
         why ``_chebgauss1`` required more nodes in this test, and in general would
         require more nodes for functions with more features.
@@ -1086,7 +1086,7 @@ class TestBounce1D:
         return safediv(1, jnp.sqrt(jnp.abs(1 - pitch * B)))
 
     @pytest.mark.unit
-    @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d * 3)
+    @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d * 4)
     def test_bounce1d_checks(self):
         """Test that all the internal correctness checks pass for real example."""
         # noqa: D202

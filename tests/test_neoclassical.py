@@ -1,5 +1,7 @@
 """Test for neoclassical transport compute functions."""
 
+from datetime import datetime
+
 import matplotlib.pyplot as plt
 import numpy as np
 import pytest
@@ -100,9 +102,9 @@ class NeoIO:
 
     def __init__(self, name, eq, ns=256, M_booz=None, N_booz=None):
         self.name = name
-        self.vmec_file = f"{name}/wout_{name}.nc"
-        self.booz_out_file = f"{name}/boozmn_{name}.nc"
-        self.neo_in_file = f"{name}/neo_in.{name}"
+        self.vmec_file = f"wout_{name}.nc"
+        self.booz_file = f"boozmn.{name}"
+        self.neo_in_file = f"neo_in.{name}"
         self.neo_out_file = f"neo_out.{name}"
 
         self.eq = eq
@@ -124,10 +126,15 @@ class NeoIO:
         return neo_rho, neo_eps
 
     def write(self):
-        """Write vmec, booz_xform, and neo files."""
-        self._write_VMEC()
+        """Write neo input file."""
+        self.eq.solved = True  # must set this for NEO to run correctly
+        print(f"Writing VMEC wout to {self.vmec_file}")
+        VMECIO.save(self.eq, self.vmec_file, surfs=self.ns, verbose=0)
+        self._write_booz()
         self._write_neo()
 
+    def _write_booz(self):
+        print(f"Writing boozer output file to {self.booz_file}")
         import booz_xform as bx
 
         b = bx.Booz_xform()
@@ -135,39 +142,61 @@ class NeoIO:
         b.mboz = self.M_booz
         b.nboz = self.N_booz
         b.run()
-        b.write_boozmn(self.booz_out_file)
+        b.write_boozmn(self.booz_file)
 
-    def _write_VMEC(self):
-        self.eq.solved = True  # must set this for NEO to run correctly
-        print(f"Writing VMEC wout to {self.vmec_file}")
-        VMECIO.save(self.eq, self.vmec_file, surfs=self.ns, verbose=0)
-
-    def _write_neo(self, num_pitch=125):
-        """Write NEO input file."""
+    def _write_neo(
+        self,
+        theta_n=200,
+        phi_n=200,
+        num_pitch=50,
+        multra=1,
+        acc_req=0.01,
+        nbins=100,
+        nstep_per=75,
+        nstep_min=500,
+        nstep_max=2000,
+        verbose=2,
+    ):
         print(f"Writing NEO input file to {self.neo_in_file}")
-        with open(self.neo_in_file, "w+") as f:
-            f.write("'#'\n'#'\n'#'\n")
-            f.write(f" {self.booz_out_file}\n")
-            f.write(f" {self.neo_out_file}\n")
-            f.write(f" {self.ns-1}\n")
-            # surface indices
-            # https://github.com/PrincetonUniversity/STELLOPT/blob/develop/NEO/Sources/neo.f90
-            f.write(" ".join([str(x) for x in range(2, self.ns + 1)]) + "\n")
-            f.write(
-                " 300 ! number of theta points\n "
-                "300 ! number of zeta points\n "
-                + f"\n 0\n 0\n {num_pitch} ! number of test particles\n "
-                f"50 ! 1 = singly trapped particles\n "
-                + "0.001 ! integration accuracy\n 100 ! number of poloidal bins\n "
-                "50 ! integration steps per field period\n "
-                + "500 ! min number of field periods\n "
-                "2000 ! max number of field periods\n"
-            )
-            f.write(
-                " 0\n 1\n 0\n 0\n 2 ! 2 = reference |B| used is max on each surface"
-                " \n 0\n 0\n 0\n 0\n 0\n"
-            )
-            f.write("'#'\n'#'\n'#'\n")
-            f.write(" 0\n")
-            f.write(f"neo_cur_{self.name}\n")
-            f.write(" 200\n 2\n 0\n")
+        f = open(self.neo_in_file, "w")
+
+        def writeln(s):
+            f.write(str(s))
+            f.write("\n")
+
+        # https://princetonuniversity.github.io/STELLOPT/NEO
+        writeln(f"'#' {datetime.now()}")
+        writeln(f"'#' {self.vmec_file}")
+        writeln(f"'#' M_booz={self.M_booz}. N_booz={self.N_booz}.")
+        writeln(self.booz_file)
+        writeln(self.neo_out_file)
+        writeln(self.ns - 1)
+        writeln(" ".join(str(i) for i in range(self.ns)))
+        writeln(theta_n)
+        writeln(phi_n)
+        writeln(0)
+        writeln(0)
+        writeln(num_pitch)
+        writeln(multra)
+        writeln(acc_req)
+        writeln(nbins)
+        writeln(nstep_per)
+        writeln(nstep_min)
+        writeln(nstep_max)
+        writeln(0)
+        writeln(verbose)
+        writeln(0)
+        writeln(0)
+        writeln(2)
+        writeln(0)
+        writeln(0)
+        writeln(0)
+        writeln(0)
+        writeln(0)
+        writeln("'#'\n'#'\n'#'")
+        writeln(0)
+        writeln(f"neo_cur.{self.name}")
+        writeln(200)
+        writeln(2)
+        writeln(0)
+        f.close()

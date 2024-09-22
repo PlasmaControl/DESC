@@ -62,11 +62,10 @@ class EffectiveRipple(_Objective):
         "auto" selects forward or reverse mode based on the size of the input and output
         of the objective. Has no effect on self.grad or self.hess which always use
         reverse mode and forward over reverse mode respectively.
-    grid : Grid, optional
-        Collocation grid to evaluate flux surface averages.
-        Should have poloidal and toroidal resolution.
+    rho : ndarray
+        Unique coordinate values specifying flux surfaces to compute on.
     alpha : ndarray
-        Unique coordinate values for field line poloidal angle label alpha.
+        Unique coordinate values specifying field line labels to compute on.
     knots_per_transit : int
         Number of points per toroidal transit at which to sample data along field
         line. Default is 100.
@@ -104,7 +103,7 @@ class EffectiveRipple(_Objective):
         normalize_target=True,
         loss_function=None,
         deriv_mode="auto",
-        grid=None,
+        rho=np.linspace(0.5, 1, 3),
         alpha=np.array([0]),
         *,
         knots_per_transit=100,
@@ -118,6 +117,8 @@ class EffectiveRipple(_Objective):
         if target is None and bounds is None:
             target = 0.0
 
+        rho, alpha = np.atleast_1d(rho, alpha)
+        self._dim_f = rho.size
         self._keys_1dr = [
             "iota",
             "iota_r",
@@ -128,6 +129,7 @@ class EffectiveRipple(_Objective):
         ]
         self._constants = {
             "quad_weights": 1,
+            "rho": rho,
             "alpha": alpha,
             "zeta": np.linspace(
                 0, 2 * np.pi * num_transit, knots_per_transit * num_transit
@@ -139,7 +141,6 @@ class EffectiveRipple(_Objective):
             "batch": batch,
             "num_well": num_well,
         }
-        self._grid_1dr = grid
 
         super().__init__(
             things=eq,
@@ -165,17 +166,11 @@ class EffectiveRipple(_Objective):
 
         """
         eq = self.things[0]
-        if self._grid_1dr is None:
-            rho = np.linspace(0.5, 1, 3)
-            self._grid_1dr = LinearGrid(
-                rho=rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym
-            )
-        else:
-            rho = self._grid_1dr.compress(self._grid_1dr.nodes[:, 0])
-        self._constants["rho"] = rho
-        self._dim_f = rho.size
+        self._grid_1dr = LinearGrid(
+            rho=self._constants["rho"], M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym
+        )
         self._target, self._bounds = _parse_callable_target_bounds(
-            self._target, self._bounds, rho
+            self._target, self._bounds, self._constants["rho"]
         )
 
         timer = Timer()

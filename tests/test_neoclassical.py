@@ -54,7 +54,7 @@ def test_effective_ripple():
     assert np.isfinite(data["effective ripple"]).all()
     eps_eff = grid.compress(data["effective ripple"])
 
-    neo_rho, neo_eps = NeoIO.read_neo_out("tests/inputs/neo_out.w7x")
+    neo_rho, neo_eps = NeoIO.read("tests/inputs/neo_out.w7x")
     np.testing.assert_allclose(
         eps_eff, np.interp(rho, neo_rho, neo_eps), rtol=0.16, atol=1e-5
     )
@@ -111,23 +111,20 @@ class NeoIO:
         self.N_booz = setdefault(N_booz, 3 * eq.N)
 
     @staticmethod
-    def read_neo_out(name):
-        """Return ρ and ε¹ᐧ⁵ from given NEO output with given name."""
+    def read(name):
+        """Return ρ and ε¹ᐧ⁵ from NEO output with given name."""
         with open(name) as f:
             array = np.array([[float(x) for x in line.split()] for line in f])
 
         neo_eps = array[:, 1]
-        # replace nan values with linear interpolation
-        is_nan = np.isnan(neo_eps)
-        neo_eps[is_nan] = np.interp(
-            np.nonzero(is_nan)[0], np.nonzero(~is_nan)[0], neo_eps[~is_nan]
-        )
-        neo_eps = np.array(neo_eps)
         neo_rho = np.sqrt(np.linspace(1 / (neo_eps.size + 1), 1, neo_eps.size))
+        # replace bad values with linear interpolation
+        good = np.isfinite(neo_eps)
+        neo_eps[~good] = np.interp(neo_rho[~good], neo_rho[good], neo_eps[good])
         return neo_rho, neo_eps
 
-    def write_boozmn(self):
-        """Write booz_xform's boozmn output file."""
+    def write(self):
+        """Write vmec, booz_xform, and neo files."""
         self._write_VMEC()
         self._write_neo()
 
@@ -145,7 +142,7 @@ class NeoIO:
         print(f"Writing VMEC wout to {self.vmec_file}")
         VMECIO.save(self.eq, self.vmec_file, surfs=self.ns, verbose=0)
 
-    def _write_neo(self, N_particles=125):
+    def _write_neo(self, num_pitch=125):
         """Write NEO input file."""
         print(f"Writing NEO input file to {self.neo_in_file}")
         with open(self.neo_in_file, "w+") as f:
@@ -159,7 +156,7 @@ class NeoIO:
             f.write(
                 " 300 ! number of theta points\n "
                 "300 ! number of zeta points\n "
-                + f"\n 0\n 0\n {N_particles} ! number of test particles\n "
+                + f"\n 0\n 0\n {num_pitch} ! number of test particles\n "
                 f"50 ! 1 = singly trapped particles\n "
                 + "0.001 ! integration accuracy\n 100 ! number of poloidal bins\n "
                 "50 ! integration steps per field period\n "

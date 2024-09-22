@@ -272,8 +272,12 @@ class Bounce2D(IOAble):
 
     After computing the bounce points, the supplied quadrature is performed.
     By default, this is a Gauss quadrature after removing the singularity.
-    Fast fourier transforms interpolate functions in the integrand to the
-    quadrature nodes.
+    Fast fourier transforms interpolate smooth functions in the integrand to the
+    quadrature nodes. Quadrature is chosen over Runge-Kutta methods of the form
+        ∂Fᵢ/∂ζ =f(λ,ζ,{Gⱼ}) subject to Fᵢ(ζ₁) = 0
+    because a fourth order Runge-Kutta method is equivalent to a quadrature
+    with Simpson's rule. Our quadratures resolve these integrals more
+    efficiently, and the fixed nature of quadrature performs better on GPUs.
 
     Fast transforms are used where possible. Fast multipoint methods are not
     implemented. For non-uniform interpolation, MMTs are used. It should be
@@ -768,7 +772,12 @@ class Bounce1D(IOAble):
 
     After computing the bounce points, the supplied quadrature is performed.
     By default, this is a Gauss quadrature after removing the singularity.
-    Local splines interpolate functions in the integrand to the quadrature nodes.
+    Local splines interpolate smooth functions in the integrand to the quadrature
+    nodes. Quadrature is chosen over Runge-Kutta methods of the form
+        ∂Fᵢ/∂ζ =f(λ,ζ,{Gⱼ}) subject to Fᵢ(ζ₁) = 0
+    because a fourth order Runge-Kutta method is equivalent to a quadrature
+    with Simpson's rule. Our quadratures resolve these integrals more
+    efficiently, and the fixed nature of quadrature performs better on GPUs.
 
     See Also
     --------

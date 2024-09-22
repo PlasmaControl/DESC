@@ -34,7 +34,7 @@ from desc.integrals import (
     surface_variance,
     virtual_casing_biot_savart,
 )
-from desc.integrals.basis import FourierChebyshevBasis
+from desc.integrals.basis import FourierChebyshevSeries
 from desc.integrals.bounce_utils import (
     _get_extrema,
     bounce_points,
@@ -724,8 +724,16 @@ class TestSingularities:
             np.testing.assert_allclose(g1, ff)
 
 
-class TestBounce1DPoints:
+class TestBouncePoints:
     """Test that bounce points are computed correctly."""
+
+    @staticmethod
+    def _cheb_intersect(cheb, k):
+        cheb = cheb.copy()
+        cheb[0] = cheb[0] - k
+        roots = chebroots(cheb)
+        intersect = roots[np.logical_and(np.isreal(roots), np.abs(roots.real) < 1)].real
+        return intersect
 
     @staticmethod
     def filter(z1, z2):
@@ -745,7 +753,7 @@ class TestBounce1DPoints:
         z1, z2 = bounce_points(
             pitch_inv, knots, B.c.T, B.derivative().c.T, check=True, include_knots=True
         )
-        z1, z2 = TestBounce1DPoints.filter(z1, z2)
+        z1, z2 = TestBouncePoints.filter(z1, z2)
         assert z1.size and z2.size
         np.testing.assert_allclose(z1, intersect[0::2])
         np.testing.assert_allclose(z2, intersect[1::2])
@@ -762,7 +770,7 @@ class TestBounce1DPoints:
         z1, z2 = bounce_points(
             pitch_inv, k, B.c.T, B.derivative().c.T, check=True, include_knots=True
         )
-        z1, z2 = TestBounce1DPoints.filter(z1, z2)
+        z1, z2 = TestBouncePoints.filter(z1, z2)
         assert z1.size and z2.size
         np.testing.assert_allclose(z1, intersect[1:-1:2])
         np.testing.assert_allclose(z2, intersect[0::2][1:])
@@ -783,7 +791,7 @@ class TestBounce1DPoints:
         z1, z2 = bounce_points(
             pitch_inv, k, B.c.T, dB_dz.c.T, check=True, include_knots=True
         )
-        z1, z2 = TestBounce1DPoints.filter(z1, z2)
+        z1, z2 = TestBouncePoints.filter(z1, z2)
         assert z1.size and z2.size
         intersect = B.solve(pitch_inv, extrapolate=False)
         np.testing.assert_allclose(z1[1], 1.982767, rtol=1e-6)
@@ -810,7 +818,7 @@ class TestBounce1DPoints:
         z1, z2 = bounce_points(
             pitch_inv, k, B.c.T, dB_dz.c.T, check=True, include_knots=True
         )
-        z1, z2 = TestBounce1DPoints.filter(z1, z2)
+        z1, z2 = TestBouncePoints.filter(z1, z2)
         assert z1.size and z2.size
         intersect = B.solve(pitch_inv, extrapolate=False)
         np.testing.assert_allclose(z1, intersect[[0, -2]])
@@ -839,7 +847,7 @@ class TestBounce1DPoints:
             start=k[2],
             include_knots=True,
         )
-        z1, z2 = TestBounce1DPoints.filter(z1, z2)
+        z1, z2 = TestBouncePoints.filter(z1, z2)
         assert z1.size and z2.size
         intersect = B.solve(pitch_inv, extrapolate=False)
         np.testing.assert_allclose(z1[0], 0.835319, rtol=1e-6)
@@ -864,7 +872,7 @@ class TestBounce1DPoints:
         z1, z2 = bounce_points(
             pitch_inv, k, B.c.T, dB_dz.c.T, check=True, include_knots=True
         )
-        z1, z2 = TestBounce1DPoints.filter(z1, z2)
+        z1, z2 = TestBouncePoints.filter(z1, z2)
         assert z1.size and z2.size
         # Our routine correctly detects intersection, while scipy, jnp.root fails.
         intersect = B.solve(pitch_inv, extrapolate=False)
@@ -895,6 +903,27 @@ class TestBounce1DPoints:
         np.testing.assert_allclose(ext[idx], ext_scipy)
         np.testing.assert_allclose(B_ext[idx], B_ext_scipy)
 
+    @pytest.mark.unit
+    def test_z1_first_chebyshev(self):
+        """Test that bounce points are computed correctly."""
+
+        def f(z):
+            return -2 * np.cos(1 / (0.1 + z**2)) + 2
+
+        M, N = 1, 10
+        alpha, zeta = FourierChebyshevSeries.nodes(M, N).T
+        cheb = FourierChebyshevSeries(f(zeta).reshape(M, N)).compute_cheb(
+            fourier_pts(M)
+        )
+        pitch_inv = 3
+        z1, z2 = cheb.intersect1d(pitch_inv)
+        cheb.check_intersect1d(z1, z2, pitch_inv)
+        z1, z2 = TestBouncePoints.filter(z1, z2)
+
+        r = self._cheb_intersect(chebinterpolate(f, N - 1), pitch_inv)
+        np.testing.assert_allclose(z1, r[np.isclose(r, -0.24, atol=1e-1)])
+        np.testing.assert_allclose(z2, r[np.isclose(r, 0.24, atol=1e-1)])
+
 
 def _mod_cheb_gauss(deg):
     x, w = chebgauss(deg)
@@ -908,7 +937,7 @@ def _mod_chebu_gauss(deg):
     return x, w
 
 
-class TestBounce1DQuadrature:
+class TestBounceQuadrature:
     """Test bounce quadrature."""
 
     @pytest.mark.unit
@@ -956,7 +985,10 @@ class TestBounce1DQuadrature:
             check=True,
             **kwargs,
         )
-        result = bounce.integrate(integrand, pitch_inv, check=True, plot=True)
+        points = bounce.points(pitch_inv, num_well=1)
+        np.testing.assert_allclose(points[0], z1)
+        np.testing.assert_allclose(points[1], z2)
+        result = bounce.integrate(integrand, points, pitch_inv, check=True, plot=True)
         assert np.count_nonzero(result) == 1
         np.testing.assert_allclose(result.sum(), truth, rtol=1e-4)
 
@@ -995,14 +1027,14 @@ class TestBounce1DQuadrature:
         # Scipy's elliptic integrals are broken.
         # https://github.com/scipy/scipy/issues/20525.
         k = np.sqrt(k2)
-        K = TestBounce1DQuadrature._adaptive_elliptic(K_integrand, k)
-        E = TestBounce1DQuadrature._adaptive_elliptic(E_integrand, k)
+        K = TestBounceQuadrature._adaptive_elliptic(K_integrand, k)
+        E = TestBounceQuadrature._adaptive_elliptic(E_integrand, k)
         # Make sure scipy's adaptive quadrature is not broken.
         np.testing.assert_allclose(
-            K, TestBounce1DQuadrature._fixed_elliptic(K_integrand, k, 10)
+            K, TestBounceQuadrature._fixed_elliptic(K_integrand, k, 10)
         )
         np.testing.assert_allclose(
-            E, TestBounce1DQuadrature._fixed_elliptic(E_integrand, k, 10)
+            E, TestBounceQuadrature._fixed_elliptic(E_integrand, k, 10)
         )
 
         I_0 = 4 / k * K
@@ -1016,32 +1048,32 @@ class TestBounce1DQuadrature:
         # Check for math mistakes.
         np.testing.assert_allclose(
             I_2,
-            TestBounce1DQuadrature._adaptive_elliptic(
+            TestBounceQuadrature._adaptive_elliptic(
                 lambda Z, k: 2 / np.sqrt(k**2 - np.sin(Z / 2) ** 2) * Z * np.sin(Z), k
             ),
         )
         np.testing.assert_allclose(
             I_3,
-            TestBounce1DQuadrature._adaptive_elliptic(
+            TestBounceQuadrature._adaptive_elliptic(
                 lambda Z, k: 2 * np.sqrt(k**2 - np.sin(Z / 2) ** 2) * Z * np.sin(Z), k
             ),
         )
         np.testing.assert_allclose(
             I_4,
-            TestBounce1DQuadrature._adaptive_elliptic(
+            TestBounceQuadrature._adaptive_elliptic(
                 lambda Z, k: 2 / np.sqrt(k**2 - np.sin(Z / 2) ** 2) * np.sin(Z) ** 2, k
             ),
         )
         np.testing.assert_allclose(
             I_5,
-            TestBounce1DQuadrature._adaptive_elliptic(
+            TestBounceQuadrature._adaptive_elliptic(
                 lambda Z, k: 2 * np.sqrt(k**2 - np.sin(Z / 2) ** 2) * np.sin(Z) ** 2, k
             ),
         )
         # scipy fails
         np.testing.assert_allclose(
             I_6,
-            TestBounce1DQuadrature._fixed_elliptic(
+            TestBounceQuadrature._fixed_elliptic(
                 lambda Z, k: 2 / np.sqrt(k**2 - np.sin(Z / 2) ** 2) * np.cos(Z),
                 k,
                 deg=11,
@@ -1049,7 +1081,7 @@ class TestBounce1DQuadrature:
         )
         np.testing.assert_allclose(
             I_7,
-            TestBounce1DQuadrature._adaptive_elliptic(
+            TestBounceQuadrature._adaptive_elliptic(
                 lambda Z, k: 2 * np.sqrt(k**2 - np.sin(Z / 2) ** 2) * np.cos(Z), k
             ),
         )
@@ -1094,23 +1126,27 @@ class TestBounce1D:
             Bounce1D.required_names + ["min_tz |B|", "max_tz |B|", "g_zz"], grid=grid
         )
         # 5. Make the bounce integration operator.
-        bounce = Bounce1D(
-            grid.source_grid,
-            data,
-            quad=leggauss(3),  # not checking quadrature accuracy in this test
-            check=True,
-        )
+        bounce = Bounce1D(grid.source_grid, data, quad=leggauss(3), check=True)
         pitch_inv = bounce.get_pitch_inv(
-            grid.compress(data["min_tz |B|"]), grid.compress(data["max_tz |B|"]), 10
+            min_B=grid.compress(data["min_tz |B|"]),
+            max_B=grid.compress(data["max_tz |B|"]),
+            num_pitch=10,
         )
+        # 6. Compute bounce points.
+        points = bounce.points(pitch_inv)
+        # 7. Optionally check for correctness of bounce points.
+        bounce.check_points(points, pitch_inv, plot=False)
+        # 8. Integrate.
         num = bounce.integrate(
             integrand=TestBounce1D._example_numerator,
+            points=points,
             pitch_inv=pitch_inv,
             f=Bounce1D.reshape_data(grid.source_grid, data["g_zz"]),
             check=True,
         )
         den = bounce.integrate(
             integrand=TestBounce1D._example_denominator,
+            points=points,
             pitch_inv=pitch_inv,
             check=True,
             batch=False,
@@ -1118,7 +1154,7 @@ class TestBounce1D:
         avg = safediv(num, den)
         assert np.isfinite(avg).all() and np.count_nonzero(avg)
 
-        # 6. Basic manipulation of the output.
+        # 9. Example manipulation of the output
         # Sum all bounce averages across a particular field line, for every field line.
         result = avg.sum(axis=-1)
         # Group the result by pitch and flux surface.
@@ -1132,10 +1168,7 @@ class TestBounce1D:
         nodes = grid.source_grid.meshgrid_reshape(grid.source_grid.nodes[:, :2], "arz")
         print("(α, ρ):", nodes[m, l, 0])
 
-        # 7. Optionally check for correctness of bounce points
-        bounce.check_points(*bounce.points(pitch_inv), pitch_inv, plot=False)
-
-        # 8. Plotting
+        # 10. Plotting
         fig, ax = bounce.plot(m, l, pitch_inv[l], include_legend=False, show=False)
         return fig
 
@@ -1169,19 +1202,11 @@ class TestBounce1D:
                 "|B|_z|r,a": dg_dz(zeta),
             },
         )
-        z1 = np.array(0, ndmin=4)
-        z2 = np.array(2 * np.pi, ndmin=4)
+        points = (np.array(0, ndmin=4), np.array(2 * np.pi, ndmin=4))
         argmin = 5.61719
         h_min = h(argmin)
-        result = func(
-            h=h(zeta),
-            z1=z1,
-            z2=z2,
-            knots=zeta,
-            g=bounce.B,
-            dg_dz=bounce._dB_dz,
-        )
-        assert result.shape == z1.shape
+        result = func(h(zeta), points, zeta, bounce.B, bounce._dB_dz)
+        assert result.shape == points[0].shape
         np.testing.assert_allclose(h_min, result, rtol=1e-3)
 
     @staticmethod
@@ -1313,7 +1338,7 @@ class TestBounce1D:
         pitch_inv = get_pitch_inv(np.min(B), np.max(B), 100)[:-1]
         k2 = 0.5 * ((1 - B0 / pitch_inv) / (epsilon * B0 / pitch_inv) + 1)
         I_0, I_1, I_2, I_3, I_4, I_5, I_6, I_7 = (
-            TestBounce1DQuadrature.elliptic_incomplete(k2)
+            TestBounceQuadrature.elliptic_incomplete(k2)
         )
         y = np.sqrt(2 * epsilon * B0 / pitch_inv)
         I_0, I_2, I_4, I_6 = map(lambda I: I / y, (I_0, I_2, I_4, I_6))
@@ -1360,21 +1385,21 @@ class TestBounce1D:
             Lref=data["a"],
             check=True,
         )
-        bounce.check_points(*bounce.points(pitch_inv), pitch_inv, plot=False)
+        points = bounce.points(pitch_inv, num_well=1)
+        bounce.check_points(points, pitch_inv, plot=False)
 
         f = Bounce1D.reshape_data(things["grid"].source_grid, cvdrift, gbdrift)
         drift_numerical_num = bounce.integrate(
             integrand=TestBounce1D.drift_num_integrand,
+            points=points,
             pitch_inv=pitch_inv,
             f=f,
-            num_well=1,
             check=True,
-            # plot=True, # noqa: E800
         )
         drift_numerical_den = bounce.integrate(
             integrand=TestBounce1D.drift_den_integrand,
+            points=points,
             pitch_inv=pitch_inv,
-            num_well=1,
             weight=np.ones(data["zeta"].size),
             check=True,
         )
@@ -1446,15 +1471,21 @@ class TestBounce1D:
             return grad_fun(*args, *kwargs2.values())
 
         def fun1(pitch):
-            return bounce.integrate(integrand, 1 / pitch, check=False, **kwargs).sum()
+            return bounce.integrate(
+                integrand, bounce.points(1 / pitch), 1 / pitch, check=False, **kwargs
+            ).sum()
 
         def fun2(pitch):
             return bounce.integrate(
-                integrand_grad, 1 / pitch, check=True, **kwargs
+                integrand_grad,
+                bounce.points(1 / pitch),
+                1 / pitch,
+                check=True,
+                **kwargs,
             ).sum()
 
         pitch = 1.0
-        # can easily obtain from math or just extrapolate from analytic expression plot
+        # can obtain from math or just extrapolate from analytic expression plot
         analytic_approximation_of_gradient = 650
         np.testing.assert_allclose(
             grad(fun1)(pitch), analytic_approximation_of_gradient, rtol=1e-3
@@ -1463,37 +1494,6 @@ class TestBounce1D:
         # wrt λ but the boundary derivative: f(λ,ζ₂) (∂ζ₂/∂λ)(λ) - f(λ,ζ₁) (∂ζ₁/∂λ)(λ).
         # smooths out because the bounce points ζ₁ and ζ₂ are smooth functions of λ.
         np.testing.assert_allclose(fun2(pitch), -171500, rtol=1e-1)
-
-
-class TestBounce2DPoints:
-    """Test that bounce points are computed correctly."""
-
-    @staticmethod
-    def _cheb_intersect(cheb, k):
-        cheb = cheb.copy()
-        cheb[0] = cheb[0] - k
-        roots = chebroots(cheb)
-        intersect = roots[np.logical_and(np.isreal(roots), np.abs(roots.real) < 1)].real
-        return intersect
-
-    @pytest.mark.unit
-    def test_z1_first(self):
-        """Test that bounce points are computed correctly."""
-
-        def f(z):
-            return -2 * np.cos(1 / (0.1 + z**2)) + 2
-
-        M, N = 1, 10
-        alpha, zeta = FourierChebyshevBasis.nodes(M, N).T
-        cheb = FourierChebyshevBasis(f(zeta).reshape(M, N)).compute_cheb(fourier_pts(M))
-        pitch_inv = 3
-        z1, z2 = cheb.intersect1d(pitch_inv)
-        cheb.check_intersect1d(z1, z2, pitch_inv)
-        z1, z2 = TestBounce1DPoints.filter(z1, z2)
-
-        r = self._cheb_intersect(chebinterpolate(f, N - 1), pitch_inv)
-        np.testing.assert_allclose(z1, r[np.isclose(r, -0.24, atol=1e-1)])
-        np.testing.assert_allclose(z2, r[np.isclose(r, 0.24, atol=1e-1)])
 
 
 class TestBounce2D:
@@ -1508,7 +1508,8 @@ class TestBounce2D:
         ],
     )
     def test_alpha_sequence(self, alpha_0, iota, num_period, period):
-        """Test field line labels."""
+        """Test field line label is updated correctly after toroidal transits."""
+        # this test will be more useful once zeta != phi
         iota = np.atleast_1d(iota)
         alphas = get_alpha(alpha_0, iota, num_period, period)
         assert alphas.shape == (iota.size, num_period)
@@ -1527,11 +1528,7 @@ class TestBounce2D:
         # FIXME: Change LinearGrid to default to Fourier points nodes. Interpolation
         #        fails on LinearGrid.
         grid = Grid.create_meshgrid(
-            [
-                data["rho"],
-                fourier_pts(4 * eq._M_grid),
-                fourier_pts(1) / eq.NFP,
-            ],
+            [data["rho"], fourier_pts(4 * eq._M_grid), fourier_pts(1) / eq.NFP],
             NFP=eq.NFP,
         )
         grid_data = eq.compute(
@@ -1558,28 +1555,29 @@ class TestBounce2D:
                 iota=jnp.broadcast_to(data["iota"], shape=(M * N)),
             ),
             N_B=2 * N,
-            alpha=data["alpha"],  # - 2 * np.pi * data["iota"],
             num_transit=4,
+            alpha=data["alpha"],  # - 2 * np.pi * data["iota"],
             Bref=data["Bref"],
             Lref=data["a"],
             check=True,
             plot=True,
         )
-        bounce.check_points(*bounce.points(pitch_inv), pitch_inv, plot=True)
+        points = bounce.points(pitch_inv, num_well=1)
+        bounce.check_points(points, pitch_inv, plot=True)
 
         f = Bounce2D.reshape_data(grid, grid_data["cvdrift"], grid_data["gbdrift"])
         drift_numerical_num = bounce.integrate(
             integrand=TestBounce1D.drift_num_integrand,
+            points=points,
             pitch_inv=pitch_inv,
             f=f,
-            num_well=1,
             check=True,
             plot=True,
         )
         drift_numerical_den = bounce.integrate(
             integrand=TestBounce1D.drift_den_integrand,
+            points=points,
             pitch_inv=pitch_inv,
-            num_well=1,
             check=True,
             plot=True,
         )

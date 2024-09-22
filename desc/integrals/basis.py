@@ -1,4 +1,4 @@
-"""Fast transformable basis."""
+"""Fast transformable series."""
 
 from functools import partial
 
@@ -100,7 +100,7 @@ def _chebcast(cheb, arr):
     return cheb if jnp.ndim(arr) < cheb.ndim else cheb[jnp.newaxis]
 
 
-class FourierChebyshevBasis(IOAble):
+class FourierChebyshevSeries(IOAble):
     """Fourier-Chebyshev series.
 
     f(x, y) = ∑ₘₙ aₘₙ ψₘ(x) Tₙ(y)
@@ -127,7 +127,7 @@ class FourierChebyshevBasis(IOAble):
     """
 
     def __init__(self, f, domain=(-1, 1), lobatto=False):
-        """Interpolate Fourier-Chebyshev basis to ``f``.
+        """Interpolate Fourier-Chebyshev series to ``f``.
 
         Parameters
         ----------
@@ -147,10 +147,10 @@ class FourierChebyshevBasis(IOAble):
         self.domain = tuple(domain)
         errorif(lobatto, NotImplementedError, "JAX hasn't implemented type 1 DCT.")
         self.lobatto = bool(lobatto)
-        self._c = FourierChebyshevBasis._fast_transform(f, self.lobatto)
+        self._c = FourierChebyshevSeries._transform(f, self.lobatto)
 
     @staticmethod
-    def _fast_transform(f, lobatto):
+    def _transform(f, lobatto):
         N = f.shape[-1]
         return rfft(
             dct(f, type=2 - lobatto, axis=-1) / (N - lobatto),
@@ -223,7 +223,7 @@ class FourierChebyshevBasis(IOAble):
         return fq
 
     def harmonics(self):
-        """Spectral coefficients aₘₙ of the interpolating polynomial.
+        """Spectral coefficients aₘₙ of the interpolating trigonometric polynomial.
 
         Transform Fourier interpolant harmonics to Nyquist trigonometric
         interpolant harmonics so that the coefficients are all real.
@@ -232,7 +232,7 @@ class FourierChebyshevBasis(IOAble):
         -------
         a_mn : jnp.ndarray
             Shape (..., M, N).
-            Real valued spectral coefficients for Fourier-Chebyshev basis.
+            Real valued spectral coefficients for Fourier-Chebyshev series.
 
         """
         a_mn = harmonic(cheb_from_dct(self._c), self.M, axis=-2)
@@ -240,16 +240,16 @@ class FourierChebyshevBasis(IOAble):
         return a_mn
 
     def compute_cheb(self, x):
-        """Evaluate Fourier basis at ``x`` to obtain set of 1D Chebyshev coefficients.
+        """Evaluate Fourier series at ``x`` to obtain set of 1D Chebyshev coefficients.
 
         Parameters
         ----------
         x : jnp.ndarray
-            Points to evaluate Fourier basis.
+            Points to evaluate Fourier series.
 
         Returns
         -------
-        cheb : ChebyshevBasisSet
+        cheb : PiecewiseChebyshevSeries
             Chebyshev coefficients αₙ(x=``x``) for f(x, y) = ∑ₙ₌₀ᴺ⁻¹ αₙ(x) Tₙ(y).
 
         """
@@ -257,10 +257,10 @@ class FourierChebyshevBasis(IOAble):
         x = jnp.atleast_1d(x)[..., jnp.newaxis]
         cheb = cheb_from_dct(irfft_non_uniform(x, self._c, self.M, axis=-2))
         assert cheb.shape[-2:] == (x.shape[-2], self.N)
-        return ChebyshevBasisSet(cheb, self.domain)
+        return PiecewiseChebyshevSeries(cheb, self.domain)
 
 
-class ChebyshevBasisSet(IOAble):
+class PiecewiseChebyshevSeries(IOAble):
     """Chebyshev series.
 
     { fₓ | fₓ : y ↦ ∑ₙ₌₀ᴺ⁻¹ aₙ(x) Tₙ(y) }
@@ -272,16 +272,16 @@ class ChebyshevBasisSet(IOAble):
         Shape (..., M, N).
         Chebyshev coefficients αₙ(x) for fₓ(y) = ∑ₙ₌₀ᴺ⁻¹ αₙ(x) Tₙ(y).
     M : int
-        Number of functions in this basis set.
+        Number of cuts.
     N : int
-        Chebyshev spectral resolution.
+        Chebyshev spectral resolution of each cut.
     domain : (float, float)
         Domain for y coordinates.
 
     """
 
     def __init__(self, cheb, domain=(-1, 1)):
-        """Make Chebyshev series basis from given coefficients.
+        """Make piecewise series from given Chebyshev coefficients.
 
         Parameters
         ----------
@@ -298,7 +298,7 @@ class ChebyshevBasisSet(IOAble):
 
     @property
     def M(self):
-        """Number of functions in this basis set."""
+        """Number of cuts."""
         return self.cheb.shape[-2]
 
     @property
@@ -393,7 +393,7 @@ class ChebyshevBasisSet(IOAble):
         -------
         f : jnp.ndarray
             Shape z.shape.
-            Chebyshev basis evaluated at z.
+            Chebyshev series evaluated at z.
 
         """
         cheb = _chebcast(setdefault(cheb, self.cheb), z)

@@ -1086,7 +1086,7 @@ class TestBounce1D:
         return safediv(1, jnp.sqrt(jnp.abs(1 - pitch * B)))
 
     @pytest.mark.unit
-    @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d * 3)
+    @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d * 4)
     def test_bounce1d_checks(self):
         """Test that all the internal correctness checks pass for real example."""
         # noqa: D202

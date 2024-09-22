@@ -997,10 +997,10 @@ class TestBounceQuadrature:
             integrand = lambda B, pitch: jnp.sqrt(1 - m * pitch * B)
             truth = v * 2 * ellipe(m)
         bounce = Bounce1D(
-            Grid.create_meshgrid([1, 0, knots], coordinates="raz"),
-            data,
-            quad,
-            automorphism,
+            grid=Grid.create_meshgrid([1, 0, knots], coordinates="raz"),
+            data=data,
+            quad=quad,
+            automorphism=automorphism,
             check=True,
         )
         points = bounce.points(pitch_inv, num_well=1)
@@ -1557,7 +1557,6 @@ class TestBounce2D:
 
         # Compute numerical result.
         M, N = 512, 16
-        # Neo does 200 x 200 for their algorithm, so I suppose this isn't too weird.
         # I have concern that numpy computes Nyquist frequency component incorrectly,
         # and the reason high Fourier resolution is required is that with large sample
         # frequency the incorrect max frequency component is higher than the max

@@ -130,11 +130,10 @@ def _transform_to_clebsch_1d(grid, alpha, theta, B, N_B, is_reshaped=False):
 
     Returns
     -------
-    T, B : (PiecewiseChebyshevSeries, PiecewiseChebyshevSeries)
-        Set of 1D Chebyshev spectral coefficients of |B| along field line.
-        {|B|_α : ζ ↦ |B|(α, ζ) | α ∈ A } where A = (α₀, α₁, …, αₘ₋₁) is the
-        sequence of poloidal coordinates that specify the field line.
-        Likewise with θ.
+    T, B : tuple[PiecewiseChebyshevSeries]
+        Set of 1D Chebyshev spectral coefficients of θ along field line.
+        {θ_α : ζ ↦ θ(α, ζ) | α ∈ A} where A = (α₀, α₁, …, αₘ₋₁) is ``alpha``.
+        Likewise with |B|.
 
     """
     if not is_reshaped:
@@ -193,7 +192,8 @@ class Bounce2D(IOAble):
     Magnetic field line with label α, defined by B = ∇ρ × ∇α, is determined from
         α : ρ, θ, ζ ↦ θ + λ(ρ,θ,ζ) − ι(ρ) [ζ + ω(ρ,θ,ζ)]
     Interpolate Fourier-Chebyshev series to DESC poloidal coordinate.
-        θ : α, ζ ↦ tₘₙ exp(jmα) Tₙ(ζ)
+      θ : α, ζ ↦ tₘₙ exp(jmα) Tₙ(ζ)
+    Compute |B| along field lines.
       |B| : α, ζ ↦  bₙ(θ(α, ζ)) Tₙ(ζ)
     Compute bounce points.
       r(ζₖ) = |B|(ζₖ) − 1/λ = 0
@@ -249,8 +249,9 @@ class Bounce2D(IOAble):
     periodic coordinates, e.g. (ϑ, ϕ), to a low order polynomial basis in
     non-periodic coordinates. For example, one can obtain series coefficients in
     (α, ϕ) coordinates from those in (ϑ, ϕ) as follows
-        g : ϑ, ϕ ↦ ∑ₘₙ aₘₙ exp(j [mϑ + nϕ])
-        g : α, ϕ ↦ ∑ₘₙ aₘₙ exp(j [mα + (m ι + n)ϕ])
+      g : ϑ, ϕ ↦ ∑ₘₙ aₘₙ exp(j [mϑ + nϕ])
+
+      g : α, ϕ ↦ ∑ₘₙ aₘₙ exp(j [mα + (m ι + n)ϕ])
     However, the basis for the latter are trigonometric functions with
     irrational frequencies, courtesy of the irrational rotational transform.
     Globally convergent root-finding schemes for that basis (at fixed α) are
@@ -274,7 +275,7 @@ class Bounce2D(IOAble):
     By default, this is a Gauss quadrature after removing the singularity.
     Fast fourier transforms interpolate smooth functions in the integrand to the
     quadrature nodes. Quadrature is chosen over Runge-Kutta methods of the form
-        ∂Fᵢ/∂ζ =f(λ,ζ,{Gⱼ}) subject to Fᵢ(ζ₁) = 0
+        ∂Fᵢ/∂ζ = f(λ,ζ,{Gⱼ}) subject to Fᵢ(ζ₁) = 0
     because a fourth order Runge-Kutta method is equivalent to a quadrature
     with Simpson's rule. Our quadratures resolve these integrals more
     efficiently, and the fixed nature of quadrature performs better on GPUs.
@@ -289,9 +290,18 @@ class Bounce2D(IOAble):
     --------
     Bounce1D
         Uses one-dimensional local spline methods for the same task.
-        An advantage of ``Bounce2D`` over ``Bounce1D`` is that the coordinates on
-        which the root-finding must be done to map from DESC to Clebsch coords is
-        fixed to ``L*M*N``, independent of the number of toroidal transits.
+
+        Below are some advantages of ``Bounce2D`` over ``Bounce1D``.
+        The coordinates on which the root-finding must be done to map from DESC
+        to Clebsch coords is fixed to ``L*M*N``, independent of the number of
+        toroidal transits; generating the same data with DESC for input to
+        ``Bounce1D`` requires ``L*M*N*num_transit``. Furthermore, pseudo-spectral
+        interpolation of smooth functions such as |B| on each flux surface is more
+        efficient. This reduces the number of bounce integrals to be done by an
+        order of magnitude. Furthermore, C1 cubic spline interpolation is
+        inefficient to reconstruct smooth local maxima of |B|, which might be
+        important for (strongly) singular bounce integrals whose estimation
+        depends on ∂|B|/∂ζ there.
 
     Attributes
     ----------
@@ -351,19 +361,20 @@ class Bounce2D(IOAble):
             Starting field line poloidal label.
         num_transit : int
             Number of toroidal transits to follow field line.
-        quad : (jnp.ndarray, jnp.ndarray)
+        quad : tuple[jnp.ndarray]
             Quadrature points xₖ and weights wₖ for the approximate evaluation of an
             integral ∫₋₁¹ g(x) dx = ∑ₖ wₖ g(xₖ). Default is 32 points.
             For weak singular integrals, use ``chebgauss2`` from
             ``desc.integrals.quad_utils``.
             For strong singular integrals, use ``leggauss``.
-        automorphism : (Callable, Callable) or None
+        automorphism : tuple[Callable] or None
             The first callable should be an automorphism of the real interval [-1, 1].
             The second callable should be the derivative of the first. This map defines
             a change of variable for the bounce integral. The choice made for the
             automorphism will affect the performance of the quadrature method.
             For weak singular integrals, use ``None``.
-            For strong singular integrals, use ``automorphism_sin`` from
+            For strong singular integrals, use
+            ``(automorphism_sin,grad_automorphism_sin)`` from
             ``desc.integrals.quad_utils``.
         Bref : float
             Optional. Reference magnetic field strength for normalization.
@@ -774,14 +785,15 @@ class Bounce1D(IOAble):
     By default, this is a Gauss quadrature after removing the singularity.
     Local splines interpolate smooth functions in the integrand to the quadrature
     nodes. Quadrature is chosen over Runge-Kutta methods of the form
-        ∂Fᵢ/∂ζ =f(λ,ζ,{Gⱼ}) subject to Fᵢ(ζ₁) = 0
+        ∂Fᵢ/∂ζ = f(λ,ζ,{Gⱼ}) subject to Fᵢ(ζ₁) = 0
     because a fourth order Runge-Kutta method is equivalent to a quadrature
     with Simpson's rule. Our quadratures resolve these integrals more
     efficiently, and the fixed nature of quadrature performs better on GPUs.
 
     See Also
     --------
-    Bounce2D : Uses two-dimensional pseudo-spectral techniques for the same task.
+    Bounce2D
+        Uses two-dimensional pseudo-spectral techniques for the same task.
 
     Examples
     --------
@@ -832,19 +844,20 @@ class Bounce1D(IOAble):
         data : dict[str, jnp.ndarray]
             Data evaluated on ``grid``.
             Must include names in ``Bounce1D.required_names``.
-        quad : (jnp.ndarray, jnp.ndarray)
+        quad : tuple[jnp.ndarray]
             Quadrature points xₖ and weights wₖ for the approximate evaluation of an
             integral ∫₋₁¹ g(x) dx = ∑ₖ wₖ g(xₖ). Default is 32 points.
             For weak singular integrals, use ``chebgauss2`` from
             ``desc.integrals.quad_utils``.
             For strong singular integrals, use ``leggauss``.
-        automorphism : (Callable, Callable) or None
+        automorphism : tuple[Callable] or None
             The first callable should be an automorphism of the real interval [-1, 1].
             The second callable should be the derivative of the first. This map defines
             a change of variable for the bounce integral. The choice made for the
             automorphism will affect the performance of the quadrature method.
             For weak singular integrals, use ``None``.
-            For strong singular integrals, use ``automorphism_sin`` from
+            For strong singular integrals, use
+            ``(automorphism_sin,grad_automorphism_sin)`` from
             ``desc.integrals.quad_utils``.
         Bref : float
             Optional. Reference magnetic field strength for normalization.

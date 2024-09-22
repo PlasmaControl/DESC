@@ -2,7 +2,10 @@
 
 import numpy as np
 import pytest
+import scipy
 from jax import grad
+from numpy.polynomial.chebyshev import chebgauss, chebweight
+from scipy.special import roots_chebyu
 
 from desc.backend import jnp
 from desc.integrals.quad_utils import (
@@ -10,26 +13,14 @@ from desc.integrals.quad_utils import (
     automorphism_sin,
     bijection_from_disc,
     bijection_to_disc,
-    composite_linspace,
+    chebgauss2,
+    chebgauss_uniform,
     grad_automorphism_arcsin,
     grad_automorphism_sin,
     grad_bijection_from_disc,
     leggauss_lob,
     tanh_sinh,
 )
-from desc.utils import only1
-
-
-@pytest.mark.unit
-def test_composite_linspace():
-    """Test this utility function which is used for integration over pitch."""
-    B_min_tz = np.array([0.1, 0.2])
-    B_max_tz = np.array([1, 3])
-    breaks = np.linspace(B_min_tz, B_max_tz, num=5)
-    b = composite_linspace(breaks, num=3)
-    for i in range(breaks.shape[0]):
-        for j in range(breaks.shape[1]):
-            assert only1(np.isclose(breaks[i, j], b[:, j]).tolist())
 
 
 @pytest.mark.unit
@@ -101,3 +92,25 @@ def test_leggauss_lobatto():
     # make sure differentiable
     # https://github.com/PlasmaControl/DESC/pull/854#discussion_r1733323161
     assert np.isfinite(grad(fun)(jnp.arange(10) * np.pi)).all()
+
+
+@pytest.mark.unit
+def test_chebgauss():
+    """Test Chebyshev quadratures."""
+
+    def f(y):
+        return 5.2 * y**7 - 3.6 * y**3 + y**4
+
+    deg = 4
+    yk, wk = chebgauss(deg)
+    x, w = chebgauss_uniform(deg)
+    np.testing.assert_allclose(yk[::-1], automorphism_sin(x))
+    np.testing.assert_allclose(wk, 0.5 * jnp.pi * w)
+    np.testing.assert_allclose(np.diff(x), x[1] - x[0])
+    np.testing.assert_allclose(
+        f(automorphism_sin(x)).dot(w),
+        2 / jnp.pi * scipy.integrate.quad(lambda y: f(y) / np.sqrt(1 - y**2), -1, 1)[0],
+    )
+    x, w = roots_chebyu(deg)
+    w *= chebweight(x)
+    np.testing.assert_allclose(chebgauss2(deg), (x, w))

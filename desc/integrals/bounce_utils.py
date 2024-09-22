@@ -14,7 +14,7 @@ from desc.integrals.interp_utils import (
 )
 from desc.integrals.quad_utils import (
     bijection_from_disc,
-    composite_linspace,
+    chebgauss_uniform,
     grad_bijection_from_disc,
 )
 from desc.utils import (
@@ -27,8 +27,8 @@ from desc.utils import (
 )
 
 
-def get_pitch_inv(min_B, max_B, num_pitch, relative_shift=1e-6):
-    """Return 1/λ values for quadrature between ``min_B`` and ``max_B``.
+def get_pitch_inv_quad(min_B, max_B, num_pitch):
+    """Return 1/λ values and weights for quadrature between ``min_B`` and ``max_B``.
 
     Parameters
     ----------
@@ -37,28 +37,24 @@ def get_pitch_inv(min_B, max_B, num_pitch, relative_shift=1e-6):
     max_B : jnp.ndarray
         Maximum |B| value.
     num_pitch : int
-        Number of values, not including endpoints.
-    relative_shift : float
-        Relative amount to shift maxima down and minima up to avoid floating point
-        errors in downstream routines.
+        Number of values.
 
     Returns
     -------
-    pitch_inv : jnp.ndarray
-        Shape (*min_B.shape, num + 2).
-        1/λ values.
+    pitch_inv, weight : (jnp.ndarray, jnp.ndarray)
+        Shape (*min_B.shape, num_pitch).
+        1/λ values and weights.
 
     """
-    # Floating point error impedes consistent detection of bounce points riding
-    # extrema. Shift values slightly to resolve this issue.
-    min_B = (1 + relative_shift) * min_B
-    max_B = (1 - relative_shift) * max_B
-    # Samples should be uniformly spaced in |B| and not λ (GitHub issue #1228).
-    pitch_inv = jnp.moveaxis(
-        composite_linspace(jnp.stack([min_B, max_B]), num_pitch), 0, -1
+    errorif(
+        num_pitch > 1e5,
+        msg=f"{num_pitch} > 1e5 not possible due to floating point errors.",
     )
-    assert pitch_inv.shape == (*min_B.shape, num_pitch + 2)
-    return pitch_inv
+    # Samples should be uniformly spaced in |B| and not λ (GitHub issue #1228).
+    x, weight = chebgauss_uniform(num_pitch)
+    pitch_inv = bijection_from_disc(x, min_B[..., jnp.newaxis], max_B[..., jnp.newaxis])
+    weight = weight * grad_bijection_from_disc(min_B, max_B)[..., jnp.newaxis]
+    return pitch_inv, weight
 
 
 def _check_spline_shape(knots, g, dg_dz, pitch_inv=None):
@@ -374,7 +370,7 @@ def _bounce_quadrature(
             plot=plot,
         )
     else:
-        # TODO: Use batched vmap.
+
         def loop(z):  # over num well axis
             z1, z2 = z
             # Need to return tuple because input was tuple; artifact of JAX map.
@@ -389,10 +385,11 @@ def _bounce_quadrature(
                 method=method,
                 check=False,
                 plot=False,
-                batch=True,
+                batch=False,
             )
 
         result = jnp.moveaxis(
+            # TODO: Use batch_size arg of imap after increasing JAX version requirement.
             imap(loop, (jnp.moveaxis(z1, -1, 0), jnp.moveaxis(z2, -1, 0)))[1],
             source=0,
             destination=-1,
@@ -412,7 +409,7 @@ def _interpolate_and_integrate(
     method,
     check,
     plot,
-    batch=False,
+    batch=True,
 ):
     """Interpolate given functions to points ``Q`` and perform quadrature.
 
@@ -433,11 +430,11 @@ def _interpolate_and_integrate(
 
     """
     assert w.ndim == 1 and Q.shape[-1] == w.size
-    assert Q.shape[-3 + batch] == pitch_inv.shape[-1]
+    assert Q.shape[-3 + (not batch)] == pitch_inv.shape[-1]
     assert data["|B|"].shape[-1] == knots.size
 
     shape = Q.shape
-    if not batch:
+    if batch:
         Q = flatten_matrix(Q)
     b_sup_z = interp1d_Hermite_vec(
         Q,

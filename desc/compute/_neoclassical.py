@@ -17,6 +17,7 @@ from quadax import simpson
 from desc.backend import jit, jnp
 
 from ..integrals.bounce_integral import Bounce1D
+from ..integrals.bounce_utils import interp_to_argmin
 from ..integrals.quad_utils import (
     automorphism_sin,
     chebgauss2,
@@ -255,32 +256,19 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
     def compute(data):
         """∫ dλ ∑ⱼ [v τ γ_c²]ⱼ."""
         bounce = Bounce1D(grid, data, quad, automorphism=None, is_reshaped=True)
-        v_tau = bounce.integrate(
-            d_v_tau, data["pitch_inv"], batch=batch, num_well=num_well
-        )
-        gamma_c = (
-            2
-            / jnp.pi
-            * jnp.arctan(
-                safediv(
-                    bounce.integrate(
-                        drift,
-                        data["pitch_inv"],
-                        data["cvdrift0"],
-                        batch=batch,
-                        num_well=num_well,
-                    ),
-                    bounce.integrate(
-                        drift,
-                        data["pitch_inv"],
-                        data["gbdrift"],
-                        batch=batch,
-                        num_well=num_well,
-                    ),
-                )
+        points = bounce.points(data["pitch_inv"], num_well=num_well)
+        v_tau = bounce.integrate(d_v_tau, points, data["pitch_inv"], batch=batch)
+        gamma_c = jnp.arctan(
+            safediv(
+                bounce.integrate(
+                    drift, points, data["pitch_inv"], data["cvdrift0"], batch=batch
+                ),
+                bounce.integrate(
+                    drift, points, data["pitch_inv"], data["gbdrift"], batch=batch
+                ),
             )
         )
-        return (
+        return (4 / jnp.pi**2) * (
             (v_tau * gamma_c**2).sum(axis=-1)
             * data["pitch_inv"] ** (-2)
             * data["pitch_inv weight"]
@@ -384,19 +372,19 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
     def d_v_tau(B, pitch):
         return safediv(2.0, jnp.sqrt(jnp.abs(1 - pitch * B)))
 
-    def drift_radial(grad_rho_norm_kappa_g, B, pitch):
+    def drift1(grad_rho_norm_kappa_g, B, pitch):
         return (
             safediv(1 - 0.5 * pitch * B, jnp.sqrt(jnp.abs(1 - pitch * B)))
             * grad_rho_norm_kappa_g
             / B
         )
 
-    def drift_poloidal_1(B_psi, B, pitch):
+    def drift2(B_psi, B, pitch):
         return (
             safediv(1 - 0.5 * pitch * B, jnp.sqrt(jnp.abs(1 - pitch * B))) * B_psi / B
         )
 
-    def drift_poloidal_2(K, B, pitch):
+    def drift3(K, B, pitch):
         return jnp.sqrt(jnp.abs(1 - pitch * B)) * K / B
 
     def compute(data):
@@ -404,34 +392,40 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
         # Note v τ = 4λ⁻²B₀⁻¹ ∂I/∂((λB₀)⁻¹) where v is the particle velocity,
         # τ is the bounce time, and I is defined in Nemov eq. 36.
         bounce = Bounce1D(grid, data, quad, automorphism=None, is_reshaped=True)
-        v_tau = bounce.integrate(
-            d_v_tau, data["pitch_inv"], batch=batch, num_well=num_well
-        )
-        gamma_c = (
-            2
-            / jnp.pi
-            * jnp.arctan(
-                safediv(
+        points = bounce.points(data["pitch_inv"], num_well=num_well)
+        v_tau = bounce.integrate(d_v_tau, points, data["pitch_inv"], batch=batch)
+        gamma_c = jnp.arctan(
+            safediv(
+                bounce.integrate(
+                    drift1,
+                    points,
+                    data["pitch_inv"],
+                    data["|grad(rho)|*kappa_g"],
+                    batch=batch,
+                ),
+                (
                     bounce.integrate(
-                        drift_radial,
+                        drift2,
+                        points,
                         data["pitch_inv"],
-                        data["|grad(rho)|*kappa_g"],
+                        data["|B|_psi|v,p"],
                         batch=batch,
-                        num_well=num_well,
-                    ),
-                    bounce.integrate(
-                        [drift_poloidal_1, drift_poloidal_2],
+                    )
+                    + bounce.integrate(
+                        drift3,
+                        points,
                         data["pitch_inv"],
-                        [data["|B|_psi|v,p"], data["K"]],
+                        data["K"],
                         batch=batch,
-                        num_well=num_well,
-                        weight=data["weight"],
-                        quad2=quad2,
-                    ),
+                        quad=quad2,
+                    )
                 )
+                * interp_to_argmin(
+                    data["weight"], points, bounce.zeta, bounce.B, bounce.dB_dz
+                ),
             )
         )
-        return (
+        return (4 / jnp.pi**2) * (
             (v_tau * gamma_c**2).sum(axis=-1)
             * data["pitch_inv"] ** (-2)
             * data["pitch_inv weight"]

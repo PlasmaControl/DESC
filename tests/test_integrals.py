@@ -937,7 +937,7 @@ class TestBounceQuadrature:
         to supress the derivative (as expected from chain rule), so we need to use the
         sin automorphism. We choose to apply that map to ``leggauss`` instead of
         ``_chebgauss1`` because the extra cosine term in ``_chebgauss1`` increases the
-        polynomial complexity of the integrand and supresses the derivative too strong
+        polynomial complexity of the integrand and suppresses the derivative too strong
         for a quadrature that already clusters near edge with density 1/(1−x²). This is
         why ``_chebgauss1`` required more nodes in this test, and in general would
         require more nodes for functions with more features.
@@ -1190,7 +1190,7 @@ class TestBounce1D:
         points = (np.array(0, ndmin=4), np.array(2 * np.pi, ndmin=4))
         argmin = 5.61719
         h_min = h(argmin)
-        result = func(h(zeta), points, zeta, bounce.B, bounce._dB_dz)
+        result = func(h(zeta), points, zeta, bounce.B, bounce.dB_dz)
         assert result.shape == points[0].shape
         np.testing.assert_allclose(h_min, result, rtol=1e-3)
 

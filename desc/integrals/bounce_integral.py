@@ -178,10 +178,10 @@ class Bounce1D(IOAble):
         self._x, self._w = get_quadrature(quad, automorphism)
 
         # Compute local splines.
-        self._zeta = grid.compress(grid.nodes[:, 2], surface_label="zeta")
+        self.zeta = grid.compress(grid.nodes[:, 2], surface_label="zeta")
         self.B = jnp.moveaxis(
             CubicHermiteSpline(
-                x=self._zeta,
+                x=self.zeta,
                 y=self._data["|B|"],
                 dydx=self._data["|B|_z|r,a"],
                 axis=-1,
@@ -190,7 +190,7 @@ class Bounce1D(IOAble):
             source=(0, 1),
             destination=(-1, -2),
         )
-        self._dB_dz = polyder_vec(self.B)
+        self.dB_dz = polyder_vec(self.B)
 
         # Add axis here instead of in ``_bounce_quadrature``.
         for name in self._data:
@@ -251,7 +251,7 @@ class Bounce1D(IOAble):
             line and pitch, is padded with zero.
 
         """
-        return bounce_points(pitch_inv, self._zeta, self.B, self._dB_dz, num_well)
+        return bounce_points(pitch_inv, self.zeta, self.B, self.dB_dz, num_well)
 
     def check_points(self, points, pitch_inv, *, plot=True, **kwargs):
         """Check that bounce points are computed correctly.
@@ -283,7 +283,7 @@ class Bounce1D(IOAble):
             z1=points[0],
             z2=points[1],
             pitch_inv=pitch_inv,
-            knots=self._zeta,
+            knots=self.zeta,
             B=self.B,
             plot=plot,
             **kwargs,
@@ -301,7 +301,7 @@ class Bounce1D(IOAble):
         batch=True,
         check=False,
         plot=False,
-        quad2=None,
+        quad=None,
     ):
         """Bounce integrate ∫ f(λ, ℓ) dℓ.
 
@@ -348,6 +348,9 @@ class Bounce1D(IOAble):
         plot : bool
             Whether to plot the quantities in the integrand interpolated to the
             quadrature points of each integral. Ignored if ``check`` is false.
+        quad : tuple[jnp.ndarray]
+            Optional quadrature points and weights. If given this overrides
+            the quadrature chosen when this object was made.
 
         Returns
         -------
@@ -357,51 +360,27 @@ class Bounce1D(IOAble):
             flux surface, and pitch value.
 
         """
-        if isinstance(integrand, (list, tuple)):
-            integrand_0 = integrand[0]
-            integrand_1 = integrand[1]
-            f_0 = f[0]
-            f_1 = f[1]
-        else:
-            integrand_0 = integrand
-            f_0 = f
-            f_1 = integrand_1 = None
         result = _bounce_quadrature(
-            x=self._x,
-            w=self._w,
-            integrand=integrand_0,
+            x=self._x if quad is None else quad[0],
+            w=self._w if quad is None else quad[1],
+            integrand=integrand,
             points=points,
             pitch_inv=pitch_inv,
-            f=setdefault(f_0, []),
+            f=setdefault(f, []),
             data=self._data,
-            knots=self._zeta,
+            knots=self.zeta,
             method=method,
             batch=batch,
             check=check,
             plot=plot,
         )
-        if integrand_1 is not None:
-            result += _bounce_quadrature(
-                x=self._x if quad2 is None else quad2[0],
-                w=self._w if quad2 is None else quad2[1],
-                integrand=integrand_1,
-                points=points,
-                pitch_inv=pitch_inv,
-                f=setdefault(f_1, []),
-                data=self._data,
-                knots=self._zeta,
-                method=method,
-                batch=batch,
-                check=check,
-                plot=plot,
-            )
         if weight is not None:
             result *= interp_to_argmin(
                 weight,
                 points,
-                self._zeta,
+                self.zeta,
                 self.B,
-                self._dB_dz,
+                self.dB_dz,
                 method,
             )
         assert result.shape == points[0].shape
@@ -428,7 +407,7 @@ class Bounce1D(IOAble):
             Matplotlib (fig, ax) tuple.
 
         """
-        B, dB_dz = self.B, self._dB_dz
+        B, dB_dz = self.B, self.dB_dz
         if B.ndim == 4:
             B = B[m]
             dB_dz = dB_dz[m]
@@ -440,9 +419,9 @@ class Bounce1D(IOAble):
                 pitch_inv.ndim > 1,
                 msg=f"Got pitch_inv.ndim={pitch_inv.ndim}, but expected 1.",
             )
-            z1, z2 = bounce_points(pitch_inv, self._zeta, B, dB_dz)
+            z1, z2 = bounce_points(pitch_inv, self.zeta, B, dB_dz)
             kwargs["z1"] = z1
             kwargs["z2"] = z2
             kwargs["k"] = pitch_inv
-        fig, ax = plot_ppoly(PPoly(B.T, self._zeta), **_set_default_plot_kwargs(kwargs))
+        fig, ax = plot_ppoly(PPoly(B.T, self.zeta), **_set_default_plot_kwargs(kwargs))
         return fig, ax

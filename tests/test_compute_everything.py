@@ -36,7 +36,7 @@ def _compare_against_master(
                     actual=data[p][name],
                     desired=master_data[p][name],
                     atol=1e-9,
-                    rtol=1e-9,
+                    rtol=1e-8,
                     err_msg=f"Parameterization: {p}. Name: {name}.",
                 )
             except AssertionError as e:

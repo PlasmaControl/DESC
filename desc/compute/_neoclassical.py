@@ -16,10 +16,34 @@ from quadax import simpson
 from desc.backend import jit, jnp
 
 from ..integrals.bounce_integral import Bounce1D
+from ..integrals.bounce_utils import get_pitch_inv_quad
 from ..integrals.quad_utils import chebgauss2
 from ..utils import map2, safediv
 from .data_index import register_compute_fun
-from .utils import _get_pitch_inv_quad, _poloidal_mean
+
+
+def _alpha_mean(f):
+    """Simple mean over field lines.
+
+    Simple mean rather than integrating over α and dividing by 2π
+    (i.e. f.T.dot(dα) / dα.sum()), because when the toroidal angle extends
+    beyond one transit we need to weight all field lines uniformly, regardless
+    of their spacing wrt α.
+    """
+    return f.mean(axis=0)
+
+
+def _get_pitch_inv_quad(grid, data, num_pitch, _data):
+    p, w = get_pitch_inv_quad(
+        grid.compress(data["min_tz |B|"]), grid.compress(data["max_tz |B|"]), num_pitch
+    )
+    _data["pitch_inv"] = jnp.broadcast_to(
+        p[jnp.newaxis], (grid.num_alpha, grid.num_rho, num_pitch)
+    )
+    _data["pitch_inv weight"] = jnp.broadcast_to(
+        w[jnp.newaxis], (grid.num_alpha, grid.num_rho, num_pitch)
+    )
+    return _data
 
 
 @register_compute_fun(
@@ -45,7 +69,7 @@ def _L_ra_fsa(data, transforms, profiles, **kwargs):
         x=grid.compress(grid.nodes[:, 2], surface_label="zeta"),
         axis=-1,
     )
-    data["<L|r,a>"] = grid.expand(jnp.abs(_poloidal_mean(grid, L_ra)))
+    data["<L|r,a>"] = grid.expand(jnp.abs(_alpha_mean(L_ra)))
     return data
 
 
@@ -72,7 +96,7 @@ def _G_ra_fsa(data, transforms, profiles, **kwargs):
         x=grid.compress(grid.nodes[:, 2], surface_label="zeta"),
         axis=-1,
     )
-    data["<G|r,a>"] = grid.expand(jnp.abs(_poloidal_mean(grid, G_ra)))
+    data["<G|r,a>"] = grid.expand(jnp.abs(_alpha_mean(G_ra)))
     return data
 
 
@@ -187,7 +211,7 @@ def _effective_ripple(params, transforms, profiles, data, **kwargs):
         jnp.pi
         / (8 * 2**0.5)
         * (B0 * data["R0"] / data["<|grad(rho)|>"]) ** 2
-        * grid.expand(_poloidal_mean(grid, map2(compute, _data)))
+        * grid.expand(_alpha_mean(map2(compute, _data)))
         / data["<L|r,a>"]
     )
     return data

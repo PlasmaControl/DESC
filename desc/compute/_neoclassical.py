@@ -163,24 +163,16 @@ def _effective_ripple(params, transforms, profiles, data, **kwargs):
         return jnp.sqrt(jnp.abs(1 - pitch * B)) / B
 
     def compute(data):
-        """Return (∂ψ/∂ρ)⁻² B₀⁻² ∫ dλ λ⁻² ∑ⱼ Hⱼ²/Iⱼ.
-
-        Notes
-        -----
-        B₀ has units of λ⁻¹.
-        Nemov's ∑ⱼ Hⱼ²/Iⱼ = (∂ψ/∂ρ)² (λB₀)³ ``(H**2 / I).sum(axis=-1)``.
-        (λB₀)³ d(λB₀)⁻¹ = B₀² λ³ d(λ⁻¹) = -B₀² λ dλ.
-        """
+        """Return (∂ψ/∂ρ)⁻² B₀⁻² ∫ dλ λ⁻² ∑ⱼ Hⱼ²/Iⱼ."""
+        # B₀ has units of λ⁻¹.
+        # Nemov's ∑ⱼ Hⱼ²/Iⱼ = (∂ψ/∂ρ)² (λB₀)³ ``(H**2 / I).sum(axis=-1)``.
+        # (λB₀)³ d(λB₀)⁻¹ = B₀² λ³ d(λ⁻¹) = -B₀² λ dλ.
         bounce = Bounce1D(grid, data, quad, automorphism=None, is_reshaped=True)
+        points = bounce.points(data["pitch_inv"], num_well=num_well)
         H = bounce.integrate(
-            dH,
-            data["pitch_inv"],
-            # Interpolate |∇ρ| κ_g since it is smoother than κ_g alone.
-            data["|grad(rho)|*kappa_g"],
-            num_well=num_well,
-            batch=batch,
+            dH, points, data["pitch_inv"], data["|grad(rho)|*kappa_g"], batch=batch
         )
-        I = bounce.integrate(dI, data["pitch_inv"], num_well=num_well, batch=batch)
+        I = bounce.integrate(dI, points, data["pitch_inv"], batch=batch)
         return (
             safediv(H**2, I).sum(axis=-1)
             * data["pitch_inv"] ** (-3)
@@ -191,6 +183,7 @@ def _effective_ripple(params, transforms, profiles, data, **kwargs):
         name: Bounce1D.reshape_data(grid, data[name])
         for name in Bounce1D.required_names
     }
+    # Interpolate |∇ρ| κ_g since it is smoother than κ_g alone.
     _data["|grad(rho)|*kappa_g"] = Bounce1D.reshape_data(
         grid, data["|grad(rho)|"] * data["kappa_g"]
     )

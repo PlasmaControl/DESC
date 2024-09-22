@@ -9,7 +9,7 @@ from desc.compute import compute as compute_fun
 from desc.compute import data_index, get_data_deps, get_profiles, get_transforms
 from desc.grid import ConcentricGrid, Grid, LinearGrid, QuadratureGrid
 from desc.transform import Transform
-from desc.utils import check_posint, errorif, setdefault, warnif
+from desc.utils import check_posint, errorif, safenorm, setdefault, warnif
 
 
 def _periodic(x, period):
@@ -272,9 +272,8 @@ def _initial_guess_nn_search(coords, inbasis, eq, period, compute):
     coords = jnp.asarray(coords)
 
     def _distance_body(i, idx):
-        d = _periodic(coords[i], period) - _periodic(xg, period)
-        d = jnp.where((d > period / 2) & jnp.isfinite(period), period - d, d)
-        distance = jnp.linalg.norm(d, axis=-1)
+        d = _fixup_residual(coords[i] - xg, period)
+        distance = safenorm(d, axis=-1)
         k = jnp.argmin(distance)
         idx = put(idx, i, k)
         return idx

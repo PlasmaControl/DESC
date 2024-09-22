@@ -101,16 +101,17 @@ grad_automorphism_sin.__doc__ += "\n" + automorphism_sin.__doc__
 def tanh_sinh(deg, m=10):
     """Tanh-Sinh quadrature.
 
-    Returns quadrature points xₖ and weights wₖ for the approximate evaluation of the
-    integral ∫₋₁¹ f(x) dx ≈ ∑ₖ wₖ f(xₖ).
+    Returns quadrature points xₖ and weights wₖ for the approximate evaluation
+    of the integral ∫₋₁¹ f(x) dx ≈ ∑ₖ wₖ f(xₖ).
 
     Parameters
     ----------
     deg : int
         Number of quadrature points.
     m : float
-        Number of machine epsilons used for floating point error buffer. Larger implies
-        less floating point error, but increases the minimum achievable error.
+        Number of machine epsilons used for floating point error buffer. Larger
+        implies less floating point error, but increases the minimum achievable
+        quadrature error.
 
     Returns
     -------
@@ -135,8 +136,8 @@ def tanh_sinh(deg, m=10):
 def leggauss_lob(deg, interior_only=False):
     """Lobatto-Gauss-Legendre quadrature.
 
-    Returns quadrature points xₖ and weights wₖ for the approximate evaluation of the
-    integral ∫₋₁¹ f(x) dx ≈ ∑ₖ wₖ f(xₖ).
+    Returns quadrature points xₖ and weights wₖ for the approximate evaluation
+    of the integral ∫₋₁¹ f(x) dx ≈ ∑ₖ wₖ f(xₖ).
 
     Parameters
     ----------
@@ -186,8 +187,8 @@ def leggauss_lob(deg, interior_only=False):
 def chebgauss_uniform(deg):
     """Gauss-Chebyshev quadrature with uniformly spaced nodes.
 
-    Returns quadrature points xₖ and weights wₖ for the approximate evaluation of the
-    integral ∫₋₁¹ f(x) dx ≈ ∑ₖ wₖ f(xₖ).
+    Returns quadrature points xₖ and weights wₖ for the approximate evaluation
+    of the integral ∫₋₁¹ f(x) dx ≈ ∑ₖ wₖ f(xₖ).
 
     Parameters
     ----------
@@ -199,6 +200,7 @@ def chebgauss_uniform(deg):
     x, w : (jnp.ndarray, jnp.ndarray)
         Shape (deg, ).
         Quadrature points and weights.
+
     """
     # Define x = 2/π arcsin y and g : y ↦ f(x(y)).
     #   ∫₋₁¹ f(x) dx = 2/π ∫₋₁¹ (1−y²)⁻⁰ᐧ⁵ g(y) dy
@@ -212,8 +214,8 @@ def chebgauss_uniform(deg):
 def chebgauss2(deg):
     """Gauss-Chebyshev quadrature of the second kind.
 
-    Returns quadrature points xₖ and weights wₖ for the approximate evaluation of the
-    integral ∫₋₁¹ f(x) dx ≈ ∑ₖ wₖ f(xₖ) where f(x) = g(x) √(1−x²).
+    Returns quadrature points xₖ and weights wₖ for the approximate evaluation
+    of the integral ∫₋₁¹ f(x) dx ≈ ∑ₖ wₖ f(xₖ) where f(x) = g(x) √(1−x²).
 
     Parameters
     ----------
@@ -225,6 +227,7 @@ def chebgauss2(deg):
     x, w : (jnp.ndarray, jnp.ndarray)
         Shape (deg, ).
         Quadrature points and weights.
+
     """
     # Adapted from
     # github.com/scipy/scipy/blob/v1.14.1/scipy/special/_orthogonal.py#L1803-L1851.
@@ -240,8 +243,8 @@ def get_quadrature(quad, automorphism):
     Parameters
     ----------
     quad : (jnp.ndarray, jnp.ndarray)
-        Quadrature points xₖ and weights wₖ for the approximate evaluation of an
-        integral ∫₋₁¹ g(x) dx = ∑ₖ wₖ g(xₖ).
+        Quadrature points xₖ and weights wₖ for the approximate evaluation of
+        the integral ∫₋₁¹ g(x) dx = ∑ₖ wₖ g(xₖ).
     automorphism : (Callable, Callable) or None
         The first callable should be an automorphism of the real interval [-1, 1].
         The second callable should be the derivative of the first. This map defines

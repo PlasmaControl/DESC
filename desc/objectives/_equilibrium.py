@@ -39,7 +39,7 @@ class ForceBalance(_Objective):
 
     """
 
-    __doc__ += collect_docs()
+    __doc__ = __doc__.rstrip() + collect_docs()
 
     _equilibrium = True
     _coordinates = "rtz"
@@ -190,7 +190,7 @@ class ForceBalanceAnisotropic(_Objective):
 
     """
 
-    __doc__ += collect_docs()
+    __doc__ = __doc__.rstrip() + collect_docs()
 
     _units = "(N)"
     _coordinates = "rtz"
@@ -323,7 +323,7 @@ class RadialForceBalance(_Objective):
 
     """
 
-    __doc__ += collect_docs()
+    __doc__ = __doc__.rstrip() + collect_docs()
 
     _equilibrium = True
     _coordinates = "rtz"
@@ -456,7 +456,7 @@ class HelicalForceBalance(_Objective):
 
     """
 
-    __doc__ += collect_docs()
+    __doc__ = __doc__.rstrip() + collect_docs()
 
     _equilibrium = True
     _coordinates = "rtz"
@@ -587,7 +587,7 @@ class Energy(_Objective):
 
     """
 
-    __doc__ += collect_docs()
+    __doc__ = __doc__.rstrip() + collect_docs()
 
     _scalar = True
     _coordinates = ""
@@ -729,7 +729,7 @@ class CurrentDensity(_Objective):
 
     """
 
-    __doc__ += collect_docs()
+    __doc__ = __doc__.rstrip() + collect_docs()
 
     _equilibrium = True
     _coordinates = "rtz"

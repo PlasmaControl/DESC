@@ -1051,6 +1051,7 @@ def run_regcoil(  # noqa: C901 fxn too complex
     verbose=1,
     normalize=True,
     vacuum=False,
+    regularization_type="simple",
 ):
     """Runs REGCOIL-like algorithm to find the current potential for the surface.
 
@@ -1152,6 +1153,10 @@ def run_regcoil(  # noqa: C901 fxn too complex
     vacuum : bool, optional
         if True, will not include the contribution to the normal field from the
         plasma currents.
+    regularization_type : {"simple","regcoil"}
+        whether to use a simple regularization based off of just the single-valued
+        part of Phi, or to use the full REGCOIL regularization penalizing |K|^2.
+        Default is simple, which is much cheaper than the REGCOIL regularization.
 
     Returns
     -------
@@ -1208,6 +1213,11 @@ def run_regcoil(  # noqa: C901 fxn too complex
         errorif(int(hel) != hel, ValueError, "Helicity values must be integer")
         for hel in current_helicity
     ]
+    errorif(
+        regularization_type not in ["simple", "regcoil"],
+        ValueError,
+        "regulariztation_type must be simple or regcoil",
+    )
     q = current_helicity[0]  # poloidal transits before coil returns to itself
     p = current_helicity[1]  # toroidal transits before coil returns to itself
 
@@ -1330,7 +1340,34 @@ def run_regcoil(  # noqa: C901 fxn too complex
         Bn, _ = current_potential_field.compute_Bnormal(
             eq.surface, eval_grid=eval_grid, source_grid=source_grid, params=params
         )
-        return Bn * ne_mag * eval_grid.weights
+        return Bn
+
+    def calc_SV_current(phi_mn):
+        params = current_potential_field.params_dict
+        params["Phi_mn"] = phi_mn
+        params["I"] = 0
+        params["G"] = 0
+        data = current_potential_field.compute("K", grid=source_grid, params=params)
+
+        return data["K"]
+
+    def calc_SV_current_mag_sqd(phi_mn):
+        params = current_potential_field.params_dict
+        params["Phi_mn"] = phi_mn
+        params["I"] = 0
+        params["G"] = 0
+        data = current_potential_field.compute("K", grid=source_grid, params=params)
+
+        return dot(data["K"], data["K"], axis=1)
+
+    def calc_secular_current(phi_mn):
+        params = current_potential_field.params_dict
+        params["Phi_mn"] = jnp.zeros_like(phi_mn)
+        params["I"] = current_potential_field.I
+        params["G"] = current_potential_field.G
+        data = current_potential_field.compute("K", grid=source_grid, params=params)
+
+        return data["K"]
 
     def B_from_K_secular(I, G):
         """B from secular part of K, i.e. B^GI_{normal} from REGCOIL eqn 4."""
@@ -1344,10 +1381,33 @@ def run_regcoil(  # noqa: C901 fxn too complex
         )
         return Bn * ne_mag * eval_grid.weights
 
+    if regularization_type == "regcoil":
+        grad_Bn = Derivative(B_from_K_SV).compute(current_potential_field.Phi_mn)
+        # prob can make the below one a compute fxn instead of using
+        # JAX to compute dK^2/dPhimn
+        grad_Ksv = Derivative(calc_SV_current).compute(current_potential_field.Phi_mn)
+        A_K = Derivative(calc_SV_current_mag_sqd)
+
+        def surfint_Bn_grad_Bn(phi_mn):
+            integrand = (grad_Bn.T * B_from_K_SV(phi_mn) * ne_mag * eval_grid.weights).T
+            return jnp.sum(integrand, axis=0).squeeze()
+
+        def surfint_grad_Ksqd(phi_mn):
+            integrand = (A_K(phi_mn).T * ns_mag * source_grid.weights).T
+            return jnp.sum(integrand, axis=0).squeeze()
+
     timer = Timer()
     # calculate the Jacobian matrix A for  Bn_SV = A*Phi_mn
     timer.start("Jacobian Calculation")
-    A = Derivative(B_from_K_SV).compute(current_potential_field.Phi_mn)
+    if regularization_type == "regcoil":
+        A1 = 2 * Derivative(surfint_Bn_grad_Bn).compute(current_potential_field.Phi_mn)
+        A2 = Derivative(surfint_grad_Ksqd).compute(current_potential_field.Phi_mn)
+    else:
+        A = (
+            Derivative(B_from_K_SV).compute(current_potential_field.Phi_mn).T
+            * ne_mag
+            * eval_grid.weights
+        ).T
     timer.stop("Jacobian Calculation")
     if verbose > 1:
         timer.disp("Jacobian Calculation")
@@ -1375,7 +1435,17 @@ def run_regcoil(  # noqa: C901 fxn too complex
     else:
         Bn_ext = jnp.zeros_like(B_GI_normal)
 
-    rhs = -(Bn_plasma + Bn_ext + B_GI_normal)
+    rhs = Bn_plasma + Bn_ext + B_GI_normal
+    if regularization_type == "regcoil":
+        rhs_B = -2 * ((grad_Bn.T * rhs).T).sum(axis=0)
+        dotted_K_d_K_d_Phimn = dot(
+            calc_secular_current(current_potential_field.Phi_mn)[:, :, jnp.newaxis],
+            grad_Ksv,
+            axis=1,
+        )
+        rhs_K = -2 * (dotted_K_d_K_d_Phimn.T * ns_mag * source_grid.weights).T.sum(
+            axis=0
+        )
     lambda_regularizations = np.atleast_1d(lambda_regularization)
     scan = lambda_regularizations.size > 1
 
@@ -1389,10 +1459,12 @@ def run_regcoil(  # noqa: C901 fxn too complex
     # calculate the Phi_mn which minimizes
     # (chi^2_B + lambda_regularization*chi^2_K) for each lambda_regularization
     # pre-calculate the SVD
-    u, s, vh = jnp.linalg.svd(A, full_matrices=False)
-    s_uT = (u * s).T
-    s_uT_b = s_uT @ rhs
-    vht = vh.T
+    if regularization_type == "simple":
+        u, s, vh = jnp.linalg.svd(A, full_matrices=False)
+        s_uT = (u * s).T
+        s_uT_b = -s_uT @ rhs
+        vht = vh.T
+
     for lambda_regularization in lambda_regularizations:
         printstring = (
             "Calculating Phi_SV for"
@@ -1407,15 +1479,21 @@ def run_regcoil(  # noqa: C901 fxn too complex
                 + "#" * len(printstring)
             )
 
-        # calculate Phi_mn with SVD inverse plus the regularization
-        phi_mn_opt = vht @ ((1 / (s**2 + lambda_regularization)) * s_uT_b)
+        if regularization_type == "simple":
+            # calculate Phi_mn with SVD inverse plus the regularization
+            phi_mn_opt = vht @ ((1 / (s**2 + lambda_regularization)) * s_uT_b)
+        else:
+            phi_mn_opt = jnp.linalg.pinv(A1 + lambda_regularization * A2) @ (
+                rhs_B
+                + lambda_regularization * rhs_K  # TODO: check correctness of rhs_K
+            )
 
         phi_mns.append(phi_mn_opt)
 
-        Bn_SV = A @ phi_mn_opt
+        Bn_SV = B_from_K_SV(phi_mn_opt) * ne_mag * eval_grid.weights
         Bn_tot = Bn_SV + Bn_plasma + B_GI_normal + Bn_ext
 
-        chi_B = jnp.sum(Bn_tot * Bn_tot * ne_mag * eval_grid.weights)
+        chi_B = jnp.sum(Bn_tot * Bn_tot / ne_mag / eval_grid.weights)
         chi2Bs.append(chi_B)
 
         current_potential_field.Phi_mn = phi_mn_opt

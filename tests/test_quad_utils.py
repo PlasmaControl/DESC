@@ -14,12 +14,12 @@ from desc.integrals.quad_utils import (
     bijection_from_disc,
     bijection_to_disc,
     chebgauss2,
-    chebgauss_uniform,
     grad_automorphism_arcsin,
     grad_automorphism_sin,
     grad_bijection_from_disc,
     leggauss_lob,
     tanh_sinh,
+    uniform,
 )
 
 
@@ -103,7 +103,7 @@ def test_chebgauss():
 
     deg = 4
     yk, wk = chebgauss(deg)
-    x, w = chebgauss_uniform(deg)
+    x, w = uniform(deg)
     np.testing.assert_allclose(yk[::-1], automorphism_sin(x))
     np.testing.assert_allclose(wk, 0.5 * jnp.pi * w)
     np.testing.assert_allclose(np.diff(x), x[1] - x[0])

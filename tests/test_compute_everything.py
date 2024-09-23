@@ -31,12 +31,16 @@ def _compare_against_master(
 
     for name in data[p]:
         if p in master_data and name in master_data[p]:
+            if np.isnan(master_data[p][name]).all():
+                mean = 1.0
+            else:
+                mean = np.nanmean(np.atleast_1d(np.abs(master_data[p][name])))
             try:
                 np.testing.assert_allclose(
                     actual=data[p][name],
                     desired=master_data[p][name],
-                    atol=1e-9,
-                    rtol=1e-8,
+                    atol=1e-12 * mean,
+                    rtol=1e-10,
                     err_msg=f"Parameterization: {p}. Name: {name}.",
                 )
             except AssertionError as e:

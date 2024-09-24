@@ -2,8 +2,8 @@
 
 import numpy as np
 
-from desc.compute import compute as compute_fun
 from desc.compute import get_profiles, get_transforms
+from desc.compute.utils import _compute as compute_fun
 from desc.grid import LinearGrid
 from desc.utils import Timer, warnif
 
@@ -68,7 +68,7 @@ class MercierStability(_Objective):
 
     _coordinates = "r"
     _units = "(Wb^-2)"
-    _print_value_fmt = "Mercier Stability: {:10.3e} "
+    _print_value_fmt = "Mercier Stability: "
 
     def __init__(
         self,
@@ -249,7 +249,7 @@ class MagneticWell(_Objective):
 
     _coordinates = "r"
     _units = "(dimensionless)"
-    _print_value_fmt = "Magnetic Well: {:10.3e} "
+    _print_value_fmt = "Magnetic Well: "
 
     def __init__(
         self,

@@ -1,6 +1,7 @@
 """Classes for Magnetic Fields."""
 
 from ._core import (
+    MagneticFieldFromUser,
     OmnigenousField,
     PoloidalMagneticField,
     ScalarPotentialField,
@@ -8,6 +9,7 @@ from ._core import (
     SplineMagneticField,
     SumMagneticField,
     ToroidalMagneticField,
+    VectorPotentialField,
     VerticalMagneticField,
     _MagneticField,
     field_line_integrate,

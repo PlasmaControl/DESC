@@ -3,9 +3,12 @@
 from ._bootstrap import BootstrapRedlConsistency
 from ._coils import (
     CoilArclengthVariance,
+    CoilCurrentLength,
     CoilCurvature,
     CoilLength,
+    CoilSetMinDistance,
     CoilTorsion,
+    PlasmaCoilSetMinDistance,
     QuadraticFlux,
     ToroidalFlux,
 )
@@ -36,6 +39,7 @@ from ._omnigenity import (
     QuasisymmetryTripleProduct,
     QuasisymmetryTwoTerm,
 )
+from ._power_balance import FusionPower, HeatingPowerISS04
 from ._profiles import Pressure, RotationalTransform, Shear, ToroidalCurrent
 from ._stability import MagneticWell, MercierStability
 from .getters import (
@@ -56,6 +60,7 @@ from .linear_objectives import (
     FixAxisZ,
     FixBoundaryR,
     FixBoundaryZ,
+    FixCoilCurrent,
     FixCurrent,
     FixCurveRotation,
     FixCurveShift,
@@ -67,12 +72,17 @@ from .linear_objectives import (
     FixModeLambda,
     FixModeR,
     FixModeZ,
+    FixNearAxisLambda,
+    FixNearAxisR,
+    FixNearAxisZ,
     FixOmniBmax,
     FixOmniMap,
     FixOmniWell,
-    FixParameter,
+    FixParameters,
     FixPressure,
     FixPsi,
+    FixSheetCurrent,
+    FixSumCoilCurrent,
     FixSumModesLambda,
     FixSumModesR,
     FixSumModesZ,

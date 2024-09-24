@@ -5,7 +5,6 @@ import warnings
 import matplotlib.pyplot as plt
 import numpy as np
 import pytest
-from scipy.interpolate import interp1d
 
 from desc.basis import (
     DoubleFourierSeries,
@@ -15,12 +14,16 @@ from desc.basis import (
 )
 from desc.coils import CoilSet, FourierXYZCoil, MixedCoilSet
 from desc.compute import data_index
-from desc.compute.utils import surface_averages
 from desc.examples import get
 from desc.geometry import FourierRZToroidalSurface, FourierXYZCurve
 from desc.grid import ConcentricGrid, Grid, LinearGrid, QuadratureGrid
+from desc.integrals import surface_averages
 from desc.io import load
-from desc.magnetic_fields import OmnigenousField, ToroidalMagneticField
+from desc.magnetic_fields import (
+    OmnigenousField,
+    SplineMagneticField,
+    ToroidalMagneticField,
+)
 from desc.plotting import (
     plot_1d,
     plot_2d,
@@ -39,8 +42,10 @@ from desc.plotting import (
     plot_qs_error,
     plot_section,
     plot_surfaces,
+    poincare_plot,
 )
 from desc.utils import isalmostequal
+from desc.vmec import VMECIO
 
 tol_1d = 7.8
 tol_2d = 15
@@ -286,7 +291,8 @@ class TestPlot3D:
     def test_3d_plot_Bn(self):
         """Test 3d plotting of Bn on equilibrium surface."""
         eq = get("precise_QA")
-        eq.change_resolution(M=4, N=4, L=4, M_grid=8, N_grid=8, L_grid=8)
+        with pytest.warns(UserWarning, match="Reducing radial"):
+            eq.change_resolution(M=4, N=4, L=4, M_grid=8, N_grid=8, L_grid=8)
         fig = plot_3d(
             eq,
             "B*n",
@@ -328,7 +334,7 @@ class TestPlotFSA:
             plot_data["<" + name + ">"], desired, equal_nan=False
         )
 
-        name = "B0"
+        name = "psi_r/sqrt(g)"
         assert (
             "<" + name + ">"
             not in data_index["desc.equilibrium.equilibrium.Equilibrium"]
@@ -364,7 +370,7 @@ class TestPlotFSA:
             rho=rho,
             M=eq.M_grid,
             N=eq.N_grid,
-            with_sqrt_g=False,  # Test that does not compute data_index["<|B|>"]
+            with_sqrt_g=False,  # test that does not compute data_index["<|B|>"]
             return_data=True,
         )
         data = eq.compute(names=name, grid=grid)
@@ -507,7 +513,14 @@ class TestPlotBoundary:
         eq1 = get("SOLOVEV")
         eq2 = get("DSHAPE")
         eq3 = get("W7-X")
-        fig, ax, data = plot_boundaries((eq1, eq2, eq3), return_data=True)
+        eq4 = get("ESTELL")
+        with pytest.raises(ValueError, match="differing field periods"):
+            fig, ax = plot_boundaries([eq3, eq4], theta=0)
+        fig, ax, data = plot_boundaries(
+            (eq1, eq2, eq3),
+            phi=np.linspace(0, 2 * np.pi / eq3.NFP, 4, endpoint=False),
+            return_data=True,
+        )
         assert "R" in data.keys()
         assert "Z" in data.keys()
         assert len(data["R"]) == 3
@@ -542,6 +555,22 @@ class TestPlotComparison:
         """Test plotting comparison of flux surfaces without theta contours."""
         eqf = get("DSHAPE_CURRENT", "all")
         fig, ax = plot_comparison(eqf, theta=0)
+        return fig
+
+    @pytest.mark.unit
+    @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
+    def test_plot_comparison_different_NFPs(self):
+        """Test plotting comparison of flux surfaces with differing NFPs."""
+        eq = get("SOLOVEV")
+        eq_nonax = get("HELIOTRON")
+        eq_nonax2 = get("ESTELL")
+        with pytest.raises(ValueError, match="differing field periods"):
+            fig, ax = plot_comparison([eq_nonax, eq_nonax2], theta=0)
+        fig, ax = plot_comparison(
+            [eq, eq_nonax],
+            phi=np.linspace(0, 2 * np.pi / eq_nonax.NFP, 6, endpoint=False),
+            theta=0,
+        )
         return fig
 
 
@@ -794,6 +823,8 @@ def test_plot_coils():
     coil.rotate(angle=np.pi / N)
     coils = CoilSet.linspaced_angular(coil, I, [0, 0, 1], np.pi / NFP, N // NFP // 2)
     coils2 = MixedCoilSet.from_symmetry(coils, NFP, True)
+    with pytest.raises(ValueError, match="Expected `coils`"):
+        plot_coils("not a coil")
     fig, data = plot_coils(coils2, return_data=True)
 
     def flatten_coils(coilset):
@@ -814,17 +845,15 @@ def test_plot_coils():
 def test_plot_b_mag():
     """Test plot of |B| on longer field lines for gyrokinetic simulations."""
     psi = 0.5
+    rho = np.sqrt(psi)
     npol = 2
     nzgrid = 128
     alpha = 0
-    # compute and fit iota profile
+    # compute iota
     eq = get("W7-X")
-    data = eq.compute("iota")
-    fi = interp1d(data["rho"], data["iota"])
+    iota = eq.compute("iota", grid=LinearGrid(rho=rho, NFP=eq.NFP))["iota"][0]
 
     # get flux tube coordinate system
-    rho = np.sqrt(psi)
-    iota = fi(rho)
     zeta = np.linspace(
         -np.pi * npol / np.abs(iota), np.pi * npol / np.abs(iota), 2 * nzgrid + 1
     )
@@ -832,7 +861,7 @@ def test_plot_b_mag():
 
     rhoa = rho * np.ones_like(zeta)
     c = np.vstack([rhoa, thetas, zeta]).T
-    coords = eq.compute_theta_coords(c)
+    coords = eq.map_coordinates(c, inbasis=("rho", "theta_PEST", "zeta"))
     grid = Grid(coords)
 
     # compute |B| normalized in the usual flux tube way
@@ -860,4 +889,24 @@ def test_plot_coefficients():
 def test_plot_logo():
     """Test plotting the DESC logo."""
     fig, ax = plot_logo()
+    return fig
+
+
+@pytest.mark.unit
+@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
+def test_plot_poincare():
+    """Test making a poincare plot."""
+    # TODO: tracing from spline field seems a lot slower than from a coilset, we
+    # can probably make this test a lot faster if we make some example coilsets
+    extcur = [4700.0, 1000.0]
+    ext_field = SplineMagneticField.from_mgrid(
+        "tests/inputs/mgrid_test.nc", extcur=extcur
+    )
+    with pytest.warns(UserWarning, match="VMEC output"):
+        eq = VMECIO.load("tests/inputs/wout_test_freeb.nc")
+    grid_trace = LinearGrid(rho=np.linspace(0, 1, 9))
+    r0 = eq.compute("R", grid=grid_trace)["R"]
+    z0 = eq.compute("Z", grid=grid_trace)["Z"]
+
+    fig, ax = poincare_plot(ext_field, r0, z0, ntransit=50, NFP=eq.NFP)
     return fig

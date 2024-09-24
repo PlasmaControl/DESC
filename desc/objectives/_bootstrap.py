@@ -3,8 +3,8 @@
 import numpy as np
 
 from desc.backend import jnp
-from desc.compute import compute as compute_fun
 from desc.compute import get_profiles, get_transforms
+from desc.compute.utils import _compute as compute_fun
 from desc.grid import LinearGrid
 from desc.utils import Timer, errorif, warnif
 
@@ -70,7 +70,7 @@ class BootstrapRedlConsistency(_Objective):
 
     _coordinates = "r"
     _units = "(T A m^-2)"
-    _print_value_fmt = "Bootstrap current self-consistency error: {:10.3e} "
+    _print_value_fmt = "Bootstrap current self-consistency error: "
 
     def __init__(
         self,

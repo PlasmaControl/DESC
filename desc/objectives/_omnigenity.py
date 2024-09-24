@@ -3,8 +3,8 @@
 import warnings
 
 from desc.backend import jnp
-from desc.compute import compute as compute_fun
 from desc.compute import get_profiles, get_transforms
+from desc.compute.utils import _compute as compute_fun
 from desc.grid import LinearGrid
 from desc.utils import Timer, errorif, warnif
 from desc.vmec_utils import ptolemy_linear_transform
@@ -47,7 +47,7 @@ class QuasisymmetryBoozer(_Objective):
         reverse mode and forward over reverse mode respectively.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
-        Must be a LinearGrid with a single flux surface and sym=False.
+        Must be a LinearGrid with sym=False.
         Defaults to ``LinearGrid(M=M_booz, N=N_booz)``.
     helicity : tuple, optional
         Type of quasi-symmetry (M, N). Default = quasi-axisymmetry (1, 0).
@@ -61,7 +61,7 @@ class QuasisymmetryBoozer(_Objective):
     """
 
     _units = "(T)"
-    _print_value_fmt = "Quasi-symmetry Boozer error: {:10.3e} "
+    _print_value_fmt = "Quasi-symmetry Boozer error: "
 
     def __init__(
         self,
@@ -97,11 +97,8 @@ class QuasisymmetryBoozer(_Objective):
             name=name,
         )
 
-        self._print_value_fmt = (
-            "Quasi-symmetry ({},{}) Boozer error: ".format(
-                self.helicity[0], self.helicity[1]
-            )
-            + "{:10.3e} "
+        self._print_value_fmt = "Quasi-symmetry ({},{}) Boozer error: ".format(
+            self.helicity[0], self.helicity[1]
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -125,12 +122,6 @@ class QuasisymmetryBoozer(_Objective):
             grid = self._grid
 
         errorif(grid.sym, ValueError, "QuasisymmetryBoozer grid must be non-symmetric")
-        errorif(
-            grid.num_rho != 1,
-            ValueError,
-            "QuasisymmetryBoozer grid must be on a single surface. "
-            "To target multiple surfaces, use multiple objectives.",
-        )
         warnif(
             grid.num_theta < 2 * eq.M,
             RuntimeWarning,
@@ -198,7 +189,7 @@ class QuasisymmetryBoozer(_Objective):
         Returns
         -------
         f : ndarray
-            Quasi-symmetry flux function error at each node (T^3).
+            Symmetry breaking harmonics of B (T).
 
         """
         if constants is None:
@@ -210,8 +201,11 @@ class QuasisymmetryBoozer(_Objective):
             transforms=constants["transforms"],
             profiles=constants["profiles"],
         )
-        B_mn = constants["matrix"] @ data["|B|_mn"]
-        return B_mn[constants["idx"]]
+        B_mn = data["|B|_mn"].reshape((constants["transforms"]["grid"].num_rho, -1))
+        B_mn = constants["matrix"] @ B_mn.T
+        # output order = (rho, mn).flatten(), ie all the surfaces concatenated
+        # one after the other
+        return B_mn[constants["idx"]].T.flatten()
 
     @property
     def helicity(self):
@@ -230,13 +224,9 @@ class QuasisymmetryBoozer(_Objective):
             warnings.warn("Re-build objective after changing the helicity!")
         self._helicity = helicity
         if hasattr(self, "_print_value_fmt"):
-            units = "(T)"
-            self._print_value_fmt = (
-                "Quasi-symmetry ({},{}) Boozer error: ".format(
-                    self.helicity[0], self.helicity[1]
-                )
-                + "{:10.3e} "
-                + units
+            self._units = "(T)"
+            self._print_value_fmt = "Quasi-symmetry ({},{}) Boozer error: ".format(
+                self.helicity[0], self.helicity[1]
             )
 
 
@@ -284,7 +274,7 @@ class QuasisymmetryTwoTerm(_Objective):
 
     _coordinates = "rtz"
     _units = "(T^3)"
-    _print_value_fmt = "Quasi-symmetry two-term error: {:10.3e} "
+    _print_value_fmt = "Quasi-symmetry two-term error: "
 
     def __init__(
         self,
@@ -316,11 +306,8 @@ class QuasisymmetryTwoTerm(_Objective):
             name=name,
         )
 
-        self._print_value_fmt = (
-            "Quasi-symmetry ({},{}) two-term error: ".format(
-                self.helicity[0], self.helicity[1]
-            )
-            + "{:10.3e} "
+        self._print_value_fmt = "Quasi-symmetry ({},{}) two-term error: ".format(
+            self.helicity[0], self.helicity[1]
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -424,13 +411,9 @@ class QuasisymmetryTwoTerm(_Objective):
             self._built = False
         self._helicity = helicity
         if hasattr(self, "_print_value_fmt"):
-            units = "(T^3)"
-            self._print_value_fmt = (
-                "Quasi-symmetry ({},{}) error: ".format(
-                    self.helicity[0], self.helicity[1]
-                )
-                + "{:10.3e} "
-                + units
+            self._units = "(T^3)"
+            self._print_value_fmt = "Quasi-symmetry ({},{}) error: ".format(
+                self.helicity[0], self.helicity[1]
             )
 
 
@@ -476,7 +459,7 @@ class QuasisymmetryTripleProduct(_Objective):
 
     _coordinates = "rtz"
     _units = "(T^4/m^2)"
-    _print_value_fmt = "Quasi-symmetry error: {:10.3e} "
+    _print_value_fmt = "Quasi-symmetry error: "
 
     def __init__(
         self,
@@ -654,7 +637,7 @@ class Omnigenity(_Objective):
 
     _coordinates = "rtz"
     _units = "(T)"
-    _print_value_fmt = "Omnigenity error: {:10.3e} "
+    _print_value_fmt = "Omnigenity error: "
 
     def __init__(
         self,
@@ -666,7 +649,7 @@ class Omnigenity(_Objective):
         normalize=True,
         normalize_target=True,
         loss_function=None,
-        deriv_mode="fwd",  # FIXME: get it working with rev mode (see GH issue #943)
+        deriv_mode="auto",
         eq_grid=None,
         field_grid=None,
         M_booz=None,
@@ -891,20 +874,26 @@ class Omnigenity(_Objective):
             # update theta_B and zeta_B with new iota from the equilibrium
             M, N = constants["helicity"]
             iota = jnp.mean(eq_data["iota"])
+            # see comment in desc.compute._omnigenity for the explanation of these
+            # wheres
+            mat_OP = jnp.array(
+                [[N, iota / jnp.where(N == 0, 1, N)], [0, 1 / jnp.where(N == 0, 1, N)]]
+            )
+            mat_OT = jnp.array([[0, -1], [M, -1 / jnp.where(iota == 0, 1.0, iota)]])
+            den = jnp.where((N - M * iota) == 0, 1.0, (N - M * iota))
+            mat_OH = jnp.array([[N, M * iota / den], [M, M / den]])
             matrix = jnp.where(
                 M == 0,
-                jnp.array([N, iota / N, 0, 1 / N]),  # OP
+                mat_OP,
                 jnp.where(
                     N == 0,
-                    jnp.array([0, -1, M, -1 / iota]),  # OT
-                    jnp.array(
-                        [N, M * iota / (N - M * iota), M, M / (N - M * iota)]  # OH
-                    ),
+                    mat_OT,
+                    mat_OH,
                 ),
-            ).reshape((2, 2))
+            )
             booz = matrix @ jnp.vstack((field_data["alpha"], field_data["h"]))
-            field_data["theta_B"] = booz[0, :]
-            field_data["zeta_B"] = booz[1, :]
+            theta_B = booz[0, :]
+            zeta_B = booz[1, :]
         else:
             field_data = compute_fun(
                 "desc.magnetic_fields._core.OmnigenousField",
@@ -915,13 +904,15 @@ class Omnigenity(_Objective):
                 helicity=constants["helicity"],
                 iota=jnp.mean(eq_data["iota"]),
             )
+            theta_B = field_data["theta_B"]
+            zeta_B = field_data["zeta_B"]
 
         # additional computations that cannot be part of the regular compute API
         nodes = jnp.vstack(
             (
-                jnp.zeros_like(field_data["theta_B"]),
-                field_data["theta_B"],
-                field_data["zeta_B"],
+                jnp.zeros_like(theta_B),
+                theta_B,
+                zeta_B,
             )
         ).T
         B_eta_alpha = jnp.matmul(
@@ -981,7 +972,7 @@ class Isodynamicity(_Objective):
 
     _coordinates = "rtz"
     _units = "(dimensionless)"
-    _print_value_fmt = "Isodynamicity error: {:10.3e} "
+    _print_value_fmt = "Isodynamicity error: "
 
     def __init__(
         self,

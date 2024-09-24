@@ -14,7 +14,7 @@ from functools import partial
 from orthax.legendre import leggauss
 from quadax import simpson
 
-from desc.backend import jit, jnp
+from desc.backend import jax, jit, jnp
 
 from ..integrals.bounce_integral import Bounce1D
 from ..integrals.bounce_utils import get_pitch_inv_quad, interp_to_argmin
@@ -50,6 +50,10 @@ def _get_pitch_inv_quad(grid, data, num_pitch, _data):
         w[jnp.newaxis], (grid.num_alpha, grid.num_rho, num_pitch)
     )
     return _data
+
+
+def _relu_along_axis(x, axis):
+    return jnp.apply_along_axis(jax.nn.relu, axis, x)
 
 
 @register_compute_fun(
@@ -486,4 +490,107 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
         * grid.expand(_alpha_mean(map2(compute, _data)))
         / data["<L|r,a>"]
     )
+    return data
+
+
+@register_compute_fun(
+    name="Gamma_d Velasco",
+    label=(
+        # Γ_c = π/(8√2) ∫dλ 〈 ∑ⱼ [v τ γ_c²]ⱼ 〉
+        "\\Gamma_c = \\frac{\\pi}{8 \\sqrt{2}} "
+        "\\int d\\lambda \\langle \\sum_j (v \\tau \\gamma_c^2)_j \\rangle"
+    ),
+    units="~",
+    units_long="None",
+    description="Energetic ion confinement proxy",
+    dim=1,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="r",
+    data=["min_tz |B|", "max_tz |B|", "cvdrift0", "gbdrift", "<L|r,a>"]
+    + Bounce1D.required_names,
+    source_grid_requirement={"coordinates": "raz", "is_meshgrid": True},
+    quad="jnp.ndarray : Optional, quadrature points and weights for bounce integrals.",
+    num_pitch="int : Resolution for quadrature over velocity coordinate. Default 64.",
+    num_well=(
+        "int : Maximum number of wells to detect for each pitch and field line. "
+        "Default is to detect all wells, but due to limitations in JAX this option "
+        "may consume more memory. Specifying a number that tightly upper bounds "
+        "the number of wells will increase performance. "
+    ),
+    batch="bool : Whether to vectorize part of the computation. Default is true.",
+)
+@partial(jit, static_argnames=["num_pitch", "num_well", "batch"])
+def _Gamma_d_Velasco(params, transforms, profiles, data, **kwargs):
+    """Energetic ion confinement proxy as defined by Velasco et al.
+
+    A model for the fast evaluation of prompt losses of energetic ions in stellarators.
+    J.L. Velasco et al. 2021 Nucl. Fusion 61 116059.
+    https://doi.org/10.1088/1741-4326/ac2994.
+    Equation 16.
+    """
+    quad = (
+        kwargs["quad"]
+        if "quad" in kwargs
+        else get_quadrature(leggauss(32), (automorphism_sin, grad_automorphism_sin))
+    )
+    num_pitch = kwargs.get("num_pitch", 64)
+    num_well = kwargs.get("num_well", None)
+    thresh = kwargs.get("thresh", 0.2)
+    data_for_plot = kwargs.get("data_for_plot", False)
+    batch = kwargs.get("batch", True)
+    grid = transforms["grid"].source_grid
+
+    def d_v_tau(B, pitch):
+        return safediv(2.0, jnp.sqrt(jnp.abs(1 - pitch * B)))
+
+    def drift(f, B, pitch):
+        return safediv(f * (1 - 0.5 * pitch * B), jnp.sqrt(jnp.abs(1 - pitch * B)))
+
+    def compute(data):
+        """∫ dλ ∑ⱼ [v τ γ_c²]ⱼ."""
+        bounce = Bounce1D(grid, data, quad, automorphism=None, is_reshaped=True)
+        points = bounce.points(data["pitch_inv"], num_well=num_well)
+        v_tau = bounce.integrate(d_v_tau, points, data["pitch_inv"], batch=batch)
+        gamma_d = jnp.arctan(
+            safediv(
+                bounce.integrate(
+                    drift, points, data["pitch_inv"], data["cvdrift0"], batch=batch
+                ),
+                bounce.integrate(
+                    drift, points, data["pitch_inv"], data["gbdrift"], batch=batch
+                ),
+            )
+        )
+        return v_tau, gamma_d
+
+    _data = {  # noqa: unused dependency
+        name: Bounce1D.reshape_data(grid, data[name])
+        for name in Bounce1D.required_names + ["cvdrift0", "gbdrift"]
+    }
+
+    _data = _get_pitch_inv_quad(grid, data, num_pitch, _data)
+
+    v_tau, gamma_d = map2(compute, _data)
+
+    # Shape of gamma_d (alpha, rho, lambda, wells)
+    # Summing over all the wells (the inner most sum),
+    # finding the maximum over all alphas.
+    # filtering out values above threshold in lambda.
+    # ReLU doesn't change the shape of an array.
+    # After these operations, array should be of the type (rho, lambda)
+    gamma_d_1 = _relu_along_axis(
+        jnp.max((4 / jnp.pi**2) * (v_tau * gamma_d**2).sum(axis=-1), axis=0) - thresh,
+        axis=-1,
+    )
+
+    if data_for_plot:
+        data["Gamma_d Velasco"] = gamma_d
+    else:
+        # Integrating in lambda
+        data["Gamma_d Velasco"] = (4 / jnp.pi**2) * (
+            gamma_d_1 * _data["pitch_inv"] ** (-2) * _data["pitch_inv weight"]
+        ).sum(axis=-1)
+
     return data

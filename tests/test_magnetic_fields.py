@@ -2,12 +2,13 @@
 
 import numpy as np
 import pytest
+from diffrax import Dopri5
 from scipy.constants import mu_0
 
 from desc.backend import jit, jnp
 from desc.basis import DoubleFourierSeries
 from desc.compute import rpz2xyz, rpz2xyz_vec, xyz2rpz_vec
-from desc.compute.utils import dot, get_params, get_transforms
+from desc.compute.utils import get_params, get_transforms
 from desc.derivatives import FiniteDiffDerivative as Derivative
 from desc.examples import get
 from desc.geometry import FourierRZToroidalSurface, FourierXYZCurve
@@ -29,6 +30,7 @@ from desc.magnetic_fields import (
     read_BNORM_file,
 )
 from desc.magnetic_fields._dommaschk import CD_m_k, CN_m_k
+from desc.utils import dot
 
 
 def phi_lm(R, phi, Z, a, m):
@@ -1173,24 +1175,51 @@ class TestMagneticFields:
         np.testing.assert_allclose(z[-1], 0.001, rtol=1e-6, atol=1e-6)
 
     @pytest.mark.unit
-    def test_field_line_integrate_bounds(self):
-        """Test field line integration with bounding box."""
+    def test_field_line_integrate_long(self):
+        """Test field line integration for long distance along line."""
         # q=4, field line should rotate 1/4 turn after 1 toroidal transit
         # from outboard midplane to top center
         field = ToroidalMagneticField(2, 10) + PoloidalMagneticField(2, 10, 0.25)
-        # test that bounds work correctly, and stop integration when trajectory
-        # hits the bounds
-        r0 = [10.1]
+        r0 = [10.001]
         z0 = [0.0]
-        phis = [0, 2 * np.pi]
-        # this will hit the R bound
-        # (there is no Z bound, and R would go to 10.0 if not bounded)
-        r, z = field_line_integrate(r0, z0, phis, field, bounds_R=(10.05, np.inf))
-        np.testing.assert_allclose(r[-1], 10.05, rtol=3e-4)
-        # this will hit the Z bound
-        # (there is no R bound, and Z would go to 0.1 if not bounded)
-        r, z = field_line_integrate(r0, z0, phis, field, bounds_Z=(-np.inf, 0.05))
-        np.testing.assert_allclose(z[-1], 0.05, atol=3e-3)
+        phis = [0, 2 * np.pi * 25]
+        r, z = field_line_integrate(r0, z0, phis, field, solver=Dopri5())
+        np.testing.assert_allclose(r[-1], 10, rtol=1e-6, atol=1e-6)
+        np.testing.assert_allclose(z[-1], 0.001, rtol=1e-6, atol=1e-6)
+
+    @pytest.mark.unit
+    def test_field_line_integrate_early_terminate_default(self):
+        """Test field line integration with default early termination criterion."""
+        # q=4, field line should rotate 1/4 turn after 1 toroidal transit
+        # from outboard midplane to top center
+        # early terminate when it crosses towards the inboard side (R=10),
+        field1 = ToroidalMagneticField(2, 10) + PoloidalMagneticField(2, 10, 0.25)
+        # make a SplineMagneticField only defined in a tiny region around initial point
+        field = SplineMagneticField.from_field(
+            field=field1,
+            R=np.linspace(10.0, 10.005, 40),
+            phi=np.linspace(0, 2 * np.pi, 40),
+            Z=np.linspace(-5e-3, 5e-3, 40),
+            extrap=True,
+        )
+        r0 = [10.001]
+        z0 = [0.0]
+        phis = [0, 2 * np.pi, 2 * np.pi * 2]
+
+        r, z = field_line_integrate(
+            r0,
+            z0,
+            phis,
+            field,
+            bounds_R=(np.min(field._R), np.max(field._R)),
+            bounds_Z=(np.min(field._Z), np.max(field._Z)),
+            min_step_size=1e-2,
+        )
+        np.testing.assert_allclose(r[1], 10, rtol=1e-6, atol=1e-6)
+        np.testing.assert_allclose(z[1], 0.001, rtol=1e-6, atol=1e-6)
+        # if early terinated, the values at the un-integrated phi points are inf
+        assert np.isnan(r[-1])
+        assert np.isnan(z[-1])
 
     @pytest.mark.unit
     def test_Bnormal_calculation(self):

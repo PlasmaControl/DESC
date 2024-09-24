@@ -188,9 +188,13 @@ def _effective_ripple(params, transforms, profiles, data, **kwargs):
         bounce = Bounce1D(grid, data, quad, automorphism=None, is_reshaped=True)
         points = bounce.points(data["pitch_inv"], num_well=num_well)
         H = bounce.integrate(
-            dH, points, data["pitch_inv"], data["|grad(rho)|*kappa_g"], batch=batch
+            dH,
+            data["pitch_inv"],
+            data["|grad(rho)|*kappa_g"],
+            points=points,
+            batch=batch,
         )
-        I = bounce.integrate(dI, points, data["pitch_inv"], batch=batch)
+        I = bounce.integrate(dI, data["pitch_inv"], points=points, batch=batch)
         return (
             safediv(H**2, I).sum(axis=-1)
             * data["pitch_inv"] ** (-3)

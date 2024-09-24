@@ -1195,8 +1195,18 @@ class TestObjectiveFunction:
 
         test(eq, field, psi_from_field)
         test(eq, field, psi_from_field, rtol=1e-3)
+
+        with pytest.raises(TypeError, match="Equilibrium"):
+            ToroidalFlux(eq, field, qfm_surface=True)
+        with pytest.raises(ValueError, match="qfm_surface=False"):
+            ToroidalFlux(eq, field, qfm_surface=False, field_fixed=True)
+
         # test on field with no vector potential
-        test(eq, PoloidalMagneticField(1, 1, 1), 0.0)
+        pfield = PoloidalMagneticField(1, 1, 1)
+        test(eq, pfield, 0.0)
+        with pytest.raises(ValueError, match="vector potential"):
+            obj = ToroidalFlux(eq.surface, pfield, qfm_surface=True)
+            obj.build()
 
     @pytest.mark.unit
     def test_signed_plasma_vessel_distance(self):

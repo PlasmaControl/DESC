@@ -62,6 +62,7 @@ from desc.objectives import (
     QuadraticFlux,
     QuasisymmetryBoozer,
     QuasisymmetryTwoTerm,
+    ToroidalFlux,
     VacuumBoundaryError,
     Volume,
     get_fixed_boundary_constraints,
@@ -1249,30 +1250,19 @@ def test_qfm_optimization_with_analytic_field():
     and axisymmetric field.
     """
     surface = get("HELIOTRON", data="boundary")
-    surface.change_resolution(M=3, N=3)
+    surface.change_resolution(M=2, N=1)
     field = ToroidalMagneticField(1, 1)
     eval_grid = LinearGrid(
         rho=np.array([1.0]),
-        M=20,
-        N=12,
+        M=10,
+        N=4,
         NFP=surface.NFP,
         sym=False,
     )
 
     optimizer = Optimizer("lsq-exact")
 
-    constraints = (
-        FixParameters(
-            surface,
-            {
-                "R_lmn": [
-                    surface.R_basis.get_idx(0, 0, 0),
-                    surface.R_basis.get_idx(0, 1, 0),
-                ],
-                "Z_lmn": surface.Z_basis.get_idx(0, -1, 0),
-            },
-        ),
-    )
+    constraints = ()
     quadflux_obj = QuadraticFlux(
         eq=surface,
         field=field,
@@ -1280,13 +1270,30 @@ def test_qfm_optimization_with_analytic_field():
         qfm_surface=True,
         field_fixed=True,
     )
-    objective = ObjectiveFunction(quadflux_obj)
+    torflux = ToroidalFlux(
+        eq=surface,
+        field=field,
+        qfm_surface=True,
+        field_fixed=True,
+    )
+    torflux.build()
+    current_torflux = torflux.compute(surface.params_dict)
+    torflux = ToroidalFlux(
+        eq=surface,
+        field=field,
+        qfm_surface=True,
+        field_fixed=True,
+        target=current_torflux,
+    )
+
+    objective = ObjectiveFunction((quadflux_obj, torflux))
     (surface,), __ = optimizer.optimize(
         surface,
         objective=objective,
         constraints=constraints,
         ftol=1e-14,
         gtol=1e-14,
+        xtol=1e-14,
         verbose=3,
     )
 
@@ -1294,8 +1301,8 @@ def test_qfm_optimization_with_analytic_field():
     # to get to Bnorm = 0
     nonax_R = surface.R_lmn[np.where(surface.R_basis.modes[:, 2] != 0)]
     nonax_Z = surface.Z_lmn[np.where(surface.Z_basis.modes[:, 2] != 0)]
-    np.testing.assert_allclose(nonax_R, 0, atol=1e-5)
-    np.testing.assert_allclose(nonax_Z, 0, atol=1e-5)
+    np.testing.assert_allclose(nonax_R, 0, atol=1e-8)
+    np.testing.assert_allclose(nonax_Z, 0, atol=1e-8)
 
 
 @pytest.mark.unit

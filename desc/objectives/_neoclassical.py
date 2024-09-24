@@ -330,7 +330,15 @@ class GammaC(_Objective):
         Name of the objective function.
     Nemov : bool
         Whether to use the Γ_c as defined by Nemov et al. or Velasco et al.
-        Default is Nemov.
+        Default is Nemov. Set to ``False`` to use Velascos's.
+
+        Note that Nemov's Γ_c converges to a finite nonzero value in the
+        infinity limit of the number of toroidal transits.
+        Velasco's expression is defined to be zero on irrational surfaces;
+        and therefore, the numerical computation will converge to zero as the
+        number of toroidal transits increases. This is mentioned to remind
+        users that an optimization using Velasco's metric should be evaluated by
+        measuring decrease in Γ_c at a fixed number of toroidal transits.
 
     """
 

@@ -739,7 +739,7 @@ class CoilArclengthVariance(_CoilObjective):
         """
         data = super().compute(params, constants=constants)
         data = tree_flatten(data, is_leaf=lambda x: isinstance(x, dict))[0]
-        out = jnp.array([jnp.var(jnp.linalg.norm(dat["x_s"], axis=1)) for dat in data])
+        out = jnp.array([jnp.var(dat["length"]) for dat in data])
         return out
 
 

@@ -65,6 +65,10 @@ class ObjectiveFunction(IOAble):
         If None, it will use the largest size i.e ``obj.dim_x``.
         Defaults to ``chunk_size="auto"`` which will use a conservative
         chunk size based off of a heuristic estimate of the memory usage.
+        NOTE: When running on a CPU (not a GPU) on a HPC cluster, DESC is unable to
+        accurately estimate the available device memory, so the "auto" chunk_size
+        option will yield a larger chunk size than may be needed. It is recommended
+        to manually choose a chunk_size if an OOM error is experienced in this case.
 
     """
 

@@ -295,9 +295,9 @@ class Bounce1D(IOAble):
         self,
         integrand,
         pitch_inv,
-        points=None,
         f=None,
         weight=None,
+        points=None,
         *,
         method="cubic",
         batch=True,
@@ -321,12 +321,6 @@ class Bounce1D(IOAble):
             1/λ values to compute the bounce integrals. 1/λ(α,ρ) is specified by
             ``pitch_inv[α,ρ]`` where in the latter the labels are interpreted
             as the indices that correspond to that field line.
-        points : tuple[jnp.ndarray]
-            Shape (M, L, num_pitch, num_well).
-            Output of method ``self.points``.
-            Tuple of length two (z1, z2) that stores ζ coordinates of bounce points.
-            The points are ordered and grouped such that the straight line path
-            between ``z1`` and ``z2`` resides in the epigraph of |B|.
         f : list[jnp.ndarray] or jnp.ndarray
             Shape (M, L, N).
             Real scalar-valued functions evaluated on the ``grid`` supplied to
@@ -339,6 +333,12 @@ class Bounce1D(IOAble):
             the returned value is w(j) ∫ f(λ, ℓ) dℓ, where w(j) is ``weight``
             interpolated to the deepest point in that magnetic well. Use the method
             ``Bounce1D.reshape_data`` to reshape the data into the expected shape.
+        points : tuple[jnp.ndarray]
+            Shape (M, L, num_pitch, num_well).
+            Optional, output of method ``self.points``.
+            Tuple of length two (z1, z2) that stores ζ coordinates of bounce points.
+            The points are ordered and grouped such that the straight line path
+            between ``z1`` and ``z2`` resides in the epigraph of |B|.
         method : str
             Method of interpolation.
             See https://interpax.readthedocs.io/en/latest/_api/interpax.interp1d.html.

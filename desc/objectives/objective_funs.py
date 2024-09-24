@@ -1,9 +1,11 @@
 """Base classes for objectives."""
 
 import functools
+import warnings
 from abc import ABC, abstractmethod
 
 import numpy as np
+from termcolor import colored
 
 from desc.backend import (
     desc_config,
@@ -83,16 +85,18 @@ class ObjectiveFunction(IOAble):
             isinstance(obj, _Objective) for obj in objectives
         ), "members of ObjectiveFunction should be instances of _Objective"
         assert use_jit in {True, False}
-        warnif(
-            deriv_mode == "looped",
-            DeprecationWarning,
-            '``deriv_mode="looped"`` is deprecated in favor of'
-            ' ``deriv_mode="batched"`` with ``jac_chunk_size=1``.',
-        )
         if deriv_mode == "looped":
             # overwrite the user inputs if deprecated "looped" was given
             deriv_mode = "batched"
             jac_chunk_size = 1
+            warnings.warn(
+                colored(
+                    '``deriv_mode="looped"`` is deprecated in favor of'
+                    ' ``deriv_mode="batched"`` with ``jac_chunk_size=1``.',
+                    "yellow",
+                ),
+                DeprecationWarning,
+            )
         assert deriv_mode in {"auto", "batched", "blocked"}
         assert jac_chunk_size in ["auto", None] or isposint(jac_chunk_size)
 

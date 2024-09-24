@@ -14,8 +14,8 @@ from desc.integrals.interp_utils import (
 )
 from desc.integrals.quad_utils import (
     bijection_from_disc,
-    chebgauss_uniform,
     grad_bijection_from_disc,
+    uniform,
 )
 from desc.utils import (
     atleast_nd,
@@ -48,10 +48,11 @@ def get_pitch_inv_quad(min_B, max_B, num_pitch):
     """
     errorif(
         num_pitch > 1e5,
-        msg=f"{num_pitch} > 1e5 not possible due to floating point errors.",
+        msg="Floating point error impedes detection of bounce points "
+        f"near global extrema. Choose {num_pitch} < 1e5.",
     )
     # Samples should be uniformly spaced in |B| and not λ (GitHub issue #1228).
-    x, weight = chebgauss_uniform(num_pitch)
+    x, weight = uniform(num_pitch)
     pitch_inv = bijection_from_disc(x, min_B[..., jnp.newaxis], max_B[..., jnp.newaxis])
     weight = weight * grad_bijection_from_disc(min_B, max_B)[..., jnp.newaxis]
     return pitch_inv, weight

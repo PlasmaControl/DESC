@@ -64,7 +64,7 @@ class Bounce1D(IOAble):
     cannot support reconstruction of the function near the origin. As the
     functions of interest do not vanish at infinity, pseudo-spectral techniques
     are not used. Instead, function approximation is done with local splines.
-    This is useful if one can efficiently obtain data along field lines the
+    This is useful if one can efficiently obtain data along field lines and the
     number of toroidal transits to follow a field line is not large.
 
     After computing the bounce points, the supplied quadrature is performed.
@@ -73,7 +73,8 @@ class Bounce1D(IOAble):
 
     See Also
     --------
-    Bounce2D : Uses two-dimensional pseudo-spectral techniques for the same task.
+    Bounce2D
+        Uses two-dimensional pseudo-spectral techniques for the same task.
 
     Examples
     --------
@@ -124,20 +125,20 @@ class Bounce1D(IOAble):
         data : dict[str, jnp.ndarray]
             Data evaluated on ``grid``.
             Must include names in ``Bounce1D.required_names``.
-        quad : (jnp.ndarray, jnp.ndarray)
+        quad : tuple[jnp.ndarray]
             Quadrature points xₖ and weights wₖ for the approximate evaluation of an
             integral ∫₋₁¹ g(x) dx = ∑ₖ wₖ g(xₖ). Default is 32 points.
             For weak singular integrals, use ``chebgauss2`` from
             ``desc.integrals.quad_utils``.
             For strong singular integrals, use ``leggauss``.
-        automorphism : (Callable, Callable) or None
+        automorphism : tuple[Callable] or None
             The first callable should be an automorphism of the real interval [-1, 1].
             The second callable should be the derivative of the first. This map defines
             a change of variable for the bounce integral. The choice made for the
             automorphism will affect the performance of the quadrature method.
             For weak singular integrals, use ``None``.
-            For strong singular integrals, use ``automorphism_sin`` from
-            ``desc.integrals.quad_utils``.
+            For strong singular integrals, use
+            ``(automorphism_sin,grad_automorphism_sin)`` from
         Bref : float
             Optional. Reference magnetic field strength for normalization.
         Lref : float
@@ -242,9 +243,9 @@ class Bounce1D(IOAble):
         -------
         z1, z2 : tuple[jnp.ndarray]
             Shape (M, L, num_pitch, num_well).
-            ζ coordinates of bounce points. The points are ordered and grouped such
-            that the straight line path between ``z1`` and ``z2`` resides in the
-            epigraph of |B|.
+            Tuple of length two (z1, z2) that stores ζ coordinates of bounce points.
+            The points are ordered and grouped such that the straight line path
+            between ``z1`` and ``z2`` resides in the epigraph of |B|.
 
             If there were less than ``num_well`` wells detected along a field line,
             then the last axis, which enumerates bounce points for a particular field
@@ -260,9 +261,10 @@ class Bounce1D(IOAble):
         ----------
         points : tuple[jnp.ndarray]
             Shape (M, L, num_pitch, num_well).
-            ζ coordinates of bounce points. The points are ordered and grouped such
-            that the straight line path between ``z1`` and ``z2`` resides in the
-            epigraph of |B|.
+            Output of method ``self.points``.
+            Tuple of length two (z1, z2) that stores ζ coordinates of bounce points.
+            The points are ordered and grouped such that the straight line path
+            between ``z1`` and ``z2`` resides in the epigraph of |B|.
         pitch_inv : jnp.ndarray
             Shape (M, L, num_pitch).
             1/λ values to compute the bounce points at each field line. 1/λ(α,ρ) is
@@ -292,10 +294,10 @@ class Bounce1D(IOAble):
     def integrate(
         self,
         integrand,
-        points,
         pitch_inv,
         f=None,
         weight=None,
+        points=None,
         *,
         method="cubic",
         batch=True,
@@ -314,11 +316,6 @@ class Bounce1D(IOAble):
             accept the arrays in ``f`` as arguments as well as the additional keyword
             arguments: ``B`` and ``pitch``. A quadrature will be performed to
             approximate the bounce integral of ``integrand(*f,B=B,pitch=pitch)``.
-        points : tuple[jnp.ndarray]
-            Shape (M, L, num_pitch, num_well).
-            ζ coordinates of bounce points. The points are ordered and grouped such
-            that the straight line path between ``z1`` and ``z2`` resides in the
-            epigraph of |B|.
         pitch_inv : jnp.ndarray
             Shape (M, L, num_pitch).
             1/λ values to compute the bounce integrals. 1/λ(α,ρ) is specified by
@@ -336,6 +333,12 @@ class Bounce1D(IOAble):
             the returned value is w(j) ∫ f(λ, ℓ) dℓ, where w(j) is ``weight``
             interpolated to the deepest point in that magnetic well. Use the method
             ``Bounce1D.reshape_data`` to reshape the data into the expected shape.
+        points : tuple[jnp.ndarray]
+            Shape (M, L, num_pitch, num_well).
+            Optional, output of method ``self.points``.
+            Tuple of length two (z1, z2) that stores ζ coordinates of bounce points.
+            The points are ordered and grouped such that the straight line path
+            between ``z1`` and ``z2`` resides in the epigraph of |B|.
         method : str
             Method of interpolation.
             See https://interpax.readthedocs.io/en/latest/_api/interpax.interp1d.html.
@@ -356,6 +359,8 @@ class Bounce1D(IOAble):
             flux surface, and pitch value.
 
         """
+        if points is None:
+            points = self.points(pitch_inv)
         result = _bounce_quadrature(
             x=self._x,
             w=self._w,
@@ -379,7 +384,6 @@ class Bounce1D(IOAble):
                 self._dB_dz,
                 method,
             )
-        assert result.shape == points[0].shape
         return result
 
     def plot(self, m, l, pitch_inv=None, **kwargs):

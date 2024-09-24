@@ -29,7 +29,6 @@ from desc.utils import (
     isposint,
     setdefault,
     unique_list,
-    warnif,
 )
 
 
@@ -177,9 +176,9 @@ class ObjectiveFunction(IOAble):
         sub_obj_jac_chunk_sizes_are_ints = [
             isposint(obj._jac_chunk_size) for obj in self.objectives
         ]
-        warnif(
+        errorif(
             any(sub_obj_jac_chunk_sizes_are_ints) and self._deriv_mode != "blocked",
-            UserWarning,
+            ValueError,
             "'jac_chunk_size' was passed into one or more sub-objectives, but the"
             " ObjectiveFunction is  using 'batched' deriv_mode, so sub-objective "
             "'jac_chunk_size' will be ignored in favor of the ObjectiveFunction's "
@@ -187,10 +186,10 @@ class ObjectiveFunction(IOAble):
             " Specify 'blocked' deriv_mode if each sub-objective is desired to have a "
             "different 'jac_chunk_size' for its Jacobian computation.",
         )
-        warnif(
+        errorif(
             self._jac_chunk_size not in ["auto", None]
             and self._deriv_mode == "blocked",
-            UserWarning,
+            ValueError,
             "'jac_chunk_size' was passed into ObjectiveFunction, but the "
             "ObjectiveFunction is using 'blocked' deriv_mode, so sub-objective "
             "'jac_chunk_size' are used to compute each sub-objective's Jacobian, "

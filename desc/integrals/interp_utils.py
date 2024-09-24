@@ -66,10 +66,9 @@ def cheb_pts(N, domain=(-1, 1), lobatto=False):
 
 
 def fourier_pts(M):
-    """Get ``M`` Fourier points."""
-    m = jnp.arange(1, M + 1)
-    # [0, 2π] instead of [-π, π] to match our choice of α
-    return 2 * jnp.pi * m / M
+    """Get ``M`` Fourier points in [0, 2π]."""
+    # [0, 2π] instead of [-π, π] required to match our definition of α.
+    return 2 * jnp.pi * jnp.arange(M) / M
 
 
 def harmonic(a, M, axis=-1):

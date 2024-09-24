@@ -1543,10 +1543,11 @@ class TestBounce2D:
 
         # Recompute on non-symmetric, fft compatible grid.
         eq = things["eq"]
-        # FIXME: Change LinearGrid to default to Fourier points nodes. Interpolation
-        #        fails on LinearGrid.
+        # FIXME: Change LinearGrid to default to Fourier points nodes. FFT
+        #        interpolation looks gross on LinearGrid. edit: likely because
+        #        of multi-valued ness issue, but check after done
         grid = Grid.create_meshgrid(
-            [data["rho"], fourier_pts(4 * eq._M_grid), fourier_pts(1) / eq.NFP],
+            [data["rho"], fourier_pts(5 * eq._M_grid), fourier_pts(1) / eq.NFP],
             NFP=eq.NFP,
         )
         grid_data = eq.compute(
@@ -1556,7 +1557,7 @@ class TestBounce2D:
         grid_data["gbdrift"] = grid_data["gbdrift"] * data["normalization"]
 
         # Compute numerical result.
-        M, N = 512, 16
+        M, N = 1024, 32
         # I have concern that numpy computes Nyquist frequency component incorrectly,
         # and the reason high Fourier resolution is required is that with large sample
         # frequency the incorrect max frequency component is higher than the max
@@ -1566,14 +1567,16 @@ class TestBounce2D:
             data=grid_data,
             theta=Bounce2D.compute_theta(
                 eq,
+                M,
+                N,
                 data["rho"],
-                M=M,
-                N=N,
                 iota=jnp.broadcast_to(data["iota"], shape=(M * N)),
             ),
-            N_B=2 * N,
-            num_transit=4,
-            alpha=data["alpha"],  # - 2 * np.pi * data["iota"],
+            N_B=N,
+            num_transit=5,
+            # need to include commented shift but first make sure multivaluedness
+            # is fixed in interpolation by checking plot of f_0.
+            alpha=data["alpha"],  # - 2 * np.pi * data["iota"] - 0.1,
             Bref=data["Bref"],
             Lref=data["a"],
             check=True,
@@ -1585,29 +1588,32 @@ class TestBounce2D:
         f = Bounce2D.reshape_data(grid, grid_data["cvdrift"], grid_data["gbdrift"])
         drift_numerical_num = bounce.integrate(
             integrand=TestBounce1D.drift_num_integrand,
-            points=points,
             pitch_inv=pitch_inv,
+            points=points,
             f=f,
             check=True,
             plot=True,
         )
         drift_numerical_den = bounce.integrate(
             integrand=TestBounce1D.drift_den_integrand,
-            points=points,
             pitch_inv=pitch_inv,
+            points=points,
             check=True,
             plot=True,
         )
         drift_numerical = np.squeeze(drift_numerical_num / drift_numerical_den)
         msg = "There should be one bounce integral per pitch in this example."
         assert drift_numerical.size == drift_analytic.size, msg
+
+        # FIXME: Bug found and confirmed. due to fft of multivalued function gbdrift
         #
         # np.testing.assert_allclose(  # noqa: E800
         #     drift_numerical, drift_analytic, atol=5e-3, rtol=5e-2  # noqa: E800
         # )  # noqa: E800
 
         fig, ax = plt.subplots()
-        ax.plot(pitch_inv, drift_analytic)
-        ax.plot(pitch_inv, drift_numerical)
+        ax.plot(pitch_inv, drift_analytic, label="analytic")
+        ax.plot(pitch_inv, drift_numerical, label="numerical")
+        plt.legend()
         plt.show()
         return fig

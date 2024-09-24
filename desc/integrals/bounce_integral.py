@@ -80,7 +80,7 @@ def _transform_to_clebsch(grid, nodes, f, is_reshaped=False):
     nodes : jnp.ndarray
         Shape (L, M, N, 2) or (M, N, 2).
         DESC coordinates (θ, ζ) sourced from the Clebsch coordinates
-        ``FourierChebyshevBasis.nodes(M,N,domain=(0,2*jnp.pi))``.
+        ``FourierChebyshevSeries.nodes(M,N,domain=(0,2*jnp.pi))``.
     f : jnp.ndarray
         Function evaluated on ``grid``.
 
@@ -122,7 +122,7 @@ def _transform_to_clebsch_1d(grid, alpha, theta, B, N_B, is_reshaped=False):
     theta : jnp.ndarray
         Shape (L, M, N) or (M, N).
         DESC coordinates θ sourced from the Clebsch coordinates
-        ``FourierChebyshevBasis.nodes(M,N,domain=(0,2*jnp.pi))``.
+        ``FourierChebyshevSeries.nodes(M,N,domain=(0,2*jnp.pi))``.
     B : jnp.ndarray
         |B| evaluated on ``grid``.
     N_B : int
@@ -354,7 +354,7 @@ class Bounce2D(IOAble):
         theta : jnp.ndarray
             Shape (L, M, N).
             DESC coordinates θ sourced from the Clebsch coordinates
-            ``FourierChebyshevBasis.nodes(M,N,L,domain=(0,2*jnp.pi))``.
+            ``FourierChebyshevSeries.nodes(M,N,L,domain=(0,2*jnp.pi))``.
         N_B : int
             Desired Chebyshev spectral resolution for |B|.
         alpha : float
@@ -400,6 +400,7 @@ class Bounce2D(IOAble):
             check and kwargs.pop("warn", True) and jnp.any(data["B^zeta"] <= 0),
             msg="(∂ℓ/∂ζ)|ρ,a > 0 is required. Enforcing positive B^ζ.",
         )
+        self._alpha = alpha
         self._m = grid.num_theta
         self._n = grid.num_zeta
         self._x, self._w = get_quadrature(quad, automorphism)
@@ -432,9 +433,12 @@ class Bounce2D(IOAble):
     # for near omnigenous configurations in particular, (∂|B|/∂α)|ρ,ζ vanishes.
     # However, the Fourier series of θ(α, ζ) converges slower than desired.
     # Small discontinuities of quantities evaluated between adjacent cuts of a
-    # field line vanish at M > 256.
+    # field line vanish at M > 256. Memory seems much better than DESC's transforms
+    # though, and we avoid creation of a 1000 intermediate dependency arrays of
+    # large size like by avoiding source grid requirement in desc.compute.
+    # edit: this can be reduced once the single valued thing is fixed.
     @staticmethod
-    def compute_theta(eq, L, M=512, N=16, clebsch=None, **kwargs):
+    def compute_theta(eq, M=512, N=16, rho=1.0, clebsch=None, **kwargs):
         """Return DESC coordinates θ of Fourier Chebyshev basis nodes.
 
         The Fourier spectrum of θ in α is wider than the Chebyshev spectrum
@@ -444,18 +448,18 @@ class Bounce2D(IOAble):
         ----------
         eq : Equilibrium
             Equilibrium to use defining the coordinate mapping.
-        L : int or jnp.ndarray
-            Number of flux surfaces uniformly in [0, 1] on which to compute.
-            May also be an array of non-uniform coordinates.
         M : int
             Grid resolution in poloidal direction for Clebsch coordinate grid.
             Preferably power of 2.
         N : int
             Grid resolution in toroidal direction for Clebsch coordinate grid.
             Preferably power of 2.
+        rho : float or jnp.ndarray
+            Flux surfaces labels in [0, 1] on which to compute.
         clebsch : jnp.ndarray
             Optional, Clebsch coordinate tensor-product grid (ρ, α, ζ).
-            ``FourierChebyshevBasis.nodes(M,N,L,domain=(0,2*jnp.pi))``.
+            ``FourierChebyshevSeries.nodes(M,N,L,domain=(0,2*jnp.pi))``.
+            If given, ``rho`` is ignored.
         kwargs
             Additional parameters to supply to the coordinate mapping function.
             See ``desc.equilibrium.Equilibrium.map_coordinates``.
@@ -465,14 +469,14 @@ class Bounce2D(IOAble):
         theta : jnp.ndarray
             Shape (L, M, N).
             DESC coordinates θ sourced from the Clebsch coordinates
-            ``FourierChebyshevBasis.nodes(M,N,L,domain=(0,2*jnp.pi))``.
+            ``FourierChebyshevSeries.nodes(M,N,L,domain=(0,2*jnp.pi))``.
 
         """
         if clebsch is None:
             clebsch = FourierChebyshevSeries.nodes(
                 check_posint(M),
                 check_posint(N),
-                L,
+                rho,
                 domain=(0, 2 * jnp.pi),
             )
         return eq.map_coordinates(
@@ -528,9 +532,9 @@ class Bounce2D(IOAble):
         -------
         z1, z2 : tuple[jnp.ndarray]
             Shape (L, num_pitch, num_well).
-            ζ coordinates of bounce points. The points are ordered and grouped such
-            that the straight line path between ``z1`` and ``z2`` resides in the
-            epigraph of |B|.
+            Tuple of length two (z1, z2) that stores ζ coordinates of bounce points.
+            The points are ordered and grouped such that the straight line path
+            between ``z1`` and ``z2`` resides in the epigraph of |B|.
 
             If there were less than ``num_well`` wells detected along a field line,
             then the last axis, which enumerates bounce points for a particular field
@@ -549,9 +553,10 @@ class Bounce2D(IOAble):
         ----------
         points : tuple[jnp.ndarray]
             Shape (L, num_pitch, num_well).
-            ζ coordinates of bounce points. The points are ordered and grouped such
-            that the straight line path between ``z1`` and ``z2`` resides in the
-            epigraph of |B|.
+            Output of method ``self.points``.
+            Tuple of length two (z1, z2) that stores ζ coordinates of bounce points.
+            The points are ordered and grouped such that the straight line path
+            between ``z1`` and ``z2`` resides in the epigraph of |B|.
         pitch_inv : jnp.ndarray
             Shape (L, num_pitch).
             1/λ values to compute the bounce integrals. 1/λ(ρ) is specified by
@@ -569,6 +574,7 @@ class Bounce2D(IOAble):
             Matplotlib (fig, ax) tuples for the 1D plot of each field line.
 
         """
+        kwargs.setdefault("hlabel", r"$\alpha = $" + str(self._alpha) + r", $\zeta$")
         return self._B.check_intersect1d(
             z1=_swap_pl(points[0]),
             z2=_swap_pl(points[1]),
@@ -580,8 +586,8 @@ class Bounce2D(IOAble):
     def integrate(
         self,
         integrand,
-        points,
         pitch_inv,
+        points=None,
         f=None,
         weight=None,
         *,
@@ -600,16 +606,17 @@ class Bounce2D(IOAble):
             accept the arrays in ``f`` as arguments as well as the additional keyword
             arguments: ``B`` and ``pitch``. A quadrature will be performed to
             approximate the bounce integral of ``integrand(*f,B=B,pitch=pitch)``.
-        points : tuple[jnp.ndarray]
-            Shape (L, num_pitch, num_well).
-            ζ coordinates of bounce points. The points are ordered and grouped such
-            that the straight line path between ``z1`` and ``z2`` resides in the
-            epigraph of |B|.
         pitch_inv : jnp.ndarray
             Shape (L, num_pitch).
             1/λ values to compute the bounce integrals. 1/λ(ρ) is specified by
             ``pitch_inv[ρ]`` where in the latter the labels are interpreted
             as the indices that correspond to that field line.
+        points : tuple[jnp.ndarray]
+            Shape (L, num_pitch, num_well).
+            Output of method ``self.points``.
+            Tuple of length two (z1, z2) that stores ζ coordinates of bounce points.
+            The points are ordered and grouped such that the straight line path
+            between ``z1`` and ``z2`` resides in the epigraph of |B|.
         f : list[jnp.ndarray] or jnp.ndarray
             Shape (L, m, n).
             Real scalar-valued (2π × 2π) periodic in (θ, ζ) functions evaluated
@@ -676,6 +683,10 @@ class Bounce2D(IOAble):
             axes=(-1, -2),
         )
         B = self._B.eval1d(zeta)
+        # TODO: not all f is single-valued. effective ripple, Gamma_c is, Gamma_c
+        #  valasco is not. FFT single valued part than sum afterword with
+        #  multivalued correction part longer term solution may be adding to
+        #  compute metadata single valued term and multivalued correction factor
         f = [interp_rfft2(Q, f_i[..., jnp.newaxis, :, :], axes=(-1, -2)) for f_i in f]
         result = _swap_pl(
             (integrand(*f, B=B, pitch=1 / pitch_inv[..., jnp.newaxis]) / b_sup_z)
@@ -733,6 +744,9 @@ class Bounce2D(IOAble):
             kwargs["z1"] = z1
             kwargs["z2"] = z2
             kwargs["k"] = pitch_inv
+            kwargs.setdefault(
+                "hlabel", r"$\alpha = $" + str(self._alpha) + r", $\zeta$"
+            )
         fig, ax = B.plot1d(B.cheb, **_set_default_plot_kwargs(kwargs))
         return fig, ax
 

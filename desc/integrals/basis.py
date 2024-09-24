@@ -133,7 +133,7 @@ class FourierChebyshevSeries(IOAble):
         ----------
         f : jnp.ndarray
             Shape (..., M, N).
-            Samples of real function on the ``FourierChebyshevBasis.nodes`` grid.
+            Samples of real function on the ``FourierChebyshevSeries.nodes`` grid.
         domain : (float, float)
             Domain for y coordinates. Default is [-1, 1].
         lobatto : bool
@@ -211,7 +211,7 @@ class FourierChebyshevSeries(IOAble):
         fq : jnp.ndarray
             Shape (..., M, N)
             Fourier-Chebyshev series evaluated at
-            ``FourierChebyshevBasis.nodes(M,N,L,self.domain,self.lobatto)``.
+            ``FourierChebyshevSeries.nodes(M,N,L,self.domain,self.lobatto)``.
 
         """
         fq = idct(
@@ -510,6 +510,7 @@ class PiecewiseChebyshevSeries(IOAble):
         # ``_eps`` from ``domain[-1]``. Edit: For differentiability, we cannot
         # consider intersects at boundary of Chebyshev polynomial. Again, cases
         # where this would be incorrect have measure zero.
+        # TODO: (kaya) look into that plot with M=512, N=32
         is_z1 = (df_dy_sign <= 0) & is_intersect
         is_z2 = (df_dy_sign >= 0) & _in_epigraph_and(is_intersect, df_dy_sign)
 

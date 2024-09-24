@@ -242,7 +242,7 @@ def get_quadrature(quad, automorphism):
 
     Parameters
     ----------
-    quad : (jnp.ndarray, jnp.ndarray)
+    quad : tuple[jnp.ndarray]
         Quadrature points xₖ and weights wₖ for the approximate evaluation of
         the integral ∫₋₁¹ g(x) dx = ∑ₖ wₖ g(xₖ).
     automorphism : (Callable, Callable) or None

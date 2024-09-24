@@ -362,7 +362,6 @@ class BoundaryError(_Objective):
     """
 
     __doc__ = __doc__.rstrip() + collect_docs()
-
     __doc__ += """
     Examples
     --------

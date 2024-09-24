@@ -520,8 +520,9 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
         "the number of wells will increase performance. "
     ),
     batch="bool : Whether to vectorize part of the computation. Default is true.",
+    data_for_plot="bool: whether to output gamma_c or Gamma_d",
 )
-@partial(jit, static_argnames=["num_pitch", "num_well", "batch"])
+@partial(jit, static_argnames=["num_pitch", "num_well", "batch", "data_for_plot"])
 def _Gamma_d_Velasco(params, transforms, profiles, data, **kwargs):
     """Energetic ion confinement proxy as defined by Velasco et al.
 
@@ -574,20 +575,23 @@ def _Gamma_d_Velasco(params, transforms, profiles, data, **kwargs):
 
     v_tau, gamma_d = map2(compute, _data)
 
-    # Shape of gamma_d (alpha, rho, lambda, wells)
-    # Summing over all the wells (the inner most sum),
-    # finding the maximum over all alphas.
-    # filtering out values above threshold in lambda.
-    # ReLU doesn't change the shape of an array.
-    # After these operations, array should be of the type (rho, lambda)
-    gamma_d_1 = _relu_along_axis(
-        jnp.max((4 / jnp.pi**2) * (v_tau * gamma_d**2).sum(axis=-1), axis=0) - thresh,
-        axis=-1,
-    )
-
-    if data_for_plot:
-        data["Gamma_d Velasco"] = gamma_d
+    if data_for_plot:  # This will give us gamma_c which can be used for the plots
+        # The shape will be (alpha, rho, lambda)
+        data["Gamma_d Velasco"] = gamma_d.sum(axis=-1)
+        # Adding the lambda values
+        data.update({"pitch": 1 / _data["pitch_inv"]})
     else:
+        # Shape of gamma_d (alpha, rho, lambda, wells)
+        # Summing over all the wells (the inner most sum),
+        # finding the maximum over all alphas.
+        # filtering out values above threshold in lambda.
+        # ReLU doesn't change the shape of an array.
+        # After these operations, array should be of the type (rho, lambda)
+        gamma_d_1 = _relu_along_axis(
+            jnp.max((4 / jnp.pi**2) * (v_tau * gamma_d**2).sum(axis=-1), axis=0)
+            - thresh,
+            axis=-1,
+        )
         # Integrating in lambda
         data["Gamma_d Velasco"] = (4 / jnp.pi**2) * (
             gamma_d_1 * _data["pitch_inv"] ** (-2) * _data["pitch_inv weight"]

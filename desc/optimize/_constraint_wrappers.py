@@ -5,6 +5,7 @@ import functools
 import numpy as np
 
 from desc.backend import jit, jnp
+from desc.batching import batched_vectorize
 from desc.objectives import (
     BoundaryRSelfConsistency,
     BoundaryZSelfConsistency,
@@ -14,7 +15,6 @@ from desc.objectives import (
 )
 from desc.objectives.utils import factorize_linear_constraints
 from desc.utils import Timer, errorif, get_instance, setdefault
-from desc.utils_batched_vectorize import batched_vectorize
 
 from .utils import f_where_x
 

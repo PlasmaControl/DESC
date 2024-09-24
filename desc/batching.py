@@ -1,8 +1,9 @@
 """Utility functions for the ``batched_vectorize`` function."""
 
+import functools
 from typing import Callable, Optional
 
-from desc.backend import functools, jax, jnp
+from desc.backend import jax, jnp
 
 if jax.__version_info__ >= (0, 4, 16):
     from jax.extend import linear_util as lu

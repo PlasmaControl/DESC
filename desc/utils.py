@@ -1,5 +1,6 @@
 """Utility functions, independent of the rest of DESC."""
 
+import functools
 import operator
 import warnings
 from itertools import combinations_with_replacement, permutations
@@ -8,7 +9,7 @@ import numpy as np
 from scipy.special import factorial
 from termcolor import colored
 
-from desc.backend import flatnonzero, fori_loop, functools, jit, jnp, take
+from desc.backend import flatnonzero, fori_loop, jit, jnp, take
 
 
 class Timer:

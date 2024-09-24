@@ -1006,7 +1006,9 @@ class TestBounceQuadrature:
         points = bounce.points(pitch_inv, num_well=1)
         np.testing.assert_allclose(points[0], z1)
         np.testing.assert_allclose(points[1], z2)
-        result = bounce.integrate(integrand, points, pitch_inv, check=True, plot=True)
+        result = bounce.integrate(
+            integrand, pitch_inv, points=points, check=True, plot=True
+        )
         assert np.count_nonzero(result) == 1
         np.testing.assert_allclose(result.sum(), truth, rtol=1e-4)
 
@@ -1157,15 +1159,15 @@ class TestBounce1D:
         # 8. Integrate.
         num = bounce.integrate(
             integrand=TestBounce1D._example_numerator,
-            points=points,
             pitch_inv=pitch_inv,
             f=Bounce1D.reshape_data(grid.source_grid, data["g_zz"]),
+            points=points,
             check=True,
         )
         den = bounce.integrate(
             integrand=TestBounce1D._example_denominator,
-            points=points,
             pitch_inv=pitch_inv,
+            points=points,
             check=True,
             batch=False,
         )
@@ -1409,16 +1411,16 @@ class TestBounce1D:
         f = Bounce1D.reshape_data(things["grid"].source_grid, cvdrift, gbdrift)
         drift_numerical_num = bounce.integrate(
             integrand=TestBounce1D.drift_num_integrand,
-            points=points,
             pitch_inv=pitch_inv,
             f=f,
+            points=points,
             check=True,
         )
         drift_numerical_den = bounce.integrate(
             integrand=TestBounce1D.drift_den_integrand,
-            points=points,
             pitch_inv=pitch_inv,
             weight=np.ones(data["zeta"].size),
+            points=points,
             check=True,
         )
         drift_numerical = np.squeeze(drift_numerical_num / drift_numerical_den)
@@ -1490,16 +1492,12 @@ class TestBounce1D:
 
         def fun1(pitch):
             return bounce.integrate(
-                integrand, bounce.points(1 / pitch), 1 / pitch, check=False, **kwargs
+                integrand=integrand, pitch_inv=1 / pitch, check=False, **kwargs
             ).sum()
 
         def fun2(pitch):
             return bounce.integrate(
-                integrand_grad,
-                bounce.points(1 / pitch),
-                1 / pitch,
-                check=True,
-                **kwargs,
+                integrand=integrand_grad, pitch_inv=1 / pitch, check=True, **kwargs
             ).sum()
 
         pitch = 1.0
@@ -1589,8 +1587,8 @@ class TestBounce2D:
         drift_numerical_num = bounce.integrate(
             integrand=TestBounce1D.drift_num_integrand,
             pitch_inv=pitch_inv,
-            points=points,
             f=f,
+            points=points,
             check=True,
             plot=True,
         )

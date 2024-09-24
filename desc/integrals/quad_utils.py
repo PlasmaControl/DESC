@@ -184,7 +184,7 @@ def leggauss_lob(deg, interior_only=False):
     return x, w
 
 
-def chebgauss_uniform(deg):
+def uniform(deg):
     """Gauss-Chebyshev quadrature with uniformly spaced nodes.
 
     Returns quadrature points xₖ and weights wₖ for the approximate evaluation

@@ -34,12 +34,14 @@ jobs:
             gh cache delete "$cache_key"
           done
 
+      # Update the matplotlib version if needed later
       - name: Set up virtual environment
         run: |
           python -m venv .venv-${{ matrix.python-version }}
           source .venv-${{ matrix.python-version }}/bin/activate
           python -m pip install --upgrade pip
           pip install -r devtools/dev-requirements.txt
+          pip install matplotlib==3.7.2
 
       - name: Cache Python environment
         id: cache-env

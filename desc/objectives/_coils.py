@@ -1197,25 +1197,14 @@ class CoilArclengthVariance(_CoilObjective):
             Level of output.
 
         """
-        from desc.coils import CoilSet, _Coil
-
         super().build(use_jit=use_jit, verbose=verbose)
+        self._dim_f = self._num_coils
+        self._constants["quad_weights"] = 1
 
         if self._normalize:
-            self._normalization = self._scales["a"] ** 2
+            self._normalization = np.mean([scale["a"] ** 2 for scale in self._scales])
 
-        # TODO: repeated code but maybe it's fine
-        flattened_coils = tree_flatten(
-            self._coils,
-            is_leaf=lambda x: isinstance(x, _Coil) and not isinstance(x, CoilSet),
-        )[0]
-        flattened_coils = (
-            [flattened_coils[0]]
-            if not isinstance(self._coils, CoilSet)
-            else flattened_coils
-        )
-        self._dim_f = len(flattened_coils)
-        self._constants["quad_weights"] = 1
+        _Objective.build(self, use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
         """Compute coil arclength variance.
@@ -1235,7 +1224,7 @@ class CoilArclengthVariance(_CoilObjective):
         """
         data = super().compute(params, constants=constants)
         data = tree_flatten(data, is_leaf=lambda x: isinstance(x, dict))[0]
-        out = jnp.array([jnp.var(dat["length"]) for dat in data])
+        out = jnp.array([jnp.var(jnp.linalg.norm(dat["x_s"], axis=1)) for dat in data])
         return out
 
 

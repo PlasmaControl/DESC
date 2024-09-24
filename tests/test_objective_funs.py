@@ -40,6 +40,7 @@ from desc.objectives import (
     BootstrapRedlConsistency,
     BoundaryError,
     BScaleLength,
+    CoilArclengthVariance,
     CoilCurrentLength,
     CoilCurvature,
     CoilLength,
@@ -2164,6 +2165,7 @@ class TestComputeScalarResolution:
         # these require special logic
         BootstrapRedlConsistency,
         BoundaryError,
+        CoilArclengthVariance,
         CoilCurrentLength,
         CoilCurvature,
         CoilLength,
@@ -2529,7 +2531,14 @@ class TestComputeScalarResolution:
     @pytest.mark.regression
     @pytest.mark.parametrize(
         "objective",
-        [CoilLength, CoilTorsion, CoilCurvature, CoilCurrentLength, CoilSetMinDistance],
+        [
+            CoilArclengthVariance,
+            CoilLength,
+            CoilTorsion,
+            CoilCurvature,
+            CoilCurrentLength,
+            CoilSetMinDistance,
+        ],
     )
     def test_compute_scalar_resolution_coils(self, objective):
         """Coil objectives."""
@@ -2561,6 +2570,7 @@ class TestObjectiveNaNGrad:
         # these require special logic
         BootstrapRedlConsistency,
         BoundaryError,
+        CoilArclengthVariance,
         CoilLength,
         CoilCurrentLength,
         CoilCurvature,
@@ -2755,7 +2765,14 @@ class TestObjectiveNaNGrad:
     @pytest.mark.unit
     @pytest.mark.parametrize(
         "objective",
-        [CoilLength, CoilTorsion, CoilCurvature, CoilCurrentLength, CoilSetMinDistance],
+        [
+            CoilArclengthVariance,
+            CoilLength,
+            CoilTorsion,
+            CoilCurvature,
+            CoilCurrentLength,
+            CoilSetMinDistance,
+        ],
     )
     def test_objective_no_nangrad_coils(self, objective):
         """Coil objectives."""

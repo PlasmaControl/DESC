@@ -1483,10 +1483,11 @@ def run_regcoil(  # noqa: C901 fxn too complex
             # calculate Phi_mn with SVD inverse plus the regularization
             phi_mn_opt = vht @ ((1 / (s**2 + lambda_regularization)) * s_uT_b)
         else:
-            phi_mn_opt = jnp.linalg.pinv(A1 + lambda_regularization * A2) @ (
-                rhs_B
-                + lambda_regularization * rhs_K  # TODO: check correctness of rhs_K
-            )
+            # solve linear system
+            phi_mn_opt = jnp.linalg.lstsq(
+                A1 + lambda_regularization * A2,
+                rhs_B + lambda_regularization * rhs_K,
+            )[0]
 
         phi_mns.append(phi_mn_opt)
 

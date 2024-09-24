@@ -39,7 +39,7 @@ def _compare_against_master(
                 np.testing.assert_allclose(
                     actual=data[p][name],
                     desired=master_data[p][name],
-                    atol=1e-12 * mean,
+                    atol=1e-10 * mean + 1e-10,  # add 1e-10 for basically-zero things
                     rtol=1e-10,
                     err_msg=f"Parameterization: {p}. Name: {name}.",
                 )

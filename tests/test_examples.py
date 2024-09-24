@@ -1242,6 +1242,63 @@ def test_quadratic_flux_optimization_with_analytic_field():
 
 
 @pytest.mark.unit
+def test_qfm_optimization_with_analytic_field():
+    """Test analytic field optimization to reduce quadratic flux.
+
+    Checks that surface becomes axisymmetric with non-axisymmetric surface
+    and axisymmetric field.
+    """
+    surface = get("HELIOTRON", data="boundary")
+    surface.change_resolution(M=3, N=3)
+    field = ToroidalMagneticField(1, 1)
+    eval_grid = LinearGrid(
+        rho=np.array([1.0]),
+        M=20,
+        N=12,
+        NFP=surface.NFP,
+        sym=False,
+    )
+
+    optimizer = Optimizer("lsq-exact")
+
+    constraints = (
+        FixParameters(
+            surface,
+            {
+                "R_lmn": [
+                    surface.R_basis.get_idx(0, 0, 0),
+                    surface.R_basis.get_idx(0, 1, 0),
+                ],
+                "Z_lmn": surface.Z_basis.get_idx(0, -1, 0),
+            },
+        ),
+    )
+    quadflux_obj = QuadraticFlux(
+        eq=surface,
+        field=field,
+        eval_grid=eval_grid,
+        qfm_surface=True,
+        field_fixed=True,
+    )
+    objective = ObjectiveFunction(quadflux_obj)
+    (surface,), __ = optimizer.optimize(
+        surface,
+        objective=objective,
+        constraints=constraints,
+        ftol=1e-14,
+        gtol=1e-14,
+        verbose=3,
+    )
+
+    # optimizer should make surface basically axisymmetric
+    # to get to Bnorm = 0
+    nonax_R = surface.R_lmn[np.where(surface.R_basis.modes[:, 2] != 0)]
+    nonax_Z = surface.Z_lmn[np.where(surface.Z_basis.modes[:, 2] != 0)]
+    np.testing.assert_allclose(nonax_R, 0, atol=1e-5)
+    np.testing.assert_allclose(nonax_Z, 0, atol=1e-5)
+
+
+@pytest.mark.unit
 def test_second_stage_optimization():
     """Test optimizing magnetic field for a fixed axisymmetric equilibrium."""
     eq = get("DSHAPE")

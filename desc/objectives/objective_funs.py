@@ -209,14 +209,7 @@ class ObjectiveFunction(IOAble):
                 * self.dim_x
             )
             self._jac_chunk_size = max([1, max_chunk_size])
-        if self._deriv_mode == "blocked":
-            # set jac_chunk_size for each sub-objective
-            # to 1000 columns of Jacobian
-            # as the default for batched deriv_mode
-            for obj in self.objectives:
-                obj._jac_chunk_size = (
-                    1000 if obj._jac_chunk_size == "auto" else obj._jac_chunk_size
-                )
+
         timer.stop("Objective build")
         if verbose > 1:
             timer.disp("Objective build")
@@ -910,8 +903,7 @@ class _Objective(IOAble, ABC):
         ``t= t0 + t1/jac_chunk_size` so the larger the ``jac_chunk_size``, the faster
         the calculation takes, at the cost of requiring more memory.
         If None, it will use the largest size i.e ``obj.dim_x``.
-        Defaults to ``chunk_size="auto"`` which will use a conservative
-        size of 1000.
+        Defaults to ``chunk_size=None``.
 
     """
 
@@ -942,7 +934,7 @@ class _Objective(IOAble, ABC):
         loss_function=None,
         deriv_mode="auto",
         name=None,
-        jac_chunk_size="auto",
+        jac_chunk_size=None,
     ):
         if self._scalar:
             assert self._coordinates == ""
@@ -953,7 +945,7 @@ class _Objective(IOAble, ABC):
         assert (bounds is None) or (target is None), "Cannot use both bounds and target"
         assert loss_function in [None, "mean", "min", "max"]
         assert deriv_mode in {"auto", "fwd", "rev"}
-        assert jac_chunk_size in ["auto", None] or isposint(jac_chunk_size)
+        assert jac_chunk_size is None or isposint(jac_chunk_size)
 
         self._jac_chunk_size = jac_chunk_size
 

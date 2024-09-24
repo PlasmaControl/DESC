@@ -80,8 +80,7 @@ A full example objective with comments describing the key points is given below:
             ``jac_chunk_size``, the faster the calculation takes, at the cost of
             requiring more memory. A ``jac_chunk_size`` of 1 corresponds to the least
             memory intensive, but slowest method of calculating the Jacobian.
-            If None, it will default to a conservative default
-            `jac_chunk_size` i.e. ``np.ceil(dim_x/4)``
+            If None, it will use the largest possible size.
 
         """
 
@@ -100,7 +99,7 @@ A full example objective with comments describing the key points is given below:
             normalize_target=True,
             grid=None,
             name="QS triple product",
-            jac_chunk_size="auto",
+            jac_chunk_size=None,
         ):
             # we don't have to do much here, mostly just call ``super().__init__()``
             if target is None and bounds is None:

@@ -57,7 +57,7 @@ class QuasisymmetryBoozer(_Objective):
         Toroidal resolution of Boozer transformation. Default = 2 * eq.N.
     name : str, optional
         Name of the objective function.
-    jac_chunk_size : int or "auto", optional
+    jac_chunk_size : int , optional
         Will calculate the Jacobian for this objective ``jac_chunk_size``
         columns at a time, instead of all at once. The memory usage of the
         Jacobian calculation is roughly ``memory usage = m0 + m1*jac_chunk_size``:
@@ -68,9 +68,6 @@ class QuasisymmetryBoozer(_Objective):
         requiring more memory. A ``jac_chunk_size`` of 1 corresponds to the least
         memory intensive, but slowest method of calculating the Jacobian.
         If None, it will use the largest size i.e ``obj.dim_x``.
-        Defaults to ``chunk_size="auto"`` which will use a conservative
-        size of 1000.
-
 
     """
 
@@ -92,7 +89,7 @@ class QuasisymmetryBoozer(_Objective):
         M_booz=None,
         N_booz=None,
         name="QS Boozer",
-        jac_chunk_size="auto",
+        jac_chunk_size=None,
     ):
         if target is None and bounds is None:
             target = 0
@@ -285,7 +282,7 @@ class QuasisymmetryTwoTerm(_Objective):
         Type of quasi-symmetry (M, N).
     name : str, optional
         Name of the objective function.
-    jac_chunk_size : int or "auto", optional
+    jac_chunk_size : int , optional
         Will calculate the Jacobian for this objective ``jac_chunk_size``
         columns at a time, instead of all at once. The memory usage of the
         Jacobian calculation is roughly ``memory usage = m0 + m1*jac_chunk_size``:
@@ -296,9 +293,6 @@ class QuasisymmetryTwoTerm(_Objective):
         requiring more memory. A ``jac_chunk_size`` of 1 corresponds to the least
         memory intensive, but slowest method of calculating the Jacobian.
         If None, it will use the largest size i.e ``obj.dim_x``.
-        Defaults to ``chunk_size="auto"`` which will use a conservative
-        size of 1000.
-
 
     """
 
@@ -319,7 +313,7 @@ class QuasisymmetryTwoTerm(_Objective):
         grid=None,
         helicity=(1, 0),
         name="QS two-term",
-        jac_chunk_size="auto",
+        jac_chunk_size=None,
     ):
         if target is None and bounds is None:
             target = 0
@@ -486,7 +480,7 @@ class QuasisymmetryTripleProduct(_Objective):
         Defaults to ``LinearGrid(M=eq.M_grid, N=eq.N_grid)``.
     name : str, optional
         Name of the objective function.
-    jac_chunk_size : int or "auto", optional
+    jac_chunk_size : int , optional
         Will calculate the Jacobian for this objective ``jac_chunk_size``
         columns at a time, instead of all at once. The memory usage of the
         Jacobian calculation is roughly ``memory usage = m0 + m1*jac_chunk_size``:
@@ -497,9 +491,6 @@ class QuasisymmetryTripleProduct(_Objective):
         requiring more memory. A ``jac_chunk_size`` of 1 corresponds to the least
         memory intensive, but slowest method of calculating the Jacobian.
         If None, it will use the largest size i.e ``obj.dim_x``.
-        Defaults to ``chunk_size="auto"`` which will use a conservative
-        size of 1000.
-
 
     """
 
@@ -519,7 +510,7 @@ class QuasisymmetryTripleProduct(_Objective):
         deriv_mode="auto",
         grid=None,
         name="QS triple product",
-        jac_chunk_size="auto",
+        jac_chunk_size=None,
     ):
         if target is None and bounds is None:
             target = 0
@@ -680,7 +671,7 @@ class Omnigenity(_Objective):
         associated data are re-computed at every iteration (Default).
     name : str, optional
         Name of the objective function.
-    jac_chunk_size : int or "auto", optional
+    jac_chunk_size : int , optional
         Will calculate the Jacobian for this objective ``jac_chunk_size``
         columns at a time, instead of all at once. The memory usage of the
         Jacobian calculation is roughly ``memory usage = m0 + m1*jac_chunk_size``:
@@ -691,9 +682,6 @@ class Omnigenity(_Objective):
         requiring more memory. A ``jac_chunk_size`` of 1 corresponds to the least
         memory intensive, but slowest method of calculating the Jacobian.
         If None, it will use the largest size i.e ``obj.dim_x``.
-        Defaults to ``chunk_size="auto"`` which will use a conservative
-        size of 1000.
-
 
     """
 
@@ -720,7 +708,7 @@ class Omnigenity(_Objective):
         eq_fixed=False,
         field_fixed=False,
         name="omnigenity",
-        jac_chunk_size="auto",
+        jac_chunk_size=None,
     ):
         if target is None and bounds is None:
             target = 0
@@ -1031,7 +1019,7 @@ class Isodynamicity(_Objective):
         Defaults to ``LinearGrid(M=eq.M_grid, N=eq.N_grid)``.
     name : str, optional
         Name of the objective function.
-    jac_chunk_size : int or "auto", optional
+    jac_chunk_size : int , optional
         Will calculate the Jacobian for this objective ``jac_chunk_size``
         columns at a time, instead of all at once. The memory usage of the
         Jacobian calculation is roughly ``memory usage = m0 + m1*jac_chunk_size``:
@@ -1042,9 +1030,6 @@ class Isodynamicity(_Objective):
         requiring more memory. A ``jac_chunk_size`` of 1 corresponds to the least
         memory intensive, but slowest method of calculating the Jacobian.
         If None, it will use the largest size i.e ``obj.dim_x``.
-        Defaults to ``chunk_size="auto"`` which will use a conservative
-        size of 1000.
-
 
     """
 
@@ -1064,7 +1049,7 @@ class Isodynamicity(_Objective):
         deriv_mode="auto",
         grid=None,
         name="Isodynamicity",
-        jac_chunk_size="auto",
+        jac_chunk_size=None,
     ):
         if target is None and bounds is None:
             target = 0

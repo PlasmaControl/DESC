@@ -57,7 +57,7 @@ class GenericObjective(_Objective):
         ``QuadratureGrid(eq.L_grid, eq.M_grid, eq.N_grid)`` if thing is an Equilibrium.
     name : str, optional
         Name of the objective function.
-    jac_chunk_size : int or "auto", optional
+    jac_chunk_size : int , optional
         Will calculate the Jacobian for this objective ``jac_chunk_size``
         columns at a time, instead of all at once. The memory usage of the
         Jacobian calculation is roughly ``memory usage = m0 + m1*jac_chunk_size``:
@@ -68,9 +68,6 @@ class GenericObjective(_Objective):
         requiring more memory. A ``jac_chunk_size`` of 1 corresponds to the least
         memory intensive, but slowest method of calculating the Jacobian.
         If None, it will use the largest size i.e ``obj.dim_x``.
-        Defaults to ``chunk_size="auto"`` which will use a conservative
-        size of 1000.
-
 
     """
 
@@ -89,7 +86,7 @@ class GenericObjective(_Objective):
         deriv_mode="auto",
         grid=None,
         name="generic",
-        jac_chunk_size="auto",
+        jac_chunk_size=None,
         **kwargs,
     ):
         errorif(
@@ -241,7 +238,7 @@ class LinearObjectiveFromUser(_FixedObjective):
         normalize=False,
         normalize_target=False,
         name="custom linear",
-        jac_chunk_size="auto",
+        jac_chunk_size=None,
     ):
         if target is None and bounds is None:
             target = 0
@@ -360,7 +357,7 @@ class ObjectiveFromUser(_Objective):
         ``QuadratureGrid(eq.L_grid, eq.M_grid, eq.N_grid)`` if thing is an Equilibrium.
     name : str, optional
         Name of the objective function.
-    jac_chunk_size : int or "auto", optional
+    jac_chunk_size : int , optional
         Will calculate the Jacobian for this objective ``jac_chunk_size``
         columns at a time, instead of all at once. The memory usage of the
         Jacobian calculation is roughly ``memory usage = m0 + m1*jac_chunk_size``:
@@ -371,9 +368,6 @@ class ObjectiveFromUser(_Objective):
         requiring more memory. A ``jac_chunk_size`` of 1 corresponds to the least
         memory intensive, but slowest method of calculating the Jacobian.
         If None, it will use the largest size i.e ``obj.dim_x``.
-        Defaults to ``chunk_size="auto"`` which will use a conservative
-        size of 1000.
-
 
     Examples
     --------
@@ -410,7 +404,7 @@ class ObjectiveFromUser(_Objective):
         deriv_mode="auto",
         grid=None,
         name="custom",
-        jac_chunk_size="auto",
+        jac_chunk_size=None,
         **kwargs,
     ):
         errorif(

@@ -15,7 +15,8 @@ in a slightly slower, but more memory-efficient manner. The memory usage of the 
 will require (with some baseline memory usage). The time to compute the Jacobian is roughly ``t=t0 +t1/jac_chunk_size``
 with some baseline time, so the larger the ``jac_chunk_size``, the faster the calculation takes,
 at the cost of requiring more memory. A ``jac_chunk_size`` of 1 corresponds to the least memory intensive,
-but slowest method of calculating the Jacobian. If ``jac_chunk_size="auto"``, it will default to ``obj.dim_x/4``.
+but slowest method of calculating the Jacobian. If ``jac_chunk_size="auto"``, it will default to a size
+that should make the calculation fit in memory based on a heuristic estimate of the Jacobian memory usage.
 
 If ``deriv_mode="blocked"`` is specified when the ``ObjectiveFunction`` is created, then the Jacobian will
 be calculated individually for each of the sub-objectives inside of the ``ObjectiveFunction``, and in that case
@@ -23,4 +24,4 @@ the ``jac_chunk_size`` of the individual ``_Objective`` objects inside of the ``
 For example, if ``obj1 = QuasisymmetryTripleProduct(eq, jac_chunk_size=100)``, ``obj2 = MeanCurvature(eq, jac_chunk_size=2000)``
 and ``obj = ObjectiveFunction((obj1, obj2), deriv_mode="blocked")``, then the Jacobian will be calculated with a
 ``jac_chunk_size=100`` for the quasisymmetry part and a ``jac_chunk_size=2000`` for the curvature part, then the full Jacobian
-will be formed as a block diagonal matrix with the individual Jacobians of these two objectives.
+will be formed as a blocked matrix with the individual Jacobians of these two objectives.

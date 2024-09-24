@@ -73,7 +73,7 @@ class VacuumBoundaryError(_Objective):
         be fixed. For single stage optimization, should be False (default).
     name : str, optional
         Name of the objective function.
-    jac_chunk_size : int or "auto", optional
+    jac_chunk_size : int , optional
         Will calculate the Jacobian for this objective ``jac_chunk_size``
         columns at a time, instead of all at once. The memory usage of the
         Jacobian calculation is roughly ``memory usage = m0 + m1*jac_chunk_size``:
@@ -84,9 +84,6 @@ class VacuumBoundaryError(_Objective):
         requiring more memory. A ``jac_chunk_size`` of 1 corresponds to the least
         memory intensive, but slowest method of calculating the Jacobian.
         If None, it will use the largest size i.e ``obj.dim_x``.
-        Defaults to ``chunk_size="auto"`` which will use a conservative
-        size of 1000.
-
 
     """
 
@@ -111,7 +108,7 @@ class VacuumBoundaryError(_Objective):
         field_grid=None,
         field_fixed=False,
         name="Vacuum boundary error",
-        jac_chunk_size="auto",
+        jac_chunk_size=None,
     ):
         if target is None and bounds is None:
             target = 0
@@ -426,7 +423,7 @@ class BoundaryError(_Objective):
         less memory.
     name : str, optional
         Name of the objective function.
-    jac_chunk_size : int or "auto", optional
+    jac_chunk_size : int , optional
         Will calculate the Jacobian for this objective ``jac_chunk_size``
         columns at a time, instead of all at once. The memory usage of the
         Jacobian calculation is roughly ``memory usage = m0 + m1*jac_chunk_size``:
@@ -437,9 +434,6 @@ class BoundaryError(_Objective):
         requiring more memory. A ``jac_chunk_size`` of 1 corresponds to the least
         memory intensive, but slowest method of calculating the Jacobian.
         If None, it will use the largest size i.e ``obj.dim_x``.
-        Defaults to ``chunk_size="auto"`` which will use a conservative
-        size of 1000.
-
 
 
     Examples
@@ -485,7 +479,7 @@ class BoundaryError(_Objective):
         field_fixed=False,
         loop=True,
         name="Boundary error",
-        jac_chunk_size="auto",
+        jac_chunk_size=None,
     ):
         if target is None and bounds is None:
             target = 0
@@ -899,7 +893,7 @@ class BoundaryErrorNESTOR(_Objective):
         reverse mode and forward over reverse mode respectively.
     name : str, optional
         Name of the objective function.
-    jac_chunk_size : int or "auto", optional
+    jac_chunk_size : int , optional
         Will calculate the Jacobian for this objective ``jac_chunk_size``
         columns at a time, instead of all at once. The memory usage of the
         Jacobian calculation is roughly ``memory usage = m0 + m1*jac_chunk_size``:
@@ -910,9 +904,6 @@ class BoundaryErrorNESTOR(_Objective):
         requiring more memory. A ``jac_chunk_size`` of 1 corresponds to the least
         memory intensive, but slowest method of calculating the Jacobian.
         If None, it will use the largest size i.e ``obj.dim_x``.
-        Defaults to ``chunk_size="auto"`` which will use a conservative
-        size of 1000.
-
 
     """
 
@@ -939,7 +930,7 @@ class BoundaryErrorNESTOR(_Objective):
         loss_function=None,
         deriv_mode="auto",
         name="NESTOR Boundary",
-        jac_chunk_size="auto",
+        jac_chunk_size=None,
     ):
         if target is None and bounds is None:
             target = 0

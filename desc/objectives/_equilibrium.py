@@ -63,7 +63,7 @@ class ForceBalance(_Objective):
         Defaults to ``ConcentricGrid(eq.L_grid, eq.M_grid, eq.N_grid)``
     name : str, optional
         Name of the objective function.
-    jac_chunk_size : int or "auto", optional
+    jac_chunk_size : int , optional
         Will calculate the Jacobian for this objective ``jac_chunk_size``
         columns at a time, instead of all at once. The memory usage of the
         Jacobian calculation is roughly ``memory usage = m0 + m1*jac_chunk_size``:
@@ -74,8 +74,6 @@ class ForceBalance(_Objective):
         requiring more memory. A ``jac_chunk_size`` of 1 corresponds to the least
         memory intensive, but slowest method of calculating the Jacobian.
         If None, it will use the largest size i.e ``obj.dim_x``.
-        Defaults to ``chunk_size="auto"`` which will use a conservative
-        size of 1000.
 
     """
 
@@ -96,7 +94,7 @@ class ForceBalance(_Objective):
         deriv_mode="auto",
         grid=None,
         name="force",
-        jac_chunk_size="auto",
+        jac_chunk_size=None,
     ):
         if target is None and bounds is None:
             target = 0
@@ -250,7 +248,7 @@ class ForceBalanceAnisotropic(_Objective):
         Defaults to ``ConcentricGrid(eq.L_grid, eq.M_grid, eq.N_grid)``
     name : str
         Name of the objective function.
-    jac_chunk_size : int or "auto", optional
+    jac_chunk_size : int , optional
         Will calculate the Jacobian for this objective ``jac_chunk_size``
         columns at a time, instead of all at once. The memory usage of the
         Jacobian calculation is roughly ``memory usage = m0 + m1*jac_chunk_size``:
@@ -261,9 +259,6 @@ class ForceBalanceAnisotropic(_Objective):
         requiring more memory. A ``jac_chunk_size`` of 1 corresponds to the least
         memory intensive, but slowest method of calculating the Jacobian.
         If None, it will use the largest size i.e ``obj.dim_x``.
-        Defaults to ``chunk_size="auto"`` which will use a conservative
-        size of 1000.
-
 
     """
 
@@ -284,7 +279,7 @@ class ForceBalanceAnisotropic(_Objective):
         deriv_mode="auto",
         grid=None,
         name="force-anisotropic",
-        jac_chunk_size="auto",
+        jac_chunk_size=None,
     ):
         if target is None and bounds is None:
             target = 0
@@ -424,7 +419,7 @@ class RadialForceBalance(_Objective):
         Defaults to ``ConcentricGrid(eq.L_grid, eq.M_grid, eq.N_grid)``
     name : str, optional
         Name of the objective function.
-    jac_chunk_size : int or "auto", optional
+    jac_chunk_size : int , optional
         Will calculate the Jacobian for this objective ``jac_chunk_size``
         columns at a time, instead of all at once. The memory usage of the
         Jacobian calculation is roughly ``memory usage = m0 + m1*jac_chunk_size``:
@@ -435,9 +430,6 @@ class RadialForceBalance(_Objective):
         requiring more memory. A ``jac_chunk_size`` of 1 corresponds to the least
         memory intensive, but slowest method of calculating the Jacobian.
         If None, it will use the largest size i.e ``obj.dim_x``.
-        Defaults to ``chunk_size="auto"`` which will use a conservative
-        size of 1000.
-
 
     """
 
@@ -458,7 +450,7 @@ class RadialForceBalance(_Objective):
         deriv_mode="auto",
         grid=None,
         name="radial force",
-        jac_chunk_size="auto",
+        jac_chunk_size=None,
     ):
         if target is None and bounds is None:
             target = 0
@@ -598,7 +590,7 @@ class HelicalForceBalance(_Objective):
         Defaults to ``ConcentricGrid(eq.L_grid, eq.M_grid, eq.N_grid)``
     name : str, optional
         Name of the objective function.
-    jac_chunk_size : int or "auto", optional
+    jac_chunk_size : int , optional
         Will calculate the Jacobian for this objective ``jac_chunk_size``
         columns at a time, instead of all at once. The memory usage of the
         Jacobian calculation is roughly ``memory usage = m0 + m1*jac_chunk_size``:
@@ -609,9 +601,6 @@ class HelicalForceBalance(_Objective):
         requiring more memory. A ``jac_chunk_size`` of 1 corresponds to the least
         memory intensive, but slowest method of calculating the Jacobian.
         If None, it will use the largest size i.e ``obj.dim_x``.
-        Defaults to ``chunk_size="auto"`` which will use a conservative
-        size of 1000.
-
 
     """
 
@@ -632,7 +621,7 @@ class HelicalForceBalance(_Objective):
         deriv_mode="auto",
         grid=None,
         name="helical force",
-        jac_chunk_size="auto",
+        jac_chunk_size=None,
     ):
         if target is None and bounds is None:
             target = 0
@@ -770,7 +759,7 @@ class Energy(_Objective):
         Adiabatic (compressional) index. Default = 0.
     name : str, optional
         Name of the objective function.
-    jac_chunk_size : int or "auto", optional
+    jac_chunk_size : int , optional
         Will calculate the Jacobian for this objective ``jac_chunk_size``
         columns at a time, instead of all at once. The memory usage of the
         Jacobian calculation is roughly ``memory usage = m0 + m1*jac_chunk_size``:
@@ -781,9 +770,6 @@ class Energy(_Objective):
         requiring more memory. A ``jac_chunk_size`` of 1 corresponds to the least
         memory intensive, but slowest method of calculating the Jacobian.
         If None, it will use the largest size i.e ``obj.dim_x``.
-        Defaults to ``chunk_size="auto"`` which will use a conservative
-        size of 1000.
-
 
     """
 
@@ -807,7 +793,7 @@ class Energy(_Objective):
         grid=None,
         gamma=0,
         name="energy",
-        jac_chunk_size="auto",
+        jac_chunk_size=None,
     ):
         if target is None and bounds is None:
             target = 0
@@ -953,7 +939,7 @@ class CurrentDensity(_Objective):
         Defaults to ``ConcentricGrid(eq.L_grid, eq.M_grid, eq.N_grid)``
     name : str, optional
         Name of the objective function.
-    jac_chunk_size : int or "auto", optional
+    jac_chunk_size : int , optional
         Will calculate the Jacobian for this objective ``jac_chunk_size``
         columns at a time, instead of all at once. The memory usage of the
         Jacobian calculation is roughly ``memory usage = m0 + m1*jac_chunk_size``:
@@ -964,9 +950,6 @@ class CurrentDensity(_Objective):
         requiring more memory. A ``jac_chunk_size`` of 1 corresponds to the least
         memory intensive, but slowest method of calculating the Jacobian.
         If None, it will use the largest size i.e ``obj.dim_x``.
-        Defaults to ``chunk_size="auto"`` which will use a conservative
-        size of 1000.
-
 
     """
 
@@ -987,7 +970,7 @@ class CurrentDensity(_Objective):
         deriv_mode="auto",
         grid=None,
         name="current density",
-        jac_chunk_size="auto",
+        jac_chunk_size=None,
     ):
         if target is None and bounds is None:
             target = 0

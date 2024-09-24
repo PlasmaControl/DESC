@@ -66,7 +66,7 @@ class BootstrapRedlConsistency(_Objective):
         or quasi-axisymmetry; set to +/-NFP for quasi-helical symmetry.
     name : str, optional
         Name of the objective function.
-    jac_chunk_size : int or "auto", optional
+    jac_chunk_size : int, optional
         Will calculate the Jacobian for this objective ``jac_chunk_size``
         columns at a time, instead of all at once. The memory usage of the
         Jacobian calculation is roughly ``memory usage = m0 + m1*jac_chunk_size``:
@@ -77,8 +77,6 @@ class BootstrapRedlConsistency(_Objective):
         requiring more memory. A ``jac_chunk_size`` of 1 corresponds to the least
         memory intensive, but slowest method of calculating the Jacobian.
         If None, it will use the largest size i.e ``obj.dim_x``.
-        Defaults to ``chunk_size="auto"`` which will use a conservative
-        size of 1000.
 
     """
 
@@ -99,7 +97,7 @@ class BootstrapRedlConsistency(_Objective):
         grid=None,
         helicity=(1, 0),
         name="Bootstrap current self-consistency (Redl)",
-        jac_chunk_size="auto",
+        jac_chunk_size=None,
     ):
         if target is None and bounds is None:
             target = 0

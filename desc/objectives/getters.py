@@ -58,6 +58,17 @@ def get_equilibrium_objective(eq, mode="force", normalize=True, jac_chunk_size="
     normalize : bool
         Whether to normalize units of objective.
     jac_chunk_size : int or "auto", optional
+        If `"batched"` deriv_mode is used, will calculate the Jacobian
+        ``jac_chunk_size`` columns at a time, instead of all at once.
+        The memory usage of the Jacobian calculation is roughly
+        ``memory usage = m0 + m1*jac_chunk_size``: the smaller the chunk size,
+        the less memory the Jacobian calculation will require (with some baseline
+        memory usage). The time it takes to compute the Jacobian is roughly
+        ``t= t0 + t1/jac_chunk_size` so the larger the ``jac_chunk_size``, the faster
+        the calculation takes, at the cost of requiring more memory.
+        If None, it will use the largest size i.e ``obj.dim_x``.
+        Defaults to ``chunk_size="auto"`` which will use a conservative
+        chunk size based off of a heuristic estimate of the memory usage.
 
 
     Returns

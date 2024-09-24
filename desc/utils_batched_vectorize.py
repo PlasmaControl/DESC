@@ -56,53 +56,6 @@ def _chunk(x, chunk_size=None):
     return x.reshape((n_chunks, chunk_size) + x.shape[1:])
 
 
-def _chunk_size(x):
-    b = set(map(lambda x: x.shape[:2], jax.tree_util.tree_leaves(x)))
-    if len(b) != 1:
-        raise ValueError(
-            "The arrays in x have inconsistent chunk_size or number of chunks"
-        )
-    return b.pop()[1]
-
-
-def unchunk(x_chunked):
-    """Merge the first two axes of an array (or a pytree of arrays).
-
-    Parameters
-    ----------
-    x_chunked: an array (or pytree of arrays) of at least 2 dimensions
-
-    Returns
-    -------
-    (x, chunk_fn) : tuple
-        where x is x_chunked reshaped to (-1,)+x.shape[2:]
-        and chunk_fn is a function which restores x given x_chunked
-
-    """
-    return _unchunk(x_chunked), functools.partial(
-        _chunk, chunk_size=_chunk_size(x_chunked)
-    )
-
-
-def chunk(x, chunk_size=None):
-    """Split an array (or a pytree of arrays) into chunks along the first axis.
-
-    Parameters
-    ----------
-    x: an array (or pytree of arrays)
-    chunk_size: an integer or None (default)
-        The first axis in x must be a multiple of chunk_size
-
-    Returns
-    -------
-    (x_chunked, unchunk_fn): tuple
-        - x_chunked is x reshaped to (-1, chunk_size)+x.shape[1:]
-          if chunk_size is None then it defaults to x.shape[0], i.e. just one chunk
-        - unchunk_fn is a function which restores x given x_chunked
-    """
-    return _chunk(x, chunk_size), _unchunk
-
-
 ####
 
 # The following section of this code is derived from the NetKet project

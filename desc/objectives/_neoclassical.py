@@ -21,7 +21,7 @@ class EffectiveRipple(_Objective):
     dominant transport channel in stellarators which are not optimized to reduce it.
     The effective ripple is a proxy, measuring the effective modulation amplitude of the
     magnetic field averaged along a magnetic surface, which can be used to optimize for
-    stellarators with improved confinement.
+    stellarators with improved confinement. It is targeted as a flux surface function.
 
     References
     ----------

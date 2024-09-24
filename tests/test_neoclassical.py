@@ -138,9 +138,11 @@ class NeoIO:
         writeln(f"'#' M_booz={self.M_booz}. N_booz={self.N_booz}.")
         writeln(self.booz_file)
         writeln(self.neo_out_file)
-        writeln(self.ns)
-        # NEO starts indexing at 1 and does not compute on axis (index 1)
-        surface_indices = " ".join(str(i) for i in range(2, self.ns + 2))
+        # Neo computes things on the so-called "half grid" between the full grid.
+        # There are only ns - 1 surfaces there.
+        writeln(self.ns - 1)
+        # NEO starts indexing at 1 and does not compute on axis (index 1).
+        surface_indices = " ".join(str(i) for i in range(2, self.ns + 1))
         writeln(surface_indices)
         writeln(theta_n)
         writeln(phi_n)

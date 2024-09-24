@@ -441,8 +441,9 @@ class BallooningStability(_Objective):
     """
 
     _coordinates = "ra"
+    _scalar = None
     _units = "(dimensionless)"
-    _print_value_fmt = "Ideal-ballooning: "
+    _print_value_fmt = "Ideal-ballooning lambda: "
 
     def __init__(
         self,
@@ -462,7 +463,7 @@ class BallooningStability(_Objective):
         lam0=0.0,
         w0=1.0,
         w1=10.0,
-        name="ideal ball lambda",
+        name="ideal ballooning lambda",
     ):
         if target is None and bounds is None:
             target = 0
@@ -542,7 +543,7 @@ class BallooningStability(_Objective):
             self._zeta0, jnp.linspace(-0.5 * jnp.pi, 0.5 * jnp.pi, 15)
         )
         self._dim_f = 1
-        self._data_keys = ["ideal ball lambda"]
+        self._data_keys = ["ideal ballooning lambda"]
 
         self._args = get_params(
             self._iota_keys + self._len_keys + self._data_keys,
@@ -634,7 +635,7 @@ class BallooningStability(_Objective):
             profiles=get_profiles(self._data_keys, eq, grid),
             data=data,
             zeta0=constants["zeta0"],
-        )["ideal ball lambda"]
+        )["ideal ballooning lambda"]
 
         lam0, w0, w1 = constants["lam0"], constants["w0"], constants["w1"]
 

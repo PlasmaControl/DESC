@@ -494,7 +494,8 @@ def test_ballooning_stability_eval():
     We calculated the ideal ballooning growth rate and Newcomb ball
     metric for the HELIOTRON case at different radii.
     """
-    mu_0 = 4 * jnp.pi * 1e-7
+    from scipy.constants import mu_0
+
     eq = desc.examples.get("HELIOTRON")
 
     # Flux surfaces on which to evaluate ballooning stability
@@ -552,7 +553,7 @@ def test_ballooning_stability_eval():
         data01 = eq.compute(data_keys01, grid=LinearGrid(rho=np.array([1.0])))
 
         # here we use a different method for calculating the growth rate that uses
-        # different numerics than "ideal ball lambda" so that we can verify them
+        # different numerics than "ideal ballooning lambda" so that we can verify them
         # against one another
         psi_b = data01["Psi"][-1] / (2 * jnp.pi)
         a_N = data01["a"]
@@ -637,13 +638,14 @@ def test_ballooning_stability_eval():
         lam1 = jnp.max(jnp.real(jnp.max(w, axis=(2,))))
 
         # now compute our regular metrics and compare them
-        data_keys = ["ideal ball lambda", "Newcomb ball metric"]
+        data_keys = ["ideal ballooning lambda", "Newcomb ballooning metric"]
         data = eq.compute(data_keys, grid=grid)
 
-        lam2 = np.max(data["ideal ball lambda"])
-        Newcomb_metric = data["Newcomb ball metric"]
+        lam2 = np.max(data["ideal ballooning lambda"])
+        Newcomb_metric = data["Newcomb ballooning metric"]
 
-        np.testing.assert_allclose(lam1, lam2, atol=5e-3, rtol=1e-8)
+        print(lam1, lam2)
+        np.testing.assert_allclose(lam1, lam2, rtol=5e-5)
 
         if lam2 > 0:
             assert Newcomb_metric <= 0, (
@@ -743,10 +745,10 @@ def test_ballooning_compare_with_COBRAVMEC():
             period=(np.inf, 2 * np.pi, np.inf),
         )
 
-        data_keys = ["ideal ball lambda"]
+        data_keys = ["ideal ballooning lambda"]
         data = eq.compute(data_keys, grid=grid)
 
-        lam2_array[i] = np.max(data["ideal ball lambda"])
+        lam2_array[i] = np.max(data["ideal ballooning lambda"])
 
     root_DESC = find_root_simple(np.array(surfaces), lam2_array)
-    np.testing.assert_allclose(root_COBRAVMEC, root_DESC, atol=5e-4, rtol=1e-8)
+    np.testing.assert_allclose(root_COBRAVMEC, root_DESC, rtol=4e-4)

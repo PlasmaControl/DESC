@@ -1604,10 +1604,10 @@ def test_ballooning_stability_opt():
             period=(np.inf, 2 * np.pi, np.inf),
         )
 
-        data_keys = ["ideal ball lambda"]
+        data_keys = ["ideal ballooning lambda"]
         data = eq.compute(data_keys, grid=grid)
 
-        lam2_initial[i] = np.max(data["ideal ball lambda"])
+        lam2_initial[i] = np.max(data["ideal ballooning lambda"])
 
     # Flux surfaces on which to evaluate ballooning stability
     surfaces_ball = surfaces
@@ -1643,8 +1643,9 @@ def test_ballooning_stability_opt():
         np.max(np.abs(eq.surface.Z_basis.modes), 1) > k, :
     ]
 
+    # aspect ratio of the original HELIOTRON is 10.48
     objective = ObjectiveFunction(
-        (AspectRatio(eq=eq, bounds=(5, 15)),) + tuple(objs_ball.values())
+        (AspectRatio(eq=eq, bounds=(0, 12)),) + tuple(objs_ball.values())
     )
 
     constraints = (
@@ -1683,12 +1684,12 @@ def test_ballooning_stability_opt():
             period=(np.inf, 2 * np.pi, np.inf),
         )
 
-        data_keys = ["ideal ball lambda"]
+        data_keys = ["ideal ballooning lambda"]
         data = eq.compute(data_keys, grid=grid)
 
-        lam2_optimized[i] = np.max(data["ideal ball lambda"])
+        lam2_optimized[i] = np.max(data["ideal ballooning lambda"])
 
-    assert lam2_optimized < lam2_initial
+    assert lam2_initial - lam2_optimized >= 1.8e-2
 
 
 @pytest.mark.slow

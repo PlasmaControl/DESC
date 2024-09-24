@@ -284,14 +284,22 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
         """∫ dλ ∑ⱼ [v τ γ_c²]ⱼ."""
         bounce = Bounce1D(grid, data, quad, automorphism=None, is_reshaped=True)
         points = bounce.points(data["pitch_inv"], num_well=num_well)
-        v_tau = bounce.integrate(d_v_tau, points, data["pitch_inv"], batch=batch)
+        v_tau = bounce.integrate(d_v_tau, data["pitch_inv"], points=points, batch=batch)
         gamma_c = jnp.arctan(
             safediv(
                 bounce.integrate(
-                    drift, points, data["pitch_inv"], data["cvdrift0"], batch=batch
+                    drift,
+                    data["pitch_inv"],
+                    data["cvdrift0"],
+                    points=points,
+                    batch=batch,
                 ),
                 bounce.integrate(
-                    drift, points, data["pitch_inv"], data["gbdrift"], batch=batch
+                    drift,
+                    data["pitch_inv"],
+                    data["gbdrift"],
+                    points=points,
+                    batch=batch,
                 ),
             )
         )
@@ -396,6 +404,12 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
     #              ----------------------------------------------
     # (|∇ρ| ‖e_α|ρ,ϕ‖)ᵢ ∫ dℓ [ (1 − λ|B|/2)/√(1 − λ|B|) ∂|B|/∂ψ + √(1 − λ|B|) K ] / |B|
 
+    # Note that we rewrite equivalents of Nemov et. al's expression's using
+    # single valued maps of a physical coordinates. This avoids the computational
+    # issues of multivalued maps. It further enables use of more efficient methods,
+    # such as fast transforms and fixed computational grids throughout optimization,
+    # which are used in the ``Bounce2D`` operator on a developer branch.
+
     def d_v_tau(B, pitch):
         return safediv(2.0, jnp.sqrt(jnp.abs(1 - pitch * B)))
 
@@ -420,29 +434,29 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
         # τ is the bounce time, and I is defined in Nemov eq. 36.
         bounce = Bounce1D(grid, data, quad, automorphism=None, is_reshaped=True)
         points = bounce.points(data["pitch_inv"], num_well=num_well)
-        v_tau = bounce.integrate(d_v_tau, points, data["pitch_inv"], batch=batch)
+        v_tau = bounce.integrate(d_v_tau, data["pitch_inv"], points=points, batch=batch)
         gamma_c = jnp.arctan(
             safediv(
                 bounce.integrate(
                     drift1,
-                    points,
                     data["pitch_inv"],
                     data["|grad(rho)|*kappa_g"],
+                    points=points,
                     batch=batch,
                 ),
                 (
                     bounce.integrate(
                         drift2,
-                        points,
                         data["pitch_inv"],
                         data["|B|_psi|v,p"],
+                        points=points,
                         batch=batch,
                     )
                     + bounce.integrate(
                         drift3,
-                        points,
                         data["pitch_inv"],
                         data["K"],
+                        points=points,
                         batch=batch,
                         quad=quad2,
                     )

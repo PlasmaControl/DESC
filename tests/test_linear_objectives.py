@@ -932,7 +932,7 @@ def test_fix_omni_Bmax():
         np.testing.assert_allclose(constraint._A @ field.x_basis.modes[:, 1], sum)
 
     _test(M_x=6, N_x=3, NFP=1, sum=-4)
-    _test(M_x=9, N_x=5, NFP=2, sum=4)
+    _test(M_x=9, N_x=4, NFP=2, sum=4)
     _test(M_x=12, N_x=5, NFP=3, sum=6)
 
 

@@ -37,11 +37,11 @@ class _CoilObjective(_Objective):
 
     overwrite = {
         "loss_function": """
-        loss_function : {None, 'mean', 'min', 'max'}, optional
-            Loss function to apply to the objective values once computed. This loss
-            function is called on the raw compute value, before any shifting,
-            scaling, or normalization. Operates over all coils, not each individual
-            coil.
+    loss_function : {None, 'mean', 'min', 'max'}, optional
+        Loss function to apply to the objective values once computed. This loss
+        function is called on the raw compute value, before any shifting,
+        scaling, or normalization. Operates over all coils, not each individual
+        coil.
         """,
     }
     __doc__ = __doc__.rstrip() + collect_docs(overwrite=overwrite)
@@ -223,7 +223,9 @@ class CoilLength(_CoilObjective):
     """
 
     overwrite = overwrite_coil_length.copy()
-    overwrite["target"] += " Defaults to ``target=2*np.pi``.\n"
+    overwrite["target"] = (
+        overwrite["target"].rstrip() + " Defaults to ``target=2*np.pi``.\n"
+    )
     __doc__ = __doc__.rstrip() + collect_docs(overwrite=overwrite)
 
     _scalar = False  # Not always a scalar, if a coilset is passed in
@@ -323,7 +325,7 @@ class CoilCurvature(_CoilObjective):
     """
 
     overwrite = overwrite_coil_length
-    overwrite["target"] += "\n"
+    overwrite["target"] = overwrite["target"].rstrip() + "\n"
     __doc__ = __doc__.rstrip() + collect_docs(overwrite=overwrite)
 
     _scalar = False
@@ -418,7 +420,7 @@ class CoilTorsion(_CoilObjective):
     """
 
     overwrite = overwrite_coil_length.copy()
-    overwrite["target"] += "Defaults to ``target=0``.\n"
+    overwrite["target"] = overwrite["target"].rstrip() + " Defaults to ``target=0``.\n"
     __doc__ = __doc__.rstrip() + collect_docs(overwrite=overwrite)
 
     _scalar = False
@@ -513,7 +515,7 @@ class CoilCurrentLength(CoilLength):
     """
 
     overwrite = overwrite_coil_length.copy()
-    overwrite["target"] += "Defaults to ``target=0``.\n"
+    overwrite["target"] = overwrite["target"].rstrip() + " Defaults to ``target=0``.\n"
     __doc__ = __doc__.rstrip() + collect_docs(overwrite=overwrite)
 
     _scalar = False
@@ -617,7 +619,7 @@ class CoilSetMinDistance(_Objective):
     """
 
     overwrite = overwrite_coil_length.copy()
-    overwrite["target"] += "\n"
+    overwrite["target"] = overwrite["target"].rstrip() + "\n"
     __doc__ = __doc__.rstrip() + collect_docs(overwrite=overwrite)
 
     _scalar = False

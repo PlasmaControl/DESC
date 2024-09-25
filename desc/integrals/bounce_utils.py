@@ -234,15 +234,18 @@ def bounce_points(
     return z1, z2
 
 
-def _set_default_plot_kwargs(kwargs):
+def _set_default_plot_kwargs(kwargs, vlabel=r"$\vert B \vert$"):
     kwargs.setdefault(
         "title",
-        r"Intersects $\zeta$ in epigraph($\vert B \vert$) s.t. "
-        r"$\vert B \vert(\zeta) = 1/\lambda$",
+        r"Intersects $\zeta$ in epigraph("
+        + vlabel
+        + ") s.t. "
+        + vlabel
+        + r"$(\zeta) = 1/\lambda$",
     )
     kwargs.setdefault("klabel", r"$1/\lambda$")
     kwargs.setdefault("hlabel", r"$\zeta$")
-    kwargs.setdefault("vlabel", r"$\vert B \vert$")
+    kwargs.setdefault("vlabel", vlabel)
     return kwargs
 
 

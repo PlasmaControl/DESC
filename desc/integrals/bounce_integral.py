@@ -290,6 +290,7 @@ class Bounce2D(IOAble):
     --------
     Bounce1D
         Uses one-dimensional local spline methods for the same task.
+        Does not assume G is single-valued in θ and ζ.
 
         Below are some advantages of ``Bounce2D`` over ``Bounce1D``.
         The coordinates on which the root-finding must be done to map from DESC
@@ -638,7 +639,7 @@ class Bounce2D(IOAble):
         Returns
         -------
         result : jnp.ndarray
-            Shape is same as input points.
+            Shape (M, L, num_pitch, num_well).
             Last axis enumerates the bounce integrals for a given field line,
             flux surface, and pitch value.
 
@@ -717,12 +718,12 @@ class Bounce2D(IOAble):
         ----------
         l : int
             Index into the nodes of the grid supplied to make this object.
-            ``rho=grid.meshgrid_reshape(grid.nodes[:,0],"rtz")[l,0,0]``.
+            ``rho=grid.compress(grid.nodes[:,0])[l]``.
         pitch_inv : jnp.ndarray
             Shape (num_pitch, ).
             Optional, 1/λ values whose corresponding bounce points on the field line
             specified by Clebsch coordinate ρ(l) will be plotted.
-        kwargs : dict
+        kwargs
             Keyword arguments into
             ``desc/integrals/basis.py::PiecewiseChebyshevSeries.plot1d``.
 
@@ -744,11 +745,74 @@ class Bounce2D(IOAble):
             kwargs["z1"] = z1
             kwargs["z2"] = z2
             kwargs["k"] = pitch_inv
-            kwargs.setdefault(
-                "hlabel", r"$\alpha = $" + str(self._alpha) + r", $\zeta$"
-            )
+        kwargs.setdefault("hlabel", r"$\alpha = $" + str(self._alpha) + r", $\zeta$")
         fig, ax = B.plot1d(B.cheb, **_set_default_plot_kwargs(kwargs))
         return fig, ax
+
+    def plot_theta(self, l, **kwargs):
+        """Plot θ(α, ζ) on the specified flux surface.
+
+        Notes
+        -----
+        The definition of α in B = ∇ρ × ∇α on an irrational magnetic surface
+        implies the true map θ(α, ζ) is multivalued. In particular, following an
+        irrational field, θ grows to ∞ (always non-monotonically) as ζ → ∞.
+        Therefore, it is impossible to approximate this map using single-valued
+        basis functions defined on a bounded subset of ℝ².
+
+        However, our interest lies in computing functions which are
+        periodic in θ, so it suffices to interpolate θ over one branch cut.
+        DESC chooses the branch cut defined by (α, ζ) ∈ [0, 2π]² and we must
+        maintain that convention with our basis functions. On such a branch
+        cut, the bound θ ∈ [0, 4π] holds.
+
+        Likewise, α is multivalued. As the field line is followed, the label
+        jumps to α ∉ [0, 2π] after completing some toroidal transit. Therefore,
+        the map θ(α, ζ) must be periodic in α with period 2π. At every point
+        ζₚ ∈ [2π k, 2π ℓ] where k, ℓ ∈ ℤ where the field line completes a
+        poloidal transit there is guaranteed to exist a discrete jump
+        discontinuity in θ at ζ = 2π ℓ(p), starting the toroidal transit.
+        Recall a jump discontinuity appears as an infinitely sharp cut;
+        nearby the cut, the function must be blind to the cut.
+
+        Parameters
+        ----------
+        l : int
+            Index into the nodes of the grid supplied to make this object.
+            ``rho=grid.compress(grid.nodes[:,0])[l]``.
+        kwargs
+            Keyword arguments into
+            ``desc/integrals/basis.py::PiecewiseChebyshevSeries.plot1d``.
+
+        Returns
+        -------
+        fig, ax
+            Matplotlib (fig, ax) tuple.
+
+        """
+        T = self._T
+        if T.cheb.ndim > 2:
+            T = PiecewiseChebyshevSeries(T.cheb[l], T.domain)
+        kwargs.setdefault("hlabel", r"$\alpha = $" + str(self._alpha) + r", $\zeta$")
+        fig, ax = T.plot1d(
+            T.cheb, **_set_default_plot_kwargs(kwargs, vlabel=r"$\theta$")
+        )
+        return fig, ax
+        # Note:
+        #     It is simple to reconstruct the true map θ(α, ζ) from our
+        #     function that approximates over one the branch cut. At every
+        #     ζ = 2π ℓ, ℓ ∈ ℤ add either 0 or 2π or 4π to the next cut
+        #     toroidal cut, where this number is chosen to ensure continuity.
+        #     Can evaluate θ left and right of ζ = 2π ℓ to determine the amount
+        #     to add. This is only useful if one would like to interpolate
+        #     functions that are multi-valued in θ, ζ such as gbdrift.
+        #     still for such functions one needs to use a 1D non-periodic
+        #     interpolation such as in ``Bounce1D`` or split the function
+        #     into a single-valued part, and a multivalued part where the
+        #     multivalued part can be evaluated accurately anywhere given
+        #     some object that can evaluate the single valued part anywhere.
+        #     The infrastructure required for this would be to add such
+        #     information to data_index.
 
 
 class Bounce1D(IOAble):
@@ -1088,7 +1152,7 @@ class Bounce1D(IOAble):
         Returns
         -------
         result : jnp.ndarray
-            Shape is same as input points.
+            Shape (M, L, num_pitch, num_well).
             Last axis enumerates the bounce integrals for a given field line,
             flux surface, and pitch value.
 

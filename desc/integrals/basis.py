@@ -255,7 +255,10 @@ class FourierChebyshevSeries(IOAble):
         """
         # Add axis to broadcast against Chebyshev coefficients.
         x = jnp.atleast_1d(x)[..., jnp.newaxis]
-        cheb = cheb_from_dct(irfft_non_uniform(x, self._c, self.M, axis=-2))
+        # Add axis to broadcast against multiple x values.
+        cheb = cheb_from_dct(
+            irfft_non_uniform(x, self._c[..., jnp.newaxis, :, :], self.M, axis=-2)
+        )
         assert cheb.shape[-2:] == (x.shape[-2], self.N)
         return PiecewiseChebyshevSeries(cheb, self.domain)
 
@@ -510,7 +513,6 @@ class PiecewiseChebyshevSeries(IOAble):
         # ``_eps`` from ``domain[-1]``. Edit: For differentiability, we cannot
         # consider intersects at boundary of Chebyshev polynomial. Again, cases
         # where this would be incorrect have measure zero.
-        # TODO: (kaya) look into that plot with M=512, N=32
         is_z1 = (df_dy_sign <= 0) & is_intersect
         is_z2 = (df_dy_sign >= 0) & _in_epigraph_and(is_intersect, df_dy_sign)
 

@@ -1177,8 +1177,6 @@ class TestBounce1D:
         # 9. Example manipulation of the output
         # Sum all bounce averages across a particular field line, for every field line.
         result = avg.sum(axis=-1)
-        # Group the result by pitch and flux surface.
-        result = result.reshape(alpha.size, rho.size, pitch_inv.shape[-1])
         # The result stored at
         m, l, p = 0, 1, 3
         print("Result(α, ρ, λ):", result[m, l, p])
@@ -1186,7 +1184,7 @@ class TestBounce1D:
         print("1/λ(α, ρ):", pitch_inv[l, p])
         # for the Clebsch-type field line coordinates
         nodes = grid.source_grid.meshgrid_reshape(grid.source_grid.nodes[:, :2], "arz")
-        print("(α, ρ):", nodes[m, l, 0])
+        print("(ρ, α):", nodes[m, l, 0])
 
         # 10. Plotting
         fig, ax = bounce.plot(m, l, pitch_inv[l], include_legend=False, show=False)
@@ -1530,6 +1528,81 @@ class TestBounce2D:
         alphas = get_alpha(alpha_0, iota, num_period, period)
         assert alphas.shape == (iota.size, num_period)
         print(alphas)
+
+    @pytest.mark.unit
+    @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d * 4)
+    def test_bounce2d_checks(self):
+        """Test that all the internal correctness checks pass for real example."""
+        # noqa: D202
+        # Suppose we want to compute a bounce average of the function
+        # f(ℓ) = (1 − λ|B|/2) * g_zz, where g_zz is the squared norm of the
+        # toroidal basis vector on some set of field lines specified by (ρ, α)
+        # coordinates. This is defined as
+        # [∫ f(ℓ) / √(1 − λ|B|) dℓ] / [∫ 1 / √(1 − λ|B|) dℓ]
+
+        # 1. Define python functions for the integrands. We do that above.
+        # 2. Pick flux surfaces and grid resolution.
+        rho = np.linspace(0.1, 1, 6)
+        eq = get("HELIOTRON")
+        grid = Grid.create_meshgrid(
+            [rho, fourier_pts(3 * eq._M_grid), fourier_pts(3 * eq.N_grid) / eq.NFP],
+            NFP=eq.NFP,
+        )
+        # 3. Compute input data.
+        data = eq.compute(
+            Bounce2D.required_names + ["min_tz |B|", "max_tz |B|", "g_zz"], grid=grid
+        )
+
+        # 4. Compute DESC coordinates of optimal interpolation nodes.
+        theta = Bounce2D.compute_theta(eq, M=256, N=32, rho=rho)
+
+        # 5. Make the bounce integration operator.
+        bounce = Bounce2D(
+            grid, data, theta, num_transit=2, N_B=128, quad=leggauss(3), check=True
+        )
+        pitch_inv, _ = bounce.get_pitch_inv_quad(
+            min_B=grid.compress(data["min_tz |B|"]),
+            max_B=grid.compress(data["max_tz |B|"]),
+            num_pitch=10,
+        )
+        # 6. Compute bounce points.
+        points = bounce.points(pitch_inv)
+        # 7. Optionally check for correctness of bounce points.
+        bounce.check_points(points, pitch_inv, plot=False)
+        # 8. Integrate.
+        num = bounce.integrate(
+            integrand=TestBounce1D._example_numerator,
+            pitch_inv=pitch_inv,
+            f=Bounce2D.reshape_data(grid, data["g_zz"]),
+            points=points,
+            check=True,
+        )
+        den = bounce.integrate(
+            integrand=TestBounce1D._example_denominator,
+            pitch_inv=pitch_inv,
+            points=points,
+            check=True,
+        )
+        avg = safediv(num, den)
+        assert np.isfinite(avg).all() and np.count_nonzero(avg)
+
+        # 9. Example manipulation of the output
+        # Sum all bounce averages across a particular field line, for every field line.
+        result = avg.sum(axis=-1)
+        # The result stored at
+        l, p = 1, 3
+        print("Result(ρ, λ):", result[l, p])
+        # corresponds to the 1/λ value
+        print("1/λ(ρ):", pitch_inv[l, p])
+        # for the flux surface
+        print("ρ:", rho[l])
+
+        # 10. Plotting
+        fig, ax = bounce.plot_theta(l)
+        # TODO: why does this converge to different |B| than test_bounce1d_checks?
+        fig, ax = bounce.plot(l, pitch_inv[l], include_legend=False, show=False)
+        plt.show()
+        return fig
 
     @pytest.mark.xfail(
         reason="More DESC infrastructure required to interpolate multivalued integrand."

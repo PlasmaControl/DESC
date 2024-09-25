@@ -744,9 +744,7 @@ class Equilibrium(IOAble, Optimizable):
                 sym=self.sym, zeta=zeta % (2 * np.pi / self.NFP)
             )
             surface.change_resolution(self.L, self.M)
-            Lp_lmn, Lp_basis = get_basis_poincare(
-                self.L_lmn, self.L_basis, zeta * self.NFP
-            )
+            Lp_lmn, Lp_basis = get_basis_poincare(self.L_lmn, self.L_basis)
 
             AR = np.zeros((surface.R_basis.num_modes, self.R_basis.num_modes))
             AZ = np.zeros((surface.Z_basis.num_modes, self.Z_basis.num_modes))

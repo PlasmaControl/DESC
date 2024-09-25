@@ -492,7 +492,7 @@ def test_NAE_QSC_solve():
 
         phi = np.squeeze(grid_axis.nodes[:, 2])
         np.testing.assert_allclose(
-            lam_nae, -qsc.iota * qsc.nu_spline(phi), atol=3e-5, err_msg=string
+            lam_nae, -qsc.iota * qsc.nu_spline(phi), atol=2e-5, err_msg=string
         )
 
         # check |B| on axis
@@ -568,7 +568,7 @@ def test_NAE_QSC_solve_near_axis_based_off_eq():
 
         phi = np.squeeze(grid_axis.nodes[:, 2])
         np.testing.assert_allclose(
-            lam_nae, -qsc.iota * qsc.nu_spline(phi), atol=3e-5, err_msg=string
+            lam_nae, -qsc.iota * qsc.nu_spline(phi), atol=2e-5, err_msg=string
         )
 
         # check |B| on axis

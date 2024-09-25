@@ -1117,8 +1117,8 @@ def test_optimize_with_single_constraint():
     )
 
 
-@pytest.mark.regression
 @pytest.mark.slow
+@pytest.mark.regression
 def test_proximal_jacobian():
     """Test that JVPs and manual concatenation give the same result as full jac."""
     eq = desc.examples.get("HELIOTRON")

@@ -198,7 +198,7 @@ class _CoilObjective(_Objective):
         Returns
         -------
         f : float or array of floats
-            Coil length.
+            Coil objective value(s).
 
         """
         if constants is None:
@@ -210,6 +210,7 @@ class _CoilObjective(_Objective):
             params=params,
             transforms=constants["transforms"],
             grid=self._grid,
+            jitable=True,
         )
 
         return data
@@ -1153,7 +1154,7 @@ class CoilArclengthVariance(_CoilObjective):
 
     _scalar = False  # Not always a scalar, if a coilset is passed in
     _units = "(m^2)"
-    _print_value_fmt = "Coil Arclength Variance: {:10.3e} "
+    _print_value_fmt = "Coil Arclength Variance: "
 
     def __init__(
         self,
@@ -1168,7 +1169,6 @@ class CoilArclengthVariance(_CoilObjective):
         grid=None,
         name="coil arclength variance",
     ):
-        self._coils = coils
         if target is None and bounds is None:
             target = 0
 
@@ -1198,6 +1198,7 @@ class CoilArclengthVariance(_CoilObjective):
 
         """
         super().build(use_jit=use_jit, verbose=verbose)
+
         self._dim_f = self._num_coils
         self._constants["quad_weights"] = 1
 
@@ -1223,7 +1224,7 @@ class CoilArclengthVariance(_CoilObjective):
             Coil arclength variance.
         """
         data = super().compute(params, constants=constants)
-        data = tree_flatten(data, is_leaf=lambda x: isinstance(x, dict))[0]
+        data = tree_leaves(data, is_leaf=lambda x: isinstance(x, dict))
         out = jnp.array([jnp.var(jnp.linalg.norm(dat["x_s"], axis=1)) for dat in data])
         return out
 

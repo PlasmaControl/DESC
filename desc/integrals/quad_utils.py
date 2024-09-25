@@ -27,9 +27,8 @@ def grad_bijection_from_disc(a, b):
 def automorphism_arcsin(x):
     """[-1, 1] ∋ x ↦ y ∈ [−1, 1].
 
-    The arcsin transformation introduces a singularity that augments the singularity
-    in the bounce integral, so the quadrature scheme used to evaluate the integral must
-    work well on functions with large derivative near the boundary.
+    This map decreases node density near the boundary by the asymptotic factor
+    √(1−x²) and adds a 1/√(1−x²) factor to the integrand.
 
     Parameters
     ----------
@@ -58,14 +57,8 @@ grad_automorphism_arcsin.__doc__ += "\n" + automorphism_arcsin.__doc__
 def automorphism_sin(x, s=0, m=10):
     """[-1, 1] ∋ x ↦ y ∈ [−1, 1].
 
-    When used as the change of variable map for the bounce integral, the Lipschitzness
-    of the sin transformation prevents generation of new singularities. Furthermore,
-    its derivative vanishes to zero slowly near the boundary, which will suppress the
-    large derivatives near the boundary of singular integrals.
-
-    In effect, this map pulls the mass of the integral away from the singularities,
-    which should improve convergence if the quadrature performs better on less singular
-    integrands. Pairs well with Gauss-Legendre quadrature.
+    This map increases node density near the boundary by the asymptotic factor
+    1/√(1−x²) and adds a √(1−x²) factor to the integrand.
 
     Parameters
     ----------
@@ -108,16 +101,17 @@ grad_automorphism_sin.__doc__ += "\n" + automorphism_sin.__doc__
 def tanh_sinh(deg, m=10):
     """Tanh-Sinh quadrature.
 
-    Returns quadrature points xₖ and weights wₖ for the approximate evaluation of the
-    integral ∫₋₁¹ f(x) dx ≈ ∑ₖ wₖ f(xₖ).
+    Returns quadrature points xₖ and weights wₖ for the approximate evaluation
+    of the integral ∫₋₁¹ f(x) dx ≈ ∑ₖ wₖ f(xₖ).
 
     Parameters
     ----------
     deg : int
         Number of quadrature points.
     m : float
-        Number of machine epsilons used for floating point error buffer. Larger implies
-        less floating point error, but increases the minimum achievable error.
+        Number of machine epsilons used for floating point error buffer. Larger
+        implies less floating point error, but increases the minimum achievable
+        quadrature error.
 
     Returns
     -------
@@ -142,8 +136,8 @@ def tanh_sinh(deg, m=10):
 def leggauss_lob(deg, interior_only=False):
     """Lobatto-Gauss-Legendre quadrature.
 
-    Returns quadrature points xₖ and weights wₖ for the approximate evaluation of the
-    integral ∫₋₁¹ f(x) dx ≈ ∑ₖ wₖ f(xₖ).
+    Returns quadrature points xₖ and weights wₖ for the approximate evaluation
+    of the integral ∫₋₁¹ f(x) dx ≈ ∑ₖ wₖ f(xₖ).
 
     Parameters
     ----------
@@ -190,14 +184,67 @@ def leggauss_lob(deg, interior_only=False):
     return x, w
 
 
+def uniform(deg):
+    """Uniform quadrature that is Gauss-Chebyshev in transformed variable.
+
+    Returns quadrature points xₖ and weights wₖ for the approximate evaluation
+    of the integral ∫₋₁¹ f(x) dx ≈ ∑ₖ wₖ f(xₖ).
+
+    Parameters
+    ----------
+    deg : int
+        Number of quadrature points.
+
+    Returns
+    -------
+    x, w : (jnp.ndarray, jnp.ndarray)
+        Shape (deg, ).
+        Quadrature points and weights.
+
+    """
+    # Define x = 2/π arcsin y and g : y ↦ f(x(y)).
+    #   ∫₋₁¹ f(x) dx = 2/π ∫₋₁¹ (1−y²)⁻⁰ᐧ⁵ g(y) dy
+    # ∑ₖ wₖ f(x(yₖ)) = 2/π ∑ₖ ωₖ g(yₖ)
+    # Given roots yₖ of Chebyshev polynomial, x(yₖ) below is uniform in (-1, 1).
+    x = jnp.arange(-deg + 1, deg + 1, 2) / deg
+    w = 2 / deg * jnp.ones(deg)
+    return x, w
+
+
+def chebgauss2(deg):
+    """Gauss-Chebyshev quadrature of the second kind with implicit weighting.
+
+    Returns quadrature points xₖ and weights wₖ for the approximate evaluation
+    of the integral ∫₋₁¹ f(x) dx ≈ ∑ₖ wₖ f(xₖ) where f(x) = g(x) √(1−x²).
+
+    Parameters
+    ----------
+    deg : int
+        Number of quadrature points.
+
+    Returns
+    -------
+    x, w : (jnp.ndarray, jnp.ndarray)
+        Shape (deg, ).
+        Quadrature points and weights.
+
+    """
+    # Adapted from
+    # github.com/scipy/scipy/blob/v1.14.1/scipy/special/_orthogonal.py#L1803-L1851.
+    t = jnp.arange(deg, 0, -1) * jnp.pi / (deg + 1)
+    x = jnp.cos(t)
+    w = jnp.pi * jnp.abs(jnp.sin(t)) / (deg + 1)
+    return x, w
+
+
 def get_quadrature(quad, automorphism):
     """Apply automorphism to given quadrature.
 
     Parameters
     ----------
     quad : (jnp.ndarray, jnp.ndarray)
-        Quadrature points xₖ and weights wₖ for the approximate evaluation of an
-        integral ∫₋₁¹ g(x) dx = ∑ₖ wₖ g(xₖ).
+        Quadrature points xₖ and weights wₖ for the approximate evaluation of
+        the integral ∫₋₁¹ g(x) dx = ∑ₖ wₖ g(xₖ).
     automorphism : (Callable, Callable) or None
         The first callable should be an automorphism of the real interval [-1, 1].
         The second callable should be the derivative of the first. This map defines
@@ -218,29 +265,3 @@ def get_quadrature(quad, automorphism):
         # Recall bijection_from_disc(auto(x), ζ₁, ζ₂) = ζ.
         x = auto(x)
     return x, w
-
-
-def composite_linspace(x, num):
-    """Returns linearly spaced values between every pair of values in ``x``.
-
-    Parameters
-    ----------
-    x : jnp.ndarray
-        First axis has values to return linearly spaced values between. The remaining
-        axes are batch axes. Assumes input is sorted along first axis.
-    num : int
-        Number of values between every pair of values in ``x``.
-
-    Returns
-    -------
-    vals : jnp.ndarray
-        Shape ((x.shape[0] - 1) * num + x.shape[0], *x.shape[1:]).
-        Linearly spaced values between ``x``.
-
-    """
-    x = jnp.atleast_1d(x)
-    vals = jnp.linspace(x[:-1], x[1:], num + 1, endpoint=False)
-    vals = jnp.swapaxes(vals, 0, 1).reshape(-1, *x.shape[1:])
-    vals = jnp.append(vals, x[jnp.newaxis, -1], axis=0)
-    assert vals.shape == ((x.shape[0] - 1) * num + x.shape[0], *x.shape[1:])
-    return vals

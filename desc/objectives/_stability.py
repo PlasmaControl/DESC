@@ -440,8 +440,8 @@ class BallooningStability(_Objective):
 
     """
 
-    _coordinates = "ra"
-    _scalar = None
+    _coordinates = "r"
+    _scalar = True
     _units = "(dimensionless)"
     _print_value_fmt = "Ideal-ballooning lambda: "
 

@@ -644,7 +644,6 @@ def test_ballooning_stability_eval():
         lam2 = np.max(data["ideal ballooning lambda"])
         Newcomb_metric = data["Newcomb ballooning metric"]
 
-        print(lam1, lam2)
         np.testing.assert_allclose(lam1, lam2, rtol=5e-5)
 
         if lam2 > 0:

@@ -9,7 +9,7 @@ import numpy as np
 
 from desc.backend import custom_jvp, fori_loop, jit, jnp, sign
 from desc.io import IOAble
-from desc.utils import check_nonnegint, check_posint, copy_coeffs, errorif, flatten_list
+from desc.utils import check_nonnegint, check_posint, copy_coeffs, flatten_list
 
 __all__ = [
     "PowerSeries",
@@ -1816,8 +1816,8 @@ def _jacobi_jvp(x, xdot):
     return f, df * xdot + 0 * ndot + 0 * alphadot + 0 * betadot + 0 * dxdot
 
 
-def get_basis_poincare(X_lmn_3D, basis_3D, zeta=0):
-    """Convert 3D FourierZernikeBasis to 2D ZernikePolynomial at zeta=0 or pi.
+def get_basis_poincare(X_lmn_3D, basis_3D):
+    """Convert 3D FourierZernikeBasis to 2D ZernikePolynomial at zeta=0.
 
     Takes a 3D FourierZernike basis and its coefficients X_lmn_3D and evaluates
     the coefficients at the zeta=0 or Pi cross-section, returning a 2D ZernikePolynomial
@@ -1843,13 +1843,6 @@ def get_basis_poincare(X_lmn_3D, basis_3D, zeta=0):
         radial resolution L and poloidal resolution M are equal to the max radial
         and poloidal resolutions of the 3D basis passed as an input.
     """
-    errorif(
-        not (0 == zeta or zeta == np.pi),
-        ValueError,
-        f"Toroidal angle must be either 0 or pi, got {zeta} "
-        "This function takes the zeta value as zeta*eq.NFP such that maximum value pi "
-        "is equivalent to physical angle zeta=pi/eq.NFP",
-    )
     # Add up all the X_lm(n>=0) modes
     # so that the quantity at the zeta=0 surface is described with just lm modes
     # and get rid of the toroidal modes
@@ -1859,49 +1852,23 @@ def get_basis_poincare(X_lmn_3D, basis_3D, zeta=0):
     )  # these are corresponding to the 2D modes of the ZernikePolynomial Basis
     modes_3D = basis_3D.modes
     for i, mode in enumerate(modes_3D):
-        if zeta == 0:
-            if mode[-1] < 0:
-                pass  # we do not need the sin(zeta) modes as they = 0 at zeta=0
-            else:
-                if (mode[0], mode[1], 0) not in modes_2D:
-                    modes_2D.append((mode[0], mode[1], 0))
-                    l = mode[0]
-                    m = mode[1]
+        if mode[-1] < 0:
+            pass  # we do not need the sin(zeta) modes as they = 0 at zeta=0
+        else:
+            if (mode[0], mode[1], 0) not in modes_2D:
+                modes_2D.append((mode[0], mode[1], 0))
+                l = mode[0]
+                m = mode[1]
 
-                    inds = np.where(
-                        np.logical_and(
-                            (modes_3D[:, :2] == [l, m]).all(axis=1),
-                            modes_3D[:, 2] >= 0,
-                        )
-                    )[0]
+                inds = np.where(
+                    np.logical_and(
+                        (modes_3D[:, :2] == [l, m]).all(axis=1),
+                        modes_3D[:, 2] >= 0,
+                    )
+                )[0]
 
-                    SUM = np.sum(X_lmn_3D[inds])
-                    X_lmn_2D.append(SUM)
-        elif zeta == np.pi:
-            if mode[-1] < 0:
-                pass  # we do not need the sin(zeta) modes as they = 0 at zeta=pi
-            else:
-                if (mode[0], mode[1], 0) not in modes_2D:
-                    modes_2D.append((mode[0], mode[1], 0))
-                    l = mode[0]
-                    m = mode[1]
-
-                    inds = np.where(
-                        np.logical_and(
-                            (modes_3D[:, :2] == [l, m]).all(axis=1),
-                            modes_3D[:, 2] % 2 == 0,
-                        )
-                    )[0]
-
-                    inds1 = np.where(
-                        np.logical_and(
-                            (modes_3D[:, :2] == [l, m]).all(axis=1),
-                            modes_3D[:, 2] % 2 == 1,
-                        )
-                    )[0]
-
-                    SUM = np.sum(X_lmn_3D[inds]) - np.sum(X_lmn_3D[inds1])
-                    X_lmn_2D.append(SUM)
+                SUM = np.sum(X_lmn_3D[inds])
+                X_lmn_2D.append(SUM)
 
     X_lmn_2D = np.asarray(X_lmn_2D)
     modes_2D = np.asarray(modes_2D)

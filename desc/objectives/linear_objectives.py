@@ -475,47 +475,24 @@ class SectionRSelfConsistency(_Objective):
 
         """
         eq = self.things[0]
+
+        errorif(
+            eq.xsection.zeta != 0,
+            f"Zeta value must be 0, the given value is {eq.xsection.zeta}",
+        )
+
         modes = eq.xsection.R_basis.modes
         self._dim_f = eq.xsection.R_basis.num_modes
         self._A = np.zeros((self._dim_f, eq.R_basis.num_modes))
 
-        if eq.xsection.zeta == 0:
-            for i, (l, m, n) in enumerate(modes):
-                j = np.argwhere(
-                    np.logical_and(
-                        (eq.R_basis.modes[:, :-1] == [l, m]).all(axis=1),
-                        eq.R_basis.modes[:, 2] >= 0,
-                    )
+        for i, (l, m, n) in enumerate(modes):
+            j = np.argwhere(
+                np.logical_and(
+                    (eq.R_basis.modes[:, :-1] == [l, m]).all(axis=1),
+                    eq.R_basis.modes[:, 2] >= 0,
                 )
-                self._A[i, j] = 1
-        elif eq.xsection.zeta == np.pi / eq.NFP:
-            for i, (l, m, n) in enumerate(modes):
-                j1 = np.argwhere(
-                    np.logical_and(
-                        np.logical_and(
-                            (eq.R_basis.modes[:, :-1] == [l, m]).all(axis=1),
-                            eq.R_basis.modes[:, 2] % 2 == 1,
-                        ),
-                        eq.R_basis.modes[:, 2] >= 0,
-                    )
-                )
-                j2 = np.argwhere(
-                    np.logical_and(
-                        np.logical_and(
-                            (eq.R_basis.modes[:, :-1] == [l, m]).all(axis=1),
-                            eq.R_basis.modes[:, 2] % 2 == 0,
-                        ),
-                        eq.R_basis.modes[:, 2] >= 0,
-                    )
-                )
-                self._A[i, j1] = -1
-                self._A[i, j2] = 1
-        else:
-            raise ValueError(
-                f"Zeta value must be 0 or pi. The given value is {eq.xsection.zeta}"
-                "This constraint takes the zeta value as zeta*eq.NFP such that maximum "
-                "value pi is equivalent to physical angle zeta=pi/eq.NFP"
             )
+            self._A[i, j] = 1
 
         super().build(use_jit=use_jit, verbose=verbose)
 
@@ -594,47 +571,24 @@ class SectionZSelfConsistency(_Objective):
 
         """
         eq = self.things[0]
+
+        errorif(
+            eq.xsection.zeta != 0,
+            f"Zeta value must be 0, the given value is {eq.xsection.zeta}",
+        )
+
         modes = eq.xsection.Z_basis.modes
         self._dim_f = eq.xsection.Z_basis.num_modes
         self._A = np.zeros((self._dim_f, eq.Z_basis.num_modes))
 
-        if eq.xsection.zeta == 0:
-            for i, (l, m, n) in enumerate(modes):
-                j = np.argwhere(
-                    np.logical_and(
-                        (eq.Z_basis.modes[:, :-1] == [l, m]).all(axis=1),
-                        eq.Z_basis.modes[:, 2] >= 0,
-                    )
+        for i, (l, m, n) in enumerate(modes):
+            j = np.argwhere(
+                np.logical_and(
+                    (eq.Z_basis.modes[:, :-1] == [l, m]).all(axis=1),
+                    eq.Z_basis.modes[:, 2] >= 0,
                 )
-                self._A[i, j] = 1
-        elif eq.xsection.zeta == np.pi / eq.NFP:
-            for i, (l, m, n) in enumerate(modes):
-                j1 = np.argwhere(
-                    np.logical_and(
-                        np.logical_and(
-                            (eq.Z_basis.modes[:, :-1] == [l, m]).all(axis=1),
-                            eq.Z_basis.modes[:, 2] % 2 == 1,
-                        ),
-                        eq.Z_basis.modes[:, 2] >= 0,
-                    )
-                )
-                j2 = np.argwhere(
-                    np.logical_and(
-                        np.logical_and(
-                            (eq.Z_basis.modes[:, :-1] == [l, m]).all(axis=1),
-                            eq.Z_basis.modes[:, 2] % 2 == 0,
-                        ),
-                        eq.Z_basis.modes[:, 2] >= 0,
-                    )
-                )
-                self._A[i, j1] = -1
-                self._A[i, j2] = 1
-        else:
-            raise ValueError(
-                f"Zeta value must be 0 or pi. The given value is {eq.xsection.zeta}"
-                "This constraint takes the zeta value as zeta*eq.NFP such that maximum "
-                "value pi is equivalent to physical angle zeta=pi/eq.NFP"
             )
+            self._A[i, j] = 1
 
         super().build(use_jit=use_jit, verbose=verbose)
 
@@ -674,7 +628,6 @@ class SectionLambdaSelfConsistency(_Objective):
         surface_label=None,
         name="self_consistency section λ",
     ):
-        self._surface_label = surface_label
         super().__init__(
             things=eq,
             target=0,
@@ -685,19 +638,23 @@ class SectionLambdaSelfConsistency(_Objective):
             name=name,
         )
 
-    def build(self, eq=None, use_jit=False, verbose=1):
+    def build(self, use_jit=False, verbose=1):
         """Build constant arrays.
 
         Parameters
         ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
             Level of output.
         """
-        eq = eq or self.things[0]
+        eq = self.things[0]
+
+        errorif(
+            eq.xsection.zeta != 0,
+            f"Zeta value must be 0, the given value is {eq.xsection.zeta}",
+        )
+
         L_modes = eq.L_basis.modes
         dim_L = eq.L_basis.num_modes
 
@@ -705,43 +662,14 @@ class SectionLambdaSelfConsistency(_Objective):
         self._dim_f = eq.xsection.L_basis.num_modes
         self._A = np.zeros((self._dim_f, dim_L))
 
-        if eq.xsection.zeta == 0:
-            for i, (l, m, n) in enumerate(Lp_modes):
-                j = np.argwhere(
-                    np.logical_and(
-                        (L_modes[:, :-1] == [l, m]).all(axis=1),
-                        L_modes[:, 2] >= 0,
-                    )
+        for i, (l, m, n) in enumerate(Lp_modes):
+            j = np.argwhere(
+                np.logical_and(
+                    (L_modes[:, :-1] == [l, m]).all(axis=1),
+                    L_modes[:, 2] >= 0,
                 )
-                self._A[i, j] = 1
-        elif eq.xsection.zeta == np.pi / eq.NFP:
-            for i, (l, m, n) in enumerate(Lp_modes):
-                j1 = np.argwhere(
-                    np.logical_and(
-                        np.logical_and(
-                            (L_modes[:, :-1] == [l, m]).all(axis=1),
-                            L_modes[:, 2] % 2 == 1,
-                        ),
-                        L_modes[:, 2] >= 0,
-                    )
-                )
-                j2 = np.argwhere(
-                    np.logical_and(
-                        np.logical_and(
-                            (L_modes[:, :-1] == [l, m]).all(axis=1),
-                            L_modes[:, 2] % 2 == 0,
-                        ),
-                        L_modes[:, 2] >= 0,
-                    )
-                )
-                self._A[i, j1] = -1
-                self._A[i, j2] = 1
-        else:
-            raise ValueError(
-                f"Zeta value must be 0 or pi. The given value is {eq.xsection.zeta}"
-                "This constraint takes the zeta value as zeta*eq.NFP such that maximum "
-                "value pi is equivalent to physical angle zeta=pi/eq.NFP"
             )
+            self._A[i, j] = 1
 
         if self.target is not None:
             self._dim_f = self._A.shape[0]

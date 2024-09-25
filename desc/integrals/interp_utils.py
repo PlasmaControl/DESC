@@ -44,7 +44,7 @@ def cheb_pts(N, domain=(-1, 1), lobatto=False):
     ----------
     N : int
         Number of points.
-    domain : (float, float)
+    domain : tuple[float]
         Domain for points.
     lobatto : bool
         Whether to return the Gauss-Lobatto (extrema-plus-endpoint)

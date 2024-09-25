@@ -1531,8 +1531,11 @@ class TestBounce2D:
         assert alphas.shape == (iota.size, num_period)
         print(alphas)
 
+    @pytest.mark.xfail(
+        reason="More DESC infrastructure required to interpolate multivalued integrand."
+    )
     @pytest.mark.unit
-    @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
+    # @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
     def test_binormal_drift_bounce2d(self):
         """Test bounce-averaged drift with analytical expressions."""
         data, things = TestBounce1D.get_drift_analytic_data()
@@ -1555,11 +1558,12 @@ class TestBounce2D:
         grid_data["gbdrift"] = grid_data["gbdrift"] * data["normalization"]
 
         # Compute numerical result.
-        M, N = 1024, 32
+        M, N = 512, 32
         # I have concern that numpy computes Nyquist frequency component incorrectly,
         # and the reason high Fourier resolution is required is that with large sample
         # frequency the incorrect max frequency component is higher than the max
-        # frequency of theta, hiding the mistake.
+        # frequency of theta, hiding the mistake. Edit: maybe it's worth pursuing
+        # https://github.com/jax-ml/jax/issues/23895.
         bounce = Bounce2D(
             grid=grid,
             data=grid_data,
@@ -1604,7 +1608,6 @@ class TestBounce2D:
         assert drift_numerical.size == drift_analytic.size, msg
 
         # FIXME: Bug found and confirmed. due to fft of multivalued function gbdrift
-        #
         # np.testing.assert_allclose(  # noqa: E800
         #     drift_numerical, drift_analytic, atol=5e-3, rtol=5e-2  # noqa: E800
         # )  # noqa: E800

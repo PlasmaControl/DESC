@@ -172,7 +172,7 @@ class FourierChebyshevSeries(IOAble):
             Optional, resolution in radial direction of domain [0, 1].
             May also be an array of coordinates values. If given, then the
             returned ``coords`` is a 3D tensor-product with shape (L * M * N, 3).
-        domain : (float, float)
+        domain : tuple[float]
             Domain for y coordinates. Default is [-1, 1].
         lobatto : bool
             Whether to use the Gauss-Lobatto (Extrema-plus-Endpoint)
@@ -477,11 +477,11 @@ class PiecewiseChebyshevSeries(IOAble):
 
         Returns
         -------
-        z1, z2 : (jnp.ndarray, jnp.ndarray)
+        z1, z2 : tuple[jnp.ndarray]
             Shape broadcasts with (..., *self.cheb.shape[:-2], num_intersect).
-            Coordinates of intersects. The points are ordered and grouped such
-            that the straight line path between ``z1`` and ``z2`` resides in
-            the epigraph of f.
+            Tuple of length two (z1, z2) of coordinates of intersects.
+            The points are ordered and grouped such that the straight line path
+            between ``z1`` and ``z2`` resides in the epigraph of f.
 
         """
         errorif(
@@ -544,9 +544,9 @@ class PiecewiseChebyshevSeries(IOAble):
         ----------
         z1, z2 : jnp.ndarray
             Shape must broadcast with (*self.cheb.shape[:-2], W).
-            Coordinates of intersects. The points are ordered and grouped such
-            that the straight line path between ``z1`` and ``z2`` resides in
-            the epigraph of f.
+            Tuple of length two (z1, z2) of coordinates of intersects.
+            The points are ordered and grouped such that the straight line path
+            between ``z1`` and ``z2`` resides in the epigraph of f.
         k : jnp.ndarray
             Shape must broadcast with self.cheb.shape[:-2].
             k such that fₓ(yᵢ) = k.

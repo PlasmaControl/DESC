@@ -29,17 +29,21 @@ class _CoilObjective(_Objective):
         Coil for which the data keys will be optimized.
     data_keys : list of str
         data keys that will be optimized when this class is inherited.
-    loss_function : {None, 'mean', 'min', 'max'}, optional
-        Loss function to apply to the objective values once computed. This loss function
-        is called on the raw compute value, before any shifting, scaling, or
-        normalization. Operates over all coils, not each individual coil.
     grid : Grid, list, optional
         Collocation grid containing the nodes to evaluate at.
         If a list, must have the same structure as coil.
 
     """
 
-    __doc__ = __doc__.rstrip() + collect_docs(exclude=["loss_function"])
+    overwrite = {
+        "loss_function": """
+        loss_function : {None, 'mean', 'min', 'max'}, optional
+        Loss function to apply to the objective values once computed. This loss function
+        is called on the raw compute value, before any shifting, scaling, or
+        normalization. Operates over all coils, not each individual coil.
+        """,
+    }
+    __doc__ = __doc__.rstrip() + collect_docs(overwrite=overwrite)
 
     def __init__(
         self,
@@ -194,6 +198,17 @@ class _CoilObjective(_Objective):
         return data
 
 
+overwrite_coil_length = _CoilObjective.overwrite.copy()
+overwrite_coil_length[
+    "target"
+] = """
+    target : float, ndarray, optional
+        Target value(s) of the objective. Only used if bounds is None.
+        Must be broadcastable to Objective.dim_f. If array, it has to
+        be flattened according to the number of inputs.
+    """
+
+
 class CoilLength(_CoilObjective):
     """Coil length.
 
@@ -201,21 +216,15 @@ class CoilLength(_CoilObjective):
     ----------
     coil : CoilSet or Coil
         Coil(s) that are to be optimized
-    target : float, ndarray, optional
-        Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f. If array, it has to
-        be flattened according to the number of inputs. Defaults to ``target=2*np.pi``.
-    loss_function : {None, 'mean', 'min', 'max'}, optional
-        Loss function to apply to the objective values once computed. This loss function
-        is called on the raw compute value, before any shifting, scaling, or
-        normalization. Operates over all coils, not each individual coil.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
         Defaults to ``LinearGrid(N=2 * coil.N + 5)``
 
     """
 
-    __doc__ = __doc__.rstrip() + collect_docs(exclude=["target", "loss_function"])
+    overwrite = overwrite_coil_length.copy()
+    overwrite["target"] += " Defaults to ``target=2*np.pi``."
+    __doc__ = __doc__.rstrip() + collect_docs(overwrite=overwrite)
 
     _scalar = False  # Not always a scalar, if a coilset is passed in
     _units = "(m)"
@@ -307,21 +316,14 @@ class CoilCurvature(_CoilObjective):
     ----------
     coil : CoilSet or Coil
         Coil(s) that are to be optimized
-    target : float, ndarray, optional
-        Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f. If array, it has to
-        be flattened according to the number of inputs. Defaults to ``bounds=(0,1)``.
-    loss_function : {None, 'mean', 'min', 'max'}, optional
-        Loss function to apply to the objective values once computed. This loss function
-        is called on the raw compute value, before any shifting, scaling, or
-        normalization. Operates over all coils, not each individual coil.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
         Defaults to ``LinearGrid(N=2 * coil.N + 5)``
 
     """
 
-    __doc__ = __doc__.rstrip() + collect_docs(exclude=["target", "loss_function"])
+    overwrite = overwrite_coil_length
+    __doc__ = __doc__.rstrip() + collect_docs(overwrite=overwrite)
 
     _scalar = False
     _units = "(m^-1)"
@@ -408,21 +410,15 @@ class CoilTorsion(_CoilObjective):
     ----------
     coil : CoilSet or Coil
         Coil(s) that are to be optimized
-    target : float, ndarray, optional
-        Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f. If array, it has to
-        be flattened according to the number of inputs. Defaults to ``target=0``.
-    loss_function : {None, 'mean', 'min', 'max'}, optional
-        Loss function to apply to the objective values once computed. This loss function
-        is called on the raw compute value, before any shifting, scaling, or
-        normalization. Operates over all coils, not each individual coil.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
         Defaults to ``LinearGrid(N=2 * coil.N + 5)``
 
     """
 
-    __doc__ = __doc__.rstrip() + collect_docs(exclude=["target", "loss_function"])
+    overwrite = overwrite_coil_length.copy()
+    overwrite["target"] += " Defaults to ``target=0``."
+    __doc__ = __doc__.rstrip() + collect_docs(overwrite=overwrite)
 
     _scalar = False
     _units = "(m^-1)"
@@ -509,21 +505,15 @@ class CoilCurrentLength(CoilLength):
     ----------
     coil : CoilSet or Coil
         Coil(s) that are to be optimized
-    target : float, ndarray, optional
-        Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f. If array, it has to
-        be flattened according to the number of inputs. Defaults to ``target=0``.
-    loss_function : {None, 'mean', 'min', 'max'}, optional
-        Loss function to apply to the objective values once computed. This loss function
-        is called on the raw compute value, before any shifting, scaling, or
-        normalization. Operates over all coils, not each individual coil.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
         Defaults to ``LinearGrid(N=2 * coil.N + 5)``
 
     """
 
-    __doc__ = __doc__.rstrip() + collect_docs(exclude=["target", "loss_function"])
+    overwrite = overwrite_coil_length.copy()
+    overwrite["target"] += " Defaults to ``target=0``."
+    __doc__ = __doc__.rstrip() + collect_docs(overwrite=overwrite)
 
     _scalar = False
     _units = "(A*m)"
@@ -618,14 +608,6 @@ class CoilSetMinDistance(_Objective):
     ----------
     coil : CoilSet
         Coil(s) that are to be optimized.
-    target : float, ndarray, optional
-        Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f. If array, it has to
-        be flattened according to the number of inputs.
-    loss_function : {None, 'mean', 'min', 'max'}, optional
-        Loss function to apply to the objective values once computed. This loss function
-        is called on the raw compute value, before any shifting, scaling, or
-        normalization. Operates over all coils, not each individial coil.
     grid : Grid, list, optional
         Collocation grid used to discretize each coil. Defaults to the default grid
         for the given coil-type, see ``coils.py`` and ``curve.py`` for more details.
@@ -633,7 +615,7 @@ class CoilSetMinDistance(_Objective):
 
     """
 
-    __doc__ = __doc__.rstrip() + collect_docs(exclude=["target", "loss_function"])
+    __doc__ = __doc__.rstrip() + collect_docs(overwrite=overwrite_coil_length)
 
     _scalar = False
     _units = "(m)"
@@ -758,10 +740,6 @@ class PlasmaCoilSetMinDistance(_Objective):
         to satisfy the Objective.
     coil : CoilSet
         Coil(s) that are to be optimized.
-    loss_function : {None, 'mean', 'min', 'max'}, optional
-        Loss function to apply to the objective values once computed. This loss function
-        is called on the raw compute value, before any shifting, scaling, or
-        normalization. Operates over all coils, not each individial coil.
     plasma_grid : Grid, optional
         Collocation grid containing the nodes to evaluate plasma geometry at.
         Defaults to ``LinearGrid(M=eq.M_grid, N=eq.N_grid)``.
@@ -785,7 +763,8 @@ class PlasmaCoilSetMinDistance(_Objective):
 
     """
 
-    __doc__ = __doc__.rstrip() + collect_docs(exclude=["target", "loss_function"])
+    overwrite = {"loss_function": overwrite_coil_length["loss_function"]}
+    __doc__ = __doc__.rstrip() + collect_docs(overwrite=overwrite)
 
     _scalar = False
     _units = "(m)"
@@ -999,7 +978,8 @@ class QuadraticFlux(_Objective):
 
     """
 
-    __doc__ = __doc__.rstrip() + collect_docs(exclude=["loss_function"])
+    overwrite = {"loss_function": ""}
+    __doc__ = __doc__.rstrip() + collect_docs(overwrite=overwrite)
 
     _scalar = False
     _linear = False
@@ -1189,7 +1169,15 @@ class ToroidalFlux(_Objective):
 
     """
 
-    __doc__ = __doc__.rstrip() + collect_docs(exclude=["loss_function"])
+    overwrite = {
+        "loss_function": """
+        loss_function : {None, 'mean', 'min', 'max'}, optional
+            Loss function to apply to the objective values once computed. This function
+            is called on the raw compute value, before any shifting, scaling, or
+            normalization. Note: has no effect for this objective.
+        """
+    }
+    __doc__ = __doc__.rstrip() + collect_docs(overwrite=overwrite)
 
     _coordinates = "rtz"
     _units = "(Wb)"

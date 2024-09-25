@@ -73,15 +73,16 @@ docs = {
 }
 
 
-def collect_docs(exclude=None):
+def collect_docs(overwrite=None):
     """Collect default parameters for the docstring of Objective.
 
     Parameters
     ----------
-    exclude : list, optional
-        List of strings to exclude from the docstring. If None, all default parameters
-        are included. Use this argument if you want to specify a special docstring for
-        a specific parameter in your objective definition.
+    overwrite : dict, optional
+        Dict of strings to overwrite from the _Objective's docstring. If None,
+        all default parameters are included as they are. Use this argument if
+        you want to specify a special docstring for a specific parameter in
+        your objective definition.
 
     Returns
     -------
@@ -91,9 +92,10 @@ def collect_docs(exclude=None):
     """
     doc_params = ""
     for key in docs.keys():
-        if exclude is not None and key in exclude:
-            continue
-        doc_params += docs[key].rstrip()
+        if overwrite is not None and key in overwrite.keys():
+            doc_params += overwrite[key].rstrip()
+        else:
+            doc_params += docs[key].rstrip()
 
     return doc_params
 

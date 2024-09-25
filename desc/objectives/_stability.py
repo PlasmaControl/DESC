@@ -11,6 +11,24 @@ from .normalization import compute_scaling_factors
 from .objective_funs import _Objective, collect_docs
 from .utils import _parse_callable_target_bounds
 
+overwrite_stability = {
+    "target": """
+    target : {float, ndarray, callable}, optional
+        Target value(s) of the objective. Only used if bounds is None.
+        Must be broadcastable to Objective.dim_f. If a callable, should take a
+        single argument `rho` and return the desired value of the profile at those
+        locations. Defaults to ``bounds=(0, np.inf)``
+    """,
+    "bounds": """
+    bounds : tuple of {float, ndarray, callable}, optional
+        Lower and upper bounds on the objective. Overrides target.
+        Both bounds must be broadcastable to to Objective.dim_f
+        If a callable, each should take a single argument `rho` and return the
+        desired bound (lower or upper) of the profile at those locations.
+        Defaults to ``bounds=(0, np.inf)``
+    """,
+}
+
 
 class MercierStability(_Objective):
     """The Mercier criterion is a fast proxy for MHD stability.
@@ -27,17 +45,6 @@ class MercierStability(_Objective):
     ----------
     eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
-    target : {float, ndarray, callable}, optional
-        Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f. If a callable, should take a
-        single argument `rho` and return the desired value of the profile at those
-        locations. Defaults to ``bounds=(0, np.inf)``
-    bounds : tuple of {float, ndarray, callable}, optional
-        Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f
-        If a callable, each should take a single argument `rho` and return the
-        desired bound (lower or upper) of the profile at those locations.
-        Defaults to ``bounds=(0, np.inf)``
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
         Defaults to ``LinearGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid)``. Note that
@@ -46,7 +53,7 @@ class MercierStability(_Objective):
 
     """
 
-    __doc__ = __doc__.rstrip() + collect_docs(exclude=["target", "bounds"])
+    __doc__ = __doc__.rstrip() + collect_docs(overwrite=overwrite_stability)
 
     _coordinates = "r"
     _units = "(Wb^-2)"
@@ -190,17 +197,6 @@ class MagneticWell(_Objective):
     ----------
     eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
-    target : {float, ndarray, callable}, optional
-        Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f. If a callable, should take a
-        single argument `rho` and return the desired value of the profile at those
-        locations. Defaults to ``bounds=(0, np.inf)``
-    bounds : tuple of {float, ndarray, callable}, optional
-        Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f
-        If a callable, each should take a single argument `rho` and return the
-        desired bound (lower or upper) of the profile at those locations.
-        Defaults to ``bounds=(0, np.inf)``
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
         Defaults to ``LinearGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid)``. Note that
@@ -209,7 +205,7 @@ class MagneticWell(_Objective):
 
     """
 
-    __doc__ = __doc__.rstrip() + collect_docs(exclude=["target", "bounds"])
+    __doc__ = __doc__.rstrip() + collect_docs(overwrite=overwrite_stability)
 
     _coordinates = "r"
     _units = "(dimensionless)"

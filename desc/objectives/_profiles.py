@@ -11,6 +11,24 @@ from .normalization import compute_scaling_factors
 from .objective_funs import _Objective, collect_docs
 from .utils import _parse_callable_target_bounds
 
+profile_overwrite = {
+    "target": """
+    target : {float, ndarray, callable}, optional
+        Target value(s) of the objective. Only used if bounds is None.
+        Must be broadcastable to Objective.dim_f. If a callable, should take a
+        single argument `rho` and return the desired value of the profile at those
+        locations. Defaults to ``target=0``.
+        """,
+    "bounds": """
+    bounds : tuple of {float, ndarray, callable}, optional
+        Lower and upper bounds on the objective. Overrides target.
+        Both bounds must be broadcastable to to Objective.dim_f
+        If a callable, each should take a single argument `rho` and return the
+        desired bound (lower or upper) of the profile at those locations.
+        Defaults to ``target=0``.
+        """,
+}
+
 
 class Pressure(_Objective):
     """Target pressure profile.
@@ -19,24 +37,13 @@ class Pressure(_Objective):
     ----------
     eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
-    target : {float, ndarray, callable}, optional
-        Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f. If a callable, should take a
-        single argument `rho` and return the desired value of the profile at those
-        locations. Defaults to ``target=0``.
-    bounds : tuple of {float, ndarray, callable}, optional
-        Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f
-        If a callable, each should take a single argument `rho` and return the
-        desired bound (lower or upper) of the profile at those locations.
-        Defaults to ``target=0``.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
         Defaults to ``LinearGrid(L=eq.L_grid)``.
 
     """
 
-    __doc__ = __doc__.rstrip() + collect_docs(exclude=["target", "bounds"])
+    __doc__ = __doc__.rstrip() + collect_docs(overwrite=profile_overwrite)
 
     _coordinates = "r"
     _units = "(Pa)"
@@ -157,17 +164,6 @@ class RotationalTransform(_Objective):
     ----------
     eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
-    target : {float, ndarray, callable}, optional
-        Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f. If a callable, should take a
-        single argument `rho` and return the desired value of the profile at those
-        locations. Defaults to ``target=0``.
-    bounds : tuple of {float, ndarray, callable}, optional
-        Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f
-        If a callable, each should take a single argument `rho` and return the
-        desired bound (lower or upper) of the profile at those locations.
-        Defaults to ``target=0``.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
         Defaults to ``LinearGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid)``. Note that
@@ -176,7 +172,7 @@ class RotationalTransform(_Objective):
 
     """
 
-    __doc__ = __doc__.rstrip() + collect_docs(exclude=["target", "bounds"])
+    __doc__ = __doc__.rstrip() + collect_docs(overwrite=profile_overwrite)
 
     _coordinates = "r"
     _units = "(dimensionless)"
@@ -310,17 +306,6 @@ class Shear(_Objective):
     ----------
     eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
-    target : {float, ndarray, callable}, optional
-        Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f. If a callable, should take a
-        single argument `rho` and return the desired value of the profile at those
-        locations. Defaults to ``target=0``.
-    bounds : tuple of {float, ndarray, callable}, optional
-        Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f
-        If a callable, each should take a single argument `rho` and return the
-        desired bound (lower or upper) of the profile at those locations.
-        Defaults to ``target=0``.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
         Defaults to ``LinearGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid)``. Note that
@@ -329,7 +314,7 @@ class Shear(_Objective):
 
     """
 
-    __doc__ = __doc__.rstrip() + collect_docs(exclude=["target", "bounds"])
+    __doc__ = __doc__.rstrip() + collect_docs(overwrite=profile_overwrite)
 
     _coordinates = "r"
     _units = "(dimensionless)"
@@ -459,17 +444,6 @@ class ToroidalCurrent(_Objective):
     ----------
     eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
-    target : {float, ndarray, callable}, optional
-        Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f. If a callable, should take a
-        single argument `rho` and return the desired value of the profile at those
-        locations. Defaults to ``target=0``.
-    bounds : tuple of {float, ndarray, callable}, optional
-        Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f
-        If a callable, each should take a single argument `rho` and return the
-        desired bound (lower or upper) of the profile at those locations.
-        Defaults to ``target=0``.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
         Defaults to ``LinearGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid)``. Note that
@@ -478,7 +452,7 @@ class ToroidalCurrent(_Objective):
 
     """
 
-    __doc__ = __doc__.rstrip() + collect_docs(exclude=["target", "bounds"])
+    __doc__ = __doc__.rstrip() + collect_docs(overwrite=profile_overwrite)
 
     _coordinates = "r"
     _units = "(A)"

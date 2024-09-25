@@ -1091,7 +1091,7 @@ def run_regcoil(  # noqa: C901 fxn too complex
     by minimizing the quadratic flux on the plasma surface along with a
     regularization term on the surface current magnitude::
 
-        min_Φₛᵥ  ∫ ∫ (B . n)^2 dA + λ ∫ ∫ |K|^2 dA
+        min_Φₛᵥ  ∫ ∫ (B . n)^2 dA + λ ∫ ∫ | K |^2 dA
 
     where λ is the regularization parameter, smaller `lambda_regularization`
     corresponds to less regularization (consequently, lower Bn error but more
@@ -1163,7 +1163,7 @@ def run_regcoil(  # noqa: C901 fxn too complex
         plasma currents.
     regularization_type : {"simple","regcoil"}
         whether to use a simple regularization based off of just the single-valued
-        part of Phi, or to use the full REGCOIL regularization penalizing |K|^2.
+        part of Phi, or to use the full REGCOIL regularization penalizing | K |^2.
         Default is simple, which is much cheaper than the REGCOIL regularization.
 
     Returns

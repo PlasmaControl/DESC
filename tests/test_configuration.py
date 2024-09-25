@@ -459,8 +459,14 @@ class TestGetSurfaces:
     def test_get_zeta_surface(self):
         """Test getting a constant zeta surface."""
         eq = Equilibrium()
-        surf = eq.get_surface_at(zeta=np.pi)
-        assert surf.zeta == np.pi
+        with pytest.raises(UserWarning):
+            surf = eq.get_surface_at(zeta=np.pi)
+            assert surf.zeta == np.pi
+            rho = 1
+            np.testing.assert_allclose(surf.compute("A")["A"], np.pi * rho**2)
+
+        surf = eq.get_surface_at(zeta=0)
+        assert surf.zeta == 0
         rho = 1
         np.testing.assert_allclose(surf.compute("A")["A"], np.pi * rho**2)
 

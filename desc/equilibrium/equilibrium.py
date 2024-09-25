@@ -740,6 +740,12 @@ class Equilibrium(IOAble, Optimizable):
 
         if zeta is not None:
             assert (zeta >= 0) and (zeta <= 2 * np.pi)
+            warnif(
+                zeta != 0,
+                UserWarning,
+                "The lambda value of the returned surface will not be correct "
+                "for zeta != 0. The lambda value is taken for zeta=0.",
+            )
             surface = ZernikeRZLToroidalSection(
                 sym=self.sym, zeta=zeta % (2 * np.pi / self.NFP)
             )

@@ -1,19 +1,16 @@
 """Objectives for targeting geometrical quantities."""
 
-import warnings
-
 import numpy as np
 
-from desc.backend import jnp
-from desc.compute import get_profiles, get_transforms, rpz2xyz
+from desc.backend import jnp, vmap
+from desc.compute import get_profiles, get_transforms, rpz2xyz, xyz2rpz
 from desc.compute.utils import _compute as compute_fun
-from desc.compute.utils import safenorm
 from desc.grid import LinearGrid, QuadratureGrid
-from desc.utils import Timer
+from desc.utils import Timer, errorif, parse_argname_change, safenorm, warnif
 
 from .normalization import compute_scaling_factors
 from .objective_funs import _Objective
-from .utils import softmin
+from .utils import check_if_points_are_inside_perimeter, softmin
 
 
 class AspectRatio(_Objective):
@@ -61,7 +58,7 @@ class AspectRatio(_Objective):
 
     _scalar = True
     _units = "(dimensionless)"
-    _print_value_fmt = "Aspect ratio: {:10.3e} "
+    _print_value_fmt = "Aspect ratio: "
 
     def __init__(
         self,
@@ -223,7 +220,7 @@ class Elongation(_Objective):
 
     _scalar = True
     _units = "(dimensionless)"
-    _print_value_fmt = "Elongation: {:10.3e} "
+    _print_value_fmt = "Elongation: "
 
     def __init__(
         self,
@@ -384,7 +381,7 @@ class Volume(_Objective):
 
     _scalar = True
     _units = "(m^3)"
-    _print_value_fmt = "Plasma volume: {:10.3e} "
+    _print_value_fmt = "Plasma volume: "
 
     def __init__(
         self,
@@ -514,23 +511,23 @@ class PlasmaVesselDistance(_Objective):
     at every iteration, for example if the winding surface you compare to is part of the
     optimization and thus changing.
     If the bounding surface is fixed, set surface_fixed=True to precompute the surface
-    coordinates and improve the efficiency of the calculation
+    coordinates and improve the efficiency of the calculation.
 
     NOTE: for best results, use this objective in combination with either MeanCurvature
     or PrincipalCurvature, to penalize the tendency for the optimizer to only move the
     points on surface corresponding to the grid that the plasma-vessel distance
     is evaluated at, which can cause cusps or regions of very large curvature.
 
-    NOTE: When use_softmin=True, ensures that alpha*values passed in is
+    NOTE: When use_softmin=True, ensures that softmin_alpha*values passed in is
     at least >1, otherwise the softmin will return inaccurate approximations
     of the minimum. Will automatically multiply array values by 2 / min_val if the min
-    of alpha*array is <1. This is to avoid inaccuracies that arise when values <1
+    of softmin_alpha*array is <1. This is to avoid inaccuracies when values <1
     are present in the softmin, which can cause inaccurate mins or even incorrect
     signs of the softmin versus the actual min.
 
     Parameters
     ----------
-    eq : Equilibrium, optional
+    eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
     surface : Surface
         Bounding surface to penalize distance to.
@@ -567,27 +564,33 @@ class PlasmaVesselDistance(_Objective):
         Defaults to ``LinearGrid(M=eq.M_grid, N=eq.N_grid)``.
     use_softmin: bool, optional
         Use softmin or hard min.
-    surface_fixed: bool, optional
-        Whether the surface the distance from the plasma is computed to
-        is fixed or not. If True, the surface is fixed and its coordinates are
-        precomputed, which saves on computation time during optimization, and
-        self.things = [eq] only.
-        If False, the surface coordinates are computed at every iteration.
+    use_signed_distance: bool, optional
+        Whether to use absolute value of distance or a signed distance, with d
+        being positive if the plasma is inside of the bounding surface, and
+        negative if outside of the bounding surface.
+        NOTE: ``plasma_grid`` and ``surface_grid`` must have the same
+        toroidal angle values for signed distance to be used.
+    eq_fixed, surface_fixed: bool, optional
+        Whether the eq/surface is fixed or not. If True, the eq/surface is fixed
+        and its coordinates are precomputed, which saves on computation time during
+        optimization, and self.things = [surface]/[eq] only.
+        If False, the eq/surface coordinates are computed at every iteration.
         False by default, so that self.things = [eq, surface]
-    alpha: float, optional
-        Parameter used for softmin. The larger alpha, the closer the softmin
-        approximates the hardmin. softmin -> hardmin as alpha -> infinity.
-        if alpha*array < 1, the underlying softmin will automatically multiply
-        the array by 2/min_val to ensure that alpha*array>1. Making alpha larger
-        than this minimum value will make the softmin a more accurate approximation
-        of the true min.
+        Both cannot be True.
+    softmin_alpha: float, optional
+        Parameter used for softmin. The larger softmin_alpha, the closer the softmin
+        approximates the hardmin. softmin -> hardmin as softmin_alpha -> infinity.
+        if softmin_alpha*array < 1, the underlying softmin will automatically multiply
+        the array by 2/min_val to ensure that softmin_alpha*array>1. Making
+        softmin_alpha larger than this minimum value will make the softmin a
+        more accurate approximation of the true min.
     name : str, optional
         Name of the objective function.
     """
 
     _coordinates = "rtz"
     _units = "(m)"
-    _print_value_fmt = "Plasma-vessel distance: {:10.3e} "
+    _print_value_fmt = "Plasma-vessel distance: "
 
     def __init__(
         self,
@@ -603,9 +606,12 @@ class PlasmaVesselDistance(_Objective):
         surface_grid=None,
         plasma_grid=None,
         use_softmin=False,
+        eq_fixed=False,
         surface_fixed=False,
-        alpha=1.0,
+        softmin_alpha=1.0,
         name="plasma-vessel distance",
+        use_signed_distance=False,
+        **kwargs,
     ):
         if target is None and bounds is None:
             bounds = (1, np.inf)
@@ -613,10 +619,29 @@ class PlasmaVesselDistance(_Objective):
         self._surface_grid = surface_grid
         self._plasma_grid = plasma_grid
         self._use_softmin = use_softmin
+        self._use_signed_distance = use_signed_distance
         self._surface_fixed = surface_fixed
-        self._alpha = alpha
+        self._eq_fixed = eq_fixed
+        self._eq = eq
+        errorif(
+            eq_fixed and surface_fixed, ValueError, "Cannot fix both eq and surface"
+        )
+
+        self._softmin_alpha = parse_argname_change(
+            softmin_alpha, kwargs, "alpha", "softmin_alpha"
+        )
+        errorif(
+            len(kwargs) != 0,
+            AssertionError,
+            f"PlasmaVesselDistance got unexpected keyword argument: {kwargs.keys()}",
+        )
+        things = []
+        if not eq_fixed:
+            things.append(eq)
+        if not surface_fixed:
+            things.append(surface)
         super().__init__(
-            things=[eq, self._surface] if not surface_fixed else [eq],
+            things=things,
             target=target,
             bounds=bounds,
             weight=weight,
@@ -638,11 +663,15 @@ class PlasmaVesselDistance(_Objective):
             Level of output.
 
         """
-        eq = self.things[0]
-        surface = self._surface if self._surface_fixed else self.things[1]
-        # if things[1] is different than self._surface, update self._surface
-        if surface != self._surface:
-            self._surface = surface
+        if self._eq_fixed:
+            eq = self._eq
+            surface = self.things[0]
+        elif self._surface_fixed:
+            eq = self.things[0]
+            surface = self._surface
+        else:
+            eq = self.things[0]
+            surface = self.things[1]
         if self._surface_grid is None:
             surface_grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
         else:
@@ -651,10 +680,28 @@ class PlasmaVesselDistance(_Objective):
             plasma_grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
         else:
             plasma_grid = self._plasma_grid
-        if not np.allclose(surface_grid.nodes[:, 0], 1):
-            warnings.warn("Surface grid includes off-surface pts, should be rho=1")
-        if not np.allclose(plasma_grid.nodes[:, 0], 1):
-            warnings.warn("Plasma grid includes interior points, should be rho=1")
+        warnif(
+            not np.allclose(surface_grid.nodes[:, 0], 1),
+            UserWarning,
+            "Surface grid includes off-surface pts, should be rho=1.",
+        )
+        warnif(
+            not np.allclose(plasma_grid.nodes[:, 0], 1),
+            UserWarning,
+            "Plasma grid includes interior points, should be rho=1.",
+        )
+
+        # TODO: How to use with generalized toroidal angle?
+        errorif(
+            self._use_signed_distance
+            and not np.allclose(
+                plasma_grid.nodes[plasma_grid.unique_zeta_idx, 2],
+                surface_grid.nodes[surface_grid.unique_zeta_idx, 2],
+            ),
+            ValueError,
+            "Plasma grid and surface grid must contain points only at the "
+            "same zeta values in order to use signed distance",
+        )
 
         self._dim_f = surface_grid.num_nodes
         self._equil_data_keys = ["R", "phi", "Z"]
@@ -707,10 +754,18 @@ class PlasmaVesselDistance(_Objective):
                 params=self._surface.params_dict,
                 transforms=surface_transforms,
                 profiles={},
-                basis="xyz",
             )["x"]
+            surface_coords = rpz2xyz(surface_coords)
             self._constants["surface_coords"] = surface_coords
-
+        elif self._eq_fixed:
+            data_eq = compute_fun(
+                self._eq,
+                self._equil_data_keys,
+                params=self._eq.params_dict,
+                transforms=equil_transforms,
+                profiles=equil_profiles,
+            )
+            self._constants["data_equil"] = data_eq
         timer.stop("Precomputing transforms")
         if verbose > 1:
             timer.disp("Precomputing transforms")
@@ -721,14 +776,15 @@ class PlasmaVesselDistance(_Objective):
 
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, equil_params, surface_params=None, constants=None):
+    def compute(self, params_1, params_2=None, constants=None):
         """Compute plasma-surface distance.
 
         Parameters
         ----------
-        equil_params : dict
-            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
-        surface_params : dict
+        params_1 : dict
+            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict,
+            if eq_fixed is False, else the surface degrees of freedom
+        params_2 : dict
             Dictionary of surface degrees of freedom, eg Surface.params_dict
             Only needed if self._surface_fixed = False
         constants : dict
@@ -743,14 +799,25 @@ class PlasmaVesselDistance(_Objective):
         """
         if constants is None:
             constants = self.constants
-        data = compute_fun(
-            "desc.equilibrium.equilibrium.Equilibrium",
-            self._equil_data_keys,
-            params=equil_params,
-            transforms=constants["equil_transforms"],
-            profiles=constants["equil_profiles"],
-        )
-        plasma_coords = rpz2xyz(jnp.array([data["R"], data["phi"], data["Z"]]).T)
+        if self._eq_fixed:
+            surface_params = params_1
+        elif self._surface_fixed:
+            equil_params = params_1
+        else:
+            equil_params = params_1
+            surface_params = params_2
+        if not self._eq_fixed:
+            data = compute_fun(
+                "desc.equilibrium.equilibrium.Equilibrium",
+                self._equil_data_keys,
+                params=equil_params,
+                transforms=constants["equil_transforms"],
+                profiles=constants["equil_profiles"],
+            )
+        else:
+            data = constants["data_equil"]
+        plasma_coords_rpz = jnp.array([data["R"], data["phi"], data["Z"]]).T
+        plasma_coords = rpz2xyz(plasma_coords_rpz)
         if self._surface_fixed:
             surface_coords = constants["surface_coords"]
         else:
@@ -760,14 +827,56 @@ class PlasmaVesselDistance(_Objective):
                 params=surface_params,
                 transforms=constants["surface_transforms"],
                 profiles={},
-                basis="xyz",
             )["x"]
-        d = safenorm(plasma_coords[:, None, :] - surface_coords[None, :, :], axis=-1)
+            surface_coords = rpz2xyz(surface_coords)
+
+        diff_vec = plasma_coords[:, None, :] - surface_coords[None, :, :]
+        d = safenorm(diff_vec, axis=-1)
+
+        point_signs = jnp.ones(surface_coords.shape[0])
+        if self._use_signed_distance:
+            surface_coords_rpz = xyz2rpz(surface_coords)
+
+            plasma_coords_rpz = plasma_coords_rpz.reshape(
+                constants["equil_transforms"]["grid"].num_zeta,
+                constants["equil_transforms"]["grid"].num_theta,
+                3,
+            )
+            surface_coords_rpz = surface_coords_rpz.reshape(
+                constants["surface_transforms"]["grid"].num_zeta,
+                constants["surface_transforms"]["grid"].num_theta,
+                3,
+            )
+
+            # loop over zeta planes
+            def fun(plasma_pts_at_zeta_plane, surface_pts_at_zeta_plane):
+                plasma_pts_at_zeta_plane = jnp.vstack(
+                    (plasma_pts_at_zeta_plane, plasma_pts_at_zeta_plane[0, :])
+                )
+
+                pt_sign = check_if_points_are_inside_perimeter(
+                    plasma_pts_at_zeta_plane[:, 0],
+                    plasma_pts_at_zeta_plane[:, 2],
+                    surface_pts_at_zeta_plane[:, 0],
+                    surface_pts_at_zeta_plane[:, 2],
+                )
+
+                return pt_sign
+
+            point_signs = vmap(fun, in_axes=0)(
+                plasma_coords_rpz, surface_coords_rpz
+            ).flatten()
+            # at end here, point_signs is either +/- 1  with
+            # positive meaning the surface pt
+            # is outside the plasma and -1 if the surface pt is
+            # inside the plasma
 
         if self._use_softmin:  # do softmin
-            return jnp.apply_along_axis(softmin, 0, d, self._alpha)
+            return (
+                jnp.apply_along_axis(softmin, 0, d, self._softmin_alpha) * point_signs
+            )
         else:  # do hardmin
-            return d.min(axis=0)
+            return d.min(axis=0) * point_signs
 
 
 class MeanCurvature(_Objective):
@@ -820,7 +929,7 @@ class MeanCurvature(_Objective):
 
     _coordinates = "rtz"
     _units = "(m^-1)"
-    _print_value_fmt = "Mean curvature: {:10.3e} "
+    _print_value_fmt = "Mean curvature: "
 
     def __init__(
         self,
@@ -980,7 +1089,7 @@ class PrincipalCurvature(_Objective):
 
     _coordinates = "rtz"
     _units = "(m^-1)"
-    _print_value_fmt = "Principal curvature: {:10.3e} "
+    _print_value_fmt = "Principal curvature: "
 
     def __init__(
         self,
@@ -1135,7 +1244,7 @@ class BScaleLength(_Objective):
 
     _coordinates = "rtz"
     _units = "(m)"
-    _print_value_fmt = "Magnetic field scale length: {:10.3e} "
+    _print_value_fmt = "Magnetic field scale length: "
 
     def __init__(
         self,
@@ -1286,7 +1395,7 @@ class GoodCoordinates(_Objective):
 
     _scalar = False
     _units = "(dimensionless)"
-    _print_value_fmt = "Coordinate goodness : {:10.3e} "
+    _print_value_fmt = "Coordinate goodness : "
 
     def __init__(
         self,

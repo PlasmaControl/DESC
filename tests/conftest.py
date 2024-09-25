@@ -16,6 +16,7 @@ from desc.coils import (
     FourierRZCoil,
     FourierXYZCoil,
     MixedCoilSet,
+    SplineXYZCoil,
 )
 from desc.compute import rpz2xyz_vec
 from desc.equilibrium import EquilibriaFamily, Equilibrium
@@ -279,13 +280,25 @@ def DummyMixedCoilSet(tmpdir_factory):
     output_path = output_dir.join("DummyMixedCoilSet.h5")
 
     tf_coil = FourierPlanarCoil(current=3, center=[2, 0, 0], normal=[0, 1, 0], r_n=[1])
-    tf_coilset = CoilSet.linspaced_angular(tf_coil, n=4)
+    tf_coil.rotate(angle=np.pi / 4)
+    tf_coilset = CoilSet(tf_coil, NFP=2, sym=True)
+
     vf_coil = FourierRZCoil(current=-1, R_n=3, Z_n=-1)
     vf_coilset = CoilSet.linspaced_linear(
         vf_coil, displacement=[0, 0, 2], n=3, endpoint=True
     )
     xyz_coil = FourierXYZCoil(current=2)
-    full_coilset = MixedCoilSet((tf_coilset, vf_coilset, xyz_coil))
+    phi = 2 * np.pi * np.linspace(0, 1, 20, endpoint=True) ** 2
+    spline_coil = SplineXYZCoil(
+        current=1,
+        X=np.cos(phi),
+        Y=np.sin(phi),
+        Z=np.zeros_like(phi),
+        knots=np.linspace(0, 2 * np.pi, len(phi)),
+    )
+    full_coilset = MixedCoilSet(
+        (tf_coilset, vf_coilset, xyz_coil, spline_coil), check_intersection=False
+    )
 
     full_coilset.save(output_path)
     DummyMixedCoilSet_out = {"output_path": output_path}
@@ -330,7 +343,7 @@ def VMEC_save(SOLOVEV, tmpdir_factory):
 
 @pytest.fixture(scope="session")
 def regcoil_helical_coils_scan():
-    """Run regcoil for precise eq and surface, scan over alpha."""
+    """Run regcoil for precise eq and surface, scan over lambda_regularization."""
     eq = get("precise_QA")
     surf_winding = eq.surface.constant_offset_surface(
         offset=0.2,  # desired offset
@@ -346,8 +359,8 @@ def regcoil_helical_coils_scan():
         eq,
         eval_grid=LinearGrid(M=20, N=20, NFP=eq.NFP),
         source_grid=LinearGrid(M=40, N=40, NFP=eq.NFP),
-        alpha=np.append(np.array([0.0]), np.logspace(-30, -1, 30)),
-        current_helicity=-1,
+        lambda_regularization=np.append(np.array([0.0]), np.logspace(-30, -1, 11)),
+        current_helicity=(1, -1),
         vacuum=True,
     )
     surface_current_field = fields[0]
@@ -370,7 +383,7 @@ def regcoil_modular_coils():
     N_egrid = 30
     M_sgrid = 50
     N_sgrid = 50
-    alpha = 1e-18
+    lambda_regularization = 1e-18
 
     surface_current_field = FourierCurrentPotentialField.from_surface(
         surf_winding, M_Phi=M_Phi, N_Phi=N_Phi
@@ -380,43 +393,26 @@ def regcoil_modular_coils():
         eq,
         eval_grid=LinearGrid(M=M_egrid, N=N_egrid, NFP=eq.NFP, sym=True),
         source_grid=LinearGrid(M=M_sgrid, N=N_sgrid, NFP=eq.NFP),
-        alpha=alpha,
-        current_helicity=0,
+        lambda_regularization=lambda_regularization,
         vacuum=True,
     )
 
     return (data, surface_current_field, eq)
 
 
-@pytest.fixture(scope="session")
-def regcoil_helical_coils_pos_helicity():
-    """Run regcoil for precise QA eq and surface with positive helicity."""
-    eq = get("precise_QA")
-    surf_winding = eq.surface.constant_offset_surface(
-        offset=0.2,  # desired offset
-        M=16,  # Poloidal resolution of desired offset surface
-        N=12,  # Toroidal resolution of desired offset surface
-        grid=LinearGrid(M=32, N=16, NFP=eq.NFP),
-    )
-    M_Phi = 8
-    N_Phi = 8
-    M_egrid = 30
-    N_egrid = 30
-    M_sgrid = 50
-    N_sgrid = 50
-    alpha = 1e-18
-
-    surface_current_field = FourierCurrentPotentialField.from_surface(
-        surf_winding, M_Phi=M_Phi, N_Phi=N_Phi
-    )
-    surface_current_field, data = run_regcoil(
-        surface_current_field,
+def VMEC_save_asym(tmpdir_factory):
+    """Save an asymmetric equilibrium in VMEC netcdf format for comparison."""
+    tmpdir = tmpdir_factory.mktemp("asym_wout")
+    filename = tmpdir.join("wout_HELIO_asym_desc.nc")
+    vmec = Dataset("./tests/inputs/wout_HELIOTRON_asym_NTHETA50_NZETA100.nc", mode="r")
+    eq = Equilibrium.load("./tests/inputs/HELIO_asym.h5")
+    VMECIO.save(
         eq,
-        eval_grid=LinearGrid(M=M_egrid, N=N_egrid, NFP=eq.NFP, sym=True),
-        source_grid=LinearGrid(M=M_sgrid, N=N_sgrid, NFP=eq.NFP),
-        alpha=alpha,
-        current_helicity=2,
-        vacuum=True,
+        filename,
+        surfs=vmec.variables["ns"][:],
+        verbose=0,
+        M_nyq=round(np.max(vmec.variables["xm_nyq"][:])),
+        N_nyq=round(np.max(vmec.variables["xn_nyq"][:]) / eq.NFP),
     )
-
-    return (surface_current_field, data["chi^2_B"], eq)
+    desc = Dataset(filename, mode="r")
+    return vmec, desc, eq

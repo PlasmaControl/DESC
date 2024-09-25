@@ -6,22 +6,11 @@ Functions in this module should not depend on any other submodules in desc.objec
 import numpy as np
 
 from desc.backend import cond, jit, jnp, logsumexp, put
+from desc.io import IOAble
 from desc.utils import Index, errorif, flatten_list, svd_inv_null, unique_list, warnif
 
 
-def _tree_zeros_like(x):
-    """Get a pytree of zeros with the same structure as x."""
-    if isinstance(x, list):
-        return [_tree_zeros_like(xi) for xi in x]
-    if isinstance(x, tuple):
-        return tuple([_tree_zeros_like(xi) for xi in x])
-    if isinstance(x, dict):
-        return {key: _tree_zeros_like(val) for key, val in x.items()}
-    else:
-        return jnp.atleast_1d(jnp.zeros_like(x))
-
-
-def factorize_linear_constraints(objective, constraint):  # noqa: C901
+def factorize_linear_constraints(objective, constraint, x_scale="auto"):  # noqa: C901
     """Compute and factorize A to get pseudoinverse and nullspace.
 
     Given constraints of the form Ax=b, factorize A to find a particular solution xp
@@ -34,6 +23,10 @@ def factorize_linear_constraints(objective, constraint):  # noqa: C901
         Objective function to optimize.
     constraint : ObjectiveFunction
         Objective function of linear constraints to enforce.
+    x_scale : array_like or ``'auto'``, optional
+        Characteristic scale of each variable. Setting ``x_scale`` is equivalent
+        to reformulating the problem in scaled variables ``xs = x / x_scale``.
+        If set to ``'auto'``, the scale is determined from the initial state vector.
 
     Returns
     -------
@@ -45,6 +38,8 @@ def factorize_linear_constraints(objective, constraint):  # noqa: C901
         Combined RHS vector.
     Z : ndarray
         Null space operator for full combined A such that A @ Z == 0.
+    D : ndarray
+        Scale of the full state vector x, as set by the parameter ``x_scale``.
     unfixed_idx : ndarray
         Indices of x that correspond to non-fixed values.
     project, recover : function
@@ -142,32 +137,43 @@ def factorize_linear_constraints(objective, constraint):  # noqa: C901
             )
         A = A[unfixed_rows][:, unfixed_idx]
         b = b[unfixed_rows]
+
     unfixed_idx = indices_idx
+    fixed_idx = np.delete(np.arange(xp.size), unfixed_idx)
+
+    # compute x_scale if not provided
+    if x_scale == "auto":
+        x_scale = objective.x(*objective.things)
+    errorif(
+        x_scale.shape != xp.shape,
+        ValueError,
+        "x_scale must be the same size as the full state vector. "
+        + f"Got size {x_scale.size} for state vector of size {xp.size}.",
+    )
+    D = np.where(np.abs(x_scale) < 1e2, 1, np.abs(x_scale))
+
+    # null space & particular solution
+    A = A * D[None, unfixed_idx]
     if A.size:
-        Ainv_full, Z = svd_inv_null(A)
+        A_inv, Z = svd_inv_null(A)
     else:
-        Ainv_full = A.T
+        A_inv = A.T
         Z = np.eye(A.shape[1])
-    Ainv_full = jnp.asarray(Ainv_full)
-    Z = jnp.asarray(Z)
-    b = jnp.asarray(b)
-    xp = put(xp, unfixed_idx, Ainv_full @ b)
+    xp = put(xp, unfixed_idx, A_inv @ b)
+    xp = put(xp, fixed_idx, ((1 / D) * xp)[fixed_idx])
+
+    # cast to jnp arrays
     xp = jnp.asarray(xp)
+    A = jnp.asarray(A)
+    b = jnp.asarray(b)
+    Z = jnp.asarray(Z)
+    D = jnp.asarray(D)
 
-    @jit
-    def project(x):
-        """Project a full state vector into the reduced optimization vector."""
-        x_reduced = Z.T @ ((x - xp)[unfixed_idx])
-        return jnp.atleast_1d(jnp.squeeze(x_reduced))
-
-    @jit
-    def recover(x_reduced):
-        """Recover the full state vector from the reduced optimization vector."""
-        dx = put(jnp.zeros(objective.dim_x), unfixed_idx, Z @ x_reduced)
-        return jnp.atleast_1d(jnp.squeeze(xp + dx))
+    project = _Project(Z, D, xp, unfixed_idx)
+    recover = _Recover(Z, D, xp, unfixed_idx, objective.dim_x)
 
     # check that all constraints are actually satisfiable
-    params = objective.unpack_state(xp, False)
+    params = objective.unpack_state(D * xp, False)
     for con in constraint.objectives:
         xpi = [params[i] for i, t in enumerate(objective.things) if t in con.things]
         y1 = con.compute_unscaled(*xpi)
@@ -209,7 +215,42 @@ def factorize_linear_constraints(objective, constraint):  # noqa: C901
                 "or be due to floating point error.",
             )
 
-    return xp, A, b, Z, unfixed_idx, project, recover
+    return xp, A, b, Z, D, unfixed_idx, project, recover
+
+
+class _Project(IOAble):
+    _io_attrs_ = ["Z", "D", "xp", "unfixed_idx"]
+
+    def __init__(self, Z, D, xp, unfixed_idx):
+        self.Z = Z
+        self.D = D
+        self.xp = xp
+        self.unfixed_idx = unfixed_idx
+
+    @jit
+    def __call__(self, x_full):
+        """Project a full state vector into the reduced optimization vector."""
+        x_reduced = self.Z.T @ ((1 / self.D) * x_full - self.xp)[self.unfixed_idx]
+        return jnp.atleast_1d(jnp.squeeze(x_reduced))
+
+
+class _Recover(IOAble):
+    _io_attrs_ = ["Z", "D", "xp", "unfixed_idx", "dim_x"]
+    _static_attrs = ["dim_x"]
+
+    def __init__(self, Z, D, xp, unfixed_idx, dim_x):
+        self.Z = Z
+        self.D = D
+        self.xp = xp
+        self.unfixed_idx = unfixed_idx
+        self.dim_x = dim_x
+
+    @jit
+    def __call__(self, x_reduced):
+        """Recover the full state vector from the reduced optimization vector."""
+        dx = put(jnp.zeros(self.dim_x), self.unfixed_idx, self.Z @ x_reduced)
+        x_full = self.D * (self.xp + dx)
+        return jnp.atleast_1d(jnp.squeeze(x_full))
 
 
 def softmax(arr, alpha):
@@ -307,3 +348,78 @@ def _parse_callable_target_bounds(target, bounds, x):
     if bounds is not None and callable(bounds[1]):
         bounds = (bounds[0], bounds[1](x))
     return target, bounds
+
+
+def check_if_points_are_inside_perimeter(R, Z, Rcheck, Zcheck):
+    """Function to check if the given points is inside the given polyognal perimeter.
+
+    Rcheck, Zcheck are the points to check, and R, Z define the perimeter
+    in which to check. This function assumes that all points are in the same
+    plane. Function will return an array of signs (+/- 1), with positive sign meaning
+    the point is inside of the given perimeter, and a negative sign meaning the point
+    is outside of the given perimeter.
+
+    NOTE: it does not matter if the input coordinates are cylindrical (R,Z) or
+    cartesian (X,Y), these are equivalent as long as they are in the same phi plane.
+    This function will work even if points are not in the same phi plane, but the
+    input coordinates must then be the equivalent of cartesian coordinates for whatever
+    plane the points lie in.
+
+    Algorithm based off of "An Incremental Angle Point in Polygon Test",
+    K. Weiler, https://doi.org/10.1016/B978-0-12-336156-1.50012-4
+
+    Parameters
+    ----------
+    R,Z : ndarray
+        1-D arrays of coordinates of the points defining the polygonal
+        perimeter. The function will determine if the check point is inside
+        or outside of this perimeter. These should form a closed curve.
+    Rcheck, Zcheck : ndarray
+        coordinates of the points being checked if they are inside or outside of the
+        given perimeter.
+
+    Returns
+    -------
+    pt_sign : ndarray of {-1,1}
+        Integers corresponding to if the given point is inside or outside of the given
+        perimeter, with pt_sign[i]>0 meaning the point given by Rcheck[i], Zcheck[i] is
+        inside of the given perimeter, and a negative sign meaning the point is outside
+        of the given perimeter.
+
+    """
+    # R Z are the perimeter points
+    # Rcheck Zcheck are the points being checked for whether
+    # or not they are inside the check
+
+    Rbool = R[:, None] > Rcheck
+    Zbool = Z[:, None] > Zcheck
+    # these are now size (Ncheck, Nperimeter)
+    quadrants = jnp.zeros_like(Rbool)
+    quadrants = jnp.where(jnp.logical_and(jnp.logical_not(Rbool), Zbool), 1, quadrants)
+    quadrants = jnp.where(
+        jnp.logical_and(jnp.logical_not(Rbool), jnp.logical_not(Zbool)),
+        2,
+        quadrants,
+    )
+    quadrants = jnp.where(jnp.logical_and(Rbool, jnp.logical_not(Zbool)), 3, quadrants)
+    deltas = quadrants[1:, :] - quadrants[0:-1, :]
+    deltas = jnp.where(deltas == 3, -1, deltas)
+    deltas = jnp.where(deltas == -3, 1, deltas)
+    # then flip sign if the R intercept is > Rcheck and the
+    # quadrant flipped over a diagonal
+    b = (Z[1:] / R[1:] - Z[0:-1] / R[0:-1]) / (Z[1:] - Z[0:-1])
+    Rint = Rcheck[:, None] - b * (R[1:] - R[0:-1]) / (Z[1:] - Z[0:-1])
+    deltas = jnp.where(
+        jnp.logical_and(jnp.abs(deltas) == 2, Rint.T > Rcheck),
+        -deltas,
+        deltas,
+    )
+    pt_sign = jnp.sum(deltas, axis=0)
+    # positive distance if the check pt is inside the perimeter, else
+    # negative distance is assigned
+    # pt_sign = 0 : Means point is OUTSIDE of the perimeter,
+    #               assign positive distance
+    # pt_sign = +/-4: Means point is INSIDE perimeter, so
+    #                 assign negative distance
+    pt_sign = jnp.where(jnp.isclose(pt_sign, 0), 1, -1)
+    return pt_sign

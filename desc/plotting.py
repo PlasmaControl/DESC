@@ -1,5 +1,6 @@
 """Functions for plotting and visualizing equilibria."""
 
+import inspect
 import numbers
 import tkinter
 import warnings
@@ -15,11 +16,13 @@ from termcolor import colored
 
 from desc.backend import sign
 from desc.basis import fourier, zernike_radial_poly
-from desc.coils import CoilSet
+from desc.coils import CoilSet, _Coil
 from desc.compute import data_index, get_transforms
-from desc.compute.utils import _parse_parameterization, surface_averages_map
+from desc.compute.utils import _parse_parameterization
 from desc.equilibrium.coords import map_coordinates
 from desc.grid import Grid, LinearGrid
+from desc.integrals import surface_averages_map
+from desc.magnetic_fields import field_line_integrate
 from desc.utils import errorif, only1, parse_argname_change, setdefault
 from desc.vmec_utils import ptolemy_linear_transform
 
@@ -973,9 +976,9 @@ def plot_3d(
     if grid.num_rho == 1:
         n1, n2 = grid.num_theta, grid.num_zeta
         if not grid.nodes[-1][2] == 2 * np.pi:
-            p1, p2 = True, False
+            p1, p2 = False, False
         else:
-            p1, p2 = True, True
+            p1, p2 = False, True
     elif grid.num_theta == 1:
         n1, n2 = grid.num_rho, grid.num_zeta
         p1, p2 = False, True
@@ -1208,10 +1211,12 @@ def plot_fsa(  # noqa: C901
             # Attempt to compute the magnetic axis limit.
             # Compute derivative depending on various naming schemes.
             # e.g. B -> B_r, V(r) -> V_r(r), S_r(r) -> S_rr(r)
+            # psi_r/sqrt(g) -> (psi_r/sqrt(g))_r
             schemes = (
                 name + "_r",
                 name[:-3] + "_r" + name[-3:],
                 name[:-3] + "r" + name[-3:],
+                "(" + name + ")_r",
             )
             values_r = next(
                 (
@@ -1358,10 +1363,9 @@ def plot_section(
     phi = np.atleast_1d(phi)
     nphi = len(phi)
     if grid is None:
-        nfp = eq.NFP
         grid_kwargs = {
             "L": 25,
-            "NFP": nfp,
+            "NFP": 1,
             "axis": False,
             "theta": np.linspace(0, 2 * np.pi, 91, endpoint=True),
             "zeta": phi,
@@ -1616,9 +1620,14 @@ def plot_surfaces(eq, rho=8, theta=8, phi=None, ax=None, return_data=False, **kw
     phi = np.atleast_1d(phi)
     nphi = len(phi)
 
+    # do not need NFP supplied to these grids as
+    # the above logic takes care of the correct phi range
+    # if defaults are requested. Setting NFP here instead
+    # can create reshaping issues when phi is supplied and gets
+    # truncated by 2pi/NFP. See PR #1204
     grid_kwargs = {
         "rho": rho,
-        "NFP": nfp,
+        "NFP": 1,
         "theta": np.linspace(0, 2 * np.pi, NT, endpoint=True),
         "zeta": phi,
     }
@@ -1637,7 +1646,7 @@ def plot_surfaces(eq, rho=8, theta=8, phi=None, ax=None, return_data=False, **kw
     )
     grid_kwargs = {
         "rho": np.linspace(0, 1, NR),
-        "NFP": nfp,
+        "NFP": 1,
         "theta": theta,
         "zeta": phi,
     }
@@ -1735,6 +1744,156 @@ def plot_surfaces(eq, rho=8, theta=8, phi=None, ax=None, return_data=False, **kw
     return fig, ax
 
 
+def poincare_plot(
+    field,
+    R0,
+    Z0,
+    ntransit=100,
+    phi=None,
+    NFP=None,
+    grid=None,
+    ax=None,
+    return_data=False,
+    **kwargs,
+):
+    """Poincare plot of field lines from external magnetic field.
+
+    Parameters
+    ----------
+    field : MagneticField
+        External field, coilset, current potential etc to plot from.
+    R0, Z0 : array-like
+        Starting points at phi=0 for field line tracing.
+    ntransit : int
+        Number of transits to trace field lines for.
+    phi : float, int or array-like or None
+        Values of phi to plot section at.
+        If an integer, plot that many contours linearly spaced in (0,2pi).
+        Default is 6.
+    NFP : int, optional
+        Number of field periods. By default attempts to infer from ``field``, otherwise
+        uses NFP=1.
+    grid : Grid, optional
+        Grid used to discretize ``field``.
+    ax : matplotlib AxesSubplot, optional
+        Axis to plot on.
+    return_data : bool
+        if True, return the data plotted as well as fig,ax
+    **kwargs : dict, optional
+        Specify properties of the figure, axis, and plot appearance e.g.::
+
+            plot_X(figsize=(4,6),)
+
+        Valid keyword arguments are:
+
+        * ``figsize``: tuple of length 2, the size of the figure (to be passed to
+          matplotlib)
+        * ``color``: str or tuple, color to use for field lines.
+        * ``marker``: str, markerstyle to use for the plotted points
+        * ``size``: float, markersize to use for the plotted points
+        * ``title_fontsize``: integer, font size of the title
+        * ``xlabel_fontsize``: float, fontsize of the xlabel
+        * ``ylabel_fontsize``: float, fontsize of the ylabel
+
+        Additionally, any other keyword arguments will be passed on to
+        ``desc.magnetic_fields.field_line_integrate``
+
+    Returns
+    -------
+    fig : matplotlib.figure.Figure
+        Figure being plotted to.
+    ax : matplotlib.axes.Axes or ndarray of Axes
+        Axes being plotted to.
+    plot_data : dict
+        dictionary of the data plotted, only returned if ``return_data=True``
+    """
+    fli_kwargs = {}
+    for key in inspect.signature(field_line_integrate).parameters:
+        if key in kwargs:
+            fli_kwargs[key] = kwargs.pop(key)
+
+    figsize = kwargs.pop("figsize", None)
+    color = kwargs.pop("color", colorblind_colors[0])
+    marker = kwargs.pop("marker", "o")
+    size = kwargs.pop("size", 5)
+    title_fontsize = kwargs.pop("title_fontsize", None)
+    xlabel_fontsize = kwargs.pop("xlabel_fontsize", None)
+    ylabel_fontsize = kwargs.pop("ylabel_fontsize", None)
+
+    assert (
+        len(kwargs) == 0
+    ), f"poincare_plot got unexpected keyword argument: {kwargs.keys()}"
+
+    if NFP is None:
+        NFP = getattr(field, "NFP", 1)
+
+    phi = 6 if phi is None else phi
+    if isinstance(phi, numbers.Integral):
+        phi = np.linspace(0, 2 * np.pi / NFP, phi, endpoint=False)
+    phi = np.atleast_1d(phi)
+    nplanes = len(phi)
+
+    phis = (phi + np.arange(0, ntransit)[:, None] * 2 * np.pi / NFP).flatten()
+
+    R0, Z0 = np.atleast_1d(R0, Z0)
+
+    fieldR, fieldZ = field_line_integrate(
+        r0=R0,
+        z0=Z0,
+        phis=phis,
+        field=field,
+        source_grid=grid,
+        **fli_kwargs,
+    )
+
+    zs = fieldZ.reshape((ntransit, nplanes, -1))
+    rs = fieldR.reshape((ntransit, nplanes, -1))
+
+    signBT = np.sign(
+        field.compute_magnetic_field(np.array([R0.flat[0], 0.0, Z0.flat[0]]))[:, 1]
+    ).flat[0]
+    if signBT < 0:  # field lines are traced backwards when toroidal field < 0
+        rs, zs = rs[:, ::-1], zs[:, ::-1]
+        rs, zs = np.roll(rs, 1, 1), np.roll(zs, 1, 1)
+
+    data = {
+        "R": rs,
+        "Z": zs,
+    }
+
+    rows = np.floor(np.sqrt(nplanes)).astype(int)
+    cols = np.ceil(nplanes / rows).astype(int)
+
+    figw = 4 * cols
+    figh = 5 * rows
+    if figsize is None:
+        figsize = (figw, figh)
+    fig, ax = _format_ax(ax, rows=rows, cols=cols, figsize=figsize, equal=True)
+
+    for i in range(nplanes):
+        ax.flat[i].scatter(
+            rs[:, i, :],
+            zs[:, i, :],
+            color=color,
+            marker=marker,
+            s=size,
+        )
+
+        ax.flat[i].set_xlabel(_AXIS_LABELS_RPZ[0], fontsize=xlabel_fontsize)
+        ax.flat[i].set_ylabel(_AXIS_LABELS_RPZ[2], fontsize=ylabel_fontsize)
+        ax.flat[i].tick_params(labelbottom=True, labelleft=True)
+        ax.flat[i].set_title(
+            "$\\phi \\cdot N_{{FP}}/2\\pi = {:.3f}$".format(NFP * phi[i] / (2 * np.pi)),
+            fontsize=title_fontsize,
+        )
+
+    _set_tight_layout(fig)
+
+    if return_data:
+        return fig, ax, data
+    return fig, ax
+
+
 def plot_boundary(eq, phi=None, plot_axis=True, ax=None, return_data=False, **kwargs):
     """Plot stellarator boundary at multiple toroidal coordinates.
 
@@ -1816,7 +1975,7 @@ def plot_boundary(eq, phi=None, plot_axis=True, ax=None, return_data=False, **kw
     plot_axis = plot_axis and eq.L > 0
     rho = np.array([0.0, 1.0]) if plot_axis else np.array([1.0])
 
-    grid_kwargs = {"NFP": eq.NFP, "rho": rho, "theta": 100, "zeta": phi}
+    grid_kwargs = {"NFP": 1, "rho": rho, "theta": 100, "zeta": phi}
     grid = _get_grid(**grid_kwargs)
     nr, nt, nz = grid.num_rho, grid.num_theta, grid.num_zeta
     grid = Grid(
@@ -1886,6 +2045,9 @@ def plot_boundaries(
 ):
     """Plot stellarator boundaries at multiple toroidal coordinates.
 
+    NOTE: If attempting to plot objects with differing NFP, `phi` must
+    be given explicitly.
+
     Parameters
     ----------
     eqs : array-like of Equilibrium, Surface or EquilibriaFamily
@@ -1941,7 +2103,21 @@ def plot_boundaries(
         fig, ax = plot_boundaries((eq1, eq2, eq3))
 
     """
+    # if NFPs are not all equal, means there are
+    # objects with differing NFPs, which it is not clear
+    # how to choose the phis for by default, so we will throw an error
+    # unless phi was given.
     phi = parse_argname_change(phi, kwargs, "zeta", "phi")
+    errorif(
+        not np.allclose([thing.NFP for thing in eqs], eqs[0].NFP) and phi is None,
+        ValueError,
+        "supplied objects must have the same number of field periods, "
+        "or if there are differing field periods, `phi` must be given explicitly."
+        f" Instead, supplied objects have NFPs {[t.NFP for t in eqs]}."
+        " If attempting to plot an axisymmetric object with non-axisymmetric objects,"
+        " you must use the `change_resolution` method to make the axisymmetric "
+        "object have the same NFP as the non-axisymmetric objects.",
+    )
 
     figsize = kwargs.pop("figsize", None)
     cmap = kwargs.pop("cmap", "rainbow")
@@ -1985,7 +2161,7 @@ def plot_boundaries(
         plot_axis_i = plot_axis and eqs[i].L > 0
         rho = np.array([0.0, 1.0]) if plot_axis_i else np.array([1.0])
 
-        grid_kwargs = {"NFP": eqs[i].NFP, "theta": 100, "zeta": phi, "rho": rho}
+        grid_kwargs = {"NFP": 1, "theta": 100, "zeta": phi, "rho": rho}
         grid = _get_grid(**grid_kwargs)
         nr, nt, nz = grid.num_rho, grid.num_theta, grid.num_zeta
         grid = Grid(
@@ -2053,6 +2229,9 @@ def plot_comparison(
     **kwargs,
 ):
     """Plot comparison between flux surfaces of multiple equilibria.
+
+    NOTE: If attempting to plot objects with differing NFP, `phi` must
+    be given explicitly.
 
     Parameters
     ----------
@@ -2122,7 +2301,21 @@ def plot_comparison(
                                  )
 
     """
+    # if NFPs are not all equal, means there are
+    # objects with differing NFPs, which it is not clear
+    # how to choose the phis for by default, so we will throw an error
+    # unless phi was given.
     phi = parse_argname_change(phi, kwargs, "zeta", "phi")
+    errorif(
+        not np.allclose([thing.NFP for thing in eqs], eqs[0].NFP) and phi is None,
+        ValueError,
+        "supplied objects must have the same number of field periods, "
+        "or if there are differing field periods, `phi` must be given explicitly."
+        f" Instead, supplied objects have NFPs {[t.NFP for t in eqs]}."
+        " If attempting to plot an axisymmetric object with non-axisymmetric objects,"
+        " you must use the `change_resolution` method to make the axisymmetric "
+        "object have the same NFP as the non-axisymmetric objects.",
+    )
     color = parse_argname_change(color, kwargs, "colors", "color")
     ls = parse_argname_change(ls, kwargs, "linestyles", "ls")
     lw = parse_argname_change(lw, kwargs, "lws", "lw")
@@ -2252,6 +2445,11 @@ def plot_coils(coils, grid=None, fig=None, return_data=False, **kwargs):
         len(kwargs) != 0,
         ValueError,
         f"plot_coils got unexpected keyword argument: {kwargs.keys()}",
+    )
+    errorif(
+        not isinstance(coils, _Coil),
+        ValueError,
+        "Expected `coils` to be of type `_Coil`, instead got type" f" {type(coils)}",
     )
 
     if not isinstance(lw, (list, tuple)):
@@ -2427,7 +2625,7 @@ def plot_boozer_modes(  # noqa: C901
     elif np.isscalar(rho) and rho > 1:
         rho = np.linspace(1, 0, num=rho, endpoint=False)
 
-    B_mn = np.array([[]])
+    rho = np.sort(rho)
     M_booz = kwargs.pop("M_booz", 2 * eq.M)
     N_booz = kwargs.pop("N_booz", 2 * eq.N)
     linestyle = kwargs.pop("ls", "-")
@@ -2445,16 +2643,15 @@ def plot_boozer_modes(  # noqa: C901
     else:
         matrix, modes = ptolemy_linear_transform(basis.modes)
 
-    for i, r in enumerate(rho):
-        grid = LinearGrid(M=2 * eq.M_grid, N=2 * eq.N_grid, NFP=eq.NFP, rho=np.array(r))
-        transforms = get_transforms(
-            "|B|_mn", obj=eq, grid=grid, M_booz=M_booz, N_booz=N_booz
-        )
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            data = eq.compute("|B|_mn", grid=grid, transforms=transforms)
-        b_mn = np.atleast_2d(matrix @ data["|B|_mn"])
-        B_mn = np.vstack((B_mn, b_mn)) if B_mn.size else b_mn
+    grid = LinearGrid(M=2 * eq.M_grid, N=2 * eq.N_grid, NFP=eq.NFP, rho=rho)
+    transforms = get_transforms(
+        "|B|_mn", obj=eq, grid=grid, M_booz=M_booz, N_booz=N_booz
+    )
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        data = eq.compute("|B|_mn", grid=grid, transforms=transforms)
+    B_mn = data["|B|_mn"].reshape((len(rho), -1))
+    B_mn = np.atleast_2d(matrix @ B_mn.T).T
 
     zidx = np.where((modes[:, 1:] == np.array([[0, 0]])).all(axis=1))[0]
     if norm:
@@ -2615,22 +2812,14 @@ def plot_boozer_surface(
 
     # default grids
     if grid_compute is None:
-        if eq_switch:
-            grid_kwargs = {
-                "rho": rho,
-                "M": 4 * thing.M,
-                "N": 4 * thing.N,
-                "NFP": thing.NFP,
-                "endpoint": False,
-            }
-        else:
-            grid_kwargs = {
-                "rho": rho,
-                "M": 50,
-                "N": 50,
-                "NFP": thing.NFP,
-                "endpoint": False,
-            }
+        # grid_compute only used for Equilibrium, not OmnigenousField
+        grid_kwargs = {
+            "rho": rho,
+            "M": 4 * getattr(thing, "M", 1),
+            "N": 4 * getattr(thing, "N", 1),
+            "NFP": thing.NFP,
+            "endpoint": False,
+        }
         grid_compute = _get_grid(**grid_kwargs)
     if grid_plot is None:
         grid_kwargs = {
@@ -2638,7 +2827,7 @@ def plot_boozer_surface(
             "theta": 91,
             "zeta": 91,
             "NFP": thing.NFP,
-            "endpoint": True,
+            "endpoint": eq_switch,
         }
         grid_plot = _get_grid(**grid_kwargs)
 
@@ -2675,7 +2864,7 @@ def plot_boozer_surface(
             warnings.simplefilter("ignore")
             data = thing.compute(
                 ["theta_B", "zeta_B", "|B|"],
-                grid=grid_compute,
+                grid=grid_plot,
                 helicity=thing.helicity,
                 iota=iota,
             )
@@ -2831,6 +3020,7 @@ def plot_qs_error(  # noqa: 16 fxn too complex
         rho = np.linspace(1, 0, num=20, endpoint=False)
     elif np.isscalar(rho) and rho > 1:
         rho = np.linspace(1, 0, num=rho, endpoint=False)
+    rho = np.sort(rho)
 
     fig, ax = _format_ax(ax, figsize=kwargs.pop("figsize", None))
 
@@ -2848,119 +3038,92 @@ def plot_qs_error(  # noqa: 16 fxn too complex
     R0 = data["R0"]
     B0 = np.mean(data["|B|"] * data["sqrt(g)"]) / np.mean(data["sqrt(g)"])
 
-    f_B = np.array([])
-    f_C = np.array([])
-    f_T = np.array([])
-    plot_data = {}
-    for i, r in enumerate(rho):
-        grid = LinearGrid(M=2 * eq.M_grid, N=2 * eq.N_grid, NFP=eq.NFP, rho=np.array(r))
-        if fB:
-            transforms = get_transforms(
-                "|B|_mn", obj=eq, grid=grid, M_booz=M_booz, N_booz=N_booz
-            )
-            if i == 0:  # only need to do this once for the first rho surface
-                matrix, modes, idx = ptolemy_linear_transform(
-                    transforms["B"].basis.modes,
-                    helicity=helicity,
-                    NFP=transforms["B"].basis.NFP,
-                )
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore")
-                data = eq.compute(
-                    ["|B|_mn", "B modes"], grid=grid, transforms=transforms
-                )
-            B_mn = matrix @ data["|B|_mn"]
-            f_b = np.sqrt(np.sum(B_mn[idx] ** 2)) / np.sqrt(np.sum(B_mn**2))
-            f_B = np.append(f_B, f_b)
-        if fC:
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore")
-                data = eq.compute("f_C", grid=grid, helicity=helicity)
-            f_c = (
-                np.mean(np.abs(data["f_C"]) * data["sqrt(g)"])
-                / np.mean(data["sqrt(g)"])
-                / B0**3
-            )
-            f_C = np.append(f_C, f_c)
-        if fT:
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore")
-                data = eq.compute("f_T", grid=grid)
-            f_t = (
-                np.mean(np.abs(data["f_T"]) * data["sqrt(g)"])
-                / np.mean(data["sqrt(g)"])
-                * R0**2
-                / B0**4
-            )
-            f_T = np.append(f_T, f_t)
+    plot_data = {"rho": rho}
 
-    plot_data["f_B"] = f_B
-    plot_data["f_C"] = f_C
-    plot_data["f_T"] = f_T
-    plot_data["rho"] = rho
+    grid = LinearGrid(M=2 * eq.M_grid, N=2 * eq.N_grid, NFP=eq.NFP, rho=rho)
+    names = []
+    if fB:
+        names += ["|B|_mn"]
+        transforms = get_transforms(
+            "|B|_mn", obj=eq, grid=grid, M_booz=M_booz, N_booz=N_booz
+        )
+        matrix, modes, idx = ptolemy_linear_transform(
+            transforms["B"].basis.modes,
+            helicity=helicity,
+            NFP=transforms["B"].basis.NFP,
+        )
+    if fC or fT:
+        names += ["sqrt(g)"]
+    if fC:
+        names += ["f_C"]
+    if fT:
+        names += ["f_T"]
 
-    if log:
-        if fB:
-            ax.semilogy(
-                rho,
-                f_B,
-                ls=ls[0 % len(ls)],
-                c=colors[0 % len(colors)],
-                marker=markers[0 % len(markers)],
-                label=labels[0 % len(labels)],
-                lw=lw[0 % len(lw)],
-            )
-        if fC:
-            ax.semilogy(
-                rho,
-                f_C,
-                ls=ls[1 % len(ls)],
-                c=colors[1 % len(colors)],
-                marker=markers[1 % len(markers)],
-                label=labels[1 % len(labels)],
-                lw=lw[1 % len(lw)],
-            )
-        if fT:
-            ax.semilogy(
-                rho,
-                f_T,
-                ls=ls[2 % len(ls)],
-                c=colors[2 % len(colors)],
-                marker=markers[2 % len(markers)],
-                label=labels[2 % len(labels)],
-                lw=lw[2 % len(lw)],
-            )
-    else:
-        if fB:
-            ax.plot(
-                rho,
-                f_B,
-                ls=ls[0 % len(ls)],
-                c=colors[0 % len(colors)],
-                marker=markers[0 % len(markers)],
-                label=labels[0 % len(labels)],
-                lw=lw[0 % len(lw)],
-            )
-        if fC:
-            ax.plot(
-                rho,
-                f_C,
-                ls=ls[1 % len(ls)],
-                c=colors[1 % len(colors)],
-                marker=markers[1 % len(markers)],
-                label=labels[1 % len(labels)],
-                lw=lw[1 % len(lw)],
-            )
-        if fT:
-            ax.plot(
-                rho,
-                f_T,
-                ls=ls[2 % len(ls)],
-                c=colors[2 % len(colors)],
-                marker=markers[2 % len(markers)],
-                label=labels[2 % len(labels)],
-                lw=lw[2 % len(lw)],
-            )
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        data = eq.compute(
+            names, grid=grid, M_booz=M_booz, N_booz=N_booz, helicity=helicity
+        )
+
+    if fB:
+        B_mn = data["|B|_mn"].reshape((len(rho), -1))
+        B_mn = (matrix @ B_mn.T).T
+        f_B = np.sqrt(np.sum(B_mn[:, idx] ** 2, axis=-1)) / np.sqrt(
+            np.sum(B_mn**2, axis=-1)
+        )
+        plot_data["f_B"] = f_B
+    if fC:
+        sqrtg = grid.meshgrid_reshape(data["sqrt(g)"], "rtz")
+        f_C = grid.meshgrid_reshape(data["f_C"], "rtz")
+        f_C = (
+            np.mean(np.abs(f_C) * sqrtg, axis=(1, 2))
+            / np.mean(sqrtg, axis=(1, 2))
+            / B0**3
+        )
+        plot_data["f_C"] = f_C
+    if fT:
+        sqrtg = grid.meshgrid_reshape(data["sqrt(g)"], "rtz")
+        f_T = grid.meshgrid_reshape(data["f_T"], "rtz")
+        f_T = (
+            np.mean(np.abs(f_T) * sqrtg, axis=(1, 2))
+            / np.mean(sqrtg, axis=(1, 2))
+            * R0**2
+            / B0**4
+        )
+        plot_data["f_T"] = f_T
+
+    plot_op = ax.semilogy if log else ax.plot
+
+    if fB:
+        plot_op(
+            rho,
+            f_B,
+            ls=ls[0 % len(ls)],
+            c=colors[0 % len(colors)],
+            marker=markers[0 % len(markers)],
+            label=labels[0 % len(labels)],
+            lw=lw[0 % len(lw)],
+        )
+    if fC:
+        plot_op(
+            rho,
+            f_C,
+            ls=ls[1 % len(ls)],
+            c=colors[1 % len(colors)],
+            marker=markers[1 % len(markers)],
+            label=labels[1 % len(labels)],
+            lw=lw[1 % len(lw)],
+        )
+    if fT:
+        plot_op(
+            rho,
+            f_T,
+            ls=ls[2 % len(ls)],
+            c=colors[2 % len(colors)],
+            marker=markers[2 % len(markers)],
+            label=labels[2 % len(labels)],
+            lw=lw[2 % len(lw)],
+        )
 
     ax.set_xlabel(_AXIS_LABELS_RTZ[0], fontsize=xlabel_fontsize)
     if ylabel:
@@ -3561,7 +3724,38 @@ def plot_regcoil_outputs(
     vacuum=False,
     **kwargs,
 ):
-    """Plot the output of REGCOIL.
+    """Plot the outputs of REGCOIL.
+
+    Plots the following outputs if the input ``field`` is
+    a single ``FourierCurrentPotential`` object :
+
+    - Contour plot of the current potential on the winding surface.
+      Corresponds to the keys ``"fig_Phi", "ax_Phi"`` in the output
+      ``figdata, ax_data``
+    - Contour plot of the normal field error from that current potential
+      on the given equilibrium surface (including plasma contribution if
+      `vacuum=False`). Corresponds to the keys ``"fig_Bn", "ax_Bn"`` in the output
+      ``figdata, ax_data``
+
+    If the input ``field`` is instead a list of ``FourierCurrentPotentialField``
+    objects, this function plots :
+
+    - A scatter plot of the integrated squared quadratic flux on the plasma surface
+    versus the REGCOIL regularization parameter. Corresponds to the keys
+    ``"fig_chi^2_B_vs_lambda_regularization", "ax_chi^2_B_vs_lambda_regularization"``
+    in the output ``figdata, ax_data``
+    - A scatter plot of the squared quadratic flux integrated over the plasma surface
+    versus the squared current density magnitude integrated over the winding surface.
+    Corresponds to the keys ``"fig_chi^2_B_vs_chi^2_K"", "ax_chi^2_B_vs_chi^2_K""``
+    in the output ``figdata, ax_data``
+    - A composite plot of contours of the current potential on the winding surface for
+    each regularization parameter contained inside ``data["lambda_regularization"]``.
+    Corresponds to the keys ``"fig_scan_Phi", "ax_scan_Phi"``
+    in the output ``figdata, ax_data``
+    - A composite plot of contours of the normal field error on the plasma surface for
+    each regularization parameter contained inside ``data["lambda_regularization"]``.
+    Corresponds to the keys ``"fig_scan_Bn", "ax_scan_Bn"``
+    in the output ``figdata, ax_data``
 
     Parameters
     ----------
@@ -3569,8 +3763,7 @@ def plot_regcoil_outputs(
         object(s) with which to plot the data from the REGCOIL output.
         should have the correct resolutions and NFP to match the REGCOIL output.
     data : dict
-        dictionary containing the output of a call to ``run_regcoil`` method
-        of ``FourierCurrentPotentiaField``
+        dictionary containing the output of a call to the ``run_regcoil`` function.
     eq : Equilibrium
         the equilibrium that the Bn error was evaluated on.
     eval_grid : Grid, optional
@@ -3593,19 +3786,29 @@ def plot_regcoil_outputs(
         Valid keyword arguments are:
 
         * ``figsize``: tuple of length 2, the size of the figure (to be passed to
-          matplotlib)
+          matplotlib).
+        * ``ncontours``: int, defaults to 20, the number of contours to show
+        in the contour plots.
+        * ``markersize``: int, defaults to 12, the size of the markers to use in
+        the scatter plots.
 
 
 
     Outputs
     -------
-    fig : list of matplotlib.figure.Figure
-        list of figure being plotted to
-    ax : list of matplotlib.axes.Axes or list of ndarray of Axes
-        list of axes being plotted to
+    figdata : dict of matplotlib.figure.Figure
+        Dictionary with the keys ``"fig_X"`` with values ``matplotlib.figure.Figure``,
+        with ``X`` corresponding to the different figure types described in the
+        docstring description, which are the figures being plotted to.
+    axdata : dict
+        Dictionary with the keys ``"ax_X"`` with values ``matplotlib.axes.Axes``
+        or ``ndarray`` of ``matplotlib.axes.Axes``, with ``X`` corresponding to the
+        different figure types described in the docstring description, which are
+        the axes being plotted to.
     plot_data : dict
         dictionary of the data plotted, only returned if ``return_data=True``
         This is the same as data_regcoil
+
     """
     try:
         # if it is a list, just grab the first one
@@ -3623,7 +3826,7 @@ def plot_regcoil_outputs(
     scan = isinstance(data["Phi_mn"], list)
     # TODO: add flags for each subplot, also add |K| plot
     Bn_tot = data["Bn_total"]
-    alphas = data["alpha"]
+    lambdas = data["lambda_regularization"]
     chi2Bs = data["chi^2_B"]
     chi2Ks = data["chi^2_K"]
     phi_mns = data["Phi_mn"]
@@ -3660,6 +3863,7 @@ def plot_regcoil_outputs(
     figdata = {}
     axdata = {}
     if not scan:
+        figsize = kwargs.pop("figsize", (8, 8))
         field.Phi_mn = data["Phi_mn"]
         field.I = data["I"]
         field.G = data["G"]
@@ -3678,7 +3882,7 @@ def plot_regcoil_outputs(
             Bn_tot += B_ext
             print("adding bext")
         plt.rcParams.update({"font.size": 26})
-        plt.figure(figsize=(8, 8))
+        plt.figure(figsize=figsize)
         plt.contourf(
             eval_grid.nodes[eval_grid.unique_zeta_idx, 2],
             eval_grid.nodes[eval_grid.unique_theta_idx, 1],
@@ -3694,7 +3898,7 @@ def plot_regcoil_outputs(
 
         # TODO: replace with plot_2d call
         # current potential contour plot
-        plt.figure(figsize=(10, 10))
+        plt.figure(figsize=figsize)
         plt.rcParams.update({"font.size": 18})
         plt.contour(
             source_grid.nodes[source_grid.unique_zeta_idx, 2],
@@ -3714,27 +3918,28 @@ def plot_regcoil_outputs(
         if return_data:
             return figdata, axdata, data
         return figdata, axdata
-    else:  # show composite scan over alpha plots
+    else:  # show composite scan over lambda_regularization plots
         # strongly based off of Landreman's REGCOIL plotting routine:
         # github.com/landreman/regcoil/blob/master/
-        plt.figure(figsize=(16, 12))
+        figsize = kwargs.pop("figsize", (16, 12))
+        plt.figure(figsize=figsize)
         plt.rcParams.update({"font.size": 20})
-        plt.scatter(alphas, chi2Bs, s=markersize)
-        plt.xlabel(r"$\alpha$ (regularization parameter)")
+        plt.scatter(lambdas, chi2Bs, s=markersize)
+        plt.xlabel(r"$\lambda$ (regularization parameter)")
         plt.ylabel(r"$\chi^2_B = \int \int B_{normal}^2 dA$ ")
         plt.yscale("log")
         plt.xscale("log")
-        figdata["fig_chi^2_B_vs_alpha"] = plt.gcf()
-        axdata["ax_chi^2_B_vs_alpha"] = plt.gca()
-        plt.figure(figsize=(16, 12))
-        plt.scatter(alphas, chi2Ks, s=markersize)
+        figdata["fig_chi^2_B_vs_lambda_regularization"] = plt.gcf()
+        axdata["ax_chi^2_B_vs_lambda_regularization"] = plt.gca()
+        plt.figure(figsize=figsize)
+        plt.scatter(lambdas, chi2Ks, s=markersize)
         plt.ylabel(r"$\chi^2_K = \int \int K^2 dA'$ ")
-        plt.xlabel(r"$\alpha$ (regularization parameter)")
+        plt.xlabel(r"$\lambda$ (regularization parameter)")
         plt.yscale("log")
         plt.xscale("log")
-        figdata["fig_chi^2_K_vs_alpha"] = plt.gcf()
-        axdata["ax_chi^2_K_vs_alpha"] = plt.gca()
-        plt.figure(figsize=(16, 12))
+        figdata["fig_chi^2_K_vs_lambda_regularization"] = plt.gcf()
+        axdata["ax_chi^2_K_vs_lambda_regularization"] = plt.gca()
+        plt.figure(figsize=figsize)
         plt.scatter(chi2Ks, chi2Bs, s=markersize)
         plt.xlabel(r"$\chi^2_K = \int \int K^2 dA'$ ")
         plt.ylabel(r"$\chi^2_B = \int \int B_{normal}^2 dA$ ")
@@ -3743,11 +3948,11 @@ def plot_regcoil_outputs(
         figdata["fig_chi^2_B_vs_chi^2_K"] = plt.gcf()
         axdata["ax_chi^2_B_vs_chi^2_K"] = plt.gca()
 
-        nalpha = len(chi2Bs)
-        max_nalpha_for_contour_plots = 16
-        numPlots = min(nalpha, max_nalpha_for_contour_plots)
-        ialpha_to_plot = np.sort(list(set(map(int, np.linspace(1, nalpha, numPlots)))))
-        numPlots = len(ialpha_to_plot)
+        nlam = len(chi2Bs)
+        max_nlam_for_contour_plots = 16
+        numPlots = min(nlam, max_nlam_for_contour_plots)
+        ilam_to_plot = np.sort(list(set(map(int, np.linspace(1, nlam, numPlots)))))
+        numPlots = len(ilam_to_plot)
 
         numCols = int(np.ceil(np.sqrt(numPlots)))
         numRows = int(np.ceil(numPlots * 1.0 / numCols))
@@ -3755,10 +3960,10 @@ def plot_regcoil_outputs(
         ########################################################
         # Plot total current potentials
         ########################################################
-        plt.figure(figsize=(16, 12))
+        plt.figure(figsize=figsize)
         for whichPlot in range(numPlots):
             plt.subplot(numRows, numCols, whichPlot + 1)
-            phi_mn_opt = phi_mns[ialpha_to_plot[whichPlot] - 1]
+            phi_mn_opt = phi_mns[ilam_to_plot[whichPlot] - 1]
             # TODO replace these with plot 2d calls with the ax of each
             # subplot passed in
             field.Phi_mn = phi_mn_opt
@@ -3780,8 +3985,8 @@ def plot_regcoil_outputs(
             plt.ylabel("theta")
             plt.xlabel("zeta")
             plt.title(
-                f"alpha= {alphas[ialpha_to_plot[whichPlot] - 1]:1.5e}"
-                + f" index = {ialpha_to_plot[whichPlot] - 1}",
+                f"lambda= {lambdas[ilam_to_plot[whichPlot] - 1]:1.5e}"
+                + f" index = {ilam_to_plot[whichPlot] - 1}",
                 fontsize="x-small",
             )
             plt.colorbar()
@@ -3800,12 +4005,12 @@ def plot_regcoil_outputs(
         ########################################################
         # Plot Bn
         ########################################################
-        plt.figure(figsize=(16, 12))
+        plt.figure(figsize=figsize)
         for whichPlot in range(numPlots):
             plt.subplot(numRows, numCols, whichPlot + 1)
-            field.Phi_mn = phi_mns[ialpha_to_plot[whichPlot] - 1]
+            field.Phi_mn = phi_mns[ilam_to_plot[whichPlot] - 1]
             Bn = (
-                Bn_tot[ialpha_to_plot[whichPlot] - 1]
+                Bn_tot[ilam_to_plot[whichPlot] - 1]
                 if not recalc_eval_grid_quantites
                 else field.compute_Bnormal(
                     eq if not vacuum else eq.surface, eval_grid, source_grid
@@ -3826,8 +4031,8 @@ def plot_regcoil_outputs(
             plt.ylabel("theta")
             plt.xlabel("zeta")
             plt.title(
-                f"alpha= {alphas[ialpha_to_plot[whichPlot] - 1]:1.5e}"
-                + f" index = {ialpha_to_plot[whichPlot] - 1}",
+                f"lambda= {lambdas[ilam_to_plot[whichPlot] - 1]:1.5e}"
+                + f" index = {ilam_to_plot[whichPlot] - 1}",
                 fontsize="x-small",
             )
             plt.colorbar()
@@ -3847,10 +4052,10 @@ def plot_regcoil_outputs(
         ########################################################
         # Plot Surface Current |K|
         ########################################################
-        plt.figure(figsize=(16, 12))
+        plt.figure(figsize=figsize)
         for whichPlot in range(numPlots):
             plt.subplot(numRows, numCols, whichPlot + 1)
-            field.Phi_mn = phi_mns[ialpha_to_plot[whichPlot] - 1]
+            field.Phi_mn = phi_mns[ilam_to_plot[whichPlot] - 1]
             K = field.compute("K", grid=source_grid, basis="xyz")["K"]
             K_mag = np.linalg.norm(K, axis=1)
 
@@ -3865,8 +4070,8 @@ def plot_regcoil_outputs(
             plt.ylabel("theta")
             plt.xlabel("zeta")
             plt.title(
-                f"alpha= {alphas[ialpha_to_plot[whichPlot] - 1]:1.5e}"
-                + f" index = {ialpha_to_plot[whichPlot] - 1}",
+                f"lambda= {lambdas[ilam_to_plot[whichPlot] - 1]:1.5e}"
+                + f" index = {ilam_to_plot[whichPlot] - 1}",
                 fontsize="x-small",
             )
             plt.colorbar()

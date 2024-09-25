@@ -54,14 +54,19 @@ def test_effective_ripple():
     grid = eq.get_rtz_grid(rho, alpha, zeta, coordinates="raz")
     data = eq.compute("effective ripple", grid=grid)
     assert np.isfinite(data["effective ripple"]).all()
-    eps_eff = grid.compress(data["effective ripple"])
-
-    neo_rho, neo_eps = NeoIO.read("tests/inputs/neo_out.w7x")
     np.testing.assert_allclose(
-        eps_eff, np.interp(rho, neo_rho, neo_eps), rtol=0.16, atol=1e-5
+        data["epsilon 3/2"] ** (2 / 3),
+        data["effective ripple"],
+        err_msg="Bug in source grid logic in eq.compute.",
     )
+    eps_32 = grid.compress(data["epsilon 3/2"])
     fig, ax = plt.subplots()
-    ax.plot(rho, eps_eff, marker="o")
+    ax.plot(rho, eps_32, marker="o")
+
+    neo_rho, neo_eps_32 = NeoIO.read("tests/inputs/neo_out.w7x")
+    np.testing.assert_allclose(
+        eps_32, np.interp(rho, neo_rho, neo_eps_32), rtol=0.16, atol=1e-5
+    )
     return fig
 
 

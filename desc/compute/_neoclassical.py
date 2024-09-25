@@ -101,17 +101,17 @@ def _G_ra_fsa(data, transforms, profiles, **kwargs):
 
 
 @register_compute_fun(
-    name="effective ripple",  # this is ε¹ᐧ⁵
+    name="epsilon 3/2",
     label=(
         # ε¹ᐧ⁵ = π/(8√2) (R₀/〈|∇ψ|〉)² B₀⁻¹ ∫dλ λ⁻² 〈 ∑ⱼ Hⱼ²/Iⱼ 〉
-        "\\epsilon^{3/2} = \\frac{\\pi}{8 \\sqrt{2}} "
+        "\\epsilon_{\\mathrm{\\effective}}^{3/2} = \\frac{\\pi}{8 \\sqrt{2}} "
         "(R_0 / \\langle \\vert\\nabla \\psi\\vert \\rangle)^2 "
         "B_0^{-1} \\int d\\lambda \\lambda^{-2} "
         "\\langle \\sum_j H_j^2 / I_j \\rangle"
     ),
     units="~",
     units_long="None",
-    description="Effective ripple modulation amplitude",
+    description="Effective ripple modulation amplitude to 3/2 power",
     dim=1,
     params=[],
     transforms={"grid": []},
@@ -154,7 +154,7 @@ def _G_ra_fsa(data, transforms, profiles, **kwargs):
     #  Need more efficient function approximation of |B|(α, ζ).
 )
 @partial(jit, static_argnames=["num_pitch", "num_well", "batch"])
-def _effective_ripple(params, transforms, profiles, data, **kwargs):
+def _epsilon_32(params, transforms, profiles, data, **kwargs):
     """https://doi.org/10.1063/1.873749.
 
     Evaluation of 1/ν neoclassical transport in stellarators.
@@ -211,11 +211,30 @@ def _effective_ripple(params, transforms, profiles, data, **kwargs):
     )
     _data = _get_pitch_inv_quad(grid, data, num_pitch, _data)
     B0 = data["max_tz |B|"]
-    data["effective ripple"] = (
+    data["epsilon 3/2"] = (
         jnp.pi
         / (8 * 2**0.5)
         * (B0 * data["R0"] / data["<|grad(rho)|>"]) ** 2
         * grid.expand(_alpha_mean(map2(compute, _data)))
         / data["<L|r,a>"]
     )
+    return data
+
+
+@register_compute_fun(
+    name="effective ripple",
+    # ε¹ᐧ⁵ = π/(8√2) (R₀/〈|∇ψ|〉)² B₀⁻¹ ∫dλ λ⁻² 〈 ∑ⱼ Hⱼ²/Iⱼ 〉
+    label="\\epsilon_{\\mathrm{\\effective}}",
+    units="~",
+    units_long="None",
+    description="Effective ripple modulation amplitude",
+    dim=1,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="r",
+    data=["epsilon 3/2"],
+)
+def _effective_ripple(params, transforms, profiles, data, **kwargs):
+    data["effective ripple"] = data["epsilon 3/2"] ** (2 / 3)
     return data

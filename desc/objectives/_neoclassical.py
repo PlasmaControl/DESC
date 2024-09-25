@@ -91,7 +91,7 @@ class EffectiveRipple(_Objective):
 
     _coordinates = "r"
     _units = "~"
-    _print_value_fmt = "Effective ripple ε¹ᐧ⁵: "
+    _print_value_fmt = "Effective ripple ε: "
 
     def __init__(
         self,

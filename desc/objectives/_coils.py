@@ -1158,10 +1158,6 @@ class ToroidalFlux(_Objective):
     field : MagneticField
         MagneticField object, the parameters of this will be optimized
         to minimize the objective.
-    loss_function : {None, 'mean', 'min', 'max'}, optional
-        Loss function to apply to the objective values once computed. This function
-        is called on the raw compute value, before any shifting, scaling, or
-        normalization. Note: has no effect for this objective
     field_grid : Grid, optional
         Grid containing the nodes to evaluate field source at on
         the winding surface. (used if e.g. field is a CoilSet or

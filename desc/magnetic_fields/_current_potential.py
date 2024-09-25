@@ -11,13 +11,21 @@ from desc.backend import fori_loop, jnp
 from desc.basis import DoubleFourierSeries
 from desc.compute import rpz2xyz, rpz2xyz_vec, xyz2rpz_vec
 from desc.compute.utils import _compute as compute_fun
-from desc.compute.utils import dot, safediv
 from desc.derivatives import Derivative
 from desc.geometry import FourierRZToroidalSurface
 from desc.grid import Grid, LinearGrid
 from desc.integrals import compute_B_plasma
 from desc.optimizable import Optimizable, optimizable_parameter
-from desc.utils import Timer, check_posint, copy_coeffs, errorif, setdefault, warnif
+from desc.utils import (
+    Timer,
+    check_posint,
+    copy_coeffs,
+    dot,
+    errorif,
+    safediv,
+    setdefault,
+    warnif,
+)
 
 from ._core import (
     _MagneticField,

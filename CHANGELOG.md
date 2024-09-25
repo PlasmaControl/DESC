@@ -15,8 +15,7 @@ to compute the toroidal flux when possible, as opposed to a 2D surface integral 
 - Add ``jac_chunk_size`` to ``ObjectiveFunction`` and ``_Objective`` to control the above chunk size for the ``fwd`` mode Jacobian calculation
   - if ``None``, the chunk size is equal to ``dim_x``, so no chunking is done
   - if an ``int``, this is the chunk size to be used.
-  - if `"`auto`"` for the ``ObjectiveFunction``, will use a heuristic for the minimum ``jac_chunk_size`` needed to fit the jacobian calculation on the available device memory, according to the formula: ``min_jac_chunk_size = (desc_config.get("avail_mem") / estimated_memory_usage - 0.22)  / 0.85  * self.dim_x``
-  - if ``"auto"`` for an ``_Objective``, will use a conservative size of ``1000``
+  - if ``"auto"`` for the ``ObjectiveFunction``, will use a heuristic for the minimum ``jac_chunk_size`` needed to fit the jacobian calculation on the available device memory, according to the formula: ``min_jac_chunk_size = (desc_config.get("avail_mem") / estimated_memory_usage - 0.22)  / 0.85  * self.dim_x`` with ``estimated_memory_usage = 2.4e-7 * self.dim_f * self.dim_x + 1``
 - the ``ObjectiveFunction`` ``jac_chunk_size`` is used if ``deriv_mode="batched"``, and the ``_Objective`` ``jac_chunk_size`` will be used if ``deriv_mode="blocked"``
 
 Bug Fixes

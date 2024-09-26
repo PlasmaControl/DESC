@@ -536,8 +536,6 @@ def _check_interp(shape, Q, b_sup_z, B, result, f, plot):
 
     # Number of those integrals that were computed.
     actual = (marked & jnp.isfinite(result)).sum()
-    # fine for this fail as long as it's low, but check again after
-    # multivaluedness thing fixed
     assert goal == actual, (
         f"Lost {goal - actual} integrals from NaN generation in the integrand. This "
         "is caused by floating point error, usually due to a poor quadrature choice."

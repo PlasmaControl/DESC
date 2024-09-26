@@ -70,6 +70,17 @@ A full example objective with comments describing the key points is given below:
             Collocation grid containing the nodes to evaluate at.
         name : str, optional
             Name of the objective function.
+        jac_chunk_size : int or "auto", optional
+            Will calculate the Jacobian for this objective ``jac_chunk_size``
+            columns at a time, instead of all at once. The memory usage of the
+            Jacobian calculation is roughly ``memory usage = m0 + m1*jac_chunk_size``:
+            the smaller the chunk size, the less memory the Jacobian calculation
+            will require (with some baseline memory usage). The time to compute the
+            Jacobian is roughly ``t=t0 +t1/jac_chunk_size``, so the larger the
+            ``jac_chunk_size``, the faster the calculation takes, at the cost of
+            requiring more memory. A ``jac_chunk_size`` of 1 corresponds to the least
+            memory intensive, but slowest method of calculating the Jacobian.
+            If None, it will use the largest possible size.
 
         """
 
@@ -88,6 +99,7 @@ A full example objective with comments describing the key points is given below:
             normalize_target=True,
             grid=None,
             name="QS triple product",
+            jac_chunk_size=None,
         ):
             # we don't have to do much here, mostly just call ``super().__init__()``
             if target is None and bounds is None:
@@ -101,6 +113,7 @@ A full example objective with comments describing the key points is given below:
                 normalize=normalize,
                 normalize_target=normalize_target,
                 name=name,
+                jac_chunk_size=jac_chunk_size
             )
 
         def build(self, use_jit=True, verbose=1):

@@ -1337,7 +1337,7 @@ def run_regcoil(  # noqa: C901 fxn too complex
     elif p == 0 and q == 0:  # windowpane coils
         I = G = 0
     else:  # helical coils
-        I = p * G / eq.NFP
+        I = p * G / q / eq.NFP
 
     def B_from_K_SV(phi_mn):
         """B from single value part of K from REGCOIL eqn 4."""

@@ -400,6 +400,7 @@ def regcoil_modular_coils():
     return (data, surface_current_field, eq)
 
 
+@pytest.fixture(scope="session")
 def VMEC_save_asym(tmpdir_factory):
     """Save an asymmetric equilibrium in VMEC netcdf format for comparison."""
     tmpdir = tmpdir_factory.mktemp("asym_wout")

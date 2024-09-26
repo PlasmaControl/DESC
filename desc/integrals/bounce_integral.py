@@ -1,7 +1,5 @@
 """Methods for computing bounce integrals (singular or otherwise)."""
 
-from copy import deepcopy
-
 import numpy as np
 from interpax import CubicHermiteSpline, PPoly
 from numpy.fft import rfft2
@@ -144,6 +142,11 @@ def _transform_to_clebsch_1d(grid, alpha, theta, B, N_B, is_reshaped=False):
     # Evaluating set of single variable maps is more efficient than evaluating
     # multivariable map, so we project θ to a set of Chebyshev series.
     T = FourierChebyshevSeries(f=theta, domain=(0, 2 * jnp.pi)).compute_cheb(alpha)
+    # Theoretically, stitching θ is only necessary to recover single-valued ness
+    # necessary to bounce integrate quantities that are multivalued at a physical
+    # location. However, it is still useful to do so to ensure continuity is not
+    # lost when projecting the 2D basis to 1D.
+    T.stitch()
     theta = T.evaluate(N_B)
     xq = jnp.stack(
         [theta, jnp.broadcast_to(cheb_pts(N_B, domain=T.domain), theta.shape)], axis=-1
@@ -204,6 +207,11 @@ class Bounce2D(IOAble):
       G : α, ζ ↦ gₘₙ exp(j [m θ(α,ζ) + n ζ] )
     Perform Gaussian quadrature after removing singularities.
       Fᵢ : λ, ζ₁, ζ₂ ↦  ∫ᵢ f(λ, ζ, {Gⱼ}) dζ
+
+    If the map G is multivalued at a physical location, then it is still
+    permissible if separable into a single valued and multivalued parts.
+    In that case, supply the single valued parts, which will be interpolated
+    with FFTs, and use the provided coordinates θ,ζ ∈ ℝ to compose G.
 
     Longer description for developers.
 
@@ -288,6 +296,33 @@ class Bounce2D(IOAble):
     quadrature packs nodes at reasonable density. Fast multipoint methods are
     preferable because they are exact, but that requires more development work.
 
+    Additional notes on multivalued coordinates.
+    The definition of α in B = ∇ρ × ∇α on an irrational magnetic surface
+    implies the angle θ(α, ζ) is multivalued at a physical location.
+    In particular, following an irrational field, the single-valued θ grows
+    to ∞ (always non-monotonically) as ζ → ∞. Therefore, it is impossible to
+    approximate this map using single-valued basis functions defined on a
+    bounded subset of ℝ² (recall continuous functions on compact sets attain
+    their maximum).
+
+    Still, it suffices to interpolate θ over one branch cut.
+    DESC chooses the branch cut defined by (α, ζ) ∈ [0, 2π]² and we must
+    maintain that convention with our basis functions. On such a branch
+    cut, the bound θ ∈ [0, 4π] holds.
+
+    Likewise, α is multivalued. As the field line is followed, the label
+    jumps to α ∉ [0, 2π] after completing some toroidal transit. Therefore,
+    the map θ(α, ζ) must be periodic in α with period 2π. At every point
+    ζₚ ∈ [2π k, 2π ℓ] where k, ℓ ∈ ℤ where the field line completes a
+    poloidal transit there is guaranteed to exist a discrete jump
+    discontinuity in θ at ζ = 2π ℓ(p), starting the toroidal transit.
+    Recall a jump discontinuity appears as an infinitely sharp cut;
+    nearby the cut, the function must be blind to the cut.
+
+    To recover the single-valued θ(α, ζ) from the function approximation
+    over one branch cut, at every ζ = 2π ℓ we can add either 0 or 2π or
+    4π to the next cut of θ.
+
     See Also
     --------
     Bounce1D
@@ -300,8 +335,8 @@ class Bounce2D(IOAble):
         ``Bounce1D`` requires ``L*M*N*num_transit``. Furthermore, pseudo-spectral
         interpolation of smooth functions such as |B| on each flux surface is more
         efficient. This reduces the number of bounce integrals to be done by an
-        order of magnitude. Furthermore, C1 cubic spline interpolation is
-        inefficient to reconstruct smooth local maxima of |B|, which might be
+        order of magnitude. Also, we have noticed C1 cubic spline interpolation
+        is inefficient to reconstruct smooth local maxima of |B|, which might be
         important for (strongly) singular bounce integrals whose estimation
         depends on ∂|B|/∂ζ there.
 
@@ -748,41 +783,14 @@ class Bounce2D(IOAble):
         fig, ax = B.plot1d(B.cheb, **_set_default_plot_kwargs(kwargs))
         return fig, ax
 
-    def plot_theta(self, l, stitch=False, **kwargs):
+    def plot_theta(self, l, **kwargs):
         """Plot θ(α, ζ) on the specified flux surface.
-
-        Notes
-        -----
-        The definition of α in B = ∇ρ × ∇α on an irrational magnetic surface
-        implies the angle θ(α, ζ) is multivalued. In particular, following an
-        irrational field, the single-valued θ grows to ∞
-        (always non-monotonically) as ζ → ∞. Therefore, it is impossible to
-        approximate this map using single-valued basis functions defined on a
-        bounded subset of ℝ² (recall continuous functions on compact sets attain
-        their maximum).
-
-        However, our interest lies in computing functions which are
-        periodic in θ, so it suffices to interpolate θ over one branch cut.
-        DESC chooses the branch cut defined by (α, ζ) ∈ [0, 2π]² and we must
-        maintain that convention with our basis functions. On such a branch
-        cut, the bound θ ∈ [0, 4π] holds.
-
-        Likewise, α is multivalued. As the field line is followed, the label
-        jumps to α ∉ [0, 2π] after completing some toroidal transit. Therefore,
-        the map θ(α, ζ) must be periodic in α with period 2π. At every point
-        ζₚ ∈ [2π k, 2π ℓ] where k, ℓ ∈ ℤ where the field line completes a
-        poloidal transit there is guaranteed to exist a discrete jump
-        discontinuity in θ at ζ = 2π ℓ(p), starting the toroidal transit.
-        Recall a jump discontinuity appears as an infinitely sharp cut;
-        nearby the cut, the function must be blind to the cut.
 
         Parameters
         ----------
         l : int
             Index into the nodes of the grid supplied to make this object.
             ``rho=grid.compress(grid.nodes[:,0])[l]``.
-        stitch : bool
-            Whether to plot the single-valued θ(α, ζ).
         kwargs
             Keyword arguments into
             ``desc/integrals/basis.py::PiecewiseChebyshevSeries.plot1d``.
@@ -794,9 +802,6 @@ class Bounce2D(IOAble):
 
         """
         T = self._T
-        if stitch:
-            T = deepcopy(T)
-            T.stitch()
         if T.cheb.ndim > 2:
             T = PiecewiseChebyshevSeries(T.cheb[l], T.domain)
         kwargs.setdefault("hlabel", r"$\alpha = $" + str(self._alpha) + r", $\zeta$")

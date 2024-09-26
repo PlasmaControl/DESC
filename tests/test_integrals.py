@@ -1607,7 +1607,7 @@ class TestBounce2D:
         print("ρ:", rho[l])
 
         # 10. Plotting
-        fig, ax = bounce.plot_theta(l, stitch=True)
+        fig, ax = bounce.plot_theta(l)
         # TODO: why does this converge to different |B| than test_bounce1d_checks?
         fig, ax = bounce.plot(l, pitch_inv[l], include_legend=False, show=False)
         plt.show()

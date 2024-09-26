@@ -225,7 +225,7 @@ when instantiating an Objective objective to modify the objective cost in order 
 the objective to your desired purpose. For example, the DESC ``RotationalTransform``
 objective with ``target=iota_target`` by default forms the residual by taking the target
 and subtracting it from the profile at the points in the grid, resulting in a residual
-of the form :math:`\iota_{err} = \sum_{i} (\iota_i - iota_target)^2`, i.e. the residual
+of the form :math:`\iota_{err} = \sum_{i} (\iota_i - iota_{target})^2`, i.e. the residual
 is the sum of squared pointwise error between the current rotational transform profile
 and the target passed into the objective. If the desired objective instead is to
 optimize to target an average rotational transform of `iota_target`, we can adapt the

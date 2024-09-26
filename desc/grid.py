@@ -1646,26 +1646,27 @@ def most_rational(a, b, itol=1e-14):
         most rational number between [a,b]
 
     """
-    a = float(_round(a, itol))
-    b = float(_round(b, itol))
-    # handle empty range
-    if a == b:
-        return a
-    # ensure a < b
-    elif a > b:
-        c = a
-        a = b
-        b = c
-    # return 0 if in range
-    if np.sign(a * b) <= 0:
-        return 0
     # handle negative ranges
-    elif np.sign(a) < 0:
+    if np.sign(a) < 0:
         s = -1
         a *= -1
         b *= -1
     else:
         s = 1
+
+    # ensure a < b
+    if a > b:
+        c = a
+        a = b
+        b = c
+
+    # handle empty range
+    if a == b:
+        return a
+
+    # return 0 if in range
+    if np.sign(a * b) <= 0:
+        return 0
 
     a_cf = dec_to_cf(a)
     b_cf = dec_to_cf(b)

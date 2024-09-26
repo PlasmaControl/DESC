@@ -216,7 +216,7 @@ def batched_vectorize(pyfunc, *, excluded=frozenset(), signature=None, chunk_siz
 
     Parameters
     ----------
-    pyfunc: function to vectorize.
+    pyfunc: callable,function to vectorize.
     excluded: optional set of integers representing positional arguments for
     which the function will not be vectorized. These will be passed directly
     to ``pyfunc`` unmodified.

@@ -566,10 +566,10 @@ class BallooningStability(_Objective):
             self._alpha,
             (
                 jnp.linspace(0, jnp.pi, 8)
-                if eq.N != 0
+                if eq.N != 0 and eq.sym is True
                 else (
                     jnp.linspace(0, 2 * np.pi, 16)
-                    if eq.sym is False
+                    if eq.N != 0 and eq.sym is False
                     else jnp.array(0.0)
                 )
             ),

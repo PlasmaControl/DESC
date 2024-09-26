@@ -1646,7 +1646,18 @@ def most_rational(a, b, itol=1e-14):
         most rational number between [a,b]
 
     """
-    # handle negative ranges
+    a = float(_round(a, itol))
+    b = float(_round(b, itol))
+
+    # Handle empty range
+    if a == b:
+        return a
+
+    # Return 0 if in range
+    if np.sign(a * b) <= 0:
+        return 0
+    
+    # Handle negative ranges
     if np.sign(a) < 0:
         s = -1
         a *= -1
@@ -1654,20 +1665,10 @@ def most_rational(a, b, itol=1e-14):
     else:
         s = 1
 
-    # ensure a < b
+    # Ensure a < b
     if a > b:
-        c = a
-        a = b
-        b = c
-
-    # handle empty range
-    if a == b:
-        return a
-
-    # return 0 if in range
-    if np.sign(a * b) <= 0:
-        return 0
-
+        a, b = b, a
+    
     a_cf = dec_to_cf(a)
     b_cf = dec_to_cf(b)
     idx = 0  # first index of dissimilar digits

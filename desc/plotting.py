@@ -133,7 +133,7 @@ def _format_ax(ax, is3d=False, rows=1, cols=1, figsize=None, equal=False):
     Parameters
     ----------
     ax : None or matplotlib AxesSubplot instance
-        Axis to plot to.
+        Axis to plot on.
     is3d: bool
         Whether the plot is three-dimensional.
     rows : int, optional
@@ -847,7 +847,7 @@ def plot_3d(
     log : bool, optional
         Whether to use a log scale.
     fig : plotly.graph_objs._figure.Figure, optional
-        Figure to plot on
+        Figure to plot on.
     return_data : bool
         If True, return the data plotted as well as fig,ax
     **kwargs : dict, optional
@@ -2016,7 +2016,7 @@ def plot_boundary(eq, phi=None, plot_axis=True, ax=None, return_data=False, **kw
     ax.set_ylabel(_AXIS_LABELS_RPZ[2], fontsize=ylabel_fontsize)
     ax.tick_params(labelbottom=True, labelleft=True)
 
-    ax.legend(**legend_kw)
+    fig.legend(**legend_kw)
     _set_tight_layout(fig)
 
     plot_data = {}
@@ -2190,7 +2190,7 @@ def plot_boundaries(
     ax.tick_params(labelbottom=True, labelleft=True)
 
     if any(labels) and kwargs.pop("legend", True):
-        ax.legend(**kwargs.pop("legend_kw", {}))
+        fig.legend(**kwargs.pop("legend_kw", {}))
     _set_tight_layout(fig)
 
     assert (
@@ -2397,11 +2397,11 @@ def plot_coils(coils, grid=None, fig=None, return_data=False, **kwargs):
     Parameters
     ----------
     coils : Coil, CoilSet, Curve, or iterable
-        Coil or coils to plot
+        Coil or coils to plot.
     grid : Grid, optional
         Grid to use for evaluating geometry
     fig : plotly.graph_objs._figure.Figure, optional
-        Figure to plot on
+        Figure to plot on.
     return_data : bool
         If True, return the data plotted as well as fig,ax
     **kwargs : dict, optional
@@ -2706,7 +2706,7 @@ def plot_boozer_modes(  # noqa: C901
     ax.set_ylabel(ylabel, fontsize=ylabel_fontsize)
 
     if kwargs.pop("legend", True):
-        ax.legend(**kwargs.pop("legend_kw", {"loc": "lower right"}))
+        fig.legend(**kwargs.pop("legend_kw", {"loc": "lower right"}))
 
     assert (
         len(kwargs) == 0
@@ -2740,7 +2740,7 @@ def plot_boozer_surface(
     grid_compute : Grid, optional
         Grid to use for computing boozer spectrum
     grid_plot : Grid, optional
-        Grid to plot on
+        Grid to plot on.
     rho : float, optional
         Radial coordinate of flux surface. Used only if grids are not specified.
     fill : bool, optional
@@ -3119,7 +3119,7 @@ def plot_qs_error(  # noqa: 16 fxn too complex
         ax.set_ylabel(ylabel, fontsize=ylabel_fontsize)
 
     if kwargs.pop("legend", True):
-        ax.legend(**kwargs.pop("legend_kw", {"loc": "center right"}))
+        fig.legend(**kwargs.pop("legend_kw", {"loc": "center right"}))
 
     assert (
         len(kwargs) == 0
@@ -3495,7 +3495,7 @@ def plot_logo(save_path=None, **kwargs):
     fig : matplotlib.figure.Figure
         Figure being plotted to.
     ax : matplotlib.axes.Axes
-        Axis being plotted to.
+        Axes being plotted to.
 
     Examples
     --------

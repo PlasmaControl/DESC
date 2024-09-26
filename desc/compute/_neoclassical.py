@@ -109,9 +109,9 @@ def _G_ra_fsa(data, transforms, profiles, **kwargs):
 @register_compute_fun(
     name="epsilon 3/2",
     label=(
-        # ε¹ᐧ⁵ = π/(8√2) R₀²/〈|∇ψ|〉² B₀⁻¹ ∫dλ λ⁻² 〈 ∑ⱼ Hⱼ²/Iⱼ 〉
+        # ε¹ᐧ⁵ = π/(8√2) R₀²〈|∇ψ|〉⁻² B₀⁻¹ ∫dλ λ⁻² 〈 ∑ⱼ Hⱼ²/Iⱼ 〉
         "\\epsilon_{\\mathrm{eff}}^{3/2} = \\frac{\\pi}{8 \\sqrt{2}} "
-        "R_0^2 / \\langle \\vert\\nabla \\psi\\vert \\rangle^2 "
+        "R_0^2 \\langle \\vert\\nabla \\psi\\vert \\rangle^{-2} "
         "B_0^{-1} \\int d\\lambda \\lambda^{-2} "
         "\\langle \\sum_j H_j^2 / I_j \\rangle"
     ),

@@ -431,7 +431,7 @@ class BallooningStability(_Objective):
     zeta0 : array-like
         Points of vanishing integrated local shear to scan over.
         Default 15 points in [-π/2,π/2]
-    lam0 : float
+    lambda0 : float
         Threshold for penalizing growth rates in metric above.
     w0, w1 : float
         Weights for sum and max terms in metric above.
@@ -460,7 +460,7 @@ class BallooningStability(_Objective):
         nturns=3,
         nzetaperturn=200,
         zeta0=None,
-        lam0=0.0,
+        lambda0=0.0,
         w0=1.0,
         w1=10.0,
         name="ideal ballooning lambda",
@@ -473,7 +473,7 @@ class BallooningStability(_Objective):
         self._nturns = nturns
         self._nzetaperturn = nzetaperturn
         self._zeta0 = zeta0
-        self._lam0 = lam0
+        self._lambda0 = lambda0
         self._w0 = w0
         self._w1 = w1
 
@@ -487,6 +487,13 @@ class BallooningStability(_Objective):
             loss_function=loss_function,
             deriv_mode=deriv_mode,
             name=name,
+        )
+
+        errorif(
+            np.asarray(self._rho).size > 1,
+            ValueError,
+            "BallooningStability objective only works on a single surface. "
+            "To optimize multiple surfaces, use multiple instances of the objective.",
         )
 
     def build(self, eq=None, use_jit=True, verbose=1):
@@ -503,13 +510,6 @@ class BallooningStability(_Objective):
 
         """
         eq = self.things[0]
-
-        errorif(
-            np.asarray(self._rho).size > 1,
-            ValueError,
-            "BallooningStability objective only works on a single surface. "
-            "To optimize multiple surfaces, use multiple instances of the objective.",
-        )
 
         # we need a uniform grid to get correct surface averages for iota
         iota_grid = LinearGrid(
@@ -560,7 +560,7 @@ class BallooningStability(_Objective):
             "alpha": self._alpha,
             "zeta": zeta,
             "zeta0": self._zeta0,
-            "lam0": self._lam0,
+            "lambda0": self._lambda0,
             "w0": self._w0,
             "w1": self._w1,
             "quad_weights": 1.0,
@@ -637,10 +637,10 @@ class BallooningStability(_Objective):
             zeta0=constants["zeta0"],
         )["ideal ballooning lambda"]
 
-        lam0, w0, w1 = constants["lam0"], constants["w0"], constants["w1"]
+        lambda0, w0, w1 = constants["lambda0"], constants["w0"], constants["w1"]
 
         # Shifted ReLU operation
-        data = (lam - lam0) * (lam >= lam0)
+        data = (lam - lambda0) * (lam >= lambda0)
 
         results = w0 * jnp.sum(data) + w1 * jnp.max(data)
 

@@ -357,6 +357,7 @@ def test_magwell_print(capsys):
 def test_ballooning_geometry(tmpdir_factory):
     """Test the geometry coefficients used for the adjoint-ballooning solver.
 
+    We calculate coefficients using two different method and cross-compare them.
     The same coefficients are used for local gyrokinetic solvers which would
     be useful when we couple DESC with GX/GS2 etc.
     Observation: The larger the force error, the worse the tests behave. For
@@ -418,6 +419,12 @@ def test_ballooning_geometry(tmpdir_factory):
             "cvdrift0",
             "|B|",
             "B^zeta",
+            "theta_PEST_t",
+            "g^tt",
+            "g^zz",
+            "g^rt",
+            "g^tz",
+            "g^rz",
         ]
 
         grid = Grid.create_meshgrid(
@@ -426,40 +433,68 @@ def test_ballooning_geometry(tmpdir_factory):
             period=(np.inf, 2 * np.pi, np.inf),
         )
 
+        # Fieldline data
         data = eq.compute(data_keys, grid=grid)
 
+        # Data used to defining normalization
+        data01 = eq.compute(["Psi", "a"], grid=LinearGrid(rho=np.array([1.0])))
+        # normalizations
+        psi_b = data01["Psi"][-1] / (2 * jnp.pi)
+        Lref = data01["a"]
+        Bref = 2 * abs(psi_b) / Lref**2
+
+        # Data used only used for signs
         psi_s = data_eq["psi"][-1]
         sign_psi = psi_s / np.abs(psi_s)
         sign_iota = iotas / np.abs(iotas)
-        # normalizations
-        Lref = data_eq["a"]
-        Bref = 2 * np.abs(psi) / Lref**2
 
         modB = data["|B|"]
         x = Lref * np.sqrt(psi)
         shat = -x / iotas * shears / Lref
 
         psi_r = data["psi_r"]
-
-        grad_psi = data["grad(psi)"]
-        grad_psi_sq = data["|grad(psi)|^2"]
         grad_alpha = data["grad(alpha)"]
 
         g_sup_rr = data["g^rr"]
         g_sup_ra = data["g^ra"]
         g_sup_aa = data["g^aa"]
 
-        modB = data["|B|"]
+        lambda_r = data["lambda_r"]
+        lambda_t = data["lambda_t"]
+        lambda_z = data["lambda_z"]
 
+        grad_alpha_r = lambda_r - zeta * shears
+        grad_alpha_t = 1 + lambda_t
+        grad_alpha_z = -iotas + lambda_z
+
+        mod_grad_alpha_alt = np.sqrt(
+            grad_alpha_r**2 * data["g^rr"]
+            + grad_alpha_t**2 * data["g^tt"]
+            + grad_alpha_z**2 * data["g^zz"]
+            + 2 * grad_alpha_r * grad_alpha_t * data["g^rt"]
+            + 2 * grad_alpha_r * grad_alpha_z * data["g^rz"]
+            + 2 * grad_alpha_t * grad_alpha_z * data["g^tz"]
+        )
+
+        psi_r = 2 * psi_b * rho
+        grad_psi_dot_grad_alpha_alt = (
+            psi_r * grad_alpha_r * data["g^rr"]
+            + psi_r * grad_alpha_t * data["g^rt"]
+            + psi_r * grad_alpha_z * data["g^rz"]
+        )
+
+        grad_psi_dot_grad_psi_alt = psi_r**2 * data["g^rr"]
+
+        modB = data["|B|"]
         B_sup_zeta = data["B^zeta"]
 
-        gds2 = np.array(dot(grad_alpha, grad_alpha)) * Lref**2 * psi
-        gds2_alt = g_sup_aa * Lref**2 * psi
+        gds2_alt = mod_grad_alpha_alt**2 * Lref**2 * psi
+        gds2 = g_sup_aa * Lref**2 * psi
 
-        gds21 = -sign_iota * np.array(dot(grad_psi, grad_alpha)) * shat / Bref
-        gds21_alt = -sign_iota * g_sup_ra * shat / Bref * (psi_r)
+        gds21_alt = -sign_iota * grad_psi_dot_grad_alpha_alt * shat / Bref
+        gds21 = -sign_iota * g_sup_ra * shat / Bref * (psi_r)
 
-        gds22 = grad_psi_sq * (1 / psi) * (shat / (Lref * Bref)) ** 2
+        gds22 = grad_psi_dot_grad_psi_alt * (1 / psi) * (shat / (Lref * Bref)) ** 2
         gds22_alt = g_sup_rr * (psi_r) ** 2 * (1 / psi) * (shat / (Lref * Bref)) ** 2
 
         gbdrift = np.array(dot(cross(data["B"], data["grad(|B|)"]), grad_alpha))
@@ -477,11 +512,15 @@ def test_ballooning_geometry(tmpdir_factory):
         )
         cvdrift_alt = -sign_psi * data["cvdrift"] * 2 * Bref * Lref**2 * np.sqrt(psi)
 
-        np.testing.assert_allclose(gds2, gds2_alt)
+        np.testing.assert_allclose(gds2, gds2_alt, rtol=4e-3)
         np.testing.assert_allclose(gds22, gds22_alt)
-        np.testing.assert_allclose(gds21, gds21_alt)
+        # gds21 is a zero crossing quantity, rtol won't work,
+        # shifting the grid slightly can change rtol requirement significantly
+        np.testing.assert_allclose(gds21, gds21_alt, atol=1e-3)
         np.testing.assert_allclose(gbdrift, gbdrift_alt)
-        np.testing.assert_allclose(cvdrift, cvdrift_alt, atol=1e-2)
+        # cvdrift is a zero crossing quantity, rtol won't work,
+        # shifting the grid slightly can change rtol requirement significantly
+        np.testing.assert_allclose(cvdrift, cvdrift_alt, atol=5e-3)
 
         sqrt_g_PEST = data["sqrt(g)_PEST"]
         np.testing.assert_allclose(sqrt_g_PEST, 1 / (B_sup_zeta / psi_r))
@@ -539,6 +578,7 @@ def test_ballooning_stability_eval():
             "B^zeta",
             "p_r",
             "iota",
+            "iota_r",
             "shear",
             "psi",
             "psi_r",

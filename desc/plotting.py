@@ -3263,7 +3263,7 @@ def plot_basis(basis, return_data=False, **kwargs):
     fig : matplotlib.figure.Figure
         Figure being plotted to.
     ax : matplotlib.axes.Axes, ndarray of axes, or dict of axes
-        Axes used for plotting. A single axis is used for 1d basis functions,
+        Axes being plotted to. A single axis is used for 1d basis functions,
         2d or 3d bases return an ndarray or dict of axes.    return_data : bool
         if True, return the data plotted as well as fig,ax
     plot_data : dict
@@ -3493,9 +3493,9 @@ def plot_logo(save_path=None, **kwargs):
     Returns
     -------
     fig : matplotlib.figure.Figure
-        Handle to the figure used for plotting
+        Figure being plotted to.
     ax : matplotlib.axes.Axes
-        Handle to the axis used for plotting
+        Axis being plotted to.
 
     Examples
     --------

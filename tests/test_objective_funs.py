@@ -1285,31 +1285,62 @@ def test_derivative_modes():
     surf = FourierRZToroidalSurface()
     obj1 = ObjectiveFunction(
         [
-            PlasmaVesselDistance(eq, surf),
+            PlasmaVesselDistance(eq, surf, jac_chunk_size=1),
             MagneticWell(eq),
+            AspectRatio(eq),
         ],
         deriv_mode="batched",
         use_jit=False,
     )
     obj2 = ObjectiveFunction(
         [
+            PlasmaVesselDistance(eq, surf, jac_chunk_size=2),
+            MagneticWell(eq),
+            AspectRatio(eq, jac_chunk_size=None),
+        ],
+        deriv_mode="blocked",
+        jac_chunk_size=10,
+        use_jit=False,
+    )
+    with pytest.warns(DeprecationWarning, match="looped"):
+        obj3 = ObjectiveFunction(
+            [
+                PlasmaVesselDistance(eq, surf),
+                MagneticWell(eq),
+                AspectRatio(eq),
+            ],
+            deriv_mode="looped",
+            use_jit=False,
+        )
+    with pytest.raises(ValueError, match="jac_chunk_size"):
+        obj1.build()
+    with pytest.raises(ValueError, match="jac_chunk_size"):
+        obj2.build()
+    obj1 = ObjectiveFunction(
+        [
             PlasmaVesselDistance(eq, surf),
             MagneticWell(eq),
+            AspectRatio(eq),
+        ],
+        deriv_mode="batched",
+        use_jit=False,
+    )
+    obj2 = ObjectiveFunction(
+        [
+            PlasmaVesselDistance(eq, surf, jac_chunk_size=2),
+            MagneticWell(eq),
+            AspectRatio(eq, jac_chunk_size=None),
         ],
         deriv_mode="blocked",
         use_jit=False,
     )
-    obj3 = ObjectiveFunction(
-        [
-            PlasmaVesselDistance(eq, surf),
-            MagneticWell(eq),
-        ],
-        deriv_mode="looped",
-        use_jit=False,
-    )
-
     obj1.build()
     obj2.build()
+    # check that default size works for blocked
+    assert obj2.objectives[1]._jac_chunk_size is None
+    assert obj2.objectives[2]._jac_chunk_size is None
+    # hard to say what size auto will give, just check it is >0
+    assert obj1._jac_chunk_size > 0
     obj3.build()
     x = obj1.x(eq, surf)
     g1 = obj1.grad(x)

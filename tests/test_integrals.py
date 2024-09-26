@@ -1529,6 +1529,15 @@ class TestBounce2D:
         assert alphas.shape == (iota.size, num_period)
         print(alphas)
 
+    @staticmethod
+    def _example_numerator(g_zz, B, pitch, zeta):
+        f = (1 - 0.5 * pitch * B) * g_zz
+        return safediv(f, jnp.sqrt(jnp.abs(1 - pitch * B)))
+
+    @staticmethod
+    def _example_denominator(B, pitch, zeta):
+        return safediv(1, jnp.sqrt(jnp.abs(1 - pitch * B)))
+
     @pytest.mark.unit
     @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d * 4)
     def test_bounce2d_checks(self):
@@ -1571,14 +1580,14 @@ class TestBounce2D:
         bounce.check_points(points, pitch_inv, plot=False)
         # 8. Integrate.
         num = bounce.integrate(
-            integrand=TestBounce1D._example_numerator,
+            integrand=TestBounce2D._example_numerator,
             pitch_inv=pitch_inv,
             f=Bounce2D.reshape_data(grid, data["g_zz"]),
             points=points,
             check=True,
         )
         den = bounce.integrate(
-            integrand=TestBounce1D._example_denominator,
+            integrand=TestBounce2D._example_denominator,
             pitch_inv=pitch_inv,
             points=points,
             check=True,
@@ -1598,7 +1607,7 @@ class TestBounce2D:
         print("ρ:", rho[l])
 
         # 10. Plotting
-        fig, ax = bounce.plot_theta(l)
+        fig, ax = bounce.plot_theta(l, stitch=True)
         # TODO: why does this converge to different |B| than test_bounce1d_checks?
         fig, ax = bounce.plot(l, pitch_inv[l], include_legend=False, show=False)
         plt.show()

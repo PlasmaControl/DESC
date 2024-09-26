@@ -112,35 +112,29 @@ class FourierChebyshevSeries(IOAble):
     Performance may improve significantly
     if the spectral resolutions ``M`` and ``N`` are powers of two.
 
+
+    Parameters
+    ----------
+    f : jnp.ndarray
+        Shape (..., M, N).
+        Samples of real function on the ``FourierChebyshevSeries.nodes`` grid.
+    domain : tuple[float]
+        Domain for y coordinates. Default is [-1, 1].
+    lobatto : bool
+        Whether ``f`` was sampled on the Gauss-Lobatto (extrema-plus-endpoint)
+        instead of the interior roots grid for Chebyshev points.
+
     Attributes
     ----------
     M : int
         Fourier spectral resolution.
     N : int
         Chebyshev spectral resolution.
-    domain : (float, float)
-        Domain for y coordinates.
-    lobatto : bool
-        Whether ``f`` was sampled on the Gauss-Lobatto (extrema-plus-endpoint)
-        instead of the interior roots grid for Chebyshev points.
 
     """
 
     def __init__(self, f, domain=(-1, 1), lobatto=False):
-        """Interpolate Fourier-Chebyshev series to ``f``.
-
-        Parameters
-        ----------
-        f : jnp.ndarray
-            Shape (..., M, N).
-            Samples of real function on the ``FourierChebyshevSeries.nodes`` grid.
-        domain : (float, float)
-            Domain for y coordinates. Default is [-1, 1].
-        lobatto : bool
-            Whether ``f`` was sampled on the Gauss-Lobatto (extrema-plus-endpoint)
-            instead of the interior roots grid for Chebyshev points.
-
-        """
+        """Interpolate Fourier-Chebyshev series to ``f``."""
         self.M = f.shape[-2]
         self.N = f.shape[-1]
         errorif(domain[0] > domain[-1], msg="Got inverted domain.")
@@ -269,32 +263,18 @@ class PiecewiseChebyshevSeries(IOAble):
     { fₓ | fₓ : y ↦ ∑ₙ₌₀ᴺ⁻¹ aₙ(x) Tₙ(y) }
     and Tₙ are Chebyshev polynomials on [−yₘᵢₙ, yₘₐₓ]
 
-    Attributes
+    Parameters
     ----------
     cheb : jnp.ndarray
         Shape (..., M, N).
-        Chebyshev coefficients αₙ(x) for fₓ(y) = ∑ₙ₌₀ᴺ⁻¹ αₙ(x) Tₙ(y).
-    M : int
-        Number of cuts.
-    N : int
-        Chebyshev spectral resolution of each cut.
-    domain : (float, float)
-        Domain for y coordinates.
+        Chebyshev coefficients αₙ(x) for f(x, y) = ∑ₙ₌₀ᴺ⁻¹ αₙ(x) Tₙ(y).
+    domain : tuple[float]
+        Domain for y coordinates. Default is [-1, 1].
 
     """
 
     def __init__(self, cheb, domain=(-1, 1)):
-        """Make piecewise series from given Chebyshev coefficients.
-
-        Parameters
-        ----------
-        cheb : jnp.ndarray
-            Shape (..., M, N).
-            Chebyshev coefficients αₙ(x=``x``) for f(x, y) = ∑ₙ₌₀ᴺ⁻¹ αₙ(x) Tₙ(y).
-        domain : (float, float)
-            Domain for y coordinates. Default is [-1, 1].
-
-        """
+        """Make piecewise series from given Chebyshev coefficients."""
         self.cheb = jnp.atleast_2d(cheb)
         errorif(domain[0] > domain[-1], msg="Got inverted domain.")
         self.domain = tuple(domain)
@@ -308,6 +288,20 @@ class PiecewiseChebyshevSeries(IOAble):
     def N(self):
         """Chebyshev spectral resolution."""
         return self.cheb.shape[-1]
+
+    def stitch(self):
+        """Enforce the piecewise series is continuous."""
+        # This is used to short-circuit convergence of poloidal Fourier series
+        # so that |B| along the field line is perfectly continuous.
+        # Useful at lower resolution because the singularities in
+        # the bounce integrals are strong functions of |B| alone.
+
+        # evaluate at left boundary
+        f_0 = self.cheb[..., ::2].sum(axis=-1) - self.cheb[..., 1::2].sum(axis=-1)
+        # evaluate at right boundary
+        f_1 = self.cheb.sum(axis=-1)
+        dfx = f_1[..., :-1] - f_0[..., 1:]  # Δf = f(xᵢ, y₁) - f(xᵢ₊₁, y₀)
+        self.cheb = self.cheb.at[..., 1:, 0].add(dfx)  # + f(xᵢ₊₁, y₀)
 
     def evaluate(self, N):
         """Evaluate Chebyshev series at N Chebyshev points.

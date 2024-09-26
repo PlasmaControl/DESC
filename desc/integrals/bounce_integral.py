@@ -1,5 +1,7 @@
 """Methods for computing bounce integrals (singular or otherwise)."""
 
+from copy import deepcopy
+
 import numpy as np
 from interpax import CubicHermiteSpline, PPoly
 from numpy.fft import rfft2
@@ -153,6 +155,7 @@ def _transform_to_clebsch_1d(grid, alpha, theta, B, N_B, is_reshaped=False):
     ).reshape(*alpha.shape, N_B)
     # Need |B| parameterized by single variable to compute roots.
     B = PiecewiseChebyshevSeries(cheb_from_dct(dct(B, type=2, axis=-1)) / N_B, T.domain)
+    B.stitch()
     return T, B
 
 
@@ -190,7 +193,7 @@ class Bounce2D(IOAble):
     Brief description of algorithm.
 
     Magnetic field line with label α, defined by B = ∇ρ × ∇α, is determined from
-        α : ρ, θ, ζ ↦ θ + λ(ρ,θ,ζ) − ι(ρ) [ζ + ω(ρ,θ,ζ)]
+      α : ρ, θ, ζ ↦ θ + λ(ρ,θ,ζ) − ι(ρ) [ζ + ω(ρ,θ,ζ)]
     Interpolate Fourier-Chebyshev series to DESC poloidal coordinate.
       θ : α, ζ ↦ tₘₙ exp(jmα) Tₙ(ζ)
     Compute |B| along field lines.
@@ -212,12 +215,11 @@ class Bounce2D(IOAble):
     which is invariant to the order of summation).
 
     The DESC coordinate system is related to field-line-following coordinate
-    systems by a relation whose solution is best found with Newton iteration.
-    There is a unique real solution to that relation, so Newton iteration is a
-    globally convergent root-finding algorithm here. For the task of finding
-    bounce points, Newton iteration is not a globally convergent algorithm to
-    find the real roots of r : ζ ↦ |B|(ζ) − 1/λ where ζ is a field-line-following
-    coordinate. For this, function approximation of |B| is necessary.
+    systems by a relation whose solution is best found with Newton iteration
+    since this solution is unique.  Newton iteration is not a globally
+    convergent algorithm to find the real roots of r : ζ ↦ |B|(ζ) − 1/λ where
+    ζ is a field-line-following coordinate. For this, function approximation
+    of |B| is necessary.
 
     Therefore, to compute bounce points {(ζ₁, ζ₂)}, we approximate |B| by a
     series expansion of basis functions parameterized by a single variable ζ,
@@ -290,7 +292,6 @@ class Bounce2D(IOAble):
     --------
     Bounce1D
         Uses one-dimensional local spline methods for the same task.
-        Does not assume G is single-valued in θ and ζ.
 
         Below are some advantages of ``Bounce2D`` over ``Bounce1D``.
         The coordinates on which the root-finding must be done to map from DESC
@@ -322,7 +323,8 @@ class Bounce2D(IOAble):
         N_B=32,
         num_transit=32,
         # TODO: Allow multiple starting labels for near-rational surfaces.
-        #  think can just concatenate along second to last axis of cheb
+        #  think can just concatenate along second to last axis of cheb.
+        #  Do this in different PR.
         alpha=0.0,
         quad=leggauss(32),
         automorphism=(automorphism_sin, grad_automorphism_sin),
@@ -605,8 +607,9 @@ class Bounce2D(IOAble):
             The composition operator on the set of functions in ``f`` that maps the
             functions in ``f`` to the integrand f(λ, ℓ) in ∫ f(λ, ℓ) dℓ. It should
             accept the arrays in ``f`` as arguments as well as the additional keyword
-            arguments: ``B`` and ``pitch``. A quadrature will be performed to
-            approximate the bounce integral of ``integrand(*f,B=B,pitch=pitch)``.
+            arguments: ``B``, ``pitch``, and ``zeta``. A quadrature will be performed
+            to approximate the bounce integral of
+            ``integrand(*f,B=B,pitch=pitch,zeta=zeta)``.
         pitch_inv : jnp.ndarray
             Shape (L, num_pitch).
             1/λ values to compute the bounce integrals. 1/λ(ρ) is specified by
@@ -684,25 +687,21 @@ class Bounce2D(IOAble):
             axes=(-1, -2),
         )
         B = self._B.eval1d(zeta)
-        # TODO: not all f is single-valued. effective ripple, Gamma_c is, Gamma_c
-        #  valasco is not. FFT single valued part than sum afterword with
-        #  multivalued correction part longer term solution may be adding to
-        #  compute metadata single valued term and multivalued correction factor
         f = [interp_rfft2(Q, f_i[..., jnp.newaxis, :, :], axes=(-1, -2)) for f_i in f]
         result = _swap_pl(
-            (integrand(*f, B=B, pitch=1 / pitch_inv[..., jnp.newaxis]) / b_sup_z)
+            (
+                integrand(*f, B=B, pitch=1 / pitch_inv[..., jnp.newaxis], zeta=zeta)
+                / b_sup_z
+            )
             .reshape(shape)
             .dot(self._w)
             * grad_bijection_from_disc(z1, z2)
         )
 
         if check:
-            num_pitch = shape[0]
-            num_rho = shape[-3]
-            shape[0] = num_rho
-            shape[-3] = num_pitch
+            shape[-3], shape[0] = shape[0], shape[-3]
             _check_interp(
-                # num_alpha, num_rho, num_pitch, num_well, num_quad
+                # num_alpha is 1, num_rho, num_pitch, num_well, num_quad
                 (1, *shape),
                 *map(_swap_pl, (zeta, b_sup_z, B)),
                 result,
@@ -749,16 +748,18 @@ class Bounce2D(IOAble):
         fig, ax = B.plot1d(B.cheb, **_set_default_plot_kwargs(kwargs))
         return fig, ax
 
-    def plot_theta(self, l, **kwargs):
+    def plot_theta(self, l, stitch=False, **kwargs):
         """Plot θ(α, ζ) on the specified flux surface.
 
         Notes
         -----
         The definition of α in B = ∇ρ × ∇α on an irrational magnetic surface
-        implies the true map θ(α, ζ) is multivalued. In particular, following an
-        irrational field, θ grows to ∞ (always non-monotonically) as ζ → ∞.
-        Therefore, it is impossible to approximate this map using single-valued
-        basis functions defined on a bounded subset of ℝ².
+        implies the angle θ(α, ζ) is multivalued. In particular, following an
+        irrational field, the single-valued θ grows to ∞
+        (always non-monotonically) as ζ → ∞. Therefore, it is impossible to
+        approximate this map using single-valued basis functions defined on a
+        bounded subset of ℝ² (recall continuous functions on compact sets attain
+        their maximum).
 
         However, our interest lies in computing functions which are
         periodic in θ, so it suffices to interpolate θ over one branch cut.
@@ -780,6 +781,8 @@ class Bounce2D(IOAble):
         l : int
             Index into the nodes of the grid supplied to make this object.
             ``rho=grid.compress(grid.nodes[:,0])[l]``.
+        stitch : bool
+            Whether to plot the single-valued θ(α, ζ).
         kwargs
             Keyword arguments into
             ``desc/integrals/basis.py::PiecewiseChebyshevSeries.plot1d``.
@@ -791,6 +794,9 @@ class Bounce2D(IOAble):
 
         """
         T = self._T
+        if stitch:
+            T = deepcopy(T)
+            T.stitch()
         if T.cheb.ndim > 2:
             T = PiecewiseChebyshevSeries(T.cheb[l], T.domain)
         kwargs.setdefault("hlabel", r"$\alpha = $" + str(self._alpha) + r", $\zeta$")
@@ -798,21 +804,6 @@ class Bounce2D(IOAble):
             T.cheb, **_set_default_plot_kwargs(kwargs, vlabel=r"$\theta$")
         )
         return fig, ax
-        # Note:
-        #     It is simple to reconstruct the true map θ(α, ζ) from our
-        #     function that approximates over one the branch cut. At every
-        #     ζ = 2π ℓ, ℓ ∈ ℤ add either 0 or 2π or 4π to the next cut
-        #     toroidal cut, where this number is chosen to ensure continuity.
-        #     Can evaluate θ left and right of ζ = 2π ℓ to determine the amount
-        #     to add. This is only useful if one would like to interpolate
-        #     functions that are multi-valued in θ, ζ such as gbdrift.
-        #     still for such functions one needs to use a 1D non-periodic
-        #     interpolation such as in ``Bounce1D`` or split the function
-        #     into a single-valued part, and a multivalued part where the
-        #     multivalued part can be evaluated accurately anywhere given
-        #     some object that can evaluate the single valued part anywhere.
-        #     The infrastructure required for this would be to add such
-        #     information to data_index.
 
 
 class Bounce1D(IOAble):
@@ -843,12 +834,11 @@ class Bounce1D(IOAble):
     which is invariant to the order of summation).
 
     The DESC coordinate system is related to field-line-following coordinate
-    systems by a relation whose solution is best found with Newton iteration.
-    There is a unique real solution to that relation, so Newton iteration is a
-    globally convergent root-finding algorithm here. For the task of finding
-    bounce points, Newton iteration is not a globally convergent algorithm to
-    find the real roots of r : ζ ↦ |B|(ζ) − 1/λ where ζ is a field-line-following
-    coordinate. For this, function approximation of |B| is necessary.
+    systems by a relation whose solution is best found with Newton iteration
+    since this solution is unique.  Newton iteration is not a globally
+    convergent algorithm to find the real roots of r : ζ ↦ |B|(ζ) − 1/λ where
+    ζ is a field-line-following coordinate. For this, function approximation
+    of |B| is necessary.
 
     The function approximation in ``Bounce1D`` is ignorant that the objects to
     approximate are defined on a bounded subset of ℝ². Instead, the domain is

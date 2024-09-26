@@ -11,7 +11,7 @@ from functools import partial
 
 import numpy as np
 from interpax import interp1d
-from orthax.chebyshev import chebroots, chebvander
+from orthax.chebyshev import chebroots
 
 from desc.backend import dct, jnp, rfft, rfft2, take
 from desc.integrals.quad_utils import bijection_from_disc
@@ -393,9 +393,12 @@ def idct_non_uniform(xq, a, n, axis=-1):
 
     """
     a = jnp.moveaxis(a, axis, -1)
-    # Could use Clenshaw recursion with fq = chebval(xq, a, tensor=False).
-    basis = chebvander(xq, n - 1)
-    fq = jnp.linalg.vecdot(basis, a)
+    # Equivalent to
+    # Clenshaw recursion: chebval(xq, a, tensor=False),
+    # Vandermode product: jnp.linalg.vecdot(chebvander(xq, n - 1), a)
+    # but performs better on GPU.
+    n = jnp.arange(n)
+    fq = jnp.linalg.vecdot(jnp.cos(n * jnp.arccos(xq)[..., jnp.newaxis]), a)
     return fq
 
 

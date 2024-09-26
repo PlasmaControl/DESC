@@ -537,8 +537,18 @@ class BallooningStability(_Objective):
 
         # set alpha/zeta0 grids
         self._alpha = setdefault(
-            self._alpha, jnp.linspace(0, jnp.pi, 8) if eq.N != 0 else jnp.array(0.0)
+            self._alpha,
+            (
+                jnp.linspace(0, jnp.pi, 8)
+                if eq.N != 0
+                else (
+                    jnp.linspace(0, 2 * np.pi, 16)
+                    if eq.sym is False
+                    else jnp.array(0.0)
+                )
+            ),
         )
+
         self._zeta0 = setdefault(
             self._zeta0, jnp.linspace(-0.5 * jnp.pi, 0.5 * jnp.pi, 15)
         )

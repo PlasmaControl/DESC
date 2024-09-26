@@ -1646,6 +1646,10 @@ def most_rational(a, b, itol=1e-14):
         most rational number between [a,b]
 
     """
+
+    a = float(_round(a, itol))
+    b = float(_round(b, itol))
+    
     # handle negative ranges
     if np.sign(a) < 0:
         s = -1

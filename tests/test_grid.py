@@ -814,6 +814,7 @@ class TestGrid:
         for i in range(1, f.shape[-1]):
             np.testing.assert_allclose(f[..., i - 1], f[..., i])
 
+
 @pytest.mark.unit
 def test_find_most_rational_surfaces():
     """Test finding the most rational surfaces and their locations."""

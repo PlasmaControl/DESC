@@ -109,9 +109,9 @@ def _G_ra_fsa(data, transforms, profiles, **kwargs):
 @register_compute_fun(
     name="epsilon 3/2",
     label=(
-        # ε¹ᐧ⁵ = π/(8√2) (R₀/〈|∇ψ|〉)² B₀⁻¹ ∫dλ λ⁻² 〈 ∑ⱼ Hⱼ²/Iⱼ 〉
-        "\\epsilon_{\\mathrm{\\effective}}^{3/2} = \\frac{\\pi}{8 \\sqrt{2}} "
-        "(R_0 / \\langle \\vert\\nabla \\psi\\vert \\rangle)^2 "
+        # ε¹ᐧ⁵ = π/(8√2) R₀²/〈|∇ψ|〉² B₀⁻¹ ∫dλ λ⁻² 〈 ∑ⱼ Hⱼ²/Iⱼ 〉
+        "\\epsilon_{\\mathrm{eff}}^{3/2} = \\frac{\\pi}{8 \\sqrt{2}} "
+        "R_0^2 / \\langle \\vert\\nabla \\psi\\vert \\rangle^2 "
         "B_0^{-1} \\int d\\lambda \\lambda^{-2} "
         "\\langle \\sum_j H_j^2 / I_j \\rangle"
     ),
@@ -229,8 +229,7 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="effective ripple",
-    # ε¹ᐧ⁵ = π/(8√2) (R₀/〈|∇ψ|〉)² B₀⁻¹ ∫dλ λ⁻² 〈 ∑ⱼ Hⱼ²/Iⱼ 〉
-    label="\\epsilon_{\\mathrm{\\effective}}",
+    label="\\epsilon_{\\mathrm{eff}}",
     units="~",
     units_long="None",
     description="Effective ripple modulation amplitude",
@@ -243,6 +242,7 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
 )
 def _effective_ripple(params, transforms, profiles, data, **kwargs):
     data["effective ripple"] = data["epsilon 3/2"] ** (2 / 3)
+    return data
 
 
 @register_compute_fun(

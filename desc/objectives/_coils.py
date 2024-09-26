@@ -1615,7 +1615,7 @@ class SurfaceCurrentRegularization(_Objective):
 
     _coordinates = "tz"
     _units = "A/m"
-    _print_value_fmt = "Surface Current Regularization: {:10.3e} "
+    _print_value_fmt = "Surface Current Regularization: "
 
     def __init__(
         self,

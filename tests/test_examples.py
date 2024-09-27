@@ -302,7 +302,7 @@ def test_ATF_results(tmpdir_factory):
         spectral_indexing=eq0.spectral_indexing,
     )
     eqf = EquilibriaFamily.solve_continuation_automatic(
-        eq, verbose=2, checkpoint_path=output_dir.join("ATF.h5"), jac_chunk_size=500
+        eq, verbose=2, checkpoint_path=output_dir.join("ATF.h5")
     )
     eqf = load(output_dir.join("ATF.h5"))
     rho_err, theta_err = area_difference_desc(eq0, eqf[-1])

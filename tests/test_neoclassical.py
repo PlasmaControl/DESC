@@ -59,7 +59,7 @@ def test_effective_ripple():
         data["effective ripple"],
         err_msg="Bug in source grid logic in eq.compute.",
     )
-    eps_32 = grid.compress(data["epsilon 3/2"])
+    eps_32 = grid.compress(data["effective ripple 3/2"])
     fig, ax = plt.subplots()
     ax.plot(rho, eps_32, marker="o")
 

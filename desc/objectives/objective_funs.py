@@ -13,6 +13,7 @@ from desc.backend import (
     jit,
     jnp,
     tree_flatten,
+    tree_map,
     tree_unflatten,
     use_jax,
 )
@@ -1196,17 +1197,27 @@ class _Objective(IOAble, ABC):
             chunk_size=self._jac_chunk_size,
         )(*args, **kwargs)
 
-    def _jvp(self, v, x, constants=None, op="compute_scaled"):
+    def _jvp(self, v, x, constants=None, op="scaled"):
         v = v if isinstance(v, (tuple, list)) else (v,)
         x = x if isinstance(x, (tuple, list)) else (x,)
         assert len(x) == len(v)
 
-        fun = lambda *x: getattr(self, op)(*x, constants=constants)
-        jvpfun = lambda *dx: Derivative.compute_jvp(fun, tuple(range(len(x))), dx, *x)
-        sig = ",".join(f"(n{i})" for i in range(len(x))) + "->(k)"
-        return batched_vectorize(
-            jvpfun, signature=sig, chunk_size=self._jac_chunk_size
-        )(*v)
+        if self._deriv_mode == "fwd":
+            fun = lambda *x: getattr(self, "compute_" + op)(*x, constants=constants)
+            jvpfun = lambda *dx: Derivative.compute_jvp(
+                fun, tuple(range(len(x))), dx, *x
+            )
+            sig = ",".join(f"(n{i})" for i in range(len(x))) + "->(k)"
+            return batched_vectorize(
+                jvpfun, signature=sig, chunk_size=self._jac_chunk_size
+            )(*v)
+        else:  # rev mode. We compute full jacobian and manually do mv. In this case
+            # the jacobian should be wide so this isn't very expensive.
+            jac = getattr(self, "jac_" + op)(*x, constants=constants)
+            # jac is a tuple, 1 array for each thing
+            Jv = tree_map(jnp.dot, jac, v)
+            # sum over different things
+            return jnp.sum(jnp.asarray(Jv), axis=0)
 
     @jit
     def jvp_scaled(self, v, x, constants=None):
@@ -1222,7 +1233,7 @@ class _Objective(IOAble, ABC):
             Constant parameters passed to sub-objectives.
 
         """
-        return self._jvp(v, x, constants, "compute_scaled")
+        return self._jvp(v, x, constants, "scaled")
 
     @jit
     def jvp_scaled_error(self, v, x, constants=None):
@@ -1238,7 +1249,7 @@ class _Objective(IOAble, ABC):
             Constant parameters passed to sub-objectives.
 
         """
-        return self._jvp(v, x, constants, "compute_scaled_error")
+        return self._jvp(v, x, constants, "scaled_error")
 
     @jit
     def jvp_unscaled(self, v, x, constants=None):
@@ -1254,7 +1265,7 @@ class _Objective(IOAble, ABC):
             Constant parameters passed to sub-objectives.
 
         """
-        return self._jvp(v, x, constants, "compute_unscaled")
+        return self._jvp(v, x, constants, "unscaled")
 
     def print_value(self, args, args0=None, **kwargs):
         """Print the value of the objective."""

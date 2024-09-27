@@ -1656,7 +1656,7 @@ def most_rational(a, b, itol=1e-14):
     # Return 0 if in range
     if np.sign(a * b) <= 0:
         return 0
-    
+
     # Handle negative ranges
     if np.sign(a) < 0:
         s = -1
@@ -1668,7 +1668,7 @@ def most_rational(a, b, itol=1e-14):
     # Ensure a < b
     if a > b:
         a, b = b, a
-    
+
     a_cf = dec_to_cf(a)
     b_cf = dec_to_cf(b)
     idx = 0  # first index of dissimilar digits

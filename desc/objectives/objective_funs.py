@@ -1167,25 +1167,34 @@ class _Objective(IOAble, ABC):
     def jac_scaled(self, *args, **kwargs):
         """Compute Jacobian matrix of self.compute_scaled wrt x."""
         argnums = tuple(range(len(self.things)))
-        return Derivative(self.compute_scaled, argnums, mode=self._deriv_mode)(
-            *args, **kwargs
-        )
+        return Derivative(
+            self.compute_scaled,
+            argnums,
+            mode=self._deriv_mode,
+            chunk_size=self._jac_chunk_size,
+        )(*args, **kwargs)
 
     @jit
     def jac_scaled_error(self, *args, **kwargs):
         """Compute Jacobian matrix of self.compute_scaled_error wrt x."""
         argnums = tuple(range(len(self.things)))
-        return Derivative(self.compute_scaled_error, argnums, mode=self._deriv_mode)(
-            *args, **kwargs
-        )
+        return Derivative(
+            self.compute_scaled_error,
+            argnums,
+            mode=self._deriv_mode,
+            chunk_size=self._jac_chunk_size,
+        )(*args, **kwargs)
 
     @jit
     def jac_unscaled(self, *args, **kwargs):
         """Compute Jacobian matrix of self.compute_unscaled wrt x."""
         argnums = tuple(range(len(self.things)))
-        return Derivative(self.compute_unscaled, argnums, mode=self._deriv_mode)(
-            *args, **kwargs
-        )
+        return Derivative(
+            self.compute_unscaled,
+            argnums,
+            mode=self._deriv_mode,
+            chunk_size=self._jac_chunk_size,
+        )(*args, **kwargs)
 
     def _jvp(self, v, x, constants=None, op="compute_scaled"):
         v = v if isinstance(v, (tuple, list)) else (v,)

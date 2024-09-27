@@ -37,6 +37,7 @@ from desc.magnetic_fields import (
 )
 from desc.objectives import (
     AspectRatio,
+    BallooningStability,
     BootstrapRedlConsistency,
     BoundaryError,
     BScaleLength,
@@ -2590,6 +2591,7 @@ class TestObjectiveNaNGrad:
     ]
     specials = [
         # these require special logic
+        BallooningStability,
         BootstrapRedlConsistency,
         BoundaryError,
         CoilLength,
@@ -2825,6 +2827,15 @@ class TestObjectiveNaNGrad:
         obj.build()
         g = obj.grad(obj.x())
         assert not np.any(np.isnan(g)), str(helicity)
+
+    @pytest.mark.unit
+    def test_objective_no_nangrad_ballooning(self):
+        """BallooningStability."""
+        eq = get("HELIOTRON")
+        obj = ObjectiveFunction(BallooningStability(eq=eq))
+        obj.build()
+        g = obj.grad(obj.x())
+        assert not np.any(np.isnan(g))
 
 
 @pytest.mark.unit

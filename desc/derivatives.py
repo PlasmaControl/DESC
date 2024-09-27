@@ -5,7 +5,7 @@ from abc import ABC, abstractmethod
 import numpy as np
 from termcolor import colored
 
-from desc.backend import fori_loop, jnp, put, use_jax
+from desc.backend import jnp, put, use_jax
 
 if use_jax:
     import jax
@@ -315,23 +315,8 @@ class AutoDiffDerivative(_Derivative):
     def _compute_jvp(self, v, *args, **kwargs):
         return self.compute_jvp(self._fun, self.argnum, v, *args, **kwargs)
 
-    def _jac_looped(self, *args, **kwargs):
-
-        n = args[self._argnum].size
-        shp = jax.eval_shape(self._fun, *args).shape
-        I = jnp.eye(n)
-        J = jnp.zeros((*shp, n)).T
-
-        def body(i, J):
-            tangents = I[i]
-            Ji = self._compute_jvp(tangents, *args, **kwargs)
-            J = put(J, i, Ji.T)
-            return J
-
-        return fori_loop(0, n, body, J).T
-
     def _set_mode(self, mode) -> None:
-        if mode not in ["fwd", "rev", "grad", "hess", "jvp", "looped"]:
+        if mode not in ["fwd", "rev", "grad", "hess", "jvp"]:
             raise ValueError(
                 colored("invalid mode option for automatic differentiation", "red")
             )
@@ -347,8 +332,6 @@ class AutoDiffDerivative(_Derivative):
             self._compute = jax.hessian(self._fun, self._argnum)
         elif self._mode == "jvp":
             self._compute = self._compute_jvp
-        elif self._mode == "looped":
-            self._compute = self._jac_looped
 
 
 class FiniteDiffDerivative(_Derivative):

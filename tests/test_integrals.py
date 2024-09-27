@@ -1673,10 +1673,12 @@ class TestBounce2D:
         bounce.check_points(points, pitch_inv, plot=True)
 
         f = Bounce2D.reshape_data(grid, grid_data["cvdrift"], grid_data["gbdrift"])
+        f_vec = Bounce2D.reshape_data(grid, grid_data["grad(alpha)"])
         drift_numerical_num = bounce.integrate(
             integrand=TestBounce2D.drift_num_integrand,
             pitch_inv=pitch_inv,
             f=f,
+            f_vec=f_vec,
             points=points,
             check=True,
             plot=True,
@@ -1692,14 +1694,14 @@ class TestBounce2D:
         msg = "There should be one bounce integral per pitch in this example."
         assert drift_numerical.size == drift_analytic.size, msg
 
-        # FIXME: Bug found and confirmed. due to fft of multivalued function gbdrift
-        # np.testing.assert_allclose(  # noqa: E800
-        #     drift_numerical, drift_analytic, atol=5e-3, rtol=5e-2  # noqa: E800
-        # )  # noqa: E800
-
         fig, ax = plt.subplots()
         ax.plot(pitch_inv, drift_analytic, label="analytic")
         ax.plot(pitch_inv, drift_numerical, label="numerical")
         plt.legend()
         plt.show()
+
+        # np.testing.assert_allclose(  # noqa: E800
+        #     drift_numerical, drift_analytic, atol=5e-3, rtol=5e-2  # noqa: E800
+        # )  # noqa: E800
+
         return fig

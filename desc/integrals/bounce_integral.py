@@ -1,6 +1,5 @@
 """Methods for computing bounce integrals (singular or otherwise)."""
 
-import numpy as np
 from interpax import CubicHermiteSpline, PPoly
 from numpy.fft import rfft2
 from orthax.legendre import leggauss
@@ -629,6 +628,7 @@ class Bounce2D(IOAble):
         integrand,
         pitch_inv,
         f=None,
+        f_vec=None,
         weight=None,
         points=None,
         *,
@@ -656,6 +656,12 @@ class Bounce2D(IOAble):
         f : list[jnp.ndarray] or jnp.ndarray
             Shape (L, m, n).
             Real scalar-valued (2π × 2π) periodic in (θ, ζ) functions evaluated
+            on the ``grid`` supplied to construct this object. These functions
+            should be arguments to the callable ``integrand``. Use the method
+            ``Bounce2D.reshape_data`` to reshape the data into the expected shape.
+        f_vec : list[jnp.ndarray] or jnp.ndarray
+            Shape (L, m, n, 3).
+            Real vector-valued (2π × 2π) periodic in (θ, ζ) functions evaluated
             on the ``grid`` supplied to construct this object. These functions
             should be arguments to the callable ``integrand``. Use the method
             ``Bounce2D.reshape_data`` to reshape the data into the expected shape.
@@ -687,15 +693,18 @@ class Bounce2D(IOAble):
         """
         errorif(weight is not None, NotImplementedError, msg="See Bounce1D")
         f = setdefault(f, [])
+        f_vec = setdefault(f_vec, [])
         if not isinstance(f, (list, tuple)):
-            f = [f] if isinstance(f, (jnp.ndarray, np.ndarray)) else list(f)
+            f = [f]
+        if not isinstance(f_vec, (list, tuple)):
+            f_vec = [f_vec]
 
         points = map(_swap_pl, points)
         pitch_inv = atleast_nd(self._B.cheb.ndim - 1, pitch_inv).T
-        result = self._integrate(integrand, points, pitch_inv, f, check, plot)
+        result = self._integrate(integrand, points, pitch_inv, f, f_vec, check, plot)
         return result
 
-    def _integrate(self, integrand, points, pitch_inv, f, check, plot):
+    def _integrate(self, integrand, points, pitch_inv, f, f_vec, check, plot):
         """Bounce integrate ∫ f(λ, ℓ) dℓ.
 
         Parameters
@@ -706,6 +715,8 @@ class Bounce2D(IOAble):
             Shape (num_pitch, ) or (num_pitch, L).
         f : list[jnp.ndarray]
             Shape (m, n) or (L, m, n).
+        f : list[jnp.ndarray]
+            Shape (m, n, 3) or (L, m, n, 3).
 
         """
         z1, z2 = points
@@ -726,9 +737,17 @@ class Bounce2D(IOAble):
         )
         B = self._B.eval1d(zeta)
         f = [interp_rfft2(Q, f_i[..., jnp.newaxis, :, :], axes=(-1, -2)) for f_i in f]
+        f_vec = [
+            interp_rfft2(
+                Q[..., jnp.newaxis, :], f_i[..., jnp.newaxis, :, :, :], axes=(-2, -3)
+            )
+            for f_i in f_vec
+        ]
         result = _swap_pl(
             (
-                integrand(*f, B=B, pitch=1 / pitch_inv[..., jnp.newaxis], zeta=zeta)
+                integrand(
+                    *f, *f_vec, B=B, pitch=1 / pitch_inv[..., jnp.newaxis], zeta=zeta
+                )
                 / b_sup_z
             )
             .reshape(shape)

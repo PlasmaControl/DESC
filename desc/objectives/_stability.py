@@ -2,10 +2,11 @@
 
 import numpy as np
 
-from desc.compute import get_profiles, get_transforms
+from desc.backend import jnp
+from desc.compute import get_params, get_profiles, get_transforms
 from desc.compute.utils import _compute as compute_fun
 from desc.grid import LinearGrid
-from desc.utils import Timer, warnif
+from desc.utils import Timer, errorif, setdefault, warnif
 
 from .normalization import compute_scaling_factors
 from .objective_funs import _Objective
@@ -385,6 +386,7 @@ class MagneticWell(_Objective):
         """
         if constants is None:
             constants = self.constants
+
         data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
@@ -393,3 +395,289 @@ class MagneticWell(_Objective):
             profiles=constants["profiles"],
         )
         return constants["transforms"]["grid"].compress(data["magnetic well"])
+
+
+class BallooningStability(_Objective):
+    """A type of ideal MHD instability.
+
+    Infinite-n ideal MHD ballooning modes are of significant interest.
+    These instabilities are also related to smaller-scale kinetic instabilities.
+    With this class, we optimize MHD equilibria against the ideal ballooning mode.
+
+    Targets the following metric:
+
+    f = w₀ sum(ReLU(λ-λ₀)) + w₁ max(ReLU(λ-λ₀))
+
+    where λ is the negative squared growth rate for each field line (such that λ>0 is
+    unstable), λ₀ is a cutoff, and w₀ and w₁ are weights.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Equilibrium that will be optimized to satisfy the Objective.
+    target : {float, ndarray}, optional
+        Target value(s) of the objective. Only used if bounds is None.
+        Must be broadcastable to Objective.dim_f. Default is ``target=0``
+    bounds : tuple of {float, ndarray}, optional
+        Lower and upper bounds on the objective. Overrides target.
+        Both bounds must be broadcastable to to Objective.dim_f. Default is ``target=0``
+    weight : {float, ndarray}, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        Must be broadcastable to to Objective.dim_f
+    normalize : bool, optional
+        Whether to compute the error in physical units or non-dimensionalize.
+        Not used since the growth rate is always normalized.
+    normalize_target : bool, optional
+        Whether target and bounds should be normalized before comparing to computed
+        values. If `normalize` is `True` and the target is in physical units,
+        this should also be set to True. Not used since the growth rate is always
+        normalized.
+    loss_function : {None, 'mean', 'min', 'max'}, optional
+        Loss function to apply to the objective values once computed. This loss function
+        is called on the raw compute value, before any shifting, scaling, or
+        normalization. Has no effect for this objective.
+    deriv_mode : {"auto", "fwd", "rev"}
+        Specify how to compute jacobian matrix, either forward mode or reverse mode AD.
+        "auto" selects forward or reverse mode based on the size of the input and output
+        of the objective. Has no effect on self.grad or self.hess which always use
+        reverse mode and forward over reverse mode respectively.
+    rho : float
+        Flux surface to optimize on. To optimize over multiple surfaces, use multiple
+        objectives each with a single rho value.
+    alpha : float, ndarray
+        Field line labels to optimize. Values should be in [0, 2pi). Default is alpha=0
+        for axisymmetric equilibria, or 8 field lines linearly spaced in [0, pi] for
+        non-axisymmetric cases.
+    nturns : int
+        Number of toroidal transits of a field line to consider. Field line
+        will run from -π*nturns to π*nturns. Default 3.
+    nzetaperturn : int
+        Number of points along the field line per toroidal transit. Total number of
+        points is ``nturns*nzetaperturn``. Default 100.
+    zeta0 : array-like
+        Points of vanishing integrated local shear to scan over.
+        Default 15 points in [-π/2,π/2]
+    lambda0 : float
+        Threshold for penalizing growth rates in metric above.
+    w0, w1 : float
+        Weights for sum and max terms in metric above.
+    name : str, optional
+        Name of the objective function.
+
+    """
+
+    _coordinates = ""  # not vectorized over rho, always a scalar
+    _scalar = True
+    _units = "(dimensionless)"
+    _print_value_fmt = "Ideal ballooning lambda: "
+
+    def __init__(
+        self,
+        eq,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        loss_function=None,
+        deriv_mode="auto",
+        rho=0.5,
+        alpha=None,
+        nturns=3,
+        nzetaperturn=200,
+        zeta0=None,
+        lambda0=0.0,
+        w0=1.0,
+        w1=10.0,
+        name="ideal ballooning lambda",
+    ):
+        if target is None and bounds is None:
+            target = 0
+
+        self._rho = rho
+        self._alpha = alpha
+        self._nturns = nturns
+        self._nzetaperturn = nzetaperturn
+        self._zeta0 = zeta0
+        self._lambda0 = lambda0
+        self._w0 = w0
+        self._w1 = w1
+
+        super().__init__(
+            things=eq,
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            loss_function=loss_function,
+            deriv_mode=deriv_mode,
+            name=name,
+        )
+
+        errorif(
+            np.asarray(self._rho).size > 1,
+            ValueError,
+            "BallooningStability objective only works on a single surface. "
+            "To optimize multiple surfaces, use multiple instances of the objective.",
+        )
+
+    def build(self, eq=None, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        eq = self.things[0]
+
+        # we need a uniform grid to get correct surface averages for iota
+        iota_grid = LinearGrid(
+            rho=self._rho,
+            M=eq.M_grid,
+            N=eq.N_grid,
+            NFP=eq.NFP,
+        )
+        self._iota_keys = ["iota", "iota_r", "shear"]
+        iota_profiles = get_profiles(self._iota_keys, obj=eq, grid=iota_grid)
+        iota_transforms = get_transforms(self._iota_keys, obj=eq, grid=iota_grid)
+
+        # Separate grid to calculate the right length scale for normalization
+        len_grid = LinearGrid(rho=1.0, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
+        self._len_keys = ["a"]
+        len_profiles = get_profiles(self._len_keys, obj=eq, grid=len_grid)
+        len_transforms = get_transforms(self._len_keys, obj=eq, grid=len_grid)
+
+        # make a set of nodes along a single fieldline
+        zeta = jnp.linspace(
+            -jnp.pi * self._nturns,
+            jnp.pi * self._nturns,
+            self._nturns * self._nzetaperturn,
+        )
+
+        # set alpha/zeta0 grids
+        self._alpha = setdefault(
+            self._alpha,
+            (
+                jnp.linspace(0, jnp.pi, 8)
+                if eq.N != 0 and eq.sym is True
+                else (
+                    jnp.linspace(0, 2 * np.pi, 16)
+                    if eq.N != 0 and eq.sym is False
+                    else jnp.array(0.0)
+                )
+            ),
+        )
+
+        self._zeta0 = setdefault(
+            self._zeta0, jnp.linspace(-0.5 * jnp.pi, 0.5 * jnp.pi, 15)
+        )
+        self._dim_f = 1
+        self._data_keys = ["ideal ballooning lambda"]
+
+        self._args = get_params(
+            self._iota_keys + self._len_keys + self._data_keys,
+            obj="desc.equilibrium.equilibrium.Equilibrium",
+            has_axis=False,
+        )
+
+        self._constants = {
+            "iota_transforms": iota_transforms,
+            "iota_profiles": iota_profiles,
+            "len_transforms": len_transforms,
+            "len_profiles": len_profiles,
+            "rho": self._rho,
+            "alpha": self._alpha,
+            "zeta": zeta,
+            "zeta0": self._zeta0,
+            "lambda0": self._lambda0,
+            "w0": self._w0,
+            "w1": self._w1,
+            "quad_weights": 1.0,
+        }
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, params, constants=None):
+        """
+        Compute the ballooning stability growth rate.
+
+        Parameters
+        ----------
+        params : dict
+            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
+
+        Returns
+        -------
+        lam : ndarray
+            ideal ballooning growth rate.
+
+        """
+        eq = self.things[0]
+
+        if constants is None:
+            constants = self.constants
+        # we first compute iota on a uniform grid to get correct averaging etc.
+        iota_data = compute_fun(
+            eq,
+            self._iota_keys,
+            params=params,
+            transforms=constants["iota_transforms"],
+            profiles=constants["iota_profiles"],
+        )
+
+        len_data = compute_fun(
+            eq,
+            self._len_keys,
+            params=params,
+            transforms=constants["len_transforms"],
+            profiles=constants["len_profiles"],
+        )
+
+        # Now we compute theta_DESC for given theta_PEST
+        rho, alpha, zeta = constants["rho"], constants["alpha"], constants["zeta"]
+
+        # we prime the data dict with the correct iota values so we don't recompute them
+        # using the wrong grid
+        data = {
+            "iota": iota_data["iota"][0],
+            "iota_r": iota_data["iota_r"][0],
+            "shear": iota_data["shear"][0],
+            "a": len_data["a"],
+        }
+
+        grid = eq.get_rtz_grid(
+            rho,
+            alpha,
+            zeta,
+            coordinates="raz",
+            period=(np.inf, 2 * np.pi, np.inf),
+            params=params,
+        )
+
+        lam = compute_fun(
+            eq,
+            self._data_keys,
+            params,
+            get_transforms(self._data_keys, eq, grid, jitable=True),
+            profiles=get_profiles(self._data_keys, eq, grid),
+            data=data,
+            zeta0=constants["zeta0"],
+        )["ideal ballooning lambda"]
+
+        lambda0, w0, w1 = constants["lambda0"], constants["w0"], constants["w1"]
+
+        # Shifted ReLU operation
+        data = (lam - lambda0) * (lam >= lambda0)
+
+        results = w0 * jnp.sum(data) + w1 * jnp.max(data)
+
+        return results

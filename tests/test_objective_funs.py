@@ -37,6 +37,7 @@ from desc.magnetic_fields import (
 )
 from desc.objectives import (
     AspectRatio,
+    BallooningStability,
     BootstrapRedlConsistency,
     BoundaryError,
     BScaleLength,
@@ -2600,6 +2601,7 @@ class TestObjectiveNaNGrad:
     ]
     specials = [
         # these require special logic
+        BallooningStability,
         BootstrapRedlConsistency,
         BoundaryError,
         CoilLength,
@@ -2839,7 +2841,7 @@ class TestObjectiveNaNGrad:
 
     @pytest.mark.unit
     def test_objective_no_nangrad_effective_ripple(self):
-        """Make sure we can differentiate."""
+        """Effective ripple."""
         eq = get("ESTELL")
         with pytest.warns(UserWarning, match="Reducing radial"):
             eq.change_resolution(2, 2, 2, 4, 4, 4)
@@ -2847,6 +2849,14 @@ class TestObjectiveNaNGrad:
             [EffectiveRipple(eq, knots_per_transit=50, num_transit=2, num_pitch=25)]
         )
         obj.build(verbose=0)
+        g = obj.grad(obj.x())
+        assert not np.any(np.isnan(g))
+
+    def test_objective_no_nangrad_ballooning(self):
+        """BallooningStability."""
+        eq = get("HELIOTRON")
+        obj = ObjectiveFunction(BallooningStability(eq=eq))
+        obj.build()
         g = obj.grad(obj.x())
         assert not np.any(np.isnan(g))
 

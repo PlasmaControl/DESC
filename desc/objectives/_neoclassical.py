@@ -48,6 +48,7 @@ class EffectiveRipple(_Objective):
         Weighting to apply to the Objective, relative to other Objectives.
         Must be broadcastable to Objective.dim_f
     normalize : bool, optional
+        This quantity is already normalized so this parameter is ignored.
         Whether to compute the error in physical units or non-dimensionalize.
     normalize_target : bool, optional
         Whether target and bounds should be normalized before comparing to computed
@@ -234,7 +235,7 @@ class EffectiveRipple(_Objective):
             constants["profiles"],
         )
         # TODO: interpolate all deps to this grid with fft utilities from fourier bounce
-        grid = eq.get_rtz_grid(
+        grid = eq._get_rtz_grid(
             constants["rho"],
             constants["alpha"],
             constants["zeta"],

@@ -427,7 +427,7 @@ def get_profiles(keys, obj, grid=None, has_axis=False, basis="rpz"):
         Name of the desired quantity from the data index.
     obj : Equilibrium, Curve, Surface, Coil, etc.
         Object to compute quantity for.
-    grid : _Grid
+    grid : Grid
         Grid to compute quantity on.
     has_axis : bool
         Whether the grid to compute on has a node on the magnetic axis.
@@ -511,7 +511,7 @@ def get_transforms(
         Name of the desired quantity from the data index
     obj : Equilibrium, Curve, Surface, Coil, etc.
         Object to compute quantity for.
-    grid : _Grid
+    grid : Grid
         Grid to compute quantity on
     jitable: bool
         Whether to skip certain checks so that this operation works under JIT

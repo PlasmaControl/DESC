@@ -12,22 +12,25 @@ import numpy as np
 import pytest
 
 from desc.compute import data_index
-from desc.compute.utils import _grow_seeds, dot
+from desc.compute.utils import _grow_seeds
 from desc.equilibrium import Equilibrium
 from desc.examples import get
 from desc.grid import LinearGrid
 from desc.integrals import surface_integrals_map
 from desc.objectives import GenericObjective, ObjectiveFunction
+from desc.utils import dot
 
 # Unless mentioned in the source code of the compute function, the assumptions
 # made to compute the magnetic axis limit can be reduced to assuming that these
 # functions tend toward zero as the magnetic axis is approached and that
 # d²ψ/(dρ)² and 𝜕√𝑔/𝜕𝜌 are both finite nonzero at the magnetic axis.
 # Also, dⁿψ/(dρ)ⁿ for n > 3 is assumed zero everywhere.
-zero_limits = {"rho", "psi", "psi_r", "e_theta", "sqrt(g)", "B_t"}
-# "current Redl" and "P_ISS04" need special treatment because they are not defined for
-# all configurations (giving NaN values)
-not_continuous_limits = {"current Redl", "P_ISS04"}
+zero_limits = {"rho", "psi", "psi_r", "psi_rrr", "e_theta", "sqrt(g)", "B_t"}
+
+# These compute quantities require kinetic profiles, which are not defined for all
+# configurations (giving NaN values)
+not_continuous_limits = {"current Redl", "P_ISS04", "P_fusion", "<sigma*nu>"}
+
 not_finite_limits = {
     "D_Mercier",
     "D_geodesic",
@@ -58,10 +61,12 @@ not_finite_limits = {
     "g^tz_r",
     "g^tz_t",
     "g^tz_z",
+    "grad(alpha)",
+    "g^aa",
+    "g^ra",
     "gbdrift",
     "cvdrift",
     "grad(alpha)",
-    "cvdrift0",
     "|e^helical|",
     "|grad(theta)|",
     "<J*B> Redl",  # may not exist for all configurations
@@ -92,7 +97,6 @@ not_implemented_limits = {
     "K_vc",  # only defined on surface
     "iota_num_rrr",
     "iota_den_rrr",
-    "cvdrift0",
 }
 
 
@@ -133,6 +137,14 @@ def _skip_this(eq, name):
         or (eq.anisotropy is None and "beta_a" in name)
         or (eq.pressure is not None and "<J*B> Redl" in name)
         or (eq.current is None and "iota_num" in name)
+        # These quantities require a coordinate mapping to compute and special grids, so
+        # it's not economical to test their axis limits here. Instead, a grid that
+        # includes the axis should be used in existing unit tests for these quantities.
+        or bool(
+            data_index["desc.equilibrium.equilibrium.Equilibrium"][name][
+                "source_grid_requirement"
+            ]
+        )
     )
 
 
@@ -386,3 +398,4 @@ def test_reverse_mode_ad_axis(name):
     obj.build(verbose=0)
     g = obj.grad(obj.x())
     assert not np.any(np.isnan(g))
+    print(np.count_nonzero(g), name)

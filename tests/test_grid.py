@@ -14,6 +14,7 @@ from desc.grid import (
     dec_to_cf,
     find_least_rational_surfaces,
     find_most_rational_surfaces,
+    most_rational,
 )
 from desc.profiles import PowerSeriesProfile
 
@@ -482,14 +483,16 @@ class TestGrid:
         N = 0
         NFP = 1
         grid_quad = QuadratureGrid(L, M, N, NFP)
-        roots, weights = special.js_roots(3, 2, 2)
+        roots, weights = special.js_roots(2, 2, 2)
         quadrature_nodes = np.stack(
             [
-                np.array([roots[0]] * 5 + [roots[1]] * 5 + [roots[2]] * 5),
                 np.array(
-                    [0, 2 * np.pi / 5, 4 * np.pi / 5, 6 * np.pi / 5, 8 * np.pi / 5] * 3
+                    [roots[0]] * grid_quad.num_theta + [roots[1]] * grid_quad.num_theta
                 ),
-                np.zeros(15),
+                np.array(
+                    [0, 2 * np.pi / 5, 4 * np.pi / 5, 6 * np.pi / 5, 8 * np.pi / 5] * 2
+                ),
+                np.zeros(10),
             ]
         ).T
         np.testing.assert_allclose(grid_quad.spacing.prod(axis=1), grid_quad.weights)
@@ -791,26 +794,23 @@ class TestGrid:
         zeta = np.linspace(0, 6 * np.pi, 5)
         grid = Grid.create_meshgrid([rho, alpha, zeta], coordinates="raz")
         r, a, z = grid.nodes.T
-        r = grid.meshgrid_reshape(r, "raz")
-        a = grid.meshgrid_reshape(a, "raz")
-        z = grid.meshgrid_reshape(z, "raz")
         # functions of zeta should separate along first two axes
         # since those are contiguous, this should work
-        f = z.reshape(-1, zeta.size)
+        f = grid.meshgrid_reshape(z, "raz").reshape(-1, zeta.size)
         for i in range(1, f.shape[0]):
             np.testing.assert_allclose(f[i - 1], f[i])
         # likewise for rho
-        f = r.reshape(rho.size, -1)
+        f = grid.meshgrid_reshape(r, "raz").reshape(rho.size, -1)
         for i in range(1, f.shape[-1]):
             np.testing.assert_allclose(f[:, i - 1], f[:, i])
         # test reshaping result won't mix data
-        f = (a**2 + z).reshape(rho.size, alpha.size, zeta.size)
+        f = grid.meshgrid_reshape(a**2 + z, "raz")
         for i in range(1, f.shape[0]):
             np.testing.assert_allclose(f[i - 1], f[i])
-        f = (r**2 + z).reshape(rho.size, alpha.size, zeta.size)
+        f = grid.meshgrid_reshape(r**2 + z, "raz")
         for i in range(1, f.shape[1]):
             np.testing.assert_allclose(f[:, i - 1], f[:, i])
-        f = (r**2 + a).reshape(rho.size, alpha.size, zeta.size)
+        f = grid.meshgrid_reshape(r**2 + a, "raz")
         for i in range(1, f.shape[-1]):
             np.testing.assert_allclose(f[..., i - 1], f[..., i])
 
@@ -823,6 +823,33 @@ def test_find_most_rational_surfaces():
     rho, io = find_most_rational_surfaces(iota, 5)
     np.testing.assert_allclose(rho, np.linspace(0, 1, 5), atol=1e-14, rtol=0)
     np.testing.assert_allclose(io, np.linspace(1, 3, 5), atol=1e-14, rtol=0)
+
+    # simple test, linear iota going from -1 to -3
+    iota = PowerSeriesProfile([-1, -2])
+    rho, io = find_most_rational_surfaces(iota, 5)
+    np.testing.assert_allclose(rho, np.linspace(0, 1, 5), atol=1e-14, rtol=0)
+    np.testing.assert_allclose(io, np.linspace(-1, -3, 5), atol=1e-14, rtol=0)
+
+    # invalid (a > b) ranges and negative ranges are swapped and made positive
+    all_same = [
+        most_rational(1, 2),
+        most_rational(2, 1),
+        most_rational(-1, -2),
+        most_rational(-2, -1),
+    ]
+
+    assert len(set(map(abs, all_same))) == 1
+
+    # if 0 in range, return 0
+    has_zero = [
+        most_rational(0, 1),
+        most_rational(0, -1),
+        most_rational(0, 0),
+        most_rational(-1, 0),
+        most_rational(1, 0),
+    ]
+
+    assert all(result == 0 for result in has_zero)
 
 
 @pytest.mark.unit

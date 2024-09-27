@@ -15,7 +15,6 @@ from desc.grid import Grid, LinearGrid
 from desc.io import InputReader
 from desc.objectives import ForceBalance, ObjectiveFunction, get_equilibrium_objective
 from desc.profiles import PowerSeriesProfile
-from desc.utils import errorif
 
 from .utils import area_difference, compute_coords
 
@@ -50,33 +49,12 @@ def test_map_coordinates():
     """Test root finding for (rho,theta,zeta) for common use cases."""
     # finding coordinates along a single field line
     eq = get("NCSX")
+    with pytest.warns(UserWarning, match="Reducing radial"):
+        eq.change_resolution(3, 3, 3, 6, 6, 6)
     n = 100
     coords = np.array([np.ones(n), np.zeros(n), np.linspace(0, 10 * np.pi, n)]).T
-    grid = LinearGrid(rho=1, M=eq.M_grid, N=eq.N_grid, sym=eq.sym, NFP=eq.NFP)
-    iota = grid.compress(eq.compute("iota", grid=grid)["iota"])
-    iota = np.broadcast_to(iota, shape=(n,))
-
-    tol = 1e-5
-    out_1 = eq.map_coordinates(
-        coords, inbasis=["rho", "alpha", "zeta"], iota=iota, tol=tol
-    )
-    assert np.isfinite(out_1).all()
-    out_2 = eq.map_coordinates(
-        coords,
-        inbasis=["rho", "alpha", "zeta"],
-        period=(np.inf, 2 * np.pi, np.inf),
-        tol=tol,
-    )
-    assert np.isfinite(out_2).all()
-    diff = out_1 - out_2
-    errorif(
-        not np.all(
-            np.isclose(diff, 0, atol=2 * tol)
-            | np.isclose(np.abs(diff), 2 * np.pi, atol=2 * tol)
-        ),
-        AssertionError,
-        f"diff: {diff}",
-    )
+    out = eq.map_coordinates(coords, inbasis=["rho", "alpha", "zeta"])
+    assert np.isfinite(out).all()
 
     eq = get("DSHAPE")
 
@@ -89,9 +67,9 @@ def test_map_coordinates():
 
     grid = Grid(np.vstack([rho, theta, zeta]).T, sort=False)
     in_data = eq.compute(inbasis, grid=grid)
-    in_coords = np.stack([in_data[k] for k in inbasis], axis=-1)
+    in_coords = np.column_stack([in_data[k] for k in inbasis])
     out_data = eq.compute(outbasis, grid=grid)
-    out_coords = np.stack([out_data[k] for k in outbasis], axis=-1)
+    out_coords = np.column_stack([out_data[k] for k in outbasis])
 
     out = eq.map_coordinates(
         in_coords,

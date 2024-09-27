@@ -4,7 +4,9 @@ import shutil
 
 import numpy as np
 import pytest
+import scipy
 
+from desc.backend import jnp
 from desc.coils import (
     CoilSet,
     FourierPlanarCoil,
@@ -13,12 +15,13 @@ from desc.coils import (
     MixedCoilSet,
     SplineXYZCoil,
 )
-from desc.compute import get_params, get_transforms, xyz2rpz, xyz2rpz_vec
+from desc.compute import get_params, get_transforms, rpz2xyz, xyz2rpz, xyz2rpz_vec
 from desc.examples import get
-from desc.geometry import FourierRZCurve, FourierRZToroidalSurface
+from desc.geometry import FourierRZCurve, FourierRZToroidalSurface, FourierXYZCurve
 from desc.grid import Grid, LinearGrid
 from desc.io import load
 from desc.magnetic_fields import SumMagneticField, VerticalMagneticField
+from desc.utils import dot
 
 
 class TestCoil:
@@ -148,6 +151,198 @@ class TestCoil:
         np.testing.assert_allclose(
             B_true_rpz_phi, B_rpz, rtol=1e-3, atol=1e-10, err_msg="Using FourierRZCoil"
         )
+
+    @pytest.mark.unit
+    def test_biot_savart_vector_potential_all_coils(self):
+        """Test biot-savart vec potential implementation against analytic formula."""
+        coil_grid = LinearGrid(zeta=100, endpoint=False)
+
+        R = 2
+        y = 1
+        I = 1e7
+
+        A_true = np.atleast_2d([0, 0, 0])
+        grid_xyz = np.atleast_2d([10, y, 0])
+        grid_rpz = xyz2rpz(grid_xyz)
+
+        def test(coil, grid_xyz, grid_rpz):
+            A_xyz = coil.compute_magnetic_vector_potential(
+                grid_xyz, basis="xyz", source_grid=coil_grid
+            )
+            A_rpz = coil.compute_magnetic_vector_potential(
+                grid_rpz, basis="rpz", source_grid=coil_grid
+            )
+            np.testing.assert_allclose(
+                A_true, A_xyz, rtol=1e-3, atol=1e-10, err_msg=f"Using {coil}"
+            )
+            np.testing.assert_allclose(
+                A_true, A_rpz, rtol=1e-3, atol=1e-10, err_msg=f"Using {coil}"
+            )
+            np.testing.assert_allclose(
+                A_true, A_rpz, rtol=1e-3, atol=1e-10, err_msg=f"Using {coil}"
+            )
+
+        # FourierXYZCoil
+        coil = FourierXYZCoil(I)
+        test(coil, grid_xyz, grid_rpz)
+
+        # SplineXYZCoil
+        x = coil.compute("x", grid=coil_grid, basis="xyz")["x"]
+        coil = SplineXYZCoil(I, X=x[:, 0], Y=x[:, 1], Z=x[:, 2])
+        test(coil, grid_xyz, grid_rpz)
+
+        # FourierPlanarCoil
+        coil = FourierPlanarCoil(I)
+        test(coil, grid_xyz, grid_rpz)
+
+        grid_xyz = np.atleast_2d([0, 0, y])
+        grid_rpz = xyz2rpz(grid_xyz)
+
+        # FourierRZCoil
+        coil = FourierRZCoil(I, R_n=np.array([R]), modes_R=np.array([0]))
+        test(coil, grid_xyz, grid_rpz)
+        # test in a CoilSet
+        coil2 = CoilSet(coil)
+        test(coil2, grid_xyz, grid_rpz)
+        # test in a MixedCoilSet
+        coil3 = MixedCoilSet(coil2, coil, check_intersection=False)
+        coil3[1].current = 0
+        test(coil3, grid_xyz, grid_rpz)
+
+    @pytest.mark.unit
+    def test_biot_savart_vector_potential_integral_all_coils(self):
+        """Test analytic expression of flux integral for all coils."""
+        # taken from analytic benchmark in
+        # "A Magnetic Diagnostic Code for 3D Fusion Equilibria", Lazerson 2013
+        # find flux for concentric loops of varying radii to a circular coil
+
+        coil_grid = LinearGrid(zeta=1000, endpoint=False)
+
+        R = 1
+        I = 1e7
+
+        # analytic eqn for "A_phi" (phi is in dl direction for loop)
+        def _A_analytic(r):
+            # elliptic integral arguments must be k^2, not k,
+            # error in original paper and apparently in Jackson EM book too.
+            theta = np.pi / 2
+            arg = R**2 + r**2 + 2 * r * R * np.sin(theta)
+            term_1_num = 4.0e-7 * I * R
+            term_1_den = np.sqrt(arg)
+            k_sqd = 4 * r * R * np.sin(theta) / arg
+            term_2_num = (2 - k_sqd) * scipy.special.ellipk(
+                k_sqd
+            ) - 2 * scipy.special.ellipe(k_sqd)
+            term_2_den = k_sqd
+            return term_1_num * term_2_num / term_1_den / term_2_den
+
+        # we only evaluate it at theta=np.pi/2 (b/c it is in spherical coords)
+        rs = np.linspace(0.1, 3, 10, endpoint=True)
+        N = 200
+        curve_grid = LinearGrid(zeta=N)
+
+        def test(
+            coil, grid_xyz, grid_rpz, A_true_rpz, correct_flux, rtol=1e-10, atol=1e-12
+        ):
+            """Test that we compute the correct flux for the given coil."""
+            A_xyz = coil.compute_magnetic_vector_potential(
+                grid_xyz, basis="xyz", source_grid=coil_grid
+            )
+            A_rpz = coil.compute_magnetic_vector_potential(
+                grid_rpz, basis="rpz", source_grid=coil_grid
+            )
+            flux_xyz = jnp.sum(
+                dot(A_xyz, curve_data["x_s"], axis=-1) * curve_grid.spacing[:, 2]
+            )
+            flux_rpz = jnp.sum(
+                dot(A_rpz, curve_data_rpz["x_s"], axis=-1) * curve_grid.spacing[:, 2]
+            )
+
+            np.testing.assert_allclose(
+                correct_flux, flux_xyz, rtol=rtol, err_msg=f"Using {coil}"
+            )
+            np.testing.assert_allclose(
+                correct_flux, flux_rpz, rtol=rtol, err_msg=f"Using {coil}"
+            )
+            np.testing.assert_allclose(
+                A_true_rpz,
+                A_rpz,
+                rtol=rtol,
+                atol=atol,
+                err_msg=f"Using {coil}",
+            )
+
+        for r in rs:
+            # A_phi is constant around the loop (no phi dependence)
+            A_true_phi = _A_analytic(r) * np.ones(N)
+            A_true_rpz = np.vstack(
+                (np.zeros_like(A_true_phi), A_true_phi, np.zeros_like(A_true_phi))
+            ).T
+            correct_flux = np.sum(r * A_true_phi * 2 * np.pi / N)
+
+            curve = FourierXYZCurve(
+                X_n=[-r, 0, 0], Y_n=[0, 0, r], Z_n=[0, 0, 0]
+            )  # flux loop to integrate A over
+
+            curve_data = curve.compute(["x", "x_s"], grid=curve_grid, basis="xyz")
+            curve_data_rpz = curve.compute(["x", "x_s"], grid=curve_grid, basis="rpz")
+
+            grid_rpz = np.vstack(
+                [
+                    curve_data_rpz["x"][:, 0],
+                    curve_data_rpz["x"][:, 1],
+                    curve_data_rpz["x"][:, 2],
+                ]
+            ).T
+            grid_xyz = rpz2xyz(grid_rpz)
+            # FourierXYZCoil
+            coil = FourierXYZCoil(I, X_n=[-R, 0, 0], Y_n=[0, 0, R], Z_n=[0, 0, 0])
+            test(
+                coil,
+                grid_xyz,
+                grid_rpz,
+                A_true_rpz,
+                correct_flux,
+                rtol=1e-8,
+                atol=1e-12,
+            )
+
+            # SplineXYZCoil
+            x = coil.compute("x", grid=coil_grid, basis="xyz")["x"]
+            coil = SplineXYZCoil(I, X=x[:, 0], Y=x[:, 1], Z=x[:, 2])
+            test(
+                coil,
+                grid_xyz,
+                grid_rpz,
+                A_true_rpz,
+                correct_flux,
+                rtol=1e-4,
+                atol=1e-12,
+            )
+
+            # FourierPlanarCoil
+            coil = FourierPlanarCoil(I, center=[0, 0, 0], normal=[0, 0, -1], r_n=R)
+            test(
+                coil,
+                grid_xyz,
+                grid_rpz,
+                A_true_rpz,
+                correct_flux,
+                rtol=1e-8,
+                atol=1e-12,
+            )
+
+            # FourierRZCoil
+            coil = FourierRZCoil(I, R_n=np.array([R]), modes_R=np.array([0]))
+            test(
+                coil,
+                grid_xyz,
+                grid_rpz,
+                A_true_rpz,
+                correct_flux,
+                rtol=1e-8,
+                atol=1e-12,
+            )
 
     @pytest.mark.unit
     def test_properties(self):

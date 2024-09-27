@@ -53,6 +53,7 @@ class QuasisymmetryBoozer(_Objective):
         M_booz=None,
         N_booz=None,
         name="QS Boozer",
+        jac_chunk_size=None,
     ):
         if target is None and bounds is None:
             target = 0
@@ -70,6 +71,7 @@ class QuasisymmetryBoozer(_Objective):
             loss_function=loss_function,
             deriv_mode=deriv_mode,
             name=name,
+            jac_chunk_size=jac_chunk_size,
         )
 
         self._print_value_fmt = "Quasi-symmetry ({},{}) Boozer error: ".format(
@@ -239,6 +241,7 @@ class QuasisymmetryTwoTerm(_Objective):
         grid=None,
         helicity=(1, 0),
         name="QS two-term",
+        jac_chunk_size=None,
     ):
         if target is None and bounds is None:
             target = 0
@@ -254,6 +257,7 @@ class QuasisymmetryTwoTerm(_Objective):
             loss_function=loss_function,
             deriv_mode=deriv_mode,
             name=name,
+            jac_chunk_size=jac_chunk_size,
         )
 
         self._print_value_fmt = "Quasi-symmetry ({},{}) two-term error: ".format(
@@ -398,6 +402,7 @@ class QuasisymmetryTripleProduct(_Objective):
         deriv_mode="auto",
         grid=None,
         name="QS triple product",
+        jac_chunk_size=None,
     ):
         if target is None and bounds is None:
             target = 0
@@ -412,6 +417,7 @@ class QuasisymmetryTripleProduct(_Objective):
             loss_function=loss_function,
             deriv_mode=deriv_mode,
             name=name,
+            jac_chunk_size=jac_chunk_size,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -558,6 +564,7 @@ class Omnigenity(_Objective):
         eq_fixed=False,
         field_fixed=False,
         name="omnigenity",
+        jac_chunk_size=None,
     ):
         if target is None and bounds is None:
             target = 0
@@ -589,6 +596,7 @@ class Omnigenity(_Objective):
             loss_function=loss_function,
             deriv_mode=deriv_mode,
             name=name,
+            jac_chunk_size=jac_chunk_size,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -860,6 +868,7 @@ class Isodynamicity(_Objective):
         deriv_mode="auto",
         grid=None,
         name="Isodynamicity",
+        jac_chunk_size=None,
     ):
         if target is None and bounds is None:
             target = 0
@@ -874,6 +883,7 @@ class Isodynamicity(_Objective):
             loss_function=loss_function,
             deriv_mode=deriv_mode,
             name=name,
+            jac_chunk_size=jac_chunk_size,
         )
 
     def build(self, use_jit=True, verbose=1):

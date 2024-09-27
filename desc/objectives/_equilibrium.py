@@ -58,6 +58,7 @@ class ForceBalance(_Objective):
         deriv_mode="auto",
         grid=None,
         name="force",
+        jac_chunk_size=None,
     ):
         if target is None and bounds is None:
             target = 0
@@ -72,6 +73,7 @@ class ForceBalance(_Objective):
             loss_function=loss_function,
             deriv_mode=deriv_mode,
             name=name,
+            jac_chunk_size=jac_chunk_size,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -209,6 +211,7 @@ class ForceBalanceAnisotropic(_Objective):
         deriv_mode="auto",
         grid=None,
         name="force-anisotropic",
+        jac_chunk_size=None,
     ):
         if target is None and bounds is None:
             target = 0
@@ -223,6 +226,7 @@ class ForceBalanceAnisotropic(_Objective):
             loss_function=loss_function,
             deriv_mode=deriv_mode,
             name=name,
+            jac_chunk_size=jac_chunk_size,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -342,6 +346,7 @@ class RadialForceBalance(_Objective):
         deriv_mode="auto",
         grid=None,
         name="radial force",
+        jac_chunk_size=None,
     ):
         if target is None and bounds is None:
             target = 0
@@ -356,6 +361,7 @@ class RadialForceBalance(_Objective):
             loss_function=loss_function,
             deriv_mode=deriv_mode,
             name=name,
+            jac_chunk_size=jac_chunk_size,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -475,6 +481,7 @@ class HelicalForceBalance(_Objective):
         deriv_mode="auto",
         grid=None,
         name="helical force",
+        jac_chunk_size=None,
     ):
         if target is None and bounds is None:
             target = 0
@@ -489,6 +496,7 @@ class HelicalForceBalance(_Objective):
             loss_function=loss_function,
             deriv_mode=deriv_mode,
             name=name,
+            jac_chunk_size=jac_chunk_size,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -609,6 +617,7 @@ class Energy(_Objective):
         grid=None,
         gamma=0,
         name="energy",
+        jac_chunk_size=None,
     ):
         if target is None and bounds is None:
             target = 0
@@ -624,6 +633,7 @@ class Energy(_Objective):
             loss_function=loss_function,
             deriv_mode=deriv_mode,
             name=name,
+            jac_chunk_size=jac_chunk_size,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -748,6 +758,7 @@ class CurrentDensity(_Objective):
         deriv_mode="auto",
         grid=None,
         name="current density",
+        jac_chunk_size=None,
     ):
         if target is None and bounds is None:
             target = 0
@@ -762,6 +773,7 @@ class CurrentDensity(_Objective):
             loss_function=loss_function,
             deriv_mode=deriv_mode,
             name=name,
+            jac_chunk_size=jac_chunk_size,
         )
 
     def build(self, use_jit=True, verbose=1):

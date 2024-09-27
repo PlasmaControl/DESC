@@ -49,6 +49,7 @@ class GenericObjective(_Objective):
         deriv_mode="auto",
         grid=None,
         name="generic",
+        jac_chunk_size=None,
         **kwargs,
     ):
         errorif(
@@ -71,6 +72,7 @@ class GenericObjective(_Objective):
             loss_function=loss_function,
             deriv_mode=deriv_mode,
             name=name,
+            jac_chunk_size=jac_chunk_size,
         )
         self._p = _parse_parameterization(thing)
         self._scalar = not bool(data_index[self._p][self.f]["dim"])
@@ -182,6 +184,7 @@ class LinearObjectiveFromUser(_FixedObjective):
         normalize=False,
         normalize_target=False,
         name="custom linear",
+        jac_chunk_size=None,
     ):
         if target is None and bounds is None:
             target = 0
@@ -194,6 +197,7 @@ class LinearObjectiveFromUser(_FixedObjective):
             normalize=normalize,
             normalize_target=normalize_target,
             name=name,
+            jac_chunk_size=jac_chunk_size,
         )
 
     def build(self, use_jit=False, verbose=1):
@@ -311,6 +315,7 @@ class ObjectiveFromUser(_Objective):
         deriv_mode="auto",
         grid=None,
         name="custom",
+        jac_chunk_size=None,
         **kwargs,
     ):
         errorif(
@@ -333,6 +338,7 @@ class ObjectiveFromUser(_Objective):
             loss_function=loss_function,
             deriv_mode=deriv_mode,
             name=name,
+            jac_chunk_size=jac_chunk_size,
         )
         self._p = _parse_parameterization(thing)
 

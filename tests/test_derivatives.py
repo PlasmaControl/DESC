@@ -121,25 +121,6 @@ class TestDerivative:
         jac = AutoDiffDerivative(fun, num_blocks=3, shape=A.shape)
         np.testing.assert_allclose(jac(x), A)
 
-    @pytest.mark.unit
-    def test_jac_looped(self):
-        """Test computing the jacobian by explicit looping jvp."""
-
-        def test_fun(x, y, a):
-            return jnp.cos(x) + x * y + a
-
-        x = np.array([1, 5, 0.01, 200])
-        y = np.array([60, 1, 100, 0.02])
-        a = -2.0
-
-        jac1 = AutoDiffDerivative(test_fun, argnum=0, mode="fwd")
-        J1 = jac1.compute(x, y, a)
-
-        jac2 = AutoDiffDerivative(test_fun, argnum=0, mode="looped")
-        J2 = jac2.compute(x, y, a)
-
-        np.testing.assert_allclose(J1, J2, atol=1e-8)
-
 
 class TestJVP:
     """Test calculation of jacobian vector products."""

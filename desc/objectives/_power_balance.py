@@ -51,6 +51,7 @@ class FusionPower(_Objective):
         fuel="DT",
         grid=None,
         name="fusion power",
+        jac_chunk_size=None,
     ):
         errorif(
             fuel not in ["DT"], ValueError, f"fuel must be one of ['DT'], got {fuel}."
@@ -69,6 +70,7 @@ class FusionPower(_Objective):
             loss_function=loss_function,
             deriv_mode=deriv_mode,
             name=name,
+            jac_chunk_size=jac_chunk_size,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -212,6 +214,7 @@ class HeatingPowerISS04(_Objective):
         gamma=0,
         grid=None,
         name="heating power",
+        jac_chunk_size=None,
     ):
         if target is None and bounds is None:
             target = 0
@@ -228,6 +231,7 @@ class HeatingPowerISS04(_Objective):
             loss_function=loss_function,
             deriv_mode=deriv_mode,
             name=name,
+            jac_chunk_size=jac_chunk_size,
         )
 
     def build(self, use_jit=True, verbose=1):

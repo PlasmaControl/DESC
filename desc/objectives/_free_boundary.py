@@ -72,6 +72,7 @@ class VacuumBoundaryError(_Objective):
         field_grid=None,
         field_fixed=False,
         name="Vacuum boundary error",
+        jac_chunk_size=None,
     ):
         if target is None and bounds is None:
             target = 0
@@ -94,6 +95,7 @@ class VacuumBoundaryError(_Objective):
             loss_function=loss_function,
             deriv_mode=deriv_mode,
             name=name,
+            jac_chunk_size=jac_chunk_size,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -406,6 +408,7 @@ class BoundaryError(_Objective):
         field_fixed=False,
         loop=True,
         name="Boundary error",
+        jac_chunk_size=None,
     ):
         if target is None and bounds is None:
             target = 0
@@ -432,6 +435,7 @@ class BoundaryError(_Objective):
             loss_function=loss_function,
             deriv_mode=deriv_mode,
             name=name,
+            jac_chunk_size=jac_chunk_size,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -819,6 +823,7 @@ class BoundaryErrorNESTOR(_Objective):
         loss_function=None,
         deriv_mode="auto",
         name="NESTOR Boundary",
+        jac_chunk_size=None,
     ):
         if target is None and bounds is None:
             target = 0
@@ -838,6 +843,7 @@ class BoundaryErrorNESTOR(_Objective):
             loss_function=loss_function,
             deriv_mode=deriv_mode,
             name=name,
+            jac_chunk_size=jac_chunk_size,
         )
 
     def build(self, use_jit=True, verbose=1):

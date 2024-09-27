@@ -59,6 +59,7 @@ class _CoilObjective(_Objective):
         deriv_mode="auto",
         grid=None,
         name=None,
+        jac_chunk_size=None,
     ):
         self._grid = grid
         self._data_keys = data_keys
@@ -73,6 +74,7 @@ class _CoilObjective(_Objective):
             loss_function=loss_function,
             deriv_mode=deriv_mode,
             name=name,
+            jac_chunk_size=jac_chunk_size,
         )
 
     def build(self, use_jit=True, verbose=1):  # noqa:C901
@@ -244,6 +246,7 @@ class CoilLength(_CoilObjective):
         deriv_mode="auto",
         grid=None,
         name="coil length",
+        jac_chunk_size=None,
     ):
         if target is None and bounds is None:
             target = 2 * np.pi
@@ -260,6 +263,7 @@ class CoilLength(_CoilObjective):
             deriv_mode=deriv_mode,
             grid=grid,
             name=name,
+            jac_chunk_size=jac_chunk_size,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -344,6 +348,7 @@ class CoilCurvature(_CoilObjective):
         deriv_mode="auto",
         grid=None,
         name="coil curvature",
+        jac_chunk_size=None,
     ):
         if target is None and bounds is None:
             bounds = (0, 1)
@@ -360,6 +365,7 @@ class CoilCurvature(_CoilObjective):
             deriv_mode=deriv_mode,
             grid=grid,
             name=name,
+            jac_chunk_size=jac_chunk_size,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -439,6 +445,7 @@ class CoilTorsion(_CoilObjective):
         deriv_mode="auto",
         grid=None,
         name="coil torsion",
+        jac_chunk_size=None,
     ):
         if target is None and bounds is None:
             target = 0
@@ -455,6 +462,7 @@ class CoilTorsion(_CoilObjective):
             deriv_mode=deriv_mode,
             grid=grid,
             name=name,
+            jac_chunk_size=jac_chunk_size,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -534,6 +542,7 @@ class CoilCurrentLength(CoilLength):
         deriv_mode="auto",
         grid=None,
         name="coil current length",
+        jac_chunk_size=None,
     ):
         if target is None and bounds is None:
             target = 0
@@ -549,6 +558,7 @@ class CoilCurrentLength(CoilLength):
             deriv_mode=deriv_mode,
             grid=grid,
             name=name,
+            jac_chunk_size=jac_chunk_size,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -638,6 +648,7 @@ class CoilSetMinDistance(_Objective):
         deriv_mode="auto",
         grid=None,
         name="coil-coil minimum distance",
+        jac_chunk_size=None,
     ):
         from desc.coils import CoilSet
 
@@ -659,6 +670,7 @@ class CoilSetMinDistance(_Objective):
             loss_function=loss_function,
             deriv_mode=deriv_mode,
             name=name,
+            jac_chunk_size=jac_chunk_size,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -791,6 +803,7 @@ class PlasmaCoilSetMinDistance(_Objective):
         eq_fixed=False,
         coils_fixed=False,
         name="plasma-coil minimum distance",
+        jac_chunk_size=None,
     ):
         if target is None and bounds is None:
             bounds = (1, np.inf)
@@ -816,6 +829,7 @@ class PlasmaCoilSetMinDistance(_Objective):
             loss_function=loss_function,
             deriv_mode=deriv_mode,
             name=name,
+            jac_chunk_size=jac_chunk_size,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -1006,6 +1020,7 @@ class QuadraticFlux(_Objective):
         field_grid=None,
         vacuum=False,
         name="Quadratic flux",
+        jac_chunk_size=None,
     ):
         if target is None and bounds is None:
             target = 0
@@ -1024,6 +1039,7 @@ class QuadraticFlux(_Objective):
             normalize=normalize,
             normalize_target=normalize_target,
             name=name,
+            jac_chunk_size=jac_chunk_size,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -1198,6 +1214,7 @@ class ToroidalFlux(_Objective):
         field_grid=None,
         eval_grid=None,
         name="toroidal-flux",
+        jac_chunk_size=None,
     ):
         if target is None and bounds is None:
             target = eq.Psi
@@ -1217,6 +1234,7 @@ class ToroidalFlux(_Objective):
             loss_function=loss_function,
             deriv_mode=deriv_mode,
             name=name,
+            jac_chunk_size=jac_chunk_size,
         )
 
     def build(self, use_jit=True, verbose=1):

@@ -29,6 +29,7 @@ def _solve_axisym(
     maxiter=100,
     verbose=1,
     checkpoint_path=None,
+    jac_chunk_size="auto",
 ):
     """Solve initial axisymmetric case with adaptive step sizing."""
     timer = Timer()
@@ -99,7 +100,9 @@ def _solve_axisym(
             surf_i = surf_i2
 
         constraints_i = get_fixed_boundary_constraints(eq=eqi)
-        objective_i = get_equilibrium_objective(eq=eqi, mode=objective)
+        objective_i = get_equilibrium_objective(
+            eq=eqi, mode=objective, jac_chunk_size=jac_chunk_size
+        )
 
         if verbose:
             _print_iteration_summary(
@@ -196,6 +199,7 @@ def _add_pressure(
     maxiter=100,
     verbose=1,
     checkpoint_path=None,
+    jac_chunk_size="auto",
 ):
     """Add pressure with adaptive step sizing."""
     timer = Timer()
@@ -224,7 +228,9 @@ def _add_pressure(
         pres_ratio += pres_step
 
         constraints_i = get_fixed_boundary_constraints(eq=eqi)
-        objective_i = get_equilibrium_objective(eq=eqi, mode=objective)
+        objective_i = get_equilibrium_objective(
+            eq=eqi, mode=objective, jac_chunk_size=jac_chunk_size
+        )
 
         if verbose:
             _print_iteration_summary(
@@ -324,6 +330,7 @@ def _add_shaping(
     maxiter=100,
     verbose=1,
     checkpoint_path=None,
+    jac_chunk_size="auto",
 ):
     """Add 3D shaping with adaptive step sizing."""
     timer = Timer()
@@ -355,7 +362,9 @@ def _add_shaping(
         bdry_ratio += bdry_step
 
         constraints_i = get_fixed_boundary_constraints(eq=eqi)
-        objective_i = get_equilibrium_objective(eq=eqi, mode=objective)
+        objective_i = get_equilibrium_objective(
+            eq=eqi, mode=objective, jac_chunk_size=jac_chunk_size
+        )
 
         if verbose:
             _print_iteration_summary(
@@ -453,6 +462,7 @@ def solve_continuation_automatic(  # noqa: C901
     maxiter=100,
     verbose=1,
     checkpoint_path=None,
+    jac_chunk_size="auto",
     **kwargs,
 ):
     """Solve for an equilibrium using an automatic continuation method.
@@ -531,6 +541,7 @@ def solve_continuation_automatic(  # noqa: C901
         maxiter,
         verbose,
         checkpoint_path,
+        jac_chunk_size=jac_chunk_size,
     )
 
     # for zero current we want to do shaping before pressure to avoid having a
@@ -549,6 +560,7 @@ def solve_continuation_automatic(  # noqa: C901
             maxiter,
             verbose,
             checkpoint_path,
+            jac_chunk_size=jac_chunk_size,
         )
 
         eqfam = _add_pressure(
@@ -564,6 +576,7 @@ def solve_continuation_automatic(  # noqa: C901
             maxiter,
             verbose,
             checkpoint_path,
+            jac_chunk_size=jac_chunk_size,
         )
 
     # for other cases such as fixed iota or nonzero current we do pressure first
@@ -582,6 +595,7 @@ def solve_continuation_automatic(  # noqa: C901
             maxiter,
             verbose,
             checkpoint_path,
+            jac_chunk_size=jac_chunk_size,
         )
 
         eqfam = _add_shaping(
@@ -597,6 +611,7 @@ def solve_continuation_automatic(  # noqa: C901
             maxiter,
             verbose,
             checkpoint_path,
+            jac_chunk_size=jac_chunk_size,
         )
     eq.params_dict = eqfam[-1].params_dict
     eqfam[-1] = eq
@@ -627,6 +642,7 @@ def solve_continuation(  # noqa: C901
     maxiter=100,
     verbose=1,
     checkpoint_path=None,
+    jac_chunk_size="auto",
 ):
     """Solve for an equilibrium by continuation method.
 
@@ -689,7 +705,9 @@ def solve_continuation(  # noqa: C901
 
     if not isinstance(optimizer, Optimizer):
         optimizer = Optimizer(optimizer)
-    objective_i = get_equilibrium_objective(eq=eqfam[0], mode=objective)
+    objective_i = get_equilibrium_objective(
+        eq=eqfam[0], mode=objective, jac_chunk_size=jac_chunk_size
+    )
     constraints_i = get_fixed_boundary_constraints(eq=eqfam[0])
 
     ii = 0
@@ -736,7 +754,9 @@ def solve_continuation(  # noqa: C901
                 print("Perturbing equilibrium")
             # TODO: pass Jx if available
             eqp = eqfam[ii - 1].copy()
-            objective_i = get_equilibrium_objective(eq=eqp, mode=objective)
+            objective_i = get_equilibrium_objective(
+                eq=eqp, mode=objective, jac_chunk_size=jac_chunk_size
+            )
             constraints_i = get_fixed_boundary_constraints(eq=eqp)
             eqp.change_resolution(**eqi.resolution)
             eqp.perturb(
@@ -755,8 +775,9 @@ def solve_continuation(  # noqa: C901
             stop = True
 
         if not stop:
-            # TODO: add ability to rebind objectives
-            objective_i = get_equilibrium_objective(eq=eqi, mode=objective)
+            objective_i = get_equilibrium_objective(
+                eq=eqi, mode=objective, jac_chunk_size=jac_chunk_size
+            )
             constraints_i = get_fixed_boundary_constraints(eq=eqi)
             eqi.solve(
                 optimizer=optimizer,

@@ -33,6 +33,8 @@
    notebooks/tutorials/bootstrap_current.ipynb
    notebooks/tutorials/poincare_boundary_condition.ipynb
    notebooks/tutorials/coil_stage_two_optimization.ipynb
+   notebooks/tutorials/ideal_ballooning_stability.ipynb
+   memory_usage
 
 .. toctree::
    :maxdepth: 1

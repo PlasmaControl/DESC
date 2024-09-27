@@ -266,4 +266,5 @@ def test_compute_everything():
         with open("tests/inputs/master_compute_data_rpz.pkl", "wb") as file:
             # remember to git commit this file
             pickle.dump(this_branch_data_rpz, file)
+
     assert not error_rpz

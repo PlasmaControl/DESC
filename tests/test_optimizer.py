@@ -1139,15 +1139,16 @@ def test_proximal_jacobian():
         deriv_mode="batched",
         use_jit=False,
     )
-    obj2 = ObjectiveFunction(
-        (
-            QuasisymmetryTripleProduct(eq2, deriv_mode="fwd"),
-            AspectRatio(eq2, deriv_mode="fwd"),
-            Volume(eq2, deriv_mode="fwd"),
-        ),
-        deriv_mode="looped",
-        use_jit=False,
-    )
+    with pytest.warns(DeprecationWarning, match="looped"):
+        obj2 = ObjectiveFunction(
+            (
+                QuasisymmetryTripleProduct(eq2, deriv_mode="fwd"),
+                AspectRatio(eq2, deriv_mode="fwd"),
+                Volume(eq2, deriv_mode="fwd"),
+            ),
+            deriv_mode="looped",
+            use_jit=False,
+        )
     obj3 = ObjectiveFunction(
         (
             QuasisymmetryTripleProduct(eq3, deriv_mode="fwd"),
@@ -1248,9 +1249,10 @@ def test_LinearConstraint_jacobian():
     obj1 = ObjectiveFunction(
         ForceBalance(eq1, deriv_mode="auto"), deriv_mode="batched", use_jit=False
     )
-    obj2 = ObjectiveFunction(
-        ForceBalance(eq2, deriv_mode="fwd"), deriv_mode="looped", use_jit=False
-    )
+    with pytest.warns(DeprecationWarning, match="looped"):
+        obj2 = ObjectiveFunction(
+            ForceBalance(eq2, deriv_mode="fwd"), deriv_mode="looped", use_jit=False
+        )
     obj3 = ObjectiveFunction(
         ForceBalance(eq3, deriv_mode="rev"), deriv_mode="blocked", use_jit=False
     )

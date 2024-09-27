@@ -14,6 +14,7 @@ from desc.grid import (
     dec_to_cf,
     find_least_rational_surfaces,
     find_most_rational_surfaces,
+    most_rational,
 )
 from desc.profiles import PowerSeriesProfile
 
@@ -822,6 +823,33 @@ def test_find_most_rational_surfaces():
     rho, io = find_most_rational_surfaces(iota, 5)
     np.testing.assert_allclose(rho, np.linspace(0, 1, 5), atol=1e-14, rtol=0)
     np.testing.assert_allclose(io, np.linspace(1, 3, 5), atol=1e-14, rtol=0)
+
+    # simple test, linear iota going from -1 to -3
+    iota = PowerSeriesProfile([-1, -2])
+    rho, io = find_most_rational_surfaces(iota, 5)
+    np.testing.assert_allclose(rho, np.linspace(0, 1, 5), atol=1e-14, rtol=0)
+    np.testing.assert_allclose(io, np.linspace(-1, -3, 5), atol=1e-14, rtol=0)
+
+    # invalid (a > b) ranges and negative ranges are swapped and made positive
+    all_same = [
+        most_rational(1, 2),
+        most_rational(2, 1),
+        most_rational(-1, -2),
+        most_rational(-2, -1),
+    ]
+
+    assert len(set(map(abs, all_same))) == 1
+
+    # if 0 in range, return 0
+    has_zero = [
+        most_rational(0, 1),
+        most_rational(0, -1),
+        most_rational(0, 0),
+        most_rational(-1, 0),
+        most_rational(1, 0),
+    ]
+
+    assert all(result == 0 for result in has_zero)
 
 
 @pytest.mark.unit

@@ -110,6 +110,24 @@ def _transform_to_clebsch(grid, nodes, f, is_reshaped=False):
 def _transform_to_clebsch_1d(grid, alpha, theta, B, N_B, is_reshaped=False):
     """Transform to single variable Clebsch spectral domain.
 
+    Notes
+    -----
+    It appears the Fourier transform of θ may have small oscillatory bumps outside
+    reasonable bandwidths. This impedes full convergence of θ(α, ζ=0). Maybe this
+    is because θ is not a physical signal as it is determined by the optimizer.
+
+    The field line label changes discontinuously, so functions defined on
+    cuts of the field line are not guaranteed continuity until full convergence.
+    Therefore, we explicitly enforce continuity of θ to short-circuit the
+    convergence.
+
+    This works well because the first cut is on α=0, which is a knot of the
+    Fourier series, the Chebyshev points include a knot near endpoints,
+    so θ at the next cut of the field line is known with precision.
+    (Moreso if using Lobatto nodes). Note the Fourier series converges fast
+    for |B|, even in non-omnigenous configurations where (∂|B|/∂α)|ρ,ζ is not
+    small, so this is indeed some feature with θ.
+
     Parameters
     ----------
     grid : Grid
@@ -142,10 +160,6 @@ def _transform_to_clebsch_1d(grid, alpha, theta, B, N_B, is_reshaped=False):
     # Evaluating set of single variable maps is more efficient than evaluating
     # multivariable map, so we project θ to a set of Chebyshev series.
     T = FourierChebyshevSeries(f=theta, domain=(0, 2 * jnp.pi)).compute_cheb(alpha)
-    # Theoretically, stitching θ is only necessary to recover single-valued ness
-    # necessary to bounce integrate quantities that are multivalued at a physical
-    # location. However, it is still useful to do so to ensure continuity is not
-    # lost when projecting the 2D basis to 1D.
     T.stitch()
     theta = T.evaluate(N_B)
     xq = jnp.stack(
@@ -156,9 +170,9 @@ def _transform_to_clebsch_1d(grid, alpha, theta, B, N_B, is_reshaped=False):
         f=B[..., jnp.newaxis, :, :],
         axes=(-1, -2),
     ).reshape(*alpha.shape, N_B)
-    # Need |B| parameterized by single variable to compute roots.
+    # Parameterize |B| by single variable to compute roots.
     B = PiecewiseChebyshevSeries(cheb_from_dct(dct(B, type=2, axis=-1)) / N_B, T.domain)
-    B.stitch()
+    # |B| guaranteed to be continuous because it was interpolated from B(θ(α, ζ),ζ).
     return T, B
 
 
@@ -356,7 +370,7 @@ class Bounce2D(IOAble):
         data,
         theta,
         N_B=32,
-        num_transit=32,
+        num_transit=16,
         # TODO: Allow multiple starting labels for near-rational surfaces.
         #  think can just concatenate along second to last axis of cheb.
         #  Do this in different PR.
@@ -467,20 +481,9 @@ class Bounce2D(IOAble):
         assert self._T.N == theta.shape[-1]
         assert self._B.N == N_B
 
-    # The Fourier series converges fast for |B|(α, ζ);
-    # for near omnigenous configurations in particular, (∂|B|/∂α)|ρ,ζ vanishes.
-    # However, the Fourier series of θ(α, ζ) converges slower than desired.
-    # Small discontinuities of quantities evaluated between adjacent cuts of a
-    # field line vanish at M > 256. Memory seems much better than DESC's transforms
-    # though, and we avoid creation of a 1000 intermediate dependency arrays of
-    # large size like by avoiding source grid requirement in desc.compute.
-    # edit: this can be reduced once the single valued thing is fixed.
     @staticmethod
-    def compute_theta(eq, M=512, N=16, rho=1.0, clebsch=None, **kwargs):
+    def compute_theta(eq, M=32, N=16, rho=1.0, clebsch=None, **kwargs):
         """Return DESC coordinates θ of Fourier Chebyshev basis nodes.
-
-        The Fourier spectrum of θ in α is wider than the Chebyshev spectrum
-        of θ in ζ, so M > N is recommended.
 
         Parameters
         ----------

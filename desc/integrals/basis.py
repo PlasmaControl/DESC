@@ -291,17 +291,12 @@ class PiecewiseChebyshevSeries(IOAble):
 
     def stitch(self):
         """Enforce the piecewise series is continuous."""
-        # This is used to short-circuit convergence of poloidal Fourier series
-        # so that |B| along the field line is perfectly continuous.
-        # Useful at lower resolution because the singularities in
-        # the bounce integrals are strong functions of |B| alone.
-
         # evaluate at left boundary
         f_0 = self.cheb[..., ::2].sum(axis=-1) - self.cheb[..., 1::2].sum(axis=-1)
         # evaluate at right boundary
         f_1 = self.cheb.sum(axis=-1)
         dfx = f_1[..., :-1] - f_0[..., 1:]  # Δf = f(xᵢ, y₁) - f(xᵢ₊₁, y₀)
-        self.cheb = self.cheb.at[..., 1:, 0].add(dfx)  # + f(xᵢ₊₁, y₀)
+        self.cheb = self.cheb.at[..., 1:, 0].add(dfx.cumsum(axis=-1))
 
     def evaluate(self, N):
         """Evaluate Chebyshev series at N Chebyshev points.

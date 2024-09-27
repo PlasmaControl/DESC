@@ -1563,11 +1563,11 @@ class TestBounce2D:
         )
 
         # 4. Compute DESC coordinates of optimal interpolation nodes.
-        theta = Bounce2D.compute_theta(eq, M=256, N=32, rho=rho)
+        theta = Bounce2D.compute_theta(eq, M=64, N=32, rho=rho)
 
         # 5. Make the bounce integration operator.
         bounce = Bounce2D(
-            grid, data, theta, num_transit=2, N_B=128, quad=leggauss(3), check=True
+            grid, data, theta, num_transit=3, N_B=64, quad=leggauss(3), check=True
         )
         pitch_inv, _ = bounce.get_pitch_inv_quad(
             min_B=grid.compress(data["min_tz |B|"]),
@@ -1613,9 +1613,17 @@ class TestBounce2D:
         plt.show()
         return fig
 
-    @pytest.mark.xfail(
-        reason="More DESC infrastructure required to interpolate multivalued integrand."
-    )
+    @staticmethod
+    def drift_num_integrand(cvdrift, gbdrift, B, pitch, zeta):
+        """Integrand of numerator of bounce averaged binormal drift."""
+        g = jnp.sqrt(1 - pitch * B)
+        return (cvdrift * g) - (0.5 * g * gbdrift) + (0.5 * gbdrift / g)
+
+    @staticmethod
+    def drift_den_integrand(B, pitch, zeta):
+        """Integrand of denominator of bounce averaged binormal drift."""
+        return 1 / jnp.sqrt(1 - pitch * B)
+
     @pytest.mark.unit
     # @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
     def test_binormal_drift_bounce2d(self):
@@ -1640,12 +1648,7 @@ class TestBounce2D:
         grid_data["gbdrift"] = grid_data["gbdrift"] * data["normalization"]
 
         # Compute numerical result.
-        M, N = 512, 32
-        # I have concern that numpy computes Nyquist frequency component incorrectly,
-        # and the reason high Fourier resolution is required is that with large sample
-        # frequency the incorrect max frequency component is higher than the max
-        # frequency of theta, hiding the mistake. Edit: maybe it's worth pursuing
-        # https://github.com/jax-ml/jax/issues/23895.
+        M, N = 16, 16
         bounce = Bounce2D(
             grid=grid,
             data=grid_data,
@@ -1657,10 +1660,10 @@ class TestBounce2D:
                 iota=jnp.broadcast_to(data["iota"], shape=(M * N)),
             ),
             N_B=N,
-            num_transit=5,
-            # need to include commented shift but first make sure multivaluedness
-            # is fixed in interpolation by checking plot of f_0.
-            alpha=data["alpha"],  # - 2 * np.pi * data["iota"] - 0.1,
+            num_transit=3,
+            # can check if multivalued quantity interpolated correctly
+            # by comparing plot of f_0 with bounce1d.
+            alpha=data["alpha"] - 2 * np.pi * data["iota"],
             Bref=data["Bref"],
             Lref=data["a"],
             check=True,
@@ -1671,7 +1674,7 @@ class TestBounce2D:
 
         f = Bounce2D.reshape_data(grid, grid_data["cvdrift"], grid_data["gbdrift"])
         drift_numerical_num = bounce.integrate(
-            integrand=TestBounce1D.drift_num_integrand,
+            integrand=TestBounce2D.drift_num_integrand,
             pitch_inv=pitch_inv,
             f=f,
             points=points,
@@ -1679,7 +1682,7 @@ class TestBounce2D:
             plot=True,
         )
         drift_numerical_den = bounce.integrate(
-            integrand=TestBounce1D.drift_den_integrand,
+            integrand=TestBounce2D.drift_den_integrand,
             pitch_inv=pitch_inv,
             points=points,
             check=True,

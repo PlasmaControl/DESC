@@ -9,7 +9,7 @@ import numpy as np
 from scipy.special import factorial
 from termcolor import colored
 
-from desc.backend import flatnonzero, fori_loop, imap, jit, jnp, take
+from desc.backend import flatnonzero, fori_loop, jit, jnp, take
 
 
 class Timer:
@@ -742,15 +742,6 @@ def flatten_matrix(y):
 def atleast_nd(ndmin, ary):
     """Adds dimensions to front if necessary."""
     return jnp.array(ary, ndmin=ndmin) if jnp.ndim(ary) < ndmin else ary
-
-
-def map2(fun, xs, *, batch_size=None):
-    """Map over leading two axes iteratively."""
-    # Can't pass in batch_size to imap yet because only new version jax allow that.
-    return imap(
-        lambda x: imap(fun, x),
-        xs,
-    )
 
 
 PRINT_WIDTH = 60  # current longest name is BootstrapRedlConsistency with pre-text

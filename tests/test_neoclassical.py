@@ -23,7 +23,7 @@ def test_field_line_average():
     iota = iota_grid.compress(eq.compute("iota", grid=iota_grid)["iota"]).item()
     # For axisymmetric devices, one poloidal transit must be exact.
     zeta = np.linspace(0, 2 * np.pi / iota, 25)
-    grid = eq.get_rtz_grid(rho, alpha, zeta, coordinates="raz")
+    grid = eq._get_rtz_grid(rho, alpha, zeta, coordinates="raz")
     data = eq.compute(["<L|r,a>", "<G|r,a>", "V_r(r)"], grid=grid)
     np.testing.assert_allclose(
         data["<L|r,a>"] / data["<G|r,a>"], data["V_r(r)"] / (4 * np.pi**2), rtol=1e-3
@@ -34,7 +34,7 @@ def test_field_line_average():
     # Otherwise, many toroidal transits are necessary to sample surface.
     eq = get("W7-X")
     zeta = np.linspace(0, 40 * np.pi, 300)
-    grid = eq.get_rtz_grid(rho, alpha, zeta, coordinates="raz")
+    grid = eq._get_rtz_grid(rho, alpha, zeta, coordinates="raz")
     data = eq.compute(["<L|r,a>", "<G|r,a>", "V_r(r)"], grid=grid)
     np.testing.assert_allclose(
         data["<L|r,a>"] / data["<G|r,a>"], data["V_r(r)"] / (4 * np.pi**2), rtol=1e-3
@@ -51,11 +51,11 @@ def test_effective_ripple():
     rho = np.linspace(0, 1, 10)
     alpha = np.array([0])
     zeta = np.linspace(0, 20 * np.pi, 1000)
-    grid = eq.get_rtz_grid(rho, alpha, zeta, coordinates="raz")
+    grid = eq._get_rtz_grid(rho, alpha, zeta, coordinates="raz")
     data = eq.compute("effective ripple", grid=grid)
     assert np.isfinite(data["effective ripple"]).all()
     np.testing.assert_allclose(
-        data["epsilon 3/2"] ** (2 / 3),
+        data["effective ripple 3/2"] ** (2 / 3),
         data["effective ripple"],
         err_msg="Bug in source grid logic in eq.compute.",
     )
@@ -76,7 +76,7 @@ def test_Gamma_c_Velasco():
     """Test Γ_c with W7-X."""
     eq = get("W7-X")
     rho = np.linspace(0, 1, 10)
-    grid = eq.get_rtz_grid(
+    grid = eq._get_rtz_grid(
         rho, np.array([0]), np.linspace(0, 20 * np.pi, 1000), coordinates="raz"
     )
     data = eq.compute("Gamma_c Velasco", grid=grid)
@@ -92,7 +92,7 @@ def test_Gamma_c():
     """Test Γ_c Nemov with W7-X."""
     eq = get("W7-X")
     rho = np.linspace(0, 1, 10)
-    grid = eq.get_rtz_grid(
+    grid = eq._get_rtz_grid(
         rho, np.array([0]), np.linspace(0, 20 * np.pi, 1000), coordinates="raz"
     )
     data = eq.compute("Gamma_c", grid=grid)

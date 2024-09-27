@@ -14,7 +14,7 @@ from functools import partial
 from orthax.legendre import leggauss
 from quadax import simpson
 
-from desc.backend import jit, jnp
+from desc.backend import imap, jit, jnp
 
 from ..integrals.bounce_integral import Bounce1D
 from ..integrals.bounce_utils import get_pitch_inv_quad, interp_to_argmin
@@ -24,7 +24,7 @@ from ..integrals.quad_utils import (
     get_quadrature,
     grad_automorphism_sin,
 )
-from ..utils import cross, dot, map2, safediv
+from ..utils import cross, dot, safediv
 from .data_index import register_compute_fun
 
 
@@ -50,6 +50,12 @@ def _get_pitch_inv_quad(grid, data, num_pitch, _data):
         w[jnp.newaxis], (grid.num_alpha, grid.num_rho, num_pitch)
     )
     return _data
+
+
+def map2(fun, xs, *, batch_size=None):
+    """Map over leading two axes iteratively."""
+    # Can't pass in batch_size to imap yet because only new version jax allow that.
+    return imap(lambda x: imap(fun, x), xs)
 
 
 @register_compute_fun(
@@ -107,7 +113,7 @@ def _G_ra_fsa(data, transforms, profiles, **kwargs):
 
 
 @register_compute_fun(
-    name="epsilon 3/2",
+    name="effective ripple 3/2",
     label=(
         # ε¹ᐧ⁵ = π/(8√2) R₀²〈|∇ψ|〉⁻² B₀⁻¹ ∫dλ λ⁻² 〈 ∑ⱼ Hⱼ²/Iⱼ 〉
         "\\epsilon_{\\mathrm{eff}}^{3/2} = \\frac{\\pi}{8 \\sqrt{2}} "
@@ -217,7 +223,7 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
     )
     _data = _get_pitch_inv_quad(grid, data, num_pitch, _data)
     B0 = data["max_tz |B|"]
-    data["epsilon 3/2"] = (
+    data["effective ripple 3/2"] = (
         jnp.pi
         / (8 * 2**0.5)
         * (B0 * data["R0"] / data["<|grad(rho)|>"]) ** 2
@@ -238,10 +244,10 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
     transforms={"grid": []},
     profiles=[],
     coordinates="r",
-    data=["epsilon 3/2"],
+    data=["effective ripple 3/2"],
 )
 def _effective_ripple(params, transforms, profiles, data, **kwargs):
-    data["effective ripple"] = data["epsilon 3/2"] ** (2 / 3)
+    data["effective ripple"] = data["effective ripple 3/2"] ** (2 / 3)
     return data
 
 

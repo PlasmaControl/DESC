@@ -959,14 +959,14 @@ class TestBounceQuadrature:
         Notes
         -----
         Empirical testing shows asymptotic density of nodes needs to be at least
-        1/√(1−x²) and quadrature needs √(1−x²) factor in Jacobian for accurate
+        1/√(1−x²) and quadrature needs a cosine factor in Jacobian for accurate
         bounce integrals. This is satisfied by ``chebgauss2`` and ``leggauss`` with
         the sin automorphism. The former has less clustering near boundary by a factor
         of 1/√(1−x²), so we choose it for weakly singular bounce integrals. This will
         capture more features in the integral, especially the W shaped wells. Less
         clustering will also make non-uniform FFTs more accurate.
 
-        For the strongly singular bounce integrals, another √(1−x²) factor is preferred
+        For the strongly singular bounce integrals, another cosine factor is preferred
         to supress the derivative (as expected from chain rule), so we need to use the
         sin automorphism. We choose to apply that map to ``leggauss`` instead of
         ``_chebgauss1`` because the extra cosine term in ``_chebgauss1`` increases the

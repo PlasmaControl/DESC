@@ -674,10 +674,10 @@ def get_rtz_grid(
     jitable=True,
     **kwargs,
 ):
-    """Return DESC grid in rtz (rho, theta, zeta) coordinates from given coordinates.
+    """Return DESC grid in (rho, theta, zeta) coordinates from given coordinates.
 
-    Create a tensor-product grid from the given coordinates, and return the same grid
-    in DESC coordinates.
+    Create a tensor-product grid from the given coordinates, and return the same
+    grid in DESC coordinates.
 
     Parameters
     ----------

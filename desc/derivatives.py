@@ -10,6 +10,8 @@ from desc.backend import jnp, put, use_jax
 if use_jax:
     import jax
 
+    from desc.batching import jacfwd_chunked, jacrev_chunked
+
 
 class _Derivative(ABC):
     """_Derivative is an abstract base class for derivative matrix calculations.
@@ -123,11 +125,11 @@ class AutoDiffDerivative(_Derivative):
 
     """
 
-    def __init__(self, fun, argnum=0, mode="fwd", **kwargs):
+    def __init__(self, fun, argnum=0, mode="fwd", chunk_size=None, **kwargs):
 
         self._fun = fun
         self._argnum = argnum
-
+        self._chunk_size = chunk_size
         self._set_mode(mode)
 
     def compute(self, *args, **kwargs):
@@ -323,9 +325,13 @@ class AutoDiffDerivative(_Derivative):
 
         self._mode = mode
         if self._mode == "fwd":
-            self._compute = jax.jacfwd(self._fun, self._argnum)
+            self._compute = jacfwd_chunked(
+                self._fun, self._argnum, chunk_size=self._chunk_size
+            )
         elif self._mode == "rev":
-            self._compute = jax.jacrev(self._fun, self._argnum)
+            self._compute = jacrev_chunked(
+                self._fun, self._argnum, chunk_size=self._chunk_size
+            )
         elif self._mode == "grad":
             self._compute = jax.grad(self._fun, self._argnum)
         elif self._mode == "hess":

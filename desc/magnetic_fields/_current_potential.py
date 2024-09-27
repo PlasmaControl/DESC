@@ -1,5 +1,6 @@
 """Magnetic field due to sheet current on a winding surface."""
 
+import fractions
 import warnings
 
 import matplotlib.pyplot as plt
@@ -1600,12 +1601,17 @@ def _find_current_potential_contours(
     net_toroidal_current = surface_current_field.I
     nfp = surface_current_field.NFP
     helicity = safediv(net_poloidal_current, net_toroidal_current * nfp, threshold=1e-8)
+    # we know that helicity = q/p
+    q_over_p = fractions.Fraction(float(helicity)).limit_denominator(
+        max_denominator=100
+    )
+    p = q_over_p.denominator
     dz = 2 * np.pi / nfp / npts
     if not jnp.isclose(helicity, 0):
         # helical coils
         zeta_full = jnp.arange(
             0,
-            2 * jnp.pi / nfp + 1e-6,
+            2 * jnp.pi / nfp * abs(p) + 1e-6,
             dz,
         )
         # ensure we have always have points at least from -2pi, 2pi as depending
@@ -1614,7 +1620,7 @@ def _find_current_potential_contours(
         # and we want to ensure we catch the start and end of the contours
         theta_full = jnp.arange(
             jnp.sign(helicity) * 2 * jnp.pi,
-            -jnp.sign(helicity) * (2 * np.pi * int(np.abs(helicity) + 1) + 1e-6),
+            -jnp.sign(helicity) * (2 * np.pi * int(np.abs(p) + 1) + 1e-6),
             -jnp.sign(helicity) * 2 * np.pi / npts / nfp,
         )
 
@@ -1631,13 +1637,30 @@ def _find_current_potential_contours(
     ################################################################
     # make linspace contours
     if not jnp.isclose(helicity, 0):
-        # helical coils
-        # we start them on zeta=0 plane, so we will find contours
-        # going from 0 to I (corresponding to zeta=0, and theta*sign(I) increasing)
-        contours = jnp.linspace(
-            0, jnp.abs(net_toroidal_current), num_coils + 1, endpoint=True
-        )
-        contours = jnp.sort(contours)
+        if abs(helicity >= 1):
+            # helical coils
+            # we start them on zeta=0 plane, so we will find contours
+            # going from 0 to I (corresponding to zeta=0, and theta*sign(I) increasing)
+            contours = jnp.linspace(
+                0,
+                jnp.abs(net_toroidal_current) * (1 - 1e-7),
+                num_coils + 1,
+                endpoint=True,
+            )  # (1e-7 factor to ensure that the contours don't overshoot
+            # the actual Phi values)
+            contours = jnp.sort(contours)
+        else:
+            # helicity is <1, we dont need to start contours all the way to I,
+            # only to I / p * nfp, as we follow them longer around toroidally
+            # since coils are umbilic-like
+            contours = jnp.linspace(
+                0,
+                jnp.abs(net_toroidal_current / p * nfp) * (1 - 1e-7),
+                num_coils + 1,
+                endpoint=True,
+            )  # (1e-7 factor to ensure that the contours
+            # don't overshoot the actual Phi values)
+            contours = jnp.sort(contours)
     else:
         # modular coils
         # go from zero to G/nfp
@@ -1687,6 +1710,7 @@ def _find_current_potential_contours(
     # list of arrays of the current potential contours,
     # given as indices in theta,zeta
     contours_indices = []
+
     for contour in contours:
         this_contour = skimage.measure.find_contours(
             np.asarray(jnp.transpose(phi_total_full)), level=contour
@@ -1735,7 +1759,6 @@ def _find_current_potential_contours(
     theta_diff = (
         2 * jnp.pi * jnp.abs(helicity) if not jnp.isclose(helicity, 0) else 2 * jnp.pi
     )
-
     if show_plots:
         plt.contourf(
             zeta_full_2D.T, theta_full_2D.T, jnp.transpose(phi_total_full), contours
@@ -1776,7 +1799,7 @@ def _find_current_potential_contours(
                     "sk",
                     label="start of contour",
                 )
-    if not jnp.isclose(helicity, 0):
+    if not jnp.isclose(helicity, 0) and abs(p) == 1:
         # right now these are only over 1 FP
         # so must tile them s.t. they are full coils, by repeating them
         #  with a 2pi/NFP shift in zeta
@@ -1824,7 +1847,9 @@ def _find_current_potential_contours(
                 nfp * (orig_endpoint_theta - contour_theta[i_contour][0])
                 + contour_theta[i_contour][0],
             )
-            contour_zeta[i_contour] = jnp.append(contour_zeta[i_contour], 2 * jnp.pi)
+            contour_zeta[i_contour] = jnp.append(
+                contour_zeta[i_contour], 2 * jnp.pi * abs(p)
+            )
     if show_plots:
         plt.legend()
 

@@ -25,11 +25,11 @@ class QuasisymmetryBoozer(_Objective):
         Must be broadcastable to Objective.dim_f. Defaults to ``target=0``.
     bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f.
+        Both bounds must be broadcastable to Objective.dim_f.
         Defaults to ``target=0``.
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        Must be broadcastable to to Objective.dim_f
+        Must be broadcastable to Objective.dim_f
     normalize : bool, optional
         Whether to compute the error in physical units or non-dimensionalize.
     normalize_target : bool, optional
@@ -41,7 +41,7 @@ class QuasisymmetryBoozer(_Objective):
         is called on the raw compute value, before any shifting, scaling, or
         normalization.
     deriv_mode : {"auto", "fwd", "rev"}
-        Specify how to compute jacobian matrix, either forward mode or reverse mode AD.
+        Specify how to compute Jacobian matrix, either forward mode or reverse mode AD.
         "auto" selects forward or reverse mode based on the size of the input and output
         of the objective. Has no effect on self.grad or self.hess which always use
         reverse mode and forward over reverse mode respectively.
@@ -57,6 +57,17 @@ class QuasisymmetryBoozer(_Objective):
         Toroidal resolution of Boozer transformation. Default = 2 * eq.N.
     name : str, optional
         Name of the objective function.
+    jac_chunk_size : int , optional
+        Will calculate the Jacobian for this objective ``jac_chunk_size``
+        columns at a time, instead of all at once. The memory usage of the
+        Jacobian calculation is roughly ``memory usage = m0 + m1*jac_chunk_size``:
+        the smaller the chunk size, the less memory the Jacobian calculation
+        will require (with some baseline memory usage). The time to compute the
+        Jacobian is roughly ``t=t0 +t1/jac_chunk_size``, so the larger the
+        ``jac_chunk_size``, the faster the calculation takes, at the cost of
+        requiring more memory. A ``jac_chunk_size`` of 1 corresponds to the least
+        memory intensive, but slowest method of calculating the Jacobian.
+        If None, it will use the largest size i.e ``obj.dim_x``.
 
     """
 
@@ -78,6 +89,7 @@ class QuasisymmetryBoozer(_Objective):
         M_booz=None,
         N_booz=None,
         name="QS Boozer",
+        jac_chunk_size=None,
     ):
         if target is None and bounds is None:
             target = 0
@@ -95,6 +107,7 @@ class QuasisymmetryBoozer(_Objective):
             loss_function=loss_function,
             deriv_mode=deriv_mode,
             name=name,
+            jac_chunk_size=jac_chunk_size,
         )
 
         self._print_value_fmt = "Quasi-symmetry ({},{}) Boozer error: ".format(
@@ -247,11 +260,11 @@ class QuasisymmetryTwoTerm(_Objective):
         Must be broadcastable to Objective.dim_f. Defaults to ``target=0``.
     bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f.
+        Both bounds must be broadcastable to Objective.dim_f.
         Defaults to ``target=0``.
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        Must be broadcastable to to Objective.dim_f
+        Must be broadcastable to Objective.dim_f
     normalize : bool, optional
         Whether to compute the error in physical units or non-dimensionalize.
     normalize_target : bool, optional
@@ -263,7 +276,7 @@ class QuasisymmetryTwoTerm(_Objective):
         is called on the raw compute value, before any shifting, scaling, or
         normalization.
     deriv_mode : {"auto", "fwd", "rev"}
-        Specify how to compute jacobian matrix, either forward mode or reverse mode AD.
+        Specify how to compute Jacobian matrix, either forward mode or reverse mode AD.
         "auto" selects forward or reverse mode based on the size of the input and output
         of the objective. Has no effect on self.grad or self.hess which always use
         reverse mode and forward over reverse mode respectively.
@@ -274,6 +287,17 @@ class QuasisymmetryTwoTerm(_Objective):
         Type of quasi-symmetry (M, N).
     name : str, optional
         Name of the objective function.
+    jac_chunk_size : int , optional
+        Will calculate the Jacobian for this objective ``jac_chunk_size``
+        columns at a time, instead of all at once. The memory usage of the
+        Jacobian calculation is roughly ``memory usage = m0 + m1*jac_chunk_size``:
+        the smaller the chunk size, the less memory the Jacobian calculation
+        will require (with some baseline memory usage). The time to compute the
+        Jacobian is roughly ``t=t0 +t1/jac_chunk_size``, so the larger the
+        ``jac_chunk_size``, the faster the calculation takes, at the cost of
+        requiring more memory. A ``jac_chunk_size`` of 1 corresponds to the least
+        memory intensive, but slowest method of calculating the Jacobian.
+        If None, it will use the largest size i.e ``obj.dim_x``.
 
     """
 
@@ -294,6 +318,7 @@ class QuasisymmetryTwoTerm(_Objective):
         grid=None,
         helicity=(1, 0),
         name="QS two-term",
+        jac_chunk_size=None,
     ):
         if target is None and bounds is None:
             target = 0
@@ -309,6 +334,7 @@ class QuasisymmetryTwoTerm(_Objective):
             loss_function=loss_function,
             deriv_mode=deriv_mode,
             name=name,
+            jac_chunk_size=jac_chunk_size,
         )
 
         self._print_value_fmt = "Quasi-symmetry ({},{}) two-term error: ".format(
@@ -439,11 +465,11 @@ class QuasisymmetryTripleProduct(_Objective):
         Must be broadcastable to Objective.dim_f. Defaults to ``target=0``.
     bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f.
+        Both bounds must be broadcastable to Objective.dim_f.
         Defaults to ``target=0``.
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        Must be broadcastable to to Objective.dim_f
+        Must be broadcastable to Objective.dim_f
     normalize : bool, optional
         Whether to compute the error in physical units or non-dimensionalize.
     normalize_target : bool, optional
@@ -455,7 +481,7 @@ class QuasisymmetryTripleProduct(_Objective):
         is called on the raw compute value, before any shifting, scaling, or
         normalization.
     deriv_mode : {"auto", "fwd", "rev"}
-        Specify how to compute jacobian matrix, either forward mode or reverse mode AD.
+        Specify how to compute Jacobian matrix, either forward mode or reverse mode AD.
         "auto" selects forward or reverse mode based on the size of the input and output
         of the objective. Has no effect on self.grad or self.hess which always use
         reverse mode and forward over reverse mode respectively.
@@ -464,6 +490,17 @@ class QuasisymmetryTripleProduct(_Objective):
         Defaults to ``LinearGrid(M=eq.M_grid, N=eq.N_grid)``.
     name : str, optional
         Name of the objective function.
+    jac_chunk_size : int , optional
+        Will calculate the Jacobian for this objective ``jac_chunk_size``
+        columns at a time, instead of all at once. The memory usage of the
+        Jacobian calculation is roughly ``memory usage = m0 + m1*jac_chunk_size``:
+        the smaller the chunk size, the less memory the Jacobian calculation
+        will require (with some baseline memory usage). The time to compute the
+        Jacobian is roughly ``t=t0 +t1/jac_chunk_size``, so the larger the
+        ``jac_chunk_size``, the faster the calculation takes, at the cost of
+        requiring more memory. A ``jac_chunk_size`` of 1 corresponds to the least
+        memory intensive, but slowest method of calculating the Jacobian.
+        If None, it will use the largest size i.e ``obj.dim_x``.
 
     """
 
@@ -483,6 +520,7 @@ class QuasisymmetryTripleProduct(_Objective):
         deriv_mode="auto",
         grid=None,
         name="QS triple product",
+        jac_chunk_size=None,
     ):
         if target is None and bounds is None:
             target = 0
@@ -497,6 +535,7 @@ class QuasisymmetryTripleProduct(_Objective):
             loss_function=loss_function,
             deriv_mode=deriv_mode,
             name=name,
+            jac_chunk_size=jac_chunk_size,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -595,11 +634,11 @@ class Omnigenity(_Objective):
         Must be broadcastable to Objective.dim_f. Defaults to ``target=0``.
     bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f.
+        Both bounds must be broadcastable to Objective.dim_f.
         Defaults to ``target=0``.
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        Must be broadcastable to to Objective.dim_f
+        Must be broadcastable to Objective.dim_f
     normalize : bool
         Whether to compute the error in physical units or non-dimensionalize.
     normalize_target : bool
@@ -611,7 +650,7 @@ class Omnigenity(_Objective):
         is called on the raw compute value, before any shifting, scaling, or
         normalization.
     deriv_mode : {"auto", "fwd", "rev"}
-        Specify how to compute jacobian matrix, either forward mode or reverse mode AD.
+        Specify how to compute Jacobian matrix, either forward mode or reverse mode AD.
         "auto" selects forward or reverse mode based on the size of the input and output
         of the objective. Has no effect on self.grad or self.hess which always use
         reverse mode and forward over reverse mode respectively.
@@ -645,8 +684,19 @@ class Omnigenity(_Objective):
         computation time during optimization and self.things = [eq] only.
         If False, the field is allowed to change during the optimization and its
         associated data are re-computed at every iteration (Default).
-    name : str
+    name : str, optional
         Name of the objective function.
+    jac_chunk_size : int , optional
+        Will calculate the Jacobian for this objective ``jac_chunk_size``
+        columns at a time, instead of all at once. The memory usage of the
+        Jacobian calculation is roughly ``memory usage = m0 + m1*jac_chunk_size``:
+        the smaller the chunk size, the less memory the Jacobian calculation
+        will require (with some baseline memory usage). The time to compute the
+        Jacobian is roughly ``t=t0 +t1/jac_chunk_size``, so the larger the
+        ``jac_chunk_size``, the faster the calculation takes, at the cost of
+        requiring more memory. A ``jac_chunk_size`` of 1 corresponds to the least
+        memory intensive, but slowest method of calculating the Jacobian.
+        If None, it will use the largest size i.e ``obj.dim_x``.
 
     """
 
@@ -673,6 +723,7 @@ class Omnigenity(_Objective):
         eq_fixed=False,
         field_fixed=False,
         name="omnigenity",
+        jac_chunk_size=None,
     ):
         if target is None and bounds is None:
             target = 0
@@ -704,6 +755,7 @@ class Omnigenity(_Objective):
             loss_function=loss_function,
             deriv_mode=deriv_mode,
             name=name,
+            jac_chunk_size=jac_chunk_size,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -956,11 +1008,11 @@ class Isodynamicity(_Objective):
         Must be broadcastable to Objective.dim_f. Defaults to ``target=0``.
     bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f.
+        Both bounds must be broadcastable to Objective.dim_f.
         Defaults to ``target=0``.
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        Must be broadcastable to to Objective.dim_f
+        Must be broadcastable to Objective.dim_f
     normalize : bool, optional
         Whether to compute the error in physical units or non-dimensionalize.
     normalize_target : bool, optional
@@ -973,7 +1025,7 @@ class Isodynamicity(_Objective):
         is called on the raw compute value, before any shifting, scaling, or
         normalization.
     deriv_mode : {"auto", "fwd", "rev"}
-        Specify how to compute jacobian matrix, either forward mode or reverse mode AD.
+        Specify how to compute Jacobian matrix, either forward mode or reverse mode AD.
         "auto" selects forward or reverse mode based on the size of the input and output
         of the objective. Has no effect on self.grad or self.hess which always use
         reverse mode and forward over reverse mode respectively.
@@ -982,6 +1034,17 @@ class Isodynamicity(_Objective):
         Defaults to ``LinearGrid(M=eq.M_grid, N=eq.N_grid)``.
     name : str, optional
         Name of the objective function.
+    jac_chunk_size : int , optional
+        Will calculate the Jacobian for this objective ``jac_chunk_size``
+        columns at a time, instead of all at once. The memory usage of the
+        Jacobian calculation is roughly ``memory usage = m0 + m1*jac_chunk_size``:
+        the smaller the chunk size, the less memory the Jacobian calculation
+        will require (with some baseline memory usage). The time to compute the
+        Jacobian is roughly ``t=t0 +t1/jac_chunk_size``, so the larger the
+        ``jac_chunk_size``, the faster the calculation takes, at the cost of
+        requiring more memory. A ``jac_chunk_size`` of 1 corresponds to the least
+        memory intensive, but slowest method of calculating the Jacobian.
+        If None, it will use the largest size i.e ``obj.dim_x``.
 
     """
 
@@ -1001,6 +1064,7 @@ class Isodynamicity(_Objective):
         deriv_mode="auto",
         grid=None,
         name="Isodynamicity",
+        jac_chunk_size=None,
     ):
         if target is None and bounds is None:
             target = 0
@@ -1015,6 +1079,7 @@ class Isodynamicity(_Objective):
             loss_function=loss_function,
             deriv_mode=deriv_mode,
             name=name,
+            jac_chunk_size=jac_chunk_size,
         )
 
     def build(self, use_jit=True, verbose=1):

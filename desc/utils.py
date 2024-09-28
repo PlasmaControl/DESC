@@ -1,8 +1,8 @@
 """Utility functions, independent of the rest of DESC."""
 
+import functools
 import operator
 import warnings
-from functools import partial
 from itertools import combinations_with_replacement, permutations
 
 import numpy as np
@@ -692,7 +692,9 @@ def broadcast_tree(tree_in, tree_out, dtype=int):
         raise ValueError("trees must be nested lists of dicts")
 
 
-@partial(jnp.vectorize, signature="(m),(m)->(n)", excluded={"size", "fill_value"})
+@functools.partial(
+    jnp.vectorize, signature="(m),(m)->(n)", excluded={"size", "fill_value"}
+)
 def take_mask(a, mask, /, *, size=None, fill_value=None):
     """JIT compilable method to return ``a[mask][:size]`` padded by ``fill_value``.
 
@@ -743,3 +745,111 @@ def atleast_nd(ndmin, ary):
 
 
 PRINT_WIDTH = 60  # current longest name is BootstrapRedlConsistency with pre-text
+
+
+def dot(a, b, axis=-1):
+    """Batched vector dot product.
+
+    Parameters
+    ----------
+    a : array-like
+        First array of vectors.
+    b : array-like
+        Second array of vectors.
+    axis : int
+        Axis along which vectors are stored.
+
+    Returns
+    -------
+    y : array-like
+        y = sum(a*b, axis=axis)
+
+    """
+    return jnp.sum(a * b, axis=axis, keepdims=False)
+
+
+def cross(a, b, axis=-1):
+    """Batched vector cross product.
+
+    Parameters
+    ----------
+    a : array-like
+        First array of vectors.
+    b : array-like
+        Second array of vectors.
+    axis : int
+        Axis along which vectors are stored.
+
+    Returns
+    -------
+    y : array-like
+        y = a x b
+
+    """
+    return jnp.cross(a, b, axis=axis)
+
+
+def safenorm(x, ord=None, axis=None, fill=0, threshold=0):
+    """Like jnp.linalg.norm, but without nan gradient at x=0.
+
+    Parameters
+    ----------
+    x : ndarray
+        Vector or array to norm.
+    ord : {non-zero int, inf, -inf, 'fro', 'nuc'}, optional
+        Order of norm.
+    axis : {None, int, 2-tuple of ints}, optional
+        Axis to take norm along.
+    fill : float, ndarray, optional
+        Value to return where x is zero.
+    threshold : float >= 0
+        How small is x allowed to be.
+
+    """
+    is_zero = (jnp.abs(x) <= threshold).all(axis=axis, keepdims=True)
+    y = jnp.where(is_zero, jnp.ones_like(x), x)  # replace x with ones if is_zero
+    n = jnp.linalg.norm(y, ord=ord, axis=axis)
+    n = jnp.where(is_zero.squeeze(), fill, n)  # replace norm with zero if is_zero
+    return n
+
+
+def safenormalize(x, ord=None, axis=None, fill=0, threshold=0):
+    """Normalize a vector to unit length, but without nan gradient at x=0.
+
+    Parameters
+    ----------
+    x : ndarray
+        Vector or array to norm.
+    ord : {non-zero int, inf, -inf, 'fro', 'nuc'}, optional
+        Order of norm.
+    axis : {None, int, 2-tuple of ints}, optional
+        Axis to take norm along.
+    fill : float, ndarray, optional
+        Value to return where x is zero.
+    threshold : float >= 0
+        How small is x allowed to be.
+
+    """
+    is_zero = (jnp.abs(x) <= threshold).all(axis=axis, keepdims=True)
+    y = jnp.where(is_zero, jnp.ones_like(x), x)  # replace x with ones if is_zero
+    n = safenorm(x, ord, axis, fill, threshold) * jnp.ones_like(x)
+    # return unit vector with equal components if norm <= threshold
+    return jnp.where(n <= threshold, jnp.ones_like(y) / jnp.sqrt(y.size), y / n)
+
+
+def safediv(a, b, fill=0, threshold=0):
+    """Divide a/b with guards for division by zero.
+
+    Parameters
+    ----------
+    a, b : ndarray
+        Numerator and denominator.
+    fill : float, ndarray, optional
+        Value to return where b is zero.
+    threshold : float >= 0
+        How small is b allowed to be.
+    """
+    mask = jnp.abs(b) <= threshold
+    num = jnp.where(mask, fill, a)
+    den = jnp.where(mask, 1, b)
+    return num / den

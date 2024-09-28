@@ -12,10 +12,9 @@ from desc.backend import (
 )
 from desc.compute import get_profiles, get_transforms, rpz2xyz
 from desc.compute.utils import _compute as compute_fun
-from desc.compute.utils import safenorm
 from desc.grid import LinearGrid, _Grid
 from desc.integrals import compute_B_plasma
-from desc.utils import Timer, errorif, warnif
+from desc.utils import Timer, errorif, safenorm, warnif
 
 from .normalization import compute_scaling_factors
 from .objective_funs import _Objective
@@ -35,10 +34,10 @@ class _CoilObjective(_Objective):
         Must be broadcastable to Objective.dim_f.
     bounds : tuple of float, ndarray, optional
         Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f
+        Both bounds must be broadcastable to Objective.dim_f
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        Must be broadcastable to to Objective.dim_f
+        Must be broadcastable to Objective.dim_f
     normalize : bool, optional
         Whether to compute the error in physical units or non-dimensionalize.
     normalize_target : bool, optional
@@ -51,7 +50,7 @@ class _CoilObjective(_Objective):
         is called on the raw compute value, before any shifting, scaling, or
         normalization. Operates over all coils, not each individual coil.
     deriv_mode : {"auto", "fwd", "rev"}
-        Specify how to compute jacobian matrix, either forward mode or reverse mode AD.
+        Specify how to compute Jacobian matrix, either forward mode or reverse mode AD.
         "auto" selects forward or reverse mode based on the size of the input and output
         of the objective. Has no effect on self.grad or self.hess which always use
         reverse mode and forward over reverse mode respectively.
@@ -60,6 +59,17 @@ class _CoilObjective(_Objective):
         If a list, must have the same structure as coil.
     name : str, optional
         Name of the objective function.
+    jac_chunk_size : int , optional
+        Will calculate the Jacobian for this objective ``jac_chunk_size``
+        columns at a time, instead of all at once. The memory usage of the
+        Jacobian calculation is roughly ``memory usage = m0 + m1*jac_chunk_size``:
+        the smaller the chunk size, the less memory the Jacobian calculation
+        will require (with some baseline memory usage). The time to compute the
+        Jacobian is roughly ``t=t0 +t1/jac_chunk_size``, so the larger the
+        ``jac_chunk_size``, the faster the calculation takes, at the cost of
+        requiring more memory. A ``jac_chunk_size`` of 1 corresponds to the least
+        memory intensive, but slowest method of calculating the Jacobian.
+        If None, it will use the largest size i.e ``obj.dim_x``.
 
     """
 
@@ -76,6 +86,7 @@ class _CoilObjective(_Objective):
         deriv_mode="auto",
         grid=None,
         name=None,
+        jac_chunk_size=None,
     ):
         self._grid = grid
         self._data_keys = data_keys
@@ -90,6 +101,7 @@ class _CoilObjective(_Objective):
             loss_function=loss_function,
             deriv_mode=deriv_mode,
             name=name,
+            jac_chunk_size=jac_chunk_size,
         )
 
     def build(self, use_jit=True, verbose=1):  # noqa:C901
@@ -229,11 +241,11 @@ class CoilLength(_CoilObjective):
         be flattened according to the number of inputs. Defaults to ``target=2*np.pi``.
     bounds : tuple of float, ndarray, optional
         Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f.
+        Both bounds must be broadcastable to Objective.dim_f.
         Defaults to ``target=2*np.pi``.
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        Must be broadcastable to to Objective.dim_f
+        Must be broadcastable to Objective.dim_f
     normalize : bool, optional
         Whether to compute the error in physical units or non-dimensionalize.
     normalize_target : bool, optional
@@ -246,7 +258,7 @@ class CoilLength(_CoilObjective):
         is called on the raw compute value, before any shifting, scaling, or
         normalization. Operates over all coils, not each individual coil.
     deriv_mode : {"auto", "fwd", "rev"}
-        Specify how to compute jacobian matrix, either forward mode or reverse mode AD.
+        Specify how to compute Jacobian matrix, either forward mode or reverse mode AD.
         "auto" selects forward or reverse mode based on the size of the input and output
         of the objective. Has no effect on self.grad or self.hess which always use
         reverse mode and forward over reverse mode respectively.
@@ -255,6 +267,17 @@ class CoilLength(_CoilObjective):
         Defaults to ``LinearGrid(N=2 * coil.N + 5)``
     name : str, optional
         Name of the objective function.
+    jac_chunk_size : int , optional
+        Will calculate the Jacobian for this objective ``jac_chunk_size``
+        columns at a time, instead of all at once. The memory usage of the
+        Jacobian calculation is roughly ``memory usage = m0 + m1*jac_chunk_size``:
+        the smaller the chunk size, the less memory the Jacobian calculation
+        will require (with some baseline memory usage). The time to compute the
+        Jacobian is roughly ``t=t0 +t1/jac_chunk_size``, so the larger the
+        ``jac_chunk_size``, the faster the calculation takes, at the cost of
+        requiring more memory. A ``jac_chunk_size`` of 1 corresponds to the least
+        memory intensive, but slowest method of calculating the Jacobian.
+        If None, it will use the largest size i.e ``obj.dim_x``.
 
     """
 
@@ -274,6 +297,7 @@ class CoilLength(_CoilObjective):
         deriv_mode="auto",
         grid=None,
         name="coil length",
+        jac_chunk_size=None,
     ):
         if target is None and bounds is None:
             target = 2 * np.pi
@@ -290,6 +314,7 @@ class CoilLength(_CoilObjective):
             deriv_mode=deriv_mode,
             grid=grid,
             name=name,
+            jac_chunk_size=jac_chunk_size,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -354,11 +379,11 @@ class CoilCurvature(_CoilObjective):
         be flattened according to the number of inputs. Defaults to ``bounds=(0,1)``.
     bounds : tuple of float, ndarray, optional
         Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f.
+        Both bounds must be broadcastable to Objective.dim_f.
         Defaults to ``bounds=(0,1)``.
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        Must be broadcastable to to Objective.dim_f
+        Must be broadcastable to Objective.dim_f
     normalize : bool, optional
         Whether to compute the error in physical units or non-dimensionalize.
     normalize_target : bool, optional
@@ -371,7 +396,7 @@ class CoilCurvature(_CoilObjective):
         is called on the raw compute value, before any shifting, scaling, or
         normalization. Operates over all coils, not each individual coil.
     deriv_mode : {"auto", "fwd", "rev"}
-        Specify how to compute jacobian matrix, either forward mode or reverse mode AD.
+        Specify how to compute Jacobian matrix, either forward mode or reverse mode AD.
         "auto" selects forward or reverse mode based on the size of the input and output
         of the objective. Has no effect on self.grad or self.hess which always use
         reverse mode and forward over reverse mode respectively.
@@ -380,6 +405,17 @@ class CoilCurvature(_CoilObjective):
         Defaults to ``LinearGrid(N=2 * coil.N + 5)``
     name : str, optional
         Name of the objective function.
+    jac_chunk_size : int , optional
+        Will calculate the Jacobian for this objective ``jac_chunk_size``
+        columns at a time, instead of all at once. The memory usage of the
+        Jacobian calculation is roughly ``memory usage = m0 + m1*jac_chunk_size``:
+        the smaller the chunk size, the less memory the Jacobian calculation
+        will require (with some baseline memory usage). The time to compute the
+        Jacobian is roughly ``t=t0 +t1/jac_chunk_size``, so the larger the
+        ``jac_chunk_size``, the faster the calculation takes, at the cost of
+        requiring more memory. A ``jac_chunk_size`` of 1 corresponds to the least
+        memory intensive, but slowest method of calculating the Jacobian.
+        If None, it will use the largest size i.e ``obj.dim_x``.
 
     """
 
@@ -399,6 +435,7 @@ class CoilCurvature(_CoilObjective):
         deriv_mode="auto",
         grid=None,
         name="coil curvature",
+        jac_chunk_size=None,
     ):
         if target is None and bounds is None:
             bounds = (0, 1)
@@ -415,6 +452,7 @@ class CoilCurvature(_CoilObjective):
             deriv_mode=deriv_mode,
             grid=grid,
             name=name,
+            jac_chunk_size=jac_chunk_size,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -474,11 +512,11 @@ class CoilTorsion(_CoilObjective):
         be flattened according to the number of inputs. Defaults to ``target=0``.
     bounds : tuple of float, ndarray, optional
         Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f.
+        Both bounds must be broadcastable to Objective.dim_f.
         Defaults to ``target=0``.
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        Must be broadcastable to to Objective.dim_f
+        Must be broadcastable to Objective.dim_f
     normalize : bool, optional
         Whether to compute the error in physical units or non-dimensionalize.
     normalize_target : bool, optional
@@ -491,7 +529,7 @@ class CoilTorsion(_CoilObjective):
         is called on the raw compute value, before any shifting, scaling, or
         normalization. Operates over all coils, not each individual coil.
     deriv_mode : {"auto", "fwd", "rev"}
-        Specify how to compute jacobian matrix, either forward mode or reverse mode AD.
+        Specify how to compute Jacobian matrix, either forward mode or reverse mode AD.
         "auto" selects forward or reverse mode based on the size of the input and output
         of the objective. Has no effect on self.grad or self.hess which always use
         reverse mode and forward over reverse mode respectively.
@@ -500,6 +538,17 @@ class CoilTorsion(_CoilObjective):
         Defaults to ``LinearGrid(N=2 * coil.N + 5)``
     name : str, optional
         Name of the objective function.
+    jac_chunk_size : int , optional
+        Will calculate the Jacobian for this objective ``jac_chunk_size``
+        columns at a time, instead of all at once. The memory usage of the
+        Jacobian calculation is roughly ``memory usage = m0 + m1*jac_chunk_size``:
+        the smaller the chunk size, the less memory the Jacobian calculation
+        will require (with some baseline memory usage). The time to compute the
+        Jacobian is roughly ``t=t0 +t1/jac_chunk_size``, so the larger the
+        ``jac_chunk_size``, the faster the calculation takes, at the cost of
+        requiring more memory. A ``jac_chunk_size`` of 1 corresponds to the least
+        memory intensive, but slowest method of calculating the Jacobian.
+        If None, it will use the largest size i.e ``obj.dim_x``.
 
     """
 
@@ -519,6 +568,7 @@ class CoilTorsion(_CoilObjective):
         deriv_mode="auto",
         grid=None,
         name="coil torsion",
+        jac_chunk_size=None,
     ):
         if target is None and bounds is None:
             target = 0
@@ -535,6 +585,7 @@ class CoilTorsion(_CoilObjective):
             deriv_mode=deriv_mode,
             grid=grid,
             name=name,
+            jac_chunk_size=jac_chunk_size,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -594,11 +645,11 @@ class CoilCurrentLength(CoilLength):
         be flattened according to the number of inputs. Defaults to ``target=0``.
     bounds : tuple of float, ndarray, optional
         Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f.
+        Both bounds must be broadcastable to Objective.dim_f.
         Defaults to ``target=0``.
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        Must be broadcastable to to Objective.dim_f
+        Must be broadcastable to Objective.dim_f
     normalize : bool, optional
         Whether to compute the error in physical units or non-dimensionalize.
     normalize_target : bool, optional
@@ -611,7 +662,7 @@ class CoilCurrentLength(CoilLength):
         is called on the raw compute value, before any shifting, scaling, or
         normalization. Operates over all coils, not each individual coil.
     deriv_mode : {"auto", "fwd", "rev"}
-        Specify how to compute jacobian matrix, either forward mode or reverse mode AD.
+        Specify how to compute Jacobian matrix, either forward mode or reverse mode AD.
         "auto" selects forward or reverse mode based on the size of the input and output
         of the objective. Has no effect on self.grad or self.hess which always use
         reverse mode and forward over reverse mode respectively.
@@ -620,6 +671,17 @@ class CoilCurrentLength(CoilLength):
         Defaults to ``LinearGrid(N=2 * coil.N + 5)``
     name : str, optional
         Name of the objective function.
+    jac_chunk_size : int , optional
+        Will calculate the Jacobian for this objective ``jac_chunk_size``
+        columns at a time, instead of all at once. The memory usage of the
+        Jacobian calculation is roughly ``memory usage = m0 + m1*jac_chunk_size``:
+        the smaller the chunk size, the less memory the Jacobian calculation
+        will require (with some baseline memory usage). The time to compute the
+        Jacobian is roughly ``t=t0 +t1/jac_chunk_size``, so the larger the
+        ``jac_chunk_size``, the faster the calculation takes, at the cost of
+        requiring more memory. A ``jac_chunk_size`` of 1 corresponds to the least
+        memory intensive, but slowest method of calculating the Jacobian.
+        If None, it will use the largest size i.e ``obj.dim_x``.
 
     """
 
@@ -639,6 +701,7 @@ class CoilCurrentLength(CoilLength):
         deriv_mode="auto",
         grid=None,
         name="coil current length",
+        jac_chunk_size=None,
     ):
         if target is None and bounds is None:
             target = 0
@@ -654,6 +717,7 @@ class CoilCurrentLength(CoilLength):
             deriv_mode=deriv_mode,
             grid=grid,
             name=name,
+            jac_chunk_size=jac_chunk_size,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -748,6 +812,17 @@ class CoilSetMinDistance(_Objective):
         If a list, must have the same structure as coils.
     name : str, optional
         Name of the objective function.
+    jac_chunk_size : int , optional
+        Will calculate the Jacobian for this objective ``jac_chunk_size``
+        columns at a time, instead of all at once. The memory usage of the
+        Jacobian calculation is roughly ``memory usage = m0 + m1*jac_chunk_size``:
+        the smaller the chunk size, the less memory the Jacobian calculation
+        will require (with some baseline memory usage). The time to compute the
+        Jacobian is roughly ``t=t0 +t1/jac_chunk_size``, so the larger the
+        ``jac_chunk_size``, the faster the calculation takes, at the cost of
+        requiring more memory. A ``jac_chunk_size`` of 1 corresponds to the least
+        memory intensive, but slowest method of calculating the Jacobian.
+        If None, it will use the largest size i.e ``obj.dim_x``.
 
     """
 
@@ -767,6 +842,7 @@ class CoilSetMinDistance(_Objective):
         deriv_mode="auto",
         grid=None,
         name="coil-coil minimum distance",
+        jac_chunk_size=None,
     ):
         from desc.coils import CoilSet
 
@@ -788,6 +864,7 @@ class CoilSetMinDistance(_Objective):
             loss_function=loss_function,
             deriv_mode=deriv_mode,
             name=name,
+            jac_chunk_size=jac_chunk_size,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -922,6 +999,17 @@ class PlasmaCoilSetMinDistance(_Objective):
         False by default, so that self.things = [coil, eq].
     name : str, optional
         Name of the objective function.
+    jac_chunk_size : int , optional
+        Will calculate the Jacobian for this objective ``jac_chunk_size``
+        columns at a time, instead of all at once. The memory usage of the
+        Jacobian calculation is roughly ``memory usage = m0 + m1*jac_chunk_size``:
+        the smaller the chunk size, the less memory the Jacobian calculation
+        will require (with some baseline memory usage). The time to compute the
+        Jacobian is roughly ``t=t0 +t1/jac_chunk_size``, so the larger the
+        ``jac_chunk_size``, the faster the calculation takes, at the cost of
+        requiring more memory. A ``jac_chunk_size`` of 1 corresponds to the least
+        memory intensive, but slowest method of calculating the Jacobian.
+        If None, it will use the largest size i.e ``obj.dim_x``.
 
     """
 
@@ -945,6 +1033,7 @@ class PlasmaCoilSetMinDistance(_Objective):
         eq_fixed=False,
         coils_fixed=False,
         name="plasma-coil minimum distance",
+        jac_chunk_size=None,
     ):
         if target is None and bounds is None:
             bounds = (1, np.inf)
@@ -970,6 +1059,7 @@ class PlasmaCoilSetMinDistance(_Objective):
             loss_function=loss_function,
             deriv_mode=deriv_mode,
             name=name,
+            jac_chunk_size=jac_chunk_size,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -1152,6 +1242,17 @@ class QuadraticFlux(_Objective):
         plasma currents) is set to zero.
     name : str
         Name of the objective function.
+    jac_chunk_size : int , optional
+        Will calculate the Jacobian for this objective ``jac_chunk_size``
+        columns at a time, instead of all at once. The memory usage of the
+        Jacobian calculation is roughly ``memory usage = m0 + m1*jac_chunk_size``:
+        the smaller the chunk size, the less memory the Jacobian calculation
+        will require (with some baseline memory usage). The time to compute the
+        Jacobian is roughly ``t=t0 +t1/jac_chunk_size``, so the larger the
+        ``jac_chunk_size``, the faster the calculation takes, at the cost of
+        requiring more memory. A ``jac_chunk_size`` of 1 corresponds to the least
+        memory intensive, but slowest method of calculating the Jacobian.
+        If None, it will use the largest size i.e ``obj.dim_x``.
 
     """
 
@@ -1175,6 +1276,7 @@ class QuadraticFlux(_Objective):
         field_grid=None,
         vacuum=False,
         name="Quadratic flux",
+        jac_chunk_size=None,
     ):
         if target is None and bounds is None:
             target = 0
@@ -1193,6 +1295,7 @@ class QuadraticFlux(_Objective):
             normalize=normalize,
             normalize_target=normalize_target,
             name=name,
+            jac_chunk_size=jac_chunk_size,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -1332,10 +1435,10 @@ class ToroidalFlux(_Objective):
         Defaults to eq.Psi. Must be broadcastable to Objective.dim_f.
     bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f
+        Both bounds must be broadcastable to Objective.dim_f
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        Must be broadcastable to to Objective.dim_f
+        Must be broadcastable to Objective.dim_f
     normalize : bool, optional
         Whether to compute the error in physical units or non-dimensionalize.
     normalize_target : bool
@@ -1347,7 +1450,7 @@ class ToroidalFlux(_Objective):
         is called on the raw compute value, before any shifting, scaling, or
         normalization. Note: has no effect for this objective
     deriv_mode : {"auto", "fwd", "rev"}
-        Specify how to compute jacobian matrix, either forward mode or reverse mode AD.
+        Specify how to compute Jacobian matrix, either forward mode or reverse mode AD.
         "auto" selects forward or reverse mode based on the size of the input and output
         of the objective. Has no effect on self.grad or self.hess which always use
         reverse mode and forward over reverse mode respectively.
@@ -1362,6 +1465,17 @@ class ToroidalFlux(_Objective):
         zeta=jnp.array(0.0), NFP=eq.NFP).
     name : str, optional
         Name of the objective function.
+    jac_chunk_size : int , optional
+        Will calculate the Jacobian for this objective ``jac_chunk_size``
+        columns at a time, instead of all at once. The memory usage of the
+        Jacobian calculation is roughly ``memory usage = m0 + m1*jac_chunk_size``:
+        the smaller the chunk size, the less memory the Jacobian calculation
+        will require (with some baseline memory usage). The time to compute the
+        Jacobian is roughly ``t=t0 +t1/jac_chunk_size``, so the larger the
+        ``jac_chunk_size``, the faster the calculation takes, at the cost of
+        requiring more memory. A ``jac_chunk_size`` of 1 corresponds to the least
+        memory intensive, but slowest method of calculating the Jacobian.
+        If None, it will use the largest size i.e ``obj.dim_x``.
 
 
     """
@@ -1384,6 +1498,7 @@ class ToroidalFlux(_Objective):
         field_grid=None,
         eval_grid=None,
         name="toroidal-flux",
+        jac_chunk_size=None,
     ):
         if target is None and bounds is None:
             target = eq.Psi
@@ -1403,6 +1518,7 @@ class ToroidalFlux(_Objective):
             loss_function=loss_function,
             deriv_mode=deriv_mode,
             name=name,
+            jac_chunk_size=jac_chunk_size,
         )
 
     def build(self, use_jit=True, verbose=1):

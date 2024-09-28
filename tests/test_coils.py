@@ -16,12 +16,12 @@ from desc.coils import (
     SplineXYZCoil,
 )
 from desc.compute import get_params, get_transforms, rpz2xyz, xyz2rpz, xyz2rpz_vec
-from desc.compute.utils import dot
 from desc.examples import get
 from desc.geometry import FourierRZCurve, FourierRZToroidalSurface, FourierXYZCurve
 from desc.grid import Grid, LinearGrid
 from desc.io import load
 from desc.magnetic_fields import SumMagneticField, VerticalMagneticField
+from desc.utils import dot
 
 
 class TestCoil:

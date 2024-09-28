@@ -26,13 +26,13 @@ class Pressure(_Objective):
         locations. Defaults to ``target=0``.
     bounds : tuple of {float, ndarray, callable}, optional
         Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f
+        Both bounds must be broadcastable to Objective.dim_f
         If a callable, each should take a single argument `rho` and return the
         desired bound (lower or upper) of the profile at those locations.
         Defaults to ``target=0``.
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        Must be broadcastable to to Objective.dim_f
+        Must be broadcastable to Objective.dim_f
     normalize : bool, optional
         Whether to compute the error in physical units or non-dimensionalize.
     normalize_target : bool, optional
@@ -44,7 +44,7 @@ class Pressure(_Objective):
         is called on the raw compute value, before any shifting, scaling, or
         normalization.
     deriv_mode : {"auto", "fwd", "rev"}
-        Specify how to compute jacobian matrix, either forward mode or reverse mode AD.
+        Specify how to compute Jacobian matrix, either forward mode or reverse mode AD.
         "auto" selects forward or reverse mode based on the size of the input and output
         of the objective. Has no effect on self.grad or self.hess which always use
         reverse mode and forward over reverse mode respectively.
@@ -53,6 +53,17 @@ class Pressure(_Objective):
         Defaults to ``LinearGrid(L=eq.L_grid)``.
     name : str, optional
         Name of the objective function.
+    jac_chunk_size : int , optional
+        Will calculate the Jacobian for this objective ``jac_chunk_size``
+        columns at a time, instead of all at once. The memory usage of the
+        Jacobian calculation is roughly ``memory usage = m0 + m1*jac_chunk_size``:
+        the smaller the chunk size, the less memory the Jacobian calculation
+        will require (with some baseline memory usage). The time to compute the
+        Jacobian is roughly ``t=t0 +t1/jac_chunk_size``, so the larger the
+        ``jac_chunk_size``, the faster the calculation takes, at the cost of
+        requiring more memory. A ``jac_chunk_size`` of 1 corresponds to the least
+        memory intensive, but slowest method of calculating the Jacobian.
+        If None, it will use the largest size i.e ``obj.dim_x``.
 
     """
 
@@ -72,6 +83,7 @@ class Pressure(_Objective):
         deriv_mode="auto",
         grid=None,
         name="pressure",
+        jac_chunk_size=None,
     ):
         if target is None and bounds is None:
             target = 0
@@ -86,6 +98,7 @@ class Pressure(_Objective):
             loss_function=loss_function,
             deriv_mode=deriv_mode,
             name=name,
+            jac_chunk_size=jac_chunk_size,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -182,13 +195,13 @@ class RotationalTransform(_Objective):
         locations. Defaults to ``target=0``.
     bounds : tuple of {float, ndarray, callable}, optional
         Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f
+        Both bounds must be broadcastable to Objective.dim_f
         If a callable, each should take a single argument `rho` and return the
         desired bound (lower or upper) of the profile at those locations.
         Defaults to ``target=0``.
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        Must be broadcastable to to Objective.dim_f
+        Must be broadcastable to Objective.dim_f
     normalize : bool, optional
         Whether to compute the error in physical units or non-dimensionalize.
     normalize_target : bool, optional
@@ -200,7 +213,7 @@ class RotationalTransform(_Objective):
         is called on the raw compute value, before any shifting, scaling, or
         normalization.
     deriv_mode : {"auto", "fwd", "rev"}
-        Specify how to compute jacobian matrix, either forward mode or reverse mode AD.
+        Specify how to compute Jacobian matrix, either forward mode or reverse mode AD.
         "auto" selects forward or reverse mode based on the size of the input and output
         of the objective. Has no effect on self.grad or self.hess which always use
         reverse mode and forward over reverse mode respectively.
@@ -211,6 +224,17 @@ class RotationalTransform(_Objective):
         are required.
     name : str, optional
         Name of the objective function.
+    jac_chunk_size : int , optional
+        Will calculate the Jacobian for this objective ``jac_chunk_size``
+        columns at a time, instead of all at once. The memory usage of the
+        Jacobian calculation is roughly ``memory usage = m0 + m1*jac_chunk_size``:
+        the smaller the chunk size, the less memory the Jacobian calculation
+        will require (with some baseline memory usage). The time to compute the
+        Jacobian is roughly ``t=t0 +t1/jac_chunk_size``, so the larger the
+        ``jac_chunk_size``, the faster the calculation takes, at the cost of
+        requiring more memory. A ``jac_chunk_size`` of 1 corresponds to the least
+        memory intensive, but slowest method of calculating the Jacobian.
+        If None, it will use the largest size i.e ``obj.dim_x``.
 
     """
 
@@ -230,6 +254,7 @@ class RotationalTransform(_Objective):
         deriv_mode="auto",
         grid=None,
         name="rotational transform",
+        jac_chunk_size=None,
     ):
         if target is None and bounds is None:
             target = 0
@@ -244,6 +269,7 @@ class RotationalTransform(_Objective):
             loss_function=loss_function,
             deriv_mode=deriv_mode,
             name=name,
+            jac_chunk_size=jac_chunk_size,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -353,13 +379,13 @@ class Shear(_Objective):
         locations. Defaults to ``target=0``.
     bounds : tuple of {float, ndarray, callable}, optional
         Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f
+        Both bounds must be broadcastable to Objective.dim_f
         If a callable, each should take a single argument `rho` and return the
         desired bound (lower or upper) of the profile at those locations.
         Defaults to ``target=0``.
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        Must be broadcastable to to Objective.dim_f
+        Must be broadcastable to Objective.dim_f
     normalize : bool, optional
         Whether to compute the error in physical units or non-dimensionalize.
     normalize_target : bool, optional
@@ -371,7 +397,7 @@ class Shear(_Objective):
         is called on the raw compute value, before any shifting, scaling, or
         normalization.
     deriv_mode : {"auto", "fwd", "rev"}
-        Specify how to compute jacobian matrix, either forward mode or reverse mode AD.
+        Specify how to compute Jacobian matrix, either forward mode or reverse mode AD.
         "auto" selects forward or reverse mode based on the size of the input and output
         of the objective. Has no effect on self.grad or self.hess which always use
         reverse mode and forward over reverse mode respectively.
@@ -382,6 +408,17 @@ class Shear(_Objective):
         are required.
     name : str, optional
         Name of the objective function.
+    jac_chunk_size : int , optional
+        Will calculate the Jacobian for this objective ``jac_chunk_size``
+        columns at a time, instead of all at once. The memory usage of the
+        Jacobian calculation is roughly ``memory usage = m0 + m1*jac_chunk_size``:
+        the smaller the chunk size, the less memory the Jacobian calculation
+        will require (with some baseline memory usage). The time to compute the
+        Jacobian is roughly ``t=t0 +t1/jac_chunk_size``, so the larger the
+        ``jac_chunk_size``, the faster the calculation takes, at the cost of
+        requiring more memory. A ``jac_chunk_size`` of 1 corresponds to the least
+        memory intensive, but slowest method of calculating the Jacobian.
+        If None, it will use the largest size i.e ``obj.dim_x``.
 
     """
 
@@ -401,6 +438,7 @@ class Shear(_Objective):
         deriv_mode="auto",
         grid=None,
         name="shear",
+        jac_chunk_size=None,
     ):
         if target is None and bounds is None:
             bounds = (-np.inf, 0)
@@ -415,6 +453,7 @@ class Shear(_Objective):
             loss_function=loss_function,
             deriv_mode=deriv_mode,
             name=name,
+            jac_chunk_size=jac_chunk_size,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -520,13 +559,13 @@ class ToroidalCurrent(_Objective):
         locations. Defaults to ``target=0``.
     bounds : tuple of {float, ndarray, callable}, optional
         Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f
+        Both bounds must be broadcastable to Objective.dim_f
         If a callable, each should take a single argument `rho` and return the
         desired bound (lower or upper) of the profile at those locations.
         Defaults to ``target=0``.
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        Must be broadcastable to to Objective.dim_f
+        Must be broadcastable to Objective.dim_f
     normalize : bool, optional
         Whether to compute the error in physical units or non-dimensionalize.
     normalize_target : bool, optional
@@ -538,7 +577,7 @@ class ToroidalCurrent(_Objective):
         is called on the raw compute value, before any shifting, scaling, or
         normalization.
     deriv_mode : {"auto", "fwd", "rev"}
-        Specify how to compute jacobian matrix, either forward mode or reverse mode AD.
+        Specify how to compute Jacobian matrix, either forward mode or reverse mode AD.
         "auto" selects forward or reverse mode based on the size of the input and output
         of the objective. Has no effect on self.grad or self.hess which always use
         reverse mode and forward over reverse mode respectively.
@@ -549,6 +588,17 @@ class ToroidalCurrent(_Objective):
         are required.
     name : str, optional
         Name of the objective function.
+    jac_chunk_size : int , optional
+        Will calculate the Jacobian for this objective ``jac_chunk_size``
+        columns at a time, instead of all at once. The memory usage of the
+        Jacobian calculation is roughly ``memory usage = m0 + m1*jac_chunk_size``:
+        the smaller the chunk size, the less memory the Jacobian calculation
+        will require (with some baseline memory usage). The time to compute the
+        Jacobian is roughly ``t=t0 +t1/jac_chunk_size``, so the larger the
+        ``jac_chunk_size``, the faster the calculation takes, at the cost of
+        requiring more memory. A ``jac_chunk_size`` of 1 corresponds to the least
+        memory intensive, but slowest method of calculating the Jacobian.
+        If None, it will use the largest size i.e ``obj.dim_x``.
 
     """
 
@@ -568,6 +618,7 @@ class ToroidalCurrent(_Objective):
         deriv_mode="auto",
         grid=None,
         name="toroidal current",
+        jac_chunk_size=None,
     ):
         if target is None and bounds is None:
             target = 0
@@ -582,6 +633,7 @@ class ToroidalCurrent(_Objective):
             loss_function=loss_function,
             deriv_mode=deriv_mode,
             name=name,
+            jac_chunk_size=jac_chunk_size,
         )
 
     def build(self, use_jit=True, verbose=1):

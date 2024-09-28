@@ -2,6 +2,7 @@ name: desc-env
 dependencies:
   # standard install
   - colorama
+  - diffrax >= 0.4.1
   - h5py >= 3.0.0, < 4.0
   - matplotlib >= 3.5.0, < 4.0.0
   - mpmath >= 1.0.0, < 2.0
@@ -20,3 +21,4 @@ dependencies:
     - orthax
     - plotly >= 5.16, < 6.0
     - pylatexenc >= 2.0, < 3.0
+    - quadax >= 0.2.2

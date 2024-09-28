@@ -12,7 +12,7 @@ from functools import partial
 from interpax import interp1d
 
 from desc.backend import jnp
-from desc.compute.utils import safediv
+from desc.utils import safediv
 
 # Warning: method must be specified as keyword argument.
 interp1d_vec = jnp.vectorize(
@@ -203,7 +203,8 @@ def _root_cubic(C, sentinel, eps, distinct):
 
     def irreducible(Q, R, b, mask):
         # Three irrational real roots.
-        theta = jnp.arccos(R / jnp.sqrt(jnp.where(mask, Q**3, R**2 + 1)))
+        theta = R / jnp.sqrt(jnp.where(mask, Q**3, 1.0))
+        theta = jnp.arccos(jnp.where(jnp.abs(theta) < 1.0, theta, 0.0))
         return jnp.moveaxis(
             -2
             * jnp.sqrt(Q)

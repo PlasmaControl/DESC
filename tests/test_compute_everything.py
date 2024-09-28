@@ -8,6 +8,7 @@ import pytest
 
 from desc.coils import FourierPlanarCoil, FourierRZCoil, FourierXYZCoil, SplineXYZCoil
 from desc.compute import data_index, xyz2rpz, xyz2rpz_vec
+from desc.compute.utils import _grow_seeds
 from desc.examples import get
 from desc.geometry import (
     FourierPlanarCurve,
@@ -31,11 +32,15 @@ def _compare_against_master(
 
     for name in data[p]:
         if p in master_data and name in master_data[p]:
+            if np.isnan(master_data[p][name]).all():
+                mean = 1.0
+            else:
+                mean = np.nanmean(np.atleast_1d(np.abs(master_data[p][name])))
             try:
                 np.testing.assert_allclose(
                     actual=data[p][name],
                     desired=master_data[p][name],
-                    atol=1e-10,
+                    atol=1e-10 * mean + 1e-10,  # add 1e-10 for basically-zero things
                     rtol=1e-10,
                     err_msg=f"Parameterization: {p}. Name: {name}.",
                 )
@@ -217,13 +222,13 @@ def test_compute_everything():
         # size cap at 100 mb, so can't hit suggested resolution for some things.
         warnings.filterwarnings("ignore", category=ResolutionWarning)
         for p in things:
-            print(things[p])
-            names = {
-                name
-                for name in data_index[p]
-                # Skip these quantities as they should be covered in other tests.
-                if not data_index[p][name]["source_grid_requirement"]
-            }
+            names = set(data_index[p].keys())
+
+            def need_src(name):
+                return bool(data_index[p][name]["source_grid_requirement"])
+
+            names -= _grow_seeds(p, set(filter(need_src, names)), names)
+
             this_branch_data_rpz[p] = things[p].compute(
                 list(names), **grid.get(p, {}), basis="rpz"
             )
@@ -267,4 +272,5 @@ def test_compute_everything():
         with open("tests/inputs/master_compute_data_rpz.pkl", "wb") as file:
             # remember to git commit this file
             pickle.dump(this_branch_data_rpz, file)
+
     assert not error_rpz

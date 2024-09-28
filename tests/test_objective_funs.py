@@ -37,6 +37,7 @@ from desc.magnetic_fields import (
 )
 from desc.objectives import (
     AspectRatio,
+    BallooningStability,
     BootstrapRedlConsistency,
     BoundaryError,
     BScaleLength,
@@ -45,6 +46,7 @@ from desc.objectives import (
     CoilLength,
     CoilSetMinDistance,
     CoilTorsion,
+    EffectiveRipple,
     Elongation,
     Energy,
     ForceBalance,
@@ -1285,31 +1287,62 @@ def test_derivative_modes():
     surf = FourierRZToroidalSurface()
     obj1 = ObjectiveFunction(
         [
-            PlasmaVesselDistance(eq, surf),
+            PlasmaVesselDistance(eq, surf, jac_chunk_size=1),
             MagneticWell(eq),
+            AspectRatio(eq),
         ],
         deriv_mode="batched",
         use_jit=False,
     )
     obj2 = ObjectiveFunction(
         [
+            PlasmaVesselDistance(eq, surf, jac_chunk_size=2),
+            MagneticWell(eq),
+            AspectRatio(eq, jac_chunk_size=None),
+        ],
+        deriv_mode="blocked",
+        jac_chunk_size=10,
+        use_jit=False,
+    )
+    with pytest.warns(DeprecationWarning, match="looped"):
+        obj3 = ObjectiveFunction(
+            [
+                PlasmaVesselDistance(eq, surf),
+                MagneticWell(eq),
+                AspectRatio(eq),
+            ],
+            deriv_mode="looped",
+            use_jit=False,
+        )
+    with pytest.raises(ValueError, match="jac_chunk_size"):
+        obj1.build()
+    with pytest.raises(ValueError, match="jac_chunk_size"):
+        obj2.build()
+    obj1 = ObjectiveFunction(
+        [
             PlasmaVesselDistance(eq, surf),
             MagneticWell(eq),
+            AspectRatio(eq),
+        ],
+        deriv_mode="batched",
+        use_jit=False,
+    )
+    obj2 = ObjectiveFunction(
+        [
+            PlasmaVesselDistance(eq, surf, jac_chunk_size=2),
+            MagneticWell(eq),
+            AspectRatio(eq, jac_chunk_size=None),
         ],
         deriv_mode="blocked",
         use_jit=False,
     )
-    obj3 = ObjectiveFunction(
-        [
-            PlasmaVesselDistance(eq, surf),
-            MagneticWell(eq),
-        ],
-        deriv_mode="looped",
-        use_jit=False,
-    )
-
     obj1.build()
     obj2.build()
+    # check that default size works for blocked
+    assert obj2.objectives[1]._jac_chunk_size is None
+    assert obj2.objectives[2]._jac_chunk_size is None
+    # hard to say what size auto will give, just check it is >0
+    assert obj1._jac_chunk_size > 0
     obj3.build()
     x = obj1.x(eq, surf)
     g1 = obj1.grad(x)
@@ -2522,8 +2555,17 @@ class TestComputeScalarResolution:
                 M_grid=int(self.eq.M * res),
                 N_grid=int(self.eq.N * res),
             )
-
-            obj = ObjectiveFunction(objective(eq=self.eq), use_jit=False)
+            if objective in {EffectiveRipple}:
+                obj = ObjectiveFunction(
+                    [
+                        objective(
+                            self.eq, knots_per_transit=50, num_transit=2, num_pitch=25
+                        )
+                    ],
+                    use_jit=False,
+                )
+            else:
+                obj = ObjectiveFunction(objective(eq=self.eq), use_jit=False)
             obj.build(verbose=0)
             f[i] = obj.compute_scalar(obj.x())
         np.testing.assert_allclose(f, f[-1], rtol=5e-2)
@@ -2561,6 +2603,7 @@ class TestObjectiveNaNGrad:
     ]
     specials = [
         # these require special logic
+        BallooningStability,
         BootstrapRedlConsistency,
         BoundaryError,
         CoilLength,
@@ -2568,6 +2611,7 @@ class TestObjectiveNaNGrad:
         CoilCurvature,
         CoilSetMinDistance,
         CoilTorsion,
+        EffectiveRipple,
         ForceBalanceAnisotropic,
         FusionPower,
         HeatingPowerISS04,
@@ -2798,6 +2842,27 @@ class TestObjectiveNaNGrad:
         obj.build()
         g = obj.grad(obj.x())
         assert not np.any(np.isnan(g)), str(helicity)
+
+    @pytest.mark.unit
+    def test_objective_no_nangrad_effective_ripple(self):
+        """Effective ripple."""
+        eq = get("ESTELL")
+        with pytest.warns(UserWarning, match="Reducing radial"):
+            eq.change_resolution(2, 2, 2, 4, 4, 4)
+        obj = ObjectiveFunction(
+            [EffectiveRipple(eq, knots_per_transit=50, num_transit=2, num_pitch=25)]
+        )
+        obj.build(verbose=0)
+        g = obj.grad(obj.x())
+        assert not np.any(np.isnan(g))
+
+    def test_objective_no_nangrad_ballooning(self):
+        """BallooningStability."""
+        eq = get("HELIOTRON")
+        obj = ObjectiveFunction(BallooningStability(eq=eq))
+        obj.build()
+        g = obj.grad(obj.x())
+        assert not np.any(np.isnan(g))
 
 
 @pytest.mark.unit

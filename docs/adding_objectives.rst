@@ -52,10 +52,10 @@ A full example objective with comments describing the key points is given below:
             Must be broadcastable to Objective.dim_f.
         bounds : tuple of {float, ndarray}, optional
             Lower and upper bounds on the objective. Overrides target.
-            Both bounds must be broadcastable to to Objective.dim_f
+            Both bounds must be broadcastable to Objective.dim_f
         weight : {float, ndarray}, optional
             Weighting to apply to the Objective, relative to other Objectives.
-            Must be broadcastable to to Objective.dim_f
+            Must be broadcastable to Objective.dim_f
         normalize : bool, optional
             Whether to compute the error in physical units or non-dimensionalize.
         normalize_target : bool, optional
@@ -70,6 +70,17 @@ A full example objective with comments describing the key points is given below:
             Collocation grid containing the nodes to evaluate at.
         name : str, optional
             Name of the objective function.
+        jac_chunk_size : int or "auto", optional
+            Will calculate the Jacobian for this objective ``jac_chunk_size``
+            columns at a time, instead of all at once. The memory usage of the
+            Jacobian calculation is roughly ``memory usage = m0 + m1*jac_chunk_size``:
+            the smaller the chunk size, the less memory the Jacobian calculation
+            will require (with some baseline memory usage). The time to compute the
+            Jacobian is roughly ``t=t0 +t1/jac_chunk_size``, so the larger the
+            ``jac_chunk_size``, the faster the calculation takes, at the cost of
+            requiring more memory. A ``jac_chunk_size`` of 1 corresponds to the least
+            memory intensive, but slowest method of calculating the Jacobian.
+            If None, it will use the largest possible size.
 
         """
 
@@ -88,6 +99,7 @@ A full example objective with comments describing the key points is given below:
             normalize_target=True,
             grid=None,
             name="QS triple product",
+            jac_chunk_size=None,
         ):
             # we don't have to do much here, mostly just call ``super().__init__()``
             if target is None and bounds is None:
@@ -101,6 +113,7 @@ A full example objective with comments describing the key points is given below:
                 normalize=normalize,
                 normalize_target=normalize_target,
                 name=name,
+                jac_chunk_size=jac_chunk_size
             )
 
         def build(self, use_jit=True, verbose=1):
@@ -205,6 +218,7 @@ A full example objective with comments describing the key points is given below:
             # and to make the objective value independent of grid resolution.
             return f
 
+
 Converting to Cartesian coordinates
 -----------------------------------
 
@@ -216,8 +230,8 @@ you will have to manually convert these vectors using the geometry utility funct
 ``rpz2xyz`` and/or ``rpz2xyz_vec``. See the ``PlasmaVesselDistance`` objective for an
 example of this.
 
-Adapting Existing Objectives with Different Loss Funtions
----------------------------------------------------------
+Adapting Existing Objectives with Different Loss Functions
+----------------------------------------------------------
 
 If your desired objective is already implemented in DESC, but not in the correct form,
 a few different loss functions are available through the the ``loss_function`` kwarg
@@ -225,7 +239,7 @@ when instantiating an Objective objective to modify the objective cost in order 
 the objective to your desired purpose. For example, the DESC ``RotationalTransform``
 objective with ``target=iota_target`` by default forms the residual by taking the target
 and subtracting it from the profile at the points in the grid, resulting in a residual
-of the form :math:`\iota_{err} = \sum_{i} (\iota_i - iota_target)^2`, i.e. the residual
+of the form :math:`\iota_{err} = \sum_{i} (\iota_i - iota_{target})^2`, i.e. the residual
 is the sum of squared pointwise error between the current rotational transform profile
 and the target passed into the objective. If the desired objective instead is to
 optimize to target an average rotational transform of `iota_target`, we can adapt the

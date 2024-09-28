@@ -6,6 +6,7 @@ import numpy as np
 from termcolor import colored
 
 from desc.backend import jnp, put, use_jax
+from desc.utils import ensure_tuple
 
 if use_jax:
     import jax
@@ -207,7 +208,7 @@ class AutoDiffDerivative(_Derivative):
         """
         _ = kwargs.pop("rel_step", None)  # unused by autodiff
         argnum = (argnum,) if jnp.isscalar(argnum) else tuple(argnum)
-        v = (v,) if not isinstance(v, (tuple, list)) else v
+        v = ensure_tuple(v)
 
         def _fun(*x):
             _args = list(args)
@@ -243,14 +244,14 @@ class AutoDiffDerivative(_Derivative):
 
         """
         if np.isscalar(argnum1):
-            v1 = (v1,) if not isinstance(v1, (tuple, list)) else v1
+            v1 = ensure_tuple(v1)
             argnum1 = (argnum1,)
         else:
             v1 = tuple(v1)
 
         if np.isscalar(argnum2):
             argnum2 = (argnum2 + 1,)
-            v2 = (v2,) if not isinstance(v2, (tuple, list)) else v2
+            v2 = ensure_tuple(v2)
         else:
             argnum2 = tuple([i + 1 for i in argnum2])
             v2 = tuple(v2)
@@ -286,21 +287,21 @@ class AutoDiffDerivative(_Derivative):
 
         """
         if np.isscalar(argnum1):
-            v1 = (v1,) if not isinstance(v1, (tuple, list)) else v1
+            v1 = ensure_tuple(v1)
             argnum1 = (argnum1,)
         else:
             v1 = tuple(v1)
 
         if np.isscalar(argnum2):
             argnum2 = (argnum2 + 1,)
-            v2 = (v2,) if not isinstance(v2, (tuple, list)) else v2
+            v2 = ensure_tuple(v2)
         else:
             argnum2 = tuple([i + 1 for i in argnum2])
             v2 = tuple(v2)
 
         if np.isscalar(argnum3):
             argnum3 = (argnum3 + 2,)
-            v3 = (v3,) if not isinstance(v3, (tuple, list)) else v3
+            v3 = ensure_tuple(v3)
         else:
             argnum3 = tuple([i + 2 for i in argnum3])
             v3 = tuple(v3)
@@ -518,7 +519,7 @@ class FiniteDiffDerivative(_Derivative):
             argnum = (argnum,)
         else:
             nargs = len(argnum)
-        v = (v,) if not isinstance(v, tuple) else v
+        v = ensure_tuple(v)
 
         f = np.array(
             [
@@ -555,14 +556,14 @@ class FiniteDiffDerivative(_Derivative):
 
         """
         if np.isscalar(argnum1):
-            v1 = (v1,) if not isinstance(v1, tuple) else v1
+            v1 = ensure_tuple(v1)
             argnum1 = (argnum1,)
         else:
             v1 = tuple(v1)
 
         if np.isscalar(argnum2):
             argnum2 = (argnum2 + 1,)
-            v2 = (v2,) if not isinstance(v2, tuple) else v2
+            v2 = ensure_tuple(v2)
         else:
             argnum2 = tuple([i + 1 for i in argnum2])
             v2 = tuple(v2)
@@ -598,21 +599,21 @@ class FiniteDiffDerivative(_Derivative):
 
         """
         if np.isscalar(argnum1):
-            v1 = (v1,) if not isinstance(v1, tuple) else v1
+            v1 = ensure_tuple(v1)
             argnum1 = (argnum1,)
         else:
             v1 = tuple(v1)
 
         if np.isscalar(argnum2):
             argnum2 = (argnum2 + 1,)
-            v2 = (v2,) if not isinstance(v2, tuple) else v2
+            v2 = ensure_tuple(v2)
         else:
             argnum2 = tuple([i + 1 for i in argnum2])
             v2 = tuple(v2)
 
         if np.isscalar(argnum3):
             argnum3 = (argnum3 + 2,)
-            v3 = (v3,) if not isinstance(v3, tuple) else v3
+            v3 = ensure_tuple(v3)
         else:
             argnum3 = tuple([i + 2 for i in argnum3])
             v3 = tuple(v3)

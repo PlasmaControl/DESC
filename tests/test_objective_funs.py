@@ -1343,6 +1343,7 @@ def test_derivative_modes():
     assert obj1._jac_chunk_size > 0
     obj3.build()
     x = obj1.x(eq, surf)
+    v = jnp.ones_like(x)
     g1 = obj1.grad(x)
     g2 = obj2.grad(x)
     g3 = obj3.grad(x)
@@ -1363,6 +1364,11 @@ def test_derivative_modes():
     H3 = obj3.hess(x)
     np.testing.assert_allclose(H1, H2, atol=1e-10)
     np.testing.assert_allclose(H1, H3, atol=1e-10)
+    j1 = obj1.jvp_scaled(v, x)
+    j2 = obj2.jvp_scaled(v, x)
+    j3 = obj3.jvp_scaled(v, x)
+    np.testing.assert_allclose(j1, j2, atol=1e-10)
+    np.testing.assert_allclose(j1, j3, atol=1e-10)
 
 
 @pytest.mark.unit

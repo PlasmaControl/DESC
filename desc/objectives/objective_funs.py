@@ -968,11 +968,13 @@ class _Objective(IOAble, ABC):
     def _set_derivatives(self):
         """Choose derivative mode based on size of inputs/outputs."""
         if self._deriv_mode == "auto":
-            # choose based on shape of jacobian. fwd mode is more memory efficient
-            # so we prefer that unless the jacobian is really wide
+            # choose based on shape of jacobian. dim_x is usually an overestimate of
+            # the true number of DOFs because linear constraints remove some. Also
+            # fwd mode is more memory efficient so we prefer that unless the jacobian
+            # is really wide
             self._deriv_mode = (
                 "fwd"
-                if self.dim_f >= 0.5 * sum(t.dim_x for t in self.things)
+                if self.dim_f >= 0.2 * sum(t.dim_x for t in self.things)
                 else "rev"
             )
 

@@ -35,16 +35,9 @@ class _CoilObjective(_Objective):
 
     """
 
-    overwrite = {
-        "loss_function": """
-    loss_function : {None, 'mean', 'min', 'max'}, optional
-        Loss function to apply to the objective values once computed. This loss
-        function is called on the raw compute value, before any shifting,
-        scaling, or normalization. Operates over all coils, not each individual
-        coil.
-        """,
-    }
-    __doc__ = __doc__.rstrip() + collect_docs(overwrite=overwrite)
+    __doc__ = __doc__.rstrip() + collect_docs(
+        coil=True,
+    )
 
     def __init__(
         self,
@@ -201,16 +194,6 @@ class _CoilObjective(_Objective):
         return data
 
 
-overwrite_coil_length = _CoilObjective.overwrite.copy()
-overwrite_coil_length[
-    "target"
-] = """
-    target : float, ndarray, optional
-        Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f. If array, it has to
-        be flattened according to the number of inputs. """
-
-
 class CoilLength(_CoilObjective):
     """Coil length.
 
@@ -224,11 +207,11 @@ class CoilLength(_CoilObjective):
 
     """
 
-    overwrite = overwrite_coil_length.copy()
-    overwrite["target"] = (
-        overwrite["target"].rstrip() + " Defaults to ``target=2*np.pi``.\n"
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``target=2*np.pi``.",
+        bounds_default="``target=2*np.pi``.",
+        coil=True,
     )
-    __doc__ = __doc__.rstrip() + collect_docs(overwrite=overwrite)
 
     _scalar = False  # Not always a scalar, if a coilset is passed in
     _units = "(m)"
@@ -328,9 +311,11 @@ class CoilCurvature(_CoilObjective):
 
     """
 
-    overwrite = overwrite_coil_length
-    overwrite["target"] = overwrite["target"].rstrip() + "\n"
-    __doc__ = __doc__.rstrip() + collect_docs(overwrite=overwrite)
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``bounds=(0,1).``",
+        bounds_default="``bounds=(0,1).``",
+        coil=True,
+    )
 
     _scalar = False
     _units = "(m^-1)"
@@ -425,9 +410,11 @@ class CoilTorsion(_CoilObjective):
 
     """
 
-    overwrite = overwrite_coil_length.copy()
-    overwrite["target"] = overwrite["target"].rstrip() + " Defaults to ``target=0``.\n"
-    __doc__ = __doc__.rstrip() + collect_docs(overwrite=overwrite)
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``target=0``.",
+        bounds_default="``target=0``.",
+        coil=True,
+    )
 
     _scalar = False
     _units = "(m^-1)"
@@ -522,9 +509,11 @@ class CoilCurrentLength(CoilLength):
 
     """
 
-    overwrite = overwrite_coil_length.copy()
-    overwrite["target"] = overwrite["target"].rstrip() + " Defaults to ``target=0``.\n"
-    __doc__ = __doc__.rstrip() + collect_docs(overwrite=overwrite)
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``target=0``.",
+        bounds_default="``target=0``.",
+        coil=True,
+    )
 
     _scalar = False
     _units = "(A*m)"
@@ -628,9 +617,7 @@ class CoilSetMinDistance(_Objective):
 
     """
 
-    overwrite = overwrite_coil_length.copy()
-    overwrite["target"] = overwrite["target"].rstrip() + "\n"
-    __doc__ = __doc__.rstrip() + collect_docs(overwrite=overwrite)
+    __doc__ = __doc__.rstrip() + collect_docs(coil=True)
 
     _scalar = False
     _units = "(m)"
@@ -780,8 +767,7 @@ class PlasmaCoilSetMinDistance(_Objective):
 
     """
 
-    overwrite = {"loss_function": overwrite_coil_length["loss_function"]}
-    __doc__ = __doc__.rstrip() + collect_docs(overwrite=overwrite)
+    __doc__ = __doc__.rstrip() + collect_docs(coil=True)
 
     _scalar = False
     _units = "(m)"
@@ -997,8 +983,11 @@ class QuadraticFlux(_Objective):
 
     """
 
-    overwrite = {"loss_function": ""}
-    __doc__ = __doc__.rstrip() + collect_docs(overwrite=overwrite)
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``target=0``.",
+        bounds_default="``target=0``.",
+        loss_detail=" Note: has no effect for this objective.",
+    )
 
     _scalar = False
     _linear = False
@@ -1186,15 +1175,9 @@ class ToroidalFlux(_Objective):
 
     """
 
-    overwrite = {
-        "loss_function": """
-    loss_function : {None, 'mean', 'min', 'max'}, optional
-        Loss function to apply to the objective values once computed. This function
-        is called on the raw compute value, before any shifting, scaling, or
-        normalization. Note: has no effect for this objective.
-        """
-    }
-    __doc__ = __doc__.rstrip() + collect_docs(overwrite=overwrite)
+    __doc__ = __doc__.rstrip() + collect_docs(
+        loss_detail=" Note: has no effect for this objective."
+    )
 
     _coordinates = "rtz"
     _units = "(Wb)"

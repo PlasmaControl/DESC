@@ -42,7 +42,9 @@ class BootstrapRedlConsistency(_Objective):
 
     """
 
-    __doc__ = __doc__.rstrip() + collect_docs()
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``target=0``.", bounds_default="``target=0``."
+    )
 
     _coordinates = "r"
     _units = "(T A m^-2)"

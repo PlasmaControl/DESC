@@ -33,7 +33,9 @@ class QuasisymmetryBoozer(_Objective):
 
     """
 
-    __doc__ = __doc__.rstrip() + collect_docs()
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``target=0``.", bounds_default="``target=0``."
+    )
 
     _units = "(T)"
     _print_value_fmt = "Quasi-symmetry Boozer error: "
@@ -222,7 +224,9 @@ class QuasisymmetryTwoTerm(_Objective):
 
     """
 
-    __doc__ = __doc__.rstrip() + collect_docs()
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``target=0``.", bounds_default="``target=0``."
+    )
 
     _coordinates = "rtz"
     _units = "(T^3)"
@@ -384,7 +388,9 @@ class QuasisymmetryTripleProduct(_Objective):
 
     """
 
-    __doc__ = __doc__.rstrip() + collect_docs()
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``target=0``.", bounds_default="``target=0``."
+    )
 
     _coordinates = "rtz"
     _units = "(T^4/m^2)"
@@ -539,7 +545,9 @@ class Omnigenity(_Objective):
 
     """
 
-    __doc__ = __doc__.rstrip() + collect_docs()
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``target=0``.", bounds_default="``target=0``."
+    )
 
     _coordinates = "rtz"
     _units = "(T)"
@@ -850,7 +858,9 @@ class Isodynamicity(_Objective):
 
     """
 
-    __doc__ = __doc__.rstrip() + collect_docs()
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``target=0``.", bounds_default="``target=0``."
+    )
 
     _coordinates = "rtz"
     _units = "(dimensionless)"

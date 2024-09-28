@@ -28,7 +28,13 @@ class AspectRatio(_Objective):
 
     """
 
-    __doc__ = __doc__.rstrip() + collect_docs()
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``target=2``.",
+        bounds_default="``target=2``.",
+        normalize_detail=" Note: Has no effect for this objective.",
+        normalize_target_detail=" Note: Has no effect for this objective.",
+        loss_detail=" Note: Has no effect for this objective.",
+    )
 
     _scalar = True
     _units = "(dimensionless)"
@@ -166,7 +172,13 @@ class Elongation(_Objective):
 
     """
 
-    __doc__ = __doc__.rstrip() + collect_docs()
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``target=1``.",
+        bounds_default="``target=1``.",
+        normalize_detail=" Note: Has no effect for this objective.",
+        normalize_target_detail=" Note: Has no effect for this objective.",
+        loss_detail=" Note: Has no effect for this objective.",
+    )
 
     _scalar = True
     _units = "(dimensionless)"
@@ -303,7 +315,11 @@ class Volume(_Objective):
 
     """
 
-    __doc__ = __doc__.rstrip() + collect_docs()
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``target=1``.",
+        bounds_default="``target=1``.",
+        loss_detail=" Note: Has no effect for this objective.",
+    )
 
     _scalar = True
     _units = "(m^3)"
@@ -490,7 +506,10 @@ class PlasmaVesselDistance(_Objective):
 
     """
 
-    __doc__ = __doc__.rstrip() + collect_docs()
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``bounds=(1,np.inf)``.",
+        bounds_default="``bounds=(1,np.inf)``.",
+    )
 
     _coordinates = "rtz"
     _units = "(m)"
@@ -806,7 +825,10 @@ class MeanCurvature(_Objective):
 
     """
 
-    __doc__ = __doc__.rstrip() + collect_docs()
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``bounds=(-np.inf,0)``.",
+        bounds_default="``bounds=(-np.inf,0)``.",
+    )
 
     _coordinates = "rtz"
     _units = "(m^-1)"
@@ -943,7 +965,10 @@ class PrincipalCurvature(_Objective):
 
     """
 
-    __doc__ = __doc__.rstrip() + collect_docs()
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``target=1``.",
+        bounds_default="``target=1``.",
+    )
 
     _coordinates = "rtz"
     _units = "(m^-1)"
@@ -1075,7 +1100,10 @@ class BScaleLength(_Objective):
 
     """
 
-    __doc__ = __doc__.rstrip() + collect_docs()
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``bounds=(1,np.inf)``.",
+        bounds_default="``bounds=(1,np.inf)``.",
+    )
 
     _coordinates = "rtz"
     _units = "(m)"
@@ -1203,7 +1231,10 @@ class GoodCoordinates(_Objective):
 
     """
 
-    __doc__ = __doc__.rstrip() + collect_docs()
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``target=0``.",
+        bounds_default="``target=0``.",
+    )
 
     _scalar = False
     _units = "(dimensionless)"

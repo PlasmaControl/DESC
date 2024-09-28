@@ -32,7 +32,9 @@ class GenericObjective(_Objective):
 
     """
 
-    __doc__ = __doc__.rstrip() + collect_docs()
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``target=0``.", bounds_default="``target=0``."
+    )
 
     _print_value_fmt = "Generic objective value: "
 
@@ -166,7 +168,9 @@ class LinearObjectiveFromUser(_FixedObjective):
 
     """
 
-    __doc__ = __doc__.rstrip() + collect_docs()
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``target=0``.", bounds_default="``target=0``."
+    )
 
     _scalar = False
     _linear = True
@@ -278,7 +282,9 @@ class ObjectiveFromUser(_Objective):
 
     """
 
-    __doc__ = __doc__.rstrip() + collect_docs()
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``target=0``.", bounds_default="``target=0``."
+    )
     __doc__ += """
     Examples
     --------

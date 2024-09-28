@@ -49,7 +49,9 @@ class VacuumBoundaryError(_Objective):
 
     """
 
-    __doc__ = __doc__.rstrip() + collect_docs()
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``target=0``.", bounds_default="``target=0``."
+    )
 
     _scalar = False
     _linear = False
@@ -363,7 +365,9 @@ class BoundaryError(_Objective):
 
     """
 
-    __doc__ = __doc__.rstrip() + collect_docs()
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``target=0``.", bounds_default="``target=0``."
+    )
     __doc__ += """
     Examples
     --------
@@ -798,7 +802,9 @@ class BoundaryErrorNESTOR(_Objective):
 
     """
 
-    __doc__ = __doc__.rstrip() + collect_docs()
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``target=0``.", bounds_default="``target=0``."
+    )
 
     _scalar = False
     _linear = False

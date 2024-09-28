@@ -99,7 +99,15 @@ docs = {
 }
 
 
-def collect_docs(overwrite=None):
+def collect_docs(
+    overwrite=None,
+    target_default="",
+    bounds_default="",
+    normalize_detail=None,
+    normalize_target_detail=None,
+    loss_detail=None,
+    coil=False,
+):
     """Collect default parameters for the docstring of Objective.
 
     Parameters
@@ -109,6 +117,19 @@ def collect_docs(overwrite=None):
         all default parameters are included as they are. Use this argument if
         you want to specify a special docstring for a specific parameter in
         your objective definition.
+    target_default : str, optional
+        Default value for the target parameter.
+    bounds_default : str, optional
+        Default value for the bounds parameter.
+    normalize_detail : str, optional
+        Additional information about the normalize parameter.
+    normalize_target_detail : str, optional
+        Additional information about the normalize_target parameter.
+    loss_detail : str, optional
+        Additional information about the loss function.
+    coil : bool, optional
+        Whether the objective is a coil objective. If True, adds extra docs to
+        target and loss_function.
 
     Returns
     -------
@@ -121,7 +142,35 @@ def collect_docs(overwrite=None):
         if overwrite is not None and key in overwrite.keys():
             doc_params += overwrite[key].rstrip()
         else:
-            doc_params += docs[key].rstrip()
+            if key == "target":
+                target = ""
+                if coil:
+                    target += "If array, it has to be flattened according to the "
+                    +"number of inputs."
+                if target_default != "":
+                    target += " Defaults to " + target_default
+                doc_params += docs[key].rstrip() + target
+            elif key == "bounds" and bounds_default != "":
+                doc_params += docs[key].rstrip() + " Defaults to " + bounds_default
+            elif key == "loss_function":
+                loss = ""
+                if coil:
+                    loss = " Operates over all coils, not each individual coil."
+                if loss_detail is not None:
+                    loss += loss_detail
+                doc_params += docs[key].rstrip() + loss
+            elif key == "normalize":
+                norm = ""
+                if normalize_detail is not None:
+                    norm += normalize_detail
+                doc_params += docs[key].rstrip() + norm
+            elif key == "normalize_target":
+                norm_target = ""
+                if normalize_target_detail is not None:
+                    norm_target = normalize_target_detail
+                doc_params += docs[key].rstrip() + norm_target
+            else:
+                doc_params += docs[key].rstrip()
 
     return doc_params
 

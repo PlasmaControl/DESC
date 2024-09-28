@@ -9,12 +9,13 @@ computational grid has a node on the magnetic axis to avoid potentially
 expensive computations.
 """
 
+from quadax import cumulative_simpson
 from scipy.constants import elementary_charge, mu_0
 
 from desc.backend import cond, jnp
 
 from ..integrals.surface_integral import surface_averages, surface_integrals
-from ..utils import cumtrapz, dot, safediv
+from ..utils import dot, safediv
 from .data_index import register_compute_fun
 
 
@@ -142,8 +143,11 @@ def _chi_r(params, transforms, profiles, data, **kwargs):
     resolution_requirement="r",
 )
 def _chi(params, transforms, profiles, data, **kwargs):
-    chi_r = transforms["grid"].compress(data["chi_r"])
-    chi = cumtrapz(chi_r, transforms["grid"].compress(data["rho"]), initial=0)
+    chi = cumulative_simpson(
+        y=transforms["grid"].compress(data["chi_r"]),
+        x=transforms["grid"].compress(data["rho"]),
+        initial=0,
+    )
     data["chi"] = transforms["grid"].expand(chi)
     return data
 

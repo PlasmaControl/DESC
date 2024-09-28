@@ -12,21 +12,25 @@ import numpy as np
 import pytest
 
 from desc.compute import data_index
-from desc.compute.utils import _grow_seeds, dot, surface_integrals_map
+from desc.compute.utils import _grow_seeds
 from desc.equilibrium import Equilibrium
 from desc.examples import get
 from desc.grid import LinearGrid
+from desc.integrals import surface_integrals_map
 from desc.objectives import GenericObjective, ObjectiveFunction
+from desc.utils import dot
 
 # Unless mentioned in the source code of the compute function, the assumptions
 # made to compute the magnetic axis limit can be reduced to assuming that these
 # functions tend toward zero as the magnetic axis is approached and that
 # d²ψ/(dρ)² and 𝜕√𝑔/𝜕𝜌 are both finite nonzero at the magnetic axis.
 # Also, dⁿψ/(dρ)ⁿ for n > 3 is assumed zero everywhere.
-zero_limits = {"rho", "psi", "psi_r", "e_theta", "sqrt(g)", "B_t"}
-# "current Redl" needs special treatment because it is generally not defined for all
-# configurations (giving NaN values), except it is always 0 at the magnetic axis
-not_continuous_limits = {"current Redl"}
+zero_limits = {"rho", "psi", "psi_r", "psi_rrr", "e_theta", "sqrt(g)", "B_t"}
+
+# These compute quantities require kinetic profiles, which are not defined for all
+# configurations (giving NaN values)
+not_continuous_limits = {"current Redl", "P_ISS04", "P_fusion", "<sigma*nu>"}
+
 not_finite_limits = {
     "D_Mercier",
     "D_geodesic",
@@ -57,6 +61,9 @@ not_finite_limits = {
     "g^tz_r",
     "g^tz_t",
     "g^tz_z",
+    "grad(alpha)",
+    "g^aa",
+    "g^ra",
     "gbdrift",
     "cvdrift",
     "grad(alpha)",
@@ -126,6 +133,7 @@ def _skip_this(eq, name):
         or (eq.electron_temperature is None and "Te" in name)
         or (eq.electron_density is None and "ne" in name)
         or (eq.ion_temperature is None and "Ti" in name)
+        or (eq.electron_density is None and "ni" in name)
         or (eq.anisotropy is None and "beta_a" in name)
         or (eq.pressure is not None and "<J*B> Redl" in name)
         or (eq.current is None and "iota_num" in name)
@@ -258,7 +266,7 @@ class TestAxisLimits:
     @pytest.mark.unit
     def test_axis_limit_api(self):
         """Test that axis limit dependencies are computed only when necessary."""
-        name = "B0"
+        name = "psi_r/sqrt(g)"
         deps = {"psi_r", "sqrt(g)"}
         axis_limit_deps = {"psi_rr", "sqrt(g)_r"}
         eq = Equilibrium()

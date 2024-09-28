@@ -1221,8 +1221,15 @@ class Equilibrium(IOAble, Optimizable):
             **kwargs,
         )
 
-    def get_rtz_grid(
-        self, radial, poloidal, toroidal, coordinates, period, jitable=True, **kwargs
+    def _get_rtz_grid(
+        self,
+        radial,
+        poloidal,
+        toroidal,
+        coordinates,
+        period=(np.inf, np.inf, np.inf),
+        jitable=True,
+        **kwargs,
     ):
         """Return DESC grid in (rho, theta, zeta) coordinates from given coordinates.
 
@@ -1243,8 +1250,8 @@ class Equilibrium(IOAble, Optimizable):
             rvp : rho, theta_PEST, phi
             rtz : rho, theta, zeta
         period : tuple of float
-            Assumed periodicity for each quantity in inbasis.
-            Use np.inf to denote no periodicity.
+            Assumed periodicity of the given coordinates.
+            Use ``np.inf`` to denote no periodicity.
         jitable : bool, optional
             If false the returned grid has additional attributes.
             Required to be false to retain nodes at magnetic axis.
@@ -1292,10 +1299,14 @@ class Equilibrium(IOAble, Optimizable):
             point. Only returned if ``full_output`` is True.
 
         """
-        warnif(True, DeprecationWarning, msg="Use map_coordinates instead.")
+        warnif(
+            True,
+            DeprecationWarning,
+            "Use map_coordinates instead of compute_theta_coords.",
+        )
         return map_coordinates(
             self,
-            flux_coords,
+            coords=flux_coords,
             inbasis=("rho", "theta_PEST", "zeta"),
             outbasis=("rho", "theta", "zeta"),
             params=self.params_dict if L_lmn is None else {"L_lmn": L_lmn},

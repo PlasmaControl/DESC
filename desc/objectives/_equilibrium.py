@@ -63,13 +63,24 @@ class ForceBalance(_Objective):
         Defaults to ``ConcentricGrid(eq.L_grid, eq.M_grid, eq.N_grid)``
     name : str, optional
         Name of the objective function.
+    jac_chunk_size : int , optional
+        Will calculate the Jacobian for this objective ``jac_chunk_size``
+        columns at a time, instead of all at once. The memory usage of the
+        Jacobian calculation is roughly ``memory usage = m0 + m1*jac_chunk_size``:
+        the smaller the chunk size, the less memory the Jacobian calculation
+        will require (with some baseline memory usage). The time to compute the
+        Jacobian is roughly ``t=t0 +t1/jac_chunk_size``, so the larger the
+        ``jac_chunk_size``, the faster the calculation takes, at the cost of
+        requiring more memory. A ``jac_chunk_size`` of 1 corresponds to the least
+        memory intensive, but slowest method of calculating the Jacobian.
+        If None, it will use the largest size i.e ``obj.dim_x``.
 
     """
 
     _equilibrium = True
     _coordinates = "rtz"
     _units = "(N)"
-    _print_value_fmt = "Force error: {:10.3e} "
+    _print_value_fmt = "Force error: "
 
     def __init__(
         self,
@@ -83,6 +94,7 @@ class ForceBalance(_Objective):
         deriv_mode="auto",
         grid=None,
         name="force",
+        jac_chunk_size=None,
     ):
         if target is None and bounds is None:
             target = 0
@@ -97,6 +109,7 @@ class ForceBalance(_Objective):
             loss_function=loss_function,
             deriv_mode=deriv_mode,
             name=name,
+            jac_chunk_size=jac_chunk_size,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -235,13 +248,24 @@ class ForceBalanceAnisotropic(_Objective):
         Defaults to ``ConcentricGrid(eq.L_grid, eq.M_grid, eq.N_grid)``
     name : str
         Name of the objective function.
+    jac_chunk_size : int , optional
+        Will calculate the Jacobian for this objective ``jac_chunk_size``
+        columns at a time, instead of all at once. The memory usage of the
+        Jacobian calculation is roughly ``memory usage = m0 + m1*jac_chunk_size``:
+        the smaller the chunk size, the less memory the Jacobian calculation
+        will require (with some baseline memory usage). The time to compute the
+        Jacobian is roughly ``t=t0 +t1/jac_chunk_size``, so the larger the
+        ``jac_chunk_size``, the faster the calculation takes, at the cost of
+        requiring more memory. A ``jac_chunk_size`` of 1 corresponds to the least
+        memory intensive, but slowest method of calculating the Jacobian.
+        If None, it will use the largest size i.e ``obj.dim_x``.
 
     """
 
     _units = "(N)"
     _coordinates = "rtz"
     _equilibrium = True
-    _print_value_fmt = "Anisotropic force error: {:10.3e} "
+    _print_value_fmt = "Anisotropic force error: "
 
     def __init__(
         self,
@@ -255,6 +279,7 @@ class ForceBalanceAnisotropic(_Objective):
         deriv_mode="auto",
         grid=None,
         name="force-anisotropic",
+        jac_chunk_size=None,
     ):
         if target is None and bounds is None:
             target = 0
@@ -269,6 +294,7 @@ class ForceBalanceAnisotropic(_Objective):
             loss_function=loss_function,
             deriv_mode=deriv_mode,
             name=name,
+            jac_chunk_size=jac_chunk_size,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -393,13 +419,24 @@ class RadialForceBalance(_Objective):
         Defaults to ``ConcentricGrid(eq.L_grid, eq.M_grid, eq.N_grid)``
     name : str, optional
         Name of the objective function.
+    jac_chunk_size : int , optional
+        Will calculate the Jacobian for this objective ``jac_chunk_size``
+        columns at a time, instead of all at once. The memory usage of the
+        Jacobian calculation is roughly ``memory usage = m0 + m1*jac_chunk_size``:
+        the smaller the chunk size, the less memory the Jacobian calculation
+        will require (with some baseline memory usage). The time to compute the
+        Jacobian is roughly ``t=t0 +t1/jac_chunk_size``, so the larger the
+        ``jac_chunk_size``, the faster the calculation takes, at the cost of
+        requiring more memory. A ``jac_chunk_size`` of 1 corresponds to the least
+        memory intensive, but slowest method of calculating the Jacobian.
+        If None, it will use the largest size i.e ``obj.dim_x``.
 
     """
 
     _equilibrium = True
     _coordinates = "rtz"
     _units = "(N)"
-    _print_value_fmt = "Radial force error: {:10.3e} "
+    _print_value_fmt = "Radial force error: "
 
     def __init__(
         self,
@@ -413,6 +450,7 @@ class RadialForceBalance(_Objective):
         deriv_mode="auto",
         grid=None,
         name="radial force",
+        jac_chunk_size=None,
     ):
         if target is None and bounds is None:
             target = 0
@@ -427,6 +465,7 @@ class RadialForceBalance(_Objective):
             loss_function=loss_function,
             deriv_mode=deriv_mode,
             name=name,
+            jac_chunk_size=jac_chunk_size,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -551,13 +590,24 @@ class HelicalForceBalance(_Objective):
         Defaults to ``ConcentricGrid(eq.L_grid, eq.M_grid, eq.N_grid)``
     name : str, optional
         Name of the objective function.
+    jac_chunk_size : int , optional
+        Will calculate the Jacobian for this objective ``jac_chunk_size``
+        columns at a time, instead of all at once. The memory usage of the
+        Jacobian calculation is roughly ``memory usage = m0 + m1*jac_chunk_size``:
+        the smaller the chunk size, the less memory the Jacobian calculation
+        will require (with some baseline memory usage). The time to compute the
+        Jacobian is roughly ``t=t0 +t1/jac_chunk_size``, so the larger the
+        ``jac_chunk_size``, the faster the calculation takes, at the cost of
+        requiring more memory. A ``jac_chunk_size`` of 1 corresponds to the least
+        memory intensive, but slowest method of calculating the Jacobian.
+        If None, it will use the largest size i.e ``obj.dim_x``.
 
     """
 
     _equilibrium = True
     _coordinates = "rtz"
     _units = "(N)"
-    _print_value_fmt = "Helical force error: {:10.3e}, "
+    _print_value_fmt = "Helical force error: "
 
     def __init__(
         self,
@@ -571,6 +621,7 @@ class HelicalForceBalance(_Objective):
         deriv_mode="auto",
         grid=None,
         name="helical force",
+        jac_chunk_size=None,
     ):
         if target is None and bounds is None:
             target = 0
@@ -585,6 +636,7 @@ class HelicalForceBalance(_Objective):
             loss_function=loss_function,
             deriv_mode=deriv_mode,
             name=name,
+            jac_chunk_size=jac_chunk_size,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -707,6 +759,17 @@ class Energy(_Objective):
         Adiabatic (compressional) index. Default = 0.
     name : str, optional
         Name of the objective function.
+    jac_chunk_size : int , optional
+        Will calculate the Jacobian for this objective ``jac_chunk_size``
+        columns at a time, instead of all at once. The memory usage of the
+        Jacobian calculation is roughly ``memory usage = m0 + m1*jac_chunk_size``:
+        the smaller the chunk size, the less memory the Jacobian calculation
+        will require (with some baseline memory usage). The time to compute the
+        Jacobian is roughly ``t=t0 +t1/jac_chunk_size``, so the larger the
+        ``jac_chunk_size``, the faster the calculation takes, at the cost of
+        requiring more memory. A ``jac_chunk_size`` of 1 corresponds to the least
+        memory intensive, but slowest method of calculating the Jacobian.
+        If None, it will use the largest size i.e ``obj.dim_x``.
 
     """
 
@@ -714,7 +777,7 @@ class Energy(_Objective):
     _coordinates = ""
     _equilibrium = True
     _units = "(J)"
-    _print_value_fmt = "Total MHD energy: {:10.3e} "
+    _print_value_fmt = "Total MHD energy: "
     _io_attrs_ = _Objective._io_attrs_ + ["gamma"]
 
     def __init__(
@@ -730,6 +793,7 @@ class Energy(_Objective):
         grid=None,
         gamma=0,
         name="energy",
+        jac_chunk_size=None,
     ):
         if target is None and bounds is None:
             target = 0
@@ -745,6 +809,7 @@ class Energy(_Objective):
             loss_function=loss_function,
             deriv_mode=deriv_mode,
             name=name,
+            jac_chunk_size=jac_chunk_size,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -874,13 +939,24 @@ class CurrentDensity(_Objective):
         Defaults to ``ConcentricGrid(eq.L_grid, eq.M_grid, eq.N_grid)``
     name : str, optional
         Name of the objective function.
+    jac_chunk_size : int , optional
+        Will calculate the Jacobian for this objective ``jac_chunk_size``
+        columns at a time, instead of all at once. The memory usage of the
+        Jacobian calculation is roughly ``memory usage = m0 + m1*jac_chunk_size``:
+        the smaller the chunk size, the less memory the Jacobian calculation
+        will require (with some baseline memory usage). The time to compute the
+        Jacobian is roughly ``t=t0 +t1/jac_chunk_size``, so the larger the
+        ``jac_chunk_size``, the faster the calculation takes, at the cost of
+        requiring more memory. A ``jac_chunk_size`` of 1 corresponds to the least
+        memory intensive, but slowest method of calculating the Jacobian.
+        If None, it will use the largest size i.e ``obj.dim_x``.
 
     """
 
     _equilibrium = True
     _coordinates = "rtz"
     _units = "(A*m)"
-    _print_value_fmt = "Current density: {:10.3e} "
+    _print_value_fmt = "Current density: "
 
     def __init__(
         self,
@@ -894,6 +970,7 @@ class CurrentDensity(_Objective):
         deriv_mode="auto",
         grid=None,
         name="current density",
+        jac_chunk_size=None,
     ):
         if target is None and bounds is None:
             target = 0
@@ -908,6 +985,7 @@ class CurrentDensity(_Objective):
             loss_function=loss_function,
             deriv_mode=deriv_mode,
             name=name,
+            jac_chunk_size=jac_chunk_size,
         )
 
     def build(self, use_jit=True, verbose=1):

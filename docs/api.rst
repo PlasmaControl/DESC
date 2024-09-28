@@ -41,6 +41,7 @@ Compatibility
 
     desc.compat.ensure_positive_jacobian
     desc.compat.flip_helicity
+    desc.compat.flip_theta
     desc.compat.rescale
 
 Continuation
@@ -289,6 +290,7 @@ Profiles
     desc.profiles.PowerSeriesProfile
     desc.profiles.TwoPowerProfile
     desc.profiles.SplineProfile
+    desc.profiles.HermiteSplineProfile
     desc.profiles.MTanhProfile
     desc.profiles.ScaledProfile
     desc.profiles.SumProfile

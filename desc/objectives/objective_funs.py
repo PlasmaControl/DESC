@@ -145,13 +145,17 @@ def collect_docs(
             if key == "target":
                 target = ""
                 if coil:
-                    target += "If array, it has to be flattened according to the "
-                    +"number of inputs."
+                    target += (
+                        "If array, it has to be flattened according to the "
+                        + "number of inputs."
+                    )
                 if target_default != "":
-                    target += " Defaults to " + target_default
+                    target = target + " Defaults to " + target_default
                 doc_params += docs[key].rstrip() + target
             elif key == "bounds" and bounds_default != "":
-                doc_params += docs[key].rstrip() + " Defaults to " + bounds_default
+                doc_params = (
+                    doc_params + docs[key].rstrip() + " Defaults to " + bounds_default
+                )
             elif key == "loss_function":
                 loss = ""
                 if coil:

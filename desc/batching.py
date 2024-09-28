@@ -2,29 +2,22 @@
 
 import functools
 from functools import partial
-from typing import Any, Callable, Optional, Sequence
+from typing import Callable, Optional
 
-import numpy as np
-from jax._src import core, dispatch, dtypes
-from jax._src.api_util import (
-    _ensure_index,
-    argnums_partial,
-    check_callable,
-    flatten_fun_nokwargs,
-    flatten_fun_nokwargs2,
-    shaped_abstractify,
+from jax._src.api import (
+    _check_input_dtype_jacfwd,
+    _check_input_dtype_jacrev,
+    _check_output_dtype_jacfwd,
+    _check_output_dtype_jacrev,
+    _jacfwd_unravel,
+    _jacrev_unravel,
+    _jvp,
+    _std_basis,
+    _vjp,
 )
-from jax._src.interpreters import ad
-from jax._src.lax import lax as lax_internal
-from jax._src.tree_util import (
-    Partial,
-    tree_flatten,
-    tree_map,
-    tree_structure,
-    tree_transpose,
-    tree_unflatten,
-)
-from jax._src.util import safe_map, wraps
+from jax._src.api_util import _ensure_index, argnums_partial, check_callable
+from jax._src.tree_util import tree_map, tree_structure, tree_transpose
+from jax._src.util import wraps
 
 from desc.backend import jax, jnp
 
@@ -39,8 +32,6 @@ from jax._src.numpy.vectorize import (
     _parse_gufunc_signature,
     _parse_input_dimensions,
 )
-
-_dtype = partial(dtypes.dtype, canonicalize=True)
 
 # The following section of this code is derived from the NetKet project
 # https://github.com/netket/netket/blob/9881c9fb217a2ac4dc9274a054bf6e6a2993c519/
@@ -357,12 +348,13 @@ def batched_vectorize(pyfunc, *, excluded=frozenset(), signature=None, chunk_siz
 
 
 def jacfwd_chunked(
-    fun: Callable,
-    argnums: int | Sequence[int] = 0,
-    has_aux: bool = False,
+    fun,
+    argnums=0,
+    has_aux=False,
+    holomorphic=False,
     *,
     chunk_size=None,
-) -> Callable:
+):
     """Jacobian of ``fun`` evaluated column-by-column using forward-mode AD.
 
     Parameters
@@ -376,6 +368,8 @@ def jacfwd_chunked(
         Indicates whether ``fun`` returns a pair where the first element is considered
         the output of the mathematical function to be differentiated and the second
         element is auxiliary data. Default False.
+    holomorphic: Optional, bool.
+        Indicates whether ``fun`` is promised to be holomorphic. Default False.
     chunk_size: int
         The size of the batches to pass to vmap. If None, defaults to the largest
         possible chunk_size.
@@ -404,7 +398,7 @@ def jacfwd_chunked(
         f_partial, dyn_args = argnums_partial(
             f, argnums, args, require_static_args_hashable=False
         )
-        tree_map(_check_input_dtype_jacfwd, dyn_args)
+        tree_map(partial(_check_input_dtype_jacfwd, holomorphic), dyn_args)
         if not has_aux:
             pushfwd: Callable = partial(_jvp, f_partial, dyn_args)
             y, jac = vmap_chunked(pushfwd, chunk_size=chunk_size)(_std_basis(dyn_args))
@@ -418,7 +412,7 @@ def jacfwd_chunked(
             y = tree_map(lambda x: x[0], y)
             jac = tree_map(lambda x: jnp.moveaxis(x, 0, -1), jac)
             aux = tree_map(lambda x: x[0], aux)
-
+        tree_map(partial(_check_output_dtype_jacfwd, holomorphic), y)
         example_args = dyn_args[0] if isinstance(argnums, int) else dyn_args
         jac_tree = tree_map(partial(_jacfwd_unravel, example_args), y, jac)
         if not has_aux:
@@ -430,12 +424,14 @@ def jacfwd_chunked(
 
 
 def jacrev_chunked(
-    fun: Callable,
-    argnums: int | Sequence[int] = 0,
-    has_aux: bool = False,
+    fun,
+    argnums=0,
+    has_aux=False,
+    holomorphic=False,
+    allow_int=False,
     *,
     chunk_size=None,
-) -> Callable:
+):
     """Jacobian of ``fun`` evaluated row-by-row using reverse-mode AD.
 
     Parameters
@@ -449,6 +445,12 @@ def jacrev_chunked(
         Indicates whether ``fun`` returns a pair where the first element is considered
         the output of the mathematical function to be differentiated and the second
         element is auxiliary data. Default False.
+    holomorphic: Optional, bool.
+        Indicates whether ``fun`` is promised to be holomorphic. Default False.
+    allow_int: Optional, bool.
+        Whether to allow differentiating with respect to integer valued inputs. The
+        gradient of an integer input will have a trivial vector-space dtype (float0).
+        Default False.
     chunk_size: int
         The size of the batches to pass to vmap. If None, defaults to the largest
         possible chunk_size.
@@ -476,12 +478,12 @@ def jacrev_chunked(
         f_partial, dyn_args = argnums_partial(
             f, argnums, args, require_static_args_hashable=False
         )
-        tree_map(_check_input_dtype_jacrev, dyn_args)
+        tree_map(partial(_check_input_dtype_jacrev, holomorphic, allow_int), dyn_args)
         if not has_aux:
             y, pullback = _vjp(f_partial, *dyn_args)
         else:
             y, pullback, aux = _vjp(f_partial, *dyn_args, has_aux=True)
-        tree_map(_check_output_dtype_jacrev, y)
+        tree_map(partial(_check_output_dtype_jacrev, holomorphic), y)
         jac = vmap_chunked(pullback, chunk_size=chunk_size)(_std_basis(y))
         jac = jac[0] if isinstance(argnums, int) else jac
         example_args = dyn_args[0] if isinstance(argnums, int) else dyn_args
@@ -495,232 +497,3 @@ def jacrev_chunked(
             return jac_tree, aux
 
     return jacfun
-
-
-def _check_input_dtype_jacrev(x):
-    dispatch.check_arg(x)
-    aval = core.get_aval(x)
-    if (
-        dtypes.issubdtype(aval.dtype, dtypes.extended)
-        or dtypes.issubdtype(aval.dtype, np.integer)
-        or dtypes.issubdtype(aval.dtype, np.bool_)
-    ):
-        raise TypeError(
-            f"jacrev_chunked requires real- or complex-valued inputs (input dtype "
-            f"that is a sub-dtype of np.inexact), but got {aval.dtype.name}. "
-            "If you want to use Boolean- or integer-valued inputs, use vjp "
-            "or set allow_int to True."
-        )
-    elif not dtypes.issubdtype(aval.dtype, np.inexact):
-        raise TypeError(
-            f"jacrev_chunked requires numerical-valued inputs (input dtype that is a "
-            f"sub-dtype of np.bool_ or np.number), but got {aval.dtype.name}."
-        )
-
-
-def _check_output_dtype_jacrev(x):
-    aval = core.get_aval(x)
-    if dtypes.issubdtype(aval.dtype, dtypes.extended):
-        raise TypeError(f"jacrev_chunked with output element type {aval.dtype.name}")
-    elif dtypes.issubdtype(aval.dtype, np.complexfloating):
-        raise TypeError(
-            f"jacrev_chunked requires real-valued outputs (output dtype that is "
-            f"a sub-dtype of np.floating), but got {aval.dtype.name}. "
-            "For holomorphic differentiation, pass holomorphic=True. "
-            "For differentiation of non-holomorphic functions involving complex "
-            "outputs, use jax.vjp directly."
-        )
-    elif not dtypes.issubdtype(aval.dtype, np.floating):
-        raise TypeError(
-            f"jacrev_chunked requires real-valued outputs (output dtype that is "
-            f"a sub-dtype of np.floating), but got {aval.dtype.name}. "
-            "For differentiation of functions with integer outputs, use "
-            "jax.vjp directly."
-        )
-
-
-def _check_input_dtype_jacfwd(x: Any) -> None:
-    dispatch.check_arg(x)
-    aval = core.get_aval(x)
-    if dtypes.issubdtype(aval.dtype, dtypes.extended):
-        raise TypeError(f"jacfwd with input element type {aval.dtype.name}")
-    elif not dtypes.issubdtype(aval.dtype, np.floating):
-        raise TypeError(
-            "jacfwd requires real-valued inputs (input dtype that is "
-            f"a sub-dtype of np.floating), but got {aval.dtype.name}. "
-            "For holomorphic differentiation, pass holomorphic=True. "
-            "For differentiation of non-holomorphic functions involving "
-            "complex inputs or integer inputs, use jax.jvp directly."
-        )
-
-
-def _jacfwd_unravel(input_pytree, output_pytree_leaf, arr):
-    return _unravel_array_into_pytree(input_pytree, -1, output_pytree_leaf, arr)
-
-
-def _jacrev_unravel(output_pytree, input_pytree_leaf, arr):
-    return _unravel_array_into_pytree(output_pytree, 0, input_pytree_leaf, arr)
-
-
-def _possible_downcast(x, example):
-    if dtypes.issubdtype(x.dtype, np.complexfloating) and not dtypes.issubdtype(
-        _dtype(example), np.complexfloating
-    ):
-        x = x.real
-    dtype = None if example is None else _dtype(example)
-    weak_type = None if example is None else dtypes.is_weakly_typed(example)
-    return lax_internal._convert_element_type(x, dtype, weak_type)
-
-
-def _std_basis(pytree):
-    leaves, _ = tree_flatten(pytree)
-    ndim = sum(safe_map(np.size, leaves))
-    dtype = dtypes.result_type(*leaves)
-    flat_basis = jnp.eye(ndim, dtype=dtype)
-    return _unravel_array_into_pytree(pytree, 1, None, flat_basis)
-
-
-def _unravel_array_into_pytree(pytree, axis, example, arr):
-    """Unravel an array into a PyTree with a given structure.
-
-    Parameters
-    ----------
-        pytree: The pytree that provides the structure.
-        axis: The parameter axis is either -1, 0, or 1.  It controls the
-          resulting shapes.
-        example: If specified, cast the components to the matching dtype/weak_type,
-          or else use the pytree leaf type if example is None.
-        arr: The array to be unraveled.
-    """
-    leaves, treedef = tree_flatten(pytree)
-    axis = axis % arr.ndim
-    shapes = [arr.shape[:axis] + np.shape(l) + arr.shape[axis + 1 :] for l in leaves]
-    parts = _split(arr, np.cumsum(safe_map(np.size, leaves[:-1])), axis)
-    reshaped_parts = [
-        _possible_downcast(np.reshape(x, shape), leaf if example is None else example)
-        for x, shape, leaf in zip(parts, shapes, leaves)
-    ]
-    return tree_unflatten(treedef, reshaped_parts)
-
-
-def _split(x, indices, axis):
-    if isinstance(x, np.ndarray):
-        return np.split(x, indices, axis)
-    else:
-        return x._split(indices, axis)
-
-
-def _jvp(fun: lu.WrappedFun, primals, tangents, has_aux=False):
-    """Variant of jvp() that takes an lu.WrappedFun."""
-    if not isinstance(primals, (tuple, list)) or not isinstance(
-        tangents, (tuple, list)
-    ):
-        raise TypeError(
-            "primal and tangent arguments to jax.jvp must be tuples or lists; "
-            f"found {type(primals).__name__} and {type(tangents).__name__}."
-        )
-
-    ps_flat, tree_def = tree_flatten(primals)
-    ts_flat, tree_def_2 = tree_flatten(tangents)
-    if tree_def != tree_def_2:
-        raise TypeError(
-            "primal and tangent arguments to jax.jvp must have the same tree "
-            f"structure; primals have tree structure {tree_def} whereas tangents have "
-            f"tree structure {tree_def_2}."
-        )
-    for p, t in zip(ps_flat, ts_flat):
-        if core.primal_dtype_to_tangent_dtype(_dtype(p)) != _dtype(t):
-            raise TypeError(
-                "primal and tangent arguments to jax.jvp do not match; "
-                "dtypes must be equal, or in case of int/bool primal dtype "
-                "the tangent dtype must be float0."
-                f"Got primal dtype {_dtype(p)} and so expected tangent dtype "
-                f"{core.primal_dtype_to_tangent_dtype(_dtype(p))}, but got "
-                f"tangent dtype {_dtype(t)} instead."
-            )
-        if np.shape(p) != np.shape(t):
-            raise ValueError(
-                "jvp called with different primal and tangent shapes;"
-                f"Got primal shape {np.shape(p)} and tangent shape as {np.shape(t)}"
-            )
-
-    if not has_aux:
-        flat_fun, out_tree = flatten_fun_nokwargs(fun, tree_def)
-        out_primals, out_tangents = ad.jvp(flat_fun).call_wrapped(ps_flat, ts_flat)
-        out_tree = out_tree()
-        return (
-            tree_unflatten(out_tree, out_primals),
-            tree_unflatten(out_tree, out_tangents),
-        )
-    else:
-        flat_fun, out_aux_trees = flatten_fun_nokwargs2(fun, tree_def)
-        jvp_fun, aux = ad.jvp(flat_fun, has_aux=True)
-        out_primals, out_tangents = jvp_fun.call_wrapped(ps_flat, ts_flat)
-        out_tree, aux_tree = out_aux_trees()
-        return (
-            tree_unflatten(out_tree, out_primals),
-            tree_unflatten(out_tree, out_tangents),
-            tree_unflatten(aux_tree, aux()),
-        )
-
-
-def _vjp(fun: lu.WrappedFun, *primals, has_aux=False):
-    """Variant of vjp() that takes an lu.WrappedFun."""
-    primals_flat, in_tree = tree_flatten(primals)
-    for arg in primals_flat:
-        dispatch.check_arg(arg)
-    if not has_aux:
-        flat_fun, out_tree = flatten_fun_nokwargs(fun, in_tree)
-        out_primals, vjp = ad.vjp(flat_fun, primals_flat)
-        out_tree = out_tree()
-    else:
-        flat_fun, out_aux_trees = flatten_fun_nokwargs2(fun, in_tree)
-        out_primals, vjp, aux = ad.vjp(flat_fun, primals_flat, has_aux=True)
-        out_tree, aux_tree = out_aux_trees()
-    out_primal_avals = map(shaped_abstractify, out_primals)
-    out_primal_py = tree_unflatten(out_tree, out_primals)
-    vjp_py = Partial(
-        partial(
-            _vjp_pullback_wrapper, fun.__name__, out_primal_avals, (out_tree, in_tree)
-        ),
-        vjp,
-    )
-    if not has_aux:
-        return out_primal_py, vjp_py
-    else:
-        return out_primal_py, vjp_py, tree_unflatten(aux_tree, aux)
-
-
-def _vjp_pullback_wrapper(name, out_primal_avals, io_tree, fun, *py_args_):
-    (py_args,) = py_args_
-    in_tree_expected, out_tree = io_tree
-    args, in_tree = tree_flatten(py_args)
-    if in_tree != in_tree_expected:
-        raise ValueError(
-            f"unexpected tree structure of argument to vjp function: "
-            f"got {in_tree}, but expected to match {in_tree_expected}"
-        )
-    for arg, aval in zip(args, out_primal_avals):
-        ct_aval = shaped_abstractify(arg)
-        try:
-            ct_aval_expected = aval.to_tangent_type()
-        except AttributeError:
-            # https://github.com/jax-ml/jax/commit/018189491bde26fe9c7ade1213c5cbbad8bca1c6
-            ct_aval_expected = aval.at_least_vspace()
-        if not core.typecompat(
-            ct_aval, ct_aval_expected
-        ) and not _temporary_dtype_exception(ct_aval, ct_aval_expected):
-            raise ValueError(
-                "unexpected JAX type (e.g. shape/dtype) for argument to vjp function: "
-                f"got {ct_aval.str_short()}, but expected "
-                f"{ct_aval_expected.str_short()} because the corresponding output "
-                f"of the function {name} had JAX type {aval.str_short()}"
-            )
-    ans = fun(*args)
-    return tree_unflatten(out_tree, ans)
-
-
-def _temporary_dtype_exception(a, a_) -> bool:
-    if isinstance(a, core.ShapedArray) and isinstance(a_, core.ShapedArray):
-        return a.shape == a_.shape and a_.dtype == dtypes.float0
-    return False

@@ -27,7 +27,7 @@ class EffectiveRipple(_Objective):
     dominant transport channel in stellarators which are not optimized to reduce it.
     The effective ripple is a proxy, measuring the effective modulation amplitude of the
     magnetic field averaged along a magnetic surface, which can be used to optimize for
-    stellarators with improved confinement.
+    stellarators with improved confinement. It is targeted as a flux surface function.
 
     References
     ----------
@@ -54,6 +54,7 @@ class EffectiveRipple(_Objective):
         Weighting to apply to the Objective, relative to other Objectives.
         Must be broadcastable to Objective.dim_f
     normalize : bool, optional
+        This quantity is already normalized so this parameter is ignored.
         Whether to compute the error in physical units or non-dimensionalize.
     normalize_target : bool, optional
         Whether target and bounds should be normalized before comparing to computed
@@ -92,12 +93,23 @@ class EffectiveRipple(_Objective):
         the number of wells will increase performance.
     name : str, optional
         Name of the objective function.
+    jac_chunk_size : int , optional
+        Will calculate the Jacobian for this objective ``jac_chunk_size``
+        columns at a time, instead of all at once. The memory usage of the
+        Jacobian calculation is roughly ``memory usage = m0 + m1*jac_chunk_size``:
+        the smaller the chunk size, the less memory the Jacobian calculation
+        will require (with some baseline memory usage). The time to compute the
+        Jacobian is roughly ``t=t0 +t1/jac_chunk_size``, so the larger the
+        ``jac_chunk_size``, the faster the calculation takes, at the cost of
+        requiring more memory. A ``jac_chunk_size`` of 1 corresponds to the least
+        memory intensive, but slowest method of calculating the Jacobian.
+        If None, it will use the largest size i.e ``obj.dim_x``.
 
     """
 
     _coordinates = "r"
     _units = "~"
-    _print_value_fmt = "Effective ripple ε¹ᐧ⁵: "
+    _print_value_fmt = "Effective ripple ε: "
 
     def __init__(
         self,
@@ -119,6 +131,7 @@ class EffectiveRipple(_Objective):
         batch=True,
         num_well=None,
         name="Effective ripple",
+        jac_chunk_size=None,
     ):
         if target is None and bounds is None:
             target = 0.0
@@ -158,6 +171,7 @@ class EffectiveRipple(_Objective):
             loss_function=loss_function,
             deriv_mode=deriv_mode,
             name=name,
+            jac_chunk_size=jac_chunk_size,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -227,7 +241,7 @@ class EffectiveRipple(_Objective):
             constants["profiles"],
         )
         # TODO: interpolate all deps to this grid with fft utilities from fourier bounce
-        grid = eq.get_rtz_grid(
+        grid = eq._get_rtz_grid(
             constants["rho"],
             constants["alpha"],
             constants["zeta"],
@@ -326,8 +340,6 @@ class GammaC(_Objective):
         Default is to detect all wells, but due to limitations in JAX this option
         may consume more memory. Specifying a number that tightly upper bounds
         the number of wells will increase performance.
-    name : str, optional
-        Name of the objective function.
     Nemov : bool
         Whether to use the Γ_c as defined by Nemov et al. or Velasco et al.
         Default is Nemov. Set to ``False`` to use Velascos's.
@@ -339,6 +351,19 @@ class GammaC(_Objective):
         number of toroidal transits increases. This is mentioned to remind
         users that an optimization using Velasco's metric should be evaluated by
         measuring decrease in Γ_c at a fixed number of toroidal transits.
+    name : str, optional
+        Name of the objective function.
+    jac_chunk_size : int , optional
+        Will calculate the Jacobian for this objective ``jac_chunk_size``
+        columns at a time, instead of all at once. The memory usage of the
+        Jacobian calculation is roughly ``memory usage = m0 + m1*jac_chunk_size``:
+        the smaller the chunk size, the less memory the Jacobian calculation
+        will require (with some baseline memory usage). The time to compute the
+        Jacobian is roughly ``t=t0 +t1/jac_chunk_size``, so the larger the
+        ``jac_chunk_size``, the faster the calculation takes, at the cost of
+        requiring more memory. A ``jac_chunk_size`` of 1 corresponds to the least
+        memory intensive, but slowest method of calculating the Jacobian.
+        If None, it will use the largest size i.e ``obj.dim_x``.
 
     """
 
@@ -365,8 +390,9 @@ class GammaC(_Objective):
         num_pitch=64,
         batch=True,
         num_well=None,
-        name="Gamma_c",
         Nemov=True,
+        name="Gamma_c",
+        jac_chunk_size=None,
     ):
         if target is None and bounds is None:
             target = 0.0
@@ -404,6 +430,7 @@ class GammaC(_Objective):
             loss_function=loss_function,
             deriv_mode=deriv_mode,
             name=name,
+            jac_chunk_size=jac_chunk_size,
         )
 
     def build(self, use_jit=True, verbose=1):

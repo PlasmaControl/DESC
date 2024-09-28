@@ -184,8 +184,8 @@ def leggauss_lob(deg, interior_only=False):
     return x, w
 
 
-def chebgauss_uniform(deg):
-    """Gauss-Chebyshev quadrature with uniformly spaced nodes.
+def uniform(deg):
+    """Uniform quadrature that is Gauss-Chebyshev in transformed variable.
 
     Returns quadrature points xₖ and weights wₖ for the approximate evaluation
     of the integral ∫₋₁¹ f(x) dx ≈ ∑ₖ wₖ f(xₖ).
@@ -205,14 +205,14 @@ def chebgauss_uniform(deg):
     # Define x = 2/π arcsin y and g : y ↦ f(x(y)).
     #   ∫₋₁¹ f(x) dx = 2/π ∫₋₁¹ (1−y²)⁻⁰ᐧ⁵ g(y) dy
     # ∑ₖ wₖ f(x(yₖ)) = 2/π ∑ₖ ωₖ g(yₖ)
-    # Given roots yₖ of Chebyshev polynomial, x(yₖ) is uniform in (-1, 1).
+    # Given roots yₖ of Chebyshev polynomial, x(yₖ) below is uniform in (-1, 1).
     x = jnp.arange(-deg + 1, deg + 1, 2) / deg
     w = 2 / deg * jnp.ones(deg)
     return x, w
 
 
 def chebgauss2(deg):
-    """Gauss-Chebyshev quadrature of the second kind.
+    """Gauss-Chebyshev quadrature of the second kind with implicit weighting.
 
     Returns quadrature points xₖ and weights wₖ for the approximate evaluation
     of the integral ∫₋₁¹ f(x) dx ≈ ∑ₖ wₖ f(xₖ) where f(x) = g(x) √(1−x²).

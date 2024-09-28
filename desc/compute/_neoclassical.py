@@ -14,7 +14,7 @@ from functools import partial
 from orthax.legendre import leggauss
 from quadax import simpson
 
-from desc.backend import jax, jit, jnp
+from desc.backend import imap, jax, jit, jnp
 
 from ..integrals.bounce_integral import Bounce1D
 from ..integrals.bounce_utils import get_pitch_inv_quad, interp_to_argmin
@@ -24,7 +24,7 @@ from ..integrals.quad_utils import (
     get_quadrature,
     grad_automorphism_sin,
 )
-from ..utils import cross, dot, map2, safediv
+from ..utils import cross, dot, safediv
 from .data_index import register_compute_fun
 
 
@@ -53,7 +53,14 @@ def _get_pitch_inv_quad(grid, data, num_pitch, _data):
 
 
 def _relu_along_axis(x, axis):
+    """Applies ReLU (Rectified Linear Unit) operation along an axis."""
     return jnp.apply_along_axis(jax.nn.relu, axis, x)
+
+
+def map2(fun, xs, *, batch_size=None):
+    """Map over leading two axes iteratively."""
+    # Can't pass in batch_size to imap yet because only new version jax allow that.
+    return imap(lambda x: imap(fun, x), xs)
 
 
 @register_compute_fun(
@@ -111,17 +118,17 @@ def _G_ra_fsa(data, transforms, profiles, **kwargs):
 
 
 @register_compute_fun(
-    name="effective ripple",  # this is ε¹ᐧ⁵
+    name="effective ripple 3/2",
     label=(
-        # ε¹ᐧ⁵ = π/(8√2) (R₀/〈|∇ψ|〉)² B₀⁻¹ ∫dλ λ⁻² 〈 ∑ⱼ Hⱼ²/Iⱼ 〉
-        "\\epsilon^{3/2} = \\frac{\\pi}{8 \\sqrt{2}} "
-        "(R_0 / \\langle \\vert\\nabla \\psi\\vert \\rangle)^2 "
+        # ε¹ᐧ⁵ = π/(8√2) R₀²〈|∇ψ|〉⁻² B₀⁻¹ ∫dλ λ⁻² 〈 ∑ⱼ Hⱼ²/Iⱼ 〉
+        "\\epsilon_{\\mathrm{eff}}^{3/2} = \\frac{\\pi}{8 \\sqrt{2}} "
+        "R_0^2 \\langle \\vert\\nabla \\psi\\vert \\rangle^{-2} "
         "B_0^{-1} \\int d\\lambda \\lambda^{-2} "
         "\\langle \\sum_j H_j^2 / I_j \\rangle"
     ),
     units="~",
     units_long="None",
-    description="Effective ripple modulation amplitude",
+    description="Effective ripple modulation amplitude to 3/2 power",
     dim=1,
     params=[],
     transforms={"grid": []},
@@ -164,7 +171,7 @@ def _G_ra_fsa(data, transforms, profiles, **kwargs):
     #  Need more efficient function approximation of |B|(α, ζ).
 )
 @partial(jit, static_argnames=["num_pitch", "num_well", "batch"])
-def _effective_ripple(params, transforms, profiles, data, **kwargs):
+def _epsilon_32(params, transforms, profiles, data, **kwargs):
     """https://doi.org/10.1063/1.873749.
 
     Evaluation of 1/ν neoclassical transport in stellarators.
@@ -198,9 +205,13 @@ def _effective_ripple(params, transforms, profiles, data, **kwargs):
         bounce = Bounce1D(grid, data, quad, automorphism=None, is_reshaped=True)
         points = bounce.points(data["pitch_inv"], num_well=num_well)
         H = bounce.integrate(
-            dH, points, data["pitch_inv"], data["|grad(rho)|*kappa_g"], batch=batch
+            dH,
+            data["pitch_inv"],
+            data["|grad(rho)|*kappa_g"],
+            points=points,
+            batch=batch,
         )
-        I = bounce.integrate(dI, points, data["pitch_inv"], batch=batch)
+        I = bounce.integrate(dI, data["pitch_inv"], points=points, batch=batch)
         return (
             safediv(H**2, I).sum(axis=-1)
             * data["pitch_inv"] ** (-3)
@@ -217,13 +228,31 @@ def _effective_ripple(params, transforms, profiles, data, **kwargs):
     )
     _data = _get_pitch_inv_quad(grid, data, num_pitch, _data)
     B0 = data["max_tz |B|"]
-    data["effective ripple"] = (
+    data["effective ripple 3/2"] = (
         jnp.pi
         / (8 * 2**0.5)
         * (B0 * data["R0"] / data["<|grad(rho)|>"]) ** 2
         * grid.expand(_alpha_mean(map2(compute, _data)))
         / data["<L|r,a>"]
     )
+    return data
+
+
+@register_compute_fun(
+    name="effective ripple",
+    label="\\epsilon_{\\mathrm{eff}}",
+    units="~",
+    units_long="None",
+    description="Effective ripple modulation amplitude",
+    dim=1,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="r",
+    data=["effective ripple 3/2"],
+)
+def _effective_ripple(params, transforms, profiles, data, **kwargs):
+    data["effective ripple"] = data["effective ripple 3/2"] ** (2 / 3)
     return data
 
 
@@ -284,14 +313,22 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
         """∫ dλ ∑ⱼ [v τ γ_c²]ⱼ."""
         bounce = Bounce1D(grid, data, quad, automorphism=None, is_reshaped=True)
         points = bounce.points(data["pitch_inv"], num_well=num_well)
-        v_tau = bounce.integrate(d_v_tau, points, data["pitch_inv"], batch=batch)
+        v_tau = bounce.integrate(d_v_tau, data["pitch_inv"], points=points, batch=batch)
         gamma_c = jnp.arctan(
             safediv(
                 bounce.integrate(
-                    drift, points, data["pitch_inv"], data["cvdrift0"], batch=batch
+                    drift,
+                    data["pitch_inv"],
+                    data["cvdrift0"],
+                    points=points,
+                    batch=batch,
                 ),
                 bounce.integrate(
-                    drift, points, data["pitch_inv"], data["gbdrift"], batch=batch
+                    drift,
+                    data["pitch_inv"],
+                    data["gbdrift"],
+                    points=points,
+                    batch=batch,
                 ),
             )
         )
@@ -396,6 +433,12 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
     #              ----------------------------------------------
     # (|∇ρ| ‖e_α|ρ,ϕ‖)ᵢ ∫ dℓ [ (1 − λ|B|/2)/√(1 − λ|B|) ∂|B|/∂ψ + √(1 − λ|B|) K ] / |B|
 
+    # Note that we rewrite equivalents of Nemov et al.'s expression's using
+    # single valued maps of a physical coordinates. This avoids the computational
+    # issues of multivalued maps. It further enables use of more efficient methods,
+    # such as fast transforms and fixed computational grids throughout optimization,
+    # which are used in the ``Bounce2D`` operator on a developer branch.
+
     def d_v_tau(B, pitch):
         return safediv(2.0, jnp.sqrt(jnp.abs(1 - pitch * B)))
 
@@ -420,29 +463,29 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
         # τ is the bounce time, and I is defined in Nemov eq. 36.
         bounce = Bounce1D(grid, data, quad, automorphism=None, is_reshaped=True)
         points = bounce.points(data["pitch_inv"], num_well=num_well)
-        v_tau = bounce.integrate(d_v_tau, points, data["pitch_inv"], batch=batch)
+        v_tau = bounce.integrate(d_v_tau, data["pitch_inv"], points=points, batch=batch)
         gamma_c = jnp.arctan(
             safediv(
                 bounce.integrate(
                     drift1,
-                    points,
                     data["pitch_inv"],
                     data["|grad(rho)|*kappa_g"],
+                    points=points,
                     batch=batch,
                 ),
                 (
                     bounce.integrate(
                         drift2,
-                        points,
                         data["pitch_inv"],
                         data["|B|_psi|v,p"],
+                        points=points,
                         batch=batch,
                     )
                     + bounce.integrate(
                         drift3,
-                        points,
                         data["pitch_inv"],
                         data["K"],
+                        points=points,
                         batch=batch,
                         quad=quad2,
                     )

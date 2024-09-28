@@ -23,7 +23,7 @@ def test_field_line_average():
     iota = iota_grid.compress(eq.compute("iota", grid=iota_grid)["iota"]).item()
     # For axisymmetric devices, one poloidal transit must be exact.
     zeta = np.linspace(0, 2 * np.pi / iota, 25)
-    grid = eq.get_rtz_grid(rho, alpha, zeta, coordinates="raz")
+    grid = eq._get_rtz_grid(rho, alpha, zeta, coordinates="raz")
     data = eq.compute(["<L|r,a>", "<G|r,a>", "V_r(r)"], grid=grid)
     np.testing.assert_allclose(
         data["<L|r,a>"] / data["<G|r,a>"], data["V_r(r)"] / (4 * np.pi**2), rtol=1e-3
@@ -34,7 +34,7 @@ def test_field_line_average():
     # Otherwise, many toroidal transits are necessary to sample surface.
     eq = get("W7-X")
     zeta = np.linspace(0, 40 * np.pi, 300)
-    grid = eq.get_rtz_grid(rho, alpha, zeta, coordinates="raz")
+    grid = eq._get_rtz_grid(rho, alpha, zeta, coordinates="raz")
     data = eq.compute(["<L|r,a>", "<G|r,a>", "V_r(r)"], grid=grid)
     np.testing.assert_allclose(
         data["<L|r,a>"] / data["<G|r,a>"], data["V_r(r)"] / (4 * np.pi**2), rtol=1e-3
@@ -51,17 +51,22 @@ def test_effective_ripple():
     rho = np.linspace(0, 1, 10)
     alpha = np.array([0])
     zeta = np.linspace(0, 20 * np.pi, 1000)
-    grid = eq.get_rtz_grid(rho, alpha, zeta, coordinates="raz")
+    grid = eq._get_rtz_grid(rho, alpha, zeta, coordinates="raz")
     data = eq.compute("effective ripple", grid=grid)
     assert np.isfinite(data["effective ripple"]).all()
-    eps_eff = grid.compress(data["effective ripple"])
-
-    neo_rho, neo_eps = NeoIO.read("tests/inputs/neo_out.w7x")
     np.testing.assert_allclose(
-        eps_eff, np.interp(rho, neo_rho, neo_eps), rtol=0.16, atol=1e-5
+        data["effective ripple 3/2"] ** (2 / 3),
+        data["effective ripple"],
+        err_msg="Bug in source grid logic in eq.compute.",
     )
+    eps_32 = grid.compress(data["effective ripple 3/2"])
     fig, ax = plt.subplots()
-    ax.plot(rho, eps_eff, marker="o")
+    ax.plot(rho, eps_32, marker="o")
+
+    neo_rho, neo_eps_32 = NeoIO.read("tests/inputs/neo_out.w7x")
+    np.testing.assert_allclose(
+        eps_32, np.interp(rho, neo_rho, neo_eps_32), rtol=0.16, atol=1e-5
+    )
     return fig
 
 
@@ -71,7 +76,7 @@ def test_Gamma_c_Velasco():
     """Test Γ_c with W7-X."""
     eq = get("W7-X")
     rho = np.linspace(0, 1, 10)
-    grid = eq.get_rtz_grid(
+    grid = eq._get_rtz_grid(
         rho, np.array([0]), np.linspace(0, 20 * np.pi, 1000), coordinates="raz"
     )
     data = eq.compute("Gamma_c Velasco", grid=grid)
@@ -87,7 +92,7 @@ def test_Gamma_c():
     """Test Γ_c Nemov with W7-X."""
     eq = get("W7-X")
     rho = np.linspace(0, 1, 10)
-    grid = eq.get_rtz_grid(
+    grid = eq._get_rtz_grid(
         rho, np.array([0]), np.linspace(0, 20 * np.pi, 1000), coordinates="raz"
     )
     data = eq.compute("Gamma_c", grid=grid)
@@ -170,8 +175,12 @@ class NeoIO:
         writeln(f"'#' M_booz={self.M_booz}. N_booz={self.N_booz}.")
         writeln(self.booz_file)
         writeln(self.neo_out_file)
+        # Neo computes things on the so-called "half grid" between the full grid.
+        # There are only ns - 1 surfaces there.
         writeln(self.ns - 1)
-        writeln(" ".join(str(i) for i in range(self.ns)))
+        # NEO starts indexing at 1 and does not compute on axis (index 1).
+        surface_indices = " ".join(str(i) for i in range(2, self.ns + 1))
+        writeln(surface_indices)
         writeln(theta_n)
         writeln(phi_n)
         writeln(0)

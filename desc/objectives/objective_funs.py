@@ -982,7 +982,7 @@ class _Objective(IOAble, ABC):
             # so we prefer that unless the jacobian is really wide
             self._deriv_mode = (
                 "fwd"
-                if self.dim_f >= 0.5 * sum(t.dim_x for t in self.things)
+                if self.dim_f >= 0.2 * sum(t.dim_x for t in self.things)
                 else "rev"
             )
 

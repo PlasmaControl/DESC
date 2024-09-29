@@ -33,23 +33,36 @@ def _alpha_mean(f):
     return f.mean(axis=0)
 
 
-def _get_pitch_inv_quad(grid, data, num_pitch, _data):
-    p, w = get_pitch_inv_quad(
-        grid.compress(data["min_tz |B|"]), grid.compress(data["max_tz |B|"]), num_pitch
-    )
-    _data["pitch_inv"] = jnp.broadcast_to(
-        p[jnp.newaxis], (grid.num_alpha, grid.num_rho, num_pitch)
-    )
-    _data["pitch_inv weight"] = jnp.broadcast_to(
-        w[jnp.newaxis], (grid.num_alpha, grid.num_rho, num_pitch)
-    )
-    return _data
+def _compute(fun, _data, data, grid, num_pitch):
+    """Compute ``fun`` for each α and ρ value iteratively to reduce memory usage.
 
+    Parameters
+    ----------
+    fun : callable
+        Function to compute.
+    _data : dict[str, jnp.ndarray]
+        Data in shape (M, L, N) to provide to ``fun``.
+        Stuff in ``Bounce1D.required_names`` will be added automatically.
+    data : dict[str, jnp.ndarray]
+        DESC data dict.
 
-def map2(fun, xs, *, batch_size=None):
-    """Map over leading two axes iteratively."""
-    # Can't pass in batch_size to imap yet because only new version jax allow that.
-    return imap(lambda x: imap(fun, x), xs)
+    """
+    pitch_inv, pitch_inv_weight = get_pitch_inv_quad(
+        grid.compress(data["min_tz |B|"]),
+        grid.compress(data["max_tz |B|"]),
+        num_pitch,
+    )
+
+    def for_each_rho(x):
+        # using same λ values for every field line α on flux surface ρ
+        x["pitch_inv"] = pitch_inv
+        x["pitch_inv weight"] = pitch_inv_weight
+        return imap(fun, x)
+
+    for name in Bounce1D.required_names:
+        _data[name] = Bounce1D.reshape_data(grid, data[name])
+
+    return grid.expand(_alpha_mean(imap(for_each_rho, _data)))
 
 
 @register_compute_fun(
@@ -136,6 +149,7 @@ def _G_ra_fsa(data, transforms, profiles, **kwargs):
     resolution_requirement="z",
     source_grid_requirement={"coordinates": "raz", "is_meshgrid": True},
     quad="jnp.ndarray : Optional, quadrature points and weights for bounce integrals.",
+    num_quad="int : Bounce integral resolution. Ignored if given ``quad``. Default 32.",
     num_pitch="int : Resolution for quadrature over velocity coordinate. Default 50.",
     num_well=(
         "int : Maximum number of wells to detect for each pitch and field line. "
@@ -159,7 +173,7 @@ def _G_ra_fsa(data, transforms, profiles, **kwargs):
     # TODO: Improve performance... see GitHub issue #1045.
     #  Need more efficient function approximation of |B|(α, ζ).
 )
-@partial(jit, static_argnames=["num_pitch", "num_well", "batch"])
+@partial(jit, static_argnames=["num_quad", "num_pitch", "num_well", "batch"])
 def _epsilon_32(params, transforms, profiles, data, **kwargs):
     """https://doi.org/10.1063/1.873749.
 
@@ -167,8 +181,11 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
     V. V. Nemov, S. V. Kasilov, W. Kernbichler, M. F. Heyn.
     Phys. Plasmas 1 December 1999; 6 (12): 4622–4632.
     """
-    quad = kwargs["quad"] if "quad" in kwargs else chebgauss2(32)
-    num_pitch = kwargs.get("num_pitch", 50)
+    # noqa: unused dependency
+    if "quad" in kwargs:
+        quad = kwargs["quad"]
+    else:
+        quad = chebgauss2(kwargs.get("num_quad", 32))
     num_well = kwargs.get("num_well", None)
     batch = kwargs.get("batch", True)
     grid = transforms["grid"].source_grid
@@ -186,8 +203,8 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
         # Integrand of Nemov eq. 31.
         return jnp.sqrt(jnp.abs(1 - pitch * B)) / B
 
-    def compute(data):
-        """Return (∂ψ/∂ρ)⁻² B₀⁻² ∫ dλ λ⁻² ∑ⱼ Hⱼ²/Iⱼ."""
+    def eps_32(data):
+        """(∂ψ/∂ρ)⁻² B₀⁻² ∫ dλ λ⁻² ∑ⱼ Hⱼ²/Iⱼ."""
         # B₀ has units of λ⁻¹.
         # Nemov's ∑ⱼ Hⱼ²/Iⱼ = (∂ψ/∂ρ)² (λB₀)³ ``(H**2 / I).sum(axis=-1)``.
         # (λB₀)³ d(λB₀)⁻¹ = B₀² λ³ d(λ⁻¹) = -B₀² λ dλ.
@@ -207,21 +224,18 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
             * data["pitch_inv weight"]
         ).sum(axis=-1)
 
-    _data = {  # noqa: unused dependency
-        name: Bounce1D.reshape_data(grid, data[name])
-        for name in Bounce1D.required_names
-    }
     # Interpolate |∇ρ| κ_g since it is smoother than κ_g alone.
-    _data["|grad(rho)|*kappa_g"] = Bounce1D.reshape_data(
-        grid, data["|grad(rho)|"] * data["kappa_g"]
-    )
-    _data = _get_pitch_inv_quad(grid, data, num_pitch, _data)
+    _data = {
+        "|grad(rho)|*kappa_g": Bounce1D.reshape_data(
+            grid, data["|grad(rho)|"] * data["kappa_g"]
+        )
+    }
     B0 = data["max_tz |B|"]
     data["effective ripple 3/2"] = (
         jnp.pi
         / (8 * 2**0.5)
         * (B0 * data["R0"] / data["<|grad(rho)|>"]) ** 2
-        * grid.expand(_alpha_mean(map2(compute, _data)))
+        * _compute(eps_32, _data, data, grid, kwargs.get("num_pitch", 50))
         / data["<L|r,a>"]
     )
     return data
@@ -235,7 +249,7 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
     description="Effective ripple modulation amplitude",
     dim=1,
     params=[],
-    transforms={"grid": []},
+    transforms={},
     profiles=[],
     coordinates="r",
     data=["effective ripple 3/2"],

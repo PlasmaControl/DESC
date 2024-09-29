@@ -446,7 +446,7 @@ class _Coil(_MagneticField, Optimizable, ABC):
             + " (name={}, current={})".format(self.name, self.current)
         )
 
-    def to_FourierXYZ(self, N=10, grid=None, s=None, name=""):
+    def to_FourierXYZ(self, N=10, grid=None, s=None, name="", **kwargs):
         """Convert coil to FourierXYZCoil representation.
 
         Parameters
@@ -479,7 +479,7 @@ class _Coil(_MagneticField, Optimizable, ABC):
             self.current, coords, N=N, s=s, basis="xyz", name=name
         )
 
-    def to_SplineXYZ(self, knots=None, grid=None, method="cubic", name=""):
+    def to_SplineXYZ(self, knots=None, grid=None, method="cubic", name="", **kwargs):
         """Convert coil to SplineXYZCoil.
 
         Parameters
@@ -519,7 +519,7 @@ class _Coil(_MagneticField, Optimizable, ABC):
             self.current, coords, knots=knots, method=method, name=name, basis="xyz"
         )
 
-    def to_FourierRZ(self, N=10, grid=None, NFP=None, sym=False, name=""):
+    def to_FourierRZ(self, N=10, grid=None, NFP=None, sym=False, name="", **kwargs):
         """Convert Coil to FourierRZCoil representation.
 
         Note that some types of coils may not be representable in this basis.
@@ -553,7 +553,7 @@ class _Coil(_MagneticField, Optimizable, ABC):
             self.current, coords, N=N, NFP=NFP, basis="xyz", sym=sym, name=name
         )
 
-    def to_FourierPlanar(self, N=10, grid=None, basis="xyz", name=""):
+    def to_FourierPlanar(self, N=10, grid=None, basis="xyz", name="", **kwargs):
         """Convert Coil to FourierPlanarCoil representation.
 
         Note that some types of coils may not be representable in this basis.
@@ -1705,7 +1705,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         return cls(*coilset)
 
     @classmethod
-    def from_makegrid_coilfile(cls, coil_file, method="cubic"):
+    def from_makegrid_coilfile(cls, coil_file, method="cubic", check_intersection=True):
         """Create a CoilSet of SplineXYZCoils from a MAKEGRID-formatted coil txtfile.
 
         If the MAKEGRID contains more than one coil group (denoted by the number listed
@@ -1730,6 +1730,8 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
               the data, and will not introduce new extrema in the interpolated points
             - ``'monotonic-0'``: same as `'monotonic'` but with 0 first derivatives at
               both endpoints
+        check_intersection : bool
+            whether to check the resulting coilsets for intersecting coils.
 
         """
         coils = []  # list of SplineXYZCoils, ignoring coil groups
@@ -1805,7 +1807,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             )
 
         try:
-            return cls(*coils)
+            return cls(*coils, check_intersection=check_intersection)
         except ValueError as e:
             errorif(
                 True,
@@ -2458,7 +2460,7 @@ class MixedCoilSet(CoilSet):
         return self._compute_A_or_B(coords, params, basis, source_grid, transforms, "A")
 
     def to_FourierPlanar(
-        self, N=10, grid=None, basis="xyz", name="", check_intersection=False
+        self, N=10, grid=None, basis="xyz", name="", check_intersection=True
     ):
         """Convert all coils to FourierPlanarCoil representation.
 
@@ -2487,7 +2489,12 @@ class MixedCoilSet(CoilSet):
             minor radius r in a plane specified by a center position and normal vector.
 
         """
-        coils = [coil.to_FourierPlanar(N=N, grid=grid, basis=basis) for coil in self]
+        coils = [
+            coil.to_FourierPlanar(
+                N=N, grid=grid, basis=basis, check_intersection=check_intersection
+            )
+            for coil in self
+        ]
         return self.__class__(*coils, name=name, check_intersection=check_intersection)
 
     def to_FourierRZ(
@@ -2520,7 +2527,12 @@ class MixedCoilSet(CoilSet):
             New representation of the coilset parameterized by a Fourier series for R,Z.
 
         """
-        coils = [coil.to_FourierRZ(N=N, grid=grid, NFP=NFP, sym=sym) for coil in self]
+        coils = [
+            coil.to_FourierRZ(
+                N=N, grid=grid, NFP=NFP, sym=sym, check_intersection=check_intersection
+            )
+            for coil in self
+        ]
         return self.__class__(*coils, name=name, check_intersection=check_intersection)
 
     def to_FourierXYZ(self, N=10, grid=None, s=None, name="", check_intersection=True):
@@ -2548,7 +2560,10 @@ class MixedCoilSet(CoilSet):
             X,Y,Z.
 
         """
-        coils = [coil.to_FourierXYZ(N, grid, s) for coil in self]
+        coils = [
+            coil.to_FourierXYZ(N, grid, s, check_intersection=check_intersection)
+            for coil in self
+        ]
         return self.__class__(*coils, name=name, check_intersection=check_intersection)
 
     def to_SplineXYZ(
@@ -2586,7 +2601,12 @@ class MixedCoilSet(CoilSet):
             New representation of the coilset parameterized by a spline for X,Y,Z.
 
         """
-        coils = [coil.to_SplineXYZ(knots, grid, method) for coil in self]
+        coils = [
+            coil.to_SplineXYZ(
+                knots, grid, method, check_intersection=check_intersection
+            )
+            for coil in self
+        ]
         return self.__class__(*coils, name=name, check_intersection=check_intersection)
 
     def __add__(self, other):
@@ -2610,7 +2630,7 @@ class MixedCoilSet(CoilSet):
 
     @classmethod
     def from_makegrid_coilfile(  # noqa: C901 - FIXME: simplify this
-        cls, coil_file, method="cubic", ignore_groups=False
+        cls, coil_file, method="cubic", ignore_groups=False, check_intersection=True
     ):
         """Create a MixedCoilSet of SplineXYZCoils from a MAKEGRID coil txtfile.
 
@@ -2645,6 +2665,9 @@ class MixedCoilSet(CoilSet):
             single coilgroup. If there is only a single group, however, this will not
             return a nested coilset, but just a single coilset for that group. if True,
             return the coils as just a single MixedCoilSet.
+        check_intersection : bool
+            whether to check the resulting coilsets for intersecting coils.
+
 
         """
         coils = {}  # dict of list of SplineXYZCoils, one list per coilgroup
@@ -2741,18 +2764,34 @@ class MixedCoilSet(CoilSet):
         # nested coilset
         groupinds = list(coils.keys())
         if len(groupinds) == 1:
-            return cls(*coils[groupinds[0]], name=groupnames[0])
+            return cls(
+                *coils[groupinds[0]],
+                name=groupnames[0],
+                check_intersection=check_intersection,
+            )
 
         # if not, possibly return a nested coilset, containing one coilset per coilgroup
         coilsets = []  # list of coilsets, so we can attempt to use CoilSet for each one
         for groupname, groupind in zip(groupnames, groupinds):
             try:
                 # try making the coilgroup use a CoilSet
-                coilsets.append(CoilSet(*coils[groupind], name=groupname))
+                coilsets.append(
+                    CoilSet(
+                        *coils[groupind],
+                        name=groupname,
+                        check_intersection=check_intersection,
+                    )
+                )
             except ValueError:  # can't load as a CoilSet if any of the coils have
                 # different length of knots, so load as MixedCoilSet instead
-                coilsets.append(cls(*coils[groupind], name=groupname))
-        cset = cls(*coilsets)
+                coilsets.append(
+                    cls(
+                        *coils[groupind],
+                        name=groupname,
+                        check_intersection=check_intersection,
+                    )
+                )
+        cset = cls(*coilsets, check_intersection=check_intersection)
         if ignore_groups:
-            cset = cls(*flatten_coils(cset))
+            cset = cls(*flatten_coils(cset), check_intersection=check_intersection)
         return cset

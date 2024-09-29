@@ -2182,6 +2182,16 @@ def test_loss_function_asserts():
         RotationalTransform(eq=eq, loss_function=fun)
 
 
+def _reduced_resolution_objective(eq, objective):
+    """Speed up testing suite by defining rules to reduce objective resolution."""
+    kwargs = {}
+    if objective in {EffectiveRipple, GammaC}:
+        kwargs["knots_per_transit"] = 50
+        kwargs["num_transit"] = 2
+        kwargs["num_pitch"] = 25
+    return objective(eq=eq, **kwargs)
+
+
 class TestComputeScalarResolution:
     """Test that compute_scalar values are roughly independent of grid resolution."""
 
@@ -2554,17 +2564,9 @@ class TestComputeScalarResolution:
                 M_grid=int(self.eq.M * res),
                 N_grid=int(self.eq.N * res),
             )
-            if objective in {EffectiveRipple, GammaC}:
-                obj = ObjectiveFunction(
-                    [
-                        objective(
-                            self.eq, knots_per_transit=50, num_transit=2, num_pitch=25
-                        )
-                    ],
-                    use_jit=False,
-                )
-            else:
-                obj = ObjectiveFunction(objective(eq=self.eq), use_jit=False)
+            obj = ObjectiveFunction(
+                _reduced_resolution_objective(self.eq, objective), use_jit=False
+            )
             obj.build(verbose=0)
             f[i] = obj.compute_scalar(obj.x())
         np.testing.assert_allclose(f, f[-1], rtol=5e-2)
@@ -2847,9 +2849,7 @@ class TestObjectiveNaNGrad:
         eq = get("ESTELL")
         with pytest.warns(UserWarning, match="Reducing radial"):
             eq.change_resolution(2, 2, 2, 4, 4, 4)
-        obj = ObjectiveFunction(
-            [EffectiveRipple(eq, knots_per_transit=50, num_transit=2, num_pitch=25)]
-        )
+        obj = ObjectiveFunction(_reduced_resolution_objective(eq, EffectiveRipple))
         obj.build(verbose=0)
         g = obj.grad(obj.x())
         assert not np.any(np.isnan(g))
@@ -2860,9 +2860,7 @@ class TestObjectiveNaNGrad:
         eq = get("ESTELL")
         with pytest.warns(UserWarning, match="Reducing radial"):
             eq.change_resolution(2, 2, 2, 4, 4, 4)
-        obj = ObjectiveFunction(
-            [GammaC(eq, knots_per_transit=50, num_transit=2, num_pitch=25)]
-        )
+        obj = ObjectiveFunction(_reduced_resolution_objective(eq, GammaC))
         obj.build(verbose=0)
         g = obj.grad(obj.x())
         assert not np.any(np.isnan(g))

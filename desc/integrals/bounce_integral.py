@@ -111,21 +111,47 @@ def _transform_to_clebsch_1d(grid, alpha, theta, B, N_B, is_reshaped=False):
 
     Notes
     -----
-    It appears the Fourier transform of θ may have small oscillatory bumps outside
-    reasonable bandwidths. This impedes full convergence of θ(α, ζ=0). Maybe this
-    is because θ is not a physical signal as it is determined by the optimizer.
+    The field line label α changes discontinuously, so the approximation
+    g defined with basis function in (α, ζ) coordinates to some continuous
+    function f does not guarantee continuity between cuts of the field line
+    until full convergence of g to f.
 
-    The field line label changes discontinuously, so functions defined on
-    cuts of the field line are not guaranteed continuity until full convergence.
-    Therefore, we explicitly enforce continuity of θ to short-circuit the
-    convergence.
+    Note if g were defined with basis functions in straight field line
+    coordinates, then continuity between cuts of the field line, as
+    determined by the straight field line coordinates (ϑ, ζ), is
+    guaranteed even with incomplete convergence (because the
+    parameters (ϑ, ζ) change continuously along the field line).
 
-    This works well because the first cut is on α=0, which is a knot of the
-    Fourier series, the Chebyshev points include a knot near endpoints,
-    so θ at the next cut of the field line is known with precision.
-    (Moreso if using Lobatto nodes). Note the Fourier series converges fast
-    for |B|, even in non-omnigenous configurations where (∂|B|/∂α)|ρ,ζ is not
-    small, so this is indeed some feature with θ.
+    Do not interpret this as superior function approximation.
+    Indeed, if g is defined with basis functions in (α, ζ) coordinates, then
+    g(α=α₀, ζ) will sample the approximation to f(α=α₀, ζ) for the full domain in ζ.
+    This holds even with incomplete convergence of g to f.
+    However, if g is defined with basis functions in (ϑ, ζ) coordinates, then
+    g(ϑ(α=α₀,ζ), ζ) will sample the approximation f(α=α₀ ± ε, ζ) with ε → 0 as
+    g converges to f.
+
+    (Visually, the small discontinuity apparent in g(α, ζ) at cuts of the field
+    line will not be visible in g(ϑ, ζ) because when moving along the field line
+    with g(ϑ, ζ) one is continuously flowing away from the starting field line,
+    (whereas g(α, ζ) has to "decide" at the cut what the next field line is).
+    (If full convergence is difficult to achieve, then in the context of surface
+    averaging bounce integrals, function approximation in (α, ζ) coordinates
+    might be preferable because most of the bounce integrals do not stretch
+    across toroidal transits).)
+
+    Now, it appears the Fourier transform of θ may have small oscillatory bumps
+    outside reasonable bandwidths. This impedes full convergence of any
+    approximation, and in particular the poloidal Fourier series for, θ(α, ζ=ζ₀).
+    Maybe this is because θ is not a physical signal as it is determined by the
+    optimizer. (Note the Fourier series converges fast for |B|, even in
+    non-omnigenous configurations where (∂|B|/∂α)|ρ,ζ is not small, so this is
+    indeed some feature with θ).
+
+    Therefore, we explicitly enforce continuity of our approximation of θ between
+    cuts to short-circuit the convergence. This works to remove the small
+    discontinuity between cuts of the field line because the first cut is on α=0,
+    which is a knot of the Fourier series, and the Chebyshev points include a knot
+    near endpoints, so θ at the next cut of the field line is known with precision.
 
     Parameters
     ----------

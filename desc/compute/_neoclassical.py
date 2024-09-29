@@ -39,7 +39,7 @@ def _alpha_mean(f):
     return f.mean(axis=0)
 
 
-def _compute(fun, interp_data, data, grid, num_pitch):
+def _compute(fun, interp_data, data, grid, num_pitch, reduce=True):
     """Compute ``fun`` for each α and ρ value iteratively to reduce memory usage.
 
     Parameters
@@ -52,6 +52,9 @@ def _compute(fun, interp_data, data, grid, num_pitch):
         Reshaped automatically.
     data : dict[str, jnp.ndarray]
         DESC data dict.
+    reduce : bool
+        Whether to compute mean over α and expand to grid.
+        Default is true.
 
     """
     pitch_inv, pitch_inv_weight = get_pitch_inv_quad(
@@ -71,7 +74,8 @@ def _compute(fun, interp_data, data, grid, num_pitch):
     interp_data = dict(
         zip(interp_data.keys(), Bounce1D.reshape_data(grid, *interp_data.values()))
     )
-    return grid.expand(_alpha_mean(imap(for_each_rho, interp_data)))
+    out = imap(for_each_rho, interp_data)
+    return grid.expand(_alpha_mean(out)) if reduce else out
 
 
 @register_compute_fun(

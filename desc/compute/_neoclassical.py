@@ -33,16 +33,17 @@ def _alpha_mean(f):
     return f.mean(axis=0)
 
 
-def _compute(fun, _data, data, grid, num_pitch):
+def _compute(fun, interp_data, data, grid, num_pitch):
     """Compute ``fun`` for each α and ρ value iteratively to reduce memory usage.
 
     Parameters
     ----------
     fun : callable
         Function to compute.
-    _data : dict[str, jnp.ndarray]
-        Data in shape (M, L, N) to provide to ``fun``.
-        Stuff in ``Bounce1D.required_names`` will be added automatically.
+    interp_data : dict[str, jnp.ndarray]
+        Data to provide to ``fun``.
+        Names in ``Bounce1D.required_names`` will be overridden.
+        Reshaped automatically.
     data : dict[str, jnp.ndarray]
         DESC data dict.
 
@@ -60,9 +61,11 @@ def _compute(fun, _data, data, grid, num_pitch):
         return imap(fun, x)
 
     for name in Bounce1D.required_names:
-        _data[name] = Bounce1D.reshape_data(grid, data[name])
-
-    return grid.expand(_alpha_mean(imap(for_each_rho, _data)))
+        interp_data[name] = data[name]
+    interp_data = dict(
+        zip(interp_data.keys(), Bounce1D.reshape_data(grid, *interp_data.values()))
+    )
+    return grid.expand(_alpha_mean(imap(for_each_rho, interp_data)))
 
 
 @register_compute_fun(
@@ -225,17 +228,13 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
         ).sum(axis=-1)
 
     # Interpolate |∇ρ| κ_g since it is smoother than κ_g alone.
-    _data = {
-        "|grad(rho)|*kappa_g": Bounce1D.reshape_data(
-            grid, data["|grad(rho)|"] * data["kappa_g"]
-        )
-    }
+    interp_data = {"|grad(rho)|*kappa_g": data["|grad(rho)|"] * data["kappa_g"]}
     B0 = data["max_tz |B|"]
     data["effective ripple 3/2"] = (
         jnp.pi
         / (8 * 2**0.5)
         * (B0 * data["R0"] / data["<|grad(rho)|>"]) ** 2
-        * _compute(eps_32, _data, data, grid, kwargs.get("num_pitch", 50))
+        * _compute(eps_32, interp_data, data, grid, kwargs.get("num_pitch", 50))
         / data["<L|r,a>"]
     )
     return data

@@ -27,6 +27,25 @@ from ..integrals.quad_utils import (
 from ..utils import cross, dot, safediv
 from .data_index import register_compute_fun
 
+_bounce_doc = {
+    "quad": (
+        "tuple[jnp.ndarray] : Quadrature points and weights for bounce integrals. "
+        "Default option is well tested."
+    ),
+    "num_quad": (
+        "int : Resolution for quadrature of bounce integrals. "
+        "Default is 32. This option is ignored if given ``quad``."
+    ),
+    "num_pitch": "int : Resolution for quadrature over velocity coordinate.",
+    "num_well": (
+        "int : Maximum number of wells to detect for each pitch and field line. "
+        "Default is to detect all wells, but due to limitations in JAX this option "
+        "may consume more memory. Specifying a number that tightly upper bounds "
+        "the number of wells will increase performance."
+    ),
+    "batch": "bool : Whether to vectorize part of the computation. Default is true.",
+}
+
 
 def _alpha_mean(f):
     """Simple mean over field lines.
@@ -161,16 +180,7 @@ def _G_ra_fsa(data, transforms, profiles, **kwargs):
     + Bounce1D.required_names,
     resolution_requirement="z",
     source_grid_requirement={"coordinates": "raz", "is_meshgrid": True},
-    quad="jnp.ndarray : Optional, quadrature points and weights for bounce integrals.",
-    num_quad="int : Bounce integral resolution. Ignored if given ``quad``. Default 32.",
-    num_pitch="int : Resolution for quadrature over velocity coordinate. Default 50.",
-    num_well=(
-        "int : Maximum number of wells to detect for each pitch and field line. "
-        "Default is to detect all wells, but due to limitations in JAX this option "
-        "may consume more memory. Specifying a number that tightly upper bounds "
-        "the number of wells will increase performance."
-    ),
-    batch="bool : Whether to vectorize part of the computation. Default is true.",
+    **_bounce_doc,
     # Some notes on choosing the resolution hyperparameters:
     # The default settings were chosen such that the effective ripple profile on
     # the W7-X stellarator looks similar to the profile computed at higher resolution,
@@ -286,16 +296,7 @@ def _effective_ripple(params, transforms, profiles, data, **kwargs):
     data=["min_tz |B|", "max_tz |B|", "cvdrift0", "gbdrift", "<L|r,a>"]
     + Bounce1D.required_names,
     source_grid_requirement={"coordinates": "raz", "is_meshgrid": True},
-    quad="jnp.ndarray : Optional, quadrature points and weights for bounce integrals.",
-    num_quad="int : Bounce integral resolution. Ignored if given ``quad``. Default 32.",
-    num_pitch="int : Resolution for quadrature over velocity coordinate. Default 64.",
-    num_well=(
-        "int : Maximum number of wells to detect for each pitch and field line. "
-        "Default is to detect all wells, but due to limitations in JAX this option "
-        "may consume more memory. Specifying a number that tightly upper bounds "
-        "the number of wells will increase performance. "
-    ),
-    batch="bool : Whether to vectorize part of the computation. Default is true.",
+    **_bounce_doc,
 )
 @partial(jit, static_argnames=["num_quad", "num_pitch", "num_well", "batch"])
 def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
@@ -398,19 +399,8 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
     ]
     + Bounce1D.required_names,
     source_grid_requirement={"coordinates": "raz", "is_meshgrid": True},
-    quad="jnp.ndarray : Optional, quadrature points and weights for strongly singular "
-    "bounce integrals.",
-    quad2="jnp.ndarray : Optional, quadrature points and weights for weakly singular "
-    "bounce integrals.",
-    num_quad="int : Bounce integral resolution. Ignored if given ``quad``. Default 32.",
-    num_pitch="int : Resolution for quadrature over velocity coordinate. Default 64.",
-    num_well=(
-        "int : Maximum number of wells to detect for each pitch and field line. "
-        "Default is to detect all wells, but due to limitations in JAX this option "
-        "may consume more memory. Specifying a number that tightly upper bounds "
-        "the number of wells will increase performance. "
-    ),
-    batch="bool : Whether to vectorize part of the computation. Default is true.",
+    **_bounce_doc,
+    quad2="Same as ``quad`` for the weak singular integrals in particular.",
 )
 @partial(jit, static_argnames=["num_quad", "num_pitch", "num_well", "batch"])
 def _Gamma_c(params, transforms, profiles, data, **kwargs):

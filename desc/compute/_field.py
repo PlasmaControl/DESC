@@ -119,6 +119,7 @@ def _B_sup_zeta(params, transforms, profiles, data, **kwargs):
     data=["psi_r/sqrt(g)", "phi_z", "theta_PEST_t", "phi_t", "theta_PEST_z"],
 )
 def _B_sup_phi(params, transforms, profiles, data, **kwargs):
+    # Written like this, independent of iota, to enable computing without integration.
     data["B^phi"] = data["psi_r/sqrt(g)"] * (
         data["phi_z"] * data["theta_PEST_t"] - data["phi_t"] * data["theta_PEST_z"]
     )
@@ -359,7 +360,8 @@ def _B_R(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="B_phi",
-    label="B_{\\phi} = \\mathbf{B} \\cdot \\hat{\\phi}",
+    label="B_{\\phi} = \\mathbf{B} \\cdot \\hat{\\phi} "
+    "= \\mathbf{B} \\cdot R^{-1} \\mathbf{e}_{\\phi} |_{R, Z}",
     units="T",
     units_long="Tesla",
     description="Toroidal component of magnetic field in lab frame",

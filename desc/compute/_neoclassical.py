@@ -439,12 +439,6 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
     #              ----------------------------------------------
     # (|∇ρ| ‖e_α|ρ,ϕ‖)ᵢ ∫ dℓ [ (1 − λ|B|/2)/√(1 − λ|B|) ∂|B|/∂ψ + √(1 − λ|B|) K ] / |B|
 
-    # Note that we rewrite equivalents of Nemov et al.'s expression's using
-    # single valued maps of a physical coordinates. This avoids the computational
-    # issues of multivalued maps. It further enables use of more efficient methods,
-    # such as fast transforms and fixed computational grids throughout optimization,
-    # which are used in the ``Bounce2D`` operator on a developer branch.
-
     def d_v_tau(B, pitch):
         return safediv(2.0, jnp.sqrt(jnp.abs(1 - pitch * B)))
 
@@ -511,17 +505,25 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
             * data["pitch_inv weight"]
         ).sum(axis=-1)
 
+    # We rewrite equivalents of Nemov et al.'s expression's using single-valued
+    # maps of a physical coordinates. This avoids the computational issues of
+    # multivalued maps. It further enables use of more efficient methods, such as
+    # fast transforms and fixed computational grids throughout optimization, which
+    # are used in the ``Bounce2D`` operator on a developer branch. Also, Nemov
+    # assumes B^ϕ > 0 in some comments; this is not true in DESC, but the
+    # computations done here are invariant to the sign.
+
+    # It is assumed the grid is sufficiently dense to reconstruct |B|,
+    # so anything smoother than |B| may be captured accurately as a single
+    # spline rather than splining each component.
     interp_data = {
         "|grad(rho)|*kappa_g": data["|grad(rho)|"] * data["kappa_g"],
         "|grad(rho)|*|e_alpha|r,p|": data["|grad(rho)|"] * data["|e_alpha|r,p|"],
         "|B|_psi|v,p": data["|B|_r|v,p"] / data["psi_r"],
-        # TODO: Confirm if K is smoother than individual components.
-        #  If not, should spline separately.
         "K": data["iota_r"] * dot(cross(data["e^rho"], data["b"]), data["grad(phi)"])
-        # Behaves as log derivative if one ignores the issue of an argument with units.
-        # Smoothness determined by + lower bound of argument ∂log(|B|²/B^ϕ)/∂ψ |B|.
-        # Note that Nemov assumes B^ϕ > 0; this is not true in DESC, but we account
-        # for that in this computation.
+        # Behaves as ∂log(|B|²/B^ϕ)/∂ψ |B| if one ignores the issue of a log argument
+        # with units. Smoothness determined by positive lower bound of log argument,
+        # and hence behaves as ∂log(|B|)/∂ψ |B| = ∂|B|/∂ψ.
         - (2 * data["|B|_r|v,p"] - data["|B|"] * data["B^phi_r|v,p"] / data["B^phi"])
         / data["psi_r"],
     }

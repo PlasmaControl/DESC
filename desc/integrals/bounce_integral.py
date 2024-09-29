@@ -127,7 +127,7 @@ def _transform_to_clebsch_1d(grid, alpha, theta, B, N_B, is_reshaped=False):
     g(α=α₀, ζ) will sample the approximation to f(α=α₀, ζ) for the full domain in ζ.
     This holds even with incomplete convergence of g to f.
     However, if g is defined with basis functions in (ϑ, ζ) coordinates, then
-    g(ϑ(α=α₀,ζ), ζ) will sample the approximation f(α=α₀ ± ε, ζ) with ε → 0 as
+    g(ϑ(α=α₀,ζ), ζ) will sample the approximation to f(α=α₀ ± ε, ζ) with ε → 0 as
     g converges to f.
 
     (Visually, the small discontinuity apparent in g(α, ζ) at cuts of the field

@@ -12,10 +12,9 @@ from desc.backend import (
 )
 from desc.compute import get_profiles, get_transforms, rpz2xyz
 from desc.compute.utils import _compute as compute_fun
-from desc.compute.utils import safenorm
 from desc.grid import LinearGrid, _Grid
 from desc.integrals import compute_B_plasma
-from desc.utils import Timer, errorif, warnif
+from desc.utils import Timer, errorif, safenorm, warnif
 
 from .normalization import compute_scaling_factors
 from .objective_funs import _Objective
@@ -60,6 +59,17 @@ class _CoilObjective(_Objective):
         If a list, must have the same structure as coil.
     name : str, optional
         Name of the objective function.
+    jac_chunk_size : int , optional
+        Will calculate the Jacobian for this objective ``jac_chunk_size``
+        columns at a time, instead of all at once. The memory usage of the
+        Jacobian calculation is roughly ``memory usage = m0 + m1*jac_chunk_size``:
+        the smaller the chunk size, the less memory the Jacobian calculation
+        will require (with some baseline memory usage). The time to compute the
+        Jacobian is roughly ``t=t0 +t1/jac_chunk_size``, so the larger the
+        ``jac_chunk_size``, the faster the calculation takes, at the cost of
+        requiring more memory. A ``jac_chunk_size`` of 1 corresponds to the least
+        memory intensive, but slowest method of calculating the Jacobian.
+        If None, it will use the largest size i.e ``obj.dim_x``.
 
     """
 
@@ -76,6 +86,7 @@ class _CoilObjective(_Objective):
         deriv_mode="auto",
         grid=None,
         name=None,
+        jac_chunk_size=None,
     ):
         self._grid = grid
         self._data_keys = data_keys
@@ -90,6 +101,7 @@ class _CoilObjective(_Objective):
             loss_function=loss_function,
             deriv_mode=deriv_mode,
             name=name,
+            jac_chunk_size=jac_chunk_size,
         )
 
     def build(self, use_jit=True, verbose=1):  # noqa:C901
@@ -255,6 +267,17 @@ class CoilLength(_CoilObjective):
         Defaults to ``LinearGrid(N=2 * coil.N + 5)``
     name : str, optional
         Name of the objective function.
+    jac_chunk_size : int , optional
+        Will calculate the Jacobian for this objective ``jac_chunk_size``
+        columns at a time, instead of all at once. The memory usage of the
+        Jacobian calculation is roughly ``memory usage = m0 + m1*jac_chunk_size``:
+        the smaller the chunk size, the less memory the Jacobian calculation
+        will require (with some baseline memory usage). The time to compute the
+        Jacobian is roughly ``t=t0 +t1/jac_chunk_size``, so the larger the
+        ``jac_chunk_size``, the faster the calculation takes, at the cost of
+        requiring more memory. A ``jac_chunk_size`` of 1 corresponds to the least
+        memory intensive, but slowest method of calculating the Jacobian.
+        If None, it will use the largest size i.e ``obj.dim_x``.
 
     """
 
@@ -274,6 +297,7 @@ class CoilLength(_CoilObjective):
         deriv_mode="auto",
         grid=None,
         name="coil length",
+        jac_chunk_size=None,
     ):
         if target is None and bounds is None:
             target = 2 * np.pi
@@ -290,6 +314,7 @@ class CoilLength(_CoilObjective):
             deriv_mode=deriv_mode,
             grid=grid,
             name=name,
+            jac_chunk_size=jac_chunk_size,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -380,6 +405,17 @@ class CoilCurvature(_CoilObjective):
         Defaults to ``LinearGrid(N=2 * coil.N + 5)``
     name : str, optional
         Name of the objective function.
+    jac_chunk_size : int , optional
+        Will calculate the Jacobian for this objective ``jac_chunk_size``
+        columns at a time, instead of all at once. The memory usage of the
+        Jacobian calculation is roughly ``memory usage = m0 + m1*jac_chunk_size``:
+        the smaller the chunk size, the less memory the Jacobian calculation
+        will require (with some baseline memory usage). The time to compute the
+        Jacobian is roughly ``t=t0 +t1/jac_chunk_size``, so the larger the
+        ``jac_chunk_size``, the faster the calculation takes, at the cost of
+        requiring more memory. A ``jac_chunk_size`` of 1 corresponds to the least
+        memory intensive, but slowest method of calculating the Jacobian.
+        If None, it will use the largest size i.e ``obj.dim_x``.
 
     """
 
@@ -399,6 +435,7 @@ class CoilCurvature(_CoilObjective):
         deriv_mode="auto",
         grid=None,
         name="coil curvature",
+        jac_chunk_size=None,
     ):
         if target is None and bounds is None:
             bounds = (0, 1)
@@ -415,6 +452,7 @@ class CoilCurvature(_CoilObjective):
             deriv_mode=deriv_mode,
             grid=grid,
             name=name,
+            jac_chunk_size=jac_chunk_size,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -500,6 +538,17 @@ class CoilTorsion(_CoilObjective):
         Defaults to ``LinearGrid(N=2 * coil.N + 5)``
     name : str, optional
         Name of the objective function.
+    jac_chunk_size : int , optional
+        Will calculate the Jacobian for this objective ``jac_chunk_size``
+        columns at a time, instead of all at once. The memory usage of the
+        Jacobian calculation is roughly ``memory usage = m0 + m1*jac_chunk_size``:
+        the smaller the chunk size, the less memory the Jacobian calculation
+        will require (with some baseline memory usage). The time to compute the
+        Jacobian is roughly ``t=t0 +t1/jac_chunk_size``, so the larger the
+        ``jac_chunk_size``, the faster the calculation takes, at the cost of
+        requiring more memory. A ``jac_chunk_size`` of 1 corresponds to the least
+        memory intensive, but slowest method of calculating the Jacobian.
+        If None, it will use the largest size i.e ``obj.dim_x``.
 
     """
 
@@ -519,6 +568,7 @@ class CoilTorsion(_CoilObjective):
         deriv_mode="auto",
         grid=None,
         name="coil torsion",
+        jac_chunk_size=None,
     ):
         if target is None and bounds is None:
             target = 0
@@ -535,6 +585,7 @@ class CoilTorsion(_CoilObjective):
             deriv_mode=deriv_mode,
             grid=grid,
             name=name,
+            jac_chunk_size=jac_chunk_size,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -620,6 +671,17 @@ class CoilCurrentLength(CoilLength):
         Defaults to ``LinearGrid(N=2 * coil.N + 5)``
     name : str, optional
         Name of the objective function.
+    jac_chunk_size : int , optional
+        Will calculate the Jacobian for this objective ``jac_chunk_size``
+        columns at a time, instead of all at once. The memory usage of the
+        Jacobian calculation is roughly ``memory usage = m0 + m1*jac_chunk_size``:
+        the smaller the chunk size, the less memory the Jacobian calculation
+        will require (with some baseline memory usage). The time to compute the
+        Jacobian is roughly ``t=t0 +t1/jac_chunk_size``, so the larger the
+        ``jac_chunk_size``, the faster the calculation takes, at the cost of
+        requiring more memory. A ``jac_chunk_size`` of 1 corresponds to the least
+        memory intensive, but slowest method of calculating the Jacobian.
+        If None, it will use the largest size i.e ``obj.dim_x``.
 
     """
 
@@ -639,6 +701,7 @@ class CoilCurrentLength(CoilLength):
         deriv_mode="auto",
         grid=None,
         name="coil current length",
+        jac_chunk_size=None,
     ):
         if target is None and bounds is None:
             target = 0
@@ -654,6 +717,7 @@ class CoilCurrentLength(CoilLength):
             deriv_mode=deriv_mode,
             grid=grid,
             name=name,
+            jac_chunk_size=jac_chunk_size,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -748,6 +812,17 @@ class CoilSetMinDistance(_Objective):
         If a list, must have the same structure as coils.
     name : str, optional
         Name of the objective function.
+    jac_chunk_size : int , optional
+        Will calculate the Jacobian for this objective ``jac_chunk_size``
+        columns at a time, instead of all at once. The memory usage of the
+        Jacobian calculation is roughly ``memory usage = m0 + m1*jac_chunk_size``:
+        the smaller the chunk size, the less memory the Jacobian calculation
+        will require (with some baseline memory usage). The time to compute the
+        Jacobian is roughly ``t=t0 +t1/jac_chunk_size``, so the larger the
+        ``jac_chunk_size``, the faster the calculation takes, at the cost of
+        requiring more memory. A ``jac_chunk_size`` of 1 corresponds to the least
+        memory intensive, but slowest method of calculating the Jacobian.
+        If None, it will use the largest size i.e ``obj.dim_x``.
 
     """
 
@@ -767,6 +842,7 @@ class CoilSetMinDistance(_Objective):
         deriv_mode="auto",
         grid=None,
         name="coil-coil minimum distance",
+        jac_chunk_size=None,
     ):
         from desc.coils import CoilSet
 
@@ -788,6 +864,7 @@ class CoilSetMinDistance(_Objective):
             loss_function=loss_function,
             deriv_mode=deriv_mode,
             name=name,
+            jac_chunk_size=jac_chunk_size,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -922,6 +999,17 @@ class PlasmaCoilSetMinDistance(_Objective):
         False by default, so that self.things = [coil, eq].
     name : str, optional
         Name of the objective function.
+    jac_chunk_size : int , optional
+        Will calculate the Jacobian for this objective ``jac_chunk_size``
+        columns at a time, instead of all at once. The memory usage of the
+        Jacobian calculation is roughly ``memory usage = m0 + m1*jac_chunk_size``:
+        the smaller the chunk size, the less memory the Jacobian calculation
+        will require (with some baseline memory usage). The time to compute the
+        Jacobian is roughly ``t=t0 +t1/jac_chunk_size``, so the larger the
+        ``jac_chunk_size``, the faster the calculation takes, at the cost of
+        requiring more memory. A ``jac_chunk_size`` of 1 corresponds to the least
+        memory intensive, but slowest method of calculating the Jacobian.
+        If None, it will use the largest size i.e ``obj.dim_x``.
 
     """
 
@@ -945,6 +1033,7 @@ class PlasmaCoilSetMinDistance(_Objective):
         eq_fixed=False,
         coils_fixed=False,
         name="plasma-coil minimum distance",
+        jac_chunk_size=None,
     ):
         if target is None and bounds is None:
             bounds = (1, np.inf)
@@ -970,6 +1059,7 @@ class PlasmaCoilSetMinDistance(_Objective):
             loss_function=loss_function,
             deriv_mode=deriv_mode,
             name=name,
+            jac_chunk_size=jac_chunk_size,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -1152,6 +1242,17 @@ class QuadraticFlux(_Objective):
         plasma currents) is set to zero.
     name : str
         Name of the objective function.
+    jac_chunk_size : int , optional
+        Will calculate the Jacobian for this objective ``jac_chunk_size``
+        columns at a time, instead of all at once. The memory usage of the
+        Jacobian calculation is roughly ``memory usage = m0 + m1*jac_chunk_size``:
+        the smaller the chunk size, the less memory the Jacobian calculation
+        will require (with some baseline memory usage). The time to compute the
+        Jacobian is roughly ``t=t0 +t1/jac_chunk_size``, so the larger the
+        ``jac_chunk_size``, the faster the calculation takes, at the cost of
+        requiring more memory. A ``jac_chunk_size`` of 1 corresponds to the least
+        memory intensive, but slowest method of calculating the Jacobian.
+        If None, it will use the largest size i.e ``obj.dim_x``.
 
     """
 
@@ -1175,6 +1276,7 @@ class QuadraticFlux(_Objective):
         field_grid=None,
         vacuum=False,
         name="Quadratic flux",
+        jac_chunk_size=None,
     ):
         if target is None and bounds is None:
             target = 0
@@ -1193,6 +1295,7 @@ class QuadraticFlux(_Objective):
             normalize=normalize,
             normalize_target=normalize_target,
             name=name,
+            jac_chunk_size=jac_chunk_size,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -1310,6 +1413,14 @@ class ToroidalFlux(_Objective):
     by making the coil currents zero. Instead, this objective ensures
     the coils create the necessary toroidal flux for the equilibrium field.
 
+    Will try to use the vector potential method to calculate the toroidal flux
+    (Φ = ∮ 𝐀 ⋅ 𝐝𝐥 over the perimeter of a constant zeta plane)
+    instead of the brute force method using the magnetic field
+    (Φ = ∯ 𝐁 ⋅ 𝐝𝐒 over a constant zeta XS). The vector potential method
+    is much more efficient, however not every ``MagneticField`` object
+    has a vector potential available to compute, so in those cases
+    the magnetic field method is used.
+
     Parameters
     ----------
     eq : Equilibrium
@@ -1354,6 +1465,18 @@ class ToroidalFlux(_Objective):
         zeta=jnp.array(0.0), NFP=eq.NFP).
     name : str, optional
         Name of the objective function.
+    jac_chunk_size : int , optional
+        Will calculate the Jacobian for this objective ``jac_chunk_size``
+        columns at a time, instead of all at once. The memory usage of the
+        Jacobian calculation is roughly ``memory usage = m0 + m1*jac_chunk_size``:
+        the smaller the chunk size, the less memory the Jacobian calculation
+        will require (with some baseline memory usage). The time to compute the
+        Jacobian is roughly ``t=t0 +t1/jac_chunk_size``, so the larger the
+        ``jac_chunk_size``, the faster the calculation takes, at the cost of
+        requiring more memory. A ``jac_chunk_size`` of 1 corresponds to the least
+        memory intensive, but slowest method of calculating the Jacobian.
+        If None, it will use the largest size i.e ``obj.dim_x``.
+
 
     """
 
@@ -1375,6 +1498,7 @@ class ToroidalFlux(_Objective):
         field_grid=None,
         eval_grid=None,
         name="toroidal-flux",
+        jac_chunk_size=None,
     ):
         if target is None and bounds is None:
             target = eq.Psi
@@ -1382,6 +1506,7 @@ class ToroidalFlux(_Objective):
         self._field_grid = field_grid
         self._eval_grid = eval_grid
         self._eq = eq
+        # TODO: add eq_fixed option so this can be used in single stage
 
         super().__init__(
             things=[field],
@@ -1393,6 +1518,7 @@ class ToroidalFlux(_Objective):
             loss_function=loss_function,
             deriv_mode=deriv_mode,
             name=name,
+            jac_chunk_size=jac_chunk_size,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -1407,9 +1533,17 @@ class ToroidalFlux(_Objective):
 
         """
         eq = self._eq
+        self._use_vector_potential = True
+        try:
+            self._field.compute_magnetic_vector_potential([0, 0, 0])
+        except (NotImplementedError, ValueError):
+            self._use_vector_potential = False
         if self._eval_grid is None:
             eval_grid = LinearGrid(
-                L=eq.L_grid, M=eq.M_grid, zeta=jnp.array(0.0), NFP=eq.NFP
+                L=eq.L_grid if not self._use_vector_potential else 0,
+                M=eq.M_grid,
+                zeta=jnp.array(0.0),
+                NFP=eq.NFP,
             )
             self._eval_grid = eval_grid
         eval_grid = self._eval_grid
@@ -1444,10 +1578,12 @@ class ToroidalFlux(_Objective):
         if verbose > 0:
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
-
-        data = eq.compute(
-            ["R", "phi", "Z", "|e_rho x e_theta|", "n_zeta"], grid=eval_grid
-        )
+        data_keys = ["R", "phi", "Z"]
+        if self._use_vector_potential:
+            data_keys += ["e_theta"]
+        else:
+            data_keys += ["|e_rho x e_theta|", "n_zeta"]
+        data = eq.compute(data_keys, grid=eval_grid)
 
         plasma_coords = jnp.array([data["R"], data["phi"], data["Z"]]).T
 
@@ -1489,22 +1625,32 @@ class ToroidalFlux(_Objective):
 
         data = constants["equil_data"]
         plasma_coords = constants["plasma_coords"]
-
-        B = constants["field"].compute_magnetic_field(
-            plasma_coords,
-            basis="rpz",
-            source_grid=constants["field_grid"],
-            params=field_params,
-        )
         grid = constants["eval_grid"]
 
-        B_dot_n_zeta = jnp.sum(B * data["n_zeta"], axis=1)
+        if self._use_vector_potential:
+            A = constants["field"].compute_magnetic_vector_potential(
+                plasma_coords,
+                basis="rpz",
+                source_grid=constants["field_grid"],
+                params=field_params,
+            )
 
-        Psi = jnp.sum(
-            grid.spacing[:, 0]
-            * grid.spacing[:, 1]
-            * data["|e_rho x e_theta|"]
-            * B_dot_n_zeta
-        )
+            A_dot_e_theta = jnp.sum(A * data["e_theta"], axis=1)
+            Psi = jnp.sum(grid.spacing[:, 1] * A_dot_e_theta)
+        else:
+            B = constants["field"].compute_magnetic_field(
+                plasma_coords,
+                basis="rpz",
+                source_grid=constants["field_grid"],
+                params=field_params,
+            )
+
+            B_dot_n_zeta = jnp.sum(B * data["n_zeta"], axis=1)
+            Psi = jnp.sum(
+                grid.spacing[:, 0]
+                * grid.spacing[:, 1]
+                * data["|e_rho x e_theta|"]
+                * B_dot_n_zeta
+            )
 
         return Psi

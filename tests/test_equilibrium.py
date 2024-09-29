@@ -53,11 +53,7 @@ def test_map_coordinates():
         eq.change_resolution(3, 3, 3, 6, 6, 6)
     n = 100
     coords = np.array([np.ones(n), np.zeros(n), np.linspace(0, 10 * np.pi, n)]).T
-    out = eq.map_coordinates(
-        coords,
-        inbasis=["rho", "alpha", "zeta"],
-        period=(np.inf, 2 * np.pi, np.inf),
-    )
+    out = eq.map_coordinates(coords, inbasis=["rho", "alpha", "zeta"])
     assert np.isfinite(out).all()
 
     eq = get("DSHAPE")

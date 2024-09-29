@@ -47,7 +47,7 @@ class QuasisymmetryBoozer(_Objective):
         reverse mode and forward over reverse mode respectively.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
-        Must be a LinearGrid with a single flux surface and sym=False.
+        Must be a LinearGrid with sym=False.
         Defaults to ``LinearGrid(M=M_booz, N=N_booz)``.
     helicity : tuple, optional
         Type of quasi-symmetry (M, N). Default = quasi-axisymmetry (1, 0).
@@ -57,6 +57,17 @@ class QuasisymmetryBoozer(_Objective):
         Toroidal resolution of Boozer transformation. Default = 2 * eq.N.
     name : str, optional
         Name of the objective function.
+    jac_chunk_size : int , optional
+        Will calculate the Jacobian for this objective ``jac_chunk_size``
+        columns at a time, instead of all at once. The memory usage of the
+        Jacobian calculation is roughly ``memory usage = m0 + m1*jac_chunk_size``:
+        the smaller the chunk size, the less memory the Jacobian calculation
+        will require (with some baseline memory usage). The time to compute the
+        Jacobian is roughly ``t=t0 +t1/jac_chunk_size``, so the larger the
+        ``jac_chunk_size``, the faster the calculation takes, at the cost of
+        requiring more memory. A ``jac_chunk_size`` of 1 corresponds to the least
+        memory intensive, but slowest method of calculating the Jacobian.
+        If None, it will use the largest size i.e ``obj.dim_x``.
 
     """
 
@@ -78,6 +89,7 @@ class QuasisymmetryBoozer(_Objective):
         M_booz=None,
         N_booz=None,
         name="QS Boozer",
+        jac_chunk_size=None,
     ):
         if target is None and bounds is None:
             target = 0
@@ -95,6 +107,7 @@ class QuasisymmetryBoozer(_Objective):
             loss_function=loss_function,
             deriv_mode=deriv_mode,
             name=name,
+            jac_chunk_size=jac_chunk_size,
         )
 
         self._print_value_fmt = "Quasi-symmetry ({},{}) Boozer error: ".format(
@@ -122,12 +135,6 @@ class QuasisymmetryBoozer(_Objective):
             grid = self._grid
 
         errorif(grid.sym, ValueError, "QuasisymmetryBoozer grid must be non-symmetric")
-        errorif(
-            grid.num_rho != 1,
-            ValueError,
-            "QuasisymmetryBoozer grid must be on a single surface. "
-            "To target multiple surfaces, use multiple objectives.",
-        )
         warnif(
             grid.num_theta < 2 * eq.M,
             RuntimeWarning,
@@ -195,7 +202,7 @@ class QuasisymmetryBoozer(_Objective):
         Returns
         -------
         f : ndarray
-            Quasi-symmetry flux function error at each node (T^3).
+            Symmetry breaking harmonics of B (T).
 
         """
         if constants is None:
@@ -207,8 +214,11 @@ class QuasisymmetryBoozer(_Objective):
             transforms=constants["transforms"],
             profiles=constants["profiles"],
         )
-        B_mn = constants["matrix"] @ data["|B|_mn"]
-        return B_mn[constants["idx"]]
+        B_mn = data["|B|_mn"].reshape((constants["transforms"]["grid"].num_rho, -1))
+        B_mn = constants["matrix"] @ B_mn.T
+        # output order = (rho, mn).flatten(), ie all the surfaces concatenated
+        # one after the other
+        return B_mn[constants["idx"]].T.flatten()
 
     @property
     def helicity(self):
@@ -272,6 +282,17 @@ class QuasisymmetryTwoTerm(_Objective):
         Type of quasi-symmetry (M, N).
     name : str, optional
         Name of the objective function.
+    jac_chunk_size : int , optional
+        Will calculate the Jacobian for this objective ``jac_chunk_size``
+        columns at a time, instead of all at once. The memory usage of the
+        Jacobian calculation is roughly ``memory usage = m0 + m1*jac_chunk_size``:
+        the smaller the chunk size, the less memory the Jacobian calculation
+        will require (with some baseline memory usage). The time to compute the
+        Jacobian is roughly ``t=t0 +t1/jac_chunk_size``, so the larger the
+        ``jac_chunk_size``, the faster the calculation takes, at the cost of
+        requiring more memory. A ``jac_chunk_size`` of 1 corresponds to the least
+        memory intensive, but slowest method of calculating the Jacobian.
+        If None, it will use the largest size i.e ``obj.dim_x``.
 
     """
 
@@ -292,6 +313,7 @@ class QuasisymmetryTwoTerm(_Objective):
         grid=None,
         helicity=(1, 0),
         name="QS two-term",
+        jac_chunk_size=None,
     ):
         if target is None and bounds is None:
             target = 0
@@ -307,6 +329,7 @@ class QuasisymmetryTwoTerm(_Objective):
             loss_function=loss_function,
             deriv_mode=deriv_mode,
             name=name,
+            jac_chunk_size=jac_chunk_size,
         )
 
         self._print_value_fmt = "Quasi-symmetry ({},{}) two-term error: ".format(
@@ -457,6 +480,17 @@ class QuasisymmetryTripleProduct(_Objective):
         Defaults to ``LinearGrid(M=eq.M_grid, N=eq.N_grid)``.
     name : str, optional
         Name of the objective function.
+    jac_chunk_size : int , optional
+        Will calculate the Jacobian for this objective ``jac_chunk_size``
+        columns at a time, instead of all at once. The memory usage of the
+        Jacobian calculation is roughly ``memory usage = m0 + m1*jac_chunk_size``:
+        the smaller the chunk size, the less memory the Jacobian calculation
+        will require (with some baseline memory usage). The time to compute the
+        Jacobian is roughly ``t=t0 +t1/jac_chunk_size``, so the larger the
+        ``jac_chunk_size``, the faster the calculation takes, at the cost of
+        requiring more memory. A ``jac_chunk_size`` of 1 corresponds to the least
+        memory intensive, but slowest method of calculating the Jacobian.
+        If None, it will use the largest size i.e ``obj.dim_x``.
 
     """
 
@@ -476,6 +510,7 @@ class QuasisymmetryTripleProduct(_Objective):
         deriv_mode="auto",
         grid=None,
         name="QS triple product",
+        jac_chunk_size=None,
     ):
         if target is None and bounds is None:
             target = 0
@@ -490,6 +525,7 @@ class QuasisymmetryTripleProduct(_Objective):
             loss_function=loss_function,
             deriv_mode=deriv_mode,
             name=name,
+            jac_chunk_size=jac_chunk_size,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -633,8 +669,19 @@ class Omnigenity(_Objective):
         computation time during optimization and self.things = [eq] only.
         If False, the field is allowed to change during the optimization and its
         associated data are re-computed at every iteration (Default).
-    name : str
+    name : str, optional
         Name of the objective function.
+    jac_chunk_size : int , optional
+        Will calculate the Jacobian for this objective ``jac_chunk_size``
+        columns at a time, instead of all at once. The memory usage of the
+        Jacobian calculation is roughly ``memory usage = m0 + m1*jac_chunk_size``:
+        the smaller the chunk size, the less memory the Jacobian calculation
+        will require (with some baseline memory usage). The time to compute the
+        Jacobian is roughly ``t=t0 +t1/jac_chunk_size``, so the larger the
+        ``jac_chunk_size``, the faster the calculation takes, at the cost of
+        requiring more memory. A ``jac_chunk_size`` of 1 corresponds to the least
+        memory intensive, but slowest method of calculating the Jacobian.
+        If None, it will use the largest size i.e ``obj.dim_x``.
 
     """
 
@@ -661,6 +708,7 @@ class Omnigenity(_Objective):
         eq_fixed=False,
         field_fixed=False,
         name="omnigenity",
+        jac_chunk_size=None,
     ):
         if target is None and bounds is None:
             target = 0
@@ -692,6 +740,7 @@ class Omnigenity(_Objective):
             loss_function=loss_function,
             deriv_mode=deriv_mode,
             name=name,
+            jac_chunk_size=jac_chunk_size,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -970,6 +1019,17 @@ class Isodynamicity(_Objective):
         Defaults to ``LinearGrid(M=eq.M_grid, N=eq.N_grid)``.
     name : str, optional
         Name of the objective function.
+    jac_chunk_size : int , optional
+        Will calculate the Jacobian for this objective ``jac_chunk_size``
+        columns at a time, instead of all at once. The memory usage of the
+        Jacobian calculation is roughly ``memory usage = m0 + m1*jac_chunk_size``:
+        the smaller the chunk size, the less memory the Jacobian calculation
+        will require (with some baseline memory usage). The time to compute the
+        Jacobian is roughly ``t=t0 +t1/jac_chunk_size``, so the larger the
+        ``jac_chunk_size``, the faster the calculation takes, at the cost of
+        requiring more memory. A ``jac_chunk_size`` of 1 corresponds to the least
+        memory intensive, but slowest method of calculating the Jacobian.
+        If None, it will use the largest size i.e ``obj.dim_x``.
 
     """
 
@@ -989,6 +1049,7 @@ class Isodynamicity(_Objective):
         deriv_mode="auto",
         grid=None,
         name="Isodynamicity",
+        jac_chunk_size=None,
     ):
         if target is None and bounds is None:
             target = 0
@@ -1003,6 +1064,7 @@ class Isodynamicity(_Objective):
             loss_function=loss_function,
             deriv_mode=deriv_mode,
             name=name,
+            jac_chunk_size=jac_chunk_size,
         )
 
     def build(self, use_jit=True, verbose=1):

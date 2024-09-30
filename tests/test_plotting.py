@@ -47,9 +47,9 @@ from desc.plotting import (
 from desc.utils import isalmostequal
 from desc.vmec import VMECIO
 
-tol_1d = 7.8
-tol_2d = 15
-tol_3d = 15
+tol_1d = 4.5
+tol_2d = 10
+tol_3d = 10
 
 
 @pytest.mark.unit

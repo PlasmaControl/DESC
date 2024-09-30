@@ -1343,6 +1343,7 @@ def test_derivative_modes():
     assert obj1._jac_chunk_size > 0
     obj3.build()
     x = obj1.x(eq, surf)
+    v = jnp.ones_like(x)
     g1 = obj1.grad(x)
     g2 = obj2.grad(x)
     g3 = obj3.grad(x)
@@ -1363,6 +1364,48 @@ def test_derivative_modes():
     H3 = obj3.hess(x)
     np.testing.assert_allclose(H1, H2, atol=1e-10)
     np.testing.assert_allclose(H1, H3, atol=1e-10)
+    j1 = obj1.jvp_scaled(v, x)
+    j2 = obj2.jvp_scaled(v, x)
+    j3 = obj3.jvp_scaled(v, x)
+    np.testing.assert_allclose(j1, j2, atol=1e-10)
+    np.testing.assert_allclose(j1, j3, atol=1e-10)
+
+
+@pytest.mark.unit
+def test_fwd_rev():
+    """Test that forward and reverse mode jvps etc give same results."""
+    eq = Equilibrium()
+    obj1 = MeanCurvature(eq, deriv_mode="fwd")
+    obj2 = MeanCurvature(eq, deriv_mode="rev")
+    obj1.build()
+    obj2.build()
+
+    x = eq.pack_params(eq.params_dict)
+    J1 = obj1.jac_scaled(x)
+    J2 = obj2.jac_scaled(x)
+    np.testing.assert_allclose(J1, J2, atol=1e-14)
+
+    jvp1 = obj1.jvp_scaled(x, jnp.ones_like(x))
+    jvp2 = obj2.jvp_scaled(x, jnp.ones_like(x))
+    np.testing.assert_allclose(jvp1, jvp2, atol=1e-14)
+
+    surf = FourierRZToroidalSurface()
+    obj1 = PlasmaVesselDistance(eq, surf, deriv_mode="fwd")
+    obj2 = PlasmaVesselDistance(eq, surf, deriv_mode="rev")
+    obj1.build()
+    obj2.build()
+
+    x1 = eq.pack_params(eq.params_dict)
+    x2 = surf.pack_params(surf.params_dict)
+
+    J1a, J1b = obj1.jac_scaled(x1, x2)
+    J2a, J2b = obj2.jac_scaled(x1, x2)
+    np.testing.assert_allclose(J1a, J2a, atol=1e-14)
+    np.testing.assert_allclose(J1b, J2b, atol=1e-14)
+
+    jvp1 = obj1.jvp_scaled((x1, x2), (jnp.ones_like(x1), jnp.ones_like(x2)))
+    jvp2 = obj2.jvp_scaled((x1, x2), (jnp.ones_like(x1), jnp.ones_like(x2)))
+    np.testing.assert_allclose(jvp1, jvp2, atol=1e-14)
 
 
 @pytest.mark.unit

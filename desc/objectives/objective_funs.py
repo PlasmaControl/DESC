@@ -13,6 +13,7 @@ from desc.backend import (
     jit,
     jnp,
     tree_flatten,
+    tree_map,
     tree_unflatten,
     use_jax,
 )
@@ -23,6 +24,7 @@ from desc.optimizable import Optimizable
 from desc.utils import (
     PRINT_WIDTH,
     Timer,
+    ensure_tuple,
     errorif,
     flatten_list,
     is_broadcastable,
@@ -647,15 +649,36 @@ class ObjectiveFunction(IOAble):
             Derivative(self.compute_scalar, mode="hess")(x, constants).squeeze()
         )
 
-    def _jac_blocked(self, op, x, constants=None):
-        # could also do something similar for grad and hess, but probably not
-        # worth it. grad is already super cheap to eval all at once, and blocked
-        # hess would only be block diag which may miss important interactions.
+    @jit
+    def jac_scaled(self, x, constants=None):
+        """Compute Jacobian matrix of self.compute_scaled wrt x."""
+        v = jnp.eye(x.shape[0])
+        return self.jvp_scaled(v, x, constants).T
+
+    @jit
+    def jac_scaled_error(self, x, constants=None):
+        """Compute Jacobian matrix of self.compute_scaled_error wrt x."""
+        v = jnp.eye(x.shape[0])
+        return self.jvp_scaled_error(v, x, constants).T
+
+    @jit
+    def jac_unscaled(self, x, constants=None):
+        """Compute Jacobian matrix of self.compute_unscaled wrt x."""
+        v = jnp.eye(x.shape[0])
+        return self.jvp_unscaled(v, x, constants).T
+
+    def _jvp_blocked(self, v, x, constants=None, op="scaled"):
+        v = ensure_tuple(v)
+        if len(v) > 1:
+            # using blocked for higher order derivatives is a pain, and only really
+            # is needed for perturbations. Just pass that to jvp_batched for now
+            return self._jvp_batched(v, x, constants, op)
 
         if constants is None:
             constants = self.constants
         xs_splits = np.cumsum([t.dim_x for t in self.things])
         xs = jnp.split(x, xs_splits)
+        vs = jnp.split(v[0], xs_splits, axis=-1)
         J = []
         assert len(self.objectives) == len(self.constants)
         # basic idea is we compute the jacobian of each objective wrt each thing
@@ -665,63 +688,18 @@ class ObjectiveFunction(IOAble):
             # get the xs that go to that objective
             thing_idx = self._things_per_objective_idx[k]
             xi = [xs[i] for i in thing_idx]
-            Ji_ = getattr(obj, op)(*xi, constants=const)  # jac wrt to just those things
-            Ji = []  # jac wrt all things
-            for i, thing in enumerate(self.things):
-                if i in thing_idx:  # dfi/dxj != 0
-                    Ji += [Ji_[thing_idx.index(i)]]
-                else:  # dfi/dxj == 0
-                    Ji += [jnp.zeros((obj.dim_f, thing.dim_x))]
-            Ji = jnp.hstack(Ji)  # something like [df1/dx1, df1/dx2, 0]
-            J += [Ji]
-        # something like [df1/dx1, df1/dx2, 0]
-        #                [df2/dx1, 0, df2/dx3]   # noqa:E800
-        J = jnp.vstack(J)
+            vi = [vs[i] for i in thing_idx]
+            Ji_ = getattr(obj, "jvp_" + op)(vi, xi, constants=const)
+            J += [Ji_]
+        # this is the transpose of the jvp when v is a matrix, for consistency with
+        # jvp_batched
+        J = jnp.hstack(J)
         return J
 
-    @jit
-    def jac_scaled(self, x, constants=None):
-        """Compute Jacobian matrix of self.compute_scaled wrt x."""
-        if constants is None:
-            constants = self.constants
+    def _jvp_batched(self, v, x, constants=None, op="scaled"):
+        v = ensure_tuple(v)
 
-        if self._deriv_mode == "batched":
-            J = Derivative(self.compute_scaled, mode="fwd")(x, constants)
-        if self._deriv_mode == "blocked":
-            J = self._jac_blocked("jac_scaled", x, constants)
-
-        return jnp.atleast_2d(J.squeeze())
-
-    @jit
-    def jac_scaled_error(self, x, constants=None):
-        """Compute Jacobian matrix of self.compute_scaled_error wrt x."""
-        if constants is None:
-            constants = self.constants
-
-        if self._deriv_mode == "batched":
-            J = Derivative(self.compute_scaled_error, mode="fwd")(x, constants)
-        if self._deriv_mode == "blocked":
-            J = self._jac_blocked("jac_scaled_error", x, constants)
-
-        return jnp.atleast_2d(J.squeeze())
-
-    @jit
-    def jac_unscaled(self, x, constants=None):
-        """Compute Jacobian matrix of self.compute_unscaled wrt x."""
-        if constants is None:
-            constants = self.constants
-
-        if self._deriv_mode == "batched":
-            J = Derivative(self.compute_unscaled, mode="fwd")(x, constants)
-        if self._deriv_mode == "blocked":
-            J = self._jac_blocked("jac_unscaled", x, constants)
-
-        return jnp.atleast_2d(J.squeeze())
-
-    def _jvp(self, v, x, constants=None, op="compute_scaled"):
-        v = v if isinstance(v, (tuple, list)) else (v,)
-
-        fun = lambda x: getattr(self, op)(x, constants)
+        fun = lambda x: getattr(self, "compute_" + op)(x, constants)
         if len(v) == 1:
             jvpfun = lambda dx: Derivative.compute_jvp(fun, 0, dx, x)
             return batched_vectorize(
@@ -759,7 +737,11 @@ class ObjectiveFunction(IOAble):
             Constant parameters passed to sub-objectives.
 
         """
-        return self._jvp(v, x, constants, "compute_scaled")
+        if self._deriv_mode == "batched":
+            J = self._jvp_batched(v, x, constants, "scaled")
+        if self._deriv_mode == "blocked":
+            J = self._jvp_blocked(v, x, constants, "scaled")
+        return J
 
     @jit
     def jvp_scaled_error(self, v, x, constants=None):
@@ -776,7 +758,11 @@ class ObjectiveFunction(IOAble):
             Constant parameters passed to sub-objectives.
 
         """
-        return self._jvp(v, x, constants, "compute_scaled_error")
+        if self._deriv_mode == "batched":
+            J = self._jvp_batched(v, x, constants, "scaled_error")
+        if self._deriv_mode == "blocked":
+            J = self._jvp_blocked(v, x, constants, "scaled_error")
+        return J
 
     @jit
     def jvp_unscaled(self, v, x, constants=None):
@@ -793,10 +779,14 @@ class ObjectiveFunction(IOAble):
             Constant parameters passed to sub-objectives.
 
         """
-        return self._jvp(v, x, constants, "compute_unscaled")
+        if self._deriv_mode == "batched":
+            J = self._jvp_batched(v, x, constants, "unscaled")
+        if self._deriv_mode == "blocked":
+            J = self._jvp_blocked(v, x, constants, "unscaled")
+        return J
 
-    def _vjp(self, v, x, constants=None, op="compute_scaled"):
-        fun = lambda x: getattr(self, op)(x, constants)
+    def _vjp(self, v, x, constants=None, op="scaled"):
+        fun = lambda x: getattr(self, "compute_" + op)(x, constants)
         return Derivative.compute_vjp(fun, 0, v, x)
 
     @jit
@@ -813,7 +803,7 @@ class ObjectiveFunction(IOAble):
             Constant parameters passed to sub-objectives.
 
         """
-        return self._vjp(v, x, constants, "compute_scaled")
+        return self._vjp(v, x, constants, "scaled")
 
     @jit
     def vjp_scaled_error(self, v, x, constants=None):
@@ -829,7 +819,7 @@ class ObjectiveFunction(IOAble):
             Constant parameters passed to sub-objectives.
 
         """
-        return self._vjp(v, x, constants, "compute_scaled_error")
+        return self._vjp(v, x, constants, "scaled_error")
 
     @jit
     def vjp_unscaled(self, v, x, constants=None):
@@ -845,7 +835,7 @@ class ObjectiveFunction(IOAble):
             Constant parameters passed to sub-objectives.
 
         """
-        return self._vjp(v, x, constants, "compute_unscaled")
+        return self._vjp(v, x, constants, "unscaled")
 
     def compile(self, mode="auto", verbose=1):
         """Call the necessary functions to ensure the function is compiled.
@@ -1125,11 +1115,13 @@ class _Objective(IOAble, ABC):
     def _set_derivatives(self):
         """Choose derivative mode based on size of inputs/outputs."""
         if self._deriv_mode == "auto":
-            # choose based on shape of jacobian. fwd mode is more memory efficient
-            # so we prefer that unless the jacobian is really wide
+            # choose based on shape of jacobian. dim_x is usually an overestimate of
+            # the true number of DOFs because linear constraints remove some. Also
+            # fwd mode is more memory efficient so we prefer that unless the jacobian
+            # is really wide
             self._deriv_mode = (
                 "fwd"
-                if self.dim_f >= 0.5 * sum(t.dim_x for t in self.things)
+                if self.dim_f >= 0.2 * sum(t.dim_x for t in self.things)
                 else "rev"
             )
 
@@ -1314,37 +1306,57 @@ class _Objective(IOAble, ABC):
     def jac_scaled(self, *args, **kwargs):
         """Compute Jacobian matrix of self.compute_scaled wrt x."""
         argnums = tuple(range(len(self.things)))
-        return Derivative(self.compute_scaled, argnums, mode=self._deriv_mode)(
-            *args, **kwargs
-        )
+        return Derivative(
+            self.compute_scaled,
+            argnums,
+            mode=self._deriv_mode,
+            chunk_size=self._jac_chunk_size,
+        )(*args, **kwargs)
 
     @jit
     def jac_scaled_error(self, *args, **kwargs):
         """Compute Jacobian matrix of self.compute_scaled_error wrt x."""
         argnums = tuple(range(len(self.things)))
-        return Derivative(self.compute_scaled_error, argnums, mode=self._deriv_mode)(
-            *args, **kwargs
-        )
+        return Derivative(
+            self.compute_scaled_error,
+            argnums,
+            mode=self._deriv_mode,
+            chunk_size=self._jac_chunk_size,
+        )(*args, **kwargs)
 
     @jit
     def jac_unscaled(self, *args, **kwargs):
         """Compute Jacobian matrix of self.compute_unscaled wrt x."""
         argnums = tuple(range(len(self.things)))
-        return Derivative(self.compute_unscaled, argnums, mode=self._deriv_mode)(
-            *args, **kwargs
-        )
+        return Derivative(
+            self.compute_unscaled,
+            argnums,
+            mode=self._deriv_mode,
+            chunk_size=self._jac_chunk_size,
+        )(*args, **kwargs)
 
-    def _jvp(self, v, x, constants=None, op="compute_scaled"):
-        v = v if isinstance(v, (tuple, list)) else (v,)
-        x = x if isinstance(x, (tuple, list)) else (x,)
+    def _jvp(self, v, x, constants=None, op="scaled"):
+        v = ensure_tuple(v)
+        x = ensure_tuple(x)
         assert len(x) == len(v)
 
-        fun = lambda *x: getattr(self, op)(*x, constants=constants)
-        jvpfun = lambda *dx: Derivative.compute_jvp(fun, tuple(range(len(x))), dx, *x)
-        sig = ",".join(f"(n{i})" for i in range(len(x))) + "->(k)"
-        return batched_vectorize(
-            jvpfun, signature=sig, chunk_size=self._jac_chunk_size
-        )(*v)
+        if self._deriv_mode == "fwd":
+            fun = lambda *x: getattr(self, "compute_" + op)(*x, constants=constants)
+            jvpfun = lambda *dx: Derivative.compute_jvp(
+                fun, tuple(range(len(x))), dx, *x
+            )
+            sig = ",".join(f"(n{i})" for i in range(len(x))) + "->(k)"
+            return batched_vectorize(
+                jvpfun, signature=sig, chunk_size=self._jac_chunk_size
+            )(*v)
+        else:  # rev mode. We compute full jacobian and manually do mv. In this case
+            # the jacobian should be wide so this isn't very expensive.
+            jac = getattr(self, "jac_" + op)(*x, constants=constants)
+            # jac is a tuple, 1 array for each thing. Transposes here and below make it
+            # equivalent to fwd mode above, which batches over the first axis
+            Jv = tree_map(lambda a, b: jnp.dot(a, b.T), jac, v)
+            # sum over different things.
+            return jnp.sum(jnp.asarray(Jv), axis=0).T
 
     @jit
     def jvp_scaled(self, v, x, constants=None):
@@ -1360,7 +1372,7 @@ class _Objective(IOAble, ABC):
             Constant parameters passed to sub-objectives.
 
         """
-        return self._jvp(v, x, constants, "compute_scaled")
+        return self._jvp(v, x, constants, "scaled")
 
     @jit
     def jvp_scaled_error(self, v, x, constants=None):
@@ -1376,7 +1388,7 @@ class _Objective(IOAble, ABC):
             Constant parameters passed to sub-objectives.
 
         """
-        return self._jvp(v, x, constants, "compute_scaled_error")
+        return self._jvp(v, x, constants, "scaled_error")
 
     @jit
     def jvp_unscaled(self, v, x, constants=None):
@@ -1392,7 +1404,7 @@ class _Objective(IOAble, ABC):
             Constant parameters passed to sub-objectives.
 
         """
-        return self._jvp(v, x, constants, "compute_unscaled")
+        return self._jvp(v, x, constants, "unscaled")
 
     def print_value(self, args, args0=None, **kwargs):
         """Print the value of the objective."""

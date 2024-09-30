@@ -941,3 +941,12 @@ def cumtrapz(y, x=None, dx=1.0, axis=-1, initial=None):
         )
 
     return res
+
+
+def ensure_tuple(x):
+    """Returns x as a tuple of arrays."""
+    if isinstance(x, tuple):
+        return x
+    if isinstance(x, list):
+        return tuple(x)
+    return (x,)

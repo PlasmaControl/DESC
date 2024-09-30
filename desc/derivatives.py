@@ -6,9 +6,12 @@ import numpy as np
 from termcolor import colored
 
 from desc.backend import jnp, put, use_jax
+from desc.utils import ensure_tuple
 
 if use_jax:
     import jax
+
+    from desc.batching import jacfwd_chunked, jacrev_chunked
 
 
 class _Derivative(ABC):
@@ -123,11 +126,11 @@ class AutoDiffDerivative(_Derivative):
 
     """
 
-    def __init__(self, fun, argnum=0, mode="fwd", **kwargs):
+    def __init__(self, fun, argnum=0, mode="fwd", chunk_size=None, **kwargs):
 
         self._fun = fun
         self._argnum = argnum
-
+        self._chunk_size = chunk_size
         self._set_mode(mode)
 
     def compute(self, *args, **kwargs):
@@ -205,7 +208,7 @@ class AutoDiffDerivative(_Derivative):
         """
         _ = kwargs.pop("rel_step", None)  # unused by autodiff
         argnum = (argnum,) if jnp.isscalar(argnum) else tuple(argnum)
-        v = (v,) if not isinstance(v, (tuple, list)) else v
+        v = ensure_tuple(v)
 
         def _fun(*x):
             _args = list(args)
@@ -241,14 +244,14 @@ class AutoDiffDerivative(_Derivative):
 
         """
         if np.isscalar(argnum1):
-            v1 = (v1,) if not isinstance(v1, (tuple, list)) else v1
+            v1 = ensure_tuple(v1)
             argnum1 = (argnum1,)
         else:
             v1 = tuple(v1)
 
         if np.isscalar(argnum2):
             argnum2 = (argnum2 + 1,)
-            v2 = (v2,) if not isinstance(v2, (tuple, list)) else v2
+            v2 = ensure_tuple(v2)
         else:
             argnum2 = tuple([i + 1 for i in argnum2])
             v2 = tuple(v2)
@@ -284,21 +287,21 @@ class AutoDiffDerivative(_Derivative):
 
         """
         if np.isscalar(argnum1):
-            v1 = (v1,) if not isinstance(v1, (tuple, list)) else v1
+            v1 = ensure_tuple(v1)
             argnum1 = (argnum1,)
         else:
             v1 = tuple(v1)
 
         if np.isscalar(argnum2):
             argnum2 = (argnum2 + 1,)
-            v2 = (v2,) if not isinstance(v2, (tuple, list)) else v2
+            v2 = ensure_tuple(v2)
         else:
             argnum2 = tuple([i + 1 for i in argnum2])
             v2 = tuple(v2)
 
         if np.isscalar(argnum3):
             argnum3 = (argnum3 + 2,)
-            v3 = (v3,) if not isinstance(v3, (tuple, list)) else v3
+            v3 = ensure_tuple(v3)
         else:
             argnum3 = tuple([i + 2 for i in argnum3])
             v3 = tuple(v3)
@@ -323,9 +326,13 @@ class AutoDiffDerivative(_Derivative):
 
         self._mode = mode
         if self._mode == "fwd":
-            self._compute = jax.jacfwd(self._fun, self._argnum)
+            self._compute = jacfwd_chunked(
+                self._fun, self._argnum, chunk_size=self._chunk_size
+            )
         elif self._mode == "rev":
-            self._compute = jax.jacrev(self._fun, self._argnum)
+            self._compute = jacrev_chunked(
+                self._fun, self._argnum, chunk_size=self._chunk_size
+            )
         elif self._mode == "grad":
             self._compute = jax.grad(self._fun, self._argnum)
         elif self._mode == "hess":
@@ -512,7 +519,7 @@ class FiniteDiffDerivative(_Derivative):
             argnum = (argnum,)
         else:
             nargs = len(argnum)
-        v = (v,) if not isinstance(v, tuple) else v
+        v = ensure_tuple(v)
 
         f = np.array(
             [
@@ -549,14 +556,14 @@ class FiniteDiffDerivative(_Derivative):
 
         """
         if np.isscalar(argnum1):
-            v1 = (v1,) if not isinstance(v1, tuple) else v1
+            v1 = ensure_tuple(v1)
             argnum1 = (argnum1,)
         else:
             v1 = tuple(v1)
 
         if np.isscalar(argnum2):
             argnum2 = (argnum2 + 1,)
-            v2 = (v2,) if not isinstance(v2, tuple) else v2
+            v2 = ensure_tuple(v2)
         else:
             argnum2 = tuple([i + 1 for i in argnum2])
             v2 = tuple(v2)
@@ -592,21 +599,21 @@ class FiniteDiffDerivative(_Derivative):
 
         """
         if np.isscalar(argnum1):
-            v1 = (v1,) if not isinstance(v1, tuple) else v1
+            v1 = ensure_tuple(v1)
             argnum1 = (argnum1,)
         else:
             v1 = tuple(v1)
 
         if np.isscalar(argnum2):
             argnum2 = (argnum2 + 1,)
-            v2 = (v2,) if not isinstance(v2, tuple) else v2
+            v2 = ensure_tuple(v2)
         else:
             argnum2 = tuple([i + 1 for i in argnum2])
             v2 = tuple(v2)
 
         if np.isscalar(argnum3):
             argnum3 = (argnum3 + 2,)
-            v3 = (v3,) if not isinstance(v3, tuple) else v3
+            v3 = ensure_tuple(v3)
         else:
             argnum3 = tuple([i + 2 for i in argnum3])
             v3 = tuple(v3)

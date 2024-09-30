@@ -2120,9 +2120,7 @@ def plot_boundaries(
 
     phi = (1 if eqs[-1].N == 0 else 4) if phi is None else phi
     if isinstance(phi, numbers.Integral):
-        phi = np.linspace(
-            0, 2 * np.pi / eqs[-1].NFP, phi + 1
-        )  # +1 to include pi and 2pi
+        phi = np.linspace(0, 2 * np.pi / eqs[-1].NFP, phi, endpoint=False)
     phi = np.atleast_1d(phi)
 
     neq = len(eqs)
@@ -2173,7 +2171,7 @@ def plot_boundaries(
         plot_data["R"].append(R)
         plot_data["Z"].append(Z)
 
-        for j in range(nz - 1):
+        for j in range(nz):
             (line,) = ax.plot(
                 R[:, -1, j], Z[:, -1, j], color=colors[i], linestyle=ls[i], lw=lw[i]
             )

@@ -21,6 +21,25 @@ from ..integrals.quad_utils import chebgauss2
 from ..utils import safediv
 from .data_index import register_compute_fun
 
+_bounce_doc = {
+    "quad": (
+        "tuple[jnp.ndarray] : Quadrature points and weights for bounce integrals. "
+        "Default option is well tested."
+    ),
+    "num_quad": (
+        "int : Resolution for quadrature of bounce integrals. "
+        "Default is 32. This option is ignored if given ``quad``."
+    ),
+    "num_pitch": "int : Resolution for quadrature over velocity coordinate.",
+    "num_well": (
+        "int : Maximum number of wells to detect for each pitch and field line. "
+        "Default is to detect all wells, but due to limitations in JAX this option "
+        "may consume more memory. Specifying a number that tightly upper bounds "
+        "the number of wells will increase performance."
+    ),
+    "batch": "bool : Whether to vectorize part of the computation. Default is true.",
+}
+
 
 def _alpha_mean(f):
     """Simple mean over field lines.
@@ -33,7 +52,7 @@ def _alpha_mean(f):
     return f.mean(axis=0)
 
 
-def _compute(fun, interp_data, data, grid, num_pitch):
+def _compute(fun, interp_data, data, grid, num_pitch, reduce=True):
     """Compute ``fun`` for each α and ρ value iteratively to reduce memory usage.
 
     Parameters
@@ -46,6 +65,9 @@ def _compute(fun, interp_data, data, grid, num_pitch):
         Reshaped automatically.
     data : dict[str, jnp.ndarray]
         DESC data dict.
+    reduce : bool
+        Whether to compute mean over α and expand to grid.
+        Default is true.
 
     """
     pitch_inv, pitch_inv_weight = get_pitch_inv_quad(
@@ -65,7 +87,8 @@ def _compute(fun, interp_data, data, grid, num_pitch):
     interp_data = dict(
         zip(interp_data.keys(), Bounce1D.reshape_data(grid, *interp_data.values()))
     )
-    return grid.expand(_alpha_mean(imap(for_each_rho, interp_data)))
+    out = imap(for_each_rho, interp_data)
+    return grid.expand(_alpha_mean(out)) if reduce else out
 
 
 @register_compute_fun(
@@ -151,16 +174,7 @@ def _G_ra_fsa(data, transforms, profiles, **kwargs):
     + Bounce1D.required_names,
     resolution_requirement="z",
     source_grid_requirement={"coordinates": "raz", "is_meshgrid": True},
-    quad="jnp.ndarray : Optional, quadrature points and weights for bounce integrals.",
-    num_quad="int : Bounce integral resolution. Ignored if given ``quad``. Default 32.",
-    num_pitch="int : Resolution for quadrature over velocity coordinate. Default 50.",
-    num_well=(
-        "int : Maximum number of wells to detect for each pitch and field line. "
-        "Default is to detect all wells, but due to limitations in JAX this option "
-        "may consume more memory. Specifying a number that tightly upper bounds "
-        "the number of wells will increase performance."
-    ),
-    batch="bool : Whether to vectorize part of the computation. Default is true.",
+    **_bounce_doc,
     # Some notes on choosing the resolution hyperparameters:
     # The default settings were chosen such that the effective ripple profile on
     # the W7-X stellarator looks similar to the profile computed at higher resolution,

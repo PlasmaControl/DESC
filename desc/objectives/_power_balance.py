@@ -33,7 +33,9 @@ class FusionPower(_Objective):
     """
 
     __doc__ = __doc__.rstrip() + collect_docs(
-        target_default="``target=1e9``.", bounds_default="``target=1e9``."
+        target_default="``target=1e9``.",
+        bounds_default="``target=1e9``.",
+        loss_detail=" Note: Has no effect for this objective.",
     )
 
     _scalar = True
@@ -197,7 +199,9 @@ class HeatingPowerISS04(_Objective):
     """
 
     __doc__ = __doc__.rstrip() + collect_docs(
-        target_default="``target=0``.", bounds_default="``target=0``."
+        target_default="``target=0``.",
+        bounds_default="``target=0``.",
+        loss_detail=" Note: Has no effect for this objective.",
     )
 
     _scalar = True

@@ -617,7 +617,11 @@ class CoilSetMinDistance(_Objective):
 
     """
 
-    __doc__ = __doc__.rstrip() + collect_docs(coil=True)
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``bounds=(1,np.inf)``.",
+        bounds_default="``bounds=(1,np.inf)``.",
+        coil=True,
+    )
 
     _scalar = False
     _units = "(m)"
@@ -767,7 +771,11 @@ class PlasmaCoilSetMinDistance(_Objective):
 
     """
 
-    __doc__ = __doc__.rstrip() + collect_docs(coil=True)
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``bounds=(1,np.inf)``.",
+        bounds_default="``bounds=(1,np.inf)``.",
+        coil=True,
+    )
 
     _scalar = False
     _units = "(m)"
@@ -1176,7 +1184,9 @@ class ToroidalFlux(_Objective):
     """
 
     __doc__ = __doc__.rstrip() + collect_docs(
-        loss_detail=" Note: has no effect for this objective."
+        target_default="``target=eq.Psi``.",
+        bounds_default="``target=eq.Psi``.",
+        loss_detail=" Note: has no effect for this objective.",
     )
 
     _coordinates = "rtz"

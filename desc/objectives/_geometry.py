@@ -177,7 +177,6 @@ class Elongation(_Objective):
         bounds_default="``target=1``.",
         normalize_detail=" Note: Has no effect for this objective.",
         normalize_target_detail=" Note: Has no effect for this objective.",
-        loss_detail=" Note: Has no effect for this objective.",
     )
 
     _scalar = True

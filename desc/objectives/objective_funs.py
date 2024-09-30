@@ -113,14 +113,6 @@ class ObjectiveFunction(IOAble):
         self._compiled = False
         self._name = name
 
-    def _set_derivatives(self):
-        """Choose derivative mode based on mode of sub-objectives."""
-        if self._deriv_mode == "auto":
-            if all((obj._deriv_mode == "fwd") for obj in self.objectives):
-                self._deriv_mode = "batched"
-            else:
-                self._deriv_mode = "blocked"
-
     def _unjit(self):
         """Remove jit compiled methods."""
         methods = [
@@ -178,12 +170,20 @@ class ObjectiveFunction(IOAble):
         else:
             self._scalar = False
 
-        self._set_derivatives()
+        self._set_things()
+
+        # setting derivative mode and chunking.
+        errorif(
+            isposint(self._jac_chunk_size) and self._deriv_mode in ["auto", "blocked"],
+            ValueError,
+            "'jac_chunk_size' was passed into ObjectiveFunction, but the "
+            "ObjectiveFunction is not using 'batched' deriv_mode",
+        )
         sub_obj_jac_chunk_sizes_are_ints = [
             isposint(obj._jac_chunk_size) for obj in self.objectives
         ]
         errorif(
-            any(sub_obj_jac_chunk_sizes_are_ints) and self._deriv_mode != "blocked",
+            any(sub_obj_jac_chunk_sizes_are_ints) and self._deriv_mode == "batched",
             ValueError,
             "'jac_chunk_size' was passed into one or more sub-objectives, but the"
             " ObjectiveFunction is  using 'batched' deriv_mode, so sub-objective "
@@ -192,21 +192,12 @@ class ObjectiveFunction(IOAble):
             " Specify 'blocked' deriv_mode if each sub-objective is desired to have a "
             "different 'jac_chunk_size' for its Jacobian computation.",
         )
-        errorif(
-            self._jac_chunk_size not in ["auto", None]
-            and self._deriv_mode == "blocked",
-            ValueError,
-            "'jac_chunk_size' was passed into ObjectiveFunction, but the "
-            "ObjectiveFunction is using 'blocked' deriv_mode, so sub-objective "
-            "'jac_chunk_size' are used to compute each sub-objective's Jacobian, "
-            "`ignoring the ObjectiveFunction's 'jac_chunk_size'.",
-        )
 
-        if not self.use_jit:
-            self._unjit()
-
-        self._set_things()
-        self._built = True
+        if self._deriv_mode == "auto":
+            if all((obj._deriv_mode == "fwd") for obj in self.objectives):
+                self._deriv_mode = "batched"
+            else:
+                self._deriv_mode = "blocked"
 
         if self._jac_chunk_size == "auto":
             # Heuristic estimates of fwd mode Jacobian memory usage,
@@ -218,6 +209,15 @@ class ObjectiveFunction(IOAble):
                 * self.dim_x
             )
             self._jac_chunk_size = max([1, max_chunk_size])
+            if self._deriv_mode == "blocked":
+                for obj in self.objectives:
+                    if obj._jac_chunk_size is None:
+                        obj._jac_chunk_size = self._jac_chunk_size
+
+        if not self.use_jit:
+            self._unjit()
+
+        self._built = True
 
         timer.stop("Objective build")
         if verbose > 1:

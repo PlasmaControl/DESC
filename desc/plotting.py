@@ -133,7 +133,7 @@ def _format_ax(ax, is3d=False, rows=1, cols=1, figsize=None, equal=False):
     Parameters
     ----------
     ax : None or matplotlib AxesSubplot instance
-        Axis to plot to.
+        Axis to plot on.
     is3d: bool
         Whether the plot is three-dimensional.
     rows : int, optional
@@ -435,7 +435,7 @@ def plot_1d(eq, name, grid=None, log=False, ax=None, return_data=False, **kwargs
     ax : matplotlib AxesSubplot, optional
         Axis to plot on.
     return_data : bool
-        if True, return the data plotted as well as fig,ax
+        If True, return the data plotted as well as fig,ax
     **kwargs : dict, optional
         Specify properties of the figure, axis, and plot appearance e.g.::
 
@@ -461,7 +461,7 @@ def plot_1d(eq, name, grid=None, log=False, ax=None, return_data=False, **kwargs
     ax : matplotlib.axes.Axes or ndarray of Axes
         Axes being plotted to.
     plot_data : dict
-        dictionary of the data plotted, only returned if ``return_data=True``
+        Dictionary of the data plotted, only returned if ``return_data=True``
 
     Examples
     --------
@@ -583,7 +583,7 @@ def plot_2d(
     ax : matplotlib AxesSubplot, optional
         Axis to plot on.
     return_data : bool
-        if True, return the data plotted as well as fig,ax
+        If True, return the data plotted as well as fig,ax
     **kwargs : dict, optional
         Specify properties of the figure, axis, and plot appearance e.g.::
 
@@ -612,7 +612,7 @@ def plot_2d(
     ax : matplotlib.axes.Axes or ndarray of Axes
         Axes being plotted to.
     plot_data : dict
-        dictionary of the data plotted, only returned if ``return_data=True``
+        Dictionary of the data plotted, only returned if ``return_data=True``
 
     Examples
     --------
@@ -843,9 +843,9 @@ def plot_3d(
     log : bool, optional
         Whether to use a log scale.
     fig : plotly.graph_objs._figure.Figure, optional
-        Figure to plot on
+        Figure to plot on.
     return_data : bool
-        if True, return the data plotted as well as fig,ax
+        If True, return the data plotted as well as fig,ax
     **kwargs : dict, optional
         Specify properties of the figure, axis, and plot appearance e.g.::
 
@@ -872,7 +872,7 @@ def plot_3d(
     fig : plotly.graph_objs._figure.Figure
         Figure being plotted to
     plot_data : dict
-        dictionary of the data plotted, only returned if ``return_data=True``
+        Dictionary of the data plotted, only returned if ``return_data=True``
 
     Examples
     --------
@@ -1104,7 +1104,7 @@ def plot_fsa(  # noqa: C901
     ax : matplotlib AxesSubplot, optional
         Axis to plot on.
     return_data : bool
-        if True, return the data plotted as well as fig,ax
+        If True, return the data plotted as well as fig,ax
     **kwargs : dict, optional
         Specify properties of the figure, axis, and plot appearance e.g.::
 
@@ -1130,7 +1130,7 @@ def plot_fsa(  # noqa: C901
     ax : matplotlib.axes.Axes or ndarray of Axes
         Axes being plotted to.
     plot_data : dict
-        dictionary of the data plotted, only returned if ``return_data=True``
+        Dictionary of the data plotted, only returned if ``return_data=True``
 
     Examples
     --------
@@ -1296,7 +1296,7 @@ def plot_section(
     ax : matplotlib AxesSubplot, optional
         Axis to plot on.
     return_data : bool
-        if True, return the data plotted as well as fig,ax
+        If True, return the data plotted as well as fig,ax
     **kwargs : dict, optional
         Specify properties of the figure, axis, and plot appearance e.g.::
 
@@ -1324,7 +1324,7 @@ def plot_section(
     ax : matplotlib.axes.Axes or ndarray of Axes
         Axes being plotted to.
     plot_data : dict
-        dictionary of the data plotted, only returned if ``return_data=True``
+        Dictionary of the data plotted, only returned if ``return_data=True``
 
     Examples
     --------
@@ -1508,7 +1508,7 @@ def plot_surfaces(eq, rho=8, theta=8, phi=None, ax=None, return_data=False, **kw
     ax : matplotlib AxesSubplot, optional
         Axis to plot on.
     return_data : bool
-        if True, return the data plotted as well as fig,ax
+        If True, return the data plotted as well as fig,ax
     **kwargs : dict, optional
         Specify properties of the figure, axis, and plot appearance e.g.::
 
@@ -1548,7 +1548,7 @@ def plot_surfaces(eq, rho=8, theta=8, phi=None, ax=None, return_data=False, **kw
     ax : matplotlib.axes.Axes or ndarray of Axes
         Axes being plotted to.
     plot_data : dict
-        dictionary of the data plotted, only returned if ``return_data=True``
+        Dictionary of the data plotted, only returned if ``return_data=True``
 
     Examples
     --------
@@ -1760,7 +1760,7 @@ def poincare_plot(
     ax : matplotlib AxesSubplot, optional
         Axis to plot on.
     return_data : bool
-        if True, return the data plotted as well as fig,ax
+        If True, return the data plotted as well as fig,ax
     **kwargs : dict, optional
         Specify properties of the figure, axis, and plot appearance e.g.::
 
@@ -1787,7 +1787,7 @@ def poincare_plot(
     ax : matplotlib.axes.Axes or ndarray of Axes
         Axes being plotted to.
     plot_data : dict
-        dictionary of the data plotted, only returned if ``return_data=True``
+        Dictionary of the data plotted, only returned if ``return_data=True``
     """
     fli_kwargs = {}
     for key in inspect.signature(field_line_integrate).parameters:
@@ -1892,7 +1892,7 @@ def plot_boundary(eq, phi=None, plot_axis=True, ax=None, return_data=False, **kw
     ax : matplotlib AxesSubplot, optional
         Axis to plot on.
     return_data : bool
-        if True, return the data plotted as well as fig,ax
+        If True, return the data plotted as well as fig,ax
     **kwargs : dict, optional
         Specify properties of the figure, axis, and plot appearance e.g.::
 
@@ -1919,7 +1919,7 @@ def plot_boundary(eq, phi=None, plot_axis=True, ax=None, return_data=False, **kw
     ax : matplotlib.axes.Axes or ndarray of Axes
         Axes being plotted to.
     plot_data : dict
-        dictionary of the data plotted, only returned if ``return_data=True``
+        Dictionary of the data plotted, only returned if ``return_data=True``
 
     Examples
     --------
@@ -2045,7 +2045,7 @@ def plot_boundaries(
     ax : matplotlib AxesSubplot, optional
         Axis to plot on.
     return_data : bool
-        if True, return the data plotted as well as fig,ax
+        If True, return the data plotted as well as fig,ax
     **kwargs : dict, optional
         Specify properties of the figure, axis, and plot appearance e.g.::
 
@@ -2073,7 +2073,7 @@ def plot_boundaries(
     ax : matplotlib.axes.Axes or ndarray of Axes
         Axes being plotted to.
     plot_data : dict
-        dictionary of the data plotted, only returned if ``return_data=True``
+        Dictionary of the data plotted, only returned if ``return_data=True``
 
     Examples
     --------
@@ -2243,7 +2243,7 @@ def plot_comparison(
     labels : array-like
         Array the same length as eqs of labels to apply to each equilibrium.
     return_data : bool
-        if True, return the data plotted as well as fig,ax
+        If True, return the data plotted as well as fig,ax
     **kwargs : dict, optional
         Specify properties of the figure, axis, and plot appearance e.g.::
 
@@ -2266,7 +2266,7 @@ def plot_comparison(
     ax : matplotlib.axes.Axes or ndarray of Axes
         Axes being plotted to.
     plot_data : dict
-        dictionary of the data plotted, only returned if ``return_data=True``
+        Dictionary of the data plotted, only returned if ``return_data=True``
 
     Examples
     --------
@@ -2390,13 +2390,13 @@ def plot_coils(coils, grid=None, fig=None, return_data=False, **kwargs):
     Parameters
     ----------
     coils : Coil, CoilSet, Curve, or iterable
-        Coil or coils to plot
+        Coil or coils to plot.
     grid : Grid, optional
         Grid to use for evaluating geometry
     fig : plotly.graph_objs._figure.Figure, optional
-        Figure to plot on
+        Figure to plot on.
     return_data : bool
-        if True, return the data plotted as well as fig,ax
+        If True, return the data plotted as well as fig,ax
     **kwargs : dict, optional
         Specify properties of the figure, axis, and plot appearance e.g.::
 
@@ -2415,7 +2415,7 @@ def plot_coils(coils, grid=None, fig=None, return_data=False, **kwargs):
     fig : plotly.graph_objs._figure.Figure
         Figure being plotted to
     plot_data : dict
-        dictionary of the data plotted, only returned if ``return_data=True``
+        Dictionary of the data plotted, only returned if ``return_data=True``
 
     """
     lw = kwargs.pop("lw", 5)
@@ -2561,7 +2561,7 @@ def plot_boozer_modes(  # noqa: C901
     ax : matplotlib AxesSubplot, optional
         Axis to plot on.
     return_data : bool
-        if True, return the data plotted as well as fig,ax
+        If True, return the data plotted as well as fig,ax
     **kwargs : dict, optional
         Specify properties of the figure, axis, and plot appearance e.g.::
 
@@ -2589,7 +2589,7 @@ def plot_boozer_modes(  # noqa: C901
     ax : matplotlib.axes.Axes or ndarray of Axes
         Axes being plotted to.
     plot_data : dict
-        dictionary of the data plotted, only returned if ``return_data=True``
+        Dictionary of the data plotted, only returned if ``return_data=True``
 
     Examples
     --------
@@ -2730,9 +2730,9 @@ def plot_boozer_surface(
     thing : Equilibrium or OmnigenousField
         Object from which to plot.
     grid_compute : Grid, optional
-        grid to use for computing boozer spectrum
+        Grid to use for computing boozer spectrum
     grid_plot : Grid, optional
-        grid to plot on
+        Grid to plot on.
     rho : float, optional
         Radial coordinate of flux surface. Used only if grids are not specified.
     fill : bool, optional
@@ -2744,7 +2744,7 @@ def plot_boozer_surface(
     ax : matplotlib AxesSubplot, optional
         Axis to plot on.
     return_data : bool
-        if True, return the data plotted as well as fig,ax
+        If True, return the data plotted as well as fig,ax
     **kwargs : dict, optional
         Specify properties of the figure, axis, and plot appearance e.g.::
 
@@ -2764,11 +2764,11 @@ def plot_boozer_surface(
     Returns
     -------
     fig : matplotlib.figure.Figure
-        figure being plotted to
+        Figure being plotted to
     ax : matplotlib.axes.Axes or ndarray of Axes
-        axes being plotted to
+        Axes being plotted to
     plot_data : dict
-        dictionary of the data plotted, only returned if ``return_data=True``
+        Dictionary of the data plotted, only returned if ``return_data=True``
 
     Examples
     --------
@@ -2945,7 +2945,7 @@ def plot_qs_error(  # noqa: 16 fxn too complex
     ax : matplotlib AxesSubplot, optional
         Axis to plot on.
     return_data : bool
-        if True, return the data plotted as well as fig,ax
+        If True, return the data plotted as well as fig,ax
     **kwargs : dict, optional
         Specify properties of the figure, axis, and plot appearance e.g.::
 
@@ -2979,7 +2979,7 @@ def plot_qs_error(  # noqa: 16 fxn too complex
     ax : matplotlib.axes.Axes or ndarray of Axes
         Axes being plotted to.
     plot_data : dict
-        dictionary of the data plotted, only returned if ``return_data=True``
+        Dictionary of the data plotted, only returned if ``return_data=True``
 
     Examples
     --------
@@ -3132,7 +3132,7 @@ def plot_grid(grid, return_data=False, **kwargs):
     grid : Grid
         Grid to plot.
     return_data : bool
-        if True, return the data plotted as well as fig,ax
+        If True, return the data plotted as well as fig,ax
     **kwargs : dict, optional
         Specify properties of the figure, axis, and plot appearance e.g.::
 
@@ -3151,7 +3151,7 @@ def plot_grid(grid, return_data=False, **kwargs):
     ax : matplotlib.axes.Axes or ndarray of Axes
         Axes being plotted to.
     plot_data : dict
-        dictionary of the data plotted, only returned if ``return_data=True``
+        Dictionary of the data plotted, only returned if ``return_data=True``
 
     Examples
     --------
@@ -3237,7 +3237,7 @@ def plot_basis(basis, return_data=False, **kwargs):
     basis : Basis
         basis to plot
     return_data : bool
-        if True, return the data plotted as well as fig,ax
+        If True, return the data plotted as well as fig,ax
     **kwargs : dict, optional
         Specify properties of the figure, axis, and plot appearance e.g.::
 
@@ -3255,11 +3255,11 @@ def plot_basis(basis, return_data=False, **kwargs):
     fig : matplotlib.figure.Figure
         Figure being plotted to.
     ax : matplotlib.axes.Axes, ndarray of axes, or dict of axes
-        Axes used for plotting. A single axis is used for 1d basis functions,
+        Axes being plotted to. A single axis is used for 1d basis functions,
         2d or 3d bases return an ndarray or dict of axes.    return_data : bool
         if True, return the data plotted as well as fig,ax
     plot_data : dict
-        dictionary of the data plotted, only returned if ``return_data=True``
+        Dictionary of the data plotted, only returned if ``return_data=True``
 
     Examples
     --------
@@ -3475,19 +3475,19 @@ def plot_logo(save_path=None, **kwargs):
     Parameters
     ----------
     save_path : str or path-like
-        path to save the figure to.
+        Path to save the figure to.
         File format is inferred from the filename (Default value = None)
     **kwargs : dict, optional
-        additional plot formatting parameters.
+        Additional plot formatting parameters.
         options include ``'D_color'``, ``'D_color_rho'``, ``'D_color_theta'``,
         ``'E_color'``, ``'Scolor'``, ``'C_color'``, ``'BGcolor'``, ``'fig_width'``
 
     Returns
     -------
     fig : matplotlib.figure.Figure
-        handle to the figure used for plotting
+        Figure being plotted to.
     ax : matplotlib.axes.Axes
-        handle to the axis used for plotting
+        Axes being plotted to.
 
     Examples
     --------

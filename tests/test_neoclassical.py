@@ -7,6 +7,7 @@ import numpy as np
 import pytest
 from tests.test_plotting import tol_1d
 
+from desc.equilibrium.coords import get_rtz_grid
 from desc.examples import get
 from desc.grid import LinearGrid
 from desc.utils import errorif, setdefault
@@ -23,7 +24,7 @@ def test_field_line_average():
     iota = iota_grid.compress(eq.compute("iota", grid=iota_grid)["iota"]).item()
     # For axisymmetric devices, one poloidal transit must be exact.
     zeta = np.linspace(0, 2 * np.pi / iota, 25)
-    grid = eq._get_rtz_grid(rho, alpha, zeta, coordinates="raz")
+    grid = get_rtz_grid(eq, rho, alpha, zeta, coordinates="raz")
     data = eq.compute(["<L|r,a>", "<G|r,a>", "V_r(r)"], grid=grid)
     np.testing.assert_allclose(
         data["<L|r,a>"] / data["<G|r,a>"], data["V_r(r)"] / (4 * np.pi**2), rtol=1e-3
@@ -34,7 +35,7 @@ def test_field_line_average():
     # Otherwise, many toroidal transits are necessary to sample surface.
     eq = get("W7-X")
     zeta = np.linspace(0, 40 * np.pi, 300)
-    grid = eq._get_rtz_grid(rho, alpha, zeta, coordinates="raz")
+    grid = get_rtz_grid(eq, rho, alpha, zeta, coordinates="raz")
     data = eq.compute(["<L|r,a>", "<G|r,a>", "V_r(r)"], grid=grid)
     np.testing.assert_allclose(
         data["<L|r,a>"] / data["<G|r,a>"], data["V_r(r)"] / (4 * np.pi**2), rtol=1e-3
@@ -51,7 +52,7 @@ def test_effective_ripple():
     rho = np.linspace(0, 1, 10)
     alpha = np.array([0])
     zeta = np.linspace(0, 20 * np.pi, 1000)
-    grid = eq._get_rtz_grid(rho, alpha, zeta, coordinates="raz")
+    grid = get_rtz_grid(eq, rho, alpha, zeta, coordinates="raz")
     data = eq.compute("effective ripple", grid=grid)
     assert np.isfinite(data["effective ripple"]).all()
     np.testing.assert_allclose(

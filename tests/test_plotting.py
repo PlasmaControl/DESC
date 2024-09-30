@@ -516,6 +516,11 @@ class TestPlotBoundary:
         eq4 = get("ESTELL")
         with pytest.raises(ValueError, match="differing field periods"):
             fig, ax = plot_boundaries([eq3, eq4], theta=0)
+        _, _, data1 = plot_boundaries(
+            (eq1, eq2, eq3),
+            phi=4,
+            return_data=True,
+        )
         fig, ax, data = plot_boundaries(
             (eq1, eq2, eq3),
             phi=np.linspace(0, 2 * np.pi / eq3.NFP, 4, endpoint=False),
@@ -525,6 +530,12 @@ class TestPlotBoundary:
         assert "Z" in data.keys()
         assert len(data["R"]) == 3
         assert len(data["Z"]) == 3
+        assert (
+            data["R"][-1].shape == data1["R"][-1].shape
+        ), "Passing phi as an integer or array results in different behavior"
+        assert (
+            data["Z"][-1].shape == data1["Z"][-1].shape
+        ), "Passing phi as an integer or array results in different behavior"
 
         return fig
 

@@ -853,3 +853,12 @@ def safediv(a, b, fill=0, threshold=0):
     num = jnp.where(mask, fill, a)
     den = jnp.where(mask, 1, b)
     return num / den
+
+
+def ensure_tuple(x):
+    """Returns x as a tuple of arrays."""
+    if isinstance(x, tuple):
+        return x
+    if isinstance(x, list):
+        return tuple(x)
+    return (x,)

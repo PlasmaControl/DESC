@@ -39,7 +39,7 @@ doc_target = """
 doc_bounds = """
     bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f
+        Both bounds must be broadcastable to Objective.dim_f
 """
 doc_weight = """
     weight : {float, ndarray}, optional

@@ -44,7 +44,7 @@ doc_bounds = """
 doc_weight = """
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        Must be broadcastable to to Objective.dim_f
+        Must be broadcastable to Objective.dim_f
 """
 doc_normalize = """
     normalize : bool, optional

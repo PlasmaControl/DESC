@@ -174,7 +174,11 @@ class RotationalTransform(_Objective):
 
     """
 
-    __doc__ = __doc__.rstrip() + collect_docs(overwrite=profile_overwrite)
+    __doc__ = __doc__.rstrip() + collect_docs(
+        overwrite=profile_overwrite,
+        normalize_detail=" Note: Has no effect for this objective.",
+        normalize_target_detail=" Note: Has no effect for this objective.",
+    )
 
     _coordinates = "r"
     _units = "(dimensionless)"
@@ -318,7 +322,11 @@ class Shear(_Objective):
 
     """
 
-    __doc__ = __doc__.rstrip() + collect_docs(overwrite=profile_overwrite)
+    __doc__ = __doc__.rstrip() + collect_docs(
+        overwrite=profile_overwrite,
+        normalize_detail=" Note: Has no effect for this objective.",
+        normalize_target_detail=" Note: Has no effect for this objective.",
+    )
 
     _coordinates = "r"
     _units = "(dimensionless)"

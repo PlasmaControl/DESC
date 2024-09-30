@@ -208,7 +208,11 @@ class MagneticWell(_Objective):
 
     """
 
-    __doc__ = __doc__.rstrip() + collect_docs(overwrite=overwrite_stability)
+    __doc__ = __doc__.rstrip() + collect_docs(
+        overwrite=overwrite_stability,
+        normalize_detail=" Note: Has no effect for this objective.",
+        normalize_target_detail=" Note: Has no effect for this objective.",
+    )
 
     _coordinates = "r"
     _units = "(dimensionless)"

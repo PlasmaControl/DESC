@@ -63,7 +63,7 @@ class VacuumBoundaryError(_Objective):
         "auto" selects forward or reverse mode based on the size of the input and output
         of the objective. Has no effect on self.grad or self.hess which always use
         reverse mode and forward over reverse mode respectively.
-    grid : Grid, optional
+    eval_grid : Grid, optional
         Collocation grid containing the nodes to evaluate error at. Should be at rho=1.
         Defaults to ``LinearGrid(M=eq.M_grid, N=eq.N_grid)``
     field_grid : Grid, optional
@@ -104,7 +104,7 @@ class VacuumBoundaryError(_Objective):
         normalize_target=True,
         loss_function=None,
         deriv_mode="auto",
-        grid=None,
+        eval_grid=None,
         field_grid=None,
         field_fixed=False,
         name="Vacuum boundary error",
@@ -112,7 +112,7 @@ class VacuumBoundaryError(_Objective):
     ):
         if target is None and bounds is None:
             target = 0
-        self._grid = grid
+        self._eval_grid = eval_grid
         self._eq = eq
         self._field = field
         self._field_grid = field_grid
@@ -146,12 +146,12 @@ class VacuumBoundaryError(_Objective):
 
         """
         eq = self.things[0]
-        if self._grid is None:
+        if self._eval_grid is None:
             grid = LinearGrid(
                 rho=np.array([1.0]), M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False
             )
         else:
-            grid = self._grid
+            grid = self._eval_grid
 
         pres = np.max(np.abs(eq.compute("p")["p"]))
         curr = np.max(np.abs(eq.compute("current")["current"]))

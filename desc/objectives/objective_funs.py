@@ -799,7 +799,7 @@ class ObjectiveFunction(IOAble):
     @property
     def dim_f(self):
         """int: Number of objective equations."""
-        if not self.built:
+        if not hasattr(self, "_dim_f"):
             raise RuntimeError("ObjectiveFunction must be built first.")
         return self._dim_f
 

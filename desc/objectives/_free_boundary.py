@@ -12,7 +12,7 @@ from desc.grid import LinearGrid
 from desc.integrals import DFTInterpolator, FFTInterpolator, virtual_casing_biot_savart
 from desc.nestor import Nestor
 from desc.objectives.objective_funs import _Objective
-from desc.utils import PRINT_WIDTH, Timer, errorif, warnif
+from desc.utils import PRINT_WIDTH, Timer, errorif, parse_argname_change, warnif
 
 from .normalization import compute_scaling_factors
 
@@ -111,9 +111,7 @@ class VacuumBoundaryError(_Objective):
         jac_chunk_size=None,
         **kwargs,
     ):
-        self._eval_grid = self.parse_argname_change(
-            eval_grid, kwargs, "grid", "eval_grid"
-        )
+        self._eval_grid = parse_argname_change(eval_grid, kwargs, "grid", "eval_grid")
         if target is None and bounds is None:
             target = 0
         self._eval_grid = eval_grid

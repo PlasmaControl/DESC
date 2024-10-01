@@ -109,7 +109,11 @@ class VacuumBoundaryError(_Objective):
         field_fixed=False,
         name="Vacuum boundary error",
         jac_chunk_size=None,
+        **kwargs,
     ):
+        self._eval_grid = self.parse_argname_change(
+            eval_grid, kwargs, "grid", "eval_grid"
+        )
         if target is None and bounds is None:
             target = 0
         self._eval_grid = eval_grid

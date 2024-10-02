@@ -1163,7 +1163,7 @@ def run_regcoil(  # noqa: C901 fxn too complex
         plasma currents.
     regularization_type : {"simple","regcoil"}
         whether to use a simple regularization based off of just the single-valued
-        part of Phi, or to use the full REGCOIL regularization penalizing | K |^2.
+        part of Phi, or to use the full REGCOIL regularization penalizing | K | ^ 2.
         Default is simple, which is much cheaper than the REGCOIL regularization.
 
     Returns

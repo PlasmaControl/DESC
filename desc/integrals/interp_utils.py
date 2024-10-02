@@ -239,7 +239,7 @@ def interp_rfft2(
         Domain of coordinate specified by ``xq[...,0]`` over which samples were taken.
     domain1 : tuple[float]
         Domain of coordinate specified by ``xq[...,1]`` over which samples were taken.
-    axes : tuple[int, int]
+    axes : tuple[int]
         Axes along which to transform.
         The real transform is done along ``axes[1]``, so it will be more
         efficient for that to denote the larger size axis in ``axes``.
@@ -283,7 +283,7 @@ def irfft2_non_uniform(
         Domain of coordinate specified by ``xq[...,0]`` over which samples were taken.
     domain1 : tuple[float]
         Domain of coordinate specified by ``xq[...,1]`` over which samples were taken.
-    axes : tuple[int, int]
+    axes : tuple[int]
         Axes along which to transform.
 
     Returns

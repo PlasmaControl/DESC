@@ -3,6 +3,7 @@
 import numbers
 from abc import ABC
 from collections.abc import MutableSequence
+from functools import partial
 
 import numpy as np
 
@@ -32,7 +33,7 @@ from desc.utils import equals, errorif, flatten_list, safenorm, warnif
 
 
 @jit
-def biot_savart_hh(eval_pts, coil_pts_start, coil_pts_end, current):
+def biot_savart_hh(eval_pts, coil_pts_start, coil_pts_end, current, **kwargs):
     """Biot-Savart law for filamentary coils following [1].
 
     The coil is approximated by a series of straight line segments
@@ -81,8 +82,10 @@ def biot_savart_hh(eval_pts, coil_pts_start, coil_pts_end, current):
     return B
 
 
-@jit
-def biot_savart_vector_potential_hh(eval_pts, coil_pts_start, coil_pts_end, current):
+@partial(jit, static_argnums=(4,))
+def biot_savart_vector_potential_hh(
+    eval_pts, coil_pts_start, coil_pts_end, current, approx_f=False
+):
     """Biot-Savart law for vector potential for filamentary coils following [1].
 
     The coil is approximated by a series of straight line segments
@@ -99,6 +102,14 @@ def biot_savart_vector_potential_hh(eval_pts, coil_pts_start, coil_pts_end, curr
         though this is not checked.
     current : float
         Current through the coil (in Amps).
+    approx_f: bool
+            whether to approximate the f(eps) log term in the Hanson-Hirshman
+            vector potential calculation with a truncated Taylor series.
+            This can result in minor (~5%) savings over the exact calculation
+            and is extremely accurate (nearly to machine precision) as long as the
+            evaluation point distance is much larger than the line segment lengths
+            (the physical distance between consecutive points on
+            the given source_grid).
 
     Returns
     -------
@@ -120,8 +131,11 @@ def biot_savart_vector_potential_hh(eval_pts, coil_pts_start, coil_pts_end, curr
     Ri_p_Rf = Ri + Rf
 
     eps = L[:, jnp.newaxis] / (Ri_p_Rf)
-
-    A_mag = 1.0e-7 * current * jnp.log((1 + eps) / (1 - eps))  # 1.0e-7 ==  mu_0/(4 pi)
+    if approx_f:
+        f_of_eps = 2 * (eps + eps**3 / 3 + eps**5 / 5 + eps**7 / 7 + eps**9 / 9)
+    else:
+        f_of_eps = jnp.log((1 + eps) / (1 - eps))
+    A_mag = 1.0e-7 * current * f_of_eps  # 1.0e-7 ==  mu_0/(4 pi)
 
     # Now just need  to multiply by e^ = d_vec/L = (x_f - x_i)/L
     A = jnp.sum(A_mag[:, :, jnp.newaxis] * d_vec_over_L[:, jnp.newaxis, :], axis=0)
@@ -964,6 +978,7 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
         source_grid=None,
         transforms=None,
         compute_A_or_B="B",
+        approx_f=False,
     ):
         """Compute magnetic field or vector potential at a set of points.
 
@@ -986,6 +1001,14 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
         compute_A_or_B: {"A", "B"}, optional
             whether to compute the magnetic vector potential "A" or the magnetic field
             "B". Defaults to "B"
+        approx_f: bool
+            whether to approximate the f(eps) log term in the Hanson-Hirshman
+            vector potential calculation with a truncated Taylor series.
+            This can result in minor (~5%) savings over the exact calculation
+            and is extremely accurate (nearly to machine precision) as long as the
+            evaluation point distance is much larger than the line segment lengths
+            (the physical distance between consecutive points on
+            the given source_grid).
 
         Returns
         -------
@@ -1027,7 +1050,7 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
         # coils curvature which is a 2nd derivative of the position, and doing that
         # with only possibly c1 cubic splines is inaccurate, so we don't do it
         # (for now, maybe in the future?)
-        AB = op(coords, coil_pts_start, coil_pts_end, current)
+        AB = op(coords, coil_pts_start, coil_pts_end, current, approx_f=approx_f)
 
         if basis == "rpz":
             AB = xyz2rpz_vec(AB, x=coords[:, 0], y=coords[:, 1])
@@ -1070,7 +1093,13 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
         return self._compute_A_or_B(coords, params, basis, source_grid, transforms, "B")
 
     def compute_magnetic_vector_potential(
-        self, coords, params=None, basis="rpz", source_grid=None, transforms=None
+        self,
+        coords,
+        params=None,
+        basis="rpz",
+        source_grid=None,
+        transforms=None,
+        approx_f=False,
     ):
         """Compute magnetic vector potential at a set of points.
 
@@ -1091,6 +1120,14 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
             points. Should NOT include endpoint at 2pi.
         transforms : dict of Transform or array-like
             Transforms for R, Z, lambda, etc. Default is to build from grid.
+        approx_f: bool
+            whether to approximate the f(eps) log term in the Hanson-Hirshman
+            vector potential calculation with a truncated Taylor series.
+            This can result in minor (~5%) savings over the exact calculation
+            and is extremely accurate (nearly to machine precision) as long as the
+            evaluation point distance is much larger than the line segment lengths
+            (the physical distance between consecutive points on
+            the given source_grid).
 
         Returns
         -------
@@ -1105,7 +1142,9 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
         Convergence is approximately quadratic in the number of coil points.
 
         """
-        return self._compute_A_or_B(coords, params, basis, source_grid, transforms, "A")
+        return self._compute_A_or_B(
+            coords, params, basis, source_grid, transforms, "A", approx_f=approx_f
+        )
 
     @classmethod
     def from_values(

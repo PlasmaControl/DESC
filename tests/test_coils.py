@@ -242,11 +242,18 @@ class TestCoil:
         curve_grid = LinearGrid(zeta=N)
 
         def test(
-            coil, grid_xyz, grid_rpz, A_true_rpz, correct_flux, rtol=1e-10, atol=1e-12
+            coil,
+            grid_xyz,
+            grid_rpz,
+            A_true_rpz,
+            correct_flux,
+            rtol=1e-10,
+            atol=1e-12,
+            **kwargs,
         ):
             """Test that we compute the correct flux for the given coil."""
             A_xyz = coil.compute_magnetic_vector_potential(
-                grid_xyz, basis="xyz", source_grid=coil_grid
+                grid_xyz, basis="xyz", source_grid=coil_grid, **kwargs
             )
             A_rpz = coil.compute_magnetic_vector_potential(
                 grid_rpz, basis="rpz", source_grid=coil_grid
@@ -318,6 +325,7 @@ class TestCoil:
                 correct_flux,
                 rtol=1e-4,
                 atol=1e-12,
+                approx_f=True,
             )
 
             # FourierPlanarCoil

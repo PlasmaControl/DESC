@@ -1700,12 +1700,10 @@ class SurfaceCurrentRegularization(_Objective):
         worse the normal field.
     normalize : bool, optional
         Whether to compute the error in physical units or non-dimensionalize.
-        Note: has no effect on this objective.
     normalize_target : bool
         Whether target should be normalized before comparing to computed values.
         if `normalize` is `True` and the target is in physical units, this should also
         be set to True.
-        Note: has no effect on this objective.
     loss_function : {None, 'mean', 'min', 'max'}, optional
         Loss function to apply to the objective values once computed. This loss function
         is called on the raw compute value, before any shifting, scaling, or
@@ -1814,6 +1812,10 @@ class SurfaceCurrentRegularization(_Objective):
             obj=surface_current_field,
             grid=source_grid,
             has_axis=source_grid.axis.size,
+        )
+
+        self._normalization = np.max(
+            [abs(surface_current_field.I + surface_current_field.G), 1]
         )
 
         self._constants = {

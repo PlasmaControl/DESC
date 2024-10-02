@@ -150,8 +150,10 @@ def _f_2d(x, y):
 
 
 def _f_2d_nyquist_freq():
-    x_freq_nyquist = 3 + 2
-    y_freq_nyquist = 5 + 3
+    # can just sum frequencies multiplied above thanks to fourier
+    x_freq, y_freq = 3, 5
+    x_freq_nyquist = x_freq + 2
+    y_freq_nyquist = y_freq + 3
     return x_freq_nyquist, y_freq_nyquist
 
 
@@ -189,51 +191,69 @@ class TestFastInterp:
 
     @pytest.mark.unit
     @pytest.mark.parametrize(
-        "func, n",
+        "func, n, domain",
         [
-            (_f_1d, 2 * _f_1d_nyquist_freq() + 1),
-            (_f_1d, 2 * _f_1d_nyquist_freq()),
+            (_f_1d, 2 * _f_1d_nyquist_freq() + 1, (0, 2 * np.pi)),
+            # At Nyquist:
+            # Should pass for 1D example above, and useful since
+            # others don't test if nyquist frequency component is
+            # computed correctly since it would just be zero.
+            (_f_1d, 2 * _f_1d_nyquist_freq(), (0, 2 * np.pi)),
+            # shifted domain
+            (_f_1d, 2 * _f_1d_nyquist_freq() + 1, (-np.pi, np.pi)),
+            (_f_1d, 2 * _f_1d_nyquist_freq(), (-np.pi, np.pi)),
+            # faster period, can do at Nyquist rate if off phase
+            (lambda x: np.cos(7 * x), 1 * 2, (-np.pi / 7, np.pi / 7)),
+            # faster period, need above Nyquist rate if on phase
+            (lambda x: np.sin(7 * x), 1 * 2 + 1, (-np.pi / 7, np.pi / 7)),
         ],
     )
-    def test_interp_rfft(self, func, n):
+    def test_interp_rfft(self, func, n, domain):
         """Test non-uniform FFT interpolation."""
+        x = np.linspace(domain[0], domain[1], n, endpoint=False)
+        f = func(x)
         xq = np.array([7.34, 1.10134, 2.28])
-        x = np.linspace(0, 2 * np.pi, n, endpoint=False)
-        assert not np.any(np.isclose(xq[..., np.newaxis], x))
-        f, fq = func(x), func(xq)
-        np.testing.assert_allclose(interp_rfft(xq, f), fq)
+        fq = func(xq)
+        np.testing.assert_allclose(interp_rfft(xq, f, domain), fq)
         M = f.shape[-1]
-        np.testing.assert_allclose(
-            np.sum(
-                harmonic_vander(xq, M) * harmonic(rfft(f, norm="forward"), M), axis=-1
-            ),
-            fq,
-        )
+        basis = harmonic_vander(xq, M, domain)
+        coef = harmonic(rfft(f, norm="forward"), M)
+        np.testing.assert_allclose((basis * coef).sum(axis=-1), fq)
 
-    @pytest.mark.xfail(reason="Does numpy, jax, and scipy need to fix a bug with FFT?")
     @pytest.mark.unit
     @pytest.mark.parametrize(
-        "func, m, n",
+        "func, m, n, domain0, domain1",
         [
-            (_f_2d, 2 * _f_2d_nyquist_freq()[0] + 1, 2 * _f_2d_nyquist_freq()[1] + 1),
-            (_f_2d, 2 * _f_2d_nyquist_freq()[0], 2 * _f_2d_nyquist_freq()[1]),
+            (
+                _f_2d,
+                2 * _f_2d_nyquist_freq()[0] + 1,
+                2 * _f_2d_nyquist_freq()[1] + 1,
+                (0, 2 * np.pi),
+                (0, 2 * np.pi),
+            ),
+            (
+                _f_2d,
+                2 * _f_2d_nyquist_freq()[0] + 1,
+                2 * _f_2d_nyquist_freq()[1] + 1,
+                (-np.pi / 3, 5 * np.pi / 3),
+                (np.pi, 3 * np.pi),
+            ),
         ],
     )
-    def test_interp_rfft2(self, func, m, n):
+    def test_interp_rfft2(self, func, m, n, domain0, domain1):
         """Test non-uniform FFT interpolation."""
         xq = np.array([[7.34, 1.10134, 2.28], [1.1, 3.78432, 8.542]]).T
-        x = np.linspace(0, 2 * np.pi, m, endpoint=False)
-        y = np.linspace(0, 2 * np.pi, n, endpoint=False)
-        assert not np.any(np.isclose(xq[..., 0, np.newaxis], x))
-        assert not np.any(np.isclose(xq[..., 1, np.newaxis], y))
+        x = np.linspace(domain0[0], domain0[1], m, endpoint=False)
+        y = np.linspace(domain1[0], domain1[1], n, endpoint=False)
         x, y = map(np.ravel, list(np.meshgrid(x, y, indexing="ij")))
         truth = func(xq[..., 0], xq[..., 1])
+        f = func(x, y).reshape(m, n)
         np.testing.assert_allclose(
-            interp_rfft2(xq, func(x, y).reshape(m, n), axes=(-2, -1)),
+            interp_rfft2(xq, f, domain0, domain1, axes=(-2, -1)),
             truth,
         )
         np.testing.assert_allclose(
-            interp_rfft2(xq, func(x, y).reshape(m, n), axes=(-1, -2)),
+            interp_rfft2(xq, f, domain0, domain1, axes=(-1, -2)),
             truth,
         )
 

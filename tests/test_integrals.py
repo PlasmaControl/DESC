@@ -1187,7 +1187,7 @@ class TestBounce1D:
         print("(ρ, α):", nodes[m, l, 0])
 
         # 10. Plotting
-        fig, ax = bounce.plot(m, l, pitch_inv[l], include_legend=False, show=False)
+        fig, ax = bounce.plot(m, l, pitch_inv[l], include_legend=False, show=True)
         return fig
 
     @pytest.mark.unit
@@ -1554,7 +1554,7 @@ class TestBounce2D:
         rho = np.linspace(0.1, 1, 6)
         eq = get("HELIOTRON")
         grid = Grid.create_meshgrid(
-            [rho, fourier_pts(3 * eq._M_grid), fourier_pts(3 * eq.N_grid) / eq.NFP],
+            [rho, fourier_pts(eq._M_grid), fourier_pts(eq.N_grid) / eq.NFP],
             NFP=eq.NFP,
         )
         # 3. Compute input data.
@@ -1563,11 +1563,11 @@ class TestBounce2D:
         )
 
         # 4. Compute DESC coordinates of optimal interpolation nodes.
-        theta = Bounce2D.compute_theta(eq, M=64, N=32, rho=rho)
+        theta = Bounce2D.compute_theta(eq, M=128, N=200, rho=rho)
 
         # 5. Make the bounce integration operator.
         bounce = Bounce2D(
-            grid, data, theta, num_transit=3, N_B=64, quad=leggauss(3), check=True
+            grid, data, theta, num_transit=1, N_B=400, quad=leggauss(3), check=True
         )
         pitch_inv, _ = bounce.get_pitch_inv_quad(
             min_B=grid.compress(data["min_tz |B|"]),
@@ -1577,7 +1577,7 @@ class TestBounce2D:
         # 6. Compute bounce points.
         points = bounce.points(pitch_inv)
         # 7. Optionally check for correctness of bounce points.
-        bounce.check_points(points, pitch_inv, plot=False)
+        bounce.check_points(points, pitch_inv, plot=True)
         # 8. Integrate.
         num = bounce.integrate(
             integrand=TestBounce2D._example_numerator,
@@ -1608,8 +1608,9 @@ class TestBounce2D:
 
         # 10. Plotting
         fig, ax = bounce.plot_theta(l)
-        # TODO: why does this converge to different |B| than test_bounce1d_checks?
-        fig, ax = bounce.plot(l, pitch_inv[l], include_legend=False, show=False)
+        fig, ax = bounce.plot(
+            l, pitch_inv[l], include_legend=False, show=True, num=10000
+        )
         plt.show()
         return fig
 
@@ -1638,7 +1639,11 @@ class TestBounce2D:
         #        interpolation looks gross on LinearGrid. edit: likely because
         #        of multi-valued ness issue, but check after done
         grid = Grid.create_meshgrid(
-            [data["rho"], fourier_pts(5 * eq._M_grid), fourier_pts(1) / eq.NFP],
+            [
+                data["rho"],
+                fourier_pts(eq._M_grid),
+                fourier_pts(max(1, eq.N_grid)) / eq.NFP,
+            ],
             NFP=eq.NFP,
         )
         grid_data = eq.compute(
@@ -1673,12 +1678,10 @@ class TestBounce2D:
         bounce.check_points(points, pitch_inv, plot=True)
 
         f = Bounce2D.reshape_data(grid, grid_data["cvdrift"], grid_data["gbdrift"])
-        f_vec = Bounce2D.reshape_data(grid, grid_data["grad(alpha)"])
         drift_numerical_num = bounce.integrate(
             integrand=TestBounce2D.drift_num_integrand,
             pitch_inv=pitch_inv,
             f=f,
-            f_vec=f_vec,
             points=points,
             check=True,
             plot=True,

@@ -66,7 +66,7 @@ def cheb_pts(N, domain=(-1, 1), lobatto=False):
 
 
 def fourier_pts(M):
-    """Get ``M`` Fourier points in [0, 2π]."""
+    """Get ``M`` Fourier points in [0, 2π)."""
     # [0, 2π] instead of [-π, π] required to match our definition of α.
     return 2 * jnp.pi * jnp.arange(M) / M
 
@@ -112,7 +112,7 @@ def harmonic(a, M, axis=-1):
     return h
 
 
-def harmonic_vander(x, M):
+def harmonic_vander(x, M, domain=(0, 2 * np.pi)):
     """Nyquist trigonometric interpolant basis evaluated at ``x``.
 
     Parameters
@@ -121,6 +121,9 @@ def harmonic_vander(x, M):
         Points at which to evaluate pseudo-Vandermonde matrix.
     M : int
         Spectral resolution.
+    domain : tuple[float]
+        Domain over which samples will be taken.
+        This domain should span an open period of the function to interpolate.
 
     Returns
     -------
@@ -130,8 +133,8 @@ def harmonic_vander(x, M):
         Last axis ordered as [1, cos(x), ..., cos(mx), sin(x), sin(2x), ..., sin(mx)].
 
     """
-    m = jnp.fft.rfftfreq(M, d=1 / M)
-    mx = m * x[..., jnp.newaxis]
+    m = jnp.fft.rfftfreq(M, d=np.diff(domain) / (2 * jnp.pi) / M)
+    mx = m * (x - domain[0])[..., jnp.newaxis]
     basis = jnp.concatenate(
         [jnp.cos(mx), jnp.sin(mx[..., 1 : m.size - ((M % 2) == 0)])], axis=-1
     )
@@ -150,7 +153,7 @@ def harmonic_vander(x, M):
 #   https://github.com/flatironinstitute/jax-finufft.
 
 
-def interp_rfft(xq, f, axis=-1):
+def interp_rfft(xq, f, domain=(0, 2 * jnp.pi), axis=-1):
     """Interpolate real-valued ``f`` to ``xq`` with FFT.
 
     Parameters
@@ -159,7 +162,9 @@ def interp_rfft(xq, f, axis=-1):
         Real query points where interpolation is desired.
         Shape of ``xq`` must broadcast with arrays of shape ``np.delete(f.shape,axis)``.
     f : jnp.ndarray
-        Real 2π periodic function values on uniform grid to interpolate.
+        Real function values on uniform grid over an open period to interpolate.
+    domain : tuple[float]
+        Domain over which samples were taken.
     axis : int
         Axis along which to transform.
 
@@ -170,12 +175,12 @@ def interp_rfft(xq, f, axis=-1):
 
     """
     a = rfft(f, axis=axis, norm="forward")
-    fq = irfft_non_uniform(xq, a, f.shape[axis], axis)
+    fq = irfft_non_uniform(xq, a, f.shape[axis], domain, axis)
     return fq
 
 
-def irfft_non_uniform(xq, a, n, axis=-1):
-    """Evaluate Fourier coefficients ``a`` at ``xq`` ∈ [0, 2π].
+def irfft_non_uniform(xq, a, n, domain=(0, 2 * jnp.pi), axis=-1):
+    """Evaluate Fourier coefficients ``a`` at ``xq``.
 
     Parameters
     ----------
@@ -186,6 +191,8 @@ def irfft_non_uniform(xq, a, n, axis=-1):
         Fourier coefficients ``a=rfft(f,axis=axis,norm="forward")``.
     n : int
         Spectral resolution of ``a``.
+    domain : tuple[float]
+        Domain over which samples were taken.
     axis : int
         Axis along which to transform.
 
@@ -203,14 +210,17 @@ def irfft_non_uniform(xq, a, n, axis=-1):
         .at[..., -1]
         .divide(1.0 + ((n % 2) == 0))
     )
-    m = jnp.fft.rfftfreq(n, d=1 / n)
+    m = jnp.fft.rfftfreq(n, d=np.diff(domain) / (2 * jnp.pi) / n)
+    xq = xq - domain[0]
     basis = jnp.exp(-1j * m * xq[..., jnp.newaxis])
     fq = 2.0 * jnp.linalg.vecdot(basis, a).real
     # ℜ〈 basis, a 〉= cos(m xq)⋅ℜ(a) − sin(m xq)⋅ℑ(a)
     return fq
 
 
-def interp_rfft2(xq, f, axes=(-2, -1)):
+def interp_rfft2(
+    xq, f, domain0=(0, 2 * jnp.pi), domain1=(0, 2 * jnp.pi), axes=(-2, -1)
+):
     """Interpolate real-valued ``f`` to ``xq`` with FFT.
 
     Parameters
@@ -224,8 +234,11 @@ def interp_rfft2(xq, f, axes=(-2, -1)):
         across axis ``min(axes)`` (``max(axes)``) of the function values ``f``.
     f : jnp.ndarray
         Shape (..., f.shape[-2], f.shape[-1]).
-        Real (2π × 2π) periodic function values on uniform tensor-product grid
-        to interpolate.
+        Real function values on uniform tensor-product grid over an open period.
+    domain0 : tuple[float]
+        Domain of coordinate specified by ``xq[...,0]`` over which samples were taken.
+    domain1 : tuple[float]
+        Domain of coordinate specified by ``xq[...,1]`` over which samples were taken.
     axes : tuple[int, int]
         Axes along which to transform.
         The real transform is done along ``axes[1]``, so it will be more
@@ -238,12 +251,16 @@ def interp_rfft2(xq, f, axes=(-2, -1)):
 
     """
     a = rfft2(f, axes=axes, norm="forward")
-    fq = irfft2_non_uniform(xq, a, f.shape[axes[0]], f.shape[axes[1]], axes)
+    fq = irfft2_non_uniform(
+        xq, a, f.shape[axes[0]], f.shape[axes[1]], domain0, domain1, axes
+    )
     return fq
 
 
-def irfft2_non_uniform(xq, a, M, N, axes=(-2, -1)):
-    """Evaluate Fourier coefficients ``a`` at ``xq`` ∈ [0, 2π]².
+def irfft2_non_uniform(
+    xq, a, M, N, domain0=(0, 2 * jnp.pi), domain1=(0, 2 * jnp.pi), axes=(-2, -1)
+):
+    """Evaluate Fourier coefficients ``a`` at ``xq``.
 
     Parameters
     ----------
@@ -262,6 +279,10 @@ def irfft2_non_uniform(xq, a, M, N, axes=(-2, -1)):
         Spectral resolution of ``a`` along ``axes[0]``.
     N : int
         Spectral resolution of ``a`` along ``axes[1]``.
+    domain0 : tuple[float]
+        Domain of coordinate specified by ``xq[...,0]`` over which samples were taken.
+    domain1 : tuple[float]
+        Domain of coordinate specified by ``xq[...,1]`` over which samples were taken.
     axes : tuple[int, int]
         Axes along which to transform.
 
@@ -283,9 +304,11 @@ def irfft2_non_uniform(xq, a, M, N, axes=(-2, -1)):
         .divide(1.0 + ((N % 2) == 0))
     )
 
-    m = jnp.fft.fftfreq(M, d=1 / M)
-    n = jnp.fft.rfftfreq(N, d=1 / N)
+    m = jnp.fft.fftfreq(M, d=np.diff(domain0) / (2 * jnp.pi) / M)
+    n = jnp.fft.rfftfreq(N, d=np.diff(domain1) / (2 * jnp.pi) / N)
     idx = np.argsort(axes)
+
+    xq = xq - jnp.array([domain0[0], domain1[0]])
     basis = jnp.exp(
         1j
         * (

@@ -48,8 +48,7 @@ def _transform_to_desc(grid, f, is_reshaped=False):
     Parameters
     ----------
     grid : Grid
-        Tensor-product grid in (θ, ζ) with uniformly spaced nodes in
-        (2π × 2π) poloidal and toroidal coordinates.
+        Tensor-product grid in (θ, ζ) with uniformly spaced nodes [0, 2π) × [0, 2π/NFP).
         Preferably power of 2 for ``grid.num_theta`` and ``grid.num_zeta``.
     f : jnp.ndarray
         Function evaluated on ``grid``.
@@ -73,8 +72,7 @@ def _transform_to_clebsch(grid, nodes, f, is_reshaped=False):
     Parameters
     ----------
     grid : Grid
-        Tensor-product grid in (θ, ζ) with uniformly spaced nodes in
-        (2π × 2π) poloidal and toroidal coordinates.
+        Tensor-product grid in (θ, ζ) with uniformly spaced nodes [0, 2π) × [0, 2π/NFP).
         Preferably power of 2 for ``grid.num_theta`` and ``grid.num_zeta``.
     nodes : jnp.ndarray
         Shape (L, M, N, 2) or (M, N, 2).
@@ -100,6 +98,7 @@ def _transform_to_clebsch(grid, nodes, f, is_reshaped=False):
             # which is not a tensor product node set in DESC space.
             xq=nodes.reshape(*nodes.shape[:-3], M * N, 2),
             f=f[..., jnp.newaxis, :, :],
+            domain1=(0, 2 * jnp.pi / grid.NFP),
             axes=(-1, -2),
         ).reshape(*nodes.shape[:-3], M, N),
         domain=(0, 2 * jnp.pi),
@@ -156,8 +155,7 @@ def _transform_to_clebsch_1d(grid, alpha, theta, B, N_B, is_reshaped=False):
     Parameters
     ----------
     grid : Grid
-        Tensor-product grid in (θ, ζ) with uniformly spaced nodes in
-        (2π × 2π) poloidal and toroidal coordinates.
+        Tensor-product grid in (θ, ζ) with uniformly spaced nodes [0, 2π) × [0, 2π/NFP).
         Preferably power of 2 for ``grid.num_theta`` and ``grid.num_zeta``.
     alpha : jnp.ndarray
         Shape (L, num_transit) or (num_transit, ).
@@ -193,6 +191,7 @@ def _transform_to_clebsch_1d(grid, alpha, theta, B, N_B, is_reshaped=False):
     B = interp_rfft2(
         xq=xq,
         f=B[..., jnp.newaxis, :, :],
+        domain1=(0, 2 * jnp.pi / grid.NFP),
         axes=(-1, -2),
     ).reshape(*alpha.shape, N_B)
     # Parameterize |B| by single variable to compute roots.
@@ -421,9 +420,8 @@ class Bounce2D(IOAble):
         Parameters
         ----------
         grid : Grid
-            Tensor-product grid in (ρ, θ, ζ) with uniformly spaced nodes in
-            (2π × 2π) poloidal and toroidal coordinates.
-            Note that below shape notation defines
+            Tensor-product grid in (ρ, θ, ζ) with uniformly spaced nodes
+            [0, 2π) × [0, 2π/NFP). Note that below shape notation defines
             L = ``grid.num_rho``, m = ``grid.num_theta``, and n = ``grid.num_zeta``.
         data : dict[str, jnp.ndarray]
             Data evaluated on ``grid``.
@@ -480,6 +478,7 @@ class Bounce2D(IOAble):
         self._alpha = alpha
         self._m = grid.num_theta
         self._n = grid.num_zeta
+        self._NFP = grid.NFP
         self._x, self._w = get_quadrature(quad, automorphism)
 
         # peel off field lines
@@ -748,10 +747,12 @@ class Bounce2D(IOAble):
         z1, z2 = points
         shape = [*z1.shape, self._x.size]
 
+        # This is ζ along the field line.
         zeta = flatten_matrix(
             bijection_from_disc(self._x, z1[..., jnp.newaxis], z2[..., jnp.newaxis])
         )
-        # Expects shape (num_pitch, L) if T.cheb.shape[0] is L.
+        # Note self._T expects shape (num_pitch, L) if T.cheb.shape[0] is L.
+        # These are the (θ, ζ) coordinates of the quadrature points.
         Q = jnp.stack([self._T.eval1d(zeta), zeta], axis=-1)
 
         b_sup_z = irfft2_non_uniform(
@@ -759,20 +760,36 @@ class Bounce2D(IOAble):
             a=self._b_sup_z[..., jnp.newaxis, :, :],
             M=self._n,
             N=self._m,
+            domain1=(0, 2 * jnp.pi / self._NFP),
             axes=(-1, -2),
         )
         B = self._B.eval1d(zeta)
-        f = [interp_rfft2(Q, f_i[..., jnp.newaxis, :, :], axes=(-1, -2)) for f_i in f]
+        f = [
+            interp_rfft2(
+                Q,
+                f_i[..., jnp.newaxis, :, :],
+                domain1=(0, 2 * jnp.pi / self._NFP),
+                axes=(-1, -2),
+            )
+            for f_i in f
+        ]
         f_vec = [
             interp_rfft2(
-                Q[..., jnp.newaxis, :], f_i[..., jnp.newaxis, :, :, :], axes=(-2, -3)
+                Q[..., jnp.newaxis, :],
+                f_i[..., jnp.newaxis, :, :, :],
+                domain1=(0, 2 * jnp.pi / self._NFP),
+                axes=(-2, -3),
             )
             for f_i in f_vec
         ]
         result = _swap_pl(
             (
                 integrand(
-                    *f, *f_vec, B=B, pitch=1 / pitch_inv[..., jnp.newaxis], zeta=zeta
+                    *f,
+                    *f_vec,
+                    B=B,
+                    pitch=1 / pitch_inv[..., jnp.newaxis],
+                    zeta=zeta,
                 )
                 / b_sup_z
             )

@@ -782,6 +782,8 @@ class FourierCurrentPotentialField(
         secular linear term in theta (I)  and zeta (G) and a double Fourier
         series in theta/zeta.
 
+        NOTE: The function is not jit/AD compatible
+
         Parameters
         ----------
         num_coils : int, optional

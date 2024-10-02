@@ -1163,7 +1163,7 @@ def run_regcoil(  # noqa: C901 fxn too complex
         plasma currents.
     regularization_type : {"simple","regcoil"}
         whether to use a simple regularization based off of just the single-valued
-        part of Phi, or to use the full REGCOIL regularization penalizing | K |^2.
+        part of Phi, or to use the full REGCOIL regularization penalizing | K | ^ 2.
         Default is simple, which is much cheaper than the REGCOIL regularization.
 
     Returns
@@ -1203,7 +1203,7 @@ def run_regcoil(  # noqa: C901 fxn too complex
                 surface. a float if `lambda_regularization` was a float, or list of
                 float of length `lambda_regularization.size` if `lambda_regularization`
                 was an array, corresponding to the array of `lambda_regularization`.
-            |K| : Current density magnitude on winding surface, evaluated at the
+            | K | : Current density magnitude on winding surface, evaluated at the
                 given `source_grid`. An array of length `source_grid.num_nodes` if
                 `lambda_regularization` was a float, or list of arrays, with list
                 length `lambda_regularization.size`, if `lambda_regularization` was an

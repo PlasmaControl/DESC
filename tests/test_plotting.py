@@ -48,9 +48,9 @@ from desc.plotting import (
 from desc.utils import isalmostequal
 from desc.vmec import VMECIO
 
-tol_1d = 7.8
-tol_2d = 15
-tol_3d = 15
+tol_1d = 4.5
+tol_2d = 10
+tol_3d = 10
 
 
 @pytest.mark.unit
@@ -508,7 +508,7 @@ class TestPlotBoundary:
         return fig
 
     @pytest.mark.unit
-    @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
+    @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
     def test_plot_boundaries(self):
         """Test plotting boundaries."""
         eq1 = get("SOLOVEV")
@@ -517,6 +517,11 @@ class TestPlotBoundary:
         eq4 = get("ESTELL")
         with pytest.raises(ValueError, match="differing field periods"):
             fig, ax = plot_boundaries([eq3, eq4], theta=0)
+        _, _, data1 = plot_boundaries(
+            (eq1, eq2, eq3),
+            phi=4,
+            return_data=True,
+        )
         fig, ax, data = plot_boundaries(
             (eq1, eq2, eq3),
             phi=np.linspace(0, 2 * np.pi / eq3.NFP, 4, endpoint=False),
@@ -526,6 +531,12 @@ class TestPlotBoundary:
         assert "Z" in data.keys()
         assert len(data["R"]) == 3
         assert len(data["Z"]) == 3
+        assert (
+            data["R"][-1].shape == data1["R"][-1].shape
+        ), "Passing phi as an integer or array results in different behavior"
+        assert (
+            data["Z"][-1].shape == data1["Z"][-1].shape
+        ), "Passing phi as an integer or array results in different behavior"
 
         return fig
 

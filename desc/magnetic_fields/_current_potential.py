@@ -849,31 +849,8 @@ class FourierCurrentPotentialField(
         ################################################################
         # Find the XYZ points in real space of the coil contours
         ################################################################
-        def find_XYZ_points(
-            theta_pts,
-            zeta_pts,
-            surface,
-        ):
-            contour_X = []
-            contour_Y = []
-            contour_Z = []
 
-            for thetas, zetas in zip(theta_pts, zeta_pts):
-                coords = surface.compute(
-                    "x",
-                    grid=Grid(
-                        jnp.vstack((jnp.zeros_like(thetas), thetas, zetas)).T,
-                        sort=False,
-                    ),
-                    basis="xyz",
-                )["x"]
-                contour_X.append(coords[:, 0])
-                contour_Y.append(coords[:, 1])
-                contour_Z.append(coords[:, 2])
-
-            return contour_X, contour_Y, contour_Z
-
-        contour_X, contour_Y, contour_Z = find_XYZ_points(
+        contour_X, contour_Y, contour_Z = _find_XYZ_points(
             contour_theta,
             contour_zeta,
             self,
@@ -886,7 +863,7 @@ class FourierCurrentPotentialField(
 
         coils = []
         knot_numbers = []
-        for j in range(len(contour_X)):
+        for j in range(num_coils):
             if not jnp.isclose(helicity, 0):
                 # helical coils
                 # make sure that the sign of the coil current is correct
@@ -1683,7 +1660,6 @@ def _find_current_potential_contours(
         theta_full.size, zeta_full.size, order="F"
     )
 
-    N_trial_contours = len(contours) - 1
     # list of arrays of the zeta and theta coordinates
     # of each constant potential contour
     contour_zeta = []
@@ -1746,7 +1722,7 @@ def _find_current_potential_contours(
         )
         plt.xlabel(r"$\zeta$")
         plt.ylabel(r"$\theta$")
-    for j in range(N_trial_contours):
+    for j in range(num_coils):
         contour_zeta.append(contours_theta_zeta[j][:, 0])
         contour_theta.append(contours_theta_zeta[j][:, 1])
         # check if closed and if not throw warning
@@ -1787,7 +1763,7 @@ def _find_current_potential_contours(
         # and a -2pi*helicity shift in theta
         # we could alternatively wait until we are in real space and then
         # rotate the coils there, but this also works
-        for i_contour in range(len(contour_theta)):
+        for i_contour in range(num_coils):
             # check if the contour is arranged with zeta=0 at the start
             # or at the end, easiest to do this tiling if we assume
             # the first index is at zeta=0
@@ -1833,3 +1809,28 @@ def _find_current_potential_contours(
         plt.legend()
 
     return contour_theta, contour_zeta
+
+
+def _find_XYZ_points(
+    theta_pts,
+    zeta_pts,
+    surface,
+):
+    contour_X = []
+    contour_Y = []
+    contour_Z = []
+
+    for thetas, zetas in zip(theta_pts, zeta_pts):
+        coords = surface.compute(
+            "x",
+            grid=Grid(
+                jnp.vstack((jnp.zeros_like(thetas), thetas, zetas)).T,
+                sort=False,
+            ),
+            basis="xyz",
+        )["x"]
+        contour_X.append(coords[:, 0])
+        contour_Y.append(coords[:, 1])
+        contour_Z.append(coords[:, 2])
+
+    return contour_X, contour_Y, contour_Z

@@ -3065,7 +3065,7 @@ class FixOmniBmax(_FixedObjective):
                     np.logical_and((basis.modes[:, 1] % 2 == 0), basis.modes[:, 1] > 0),
                 )
             )[0]
-            mm = basis.modes[idx_m, 2]
+            mm = basis.modes[idx_m, 1]
             self._A[i, idx_0] = 1
             self._A[i, idx_m] = (mm % 2 - 1) * (mm % 4 - 1)
 

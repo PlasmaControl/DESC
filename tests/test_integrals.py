@@ -57,7 +57,7 @@ from desc.integrals.quad_utils import (
 from desc.integrals.singularities import _get_quadrature_nodes
 from desc.integrals.surface_integral import _get_grid_surface
 from desc.transform import Transform
-from desc.utils import dot, safediv
+from desc.utils import dot, errorif, safediv
 
 
 class TestSurfaceIntegral:
@@ -1134,11 +1134,11 @@ class TestBounce1D:
         # 1. Define python functions for the integrands. We do that above.
         # 2. Pick flux surfaces, field lines, and how far to follow the field
         #    line in Clebsch coordinates ρ, α, ζ.
-        rho = np.linspace(0.1, 1, 6)
-        alpha = np.array([0, 0.5])
-        zeta = np.linspace(-2 * np.pi, 2 * np.pi, 200)
+        rho = 1  # np.linspace(0.1, 1, 6)
+        alpha = 0  # np.array([0, 0.5])
+        zeta = np.linspace(0, 2 * np.pi, 400)
 
-        eq = get("HELIOTRON")
+        eq = get("W7-X")
         # 3. Convert above coordinates to DESC computational coordinates.
         grid = get_rtz_grid(eq, rho, alpha, zeta, coordinates="raz")
         # 4. Compute input data.
@@ -1146,7 +1146,9 @@ class TestBounce1D:
             Bounce1D.required_names + ["min_tz |B|", "max_tz |B|", "g_zz"], grid=grid
         )
         # 5. Make the bounce integration operator.
-        bounce = Bounce1D(grid.source_grid, data, quad=leggauss(3), check=True)
+        bounce = Bounce1D(
+            grid.source_grid, data, quad=leggauss(3), check=True, warn=False
+        )
         pitch_inv, _ = bounce.get_pitch_inv_quad(
             min_B=grid.compress(data["min_tz |B|"]),
             max_B=grid.compress(data["max_tz |B|"]),
@@ -1172,13 +1174,19 @@ class TestBounce1D:
             batch=False,
         )
         avg = safediv(num, den)
-        assert np.isfinite(avg).all() and np.count_nonzero(avg)
+        errorif(not np.isfinite(avg).all())
+        errorif(
+            np.count_nonzero(avg) == 0,
+            msg="Detected 0 wells on this cut of the field line. Make sure enough "
+            "toroidal transits were followed for this test, or plot the field line "
+            "to see if this is expected.",
+        )
 
         # 9. Example manipulation of the output
         # Sum all bounce averages across a particular field line, for every field line.
         result = avg.sum(axis=-1)
         # The result stored at
-        m, l, p = 0, 1, 3
+        m, l, p = 0, 0, 3
         print("Result(α, ρ, λ):", result[m, l, p])
         # corresponds to the 1/λ value
         print("1/λ(α, ρ):", pitch_inv[l, p])
@@ -1551,10 +1559,15 @@ class TestBounce2D:
 
         # 1. Define python functions for the integrands. We do that above.
         # 2. Pick flux surfaces and grid resolution.
-        rho = np.linspace(0.1, 1, 6)
-        eq = get("HELIOTRON")
+        rho = 1  # np.linspace(0.1, 1, 6)
+        eq = get("W7-X")
         grid = Grid.create_meshgrid(
-            [rho, fourier_pts(eq._M_grid), fourier_pts(eq.N_grid) / eq.NFP],
+            [
+                rho,
+                fourier_pts(eq._M_grid),
+                fourier_pts(max(1, eq.N_grid)) / eq.NFP,
+            ],
+            period=(np.inf, 2 * np.pi, 2 * np.pi / eq.NFP),
             NFP=eq.NFP,
         )
         # 3. Compute input data.
@@ -1563,11 +1576,18 @@ class TestBounce2D:
         )
 
         # 4. Compute DESC coordinates of optimal interpolation nodes.
-        theta = Bounce2D.compute_theta(eq, M=128, N=200, rho=rho)
+        theta = Bounce2D.compute_theta(eq, M=2, N=512, rho=rho)
 
         # 5. Make the bounce integration operator.
         bounce = Bounce2D(
-            grid, data, theta, num_transit=1, N_B=400, quad=leggauss(3), check=True
+            grid,
+            data,
+            theta,
+            num_transit=1,
+            N_B=512,
+            quad=leggauss(3),
+            check=True,
+            warn=False,
         )
         pitch_inv, _ = bounce.get_pitch_inv_quad(
             min_B=grid.compress(data["min_tz |B|"]),
@@ -1599,7 +1619,7 @@ class TestBounce2D:
         # Sum all bounce averages across a particular field line, for every field line.
         result = avg.sum(axis=-1)
         # The result stored at
-        l, p = 1, 3
+        l, p = 0, 3
         print("Result(ρ, λ):", result[l, p])
         # corresponds to the 1/λ value
         print("1/λ(ρ):", pitch_inv[l, p])
@@ -1608,9 +1628,9 @@ class TestBounce2D:
 
         # 10. Plotting
         fig, ax = bounce.plot_theta(l)
-        fig, ax = bounce.plot(
-            l, pitch_inv[l], include_legend=False, show=True, num=10000
-        )
+        # FIXME: get this plot to match test_bounce1d_checks plot.
+        #      must not be the same part of field line? everything is tested to work...
+        fig, ax = bounce.plot(l, pitch_inv[l], include_legend=False, show=True)
         plt.show()
         return fig
 

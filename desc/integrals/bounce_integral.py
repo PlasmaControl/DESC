@@ -188,6 +188,7 @@ def _transform_to_clebsch_1d(grid, alpha, theta, B, N_B, is_reshaped=False):
     xq = jnp.stack(
         [theta, jnp.broadcast_to(cheb_pts(N_B, domain=T.domain), theta.shape)], axis=-1
     ).reshape(*alpha.shape[:-1], alpha.shape[-1] * N_B, 2)
+
     B = interp_rfft2(
         xq=xq,
         f=B[..., jnp.newaxis, :, :],
@@ -680,13 +681,13 @@ class Bounce2D(IOAble):
             as the indices that correspond to that field line.
         f : list[jnp.ndarray] or jnp.ndarray
             Shape (L, m, n).
-            Real scalar-valued (2π × 2π) periodic in (θ, ζ) functions evaluated
+            Real scalar-valued (2π × 2π/NFP) periodic in (θ, ζ) functions evaluated
             on the ``grid`` supplied to construct this object. These functions
             should be arguments to the callable ``integrand``. Use the method
             ``Bounce2D.reshape_data`` to reshape the data into the expected shape.
         f_vec : list[jnp.ndarray] or jnp.ndarray
             Shape (L, m, n, 3).
-            Real vector-valued (2π × 2π) periodic in (θ, ζ) functions evaluated
+            Real vector-valued (2π × 2π/NFP) periodic in (θ, ζ) functions evaluated
             on the ``grid`` supplied to construct this object. These functions
             should be arguments to the callable ``integrand``. Use the method
             ``Bounce2D.reshape_data`` to reshape the data into the expected shape.
@@ -764,6 +765,8 @@ class Bounce2D(IOAble):
             axes=(-1, -2),
         )
         B = self._B.eval1d(zeta)
+        # Note not all functions are periodic in ζ with period 2π/NFP.
+        # Users will likely want GitHub issue #1287.
         f = [
             interp_rfft2(
                 Q,

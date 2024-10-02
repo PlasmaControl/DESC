@@ -193,19 +193,13 @@ class TestFastInterp:
     @pytest.mark.parametrize(
         "func, n, domain",
         [
+            # Test cases chosen with purpose, don't remove any.
             (_f_1d, 2 * _f_1d_nyquist_freq() + 1, (0, 2 * np.pi)),
-            # At Nyquist:
-            # Should pass for 1D example above, and useful since
-            # others don't test if nyquist frequency component is
-            # computed correctly since it would just be zero.
             (_f_1d, 2 * _f_1d_nyquist_freq(), (0, 2 * np.pi)),
-            # shifted domain
             (_f_1d, 2 * _f_1d_nyquist_freq() + 1, (-np.pi, np.pi)),
             (_f_1d, 2 * _f_1d_nyquist_freq(), (-np.pi, np.pi)),
-            # faster period, can do at Nyquist rate if off phase
-            (lambda x: np.cos(7 * x), 1 * 2, (-np.pi / 7, np.pi / 7)),
-            # faster period, need above Nyquist rate if on phase
-            (lambda x: np.sin(7 * x), 1 * 2 + 1, (-np.pi / 7, np.pi / 7)),
+            (lambda x: np.cos(7 * x), 2, (-np.pi / 7, np.pi / 7)),
+            (lambda x: np.sin(7 * x), 3, (-np.pi / 7, np.pi / 7)),
         ],
     )
     def test_interp_rfft(self, func, n, domain):

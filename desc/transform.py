@@ -8,7 +8,13 @@ from termcolor import colored
 
 from desc.backend import jnp, put
 from desc.io import IOAble
-from desc.utils import combination_permutation, isalmostequal, islinspaced, issorted
+from desc.utils import (
+    combination_permutation,
+    errorif,
+    isalmostequal,
+    islinspaced,
+    issorted,
+)
 
 
 class Transform(IOAble):
@@ -59,21 +65,22 @@ class Transform(IOAble):
         self._basis = basis
         self._rcond = rcond if rcond is not None else "auto"
 
-        if (
-            method != "jitable"
-            and grid.node_pattern != "custom"
+        errorif(
+            self.grid.coordinates != "rtz",
+            msg=f"Expected coordinates rtz got {self.grid.coordinates}.",
+        )
+        # DESC truncates the computational domain to ζ ∈ [0, 2π/grid.NFP]
+        # and changes variables to the spectrally condensed ζ* = basis.NFP ζ,
+        # so basis.NFP must equal grid.NFP.
+        errorif(
+            self.grid.NFP != self.basis.NFP
             and self.basis.N != 0
-            and self.grid.NFP != self.basis.NFP
-            and np.any(self.grid.nodes[:, 2] != 0)
-        ):
-            warnings.warn(
-                colored(
-                    "Unequal number of field periods for grid {} and basis {}.".format(
-                        self.grid.NFP, self.basis.NFP
-                    ),
-                    "yellow",
-                )
-            )
+            and grid.node_pattern != "custom"
+            # I'd argue these two are not worth it
+            and method != "jitable" and np.any(self.grid.nodes[:, 2] != 0),
+            msg=f"Unequal number of field periods for grid {self.grid.NFP} and "
+            f"basis {self.basis.NFP}.",
+        )
 
         self._built = False
         self._built_pinv = False

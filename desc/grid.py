@@ -671,6 +671,7 @@ class Grid(_Grid):
         Use np.inf to denote no periodicity.
     NFP : int
         Number of field periods (Default = 1).
+        Change this only if your nodes are placed within one field period.
     source_grid : Grid
         Grid from which coordinates were mapped from.
     sort : bool
@@ -794,7 +795,8 @@ class Grid(_Grid):
         NFP : int
             Number of field periods (Default = 1).
             Only makes sense to change from 1 if last coordinate is periodic
-            with some constant divided by ``NFP``.
+            with some constant divided by ``NFP`` and the nodes are placed
+            within one field period.
 
         Returns
         -------
@@ -916,6 +918,8 @@ class LinearGrid(_Grid):
         Toroidal grid resolution.
     NFP : int
         Number of field periods (Default = 1).
+        Change this only if your nodes are placed within one field period
+        or should be interpreted as spanning one field period.
     sym : bool
         True for stellarator symmetry, False otherwise (Default = False).
     axis : bool
@@ -1011,6 +1015,8 @@ class LinearGrid(_Grid):
             Toroidal grid resolution.
         NFP : int
             Number of field periods (Default = 1).
+            Only change this if your nodes are placed within one field period
+            or should be interpreted as spanning one field period.
         axis : bool
             True to include a point at rho=0 (default), False for rho[0] = rho[1]/2.
         endpoint : bool

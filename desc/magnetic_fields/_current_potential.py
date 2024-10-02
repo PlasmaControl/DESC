@@ -762,7 +762,7 @@ class FourierCurrentPotentialField(
 
     def to_CoilSet(  # noqa: C901 - FIXME: simplify this
         self,
-        num_coils=10,  # TODO: make this coils_per_NFP for modular...
+        num_coils,
         step=1,
         spline_method="cubic",
         show_plots=False,
@@ -785,10 +785,10 @@ class FourierCurrentPotentialField(
         Parameters
         ----------
         num_coils : int, optional
-            Total number of coils to discretize the surface current with, by default 10.
-            if the coils are modular (i.e. I=0), then this is the number of
+            Number of coils to discretize the surface current with.
+            If the coils are modular (i.e. I=0), then this is the number of
             coils per field period. If the coils are stellarator-symmetric, then this
-            is the number of coils per half field-period
+            is the number of coils per half field-period.
         step : int, optional
             Amount of points to skip by when saving the coil geometry spline
             by default 1, meaning that every point will be saved

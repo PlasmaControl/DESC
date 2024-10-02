@@ -237,6 +237,9 @@ _class_inheritance = {
     "desc.geometry.curve.FourierPlanarCurve": [
         "desc.geometry.core.Curve",
     ],
+    "desc.geometry.curve.C0FourierPlanarCurve": [
+        "desc.geometry.core.Curve",
+    ],
     "desc.geometry.curve.SplineXYZCurve": [
         "desc.geometry.core.Curve",
     ],

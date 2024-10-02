@@ -161,7 +161,10 @@ def _Z_Curve(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="s",
     data=["x"],
-    parameterization="desc.geometry.curve.FourierPlanarCurve",
+    parameterization=[
+        "desc.geometry.curve.FourierPlanarCurve",
+        "desc.geometry.curve.C0FourierPlanarCurve",
+    ],
     basis_in="{'rpz', 'xyz'}: Basis for input params vectors, Default 'xyz'",
 )
 def _center_FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
@@ -175,6 +178,242 @@ def _center_FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
     # convert back to rpz
     data["center"] = xyz2rpz(center) * jnp.ones_like(data["x"])
     return data
+
+
+@register_compute_fun(
+    name="x",
+    label="\\mathbf{x}",
+    units="m",
+    units_long="meters",
+    description="Position vector along curve",
+    dim=3,
+    params=["r_n", "center", "normal", "rotmat", "shift"],
+    transforms={"r": [[0, 0, 0]]},
+    profiles=[],
+    coordinates="s",
+    data=["s"],
+    parameterization="desc.geometry.curve.C0FourierPlanarCurve",
+    basis_in="{'rpz', 'xyz'}: Basis for input params vectors, Default 'xyz'",
+    len_rn=1,
+)
+def _x_C0FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
+    if kwargs.get("basis_in", "xyz").lower() == "rpz":
+        center = rpz2xyz(params["center"])
+        normal = rpz2xyz_vec(params["normal"], phi=params["center"][1])
+    else:
+        center = params["center"]
+        normal = params["normal"]
+
+    len_rn = kwargs.get("len_rn", 1)
+
+    # 0 to pi
+    r1 = transforms["r"].transform(jnp.atleast_1d(params["r_n"][:len_rn]), dz=0)
+    Z1 = jnp.zeros_like(r1)
+    X1 = r1 * jnp.cos(data["s"])
+    X1 = jnp.where(data["s"] > jnp.pi, X1, 0)
+    Y1 = r1 * jnp.sin(data["s"])
+    Y1 = jnp.where(data["s"] > jnp.pi, Y1, 0)
+
+    # pi to 2pi
+    r2 = transforms["r"].transform(jnp.atleast_1d(params["r_n"][len_rn:]), dz=0)
+    Z2 = jnp.zeros_like(r2)
+    X2 = r2 * jnp.cos(data["s"])
+    X2 = jnp.where(data["s"] < jnp.pi, X2, 0)
+    Y2 = r2 * jnp.sin(data["s"])
+    Y2 = jnp.where(data["s"] < jnp.pi, Y2, 0)
+
+    X = X1 + X2
+    Y = Y1 + Y2
+    Z = Z1 + Z2
+
+    coords = jnp.array([X, Y, Z]).T
+
+    # rotate into place
+    Zaxis = jnp.array([0.0, 0.0, 1.0])  # 2D curve in X-Y plane has normal = +Z axis
+    axis = cross(Zaxis, normal)
+    angle = jnp.arccos(dot(Zaxis, safenormalize(normal)))
+    A = rotation_matrix(axis=axis, angle=angle)
+    coords = jnp.matmul(coords, A.T) + center
+    coords = jnp.matmul(coords, params["rotmat"].reshape((3, 3)).T) + params["shift"]
+    # convert back to rpz
+    coords = xyz2rpz(coords)
+    data["x"] = coords
+
+    return data
+
+
+@register_compute_fun(
+    name="x_s",
+    label="\\mathbf{x}",
+    units="m",
+    units_long="meters",
+    description="Position vector along curve",
+    dim=3,
+    params=["r_n", "center", "normal", "rotmat", "shift"],
+    transforms={"r": [[0, 0, 0]]},
+    profiles=[],
+    coordinates="s",
+    data=["s"],
+    parameterization="desc.geometry.curve.C0FourierPlanarCurve",
+    basis_in="{'rpz', 'xyz'}: Basis for input params vectors, Default 'xyz'",
+)
+def _x_s_C0FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
+    if kwargs.get("basis_in", "xyz").lower() == "rpz":
+        center = rpz2xyz(params["center"])
+        normal = rpz2xyz_vec(params["normal"], phi=params["center"][1])
+    else:
+        center = params["center"]
+        normal = params["normal"]
+
+    params["r_n"]
+
+    # enforce that all curves have same resolution
+    r = transforms["r"].transform(params["r_n"], dz=0)
+    Z = jnp.zeros_like(r)
+
+    # 0 to pi
+    X1 = r[0] * jnp.cos(data["s"])
+    X1 = jnp.where(data["s"] > jnp.pi, X1, 0)
+    Y1 = r[0] * jnp.sin(data["s"])
+    Y1 = jnp.where(data["s"] > jnp.pi, Y1, 0)
+
+    # pi to 2pi
+    X2 = r[1] * jnp.cos(data["s"])
+    X2 = jnp.where(data["s"] < jnp.pi, X2, 0)
+    Y2 = r[1] * jnp.sin(data["s"])
+    Y2 = jnp.where(data["s"] < jnp.pi, Y2, 0)
+
+    X = X1 + X2
+    Y = Y1 + Y2
+
+    coords = jnp.array([X, Y, Z]).T
+
+    # rotate into place
+    Zaxis = jnp.array([0.0, 0.0, 1.0])  # 2D curve in X-Y plane has normal = +Z axis
+    axis = cross(Zaxis, normal)
+    angle = jnp.arccos(dot(Zaxis, safenormalize(normal)))
+    A = rotation_matrix(axis=axis, angle=angle)
+    coords = jnp.matmul(coords, A.T) + center
+    coords = jnp.matmul(coords, params["rotmat"].reshape((3, 3)).T) + params["shift"]
+    # convert back to rpz
+    coords = xyz2rpz(coords)
+    data["x"] = coords
+
+
+@register_compute_fun(
+    name="x_ss",
+    label="\\mathbf{x}",
+    units="m",
+    units_long="meters",
+    description="Position vector along curve",
+    dim=3,
+    params=["r_n", "center", "normal", "rotmat", "shift"],
+    transforms={"r": [[0, 0, 0]]},
+    profiles=[],
+    coordinates="s",
+    data=["s"],
+    parameterization="desc.geometry.curve.C0FourierPlanarCurve",
+    basis_in="{'rpz', 'xyz'}: Basis for input params vectors, Default 'xyz'",
+)
+def _x_ss_C0FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
+    if kwargs.get("basis_in", "xyz").lower() == "rpz":
+        center = rpz2xyz(params["center"])
+        normal = rpz2xyz_vec(params["normal"], phi=params["center"][1])
+    else:
+        center = params["center"]
+        normal = params["normal"]
+
+    params["r_n"]
+
+    # enforce that all curves have same resolution
+    r = transforms["r"].transform(params["r_n"], dz=0)
+    Z = jnp.zeros_like(r)
+
+    # 0 to pi
+    X1 = r[0] * jnp.cos(data["s"])
+    X1 = jnp.where(data["s"] > jnp.pi, X1, 0)
+    Y1 = r[0] * jnp.sin(data["s"])
+    Y1 = jnp.where(data["s"] > jnp.pi, Y1, 0)
+
+    # pi to 2pi
+    X2 = r[1] * jnp.cos(data["s"])
+    X2 = jnp.where(data["s"] < jnp.pi, X2, 0)
+    Y2 = r[1] * jnp.sin(data["s"])
+    Y2 = jnp.where(data["s"] < jnp.pi, Y2, 0)
+
+    X = X1 + X2
+    Y = Y1 + Y2
+
+    coords = jnp.array([X, Y, Z]).T
+
+    # rotate into place
+    Zaxis = jnp.array([0.0, 0.0, 1.0])  # 2D curve in X-Y plane has normal = +Z axis
+    axis = cross(Zaxis, normal)
+    angle = jnp.arccos(dot(Zaxis, safenormalize(normal)))
+    A = rotation_matrix(axis=axis, angle=angle)
+    coords = jnp.matmul(coords, A.T) + center
+    coords = jnp.matmul(coords, params["rotmat"].reshape((3, 3)).T) + params["shift"]
+    # convert back to rpz
+    coords = xyz2rpz(coords)
+    data["x"] = coords
+
+
+@register_compute_fun(
+    name="x_sss",
+    label="\\mathbf{x}",
+    units="m",
+    units_long="meters",
+    description="Position vector along curve",
+    dim=3,
+    params=["r_n", "center", "normal", "rotmat", "shift"],
+    transforms={"r": [[0, 0, 0]]},
+    profiles=[],
+    coordinates="s",
+    data=["s"],
+    parameterization="desc.geometry.curve.C0FourierPlanarCurve",
+    basis_in="{'rpz', 'xyz'}: Basis for input params vectors, Default 'xyz'",
+)
+def _x_sss_C0FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
+    if kwargs.get("basis_in", "xyz").lower() == "rpz":
+        center = rpz2xyz(params["center"])
+        normal = rpz2xyz_vec(params["normal"], phi=params["center"][1])
+    else:
+        center = params["center"]
+        normal = params["normal"]
+
+    params["r_n"]
+
+    # enforce that all curves have same resolution
+    r = transforms["r"].transform(params["r_n"], dz=0)
+    Z = jnp.zeros_like(r)
+
+    # 0 to pi
+    X1 = r[0] * jnp.cos(data["s"])
+    X1 = jnp.where(data["s"] > jnp.pi, X1, 0)
+    Y1 = r[0] * jnp.sin(data["s"])
+    Y1 = jnp.where(data["s"] > jnp.pi, Y1, 0)
+
+    # pi to 2pi
+    X2 = r[1] * jnp.cos(data["s"])
+    X2 = jnp.where(data["s"] < jnp.pi, X2, 0)
+    Y2 = r[1] * jnp.sin(data["s"])
+    Y2 = jnp.where(data["s"] < jnp.pi, Y2, 0)
+
+    X = X1 + X2
+    Y = Y1 + Y2
+
+    coords = jnp.array([X, Y, Z]).T
+
+    # rotate into place
+    Zaxis = jnp.array([0.0, 0.0, 1.0])  # 2D curve in X-Y plane has normal = +Z axis
+    axis = cross(Zaxis, normal)
+    angle = jnp.arccos(dot(Zaxis, safenormalize(normal)))
+    A = rotation_matrix(axis=axis, angle=angle)
+    coords = jnp.matmul(coords, A.T) + center
+    coords = jnp.matmul(coords, params["rotmat"].reshape((3, 3)).T) + params["shift"]
+    # convert back to rpz
+    coords = xyz2rpz(coords)
+    data["x"] = coords
 
 
 @register_compute_fun(

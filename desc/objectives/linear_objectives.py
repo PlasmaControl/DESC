@@ -436,6 +436,36 @@ class BoundaryZSelfConsistency(_Objective):
         return jnp.dot(self._A, params["Z_lmn"]) - params["Zb_lmn"]
 
 
+class C0FourierPlanarCurveSelfConsistency(_Objective):
+    """Objective to enforce C0 continuity of the curve."""
+
+    def __init__(
+        self,
+        curves,
+        name="",
+    ):
+        """Initialize the objective."""
+        super().__init__(
+            things=curves,
+            target=0,
+            bounds=None,
+            weight=1,
+            normalize=False,
+            normalize_target=False,
+            name=name,
+        )
+
+    def build(self, use_jit=False, verbose=1):
+        """Building."""
+        self._dim_f = 1
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, params, constants=None):
+        """Compute error in C0 continuity of the curve."""
+        f = sum(params[0]["r_n"]) - sum(params[1]["r_n"])
+        return f
+
+
 class AxisRSelfConsistency(_Objective):
     """Ensure consistency between Zernike and Fourier coefficients on axis.
 

@@ -1815,7 +1815,7 @@ class SurfaceCurrentRegularization(_Objective):
         )
 
         self._normalization = np.max(
-            [abs(surface_current_field.I + surface_current_field.G), 1]
+            [abs(surface_current_field.I) + abs(surface_current_field.G), 1]
         )
 
         self._constants = {

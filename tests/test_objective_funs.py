@@ -1323,6 +1323,7 @@ def test_derivative_modes():
             AspectRatio(eq),
         ],
         deriv_mode="batched",
+        jac_chunk_size="auto",
         use_jit=False,
     )
     obj2 = ObjectiveFunction(
@@ -1332,13 +1333,15 @@ def test_derivative_modes():
             AspectRatio(eq, jac_chunk_size=None),
         ],
         deriv_mode="blocked",
+        jac_chunk_size="auto",
         use_jit=False,
     )
     obj1.build()
     obj2.build()
     # check that default size works for blocked
-    assert obj2.objectives[1]._jac_chunk_size is None
-    assert obj2.objectives[2]._jac_chunk_size is None
+    assert obj2.objectives[0]._jac_chunk_size == 2
+    assert obj2.objectives[1]._jac_chunk_size > 0
+    assert obj2.objectives[2]._jac_chunk_size > 0
     # hard to say what size auto will give, just check it is >0
     assert obj1._jac_chunk_size > 0
     obj3.build()

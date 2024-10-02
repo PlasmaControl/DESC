@@ -12,7 +12,7 @@ from desc.grid import LinearGrid
 from desc.integrals import DFTInterpolator, FFTInterpolator, virtual_casing_biot_savart
 from desc.nestor import Nestor
 from desc.objectives.objective_funs import _Objective, collect_docs
-from desc.utils import PRINT_WIDTH, Timer, errorif, warnif
+from desc.utils import PRINT_WIDTH, Timer, errorif, parse_argname_change, warnif
 
 from .normalization import compute_scaling_factors
 
@@ -38,7 +38,7 @@ class VacuumBoundaryError(_Objective):
         Equilibrium that will be optimized to satisfy the Objective.
     field : MagneticField
         External field produced by coils or other sources outside the plasma.
-    grid : Grid, optional
+    eval_grid : Grid, optional
         Collocation grid containing the nodes to evaluate error at. Should be at rho=1.
         Defaults to ``LinearGrid(M=eq.M_grid, N=eq.N_grid)``
     field_grid : Grid, optional
@@ -70,15 +70,17 @@ class VacuumBoundaryError(_Objective):
         normalize_target=True,
         loss_function=None,
         deriv_mode="auto",
-        grid=None,
+        eval_grid=None,
         field_grid=None,
         field_fixed=False,
         name="Vacuum boundary error",
         jac_chunk_size=None,
+        **kwargs,
     ):
+        eval_grid = parse_argname_change(eval_grid, kwargs, "grid", "eval_grid")
         if target is None and bounds is None:
             target = 0
-        self._grid = grid
+        self._eval_grid = eval_grid
         self._eq = eq
         self._field = field
         self._field_grid = field_grid
@@ -112,12 +114,12 @@ class VacuumBoundaryError(_Objective):
 
         """
         eq = self.things[0]
-        if self._grid is None:
+        if self._eval_grid is None:
             grid = LinearGrid(
                 rho=np.array([1.0]), M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False
             )
         else:
-            grid = self._grid
+            grid = self._eval_grid
 
         pres = np.max(np.abs(eq.compute("p")["p"]))
         curr = np.max(np.abs(eq.compute("current")["current"]))

@@ -1317,16 +1317,25 @@ def test_second_stage_optimization_CoilSet():
 
 @pytest.mark.slow
 @pytest.mark.unit
-def test_optimize_with_all_coil_types(DummyCoilSet, DummyMixedCoilSet):
+@pytest.mark.parametrize(
+    "coil,optimizer,index",
+    [
+        (FourierPlanarCoil(), "fmintr", None),
+        (FourierRZCoil(), "fmintr", None),
+        (FourierXYZCoil(), "fmintr", None),
+        ("DummyMixedCoilSet", "fmintr", -1),  # spline coil
+        ("DummyCoilSet", "lsq-exact", 0),  # sym coils
+        ("DummyCoilSet", "lsq-exact", 1),  # asym coils
+        ("DummyMixedCoilSet", "lsq-exact", None),
+        ("DummyNestedCoilSet", "lsq-exact", None),
+    ],
+)
+def test_optimize_with_all_coil_types(coil, optimizer, index, request):
     """Test optimizing for every type of coil and dummy coil sets."""
-    sym_coils = load(load_from=str(DummyCoilSet["output_path_sym"]), file_format="hdf5")
-    asym_coils = load(
-        load_from=str(DummyCoilSet["output_path_asym"]), file_format="hdf5"
-    )
-    mixed_coils = load(
-        load_from=str(DummyMixedCoilSet["output_path"]), file_format="hdf5"
-    )
-    nested_coils = MixedCoilSet(sym_coils, mixed_coils, check_intersection=False)
+    if isinstance(coil, str):
+        coil = request.getfixturevalue(coil)
+        coil = coil[index] if index is not None else coil
+
     eq = Equilibrium()
     # not attempting to accurately calc B for this test,
     # so make the grids very coarse
@@ -1352,9 +1361,7 @@ def test_optimize_with_all_coil_types(DummyCoilSet, DummyMixedCoilSet):
         (c,), _ = optimizer.optimize(c, obj, maxiter=2, ftol=0, xtol=1e-15)
 
         # now check with optimizing geometry and actually check result
-        objs = [
-            CoilLength(c, target=target),
-        ]
+        objs = [CoilLength(c, target=target)]
         extra_msg = ""
         if isinstance(c, MixedCoilSet):
             # just to check they work without error
@@ -1369,7 +1376,7 @@ def test_optimize_with_all_coil_types(DummyCoilSet, DummyMixedCoilSet):
 
         obj = ObjectiveFunction(objs)
 
-        (c,), _ = optimizer.optimize(c, obj, maxiter=25, ftol=5e-3, xtol=1e-15)
+        (c,), _ = optimizer.optimize(c, obj, maxiter=50, ftol=5e-3, xtol=1e-15)
         flattened_coils = tree_leaves(
             c, is_leaf=lambda x: isinstance(x, _Coil) and not isinstance(x, CoilSet)
         )
@@ -1378,21 +1385,7 @@ def test_optimize_with_all_coil_types(DummyCoilSet, DummyMixedCoilSet):
             lengths, target, rtol=rtol, err_msg=f"lengths {c}" + extra_msg
         )
 
-    spline_coil = mixed_coils.coils[-1].copy()
-
-    # single coil
-    test(FourierPlanarCoil(), "fmintr")
-    test(FourierRZCoil(), "fmintr")
-    test(FourierXYZCoil(), "fmintr")
-    test(spline_coil, "fmintr")
-
-    # CoilSet
-    test(sym_coils, "lsq-exact")
-    test(asym_coils, "lsq-exact")
-
-    # MixedCoilSet
-    test(mixed_coils, "lsq-exact")
-    test(nested_coils, "lsq-exact")
+    test(coil, optimizer)
 
 
 @pytest.mark.unit

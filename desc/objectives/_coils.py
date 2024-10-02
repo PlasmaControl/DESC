@@ -1813,10 +1813,10 @@ class SurfaceCurrentRegularization(_Objective):
             grid=source_grid,
             has_axis=source_grid.axis.size,
         )
-
-        self._normalization = np.max(
-            [abs(surface_current_field.I) + abs(surface_current_field.G), 1]
-        )
+        if self._normalize:
+            self._normalization = np.max(
+                [abs(surface_current_field.I) + abs(surface_current_field.G), 1]
+            )
 
         self._constants = {
             "surface_transforms": surface_transforms,

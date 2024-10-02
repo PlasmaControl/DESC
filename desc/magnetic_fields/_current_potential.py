@@ -845,9 +845,6 @@ class FourierCurrentPotentialField(
         contour_theta, contour_zeta = _find_current_potential_contours(
             self, num_coils, npts, show_plots, stell_sym
         )
-        # for modular coils, easiest way to check contour direction is to see
-        # direction of the contour thetas
-        sign_of_theta_contours = jnp.sign(contour_theta[0][-1] - contour_theta[0][0])
 
         ################################################################
         # Find the XYZ points in real space of the coil contours
@@ -921,6 +918,11 @@ class FourierCurrentPotentialField(
                 # (extra negative sign because a positive G -> negative toroidal B
                 # but we always have a right-handed coord system, and so current flowing
                 # in positive poloidal direction creates a positive toroidal B)
+                # for modular coils, easiest way to check contour direction is to see
+                # direction of the contour thetas
+                sign_of_theta_contours = jnp.sign(
+                    contour_theta[0][-1] - contour_theta[0][0]
+                )
                 current_sign = -sign_of_theta_contours * jnp.sign(net_poloidal_current)
                 thisCurrent = jnp.abs(coil_current) * current_sign
             coil = SplineXYZCoil(

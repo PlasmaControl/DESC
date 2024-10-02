@@ -1203,7 +1203,7 @@ def run_regcoil(  # noqa: C901 fxn too complex
                 surface. a float if `lambda_regularization` was a float, or list of
                 float of length `lambda_regularization.size` if `lambda_regularization`
                 was an array, corresponding to the array of `lambda_regularization`.
-            |K| : Current density magnitude on winding surface, evaluated at the
+            | K | : Current density magnitude on winding surface, evaluated at the
                 given `source_grid`. An array of length `source_grid.num_nodes` if
                 `lambda_regularization` was a float, or list of arrays, with list
                 length `lambda_regularization.size`, if `lambda_regularization` was an

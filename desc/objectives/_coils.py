@@ -994,7 +994,6 @@ class QuadraticFlux(_Objective):
     __doc__ = __doc__.rstrip() + collect_docs(
         target_default="``target=0``.",
         bounds_default="``target=0``.",
-        loss_detail=" Note: has no effect for this objective.",
     )
 
     _scalar = False

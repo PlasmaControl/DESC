@@ -284,7 +284,15 @@ class TestPlot3D:
     def test_plot_3d_surface(self):
         """Test 3d plotting of surface object."""
         surf = FourierRZToroidalSurface()
-        fig = plot_3d(surf, "curvature_H_rho")
+        fig = plot_3d(
+            surf,
+            "curvature_H_rho",
+            showgrid=False,
+            showscale=False,
+            zeroline=False,
+            showticklabels=False,
+            showaxislabels=False,
+        )
         return fig
 
     @pytest.mark.unit
@@ -834,6 +842,40 @@ def test_plot_coils():
             return [coilset]
 
     coil_list = flatten_coils(coils2)
+    for string in ["X", "Y", "Z"]:
+        assert string in data.keys()
+        assert len(data[string]) == len(coil_list)
+    return fig
+
+
+@pytest.mark.unit
+def test_plot_coils_no_grid():
+    """Test 3d plotting of coils with currents without any gridlines."""
+    N = 48
+    NFP = 4
+    I = 1
+    coil = FourierXYZCoil()
+    coil.rotate(angle=np.pi / N)
+    coils = CoilSet.linspaced_angular(coil, I, [0, 0, 1], np.pi / NFP, N // NFP // 2)
+    with pytest.raises(ValueError, match="Expected `coils`"):
+        plot_coils("not a coil")
+    fig, data = plot_coils(
+        coils,
+        unique=True,
+        return_data=True,
+        showgrid=False,
+        zeroline=False,
+        showticklabels=False,
+        showaxislabels=False,
+    )
+
+    def flatten_coils(coilset):
+        if hasattr(coilset, "__len__"):
+            return [a for i in coilset for a in flatten_coils(i)]
+        else:
+            return [coilset]
+
+    coil_list = flatten_coils(coils)
     for string in ["X", "Y", "Z"]:
         assert string in data.keys()
         assert len(data[string]) == len(coil_list)

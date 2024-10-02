@@ -707,7 +707,7 @@ class FourierRZToroidalSurface(Surface):
                 M=base_surface.M * 2,
                 N=base_surface.N * 2,
                 NFP=base_surface.NFP,
-                sym=False,
+                sym=base_surface.sym,
             )
         assert isinstance(
             base_surface, FourierRZToroidalSurface

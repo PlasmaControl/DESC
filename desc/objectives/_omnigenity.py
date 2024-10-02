@@ -163,7 +163,7 @@ class QuasisymmetryBoozer(_Objective):
             M_booz=M_booz,
             N_booz=N_booz,
         )
-        matrix, modes, idx = ptolemy_linear_transform(
+        matrix, _, idx = ptolemy_linear_transform(
             transforms["B"].basis.modes,
             helicity=self.helicity,
             NFP=transforms["B"].basis.NFP,
@@ -180,7 +180,7 @@ class QuasisymmetryBoozer(_Objective):
         if verbose > 1:
             timer.disp("Precomputing transforms")
 
-        self._dim_f = idx.size
+        self._dim_f = idx.size * grid.num_rho
 
         if self._normalize:
             scales = compute_scaling_factors(eq)

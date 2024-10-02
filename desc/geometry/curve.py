@@ -867,7 +867,7 @@ class C0FourierPlanarCurve(Curve):
         # stitch together r_ns here
         self._r_n = jnp.concatenate([curve_1.r_n, curve_2.r_n])
         self.r_basis = curve_1.r_basis
-        print(self.r_basis)
+        self.basis = curve_1.basis
         self.center = curve_1.center
         self.normal = curve_1.normal
         len_rn = len(curve_1.r_n)
@@ -931,6 +931,7 @@ class C0FourierPlanarCurve(Curve):
             transforms=transforms,
             data=data,
             override_grid=override_grid,
+            basis_in=self.basis,
             len_rn=self.len_rn,
             **kwargs,
         )

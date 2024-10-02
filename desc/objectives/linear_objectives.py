@@ -454,15 +454,18 @@ class C0FourierPlanarCurveSelfConsistency(_Objective):
             normalize_target=False,
             name=name,
         )
+        self.curves = curves
 
     def build(self, use_jit=False, verbose=1):
         """Building."""
         self._dim_f = 1
+        curve_1 = self.curves[0]
+        self.len_rn = len(curve_1.r_n)
         super().build(use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
         """Compute error in C0 continuity of the curve."""
-        f = sum(params[0]["r_n"]) - sum(params[1]["r_n"])
+        f = sum(params["r_n"][: self.len_rn]) - sum(params["r_n"][self.len_rn :])
         return f
 
 

@@ -10,10 +10,10 @@ from desc.backend import jnp, put
 from desc.io import IOAble
 from desc.utils import (
     combination_permutation,
-    errorif,
     isalmostequal,
     islinspaced,
     issorted,
+    warnif,
 )
 
 
@@ -65,14 +65,14 @@ class Transform(IOAble):
         self._basis = basis
         self._rcond = rcond if rcond is not None else "auto"
 
-        errorif(
+        warnif(
             self.grid.coordinates != "rtz",
             msg=f"Expected coordinates rtz got {self.grid.coordinates}.",
         )
         # DESC truncates the computational domain to ζ ∈ [0, 2π/grid.NFP]
         # and changes variables to the spectrally condensed ζ* = basis.NFP ζ,
         # so basis.NFP must equal grid.NFP.
-        errorif(
+        warnif(
             method != "jitable"
             and self.grid.NFP != self.basis.NFP
             and self.basis.N != 0

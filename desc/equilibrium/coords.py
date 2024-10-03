@@ -740,7 +740,6 @@ def get_rtz_grid(
     desc_grid = Grid(
         nodes=rtz_nodes,
         coordinates="rtz",
-        NFP=1,
         source_grid=grid,
         sort=False,
         jitable=jitable,

@@ -186,7 +186,7 @@ class ObjectiveFunction(IOAble):
             any(sub_obj_jac_chunk_sizes_are_ints) and self._deriv_mode == "batched",
             ValueError,
             "'jac_chunk_size' was passed into one or more sub-objectives, but the"
-            " ObjectiveFunction is  using 'batched' deriv_mode, so sub-objective "
+            " ObjectiveFunction is using 'batched' deriv_mode, so sub-objective "
             "'jac_chunk_size' will be ignored in favor of the ObjectiveFunction's "
             f"'jac_chunk_size' of {self._jac_chunk_size}."
             " Specify 'blocked' deriv_mode if each sub-objective is desired to have a "

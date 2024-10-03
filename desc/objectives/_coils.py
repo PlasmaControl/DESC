@@ -1662,11 +1662,11 @@ class SurfaceCurrentRegularization(_Objective):
 
     compute::
 
-        w * | K | * | N |
+        w * | K | * | e_theta x e_zeta |
 
     where K is the winding surface current density, w is the
     regularization parameter (the weight on this objective),
-    and | N | is the magnitude of the surface normal i.e. the
+    and | e_theta x e_zeta | is the magnitude of the surface normal i.e. the
     surface jacobian | e_theta x e_zeta |
 
     This is intended to be used with a surface current::

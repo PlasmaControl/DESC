@@ -394,6 +394,7 @@ def regcoil_modular_coils():
         eval_grid=LinearGrid(M=M_egrid, N=N_egrid, NFP=eq.NFP, sym=True),
         source_grid=LinearGrid(M=M_sgrid, N=N_sgrid, NFP=eq.NFP),
         lambda_regularization=lambda_regularization,
+        regularization_type="regcoil",
         vacuum=True,
     )
 

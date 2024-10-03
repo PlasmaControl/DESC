@@ -862,7 +862,6 @@ class FourierCurrentPotentialField(
         from desc.coils import CoilSet, SplineXYZCoil
 
         coils = []
-        knot_numbers = []
         for j in range(num_coils):
             if not jnp.isclose(helicity, 0):
                 # helical coils
@@ -886,7 +885,7 @@ class FourierCurrentPotentialField(
                     basis="xyz",
                 )["K"]
                 current_sign = jnp.sign(jnp.dot(contour_vector, K[0, :]))
-                thisCurrent = current_sign * coil_current
+                thisCurrent = current_sign * jnp.abs(coil_current)
             else:
                 # modular coils
                 # make sure that the sign of the coil current is correct
@@ -909,7 +908,6 @@ class FourierCurrentPotentialField(
                 jnp.append(contour_Z[j][0::step], contour_Z[j][0]),
                 method=spline_method,
             )
-            knot_numbers.append(coil.N)
             coils.append(coil)
         # check_intersection is False here as these coils by construction
         # cannot intersect eachother (they are contours of the current potential
@@ -1032,15 +1030,16 @@ def run_regcoil(  # noqa: C901 fxn too complex
     current_potential_field,
     eq,
     lambda_regularization=0.0,
+    current_helicity=(1, 0),
+    vacuum=False,
+    regularization_type="regcoil",
     source_grid=None,
     eval_grid=None,
-    current_helicity=(1, 0),
+    vc_source_grid=None,
     external_field=None,
     external_field_grid=None,
     verbose=1,
     normalize=True,
-    vacuum=False,
-    regularization_type="simple",
 ):
     """Runs REGCOIL-like algorithm to find the current potential for the surface.
 
@@ -1090,7 +1089,7 @@ def run_regcoil(  # noqa: C901 fxn too complex
     eq : Equilibrium
         Equilibrium to minimize the quadratic flux (plus regularization) on.
     lambda_regularization : float or ndarray, optional
-        regularization parameter, > 0, regularizes minimization of Bn
+        regularization parameter, >= 0, regularizes minimization of Bn
         on plasma surface with minimization of current density mag K on winding
         surface i.e. larger lambda_regularization, simpler coilset and smaller
         currents, but worse Bn. If a float, only runs REGCOIL for that single value
@@ -1098,18 +1097,6 @@ def run_regcoil(  # noqa: C901 fxn too complex
         If an array is passed, will run REGCOIL for each lambda_regularization in
         that array and return a list of FourierCurrentPotentialFields, and the
         associated data.
-    source_grid : Grid, optional
-        Source grid upon which to evaluate the surface current when calculating
-        the normal field on the plasma surface. Also used to evaluate the
-        virtual casing current, if the plasma has finite plasma currents.
-        Defaults to
-        LinearGrid(M=max(3 * current_potential_field.M_Phi, 30),
-        N=max(3 * current_potential_field.N_Phi, 30), NFP=eq.NFP)
-    eval_grid : _type_, optional
-        Grid upon which to evaluate the normal field on the plasma surface, and
-        at which the normal field is minimized.
-        Defaults to
-        `LinearGrid(M= 30, N= 30, NFP=eq.NFP)`
     current_helicity : tuple of size 2, optional
         Tuple of (q,p) used to determine coil topology, where q is the
         number of poloidal transits a coil makes in one field period and
@@ -1119,6 +1106,29 @@ def run_regcoil(  # noqa: C901 fxn too complex
         If p,q are both zero, it corresponds to windowpane coils.
         The net toroidal current (when q is nonzero) is set as
         I = p(G-G_ext)/q/NFP
+    vacuum : bool, optional
+        if True, will not include the contribution to the normal field from the
+        plasma currents.
+    regularization_type : {"simple","regcoil"}
+        whether to use a simple regularization based off of just the single-valued
+        part of Phi, or to use the full REGCOIL regularization penalizing | K | ^ 2.
+    source_grid : Grid, optional
+        Source grid upon which to evaluate the surface current when calculating
+        the normal field on the plasma surface. Also used to evaluate the
+        virtual casing current, if the plasma has finite plasma currents.
+        Defaults to
+        LinearGrid(M=max(3 * current_potential_field.M_Phi, 30),
+        N=max(3 * current_potential_field.N_Phi, 30), NFP=eq.NFP)
+    eval_grid : Grid, optional
+        Grid upon which to evaluate the normal field on the plasma surface, and
+        at which the normal field is minimized.
+        Defaults to
+        `LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)`
+    vc_source_grid : LinearGrid
+        LinearGrid to use for the singular integral for the virtual casing
+        principle to calculate the component of the normal field from the
+        plasma currents. Must have endpoint=False and sym=False and be linearly
+        spaced in theta and zeta, with nodes only at rho=1.0
     external_field: _MagneticField,
         DESC `_MagneticField` object giving the magnetic field
         provided by any coils/fields external to the winding surface.
@@ -1139,13 +1149,7 @@ def run_regcoil(  # noqa: C901 fxn too complex
     normalize : bool, optional
         whether or not to normalize Bn when printing the Bnormal errors. If true,
         will normalize by the average equilibrium field strength on the surface.
-    vacuum : bool, optional
-        if True, will not include the contribution to the normal field from the
-        plasma currents.
-    regularization_type : {"simple","regcoil"}
-        whether to use a simple regularization based off of just the single-valued
-        part of Phi, or to use the full REGCOIL regularization penalizing | K | ^ 2.
-        Default is simple, which is much cheaper than the REGCOIL regularization.
+
 
     Returns
     -------
@@ -1246,7 +1250,7 @@ def run_regcoil(  # noqa: C901 fxn too complex
             NFP=int(eq.NFP),
         )
     if eval_grid is None:
-        eval_grid = LinearGrid(M=30, N=30, NFP=int(eq.NFP))
+        eval_grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=int(eq.NFP))
     if normalize:
         B_eq_surf = eq.compute("|B|", eval_grid)["|B|"]
         # just need it for normalization, so do a simple mean
@@ -1409,7 +1413,7 @@ def run_regcoil(  # noqa: C901 fxn too complex
     # find the normal field from the secular part of the current potential
     B_GI_normal = B_from_K_secular(I, G)
     if not vacuum:
-        Bn_plasma = compute_B_plasma(eq, eval_grid, source_grid, normal_only=True)
+        Bn_plasma = compute_B_plasma(eq, eval_grid, vc_source_grid, normal_only=True)
         Bn_plasma = Bn_plasma * ne_mag * eval_grid.weights
 
     else:

@@ -16,7 +16,7 @@ from quadax import simpson
 
 from desc.backend import imap, jit, jnp
 
-from ..integrals.bounce_integral import Bounce1D
+from ..integrals.bounce_integral import Bounce1D, Bounce2D
 from ..integrals.bounce_utils import get_pitch_inv_quad, interp_to_argmin
 from ..integrals.quad_utils import (
     automorphism_sin,
@@ -95,6 +95,34 @@ def _compute(fun, interp_data, data, grid, num_pitch, reduce=True):
     )
     out = imap(for_each_rho, interp_data)
     return grid.expand(_alpha_mean(out)) if reduce else out
+
+
+def _compute_2d(fun, interp_data, data, grid, num_pitch):
+    """Compute ``fun`` for each α and ρ value iteratively to reduce memory usage.
+
+    Parameters
+    ----------
+    fun : callable
+        Function to compute.
+    interp_data : dict[str, jnp.ndarray]
+        Data to provide to ``fun``.
+        Names in ``Bounce2D.required_names`` will be overridden.
+        Reshaped automatically.
+    data : dict[str, jnp.ndarray]
+        DESC data dict.
+
+    """
+    for name in Bounce2D.required_names:
+        interp_data[name] = data[name]
+    interp_data = dict(
+        zip(interp_data.keys(), Bounce2D.reshape_data(grid, *interp_data.values()))
+    )
+    interp_data["pitch_inv"], interp_data["pitch_inv weight"] = get_pitch_inv_quad(
+        grid.compress(data["min_tz |B|"]),
+        grid.compress(data["max_tz |B|"]),
+        num_pitch,
+    )
+    return grid.expand(imap(fun, interp_data))
 
 
 @register_compute_fun(
@@ -181,20 +209,6 @@ def _G_ra_fsa(data, transforms, profiles, **kwargs):
     resolution_requirement="z",
     source_grid_requirement={"coordinates": "raz", "is_meshgrid": True},
     **_bounce_doc,
-    # Some notes on choosing the resolution hyperparameters:
-    # The default settings were chosen such that the effective ripple profile on
-    # the W7-X stellarator looks similar to the profile computed at higher resolution,
-    # indicating convergence. The parameters ``num_transit`` and ``knots_per_transit``
-    # have a stronger effect on the result. As a reference for W7-X, when computing the
-    # effective ripple by tracing a single field line on each flux surface, a density of
-    # 100 knots per toroidal transit accurately reconstructs the ripples along the field
-    # line. After 10 toroidal transits convergence is apparent (after 15 the returns
-    # diminish). Dips in the resulting profile indicates insufficient ``num_transit``.
-    # Unreasonably high values indicates insufficient ``knots_per_transit``.
-    # One can plot the field line with ``Bounce1D.plot`` to see if the number of knots
-    # was sufficient to reconstruct the field line.
-    # TODO: Improve performance... see GitHub issue #1045.
-    #  Need more efficient function approximation of |B|(α, ζ).
 )
 @partial(jit, static_argnames=["num_quad", "num_pitch", "num_well", "batch"])
 def _epsilon_32(params, transforms, profiles, data, **kwargs):
@@ -261,6 +275,123 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="effective ripple 3/2_2d",
+    label=(
+        # ε¹ᐧ⁵ = π/(8√2) R₀²〈|∇ψ|〉⁻² B₀⁻¹ ∫dλ λ⁻² 〈 ∑ⱼ Hⱼ²/Iⱼ 〉
+        "\\epsilon_{\\mathrm{eff}}^{3/2} = \\frac{\\pi}{8 \\sqrt{2}} "
+        "R_0^2 \\langle \\vert\\nabla \\psi\\vert \\rangle^{-2} "
+        "B_0^{-1} \\int d\\lambda \\lambda^{-2} "
+        "\\langle \\sum_j H_j^2 / I_j \\rangle"
+    ),
+    units="~",
+    units_long="None",
+    description="Effective ripple modulation amplitude to 3/2 power",
+    dim=1,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="r",
+    data=[
+        "min_tz |B|",
+        "max_tz |B|",
+        "|grad(rho)|",
+        "kappa_g",
+        # TODO: Need a tiny bit more infrastructure to compute <L|r,a> this.
+        #      1. Add bounce.interpolate_uniform method which
+        #         interpolates some function g(theta, zeta)
+        #         to uniformly spaced nodes along the field lines.
+        #         (Use FFT in forward direction and DCT in inverse).
+        #         See the logic in bounce.integrate and transform_to_clebsch_1d.
+        #         Then use simpson's rule to integrate output as
+        #         is done in the compute fun for <L|r,a>. Again since
+        #         B^zeta is smooth simpson's rule will work fine.
+        "<L|r,a>",
+        "R0",
+        "<|grad(rho)|>",
+    ]
+    + Bounce2D.required_names,
+    resolution_requirement="z",
+    # TODO: Add requirement for FFT points on (0, 2pi) (0, 2pi/NFP).
+    grid_requirement={"coordinates": "rtz", "is_meshgrid": True, "sym": False},
+    theta="jnp.ndarray : DESC coordinates θ of (α,ζ) Fourier Chebyshev basis nodes.",
+    num_transit="int : Number of toroidal transits to follow field line.",
+    **_bounce_doc,
+)
+@partial(jit, static_argnames=["num_quad", "num_pitch", "num_well", "batch"])
+def _epsilon_32_2d(params, transforms, profiles, data, **kwargs):
+    """https://doi.org/10.1063/1.873749.
+
+    Evaluation of 1/ν neoclassical transport in stellarators.
+    V. V. Nemov, S. V. Kasilov, W. Kernbichler, M. F. Heyn.
+    Phys. Plasmas 1 December 1999; 6 (12): 4622–4632.
+    """
+    # noqa: unused dependency
+    if "quad" in kwargs:
+        quad = kwargs["quad"]
+    else:
+        quad = chebgauss2(kwargs.get("num_quad", 32))
+    num_well = kwargs.get("num_well", None)
+    num_transit = kwargs.get("num_transit", 20)
+    grid = transforms["grid"]
+
+    def dH(grad_rho_norm_kappa_g, B, pitch, zeta):
+        # Integrand of Nemov eq. 30 with |∂ψ/∂ρ| (λB₀)¹ᐧ⁵ removed.
+        return (
+            jnp.sqrt(jnp.abs(1 - pitch * B))
+            * (4 / (pitch * B) - 1)
+            * grad_rho_norm_kappa_g
+            / B
+        )
+
+    def dI(B, pitch, zeta):
+        # Integrand of Nemov eq. 31.
+        return jnp.sqrt(jnp.abs(1 - pitch * B)) / B
+
+    def eps_32(data):
+        """(∂ψ/∂ρ)⁻² B₀⁻² ∫ dλ λ⁻² ∑ⱼ Hⱼ²/Iⱼ."""
+        # B₀ has units of λ⁻¹.
+        # Nemov's ∑ⱼ Hⱼ²/Iⱼ = (∂ψ/∂ρ)² (λB₀)³ ``(H**2 / I).sum(axis=-1)``.
+        # (λB₀)³ d(λB₀)⁻¹ = B₀² λ³ d(λ⁻¹) = -B₀² λ dλ.
+        bounce = Bounce2D(
+            grid=grid,
+            data=data,
+            theta=data["theta"],
+            num_transit=num_transit,
+            quad=quad,
+            automorphism=None,
+            is_reshaped=True,
+        )
+        points = bounce.points(data["pitch_inv"], num_well=num_well)
+        H = bounce.integrate(
+            dH,
+            data["pitch_inv"],
+            data["|grad(rho)|*kappa_g"],
+            points=points,
+        )
+        I = bounce.integrate(dI, data["pitch_inv"], points=points)
+        return (
+            safediv(H**2, I).sum(axis=-1)
+            * data["pitch_inv"] ** (-3)
+            * data["pitch_inv weight"]
+        ).sum(axis=-1)
+
+    # Interpolate |∇ρ| κ_g since it is smoother than κ_g alone.
+    interp_data = {
+        "|grad(rho)|*kappa_g": data["|grad(rho)|"] * data["kappa_g"],
+        "theta": kwargs["theta"],
+    }
+    B0 = data["max_tz |B|"]
+    data["effective ripple 3/2_2d"] = (
+        jnp.pi
+        / (8 * 2**0.5)
+        * (B0 * data["R0"] / data["<|grad(rho)|>"]) ** 2
+        * _compute_2d(eps_32, interp_data, data, grid, kwargs.get("num_pitch", 50))
+        / data["<L|r,a>"]
+    )
+    return data
+
+
+@register_compute_fun(
     name="effective ripple",
     label="\\epsilon_{\\mathrm{eff}}",
     units="~",
@@ -275,6 +406,24 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
 )
 def _effective_ripple(params, transforms, profiles, data, **kwargs):
     data["effective ripple"] = data["effective ripple 3/2"] ** (2 / 3)
+    return data
+
+
+@register_compute_fun(
+    name="effective ripple_2d",
+    label="\\epsilon_{\\mathrm{eff}}",
+    units="~",
+    units_long="None",
+    description="Effective ripple modulation amplitude",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="r",
+    data=["effective ripple 3/2_2d"],
+)
+def _effective_ripple_2d(params, transforms, profiles, data, **kwargs):
+    data["effective ripple_2d"] = data["effective ripple 3/2_2d"] ** (2 / 3)
     return data
 
 

@@ -9,7 +9,9 @@ from tests.test_plotting import tol_1d
 
 from desc.equilibrium.coords import get_rtz_grid
 from desc.examples import get
-from desc.grid import LinearGrid
+from desc.grid import Grid, LinearGrid
+from desc.integrals import Bounce2D
+from desc.integrals.interp_utils import fourier_pts
 from desc.utils import errorif, setdefault
 from desc.vmec import VMECIO
 
@@ -63,6 +65,35 @@ def test_effective_ripple():
     eps_32 = grid.compress(data["effective ripple 3/2"])
     fig, ax = plt.subplots()
     ax.plot(rho, eps_32, marker="o")
+
+    neo_rho, neo_eps_32 = NeoIO.read("tests/inputs/neo_out.w7x")
+    np.testing.assert_allclose(eps_32, np.interp(rho, neo_rho, neo_eps_32), rtol=0.16)
+    return fig
+
+
+@pytest.mark.unit
+# @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
+def test_effective_ripple_2d():
+    """Test effective ripple 2d with W7-X."""
+    eq = get("W7-X")
+    rho = np.linspace(0, 1, 10)
+    grid = Grid.create_meshgrid(
+        [rho, fourier_pts(eq.M_grid), fourier_pts(eq.N_grid) / eq.NFP],
+        period=(np.inf, 2 * np.pi, 2 * np.pi / eq.NFP),
+        NFP=eq.NFP,
+    )
+    theta = Bounce2D.compute_theta(eq, M=8, N=64, rho=rho)
+    data = eq.compute("effective ripple_2d", grid=grid, theta=theta, num_transit=10)
+    assert np.isfinite(data["effective ripple_2d"]).all()
+    np.testing.assert_allclose(
+        data["effective ripple 3/2_2d"] ** (2 / 3),
+        data["effective ripple_2d"],
+        err_msg="Bug in source grid logic in eq.compute.",
+    )
+    eps_32 = grid.compress(data["effective ripple 3/2_2d"])
+    fig, ax = plt.subplots()
+    ax.plot(rho, eps_32, marker="o")
+    plt.show()
 
     neo_rho, neo_eps_32 = NeoIO.read("tests/inputs/neo_out.w7x")
     np.testing.assert_allclose(eps_32, np.interp(rho, neo_rho, neo_eps_32), rtol=0.16)

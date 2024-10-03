@@ -510,7 +510,7 @@ class Bounce2D(IOAble):
 
     @staticmethod
     def compute_theta(eq, M=16, N=32, rho=1.0, clebsch=None, **kwargs):
-        """Return DESC coordinates θ of Fourier Chebyshev basis nodes.
+        """Return DESC coordinates θ of (α,ζ) Fourier Chebyshev basis nodes.
 
         Parameters
         ----------

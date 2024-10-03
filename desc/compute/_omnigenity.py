@@ -608,10 +608,10 @@ def _B_omni(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["b", "grad(|B|)", "|B|", "grad(psi)"],
+    data=["b", "grad(|B|)", "|B|^2", "grad(psi)"],
 )
 def _isodynamicity(params, transforms, profiles, data, **kwargs):
     data["isodynamicity"] = (
-        dot(cross(data["b"], data["grad(|B|)"]), data["grad(psi)"]) / data["|B|"] ** 2
+        dot(cross(data["b"], data["grad(|B|)"]), data["grad(psi)"]) / data["|B|^2"]
     )
     return data

@@ -3120,6 +3120,25 @@ def _theta_PEST_rt(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="theta_PEST_rz",
+    label="\\partial_{\\rho \\zeta} \\vartheta",
+    units="rad",
+    units_long="radians",
+    description="PEST straight field line poloidal angular coordinate, derivative wrt "
+    "radial and DESC toroidal coordinate",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["lambda_rz"],
+)
+def _theta_PEST_rz(params, transforms, profiles, data, **kwargs):
+    data["theta_PEST_rz"] = data["lambda_rz"]
+    return data
+
+
+@register_compute_fun(
     name="theta_PEST_rrt",
     label="\\partial_{\\rho \\rho \\theta} \\vartheta",
     units="rad",

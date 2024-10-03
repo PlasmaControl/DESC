@@ -1230,7 +1230,7 @@ class TestBounce1D:
         points = (np.array(0, ndmin=4), np.array(2 * np.pi, ndmin=4))
         argmin = 5.61719
         h_min = h(argmin)
-        result = func(h(zeta), points, zeta, bounce.B, bounce._dB_dz)
+        result = func(h(zeta), points, zeta, bounce.B, bounce.dB_dz)
         assert result.shape == points[0].shape
         np.testing.assert_allclose(h_min, result, rtol=1e-3)
 

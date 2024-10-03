@@ -3884,7 +3884,6 @@ def plot_regcoil_outputs(
         )
         if external_field and recalc_eval_grid_quantites:
             Bn_tot += B_ext
-            print("adding bext")
         plt.rcParams.update({"font.size": 26})
         plt.figure(figsize=figsize)
         plt.contourf(

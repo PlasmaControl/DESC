@@ -3,6 +3,7 @@ import numpy as np
 from desc.backend import jnp
 from desc.compute import get_profiles, get_transforms
 from desc.compute.utils import _compute as compute_fun
+from desc.grid import LinearGrid
 from desc.magnetic_fields._current_potential import (
     _compute_A_or_B_from_CurrentPotentialField,
 )
@@ -330,16 +331,13 @@ class FluxLoop(_Objective):
 
 
 class RogowskiLoop(_Objective):
-    """Target the flux through a loop given by the given coil.
+    """Target the net current enclosed by a loop given by the given coil.
 
-    This objective will calculate the magnetic flux through a given coil,
+    This objective will calculate the net current through a given coil,
     intended for use to compare to experimental measurements for reconstruction.
 
-    Will use the vector potential method to calculate the magnetic flux
-    (Φ = ∮ 𝐀 ⋅ 𝐝𝐥 over the coil loop) The vector potential method
-    is much more efficient, however not every ``MagneticField`` object
-    has a vector potential available to compute, so in those cases
-    an error will be thrown.
+    Will use the Ampere's Law + stoke's theorem to calculate the current
+    (mu_0 I = ∮ B ⋅ 𝐝𝐥 over the coil loop)
 
     The equilibrium and possibly a coilset are allowed to vary, but the
     flux loop location is held fixed.
@@ -358,7 +356,8 @@ class RogowskiLoop(_Objective):
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
         Defaults to eq.Psi. Must be broadcastable to Objective.dim_f
-        which is the number of coils in flux_loops.
+        which is the number of coils in flux_loops. Target should be in
+        units of mu0*I
     bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
         Both bounds must be broadcastable to to Objective.dim_f
@@ -390,7 +389,7 @@ class RogowskiLoop(_Objective):
         N=50).
     vc_source_grid : LinearGrid
         LinearGrid to use for the (non-singular) integral for the virtual casing
-        principle to calculate the flux loop contribution from the
+        principle to calculate the current contribution from the
         plasma currents. Must have endpoint=False and sym=False and be linearly
         spaced in theta and zeta, with nodes only at rho=1.0
     name : str, optional
@@ -409,7 +408,6 @@ class RogowskiLoop(_Objective):
     vacuum : bool
         whether eq is vacuum, in which case plasma contribution to B won't be
         calculated.
-
 
     """
 
@@ -481,6 +479,16 @@ class RogowskiLoop(_Objective):
 
         if self._normalize:
             self._normalization = eq.Psi
+        if self._vc_source_grid is None:
+            # for axisymmetry we still need to know about toroidal effects, so its
+            # cheapest to pretend there are extra field periods
+            self._vc_source_grid = LinearGrid(
+                rho=np.array([1.0]),
+                M=eq.M_grid,
+                N=eq.N_grid,
+                NFP=eq.NFP if eq.N > 0 else 64,
+                sym=False,
+            )
 
         # ensure vacuum eq, as is unneeded for finite beta
         pres = np.max(np.abs(eq.compute("p")["p"]))
@@ -521,17 +529,17 @@ class RogowskiLoop(_Objective):
 
         # pre-calc coil contrib to flux loops if coils are fixed
         if self._coils_fixed:
-            fluxes = []
+            currents = []
             for i in range(self._dim_f):
-                A = self._coils.compute_magnetic_field(
+                B = self._coils.compute_magnetic_field(
                     flux_loop_data[i]["x"],
                     basis="rpz",
                     source_grid=self._field_grid,
                 )
-                A_dot_dxds = jnp.sum(A * flux_loop_data[i]["x_s"], axis=1)
-                Psi = jnp.sum(self._flux_loop_grid.spacing[:, 2] * A_dot_dxds)
-                fluxes.append(Psi)
-            fluxes = jnp.array(fluxes)
+                B_dot_dxds = jnp.sum(B * flux_loop_data[i]["x_s"], axis=1)
+                mu0_I = jnp.sum(self._flux_loop_grid.spacing[:, 2] * B_dot_dxds)
+                currents.append(mu0_I)
+            currents = jnp.array(currents)
 
         self._constants = {
             "quad_weights": 1.0,
@@ -542,7 +550,7 @@ class RogowskiLoop(_Objective):
             "vc_source_grid": self._vc_source_grid,
         }
         if self._coils_fixed:
-            self._constants["flux_from_coils"] = fluxes
+            self._constants["mu0_I_from_coils"] = currents
         if self._sheet_current:
             self._sheet_data_keys = ["K"]
             sheet_source_transforms = get_transforms(
@@ -610,21 +618,21 @@ class RogowskiLoop(_Objective):
             plasma_surf_data["K_vc"] += sheet_source_data["K"]
         plasma_surf_data["K"] = plasma_surf_data["K_vc"]
         # loop over the flux loop coils
-        fluxes = []
+        mu0_Is = []
         for i in range(self._dim_f):
             if not self._coils_fixed:
-                Acoil = self._coils.compute_magnetic_field(
+                Bcoil = self._coils.compute_magnetic_field(
                     flux_loop_data[i]["x"],
                     basis="rpz",
                     source_grid=constants["field_grid"],
                     params=field_params,
                 )
             else:
-                Acoil = jnp.zeros_like(self._flux_loop_grid.nodes)
+                Bcoil = jnp.zeros_like(self._flux_loop_grid.nodes)
 
             # get plasma contribution
             if not self._vacuum:
-                Aplasma = _compute_A_or_B_from_CurrentPotentialField(
+                Bplasma = _compute_A_or_B_from_CurrentPotentialField(
                     self._coils,
                     flux_loop_data[i]["x"],
                     source_grid=constants["vc_source_grid"],
@@ -632,13 +640,14 @@ class RogowskiLoop(_Objective):
                     data=plasma_surf_data,
                 )
             else:
-                Aplasma = jnp.zeros_like(self._flux_loop_grid.nodes)
-            A = Aplasma + Acoil
+                Bplasma = jnp.zeros_like(self._flux_loop_grid.nodes)
+            B = Bplasma + Bcoil
 
-            A_dot_dxds = jnp.sum(A * flux_loop_data[i]["x_s"], axis=1)
-            Psi = jnp.sum(grid.spacing[:, 2] * A_dot_dxds)
-            fluxes.append(Psi)
-        fluxes = jnp.asarray(fluxes)
+            B_dot_dxds = jnp.sum(B * flux_loop_data[i]["x_s"], axis=1)
+            mu0I = jnp.sum(grid.spacing[:, 2] * B_dot_dxds)
+            mu0_Is.append(mu0I)
+        mu0_Is = jnp.asarray(mu0_Is)
         if self._coils_fixed:
-            fluxes += constants["flux_from_coils"]
-        return fluxes
+            mu0_Is += constants["mu0_I_from_coils"]
+        out = jnp.atleast_1d(mu0_Is.squeeze())
+        return out

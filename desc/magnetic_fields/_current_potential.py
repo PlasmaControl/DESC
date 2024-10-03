@@ -1302,13 +1302,10 @@ def run_regcoil(  # noqa: C901 fxn too complex
 
             # negative sign here because with REGCOIL convention, negative G makes
             # positive toroidal B
-            G_ext = -(
-                jnp.trapezoid(
-                    y=ext_field_B_zeta,
-                    x=curve_grid.nodes[:, 2],
-                )
-                / mu_0
+            G_ext = (
+                -jnp.sum(ext_field_B_zeta) * 2 * jnp.pi / curve_grid.num_nodes / mu_0
             )
+
     else:
         G_ext = 0
 

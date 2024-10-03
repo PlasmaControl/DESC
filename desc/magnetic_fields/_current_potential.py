@@ -1039,7 +1039,6 @@ def run_regcoil(  # noqa: C901 fxn too complex
     external_field=None,
     external_field_grid=None,
     verbose=1,
-    normalize=True,
 ):
     """Runs REGCOIL-like algorithm to find the current potential for the surface.
 
@@ -1251,12 +1250,9 @@ def run_regcoil(  # noqa: C901 fxn too complex
         )
     if eval_grid is None:
         eval_grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=int(eq.NFP))
-    if normalize:
-        B_eq_surf = eq.compute("|B|", eval_grid)["|B|"]
-        # just need it for normalization, so do a simple mean
-        normalization_B = jnp.mean(B_eq_surf)
-    else:
-        normalization_B = 1
+    B_eq_surf = eq.compute("|B|", eval_grid)["|B|"]
+    # just need it for normalization, so do a simple mean
+    normalization_B = jnp.mean(B_eq_surf)
 
     data["eval_grid"] = eval_grid
     data["source_grid"] = source_grid
@@ -1499,10 +1495,11 @@ def run_regcoil(  # noqa: C901 fxn too complex
         chi_K = jnp.sum(K_mag * K_mag * ns_mag * source_grid.weights)
         chi2Ks.append(chi_K)
         K_mags.append(K_mag)
-        Bn_print = Bn_tot / normalization_B
+        Bn_print = Bn_tot
+        Bn_print_normalized = Bn_tot / normalization_B
         Bn_arrs.append(Bn_tot)
         if verbose > 0:
-            units = " (T)" if not normalize else " (unitless)"
+            units = " (T)"
             printstring = f"chi^2 B = {chi_B:1.5e}"
             print(printstring)
             printstring = f"min Bnormal = {jnp.min(np.abs(Bn_print)):1.5e}"
@@ -1512,6 +1509,16 @@ def run_regcoil(  # noqa: C901 fxn too complex
             printstring += units
             print(printstring)
             printstring = f"Avg Bnormal = {jnp.mean(jnp.abs(Bn_print)):1.5e}"
+            printstring += units
+            print(printstring)
+            units = " (unitless)"
+            printstring = f"min Bnormal = {jnp.min(np.abs(Bn_print_normalized)):1.5e}"
+            printstring += units
+            print(printstring)
+            printstring = f"Max Bnormal = {jnp.max(jnp.abs(Bn_print_normalized)):1.5e}"
+            printstring += units
+            print(printstring)
+            printstring = f"Avg Bnormal = {jnp.mean(jnp.abs(Bn_print_normalized)):1.5e}"
             printstring += units
             print(printstring)
     data["lambda_regularization"] = (

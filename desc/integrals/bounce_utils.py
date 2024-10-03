@@ -234,7 +234,8 @@ def bounce_points(
     return z1, z2
 
 
-def _set_default_plot_kwargs(kwargs, vlabel=r"$\vert B \vert$"):
+def _set_default_plot_kwargs(kwargs):
+    vlabel = r"$\vert B \vert$"
     kwargs.setdefault(
         "title",
         r"Intersects $\zeta$ in epigraph("
@@ -757,7 +758,7 @@ def interp_to_argmin_hard(h, points, knots, g, dg_dz, method="cubic"):
 
 def plot_ppoly(
     ppoly,
-    num=1000,
+    num=5000,
     z1=None,
     z2=None,
     k=None,

@@ -394,7 +394,7 @@ class Bounce2D(IOAble):
         grid,
         data,
         theta,
-        N_B=32,
+        N_B=None,
         num_transit=16,
         # TODO: Allow multiple starting labels for near-rational surfaces.
         #  think can just concatenate along second to last axis of cheb.
@@ -433,6 +433,7 @@ class Bounce2D(IOAble):
             ``FourierChebyshevSeries.nodes(M,N,L,domain=(0,2*jnp.pi))``.
         N_B : int
             Desired Chebyshev spectral resolution for |B|.
+            Default is to double the resolution of ``theta``.
         alpha : float
             Starting field line poloidal label.
         num_transit : int
@@ -476,6 +477,7 @@ class Bounce2D(IOAble):
             check and kwargs.pop("warn", True) and jnp.any(data["B^zeta"] <= 0),
             msg="(∂ℓ/∂ζ)|ρ,a > 0 is required. Enforcing positive B^ζ.",
         )
+        N_B = setdefault(N_B, theta.shape[-1] * 2)
         self._alpha = alpha
         self._m = grid.num_theta
         self._n = grid.num_zeta
@@ -507,7 +509,7 @@ class Bounce2D(IOAble):
         assert self._B.N == N_B
 
     @staticmethod
-    def compute_theta(eq, M=32, N=16, rho=1.0, clebsch=None, **kwargs):
+    def compute_theta(eq, M=16, N=32, rho=1.0, clebsch=None, **kwargs):
         """Return DESC coordinates θ of Fourier Chebyshev basis nodes.
 
         Parameters
@@ -765,8 +767,6 @@ class Bounce2D(IOAble):
             axes=(-1, -2),
         )
         B = self._B.eval1d(zeta)
-        # Note not all functions are periodic in ζ with period 2π/NFP.
-        # Users will likely want GitHub issue #1287.
         f = [
             interp_rfft2(
                 Q,
@@ -872,10 +872,16 @@ class Bounce2D(IOAble):
         T = self._T
         if T.cheb.ndim > 2:
             T = PiecewiseChebyshevSeries(T.cheb[l], T.domain)
-        kwargs.setdefault("hlabel", r"$\alpha = $" + str(self._alpha) + r", $\zeta$")
-        fig, ax = T.plot1d(
-            T.cheb, **_set_default_plot_kwargs(kwargs, vlabel=r"$\theta$")
+        kwargs.setdefault(
+            "title",
+            r"DESC poloidal angle $\theta($"
+            + r"$\alpha=$"
+            + str(self._alpha)
+            + r"$, \zeta)$",
         )
+        kwargs.setdefault("hlabel", r"$\alpha = $" + str(self._alpha) + r", $\zeta$")
+        kwargs.setdefault("vlabel", r"$\theta$")
+        fig, ax = T.plot1d(T.cheb, **_set_default_plot_kwargs(kwargs))
         return fig, ax
 
 

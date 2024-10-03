@@ -615,7 +615,7 @@ class PiecewiseChebyshevSeries(IOAble):
     def plot1d(
         self,
         cheb,
-        num=1000,
+        num=5000,
         z1=None,
         z2=None,
         k=None,

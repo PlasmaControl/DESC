@@ -24,8 +24,7 @@ chebroots_vec = jnp.vectorize(chebroots, signature="(m)->(n)")
 
 
 # TODO: Transformation to make nodes more uniform Boyd eq. 16.46 pg. 336.
-#  Have a hunch more uniformly spaced nodes could speed up convergence
-#  Edit: Seems unnecessary for now. Chebyshev part converges fine.
+#  More uniformly spaced nodes will speed up convergence.
 
 
 def cheb_pts(N, domain=(-1, 1), lobatto=False):
@@ -304,11 +303,12 @@ def irfft2_non_uniform(
         .divide(1.0 + ((N % 2) == 0))
     )
 
-    m = jnp.fft.fftfreq(M, d=np.diff(domain0) / (2 * jnp.pi) / M)
-    n = jnp.fft.rfftfreq(N, d=np.diff(domain1) / (2 * jnp.pi) / N)
     idx = np.argsort(axes)
-
+    domain = (domain0, domain1)
+    m = jnp.fft.fftfreq(M, d=np.diff(domain[idx[0]]) / (2 * jnp.pi) / M)
+    n = jnp.fft.rfftfreq(N, d=np.diff(domain[idx[1]]) / (2 * jnp.pi) / N)
     xq = xq - jnp.array([domain0[0], domain1[0]])
+
     basis = jnp.exp(
         1j
         * (

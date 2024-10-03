@@ -218,6 +218,7 @@ class TestFastInterp:
     @pytest.mark.parametrize(
         "func, m, n, domain0, domain1",
         [
+            # Test cases chosen with purpose, don't remove any.
             (
                 _f_2d,
                 2 * _f_2d_nyquist_freq()[0] + 1,
@@ -232,11 +233,18 @@ class TestFastInterp:
                 (-np.pi / 3, 5 * np.pi / 3),
                 (np.pi, 3 * np.pi),
             ),
+            (
+                lambda x, y: np.cos(30 * x) + np.sin(y) ** 2 + 1,
+                2 * 30 // 30 + 1,
+                2 * 2 + 1,
+                (0, 2 * np.pi / 30),
+                (np.pi, 3 * np.pi),
+            ),
         ],
     )
     def test_interp_rfft2(self, func, m, n, domain0, domain1):
         """Test non-uniform FFT interpolation."""
-        xq = np.array([[7.34, 1.10134, 2.28], [1.1, 3.78432, 8.542]]).T
+        xq = np.array([[7.34, 1.10134, 2.28, 1e3 * np.e], [1.1, 3.78432, 8.542, 0]]).T
         x = np.linspace(domain0[0], domain0[1], m, endpoint=False)
         y = np.linspace(domain1[0], domain1[1], n, endpoint=False)
         x, y = map(np.ravel, list(np.meshgrid(x, y, indexing="ij")))

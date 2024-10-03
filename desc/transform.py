@@ -73,11 +73,11 @@ class Transform(IOAble):
         # and changes variables to the spectrally condensed ζ* = basis.NFP ζ,
         # so basis.NFP must equal grid.NFP.
         errorif(
-            self.grid.NFP != self.basis.NFP
+            method != "jitable"
+            and self.grid.NFP != self.basis.NFP
             and self.basis.N != 0
             and grid.node_pattern != "custom"
-            # I'd argue these two are not worth it
-            and method != "jitable" and np.any(self.grid.nodes[:, 2] != 0),
+            and np.any(self.grid.nodes[:, 2] != 0),
             msg=f"Unequal number of field periods for grid {self.grid.NFP} and "
             f"basis {self.basis.NFP}.",
         )

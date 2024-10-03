@@ -1201,10 +1201,12 @@ def run_regcoil(  # noqa: C901 fxn too complex
         ValueError,
         "current_helicity must be a length-two tuple",
     )
-    [
-        errorif(int(hel) != hel, ValueError, "Helicity values must be integer")
-        for hel in current_helicity
-    ]
+    errorif(
+        any(int(hel) != hel for hel in current_helicity),
+        ValueError,
+        "Helicity values must be integer",
+    )
+
     errorif(
         regularization_type not in ["simple", "regcoil"],
         ValueError,
@@ -1216,28 +1218,28 @@ def run_regcoil(  # noqa: C901 fxn too complex
     # maybe it is an EquilibriaFamily
     errorif(hasattr(eq, "__len__"), ValueError, "Expected a single equilibrium")
 
-    # check if vacuum flag should be True or not
-    pres = np.max(np.abs(eq.compute("p")["p"]))
-    curr = np.max(np.abs(eq.compute("current")["current"]))
-    warnif(
-        vacuum and pres > 1e-8,
-        UserWarning,
-        f"Pressure appears to be non-zero (max {pres} Pa), "
-        + "vacuum flag should probably be set to False.",
-    )
-    warnif(
-        vacuum and curr > 1e-8,
-        UserWarning,
-        f"Current appears to be non-zero (max {curr} A), "
-        + "vacuum flag should probably be set to False.",
-    )
+    if vacuum:
+        # check if vacuum flag should be True or not
+        pres = np.max(np.abs(eq.compute("p")["p"]))
+        curr = np.max(np.abs(eq.compute("current")["current"]))
+        warnif(
+            pres > 1e-8,
+            UserWarning,
+            f"Pressure appears to be non-zero (max {pres} Pa), "
+            + "vacuum flag should probably be set to False.",
+        )
+        warnif(
+            curr > 1e-8,
+            UserWarning,
+            f"Current appears to be non-zero (max {curr} A), "
+            + "vacuum flag should probably be set to False.",
+        )
 
     data = {}
     if external_field:  # ensure given field is an instance of _MagneticField
         assert hasattr(external_field, "compute_magnetic_field"), (
-            "Expected"
-            + "MagneticField for argument external_field,"
-            + f" got type {type(external_field)} "
+            "Expected MagneticField for argument external_field, "
+            f"got type {type(external_field)} "
         )
         data["external_field"] = external_field
         data["external_field_grid"] = external_field_grid
@@ -1275,7 +1277,7 @@ def run_regcoil(  # noqa: C901 fxn too complex
         except AttributeError:
             curve_grid = LinearGrid(
                 N=int(eq.NFP) * 50,
-                theta=jnp.array(jnp.pi),
+                theta=jnp.array(jnp.pi),  # does not matter which theta we choose
                 rho=jnp.array(1.0),
                 endpoint=True,
             )
@@ -1301,7 +1303,7 @@ def run_regcoil(  # noqa: C901 fxn too complex
             # negative sign here because with REGCOIL convention, negative G makes
             # positive toroidal B
             G_ext = -(
-                np.trapz(
+                jnp.trapezoid(
                     y=ext_field_B_zeta,
                     x=curve_grid.nodes[:, 2],
                 )

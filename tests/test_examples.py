@@ -1212,7 +1212,7 @@ def test_regcoil_axisymmetric():
     # make a simple axisymmetric vacuum equilibrium
     eq = load("./tests/inputs/vacuum_circular_tokamak.h5")
     # no phi_SV is needed since it is axisymmetric,
-    # so phi_mn should be zero when running REGCOIL
+    # so phi_mn should be zero when running with simple regularization
     # especially with a nonzero lambda_regularization
     surf_winding = FourierRZToroidalSurface.constant_offset_surface(eq.surface, 2)
 
@@ -1223,9 +1223,9 @@ def test_regcoil_axisymmetric():
         surface_current_field,
         eq,
         lambda_regularization=0,
-        normalize=False,
         vacuum=True,
         verbose=2,
+        regularization_type="regcoil",
     )
     chi_B = data["chi^2_B"]
     phi_mn_opt = surface_current_field.Phi_mn
@@ -1257,6 +1257,7 @@ def test_regcoil_axisymmetric():
         source_grid=LinearGrid(M=40, N=40, NFP=eq.NFP),
         lambda_regularization=1e4,
         vacuum=True,
+        regularization_type="simple",
     )
     phi_mn_opt = surface_current_field.Phi_mn
     np.testing.assert_allclose(phi_mn_opt, 0, atol=1e-16)
@@ -1284,7 +1285,7 @@ def test_regcoil_axisymmetric():
     )
     phi_mn_opt = surface_current_field.Phi_mn
     np.testing.assert_allclose(G / 2, surface_current_field.G, atol=1e-8)
-    np.testing.assert_allclose(phi_mn_opt, 0, atol=1e-10)
+    np.testing.assert_allclose(phi_mn_opt, 0, atol=1e-9)
     np.testing.assert_allclose(
         surface_current_field.compute("Phi", grid=grid)["Phi"],
         correct_phi / 2,

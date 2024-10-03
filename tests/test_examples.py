@@ -1222,7 +1222,7 @@ def test_regcoil_axisymmetric():
     surface_current_field, data = run_regcoil(
         surface_current_field,
         eq,
-        lambda_regularization=0,
+        lambda_regularization=1e-30,  # little regularization to avoid singular matrix
         vacuum=True,
         verbose=2,
         regularization_type="regcoil",

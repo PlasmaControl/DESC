@@ -3832,8 +3832,14 @@ def plot_regcoil_outputs(
         eval_grid = data["eval_grid"]
         eval_grid = (
             eval_grid
-            if not eval_grid.sym
-            else LinearGrid(M=eval_grid.M, N=eval_grid.N, sym=False, NFP=eval_grid.NFP)
+            if (not eval_grid.sym and eval_grid.N != 0)
+            else LinearGrid(
+                M=eval_grid.M,
+                N=max(eval_grid.N, 1),
+                sym=False,
+                NFP=eval_grid.NFP,
+                endpoint=True,
+            )
         )
     if source_grid is None:
         source_grid = data["source_grid"]

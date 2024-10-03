@@ -2,6 +2,7 @@
 
 import warnings
 
+import jax.scipy
 import matplotlib.pyplot as plt
 import numpy as np
 import skimage.measure
@@ -1029,7 +1030,7 @@ def _compute_A_or_B_from_CurrentPotentialField(
 def run_regcoil(  # noqa: C901 fxn too complex
     current_potential_field,
     eq,
-    lambda_regularization=0.0,
+    lambda_regularization=1e-30,
     current_helicity=(1, 0),
     vacuum=False,
     regularization_type="regcoil",
@@ -1439,10 +1440,16 @@ def run_regcoil(  # noqa: C901 fxn too complex
             phi_mn_opt = vht @ ((1 / (s**2 + lambda_regularization)) * s_uT_b)
         else:
             # solve linear system
-            phi_mn_opt = jnp.linalg.lstsq(
-                A1 + lambda_regularization * A2,
-                rhs_B + lambda_regularization * rhs_K,
-            )[0]
+            matrix = A1 + lambda_regularization * A2
+            phi_mn_opt = jax.scipy.linalg.solve(
+                matrix, rhs_B + lambda_regularization * rhs_K, assume_a="pos"
+            )
+            if jnp.any(jnp.isnan(phi_mn_opt)):
+                print("found nans")
+                # failed to solve, likely bc matrix is singular, use lstsq instead
+                phi_mn_opt = jnp.linalg.lstsq(
+                    matrix, rhs_B + lambda_regularization * rhs_K
+                )[0]
 
         phi_mns.append(phi_mn_opt)
 

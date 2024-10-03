@@ -362,6 +362,7 @@ def regcoil_helical_coils_scan():
         lambda_regularization=np.append(np.array([0.0]), np.logspace(-30, -1, 11)),
         current_helicity=(1, -1),
         vacuum=True,
+        regularization_type="simple",
     )
     surface_current_field = fields[0]
     return (data, surface_current_field, eq)

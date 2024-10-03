@@ -1270,42 +1270,7 @@ def run_regcoil(  # noqa: C901 fxn too complex
     G_tot = -(eq.compute("G", grid=source_grid)["G"][0] / mu_0 * 2 * jnp.pi)
 
     if external_field:
-        # calculate the portion of G provided by external field
-        # by integrating external toroidal field along a curve of constant theta
-        try:
-            G_ext = external_field.G
-        except AttributeError:
-            curve_grid = LinearGrid(
-                N=int(eq.NFP) * 50,
-                theta=jnp.array(jnp.pi),  # does not matter which theta we choose
-                rho=jnp.array(1.0),
-                endpoint=True,
-            )
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore", UserWarning)
-                # ignore warning from unequal NFP for grid and basis,
-                # as we don't know a-priori if the external field
-                # shares the same discrete symmetry as the equilibrium,
-                # so we will use a grid with NFP=1 to be safe
-                curve_data = eq.compute(
-                    ["R", "phi", "Z", "e_zeta"],
-                    grid=curve_grid,
-                )
-                curve_coords = jnp.vstack(
-                    (curve_data["R"], curve_data["phi"], curve_data["Z"])
-                ).T
-                ext_field_along_curve = external_field.compute_magnetic_field(
-                    curve_coords, basis="rpz", source_grid=external_field_grid
-                )
-            # calculate covariant B_zeta = B dot e_zeta from external field
-            ext_field_B_zeta = dot(ext_field_along_curve, curve_data["e_zeta"], axis=-1)
-
-            # negative sign here because with REGCOIL convention, negative G makes
-            # positive toroidal B
-            G_ext = (
-                -jnp.sum(ext_field_B_zeta) * 2 * jnp.pi / curve_grid.num_nodes / mu_0
-            )
-
+        G_ext = _G_from_external_field(external_field, eq, external_field_grid)
     else:
         G_ext = 0
 
@@ -1844,3 +1809,40 @@ def _find_XYZ_points(
         contour_Z.append(coords[:, 2])
 
     return contour_X, contour_Y, contour_Z
+
+
+def _G_from_external_field(external_field, eq, external_field_grid):
+    # calculate the portion of G provided by external field
+    # by integrating external toroidal field along a curve of constant theta
+    try:
+        G_ext = external_field.G
+    except AttributeError:
+        curve_grid = LinearGrid(
+            N=int(eq.NFP) * 50,
+            theta=jnp.array(jnp.pi),  # does not matter which theta we choose
+            rho=jnp.array(1.0),
+            endpoint=True,
+        )
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", UserWarning)
+            # ignore warning from unequal NFP for grid and basis,
+            # as we don't know a-priori if the external field
+            # shares the same discrete symmetry as the equilibrium,
+            # so we will use a grid with NFP=1 to be safe
+            curve_data = eq.compute(
+                ["R", "phi", "Z", "e_zeta"],
+                grid=curve_grid,
+            )
+            curve_coords = jnp.vstack(
+                (curve_data["R"], curve_data["phi"], curve_data["Z"])
+            ).T
+            ext_field_along_curve = external_field.compute_magnetic_field(
+                curve_coords, basis="rpz", source_grid=external_field_grid
+            )
+        # calculate covariant B_zeta = B dot e_zeta from external field
+        ext_field_B_zeta = dot(ext_field_along_curve, curve_data["e_zeta"], axis=-1)
+
+        # negative sign here because with REGCOIL convention, negative G makes
+        # positive toroidal B
+        G_ext = -jnp.sum(ext_field_B_zeta) * 2 * jnp.pi / curve_grid.num_nodes / mu_0
+    return G_ext

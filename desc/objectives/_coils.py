@@ -1691,13 +1691,14 @@ class SurfaceCurrentRegularization(_Objective):
     bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
         Both bounds must be broadcastable to to Objective.dim_f
+        Defaults to target=0
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
         Must be broadcastable to to Objective.dim_f
         When used with QuadraticFlux objective, this acts as the regularization
-        parameter, with 0 corresponding to no regularization. The larger this
-        parameter is, the less complex the surface current will be, but the
-        worse the normal field.
+        parameter (with w^2 = lambda), with 0 corresponding to no regularization.
+        The larger this parameter is, the less complex the surface current will be,
+        but the worse the normal field.
     normalize : bool, optional
         Whether to compute the error in physical units or non-dimensionalize.
     normalize_target : bool
@@ -1784,6 +1785,8 @@ class SurfaceCurrentRegularization(_Objective):
             Level of output.
 
         """
+        from desc.magnetic_fields import FourierCurrentPotentialField
+
         surface_current_field = self.things[0]
 
         if self._source_grid is None:
@@ -1814,9 +1817,16 @@ class SurfaceCurrentRegularization(_Objective):
             has_axis=source_grid.axis.size,
         )
         if self._normalize:
-            self._normalization = np.max(
-                [abs(surface_current_field.I) + abs(surface_current_field.G), 1]
-            )
+            if isinstance(surface_current_field, FourierCurrentPotentialField):
+                self._normalization = np.max(
+                    [abs(surface_current_field.I) + abs(surface_current_field.G), 1]
+                )
+            else:  # it does not have I,G bc is CurrentPotentialField
+                self._normalization = np.mean(
+                    np.abs(
+                        surface_current_field.compute("Phi", grid=source_grid)["Phi"]
+                    )
+                )
 
         self._constants = {
             "surface_transforms": surface_transforms,

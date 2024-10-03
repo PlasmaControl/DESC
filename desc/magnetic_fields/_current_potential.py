@@ -1541,7 +1541,7 @@ def _find_current_potential_contours(
         ``skimage.measure.find_contours`` which finds contours using a
         marching squares algorithm.
     show_plots : bool, optional
-        whether to plot the contours, useful for debuggin or seeing why contour finding
+        whether to plot the contours, useful for debugging or seeing why contour finding
         fails, by default False
     stell_sym : bool, optional
         if the modular coilset has stellarator symmetry, by default False.

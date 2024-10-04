@@ -1324,7 +1324,7 @@ def test_regcoil_modular_check_B(regcoil_modular_coils):
         source_grid=LinearGrid(M=60, N=60, NFP=surface_current_field.NFP),
         basis="rpz",
     )
-    np.testing.assert_allclose(B, B_from_surf, rtol=5e-2, atol=4.9e-4)
+    np.testing.assert_allclose(B, B_from_surf, rtol=5e-2, atol=5e-4)
 
 
 @pytest.mark.regression

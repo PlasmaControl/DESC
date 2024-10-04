@@ -1212,7 +1212,7 @@ def test_regcoil_axisymmetric():
     # make a simple axisymmetric vacuum equilibrium
     eq = load("./tests/inputs/vacuum_circular_tokamak.h5")
     # no phi_SV is needed since it is axisymmetric,
-    # so phi_mn should be zero when running REGCOIL
+    # so phi_mn should be zero when running with simple regularization
     # especially with a nonzero lambda_regularization
     surf_winding = FourierRZToroidalSurface.constant_offset_surface(eq.surface, 2)
 
@@ -1222,12 +1222,14 @@ def test_regcoil_axisymmetric():
     surface_current_field, data = run_regcoil(
         surface_current_field,
         eq,
-        lambda_regularization=0,
-        normalize=False,
+        lambda_regularization=1e-30,  # little regularization to avoid singular matrix
         vacuum=True,
         verbose=2,
+        regularization_type="regcoil",
     )
-    chi_B = data["chi^2_B"]
+    # is a list of length one, index into it
+    surface_current_field = surface_current_field[0]
+    chi_B = data["chi^2_B"][0]
     phi_mn_opt = surface_current_field.Phi_mn
     G = surface_current_field.G
     np.testing.assert_allclose(phi_mn_opt, 0, atol=1e-6)
@@ -1238,7 +1240,7 @@ def test_regcoil_axisymmetric():
     B_from_surf = surface_current_field.compute_magnetic_field(
         coords, source_grid=LinearGrid(M=200, N=200, NFP=surf_winding.NFP)
     )
-    np.testing.assert_allclose(B, B_from_surf, atol=1e-4)
+    np.testing.assert_allclose(B, B_from_surf, rtol=1e-4, atol=1e-8)
 
     grid = LinearGrid(N=10, M=10, NFP=surface_current_field.NFP)
     correct_phi = G * grid.nodes[:, 2] / 2 / np.pi
@@ -1257,17 +1259,19 @@ def test_regcoil_axisymmetric():
         source_grid=LinearGrid(M=40, N=40, NFP=eq.NFP),
         lambda_regularization=1e4,
         vacuum=True,
+        regularization_type="simple",
     )
+    surface_current_field = surface_current_field[0]
     phi_mn_opt = surface_current_field.Phi_mn
     np.testing.assert_allclose(phi_mn_opt, 0, atol=1e-16)
-    np.testing.assert_allclose(data["chi^2_B"], 0, atol=1e-10)
+    np.testing.assert_allclose(data["chi^2_B"][0], 0, atol=1e-10)
     np.testing.assert_allclose(
         surface_current_field.compute("Phi", grid=grid)["Phi"], correct_phi, atol=1e-16
     )
     B_from_surf = surface_current_field.compute_magnetic_field(
         coords, source_grid=LinearGrid(M=200, N=200, NFP=surf_winding.NFP)
     )
-    np.testing.assert_allclose(B, B_from_surf, atol=1e-4)
+    np.testing.assert_allclose(B, B_from_surf, rtol=1e-4, atol=1e-8)
 
     # test with half the current given external to winding surface
     surface_current_field, data = run_regcoil(
@@ -1282,19 +1286,20 @@ def test_regcoil_axisymmetric():
         external_field=ToroidalMagneticField(B0=-mu_0 * (G / 2) / 2 / np.pi, R0=1),
         vacuum=True,
     )
+    surface_current_field = surface_current_field[0]
     phi_mn_opt = surface_current_field.Phi_mn
     np.testing.assert_allclose(G / 2, surface_current_field.G, atol=1e-8)
-    np.testing.assert_allclose(phi_mn_opt, 0, atol=1e-10)
+    np.testing.assert_allclose(phi_mn_opt, 0, atol=1e-9)
     np.testing.assert_allclose(
         surface_current_field.compute("Phi", grid=grid)["Phi"],
         correct_phi / 2,
         atol=1e-9,
     )
-    np.testing.assert_allclose(data["chi^2_B"], 0, atol=1e-11)
+    np.testing.assert_allclose(data["chi^2_B"][0], 0, atol=1e-11)
     B_from_surf = surface_current_field.compute_magnetic_field(
         coords, source_grid=LinearGrid(M=200, N=200, NFP=surf_winding.NFP)
     )
-    np.testing.assert_allclose(B, B_from_surf * 2, atol=1e-4)
+    np.testing.assert_allclose(B, B_from_surf * 2, rtol=1e-4, atol=1e-8)
 
 
 @pytest.mark.regression
@@ -1307,19 +1312,19 @@ def test_regcoil_modular_check_B(regcoil_modular_coils):
         initial_surface_current_field,
         eq,
     ) = regcoil_modular_coils
-    chi_B = data["chi^2_B"]
+    chi_B = data["chi^2_B"][0]
     surface_current_field = initial_surface_current_field.copy()
 
-    np.testing.assert_array_less(chi_B, 1e-5)
-    coords = eq.compute(["R", "phi", "Z", "B"])
+    np.testing.assert_array_less(chi_B, 1e-6)
+    coords = eq.compute(["R", "phi", "Z", "B"], grid=LinearGrid(M=20, N=20, NFP=eq.NFP))
     B = coords["B"]
     coords = np.vstack([coords["R"], coords["phi"], coords["Z"]]).T
     B_from_surf = surface_current_field.compute_magnetic_field(
         coords,
-        source_grid=LinearGrid(M=80, N=80, NFP=surface_current_field.NFP),
+        source_grid=LinearGrid(M=60, N=60, NFP=surface_current_field.NFP),
         basis="rpz",
     )
-    np.testing.assert_allclose(B, B_from_surf, atol=3e-3)
+    np.testing.assert_allclose(B, B_from_surf, rtol=5e-2, atol=5e-4)
 
 
 @pytest.mark.regression
@@ -1335,10 +1340,13 @@ def test_regcoil_helical_coils_check_objective_method(
     N_sgrid = 50
 
     (
-        _,
+        data,
         initial_surface_current_field,
         eq,
     ) = regcoil_helical_coils_scan
+    lam_index = 3
+    lam = data["lambda_regularization"][lam_index]
+    initial_surface_current_field.Phi_mn = data["Phi_mn"][lam_index]
     surface_current_field = initial_surface_current_field.copy()
 
     # reset the Phi_mn
@@ -1370,7 +1378,7 @@ def test_regcoil_helical_coils_check_objective_method(
             obj,
             SurfaceCurrentRegularization(
                 surface_current_field=surface_current_field,
-                weight=np.sqrt(1e-18),
+                weight=np.sqrt(lam),
                 source_grid=sgrid,
             ),
         ),
@@ -1404,8 +1412,8 @@ def test_regcoil_helical_coils_check_objective_method(
         source_grid=LinearGrid(M=60, N=60, NFP=surface_current_field.NFP),
         basis="rpz",
     )
-    np.testing.assert_allclose(B, B_from_surf, atol=6e-3, rtol=1e-4)
-    np.testing.assert_allclose(B_from_orig_surf, B_from_surf, atol=4e-3, rtol=1e-4)
+    np.testing.assert_allclose(B, B_from_surf, atol=6e-4, rtol=5e-2)
+    np.testing.assert_allclose(B_from_orig_surf, B_from_surf, atol=1e-8, rtol=1e-8)
 
 
 @pytest.mark.unit

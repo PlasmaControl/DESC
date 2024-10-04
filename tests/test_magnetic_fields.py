@@ -627,7 +627,7 @@ class TestMagneticFields:
             NFP=10,
         )
 
-        coils = field.to_CoilSet(1)  # .to_FourierXYZ(N=100,grid=LinearGrid(N=200))
+        coils = field.to_CoilSet(1)
 
         np.testing.assert_allclose(
             coils.compute_magnetic_field([20.0, 0, 0], source_grid=LinearGrid(N=700)),
@@ -655,7 +655,7 @@ class TestMagneticFields:
             NFP=10,
         )
 
-        coils = field.to_CoilSet(1)  # .to_FourierXYZ(N=100,grid=LinearGrid(N=200))
+        coils = field.to_CoilSet(1)
 
         np.testing.assert_allclose(
             -coils.compute_magnetic_field([20.0, 0, 0], source_grid=LinearGrid(N=700)),

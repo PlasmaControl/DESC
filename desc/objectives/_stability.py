@@ -539,7 +539,7 @@ class BallooningStability(_Objective):
             self._alpha, jnp.linspace(0, jnp.pi, 8) if eq.N != 0 else jnp.array(0.0)
         )
         self._zeta0 = setdefault(
-            self._zeta0, jnp.linspace(-0.5 * jnp.pi, 0.5 * jnp.pi, 13)
+                self._zeta0, jnp.linspace(-0.5 * jnp.pi, 0.5 * jnp.pi, 13)[1:]
         )
         self._dim_f = 1
         self._data_keys = ["ideal ball lambda"]

@@ -3867,7 +3867,7 @@ def plot_regcoil_outputs(
         field.copy()
     )  # copy the field so that we are not changing the passed-in field
     # TODO: check that field has correct NFP and resolutions?
-    scan = isinstance(data["Phi_mn"], list)
+    scan = len(data["Phi_mn"]) > 1
     # TODO: add flags for each subplot, also add |K| plot
     Bn_tot = data["Bn_total"]
     lambdas = data["lambda_regularization"]
@@ -3914,7 +3914,7 @@ def plot_regcoil_outputs(
     axdata = {}
     if not scan:
         figsize = kwargs.pop("figsize", (8, 8))
-        field.Phi_mn = data["Phi_mn"]
+        field.Phi_mn = data["Phi_mn"][0]
         field.I = data["I"]
         field.G = data["G"]
         # TODO: replace with plot_2d call

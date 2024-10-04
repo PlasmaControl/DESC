@@ -398,6 +398,7 @@ def regcoil_modular_coils():
         regularization_type="regcoil",
         vacuum=True,
     )
+    surface_current_field = surface_current_field[0]
 
     return (data, surface_current_field, eq)
 

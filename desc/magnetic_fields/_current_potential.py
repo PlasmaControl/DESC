@@ -1154,46 +1154,41 @@ def run_regcoil(  # noqa: C901 fxn too complex
 
     Returns
     -------
-    surface_current_field : FourierCurrentPotentialField or list of
+    fields  : list of FourierCurrentPotentialField
         A FourierCurrentPotentialField with the Phi_mn set to the
-        optimized current potential. If multiple lambda_regularization were passed in,
-        this is a list of length lambda_regularization.size with the optimized fields
+        optimized current potential. This is a list of length
+        lambda_regularization.size with the optimized fields
         for each parameter value lambda_regularization.
     data : dict
         Dictionary with the following keys,::
 
             lambda_regularization : regularization parameter the algorithm was ran
-                    with, a float if passed-in `lambda_regularization` was a float,
-                    or an array if it was an array, corresponding to the list of
-                    `Phi_mn`.
+                    with, a array of passed-in `lambda_regularization`
+                    corresponding to the list of `Phi_mn`.
             Phi_mn : the single-valued current potential coefficients which
                     minimize the Bn at the given eval_grid on the plasma, subject
                     to regularization on the surface current magnitude governed by
                     lambda_regularization.
-                    An array of length `self.Phi_basis.num_modes` if passed-in
-                    `lambda_regularization`, was a float, or a list of arrays,
-                    with list length `lambda_regularization.size` if
-                    `lambda_regularization` was an array, corresponding to the
+                    A list of arrays of length `self.Phi_basis.num_modes` if passed-in
+                    `lambda_regularization`,
+                    with list length `lambda_regularization.size`, corresponding to the
                     list of regularization parameters `lambda_regularization`.
             I : float, net toroidal current (in Amperes) on the winding surface.
-                Governed by the `current_helicity` parameters, and is zero for
-                modular coils (when `p=current_helicity[0]=0`).
+                    Governed by the `current_helicity` parameters, and is zero for
+                    modular coils (when `p=current_helicity[0]=0`).
             G : float, net poloidal current (in Amperes) on the winding surface.
-                Determined by the equilibrium toroidal magnetic field, as well as
-                the given external field.
+                    Determined by the equilibrium toroidal magnetic field, as well as
+                    the given external field.
             chi^2_B : quadratic flux squared, integrated over the plasma surface.
-                a float if `lambda_regularization` was a float, or list of float of
-                length `lambda_regularization.size` if `lambda_regularization` was an
-                array, corresponding to the array of `lambda_regularization` values.
+                    list of float of  length `lambda_regularization.size`,
+                    corresponding to the array of `lambda_regularization` values.
             chi^2_K : Current density magnitude squared, integrated over winding
-                surface. a float if `lambda_regularization` was a float, or list of
-                float of length `lambda_regularization.size` if `lambda_regularization`
-                was an array, corresponding to the array of `lambda_regularization`.
+                    surface. a list of float of length `lambda_regularization.size`,
+                    corresponding to the array of `lambda_regularization`.
             | K | : Current density magnitude on winding surface, evaluated at the
-                given `source_grid`. An array of length `source_grid.num_nodes` if
-                `lambda_regularization` was a float, or list of arrays, with list
-                length `lambda_regularization.size`, if `lambda_regularization` was an
-                array, corresponding to the array of `lambda_regularization`.
+                    given `source_grid`. A list of arrays, with list length
+                    `lambda_regularization.size`, corresponding to the array
+                    of `lambda_regularization`.
             eval_grid: Grid object that Bn was evaluated at.
             source_grid: Grid object that Phi and K were evaluated at.
 
@@ -1404,7 +1399,6 @@ def run_regcoil(  # noqa: C901 fxn too complex
             axis=0
         )
     lambda_regularizations = np.atleast_1d(lambda_regularization)
-    scan = lambda_regularizations.size > 1
 
     chi2Bs = []
     chi2Ks = []
@@ -1493,19 +1487,15 @@ def run_regcoil(  # noqa: C901 fxn too complex
             printstring = f"Avg Bnormal = {jnp.mean(jnp.abs(Bn_print_normalized)):1.5e}"
             printstring += units
             print(printstring)
-    data["lambda_regularization"] = (
-        lambda_regularizations[0] if not scan else lambda_regularizations
-    )
-    data["Phi_mn"] = phi_mns[0] if not scan else phi_mns
+    data["lambda_regularization"] = lambda_regularizations
+    data["Phi_mn"] = phi_mns
     data["I"] = I
     data["G"] = G
-    data["chi^2_B"] = chi2Bs[0] if not scan else chi2Bs
-    data["chi^2_K"] = chi2Ks[0] if not scan else chi2Ks
-    data["|K|"] = K_mags[0] if not scan else K_mags
-    data["Bn_total"] = Bn_arrs[0] if not scan else Bn_arrs
+    data["chi^2_B"] = chi2Bs
+    data["chi^2_K"] = chi2Ks
+    data["|K|"] = K_mags
+    data["Bn_total"] = Bn_arrs
 
-    if len(fields) == 1:
-        fields = fields[0]
     return fields, data
 
 

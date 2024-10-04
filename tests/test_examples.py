@@ -1227,7 +1227,9 @@ def test_regcoil_axisymmetric():
         verbose=2,
         regularization_type="regcoil",
     )
-    chi_B = data["chi^2_B"]
+    # is a list of length one, index into it
+    surface_current_field = surface_current_field[0]
+    chi_B = data["chi^2_B"][0]
     phi_mn_opt = surface_current_field.Phi_mn
     G = surface_current_field.G
     np.testing.assert_allclose(phi_mn_opt, 0, atol=1e-6)
@@ -1259,9 +1261,10 @@ def test_regcoil_axisymmetric():
         vacuum=True,
         regularization_type="simple",
     )
+    surface_current_field = surface_current_field[0]
     phi_mn_opt = surface_current_field.Phi_mn
     np.testing.assert_allclose(phi_mn_opt, 0, atol=1e-16)
-    np.testing.assert_allclose(data["chi^2_B"], 0, atol=1e-10)
+    np.testing.assert_allclose(data["chi^2_B"][0], 0, atol=1e-10)
     np.testing.assert_allclose(
         surface_current_field.compute("Phi", grid=grid)["Phi"], correct_phi, atol=1e-16
     )
@@ -1283,6 +1286,7 @@ def test_regcoil_axisymmetric():
         external_field=ToroidalMagneticField(B0=-mu_0 * (G / 2) / 2 / np.pi, R0=1),
         vacuum=True,
     )
+    surface_current_field = surface_current_field[0]
     phi_mn_opt = surface_current_field.Phi_mn
     np.testing.assert_allclose(G / 2, surface_current_field.G, atol=1e-8)
     np.testing.assert_allclose(phi_mn_opt, 0, atol=1e-9)
@@ -1291,7 +1295,7 @@ def test_regcoil_axisymmetric():
         correct_phi / 2,
         atol=1e-9,
     )
-    np.testing.assert_allclose(data["chi^2_B"], 0, atol=1e-11)
+    np.testing.assert_allclose(data["chi^2_B"][0], 0, atol=1e-11)
     B_from_surf = surface_current_field.compute_magnetic_field(
         coords, source_grid=LinearGrid(M=200, N=200, NFP=surf_winding.NFP)
     )
@@ -1308,7 +1312,7 @@ def test_regcoil_modular_check_B(regcoil_modular_coils):
         initial_surface_current_field,
         eq,
     ) = regcoil_modular_coils
-    chi_B = data["chi^2_B"]
+    chi_B = data["chi^2_B"][0]
     surface_current_field = initial_surface_current_field.copy()
 
     np.testing.assert_array_less(chi_B, 1e-6)

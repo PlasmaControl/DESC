@@ -1336,10 +1336,13 @@ def test_regcoil_helical_coils_check_objective_method(
     N_sgrid = 50
 
     (
-        _,
+        data,
         initial_surface_current_field,
         eq,
     ) = regcoil_helical_coils_scan
+    lam_index = 3
+    lam = data["lambda_regularization"][lam_index]
+    initial_surface_current_field.Phi_mn = data["Phi_mn"][lam_index]
     surface_current_field = initial_surface_current_field.copy()
 
     # reset the Phi_mn
@@ -1371,7 +1374,7 @@ def test_regcoil_helical_coils_check_objective_method(
             obj,
             SurfaceCurrentRegularization(
                 surface_current_field=surface_current_field,
-                weight=np.sqrt(1e-18),
+                weight=np.sqrt(lam),
                 source_grid=sgrid,
             ),
         ),
@@ -1406,7 +1409,6 @@ def test_regcoil_helical_coils_check_objective_method(
         basis="rpz",
     )
     np.testing.assert_allclose(B, B_from_surf, atol=6e-4, rtol=5e-2)
-    np.testing.assert_allclose(B_from_orig_surf, B_from_surf, atol=1e-8, rtol=1e-4)
     np.testing.assert_allclose(B_from_orig_surf, B_from_surf, atol=1e-8, rtol=1e-8)
 
 

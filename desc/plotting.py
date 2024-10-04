@@ -3835,6 +3835,8 @@ def plot_regcoil_outputs(
         in the contour plots.
         * ``markersize``: int, defaults to 12, the size of the markers to use in
         the scatter plots.
+        * ``cmap``: str, matplotlib colormap scheme to use, passed to ax.contourf
+
 
 
 
@@ -3862,7 +3864,7 @@ def plot_regcoil_outputs(
     except TypeError:
         # it was not a list, so proceed as usual
         pass
-
+    cmap = kwargs.pop("cmap", "viridis")
     field = (
         field.copy()
     )  # copy the field so that we are not changing the passed-in field
@@ -3954,7 +3956,7 @@ def plot_regcoil_outputs(
             source_grid.nodes[source_grid.unique_theta_idx, 1],
             (phi_tot).reshape(source_grid.num_theta, source_grid.num_zeta, order="F"),
             levels=ncontours,
-            cmap="viridis",
+            cmap=cmap,
         )
         plt.colorbar()
         plt.ylabel("theta")
@@ -4029,7 +4031,7 @@ def plot_regcoil_outputs(
                     source_grid.num_theta, source_grid.num_zeta, order="F"
                 ),
                 levels=ncontours,
-                cmap="viridis",
+                cmap=cmap,
             )
             plt.ylabel("theta")
             plt.xlabel("zeta")
@@ -4075,7 +4077,7 @@ def plot_regcoil_outputs(
                 eval_grid.nodes[eval_grid.unique_theta_idx, 1],
                 (Bn).reshape(eval_grid.num_theta, eval_grid.num_zeta, order="F"),
                 levels=ncontours,
-                cmap="viridis",
+                cmap=cmap,
             )
             plt.ylabel("theta")
             plt.xlabel("zeta")

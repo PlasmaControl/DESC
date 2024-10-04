@@ -606,6 +606,7 @@ def plot_2d(
           the surface, must be provided if Bn is entered as the variable to plot.
         * ``field_grid``: MagneticField, a Grid to pass to the field as a source grid
           from which to calculate Bn, by default None.
+        * ``use_contour`` : bool, whether to use ax.contour instead of ax.contourf
 
     Returns
     -------
@@ -721,6 +722,7 @@ def plot_2d(
     title_fontsize = kwargs.pop("title_fontsize", None)
     xlabel_fontsize = kwargs.pop("xlabel_fontsize", None)
     ylabel_fontsize = kwargs.pop("ylabel_fontsize", None)
+    use_contour = kwargs.pop("use_contour", False)
     assert len(kwargs) == 0, f"plot_2d got unexpected keyword argument: {kwargs.keys()}"
 
     cax_kwargs = {"size": "5%", "pad": 0.05}
@@ -735,8 +737,10 @@ def plot_2d(
         .reshape((grid.num_theta, grid.num_rho, grid.num_zeta), order="F")
         .squeeze()
     )
-
-    im = ax.contourf(xx, yy, data, **contourf_kwargs)
+    if use_contour:
+        im = ax.contour(xx, yy, data, **contourf_kwargs)
+    else:
+        im = ax.contourf(xx, yy, data, **contourf_kwargs)
     cax = divider.append_axes("right", **cax_kwargs)
     cbar = fig.colorbar(im, cax=cax)
     cbar.update_ticks()
@@ -3774,7 +3778,7 @@ def plot_regcoil_outputs(
     a single ``FourierCurrentPotential`` object :
 
     - Contour plot of the current potential on the winding surface.
-      Corresponds to the keys ``"fig_Phi", "ax_Phi"`` in the output
+      Corresponds to the keys ``"fig_Phi", "ax_K"`` in the output
       ``figdata, ax_data``
     - Contour plot of the normal field error from that current potential
       on the given equilibrium surface (including plasma contribution if
@@ -3836,8 +3840,9 @@ def plot_regcoil_outputs(
         * ``markersize``: int, defaults to 12, the size of the markers to use in
         the scatter plots.
         * ``cmap``: str, matplotlib colormap scheme to use, passed to ax.contourf
-
-
+        * ``title_fontsize``: integer, font size of the titles
+        * ``xlabel_fontsize``: float, fontsize of the xlabels
+        * ``ylabel_fontsize``: float, fontsize of the ylabels
 
 
     Outputs
@@ -3870,8 +3875,8 @@ def plot_regcoil_outputs(
     )  # copy the field so that we are not changing the passed-in field
     # TODO: check that field has correct NFP and resolutions?
     scan = len(data["Phi_mn"]) > 1
-    # TODO: add flags for each subplot, also add |K| plot
-    Bn_tot = data["Bn_total"]
+    scan_str = "_scan" if scan else ""
+
     lambdas = data["lambda_regularization"]
     chi2Bs = data["chi^2_B"]
     chi2Ks = data["chi^2_K"]
@@ -3900,250 +3905,195 @@ def plot_regcoil_outputs(
 
     if "external_field" in data.keys() and recalc_eval_grid_quantites:
         external_field = data["external_field"]
-        external_field_grid = data["external_field_grid"]
-        B_ext = external_field.compute_Bnormal(
-            eq.surface, eval_grid, external_field_grid
-        )[0]
-
     else:
         external_field = None
 
-    # TODO: if recalculating do we replace the data in the dict?
-
     ncontours = kwargs.pop("ncontours", 20)
     markersize = kwargs.pop("markersize", 12)
+    xlabel_fontsize = kwargs.pop("xlabel_fontsize", None)
+    ylabel_fontsize = kwargs.pop("ylabel_fontsize", None)
+    title_fontsize = kwargs.pop("title_fontsize", None)
+
     figdata = {}
     axdata = {}
-    if not scan:
-        figsize = kwargs.pop("figsize", (8, 8))
-        field.Phi_mn = data["Phi_mn"][0]
-        field.I = data["I"]
-        field.G = data["G"]
-        # TODO: replace with plot_2d call
-        phi_tot = field.compute("Phi", grid=source_grid)["Phi"]
-        # Bnormal plot
-        thing_to_pass_to_Bnorm_compute = eq.surface if vacuum else eq
-        Bn_tot = (
-            Bn_tot
-            if not recalc_eval_grid_quantites
-            else field.compute_Bnormal(
-                thing_to_pass_to_Bnorm_compute, eval_grid, source_grid
-            )[0]
+    # show composite scan over lambda_regularization plots
+    # strongly based off of Landreman's REGCOIL plotting routine:
+    # github.com/landreman/regcoil/blob/master/
+    figsize = kwargs.pop("figsize", (16, 12))
+    if scan:  # this plot only makes sense for a scan
+        fig_chiB_lam, ax_chiB_lam = plt.subplots(figsize=figsize)
+        ax_chiB_lam.scatter(lambdas, chi2Bs, s=markersize)
+        ax_chiB_lam.set_xlabel(
+            r"$\lambda$ (regularization parameter)", fontsize=xlabel_fontsize
         )
-        if external_field and recalc_eval_grid_quantites:
-            Bn_tot += B_ext
-        plt.rcParams.update({"font.size": 26})
-        plt.figure(figsize=figsize)
-        plt.contourf(
-            eval_grid.nodes[eval_grid.unique_zeta_idx, 2],
-            eval_grid.nodes[eval_grid.unique_theta_idx, 1],
-            (Bn_tot).reshape(eval_grid.num_theta, eval_grid.num_zeta, order="F"),
+        ax_chiB_lam.set_ylabel(
+            r"$\chi^2_B = \int \int B_{normal}^2 dA$ ", fontsize=ylabel_fontsize
         )
-        plt.ylabel("theta")
-        plt.xlabel("zeta")
-        plt.title("Bnormal on plasma surface")
-        plt.colorbar()
-        plt.xlim([0, 2 * np.pi / field.NFP])
-        figdata["fig_Bn"] = plt.gcf()
-        axdata["ax_Bn"] = plt.gca()
+        ax_chiB_lam.set_yscale("log")
+        ax_chiB_lam.set_xscale("log")
+        figdata["fig_chi^2_B_vs_lambda_regularization"] = fig_chiB_lam
+        axdata["ax_chi^2_B_vs_lambda_regularization"] = ax_chiB_lam
+        fig_chiK_lam, ax_chiK_lam = plt.subplots(figsize=figsize)
 
-        # TODO: replace with plot_2d call
-        # current potential contour plot
-        plt.figure(figsize=figsize)
-        plt.rcParams.update({"font.size": 18})
-        plt.contour(
-            source_grid.nodes[source_grid.unique_zeta_idx, 2],
-            source_grid.nodes[source_grid.unique_theta_idx, 1],
-            (phi_tot).reshape(source_grid.num_theta, source_grid.num_zeta, order="F"),
-            levels=ncontours,
-            cmap=cmap,
+        ax_chiK_lam.scatter(lambdas, chi2Ks, s=markersize)
+        ax_chiK_lam.set_ylabel(
+            r"$\chi^2_K = \int \int K^2 dA'$ ", fontsize=ylabel_fontsize
         )
-        plt.colorbar()
-        plt.ylabel("theta")
-        plt.xlabel("zeta")
-        plt.title("Total Current Potential on winding surface")
+        ax_chiK_lam.set_xlabel(
+            r"$\lambda$ (regularization parameter)", fontsize=xlabel_fontsize
+        )
+        ax_chiK_lam.set_yscale("log")
+        ax_chiK_lam.set_xscale("log")
+        figdata["fig_chi^2_K_vs_lambda_regularization"] = fig_chiK_lam
+        axdata["ax_chi^2_K_vs_lambda_regularization"] = ax_chiK_lam
+        fig_chiB_chiK, ax_chiB_chiK = plt.subplots(figsize=figsize)
+        ax_chiB_chiK.scatter(chi2Ks, chi2Bs, s=markersize)
+        ax_chiB_chiK.set_xlabel(
+            r"$\chi^2_K = \int \int K^2 dA'$ ", fontsize=xlabel_fontsize
+        )
+        ax_chiB_chiK.set_ylabel(
+            r"$\chi^2_B = \int \int B_{normal}^2 dA$ ", fontsize=ylabel_fontsize
+        )
+        ax_chiB_chiK.set_yscale("log")
+        ax_chiB_chiK.set_xscale("log")
+        figdata["fig_chi^2_B_vs_chi^2_K"] = fig_chiB_chiK
+        axdata["ax_chi^2_B_vs_chi^2_K"] = ax_chiB_chiK
 
-        plt.xlim([0, 2 * np.pi / field.NFP])
-        figdata["fig_Phi"] = plt.gcf()
-        axdata["ax_Phi"] = plt.gca()
-        if return_data:
-            return figdata, axdata, data
-        return figdata, axdata
-    else:  # show composite scan over lambda_regularization plots
-        # strongly based off of Landreman's REGCOIL plotting routine:
-        # github.com/landreman/regcoil/blob/master/
-        figsize = kwargs.pop("figsize", (16, 12))
-        plt.figure(figsize=figsize)
-        plt.rcParams.update({"font.size": 20})
-        plt.scatter(lambdas, chi2Bs, s=markersize)
-        plt.xlabel(r"$\lambda$ (regularization parameter)")
-        plt.ylabel(r"$\chi^2_B = \int \int B_{normal}^2 dA$ ")
-        plt.yscale("log")
-        plt.xscale("log")
-        figdata["fig_chi^2_B_vs_lambda_regularization"] = plt.gcf()
-        axdata["ax_chi^2_B_vs_lambda_regularization"] = plt.gca()
-        plt.figure(figsize=figsize)
-        plt.scatter(lambdas, chi2Ks, s=markersize)
-        plt.ylabel(r"$\chi^2_K = \int \int K^2 dA'$ ")
-        plt.xlabel(r"$\lambda$ (regularization parameter)")
-        plt.yscale("log")
-        plt.xscale("log")
-        figdata["fig_chi^2_K_vs_lambda_regularization"] = plt.gcf()
-        axdata["ax_chi^2_K_vs_lambda_regularization"] = plt.gca()
-        plt.figure(figsize=figsize)
-        plt.scatter(chi2Ks, chi2Bs, s=markersize)
-        plt.xlabel(r"$\chi^2_K = \int \int K^2 dA'$ ")
-        plt.ylabel(r"$\chi^2_B = \int \int B_{normal}^2 dA$ ")
-        plt.yscale("log")
-        plt.xscale("log")
-        figdata["fig_chi^2_B_vs_chi^2_K"] = plt.gcf()
-        axdata["ax_chi^2_B_vs_chi^2_K"] = plt.gca()
+    nlam = len(chi2Bs)
+    max_nlam_for_contour_plots = 16
+    numPlots = min(nlam, max_nlam_for_contour_plots)
+    ilam_to_plot = np.sort(list(set(map(int, np.linspace(1, nlam, numPlots)))))
+    numPlots = len(ilam_to_plot)
 
-        nlam = len(chi2Bs)
-        max_nlam_for_contour_plots = 16
-        numPlots = min(nlam, max_nlam_for_contour_plots)
-        ilam_to_plot = np.sort(list(set(map(int, np.linspace(1, nlam, numPlots)))))
-        numPlots = len(ilam_to_plot)
+    numCols = int(np.ceil(np.sqrt(numPlots)))
+    numRows = int(np.ceil(numPlots * 1.0 / numCols))
 
-        numCols = int(np.ceil(np.sqrt(numPlots)))
-        numRows = int(np.ceil(numPlots * 1.0 / numCols))
-
-        ########################################################
-        # Plot total current potentials
-        ########################################################
-        plt.figure(figsize=figsize)
-        for whichPlot in range(numPlots):
-            plt.subplot(numRows, numCols, whichPlot + 1)
+    ########################################################
+    # Plot total current potentials
+    ########################################################
+    fig_Phi, ax_Phi = plt.subplots(nrows=numRows, ncols=numCols, figsize=figsize)
+    whichPlot = 0
+    for row in range(numRows):
+        for col in range(numCols):
+            ax = ax_Phi if not scan else ax_Phi[row, col]
             phi_mn_opt = phi_mns[ilam_to_plot[whichPlot] - 1]
-            # TODO replace these with plot 2d calls with the ax of each
-            # subplot passed in
             field.Phi_mn = phi_mn_opt
             field.I = data["I"]
             field.G = data["G"]
-            phi_tot = field.compute("Phi", grid=source_grid)["Phi"]
-
-            plt.rcParams.update({"font.size": 18})
-
-            plt.contour(
-                source_grid.nodes[source_grid.unique_zeta_idx, 2],
-                source_grid.nodes[source_grid.unique_theta_idx, 1],
-                (phi_tot).reshape(
-                    source_grid.num_theta, source_grid.num_zeta, order="F"
-                ),
-                levels=ncontours,
+            _, ax = plot_2d(
+                field,
+                "Phi",
+                grid=source_grid,
+                ax=ax,
                 cmap=cmap,
+                use_contour=True,
+                levels=ncontours,
+                title_fontsize=title_fontsize,
             )
-            plt.ylabel("theta")
-            plt.xlabel("zeta")
-            plt.title(
-                f"lambda= {lambdas[ilam_to_plot[whichPlot] - 1]:1.5e}"
-                + f" index = {ilam_to_plot[whichPlot] - 1}",
+
+            ax.set_title(
+                f"lambda= {lambdas[ilam_to_plot[whichPlot]-1]:1.5e}"
+                + f" index = {ilam_to_plot[whichPlot]-1}",
                 fontsize="x-small",
             )
-            plt.colorbar()
-            plt.xlim([0, 2 * np.pi / field.NFP])
-        plt.tight_layout()
-        plt.figtext(
-            0.5,
-            0.995,
-            "Total Current Potential",
-            horizontalalignment="center",
-            verticalalignment="top",
-            fontsize="small",
-        )
-        figdata["fig_scan_Phi"] = plt.gcf()
-        axdata["ax_scan_Phi"] = plt.gca()
-        ########################################################
-        # Plot Bn
-        ########################################################
-        plt.figure(figsize=figsize)
-        for whichPlot in range(numPlots):
-            plt.subplot(numRows, numCols, whichPlot + 1)
-            field.Phi_mn = phi_mns[ilam_to_plot[whichPlot] - 1]
-            Bn = (
-                Bn_tot[ilam_to_plot[whichPlot] - 1]
-                if not recalc_eval_grid_quantites
-                else field.compute_Bnormal(
-                    eq if not vacuum else eq.surface, eval_grid, source_grid
-                )[0]
-            )
-            if external_field and recalc_eval_grid_quantites:
-                Bn_tot += B_ext
+            whichPlot += 1
+    fig_Phi.tight_layout()
+    fig_Phi.text(
+        0.5,
+        0.995,
+        "Total Current Potential (A)",
+        horizontalalignment="center",
+        verticalalignment="top",
+        fontsize="small",
+    )
+    figdata["fig" + scan_str + "_Phi"] = fig_Phi
+    axdata["ax" + scan_str + "_Phi"] = ax_Phi
 
-            plt.rcParams.update({"font.size": 18})
-
-            plt.contourf(
-                eval_grid.nodes[eval_grid.unique_zeta_idx, 2],
-                eval_grid.nodes[eval_grid.unique_theta_idx, 1],
-                (Bn).reshape(eval_grid.num_theta, eval_grid.num_zeta, order="F"),
-                levels=ncontours,
+    ########################################################
+    # Plot Bn
+    ########################################################
+    fig_Bn, ax_Bn = plt.subplots(nrows=numRows, ncols=numCols, figsize=figsize)
+    whichPlot = 0
+    for row in range(numRows):
+        for col in range(numCols):
+            ax = ax_Bn if not scan else ax_Bn[row, col]
+            phi_mn_opt = phi_mns[ilam_to_plot[whichPlot] - 1]
+            field.Phi_mn = phi_mn_opt
+            field.I = data["I"]
+            field.G = data["G"]
+            _, ax = plot_2d(
+                eq if not vacuum else eq.surface,
+                "B*n",
+                field=(field if external_field is None else field + external_field),
+                grid=eval_grid,
+                field_grid=source_grid,
+                ax=ax,
                 cmap=cmap,
-            )
-            plt.ylabel("theta")
-            plt.xlabel("zeta")
-            plt.title(
-                f"lambda= {lambdas[ilam_to_plot[whichPlot] - 1]:1.5e}"
-                + f" index = {ilam_to_plot[whichPlot] - 1}",
-                fontsize="x-small",
-            )
-            plt.colorbar()
-            plt.xlim([0, 2 * np.pi / field.NFP])
-        plt.tight_layout()
-        units = " (T)"
-        plt.figtext(
-            0.5,
-            0.995,
-            "Bnormal" + units,
-            horizontalalignment="center",
-            verticalalignment="top",
-            fontsize="small",
-        )
-        figdata["fig_scan_Bn"] = plt.gcf()
-        axdata["ax_scan_Bn"] = plt.gca()
-        ########################################################
-        # Plot Surface Current |K|
-        ########################################################
-        plt.figure(figsize=figsize)
-        for whichPlot in range(numPlots):
-            plt.subplot(numRows, numCols, whichPlot + 1)
-            field.Phi_mn = phi_mns[ilam_to_plot[whichPlot] - 1]
-            K = field.compute("K", grid=source_grid, basis="xyz")["K"]
-            K_mag = np.linalg.norm(K, axis=1)
-
-            plt.rcParams.update({"font.size": 18})
-
-            plt.contourf(
-                source_grid.nodes[source_grid.unique_zeta_idx, 2],
-                source_grid.nodes[source_grid.unique_theta_idx, 1],
-                (K_mag).reshape(source_grid.num_theta, source_grid.num_zeta, order="F"),
                 levels=ncontours,
+                title_fontsize=title_fontsize,
             )
-            plt.ylabel("theta")
-            plt.xlabel("zeta")
-            plt.title(
+
+            ax.set_title(
                 f"lambda= {lambdas[ilam_to_plot[whichPlot] - 1]:1.5e}"
                 + f" index = {ilam_to_plot[whichPlot] - 1}",
                 fontsize="x-small",
             )
-            plt.colorbar()
-            plt.xlim([0, 2 * np.pi / field.NFP])
-        plt.tight_layout()
-        units = " (A/m)"
-        plt.figtext(
-            0.5,
-            0.995,
-            "|K|" + units,
-            horizontalalignment="center",
-            verticalalignment="top",
-            fontsize="small",
-        )
-        figdata["fig_scan_K"] = plt.gcf()
-        axdata["ax_scan_K"] = plt.gca()
-        if return_data:
-            return (
-                figdata,
-                axdata,
-                data,
+            whichPlot += 1
+    fig_Bn.tight_layout()
+    fig_Bn.text(
+        0.5,
+        0.995,
+        r"$B_n$ (T)",
+        horizontalalignment="center",
+        verticalalignment="top",
+        fontsize="small",
+    )
+    figdata["fig" + scan_str + "_Bn"] = fig_Bn
+    axdata["ax" + scan_str + "_Bn"] = ax_Bn
+    ########################################################
+    # Plot Surface Current |K|
+    ########################################################
+    fig_K, ax_K = plt.subplots(nrows=numRows, ncols=numCols, figsize=figsize)
+    whichPlot = 0
+    for row in range(numRows):
+        for col in range(numCols):
+            ax = ax_K if not scan else ax_K[row, col]
+            phi_mn_opt = phi_mns[ilam_to_plot[whichPlot] - 1]
+            field.Phi_mn = phi_mn_opt
+            field.I = data["I"]
+            field.G = data["G"]
+            _, ax = plot_2d(
+                field,
+                "K",
+                grid=source_grid,
+                ax=ax,
+                cmap=cmap,
+                levels=ncontours,
+                title_fontsize=title_fontsize,
             )
-        else:
-            return figdata, axdata
+
+            ax.set_title(
+                f"lambda= {lambdas[ilam_to_plot[whichPlot] - 1]:1.5e}"
+                + f" index = {ilam_to_plot[whichPlot] - 1}",
+                fontsize="x-small",
+            )
+            whichPlot += 1
+    fig_K.tight_layout()
+    fig_K.text(
+        0.5,
+        0.995,
+        r"$|K|$ (A/m)",
+        horizontalalignment="center",
+        verticalalignment="top",
+        fontsize="small",
+    )
+    figdata["fig" + scan_str + "_K"] = fig_K
+    axdata["ax" + scan_str + "_K"] = ax_K
+    if return_data:
+        return (
+            figdata,
+            axdata,
+            data,
+        )
+    else:
+        return figdata, axdata

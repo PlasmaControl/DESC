@@ -827,8 +827,9 @@ class FourierCurrentPotentialField(
         helicity = safediv(
             net_poloidal_current, net_toroidal_current * nfp, threshold=1e-8
         )
+        coil_type = "modular" if jnp.isclose(helicity, 0) else "helical"
         # determine current per coil
-        if not jnp.isclose(helicity, 0):
+        if coil_type == "helical":
             # helical coils
             coil_current = jnp.abs(net_toroidal_current) / num_coils
         else:  # modular coils
@@ -864,7 +865,7 @@ class FourierCurrentPotentialField(
 
         coils = []
         for j in range(num_coils):
-            if not jnp.isclose(helicity, 0):
+            if coil_type == "helical":
                 # helical coils
                 # make sure that the sign of the coil current is correct
                 # by dotting K with the vector along the contour
@@ -916,7 +917,7 @@ class FourierCurrentPotentialField(
         # unless stell_sym is true, then the full coilset might have
         # self intersection depending on if the coils cross the
         # symmetry plane, in which case we will check
-        if jnp.isclose(helicity, 0):
+        if coil_type == "modular":
             final_coilset = CoilSet(
                 *coils, NFP=nfp, sym=stell_sym, check_intersection=stell_sym
             )
@@ -1563,8 +1564,9 @@ def _find_current_potential_contours(
     net_toroidal_current = surface_current_field.I
     nfp = surface_current_field.NFP
     helicity = safediv(net_poloidal_current, net_toroidal_current * nfp, threshold=1e-8)
+    coil_type = "modular" if jnp.isclose(helicity, 0) else "helical"
     dz = 2 * np.pi / nfp / npts
-    if not jnp.isclose(helicity, 0):
+    if coil_type == "helical":
         # helical coils
         zeta_full = jnp.arange(
             0,
@@ -1593,7 +1595,7 @@ def _find_current_potential_contours(
     # find contours of constant phi
     ################################################################
     # make linspace contours
-    if not jnp.isclose(helicity, 0):
+    if coil_type == "helical":
         # helical coils
         # we start them on zeta=0 plane, so we will find contours
         # going from 0 to I (corresponding to zeta=0, and theta*sign(I) increasing)
@@ -1690,11 +1692,11 @@ def _find_current_potential_contours(
     # to be used to check closure conditions on the coils
     ## closure condition in zeta for modular is returns to same zeta,
     ## while for helical is that the contour dzeta = 2pi/NFP
-    zeta_diff = 2 * jnp.pi / nfp if not jnp.isclose(helicity, 0) else 0.0
+    zeta_diff = 2 * jnp.pi / nfp if coil_type == "helical" else 0.0
     ## closure condition in theta for modular is that dtheta = 2pi,
     ## while for helical the dtheta = 2pi*abs(helicity)
     theta_diff = (
-        2 * jnp.pi * jnp.abs(helicity) if not jnp.isclose(helicity, 0) else 2 * jnp.pi
+        2 * jnp.pi * jnp.abs(helicity) if coil_type == "helical" else 2 * jnp.pi
     )
 
     if show_plots:
@@ -1737,7 +1739,7 @@ def _find_current_potential_contours(
                     "sk",
                     label="start of contour",
                 )
-    if not jnp.isclose(helicity, 0):
+    if coil_type == "helical":
         # right now these are only over 1 FP
         # so must tile them s.t. they are full coils, by repeating them
         #  with a 2pi/NFP shift in zeta

@@ -1625,7 +1625,6 @@ def _find_current_potential_contours(
         ) * jnp.sign(net_poloidal_current)
         contours = jnp.sort(contours)
 
-    # TODO: change this so that  this we only need Ncoils length array
     theta_full_2D, zeta_full_2D = jnp.meshgrid(theta_full, zeta_full, indexing="ij")
 
     grid = Grid(

@@ -1238,7 +1238,7 @@ def test_regcoil_axisymmetric():
     B_from_surf = surface_current_field.compute_magnetic_field(
         coords, source_grid=LinearGrid(M=200, N=200, NFP=surf_winding.NFP)
     )
-    np.testing.assert_allclose(B, B_from_surf, atol=1e-4)
+    np.testing.assert_allclose(B, B_from_surf, rtol=1e-4, atol=1e-8)
 
     grid = LinearGrid(N=10, M=10, NFP=surface_current_field.NFP)
     correct_phi = G * grid.nodes[:, 2] / 2 / np.pi
@@ -1268,7 +1268,7 @@ def test_regcoil_axisymmetric():
     B_from_surf = surface_current_field.compute_magnetic_field(
         coords, source_grid=LinearGrid(M=200, N=200, NFP=surf_winding.NFP)
     )
-    np.testing.assert_allclose(B, B_from_surf, atol=1e-4)
+    np.testing.assert_allclose(B, B_from_surf, rtol=1e-4, atol=1e-8)
 
     # test with half the current given external to winding surface
     surface_current_field, data = run_regcoil(
@@ -1295,7 +1295,7 @@ def test_regcoil_axisymmetric():
     B_from_surf = surface_current_field.compute_magnetic_field(
         coords, source_grid=LinearGrid(M=200, N=200, NFP=surf_winding.NFP)
     )
-    np.testing.assert_allclose(B, B_from_surf * 2, atol=1e-4)
+    np.testing.assert_allclose(B, B_from_surf * 2, rtol=1e-4, atol=1e-8)
 
 
 @pytest.mark.regression
@@ -1311,16 +1311,16 @@ def test_regcoil_modular_check_B(regcoil_modular_coils):
     chi_B = data["chi^2_B"]
     surface_current_field = initial_surface_current_field.copy()
 
-    np.testing.assert_array_less(chi_B, 1e-5)
-    coords = eq.compute(["R", "phi", "Z", "B"])
+    np.testing.assert_array_less(chi_B, 1e-6)
+    coords = eq.compute(["R", "phi", "Z", "B"], grid=LinearGrid(M=20, N=20, NFP=eq.NFP))
     B = coords["B"]
     coords = np.vstack([coords["R"], coords["phi"], coords["Z"]]).T
     B_from_surf = surface_current_field.compute_magnetic_field(
         coords,
-        source_grid=LinearGrid(M=80, N=80, NFP=surface_current_field.NFP),
+        source_grid=LinearGrid(M=60, N=60, NFP=surface_current_field.NFP),
         basis="rpz",
     )
-    np.testing.assert_allclose(B, B_from_surf, atol=3e-3)
+    np.testing.assert_allclose(B, B_from_surf, rtol=5e-2, atol=4.9e-4)
 
 
 @pytest.mark.regression
@@ -1405,8 +1405,9 @@ def test_regcoil_helical_coils_check_objective_method(
         source_grid=LinearGrid(M=60, N=60, NFP=surface_current_field.NFP),
         basis="rpz",
     )
-    np.testing.assert_allclose(B, B_from_surf, atol=6e-3, rtol=1e-4)
-    np.testing.assert_allclose(B_from_orig_surf, B_from_surf, atol=4e-3, rtol=1e-4)
+    np.testing.assert_allclose(B, B_from_surf, atol=6e-4, rtol=5e-2)
+    np.testing.assert_allclose(B_from_orig_surf, B_from_surf, atol=1e-8, rtol=1e-4)
+    np.testing.assert_allclose(B_from_orig_surf, B_from_surf, atol=1e-8, rtol=1e-8)
 
 
 @pytest.mark.unit

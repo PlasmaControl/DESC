@@ -1813,4 +1813,4 @@ def _jacobi_jvp(x, xdot):
     # but marking them as non-diff argnums seems to cause escaped tracer values.
     # probably a more elegant fix, but just setting those derivatives to zero seems
     # to work fine.
-    return f, df * xdot + 0 * ndot + 0 * alphadot + 0 * betadot + 0 * dxdot
+    return f, df * xdot

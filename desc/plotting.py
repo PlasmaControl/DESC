@@ -3908,7 +3908,7 @@ def plot_regcoil_outputs(
     else:
         external_field = None
 
-    ncontours = kwargs.pop("ncontours", 20)
+    ncontours = kwargs.pop("ncontours", 15)
     markersize = kwargs.pop("markersize", 12)
     xlabel_fontsize = kwargs.pop("xlabel_fontsize", None)
     ylabel_fontsize = kwargs.pop("ylabel_fontsize", None)

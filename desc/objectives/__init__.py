@@ -9,6 +9,7 @@ from ._coils import (
     CoilTorsion,
     PlasmaCoilSetMinDistance,
     QuadraticFlux,
+    SurfaceCurrentRegularization,
     ToroidalFlux,
 )
 from ._equilibrium import (

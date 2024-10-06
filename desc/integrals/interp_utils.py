@@ -218,26 +218,29 @@ def irfft_non_uniform(xq, a, n, domain=(0, 2 * jnp.pi), axis=-1):
 
 
 def interp_rfft2(
-    xq, f, domain0=(0, 2 * jnp.pi), domain1=(0, 2 * jnp.pi), axes=(-2, -1)
+    xq0, xq1, f, domain0=(0, 2 * jnp.pi), domain1=(0, 2 * jnp.pi), axes=(-2, -1)
 ):
-    """Interpolate real-valued ``f`` to ``xq`` with FFT.
+    """Interpolate real-valued ``f`` to coordinates ``(xq0,xq1)`` with FFT.
 
     Parameters
     ----------
-    xq : jnp.ndarray
-        Shape (..., 2).
-        Real query points where interpolation is desired.
-        Shape ``xq.shape[:-1]`` must broadcast with shape ``np.delete(f.shape,axes)``.
-        Last axis must hold coordinates for a given point. The coordinates stored
-        along ``xq[...,0]`` (``xq[...,1]``) must be the same coordinate enumerated
-        across axis ``min(axes)`` (``max(axes)``) of the function values ``f``.
+    xq0 : jnp.ndarray
+        Real query points of coordinate in ``domain0`` where interpolation is desired.
+        Shape must broadcast with shape ``np.delete(a.shape,axes)``.
+        The coordinates stored here must be the same coordinate enumerated
+        across axis ``min(axes)`` of the function values ``f``.
+    xq1 : jnp.ndarray
+        Real query points of coordinate in ``domain1`` where interpolation is desired.
+        Shape must broadcast with shape ``np.delete(a.shape,axes)``.
+        The coordinates stored here must be the same coordinate enumerated
+        across axis ``max(axes)`` of the function values ``f``.
     f : jnp.ndarray
         Shape (..., f.shape[-2], f.shape[-1]).
         Real function values on uniform tensor-product grid over an open period.
     domain0 : tuple[float]
-        Domain of coordinate specified by ``xq[...,0]`` over which samples were taken.
+        Domain of coordinate specified by ``xq0`` over which samples were taken.
     domain1 : tuple[float]
-        Domain of coordinate specified by ``xq[...,1]`` over which samples were taken.
+        Domain of coordinate specified by ``xq1`` over which samples were taken.
     axes : tuple[int]
         Axes along which to transform.
         The real transform is done along ``axes[1]``, so it will be more
@@ -251,26 +254,28 @@ def interp_rfft2(
     """
     a = rfft2(f, axes=axes, norm="forward")
     fq = irfft2_non_uniform(
-        xq, a, f.shape[axes[0]], f.shape[axes[1]], domain0, domain1, axes
+        xq0, xq1, a, f.shape[axes[0]], f.shape[axes[1]], domain0, domain1, axes
     )
     return fq
 
 
 def irfft2_non_uniform(
-    xq, a, M, N, domain0=(0, 2 * jnp.pi), domain1=(0, 2 * jnp.pi), axes=(-2, -1)
+    xq0, xq1, a, M, N, domain0=(0, 2 * jnp.pi), domain1=(0, 2 * jnp.pi), axes=(-2, -1)
 ):
-    """Evaluate Fourier coefficients ``a`` at ``xq``.
+    """Evaluate Fourier coefficients ``a`` at coordinates ``(xq0,xq1)``.
 
     Parameters
     ----------
-    xq : jnp.ndarray
-        Shape (..., 2).
-        Real query points where interpolation is desired.
-        Last axis must hold coordinates for a given point.
-        Shape ``xq.shape[:-1]`` must broadcast with shape ``np.delete(a.shape,axes)``.
-        Last axis must hold coordinates for a given point. The coordinates stored
-        along ``xq[...,0]`` (``xq[...,1]``) must be the same coordinate enumerated
-        across axis ``min(axes)`` (``max(axes)``) of the Fourier coefficients ``a``.
+    xq0 : jnp.ndarray
+        Real query points of coordinate in ``domain0`` where interpolation is desired.
+        Shape must broadcast with shape ``np.delete(a.shape,axes)``.
+        The coordinates stored here must be the same coordinate enumerated
+        across axis ``min(axes)`` of the Fourier coefficients ``a``.
+    xq1 : jnp.ndarray
+        Real query points of coordinate in ``domain1`` where interpolation is desired.
+        Shape must broadcast with shape ``np.delete(a.shape,axes)``.
+        The coordinates stored here must be the same coordinate enumerated
+        across axis ``max(axes)`` of the Fourier coefficients ``a``.
     a : jnp.ndarray
         Shape (..., a.shape[-2], a.shape[-1]).
         Fourier coefficients ``a=rfft2(f,axes=axes,norm="forward")``.
@@ -279,9 +284,9 @@ def irfft2_non_uniform(
     N : int
         Spectral resolution of ``a`` along ``axes[1]``.
     domain0 : tuple[float]
-        Domain of coordinate specified by ``xq[...,0]`` over which samples were taken.
+        Domain of coordinate specified by ``xq0`` over which samples were taken.
     domain1 : tuple[float]
-        Domain of coordinate specified by ``xq[...,1]`` over which samples were taken.
+        Domain of coordinate specified by ``xq1`` over which samples were taken.
     axes : tuple[int]
         Axes along which to transform.
 
@@ -291,7 +296,7 @@ def irfft2_non_uniform(
         Real function value at query points.
 
     """
-    errorif(not (len(axes) == xq.shape[-1] == 2), msg="This is a 2D transform.")
+    errorif(len(axes) != 2, msg="This is a 2D transform.")
     errorif(a.ndim < 2, msg=f"Dimension mismatch, a.shape: {a.shape}.")
 
     # |a| << |basis|, so move a instead of basis
@@ -307,13 +312,15 @@ def irfft2_non_uniform(
     domain = (domain0, domain1)
     m = jnp.fft.fftfreq(M, d=np.diff(domain[idx[0]]) / (2 * jnp.pi) / M)
     n = jnp.fft.rfftfreq(N, d=np.diff(domain[idx[1]]) / (2 * jnp.pi) / N)
-    xq = xq - jnp.array([domain0[0], domain1[0]])
+    xq0 = xq0 - domain0[0]
+    xq1 = xq1 - domain1[0]
+    xq = (xq0, xq1)
 
     basis = jnp.exp(
         1j
         * (
-            (m * xq[..., idx[0], jnp.newaxis])[..., jnp.newaxis]
-            + (n * xq[..., idx[1], jnp.newaxis])[..., jnp.newaxis, :]
+            (m * xq[idx[0]][..., jnp.newaxis])[..., jnp.newaxis]
+            + (n * xq[idx[1]][..., jnp.newaxis])[..., jnp.newaxis, :]
         )
     )
     fq = 2.0 * (basis * a).real.sum(axis=(-2, -1))

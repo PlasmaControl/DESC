@@ -31,17 +31,17 @@ jobs:
         with:
           python-version: '3.10'
           cache: pip
-      - name: Install dependencies
+      - name: Upgrade pip
         run: |
           python -m pip install --upgrade pip
-          pip install -r devtools/dev-requirements.txt
-          pip install matplotlib==3.5.0
-      - name: Remove jax
-        run: |
-          pip uninstall jax jaxlib -y
       - name: install jax
         run: |
           pip install "jax[cpu]==${{ matrix.jax-version }}"
+      - name: install other dependencies
+        run: |
+          sed -i '/jax/d' ./requirements.txt
+          pip install -r devtools/test-requirements.txt
+          pip install matplotlib==3.5.0
       - name: Test with pytest
         run: |
           pwd

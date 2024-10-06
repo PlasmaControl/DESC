@@ -208,13 +208,12 @@ class FourierChebyshevSeries(IOAble):
             ``FourierChebyshevSeries.nodes(M,N,L,self.domain,self.lobatto)``.
 
         """
-        fq = idct(
+        return idct(
             irfft(self._c, n=M, axis=-2, norm="forward"),
             type=2 - self.lobatto,
             n=N,
             axis=-1,
         ) * (N - self.lobatto)
-        return fq
 
     def harmonics(self):
         """Spectral coefficients aₘₙ of the interpolating trigonometric polynomial.

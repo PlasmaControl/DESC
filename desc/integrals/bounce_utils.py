@@ -51,7 +51,8 @@ def get_alpha(alpha_0, iota, num_transit, period):
 
     """
     # Δϕ (∂α/∂ϕ) = Δϕ ι̅ = Δϕ ι/2π = Δϕ data["iota"]
-    alpha = alpha_0 + period * iota[:, jnp.newaxis] * jnp.arange(num_transit)
+    # FIXME: Looks innocent, but JAX doesn't like this...
+    alpha = alpha_0 + period * jnp.expand_dims(iota, -1) * jnp.arange(num_transit)
     return alpha
 
 

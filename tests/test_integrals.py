@@ -1230,7 +1230,7 @@ class TestBounce1D:
         points = (np.array(0, ndmin=4), np.array(2 * np.pi, ndmin=4))
         argmin = 5.61719
         h_min = h(argmin)
-        result = func(h(zeta), points, zeta, bounce.B, bounce._dB_dz)
+        result = func(h(zeta), points, zeta, bounce.B, bounce.dB_dz)
         assert result.shape == points[0].shape
         np.testing.assert_allclose(h_min, result, rtol=1e-3)
 
@@ -1578,7 +1578,13 @@ class TestBounce2D:
         theta = Bounce2D.compute_theta(eq, M=8, N=64, rho=rho)
         # 5. Make the bounce integration operator.
         bounce = Bounce2D(
-            grid, data, theta, num_transit=2, quad=leggauss(3), check=True
+            grid,
+            data,
+            iota=grid.compress(data["iota"]),
+            theta=theta,
+            num_transit=2,
+            quad=leggauss(3),
+            check=True,
         )
         pitch_inv, _ = bounce.get_pitch_inv_quad(
             min_B=grid.compress(data["min_tz |B|"]),
@@ -1686,6 +1692,7 @@ class TestBounce2D:
         bounce = Bounce2D(
             grid=grid,
             data=grid_data,
+            iota=data["iota"],
             theta=Bounce2D.compute_theta(
                 eq,
                 M,

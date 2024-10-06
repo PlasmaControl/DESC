@@ -72,7 +72,7 @@ def test_effective_ripple():
 
 
 @pytest.mark.unit
-# @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
+@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
 def test_effective_ripple_2d():
     """Test effective ripple 2d with W7-X."""
     eq = get("W7-X")
@@ -82,7 +82,7 @@ def test_effective_ripple_2d():
         period=(np.inf, 2 * np.pi, 2 * np.pi / eq.NFP),
         NFP=eq.NFP,
     )
-    theta = Bounce2D.compute_theta(eq, M=8, N=64, rho=rho)
+    theta = Bounce2D.compute_theta(eq, M=16, N=64, rho=rho)
     data = eq.compute("effective ripple_2d", grid=grid, theta=theta, num_transit=10)
     assert np.isfinite(data["effective ripple_2d"]).all()
     np.testing.assert_allclose(

@@ -45,6 +45,25 @@ _bounce_doc = {
     ),
     "batch": "bool : Whether to vectorize part of the computation. Default is true.",
 }
+_bounce2d_doc = {
+    "num_transit": "int : Number of toroidal transits to follow field line.",
+    "theta": "jnp.ndarray : DESC coordinates θ of (α,ζ) Fourier Chebyshev basis nodes.",
+    "N_B": (
+        "int : Desired Chebyshev spectral resolution for |B|. "
+        "Default is to double the resolution of ``theta``."
+    ),
+    "length_quad": (
+        "tuple[jnp.ndarray] : Quadrature points xₖ and weights wₖ for the "
+        "approximate evaluation of the integral ∫₋₁¹ f(x) dx ≈ ∑ₖ wₖ f(xₖ). "
+        "Used to compute the proper length of the field line ∫ dℓ / |B|. "
+        "Should not use more points than half Chebyshev resolution of |B|. "
+        "Default is Gauss-Legendre quadrature at resolution ``N_B // 2``."
+    ),
+    "quad": _bounce_doc["quad"],
+    "num_quad": _bounce_doc["num_quad"],
+    "num_pitch": _bounce_doc["num_pitch"],
+    "num_well": _bounce_doc["num_well"],
+}
 
 
 def _alpha_mean(f):
@@ -97,7 +116,7 @@ def _compute(fun, interp_data, data, grid, num_pitch, reduce=True):
     return grid.expand(_alpha_mean(out)) if reduce else out
 
 
-def _compute_2d(fun, interp_data, data, grid, num_pitch):
+def _compute_2d(fun, interp_data, data, theta, grid, num_pitch):
     """Compute ``fun`` for each α and ρ value iteratively to reduce memory usage.
 
     Parameters
@@ -110,6 +129,10 @@ def _compute_2d(fun, interp_data, data, grid, num_pitch):
         Reshaped automatically.
     data : dict[str, jnp.ndarray]
         DESC data dict.
+    theta : jnp.ndarray
+        Shape (L, M, N).
+        DESC coordinates θ sourced from the Clebsch coordinates
+        ``FourierChebyshevSeries.nodes(M,N,L,domain=(0,2*jnp.pi))``.
 
     """
     for name in Bounce2D.required_names:
@@ -117,11 +140,14 @@ def _compute_2d(fun, interp_data, data, grid, num_pitch):
     interp_data = dict(
         zip(interp_data.keys(), Bounce2D.reshape_data(grid, *interp_data.values()))
     )
+    # These already have expected shape with num_rho along first axis.
     interp_data["pitch_inv"], interp_data["pitch_inv weight"] = get_pitch_inv_quad(
         grid.compress(data["min_tz |B|"]),
         grid.compress(data["max_tz |B|"]),
         num_pitch,
     )
+    interp_data["iota"] = grid.compress(data["iota"])
+    interp_data["theta"] = theta
     return grid.expand(imap(fun, interp_data))
 
 
@@ -296,11 +322,11 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
     resolution_requirement="z",
     # TODO: Add requirement for FFT points on (0, 2pi) (0, 2pi/NFP).
     grid_requirement={"coordinates": "rtz", "is_meshgrid": True, "sym": False},
-    theta="jnp.ndarray : DESC coordinates θ of (α,ζ) Fourier Chebyshev basis nodes.",
-    num_transit="int : Number of toroidal transits to follow field line.",
-    **_bounce_doc,
+    **_bounce2d_doc,
 )
-@partial(jit, static_argnames=["num_quad", "num_pitch", "num_well", "batch"])
+@partial(
+    jit, static_argnames=["num_transit", "N_B", "num_quad", "num_pitch", "num_well"]
+)
 def _epsilon_32_2d(params, transforms, profiles, data, **kwargs):
     """https://doi.org/10.1063/1.873749.
 
@@ -309,10 +335,16 @@ def _epsilon_32_2d(params, transforms, profiles, data, **kwargs):
     Phys. Plasmas 1 December 1999; 6 (12): 4622–4632.
     """
     # noqa: unused dependency
+    theta = kwargs["theta"]
+    N_B = kwargs.get("N_B", theta.shape[-1] * 2)
     if "quad" in kwargs:
         quad = kwargs["quad"]
     else:
         quad = chebgauss2(kwargs.get("num_quad", 32))
+    if "length_quad" in kwargs:
+        length_quad = kwargs["length_quad"]
+    else:
+        length_quad = leggauss(N_B // 2)
     num_well = kwargs.get("num_well", None)
     num_transit = kwargs.get("num_transit", 20)
     grid = transforms["grid"]
@@ -338,7 +370,9 @@ def _epsilon_32_2d(params, transforms, profiles, data, **kwargs):
         bounce = Bounce2D(
             grid=grid,
             data=data,
+            iota=data["iota"],
             theta=data["theta"],
+            N_B=N_B,
             num_transit=num_transit,
             quad=quad,
             automorphism=None,
@@ -356,20 +390,18 @@ def _epsilon_32_2d(params, transforms, profiles, data, **kwargs):
             safediv(H**2, I).sum(axis=-1)
             * data["pitch_inv"] ** (-3)
             * data["pitch_inv weight"]
-        ).sum(axis=-1)
+        ).sum(axis=-1) / bounce.compute_length(length_quad)
 
     # Interpolate |∇ρ| κ_g since it is smoother than κ_g alone.
-    interp_data = {
-        "|grad(rho)|*kappa_g": data["|grad(rho)|"] * data["kappa_g"],
-        "theta": kwargs["theta"],
-    }
+    interp_data = {"|grad(rho)|*kappa_g": data["|grad(rho)|"] * data["kappa_g"]}
     B0 = data["max_tz |B|"]
     data["effective ripple 3/2_2d"] = (
         jnp.pi
         / (8 * 2**0.5)
         * (B0 * data["R0"] / data["<|grad(rho)|>"]) ** 2
-        * _compute_2d(eps_32, interp_data, data, grid, kwargs.get("num_pitch", 50))
-        / data["<L|r,a>"]
+        * _compute_2d(
+            eps_32, interp_data, data, theta, grid, kwargs.get("num_pitch", 50)
+        )
     )
     return data
 

@@ -1,10 +1,9 @@
 """Methods for computing bounce integrals (singular or otherwise)."""
 
 from interpax import CubicHermiteSpline, PPoly
-from numpy.fft import rfft2
 from orthax.legendre import leggauss
 
-from desc.backend import dct, jnp
+from desc.backend import dct, jnp, rfft2
 from desc.integrals.basis import FourierChebyshevSeries, PiecewiseChebyshevSeries
 from desc.integrals.bounce_utils import (
     _bounce_quadrature,
@@ -396,6 +395,7 @@ class Bounce2D(IOAble):
         self,
         grid,
         data,
+        iota,
         theta,
         N_B=None,
         num_transit=16,
@@ -430,6 +430,9 @@ class Bounce2D(IOAble):
         data : dict[str, jnp.ndarray]
             Data evaluated on ``grid``.
             Must include names in ``Bounce2D.required_names``.
+        iota : jnp.ndarray
+            Shape (L, ).
+            Rotational transform.
         theta : jnp.ndarray
             Shape (L, M, N).
             DESC coordinates θ sourced from the Clebsch coordinates
@@ -488,18 +491,7 @@ class Bounce2D(IOAble):
         self._x, self._w = get_quadrature(quad, automorphism)
 
         # peel off field lines
-        iota = data["iota"].ravel()
-        alpha = get_alpha(
-            alpha,
-            iota=(
-                grid.compress(iota)
-                if iota.size == grid.num_nodes
-                # assume passed in reshaped data over flux surface
-                else jnp.array(iota[0])
-            ),
-            num_transit=num_transit,
-            period=2 * jnp.pi,
-        )
+        alpha = get_alpha(alpha, iota=iota, num_transit=num_transit, period=2 * jnp.pi)
         # Compute spectral coefficients.
         self._T, self._B = _transform_to_clebsch_1d(
             grid, alpha, theta, data["|B|"] / Bref, N_B, is_reshaped

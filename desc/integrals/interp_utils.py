@@ -24,7 +24,7 @@ chebroots_vec = jnp.vectorize(chebroots, signature="(m)->(n)")
 
 
 # TODO: Transformation to make nodes more uniform Boyd eq. 16.46 pg. 336.
-#  More uniformly spaced nodes will speed up convergence.
+#  More uniformly spaced nodes might speed up convergence.
 
 
 def cheb_pts(N, domain=(-1, 1), lobatto=False):
@@ -141,15 +141,20 @@ def harmonic_vander(x, M, domain=(0, 2 * np.pi)):
     return basis
 
 
-# TODO: For inverse transforms, do multipoint evaluation with FFT.
-#   FFT cost is 𝒪(M N log[M N]) while direct evaluation is 𝒪(M² N²).
-#   Chapter 10, https://doi.org/10.1017/CBO9781139856065.
-#   Right now we do an MMT with the Vandermode matrix.
-#   Multipoint is likely better than using NFFT (for strong singular bounce
-#   integrals) to evaluate f(xq) given fourier coefficients because evaluation
-#   points are quadratically packed near edges for efficient quadrature. For
-#   weak singularities (e.g. effective ripple) NFFT should work well.
+# TODO: For inverse transforms, use non-uniform fast transforms (NFFT).
 #   https://github.com/flatironinstitute/jax-finufft.
+#   Let spectral resolution be F, (e.g. F = M N for 2D transform),
+#   and number of points (non-uniform) to evaluate be Q. A non-uniform
+#   fast transform cost is 𝒪([F+Q] log[F] log[1/ε]) where ε is the
+#   interpolation error term (depending on implementation how ε appears
+#   may change, but it is always logarithmic). Direct evaluation is 𝒪(F Q).
+#   Note that for the inverse Chebyshev transforms, we can also use fast
+#   multipoint methods Chapter 10, https://doi.org/10.1017/CBO9781139856065.
+#   Unlike NFFTs, multipoint methods are exact and reduce to using FFTs.
+#   The cost is 𝒪([F+Q] łog²[F + Q]). This is a good candidate for evaluating
+#   |B|, since the integrands are not smooth functions of |B|, which we know
+#   as a Chebyshev series, and the nodes are packed more tightly near the edges,
+#   in particular for the strongly singular integrals.
 
 
 def interp_rfft(xq, f, domain=(0, 2 * jnp.pi), axis=-1):

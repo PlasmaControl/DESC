@@ -289,9 +289,8 @@ class Bounce2D(IOAble):
     polynomials are preferred to other orthogonal polynomial series since
     fast discrete polynomial transforms (DPT) are implemented via fast transform
     to Chebyshev then DCT. Although nothing prohibits a direct DPT, we want to
-    rely on existing libraries. There are other reasons to prefer Chebyshev series
-    not discussed here. Therefore, a Fourier-Chebyshev series is chosen to
-    interpolate θ(α,ζ), and a piecewise Chebyshev series interpolates |B|(ζ).
+    rely on existing libraries. Therefore, a Fourier-Chebyshev series is chosen
+    to interpolate θ(α,ζ), and a piecewise Chebyshev series interpolates |B|(ζ).
 
     Computing accurate series expansions in (α, ζ) coordinates demands
     particular interpolation points in that coordinate system. Newton iteration
@@ -318,9 +317,12 @@ class Bounce2D(IOAble):
     The reason θ is not interpolated with a double Fourier series θ(ϑ, ζ) is
     because quadrature points along |B|(α=α₀, ζ) can be identified by a single
     variable; evaluating the multivariable map θ(ϑ(α, ζ), ζ) is expensive
-    compared to evaluating the single variable map θ(α=α₀, ζ).
-    Another option is to use a filtered Fourier series,
-    doi.org/10.1016/j.aml.2006.10.001.
+    compared to evaluating the single variable map θ(α=α₀, ζ). Also, the advantage
+    of DESC coordinates is that they use the spectrally condensed variable
+    ζ* = NFP ζ. This cannot be done in any other coordinate system, regardless of
+    whether it is periodic or not, so (ϑ, ϕ) coordinates are no better than (α, ζ)
+    coordinates in this aspect. (Another option is to use a filtered Fourier
+    series, doi.org/10.1016/j.aml.2006.10.001).
 
     After computing the bounce points, the supplied quadrature is performed.
     By default, this is a Gauss quadrature after removing the singularity.
@@ -332,10 +334,8 @@ class Bounce2D(IOAble):
     efficiently, and the fixed nature of quadrature performs better on GPUs.
 
     Fast transforms are used where possible. Fast multipoint methods are not
-    implemented. For non-uniform interpolation, MMTs are used. It should be
-    worthwhile to use the inverse non-uniform fast transforms, so long as the
-    quadrature packs nodes at reasonable density. Fast multipoint methods are
-    preferable because they are exact, but that requires more development work.
+    implemented. For non-uniform interpolation, MMTs are used. It will be
+    worthwhile to use the inverse non-uniform fast transforms.
 
     Additional notes on multivalued coordinates.
     The definition of α in B = ∇ρ × ∇α on an irrational magnetic surface
@@ -829,10 +829,20 @@ class Bounce2D(IOAble):
             Shape (L, ).
 
         """
-        # Gauss quadrature captures double frequency of Chebyshev series.
+        # Integrating an analytic map, so a fixed high order quadrature is ideal.
+        # The integration domain is not periodic, so the best candidates to choose
+        # are Gauss-Legendre quadrature and Clenshaw-Curtis. GL is more efficient
+        # than CC for analytic maps by a factor of 2. Advantage of CC is that θ at
+        # the quadrature points can be computed with fast cosine transform. However,
+        # one still needs to perform a non-uniform inverse fourier transform of B^ζ
+        # at those points, which will be the dominating expense. The spectral width
+        # of θ along field lines is also narrower than B^ζ, especially at high NFP.
         x, w = leggauss(self._B.N // 2) if quad is None else quad
 
-        # TODO: There exits a fast transform from Chebyshev series to Legendre nodes.
+        # TODO: Use fast Chebyshev to Legendre inverse transform.
+        # When converted to a Legendre series, θ at the quadrature points can
+        # be computed with a fast transform (without needing to compute leggauss nodes).
+        # This is likely preferable to even a true non-uniform transform.
         theta = idct_non_uniform(x, self._T.cheb[..., jnp.newaxis, :], self._T.N)
         zeta = jnp.broadcast_to(bijection_from_disc(x, 0, 2 * jnp.pi), theta.shape)
 

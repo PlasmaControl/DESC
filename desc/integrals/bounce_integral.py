@@ -20,6 +20,7 @@ from desc.integrals.bounce_utils import (
 from desc.integrals.interp_utils import (
     cheb_from_dct,
     cheb_pts,
+    idct_non_uniform,
     interp_rfft2,
     irfft2_non_uniform,
     polyder_vec,
@@ -92,15 +93,17 @@ def _transform_to_clebsch(grid, nodes, f, is_reshaped=False):
         f = grid.meshgrid_reshape(f, "rtz")
 
     M, N = nodes.shape[-3], nodes.shape[-2]
+    nodes = nodes.reshape(*nodes.shape[:-3], M * N, 2)
     return FourierChebyshevSeries(
         f=interp_rfft2(
             # Interpolate to nodes in Clebsch space,
             # which is not a tensor product node set in DESC space.
-            xq=nodes.reshape(*nodes.shape[:-3], M * N, 2),
+            xq0=nodes[..., 0],
+            xq1=nodes[..., 1],
             f=f[..., jnp.newaxis, :, :],
             domain1=(0, 2 * jnp.pi / grid.NFP),
             axes=(-1, -2),
-        ).reshape(*nodes.shape[:-3], M, N),
+        ).reshape(*nodes.shape[:-2], M, N),
         domain=(0, 2 * jnp.pi),
     )
 
@@ -185,12 +188,12 @@ def _transform_to_clebsch_1d(grid, alpha, theta, B, N_B, is_reshaped=False):
     T = FourierChebyshevSeries(f=theta, domain=(0, 2 * jnp.pi)).compute_cheb(alpha)
     T.stitch()
     theta = T.evaluate(N_B)
-    xq = jnp.stack(
-        [theta, jnp.broadcast_to(cheb_pts(N_B, domain=T.domain), theta.shape)], axis=-1
-    ).reshape(*alpha.shape[:-1], alpha.shape[-1] * N_B, 2)
+    zeta = jnp.broadcast_to(cheb_pts(N_B, domain=T.domain), theta.shape)
 
+    shape = (*alpha.shape[:-1], alpha.shape[-1] * N_B)
     B = interp_rfft2(
-        xq=xq,
+        theta.reshape(shape),
+        zeta.reshape(shape),
         f=B[..., jnp.newaxis, :, :],
         domain1=(0, 2 * jnp.pi / grid.NFP),
         axes=(-1, -2),
@@ -501,8 +504,8 @@ class Bounce2D(IOAble):
         self._T, self._B = _transform_to_clebsch_1d(
             grid, alpha, theta, data["|B|"] / Bref, N_B, is_reshaped
         )
-        self._b_sup_z = _transform_to_desc(
-            grid, jnp.abs(data["B^zeta"]) / data["|B|"] * Lref, is_reshaped
+        self._B_sup_z = _transform_to_desc(
+            grid, jnp.abs(data["B^zeta"]) * Lref / Bref, is_reshaped
         )
         assert self._T.M == self._B.M == num_transit
         assert self._T.N == theta.shape[-1]
@@ -743,24 +746,26 @@ class Bounce2D(IOAble):
             Shape (num_pitch, ) or (num_pitch, L).
         f : list[jnp.ndarray]
             Shape (m, n) or (L, m, n).
-        f : list[jnp.ndarray]
+        f_vec : list[jnp.ndarray]
             Shape (m, n, 3) or (L, m, n, 3).
 
         """
         z1, z2 = points
         shape = [*z1.shape, self._x.size]
 
-        # This is ζ along the field line.
+        # These are the ζ coordinates of the quadrature points.
+        # Shape is (num_pitch, L, number of points to interpolate onto).
         zeta = flatten_matrix(
             bijection_from_disc(self._x, z1[..., jnp.newaxis], z2[..., jnp.newaxis])
         )
         # Note self._T expects shape (num_pitch, L) if T.cheb.shape[0] is L.
-        # These are the (θ, ζ) coordinates of the quadrature points.
-        Q = jnp.stack([self._T.eval1d(zeta), zeta], axis=-1)
+        # These are the θ coordinates of the quadrature points.
+        theta = self._T.eval1d(zeta)
 
-        b_sup_z = irfft2_non_uniform(
-            xq=Q,
-            a=self._b_sup_z[..., jnp.newaxis, :, :],
+        B_sup_z = irfft2_non_uniform(
+            theta,
+            zeta,
+            a=self._B_sup_z[..., jnp.newaxis, :, :],
             M=self._n,
             N=self._m,
             domain1=(0, 2 * jnp.pi / self._NFP),
@@ -769,7 +774,8 @@ class Bounce2D(IOAble):
         B = self._B.eval1d(zeta)
         f = [
             interp_rfft2(
-                Q,
+                theta,
+                zeta,
                 f_i[..., jnp.newaxis, :, :],
                 domain1=(0, 2 * jnp.pi / self._NFP),
                 axes=(-1, -2),
@@ -778,7 +784,8 @@ class Bounce2D(IOAble):
         ]
         f_vec = [
             interp_rfft2(
-                Q[..., jnp.newaxis, :],
+                theta[..., jnp.newaxis],
+                zeta[..., jnp.newaxis],
                 f_i[..., jnp.newaxis, :, :, :],
                 domain1=(0, 2 * jnp.pi / self._NFP),
                 axes=(-2, -3),
@@ -794,7 +801,8 @@ class Bounce2D(IOAble):
                     pitch=1 / pitch_inv[..., jnp.newaxis],
                     zeta=zeta,
                 )
-                / b_sup_z
+                * B
+                / B_sup_z
             )
             .reshape(shape)
             .dot(self._w)
@@ -806,12 +814,49 @@ class Bounce2D(IOAble):
             _check_interp(
                 # num_alpha is 1, num_rho, num_pitch, num_well, num_quad
                 (1, *shape),
-                *map(_swap_pl, (zeta, b_sup_z, B)),
+                *map(_swap_pl, (zeta, B_sup_z, B)),
                 result,
                 list(map(_swap_pl, f)),
                 plot,
             )
         return result
+
+    def compute_length(self, quad=None):
+        """Compute the proper length of the field line ∫ dℓ / |B|.
+
+        Parameters
+        ----------
+        quad : tuple[jnp.ndarray]
+            Quadrature points xₖ and weights wₖ for the approximate evaluation
+            of the integral ∫₋₁¹ f(x) dx ≈ ∑ₖ wₖ f(xₖ).
+            Should not use more points than half Chebyshev resolution of |B|.
+
+        Returns
+        -------
+        length : jnp.ndarray
+            Shape (L, ).
+
+        """
+        # Gauss quadrature captures double frequency of Chebyshev series.
+        x, w = leggauss(self._B.N // 2) if quad is None else quad
+
+        # TODO: There exits a fast transform from Chebyshev series to Legendre nodes.
+        theta = idct_non_uniform(x, self._T.cheb[..., jnp.newaxis, :], self._T.N)
+        zeta = jnp.broadcast_to(bijection_from_disc(x, 0, 2 * jnp.pi), theta.shape)
+
+        shape = (-1, self._T.M * w.size)  # (num_rho, num transit * w.size)
+        B_sup_z = irfft2_non_uniform(
+            theta.reshape(shape),
+            zeta.reshape(shape),
+            a=self._B_sup_z[..., jnp.newaxis, :, :],
+            M=self._n,
+            N=self._m,
+            domain1=(0, 2 * jnp.pi / self._NFP),
+            axes=(-1, -2),
+        ).reshape(-1, self._T.M, w.size)
+
+        # Gradient of change of variable bijection from [−1, 1] → [0, 2π] is π.
+        return (1 / B_sup_z).dot(w).sum(axis=-1) * jnp.pi
 
     def plot(self, l, pitch_inv=None, **kwargs):
         """Plot the field line and bounce points of the given pitch angles.

@@ -244,18 +244,19 @@ class TestFastInterp:
     )
     def test_interp_rfft2(self, func, m, n, domain0, domain1):
         """Test non-uniform FFT interpolation."""
-        xq = np.array([[7.34, 1.10134, 2.28, 1e3 * np.e], [1.1, 3.78432, 8.542, 0]]).T
+        theta = np.array([7.34, 1.10134, 2.28, 1e3 * np.e])
+        zeta = np.array([1.1, 3.78432, 8.542, 0])
         x = np.linspace(domain0[0], domain0[1], m, endpoint=False)
         y = np.linspace(domain1[0], domain1[1], n, endpoint=False)
         x, y = map(np.ravel, list(np.meshgrid(x, y, indexing="ij")))
-        truth = func(xq[..., 0], xq[..., 1])
+        truth = func(theta, zeta)
         f = func(x, y).reshape(m, n)
         np.testing.assert_allclose(
-            interp_rfft2(xq, f, domain0, domain1, axes=(-2, -1)),
+            interp_rfft2(theta, zeta, f, domain0, domain1, axes=(-2, -1)),
             truth,
         )
         np.testing.assert_allclose(
-            interp_rfft2(xq, f, domain0, domain1, axes=(-1, -2)),
+            interp_rfft2(theta, zeta, f, domain0, domain1, axes=(-1, -2)),
             truth,
         )
 

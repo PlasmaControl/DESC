@@ -372,7 +372,7 @@ class PiecewiseChebyshevSeries(IOAble):
         ----------
         z : jnp.ndarray
             Shape (..., *cheb.shape[:-2], z.shape[-1]).
-            Coordinates in [sef.domain[0], ∞).
+            Coordinates in [self.domain[0], ∞).
             The coordinates z ∈ ℝ are assumed isomorphic to (x, y) ∈ ℝ² where
             ``z // domain`` yields the index into the proper Chebyshev series
             along the second to last axis of ``cheb`` and ``z % domain`` is

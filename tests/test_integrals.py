@@ -1625,6 +1625,26 @@ class TestBounce2D:
 
         # 10. Plotting
         fig, ax = bounce.plot(l, pitch_inv[l], include_legend=False, show=False)
+
+        length = bounce.compute_length()
+        np.testing.assert_allclose(
+            length,
+            # Computed through <L|r,a> with Simpson's rule at 800 nodes (over-resolved).
+            # The difference is likely not due to quadrature error, rather interpolation
+            # error as the data points for ``bounce.compute_length()`` come from Fourier
+            # series of |B|, while those for <L|r,a> come from Fourier series of
+            # plasma boundary. Also, currently JAX has a bug with DCT and FFT that limit
+            # the accuracy to something comparable to 32 bit.
+            [
+                384.77892007,
+                361.60220181,
+                345.33817065,
+                333.00781712,
+                352.16277188,
+                440.09424799,
+            ],
+            rtol=3e-3,
+        )
         return fig
 
     @staticmethod

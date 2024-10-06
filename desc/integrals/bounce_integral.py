@@ -143,10 +143,10 @@ def _transform_to_clebsch_1d(grid, alpha, theta, B, N_B, is_reshaped=False):
     Now, it appears the Fourier transform of θ may have small oscillatory bumps
     outside reasonable bandwidths. This impedes full convergence of any
     approximation, and in particular the poloidal Fourier series for, θ(α, ζ=ζ₀).
-    Maybe this is because θ is not a physical signal as it is determined by the
-    optimizer. (Note the Fourier series converges fast for |B|, even in
-    non-omnigenous configurations where (∂|B|/∂α)|ρ,ζ is not small, so this is
-    indeed some feature with θ).
+    Maybe this is because the Chebyshev interpolation is detected root-finding
+    errors where the nodes are more densely clustered θ. (Note the Fourier series
+    converges fast for |B|, even in non-omnigenous configurations where
+    (∂|B|/∂α)|ρ,ζ is not small, so this is indeed some feature with θ).
 
     Therefore, we explicitly enforce continuity of our approximation of θ between
     cuts to short-circuit the convergence. This works to remove the small
@@ -418,8 +418,6 @@ class Bounce2D(IOAble):
         -----
         Performance may improve significantly if the spectral
         resolutions ``m``, ``n``, ``M``, ``N``, and ``N_B`` are powers of two.
-        It is possible for the optimal ``M``, ``N``, and ``N_B`` to decrease
-        when ``m`` and ``n`` increase, though ``M`` is usually still large.
 
         Parameters
         ----------

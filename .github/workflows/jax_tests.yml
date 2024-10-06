@@ -36,11 +36,11 @@ jobs:
           python -m pip install --upgrade pip
       - name: install jax
         run: |
-          pip install "jax[cpu]==${{ matrix.jax-version }}"
+          pip install "jax==${{ matrix.jax-version }}"
       - name: install other dependencies
         run: |
           sed -i '/jax/d' ./requirements.txt
-          pip install -r devtools/test-requirements.txt
+          pip install -r ./devtools/test-requirements.txt
           pip install matplotlib==3.5.0
       - name: Test with pytest
         run: |

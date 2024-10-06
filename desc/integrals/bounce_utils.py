@@ -51,7 +51,12 @@ def get_alpha(alpha_0, iota, num_transit, period):
 
     """
     # Δϕ (∂α/∂ϕ) = Δϕ ι̅ = Δϕ ι/2π = Δϕ data["iota"]
-    # FIXME: Looks innocent, but JAX doesn't like this...
+    # FIXME: Looks innocent, but JAX doesn't like this. It works fine if iota
+    #   is already an array of ndim 1, but when we loop over rho in the registered
+    #   compute fun to calculate epsilon effective, iota becomes a float (jax complains
+    #   it's an int64[] for some reason) and when it is a scalar instead of an array
+    #   jax thinks the computation needs to know the particular value of iota to jit
+    #   beforehand. when it is an array jax should treat it without issue as usual.
     alpha = alpha_0 + period * jnp.expand_dims(iota, -1) * jnp.arange(num_transit)
     return alpha
 

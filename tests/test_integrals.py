@@ -1623,18 +1623,12 @@ class TestBounce2D:
         # for the flux surface
         print("ρ:", rho[l])
 
-        # 10. Plotting
-        fig, ax = bounce.plot(l, pitch_inv[l], include_legend=False, show=False)
-
-        length = bounce.compute_length()
         np.testing.assert_allclose(
-            length,
-            # Computed through <L|r,a> with Simpson's rule at 800 nodes (over-resolved).
-            # The difference is likely not due to quadrature error, rather interpolation
-            # error as the data points for ``bounce.compute_length()`` come from Fourier
-            # series of |B|, while those for <L|r,a> come from Fourier series of
-            # plasma boundary. Also, currently JAX has a bug with DCT and FFT that limit
-            # the accuracy to something comparable to 32 bit.
+            bounce.compute_length(),
+            # Computed data below through <L|r,a> with Simpson's rule at 800 nodes.
+            # The difference is likely due to interpolation and floating point error.
+            # (On the version of JAX on which rtol was set, there is a bug with DCT
+            # and FFT that limit the accuracy to something comparable to 32 bit).
             [
                 384.77892007,
                 361.60220181,
@@ -1645,6 +1639,9 @@ class TestBounce2D:
             ],
             rtol=3e-3,
         )
+
+        # 10. Plotting
+        fig, ax = bounce.plot(l, pitch_inv[l], include_legend=False, show=False)
         return fig
 
     @staticmethod

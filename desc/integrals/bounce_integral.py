@@ -853,7 +853,7 @@ class Bounce2D(IOAble):
             N=self._m,
             domain1=(0, 2 * jnp.pi / self._NFP),
             axes=(-1, -2),
-        ).reshape(-1, self._T.M, w.size)
+        ).reshape(*self._T.cheb.shape[:-2], self._T.M, w.size)
 
         # Gradient of change of variable bijection from [−1, 1] → [0, 2π] is π.
         return (1 / B_sup_z).dot(w).sum(axis=-1) * jnp.pi

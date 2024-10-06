@@ -1941,24 +1941,71 @@ def _g_sup_ra(params, transforms, profiles, data, **kwargs):
     # Exact definition of the magnetic drifts taken from
     # eqn. 48 of Introduction to Quasisymmetry by Landreman
     # https://tinyurl.com/54udvaa4
-    label="\\mathrm{gbdrift} = 1/B^{2} (\\mathbf{b}\\times\\nabla B) \\cdot"
-    + "\\nabla \\alpha",
+    label="(\\nabla \\vert B \\vert)_{\\mathrm{drift}} = "
+    "(\\mathbf{b} \\times \\nabla B) \\cdot \\nabla \\alpha / \\vert B \\vert^{2}",
     units="1 / Wb",
     units_long="Inverse webers",
     description="Binormal component of the geometric part of the gradB drift"
-    + " used for local stability analyses, Gamma_c, epsilon_eff etc.",
+    + " used for local stability analyses",
     dim=1,
     params=[],
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["|B|^2", "b", "grad(alpha)", "grad(|B|)"],
+    data=["periodic(gbdrift)", "secular(gbdrift)"],
 )
 def _gbdrift(params, transforms, profiles, data, **kwargs):
-    data["gbdrift"] = (
-        1
+    data["gbdrift"] = data["periodic(gbdrift)"] + data["secular(gbdrift)"]
+    return data
+
+
+@register_compute_fun(
+    name="periodic(gbdrift)",
+    # Exact definition of the magnetic drifts taken from
+    # eqn. 48 of Introduction to Quasisymmetry by Landreman
+    # https://tinyurl.com/54udvaa4
+    label="\\mathrm{periodic}(\\nabla \\vert B \\vert)_{\\mathrm{drift}}",
+    units="1/(T-m^{2})",
+    units_long="inverse Tesla meters^2",
+    description="Binormal component of the geometric part of the gradB drift"
+    + " used for local stability analyses, Gamma_c, epsilon_eff etc."
+    " Periodic component.",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["|B|^2", "b", "periodic(grad(alpha))", "grad(|B|)"],
+)
+def _periodic_gbdrift(params, transforms, profiles, data, **kwargs):
+    data["periodic(gbdrift)"] = (
+        dot(data["b"], cross(data["grad(|B|)"], data["periodic(grad(alpha))"]))
         / data["|B|^2"]
-        * dot(data["b"], cross(data["grad(|B|)"], data["grad(alpha)"]))
+    )
+    return data
+
+
+@register_compute_fun(
+    name="secular(gbdrift)",
+    # Exact definition of the magnetic drifts taken from
+    # eqn. 48 of Introduction to Quasisymmetry by Landreman
+    # https://tinyurl.com/54udvaa4
+    label="\\mathrm{secular}(\\nabla \\vert B \\vert)_{\\mathrm{drift}}",
+    units="1/(T-m^{2})",
+    units_long="inverse Tesla meters^2",
+    description="Secular component of binormal component of "
+    "the geometric part of the gradB drift.",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["|B|^2", "b", "secular(grad(alpha))", "grad(|B|)"],
+)
+def _secular_gbdrift(params, transforms, profiles, data, **kwargs):
+    data["secular(gbdrift)"] = (
+        dot(data["b"], cross(data["grad(|B|)"], data["secular(grad(alpha))"]))
+        / data["|B|^2"]
     )
     return data
 
@@ -1973,17 +2020,37 @@ def _gbdrift(params, transforms, profiles, data, **kwargs):
     units="1 / Wb",
     units_long="Inverse webers",
     description="Binormal component of the geometric part of the curvature drift"
-    + " used for local stability analyses, Gamma_c, epsilon_eff etc.",
+    + " used for local stability analyses.",
     dim=1,
     params=[],
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["p_r", "psi_r", "|B|^2", "gbdrift"],
+    data=["periodic(cvdrift)", "secular(gbdrift)"],
 )
 def _cvdrift(params, transforms, profiles, data, **kwargs):
-    dp_dpsi = mu_0 * data["p_r"] / data["psi_r"]
-    data["cvdrift"] = 1 / data["|B|^2"] * dp_dpsi + data["gbdrift"]
+    data["cvdrift"] = data["periodic(cvdrift)"] + data["secular(gbdrift)"]
+    return data
+
+
+@register_compute_fun(
+    name="periodic(cvdrift)",
+    label="\\mathrm{periodic(cvdrift)}",
+    units="1/(T-m^{2})",
+    units_long="inverse Tesla meters^2",
+    description="Periodic component of binormal component of the "
+    "geometric part of the curvature drift",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["p_r", "psi_r", "|B|^2", "periodic(gbdrift)"],
+)
+def _periodic_cvdrift(params, transforms, profiles, data, **kwargs):
+    data["periodic(cvdrift)"] = (
+        mu_0 * data["p_r"] / data["psi_r"] / data["|B|^2"] + data["periodic(gbdrift)"]
+    )
     return data
 
 
@@ -1992,12 +2059,12 @@ def _cvdrift(params, transforms, profiles, data, **kwargs):
     # Exact definition of the magnetic drifts taken from
     # eqn. 48 of Introduction to Quasisymmetry by Landreman
     # https://tinyurl.com/54udvaa4
-    label="\\mathrm{cvdrift0} = 1/B^{2} (\\mathbf{b}\\times\\nabla B)"
-    + "\\cdot (2 \\rho \\nabla \\rho)",
+    label="\\mathrm{cvdrift0} = (\\mathbf{b}\\times\\nabla B)"
+    + "\\cdot (2 \\rho \\nabla \\rho) / \\vert B \\vert^2",
     units="1 / Wb",
     units_long="Inverse webers",
     description="Radial component of the geometric part of the curvature drift"
-    + " used for local stability analyses, gyrokinetics, Gamma_c.",
+    + " used for local stability analyses and gyrokinetics.",
     dim=1,
     params=[],
     transforms={},

@@ -1261,6 +1261,7 @@ class TestBounce1D:
                 "iota",
                 "psi",
                 "a",
+                "theta_PEST",
             ],
             grid=grid,
         )
@@ -1303,15 +1304,14 @@ class TestBounce1D:
         # is independent of normalization length scales, like "effective r/R0".
         epsilon = data["a"] * data["rho"]  # Aspect ratio of the flux surface.
         np.testing.assert_allclose(epsilon, 0.05)
-        theta_PEST = data["alpha"] + data["iota"] * data["zeta"]
         # same as 1 / (1 + epsilon cos(theta)) assuming epsilon << 1
-        B_analytic = B0 * (1 - epsilon * np.cos(theta_PEST))
+        B_analytic = B0 * (1 - epsilon * np.cos(data["theta_PEST"]))
         np.testing.assert_allclose(B, B_analytic, atol=3e-3)
 
         gradpar = data["a"] * data["B^zeta"] / data["|B|"]
         # This method of computing G0 suggests a fixed point iteration.
         G0 = data["a"]
-        gradpar_analytic = G0 * (1 - epsilon * np.cos(theta_PEST))
+        gradpar_analytic = G0 * (1 - epsilon * np.cos(data["theta_PEST"]))
         gradpar_theta_analytic = data["iota"] * gradpar_analytic
         G0 = np.mean(gradpar_theta_analytic)
         np.testing.assert_allclose(gradpar, gradpar_analytic, atol=5e-3)
@@ -1329,10 +1329,12 @@ class TestBounce1D:
             / data["Bref"]
         )
         gds21_analytic = -data["shear"] * (
-            data["shear"] * theta_PEST - alpha_MHD / B**4 * np.sin(theta_PEST)
+            data["shear"] * data["theta_PEST"]
+            - alpha_MHD / B**4 * np.sin(data["theta_PEST"])
         )
         gds21_analytic_low_order = -data["shear"] * (
-            data["shear"] * theta_PEST - alpha_MHD / B0**4 * np.sin(theta_PEST)
+            data["shear"] * data["theta_PEST"]
+            - alpha_MHD / B0**4 * np.sin(data["theta_PEST"])
         )
         np.testing.assert_allclose(gds21, gds21_analytic, atol=2e-2)
         np.testing.assert_allclose(gds21, gds21_analytic_low_order, atol=2.7e-2)
@@ -1340,13 +1342,13 @@ class TestBounce1D:
         fudge_1 = 0.19
         gbdrift_analytic = fudge_1 * (
             -data["shear"]
-            + np.cos(theta_PEST)
-            - gds21_analytic / data["shear"] * np.sin(theta_PEST)
+            + np.cos(data["theta_PEST"])
+            - gds21_analytic / data["shear"] * np.sin(data["theta_PEST"])
         )
         gbdrift_analytic_low_order = fudge_1 * (
             -data["shear"]
-            + np.cos(theta_PEST)
-            - gds21_analytic_low_order / data["shear"] * np.sin(theta_PEST)
+            + np.cos(data["theta_PEST"])
+            - gds21_analytic_low_order / data["shear"] * np.sin(data["theta_PEST"])
         )
         fudge_2 = 0.07
         cvdrift_analytic = gbdrift_analytic + fudge_2 * alpha_MHD / B**2
@@ -1654,6 +1656,8 @@ class TestBounce2D:
             ],
             NFP=eq.NFP,
         )
+        # TODO: request periodic terms and construct secular terms in the
+        # integrand functions
         grid_data = eq.compute(
             names=Bounce2D.required_names + ["cvdrift", "gbdrift"], grid=grid
         )

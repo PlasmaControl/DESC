@@ -291,24 +291,7 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
     transforms={"grid": []},
     profiles=[],
     coordinates="r",
-    data=[
-        "min_tz |B|",
-        "max_tz |B|",
-        "|grad(rho)|",
-        "kappa_g",
-        # TODO: Need a tiny bit more infrastructure to compute <L|r,a> this.
-        #      1. Add bounce.interpolate_uniform method which
-        #         interpolates some function g(theta, zeta)
-        #         to uniformly spaced nodes along the field lines.
-        #         (Use FFT in forward direction and DCT in inverse).
-        #         See the logic in bounce.integrate and transform_to_clebsch_1d.
-        #         Then use simpson's rule to integrate output as
-        #         is done in the compute fun for <L|r,a>. Again since
-        #         B^zeta is smooth simpson's rule will work fine.
-        "<L|r,a>",
-        "R0",
-        "<|grad(rho)|>",
-    ]
+    data=["min_tz |B|", "max_tz |B|", "|grad(rho)|", "kappa_g", "R0", "<|grad(rho)|>"]
     + Bounce2D.required_names,
     resolution_requirement="z",
     # TODO: Add requirement for FFT points on (0, 2pi) (0, 2pi/NFP).

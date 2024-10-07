@@ -143,10 +143,10 @@ def _transform_to_clebsch_1d(grid, alpha, theta, B, N_B, is_reshaped=False):
     Now, it appears the Fourier transform of θ may have small oscillatory bumps
     outside reasonable bandwidths. This impedes full convergence of any
     approximation, and in particular the poloidal Fourier series for, θ(α, ζ=ζ₀).
-    Maybe this is because θ is not a physical signal as it is determined by the
-    optimizer. (Note the Fourier series converges fast for |B|, even in
-    non-omnigenous configurations where (∂|B|/∂α)|ρ,ζ is not small, so this is
-    indeed some feature with θ).
+    Maybe this is because the Chebyshev interpolation is detecting root-finding
+    errors where the nodes are more densely clustered. (Note the Fourier series
+    converges fast for |B|, even in non-omnigenous configurations where
+    (∂|B|/∂α)|ρ,ζ is not small, so this is indeed some feature with θ).
 
     Therefore, we explicitly enforce continuity of our approximation of θ between
     cuts to short-circuit the convergence. This works to remove the small
@@ -311,7 +311,7 @@ class Bounce2D(IOAble):
 
     Recall that periodicity enables faster convergence, motivating the desire
     to instead interpolate |B|(ϑ, ϕ) with a double Fourier series and applying
-    bisection methods to find bounce points with mesh size inversely
+    bisection methods to find roots with mesh size inversely
     proportional to the max frequency along the field line: M ι + N. ``Bounce2D``
     does not use that approach as that root-finding scheme is inferior.
     The reason θ is not interpolated with a double Fourier series θ(ϑ, ζ) is
@@ -418,8 +418,6 @@ class Bounce2D(IOAble):
         -----
         Performance may improve significantly if the spectral
         resolutions ``m``, ``n``, ``M``, ``N``, and ``N_B`` are powers of two.
-        It is possible for the optimal ``M``, ``N``, and ``N_B`` to decrease
-        when ``m`` and ``n`` increase, though ``M`` is usually still large.
 
         Parameters
         ----------
@@ -491,7 +489,7 @@ class Bounce2D(IOAble):
         self._x, self._w = get_quadrature(quad, automorphism)
 
         # peel off field lines
-        alpha = get_alpha(alpha, iota=iota, num_transit=num_transit, period=2 * jnp.pi)
+        alpha = get_alpha(alpha, iota, num_transit, 2 * jnp.pi)
         # Compute spectral coefficients.
         self._T, self._B = _transform_to_clebsch_1d(
             grid, alpha, theta, data["|B|"] / Bref, N_B, is_reshaped

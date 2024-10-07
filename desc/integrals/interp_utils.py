@@ -20,6 +20,11 @@ from desc.utils import Index, errorif, safediv
 # TODO: Boyd's method 𝒪(N²) instead of Chebyshev companion matrix 𝒪(N³).
 #  John P. Boyd, Computing real roots of a polynomial in Chebyshev series
 #  form through subdivision. https://doi.org/10.1016/j.apnum.2005.09.007.
+#  Use that once to find extrema of |B| if N_B > 64. Then to find roots
+#  of bounce points use the closed formula in Boyd's spectral methods
+#  section 19.6. Can isolate interval to search for root by observing
+#  whether B - 1/pitch changes sign at extrema. This is significantly
+#  cheaper and non-iterative, so jax and gpu will like it.
 chebroots_vec = jnp.vectorize(chebroots, signature="(m)->(n)")
 
 

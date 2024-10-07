@@ -143,8 +143,8 @@ def _transform_to_clebsch_1d(grid, alpha, theta, B, N_B, is_reshaped=False):
     Now, it appears the Fourier transform of θ may have small oscillatory bumps
     outside reasonable bandwidths. This impedes full convergence of any
     approximation, and in particular the poloidal Fourier series for, θ(α, ζ=ζ₀).
-    Maybe this is because the Chebyshev interpolation is detected root-finding
-    errors where the nodes are more densely clustered θ. (Note the Fourier series
+    Maybe this is because the Chebyshev interpolation is detecting root-finding
+    errors where the nodes are more densely clustered. (Note the Fourier series
     converges fast for |B|, even in non-omnigenous configurations where
     (∂|B|/∂α)|ρ,ζ is not small, so this is indeed some feature with θ).
 
@@ -311,7 +311,7 @@ class Bounce2D(IOAble):
 
     Recall that periodicity enables faster convergence, motivating the desire
     to instead interpolate |B|(ϑ, ϕ) with a double Fourier series and applying
-    bisection methods to find bounce points with mesh size inversely
+    bisection methods to find roots with mesh size inversely
     proportional to the max frequency along the field line: M ι + N. ``Bounce2D``
     does not use that approach as that root-finding scheme is inferior.
     The reason θ is not interpolated with a double Fourier series θ(ϑ, ζ) is

@@ -18,7 +18,7 @@ def _periodic(x, period):
 
 def _fixup_residual(r, period):
     r = _periodic(r, period)
-    # r should be between -period and period
+    # r should be between -period/2 and period/2
     return jnp.where((r > period / 2) & jnp.isfinite(period), -period + r, r)
 
 

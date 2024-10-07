@@ -29,7 +29,11 @@ from .linear_objectives import (
     FixPsi,
     FixSheetCurrent,
 )
-from .nae_utils import calc_zeroth_order_lambda, make_RZ_cons_1st_order
+from .nae_utils import (
+    calc_zeroth_order_lambda,
+    make_RZ_cons_1st_order,
+    make_RZ_cons_2nd_order,
+)
 from .objective_funs import ObjectiveFunction
 
 _PROFILE_CONSTRAINTS = {
@@ -295,10 +299,20 @@ def _get_NAE_constraints(
 
     if order >= 1:  # first order constraints
         constraints += make_RZ_cons_1st_order(
-            qsc=qsc_eq, desc_eq=desc_eq, N=N, fix_lambda=fix_lambda and fix_lambda > 0
+            qsc=qsc_eq,
+            desc_eq=desc_eq,
+            N=N,
+            fix_lambda=fix_lambda and fix_lambda > 0,
         )
-    if order >= 2:  # 2nd order constraints
-        raise NotImplementedError("NAE constraints only implemented up to O(rho) ")
+    if order == 2:  # 2nd order constraints
+        constraints += make_RZ_cons_2nd_order(
+            qsc=qsc_eq,
+            desc_eq=desc_eq,
+            N=N,
+            fix_lambda=fix_lambda and fix_lambda > 1,
+        )
+    if order > 2:
+        raise NotImplementedError("NAE constraints only implemented up to O(rho^2) ")
 
     return constraints
 

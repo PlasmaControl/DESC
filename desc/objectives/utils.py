@@ -192,7 +192,7 @@ def factorize_linear_constraints(objective, constraint, x_scale="auto"):  # noqa
             + f"{con}.",
         )
 
-        # else check with tighter tols and throw an error, these tolerances
+        # else check with tighter tols and throw a warning, these tolerances
         # could be tripped due to just numerical roundoff or poor scaling between
         # constraints, so don't want to error out but we do want to warn the user.
         atol = 3e-14

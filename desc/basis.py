@@ -1509,7 +1509,7 @@ def custom_jvp_with_jit(func):
         custom_jvp,
         nondiff_argnums=(3,),
     )
-    def dummy(r, l, m, dr):
+    def dummy(r, l, m, dr=0):
         return func(r, l, m, dr)
 
     @dummy.defjvp

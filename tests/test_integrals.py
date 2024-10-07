@@ -13,7 +13,7 @@ from scipy.interpolate import CubicHermiteSpline
 from scipy.special import ellipe, ellipkm1
 from tests.test_plotting import tol_1d
 
-from desc.backend import jnp
+from desc.backend import jit, jnp
 from desc.basis import FourierZernikeBasis
 from desc.equilibrium import Equilibrium
 from desc.equilibrium.coords import get_rtz_grid
@@ -1522,7 +1522,7 @@ class TestBounce1D:
 
 
 class TestBounce2D:
-    """Test bounce integration with two-dimensional pseudo-spectral methods."""
+    """Test bounce integration that uses 2D pseudo-spectral methods."""
 
     @pytest.mark.unit
     @pytest.mark.parametrize(
@@ -1533,11 +1533,12 @@ class TestBounce2D:
         ],
     )
     def test_alpha_sequence(self, alpha_0, iota, num_period, period):
-        """Test field line label is updated correctly after toroidal transits."""
-        # this test will be more useful once zeta != phi
-        iota = np.atleast_1d(iota)
-        alphas = get_alpha(alpha_0, iota, num_period, period)
-        assert alphas.shape == (iota.size, num_period)
+        """Test field line label updating works with jit."""
+        alphas = jit(get_alpha, static_argnums=2)(alpha_0, iota, num_period, period)
+        if np.ndim(iota):
+            assert alphas.shape == (iota.size, num_period)
+        else:
+            assert alphas.shape == (num_period,)
         print(alphas)
 
     @staticmethod

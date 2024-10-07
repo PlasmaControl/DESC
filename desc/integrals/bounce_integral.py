@@ -489,7 +489,7 @@ class Bounce2D(IOAble):
         self._x, self._w = get_quadrature(quad, automorphism)
 
         # peel off field lines
-        alpha = get_alpha(alpha, iota=iota, num_transit=num_transit, period=2 * jnp.pi)
+        alpha = get_alpha(alpha, iota, num_transit, 2 * jnp.pi)
         # Compute spectral coefficients.
         self._T, self._B = _transform_to_clebsch_1d(
             grid, alpha, theta, data["|B|"] / Bref, N_B, is_reshaped

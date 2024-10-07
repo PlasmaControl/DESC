@@ -32,6 +32,7 @@ from desc.magnetic_fields import (
 )
 from desc.objectives import (
     AspectRatio,
+    BallooningStability,
     BoundaryError,
     CoilCurvature,
     CoilLength,
@@ -301,9 +302,7 @@ def test_ATF_results(tmpdir_factory):
         spectral_indexing=eq0.spectral_indexing,
     )
     eqf = EquilibriaFamily.solve_continuation_automatic(
-        eq,
-        verbose=2,
-        checkpoint_path=output_dir.join("ATF.h5"),
+        eq, verbose=2, checkpoint_path=output_dir.join("ATF.h5"), jac_chunk_size=500
     )
     eqf = load(output_dir.join("ATF.h5"))
     rho_err, theta_err = area_difference_desc(eq0, eqf[-1])
@@ -1119,7 +1118,8 @@ def test_freeb_vacuum():
         FixPsi(eq=eq),
     )
     objective = ObjectiveFunction(
-        VacuumBoundaryError(eq=eq, field=ext_field, field_fixed=True)
+        VacuumBoundaryError(eq=eq, field=ext_field, field_fixed=True),
+        jac_chunk_size=1000,
     )
     eq, _ = eq.optimize(
         objective,
@@ -1637,6 +1637,135 @@ def test_coilset_geometry_optimization():
         abs(surf_opt.Z_lmn[surf_opt.Z_basis.get_idx(M=-1, N=0)]) + offset,
         rtol=2e-2,
     )
+
+
+@pytest.mark.regression
+def test_ballooning_stability_opt():
+    """Perform ballooning stability optimization with DESC."""
+    eq = get("HELIOTRON")
+
+    # Flux surfaces on which to evaluate ballooning stability
+    surfaces = [0.8]
+
+    grid = LinearGrid(rho=jnp.array(surfaces), NFP=eq.NFP)
+    eq_data_keys = ["iota"]
+
+    data = eq.compute(eq_data_keys, grid=grid)
+
+    Nalpha = 8  # Number of field lines
+
+    # Field lines on which to evaluate ballooning stability
+    alpha = jnp.linspace(0, np.pi, Nalpha)
+
+    # Number of toroidal transits of the field line
+    ntor = 2
+
+    # Number of point along a field line in ballooning space
+    N0 = 2 * ntor * eq.M_grid * eq.N_grid + 1
+
+    # range of the ballooning coordinate zeta
+    zeta = np.linspace(-jnp.pi * ntor, jnp.pi * ntor, N0)
+
+    lam2_initial = np.zeros(
+        len(surfaces),
+    )
+    for i in range(len(surfaces)):
+        rho = surfaces[i]
+
+        grid = eq.get_rtz_grid(
+            rho,
+            alpha,
+            zeta,
+            coordinates="raz",
+            period=(np.inf, 2 * np.pi, np.inf),
+        )
+
+        data_keys = ["ideal ballooning lambda"]
+        data = eq.compute(data_keys, grid=grid)
+
+        lam2_initial[i] = np.max(data["ideal ballooning lambda"])
+
+    # Flux surfaces on which to evaluate ballooning stability
+    surfaces_ball = surfaces
+
+    # Determine which modes to unfix
+    k = 2
+
+    objs_ball = {}
+
+    eq_ball_weight = 1.0e2
+
+    for i, rho in enumerate(surfaces_ball):
+        alpha = np.linspace(0, np.pi, Nalpha)
+
+        objs_ball[rho] = BallooningStability(
+            eq=eq,
+            rho=np.array([rho]),
+            alpha=alpha,
+            nturns=ntor,
+            nzetaperturn=2 * (eq.M_grid * eq.N_grid),
+            weight=eq_ball_weight,
+        )
+
+    modes_R = np.vstack(
+        (
+            [0, 0, 0],
+            eq.surface.R_basis.modes[
+                np.max(np.abs(eq.surface.R_basis.modes), 1) > k, :
+            ],
+        )
+    )
+    modes_Z = eq.surface.Z_basis.modes[
+        np.max(np.abs(eq.surface.Z_basis.modes), 1) > k, :
+    ]
+
+    # aspect ratio of the original HELIOTRON is 10.48
+    objective = ObjectiveFunction(
+        (AspectRatio(eq=eq, bounds=(0, 12)),) + tuple(objs_ball.values())
+    )
+
+    constraints = (
+        ForceBalance(eq=eq),
+        FixBoundaryR(eq=eq, modes=modes_R),
+        FixBoundaryZ(eq=eq, modes=modes_Z),
+        FixPressure(eq=eq),
+        FixIota(eq=eq),
+        FixPsi(eq=eq),
+    )
+
+    optimizer = Optimizer("proximal-lsq-exact")
+    (eq,), _ = optimizer.optimize(
+        eq,
+        objective,
+        constraints,
+        ftol=1e-4,
+        xtol=1e-6,
+        gtol=1e-6,
+        maxiter=2,  # increase maxiter to 50 for a better result
+        verbose=3,
+        options={"initial_trust_ratio": 2e-3},
+    )
+
+    lam2_optimized = np.zeros(
+        len(surfaces),
+    )
+    for i in range(len(surfaces)):
+        rho = surfaces[i]
+
+        grid = eq.get_rtz_grid(
+            rho,
+            alpha,
+            zeta,
+            coordinates="raz",
+            period=(np.inf, 2 * np.pi, np.inf),
+        )
+
+        data_keys = ["ideal ballooning lambda"]
+        data = eq.compute(data_keys, grid=grid)
+
+        lam2_optimized[i] = np.max(data["ideal ballooning lambda"])
+
+    assert lam2_initial - lam2_optimized >= 1.8e-2
 
 
 @pytest.mark.slow

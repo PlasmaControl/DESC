@@ -12,7 +12,7 @@ from desc.grid import LinearGrid
 from desc.integrals import DFTInterpolator, FFTInterpolator, virtual_casing_biot_savart
 from desc.nestor import Nestor
 from desc.objectives.objective_funs import _Objective
-from desc.utils import PRINT_WIDTH, Timer, errorif, warnif
+from desc.utils import PRINT_WIDTH, Timer, errorif, parse_argname_change, warnif
 
 from .normalization import compute_scaling_factors
 
@@ -63,7 +63,7 @@ class VacuumBoundaryError(_Objective):
         "auto" selects forward or reverse mode based on the size of the input and output
         of the objective. Has no effect on self.grad or self.hess which always use
         reverse mode and forward over reverse mode respectively.
-    grid : Grid, optional
+    eval_grid : Grid, optional
         Collocation grid containing the nodes to evaluate error at. Should be at rho=1.
         Defaults to ``LinearGrid(M=eq.M_grid, N=eq.N_grid)``
     field_grid : Grid, optional
@@ -71,8 +71,19 @@ class VacuumBoundaryError(_Objective):
     field_fixed : bool
         Whether to assume the field is fixed. For free boundary solve, should
         be fixed. For single stage optimization, should be False (default).
-    name : str
+    name : str, optional
         Name of the objective function.
+    jac_chunk_size : int , optional
+        Will calculate the Jacobian for this objective ``jac_chunk_size``
+        columns at a time, instead of all at once. The memory usage of the
+        Jacobian calculation is roughly ``memory usage = m0 + m1*jac_chunk_size``:
+        the smaller the chunk size, the less memory the Jacobian calculation
+        will require (with some baseline memory usage). The time to compute the
+        Jacobian is roughly ``t=t0 +t1/jac_chunk_size``, so the larger the
+        ``jac_chunk_size``, the faster the calculation takes, at the cost of
+        requiring more memory. A ``jac_chunk_size`` of 1 corresponds to the least
+        memory intensive, but slowest method of calculating the Jacobian.
+        If None, it will use the largest size i.e ``obj.dim_x``.
 
     """
 
@@ -93,14 +104,17 @@ class VacuumBoundaryError(_Objective):
         normalize_target=True,
         loss_function=None,
         deriv_mode="auto",
-        grid=None,
+        eval_grid=None,
         field_grid=None,
         field_fixed=False,
         name="Vacuum boundary error",
+        jac_chunk_size=None,
+        **kwargs,
     ):
+        eval_grid = parse_argname_change(eval_grid, kwargs, "grid", "eval_grid")
         if target is None and bounds is None:
             target = 0
-        self._grid = grid
+        self._eval_grid = eval_grid
         self._eq = eq
         self._field = field
         self._field_grid = field_grid
@@ -119,6 +133,7 @@ class VacuumBoundaryError(_Objective):
             loss_function=loss_function,
             deriv_mode=deriv_mode,
             name=name,
+            jac_chunk_size=jac_chunk_size,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -133,12 +148,12 @@ class VacuumBoundaryError(_Objective):
 
         """
         eq = self.things[0]
-        if self._grid is None:
+        if self._eval_grid is None:
             grid = LinearGrid(
                 rho=np.array([1.0]), M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False
             )
         else:
-            grid = self._grid
+            grid = self._eval_grid
 
         pres = np.max(np.abs(eq.compute("p")["p"]))
         curr = np.max(np.abs(eq.compute("current")["current"]))
@@ -408,8 +423,19 @@ class BoundaryError(_Objective):
     loop : bool
         If True, evaluate integral using loops, as opposed to vmap. Slower, but uses
         less memory.
-    name : str
+    name : str, optional
         Name of the objective function.
+    jac_chunk_size : int , optional
+        Will calculate the Jacobian for this objective ``jac_chunk_size``
+        columns at a time, instead of all at once. The memory usage of the
+        Jacobian calculation is roughly ``memory usage = m0 + m1*jac_chunk_size``:
+        the smaller the chunk size, the less memory the Jacobian calculation
+        will require (with some baseline memory usage). The time to compute the
+        Jacobian is roughly ``t=t0 +t1/jac_chunk_size``, so the larger the
+        ``jac_chunk_size``, the faster the calculation takes, at the cost of
+        requiring more memory. A ``jac_chunk_size`` of 1 corresponds to the least
+        memory intensive, but slowest method of calculating the Jacobian.
+        If None, it will use the largest size i.e ``obj.dim_x``.
 
 
     Examples
@@ -455,6 +481,7 @@ class BoundaryError(_Objective):
         field_fixed=False,
         loop=True,
         name="Boundary error",
+        jac_chunk_size=None,
     ):
         if target is None and bounds is None:
             target = 0
@@ -481,6 +508,7 @@ class BoundaryError(_Objective):
             loss_function=loss_function,
             deriv_mode=deriv_mode,
             name=name,
+            jac_chunk_size=jac_chunk_size,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -865,8 +893,19 @@ class BoundaryErrorNESTOR(_Objective):
         "auto" selects forward or reverse mode based on the size of the input and output
         of the objective. Has no effect on self.grad or self.hess which always use
         reverse mode and forward over reverse mode respectively.
-    name : str
+    name : str, optional
         Name of the objective function.
+    jac_chunk_size : int , optional
+        Will calculate the Jacobian for this objective ``jac_chunk_size``
+        columns at a time, instead of all at once. The memory usage of the
+        Jacobian calculation is roughly ``memory usage = m0 + m1*jac_chunk_size``:
+        the smaller the chunk size, the less memory the Jacobian calculation
+        will require (with some baseline memory usage). The time to compute the
+        Jacobian is roughly ``t=t0 +t1/jac_chunk_size``, so the larger the
+        ``jac_chunk_size``, the faster the calculation takes, at the cost of
+        requiring more memory. A ``jac_chunk_size`` of 1 corresponds to the least
+        memory intensive, but slowest method of calculating the Jacobian.
+        If None, it will use the largest size i.e ``obj.dim_x``.
 
     """
 
@@ -893,6 +932,7 @@ class BoundaryErrorNESTOR(_Objective):
         loss_function=None,
         deriv_mode="auto",
         name="NESTOR Boundary",
+        jac_chunk_size=None,
     ):
         if target is None and bounds is None:
             target = 0
@@ -912,6 +952,7 @@ class BoundaryErrorNESTOR(_Objective):
             loss_function=loss_function,
             deriv_mode=deriv_mode,
             name=name,
+            jac_chunk_size=jac_chunk_size,
         )
 
     def build(self, use_jit=True, verbose=1):

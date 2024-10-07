@@ -1,8 +1,8 @@
 """Utility functions, independent of the rest of DESC."""
 
+import functools
 import operator
 import warnings
-from functools import partial
 from itertools import combinations_with_replacement, permutations
 
 import numpy as np
@@ -692,7 +692,9 @@ def broadcast_tree(tree_in, tree_out, dtype=int):
         raise ValueError("trees must be nested lists of dicts")
 
 
-@partial(jnp.vectorize, signature="(m),(m)->(n)", excluded={"size", "fill_value"})
+@functools.partial(
+    jnp.vectorize, signature="(m),(m)->(n)", excluded={"size", "fill_value"}
+)
 def take_mask(a, mask, /, *, size=None, fill_value=None):
     """JIT compilable method to return ``a[mask][:size]`` padded by ``fill_value``.
 
@@ -927,3 +929,12 @@ def cumtrapz(y, x=None, dx=1.0, axis=-1, initial=None):
         )
 
     return res
+
+
+def ensure_tuple(x):
+    """Returns x as a tuple of arrays."""
+    if isinstance(x, tuple):
+        return x
+    if isinstance(x, list):
+        return tuple(x)
+    return (x,)

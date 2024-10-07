@@ -601,7 +601,7 @@ class BallooningStability(_Objective):
             "w1": self._w1,
             "quad_weights": 1.0,
         }
-        super().build(use_jit=use_jit, verbose=verbose)
+        super().build(use_jit=False, verbose=verbose)
 
     def compute(self, params, constants=None):
         """

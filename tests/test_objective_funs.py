@@ -78,7 +78,7 @@ from desc.objectives import (
 )
 from desc.objectives._free_boundary import BoundaryErrorNESTOR
 from desc.objectives.normalization import compute_scaling_factors
-from desc.objectives.objective_funs import _Objective
+from desc.objectives.objective_funs import _Objective, collect_docs
 from desc.objectives.utils import softmax, softmin
 from desc.profiles import FourierZernikeProfile, PowerSeriesProfile
 from desc.utils import PRINT_WIDTH
@@ -2933,3 +2933,19 @@ def test_objective_print_widths():
                     + "change the name or increase the PRINT_WIDTH in the "
                     + "desc/utils.py file. The former is preferred."
                 )
+
+
+def test_objective_docstring():
+    """Test that the objective docstring and collect_docs are consistent."""
+    objective_docs = _Objective.__doc__.rstrip()
+    doc_header = (
+        "Objective (or constraint) used in the optimization of an Equilibrium.\n\n"
+        + "    Parameters\n"
+        + "    ----------\n"
+        + "    things : Optimizable or tuple/list of Optimizable\n"
+        + "        Objects that will be optimized to satisfy the Objective.\n"
+    )
+    collected_docs = collect_docs().strip()
+    collected_docs = doc_header + "    " + collected_docs
+
+    assert objective_docs == collected_docs

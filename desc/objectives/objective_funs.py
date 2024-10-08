@@ -33,6 +33,153 @@ from desc.utils import (
     unique_list,
 )
 
+doc_target = """
+    target : {float, ndarray}, optional
+        Target value(s) of the objective. Only used if bounds is None.
+        Must be broadcastable to Objective.dim_f.
+"""
+doc_bounds = """
+    bounds : tuple of {float, ndarray}, optional
+        Lower and upper bounds on the objective. Overrides target.
+        Both bounds must be broadcastable to Objective.dim_f
+"""
+doc_weight = """
+    weight : {float, ndarray}, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        Must be broadcastable to Objective.dim_f
+"""
+doc_normalize = """
+    normalize : bool, optional
+        Whether to compute the error in physical units or non-dimensionalize.
+"""
+doc_normalize_target = """
+    normalize_target : bool, optional
+        Whether target and bounds should be normalized before comparing to computed
+        values. If `normalize` is `True` and the target is in physical units,
+        this should also be set to True.
+"""
+doc_loss_function = """
+    loss_function : {None, 'mean', 'min', 'max'}, optional
+        Loss function to apply to the objective values once computed. This loss function
+        is called on the raw compute value, before any shifting, scaling, or
+        normalization.
+"""
+doc_deriv_mode = """
+    deriv_mode : {"auto", "fwd", "rev"}
+        Specify how to compute Jacobian matrix, either forward mode or reverse mode AD.
+        "auto" selects forward or reverse mode based on the size of the input and output
+        of the objective. Has no effect on self.grad or self.hess which always use
+        reverse mode and forward over reverse mode respectively.
+"""
+doc_name = """
+    name : str, optional
+        Name of the objective.
+"""
+doc_jac_chunk_size = """
+    jac_chunk_size : int or "auto", optional
+        Will calculate the Jacobian
+        ``jac_chunk_size`` columns at a time, instead of all at once.
+        The memory usage of the Jacobian calculation is roughly
+        ``memory usage = m0 + m1*jac_chunk_size``: the smaller the chunk size,
+        the less memory the Jacobian calculation will require (with some baseline
+        memory usage). The time it takes to compute the Jacobian is roughly
+        ``t= t0 + t1/jac_chunk_size` so the larger the ``jac_chunk_size``, the faster
+        the calculation takes, at the cost of requiring more memory.
+        If None, it will use the largest size i.e ``obj.dim_x``.
+        Defaults to ``chunk_size=None``.
+"""
+docs = {
+    "target": doc_target,
+    "bounds": doc_bounds,
+    "weight": doc_weight,
+    "normalize": doc_normalize,
+    "normalize_target": doc_normalize_target,
+    "loss_function": doc_loss_function,
+    "deriv_mode": doc_deriv_mode,
+    "name": doc_name,
+    "jac_chunk_size": doc_jac_chunk_size,
+}
+
+
+def collect_docs(
+    overwrite=None,
+    target_default="",
+    bounds_default="",
+    normalize_detail=None,
+    normalize_target_detail=None,
+    loss_detail=None,
+    coil=False,
+):
+    """Collect default parameters for the docstring of Objective.
+
+    Parameters
+    ----------
+    overwrite : dict, optional
+        Dict of strings to overwrite from the _Objective's docstring. If None,
+        all default parameters are included as they are. Use this argument if
+        you want to specify a special docstring for a specific parameter in
+        your objective definition.
+    target_default : str, optional
+        Default value for the target parameter.
+    bounds_default : str, optional
+        Default value for the bounds parameter.
+    normalize_detail : str, optional
+        Additional information about the normalize parameter.
+    normalize_target_detail : str, optional
+        Additional information about the normalize_target parameter.
+    loss_detail : str, optional
+        Additional information about the loss function.
+    coil : bool, optional
+        Whether the objective is a coil objective. If True, adds extra docs to
+        target and loss_function.
+
+    Returns
+    -------
+    doc_params : str
+        String of default parameters for the docstring.
+
+    """
+    doc_params = ""
+    for key in docs.keys():
+        if overwrite is not None and key in overwrite.keys():
+            doc_params += overwrite[key].rstrip()
+        else:
+            if key == "target":
+                target = ""
+                if coil:
+                    target += (
+                        "If array, it has to be flattened according to the "
+                        + "number of inputs."
+                    )
+                if target_default != "":
+                    target = target + " Defaults to " + target_default
+                doc_params += docs[key].rstrip() + target
+            elif key == "bounds" and bounds_default != "":
+                doc_params = (
+                    doc_params + docs[key].rstrip() + " Defaults to " + bounds_default
+                )
+            elif key == "loss_function":
+                loss = ""
+                if coil:
+                    loss = " Operates over all coils, not each individual coil."
+                if loss_detail is not None:
+                    loss += loss_detail
+                doc_params += docs[key].rstrip() + loss
+            elif key == "normalize":
+                norm = ""
+                if normalize_detail is not None:
+                    norm += normalize_detail
+                doc_params += docs[key].rstrip() + norm
+            elif key == "normalize_target":
+                norm_target = ""
+                if normalize_target_detail is not None:
+                    norm_target = normalize_target_detail
+                doc_params += docs[key].rstrip() + norm_target
+            else:
+                doc_params += docs[key].rstrip()
+
+    return doc_params
+
 
 class ObjectiveFunction(IOAble):
     """Objective function comprised of one or more Objectives.

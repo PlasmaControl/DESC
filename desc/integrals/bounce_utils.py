@@ -27,6 +27,34 @@ from desc.utils import (
 )
 
 
+# TODO: Generalize this beyond ζ = ϕ or just map to Clebsch with ϕ.
+def get_alpha(alpha_0, iota, num_transit, period):
+    """Get sequence of poloidal coordinates A = (α₀, α₁, …, αₘ₋₁) of field line.
+
+    Parameters
+    ----------
+    alpha_0 : float
+        Starting field line poloidal label.
+    iota : jnp.ndarray
+        Shape (iota.size, ).
+        Rotational transform normalized by 2π.
+    num_transit : float
+        Number of ``period``s to follow field line.
+    period : float
+        Toroidal period after which to update label.
+
+    Returns
+    -------
+    alpha : jnp.ndarray
+        Shape (iota.size, num_transit).
+        Sequence of poloidal coordinates A = (α₀, α₁, …, αₘ₋₁) that specify field line.
+
+    """
+    # Δϕ (∂α/∂ϕ) = Δϕ ι̅ = Δϕ ι/2π = Δϕ data["iota"]
+    alpha = alpha_0 + period * jnp.expand_dims(iota, -1) * jnp.arange(num_transit)
+    return alpha
+
+
 def get_pitch_inv_quad(min_B, max_B, num_pitch):
     """Return 1/λ values and weights for quadrature between ``min_B`` and ``max_B``.
 
@@ -207,14 +235,18 @@ def bounce_points(
 
 
 def _set_default_plot_kwargs(kwargs):
+    vlabel = r"$\vert B \vert$"
     kwargs.setdefault(
         "title",
-        r"Intersects $\zeta$ in epigraph($\vert B \vert$) s.t. "
-        r"$\vert B \vert(\zeta) = 1/\lambda$",
+        r"Intersects $\zeta$ in epigraph("
+        + vlabel
+        + ") s.t. "
+        + vlabel
+        + r"$(\zeta) = 1/\lambda$",
     )
     kwargs.setdefault("klabel", r"$1/\lambda$")
     kwargs.setdefault("hlabel", r"$\zeta$")
-    kwargs.setdefault("vlabel", r"$\vert B \vert$")
+    kwargs.setdefault("vlabel", vlabel)
     return kwargs
 
 
@@ -726,7 +758,7 @@ def interp_to_argmin_hard(h, points, knots, g, dg_dz, method="cubic"):
 
 def plot_ppoly(
     ppoly,
-    num=1000,
+    num=5000,
     z1=None,
     z2=None,
     k=None,

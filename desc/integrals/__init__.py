@@ -1,6 +1,6 @@
 """Classes for function integration."""
 
-from .bounce_integral import Bounce1D
+from .bounce_integral import Bounce1D, Bounce2D
 from .singularities import (
     DFTInterpolator,
     FFTInterpolator,

@@ -58,7 +58,7 @@ def automorphism_sin(x, s=0, m=10):
     """[-1, 1] ∋ x ↦ y ∈ [−1, 1].
 
     This map increases node density near the boundary by the asymptotic factor
-    1/√(1−x²) and adds a √(1−x²) factor to the integrand.
+    1/√(1−x²) and adds a cosine factor to the integrand.
 
     Parameters
     ----------
@@ -242,7 +242,7 @@ def get_quadrature(quad, automorphism):
 
     Parameters
     ----------
-    quad : (jnp.ndarray, jnp.ndarray)
+    quad : tuple[jnp.ndarray]
         Quadrature points xₖ and weights wₖ for the approximate evaluation of
         the integral ∫₋₁¹ g(x) dx = ∑ₖ wₖ g(xₖ).
     automorphism : (Callable, Callable) or None

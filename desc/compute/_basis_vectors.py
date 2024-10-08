@@ -3223,14 +3223,58 @@ def _e_sub_zeta_zz(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["e^rho", "e^theta", "e^zeta", "alpha_r", "alpha_t", "alpha_z"],
+    data=["periodic(grad(alpha))", "secular(grad(alpha))"],
 )
 def _grad_alpha(params, transforms, profiles, data, **kwargs):
-    data["grad(alpha)"] = (
-        data["alpha_r"] * data["e^rho"].T
+    data["grad(alpha)"] = data["periodic(grad(alpha))"] + data["secular(grad(alpha))"]
+    return data
+
+
+@register_compute_fun(
+    name="periodic(grad(alpha))",
+    label="\\mathrm{periodic}(\\nabla \\alpha)",
+    units="m^{-1}",
+    units_long="Inverse meters",
+    description=(
+        "Gradient of field line label, which is perpendicular to the field line, "
+        "periodic component"
+    ),
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["e^rho", "e^theta", "e^zeta", "periodic(alpha_r)", "alpha_t", "alpha_z"],
+)
+def _periodic_grad_alpha(params, transforms, profiles, data, **kwargs):
+    data["periodic(grad(alpha))"] = (
+        data["periodic(alpha_r)"] * data["e^rho"].T
         + data["alpha_t"] * data["e^theta"].T
         + data["alpha_z"] * data["e^zeta"].T
     ).T
+    return data
+
+
+@register_compute_fun(
+    name="secular(grad(alpha))",
+    label="\\mathrm{secular}(\\nabla \\alpha)",
+    units="m^{-1}",
+    units_long="Inverse meters",
+    description=(
+        "Gradient of field line label, which is perpendicular to the field line, "
+        "periodic component"
+    ),
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["e^rho", "secular(alpha_r)"],
+)
+def _secular_grad_alpha(params, transforms, profiles, data, **kwargs):
+    data["secular(grad(alpha))"] = (
+        data["secular(alpha_r)"][:, jnp.newaxis] * data["e^rho"]
+    )
     return data
 
 

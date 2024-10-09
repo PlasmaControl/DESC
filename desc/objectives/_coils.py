@@ -962,12 +962,17 @@ class PlasmaCoilSetMinDistance(_Objective):
 class CoilArclengthVariance(_CoilObjective):
     """Variance of |dx/ds| along the curve.
 
-    This objective is meant to combat any issues
-    corresponding to non-uniqueness of the representation
-    of a curve, in that the same physical curve can be
-    represented by different parametrizations.
+    This objective is meant to combat any issues corresponding to non-uniqueness of
+    the representation of a curve, in that the same physical curve can be represented
+    by different parametrizations by changing the curve parameter [1]_. Note that this
+    objective has no effect for ``FourierRZCoil`` and ``FourierPlanarCoil`` which have
+    a single unique parameterization (the objective will always return 0 for these
+    types).
 
-    See Wechsung 2021 supporting information for more detail.
+    References
+    ----------
+    .. [1] Wechsung, et al. "Precise stellarator quasi-symmetry can be achieved
+       with electromagnetic coils." PNAS (2022)
 
     Parameters
     ----------
@@ -1057,6 +1062,18 @@ class CoilArclengthVariance(_CoilObjective):
         self._dim_f = self._num_coils
         self._constants["quad_weights"] = 1
 
+        coilset = self.things[0]
+        # local import to avoid circular import
+        from desc.coils import CoilSet, FourierXYZCoil, SplineXYZCoil, _Coil
+
+        def _is_single_coil(c):
+            return isinstance(c, _Coil) and not isinstance(c, CoilSet)
+
+        coils = tree_leaves(coilset, is_leaf=_is_single_coil)
+        self._constants["mask"] = np.array(
+            [int(isinstance(coil, (FourierXYZCoil, SplineXYZCoil))) for coil in coils]
+        )
+
         if self._normalize:
             self._normalization = np.mean([scale["a"] ** 2 for scale in self._scales])
 
@@ -1078,10 +1095,12 @@ class CoilArclengthVariance(_CoilObjective):
         f : float or array of floats
             Coil arclength variance.
         """
+        if constants is None:
+            constants = self.constants
         data = super().compute(params, constants=constants)
         data = tree_leaves(data, is_leaf=lambda x: isinstance(x, dict))
         out = jnp.array([jnp.var(jnp.linalg.norm(dat["x_s"], axis=1)) for dat in data])
-        return out
+        return out * constants["mask"]
 
 
 class QuadraticFlux(_Objective):

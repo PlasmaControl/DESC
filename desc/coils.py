@@ -1,5 +1,6 @@
 """Classes for magnetic field coils."""
 
+import functools
 import numbers
 from abc import ABC
 from collections.abc import MutableSequence
@@ -28,7 +29,7 @@ from desc.geometry import (
 from desc.grid import LinearGrid
 from desc.magnetic_fields import _MagneticField
 from desc.optimizable import Optimizable, OptimizableCollection, optimizable_parameter
-from desc.utils import equals, errorif, flatten_list, safenorm, warnif
+from desc.utils import cross, dot, equals, errorif, flatten_list, safenorm, warnif
 
 
 @jit
@@ -1460,6 +1461,33 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             return x, x_s
         return x
 
+    def _compute_linking_number(self, params=None, grid=None):
+        """Calculate linking numbers for coils in the coilset.
+
+        Parameters
+        ----------
+        params : dict or array-like of dict, optional
+            Parameters to pass to coils, either the same for all coils or one for each.
+        grid : Grid or int, optional
+            Grid of coordinates to evaluate at. Defaults to a Linear grid.
+            If an integer, uses that many equally spaced points.
+
+        Returns
+        -------
+        link : ndarray, shape(num_coils, num_coils)
+            Linking number of each coil with each other coil. link=0 means they are not
+            linked, +/- 1 means the coils link each other in one direction or another.
+
+        """
+        if grid is None:
+            grid = LinearGrid(N=50)
+        dx = grid.spacing[:, 2]
+        x, x_s = self._compute_position(params, grid, dx1=True, basis="xyz")
+        link = _linking_number(
+            x[:, None], x[None, :], x_s[:, None], x_s[None, :], dx, dx
+        )
+        return link / (4 * jnp.pi)
+
     def _compute_A_or_B(
         self,
         coords,
@@ -2845,3 +2873,18 @@ class MixedCoilSet(CoilSet):
         if ignore_groups:
             cset = cls(*flatten_coils(cset), check_intersection=check_intersection)
         return cset
+
+
+@functools.partial(jnp.vectorize, signature="(m,3),(n,3),(m,3),(n,3),(m),(n)->()")
+def _linking_number(x1, x2, x1_s, x2_s, dx1, dx2):
+    """Linking number between curves x1 and x2 with tangents x1_s, x2_s."""
+    x1_s *= dx1[:, None]
+    x2_s *= dx2[:, None]
+    dx = x1[:, None, :] - x2[None, :, :]  # shape(m,n,3)
+    dx_norm = safenorm(dx, axis=-1)  # shape(m,n)
+    den = dx_norm**3
+    dr1xdr2 = cross(x1_s[:, None, :], x2_s[None, :, :], axis=-1)  # shape(m,n,3)
+    num = dot(dx, dr1xdr2, axis=-1)  # shape(m,n)
+    small = dx_norm < jnp.finfo(x1.dtype).eps
+    ratio = jnp.where(small, 0.0, num / jnp.where(small, 1.0, den))
+    return ratio.sum()

@@ -32,7 +32,6 @@ maxiter = 200
 # solver methods
 optimizer = lsq-exact
 objective = vacuum
-bdry_mode = lcfs
 spectral_indexing = ansi
 
 # pressure and rotational transform/current profiles

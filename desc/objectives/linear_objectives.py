@@ -257,13 +257,13 @@ class BoundaryRSelfConsistency(_Objective):
     _linear = True
     _fixed = False  # not "diagonal", since it is fixing a sum
     _units = "(m)"
-    _print_value_fmt = "R boundary self consistency error: "
+    _print_value_fmt = "LCFS R self consistency error: "
 
     def __init__(
         self,
         eq,
         surface_label=None,
-        name="self_consistency R",
+        name="self_consistency lcfs R",
     ):
         self._surface_label = surface_label
         super().__init__(
@@ -290,26 +290,21 @@ class BoundaryRSelfConsistency(_Objective):
         """
         eq = self.things[0]
         modes = eq.surface.R_basis.modes
-        idx = np.arange(eq.surface.R_basis.num_modes)
-
-        self._dim_f = idx.size
+        self._dim_f = eq.surface.R_basis.num_modes
         self._A = np.zeros((self._dim_f, eq.R_basis.num_modes))
+
         Js = []
         surf = eq.surface.rho if self._surface_label is None else self._surface_label
         for i, (l, m, n) in enumerate(eq.R_basis.modes):
-            if eq.bdry_mode == "lcfs":
-                j = np.argwhere((modes[:, 1:] == [m, n]).all(axis=1))
-                Js.append(j.flatten())
-            else:
-                raise NotImplementedError(
-                    "bdry_mode is not lcfs, yell at Dario to finish poincare stuff"
-                )
+            j = np.argwhere((modes[:, 1:] == [m, n]).all(axis=1))
+            Js.append(j.flatten())
         Js = np.array(Js)
         # Broadcasting at once is faster. We need to use np.arange to avoid
         # setting the value to the whole row.
         self._A[Js[:, 0], np.arange(eq.R_basis.num_modes)] = zernike_radial(
             surf, eq.R_basis.modes[:, 0], eq.R_basis.modes[:, 1]
         )
+
         super().build(use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
@@ -356,13 +351,13 @@ class BoundaryZSelfConsistency(_Objective):
     _linear = True
     _fixed = False  # not "diagonal", since it is fixing a sum
     _units = "(m)"
-    _print_value_fmt = "Z boundary self consistency error: "
+    _print_value_fmt = "LCFS Z self consistency error: "
 
     def __init__(
         self,
         eq,
         surface_label=None,
-        name="self_consistency Z",
+        name="self_consistency lcfs Z",
     ):
         self._surface_label = surface_label
         super().__init__(
@@ -391,26 +386,20 @@ class BoundaryZSelfConsistency(_Objective):
         """
         eq = self.things[0]
         modes = eq.surface.Z_basis.modes
-        idx = np.arange(eq.surface.Z_basis.num_modes)
-
-        self._dim_f = idx.size
+        self._dim_f = eq.surface.Z_basis.num_modes
         self._A = np.zeros((self._dim_f, eq.Z_basis.num_modes))
         Js = []
         surf = eq.surface.rho if self._surface_label is None else self._surface_label
         for i, (l, m, n) in enumerate(eq.Z_basis.modes):
-            if eq.bdry_mode == "lcfs":
-                j = np.argwhere((modes[:, 1:] == [m, n]).all(axis=1))
-                Js.append(j.flatten())
-            else:
-                raise NotImplementedError(
-                    "bdry_mode is not lcfs, yell at Dario to finish poincare stuff"
-                )
+            j = np.argwhere((modes[:, 1:] == [m, n]).all(axis=1))
+            Js.append(j.flatten())
         Js = np.array(Js)
         # Broadcasting at once is faster. We need to use np.arange to avoid
         # setting the value to the whole row.
         self._A[Js[:, 0], np.arange(eq.Z_basis.num_modes)] = zernike_radial(
             surf, eq.Z_basis.modes[:, 0], eq.Z_basis.modes[:, 1]
         )
+
         super().build(use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
@@ -436,6 +425,262 @@ class BoundaryZSelfConsistency(_Objective):
         return jnp.dot(self._A, params["Z_lmn"]) - params["Zb_lmn"]
 
 
+class SectionRSelfConsistency(_Objective):
+    """Ensure that the boundary and interior surfaces are self-consistent.
+
+    Note: this constraint is automatically applied when needed, and does not need to be
+    included by the user.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Equilibrium that will be optimized to satisfy the Objective.
+    surface_label : float, optional
+        Surface to enforce boundary conditions on. Defaults to Equilibrium.surface.rho
+    name : str, optional
+        Name of the objective function.
+
+    """
+
+    _scalar = False
+    _linear = True
+    _fixed = False
+    _units = "(m)"
+    _print_value_fmt = "Cross-section R self consistency error: "
+
+    def __init__(
+        self,
+        eq,
+        name="self_consistency section R",
+    ):
+        super().__init__(
+            things=eq,
+            target=0,
+            bounds=None,
+            weight=1,
+            normalize=False,
+            normalize_target=False,
+            name=name,
+        )
+
+    def build(self, use_jit=False, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        eq = self.things[0]
+
+        errorif(
+            eq.xsection.zeta != 0,
+            f"Zeta value must be 0, the given value is {eq.xsection.zeta}",
+        )
+
+        modes = eq.xsection.R_basis.modes
+        self._dim_f = eq.xsection.R_basis.num_modes
+        self._A = np.zeros((self._dim_f, eq.R_basis.num_modes))
+
+        for i, (l, m, n) in enumerate(modes):
+            j = np.argwhere(
+                np.logical_and(
+                    (eq.R_basis.modes[:, :-1] == [l, m]).all(axis=1),
+                    eq.R_basis.modes[:, 2] >= 0,
+                )
+            )
+            self._A[i, j] = 1
+
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, params, constants=None):
+        """Compute boundary R self-consistency errors.
+
+        IE, the mismatch between the Fourier-Zernike basis evaluated at rho=1 and the
+        double Fourier series defining the equilibrium LCFS
+
+        Parameters
+        ----------
+        params : dict
+            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
+
+        Returns
+        -------
+        f : ndarray
+            boundary R self-consistency errors.
+
+        """
+        return jnp.dot(self._A, params["R_lmn"]) - params["Rp_lmn"]
+
+
+class SectionZSelfConsistency(_Objective):
+    """Keeps the coefficients same as the given cross-section values at cross-section.
+
+    Note: this constraint is automatically applied when needed, and does not need to be
+    included by the user.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Equilibrium that will be optimized to satisfy the Objective.
+    surface_label : float, optional
+        Surface to enforce boundary conditions on. Defaults to Equilibrium.surface.rho
+    name : str, optional
+        Name of the objective function.
+
+    """
+
+    _scalar = False
+    _linear = True
+    _fixed = False
+    _units = "(m)"
+    _print_value_fmt = "Cross-section Z self consistency error: "
+
+    def __init__(
+        self,
+        eq,
+        name="self_consistency section Z",
+    ):
+        super().__init__(
+            things=eq,
+            target=0,
+            bounds=None,
+            weight=1,
+            normalize=False,
+            normalize_target=False,
+            name=name,
+        )
+
+    def build(self, use_jit=False, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        eq = self.things[0]
+
+        errorif(
+            eq.xsection.zeta != 0,
+            f"Zeta value must be 0, the given value is {eq.xsection.zeta}",
+        )
+
+        modes = eq.xsection.Z_basis.modes
+        self._dim_f = eq.xsection.Z_basis.num_modes
+        self._A = np.zeros((self._dim_f, eq.Z_basis.num_modes))
+
+        for i, (l, m, n) in enumerate(modes):
+            j = np.argwhere(
+                np.logical_and(
+                    (eq.Z_basis.modes[:, :-1] == [l, m]).all(axis=1),
+                    eq.Z_basis.modes[:, 2] >= 0,
+                )
+            )
+            self._A[i, j] = 1
+
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, params, constants=None):
+        """Compute deviation from desired boundary."""
+        return jnp.dot(self._A, params["Z_lmn"]) - params["Zp_lmn"]
+
+
+class SectionLambdaSelfConsistency(_Objective):
+    """Enforces lambda values at cross-section.
+
+    Parameters
+    ----------
+    eq : Equilibrium, optional
+        Equilibrium that will be optimized to satisfy the Objective.
+    target : float, ndarray, optional
+        Value to fix lambda to at rho=0 and (theta=0,zeta=0)
+    bounds : tuple of {float, ndarray}, optional
+        Lower and upper bounds on the objective. Overrides target.
+        Both bounds must be broadcastable to to Objective.dim_f
+    weight : float, ndarray, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        len(weight) must be equal to Objective.dim_f
+    name : str
+        Name of the objective function.
+    """
+
+    _scalar = False
+    _linear = True
+    _fixed = False
+    _units = "(dimensionless)"
+    _print_value_fmt = "Cross-section λ self consistency error: "
+
+    def __init__(
+        self,
+        eq,
+        surface_label=None,
+        name="self_consistency section λ",
+    ):
+        super().__init__(
+            things=eq,
+            target=0,
+            bounds=None,
+            weight=1,
+            normalize=False,
+            normalize_target=False,
+            name=name,
+        )
+
+    def build(self, use_jit=False, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+        """
+        eq = self.things[0]
+
+        errorif(
+            eq.xsection.zeta != 0,
+            f"Zeta value must be 0, the given value is {eq.xsection.zeta}",
+        )
+
+        L_modes = eq.L_basis.modes
+        dim_L = eq.L_basis.num_modes
+
+        Lp_modes = eq.xsection.L_basis.modes
+        self._dim_f = eq.xsection.L_basis.num_modes
+        self._A = np.zeros((self._dim_f, dim_L))
+
+        for i, (l, m, n) in enumerate(Lp_modes):
+            j = np.argwhere(
+                np.logical_and(
+                    (L_modes[:, :-1] == [l, m]).all(axis=1),
+                    L_modes[:, 2] >= 0,
+                )
+            )
+            self._A[i, j] = 1
+
+        if self.target is not None:
+            self._dim_f = self._A.shape[0]
+
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, params, constants=None):
+        """Compute deviation from desired boundary."""
+        return jnp.dot(self._A, params["L_lmn"]) - params["Lp_lmn"]
+
+
 class AxisRSelfConsistency(_Objective):
     """Ensure consistency between Zernike and Fourier coefficients on axis.
 
@@ -455,12 +700,12 @@ class AxisRSelfConsistency(_Objective):
     _linear = True
     _fixed = False  # not "diagonal", since it is fixing a sum
     _units = "(m)"
-    _print_value_fmt = "R axis self consistency error: "
+    _print_value_fmt = "Axis R self consistency error: "
 
     def __init__(
         self,
         eq,
-        name="axis R self consistency",
+        name="self_consistency axis R",
     ):
         super().__init__(
             things=eq,
@@ -543,12 +788,12 @@ class AxisZSelfConsistency(_Objective):
     _linear = True
     _fixed = False  # not "diagonal", since it is fixing a sum
     _units = "(m)"
-    _print_value_fmt = "Z axis self consistency error: "
+    _print_value_fmt = "Axis Z self consistency error: "
 
     def __init__(
         self,
         eq,
-        name="axis Z self consistency",
+        name="self_consistency axis Z",
     ):
         super().__init__(
             things=eq,
@@ -645,7 +890,7 @@ class FixBoundaryR(FixParameters):
     """
 
     _units = "(m)"
-    _print_value_fmt = "R boundary error: "
+    _print_value_fmt = "LCFS R error: "
 
     def __init__(
         self,
@@ -656,7 +901,7 @@ class FixBoundaryR(FixParameters):
         normalize=True,
         normalize_target=True,
         modes=True,
-        name="lcfs R",
+        name="fixed LCFS R",
     ):
         if isinstance(modes, bool):
             indices = modes
@@ -726,7 +971,7 @@ class FixBoundaryZ(FixParameters):
     """
 
     _units = "(m)"
-    _print_value_fmt = "Z boundary error: "
+    _print_value_fmt = "LCFS Z error: "
 
     def __init__(
         self,
@@ -737,7 +982,7 @@ class FixBoundaryZ(FixParameters):
         normalize=True,
         normalize_target=True,
         modes=True,
-        name="lcfs Z",
+        name="fixed LCFS Z",
     ):
         if isinstance(modes, bool):
             indices = modes
@@ -748,6 +993,249 @@ class FixBoundaryZ(FixParameters):
         super().__init__(
             thing=eq,
             params={"Zb_lmn": indices},
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            name=name,
+        )
+
+    def build(self, use_jit=False, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        eq = self.things[0]
+        if self._normalize:
+            scales = compute_scaling_factors(eq)
+            self._normalization = scales["a"]
+        super().build(use_jit=use_jit, verbose=verbose)
+
+
+class FixSectionR(FixParameters):
+    """Boundary condition on the R cross-section parameters.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Equilibrium that will be optimized to satisfy the Objective.
+    target : {float, ndarray}, optional
+        Target value(s) of the objective. Only used if bounds is None.
+        Must be broadcastable to Objective.dim_f. Defaults to ``target=eq.Rb_lmn``.
+    bounds : tuple of {float, ndarray}, optional
+        Lower and upper bounds on the objective. Overrides target.
+        Both bounds must be broadcastable to to Objective.dim_f.
+        Defaults to ``target=eq.Rb_lmn``.
+    weight : {float, ndarray}, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        Must be broadcastable to to Objective.dim_f
+    normalize : bool, optional
+        Whether to compute the error in physical units or non-dimensionalize.
+    normalize_target : bool, optional
+        Whether target and bounds should be normalized before comparing to computed
+        values. If `normalize` is `True` and the target is in physical units,
+        this should also be set to True.
+    modes : ndarray, optional
+        Basis modes numbers [l,m,n] of boundary modes to fix.
+        len(target) = len(weight) = len(modes).
+        If True/False uses all/none of the profile modes.
+    name : str, optional
+        Name of the objective function.
+
+    """
+
+    _units = "(m)"
+    _print_value_fmt = "Cross-section R error: "
+
+    def __init__(
+        self,
+        eq,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        modes=True,
+        name="fixed cross-section R",
+    ):
+        if isinstance(modes, bool):
+            indices = modes
+        else:
+            indices = np.array([], dtype=int)
+            for mode in np.atleast_2d(modes):
+                indices = np.append(indices, eq.xsection.R_basis.get_idx(*mode))
+        super().__init__(
+            thing=eq,
+            params={"Rp_lmn": indices},
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            name=name,
+        )
+
+    def build(self, use_jit=False, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        eq = self.things[0]
+        if self._normalize:
+            scales = compute_scaling_factors(eq)
+            self._normalization = scales["a"]
+        super().build(use_jit=use_jit, verbose=verbose)
+
+
+class FixSectionZ(FixParameters):
+    """Boundary condition on the Z cross-section parameters.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Equilibrium that will be optimized to satisfy the Objective.
+    target : {float, ndarray}, optional
+        Target value(s) of the objective. Only used if bounds is None.
+        Must be broadcastable to Objective.dim_f. Defaults to ``target=eq.Rb_lmn``.
+    bounds : tuple of {float, ndarray}, optional
+        Lower and upper bounds on the objective. Overrides target.
+        Both bounds must be broadcastable to to Objective.dim_f.
+        Defaults to ``target=eq.Rb_lmn``.
+    weight : {float, ndarray}, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        Must be broadcastable to to Objective.dim_f
+    normalize : bool, optional
+        Whether to compute the error in physical units or non-dimensionalize.
+    normalize_target : bool, optional
+        Whether target and bounds should be normalized before comparing to computed
+        values. If `normalize` is `True` and the target is in physical units,
+        this should also be set to True.
+    modes : ndarray, optional
+        Basis modes numbers [l,m,n] of boundary modes to fix.
+        len(target) = len(weight) = len(modes).
+        If True/False uses all/none of the profile modes.
+    name : str, optional
+        Name of the objective function.
+
+    """
+
+    _units = "(m)"
+    _print_value_fmt = "Cross-section Z error: "
+
+    def __init__(
+        self,
+        eq,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        modes=True,
+        name="fixed cross-section Z",
+    ):
+        if isinstance(modes, bool):
+            indices = modes
+        else:
+            indices = np.array([], dtype=int)
+            for mode in np.atleast_2d(modes):
+                indices = np.append(indices, eq.xsection.Z_basis.get_idx(*mode))
+        super().__init__(
+            thing=eq,
+            params={"Zp_lmn": indices},
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            name=name,
+        )
+
+    def build(self, use_jit=False, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        eq = self.things[0]
+        if self._normalize:
+            scales = compute_scaling_factors(eq)
+            self._normalization = scales["a"]
+        super().build(use_jit=use_jit, verbose=verbose)
+
+
+class FixSectionLambda(FixParameters):
+    """Boundary condition on the Lambda cross-section parameters.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Equilibrium that will be optimized to satisfy the Objective.
+    target : {float, ndarray}, optional
+        Target value(s) of the objective. Only used if bounds is None.
+        Must be broadcastable to Objective.dim_f. Defaults to ``target=eq.Rb_lmn``.
+    bounds : tuple of {float, ndarray}, optional
+        Lower and upper bounds on the objective. Overrides target.
+        Both bounds must be broadcastable to to Objective.dim_f.
+        Defaults to ``target=eq.Rb_lmn``.
+    weight : {float, ndarray}, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        Must be broadcastable to to Objective.dim_f
+    normalize : bool, optional
+        Whether to compute the error in physical units or non-dimensionalize.
+    normalize_target : bool, optional
+        Whether target and bounds should be normalized before comparing to computed
+        values. If `normalize` is `True` and the target is in physical units,
+        this should also be set to True.
+    modes : ndarray, optional
+        Basis modes numbers [l,m,n] of boundary modes to fix.
+        len(target) = len(weight) = len(modes).
+        If True/False uses all/none of the profile modes.
+    name : str, optional
+        Name of the objective function.
+
+    """
+
+    _units = "(m)"
+    _print_value_fmt = "Cross-section λ error: "
+
+    def __init__(
+        self,
+        eq,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        modes=True,
+        name="fixed cross-section λ",
+    ):
+        if isinstance(modes, bool):
+            indices = modes
+        else:
+            indices = np.array([], dtype=int)
+            for mode in np.atleast_2d(modes):
+                indices = np.append(indices, eq.xsection.L_basis.get_idx(*mode))
+        super().__init__(
+            thing=eq,
+            params={"Lp_lmn": indices},
             target=target,
             bounds=bounds,
             weight=weight,

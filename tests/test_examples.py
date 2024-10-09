@@ -1044,6 +1044,7 @@ def test_freeb_vacuum():
     objective = ObjectiveFunction(
         VacuumBoundaryError(eq=eq, field=ext_field, field_fixed=True),
         jac_chunk_size=1000,
+        deriv_mode="batched",
     )
     eq, _ = eq.optimize(
         objective,

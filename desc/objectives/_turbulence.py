@@ -2,10 +2,11 @@
 import numpy as np
 
 from desc.compute.utils import _compute as compute_fun
-from desc.compute.utils import get_profiles, get_transforms
+from desc.compute.utils import get_profiles, get_transforms, get_params
 from desc.backend import jnp
 from desc.utils import Timer
 
+from desc.grid import LinearGrid
 from .normalization import compute_scaling_factors
 from .objective_funs import _Objective
 from ..equilibrium.coords import get_rtz_grid
@@ -121,25 +122,42 @@ class EffectiveRadius(_Objective):
         """
         eq = self.things[0]
 
+        # we need a uniform grid to get correct surface averages for iota
+        iota_grid = LinearGrid(
+            rho=self._rho,
+            M=eq.M_grid,
+            N=eq.N_grid,
+            NFP=eq.NFP,
+        )
+        self._iota_keys = ["iota", "iota_r", "shear"]
+        iota_profiles = get_profiles(self._iota_keys, obj=eq, grid=iota_grid)
+        iota_transforms = get_transforms(self._iota_keys, obj=eq, grid=iota_grid)
+
+        # Separate grid to calculate the right length scale for normalization
+        len_grid = LinearGrid(rho=1.0, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
+        self._len_keys = ["a"]
+        len_profiles = get_profiles(self._len_keys, obj=eq, grid=len_grid)
+        len_transforms = get_transforms(self._len_keys, obj=eq, grid=len_grid)
+
         if self._grid is None:
             # Get value of iota on the chosen surface
             iota_grid = get_rtz_grid(
                 eq,
-                np.array(self._rho),
-                np.array(self._alpha),
-                np.array(0),
+                jnp.array(self._rho),
+                jnp.array(self._alpha),
+                jnp.array(0),
                 coordinates="rtz",
-                period=(np.inf,2*np.pi,np.inf),
+                period=(jnp.inf,2*jnp.pi,jnp.inf),
             )
-            iota = eq.compute("iota",grid=iota_grid)["iota"]
+            iota = eq.compute("iota",grid=iota_grid)["iota"][1]
             n_tor = self._n_pol/(iota*eq.NFP)
             grid = get_rtz_grid(
                 eq,
-                np.array(self._rho),
-                np.array(self._alpha),
-                np.linspace(0,2*n_tor*np.pi,self._n_pol*self._knots_per_transit),
+                jnp.array(self._rho),
+                jnp.array(self._alpha),
+                jnp.linspace(0,2*n_tor*jnp.pi,self._n_pol*self._knots_per_transit),
                 coordinates="raz",
-                period=(np.inf,2*np.pi,np.inf),
+                period=(jnp.inf,2*jnp.pi,jnp.inf),
             )
         else :
             grid = self._grid
@@ -153,9 +171,24 @@ class EffectiveRadius(_Objective):
         profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
         transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
 
+        zeta = jnp.linspace(0,2*jnp.pi * self._n_pol, self._n_pol * self._knots_per_transit)
+
+        self._args = get_params(
+            self._iota_keys + self._len_keys + self._data_keys,
+            obj="desc.equilibrium.equilibrium.Equilibrium",
+            has_axis=False,
+        )
+
         self._constants = {
+            "iota_transforms": iota_transforms,
+            "iota_profiles": iota_profiles,
+            "len_transforms": len_transforms,
+            "len_profiles": len_profiles,
             "transforms": transforms,
             "profiles": profiles,
+            "rho": self._rho,
+            "alpha": self._alpha,
+            "zeta": zeta,
         }
 
         timer.stop("Precomputing transforms")
@@ -185,15 +218,62 @@ class EffectiveRadius(_Objective):
 
         if constants is None:
             constants = self.constants
+
+        rho, alpha, zeta = constants["rho"], constants["alpha"], constants["zeta"]
+
+        # we first compute iota on a uniform grid to get correct averaging etc.
+        iota_data = compute_fun(
+            eq,
+            self._iota_keys,
+            params=params,
+            transforms=constants["iota_transforms"],
+            profiles=constants["iota_profiles"],
+        )
+
+        len_data = compute_fun(
+            eq,
+            self._len_keys,
+            params=params,
+            transforms=constants["len_transforms"],
+            profiles=constants["len_profiles"],
+        )
+
+        # we prime the data dict with the correct iota values so we don't recompute them
+        # using the wrong grid
+        data = {
+            "iota": iota_data["iota"][0],
+            "iota_r": iota_data["iota_r"][0],
+            "shear": iota_data["shear"][0],
+            "a" : len_data["a"],
+        }
+
+        grid = eq.get_rtz_grid(
+            rho,
+            alpha,
+            zeta,
+            coordinates="raz",
+            period=(jnp.inf, 2 * jnp.pi, jnp.inf),
+            params=params,
+        )
+
         data = compute_fun(
             eq,
             self._data_keys,
-            params=params,
+            params,
+            get_transforms(self._data_keys, eq, grid, jitable=True),
+            profiles=get_profiles(self._data_keys, eq, grid),
             data=data,
-            transforms=constants["transforms"],
-            profiles=constants["profiles"],
-        )
-        R_eff = data["R_eff"]
+        )["R_eff"]
+
+        # data = compute_fun(
+        #     eq,
+        #     self._data_keys,
+        #     params=params,
+        #     data=data,
+        #     transforms=constants["transforms"],
+        #     profiles=constants["profiles"],
+        # )
+        # R_eff = data["R_eff"]
         if self._target_type == "max":
             R_eff = jnp.max(R_eff)
         elif self._target_type == "mean":

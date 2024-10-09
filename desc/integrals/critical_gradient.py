@@ -1,6 +1,6 @@
 '''Methods for computing the critical gradient and effective radius of curvature'''
 
-import numpy as np
+from desc.backend import jnp
 from scipy.integrate import cumulative_trapezoid
 from scipy.optimize import curve_fit
 
@@ -10,7 +10,7 @@ from scipy.optimize import curve_fit
 # def get_field_line_grid(eq,rho=0.5,alpha=0,n_pol = 4,n_points = 200):
 #     '''Creates a field line aligned grid for chosen value of rho and alpha in rtz coordinates
     
-#     Notes : Toroidal grid in zeta is defined between 0 and 2*(n_pol/(iota*NFP))*np.pi
+#     Notes : Toroidal grid in zeta is defined between 0 and 2*(n_pol/(iota*NFP))*jnp.pi
 
 #     Parameters
 #         ----------
@@ -37,25 +37,25 @@ from scipy.optimize import curve_fit
 #     # Get initial grid to get iota value on the chosen field line
 #     initial_grid = get_rtz_grid(
 #         eq,
-#         np.array(rho),
-#         np.array(alpha),
-#         np.array(0),
+#         jnp.array(rho),
+#         jnp.array(alpha),
+#         jnp.array(0),
 #         coordinates="raz",
-#         period=(np.inf,2*np.pi,np.inf)
+#         period=(jnp.inf,2*jnp.pi,jnp.inf)
 #     )
-#     iota = np.abs(eq.compute("iota",grid=initial_grid)["iota"])
+#     iota = jnp.abs(eq.compute("iota",grid=initial_grid)["iota"])
 #     NFP = eq.NFP
 #     n_tor = n_pol/(iota*NFP)
-#     zeta = np.linspace(0,2*n_tor*np.pi,n_points*n_pol)
+#     zeta = jnp.linspace(0,2*n_tor*jnp.pi,n_points*n_pol)
 
 #     # Create output grid
 #     grid = get_rtz_grid(
 #         eq,
-#         np.array(rho),
-#         np.array(alpha),
+#         jnp.array(rho),
+#         jnp.array(alpha),
 #         zeta,
 #         coordinates="raz",
-#         period=(np.inf,2*np.pi,np.inf),
+#         period=(jnp.inf,2*jnp.pi,jnp.inf),
 #     )
 #     return grid
 
@@ -132,7 +132,7 @@ def fit_drift_peaks(l,Kd):
     val_0 = Kd[0]
     
     # Find indices where Kd changes sign (crosses zero)
-    zero_crossings = np.where(np.diff(np.sign(Kd)))[0]
+    zero_crossings = jnp.where(jnp.diff(jnp.sign(Kd)))[0]
     
     # Initialize lists to store valid peak intervals
     peak_indices = []
@@ -158,7 +158,7 @@ def fit_drift_peaks(l,Kd):
             continue
     
     # Define p0 for fitting, the importance is on the sign as the curve_fit has trouble when it has to change sign
-    p0 = np.sign(val_0)*np.array([1,1])
+    p0 = jnp.sign(val_0)*jnp.array([1,1])
 
     # Loop through valid peak indices and perform fitting
     for l_min_idx, l_max_idx in peak_indices:
@@ -169,7 +169,7 @@ def fit_drift_peaks(l,Kd):
         # Fit the quadratic curve to the peak
         popt,_ = curve_fit(Kd_quadratic,l_peak,Kd_peak,p0=p0)
 
-        R_eff = np.abs(1/popt[0])
+        R_eff = jnp.abs(1/popt[0])
         L_par = l[l_max_idx] - l[l_min_idx]
         
         # Store the peak data and fitting parameters

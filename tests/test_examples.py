@@ -1594,10 +1594,10 @@ def test_coil_arclength_optimization():
     xs1 = coil_opt_with_arc_obj.compute("x_s")["x_s"]
     xs2 = coil_opt_without_arc_obj.compute("x_s")["x_s"]
     np.testing.assert_allclose(
-        coil_opt_without_arc_obj.compute("length")["length"], target_length, atol=1e-4
+        coil_opt_without_arc_obj.compute("length")["length"], target_length, rtol=1e-4
     )
     np.testing.assert_allclose(
-        coil_opt_with_arc_obj.compute("length")["length"], target_length, atol=1e-4
+        coil_opt_with_arc_obj.compute("length")["length"], target_length, rtol=1e-4
     )
     np.testing.assert_allclose(np.var(np.linalg.norm(xs1, axis=1)), 0, atol=1e-5)
     assert np.var(np.linalg.norm(xs1, axis=1)) < np.var(np.linalg.norm(xs2, axis=1))

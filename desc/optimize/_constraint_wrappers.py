@@ -5,6 +5,7 @@ import functools
 import numpy as np
 
 from desc.backend import jit, jnp
+from desc.batching import batched_vectorize
 from desc.objectives import (
     BoundaryRSelfConsistency,
     BoundaryZSelfConsistency,
@@ -103,6 +104,7 @@ class LinearConstraintProjection(ObjectiveFunction):
             self._A,
             self._b,
             self._Z,
+            self._D,
             self._unfixed_idx,
             self._project,
             self._recover,
@@ -113,10 +115,8 @@ class LinearConstraintProjection(ObjectiveFunction):
         self._dim_x = self._objective.dim_x
         self._dim_x_reduced = self._Z.shape[1]
 
-        # equivalent matrix for A[unfixed_idx]@Z == A@unfixed_idx_mat
-        self._unfixed_idx_mat = (
-            jnp.eye(self._objective.dim_x)[:, self._unfixed_idx] @ self._Z
-        )
+        # equivalent matrix for A[unfixed_idx] @ D @ Z == A @ unfixed_idx_mat
+        self._unfixed_idx_mat = jnp.diag(self._D)[:, self._unfixed_idx] @ self._Z
 
         self._built = True
         timer.stop("Linear constraint projection build")
@@ -261,7 +261,7 @@ class LinearConstraintProjection(ObjectiveFunction):
         """
         x = self.recover(x_reduced)
         df = self._objective.grad(x, constants)
-        return df[self._unfixed_idx] @ self._Z
+        return df[self._unfixed_idx] @ (self._Z * self._D[self._unfixed_idx, None])
 
     def hess(self, x_reduced, constants=None):
         """Compute Hessian of self.compute_scalar.
@@ -281,14 +281,14 @@ class LinearConstraintProjection(ObjectiveFunction):
         """
         x = self.recover(x_reduced)
         df = self._objective.hess(x, constants)
-        return self._Z.T @ df[self._unfixed_idx, :][:, self._unfixed_idx] @ self._Z
+        return (
+            (self._Z.T * (1 / self._D)[None, self._unfixed_idx])
+            @ df[self._unfixed_idx, :][:, self._unfixed_idx]
+            @ (self._Z * self._D[self._unfixed_idx, None])
+        )
 
     def _jac(self, x_reduced, constants=None, op="scaled"):
         x = self.recover(x_reduced)
-        if self._objective._deriv_mode == "blocked":
-            fun = getattr(self._objective, "jac_" + op)
-            return fun(x, constants)[:, self._unfixed_idx] @ self._Z
-
         v = self._unfixed_idx_mat
         df = getattr(self._objective, "jvp_" + op)(v.T, x, constants)
         return df.T
@@ -401,7 +401,7 @@ class LinearConstraintProjection(ObjectiveFunction):
     def _vjp(self, v, x_reduced, constants=None, op="vjp_scaled"):
         x = self.recover(x_reduced)
         df = getattr(self._objective, op)(v, x, constants)
-        return df[self._unfixed_idx] @ self._Z
+        return df[self._unfixed_idx] @ (self._Z * self._D[self._unfixed_idx, None])
 
     def vjp_scaled(self, v, x_reduced, constants=None):
         """Compute vector-Jacobian product of self.compute_scaled.
@@ -533,8 +533,8 @@ class ProximalProjection(ObjectiveFunction):
             self._args.remove(arg)
         linear_constraint = ObjectiveFunction(self._linear_constraints)
         linear_constraint.build()
-        _, A, _, self._Z, self._unfixed_idx, _, _ = factorize_linear_constraints(
-            self._constraint, linear_constraint
+        _, _, _, self._Z, self._D, self._unfixed_idx, _, _ = (
+            factorize_linear_constraints(self._constraint, linear_constraint)
         )
 
         # dx/dc - goes from the full state to optimization variables for eq
@@ -618,14 +618,14 @@ class ProximalProjection(ObjectiveFunction):
         )
         self._dimx_per_thing = [t.dim_x for t in self.things]
 
-        # equivalent matrix for A[unfixed_idx]@Z == A@unfixed_idx_mat
+        # equivalent matrix for A[unfixed_idx] @ D @ Z == A @ unfixed_idx_mat
         self._unfixed_idx_mat = jnp.eye(self._objective.dim_x)
         self._unfixed_idx_mat = jnp.split(
             self._unfixed_idx_mat, np.cumsum([t.dim_x for t in self.things]), axis=-1
         )
-        self._unfixed_idx_mat[self._eq_idx] = (
-            self._unfixed_idx_mat[self._eq_idx][:, self._unfixed_idx] @ self._Z
-        )
+        self._unfixed_idx_mat[self._eq_idx] = self._unfixed_idx_mat[self._eq_idx][
+            :, self._unfixed_idx
+        ] @ (self._Z * self._D[self._unfixed_idx, None])
         self._unfixed_idx_mat = np.concatenate(
             [np.atleast_2d(foo) for foo in self._unfixed_idx_mat], axis=-1
         )
@@ -973,7 +973,9 @@ class ProximalProjection(ObjectiveFunction):
         constants = setdefault(constants, self.constants)
         xg, xf = self._update_equilibrium(x, store=True)
         jvpfun = lambda u: self._jvp(u, xf, xg, constants, op="scaled")
-        return jnp.vectorize(jvpfun, signature="(n)->(k)")(v)
+        return batched_vectorize(
+            jvpfun, signature="(n)->(k)", chunk_size=self._objective._jac_chunk_size
+        )(v)
 
     def jvp_scaled_error(self, v, x, constants=None):
         """Compute Jacobian-vector product of self.compute_scaled_error.
@@ -993,7 +995,9 @@ class ProximalProjection(ObjectiveFunction):
         constants = setdefault(constants, self.constants)
         xg, xf = self._update_equilibrium(x, store=True)
         jvpfun = lambda u: self._jvp(u, xf, xg, constants, op="scaled_error")
-        return jnp.vectorize(jvpfun, signature="(n)->(k)")(v)
+        return batched_vectorize(
+            jvpfun, signature="(n)->(k)", chunk_size=self._objective._jac_chunk_size
+        )(v)
 
     def jvp_unscaled(self, v, x, constants=None):
         """Compute Jacobian-vector product of self.compute_unscaled.
@@ -1013,22 +1017,10 @@ class ProximalProjection(ObjectiveFunction):
         constants = setdefault(constants, self.constants)
         xg, xf = self._update_equilibrium(x, store=True)
         jvpfun = lambda u: self._jvp(u, xf, xg, constants, op="unscaled")
-        return jnp.vectorize(jvpfun, signature="(n)->(k)")(v)
+        return batched_vectorize(
+            jvpfun, signature="(n)->(k)", chunk_size=self._objective._jac_chunk_size
+        )(v)
 
-    @functools.partial(jit, static_argnames=("self", "op"))
-    def _jvp_f(self, xf, dc, constants, op):
-        Fx = getattr(self._constraint, "jac_" + op)(xf, constants)
-        Fx_reduced = Fx[:, self._unfixed_idx] @ self._Z
-        Fc = Fx @ (self._dxdc @ dc)
-        Fxh = Fx_reduced
-        cutoff = jnp.finfo(Fxh.dtype).eps * max(Fxh.shape)
-        uf, sf, vtf = jnp.linalg.svd(Fxh, full_matrices=False)
-        sf += sf[-1]  # add a tiny bit of regularization
-        sfi = jnp.where(sf < cutoff * sf[0], 0, 1 / sf)
-        Fxh_inv = vtf.T @ (sfi[..., None] * uf.T)
-        return Fxh_inv @ Fc
-
-    @functools.partial(jit, static_argnames=("self", "op"))
     def _jvp(self, v, xf, xg, constants, op):
         # we're replacing stuff like this with jvps
         # Fx_reduced = Fx[:, unfixed_idx] @ Z               # noqa: E800
@@ -1041,7 +1033,17 @@ class ProximalProjection(ObjectiveFunction):
         # want jvp_f to only get parts from equilibrium, not other things
         vs = jnp.split(v, np.cumsum(self._dimc_per_thing))
         # this is Fx_reduced_inv @ Fc
-        dfdc = self._jvp_f(xf, vs[self._eq_idx], constants[1], op)
+        dfdc = _proximal_jvp_f_pure(
+            self._constraint,
+            xf,
+            constants[1],
+            vs[self._eq_idx],
+            self._unfixed_idx,
+            self._Z,
+            self._D,
+            self._dxdc,
+            op,
+        )
         # broadcasting against multiple things
         dfdcs = [jnp.zeros(dim) for dim in self._dimc_per_thing]
         dfdcs[self._eq_idx] = dfdc
@@ -1058,32 +1060,12 @@ class ProximalProjection(ObjectiveFunction):
             ]
         )
         tangent = self._unfixed_idx_mat @ dfdc - dxdcv
-        if self._objective._deriv_mode in ["batched", "looped"]:
+        if self._objective._deriv_mode in ["batched"]:
             out = getattr(self._objective, "jvp_" + op)(tangent, xg, constants[0])
         else:  # deriv_mode == "blocked"
             vgs = jnp.split(tangent, np.cumsum(self._dimx_per_thing))
             xgs = jnp.split(xg, np.cumsum(self._dimx_per_thing))
-            out = []
-            for obj, const in zip(
-                self._objective.objectives, self._objective.constants
-            ):
-                xi = [x for x, t in zip(xgs, self._objective.things) if t in obj.things]
-                vi = [v for v, t in zip(vgs, self._objective.things) if t in obj.things]
-                if obj._deriv_mode == "rev":
-                    # obj might now allow fwd mode, so compute full rev mode jacobian
-                    # and do matmul manually. This is slightly inefficient, but usually
-                    # when rev mode is used, dim_f <<< dim_x, so its not too bad.
-                    Ji = getattr(obj, "jac_" + op)(*xi, const)
-                    outi = jnp.array([Jii @ vii.T for Jii, vii in zip(Ji, vi)]).sum(
-                        axis=0
-                    )
-                    out.append(outi)
-                else:
-                    outi = getattr(obj, "jvp_" + op)(
-                        [_vi for _vi in vi], xi, constants=const
-                    ).T
-                    out.append(outi)
-            out = jnp.concatenate(out)
+            out = _proximal_jvp_blocked_pure(self._objective, vgs, xgs, op)
         return -out
 
     @property
@@ -1094,3 +1076,48 @@ class ProximalProjection(ObjectiveFunction):
     def __getattr__(self, name):
         """For other attributes we defer to the base objective."""
         return getattr(self._objective, name)
+
+
+# in ProximalProjection we have an explicit state that we keep track of (and add
+# to as we go) meaning if we jit anything with self static it doesn't update
+# correctly, while if we leave self unstatic then it recompiles every time because
+# the pytree structure of ProximalProjection is changing. To get around that we
+# define these helper functions that are stateless so we can safely jit them
+
+
+@functools.partial(jit, static_argnames=["op"])
+def _proximal_jvp_f_pure(constraint, xf, constants, dc, unfixed_idx, Z, D, dxdc, op):
+    Fx = getattr(constraint, "jac_" + op)(xf, constants)
+    Fx_reduced = Fx @ jnp.diag(D)[:, unfixed_idx] @ Z
+    Fc = Fx @ (dxdc @ dc)
+    Fxh = Fx_reduced
+    cutoff = jnp.finfo(Fxh.dtype).eps * max(Fxh.shape)
+    uf, sf, vtf = jnp.linalg.svd(Fxh, full_matrices=False)
+    sf += sf[-1]  # add a tiny bit of regularization
+    sfi = jnp.where(sf < cutoff * sf[0], 0, 1 / sf)
+    Fxh_inv = vtf.T @ (sfi[..., None] * uf.T)
+    return Fxh_inv @ Fc
+
+
+@functools.partial(jit, static_argnames=["op"])
+def _proximal_jvp_blocked_pure(objective, vgs, xgs, op):
+    out = []
+    for k, (obj, const) in enumerate(zip(objective.objectives, objective.constants)):
+        thing_idx = objective._things_per_objective_idx[k]
+        xi = [xgs[i] for i in thing_idx]
+        vi = [vgs[i] for i in thing_idx]
+        assert len(xi) > 0
+        assert len(vi) > 0
+        assert len(xi) == len(vi)
+        if obj._deriv_mode == "rev":
+            # obj might not allow fwd mode, so compute full rev mode jacobian
+            # and do matmul manually. This is slightly inefficient, but usually
+            # when rev mode is used, dim_f <<< dim_x, so its not too bad.
+            Ji = getattr(obj, "jac_" + op)(*xi, constants=const)
+            outi = jnp.array([Jii @ vii.T for Jii, vii in zip(Ji, vi)]).sum(axis=0)
+            out.append(outi)
+        else:
+            outi = getattr(obj, "jvp_" + op)([_vi for _vi in vi], xi, constants=const).T
+            out.append(outi)
+    out = jnp.concatenate(out)
+    return out

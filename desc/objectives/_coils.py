@@ -959,7 +959,7 @@ class PlasmaCoilSetMinDistance(_Objective):
 
 
 class CoilArclengthVariance(_CoilObjective):
-    """Variance of |dx/ds| along the curve.
+    """Variance of ||dx/ds|| along the curve.
 
     This objective is meant to combat any issues corresponding to non-uniqueness of
     the representation of a curve, in that the same physical curve can be represented

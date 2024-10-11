@@ -65,7 +65,6 @@ def compute(  # noqa: C901
 
     """
     basis = kwargs.pop("basis", "rpz").lower()
-    jitable = kwargs.pop("jitable", False)
     errorif(basis not in {"rpz", "xyz"}, NotImplementedError)
     p = _parse_parameterization(parameterization)
     if isinstance(names, str):
@@ -78,46 +77,46 @@ def compute(  # noqa: C901
     bad_kwargs = kwargs.keys() - allowed_kwargs
     if len(bad_kwargs) > 0:
         raise ValueError(f"Unrecognized argument(s): {bad_kwargs}")
-    if not jitable:
-        for name in names:
-            assert _has_params(name, params, p), f"Don't have params to compute {name}"
-            assert _has_profiles(
-                name, profiles, p
-            ), f"Don't have profiles to compute {name}"
-            assert _has_transforms(
-                name, transforms, p
-            ), f"Don't have transforms to compute {name}"
 
-        if "grid" in transforms:
+    for name in names:
+        assert _has_params(name, params, p), f"Don't have params to compute {name}"
+        assert _has_profiles(
+            name, profiles, p
+        ), f"Don't have profiles to compute {name}"
+        assert _has_transforms(
+            name, transforms, p
+        ), f"Don't have transforms to compute {name}"
 
-            def check_fun(name):
-                reqs = data_index[p][name]["grid_requirement"]
-                for req in reqs:
-                    errorif(
-                        not hasattr(transforms["grid"], req)
-                        or reqs[req] != getattr(transforms["grid"], req),
-                        AttributeError,
-                        f"Expected grid with '{req}:{reqs[req]}' to compute {name}.",
-                    )
+    if "grid" in transforms:
 
-                reqs = data_index[p][name]["source_grid_requirement"]
+        def check_fun(name):
+            reqs = data_index[p][name]["grid_requirement"]
+            for req in reqs:
                 errorif(
-                    reqs and not hasattr(transforms["grid"], "source_grid"),
+                    not hasattr(transforms["grid"], req)
+                    or reqs[req] != getattr(transforms["grid"], req),
                     AttributeError,
-                    f"Expected grid with attribute 'source_grid' to compute {name}. "
-                    f"Source grid should have coordinates: {reqs.get('coordinates')}.",
+                    f"Expected grid with '{req}:{reqs[req]}' to compute {name}.",
                 )
-                for req in reqs:
-                    errorif(
-                        not hasattr(transforms["grid"].source_grid, req)
-                        or reqs[req] != getattr(transforms["grid"].source_grid, req),
-                        AttributeError,
-                        f"Expected grid with '{req}:{reqs[req]}' to compute {name}.",
-                    )
 
-            _ = _get_deps(
-                p, names, set(), data, transforms["grid"].axis.size, check_fun=check_fun
+            reqs = data_index[p][name]["source_grid_requirement"]
+            errorif(
+                reqs and not hasattr(transforms["grid"], "source_grid"),
+                AttributeError,
+                f"Expected grid with attribute 'source_grid' to compute {name}. "
+                f"Source grid should have coordinates: {reqs.get('coordinates')}.",
             )
+            for req in reqs:
+                errorif(
+                    not hasattr(transforms["grid"].source_grid, req)
+                    or reqs[req] != getattr(transforms["grid"].source_grid, req),
+                    AttributeError,
+                    f"Expected grid with '{req}:{reqs[req]}' to compute {name}.",
+                )
+
+        _ = _get_deps(
+            p, names, set(), data, transforms["grid"].axis.size, check_fun=check_fun
+        )
 
     if data is None:
         data = {}

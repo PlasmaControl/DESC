@@ -189,7 +189,6 @@ class _CoilObjective(_Objective):
             params=params,
             transforms=constants["transforms"],
             grid=self._grid,
-            jitable=True,
         )
 
         return data

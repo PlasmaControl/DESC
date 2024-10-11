@@ -1362,3 +1362,116 @@ class ToroidalFlux(_Objective):
             )
 
         return Psi
+
+
+class CoilSetLinkingNumber(_Objective):
+    """Prevents coils from becoming interlinked.
+
+    The linking number of 2 curves is  (approximately) 0 if they are not linked, and
+    (approximately) +/-1 if they are (with the sign indicating the helicity of the
+    linking).
+
+    This objective returns a single value for each coil in the coilset, with that number
+    being the sum of the absolute value of the linking numbers of that coil with every
+    other coil in the coilset, approximating the number of other coils that are linked
+
+    Parameters
+    ----------
+    coil : CoilSet
+        Coil(s) that are to be optimized.
+    grid : Grid, list, optional
+        Collocation grid used to discretize each coil. Defaults to
+        ``LinearGrid(N=50)``
+
+    """
+
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``target=0``.",
+        bounds_default="``target=0``.",
+        coil=True,
+    )
+
+    _scalar = False
+    _units = "(dimensionless)"
+    _print_value_fmt = "Coil linking number: "
+
+    def __init__(
+        self,
+        coil,
+        grid=None,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        loss_function=None,
+        deriv_mode="auto",
+        jac_chunk_size=None,
+        name="coil-coil linking number",
+    ):
+        from desc.coils import CoilSet
+
+        if target is None and bounds is None:
+            target = 0
+        self._grid = grid
+        errorif(
+            not isinstance(coil, CoilSet),
+            ValueError,
+            "coil must be of type CoilSet, not an individual Coil",
+        )
+        super().__init__(
+            things=coil,
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            loss_function=loss_function,
+            deriv_mode=deriv_mode,
+            jac_chunk_size=jac_chunk_size,
+            name=name,
+        )
+
+    def build(self, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        coilset = self.things[0]
+        grid = self._grid or LinearGrid(N=50)
+
+        self._dim_f = coilset.num_coils
+        self._constants = {"coilset": coilset, "grid": grid, "quad_weights": 1.0}
+
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, params, constants=None):
+        """Compute minimum distances between coils.
+
+        Parameters
+        ----------
+        params : dict
+            Dictionary of coilset degrees of freedom, eg CoilSet.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc.
+            Defaults to self._constants.
+
+        Returns
+        -------
+        f : array of floats
+            Minimum distance to another coil for each coil in the coilset.
+
+        """
+        if constants is None:
+            constants = self.constants
+        link = constants["coilset"]._compute_linking_number(
+            params=params, grid=constants["grid"]
+        )
+
+        return jnp.abs(link).sum(axis=0)

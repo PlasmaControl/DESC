@@ -619,6 +619,7 @@ class _Grid(IOAble, ABC):
         -------
         x : ndarray
             Data reshaped to align with grid nodes.
+
         """
         errorif(
             not self.is_meshgrid,
@@ -637,7 +638,8 @@ class _Grid(IOAble, ABC):
             vec = True
             shape += (-1,)
         x = x.reshape(shape, order="F")
-        x = jnp.moveaxis(x, 1, 0)  # now shape rtz/raz etc
+        # swap to change shape from trz/arz to rtz/raz etc.
+        x = jnp.swapaxes(x, 1, 0)
         newax = tuple(self.coordinates.index(c) for c in order)
         if vec:
             newax += (3,)
@@ -788,10 +790,11 @@ class Grid(_Grid):
             rtz : rho, theta, zeta
         period : tuple of float
             Assumed periodicity for each coordinate.
-            Use np.inf to denote no periodicity.
+            Use ``np.inf`` to denote no periodicity.
         NFP : int
             Number of field periods (Default = 1).
-            Only makes sense to change from 1 if ``period[2]==2π``.
+            Only makes sense to change from 1 if last coordinate is periodic
+            with some constant divided by ``NFP``.
 
         Returns
         -------
@@ -1034,6 +1037,8 @@ class LinearGrid(_Grid):
         """
         self._NFP = check_posint(NFP, "NFP", False)
         self._period = (np.inf, 2 * np.pi, 2 * np.pi / self._NFP)
+        # TODO:
+        #  https://github.com/PlasmaControl/DESC/pull/1204#pullrequestreview-2246771337
         axis = bool(axis)
         endpoint = bool(endpoint)
         theta_period = self.period[1]
@@ -1643,24 +1648,26 @@ def most_rational(a, b, itol=1e-14):
     """
     a = float(_round(a, itol))
     b = float(_round(b, itol))
-    # handle empty range
+
+    # Handle empty range
     if a == b:
         return a
-    # ensure a < b
-    elif a > b:
-        c = a
-        a = b
-        b = c
-    # return 0 if in range
+
+    # Return 0 if in range
     if np.sign(a * b) <= 0:
         return 0
-    # handle negative ranges
-    elif np.sign(a) < 0:
+
+    # Handle negative ranges
+    if np.sign(a) < 0:
         s = -1
         a *= -1
         b *= -1
     else:
         s = 1
+
+    # Ensure a < b
+    if a > b:
+        a, b = b, a
 
     a_cf = dec_to_cf(a)
     b_cf = dec_to_cf(b)
@@ -1885,8 +1892,13 @@ def _periodic_spacing(x, period=2 * jnp.pi, sort=False, jnp=jnp):
         x = jnp.sort(x, axis=0)
     # choose dx to be half the distance between its neighbors
     if x.size > 1:
-        dx_0 = x[1] + (period - x[-1]) % period
-        dx_1 = x[0] + (period - x[-2]) % period
+        if np.isfinite(period):
+            dx_0 = x[1] + (period - x[-1]) % period
+            dx_1 = x[0] + (period - x[-2]) % period
+        else:
+            # just set to 0 to stop nan gradient, even though above gives expected value
+            dx_0 = 0
+            dx_1 = 0
         if x.size == 2:
             # then dx[0] == period and dx[-1] == 0, so fix this
             dx_1 = dx_0

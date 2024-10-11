@@ -36,6 +36,7 @@ from desc.objectives import (
     FixNearAxisLambda,
     FixNearAxisR,
     FixNearAxisZ,
+    FixOmniBmax,
     FixOmniMap,
     FixOmniWell,
     FixParameters,
@@ -309,13 +310,8 @@ def test_fixed_axis_and_theta_SFL_solve():
     orig_R_val = eq.axis.R_n
     orig_Z_val = eq.axis.Z_n
 
-    constraints = (
-        FixThetaSFL(eq=eq),
-        FixPressure(eq=eq),
-        FixCurrent(eq=eq),
-        FixPsi(eq=eq),
-        FixAxisR(eq=eq),
-        FixAxisZ(eq=eq),
+    constraints = (FixThetaSFL(eq=eq),) + get_NAE_constraints(
+        eq, None, order=0, fix_lambda=False
     )
 
     eq.solve(
@@ -918,6 +914,26 @@ def test_fix_omni_indices():
     constraint = FixOmniMap(field=field, indices=indices)
     constraint.build()
     assert constraint.dim_f == indices.size
+
+
+@pytest.mark.unit
+def test_fix_omni_Bmax():
+    """Test that omnigenity parameters are constrained for B_max to be a straight line.
+
+    Test for GH issue #1266.
+    """
+
+    def _test(M_x, N_x, NFP, sum):
+        field = OmnigenousField(L_x=2, M_x=M_x, N_x=N_x, NFP=NFP, helicity=(1, NFP))
+        constraint = FixOmniBmax(field=field)
+        constraint.build()
+        assert constraint.dim_f == (2 * field.N_x + 1) * (field.L_x + 1)
+        # 0 - 2 + 4 - 6 + 8 ...
+        np.testing.assert_allclose(constraint._A @ field.x_basis.modes[:, 1], sum)
+
+    _test(M_x=6, N_x=3, NFP=1, sum=-4)
+    _test(M_x=9, N_x=4, NFP=2, sum=4)
+    _test(M_x=12, N_x=5, NFP=3, sum=6)
 
 
 @pytest.mark.unit

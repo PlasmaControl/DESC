@@ -24,18 +24,20 @@ from desc.coils import (
 from desc.compute import get_transforms
 from desc.equilibrium import Equilibrium
 from desc.examples import get
-from desc.geometry import FourierRZToroidalSurface, FourierXYZCurve
+from desc.geometry import FourierPlanarCurve, FourierRZToroidalSurface, FourierXYZCurve
 from desc.grid import ConcentricGrid, LinearGrid, QuadratureGrid
 from desc.io import load
 from desc.magnetic_fields import (
     FourierCurrentPotentialField,
     OmnigenousField,
+    PoloidalMagneticField,
     SplineMagneticField,
     ToroidalMagneticField,
     VerticalMagneticField,
 )
 from desc.objectives import (
     AspectRatio,
+    BallooningStability,
     BootstrapRedlConsistency,
     BoundaryError,
     BScaleLength,
@@ -76,7 +78,7 @@ from desc.objectives import (
 )
 from desc.objectives._free_boundary import BoundaryErrorNESTOR
 from desc.objectives.normalization import compute_scaling_factors
-from desc.objectives.objective_funs import _Objective
+from desc.objectives.objective_funs import _Objective, collect_docs
 from desc.objectives.utils import softmax, softmin
 from desc.profiles import FourierZernikeProfile, PowerSeriesProfile
 from desc.utils import PRINT_WIDTH
@@ -368,6 +370,51 @@ class TestObjectiveFunction:
         np.testing.assert_allclose(f[idx_f][:120], B_mn[idx_B][:120])
 
     @pytest.mark.unit
+    def test_qh_boozer_multiple_surfaces(self):
+        """Test for computing Boozer error on multiple surfaces."""
+        eq = get("WISTELL-A")  # WISTELL-A is optimized for QH symmetry
+        helicity = (1, -eq.NFP)
+        M_booz = eq.M
+        N_booz = eq.N
+        grid1 = LinearGrid(rho=0.5, M=2 * eq.M, N=2 * eq.N, NFP=eq.NFP, sym=False)
+        grid2 = LinearGrid(rho=1.0, M=2 * eq.M, N=2 * eq.N, NFP=eq.NFP, sym=False)
+        grid3 = LinearGrid(
+            rho=np.array([0.5, 1.0]), M=2 * eq.M, N=2 * eq.N, NFP=eq.NFP, sym=False
+        )
+
+        obj1 = QuasisymmetryBoozer(
+            helicity=helicity,
+            M_booz=M_booz,
+            N_booz=N_booz,
+            grid=grid1,
+            normalize=False,
+            eq=eq,
+        )
+        obj2 = QuasisymmetryBoozer(
+            helicity=helicity,
+            M_booz=M_booz,
+            N_booz=N_booz,
+            grid=grid2,
+            normalize=False,
+            eq=eq,
+        )
+        obj3 = QuasisymmetryBoozer(
+            helicity=helicity,
+            M_booz=M_booz,
+            N_booz=N_booz,
+            grid=grid3,
+            normalize=False,
+            eq=eq,
+        )
+        obj1.build()
+        obj2.build()
+        obj3.build()
+        f1 = obj1.compute_unscaled(*obj1.xs(eq))
+        f2 = obj2.compute_unscaled(*obj2.xs(eq))
+        f3 = obj3.compute_unscaled(*obj3.xs(eq))
+        np.testing.assert_allclose(f3, np.concatenate([f1, f2]), atol=1e-14)
+
+    @pytest.mark.unit
     def test_qs_twoterm(self):
         """Test calculation of two term QS metric."""
 
@@ -438,11 +485,6 @@ class TestObjectiveFunction:
 
         # symmetric grid
         grid = LinearGrid(M=eq.M, N=eq.N, NFP=eq.NFP, sym=True)
-        with pytest.raises(ValueError):
-            QuasisymmetryBoozer(eq=eq, grid=grid).build()
-
-        # multiple flux surfaces
-        grid = LinearGrid(M=eq.M, N=eq.N, NFP=eq.NFP, rho=[0.25, 0.5, 0.75, 1])
         with pytest.raises(ValueError):
             QuasisymmetryBoozer(eq=eq, grid=grid).build()
 
@@ -869,6 +911,13 @@ class TestObjectiveFunction:
         test(mixed_coils)
         test(nested_coils, grid=grid)
 
+    def test_coil_type_error(self):
+        """Tests error when objective is not passed a coil."""
+        curve = FourierPlanarCurve(r_n=2, basis="rpz")
+        obj = CoilLength(curve)
+        with pytest.raises(TypeError):
+            obj.build()
+
     @pytest.mark.unit
     def test_coil_min_distance(self):
         """Tests minimum distance between coils in a coilset."""
@@ -1113,10 +1162,14 @@ class TestObjectiveFunction:
     @pytest.mark.unit
     def test_toroidal_flux(self):
         """Test calculation of toroidal flux from coils."""
-        grid1 = LinearGrid(L=10, M=10, zeta=np.array(0.0))
+        grid1 = LinearGrid(L=0, M=40, zeta=np.array(0.0))
 
         def test(eq, field, correct_value, rtol=1e-14, grid=None):
-            obj = ToroidalFlux(eq=eq, field=field, eval_grid=grid)
+            obj = ToroidalFlux(
+                eq=eq,
+                field=field,
+                eval_grid=grid,
+            )
             obj.build(verbose=2)
             torflux = obj.compute_unscaled(*obj.xs(field))
             np.testing.assert_allclose(torflux, correct_value, rtol=rtol)
@@ -1126,22 +1179,20 @@ class TestObjectiveFunction:
         field = ToroidalMagneticField(B0=1, R0=1)
         # calc field Psi
 
-        data = eq.compute(["R", "phi", "Z", "|e_rho x e_theta|", "n_zeta"], grid=grid1)
-        field_B = field.compute_magnetic_field(
+        data = eq.compute(["R", "phi", "Z", "e_theta"], grid=grid1)
+        field_A = field.compute_magnetic_vector_potential(
             np.vstack([data["R"], data["phi"], data["Z"]]).T
         )
 
-        B_dot_n_zeta = jnp.sum(field_B * data["n_zeta"], axis=1)
+        A_dot_e_theta = jnp.sum(field_A * data["e_theta"], axis=1)
 
-        psi_from_field = np.sum(
-            grid1.spacing[:, 0]
-            * grid1.spacing[:, 1]
-            * data["|e_rho x e_theta|"]
-            * B_dot_n_zeta
-        )
-        eq.change_resolution(L_grid=10, M_grid=10)
+        psi_from_field = np.sum(grid1.spacing[:, 1] * A_dot_e_theta)
+        eq.change_resolution(L_grid=20, M_grid=20)
 
         test(eq, field, psi_from_field)
+        test(eq, field, psi_from_field, rtol=1e-3)
+        # test on field with no vector potential
+        test(eq, PoloidalMagneticField(1, 1, 1), 0.0)
 
     @pytest.mark.unit
     def test_signed_plasma_vessel_distance(self):
@@ -1234,33 +1285,68 @@ def test_derivative_modes():
     surf = FourierRZToroidalSurface()
     obj1 = ObjectiveFunction(
         [
-            PlasmaVesselDistance(eq, surf),
+            PlasmaVesselDistance(eq, surf, jac_chunk_size=1),
             MagneticWell(eq),
+            AspectRatio(eq),
         ],
         deriv_mode="batched",
         use_jit=False,
     )
     obj2 = ObjectiveFunction(
         [
-            PlasmaVesselDistance(eq, surf),
+            PlasmaVesselDistance(eq, surf, jac_chunk_size=2),
             MagneticWell(eq),
+            AspectRatio(eq, jac_chunk_size=None),
         ],
         deriv_mode="blocked",
+        jac_chunk_size=10,
         use_jit=False,
     )
-    obj3 = ObjectiveFunction(
+    with pytest.warns(DeprecationWarning, match="looped"):
+        obj3 = ObjectiveFunction(
+            [
+                PlasmaVesselDistance(eq, surf),
+                MagneticWell(eq),
+                AspectRatio(eq),
+            ],
+            deriv_mode="looped",
+            use_jit=False,
+        )
+    with pytest.raises(ValueError, match="jac_chunk_size"):
+        obj1.build()
+    with pytest.raises(ValueError, match="jac_chunk_size"):
+        obj2.build()
+    obj1 = ObjectiveFunction(
         [
             PlasmaVesselDistance(eq, surf),
             MagneticWell(eq),
+            AspectRatio(eq),
         ],
-        deriv_mode="looped",
+        deriv_mode="batched",
+        jac_chunk_size="auto",
         use_jit=False,
     )
-
+    obj2 = ObjectiveFunction(
+        [
+            PlasmaVesselDistance(eq, surf, jac_chunk_size=2),
+            MagneticWell(eq),
+            AspectRatio(eq, jac_chunk_size=None),
+        ],
+        deriv_mode="blocked",
+        jac_chunk_size="auto",
+        use_jit=False,
+    )
     obj1.build()
     obj2.build()
+    # check that default size works for blocked
+    assert obj2.objectives[0]._jac_chunk_size == 2
+    assert obj2.objectives[1]._jac_chunk_size > 0
+    assert obj2.objectives[2]._jac_chunk_size > 0
+    # hard to say what size auto will give, just check it is >0
+    assert obj1._jac_chunk_size > 0
     obj3.build()
     x = obj1.x(eq, surf)
+    v = jnp.ones_like(x)
     g1 = obj1.grad(x)
     g2 = obj2.grad(x)
     g3 = obj3.grad(x)
@@ -1281,6 +1367,48 @@ def test_derivative_modes():
     H3 = obj3.hess(x)
     np.testing.assert_allclose(H1, H2, atol=1e-10)
     np.testing.assert_allclose(H1, H3, atol=1e-10)
+    j1 = obj1.jvp_scaled(v, x)
+    j2 = obj2.jvp_scaled(v, x)
+    j3 = obj3.jvp_scaled(v, x)
+    np.testing.assert_allclose(j1, j2, atol=1e-10)
+    np.testing.assert_allclose(j1, j3, atol=1e-10)
+
+
+@pytest.mark.unit
+def test_fwd_rev():
+    """Test that forward and reverse mode jvps etc give same results."""
+    eq = Equilibrium()
+    obj1 = MeanCurvature(eq, deriv_mode="fwd")
+    obj2 = MeanCurvature(eq, deriv_mode="rev")
+    obj1.build()
+    obj2.build()
+
+    x = eq.pack_params(eq.params_dict)
+    J1 = obj1.jac_scaled(x)
+    J2 = obj2.jac_scaled(x)
+    np.testing.assert_allclose(J1, J2, atol=1e-14)
+
+    jvp1 = obj1.jvp_scaled(x, jnp.ones_like(x))
+    jvp2 = obj2.jvp_scaled(x, jnp.ones_like(x))
+    np.testing.assert_allclose(jvp1, jvp2, atol=1e-14)
+
+    surf = FourierRZToroidalSurface()
+    obj1 = PlasmaVesselDistance(eq, surf, deriv_mode="fwd")
+    obj2 = PlasmaVesselDistance(eq, surf, deriv_mode="rev")
+    obj1.build()
+    obj2.build()
+
+    x1 = eq.pack_params(eq.params_dict)
+    x2 = surf.pack_params(surf.params_dict)
+
+    J1a, J1b = obj1.jac_scaled(x1, x2)
+    J2a, J2b = obj2.jac_scaled(x1, x2)
+    np.testing.assert_allclose(J1a, J2a, atol=1e-14)
+    np.testing.assert_allclose(J1b, J2b, atol=1e-14)
+
+    jvp1 = obj1.jvp_scaled((x1, x2), (jnp.ones_like(x1), jnp.ones_like(x2)))
+    jvp2 = obj2.jvp_scaled((x1, x2), (jnp.ones_like(x1), jnp.ones_like(x2)))
+    np.testing.assert_allclose(jvp1, jvp2, atol=1e-14)
 
 
 @pytest.mark.unit
@@ -2228,7 +2356,9 @@ class TestComputeScalarResolution:
     @pytest.mark.regression
     def test_compute_scalar_resolution_boundary_error(self):
         """BoundaryError."""
-        ext_field = SplineMagneticField.from_mgrid(r"tests/inputs/mgrid_solovev.nc")
+        with pytest.warns(UserWarning):
+            # user warning because saved mgrid no vector potential
+            ext_field = SplineMagneticField.from_mgrid(r"tests/inputs/mgrid_solovev.nc")
 
         pres = PowerSeriesProfile([1.25e-1, 0, -1.25e-1])
         iota = PowerSeriesProfile([-4.9e-1, 0, 3.0e-1])
@@ -2254,7 +2384,9 @@ class TestComputeScalarResolution:
     @pytest.mark.regression
     def test_compute_scalar_resolution_vacuum_boundary_error(self):
         """VacuumBoundaryError."""
-        ext_field = SplineMagneticField.from_mgrid(r"tests/inputs/mgrid_solovev.nc")
+        with pytest.warns(UserWarning):
+            # user warning because saved mgrid no vector potential
+            ext_field = SplineMagneticField.from_mgrid(r"tests/inputs/mgrid_solovev.nc")
 
         pres = PowerSeriesProfile([1.25e-1, 0, -1.25e-1])
         iota = PowerSeriesProfile([-4.9e-1, 0, 3.0e-1])
@@ -2281,7 +2413,8 @@ class TestComputeScalarResolution:
     @pytest.mark.regression
     def test_compute_scalar_resolution_quadratic_flux(self):
         """VacuumBoundaryError."""
-        ext_field = SplineMagneticField.from_mgrid(r"tests/inputs/mgrid_solovev.nc")
+        with pytest.warns(UserWarning):
+            ext_field = SplineMagneticField.from_mgrid(r"tests/inputs/mgrid_solovev.nc")
 
         pres = PowerSeriesProfile([1.25e-1, 0, -1.25e-1])
         iota = PowerSeriesProfile([-4.9e-1, 0, 3.0e-1])
@@ -2305,7 +2438,25 @@ class TestComputeScalarResolution:
         np.testing.assert_allclose(f, f[-1], rtol=5e-2)
 
     @pytest.mark.regression
-    def test_compute_scalar_resolution_toroidal_flux(self):
+    def test_compute_scalar_resolution_toroidal_flux_A(self):
+        """ToroidalFlux."""
+        ext_field = ToroidalMagneticField(1, 1)
+        eq = get("precise_QA")
+        with pytest.warns(UserWarning, match="Reducing radial"):
+            eq.change_resolution(4, 4, 4, 8, 8, 8)
+
+        f = np.zeros_like(self.res_array, dtype=float)
+        for i, res in enumerate(self.res_array):
+            eq.change_resolution(
+                L_grid=int(eq.L * res), M_grid=int(eq.M * res), N_grid=int(eq.N * res)
+            )
+            obj = ObjectiveFunction(ToroidalFlux(eq, ext_field), use_jit=False)
+            obj.build(verbose=0)
+            f[i] = obj.compute_scalar(obj.x())
+        np.testing.assert_allclose(f, f[-1], rtol=5e-2)
+
+    @pytest.mark.regression
+    def test_compute_scalar_resolution_toroidal_flux_B(self):
         """ToroidalFlux."""
         ext_field = ToroidalMagneticField(1, 1)
         eq = get("precise_QA")
@@ -2486,6 +2637,7 @@ class TestObjectiveNaNGrad:
     ]
     specials = [
         # these require special logic
+        BallooningStability,
         BootstrapRedlConsistency,
         BoundaryError,
         CoilLength,
@@ -2579,7 +2731,9 @@ class TestObjectiveNaNGrad:
     @pytest.mark.unit
     def test_objective_no_nangrad_boundary_error(self):
         """BoundaryError."""
-        ext_field = SplineMagneticField.from_mgrid(r"tests/inputs/mgrid_solovev.nc")
+        with pytest.warns(UserWarning):
+            # user warning because saved mgrid no vector potential
+            ext_field = SplineMagneticField.from_mgrid(r"tests/inputs/mgrid_solovev.nc")
 
         pres = PowerSeriesProfile([1.25e-1, 0, -1.25e-1])
         iota = PowerSeriesProfile([-4.9e-1, 0, 3.0e-1])
@@ -2600,7 +2754,9 @@ class TestObjectiveNaNGrad:
     @pytest.mark.unit
     def test_objective_no_nangrad_vacuum_boundary_error(self):
         """VacuumBoundaryError."""
-        ext_field = SplineMagneticField.from_mgrid(r"tests/inputs/mgrid_solovev.nc")
+        with pytest.warns(UserWarning):
+            # user warning because saved mgrid no vector potential
+            ext_field = SplineMagneticField.from_mgrid(r"tests/inputs/mgrid_solovev.nc")
 
         pres = PowerSeriesProfile([1.25e-1, 0, -1.25e-1])
         iota = PowerSeriesProfile([-4.9e-1, 0, 3.0e-1])
@@ -2623,7 +2779,9 @@ class TestObjectiveNaNGrad:
     @pytest.mark.unit
     def test_objective_no_nangrad_quadratic_flux(self):
         """QuadraticFlux."""
-        ext_field = SplineMagneticField.from_mgrid(r"tests/inputs/mgrid_solovev.nc")
+        with pytest.warns(UserWarning):
+            # user warning because saved mgrid no vector potential
+            ext_field = SplineMagneticField.from_mgrid(r"tests/inputs/mgrid_solovev.nc")
 
         pres = PowerSeriesProfile([1.25e-1, 0, -1.25e-1])
         iota = PowerSeriesProfile([-4.9e-1, 0, 3.0e-1])
@@ -2654,7 +2812,12 @@ class TestObjectiveNaNGrad:
         obj = ObjectiveFunction(ToroidalFlux(eq, ext_field), use_jit=False)
         obj.build()
         g = obj.grad(obj.x(ext_field))
-        assert not np.any(np.isnan(g)), "toroidal flux"
+        assert not np.any(np.isnan(g)), "toroidal flux A"
+
+        obj = ObjectiveFunction(ToroidalFlux(eq, ext_field), use_jit=False)
+        obj.build()
+        g = obj.grad(obj.x(ext_field))
+        assert not np.any(np.isnan(g)), "toroidal flux B"
 
     @pytest.mark.unit
     @pytest.mark.parametrize(
@@ -2711,6 +2874,15 @@ class TestObjectiveNaNGrad:
         g = obj.grad(obj.x())
         assert not np.any(np.isnan(g)), str(helicity)
 
+    @pytest.mark.unit
+    def test_objective_no_nangrad_ballooning(self):
+        """BallooningStability."""
+        eq = get("HELIOTRON")
+        obj = ObjectiveFunction(BallooningStability(eq=eq))
+        obj.build()
+        g = obj.grad(obj.x())
+        assert not np.any(np.isnan(g))
+
 
 @pytest.mark.unit
 def test_asymmetric_normalization():
@@ -2761,3 +2933,19 @@ def test_objective_print_widths():
                     + "change the name or increase the PRINT_WIDTH in the "
                     + "desc/utils.py file. The former is preferred."
                 )
+
+
+def test_objective_docstring():
+    """Test that the objective docstring and collect_docs are consistent."""
+    objective_docs = _Objective.__doc__.rstrip()
+    doc_header = (
+        "Objective (or constraint) used in the optimization of an Equilibrium.\n\n"
+        + "    Parameters\n"
+        + "    ----------\n"
+        + "    things : Optimizable or tuple/list of Optimizable\n"
+        + "        Objects that will be optimized to satisfy the Objective.\n"
+    )
+    collected_docs = collect_docs().strip()
+    collected_docs = doc_header + "    " + collected_docs
+
+    assert objective_docs == collected_docs

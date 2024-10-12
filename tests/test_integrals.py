@@ -1078,6 +1078,44 @@ class TestBounceQuadrature:
 class TestBounce1D:
     """Test bounce integration with one-dimensional local spline methods."""
 
+    @pytest.mark.unit
+    def test_interp_zero_crossing(self):
+        """To see resolution for interp to get zero crossings of big well accurately."""
+        rho = np.linspace(0.1, 1, 6)
+        alpha = np.array([0, 0.5])
+        num_transit = 2  # toroidal transits
+        resolution_per_transit = 10 * num_transit  # just need to capture big wells
+        zeta = np.linspace(-1, 1, resolution_per_transit) * (np.pi * num_transit // 2)
+
+        eq = get("W7-X")
+        # 3. Convert above coordinates to DESC computational coordinates.
+        grid = get_rtz_grid(eq, rho, alpha, zeta, coordinates="raz")
+        data = eq.compute(
+            Bounce1D.required_names + ["min_tz |B|", "max_tz |B|", "cvdrift"], grid=grid
+        )
+        # this code is set up to find zeros of |B|, so we pretend |B| = cvdrift
+        data["|B|"] = data["cvdrift"]
+        # if you compute derivative of cvdrift along field lines you could also
+        # set data["|B|_z|r,a"] = data["cvdrift_z|r,a"] and set hermite=True,
+        # but it might be better to not use derivative information in this case since
+        # you don't want to capture high frequency components and regular cubic spline
+        # will fit at lower frequency than cubic hermite spline.
+        bounce = Bounce1D(grid.source_grid, data, check=True, hermite=False, warn=False)
+        pitch_inv = 0
+        # these should just be roots of f = cvdrift - 0 along field lines
+        points = bounce.points(pitch_inv)
+        # should just plot cvdrift along field lines with roots
+        title = r"Intersects $z$ in epigraph(cvdrift) s.t. cvdrift($z$) = 0"
+        bounce.check_points(
+            points, pitch_inv, plot=True, title=title, include_knots=True
+        )
+        m, l = 0, 1
+        nodes = grid.source_grid.meshgrid_reshape(grid.source_grid.nodes[:, :2], "arz")
+        print("(α, ρ):", nodes[m, l, 0])
+        # can also plot at this field line and flux surface printed above
+        fig, ax = bounce.plot(m, l, pitch_inv, title=title, include_knots=True)
+        return fig
+
     @staticmethod
     def _example_numerator(g_zz, B, pitch):
         f = (1 - 0.5 * pitch * B) * g_zz

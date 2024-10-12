@@ -1,6 +1,6 @@
 """Methods for computing bounce integrals (singular or otherwise)."""
 
-from interpax import CubicHermiteSpline, PPoly
+from interpax import CubicHermiteSpline, CubicSpline, PPoly
 from orthax.legendre import leggauss
 
 from desc.backend import jnp
@@ -109,6 +109,7 @@ class Bounce1D(IOAble):
         Lref=1.0,
         is_reshaped=False,
         check=False,
+        hermite=True,
         **kwargs,
     ):
         """Returns an object to compute bounce integrals.
@@ -151,6 +152,9 @@ class Bounce1D(IOAble):
             provide only those axes of the reshaped data. Default is false.
         check : bool
             Flag for debugging. Must be false for JAX transformations.
+        hermite : bool
+            Whether to interpolate with derivative information of the function.
+            Default True.
 
         """
         # Strictly increasing zeta knots enforces dζ > 0.
@@ -180,17 +184,23 @@ class Bounce1D(IOAble):
 
         # Compute local splines.
         self._zeta = grid.compress(grid.nodes[:, 2], surface_label="zeta")
-        self.B = jnp.moveaxis(
+        coef = (
             CubicHermiteSpline(
                 x=self._zeta,
                 y=self._data["|B|"],
                 dydx=self._data["|B|_z|r,a"],
                 axis=-1,
                 check=check,
-            ).c,
-            source=(0, 1),
-            destination=(-1, -2),
+            ).c
+            if hermite
+            else CubicSpline(
+                x=self._zeta,
+                y=self._data["|B|"],
+                axis=-1,
+                check=check,
+            ).c
         )
+        self.B = jnp.moveaxis(coef, source=(0, 1), destination=(-1, -2))
         self._dB_dz = polyder_vec(self.B)
 
         # Add axis here instead of in ``_bounce_quadrature``.
@@ -416,8 +426,8 @@ class Bounce1D(IOAble):
             dB_dz = dB_dz[l]
         if pitch_inv is not None:
             errorif(
-                pitch_inv.ndim > 1,
-                msg=f"Got pitch_inv.ndim={pitch_inv.ndim}, but expected 1.",
+                jnp.ndim(pitch_inv) > 1,
+                msg=f"Got pitch_inv.ndim={jnp.ndim(pitch_inv)}, but expected 1.",
             )
             z1, z2 = bounce_points(pitch_inv, self._zeta, B, dB_dz)
             kwargs["z1"] = z1

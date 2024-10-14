@@ -1030,7 +1030,7 @@ def _compute_A_or_B_from_CurrentPotentialField(
 
 
 def run_regcoil(  # noqa: C901 fxn too complex
-    current_potential_field,
+    field,
     eq,
     lambda_regularization=1e-30,
     current_helicity=(1, 0),
@@ -1045,10 +1045,7 @@ def run_regcoil(  # noqa: C901 fxn too complex
 ):
     """Runs REGCOIL-like algorithm to find the current potential for the surface.
 
-    NOTE: will set the FourierCurrentPotentialField's Phi_mn to
-    the lowest lambda_regularization value's solution, and will also set I and G
-    to the values corresponding to the input equilibrium, external_field,
-    and current_helicity.
+    NOTE: The original passed-in field will not be modified.
 
     NOTE: The function is not jit/AD compatible
 
@@ -1086,7 +1083,7 @@ def run_regcoil(  # noqa: C901 fxn too complex
 
     Parameters
     ----------
-    current_potential_field : FourierCurrentPotentialField
+    field : FourierCurrentPotentialField
         ``FourierCurrentPotentialField`` to run REGCOIL with.
     eq : Equilibrium
         Equilibrium to minimize the quadratic flux (plus regularization) on.
@@ -1095,7 +1092,8 @@ def run_regcoil(  # noqa: C901 fxn too complex
         on plasma surface with minimization of current density mag K on winding
         surface i.e. larger lambda_regularization, simpler coilset and smaller
         currents, but worse Bn. If a float, only runs REGCOIL for that single value
-        and returns a single FourierCurrentPotentialField and the associated data.
+        and returns a list with the single FourierCurrentPotentialField and the
+        associated data.
         If an array is passed, will run REGCOIL for each lambda_regularization in
         that array and return a list of FourierCurrentPotentialFields, and the
         associated data.
@@ -1210,6 +1208,7 @@ def run_regcoil(  # noqa: C901 fxn too complex
         ValueError,
         "regulariztation_type must be simple or regcoil",
     )
+    current_potential_field = field.copy()  # copy field so we can modify freely
     q = current_helicity[0]  # poloidal transits before coil returns to itself
     p = current_helicity[1]  # toroidal transits before coil returns to itself
 

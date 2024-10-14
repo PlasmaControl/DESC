@@ -807,8 +807,9 @@ class FourierCurrentPotentialField(
         stell_sym : bool
             whether the coils are stellarator-symmetric or not. Defaults to False. Only
             matters for modular coils (currently)
-            #TODO: once winding surface curve is implemented, enforce sym for
-            # helical as well
+            TODO: once winding surface curve is implemented, enforce sym for
+            helical as well
+
 
         Returns
         -------
@@ -1559,22 +1560,26 @@ def _find_current_potential_contours(
     dz = 2 * np.pi / nfp / npts
     if coil_type == "helical":
         # helical coils
-        zeta_full = jnp.linspace(0, 2 * jnp.pi / nfp, npts, endpoint=True)
+        zeta_full = jnp.linspace(
+            0, 2 * jnp.pi / nfp, round(2 * jnp.pi / nfp / dz), endpoint=True
+        )
         # ensure we have always have points at least from -2pi, 2pi as depending
         # on sign of I, the contours from Phi = [0, abs(I)] may have their starting
         # points (the theta value at zeta=0) be positive or negative theta values,
         # and we want to ensure we catch the start and end of the contours
+        theta0 = jnp.sign(helicity) * 2 * jnp.pi
+        theta1 = -jnp.sign(helicity) * (2 * np.pi * int(np.abs(helicity) + 1))
         theta_full = jnp.linspace(
-            jnp.sign(helicity) * 2 * jnp.pi,
-            -jnp.sign(helicity) * (2 * np.pi * int(np.abs(helicity) + 1)),
-            int(npts * (1 + np.abs(helicity + 1) * nfp)),
+            theta0,
+            theta1,
+            round(abs(theta1 - theta0) / dz),
             endpoint=True,
         )
 
         theta_full = jnp.sort(theta_full)
     else:
         # modular coils
-        theta_full = jnp.linspace(0, 2 * jnp.pi, npts + 1)
+        theta_full = jnp.linspace(0, 2 * jnp.pi, round(2 * jnp.pi / dz))
         # we start below 0 for zeta to allow for contours which may go in/out of
         # the zeta=0 plane
         zeta_full = jnp.linspace(
@@ -1701,9 +1706,9 @@ def _find_current_potential_contours(
         # check if closed and if not throw warning
 
         if not jnp.isclose(
-            jnp.abs(contour_zeta[-1][-1] - contour_zeta[-1][0]), zeta_diff
+            jnp.abs(contour_zeta[-1][-1] - contour_zeta[-1][0]), zeta_diff, rtol=1e-4
         ) or not jnp.isclose(
-            jnp.abs(contour_theta[-1][-1] - contour_theta[-1][0]), theta_diff
+            jnp.abs(contour_theta[-1][-1] - contour_theta[-1][0]), theta_diff, rtol=1e-4
         ):
             warnings.warn(
                 f"Detected a coil contour (coil index {j}) that may not be "
@@ -1717,6 +1722,13 @@ def _find_current_potential_contours(
                 "Use `show_plots=True` to visualize the contours.",
                 UserWarning,
             )
+            print(f"zeta diff = {jnp.abs(contour_zeta[-1][-1] - contour_zeta[-1][0])}")
+            print(f"expected zeta diff = {zeta_diff}")
+            print(
+                f"theta diff = {jnp.abs(contour_theta[-1][-1] - contour_theta[-1][0])}"
+            )
+            print(f"expected theta diff = {theta_diff}")
+
         numCoils += 1
         if show_plots:
             plt.plot(contour_zeta[-1], contour_theta[-1], "-r", linewidth=1)

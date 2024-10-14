@@ -24,16 +24,27 @@ def grad_bijection_from_disc(a, b):
     return dy_dx
 
 
-def automorphism_arcsin(x):
+# This map was tested as a change of variables to interpolate with
+# Chebyshev series on a more uniform grid. The result was worse
+# convergence, with visible Runge like oscillation near boundary
+# that persisted at high resolution.
+def automorphism_arcsin(x, gamma=jnp.cos(0.5)):
     """[-1, 1] ∋ x ↦ y ∈ [−1, 1].
 
     This map decreases node density near the boundary by the asymptotic factor
-    √(1−x²) and adds a 1/√(1−x²) factor to the integrand.
+    √(1−γ²x²) and adds a 1/√(1−γ²x²) factor to the integrand.
+
+    References
+    ----------
+    Kosloff and Tal-Ezer almost-equispaced grid where γ = 1−β.
+    See Boyd, Chebyshev and Fourier Spectral Methods section 16.9.
 
     Parameters
     ----------
     x : jnp.ndarray
         Points to transform.
+    gamma : float
+        Transformation parameter γ = 1−β. Default is cos(0.5).
 
     Returns
     -------
@@ -41,13 +52,13 @@ def automorphism_arcsin(x):
         Transformed points.
 
     """
-    y = 2.0 * jnp.arcsin(x) / jnp.pi
+    y = jnp.arcsin(gamma * x) / jnp.arcsin(gamma)
     return y
 
 
-def grad_automorphism_arcsin(x):
+def grad_automorphism_arcsin(x, gamma=jnp.cos(0.5)):
     """Gradient of arcsin automorphism."""
-    dy_dx = 2.0 / (jnp.sqrt(1.0 - x**2) * jnp.pi)
+    dy_dx = gamma / jnp.arcsin(gamma) / jnp.sqrt(1 - (gamma * x) ** 2)
     return dy_dx
 
 
@@ -58,7 +69,7 @@ def automorphism_sin(x, s=0, m=10):
     """[-1, 1] ∋ x ↦ y ∈ [−1, 1].
 
     This map increases node density near the boundary by the asymptotic factor
-    1/√(1−x²) and adds a cosine factor to the integrand.
+    1/√(1−x²) and adds a cosine factor to the integrand when ``s=0``.
 
     Parameters
     ----------

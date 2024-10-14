@@ -28,10 +28,6 @@ from desc.utils import Index, errorif, safediv
 chebroots_vec = jnp.vectorize(chebroots, signature="(m)->(n)")
 
 
-# TODO: Transformation to make nodes more uniform Boyd eq. 16.46 pg. 336.
-#  More uniformly spaced nodes might speed up convergence.
-
-
 def cheb_pts(N, domain=(-1, 1), lobatto=False):
     """Get ``N`` Chebyshev points mapped to given domain.
 

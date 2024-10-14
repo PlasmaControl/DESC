@@ -1,8 +1,10 @@
 '''Methods for computing the critical gradient and effective radius of curvature'''
 
-from desc.backend import jnp
+from desc.backend import jnp, jax
 from scipy.integrate import cumulative_trapezoid
 from scipy.optimize import curve_fit
+
+# import functools
 
 # from ..equilibrium.coords import get_rtz_grid TODO why can't I import this?
 
@@ -87,7 +89,7 @@ def Kd_quadratic(l, Reff_inv, ln):
     lc = (l[0]+l[-1])/2
     return Reff_inv * (1 - (l - lc)**2 / ln**2)
 
-
+# @functools.partial(jax.jit, static_argnames = ["Kd"])
 def fit_drift_peaks(l,Kd):
     '''Fits all regions of bad curvatude of the drift curvature with a desired quadratic fit of 
     the form Kd(l) = R_eff_inv*(1-(l-l_c)^2/l_n^2) with R_eff and l_n free fitting parameters

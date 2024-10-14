@@ -252,6 +252,7 @@ class EffectiveRadius(_Objective):
             alpha,
             zeta,
             coordinates="raz",
+            iota = data["iota"],
             period=(jnp.inf, 2 * jnp.pi, jnp.inf),
             params=params,
         )
@@ -265,15 +266,6 @@ class EffectiveRadius(_Objective):
             data=data,
         )["R_eff"]
 
-        # data = compute_fun(
-        #     eq,
-        #     self._data_keys,
-        #     params=params,
-        #     data=data,
-        #     transforms=constants["transforms"],
-        #     profiles=constants["profiles"],
-        # )
-        # R_eff = data["R_eff"]
         if self._target_type == "max":
             R_eff = jnp.max(R_eff)
         elif self._target_type == "mean":

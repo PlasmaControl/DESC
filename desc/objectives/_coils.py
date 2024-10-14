@@ -1367,7 +1367,7 @@ class ToroidalFlux(_Objective):
 class CoilSetLinkingNumber(_Objective):
     """Prevents coils from becoming interlinked.
 
-    The linking number of 2 curves is  (approximately) 0 if they are not linked, and
+    The linking number of 2 curves is (approximately) 0 if they are not linked, and
     (approximately) +/-1 if they are (with the sign indicating the helicity of the
     linking).
 

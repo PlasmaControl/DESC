@@ -1396,9 +1396,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
 
         """
         basis = kwargs.pop("basis", "xyz")
-        keys = ["x"]
-        if dx1:
-            keys += ["x_s"]
+        keys = ["x", "x_s"] if dx1 else ["x"]
         if params is None:
             params = [get_params(keys, coil, basis=basis) for coil in self]
         data = self.compute(keys, grid=grid, params=params, basis=basis, **kwargs)

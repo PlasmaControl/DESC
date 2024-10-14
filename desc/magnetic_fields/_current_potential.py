@@ -1312,13 +1312,8 @@ def run_regcoil(  # noqa: C901 fxn too complex
         return data["K"]
 
     def calc_SV_current_mag_sqd(phi_mn):
-        params = current_potential_field.params_dict
-        params["Phi_mn"] = phi_mn
-        params["I"] = 0
-        params["G"] = 0
-        data = current_potential_field.compute("K", grid=source_grid, params=params)
-
-        return dot(data["K"], data["K"], axis=1)
+        K = calc_SV_current(phi_mn)
+        return dot(K, K, axis=1)
 
     def calc_secular_current(phi_mn):
         params = current_potential_field.params_dict
@@ -1341,27 +1336,32 @@ def run_regcoil(  # noqa: C901 fxn too complex
         )
         return Bn * ne_mag * eval_grid.weights
 
+    def surfint_Ksqd_SV(phi_mn):
+        integrand = (calc_SV_current_mag_sqd(phi_mn) * ns_mag * source_grid.weights).T
+        return jnp.sum(integrand).squeeze()
+
+    def surfint_Bsqd_SV(phi_mn):
+        integrand = ((B_from_K_SV(phi_mn) ** 2) * ne_mag * eval_grid.weights).T
+        return jnp.sum(integrand).squeeze()
+
     if regularization_type == "regcoil":
+        # also need these gradients for the RHS if using regcoil regularization
         grad_Bn = Derivative(B_from_K_SV).compute(current_potential_field.Phi_mn)
-        # prob can make the below one a compute fxn instead of using
-        # JAX to compute dK^2/dPhimn
+        # TODO: likely can make the grad_Ksv one into a compute fxn instead of using
+        # JAX to compute dK/dPhimn, but this works for now
         grad_Ksv = Derivative(calc_SV_current).compute(current_potential_field.Phi_mn)
-        A_K = Derivative(calc_SV_current_mag_sqd)
-
-        def surfint_Bn_grad_Bn(phi_mn):
-            integrand = (grad_Bn.T * B_from_K_SV(phi_mn) * ne_mag * eval_grid.weights).T
-            return jnp.sum(integrand, axis=0).squeeze()
-
-        def surfint_grad_Ksqd(phi_mn):
-            integrand = (A_K(phi_mn).T * ns_mag * source_grid.weights).T
-            return jnp.sum(integrand, axis=0).squeeze()
 
     timer = Timer()
     # calculate the Jacobian matrix A for  Bn_SV = A*Phi_mn
     timer.start("Jacobian Calculation")
     if regularization_type == "regcoil":
-        A1 = 2 * Derivative(surfint_Bn_grad_Bn).compute(current_potential_field.Phi_mn)
-        A2 = Derivative(surfint_grad_Ksqd).compute(current_potential_field.Phi_mn)
+        A1 = Derivative(surfint_Bsqd_SV, mode="hess").compute(
+            current_potential_field.Phi_mn
+        )
+        A2 = Derivative(surfint_Ksqd_SV, mode="hess").compute(
+            current_potential_field.Phi_mn
+        )
+
     else:
         A = (
             Derivative(B_from_K_SV).compute(current_potential_field.Phi_mn).T

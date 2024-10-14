@@ -1559,19 +1559,16 @@ def _find_current_potential_contours(
     dz = 2 * np.pi / nfp / npts
     if coil_type == "helical":
         # helical coils
-        zeta_full = jnp.arange(
-            0,
-            2 * jnp.pi / nfp + 1e-6,
-            dz,
-        )
+        zeta_full = jnp.linspace(0, 2 * jnp.pi / nfp, npts, endpoint=True)
         # ensure we have always have points at least from -2pi, 2pi as depending
         # on sign of I, the contours from Phi = [0, abs(I)] may have their starting
         # points (the theta value at zeta=0) be positive or negative theta values,
         # and we want to ensure we catch the start and end of the contours
-        theta_full = jnp.arange(
+        theta_full = jnp.linspace(
             jnp.sign(helicity) * 2 * jnp.pi,
-            -jnp.sign(helicity) * (2 * np.pi * int(np.abs(helicity) + 1) + 1e-6),
-            -jnp.sign(helicity) * 2 * np.pi / npts / nfp,
+            -jnp.sign(helicity) * (2 * np.pi * int(np.abs(helicity) + 1)),
+            int(npts * (1 + np.abs(helicity + 1) * nfp)),
+            endpoint=True,
         )
 
         theta_full = jnp.sort(theta_full)
@@ -1580,7 +1577,9 @@ def _find_current_potential_contours(
         theta_full = jnp.linspace(0, 2 * jnp.pi, npts + 1)
         # we start below 0 for zeta to allow for contours which may go in/out of
         # the zeta=0 plane
-        zeta_full = jnp.arange(-jnp.pi / nfp, (2 + 1) * jnp.pi / nfp, dz)
+        zeta_full = jnp.linspace(
+            -jnp.pi / nfp, (2 + 1) * jnp.pi / nfp, round(4 * jnp.pi / dz)
+        )
 
     ################################################################
     # find contours of constant phi

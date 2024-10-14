@@ -92,6 +92,28 @@ def factorize_linear_constraints(objective, constraint, x_scale="auto"):  # noqa
         A = A[:, cols]
     assert A.shape[1] == xp.size
 
+    # check for degenerate rows and delete if necessary
+    row_idx_to_delete = np.array([], dtype=int)
+    for row_idx in range(A.shape[0]):
+        # find all rows equal to this row
+        rows_equal_to_this_row = np.where(np.all(A[row_idx, :] == A, axis=1))[0]
+        # find the rows equal to this row that are not this row
+        rows_equal_to_this_row_but_not_this_row = rows_equal_to_this_row[
+            rows_equal_to_this_row != row_idx
+        ]
+        # if there are rows equal to this row that aren't this row, AND this particular
+        # row has not already been detected as a duplicate of an earlier one and slated
+        # for deletion, add the duplicate row indices to the array of
+        # rows to be deleted
+        if (
+            rows_equal_to_this_row_but_not_this_row.size
+            and row_idx not in row_idx_to_delete
+        ):
+            row_idx_to_delete = np.append(row_idx_to_delete, rows_equal_to_this_row[1:])
+    # delete the affected rows, and also the corresponding rows of b
+    A = np.delete(A, row_idx_to_delete, axis=0)
+    b = np.delete(b, row_idx_to_delete)
+
     # will store the global index of the unfixed rows, idx
     indices_row = np.arange(A.shape[0])
     indices_idx = np.arange(A.shape[1])
@@ -161,7 +183,6 @@ def factorize_linear_constraints(objective, constraint, x_scale="auto"):  # noqa
         Z = np.eye(A.shape[1])
     xp = put(xp, unfixed_idx, A_inv @ b)
     xp = put(xp, fixed_idx, ((1 / D) * xp)[fixed_idx])
-
     # cast to jnp arrays
     xp = jnp.asarray(xp)
     A = jnp.asarray(A)

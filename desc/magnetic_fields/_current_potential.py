@@ -753,6 +753,7 @@ def _compute_A_or_B_from_CurrentPotentialField(
     basis="rpz",
     transforms=None,
     compute_A_or_B="B",
+    data=None,
 ):
     """Compute magnetic field or vector potential at a set of points.
 
@@ -794,23 +795,24 @@ def _compute_A_or_B_from_CurrentPotentialField(
     ]
     # compute surface current, and store grid quantities
     # needed for integration in class
-    if not params or not transforms:
-        data = field.compute(
-            ["K", "x"],
-            grid=source_grid,
-            basis="rpz",
-            params=params,
-            transforms=transforms,
-            jitable=True,
-        )
-    else:
-        data = compute_fun(
-            field,
-            names=["K", "x"],
-            params=params,
-            transforms=transforms,
-            profiles={},
-        )
+    if data is None:
+        if not params or not transforms:
+            data = field.compute(
+                ["K", "x"],
+                grid=source_grid,
+                basis="rpz",
+                params=params,
+                transforms=transforms,
+                jitable=True,
+            )
+        else:
+            data = compute_fun(
+                field,
+                names=["K", "x"],
+                params=params,
+                transforms=transforms,
+                profiles={},
+            )
 
     _rs = data["x"]
     _K = data["K"]

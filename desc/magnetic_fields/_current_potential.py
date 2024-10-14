@@ -846,7 +846,14 @@ class FourierCurrentPotentialField(
         )
 
         contour_theta, contour_zeta = _find_current_potential_contours(
-            self, num_coils, npts, show_plots, stell_sym
+            self,
+            num_coils,
+            npts,
+            show_plots,
+            stell_sym,
+            net_poloidal_current,
+            net_toroidal_current,
+            helicity,
         )
 
         ################################################################
@@ -1503,7 +1510,14 @@ def run_regcoil(  # noqa: C901 fxn too complex
 # TODO: replace contour finding with optimizing Winding surface curves
 # once that is implemented
 def _find_current_potential_contours(
-    surface_current_field, num_coils, npts=128, show_plots=False, stell_sym=False
+    surface_current_field,
+    num_coils,
+    npts=128,
+    show_plots=False,
+    stell_sym=False,
+    net_poloidal_current=None,
+    net_toroidal_current=None,
+    helicity=None,
 ):
     """Find contours of constant current potential (i.e. coils).
 
@@ -1538,6 +1552,13 @@ def _find_current_potential_contours(
     stell_sym : bool, optional
         if the modular coilset has stellarator symmetry, by default False.
         Does nothing for helical coils.
+    net_poloidal_current, net_toroidal_current : float, optional
+        the net poloidal (toroidal) current flowing on the surface. If None, will
+         attempt to infer from the given surface_current_field's attributes.
+    helicity : int, optional
+        the helicity of the coil currents, should be consistent with the passed-in
+        net currents. If None, will use the correct ratio of net poloidal and net
+        toroidal currents.
 
     Returns
     -------
@@ -1551,10 +1572,18 @@ def _find_current_potential_contours(
     # we know that I = -(G - G_ext) / (helicity * NFP)
     # if net_toroidal_current is zero, then we have modular coils,
     # and just make helicity zero
-    net_poloidal_current = surface_current_field.G
-    net_toroidal_current = surface_current_field.I
+    net_poloidal_current = setdefault(
+        net_poloidal_current, surface_current_field.G, net_poloidal_current
+    )
+    net_toroidal_current = setdefault(
+        net_toroidal_current, surface_current_field.I, net_toroidal_current
+    )
     nfp = surface_current_field.NFP
-    helicity = safediv(net_poloidal_current, net_toroidal_current * nfp, threshold=1e-8)
+    helicity = setdefault(
+        helicity,
+        safediv(net_poloidal_current, net_toroidal_current * nfp, threshold=1e-8),
+        helicity,
+    )
     coil_type = "modular" if jnp.isclose(helicity, 0) else "helical"
     dz = 2 * np.pi / nfp / npts
     if coil_type == "helical":

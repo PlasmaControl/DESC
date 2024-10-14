@@ -3992,7 +3992,8 @@ def plot_regcoil_outputs(
             )
 
             ax.set_title(
-                f"lambda= {lambdas[ilam_to_plot[whichPlot]-1]:1.5e}"
+                r"$\lambda =$"
+                + f" {lambdas[ilam_to_plot[whichPlot] - 1]:1.5e}"
                 + f" index = {ilam_to_plot[whichPlot]-1}",
                 fontsize="x-small",
             )
@@ -4034,7 +4035,8 @@ def plot_regcoil_outputs(
             )
 
             ax.set_title(
-                f"lambda= {lambdas[ilam_to_plot[whichPlot] - 1]:1.5e}"
+                r"$\lambda =$"
+                + f" {lambdas[ilam_to_plot[whichPlot] - 1]:1.5e}"
                 + f" index = {ilam_to_plot[whichPlot] - 1}",
                 fontsize="x-small",
             )
@@ -4073,7 +4075,8 @@ def plot_regcoil_outputs(
             )
 
             ax.set_title(
-                f"lambda= {lambdas[ilam_to_plot[whichPlot] - 1]:1.5e}"
+                r"$\lambda =$"
+                + f" {lambdas[ilam_to_plot[whichPlot] - 1]:1.5e}"
                 + f" index = {ilam_to_plot[whichPlot] - 1}",
                 fontsize="x-small",
             )

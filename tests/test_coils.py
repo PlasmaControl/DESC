@@ -1291,7 +1291,7 @@ def test_linking_number():
     grid = LinearGrid(N=25)
     # regular modular coilset from symmetry, so that there are 10 coils, half going
     # one way and half going the other way
-    coilset = CoilSet.from_symmetry(coil, NFP=5, sym=True)
+    coilset = CoilSet(coil, NFP=5, sym=True)
     coil2 = FourierRZCoil()
     # add a coil along the axis that links all the other coils
     coilset2 = MixedCoilSet(coilset, coil2)

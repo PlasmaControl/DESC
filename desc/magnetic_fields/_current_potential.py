@@ -1346,9 +1346,25 @@ def run_regcoil(  # noqa: C901 fxn too complex
 
     if regularization_type == "regcoil":
         # also need these gradients for the RHS if using regcoil regularization
-        grad_Bn = Derivative(B_from_K_SV).compute(current_potential_field.Phi_mn)
+        # set jacobian deriv mode based on the matrix dimensions,  which is the output
+        # size (grid nodes, which is eval_grid for Bn and 3*source_grid for K)
+        # by the input size (the number of Phi modes)
+        deriv_mode = (
+            "fwd"
+            if eval_grid.num_nodes >= 0.5 * current_potential_field.Phi_basis.num_modes
+            else "rev"
+        )
+        grad_Bn = Derivative(B_from_K_SV, mode=deriv_mode).compute(
+            current_potential_field.Phi_mn
+        )
         # TODO: likely can make the grad_Ksv one into a compute fxn instead of using
         # JAX to compute dK/dPhimn, but this works for now
+        deriv_mode = (
+            "fwd"
+            if 3 * source_grid.num_nodes
+            >= 0.5 * current_potential_field.Phi_basis.num_modes
+            else "rev"
+        )
         grad_Ksv = Derivative(calc_SV_current).compute(current_potential_field.Phi_mn)
 
     timer = Timer()
@@ -1363,6 +1379,12 @@ def run_regcoil(  # noqa: C901 fxn too complex
         )
 
     else:
+        # set jacobian deriv mode based on the matrix dimensions
+        deriv_mode = (
+            "fwd"
+            if eval_grid.num_nodes >= 0.5 * current_potential_field.Phi_basis.num_modes
+            else "rev"
+        )
         A = (
             Derivative(B_from_K_SV).compute(current_potential_field.Phi_mn).T
             * ne_mag
@@ -1426,7 +1448,7 @@ def run_regcoil(  # noqa: C901 fxn too complex
 
     for lambda_regularization in lambda_regularizations:
         printstring = (
-            "Calculating Phi_SV for"
+            "Calculating Phi_SV for "
             + f"lambda_regularization = {lambda_regularization:1.5e}"
         )
         if verbose > 0:

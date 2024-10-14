@@ -179,7 +179,7 @@ def test_1d_optimization():
         ForceBalance(eq=eq),
         FixBoundaryR(eq=eq),
         FixBoundaryR(eq=eq, modes=[0, 0, 0]),  # add a degenerate constraint to confirm
-        # lsq-exact not affected by GH #1297
+        # proximal-lsq-exact not affected by GH #1297
         FixBoundaryZ(eq=eq, modes=eq.surface.Z_basis.modes[0:-1, :]),
         FixPressure(eq=eq),
         FixIota(eq=eq),
@@ -219,8 +219,6 @@ def run_qh_step(n, eq):
     constraints = (
         ForceBalance(eq=eq),
         FixBoundaryR(eq=eq, modes=R_modes),
-        FixBoundaryR(eq=eq, modes=[0, 0, 0]),  # add a degenerate constraint to confirm
-        # proximal-lsq-exact not affected by GH #1297
         FixBoundaryZ(eq=eq, modes=Z_modes),
         FixPressure(eq=eq),
         FixCurrent(eq=eq),
@@ -650,7 +648,7 @@ def test_multiobject_optimization_al():
         FixBoundaryR(eq, modes=[[0, 0, 0]]),
         FixBoundaryR(
             eq=eq, modes=[0, 0, 0]
-        ),  # add a degenerate constraint to test fix of GH #1297
+        ),  # add a degenerate constraint to test fix of GH #1297 for lsq-auglag
         PlasmaVesselDistance(surface=surf, eq=eq, target=1),
     )
 

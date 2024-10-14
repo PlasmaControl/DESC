@@ -378,8 +378,8 @@ def regcoil_modular_coils():
         N=12,  # Toroidal resolution of desired offset surface
         grid=LinearGrid(M=32, N=16, NFP=eq.NFP),
     )
-    M_Phi = 8
-    N_Phi = 8
+    M_Phi = 10
+    N_Phi = 10
     M_egrid = 30
     N_egrid = 30
     M_sgrid = 50

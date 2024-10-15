@@ -1530,7 +1530,7 @@ class LinkingCurrent(_Objective):
 class CoilSetLinkingNumber(_Objective):
     """Prevents coils from becoming interlinked.
 
-    The linking number of 2 curves is  (approximately) 0 if they are not linked, and
+    The linking number of 2 curves is (approximately) 0 if they are not linked, and
     (approximately) +/-1 if they are (with the sign indicating the helicity of the
     linking).
 
@@ -1615,7 +1615,7 @@ class CoilSetLinkingNumber(_Objective):
         super().build(use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
-        """Compute minimum distances between coils.
+        """Compute linking numbers between coils.
 
         Parameters
         ----------
@@ -1628,7 +1628,9 @@ class CoilSetLinkingNumber(_Objective):
         Returns
         -------
         f : array of floats
-            Minimum distance to another coil for each coil in the coilset.
+            For each coil, the sum of the absolute value of the linking numbers between
+            that coil and every other coil in the coilset, which approximates the
+            number of coils linked with that coil.
 
         """
         if constants is None:

@@ -18,7 +18,7 @@ from desc.backend import (
     vmap,
 )
 from desc.compute import get_params, rpz2xyz, rpz2xyz_vec, xyz2rpz, xyz2rpz_vec
-from desc.compute.geom_utils import reflection_matrix, rotation_matrix
+from desc.compute.geom_utils import reflection_matrix
 from desc.compute.utils import _compute as compute_fun
 from desc.geometry import (
     FourierPlanarCurve,
@@ -1396,9 +1396,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
 
         """
         basis = kwargs.pop("basis", "xyz")
-        keys = ["x"]
-        if dx1:
-            keys += ["x_s"]
+        keys = ["x", "x_s"] if dx1 else ["x"]
         if params is None:
             params = [get_params(keys, coil, basis=basis) for coil in self]
         data = self.compute(keys, grid=grid, params=params, basis=basis, **kwargs)
@@ -1438,15 +1436,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         for k in range(1, self.NFP):
             rpz = jnp.vstack((rpz, rpz0 + jnp.array([0, 2 * jnp.pi * k / self.NFP, 0])))
         if dx1:
-            rpz_s0 = rpz_s
-            for k in range(1, self.NFP):
-                rpz_s = jnp.vstack(
-                    (
-                        rpz_s,
-                        rpz_s0
-                        @ rotation_matrix([0, 0, 1], 2 * jnp.pi * k / self.NFP).T,
-                    )
-                )
+            rpz_s = jnp.tile(rpz_s, (self.NFP, 1, 1))
 
         # ensure phi in [0, 2pi)
         rpz = rpz.at[:, :, 1].set(jnp.mod(rpz[:, :, 1], 2 * jnp.pi))

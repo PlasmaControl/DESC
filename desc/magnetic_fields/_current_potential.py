@@ -1283,8 +1283,9 @@ def run_regcoil(  # noqa: C901 fxn too complex
     else:  # helical coils
         I = p * G / q / eq.NFP
 
+    # define functions which will be differentiated
     def Bn_from_K(phi_mn, I, G):
-        """B from single value part of K from REGCOIL eqn 4."""
+        """B from K from REGCOIL eqn 4."""
         params = current_potential_field.params_dict
         params["Phi_mn"] = phi_mn
         params["I"] = I
@@ -1294,34 +1295,22 @@ def run_regcoil(  # noqa: C901 fxn too complex
         )
         return Bn
 
-    def calc_SV_current(phi_mn):
+    def K(phi_mn, I, G):
         params = current_potential_field.params_dict
         params["Phi_mn"] = phi_mn
-        params["I"] = 0
-        params["G"] = 0
+        params["I"] = I
+        params["G"] = G
         data = current_potential_field.compute("K", grid=source_grid, params=params)
-
         return data["K"]
 
-    def calc_SV_current_mag_sqd(phi_mn):
-        K = calc_SV_current(phi_mn)
-        return dot(K, K, axis=1)
-
-    def calc_secular_current(phi_mn):
-        params = current_potential_field.params_dict
-        params["Phi_mn"] = jnp.zeros_like(phi_mn)
-        params["I"] = current_potential_field.I
-        params["G"] = current_potential_field.G
-        data = current_potential_field.compute("K", grid=source_grid, params=params)
-
-        return data["K"]
-
-    def surfint_Ksqd_SV(phi_mn):
-        integrand = (calc_SV_current_mag_sqd(phi_mn) * ns_mag * source_grid.weights).T
+    def surfint_Ksqd(phi_mn, I, G):
+        K_vec = K(phi_mn, I, G)
+        K_mag_sqd = dot(K_vec, K_vec, axis=1)
+        integrand = (K_mag_sqd * ns_mag * source_grid.weights).T
         return jnp.sum(integrand).squeeze()
 
-    def surfint_Bsqd_SV(phi_mn):
-        integrand = ((Bn_from_K(phi_mn, 0.0, 0.0) ** 2) * ne_mag * eval_grid.weights).T
+    def surfint_Bnsqd(phi_mn, I, G):
+        integrand = ((Bn_from_K(phi_mn, I, G) ** 2) * ne_mag * eval_grid.weights).T
         return jnp.sum(integrand).squeeze()
 
     if regularization_type == "regcoil":
@@ -1345,17 +1334,17 @@ def run_regcoil(  # noqa: C901 fxn too complex
             >= 0.5 * current_potential_field.Phi_basis.num_modes
             else "rev"
         )
-        grad_Ksv = Derivative(calc_SV_current).compute(current_potential_field.Phi_mn)
+        grad_Ksv = Derivative(K).compute(current_potential_field.Phi_mn, 0.0, 0.0)
 
     timer = Timer()
     # calculate the Jacobian matrix A for  Bn_SV = A*Phi_mn
     timer.start("Jacobian Calculation")
     if regularization_type == "regcoil":
-        A1 = Derivative(surfint_Bsqd_SV, mode="hess").compute(
-            current_potential_field.Phi_mn
+        A1 = Derivative(surfint_Bnsqd, mode="hess").compute(
+            current_potential_field.Phi_mn, 0.0, 0.0
         )
-        A2 = Derivative(surfint_Ksqd_SV, mode="hess").compute(
-            current_potential_field.Phi_mn
+        A2 = Derivative(surfint_Ksqd, mode="hess").compute(
+            current_potential_field.Phi_mn, 0.0, 0.0
         )
 
     else:
@@ -1378,20 +1367,18 @@ def run_regcoil(  # noqa: C901 fxn too complex
     current_potential_field.G = float(G)
 
     # find the normal field from the secular part of the current potential
-    # also mutliply now by necessary weights and normal vector magnitude
-    B_GI_normal = (
+    # also mutliply by necessary weights and normal vector magnitude
+    Bn_GI = (
         Bn_from_K(jnp.zeros_like(current_potential_field.Phi_mn), I, G)
         * ne_mag
         * eval_grid.weights
     )
-    if not vacuum:
+    if not vacuum:  # get Bn from plasma contribution
         Bn_plasma = compute_B_plasma(eq, eval_grid, vc_source_grid, normal_only=True)
         Bn_plasma = Bn_plasma * ne_mag * eval_grid.weights
 
     else:
-        Bn_plasma = jnp.zeros_like(
-            B_GI_normal
-        )  # from plasma current, currently assume is 0
+        Bn_plasma = jnp.zeros_like(Bn_GI)  # from plasma current, currently assume is 0
     # find external field's Bnormal contribution
     if external_field:
         Bn_ext, _ = external_field.compute_Bnormal(
@@ -1400,13 +1387,17 @@ def run_regcoil(  # noqa: C901 fxn too complex
         Bn_ext = Bn_ext * ne_mag * eval_grid.weights
 
     else:
-        Bn_ext = jnp.zeros_like(B_GI_normal)
+        Bn_ext = jnp.zeros_like(Bn_GI)
 
-    rhs = Bn_plasma + Bn_ext + B_GI_normal
+    rhs = Bn_plasma + Bn_ext + Bn_GI
     if regularization_type == "regcoil":
         rhs_B = -2 * ((grad_Bn.T * rhs).T).sum(axis=0)
         dotted_K_d_K_d_Phimn = dot(
-            calc_secular_current(current_potential_field.Phi_mn)[:, :, jnp.newaxis],
+            K(
+                jnp.zeros_like(current_potential_field.Phi_mn),
+                current_potential_field.I,
+                current_potential_field.G,
+            )[:, :, jnp.newaxis],
             grad_Ksv,
             axis=1,
         )
@@ -1465,7 +1456,7 @@ def run_regcoil(  # noqa: C901 fxn too complex
         phi_mns.append(phi_mn_opt)
 
         Bn_SV = Bn_from_K(phi_mn_opt, 0.0, 0.0) * ne_mag * eval_grid.weights
-        Bn_tot = Bn_SV + Bn_plasma + B_GI_normal + Bn_ext
+        Bn_tot = Bn_SV + Bn_plasma + Bn_GI + Bn_ext
 
         chi_B = jnp.sum(Bn_tot * Bn_tot / ne_mag / eval_grid.weights)
         chi2Bs.append(chi_B)

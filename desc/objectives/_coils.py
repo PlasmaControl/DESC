@@ -1512,7 +1512,7 @@ class SurfaceCurrentRegularization(_Objective):
         Collocation grid containing the nodes to evaluate current source at on
         the winding surface. If used in conjunction with the QuadraticFlux objective,
         with its ``field_grid`` matching this ``source_grid``, this replicates the
-        REGCOIL algorithm described in [1]_.
+        REGCOIL algorithm described in [1]_ .
 
     References
     ----------

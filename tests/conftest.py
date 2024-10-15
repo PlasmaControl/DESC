@@ -357,12 +357,12 @@ def regcoil_helical_coils_scan():
     fields, data = run_regcoil(
         surface_current_field,
         eq,
-        eval_grid=LinearGrid(M=20, N=20, NFP=eq.NFP),
+        eval_grid=LinearGrid(M=20, N=20, NFP=eq.NFP, sym=True),
         source_grid=LinearGrid(M=40, N=40, NFP=eq.NFP),
         lambda_regularization=np.append(np.array([0.0]), np.logspace(-30, -1, 11)),
         current_helicity=(1, -1),
         vacuum=True,
-        regularization_type="regcoil",
+        regularization_type="simple",
     )
     surface_current_field = fields[0]
     return (data, surface_current_field, eq)
@@ -395,7 +395,7 @@ def regcoil_modular_coils():
         eval_grid=LinearGrid(M=M_egrid, N=N_egrid, NFP=eq.NFP, sym=True),
         source_grid=LinearGrid(M=M_sgrid, N=N_sgrid, NFP=eq.NFP),
         lambda_regularization=lambda_regularization,
-        regularization_type="simple",
+        regularization_type="regcoil",
         vacuum=True,
     )
     surface_current_field = surface_current_field[0]

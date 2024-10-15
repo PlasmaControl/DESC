@@ -1335,10 +1335,10 @@ def test_regcoil_helical_coils_check_objective_method(
     regcoil_helical_coils_scan,
 ):
     """Test precise QA helical coil regcoil solution."""
-    M_egrid = 30
-    N_egrid = 30
-    M_sgrid = 50
-    N_sgrid = 50
+    M_egrid = 20
+    N_egrid = 20
+    M_sgrid = 40
+    N_sgrid = 40
 
     (
         data,
@@ -1397,7 +1397,7 @@ def test_regcoil_helical_coils_check_objective_method(
         ftol=0,
         gtol=0,
         xtol=1e-16,
-        options={"initial_trust_radius": np.inf},
+        options={"initial_trust_radius": np.inf, "tr_method": "cho"},
     )
 
     coords = eq.compute(["R", "phi", "Z", "B"])

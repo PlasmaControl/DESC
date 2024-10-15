@@ -97,7 +97,7 @@ def factorize_linear_constraints(objective, constraint, x_scale="auto"):  # noqa
     # which are duplicate rows of A that also have duplicate entries of b,
     # if the entries of b aren't the same then the constraints are actually
     # incompatible and so we will leave those to be caught later.
-    A_augmented = np.hstack(A, b)
+    A_augmented = np.hstack([A, np.reshape(b, (A.shape[0], 1))])
     row_idx_to_delete = np.array([], dtype=int)
     for row_idx in range(A_augmented.shape[0]):
         # find all rows equal to this row

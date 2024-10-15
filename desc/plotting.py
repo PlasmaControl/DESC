@@ -3910,9 +3910,9 @@ def plot_regcoil_outputs(
 
     ncontours = kwargs.pop("ncontours", 15)
     markersize = kwargs.pop("markersize", 12)
-    xlabel_fontsize = kwargs.pop("xlabel_fontsize", None)
-    ylabel_fontsize = kwargs.pop("ylabel_fontsize", None)
-    title_fontsize = kwargs.pop("title_fontsize", None)
+    xlabel_fontsize = kwargs.pop("xlabel_fontsize", 24)
+    ylabel_fontsize = kwargs.pop("ylabel_fontsize", 24)
+    title_fontsize = kwargs.pop("title_fontsize", 24)
 
     figdata = {}
     axdata = {}
@@ -3989,22 +3989,23 @@ def plot_regcoil_outputs(
                 use_contour=True,
                 levels=ncontours,
                 title_fontsize=title_fontsize,
+                xlabel_fontsize=xlabel_fontsize,
+                ylabel_fontsize=ylabel_fontsize,
             )
 
             ax.set_title(
-                f"lambda= {lambdas[ilam_to_plot[whichPlot]-1]:1.5e}"
+                r"$\lambda =$"
+                + f" {lambdas[ilam_to_plot[whichPlot] - 1]:1.5e}"
                 + f" index = {ilam_to_plot[whichPlot]-1}",
-                fontsize="x-small",
+                fontsize="small",
             )
             whichPlot += 1
     fig_Phi.tight_layout()
-    fig_Phi.text(
-        0.5,
-        0.995,
-        "Total Current Potential (A)",
-        horizontalalignment="center",
-        verticalalignment="top",
-        fontsize="small",
+    fig_Phi.subplots_adjust(top=0.92)
+
+    fig_Phi.suptitle(
+        r"Total Current Potential $\Phi$ (A)",
+        fontsize=title_fontsize,
     )
     figdata["fig" + scan_str + "_Phi"] = fig_Phi
     axdata["ax" + scan_str + "_Phi"] = ax_Phi
@@ -4031,22 +4032,22 @@ def plot_regcoil_outputs(
                 cmap=cmap,
                 levels=ncontours,
                 title_fontsize=title_fontsize,
+                xlabel_fontsize=xlabel_fontsize,
+                ylabel_fontsize=ylabel_fontsize,
             )
 
             ax.set_title(
-                f"lambda= {lambdas[ilam_to_plot[whichPlot] - 1]:1.5e}"
+                r"$\lambda =$"
+                + f" {lambdas[ilam_to_plot[whichPlot] - 1]:1.5e}"
                 + f" index = {ilam_to_plot[whichPlot] - 1}",
-                fontsize="x-small",
+                fontsize="small",
             )
             whichPlot += 1
     fig_Bn.tight_layout()
-    fig_Bn.text(
-        0.5,
-        0.995,
+    fig_Bn.subplots_adjust(top=0.92)
+    fig_Bn.suptitle(
         r"$B_n$ (T)",
-        horizontalalignment="center",
-        verticalalignment="top",
-        fontsize="small",
+        fontsize=title_fontsize,
     )
     figdata["fig" + scan_str + "_Bn"] = fig_Bn
     axdata["ax" + scan_str + "_Bn"] = ax_Bn
@@ -4070,22 +4071,22 @@ def plot_regcoil_outputs(
                 cmap=cmap,
                 levels=ncontours,
                 title_fontsize=title_fontsize,
+                xlabel_fontsize=xlabel_fontsize,
+                ylabel_fontsize=ylabel_fontsize,
             )
 
             ax.set_title(
-                f"lambda= {lambdas[ilam_to_plot[whichPlot] - 1]:1.5e}"
+                r"$\lambda =$"
+                + f" {lambdas[ilam_to_plot[whichPlot] - 1]:1.5e}"
                 + f" index = {ilam_to_plot[whichPlot] - 1}",
-                fontsize="x-small",
+                fontsize="small",
             )
             whichPlot += 1
     fig_K.tight_layout()
-    fig_K.text(
-        0.5,
-        0.995,
+    fig_K.subplots_adjust(top=0.92)
+    fig_K.suptitle(
         r"$|K|$ (A/m)",
-        horizontalalignment="center",
-        verticalalignment="top",
-        fontsize="small",
+        fontsize=title_fontsize,
     )
     figdata["fig" + scan_str + "_K"] = fig_K
     axdata["ax" + scan_str + "_K"] = ax_K

@@ -807,8 +807,9 @@ class FourierCurrentPotentialField(
         stell_sym : bool
             whether the coils are stellarator-symmetric or not. Defaults to False. Only
             matters for modular coils (currently)
-            #TODO: once winding surface curve is implemented, enforce sym for
-            # helical as well
+            TODO: once winding surface curve is implemented, enforce sym for
+            helical as well
+
 
         Returns
         -------
@@ -845,7 +846,14 @@ class FourierCurrentPotentialField(
         )
 
         contour_theta, contour_zeta = _find_current_potential_contours(
-            self, num_coils, npts, show_plots, stell_sym
+            self,
+            num_coils,
+            npts,
+            show_plots,
+            stell_sym,
+            net_poloidal_current,
+            net_toroidal_current,
+            helicity,
         )
 
         ################################################################
@@ -1029,7 +1037,7 @@ def _compute_A_or_B_from_CurrentPotentialField(
 
 
 def run_regcoil(  # noqa: C901 fxn too complex
-    current_potential_field,
+    field,
     eq,
     lambda_regularization=1e-30,
     current_helicity=(1, 0),
@@ -1044,10 +1052,7 @@ def run_regcoil(  # noqa: C901 fxn too complex
 ):
     """Runs REGCOIL-like algorithm to find the current potential for the surface.
 
-    NOTE: will set the FourierCurrentPotentialField's Phi_mn to
-    the lowest lambda_regularization value's solution, and will also set I and G
-    to the values corresponding to the input equilibrium, external_field,
-    and current_helicity.
+    NOTE: The original passed-in field will not be modified.
 
     NOTE: The function is not jit/AD compatible
 
@@ -1085,7 +1090,7 @@ def run_regcoil(  # noqa: C901 fxn too complex
 
     Parameters
     ----------
-    current_potential_field : FourierCurrentPotentialField
+    field : FourierCurrentPotentialField
         ``FourierCurrentPotentialField`` to run REGCOIL with.
     eq : Equilibrium
         Equilibrium to minimize the quadratic flux (plus regularization) on.
@@ -1094,7 +1099,8 @@ def run_regcoil(  # noqa: C901 fxn too complex
         on plasma surface with minimization of current density mag K on winding
         surface i.e. larger lambda_regularization, simpler coilset and smaller
         currents, but worse Bn. If a float, only runs REGCOIL for that single value
-        and returns a single FourierCurrentPotentialField and the associated data.
+        and returns a list with the single FourierCurrentPotentialField and the
+        associated data.
         If an array is passed, will run REGCOIL for each lambda_regularization in
         that array and return a list of FourierCurrentPotentialFields, and the
         associated data.
@@ -1209,6 +1215,7 @@ def run_regcoil(  # noqa: C901 fxn too complex
         ValueError,
         "regulariztation_type must be simple or regcoil",
     )
+    current_potential_field = field.copy()  # copy field so we can modify freely
     q = current_helicity[0]  # poloidal transits before coil returns to itself
     p = current_helicity[1]  # toroidal transits before coil returns to itself
 
@@ -1273,13 +1280,14 @@ def run_regcoil(  # noqa: C901 fxn too complex
 
     # G needed by surface current is the total G minus the external contribution
     G = G_tot - G_ext
-    # TODO: what to do if p!=0 but q = 0?
-    # what to set for I in that case?
     # calculate I, net toroidal current on winding surface
     if p == 0:  # modular coils
         I = 0
     elif p == 0 and q == 0:  # windowpane coils
         I = G = 0
+    elif q == 0:  # only toroidally closed coils, like PF coils
+        I = p * G  # give some toroidal current corr. to p
+        G = 0  # because 1==0
     else:  # helical coils
         I = p * G / q / eq.NFP
 
@@ -1304,13 +1312,8 @@ def run_regcoil(  # noqa: C901 fxn too complex
         return data["K"]
 
     def calc_SV_current_mag_sqd(phi_mn):
-        params = current_potential_field.params_dict
-        params["Phi_mn"] = phi_mn
-        params["I"] = 0
-        params["G"] = 0
-        data = current_potential_field.compute("K", grid=source_grid, params=params)
-
-        return dot(data["K"], data["K"], axis=1)
+        K = calc_SV_current(phi_mn)
+        return dot(K, K, axis=1)
 
     def calc_secular_current(phi_mn):
         params = current_potential_field.params_dict
@@ -1333,28 +1336,55 @@ def run_regcoil(  # noqa: C901 fxn too complex
         )
         return Bn * ne_mag * eval_grid.weights
 
+    def surfint_Ksqd_SV(phi_mn):
+        integrand = (calc_SV_current_mag_sqd(phi_mn) * ns_mag * source_grid.weights).T
+        return jnp.sum(integrand).squeeze()
+
+    def surfint_Bsqd_SV(phi_mn):
+        integrand = ((B_from_K_SV(phi_mn) ** 2) * ne_mag * eval_grid.weights).T
+        return jnp.sum(integrand).squeeze()
+
     if regularization_type == "regcoil":
-        grad_Bn = Derivative(B_from_K_SV).compute(current_potential_field.Phi_mn)
-        # prob can make the below one a compute fxn instead of using
-        # JAX to compute dK^2/dPhimn
+        # also need these gradients for the RHS if using regcoil regularization
+        # set jacobian deriv mode based on the matrix dimensions,  which is the output
+        # size (grid nodes, which is eval_grid for Bn and 3*source_grid for K)
+        # by the input size (the number of Phi modes)
+        deriv_mode = (
+            "fwd"
+            if eval_grid.num_nodes >= 0.5 * current_potential_field.Phi_basis.num_modes
+            else "rev"
+        )
+        grad_Bn = Derivative(B_from_K_SV, mode=deriv_mode).compute(
+            current_potential_field.Phi_mn
+        )
+        # TODO: likely can make the grad_Ksv one into a compute fxn instead of using
+        # JAX to compute dK/dPhimn, but this works for now
+        deriv_mode = (
+            "fwd"
+            if 3 * source_grid.num_nodes
+            >= 0.5 * current_potential_field.Phi_basis.num_modes
+            else "rev"
+        )
         grad_Ksv = Derivative(calc_SV_current).compute(current_potential_field.Phi_mn)
-        A_K = Derivative(calc_SV_current_mag_sqd)
-
-        def surfint_Bn_grad_Bn(phi_mn):
-            integrand = (grad_Bn.T * B_from_K_SV(phi_mn) * ne_mag * eval_grid.weights).T
-            return jnp.sum(integrand, axis=0).squeeze()
-
-        def surfint_grad_Ksqd(phi_mn):
-            integrand = (A_K(phi_mn).T * ns_mag * source_grid.weights).T
-            return jnp.sum(integrand, axis=0).squeeze()
 
     timer = Timer()
     # calculate the Jacobian matrix A for  Bn_SV = A*Phi_mn
     timer.start("Jacobian Calculation")
     if regularization_type == "regcoil":
-        A1 = 2 * Derivative(surfint_Bn_grad_Bn).compute(current_potential_field.Phi_mn)
-        A2 = Derivative(surfint_grad_Ksqd).compute(current_potential_field.Phi_mn)
+        A1 = Derivative(surfint_Bsqd_SV, mode="hess").compute(
+            current_potential_field.Phi_mn
+        )
+        A2 = Derivative(surfint_Ksqd_SV, mode="hess").compute(
+            current_potential_field.Phi_mn
+        )
+
     else:
+        # set jacobian deriv mode based on the matrix dimensions
+        deriv_mode = (
+            "fwd"
+            if eval_grid.num_nodes >= 0.5 * current_potential_field.Phi_basis.num_modes
+            else "rev"
+        )
         A = (
             Derivative(B_from_K_SV).compute(current_potential_field.Phi_mn).T
             * ne_mag
@@ -1418,7 +1448,7 @@ def run_regcoil(  # noqa: C901 fxn too complex
 
     for lambda_regularization in lambda_regularizations:
         printstring = (
-            "Calculating Phi_SV for"
+            "Calculating Phi_SV for "
             + f"lambda_regularization = {lambda_regularization:1.5e}"
         )
         if verbose > 0:
@@ -1502,7 +1532,14 @@ def run_regcoil(  # noqa: C901 fxn too complex
 # TODO: replace contour finding with optimizing Winding surface curves
 # once that is implemented
 def _find_current_potential_contours(
-    surface_current_field, num_coils, npts=128, show_plots=False, stell_sym=False
+    surface_current_field,
+    num_coils,
+    npts=128,
+    show_plots=False,
+    stell_sym=False,
+    net_poloidal_current=None,
+    net_toroidal_current=None,
+    helicity=None,
 ):
     """Find contours of constant current potential (i.e. coils).
 
@@ -1537,6 +1574,13 @@ def _find_current_potential_contours(
     stell_sym : bool, optional
         if the modular coilset has stellarator symmetry, by default False.
         Does nothing for helical coils.
+    net_poloidal_current, net_toroidal_current : float, optional
+        the net poloidal (toroidal) current flowing on the surface. If None, will
+         attempt to infer from the given surface_current_field's attributes.
+    helicity : int, optional
+        the helicity of the coil currents, should be consistent with the passed-in
+        net currents. If None, will use the correct ratio of net poloidal and net
+        toroidal currents.
 
     Returns
     -------
@@ -1550,36 +1594,47 @@ def _find_current_potential_contours(
     # we know that I = -(G - G_ext) / (helicity * NFP)
     # if net_toroidal_current is zero, then we have modular coils,
     # and just make helicity zero
-    net_poloidal_current = surface_current_field.G
-    net_toroidal_current = surface_current_field.I
+    net_poloidal_current = setdefault(
+        net_poloidal_current, surface_current_field.G, net_poloidal_current
+    )
+    net_toroidal_current = setdefault(
+        net_toroidal_current, surface_current_field.I, net_toroidal_current
+    )
     nfp = surface_current_field.NFP
-    helicity = safediv(net_poloidal_current, net_toroidal_current * nfp, threshold=1e-8)
+    helicity = setdefault(
+        helicity,
+        safediv(net_poloidal_current, net_toroidal_current * nfp, threshold=1e-8),
+        helicity,
+    )
     coil_type = "modular" if jnp.isclose(helicity, 0) else "helical"
     dz = 2 * np.pi / nfp / npts
     if coil_type == "helical":
         # helical coils
-        zeta_full = jnp.arange(
-            0,
-            2 * jnp.pi / nfp + 1e-6,
-            dz,
+        zeta_full = jnp.linspace(
+            0, 2 * jnp.pi / nfp, round(2 * jnp.pi / nfp / dz), endpoint=True
         )
         # ensure we have always have points at least from -2pi, 2pi as depending
         # on sign of I, the contours from Phi = [0, abs(I)] may have their starting
         # points (the theta value at zeta=0) be positive or negative theta values,
         # and we want to ensure we catch the start and end of the contours
-        theta_full = jnp.arange(
-            jnp.sign(helicity) * 2 * jnp.pi,
-            -jnp.sign(helicity) * (2 * np.pi * int(np.abs(helicity) + 1) + 1e-6),
-            -jnp.sign(helicity) * 2 * np.pi / npts / nfp,
+        theta0 = jnp.sign(helicity) * 2 * jnp.pi
+        theta1 = -jnp.sign(helicity) * (2 * np.pi * int(np.abs(helicity) + 1))
+        theta_full = jnp.linspace(
+            theta0,
+            theta1,
+            round(abs(theta1 - theta0) / dz),
+            endpoint=True,
         )
 
         theta_full = jnp.sort(theta_full)
     else:
         # modular coils
-        theta_full = jnp.linspace(0, 2 * jnp.pi, npts + 1)
+        theta_full = jnp.linspace(0, 2 * jnp.pi, round(2 * jnp.pi / dz))
         # we start below 0 for zeta to allow for contours which may go in/out of
         # the zeta=0 plane
-        zeta_full = jnp.arange(-jnp.pi / nfp, (2 + 1) * jnp.pi / nfp, dz)
+        zeta_full = jnp.linspace(
+            -jnp.pi / nfp, (2 + 1) * jnp.pi / nfp, round(4 * jnp.pi / dz)
+        )
 
     ################################################################
     # find contours of constant phi
@@ -1701,9 +1756,9 @@ def _find_current_potential_contours(
         # check if closed and if not throw warning
 
         if not jnp.isclose(
-            jnp.abs(contour_zeta[-1][-1] - contour_zeta[-1][0]), zeta_diff
+            jnp.abs(contour_zeta[-1][-1] - contour_zeta[-1][0]), zeta_diff, rtol=1e-4
         ) or not jnp.isclose(
-            jnp.abs(contour_theta[-1][-1] - contour_theta[-1][0]), theta_diff
+            jnp.abs(contour_theta[-1][-1] - contour_theta[-1][0]), theta_diff, rtol=1e-4
         ):
             warnings.warn(
                 f"Detected a coil contour (coil index {j}) that may not be "
@@ -1717,6 +1772,13 @@ def _find_current_potential_contours(
                 "Use `show_plots=True` to visualize the contours.",
                 UserWarning,
             )
+            print(f"zeta diff = {jnp.abs(contour_zeta[-1][-1] - contour_zeta[-1][0])}")
+            print(f"expected zeta diff = {zeta_diff}")
+            print(
+                f"theta diff = {jnp.abs(contour_theta[-1][-1] - contour_theta[-1][0])}"
+            )
+            print(f"expected theta diff = {theta_diff}")
+
         numCoils += 1
         if show_plots:
             plt.plot(contour_zeta[-1], contour_theta[-1], "-r", linewidth=1)

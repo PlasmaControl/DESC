@@ -1497,37 +1497,8 @@ def zernike_radial_poly(r, l, m, dr=0, exact="auto"):
     return polyval_vec(coeffs, r, prec=prec).T
 
 
-def custom_jvp_with_jit(func):
-    """Decorator for custom_jvp with jit.
-
-    This decorator is specifically with functions that have the same
-    structure as the zernike_radial such as r, l, m, dr, where dr is
-    the static argument.
-    """
-
-    @functools.partial(
-        custom_jvp,
-        nondiff_argnums=(3,),
-    )
-    def dummy(r, l, m, dr=0):
-        return func(r, l, m, dr)
-
-    @dummy.defjvp
-    def _dummy_jvp(dr, x, xdot):
-        """Custom derivative rule for the function.
-
-        This is just the same function called with dx+1.
-        """
-        (r, l, m) = x
-        (rdot, ldot, mdot) = xdot
-        f = dummy(r, l, m, dr)
-        df = dummy(r, l, m, dr + 1)
-        return f, df * rdot
-
-    return jit(dummy, static_argnums=3)
-
-
-@custom_jvp_with_jit
+@functools.partial(custom_jvp, nondiff_argnums=(1, 2, 3))
+@functools.partial(jit, static_argnums=(3,))
 def zernike_radial(r, l, m, dr=0):
     """Radial part of zernike polynomials.
 
@@ -1553,12 +1524,12 @@ def zernike_radial(r, l, m, dr=0):
         basis function(s) evaluated at specified points
 
     """
-    m = jnp.abs(m).astype(float)
+    m = jnp.abs(m).astype(jnp.float64)
     alpha = m
     beta = 0
     n = (l - m) // 2
-    s = (-1) ** n
-    jacobi_arg = 1 - 2 * r**2
+    s = ((-1) ** n).astype(jnp.float64)
+    jacobi_arg = 1.0 - 2 * r**2
     if dr == 0:
         out = r**m * _jacobi(n, alpha, beta, jacobi_arg, 0)
     elif dr == 1:
@@ -1603,7 +1574,7 @@ def zernike_radial(r, l, m, dr=0):
             "Analytic radial derivatives of Zernike polynomials for order>4 "
             + "have not been implemented."
         )
-    return s * jnp.where((l - m) % 2 == 0, out, 0)
+    return s * jnp.where((l - m) % 2 == 0, out, 0.0)
 
 
 def power_coeffs(l):
@@ -1830,7 +1801,7 @@ def _jacobi(n, alpha, beta, x, dx=0):
     # other edge cases
     out = jnp.where(n == 0, 1.0, out)
     out = jnp.where(n == 1, 0.5 * (2 * (alpha + 1) + (alpha + beta + 2) * (x - 1)), out)
-    return c * out
+    return (c * out).astype(jnp.float64)
 
 
 @_jacobi.defjvp
@@ -1844,3 +1815,12 @@ def _jacobi_jvp(n, alpha, beta, dx, x, xdot):
     # probably a more elegant fix, but just setting those derivatives to zero seems
     # to work fine.
     return f, df * xdot
+
+
+@zernike_radial.defjvp
+def zernike_radial_jvp(l, m, dr, primal, tangent):
+    (r,) = primal
+    (rdot,) = tangent
+    f = zernike_radial(r, l, m, dr)
+    df = zernike_radial(r, l, m, dr + 1)
+    return f, df * rdot

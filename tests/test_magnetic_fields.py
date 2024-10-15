@@ -1,5 +1,6 @@
 """Tests for magnetic field classes."""
 
+import matplotlib.pyplot as plt
 import numpy as np
 import pytest
 from diffrax import Dopri5
@@ -558,6 +559,7 @@ class TestMagneticFields:
         )
 
     @pytest.mark.unit
+    @pytest.mark.mpl_image_compare(remove_text=True, tolerance=10)
     def test_fourier_current_potential_field_modular_coil_cut(self):
         """Test Fourier current potential coil cut against analytic solenoid."""
         surface = FourierRZToroidalSurface(
@@ -581,7 +583,7 @@ class TestMagneticFields:
             modes_Z=surface._Z_basis.modes[:, 1:],
             NFP=surface.NFP,
         )
-        coils = field.to_CoilSet(10, stell_sym=True).to_FourierXYZ(
+        coils = field.to_CoilSet(10, stell_sym=True, show_plots=True).to_FourierXYZ(
             N=2, grid=LinearGrid(N=8), check_intersection=False
         )
 
@@ -599,6 +601,7 @@ class TestMagneticFields:
             atol=1e-8,
             rtol=1e-8,
         )
+        return plt.gcf()
 
     @pytest.mark.unit
     def test_fourier_current_potential_field_helical_coil_cut(self):

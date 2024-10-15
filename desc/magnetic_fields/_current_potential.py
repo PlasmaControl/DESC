@@ -2,13 +2,12 @@
 
 import warnings
 
-import jax.scipy
 import matplotlib.pyplot as plt
 import numpy as np
 import skimage.measure
 from scipy.constants import mu_0
 
-from desc.backend import fori_loop, jnp
+from desc.backend import cho_factor, cho_solve, fori_loop, jnp
 from desc.basis import DoubleFourierSeries
 from desc.compute import rpz2xyz, rpz2xyz_vec, xyz2rpz_vec
 from desc.compute.utils import _compute as compute_fun
@@ -807,9 +806,6 @@ class FourierCurrentPotentialField(
         stell_sym : bool
             whether the coils are stellarator-symmetric or not. Defaults to False. Only
             matters for modular coils (currently)
-            TODO: once winding surface curve is implemented, enforce sym for
-            helical as well
-
 
         Returns
         -------
@@ -930,6 +926,8 @@ class FourierCurrentPotentialField(
                 *coils, NFP=nfp, sym=stell_sym, check_intersection=stell_sym
             )
         else:
+            # TODO: once winding surface curve is implemented, enforce sym for
+            # helical as well
             final_coilset = CoilSet(*coils, check_intersection=False)
         return final_coilset
 
@@ -1052,11 +1050,9 @@ def run_regcoil(  # noqa: C901 fxn too complex
 ):
     """Runs REGCOIL-like algorithm to find the current potential for the surface.
 
-    NOTE: The original passed-in field will not be modified.
-
     NOTE: The function is not jit/AD compatible
 
-    Follows algorithm of [1] to find the current potential Phi on the surface,
+    Follows algorithm of [1]_ to find the current potential Phi on the surface,
     given a surface current::
 
         K = n x ∇ Φ
@@ -1084,9 +1080,6 @@ def run_regcoil(  # noqa: C901 fxn too complex
     complex and large surface currents) and larger `lambda_regularization`
     corresponds to more regularization (consequently, higher Bn error but simpler
     and smaller surface currents).
-
-    [1] Landreman, An improved current potential method for fast computation
-        of stellarator coil shapes, Nuclear Fusion (2017)
 
     Parameters
     ----------
@@ -1121,9 +1114,7 @@ def run_regcoil(  # noqa: C901 fxn too complex
         part of Phi, or to use the full REGCOIL regularization penalizing | K | ^ 2.
     source_grid : Grid, optional
         Source grid upon which to evaluate the surface current when calculating
-        the normal field on the plasma surface. Also used to evaluate the
-        virtual casing current, if the plasma has finite plasma currents.
-        Defaults to
+        the normal field on the plasma surface. Defaults to
         LinearGrid(M=max(3 * current_potential_field.M_Phi, 30),
         N=max(3 * current_potential_field.N_Phi, 30), NFP=eq.NFP)
     eval_grid : Grid, optional
@@ -1153,10 +1144,6 @@ def run_regcoil(  # noqa: C901 fxn too complex
         1 will display Bn max,min,average and chi^2 values for each
         lambda_regularization.
         2 will display jacobian timing info
-    normalize : bool, optional
-        whether or not to normalize Bn when printing the Bnormal errors. If true,
-        will normalize by the average equilibrium field strength on the surface.
-
 
     Returns
     -------
@@ -1197,6 +1184,11 @@ def run_regcoil(  # noqa: C901 fxn too complex
                     of `lambda_regularization`.
             eval_grid: Grid object that Bn was evaluated at.
             source_grid: Grid object that Phi and K were evaluated at.
+
+    References
+    ----------
+    .. [1] Landreman, Matt. "An improved current potential method for fast computation
+      of stellarator coil shapes." Nuclear Fusion 57 (2017): 046003.
 
     """
     errorif(
@@ -1466,15 +1458,16 @@ def run_regcoil(  # noqa: C901 fxn too complex
         else:
             # solve linear system
             matrix = A1 + lambda_regularization * A2
-            phi_mn_opt = jax.scipy.linalg.solve(
-                matrix, rhs_B + lambda_regularization * rhs_K, assume_a="pos"
-            )
+            rhs = rhs_B + lambda_regularization * rhs_K
+            cho_fac_c_and_lower = cho_factor(matrix)
+            phi_mn_opt = cho_solve(cho_fac_c_and_lower, rhs)
             if jnp.any(jnp.isnan(phi_mn_opt)):
-                print("found nans")
+                print(
+                    "Singular linear system encountered at "
+                    f"lambda={lambda_regularization}, retrying with pseudoinverse"
+                )
                 # failed to solve, likely bc matrix is singular, use lstsq instead
-                phi_mn_opt = jnp.linalg.lstsq(
-                    matrix, rhs_B + lambda_regularization * rhs_K
-                )[0]
+                phi_mn_opt = jnp.linalg.lstsq(matrix, rhs)[0]
 
         phi_mns.append(phi_mn_opt)
 

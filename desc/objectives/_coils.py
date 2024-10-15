@@ -1508,7 +1508,6 @@ class SurfaceCurrentRegularization(_Objective):
     surface_current_field : CurrentPotentialField
         Surface current which is producing the magnetic field, the parameters
         of this will be optimized to minimize the objective.
-
     source_grid : Grid, optional
         Collocation grid containing the nodes to evaluate current source at on
         the winding surface. If used in conjunction with the QuadraticFlux objective,
@@ -1517,8 +1516,8 @@ class SurfaceCurrentRegularization(_Objective):
 
     References
     ----------
-    .. [1] Landreman, An improved current potential method for fast computation
-        of stellarator coil shapes, Nuclear Fusion (2017)
+    .. [1] Landreman, Matt. "An improved current potential method for fast computation
+      of stellarator coil shapes." Nuclear Fusion 57 (2017): 046003.
 
     """
 

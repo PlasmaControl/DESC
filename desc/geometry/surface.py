@@ -381,7 +381,7 @@ class FourierRZToroidalSurface(Surface):
         References
         ----------
         .. [1] Goodman, Alan, et al. "Constructing Precisely Quasi-Isodynamic
-        Magnetic Fields." Journal of Plasma Physics 89.5 (2023): 905890504.
+          Magnetic Fields." Journal of Plasma Physics 89.5 (2023): 905890504.
 
         """
         assert mirror_ratio <= 1

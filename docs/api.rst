@@ -164,6 +164,7 @@ Objective Functions
     desc.objectives.CoilCurrentLength
     desc.objectives.CoilCurvature
     desc.objectives.CoilLength
+    desc.objectives.CoilSetLinkingNumber
     desc.objectives.CoilSetMinDistance
     desc.objectives.CoilTorsion
     desc.objectives.CurrentDensity

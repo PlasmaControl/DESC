@@ -1497,7 +1497,6 @@ def zernike_radial_poly(r, l, m, dr=0, exact="auto"):
     return polyval_vec(coeffs, r, prec=prec).T
 
 
-@functools.partial(custom_jvp, nondiff_argnums=(1, 2, 3))
 @functools.partial(jit, static_argnums=(3,))
 def zernike_radial(r, l, m, dr=0):
     """Radial part of zernike polynomials.
@@ -1733,7 +1732,7 @@ def _binom(n, k):
     return b
 
 
-@functools.partial(custom_jvp, nondiff_argnums=(0, 1, 2, 4))
+@functools.partial(custom_jvp, nondiff_argnums=(4,))
 @jit
 @jnp.vectorize
 def _jacobi(n, alpha, beta, x, dx=0):
@@ -1805,9 +1804,9 @@ def _jacobi(n, alpha, beta, x, dx=0):
 
 
 @_jacobi.defjvp
-def _jacobi_jvp(n, alpha, beta, dx, x, xdot):
-    (x,) = x
-    (xdot,) = xdot
+def _jacobi_jvp(dx, x, xdot):
+    (n, alpha, beta, x) = x
+    (*_, xdot) = xdot
     f = _jacobi(n, alpha, beta, x, dx)
     df = _jacobi(n, alpha, beta, x, dx + 1)
     # in theory n, alpha, beta, dx aren't differentiable (they're integers)
@@ -1815,12 +1814,3 @@ def _jacobi_jvp(n, alpha, beta, dx, x, xdot):
     # probably a more elegant fix, but just setting those derivatives to zero seems
     # to work fine.
     return f, df * xdot
-
-
-@zernike_radial.defjvp
-def zernike_radial_jvp(l, m, dr, primal, tangent):
-    (r,) = primal
-    (rdot,) = tangent
-    f = zernike_radial(r, l, m, dr)
-    df = zernike_radial(r, l, m, dr + 1)
-    return f, df * rdot

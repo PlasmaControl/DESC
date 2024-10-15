@@ -93,10 +93,17 @@ def factorize_linear_constraints(objective, constraint, x_scale="auto"):  # noqa
     assert A.shape[1] == xp.size
 
     # check for degenerate rows and delete if necessary
+    # augment A with b so that it only deletes actual degenerate constraints
+    # which are duplicate rows of A that also have duplicate entries of b,
+    # if the entries of b aren't the same then the constraints are actually
+    # incompatible and so we will leave those to be caught later.
+    A_augmented = np.hstack(A, b)
     row_idx_to_delete = np.array([], dtype=int)
-    for row_idx in range(A.shape[0]):
+    for row_idx in range(A_augmented.shape[0]):
         # find all rows equal to this row
-        rows_equal_to_this_row = np.where(np.all(A[row_idx, :] == A, axis=1))[0]
+        rows_equal_to_this_row = np.where(
+            np.all(A_augmented[row_idx, :] == A_augmented, axis=1)
+        )[0]
         # find the rows equal to this row that are not this row
         rows_equal_to_this_row_but_not_this_row = rows_equal_to_this_row[
             rows_equal_to_this_row != row_idx
@@ -111,8 +118,9 @@ def factorize_linear_constraints(objective, constraint, x_scale="auto"):  # noqa
         ):
             row_idx_to_delete = np.append(row_idx_to_delete, rows_equal_to_this_row[1:])
     # delete the affected rows, and also the corresponding rows of b
-    A = np.delete(A, row_idx_to_delete, axis=0)
-    b = np.delete(b, row_idx_to_delete)
+    A_augmented = np.delete(A_augmented, row_idx_to_delete, axis=0)
+    A = A_augmented[:, :-1]
+    b = A_augmented[:, -1].squeeze()
 
     # will store the global index of the unfixed rows, idx
     indices_row = np.arange(A.shape[0])

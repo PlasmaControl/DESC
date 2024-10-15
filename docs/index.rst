@@ -61,10 +61,11 @@
    :maxdepth: 1
    :caption: Developer guides
 
+   notebooks/dev_guide/getting-started-eq.solve.ipynb
+   notebooks/dev_guide/grid.ipynb
    adding_compute_funs
    adding_objectives
    adding_optimizers
-   notebooks/dev_guide/grid.ipynb
 
 
 

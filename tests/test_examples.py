@@ -1364,7 +1364,7 @@ def test_regcoil_PF_check_B(regcoil_PF_coils):
         data,
         surface_current_field,
         eq,
-    ) = regcoil_PF_coils()
+    ) = regcoil_PF_coils
     assert surface_current_field.G == 0
     assert abs(surface_current_field.I) > 0
     chi_B = data["chi^2_B"][0]

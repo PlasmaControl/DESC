@@ -1039,7 +1039,7 @@ def _compute_A_or_B_from_CurrentPotentialField(
 # REGCOIL utilities
 
 
-def run_regcoil(  # noqa: C901 fxn too complex
+def solve_regularized_least_squares_surface_current(  # noqa: C901 fxn too complex
     field,
     eq,
     lambda_regularization=1e-30,
@@ -1078,7 +1078,7 @@ def run_regcoil(  # noqa: C901 fxn too complex
     by minimizing the quadratic flux on the plasma surface along with a
     regularization term on the surface current magnitude::
 
-        min_Φₛᵥ  ∫ ∫ (B . n)^2 dA + λ ∫ ∫ | K |^2 dA
+        min_Φₛᵥ  ∫ ∫ (B . n)^2 dA + λ ∫ ∫ ||K||^2 dA
 
     where λ is the regularization parameter, smaller `lambda_regularization`
     corresponds to less regularization (consequently, lower Bn error but more
@@ -1183,7 +1183,7 @@ def run_regcoil(  # noqa: C901 fxn too complex
             chi^2_K : Current density magnitude squared, integrated over winding
                     surface. a list of float of length `lambda_regularization.size`,
                     corresponding to the array of `lambda_regularization`.
-            | K | : Current density magnitude on winding surface, evaluated at the
+            ||K|| : Current density magnitude on winding surface, evaluated at the
                     given `source_grid`. A list of arrays, with list length
                     `lambda_regularization.size`, corresponding to the array
                     of `lambda_regularization`.

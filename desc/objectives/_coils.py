@@ -1513,7 +1513,7 @@ class SurfaceCurrentRegularization(_Objective):
     Intended to be used with a QuadraticFlux objective, to form
     a problem similar to the REGCOIL algorithm described in [1]_ (if used with a
     ``FourierCurrentPotentialField``, is equivalent to the ``simple``
-    regularization of the ``run_regcoil`` method).
+    regularization of the ``solve_regularized_least_squares_surface_current`` method).
 
     References
     ----------

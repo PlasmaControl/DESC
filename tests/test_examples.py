@@ -31,7 +31,7 @@ from desc.magnetic_fields import (
     SplineMagneticField,
     ToroidalMagneticField,
     VerticalMagneticField,
-    run_regcoil,
+    solve_regularized_least_squares_surface_current,
 )
 from desc.objectives import (
     AspectRatio,
@@ -1220,7 +1220,7 @@ def test_regcoil_axisymmetric():
     surface_current_field = FourierCurrentPotentialField.from_surface(
         surf_winding, M_Phi=1, N_Phi=1, sym_Phi="sin"
     )
-    surface_current_field, data = run_regcoil(
+    surface_current_field, data = solve_regularized_least_squares_surface_current(
         surface_current_field,
         eq,
         lambda_regularization=1e-30,  # little regularization to avoid singular matrix
@@ -1253,7 +1253,7 @@ def test_regcoil_axisymmetric():
         N=2,
     )
     # test with lambda_regularization large, should have no phi_mn
-    surface_current_field, data = run_regcoil(
+    surface_current_field, data = solve_regularized_least_squares_surface_current(
         surface_current_field,
         eq=eq,
         eval_grid=LinearGrid(M=10, N=10, NFP=eq.NFP, sym=eq.sym),
@@ -1275,7 +1275,7 @@ def test_regcoil_axisymmetric():
     np.testing.assert_allclose(B, B_from_surf, rtol=1e-4, atol=1e-8)
 
     # test with half the current given external to winding surface
-    surface_current_field, data = run_regcoil(
+    surface_current_field, data = solve_regularized_least_squares_surface_current(
         surface_current_field,
         eq=eq,
         eval_grid=LinearGrid(M=10, N=10, NFP=eq.NFP, sym=eq.sym),

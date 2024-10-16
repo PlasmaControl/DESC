@@ -22,7 +22,10 @@ from desc.compute import rpz2xyz_vec
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.examples import get
 from desc.grid import LinearGrid
-from desc.magnetic_fields import FourierCurrentPotentialField, run_regcoil
+from desc.magnetic_fields import (
+    FourierCurrentPotentialField,
+    solve_regularized_least_squares_surface_current,
+)
 from desc.vmec import VMECIO
 
 plt.rcParams.update({"figure.max_open_warning": 0})
@@ -354,7 +357,7 @@ def regcoil_helical_coils_scan():
     surface_current_field = FourierCurrentPotentialField.from_surface(
         surf_winding, M_Phi=8, N_Phi=8
     )
-    fields, data = run_regcoil(
+    fields, data = solve_regularized_least_squares_surface_current(
         surface_current_field,
         eq,
         eval_grid=LinearGrid(M=20, N=20, NFP=eq.NFP, sym=True),
@@ -389,7 +392,7 @@ def regcoil_modular_coils():
     surface_current_field = FourierCurrentPotentialField.from_surface(
         surf_winding, M_Phi=M_Phi, N_Phi=N_Phi
     )
-    surface_current_field, data = run_regcoil(
+    surface_current_field, data = solve_regularized_least_squares_surface_current(
         surface_current_field,
         eq,
         eval_grid=LinearGrid(M=M_egrid, N=N_egrid, NFP=eq.NFP, sym=True),

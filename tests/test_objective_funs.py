@@ -37,12 +37,14 @@ from desc.magnetic_fields import (
 )
 from desc.objectives import (
     AspectRatio,
+    BallooningStability,
     BootstrapRedlConsistency,
     BoundaryError,
     BScaleLength,
     CoilCurrentLength,
     CoilCurvature,
     CoilLength,
+    CoilSetLinkingNumber,
     CoilSetMinDistance,
     CoilTorsion,
     Elongation,
@@ -77,7 +79,7 @@ from desc.objectives import (
 )
 from desc.objectives._free_boundary import BoundaryErrorNESTOR
 from desc.objectives.normalization import compute_scaling_factors
-from desc.objectives.objective_funs import _Objective
+from desc.objectives.objective_funs import _Objective, collect_docs
 from desc.objectives.utils import softmax, softmin
 from desc.profiles import FourierZernikeProfile, PowerSeriesProfile
 from desc.utils import PRINT_WIDTH
@@ -1194,6 +1196,25 @@ class TestObjectiveFunction:
         test(eq, PoloidalMagneticField(1, 1, 1), 0.0)
 
     @pytest.mark.unit
+    def test_coil_linking_number(self):
+        """Test for linking number objective."""
+        coil = FourierPlanarCoil(center=[10, 1, 0])
+        # regular modular coilset from symmetry, so that there are 10 coils, half going
+        # one way and half going the other way
+        coilset = CoilSet.from_symmetry(coil, NFP=5, sym=True)
+        coil2 = FourierRZCoil()
+        # add a coil along the axis that links all the other coils
+        coilset2 = MixedCoilSet(coilset, coil2)
+
+        obj = CoilSetLinkingNumber(coilset2)
+        obj.build()
+        out = obj.compute_scaled_error(coilset2.params_dict)
+        # the modular coils all link 1 other coil (the axis)
+        # while the axis links all 10 modular coils
+        expected = np.array([1] * 10 + [10])
+        np.testing.assert_allclose(out, expected, rtol=1e-3)
+
+    @pytest.mark.unit
     def test_signed_plasma_vessel_distance(self):
         """Test calculation of signed distance from plasma to vessel."""
         R0 = 10.0
@@ -1284,33 +1305,68 @@ def test_derivative_modes():
     surf = FourierRZToroidalSurface()
     obj1 = ObjectiveFunction(
         [
-            PlasmaVesselDistance(eq, surf),
+            PlasmaVesselDistance(eq, surf, jac_chunk_size=1),
             MagneticWell(eq),
+            AspectRatio(eq),
         ],
         deriv_mode="batched",
         use_jit=False,
     )
     obj2 = ObjectiveFunction(
         [
-            PlasmaVesselDistance(eq, surf),
+            PlasmaVesselDistance(eq, surf, jac_chunk_size=2),
             MagneticWell(eq),
+            AspectRatio(eq, jac_chunk_size=None),
         ],
         deriv_mode="blocked",
+        jac_chunk_size=10,
         use_jit=False,
     )
-    obj3 = ObjectiveFunction(
+    with pytest.warns(DeprecationWarning, match="looped"):
+        obj3 = ObjectiveFunction(
+            [
+                PlasmaVesselDistance(eq, surf),
+                MagneticWell(eq),
+                AspectRatio(eq),
+            ],
+            deriv_mode="looped",
+            use_jit=False,
+        )
+    with pytest.raises(ValueError, match="jac_chunk_size"):
+        obj1.build()
+    with pytest.raises(ValueError, match="jac_chunk_size"):
+        obj2.build()
+    obj1 = ObjectiveFunction(
         [
             PlasmaVesselDistance(eq, surf),
             MagneticWell(eq),
+            AspectRatio(eq),
         ],
-        deriv_mode="looped",
+        deriv_mode="batched",
+        jac_chunk_size="auto",
         use_jit=False,
     )
-
+    obj2 = ObjectiveFunction(
+        [
+            PlasmaVesselDistance(eq, surf, jac_chunk_size=2),
+            MagneticWell(eq),
+            AspectRatio(eq, jac_chunk_size=None),
+        ],
+        deriv_mode="blocked",
+        jac_chunk_size="auto",
+        use_jit=False,
+    )
     obj1.build()
     obj2.build()
+    # check that default size works for blocked
+    assert obj2.objectives[0]._jac_chunk_size == 2
+    assert obj2.objectives[1]._jac_chunk_size > 0
+    assert obj2.objectives[2]._jac_chunk_size > 0
+    # hard to say what size auto will give, just check it is >0
+    assert obj1._jac_chunk_size > 0
     obj3.build()
     x = obj1.x(eq, surf)
+    v = jnp.ones_like(x)
     g1 = obj1.grad(x)
     g2 = obj2.grad(x)
     g3 = obj3.grad(x)
@@ -1331,6 +1387,48 @@ def test_derivative_modes():
     H3 = obj3.hess(x)
     np.testing.assert_allclose(H1, H2, atol=1e-10)
     np.testing.assert_allclose(H1, H3, atol=1e-10)
+    j1 = obj1.jvp_scaled(v, x)
+    j2 = obj2.jvp_scaled(v, x)
+    j3 = obj3.jvp_scaled(v, x)
+    np.testing.assert_allclose(j1, j2, atol=1e-10)
+    np.testing.assert_allclose(j1, j3, atol=1e-10)
+
+
+@pytest.mark.unit
+def test_fwd_rev():
+    """Test that forward and reverse mode jvps etc give same results."""
+    eq = Equilibrium()
+    obj1 = MeanCurvature(eq, deriv_mode="fwd")
+    obj2 = MeanCurvature(eq, deriv_mode="rev")
+    obj1.build()
+    obj2.build()
+
+    x = eq.pack_params(eq.params_dict)
+    J1 = obj1.jac_scaled(x)
+    J2 = obj2.jac_scaled(x)
+    np.testing.assert_allclose(J1, J2, atol=1e-14)
+
+    jvp1 = obj1.jvp_scaled(x, jnp.ones_like(x))
+    jvp2 = obj2.jvp_scaled(x, jnp.ones_like(x))
+    np.testing.assert_allclose(jvp1, jvp2, atol=1e-14)
+
+    surf = FourierRZToroidalSurface()
+    obj1 = PlasmaVesselDistance(eq, surf, deriv_mode="fwd")
+    obj2 = PlasmaVesselDistance(eq, surf, deriv_mode="rev")
+    obj1.build()
+    obj2.build()
+
+    x1 = eq.pack_params(eq.params_dict)
+    x2 = surf.pack_params(surf.params_dict)
+
+    J1a, J1b = obj1.jac_scaled(x1, x2)
+    J2a, J2b = obj2.jac_scaled(x1, x2)
+    np.testing.assert_allclose(J1a, J2a, atol=1e-14)
+    np.testing.assert_allclose(J1b, J2b, atol=1e-14)
+
+    jvp1 = obj1.jvp_scaled((x1, x2), (jnp.ones_like(x1), jnp.ones_like(x2)))
+    jvp2 = obj2.jvp_scaled((x1, x2), (jnp.ones_like(x1), jnp.ones_like(x2)))
+    np.testing.assert_allclose(jvp1, jvp2, atol=1e-14)
 
 
 @pytest.mark.unit
@@ -2167,6 +2265,7 @@ class TestComputeScalarResolution:
         CoilCurrentLength,
         CoilCurvature,
         CoilLength,
+        CoilSetLinkingNumber,
         CoilSetMinDistance,
         CoilTorsion,
         FusionPower,
@@ -2529,7 +2628,14 @@ class TestComputeScalarResolution:
     @pytest.mark.regression
     @pytest.mark.parametrize(
         "objective",
-        [CoilLength, CoilTorsion, CoilCurvature, CoilCurrentLength, CoilSetMinDistance],
+        [
+            CoilLength,
+            CoilTorsion,
+            CoilCurvature,
+            CoilCurrentLength,
+            CoilSetMinDistance,
+            CoilSetLinkingNumber,
+        ],
     )
     def test_compute_scalar_resolution_coils(self, objective):
         """Coil objectives."""
@@ -2559,11 +2665,13 @@ class TestObjectiveNaNGrad:
     ]
     specials = [
         # these require special logic
+        BallooningStability,
         BootstrapRedlConsistency,
         BoundaryError,
         CoilLength,
         CoilCurrentLength,
         CoilCurvature,
+        CoilSetLinkingNumber,
         CoilSetMinDistance,
         CoilTorsion,
         ForceBalanceAnisotropic,
@@ -2755,7 +2863,14 @@ class TestObjectiveNaNGrad:
     @pytest.mark.unit
     @pytest.mark.parametrize(
         "objective",
-        [CoilLength, CoilTorsion, CoilCurvature, CoilCurrentLength, CoilSetMinDistance],
+        [
+            CoilLength,
+            CoilTorsion,
+            CoilCurvature,
+            CoilCurrentLength,
+            CoilSetMinDistance,
+            CoilSetLinkingNumber,
+        ],
     )
     def test_objective_no_nangrad_coils(self, objective):
         """Coil objectives."""
@@ -2794,6 +2909,15 @@ class TestObjectiveNaNGrad:
         obj.build()
         g = obj.grad(obj.x())
         assert not np.any(np.isnan(g)), str(helicity)
+
+    @pytest.mark.unit
+    def test_objective_no_nangrad_ballooning(self):
+        """BallooningStability."""
+        eq = get("HELIOTRON")
+        obj = ObjectiveFunction(BallooningStability(eq=eq))
+        obj.build()
+        g = obj.grad(obj.x())
+        assert not np.any(np.isnan(g))
 
 
 @pytest.mark.unit
@@ -2845,3 +2969,19 @@ def test_objective_print_widths():
                     + "change the name or increase the PRINT_WIDTH in the "
                     + "desc/utils.py file. The former is preferred."
                 )
+
+
+def test_objective_docstring():
+    """Test that the objective docstring and collect_docs are consistent."""
+    objective_docs = _Objective.__doc__.rstrip()
+    doc_header = (
+        "Objective (or constraint) used in the optimization of an Equilibrium.\n\n"
+        + "    Parameters\n"
+        + "    ----------\n"
+        + "    things : Optimizable or tuple/list of Optimizable\n"
+        + "        Objects that will be optimized to satisfy the Objective.\n"
+    )
+    collected_docs = collect_docs().strip()
+    collected_docs = doc_header + "    " + collected_docs
+
+    assert objective_docs == collected_docs

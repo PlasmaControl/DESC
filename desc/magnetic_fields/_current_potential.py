@@ -1037,10 +1037,7 @@ def _compute_A_or_B_from_CurrentPotentialField(
     return B
 
 
-# REGCOIL utilities
-
-
-def solve_regularized_least_squares_surface_current(  # noqa: C901 fxn too complex
+def solve_regularized_surface_current(  # noqa: C901 fxn too complex
     field,
     eq,
     lambda_regularization=1e-30,
@@ -1090,7 +1087,7 @@ def solve_regularized_least_squares_surface_current(  # noqa: C901 fxn too compl
     Parameters
     ----------
     field : FourierCurrentPotentialField
-        ``FourierCurrentPotentialField`` to run REGCOIL with.
+        ``FourierCurrentPotentialField`` to run REGCOIL algorithm with.
     eq : Equilibrium
         Equilibrium to minimize the quadratic flux (plus regularization) on.
     lambda_regularization : float or ndarray, optional
@@ -1211,8 +1208,22 @@ def solve_regularized_least_squares_surface_current(  # noqa: C901 fxn too compl
     errorif(
         regularization_type not in ["simple", "regcoil"],
         ValueError,
-        "regulariztation_type must be simple or regcoil",
+        'regularization_type must be "simple" or "regcoil"',
     )
+    errorif(
+        not isinstance(field, FourierCurrentPotentialField),
+        ValueError,
+        "Expected FourierCurrentPotentialField for field argument, instead got type "
+        f"{type(field)}",
+    )
+    warnif(
+        field.sym_Phi == "cos" and field.sym is True and eq.sym is True,
+        UserWarning,
+        "Detected incompatible Phi symmetry (cos) for symmetric"
+        " equilibrium and surface geometry, it is recommended to switch to"
+        " sin symmetry for Phi.",
+    )
+
     current_potential_field = field.copy()  # copy field so we can modify freely
     q = current_helicity[0]  # poloidal transits before coil returns to itself
     p = current_helicity[1]  # toroidal transits before coil returns to itself

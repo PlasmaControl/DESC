@@ -1588,10 +1588,7 @@ class ToroidalFlux(_Objective):
         field_params = params_1 if not self._qfm_surface else params_2
         surf_params = params_2 if not self._qfm_surface else params_1
 
-        if not self._qfm_surface:
-            data = constants["equil_data"]
-            plasma_coords = constants["plasma_coords"]
-        else:
+        if self._qfm_surface:
             data = compute_fun(
                 self._eq,
                 self._data_keys,
@@ -1600,6 +1597,9 @@ class ToroidalFlux(_Objective):
                 constants["eval_profiles"],
             )
             plasma_coords = jnp.array([data["R"], data["phi"], data["Z"]]).T
+        else:
+            data = constants["equil_data"]
+            plasma_coords = constants["plasma_coords"]
 
         grid = constants["eval_grid"]
 

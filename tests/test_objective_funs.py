@@ -2945,6 +2945,7 @@ def test_asymmetric_normalization():
         assert np.all(np.isfinite(val))
 
 
+@pytest.mark.unit
 def test_objective_print_widths():
     """Test that the objective's name is shorter than max."""
     subclasses = _Objective.__subclasses__()
@@ -2973,6 +2974,7 @@ def test_objective_print_widths():
                 )
 
 
+@pytest.mark.unit
 def test_objective_docstring():
     """Test that the objective docstring and collect_docs are consistent."""
     objective_docs = _Objective.__doc__.rstrip()

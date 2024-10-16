@@ -28,3 +28,12 @@ repos:
     rev: v3.2.0
     hooks:
       - id: pyupgrade
+  - repo: local
+    hooks:
+      - id: check_unmarked_tests
+        name: check_unmarked_tests
+        entry: devtools/check_unmarked_tests.sh
+        language: script
+        files: ^tests/
+        types: [python]
+        pass_filenames: false

@@ -989,6 +989,11 @@ class QuadraticFlux(_Objective):
     vacuum : bool
         If true, B_plasma (the contribution to the normal field on the boundary from the
         plasma currents) is set to zero.
+    sqrt_area_weighting : bool
+        Whether or not to square the local area weighting on the objective, i.e.
+        whether to return Bn * ||e_theta x e_zeta|| or Bn * sqrt(||e_theta x e_zeta||).
+        If True, when combined with SurfaceCurrentRegularization, the resulting problem
+        is equivalent to the REGCOIL algorithm.
 
     """
 
@@ -1016,6 +1021,7 @@ class QuadraticFlux(_Objective):
         eval_grid=None,
         field_grid=None,
         vacuum=False,
+        sqrt_area_weighting=False,
         name="Quadratic flux",
         jac_chunk_size=None,
     ):
@@ -1027,6 +1033,7 @@ class QuadraticFlux(_Objective):
         self._field = field
         self._field_grid = field_grid
         self._vacuum = vacuum
+        self._sqrt_area_weighting = sqrt_area_weighting
         things = [field]
         super().__init__(
             things=things,
@@ -1080,6 +1087,11 @@ class QuadraticFlux(_Objective):
             params=eq.params_dict,
             transforms=eval_transforms,
             profiles=eval_profiles,
+        )
+        eval_data["area_weighting"] = (
+            jnp.sqrt(eval_data["|e_theta x e_zeta|"])
+            if self._sqrt_area_weighting
+            else eval_data["|e_theta x e_zeta|"]
         )
 
         # pre-compute B_plasma because we are assuming eq is fixed
@@ -1142,7 +1154,7 @@ class QuadraticFlux(_Objective):
             params=field_params,
         )
         B_ext = jnp.sum(B_ext * eval_data["n_rho"], axis=-1)
-        f = (B_ext + B_plasma) * eval_data["|e_theta x e_zeta|"]
+        f = (B_ext + B_plasma) * eval_data["area_weighting"]
         return f
 
 
@@ -1485,12 +1497,12 @@ class SurfaceCurrentRegularization(_Objective):
 
     compute::
 
-        w * | K | * | e_theta x e_zeta |
+        w * ||K|| * ||e_theta x e_zeta||
 
     where K is the winding surface current density, w is the
     regularization parameter (the weight on this objective),
-    and | e_theta x e_zeta | is the magnitude of the surface normal i.e. the
-    surface jacobian | e_theta x e_zeta |
+    and ||e_theta x e_zeta|| is the magnitude of the surface normal i.e. the
+    surface jacobian ||e_theta x e_zeta||
 
     This is intended to be used with a surface current::
 
@@ -1501,24 +1513,23 @@ class SurfaceCurrentRegularization(_Objective):
     Intended to be used with a QuadraticFlux objective, to form
     a problem similar to the REGCOIL algorithm described in [1]_ (if used with a
     ``FourierCurrentPotentialField``, is equivalent to the ``simple``
-    regularization of the ``run_regcoil`` method).
+    regularization of the ``solve_regularized_surface_current`` method).
+
+    References
+    ----------
+    .. [1] Landreman, Matt. "An improved current potential method for fast computation
+      of stellarator coil shapes." Nuclear Fusion (2017).
 
     Parameters
     ----------
     surface_current_field : CurrentPotentialField
         Surface current which is producing the magnetic field, the parameters
         of this will be optimized to minimize the objective.
-
     source_grid : Grid, optional
         Collocation grid containing the nodes to evaluate current source at on
         the winding surface. If used in conjunction with the QuadraticFlux objective,
         with its ``field_grid`` matching this ``source_grid``, this replicates the
-        REGCOIL algorithm described in [1]_.
-
-    References
-    ----------
-    .. [1] Landreman, An improved current potential method for fast computation
-        of stellarator coil shapes, Nuclear Fusion (2017)
+        REGCOIL algorithm described in [1]_ .
 
     """
 
@@ -1597,11 +1608,17 @@ class SurfaceCurrentRegularization(_Objective):
         from desc.magnetic_fields import FourierCurrentPotentialField
 
         surface_current_field = self.things[0]
+        if isinstance(surface_current_field, FourierCurrentPotentialField):
+            M_Phi = surface_current_field._M_Phi
+            N_Phi = surface_current_field._N_Phi
+        else:
+            M_Phi = surface_current_field.M + 1
+            N_Phi = surface_current_field.N + 1
 
         if self._source_grid is None:
             source_grid = LinearGrid(
-                M=surface_current_field._M_Phi * 3 + 1,
-                N=surface_current_field._N_Phi * 3 + 1,
+                M=3 * M_Phi + 1,
+                N=3 * N_Phi + 1,
                 NFP=surface_current_field.NFP,
             )
         else:
@@ -1631,10 +1648,12 @@ class SurfaceCurrentRegularization(_Objective):
                     [abs(surface_current_field.I) + abs(surface_current_field.G), 1]
                 )
             else:  # it does not have I,G bc is CurrentPotentialField
-                self._normalization = np.mean(
-                    np.abs(
-                        surface_current_field.compute("Phi", grid=source_grid)["Phi"]
-                    )
+                Phi = surface_current_field.compute("Phi", grid=source_grid)["Phi"]
+                self._normalization = np.max(
+                    [
+                        np.mean(np.abs(Phi)),
+                        1,
+                    ]
                 )
 
         self._constants = {
@@ -1678,4 +1697,4 @@ class SurfaceCurrentRegularization(_Objective):
         )
 
         K_mag = safenorm(surface_data["K"], axis=-1)
-        return K_mag * surface_data["|e_theta x e_zeta|"]
+        return K_mag * jnp.sqrt(surface_data["|e_theta x e_zeta|"])

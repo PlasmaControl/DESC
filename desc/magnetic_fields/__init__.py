@@ -18,6 +18,6 @@ from ._core import (
 from ._current_potential import (
     CurrentPotentialField,
     FourierCurrentPotentialField,
-    run_regcoil,
+    solve_regularized_surface_current,
 )
 from ._dommaschk import DommaschkPotentialField, dommaschk_potential

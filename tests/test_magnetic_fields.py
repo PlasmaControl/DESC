@@ -1,5 +1,6 @@
 """Tests for magnetic field classes."""
 
+import matplotlib.pyplot as plt
 import numpy as np
 import pytest
 from diffrax import Dopri5
@@ -28,6 +29,7 @@ from desc.magnetic_fields import (
     VerticalMagneticField,
     field_line_integrate,
     read_BNORM_file,
+    solve_regularized_surface_current,
 )
 from desc.magnetic_fields._dommaschk import CD_m_k, CN_m_k
 from desc.utils import dot
@@ -558,6 +560,7 @@ class TestMagneticFields:
         )
 
     @pytest.mark.unit
+    @pytest.mark.mpl_image_compare(remove_text=True, tolerance=10)
     def test_fourier_current_potential_field_modular_coil_cut(self):
         """Test Fourier current potential coil cut against analytic solenoid."""
         surface = FourierRZToroidalSurface(
@@ -581,7 +584,7 @@ class TestMagneticFields:
             modes_Z=surface._Z_basis.modes[:, 1:],
             NFP=surface.NFP,
         )
-        coils = field.to_CoilSet(10, stell_sym=True).to_FourierXYZ(
+        coils = field.to_CoilSet(10, stell_sym=True, show_plots=True).to_FourierXYZ(
             N=2, grid=LinearGrid(N=8), check_intersection=False
         )
 
@@ -599,6 +602,7 @@ class TestMagneticFields:
             atol=1e-8,
             rtol=1e-8,
         )
+        return plt.gcf()
 
     @pytest.mark.unit
     def test_fourier_current_potential_field_helical_coil_cut(self):
@@ -1379,6 +1383,55 @@ class TestMagneticFields:
         np.testing.assert_allclose(B_axis_lowres, B_axis_highres, rtol=6e-3)
         np.testing.assert_allclose(B_half_lowres, B_half_highres, rtol=3e-3)
         np.testing.assert_allclose(B_lcfs_lowres, B_lcfs_highres, rtol=4e-3)
+
+    @pytest.mark.unit
+    def test_solve_current_potential_warnings_and_errors(self):
+        """Test solve current potential warnings/errors."""
+        field = FourierCurrentPotentialField(
+            I=0,
+            G=1,
+            sym_Phi="sin",
+        )
+        eq = get("SOLOVEV")
+        with pytest.warns(UserWarning, match="Reducing radial"):
+            eq.change_resolution(L=1, M=1, N=1, L_grid=1, M_grid=1, N_grid=1)
+        with pytest.raises(ValueError, match="length"):
+            solve_regularized_surface_current(field, eq, current_helicity=(1, 1, 1))
+        with pytest.raises(ValueError, match="integer"):
+            solve_regularized_surface_current(field, eq, current_helicity=(1.2, 1))
+        with pytest.raises(ValueError, match="regularization"):
+            solve_regularized_surface_current(
+                field, eq, regularization_type="not a valid option"
+            )
+        with pytest.raises(ValueError, match="Expected Fourier"):
+            solve_regularized_surface_current(
+                ToroidalMagneticField(1, 1),
+                eq,
+            )
+        with pytest.raises(AssertionError, match="Expected MagneticField"):
+            solve_regularized_surface_current(field, eq, external_field=eq)
+        field = FourierCurrentPotentialField(
+            I=0,
+            G=1,
+            sym_Phi="cos",
+        )
+        grid = LinearGrid(M=1, N=1)
+        # nested with pytest.warns, if a warning is not detected it is
+        # re-emitted and goes through the higher level context,
+        #  this lets us test 3 different warnings with one fxn
+        # call here
+        with pytest.warns(UserWarning, match="Detected"):
+            with pytest.warns(UserWarning, match="Pressure"):
+                with pytest.warns(UserWarning, match="Current"):
+                    solve_regularized_surface_current(
+                        field,
+                        eq,
+                        eval_grid=grid,
+                        source_grid=grid,
+                        vc_source_grid=grid,
+                        verbose=0,
+                        vacuum=True,
+                    )
 
 
 @pytest.mark.unit

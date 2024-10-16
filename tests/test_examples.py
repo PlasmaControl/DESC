@@ -1587,7 +1587,7 @@ def test_coil_arclength_optimization():
     opt = Optimizer("lsq-exact")
     (coil_opt_without_arc_obj,), _ = opt.optimize(
         c1, objective=obj, verbose=3, copy=True, ftol=1e-6
-    )  # ,options={"initial_trust_ratio":1e-4})
+    )
     (coil_opt_with_arc_obj,), _ = opt.optimize(
         c1, objective=obj2, verbose=3, copy=True, ftol=1e-6, maxiter=200
     )

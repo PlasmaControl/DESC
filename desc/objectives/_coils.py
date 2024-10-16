@@ -1166,6 +1166,9 @@ class QuadraticFluxMinimizingSurface(_Objective):
 
     Used to find a quadratic-flux-minimizing (QFM) surface, so a
     `FourierRZToroidalSurface` should be passed to the objective.
+    Should always be used along with a ``ToroidalFlux`` objective to
+    ensure that the resulting QFM surface has the desired amount of
+    flux enclosed and avoid trivial solutions.
 
     Parameters
     ----------
@@ -1173,7 +1176,7 @@ class QuadraticFluxMinimizingSurface(_Objective):
         QFM surface upon which the normal field error will be minimized.
     field : MagneticField
         External field produced by coils or other source, which will be optimized to
-        minimize the normal field error on the provided  QFM surface.
+        minimize the normal field error on the provided QFM surface.
     eval_grid : Grid, optional
         Collocation grid containing the nodes on the surface at which the
         magnetic field is being calculated and where to evaluate Bn errors.

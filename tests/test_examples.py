@@ -1362,6 +1362,7 @@ def test_regcoil_helical_coils_check_objective_method(
         eval_grid=eval_grid,
         field_grid=sgrid,
         vacuum=True,
+        sqrt_area_weighting=True,
     )
 
     objective = ObjectiveFunction(

@@ -853,6 +853,89 @@ class FourierPlanarCurve(Curve):
         )
 
 
+class C0FourierPlanarCurve(Curve):
+    """C0 fourier."""
+
+    def __init__(
+        self,
+        curve_1,
+        curve_2,
+        name="",
+    ):
+        """Create a new curve by stitching together two C0 continuous curves."""
+        super().__init__(name)
+        # stitch together r_ns here
+        self._r_n = jnp.concatenate([curve_1.r_n, curve_2.r_n])
+        self.r_basis = curve_1.r_basis
+        print(self.r_basis)
+        self.center = curve_1.center
+        self.normal = curve_1.normal
+        len_rn = len(curve_1.r_n)
+        self.len_rn = len_rn
+
+    @optimizable_parameter
+    @property
+    def r_n(self):
+        """Spectral coefficients for r."""
+        return self._r_n
+
+    @property
+    def N(self):
+        """Maximum mode number."""
+        return self.r_basis.N
+
+    def compute(
+        self,
+        names,
+        grid=None,
+        params=None,
+        transforms=None,
+        data=None,
+        override_grid=True,
+        **kwargs,
+    ):
+        """Compute the quantity given by name on grid.
+
+        Parameters
+        ----------
+        names : str or array-like of str
+            Name(s) of the quantity(s) to compute.
+        grid : Grid or int, optional
+            Grid of coordinates to evaluate at. Defaults to a Linear grid.
+            If an integer, uses that many equally spaced points.
+        params : dict of ndarray
+            Parameters from the equilibrium. Defaults to attributes of self.
+        transforms : dict of Transform
+            Transforms for R, Z, lambda, etc. Default is to build from grid
+        data : dict of ndarray
+            Data computed so far, generally output from other compute functions.
+            Any vector v = v¹ R̂ + v² ϕ̂ + v³ Ẑ should be given in components
+            v = [v¹, v², v³] where R̂, ϕ̂, Ẑ are the normalized basis vectors
+            of the cylindrical coordinates R, ϕ, Z.
+        override_grid : bool
+            If True, override the user supplied grid if necessary and use a full
+            resolution grid to compute quantities and then downsample to user requested
+            grid. If False, uses only the user specified grid, which may lead to
+            inaccurate values for surface or volume averages.
+
+        Returns
+        -------
+        data : dict of ndarray
+            Computed quantity and intermediate variables.
+
+        """
+        return super().compute(
+            names=names,
+            grid=grid,
+            params=params,
+            transforms=transforms,
+            data=data,
+            override_grid=override_grid,
+            len_rn=self.len_rn,
+            **kwargs,
+        )
+
+
 class SplineXYZCurve(Curve):
     """Curve parameterized by spline knots in X,Y,Z.
 

@@ -24,6 +24,7 @@ from desc.examples import get
 from desc.grid import LinearGrid
 from desc.magnetic_fields import (
     FourierCurrentPotentialField,
+    ToroidalMagneticField,
     solve_regularized_least_squares_surface_current,
 )
 from desc.vmec import VMECIO
@@ -400,6 +401,84 @@ def regcoil_modular_coils():
         lambda_regularization=lambda_regularization,
         regularization_type="regcoil",
         vacuum=True,
+    )
+    surface_current_field = surface_current_field[0]
+
+    return (data, surface_current_field, eq)
+
+
+@pytest.fixture(scope="session")
+def regcoil_windowpane_coils():
+    """Run regcoil for precise QA eq and surface with windowpane coils."""
+    eq = get("precise_QA")
+    surf_winding = eq.surface.constant_offset_surface(
+        offset=0.2,  # desired offset
+        M=16,  # Poloidal resolution of desired offset surface
+        N=12,  # Toroidal resolution of desired offset surface
+        grid=LinearGrid(M=32, N=16, NFP=eq.NFP),
+    )
+    M_Phi = 10
+    N_Phi = 10
+    M_egrid = 20
+    N_egrid = 20
+    M_sgrid = 20
+    N_sgrid = 20
+    lambda_regularization = 1e-18
+
+    surface_current_field = FourierCurrentPotentialField.from_surface(
+        surf_winding, M_Phi=M_Phi, N_Phi=N_Phi, sym_Phi="sin"
+    )
+    # provide necessary toroidal flux with a TF field
+    G = eq.compute("G")["G"][-1]
+    surface_current_field, data = solve_regularized_least_squares_surface_current(
+        surface_current_field,
+        eq,
+        eval_grid=LinearGrid(M=M_egrid, N=N_egrid, NFP=eq.NFP, sym=True),
+        source_grid=LinearGrid(M=M_sgrid, N=N_sgrid, NFP=eq.NFP),
+        lambda_regularization=lambda_regularization,
+        regularization_type="regcoil",
+        vacuum=True,
+        current_helicity=(0, 0),
+        external_field=ToroidalMagneticField(B0=G, R0=1),
+    )
+    surface_current_field = surface_current_field[0]
+
+    return (data, surface_current_field, eq)
+
+
+@pytest.fixture(scope="session")
+def regcoil_PF_coils():
+    """Run regcoil for precise QA eq and surface with PF coils."""
+    eq = get("precise_QA")
+    surf_winding = eq.surface.constant_offset_surface(
+        offset=0.2,  # desired offset
+        M=16,  # Poloidal resolution of desired offset surface
+        N=12,  # Toroidal resolution of desired offset surface
+        grid=LinearGrid(M=32, N=16, NFP=eq.NFP),
+    )
+    M_Phi = 10
+    N_Phi = 10
+    M_egrid = 20
+    N_egrid = 20
+    M_sgrid = 30
+    N_sgrid = 30
+    lambda_regularization = 1e-24
+
+    surface_current_field = FourierCurrentPotentialField.from_surface(
+        surf_winding, M_Phi=M_Phi, N_Phi=N_Phi, sym_Phi="sin"
+    )
+    # provide necessary toroidal flux with a TF field
+    G = eq.compute("G")["G"][-1]
+    surface_current_field, data = solve_regularized_least_squares_surface_current(
+        surface_current_field,
+        eq,
+        eval_grid=LinearGrid(M=M_egrid, N=N_egrid, NFP=eq.NFP, sym=True),
+        source_grid=LinearGrid(M=M_sgrid, N=N_sgrid, NFP=eq.NFP),
+        lambda_regularization=lambda_regularization,
+        regularization_type="regcoil",
+        vacuum=True,
+        current_helicity=(0, 1),
+        external_field=ToroidalMagneticField(B0=G, R0=1),
     )
     surface_current_field = surface_current_field[0]
 

@@ -605,7 +605,8 @@ def plot_2d(
           the surface, must be provided if Bn is entered as the variable to plot.
         * ``field_grid``: MagneticField, a Grid to pass to the field as a source grid
           from which to calculate Bn, by default None.
-        * ``filled`` : bool, whether to use ax.contour instead of ax.contourf
+        * ``filled`` : bool, whether to fill contours or not i.e. whether to use
+          `contourf` or `contour`
 
     Returns
     -------
@@ -721,7 +722,7 @@ def plot_2d(
     title_fontsize = kwargs.pop("title_fontsize", None)
     xlabel_fontsize = kwargs.pop("xlabel_fontsize", None)
     ylabel_fontsize = kwargs.pop("ylabel_fontsize", None)
-    filled = kwargs.pop("filled", False)
+    filled = kwargs.pop("filled", True)
     assert len(kwargs) == 0, f"plot_2d got unexpected keyword argument: {kwargs.keys()}"
 
     cax_kwargs = {"size": "5%", "pad": 0.05}
@@ -736,7 +737,7 @@ def plot_2d(
         .reshape((grid.num_theta, grid.num_rho, grid.num_zeta), order="F")
         .squeeze()
     )
-    if filled:
+    if not filled:
         im = ax.contour(xx, yy, data, **contourf_kwargs)
     else:
         im = ax.contourf(xx, yy, data, **contourf_kwargs)

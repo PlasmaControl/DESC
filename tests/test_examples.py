@@ -1307,7 +1307,7 @@ def test_regcoil_axisymmetric():
 @pytest.mark.solve
 @pytest.mark.slow
 def test_regcoil_modular_check_B(regcoil_modular_coils):
-    """Test precise QA modular (helicity=0) regcoil solution."""
+    """Test precise QA modular (helicity=(1,0)) regcoil solution."""
     (
         data,
         initial_surface_current_field,
@@ -1326,6 +1326,59 @@ def test_regcoil_modular_check_B(regcoil_modular_coils):
         basis="rpz",
     )
     np.testing.assert_allclose(B, B_from_surf, rtol=5e-2, atol=5e-4)
+
+
+@pytest.mark.regression
+@pytest.mark.solve
+@pytest.mark.slow
+def test_regcoil_windowpane_check_B(regcoil_windowpane_coils):
+    """Test precise QA windowpane (helicity=(0,0)) regcoil solution."""
+    (
+        data,
+        surface_current_field,
+        eq,
+    ) = regcoil_windowpane_coils
+    assert surface_current_field.I == 0
+    assert surface_current_field.G == 0
+
+    chi_B = data["chi^2_B"][0]
+    np.testing.assert_array_less(chi_B, 1e-7)
+    coords = eq.compute(["R", "phi", "Z", "B"], grid=data["eval_grid"])
+    B = coords["B"]
+    coords = np.vstack([coords["R"], coords["phi"], coords["Z"]]).T
+    field = surface_current_field + data["external_field"]
+    B_from_surf = field.compute_magnetic_field(
+        coords,
+        source_grid=data["source_grid"],
+        basis="rpz",
+    )
+    np.testing.assert_allclose(B, B_from_surf, rtol=1e-2, atol=5e-4)
+
+
+@pytest.mark.regression
+@pytest.mark.solve
+@pytest.mark.slow
+def test_regcoil_PF_check_B(regcoil_PF_coils):
+    """Test precise QA PF (helicity=(0,2)) regcoil solution."""
+    (
+        data,
+        surface_current_field,
+        eq,
+    ) = regcoil_PF_coils()
+    assert surface_current_field.G == 0
+    assert abs(surface_current_field.I) > 0
+    chi_B = data["chi^2_B"][0]
+    np.testing.assert_array_less(chi_B, 1e-5)
+    coords = eq.compute(["R", "phi", "Z", "B"], grid=data["eval_grid"])
+    B = coords["B"]
+    coords = np.vstack([coords["R"], coords["phi"], coords["Z"]]).T
+    field = surface_current_field + data["external_field"]
+    B_from_surf = field.compute_magnetic_field(
+        coords,
+        source_grid=data["source_grid"],
+        basis="rpz",
+    )
+    np.testing.assert_allclose(B, B_from_surf, rtol=4e-2, atol=5e-4)
 
 
 @pytest.mark.regression

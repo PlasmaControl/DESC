@@ -1279,13 +1279,13 @@ def solve_regularized_least_squares_surface_current(  # noqa: C901 fxn too compl
     # G needed by surface current is the total G minus the external contribution
     G = G_tot - G_ext
     # calculate I, net toroidal current on winding surface
-    if p == 0:  # modular coils
-        I = 0
-    elif p == 0 and q == 0:  # windowpane coils
+    if p == 0 and q == 0:  # windowpane coils
         I = G = 0
+    elif p == 0:  # modular coils
+        I = 0
     elif q == 0:  # only toroidally closed coils, like PF coils
-        I = p * G  # give some toroidal current corr. to p
-        G = 0  # because 1==0
+        I = p * G_tot  # give some toroidal current corr. to p
+        G = 0  # because I==0
     else:  # helical coils
         I = p * G / q / eq.NFP
 

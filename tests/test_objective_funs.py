@@ -1345,6 +1345,7 @@ def test_derivative_modes():
     assert obj1._jac_chunk_size > 0
     obj3.build()
     x = obj1.x(eq, surf)
+    v = jnp.ones_like(x)
     g1 = obj1.grad(x)
     g2 = obj2.grad(x)
     g3 = obj3.grad(x)
@@ -1365,6 +1366,48 @@ def test_derivative_modes():
     H3 = obj3.hess(x)
     np.testing.assert_allclose(H1, H2, atol=1e-10)
     np.testing.assert_allclose(H1, H3, atol=1e-10)
+    j1 = obj1.jvp_scaled(v, x)
+    j2 = obj2.jvp_scaled(v, x)
+    j3 = obj3.jvp_scaled(v, x)
+    np.testing.assert_allclose(j1, j2, atol=1e-10)
+    np.testing.assert_allclose(j1, j3, atol=1e-10)
+
+
+@pytest.mark.unit
+def test_fwd_rev():
+    """Test that forward and reverse mode jvps etc give same results."""
+    eq = Equilibrium()
+    obj1 = MeanCurvature(eq, deriv_mode="fwd")
+    obj2 = MeanCurvature(eq, deriv_mode="rev")
+    obj1.build()
+    obj2.build()
+
+    x = eq.pack_params(eq.params_dict)
+    J1 = obj1.jac_scaled(x)
+    J2 = obj2.jac_scaled(x)
+    np.testing.assert_allclose(J1, J2, atol=1e-14)
+
+    jvp1 = obj1.jvp_scaled(x, jnp.ones_like(x))
+    jvp2 = obj2.jvp_scaled(x, jnp.ones_like(x))
+    np.testing.assert_allclose(jvp1, jvp2, atol=1e-14)
+
+    surf = FourierRZToroidalSurface()
+    obj1 = PlasmaVesselDistance(eq, surf, deriv_mode="fwd")
+    obj2 = PlasmaVesselDistance(eq, surf, deriv_mode="rev")
+    obj1.build()
+    obj2.build()
+
+    x1 = eq.pack_params(eq.params_dict)
+    x2 = surf.pack_params(surf.params_dict)
+
+    J1a, J1b = obj1.jac_scaled(x1, x2)
+    J2a, J2b = obj2.jac_scaled(x1, x2)
+    np.testing.assert_allclose(J1a, J2a, atol=1e-14)
+    np.testing.assert_allclose(J1b, J2b, atol=1e-14)
+
+    jvp1 = obj1.jvp_scaled((x1, x2), (jnp.ones_like(x1), jnp.ones_like(x2)))
+    jvp2 = obj2.jvp_scaled((x1, x2), (jnp.ones_like(x1), jnp.ones_like(x2)))
+    np.testing.assert_allclose(jvp1, jvp2, atol=1e-14)
 
 
 @pytest.mark.unit
@@ -2182,6 +2225,16 @@ def test_loss_function_asserts():
         RotationalTransform(eq=eq, loss_function=fun)
 
 
+def _reduced_resolution_objective(eq, objective):
+    """Speed up testing suite by defining rules to reduce objective resolution."""
+    kwargs = {}
+    if objective in {EffectiveRipple}:
+        kwargs["knots_per_transit"] = 50
+        kwargs["num_transit"] = 2
+        kwargs["num_pitch"] = 25
+    return objective(eq=eq, **kwargs)
+
+
 class TestComputeScalarResolution:
     """Test that compute_scalar values are roughly independent of grid resolution."""
 
@@ -2555,17 +2608,9 @@ class TestComputeScalarResolution:
                 M_grid=int(self.eq.M * res),
                 N_grid=int(self.eq.N * res),
             )
-            if objective in {EffectiveRipple}:
-                obj = ObjectiveFunction(
-                    [
-                        objective(
-                            self.eq, knots_per_transit=50, num_transit=2, num_pitch=25
-                        )
-                    ],
-                    use_jit=False,
-                )
-            else:
-                obj = ObjectiveFunction(objective(eq=self.eq), use_jit=False)
+            obj = ObjectiveFunction(
+                _reduced_resolution_objective(self.eq, objective), use_jit=False
+            )
             obj.build(verbose=0)
             f[i] = obj.compute_scalar(obj.x())
         np.testing.assert_allclose(f, f[-1], rtol=5e-2)
@@ -2849,9 +2894,7 @@ class TestObjectiveNaNGrad:
         eq = get("ESTELL")
         with pytest.warns(UserWarning, match="Reducing radial"):
             eq.change_resolution(2, 2, 2, 4, 4, 4)
-        obj = ObjectiveFunction(
-            [EffectiveRipple(eq, knots_per_transit=50, num_transit=2, num_pitch=25)]
-        )
+        obj = ObjectiveFunction(_reduced_resolution_objective(eq, EffectiveRipple))
         obj.build(verbose=0)
         g = obj.grad(obj.x())
         assert not np.any(np.isnan(g))

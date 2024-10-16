@@ -7,9 +7,10 @@ import numpy as np
 import pytest
 from tests.test_plotting import tol_1d
 
+from desc.equilibrium.coords import get_rtz_grid
 from desc.examples import get
 from desc.grid import LinearGrid
-from desc.utils import setdefault
+from desc.utils import errorif, setdefault
 from desc.vmec import VMECIO
 
 
@@ -23,7 +24,7 @@ def test_field_line_average():
     iota = iota_grid.compress(eq.compute("iota", grid=iota_grid)["iota"]).item()
     # For axisymmetric devices, one poloidal transit must be exact.
     zeta = np.linspace(0, 2 * np.pi / iota, 25)
-    grid = eq._get_rtz_grid(rho, alpha, zeta, coordinates="raz")
+    grid = get_rtz_grid(eq, rho, alpha, zeta, coordinates="raz")
     data = eq.compute(["<L|r,a>", "<G|r,a>", "V_r(r)"], grid=grid)
     np.testing.assert_allclose(
         data["<L|r,a>"] / data["<G|r,a>"], data["V_r(r)"] / (4 * np.pi**2), rtol=1e-3
@@ -34,7 +35,7 @@ def test_field_line_average():
     # Otherwise, many toroidal transits are necessary to sample surface.
     eq = get("W7-X")
     zeta = np.linspace(0, 40 * np.pi, 300)
-    grid = eq._get_rtz_grid(rho, alpha, zeta, coordinates="raz")
+    grid = get_rtz_grid(eq, rho, alpha, zeta, coordinates="raz")
     data = eq.compute(["<L|r,a>", "<G|r,a>", "V_r(r)"], grid=grid)
     np.testing.assert_allclose(
         data["<L|r,a>"] / data["<G|r,a>"], data["V_r(r)"] / (4 * np.pi**2), rtol=1e-3
@@ -51,7 +52,7 @@ def test_effective_ripple():
     rho = np.linspace(0, 1, 10)
     alpha = np.array([0])
     zeta = np.linspace(0, 20 * np.pi, 1000)
-    grid = eq._get_rtz_grid(rho, alpha, zeta, coordinates="raz")
+    grid = get_rtz_grid(eq, rho, alpha, zeta, coordinates="raz")
     data = eq.compute("effective ripple", grid=grid)
     assert np.isfinite(data["effective ripple"]).all()
     np.testing.assert_allclose(
@@ -64,9 +65,7 @@ def test_effective_ripple():
     ax.plot(rho, eps_32, marker="o")
 
     neo_rho, neo_eps_32 = NeoIO.read("tests/inputs/neo_out.w7x")
-    np.testing.assert_allclose(
-        eps_32, np.interp(rho, neo_rho, neo_eps_32), rtol=0.16, atol=1e-5
-    )
+    np.testing.assert_allclose(eps_32, np.interp(rho, neo_rho, neo_eps_32), rtol=0.16)
     return fig
 
 
@@ -88,10 +87,7 @@ class NeoIO:
     @staticmethod
     def read(name):
         """Return ρ and ε¹ᐧ⁵ from NEO output with given name."""
-        with open(name) as f:
-            array = np.array([[float(x) for x in line.split()] for line in f])
-
-        neo_eps = array[:, 1]
+        neo_eps = np.loadtxt(name)[:, 1]
         neo_rho = np.sqrt(np.linspace(1 / (neo_eps.size + 1), 1, neo_eps.size))
         # replace bad values with linear interpolation
         good = np.isfinite(neo_eps)
@@ -100,7 +96,7 @@ class NeoIO:
 
     def write(self):
         """Write neo input file."""
-        self.eq.solved = True  # must set this for NEO to run correctly
+        errorif(not self.eq.solved, msg="eq must be set to solved for NEO")
         print(f"Writing VMEC wout to {self.vmec_file}")
         VMECIO.save(self.eq, self.vmec_file, surfs=self.ns, verbose=0)
         self._write_booz()

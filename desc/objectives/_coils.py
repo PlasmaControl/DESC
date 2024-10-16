@@ -1588,8 +1588,11 @@ class ToroidalFlux(_Objective):
         """
         if constants is None:
             constants = self.constants
-        field_params = params_1 if not self._qfm_surface else params_2
-        surf_params = params_2 if not self._qfm_surface else params_1
+        field_params = params_2 if self._qfm_surface else params_1
+        field_params = (
+            constants["field"].params_dict if self._field_fixed else field_params
+        )
+        surf_params = params_1 if self._qfm_surface else None
 
         if self._qfm_surface:
             data = compute_fun(

@@ -120,7 +120,7 @@ def factorize_linear_constraints(objective, constraint, x_scale="auto"):  # noqa
     # delete the affected rows, and also the corresponding rows of b
     A_augmented = np.delete(A_augmented, row_idx_to_delete, axis=0)
     A = A_augmented[:, :-1]
-    b = A_augmented[:, -1].squeeze()
+    b = np.atleast_1d(A_augmented[:, -1].squeeze())
 
     # will store the global index of the unfixed rows, idx
     indices_row = np.arange(A.shape[0])

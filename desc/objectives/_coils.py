@@ -1380,7 +1380,9 @@ class LinkingCurrent(_Objective):
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate plasma current at.
         Defaults to ``LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)``.
-
+    eq_fixed : bool
+        Whether the equilibrium is assumed fixed (should be true for stage 2, false
+        for single stage).
     """
 
     __doc__ = __doc__.rstrip() + collect_docs(
@@ -1404,14 +1406,20 @@ class LinkingCurrent(_Objective):
         loss_function=None,
         deriv_mode="auto",
         grid=None,
+        eq_fixed=False,
         jac_chunk_size=None,
         name="linking current",
     ):
         if target is None and bounds is None:
             target = 0
         self._grid = grid
+        self._eq_fixed = eq_fixed
+        self._linear = eq_fixed
+        self._eq = eq
+        self._coil = coil
+
         super().__init__(
-            things=[eq, coil],
+            things=[coil] if eq_fixed else [coil, eq],
             target=target,
             bounds=bounds,
             weight=weight,
@@ -1434,8 +1442,8 @@ class LinkingCurrent(_Objective):
             Level of output.
 
         """
-        eq = self.things[0]
-        coil = self.things[1]
+        eq = self._eq
+        coil = self._coil
         grid = self._grid or LinearGrid(
             M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym
         )
@@ -1474,11 +1482,23 @@ class LinkingCurrent(_Objective):
         link = np.round(dummy_coilset._compute_linking_number())[0, 1:]
 
         self._constants = {
-            "profiles": profiles,
-            "transforms": transforms,
             "quad_weights": 1.0,
             "link": link,
         }
+
+        if self._eq_fixed:
+            data = compute_fun(
+                "desc.equilibrium.equilibrium.Equilibrium",
+                self._data_keys,
+                params=eq.params_dict,
+                transforms=transforms,
+                profiles=profiles,
+            )
+            eq_linking_current = 2 * jnp.pi * data["G"][0] / mu_0
+            self._constants["eq_linking_current"] = (eq_linking_current,)
+        else:
+            self._constants["profiles"] = profiles
+            self._constants["transforms"] = transforms
 
         if self._normalize:
             params = tree_leaves(
@@ -1488,15 +1508,16 @@ class LinkingCurrent(_Objective):
 
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, eq_params, coil_params, constants=None):
+    def compute(self, coil_params, eq_params=None, constants=None):
         """Compute linking current error.
 
         Parameters
         ----------
-        eq_params : dict
-            Dictionary of equilibrium degrees of freedom, eg ``Equilibrium.params_dict``
         coil_params : dict
             Dictionary of coilset degrees of freedom, eg ``CoilSet.params_dict``
+        eq_params : dict
+            Dictionary of equilibrium degrees of freedom, eg ``Equilibrium.params_dict``
+            Only required if eq_fixed=False.
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc.
             Defaults to self._constants.
@@ -1509,14 +1530,18 @@ class LinkingCurrent(_Objective):
         """
         if constants is None:
             constants = self.constants
-        data = compute_fun(
-            "desc.equilibrium.equilibrium.Equilibrium",
-            self._data_keys,
-            params=eq_params,
-            transforms=constants["transforms"],
-            profiles=constants["profiles"],
-        )
-        eq_linking_current = 2 * jnp.pi * data["G"][0] / mu_0
+        if self._eq_fixed:
+            eq_linking_current = constants["eq_linking_current"]
+        else:
+            data = compute_fun(
+                "desc.equilibrium.equilibrium.Equilibrium",
+                self._data_keys,
+                params=eq_params,
+                transforms=constants["transforms"],
+                profiles=constants["profiles"],
+            )
+            eq_linking_current = 2 * jnp.pi * data["G"][0] / mu_0
+
         coil_currents = jnp.concatenate(
             [
                 jnp.atleast_1d(param[idx])

@@ -1608,11 +1608,17 @@ class SurfaceCurrentRegularization(_Objective):
         from desc.magnetic_fields import FourierCurrentPotentialField
 
         surface_current_field = self.things[0]
+        if isinstance(surface_current_field, FourierCurrentPotentialField):
+            M_Phi = surface_current_field._M_Phi
+            N_Phi = surface_current_field._N_Phi
+        else:
+            M_Phi = surface_current_field.M + 1
+            N_Phi = surface_current_field.N + 1
 
         if self._source_grid is None:
             source_grid = LinearGrid(
-                M=surface_current_field._M_Phi * 3 + 1,
-                N=surface_current_field._N_Phi * 3 + 1,
+                M=3 * M_Phi + 1,
+                N=3 * N_Phi + 1,
                 NFP=surface_current_field.NFP,
             )
         else:

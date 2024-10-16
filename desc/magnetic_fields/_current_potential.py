@@ -129,6 +129,7 @@ class CurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
             check_orientation=check_orientation,
         )
 
+    # TODO: make this an optimizable parameter so the potential may be optimized
     @property
     def params(self):
         """Dict of parameters to pass to potential function and its derivatives."""

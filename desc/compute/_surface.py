@@ -382,8 +382,8 @@ def _Phi_z_FourierCurrentPotentialField(params, transforms, profiles, data, **kw
     units_long="Amperes",
     description="Surface current potential",
     dim=1,
-    params=["params"],
-    transforms={"grid": [], "potential": []},
+    params=[],
+    transforms={"grid": [], "potential": [], "params": []},
     profiles=[],
     coordinates="tz",
     data=[],
@@ -393,7 +393,7 @@ def _Phi_CurrentPotentialField(params, transforms, profiles, data, **kwargs):
     data["Phi"] = transforms["potential"](
         transforms["grid"].nodes[:, 1],
         transforms["grid"].nodes[:, 2],
-        **params["params"]
+        **transforms["params"]
     )
     return data
 
@@ -405,8 +405,8 @@ def _Phi_CurrentPotentialField(params, transforms, profiles, data, **kwargs):
     units_long="Amperes",
     description="Surface current potential, poloidal derivative",
     dim=1,
-    params=["params"],
-    transforms={"grid": [], "potential_dtheta": []},
+    params=[],
+    transforms={"grid": [], "potential_dtheta": [], "params": []},
     profiles=[],
     coordinates="tz",
     data=[],
@@ -416,7 +416,7 @@ def _Phi_t_CurrentPotentialField(params, transforms, profiles, data, **kwargs):
     data["Phi_t"] = transforms["potential_dtheta"](
         transforms["grid"].nodes[:, 1],
         transforms["grid"].nodes[:, 2],
-        **params["params"]
+        **transforms["params"]
     )
     return data
 
@@ -428,8 +428,8 @@ def _Phi_t_CurrentPotentialField(params, transforms, profiles, data, **kwargs):
     units_long="Amperes",
     description="Surface current potential, toroidal derivative",
     dim=1,
-    params=["params"],
-    transforms={"grid": [], "potential_dzeta": []},
+    params=[],
+    transforms={"grid": [], "potential_dzeta": [], "params": []},
     profiles=[],
     coordinates="tz",
     data=[],
@@ -439,7 +439,7 @@ def _Phi_z_CurrentPotentialField(params, transforms, profiles, data, **kwargs):
     data["Phi_z"] = transforms["potential_dzeta"](
         transforms["grid"].nodes[:, 1],
         transforms["grid"].nodes[:, 2],
-        **params["params"]
+        **transforms["params"]
     )
     return data
 

@@ -1142,7 +1142,7 @@ class QuadraticFlux(_Objective):
             params=field_params,
         )
         B_ext = jnp.sum(B_ext * eval_data["n_rho"], axis=-1)
-        f = (B_ext + B_plasma) * eval_data["|e_theta x e_zeta|"]
+        f = (B_ext + B_plasma) * jnp.sqrt(eval_data["|e_theta x e_zeta|"])
         return f
 
 

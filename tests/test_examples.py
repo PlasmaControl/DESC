@@ -1335,17 +1335,12 @@ def test_regcoil_helical_coils_check_objective_method(
     regcoil_helical_coils_scan,
 ):
     """Test precise QA helical coil regcoil solution."""
-    M_egrid = 20
-    N_egrid = 20
-    M_sgrid = 40
-    N_sgrid = 40
-
     (
         data,
         initial_surface_current_field,
         eq,
     ) = regcoil_helical_coils_scan
-    lam_index = 3
+    lam_index = 1
     lam = data["lambda_regularization"][lam_index]
     initial_surface_current_field.Phi_mn = data["Phi_mn"][lam_index]
     surface_current_field = initial_surface_current_field.copy()
@@ -1358,13 +1353,8 @@ def test_regcoil_helical_coils_check_objective_method(
             params={"I": True, "G": True, "R_lmn": True, "Z_lmn": True},
         ),
     )
-
-    eval_grid = LinearGrid(M=M_egrid, N=N_egrid, NFP=eq.NFP, sym=True)
-    sgrid = LinearGrid(
-        M=M_sgrid,
-        N=N_sgrid,
-        NFP=eq.NFP,
-    )
+    eval_grid = data["eval_grid"]
+    sgrid = data["source_grid"]
 
     obj = QuadraticFlux(
         field=surface_current_field,
@@ -1405,12 +1395,12 @@ def test_regcoil_helical_coils_check_objective_method(
     coords = np.vstack([coords["R"], coords["phi"], coords["Z"]]).T
     B_from_surf = surface_current_field.compute_magnetic_field(
         coords,
-        source_grid=LinearGrid(M=60, N=60, NFP=surface_current_field.NFP),
+        source_grid=sgrid,
         basis="rpz",
     )
     B_from_orig_surf = initial_surface_current_field.compute_magnetic_field(
         coords,
-        source_grid=LinearGrid(M=60, N=60, NFP=surface_current_field.NFP),
+        source_grid=sgrid,
         basis="rpz",
     )
     np.testing.assert_allclose(B, B_from_surf, atol=6e-4, rtol=5e-2)

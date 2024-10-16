@@ -1485,12 +1485,12 @@ class SurfaceCurrentRegularization(_Objective):
 
     compute::
 
-        w * | K | * | e_theta x e_zeta |
+        w * ||K|| * ||e_theta x e_zeta||
 
     where K is the winding surface current density, w is the
     regularization parameter (the weight on this objective),
-    and | e_theta x e_zeta | is the magnitude of the surface normal i.e. the
-    surface jacobian | e_theta x e_zeta |
+    and ||e_theta x e_zeta|| is the magnitude of the surface normal i.e. the
+    surface jacobian ||e_theta x e_zeta||
 
     This is intended to be used with a surface current::
 
@@ -1503,6 +1503,11 @@ class SurfaceCurrentRegularization(_Objective):
     ``FourierCurrentPotentialField``, is equivalent to the ``simple``
     regularization of the ``run_regcoil`` method).
 
+    References
+    ----------
+    .. [1] Landreman, Matt. "An improved current potential method for fast computation
+      of stellarator coil shapes." Nuclear Fusion (2017).
+
     Parameters
     ----------
     surface_current_field : CurrentPotentialField
@@ -1513,11 +1518,6 @@ class SurfaceCurrentRegularization(_Objective):
         the winding surface. If used in conjunction with the QuadraticFlux objective,
         with its ``field_grid`` matching this ``source_grid``, this replicates the
         REGCOIL algorithm described in [1]_ .
-
-    References
-    ----------
-    .. [1] Landreman, Matt. "An improved current potential method for fast computation
-      of stellarator coil shapes." Nuclear Fusion 57 (2017): 046003.
 
     """
 
@@ -1630,10 +1630,12 @@ class SurfaceCurrentRegularization(_Objective):
                     [abs(surface_current_field.I) + abs(surface_current_field.G), 1]
                 )
             else:  # it does not have I,G bc is CurrentPotentialField
-                self._normalization = np.mean(
-                    np.abs(
-                        surface_current_field.compute("Phi", grid=source_grid)["Phi"]
-                    )
+                Phi = surface_current_field.compute("Phi", grid=source_grid)["Phi"]
+                self._normalization = np.max(
+                    [
+                        np.mean(np.abs(Phi)),
+                        1,
+                    ]
                 )
 
         self._constants = {
@@ -1677,4 +1679,4 @@ class SurfaceCurrentRegularization(_Objective):
         )
 
         K_mag = safenorm(surface_data["K"], axis=-1)
-        return K_mag * surface_data["|e_theta x e_zeta|"]
+        return K_mag * jnp.sqrt(surface_data["|e_theta x e_zeta|"])

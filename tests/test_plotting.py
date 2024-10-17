@@ -47,9 +47,9 @@ from desc.plotting import (
 from desc.utils import isalmostequal
 from desc.vmec import VMECIO
 
-tol_1d = 7.8
-tol_2d = 15
-tol_3d = 15
+tol_1d = 4.5
+tol_2d = 10
+tol_3d = 10
 
 
 @pytest.mark.unit
@@ -284,7 +284,15 @@ class TestPlot3D:
     def test_plot_3d_surface(self):
         """Test 3d plotting of surface object."""
         surf = FourierRZToroidalSurface()
-        fig = plot_3d(surf, "curvature_H_rho")
+        fig = plot_3d(
+            surf,
+            "curvature_H_rho",
+            showgrid=False,
+            showscale=False,
+            zeroline=False,
+            showticklabels=False,
+            showaxislabels=False,
+        )
         return fig
 
     @pytest.mark.unit
@@ -507,7 +515,7 @@ class TestPlotBoundary:
         return fig
 
     @pytest.mark.unit
-    @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
+    @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
     def test_plot_boundaries(self):
         """Test plotting boundaries."""
         eq1 = get("SOLOVEV")
@@ -516,6 +524,11 @@ class TestPlotBoundary:
         eq4 = get("ESTELL")
         with pytest.raises(ValueError, match="differing field periods"):
             fig, ax = plot_boundaries([eq3, eq4], theta=0)
+        _, _, data1 = plot_boundaries(
+            (eq1, eq2, eq3),
+            phi=4,
+            return_data=True,
+        )
         fig, ax, data = plot_boundaries(
             (eq1, eq2, eq3),
             phi=np.linspace(0, 2 * np.pi / eq3.NFP, 4, endpoint=False),
@@ -525,6 +538,12 @@ class TestPlotBoundary:
         assert "Z" in data.keys()
         assert len(data["R"]) == 3
         assert len(data["Z"]) == 3
+        assert (
+            data["R"][-1].shape == data1["R"][-1].shape
+        ), "Passing phi as an integer or array results in different behavior"
+        assert (
+            data["Z"][-1].shape == data1["Z"][-1].shape
+        ), "Passing phi as an integer or array results in different behavior"
 
         return fig
 
@@ -834,6 +853,40 @@ def test_plot_coils():
             return [coilset]
 
     coil_list = flatten_coils(coils2)
+    for string in ["X", "Y", "Z"]:
+        assert string in data.keys()
+        assert len(data[string]) == len(coil_list)
+    return fig
+
+
+@pytest.mark.unit
+def test_plot_coils_no_grid():
+    """Test 3d plotting of coils with currents without any gridlines."""
+    N = 48
+    NFP = 4
+    I = 1
+    coil = FourierXYZCoil()
+    coil.rotate(angle=np.pi / N)
+    coils = CoilSet.linspaced_angular(coil, I, [0, 0, 1], np.pi / NFP, N // NFP // 2)
+    with pytest.raises(ValueError, match="Expected `coils`"):
+        plot_coils("not a coil")
+    fig, data = plot_coils(
+        coils,
+        unique=True,
+        return_data=True,
+        showgrid=False,
+        zeroline=False,
+        showticklabels=False,
+        showaxislabels=False,
+    )
+
+    def flatten_coils(coilset):
+        if hasattr(coilset, "__len__"):
+            return [a for i in coilset for a in flatten_coils(i)]
+        else:
+            return [coilset]
+
+    coil_list = flatten_coils(coils)
     for string in ["X", "Y", "Z"]:
         assert string in data.keys()
         assert len(data[string]) == len(coil_list)

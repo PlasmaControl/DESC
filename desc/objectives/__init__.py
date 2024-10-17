@@ -31,7 +31,7 @@ from ._geometry import (
     PrincipalCurvature,
     Volume,
 )
-from ._neoclassical import EffectiveRipple, GammaC
+from ._neoclassical import EffectiveRipple, GammaC, Gammad
 from ._omnigenity import (
     Isodynamicity,
     Omnigenity,

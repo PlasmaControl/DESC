@@ -382,8 +382,8 @@ def _Phi_z_FourierCurrentPotentialField(params, transforms, profiles, data, **kw
     units_long="Amperes",
     description="Surface current potential",
     dim=1,
-    params=["params"],
-    transforms={"grid": [], "potential": []},
+    params=[],
+    transforms={"grid": [], "potential": [], "params": []},
     profiles=[],
     coordinates="tz",
     data=[],
@@ -393,7 +393,7 @@ def _Phi_CurrentPotentialField(params, transforms, profiles, data, **kwargs):
     data["Phi"] = transforms["potential"](
         transforms["grid"].nodes[:, 1],
         transforms["grid"].nodes[:, 2],
-        **params["params"]
+        **transforms["params"]
     )
     return data
 
@@ -405,8 +405,8 @@ def _Phi_CurrentPotentialField(params, transforms, profiles, data, **kwargs):
     units_long="Amperes",
     description="Surface current potential, poloidal derivative",
     dim=1,
-    params=["params"],
-    transforms={"grid": [], "potential_dtheta": []},
+    params=[],
+    transforms={"grid": [], "potential_dtheta": [], "params": []},
     profiles=[],
     coordinates="tz",
     data=[],
@@ -416,7 +416,7 @@ def _Phi_t_CurrentPotentialField(params, transforms, profiles, data, **kwargs):
     data["Phi_t"] = transforms["potential_dtheta"](
         transforms["grid"].nodes[:, 1],
         transforms["grid"].nodes[:, 2],
-        **params["params"]
+        **transforms["params"]
     )
     return data
 
@@ -428,8 +428,8 @@ def _Phi_t_CurrentPotentialField(params, transforms, profiles, data, **kwargs):
     units_long="Amperes",
     description="Surface current potential, toroidal derivative",
     dim=1,
-    params=["params"],
-    transforms={"grid": [], "potential_dzeta": []},
+    params=[],
+    transforms={"grid": [], "potential_dzeta": [], "params": []},
     profiles=[],
     coordinates="tz",
     data=[],
@@ -439,8 +439,52 @@ def _Phi_z_CurrentPotentialField(params, transforms, profiles, data, **kwargs):
     data["Phi_z"] = transforms["potential_dzeta"](
         transforms["grid"].nodes[:, 1],
         transforms["grid"].nodes[:, 2],
-        **params["params"]
+        **transforms["params"]
     )
+    return data
+
+
+@register_compute_fun(
+    name="K^theta",
+    label="K^{\\theta}",
+    units="A/m^2",
+    units_long="Amperes per square meter",
+    description="Contravariant poloidal component of surface current density",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="tz",
+    data=["Phi_z", "|e_theta x e_zeta|"],
+    parameterization=[
+        "desc.magnetic_fields._current_potential.CurrentPotentialField",
+        "desc.magnetic_fields._current_potential.FourierCurrentPotentialField",
+    ],
+)
+def _K_sup_theta_CurrentPotentialField(params, transforms, profiles, data, **kwargs):
+    data["K^theta"] = -data["Phi_z"] * (1 / data["|e_theta x e_zeta|"])
+    return data
+
+
+@register_compute_fun(
+    name="K^zeta",
+    label="K^{\\zeta}",
+    units="A/m^2",
+    units_long="Amperes per square meter",
+    description="Contravariant toroidal component of surface current density",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="tz",
+    data=["Phi_t", "|e_theta x e_zeta|"],
+    parameterization=[
+        "desc.magnetic_fields._current_potential.CurrentPotentialField",
+        "desc.magnetic_fields._current_potential.FourierCurrentPotentialField",
+    ],
+)
+def _K_sup_zeta_CurrentPotentialField(params, transforms, profiles, data, **kwargs):
+    data["K^zeta"] = data["Phi_t"] * (1 / data["|e_theta x e_zeta|"])
     return data
 
 
@@ -456,16 +500,16 @@ def _Phi_z_CurrentPotentialField(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="tz",
-    data=["Phi_t", "Phi_z", "e_theta", "e_zeta", "|e_theta x e_zeta|"],
+    data=["K^theta", "K^zeta", "e_theta", "e_zeta"],
     parameterization=[
         "desc.magnetic_fields._current_potential.CurrentPotentialField",
         "desc.magnetic_fields._current_potential.FourierCurrentPotentialField",
     ],
 )
 def _K_CurrentPotentialField(params, transforms, profiles, data, **kwargs):
-    data["K"] = (
-        data["Phi_t"] * (1 / data["|e_theta x e_zeta|"]) * data["e_zeta"].T
-    ).T - (data["Phi_z"] * (1 / data["|e_theta x e_zeta|"]) * data["e_theta"].T).T
+    data["K"] = (data["K^zeta"] * data["e_zeta"].T).T + (
+        data["K^theta"] * data["e_theta"].T
+    ).T
     return data
 
 

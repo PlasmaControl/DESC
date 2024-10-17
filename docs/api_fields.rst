@@ -41,6 +41,18 @@ There are also classes for representing a current potential on a winding surface
     desc.magnetic_fields.CurrentPotentialField
     desc.magnetic_fields.FourierCurrentPotentialField
 
+``desc.magnetic_fields`` also has a function which can solve a regularized least-squares problem
+in order to find the optimal surface current distribution which minimizes the normal field on a
+given plasma boundary, ``desc.magnetic_fields.solve_regularized_surface_current``, which can
+be used in a similar way as the REGCOIL code:
+
+.. autosummary::
+    :toctree: _api/magnetic_fields
+    :recursive:
+    :template: class.rst
+
+    desc.magnetic_fields.solve_regularized_surface_current
+
 There is also a class for representing omnigenous magnetic fields:
 
 .. autosummary::
@@ -69,7 +81,6 @@ the BNORM code:
     :template: class.rst
 
     desc.magnetic_fields.read_BNORM_file
-
 
 
 Coils

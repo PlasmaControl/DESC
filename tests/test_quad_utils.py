@@ -46,7 +46,7 @@ def test_automorphism():
         atol=2e-6,
     )
     np.testing.assert_allclose(
-        1 / grad_automorphism_arcsin(y),
+        1 / grad_automorphism_arcsin(y, gamma=1),
         grad_automorphism_sin(automorphism_arcsin(y, gamma=1)),
         atol=2e-6,
     )

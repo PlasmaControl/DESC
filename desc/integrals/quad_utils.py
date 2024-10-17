@@ -256,7 +256,7 @@ def get_quadrature(quad, automorphism):
     quad : tuple[jnp.ndarray]
         Quadrature points xₖ and weights wₖ for the approximate evaluation of
         the integral ∫₋₁¹ g(x) dx = ∑ₖ wₖ g(xₖ).
-    automorphism : (Callable, Callable) or None
+    automorphism : tuple[Callable] or None
         The first callable should be an automorphism of the real interval [-1, 1].
         The second callable should be the derivative of the first. This map defines
         a change of variable for the bounce integral. The choice made for the

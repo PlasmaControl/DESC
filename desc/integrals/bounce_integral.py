@@ -8,7 +8,11 @@ from matplotlib import pyplot as plt
 from orthax.legendre import leggauss
 
 from desc.backend import irfft2, jnp, rfft2
-from desc.integrals.basis import FourierChebyshevSeries, PiecewiseChebyshevSeries
+from desc.integrals.basis import (
+    FourierChebyshevSeries,
+    PiecewiseChebyshevSeries,
+    get_alpha,
+)
 from desc.integrals.bounce_utils import (
     _bounce_quadrature,
     _check_bounce_points,
@@ -18,7 +22,6 @@ from desc.integrals.bounce_utils import (
     _transform_to_desc,
     _transform_to_PEST,
     bounce_points,
-    get_alpha,
     get_pitch_inv_quad,
     interp_to_argmin,
     plot_ppoly,
@@ -182,10 +185,12 @@ class Bounce2D(Bounce):
     The advantage of Fourier series in DESC coordinates is that they may use the
     spectrally condensed variable ζ* = NFP ζ. This cannot be done in any other
     coordinate system, regardless of whether the basis functions are periodic.
-    The cost of this expense is reduced by the choice to parameterize |B| as a
-    single variable map along field lines since evaluating the multivariable map
-    |B|(ϑ(α, ζ), ζ) is more expensive (assuming the 2D Fourier resolution of |B|
-    in straight field line coordinates is larger than the 1D Chebyshev resolution).
+    The strategy of parameterizing |B| along field lines with a single variable
+    in Clebsch coordinates (as opposed to two variables in straight-field line
+    coordinates) also serves to minimize this penalty since evaluation of |B|
+    when computing bounce points will be less expensive
+    (assuming the 2D Fourier resolution of |B| in
+    straight field line coordinates is larger than the 1D Chebyshev resolution).
 
     Computing accurate series expansions in (α, ζ) coordinates demands
     particular interpolation points in that coordinate system. Newton iteration
@@ -600,14 +605,14 @@ class Bounce2D(Bounce):
         shape = [*z1.shape, self._x.size]
 
         # These are the ζ ∈ ℝ coordinates of the quadrature points.
-        # Shape is (num_pitch, L, number of points to interpolate onto).
+        # Shape is (num pitch, L, number of points to interpolate onto).
         zeta = flatten_matrix(
             bijection_from_disc(self._x, z1[..., jnp.newaxis], z2[..., jnp.newaxis])
         )
         # Note self._T expects shape (num_pitch, L) if T.cheb.shape[0] is L.
         # These are the θ ∈ ℝ coordinates of the quadrature points.
         theta = self._T_cheb.eval1d(zeta)
-        # TODO: Compute like B_sup_z once we have NFFTs?
+        # TODO: Benchmark against computing like B_sup_z. Repeat benchmark with NFFTs.
         B = self._B_cheb.eval1d(zeta)
 
         B_sup_z = irfft2_non_uniform(
@@ -659,7 +664,7 @@ class Bounce2D(Bounce):
         if check:
             shape[-3], shape[0] = shape[0], shape[-3]
             _check_interp(
-                # num_alpha is 1, num_rho, num_pitch, num_well, num_quad
+                # shape is num_alpha = 1, num_rho, num_pitch, num_well, num_quad
                 (1, *shape),
                 *map(_swap_pl, (zeta, B_sup_z, B)),
                 result,
@@ -699,7 +704,7 @@ class Bounce2D(Bounce):
         )
         zeta = jnp.broadcast_to(bijection_from_disc(x, 0, 2 * jnp.pi), theta.shape)
 
-        # (num_rho, num transit * num quad points)
+        # (num rho, num transit * num quad points)
         shape = (*self._T_cheb.cheb.shape[:-2], self._T_cheb.X * w.size)
         B_sup_z = irfft2_non_uniform(
             theta.reshape(shape),
@@ -711,7 +716,7 @@ class Bounce2D(Bounce):
             axes=(-1, -2),
         ).reshape(*shape[:-1], self._T_cheb.X, w.size)
 
-        # Gradient of change of variable bijection from [−1, 1] → [0, 2π] is π.
+        # Gradient of change of variable from [−1, 1] → [0, 2π] is π.
         return (1 / B_sup_z).dot(w).sum(axis=-1) * jnp.pi
 
     def plot(self, l, pitch_inv=None, **kwargs):
@@ -1203,7 +1208,7 @@ class Bounce1D(Bounce):
 
     The DESC coordinate system is related to field-line-following coordinate
     systems by a relation whose solution is best found with Newton iteration
-    since this solution is unique.  Newton iteration is not a globally
+    since this solution is unique. Newton iteration is not a globally
     convergent algorithm to find the real roots of r : ζ ↦ |B|(ζ) − 1/λ where
     ζ is a field-line-following coordinate. For this, function approximation
     of |B| is necessary.

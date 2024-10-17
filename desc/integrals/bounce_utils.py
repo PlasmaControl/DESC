@@ -905,34 +905,6 @@ def _transform_to_PEST(grid, T, f, N, is_reshaped=False):
     )
 
 
-# TODO: Generalize this beyond ζ = ϕ or just map to Clebsch with ϕ.
-def get_alpha(alpha_0, iota, num_transit, period):
-    """Get sequence of poloidal coordinates A = (α₀, α₁, …, αₘ₋₁) of field line.
-
-    Parameters
-    ----------
-    alpha_0 : float
-        Starting field line poloidal label.
-    iota : jnp.ndarray
-        Shape (iota.size, ).
-        Rotational transform normalized by 2π.
-    num_transit : float
-        Number of ``period``s to follow field line.
-    period : float
-        Toroidal period after which to update label.
-
-    Returns
-    -------
-    alpha : jnp.ndarray
-        Shape (iota.size, num_transit).
-        Sequence of poloidal coordinates A = (α₀, α₁, …, αₘ₋₁) that specify field line.
-
-    """
-    # Δϕ (∂α/∂ϕ) = Δϕ ι̅ = Δϕ ι/2π = Δϕ data["iota"]
-    alpha = alpha_0 + period * jnp.expand_dims(iota, -1) * jnp.arange(num_transit)
-    return alpha
-
-
 def _transform_to_clebsch_1d(grid, alpha, theta, B, Y_B):
     """Transform to single variable Clebsch spectral domain.
 
@@ -965,6 +937,11 @@ def _transform_to_clebsch_1d(grid, alpha, theta, B, Y_B):
     averaging bounce integrals, function approximation in (α, ζ) coordinates
     might be preferable because most of the bounce integrals do not stretch
     across toroidal transits).)
+
+    Note that if g is an unbounded function, as all coordinates are, then
+    it is impossible to approximate it with a finite number of periodic
+    basis functions, so we are forced to use a Fourier Chebyshev series to
+    interpolate θ anyway.
 
     Now, it appears the Fourier transform of θ may have small oscillatory bumps
     outside reasonable bandwidths. This impedes full convergence of any

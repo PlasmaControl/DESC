@@ -36,12 +36,11 @@ from desc.integrals import (
     surface_variance,
     virtual_casing_biot_savart,
 )
-from desc.integrals.basis import FourierChebyshevSeries
+from desc.integrals.basis import FourierChebyshevSeries, get_alpha
 from desc.integrals.bounce_integral import Bounce2DPEST
 from desc.integrals.bounce_utils import (
     _get_extrema,
     bounce_points,
-    get_alpha,
     get_pitch_inv_quad,
     interp_to_argmin,
     interp_to_argmin_hard,

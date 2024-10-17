@@ -33,6 +33,34 @@ from desc.utils import (
 )
 
 
+# TODO: Generalize this beyond ζ = ϕ or just map to Clebsch with ϕ.
+def get_alpha(alpha_0, iota, num_transit, period):
+    """Get sequence of poloidal coordinates A = (α₀, α₁, …, αₘ₋₁) of field line.
+
+    Parameters
+    ----------
+    alpha_0 : float
+        Starting field line poloidal label.
+    iota : jnp.ndarray
+        Shape (iota.size, ).
+        Rotational transform normalized by 2π.
+    num_transit : float
+        Number of ``period``s to follow field line.
+    period : float
+        Toroidal period after which to update label.
+
+    Returns
+    -------
+    alpha : jnp.ndarray
+        Shape (iota.size, num_transit).
+        Sequence of poloidal coordinates A = (α₀, α₁, …, αₘ₋₁) that specify field line.
+
+    """
+    # Δϕ (∂α/∂ϕ) = Δϕ ι̅ = Δϕ ι/2π = Δϕ data["iota"]
+    alpha = alpha_0 + period * jnp.expand_dims(iota, -1) * jnp.arange(num_transit)
+    return alpha
+
+
 @partial(jnp.vectorize, signature="(m),(m)->(m)")
 def _in_epigraph_and(is_intersect, df_dy_sign, /):
     """Set and epigraph of function f with the given set of points.
@@ -106,6 +134,13 @@ class FourierChebyshevSeries(IOAble):
     f(x, y) = ∑ₘₙ aₘₙ ψₘ(x) Tₙ(y)
     where ψₘ are trigonometric polynomials on [0, 2π]
     and Tₙ are Chebyshev polynomials on [−yₘᵢₙ, yₘₐₓ].
+
+    Examples
+    --------
+    Let the magnetic field be B = ∇ρ × ∇α, x = α, and y = ζ. This basis can
+    will then parameterize maps in Clebsch coordinates. Passing in a sequence
+    of α values tracking the field line (see ``get_alpha``) to the
+    ``compute_cheb`` method will generate f along field lines.
 
     Notes
     -----
@@ -186,7 +221,7 @@ class FourierChebyshevSeries(IOAble):
         return jnp.column_stack(coords)
 
     def evaluate(self, X, Y):
-        """Evaluate Fourier-Chebyshev series.
+        """Evaluate Fourier-Chebyshev series on tensor-product grid.
 
         Parameters
         ----------
@@ -430,7 +465,7 @@ class PiecewiseChebyshevSeries(IOAble):
         y = jnp.where(is_intersect, y.real, 0.0)
 
         # TODO: Multipoint evaluation with FFT.
-        #   Chapter 10, https://doi.org/10.1017/CBO9781139856065.
+        #   See note in integrals/basis.py near line 145.
         n = jnp.arange(self.Y)
         #      ∂f/∂y =      ∑ₙ₌₀ᴺ⁻¹ aₙ(x) n Uₙ₋₁(y)
         # sign ∂f/∂y = sign ∑ₙ₌₀ᴺ⁻¹ aₙ(x) n sin(n arcos y)

@@ -49,6 +49,7 @@ class Transform(IOAble):
     """
 
     _io_attrs_ = ["_grid", "_basis", "_derivatives", "_rcond", "_method"]
+    _static_attrs = ["_derivatives"]
 
     def __init__(
         self,

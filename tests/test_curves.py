@@ -262,6 +262,7 @@ class TestFourierRZCurve:
         np.testing.assert_allclose(curve3.NFP, curve4.NFP)
         np.testing.assert_allclose(curve3.sym, curve4.sym)
 
+    @pytest.mark.unit
     def test_to_FourierRZCurve(self):
         """Test conversion to FourierRZCurve."""
         xyz = FourierXYZCurve(modes=[-1, 1], X_n=[0, 10], Y_n=[10, 0], Z_n=[0, 0])

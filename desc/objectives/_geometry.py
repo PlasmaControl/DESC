@@ -8,6 +8,7 @@ from desc.compute.utils import _compute as compute_fun
 from desc.grid import LinearGrid, QuadratureGrid
 from desc.utils import Timer, errorif, parse_argname_change, safenorm, warnif
 
+from ..compute.geom_utils import errorif_sym
 from .normalization import compute_scaling_factors
 from .objective_funs import _Objective, collect_docs
 from .utils import check_if_points_are_inside_perimeter, softmin
@@ -99,6 +100,7 @@ class AspectRatio(_Objective):
                     M=eq.M * 2,
                     N=eq.N * 2,
                     NFP=eq.NFP,
+                    sym=False,
                 )
         else:
             grid = self._grid
@@ -199,6 +201,8 @@ class Elongation(_Objective):
     ):
         if target is None and bounds is None:
             target = 1
+        if grid is not None:
+            errorif_sym(grid, name)
         self._grid = grid
         super().__init__(
             things=eq,
@@ -242,6 +246,7 @@ class Elongation(_Objective):
                     M=eq.M * 2,
                     N=eq.N * 2,
                     NFP=eq.NFP,
+                    sym=False,
                 )
         else:
             grid = self._grid

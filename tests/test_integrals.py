@@ -4,16 +4,18 @@ from functools import partial
 
 import numpy as np
 import pytest
+import quadax
 from jax import grad
 from matplotlib import pyplot as plt
-from numpy.polynomial.chebyshev import chebgauss, chebweight
+from numpy.polynomial.chebyshev import chebgauss, chebinterpolate, chebroots, chebweight
 from numpy.polynomial.legendre import leggauss
+from quadax import simpson
 from scipy import integrate
 from scipy.interpolate import CubicHermiteSpline
 from scipy.special import ellipe, ellipkm1
 from tests.test_plotting import tol_1d
 
-from desc.backend import jnp
+from desc.backend import jit, jnp
 from desc.basis import FourierZernikeBasis
 from desc.equilibrium import Equilibrium
 from desc.equilibrium.coords import get_rtz_grid
@@ -21,6 +23,7 @@ from desc.examples import get
 from desc.grid import ConcentricGrid, Grid, LinearGrid, QuadratureGrid
 from desc.integrals import (
     Bounce1D,
+    Bounce2D,
     DFTInterpolator,
     FFTInterpolator,
     line_integrals,
@@ -33,6 +36,8 @@ from desc.integrals import (
     surface_variance,
     virtual_casing_biot_savart,
 )
+from desc.integrals.basis import FourierChebyshevSeries, get_alpha
+from desc.integrals.bounce_integral import Bounce2DPEST
 from desc.integrals.bounce_utils import (
     _get_extrema,
     bounce_points,
@@ -40,6 +45,7 @@ from desc.integrals.bounce_utils import (
     interp_to_argmin,
     interp_to_argmin_hard,
 )
+from desc.integrals.interp_utils import fourier_pts
 from desc.integrals.quad_utils import (
     automorphism_sin,
     bijection_from_disc,
@@ -49,11 +55,12 @@ from desc.integrals.quad_utils import (
     grad_bijection_from_disc,
     leggauss_lob,
     tanh_sinh,
+    uniform,
 )
 from desc.integrals.singularities import _get_quadrature_nodes
 from desc.integrals.surface_integral import _get_grid_surface
 from desc.transform import Transform
-from desc.utils import dot, safediv
+from desc.utils import dot, errorif, safediv
 
 
 class TestSurfaceIntegral:
@@ -725,6 +732,14 @@ class TestBouncePoints:
     """Test that bounce points are computed correctly."""
 
     @staticmethod
+    def _cheb_intersect(cheb, k):
+        cheb = cheb.copy()
+        cheb[0] = cheb[0] - k
+        roots = chebroots(cheb)
+        intersect = roots[np.logical_and(np.isreal(roots), np.abs(roots.real) < 1)].real
+        return intersect
+
+    @staticmethod
     def filter(z1, z2):
         """Remove bounce points whose integrals have zero measure."""
         mask = (z1 - z2) != 0.0
@@ -892,6 +907,27 @@ class TestBouncePoints:
         np.testing.assert_allclose(ext[idx], ext_scipy)
         np.testing.assert_allclose(B_ext[idx], B_ext_scipy)
 
+    @pytest.mark.unit
+    def test_z1_first_chebyshev(self):
+        """Test that bounce points are computed correctly."""
+
+        def f(z):
+            return -2 * np.cos(1 / (0.1 + z**2)) + 2
+
+        M, N = 1, 10
+        alpha, zeta = FourierChebyshevSeries.nodes(M, N).T
+        cheb = FourierChebyshevSeries(f(zeta).reshape(M, N)).compute_cheb(
+            fourier_pts(M)
+        )
+        pitch_inv = 3
+        z1, z2 = cheb.intersect1d(pitch_inv)
+        cheb.check_intersect1d(z1, z2, pitch_inv)
+        z1, z2 = TestBouncePoints.filter(z1, z2)
+
+        r = self._cheb_intersect(chebinterpolate(f, N - 1), pitch_inv)
+        np.testing.assert_allclose(z1, r[np.isclose(r, -0.24, atol=1e-1)])
+        np.testing.assert_allclose(z2, r[np.isclose(r, 0.24, atol=1e-1)])
+
 
 def _chebgauss1(deg):
     x, w = chebgauss(deg)
@@ -899,10 +935,41 @@ def _chebgauss1(deg):
     return x, w
 
 
+auto_sin = (automorphism_sin, grad_automorphism_sin)
+
+
+def _one_bump(x, h):
+    # B with hump of height h in middle
+    return h * (1 - x**2) ** 2 + x**2 + 1
+
+
+def _bumpy(x, x_peak=(-0.5, 0, 0.5), h_peak=(0.5, 0.75, 0.25), sigma=0.125):
+    """Make |B| with humps.
+
+    Looks fine by eye when plotted, but might not be that realistic of an example?,
+    since no power series centered near center of Gaussian converges (to Gaussian).
+
+    Parameters
+    ----------
+    x : jnp.ndarray
+        Points to evaluate.
+    x_peak : jnp.ndarray
+        Peak centers in [-1, 1], excluding endpoints.
+    h_peak : jnp.ndarray
+        Peak heights in [0, 1], excluding endpoints.
+    sigma : float
+        Standard deviation of Gaussian.
+
+    """
+    x, x_peak, h_peak = jnp.atleast_1d(x, x_peak, h_peak)
+    x_peak = jnp.hstack([-1, x_peak, 1])
+    h_peak = jnp.hstack([1, h_peak, 1])
+    basis = jnp.exp(-jnp.square((x[:, jnp.newaxis] - x_peak) / sigma))
+    return basis.dot(h_peak).squeeze() + 1
+
+
 class TestBounceQuadrature:
     """Test bounce quadrature."""
-
-    auto_sin = (automorphism_sin, grad_automorphism_sin)
 
     @pytest.mark.unit
     @pytest.mark.parametrize(
@@ -926,14 +993,14 @@ class TestBounceQuadrature:
         Notes
         -----
         Empirical testing shows asymptotic density of nodes needs to be at least
-        1/√(1−x²) and quadrature needs √(1−x²) factor in Jacobian for accurate
+        1/√(1−x²) and quadrature needs a cosine factor in Jacobian for accurate
         bounce integrals. This is satisfied by ``chebgauss2`` and ``leggauss`` with
         the sin automorphism. The former has less clustering near boundary by a factor
         of 1/√(1−x²), so we choose it for weakly singular bounce integrals. This will
         capture more features in the integral, especially the W shaped wells. Less
         clustering will also make non-uniform FFTs more accurate.
 
-        For the strongly singular bounce integrals, another √(1−x²) factor is preferred
+        For the strongly singular bounce integrals, another cosine factor is preferred
         to supress the derivative (as expected from chain rule), so we need to use the
         sin automorphism. We choose to apply that map to ``leggauss`` instead of
         ``_chebgauss1`` because the extra cosine term in ``_chebgauss1`` increases the
@@ -964,10 +1031,10 @@ class TestBounceQuadrature:
             integrand = lambda B, pitch: jnp.sqrt(1 - m * pitch * B)
             truth = v * 2 * ellipe(m)
         bounce = Bounce1D(
-            Grid.create_meshgrid([1, 0, knots], coordinates="raz"),
-            data,
-            quad,
-            automorphism,
+            grid=Grid.create_meshgrid([1, 0, knots], coordinates="raz"),
+            data=data,
+            quad=quad,
+            automorphism=automorphism,
             check=True,
         )
         points = bounce.points(pitch_inv, num_well=1)
@@ -978,6 +1045,67 @@ class TestBounceQuadrature:
         )
         assert np.count_nonzero(result) == 1
         np.testing.assert_allclose(result.sum(), truth, rtol=1e-4)
+
+    @pytest.mark.parametrize(
+        "is_strong, B",
+        [
+            (False, lambda x: _one_bump(x, 0.75)),
+            (False, lambda x: _one_bump(x, 0.999)),
+            (True, lambda x: _one_bump(x, 0.75)),
+            (True, lambda x: _one_bump(x, 0.999)),
+            (False, _bumpy),
+            (True, _bumpy),
+        ],
+    )
+    def test_quad_compare(self, is_strong, B):
+        """Compare quadratures in W-shaped wells."""
+        x = np.linspace(-1, 1, 1000)
+        plt.plot(x, B(x))
+        plt.show()
+
+        def func(x):
+            w1 = jnp.sqrt(jnp.clip(2 - B(x), 0, jnp.inf))
+            if is_strong:
+                w1 = safediv(1, w1)
+            return w1
+
+        plt.plot(x, func(x))
+        plt.show()
+
+        truth, info = quadax.quadts(func, interval=(-1, 1))
+        print("\n" + 50 * "---" + f"\nTrue value: {truth}, neval: {info[1]}")
+        for n in [16, 32, 64, 128]:
+            # Uniform spacing quadratures.
+            x, w = uniform(n)
+            fx = func(x)
+            trap = fx.dot(w)
+            simp = simpson(y=fx, x=x)
+
+            # Node density near boundary is 1/√(1−x²).
+            # Default quadrature for weak singularities.
+            x, w = chebgauss2(n)
+            cheb2 = func(x).dot(w)
+
+            # Node density near boundary is 1/√(1−x²).
+            x, w = _chebgauss1(n)
+            cheb1 = func(x).dot(w)
+
+            # Node density near boundary is 1/(1−x²).
+            # Default quadrature for strong singularities.
+            x, w = get_quadrature(leggauss(n), auto_sin)
+            legs = func(x).dot(w)
+
+            # Node density near boundary > 1/(1−x²).
+            x, w = tanh_sinh(n)
+            tanh = func(x).dot(w)
+
+            print(f"\nPoints: {n}")
+            print(f"Trapezoid: {trap:.12f}, Error: {abs(trap - truth):.2e}")
+            print(f"Simpson:   {simp:.12f}, Error: {abs(simp - truth):.2e}")
+            print(f"Cheb weak: {cheb2:.12f}, Error: {abs(cheb2 - truth):.2e}")
+            print(f"Cheb strg: {cheb1:.12f}, Error: {abs(cheb1 - truth):.2e}")
+            print(f"Legs strg: {legs:.12f}, Error: {abs(legs - truth):.2e}")
+            print(f"Tanh-sinh: {tanh:.12f}, Error: {abs(tanh - truth):.2e}")
 
     @staticmethod
     @partial(np.vectorize, excluded={0})
@@ -1106,6 +1234,7 @@ class TestBounce1D:
         zeta = np.linspace(-2 * np.pi, 2 * np.pi, 200)
 
         eq = get("HELIOTRON")
+
         # 3. Convert above coordinates to DESC computational coordinates.
         grid = get_rtz_grid(eq, rho, alpha, zeta, coordinates="raz")
         # 4. Compute input data.
@@ -1139,13 +1268,17 @@ class TestBounce1D:
             batch=False,
         )
         avg = safediv(num, den)
-        assert np.isfinite(avg).all() and np.count_nonzero(avg)
+        errorif(not np.isfinite(avg).all())
+        errorif(
+            np.count_nonzero(avg) == 0,
+            msg="Detected 0 wells on this cut of the field line. Make sure enough "
+            "toroidal transits were followed for this test, or plot the field line "
+            "to see if this is expected.",
+        )
 
         # 9. Example manipulation of the output
         # Sum all bounce averages across a particular field line, for every field line.
         result = avg.sum(axis=-1)
-        # Group the result by pitch and flux surface.
-        result = result.reshape(alpha.size, rho.size, pitch_inv.shape[-1])
         # The result stored at
         m, l, p = 0, 1, 3
         print("Result(α, ρ, λ):", result[m, l, p])
@@ -1153,7 +1286,7 @@ class TestBounce1D:
         print("1/λ(α, ρ):", pitch_inv[l, p])
         # for the Clebsch-type field line coordinates
         nodes = grid.source_grid.meshgrid_reshape(grid.source_grid.nodes[:, :2], "arz")
-        print("(α, ρ):", nodes[m, l, 0])
+        print("(ρ, α):", nodes[m, l, 0])
 
         # 10. Plotting
         fig, ax = bounce.plot(m, l, pitch_inv[l], include_legend=False, show=False)
@@ -1192,7 +1325,7 @@ class TestBounce1D:
         points = (np.array(0, ndmin=4), np.array(2 * np.pi, ndmin=4))
         argmin = 5.61719
         h_min = h(argmin)
-        result = func(h(zeta), points, zeta, bounce.B, bounce._dB_dz)
+        result = func(h(zeta), points, zeta, bounce.B, bounce.dB_dz)
         assert result.shape == points[0].shape
         np.testing.assert_allclose(h_min, result, rtol=1e-3)
 
@@ -1223,6 +1356,7 @@ class TestBounce1D:
                 "iota",
                 "psi",
                 "a",
+                "theta_PEST",
             ],
             grid=grid,
         )
@@ -1265,15 +1399,14 @@ class TestBounce1D:
         # is independent of normalization length scales, like "effective r/R0".
         epsilon = data["a"] * data["rho"]  # Aspect ratio of the flux surface.
         np.testing.assert_allclose(epsilon, 0.05)
-        theta_PEST = data["alpha"] + data["iota"] * data["zeta"]
         # same as 1 / (1 + epsilon cos(theta)) assuming epsilon << 1
-        B_analytic = B0 * (1 - epsilon * np.cos(theta_PEST))
+        B_analytic = B0 * (1 - epsilon * np.cos(data["theta_PEST"]))
         np.testing.assert_allclose(B, B_analytic, atol=3e-3)
 
         gradpar = data["a"] * data["B^zeta"] / data["|B|"]
         # This method of computing G0 suggests a fixed point iteration.
         G0 = data["a"]
-        gradpar_analytic = G0 * (1 - epsilon * np.cos(theta_PEST))
+        gradpar_analytic = G0 * (1 - epsilon * np.cos(data["theta_PEST"]))
         gradpar_theta_analytic = data["iota"] * gradpar_analytic
         G0 = np.mean(gradpar_theta_analytic)
         np.testing.assert_allclose(gradpar, gradpar_analytic, atol=5e-3)
@@ -1291,10 +1424,12 @@ class TestBounce1D:
             / data["Bref"]
         )
         gds21_analytic = -data["shear"] * (
-            data["shear"] * theta_PEST - alpha_MHD / B**4 * np.sin(theta_PEST)
+            data["shear"] * data["theta_PEST"]
+            - alpha_MHD / B**4 * np.sin(data["theta_PEST"])
         )
         gds21_analytic_low_order = -data["shear"] * (
-            data["shear"] * theta_PEST - alpha_MHD / B0**4 * np.sin(theta_PEST)
+            data["shear"] * data["theta_PEST"]
+            - alpha_MHD / B0**4 * np.sin(data["theta_PEST"])
         )
         np.testing.assert_allclose(gds21, gds21_analytic, atol=2e-2)
         np.testing.assert_allclose(gds21, gds21_analytic_low_order, atol=2.7e-2)
@@ -1302,13 +1437,13 @@ class TestBounce1D:
         fudge_1 = 0.19
         gbdrift_analytic = fudge_1 * (
             -data["shear"]
-            + np.cos(theta_PEST)
-            - gds21_analytic / data["shear"] * np.sin(theta_PEST)
+            + np.cos(data["theta_PEST"])
+            - gds21_analytic / data["shear"] * np.sin(data["theta_PEST"])
         )
         gbdrift_analytic_low_order = fudge_1 * (
             -data["shear"]
-            + np.cos(theta_PEST)
-            - gds21_analytic_low_order / data["shear"] * np.sin(theta_PEST)
+            + np.cos(data["theta_PEST"])
+            - gds21_analytic_low_order / data["shear"] * np.sin(data["theta_PEST"])
         )
         fudge_2 = 0.07
         cvdrift_analytic = gbdrift_analytic + fudge_2 * alpha_MHD / B**2
@@ -1382,6 +1517,7 @@ class TestBounce1D:
             f=f,
             points=points,
             check=True,
+            plot=False,
         )
         drift_numerical_den = bounce.integrate(
             integrand=TestBounce1D.drift_den_integrand,
@@ -1389,6 +1525,7 @@ class TestBounce1D:
             weight=np.ones(data["zeta"].size),
             points=points,
             check=True,
+            plot=False,
         )
         drift_numerical = np.squeeze(drift_numerical_num / drift_numerical_den)
         msg = "There should be one bounce integral per pitch in this example."
@@ -1477,3 +1614,267 @@ class TestBounce1D:
         # wrt λ but the boundary derivative: f(λ,ζ₂) (∂ζ₂/∂λ)(λ) - f(λ,ζ₁) (∂ζ₁/∂λ)(λ).
         # smooths out because the bounce points ζ₁ and ζ₂ are smooth functions of λ.
         np.testing.assert_allclose(fun2(pitch), -171500, rtol=1e-1)
+
+
+class TestBounce2D:
+    """Test bounce integration that uses 2D pseudo-spectral methods."""
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize(
+        "alpha_0, iota, num_period, period",
+        [
+            (0, np.sqrt(2), 1, 2 * np.pi),
+            (0, np.arange(1, 3) * np.sqrt(2), 5, 2 * np.pi),
+        ],
+    )
+    def test_alpha_sequence(self, alpha_0, iota, num_period, period):
+        """Test field line label updating works with jit."""
+        alphas = jit(get_alpha, static_argnums=2)(alpha_0, iota, num_period, period)
+        if np.ndim(iota):
+            assert alphas.shape == (iota.size, num_period)
+        else:
+            assert alphas.shape == (num_period,)
+        print(alphas)
+
+    @staticmethod
+    def _example_numerator(g_zz, B, pitch, zeta):
+        f = (1 - 0.5 * pitch * B) * g_zz
+        return safediv(f, jnp.sqrt(jnp.abs(1 - pitch * B)))
+
+    @staticmethod
+    def _example_denominator(B, pitch, zeta):
+        return safediv(1, jnp.sqrt(jnp.abs(1 - pitch * B)))
+
+    # TODO: Could test integration against bounce1d for this stellarator
+    @pytest.mark.unit
+    @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d * 4)
+    def test_bounce2d_checks(self):
+        """Test that all the internal correctness checks pass for real example."""
+        # noqa: D202
+        # Suppose we want to compute a bounce average of the function
+        # f(ℓ) = (1 − λ|B|/2) * g_zz, where g_zz is the squared norm of the
+        # toroidal basis vector on some set of field lines specified by (ρ, α)
+        # coordinates. This is defined as
+        # [∫ f(ℓ) / √(1 − λ|B|) dℓ] / [∫ 1 / √(1 − λ|B|) dℓ]
+
+        # 1. Define python functions for the integrands. We do that above.
+        # 2. Pick flux surfaces and grid resolution.
+        rho = np.linspace(0.1, 1, 6)
+        eq = get("HELIOTRON")
+        grid = Grid.create_meshgrid(
+            [rho, fourier_pts(eq.M_grid), fourier_pts(eq.N_grid) / eq.NFP],
+            period=(np.inf, 2 * np.pi, 2 * np.pi / eq.NFP),
+            NFP=eq.NFP,
+        )
+        # 3. Compute input data.
+        data = eq.compute(
+            Bounce2D.required_names + ["min_tz |B|", "max_tz |B|", "g_zz"], grid=grid
+        )
+        # 4. Compute DESC coordinates of optimal interpolation nodes.
+        theta = Bounce2D.compute_theta(eq, X=8, Y=64, rho=rho)
+        # 5. Make the bounce integration operator.
+        bounce = Bounce2D(
+            grid,
+            data,
+            iota=grid.compress(data["iota"]),
+            theta=theta,
+            num_transit=2,
+            quad=leggauss(3),
+            check=True,
+        )
+        pitch_inv, _ = bounce.get_pitch_inv_quad(
+            min_B=grid.compress(data["min_tz |B|"]),
+            max_B=grid.compress(data["max_tz |B|"]),
+            num_pitch=10,
+        )
+        # 6. Compute bounce points.
+        points = bounce.points(pitch_inv)
+        # 7. Optionally check for correctness of bounce points.
+        bounce.check_points(points, pitch_inv, plot=False)
+        # 8. Integrate.
+        num = bounce.integrate(
+            integrand=TestBounce2D._example_numerator,
+            pitch_inv=pitch_inv,
+            f=Bounce2D.reshape_data(grid, data["g_zz"]),
+            points=points,
+            check=True,
+        )
+        den = bounce.integrate(
+            integrand=TestBounce2D._example_denominator,
+            pitch_inv=pitch_inv,
+            points=points,
+            check=True,
+        )
+        avg = safediv(num, den)
+        errorif(not np.isfinite(avg).all())
+        errorif(
+            np.count_nonzero(avg) == 0,
+            msg="Detected 0 wells on this cut of the field line. Make sure enough "
+            "toroidal transits were followed for this test, or plot the field line "
+            "to see if this is expected.",
+        )
+
+        # 9. Example manipulation of the output
+        # Sum all bounce averages across a particular field line, for every field line.
+        result = avg.sum(axis=-1)
+        # The result stored at
+        l, p = 1, 3
+        print("Result(ρ, λ):", result[l, p])
+        # corresponds to the 1/λ value
+        print("1/λ(ρ):", pitch_inv[l, p])
+        # for the flux surface
+        print("ρ:", rho[l])
+
+        np.testing.assert_allclose(
+            bounce.compute_length(),
+            # Computed data below through <L|r,a> with Simpson's rule at 800 nodes.
+            # The difference is likely due to interpolation and floating point error.
+            # (On the version of JAX on which rtol was set, there is a bug with DCT
+            # and FFT that limit the accuracy to something comparable to 32 bit).
+            [
+                384.77892007,
+                361.60220181,
+                345.33817065,
+                333.00781712,
+                352.16277188,
+                440.09424799,
+            ],
+            rtol=3e-3,
+        )
+
+        # 10. Plotting
+        fig, ax = bounce.plot(l, pitch_inv[l], include_legend=False, show=False)
+        return fig
+
+    @pytest.mark.unit
+    # @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d * 4)
+    def test_bounce2d_pest(self):
+        """Test that all the internal correctness checks pass for real example."""
+        # noqa: D202
+        # Suppose we want to compute a bounce average of the function
+        # f(ℓ) = (1 − λ|B|/2) * g_zz, where g_zz is the squared norm of the
+        # toroidal basis vector on some set of field lines specified by (ρ, α)
+        # coordinates. This is defined as
+        # [∫ f(ℓ) / √(1 − λ|B|) dℓ] / [∫ 1 / √(1 − λ|B|) dℓ]
+
+        # 1. Define python functions for the integrands. We do that above.
+        # 2. Pick flux surfaces and grid resolution.
+        rho = np.linspace(0.1, 1, 6)
+        eq = get("HELIOTRON")
+        grid = Grid.create_meshgrid(
+            [rho, fourier_pts(eq.M_grid), fourier_pts(eq.N_grid) / eq.NFP],
+            period=(np.inf, 2 * np.pi, 2 * np.pi / eq.NFP),
+            NFP=eq.NFP,
+        )
+        # 3. Compute input data.
+        data = eq.compute(
+            Bounce2D.required_names + ["min_tz |B|", "max_tz |B|", "g_zz"], grid=grid
+        )
+        # 4. Compute DESC coordinates of optimal interpolation nodes.
+        theta = Bounce2DPEST.compute_theta(eq, X=32, Y=32, rho=rho)
+        # 5. Make the bounce integration operator.
+        bounce = Bounce2DPEST(
+            grid,
+            data,
+            iota=grid.compress(data["iota"]),
+            Y_B=32,
+            theta=theta,
+            num_transit=2,
+            quad=leggauss(3),
+            check=True,
+            warn=False,
+        )
+        phi = jnp.linspace(0, 4 * jnp.pi, 4000)
+        bounce.plot(1, phi)
+        bounce.plot_theta(1, phi)
+        bounce.plot(1, phi)
+
+    @staticmethod
+    def drift_num_integrand(cvdrift, gbdrift, B, pitch, zeta):
+        """Integrand of numerator of bounce averaged binormal drift."""
+        g = jnp.sqrt(1 - pitch * B)
+        return (cvdrift * g) - (0.5 * g * gbdrift) + (0.5 * gbdrift / g)
+
+    @staticmethod
+    def drift_den_integrand(B, pitch, zeta):
+        """Integrand of denominator of bounce averaged binormal drift."""
+        return 1 / jnp.sqrt(1 - pitch * B)
+
+    @pytest.mark.unit
+    @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
+    def test_binormal_drift_bounce2d(self):
+        """Test bounce-averaged drift with analytical expressions."""
+        data, things = TestBounce1D.get_drift_analytic_data()
+        # Compute analytic approximation.
+        drift_analytic, _, _, pitch_inv = TestBounce1D.drift_analytic(data)
+
+        # Recompute on non-symmetric, fft compatible grid.
+        eq = things["eq"]
+        grid = Grid.create_meshgrid(
+            [
+                data["rho"],
+                fourier_pts(eq._M_grid),
+                fourier_pts(max(1, eq.N_grid)) / eq.NFP,
+            ],
+            NFP=eq.NFP,
+        )
+        # TODO: request periodic terms and construct secular terms in the
+        # integrand functions
+        grid_data = eq.compute(
+            names=Bounce2D.required_names + ["cvdrift", "gbdrift"], grid=grid
+        )
+        grid_data["cvdrift"] = grid_data["cvdrift"] * data["normalization"]
+        grid_data["gbdrift"] = grid_data["gbdrift"] * data["normalization"]
+
+        # Compute numerical result.
+        X, Y = 32, 32  # todo: lower these to minimum once we get match
+        bounce = Bounce2D(
+            grid=grid,
+            data=grid_data,
+            iota=data["iota"],
+            theta=Bounce2D.compute_theta(
+                eq,
+                X=X,
+                Y=Y,
+                rho=data["rho"],
+                iota=jnp.broadcast_to(data["iota"], shape=(X * Y)),
+            ),
+            num_transit=2,
+            alpha=data["alpha"] - 2 * np.pi * data["iota"],
+            Bref=data["Bref"],
+            Lref=data["a"],
+            check=True,
+        )
+        points = bounce.points(pitch_inv, num_well=1)
+        bounce.check_points(points, pitch_inv, plot=False)
+
+        f = Bounce2D.reshape_data(grid, grid_data["cvdrift"], grid_data["gbdrift"])
+        drift_numerical_num = bounce.integrate(
+            integrand=TestBounce2D.drift_num_integrand,
+            pitch_inv=pitch_inv,
+            f=f,
+            points=points,
+            check=True,
+            plot=False,
+        )
+        drift_numerical_den = bounce.integrate(
+            integrand=TestBounce2D.drift_den_integrand,
+            pitch_inv=pitch_inv,
+            points=points,
+            check=True,
+            plot=False,
+        )
+        drift_numerical = np.squeeze(drift_numerical_num / drift_numerical_den)
+        msg = "There should be one bounce integral per pitch in this example."
+        assert drift_numerical.size == drift_analytic.size, msg
+
+        fig, ax = plt.subplots()
+        ax.plot(pitch_inv, drift_analytic)
+        ax.plot(pitch_inv, drift_numerical)
+
+        # TODO: need to make integrands multivalued
+        # np.testing.assert_allclose(  # noqa: E800
+        #     drift_numerical, drift_analytic, atol=5e-3, rtol=5e-2  # noqa: E800
+        # )  # noqa: E800
+
+        return fig

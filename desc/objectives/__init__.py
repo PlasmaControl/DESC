@@ -5,6 +5,7 @@ from ._coils import (
     CoilCurrentLength,
     CoilCurvature,
     CoilLength,
+    CoilSetLinkingNumber,
     CoilSetMinDistance,
     CoilTorsion,
     PlasmaCoilSetMinDistance,

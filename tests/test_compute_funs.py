@@ -6,11 +6,12 @@ from scipy.signal import convolve2d
 
 from desc.compute import rpz2xyz_vec
 from desc.equilibrium import Equilibrium
+from desc.equilibrium.coords import get_rtz_grid
 from desc.examples import get
 from desc.geometry import FourierRZToroidalSurface
 from desc.grid import LinearGrid
 from desc.io import load
-from desc.utils import dot
+from desc.utils import cross, dot
 
 # convolve kernel is reverse of FD coeffs
 FD_COEF_1_2 = np.array([-1 / 2, 0, 1 / 2])[::-1]
@@ -1540,32 +1541,100 @@ def test_surface_equilibrium_geometry():
 
 
 @pytest.mark.unit
-def test_parallel_grad():
-    """Test geometric and physical methods of computing parallel gradients agree."""
-    eq = get("W7-X")
-    with pytest.warns(UserWarning, match="Reducing radial"):
-        eq.change_resolution(2, 2, 2, 4, 4, 4)
+def test_clebsch_sfl_funs():
+    """Test geometric and physical methods of computing B agree."""
+
+    def test(eq):
+        with pytest.warns(UserWarning, match="Reducing radial"):
+            eq.change_resolution(2, 2, 2, 4, 4, 4)
+        data = eq.compute(
+            [
+                "e_zeta|r,a",
+                "B",
+                "B^zeta",
+                "B^phi",
+                "|B|_z|r,a",
+                "grad(|B|)",
+                "|e_zeta|r,a|_z|r,a",
+                "B^zeta_z|r,a",
+                "|B|",
+                "sqrt(g)_Clebsch",
+                "sqrt(g)_PEST",
+                "psi_r",
+                "grad(psi)",
+                "grad(alpha)",
+                "grad(phi)",
+                "B_phi",
+            ],
+        )
+        np.testing.assert_allclose(data["e_zeta|r,a"], (data["B"].T / data["B^zeta"]).T)
+        np.testing.assert_allclose(
+            data["|B|_z|r,a"], dot(data["grad(|B|)"], data["e_zeta|r,a"])
+        )
+        np.testing.assert_allclose(
+            data["|e_zeta|r,a|_z|r,a"],
+            data["|B|_z|r,a"] / np.abs(data["B^zeta"])
+            - data["|B|"]
+            * data["B^zeta_z|r,a"]
+            * np.sign(data["B^zeta"])
+            / data["B^zeta"] ** 2,
+        )
+        np.testing.assert_allclose(
+            data["B"], cross(data["grad(psi)"], data["grad(alpha)"])
+        )
+        np.testing.assert_allclose(
+            data["B^zeta"], data["psi_r"] / data["sqrt(g)_Clebsch"]
+        )
+        np.testing.assert_allclose(data["B^phi"], data["psi_r"] / data["sqrt(g)_PEST"])
+        np.testing.assert_allclose(data["B^phi"], dot(data["B"], data["grad(phi)"]))
+        np.testing.assert_allclose(data["B_phi"], data["B"][:, 1])
+
+    test(get("W7-X"))
+    test(get("NCSX"))
+
+
+@pytest.mark.unit
+def test_parallel_grad_fd(DummyStellarator):
+    """Test that the parallel gradients match with numerical gradients."""
+    eq = load(load_from=str(DummyStellarator["output_path"]), file_format="hdf5")
+    grid = get_rtz_grid(
+        eq,
+        0.5,
+        0,
+        np.linspace(0, 2 * np.pi, 50),
+        coordinates="raz",
+        period=(np.inf, 2 * np.pi, np.inf),
+    )
     data = eq.compute(
         [
-            "e_zeta|r,a",
-            "B",
-            "B^zeta",
-            "|B|_z|r,a",
-            "grad(|B|)",
-            "|e_zeta|r,a|_z|r,a",
-            "B^zeta_z|r,a",
             "|B|",
+            "|B|_z|r,a",
+            "|e_zeta|r,a|",
+            "|e_zeta|r,a|_z|r,a",
+            "B^zeta",
+            "B^zeta_z|r,a",
         ],
+        grid=grid,
     )
-    np.testing.assert_allclose(data["e_zeta|r,a"], (data["B"].T / data["B^zeta"]).T)
+    dz = grid.source_grid.spacing[:, 2]
+    fd = np.convolve(data["|B|"], FD_COEF_1_4, "same") / dz
     np.testing.assert_allclose(
-        data["|B|_z|r,a"], dot(data["grad(|B|)"], data["e_zeta|r,a"])
+        data["|B|_z|r,a"][2:-2],
+        fd[2:-2],
+        rtol=1e-2,
+        atol=1e-2 * np.mean(np.abs(data["|B|_z|r,a"])),
     )
+    fd = np.convolve(data["|e_zeta|r,a|"], FD_COEF_1_4, "same") / dz
     np.testing.assert_allclose(
-        data["|e_zeta|r,a|_z|r,a"],
-        data["|B|_z|r,a"] / np.abs(data["B^zeta"])
-        - data["|B|"]
-        * data["B^zeta_z|r,a"]
-        * np.sign(data["B^zeta"])
-        / data["B^zeta"] ** 2,
+        data["|e_zeta|r,a|_z|r,a"][2:-2],
+        fd[2:-2],
+        rtol=1e-2,
+        atol=1e-2 * np.mean(np.abs(data["|e_zeta|r,a|_z|r,a"])),
+    )
+    fd = np.convolve(data["B^zeta"], FD_COEF_1_4, "same") / dz
+    np.testing.assert_allclose(
+        data["B^zeta_z|r,a"][2:-2],
+        fd[2:-2],
+        rtol=1e-2,
+        atol=1e-2 * np.mean(np.abs(data["B^zeta_z|r,a"])),
     )

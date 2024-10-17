@@ -30,6 +30,8 @@ from ._geometry import (
     MeanCurvature,
     PlasmaVesselDistance,
     PrincipalCurvature,
+    UmbilicFieldAligned,
+    UmbilicHighCurvature,
     Volume,
 )
 from ._neoclassical import EffectiveRipple

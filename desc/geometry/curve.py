@@ -16,7 +16,12 @@ from desc.utils import check_nonnegint, check_posint, copy_coeffs, errorif, warn
 
 from .core import Curve
 
-__all__ = ["FourierRZCurve", "FourierXYZCurve", "FourierPlanarCurve", "SplineXYZCurve"]
+__all__ = [
+    "FourierRZCurve",
+    "FourierXYZCurve",
+    "FourierPlanarCurve",
+    "SplineXYZCurve",
+]
 
 
 class FourierRZCurve(Curve):
@@ -32,6 +37,9 @@ class FourierRZCurve(Curve):
         Mode numbers associated with Z_n, If not given defaults to [-n:n]].
     NFP : int
         Number of field periods.
+    NFP_umbilic_factor : float
+        Rational number of the form 1/integer with integer>=1.
+        This is needed for the umbilic torus design.
     sym : bool
         Whether to enforce stellarator symmetry.
     name : str
@@ -46,6 +54,7 @@ class FourierRZCurve(Curve):
         "_Z_basis",
         "_sym",
         "_NFP",
+        "_NFP_umbilic_factor",
     ]
 
     def __init__(
@@ -55,6 +64,7 @@ class FourierRZCurve(Curve):
         modes_R=None,
         modes_Z=None,
         NFP=1,
+        NFP_umbilic_factor=1,
         sym="auto",
         name="",
     ):
@@ -89,8 +99,21 @@ class FourierRZCurve(Curve):
         NZ = np.max(abs(modes_Z))
         N = max(NR, NZ)
         self._NFP = check_posint(NFP, "NFP", False)
-        self._R_basis = FourierSeries(N, int(NFP), sym="cos" if sym else False)
-        self._Z_basis = FourierSeries(N, int(NFP), sym="sin" if sym else False)
+        self._NFP_umbilic_factor = check_posint(
+            NFP_umbilic_factor, "NFP_umbilic_factor", False
+        )
+        self._R_basis = FourierSeries(
+            N,
+            int(NFP),
+            NFP_umbilic_factor=int(NFP_umbilic_factor),
+            sym="cos" if sym else False,
+        )
+        self._Z_basis = FourierSeries(
+            N,
+            int(NFP),
+            NFP_umbilic_factor=int(NFP_umbilic_factor),
+            sym="sin" if sym else False,
+        )
 
         self._R_n = copy_coeffs(R_n, modes_R, self.R_basis.modes[:, 2])
         self._Z_n = copy_coeffs(Z_n, modes_Z, self.Z_basis.modes[:, 2])
@@ -116,30 +139,53 @@ class FourierRZCurve(Curve):
         return self._NFP
 
     @property
+    def NFP_umbilic_factor(self):
+        """NFP umbilic factor. Effective NFP -> NFP/NFP_umbilic_factor."""
+        return self.__dict__.setdefault("_NFP_umbilic_factor", 1)
+
+    def _NFP_umbilic_factor(self):
+        """NFP umbilic factor. Effective NFP -> NFP/NFP_umbilic_factor."""
+        self._NFP_umbilic_factor = self.NFP_umbilic_factor
+
+    @property
     def N(self):
         """Maximum mode number."""
         return max(self.R_basis.N, self.Z_basis.N)
 
-    def change_resolution(self, N=None, NFP=None, sym=None):
+    def change_resolution(self, N=None, NFP=None, NFP_umbilic_factor=None, sym=None):
         """Change the maximum toroidal resolution."""
         N = check_nonnegint(N, "N")
         NFP = check_posint(NFP, "NFP")
+        NFP_umbilic_factor = check_posint(NFP_umbilic_factor, "NFP_umbilic_factor")
         if (
             ((N is not None) and (N != self.N))
             or ((NFP is not None) and (NFP != self.NFP))
+            or (
+                (NFP_umbilic_factor is not None)
+                and (NFP_umbilic_factor != self.NFP_umbilic_factor)
+            )
             or (sym is not None)
             and (sym != self.sym)
         ):
             self._NFP = int(NFP if NFP is not None else self.NFP)
+            self._NFP_umbilic_factor = int(
+                NFP_umbilic_factor if NFP_umbilic_factor is not None else int(1)
+            )
             self._sym = bool(sym) if sym is not None else self.sym
             N = int(N if N is not None else self.N)
             R_modes_old = self.R_basis.modes
             Z_modes_old = self.Z_basis.modes
             self.R_basis.change_resolution(
-                N=N, NFP=self.NFP, sym="cos" if self.sym else self.sym
+                N=N,
+                NFP=self.NFP,
+                NFP_umbilic_factor=self.NFP_umbilic_factor,
+                sym="cos" if self.sym else self.sym,
             )
             self.Z_basis.change_resolution(
-                N=N, NFP=self.NFP, sym="sin" if self.sym else self.sym
+                N=N,
+                NFP=self.NFP,
+                NFP_umbilic_factor=self.NFP_umbilic_factor,
+                sym="sin" if self.sym else self.sym,
             )
             self.R_n = copy_coeffs(self.R_n, R_modes_old, self.R_basis.modes)
             self.Z_n = copy_coeffs(self.Z_n, Z_modes_old, self.Z_basis.modes)
@@ -229,13 +275,16 @@ class FourierRZCurve(Curve):
             inputs["axis"][:, 0].astype(int),
             inputs["axis"][:, 0].astype(int),
             inputs["NFP"],
+            int(1),
             inputs["sym"],
             **kwargs,
         )
         return curve
 
     @classmethod
-    def from_values(cls, coords, N=10, NFP=1, sym=False, basis="rpz", name=""):
+    def from_values(
+        cls, coords, N=10, NFP=1, NFP_umbilic_factor=1, basis="rpz", name="", sym=False
+    ):
         """Fit coordinates to FourierRZCurve representation.
 
         Parameters
@@ -248,6 +297,9 @@ class FourierRZCurve(Curve):
         NFP : int
             Number of field periods, the curve will have a discrete toroidal symmetry
             according to NFP.
+        NFP_umbilic_factor : int
+            Umbilic factor to fit curves that go around multiple times toroidally before
+            closing on themselves.
         sym : bool
             Whether to enforce stellarator symmetry.
         basis : {"rpz", "xyz"}
@@ -299,9 +351,10 @@ class FourierRZCurve(Curve):
         return FourierRZCurve(
             R_n=R_n,
             Z_n=Z_n,
+            NFP=NFP,
+            NFP_umbilic_factor=NFP_umbilic_factor,
             modes_R=basis.modes[:, 2],
             modes_Z=basis.modes[:, 2],
-            NFP=NFP,
             sym=sym,
             name=name,
         )
@@ -367,9 +420,9 @@ class FourierXYZCurve(Curve):
         assert Z_n.size == modes.size, "Z_n and modes must be the same size"
 
         N = np.max(abs(modes))
-        self._X_basis = FourierSeries(N, NFP=1, sym=False)
-        self._Y_basis = FourierSeries(N, NFP=1, sym=False)
-        self._Z_basis = FourierSeries(N, NFP=1, sym=False)
+        self._X_basis = FourierSeries(N, NFP=1, NFP_umbilic_factor=1, sym=False)
+        self._Y_basis = FourierSeries(N, NFP=1, NFP_umbilic_factor=1, sym=False)
+        self._Z_basis = FourierSeries(N, NFP=1, NFP_umbilic_factor=1, sym=False)
         self._X_n = copy_coeffs(X_n, modes, self.X_basis.modes[:, 2])
         self._Y_n = copy_coeffs(Y_n, modes, self.Y_basis.modes[:, 2])
         self._Z_n = copy_coeffs(Z_n, modes, self.Z_basis.modes[:, 2])
@@ -618,7 +671,7 @@ class FourierPlanarCurve(Curve):
         assert basis.lower() in ["xyz", "rpz"]
 
         N = np.max(abs(modes))
-        self._r_basis = FourierSeries(N, NFP=1, sym=False)
+        self._r_basis = FourierSeries(N, NFP=1, NFP_umbilic_factor=1, sym=False)
         self._r_n = copy_coeffs(r_n, modes, self.r_basis.modes[:, 2])
 
         self._basis = basis

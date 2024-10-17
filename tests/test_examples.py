@@ -178,6 +178,8 @@ def test_1d_optimization():
     constraints = (
         ForceBalance(eq=eq),
         FixBoundaryR(eq=eq),
+        FixBoundaryR(eq=eq, modes=[0, 0, 0]),  # add a degenerate constraint to confirm
+        # proximal-lsq-exact not affected by GH #1297
         FixBoundaryZ(eq=eq, modes=eq.surface.Z_basis.modes[0:-1, :]),
         FixPressure(eq=eq),
         FixIota(eq=eq),
@@ -644,6 +646,9 @@ def test_multiobject_optimization_al():
         FixParameters(surf, {"R_lmn": np.array([0]), "Z_lmn": np.array([3])}),
         FixParameters(eq, {"Psi": True, "i_l": True}),
         FixBoundaryR(eq, modes=[[0, 0, 0]]),
+        FixBoundaryR(
+            eq=eq, modes=[0, 0, 0]
+        ),  # add a degenerate constraint to test fix of GH #1297 for lsq-auglag
         PlasmaVesselDistance(surface=surf, eq=eq, target=1),
     )
 
@@ -1043,6 +1048,7 @@ def test_freeb_vacuum():
     objective = ObjectiveFunction(
         VacuumBoundaryError(eq=eq, field=ext_field, field_fixed=True),
         jac_chunk_size=1000,
+        deriv_mode="batched",
     )
     eq, _ = eq.optimize(
         objective,

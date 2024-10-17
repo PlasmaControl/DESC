@@ -137,10 +137,15 @@ class FourierChebyshevSeries(IOAble):
 
     Examples
     --------
-    Let the magnetic field be B = ∇ρ × ∇α, x = α, and y = ζ. This basis can
-    will then parameterize maps in Clebsch coordinates. Passing in a sequence
-    of α values tracking the field line (see ``get_alpha``) to the
-    ``compute_cheb`` method will generate f along field lines.
+    Let the magnetic field be B = ∇ρ × ∇x. This basis will then parameterize
+    maps in Clebsch coordinates. Passing in a sequence of x values tracking
+    the field line (see ``get_alpha``) to the ``compute_cheb`` method will
+    generate a 1D parameterization of f along the field line.
+
+    This is useful to interpolate f ≝ θ and use the map x, ζ ↦ θ(x, ζ) to
+    compute quantities along field lines via evaluating Fourier series
+    parameterized in DESC computational coordinates θ, ζ, where the Fourier
+    transform is more condensed when NFP > 1.
 
     Notes
     -----

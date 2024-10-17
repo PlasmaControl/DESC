@@ -3262,7 +3262,7 @@ def _periodic_grad_alpha(params, transforms, profiles, data, **kwargs):
     units_long="Inverse meters",
     description=(
         "Gradient of field line label, which is perpendicular to the field line, "
-        "periodic component"
+        "secular component"
     ),
     dim=3,
     params=[],

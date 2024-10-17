@@ -4,11 +4,22 @@ import numpy as np
 from interpax import PPoly
 from matplotlib import pyplot as plt
 
-from desc.backend import imap, jnp, softargmax
-from desc.integrals.basis import _add2legend, _in_epigraph_and, _plot_intersect
+from desc.backend import dct, imap, irfft2, jnp, rfft2, softargmax
+from desc.integrals.basis import (
+    FourierChebyshevSeries,
+    PiecewiseChebyshevSeries,
+    _add2legend,
+    _in_epigraph_and,
+    _plot_intersect,
+)
 from desc.integrals.interp_utils import (
+    cheb_from_dct,
+    cheb_pts,
+    fourier_pts,
     interp1d_Hermite_vec,
     interp1d_vec,
+    interp_rfft2,
+    irfft2_non_uniform,
     polyroot_vec,
     polyval_vec,
 )
@@ -25,34 +36,6 @@ from desc.utils import (
     setdefault,
     take_mask,
 )
-
-
-# TODO: Generalize this beyond ζ = ϕ or just map to Clebsch with ϕ.
-def get_alpha(alpha_0, iota, num_transit, period):
-    """Get sequence of poloidal coordinates A = (α₀, α₁, …, αₘ₋₁) of field line.
-
-    Parameters
-    ----------
-    alpha_0 : float
-        Starting field line poloidal label.
-    iota : jnp.ndarray
-        Shape (iota.size, ).
-        Rotational transform normalized by 2π.
-    num_transit : float
-        Number of ``period``s to follow field line.
-    period : float
-        Toroidal period after which to update label.
-
-    Returns
-    -------
-    alpha : jnp.ndarray
-        Shape (iota.size, num_transit).
-        Sequence of poloidal coordinates A = (α₀, α₁, …, αₘ₋₁) that specify field line.
-
-    """
-    # Δϕ (∂α/∂ϕ) = Δϕ ι̅ = Δϕ ι/2π = Δϕ data["iota"]
-    alpha = alpha_0 + period * jnp.expand_dims(iota, -1) * jnp.arange(num_transit)
-    return alpha
 
 
 def get_pitch_inv_quad(min_B, max_B, num_pitch):
@@ -856,3 +839,167 @@ def plot_ppoly(
         plt.show()
         plt.close()
     return fig, ax
+
+
+def _transform_to_desc(grid, f, is_reshaped=False):
+    """Transform to DESC spectral domain.
+
+    Parameters
+    ----------
+    grid : Grid
+        Tensor-product grid in (θ, ζ) with uniformly spaced nodes [0, 2π) × [0, 2π/NFP).
+        Preferably power of 2 for ``grid.num_theta`` and ``grid.num_zeta``.
+    f : jnp.ndarray
+        Function evaluated on ``grid``.
+
+    Returns
+    -------
+    a : jnp.ndarray
+        Shape (..., grid.num_theta // 2 + 1, grid.num_zeta)
+        Complex coefficients of 2D real FFT of ``f``.
+
+    """
+    if not is_reshaped:
+        f = grid.meshgrid_reshape(f, "rtz")
+    # real fft over poloidal since usually m > n
+    return rfft2(f, axes=(-1, -2), norm="forward")
+
+
+def _transform_to_PEST(grid, T, f, N, is_reshaped=False):
+    """Transform to PEST straight field line spectral domain.
+
+    Parameters
+    ----------
+    grid : Grid
+        Tensor-product grid in (θ, ζ) with uniformly spaced nodes [0, 2π) × [0, 2π/NFP).
+        Preferably power of 2 for ``grid.num_theta`` and ``grid.num_zeta``.
+    T : jnp.ndarray
+        Fourier transform of θ(ϑ,ϕ).
+    f : jnp.ndarray
+        Function evaluated on ``grid``.
+    N : int
+        Desired spectral resolution for ``f``. Preferably power of 2.
+
+    Returns
+    -------
+    F : jnp.ndarray
+        Fourier transform of f(ϑ,ϕ).
+
+    """
+    if not is_reshaped:
+        f = grid.meshgrid_reshape(f, "rtz")
+
+    theta = irfft2(T, (N, N), norm="forward")
+    zeta = jnp.broadcast_to(fourier_pts(N), theta.shape)
+
+    shape = (*theta.shape[:-2], N * N)  # num rho, num points
+    return rfft2(
+        interp_rfft2(
+            theta.reshape(shape),
+            zeta.reshape(shape),
+            f=f[..., jnp.newaxis, :, :],
+            domain1=(0, 2 * jnp.pi / grid.NFP),
+            axes=(-1, -2),
+        ).reshape(*shape[:-1], N, N),
+        norm="forward",
+    )
+
+
+def _transform_to_clebsch_1d(grid, alpha, theta, B, Y_B):
+    """Transform to single variable Clebsch spectral domain.
+
+    Notes
+    -----
+    The field line label α changes discontinuously, so the approximation
+    g defined with basis function in (α, ζ) coordinates to some continuous
+    function f does not guarantee continuity between cuts of the field line
+    until full convergence of g to f.
+
+    Note if g were defined with basis functions in straight field line
+    coordinates, then continuity between cuts of the field line, as
+    determined by the straight field line coordinates (ϑ, ζ), is
+    guaranteed even with incomplete convergence (because the
+    parameters (ϑ, ζ) change continuously along the field line).
+
+    Do not interpret this as superior function approximation.
+    Indeed, if g is defined with basis functions in (α, ζ) coordinates, then
+    g(α=α₀, ζ) will sample the approximation to f(α=α₀, ζ) for the full domain in ζ.
+    This holds even with incomplete convergence of g to f.
+    However, if g is defined with basis functions in (ϑ, ζ) coordinates, then
+    g(ϑ(α=α₀,ζ), ζ) will sample the approximation to f(α=α₀ ± ε, ζ) with ε → 0 as
+    g converges to f.
+
+    (Visually, the small discontinuity apparent in g(α, ζ) at cuts of the field
+    line will not be visible in g(ϑ, ζ) because when moving along the field line
+    with g(ϑ, ζ) one is continuously flowing away from the starting field line,
+    (whereas g(α, ζ) has to "decide" at the cut what the next field line is).
+    (If full convergence is difficult to achieve, then in the context of surface
+    averaging bounce integrals, function approximation in (α, ζ) coordinates
+    might be preferable because most of the bounce integrals do not stretch
+    across toroidal transits).)
+
+    Note that if g is an unbounded function, as all coordinates are, then
+    it is impossible to approximate it with a finite number of periodic
+    basis functions, so we are forced to use a Fourier Chebyshev series to
+    interpolate θ anyway.
+
+    Now, it appears the Fourier transform of θ may have small oscillatory bumps
+    outside reasonable bandwidths. This impedes full convergence of any
+    approximation, and in particular the poloidal Fourier series for, θ(α, ζ=ζ₀).
+    Maybe this is because the Chebyshev interpolation is detecting root-finding
+    errors where the nodes are more densely clustered. (Note the Fourier series
+    converges fast for |B|, even in non-omnigenous configurations where
+    (∂|B|/∂α)|ρ,ζ is not small, so this is indeed some feature with θ).
+
+    Therefore, we explicitly enforce continuity of our approximation of θ between
+    cuts to short-circuit the convergence. This works to remove the small
+    discontinuity between cuts of the field line because the first cut is on α=0,
+    which is a knot of the Fourier series, and the Chebyshev points include a knot
+    near endpoints, so θ at the next cut of the field line is known with precision.
+
+    Parameters
+    ----------
+    grid : Grid
+        Tensor-product grid in (θ, ζ) with uniformly spaced nodes [0, 2π) × [0, 2π/NFP).
+        Preferably power of 2 for ``grid.num_theta`` and ``grid.num_zeta``.
+    alpha : jnp.ndarray
+        Shape (L, num_transit) or (num_transit, ).
+        Sequence of poloidal coordinates A = (α₀, α₁, …, αₘ₋₁) that specify field line.
+    theta : jnp.ndarray
+        Shape (L, M, N) or (M, N).
+        DESC coordinates θ sourced from the Clebsch coordinates
+        ``FourierChebyshevSeries.nodes(M,N,domain=(0,2*jnp.pi))``.
+    B : jnp.ndarray
+        Fourier transform of |B|(θ, ζ) as returned by ``_transform_to_desc``.
+    Y_B : int
+        Desired Chebyshev spectral resolution for |B|. Preferably power of 2.
+
+    Returns
+    -------
+    T, B : tuple[PiecewiseChebyshevSeries]
+        Set of 1D Chebyshev spectral coefficients of θ along field line.
+        {θ_α : ζ ↦ θ(α, ζ) | α ∈ A} where A = (α₀, α₁, …, αₘ₋₁) is ``alpha``.
+        Likewise with |B|.
+
+    """
+    # Evaluating set of single variable maps is more efficient than evaluating
+    # multivariable map, so we project θ to a set of Chebyshev series.
+    T = FourierChebyshevSeries(f=theta, domain=(0, 2 * jnp.pi)).compute_cheb(alpha)
+    T.stitch()
+    theta = T.evaluate(Y_B)
+    zeta = jnp.broadcast_to(cheb_pts(Y_B, domain=T.domain), theta.shape)
+
+    shape = (*alpha.shape[:-1], alpha.shape[-1] * Y_B)
+    B = irfft2_non_uniform(
+        theta.reshape(shape),
+        zeta.reshape(shape),
+        B[..., jnp.newaxis, :, :],
+        n0=grid.num_zeta,
+        n1=grid.num_theta,
+        domain1=(0, 2 * jnp.pi / grid.NFP),
+        axes=(-1, -2),
+    ).reshape(*alpha.shape, Y_B)
+    # Parameterize |B| by single variable to compute roots.
+    B = PiecewiseChebyshevSeries(cheb_from_dct(dct(B, type=2, axis=-1)) / Y_B, T.domain)
+    # |B| guaranteed to be continuous because it was interpolated from B(θ(α, ζ),ζ).
+    return T, B

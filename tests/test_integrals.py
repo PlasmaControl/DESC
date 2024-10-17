@@ -4,10 +4,12 @@ from functools import partial
 
 import numpy as np
 import pytest
+import quadax
 from jax import grad
 from matplotlib import pyplot as plt
 from numpy.polynomial.chebyshev import chebgauss, chebinterpolate, chebroots, chebweight
 from numpy.polynomial.legendre import leggauss
+from quadax import simpson
 from scipy import integrate
 from scipy.interpolate import CubicHermiteSpline
 from scipy.special import ellipe, ellipkm1
@@ -34,11 +36,11 @@ from desc.integrals import (
     surface_variance,
     virtual_casing_biot_savart,
 )
-from desc.integrals.basis import FourierChebyshevSeries
+from desc.integrals.basis import FourierChebyshevSeries, get_alpha
+from desc.integrals.bounce_integral import Bounce2DPEST
 from desc.integrals.bounce_utils import (
     _get_extrema,
     bounce_points,
-    get_alpha,
     get_pitch_inv_quad,
     interp_to_argmin,
     interp_to_argmin_hard,
@@ -53,6 +55,7 @@ from desc.integrals.quad_utils import (
     grad_bijection_from_disc,
     leggauss_lob,
     tanh_sinh,
+    uniform,
 )
 from desc.integrals.singularities import _get_quadrature_nodes
 from desc.integrals.surface_integral import _get_grid_surface
@@ -932,10 +935,41 @@ def _chebgauss1(deg):
     return x, w
 
 
+auto_sin = (automorphism_sin, grad_automorphism_sin)
+
+
+def _one_bump(x, h):
+    # B with hump of height h in middle
+    return h * (1 - x**2) ** 2 + x**2 + 1
+
+
+def _bumpy(x, x_peak=(-0.5, 0, 0.5), h_peak=(0.5, 0.75, 0.25), sigma=0.125):
+    """Make |B| with humps.
+
+    Looks fine by eye when plotted, but might not be that realistic of an example?,
+    since no power series centered near center of Gaussian converges (to Gaussian).
+
+    Parameters
+    ----------
+    x : jnp.ndarray
+        Points to evaluate.
+    x_peak : jnp.ndarray
+        Peak centers in [-1, 1], excluding endpoints.
+    h_peak : jnp.ndarray
+        Peak heights in [0, 1], excluding endpoints.
+    sigma : float
+        Standard deviation of Gaussian.
+
+    """
+    x, x_peak, h_peak = jnp.atleast_1d(x, x_peak, h_peak)
+    x_peak = jnp.hstack([-1, x_peak, 1])
+    h_peak = jnp.hstack([1, h_peak, 1])
+    basis = jnp.exp(-jnp.square((x[:, jnp.newaxis] - x_peak) / sigma))
+    return basis.dot(h_peak).squeeze() + 1
+
+
 class TestBounceQuadrature:
     """Test bounce quadrature."""
-
-    auto_sin = (automorphism_sin, grad_automorphism_sin)
 
     @pytest.mark.unit
     @pytest.mark.parametrize(
@@ -1011,6 +1045,67 @@ class TestBounceQuadrature:
         )
         assert np.count_nonzero(result) == 1
         np.testing.assert_allclose(result.sum(), truth, rtol=1e-4)
+
+    @pytest.mark.parametrize(
+        "is_strong, B",
+        [
+            (False, lambda x: _one_bump(x, 0.75)),
+            (False, lambda x: _one_bump(x, 0.999)),
+            (True, lambda x: _one_bump(x, 0.75)),
+            (True, lambda x: _one_bump(x, 0.999)),
+            (False, _bumpy),
+            (True, _bumpy),
+        ],
+    )
+    def test_quad_compare(self, is_strong, B):
+        """Compare quadratures in W-shaped wells."""
+        x = np.linspace(-1, 1, 1000)
+        plt.plot(x, B(x))
+        plt.show()
+
+        def func(x):
+            w1 = jnp.sqrt(jnp.clip(2 - B(x), 0, jnp.inf))
+            if is_strong:
+                w1 = safediv(1, w1)
+            return w1
+
+        plt.plot(x, func(x))
+        plt.show()
+
+        truth, info = quadax.quadts(func, interval=(-1, 1))
+        print("\n" + 50 * "---" + f"\nTrue value: {truth}, neval: {info[1]}")
+        for n in [16, 32, 64, 128]:
+            # Uniform spacing quadratures.
+            x, w = uniform(n)
+            fx = func(x)
+            trap = fx.dot(w)
+            simp = simpson(y=fx, x=x)
+
+            # Node density near boundary is 1/√(1−x²).
+            # Default quadrature for weak singularities.
+            x, w = chebgauss2(n)
+            cheb2 = func(x).dot(w)
+
+            # Node density near boundary is 1/√(1−x²).
+            x, w = _chebgauss1(n)
+            cheb1 = func(x).dot(w)
+
+            # Node density near boundary is 1/(1−x²).
+            # Default quadrature for strong singularities.
+            x, w = get_quadrature(leggauss(n), auto_sin)
+            legs = func(x).dot(w)
+
+            # Node density near boundary > 1/(1−x²).
+            x, w = tanh_sinh(n)
+            tanh = func(x).dot(w)
+
+            print(f"\nPoints: {n}")
+            print(f"Trapezoid: {trap:.12f}, Error: {abs(trap - truth):.2e}")
+            print(f"Simpson:   {simp:.12f}, Error: {abs(simp - truth):.2e}")
+            print(f"Cheb weak: {cheb2:.12f}, Error: {abs(cheb2 - truth):.2e}")
+            print(f"Cheb strg: {cheb1:.12f}, Error: {abs(cheb1 - truth):.2e}")
+            print(f"Legs strg: {legs:.12f}, Error: {abs(legs - truth):.2e}")
+            print(f"Tanh-sinh: {tanh:.12f}, Error: {abs(tanh - truth):.2e}")
 
     @staticmethod
     @partial(np.vectorize, excluded={0})
@@ -1576,7 +1671,7 @@ class TestBounce2D:
             Bounce2D.required_names + ["min_tz |B|", "max_tz |B|", "g_zz"], grid=grid
         )
         # 4. Compute DESC coordinates of optimal interpolation nodes.
-        theta = Bounce2D.compute_theta(eq, M=8, N=64, rho=rho)
+        theta = Bounce2D.compute_theta(eq, X=8, Y=64, rho=rho)
         # 5. Make the bounce integration operator.
         bounce = Bounce2D(
             grid,
@@ -1651,6 +1746,49 @@ class TestBounce2D:
         fig, ax = bounce.plot(l, pitch_inv[l], include_legend=False, show=False)
         return fig
 
+    @pytest.mark.unit
+    # @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d * 4)
+    def test_bounce2d_pest(self):
+        """Test that all the internal correctness checks pass for real example."""
+        # noqa: D202
+        # Suppose we want to compute a bounce average of the function
+        # f(ℓ) = (1 − λ|B|/2) * g_zz, where g_zz is the squared norm of the
+        # toroidal basis vector on some set of field lines specified by (ρ, α)
+        # coordinates. This is defined as
+        # [∫ f(ℓ) / √(1 − λ|B|) dℓ] / [∫ 1 / √(1 − λ|B|) dℓ]
+
+        # 1. Define python functions for the integrands. We do that above.
+        # 2. Pick flux surfaces and grid resolution.
+        rho = np.linspace(0.1, 1, 6)
+        eq = get("HELIOTRON")
+        grid = Grid.create_meshgrid(
+            [rho, fourier_pts(eq.M_grid), fourier_pts(eq.N_grid) / eq.NFP],
+            period=(np.inf, 2 * np.pi, 2 * np.pi / eq.NFP),
+            NFP=eq.NFP,
+        )
+        # 3. Compute input data.
+        data = eq.compute(
+            Bounce2D.required_names + ["min_tz |B|", "max_tz |B|", "g_zz"], grid=grid
+        )
+        # 4. Compute DESC coordinates of optimal interpolation nodes.
+        theta = Bounce2DPEST.compute_theta(eq, X=32, Y=32, rho=rho)
+        # 5. Make the bounce integration operator.
+        bounce = Bounce2DPEST(
+            grid,
+            data,
+            iota=grid.compress(data["iota"]),
+            Y_B=32,
+            theta=theta,
+            num_transit=2,
+            quad=leggauss(3),
+            check=True,
+            warn=False,
+        )
+        phi = jnp.linspace(0, 4 * jnp.pi, 4000)
+        bounce.plot(1, phi)
+        bounce.plot_theta(1, phi)
+        bounce.plot(1, phi)
+
     @staticmethod
     def drift_num_integrand(cvdrift, gbdrift, B, pitch, zeta):
         """Integrand of numerator of bounce averaged binormal drift."""
@@ -1689,17 +1827,17 @@ class TestBounce2D:
         grid_data["gbdrift"] = grid_data["gbdrift"] * data["normalization"]
 
         # Compute numerical result.
-        M, N = 32, 32  # todo: lower these to minimum once we get match
+        X, Y = 32, 32  # todo: lower these to minimum once we get match
         bounce = Bounce2D(
             grid=grid,
             data=grid_data,
             iota=data["iota"],
             theta=Bounce2D.compute_theta(
                 eq,
-                M,
-                N,
-                data["rho"],
-                iota=jnp.broadcast_to(data["iota"], shape=(M * N)),
+                X=X,
+                Y=Y,
+                rho=data["rho"],
+                iota=jnp.broadcast_to(data["iota"], shape=(X * Y)),
             ),
             num_transit=2,
             alpha=data["alpha"] - 2 * np.pi * data["iota"],

@@ -33,6 +33,34 @@ from desc.utils import (
 )
 
 
+# TODO: Generalize this beyond ζ = ϕ or just map to Clebsch with ϕ.
+def get_alpha(alpha_0, iota, num_transit, period):
+    """Get sequence of poloidal coordinates A = (α₀, α₁, …, αₘ₋₁) of field line.
+
+    Parameters
+    ----------
+    alpha_0 : float
+        Starting field line poloidal label.
+    iota : jnp.ndarray
+        Shape (iota.size, ).
+        Rotational transform normalized by 2π.
+    num_transit : float
+        Number of ``period``s to follow field line.
+    period : float
+        Toroidal period after which to update label.
+
+    Returns
+    -------
+    alpha : jnp.ndarray
+        Shape (iota.size, num_transit).
+        Sequence of poloidal coordinates A = (α₀, α₁, …, αₘ₋₁) that specify field line.
+
+    """
+    # Δϕ (∂α/∂ϕ) = Δϕ ι̅ = Δϕ ι/2π = Δϕ data["iota"]
+    alpha = alpha_0 + period * jnp.expand_dims(iota, -1) * jnp.arange(num_transit)
+    return alpha
+
+
 @partial(jnp.vectorize, signature="(m),(m)->(m)")
 def _in_epigraph_and(is_intersect, df_dy_sign, /):
     """Set and epigraph of function f with the given set of points.
@@ -101,11 +129,23 @@ def _chebcast(cheb, arr):
 
 
 class FourierChebyshevSeries(IOAble):
-    """Fourier-Chebyshev series.
+    """Real-valued Fourier-Chebyshev series.
 
     f(x, y) = ∑ₘₙ aₘₙ ψₘ(x) Tₙ(y)
     where ψₘ are trigonometric polynomials on [0, 2π]
     and Tₙ are Chebyshev polynomials on [−yₘᵢₙ, yₘₐₓ].
+
+    Examples
+    --------
+    Let the magnetic field be B = ∇ρ × ∇x. This basis will then parameterize
+    maps in Clebsch coordinates. Passing in a sequence of x values tracking
+    the field line (see ``get_alpha``) to the ``compute_cheb`` method will
+    generate a 1D parameterization of f along the field line.
+
+    This is useful to interpolate f ≝ θ and use the map x, ζ ↦ θ(x, ζ) to
+    compute quantities along field lines via evaluating Fourier series
+    parameterized in DESC computational coordinates θ, ζ, where the Fourier
+    transform is more condensed when NFP > 1.
 
     Notes
     -----
@@ -126,46 +166,41 @@ class FourierChebyshevSeries(IOAble):
 
     Attributes
     ----------
-    M : int
+    X : int
         Fourier spectral resolution.
-    N : int
+    Y : int
         Chebyshev spectral resolution.
 
     """
 
     def __init__(self, f, domain=(-1, 1), lobatto=False):
         """Interpolate Fourier-Chebyshev series to ``f``."""
-        self.M = f.shape[-2]
-        self.N = f.shape[-1]
+        self.X = f.shape[-2]
+        self.Y = f.shape[-1]
         errorif(domain[0] > domain[-1], msg="Got inverted domain.")
         self.domain = tuple(domain)
         errorif(lobatto, NotImplementedError, "JAX hasn't implemented type 1 DCT.")
         self.lobatto = bool(lobatto)
-        self._c = FourierChebyshevSeries._transform(f, self.lobatto)
-
-    @staticmethod
-    def _transform(f, lobatto):
-        N = f.shape[-1]
-        return rfft(
-            dct(f, type=2 - lobatto, axis=-1) / (N - lobatto),
+        self._c = rfft(
+            dct(f, type=2 - lobatto, axis=-1) / (self.Y - lobatto),
             axis=-2,
             norm="forward",
         )
 
     @staticmethod
-    def nodes(M, N, L=None, domain=(-1, 1), lobatto=False):
+    def nodes(X, Y, L=None, domain=(-1, 1), lobatto=False):
         """Tensor product grid of optimal collocation nodes for this basis.
 
         Parameters
         ----------
-        M : int
+        X : int
             Grid resolution in x direction. Preferably power of 2.
-        N : int
+        Y : int
             Grid resolution in y direction. Preferably power of 2.
         L : int or jnp.ndarray
             Optional, resolution in radial direction of domain [0, 1].
             May also be an array of coordinates values. If given, then the
-            returned ``coords`` is a 3D tensor-product with shape (L * M * N, 3).
+            returned ``coords`` is a 3D tensor-product with shape (L * X * Y, 3).
         domain : tuple[float]
             Domain for y coordinates. Default is [-1, 1].
         lobatto : bool
@@ -175,12 +210,12 @@ class FourierChebyshevSeries(IOAble):
         Returns
         -------
         coords : jnp.ndarray
-            Shape (M * N, 2).
+            Shape (X * Y, 2).
             Grid of (x, y) points for optimal interpolation.
 
         """
-        x = fourier_pts(M)
-        y = cheb_pts(N, domain, lobatto)
+        x = fourier_pts(X)
+        y = cheb_pts(Y, domain, lobatto)
         if L is None:
             coords = (x, y)
         else:
@@ -190,30 +225,30 @@ class FourierChebyshevSeries(IOAble):
         coords = tuple(map(jnp.ravel, jnp.meshgrid(*coords, indexing="ij")))
         return jnp.column_stack(coords)
 
-    def evaluate(self, M, N):
-        """Evaluate Fourier-Chebyshev series.
+    def evaluate(self, X, Y):
+        """Evaluate Fourier-Chebyshev series on tensor-product grid.
 
         Parameters
         ----------
-        M : int
+        X : int
             Grid resolution in x direction. Preferably power of 2.
-        N : int
+        Y : int
             Grid resolution in y direction. Preferably power of 2.
 
         Returns
         -------
         fq : jnp.ndarray
-            Shape (..., M, N)
+            Shape (..., X, Y)
             Fourier-Chebyshev series evaluated at
-            ``FourierChebyshevSeries.nodes(M,N,L,self.domain,self.lobatto)``.
+            ``FourierChebyshevSeries.nodes(X,Y,L,self.domain,self.lobatto)``.
 
         """
         return idct(
-            irfft(self._c, n=M, axis=-2, norm="forward"),
+            irfft(self._c, n=X, axis=-2, norm="forward"),
             type=2 - self.lobatto,
-            n=N,
+            n=Y,
             axis=-1,
-        ) * (N - self.lobatto)
+        ) * (Y - self.lobatto)
 
     def harmonics(self):
         """Spectral coefficients aₘₙ of the interpolating trigonometric polynomial.
@@ -224,12 +259,12 @@ class FourierChebyshevSeries(IOAble):
         Returns
         -------
         a_mn : jnp.ndarray
-            Shape (..., M, N).
+            Shape (..., X, Y).
             Real valued spectral coefficients for Fourier-Chebyshev series.
 
         """
-        a_mn = harmonic(cheb_from_dct(self._c), self.M, axis=-2)
-        assert a_mn.shape[-2:] == (self.M, self.N)
+        a_mn = harmonic(cheb_from_dct(self._c), self.X, axis=-2)
+        assert a_mn.shape[-2:] == (self.X, self.Y)
         return a_mn
 
     def compute_cheb(self, x):
@@ -250,9 +285,9 @@ class FourierChebyshevSeries(IOAble):
         x = jnp.atleast_1d(x)[..., jnp.newaxis]
         # Add axis to broadcast against multiple x values.
         cheb = cheb_from_dct(
-            irfft_non_uniform(x, self._c[..., jnp.newaxis, :, :], self.M, axis=-2)
+            irfft_non_uniform(x, self._c[..., jnp.newaxis, :, :], self.X, axis=-2)
         )
-        assert cheb.shape[-2:] == (x.shape[-2], self.N)
+        assert cheb.shape[-2:] == (x.shape[-2], self.Y)
         return PiecewiseChebyshevSeries(cheb, self.domain)
 
 
@@ -265,7 +300,7 @@ class PiecewiseChebyshevSeries(IOAble):
     Parameters
     ----------
     cheb : jnp.ndarray
-        Shape (..., M, N).
+        Shape (..., X, Y).
         Chebyshev coefficients αₙ(x) for f(x, y) = ∑ₙ₌₀ᴺ⁻¹ αₙ(x) Tₙ(y).
     domain : tuple[float]
         Domain for y coordinates. Default is [-1, 1].
@@ -279,12 +314,12 @@ class PiecewiseChebyshevSeries(IOAble):
         self.domain = tuple(domain)
 
     @property
-    def M(self):
+    def X(self):
         """Number of cuts."""
         return self.cheb.shape[-2]
 
     @property
-    def N(self):
+    def Y(self):
         """Chebyshev spectral resolution."""
         return self.cheb.shape[-1]
 
@@ -297,26 +332,26 @@ class PiecewiseChebyshevSeries(IOAble):
         dfx = f_1[..., :-1] - f_0[..., 1:]  # Δf = f(xᵢ, y₁) - f(xᵢ₊₁, y₀)
         self.cheb = self.cheb.at[..., 1:, 0].add(dfx.cumsum(axis=-1))
 
-    def evaluate(self, N):
-        """Evaluate Chebyshev series at N Chebyshev points.
+    def evaluate(self, Y):
+        """Evaluate Chebyshev series at Y Chebyshev points.
 
         Evaluate each function in this set
         { fₓ | fₓ : y ↦ ∑ₙ₌₀ᴺ⁻¹ aₙ(x) Tₙ(y) }
-        at y points given by the N Chebyshev points.
+        at y points given by the Y Chebyshev points.
 
         Parameters
         ----------
-        N : int
+        Y : int
             Grid resolution in y direction. Preferably power of 2.
 
         Returns
         -------
         fq : jnp.ndarray
-            Shape (..., M, N)
-            Chebyshev series evaluated at N Chebyshev points.
+            Shape (..., X, Y)
+            Chebyshev series evaluated at Y Chebyshev points.
 
         """
-        return idct(dct_from_cheb(self.cheb), type=2, n=N, axis=-1) * N
+        return idct(dct_from_cheb(self.cheb), type=2, n=Y, axis=-1) * Y
 
     def isomorphism_to_C1(self, y):
         """Return coordinates z ∈ ℂ isomorphic to (x, y) ∈ ℂ².
@@ -377,7 +412,7 @@ class PiecewiseChebyshevSeries(IOAble):
             along the second to last axis of ``cheb`` and ``z % domain`` is
             the coordinate value on the domain of that Chebyshev series.
         cheb : jnp.ndarray
-            Shape (..., M, N).
+            Shape (..., X, Y).
             Chebyshev coefficients to use. If not given, uses ``self.cheb``.
 
         Returns
@@ -392,7 +427,7 @@ class PiecewiseChebyshevSeries(IOAble):
         x_idx, y = self.isomorphism_to_C2(z)
         y = bijection_to_disc(y, self.domain[0], self.domain[1])
         # Chebyshev coefficients αₙ for f(z) = ∑ₙ₌₀ᴺ⁻¹ αₙ(x[z]) Tₙ(y[z])
-        # are held in cheb with shape (..., num cheb series, N).
+        # are held in cheb with shape (..., num cheb series, Y).
         cheb = jnp.take_along_axis(cheb, x_idx[..., jnp.newaxis], axis=-2)
         f = idct_non_uniform(y, cheb, N)
         assert f.shape == z.shape
@@ -412,7 +447,7 @@ class PiecewiseChebyshevSeries(IOAble):
         Returns
         -------
         y : jnp.ndarray
-            Shape (..., *cheb.shape[:-1], N - 1).
+            Shape (..., *cheb.shape[:-1], Y - 1).
             Solutions yᵢ of f(x, yᵢ) = k(x), in ascending order.
         is_intersect : jnp.ndarray
             Shape y.shape.
@@ -425,7 +460,7 @@ class PiecewiseChebyshevSeries(IOAble):
         c = _subtract_first(_chebcast(self.cheb, k), k)
         # roots yᵢ of f(x, y) = ∑ₙ₌₀ᴺ⁻¹ αₙ(x) Tₙ(y) - k(x)
         y = chebroots_vec(c)
-        assert y.shape == (*c.shape[:-1], self.N - 1)
+        assert y.shape == (*c.shape[:-1], self.Y - 1)
 
         # Intersects must satisfy y ∈ [-1, 1].
         # Pick sentinel such that only distinct roots are considered intersects.
@@ -435,8 +470,8 @@ class PiecewiseChebyshevSeries(IOAble):
         y = jnp.where(is_intersect, y.real, 0.0)
 
         # TODO: Multipoint evaluation with FFT.
-        #   Chapter 10, https://doi.org/10.1017/CBO9781139856065.
-        n = jnp.arange(self.N)
+        #   See note in integrals/basis.py near line 145.
+        n = jnp.arange(self.Y)
         #      ∂f/∂y =      ∑ₙ₌₀ᴺ⁻¹ aₙ(x) n Uₙ₋₁(y)
         # sign ∂f/∂y = sign ∑ₙ₌₀ᴺ⁻¹ aₙ(x) n sin(n arcos y)
         df_dy_sign = jnp.sign(
@@ -476,10 +511,10 @@ class PiecewiseChebyshevSeries(IOAble):
 
         """
         errorif(
-            self.N < 2,
+            self.Y < 2,
             NotImplementedError,
-            "This method requires a Chebyshev spectral resolution of N > 1, "
-            f"but got N = {self.N}.",
+            "This method requires a Chebyshev spectral resolution of Y > 1, "
+            f"but got Y = {self.Y}.",
         )
 
         # Add axis to use same k over all Chebyshev series of the piecewise spline.
@@ -522,7 +557,7 @@ class PiecewiseChebyshevSeries(IOAble):
         # Same but back dim already exists.
         z1 = atleast_nd(self.cheb.ndim, z1)
         z2 = atleast_nd(self.cheb.ndim, z2)
-        # Cheb has shape    (..., M, N) and others
+        # Cheb has shape    (..., X, Y) and others
         #     have shape (K, ..., W)
         errorif(not (z1.ndim == z2.ndim == k.ndim == self.cheb.ndim))
         return z1, z2, k
@@ -631,7 +666,7 @@ class PiecewiseChebyshevSeries(IOAble):
         Parameters
         ----------
         cheb : jnp.ndarray
-            Shape (M, N).
+            Shape (X, Y).
             Piecewise Chebyshev series f.
         num : int
             Number of points to evaluate ``cheb`` for plot.
@@ -669,7 +704,7 @@ class PiecewiseChebyshevSeries(IOAble):
         legend = {}
         z = jnp.linspace(
             start=self.domain[0],
-            stop=self.domain[0] + (self.domain[1] - self.domain[0]) * self.M,
+            stop=self.domain[0] + (self.domain[1] - self.domain[0]) * self.X,
             num=num,
         )
         _add2legend(legend, ax.plot(z, self.eval1d(z, cheb), label=vlabel))

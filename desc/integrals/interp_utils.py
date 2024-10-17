@@ -17,10 +17,10 @@ from desc.backend import dct, jnp, rfft, rfft2, take
 from desc.integrals.quad_utils import bijection_from_disc
 from desc.utils import Index, errorif, safediv
 
-# TODO: Boyd's method 𝒪(N²) instead of Chebyshev companion matrix 𝒪(N³).
+# TODO: Boyd's method 𝒪(n²) instead of Chebyshev companion matrix 𝒪(n³).
 #  John P. Boyd, Computing real roots of a polynomial in Chebyshev series
 #  form through subdivision. https://doi.org/10.1016/j.apnum.2005.09.007.
-#  Use that once to find extrema of |B| if N_B > 64. Then to find roots
+#  Use that once to find extrema of |B| if Y_B > 64. Then to find roots
 #  of bounce points use the closed formula in Boyd's spectral methods
 #  section 19.6. Can isolate interval to search for root by observing
 #  whether B - 1/pitch changes sign at extrema. This is significantly
@@ -28,12 +28,8 @@ from desc.utils import Index, errorif, safediv
 chebroots_vec = jnp.vectorize(chebroots, signature="(m)->(n)")
 
 
-# TODO: Transformation to make nodes more uniform Boyd eq. 16.46 pg. 336.
-#  More uniformly spaced nodes might speed up convergence.
-
-
-def cheb_pts(N, domain=(-1, 1), lobatto=False):
-    """Get ``N`` Chebyshev points mapped to given domain.
+def cheb_pts(n, domain=(-1, 1), lobatto=False):
+    """Get ``n`` Chebyshev points mapped to given domain.
 
     Warnings
     --------
@@ -46,7 +42,7 @@ def cheb_pts(N, domain=(-1, 1), lobatto=False):
 
     Parameters
     ----------
-    N : int
+    n : int
         Number of points.
     domain : tuple[float]
         Domain for points.
@@ -57,32 +53,32 @@ def cheb_pts(N, domain=(-1, 1), lobatto=False):
     Returns
     -------
     pts : jnp.ndarray
-        Shape (N, ).
+        Shape (n, ).
         Chebyshev points mapped to given domain.
 
     """
-    n = jnp.arange(N)
+    N = jnp.arange(n)
     if lobatto:
-        y = jnp.cos(jnp.pi * n / (N - 1))
+        y = jnp.cos(jnp.pi * N / (n - 1))
     else:
-        y = jnp.cos(jnp.pi * (2 * n + 1) / (2 * N))
+        y = jnp.cos(jnp.pi * (2 * N + 1) / (2 * n))
     return bijection_from_disc(y, domain[0], domain[-1])
 
 
-def fourier_pts(M):
-    """Get ``M`` Fourier points in [0, 2π)."""
+def fourier_pts(n):
+    """Get ``n`` Fourier points in [0, 2π)."""
     # [0, 2π] instead of [-π, π] required to match our definition of α.
-    return 2 * jnp.pi * jnp.arange(M) / M
+    return 2 * jnp.pi * jnp.arange(n) / n
 
 
-def harmonic(a, M, axis=-1):
+def harmonic(a, n, axis=-1):
     """Spectral coefficients of the Nyquist trigonometric interpolant.
 
     Parameters
     ----------
     a : jnp.ndarray
         Fourier coefficients ``a=rfft(f,norm="forward",axis=axis)``.
-    M : int
+    n : int
         Spectral resolution of ``a``.
     axis : int
         Axis along which coefficients are stored.
@@ -91,19 +87,19 @@ def harmonic(a, M, axis=-1):
     -------
     h : jnp.ndarray
         Nyquist trigonometric interpolant coefficients.
-        Coefficients ordered along ``axis`` of size ``M`` to match ordering of
-        [1, cos(x), ..., cos(mx), sin(x), sin(2x), ..., sin(mx)] basis.
+        Coefficients ordered along ``axis`` of size ``n`` to match ordering of
+        [1, cos(x), ..., cos(nx), sin(x), sin(2x), ..., sin(nx)] basis.
 
     """
-    is_even = (M % 2) == 0
-    # cos(mx) coefficients
+    is_even = (n % 2) == 0
+    # cos(nx) coefficients
     an = 2.0 * (
         a.real.at[Index.get(0, axis, a.ndim)]
         .divide(2.0)
         .at[Index.get(-1, axis, a.ndim)]
         .divide(1.0 + is_even)
     )
-    # sin(mx) coefficients
+    # sin(nx) coefficients
     bn = -2.0 * take(
         a.imag,
         jnp.arange(1, a.shape[axis] - is_even),
@@ -112,18 +108,18 @@ def harmonic(a, M, axis=-1):
         indices_are_sorted=True,
     )
     h = jnp.concatenate([an, bn], axis=axis)
-    assert h.shape[axis] == M
+    assert h.shape[axis] == n
     return h
 
 
-def harmonic_vander(x, M, domain=(0, 2 * np.pi)):
+def harmonic_vander(x, n, domain=(0, 2 * np.pi)):
     """Nyquist trigonometric interpolant basis evaluated at ``x``.
 
     Parameters
     ----------
     x : jnp.ndarray
-        Points at which to evaluate pseudo-Vandermonde matrix.
-    M : int
+        Points at which to evaluate Vandermonde matrix.
+    n : int
         Spectral resolution.
     domain : tuple[float]
         Domain over which samples will be taken.
@@ -132,23 +128,23 @@ def harmonic_vander(x, M, domain=(0, 2 * np.pi)):
     Returns
     -------
     basis : jnp.ndarray
-        Shape (*x.shape, M).
-        Pseudo-Vandermonde matrix of degree ``M-1`` and sample points ``x``.
-        Last axis ordered as [1, cos(x), ..., cos(mx), sin(x), sin(2x), ..., sin(mx)].
+        Shape (*x.shape, n).
+        Vandermonde matrix of degree ``n-1`` and sample points ``x``.
+        Last axis ordered as [1, cos(x), ..., cos(nx), sin(x), sin(2x), ..., sin(nx)].
 
     """
-    m = jnp.fft.rfftfreq(M, d=np.diff(domain) / (2 * jnp.pi) / M)
-    mx = m * (x - domain[0])[..., jnp.newaxis]
+    N = jnp.fft.rfftfreq(n, d=np.diff(domain) / (2 * jnp.pi) / n)
+    nx = N * (x - domain[0])[..., jnp.newaxis]
     basis = jnp.concatenate(
-        [jnp.cos(mx), jnp.sin(mx[..., 1 : m.size - ((M % 2) == 0)])], axis=-1
+        [jnp.cos(nx), jnp.sin(nx[..., 1 : N.size - ((n % 2) == 0)])], axis=-1
     )
-    assert basis.shape == (*x.shape, M)
+    assert basis.shape == (*x.shape, n)
     return basis
 
 
 # TODO: For inverse transforms, use non-uniform fast transforms (NFFT).
 #   https://github.com/flatironinstitute/jax-finufft.
-#   Let spectral resolution be F, (e.g. F = M N for 2D transform),
+#   Let spectral resolution be F, (e.g. F = M n1 for 2D transform),
 #   and number of points (non-uniform) to evaluate be Q. A non-uniform
 #   fast transform cost is 𝒪([F+Q] log[F] log[1/ε]) where ε is the
 #   interpolation error term (depending on implementation how ε appears
@@ -219,9 +215,9 @@ def irfft_non_uniform(xq, a, n, domain=(0, 2 * jnp.pi), axis=-1):
         .at[..., -1]
         .divide(1.0 + ((n % 2) == 0))
     )
-    m = jnp.fft.rfftfreq(n, d=np.diff(domain) / (2 * jnp.pi) / n)
+    N = jnp.fft.rfftfreq(n, d=np.diff(domain) / (2 * jnp.pi) / n)
     xq = xq - domain[0]
-    basis = jnp.exp(-1j * m * xq[..., jnp.newaxis])
+    basis = jnp.exp(-1j * N * xq[..., jnp.newaxis])
     fq = 2.0 * jnp.linalg.vecdot(basis, a).real
     # ℜ〈 basis, a 〉= cos(m xq)⋅ℜ(a) − sin(m xq)⋅ℑ(a)
     return fq
@@ -270,7 +266,7 @@ def interp_rfft2(
 
 
 def irfft2_non_uniform(
-    xq0, xq1, a, M, N, domain0=(0, 2 * jnp.pi), domain1=(0, 2 * jnp.pi), axes=(-2, -1)
+    xq0, xq1, a, n0, n1, domain0=(0, 2 * jnp.pi), domain1=(0, 2 * jnp.pi), axes=(-2, -1)
 ):
     """Evaluate Fourier coefficients ``a`` at coordinates ``(xq0,xq1)``.
 
@@ -289,9 +285,9 @@ def irfft2_non_uniform(
     a : jnp.ndarray
         Shape (..., a.shape[-2], a.shape[-1]).
         Fourier coefficients ``a=rfft2(f,axes=axes,norm="forward")``.
-    M : int
+    n0 : int
         Spectral resolution of ``a`` along ``axes[0]``.
-    N : int
+    n1 : int
         Spectral resolution of ``a`` along ``axes[1]``.
     domain0 : tuple[float]
         Domain of coordinate specified by ``xq0`` over which samples were taken.
@@ -315,13 +311,13 @@ def irfft2_non_uniform(
         .at[..., 0]
         .divide(2.0)
         .at[..., -1]
-        .divide(1.0 + ((N % 2) == 0))
+        .divide(1.0 + ((n1 % 2) == 0))
     )
 
     idx = np.argsort(axes)
     domain = (domain0, domain1)
-    m = jnp.fft.fftfreq(M, d=np.diff(domain[idx[0]]) / (2 * jnp.pi) / M)
-    n = jnp.fft.rfftfreq(N, d=np.diff(domain[idx[1]]) / (2 * jnp.pi) / N)
+    N0 = jnp.fft.fftfreq(n0, d=np.diff(domain[idx[0]]) / (2 * jnp.pi) / n0)
+    N1 = jnp.fft.rfftfreq(n1, d=np.diff(domain[idx[1]]) / (2 * jnp.pi) / n1)
     xq0 = xq0 - domain0[0]
     xq1 = xq1 - domain1[0]
     xq = (xq0, xq1)
@@ -329,8 +325,8 @@ def irfft2_non_uniform(
     basis = jnp.exp(
         1j
         * (
-            (m * xq[idx[0]][..., jnp.newaxis])[..., jnp.newaxis]
-            + (n * xq[idx[1]][..., jnp.newaxis])[..., jnp.newaxis, :]
+            (N0 * xq[idx[0]][..., jnp.newaxis])[..., jnp.newaxis]
+            + (N1 * xq[idx[1]][..., jnp.newaxis])[..., jnp.newaxis, :]
         )
     )
     fq = 2.0 * (basis * a).real.sum(axis=(-2, -1))

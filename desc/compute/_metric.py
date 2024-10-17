@@ -1961,9 +1961,6 @@ def _gbdrift(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="periodic(gbdrift)",
-    # Exact definition of the magnetic drifts taken from
-    # eqn. 48 of Introduction to Quasisymmetry by Landreman
-    # https://tinyurl.com/54udvaa4
     label="\\mathrm{periodic}(\\nabla \\vert B \\vert)_{\\mathrm{drift}}",
     units="1/(T-m^{2})",
     units_long="inverse Tesla meters^2",
@@ -1987,9 +1984,6 @@ def _periodic_gbdrift(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="secular(gbdrift)",
-    # Exact definition of the magnetic drifts taken from
-    # eqn. 48 of Introduction to Quasisymmetry by Landreman
-    # https://tinyurl.com/54udvaa4
     label="\\mathrm{secular}(\\nabla \\vert B \\vert)_{\\mathrm{drift}}",
     units="1/(T-m^{2})",
     units_long="inverse Tesla meters^2",

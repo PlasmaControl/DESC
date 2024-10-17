@@ -45,6 +45,17 @@ jobs:
           - mpl-version: 3.7.0
           - mpl-version: 3.7.1
           - mpl-version: 3.7.2
+          - mpl-version: 3.7.3
+          - mpl-version: 3.7.4
+          - mpl-version: 3.7.5
+          - mpl-version: 3.8.0
+          - mpl-version: 3.8.1
+          - mpl-version: 3.8.2
+          - mpl-version: 3.8.3
+          - mpl-version: 3.8.4
+          - mpl-version: 3.9.0
+          - mpl-version: 3.9.2
+
     steps:
       - uses: actions/checkout@v4
       - name: Set up Python 3.10

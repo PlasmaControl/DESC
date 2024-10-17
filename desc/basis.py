@@ -1497,7 +1497,7 @@ def zernike_radial_poly(r, l, m, dr=0, exact="auto"):
     return polyval_vec(coeffs, r, prec=prec).T
 
 
-@functools.partial(jit, static_argnums=3)
+@functools.partial(jit, static_argnums=(3,))
 def zernike_radial(r, l, m, dr=0):
     """Radial part of zernike polynomials.
 
@@ -1523,12 +1523,12 @@ def zernike_radial(r, l, m, dr=0):
         basis function(s) evaluated at specified points
 
     """
-    m = jnp.abs(m).astype(float)
+    m = jnp.abs(m).astype(jnp.float64)
     alpha = m
     beta = 0
     n = (l - m) // 2
-    s = (-1) ** n
-    jacobi_arg = 1 - 2 * r**2
+    s = ((-1) ** n).astype(jnp.float64)
+    jacobi_arg = 1.0 - 2 * r**2
     if dr == 0:
         out = r**m * _jacobi(n, alpha, beta, jacobi_arg, 0)
     elif dr == 1:
@@ -1573,7 +1573,7 @@ def zernike_radial(r, l, m, dr=0):
             "Analytic radial derivatives of Zernike polynomials for order>4 "
             + "have not been implemented."
         )
-    return s * jnp.where((l - m) % 2 == 0, out, 0)
+    return s * jnp.where((l - m) % 2 == 0, out, 0.0)
 
 
 def power_coeffs(l):
@@ -1732,7 +1732,7 @@ def _binom(n, k):
     return b
 
 
-@custom_jvp
+@functools.partial(custom_jvp, nondiff_argnums=(4,))
 @jit
 @jnp.vectorize
 def _jacobi(n, alpha, beta, x, dx=0):
@@ -1800,17 +1800,17 @@ def _jacobi(n, alpha, beta, x, dx=0):
     # other edge cases
     out = jnp.where(n == 0, 1.0, out)
     out = jnp.where(n == 1, 0.5 * (2 * (alpha + 1) + (alpha + beta + 2) * (x - 1)), out)
-    return c * out
+    return (c * out).astype(jnp.float64)
 
 
 @_jacobi.defjvp
-def _jacobi_jvp(x, xdot):
-    (n, alpha, beta, x, dx) = x
-    (ndot, alphadot, betadot, xdot, dxdot) = xdot
+def _jacobi_jvp(dx, x, xdot):
+    (n, alpha, beta, x) = x
+    (*_, xdot) = xdot
     f = _jacobi(n, alpha, beta, x, dx)
     df = _jacobi(n, alpha, beta, x, dx + 1)
     # in theory n, alpha, beta, dx aren't differentiable (they're integers)
     # but marking them as non-diff argnums seems to cause escaped tracer values.
     # probably a more elegant fix, but just setting those derivatives to zero seems
     # to work fine.
-    return f, df * xdot + 0 * ndot + 0 * alphadot + 0 * betadot + 0 * dxdot
+    return f, df * xdot

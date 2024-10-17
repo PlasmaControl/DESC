@@ -103,12 +103,14 @@ def _swap_pl(f):
 class Bounce2D(Bounce):
     """Computes bounce integrals using two-dimensional pseudo-spectral methods.
 
-    The bounce integral is defined as ∫ f(λ, ℓ) dℓ, where
-        dℓ parameterizes the distance along the field line in meters,
-        f(λ, ℓ) is the quantity to integrate along the field line,
-        and the boundaries of the integral are bounce points ℓ₁, ℓ₂ s.t. λ|B|(ℓᵢ) = 1,
-        where λ is a constant defining the integral proportional to the magnetic moment
-        over energy and |B| is the norm of the magnetic field.
+    The bounce integral is defined as ∫ f(λ, ℓ) dℓ where
+
+    * dℓ parameterizes the distance along the field line in meters.
+    * f(λ, ℓ) is the quantity to integrate along the field line.
+    * The boundaries of the integral are bounce points ℓ₁, ℓ₂ s.t. λ|B|(ℓᵢ) = 1.
+    * λ is a constant defining the integral proportional to the magnetic moment
+      over energy.
+    * |B| is the norm of the magnetic field.
 
     For a particle with fixed λ, bounce points are defined to be the location on the
     field line such that the particle's velocity parallel to the magnetic field is zero.
@@ -116,9 +118,8 @@ class Bounce2D(Bounce):
     the particle's guiding center trajectory traveling in the direction of increasing
     field-line-following coordinate ζ.
 
-    Notes
-    -----
-    Brief description of algorithm.
+    Brief description of algorithm
+    ------------------------------
 
     Magnetic field line with label α, defined by B = ∇ρ × ∇α, is determined from
       α : ρ, θ, ζ ↦ θ + λ(ρ,θ,ζ) − ι(ρ) [ζ + ω(ρ,θ,ζ)]
@@ -138,7 +139,8 @@ class Bounce2D(Bounce):
     In that case, supply the single valued parts, which will be interpolated
     with FFTs, and use the provided coordinates θ,ζ ∈ ℝ to compose G.
 
-    Longer description for developers.
+    Notes for developers
+    --------------------
 
     For applications which reduce to computing a nonlinear function of distance
     along field lines between bounce points, it is required to identify these
@@ -175,22 +177,22 @@ class Bounce2D(Bounce):
     to Chebyshev then DCT. Although nothing prohibits a direct DPT, we want to
     rely on existing libraries. Therefore, a Fourier-Chebyshev series is chosen
     to interpolate θ(α,ζ), and a piecewise Chebyshev series interpolates |B|(ζ).
-    An alternative to Chebyshev series is to use a filtered Fourier series
-    doi.org/10.1016/j.aml.2006.10.001. We did not benchmark against that.
-    Note that θ is not interpolated with a double Fourier series θ(ϑ, ζ) because
-    it is impossible to approximate an unbounded function with a finite Fourier
-    series. Due to Gibbs effects, this statement holds even when the goal is to
-    approximate θ over one branch cut.
 
-    The advantage of Fourier series in DESC coordinates is that they may use the
-    spectrally condensed variable ζ* = NFP ζ. This cannot be done in any other
-    coordinate system, regardless of whether the basis functions are periodic.
-    The strategy of parameterizing |B| along field lines with a single variable
-    in Clebsch coordinates (as opposed to two variables in straight-field line
-    coordinates) also serves to minimize this penalty since evaluation of |B|
-    when computing bounce points will be less expensive
-    (assuming the 2D Fourier resolution of |B| in
-    straight field line coordinates is larger than the 1D Chebyshev resolution).
+    * An alternative to Chebyshev series is to use a
+      [filtered Fourier series](doi.org/10.1016/j.aml.2006.10.001).
+      We did not benchmark against that.
+    * θ is not interpolated with a double Fourier series θ(ϑ, ζ) because
+      it is impossible to approximate an unbounded function with a finite Fourier
+      series. Due to Gibbs effects, this statement holds even when the goal is to
+      approximate θ over one branch cut. The proof uses analytic continuation.
+    * The advantage of Fourier series in DESC coordinates is that they may use the
+      spectrally condensed variable ζ* = NFP ζ. This cannot be done in any other
+      coordinate system, regardless of whether the basis functions are periodic.
+      The strategy of parameterizing |B| along field lines with a single variable
+      in Clebsch coordinates (as opposed to two variables in straight-field line
+      coordinates) also serves to minimize this penalty since evaluation of |B|
+      when computing bounce points will be less expensive (assuming the 2D
+      Fourier resolution of |B|(ϑ, ϕ) is larger than the 1D Chebyshev resolution).
 
     Computing accurate series expansions in (α, ζ) coordinates demands
     particular interpolation points in that coordinate system. Newton iteration
@@ -222,16 +224,15 @@ class Bounce2D(Bounce):
     implemented. For non-uniform interpolation, MMTs are used. It will be
     worthwhile to use the inverse non-uniform fast transforms.
 
-    Additional notes on multivalued coordinates.
+    Additional notes on multivalued coordinates:
     The definition of α in B = ∇ρ × ∇α on an irrational magnetic surface
     implies the angle θ(α, ζ) is multivalued at a physical location.
     In particular, following an irrational field, the single-valued θ grows
-    to ∞ (always non-monotonically) as ζ → ∞. Therefore, it is impossible to
-    approximate this map using single-valued basis functions defined on a
-    bounded subset of ℝ² (recall continuous functions on compact sets attain
-    their maximum). Still, it suffices to interpolate θ over one branch cut.
-    We choose the branch cut defined by (α, ζ) ∈ [0, 2π]. On such a branch
-    cut, the bound θ ∈ [0, 4π] holds.
+    to ∞ as ζ → ∞. Therefore, it is impossible to approximate this map using
+    single-valued basis functions defined on a bounded subset of ℝ²
+    (recall continuous functions on compact sets attain their maximum).
+    Still, it suffices to interpolate θ over one branch cut. We choose the
+    branch cut defined by (α, ζ) ∈ [0, 2π]. Here the bound θ ∈ [0, 4π] holds.
 
     Likewise, α is multivalued. As the field line is followed, the label
     jumps to α ∉ [0, 2π] after completing some toroidal transit. Therefore,
@@ -244,22 +245,40 @@ class Bounce2D(Bounce):
     approximation over one branch cut, at every ζ = 2π ℓ we can add either
     0 or 2π or 4π to the next cut of θ.
 
+    Examples
+    --------
+    See ``tests/test_integrals.py::TestBounce2D::test_bounce2d_checks``.
+
     See Also
     --------
-    Bounce1D
-        Uses one-dimensional local spline methods for the same task.
+    Bounce1D : Uses one-dimensional local spline methods for the same task.
 
-        Below are some advantages of ``Bounce2D`` over ``Bounce1D``.
-        The coordinates on which the root-finding must be done to map from DESC
-        to Clebsch coords is fixed to ``L*M*N``, independent of the number of
-        toroidal transits; generating the same data with DESC for input to
-        ``Bounce1D`` requires ``L*M*N*num_transit``. Furthermore, pseudo-spectral
-        interpolation of smooth functions such as |B| on each flux surface is more
-        efficient. This reduces the number of bounce integrals to be done by an
-        order of magnitude due to GitHub issue #1303. Also, we have noticed C1 cubic
-        spline interpolation is inefficient to reconstruct smooth local maxima of |B|,
-        which might be important for (strongly) singular bounce integrals whose
-        estimation depends on ∂|B|/∂ζ there.
+
+    Comparison to Bounce1D
+    ----------------------
+    ``Bounce2D`` solves the dominant cost of optimization objectives relying on
+    ``Bounce1D``: interpolating DESC's 3D transforms to an optimization-step
+    dependent grid that is dense enough for function approximation with local
+    splines. This is sometimes referred to as off-grid interpolation in literature;
+    it is often a bottleneck.
+
+    * The function approximation done here requires DESC transforms on a fixed
+      grid with typical resolution, using FFTs to compute the map α,ζ ↦ θ(α,ζ)
+      between coordinate systems. This enables evaluating functions along
+      field lines without root-finding.
+    * The faster convergence of spectral interpolation requires a less dense
+      grid to interpolate onto from DESC's 3D transforms. (Due to limitations
+      in JAX, this also reduces the number of bounce integrals to be done by an
+      order of magnitude; see GitHub issue #1303).
+    * Spectral approximation is more accurate than cubic splines even when the
+      latter has high resolution. This may be important to reconstruct
+      smooth local maxima of |B| as the estimation of singular bounce integrals
+      depends strongly on ∂|B|/∂ζ near the bounce points.
+    * 2D interpolation enables tracing the field line for many toroidal transits.
+    * The drawback is that evaluating a Fourier series with resolution F at Q
+      non-uniform quadrature points takes 𝒪([F+Q] log[F] log[1/ε]) time
+      whereas cubic splines take 𝒪(C Q) time. Still, F decreases as
+      NFP increases whereas C increases, and Q >> F and C.
 
     Attributes
     ----------
@@ -1182,12 +1201,14 @@ class Bounce2DPEST(Bounce):
 class Bounce1D(Bounce):
     """Computes bounce integrals using one-dimensional local spline methods.
 
-    The bounce integral is defined as ∫ f(λ, ℓ) dℓ, where
-        dℓ parameterizes the distance along the field line in meters,
-        f(λ, ℓ) is the quantity to integrate along the field line,
-        and the boundaries of the integral are bounce points ℓ₁, ℓ₂ s.t. λ|B|(ℓᵢ) = 1,
-        where λ is a constant defining the integral proportional to the magnetic moment
-        over energy and |B| is the norm of the magnetic field.
+    The bounce integral is defined as ∫ f(λ, ℓ) dℓ where
+
+    * dℓ parameterizes the distance along the field line in meters.
+    * f(λ, ℓ) is the quantity to integrate along the field line.
+    * The boundaries of the integral are bounce points ℓ₁, ℓ₂ s.t. λ|B|(ℓᵢ) = 1.
+    * λ is a constant defining the integral proportional to the magnetic moment
+      over energy.
+    * |B| is the norm of the magnetic field.
 
     For a particle with fixed λ, bounce points are defined to be the location on the
     field line such that the particle's velocity parallel to the magnetic field is zero.
@@ -1195,9 +1216,8 @@ class Bounce1D(Bounce):
     the particle's guiding center trajectory traveling in the direction of increasing
     field-line-following coordinate ζ.
 
-    Notes
-    -----
-    Brief description of algorithm for developers.
+    Notes for developers
+    --------------------
 
     For applications which reduce to computing a nonlinear function of distance
     along field lines between bounce points, it is required to identify these

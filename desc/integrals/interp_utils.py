@@ -144,7 +144,7 @@ def harmonic_vander(x, n, domain=(0, 2 * np.pi)):
 
 # TODO: For inverse transforms, use non-uniform fast transforms (NFFT).
 #   https://github.com/flatironinstitute/jax-finufft.
-#   Let spectral resolution be F, (e.g. F = M n1 for 2D transform),
+#   Let spectral resolution be F, (e.g. F = M N for 2D transform),
 #   and number of points (non-uniform) to evaluate be Q. A non-uniform
 #   fast transform cost is 𝒪([F+Q] log[F] log[1/ε]) where ε is the
 #   interpolation error term (depending on implementation how ε appears
@@ -152,10 +152,10 @@ def harmonic_vander(x, n, domain=(0, 2 * np.pi)):
 #   Note that for the inverse Chebyshev transforms, we can also use fast
 #   multipoint methods Chapter 10, https://doi.org/10.1017/CBO9781139856065.
 #   Unlike NFFTs, multipoint methods are exact and reduce to using FFTs.
-#   The cost is 𝒪([F+Q] łog²[F + Q]). This is a good candidate for evaluating
+#   The cost is 𝒪([F+Q] log²[F + Q]). This might be useful to evaluating
 #   |B|, since the integrands are not smooth functions of |B|, which we know
-#   as a Chebyshev series, and the nodes are packed more tightly near the edges,
-#   in particular for the strongly singular integrals.
+#   as a Chebyshev series, and the nodes are packed more tightly near the
+#   singular regions.
 
 
 def interp_rfft(xq, f, domain=(0, 2 * jnp.pi), axis=-1):

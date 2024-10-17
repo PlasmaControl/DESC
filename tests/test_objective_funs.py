@@ -44,6 +44,7 @@ from desc.objectives import (
     CoilCurrentLength,
     CoilCurvature,
     CoilLength,
+    CoilSetLinkingNumber,
     CoilSetMinDistance,
     CoilTorsion,
     EffectiveRipple,
@@ -80,7 +81,7 @@ from desc.objectives import (
 )
 from desc.objectives._free_boundary import BoundaryErrorNESTOR
 from desc.objectives.normalization import compute_scaling_factors
-from desc.objectives.objective_funs import _Objective
+from desc.objectives.objective_funs import _Objective, collect_docs
 from desc.objectives.utils import softmax, softmin
 from desc.profiles import FourierZernikeProfile, PowerSeriesProfile
 from desc.utils import PRINT_WIDTH
@@ -1197,6 +1198,25 @@ class TestObjectiveFunction:
         test(eq, PoloidalMagneticField(1, 1, 1), 0.0)
 
     @pytest.mark.unit
+    def test_coil_linking_number(self):
+        """Test for linking number objective."""
+        coil = FourierPlanarCoil(center=[10, 1, 0])
+        # regular modular coilset from symmetry, so that there are 10 coils, half going
+        # one way and half going the other way
+        coilset = CoilSet.from_symmetry(coil, NFP=5, sym=True)
+        coil2 = FourierRZCoil()
+        # add a coil along the axis that links all the other coils
+        coilset2 = MixedCoilSet(coilset, coil2)
+
+        obj = CoilSetLinkingNumber(coilset2)
+        obj.build()
+        out = obj.compute_scaled_error(coilset2.params_dict)
+        # the modular coils all link 1 other coil (the axis)
+        # while the axis links all 10 modular coils
+        expected = np.array([1] * 10 + [10])
+        np.testing.assert_allclose(out, expected, rtol=1e-3)
+
+    @pytest.mark.unit
     def test_signed_plasma_vessel_distance(self):
         """Test calculation of signed distance from plasma to vessel."""
         R0 = 10.0
@@ -1325,6 +1345,7 @@ def test_derivative_modes():
             AspectRatio(eq),
         ],
         deriv_mode="batched",
+        jac_chunk_size="auto",
         use_jit=False,
     )
     obj2 = ObjectiveFunction(
@@ -1334,13 +1355,15 @@ def test_derivative_modes():
             AspectRatio(eq, jac_chunk_size=None),
         ],
         deriv_mode="blocked",
+        jac_chunk_size="auto",
         use_jit=False,
     )
     obj1.build()
     obj2.build()
     # check that default size works for blocked
-    assert obj2.objectives[1]._jac_chunk_size is None
-    assert obj2.objectives[2]._jac_chunk_size is None
+    assert obj2.objectives[0]._jac_chunk_size == 2
+    assert obj2.objectives[1]._jac_chunk_size > 0
+    assert obj2.objectives[2]._jac_chunk_size > 0
     # hard to say what size auto will give, just check it is >0
     assert obj1._jac_chunk_size > 0
     obj3.build()
@@ -2254,6 +2277,7 @@ class TestComputeScalarResolution:
         CoilCurrentLength,
         CoilCurvature,
         CoilLength,
+        CoilSetLinkingNumber,
         CoilSetMinDistance,
         CoilTorsion,
         FusionPower,
@@ -2617,7 +2641,14 @@ class TestComputeScalarResolution:
     @pytest.mark.regression
     @pytest.mark.parametrize(
         "objective",
-        [CoilLength, CoilTorsion, CoilCurvature, CoilCurrentLength, CoilSetMinDistance],
+        [
+            CoilLength,
+            CoilTorsion,
+            CoilCurvature,
+            CoilCurrentLength,
+            CoilSetMinDistance,
+            CoilSetLinkingNumber,
+        ],
     )
     def test_compute_scalar_resolution_coils(self, objective):
         """Coil objectives."""
@@ -2653,6 +2684,7 @@ class TestObjectiveNaNGrad:
         CoilLength,
         CoilCurrentLength,
         CoilCurvature,
+        CoilSetLinkingNumber,
         CoilSetMinDistance,
         CoilTorsion,
         EffectiveRipple,
@@ -2846,7 +2878,14 @@ class TestObjectiveNaNGrad:
     @pytest.mark.unit
     @pytest.mark.parametrize(
         "objective",
-        [CoilLength, CoilTorsion, CoilCurvature, CoilCurrentLength, CoilSetMinDistance],
+        [
+            CoilLength,
+            CoilTorsion,
+            CoilCurvature,
+            CoilCurrentLength,
+            CoilSetMinDistance,
+            CoilSetLinkingNumber,
+        ],
     )
     def test_objective_no_nangrad_coils(self, objective):
         """Coil objectives."""
@@ -2966,3 +3005,19 @@ def test_objective_print_widths():
                     + "change the name or increase the PRINT_WIDTH in the "
                     + "desc/utils.py file. The former is preferred."
                 )
+
+
+def test_objective_docstring():
+    """Test that the objective docstring and collect_docs are consistent."""
+    objective_docs = _Objective.__doc__.rstrip()
+    doc_header = (
+        "Objective (or constraint) used in the optimization of an Equilibrium.\n\n"
+        + "    Parameters\n"
+        + "    ----------\n"
+        + "    things : Optimizable or tuple/list of Optimizable\n"
+        + "        Objects that will be optimized to satisfy the Objective.\n"
+    )
+    collected_docs = collect_docs().strip()
+    collected_docs = doc_header + "    " + collected_docs
+
+    assert objective_docs == collected_docs

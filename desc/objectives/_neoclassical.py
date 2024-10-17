@@ -346,11 +346,12 @@ class GammaC(_Objective):
 
         Note that Nemov's Γ_c converges to a finite nonzero value in the
         infinity limit of the number of toroidal transits.
-        Velasco's expression is defined to be zero on irrational surfaces;
-        and therefore, the numerical computation will converge to zero as the
-        number of toroidal transits increases. This is mentioned to remind
-        users that an optimization using Velasco's metric should be evaluated by
-        measuring decrease in Γ_c at a fixed number of toroidal transits.
+        Velasco's expression has a secular term that will drive the result
+        to zero as the number of toroidal transits increases unless the
+        secular term is averaged out from all the singular integrals.
+        Therefore, an optimization using Velasco's metric should be evaluated by
+        measuring decrease in Γ_c at a fixed number of toroidal transits until
+        unless an adaptive quadrature is used.
     name : str, optional
         Name of the objective function.
     jac_chunk_size : int , optional

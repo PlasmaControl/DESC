@@ -363,6 +363,8 @@ class FourierRZToroidalSurface(Surface):
     ):
         """Create a surface from a near-axis model for quasi-poloidal symmetry.
 
+        Model is based off of section III of Goodman et. al. [1]_
+
         Parameters
         ----------
         major_radius : float
@@ -388,6 +390,11 @@ class FourierRZToroidalSurface(Surface):
         -------
         surface : FourierRZToroidalSurface
             Surface with given geometric properties.
+
+        References
+        ----------
+        .. [1] Goodman, Alan, et al. "Constructing Precisely Quasi-Isodynamic
+          Magnetic Fields." Journal of Plasma Physics 89.5 (2023): 905890504.
 
         """
         assert mirror_ratio <= 1

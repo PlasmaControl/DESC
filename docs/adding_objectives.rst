@@ -47,42 +47,16 @@ A full example objective with comments describing the key points is given below:
         ----------
         eq : Equilibrium
             Equilibrium that will be optimized to satisfy the Objective.
-        target : {float, ndarray}, optional
-            Target value(s) of the objective. Only used if bounds is None.
-            Must be broadcastable to Objective.dim_f.
-        bounds : tuple of {float, ndarray}, optional
-            Lower and upper bounds on the objective. Overrides target.
-            Both bounds must be broadcastable to Objective.dim_f
-        weight : {float, ndarray}, optional
-            Weighting to apply to the Objective, relative to other Objectives.
-            Must be broadcastable to Objective.dim_f
-        normalize : bool, optional
-            Whether to compute the error in physical units or non-dimensionalize.
-        normalize_target : bool, optional
-            Whether target and bounds should be normalized before comparing to computed
-            values. If `normalize` is `True` and the target is in physical units,
-            this should also be set to True.
-        loss_function : {None, 'mean', 'min', 'max'}, optional
-            Loss function to apply to the objective values once computed. This loss function
-            is called on the raw compute value, before any shifting, scaling, or
-            normalization.
         grid : Grid, optional
             Collocation grid containing the nodes to evaluate at.
-        name : str, optional
-            Name of the objective function.
-        jac_chunk_size : int or "auto", optional
-            Will calculate the Jacobian for this objective ``jac_chunk_size``
-            columns at a time, instead of all at once. The memory usage of the
-            Jacobian calculation is roughly ``memory usage = m0 + m1*jac_chunk_size``:
-            the smaller the chunk size, the less memory the Jacobian calculation
-            will require (with some baseline memory usage). The time to compute the
-            Jacobian is roughly ``t=t0 +t1/jac_chunk_size``, so the larger the
-            ``jac_chunk_size``, the faster the calculation takes, at the cost of
-            requiring more memory. A ``jac_chunk_size`` of 1 corresponds to the least
-            memory intensive, but slowest method of calculating the Jacobian.
-            If None, it will use the largest possible size.
 
         """
+        # Most of the documentation is shared among all objectives, so we just inherit
+        # the docstring from the base class and add a few details specific to this objective.
+        # See the documentation of `collect_docs` for more details.
+        __doc__ = __doc__.rstrip() + collect_docs(
+            target_default="``target=0``.", bounds_default="``target=0``."
+        )
 
         _coordinates = "rtz"    # What coordinates is this objective a function of, with r=rho, t=theta, z=zeta?
                                 # i.e. if only a profile, it is "r" , while if all 3 coordinates it is "rtz"
@@ -234,8 +208,8 @@ Adapting Existing Objectives with Different Loss Functions
 ----------------------------------------------------------
 
 If your desired objective is already implemented in DESC, but not in the correct form,
-a few different loss functions are available through the the ``loss_function`` kwarg
-when instantiating an Objective objective to modify the objective cost in order to adapt
+a few different loss functions are available through the ``loss_function`` kwarg
+when instantiating an Objective, to modify the objective cost in order to adapt
 the objective to your desired purpose. For example, the DESC ``RotationalTransform``
 objective with ``target=iota_target`` by default forms the residual by taking the target
 and subtracting it from the profile at the points in the grid, resulting in a residual

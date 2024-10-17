@@ -1,6 +1,6 @@
 """Utilities for getting standard groups of objectives and constraints."""
 
-from desc.utils import flatten_list, is_any_instance, unique_list
+from desc.utils import flatten_list, is_any_instance, isposint, unique_list
 
 from ._equilibrium import Energy, ForceBalance, HelicalForceBalance, RadialForceBalance
 from .linear_objectives import (
@@ -90,7 +90,10 @@ def get_equilibrium_objective(eq, mode="force", normalize=True, jac_chunk_size="
         objectives = (RadialForceBalance(**kwargs), HelicalForceBalance(**kwargs))
     else:
         raise ValueError("got an unknown equilibrium objective type '{}'".format(mode))
-    return ObjectiveFunction(objectives, jac_chunk_size=jac_chunk_size)
+    deriv_mode = "batched" if isposint(jac_chunk_size) else "auto"
+    return ObjectiveFunction(
+        objectives, jac_chunk_size=jac_chunk_size, deriv_mode=deriv_mode
+    )
 
 
 def get_fixed_axis_constraints(eq, profiles=True, normalize=True):

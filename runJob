@@ -1,0 +1,21 @@
+#!/bin/bash
+#SBATCH --job-name=regcoil            # create a short name for your job
+#SBATCH --time=6:00:00          # total run time limit (HH:MM:SS)
+#SBATCH --mail-type=begin        # send mail when process begins
+#SBATCH --mail-type=end          # send email when job ends
+#SBATCH --mail-type=fail         # send email if job fails
+#SBATCH --mail-user=fcastro@princeton.edu
+#SBATCH --constraint=gpu80
+#SBATCH --gres=gpu:1
+
+module purge
+
+module load anaconda3/2023.9
+module load cudatoolkit/11.7 cudnn/cuda-11.x/8.2.0
+
+conda activate desc-env2
+
+source setup_DESC_env
+export XLA_PYTHON_CLIENT_MEM_FRACTION=false
+
+jupyter nbconvert --ExecutePreprocessor.timeout=None --to notebook --execute --inplace regcoil-test.py

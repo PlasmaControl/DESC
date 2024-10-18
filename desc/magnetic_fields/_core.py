@@ -61,6 +61,254 @@ def biot_savart_general(re, rs, J, dV):
 
     return 1e-7 * fori_loop(0, J.shape[0], body, B)
 
+def biot_savart_potential(re, rs, psi_, dV,
+                          _n_rho_,nabla_gamma_dot_n,
+                          esrho,estheta,eszeta,
+                          e_rho,e_theta,e_zeta):
+    
+    """Biot-Savart law for arbitrary sources.
+
+    Parameters
+    ----------
+    re : ndarray, shape(n_eval_pts, 3)
+        evaluation points to evaluate B at, in cartesian.
+    rs : ndarray, shape(n_src_pts, 3)
+        source points for current density J, in cartesian.
+    J : ndarray, shape(n_src_pts, 3)
+        current density vector at source points, in cartesian.
+    dV : ndarray, shape(n_src_pts)
+        volume element at source points
+
+    Returns
+    -------
+    B : ndarray, shape(n,3)
+        magnetic field in cartesian components at specified points
+    """
+    (re, rs, psi_, dV, 
+    _n_rho_,nabla_gamma_dot_n_,
+    esrho,estheta,eszeta,
+    e_rho,e_theta,e_zeta) = map(jnp.asarray, (re, rs, psi_, dV,
+                                             _n_rho_,nabla_gamma_dot_n,
+                                             esrho,estheta,eszeta,
+                                             e_rho,e_theta,e_zeta
+                                            )
+                              )
+    
+    assert _n_rho_.shape == rs.shape
+    JdV = psi_*nabla_gamma_dot_n_ * dV#[:, None]
+    B = jnp.zeros_like(re)
+
+    def body(i, B):
+        dr = re - rs[i, :]
+        #_n_rho = _n_rho_[i, :]
+        
+        r = jnp.linalg.norm(dr, axis=-1)
+        
+        #num = JdV[i,]*(jnp.sum(_n_rho*esrho,axis = -1)[:, None]*(e_rho*((r**2)[:, None])
+        #                                                         - 3*jnp.sum(e_rho*dr,axis = -1)[:, None]*dr
+        #                                                        ) 
+        #               + jnp.sum(_n_rho*estheta,axis = -1)[:, None]*((r**2)[:, None]*e_theta 
+        #                                                             - 3*jnp.sum(e_theta*dr,axis = -1)[:, None]*dr
+        #                                                            )
+        #               + jnp.sum(_n_rho*eszeta,axis = -1)[:, None]*((r**2)[:, None]*e_zeta
+        #                                                            - 3*jnp.sum(e_zeta*dr,axis = -1)[:, None]*dr
+        #                                                           )
+        #      )
+        
+        #den = r**5
+        
+        num = dr*JdV[i,]
+        den = r**3
+        
+        B = B + jnp.where(den[:, None] == 0, 0, num / den[:, None])
+        return B
+
+    return 1e-7 * fori_loop(0, re.shape[0], body, B)
+
+
+def biot_savart_t(re, rs, J, dV,e_t):
+    """Biot-Savart law for arbitrary sources.
+
+    Parameters
+    ----------
+    re : ndarray, shape(n_eval_pts, 3)
+        evaluation points to evaluate B at, in cartesian.
+    rs : ndarray, shape(n_src_pts, 3)
+        source points for current density J, in cartesian.
+    J : ndarray, shape(n_src_pts, 3)
+        current density vector at source points, in cartesian.
+    dV : ndarray, shape(n_src_pts)
+        volume element at source points
+
+    Returns
+    -------
+    B : ndarray, shape(n,3)
+        magnetic field in cartesian components at specified points
+    """
+    re, rs, J, dV,e_t = map(jnp.asarray, (re, rs, J, dV,e_t))
+    assert J.shape == rs.shape
+    JdV = J * dV[:, None]
+    B = jnp.zeros_like(re)
+    
+    def body(i, B):
+        r = re - rs[i, :]
+        
+        den = jnp.linalg.norm(r, axis=-1) #** 3
+        
+        num = jnp.cross(JdV[i, :], (den**2)[:, None]*e_t - 3*jnp.sum(e_t*r,axis = -1)[:, None]*r, axis=-1)
+        
+        B = B + jnp.where(den[:, None] == 0, 0, num / (den**5)[:, None] )
+        return B
+
+    return 1e-7 * fori_loop(0, J.shape[0], body, B)
+
+def surf_div_general(re, rs, J, dV, 
+                     r_t, r_z,
+                         pos_t, pos_z,
+                         etg, ezg,
+                         n,
+                         nt,nz,):
+    """Biot-Savart law for arbitrary sources.
+
+    Parameters
+    ----------
+    re : ndarray, shape(n_eval_pts, 3)
+        evaluation points to evaluate B at, in cartesian.
+    rs : ndarray, shape(n_src_pts, 3)
+        source points for current density J, in cartesian.
+    J : ndarray, shape(n_src_pts, 3)
+        current density vector at source points, in cartesian.
+    dV : ndarray, shape(n_src_pts)
+        volume element at source points
+
+    Returns
+    -------
+    B : ndarray, shape(n,1)
+        magnetic field in cartesian components at specified points
+    """
+    (re, rs, J, dV, 
+     r_t, r_z,
+     pos_t, pos_z,
+     etg, ezg,
+     n,
+     nt,nz,
+     
+    ) = map(jnp.asarray, (re, rs, J, dV, 
+                         r_t, r_z,
+                         pos_t, pos_z,
+                         etg, ezg,
+                         n,
+                         nt,nz,
+                         )
+                       )
+    
+    assert J.shape == rs.shape
+    JdV = J * dV[:, None]
+    B = jnp.zeros_like(re[:,0])
+
+    def body(i, B):
+        r = re - rs[i, :]
+        
+        den = jnp.linalg.norm(r, axis=-1)
+        #rn = jnp.linalg.norm(r, axis=-1) ** 3
+        
+        a = jnp.where(den[:, None] == 0, 0, r / den[:, None]**3)
+        at = ( jnp.where(den[:, None] == 0, 0, 
+                         r_t / den[:, None]**3) 
+              - 3*jnp.where(den[:, None] == 0, 0, 
+                          r * ( jnp.sum(r*pos_t,axis = -1)[:, None] ) / den[:, None]**5) 
+             )
+        
+        az = ( jnp.where(den[:, None] == 0, 0, 
+                         r_z / den[:, None]**3) 
+              - 3*jnp.where(den[:, None] == 0, 0, 
+                          r * ( jnp.sum(r*pos_z,axis = -1)[:, None]
+              ) / den[:, None]**5) 
+             )
+        
+        term1 = jnp.cross(n, nt,axis = -1)*jnp.sum(a*etg,axis = -1)[:, None]
+        term2 = jnp.cross(n, nz,axis = -1)*jnp.sum(a*ezg,axis = -1)[:, None]
+        term3 = jnp.cross(n, etg,axis = -1)*jnp.sum(n*at + nt*a,axis = -1)[:, None]
+        term4 = jnp.cross(n, etg,axis = -1)*jnp.sum(n*at + nt*a,axis = -1)[:, None]
+        
+        surf_curl_a = - ( term1 + term2 - (term3 + term4) )
+        
+        B = B + jnp.where(den[:, None] == 0, 0, jnp.sum(JdV[i, :]*surf_curl_a,axis = -1) # 
+                         )
+        return B
+
+    return 1e-7 * fori_loop(0, J.shape[0], body, B)
+
+
+def vector_potential_general(re, rs, J, dV):
+    """Definition of vector potential for arbitrary sources.
+
+    Parameters
+    ----------
+    re : ndarray, shape(n_eval_pts, 3)
+        evaluation points to evaluate B at, in cartesian.
+    rs : ndarray, shape(n_src_pts, 3)
+        source points for current density J, in cartesian.
+    J : ndarray, shape(n_src_pts, 3)
+        current density vector at source points, in cartesian.
+    dV : ndarray, shape(n_src_pts)
+        volume element at source points
+
+    Returns
+    -------
+    A : ndarray, shape(n,3)
+        magnetic field in cartesian components at specified points
+    """
+    re, rs, J, dV = map(jnp.asarray, (re, rs, J, dV))
+    assert J.shape == rs.shape
+    JdV = J * dV[:, None]
+    A = jnp.zeros_like(re)
+
+    def body(i, A):
+        r = re - rs[i, :]
+        num = JdV[i, :]#jnp.cross(JdV[i, :], r, axis=-1)
+        den = jnp.linalg.norm(r, axis=-1)
+        A = A + jnp.where(den[:, None] == 0, 0, num / den[:, None])
+        return A
+
+    return 1e-7 * fori_loop(0, J.shape[0], body, A)
+
+def vector_potential_potential(re, rs, J, dV,):
+    
+    """Biot-Savart law for arbitrary sources.
+
+    Parameters
+    ----------
+    re : ndarray, shape(n_eval_pts, 3)
+        evaluation points to evaluate B at, in cartesian.
+    rs : ndarray, shape(n_src_pts, 3)
+        source points for current density J, in cartesian.
+    J : ndarray, shape(n_src_pts, 3)
+        current density vector at source points, in cartesian.
+    dV : ndarray, shape(n_src_pts)
+        volume element at source points
+
+    Returns
+    -------
+    B : ndarray, shape(n,3)
+        magnetic field in cartesian components at specified points
+    """
+    (re, rs, J, dV,) = map(jnp.asarray, (re, rs, J, dV,
+                                            )
+                              )
+    
+    assert J.shape == rs.shape
+    JdV = J* dV[:, None]
+    A = jnp.zeros_like(re)
+
+    def body(i, A):
+        r = re - rs[i, :]
+        num = jnp.cross(JdV[i, :], r, axis=-1)
+        den = jnp.linalg.norm(r, axis=-1) ** 3
+        A = A + jnp.where(den[:, None] == 0, 0, num / den[:, None])
+        return A
+
+    return 1e-7 * fori_loop(0, J.shape[0], body, A)
 
 def read_BNORM_file(fname, surface, eval_grid=None, scale_by_curpol=True):
     """Read BNORM-style .txt file containing Bnormal Fourier coefficients.

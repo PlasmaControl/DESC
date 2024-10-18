@@ -14,7 +14,6 @@ from desc.backend import jnp
 from .data_index import register_compute_fun
 from .utils import cross, dot, line_integrals, surface_integrals
 
-
 @register_compute_fun(
     name="V",
     label="V",
@@ -289,7 +288,6 @@ def _S(params, transforms, profiles, data, **kwargs):
 def _S_of_r(params, transforms, profiles, data, **kwargs):
     data["S(r)"] = surface_integrals(transforms["grid"], data["|e_theta x e_zeta|"])
     return data
-
 
 @register_compute_fun(
     name="S_r(r)",

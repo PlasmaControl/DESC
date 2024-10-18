@@ -9,11 +9,10 @@ from interpax import fft_interp2d
 from desc.backend import fori_loop, jnp, put, vmap
 from desc.basis import DoubleFourierSeries
 from desc.compute import rpz2xyz, rpz2xyz_vec, xyz2rpz_vec
-from desc.compute.utils import safediv, safenorm
+from desc.compute.utils import safediv, safenorm, dot
 from desc.grid import LinearGrid
 from desc.io import IOAble
 from desc.utils import isalmostequal, islinspaced
-
 
 def _get_quadrature_nodes(q):
     """Polar nodes for quadrature around singular point.
@@ -369,6 +368,9 @@ def _nonsingular_part(
     h_z = jnp.mean(source_dzeta)
 
     source_phi = source_data["phi"]
+    if isinstance(kernel, str):
+        kernel = kernels[kernel]
+        
     keys = kernel.keys
 
     def nfp_loop(j, f_data):
@@ -609,7 +611,7 @@ def singular_integral(
     out1 = _nonsingular_part(
         eval_data, eval_grid, source_data, source_grid, s, kernel, loop
     )
-    return out1 + out2
+    return out1, out2
 
 
 def _kernel_nr_over_r3(eval_data, source_data, diag=False):
@@ -700,16 +702,105 @@ def _kernel_biot_savart_A(eval_data, source_data, diag=False):
         r = r[:, :, None]
     return 1e-7 * safediv(K, r)
 
-
 _kernel_biot_savart_A.ndim = 3
 _kernel_biot_savart_A.keys = ["R", "phi", "Z", "K_vc"]
 
+def _kernel_special(eval_data, source_data, diag=False):
+    
+    # K
+    source_x = jnp.atleast_2d(
+        rpz2xyz(jnp.array([source_data["R"], source_data["phi"], source_data["Z"]]).T)
+    )
+    eval_x = jnp.atleast_2d(
+        rpz2xyz(jnp.array([eval_data["R"], eval_data["phi"], eval_data["Z"]]).T)
+    )
+    
+    if diag:
+        dx = eval_x - source_x
+    else:
+        dx = eval_x[:, None] - source_x[None]
+    
+    K = rpz2xyz_vec(source_data["K_vc"], phi=source_data["phi"])
+    r = safenorm(dx, axis=-1)
+    
+    if diag:
+        r = r[:, None]
+    else:
+        r = r[:, :, None]
+    
+    r_tse = safenorm(dx, axis=-1)
+    #r_sim = safenorm(dx, axis=-1)#r_tse[:, None]
+    r_com = r#[:, None]
+    
+    r_t = jnp.atleast_2d(rpz2xyz_vec(eval_data["e_theta"],phi=eval_data["phi"]))
+    r_z = jnp.atleast_2d(rpz2xyz_vec(eval_data["e_zeta"],phi=eval_data["phi"]))
+    
+    #pos_t = jnp.atleast_2d(jnp.array([eval_data["X_t"], eval_data["Y_t"], eval_data["Z_t"]]).T)
+    
+    #pos_z = jnp.atleast_2d(jnp.array([eval_data["X_z"], eval_data["Y_z"], eval_data["Z_z"]]).T)
+    
+    a_t = safediv(r_t,r_com**3) #- 3*(jnp.sum(r_t*dx,axis = -1)*safediv(dx,r_com**5).T).T
+    a_z = safediv(r_z,r_com**3) #- 3*(jnp.sum(r_z*dx,axis = -1)*safediv(dx,r_com**5).T).T
+    
+    n_rho = jnp.atleast_2d(rpz2xyz_vec(eval_data["n_rho"],phi=eval_data["phi"]))
+    
+    etg = jnp.atleast_2d(rpz2xyz_vec(eval_data["e^theta_gamma"],phi=eval_data["phi"]))
+    
+    ezg = jnp.atleast_2d(rpz2xyz_vec(eval_data["e^zeta_gamma"],phi=eval_data["phi"]))
+    
+    nt = jnp.atleast_2d(rpz2xyz_vec(eval_data["n_rho_t"],phi=eval_data["phi"]))
+    nz = jnp.atleast_2d(rpz2xyz_vec(eval_data["n_rho_z"],phi=eval_data["phi"]))
+    
+    v1 = jnp.cross(n_rho, nt, axis=-1)#[:,None]
+    
+    term1 = (jnp.sum(etg * safediv(dx, r_com**3), axis=-1)*v1.T
+            ).T
+    
+    v2 = jnp.cross(n_rho, nz, axis=-1)#[:,None]
+    
+    term2 = (jnp.sum(ezg * safediv(dx, r_com**3), axis=-1)*v2.T).T
+    
+    v3 = jnp.cross(n_rho, etg, axis=-1)#[:,None]
+    
+    a = safediv(dx, r_com**3)
+    
+    term3 = ( ( jnp.sum(n_rho * a_t, axis = -1) 
+               + jnp.sum(nt * a, axis = -1) 
+              )*v3.T
+            ).T
+
+    v4 = jnp.cross(n_rho, ezg, axis=-1)#[:,None]
+    
+    term4 = ( ( jnp.sum(n_rho * a_z, axis = -1) 
+               + jnp.sum(nz * a, axis = -1) 
+              )*v4.T ).T
+    
+    
+    out = jnp.sum(K * (term1 
+                       + term2 
+                       - (term3 + term4
+                         )
+                      ),
+                  axis = -1)
+    
+    return 1e-7 * out
+
+_kernel_special.ndim = 1
+_kernel_special.keys = ["R", "phi", "Z",
+                        #"X_t","Y_t","Z_t",
+                        #"X_z","Y_z","Z_z",
+                        "n_rho",
+                        "n_rho_t","n_rho_z",
+                        "e_theta","e_zeta",
+                        "e^theta_gamma","e^zeta_gamma",
+                        "K_vc"]
 
 kernels = {
     "1_over_r": _kernel_1_over_r,
     "nr_over_r3": _kernel_nr_over_r3,
     "biot_savart": _kernel_biot_savart,
     "biot_savart_A": _kernel_biot_savart_A,
+    "special": _kernel_special,
 }
 
 

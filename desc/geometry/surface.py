@@ -4,6 +4,10 @@ import warnings
 
 import numpy as np
 
+#import jax
+#import jax.numpy as jnp
+#from jax import jit, jacfwd
+
 from desc.backend import block_diag, jit, jnp, put, root_scalar, sign, vmap
 from desc.basis import DoubleFourierSeries, ZernikePolynomial
 from desc.compute import rpz2xyz_vec, xyz2rpz, xyz2rpz_vec
@@ -80,7 +84,7 @@ class FourierRZToroidalSurface(Surface):
         if modes_Z is None:
             modes_Z = modes_R
         R_lmn, Z_lmn, modes_R, modes_Z = map(
-            np.asarray, (R_lmn, Z_lmn, modes_R, modes_Z)
+            jnp.asarray, (R_lmn, Z_lmn, modes_R, modes_Z)
         )
 
         assert (

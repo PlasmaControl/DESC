@@ -151,6 +151,33 @@ def _e_theta_x_e_zeta_rr(params, transforms, profiles, data, **kwargs):
     )
     return data
 
+@register_compute_fun(
+    name="|e_theta x e_zeta|_t",
+    label="\\partial_{\\theta}|e_{\\theta} \\times e_{\\zeta}|",
+    units="m^{2}",
+    units_long="square meters",
+    description="2D Jacobian determinant for constant rho surface,"
+    "derivative wrt poloidal angle",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["e_theta", "e_theta_t", "e_zeta", "e_zeta_t", "|e_theta x e_zeta|"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.core.Surface",
+    ],
+)
+def _e_theta_x_e_zeta_t(params, transforms, profiles, data, **kwargs):
+    data["|e_theta x e_zeta|_t"] = dot(
+        (
+            cross(data["e_theta_t"], data["e_zeta"])
+            + cross(data["e_theta"], data["e_zeta_t"])
+        ),
+        cross(data["e_theta"], data["e_zeta"]),
+    ) / (data["|e_theta x e_zeta|"])
+    return data
 
 @register_compute_fun(
     name="|e_theta x e_zeta|_z",

@@ -606,11 +606,27 @@ class Grid(_Grid):
 
         """
         nodes = jnp.atleast_2d(jnp.asarray(nodes)).reshape((-1, 3)).astype(float)
+        
         # Do not alter nodes given by the user for custom grids.
         # In particular, do not modulo nodes by 2pi or 2pi/NFP.
         # This may cause the surface_integrals() function to fail recognizing
         # surfaces outside the interval [0, 2pi] as duplicates. However, most
         # surface integral computations are done with LinearGrid anyway.
+        
+        #r, t, z = np.meshgrid(nodes[:,0], nodes[:,1], nodes[:,2], indexing="ij")
+        #r = r.flatten()
+        #t = t.flatten()
+        #z = z.flatten()
+
+        #dr, dt, dz = np.meshgrid(dr, dt, dz, indexing="ij")
+        #dr = dr.flatten()
+        #dt = dt.flatten()
+        #dz = dz.flatten()
+
+        #nodes = np.stack([nodes[:,0], nodes[:,1], nodes[:,2]]).T
+        #nodes = np.stack([r, t, z]).T
+        #spacing = np.stack([dr, dt, dz]).T
+        
         return nodes
 
 

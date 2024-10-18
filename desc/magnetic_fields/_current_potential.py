@@ -1039,6 +1039,7 @@ def run_regcoil(  # noqa: C901 fxn too complex
     verbose=1,
     normalize=True,
     vacuum=False,
+    kappa = 0,
 ):
     """Runs regcoil algorithm to find the current potential for the surface.
 
@@ -1287,7 +1288,7 @@ def run_regcoil(  # noqa: C901 fxn too complex
     G = G_tot - G_ext
     # calclulate I, net toroidal current on winding surface
     if current_helicity == 0:  # modular coils
-        I = 0
+        I = kappa*G
     else:  # helical coils
         I = G / current_helicity / eq.NFP
 

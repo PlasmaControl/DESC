@@ -38,7 +38,6 @@ from desc.integrals import (
     virtual_casing_biot_savart,
 )
 from desc.integrals.basis import FourierChebyshevSeries
-from desc.integrals.bounce_integral import Bounce2DPEST
 from desc.integrals.bounce_utils import (
     _get_extrema,
     bounce_points,
@@ -1755,46 +1754,6 @@ class TestBounce2D:
         b.check_points(b.points(pitch_inv), pitch_inv, plot=False)
 
         return fig
-
-    @pytest.mark.unit
-    # @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d * 4)
-    def test_bounce2d_pest(self):
-        """Test that all the internal correctness checks pass for real example."""
-        # noqa: D202
-        # Suppose we want to compute a bounce average of the function
-        # f(ℓ) = (1 − λ|B|/2) * g_zz, where g_zz is the squared norm of the
-        # toroidal basis vector on some set of field lines specified by (ρ, α)
-        # coordinates. This is defined as
-        # [∫ f(ℓ) / √(1 − λ|B|) dℓ] / [∫ 1 / √(1 − λ|B|) dℓ]
-
-        # 1. Define python functions for the integrands. We do that above.
-        # 2. Pick flux surfaces and grid resolution.
-        rho = np.linspace(0.1, 1, 6)
-        eq = get("HELIOTRON")
-        grid = Grid.create_meshgrid(
-            [rho, fourier_pts(eq.M_grid), fourier_pts(eq.N_grid) / eq.NFP],
-            period=(np.inf, 2 * np.pi, 2 * np.pi / eq.NFP),
-            NFP=eq.NFP,
-        )
-        # 3. Compute input data.
-        data = eq.compute(
-            Bounce2D.required_names + ["min_tz |B|", "max_tz |B|", "g_zz"], grid=grid
-        )
-        # 4. Compute DESC coordinates of optimal interpolation nodes.
-        theta = Bounce2DPEST.compute_theta(eq, X=32, Y=32, rho=rho)
-        # 5. Make the bounce integration operator.
-        bounce = Bounce2DPEST(
-            grid,
-            data,
-            iota=grid.compress(data["iota"]),
-            theta=theta,
-            num_transit=2,
-            quad=leggauss(3),
-        )
-        phi = jnp.linspace(0, 4 * jnp.pi, 4000)
-        bounce.plot(1, phi)
-        bounce.plot_theta(1, phi)
-        bounce.plot(1, phi)
 
     @staticmethod
     def drift_num_integrand(cvdrift, gbdrift, B, pitch, zeta):

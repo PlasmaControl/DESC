@@ -43,10 +43,11 @@ from desc.integrals.bounce_utils import (
     bounce_points,
     get_alpha,
     get_pitch_inv_quad,
+    interp_fft_to_argmin,
     interp_to_argmin,
     interp_to_argmin_hard,
 )
-from desc.integrals.interp_utils import fourier_pts
+from desc.integrals.interp_utils import fourier_pts, polyder_vec
 from desc.integrals.quad_utils import (
     automorphism_sin,
     bijection_from_disc,
@@ -1639,6 +1640,48 @@ class TestBounce2D:
     @staticmethod
     def _example_denominator(B, pitch, zeta):
         return safediv(1, jnp.sqrt(jnp.abs(1 - pitch * B)))
+
+    # TODO: Improve this test like test_interp_to_argmin in TestBounce1D.
+    @pytest.mark.unit
+    def test_interp_fft_to_argmin(self):
+        """Test argmin interpolation."""  # noqa: D202
+
+        rho = np.linspace(0.1, 1, 6)
+        eq = get("HELIOTRON")
+        grid = Grid.create_meshgrid(
+            [rho, fourier_pts(eq.M_grid), fourier_pts(eq.N_grid) / eq.NFP],
+            period=(np.inf, 2 * np.pi, 2 * np.pi / eq.NFP),
+            NFP=eq.NFP,
+        )
+        data = eq.compute(
+            Bounce2D.required_names + ["min_tz |B|", "max_tz |B|", "1"], grid=grid
+        )
+        theta = Bounce2D.compute_theta(eq, X=8, Y=8, rho=rho)
+        bounce = Bounce2D(
+            grid,
+            data,
+            iota=grid.compress(data["iota"]),
+            theta=theta,
+            num_transit=2,
+            quad=leggauss(3),
+            check=True,
+            spline=True,
+        )
+        pitch_inv, _ = bounce.get_pitch_inv_quad(
+            min_B=grid.compress(data["min_tz |B|"]),
+            max_B=grid.compress(data["max_tz |B|"]),
+            num_pitch=10,
+        )
+        weight = interp_fft_to_argmin(
+            bounce._NFP,
+            bounce._c["T(z)"],
+            grid.meshgrid_reshape(data["1"], "rtz"),
+            bounce.points(pitch_inv),
+            bounce._c["knots"],
+            bounce._c["B(z)"],
+            polyder_vec(bounce._c["B(z)"]),
+        )
+        np.testing.assert_allclose(weight, 1)
 
     # TODO: Could test integration against bounce1d for this stellarator
     @pytest.mark.unit

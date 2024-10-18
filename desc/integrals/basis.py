@@ -296,7 +296,7 @@ class PiecewiseChebyshevSeries(IOAble):
         return self.cheb.shape[-1]
 
     def stitch(self):
-        """Enforce the piecewise series is continuous."""
+        """Enforce continuity of the piecewise series."""
         # evaluate at left boundary
         f_0 = self.cheb[..., ::2].sum(axis=-1) - self.cheb[..., 1::2].sum(axis=-1)
         # evaluate at right boundary
@@ -325,7 +325,7 @@ class PiecewiseChebyshevSeries(IOAble):
         """
         return idct(dct_from_cheb(self.cheb), type=2, n=Y, axis=-1) * Y
 
-    def isomorphism_to_C1(self, y):
+    def _isomorphism_to_C1(self, y):
         """Return coordinates z ∈ ℂ isomorphic to (x, y) ∈ ℂ².
 
         Maps row x of y to z = y + f(x) where f(x) = x * |domain|.
@@ -348,7 +348,7 @@ class PiecewiseChebyshevSeries(IOAble):
         z = y + z_shift[:, jnp.newaxis]
         return z
 
-    def isomorphism_to_C2(self, z):
+    def _isomorphism_to_C2(self, z):
         """Return coordinates (x, y) ∈ ℂ² isomorphic to z ∈ ℂ.
 
         Returns index x and minimum value y such that
@@ -396,7 +396,7 @@ class PiecewiseChebyshevSeries(IOAble):
         """
         cheb = _chebcast(setdefault(cheb, self.cheb), z)
         N = cheb.shape[-1]
-        x_idx, y = self.isomorphism_to_C2(z)
+        x_idx, y = self._isomorphism_to_C2(z)
         y = bijection_to_disc(y, self.domain[0], self.domain[1])
         # Chebyshev coefficients αₙ for f(z) = ∑ₙ₌₀ᴺ⁻¹ αₙ(x[z]) Tₙ(y[z])
         # are held in cheb with shape (..., num cheb series, Y).
@@ -442,7 +442,7 @@ class PiecewiseChebyshevSeries(IOAble):
         y = jnp.where(is_intersect, y.real, 0.0)
 
         # TODO: Multipoint evaluation with FFT.
-        #   See note in integrals/basis.py near line 145.
+        #   See note in integrals/interp_utils.py.
         n = jnp.arange(self.Y)
         #      ∂f/∂y =      ∑ₙ₌₀ᴺ⁻¹ aₙ(x) n Uₙ₋₁(y)
         # sign ∂f/∂y = sign ∑ₙ₌₀ᴺ⁻¹ aₙ(x) n sin(n arcos y)
@@ -495,7 +495,7 @@ class PiecewiseChebyshevSeries(IOAble):
         )
         # Flatten so that last axis enumerates intersects along the piecewise spline.
         y, is_intersect, df_dy_sign = map(
-            flatten_matrix, (self.isomorphism_to_C1(y), is_intersect, df_dy_sign)
+            flatten_matrix, (self._isomorphism_to_C1(y), is_intersect, df_dy_sign)
         )
 
         # Note for bounce point applications:
@@ -503,11 +503,12 @@ class PiecewiseChebyshevSeries(IOAble):
         # polynomials is a left intersection i.e. ``is_z1`` because the subset of
         # pitch values that generate this edge case has zero measure. By ignoring
         # this, for those subset of pitch values the integrations will be done in
-        # the hypograph of |B|, which will yield zero. If in far future decide to
-        # not ignore this, note the solution is to disqualify intersects within
-        # ``_eps`` from ``domain[-1]``. Edit: For differentiability, we cannot
-        # consider intersects at boundary of Chebyshev polynomial. Again, cases
-        # where this would be incorrect have measure zero.
+        # the hypograph of |B|, which will yield zero. If in future decide to
+        # not ignore this, note the solution is to
+        # 1. disqualify intersects within ``_eps`` from ``domain[-1]``
+        # 2. Evaluate sign in ``intersect2d`` at boundary of Chebyshev polynomial
+        #    using Chebyshev identities rather than arccos(-1) or arccos(1) which
+        #    are not differentiable.
         is_z1 = (df_dy_sign <= 0) & is_intersect
         is_z2 = (df_dy_sign >= 0) & _in_epigraph_and(is_intersect, df_dy_sign)
 

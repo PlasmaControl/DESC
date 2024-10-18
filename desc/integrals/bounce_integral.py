@@ -9,14 +9,15 @@ from desc.backend import jnp
 from desc.integrals.basis import FourierChebyshevSeries, PiecewiseChebyshevSeries
 from desc.integrals.bounce_utils import (
     _bounce_quadrature,
-    _chebyshev,
     _check_bounce_points,
     _check_interp,
-    _cubic_spline,
-    _fourier_chebyshev,
     _set_default_plot_kwargs,
     bounce_points,
+    chebyshev,
+    cubic_spline,
+    fourier_chebyshev,
     get_pitch_inv_quad,
+    interp_fft_to_argmin,
     interp_to_argmin,
     plot_ppoly,
 )
@@ -78,12 +79,6 @@ def _swap_pl(f):
     # swap L and num_pitch axes.
     assert f.ndim <= 3
     return jnp.swapaxes(f, 0, -2)
-
-
-# TODO: After GitHub issue #1034 is resolved, we should pass in the previous
-#  θ(α, ζ) coordinates as an initial guess for the next coordinate mapping.
-#  Perhaps tell the optimizer to perturb the coefficients of the
-#  θ(α, ζ) directly? think this is equivalent to perturbing lambda.
 
 
 class Bounce2D(Bounce):
@@ -299,7 +294,8 @@ class Bounce2D(Bounce):
         ----------
         grid : Grid
             Tensor-product grid in (ρ, θ, ζ) with uniformly spaced nodes
-            [0, 2π) × [0, 2π/NFP). Note that below shape notation defines
+            [0, 2π) × [0, 2π/NFP). The ζ nodes should be strictly increasing.
+            Note that below shape notation defines
             ``L=grid.num_rho``, ``M=grid.num_theta``, and ``N=grid.num_zeta``.
         data : dict[str, jnp.ndarray]
             Data evaluated on ``grid``.
@@ -369,29 +365,33 @@ class Bounce2D(Bounce):
             "B^zeta": _fourier(
                 grid, jnp.abs(data["B^zeta"]) * Lref / Bref, is_reshaped
             ),
-            "T(z)": _fourier_chebyshev(theta, iota, alpha, num_transit),
+            "T(z)": fourier_chebyshev(theta, iota, alpha, num_transit),
         }
         Y_B = setdefault(Y_B, theta.shape[-1] * 2)
         if spline:
-            self._c["B(z)"], self._c["knots"] = _cubic_spline(
-                n0=self._n0,
-                n1=self._n1,
-                NFP=self._NFP,
-                T=self._c["T(z)"],
-                f=self._c["|B|"],
-                Y=Y_B,
+            self._c["B(z)"], self._c["knots"] = cubic_spline(
+                self._n0,
+                self._n1,
+                self._NFP,
+                self._c["T(z)"],
+                self._c["|B|"],
+                Y_B,
                 check=check,
             )
         else:
-            self._c["B(z)"] = _chebyshev(
-                n0=self._n0,
-                n1=self._n1,
-                NFP=self._NFP,
-                T=self._c["T(z)"],
-                f=self._c["|B|"],
-                Y=Y_B,
+            self._c["B(z)"] = chebyshev(
+                self._n0,
+                self._n1,
+                self._NFP,
+                self._c["T(z)"],
+                self._c["|B|"],
+                Y_B,
             )
 
+    # TODO: After GitHub issue #1034 is resolved, we should pass in the previous
+    #  θ(α, ζ) coordinates as an initial guess for the next coordinate mapping.
+    #  Think more about whether possible to perturb the coefficients of the
+    #  θ(α, ζ) since these are related to lambda.
     @staticmethod
     def compute_theta(eq, X=16, Y=32, rho=1.0, clebsch=None, **kwargs):
         """Return DESC coordinates θ of (α,ζ) Fourier Chebyshev basis nodes.
@@ -435,6 +435,8 @@ class Bounce2D(Bounce):
             coords=clebsch,
             inbasis=("rho", "alpha", "zeta"),
             period=(jnp.inf, jnp.inf, jnp.inf),
+            tol=kwargs.pop("tol", 1e-7),
+            maxiter=kwargs.pop("maxiter", 40),
             **kwargs,
         ).reshape(-1, X, Y, 3)[..., 1]
 
@@ -620,10 +622,25 @@ class Bounce2D(Bounce):
         if not isinstance(f_vec, (list, tuple)):
             f_vec = [f_vec]
 
+        if weight is not None:
+            errorif(
+                isinstance(self._c["B(z)"], PiecewiseChebyshevSeries),
+                NotImplementedError,
+            )
+            weight = interp_fft_to_argmin(
+                self._NFP,
+                self._c["T(z)"],
+                weight,
+                points,
+                self._c["knots"],
+                self._c["B(z)"],
+                polyder_vec(self._c["B(z)"]),
+            )
         points = map(_swap_pl, points)
         pitch_inv = atleast_nd(self._c["T(z)"].cheb.ndim - 1, pitch_inv).T
-        result = self._integrate(integrand, points, pitch_inv, f, f_vec, check, plot)
-        return result
+        return setdefault(weight, 1.0) * self._integrate(
+            integrand, points, pitch_inv, f, f_vec, check, plot
+        )
 
     def _integrate(self, integrand, points, pitch_inv, f, f_vec, check, plot):
         """Bounce integrate ∫ f(λ, ℓ) dℓ.
@@ -1128,7 +1145,8 @@ class Bounce1D(Bounce):
         )
 
     # TODO: Add option for adaptive quadrature with quadax.
-    #  quadax.quadgk with the currently used cov works best.
+    #  quadax.quadgk with the currently used c.o.v. seems to work nice.
+    #  without change of variable one needs to use quadax.quadts.
     def integrate(
         self,
         integrand,

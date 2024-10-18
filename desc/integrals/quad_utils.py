@@ -26,9 +26,9 @@ def grad_bijection_from_disc(a, b):
 
 
 # This map was tested as a change of variables to interpolate with
-# Chebyshev series on a more uniform grid. The result was worse
-# convergence, with visible Runge like oscillation near boundary
-# that persisted at high resolution.
+# Chebyshev series on a more uniform grid. Although it fit to
+# oscillatory functions better, it gives small wiggles due to Runge
+# effects near boundary.
 def automorphism_arcsin(x, gamma=jnp.cos(0.5)):
     """[-1, 1] ∋ x ↦ y ∈ [−1, 1].
 

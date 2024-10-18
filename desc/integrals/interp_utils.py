@@ -13,7 +13,7 @@ import numpy as np
 from interpax import interp1d
 from orthax.chebyshev import chebroots
 
-from desc.backend import dct, irfft2, jnp, rfft, rfft2, take
+from desc.backend import dct, jnp, rfft, rfft2, take
 from desc.integrals.quad_utils import bijection_from_disc
 from desc.utils import Index, errorif, safediv
 
@@ -468,46 +468,6 @@ def _fourier(grid, f, is_reshaped=False):
         f = grid.meshgrid_reshape(f, "rtz")
     # real fft over poloidal since usually m > n
     return rfft2(f, axes=(-1, -2), norm="forward")
-
-
-def _fourier_pest(grid, T, f, N, is_reshaped=False):
-    """Transform to PEST straight field line spectral domain.
-
-    Parameters
-    ----------
-    grid : Grid
-        Tensor-product grid in (θ, ζ) with uniformly spaced nodes [0, 2π) × [0, 2π/NFP).
-        Preferably power of 2 for ``grid.num_theta`` and ``grid.num_zeta``.
-    T : jnp.ndarray
-        Fourier transform of θ(ϑ,ϕ).
-    f : jnp.ndarray
-        Function evaluated on ``grid``.
-    N : int
-        Desired spectral resolution for ``f``. Preferably power of 2.
-
-    Returns
-    -------
-    a : jnp.ndarray
-        Fourier transform of f(ϑ,ϕ).
-
-    """
-    if not is_reshaped:
-        f = grid.meshgrid_reshape(f, "rtz")
-
-    # Compute θ at ϑ,ϕ fourier points and reshape to (num rho, num points).
-    theta = irfft2(T, (N, N), norm="forward").reshape(*T.shape[:-2], N**2)
-    zeta = jnp.broadcast_to(fourier_pts(N), (N, N)).ravel()
-
-    return rfft2(
-        interp_rfft2(
-            theta,
-            zeta,
-            f=f[..., jnp.newaxis, :, :],
-            domain1=(0, 2 * jnp.pi / grid.NFP),
-            axes=(-1, -2),
-        ).reshape(*T.shape[:-2], N, N),
-        norm="forward",
-    )
 
 
 # Warning: method must be specified as keyword argument.

@@ -18,6 +18,7 @@ from desc.integrals.interp_utils import (
     idct_non_uniform,
     interp1d_Hermite_vec,
     interp1d_vec,
+    interp_rfft2,
     irfft2_non_uniform,
     polyroot_vec,
     polyval_vec,
@@ -588,7 +589,8 @@ def _get_extrema(knots, g, dg_dz, sentinel=jnp.nan):
     g_ext = flatten_matrix(polyval_vec(x=ext, c=g[..., jnp.newaxis, :]))
     # Transform out of local power basis expansion.
     ext = flatten_matrix(ext + knots[:-1, jnp.newaxis])
-    assert ext.shape == g_ext.shape and ext.shape[-1] == g.shape[-2] * (g.shape[-1] - 2)
+    assert ext.shape == g_ext.shape
+    assert ext.shape[-1] == g.shape[-2] * (g.shape[-1] - 2)
     return ext, g_ext
 
 
@@ -868,7 +870,7 @@ def get_alpha(alpha_0, iota, num_transit, period):
     return alpha
 
 
-def _fourier_chebyshev(theta, iota, alpha, num_transit):
+def fourier_chebyshev(theta, iota, alpha, num_transit):
     """Parameterize θ along field lines ``alpha``.
 
     Parameters
@@ -946,7 +948,7 @@ def _fourier_chebyshev(theta, iota, alpha, num_transit):
     return T
 
 
-def _chebyshev(n0, n1, NFP, T, f, Y):
+def chebyshev(n0, n1, NFP, T, f, Y):
     """Chebyshev along field lines.
 
     Parameters
@@ -973,7 +975,7 @@ def _chebyshev(n0, n1, NFP, T, f, Y):
     # is then up-sampling the Chebyshev resolution, which is good since the
     # spectrum of |B| is wider than θ.
 
-    # θ at Chebyshev points, reshaped to (num rho * num points)
+    # θ at Chebyshev points, reshaped to (num rho, num transit * num points)
     theta = T.evaluate(Y).reshape(*T.cheb.shape[:-2], T.X * Y)
     zeta = jnp.broadcast_to(cheb_pts(Y, domain=T.domain), (T.X, Y)).ravel()
 
@@ -991,7 +993,7 @@ def _chebyshev(n0, n1, NFP, T, f, Y):
     return f
 
 
-def _cubic_spline(n0, n1, NFP, T, f, Y, check=False):
+def cubic_spline(n0, n1, NFP, T, f, Y, check=False):
     """Cubic spline along field lines.
 
     Parameters
@@ -1023,7 +1025,7 @@ def _cubic_spline(n0, n1, NFP, T, f, Y, check=False):
         Knots of spline ``f``.
 
     """
-    # θ at uniformly spaced points along field line.
+    # θ at uniformly spaced points along field line
     knots = jnp.linspace(-1, 1, Y, endpoint=False)
     theta = idct_non_uniform(knots, T.cheb[..., jnp.newaxis, :], T.Y).reshape(
         *T.cheb.shape[:-2], T.X * Y
@@ -1049,3 +1051,83 @@ def _cubic_spline(n0, n1, NFP, T, f, Y, check=False):
     )
     assert f.shape[-2:] == (T.X * Y - 1, 4), f.shape
     return f, knots
+
+
+def interp_fft_to_argmin(
+    NFP, T, h, points, knots, g, dg_dz, beta=-100, upper_sentinel=1e2
+):
+    """Interpolate ``h`` to the deepest point of ``g`` between ``z1`` and ``z2``.
+
+    Let E = {ζ ∣ ζ₁ < ζ < ζ₂} and A = argmin_E g(ζ). Returns mean_A h(ζ).
+
+    Parameters
+    ----------
+    T : PiecewiseChebyshevSeries
+        Set of 1D Chebyshev spectral coefficients of θ along field line.
+        {θ_α : ζ ↦ θ(α, ζ) | α ∈ A} where A = (α₀, α₁, …, αₘ₋₁) is the same
+        field line.
+    h : jnp.ndarray
+        Shape (..., grid.num_theta, grid.num_zeta)
+        Function evaluated on tensor-product grid in (ρ, θ, ζ) with uniformly
+        spaced nodes [0, 2π) × [0, 2π/NFP).
+    points : jnp.ndarray
+        Shape (..., num_pitch, W).
+        Boundaries to detect argmin between.
+        First (second) element stores left (right) boundaries.
+    knots : jnp.ndarray
+        Shape (N, ).
+        z coordinates of spline knots. Must be strictly increasing.
+    g : jnp.ndarray
+        Shape (..., N - 1, g.shape[-1]).
+        Polynomial coefficients of the spline of g in local power basis.
+        Last axis enumerates the coefficients of power series. Second to
+        last axis enumerates the polynomials that compose a particular spline.
+    dg_dz : jnp.ndarray
+        Shape (..., N - 1, g.shape[-1] - 1).
+        Polynomial coefficients of the spline of ∂g/∂z in local power basis.
+        Last axis enumerates the coefficients of power series. Second to
+        last axis enumerates the polynomials that compose a particular spline.
+    beta : float
+        More negative gives exponentially better approximation at the
+        expense of noisier gradients - noisier in the physics sense (unrelated
+        to the automatic differentiation).
+    upper_sentinel : float
+        Something larger than g. Choose value such that
+        exp(max(g)) << exp(``upper_sentinel``). Don't make too large or numerical
+        resolution is lost.
+
+    Warnings
+    --------
+    Recall that if g is small then the effect of β is reduced.
+    If the intention is to use this function as argmax, be sure to supply
+    a lower sentinel for ``upper_sentinel``.
+
+    Returns
+    -------
+    h : jnp.ndarray
+        Shape (..., num_pitch, W).
+
+    """
+    z1, z2 = points
+    assert z1.ndim == z2.ndim >= 2 and z1.shape == z2.shape
+    # Shape is (num rho, number of extrema)
+    ext, g_ext = _get_extrema(knots, g, dg_dz, sentinel=0)
+    # Our softargmax(x) does the proper shift to compute softargmax(x - max(x)),
+    # but it's still not a good idea to compute over a large length scale, so we
+    # warn in docstring to choose upper sentinel properly.
+    argmin = softargmax(
+        beta * _where_for_argmin(z1, z2, ext, g_ext, upper_sentinel),
+        axis=-1,
+    )
+    h = jnp.linalg.vecdot(
+        argmin,
+        interp_rfft2(
+            T.eval1d(ext),  # theta coordinates of extrema of g
+            ext,  # zeta coordinates of extrema of g
+            h[..., jnp.newaxis, :, :],
+            domain1=(0, 2 * jnp.pi / NFP),
+            axes=(-1, -2),
+        )[..., jnp.newaxis, jnp.newaxis, :],
+    )
+    assert h.shape == z1.shape
+    return h

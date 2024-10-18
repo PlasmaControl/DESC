@@ -309,7 +309,7 @@ class TestFastInterp:
         else:
             fq_2 = norm * idct(dct(f(m), type=dct_type), n=n.size, type=dct_type)
         np.testing.assert_allclose(fq_1, f(n), atol=1e-14)
-        # JAX is less accurate than scipy.
+        # Resolved by https://github.com/google/jax/issues/23895.
         np.testing.assert_allclose(fq_2, f(n), atol=1e-6)
 
         fig, ax = plt.subplots()

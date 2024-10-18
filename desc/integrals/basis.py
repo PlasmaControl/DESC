@@ -33,34 +33,6 @@ from desc.utils import (
 )
 
 
-# TODO: Generalize this beyond ζ = ϕ or just map to Clebsch with ϕ.
-def get_alpha(alpha_0, iota, num_transit, period):
-    """Get sequence of poloidal coordinates A = (α₀, α₁, …, αₘ₋₁) of field line.
-
-    Parameters
-    ----------
-    alpha_0 : float
-        Starting field line poloidal label.
-    iota : jnp.ndarray
-        Shape (iota.size, ).
-        Rotational transform normalized by 2π.
-    num_transit : float
-        Number of ``period``s to follow field line.
-    period : float
-        Toroidal period after which to update label.
-
-    Returns
-    -------
-    alpha : jnp.ndarray
-        Shape (iota.size, num_transit).
-        Sequence of poloidal coordinates A = (α₀, α₁, …, αₘ₋₁) that specify field line.
-
-    """
-    # Δϕ (∂α/∂ϕ) = Δϕ ι̅ = Δϕ ι/2π = Δϕ data["iota"]
-    alpha = alpha_0 + period * jnp.expand_dims(iota, -1) * jnp.arange(num_transit)
-    return alpha
-
-
 @partial(jnp.vectorize, signature="(m),(m)->(m)")
 def _in_epigraph_and(is_intersect, df_dy_sign, /):
     """Set and epigraph of function f with the given set of points.

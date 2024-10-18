@@ -13,18 +13,26 @@ import numpy as np
 from interpax import interp1d
 from orthax.chebyshev import chebroots
 
-from desc.backend import dct, jnp, rfft, rfft2, take
+from desc.backend import dct, irfft2, jnp, rfft, rfft2, take
 from desc.integrals.quad_utils import bijection_from_disc
 from desc.utils import Index, errorif, safediv
 
-# TODO: Boyd's method 𝒪(n²) instead of Chebyshev companion matrix 𝒪(n³).
+# TODO:
+#  1. Boyd's method 𝒪(n²) instead of Chebyshev companion matrix 𝒪(n³).
 #  John P. Boyd, Computing real roots of a polynomial in Chebyshev series
 #  form through subdivision. https://doi.org/10.1016/j.apnum.2005.09.007.
-#  Use that once to find extrema of |B| if Y_B > 64. Then to find roots
-#  of bounce points use the closed formula in Boyd's spectral methods
-#  section 19.6. Can isolate interval to search for root by observing
-#  whether B - 1/pitch changes sign at extrema. This is significantly
-#  cheaper and non-iterative, so jax and gpu will like it.
+#  Use that once to find extrema of |B| if Y_B > 64.
+#  2. Then to find roots of bounce points use the closed formula in Boyd's
+#  spectral methods section 19.6. Can isolate interval to search for root by
+#  observing whether B - 1/pitch changes sign at extrema. Only need to do
+#  evaluate Chebyshev series at quadrature points once, and can use that to
+#  compute the integral for every pitch. The integral will converge rapidly
+#  since a low order polynomial approximates |B| well in between adjacent
+#  extrema. This is significantly cheaper and non-iterative, so jax and gpu
+#  will like it.
+#  Implementing 1 and 2 will remove all eigenvalue solves from computation.
+#  2 is a larger improvement than 1.
+#  Implement this in later PR.
 chebroots_vec = jnp.vectorize(chebroots, signature="(m)->(n)")
 
 
@@ -112,7 +120,7 @@ def harmonic(a, n, axis=-1):
     return h
 
 
-def harmonic_vander(x, n, domain=(0, 2 * np.pi)):
+def harmonic_vander(x, n, domain=(0, 2 * jnp.pi)):
     """Nyquist trigonometric interpolant basis evaluated at ``x``.
 
     Parameters
@@ -436,6 +444,70 @@ def idct_non_uniform(xq, a, n, axis=-1):
     n = jnp.arange(n)
     fq = jnp.linalg.vecdot(jnp.cos(n * jnp.arccos(xq)[..., jnp.newaxis]), a)
     return fq
+
+
+def _fourier(grid, f, is_reshaped=False):
+    """Transform to DESC spectral domain.
+
+    Parameters
+    ----------
+    grid : Grid
+        Tensor-product grid in (θ, ζ) with uniformly spaced nodes [0, 2π) × [0, 2π/NFP).
+        Preferably power of 2 for ``grid.num_theta`` and ``grid.num_zeta``.
+    f : jnp.ndarray
+        Function evaluated on ``grid``.
+
+    Returns
+    -------
+    a : jnp.ndarray
+        Shape (..., grid.num_theta // 2 + 1, grid.num_zeta)
+        Complex coefficients of 2D real FFT of ``f``.
+
+    """
+    if not is_reshaped:
+        f = grid.meshgrid_reshape(f, "rtz")
+    # real fft over poloidal since usually m > n
+    return rfft2(f, axes=(-1, -2), norm="forward")
+
+
+def _fourier_pest(grid, T, f, N, is_reshaped=False):
+    """Transform to PEST straight field line spectral domain.
+
+    Parameters
+    ----------
+    grid : Grid
+        Tensor-product grid in (θ, ζ) with uniformly spaced nodes [0, 2π) × [0, 2π/NFP).
+        Preferably power of 2 for ``grid.num_theta`` and ``grid.num_zeta``.
+    T : jnp.ndarray
+        Fourier transform of θ(ϑ,ϕ).
+    f : jnp.ndarray
+        Function evaluated on ``grid``.
+    N : int
+        Desired spectral resolution for ``f``. Preferably power of 2.
+
+    Returns
+    -------
+    a : jnp.ndarray
+        Fourier transform of f(ϑ,ϕ).
+
+    """
+    if not is_reshaped:
+        f = grid.meshgrid_reshape(f, "rtz")
+
+    # Compute θ at ϑ,ϕ fourier points and reshape to (num rho, num points).
+    theta = irfft2(T, (N, N), norm="forward").reshape(*T.shape[:-2], N**2)
+    zeta = jnp.broadcast_to(fourier_pts(N), (N, N)).ravel()
+
+    return rfft2(
+        interp_rfft2(
+            theta,
+            zeta,
+            f=f[..., jnp.newaxis, :, :],
+            domain1=(0, 2 * jnp.pi / grid.NFP),
+            axes=(-1, -2),
+        ).reshape(*T.shape[:-2], N, N),
+        norm="forward",
+    )
 
 
 # Warning: method must be specified as keyword argument.

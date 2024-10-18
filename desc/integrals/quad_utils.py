@@ -1,5 +1,6 @@
 """Utilities for quadratures."""
 
+from orthax.chebyshev import chebgauss, chebweight
 from orthax.legendre import legder, legval
 
 from desc.backend import eigh_tridiagonal, jnp, put
@@ -126,7 +127,7 @@ def tanh_sinh(deg, m=10):
 
     Returns
     -------
-    x, w : (jnp.ndarray, jnp.ndarray)
+    x, w : tuple[jnp.ndarray]
         Shape (deg, ).
         Quadrature points and weights.
 
@@ -161,7 +162,7 @@ def leggauss_lob(deg, interior_only=False):
 
     Returns
     -------
-    x, w : (jnp.ndarray, jnp.ndarray)
+    x, w : tuple[jnp.ndarray]
         Shape (deg, ).
         Quadrature points and weights.
 
@@ -208,7 +209,7 @@ def uniform(deg):
 
     Returns
     -------
-    x, w : (jnp.ndarray, jnp.ndarray)
+    x, w : tuple[jnp.ndarray]
         Shape (deg, ).
         Quadrature points and weights.
 
@@ -220,6 +221,28 @@ def uniform(deg):
     x = jnp.arange(-deg + 1, deg + 1, 2) / deg
     w = 2 / deg * jnp.ones(deg)
     return x, w
+
+
+def chebgauss1(deg):
+    """Gauss-Chebyshev quadrature of the first kind with implicit weighting.
+
+    Returns quadrature points xₖ and weights wₖ for the approximate evaluation
+    of the integral ∫₋₁¹ f(x) dx ≈ ∑ₖ wₖ f(xₖ) where f(x) = g(x) / √(1−x²).
+
+    Parameters
+    ----------
+    deg : int
+        Number of quadrature points.
+
+    Returns
+    -------
+    x, w : tuple[jnp.ndarray]
+        Shape (deg, ).
+        Quadrature points and weights.
+
+    """
+    x, w = chebgauss(deg)
+    return x, w / chebweight(x)
 
 
 def chebgauss2(deg):
@@ -235,7 +258,7 @@ def chebgauss2(deg):
 
     Returns
     -------
-    x, w : (jnp.ndarray, jnp.ndarray)
+    x, w : tuple[jnp.ndarray]
         Shape (deg, ).
         Quadrature points and weights.
 
@@ -264,7 +287,7 @@ def get_quadrature(quad, automorphism):
 
     Returns
     -------
-    x, w : (jnp.ndarray, jnp.ndarray)
+    x, w : tuple[jnp.ndarray]
         Quadrature points and weights.
 
     """

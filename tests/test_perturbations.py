@@ -13,8 +13,9 @@ from desc.objectives import (
     ToroidalCurrent,
     get_equilibrium_objective,
     get_fixed_boundary_constraints,
+    get_fixed_xsection_constraints,
 )
-from desc.perturbations import optimal_perturb, perturb
+from desc.perturbations import get_deltas, optimal_perturb, perturb
 
 
 @pytest.mark.regression
@@ -213,3 +214,52 @@ def test_perturb_axis():
     assert ax2.N == 0
     eq.axis = ax2
     assert eq.axis.N == 2
+
+
+@pytest.mark.unit
+def test_perturb_poincare():
+    """Test that perturbing the Poincare section."""
+    # TODO: make it actually test perturbation
+    eq = desc.examples.get("HELIOTRON")
+    eq_poin = Equilibrium(
+        xsection=eq.get_surface_at(zeta=0),
+        pressure=eq.pressure,
+        iota=eq.iota,
+        Psi=eq.Psi,  # flux (in Webers) within the last closed flux surface
+        NFP=eq.NFP,  # number of field periods
+        L=eq.L,  # radial spectral resolution
+        M=eq.M,  # poloidal spectral resolution
+        N=eq.N,  # toroidal spectral resolution
+        L_grid=eq.L_grid,  # real space radial resolution, slightly oversampled
+        M_grid=eq.M_grid,  # real space poloidal resolution, slightly oversampled
+        N_grid=eq.N_grid,  # real space toroidal resolution
+        sym=eq.sym,  # explicitly enforce stellarator symmetry
+        spectral_indexing=eq._spectral_indexing,
+    )
+
+    eq_poin.change_resolution(eq.L, eq.M, eq.N)
+    eq_poin.axis = eq_poin.get_axis()
+    eq_poin.surface = eq_poin.get_surface_at(rho=1)
+
+    eq_poin.L_lmn = eq_poin.L_lmn.at[:].set(0)
+    eq_poin.R_lmn = eq_poin.R_lmn.at[eq_poin.R_basis.get_idx(1, 1, 1)].set(0.1)
+    eq_poin.Z_lmn = eq_poin.Z_lmn.at[eq_poin.Z_basis.get_idx(1, -1, 1)].set(0.1)
+    eq_poin.xsection = eq_poin.get_surface_at(zeta=0)
+
+    surf1 = eq_poin.xsection
+    surf2 = eq.xsection
+
+    things1 = {"surface_poincare": surf1}
+    things2 = {"surface_poincare": surf2}
+
+    deltas = get_deltas(things1, things2)
+    constraints = get_fixed_xsection_constraints(eq=eq_poin)
+    objective = ObjectiveFunction(ForceBalance(eq_poin))
+
+    eq_poin.perturb(
+        objective=objective, constraints=constraints, deltas=deltas, tr_ratio=0.02
+    )
+
+    np.testing.assert_allclose(eq.Rp_lmn, eq_poin.Rp_lmn)
+    np.testing.assert_allclose(eq.Zp_lmn, eq_poin.Zp_lmn)
+    np.testing.assert_allclose(eq.Lp_lmn, eq_poin.Lp_lmn)

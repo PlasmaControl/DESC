@@ -41,6 +41,7 @@ from desc.objectives import (
     BootstrapRedlConsistency,
     BoundaryError,
     BScaleLength,
+    CoilArclengthVariance,
     CoilCurrentLength,
     CoilCurvature,
     CoilLength,
@@ -914,6 +915,7 @@ class TestObjectiveFunction:
         test(mixed_coils)
         test(nested_coils, grid=grid)
 
+    @pytest.mark.unit
     def test_coil_type_error(self):
         """Tests error when objective is not passed a coil."""
         curve = FourierPlanarCurve(r_n=2, basis="rpz")
@@ -1104,6 +1106,7 @@ class TestObjectiveFunction:
 
         # TODO: add more complex test case with a stellarator and/or MixedCoilSet
 
+    @pytest.mark.unit
     def test_quadratic_flux(self):
         """Test calculation of quadratic flux on the boundary."""
         t_field = ToroidalMagneticField(1, 1)
@@ -2274,6 +2277,7 @@ class TestComputeScalarResolution:
         # these require special logic
         BootstrapRedlConsistency,
         BoundaryError,
+        CoilArclengthVariance,
         CoilCurrentLength,
         CoilCurvature,
         CoilLength,
@@ -2642,12 +2646,13 @@ class TestComputeScalarResolution:
     @pytest.mark.parametrize(
         "objective",
         [
+            CoilArclengthVariance,
+            CoilCurrentLength,
+            CoilCurvature,
             CoilLength,
             CoilTorsion,
-            CoilCurvature,
-            CoilCurrentLength,
-            CoilSetMinDistance,
             CoilSetLinkingNumber,
+            CoilSetMinDistance,
         ],
     )
     def test_compute_scalar_resolution_coils(self, objective):
@@ -2681,6 +2686,7 @@ class TestObjectiveNaNGrad:
         BallooningStability,
         BootstrapRedlConsistency,
         BoundaryError,
+        CoilArclengthVariance,
         CoilLength,
         CoilCurrentLength,
         CoilCurvature,
@@ -2879,12 +2885,13 @@ class TestObjectiveNaNGrad:
     @pytest.mark.parametrize(
         "objective",
         [
+            CoilArclengthVariance,
+            CoilCurrentLength,
+            CoilCurvature,
             CoilLength,
             CoilTorsion,
-            CoilCurvature,
-            CoilCurrentLength,
-            CoilSetMinDistance,
             CoilSetLinkingNumber,
+            CoilSetMinDistance,
         ],
     )
     def test_objective_no_nangrad_coils(self, objective):
@@ -2979,6 +2986,7 @@ def test_asymmetric_normalization():
         assert np.all(np.isfinite(val))
 
 
+@pytest.mark.unit
 def test_objective_print_widths():
     """Test that the objective's name is shorter than max."""
     subclasses = _Objective.__subclasses__()
@@ -3007,6 +3015,7 @@ def test_objective_print_widths():
                 )
 
 
+@pytest.mark.unit
 def test_objective_docstring():
     """Test that the objective docstring and collect_docs are consistent."""
     objective_docs = _Objective.__doc__.rstrip()

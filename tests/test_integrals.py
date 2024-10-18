@@ -7,12 +7,13 @@ import pytest
 import quadax
 from jax import grad
 from matplotlib import pyplot as plt
-from numpy.polynomial.chebyshev import chebgauss, chebinterpolate, chebroots, chebweight
+from numpy.polynomial.chebyshev import chebinterpolate, chebroots
 from numpy.polynomial.legendre import leggauss
 from quadax import simpson
 from scipy import integrate
 from scipy.interpolate import CubicHermiteSpline
 from scipy.special import ellipe, ellipkm1
+from termcolor import colored
 from tests.test_plotting import tol_1d
 
 from desc.backend import jit, jnp
@@ -36,19 +37,21 @@ from desc.integrals import (
     surface_variance,
     virtual_casing_biot_savart,
 )
-from desc.integrals.basis import FourierChebyshevSeries, get_alpha
-from desc.integrals.bounce_integral import Bounce2DPEST
+from desc.integrals.basis import FourierChebyshevSeries
 from desc.integrals.bounce_utils import (
     _get_extrema,
     bounce_points,
+    get_alpha,
     get_pitch_inv_quad,
+    interp_fft_to_argmin,
     interp_to_argmin,
     interp_to_argmin_hard,
 )
-from desc.integrals.interp_utils import fourier_pts
+from desc.integrals.interp_utils import fourier_pts, polyder_vec
 from desc.integrals.quad_utils import (
     automorphism_sin,
     bijection_from_disc,
+    chebgauss1,
     chebgauss2,
     get_quadrature,
     grad_automorphism_sin,
@@ -929,12 +932,6 @@ class TestBouncePoints:
         np.testing.assert_allclose(z2, r[np.isclose(r, 0.24, atol=1e-1)])
 
 
-def _chebgauss1(deg):
-    x, w = chebgauss(deg)
-    w /= chebweight(x)
-    return x, w
-
-
 auto_sin = (automorphism_sin, grad_automorphism_sin)
 
 
@@ -979,7 +976,7 @@ class TestBounceQuadrature:
             (False, tanh_sinh(20), None),
             # Node density near boundary is 1/(1−x²).
             (True, leggauss(25), auto_sin),
-            (True, _chebgauss1(30), auto_sin),
+            (True, chebgauss1(30), auto_sin),
             # Lobatto nodes
             (False, leggauss_lob(8, interior_only=True), auto_sin),
             # Node density near boundary is 1/√(1−x²).
@@ -1003,10 +1000,10 @@ class TestBounceQuadrature:
         For the strongly singular bounce integrals, another cosine factor is preferred
         to supress the derivative (as expected from chain rule), so we need to use the
         sin automorphism. We choose to apply that map to ``leggauss`` instead of
-        ``_chebgauss1`` because the extra cosine term in ``_chebgauss1`` increases the
+        ``chebgauss1`` because the extra cosine term in ``chebgauss1`` increases the
         polynomial complexity of the integrand and suppresses the derivative too strong
         for a quadrature that already clusters near edge with density 1/(1−x²). This is
-        why ``_chebgauss1`` required more nodes in this test, and in general would
+        why ``chebgauss1`` required more nodes in this test, and in general would
         require more nodes for functions with more features.
 
         """
@@ -1057,6 +1054,7 @@ class TestBounceQuadrature:
             (True, _bumpy),
         ],
     )
+    @pytest.mark.unit
     def test_quad_compare(self, is_strong, B):
         """Compare quadratures in W-shaped wells."""
         x = np.linspace(-1, 1, 1000)
@@ -1074,38 +1072,36 @@ class TestBounceQuadrature:
 
         truth, info = quadax.quadts(func, interval=(-1, 1))
         print("\n" + 50 * "---" + f"\nTrue value: {truth}, neval: {info[1]}")
-        for n in [16, 32, 64, 128]:
-            # Uniform spacing quadratures.
+        for n in [8, 16, 32, 64, 128]:
             x, w = uniform(n)
             fx = func(x)
             trap = fx.dot(w)
             simp = simpson(y=fx, x=x)
-
-            # Node density near boundary is 1/√(1−x²).
-            # Default quadrature for weak singularities.
-            x, w = chebgauss2(n)
-            cheb2 = func(x).dot(w)
-
-            # Node density near boundary is 1/√(1−x²).
-            x, w = _chebgauss1(n)
-            cheb1 = func(x).dot(w)
-
-            # Node density near boundary is 1/(1−x²).
-            # Default quadrature for strong singularities.
             x, w = get_quadrature(leggauss(n), auto_sin)
             legs = func(x).dot(w)
-
-            # Node density near boundary > 1/(1−x²).
             x, w = tanh_sinh(n)
             tanh = func(x).dot(w)
 
             print(f"\nPoints: {n}")
-            print(f"Trapezoid: {trap:.12f}, Error: {abs(trap - truth):.2e}")
-            print(f"Simpson:   {simp:.12f}, Error: {abs(simp - truth):.2e}")
-            print(f"Cheb weak: {cheb2:.12f}, Error: {abs(cheb2 - truth):.2e}")
-            print(f"Cheb strg: {cheb1:.12f}, Error: {abs(cheb1 - truth):.2e}")
-            print(f"Legs strg: {legs:.12f}, Error: {abs(legs - truth):.2e}")
-            print(f"Tanh-sinh: {tanh:.12f}, Error: {abs(tanh - truth):.2e}")
+            print("Singularity = " + ("strong" if is_strong else "weak"))
+            print(f"Trapezoid:  {trap:.12f}, Error: {abs(trap - truth):.2e}")
+            print(f"Simpson:    {simp:.12f}, Error: {abs(simp - truth):.2e}")
+            print(
+                (colored("Legs sin:   ", "cyan") if is_strong else "Legs sin:   ")
+                + f"{legs:.12f}, Error: {abs(legs - truth):.2e}"
+            )
+            print(f"Tanh-sinh:  {tanh:.12f}, Error: {abs(tanh - truth):.2e}")
+            if is_strong:
+                x, w = chebgauss1(n)
+                cheb1 = func(x).dot(w)
+                print(f"Cheb strg:  {cheb1:.12f}, Error: {abs(cheb1 - truth):.2e}")
+            else:
+                x, w = chebgauss2(n)
+                cheb2 = func(x).dot(w)
+                print(
+                    colored("Cheb weak:  ", "cyan")
+                    + f"{cheb2:.12f}, Error: {abs(cheb2 - truth):.2e}"
+                )
 
     @staticmethod
     @partial(np.vectorize, excluded={0})
@@ -1645,6 +1641,48 @@ class TestBounce2D:
     def _example_denominator(B, pitch, zeta):
         return safediv(1, jnp.sqrt(jnp.abs(1 - pitch * B)))
 
+    # TODO: Improve this test like test_interp_to_argmin in TestBounce1D.
+    @pytest.mark.unit
+    def test_interp_fft_to_argmin(self):
+        """Test argmin interpolation."""  # noqa: D202
+
+        rho = np.linspace(0.1, 1, 6)
+        eq = get("HELIOTRON")
+        grid = Grid.create_meshgrid(
+            [rho, fourier_pts(eq.M_grid), fourier_pts(eq.N_grid) / eq.NFP],
+            period=(np.inf, 2 * np.pi, 2 * np.pi / eq.NFP),
+            NFP=eq.NFP,
+        )
+        data = eq.compute(
+            Bounce2D.required_names + ["min_tz |B|", "max_tz |B|", "1"], grid=grid
+        )
+        theta = Bounce2D.compute_theta(eq, X=8, Y=8, rho=rho)
+        bounce = Bounce2D(
+            grid,
+            data,
+            iota=grid.compress(data["iota"]),
+            theta=theta,
+            num_transit=2,
+            quad=leggauss(3),
+            check=True,
+            spline=True,
+        )
+        pitch_inv, _ = bounce.get_pitch_inv_quad(
+            min_B=grid.compress(data["min_tz |B|"]),
+            max_B=grid.compress(data["max_tz |B|"]),
+            num_pitch=10,
+        )
+        weight = interp_fft_to_argmin(
+            bounce._NFP,
+            bounce._c["T(z)"],
+            grid.meshgrid_reshape(data["1"], "rtz"),
+            bounce.points(pitch_inv),
+            bounce._c["knots"],
+            bounce._c["B(z)"],
+            polyder_vec(bounce._c["B(z)"]),
+        )
+        np.testing.assert_allclose(weight, 1)
+
     # TODO: Could test integration against bounce1d for this stellarator
     @pytest.mark.unit
     @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d * 4)
@@ -1681,6 +1719,7 @@ class TestBounce2D:
             num_transit=2,
             quad=leggauss(3),
             check=True,
+            spline=False,
         )
         pitch_inv, _ = bounce.get_pitch_inv_quad(
             min_B=grid.compress(data["min_tz |B|"]),
@@ -1744,50 +1783,20 @@ class TestBounce2D:
 
         # 10. Plotting
         fig, ax = bounce.plot(l, pitch_inv[l], include_legend=False, show=False)
-        return fig
 
-    @pytest.mark.unit
-    # @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d * 4)
-    def test_bounce2d_pest(self):
-        """Test that all the internal correctness checks pass for real example."""
-        # noqa: D202
-        # Suppose we want to compute a bounce average of the function
-        # f(ℓ) = (1 − λ|B|/2) * g_zz, where g_zz is the squared norm of the
-        # toroidal basis vector on some set of field lines specified by (ρ, α)
-        # coordinates. This is defined as
-        # [∫ f(ℓ) / √(1 − λ|B|) dℓ] / [∫ 1 / √(1 − λ|B|) dℓ]
-
-        # 1. Define python functions for the integrands. We do that above.
-        # 2. Pick flux surfaces and grid resolution.
-        rho = np.linspace(0.1, 1, 6)
-        eq = get("HELIOTRON")
-        grid = Grid.create_meshgrid(
-            [rho, fourier_pts(eq.M_grid), fourier_pts(eq.N_grid) / eq.NFP],
-            period=(np.inf, 2 * np.pi, 2 * np.pi / eq.NFP),
-            NFP=eq.NFP,
-        )
-        # 3. Compute input data.
-        data = eq.compute(
-            Bounce2D.required_names + ["min_tz |B|", "max_tz |B|", "g_zz"], grid=grid
-        )
-        # 4. Compute DESC coordinates of optimal interpolation nodes.
-        theta = Bounce2DPEST.compute_theta(eq, X=32, Y=32, rho=rho)
-        # 5. Make the bounce integration operator.
-        bounce = Bounce2DPEST(
+        # make sure tests pass when spline=True
+        b = Bounce2D(
             grid,
             data,
             iota=grid.compress(data["iota"]),
-            Y_B=32,
             theta=theta,
             num_transit=2,
-            quad=leggauss(3),
             check=True,
-            warn=False,
+            spline=True,
         )
-        phi = jnp.linspace(0, 4 * jnp.pi, 4000)
-        bounce.plot(1, phi)
-        bounce.plot_theta(1, phi)
-        bounce.plot(1, phi)
+        b.check_points(b.points(pitch_inv), pitch_inv, plot=False)
+
+        return fig
 
     @staticmethod
     def drift_num_integrand(cvdrift, gbdrift, B, pitch, zeta):

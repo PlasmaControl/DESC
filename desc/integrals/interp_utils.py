@@ -17,14 +17,22 @@ from desc.backend import dct, jnp, rfft, rfft2, take
 from desc.integrals.quad_utils import bijection_from_disc
 from desc.utils import Index, errorif, safediv
 
-# TODO: Boyd's method 𝒪(n²) instead of Chebyshev companion matrix 𝒪(n³).
+# TODO:
+#  1. Boyd's method 𝒪(n²) instead of Chebyshev companion matrix 𝒪(n³).
 #  John P. Boyd, Computing real roots of a polynomial in Chebyshev series
 #  form through subdivision. https://doi.org/10.1016/j.apnum.2005.09.007.
-#  Use that once to find extrema of |B| if Y_B > 64. Then to find roots
-#  of bounce points use the closed formula in Boyd's spectral methods
-#  section 19.6. Can isolate interval to search for root by observing
-#  whether B - 1/pitch changes sign at extrema. This is significantly
-#  cheaper and non-iterative, so jax and gpu will like it.
+#  Use that once to find extrema of |B| if Y_B > 64.
+#  2. Then to find roots of bounce points use the closed formula in Boyd's
+#  spectral methods section 19.6. Can isolate interval to search for root by
+#  observing whether B - 1/pitch changes sign at extrema. Only need to do
+#  evaluate Chebyshev series at quadrature points once, and can use that to
+#  compute the integral for every pitch. The integral will converge rapidly
+#  since a low order polynomial approximates |B| well in between adjacent
+#  extrema. This is significantly cheaper and non-iterative, so jax and gpu
+#  will like it.
+#  Implementing 1 and 2 will remove all eigenvalue solves from computation.
+#  2 is a larger improvement than 1.
+#  Implement this in later PR.
 chebroots_vec = jnp.vectorize(chebroots, signature="(m)->(n)")
 
 
@@ -112,7 +120,7 @@ def harmonic(a, n, axis=-1):
     return h
 
 
-def harmonic_vander(x, n, domain=(0, 2 * np.pi)):
+def harmonic_vander(x, n, domain=(0, 2 * jnp.pi)):
     """Nyquist trigonometric interpolant basis evaluated at ``x``.
 
     Parameters
@@ -144,7 +152,7 @@ def harmonic_vander(x, n, domain=(0, 2 * np.pi)):
 
 # TODO: For inverse transforms, use non-uniform fast transforms (NFFT).
 #   https://github.com/flatironinstitute/jax-finufft.
-#   Let spectral resolution be F, (e.g. F = M n1 for 2D transform),
+#   Let spectral resolution be F, (e.g. F = M N for 2D transform),
 #   and number of points (non-uniform) to evaluate be Q. A non-uniform
 #   fast transform cost is 𝒪([F+Q] log[F] log[1/ε]) where ε is the
 #   interpolation error term (depending on implementation how ε appears
@@ -152,10 +160,10 @@ def harmonic_vander(x, n, domain=(0, 2 * np.pi)):
 #   Note that for the inverse Chebyshev transforms, we can also use fast
 #   multipoint methods Chapter 10, https://doi.org/10.1017/CBO9781139856065.
 #   Unlike NFFTs, multipoint methods are exact and reduce to using FFTs.
-#   The cost is 𝒪([F+Q] łog²[F + Q]). This is a good candidate for evaluating
+#   The cost is 𝒪([F+Q] log²[F + Q]). This might be useful to evaluating
 #   |B|, since the integrands are not smooth functions of |B|, which we know
-#   as a Chebyshev series, and the nodes are packed more tightly near the edges,
-#   in particular for the strongly singular integrals.
+#   as a Chebyshev series, and the nodes are packed more tightly near the
+#   singular regions.
 
 
 def interp_rfft(xq, f, domain=(0, 2 * jnp.pi), axis=-1):
@@ -436,6 +444,30 @@ def idct_non_uniform(xq, a, n, axis=-1):
     n = jnp.arange(n)
     fq = jnp.linalg.vecdot(jnp.cos(n * jnp.arccos(xq)[..., jnp.newaxis]), a)
     return fq
+
+
+def _fourier(grid, f, is_reshaped=False):
+    """Transform to DESC spectral domain.
+
+    Parameters
+    ----------
+    grid : Grid
+        Tensor-product grid in (θ, ζ) with uniformly spaced nodes [0, 2π) × [0, 2π/NFP).
+        Preferably power of 2 for ``grid.num_theta`` and ``grid.num_zeta``.
+    f : jnp.ndarray
+        Function evaluated on ``grid``.
+
+    Returns
+    -------
+    a : jnp.ndarray
+        Shape (..., grid.num_theta // 2 + 1, grid.num_zeta)
+        Complex coefficients of 2D real FFT of ``f``.
+
+    """
+    if not is_reshaped:
+        f = grid.meshgrid_reshape(f, "rtz")
+    # real fft over poloidal since usually m > n
+    return rfft2(f, axes=(-1, -2), norm="forward")
 
 
 # Warning: method must be specified as keyword argument.

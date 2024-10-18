@@ -1043,10 +1043,8 @@ class LinearGrid(_Grid):
         """
         self._NFP = check_posint(NFP, "NFP", False)
         self._period = (np.inf, 2 * np.pi, 2 * np.pi / self._NFP)
-        # FIXME:
+        # TODO:
         #  https://github.com/PlasmaControl/DESC/pull/1204#pullrequestreview-2246771337
-        #  Quantities like alpha, grad(alpha), etc. are computed incorrectly at
-        #  phi > 2pi / NFP and theta > 2pi / NFP.
         axis = bool(axis)
         endpoint = bool(endpoint)
         theta_period = self.period[1]

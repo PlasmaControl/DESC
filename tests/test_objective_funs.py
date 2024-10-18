@@ -68,6 +68,7 @@ from desc.objectives import (
     Pressure,
     PrincipalCurvature,
     QuadraticFlux,
+    QuadraticFluxMinimizingSurface,
     QuasisymmetryBoozer,
     QuasisymmetryTripleProduct,
     QuasisymmetryTwoTerm,
@@ -1113,7 +1114,7 @@ class TestObjectiveFunction:
         eq = load("./tests/inputs/vacuum_circular_tokamak.h5")
         obj = QuadraticFlux(eq, t_field)
         obj.build(eq, verbose=2)
-        f = obj.compute(field_params=t_field.params_dict)
+        f = obj.compute(params_1=t_field.params_dict)
         np.testing.assert_allclose(f, 0, rtol=1e-14, atol=1e-14)
 
         # test non-axisymmetric surface
@@ -1141,7 +1142,7 @@ class TestObjectiveFunction:
         )[0]
         obj.build(eq)
         dA = eq.compute("|e_theta x e_zeta|", grid=eval_grid)["|e_theta x e_zeta|"]
-        f = obj.compute(field_params=t_field.params_dict)
+        f = obj.compute(params_1=t_field.params_dict)
 
         np.testing.assert_allclose(f, Bnorm * dA, atol=2e-4, rtol=1e-2)
 
@@ -1158,10 +1159,47 @@ class TestObjectiveFunction:
         obj = QuadraticFlux(eq, t_field, vacuum=True, eval_grid=eval_grid)
         Bnorm = t_field.compute_Bnormal(eq.surface, eval_grid=eval_grid)[0]
         obj.build(eq)
-        f = obj.compute(field_params=t_field.params_dict)
+        f = obj.compute(params_1=t_field.params_dict)
         dA = eq.compute("|e_theta x e_zeta|", grid=eval_grid)["|e_theta x e_zeta|"]
         # check that they're the same since we set B_plasma = 0
         np.testing.assert_allclose(f, Bnorm * dA, atol=1e-14)
+
+    @pytest.mark.unit
+    def test_quadratic_flux_minimizing_surface(self):
+        """Test calculation of quadratic flux on a surface."""
+        t_field = ToroidalMagneticField(1, 1)
+
+        # test that torus (axisymmetric) Bnorm is exactly 0
+        eq = load("./tests/inputs/vacuum_circular_tokamak.h5")
+        surf = eq.surface
+        obj = QuadraticFluxMinimizingSurface(surf, t_field)
+        obj.build(eq, verbose=2)
+        f = obj.compute(params_1=surf.params_dict, params_2=t_field.params_dict)
+        np.testing.assert_allclose(f, 0, rtol=1e-14, atol=1e-14)
+
+        # test non-axisymmetric surface
+        eq = desc.examples.get("precise_QA", "all")[0]
+        surf = eq.surface
+        surf.change_resolution(4, 4)
+        eval_grid = LinearGrid(
+            rho=np.array([1.0]),
+            M=surf.M * 2,
+            N=surf.N * 2,
+            NFP=eq.NFP,
+            sym=False,
+        )
+
+        obj = QuadraticFluxMinimizingSurface(
+            surf, t_field, eval_grid=eval_grid, field_fixed=True
+        )
+        Bnorm = t_field.compute_Bnormal(
+            eq.surface, eval_grid=eval_grid, source_grid=eval_grid
+        )[0]
+        obj.build(surf)
+        dA = surf.compute("|e_theta x e_zeta|", grid=eval_grid)["|e_theta x e_zeta|"]
+        f = obj.compute(params_1=surf.params_dict)
+
+        np.testing.assert_allclose(f, Bnorm * dA, atol=2e-4, rtol=1e-2)
 
     @pytest.mark.unit
     def test_toroidal_flux(self):
@@ -1195,8 +1233,18 @@ class TestObjectiveFunction:
 
         test(eq, field, psi_from_field)
         test(eq, field, psi_from_field, rtol=1e-3)
+
+        with pytest.raises(TypeError, match="Equilibrium"):
+            ToroidalFlux(eq, field, qfm_surface=True)
+        with pytest.raises(ValueError, match="qfm_surface=False"):
+            ToroidalFlux(eq, field, qfm_surface=False, field_fixed=True)
+
         # test on field with no vector potential
-        test(eq, PoloidalMagneticField(1, 1, 1), 0.0)
+        pfield = PoloidalMagneticField(1, 1, 1)
+        test(eq, pfield, 0.0)
+        with pytest.raises(ValueError, match="vector potential"):
+            obj = ToroidalFlux(eq.surface, pfield, qfm_surface=True)
+            obj.build()
 
     @pytest.mark.unit
     def test_coil_linking_number(self):

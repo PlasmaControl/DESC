@@ -18,7 +18,250 @@ from desc.compute.utils import (
 from desc.grid import LinearGrid, QuadratureGrid, _Grid
 from desc.io import IOAble
 from desc.optimizable import Optimizable, optimizable_parameter
-from desc.utils import errorif
+
+
+class UmbilicCurve(IOAble, Optimizable, ABC):
+    """Abstract base class for 1D umbilic curves in 3D space."""
+
+    _io_attrs_ = ["_name"]
+
+    def __init__(self, name=""):
+        self._name = name
+
+    def _set_up(self):
+        """Set things after loading."""
+        if hasattr(self, "_NFP"):
+            self._NFP = int(self._NFP)
+        if not hasattr(self, "_shift"):
+            self.shift
+        if not hasattr(self, "_rotmat"):
+            self.rotmat
+
+    @optimizable_parameter
+    @property
+    def shift(self):
+        """Displacement of curve in X, Y, Z."""
+        return self.__dict__.setdefault("_shift", jnp.array([0, 0, 0], dtype=float))
+
+    @shift.setter
+    def shift(self, new):
+        if len(new) == 3:
+            self._shift = jnp.asarray(new)
+        else:
+            raise ValueError("shift should be a 3 element vector, got {}".format(new))
+
+    @optimizable_parameter
+    @property
+    def rotmat(self):
+        """Rotation matrix of curve in X, Y, Z."""
+        return self.__dict__.setdefault("_rotmat", jnp.eye(3, dtype=float).flatten())
+
+    @rotmat.setter
+    def rotmat(self, new):
+        if len(new) == 9:
+            self._rotmat = jnp.asarray(new)
+        else:
+            self._rotmat = jnp.asarray(new.flatten())
+
+    @property
+    def name(self):
+        """Name of the curve."""
+        return self.__dict__.setdefault("_name", "")
+
+    @name.setter
+    def name(self, new):
+        self._name = str(new)
+
+    def compute(
+        self,
+        names,
+        grid=None,
+        params=None,
+        transforms=None,
+        data=None,
+        override_grid=True,
+        **kwargs,
+    ):
+        """Compute the quantity given by name on grid.
+
+        Parameters
+        ----------
+        names : str or array-like of str
+            Name(s) of the quantity(s) to compute.
+        grid : Grid or int, optional
+            Grid of coordinates to evaluate at. Defaults to a Linear grid.
+            If an integer, uses that many equally spaced points.
+        params : dict of ndarray
+            Parameters from the equilibrium. Defaults to attributes of self.
+        transforms : dict of Transform
+            Transforms for R, Z, lambda, etc. Default is to build from grid
+        data : dict of ndarray
+            Data computed so far, generally output from other compute functions.
+            Any vector v = v¹ R̂ + v² ϕ̂ + v³ Ẑ should be given in components
+            v = [v¹, v², v³] where R̂, ϕ̂, Ẑ are the normalized basis vectors
+            of the cylindrical coordinates R, ϕ, Z.
+        override_grid : bool
+            If True, override the user supplied grid if necessary and use a full
+            resolution grid to compute quantities and then downsample to user requested
+            grid. If False, uses only the user specified grid, which may lead to
+            inaccurate values for surface or volume averages.
+
+        Returns
+        -------
+        data : dict of ndarray
+            Computed quantity and intermediate variables.
+
+        """
+        if isinstance(names, str):
+            names = [names]
+        if grid is None:
+            NFP_umbilic_factor = (
+                self.NFP_umbilic_factor
+                if (
+                    hasattr(self, "NFP_umbilic_factor")
+                    and self.NFP_umbilic_factor is not None
+                )
+                else 1
+            )
+            grid = LinearGrid(
+                N=2 * self.N * getattr(self, "NFP", 1) + 5,
+                NFP_umbilic_factor=int(NFP_umbilic_factor),
+            )
+        elif isinstance(grid, numbers.Integral):
+            NFP = self.NFP if hasattr(self, "NFP") else 1
+            NFP_umbilic_factor = (
+                self.NFP_umbilic_factor if hasattr(self, "NFP_umbilic_factor") else 1
+            )
+            grid = LinearGrid(
+                N=grid, NFP=NFP, NFP_umbilic_factor=NFP_umbilic_factor, endpoint=False
+            )
+        elif hasattr(grid, "NFP"):
+            NFP = grid.NFP
+        else:
+            raise TypeError(
+                "must pass in a Grid object or an integer for argument grid!"
+                f"instead got type {type(grid)}",
+            )
+
+        if params is None:
+            params = get_params(names, obj=self, basis=kwargs.get("basis", "rpz"))
+        if transforms is None:
+            transforms = get_transforms(
+                names,
+                obj=self,
+                grid=grid,
+                jitable=True,
+            )
+        if data is None:
+            data = {}
+        profiles = {}
+
+        p = _parse_parameterization(self)
+        deps = list(set(get_data_deps(names, obj=p) + names))
+        dep0d = [
+            dep
+            for dep in deps
+            if (data_index[p][dep]["coordinates"] == "") and (dep not in data)
+        ]
+        calc0d = bool(len(dep0d))
+        # see if the grid we're already using will work for desired qtys
+        if calc0d and (grid.N >= 2 * self.N + 5) and isinstance(grid, LinearGrid):
+            calc0d = False
+
+        if calc0d and override_grid:
+            grid0d = LinearGrid(N=2 * self.N * getattr(self, "NFP", 1) + 5)
+            data0d = compute_fun(
+                self,
+                dep0d,
+                params=params,
+                transforms=get_transforms(
+                    dep0d,
+                    obj=self,
+                    grid=grid0d,
+                    jitable=True,
+                    **kwargs,
+                ),
+                profiles={},
+                data=None,
+                **kwargs,
+            )
+            # these should all be 0d quantities so don't need to compress/expand
+            data0d = {key: val for key, val in data0d.items() if key in dep0d}
+            data.update(data0d)
+
+        data = compute_fun(
+            self,
+            names,
+            params=params,
+            transforms=transforms,
+            profiles=profiles,
+            data=data,
+            **kwargs,
+        )
+        return data
+
+    def translate(self, displacement=[0, 0, 0]):
+        """Translate the curve by a rigid displacement in X,Y,Z coordinates."""
+        self.shift = self.shift + jnp.asarray(displacement)
+
+    def flip(self, normal=[0, 0, 1]):
+        """Flip the curve about the plane with specified normal in X,Y,Z coordinates."""
+        F = reflection_matrix(normal)
+        self.rotmat = (F @ self.rotmat.reshape(3, 3)).flatten()
+        self.shift = self.shift @ F.T
+
+    def __repr__(self):
+        """Get the string form of the object."""
+        return (
+            type(self).__name__
+            + " at "
+            + str(hex(id(self)))
+            + " (name={})".format(self.name)
+        )
+
+    def to_FourierUmbilic(
+        self, N=10, grid=None, NFP=None, NFP_umbilic_factor=1, sym=False, name=""
+    ):
+        """Convert Curve to FourierRZCurve representation.
+
+        Note that some types of curves may not be representable in this basis.
+
+        Parameters
+        ----------
+        N : int
+            Fourier resolution of the new A representation.
+        grid : Grid, int or None
+            Grid used to evaluate curve coordinates on to fit with FourierRZCurve.
+            If an integer, uses that many equally spaced points.
+        NFP : int
+            Number of field periods, the curve will have a discrete toroidal symmetry
+            according to NFP.
+        sym : bool, optional
+            Whether the curve is stellarator-symmetric or not. Default is False.
+        name : str
+            name for this curve
+
+        Returns
+        -------
+        curve : FourierRZCurve
+            New representation of the curve parameterized by Fourier series for R,Z.
+
+        """
+        from .umbiliccurve import FourierUmbilicCurve
+
+        NFP = 1 or NFP
+        if grid is None:
+            grid = LinearGrid(N=2 * N + 1)
+        coords = self.compute("A", grid=grid, basis="rtz")["A"]
+        return FourierUmbilicCurve.from_values(
+            coords,
+            N=N,
+            NFP=NFP,
+            NFP_umbilic_factor=NFP_umbilic_factor,
+            basis="rtz",
+            name=name,
+            sym=sym,
+        )
 
 
 class Curve(IOAble, Optimizable, ABC):
@@ -118,14 +361,33 @@ class Curve(IOAble, Optimizable, ABC):
         if isinstance(names, str):
             names = [names]
         if grid is None:
-            grid = LinearGrid(N=2 * self.N * getattr(self, "NFP", 1) + 5)
+            NFP_umbilic_factor = (
+                self.NFP_umbilic_factor
+                if (
+                    hasattr(self, "NFP_umbilic_factor")
+                    and self.NFP_umbilic_factor is not None
+                )
+                else 1
+            )
+            grid = LinearGrid(
+                N=2 * self.N * getattr(self, "NFP", 1) + 5,
+                NFP_umbilic_factor=int(NFP_umbilic_factor),
+            )
         elif isinstance(grid, numbers.Integral):
-            grid = LinearGrid(N=grid)
-        errorif(
-            not isinstance(grid, _Grid),
-            TypeError,
-            f"grid argument must be a Grid object or an integer, got type {type(grid)}",
-        )
+            NFP = self.NFP if hasattr(self, "NFP") else 1
+            NFP_umbilic_factor = (
+                self.NFP_umbilic_factor if hasattr(self, "NFP_umbilic_factor") else 1
+            )
+            grid = LinearGrid(
+                N=grid, NFP=NFP, NFP_umbilic_factor=NFP_umbilic_factor, endpoint=False
+            )
+        elif hasattr(grid, "NFP"):
+            NFP = grid.NFP
+        else:
+            raise TypeError(
+                "must pass in a Grid object or an integer for argument grid!"
+                f"instead got type {type(grid)}",
+            )
 
         if params is None:
             params = get_params(names, obj=self, basis=kwargs.get("basis", "rpz"))
@@ -537,7 +799,12 @@ class Surface(IOAble, Optimizable, ABC):
             ):
                 calc0d = False
             else:
-                grid0d = QuadratureGrid(L=2 * self.L + 5, M=2 * self.M + 5, N=0, NFP=1)
+                grid0d = QuadratureGrid(
+                    L=2 * self.L + 5,
+                    M=2 * self.M + 5,
+                    N=0,
+                    NFP=1,
+                )
                 grid0d._nodes[:, 2] = self.zeta
 
         if calc0d and override_grid:

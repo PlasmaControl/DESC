@@ -16,7 +16,7 @@ from termcolor import colored
 
 from desc.backend import sign
 from desc.basis import fourier, zernike_radial_poly
-from desc.coils import CoilSet, _Coil
+from desc.coils import CoilSet
 from desc.compute import data_index, get_transforms
 from desc.compute.utils import _parse_parameterization
 from desc.equilibrium.coords import map_coordinates
@@ -222,6 +222,7 @@ def _get_grid(**kwargs):
         "rho": np.array([1.0]),
         "theta": np.array([0.0]),
         "zeta": np.array([0.0]),
+        "NFP_umbilic_factor": int(1),
     }
     for key in kwargs.keys():
         if key in grid_args.keys():
@@ -494,13 +495,21 @@ def plot_1d(eq, name, grid=None, log=False, ax=None, return_data=False, **kwargs
                 log=log,
                 ax=ax,
                 return_data=return_data,
+                grid=grid,
                 **kwargs,
             )
         rho = grid.nodes[:, 0]
         if not np.all(np.isclose(rho, rho[0])):
             # rho nodes are not constant, so user must be plotting against rho
             return plot_fsa(
-                eq, name, rho=rho, log=log, ax=ax, return_data=return_data, **kwargs
+                eq,
+                name,
+                rho=rho,
+                log=log,
+                ax=ax,
+                return_data=return_data,
+                grid=grid,
+                **kwargs,
             )
 
     elif data_index[parameterization][name]["coordinates"] == "s":  # curve qtys
@@ -1104,6 +1113,7 @@ def plot_fsa(  # noqa: C901
     norm_F=False,
     ax=None,
     return_data=False,
+    grid=None,
     **kwargs,
 ):
     """Plot flux surface averages of quantities.
@@ -1141,7 +1151,10 @@ def plot_fsa(  # noqa: C901
     ax : matplotlib AxesSubplot, optional
         Axis to plot on.
     return_data : bool
-        If True, return the data plotted as well as fig,ax
+        if True, return the data plotted as well as fig,ax
+    grid : _Grid
+        Grid to compute name on. If provided, the parameters
+        ``rho``, ``M``, and ``N`` are ignored.
     **kwargs : dict, optional
         Specify properties of the figure, axis, and plot appearance e.g.::
 
@@ -1179,22 +1192,24 @@ def plot_fsa(  # noqa: C901
         fig, ax = plot_fsa(eq, "B_theta", with_sqrt_g=False)
 
     """
-    if np.isscalar(rho) and (int(rho) == rho):
-        rho = np.linspace(0, 1, rho + 1)
-    rho = np.atleast_1d(rho)
     if M is None:
         M = eq.M_grid
     if N is None:
         N = eq.N_grid
+    if grid is None:
+        if np.isscalar(rho) and (int(rho) == rho):
+            rho = np.linspace(0, 1, rho + 1)
+        rho = np.atleast_1d(rho)
+        grid = LinearGrid(M=M, N=N, NFP=eq.NFP, sym=eq.sym, rho=rho)
+    else:
+        rho = grid.compress(grid.nodes[:, 0])
+
     linecolor = kwargs.pop("linecolor", colorblind_colors[0])
     ls = kwargs.pop("ls", "-")
     lw = kwargs.pop("lw", 1)
     fig, ax = _format_ax(ax, figsize=kwargs.pop("figsize", (4, 4)))
 
     label = kwargs.pop("label", None)
-
-    grid = LinearGrid(M=M, N=N, NFP=eq.NFP, rho=rho)
-
     p = "desc.equilibrium.equilibrium.Equilibrium"
     if "<" + name + ">" in data_index[p]:
         # If we identify the quantity to plot as something in data_index, then
@@ -1987,7 +2002,9 @@ def plot_boundary(eq, phi=None, plot_axis=True, ax=None, return_data=False, **kw
 
     phi = (1 if eq.N == 0 else 4) if phi is None else phi
     if isinstance(phi, numbers.Integral):
-        phi = np.linspace(0, 2 * np.pi / eq.NFP, phi, endpoint=False)
+        phi = np.linspace(
+            0, 2 * np.pi / eq.NFP, phi, endpoint=False
+        )  # +1 to include pi and 2pi
     phi = np.atleast_1d(phi)
     nphi = len(phi)
     # don't plot axis for FourierRZToroidalSurface, since it's not defined.
@@ -1997,15 +2014,17 @@ def plot_boundary(eq, phi=None, plot_axis=True, ax=None, return_data=False, **kw
     grid_kwargs = {"NFP": 1, "rho": rho, "theta": 100, "zeta": phi}
     grid = _get_grid(**grid_kwargs)
     nr, nt, nz = grid.num_rho, grid.num_theta, grid.num_zeta
+    coords = map_coordinates(
+        eq,
+        grid.nodes,
+        ["rho", "theta", "phi"],
+        ["rho", "theta", "zeta"],
+        period=(np.inf, 2 * np.pi, 2 * np.pi),
+        guess=grid.nodes,
+    )
+
     grid = Grid(
-        map_coordinates(
-            eq,
-            grid.nodes,
-            ["rho", "theta", "phi"],
-            ["rho", "theta", "zeta"],
-            period=(np.inf, 2 * np.pi, 2 * np.pi),
-            guess=grid.nodes,
-        ),
+        coords,
         sort=False,
     )
 
@@ -2474,11 +2493,6 @@ def plot_coils(coils, grid=None, fig=None, return_data=False, **kwargs):
         len(kwargs) != 0,
         ValueError,
         f"plot_coils got unexpected keyword argument: {kwargs.keys()}",
-    )
-    errorif(
-        not isinstance(coils, _Coil),
-        ValueError,
-        "Expected `coils` to be of type `_Coil`, instead got type" f" {type(coils)}",
     )
 
     if not isinstance(lw, (list, tuple)):

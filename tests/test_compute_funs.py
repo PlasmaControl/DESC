@@ -6,6 +6,7 @@ from scipy.signal import convolve2d
 
 from desc.compute import rpz2xyz_vec
 from desc.equilibrium import Equilibrium
+from desc.equilibrium.coords import get_rtz_grid
 from desc.examples import get
 from desc.geometry import FourierRZToroidalSurface
 from desc.grid import LinearGrid
@@ -1465,6 +1466,7 @@ def test_iota_components():
     np.testing.assert_allclose(data_c["iota vacuum"], 0)
 
     # vacuum stellarator, so all rotational transform should be from the external field
+    # with pytest.warns(RuntimeWarning):  # because eq.NFP_umbilic_factor is undefined
     eq = get("ESTELL")
     grid = LinearGrid(L=100, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, axis=True)
     data = eq.compute(["iota", "iota current", "iota vacuum"], grid)
@@ -1568,4 +1570,51 @@ def test_parallel_grad():
         * data["B^zeta_z|r,a"]
         * np.sign(data["B^zeta"])
         / data["B^zeta"] ** 2,
+    )
+
+
+@pytest.mark.unit
+def test_parallel_grad_fd(DummyStellarator):
+    """Test that the parallel gradients match with numerical gradients."""
+    eq = load(load_from=str(DummyStellarator["output_path"]), file_format="hdf5")
+    grid = get_rtz_grid(
+        eq,
+        0.5,
+        0,
+        np.linspace(0, 2 * np.pi, 50),
+        coordinates="raz",
+        period=(np.inf, 2 * np.pi, np.inf),
+    )
+    data = eq.compute(
+        [
+            "|B|",
+            "|B|_z|r,a",
+            "|e_zeta|r,a|",
+            "|e_zeta|r,a|_z|r,a",
+            "B^zeta",
+            "B^zeta_z|r,a",
+        ],
+        grid=grid,
+    )
+    dz = grid.source_grid.spacing[:, 2]
+    fd = np.convolve(data["|B|"], FD_COEF_1_4, "same") / dz
+    np.testing.assert_allclose(
+        data["|B|_z|r,a"][2:-2],
+        fd[2:-2],
+        rtol=1e-2,
+        atol=1e-2 * np.mean(np.abs(data["|B|_z|r,a"])),
+    )
+    fd = np.convolve(data["|e_zeta|r,a|"], FD_COEF_1_4, "same") / dz
+    np.testing.assert_allclose(
+        data["|e_zeta|r,a|_z|r,a"][2:-2],
+        fd[2:-2],
+        rtol=1e-2,
+        atol=1e-2 * np.mean(np.abs(data["|e_zeta|r,a|_z|r,a"])),
+    )
+    fd = np.convolve(data["B^zeta"], FD_COEF_1_4, "same") / dz
+    np.testing.assert_allclose(
+        data["B^zeta_z|r,a"][2:-2],
+        fd[2:-2],
+        rtol=1e-2,
+        atol=1e-2 * np.mean(np.abs(data["B^zeta_z|r,a"])),
     )

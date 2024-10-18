@@ -58,7 +58,7 @@ def automorphism_sin(x, s=0, m=10):
     """[-1, 1] ∋ x ↦ y ∈ [−1, 1].
 
     This map increases node density near the boundary by the asymptotic factor
-    1/√(1−x²) and adds a √(1−x²) factor to the integrand.
+    1/√(1−x²) and adds a cosine factor to the integrand.
 
     Parameters
     ----------

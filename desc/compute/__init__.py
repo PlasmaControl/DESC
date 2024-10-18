@@ -35,10 +35,12 @@ from . import (
     _field,
     _geometry,
     _metric,
+    _neoclassical,
     _omnigenity,
     _profiles,
     _stability,
     _surface,
+    _umbiliccurve,
 )
 from .data_index import all_kwargs, allowed_kwargs, data_index
 from .geom_utils import rpz2xyz, rpz2xyz_vec, xyz2rpz, xyz2rpz_vec

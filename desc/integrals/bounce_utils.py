@@ -1,14 +1,25 @@
 """Utilities and functional programming interface for bounce integrals."""
 
 import numpy as np
-from interpax import PPoly
+from interpax import CubicSpline, PPoly
 from matplotlib import pyplot as plt
 
-from desc.backend import imap, jnp, softargmax
-from desc.integrals.basis import _add2legend, _in_epigraph_and, _plot_intersect
+from desc.backend import dct, imap, jnp, softargmax
+from desc.integrals.basis import (
+    FourierChebyshevSeries,
+    PiecewiseChebyshevSeries,
+    _add2legend,
+    _in_epigraph_and,
+    _plot_intersect,
+)
 from desc.integrals.interp_utils import (
+    cheb_from_dct,
+    cheb_pts,
+    idct_non_uniform,
     interp1d_Hermite_vec,
     interp1d_vec,
+    interp_rfft2,
+    irfft2_non_uniform,
     polyroot_vec,
     polyval_vec,
 )
@@ -207,14 +218,18 @@ def bounce_points(
 
 
 def _set_default_plot_kwargs(kwargs):
+    vlabel = r"$\vert B \vert$"
     kwargs.setdefault(
         "title",
-        r"Intersects $\zeta$ in epigraph($\vert B \vert$) s.t. "
-        r"$\vert B \vert(\zeta) = 1/\lambda$",
+        r"Intersects $\zeta$ in epigraph("
+        + vlabel
+        + ") s.t. "
+        + vlabel
+        + r"$(\zeta) = 1/\lambda$",
     )
     kwargs.setdefault("klabel", r"$1/\lambda$")
     kwargs.setdefault("hlabel", r"$\zeta$")
-    kwargs.setdefault("vlabel", r"$\vert B \vert$")
+    kwargs.setdefault("vlabel", vlabel)
     return kwargs
 
 
@@ -574,7 +589,8 @@ def _get_extrema(knots, g, dg_dz, sentinel=jnp.nan):
     g_ext = flatten_matrix(polyval_vec(x=ext, c=g[..., jnp.newaxis, :]))
     # Transform out of local power basis expansion.
     ext = flatten_matrix(ext + knots[:-1, jnp.newaxis])
-    assert ext.shape == g_ext.shape and ext.shape[-1] == g.shape[-2] * (g.shape[-1] - 2)
+    assert ext.shape == g_ext.shape
+    assert ext.shape[-1] == g.shape[-2] * (g.shape[-1] - 2)
     return ext, g_ext
 
 
@@ -726,7 +742,7 @@ def interp_to_argmin_hard(h, points, knots, g, dg_dz, method="cubic"):
 
 def plot_ppoly(
     ppoly,
-    num=1000,
+    num=5000,
     z1=None,
     z2=None,
     k=None,
@@ -824,3 +840,294 @@ def plot_ppoly(
         plt.show()
         plt.close()
     return fig, ax
+
+
+# TODO: Generalize this beyond ζ = ϕ or just map to Clebsch with ϕ.
+def get_alpha(alpha_0, iota, num_transit, period):
+    """Get sequence of poloidal coordinates A = (α₀, α₁, …, αₘ₋₁) of field line.
+
+    Parameters
+    ----------
+    alpha_0 : float
+        Starting field line poloidal label.
+    iota : jnp.ndarray
+        Shape (iota.size, ).
+        Rotational transform normalized by 2π.
+    num_transit : float
+        Number of ``period``s to follow field line.
+    period : float
+        Toroidal period after which to update label.
+
+    Returns
+    -------
+    alpha : jnp.ndarray
+        Shape (iota.size, num_transit).
+        Sequence of poloidal coordinates A = (α₀, α₁, …, αₘ₋₁) that specify field line.
+
+    """
+    # Δϕ (∂α/∂ϕ) = Δϕ ι̅ = Δϕ ι/2π = Δϕ data["iota"]
+    alpha = alpha_0 + period * jnp.expand_dims(iota, -1) * jnp.arange(num_transit)
+    return alpha
+
+
+def fourier_chebyshev(theta, iota, alpha, num_transit):
+    """Parameterize θ along field lines ``alpha``.
+
+    Parameters
+    ----------
+    theta : jnp.ndarray
+        Shape (L, M, N) or (M, N).
+        DESC coordinates θ sourced from the Clebsch coordinates
+        ``FourierChebyshevSeries.nodes(M,N,domain=(0,2*jnp.pi))``.
+    iota : jnp.ndarray
+        Shape (L, ).
+        Rotational transform.
+    alpha : float
+        Starting field line poloidal label.
+    num_transit : int
+        Number of toroidal transits to follow field line.
+
+    Returns
+    -------
+    T : PiecewiseChebyshevSeries
+        Set of 1D Chebyshev spectral coefficients of θ along field line.
+        {θ_α : ζ ↦ θ(α, ζ) | α ∈ A} where A = (α₀, α₁, …, αₘ₋₁) is the same
+        field line as ``alpha``.
+
+    Notes
+    -----
+    The field line label α changes discontinuously, so the approximation
+    g defined with basis function in (α, ζ) coordinates to some continuous
+    function f does not guarantee continuity between cuts of the field line
+    until full convergence of g to f.
+
+    Note if g were defined with basis functions in straight field line
+    coordinates, then continuity between cuts of the field line, as
+    determined by the straight field line coordinates (ϑ, ζ), is
+    guaranteed even with incomplete convergence (because the
+    parameters (ϑ, ζ) change continuously along the field line).
+
+    Do not interpret this as superior function approximation.
+    Indeed, if g is defined with basis functions in (α, ζ) coordinates, then
+    g(α=α₀, ζ) will sample the approximation to f(α=α₀, ζ) for the full domain in ζ.
+    This holds even with incomplete convergence of g to f.
+    However, if g is defined with basis functions in (ϑ, ζ) coordinates, then
+    g(ϑ(α=α₀,ζ), ζ) will sample the approximation to f(α=α₀ ± ε, ζ) with ε → 0 as
+    g converges to f.
+
+    (Visually, the small discontinuity apparent in g(α, ζ) at cuts of the field
+    line will not be visible in g(ϑ, ζ) because when moving along the field line
+    with g(ϑ, ζ) one is continuously flowing away from the starting field line,
+    (whereas g(α, ζ) has to "decide" at the cut what the next field line is).
+    (If full convergence is difficult to achieve, then in the context of surface
+    averaging bounce integrals, function approximation in (α, ζ) coordinates
+    might be preferable because most of the bounce integrals do not stretch
+    across toroidal transits).)
+
+    Note that if g is an unbounded function, as all coordinates are, then
+    it is impossible to approximate it with a finite number of periodic
+    basis functions, so we are forced to use a Fourier Chebyshev series to
+    interpolate θ anyway.
+
+    We explicitly enforce continuity of our approximation of θ between
+    cuts to short-circuit the convergence of the Fourier series for θ.
+    This works to remove the small discontinuity between cuts of the field line
+    because the first cut is on α=0, which is a knot of the Fourier series, and
+    the Chebyshev points include a knot near endpoints, so θ at the next cut of
+    the field line is known with precision.
+
+    """
+    # peeling off field lines
+    alpha = get_alpha(alpha, iota, num_transit, 2 * jnp.pi)
+    # Evaluating set of single variable maps is more efficient than evaluating
+    # multivariable map, so we project θ to a set of Chebyshev series.
+    T = FourierChebyshevSeries(f=theta, domain=(0, 2 * jnp.pi)).compute_cheb(alpha)
+    T.stitch()
+    assert T.X == num_transit
+    assert T.Y == theta.shape[-1]
+    return T
+
+
+def chebyshev(n0, n1, NFP, T, f, Y):
+    """Chebyshev along field lines.
+
+    Parameters
+    ----------
+    T : PiecewiseChebyshevSeries
+        Set of 1D Chebyshev spectral coefficients of θ along field line.
+        {θ_α : ζ ↦ θ(α, ζ) | α ∈ A} where A = (α₀, α₁, …, αₘ₋₁) is the same
+        field line.
+    f : jnp.ndarray
+        Fourier transform of f(θ, ζ) as returned by ``_fourier``.
+        ``n0=grid.num_zeta``, ``n1=grid.num_theta``, ``NFP=grid.NFP``.
+    Y : int
+        Chebyshev spectral resolution for ``f``. Preferably power of 2.
+
+    Returns
+    -------
+    f : PiecewiseChebyshevSeries
+        Set of 1D Chebyshev spectral coefficients of θ along field line.
+        {f_α : ζ ↦ f(α, ζ) | α ∈ A} where A = (α₀, α₁, …, αₘ₋₁) is the same
+        field line.
+
+    """
+    # When f = |B|, it is expected that Y > T.Y so the code immediately below
+    # is then up-sampling the Chebyshev resolution, which is good since the
+    # spectrum of |B| is wider than θ.
+
+    # θ at Chebyshev points, reshaped to (num rho, num transit * num points)
+    theta = T.evaluate(Y).reshape(*T.cheb.shape[:-2], T.X * Y)
+    zeta = jnp.broadcast_to(cheb_pts(Y, domain=T.domain), (T.X, Y)).ravel()
+
+    # f at Chebyshev points
+    f = irfft2_non_uniform(
+        theta,
+        zeta,
+        f[..., jnp.newaxis, :, :],
+        n0=n0,
+        n1=n1,
+        domain1=(0, 2 * jnp.pi / NFP),
+        axes=(-1, -2),
+    ).reshape(*T.cheb.shape[:-1], Y)
+    f = PiecewiseChebyshevSeries(cheb_from_dct(dct(f, type=2, axis=-1)) / Y, T.domain)
+    return f
+
+
+def cubic_spline(n0, n1, NFP, T, f, Y, check=False):
+    """Cubic spline along field lines.
+
+    Parameters
+    ----------
+    T : PiecewiseChebyshevSeries
+        Set of 1D Chebyshev spectral coefficients of θ along field line.
+        {θ_α : ζ ↦ θ(α, ζ) | α ∈ A} where A = (α₀, α₁, …, αₘ₋₁) is the same
+        field line.
+    f : jnp.ndarray
+        Fourier transform of f(θ, ζ) as returned by ``_fourier``.
+        ``n0=grid.num_zeta``, ``n1=grid.num_theta``, ``NFP=grid.NFP``.
+    Y : int
+        Number of knots per transit to interpolate ``f``.
+    check : bool
+        Flag for debugging. Must be false for JAX transformations.
+
+    Returns
+    -------
+    f : jnp.ndarray
+        Shape (L, num_transit * (Y - 1), 4).
+        Polynomial coefficients of the spline of f in local power basis.
+        Last axis enumerates the coefficients of power series. For a polynomial
+        given by ∑ᵢⁿ cᵢ xⁱ, coefficient cᵢ is stored at ``f[...,n-i]``.
+        Third axis enumerates the polynomials that compose a particular spline.
+        Second axis enumerates transits.
+        First axis enumerates field lines of a particular flux surface.
+    knots : jnp.ndarray
+        Shape (num_transit * (Y - 1)).
+        Knots of spline ``f``.
+
+    """
+    # θ at uniformly spaced points along field line
+    knots = jnp.linspace(-1, 1, Y, endpoint=False)
+    theta = idct_non_uniform(knots, T.cheb[..., jnp.newaxis, :], T.Y).reshape(
+        *T.cheb.shape[:-2], T.X * Y
+    )
+    knots = (
+        bijection_from_disc(knots, T.domain[0], T.domain[-1])
+        + np.diff(T.domain) * jnp.arange(T.X)[:, jnp.newaxis]
+    ).ravel()
+
+    f = irfft2_non_uniform(
+        theta,
+        knots,
+        f[..., jnp.newaxis, :, :],
+        n0=n0,
+        n1=n1,
+        domain1=(0, 2 * jnp.pi / NFP),
+        axes=(-1, -2),
+    )
+    f = jnp.moveaxis(
+        CubicSpline(x=knots, y=f, axis=-1, check=check).c,
+        source=(0, 1),
+        destination=(-1, -2),
+    )
+    assert f.shape[-2:] == (T.X * Y - 1, 4), f.shape
+    return f, knots
+
+
+def interp_fft_to_argmin(
+    NFP, T, h, points, knots, g, dg_dz, beta=-100, upper_sentinel=1e2
+):
+    """Interpolate ``h`` to the deepest point of ``g`` between ``z1`` and ``z2``.
+
+    Let E = {ζ ∣ ζ₁ < ζ < ζ₂} and A = argmin_E g(ζ). Returns mean_A h(ζ).
+
+    Parameters
+    ----------
+    T : PiecewiseChebyshevSeries
+        Set of 1D Chebyshev spectral coefficients of θ along field line.
+        {θ_α : ζ ↦ θ(α, ζ) | α ∈ A} where A = (α₀, α₁, …, αₘ₋₁) is the same
+        field line.
+    h : jnp.ndarray
+        Shape (..., grid.num_theta, grid.num_zeta)
+        Function evaluated on tensor-product grid in (ρ, θ, ζ) with uniformly
+        spaced nodes [0, 2π) × [0, 2π/NFP).
+    points : jnp.ndarray
+        Shape (..., num_pitch, W).
+        Boundaries to detect argmin between.
+        First (second) element stores left (right) boundaries.
+    knots : jnp.ndarray
+        Shape (N, ).
+        z coordinates of spline knots. Must be strictly increasing.
+    g : jnp.ndarray
+        Shape (..., N - 1, g.shape[-1]).
+        Polynomial coefficients of the spline of g in local power basis.
+        Last axis enumerates the coefficients of power series. Second to
+        last axis enumerates the polynomials that compose a particular spline.
+    dg_dz : jnp.ndarray
+        Shape (..., N - 1, g.shape[-1] - 1).
+        Polynomial coefficients of the spline of ∂g/∂z in local power basis.
+        Last axis enumerates the coefficients of power series. Second to
+        last axis enumerates the polynomials that compose a particular spline.
+    beta : float
+        More negative gives exponentially better approximation at the
+        expense of noisier gradients - noisier in the physics sense (unrelated
+        to the automatic differentiation).
+    upper_sentinel : float
+        Something larger than g. Choose value such that
+        exp(max(g)) << exp(``upper_sentinel``). Don't make too large or numerical
+        resolution is lost.
+
+    Warnings
+    --------
+    Recall that if g is small then the effect of β is reduced.
+    If the intention is to use this function as argmax, be sure to supply
+    a lower sentinel for ``upper_sentinel``.
+
+    Returns
+    -------
+    h : jnp.ndarray
+        Shape (..., num_pitch, W).
+
+    """
+    z1, z2 = points
+    assert z1.ndim == z2.ndim >= 2 and z1.shape == z2.shape
+    # Shape is (num rho, number of extrema)
+    ext, g_ext = _get_extrema(knots, g, dg_dz, sentinel=0)
+    # Our softargmax(x) does the proper shift to compute softargmax(x - max(x)),
+    # but it's still not a good idea to compute over a large length scale, so we
+    # warn in docstring to choose upper sentinel properly.
+    argmin = softargmax(
+        beta * _where_for_argmin(z1, z2, ext, g_ext, upper_sentinel),
+        axis=-1,
+    )
+    h = jnp.linalg.vecdot(
+        argmin,
+        interp_rfft2(
+            T.eval1d(ext),  # theta coordinates of extrema of g
+            ext,  # zeta coordinates of extrema of g
+            h[..., jnp.newaxis, :, :],
+            domain1=(0, 2 * jnp.pi / NFP),
+            axes=(-1, -2),
+        )[..., jnp.newaxis, jnp.newaxis, :],
+    )
+    assert h.shape == z1.shape
+    return h

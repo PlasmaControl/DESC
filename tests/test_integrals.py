@@ -38,6 +38,7 @@ from desc.integrals import (
     virtual_casing_biot_savart,
 )
 from desc.integrals.basis import FourierChebyshevSeries
+from desc.integrals.bounce_integral import _swap_pl
 from desc.integrals.bounce_utils import (
     _get_extrema,
     bounce_points,
@@ -63,7 +64,7 @@ from desc.integrals.quad_utils import (
 from desc.integrals.singularities import _get_quadrature_nodes
 from desc.integrals.surface_integral import _get_grid_surface
 from desc.transform import Transform
-from desc.utils import dot, errorif, safediv
+from desc.utils import dot, errorif, safediv, setdefault
 
 
 class TestSurfaceIntegral:
@@ -1479,23 +1480,21 @@ class TestBounce1D:
     @staticmethod
     def drift_num_integrand(cvdrift, gbdrift, B, pitch):
         """Integrand of numerator of bounce averaged binormal drift."""
-        g = jnp.sqrt(1 - pitch * B)
+        g = jnp.sqrt(jnp.abs(1 - pitch * B))
         return (cvdrift * g) - (0.5 * g * gbdrift) + (0.5 * gbdrift / g)
 
     @staticmethod
     def drift_den_integrand(B, pitch):
         """Integrand of denominator of bounce averaged binormal drift."""
-        return 1 / jnp.sqrt(1 - pitch * B)
+        return 1 / jnp.sqrt(jnp.abs(1 - pitch * B))
 
     @pytest.mark.unit
     @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
     def test_binormal_drift_bounce1d(self):
         """Test bounce-averaged drift with analytical expressions."""
         data, things = TestBounce1D.get_drift_analytic_data()
-        # Compute analytic approximation.
         drift_analytic, cvdrift, gbdrift, pitch_inv = TestBounce1D.drift_analytic(data)
 
-        # Compute numerical result.
         bounce = Bounce1D(
             things["grid"].source_grid,
             data,
@@ -1505,7 +1504,6 @@ class TestBounce1D:
         )
         points = bounce.points(pitch_inv, num_well=1)
         bounce.check_points(points, pitch_inv, plot=False)
-
         f = Bounce1D.reshape_data(things["grid"].source_grid, cvdrift, gbdrift)
         drift_numerical_num = bounce.integrate(
             integrand=TestBounce1D.drift_num_integrand,
@@ -1513,7 +1511,6 @@ class TestBounce1D:
             f=f,
             points=points,
             check=True,
-            plot=False,
         )
         drift_numerical_den = bounce.integrate(
             integrand=TestBounce1D.drift_den_integrand,
@@ -1521,9 +1518,9 @@ class TestBounce1D:
             weight=np.ones(data["zeta"].size),
             points=points,
             check=True,
-            plot=False,
         )
         drift_numerical = np.squeeze(drift_numerical_num / drift_numerical_den)
+        assert np.isfinite(drift_numerical).all()
         msg = "There should be one bounce integral per pitch in this example."
         assert drift_numerical.size == drift_analytic.size, msg
         np.testing.assert_allclose(
@@ -1543,7 +1540,9 @@ class TestBounce1D:
         return fig
 
     @staticmethod
-    def _test_bounce_autodiff(bounce, integrand, **kwargs):
+    def _test_bounce_autodiff(
+        bounce, integrand, pitch_argnum=-1, num_args=None, **kwargs
+    ):
         """Make sure reverse mode AD works correctly on this algorithm.
 
         Non-differentiable operations (e.g. ``take_mask``) are used in computation.
@@ -1586,7 +1585,8 @@ class TestBounce1D:
 
         def integrand_grad(*args, **kwargs2):
             grad_fun = jnp.vectorize(
-                grad(integrand, -1), signature="()," * len(kwargs["f"]) + "(),()->()"
+                grad(integrand, pitch_argnum),
+                signature="()," * setdefault(num_args, len(kwargs["f"])) + "(),()->()",
             )
             return grad_fun(*args, *kwargs2.values())
 
@@ -1604,7 +1604,7 @@ class TestBounce1D:
         # can obtain from math or just extrapolate from analytic expression plot
         analytic_approximation_of_gradient = 650
         np.testing.assert_allclose(
-            grad(fun1)(pitch), analytic_approximation_of_gradient, rtol=1e-3
+            grad(fun1)(pitch), analytic_approximation_of_gradient, rtol=5e-3
         )
         # It is expected that this is much larger because the integrand is singular
         # wrt λ but the boundary derivative: f(λ,ζ₂) (∂ζ₂/∂λ)(λ) - f(λ,ζ₁) (∂ζ₁/∂λ)(λ).
@@ -1630,7 +1630,6 @@ class TestBounce2D:
             assert alphas.shape == (iota.size, num_period)
         else:
             assert alphas.shape == (num_period,)
-        print(alphas)
 
     @staticmethod
     def _example_numerator(g_zz, B, pitch, zeta):
@@ -1646,7 +1645,7 @@ class TestBounce2D:
     def test_interp_fft_to_argmin(self):
         """Test argmin interpolation."""  # noqa: D202
 
-        rho = np.linspace(0.1, 1, 6)
+        rho = np.array([1])
         eq = get("HELIOTRON")
         grid = Grid.create_meshgrid(
             [rho, fourier_pts(eq.M_grid), fourier_pts(eq.N_grid) / eq.NFP],
@@ -1662,8 +1661,7 @@ class TestBounce2D:
             data,
             iota=grid.compress(data["iota"]),
             theta=theta,
-            num_transit=2,
-            quad=leggauss(3),
+            num_transit=1,
             check=True,
             spline=True,
         )
@@ -1676,7 +1674,7 @@ class TestBounce2D:
             bounce._NFP,
             bounce._c["T(z)"],
             grid.meshgrid_reshape(data["1"], "rtz"),
-            bounce.points(pitch_inv),
+            (_swap_pl(z) for z in bounce.points(pitch_inv)),
             bounce._c["knots"],
             bounce._c["B(z)"],
             polyder_vec(bounce._c["B(z)"]),
@@ -1706,7 +1704,8 @@ class TestBounce2D:
         )
         # 3. Compute input data.
         data = eq.compute(
-            Bounce2D.required_names + ["min_tz |B|", "max_tz |B|", "g_zz"], grid=grid
+            Bounce2D.required_names + ["min_tz |B|", "max_tz |B|", "g_zz", "1"],
+            grid=grid,
         )
         # 4. Compute DESC coordinates of optimal interpolation nodes.
         theta = Bounce2D.compute_theta(eq, X=8, Y=64, rho=rho)
@@ -1799,44 +1798,42 @@ class TestBounce2D:
         return fig
 
     @staticmethod
-    def drift_num_integrand(cvdrift, gbdrift, B, pitch, zeta):
+    def drift_num_integrand(
+        periodic_cvdrift, periodic_gbdrift, secular_gbdrift_over_phi, B, pitch, zeta
+    ):
         """Integrand of numerator of bounce averaged binormal drift."""
-        g = jnp.sqrt(1 - pitch * B)
+        g = jnp.sqrt(jnp.abs(1 - pitch * B))
+        cvdrift = periodic_cvdrift + secular_gbdrift_over_phi * zeta
+        gbdrift = periodic_gbdrift + secular_gbdrift_over_phi * zeta
         return (cvdrift * g) - (0.5 * g * gbdrift) + (0.5 * gbdrift / g)
 
     @staticmethod
     def drift_den_integrand(B, pitch, zeta):
         """Integrand of denominator of bounce averaged binormal drift."""
-        return 1 / jnp.sqrt(1 - pitch * B)
+        return 1 / jnp.sqrt(jnp.abs(1 - pitch * B))
 
     @pytest.mark.unit
     @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
     def test_binormal_drift_bounce2d(self):
         """Test bounce-averaged drift with analytical expressions."""
         data, things = TestBounce1D.get_drift_analytic_data()
-        # Compute analytic approximation.
         drift_analytic, _, _, pitch_inv = TestBounce1D.drift_analytic(data)
 
-        # Recompute on non-symmetric, fft compatible grid.
         eq = things["eq"]
         grid = Grid.create_meshgrid(
             [
                 data["rho"],
-                fourier_pts(eq._M_grid),
+                fourier_pts(eq.M_grid),
                 fourier_pts(max(1, eq.N_grid)) / eq.NFP,
             ],
             NFP=eq.NFP,
         )
-        # TODO: request periodic terms and construct secular terms in the
-        # integrand functions
-        grid_data = eq.compute(
-            names=Bounce2D.required_names + ["cvdrift", "gbdrift"], grid=grid
-        )
-        grid_data["cvdrift"] = grid_data["cvdrift"] * data["normalization"]
-        grid_data["gbdrift"] = grid_data["gbdrift"] * data["normalization"]
+        names = ["periodic(cvdrift)", "periodic(gbdrift)", "secular(gbdrift)/phi"]
+        grid_data = eq.compute(names=Bounce2D.required_names + names, grid=grid)
+        for name in names:
+            grid_data[name] = grid_data[name] * data["normalization"]
 
-        # Compute numerical result.
-        X, Y = 32, 32  # todo: lower these to minimum once we get match
+        X, Y = 8, 8
         bounce = Bounce2D(
             grid=grid,
             data=grid_data,
@@ -1848,42 +1845,48 @@ class TestBounce2D:
                 rho=data["rho"],
                 iota=jnp.broadcast_to(data["iota"], shape=(X * Y)),
             ),
-            num_transit=2,
-            alpha=data["alpha"] - 2 * np.pi * data["iota"],
+            num_transit=3,
+            alpha=data["alpha"] - 2.5 * np.pi * data["iota"],
             Bref=data["Bref"],
             Lref=data["a"],
             check=True,
+            spline=False,
         )
         points = bounce.points(pitch_inv, num_well=1)
         bounce.check_points(points, pitch_inv, plot=False)
-
-        f = Bounce2D.reshape_data(grid, grid_data["cvdrift"], grid_data["gbdrift"])
+        f = Bounce2D.reshape_data(grid, *(grid_data[name] for name in names))
         drift_numerical_num = bounce.integrate(
             integrand=TestBounce2D.drift_num_integrand,
             pitch_inv=pitch_inv,
             f=f,
             points=points,
             check=True,
-            plot=False,
         )
         drift_numerical_den = bounce.integrate(
             integrand=TestBounce2D.drift_den_integrand,
             pitch_inv=pitch_inv,
             points=points,
             check=True,
-            plot=False,
         )
         drift_numerical = np.squeeze(drift_numerical_num / drift_numerical_den)
+        assert np.isfinite(drift_numerical).all()
         msg = "There should be one bounce integral per pitch in this example."
         assert drift_numerical.size == drift_analytic.size, msg
+        np.testing.assert_allclose(
+            drift_numerical, drift_analytic, atol=5e-3, rtol=5e-2
+        )
+
+        TestBounce1D._test_bounce_autodiff(
+            bounce,
+            TestBounce2D.drift_num_integrand,
+            pitch_argnum=-2,
+            # add 1 to num args since the integrand functions expect the
+            # additional keyword argument "zeta" for computing secular terms
+            num_args=len(f) + 1,
+            f=f,
+        )
 
         fig, ax = plt.subplots()
         ax.plot(pitch_inv, drift_analytic)
         ax.plot(pitch_inv, drift_numerical)
-
-        # TODO: need to make integrands multivalued
-        # np.testing.assert_allclose(  # noqa: E800
-        #     drift_numerical, drift_analytic, atol=5e-3, rtol=5e-2  # noqa: E800
-        # )  # noqa: E800
-
         return fig

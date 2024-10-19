@@ -128,7 +128,7 @@ class FourierChebyshevSeries(IOAble):
     Parameters
     ----------
     f : jnp.ndarray
-        Shape (..., M, N).
+        Shape (..., X, Y).
         Samples of real function on the ``FourierChebyshevSeries.nodes`` grid.
     domain : tuple[float]
         Domain for y coordinates. Default is [-1, 1].
@@ -361,7 +361,7 @@ class PiecewiseChebyshevSeries(IOAble):
 
         Returns
         -------
-        x_idx, y_val : (jnp.ndarray, jnp.ndarray)
+        x_idx, y_val : tuple[jnp.ndarray]
             Shape z.shape.
             Isomorphic coordinates.
 
@@ -476,7 +476,7 @@ class PiecewiseChebyshevSeries(IOAble):
         Returns
         -------
         z1, z2 : tuple[jnp.ndarray]
-            Shape broadcasts with (..., *self.cheb.shape[:-2], num_intersect).
+            Shape broadcasts with (..., *self.cheb.shape[:-2], num intersect).
             Tuple of length two (z1, z2) of coordinates of intersects.
             The points are ordered and grouped such that the straight line path
             between ``z1`` and ``z2`` resides in the epigraph of f.

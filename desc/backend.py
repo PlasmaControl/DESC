@@ -273,7 +273,7 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
                 xk1, fk1 = backtrack(xk1, fk1, d)
                 return xk1, fk1, k1 + 1
 
-            state = guess, res(guess), 0
+            state = guess, res(guess), 0.0
             state = jax.lax.while_loop(condfun, bodyfun, state)
             if full_output:
                 return state[0], state[1:]
@@ -401,7 +401,7 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
             state = (
                 jnp.atleast_1d(jnp.asarray(guess)),
                 jnp.atleast_1d(resfun(guess)),
-                0,
+                0.0,
             )
             state = jax.lax.while_loop(condfun, bodyfun, state)
             if full_output:

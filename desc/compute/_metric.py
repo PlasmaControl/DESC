@@ -1945,8 +1945,8 @@ def _g_sup_ra(params, transforms, profiles, data, **kwargs):
     "(\\mathbf{b} \\times \\nabla B) \\cdot \\nabla \\alpha / \\vert B \\vert^{2}",
     units="1 / Wb",
     units_long="Inverse webers",
-    description="Binormal component of the geometric part of the gradB drift"
-    + " used for local stability analyses",
+    description="Binormal, geometric part of the gradB drift. "
+    "Used for local stability analyses, gyrokinetics, and Gamma_c.",
     dim=1,
     params=[],
     transforms={},
@@ -1962,11 +1962,9 @@ def _gbdrift(params, transforms, profiles, data, **kwargs):
 @register_compute_fun(
     name="periodic(gbdrift)",
     label="\\mathrm{periodic}(\\nabla \\vert B \\vert)_{\\mathrm{drift}}",
-    units="1/(T-m^{2})",
-    units_long="inverse Tesla meters^2",
-    description="Binormal component of the geometric part of the gradB drift"
-    + " used for local stability analyses, Gamma_c, epsilon_eff etc."
-    " Periodic component.",
+    units="1 / Wb",
+    units_long="Inverse webers",
+    description="Periodic, binormal, geometric part of the gradB drift.",
     dim=1,
     params=[],
     transforms={},
@@ -1985,10 +1983,9 @@ def _periodic_gbdrift(params, transforms, profiles, data, **kwargs):
 @register_compute_fun(
     name="secular(gbdrift)",
     label="\\mathrm{secular}(\\nabla \\vert B \\vert)_{\\mathrm{drift}}",
-    units="1/(T-m^{2})",
-    units_long="inverse Tesla meters^2",
-    description="Secular component of binormal component of "
-    "the geometric part of the gradB drift.",
+    units="1 / Wb",
+    units_long="Inverse webers",
+    description="Secular, binormal, geometric part of the gradB drift.",
     dim=1,
     params=[],
     transforms={},
@@ -2005,6 +2002,29 @@ def _secular_gbdrift(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="secular(gbdrift)/phi",
+    label="\\mathrm{secular}(\\nabla \\vert B \\vert)_{\\mathrm{drift}} / \\phi",
+    units="1 / Wb",
+    units_long="Inverse webers",
+    description="Secular, binormal, geometric part of the gradB drift divided "
+    "by the toroidal angle. This quantity is periodic.",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["|B|^2", "b", "e^rho", "grad(|B|)", "iota_r"],
+)
+def _secular_gbdrift_over_phi(params, transforms, profiles, data, **kwargs):
+    data["secular(gbdrift)/phi"] = (
+        dot(data["b"], cross(data["e^rho"], data["grad(|B|)"]))
+        * data["iota_r"]
+        / data["|B|^2"]
+    )
+    return data
+
+
+@register_compute_fun(
     name="cvdrift",
     # Exact definition of the magnetic drifts taken from
     # eqn. 48 of Introduction to Quasisymmetry by Landreman
@@ -2013,8 +2033,8 @@ def _secular_gbdrift(params, transforms, profiles, data, **kwargs):
     + "\\cdot \\nabla \\alpha",
     units="1 / Wb",
     units_long="Inverse webers",
-    description="Binormal component of the geometric part of the curvature drift"
-    + " used for local stability analyses.",
+    description="Binormal, geometric part of the curvature drift. "
+    "Used for local stability analyses and gyrokinetics.",
     dim=1,
     params=[],
     transforms={},
@@ -2030,10 +2050,9 @@ def _cvdrift(params, transforms, profiles, data, **kwargs):
 @register_compute_fun(
     name="periodic(cvdrift)",
     label="\\mathrm{periodic(cvdrift)}",
-    units="1/(T-m^{2})",
-    units_long="inverse Tesla meters^2",
-    description="Periodic component of binormal component of the "
-    "geometric part of the curvature drift",
+    units="1 / Wb",
+    units_long="Inverse webers",
+    description="Periodic, binormal, geometric part of the curvature drift.",
     dim=1,
     params=[],
     transforms={},
@@ -2052,13 +2071,13 @@ def _periodic_cvdrift(params, transforms, profiles, data, **kwargs):
     name="cvdrift0",
     # Exact definition of the magnetic drifts taken from
     # eqn. 48 of Introduction to Quasisymmetry by Landreman
-    # https://tinyurl.com/54udvaa4
-    label="\\mathrm{cvdrift0} = (\\mathbf{b}\\times\\nabla B)"
-    + "\\cdot (2 \\rho \\nabla \\rho) / \\vert B \\vert^2",
+    # https://tinyurl.com/54udvaa4 up to dimensionless factors.
+    label="\\mathrm{cvdrift0} = 1/B^{2} (\\mathbf{b}\\times\\nabla B)"
+    + "\\cdot (2 \\rho \\nabla \\rho)",
     units="1 / Wb",
     units_long="Inverse webers",
-    description="Radial component of the geometric part of the curvature drift"
-    + " used for local stability analyses and gyrokinetics.",
+    description="Radial, geometric part of the curvature drift."
+    + " Used for local stability analyses, gyrokinetics, and Gamma_c.",
     dim=1,
     params=[],
     transforms={},

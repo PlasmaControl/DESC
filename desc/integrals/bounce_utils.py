@@ -693,7 +693,6 @@ def interp_to_argmin(
         # adding axes to broadcast with num pitch and num well axes
         interp1d_vec(ext, knots, h, method=method)[..., jnp.newaxis, jnp.newaxis, :],
     )
-    assert h.shape == z1.shape
     return h
 
 
@@ -758,7 +757,6 @@ def interp_to_argmin_hard(h, points, knots, g, dg_dz, method="cubic"):
         h[..., jnp.newaxis, :],
         method=method,
     )
-    assert h.shape == z1.shape
     return h
 
 
@@ -1090,8 +1088,8 @@ def interp_fft_to_argmin(
         field line.
     h : jnp.ndarray
         Shape (..., grid.num_theta, grid.num_zeta)
-        Function evaluated on tensor-product grid in (ρ, θ, ζ) with uniformly
-        spaced nodes [0, 2π) × [0, 2π/NFP).
+        Periodic function evaluated on tensor-product grid in (ρ, θ, ζ) with
+        uniformly spaced nodes [0, 2π) × [0, 2π/NFP).
     points : jnp.ndarray
         Shape (..., num well).
         Boundaries to detect argmin between.
@@ -1131,7 +1129,7 @@ def interp_fft_to_argmin(
 
     """
     z1, z2 = points
-    assert z1.ndim == z2.ndim >= 2 and z1.shape == z2.shape
+    assert z1.ndim == z2.ndim >= 1 and z1.shape == z2.shape
     ext, g_ext = _get_extrema(knots, g, dg_dz, sentinel=0)
     # Our softargmax(x) does the proper shift to compute softargmax(x - max(x)),
     # but it's still not a good idea to compute over a large length scale, so we
@@ -1151,5 +1149,4 @@ def interp_fft_to_argmin(
         )[..., jnp.newaxis, :],
         # adding axis to broadcast with num well axis
     )
-    assert h.shape == z1.shape
     return h

@@ -14,6 +14,7 @@ from scipy import integrate
 from scipy.interpolate import CubicHermiteSpline
 from scipy.special import ellipe, ellipkm1
 from termcolor import colored
+from tests.test_interp_utils import _f_1d, _f_1d_nyquist_freq
 from tests.test_plotting import tol_1d
 
 from desc.backend import jit, jnp
@@ -38,7 +39,6 @@ from desc.integrals import (
     virtual_casing_biot_savart,
 )
 from desc.integrals.basis import FourierChebyshevSeries
-from desc.integrals.bounce_integral import _swap_pl
 from desc.integrals.bounce_utils import (
     _get_extrema,
     bounce_points,
@@ -1200,7 +1200,7 @@ class TestBounceQuadrature:
         return I_0, I_1, I_2, I_3, I_4, I_5, I_6, I_7
 
 
-class TestBounce1D:
+class TestBounce:
     """Test bounce integration with one-dimensional local spline methods."""
 
     @staticmethod
@@ -1251,14 +1251,14 @@ class TestBounce1D:
         bounce.check_points(points, pitch_inv, plot=False)
         # 8. Integrate.
         num = bounce.integrate(
-            integrand=TestBounce1D._example_numerator,
+            integrand=TestBounce._example_numerator,
             pitch_inv=pitch_inv,
             f=Bounce1D.reshape_data(grid.source_grid, data["g_zz"]),
             points=points,
             check=True,
         )
         den = bounce.integrate(
-            integrand=TestBounce1D._example_denominator,
+            integrand=TestBounce._example_denominator,
             pitch_inv=pitch_inv,
             points=points,
             check=True,
@@ -1292,7 +1292,7 @@ class TestBounce1D:
     @pytest.mark.unit
     @pytest.mark.parametrize("func", [interp_to_argmin, interp_to_argmin_hard])
     def test_interp_to_argmin(self, func):
-        """Test argmin interpolation."""  # noqa: D202
+        """Test interpolation of h to argmin g."""  # noqa: D202
 
         # Test functions chosen with purpose; don't change unless plotted and compared.
         def h(z):
@@ -1309,22 +1309,22 @@ class TestBounce1D:
                 + np.sin(3 * z) * np.cos(z**2) * np.cos(1 / (1 + z))
             )
 
+        argmin_g = 5.61719
         zeta = np.linspace(0, 3 * np.pi, 175)
-        bounce = Bounce1D(
-            Grid.create_meshgrid([1, 0, zeta], coordinates="raz"),
-            {
-                "B^zeta": np.ones_like(zeta),
-                "B^zeta_z|r,a": np.ones_like(zeta),
-                "|B|": g(zeta),
-                "|B|_z|r,a": dg_dz(zeta),
-            },
+        data = dict.fromkeys(Bounce1D.required_names, g(zeta))
+        data["|B|_z|r,a"] = dg_dz(zeta)
+        bounce = Bounce1D(Grid.create_meshgrid([1, 0, zeta], coordinates="raz"), data)
+        np.testing.assert_allclose(
+            func(
+                h=h(zeta),
+                points=(np.array(0, ndmin=2), np.array(2 * np.pi, ndmin=2)),
+                knots=zeta,
+                g=bounce.B,
+                dg_dz=bounce.dB_dz,
+            ),
+            h(argmin_g),
+            rtol=1e-3,
         )
-        points = (np.array(0, ndmin=4), np.array(2 * np.pi, ndmin=4))
-        argmin = 5.61719
-        h_min = h(argmin)
-        result = func(h(zeta), points, zeta, bounce.B, bounce.dB_dz)
-        assert result.shape == points[0].shape
-        np.testing.assert_allclose(h_min, result, rtol=1e-3)
 
     @staticmethod
     def get_drift_analytic_data():
@@ -1492,8 +1492,8 @@ class TestBounce1D:
     @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
     def test_binormal_drift_bounce1d(self):
         """Test bounce-averaged drift with analytical expressions."""
-        data, things = TestBounce1D.get_drift_analytic_data()
-        drift_analytic, cvdrift, gbdrift, pitch_inv = TestBounce1D.drift_analytic(data)
+        data, things = TestBounce.get_drift_analytic_data()
+        drift_analytic, cvdrift, gbdrift, pitch_inv = TestBounce.drift_analytic(data)
 
         bounce = Bounce1D(
             things["grid"].source_grid,
@@ -1506,14 +1506,14 @@ class TestBounce1D:
         bounce.check_points(points, pitch_inv, plot=False)
         f = Bounce1D.reshape_data(things["grid"].source_grid, cvdrift, gbdrift)
         drift_numerical_num = bounce.integrate(
-            integrand=TestBounce1D.drift_num_integrand,
+            integrand=TestBounce.drift_num_integrand,
             pitch_inv=pitch_inv,
             f=f,
             points=points,
             check=True,
         )
         drift_numerical_den = bounce.integrate(
-            integrand=TestBounce1D.drift_den_integrand,
+            integrand=TestBounce.drift_den_integrand,
             pitch_inv=pitch_inv,
             weight=np.ones(data["zeta"].size),
             points=points,
@@ -1527,9 +1527,9 @@ class TestBounce1D:
             drift_numerical, drift_analytic, atol=5e-3, rtol=5e-2
         )
 
-        TestBounce1D._test_bounce_autodiff(
+        TestBounce._test_bounce_autodiff(
             bounce,
-            TestBounce1D.drift_num_integrand,
+            TestBounce.drift_num_integrand,
             f=f,
             weight=np.ones(data["zeta"].size),
         )
@@ -1631,6 +1631,44 @@ class TestBounce2D:
         else:
             assert alphas.shape == (num_period,)
 
+    @pytest.mark.unit
+    def test_interp_fft_to_argmin(self):
+        """Test interpolation of h to argmin of g."""  # noqa: D202
+
+        def g(z):
+            return np.cos(z) ** 2 + np.sin(7 * z) - np.sin(z)
+
+        argmin_g = np.pi / 2
+        h = _f_1d
+        nyquist = 2 * max(_f_1d_nyquist_freq(), 7) + 1
+        grid = Grid.create_meshgrid(
+            [1, 0, fourier_pts(nyquist)], period=(np.inf, 2 * np.pi, 2 * np.pi)
+        )
+        bounce = Bounce2D(
+            grid=grid,
+            data=dict.fromkeys(Bounce2D.required_names, g(grid.nodes[:, 2])),
+            Y_B=2 * nyquist,
+            num_transit=1,
+            spline=True,
+            # dummy values
+            iota=1,
+            # h depends on ζ alone,so doesn't matter what θ(α, ζ) is
+            theta=grid.meshgrid_reshape(grid.nodes[:, 1], "rtz"),
+        )
+        np.testing.assert_allclose(
+            interp_fft_to_argmin(
+                NFP=bounce._NFP,
+                T=bounce._c["T(z)"],
+                h=grid.meshgrid_reshape(h(grid.nodes[:, 2]), "rtz"),
+                points=(np.array(0, ndmin=1), np.array(2 * np.pi, ndmin=1)),
+                knots=bounce._c["knots"],
+                g=bounce._c["B(z)"],
+                dg_dz=polyder_vec(bounce._c["B(z)"]),
+            ),
+            h(argmin_g),
+            rtol=1e-6,
+        )
+
     @staticmethod
     def _example_numerator(g_zz, B, pitch, zeta):
         f = (1 - 0.5 * pitch * B) * g_zz
@@ -1640,48 +1678,6 @@ class TestBounce2D:
     def _example_denominator(B, pitch, zeta):
         return safediv(1, jnp.sqrt(jnp.abs(1 - pitch * B)))
 
-    # TODO: Improve this test like test_interp_to_argmin in TestBounce1D.
-    @pytest.mark.unit
-    def test_interp_fft_to_argmin(self):
-        """Test argmin interpolation."""  # noqa: D202
-
-        rho = np.array([1])
-        eq = get("HELIOTRON")
-        grid = Grid.create_meshgrid(
-            [rho, fourier_pts(eq.M_grid), fourier_pts(eq.N_grid) / eq.NFP],
-            period=(np.inf, 2 * np.pi, 2 * np.pi / eq.NFP),
-            NFP=eq.NFP,
-        )
-        data = eq.compute(
-            Bounce2D.required_names + ["min_tz |B|", "max_tz |B|", "1"], grid=grid
-        )
-        theta = Bounce2D.compute_theta(eq, X=8, Y=8, rho=rho)
-        bounce = Bounce2D(
-            grid,
-            data,
-            iota=grid.compress(data["iota"]),
-            theta=theta,
-            num_transit=1,
-            check=True,
-            spline=True,
-        )
-        pitch_inv, _ = bounce.get_pitch_inv_quad(
-            min_B=grid.compress(data["min_tz |B|"]),
-            max_B=grid.compress(data["max_tz |B|"]),
-            num_pitch=10,
-        )
-        weight = interp_fft_to_argmin(
-            bounce._NFP,
-            bounce._c["T(z)"],
-            grid.meshgrid_reshape(data["1"], "rtz"),
-            (_swap_pl(z) for z in bounce.points(pitch_inv)),
-            bounce._c["knots"],
-            bounce._c["B(z)"],
-            polyder_vec(bounce._c["B(z)"]),
-        )
-        np.testing.assert_allclose(weight, 1)
-
-    # TODO: Could test integration against bounce1d for this stellarator
     @pytest.mark.unit
     @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d * 4)
     def test_bounce2d_checks(self):
@@ -1816,8 +1812,8 @@ class TestBounce2D:
     @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
     def test_binormal_drift_bounce2d(self):
         """Test bounce-averaged drift with analytical expressions."""
-        data, things = TestBounce1D.get_drift_analytic_data()
-        drift_analytic, _, _, pitch_inv = TestBounce1D.drift_analytic(data)
+        data, things = TestBounce.get_drift_analytic_data()
+        drift_analytic, _, _, pitch_inv = TestBounce.drift_analytic(data)
 
         eq = things["eq"]
         grid = Grid.create_meshgrid(
@@ -1876,7 +1872,7 @@ class TestBounce2D:
             drift_numerical, drift_analytic, atol=5e-3, rtol=5e-2
         )
 
-        TestBounce1D._test_bounce_autodiff(
+        TestBounce._test_bounce_autodiff(
             bounce,
             TestBounce2D.drift_num_integrand,
             pitch_argnum=-2,

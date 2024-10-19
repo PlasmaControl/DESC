@@ -593,6 +593,7 @@ class Bounce2D(Bounce):
             the returned value is w(j) ∫ f(λ, ℓ) dℓ, where w(j) is ``weight``
             interpolated to the deepest point in that magnetic well. Use the method
             ``Bounce2D.reshape_data`` to reshape the data into the expected shape.
+            It is assumed ``weight`` is a periodic function.
         points : tuple[jnp.ndarray]
             Shape (num rho, num pitch, num well).
             Optional, output of method ``self.points``.
@@ -916,7 +917,7 @@ class Bounce1D(Bounce):
 
     Examples
     --------
-    See ``tests/test_integrals.py::TestBounce1D::test_bounce1d_checks``.
+    See ``tests/test_integrals.py::TestBounce::test_bounce1d_checks``.
 
     Attributes
     ----------

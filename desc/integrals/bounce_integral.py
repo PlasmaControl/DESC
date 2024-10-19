@@ -527,11 +527,11 @@ class Bounce2D(Bounce):
         kwargs = _set_default_plot_kwargs(kwargs)
         if isinstance(self._c["B(z)"], PiecewiseChebyshevSeries):
             return self._c["B(z)"].check_intersect1d(
-                z1=_swap_pl(points[0]),
-                z2=_swap_pl(points[1]),
                 # We move num pitch axis to front so that the num rho axis broadcasts
                 # with the spectral coefficients (whose first axis is also num rho),
                 # assuming this axis exists.
+                z1=_swap_pl(points[0]),
+                z2=_swap_pl(points[1]),
                 k=atleast_nd(self._c["B(z)"].cheb.ndim - 1, pitch_inv).T,
                 plot=plot,
                 **kwargs,

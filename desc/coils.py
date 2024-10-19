@@ -29,7 +29,17 @@ from desc.geometry import (
 from desc.grid import LinearGrid
 from desc.magnetic_fields import _MagneticField
 from desc.optimizable import Optimizable, OptimizableCollection, optimizable_parameter
-from desc.utils import cross, dot, equals, errorif, flatten_list, safenorm, warnif
+from desc.utils import (
+    check_posint,
+    cross,
+    dot,
+    equals,
+    errorif,
+    flatten_list,
+    safenorm,
+    setdefault,
+    warnif,
+)
 
 
 @jit
@@ -222,13 +232,26 @@ class _Coil(_MagneticField, Optimizable, ABC):
     ----------
     current : float
         Current through the coil, in Amperes.
+    num_turns : int
+        number of turns of the coil. This will multiply its current
+        when considering Ampere's law, or will multiply the flux through
+        the coil when used as a diagnostic loop.
+
     """
 
-    _io_attrs_ = _MagneticField._io_attrs_ + ["_current"]
+    _io_attrs_ = _MagneticField._io_attrs_ + ["_current", "_num_turns"]
 
     def __init__(self, current, *args, **kwargs):
         self._current = float(np.squeeze(current))
+        num_turns = kwargs.pop("num_turns", 1)
+        check_posint(num_turns, "num_turns")
+        self._num_turns = int(num_turns)
         super().__init__(*args, **kwargs)
+
+    def _set_up(self):
+        for attribute in self._io_attrs_:
+            if not hasattr(self, attribute):
+                setattr(self, attribute, None)
 
     @optimizable_parameter
     @property
@@ -238,6 +261,7 @@ class _Coil(_MagneticField, Optimizable, ABC):
 
     @current.setter
     def current(self, new):
+        new = setdefault(new, 1, new)
         assert jnp.isscalar(new) or new.size == 1
         self._current = float(np.squeeze(new))
 
@@ -245,6 +269,17 @@ class _Coil(_MagneticField, Optimizable, ABC):
     def num_coils(self):
         """int: Number of coils."""
         return 1
+
+    @property
+    def num_turns(self):
+        """int: Number of turns in the coil."""
+        return self._num_turns
+
+    @num_turns.setter
+    def num_turns(self, new):
+        check_posint(new, "num_turns")
+        assert jnp.isscalar(new) or new.size == 1
+        self._num_turns = int(np.squeeze(new))
 
     def _compute_position(self, params=None, grid=None, dx1=False, **kwargs):
         """Compute coil positions accounting for stellarator symmetry.
@@ -343,8 +378,11 @@ class _Coil(_MagneticField, Optimizable, ABC):
             coords = rpz2xyz(coords)
         if params is None:
             current = self.current
+            num_turns = self.num_turns
         else:
             current = params.pop("current", self.current)
+            num_turns = params.pop("num_turns", self.num_turns)
+
         if source_grid is None:
             # NFP=1 to ensure points span the entire length of the coil
             # multiply resolution by NFP to ensure Biot-Savart integration is accurate
@@ -369,7 +407,9 @@ class _Coil(_MagneticField, Optimizable, ABC):
             data["x_s"] = rpz2xyz_vec(data["x_s"], phi=data["x"][:, 1])
             data["x"] = rpz2xyz(data["x"])
 
-        AB = op(coords, data["x"], data["x_s"] * data["ds"][:, None], current)
+        AB = op(
+            coords, data["x"], data["x_s"] * data["ds"][:, None], current * num_turns
+        )
 
         if basis.lower() == "rpz":
             AB = xyz2rpz_vec(AB, phi=phi)
@@ -490,7 +530,13 @@ class _Coil(_MagneticField, Optimizable, ABC):
             grid = LinearGrid(N=2 * N + 1)
         coords = self.compute("x", grid=grid, basis="xyz")["x"]
         return FourierXYZCoil.from_values(
-            self.current, coords, N=N, s=s, basis="xyz", name=name
+            self.current,
+            coords,
+            N=N,
+            s=s,
+            basis="xyz",
+            name=name,
+            num_turns=self.num_turns,
         )
 
     def to_SplineXYZ(self, knots=None, grid=None, method="cubic", name="", **kwargs):
@@ -530,7 +576,13 @@ class _Coil(_MagneticField, Optimizable, ABC):
             grid = LinearGrid(zeta=knots)
         coords = self.compute("x", grid=grid, basis="xyz")["x"]
         return SplineXYZCoil.from_values(
-            self.current, coords, knots=knots, method=method, name=name, basis="xyz"
+            self.current,
+            coords,
+            knots=knots,
+            method=method,
+            name=name,
+            basis="xyz",
+            num_turns=self.num_turns,
         )
 
     def to_FourierRZ(self, N=10, grid=None, NFP=None, sym=False, name="", **kwargs):
@@ -564,7 +616,14 @@ class _Coil(_MagneticField, Optimizable, ABC):
             grid = LinearGrid(N=2 * N + 1)
         coords = self.compute("x", grid=grid, basis="xyz")["x"]
         return FourierRZCoil.from_values(
-            self.current, coords, N=N, NFP=NFP, basis="xyz", sym=sym, name=name
+            self.current,
+            coords,
+            N=N,
+            NFP=NFP,
+            basis="xyz",
+            sym=sym,
+            name=name,
+            num_turns=self.num_turns,
         )
 
     def to_FourierPlanar(self, N=10, grid=None, basis="xyz", name="", **kwargs):
@@ -597,7 +656,7 @@ class _Coil(_MagneticField, Optimizable, ABC):
             grid = LinearGrid(N=2 * N + 1)
         coords = self.compute("x", grid=grid, basis=basis)["x"]
         return FourierPlanarCoil.from_values(
-            self.current, coords, N=N, basis=basis, name=name
+            self.current, coords, N=N, basis=basis, name=name, num_turns=self.num_turns
         )
 
 
@@ -620,6 +679,10 @@ class FourierRZCoil(_Coil, FourierRZCurve):
         whether to enforce stellarator symmetry
     name : str
         name for this coil
+    num_turns : int
+        number of turns of the coil. This will multiply its current
+        when considering Ampere's law, or will multiply the flux through
+        the coil when used as a diagnostic loop.
 
     Examples
     --------
@@ -665,11 +728,24 @@ class FourierRZCoil(_Coil, FourierRZCurve):
         NFP=1,
         sym="auto",
         name="",
+        num_turns=1,
     ):
-        super().__init__(current, R_n, Z_n, modes_R, modes_Z, NFP, sym, name)
+        super().__init__(
+            current,
+            R_n,
+            Z_n,
+            modes_R,
+            modes_Z,
+            NFP,
+            sym,
+            name,
+            num_turns=num_turns,
+        )
 
     @classmethod
-    def from_values(cls, current, coords, N=10, NFP=1, basis="rpz", sym=False, name=""):
+    def from_values(
+        cls, current, coords, N=10, NFP=1, basis="rpz", sym=False, name="", num_turns=1
+    ):
         """Fit coordinates to FourierRZCoil representation.
 
         Parameters
@@ -690,6 +766,10 @@ class FourierRZCoil(_Coil, FourierRZCurve):
             Whether to enforce stellarator symmetry.
         name : str
             name for this coil
+        num_turns : int
+            number of turns of the coil. This will multiply its current
+            when considering Ampere's law, or will multiply the flux through
+            the coil when used as a diagnostic loop.
 
 
         Returns
@@ -710,6 +790,7 @@ class FourierRZCoil(_Coil, FourierRZCurve):
             NFP=NFP,
             sym=curve.sym,
             name=name,
+            num_turns=num_turns,
         )
 
 
@@ -726,6 +807,10 @@ class FourierXYZCoil(_Coil, FourierXYZCurve):
         mode numbers associated with X_n etc.
     name : str
         name for this coil
+    num_turns : int
+        number of turns of the coil. This will multiply its current
+        when considering Ampere's law, or will multiply the flux through
+        the coil when used as a diagnostic loop.
 
     Examples
     --------
@@ -772,11 +857,14 @@ class FourierXYZCoil(_Coil, FourierXYZCurve):
         Z_n=[-2, 0, 0],
         modes=None,
         name="",
+        num_turns=1,
     ):
-        super().__init__(current, X_n, Y_n, Z_n, modes, name)
+        super().__init__(current, X_n, Y_n, Z_n, modes, name, num_turns=num_turns)
 
     @classmethod
-    def from_values(cls, current, coords, N=10, s=None, basis="xyz", name=""):
+    def from_values(
+        cls, current, coords, N=10, s=None, basis="xyz", name="", num_turns=1
+    ):
         """Fit coordinates to FourierXYZCoil representation.
 
         Parameters
@@ -795,6 +883,13 @@ class FourierXYZCoil(_Coil, FourierXYZCurve):
             if None, defaults to normalized arclength
         basis : {"rpz", "xyz"}
             basis for input coordinates. Defaults to "xyz"
+        name : str
+            name for this coil
+        num_turns : int
+            number of turns of the coil. This will multiply its current
+            when considering Ampere's law, or will multiply the flux through
+            the coil when used as a diagnostic loop.
+
         Returns
         -------
         coil : FourierXYZCoil
@@ -809,6 +904,7 @@ class FourierXYZCoil(_Coil, FourierXYZCurve):
             Z_n=curve.Z_n,
             modes=curve.X_basis.modes[:, 2],
             name=name,
+            num_turns=num_turns,
         )
 
 
@@ -834,7 +930,11 @@ class FourierPlanarCoil(_Coil, FourierPlanarCurve):
     basis : {'xyz', 'rpz'}
         Coordinate system for center and normal vectors. Default = 'xyz'.
     name : str
-        Name for this coil.
+        name for this coil
+    num_turns : int
+        number of turns of the coil. This will multiply its current
+        when considering Ampere's law, or will multiply the flux through
+        the coil when used as a diagnostic loop..
 
     Examples
     --------
@@ -882,11 +982,14 @@ class FourierPlanarCoil(_Coil, FourierPlanarCurve):
         modes=None,
         basis="xyz",
         name="",
+        num_turns=1,
     ):
-        super().__init__(current, center, normal, r_n, modes, basis, name)
+        super().__init__(
+            current, center, normal, r_n, modes, basis, name, num_turns=num_turns
+        )
 
     @classmethod
-    def from_values(cls, current, coords, N=10, basis="xyz", name=""):
+    def from_values(cls, current, coords, N=10, basis="xyz", name="", num_turns=1):
         """Fit coordinates to FourierPlanarCoil representation.
 
         Parameters
@@ -902,6 +1005,10 @@ class FourierPlanarCoil(_Coil, FourierPlanarCurve):
             Basis for input coordinates. Defaults to "xyz".
         name : str
             Name for this curve.
+        num_turns : int
+            number of turns of the coil. This will multiply its current
+            when considering Ampere's law, or will multiply the flux through
+            the coil when used as a diagnostic loop.
 
         Returns
         -------
@@ -918,6 +1025,7 @@ class FourierPlanarCoil(_Coil, FourierPlanarCurve):
             modes=curve.r_basis.modes[:, 2],
             basis="xyz",
             name=name,
+            num_turns=num_turns,
         )
 
 
@@ -950,9 +1058,12 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
           data, and will not introduce new extrema in the interpolated points
         - ``'monotonic-0'``: same as `'monotonic'` but with 0 first derivatives at both
           endpoints
-
     name : str
-        name for this curve
+        name for this coiil
+    num_turns : int
+            number of turns of the coil. This will multiply its current
+            when considering Ampere's law, or will multiply the flux through
+            the coil when used as a diagnostic loop.
 
     """
 
@@ -967,8 +1078,9 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
         knots=None,
         method="cubic",
         name="",
+        num_turns=1,
     ):
-        super().__init__(current, X, Y, Z, knots, method, name)
+        super().__init__(current, X, Y, Z, knots, method, name, num_turns=num_turns)
 
     def _compute_A_or_B(
         self,
@@ -1025,8 +1137,10 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
             coords = rpz2xyz(coords)
         if params is None:
             current = self.current
+            num_turns = self.num_turns
         else:
             current = params.pop("current", self.current)
+            num_turns = params.pop("num_turns", self.num_turns)
 
         data = self.compute(
             ["x"], grid=source_grid, params=params, basis="xyz", transforms=transforms
@@ -1041,7 +1155,7 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
         # coils curvature which is a 2nd derivative of the position, and doing that
         # with only possibly c1 cubic splines is inaccurate, so we don't do it
         # (for now, maybe in the future?)
-        AB = op(coords, coil_pts_start, coil_pts_end, current)
+        AB = op(coords, coil_pts_start, coil_pts_end, current * num_turns)
 
         if basis == "rpz":
             AB = xyz2rpz_vec(AB, x=coords[:, 0], y=coords[:, 1])
@@ -1123,7 +1237,14 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
 
     @classmethod
     def from_values(
-        cls, current, coords, knots=None, method="cubic", name="", basis="xyz"
+        cls,
+        current,
+        coords,
+        knots=None,
+        method="cubic",
+        name="",
+        num_turns=1,
+        basis="xyz",
     ):
         """Create SplineXYZCoil from coordinate values.
 
@@ -1153,6 +1274,10 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
 
         name : str
             name for this curve
+        num_turns : int
+            number of turns of the coil. This will multiply its current
+            when considering Ampere's law, or will multiply the flux through
+            the coil when used as a diagnostic loop.
         basis : {"rpz", "xyz"}
             basis for input coordinates. Defaults to "xyz"
 
@@ -1173,6 +1298,7 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
             knots=curve.knots,
             method=curve.method,
             name=name,
+            num_turns=num_turns,
         )
 
 
@@ -1239,6 +1365,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
 
     _io_attrs_ = _Coil._io_attrs_ + ["_coils", "_NFP", "_sym"]
     _io_attrs_.remove("_current")
+    _io_attrs_.remove("_num_turns")
 
     def __init__(
         self,
@@ -1526,6 +1653,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             ]
             for par, coil in zip(params, self):
                 par["current"] = coil.current
+                par["num_turns"] = coil.num_turns
 
         # stellarator symmetry is easiest in [X,Y,Z] coordinates
         if basis.lower() == "rpz":
@@ -1997,7 +2125,12 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             f.writelines(lines)
 
     def to_FourierPlanar(
-        self, N=10, grid=None, basis="xyz", name="", check_intersection=True
+        self,
+        N=10,
+        grid=None,
+        basis="xyz",
+        name="",
+        check_intersection=True,
     ):
         """Convert all coils to FourierPlanarCoil.
 
@@ -2036,7 +2169,13 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         )
 
     def to_FourierRZ(
-        self, N=10, grid=None, NFP=None, sym=False, name="", check_intersection=True
+        self,
+        N=10,
+        grid=None,
+        NFP=None,
+        sym=False,
+        name="",
+        check_intersection=True,
     ):
         """Convert all coils to FourierRZCoil representaion.
 
@@ -2109,7 +2248,12 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         )
 
     def to_SplineXYZ(
-        self, knots=None, grid=None, method="cubic", name="", check_intersection=True
+        self,
+        knots=None,
+        grid=None,
+        method="cubic",
+        name="",
+        check_intersection=True,
     ):
         """Convert all coils to SplineXYZCoil representation.
 
@@ -2528,7 +2672,12 @@ class MixedCoilSet(CoilSet):
         return self._compute_A_or_B(coords, params, basis, source_grid, transforms, "A")
 
     def to_FourierPlanar(
-        self, N=10, grid=None, basis="xyz", name="", check_intersection=True
+        self,
+        N=10,
+        grid=None,
+        basis="xyz",
+        name="",
+        check_intersection=True,
     ):
         """Convert all coils to FourierPlanarCoil representation.
 
@@ -2566,7 +2715,13 @@ class MixedCoilSet(CoilSet):
         return self.__class__(*coils, name=name, check_intersection=check_intersection)
 
     def to_FourierRZ(
-        self, N=10, grid=None, NFP=None, sym=False, name="", check_intersection=True
+        self,
+        N=10,
+        grid=None,
+        NFP=None,
+        sym=False,
+        name="",
+        check_intersection=True,
     ):
         """Convert all coils to FourierRZCoil representation.
 
@@ -2635,7 +2790,12 @@ class MixedCoilSet(CoilSet):
         return self.__class__(*coils, name=name, check_intersection=check_intersection)
 
     def to_SplineXYZ(
-        self, knots=None, grid=None, method="cubic", name="", check_intersection=True
+        self,
+        knots=None,
+        grid=None,
+        method="cubic",
+        name="",
+        check_intersection=True,
     ):
         """Convert all coils to SplineXYZCoil representation.
 

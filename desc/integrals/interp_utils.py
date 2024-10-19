@@ -2,7 +2,7 @@
 
 Notes
 -----
-These polynomial utilities are chosen for performance on gpu among
+These utilities are chosen for performance on gpu among
 methods that have the best (asymptotic) algorithmic complexity.
 For example, we prefer to not use Horner's method.
 """
@@ -139,12 +139,13 @@ def harmonic_vander(x, n, domain=(0, 2 * jnp.pi)):
         Last axis ordered as [1, cos(x), ..., cos(nx), sin(x), sin(2x), ..., sin(nx)].
 
     """
-    N = jnp.fft.rfftfreq(n, d=np.diff(domain) / (2 * jnp.pi) / n)
-    nx = N * (x - domain[0])[..., jnp.newaxis]
+    is_even = (n % 2) == 0
+    n_rfft = jnp.fft.rfftfreq(n, d=(domain[-1] - domain[0]) / (2 * jnp.pi * n))
+    nx = n_rfft * (x - domain[0])[..., jnp.newaxis]
     basis = jnp.concatenate(
-        [jnp.cos(nx), jnp.sin(nx[..., 1 : N.size - ((n % 2) == 0)])], axis=-1
+        [jnp.cos(nx), jnp.sin(nx[..., 1 : n_rfft.size - is_even])], axis=-1
     )
-    assert basis.shape == (*x.shape, n)
+    assert basis.shape[-1] == n
     return basis
 
 
@@ -186,8 +187,7 @@ def interp_rfft(xq, f, domain=(0, 2 * jnp.pi), axis=-1):
 
     """
     a = rfft(f, axis=axis, norm="forward")
-    fq = irfft_non_uniform(xq, a, f.shape[axis], domain, axis)
-    return fq
+    return irfft_non_uniform(xq, a, f.shape[axis], domain, axis)
 
 
 def irfft_non_uniform(xq, a, n, domain=(0, 2 * jnp.pi), axis=-1):
@@ -213,7 +213,7 @@ def irfft_non_uniform(xq, a, n, domain=(0, 2 * jnp.pi), axis=-1):
         Real function value at query points.
 
     """
-    # |a| << |basis|, so move a instead of basis
+    # |a| << |xq|, so move a instead
     a = (
         jnp.moveaxis(a, axis, -1)
         .at[..., 0]
@@ -221,12 +221,9 @@ def irfft_non_uniform(xq, a, n, domain=(0, 2 * jnp.pi), axis=-1):
         .at[..., -1]
         .divide(1.0 + ((n % 2) == 0))
     )
-    N = jnp.fft.rfftfreq(n, d=np.diff(domain) / (2 * jnp.pi) / n)
-    xq = xq - domain[0]
-    basis = jnp.exp(-1j * N * xq[..., jnp.newaxis])
-    fq = 2.0 * jnp.linalg.vecdot(basis, a).real
-    # ℜ〈 basis, a 〉= cos(m xq)⋅ℜ(a) − sin(m xq)⋅ℑ(a)
-    return fq
+    n = jnp.fft.rfftfreq(n, d=(domain[-1] - domain[0]) / (2 * jnp.pi * n))
+    basis = jnp.exp(1j * n * (xq - domain[0])[..., jnp.newaxis])
+    return 2.0 * (basis * a).real.sum(axis=-1)
 
 
 def interp_rfft2(
@@ -265,10 +262,10 @@ def interp_rfft2(
 
     """
     a = rfft2(f, axes=axes, norm="forward")
-    fq = irfft2_non_uniform(
-        xq0, xq1, a, f.shape[axes[0]], f.shape[axes[1]], domain0, domain1, axes
+    n0, n1 = sorted(axes)
+    return irfft2_non_uniform(
+        xq0, xq1, a, f.shape[n0], f.shape[n1], domain0, domain1, axes
     )
-    return fq
 
 
 def irfft2_non_uniform(
@@ -292,9 +289,9 @@ def irfft2_non_uniform(
         Shape (..., a.shape[-2], a.shape[-1]).
         Fourier coefficients ``a=rfft2(f,axes=axes,norm="forward")``.
     n0 : int
-        Spectral resolution of ``a`` along ``axes[0]``.
+        Spectral resolution of ``a`` for ``domain0``.
     n1 : int
-        Spectral resolution of ``a`` along ``axes[1]``.
+        Spectral resolution of ``a`` for ``domain1``.
     domain0 : tuple[float]
         Domain of coordinate specified by ``xq0`` over which samples were taken.
     domain1 : tuple[float]
@@ -308,35 +305,31 @@ def irfft2_non_uniform(
         Real function value at query points.
 
     """
-    errorif(len(axes) != 2, msg="This is a 2D transform.")
-    errorif(a.ndim < 2, msg=f"Dimension mismatch, a.shape: {a.shape}.")
+    idx = np.argsort(axes)
+    d = (domain0, domain1)
+    n = (n0, n1)
+    d_fft, d_rfft = d[idx[0]], d[idx[1]]
+    n_fft, n_rfft = n[idx[0]], n[idx[1]]
 
-    # |a| << |basis|, so move a instead of basis
+    # |a| << |xq|, so move a instead
     a = (
         jnp.moveaxis(a, source=axes, destination=(-2, -1))
         .at[..., 0]
         .divide(2.0)
         .at[..., -1]
-        .divide(1.0 + ((n1 % 2) == 0))
+        .divide(1.0 + ((n_rfft % 2) == 0))
     )
-
-    idx = np.argsort(axes)
-    domain = (domain0, domain1)
-    N0 = jnp.fft.fftfreq(n0, d=np.diff(domain[idx[0]]) / (2 * jnp.pi) / n0)
-    N1 = jnp.fft.rfftfreq(n1, d=np.diff(domain[idx[1]]) / (2 * jnp.pi) / n1)
-    xq0 = xq0 - domain0[0]
-    xq1 = xq1 - domain1[0]
-    xq = (xq0, xq1)
-
+    n_fft = jnp.fft.fftfreq(n_fft, d=(d_fft[1] - d_fft[0]) / (2 * jnp.pi * n_fft))
+    n_rfft = jnp.fft.rfftfreq(n_rfft, d=(d_rfft[1] - d_rfft[0]) / (2 * jnp.pi * n_rfft))
+    xq = (xq0 - domain0[0], xq1 - domain1[0])
     basis = jnp.exp(
         1j
         * (
-            (N0 * xq[idx[0]][..., jnp.newaxis])[..., jnp.newaxis]
-            + (N1 * xq[idx[1]][..., jnp.newaxis])[..., jnp.newaxis, :]
+            (n_fft * xq[idx[0]][..., jnp.newaxis])[..., jnp.newaxis]
+            + (n_rfft * xq[idx[1]][..., jnp.newaxis])[..., jnp.newaxis, :]
         )
     )
-    fq = 2.0 * (basis * a).real.sum(axis=(-2, -1))
-    return fq
+    return 2.0 * (basis * a).real.sum(axis=(-2, -1))
 
 
 def cheb_from_dct(a, axis=-1):
@@ -358,8 +351,7 @@ def cheb_from_dct(a, axis=-1):
         Chebyshev coefficients along ``axis``.
 
     """
-    cheb = a.copy().at[Index.get(0, axis, a.ndim)].divide(2.0)
-    return cheb
+    return a.copy().at[Index.get(0, axis, a.ndim)].divide(2.0)
 
 
 def dct_from_cheb(cheb, axis=-1):
@@ -378,8 +370,7 @@ def dct_from_cheb(cheb, axis=-1):
         Chebyshev coefficients along ``axis``.
 
     """
-    a = cheb.copy().at[Index.get(0, axis, cheb.ndim)].multiply(2.0)
-    return a
+    return cheb.copy().at[Index.get(0, axis, cheb.ndim)].multiply(2.0)
 
 
 def interp_dct(xq, f, lobatto=False, axis=-1):
@@ -409,8 +400,7 @@ def interp_dct(xq, f, lobatto=False, axis=-1):
     a = cheb_from_dct(dct(f, type=2 - lobatto, axis=axis), axis) / (
         f.shape[axis] - lobatto
     )
-    fq = idct_non_uniform(xq, a, f.shape[axis], axis)
-    return fq
+    return idct_non_uniform(xq, a, f.shape[axis], axis)
 
 
 def idct_non_uniform(xq, a, n, axis=-1):
@@ -434,14 +424,11 @@ def idct_non_uniform(xq, a, n, axis=-1):
         Real function value at query points.
 
     """
+    # |a| << |xq|, so move a instead
     a = jnp.moveaxis(a, axis, -1)
-    # Equivalent to
-    # Clenshaw recursion: chebval(xq, a, tensor=False),
-    # Vandermode product: jnp.linalg.vecdot(chebvander(xq, n - 1), a)
-    # but performs better on GPU.
+    # Same as Clenshaw recursion ``chebval(xq,a,tensor=False)`` but better on GPU.
     n = jnp.arange(n)
-    fq = jnp.linalg.vecdot(jnp.cos(n * jnp.arccos(xq)[..., jnp.newaxis]), a)
-    return fq
+    return jnp.sum(jnp.cos(n * jnp.arccos(xq)[..., jnp.newaxis]) * a, axis=-1)
 
 
 def _fourier(grid, f, is_reshaped=False):
@@ -464,7 +451,7 @@ def _fourier(grid, f, is_reshaped=False):
     """
     if not is_reshaped:
         f = grid.meshgrid_reshape(f, "rtz")
-    # real fft over poloidal since usually m > n
+    # real fft over poloidal since usually M > N
     return rfft2(f, axes=(-1, -2), norm="forward")
 
 
@@ -578,8 +565,7 @@ def _filter_distinct(r, sentinel, eps):
     # eps needs to be low enough that close distinct roots do not get removed.
     # Otherwise, algorithms relying on continuity will fail.
     mask = jnp.isclose(jnp.diff(r, axis=-1, prepend=sentinel), 0, atol=eps)
-    r = jnp.where(mask, sentinel, r)
-    return r
+    return jnp.where(mask, sentinel, r)
 
 
 _polyroots_vec = jnp.vectorize(
@@ -762,6 +748,6 @@ def _root_linear(C, sentinel, eps, distinct=False):
 
 
 def _concat_sentinel(r, sentinel, num=1):
-    """Append ``sentinel`` ``num`` times to ``r`` on last axis."""
+    """Concatenate ``sentinel`` ``num`` times to ``r`` on last axis."""
     sent = jnp.broadcast_to(sentinel, (*r.shape[:-1], num))
     return jnp.append(r, sent, axis=-1)

@@ -111,7 +111,7 @@ class FourierChebyshevSeries(IOAble):
     --------
     Let the magnetic field be B = ∇ρ × ∇x. This basis will then parameterize
     maps in Clebsch coordinates. Passing in a sequence of x values tracking
-    the field line (see ``get_alpha``) to the ``compute_cheb`` method will
+    the field line (see ``get_fieldline``) to the ``compute_cheb`` method will
     generate a 1D parameterization of f along the field line.
 
     This is useful to interpolate f ≝ θ and use the map x, ζ ↦ θ(x, ζ) to
@@ -147,11 +147,11 @@ class FourierChebyshevSeries(IOAble):
 
     def __init__(self, f, domain=(-1, 1), lobatto=False):
         """Interpolate Fourier-Chebyshev series to ``f``."""
+        errorif(domain[0] > domain[-1], msg="Got inverted domain.")
+        errorif(lobatto, NotImplementedError, "JAX hasn't implemented type 1 DCT.")
         self.X = f.shape[-2]
         self.Y = f.shape[-1]
-        errorif(domain[0] > domain[-1], msg="Got inverted domain.")
         self.domain = domain
-        errorif(lobatto, NotImplementedError, "JAX hasn't implemented type 1 DCT.")
         self.lobatto = lobatto
         self._c = rfft(
             dct(f, type=2 - lobatto, axis=-1) / (self.Y - lobatto),
@@ -281,8 +281,8 @@ class PiecewiseChebyshevSeries(IOAble):
 
     def __init__(self, cheb, domain=(-1, 1)):
         """Make piecewise series from given Chebyshev coefficients."""
-        self.cheb = jnp.atleast_2d(cheb)
         errorif(domain[0] > domain[-1], msg="Got inverted domain.")
+        self.cheb = jnp.atleast_2d(cheb)
         self.domain = domain
 
     @property
@@ -345,8 +345,7 @@ class PiecewiseChebyshevSeries(IOAble):
         """
         assert y.ndim >= 2
         z_shift = jnp.arange(y.shape[-2]) * (self.domain[-1] - self.domain[0])
-        z = y + z_shift[:, jnp.newaxis]
-        return z
+        return y + z_shift[:, jnp.newaxis]
 
     def _isomorphism_to_C2(self, z):
         """Return coordinates (x, y) ∈ ℂ² isomorphic to z ∈ ℂ.
@@ -361,15 +360,15 @@ class PiecewiseChebyshevSeries(IOAble):
 
         Returns
         -------
-        x_idx, y_val : tuple[jnp.ndarray]
+        x_idx, y : tuple[jnp.ndarray]
             Shape z.shape.
             Isomorphic coordinates.
 
         """
-        x_idx, y_val = jnp.divmod(z - self.domain[0], self.domain[-1] - self.domain[0])
+        x_idx, y = jnp.divmod(z - self.domain[0], self.domain[-1] - self.domain[0])
         x_idx = x_idx.astype(int)
-        y_val += self.domain[0]
-        return x_idx, y_val
+        y += self.domain[0]
+        return x_idx, y
 
     def eval1d(self, z, cheb=None):
         """Evaluate piecewise Chebyshev series at coordinates z.
@@ -395,13 +394,13 @@ class PiecewiseChebyshevSeries(IOAble):
 
         """
         cheb = _chebcast(setdefault(cheb, self.cheb), z)
-        N = cheb.shape[-1]
+        Y = cheb.shape[-1]
         x_idx, y = self._isomorphism_to_C2(z)
-        y = bijection_to_disc(y, self.domain[0], self.domain[1])
+        y = bijection_to_disc(y, self.domain[0], self.domain[-1])
         # Chebyshev coefficients αₙ for f(z) = ∑ₙ₌₀ᴺ⁻¹ αₙ(x[z]) Tₙ(y[z])
         # are held in cheb with shape (..., num cheb series, Y).
         cheb = jnp.take_along_axis(cheb, x_idx[..., jnp.newaxis], axis=-2)
-        f = idct_non_uniform(y, cheb, N)
+        f = idct_non_uniform(y, cheb, Y)
         assert f.shape == z.shape
         return f
 
@@ -677,7 +676,7 @@ class PiecewiseChebyshevSeries(IOAble):
         legend = {}
         z = jnp.linspace(
             start=self.domain[0],
-            stop=self.domain[0] + (self.domain[1] - self.domain[0]) * self.X,
+            stop=self.domain[0] + (self.domain[-1] - self.domain[0]) * self.X,
             num=num,
         )
         _add2legend(legend, ax.plot(z, self.eval1d(z, cheb), label=vlabel))

@@ -178,7 +178,7 @@ class Bounce2D(Bounce):
     Fast fourier transforms interpolate smooth functions in the integrand to the
     quadrature nodes. Quadrature is chosen over Runge-Kutta methods of the form
         ∂Fᵢ/∂ζ = f(λ,ζ,{Gⱼ}) subject to Fᵢ(ζ₁) = 0
-    because a fourth order Runge-Kutta method is equivalent to a quadrature
+    A fourth order Runge-Kutta method is equivalent to a quadrature
     with Simpson's rule. Our quadratures resolve these integrals more
     efficiently, and the fixed nature of quadrature performs better on GPUs.
 
@@ -278,8 +278,7 @@ class Bounce2D(Bounce):
         grid : Grid
             Tensor-product grid in (ρ, θ, ζ) with uniformly spaced nodes
             [0, 2π) × [0, 2π/NFP). The ζ nodes should be strictly increasing.
-            Note that below shape notation defines
-            ``L=grid.num_rho``, ``M=grid.num_theta``, and ``N=grid.num_zeta``.
+            Below shape notation defines ``M=grid.num_theta`` and ``N=grid.num_zeta``.
         data : dict[str, jnp.ndarray]
             Data evaluated on ``grid``.
             Must include names in ``Bounce2D.required_names``.
@@ -332,8 +331,8 @@ class Bounce2D(Bounce):
         """
         errorif(grid.sym, NotImplementedError, msg="Need grid that works with FFTs.")
 
-        self._n0 = grid.num_zeta
-        self._n1 = grid.num_theta
+        self._M = grid.num_theta
+        self._N = grid.num_zeta
         self._NFP = grid.NFP
         self._alpha = alpha
         self._x, self._w = get_quadrature(quad, automorphism)
@@ -353,8 +352,8 @@ class Bounce2D(Bounce):
         Y_B = setdefault(Y_B, theta.shape[-1] * 2)
         if spline:
             self._c["B(z)"], self._c["knots"] = cubic_spline(
-                self._n0,
-                self._n1,
+                self._M,
+                self._N,
                 self._NFP,
                 self._c["T(z)"],
                 self._c["|B|"],
@@ -363,8 +362,8 @@ class Bounce2D(Bounce):
             )
         else:
             self._c["B(z)"] = chebyshev(
-                self._n0,
-                self._n1,
+                self._M,
+                self._N,
                 self._NFP,
                 self._c["T(z)"],
                 self._c["|B|"],
@@ -491,8 +490,11 @@ class Bounce2D(Bounce):
                 polyder_vec(self._c["B(z)"]),
                 num_well,
             )
-        # TODO: One application of Newton on Fourier series |B|.
         return z1, z2
+
+    def _polish_points(self, points, pitch_inv):
+        # TODO: One application of Newton on Fourier series |B| - pitch_inv.
+        raise NotImplementedError
 
     def check_points(self, points, pitch_inv, *, plot=True, **kwargs):
         """Check that bounce points are computed correctly.
@@ -663,34 +665,32 @@ class Bounce2D(Bounce):
         """
         if not isinstance(f, (list, tuple)):
             f = [f]
-        # Shape is (num pitch, num rho, num well, num quad).
-        shape = [*z1.shape, self._x.size]
+        shape = [*z1.shape, self._x.size]  # num pitch, num rho, num well, num quad
         # ζ ∈ ℝ and θ ∈ ℝ coordinates of quadrature points
         zeta = flatten_matrix(
             bijection_from_disc(self._x, z1[..., jnp.newaxis], z2[..., jnp.newaxis])
         )
         theta = self._c["T(z)"].eval1d(zeta)
 
-        # Better to compute |B| from Fourier series instead of spline
-        # approximation because integrals are sensitive to |B|.
-        # Ideally doing one Newton step will resolve any issues.
-        # For now, it's fine to integrate with √|1−λB| as discussed
-        # in doi.org/10.1063/5.0160282.
+        # Compute |B| from Fourier series instead of spline approximation
+        # because integrals are sensitive to |B|. Using the ``polish_points``
+        # method should resolve any issues. For now, we integrate with √|1−λB|
+        # as justified in doi.org/10.1063/5.0160282.
         B = irfft2_non_uniform(
             theta,
             zeta,
-            a=self._c["|B|"][..., jnp.newaxis, :, :],
-            n0=self._n0,
-            n1=self._n1,
+            self._c["|B|"][..., jnp.newaxis, :, :],
+            self._M,
+            self._N,
             domain1=(0, 2 * jnp.pi / self._NFP),
             axes=(-1, -2),
         )
         B_sup_z = irfft2_non_uniform(
             theta,
             zeta,
-            a=self._c["B^zeta"][..., jnp.newaxis, :, :],
-            n0=self._n0,
-            n1=self._n1,
+            self._c["B^zeta"][..., jnp.newaxis, :, :],
+            self._M,
+            self._N,
             domain1=(0, 2 * jnp.pi / self._NFP),
             axes=(-1, -2),
         )
@@ -719,6 +719,7 @@ class Bounce2D(Bounce):
                 list(map(_swap_pl, f)),
                 plot,
             )
+
         return result
 
     def compute_length(self, quad=None):
@@ -737,11 +738,10 @@ class Bounce2D(Bounce):
             Shape (num rho, ).
 
         """
-        # Integrating an analytic oscillatory function so a high order
-        # quadrature is ideal. Difficult to pick the right frequency for Filon
-        # quadrature in general, which would work best for something with high
-        # NFP like Heliotron. Gauss-Legendre is superior to Clenshaw-Curtis for
-        # smooth oscillatory maps.
+        # Integrating an analytic oscillatory map so a high order quadrature is ideal.
+        # Difficult to pick the right frequency for Filon quadrature in general, which
+        # would work best, especially at high NFP. Gauss-Legendre is superior to
+        # Clenshaw-Curtis for smooth oscillatory maps.
         deg = (
             self._c["B(z)"].Y // 2
             if isinstance(self._c["B(z)"], PiecewiseChebyshevSeries)
@@ -764,9 +764,9 @@ class Bounce2D(Bounce):
         B_sup_z = irfft2_non_uniform(
             theta,
             zeta,
-            a=self._c["B^zeta"][..., jnp.newaxis, :, :],
-            n0=self._n0,
-            n1=self._n1,
+            self._c["B^zeta"][..., jnp.newaxis, :, :],
+            self._M,
+            self._N,
             domain1=(0, 2 * jnp.pi / self._NFP),
             axes=(-1, -2),
         ).reshape(*shape[:-1], self._c["T(z)"].X, w.size)
@@ -906,7 +906,7 @@ class Bounce1D(Bounce):
     Local splines interpolate smooth functions in the integrand to the quadrature
     nodes. Quadrature is chosen over Runge-Kutta methods of the form
         ∂Fᵢ/∂ζ = f(λ,ζ,{Gⱼ}) subject to Fᵢ(ζ₁) = 0
-    because a fourth order Runge-Kutta method is equivalent to a quadrature
+    A fourth order Runge-Kutta method is equivalent to a quadrature
     with Simpson's rule. Our quadratures resolve these integrals more
     efficiently, and the fixed nature of quadrature performs better on GPUs.
 

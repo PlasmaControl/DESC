@@ -9,20 +9,17 @@ from desc.utils import errorif
 
 def bijection_to_disc(x, a, b):
     """[a, b] ∋ x ↦ y ∈ [−1, 1]."""
-    y = 2.0 * (x - a) / (b - a) - 1.0
-    return y
+    return 2.0 * (x - a) / (b - a) - 1.0
 
 
 def bijection_from_disc(x, a, b):
     """[−1, 1] ∋ x ↦ y ∈ [a, b]."""
-    y = 0.5 * (b - a) * (x + 1.0) + a
-    return y
+    return 0.5 * (b - a) * (x + 1.0) + a
 
 
 def grad_bijection_from_disc(a, b):
     """Gradient wrt ``x`` of ``bijection_from_disc``."""
-    dy_dx = 0.5 * (b - a)
-    return dy_dx
+    return 0.5 * (b - a)
 
 
 # This map was tested as a change of variables to interpolate with
@@ -53,14 +50,12 @@ def automorphism_arcsin(x, gamma=jnp.cos(0.5)):
         Transformed points.
 
     """
-    y = jnp.arcsin(gamma * x) / jnp.arcsin(gamma)
-    return y
+    return jnp.arcsin(gamma * x) / jnp.arcsin(gamma)
 
 
 def grad_automorphism_arcsin(x, gamma=jnp.cos(0.5)):
     """Gradient of arcsin automorphism."""
-    dy_dx = gamma / jnp.arcsin(gamma) / jnp.sqrt(1 - (gamma * x) ** 2)
-    return dy_dx
+    return gamma / jnp.arcsin(gamma) / jnp.sqrt(1 - (gamma * x) ** 2)
 
 
 grad_automorphism_arcsin.__doc__ += "\n" + automorphism_arcsin.__doc__
@@ -103,8 +98,7 @@ def grad_automorphism_sin(x, s=0):
     """Gradient of sin automorphism."""
     dy0_dx = 0.5 * jnp.pi * jnp.cos(0.5 * jnp.pi * x)
     dy1_dx = 1.0 + jnp.cos(jnp.pi * x)
-    dy_dx = (1 - s) * dy0_dx + s * dy1_dx
-    return dy_dx
+    return (1 - s) * dy0_dx + s * dy1_dx
 
 
 grad_automorphism_sin.__doc__ += "\n" + automorphism_sin.__doc__

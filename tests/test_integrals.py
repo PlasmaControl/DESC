@@ -42,7 +42,7 @@ from desc.integrals.basis import FourierChebyshevSeries
 from desc.integrals.bounce_utils import (
     _get_extrema,
     bounce_points,
-    get_alpha,
+    get_fieldline,
     get_pitch_inv_quad,
     interp_fft_to_argmin,
     interp_to_argmin,
@@ -1623,13 +1623,13 @@ class TestBounce2D:
             (0, np.arange(1, 3) * np.sqrt(2), 5, 2 * np.pi),
         ],
     )
-    def test_alpha_sequence(self, alpha_0, iota, num_period, period):
+    def test_get_fieldline(self, alpha_0, iota, num_period, period):
         """Test field line label updating works with jit."""
-        alphas = jit(get_alpha, static_argnums=2)(alpha_0, iota, num_period, period)
-        if np.ndim(iota):
-            assert alphas.shape == (iota.size, num_period)
-        else:
-            assert alphas.shape == (num_period,)
+        fieldline = jit(get_fieldline, static_argnums=2)(
+            alpha_0, iota, num_period, period
+        )
+        shape = (iota.size, num_period) if np.ndim(iota) else (num_period,)
+        assert fieldline.shape == shape
 
     @pytest.mark.unit
     def test_interp_fft_to_argmin(self):

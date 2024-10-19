@@ -428,7 +428,7 @@ def idct_non_uniform(xq, a, n, axis=-1):
     a = jnp.moveaxis(a, axis, -1)
     # Same as Clenshaw recursion ``chebval(xq,a,tensor=False)`` but better on GPU.
     n = jnp.arange(n)
-    return jnp.sum(jnp.cos(n * jnp.arccos(xq)[..., jnp.newaxis]) * a, axis=-1)
+    return jnp.linalg.vecdot(jnp.cos(n * jnp.arccos(xq)[..., jnp.newaxis]), a)
 
 
 def _fourier(grid, f, is_reshaped=False):

@@ -367,6 +367,7 @@ def _map_PEST_coordinates(
                 fixup=fixup,
                 tol=tol,
                 maxiter=maxiter,
+                full_output=full_output,
                 **kwargs,
             )
         )
@@ -479,6 +480,7 @@ def _map_clebsch_coordinates(
                 fixup=fixup,
                 tol=tol,
                 maxiter=maxiter,
+                full_output=full_output,
                 **kwargs,
             )
         )

@@ -2874,6 +2874,7 @@ class FixSumCoilCurrent(FixCoilCurrent):
             Sum of coil currents.
 
         """
+        # TODO: multiply each by num_turns?
         return jnp.sum(
             jnp.concatenate(
                 [

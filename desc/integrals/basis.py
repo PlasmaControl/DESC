@@ -122,7 +122,7 @@ class FourierChebyshevSeries(IOAble):
     Notes
     -----
     Performance may improve significantly
-    if the spectral resolutions ``M`` and ``N`` are powers of two.
+    if the spectral resolutions ``X`` and ``Y`` are powers of two.
 
 
     Parameters
@@ -150,9 +150,9 @@ class FourierChebyshevSeries(IOAble):
         self.X = f.shape[-2]
         self.Y = f.shape[-1]
         errorif(domain[0] > domain[-1], msg="Got inverted domain.")
-        self.domain = tuple(domain)
+        self.domain = domain
         errorif(lobatto, NotImplementedError, "JAX hasn't implemented type 1 DCT.")
-        self.lobatto = bool(lobatto)
+        self.lobatto = lobatto
         self._c = rfft(
             dct(f, type=2 - lobatto, axis=-1) / (self.Y - lobatto),
             axis=-2,
@@ -283,7 +283,7 @@ class PiecewiseChebyshevSeries(IOAble):
         """Make piecewise series from given Chebyshev coefficients."""
         self.cheb = jnp.atleast_2d(cheb)
         errorif(domain[0] > domain[-1], msg="Got inverted domain.")
-        self.domain = tuple(domain)
+        self.domain = domain
 
     @property
     def X(self):

@@ -81,4 +81,6 @@ from .linear_objectives import (
     FixSumModesZ,
     FixThetaSFL,
 )
+
+from ._harmonic import HarmonicField_to_BiotSavart
 from .objective_funs import ObjectiveFunction

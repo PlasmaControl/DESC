@@ -1,0 +1,13 @@
+#!/bin/bash
+#SBATCH --job-name=iso-reg         # create a short name for your job
+#SBATCH --time=00:15:00          # total run time limit (HH:MM:SS)
+#SBATCH --mail-type=begin        # send mail when process begins
+#SBATCH --mail-type=end          # send email when job ends
+#SBATCH --mail-user=fcastro@princeton.edu
+#SBATCH --constraint=a100
+#SBATCH --gres=gpu:1
+
+module load anaconda3/2023.9
+conda activate desc-env3
+
+jupyter nbconvert --ExecutePreprocessor.timeout=None --to notebook --execute --inplace surf-div-free.ipynb

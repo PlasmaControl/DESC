@@ -2941,6 +2941,7 @@ class TestObjectiveNaNGrad:
         g = obj.grad(obj.x())
         assert not np.any(np.isnan(g))
 
+    @pytest.mark.unit
     def test_objective_no_nangrad_ballooning(self):
         """BallooningStability."""
         eq = get("HELIOTRON")

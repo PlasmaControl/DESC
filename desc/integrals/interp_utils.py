@@ -28,11 +28,9 @@ from desc.utils import Index, errorif, safediv
 #  evaluate Chebyshev series at quadrature points once, and can use that to
 #  compute the integral for every pitch. The integral will converge rapidly
 #  since a low order polynomial approximates |B| well in between adjacent
-#  extrema. This is significantly cheaper and non-iterative, so jax and gpu
-#  will like it.
+#  extrema. This is cheaper and non-iterative, so jax and gpu will like it.
 #  Implementing 1 and 2 will remove all eigenvalue solves from computation.
-#  2 is a larger improvement than 1.
-#  Implement this in later PR.
+#  2 is a larger improvement than 1. Implement this in later PR.
 chebroots_vec = jnp.vectorize(chebroots, signature="(m)->(n)")
 
 

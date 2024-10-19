@@ -292,6 +292,7 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
         maxiter_ls=0,
         alpha=0.1,
         fixup=None,
+        full_output=False,
     ):
         """Find x where fun(x, *args) == 0.
 
@@ -389,16 +390,23 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
                 0,
             )
             state = jax.lax.while_loop(condfun, bodyfun, state)
-            return state[0], state[1:]
+            if full_output:
+                return state[0], state[1:]
+            else:
+                return state[0]
 
         def tangent_solve(g, y):
             A = jnp.atleast_2d(jax.jacfwd(g)(y))
             return _lstsq(A, jnp.atleast_1d(y))
 
-        x, (res, niter) = jax.lax.custom_root(
-            res, x0, solve, tangent_solve, has_aux=True
-        )
-        return x, (safenorm(res), niter)
+        if full_output:
+            x, (res, niter) = jax.lax.custom_root(
+                res, x0, solve, tangent_solve, has_aux=True
+            )
+            return x, (safenorm(res), niter)
+        else:
+            x = jax.lax.custom_root(res, x0, solve, tangent_solve, has_aux=False)
+            return x
 
 
 # we can't really test the numpy backend stuff in automated testing, so we ignore it

@@ -208,6 +208,7 @@ def map_coordinates(  # noqa: C901
                 fixup=fixup,
                 tol=tol,
                 maxiter=maxiter,
+                full_output=full_output,
                 **kwargs,
             )
         )
@@ -215,7 +216,10 @@ def map_coordinates(  # noqa: C901
     # See description here
     # https://github.com/PlasmaControl/DESC/pull/504#discussion_r1194172532
     # except we make sure properly handle periodic coordinates.
-    yk, (res, niter) = vecroot(yk, coords)
+    if full_output:
+        yk, (res, niter) = vecroot(yk, coords)
+    else:
+        yk = vecroot(yk, coords)
 
     out = compute(yk, outbasis)
     if full_output:

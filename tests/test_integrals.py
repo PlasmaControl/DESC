@@ -1060,7 +1060,6 @@ class TestBounceQuadrature:
         """Compare quadratures in W-shaped wells."""
         x = np.linspace(-1, 1, 1000)
         plt.plot(x, B(x))
-        plt.show()
 
         def func(x):
             w1 = jnp.sqrt(jnp.clip(2 - B(x), 0, jnp.inf))
@@ -1069,7 +1068,6 @@ class TestBounceQuadrature:
             return w1
 
         plt.plot(x, func(x))
-        plt.show()
 
         truth, info = quadax.quadts(func, interval=(-1, 1))
         print("\n" + 50 * "---" + f"\nTrue value: {truth}, neval: {info[1]}")
@@ -1760,8 +1758,8 @@ class TestBounce2D:
         print("ρ:", rho[l])
 
         np.testing.assert_allclose(
-            bounce.compute_length(),
-            # Computed data below through <L|r,a> with Simpson's rule at 800 nodes.
+            bounce.compute_fieldline_length(),
+            # Computed below through "fieldline length" with Simpson's rule 800 points.
             # The difference is likely due to interpolation and floating point error.
             # (On the version of JAX on which rtol was set, there is a bug with DCT
             # and FFT that limit the accuracy to something comparable to 32 bit).

@@ -28,7 +28,7 @@ from ..integrals.quad_utils import (
     get_quadrature,
     grad_automorphism_sin,
 )
-from .objective_funs import _Objective
+from .objective_funs import _Objective, collect_docs
 from .utils import _parse_callable_target_bounds
 
 
@@ -53,41 +53,14 @@ class EffectiveRipple(_Objective):
     Parameters
     ----------
     eq : Equilibrium
-        Equilibrium that will be optimized to satisfy the Objective.
-    target : {float, ndarray, callable}, optional
-        Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f. If a callable, should take a
-        single argument ``rho`` and return the desired value of the profile at those
-        locations. Defaults to 0.
-    bounds : tuple of {float, ndarray, callable}, optional
-        Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to Objective.dim_f.
-        If a callable, each should take a single argument ``rho`` and return the
-        desired bound (lower or upper) of the profile at those locations.
-    weight : {float, ndarray}, optional
-        Weighting to apply to the Objective, relative to other Objectives.
-        Must be broadcastable to Objective.dim_f
-    normalize : bool, optional
-        This quantity is already normalized so this parameter is ignored.
-        Whether to compute the error in physical units or non-dimensionalize.
-    normalize_target : bool, optional
-        Whether target and bounds should be normalized before comparing to computed
-        values. If `normalize` is ``True`` and the target is in physical units,
-        this should also be set to True.
-    loss_function : {None, 'mean', 'min', 'max'}, optional
-        Loss function to apply to the objective values once computed. This loss function
-        is called on the raw compute value, before any shifting, scaling, or
-        normalization.
-    deriv_mode : {"auto", "fwd", "rev"}
-        Specify how to compute Jacobian matrix, either forward mode or reverse mode AD.
-        "auto" selects forward or reverse mode based on the size of the input and output
-        of the objective. Has no effect on self.grad or self.hess which always use
-        reverse mode and forward over reverse mode respectively.
-    grid : Grid, optional
-        Tensor-product grid in (ρ, θ, ζ) with uniformly spaced nodes
-        [0, 2π) × [0, 2π/NFP). That is, the M, N number of θ, ζ nodes must match
-        the output of ``fourier_pts(M)``, ``fourier_pts(N)/eq.NFP``, respectively.
-        ``M`` and ``N`` are preferably power of two.
+        ``Equilibrium`` to be optimized.
+    grid : Grid
+        Optional, tensor-product grid in (ρ, θ, ζ) with uniformly spaced nodes
+        (θ, ζ) ∈ [0, 2π) × [0, 2π/NFP). That is,
+        ``grid.num_theta``, ``grid.num_zeta`` must match the output of
+        ``desc.integrals.interp_utils.fourier_pts(grid.num_theta)``,
+        ``desc.integrals.interp_utils.fourier_pts(grid.num_zeta)/grid.NFP``,
+        respectively. Powers of two are preferable.
     X : int
         Grid resolution in poloidal direction for Clebsch coordinate grid.
         Preferably power of 2.
@@ -104,27 +77,21 @@ class EffectiveRipple(_Objective):
     num_quad : int
         Resolution for quadrature of bounce integrals. Default is 32.
     num_pitch : int
-        Resolution for quadrature over velocity coordinate. Default is 50.
+        Resolution for quadrature over velocity coordinate. Default is 64.
     num_well : int
         Maximum number of wells to detect for each pitch and field line.
         Default is to detect all wells, but due to limitations in JAX this option
         may consume more memory. Specifying a number that tightly upper bounds
         the number of wells will increase performance.
-    name : str, optional
-        Name of the objective function.
-    jac_chunk_size : int , optional
-        Will calculate the Jacobian for this objective ``jac_chunk_size``
-        columns at a time, instead of all at once. The memory usage of the
-        Jacobian calculation is roughly ``memory usage = m0 + m1*jac_chunk_size``:
-        the smaller the chunk size, the less memory the Jacobian calculation
-        will require (with some baseline memory usage). The time to compute the
-        Jacobian is roughly ``t=t0 +t1/jac_chunk_size``, so the larger the
-        ``jac_chunk_size``, the faster the calculation takes, at the cost of
-        requiring more memory. A ``jac_chunk_size`` of 1 corresponds to the least
-        memory intensive, but slowest method of calculating the Jacobian.
-        If None, it will use the largest size i.e ``obj.dim_x``.
 
     """
+
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``target=0``.",
+        bounds_default="``target=0``.",
+        normalize_detail=" Note: Has no effect for this objective.",
+        normalize_target_detail=" Note: Has no effect for this objective.",
+    )
 
     _coordinates = "r"
     _units = "~"
@@ -141,6 +108,8 @@ class EffectiveRipple(_Objective):
         loss_function=None,
         deriv_mode="auto",
         grid=None,
+        name="Effective ripple",
+        jac_chunk_size=None,
         *,
         X=16,  # X is cheap to increase.
         Y=32,
@@ -150,8 +119,6 @@ class EffectiveRipple(_Objective):
         num_quad=32,
         num_pitch=50,
         num_well=None,
-        name="Effective ripple",
-        jac_chunk_size=None,
     ):
         if target is None and bounds is None:
             target = 0.0
@@ -159,10 +126,11 @@ class EffectiveRipple(_Objective):
         self._grid = grid
         self._X = X
         self._Y = Y
-        self._constants = {"quad_weights": 1, "quad": chebgauss2(num_quad)}
+        self._constants = {"quad_weights": 1}
         self._hyperparam = {
             "Y_B": setdefault(Y_B, 2 * Y),
             "num_transit": num_transit,
+            "num_quad": num_quad,
             "num_pitch": num_pitch,
             "num_well": setdefault(num_well, Y_B * num_transit),
         }
@@ -202,10 +170,6 @@ class EffectiveRipple(_Objective):
                 NFP=eq.NFP,
             )
         # Should we call self._grid.to_numpy()?
-        self._dim_f = self._grid.num_rho
-        self._target, self._bounds = _parse_callable_target_bounds(
-            self._target, self._bounds, self._grid.compress(self._grid.nodes[:, 0])
-        )
         self._constants["clebsch"] = FourierChebyshevSeries.nodes(
             self._X,
             self._Y,
@@ -213,19 +177,23 @@ class EffectiveRipple(_Objective):
             domain=(0, 2 * np.pi),
         )
         self._constants["fieldline_quad"] = leggauss(self._hyperparam["Y_B"] // 2)
+        self._constants["quad"] = chebgauss2(self._hyperparam.pop("num_quad"))
+
+        self._dim_f = self._grid.num_rho
+        self._target, self._bounds = _parse_callable_target_bounds(
+            self._target, self._bounds, self._grid.compress(self._grid.nodes[:, 0])
+        )
 
         timer = Timer()
         if verbose > 0:
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
-
         self._constants["transforms"] = get_transforms(
             "effective ripple", eq, grid=self._grid
         )
         self._constants["profiles"] = get_profiles(
             "effective ripple", eq, grid=self._grid
         )
-
         timer.stop("Precomputing transforms")
         if verbose > 1:
             timer.disp("Precomputing transforms")
@@ -301,40 +269,14 @@ class GammaC(_Objective):
     Parameters
     ----------
     eq : Equilibrium
-        Equilibrium that will be optimized to satisfy the Objective.
-    target : {float, ndarray, callable}, optional
-        Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f. If a callable, should take a
-        single argument ``rho`` and return the desired value of the profile at those
-        locations. Defaults to 0.
-    bounds : tuple of {float, ndarray, callable}, optional
-        Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to Objective.dim_f.
-        If a callable, each should take a single argument ``rho`` and return the
-        desired bound (lower or upper) of the profile at those locations.
-    weight : {float, ndarray}, optional
-        Weighting to apply to the Objective, relative to other Objectives.
-        Must be broadcastable to Objective.dim_f
-    normalize : bool, optional
-        Whether to compute the error in physical units or non-dimensionalize.
-    normalize_target : bool, optional
-        Whether target and bounds should be normalized before comparing to computed
-        values. If `normalize` is `True` and the target is in physical units,
-        this should also be set to True.
-    loss_function : {None, 'mean', 'min', 'max'}, optional
-        Loss function to apply to the objective values once computed. This loss function
-        is called on the raw compute value, before any shifting, scaling, or
-        normalization.
-    deriv_mode : {"auto", "fwd", "rev"}
-        Specify how to compute Jacobian matrix, either forward mode or reverse mode AD.
-        "auto" selects forward or reverse mode based on the size of the input and output
-        of the objective. Has no effect on self.grad or self.hess which always use
-        reverse mode and forward over reverse mode respectively.
-    grid : Grid, optional
-        Tensor-product grid in (ρ, θ, ζ) with uniformly spaced nodes
-        [0, 2π) × [0, 2π/NFP). That is, the M, N number of θ, ζ nodes must match
-        the output of ``fourier_pts(M)``, ``fourier_pts(N)/eq.NFP``, respectively.
-        ``M`` and ``N`` are preferably power of two.
+        ``Equilibrium`` to be optimized.
+    grid : Grid
+        Optional, tensor-product grid in (ρ, θ, ζ) with uniformly spaced nodes
+        (θ, ζ) ∈ [0, 2π) × [0, 2π/NFP). That is,
+        ``grid.num_theta``, ``grid.num_zeta`` must match the output of
+        ``desc.integrals.interp_utils.fourier_pts(grid.num_theta)``,
+        ``desc.integrals.interp_utils.fourier_pts(grid.num_zeta)/grid.NFP``,
+        respectively. Powers of two are preferable.
     X : int
         Grid resolution in poloidal direction for Clebsch coordinate grid.
         Preferably power of 2.
@@ -369,21 +311,15 @@ class GammaC(_Objective):
         Therefore, an optimization using Velasco's metric should be evaluated by
         measuring decrease in Γ_c at a fixed number of toroidal transits until
         unless an adaptive quadrature is used.
-    name : str, optional
-        Name of the objective function.
-    jac_chunk_size : int , optional
-        Will calculate the Jacobian for this objective ``jac_chunk_size``
-        columns at a time, instead of all at once. The memory usage of the
-        Jacobian calculation is roughly ``memory usage = m0 + m1*jac_chunk_size``:
-        the smaller the chunk size, the less memory the Jacobian calculation
-        will require (with some baseline memory usage). The time to compute the
-        Jacobian is roughly ``t=t0 +t1/jac_chunk_size``, so the larger the
-        ``jac_chunk_size``, the faster the calculation takes, at the cost of
-        requiring more memory. A ``jac_chunk_size`` of 1 corresponds to the least
-        memory intensive, but slowest method of calculating the Jacobian.
-        If None, it will use the largest size i.e ``obj.dim_x``.
 
     """
+
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``target=0``.",
+        bounds_default="``target=0``.",
+        normalize_detail=" Note: Has no effect for this objective.",
+        normalize_target_detail=" Note: Has no effect for this objective.",
+    )
 
     _coordinates = "r"
     _units = "~"
@@ -400,6 +336,8 @@ class GammaC(_Objective):
         loss_function=None,
         deriv_mode="auto",
         grid=None,
+        name="Gamma_c",
+        jac_chunk_size=None,
         *,
         X=16,  # X is cheap to increase.
         Y=32,
@@ -410,8 +348,6 @@ class GammaC(_Objective):
         num_pitch=64,
         num_well=None,
         Nemov=True,
-        name="Gamma_c",
-        jac_chunk_size=None,
     ):
         if target is None and bounds is None:
             target = 0.0
@@ -469,10 +405,6 @@ class GammaC(_Objective):
                 NFP=eq.NFP,
             )
         # Should we call self._grid.to_numpy()?
-        self._dim_f = self._grid.num_rho
-        self._target, self._bounds = _parse_callable_target_bounds(
-            self._target, self._bounds, self._grid.compress(self._grid.nodes[:, 0])
-        )
         self._constants["clebsch"] = FourierChebyshevSeries.nodes(
             self._X,
             self._Y,
@@ -485,14 +417,17 @@ class GammaC(_Objective):
             (automorphism_sin, grad_automorphism_sin),
         )
 
+        self._dim_f = self._grid.num_rho
+        self._target, self._bounds = _parse_callable_target_bounds(
+            self._target, self._bounds, self._grid.compress(self._grid.nodes[:, 0])
+        )
+
         timer = Timer()
         if verbose > 0:
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
-
         self._constants["transforms"] = get_transforms(self._key, eq, grid=self._grid)
         self._constants["profiles"] = get_profiles(self._key, eq, grid=self._grid)
-
         timer.stop("Precomputing transforms")
         if verbose > 1:
             timer.disp("Precomputing transforms")
@@ -519,9 +454,8 @@ class GammaC(_Objective):
         """
         if constants is None:
             constants = self.constants
-        quad2 = {}
         if "quad2" in constants:
-            quad2["quad2"] = constants["quad2"]
+            self._hyperparam["quad2"] = constants["quad2"]
 
         eq = self.things[0]
         data = compute_fun(
@@ -547,7 +481,6 @@ class GammaC(_Objective):
             ),
             fieldline_quad=constants["fieldline_quad"],
             quad=constants["quad"],
-            **quad2,
             **self._hyperparam,
         )
         return constants["transforms"]["grid"].compress(data[self._key])

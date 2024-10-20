@@ -293,7 +293,7 @@ def _effective_ripple(params, transforms, profiles, data, **kwargs):
     transforms={"grid": []},
     profiles=[],
     coordinates="r",
-    data=["min_tz |B|", "max_tz |B|", "cvdrift0", "gbdrift", "<L|r,a>"]
+    data=["min_tz |B|", "max_tz |B|", "cvdrift0", "gbdrift", "fieldline length"]
     + Bounce1D.required_names,
     source_grid_requirement={"coordinates": "raz", "is_meshgrid": True},
     **_bounce_doc,
@@ -361,7 +361,7 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
         * _compute(
             Gamma_c_Velasco, interp_data, data, grid, kwargs.get("num_pitch", 64)
         )
-        / data["<L|r,a>"]
+        / data["fieldline length"]
     )
     return data
 
@@ -388,7 +388,6 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
         "B^phi_r|v,p",
         "b",
         "|B|_r|v,p",
-        "<L|r,a>",
         "iota_r",
         "grad(phi)",
         "e^rho",
@@ -396,6 +395,7 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
         "|e_alpha|r,p|",
         "kappa_g",
         "psi_r",
+        "fieldline length",
     ]
     + Bounce1D.required_names,
     source_grid_requirement={"coordinates": "raz", "is_meshgrid": True},
@@ -531,6 +531,6 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
         jnp.pi
         / (8 * 2**0.5)
         * _compute(Gamma_c, interp_data, data, grid, kwargs.get("num_pitch", 64))
-        / data["<L|r,a>"]
+        / data["fieldline length"]
     )
     return data

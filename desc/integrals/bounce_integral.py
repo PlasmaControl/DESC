@@ -403,7 +403,7 @@ class Bounce2D(Bounce):
     #  θ(α, ζ) since these are related to lambda.
 
     @staticmethod
-    def compute_theta(eq, X=16, Y=32, rho=1.0, clebsch=None, **kwargs):
+    def compute_theta(eq, X=16, Y=32, rho=1.0, iota=None, clebsch=None, **kwargs):
         """Return DESC coordinates θ of (α,ζ) Fourier Chebyshev basis nodes.
 
         Parameters
@@ -417,10 +417,16 @@ class Bounce2D(Bounce):
             Grid resolution in toroidal direction for Clebsch coordinate grid.
             Preferably power of 2.
         rho : float or jnp.ndarray
+            Shape (num rho, ).
             Flux surfaces labels in [0, 1] on which to compute.
+        iota : float or jnp.ndarray
+            Shape (num rho, ).
+            Optional, rotational transform on the flux surfaces to compute on.
         clebsch : jnp.ndarray
+            Shape (num rho * X * Y, 3).
             Optional, precomputed Clebsch coordinate tensor-product grid (ρ, α, ζ).
             ``FourierChebyshevSeries.nodes(X,Y,rho,domain=(0,2*jnp.pi))``.
+            If supplied ``rho`` is ignored.
         kwargs
             Additional parameters to supply to the coordinate mapping function.
             See ``desc.equilibrium.Equilibrium.map_coordinates``.
@@ -435,6 +441,9 @@ class Bounce2D(Bounce):
         """
         if clebsch is None:
             clebsch = FourierChebyshevSeries.nodes(X, Y, rho, domain=(0, 2 * jnp.pi))
+        if iota is not None:
+            iota = jnp.atleast_1d(iota)
+            kwargs["iota"] = jnp.broadcast_to(iota, shape=(Y, X, iota.size)).T.ravel()
         return eq.map_coordinates(
             coords=clebsch,
             inbasis=("rho", "alpha", "zeta"),

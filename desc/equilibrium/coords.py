@@ -105,7 +105,11 @@ def map_coordinates(  # noqa: C901
             f"don't have recipe to compute partial derivative {key}",
         )
 
-    profiles = get_profiles(inbasis + basis_derivs, eq)
+    profiles = (
+        kwargs["profiles"]
+        if "profiles" in kwargs
+        else get_profiles(inbasis + basis_derivs, eq)
+    )
 
     # TODO: make this work for permutations of in/out basis
     if outbasis == ("rho", "theta", "zeta"):
@@ -114,7 +118,9 @@ def map_coordinates(  # noqa: C901
                 iota = kwargs.pop("iota")
             else:
                 if profiles["iota"] is None:
-                    profiles["iota"] = eq.get_profile(["iota", "iota_r"], params=params)
+                    profiles["iota"] = eq.get_profile(
+                        ["iota", "iota_r"], params=params, **kwargs
+                    )
                 iota = profiles["iota"].compute(Grid(coords, sort=False, jitable=True))
             return _map_clebsch_coordinates(
                 coords=coords,
@@ -143,7 +149,7 @@ def map_coordinates(  # noqa: C901
 
     # do surface average to get iota once
     if "iota" in profiles and profiles["iota"] is None:
-        profiles["iota"] = eq.get_profile(["iota", "iota_r"], params=params)
+        profiles["iota"] = eq.get_profile(["iota", "iota_r"], params=params, **kwargs)
         params["i_l"] = profiles["iota"].params
 
     rhomin = kwargs.pop("rhomin", tol / 10)

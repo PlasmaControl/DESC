@@ -1,13 +1,27 @@
-"""Objectives for targeting neoclassical transport."""
+"""Objectives for targeting neoclassical transport.
+
+Notes
+-----
+Performance will improve significantly by resolving these GitHub issues.
+  * ``1154`` Improve coordinate mapping performance
+  * ``1294`` Nonuniform fast transforms
+  * ``1303`` Patch for differentiable code with dynamic shapes
+  * ``1206`` Upsample data above midplane to full grid assuming stellarator symmetry
+  * ``1034`` Optimizers/objectives with auxiliary output
+
+"""
 
 import numpy as np
 from orthax.legendre import leggauss
 
 from desc.compute import get_profiles, get_transforms
 from desc.compute.utils import _compute as compute_fun
-from desc.grid import LinearGrid
-from desc.utils import Timer
+from desc.grid import Grid
+from desc.utils import Timer, setdefault
 
+from ..integrals import Bounce2D
+from ..integrals.basis import FourierChebyshevSeries
+from ..integrals.interp_utils import fourier_pts
 from ..integrals.quad_utils import (
     automorphism_sin,
     chebgauss2,
@@ -69,13 +83,20 @@ class EffectiveRipple(_Objective):
         "auto" selects forward or reverse mode based on the size of the input and output
         of the objective. Has no effect on self.grad or self.hess which always use
         reverse mode and forward over reverse mode respectively.
-    rho : ndarray
-        Unique coordinate values specifying flux surfaces to compute on.
-    alpha : ndarray
-        Unique coordinate values specifying field line labels to compute on.
-    knots_per_transit : int
-        Number of points per toroidal transit at which to sample data along field
-        line. Default is 100.
+    grid : Grid, optional
+        Tensor-product grid in (ρ, θ, ζ) with uniformly spaced nodes
+        [0, 2π) × [0, 2π/NFP). That is, the M, N number of θ, ζ nodes must match
+        the output of ``fourier_pts(M)``, ``fourier_pts(N)/eq.NFP``, respectively.
+        ``M`` and ``N`` are preferably power of two.
+    X : int
+        Grid resolution in poloidal direction for Clebsch coordinate grid.
+        Preferably power of 2.
+    Y : int
+        Grid resolution in toroidal direction for Clebsch coordinate grid.
+        Preferably power of 2.
+    Y_B : int
+        Desired resolution for |B| along field lines to compute bounce points.
+        Default is to double ``Y``.
     num_transit : int
         Number of toroidal transits to follow field line.
         For axisymmetric devices, one poloidal transit is sufficient. Otherwise,
@@ -84,8 +105,6 @@ class EffectiveRipple(_Objective):
         Resolution for quadrature of bounce integrals. Default is 32.
     num_pitch : int
         Resolution for quadrature over velocity coordinate. Default is 50.
-    batch : bool
-        Whether to vectorize part of the computation. Default is true.
     num_well : int
         Maximum number of wells to detect for each pitch and field line.
         Default is to detect all wells, but due to limitations in JAX this option
@@ -121,14 +140,15 @@ class EffectiveRipple(_Objective):
         normalize_target=True,
         loss_function=None,
         deriv_mode="auto",
-        rho=1.0,
-        alpha=0.0,
+        grid=None,
         *,
-        knots_per_transit=100,
-        num_transit=10,
+        X=16,  # X is cheap to increase.
+        Y=32,
+        # Y_B is expensive to increase if one does not fix num well per transit.
+        Y_B=None,
+        num_transit=20,
         num_quad=32,
         num_pitch=50,
-        batch=True,
         num_well=None,
         name="Effective ripple",
         jac_chunk_size=None,
@@ -136,29 +156,15 @@ class EffectiveRipple(_Objective):
         if target is None and bounds is None:
             target = 0.0
 
-        rho, alpha = np.atleast_1d(rho, alpha)
-        self._dim_f = rho.size
-        self._keys_1dr = [
-            "iota",
-            "iota_r",
-            "<|grad(rho)|>",
-            "min_tz |B|",
-            "max_tz |B|",
-            "R0",  # TODO: GitHub PR #1094
-        ]
-        self._constants = {
-            "quad_weights": 1,
-            "rho": rho,
-            "alpha": alpha,
-            "zeta": np.linspace(
-                0, 2 * np.pi * num_transit, knots_per_transit * num_transit
-            ),
-            "quad": chebgauss2(num_quad),
-        }
-        self._hyperparameters = {
+        self._grid = grid
+        self._X = X
+        self._Y = Y
+        self._constants = {"quad_weights": 1, "quad": chebgauss2(num_quad)}
+        self._hyperparam = {
+            "Y_B": setdefault(Y_B, 2 * Y),
+            "num_transit": num_transit,
             "num_pitch": num_pitch,
-            "batch": batch,
-            "num_well": num_well,
+            "num_well": setdefault(num_well, Y_B * num_transit),
         }
 
         super().__init__(
@@ -186,23 +192,38 @@ class EffectiveRipple(_Objective):
 
         """
         eq = self.things[0]
-        self._grid_1dr = LinearGrid(
-            rho=self._constants["rho"], M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym
-        )
+        if self._grid is None:
+            self._grid = Grid.create_meshgrid(
+                # Multiply equilibrium resolution by 2 instead of using eq.*_grid
+                # because the eq.*_grid integers are odd, and we'd like them to be
+                # powers of two or at least even.
+                [1.0, fourier_pts(eq.M * 2), fourier_pts(max(1, eq.N) * 2) / eq.NFP],
+                period=(np.inf, 2 * np.pi, 2 * np.pi / eq.NFP),
+                NFP=eq.NFP,
+            )
+        # Should we call self._grid.to_numpy()?
+        self._dim_f = self._grid.num_rho
         self._target, self._bounds = _parse_callable_target_bounds(
-            self._target, self._bounds, self._constants["rho"]
+            self._target, self._bounds, self._grid.compress(self._grid.nodes[:, 0])
         )
+        self._constants["clebsch"] = FourierChebyshevSeries.nodes(
+            self._X,
+            self._Y,
+            self._grid.compress(self._grid.nodes[:, 0]),
+            domain=(0, 2 * np.pi),
+        )
+        self._constants["fieldline_quad"] = leggauss(self._hyperparam["Y_B"] // 2)
 
         timer = Timer()
         if verbose > 0:
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._constants["transforms_1dr"] = get_transforms(
-            self._keys_1dr, eq, self._grid_1dr
+        self._constants["transforms"] = get_transforms(
+            "effective ripple", eq, grid=self._grid
         )
         self._constants["profiles"] = get_profiles(
-            self._keys_1dr + ["effective ripple*"], eq, self._grid_1dr
+            "effective ripple", eq, grid=self._grid
         )
 
         timer.stop("Precomputing transforms")
@@ -218,56 +239,47 @@ class EffectiveRipple(_Objective):
         ----------
         params : dict
             Dictionary of equilibrium degrees of freedom, e.g.
-            ``Equilibrium.params_dict``
+            ``Equilibrium.params_dict``.
         constants : dict
             Dictionary of constant data, e.g. transforms, profiles etc.
             Defaults to ``self.constants``.
 
         Returns
         -------
-        result : ndarray
+        eps_eff : ndarray
             Effective ripple as a function of the flux surface label.
 
         """
+        # TODO: GitHub pull request #1094.
         if constants is None:
             constants = self.constants
         eq = self.things[0]
-        # TODO: compute all deps of effective ripple here
+        data = compute_fun(
+            eq, "iota", params, constants["transforms"], constants["profiles"]
+        )
         data = compute_fun(
             eq,
-            self._keys_1dr,
+            "effective ripple",
             params,
-            constants["transforms_1dr"],
+            constants["transforms"],
             constants["profiles"],
-        )
-        # TODO: interpolate all deps to this grid with fft utilities from fourier bounce
-        grid = eq._get_rtz_grid(
-            constants["rho"],
-            constants["alpha"],
-            constants["zeta"],
-            coordinates="raz",
-            iota=self._grid_1dr.compress(data["iota"]),
-            params=params,
-        )
-        data = {
-            key: (
-                grid.copy_data_from_other(data[key], self._grid_1dr)
-                if key != "R0"
-                else data[key]
-            )
-            for key in self._keys_1dr
-        }
-        data = compute_fun(
-            eq,
-            "effective ripple*",
-            params,
-            get_transforms("effective ripple*", eq, grid, jitable=True),
-            constants["profiles"],
-            data=data,
+            data,
+            # TODO: GitHub issue #1034. Use old values as initial guess.
+            theta=Bounce2D.compute_theta(
+                eq,
+                self._X,
+                self._Y,
+                iota=constants["transforms"]["grid"].compress(data["iota"]),
+                clebsch=constants["clebsch"],
+                # Pass in params so that root finding is done with the new
+                # perturbed λ coefficients and not the original equilibrium's.
+                params=params,
+            ),
+            fieldline_quad=constants["fieldline_quad"],
             quad=constants["quad"],
-            **self._hyperparameters,
+            **self._hyperparam,
         )
-        return grid.compress(data["effective ripple*"])
+        return constants["transforms"]["grid"].compress(data["effective ripple"])
 
 
 class GammaC(_Objective):
@@ -318,23 +330,28 @@ class GammaC(_Objective):
         "auto" selects forward or reverse mode based on the size of the input and output
         of the objective. Has no effect on self.grad or self.hess which always use
         reverse mode and forward over reverse mode respectively.
-    rho : ndarray
-        Unique coordinate values specifying flux surfaces to compute on.
-    alpha : ndarray
-        Unique coordinate values specifying field line labels to compute on.
+    grid : Grid, optional
+        Tensor-product grid in (ρ, θ, ζ) with uniformly spaced nodes
+        [0, 2π) × [0, 2π/NFP). That is, the M, N number of θ, ζ nodes must match
+        the output of ``fourier_pts(M)``, ``fourier_pts(N)/eq.NFP``, respectively.
+        ``M`` and ``N`` are preferably power of two.
+    X : int
+        Grid resolution in poloidal direction for Clebsch coordinate grid.
+        Preferably power of 2.
+    Y : int
+        Grid resolution in toroidal direction for Clebsch coordinate grid.
+        Preferably power of 2.
+    Y_B : int
+        Desired resolution for |B| along field lines to compute bounce points.
+        Default is to double ``Y``.
     num_transit : int
         Number of toroidal transits to follow field line.
         For axisymmetric devices, one poloidal transit is sufficient. Otherwise,
         more transits will give more accurate result, with diminishing returns.
-    knots_per_transit : int
-        Number of points per toroidal transit at which to sample data along field
-        line. Default is 100.
     num_quad : int
         Resolution for quadrature of bounce integrals. Default is 32.
     num_pitch : int
         Resolution for quadrature over velocity coordinate. Default is 64.
-    batch : bool
-        Whether to vectorize part of the computation. Default is true.
     num_well : int
         Maximum number of wells to detect for each pitch and field line.
         Default is to detect all wells, but due to limitations in JAX this option
@@ -382,14 +399,15 @@ class GammaC(_Objective):
         normalize_target=True,
         loss_function=None,
         deriv_mode="auto",
-        rho=np.linspace(0.5, 1, 3),
-        alpha=np.array([0]),
+        grid=None,
         *,
-        num_transit=10,
-        knots_per_transit=100,
+        X=16,  # X is cheap to increase.
+        Y=32,
+        # Y_B is expensive to increase if one does not fix num well per transit.
+        Y_B=None,
+        num_transit=20,
         num_quad=32,
         num_pitch=64,
-        batch=True,
         num_well=None,
         Nemov=True,
         name="Gamma_c",
@@ -398,28 +416,23 @@ class GammaC(_Objective):
         if target is None and bounds is None:
             target = 0.0
 
-        rho, alpha = np.atleast_1d(rho, alpha)
-        self._dim_f = rho.size
-        self._constants = {
-            "quad_weights": 1,
-            "rho": rho,
-            "alpha": alpha,
-            "zeta": np.linspace(
-                0, 2 * np.pi * num_transit, knots_per_transit * num_transit
-            ),
-        }
-        self._hyperparameters = {
+        self._grid = grid
+        self._X = X
+        self._Y = Y
+        self._constants = {"quad_weights": 1}
+        self._hyperparam = {
+            "Y_B": setdefault(Y_B, 2 * Y),
+            "num_transit": num_transit,
             "num_quad": num_quad,
             "num_pitch": num_pitch,
-            "batch": batch,
-            "num_well": num_well,
+            "num_well": setdefault(num_well, Y_B * num_transit),
         }
-        self._keys_1dr = ["iota", "iota_r", "min_tz |B|", "max_tz |B|"]
         if Nemov:
-            self._key = "Gamma_c*"
+            self._key = "Gamma_c"
             self._constants["quad2"] = chebgauss2(num_quad)
         else:
-            self._key = "Gamma_c Velasco*"
+            self._key = "Gamma_c Velasco"
+            raise NotImplementedError
 
         super().__init__(
             things=eq,
@@ -446,15 +459,30 @@ class GammaC(_Objective):
 
         """
         eq = self.things[0]
-        self._grid_1dr = LinearGrid(
-            rho=self._constants["rho"], M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym
-        )
-        self._constants["quad"] = get_quadrature(
-            leggauss(self._hyperparameters.pop("num_quad")),
-            (automorphism_sin, grad_automorphism_sin),
-        )
+        if self._grid is None:
+            self._grid = Grid.create_meshgrid(
+                # Multiply equilibrium resolution by 2 instead of using eq.*_grid
+                # because the eq.*_grid integers are odd, and we'd like them to be
+                # powers of two or at least even.
+                [1.0, fourier_pts(eq.M * 2), fourier_pts(max(1, eq.N) * 2) / eq.NFP],
+                period=(np.inf, 2 * np.pi, 2 * np.pi / eq.NFP),
+                NFP=eq.NFP,
+            )
+        # Should we call self._grid.to_numpy()?
+        self._dim_f = self._grid.num_rho
         self._target, self._bounds = _parse_callable_target_bounds(
-            self._target, self._bounds, self._constants["rho"]
+            self._target, self._bounds, self._grid.compress(self._grid.nodes[:, 0])
+        )
+        self._constants["clebsch"] = FourierChebyshevSeries.nodes(
+            self._X,
+            self._Y,
+            self._grid.compress(self._grid.nodes[:, 0]),
+            domain=(0, 2 * np.pi),
+        )
+        self._constants["fieldline_quad"] = leggauss(self._hyperparam["Y_B"] // 2)
+        self._constants["quad"] = get_quadrature(
+            leggauss(self._hyperparam.pop("num_quad")),
+            (automorphism_sin, grad_automorphism_sin),
         )
 
         timer = Timer()
@@ -462,12 +490,8 @@ class GammaC(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._constants["transforms_1dr"] = get_transforms(
-            self._keys_1dr, eq, self._grid_1dr
-        )
-        self._constants["profiles"] = get_profiles(
-            self._keys_1dr + [self._key], eq, self._grid_1dr
-        )
+        self._constants["transforms"] = get_transforms(self._key, eq, grid=self._grid)
+        self._constants["profiles"] = get_profiles(self._key, eq, grid=self._grid)
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -489,46 +513,41 @@ class GammaC(_Objective):
 
         Returns
         -------
-        result : ndarray
+        Gamma_c : ndarray
             Γ_c as a function of the flux surface label.
 
         """
         if constants is None:
             constants = self.constants
-        eq = self.things[0]
-        # TODO: compute all deps of gamma here
-        data = compute_fun(
-            eq,
-            self._keys_1dr,
-            params,
-            constants["transforms_1dr"],
-            constants["profiles"],
-        )
-        # TODO: interpolate all deps to this grid with fft utilities from fourier bounce
-        grid = eq._get_rtz_grid(
-            constants["rho"],
-            constants["alpha"],
-            constants["zeta"],
-            coordinates="raz",
-            iota=self._grid_1dr.compress(data["iota"]),
-            params=params,
-        )
-        data = {
-            key: grid.copy_data_from_other(data[key], self._grid_1dr)
-            for key in self._keys_1dr
-        }
         quad2 = {}
         if "quad2" in constants:
             quad2["quad2"] = constants["quad2"]
+
+        eq = self.things[0]
+        data = compute_fun(
+            eq, "iota", params, constants["transforms"], constants["profiles"]
+        )
         data = compute_fun(
             eq,
             self._key,
             params,
-            get_transforms(self._key, eq, grid, jitable=True),
+            constants["transforms"],
             constants["profiles"],
-            data=data,
+            data,
+            # TODO: GitHub issue #1034. Use old values as initial guess.
+            theta=Bounce2D.compute_theta(
+                eq,
+                self._X,
+                self._Y,
+                iota=constants["transforms"]["grid"].compress(data["iota"]),
+                clebsch=constants["clebsch"],
+                # Pass in params so that root finding is done with the new
+                # perturbed λ coefficients and not the original equilibrium's.
+                params=params,
+            ),
+            fieldline_quad=constants["fieldline_quad"],
             quad=constants["quad"],
             **quad2,
-            **self._hyperparameters,
+            **self._hyperparam,
         )
-        return grid.compress(data[self._key])
+        return constants["transforms"]["grid"].compress(data[self._key])

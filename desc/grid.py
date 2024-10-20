@@ -646,6 +646,13 @@ class _Grid(IOAble, ABC):
         x = jnp.transpose(x, newax)
         return x
 
+    def to_numpy(self):
+        """Convert all jax array attributes to numpy arrays."""
+        for attr in self.__dict__:
+            value = getattr(self, attr)
+            if isinstance(value, jnp.ndarray):
+                setattr(self, attr, np.array(value))
+
 
 class Grid(_Grid):
     """Collocation grid with custom node placement.
@@ -808,9 +815,9 @@ class Grid(_Grid):
         a, b, c = jnp.atleast_1d(*nodes)
         if spacing is None:
             errorif(coordinates[0] != "r", NotImplementedError)
-            da = _midpoint_spacing(a)
-            db = _periodic_spacing(b, period[1])[1]
-            dc = _periodic_spacing(c, period[2])[1] * NFP
+            da = _midpoint_spacing(a, jnp=jnp)
+            db = _periodic_spacing(b, period[1], jnp=jnp)[1]
+            dc = _periodic_spacing(c, period[2], jnp=jnp)[1] * NFP
         else:
             da, db, dc = spacing
 
@@ -839,10 +846,7 @@ class Grid(_Grid):
             repeat(unique_a_idx // b.size, b.size, total_repeat_length=a.size * b.size),
             c.size,
         )
-        inverse_b_idx = jnp.tile(
-            unique_b_idx,
-            a.size * c.size,
-        )
+        inverse_b_idx = jnp.tile(unique_b_idx, a.size * c.size)
         inverse_c_idx = repeat(unique_c_idx // (a.size * b.size), (a.size * b.size))
         return Grid(
             nodes=nodes,
@@ -853,7 +857,6 @@ class Grid(_Grid):
             NFP=NFP,
             sort=False,
             is_meshgrid=True,
-            jitable=True,
             _unique_rho_idx=unique_a_idx,
             _unique_poloidal_idx=unique_b_idx,
             _unique_zeta_idx=unique_c_idx,

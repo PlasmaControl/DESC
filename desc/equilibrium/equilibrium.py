@@ -909,13 +909,13 @@ class Equilibrium(IOAble, Optimizable):
             # the compute logic assume input data is evaluated on those coordinates.
             # We exclude these from the depXdx sets below since the grids we will
             # use to compute those dependencies are coordinate-blind.
-            # Example, "<L|r,a>" has coordinates="r", but requires computing on
-            # field line following source grid.
+            # Example, "fieldline length" has coordinates="r", but requires computing
+            # on field line following source grid.
             return bool(data_index[p][name]["source_grid_requirement"])
 
-        # Need to call _grow_seeds so that some other quantity like K = 2 * <L|r,a>,
-        # which does not need a source grid to evaluate, does not compute <L|r,a> on a
-        # grid that does not follow field lines.
+        # Need to call _grow_seeds so that e.g. "effective ripple*" which does not
+        # need a source grid to evaluate, still computes "effective ripple 3/2*"
+        # on a grid whose source grid follows field lines.
         # Maybe this can help explain:
         # https://github.com/PlasmaControl/DESC/pull/1024#discussion_r1664918897.
         need_src_deps = _grow_seeds(p, set(filter(need_src, deps)), deps)

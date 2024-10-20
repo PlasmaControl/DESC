@@ -1,18 +1,18 @@
 """Compute functions for neoclassical transport.
 
 Performance will improve significantly by resolving these GitHub issues.
-
-* ``1154`` Improve coordinate mapping performance
-* ``1294`` Nonuniform fast transforms
-* ``1303`` Patch for differentiable code with dynamic shapes
-* ``1206`` Upsample data above midplane to full grid assuming stellarator symmetry
-* ``1034`` Optimizers/objectives with auxilary output
+  * ``1154`` Improve coordinate mapping performance
+  * ``1294`` Nonuniform fast transforms
+  * ``1303`` Patch for differentiable code with dynamic shapes
+  * ``1206`` Upsample data above midplane to full grid assuming stellarator symmetry
+  * ``1034`` Optimizers/objectives with auxiliary output
 
 If memory is still an issue, consider computing one pitch at a time. This
 can be done by copy-pasting the code given at
 https://github.com/PlasmaControl/DESC/pull/1003#discussion_r1780459450.
 Note that imap supports computing in batches, so that can also be used.
 Make sure to benchmark whether this reduces memory in an optimization.
+
 """
 
 from functools import partial

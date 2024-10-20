@@ -1827,17 +1827,12 @@ class TestBounce2D:
         for name in names:
             grid_data[name] = grid_data[name] * data["normalization"]
 
-        X, Y = 8, 8
         bounce = Bounce2D(
             grid=grid,
             data=grid_data,
             iota=data["iota"],
             theta=Bounce2D.compute_theta(
-                eq,
-                X=X,
-                Y=Y,
-                rho=data["rho"],
-                iota=jnp.broadcast_to(data["iota"], shape=(X * Y)),
+                eq, X=8, Y=8, rho=data["rho"], iota=data["iota"]
             ),
             num_transit=3,
             alpha=data["alpha"] - 2.5 * np.pi * data["iota"],

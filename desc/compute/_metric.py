@@ -1583,25 +1583,6 @@ def _g_sup_zz_r(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
-    name="g^rr_t",
-    label="\\partial_{\\theta} g^{\\rho}{\\rho}",
-    units="m^-2",
-    units_long="inverse square meters",
-    description="Radial/Radial element of contravariant metric tensor, "
-    + "first poloidal derivative",
-    dim=1,
-    params=[],
-    transforms={},
-    profiles=[],
-    coordinates="rtz",
-    data=["e^rho", "e^rho_t"],
-)
-def _g_sup_rr_t(params, transforms, profiles, data, **kwargs):
-    data["g^rr_t"] = 2 * dot(data["e^rho_t"], data["e^rho"])
-    return data
-
-
-@register_compute_fun(
     name="g^rt_t",
     label="\\partial_{\\theta} g^{\\rho \\theta}",
     units="m^-2",
@@ -1699,25 +1680,6 @@ def _g_sup_tz_t(params, transforms, profiles, data, **kwargs):
 )
 def _g_sup_zz_t(params, transforms, profiles, data, **kwargs):
     data["g^zz_t"] = 2 * dot(data["e^zeta_t"], data["e^zeta"])
-    return data
-
-
-@register_compute_fun(
-    name="g^rr_z",
-    label="\\partial_{\\zeta} g^{\\rho}{\\rho}",
-    units="m^-2",
-    units_long="inverse square meters",
-    description="Radial/Radial element of contravariant metric tensor, "
-    + "first toroidal derivative",
-    dim=1,
-    params=[],
-    transforms={},
-    profiles=[],
-    coordinates="rtz",
-    data=["e^rho", "e^rho_z"],
-)
-def _g_sup_rr_z(params, transforms, profiles, data, **kwargs):
-    data["g^rr_z"] = 2 * dot(data["e^rho_z"], data["e^rho"])
     return data
 
 

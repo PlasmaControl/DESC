@@ -1776,6 +1776,7 @@ class TestBounce2D:
 
         # 10. Plotting
         fig, ax = bounce.plot(l, pitch_inv[l], include_legend=False, show=False)
+        _, _ = bounce.plot_theta(l, show=False)
 
         # make sure tests pass when spline=True
         b = Bounce2D(
@@ -1788,6 +1789,7 @@ class TestBounce2D:
             spline=True,
         )
         b.check_points(b.points(pitch_inv), pitch_inv, plot=False)
+        _, _ = bounce.plot(l, pitch_inv[l], show=False)
 
         return fig
 

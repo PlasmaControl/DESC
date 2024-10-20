@@ -87,7 +87,7 @@ def test_map_coordinates_derivative():
     eq = get("DSHAPE")
     with pytest.warns(UserWarning, match="Reducing radial"):
         eq.change_resolution(3, 3, 0, 6, 6, 0)
-    inbasis = ["alpha", "phi", "rho"]
+    inbasis = ["rho", "alpha", "phi"]
 
     rho = np.linspace(0.01, 0.99, 20)
     theta = np.linspace(0, np.pi, 20, endpoint=False)
@@ -121,11 +121,15 @@ def test_map_coordinates_derivative():
 
     # Check map_coordinates with full_output is still runs without errors
     # this time _map_clebsch_coordinates is called inside map_coordinates
+    inbasis = ["rho", "alpha", "zeta"]
+    in_data = eq.compute(inbasis, grid=grid)
+    in_coords = np.stack([in_data[k] for k in inbasis], axis=-1)
+
     @jax.jit
     def foo(params, in_coords):
         out, (_, _) = eq.map_coordinates(
             in_coords,
-            ("rho", "alpha", "phi"),
+            ("rho", "alpha", "zeta"),
             ("rho", "theta", "zeta"),
             np.array([rho, theta, zeta]).T,
             params,
@@ -154,8 +158,11 @@ def test_map_coordinates_derivative():
     # this will call _map_PEST_coordinates inside map_coordinates
     @jax.jit
     def bar(L_lmn):
+        params = {"L_lmn": L_lmn}
         geom_coords = eq.map_coordinates(
-            flux_coords, inbasis=("rho", "theta_PEST", "zeta")
+            flux_coords,
+            inbasis=("rho", "theta_PEST", "zeta"),
+            params=params,
         )
         return geom_coords
 

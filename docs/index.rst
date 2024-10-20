@@ -61,10 +61,39 @@
    :maxdepth: 1
    :caption: Developer guides
 
-   adding_compute_funs
-   adding_objectives
-   adding_optimizers
+   dev_guide/adding_compute_funs.rst
+   dev_guide/adding_objectives.rst
+   dev_guide/adding_optimizers.rst
+   dev_guide/backend.rst
+   dev_guide/compute.rst
+   dev_guide/compute.ipynb
+   dev_guide/compute_2.ipynb
+   dev_guide/configuration_equilibrium.rst
+   dev_guide/grid.ipynb
+   dev_guide/objectives.rst
+   dev_guide/transforms.ipynb
+   notebooks/dev_guide/backend.ipynb
+   notebooks/dev_guide/basis.ipynb
+   notebooks/dev_guide/coils.ipynb
+   notebooks/dev_guide/compute.ipynb
+   notebooks/dev_guide/configuration.ipynb
+   notebooks/dev_guide/derivatives.ipynb
+   notebooks/dev_guide/equilibrium.ipynb
+   notebooks/dev_guide/examples.ipynb
+   notebooks/dev_guide/geometry.ipynb
    notebooks/dev_guide/grid.ipynb
+   notebooks/dev_guide/interpolate.ipynb
+   notebooks/dev_guide/io.ipynb
+   notebooks/dev_guide/magnetic_fields.ipynb
+   notebooks/dev_guide/objectives.ipynb
+   notebooks/dev_guide/optimization_objectives_constraints.ipynb
+   notebooks/dev_guide/optimize.ipynb
+   notebooks/dev_guide/perturbations.ipynb
+   notebooks/dev_guide/plotting.ipynb
+   notebooks/dev_guide/transforms.ipynb
+   notebooks/dev_guide/utils.ipynb
+   notebooks/dev_guide/vmec_utils.ipynb
+   notebooks/dev_guide/vmec.ipynb
 
 
 

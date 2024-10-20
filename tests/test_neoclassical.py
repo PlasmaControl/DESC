@@ -17,8 +17,8 @@ from desc.vmec import VMECIO
 
 
 @pytest.mark.unit
-def test_field_line_average():
-    """Test that field line average converges to surface average."""
+def test_fieldline_average():
+    """Test that fieldline average converges to surface average."""
     rho = np.array([1])
     alpha = np.array([0])
     eq = get("DSHAPE")
@@ -27,54 +27,70 @@ def test_field_line_average():
     # For axisymmetric devices, one poloidal transit must be exact.
     zeta = np.linspace(0, 2 * np.pi / iota, 25)
     grid = get_rtz_grid(eq, rho, alpha, zeta, coordinates="raz")
-    data = eq.compute(["<L|r,a>", "<G|r,a>", "V_r(r)"], grid=grid)
-    np.testing.assert_allclose(
-        data["<L|r,a>"] / data["<G|r,a>"], data["V_r(r)"] / (4 * np.pi**2), rtol=1e-3
+    data = eq.compute(
+        ["fieldline length", "fieldline length/volume", "V_r(r)"], grid=grid
     )
-    assert np.all(np.sign(data["<L|r,a>"]) > 0)
-    assert np.all(np.sign(data["<G|r,a>"]) > 0)
+    np.testing.assert_allclose(
+        data["fieldline length"] / data["fieldline length/volume"],
+        data["V_r(r)"] / (4 * np.pi**2),
+        rtol=1e-3,
+    )
+    assert np.all(data["fieldline length"] > 0)
+    assert np.all(data["fieldline length/volume"] > 0)
 
     # Otherwise, many toroidal transits are necessary to sample surface.
     eq = get("W7-X")
     zeta = np.linspace(0, 40 * np.pi, 300)
     grid = get_rtz_grid(eq, rho, alpha, zeta, coordinates="raz")
-    data = eq.compute(["<L|r,a>", "<G|r,a>", "V_r(r)"], grid=grid)
-    np.testing.assert_allclose(
-        data["<L|r,a>"] / data["<G|r,a>"], data["V_r(r)"] / (4 * np.pi**2), rtol=1e-3
+    data = eq.compute(
+        ["fieldline length", "fieldline length/volume", "V_r(r)"], grid=grid
     )
-    assert np.all(np.sign(data["<L|r,a>"]) > 0)
-    assert np.all(np.sign(data["<G|r,a>"]) > 0)
+    np.testing.assert_allclose(
+        data["fieldline length"] / data["fieldline length/volume"],
+        data["V_r(r)"] / (4 * np.pi**2),
+        rtol=1e-3,
+    )
+    assert np.all(data["fieldline length"] > 0)
+    assert np.all(data["fieldline length/volume"] > 0)
 
 
 @pytest.mark.unit
 @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
-def test_effective_ripple():
-    """Test effective ripple with W7-X."""
+def test_effective_ripple_1D():
+    """Test effective ripple 1D with W7-X against NEO."""
+    Y_B = 100
+    num_transit = 10
     eq = get("W7-X")
     rho = np.linspace(0, 1, 10)
-    alpha = np.array([0])
-    zeta = np.linspace(0, 20 * np.pi, 1000)
-    grid = get_rtz_grid(eq, rho, alpha, zeta, coordinates="raz")
-    data = eq.compute("effective ripple", grid=grid)
-    assert np.isfinite(data["effective ripple"]).all()
+    grid = get_rtz_grid(
+        eq,
+        rho,
+        poloidal=np.array([0]),
+        toroidal=np.linspace(0, num_transit * 2 * np.pi, num_transit * Y_B),
+        coordinates="raz",
+    )
+    data = eq.compute("effective ripple*", grid=grid)
+
+    assert np.isfinite(data["effective ripple*"]).all()
     np.testing.assert_allclose(
-        data["effective ripple 3/2"] ** (2 / 3),
-        data["effective ripple"],
+        data["effective ripple 3/2*"] ** (2 / 3),
+        data["effective ripple*"],
         err_msg="Bug in source grid logic in eq.compute.",
     )
-    eps_32 = grid.compress(data["effective ripple 3/2"])
-    fig, ax = plt.subplots()
-    ax.plot(rho, eps_32, marker="o")
-
+    eps_32 = grid.compress(data["effective ripple 3/2*"])
     neo_rho, neo_eps_32 = NeoIO.read("tests/inputs/neo_out.w7x")
     np.testing.assert_allclose(eps_32, np.interp(rho, neo_rho, neo_eps_32), rtol=0.16)
+
+    fig, ax = plt.subplots()
+    ax.plot(rho, eps_32, marker="o")
+    ax.plot(neo_rho, neo_eps_32)
     return fig
 
 
 @pytest.mark.unit
 @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
-def test_effective_ripple_2d():
-    """Test effective ripple 2d with W7-X."""
+def test_effective_ripple_2D():
+    """Test effective ripple 2D with W7-X against NEO."""
     eq = get("W7-X")
     rho = np.linspace(0, 1, 10)
     grid = Grid.create_meshgrid(
@@ -82,50 +98,90 @@ def test_effective_ripple_2d():
         period=(np.inf, 2 * np.pi, 2 * np.pi / eq.NFP),
         NFP=eq.NFP,
     )
-    theta = Bounce2D.compute_theta(eq, M=16, N=64, rho=rho)
-    data = eq.compute("effective ripple_2d", grid=grid, theta=theta, num_transit=10)
-    assert np.isfinite(data["effective ripple_2d"]).all()
-    np.testing.assert_allclose(
-        data["effective ripple 3/2_2d"] ** (2 / 3),
-        data["effective ripple_2d"],
-        err_msg="Bug in source grid logic in eq.compute.",
+    data = eq.compute(
+        "effective ripple 3/2",
+        grid=grid,
+        theta=Bounce2D.compute_theta(eq, X=16, Y=64, rho=rho),
+        Y_B=100,
+        num_transit=10,
+        num_quad=33,
+        spline=True,
     )
-    eps_32 = grid.compress(data["effective ripple 3/2_2d"])
+
+    assert np.isfinite(data["effective ripple 3/2"]).all()
+    eps_32 = grid.compress(data["effective ripple 3/2"])
+    neo_rho, neo_eps_32 = NeoIO.read("tests/inputs/neo_out.w7x")
+    np.testing.assert_allclose(eps_32, np.interp(rho, neo_rho, neo_eps_32), rtol=0.06)
+
     fig, ax = plt.subplots()
     ax.plot(rho, eps_32, marker="o")
-    plt.show()
-
-    neo_rho, neo_eps_32 = NeoIO.read("tests/inputs/neo_out.w7x")
-    np.testing.assert_allclose(eps_32, np.interp(rho, neo_rho, neo_eps_32), rtol=0.16)
+    ax.plot(neo_rho, neo_eps_32)
     return fig
 
 
 @pytest.mark.unit
 @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
-def test_Gamma_c_Velasco():
-    """Test Γ_c with W7-X."""
+def test_Gamma_c_Velasco_1D():
+    """Test Γ_c Velasco 1D with W7-X."""
+    Y_B = 100
+    num_transit = 10
     eq = get("W7-X")
     rho = np.linspace(0, 1, 10)
-    grid = eq._get_rtz_grid(
-        rho, np.array([0]), np.linspace(0, 20 * np.pi, 1000), coordinates="raz"
+    grid = get_rtz_grid(
+        eq,
+        rho,
+        poloidal=np.array([0]),
+        toroidal=np.linspace(0, num_transit * 2 * np.pi, num_transit * Y_B),
+        coordinates="raz",
     )
-    data = eq.compute("Gamma_c Velasco", grid=grid)
-    assert np.isfinite(data["Gamma_c Velasco"]).all()
+    data = eq.compute("Gamma_c Velasco*", grid=grid)
+    assert np.isfinite(data["Gamma_c Velasco*"]).all()
     fig, ax = plt.subplots()
-    ax.plot(rho, grid.compress(data["Gamma_c Velasco"]), marker="o")
+    ax.plot(rho, grid.compress(data["Gamma_c Velasco*"]), marker="o")
     return fig
 
 
 @pytest.mark.unit
 @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
-def test_Gamma_c():
-    """Test Γ_c Nemov with W7-X."""
+def test_Gamma_c_1D():
+    """Test Γ_c Nemov 1D with W7-X."""
+    Y_B = 100
+    num_transit = 10
     eq = get("W7-X")
     rho = np.linspace(0, 1, 10)
-    grid = eq._get_rtz_grid(
-        rho, np.array([0]), np.linspace(0, 20 * np.pi, 1000), coordinates="raz"
+    grid = get_rtz_grid(
+        eq,
+        rho,
+        poloidal=np.array([0]),
+        toroidal=np.linspace(0, num_transit * 2 * np.pi, num_transit * Y_B),
+        coordinates="raz",
     )
-    data = eq.compute("Gamma_c", grid=grid)
+    data = eq.compute("Gamma_c*", grid=grid)
+    assert np.isfinite(data["Gamma_c*"]).all()
+    fig, ax = plt.subplots()
+    ax.plot(rho, grid.compress(data["Gamma_c*"]), marker="o")
+    return fig
+
+
+@pytest.mark.unit
+@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
+def test_Gamma_c_2D():
+    """Test Γ_c Nemov 2D with W7-X."""
+    eq = get("W7-X")
+    rho = np.linspace(0, 1, 10)
+    grid = Grid.create_meshgrid(
+        [rho, fourier_pts(eq.M_grid), fourier_pts(eq.N_grid) / eq.NFP],
+        period=(np.inf, 2 * np.pi, 2 * np.pi / eq.NFP),
+        NFP=eq.NFP,
+    )
+    data = eq.compute(
+        "Gamma_c",
+        grid=grid,
+        theta=Bounce2D.compute_theta(eq, X=16, Y=64, rho=rho),
+        Y_B=100,
+        num_transit=10,
+        spline=True,
+    )
     assert np.isfinite(data["Gamma_c"]).all()
     fig, ax = plt.subplots()
     ax.plot(rho, grid.compress(data["Gamma_c"]), marker="o")

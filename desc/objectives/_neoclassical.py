@@ -202,7 +202,7 @@ class EffectiveRipple(_Objective):
             self._keys_1dr, eq, self._grid_1dr
         )
         self._constants["profiles"] = get_profiles(
-            self._keys_1dr + ["effective ripple"], eq, self._grid_1dr
+            self._keys_1dr + ["effective ripple*"], eq, self._grid_1dr
         )
 
         timer.stop("Precomputing transforms")
@@ -259,15 +259,15 @@ class EffectiveRipple(_Objective):
         }
         data = compute_fun(
             eq,
-            "effective ripple",
+            "effective ripple*",
             params,
-            get_transforms("effective ripple", eq, grid, jitable=True),
+            get_transforms("effective ripple*", eq, grid, jitable=True),
             constants["profiles"],
             data=data,
             quad=constants["quad"],
             **self._hyperparameters,
         )
-        return grid.compress(data["effective ripple"])
+        return grid.compress(data["effective ripple*"])
 
 
 class GammaC(_Objective):
@@ -416,10 +416,10 @@ class GammaC(_Objective):
         }
         self._keys_1dr = ["iota", "iota_r", "min_tz |B|", "max_tz |B|"]
         if Nemov:
-            self._key = "Gamma_c"
+            self._key = "Gamma_c*"
             self._constants["quad2"] = chebgauss2(num_quad)
         else:
-            self._key = "Gamma_c Velasco"
+            self._key = "Gamma_c Velasco*"
 
         super().__init__(
             things=eq,

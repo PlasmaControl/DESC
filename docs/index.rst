@@ -66,16 +66,16 @@
    dev_guide/adding_optimizers.rst
    dev_guide/backend.rst
    dev_guide/compute.rst
-   dev_guide/compute.ipynb
+   dev_guide/compute_notebook.ipynb
    dev_guide/compute_2.ipynb
    dev_guide/configuration_equilibrium.rst
    dev_guide/grid.ipynb
    dev_guide/objectives.rst
-   dev_guide/transforms.ipynb
+   dev_guide/transforms_2.ipynb
    notebooks/dev_guide/backend.ipynb
    notebooks/dev_guide/basis.ipynb
    notebooks/dev_guide/coils.ipynb
-   notebooks/dev_guide/compute.ipynb
+   notebooks/dev_guide/compute_notebook_2.ipynb
    notebooks/dev_guide/configuration.ipynb
    notebooks/dev_guide/derivatives.ipynb
    notebooks/dev_guide/equilibrium.ipynb

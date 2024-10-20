@@ -717,7 +717,10 @@ def get_rtz_grid(
 
     """
     grid = Grid.create_meshgrid(
-        [radial, poloidal, toroidal], coordinates=coordinates, period=period
+        [radial, poloidal, toroidal],
+        coordinates=coordinates,
+        period=period,
+        jitable=jitable,
     )
     if "iota" in kwargs:
         kwargs["iota"] = grid.expand(jnp.atleast_1d(kwargs["iota"]))

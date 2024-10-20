@@ -15,9 +15,11 @@ from scipy.fft import dct as sdct
 from scipy.fft import idct as sidct
 
 from desc.backend import dct, idct, rfft
+from desc.integrals.basis import FourierChebyshevSeries
 from desc.integrals.interp_utils import (
     cheb_from_dct,
     cheb_pts,
+    fourier_pts,
     harmonic,
     harmonic_vander,
     interp_dct,
@@ -349,3 +351,23 @@ class TestFastInterp:
         xq = bijection_to_disc(xq, 0, xq.size)
         fq = chebval(xq, c0, tensor=False)
         np.testing.assert_allclose(fq, interp_dct(xq, fz), atol=1e-13)
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize(
+        "func, m, n",
+        [
+            (
+                _f_2d,
+                2 * _f_2d_nyquist_freq()[0] + 1,
+                2 * _f_2d_nyquist_freq()[1] + 1,
+            )
+        ],
+    )
+    def test_fourier_chebyshev(self, func, m, n):
+        """Tests for coverage of FourierChebyshev series."""
+        x = fourier_pts(m)
+        y = cheb_pts(n)
+        x, y = map(np.ravel, list(np.meshgrid(x, y, indexing="ij")))
+        f = func(x, y).reshape(m, n)
+        fc = FourierChebyshevSeries(f)
+        np.testing.assert_allclose(fc.evaluate(m, n), f, rtol=1e-6)

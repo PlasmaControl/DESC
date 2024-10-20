@@ -1789,7 +1789,7 @@ class TestBounce2D:
             spline=True,
         )
         b.check_points(b.points(pitch_inv), pitch_inv, plot=False)
-        _, _ = bounce.plot(l, pitch_inv[l], show=False)
+        _, _ = b.plot(l, pitch_inv[l], show=False)
 
         return fig
 

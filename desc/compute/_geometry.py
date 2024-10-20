@@ -15,7 +15,6 @@ from ..grid import QuadratureGrid
 from ..integrals.surface_integral import line_integrals, surface_integrals
 from ..utils import cross, dot, safenorm
 from .data_index import register_compute_fun
-from .geom_utils import warnif_sym
 
 
 @register_compute_fun(
@@ -173,6 +172,11 @@ def _V_rrr_of_r(params, transforms, profiles, data, **kwargs):
         "desc.geometry.surface.FourierRZToroidalSurface",
     ],
     resolution_requirement="t",
+    grid_requirement={"sym": False},
+    # FIXME: For nonzero omega we need to integrate over theta at constant phi.
+    #  Add source_grid_requirement={"coordinates": "rtp", "is_meshgrid": True}
+    # TODO: Recognize when omega = 0 and ignore all source grid requirements
+    #  if the given grid satisfies them with phi replaced by zeta.
 )
 def _A_of_z(params, transforms, profiles, data, **kwargs):
     # Denote any vector v = v¹ R̂ + v² ϕ̂ + v³ Ẑ by v = [v¹, v², v³] where R̂, ϕ̂, Ẑ
@@ -184,7 +188,6 @@ def _A_of_z(params, transforms, profiles, data, **kwargs):
     # where n is the unit normal such that n dot e_θ|ρ,ϕ = 0 and n dot e_ϕ|R,Z = 0,
     # and the labels following | denote those coordinates are fixed.
     # Now choose v = [0, 0, Z], and n in the direction (e_θ|ρ,ζ × e_ζ|ρ,θ) ⊗ [1, 0, 1].
-    warnif_sym(transforms["grid"], "A(z)")
     n = data["n_rho"]
     n = n.at[:, 1].set(0)
     n = n / jnp.linalg.norm(n, axis=-1)[:, jnp.newaxis]
@@ -193,10 +196,6 @@ def _A_of_z(params, transforms, profiles, data, **kwargs):
         line_integrals(
             transforms["grid"],
             data["Z"] * n[:, 2] * safenorm(data["e_theta|r,p"], axis=-1),
-            # FIXME: Works currently for omega = zero, but for nonzero omega
-            #  we need to integrate over theta at constant phi.
-            #  Should be simple once we have coordinate mapping and source grid
-            #  logic from GitHub pull request #1024.
             line_label="theta",
             fix_surface=("rho", max_rho),
             expand_out=True,
@@ -227,6 +226,10 @@ def _A_of_z(params, transforms, profiles, data, **kwargs):
         "desc.equilibrium.equilibrium.Equilibrium",
     ],
     resolution_requirement="tz",
+    # FIXME: For nonzero omega we need to integrate over theta at constant phi.
+    #  Add source_grid_requirement={"coordinates": "rtp", "is_meshgrid": True}
+    # TODO: Recognize when omega = 0 and ignore all source grid requirements
+    #  if the given grid satisfies them with phi replaced by zeta.
 )
 def _A(params, transforms, profiles, data, **kwargs):
     # Denote any vector v = v¹ R̂ + v² ϕ̂ + v³ Ẑ by v = [v¹, v², v³] where R̂, ϕ̂, Ẑ
@@ -245,7 +248,6 @@ def _A(params, transforms, profiles, data, **kwargs):
     A = jnp.abs(
         line_integrals(
             transforms["grid"],
-            # FIXME: integrate over constant phi when omega is nonzero.
             data["Z"] * n[:, 2] * safenorm(data["e_theta|r,p"], axis=-1),
             line_label="theta",
             fix_surface=("rho", max_rho),
@@ -452,18 +454,18 @@ def _R0_over_a(params, transforms, profiles, data, **kwargs):
         "desc.geometry.core.Surface",
     ],
     resolution_requirement="t",
+    grid_requirement={"sym": False},
+    # FIXME: For nonzero omega we need to integrate over theta at constant phi.
+    #  Add source_grid_requirement={"coordinates": "rtp", "is_meshgrid": True}
+    # TODO: Recognize when omega = 0 and ignore all source grid requirements
+    #  if the given grid satisfies them with phi replaced by zeta.
 )
 def _perimeter_of_z(params, transforms, profiles, data, **kwargs):
-    warnif_sym(transforms["grid"], "perimeter(z)")
     max_rho = jnp.max(data["rho"])
     data["perimeter(z)"] = (
         line_integrals(
             transforms["grid"],
             safenorm(data["e_theta|r,p"], axis=-1),
-            # FIXME: Works currently for omega = zero, but for nonzero omega
-            #  we need to integrate over theta at constant phi.
-            #  Should be simple once we have coordinate mapping and source grid
-            #  logic from GitHub pull request #1024.
             line_label="theta",
             fix_surface=("rho", max_rho),
             expand_out=True,

@@ -2,37 +2,9 @@
 
 import functools
 
-from termcolor import colored
-
 from desc.backend import jnp
 
-from ..utils import ResolutionWarning, errorif, safenorm, safenormalize, warnif
-
-
-def warnif_sym(grid, name):
-    """Warn if grid has truncated poloidal domain to [0, π] ⊂ [0, 2π)."""
-    warnif(
-        grid.sym,
-        ResolutionWarning,
-        msg=colored(
-            "This grid only samples the poloidal domain θ ∈ [0, π], "
-            f"but, in general, the full domain [0, 2π) is required to compute {name}.",
-            "yellow",
-        ),
-    )
-
-
-def errorif_sym(grid, name):
-    """Warn if grid has truncated poloidal domain to [0, π] ⊂ [0, 2π)."""
-    errorif(
-        grid.sym,
-        ResolutionWarning,
-        msg=colored(
-            "This grid only samples the poloidal domain θ ∈ [0, π], "
-            f"but, in general, the full domain [0, 2π) is required to compute {name}.",
-            "yellow",
-        ),
-    )
+from ..utils import safenorm, safenormalize
 
 
 def reflection_matrix(normal):

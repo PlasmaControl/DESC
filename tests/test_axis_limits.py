@@ -18,7 +18,7 @@ from desc.examples import get
 from desc.grid import LinearGrid
 from desc.integrals import surface_integrals_map
 from desc.objectives import GenericObjective, ObjectiveFunction
-from desc.utils import ResolutionWarning, dot
+from desc.utils import dot
 
 # Unless mentioned in the source code of the compute function, the assumptions
 # made to compute the magnetic axis limit can be reduced to assuming that these
@@ -189,6 +189,7 @@ def assert_is_continuous(
         }
 
     """
+    p = "desc.equilibrium.equilibrium.Equilibrium"
     if kwargs is None:
         kwargs = {}
     # TODO: remove when boozer transform works with multiple surfaces
@@ -200,6 +201,8 @@ def assert_is_continuous(
             or "_mn" in name
             or name == "B modes"
             or _skip_this(eq, name)
+            # skip if require full grid (sym false)
+            or not data_index[p][name]["grid_requirement"].get("sym", True)
         )
     ]
 
@@ -211,7 +214,6 @@ def assert_is_continuous(
     integrate = surface_integrals_map(grid, expand_out=False)
     data = eq.compute(names=names, grid=grid)
 
-    p = "desc.equilibrium.equilibrium.Equilibrium"
     for name in names:
         if name in not_continuous_limits:
             continue
@@ -296,14 +298,12 @@ class TestAxisLimits:
         eq = get("W7-X")
         with pytest.warns(UserWarning, match="Reducing radial"):
             eq.change_resolution(4, 4, 4, 8, 8, 8)
-        with pytest.warns(ResolutionWarning, match="full domain"):
-            assert_is_continuous(eq, kwargs=kwargs)
+        assert_is_continuous(eq, kwargs=kwargs)
         # fixed current
         eq = get("NCSX")
         with pytest.warns(UserWarning, match="Reducing radial"):
             eq.change_resolution(4, 4, 4, 8, 8, 8)
-        with pytest.warns(ResolutionWarning, match="full domain"):
-            assert_is_continuous(eq, kwargs=kwargs)
+        assert_is_continuous(eq, kwargs=kwargs)
 
     @pytest.mark.unit
     def test_magnetic_field_is_physical(self):

@@ -9,8 +9,9 @@ computational grid has a node on the magnetic axis to avoid potentially
 expensive computations.
 """
 
-from desc.backend import jnp
+from desc.backend import jnp, trapezoid
 
+from ..grid import QuadratureGrid
 from ..integrals.surface_integral import line_integrals, surface_integrals
 from ..utils import cross, dot, safenorm
 from .data_index import register_compute_fun
@@ -27,11 +28,16 @@ from .data_index import register_compute_fun
     transforms={"grid": []},
     profiles=[],
     coordinates="",
-    data=["sqrt(g)"],
+    data=["sqrt(g)", "V(r)", "rho"],
     resolution_requirement="rtz",
 )
 def _V(params, transforms, profiles, data, **kwargs):
-    data["V"] = jnp.sum(data["sqrt(g)"] * transforms["grid"].weights)
+    if isinstance(transforms["grid"], QuadratureGrid):
+        data["V"] = jnp.sum(data["sqrt(g)"] * transforms["grid"].weights)
+    else:
+        # To approximate volume at ρ ~ 1, we scale by ρ⁻², assuming the integrand
+        # varies little from max ρ to ρ = 1 and a roughly circular cross-section.
+        data["V"] = jnp.max(data["V(r)"]) / jnp.max(data["rho"]) ** 2
     return data
 
 
@@ -40,27 +46,19 @@ def _V(params, transforms, profiles, data, **kwargs):
     label="V",
     units="m^{3}",
     units_long="cubic meters",
-    description="Volume",
+    description="Volume enclosed by surface, scaled by max(ρ)⁻²",
     dim=1,
     params=[],
     transforms={"grid": []},
     profiles=[],
     coordinates="",
-    data=["e_theta", "e_zeta", "x"],
+    data=["V(r)", "rho"],
     parameterization="desc.geometry.surface.FourierRZToroidalSurface",
-    resolution_requirement="tz",
 )
 def _V_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs):
-    # divergence theorem: integral(dV div [0, 0, Z]) = integral(dS dot [0, 0, Z])
-    data["V"] = jnp.max(  # take max in case there are multiple surfaces for some reason
-        jnp.abs(
-            surface_integrals(
-                transforms["grid"],
-                cross(data["e_theta"], data["e_zeta"])[:, 2] * data["x"][:, 2],
-                expand_out=False,
-            )
-        )
-    )
+    # To approximate volume at ρ ~ 1, we scale by ρ⁻², assuming the integrand
+    # varies little from max ρ to ρ = 1 and a roughly circular cross-section.
+    data["V"] = jnp.max(data["V(r)"]) / jnp.max(data["rho"]) ** 2
     return data
 
 
@@ -76,6 +74,10 @@ def _V_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="r",
     data=["e_theta", "e_zeta", "Z"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.surface.FourierRZToroidalSurface",
+    ],
     resolution_requirement="tz",
 )
 def _V_of_r(params, transforms, profiles, data, **kwargs):
@@ -156,34 +158,6 @@ def _V_rrr_of_r(params, transforms, profiles, data, **kwargs):
     label="A(\\zeta)",
     units="m^{2}",
     units_long="square meters",
-    description="Cross-sectional area as function of zeta",
-    dim=1,
-    params=[],
-    transforms={"grid": []},
-    profiles=[],
-    coordinates="z",
-    data=["|e_rho x e_theta|"],
-    parameterization=[
-        "desc.equilibrium.equilibrium.Equilibrium",
-        "desc.geometry.surface.ZernikeRZToroidalSection",
-    ],
-    resolution_requirement="rt",
-)
-def _A_of_z(params, transforms, profiles, data, **kwargs):
-    data["A(z)"] = surface_integrals(
-        transforms["grid"],
-        data["|e_rho x e_theta|"],
-        surface_label="zeta",
-        expand_out=True,
-    )
-    return data
-
-
-@register_compute_fun(
-    name="A(z)",
-    label="A(\\zeta)",
-    units="m^{2}",
-    units_long="square meters",
     description="Area of enclosed cross-section (enclosed constant phi surface), "
     "scaled by max(ρ)⁻², as function of zeta",
     dim=1,
@@ -192,14 +166,23 @@ def _A_of_z(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="z",
     data=["Z", "n_rho", "e_theta|r,p", "rho"],
-    parameterization=["desc.geometry.surface.FourierRZToroidalSurface"],
-    resolution_requirement="rt",  # just need max(rho) near 1
-    # FIXME: Add source grid requirement once omega is nonzero.
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.surface.ZernikeRZToroidalSection",
+        "desc.geometry.surface.FourierRZToroidalSurface",
+    ],
+    resolution_requirement="t",
+    grid_requirement={"sym": False},
+    # FIXME: For nonzero omega we need to integrate over theta at constant phi.
+    #  Add source_grid_requirement={"coordinates": "rtp", "is_meshgrid": True}
+    # TODO: Recognize when omega = 0 and ignore all source grid requirements
+    #  if the given grid satisfies them with phi replaced by zeta.
 )
-def _A_of_z_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs):
-    # Denote any vector v = [vᴿ, v^ϕ, vᶻ] with a tuple of its contravariant components.
+def _A_of_z(params, transforms, profiles, data, **kwargs):
+    # Denote any vector v = v¹ R̂ + v² ϕ̂ + v³ Ẑ by v = [v¹, v², v³] where R̂, ϕ̂, Ẑ
+    # are the normalized basis vectors of the cylindrical coordinates R, ϕ, Z.
     # We use a 2D divergence theorem over constant ϕ toroidal surface (i.e. R, Z plane).
-    # In this geometry, the divergence operator on a polar basis vector is
+    # In this geometry, the divergence operator in this coordinate system is
     # div = ([∂_R, ∂_ϕ, ∂_Z] ⊗ [1, 0, 1]) dot .
     # ∫ dA div v = ∫ dℓ n dot v
     # where n is the unit normal such that n dot e_θ|ρ,ϕ = 0 and n dot e_ϕ|R,Z = 0,
@@ -213,16 +196,12 @@ def _A_of_z_FourierRZToroidalSurface(params, transforms, profiles, data, **kwarg
         line_integrals(
             transforms["grid"],
             data["Z"] * n[:, 2] * safenorm(data["e_theta|r,p"], axis=-1),
-            # FIXME: Works currently for omega = zero, but for nonzero omega
-            #  we need to integrate over theta at constant phi.
-            #  Should be simple once we have coordinate mapping and source grid
-            #  logic from GitHub pull request #1024.
             line_label="theta",
             fix_surface=("rho", max_rho),
             expand_out=True,
         )
         # To approximate area at ρ ~ 1, we scale by ρ⁻², assuming the integrand
-        # varies little from ρ = max_rho to ρ = 1 and a roughly circular cross-section.
+        # varies little from max ρ to ρ = 1 and a roughly circular cross-section.
         / max_rho**2
     )
     return data
@@ -233,23 +212,53 @@ def _A_of_z_FourierRZToroidalSurface(params, transforms, profiles, data, **kwarg
     label="A",
     units="m^{2}",
     units_long="square meters",
-    description="Average cross-sectional area",
+    description="Average enclosed cross-sectional area, scaled by max(ρ)⁻²",
+    # Simple toroidal average A₀ = ∫ A(ζ) dζ / (2π) matches the convention for the
+    # average major radius R₀ = ∫ R(ρ=0) dζ / (2π).
     dim=0,
     params=[],
     transforms={"grid": []},
     profiles=[],
     coordinates="",
-    data=["A(z)"],
+    data=["Z", "n_rho", "e_theta|r,p", "rho", "phi"],
     parameterization=[
-        "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.core.Surface",
+        "desc.equilibrium.equilibrium.Equilibrium",
     ],
-    resolution_requirement="z",
+    resolution_requirement="tz",
+    # FIXME: For nonzero omega we need to integrate over theta at constant phi.
+    #  Add source_grid_requirement={"coordinates": "rtp", "is_meshgrid": True}
+    # TODO: Recognize when omega = 0 and ignore all source grid requirements
+    #  if the given grid satisfies them with phi replaced by zeta.
 )
 def _A(params, transforms, profiles, data, **kwargs):
-    data["A"] = jnp.mean(
-        transforms["grid"].compress(data["A(z)"], surface_label="zeta")
+    # Denote any vector v = v¹ R̂ + v² ϕ̂ + v³ Ẑ by v = [v¹, v², v³] where R̂, ϕ̂, Ẑ
+    # are the normalized basis vectors of the cylindrical coordinates R, ϕ, Z.
+    # We use a 2D divergence theorem over constant ϕ toroidal surface (i.e. R, Z plane).
+    # In this geometry, the divergence operator in this coordinate system is
+    # div = ([∂_R, ∂_ϕ, ∂_Z] ⊗ [1, 0, 1]) dot .
+    # ∫ dA div v = ∫ dℓ n dot v
+    # where n is the unit normal such that n dot e_θ|ρ,ϕ = 0 and n dot e_ϕ|R,Z = 0,
+    # and the labels following | denote those coordinates are fixed.
+    # Now choose v = [0, 0, Z], and n in the direction (e_θ|ρ,ζ × e_ζ|ρ,θ) ⊗ [1, 0, 1].
+    n = data["n_rho"]
+    n = n.at[:, 1].set(0)
+    n = n / jnp.linalg.norm(n, axis=-1)[:, jnp.newaxis]
+    max_rho = jnp.max(data["rho"])
+    A = jnp.abs(
+        line_integrals(
+            transforms["grid"],
+            data["Z"] * n[:, 2] * safenorm(data["e_theta|r,p"], axis=-1),
+            line_label="theta",
+            fix_surface=("rho", max_rho),
+            expand_out=False,
+        )
+        # To approximate area at ρ ~ 1, we scale by ρ⁻², assuming the integrand
+        # varies little from max ρ to ρ = 1 and a roughly circular cross-section.
+        / max_rho**2
     )
+    phi = transforms["grid"].compress(data["phi"], "zeta")
+    data["A"] = jnp.squeeze(trapezoid(A, phi) / jnp.ptp(phi) if A.size > 1 else A)
     return data
 
 
@@ -276,25 +285,22 @@ def _A_of_r(params, transforms, profiles, data, **kwargs):
     label="S",
     units="m^{2}",
     units_long="square meters",
-    description="Surface area of outermost flux surface",
+    description="Surface area of outermost flux surface, scaled by max(ρ)⁻¹",
     dim=0,
     params=[],
     transforms={"grid": []},
     profiles=[],
     coordinates="",
-    data=["|e_theta x e_zeta|"],
+    data=["S(r)", "rho"],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.FourierRZToroidalSurface",
     ],
-    resolution_requirement="tz",
 )
 def _S(params, transforms, profiles, data, **kwargs):
-    data["S"] = jnp.max(
-        surface_integrals(
-            transforms["grid"], data["|e_theta x e_zeta|"], expand_out=False
-        )
-    )
+    # To approximate surface are at ρ ~ 1, we scale by ρ⁻¹, assuming the integrand
+    # varies little from max ρ to ρ = 1.
+    data["S"] = jnp.max(data["S(r)"]) / jnp.max(data["rho"])
     return data
 
 
@@ -310,6 +316,10 @@ def _S(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="r",
     data=["|e_theta x e_zeta|"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.surface.FourierRZToroidalSurface",
+    ],
     resolution_requirement="tz",
 )
 def _S_of_r(params, transforms, profiles, data, **kwargs):
@@ -360,10 +370,12 @@ def _S_rr_of_r(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="R0",
-    label="R_{0}",
+    label="R_{0} = V / (2\\pi A) = \\int R(\\rho=0) d\\zeta / (2\\pi)",
     units="m",
     units_long="meters",
     description="Average major radius",
+    # This differs from the average value of R on the magnetic axis.
+    # R₀ ≠ 〈 R(ρ=0) 〉 =  ∫ (R ‖e_ζ‖)(ρ=0) dζ / ∫ ‖e_ζ‖(ρ=0) dζ.
     dim=0,
     params=[],
     transforms={},
@@ -441,7 +453,12 @@ def _R0_over_a(params, transforms, profiles, data, **kwargs):
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.core.Surface",
     ],
-    resolution_requirement="rt",  # just need max(rho) near 1
+    resolution_requirement="t",
+    grid_requirement={"sym": False},
+    # FIXME: For nonzero omega we need to integrate over theta at constant phi.
+    #  Add source_grid_requirement={"coordinates": "rtp", "is_meshgrid": True}
+    # TODO: Recognize when omega = 0 and ignore all source grid requirements
+    #  if the given grid satisfies them with phi replaced by zeta.
 )
 def _perimeter_of_z(params, transforms, profiles, data, **kwargs):
     max_rho = jnp.max(data["rho"])
@@ -449,16 +466,12 @@ def _perimeter_of_z(params, transforms, profiles, data, **kwargs):
         line_integrals(
             transforms["grid"],
             safenorm(data["e_theta|r,p"], axis=-1),
-            # FIXME: Works currently for omega = zero, but for nonzero omega
-            #  we need to integrate over theta at constant phi.
-            #  Should be simple once we have coordinate mapping and source grid
-            #  logic from GitHub pull request #1024.
             line_label="theta",
             fix_surface=("rho", max_rho),
             expand_out=True,
         )
         # To approximate perimeter at ρ ~ 1, we scale by ρ⁻¹, assuming the integrand
-        # varies little from ρ = max_rho to ρ = 1.
+        # varies little from max ρ to ρ = 1.
         / max_rho
     )
     return data

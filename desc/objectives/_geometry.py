@@ -99,6 +99,7 @@ class AspectRatio(_Objective):
                     M=eq.M * 2,
                     N=eq.N * 2,
                     NFP=eq.NFP,
+                    sym=False,
                 )
         else:
             grid = self._grid
@@ -242,6 +243,7 @@ class Elongation(_Objective):
                     M=eq.M * 2,
                     N=eq.N * 2,
                     NFP=eq.NFP,
+                    sym=False,
                 )
         else:
             grid = self._grid

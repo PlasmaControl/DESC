@@ -7,9 +7,9 @@ from math import factorial
 import mpmath
 import numpy as np
 
-from desc.backend import fori_loop, gammaln, jit, jnp, sign
+from desc.backend import custom_jvp, fori_loop, jit, jnp, sign
 from desc.io import IOAble
-from desc.utils import flatten_list
+from desc.utils import check_nonnegint, check_posint, flatten_list
 
 __all__ = [
     "PowerSeries",
@@ -18,10 +18,11 @@ __all__ = [
     "ZernikePolynomial",
     "ChebyshevDoubleFourierBasis",
     "FourierZernikeBasis",
+    "ChebyshevPolynomial",
 ]
 
 
-class Basis(IOAble, ABC):
+class _Basis(IOAble, ABC):
     """Basis is an abstract base class for spectral basis sets."""
 
     _io_attrs_ = [
@@ -38,6 +39,12 @@ class Basis(IOAble, ABC):
         self._enforce_symmetry()
         self._sort_modes()
         self._create_idx()
+        # ensure things that should be ints are ints
+        self._L = int(self._L)
+        self._M = int(self._M)
+        self._N = int(self._N)
+        self._NFP = int(self._NFP)
+        self._modes = self._modes.astype(int)
 
     def _set_up(self):
         """Do things after loading or changing resolution."""
@@ -46,6 +53,12 @@ class Basis(IOAble, ABC):
         self._enforce_symmetry()
         self._sort_modes()
         self._create_idx()
+        # ensure things that should be ints are ints
+        self._L = int(self._L)
+        self._M = int(self._M)
+        self._N = int(self._N)
+        self._NFP = int(self._NFP)
+        self._modes = self._modes.astype(int)
 
     def _enforce_symmetry(self):
         """Enforce stellarator symmetry."""
@@ -101,11 +114,12 @@ class Basis(IOAble, ABC):
         N : int
             Toroidal mode number.
         error : bool
-            whether to raise exception if mode is not in basis, or return empty array
+            Whether to raise exception if the mode is not in the basis (default),
+            or to return an empty array.
 
         Returns
         -------
-        idx : ndarray of int
+        idx : int
             Index of given mode numbers.
 
         """
@@ -117,7 +131,7 @@ class Basis(IOAble, ABC):
                     "mode ({}, {}, {}) is not in basis {}".format(L, M, N, str(self))
                 ) from e
             else:
-                return np.array([]).astype(int)
+                return np.array([], dtype=int)
 
     @abstractmethod
     def _get_modes(self):
@@ -138,8 +152,8 @@ class Basis(IOAble, ABC):
         modes : ndarray of in, shape(num_modes,3), optional
             basis modes to evaluate (if None, full basis is used)
         unique : bool, optional
-            whether to workload by only calculating for unique values of nodes, modes
-            can be faster, but doesn't work with jit or autodiff
+            whether to reduce workload by only calculating for unique values of nodes,
+            modes can be faster, but doesn't work with jit or autodiff
 
         Returns
         -------
@@ -157,30 +171,15 @@ class Basis(IOAble, ABC):
         """int: Maximum radial resolution."""
         return self.__dict__.setdefault("_L", 0)
 
-    @L.setter
-    def L(self, L):
-        assert int(L) == L, "Basis Resolution must be an integer!"
-        self._L = int(L)
-
     @property
     def M(self):
         """int:  Maximum poloidal resolution."""
         return self.__dict__.setdefault("_M", 0)
 
-    @M.setter
-    def M(self, M):
-        assert int(M) == M, "Basis Resolution must be an integer!"
-        self._M = int(M)
-
     @property
     def N(self):
         """int: Maximum toroidal resolution."""
         return self.__dict__.setdefault("_N", 0)
-
-    @N.setter
-    def N(self, N):
-        assert int(N) == N, "Basis Resolution must be an integer!"
-        self._N = int(N)
 
     @property
     def NFP(self):
@@ -189,17 +188,14 @@ class Basis(IOAble, ABC):
 
     @property
     def sym(self):
-        """str: {``'cos'``, ``'sin'``, ``False``} Type of symmetry."""
+        """str: Type of symmetry."""
+        # one of: {'even', 'sin', 'cos', 'cos(t)', False}
         return self.__dict__.setdefault("_sym", False)
 
     @property
     def modes(self):
         """ndarray: Mode numbers [l,m,n]."""
         return self.__dict__.setdefault("_modes", np.array([]).reshape((0, 3)))
-
-    @modes.setter
-    def modes(self, modes):
-        self._modes = modes
 
     @property
     def num_modes(self):
@@ -223,7 +219,7 @@ class Basis(IOAble, ABC):
         )
 
 
-class PowerSeries(Basis):
+class PowerSeries(_Basis):
     """1D basis set for flux surface quantities.
 
     Power series in the radial coordinate.
@@ -239,18 +235,18 @@ class PowerSeries(Basis):
     """
 
     def __init__(self, L, sym="even"):
-        self.L = L
-        self.M = 0
-        self.N = 0
+        self._L = check_nonnegint(L, "L", False)
+        self._M = 0
+        self._N = 0
         self._NFP = 1
-        self._sym = sym
+        self._sym = bool(sym) if not sym else str(sym)
         self._spectral_indexing = "linear"
 
         self._modes = self._get_modes(L=self.L)
 
         super().__init__()
 
-    def _get_modes(self, L=0):
+    def _get_modes(self, L):
         """Get mode numbers for power series.
 
         Parameters
@@ -283,8 +279,8 @@ class PowerSeries(Basis):
         modes : ndarray of in, shape(num_modes,3), optional
             Basis modes to evaluate (if None, full basis is used)
         unique : bool, optional
-            whether to workload by only calculating for unique values of nodes, modes
-            can be faster, but doesn't work with jit or autodiff
+            whether to reduce workload by only calculating for unique values of nodes,
+            modes can be faster, but doesn't work with jit or autodiff
 
         Returns
         -------
@@ -328,12 +324,12 @@ class PowerSeries(Basis):
 
         """
         if L != self.L:
-            self.L = L
+            self._L = check_nonnegint(L, "L", False)
             self._modes = self._get_modes(self.L)
             self._set_up()
 
 
-class FourierSeries(Basis):
+class FourierSeries(_Basis):
     """1D basis set for use with the magnetic axis.
 
     Fourier series in the toroidal coordinate.
@@ -352,18 +348,18 @@ class FourierSeries(Basis):
     """
 
     def __init__(self, N, NFP=1, sym=False):
-        self.L = 0
-        self.M = 0
-        self.N = N
-        self._NFP = NFP
-        self._sym = sym
+        self._L = 0
+        self._M = 0
+        self._N = check_nonnegint(N, "N", False)
+        self._NFP = check_posint(NFP, "NFP", False)
+        self._sym = bool(sym) if not sym else str(sym)
         self._spectral_indexing = "linear"
 
         self._modes = self._get_modes(N=self.N)
 
         super().__init__()
 
-    def _get_modes(self, N=0):
+    def _get_modes(self, N):
         """Get mode numbers for Fourier series.
 
         Parameters
@@ -445,15 +441,16 @@ class FourierSeries(Basis):
             Whether to enforce stellarator symmetry.
 
         """
+        NFP = check_posint(NFP, "NFP")
         self._NFP = NFP if NFP is not None else self.NFP
         if N != self.N:
-            self.N = N
+            self._N = check_nonnegint(N, "N", False)
             self._sym = sym if sym is not None else self.sym
             self._modes = self._get_modes(self.N)
             self._set_up()
 
 
-class DoubleFourierSeries(Basis):
+class DoubleFourierSeries(_Basis):
     """2D basis set for use on a single flux surface.
 
     Fourier series in both the poloidal and toroidal coordinates.
@@ -474,18 +471,18 @@ class DoubleFourierSeries(Basis):
     """
 
     def __init__(self, M, N, NFP=1, sym=False):
-        self.L = 0
-        self.M = M
-        self.N = N
-        self._NFP = NFP
-        self._sym = sym
+        self._L = 0
+        self._M = check_nonnegint(M, "M", False)
+        self._N = check_nonnegint(N, "N", False)
+        self._NFP = check_posint(NFP, "NFP", False)
+        self._sym = bool(sym) if not sym else str(sym)
         self._spectral_indexing = "linear"
 
         self._modes = self._get_modes(M=self.M, N=self.N)
 
         super().__init__()
 
-    def _get_modes(self, M=0, N=0):
+    def _get_modes(self, M, N):
         """Get mode numbers for double Fourier series.
 
         Parameters
@@ -591,16 +588,17 @@ class DoubleFourierSeries(Basis):
         None
 
         """
+        NFP = check_posint(NFP, "NFP")
         self._NFP = NFP if NFP is not None else self.NFP
         if M != self.M or N != self.N or sym != self.sym:
-            self.M = M
-            self.N = N
+            self._M = check_nonnegint(M, "M", False)
+            self._N = check_nonnegint(N, "N", False)
             self._sym = sym if sym is not None else self.sym
             self._modes = self._get_modes(self.M, self.N)
             self._set_up()
 
 
-class ZernikePolynomial(Basis):
+class ZernikePolynomial(_Basis):
     """2D basis set for analytic functions in a unit disc.
 
     Parameters
@@ -634,12 +632,12 @@ class ZernikePolynomial(Basis):
     """
 
     def __init__(self, L, M, sym=False, spectral_indexing="ansi"):
-        self.L = L
-        self.M = M
-        self.N = 0
+        self._L = check_nonnegint(L, "L", False)
+        self._M = check_nonnegint(M, "M", False)
+        self._N = 0
         self._NFP = 1
-        self._sym = sym
-        self._spectral_indexing = spectral_indexing
+        self._sym = bool(sym) if not sym else str(sym)
+        self._spectral_indexing = str(spectral_indexing)
 
         self._modes = self._get_modes(
             L=self.L, M=self.M, spectral_indexing=self.spectral_indexing
@@ -647,7 +645,7 @@ class ZernikePolynomial(Basis):
 
         super().__init__()
 
-    def _get_modes(self, L=-1, M=0, spectral_indexing="ansi"):
+    def _get_modes(self, L, M, spectral_indexing="ansi"):
         """Get mode numbers for Fourier-Zernike basis functions.
 
         Parameters
@@ -685,9 +683,6 @@ class ZernikePolynomial(Basis):
             "ansi",
             "fringe",
         ], "Unknown spectral_indexing: {}".format(spectral_indexing)
-        default_L = {"ansi": M, "fringe": 2 * M}
-        L = L if L >= 0 else default_L.get(spectral_indexing, M)
-        self.L = L
 
         if spectral_indexing == "ansi":
             pol_posm = [
@@ -801,8 +796,8 @@ class ZernikePolynomial(Basis):
 
         """
         if L != self.L or M != self.M or sym != self.sym:
-            self.L = L
-            self.M = M
+            self._L = check_nonnegint(L, "L", False)
+            self._M = check_nonnegint(M, "M", False)
             self._sym = sym if sym is not None else self.sym
             self._modes = self._get_modes(
                 self.L, self.M, spectral_indexing=self.spectral_indexing
@@ -810,7 +805,7 @@ class ZernikePolynomial(Basis):
             self._set_up()
 
 
-class ChebyshevDoubleFourierBasis(Basis):
+class ChebyshevDoubleFourierBasis(_Basis):
     """3D basis: tensor product of Chebyshev polynomials and two Fourier series.
 
     Fourier series in both the poloidal and toroidal coordinates.
@@ -833,18 +828,18 @@ class ChebyshevDoubleFourierBasis(Basis):
     """
 
     def __init__(self, L, M, N, NFP=1, sym=False):
-        self.L = L
-        self.M = M
-        self.N = N
-        self._NFP = NFP
-        self._sym = sym
+        self._L = check_nonnegint(L, "L", False)
+        self._M = check_nonnegint(M, "M", False)
+        self._N = check_nonnegint(N, "N", False)
+        self._NFP = check_posint(NFP, "NFP", False)
+        self._sym = bool(sym) if not sym else str(sym)
         self._spectral_indexing = "linear"
 
         self._modes = self._get_modes(L=self.L, M=self.M, N=self.N)
 
         super().__init__()
 
-    def _get_modes(self, L=0, M=0, N=0):
+    def _get_modes(self, L, M, N):
         """Get mode numbers for Chebyshev-Fourier series.
 
         Parameters
@@ -889,8 +884,8 @@ class ChebyshevDoubleFourierBasis(Basis):
         modes : ndarray of in, shape(num_modes,3), optional
             Basis modes to evaluate (if None, full basis is used).
         unique : bool, optional
-            whether to workload by only calculating for unique values of nodes, modes
-            can be faster, but doesn't work with jit or autodiff
+            whether to reduce workload by only calculating for unique values of nodes,
+            modes can be faster, but doesn't work with jit or autodiff
 
         Returns
         -------
@@ -933,17 +928,18 @@ class ChebyshevDoubleFourierBasis(Basis):
         None
 
         """
+        NFP = check_posint(NFP, "NFP")
         self._NFP = NFP if NFP is not None else self.NFP
         if L != self.L or M != self.M or N != self.N or sym != self.sym:
-            self._L = L
-            self._M = M
-            self._N = N
+            self._L = check_nonnegint(L, "L", False)
+            self._M = check_nonnegint(M, "M", False)
+            self._N = check_nonnegint(N, "N", False)
             self._sym = sym if sym is not None else self.sym
             self._modes = self._get_modes(self.L, self.M, self.N)
             self._set_up()
 
 
-class FourierZernikeBasis(Basis):
+class FourierZernikeBasis(_Basis):
     """3D basis set for analytic functions in a toroidal volume.
 
     Zernike polynomials in the radial & poloidal coordinates, and a Fourier
@@ -984,12 +980,12 @@ class FourierZernikeBasis(Basis):
     """
 
     def __init__(self, L, M, N, NFP=1, sym=False, spectral_indexing="ansi"):
-        self.L = L
-        self.M = M
-        self.N = N
-        self._NFP = NFP
-        self._sym = sym
-        self._spectral_indexing = spectral_indexing
+        self._L = check_nonnegint(L, "L", False)
+        self._M = check_nonnegint(M, "M", False)
+        self._N = check_nonnegint(N, "N", False)
+        self._NFP = check_posint(NFP, "NFP", False)
+        self._sym = bool(sym) if not sym else str(sym)
+        self._spectral_indexing = str(spectral_indexing)
 
         self._modes = self._get_modes(
             L=self.L, M=self.M, N=self.N, spectral_indexing=self.spectral_indexing
@@ -997,7 +993,7 @@ class FourierZernikeBasis(Basis):
 
         super().__init__()
 
-    def _get_modes(self, L=-1, M=0, N=0, spectral_indexing="ansi"):
+    def _get_modes(self, L, M, N, spectral_indexing="ansi"):
         """Get mode numbers for Fourier-Zernike basis functions.
 
         Parameters
@@ -1037,9 +1033,6 @@ class FourierZernikeBasis(Basis):
             "ansi",
             "fringe",
         ], "Unknown spectral_indexing: {}".format(spectral_indexing)
-        default_L = {"ansi": M, "fringe": 2 * M}
-        L = L if L >= 0 else default_L.get(spectral_indexing, M)
-        self.L = L
 
         if spectral_indexing == "ansi":
             pol_posm = [
@@ -1169,15 +1162,108 @@ class FourierZernikeBasis(Basis):
         None
 
         """
+        NFP = check_posint(NFP, "NFP")
         self._NFP = NFP if NFP is not None else self.NFP
         if L != self.L or M != self.M or N != self.N or sym != self.sym:
-            self.L = L
-            self.M = M
-            self.N = N
+            self._L = check_nonnegint(L, "L", False)
+            self._M = check_nonnegint(M, "M", False)
+            self._N = check_nonnegint(N, "N", False)
             self._sym = sym if sym is not None else self.sym
             self._modes = self._get_modes(
                 self.L, self.M, self.N, spectral_indexing=self.spectral_indexing
             )
+            self._set_up()
+
+
+class ChebyshevPolynomial(_Basis):
+    """Shifted Chebyshev polynomial of the first kind.
+
+    Parameters
+    ----------
+    L : int
+        Maximum radial resolution.
+
+    """
+
+    def __init__(self, L):
+        self._L = check_nonnegint(L, "L", False)
+        self._M = 0
+        self._N = 0
+        self._NFP = 1
+        self._sym = False
+        self._spectral_indexing = "linear"
+
+        self._modes = self._get_modes(L=self.L)
+
+        super().__init__()
+
+    def _get_modes(self, L):
+        """Get mode numbers for shifted Chebyshev polynomials of the first kind.
+
+        Parameters
+        ----------
+        L : int
+            Maximum radial resolution.
+
+        Returns
+        -------
+        modes : ndarray of int, shape(num_modes,3)
+            Array of mode numbers [l,m,n].
+            Each row is one basis function with modes (l,m,n).
+
+        """
+        l = np.arange(L + 1).reshape((-1, 1))
+        z = np.zeros((L + 1, 2))
+        return np.hstack([l, z])
+
+    def evaluate(
+        self, nodes, derivatives=np.array([0, 0, 0]), modes=None, unique=False
+    ):
+        """Evaluate basis functions at specified nodes.
+
+        Parameters
+        ----------
+        nodes : ndarray of float, size(num_nodes,3)
+            Node coordinates, in (rho,theta,zeta).
+        derivatives : ndarray of int, shape(num_derivatives,3)
+            Order of derivatives to compute in (rho,theta,zeta).
+        modes : ndarray of in, shape(num_modes,3), optional
+            Basis modes to evaluate (if None, full basis is used)
+        unique : bool, optional
+            whether to reduce workload by only calculating for unique values of nodes,
+            modes can be faster, but doesn't work with jit or autodiff
+
+        Returns
+        -------
+        y : ndarray, shape(num_nodes,num_modes)
+            basis functions evaluated at nodes
+
+        """
+        if modes is None:
+            modes = self.modes
+        if (derivatives[1] != 0) or (derivatives[2] != 0):
+            return jnp.zeros((nodes.shape[0], modes.shape[0]))
+        if not len(modes):
+            return np.array([]).reshape((len(nodes), 0))
+
+        r, t, z = nodes.T
+        l, m, n = modes.T
+
+        radial = chebyshev(r[:, np.newaxis], l, dr=derivatives[0])
+        return radial
+
+    def change_resolution(self, L):
+        """Change resolution of the basis to the given resolution.
+
+        Parameters
+        ----------
+        L : int
+            Maximum radial resolution.
+
+        """
+        if L != self.L:
+            self._L = check_nonnegint(L, "L", False)
+            self._modes = self._get_modes(self.L)
             self._set_up()
 
 
@@ -1210,7 +1296,6 @@ def polyder_vec(p, m, exact=False):
 
 
 def _polyder_exact(p, m):
-    factorial = np.math.factorial
     m = np.asarray(m, dtype=int)  # order of derivative
     p = np.atleast_2d(p)
     order = p.shape[1] - 1
@@ -1228,7 +1313,7 @@ def _polyder_exact(p, m):
 
 @jit
 def _polyder_jax(p, m):
-    p = jnp.atleast_2d(p)
+    p = jnp.atleast_2d(jnp.asarray(p))
     m = jnp.asarray(m).astype(int)
     order = p.shape[1] - 1
     D = jnp.arange(order, -1, -1)
@@ -1287,8 +1372,8 @@ def _polyval_exact(p, x, prec):
 
 @jit
 def _polyval_jax(p, x):
-    p = jnp.atleast_2d(p)
-    x = jnp.atleast_1d(x).flatten()
+    p = jnp.atleast_2d(jnp.asarray(p))
+    x = jnp.atleast_1d(jnp.asarray(x)).flatten()
     npoly = p.shape[0]  # number of polynomials
     order = p.shape[1]  # order of polynomials
     nx = len(x)  # number of coordinates
@@ -1305,6 +1390,16 @@ def _polyval_jax(p, x):
 def zernike_radial_coeffs(l, m, exact=True):
     """Polynomial coefficients for radial part of zernike basis.
 
+    The for loop ranges from m to l+1 in steps of 2, as opposed to the
+    formula in the zernike_eval notebook. This is to make the coeffs array in
+    ascending powers of r, which is more natural for polynomial evaluation.
+    So, one should substitute s=(l-k)/s in the formula in the notebook to get
+    the coding implementation below.
+
+                                 (-1)^((l-k)/2) * ((l+k)/2)!
+    R_l^m(r) = sum_{k=m}^l  -------------------------------------
+                             ((l-k)/2)! * ((k+m)/2)! * ((k-m)/2)!
+
     Parameters
     ----------
     l : ndarray of int, shape(K,)
@@ -1318,7 +1413,7 @@ def zernike_radial_coeffs(l, m, exact=True):
     Returns
     -------
     coeffs : ndarray
-
+        Polynomial coefficients for Zernike polynomials, in descending powers of r.
 
     Notes
     -----
@@ -1340,14 +1435,15 @@ def zernike_radial_coeffs(l, m, exact=True):
         ll = lms[ii, 0]
         mm = lms[ii, 1]
         for s in range(mm, ll + 1, 2):
-            coeffs[ii, s] = (
-                (-1) ** ((ll - s) // 2)
-                * factorial((ll + s) // 2)
-                // (
-                    factorial((ll - s) // 2)
-                    * factorial((s + mm) // 2)
-                    * factorial((s - mm) // 2)
-                )
+            # Zernike polynomials can also be written in the form of [1] which
+            # states that the coefficients are given by the binomial coefficients
+            # hence they are all integers. So, we can use exact arithmetic with integer
+            # division instead of floating point division.
+            # [1]https://en.wikipedia.org/wiki/Zernike_polynomials#Other_representations
+            coeffs[ii, s] = ((-1) ** ((ll - s) // 2) * factorial((ll + s) // 2)) // (
+                factorial((ll - s) // 2)
+                * factorial((s + mm) // 2)
+                * factorial((s - mm) // 2)
             )
     c = np.fliplr(np.where(lm_even, coeffs, 0))
     if not exact:
@@ -1427,7 +1523,7 @@ def zernike_radial(r, l, m, dr=0):
         basis function(s) evaluated at specified points
 
     """
-    m = jnp.abs(m)
+    m = jnp.abs(m).astype(float)
     alpha = m
     beta = 0
     n = (l - m) // 2
@@ -1583,6 +1679,23 @@ def fourier(theta, m, NFP=1, dt=0):
     return m_abs**dt * jnp.sin(m_abs * theta + shift)
 
 
+def zernike_norm(l, m):
+    """Norm of a Zernike polynomial with l, m indexing.
+
+    Parameters
+    ----------
+    l,m : int
+        radial and azimuthal mode numbers.
+
+    Returns
+    -------
+    norm : float
+        the integral (Z^m_l)^2 r dr dt, r=[0,1], t=[0,2*pi]
+
+    """
+    return np.sqrt((2 * (l + 1)) / (np.pi * (1 + int(m == 0))))
+
+
 @jit
 @jnp.vectorize
 def _binom(n, k):
@@ -1619,6 +1732,7 @@ def _binom(n, k):
     return b
 
 
+@custom_jvp
 @jit
 @jnp.vectorize
 def _jacobi(n, alpha, beta, x, dx=0):
@@ -1660,12 +1774,16 @@ def _jacobi(n, alpha, beta, x, dx=0):
     n, alpha, beta, x = map(jnp.asarray, (n, alpha, beta, x))
 
     # coefficient for derivative
-    c = (
-        gammaln(alpha + beta + n + 1 + dx)
-        - dx * jnp.log(2)
-        - gammaln(alpha + beta + n + 1)
+    coeffs = jnp.array(
+        [
+            1,
+            (alpha + n + 1) / 2,
+            (alpha + n + 2) * (alpha + n + 1) / 4,
+            (alpha + n + 3) * (alpha + n + 2) * (alpha + n + 1) / 8,
+            (alpha + n + 4) * (alpha + n + 3) * (alpha + n + 2) * (alpha + n + 1) / 16,
+        ]
     )
-    c = jnp.exp(c)
+    c = coeffs[dx]
     # taking derivative is same as coeff*jacobi but for shifted n,a,b
     n -= dx
     alpha += dx
@@ -1685,18 +1803,14 @@ def _jacobi(n, alpha, beta, x, dx=0):
     return c * out
 
 
-def zernike_norm(l, m):
-    """Norm of a Zernike polynomial with l, m indexing.
-
-    Parameters
-    ----------
-    l,m : int
-        radial and azimuthal mode numbers.
-
-    Returns
-    -------
-    norm : float
-        the integral (Z^m_l)^2 r dr dt, r=[0,1], t=[0,2*pi]
-
-    """
-    return np.sqrt((2 * (l + 1)) / (np.pi * (1 + int(m == 0))))
+@_jacobi.defjvp
+def _jacobi_jvp(x, xdot):
+    (n, alpha, beta, x, dx) = x
+    (ndot, alphadot, betadot, xdot, dxdot) = xdot
+    f = _jacobi(n, alpha, beta, x, dx)
+    df = _jacobi(n, alpha, beta, x, dx + 1)
+    # in theory n, alpha, beta, dx aren't differentiable (they're integers)
+    # but marking them as non-diff argnums seems to cause escaped tracer values.
+    # probably a more elegant fix, but just setting those derivatives to zero seems
+    # to work fine.
+    return f, df * xdot + 0 * ndot + 0 * alphadot + 0 * betadot + 0 * dxdot

@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 
 import desc.examples
-from desc.equilibrium import EquilibriaFamily, Equilibrium
+from desc.equilibrium import Equilibrium
 from desc.geometry import FourierRZCurve
 from desc.grid import ConcentricGrid, QuadratureGrid
 from desc.objectives import (
@@ -19,10 +19,9 @@ from desc.perturbations import optimal_perturb, perturb
 
 @pytest.mark.regression
 @pytest.mark.slow
-@pytest.mark.solve
-def test_perturbation_orders(SOLOVEV):
+def test_perturbation_orders():
     """Test that higher-order perturbations are more accurate."""
-    eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
+    eq = desc.examples.get("SOLOVEV")
 
     objective = get_equilibrium_objective(eq=eq)
     constraints = get_fixed_boundary_constraints(eq=eq)
@@ -75,7 +74,7 @@ def test_perturbation_orders(SOLOVEV):
 
     # solve for "true" high-beta solution
     eqS = eq3.copy()
-    eqS.solve(objective=objective, ftol=1e-2, verbose=3)
+    eqS.solve(ftol=1e-2, verbose=3)
 
     # evaluate equilibrium force balance
     grid = ConcentricGrid(2 * eq.L, 2 * eq.M, 2 * eq.N, eq.NFP, node_pattern="jacobi")
@@ -106,7 +105,7 @@ def test_perturb_with_float_without_error():
     # np.concatenate cannot concatenate 0-D arrays. This test exercises the fix.
     eq = Equilibrium()
     objective = get_equilibrium_objective(eq=eq)
-    constraints = get_fixed_boundary_constraints(eq=eq, iota=False)
+    constraints = get_fixed_boundary_constraints(eq=eq)
 
     # perturb Psi with a float
     deltas = {"Psi": float(eq.Psi)}
@@ -129,13 +128,17 @@ def test_optimal_perturb():
     # particular solution. Here we do a simple test to ensure the interior and boundary
     # agree
     eq1 = desc.examples.get("DSHAPE")
+    with pytest.warns(UserWarning, match="Reducing radial"):
+        eq1.change_resolution(3, 3, 0, 6, 6, 0)
     eq1.change_resolution(N=1, N_grid=5)
+    eq1.surface = eq1.get_surface_at(1.0)
     objective = ObjectiveFunction(
         ToroidalCurrent(
             eq=eq1, grid=QuadratureGrid(eq1.L, eq1.M, eq1.N), target=0, weight=1
-        )
+        ),
+        use_jit=False,
     )
-    constraint = ObjectiveFunction(ForceBalance(eq=eq1, target=0))
+    constraint = ObjectiveFunction(ForceBalance(eq=eq1, target=0), use_jit=False)
 
     objective.build()
     constraint.build()
@@ -174,9 +177,9 @@ def test_optimal_perturb():
 
     assert eq2.is_nested()
     # recompute surface from R_lmn etc.
-    surf1 = eq1.get_surface_at(1)
+    surf1 = eq2.get_surface_at(1)
     # this is the surface from perturbed coefficients
-    surf2 = eq1.surface
+    surf2 = eq2.surface
 
     np.testing.assert_allclose(surf1.R_lmn, surf2.R_lmn, atol=1e-12, rtol=1e-12)
     np.testing.assert_allclose(surf1.Z_lmn, surf2.Z_lmn, atol=1e-12, rtol=1e-12)

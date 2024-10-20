@@ -7,7 +7,7 @@ Psi = 1.0
 
 # spectral resolution
 M_pol  =  8, 14
-N_tor  =  1, 3
+N_tor  =  1,  3
 
 # continuation parameters
 bdry_ratio = 0.5, 1
@@ -24,7 +24,6 @@ maxiter = 50
 optimizer         = lsq-exact
 objective         = vacuum
 spectral_indexing = ansi
-node_pattern      = jacobi
 
 # Note that the vacuum objective will optimize for current density = 0.
 # The rotational transform profile coefficients below will only be used

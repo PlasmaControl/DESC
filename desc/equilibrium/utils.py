@@ -11,8 +11,7 @@ from desc.geometry import (
     Surface,
     ZernikeRZToroidalSection,
 )
-from desc.profiles import PowerSeriesProfile, Profile
-from desc.utils import isnonnegint
+from desc.profiles import PowerSeriesProfile, _Profile
 
 
 def parse_profile(prof, name="", **kwargs):
@@ -41,7 +40,7 @@ def parse_profile(prof, name="", **kwargs):
     TypeError
         If the object cannot be parsed as a Profile
     """
-    if isinstance(prof, Profile):
+    if isinstance(prof, _Profile):
         return prof
     if isinstance(prof, numbers.Number) or (
         isinstance(prof, (np.ndarray, jnp.ndarray)) and prof.ndim == 1
@@ -95,6 +94,7 @@ def parse_surface(surface, NFP=1, sym=True, spectral_indexing="ansi"):
                 surface[:, 1:3].astype(int),
                 NFP,
                 sym,
+                check_orientation=False,
             )
         elif np.all(surface[:, 2] == 0):
             surface = ZernikeRZToroidalSection(
@@ -181,9 +181,3 @@ def parse_axis(axis, NFP=1, sym=True, surface=None):
     else:
         raise TypeError("Got unknown axis type {}".format(axis))
     return axis
-
-
-def _assert_nonnegint(x, name=""):
-    assert (x is None) or isnonnegint(
-        x
-    ), f"{name} should be a non-negative integer or None, got {x}"

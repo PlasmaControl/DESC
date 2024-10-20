@@ -57,7 +57,7 @@ class PickleReader(PickleIO, Reader):
         ----------
         obj : python object instance
             object must have _io_attrs_ attribute to have attributes read and loaded
-        where : None or file insance
+        where : None or file instance
             specifies where to read obj from
 
         """
@@ -107,7 +107,7 @@ class PickleWriter(PickleIO, Writer):
         ----------
         obj : python object instance
             object must have _io_attrs_ attribute to have attributes read and loaded
-        where : None or file insance
+        where : None or file instance
             specifies where to write obj to
 
         """

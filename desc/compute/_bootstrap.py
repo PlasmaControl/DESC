@@ -9,12 +9,12 @@ computational grid has a node on the magnetic axis to avoid potentially
 expensive computations.
 """
 
-from scipy.constants import elementary_charge
+from scipy.constants import elementary_charge, mu_0
 from scipy.special import roots_legendre
 
 from ..backend import fori_loop, jnp
+from ..integrals.surface_integral import surface_averages_map
 from .data_index import register_compute_fun
-from .utils import surface_averages_map
 
 
 @register_compute_fun(
@@ -31,7 +31,9 @@ from .utils import surface_averages_map
     coordinates="r",
     data=["sqrt(g)", "V_r(r)", "|B|", "<|B|^2>", "max_tz |B|"],
     axis_limit_data=["sqrt(g)_r", "V_rr(r)"],
-    n_gauss="n_gauss",
+    resolution_requirement="tz",
+    n_gauss="int: Number of quadrature points to use for estimating trapped fraction. "
+    + "Default 20.",
 )
 def _trapped_fraction(params, transforms, profiles, data, **kwargs):
     """Evaluate the effective trapped particle fraction.
@@ -75,7 +77,7 @@ def _trapped_fraction(params, transforms, profiles, data, **kwargs):
     return data
 
 
-def j_dot_B_Redl(geom_data, profile_data, helicity_N=None):
+def compute_J_dot_B_Redl(geom_data, profile_data, helicity_N=None):
     """Compute the bootstrap current 〈𝐉 ⋅ 𝐁〉.
 
     Compute 〈𝐉 ⋅ 𝐁〉 using the formulae in
@@ -207,9 +209,7 @@ def j_dot_B_Redl(geom_data, profile_data, helicity_N=None):
         (0.1 + 0.6 * Zeff)
         * (X32e - X32e**4)
         / (Zeff * (0.77 + 0.63 * (1 + (Zeff - 1) ** 1.1)))
-        + 0.7
-        / (1 + 0.2 * Zeff)
-        * (X32e**2 - X32e**4 - 1.2 * (X32e**3 - X32e**4))
+        + 0.7 / (1 + 0.2 * Zeff) * (X32e**2 - X32e**4 - 1.2 * (X32e**3 - X32e**4))
         + 1.3 / (1 + 0.5 * Zeff) * (X32e**4)
     )
 
@@ -223,9 +223,7 @@ def j_dot_B_Redl(geom_data, profile_data, helicity_N=None):
     # Redl eq (15):
     F32ei = (
         -(0.4 + 1.93 * Zeff) / (Zeff * (0.8 + 0.6 * Zeff)) * (X32ei - X32ei**4)
-        + 5.5
-        / (1.5 + 2 * Zeff)
-        * (X32ei**2 - X32ei**4 - 0.8 * (X32ei**3 - X32ei**4))
+        + 5.5 / (1.5 + 2 * Zeff) * (X32ei**2 - X32ei**4 - 0.8 * (X32ei**3 - X32ei**4))
         - 1.3 / (1 + 0.5 * Zeff) * (X32ei**4)
     )
 
@@ -337,14 +335,14 @@ def j_dot_B_Redl(geom_data, profile_data, helicity_N=None):
         "Zeff",
         "rho",
     ],
-    helicity="helicity",
+    helicity="tuple: Type of quasisymmetry, (M,N). Default (1,0)",
 )
-def _compute_J_dot_B_Redl(params, transforms, profiles, data, **kwargs):
+def _J_dot_B_Redl(params, transforms, profiles, data, **kwargs):
     """Compute the bootstrap current 〈𝐉 ⋅ 𝐁〉.
 
     Compute 〈𝐉 ⋅ 𝐁〉 using the formulae in
-    Redl et al., Physics of Plasmas 28, 022502 (2021). This formula for
-    the bootstrap current is valid in axisymmetry, quasi-axisymmetry,
+    Redl et al., Physics of Plasmas 28, 022502 (2021).
+    This formula for the bootstrap current is valid in axisymmetry, quasi-axisymmetry,
     and quasi-helical symmetry, but not in other stellarators.
     """
     grid = transforms["grid"]
@@ -381,6 +379,62 @@ def _compute_J_dot_B_Redl(params, transforms, profiles, data, **kwargs):
 
     helicity = kwargs.get("helicity", (1, 0))
     helicity_N = helicity[1]
-    j_dot_B_data = j_dot_B_Redl(geom_data, profile_data, helicity_N)
-    data["<J*B> Redl"] = grid.expand(j_dot_B_data["<J*B>"])
+    J_dot_B_data = compute_J_dot_B_Redl(geom_data, profile_data, helicity_N)
+    data["<J*B> Redl"] = grid.expand(J_dot_B_data["<J*B>"])
+    return data
+
+
+@register_compute_fun(
+    name="current Redl",
+    label="\\frac{2\\pi}{\\mu_0} I_{Redl}",
+    units="A",
+    units_long="Amperes",
+    description="Net toroidal current enclosed by flux surfaces, "
+    + "consistent with bootstrap current from Redl formula",
+    dim=1,
+    params=[],
+    transforms={"grid": []},
+    profiles=["current"],
+    coordinates="r",
+    data=["rho", "psi_r", "p_r", "current", "<|B|^2>", "<J*B> Redl"],
+    degree="int: Degree of polynomial used for fitting current profile. "
+    + "Default grid.num_rho-1",
+)
+def _current_Redl(params, transforms, profiles, data, **kwargs):
+    """Compute the current profile consistent with the Redl bootstrap current.
+
+    Compute the current using Equation C3 in
+    Landreman and Catto, Physics of Plasmas 19, 056103 (2012).
+    This is the same approach as STELLOPT VBOOT with SFINCS, and should be used in an
+    iterative method to update the current profile until self-consistency is achieved.
+    """
+    rho = transforms["grid"].compress(data["rho"])
+    current_r = (  # perpendicular current
+        -mu_0
+        * transforms["grid"].compress(data["current"])
+        / transforms["grid"].compress(data["<|B|^2>"])
+        * transforms["grid"].compress(data["p_r"])
+    ) + (  # parallel current
+        2
+        * jnp.pi
+        * transforms["grid"].compress(data["psi_r"])
+        * transforms["grid"].compress(data["<J*B> Redl"])
+        / transforms["grid"].compress(data["<|B|^2>"])
+    )
+    degree = kwargs.get(
+        "degree",
+        min(
+            (
+                profiles["current"].basis.L
+                if profiles["current"] is not None
+                else transforms["grid"].num_rho - 1
+            ),
+            transforms["grid"].num_rho - 1,
+        ),
+    )
+    XX = jnp.vander(rho, degree + 1)[:, :-1]  # remove constant term
+    c_l_r = jnp.pad(jnp.linalg.lstsq(XX, current_r)[0], (0, 1))  # manual polyfit
+    c_l = jnp.polyint(c_l_r)
+    current = jnp.polyval(c_l, rho)
+    data["current Redl"] = transforms["grid"].expand(current)
     return data

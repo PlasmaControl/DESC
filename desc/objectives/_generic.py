@@ -1,17 +1,257 @@
 """Generic objectives that don't belong anywhere else."""
+
 import inspect
 import re
 
-from desc.backend import jnp
-from desc.compute import compute as compute_fun
-from desc.compute import data_index
-from desc.compute.utils import get_params, get_profiles, get_transforms
-from desc.grid import LinearGrid, QuadratureGrid
-from desc.profiles import Profile
-from desc.utils import Timer
+import numpy as np
 
-from .normalization import compute_scaling_factors
-from .objective_funs import _Objective
+from desc.backend import jnp, tree_flatten, tree_leaves, tree_unflatten
+from desc.compute import data_index
+from desc.compute.utils import _compute as compute_fun
+from desc.compute.utils import _parse_parameterization, get_profiles, get_transforms
+from desc.grid import QuadratureGrid
+from desc.optimizable import OptimizableCollection
+from desc.utils import errorif, parse_argname_change
+
+from .linear_objectives import _FixedObjective
+from .objective_funs import _Objective, collect_docs
+
+
+class GenericObjective(_Objective):
+    """A generic objective that can compute any quantity from the `data_index`.
+
+    Parameters
+    ----------
+    f : str
+        Name of the quantity to compute.
+    thing : Optimizable
+        Object that will be optimized to satisfy the Objective.
+    grid : Grid, optional
+        Collocation grid containing the nodes to evaluate at. Defaults to
+        ``QuadratureGrid(eq.L_grid, eq.M_grid, eq.N_grid)`` if thing is an Equilibrium.
+
+    """
+
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``target=0``.", bounds_default="``target=0``."
+    )
+
+    _print_value_fmt = "Generic objective value: "
+
+    def __init__(
+        self,
+        f,
+        thing,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        loss_function=None,
+        deriv_mode="auto",
+        grid=None,
+        name="generic",
+        jac_chunk_size=None,
+        **kwargs,
+    ):
+        errorif(
+            isinstance(thing, OptimizableCollection),
+            NotImplementedError,
+            "thing must be of type Optimizable and not OptimizableCollection.",
+        )
+        thing = parse_argname_change(thing, kwargs, "eq", "thing")
+        if target is None and bounds is None:
+            target = 0
+        self.f = f
+        self._grid = grid
+        super().__init__(
+            things=thing,
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            loss_function=loss_function,
+            deriv_mode=deriv_mode,
+            name=name,
+            jac_chunk_size=jac_chunk_size,
+        )
+        self._p = _parse_parameterization(thing)
+        self._scalar = not bool(data_index[self._p][self.f]["dim"])
+        self._coordinates = data_index[self._p][self.f]["coordinates"]
+        self._units = "(" + data_index[self._p][self.f]["units"] + ")"
+
+    def build(self, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        thing = self.things[0]
+        if self._grid is None:
+            errorif(
+                self._p != "desc.equilibrium.equilibrium.Equilibrium",
+                ValueError,
+                "grid must be supplied for things besides an Equilibrium.",
+            )
+            grid = QuadratureGrid(thing.L_grid, thing.M_grid, thing.N_grid, thing.NFP)
+        else:
+            grid = self._grid
+
+        if data_index[self._p][self.f]["dim"] == 0:
+            self._dim_f = 1
+        elif data_index[self._p][self.f]["coordinates"] == "r":
+            self._dim_f = grid.num_rho
+        else:
+            self._dim_f = grid.num_nodes * np.prod(data_index[self._p][self.f]["dim"])
+        profiles = get_profiles(self.f, obj=thing, grid=grid)
+        transforms = get_transforms(self.f, obj=thing, grid=grid)
+        self._constants = {
+            "transforms": transforms,
+            "profiles": profiles,
+        }
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, params, constants=None):
+        """Compute the quantity.
+
+        Parameters
+        ----------
+        params : dict
+            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc.
+            Defaults to self.constants
+
+        Returns
+        -------
+        f : ndarray
+            Computed quantity.
+
+        """
+        if constants is None:
+            constants = self.constants
+        data = compute_fun(
+            self._p,
+            self.f,
+            params=params,
+            transforms=constants["transforms"],
+            profiles=constants["profiles"],
+        )
+        f = data[self.f]
+        if self._coordinates == "r":
+            f = constants["transforms"]["grid"].compress(f, surface_label="rho")
+        return f.flatten(order="F")  # so that default quad weights line up correctly.
+
+
+class LinearObjectiveFromUser(_FixedObjective):
+    """Wrap a user defined linear objective function.
+
+    The user supplied function should take one argument, ``params``, which is a
+    dictionary of parameters of an Optimizable "thing".
+
+    The function should be JAX traceable and differentiable, and should return a single
+    JAX array. The source code of the function must be visible to the ``inspect`` module
+    for parsing.
+
+    Parameters
+    ----------
+    fun : callable
+        Custom objective function.
+    thing : Optimizable
+        Object whose degrees of freedom are being constrained.
+
+    """
+
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``target=0``.", bounds_default="``target=0``."
+    )
+
+    _scalar = False
+    _linear = True
+    _fixed = True
+    _units = "(Unknown)"
+    _print_value_fmt = "Custom linear objective value: "
+
+    def __init__(
+        self,
+        fun,
+        thing,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=False,
+        normalize_target=False,
+        name="custom linear",
+        jac_chunk_size=None,
+    ):
+        if target is None and bounds is None:
+            target = 0
+        self._fun = fun
+        super().__init__(
+            things=thing,
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            name=name,
+            jac_chunk_size=jac_chunk_size,
+        )
+
+    def build(self, use_jit=False, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        thing = self.things[0]
+
+        import jax
+
+        self._dim_f = jax.eval_shape(self._fun, thing.params_dict).size
+
+        # check that fun is linear
+        params, params_tree = tree_flatten(thing.params_dict)
+        for param in params:
+            param += np.random.rand(param.size) * 10
+        params = tree_unflatten(params_tree, params)
+        J1 = jax.jacrev(self._fun)(thing.params_dict)
+        J2 = jax.jacrev(self._fun)(params)
+        for j1, j2 in zip(tree_leaves(J1), tree_leaves(J2)):
+            assert np.all(j1 == j2), "Function must be linear!"
+
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, params, constants=None):
+        """Compute fixed degree of freedom errors.
+
+        Parameters
+        ----------
+        params : dict
+            Dictionary of equilibrium degrees of freedom, eg thing.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
+
+        Returns
+        -------
+        f : ndarray
+            Fixed degree of freedom errors.
+
+        """
+        f = self._fun(params)
+        return f
 
 
 class ObjectiveFromUser(_Objective):
@@ -34,35 +274,24 @@ class ObjectiveFromUser(_Objective):
     ----------
     fun : callable
         Custom objective function.
-    eq : Equilibrium, optional
-        Equilibrium that will be optimized to satisfy the Objective.
-    target : float, ndarray, optional
-        Target value(s) of the objective. Only used if bounds is None.
-        len(target) must be equal to Objective.dim_f
-    bounds : tuple, optional
-        Lower and upper bounds on the objective. Overrides target.
-        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
-    weight : float, ndarray, optional
-        Weighting to apply to the Objective, relative to other Objectives.
-        len(weight) must be equal to Objective.dim_f
-    normalize : bool
-        Whether to compute the error in physical units or non-dimensionalize.
-        Note: has no effect for this objective.
-    normalize_target : bool
-        Whether target and bounds should be normalized before comparing to computed
-        values. If `normalize` is `True` and the target is in physical units,
-        this should also be set to True.
-    grid : Grid, ndarray, optional
-        Collocation grid containing the nodes to evaluate at.
-    name : str
-        Name of the objective function.
+    thing : Optimizable
+        Object that will be optimized to satisfy the Objective.
+    grid : Grid, optional
+        Collocation grid containing the nodes to evaluate at. Defaults to
+        ``QuadratureGrid(eq.L_grid, eq.M_grid, eq.N_grid)`` if thing is an Equilibrium.
 
+    """
 
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``target=0``.", bounds_default="``target=0``."
+    )
+    __doc__ += """
     Examples
     --------
     .. code-block:: python
 
         from desc.compute.utils import surface_averages
+
         def myfun(grid, data):
             # This will compute the flux surface average of the function
             # R*B_T from the Grad-Shafranov equation
@@ -72,57 +301,72 @@ class ObjectiveFromUser(_Objective):
             # the unique values:
             return grid.compress(f_fsa)
 
-        myobj = ObjectiveFromUser(myfun)
+        myobj = ObjectiveFromUser(fun=myfun, thing=eq)
 
     """
 
-    _scalar = False
-    _linear = False
     _units = "(Unknown)"
-    _print_value_fmt = "Custom Objective Residual: {:10.3e} "
+    _print_value_fmt = "Custom objective value: "
 
     def __init__(
         self,
         fun,
-        eq=None,
+        thing,
         target=None,
         bounds=None,
         weight=1,
         normalize=True,
         normalize_target=True,
+        loss_function=None,
+        deriv_mode="auto",
         grid=None,
         name="custom",
+        jac_chunk_size=None,
+        **kwargs,
     ):
+        errorif(
+            isinstance(thing, OptimizableCollection),
+            NotImplementedError,
+            "thing must be of type Optimizable and not OptimizableCollection.",
+        )
+        thing = parse_argname_change(thing, kwargs, "eq", "thing")
         if target is None and bounds is None:
             target = 0
         self._fun = fun
         self._grid = grid
         super().__init__(
-            eq=eq,
+            things=thing,
             target=target,
             bounds=bounds,
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
+            loss_function=loss_function,
+            deriv_mode=deriv_mode,
             name=name,
+            jac_chunk_size=jac_chunk_size,
         )
+        self._p = _parse_parameterization(thing)
 
-    def build(self, eq=None, use_jit=True, verbose=1):
+    def build(self, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
         ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
             Level of output.
 
         """
-        eq = eq or self._eq
+        thing = self.things[0]
         if self._grid is None:
-            grid = QuadratureGrid(eq.L_grid, eq.M_grid, eq.N_grid, eq.NFP)
+            errorif(
+                self._p != "desc.equilibrium.equilibrium.Equilibrium",
+                ValueError,
+                "grid must be supplied for things besides an Equilibrium.",
+            )
+            grid = QuadratureGrid(thing.L_grid, thing.M_grid, thing.N_grid, thing.NFP)
         else:
             grid = self._grid
 
@@ -135,40 +379,40 @@ class ObjectiveFromUser(_Objective):
 
         self._data_keys = get_vars(self._fun)
         dummy_data = {}
-        p = "desc.equilibrium.equilibrium.Equilibrium"
         for key in self._data_keys:
-            assert key in data_index[p], f"Don't know how to compute {key}"
-            if data_index[p][key]["dim"] == 0:
+            assert key in data_index[self._p], f"Don't know how to compute {key}."
+            if data_index[self._p][key]["dim"] == 0:
                 dummy_data[key] = jnp.array(0.0)
             else:
-                dummy_data[key] = jnp.empty((grid.num_nodes, data_index[p][key]["dim"]))
+                dummy_data[key] = jnp.empty(
+                    (grid.num_nodes, data_index[self._p][key]["dim"])
+                ).squeeze()
 
         self._fun_wrapped = lambda data: self._fun(grid, data)
         import jax
 
         self._dim_f = jax.eval_shape(self._fun_wrapped, dummy_data).size
         self._scalar = self._dim_f == 1
-        self._args = get_params(
-            self._data_keys,
-            obj="desc.equilibrium.equilibrium.Equilibrium",
-            has_axis=grid.axis.size,
-        )
-        self._profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
-        self._transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
+        profiles = get_profiles(self._data_keys, obj=thing, grid=grid)
+        transforms = get_transforms(self._data_keys, obj=thing, grid=grid)
         self._constants = {
-            "transforms": self._transforms,
-            "profiles": self._profiles,
+            "transforms": transforms,
+            "profiles": profiles,
+            "quad_weights": 1.0,
         }
 
-        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+        super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, *args, **kwargs):
+    def compute(self, params, constants=None):
         """Compute the quantity.
 
         Parameters
         ----------
-        args : ndarray
-            Parameters given by self.args.
+        params : dict
+            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
 
         Returns
         -------
@@ -176,11 +420,10 @@ class ObjectiveFromUser(_Objective):
             Computed quantity.
 
         """
-        params, constants = self._parse_args(*args, **kwargs)
         if constants is None:
             constants = self.constants
         data = compute_fun(
-            "desc.equilibrium.equilibrium.Equilibrium",
+            self._p,
             self._data_keys,
             params=params,
             transforms=constants["transforms"],
@@ -188,498 +431,3 @@ class ObjectiveFromUser(_Objective):
         )
         f = self._fun_wrapped(data)
         return f
-
-
-class GenericObjective(_Objective):
-    """A generic objective that can compute any quantity from the `data_index`.
-
-    Parameters
-    ----------
-    f : str
-        Name of the quantity to compute.
-    eq : Equilibrium, optional
-        Equilibrium that will be optimized to satisfy the Objective.
-    target : float, ndarray, optional
-        Target value(s) of the objective. Only used if bounds is None.
-        len(target) must be equal to Objective.dim_f
-    bounds : tuple, optional
-        Lower and upper bounds on the objective. Overrides target.
-        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
-    weight : float, ndarray, optional
-        Weighting to apply to the Objective, relative to other Objectives.
-        len(weight) must be equal to Objective.dim_f
-    normalize : bool
-        Whether to compute the error in physical units or non-dimensionalize.
-        Note: has no effect for this objective.
-    normalize_target : bool
-        Whether target and bounds should be normalized before comparing to computed
-        values. If `normalize` is `True` and the target is in physical units,
-        this should also be set to True.
-    grid : Grid, ndarray, optional
-        Collocation grid containing the nodes to evaluate at.
-    name : str
-        Name of the objective function.
-
-    """
-
-    _scalar = False
-    _linear = False
-    _units = "(Unknown)"
-    _print_value_fmt = "Residual: {:10.3e} "
-
-    def __init__(
-        self,
-        f,
-        eq=None,
-        target=None,
-        bounds=None,
-        weight=1,
-        normalize=True,
-        normalize_target=True,
-        grid=None,
-        name="generic",
-    ):
-        if target is None and bounds is None:
-            target = 0
-        self.f = f
-        self._grid = grid
-        super().__init__(
-            eq=eq,
-            target=target,
-            bounds=bounds,
-            weight=weight,
-            normalize=normalize,
-            normalize_target=normalize_target,
-            name=name,
-        )
-        self._units = (
-            "("
-            + data_index["desc.equilibrium.equilibrium.Equilibrium"][self.f]["units"]
-            + ")"
-        )
-
-    def build(self, eq=None, use_jit=True, verbose=1):
-        """Build constant arrays.
-
-        Parameters
-        ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
-        use_jit : bool, optional
-            Whether to just-in-time compile the objective and derivatives.
-        verbose : int, optional
-            Level of output.
-
-        """
-        eq = eq or self._eq
-        if self._grid is None:
-            grid = QuadratureGrid(eq.L_grid, eq.M_grid, eq.N_grid, eq.NFP)
-        else:
-            grid = self._grid
-
-        p = "desc.equilibrium.equilibrium.Equilibrium"
-        if data_index[p][self.f]["dim"] == 0:
-            self._dim_f = 1
-            self._scalar = True
-        else:
-            self._dim_f = grid.num_nodes * data_index[p][self.f]["dim"]
-            self._scalar = False
-        self._args = get_params(
-            self.f,
-            obj="desc.equilibrium.equilibrium.Equilibrium",
-            has_axis=grid.axis.size,
-        )
-        self._profiles = get_profiles(self.f, obj=eq, grid=grid)
-        self._transforms = get_transforms(self.f, obj=eq, grid=grid)
-        self._constants = {
-            "transforms": self._transforms,
-            "profiles": self._profiles,
-        }
-
-        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
-
-    def compute(self, *args, **kwargs):
-        """Compute the quantity.
-
-        Parameters
-        ----------
-        args : ndarray
-            Parameters given by self.args.
-
-        Returns
-        -------
-        f : ndarray
-            Computed quantity.
-
-        """
-        params, constants = self._parse_args(*args, **kwargs)
-        if constants is None:
-            constants = self.constants
-        data = compute_fun(
-            "desc.equilibrium.equilibrium.Equilibrium",
-            self.f,
-            params=params,
-            transforms=constants["transforms"],
-            profiles=constants["profiles"],
-        )
-        f = data[self.f]
-        if not self.scalar:
-            f = (f.T * constants["transforms"]["grid"].weights).flatten()
-        return f
-
-
-class ToroidalCurrent(_Objective):
-    """Target toroidal current profile.
-
-    Parameters
-    ----------
-    eq : Equilibrium, optional
-        Equilibrium that will be optimized to satisfy the Objective.
-    target : float, ndarray, optional
-        Target value(s) of the objective. Only used if bounds is None.
-        len(target) must be equal to Objective.dim_f
-    bounds : tuple, optional
-        Lower and upper bounds on the objective. Overrides target.
-        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
-    weight : float, ndarray, optional
-        Weighting to apply to the Objective, relative to other Objectives.
-        len(weight) must be equal to Objective.dim_f
-    normalize : bool
-        Whether to compute the error in physical units or non-dimensionalize.
-    normalize_target : bool
-        Whether target and bounds should be normalized before comparing to computed
-        values. If `normalize` is `True` and the target is in physical units,
-        this should also be set to True.
-    grid : Grid, ndarray, optional
-        Collocation grid containing the nodes to evaluate at.
-    name : str
-        Name of the objective function.
-
-    """
-
-    _scalar = False
-    _linear = False
-    _units = "(A)"
-    _print_value_fmt = "Toroidal current: {:10.3e} "
-
-    def __init__(
-        self,
-        eq=None,
-        target=None,
-        bounds=None,
-        weight=1,
-        normalize=True,
-        normalize_target=True,
-        grid=None,
-        name="toroidal current",
-    ):
-        if target is None and bounds is None:
-            target = 0
-        self._grid = grid
-        super().__init__(
-            eq=eq,
-            target=target,
-            bounds=bounds,
-            weight=weight,
-            normalize=normalize,
-            normalize_target=normalize_target,
-            name=name,
-        )
-
-    def build(self, eq=None, use_jit=True, verbose=1):
-        """Build constant arrays.
-
-        Parameters
-        ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
-        use_jit : bool, optional
-            Whether to just-in-time compile the objective and derivatives.
-        verbose : int, optional
-            Level of output.
-
-        """
-        eq = eq or self._eq
-        if self._grid is None:
-            grid = LinearGrid(
-                L=eq.L_grid,
-                M=eq.M_grid,
-                N=eq.N_grid,
-                NFP=eq.NFP,
-                sym=eq.sym,
-                axis=False,
-            )
-        else:
-            grid = self._grid
-
-        if isinstance(self._target, Profile):
-            self._target = self._target(grid.nodes[grid.unique_rho_idx])
-
-        self._dim_f = grid.num_rho
-        self._data_keys = ["current"]
-        self._args = get_params(
-            self._data_keys,
-            obj="desc.equilibrium.equilibrium.Equilibrium",
-            has_axis=grid.axis.size,
-        )
-
-        timer = Timer()
-        if verbose > 0:
-            print("Precomputing transforms")
-        timer.start("Precomputing transforms")
-
-        self._profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
-        self._transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
-        self._constants = {
-            "transforms": self._transforms,
-            "profiles": self._profiles,
-        }
-
-        timer.stop("Precomputing transforms")
-        if verbose > 1:
-            timer.disp("Precomputing transforms")
-
-        if self._normalize:
-            scales = compute_scaling_factors(eq)
-            self._normalization = scales["I"]
-
-        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
-
-    def compute(self, *args, **kwargs):
-        """Compute toroidal current.
-
-        Parameters
-        ----------
-        R_lmn : ndarray
-            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
-        Z_lmn : ndarray
-            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
-        L_lmn : ndarray
-            Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
-        i_l : ndarray
-            Spectral coefficients of iota(rho) -- rotational transform profile.
-        c_l : ndarray
-            Spectral coefficients of I(rho) -- toroidal current profile.
-        Psi : float
-            Total toroidal magnetic flux within the last closed flux surface (Wb).
-
-        Returns
-        -------
-        current : ndarray
-            Toroidal current (A) through specified surfaces.
-
-        """
-        params, constants = self._parse_args(*args, **kwargs)
-        if constants is None:
-            constants = self.constants
-        data = compute_fun(
-            "desc.equilibrium.equilibrium.Equilibrium",
-            self._data_keys,
-            params=params,
-            transforms=constants["transforms"],
-            profiles=constants["profiles"],
-        )
-        return constants["transforms"]["grid"].compress(data["current"])
-
-    def _scale(self, *args, **kwargs):
-        """Compute and apply the target/bounds, weighting, and normalization."""
-        constants = kwargs.get("constants", None)
-        if constants is None:
-            constants = self.constants
-        w = constants["transforms"]["grid"].compress(
-            constants["transforms"]["grid"].spacing[:, 0]
-        )
-        return super()._scale(*args, **kwargs) * jnp.sqrt(w)
-
-    def print_value(self, *args, **kwargs):
-        """Print the value of the objective."""
-        f = self.compute(*args, **kwargs)
-        print("Maximum " + self._print_value_fmt.format(jnp.max(f)) + self._units)
-        print("Minimum " + self._print_value_fmt.format(jnp.min(f)) + self._units)
-        print("Average " + self._print_value_fmt.format(jnp.mean(f)) + self._units)
-
-        if self._normalize:
-            print(
-                "Maximum "
-                + self._print_value_fmt.format(jnp.max(f / self.normalization))
-                + "(normalized)"
-            )
-            print(
-                "Minimum "
-                + self._print_value_fmt.format(jnp.min(f / self.normalization))
-                + "(normalized)"
-            )
-            print(
-                "Average "
-                + self._print_value_fmt.format(jnp.mean(f / self.normalization))
-                + "(normalized)"
-            )
-
-
-class RotationalTransform(_Objective):
-    """Targets a rotational transform profile.
-
-    Parameters
-    ----------
-    eq : Equilibrium, optional
-        Equilibrium that will be optimized to satisfy the Objective.
-    target : float, ndarray, optional
-        Target value(s) of the objective. Only used if bounds is None.
-        len(target) must be equal to Objective.dim_f
-    bounds : tuple, optional
-        Lower and upper bounds on the objective. Overrides target.
-        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
-    weight : float, ndarray, optional
-        Weighting to apply to the Objective, relative to other Objectives.
-        len(weight) must be equal to Objective.dim_f
-    normalize : bool
-        Whether to compute the error in physical units or non-dimensionalize.
-        Note: has no effect for this objective.
-    normalize_target : bool
-        Whether target and bounds should be normalized before comparing to computed
-        values. If `normalize` is `True` and the target is in physical units,
-        this should also be set to True.
-        Note: has no effect for this objective.
-    grid : Grid, optional
-        Collocation grid containing the nodes to evaluate at.
-    name : str
-        Name of the objective function.
-
-    """
-
-    _scalar = False
-    _linear = False
-    _units = "(dimensionless)"
-    _print_value_fmt = "Rotational transform: {:10.3e} "
-
-    def __init__(
-        self,
-        eq=None,
-        target=None,
-        bounds=None,
-        weight=1,
-        normalize=True,
-        normalize_target=True,
-        grid=None,
-        name="rotational transform",
-    ):
-        if target is None and bounds is None:
-            target = 0
-        self._grid = grid
-        super().__init__(
-            eq=eq,
-            target=target,
-            bounds=bounds,
-            weight=weight,
-            normalize=normalize,
-            normalize_target=normalize_target,
-            name=name,
-        )
-
-    def build(self, eq=None, use_jit=True, verbose=1):
-        """Build constant arrays.
-
-        Parameters
-        ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
-        use_jit : bool, optional
-            Whether to just-in-time compile the objective and derivatives.
-        verbose : int, optional
-            Level of output.
-
-        """
-        eq = eq or self._eq
-        if self._grid is None:
-            grid = LinearGrid(
-                L=eq.L_grid,
-                M=eq.M_grid,
-                N=eq.N_grid,
-                NFP=eq.NFP,
-                sym=eq.sym,
-                axis=False,
-            )
-        else:
-            grid = self._grid
-
-        if isinstance(self._target, Profile):
-            self._target = self._target(grid.nodes[grid.unique_rho_idx])
-
-        self._dim_f = grid.num_rho
-        self._data_keys = ["iota"]
-        self._args = get_params(
-            self._data_keys,
-            obj="desc.equilibrium.equilibrium.Equilibrium",
-            has_axis=grid.axis.size,
-        )
-
-        timer = Timer()
-        if verbose > 0:
-            print("Precomputing transforms")
-        timer.start("Precomputing transforms")
-
-        self._profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
-        self._transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
-        self._constants = {
-            "transforms": self._transforms,
-            "profiles": self._profiles,
-        }
-
-        timer.stop("Precomputing transforms")
-        if verbose > 1:
-            timer.disp("Precomputing transforms")
-
-        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
-
-    def compute(self, *args, **kwargs):
-        """Compute rotational transform profile errors.
-
-        Parameters
-        ----------
-        R_lmn : ndarray
-            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
-        Z_lmn : ndarray
-            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
-        L_lmn : ndarray
-            Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
-        i_l : ndarray
-            Spectral coefficients of iota(rho) -- rotational transform profile.
-        c_l : ndarray
-            Spectral coefficients of I(rho) -- toroidal current profile.
-        Psi : float
-            Total toroidal magnetic flux within the last closed flux surface (Wb).
-
-        Returns
-        -------
-        iota : ndarray
-            rotational transform on specified flux surfaces.
-
-        """
-        params, constants = self._parse_args(*args, **kwargs)
-        if constants is None:
-            constants = self.constants
-        data = compute_fun(
-            "desc.equilibrium.equilibrium.Equilibrium",
-            self._data_keys,
-            params=params,
-            transforms=constants["transforms"],
-            profiles=constants["profiles"],
-        )
-        return constants["transforms"]["grid"].compress(data["iota"])
-
-    def _scale(self, *args, **kwargs):
-        """Compute and apply the target/bounds, weighting, and normalization."""
-        constants = kwargs.get("constants", None)
-        if constants is None:
-            constants = self.constants
-        w = constants["transforms"]["grid"].compress(
-            constants["transforms"]["grid"].spacing[:, 0]
-        )
-        return super()._scale(*args, **kwargs) * jnp.sqrt(w)
-
-    def print_value(self, *args, **kwargs):
-        """Print the value of the objective."""
-        f = self.compute(*args, **kwargs)
-        print("Maximum " + self._print_value_fmt.format(jnp.max(f)) + self._units)
-        print("Minimum " + self._print_value_fmt.format(jnp.min(f)) + self._units)
-        print("Average " + self._print_value_fmt.format(jnp.mean(f)) + self._units)

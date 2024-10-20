@@ -4,9 +4,13 @@ import numpy as np
 import pytest
 from netCDF4 import Dataset
 
+import desc.examples
 from desc.basis import DoubleFourierSeries, FourierZernikeBasis
 from desc.equilibrium import EquilibriaFamily, Equilibrium
+from desc.examples import get
 from desc.grid import LinearGrid
+from desc.input_reader import InputReader
+from desc.io import load
 from desc.vmec import VMECIO
 from desc.vmec_utils import (
     fourier_to_zernike,
@@ -16,6 +20,8 @@ from desc.vmec_utils import (
     vmec_boundary_subspace,
     zernike_to_fourier,
 )
+
+from .utils import area_difference_desc
 
 
 class TestVMECIO:
@@ -205,7 +211,7 @@ class TestVMECIO:
         x_mn = np.power(np.atleast_2d(rho).T, np.atleast_2d(np.abs(m))) * np.atleast_2d(
             x
         )
-        basis = FourierZernikeBasis(L=-1, M=M, N=N, spectral_indexing="ansi")
+        basis = FourierZernikeBasis(L=M, M=M, N=N, spectral_indexing="ansi")
         x_lmn = fourier_to_zernike(m, n, x_mn, basis)
 
         x_lmn_correct = np.zeros((basis.num_modes,))
@@ -237,7 +243,7 @@ class TestVMECIO:
         x_mn_correct = np.power(
             np.atleast_2d(rho).T, np.atleast_2d(np.abs(m_correct))
         ) * np.atleast_2d(x)
-        basis = FourierZernikeBasis(L=-1, M=M, N=N, spectral_indexing="ansi")
+        basis = FourierZernikeBasis(L=M, M=M, N=N, spectral_indexing="ansi")
 
         x_lmn = np.zeros((basis.num_modes,))
         for k in range(basis.num_modes):
@@ -363,10 +369,18 @@ def test_axis_surf_after_load():
 
 
 @pytest.mark.unit
-def test_vmec_save_asym(TmpDir):
-    """Tests that saving a non-symmetric equilibrium runs without errors."""
+def test_vmec_save_kinetic(TmpDir):
+    """Tests that saving an equilibrium with kinetic profiles runs without errors."""
     output_path = str(TmpDir.join("output.nc"))
-    eq = Equilibrium(L=2, M=2, N=2, NFP=3, pressure=np.array([[2, 0]]), sym=False)
+    eq = Equilibrium(
+        L=2,
+        M=2,
+        N=2,
+        NFP=3,
+        electron_density=np.array([[0, 1], [2, -1]]),
+        electron_temperature=np.array([[0, 1], [2, -1]]),
+        sym=True,
+    )
     VMECIO.save(eq, output_path)
 
 
@@ -409,6 +423,7 @@ def test_vmec_save_1(VMEC_save):
     np.testing.assert_allclose(vmec.variables["xn_nyq"][:], desc.variables["xn_nyq"][:])
     assert vmec.variables["signgs"][:] == desc.variables["signgs"][:]
     assert vmec.variables["gamma"][:] == desc.variables["gamma"][:]
+    assert vmec.variables["nextcur"][:] == desc.variables["nextcur"][:]
     assert np.all(
         np.char.compare_chararrays(
             vmec.variables["pmass_type"][:],
@@ -494,34 +509,25 @@ def test_vmec_save_1(VMEC_save):
         vmec.variables["b0"][:], desc.variables["b0"][:], rtol=5e-5
     )
     np.testing.assert_allclose(
-        np.abs(vmec.variables["bdotb"][20:100]),
-        np.abs(desc.variables["bdotb"][20:100]),
-        rtol=1e-6,
+        vmec.variables["buco"][20:100], desc.variables["buco"][20:100], rtol=1e-5
     )
     np.testing.assert_allclose(
-        np.abs(vmec.variables["buco"][20:100]),
-        np.abs(desc.variables["buco"][20:100]),
-        rtol=3e-2,
+        vmec.variables["bvco"][20:100], desc.variables["bvco"][20:100], rtol=1e-5
     )
     np.testing.assert_allclose(
-        np.abs(vmec.variables["bvco"][20:100]),
-        np.abs(desc.variables["bvco"][20:100]),
-        rtol=3e-2,
+        vmec.variables["vp"][20:100], desc.variables["vp"][20:100], rtol=1e-6
     )
     np.testing.assert_allclose(
-        np.abs(vmec.variables["jdotb"][20:100]),
-        np.abs(desc.variables["jdotb"][20:100]),
-        rtol=1e-5,
+        vmec.variables["bdotb"][20:100], desc.variables["bdotb"][20:100], rtol=1e-6
     )
     np.testing.assert_allclose(
-        np.abs(vmec.variables["jcuru"][20:100]),
-        np.abs(desc.variables["jcuru"][20:100]),
-        rtol=1e-2,
+        vmec.variables["jdotb"][20:100], desc.variables["jdotb"][20:100], rtol=1e-5
     )
     np.testing.assert_allclose(
-        np.abs(vmec.variables["jcurv"][20:100]),
-        np.abs(desc.variables["jcurv"][20:100]),
-        rtol=3e-2,
+        vmec.variables["jcuru"][20:100], desc.variables["jcuru"][20:100], rtol=1e-2
+    )
+    np.testing.assert_allclose(
+        vmec.variables["jcurv"][20:100], desc.variables["jcurv"][20:100], rtol=3e-2
     )
     np.testing.assert_allclose(
         vmec.variables["DShear"][20:100], desc.variables["DShear"][20:100], rtol=1e-2
@@ -552,6 +558,12 @@ def test_vmec_save_1(VMEC_save):
     )
     np.testing.assert_allclose(
         vmec.variables["zmax_surf"][:], desc.variables["zmax_surf"][:], rtol=5e-3
+    )
+    np.testing.assert_allclose(
+        vmec.variables["beta_vol"][:], desc.variables["beta_vol"][:], rtol=5e-5
+    )
+    np.testing.assert_allclose(
+        vmec.variables["betaxis"][:], desc.variables["betaxis"][:], rtol=5e-5
     )
 
 
@@ -854,22 +866,382 @@ def test_vmec_save_2(VMEC_save):
     np.testing.assert_allclose(currv_vmec, currv_desc, rtol=1e-2)
 
 
+@pytest.mark.regression
+@pytest.mark.slow
+def test_vmec_save_asym(VMEC_save_asym):
+    """Tests that saving in NetCDF format agrees with VMEC."""
+    vmec, desc, eq = VMEC_save_asym
+    # first, compare some quantities which don't require calculation
+    assert vmec.variables["version_"][:] == desc.variables["version_"][:]
+    assert vmec.variables["mgrid_mode"][:] == desc.variables["mgrid_mode"][:]
+    assert np.all(
+        np.char.compare_chararrays(
+            vmec.variables["mgrid_file"][:],
+            desc.variables["mgrid_file"][:],
+            "==",
+            False,
+        )
+    )
+    assert vmec.variables["ier_flag"][:] == desc.variables["ier_flag"][:]
+    assert (
+        vmec.variables["lfreeb__logical__"][:] == desc.variables["lfreeb__logical__"][:]
+    )
+    assert (
+        vmec.variables["lrecon__logical__"][:] == desc.variables["lrecon__logical__"][:]
+    )
+    assert vmec.variables["lrfp__logical__"][:] == desc.variables["lrfp__logical__"][:]
+    assert (
+        vmec.variables["lasym__logical__"][:] == desc.variables["lasym__logical__"][:]
+    )
+    assert vmec.variables["nfp"][:] == desc.variables["nfp"][:]
+    assert vmec.variables["ns"][:] == desc.variables["ns"][:]
+    assert vmec.variables["mpol"][:] == desc.variables["mpol"][:]
+    assert vmec.variables["ntor"][:] == desc.variables["ntor"][:]
+    assert vmec.variables["mnmax"][:] == desc.variables["mnmax"][:]
+    np.testing.assert_allclose(vmec.variables["xm"][:], desc.variables["xm"][:])
+    np.testing.assert_allclose(vmec.variables["xn"][:], desc.variables["xn"][:])
+    assert vmec.variables["mnmax_nyq"][:] == desc.variables["mnmax_nyq"][:]
+    np.testing.assert_allclose(vmec.variables["xm_nyq"][:], desc.variables["xm_nyq"][:])
+    np.testing.assert_allclose(vmec.variables["xn_nyq"][:], desc.variables["xn_nyq"][:])
+    assert vmec.variables["signgs"][:] == desc.variables["signgs"][:]
+    assert vmec.variables["gamma"][:] == desc.variables["gamma"][:]
+    assert vmec.variables["nextcur"][:] == desc.variables["nextcur"][:]
+    assert np.all(
+        np.char.compare_chararrays(
+            vmec.variables["pmass_type"][:],
+            desc.variables["pmass_type"][:],
+            "==",
+            False,
+        )
+    )
+    assert np.all(
+        np.char.compare_chararrays(
+            vmec.variables["piota_type"][:],
+            desc.variables["piota_type"][:],
+            "==",
+            False,
+        )
+    )
+    assert np.all(
+        np.char.compare_chararrays(
+            vmec.variables["pcurr_type"][:],
+            desc.variables["pcurr_type"][:],
+            "==",
+            False,
+        )
+    )
+    np.testing.assert_allclose(
+        vmec.variables["am"][:], desc.variables["am"][:], atol=1e-5
+    )
+    np.testing.assert_allclose(
+        vmec.variables["ai"][:], desc.variables["ai"][:], atol=1e-8
+    )
+    np.testing.assert_allclose(
+        vmec.variables["ac"][:], desc.variables["ac"][:], atol=3e-5
+    )
+    np.testing.assert_allclose(
+        vmec.variables["presf"][:], desc.variables["presf"][:], atol=2e-5
+    )
+    np.testing.assert_allclose(vmec.variables["pres"][:], desc.variables["pres"][:])
+    np.testing.assert_allclose(vmec.variables["mass"][:], desc.variables["mass"][:])
+    np.testing.assert_allclose(
+        vmec.variables["iotaf"][:], desc.variables["iotaf"][:], rtol=5e-4
+    )
+    np.testing.assert_allclose(
+        vmec.variables["q_factor"][:], desc.variables["q_factor"][:], rtol=5e-4
+    )
+    np.testing.assert_allclose(
+        vmec.variables["iotas"][:], desc.variables["iotas"][:], rtol=5e-4
+    )
+    np.testing.assert_allclose(vmec.variables["phi"][:], desc.variables["phi"][:])
+    np.testing.assert_allclose(vmec.variables["phipf"][:], desc.variables["phipf"][:])
+    np.testing.assert_allclose(vmec.variables["phips"][:], desc.variables["phips"][:])
+    np.testing.assert_allclose(
+        vmec.variables["chi"][:], desc.variables["chi"][:], atol=3e-5, rtol=1e-3
+    )
+    np.testing.assert_allclose(
+        vmec.variables["chipf"][:], desc.variables["chipf"][:], atol=3e-5, rtol=1e-3
+    )
+    np.testing.assert_allclose(
+        vmec.variables["Rmajor_p"][:], desc.variables["Rmajor_p"][:]
+    )
+    np.testing.assert_allclose(
+        vmec.variables["Aminor_p"][:], desc.variables["Aminor_p"][:]
+    )
+    np.testing.assert_allclose(vmec.variables["aspect"][:], desc.variables["aspect"][:])
+    np.testing.assert_allclose(
+        vmec.variables["volume_p"][:], desc.variables["volume_p"][:], rtol=1e-5
+    )
+    np.testing.assert_allclose(
+        vmec.variables["volavgB"][:], desc.variables["volavgB"][:], rtol=1e-5
+    )
+    np.testing.assert_allclose(
+        vmec.variables["betatotal"][:], desc.variables["betatotal"][:], rtol=1e-5
+    )
+    np.testing.assert_allclose(
+        vmec.variables["betapol"][:], desc.variables["betapol"][:], rtol=1e-5
+    )
+    np.testing.assert_allclose(
+        vmec.variables["betator"][:], desc.variables["betator"][:], rtol=1e-5
+    )
+    np.testing.assert_allclose(
+        vmec.variables["ctor"][:],
+        desc.variables["ctor"][:],
+        atol=1e-9,  # it is a zero current solve
+    )
+    np.testing.assert_allclose(
+        vmec.variables["rbtor"][:], desc.variables["rbtor"][:], rtol=1e-5
+    )
+    np.testing.assert_allclose(
+        vmec.variables["rbtor0"][:], desc.variables["rbtor0"][:], rtol=1e-5
+    )
+    np.testing.assert_allclose(
+        vmec.variables["b0"][:], desc.variables["b0"][:], rtol=4e-3
+    )
+    np.testing.assert_allclose(
+        vmec.variables["buco"][20:100], desc.variables["buco"][20:100], atol=1e-15
+    )
+    np.testing.assert_allclose(
+        vmec.variables["bvco"][20:100], desc.variables["bvco"][20:100], rtol=1e-5
+    )
+    np.testing.assert_allclose(
+        vmec.variables["vp"][20:100], desc.variables["vp"][20:100], rtol=3e-4
+    )
+    np.testing.assert_allclose(
+        vmec.variables["bdotb"][20:100], desc.variables["bdotb"][20:100], rtol=3e-4
+    )
+    np.testing.assert_allclose(
+        vmec.variables["jdotb"][20:100],
+        desc.variables["jdotb"][20:100],
+        atol=4e-3,  # nearly zero bc is vacuum
+    )
+    np.testing.assert_allclose(
+        vmec.variables["jcuru"][20:100], desc.variables["jcuru"][20:100], atol=2
+    )
+    np.testing.assert_allclose(
+        vmec.variables["jcurv"][20:100], desc.variables["jcurv"][20:100], rtol=2
+    )
+    np.testing.assert_allclose(
+        vmec.variables["DShear"][20:100], desc.variables["DShear"][20:100], rtol=3e-2
+    )
+    np.testing.assert_allclose(
+        vmec.variables["DCurr"][20:100],
+        desc.variables["DCurr"][20:100],
+        atol=1e-4,  # nearly zero bc vacuum
+    )
+    np.testing.assert_allclose(
+        vmec.variables["DWell"][20:100], desc.variables["DWell"][20:100], rtol=1e-2
+    )
+    np.testing.assert_allclose(
+        vmec.variables["DGeod"][20:100],
+        desc.variables["DGeod"][20:100],
+        atol=4e-3,
+        rtol=1e-2,
+    )
+
+    # the Mercier stability is pretty off,
+    # but these are not exactly similar solutions to eachother
+    np.testing.assert_allclose(
+        vmec.variables["DMerc"][20:100], desc.variables["DMerc"][20:100], atol=4e-3
+    )
+    np.testing.assert_allclose(
+        vmec.variables["raxis_cc"][:],
+        desc.variables["raxis_cc"][:],
+        rtol=5e-5,
+        atol=4e-3,
+    )
+    np.testing.assert_allclose(
+        vmec.variables["zaxis_cs"][:],
+        desc.variables["zaxis_cs"][:],
+        rtol=5e-5,
+        atol=1e-3,
+    )
+    np.testing.assert_allclose(
+        vmec.variables["rmin_surf"][:], desc.variables["rmin_surf"][:], rtol=5e-3
+    )
+    np.testing.assert_allclose(
+        vmec.variables["rmax_surf"][:], desc.variables["rmax_surf"][:], rtol=5e-3
+    )
+    np.testing.assert_allclose(
+        vmec.variables["zmax_surf"][:], desc.variables["zmax_surf"][:], rtol=5e-3
+    )
+    np.testing.assert_allclose(
+        vmec.variables["beta_vol"][:], desc.variables["beta_vol"][:], rtol=5e-5
+    )
+    np.testing.assert_allclose(
+        vmec.variables["betaxis"][:], desc.variables["betaxis"][:], rtol=5e-5
+    )
+    # Next, calculate some quantities and compare
+    # the DESC wout -> DESC (should be very close)
+    # and the DESC wout -> VMEC wout (should be approximately close)
+    vol_grid = LinearGrid(
+        rho=np.sqrt(
+            abs(
+                vmec.variables["phi"][:].filled()
+                / np.max(np.abs(vmec.variables["phi"][:].filled()))
+            )
+        )[10::10],
+        M=15,
+        N=15,
+        NFP=eq.NFP,
+        axis=False,
+        sym=False,
+    )
+    bdry_grid = LinearGrid(rho=1.0, M=15, N=15, NFP=eq.NFP, axis=False, sym=False)
+
+    def test(
+        nc_str,
+        desc_str,
+        negate_DESC_quant=False,
+        use_nyq=True,
+        convert_sqrt_g_or_B_rho=False,
+        atol_desc_desc_wout=5e-5,
+        rtol_desc_desc_wout=1e-5,
+        atol_vmec_desc_wout=1e-5,
+        rtol_vmec_desc_wout=1e-2,
+        grid=vol_grid,
+    ):
+        """Helper fxn to evaluate Fourier series from wout and compare to DESC."""
+        xm = desc.variables["xm_nyq"][:] if use_nyq else desc.variables["xm"][:]
+        xn = desc.variables["xn_nyq"][:] if use_nyq else desc.variables["xn"][:]
+
+        si = abs(vmec.variables["phi"][:] / np.max(np.abs(vmec.variables["phi"][:])))
+        rho = grid.nodes[:, 0]
+        s = rho**2
+        # some quantities must be negated before comparison bc
+        # they are negative in the wout i.e. B^theta
+        negate = -1 if negate_DESC_quant else 1
+
+        quant_from_desc_wout = VMECIO.vmec_interpolate(
+            desc.variables[nc_str + "c"][:],
+            desc.variables[nc_str + "s"][:],
+            xm,
+            xn,
+            theta=-grid.nodes[:, 1],  # -theta bc when we save wout we reverse theta
+            phi=grid.nodes[:, 2],
+            s=s,
+            sym=False,
+            si=si,
+        )
+
+        quant_from_vmec_wout = VMECIO.vmec_interpolate(
+            vmec.variables[nc_str + "c"][:],
+            vmec.variables[nc_str + "s"][:],
+            xm,
+            xn,
+            # pi - theta bc VMEC, when it gets a CW angle bdry,
+            # changes poloidal angle to  theta -> pi-theta
+            theta=np.pi - grid.nodes[:, 1],
+            phi=grid.nodes[:, 2],
+            s=s,
+            sym=False,
+            si=si,
+        )
+
+        data = eq.compute(["rho", "sqrt(g)", desc_str], grid=grid)
+        # convert sqrt(g) or B_rho->B_psi if needed
+        quant_desc = (
+            data[desc_str] / 2 / data["rho"]
+            if convert_sqrt_g_or_B_rho
+            else data[desc_str]
+        )
+
+        # add sqrt(g) factor if currents being compared
+        quant_desc = (
+            quant_desc * abs(data["sqrt(g)"]) / 2 / data["rho"]
+            if "J" in desc_str
+            else quant_desc
+        )
+
+        np.testing.assert_allclose(
+            negate * quant_desc,
+            quant_from_desc_wout,
+            atol=atol_desc_desc_wout,
+            rtol=rtol_desc_desc_wout,
+        )
+        np.testing.assert_allclose(
+            quant_from_desc_wout,
+            quant_from_vmec_wout,
+            atol=atol_vmec_desc_wout,
+            rtol=rtol_vmec_desc_wout,
+        )
+
+    # R & Z & lambda
+    test("rmn", "R", use_nyq=False)
+    test("zmn", "Z", use_nyq=False, atol_vmec_desc_wout=4e-2)
+
+    # |B|
+    test("bmn", "|B|", rtol_desc_desc_wout=7e-4)
+
+    # B^zeta
+    test("bsupvmn", "B^zeta")  # ,rtol_desc_desc_wout=6e-5)
+
+    # B_zeta
+    test("bsubvmn", "B_zeta", rtol_desc_desc_wout=3e-4)
+
+    # hard to compare to VMEC for the currents, since
+    # VMEC F error is worse and equilibria are not exactly similar
+    # just compare back to DESC
+    test("currumn", "J^theta", atol_vmec_desc_wout=1e4)
+    test("currvmn", "J^zeta", negate_DESC_quant=True, atol_vmec_desc_wout=1e5)
+
+    # can only compare lambda, sqrt(g) B_psi B^theta and B_theta at bdry
+    test(
+        "lmn",
+        "lambda",
+        use_nyq=False,
+        negate_DESC_quant=True,
+        grid=bdry_grid,
+        atol_desc_desc_wout=4e-4,
+        atol_vmec_desc_wout=5e-2,
+    )
+    test(
+        "gmn",
+        "sqrt(g)",
+        convert_sqrt_g_or_B_rho=True,
+        negate_DESC_quant=True,
+        grid=bdry_grid,
+        rtol_desc_desc_wout=5e-4,
+        rtol_vmec_desc_wout=4e-2,
+    )
+    test(
+        "bsupumn",
+        "B^theta",
+        negate_DESC_quant=True,
+        grid=bdry_grid,
+        atol_vmec_desc_wout=6e-4,
+    )
+    test(
+        "bsubumn",
+        "B_theta",
+        negate_DESC_quant=True,
+        grid=bdry_grid,
+        atol_desc_desc_wout=1e-4,
+        atol_vmec_desc_wout=4e-4,
+    )
+    test(
+        "bsubsmn",
+        "B_rho",
+        grid=bdry_grid,
+        convert_sqrt_g_or_B_rho=True,
+        rtol_vmec_desc_wout=6e-2,
+        atol_vmec_desc_wout=9e-3,
+    )
+
+
 @pytest.mark.unit
-@pytest.mark.solve
 @pytest.mark.mpl_image_compare(tolerance=1)
-def test_plot_vmec_comparison(SOLOVEV):
+def test_plot_vmec_comparison():
     """Test that DESC and VMEC flux surface plots match."""
-    eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
-    fig, ax = VMECIO.plot_vmec_comparison(eq, str(SOLOVEV["vmec_nc_path"]))
+    eq = desc.examples.get("SOLOVEV")
+    fig, ax = VMECIO.plot_vmec_comparison(eq, "tests/inputs/wout_SOLOVEV.nc")
     return fig
 
 
 @pytest.mark.unit
 def test_vmec_boundary_subspace(DummyStellarator):
     """Test VMEC boundary subspace is enforced properly."""
-    eq = Equilibrium.load(
-        load_from=str(DummyStellarator["output_path"]), file_format="hdf5"
-    )
+    eq = load(load_from=str(DummyStellarator["output_path"]), file_format="hdf5")
 
     RBC = np.array([[1, 2], [-1, 2], [1, 0], [2, 2]])
     ZBS = np.array([[2, 1], [-2, 1], [0, 2], [-1, 1]])
@@ -892,3 +1264,50 @@ def test_vmec_boundary_subspace(DummyStellarator):
     zbs_ref = np.atleast_2d(np.array([0, 0, 0, 1, 1, 0, 0, 1, 0, 0, 1, 0, 0]))
     np.testing.assert_allclose(rbc_ref, np.abs(rbc) > tol)
     np.testing.assert_allclose(zbs_ref, np.abs(zbs) > tol)
+
+
+@pytest.mark.regression
+@pytest.mark.solve
+def test_write_vmec_input(TmpDir):
+    """Test generated VMEC input file gives the original equilibrium when solved."""
+    # write VMEC input file
+    fname = str(TmpDir.join("input.SOLOVEV"))
+    eq0 = get("SOLOVEV")
+    W0 = eq0.compute("W")["W"]
+    VMECIO.write_vmec_input(eq0, fname)
+
+    # read VMEC input file and override defaults to match desc/examples/SOLOVEV
+    ir = InputReader()
+    inputs = ir.parse_inputs(fname)
+    inputs[0]["spectral_indexing"] = "fringe"
+    inputs[0]["L"] = 24
+
+    # solve from VMEC input file
+    fam = EquilibriaFamily(inputs)
+    fam.solve_continuation(
+        objective=inputs[0]["objective"],
+        optimizer=inputs[0]["optimizer"],
+        pert_order=[inp["pert_order"] for inp in inputs],
+        ftol=[inp["ftol"] for inp in inputs],
+        xtol=[inp["xtol"] for inp in inputs],
+        gtol=[inp["gtol"] for inp in inputs],
+        maxiter=[inp["maxiter"] for inp in inputs],
+        verbose=2,
+    )
+    eq1 = fam[-1]
+    W1 = eq1.compute("W")["W"]
+
+    # check that solution matches original equilibrium
+    rho_err, theta_err = area_difference_desc(eq0, eq1)
+    np.testing.assert_allclose(eq0.L, eq1.L)
+    np.testing.assert_allclose(eq0.M, eq1.M)
+    np.testing.assert_allclose(eq0.N, eq1.N)
+    np.testing.assert_allclose(eq0.NFP, eq1.NFP)
+    np.testing.assert_allclose(eq0.Psi, eq1.Psi)
+    np.testing.assert_allclose(eq0.p_l, eq1.p_l)
+    np.testing.assert_allclose(eq0.i_l, eq1.i_l)
+    np.testing.assert_allclose(eq0.Rb_lmn, eq1.Rb_lmn)
+    np.testing.assert_allclose(eq0.Zb_lmn, eq1.Zb_lmn)
+    np.testing.assert_allclose(W0, W1)
+    np.testing.assert_allclose(rho_err, 0, atol=1e-4)
+    np.testing.assert_allclose(theta_err, 0, atol=1e-4)

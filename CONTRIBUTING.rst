@@ -156,6 +156,43 @@ Opening a PR will trigger a suite of tests and style/formatting checks that must
 We also require approval from at least one (ideally multiple) of the main DESC developers, who may have suggested changes
 or edits to your PR.
 
+What if the ``test_compute_everything`` test fails, or there is a conflict in ``master_compute_data_rpz.pkl``?
+----------------------------------------------------------------------------------------------------------
+When the outputs of the compute quantities tested by the `test_compute_everything` [test](https://github.com/PlasmaControl/DESC/blob/master/tests/test_compute_everything.py) are changed in a PR, that test will fail.
+The three main reasons this could occur are:
+
+-  The PR was not intended to change how things are computed, but messed up something unexpected and now the compute quantities are incorrect, if you did not expect these changes in the PR then look into why these differences are happening and fix the PR.
+-  The PR updated the way one of the existing compute index quantities are computed (either by a redefinition or perhaps fixing an error present in ``master``)
+-  The PR added a new class parametrization (such as a new subclass of ``Curve`` like ``LinearCurve`` etc)
+
+If the 2nd case is the reason, then you must update the ``master_compute_data_rpz.pkl`` file with the correct quantities being computed by your PR:
+
+-  First, run the test with ``pytest tests -k test_compute_everything`` and inspect the compute quantities whose values are in error, to ensure that only the quantities you expect to be different are shown (and that the new values are indeed the correct ones, you should have a test elsewhere for that though).
+-  If the values are as expected and only the expected compute quantities are different, then replace the block
+
+.. code-block:: python
+
+   if not error_rpz and update_master_data_rpz:
+        # then update the master compute data
+
+with
+
+.. code-block:: python
+
+   if True or (not error_rpz and update_master_data_rpz):
+        # then update the master compute data
+
+
+-  rerun the test ``pytest tests -k test_compute_everything``, now any compute quantity that is different between the PR and master will be updated with the PR value
+-  ``git restore tests/test_compute_everything.py`` to remove the change you made to the test
+-  ``git add tests/inputs/master_compute_data_rpz.pkl`` and commit to commit the new data file
+
+If the 3rd case is the reason, then you must simply add the new parametrization to the ``test_compute_everything`` [test](https://github.com/PlasmaControl/DESC/blob/master/tests/test_compute_everything.py)
+
+-  ``things`` dictionary with a sensible example instance of the class to use for the test, and
+-  to the ``grid`` dictionary with a sensible default grid to use when computing the compute quantities for the new class
+-  Then, rerunning the test  ``pytest tests -k test_compute_everything`` will add the compute quantities for the new class and save them to the ``.pkl`` file
+-  ``git add tests/inputs/master_compute_data_rpz.pkl`` and commit to commit the new data file
 
 Styleguides
 ^^^^^^^^^^^

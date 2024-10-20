@@ -13,9 +13,12 @@ from .stochastic import sgd
 @register_optimizer(
     name=["fmin-auglag", "fmin-auglag-bfgs"],
     description=[
-        "Augmented Lagrangian method with trust region subproblem.",
-        "Augmented Lagrangian method with trust region subproblem. Uses BFGS to"
-        + " approximate hessian",
+        "Augmented Lagrangian trust region method for minimizing scalar valued "
+        + "multivariate function. "
+        + "See https://desc-docs.readthedocs.io/en/stable/_api/optimize/desc.optimize.fmin_auglag.html",  # noqa: E501
+        "Augmented Lagrangian trust region method for minimizing scalar valued "
+        + "multivariate function. Uses BFGS to approximate Hessian. "
+        + "See https://desc-docs.readthedocs.io/en/stable/_api/optimize/desc.optimize.fmin_auglag.html",  # noqa: E501
     ],
     scalar=True,
     equality_constraints=True,
@@ -27,7 +30,7 @@ from .stochastic import sgd
 def _optimize_desc_aug_lagrangian(
     objective, constraint, x0, method, x_scale, verbose, stoptol, options=None
 ):
-    """Wrapper for desc.optimize.fmin_lag_ls_stel.
+    """Wrapper for desc.optimize.fmin_auglag.
 
     Parameters
     ----------
@@ -37,8 +40,8 @@ def _optimize_desc_aug_lagrangian(
         Constraint to satisfy
     x0 : ndarray
         Starting point.
-    method : str
-        Name of the method to use. Any of the options in scipy.optimize.least_squares.
+    method : {"fmin-auglag", "fmin-auglag-bfgs"}
+        Name of the method to use.
     x_scale : array_like or ‘jac’, optional
         Characteristic scale of each variable. Setting x_scale is equivalent to
         reformulating the problem in scaled variables xs = x / x_scale. An alternative
@@ -53,10 +56,10 @@ def _optimize_desc_aug_lagrangian(
         * 2 : display progress during iterations
     stoptol : dict
         Dictionary of stopping tolerances, with keys {"xtol", "ftol", "gtol", "ctol",
-        "maxiter", "max_nfev", "max_njev", "max_ngev", "max_nhev"}
+        "maxiter", "max_nfev"}
     options : dict, optional
         Dictionary of optional keyword arguments to override default solver
-        settings. See the code for more details.
+        settings. See ``desc.optimize.fmin_auglag`` for details.
 
     Returns
     -------
@@ -73,30 +76,30 @@ def _optimize_desc_aug_lagrangian(
         options.setdefault("initial_trust_ratio", 1e-3)
         options.setdefault("max_trust_radius", 1.0)
     options["max_nfev"] = stoptol["max_nfev"]
-    options["max_ngev"] = stoptol["max_ngev"]
-    options["max_nhev"] = stoptol["max_nhev"]
-    hess = objective.hess if "bfgs" not in method else "bfgs"
+    # local lambdas to handle constants from both objective and constraint
+    hess = (lambda x, *c: objective.hess(x, c[0])) if "bfgs" not in method else "bfgs"
 
     if constraint is not None:
         lb, ub = constraint.bounds_scaled
         constraint_wrapped = NonlinearConstraint(
-            constraint.compute_scaled,
+            lambda x, *c: constraint.compute_scaled(x, c[1]),
             lb,
             ub,
-            constraint.jac_scaled,
+            lambda x, *c: constraint.jac_scaled(x, c[1]),
         )
-        constraint_wrapped.vjp = constraint.vjp_scaled
+        # TODO: can't pass constants dict into vjp for now
+        constraint_wrapped.vjp = lambda v, x, *args: constraint.vjp_scaled(v, x)
     else:
         constraint_wrapped = None
 
     result = fmin_auglag(
-        objective.compute_scalar,
+        lambda x, *c: objective.compute_scalar(x, c[0]),
         x0=x0,
-        grad=objective.grad,
+        grad=lambda x, *c: objective.grad(x, c[0]),
         hess=hess,
         bounds=(-jnp.inf, jnp.inf),
         constraint=constraint_wrapped,
-        args=(),
+        args=(objective.constants, constraint.constants if constraint else None),
         x_scale=x_scale,
         ftol=stoptol["ftol"],
         xtol=stoptol["xtol"],
@@ -111,8 +114,8 @@ def _optimize_desc_aug_lagrangian(
 
 @register_optimizer(
     name="lsq-auglag",
-    description="Least Squares Augmented Lagrangian approach "
-    + "to constrained optimization",
+    description="Least squares augmented Lagrangian for constrained optimization"
+    + "See https://desc-docs.readthedocs.io/en/stable/_api/optimize/desc.optimize.lsq_auglag.html",  # noqa: E501
     scalar=False,
     equality_constraints=True,
     inequality_constraints=True,
@@ -123,7 +126,7 @@ def _optimize_desc_aug_lagrangian(
 def _optimize_desc_aug_lagrangian_least_squares(
     objective, constraint, x0, method, x_scale, verbose, stoptol, options=None
 ):
-    """Wrapper for desc.optimize.fmin_lag_ls_stel.
+    """Wrapper for desc.optimize.lsq_auglag.
 
     Parameters
     ----------
@@ -133,8 +136,8 @@ def _optimize_desc_aug_lagrangian_least_squares(
         Constraint to satisfy
     x0 : ndarray
         Starting point.
-    method : str
-        Name of the method to use. Any of the options in scipy.optimize.least_squares.
+    method : {"lsq-auglag"}
+        Name of the method to use.
     x_scale : array_like or ‘jac’, optional
         Characteristic scale of each variable. Setting x_scale is equivalent to
         reformulating the problem in scaled variables xs = x / x_scale. An alternative
@@ -149,10 +152,10 @@ def _optimize_desc_aug_lagrangian_least_squares(
         * 2 : display progress during iterations
     stoptol : dict
         Dictionary of stopping tolerances, with keys {"xtol", "ftol", "gtol", "ctol",
-        "maxiter", "max_nfev", "max_njev", "max_ngev", "max_nhev"}
+        "maxiter", "max_nfev"}
     options : dict, optional
         Dictionary of optional keyword arguments to override default solver
-        settings. See the code for more details.
+        settings. See ``desc.optimize.lsq_auglag`` for details.
 
     Returns
     -------
@@ -169,26 +172,25 @@ def _optimize_desc_aug_lagrangian_least_squares(
         options.setdefault("initial_trust_radius", 1e-3)
         options.setdefault("max_trust_radius", 1.0)
     options["max_nfev"] = stoptol["max_nfev"]
-    options["max_njev"] = stoptol["max_njev"]
 
     if constraint is not None:
         lb, ub = constraint.bounds_scaled
         constraint_wrapped = NonlinearConstraint(
-            constraint.compute_scaled,
+            lambda x, *c: constraint.compute_scaled(x, c[1]),
             lb,
             ub,
-            constraint.jac_scaled,
+            lambda x, *c: constraint.jac_scaled(x, c[1]),
         )
     else:
         constraint_wrapped = None
 
     result = lsq_auglag(
-        objective.compute_scaled_error,
+        lambda x, *c: objective.compute_scaled_error(x, c[0]),
         x0=x0,
-        jac=objective.jac_scaled,
+        jac=lambda x, *c: objective.jac_scaled_error(x, c[0]),
         bounds=(-jnp.inf, jnp.inf),
         constraint=constraint_wrapped,
-        args=(),
+        args=(objective.constants, constraint.constants if constraint else None),
         x_scale=x_scale,
         ftol=stoptol["ftol"],
         xtol=stoptol["xtol"],
@@ -203,8 +205,8 @@ def _optimize_desc_aug_lagrangian_least_squares(
 
 @register_optimizer(
     name="lsq-exact",
-    description="Trust region least squares method, "
-    + "similar to the `trf` method in scipy",
+    description="Trust region least squares, similar to the `trf` method in scipy"
+    + "See https://desc-docs.readthedocs.io/en/stable/_api/optimize/desc.optimize.lsqtr.html",  # noqa: E501
     scalar=False,
     equality_constraints=False,
     inequality_constraints=False,
@@ -225,8 +227,8 @@ def _optimize_desc_least_squares(
         Constraint to satisfy - not supported by this method
     x0 : ndarray
         Starting point.
-    method : str
-        Name of the method to use. Any of the options in scipy.optimize.least_squares.
+    method : {"lsq-exact"}
+        Name of the method to use.
     x_scale : array_like or ‘jac’, optional
         Characteristic scale of each variable. Setting x_scale is equivalent to
         reformulating the problem in scaled variables xs = x / x_scale. An alternative
@@ -244,7 +246,7 @@ def _optimize_desc_least_squares(
         "maxiter", "max_nfev", "max_njev", "max_ngev", "max_nhev"}
     options : dict, optional
         Dictionary of optional keyword arguments to override default solver
-        settings. See the code for more details.
+        settings. See ``desc.optimize.lsqtr`` for details.
 
     Returns
     -------
@@ -264,12 +266,11 @@ def _optimize_desc_least_squares(
     elif options.get("initial_trust_radius", "scipy") == "scipy":
         options.setdefault("initial_trust_ratio", 0.1)
     options["max_nfev"] = stoptol["max_nfev"]
-    options["max_njev"] = stoptol["max_njev"]
 
     result = lsqtr(
         objective.compute_scaled_error,
         x0=x0,
-        jac=objective.jac_scaled,
+        jac=objective.jac_scaled_error,
         args=(objective.constants,),
         x_scale=x_scale,
         ftol=stoptol["ftol"],
@@ -285,32 +286,21 @@ def _optimize_desc_least_squares(
 
 @register_optimizer(
     name=[
-        "fmin-exact",
-        "fmin-dogleg",
-        "fmin-subspace",
-        "fmin-exact-bfgs",
-        "fmin-dogleg-bfgs",
-        "fmin-subspace-bfgs",
+        "fmintr",
+        "fmintr-bfgs",
     ],
     description=[
-        "Trust region method using iterative cholesky method to exactly solve the "
-        + "trust region subproblem.",
-        "Trust region method using Powell's dogleg method to approximately solve the "
-        + "trust region subproblem.",
-        "Trust region method solving the subproblem over the 2d subspace spanned by "
-        + "the gradient and newton direction.",
-        "Trust region method using iterative cholesky method to exactly solve the "
-        + "trust region subproblem. Uses BFGS to approximate hessian",
-        "Trust region method using Powell's dogleg method to approximately solve the "
-        + "trust region subproblem. Uses BFGS to approximate hessian",
-        "Trust region method solving the subproblem over the 2d subspace spanned by "
-        + "the gradient and newton direction. Uses BFGS to approximate hessian",
+        "Trust region method for minimizing scalar valued multivariate function. See "
+        + "https://desc-docs.readthedocs.io/en/stable/_api/optimize/desc.optimize.fmintr.html",  # noqa: E501
+        "Trust region method for minimizing scalar valued multivariate function. Uses "
+        + "BFGS to approximate the Hessian. See "
+        + "https://desc-docs.readthedocs.io/en/stable/_api/optimize/desc.optimize.fmintr.html",  # noqa: E501
     ],
     scalar=True,
     equality_constraints=False,
     inequality_constraints=False,
     stochastic=False,
-    hessian=[True, True, True, False, False, False],
+    hessian=[True, False],
     GPU=True,
 )
 def _optimize_desc_fmin_scalar(
@@ -327,7 +317,7 @@ def _optimize_desc_fmin_scalar(
     x0 : ndarray
         Starting point.
     method : str
-        Name of the method to use. Any of the options in scipy.optimize.least_squares.
+        Name of the method to use.
     x_scale : array_like or ‘jac’, optional
         Characteristic scale of each variable. Setting x_scale is equivalent to
         reformulating the problem in scaled variables xs = x / x_scale. An alternative
@@ -342,7 +332,7 @@ def _optimize_desc_fmin_scalar(
         * 2 : display progress during iterations
     stoptol : dict
         Dictionary of stopping tolerances, with keys {"xtol", "ftol", "gtol", "ctol",
-        "maxiter", "max_nfev", "max_njev", "max_ngev", "max_nhev"}
+        "maxiter", "max_nfev"}
     options : dict, optional
         Dictionary of optional keyword arguments to override default solver
         settings. See the code for more details.
@@ -366,8 +356,6 @@ def _optimize_desc_fmin_scalar(
     elif options.get("initial_trust_radius", "scipy") == "scipy":
         options.setdefault("initial_trust_ratio", 0.1)
     options["max_nfev"] = stoptol["max_nfev"]
-    options["max_ngev"] = stoptol["max_ngev"]
-    options["max_nhev"] = stoptol["max_nhev"]
 
     result = fmintr(
         objective.compute_scalar,
@@ -375,7 +363,6 @@ def _optimize_desc_fmin_scalar(
         grad=objective.grad,
         hess=hess,
         args=(),
-        method=method.replace("-bfgs", "").replace("fmin-", ""),
         x_scale=x_scale,
         ftol=stoptol["ftol"],
         xtol=stoptol["xtol"],
@@ -390,7 +377,8 @@ def _optimize_desc_fmin_scalar(
 
 @register_optimizer(
     name="sgd",
-    description="Stochastic gradient descent with Nesterov momentum",
+    description="Stochastic gradient descent with Nesterov momentum"
+    + "See https://desc-docs.readthedocs.io/en/stable/_api/optimize/desc.optimize.sgd.html",  # noqa: E501
     scalar=True,
     equality_constraints=False,
     inequality_constraints=False,
@@ -412,7 +400,7 @@ def _optimize_desc_stochastic(
     x0 : ndarray
         Starting point.
     method : str
-        Name of the method to use. Any of the options in scipy.optimize.least_squares.
+        Name of the method to use.
     x_scale : array_like or ‘jac’, optional
         Characteristic scale of each variable. Setting x_scale is equivalent to
         reformulating the problem in scaled variables xs = x / x_scale. An alternative
@@ -427,10 +415,10 @@ def _optimize_desc_stochastic(
         * 2 : display progress during iterations
     stoptol : dict
         Dictionary of stopping tolerances, with keys {"xtol", "ftol", "gtol", "ctol",
-        "maxiter", "max_nfev", "max_njev", "max_ngev", "max_nhev"}
+        "maxiter", "max_nfev"}
     options : dict, optional
         Dictionary of optional keyword arguments to override default solver
-        settings. See the code for more details.
+        settings. See ``desc.optimize.sgd`` for details.
 
     Returns
     -------

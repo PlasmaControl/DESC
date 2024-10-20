@@ -6,12 +6,11 @@ import warnings
 import numpy as np
 from termcolor import colored
 
-from desc.compute import arg_order
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.objectives import get_equilibrium_objective, get_fixed_boundary_constraints
 from desc.optimize import Optimizer
 from desc.perturbations import get_deltas
-from desc.utils import Timer
+from desc.utils import Timer, errorif
 
 MIN_MRES_STEP = 1
 MIN_PRES_STEP = 0.1
@@ -30,6 +29,7 @@ def _solve_axisym(
     maxiter=100,
     verbose=1,
     checkpoint_path=None,
+    jac_chunk_size="auto",
 ):
     """Solve initial axisymmetric case with adaptive step sizing."""
     timer = Timer()
@@ -39,7 +39,7 @@ def _solve_axisym(
     L, M, N, L_grid, M_grid, N_grid = eq.L, eq.M, eq.N, eq.L_grid, eq.M_grid, eq.N_grid
     spectral_indexing = eq.spectral_indexing
 
-    Mi = min(M // 2, mres_step) if mres_step > 0 else M
+    Mi = min(M, mres_step) if mres_step > 0 else M
     Li = int(np.ceil(L / M) * Mi)
     Ni = 0
     L_gridi = np.ceil(L_grid / L * Li).astype(int)
@@ -65,7 +65,6 @@ def _solve_axisym(
         L_grid=L_gridi,
         M_grid=M_gridi,
         N_grid=N_gridi,
-        node_pattern=eq.node_pattern,
         pressure=pres_vac.copy(),
         iota=copy.copy(eq.iota),  # have to use copy.copy here since may be None
         current=copy.copy(eq.current),
@@ -76,12 +75,6 @@ def _solve_axisym(
 
     if not isinstance(optimizer, Optimizer):
         optimizer = Optimizer(optimizer)
-    constraints_i = get_fixed_boundary_constraints(
-        eq=eqi,
-        iota=objective != "vacuum" and eq.iota is not None,
-        kinetic=eq.electron_temperature is not None,
-    )
-    objective_i = get_equilibrium_objective(eq=eqi, mode=objective)
 
     eqfam = EquilibriaFamily()
 
@@ -92,7 +85,7 @@ def _solve_axisym(
 
         if ii > 0:
             eqi = eqfam[-1].copy()
-            # increase resolution of vacuum soln
+            # increase resolution of vacuum solution
             Mi = min(Mi + mres_step, M)
             Li = int(np.ceil(L / M) * Mi)
             L_gridi = np.ceil(L_grid / L * Li).astype(int)
@@ -105,6 +98,11 @@ def _solve_axisym(
             surf_i2.change_resolution(Li, Mi, Ni)
             deltas = get_deltas({"surface": surf_i}, {"surface": surf_i2})
             surf_i = surf_i2
+
+        constraints_i = get_fixed_boundary_constraints(eq=eqi)
+        objective_i = get_equilibrium_objective(
+            eq=eqi, mode=objective, jac_chunk_size=jac_chunk_size
+        )
 
         if verbose:
             _print_iteration_summary(
@@ -119,12 +117,6 @@ def _solve_axisym(
                 optimizer,
             )
 
-        constraints_i = get_fixed_boundary_constraints(
-            eq=eqi,
-            iota=objective != "vacuum" and eq.iota is not None,
-            kinetic=eq.electron_temperature is not None,
-        )
-        objective_i = get_equilibrium_objective(eq=eqi, mode=objective)
         if len(deltas) > 0:
             if verbose > 0:
                 print("Perturbing equilibrium")
@@ -167,7 +159,7 @@ def _solve_axisym(
         if mres_step == MIN_MRES_STEP:
             raise RuntimeError(
                 "Automatic continuation failed with mres_step=1, "
-                + "something is probaby very wrong with your desired equilibrium."
+                + "something is probably very wrong with your desired equilibrium."
             )
         else:
             warnings.warn(
@@ -207,6 +199,7 @@ def _add_pressure(
     maxiter=100,
     verbose=1,
     checkpoint_path=None,
+    jac_chunk_size="auto",
 ):
     """Add pressure with adaptive step sizing."""
     timer = Timer()
@@ -215,13 +208,6 @@ def _add_pressure(
     eqfam_temp = eqfam.copy()
     # make sure its at full radial/poloidal resolution
     eqi.change_resolution(L=eq.L, M=eq.M, L_grid=eq.L_grid, M_grid=eq.M_grid)
-
-    constraints_i = get_fixed_boundary_constraints(
-        eq=eqi,
-        iota=objective != "vacuum" and eq.iota is not None,
-        kinetic=eq.electron_temperature is not None,
-    )
-    objective_i = get_equilibrium_objective(eq=eqi, mode=objective)
 
     pres_steps = (
         0
@@ -240,6 +226,11 @@ def _add_pressure(
         )
         deltas["p_l"] *= pres_step
         pres_ratio += pres_step
+
+        constraints_i = get_fixed_boundary_constraints(eq=eqi)
+        objective_i = get_equilibrium_objective(
+            eq=eqi, mode=objective, jac_chunk_size=jac_chunk_size
+        )
 
         if verbose:
             _print_iteration_summary(
@@ -297,7 +288,7 @@ def _add_pressure(
         if pres_step <= MIN_PRES_STEP:
             raise RuntimeError(
                 "Automatic continuation failed with "
-                + f"pres_step={pres_step}, something is probaby very wrong with your "
+                + f"pres_step={pres_step}, something is probably very wrong with your "
                 + "desired equilibrium."
             )
         else:
@@ -339,6 +330,7 @@ def _add_shaping(
     maxiter=100,
     verbose=1,
     checkpoint_path=None,
+    jac_chunk_size="auto",
 ):
     """Add 3D shaping with adaptive step sizing."""
     timer = Timer()
@@ -347,13 +339,6 @@ def _add_shaping(
     eqfam_temp = eqfam.copy()
     # make sure its at full resolution
     eqi.change_resolution(eq.L, eq.M, eq.N, eq.L_grid, eq.M_grid, eq.N_grid)
-
-    constraints_i = get_fixed_boundary_constraints(
-        eq=eqi,
-        iota=objective != "vacuum" and eq.iota is not None,
-        kinetic=eq.electron_temperature is not None,
-    )
-    objective_i = get_equilibrium_objective(eq=eqi, mode=objective)
 
     bdry_steps = 0 if eq.N == 0 or bdry_step == 0 else int(np.ceil(1 / bdry_step))
     bdry_ratio = 0 if eq.N else 1
@@ -373,6 +358,11 @@ def _add_shaping(
         if "Zb_lmn" in deltas:
             deltas["Zb_lmn"] *= bdry_step
         bdry_ratio += bdry_step
+
+        constraints_i = get_fixed_boundary_constraints(eq=eqi)
+        objective_i = get_equilibrium_objective(
+            eq=eqi, mode=objective, jac_chunk_size=jac_chunk_size
+        )
 
         if verbose:
             _print_iteration_summary(
@@ -430,7 +420,7 @@ def _add_shaping(
         if bdry_step <= MIN_BDRY_STEP:
             raise RuntimeError(
                 "Automatic continuation failed with "
-                + f"bdry_step={bdry_step}, something is probaby very wrong with your "
+                + f"bdry_step={bdry_step}, something is probably very wrong with your "
                 + "desired equilibrium."
             )
         else:
@@ -470,6 +460,7 @@ def solve_continuation_automatic(  # noqa: C901
     maxiter=100,
     verbose=1,
     checkpoint_path=None,
+    jac_chunk_size="auto",
     **kwargs,
 ):
     """Solve for an equilibrium using an automatic continuation method.
@@ -483,9 +474,9 @@ def solve_continuation_automatic(  # noqa: C901
     ----------
     eq : Equilibrium
         Unsolved Equilibrium with the final desired boundary, profiles, resolution.
-    objective : {"force", "energy", "vacuum"}
+    objective : {"force", "energy"}
         function to solve for equilibrium solution
-    optimizer : str or Optimzer (optional)
+    optimizer : str or Optimizer (optional)
         optimizer to use
     pert_order : int
         order of perturbations to use.
@@ -516,11 +507,16 @@ def solve_continuation_automatic(  # noqa: C901
         final desired configuration,
 
     """
-    if eq.electron_temperature is not None:
-        raise NotImplementedError(
-            "Continuation method with kinetic profiles is not currently supported"
-        )
-
+    errorif(
+        eq.electron_temperature is not None,
+        NotImplementedError,
+        "Continuation method with kinetic profiles is not currently supported",
+    )
+    errorif(
+        eq.anisotropy is not None,
+        NotImplementedError,
+        "Continuation method with anisotropic pressure is not currently supported",
+    )
     timer = Timer()
     timer.start("Total time")
 
@@ -543,41 +539,79 @@ def solve_continuation_automatic(  # noqa: C901
         maxiter,
         verbose,
         checkpoint_path,
+        jac_chunk_size=jac_chunk_size,
     )
 
-    eqfam = _add_pressure(
-        eq,
-        eqfam,
-        pres_step,
-        objective,
-        optimizer,
-        pert_order,
-        ftol,
-        xtol,
-        gtol,
-        maxiter,
-        verbose,
-        checkpoint_path,
-    )
+    # for zero current we want to do shaping before pressure to avoid having a
+    # tokamak with zero current but finite pressure (non-physical)
+    if eq.current is not None and np.all(eq.current(np.linspace(0, 1, 20)) == 0):
+        eqfam = _add_shaping(
+            eq,
+            eqfam,
+            bdry_step,
+            objective,
+            optimizer,
+            pert_order,
+            ftol,
+            xtol,
+            gtol,
+            maxiter,
+            verbose,
+            checkpoint_path,
+            jac_chunk_size=jac_chunk_size,
+        )
 
-    eqfam = _add_shaping(
-        eq,
-        eqfam,
-        bdry_step,
-        objective,
-        optimizer,
-        pert_order,
-        ftol,
-        xtol,
-        gtol,
-        maxiter,
-        verbose,
-        checkpoint_path,
-    )
-    for arg in arg_order:
-        val = np.asarray(getattr(eqfam[-1], arg))
-        if val.size:
-            setattr(eq, arg, val)
+        eqfam = _add_pressure(
+            eq,
+            eqfam,
+            pres_step,
+            objective,
+            optimizer,
+            pert_order,
+            ftol,
+            xtol,
+            gtol,
+            maxiter,
+            verbose,
+            checkpoint_path,
+            jac_chunk_size=jac_chunk_size,
+        )
+
+    # for other cases such as fixed iota or nonzero current we do pressure first
+    # since its cheaper to do it without the 3d modes
+    else:
+        eqfam = _add_pressure(
+            eq,
+            eqfam,
+            pres_step,
+            objective,
+            optimizer,
+            pert_order,
+            ftol,
+            xtol,
+            gtol,
+            maxiter,
+            verbose,
+            checkpoint_path,
+            jac_chunk_size=jac_chunk_size,
+        )
+
+        eqfam = _add_shaping(
+            eq,
+            eqfam,
+            bdry_step,
+            objective,
+            optimizer,
+            pert_order,
+            ftol,
+            xtol,
+            gtol,
+            maxiter,
+            verbose,
+            checkpoint_path,
+            jac_chunk_size=jac_chunk_size,
+        )
+    eq.params_dict = eqfam[-1].params_dict
     eqfam[-1] = eq
     timer.stop("Total time")
     if verbose > 0:
@@ -606,10 +640,11 @@ def solve_continuation(  # noqa: C901
     maxiter=100,
     verbose=1,
     checkpoint_path=None,
+    jac_chunk_size="auto",
 ):
     """Solve for an equilibrium by continuation method.
 
-    Steps through an EquilibriaFamily, solving each equilibrium, and uses pertubations
+    Steps through an EquilibriaFamily, solving each equilibrium, and uses perturbations
     to step between different profiles/boundaries.
 
     Uses the previous step as an initial guess for each solution.
@@ -618,9 +653,9 @@ def solve_continuation(  # noqa: C901
     ----------
     eqfam : EquilibriaFamily or list of Equilibria
         Equilibria to solve for at each step.
-    objective : {"force", "energy", "vacuum"}
+    objective : {"force", "energy"}
         function to solve for equilibrium solution
-    optimizer : str or Optimzer (optional)
+    optimizer : str or Optimizer (optional)
         optimizer to use
     pert_order : int or array of int
         order of perturbations to use. If array-like, should be same length as eqfam
@@ -645,10 +680,16 @@ def solve_continuation(  # noqa: C901
         final desired configuration,
 
     """
-    if not all([eq.electron_temperature is None for eq in eqfam]):
-        raise NotImplementedError(
-            "Continuation method with kinetic profiles is not currently supported"
-        )
+    errorif(
+        not all([eq.electron_temperature is None for eq in eqfam]),
+        NotImplementedError,
+        "Continuation method with kinetic profiles is not currently supported",
+    )
+    errorif(
+        not all([eq.anisotropy is None for eq in eqfam]),
+        NotImplementedError,
+        "Continuation method with anisotropic pressure is not currently supported",
+    )
 
     timer = Timer()
     timer.start("Total time")
@@ -660,12 +701,10 @@ def solve_continuation(  # noqa: C901
 
     if not isinstance(optimizer, Optimizer):
         optimizer = Optimizer(optimizer)
-    objective_i = get_equilibrium_objective(eq=eqfam[-1], mode=objective)
-    constraints_i = get_fixed_boundary_constraints(
-        eq=eqfam[-1],
-        iota=objective != "vacuum" and eqfam[0].iota is not None,
-        kinetic=eqfam[0].electron_temperature is not None,
+    objective_i = get_equilibrium_objective(
+        eq=eqfam[0], mode=objective, jac_chunk_size=jac_chunk_size
     )
+    constraints_i = get_fixed_boundary_constraints(eq=eqfam[0])
 
     ii = 0
     nn = len(eqfam)
@@ -706,20 +745,15 @@ def solve_continuation(  # noqa: C901
             }
             deltas = get_deltas(things1, things2)
 
-            # maybe rebuild objective if resolution changed.
-            if eqfam[ii - 1].resolution != eqi.resolution:
-                objective_i = get_equilibrium_objective(eq=eqfam[ii], mode=objective)
-                constraints_i = get_fixed_boundary_constraints(
-                    eq=eqfam[ii],
-                    iota=objective != "vacuum" and eqfam[ii].iota is not None,
-                    kinetic=eqfam[ii].electron_temperature is not None,
-                )
-
         if len(deltas) > 0:
             if verbose > 0:
                 print("Perturbing equilibrium")
             # TODO: pass Jx if available
             eqp = eqfam[ii - 1].copy()
+            objective_i = get_equilibrium_objective(
+                eq=eqp, mode=objective, jac_chunk_size=jac_chunk_size
+            )
+            constraints_i = get_fixed_boundary_constraints(eq=eqp)
             eqp.change_resolution(**eqi.resolution)
             eqp.perturb(
                 objective=objective_i,
@@ -729,10 +763,7 @@ def solve_continuation(  # noqa: C901
                 verbose=verbose,
                 copy=False,
             )
-            for arg in arg_order:
-                val = np.asarray(getattr(eqp, arg))
-                if val.size:
-                    setattr(eqi, arg, val)
+            eqi.params_dict = eqp.params_dict
             deltas = {}
             del eqp
 
@@ -740,6 +771,10 @@ def solve_continuation(  # noqa: C901
             stop = True
 
         if not stop:
+            objective_i = get_equilibrium_objective(
+                eq=eqi, mode=objective, jac_chunk_size=jac_chunk_size
+            )
+            constraints_i = get_fixed_boundary_constraints(eq=eqi)
             eqi.solve(
                 optimizer=optimizer,
                 objective=objective_i,

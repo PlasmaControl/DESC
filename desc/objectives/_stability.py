@@ -3,13 +3,32 @@
 import numpy as np
 
 from desc.backend import jnp
-from desc.compute import compute as compute_fun
 from desc.compute import get_params, get_profiles, get_transforms
+from desc.compute.utils import _compute as compute_fun
 from desc.grid import LinearGrid
-from desc.utils import Timer
+from desc.utils import Timer, errorif, setdefault, warnif
 
 from .normalization import compute_scaling_factors
-from .objective_funs import _Objective
+from .objective_funs import _Objective, collect_docs
+from .utils import _parse_callable_target_bounds
+
+overwrite_stability = {
+    "target": """
+    target : {float, ndarray, callable}, optional
+        Target value(s) of the objective. Only used if bounds is None.
+        Must be broadcastable to Objective.dim_f. If a callable, should take a
+        single argument `rho` and return the desired value of the profile at those
+        locations. Defaults to ``bounds=(0, np.inf)``
+    """,
+    "bounds": """
+    bounds : tuple of {float, ndarray, callable}, optional
+        Lower and upper bounds on the objective. Overrides target.
+        Both bounds must be broadcastable to to Objective.dim_f
+        If a callable, each should take a single argument `rho` and return the
+        desired bound (lower or upper) of the profile at those locations.
+        Defaults to ``bounds=(0, np.inf)``
+    """,
+}
 
 
 class MercierStability(_Objective):
@@ -25,102 +44,106 @@ class MercierStability(_Objective):
 
     Parameters
     ----------
-    eq : Equilibrium, optional
+    eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
-    target : float, ndarray, optional
-        Target value(s) of the objective. Only used if bounds is None.
-        len(target) must be equal to Objective.dim_f
-    bounds : tuple, optional
-        Lower and upper bounds on the objective. Overrides target.
-        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
-    weight : float, ndarray, optional
-        Weighting to apply to the Objective, relative to other Objectives.
-        len(weight) must be equal to Objective.dim_f
-    normalize : bool
-        Whether to compute the error in physical units or non-dimensionalize.
-    normalize_target : bool
-        Whether target and bounds should be normalized before comparing to computed
-        values. If `normalize` is `True` and the target is in physical units,
-        this should also be set to True.
-    grid : Grid, ndarray, optional
+    grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
-    name : str
-        Name of the objective function.
+        Defaults to ``LinearGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid)``. Note that
+        it should have poloidal and toroidal resolution, as flux surface averages
+        are required.
 
     """
 
-    _scalar = False
-    _linear = False
+    __doc__ = __doc__.rstrip() + collect_docs(overwrite=overwrite_stability)
+
+    _coordinates = "r"
     _units = "(Wb^-2)"
-    _print_value_fmt = "Mercier Stability: {:10.3e} "
+    _print_value_fmt = "Mercier Stability: "
 
     def __init__(
         self,
-        eq=None,
+        eq,
         target=None,
         bounds=None,
         weight=1,
         normalize=True,
         normalize_target=True,
+        loss_function=None,
+        deriv_mode="auto",
         grid=None,
         name="Mercier Stability",
+        jac_chunk_size=None,
     ):
         if target is None and bounds is None:
             bounds = (0, np.inf)
         self._grid = grid
         super().__init__(
-            eq=eq,
+            things=eq,
             target=target,
             bounds=bounds,
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
+            loss_function=loss_function,
+            deriv_mode=deriv_mode,
             name=name,
+            jac_chunk_size=jac_chunk_size,
         )
 
-    def build(self, eq=None, use_jit=True, verbose=1):
+    def build(self, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
         ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
             Level of output.
 
         """
-        eq = eq or self._eq
+        eq = self.things[0]
         if self._grid is None:
             grid = LinearGrid(
+                L=eq.L_grid,
                 M=eq.M_grid,
                 N=eq.N_grid,
                 NFP=eq.NFP,
                 sym=eq.sym,
-                rho=np.linspace(1 / 5, 1, 5),
+                axis=False,
             )
         else:
             grid = self._grid
 
+        warnif(
+            (grid.num_theta * (1 + eq.sym)) < 2 * eq.M,
+            RuntimeWarning,
+            "MercierStability objective grid requires poloidal "
+            "resolution for surface averages",
+        )
+        warnif(
+            grid.num_zeta < 2 * eq.N,
+            RuntimeWarning,
+            "MercierStability objective grid requires toroidal "
+            "resolution for surface averages",
+        )
+
+        self._target, self._bounds = _parse_callable_target_bounds(
+            self._target, self._bounds, grid.nodes[grid.unique_rho_idx]
+        )
+
         self._dim_f = grid.num_rho
         self._data_keys = ["D_Mercier"]
-        self._args = get_params(
-            self._data_keys,
-            obj="desc.equilibrium.equilibrium.Equilibrium",
-            has_axis=grid.axis.size,
-        )
 
         timer = Timer()
         if verbose > 0:
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
-        self._transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
+        profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
+        transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
         self._constants = {
-            "transforms": self._transforms,
-            "profiles": self._profiles,
+            "transforms": transforms,
+            "profiles": profiles,
         }
 
         timer.stop("Precomputing transforms")
@@ -131,35 +154,18 @@ class MercierStability(_Objective):
             scales = compute_scaling_factors(eq)
             self._normalization = 1 / scales["Psi"] ** 2
 
-        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+        super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, *args, **kwargs):
+    def compute(self, params, constants=None):
         """Compute the Mercier stability criterion.
 
         Parameters
         ----------
-        R_lmn : ndarray
-            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
-        Z_lmn : ndarray
-            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
-        L_lmn : ndarray
-            Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
-        p_l : ndarray
-            Spectral coefficients of p(rho) -- pressure profile (Pa).
-        i_l : ndarray
-            Spectral coefficients of iota(rho) -- rotational transform profile.
-        c_l : ndarray
-            Spectral coefficients of I(rho) -- toroidal current profile (A).
-        Psi : float
-            Total toroidal magnetic flux within the last closed flux surface (Wb).
-        Te_l : ndarray
-            Spectral coefficients of Te(rho) -- electron temperature profile (eV).
-        ne_l : ndarray
-            Spectral coefficients of ne(rho) -- electron density profile (1/m^3).
-        Ti_l : ndarray
-            Spectral coefficients of Ti(rho) -- ion temperature profile (eV).
-        Zeff_l : ndarray
-            Spectral coefficients of Zeff(rho) -- effective atomic number profile.
+        params : dict
+            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
 
         Returns
         -------
@@ -167,7 +173,6 @@ class MercierStability(_Objective):
             Mercier stability criterion.
 
         """
-        params, constants = self._parse_args(*args, **kwargs)
         if constants is None:
             constants = self.constants
         data = compute_fun(
@@ -178,40 +183,6 @@ class MercierStability(_Objective):
             profiles=constants["profiles"],
         )
         return constants["transforms"]["grid"].compress(data["D_Mercier"])
-
-    def _scale(self, *args, **kwargs):
-        """Compute and apply the target/bounds, weighting, and normalization."""
-        constants = kwargs.get("constants", None)
-        if constants is None:
-            constants = self.constants
-        w = constants["transforms"]["grid"].compress(
-            constants["transforms"]["grid"].spacing[:, 0]
-        )
-        return super()._scale(*args, **kwargs) * jnp.sqrt(w)
-
-    def print_value(self, *args, **kwargs):
-        """Print the value of the objective."""
-        f = self.compute(*args, **kwargs)
-        print("Maximum " + self._print_value_fmt.format(jnp.max(f)) + self._units)
-        print("Minimum " + self._print_value_fmt.format(jnp.min(f)) + self._units)
-        print("Average " + self._print_value_fmt.format(jnp.mean(f)) + self._units)
-
-        if self._normalize:
-            print(
-                "Maximum "
-                + self._print_value_fmt.format(jnp.max(f / self.normalization))
-                + "(normalized)"
-            )
-            print(
-                "Minimum "
-                + self._print_value_fmt.format(jnp.min(f / self.normalization))
-                + "(normalized)"
-            )
-            print(
-                "Average "
-                + self._print_value_fmt.format(jnp.mean(f / self.normalization))
-                + "(normalized)"
-            )
 
 
 class MagneticWell(_Objective):
@@ -227,58 +198,270 @@ class MagneticWell(_Objective):
 
     Parameters
     ----------
-    eq : Equilibrium, optional
+    eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
-    target : float, ndarray, optional
-        Target value(s) of the objective. Only used if bounds is None.
-        len(target) must be equal to Objective.dim_f
-    bounds : tuple, optional
-        Lower and upper bounds on the objective. Overrides target.
-        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
-    weight : float, ndarray, optional
-        Weighting to apply to the Objective, relative to other Objectives.
-        len(weight) must be equal to Objective.dim_f
-    normalize : bool
-        Whether to compute the error in physical units or non-dimensionalize.
-        Note: Has no effect for this objective.
-    normalize_target : bool
-        Whether target and bounds should be normalized before comparing to computed
-        values. If `normalize` is `True` and the target is in physical units,
-        this should also be set to True. Note: Has no effect for this objective.
-    grid : Grid, ndarray, optional
+    grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
-    name : str
-        Name of the objective function.
+        Defaults to ``LinearGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid)``. Note that
+        it should have poloidal and toroidal resolution, as flux surface averages
+        are required.
 
     """
 
-    _scalar = False
-    _linear = False
+    __doc__ = __doc__.rstrip() + collect_docs(
+        overwrite=overwrite_stability,
+        normalize_detail=" Note: Has no effect for this objective.",
+        normalize_target_detail=" Note: Has no effect for this objective.",
+    )
+
+    _coordinates = "r"
     _units = "(dimensionless)"
-    _print_value_fmt = "Magnetic Well: {:10.3e} "
+    _print_value_fmt = "Magnetic Well: "
 
     def __init__(
         self,
-        eq=None,
+        eq,
         target=None,
         bounds=None,
         weight=1,
         normalize=True,
         normalize_target=True,
+        loss_function=None,
+        deriv_mode="auto",
         grid=None,
         name="Magnetic Well",
+        jac_chunk_size=None,
     ):
         if target is None and bounds is None:
             bounds = (0, np.inf)
         self._grid = grid
         super().__init__(
-            eq=eq,
+            things=eq,
             target=target,
             bounds=bounds,
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
+            loss_function=loss_function,
+            deriv_mode=deriv_mode,
             name=name,
+            jac_chunk_size=jac_chunk_size,
+        )
+
+    def build(self, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+        """
+        eq = self.things[0]
+        if self._grid is None:
+            grid = LinearGrid(
+                L=eq.L_grid,
+                M=eq.M_grid,
+                N=eq.N_grid,
+                NFP=eq.NFP,
+                sym=eq.sym,
+                axis=False,
+            )
+        else:
+            grid = self._grid
+
+        warnif(
+            (grid.num_theta * (1 + eq.sym)) < 2 * eq.M,
+            RuntimeWarning,
+            "MagneticWell objective grid requires poloidal "
+            "resolution for surface averages",
+        )
+        warnif(
+            grid.num_zeta < 2 * eq.N,
+            RuntimeWarning,
+            "MagneticWell objective grid requires toroidal "
+            "resolution for surface averages",
+        )
+
+        self._target, self._bounds = _parse_callable_target_bounds(
+            self._target, self._bounds, grid.nodes[grid.unique_rho_idx]
+        )
+
+        self._dim_f = grid.num_rho
+        self._data_keys = ["magnetic well"]
+
+        timer = Timer()
+        if verbose > 0:
+            print("Precomputing transforms")
+        timer.start("Precomputing transforms")
+
+        profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
+        transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
+        self._constants = {
+            "transforms": transforms,
+            "profiles": profiles,
+        }
+
+        timer.stop("Precomputing transforms")
+        if verbose > 1:
+            timer.disp("Precomputing transforms")
+
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, params, constants=None):
+        """Compute a magnetic well parameter.
+
+        Parameters
+        ----------
+        params : dict
+            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
+
+        Returns
+        -------
+        magnetic_well : ndarray
+            Magnetic well parameter.
+
+        """
+        if constants is None:
+            constants = self.constants
+
+        data = compute_fun(
+            "desc.equilibrium.equilibrium.Equilibrium",
+            self._data_keys,
+            params=params,
+            transforms=constants["transforms"],
+            profiles=constants["profiles"],
+        )
+        return constants["transforms"]["grid"].compress(data["magnetic well"])
+
+
+class BallooningStability(_Objective):
+    """A type of ideal MHD instability.
+
+    Infinite-n ideal MHD ballooning modes are of significant interest.
+    These instabilities are also related to smaller-scale kinetic instabilities.
+    With this class, we optimize MHD equilibria against the ideal ballooning mode.
+
+    Targets the following metric:
+
+    f = w₀ sum(ReLU(λ-λ₀)) + w₁ max(ReLU(λ-λ₀))
+
+    where λ is the negative squared growth rate for each field line (such that λ>0 is
+    unstable), λ₀ is a cutoff, and w₀ and w₁ are weights.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Equilibrium that will be optimized to satisfy the Objective.
+    target : {float, ndarray}, optional
+        Target value(s) of the objective. Only used if bounds is None.
+        Must be broadcastable to Objective.dim_f. Default is ``target=0``
+    bounds : tuple of {float, ndarray}, optional
+        Lower and upper bounds on the objective. Overrides target.
+        Both bounds must be broadcastable to to Objective.dim_f. Default is ``target=0``
+    weight : {float, ndarray}, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        Must be broadcastable to to Objective.dim_f
+    normalize : bool, optional
+        Whether to compute the error in physical units or non-dimensionalize.
+        Not used since the growth rate is always normalized.
+    normalize_target : bool, optional
+        Whether target and bounds should be normalized before comparing to computed
+        values. If `normalize` is `True` and the target is in physical units,
+        this should also be set to True. Not used since the growth rate is always
+        normalized.
+    loss_function : {None, 'mean', 'min', 'max'}, optional
+        Loss function to apply to the objective values once computed. This loss function
+        is called on the raw compute value, before any shifting, scaling, or
+        normalization. Has no effect for this objective.
+    deriv_mode : {"auto", "fwd", "rev"}
+        Specify how to compute jacobian matrix, either forward mode or reverse mode AD.
+        "auto" selects forward or reverse mode based on the size of the input and output
+        of the objective. Has no effect on self.grad or self.hess which always use
+        reverse mode and forward over reverse mode respectively.
+    rho : float
+        Flux surface to optimize on. To optimize over multiple surfaces, use multiple
+        objectives each with a single rho value.
+    alpha : float, ndarray
+        Field line labels to optimize. Values should be in [0, 2pi). Default is alpha=0
+        for axisymmetric equilibria, or 8 field lines linearly spaced in [0, pi] for
+        non-axisymmetric cases.
+    nturns : int
+        Number of toroidal transits of a field line to consider. Field line
+        will run from -π*nturns to π*nturns. Default 3.
+    nzetaperturn : int
+        Number of points along the field line per toroidal transit. Total number of
+        points is ``nturns*nzetaperturn``. Default 100.
+    zeta0 : array-like
+        Points of vanishing integrated local shear to scan over.
+        Default 15 points in [-π/2,π/2]
+    lambda0 : float
+        Threshold for penalizing growth rates in metric above.
+    w0, w1 : float
+        Weights for sum and max terms in metric above.
+    name : str, optional
+        Name of the objective function.
+
+    """
+
+    _coordinates = ""  # not vectorized over rho, always a scalar
+    _scalar = True
+    _units = "(dimensionless)"
+    _print_value_fmt = "Ideal ballooning lambda: "
+
+    def __init__(
+        self,
+        eq,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        loss_function=None,
+        deriv_mode="auto",
+        rho=0.5,
+        alpha=None,
+        nturns=3,
+        nzetaperturn=200,
+        zeta0=None,
+        lambda0=0.0,
+        w0=1.0,
+        w1=10.0,
+        name="ideal ballooning lambda",
+    ):
+        if target is None and bounds is None:
+            target = 0
+
+        self._rho = rho
+        self._alpha = alpha
+        self._nturns = nturns
+        self._nzetaperturn = nzetaperturn
+        self._zeta0 = zeta0
+        self._lambda0 = lambda0
+        self._w0 = w0
+        self._w1 = w1
+
+        super().__init__(
+            things=eq,
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            loss_function=loss_function,
+            deriv_mode=deriv_mode,
+            name=name,
+        )
+
+        errorif(
+            np.asarray(self._rho).size > 1,
+            ValueError,
+            "BallooningStability objective only works on a single surface. "
+            "To optimize multiple surfaces, use multiple instances of the objective.",
         )
 
     def build(self, eq=None, use_jit=True, verbose=1):
@@ -292,104 +475,151 @@ class MagneticWell(_Objective):
             Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
             Level of output.
-        """
-        eq = eq or self._eq
-        if self._grid is None:
-            grid = LinearGrid(
-                M=eq.M_grid,
-                N=eq.N_grid,
-                NFP=eq.NFP,
-                sym=eq.sym,
-                rho=np.linspace(1 / 5, 1, 5),
-            )
-        else:
-            grid = self._grid
 
-        self._dim_f = grid.num_rho
-        self._data_keys = ["magnetic well"]
-        self._args = get_params(
-            self._data_keys,
-            obj="desc.equilibrium.equilibrium.Equilibrium",
-            has_axis=grid.axis.size,
+        """
+        eq = self.things[0]
+
+        # we need a uniform grid to get correct surface averages for iota
+        iota_grid = LinearGrid(
+            rho=self._rho,
+            M=eq.M_grid,
+            N=eq.N_grid,
+            NFP=eq.NFP,
+        )
+        self._iota_keys = ["iota", "iota_r", "shear"]
+        iota_profiles = get_profiles(self._iota_keys, obj=eq, grid=iota_grid)
+        iota_transforms = get_transforms(self._iota_keys, obj=eq, grid=iota_grid)
+
+        # Separate grid to calculate the right length scale for normalization
+        len_grid = LinearGrid(rho=1.0, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
+        self._len_keys = ["a"]
+        len_profiles = get_profiles(self._len_keys, obj=eq, grid=len_grid)
+        len_transforms = get_transforms(self._len_keys, obj=eq, grid=len_grid)
+
+        # make a set of nodes along a single fieldline
+        zeta = jnp.linspace(
+            -jnp.pi * self._nturns,
+            jnp.pi * self._nturns,
+            self._nturns * self._nzetaperturn,
         )
 
-        timer = Timer()
-        if verbose > 0:
-            print("Precomputing transforms")
-        timer.start("Precomputing transforms")
+        # set alpha/zeta0 grids
+        self._alpha = setdefault(
+            self._alpha,
+            (
+                jnp.linspace(0, jnp.pi, 8)
+                if eq.N != 0 and eq.sym is True
+                else (
+                    jnp.linspace(0, 2 * np.pi, 16)
+                    if eq.N != 0 and eq.sym is False
+                    else jnp.array(0.0)
+                )
+            ),
+        )
 
-        self._profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
-        self._transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
+        self._zeta0 = setdefault(
+            self._zeta0, jnp.linspace(-0.5 * jnp.pi, 0.5 * jnp.pi, 15)
+        )
+        self._dim_f = 1
+        self._data_keys = ["ideal ballooning lambda"]
+
+        self._args = get_params(
+            self._iota_keys + self._len_keys + self._data_keys,
+            obj="desc.equilibrium.equilibrium.Equilibrium",
+            has_axis=False,
+        )
+
         self._constants = {
-            "transforms": self._transforms,
-            "profiles": self._profiles,
+            "iota_transforms": iota_transforms,
+            "iota_profiles": iota_profiles,
+            "len_transforms": len_transforms,
+            "len_profiles": len_profiles,
+            "rho": self._rho,
+            "alpha": self._alpha,
+            "zeta": zeta,
+            "zeta0": self._zeta0,
+            "lambda0": self._lambda0,
+            "w0": self._w0,
+            "w1": self._w1,
+            "quad_weights": 1.0,
         }
+        super().build(use_jit=use_jit, verbose=verbose)
 
-        timer.stop("Precomputing transforms")
-        if verbose > 1:
-            timer.disp("Precomputing transforms")
-
-        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
-
-    def compute(self, *args, **kwargs):
-        """Compute a magnetic well parameter.
+    def compute(self, params, constants=None):
+        """
+        Compute the ballooning stability growth rate.
 
         Parameters
         ----------
-        R_lmn : ndarray
-            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
-        Z_lmn : ndarray
-            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
-        L_lmn : ndarray
-            Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
-        p_l : ndarray
-            Spectral coefficients of p(rho) -- pressure profile (Pa).
-        i_l : ndarray
-            Spectral coefficients of iota(rho) -- rotational transform profile.
-        c_l : ndarray
-            Spectral coefficients of I(rho) -- toroidal current profile (A).
-        Psi : float
-            Total toroidal magnetic flux within the last closed flux surface (Wb).
-        Te_l : ndarray
-            Spectral coefficients of Te(rho) -- electron temperature profile (eV).
-        ne_l : ndarray
-            Spectral coefficients of ne(rho) -- electron density profile (1/m^3).
-        Ti_l : ndarray
-            Spectral coefficients of Ti(rho) -- ion temperature profile (eV).
-        Zeff_l : ndarray
-            Spectral coefficients of Zeff(rho) -- effective atomic number profile.
+        params : dict
+            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
 
         Returns
         -------
-        magnetic_well : ndarray
-            Magnetic well parameter.
+        lam : ndarray
+            ideal ballooning growth rate.
 
         """
-        params, constants = self._parse_args(*args, **kwargs)
+        eq = self.things[0]
+
         if constants is None:
             constants = self.constants
-        data = compute_fun(
-            "desc.equilibrium.equilibrium.Equilibrium",
-            self._data_keys,
+        # we first compute iota on a uniform grid to get correct averaging etc.
+        iota_data = compute_fun(
+            eq,
+            self._iota_keys,
             params=params,
-            transforms=constants["transforms"],
-            profiles=constants["profiles"],
+            transforms=constants["iota_transforms"],
+            profiles=constants["iota_profiles"],
         )
-        return constants["transforms"]["grid"].compress(data["magnetic well"])
 
-    def _scale(self, *args, **kwargs):
-        """Compute and apply the target/bounds, weighting, and normalization."""
-        constants = kwargs.get("constants", None)
-        if constants is None:
-            constants = self.constants
-        w = constants["transforms"]["grid"].compress(
-            constants["transforms"]["grid"].spacing[:, 0]
+        len_data = compute_fun(
+            eq,
+            self._len_keys,
+            params=params,
+            transforms=constants["len_transforms"],
+            profiles=constants["len_profiles"],
         )
-        return super()._scale(*args, **kwargs) * jnp.sqrt(w)
 
-    def print_value(self, *args, **kwargs):
-        """Print the value of the objective."""
-        f = self.compute(*args, **kwargs)
-        print("Maximum " + self._print_value_fmt.format(jnp.max(f)) + self._units)
-        print("Minimum " + self._print_value_fmt.format(jnp.min(f)) + self._units)
-        print("Average " + self._print_value_fmt.format(jnp.mean(f)) + self._units)
+        # Now we compute theta_DESC for given theta_PEST
+        rho, alpha, zeta = constants["rho"], constants["alpha"], constants["zeta"]
+
+        # we prime the data dict with the correct iota values so we don't recompute them
+        # using the wrong grid
+        data = {
+            "iota": iota_data["iota"][0],
+            "iota_r": iota_data["iota_r"][0],
+            "shear": iota_data["shear"][0],
+            "a": len_data["a"],
+        }
+
+        grid = eq.get_rtz_grid(
+            rho,
+            alpha,
+            zeta,
+            coordinates="raz",
+            period=(np.inf, 2 * np.pi, np.inf),
+            params=params,
+        )
+
+        lam = compute_fun(
+            eq,
+            self._data_keys,
+            params,
+            get_transforms(self._data_keys, eq, grid, jitable=True),
+            profiles=get_profiles(self._data_keys, eq, grid),
+            data=data,
+            zeta0=constants["zeta0"],
+        )["ideal ballooning lambda"]
+
+        lambda0, w0, w1 = constants["lambda0"], constants["w0"], constants["w1"]
+
+        # Shifted ReLU operation
+        data = (lam - lambda0) * (lam >= lambda0)
+
+        results = w0 * jnp.sum(data) + w1 * jnp.max(data)
+
+        return results

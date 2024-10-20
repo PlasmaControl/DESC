@@ -1,17 +1,25 @@
 """Functions for mapping between flux, sfl, and real space coordinates."""
 
 import functools
-import warnings
 
 import numpy as np
-from termcolor import colored
 
-from desc.backend import fori_loop, jit, jnp, put, while_loop
+from desc.backend import fori_loop, jit, jnp, put, root, root_scalar, vmap
 from desc.compute import compute as compute_fun
-from desc.compute import data_index, get_params, get_profiles, get_transforms
+from desc.compute import data_index, get_data_deps, get_profiles, get_transforms
 from desc.grid import ConcentricGrid, Grid, LinearGrid, QuadratureGrid
 from desc.transform import Transform
-from desc.utils import Index
+from desc.utils import check_posint, errorif, safenorm, setdefault, warnif
+
+
+def _periodic(x, period):
+    return jnp.where(jnp.isfinite(period), x % period, x)
+
+
+def _fixup_residual(r, period):
+    r = _periodic(r, period)
+    # r should be between -period and period
+    return jnp.where((r > period / 2) & jnp.isfinite(period), -period + r, r)
 
 
 def map_coordinates(  # noqa: C901
@@ -20,100 +28,160 @@ def map_coordinates(  # noqa: C901
     inbasis,
     outbasis=("rho", "theta", "zeta"),
     guess=None,
-    period=(np.inf, np.inf, np.inf),
+    params=None,
+    period=None,
     tol=1e-6,
     maxiter=30,
+    full_output=False,
     **kwargs,
 ):
-    """Given coordinates in inbasis, compute corresponding coordinates in outbasis.
+    """Transform coordinates given in ``inbasis`` to ``outbasis``.
 
-    First solves for the computational coordinates that correspond to inbasis, then
-    evaluates outbasis at those locations.
+    Solves for the computational coordinates that correspond to ``inbasis``,
+    then evaluates ``outbasis`` at those locations.
 
-    Speed can often be significantly improved by providing a reasonable initial guess.
-    The default is a nearest neighbor search on a coarse grid.
-
-    NOTE: this function cannot be JIT compiled or differentiated with AD.
+    Performance can often improve significantly given a reasonable initial guess.
 
     Parameters
     ----------
     eq : Equilibrium
-        Equilibrium to use
-    coords : ndarray, shape(k,3)
-        2D array of input coordinates. Each row is a different
-        point in space.
+        Equilibrium to use.
+    coords : ndarray
+        Shape (k, 3).
+        2D array of input coordinates. Each row is a different point in space.
     inbasis, outbasis : tuple of str
-        Labels for input and output coordinates, eg ("R", "phi", "Z") or
+        Labels for input and output coordinates, e.g. ("R", "phi", "Z") or
         ("rho", "alpha", "zeta") or any combination thereof. Labels should be the
-        same as the compute function data key
-    guess : None or ndarray, shape(k,3)
+        same as the compute function data key.
+    guess : jnp.ndarray
+        Shape (k, 3).
         Initial guess for the computational coordinates ['rho', 'theta', 'zeta']
-        corresponding to coords in inbasis. If None, heuristics are used based on
-        in basis and a nearest neighbor search on a coarse grid.
+        corresponding to ``coords`` in ``inbasis``. If not given, then heuristics
+        based on ``inbasis`` or a nearest neighbor search on a grid may be used.
+        In general, this must be given to be compatible with JIT.
+    params : dict
+        Values of equilibrium parameters to use, e.g. ``eq.params_dict``.
     period : tuple of float
-        Assumed periodicity for each quantity in inbasis.
-        Use np.inf to denote no periodicity.
+        Assumed periodicity for each quantity in ``inbasis``.
+        Use ``np.inf`` to denote no periodicity.
     tol : float
         Stopping tolerance.
-    maxiter : int > 0
-        Maximum number of Newton iterations
+    maxiter : int
+        Maximum number of Newton iterations.
+    full_output : bool, optional
+        If True, also return a tuple where the first element is the residual from
+        the root finding and the second is the number of iterations.
+    kwargs : dict, optional
+        Additional keyword arguments to pass to ``root`` such as ``maxiter_ls``,
+        ``alpha``.
 
     Returns
     -------
-    coords : ndarray, shape(k,3)
-        Coordinates mapped from inbasis to outbasis. Values of NaN will be returned
-        for coordinates where root finding did not succeed, possibly because the
-        coordinate is not in the plasma volume.
+    out : jnp.ndarray
+        Shape (k, 3).
+        Coordinates mapped from ``inbasis`` to ``outbasis``. Values of NaN will be
+        returned for coordinates where root finding did not succeed, possibly
+        because the coordinate is not in the plasma volume.
+    info : tuple
+        2 element tuple containing residuals and number of iterations
+        for each point. Only returned if ``full_output`` is True.
 
     """
+    check_posint(maxiter, allow_none=False)
+    errorif(
+        not np.isfinite(tol) or tol <= 0,
+        ValueError,
+        f"tol must be a positive float, got {tol}",
+    )
     inbasis = tuple(inbasis)
     outbasis = tuple(outbasis)
-    assert (
-        np.isfinite(maxiter) and maxiter > 0
-    ), f"maxiter must be a positive integer, got {maxiter}"
-    assert np.isfinite(tol) and tol > 0, f"tol must be a positive float, got {tol}"
+    params = setdefault(params, eq.params_dict)
 
-    basis_derivs = tuple([f"{X}_{d}" for X in inbasis for d in ("r", "t", "z")])
+    basis_derivs = tuple(f"{X}_{d}" for X in inbasis for d in ("r", "t", "z"))
     for key in basis_derivs:
-        assert (
-            key in data_index["desc.equilibrium.equilibrium.Equilibrium"]
-        ), f"don't have recipe to compute partial derivative {key}"
+        errorif(
+            key not in data_index["desc.equilibrium.equilibrium.Equilibrium"],
+            NotImplementedError,
+            f"don't have recipe to compute partial derivative {key}",
+        )
+
+    profiles = get_profiles(inbasis + basis_derivs, eq)
+
+    # TODO: make this work for permutations of in/out basis
+    if outbasis == ("rho", "theta", "zeta"):
+        if inbasis == ("rho", "alpha", "zeta"):
+            if "iota" in kwargs:
+                iota = kwargs.pop("iota")
+            else:
+                if profiles["iota"] is None:
+                    profiles["iota"] = eq.get_profile(["iota", "iota_r"], params=params)
+                iota = profiles["iota"].compute(Grid(coords, sort=False, jitable=True))
+            return _map_clebsch_coordinates(
+                coords=coords,
+                iota=iota,
+                L_lmn=params["L_lmn"],
+                L_basis=eq.L_basis,
+                guess=guess[:, 1] if guess is not None else None,
+                period=period[1] if period is not None else np.inf,
+                tol=tol,
+                maxiter=maxiter,
+                full_output=full_output,
+                **kwargs,
+            )
+        if inbasis == ("rho", "theta_PEST", "zeta"):
+            return _map_PEST_coordinates(
+                coords=coords,
+                L_lmn=params["L_lmn"],
+                L_basis=eq.L_basis,
+                guess=guess[:, 1] if guess is not None else None,
+                period=period[1] if period is not None else np.inf,
+                tol=tol,
+                maxiter=maxiter,
+                full_output=full_output,
+                **kwargs,
+            )
+
+    # do surface average to get iota once
+    if "iota" in profiles and profiles["iota"] is None:
+        profiles["iota"] = eq.get_profile(["iota", "iota_r"], params=params)
+        params["i_l"] = profiles["iota"].params
 
     rhomin = kwargs.pop("rhomin", tol / 10)
-    alpha = kwargs.pop("backtrack_frac", 0.1)
-    maxls = kwargs.pop("max_backtrack", 10)
-    assert len(kwargs) == 0, f"map_coordinates got unexpected kwargs: {kwargs.keys()}"
-    period = np.asarray(period)
-    coords = coords % period
+    period = np.asarray(setdefault(period, (np.inf, np.inf, np.inf)))
+    coords = _periodic(coords, period)
 
-    params = get_params(inbasis + basis_derivs, eq)
+    p = "desc.equilibrium.equilibrium.Equilibrium"
+    names = inbasis + basis_derivs + outbasis
+    deps = list(set(get_data_deps(names, obj=p) + list(names)))
 
     @functools.partial(jit, static_argnums=1)
     def compute(y, basis):
         grid = Grid(y, sort=False, jitable=True)
-        profiles = get_profiles(inbasis + basis_derivs, eq, grid, jitable=True)
-        # do surface average to get iota once
-        if "current" in profiles and profiles["current"] is not None:
-            profiles["iota"] = eq.get_profile("iota")
-        transforms = get_transforms(inbasis + basis_derivs, eq, grid, jitable=True)
-        data = compute_fun(eq, basis, params, transforms, profiles)
-        x = jnp.stack([data[k] for k in basis], axis=-1)
+        data = {}
+        if "iota" in deps:
+            data["iota"] = profiles["iota"].compute(grid, params=params["i_l"])
+        if "iota_r" in deps:
+            data["iota_r"] = profiles["iota"].compute(grid, dr=1, params=params["i_l"])
+        if "iota_rr" in deps:
+            data["iota_rr"] = profiles["iota"].compute(grid, dr=2, params=params["i_l"])
+        transforms = get_transforms(basis, eq, grid, jitable=True)
+        data = compute_fun(eq, basis, params, transforms, profiles, data)
+        x = jnp.array([data[k] for k in basis]).T
         return x
 
     @jit
-    def residual(y):
+    def residual(y, coords):
         xk = compute(y, inbasis)
-        r = xk % period - coords % period
-        return jnp.where(r > period / 2, -period + r, r)
+        return _fixup_residual(xk - coords, period)
 
     @jit
-    def jac(y):
+    def jac(y, coords):
         J = compute(y, basis_derivs)
-        J = J.reshape((-1, 3, 3))
+        J = J.reshape((3, 3))
         return J
 
     @jit
-    def fixup(y):
+    def fixup(y, *args):
         r, t, z = y.T
         # negative rho -> flip theta
         t = jnp.where(r < 0, (t + np.pi), t)
@@ -122,257 +190,296 @@ def map_coordinates(  # noqa: C901
         y = jnp.array([r, t, z]).T
         return y
 
-    # use least squares to avoid singular behavior, cheap for 3x3 systems
-    lstsq = jit(
-        jnp.vectorize(
-            lambda A, b: jnp.linalg.lstsq(A, b)[0], signature="(n,n),(n)->(n)"
-        )
-    )
-
     yk = guess
     if yk is None:
-        # nearest neighbor search on coarse grid for initial guess
-        yg = ConcentricGrid(eq.L_grid, eq.M_grid, eq.N_grid, eq.NFP).nodes
-        xg = compute(yg, inbasis)
-        idx = jnp.zeros(len(coords)).astype(int)
-        coords = jnp.asarray(coords)
-
-        def _distance_body(i, idx):
-            d = (coords[i] % period) - (xg % period)
-            d = jnp.where(d > period / 2, period - d, d)
-            distance = jnp.linalg.norm(d, axis=-1)
-            k = jnp.argmin(distance)
-            idx = put(idx, i, k)
-            return idx
-
-        idx = fori_loop(0, len(coords), _distance_body, idx)
-        yk = yg[idx]
-
-        # apply some heuristics based on common patterns
-        if "rho" in inbasis:
-            yk = put(yk.T, 0, coords[:, inbasis.index("rho")]).T
-        if "theta" in inbasis:
-            yk = put(yk.T, 1, coords[:, inbasis.index("theta")]).T
-        elif "theta_PEST" in inbasis:  # lambda is usually small
-            yk = put(yk.T, 1, coords[:, inbasis.index("theta_PEST")]).T
-        if "zeta" in inbasis:
-            yk = put(yk.T, 2, coords[:, inbasis.index("zeta")]).T
-        elif "phi" in inbasis:
-            yk = put(yk.T, 2, coords[:, inbasis.index("phi")]).T
+        yk = _initial_guess_heuristic(yk, coords, inbasis, eq, profiles)
+    if yk is None:
+        yk = _initial_guess_nn_search(coords, inbasis, eq, period, compute)
 
     yk = fixup(yk)
-    resk = residual(yk)
 
-    for i in range(maxiter):
-        if np.max(np.abs(resk)) < tol:
-            break
-        J = jac(yk)
-        d = lstsq(J, resk)
-        alphak = jnp.ones(yk.shape[0])
-        for j in range(maxls):
-            # backtracking line search
-            yt = fixup(yk - alphak[:, None] * d)
-            res = residual(yt)
-            if np.max(np.abs(res)) < np.max(np.abs(resk)):
-                yk = yt
-                resk = res
-                break
-            else:
-                # only reduce step size where needed
-                alphak = jnp.where(
-                    np.max(np.abs(res), axis=-1) > np.max(np.abs(resk), axis=-1),
-                    alpha * alphak,
-                    alphak,
-                )
-        else:
-            # if we haven't found a good step, try taking a bad one and
-            # hope the next one is better
-            yk = yt
-            resk = res
-
-    r, t, z = yk.T
-    res = jnp.max(jnp.abs(residual(yk)), axis=-1)
-    r = jnp.where(res > tol, jnp.nan, r)
-    t = jnp.where(res > tol, jnp.nan, t)
-    z = jnp.where(res > tol, jnp.nan, z)
-
-    yk = jnp.vstack([r, t, z]).T
+    vecroot = jit(
+        vmap(
+            lambda x0, *p: root(
+                residual,
+                x0,
+                jac=jac,
+                args=p,
+                fixup=fixup,
+                tol=tol,
+                maxiter=maxiter,
+                **kwargs,
+            )
+        )
+    )
+    # See description here
+    # https://github.com/PlasmaControl/DESC/pull/504#discussion_r1194172532
+    # except we make sure properly handle periodic coordinates.
+    yk, (res, niter) = vecroot(yk, coords)
 
     out = compute(yk, outbasis)
-
+    if full_output:
+        return out, (res, niter)
     return out
 
 
-def compute_theta_coords(eq, flux_coords, L_lmn=None, tol=1e-6, maxiter=20):
-    """Find geometric theta for given straight field line theta.
+def _initial_guess_heuristic(yk, coords, inbasis, eq, profiles):
+    # some qtys have obvious initial guess based on coords
+    # commonly, the desired coordinates are something like (radial, poloidal, toroidal)
+    radialish = {"rho", "psi"}
+    poloidalish = {"theta", "theta_PEST", "alpha"}
+    toroidalish = {"zeta", "phi"}
+
+    radial = list(set(inbasis).intersection(radialish))
+    poloidal = list(set(inbasis).intersection(poloidalish))
+    toroidal = list(set(inbasis).intersection(toroidalish))
+    if len(radial) != 1 or len(poloidal) != 1 or len(toroidal) != 1:
+        # no heuristics for other cases
+        return yk
+
+    rho = theta = zeta = None
+
+    radial = radial[0]
+    poloidal = poloidal[0]
+    toroidal = toroidal[0]
+    if radial == "rho":
+        rho = coords[:, inbasis.index("rho")]
+    elif radial == "psi":
+        rho = jnp.sqrt(coords[:, inbasis.index("psi")] / eq.Psi)
+
+    # omega usually small (zero for now)
+    zeta = coords[:, inbasis.index(toroidal)]
+
+    if poloidal == "theta" or poloidal == "theta_PEST":  # lambda usually small
+        theta = coords[:, inbasis.index(poloidal)]
+    elif poloidal == "alpha":
+        alpha = coords[:, inbasis.index("alpha")]
+        rho = jnp.atleast_1d(rho)
+        zero = jnp.zeros_like(rho)
+        grid = Grid(nodes=jnp.column_stack([rho, zero, zero]), sort=False, jitable=True)
+        iota = profiles["iota"].compute(grid)
+        theta = alpha + iota * zeta
+
+    yk = jnp.column_stack([rho, theta, zeta])
+    return yk
+
+
+def _initial_guess_nn_search(coords, inbasis, eq, period, compute):
+    # nearest neighbor search on dense grid
+    yg = ConcentricGrid(eq.L_grid, eq.M_grid, max(eq.N_grid, eq.M_grid)).nodes
+    xg = compute(yg, inbasis)
+    idx = jnp.zeros(len(coords)).astype(int)
+    coords = jnp.asarray(coords)
+
+    def _distance_body(i, idx):
+        d = _fixup_residual(coords[i] - xg, period)
+        distance = safenorm(d, axis=-1)
+        k = jnp.argmin(distance)
+        idx = put(idx, i, k)
+        return idx
+
+    idx = fori_loop(0, len(coords), _distance_body, idx)
+    return yg[idx]
+
+
+# TODO: decide later whether to assume given phi instead of zeta.
+def _map_PEST_coordinates(
+    coords,
+    L_lmn,
+    L_basis,
+    guess,
+    period=np.inf,
+    tol=1e-6,
+    maxiter=30,
+    full_output=False,
+    **kwargs,
+):
+    """Find θ (theta_DESC) for given straight field line ϑ (theta_PEST).
 
     Parameters
     ----------
-    eq : Equilibrium
-        Equilibrium to use
-    flux_coords : ndarray, shape(k,3)
-        2d array of flux coordinates [rho,theta*,zeta]. Each row is a different
-        point in space.
-    L_lmn : ndarray
-        spectral coefficients for lambda. Defaults to eq.L_lmn
+    coords : ndarray
+        Shape (k, 3).
+        Straight field line PEST coordinates [ρ, ϑ, ϕ]. Assumes ζ = ϕ.
+        Each row is a different point in space.
+    L_lmn : jnp.ndarray
+        Spectral coefficients for lambda.
+    L_basis : Basis
+        Spectral basis for lambda.
+    guess : jnp.ndarray
+        Shape (k, ).
+        Optional initial guess for the computational coordinates.
+    period : float
+        Assumed periodicity for ϑ.
+        Use ``np.inf`` to denote no periodicity.
     tol : float
         Stopping tolerance.
-    maxiter : int > 0
-        maximum number of Newton iterations
+    maxiter : int
+        Maximum number of Newton iterations.
+    full_output : bool, optional
+        If True, also return a tuple where the first element is the residual from
+        the root finding and the second is the number of iterations.
+    kwargs : dict, optional
+        Additional keyword arguments to pass to ``root_scalar`` such as ``maxiter_ls``,
+        ``alpha``.
 
     Returns
     -------
-    coords : ndarray, shape(k,3)
-        coordinates [rho,theta,zeta]. If Newton method doesn't converge for
-        a given coordinate nan will be returned for those values
+    out : ndarray
+        Shape (k, 3).
+        DESC computational coordinates [ρ, θ, ζ].
+    info : tuple
+        2 element tuple containing residuals and number of iterations for each point.
+        Only returned if ``full_output`` is True.
 
     """
-    if L_lmn is None:
-        L_lmn = eq.L_lmn
-    rho, theta_star, zeta = flux_coords.T
-    if maxiter <= 0:
-        raise ValueError(f"maxiter must be a positive integer, got{maxiter}")
-    if jnp.any(rho < 0):
-        raise ValueError("rho values must be positive")
+    # noqa: D202
 
-    # Note: theta* (also known as vartheta) is the poloidal straight field-line
-    # angle in PEST-like flux coordinates
+    # Root finding for θₖ such that r(θₖ) = ϑₖ(ρ, θₖ, ζ) − ϑ = 0.
+    def rootfun(theta, theta_PEST, rho, zeta):
+        nodes = jnp.array([rho.squeeze(), theta.squeeze(), zeta.squeeze()], ndmin=2)
+        A = L_basis.evaluate(nodes)
+        lmbda = A @ L_lmn
+        theta_PEST_k = theta + lmbda
+        return _fixup_residual(theta_PEST_k - theta_PEST, period).squeeze()
 
-    nodes = flux_coords.copy()
-    A0 = eq.L_basis.evaluate(nodes, (0, 0, 0))
-
-    # theta* = theta + lambda
-    lmbda = jnp.dot(A0, L_lmn)
-    k = 0
-
-    def cond_fun(nodes_k_lmbda):
-        nodes, k, lmbda = nodes_k_lmbda
-        theta_star_k = nodes[:, 1] + lmbda
-        err = theta_star - theta_star_k
-        return jnp.any(jnp.abs(err) > tol) & (k < maxiter)
-
-    # Newton method for root finding
-    def body_fun(nodes_k_lmbda):
-        nodes, k, lmbda = nodes_k_lmbda
-        A1 = eq.L_basis.evaluate(nodes, (0, 1, 0))
+    def jacfun(theta, theta_PEST, rho, zeta):
+        # Valid everywhere except θ such that θ+λ = k period where k ∈ ℤ.
+        nodes = jnp.array([rho.squeeze(), theta.squeeze(), zeta.squeeze()], ndmin=2)
+        A1 = L_basis.evaluate(nodes, (0, 1, 0))
         lmbda_t = jnp.dot(A1, L_lmn)
-        f = theta_star - nodes[:, 1] - lmbda
-        df = -1 - lmbda_t
-        nodes = put(nodes, Index[:, 1], nodes[:, 1] - f / df)
-        A0 = eq.L_basis.evaluate(nodes, (0, 0, 0))
-        lmbda = jnp.dot(A0, L_lmn)
-        k += 1
-        return (nodes, k, lmbda)
+        return 1 + lmbda_t.squeeze()
 
-    nodes, k, lmbda = jit(while_loop, static_argnums=(0, 1))(
-        cond_fun, body_fun, (nodes, k, lmbda)
+    def fixup(x, *args):
+        return _periodic(x, period)
+
+    vecroot = jit(
+        vmap(
+            lambda x0, *p: root_scalar(
+                rootfun,
+                x0,
+                jac=jacfun,
+                args=p,
+                fixup=fixup,
+                tol=tol,
+                maxiter=maxiter,
+                **kwargs,
+            )
+        )
     )
-    theta_star_k = nodes[:, 1] + lmbda
-    err = theta_star - theta_star_k
-    noconverge = jnp.abs(err) > tol
-    nodes = jnp.where(noconverge[:, np.newaxis], jnp.nan, nodes)
+    rho, theta_PEST, zeta = coords.T
+    theta, (res, niter) = vecroot(
+        # Assume λ=0 for default initial guess.
+        setdefault(guess, theta_PEST),
+        theta_PEST,
+        rho,
+        zeta,
+    )
+    out = jnp.column_stack([rho, jnp.atleast_1d(theta.squeeze()), zeta])
+    if full_output:
+        return out, (res, niter)
+    return out
 
-    return nodes
 
-
-def compute_flux_coords(
-    eq, real_coords, R_lmn=None, Z_lmn=None, tol=1e-6, maxiter=20, rhomin=1e-6
+# TODO: decide later whether to assume given phi instead of zeta.
+def _map_clebsch_coordinates(
+    coords,
+    iota,
+    L_lmn,
+    L_basis,
+    guess=None,
+    period=np.inf,
+    tol=1e-6,
+    maxiter=30,
+    full_output=False,
+    **kwargs,
 ):
-    """Find the (rho, theta, zeta) that correspond to given (R, phi, Z).
+    """Find θ for given Clebsch field line poloidal label α.
 
     Parameters
     ----------
-    eq : Equilibrium
-        Equilibrium to use
-    real_coords : ndarray, shape(k,3)
-        2D array of real space coordinates [R,phi,Z]. Each row is a different
-        point in space.
-    R_lmn, Z_lmn : ndarray
-        spectral coefficients for R and Z. Defaults to eq.R_lmn, eq.Z_lmn
+    coords : ndarray
+        Shape (k, 3).
+        Clebsch field line coordinates [ρ, α, ζ]. Assumes ζ = ϕ.
+        Each row is a different point in space.
+    iota : ndarray
+        Shape (k, ).
+        Rotational transform on each node.
+    L_lmn : jnp.ndarray
+        Spectral coefficients for lambda.
+    L_basis : Basis
+        Spectral basis for lambda.
+    guess : jnp.ndarray
+        Shape (k, ).
+        Optional initial guess for the computational coordinates.
+    period : float
+        Assumed periodicity for α.
+        Use ``np.inf`` to denote no periodicity.
     tol : float
-        Stopping tolerance. Iterations stop when sqrt((R-Ri)**2 + (Z-Zi)**2) < tol
-    maxiter : int > 0
-        maximum number of Newton iterations
-    rhomin : float
-        minimum allowable value of rho (to avoid singularity at rho=0)
+        Stopping tolerance.
+    maxiter : int
+        Maximum number of Newton iterations.
+    full_output : bool, optional
+        If True, also return a tuple where the first element is the residual from
+        the root finding and the second is the number of iterations.
+    kwargs : dict, optional
+        Additional keyword arguments to pass to ``root_scalar`` such as ``maxiter_ls``,
+        ``alpha``.
 
     Returns
     -------
-    flux_coords : ndarray, shape(k,3)
-        flux coordinates [rho,theta,zeta]. If Newton method doesn't converge for
-        a given coordinate (often because it is outside the plasma boundary),
-        nan will be returned for those values
+    out : ndarray
+        Shape (k, 3).
+        DESC computational coordinates [ρ, θ, ζ].
+    info : tuple
+        2 element tuple containing residuals and number of iterations for each point.
+        Only returned if ``full_output`` is True.
 
     """
-    if maxiter <= 0:
-        raise ValueError(f"maxiter must be a positive integer, got{maxiter}")
-    if R_lmn is None:
-        R_lmn = eq.R_lmn
-    if Z_lmn is None:
-        Z_lmn = eq.Z_lmn
+    # noqa: D202
 
-    R, phi, Z = real_coords.T
-    R = jnp.abs(R)
+    # Root finding for θₖ such that r(θₖ) = αₖ(ρ, θₖ, ζ) − α = 0.
+    def rootfun(theta, alpha, rho, zeta, iota):
+        nodes = jnp.array([rho.squeeze(), theta.squeeze(), zeta.squeeze()], ndmin=2)
+        A = L_basis.evaluate(nodes)
+        lmbda = A @ L_lmn
+        alpha_k = theta + lmbda - iota * zeta
+        return _fixup_residual(alpha_k - alpha, period).squeeze()
 
-    # nearest neighbor search on coarse grid for initial guess
-    nodes = ConcentricGrid(L=20, M=10, N=0).nodes
-    AR = eq.R_basis.evaluate(nodes)
-    AZ = eq.Z_basis.evaluate(nodes)
-    Rg = jnp.dot(AR, R_lmn)
-    Zg = jnp.dot(AZ, Z_lmn)
-    distance = (R[:, np.newaxis] - Rg) ** 2 + (Z[:, np.newaxis] - Zg) ** 2
-    idx = jnp.argmin(distance, axis=1)
+    def jacfun(theta, alpha, rho, zeta, iota):
+        # Valid everywhere except θ such that θ+λ = k period where k ∈ ℤ.
+        nodes = jnp.array([rho.squeeze(), theta.squeeze(), zeta.squeeze()], ndmin=2)
+        A1 = L_basis.evaluate(nodes, (0, 1, 0))
+        lmbda_t = jnp.dot(A1, L_lmn)
+        return 1 + lmbda_t.squeeze()
 
-    rhok = nodes[idx, 0]
-    thetak = nodes[idx, 1]
-    Rk = Rg[idx]
-    Zk = Zg[idx]
-    k = 0
+    def fixup(x, *args):
+        return _periodic(x, period)
 
-    def cond_fun(k_rhok_thetak_Rk_Zk):
-        k, rhok, thetak, Rk, Zk = k_rhok_thetak_Rk_Zk
-        return jnp.any(((R - Rk) ** 2 + (Z - Zk) ** 2) > tol**2) & (k < maxiter)
-
-    def body_fun(k_rhok_thetak_Rk_Zk):
-        k, rhok, thetak, Rk, Zk = k_rhok_thetak_Rk_Zk
-        nodes = jnp.array([rhok, thetak, phi]).T
-        ARr = eq.R_basis.evaluate(nodes, (1, 0, 0))
-        Rr = jnp.dot(ARr, R_lmn)
-        AZr = eq.Z_basis.evaluate(nodes, (1, 0, 0))
-        Zr = jnp.dot(AZr, Z_lmn)
-        ARt = eq.R_basis.evaluate(nodes, (0, 1, 0))
-        Rt = jnp.dot(ARt, R_lmn)
-        AZt = eq.Z_basis.evaluate(nodes, (0, 1, 0))
-        Zt = jnp.dot(AZt, Z_lmn)
-
-        tau = Rt * Zr - Rr * Zt
-        eR = R - Rk
-        eZ = Z - Zk
-        thetak += (Zr * eR - Rr * eZ) / tau
-        rhok += (Rt * eZ - Zt * eR) / tau
-        # negative rho -> rotate theta instead
-        thetak = jnp.where(
-            rhok < 0, (thetak + np.pi) % (2 * np.pi), thetak % (2 * np.pi)
+    vecroot = jit(
+        vmap(
+            lambda x0, *p: root_scalar(
+                rootfun,
+                x0,
+                jac=jacfun,
+                args=p,
+                fixup=fixup,
+                tol=tol,
+                maxiter=maxiter,
+                **kwargs,
+            )
         )
-        rhok = jnp.abs(rhok)
-        rhok = jnp.clip(rhok, rhomin, 1)
-        nodes = jnp.array([rhok, thetak, phi]).T
+    )
+    rho, alpha, zeta = coords.T
+    if guess is None:
+        # Assume λ=0 for default initial guess.
+        guess = alpha + iota * zeta
+    theta, (res, niter) = vecroot(guess, alpha, rho, zeta, iota)
 
-        AR = eq.R_basis.evaluate(nodes, (0, 0, 0))
-        Rk = jnp.dot(AR, R_lmn)
-        AZ = eq.Z_basis.evaluate(nodes, (0, 0, 0))
-        Zk = jnp.dot(AZ, Z_lmn)
-        k += 1
-        return (k, rhok, thetak, Rk, Zk)
-
-    k, rhok, thetak, Rk, Zk = while_loop(cond_fun, body_fun, (k, rhok, thetak, Rk, Zk))
-
-    noconverge = (R - Rk) ** 2 + (Z - Zk) ** 2 > tol**2
-    rho = jnp.where(noconverge, jnp.nan, rhok)
-    theta = jnp.where(noconverge, jnp.nan, thetak)
-    phi = jnp.where(noconverge, jnp.nan, phi)
-
-    return jnp.vstack([rho, theta, phi]).T
+    out = jnp.column_stack([rho, jnp.atleast_1d(theta.squeeze()), zeta])
+    if full_output:
+        return out, (res, niter)
+    return out
 
 
 def is_nested(eq, grid=None, R_lmn=None, Z_lmn=None, L_lmn=None, msg=None):
@@ -417,11 +524,7 @@ def is_nested(eq, grid=None, R_lmn=None, Z_lmn=None, L_lmn=None, msg=None):
     data = compute_fun(
         "desc.equilibrium.equilibrium.Equilibrium",
         "sqrt(g)_PEST",
-        params={
-            "R_lmn": R_lmn,
-            "Z_lmn": Z_lmn,
-            "L_lmn": L_lmn,
-        },
+        params={"R_lmn": R_lmn, "Z_lmn": Z_lmn, "L_lmn": L_lmn},
         transforms=transforms,
         profiles={},  # no profiles needed
     )
@@ -429,25 +532,18 @@ def is_nested(eq, grid=None, R_lmn=None, Z_lmn=None, L_lmn=None, msg=None):
     nested = jnp.all(
         jnp.sign(data["sqrt(g)_PEST"][0]) == jnp.sign(data["sqrt(g)_PEST"])
     )
-    if not nested:
-        if msg == "auto":
-            warnings.warn(
-                colored(
-                    "WARNING: Flux surfaces are no longer nested, exiting early. "
-                    + "Automatic continuation method failed, consider specifying "
-                    + "continuation steps manually",
-                    "yellow",
-                )
-            )
-        elif msg == "manual":
-            warnings.warn(
-                colored(
-                    "WARNING: Flux surfaces are no longer nested, exiting early."
-                    + "Consider taking smaller perturbation/resolution steps "
-                    + "or reducing trust radius",
-                    "yellow",
-                )
-            )
+    warnif(
+        not nested and msg is not None,
+        RuntimeWarning,
+        "Flux surfaces are no longer nested, exiting early. "
+        + {
+            "auto": "Automatic continuation method failed, consider specifying "
+            "continuation steps manually.",
+            "manual": "Consider taking smaller perturbation/resolution steps "
+            "or reducing trust radius.",
+            None: "",
+        }[msg],
+    )
     return nested
 
 
@@ -505,8 +601,8 @@ def to_sfl(
     M_grid = M_grid or int(2 * M)
     N_grid = N_grid or int(2 * N)
 
-    grid = ConcentricGrid(L_grid, M_grid, N_grid, node_pattern="ocs")
-    bdry_grid = LinearGrid(M=M, N=N, rho=1.0)
+    grid = ConcentricGrid(L_grid, M_grid, N_grid, node_pattern="ocs", NFP=eq.NFP)
+    bdry_grid = LinearGrid(M=M, N=N, rho=1.0, NFP=eq.NFP)
 
     toroidal_coords = eq.compute(["R", "Z", "lambda"], grid=grid)
     theta = grid.nodes[:, 1]
@@ -566,3 +662,129 @@ def to_sfl(
     eq_sfl.L_lmn = L_lmn_sfl
 
     return eq_sfl
+
+
+def get_rtz_grid(
+    eq,
+    radial,
+    poloidal,
+    toroidal,
+    coordinates,
+    period=(np.inf, np.inf, np.inf),
+    jitable=True,
+    **kwargs,
+):
+    """Return DESC grid in (rho, theta, zeta) coordinates from given coordinates.
+
+    Create a tensor-product grid from the given coordinates, and return the same
+    grid in DESC coordinates.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Equilibrium on which to perform coordinate mapping.
+    radial : ndarray
+        Sorted unique radial coordinates.
+    poloidal : ndarray
+        Sorted unique poloidal coordinates.
+    toroidal : ndarray
+        Sorted unique toroidal coordinates.
+    coordinates : str
+        Input coordinates that are specified by the arguments, respectively.
+        raz : rho, alpha, zeta
+        rvp : rho, theta_PEST, phi
+        rtz : rho, theta, zeta
+    period : tuple of float
+        Assumed periodicity of the given coordinates.
+        Use ``np.inf`` to denote no periodicity.
+    jitable : bool, optional
+        If false the returned grid has additional attributes.
+        Required to be false to retain nodes at magnetic axis.
+    kwargs
+        Additional parameters to supply to the coordinate mapping function.
+        See ``desc.equilibrium.coords.map_coordinates``.
+
+    Returns
+    -------
+    desc_grid : Grid
+        DESC coordinate grid for the given coordinates.
+
+    """
+    grid = Grid.create_meshgrid(
+        [radial, poloidal, toroidal], coordinates=coordinates, period=period
+    )
+    if "iota" in kwargs:
+        kwargs["iota"] = grid.expand(jnp.atleast_1d(kwargs["iota"]))
+    inbasis = {
+        "r": "rho",
+        "t": "theta",
+        "v": "theta_PEST",
+        "a": "alpha",
+        "z": "zeta",
+        "p": "phi",
+    }
+    rtz_nodes = map_coordinates(
+        eq,
+        grid.nodes,
+        inbasis=[inbasis[char] for char in coordinates],
+        outbasis=("rho", "theta", "zeta"),
+        period=period,
+        **kwargs,
+    )
+    idx = {}
+    if inbasis[coordinates[0]] == "rho":
+        # Should work as long as inbasis radial coordinate is
+        # single variable, monotonic increasing function of rho.
+        idx["_unique_rho_idx"] = grid.unique_rho_idx
+        idx["_inverse_rho_idx"] = grid.inverse_rho_idx
+    desc_grid = Grid(
+        nodes=rtz_nodes,
+        coordinates="rtz",
+        source_grid=grid,
+        sort=False,
+        jitable=jitable,
+        **idx,
+    )
+    return desc_grid
+
+
+# TODO: deprecated, remove eventually
+def compute_theta_coords(
+    eq, flux_coords, L_lmn=None, tol=1e-6, maxiter=20, full_output=False, **kwargs
+):
+    """Find θ (theta_DESC) for given straight field line ϑ (theta_PEST).
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Equilibrium to use.
+    flux_coords : ndarray
+        Shape (k, 3).
+        Straight field line PEST coordinates [ρ, ϑ, ϕ]. Assumes ζ = ϕ.
+        Each row is a different point in space.
+    L_lmn : ndarray
+        Spectral coefficients for lambda. Defaults to ``eq.L_lmn``.
+    tol : float
+        Stopping tolerance.
+    maxiter : int
+        Maximum number of Newton iterations.
+    full_output : bool, optional
+        If True, also return a tuple where the first element is the residual from
+        the root finding and the second is the number of iterations.
+    kwargs : dict, optional
+        Additional keyword arguments to pass to ``root_scalar`` such as
+        ``maxiter_ls``, ``alpha``.
+
+    Returns
+    -------
+    coords : ndarray
+        Shape (k, 3).
+        DESC computational coordinates [ρ, θ, ζ].
+    info : tuple
+        2 element tuple containing residuals and number of iterations for each
+        point. Only returned if ``full_output`` is True.
+
+    """
+    return eq.compute_theta_coords(
+        flux_coords, L_lmn, tol, maxiter, full_output, **kwargs
+    )

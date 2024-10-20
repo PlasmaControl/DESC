@@ -31,7 +31,7 @@ class _ExactValueProfile:
         )
         self.output = {dr: data[name] for dr, name in enumerate(names)}
 
-    def compute(self, params, dr, *args, **kwargs):
+    def compute(self, grid, params, dr, *args, **kwargs):
         return self.output.get(dr, np.nan)
 
 
@@ -43,8 +43,7 @@ class TestConstrainCurrent:
     """
 
     @pytest.mark.unit
-    @pytest.mark.solve
-    def test_iota_to_current_and_back(self, DSHAPE):
+    def test_iota_to_current_and_back(self):
         """Test we can recover the rotational transform in simple cases.
 
         Given ``iota``, compute ``I(iota)`` as defined in equation 6.
@@ -65,8 +64,7 @@ class TestConstrainCurrent:
         while names[-1] + "r" in data_index["desc.equilibrium.equilibrium.Equilibrium"]:
             names += [names[-1] + "r"]
 
-        def test(stellarator, grid_type):
-            eq = desc.io.load(load_from=str(stellarator["desc_h5_path"]))[-1]
+        def test(eq, grid_type):
             kwargs = {"L": eq.L_grid, "M": eq.M_grid, "N": eq.N_grid, "NFP": eq.NFP}
             if grid_type != QuadratureGrid:
                 kwargs["sym"] = eq.sym
@@ -80,7 +78,7 @@ class TestConstrainCurrent:
             # Compute rotational transform directly from the power series which
             # defines it.
             desired = {
-                name: profiles[names[0]].compute(params=params["i_l"], dr=dr)
+                name: profiles[names[0]].compute(grid, params=params["i_l"], dr=dr)
                 for dr, name in enumerate(names)
             }
             # Compute rotational transform using the below toroidal current,
@@ -119,14 +117,16 @@ class TestConstrainCurrent:
                     err_msg=name,
                 )
 
+        eq = desc.examples.get("DSHAPE")
+        with pytest.warns(UserWarning, match="Reducing radial"):
+            eq.change_resolution(3, 3, 0, 6, 6, 0)
         # Only makes sense to test on configurations with fixed iota profiles.
-        test(DSHAPE, QuadratureGrid)
-        test(DSHAPE, ConcentricGrid)
-        test(DSHAPE, LinearGrid)
+        test(eq, QuadratureGrid)
+        test(eq, ConcentricGrid)
+        test(eq, LinearGrid)
 
     @pytest.mark.unit
-    @pytest.mark.solve
-    def test_current_to_iota_and_back(self, HELIOTRON_vac):
+    def test_current_to_iota_and_back(self):
         """Test we can recover the enclosed net toroidal current in simple cases.
 
         Given ``I``, compute ``iota(I)`` as defined in equation 18.
@@ -147,8 +147,7 @@ class TestConstrainCurrent:
         while names[-1] + "r" in data_index["desc.equilibrium.equilibrium.Equilibrium"]:
             names += [names[-1] + "r"]
 
-        def test(stellarator, grid_type):
-            eq = desc.io.load(load_from=str(stellarator["desc_h5_path"]))[-1]
+        def test(eq, grid_type):
             kwargs = {"L": eq.L_grid, "M": eq.M_grid, "N": eq.N_grid, "NFP": eq.NFP}
             if grid_type != QuadratureGrid:
                 kwargs["sym"] = eq.sym
@@ -162,7 +161,7 @@ class TestConstrainCurrent:
             # Compute toroidal current directly from the power series which
             # defines it. Recall that vacuum objective sets a current profile.
             desired = {
-                name: profiles[names[0]].compute(params=params["c_l"], dr=dr)
+                name: profiles[names[0]].compute(grid, params=params["c_l"], dr=dr)
                 for dr, name in enumerate(names)
             }
             # Compute toroidal current using the below rotational transform,
@@ -192,6 +191,9 @@ class TestConstrainCurrent:
                 )
 
         # Only makes sense to test on configurations with fixed current profiles.
-        test(HELIOTRON_vac, QuadratureGrid)
-        test(HELIOTRON_vac, ConcentricGrid)
-        test(HELIOTRON_vac, LinearGrid)
+        eq = desc.examples.get("ESTELL")
+        with pytest.warns(UserWarning, match="Reducing radial"):
+            eq.change_resolution(3, 3, 3, 6, 6, 6)
+        test(eq, QuadratureGrid)
+        test(eq, ConcentricGrid)
+        test(eq, LinearGrid)

@@ -1,35 +1,48 @@
 """Classes defining objectives for equilibrium and optimization."""
 
 from ._bootstrap import BootstrapRedlConsistency
+from ._coils import (
+    CoilArclengthVariance,
+    CoilCurrentLength,
+    CoilCurvature,
+    CoilLength,
+    CoilSetLinkingNumber,
+    CoilSetMinDistance,
+    CoilTorsion,
+    PlasmaCoilSetMinDistance,
+    QuadraticFlux,
+    ToroidalFlux,
+)
 from ._equilibrium import (
     CurrentDensity,
     Energy,
     ForceBalance,
+    ForceBalanceAnisotropic,
     HelicalForceBalance,
     RadialForceBalance,
 )
-from ._generic import (
-    GenericObjective,
-    ObjectiveFromUser,
-    RotationalTransform,
-    ToroidalCurrent,
-)
+from ._free_boundary import BoundaryError, VacuumBoundaryError
+from ._generic import GenericObjective, LinearObjectiveFromUser, ObjectiveFromUser
 from ._geometry import (
     AspectRatio,
     BScaleLength,
     Elongation,
+    GoodCoordinates,
     MeanCurvature,
     PlasmaVesselDistance,
     PrincipalCurvature,
     Volume,
 )
-from ._qs import (
+from ._omnigenity import (
     Isodynamicity,
+    Omnigenity,
     QuasisymmetryBoozer,
     QuasisymmetryTripleProduct,
     QuasisymmetryTwoTerm,
 )
-from ._stability import MagneticWell, MercierStability
+from ._power_balance import FusionPower, HeatingPowerISS04
+from ._profiles import Pressure, RotationalTransform, Shear, ToroidalCurrent
+from ._stability import BallooningStability, MagneticWell, MercierStability
 from .getters import (
     get_equilibrium_objective,
     get_fixed_axis_constraints,
@@ -42,21 +55,36 @@ from .linear_objectives import (
     AxisZSelfConsistency,
     BoundaryRSelfConsistency,
     BoundaryZSelfConsistency,
+    FixAnisotropy,
     FixAtomicNumber,
     FixAxisR,
     FixAxisZ,
     FixBoundaryR,
     FixBoundaryZ,
+    FixCoilCurrent,
     FixCurrent,
+    FixCurveRotation,
+    FixCurveShift,
     FixElectronDensity,
     FixElectronTemperature,
     FixIonTemperature,
     FixIota,
     FixLambdaGauge,
+    FixModeLambda,
     FixModeR,
     FixModeZ,
+    FixNearAxisLambda,
+    FixNearAxisR,
+    FixNearAxisZ,
+    FixOmniBmax,
+    FixOmniMap,
+    FixOmniWell,
+    FixParameters,
     FixPressure,
     FixPsi,
+    FixSheetCurrent,
+    FixSumCoilCurrent,
+    FixSumModesLambda,
     FixSumModesR,
     FixSumModesZ,
     FixThetaSFL,

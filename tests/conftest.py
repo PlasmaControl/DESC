@@ -1,28 +1,33 @@
 """Test fixtures for computing equilibria etc."""
 
 import os
-import sys
-import traceback
-import warnings
 
 import h5py
+import jax
 import numpy as np
 import pytest
 from netCDF4 import Dataset
 
 from desc.__main__ import main
+from desc.coils import (
+    CoilSet,
+    FourierPlanarCoil,
+    FourierRZCoil,
+    FourierXYZCoil,
+    MixedCoilSet,
+    SplineXYZCoil,
+)
+from desc.compute import rpz2xyz_vec
 from desc.equilibrium import EquilibriaFamily, Equilibrium
+from desc.examples import get
+from desc.grid import LinearGrid
 from desc.vmec import VMECIO
 
 
-# print full tracebacks to help find sources of warnings
-def _warn_with_traceback(message, category, filename, lineno, file=None, line=None):
-    log = file if hasattr(file, "write") else sys.stderr
-    traceback.print_stack(file=log)
-    log.write(warnings.formatwarning(message, category, filename, lineno, line))
-
-
-warnings.showwarning = _warn_with_traceback
+@pytest.fixture(scope="class", autouse=True)
+def clear_caches_before():
+    """Automatically run before each test to clear caches and reduce OOM issues."""
+    jax.clear_caches()
 
 
 @pytest.fixture(scope="session")
@@ -30,38 +35,6 @@ def TmpDir(tmpdir_factory):
     """Create a temporary directory to store testing files."""
     dir_path = tmpdir_factory.mktemp("test_results")
     return dir_path
-
-
-@pytest.fixture(scope="session")
-def SOLOVEV_vac(tmpdir_factory):
-    """Run SOLOVEV vacuum example."""
-    input_path = ".//tests//inputs//SOLOVEV_vac"
-    output_dir = tmpdir_factory.mktemp("result")
-    desc_h5_path = output_dir.join("SOLOVEV_vac_out.h5")
-    desc_nc_path = output_dir.join("SOLOVEV_vac_out.nc")
-    vmec_nc_path = ".//tests//inputs//wout_SOLOVEV_vac.nc"
-    booz_nc_path = output_dir.join("SOLOVEV_vac_bx.nc")
-
-    cwd = os.path.dirname(__file__)
-    exec_dir = os.path.join(cwd, "..")
-    input_filename = os.path.join(exec_dir, input_path)
-
-    print("Running SOLOVEV vacuum test.")
-    print("exec_dir=", exec_dir)
-    print("cwd=", cwd)
-
-    args = ["-o", str(desc_h5_path), input_filename, "--numpy", "-vv"]
-    with pytest.warns(UserWarning, match="Left handed coordinates"):
-        main(args)
-
-    SOLOVEV_vac_out = {
-        "input_path": input_path,
-        "desc_h5_path": desc_h5_path,
-        "desc_nc_path": desc_nc_path,
-        "vmec_nc_path": vmec_nc_path,
-        "booz_nc_path": booz_nc_path,
-    }
-    return SOLOVEV_vac_out
 
 
 @pytest.fixture(scope="session")
@@ -189,24 +162,6 @@ def HELIOTRON(tmpdir_factory):
 
 
 @pytest.fixture(scope="session")
-def HELIOTRON_ex(tmpdir_factory):
-    """Saved HELIOTRON fixed rotational transform example."""
-    input_path = ".//tests//inputs//HELIOTRON"
-    output_dir = tmpdir_factory.mktemp("result")
-    desc_h5_path = ".//desc//examples//HELIOTRON_output.h5"
-    vmec_nc_path = ".//tests//inputs//wout_HELIOTRON.nc"
-    booz_nc_path = output_dir.join("HELIOTRON_bx.nc")
-
-    HELIOTRON_out = {
-        "input_path": input_path,
-        "desc_h5_path": desc_h5_path,
-        "vmec_nc_path": vmec_nc_path,
-        "booz_nc_path": booz_nc_path,
-    }
-    return HELIOTRON_out
-
-
-@pytest.fixture(scope="session")
 def HELIOTRON_vac(tmpdir_factory):
     """Run HELIOTRON vacuum (vacuum) example."""
     input_path = ".//tests//inputs//HELIOTRON_vacuum"
@@ -225,7 +180,7 @@ def HELIOTRON_vac(tmpdir_factory):
     print("cwd=", cwd)
 
     args = ["-o", str(desc_h5_path), input_filename, "-vv"]
-    with pytest.warns(UserWarning, match="Vacuum objective does not use any profiles"):
+    with pytest.warns(UserWarning, match="Vacuum objective assumes 0 pressure"):
         main(args)
 
     HELIOTRON_vacuum_out = {
@@ -236,64 +191,6 @@ def HELIOTRON_vac(tmpdir_factory):
         "booz_nc_path": booz_nc_path,
     }
     return HELIOTRON_vacuum_out
-
-
-@pytest.fixture(scope="session")
-def HELIOTRON_vac2(tmpdir_factory):
-    """Run HELIOTRON vacuum (fixed current) example."""
-    input_path = ".//tests//inputs//HELIOTRON_vacuum2"
-    output_dir = tmpdir_factory.mktemp("result")
-    desc_h5_path = output_dir.join("HELIOTRON_vacuum2_out.h5")
-    desc_nc_path = output_dir.join("HELIOTRON_vacuum2_out.nc")
-    vmec_nc_path = ".//tests//inputs//wout_HELIOTRON_vacuum2.nc"
-    booz_nc_path = output_dir.join("HELIOTRON_vacuum2_bx.nc")
-
-    cwd = os.path.dirname(__file__)
-    exec_dir = os.path.join(cwd, "..")
-    input_filename = os.path.join(exec_dir, input_path)
-
-    print("Running HELIOTRON vacuum (fixed current) test.")
-    print("exec_dir=", exec_dir)
-    print("cwd=", cwd)
-
-    args = ["-o", str(desc_h5_path), input_filename, "-vv"]
-    main(args)
-
-    HELIOTRON_vacuum2_out = {
-        "input_path": input_path,
-        "desc_h5_path": desc_h5_path,
-        "desc_nc_path": desc_nc_path,
-        "vmec_nc_path": vmec_nc_path,
-        "booz_nc_path": booz_nc_path,
-    }
-    return HELIOTRON_vacuum2_out
-
-
-@pytest.fixture(scope="session")
-def precise_QH(tmpdir_factory):
-    """Fun initial condition for precise QH optimization."""
-    input_path = ".//tests//inputs//precise_QH"
-    output_dir = tmpdir_factory.mktemp("result")
-    initial_h5_path = output_dir.join("precise_QH_output.h5")
-    truth_path = ".//tests//inputs//precise_QH_step0.h5"
-
-    cwd = os.path.dirname(__file__)
-    exec_dir = os.path.join(cwd, "..")
-    input_filename = os.path.join(exec_dir, input_path)
-
-    print("Running precise QH test.")
-    print("exec_dir=", exec_dir)
-    print("cwd=", cwd)
-
-    args = ["-o", str(initial_h5_path), input_filename, "-vv"]
-    main(args)
-
-    precise_QH_out = {
-        "input_path": input_path,
-        "desc_h5_path": initial_h5_path,
-        "output_path": truth_path,
-    }
-    return precise_QH_out
 
 
 @pytest.fixture(scope="session")
@@ -323,14 +220,85 @@ def DummyStellarator(tmpdir_factory):
             ],
         ),
         "axis": np.array([[-1, 0, -0.2], [0, 3.4, 0], [1, 0.2, 0]]),
-        "objective": "force",
-        "optimizer": "lsq-exact",
     }
     eq = Equilibrium(**inputs)
     eq.save(output_path)
 
     DummyStellarator_out = {"output_path": output_path}
     return DummyStellarator_out
+
+
+@pytest.fixture(scope="session")
+def DummyCoilSet(tmpdir_factory):
+    """Create and save a dummy coil set for testing."""
+    output_dir = tmpdir_factory.mktemp("result")
+    output_path_sym = output_dir.join("DummyCoilSet_sym.h5")
+    output_path_asym = output_dir.join("DummyCoilSet_asym.h5")
+
+    eq = get("precise_QH")
+    minor_radius = eq.compute("a")["a"]
+
+    # CoilSet with symmetry
+    num_coils = 3  # number of unique coils per half field period
+    grid = LinearGrid(rho=[0.0], M=0, zeta=2 * num_coils, NFP=eq.NFP * (eq.sym + 1))
+    with pytest.warns(UserWarning):  # because eq.NFP != grid.NFP
+        data_center = eq.axis.compute("x", grid=grid, basis="xyz")
+        data_normal = eq.compute("e^zeta", grid=grid)
+    centers = data_center["x"]
+    normals = rpz2xyz_vec(data_normal["e^zeta"], phi=grid.nodes[:, 2])
+    coils = []
+    for k in range(1, 2 * num_coils + 1, 2):
+        coil = FourierPlanarCoil(
+            current=1e6,
+            center=centers[k, :],
+            normal=normals[k, :],
+            r_n=[0, minor_radius + 0.5, 0],
+        )
+        coils.append(coil)
+    coilset_sym = CoilSet(coils, NFP=eq.NFP, sym=eq.sym)
+    coilset_sym.save(output_path_sym)
+
+    # equivalent CoilSet without symmetry
+    coilset_asym = CoilSet.from_symmetry(coilset_sym, NFP=eq.NFP, sym=eq.sym)
+    coilset_asym.save(output_path_asym)
+
+    DummyCoilSet_out = {
+        "output_path_sym": output_path_sym,
+        "output_path_asym": output_path_asym,
+    }
+    return DummyCoilSet_out
+
+
+@pytest.fixture(scope="session")
+def DummyMixedCoilSet(tmpdir_factory):
+    """Create and save a dummy mixed coil set for testing."""
+    output_dir = tmpdir_factory.mktemp("result")
+    output_path = output_dir.join("DummyMixedCoilSet.h5")
+
+    tf_coil = FourierPlanarCoil(current=3, center=[2, 0, 0], normal=[0, 1, 0], r_n=[1])
+    tf_coil.rotate(angle=np.pi / 4)
+    tf_coilset = CoilSet(tf_coil, NFP=2, sym=True)
+
+    vf_coil = FourierRZCoil(current=-1, R_n=3, Z_n=-1)
+    vf_coilset = CoilSet.linspaced_linear(
+        vf_coil, displacement=[0, 0, 2], n=3, endpoint=True
+    )
+    xyz_coil = FourierXYZCoil(current=2)
+    phi = 2 * np.pi * np.linspace(0, 1, 20, endpoint=True) ** 2
+    spline_coil = SplineXYZCoil(
+        current=1,
+        X=np.cos(phi),
+        Y=np.sin(phi),
+        Z=np.zeros_like(phi),
+        knots=np.linspace(0, 2 * np.pi, len(phi)),
+    )
+    full_coilset = MixedCoilSet(
+        (tf_coilset, vf_coilset, xyz_coil, spline_coil), check_intersection=False
+    )
+
+    full_coilset.save(output_path)
+    DummyMixedCoilSet_out = {"output_path": output_path}
+    return DummyMixedCoilSet_out
 
 
 @pytest.fixture(scope="session")
@@ -367,3 +335,22 @@ def VMEC_save(SOLOVEV, tmpdir_factory):
     )
     desc = Dataset(str(SOLOVEV["desc_nc_path"]), mode="r")
     return vmec, desc
+
+
+@pytest.fixture(scope="session")
+def VMEC_save_asym(tmpdir_factory):
+    """Save an asymmetric equilibrium in VMEC netcdf format for comparison."""
+    tmpdir = tmpdir_factory.mktemp("asym_wout")
+    filename = tmpdir.join("wout_HELIO_asym_desc.nc")
+    vmec = Dataset("./tests/inputs/wout_HELIOTRON_asym_NTHETA50_NZETA100.nc", mode="r")
+    eq = Equilibrium.load("./tests/inputs/HELIO_asym.h5")
+    VMECIO.save(
+        eq,
+        filename,
+        surfs=vmec.variables["ns"][:],
+        verbose=0,
+        M_nyq=round(np.max(vmec.variables["xm_nyq"][:])),
+        N_nyq=round(np.max(vmec.variables["xn_nyq"][:]) / eq.NFP),
+    )
+    desc = Dataset(filename, mode="r")
+    return vmec, desc, eq

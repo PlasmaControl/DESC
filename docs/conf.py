@@ -42,7 +42,7 @@ extensions = [
     "sphinx.ext.coverage",
     "sphinx.ext.intersphinx",
     "sphinx.ext.mathjax",
-    "sphinx.ext.viewcode",
+    "sphinx_github_style",
     "sphinx.ext.githubpages",
     "nbsphinx",
     "sphinx.ext.napoleon",
@@ -50,6 +50,12 @@ extensions = [
     "sphinxarg.ext",
     "sphinx_copybutton",
 ]
+# options for sphinx_github_style
+top_level = "desc"
+linkcode_blob = "head"
+linkcode_url = r"https://github.com/PlasmaControl/DESC"
+linkcode_link_text = "Source"
+
 # numpydoc_class_members_toctree = False
 # Napoleon settings
 napoleon_google_docstring = False

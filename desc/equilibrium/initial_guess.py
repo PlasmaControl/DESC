@@ -1,19 +1,26 @@
 """Functions for computing initial guesses for coordinate surfaces."""
 
 import os
+import warnings
 
 import numpy as np
 
 from desc.backend import fori_loop, jit, jnp, put
 from desc.basis import zernike_radial
 from desc.geometry import FourierRZCurve, Surface
-from desc.grid import Grid
+from desc.grid import Grid, _Grid
 from desc.io import load
+from desc.objectives import (
+    FixThetaSFL,
+    GoodCoordinates,
+    ObjectiveFunction,
+    get_fixed_boundary_constraints,
+)
 from desc.transform import Transform
-from desc.utils import copy_coeffs
+from desc.utils import copy_coeffs, warnif
 
 
-def set_initial_guess(eq, *args):  # noqa: C901 - FIXME: simplify this
+def set_initial_guess(eq, *args, ensure_nested=True):  # noqa: C901 - FIXME: simplify
     """Set the initial guess for the flux surfaces, eg R_lmn, Z_lmn, L_lmn.
 
     Parameters
@@ -31,6 +38,10 @@ def set_initial_guess(eq, *args):  # noqa: C901 - FIXME: simplify this
             optionally lambda) at fixed flux coordinates. All arrays should have the
             same length. Optionally, an ndarray of shape(k,3) may be passed instead
             of a grid.
+    ensure_nested : bool
+        If True, and the default initial guess does not produce nested surfaces,
+        run a small optimization problem to attempt to refine initial guess to improve
+        coordinate mapping.
 
     Examples
     --------
@@ -90,16 +101,14 @@ def set_initial_guess(eq, *args):  # noqa: C901 - FIXME: simplify this
                 eq.Rb_lmn,
                 eq.surface.R_basis,
                 axisR,
-                "lcfs",
-                coord,
+                coord=coord,
             )
             eq.Z_lmn = _initial_guess_surface(
                 eq.Z_basis,
                 eq.Zb_lmn,
                 eq.surface.Z_basis,
                 axisZ,
-                "lcfs",
-                coord,
+                coord=coord,
             )
         else:
             raise ValueError(
@@ -212,6 +221,33 @@ def set_initial_guess(eq, *args):  # noqa: C901 - FIXME: simplify this
 
         else:
             raise ValueError("Can't initialize equilibrium from args {}.".format(args))
+
+    if ensure_nested and not eq.is_nested():
+        warnings.warn(
+            "Surfaces from initial guess are not nested, attempting to refine "
+            + "coordinates. This may take a few moments."
+        )
+        obj = ObjectiveFunction(GoodCoordinates(eq))
+        constraints = get_fixed_boundary_constraints(eq) + (FixThetaSFL(eq),)
+        eq.solve(
+            objective=obj,
+            constraints=constraints,
+            ftol=0,
+            xtol=0,
+            gtol=1e-8,
+            verbose=0,
+            optimizer="fmintr-bfgs",
+        )
+        warnif(
+            not eq.is_nested(),
+            UserWarning,
+            "Surfaces still not nested after refinement. This is possibly because "
+            + "the boundary contains self-intersections or other singularities, or "
+            + "because the refinement requires more iterations. You may need to "
+            + "manually adjust the initial guess or do further refinement using the "
+            + "GoodCoordinates objective.",
+        )
+
     return eq
 
 
@@ -265,12 +301,15 @@ def _initial_guess_surface(x_basis, b_lmn, b_basis, axis=None, mode=None, coord=
         # first do all the m != 0 modes, easiest since no special logic needed
         def body(k, x_lmn):
             l, m, n = b_modes[k]
-            scale = zernike_radial(coord, abs(m), m)
+            scale = scales[k]
             # index of basis mode with lowest radial power (l = |m|)
             mask0 = (x_modes == jnp.array([abs(m), m, n])).all(axis=1)
             x_lmn = jnp.where(mask0, b_lmn[k] / scale, x_lmn)
             return x_lmn
 
+        # Get scale values for all modes
+        m_values = b_modes[:, 1]
+        scales = zernike_radial(coord, abs(m_values), m_values)
         x_lmn = fori_loop(0, b_basis.num_modes, body, x_lmn)
 
         # now overwrite stuff to deal with the axis
@@ -295,7 +334,7 @@ def _initial_guess_surface(x_basis, b_lmn, b_basis, axis=None, mode=None, coord=
         def body(k, x_lmn):
             l, m, n = b_modes[k]
             mask0 = (x_modes == jnp.array([l, m, n])).all(axis=1)
-            x_lmn = jnp.where(x_lmn, mask0, b_lmn[k], x_lmn)
+            x_lmn = jnp.where(mask0, b_lmn[k], x_lmn)
             return x_lmn
 
         x_lmn = fori_loop(0, b_basis.num_modes, body, x_lmn)
@@ -324,7 +363,7 @@ def _initial_guess_points(nodes, x, x_basis):
         Vector of flux surface coefficients associated with x_basis.
 
     """
-    if not isinstance(nodes, Grid):
+    if not isinstance(nodes, _Grid):
         nodes = Grid(nodes, sort=False)
     transform = Transform(nodes, x_basis, build=False, build_pinv=True)
     x_lmn = transform.fit(x)

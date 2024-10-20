@@ -1,13 +1,11 @@
-To build the documentation locally, from the DESC directory:
+To build the documentation locally, install the developer requirements and run from the DESC directory:
 
 .. code-block:: sh
 
     cd docs
-    pip install sphinx
-    pip install sphinx-rtd-theme
-    pip install sphinx-argparse
+    conda install -c conda-forge pandoc
     make html
 
 will build the documentation in the _build/html/ folder of the docs folder.
 
-To build the pdf, type ``make pdf`` from the docs/ directory.
+To build the pdf, type ``make latexpdf`` from the docs/ directory.

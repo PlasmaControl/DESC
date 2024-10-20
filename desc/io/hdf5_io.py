@@ -1,10 +1,12 @@
 """Classes for reading and writing HDF5 files."""
 
+import numbers
 import pydoc
 import warnings
 
 import h5py
 import numpy as np
+from termcolor import colored
 
 from .core_io import IO, Reader, Writer
 
@@ -115,7 +117,7 @@ class hdf5Reader(hdf5IO, Reader):
         ----------
         obj : python object instance
             object must have _io_attrs_ attribute to have attributes read and loaded
-        where : None or file insance
+        where : None or file instance
             specifies where to read obj from
 
         """
@@ -123,7 +125,25 @@ class hdf5Reader(hdf5IO, Reader):
         for attr in obj._io_attrs_:
             if attr not in loc.keys():
                 warnings.warn(
-                    "Save attribute '{}' was not loaded.".format(attr), RuntimeWarning
+                    colored(
+                        "\n"
+                        f"The object attribute '{attr}' was not loaded from the file.\n"
+                        "This is likely because the file containing "
+                        f"'{obj.__class__.__name__}' was created before '{attr}' "
+                        f"became an attribute of objects of class '{obj.__class__}'.\n"
+                        "The user may verify that a default value has been set.\n"
+                        "This warning will persist until the file is saved with the "
+                        "new object.\n"
+                        "\n"
+                        "Note to developers: Add 'def _set_up(self)' as a method to "
+                        f"class '{obj.__class__}'\n"
+                        "(or the superclass where this new attribute is assigned) that "
+                        f"assigns a value to '{attr}'.\n"
+                        "This method is called automatically when a file is loaded.\n"
+                        "Recall that the testing suite will fail on warnings.",
+                        "yellow",
+                    ),
+                    RuntimeWarning,
                 )
                 continue
             if isinstance(loc[attr], h5py.Dataset):
@@ -217,7 +237,7 @@ class hdf5Reader(hdf5IO, Reader):
         Parameters
         ----------
         where : None or file instance
-            specifies wehre to read dict from
+            specifies where to read dict from
 
         """
         thelist = []
@@ -294,6 +314,9 @@ class hdf5Writer(hdf5IO, Writer):
         """
         loc = self.resolve_where(where)
 
+        def isarray(x):
+            return hasattr(x, "shape") and hasattr(x, "dtype")
+
         # save name of object class
         loc.create_dataset("__class__", data=fullname(obj))
         from desc import __version__
@@ -302,38 +325,41 @@ class hdf5Writer(hdf5IO, Writer):
         for attr in obj._io_attrs_:
             try:
                 data = getattr(obj, attr)
-                if data is None:
-                    data = "None"
-                compression = (
-                    "gzip"
-                    if isinstance(data, np.ndarray) and np.asarray(data).size > 1
-                    else None
-                )
-                loc.create_dataset(attr, data=data, compression=compression)
             except AttributeError:
                 warnings.warn(
                     "Save attribute '{}' was not saved as it does "
                     "not exist.".format(attr),
                     RuntimeWarning,
                 )
-            except TypeError:
-                theattr = getattr(obj, attr)
-                if isinstance(theattr, dict):
-                    group = loc.create_group(attr)
-                    self.write_dict(theattr, where=group)
-                elif isinstance(theattr, list):
-                    group = loc.create_group(attr)
-                    self.write_list(theattr, where=group)
-                else:
-                    try:
+                continue
+            if data is None:
+                data = "None"
+            if isarray(data):
+                data = np.asarray(data)  # convert jax arrs to np
 
-                        group = loc.create_group(attr)
-                        sub_obj = getattr(obj, attr)
-                        sub_obj.save(group)
-                    except AttributeError:
-                        warnings.warn(
-                            "Could not save object '{}'.".format(attr), RuntimeWarning
-                        )
+            if (
+                isarray(data)
+                or isinstance(data, numbers.Number)
+                or isinstance(data, str)
+            ):
+                compression = "gzip" if isarray(data) and data.size > 1 else None
+                loc.create_dataset(attr, data=data, compression=compression)
+            elif isinstance(data, dict):
+                group = loc.create_group(attr)
+                self.write_dict(data, where=group)
+            elif isinstance(data, (list, tuple)):
+                group = loc.create_group(attr)
+                self.write_list(data, where=group)
+            else:
+                from .optimizable_io import IOAble
+
+                if isinstance(data, IOAble):
+                    group = loc.create_group(attr)
+                    data.save(group)
+                else:
+                    raise TypeError(
+                        f"don't know how to save attribute {attr} of type {type(data)}"
+                    )
 
     def write_dict(self, thedict, where=None):
         """Write dictionary to file in group specified by where argument.

@@ -6,26 +6,48 @@ jobs:
   black_format:
 
     runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    strategy:
+      matrix:
+        python-version: ['3.10']
+
     steps:
-      - uses: actions/checkout@v3
-      - name: Set up Python 3.8
-        uses: actions/setup-python@v4
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
-          python-version: 3.8
-      - name: Install dependencies
+          python-version: ${{ matrix.python-version }}
+
+      - name: Restore Python environment cache
+        id: restore-env
+        uses: actions/cache/restore@v4
+        with:
+          path: .venv-${{ matrix.python-version }}
+          key: ${{ runner.os }}-venv-${{ matrix.python-version }}-${{ hashFiles('devtools/dev-requirements.txt', 'requirements.txt') }}
+
+      - name: Set up virtual environment if not restored from cache
+        if: steps.restore-env.outputs.cache-hit != 'true'
         run: |
+          gh cache list
+          python -m venv .venv-${{ matrix.python-version }}
+          source .venv-${{ matrix.python-version }}/bin/activate
           python -m pip install --upgrade pip
           pip install -r devtools/dev-requirements.txt
+
       - name: Check files using the black formatter
         run: |
+          source .venv-${{ matrix.python-version }}/bin/activate
           black --version
           black --check desc/ tests/ || black_return_code=$?
           echo "BLACK_RETURN_CODE=$black_return_code" >> $GITHUB_ENV
           black desc/ tests/
+
       - name: Annotate diff changes using reviewdog
         uses: reviewdog/action-suggester@v1
         with:
           tool_name: blackfmt
+
       - name: Fail if not formatted
         run: |
           exit ${{ env.BLACK_RETURN_CODE }}

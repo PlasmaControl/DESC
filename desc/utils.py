@@ -1,6 +1,7 @@
 """Utility functions, independent of the rest of DESC."""
 
-import numbers
+import functools
+import operator
 import warnings
 from itertools import combinations_with_replacement, permutations
 
@@ -8,7 +9,7 @@ import numpy as np
 from scipy.special import factorial
 from termcolor import colored
 
-from desc.backend import fori_loop, jit, jnp
+from desc.backend import flatnonzero, fori_loop, jit, jnp, take
 
 
 class Timer:
@@ -184,6 +185,13 @@ class _Indexable:
     def __getitem__(self, index):
         return index
 
+    @staticmethod
+    def get(stuff, axis, ndim):
+        slices = [slice(None)] * ndim
+        slices[axis] = stuff
+        slices = tuple(slices)
+        return slices
+
 
 """
 Helper object for building indexes for indexed update functions.
@@ -222,18 +230,20 @@ def equals(a, b):
         if len(a) != len(b):
             return False
         return all([equals(a[i], b[i]) for i in range(len(a))])
-    if hasattr(a, "eq"):
-        return a.eq(b)
+    if hasattr(a, "equiv"):
+        return a.equiv(b)
     return a == b
 
 
-def flatten_list(x):
+def flatten_list(x, flatten_tuple=False):
     """Flatten a nested list.
 
     Parameters
     ----------
     x : list
         nested list of lists to flatten
+    flatten_tuple : bool
+        Whether to also flatten nested tuples.
 
     Returns
     -------
@@ -241,8 +251,11 @@ def flatten_list(x):
         flattened input
 
     """
-    if isinstance(x, list):
-        return [a for i in x for a in flatten_list(i)]
+    types = (list,)
+    if flatten_tuple:
+        types += (tuple,)
+    if isinstance(x, types):
+        return [a for i in x for a in flatten_list(i, flatten_tuple)]
     else:
         return [x]
 
@@ -265,7 +278,7 @@ def issorted(x, axis=None, tol=1e-12):
 
     Returns
     -------
-    issorted : bool
+    is_sorted : bool
         whether the array is sorted along specified axis
 
     """
@@ -289,7 +302,7 @@ def isalmostequal(x, axis=-1, rtol=1e-6, atol=1e-12):
         relative tolerance for comparison.
     atol : float
         absolute tolerance for comparison.
-        If the following equation is element-wise True, then isalmostequal returns True.
+        If the following equation is element-wise True, then returns True.
             absolute(a - b) <= (atol + rtol * absolute(b))
         where a= x[0] and b is every other element of x, if flattened array,
         or if axis is not None, a = x[:,0,:] and b = x[:,i,:] for all i, and
@@ -297,7 +310,7 @@ def isalmostequal(x, axis=-1, rtol=1e-6, atol=1e-12):
 
     Returns
     -------
-    isalmostequal : bool
+    is_almost_equal : bool
         whether the array is equal along specified axis
 
     """
@@ -342,13 +355,10 @@ def islinspaced(x, axis=-1, rtol=1e-6, atol=1e-12):
         relative tolerance for comparison.
     atol : float
         absolute tolerance for comparison.
-        If the following equation is element-wise True for,
-         then isalmostequal returns True.
-            absolute(a - b) <= (atol + rtol * absolute(b))
 
     Returns
     -------
-    islinspaced : bool
+    is_linspaced : bool
         whether the array is linearly spaced along specified axis
 
     """
@@ -366,7 +376,9 @@ def islinspaced(x, axis=-1, rtol=1e-6, atol=1e-12):
 @jit
 def copy_coeffs(c_old, modes_old, modes_new, c_new=None):
     """Copy coefficients from one resolution to another."""
-    modes_old, modes_new = jnp.atleast_1d(modes_old), jnp.atleast_1d(modes_new)
+    modes_old, modes_new = jnp.atleast_1d(jnp.asarray(modes_old)), jnp.atleast_1d(
+        jnp.asarray(modes_new)
+    )
 
     if modes_old.ndim == 1:
         modes_old = modes_old.reshape((-1, 1))
@@ -453,8 +465,8 @@ def combination_permutation(m, n, equals=True):
 def multinomial_coefficients(m, n):
     """Number of ways to place n objects into m bins."""
     k = combination_permutation(m, n)
-    num = factorial(n)
-    den = factorial(k).prod(axis=-1)
+    num = factorial(n, exact=True)
+    den = factorial(k, exact=True).prod(axis=-1)
     return num / den
 
 
@@ -480,8 +492,9 @@ def is_broadcastable(shp1, shp2):
 
 
 def get_instance(things, cls):
-    """Get thing from a collection of things that is the instance of a given class."""
-    return [t for t in things if isinstance(t, cls)][0]
+    """Get first thing from an iterable of things that is instance of cls."""
+    foo = [t for t in things if isinstance(t, cls)]
+    return foo[0] if len(foo) else None
 
 
 def parse_argname_change(arg, kwargs, oldname, newname):
@@ -508,12 +521,16 @@ def setdefault(val, default, cond=None):
 
 def isnonnegint(x):
     """Determine if x is a non-negative integer."""
-    return isinstance(x, numbers.Real) and (x == int(x)) and (x >= 0)
+    try:
+        _ = operator.index(x)
+    except TypeError:
+        return False
+    return x >= 0
 
 
 def isposint(x):
     """Determine if x is a strictly positive integer."""
-    return isinstance(x, numbers.Real) and (x == int(x)) and (x > 0)
+    return isnonnegint(x) and (x > 0)
 
 
 def errorif(cond, err=ValueError, msg=""):
@@ -523,7 +540,51 @@ def errorif(cond, err=ValueError, msg=""):
     just AssertionError.
     """
     if cond:
-        raise err(msg)
+        raise err(colored(msg, "red"))
+
+
+class ResolutionWarning(UserWarning):
+    """Warning for insufficient resolution."""
+
+    pass
+
+
+def warnif(cond, err=UserWarning, msg=""):
+    """Throw a warning if condition is met."""
+    if cond:
+        warnings.warn(colored(msg, "yellow"), err)
+
+
+def check_nonnegint(x, name="", allow_none=True):
+    """Throw an error if x is not a non-negative integer."""
+    if allow_none:
+        errorif(
+            not ((x is None) or isnonnegint(x)),
+            ValueError,
+            f"{name} should be a non-negative integer or None, got {x}",
+        )
+    else:
+        errorif(
+            not isnonnegint(x),
+            ValueError,
+            f"{name} should be a non-negative integer, got {x}",
+        )
+    return x
+
+
+def check_posint(x, name="", allow_none=True):
+    """Throw an error if x is not a positive integer."""
+    if allow_none:
+        errorif(
+            not ((x is None) or isposint(x)),
+            ValueError,
+            f"{name} should be a positive integer or None, got {x}",
+        )
+    else:
+        errorif(
+            not isposint(x), ValueError, f"{name} should be a positive integer, got {x}"
+        )
+    return x
 
 
 def only1(*args):
@@ -531,3 +592,349 @@ def only1(*args):
     # copied from https://stackoverflow.com/questions/16801322/
     i = iter(args)
     return any(i) and not any(i)
+
+
+def unique_list(thelist):
+    """Get the unique elements from a list, and indices to recreate it.
+
+    Parameters
+    ----------
+    thelist : list
+        List to get unique elements from.
+
+    Returns
+    -------
+    unique : list
+        Unique elements from the input.
+    inds : list of int
+        Indices of unique elements in original list, such that
+        unique[inds[i]] == thelist[i]
+    """
+    inds = []
+    unique = []
+    for i, x in enumerate(thelist):
+        if x not in unique:
+            unique.append(x)
+        inds.append(unique.index(x))
+    return unique, inds
+
+
+def is_any_instance(things, cls):
+    """Check if any of things is an instance of cls."""
+    return any([isinstance(t, cls) for t in things])
+
+
+def broadcast_tree(tree_in, tree_out, dtype=int):
+    """Broadcast tree_in to the same pytree structure as tree_out.
+
+    Both trees must be nested lists of dicts with string keys and array values.
+    Or the values can be bools, where False broadcasts to an empty array and True
+    broadcasts to the corresponding array from tree_out.
+
+    Parameters
+    ----------
+    tree_in : pytree
+        Tree to broadcast.
+    tree_out : pytree
+        Tree with structure to broadcast to.
+    dtype : optional
+        Data type of array values. Default = int.
+
+    Returns
+    -------
+    tree : pytree
+        Tree with the leaves of tree_in broadcast to the structure of tree_out.
+
+    """
+    # both trees at leaf layer
+    if isinstance(tree_in, dict) and isinstance(tree_out, dict):
+        tree_new = {}
+        for key, value in tree_in.items():
+            errorif(
+                key not in tree_out.keys(),
+                ValueError,
+                f"dict key '{key}' of tree_in must be a subset of those in tree_out: "
+                + f"{list(tree_out.keys())}",
+            )
+            if isinstance(value, bool):
+                if value:
+                    tree_new[key] = np.atleast_1d(tree_out[key]).astype(dtype=dtype)
+                else:
+                    tree_new[key] = np.array([], dtype=dtype)
+            else:
+                tree_new[key] = np.atleast_1d(value).astype(dtype=dtype)
+        for key, value in tree_out.items():
+            if key not in tree_new.keys():
+                tree_new[key] = np.array([], dtype=dtype)
+            errorif(
+                not np.all(np.isin(tree_new[key], value)),
+                ValueError,
+                f"dict value {tree_new[key]} of tree_in must be a subset "
+                + f"of those in tree_out: {value}",
+            )
+        return tree_new
+    # tree_out is deeper than tree_in
+    elif isinstance(tree_in, dict) and isinstance(tree_out, list):
+        return [broadcast_tree(tree_in.copy(), branch) for branch in tree_out]
+    # both trees at branch layer
+    elif isinstance(tree_in, list) and isinstance(tree_out, list):
+        errorif(
+            len(tree_in) != len(tree_out),
+            ValueError,
+            "tree_in must have the same number of branches as tree_out",
+        )
+        return [broadcast_tree(tree_in[k], tree_out[k]) for k in range(len(tree_out))]
+    # tree_in is deeper than tree_out
+    elif isinstance(tree_in, list) and isinstance(tree_out, dict):
+        raise ValueError("tree_in cannot have a deeper structure than tree_out")
+    # invalid tree structure
+    else:
+        raise ValueError("trees must be nested lists of dicts")
+
+
+@functools.partial(
+    jnp.vectorize, signature="(m),(m)->(n)", excluded={"size", "fill_value"}
+)
+def take_mask(a, mask, /, *, size=None, fill_value=None):
+    """JIT compilable method to return ``a[mask][:size]`` padded by ``fill_value``.
+
+    Parameters
+    ----------
+    a : jnp.ndarray
+        The source array.
+    mask : jnp.ndarray
+        Boolean mask to index into ``a``. Should have same shape as ``a``.
+    size : int
+        Elements of ``a`` at the first size True indices of ``mask`` will be returned.
+        If there are fewer elements than size indicates, the returned array will be
+        padded with ``fill_value``. The size default is ``mask.size``.
+    fill_value : Any
+        When there are fewer than the indicated number of elements, the remaining
+        elements will be filled with ``fill_value``. Defaults to NaN for inexact types,
+        the largest negative value for signed types, the largest positive value for
+        unsigned types, and True for booleans.
+
+    Returns
+    -------
+    result : jnp.ndarray
+        Shape (size, ).
+
+    """
+    assert a.shape == mask.shape
+    idx = flatnonzero(mask, size=setdefault(size, mask.size), fill_value=mask.size)
+    return take(
+        a,
+        idx,
+        mode="fill",
+        fill_value=fill_value,
+        unique_indices=True,
+        indices_are_sorted=True,
+    )
+
+
+def flatten_matrix(y):
+    """Flatten matrix to vector."""
+    return y.reshape(*y.shape[:-2], -1)
+
+
+# TODO: Eventually remove and use numpy's stuff.
+# https://github.com/numpy/numpy/issues/25805
+def atleast_nd(ndmin, ary):
+    """Adds dimensions to front if necessary."""
+    return jnp.array(ary, ndmin=ndmin) if jnp.ndim(ary) < ndmin else ary
+
+
+PRINT_WIDTH = 60  # current longest name is BootstrapRedlConsistency with pre-text
+
+
+def dot(a, b, axis=-1):
+    """Batched vector dot product.
+
+    Parameters
+    ----------
+    a : array-like
+        First array of vectors.
+    b : array-like
+        Second array of vectors.
+    axis : int
+        Axis along which vectors are stored.
+
+    Returns
+    -------
+    y : array-like
+        y = sum(a*b, axis=axis)
+
+    """
+    return jnp.sum(a * b, axis=axis, keepdims=False)
+
+
+def cross(a, b, axis=-1):
+    """Batched vector cross product.
+
+    Parameters
+    ----------
+    a : array-like
+        First array of vectors.
+    b : array-like
+        Second array of vectors.
+    axis : int
+        Axis along which vectors are stored.
+
+    Returns
+    -------
+    y : array-like
+        y = a x b
+
+    """
+    return jnp.cross(a, b, axis=axis)
+
+
+def safenorm(x, ord=None, axis=None, fill=0, threshold=0):
+    """Like jnp.linalg.norm, but without nan gradient at x=0.
+
+    Parameters
+    ----------
+    x : ndarray
+        Vector or array to norm.
+    ord : {non-zero int, inf, -inf, 'fro', 'nuc'}, optional
+        Order of norm.
+    axis : {None, int, 2-tuple of ints}, optional
+        Axis to take norm along.
+    fill : float, ndarray, optional
+        Value to return where x is zero.
+    threshold : float >= 0
+        How small is x allowed to be.
+
+    """
+    is_zero = (jnp.abs(x) <= threshold).all(axis=axis, keepdims=True)
+    y = jnp.where(is_zero, jnp.ones_like(x), x)  # replace x with ones if is_zero
+    n = jnp.linalg.norm(y, ord=ord, axis=axis)
+    n = jnp.where(is_zero.squeeze(), fill, n)  # replace norm with zero if is_zero
+    return n
+
+
+def safenormalize(x, ord=None, axis=None, fill=0, threshold=0):
+    """Normalize a vector to unit length, but without nan gradient at x=0.
+
+    Parameters
+    ----------
+    x : ndarray
+        Vector or array to norm.
+    ord : {non-zero int, inf, -inf, 'fro', 'nuc'}, optional
+        Order of norm.
+    axis : {None, int, 2-tuple of ints}, optional
+        Axis to take norm along.
+    fill : float, ndarray, optional
+        Value to return where x is zero.
+    threshold : float >= 0
+        How small is x allowed to be.
+
+    """
+    is_zero = (jnp.abs(x) <= threshold).all(axis=axis, keepdims=True)
+    y = jnp.where(is_zero, jnp.ones_like(x), x)  # replace x with ones if is_zero
+    n = safenorm(x, ord, axis, fill, threshold) * jnp.ones_like(x)
+    # return unit vector with equal components if norm <= threshold
+    return jnp.where(n <= threshold, jnp.ones_like(y) / jnp.sqrt(y.size), y / n)
+
+
+def safediv(a, b, fill=0, threshold=0):
+    """Divide a/b with guards for division by zero.
+
+    Parameters
+    ----------
+    a, b : ndarray
+        Numerator and denominator.
+    fill : float, ndarray, optional
+        Value to return where b is zero.
+    threshold : float >= 0
+        How small is b allowed to be.
+    """
+    mask = jnp.abs(b) <= threshold
+    num = jnp.where(mask, fill, a)
+    den = jnp.where(mask, 1, b)
+    return num / den
+
+
+def cumtrapz(y, x=None, dx=1.0, axis=-1, initial=None):
+    """Cumulatively integrate y(x) using the composite trapezoidal rule.
+
+    Taken from SciPy, but changed NumPy references to JAX.NumPy:
+        https://github.com/scipy/scipy/blob/v1.10.1/scipy/integrate/_quadrature.py
+
+    Parameters
+    ----------
+    y : array_like
+        Values to integrate.
+    x : array_like, optional
+        The coordinate to integrate along. If None (default), use spacing `dx`
+        between consecutive elements in `y`.
+    dx : float, optional
+        Spacing between elements of `y`. Only used if `x` is None.
+    axis : int, optional
+        Specifies the axis to cumulate. Default is -1 (last axis).
+    initial : scalar, optional
+        If given, insert this value at the beginning of the returned result.
+        Typically, this value should be 0. Default is None, which means no
+        value at ``x[0]`` is returned and `res` has one element less than `y`
+        along the axis of integration.
+
+    Returns
+    -------
+    res : ndarray
+        The result of cumulative integration of `y` along `axis`.
+        If `initial` is None, the shape is such that the axis of integration
+        has one less value than `y`. If `initial` is given, the shape is equal
+        to that of `y`.
+
+    """
+    y = jnp.asarray(y)
+    if x is None:
+        d = dx
+    else:
+        x = jnp.asarray(x)
+        if x.ndim == 1:
+            d = jnp.diff(x)
+            # reshape to correct shape
+            shape = [1] * y.ndim
+            shape[axis] = -1
+            d = d.reshape(shape)
+        elif len(x.shape) != len(y.shape):
+            raise ValueError("If given, shape of x must be 1-D or the " "same as y.")
+        else:
+            d = jnp.diff(x, axis=axis)
+
+        if d.shape[axis] != y.shape[axis] - 1:
+            raise ValueError(
+                "If given, length of x along axis must be the " "same as y."
+            )
+
+    def tupleset(t, i, value):
+        l = list(t)
+        l[i] = value
+        return tuple(l)
+
+    nd = len(y.shape)
+    slice1 = tupleset((slice(None),) * nd, axis, slice(1, None))
+    slice2 = tupleset((slice(None),) * nd, axis, slice(None, -1))
+    res = jnp.cumsum(d * (y[slice1] + y[slice2]) / 2.0, axis=axis)
+
+    if initial is not None:
+        if not jnp.isscalar(initial):
+            raise ValueError("`initial` parameter should be a scalar.")
+
+        shape = list(res.shape)
+        shape[axis] = 1
+        res = jnp.concatenate(
+            [jnp.full(shape, initial, dtype=res.dtype), res], axis=axis
+        )
+
+    return res
+
+
+def ensure_tuple(x):
+    """Returns x as a tuple of arrays."""
+    if isinstance(x, tuple):
+        return x
+    if isinstance(x, list):
+        return tuple(x)
+    return (x,)

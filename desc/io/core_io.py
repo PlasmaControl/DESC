@@ -11,7 +11,7 @@ class IO(ABC):
         self.resolve_base()
 
     def __del__(self):
-        """Close file upon garbage colleciton or explicit deletion with del function."""
+        """Close file upon garbage collection or explicit deletion with del function."""
         self.close()
 
     def close(self):
@@ -53,7 +53,7 @@ class IO(ABC):
         -------
         if where is None:
             base attribute
-        if where is file with type foundin _file_types_
+        if where is file with type found in _file_types_
             where
 
         """

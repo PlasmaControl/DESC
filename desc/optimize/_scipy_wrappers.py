@@ -30,23 +30,20 @@ from .utils import (
         "scipy-trust-krylov",
     ],
     description=[
-        "BFGS quasi-newton method with line search. See https://docs.scipy.org/doc/"
-        + "scipy/reference/optimize.minimize-bfgs.html",
-        "Nonlinear conjugate gradient method. See https://docs.scipy.org/doc/"
-        + "scipy/reference/optimize.minimize-cg.html",
-        "Newton conjugate gradient method. See https://docs.scipy.org/doc/"
-        + "scipy/reference/optimize.minimize-newtoncg.html",
-        "Trust region method with dogleg step. Requires the hessian to be positive "
-        + "definite. See https://docs.scipy.org/doc/scipy/reference/"
-        + "optimize.minimize-dogleg.html",
-        "Trust region method using 'exact' method to solve subproblem. See "
-        + "https://docs.scipy.org/doc/scipy/reference/"
-        + "optimize.minimize-trustexact.html",
-        "Trust region method using conjugate gradient to solve subproblem. See "
-        + "https://docs.scipy.org/doc/scipy/reference/optimize.minimize-trustncg.html",
-        "Trust region method using Kyrlov iterations to solve subproblem. See "
-        + "https://docs.scipy.org/doc/scipy/reference/"
-        + "optimize.minimize-trustkrylov.html",
+        "BFGS quasi-newton method with line search. "
+        + "See https://docs.scipy.org/doc/scipy/reference/optimize.minimize-bfgs.html",
+        "Nonlinear conjugate gradient method. "
+        + "See https://docs.scipy.org/doc/scipy/reference/optimize.minimize-cg.html",
+        "Newton conjugate gradient method. "
+        + "See https://docs.scipy.org/doc/scipy/reference/optimize.minimize-newtoncg.html",  # noqa: E501
+        "Trust region method with dogleg step. Hessian must be positive definite. "
+        + "See https://docs.scipy.org/doc/scipy/reference/optimize.minimize-dogleg.html",  # noqa: E501
+        "Trust region method using 'exact' method to solve subproblem. "
+        + "See https://docs.scipy.org/doc/scipy/reference/optimize.minimize-trustexact.html",  # noqa: E501
+        "Trust region method using conjugate gradient to solve subproblem. "
+        + "See https://docs.scipy.org/doc/scipy/reference/optimize.minimize-trustncg.html",  # noqa: E501
+        "Trust region method using Krylov iterations to solve subproblem. "
+        + "See https://docs.scipy.org/doc/scipy/reference/optimize.minimize-trustkrylov.html",  # noqa: E501
     ],
     scalar=True,
     equality_constraints=False,
@@ -83,10 +80,10 @@ def _optimize_scipy_minimize(  # noqa: C901 - FIXME: simplify this
         * 2 : display progress during iterations
     stoptol : dict
         Dictionary of stopping tolerances, with keys {"xtol", "ftol", "gtol", "ctol",
-        "maxiter", "max_nfev", "max_njev", "max_ngev", "max_nhev"}
+        "maxiter", "max_nfev"}
     options : dict, optional
         Dictionary of optional keyword arguments to override default solver
-        settings. See the code for more details.
+        settings. See ``scipy.optimize.minimize`` for details.
 
     Returns
     -------
@@ -222,10 +219,6 @@ def _optimize_scipy_minimize(  # noqa: C901 - FIXME: simplify this
             stoptol["maxiter"],
             len(func_allx),
             stoptol["max_nfev"],
-            len(grad_allx),
-            stoptol["max_ngev"],
-            len(hess_allx),
-            stoptol["max_nhev"],
             dx_total=np.linalg.norm(x1 - x0),
             max_dx=options.get("max_dx", np.inf),
         )
@@ -299,12 +292,12 @@ def _optimize_scipy_minimize(  # noqa: C901 - FIXME: simplify this
 @register_optimizer(
     name=["scipy-trf", "scipy-lm", "scipy-dogbox"],
     description=[
-        "Trust region least squares method. See https://docs.scipy.org/doc/scipy/"
-        + "reference/generated/scipy.optimize.least_squares.html",
-        "Levenberg-Marquardt implicit trust region method. See https://docs.scipy.org/"
-        + "doc/scipy/reference/generated/scipy.optimize.least_squares.html",
-        "Dogleg method with box shaped trust region. See https://docs.scipy.org/doc/"
-        + "scipy/reference/generated/scipy.optimize.least_squares.html",
+        "Trust region least squares method. "
+        + "See https://docs.scipy.org/doc/scipy/reference/generated/scipy.optimize.least_squares.html",  # noqa: E501
+        "Levenberg-Marquardt implicit trust region method. "
+        + "See https://docs.scipy.org/doc/scipy/reference/generated/scipy.optimize.least_squares.html",  # noqa: E501
+        "Dogleg method with box shaped trust region. "
+        + "See https://docs.scipy.org/doc/scipy/reference/generated/scipy.optimize.least_squares.html",  # noqa: E501
     ],
     scalar=False,
     equality_constraints=False,
@@ -342,10 +335,10 @@ def _optimize_scipy_least_squares(  # noqa: C901 - FIXME: simplify this
         * 2 : display progress during iterations
     stoptol : dict
         Dictionary of stopping tolerances, with keys {"xtol", "ftol", "gtol", "ctol",
-        "maxiter", "max_nfev", "max_njev", "max_ngev", "max_nhev"}
+        "maxiter", "max_nfev"}
     options : dict, optional
         Dictionary of optional keyword arguments to override default solver
-        settings. See the code for more details.
+        settings. See ``scipy.optimize.least_squares`` for details.
 
     Returns
     -------
@@ -360,7 +353,7 @@ def _optimize_scipy_least_squares(  # noqa: C901 - FIXME: simplify this
     assert constraint is None, f"method {method} doesn't support constraints"
     options = {} if options is None else options
     x_scale = "jac" if x_scale == "auto" else x_scale
-    fun, jac = objective.compute_scaled_error, objective.jac_scaled
+    fun, jac = objective.compute_scaled_error, objective.jac_scaled_error
     # need to use some "global" variables here
     fun_allx = []
     fun_allf = []
@@ -377,7 +370,7 @@ def _optimize_scipy_least_squares(  # noqa: C901 - FIXME: simplify this
         return f
 
     def jac_wrapped(x):
-        # record all the xs and jacs we see
+        # record all the xs and jacobians we see
         jac_allx.append(x)
         J = jac(x, objective.constants)
         jac_allf.append(J)
@@ -431,10 +424,6 @@ def _optimize_scipy_least_squares(  # noqa: C901 - FIXME: simplify this
             stoptol["maxiter"],
             len(fun_allf),
             stoptol["max_nfev"],
-            len(jac_allf),  # ngev
-            stoptol["max_njev"],  # max_ngev,
-            len(jac_allf),  # nhev,
-            stoptol["max_njev"],  # max_nhev,
             dx_total=np.linalg.norm(x1 - x0),
             max_dx=options.get("max_dx", np.inf),
         )
@@ -505,10 +494,10 @@ def _optimize_scipy_least_squares(  # noqa: C901 - FIXME: simplify this
         "scipy-SLSQP",
     ],
     description=[
-        "Trust region interior point method. See https://docs.scipy.org/doc/scipy/"
-        + "reference/optimize.minimize-trustconstr.html",
-        "Sequential least squares programming method. See https://docs.scipy.org/doc/"
-        + "scipy/reference/optimize.minimize-slsqp.html",
+        "Trust region interior point method. "
+        + "See https://docs.scipy.org/doc/scipy/reference/optimize.minimize-trustconstr.html",  # noqa: E501
+        "Sequential least squares programming method. "
+        + "See https://docs.scipy.org/doc/scipy/reference/optimize.minimize-slsqp.html",  # noqa: E501
     ],
     scalar=True,
     equality_constraints=True,
@@ -545,10 +534,10 @@ def _optimize_scipy_constrained(  # noqa: C901 - FIXME: simplify this
         * 2 : display progress during iterations
     stoptol : dict
         Dictionary of stopping tolerances, with keys {"xtol", "ftol", "gtol", "ctol",
-        "maxiter", "max_nfev", "max_njev", "max_ngev", "max_nhev"}
+        "maxiter", "max_nfev"}
     options : dict, optional
         Dictionary of optional keyword arguments to override default solver
-        settings. See the code for more details.
+        settings. See ``scipy.optimize.minimize`` for details.
 
     Returns
     -------
@@ -754,10 +743,6 @@ def _optimize_scipy_constrained(  # noqa: C901 - FIXME: simplify this
             stoptol["maxiter"],
             len(func_allx),
             stoptol["max_nfev"],
-            len(grad_allx),
-            stoptol["max_ngev"],
-            len(hess_allx),
-            stoptol["max_nhev"],
             dx_total=np.linalg.norm(x1 - x0),
             max_dx=options.get("max_dx", np.inf),
             ctol=stoptol["ctol"],

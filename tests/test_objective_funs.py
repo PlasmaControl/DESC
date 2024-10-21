@@ -57,6 +57,7 @@ from desc.objectives import (
     HeatingPowerISS04,
     Isodynamicity,
     LinearObjectiveFromUser,
+    LinkingCurrent,
     MagneticWell,
     MeanCurvature,
     MercierStability,
@@ -1300,6 +1301,18 @@ class TestObjectiveFunction:
         assert abs(d.max() - (-a_s)) < 1e-14
         assert abs(d.min() - (-a_s)) < grid.spacing[0, 1] * a_s
 
+    @pytest.mark.unit
+    def test_linking_current(self):
+        """Test calculation of signed linking current from coils to plasma."""
+        eq = Equilibrium()
+        G = eq.compute("G", grid=LinearGrid(rho=1.0))["G"] * 2 * jnp.pi / mu_0
+        coil = FourierPlanarCoil(current=G / 8, center=[10, 1, 0])
+        coilset = CoilSet.from_symmetry(coil, NFP=4, sym=True)
+        obj = LinkingCurrent(eq, coilset)
+        obj.build()
+        f = obj.compute(eq.params_dict, coilset.params_dict)
+        np.testing.assert_allclose(f, 0)
+
 
 @pytest.mark.regression
 def test_derivative_modes():
@@ -2275,6 +2288,7 @@ class TestComputeScalarResolution:
         FusionPower,
         GenericObjective,
         HeatingPowerISS04,
+        LinkingCurrent,
         Omnigenity,
         PlasmaCoilSetMinDistance,
         PlasmaVesselDistance,
@@ -2655,6 +2669,26 @@ class TestComputeScalarResolution:
             f[i] = obj.compute_scalar(obj.x())
         np.testing.assert_allclose(f, f[-1], rtol=1e-2, atol=1e-12)
 
+    @pytest.mark.unit
+    def test_compute_scalar_resolution_linking_current(self):
+        """LinkingCurrent."""
+        coil = FourierPlanarCoil(center=[10, 1, 0])
+        eq = Equilibrium()
+        coilset = CoilSet.from_symmetry(coil, NFP=4, sym=True)
+        f = np.zeros_like(self.res_array, dtype=float)
+        for i, res in enumerate(self.res_array):
+            obj = ObjectiveFunction(
+                LinkingCurrent(
+                    eq,
+                    coilset,
+                    grid=LinearGrid(M=int(eq.M_grid * res), N=int(eq.N_grid * res)),
+                ),
+                use_jit=False,
+            )
+            obj.build(verbose=0)
+            f[i] = obj.compute_scalar(obj.x())
+        np.testing.assert_allclose(f, f[-1], rtol=1e-2, atol=1e-12)
+
 
 class TestObjectiveNaNGrad:
     """Make sure reverse mode AD works correctly for all objectives."""
@@ -2683,6 +2717,7 @@ class TestObjectiveNaNGrad:
         ForceBalanceAnisotropic,
         FusionPower,
         HeatingPowerISS04,
+        LinkingCurrent,
         Omnigenity,
         PlasmaCoilSetMinDistance,
         PlasmaVesselDistance,
@@ -2922,6 +2957,17 @@ class TestObjectiveNaNGrad:
         """BallooningStability."""
         eq = get("HELIOTRON")
         obj = ObjectiveFunction(BallooningStability(eq=eq))
+        obj.build()
+        g = obj.grad(obj.x())
+        assert not np.any(np.isnan(g))
+
+    @pytest.mark.unit
+    def test_objective_no_nangrad_linking_current(self):
+        """LinkingCurrent."""
+        coil = FourierPlanarCoil(center=[10, 1, 0])
+        coilset = CoilSet.from_symmetry(coil, NFP=4, sym=True)
+        eq = Equilibrium()
+        obj = ObjectiveFunction(LinkingCurrent(eq, coilset))
         obj.build()
         g = obj.grad(obj.x())
         assert not np.any(np.isnan(g))

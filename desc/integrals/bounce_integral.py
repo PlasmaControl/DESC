@@ -197,10 +197,10 @@ class Bounce2D(Bounce):
     single-valued basis functions defined on a bounded subset of ℝ²
     (recall continuous functions on compact sets attain their maximum).
     Still, it suffices to interpolate θ over one branch cut. We choose the
-    branch cut defined by (α, ζ) ∈ [0, 2π]. Here the bound θ ∈ [0, 4π] holds.
+    branch cut defined by α, ζ ∈ [0, 2π).
 
     Likewise, α is multivalued. As the field line is followed, the label
-    jumps to α ∉ [0, 2π] after completing some toroidal transit. Therefore,
+    jumps to α ∉ [0, 2π) after completing some toroidal transit. Therefore,
     the map θ(α, ζ) must be periodic in α with period 2π. At every point
     ζₚ ∈ [2π k, 2π ℓ] where k, ℓ ∈ ℤ where the field line completes a
     poloidal transit there is guaranteed to exist a discrete jump
@@ -208,7 +208,7 @@ class Bounce2D(Bounce):
     Recall a jump discontinuity appears as an infinitely sharp cut without
     Gibbs effects. To recover the single-valued θ(α, ζ) from the function
     approximation over one branch cut, at every ζ = 2π ℓ we can add either
-    0 or 2π or 4π to the next cut of θ.
+    an integer multiple of 2π to the next cut of θ.
 
     Examples
     --------
@@ -272,8 +272,7 @@ class Bounce2D(Bounce):
 
         Notes
         -----
-        Performance may improve significantly if the spectral
-        resolutions ``M``, ``N``, ``X``, ``Y``, and ``Y_B`` are powers of two.
+        Performance may improve if ``M``,``N``,``X``,``Y``,``Y_B`` are powers of two.
 
         Parameters
         ----------

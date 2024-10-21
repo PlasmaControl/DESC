@@ -17,7 +17,7 @@ from termcolor import colored
 from tests.test_interp_utils import _f_1d, _f_1d_nyquist_freq
 from tests.test_plotting import tol_1d
 
-from desc.backend import jit, jnp
+from desc.backend import jnp
 from desc.basis import FourierZernikeBasis
 from desc.equilibrium import Equilibrium
 from desc.equilibrium.coords import get_rtz_grid
@@ -42,7 +42,6 @@ from desc.integrals.basis import FourierChebyshevSeries
 from desc.integrals.bounce_utils import (
     _get_extrema,
     bounce_points,
-    get_fieldline,
     get_pitch_inv_quad,
     interp_fft_to_argmin,
     interp_to_argmin,
@@ -1029,10 +1028,10 @@ class TestBounceQuadrature:
             integrand = lambda B, pitch: jnp.sqrt(1 - m * pitch * B)
             truth = v * 2 * ellipe(m)
         bounce = Bounce1D(
-            grid=Grid.create_meshgrid([1, 0, knots], coordinates="raz"),
-            data=data,
-            quad=quad,
-            automorphism=automorphism,
+            Grid.create_meshgrid([1, 0, knots], coordinates="raz"),
+            data,
+            quad,
+            automorphism,
             check=True,
         )
         points = bounce.points(pitch_inv, num_well=1)
@@ -1614,22 +1613,6 @@ class TestBounce2D:
     """Test bounce integration that uses 2D pseudo-spectral methods."""
 
     @pytest.mark.unit
-    @pytest.mark.parametrize(
-        "alpha_0, iota, num_period, period",
-        [
-            (0, np.sqrt(2), 1, 2 * np.pi),
-            (0, np.arange(1, 3) * np.sqrt(2), 5, 2 * np.pi),
-        ],
-    )
-    def test_get_fieldline(self, alpha_0, iota, num_period, period):
-        """Test field line label updating works with jit."""
-        fieldline = jit(get_fieldline, static_argnums=2)(
-            alpha_0, iota, num_period, period
-        )
-        shape = (iota.size, num_period) if np.ndim(iota) else (num_period,)
-        assert fieldline.shape == shape
-
-    @pytest.mark.unit
     def test_interp_fft_to_argmin(self):
         """Test interpolation of h to argmin of g."""  # noqa: D202
 
@@ -1643,15 +1626,13 @@ class TestBounce2D:
             [1, 0, fourier_pts(nyquist)], period=(np.inf, 2 * np.pi, 2 * np.pi)
         )
         bounce = Bounce2D(
-            grid=grid,
-            data=dict.fromkeys(Bounce2D.required_names, g(grid.nodes[:, 2])),
+            grid,
+            dict.fromkeys(Bounce2D.required_names, g(grid.nodes[:, 2])),
+            # dummy value; h depends on ζ alone,so doesn't matter what θ(α, ζ) is
+            theta=grid.meshgrid_reshape(grid.nodes[:, 1], "rtz"),
             Y_B=2 * nyquist,
             num_transit=1,
             spline=True,
-            # dummy values
-            iota=1,
-            # h depends on ζ alone,so doesn't matter what θ(α, ζ) is
-            theta=grid.meshgrid_reshape(grid.nodes[:, 1], "rtz"),
         )
         np.testing.assert_allclose(
             interp_fft_to_argmin(
@@ -1705,14 +1686,7 @@ class TestBounce2D:
         theta = Bounce2D.compute_theta(eq, X=8, Y=64, rho=rho)
         # 5. Make the bounce integration operator.
         bounce = Bounce2D(
-            grid,
-            data,
-            iota=grid.compress(data["iota"]),
-            theta=theta,
-            num_transit=2,
-            quad=leggauss(3),
-            check=True,
-            spline=False,
+            grid, data, theta, num_transit=2, quad=leggauss(3), check=True, spline=False
         )
         pitch_inv, _ = bounce.get_pitch_inv_quad(
             min_B=grid.compress(data["min_tz |B|"]),
@@ -1779,15 +1753,7 @@ class TestBounce2D:
         _, _ = bounce.plot_theta(l, show=False)
 
         # make sure tests pass when spline=True
-        b = Bounce2D(
-            grid,
-            data,
-            iota=grid.compress(data["iota"]),
-            theta=theta,
-            num_transit=2,
-            check=True,
-            spline=True,
-        )
+        b = Bounce2D(grid, data, theta, num_transit=2, check=True, spline=True)
         b.check_points(b.points(pitch_inv), pitch_inv, plot=False)
         _, _ = b.plot(l, pitch_inv[l], show=False)
 
@@ -1830,12 +1796,9 @@ class TestBounce2D:
             grid_data[name] = grid_data[name] * data["normalization"]
 
         bounce = Bounce2D(
-            grid=grid,
-            data=grid_data,
-            iota=data["iota"],
-            theta=Bounce2D.compute_theta(
-                eq, X=8, Y=8, rho=data["rho"], iota=data["iota"]
-            ),
+            grid,
+            grid_data,
+            Bounce2D.compute_theta(eq, X=8, Y=8, rho=data["rho"], iota=data["iota"]),
             num_transit=3,
             alpha=data["alpha"] - 2.5 * np.pi * data["iota"],
             Bref=data["Bref"],

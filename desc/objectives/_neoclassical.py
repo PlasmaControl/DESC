@@ -15,11 +15,10 @@ from orthax.legendre import leggauss
 
 from desc.compute import get_profiles, get_transforms
 from desc.compute.utils import _compute as compute_fun
-from desc.grid import Grid
+from desc.grid import LinearGrid
 from desc.utils import Timer, setdefault
 
 from ..integrals import Bounce2D
-from ..integrals._interp_utils import fourier_pts
 from ..integrals._quad_utils import (
     automorphism_sin,
     chebgauss2,
@@ -55,11 +54,7 @@ class EffectiveRipple(_Objective):
         ``Equilibrium`` to be optimized.
     grid : Grid
         Optional, tensor-product grid in (ρ, θ, ζ) with uniformly spaced nodes
-        (θ, ζ) ∈ [0, 2π) × [0, 2π/NFP). That is,
-        ``grid.num_theta``, ``grid.num_zeta`` must match the output of
-        ``desc.integrals.interp_utils.fourier_pts(grid.num_theta)``,
-        ``desc.integrals.interp_utils.fourier_pts(grid.num_zeta)/grid.NFP``,
-        respectively. Powers of two are preferable.
+        (θ, ζ) ∈ [0, 2π) × [0, 2π/NFP). Powers of two are preferable.
     X : int
         Grid resolution in poloidal direction for Clebsch coordinate grid.
         Preferably power of 2.
@@ -79,9 +74,16 @@ class EffectiveRipple(_Objective):
         Resolution for quadrature over velocity coordinate. Default is 64.
     num_well : int
         Maximum number of wells to detect for each pitch and field line.
-        Default is to detect all wells, but due to limitations in JAX this option
-        may consume more memory. Specifying a number that tightly upper bounds
-        the number of wells will increase performance.
+        Giving ``None`` will detect all wells but due to current limitations in
+        JAX this will have worse performance.
+        Specifying a number that tightly upper bounds the number of wells will
+        increase performance. In general, an upper bound on the number of wells
+        per toroidal transit is ``Aι+B`` where ``A``,``B`` are the poloidal and
+        toroidal Fourier resolution of |B|, respectively, in straight-field line
+        PEST coordinates, and ι is the rotational transform normalized by 2π.
+        A tighter upper bound than ``num_well=(Aι+B)*num_transit`` is preferable.
+        The ``check_points`` or ``plot`` methods in ``desc.integrals.Bounce2D``
+        are useful to select a reasonable value.
 
     """
 
@@ -123,9 +125,9 @@ class EffectiveRipple(_Objective):
             target = 0.0
 
         self._grid = grid
+        self._constants = {"quad_weights": 1}
         self._X = X
         self._Y = Y
-        self._constants = {"quad_weights": 1}
         self._hyperparam = {
             "Y_B": setdefault(Y_B, 2 * Y),
             "num_transit": num_transit,
@@ -160,15 +162,10 @@ class EffectiveRipple(_Objective):
         """
         eq = self.things[0]
         if self._grid is None:
-            self._grid = Grid.create_meshgrid(
-                # Multiply equilibrium resolution by 2 instead of using eq.*_grid
-                # because the eq.*_grid integers are odd, and we'd like them to be
-                # powers of two or at least even.
-                [1.0, fourier_pts(eq.M * 2), fourier_pts(max(1, eq.N) * 2) / eq.NFP],
-                period=(np.inf, 2 * np.pi, 2 * np.pi / eq.NFP),
-                NFP=eq.NFP,
+            self._grid = LinearGrid(
+                theta=eq.M_grid, zeta=eq.N_grid, NFP=eq.NFP, sym=False
             )
-        # Should we call self._grid.to_numpy()?
+        assert self._grid.can_fft
         self._constants["clebsch"] = FourierChebyshevSeries.nodes(
             self._X,
             self._Y,
@@ -224,6 +221,7 @@ class EffectiveRipple(_Objective):
         data = compute_fun(
             eq, "iota", params, constants["transforms"], constants["profiles"]
         )
+        # TODO: GitHub issue #1034. Use old theta values as initial guess.
         data = compute_fun(
             eq,
             "effective ripple",
@@ -231,7 +229,6 @@ class EffectiveRipple(_Objective):
             constants["transforms"],
             constants["profiles"],
             data,
-            # TODO: GitHub issue #1034. Use old values as initial guess.
             theta=Bounce2D.compute_theta(
                 eq,
                 self._X,
@@ -271,11 +268,7 @@ class GammaC(_Objective):
         ``Equilibrium`` to be optimized.
     grid : Grid
         Optional, tensor-product grid in (ρ, θ, ζ) with uniformly spaced nodes
-        (θ, ζ) ∈ [0, 2π) × [0, 2π/NFP). That is,
-        ``grid.num_theta``, ``grid.num_zeta`` must match the output of
-        ``desc.integrals.interp_utils.fourier_pts(grid.num_theta)``,
-        ``desc.integrals.interp_utils.fourier_pts(grid.num_zeta)/grid.NFP``,
-        respectively. Powers of two are preferable.
+        (θ, ζ) ∈ [0, 2π) × [0, 2π/NFP). Powers of two are preferable.
     X : int
         Grid resolution in poloidal direction for Clebsch coordinate grid.
         Preferably power of 2.
@@ -295,9 +288,16 @@ class GammaC(_Objective):
         Resolution for quadrature over velocity coordinate. Default is 64.
     num_well : int
         Maximum number of wells to detect for each pitch and field line.
-        Default is to detect all wells, but due to limitations in JAX this option
-        may consume more memory. Specifying a number that tightly upper bounds
-        the number of wells will increase performance.
+        Giving ``None`` will detect all wells but due to current limitations in
+        JAX this will have worse performance.
+        Specifying a number that tightly upper bounds the number of wells will
+        increase performance. In general, an upper bound on the number of wells
+        per toroidal transit is ``Aι+B`` where ``A``,``B`` are the poloidal and
+        toroidal Fourier resolution of |B|, respectively, in straight-field line
+        PEST coordinates, and ι is the rotational transform normalized by 2π.
+        A tighter upper bound than ``num_well=(Aι+B)*num_transit`` is preferable.
+        The ``check_points`` or ``plot`` methods in ``desc.integrals.Bounce2D``
+        are useful to select a reasonable value.
     Nemov : bool
         Whether to use the Γ_c as defined by Nemov et al. or Velasco et al.
         Default is Nemov. Set to ``False`` to use Velascos's.
@@ -352,9 +352,9 @@ class GammaC(_Objective):
             target = 0.0
 
         self._grid = grid
+        self._constants = {"quad_weights": 1}
         self._X = X
         self._Y = Y
-        self._constants = {"quad_weights": 1}
         self._hyperparam = {
             "Y_B": setdefault(Y_B, 2 * Y),
             "num_transit": num_transit,
@@ -364,7 +364,6 @@ class GammaC(_Objective):
         }
         if Nemov:
             self._key = "Gamma_c"
-            self._constants["quad2"] = chebgauss2(num_quad)
         else:
             self._key = "Gamma_c Velasco"
             raise NotImplementedError
@@ -395,15 +394,10 @@ class GammaC(_Objective):
         """
         eq = self.things[0]
         if self._grid is None:
-            self._grid = Grid.create_meshgrid(
-                # Multiply equilibrium resolution by 2 instead of using eq.*_grid
-                # because the eq.*_grid integers are odd, and we'd like them to be
-                # powers of two or at least even.
-                [1.0, fourier_pts(eq.M * 2), fourier_pts(max(1, eq.N) * 2) / eq.NFP],
-                period=(np.inf, 2 * np.pi, 2 * np.pi / eq.NFP),
-                NFP=eq.NFP,
+            self._grid = LinearGrid(
+                theta=eq.M_grid, zeta=eq.N_grid, NFP=eq.NFP, sym=False
             )
-        # Should we call self._grid.to_numpy()?
+        assert self._grid.can_fft
         self._constants["clebsch"] = FourierChebyshevSeries.nodes(
             self._X,
             self._Y,
@@ -411,10 +405,12 @@ class GammaC(_Objective):
             domain=(0, 2 * np.pi),
         )
         self._constants["fieldline_quad"] = leggauss(self._hyperparam["Y_B"] // 2)
+        num_quad = self._hyperparam.pop("num_quad")
         self._constants["quad"] = get_quadrature(
-            leggauss(self._hyperparam.pop("num_quad")),
+            leggauss(num_quad),
             (automorphism_sin, grad_automorphism_sin),
         )
+        self._constants["quad2"] = chebgauss2(num_quad)
 
         self._dim_f = self._grid.num_rho
         self._target, self._bounds = _parse_callable_target_bounds(
@@ -440,7 +436,7 @@ class GammaC(_Objective):
         ----------
         params : dict
             Dictionary of equilibrium degrees of freedom, e.g.
-            ``Equilibrium.params_dict``
+            ``Equilibrium.params_dict``.
         constants : dict
             Dictionary of constant data, e.g. transforms, profiles etc.
             Defaults to ``self.constants``.
@@ -460,6 +456,7 @@ class GammaC(_Objective):
         data = compute_fun(
             eq, "iota", params, constants["transforms"], constants["profiles"]
         )
+        # TODO: GitHub issue #1034. Use old theta values as initial guess.
         data = compute_fun(
             eq,
             self._key,
@@ -467,7 +464,6 @@ class GammaC(_Objective):
             constants["transforms"],
             constants["profiles"],
             data,
-            # TODO: GitHub issue #1034. Use old values as initial guess.
             theta=Bounce2D.compute_theta(
                 eq,
                 self._X,

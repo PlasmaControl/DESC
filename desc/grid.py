@@ -221,6 +221,16 @@ class _Grid(IOAble, ABC):
         return self.__dict__.setdefault("_is_meshgrid", False)
 
     @property
+    def can_fft(self):
+        """bool: Whether this grid is compatible with FFT.
+
+        Tensor product grid with uniformly spaced points on
+        (θ, ζ) ∈ [0, 2π) × [0, 2π/NFP).
+        """
+        # TODO: GitHub issue 1243?
+        return self.__dict__.setdefault("_can_fft", self.is_meshgrid and not self.sym)
+
+    @property
     def coordinates(self):
         """Coordinates specified by the nodes.
 
@@ -645,13 +655,6 @@ class _Grid(IOAble, ABC):
             newax += (3,)
         x = jnp.transpose(x, newax)
         return x
-
-    def to_numpy(self):
-        """Convert all jax array attributes to numpy arrays."""
-        for attr in self.__dict__:
-            value = getattr(self, attr)
-            if isinstance(value, jnp.ndarray):
-                setattr(self, attr, np.array(value))
 
 
 class Grid(_Grid):

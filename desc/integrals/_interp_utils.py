@@ -73,7 +73,7 @@ def cheb_pts(n, domain=(-1, 1), lobatto=False):
 
 def fourier_pts(n):
     """Get ``n`` Fourier points in [0, 2π)."""
-    # [0, 2π] instead of [-π, π] required to match our definition of α.
+    # [0, 2π) instead of [-π, π) required to match our definition of α.
     return 2 * jnp.pi * jnp.arange(n) / n
 
 

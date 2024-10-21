@@ -38,37 +38,43 @@ from ..utils import cross, dot, errorif, safediv
 from .data_index import register_compute_fun
 
 _Bounce1D_doc = {
-    "quad": (
-        "tuple[jnp.ndarray] : Quadrature points and weights for bounce integrals. "
-        "Default option is well tested."
-    ),
-    "num_quad": (
-        "int : Resolution for quadrature of bounce integrals. "
-        "Default is 32. This option is ignored if given ``quad``."
-    ),
+    "quad": """tuple[jnp.ndarray] :
+        Quadrature points and weights for bounce integrals.
+        """,
+    "num_quad": """int :
+        Resolution for quadrature of bounce integrals.
+        Default is 32. This option is ignored if given ``quad``.
+        """,
     "num_pitch": "int : Resolution for quadrature over velocity coordinate.",
-    "num_well": (
-        "int : Maximum number of wells to detect for each pitch and field line. "
-        "Default is to detect all wells, but due to limitations in JAX this option "
-        "may consume more memory. Specifying a number that tightly upper bounds "
-        "the number of wells will increase performance."
-    ),
+    "num_well": """int :
+        Maximum number of wells to detect for each pitch and field line.
+        Giving ``None`` will detect all wells but due to current limitations in
+        JAX this will have worse performance.
+        Specifying a number that tightly upper bounds the number of wells will
+        increase performance. In general, an upper bound on the number of wells
+        per toroidal transit is ``Aι+B`` where ``A``,``B`` are the poloidal and
+        toroidal Fourier resolution of |B|, respectively, in straight-field line
+        PEST coordinates, and ι is the rotational transform normalized by 2π.
+        A tighter upper bound than ``num_well=(Aι+B)*num_transit`` is preferable.
+        The ``check_points`` or ``plot`` methods in ``desc.integrals.Bounce2D``
+        are useful to select a reasonable value.
+        """,
     "batch": "bool : Whether to vectorize part of the computation. Default is true.",
 }
 _Bounce2D_doc = {
     "spline": "bool : Whether to use cubic splines to compute bounce points.",
     "theta": "jnp.ndarray : DESC coordinates θ of (α,ζ) Fourier Chebyshev basis nodes.",
-    "Y_B": (
-        "int : Desired resolution for |B| along field lines to compute bounce points. "
-        "Default is to double the resolution of ``theta``."
-    ),
+    "Y_B": """int :
+        Desired resolution for |B| along field lines to compute bounce points.
+        Default is to double the resolution of ``theta``.
+        """,
     "num_transit": "int : Number of toroidal transits to follow field line.",
-    "fieldline_quad": (
-        "tuple[jnp.ndarray] : Quadrature points xₖ and weights wₖ for the "
-        "approximate evaluation of the integral ∫₋₁¹ f(x) dx ≈ ∑ₖ wₖ f(xₖ). "
-        "Used to compute the proper length of the field line ∫ dℓ / |B|. "
-        "Default is Gauss-Legendre quadrature."
-    ),
+    "fieldline_quad": """tuple[jnp.ndarray] :
+        Quadrature points xₖ and weights wₖ for the
+        approximate evaluation of the integral ∫₋₁¹ f(x) dx ≈ ∑ₖ wₖ f(xₖ).
+        Used to compute the proper length of the field line ∫ dℓ / |B|.
+        Default is Gauss-Legendre quadrature.
+        """,
     "quad": _Bounce1D_doc["quad"],
     "num_quad": _Bounce1D_doc["num_quad"],
     "num_pitch": _Bounce1D_doc["num_pitch"],
@@ -351,8 +357,7 @@ def _effective_ripple_1D(params, transforms, profiles, data, **kwargs):
     data=["min_tz |B|", "max_tz |B|", "kappa_g", "R0", "|grad(rho)|", "<|grad(rho)|>"]
     + Bounce2D.required_names,
     resolution_requirement="z",  # FIXME: GitHub issue #1312. Should be "tz".
-    # TODO: Uniformly spaced points on (θ, ζ) ∈ [0, 2π) × [0, 2π/NFP) are required.
-    grid_requirement={"coordinates": "rtz", "is_meshgrid": True, "sym": False},
+    grid_requirement={"coordinates": "rtz", "can_fft": True},
     **_Bounce2D_doc,
 )
 @partial(
@@ -752,8 +757,7 @@ def _Gamma_c_1D(params, transforms, profiles, data, **kwargs):
     ]
     + Bounce2D.required_names,
     resolution_requirement="z",  # FIXME: GitHub issue #1312. Should be "tz".
-    # TODO: Uniformly spaced points on (θ, ζ) ∈ [0, 2π) × [0, 2π/NFP) are required.
-    grid_requirement={"coordinates": "rtz", "is_meshgrid": True, "sym": False},
+    grid_requirement={"coordinates": "rtz", "can_fft": True},
     **_Bounce2D_doc,
     quad2="Same as ``quad`` for the weak singular integrals in particular.",
 )

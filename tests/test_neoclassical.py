@@ -9,9 +9,8 @@ from tests.test_plotting import tol_1d
 
 from desc.equilibrium.coords import get_rtz_grid
 from desc.examples import get
-from desc.grid import Grid, LinearGrid
+from desc.grid import LinearGrid
 from desc.integrals import Bounce2D
-from desc.integrals._interp_utils import fourier_pts
 from desc.utils import errorif, setdefault
 from desc.vmec import VMECIO
 
@@ -93,11 +92,7 @@ def test_effective_ripple_2D():
     """Test effective ripple 2D with W7-X against NEO."""
     eq = get("W7-X")
     rho = np.linspace(0, 1, 10)
-    grid = Grid.create_meshgrid(
-        [rho, fourier_pts(eq.M_grid), fourier_pts(eq.N_grid) / eq.NFP],
-        period=(np.inf, 2 * np.pi, 2 * np.pi / eq.NFP),
-        NFP=eq.NFP,
-    )
+    grid = LinearGrid(rho=rho, theta=eq.M_grid, zeta=eq.N_grid, NFP=eq.NFP, sym=False)
     data = eq.compute(
         "effective ripple 3/2",
         grid=grid,
@@ -169,11 +164,7 @@ def test_Gamma_c_2D():
     """Test Γ_c Nemov 2D with W7-X."""
     eq = get("W7-X")
     rho = np.linspace(0, 1, 10)
-    grid = Grid.create_meshgrid(
-        [rho, fourier_pts(eq.M_grid), fourier_pts(eq.N_grid) / eq.NFP],
-        period=(np.inf, 2 * np.pi, 2 * np.pi / eq.NFP),
-        NFP=eq.NFP,
-    )
+    grid = LinearGrid(rho=rho, theta=eq.M_grid, zeta=eq.N_grid, NFP=eq.NFP, sym=False)
     data = eq.compute(
         "Gamma_c",
         grid=grid,

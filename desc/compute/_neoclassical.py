@@ -21,19 +21,19 @@ from quadax import simpson
 
 from desc.backend import imap, jit, jnp
 
-from ..integrals.bounce_integral import Bounce1D, Bounce2D
-from ..integrals.bounce_utils import (
+from ..integrals._bounce_utils import (
     get_pitch_inv_quad,
     interp_fft_to_argmin,
     interp_to_argmin,
 )
-from ..integrals.interp_utils import polyder_vec
-from ..integrals.quad_utils import (
+from ..integrals._interp_utils import polyder_vec
+from ..integrals._quad_utils import (
     automorphism_sin,
     chebgauss2,
     get_quadrature,
     grad_automorphism_sin,
 )
+from ..integrals.bounce_integral import Bounce1D, Bounce2D
 from ..utils import cross, dot, errorif, safediv
 from .data_index import register_compute_fun
 

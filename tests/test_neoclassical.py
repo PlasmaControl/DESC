@@ -11,7 +11,7 @@ from desc.equilibrium.coords import get_rtz_grid
 from desc.examples import get
 from desc.grid import Grid, LinearGrid
 from desc.integrals import Bounce2D
-from desc.integrals.interp_utils import fourier_pts
+from desc.integrals._interp_utils import fourier_pts
 from desc.utils import errorif, setdefault
 from desc.vmec import VMECIO
 

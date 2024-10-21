@@ -71,7 +71,7 @@
    dev_guide/configuration_equilibrium.rst
    dev_guide/grid.ipynb
    dev_guide/objectives.rst
-   dev_guide/transforms_2.ipynb
+   dev_guide/transform_2.ipynb
    notebooks/dev_guide/backend.ipynb
    notebooks/dev_guide/basis.ipynb
    notebooks/dev_guide/coils.ipynb
@@ -90,7 +90,7 @@
    notebooks/dev_guide/optimize.ipynb
    notebooks/dev_guide/perturbations.ipynb
    notebooks/dev_guide/plotting.ipynb
-   notebooks/dev_guide/transforms.ipynb
+   notebooks/dev_guide/transform.ipynb
    notebooks/dev_guide/utils.ipynb
    notebooks/dev_guide/vmec_utils.ipynb
    notebooks/dev_guide/vmec.ipynb

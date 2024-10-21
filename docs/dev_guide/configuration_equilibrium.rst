@@ -2,7 +2,7 @@ Configuration.py and Equilibrium.py
 -----------------------------------
 
 To construct an equilibrium, the relevant parameters that decide the plasma state need to created and passed into the constructor of the ``Equilibrium`` class.
-See :ref:`Initializing an Equilibrium` for a walk-through of this process.
+See ``Initializing an Equilibrium`` for a walk-through of this process.
 
 These parameters are then automatically passed into the ``Configuration`` class, which is the abstract base class for equilibrium objects.
 Almost all the work to initialize an equilibrium object is done in ``configuration.py``, while ``equilibrium.py`` serves as a wrapper class with methods that call routines to solve and optimize the equilibrium.
@@ -28,7 +28,7 @@ Once an equilbrium is initialized, it can be solved with ``equilibrium.solve()``
 Each of these methods starts an optimization routine to either minimize the force balance residual errors or a some other specified objective function.
 T``Configuration`` class also contains the methods to compute quantities on the equilbrium.
 
-Once an equilibrium is optimized, we can compute quantities on this equilbrium with ``equilibrium.compute(names=names, grid=grid)`` where ``names`` is a list of strings that denote the names of the quantities as discussed in :ref:`Adding new physics quantities`.
+Once an equilibrium is optimized, we can compute quantities on this equilbrium with ``equilibrium.compute(names=names, grid=grid)`` where ``names`` is a list of strings that denote the names of the quantities as discussed in ``Adding new physics quantities``.
 This method calls the ``compute`` method in ``Configuration.py``.
 
 Some quantities require certain grids to ensure they computed accurately.

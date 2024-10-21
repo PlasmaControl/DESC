@@ -5,14 +5,7 @@ from interpax import CubicSpline, PPoly
 from matplotlib import pyplot as plt
 
 from desc.backend import dct, imap, jnp, softargmax
-from desc.integrals.basis import (
-    FourierChebyshevSeries,
-    PiecewiseChebyshevSeries,
-    _add2legend,
-    _in_epigraph_and,
-    _plot_intersect,
-)
-from desc.integrals.interp_utils import (
+from desc.integrals._interp_utils import (
     cheb_from_dct,
     cheb_pts,
     idct_non_uniform,
@@ -23,10 +16,17 @@ from desc.integrals.interp_utils import (
     polyroot_vec,
     polyval_vec,
 )
-from desc.integrals.quad_utils import (
+from desc.integrals._quad_utils import (
     bijection_from_disc,
     grad_bijection_from_disc,
     uniform,
+)
+from desc.integrals.basis import (
+    FourierChebyshevSeries,
+    PiecewiseChebyshevSeries,
+    _add2legend,
+    _in_epigraph_and,
+    _plot_intersect,
 )
 from desc.utils import (
     atleast_nd,

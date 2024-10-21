@@ -8,7 +8,7 @@ from numpy.polynomial.chebyshev import chebgauss, chebweight
 from scipy.special import roots_chebyu
 
 from desc.backend import jnp
-from desc.integrals.quad_utils import (
+from desc.integrals._quad_utils import (
     automorphism_arcsin,
     automorphism_sin,
     bijection_from_disc,

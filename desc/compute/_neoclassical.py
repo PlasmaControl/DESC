@@ -6,14 +6,13 @@ Performance will improve significantly by resolving these GitHub issues.
   * ``1303`` Patch for differentiable code with dynamic shapes
   * ``1206`` Upsample data above midplane to full grid assuming stellarator symmetry
   * ``1034`` Optimizers/objectives with auxiliary output
-
-If memory is still an issue, consider computing one pitch at a time. This
-can be done by copy-pasting the code given at
-https://github.com/PlasmaControl/DESC/pull/1003#discussion_r1780459450.
-Note that imap supports computing in batches, so that can also be used.
-Make sure to benchmark whether this reduces memory in an optimization.
-
 """
+
+# If memory is still an issue, consider computing one pitch at a time. This
+# can be done by copy-pasting the code given at
+# https://github.com/PlasmaControl/DESC/pull/1003#discussion_r1780459450.
+# Note that imap supports computing in batches, so that can also be used.
+# Make sure to benchmark whether this reduces memory in an optimization.
 
 from functools import partial
 
@@ -411,7 +410,6 @@ def _epsilon_32_2D(params, transforms, profiles, data, **kwargs):
         bounce = Bounce2D(
             grid,
             data,
-            data["iota"],
             data["theta"],
             Y_B,
             num_transit,
@@ -572,14 +570,14 @@ def _Gamma_c_Velasco_1D(params, transforms, profiles, data, **kwargs):
         "max_tz |B|",
         "B^phi",
         "B^phi_r|v,p",
-        "b",
         "|B|_r|v,p",
-        "iota_r",
+        "b",
         "grad(phi)",
         "e^rho",
         "|grad(rho)|",
         "|e_alpha|r,p|",
         "kappa_g",
+        "iota_r",
         "psi_r",
         "fieldline length",
     ]
@@ -742,14 +740,14 @@ def _Gamma_c_1D(params, transforms, profiles, data, **kwargs):
         "max_tz |B|",
         "B^phi",
         "B^phi_r|v,p",
-        "b",
         "|B|_r|v,p",
-        "iota_r",
+        "b",
         "grad(phi)",
         "e^rho",
         "|grad(rho)|",
         "|e_alpha|r,p|",
         "kappa_g",
+        "iota_r",
         "psi_r",
     ]
     + Bounce2D.required_names,
@@ -834,7 +832,6 @@ def _Gamma_c_2D(params, transforms, profiles, data, **kwargs):
         bounce = Bounce2D(
             grid,
             data,
-            data["iota"],
             data["theta"],
             Y_B,
             num_transit,

@@ -72,28 +72,28 @@
    dev_guide/grid.ipynb
    dev_guide/objectives.rst
    dev_guide/transform_2.ipynb
-   notebooks/dev_guide/backend.ipynb
-   notebooks/dev_guide/basis.ipynb
-   notebooks/dev_guide/coils.ipynb
-   notebooks/dev_guide/compute_notebook_2.ipynb
-   notebooks/dev_guide/configuration.ipynb
-   notebooks/dev_guide/derivatives.ipynb
-   notebooks/dev_guide/equilibrium.ipynb
-   notebooks/dev_guide/examples.ipynb
-   notebooks/dev_guide/geometry.ipynb
-   notebooks/dev_guide/grid.ipynb
-   notebooks/dev_guide/interpolate.ipynb
-   notebooks/dev_guide/io.ipynb
-   notebooks/dev_guide/magnetic_fields.ipynb
-   notebooks/dev_guide/objectives.ipynb
-   notebooks/dev_guide/optimization_objectives_constraints.ipynb
-   notebooks/dev_guide/optimize.ipynb
-   notebooks/dev_guide/perturbations.ipynb
-   notebooks/dev_guide/plotting.ipynb
-   notebooks/dev_guide/transform.ipynb
-   notebooks/dev_guide/utils.ipynb
-   notebooks/dev_guide/vmec_utils.ipynb
-   notebooks/dev_guide/vmec.ipynb
+   dev_guide/notebooks/backend.ipynb
+   dev_guide/notebooks/basis.ipynb
+   dev_guide/notebooks/coils.ipynb
+   dev_guide/notebooks/compute_notebook_2.ipynb
+   dev_guide/notebooks/configuration.ipynb
+   dev_guide/notebooks/derivatives.ipynb
+   dev_guide/notebooks/equilibrium.ipynb
+   dev_guide/notebooks/examples.ipynb
+   dev_guide/notebooks/geometry.ipynb
+   dev_guide/notebooks/grid.ipynb
+   dev_guide/notebooks/interpolate.ipynb
+   dev_guide/notebooks/io.ipynb
+   dev_guide/notebooks/magnetic_fields.ipynb
+   dev_guide/notebooks/objectives.ipynb
+   dev_guide/notebooks/optimization_objectives_constraints.ipynb
+   dev_guide/notebooks/optimize.ipynb
+   dev_guide/notebooks/perturbations.ipynb
+   dev_guide/notebooks/plotting.ipynb
+   dev_guide/notebooks/transform.ipynb
+   dev_guide/notebooks/utils.ipynb
+   dev_guide/notebooks/vmec_utils.ipynb
+   dev_guide/notebooks/vmec.ipynb
 
 
 

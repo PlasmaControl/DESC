@@ -909,13 +909,13 @@ class Equilibrium(IOAble, Optimizable):
             # the compute logic assume input data is evaluated on those coordinates.
             # We exclude these from the depXdx sets below since the grids we will
             # use to compute those dependencies are coordinate-blind.
-            # Example, "<L|r,a>" has coordinates="r", but requires computing on
-            # field line following source grid.
+            # Example, "fieldline length" has coordinates="r", but requires computing
+            # on field line following source grid.
             return bool(data_index[p][name]["source_grid_requirement"])
 
-        # Need to call _grow_seeds so that some other quantity like K = 2 * <L|r,a>,
-        # which does not need a source grid to evaluate, does not compute <L|r,a> on a
-        # grid that does not follow field lines.
+        # Need to call _grow_seeds so that e.g. "effective ripple*" which does not
+        # need a source grid to evaluate, still computes "effective ripple 3/2*"
+        # on a grid whose source grid follows field lines.
         # Maybe this can help explain:
         # https://github.com/PlasmaControl/DESC/pull/1024#discussion_r1664918897.
         need_src_deps = _grow_seeds(p, set(filter(need_src, deps)), deps)
@@ -1221,8 +1221,15 @@ class Equilibrium(IOAble, Optimizable):
             **kwargs,
         )
 
-    def get_rtz_grid(
-        self, radial, poloidal, toroidal, coordinates, period, jitable=True, **kwargs
+    def _get_rtz_grid(
+        self,
+        radial,
+        poloidal,
+        toroidal,
+        coordinates,
+        period=(np.inf, np.inf, np.inf),
+        jitable=True,
+        **kwargs,
     ):
         """Return DESC grid in (rho, theta, zeta) coordinates from given coordinates.
 
@@ -1243,8 +1250,8 @@ class Equilibrium(IOAble, Optimizable):
             rvp : rho, theta_PEST, phi
             rtz : rho, theta, zeta
         period : tuple of float
-            Assumed periodicity for each quantity in inbasis.
-            Use np.inf to denote no periodicity.
+            Assumed periodicity of the given coordinates.
+            Use ``np.inf`` to denote no periodicity.
         jitable : bool, optional
             If false the returned grid has additional attributes.
             Required to be false to retain nodes at magnetic axis.

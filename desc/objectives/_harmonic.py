@@ -189,7 +189,6 @@ class HarmonicField_to_BiotSavart(_Objective):
             curve_grid = self._curve_grid
             
         self._dim_f = surface_grid.num_nodes
-        #self._equil_data_keys = ["R", "phi", "Z"]
         #self._surface_data_keys = ["x"]
         
         # Keys for equilibrium surface are not required since the harmonic fields are computed in the
@@ -216,12 +215,19 @@ class HarmonicField_to_BiotSavart(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        equil_transforms = get_transforms(
-            self._equil_data_keys,
-            obj=eq,
-            grid=plasma_grid,
-            has_axis=plasma_grid.axis.size,
-        )
+        #equil_profiles = get_profiles(
+        #    self._equil_data_keys,
+        #    obj=self._eq,
+        #    grid=self._plasma_grid,
+        #    has_axis=self._plasma_grid.axis.size,
+        #)
+        
+        #equil_transforms = get_transforms(
+        #    self._equil_data_keys,
+        #    obj=eq,
+        #    grid=plasma_grid,
+        #    has_axis=plasma_grid.axis.size,
+        #)
         
         # compute returns points on the grid of the surface
         # (dim_f = surface_grid.num_nodes)
@@ -230,13 +236,13 @@ class HarmonicField_to_BiotSavart(_Objective):
         w = surface_grid.weights
         w *= jnp.sqrt(surface_grid.num_nodes)
 
-        self._constants = {
-            #"equil_transforms": equil_transforms,
-            #"equil_profiles": equil_profiles,
-            #"surface_transforms": surface_transforms,
-            "quad_weights": w,
-            "G": self._G,
-        }
+        #self._constants = {
+        #    "equil_transforms": equil_transforms,
+        #    "equil_profiles": equil_profiles,
+        #    #"surface_transforms": surface_transforms,
+        #    "quad_weights": w,
+        #    "G": self._G,
+        #}
 
         #if self._surface_fixed:
             # precompute the surface coordinates
@@ -300,43 +306,43 @@ class HarmonicField_to_BiotSavart(_Objective):
         
         equil_transforms = get_transforms(
             self._equil_data_keys,
-            obj=self._eq,
-            grid=self._plasma_grid,
-            jitable=True,
+            obj = self._eq,
+            grid = self._plasma_grid,
+            jitable = True,
         )
         
         curve_transforms = get_transforms(
             self._curve_data_keys,
-            obj=self._curve,
-            grid=self._curve_grid,
-            jitable=True,
+            obj = self._curve,
+            grid = self._curve_grid,
+            jitable = True,
         )
         
-        self._constants = {
-            "equil_transforms": equil_transforms,
-            "equil_profiles": equil_profiles,
+        #self._constants = {
+        #    "equil_transforms": equil_transforms,
+        #    "equil_profiles": equil_profiles,
             #"surface_transforms": surface_transforms,
-        }
+        #}
 
         edata = compute_fun(
             self._eq,
             self._equil_data_keys,
-            params=equil_params,
-            transforms=constants["equil_transforms"],
-            profiles=constants["equil_profiles"],
+            params = equil_params,
+            transforms = equil_transforms,#constants["equil_transforms"],
+            profiles = equil_profiles,#constants["equil_profiles"],
             basis="xyz",
         )
         
         # Generate a winding surface as an offset surface from the plasma surface
-        surf_winding = self._eq.surface.constant_offset_surface(offset=5e-2, # desired offset
-                                                          M=16, # Poloidal resolution of desired offset surface
-                                                          N=8, # Toroidal resolution of desired offset surface
-                                                          grid=LinearGrid(M=32,
-                                                                          N=16,
-                                                                          NFP=self._eq.NFP)
-                                                         ) # grid of points on base surface to evaluate unit normal 
-                                                        # and find points on offset surface, generally should be 
-                                                        # twice the desired 
+        surf_winding = (self._eq).surface.constant_offset_surface(
+            offset = 5e-2, # desired offset
+            M = 16, # Poloidal resolution of desired offset surface
+            N = 8, # Toroidal resolution of desired offset surface
+            grid = LinearGrid(M=32, N=16, 
+                              NFP = self._eq.NFP)
+        ) # grid of points on base surface to evaluate unit normal 
+        # and find points on offset surface, generally should be 
+        # twice the desired 
                 
         surface_transforms = get_transforms(
             self._surface_data_keys,

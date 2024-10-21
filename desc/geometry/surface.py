@@ -459,7 +459,10 @@ class FourierRZToroidalSurface(Surface):
         M = check_nonnegint(M, "M", False)
         N = check_nonnegint(N, "N", False)
         NFP = check_posint(NFP, "NFP", False)
-        theta = np.asarray(theta)
+        #theta = np.asarray(theta)
+        
+        theta = jnp.asarray(theta)
+        
         assert (
             coords.shape[0] == theta.size
         ), "coords first dimension and theta must have same size"
@@ -468,7 +471,8 @@ class FourierRZToroidalSurface(Surface):
         else:
             raise NotImplementedError("zeta != phi not yet implemented")
         nodes = Grid(
-            np.vstack([np.ones_like(theta), theta, coords[:, 1]]).T,
+            #np.vstack([np.ones_like(theta), theta, coords[:, 1]]).T,
+            jnp.vstack([jnp.ones_like(theta), theta, coords[:, 1]]).T,
             sort=False,
             jitable=True,
         )
@@ -491,8 +495,10 @@ class FourierRZToroidalSurface(Surface):
             # solves system W A x = W b
             # where A is the transform matrix, W is the diagonal weight matrix
             # of weights w, and b is the vector of data points
-            w = np.asarray(w)
-            W = np.diag(w)
+            #w = np.asarray(w)
+            #W = np.diag(w)
+            w = jnp.asarray(w)
+            W = jnp.diag(w)
             assert w.size == R.size, "w must same length as number of points being fit"
 
             transform = Transform(
@@ -726,8 +732,11 @@ class FourierRZToroidalSurface(Surface):
             grid.nodes[:, 2], grid.nodes[:, 1], grid.nodes[:, 2]
         )
 
-        zetas = np.asarray(zetas)
-        nodes = np.vstack((np.ones_like(grid.nodes[:, 1]), grid.nodes[:, 1], zetas)).T
+        #zetas = np.asarray(zetas)
+        #nodes = np.vstack((np.ones_like(grid.nodes[:, 1]), grid.nodes[:, 1], zetas)).T
+        zetas = jnp.asarray(zetas)
+        nodes = jnp.vstack((jnp.ones_like(grid.nodes[:, 1]), grid.nodes[:, 1], zetas)).T
+        
         n, x, x_offsets = n_and_r_jax(nodes)
 
         data = {}

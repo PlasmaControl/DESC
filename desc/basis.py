@@ -74,16 +74,20 @@ class _Basis(IOAble, ABC):
         ], f"Unknown symmetry type {self.sym}"
         if self.sym in ["cos", "cosine"]:  # cos(m*t-n*z) symmetry
             self._modes = self.modes[
-                np.asarray(sign(self.modes[:, 1]) == sign(self.modes[:, 2]))
+                #np.asarray(sign(self.modes[:, 1]) == sign(self.modes[:, 2]))
+                jnp.asarray(sign(self.modes[:, 1]) == sign(self.modes[:, 2]))
             ]
         elif self.sym in ["sin", "sine"]:  # sin(m*t-n*z) symmetry
             self._modes = self.modes[
-                np.asarray(sign(self.modes[:, 1]) != sign(self.modes[:, 2]))
+                #np.asarray(sign(self.modes[:, 1]) != sign(self.modes[:, 2]))
+                jnp.asarray(sign(self.modes[:, 1]) != sign(self.modes[:, 2]))
             ]
         elif self.sym == "even":  # even powers of rho
-            self._modes = self.modes[np.asarray(self.modes[:, 0] % 2 == 0)]
+            #self._modes = self.modes[np.asarray(self.modes[:, 0] % 2 == 0)]
+            self._modes = self.modes[jnp.asarray(self.modes[:, 0] % 2 == 0)]
         elif self.sym == "cos(t)":  # cos(m*t) terms only
-            self._modes = self.modes[np.asarray(sign(self.modes[:, 1]) >= 0)]
+            #self._modes = self.modes[np.asarray(sign(self.modes[:, 1]) >= 0)]
+            self._modes = self.modes[jnp.asarray(sign(self.modes[:, 1]) >= 0)]
         elif self.sym is None:
             self._sym = False
 

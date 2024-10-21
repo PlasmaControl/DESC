@@ -1,5 +1,6 @@
+=======
 Backend
--------
+=======
 
 
 DESC uses JAX for faster compile times, automatic differentiation, and other scientific computing tools.

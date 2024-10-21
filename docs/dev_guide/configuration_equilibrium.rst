@@ -1,5 +1,6 @@
+===================================
 Configuration.py and Equilibrium.py
------------------------------------
+===================================
 
 To construct an equilibrium, the relevant parameters that decide the plasma state need to created and passed into the constructor of the ``Equilibrium`` class.
 See ``Initializing an Equilibrium`` for a walk-through of this process.

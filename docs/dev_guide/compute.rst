@@ -1,5 +1,6 @@
+=============================
 Adding new physics quantities
------------------------------
+=============================
 
 
 All calculation of physics quantities takes place in ``desc.compute``

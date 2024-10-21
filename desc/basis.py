@@ -1497,7 +1497,7 @@ def zernike_radial_poly(r, l, m, dr=0, exact="auto"):
     return polyval_vec(coeffs, r, prec=prec).T
 
 
-@functools.partial(jit, static_argnums=(3,))
+@functools.partial(jit, static_argnums=3)
 def zernike_radial(r, l, m, dr=0):
     """Radial part of zernike polynomials.
 
@@ -1523,12 +1523,12 @@ def zernike_radial(r, l, m, dr=0):
         basis function(s) evaluated at specified points
 
     """
-    m = jnp.abs(m).astype(jnp.float64)
+    m = jnp.abs(m).astype(float)
     alpha = m
     beta = 0
     n = (l - m) // 2
-    s = ((-1) ** n).astype(jnp.float64)
-    jacobi_arg = 1.0 - 2 * r**2
+    s = (-1) ** n
+    jacobi_arg = 1 - 2 * r**2
     if dr == 0:
         out = r**m * _jacobi(n, alpha, beta, jacobi_arg, 0)
     elif dr == 1:
@@ -1800,7 +1800,7 @@ def _jacobi(n, alpha, beta, x, dx=0):
     # other edge cases
     out = jnp.where(n == 0, 1.0, out)
     out = jnp.where(n == 1, 0.5 * (2 * (alpha + 1) + (alpha + beta + 2) * (x - 1)), out)
-    return (c * out).astype(jnp.float64)
+    return c * out
 
 
 @_jacobi.defjvp

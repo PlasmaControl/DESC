@@ -958,7 +958,7 @@ def get_fieldline(alpha_0, iota, num_transit, period):
     Returns
     -------
     fieldline : jnp.ndarray
-        Shape (num rho, num transit).
+        Shape (num rho, num transit) or broadcastable.
         Sequence of poloidal coordinates A = (α₀, α₁, …, αₘ₋₁) that specify field line.
 
     """
@@ -977,6 +977,7 @@ def fourier_chebyshev(theta, iota, alpha, num_transit):
         Shape (num rho, X, Y) or (X, Y).
         DESC coordinates θ sourced from the Clebsch coordinates
         ``FourierChebyshevSeries.nodes(M,N,domain=(0,2*jnp.pi))``.
+        Use the ``Bounce2D.compute_theta`` method to obtain this.
     iota : jnp.ndarray
         Shape (num rho, ).
         Rotational transform normalized by 2π.

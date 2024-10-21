@@ -2,7 +2,6 @@
 
 import numpy as np
 import pytest
-from matplotlib import pyplot as plt
 from numpy.polynomial.chebyshev import (
     cheb2poly,
     chebinterpolate,
@@ -313,12 +312,6 @@ class TestFastInterp:
         np.testing.assert_allclose(fq_1, f(n), atol=1e-14)
         # Resolved by https://github.com/google/jax/issues/23895.
         np.testing.assert_allclose(fq_2, f(n), atol=1e-6)
-
-        fig, ax = plt.subplots()
-        ax.scatter(m, f(m))
-        ax.plot(n, fq_1)
-        ax.plot(n, fq_2)
-        return fig
 
     @pytest.mark.unit
     @pytest.mark.parametrize(

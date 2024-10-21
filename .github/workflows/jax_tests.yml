@@ -36,9 +36,6 @@ jobs:
           cat ./requirements.txt
           pip install -r ./devtools/dev-requirements.txt
           pip install matplotlib==3.7.2
-          if [[ $(echo "${{ matrix.jax-version }} == 0.4.13" | bc -l) -eq 1 ]]; then
-            pip install scipy==1.10.1
-          fi
       - name: Verify dependencies
         run: |
           python --version

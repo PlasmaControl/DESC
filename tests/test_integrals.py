@@ -943,9 +943,6 @@ def _one_bump(x, h):
 def _bumpy(x, x_peak=(-0.5, 0, 0.5), h_peak=(0.5, 0.75, 0.25), sigma=0.125):
     """Make |B| with humps.
 
-    Looks fine by eye when plotted, but might not be that realistic of an example?,
-    since no power series centered near center of Gaussian converges (to Gaussian).
-
     Parameters
     ----------
     x : jnp.ndarray

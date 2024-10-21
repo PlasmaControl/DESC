@@ -437,7 +437,8 @@ def _fourier(grid, f, is_reshaped=False):
     Parameters
     ----------
     grid : Grid
-        Tensor-product grid in (θ, ζ) with uniformly spaced nodes [0, 2π) × [0, 2π/NFP).
+        Tensor-product grid in (ρ, θ, ζ) with uniformly spaced nodes
+        (θ, ζ) ∈ [0, 2π) × [0, 2π/NFP).
         Preferably power of 2 for ``grid.num_theta`` and ``grid.num_zeta``.
     f : jnp.ndarray
         Function evaluated on ``grid``.

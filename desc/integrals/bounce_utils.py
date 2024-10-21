@@ -878,7 +878,8 @@ def interp_fft_to_argmin(
     h : jnp.ndarray
         Shape (..., grid.num_theta, grid.num_zeta)
         Periodic function evaluated on tensor-product grid in (ρ, θ, ζ) with
-        uniformly spaced nodes [0, 2π) × [0, 2π/NFP).
+        uniformly spaced nodes (θ, ζ) ∈ [0, 2π) × [0, 2π/NFP).
+        Preferably power of 2 for ``grid.num_theta`` and ``grid.num_zeta``.
     points : jnp.ndarray
         Shape (..., num well).
         Boundaries to detect argmin between.
@@ -962,7 +963,9 @@ def get_fieldline(alpha_0, iota, num_transit, period):
 
     """
     # Δϕ (∂α/∂ϕ) = Δϕ ι̅ = Δϕ ι/2π = Δϕ data["iota"]
-    return alpha_0 + period * jnp.expand_dims(iota, -1) * jnp.arange(num_transit)
+    return alpha_0 + period * (
+        iota if iota.size == 1 else iota[:, jnp.newaxis]
+    ) * jnp.arange(num_transit)
 
 
 def fourier_chebyshev(theta, iota, alpha, num_transit):
@@ -976,7 +979,7 @@ def fourier_chebyshev(theta, iota, alpha, num_transit):
         ``FourierChebyshevSeries.nodes(M,N,domain=(0,2*jnp.pi))``.
     iota : jnp.ndarray
         Shape (num rho, ).
-        Rotational transform.
+        Rotational transform normalized by 2π.
     alpha : float
         Starting field line poloidal label.
     num_transit : int

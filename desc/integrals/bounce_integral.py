@@ -101,7 +101,7 @@ class Bounce2D(Bounce):
       Fᵢ : λ, ζ₁, ζ₂ ↦  ∫ᵢ f(λ, ζ, {Gⱼ}) dζ
 
     If the map G is multivalued at a physical location, then it is still
-    permissible if separable into a single valued and multivalued parts.
+    permissible if separable into single valued and multivalued parts.
     In that case, supply the single valued parts, which will be interpolated
     with FFTs, and use the provided coordinates θ,ζ ∈ ℝ to compose G.
 
@@ -253,7 +253,6 @@ class Bounce2D(Bounce):
         self,
         grid,
         data,
-        iota,
         theta,
         Y_B=None,
         num_transit=32,
@@ -280,14 +279,12 @@ class Bounce2D(Bounce):
         ----------
         grid : Grid
             Tensor-product grid in (ρ, θ, ζ) with uniformly spaced nodes
-            [0, 2π) × [0, 2π/NFP). The ζ nodes should be strictly increasing.
+            (θ, ζ) ∈ [0, 2π) × [0, 2π/NFP). The ζ coordinates (the unique values prior
+            to taking the tensor-product) must be strictly increasing.
             Below shape notation defines ``M=grid.num_theta`` and ``N=grid.num_zeta``.
         data : dict[str, jnp.ndarray]
             Data evaluated on ``grid``.
             Must include names in ``Bounce2D.required_names``.
-        iota : jnp.ndarray
-            Shape (num rho, ).
-            Rotational transform.
         theta : jnp.ndarray
             Shape (num rho, X, Y).
             DESC coordinates θ sourced from the Clebsch coordinates
@@ -332,7 +329,7 @@ class Bounce2D(Bounce):
             Chebyshev series algorithm is not yet implemented.
             When using splines, it is recommended to reduce the ``num_well``
             parameter in the ``points`` method from ``3*Y_B*num_transit`` to
-            ``Y_B*num_transit``.
+            at most ``Y_B*num_transit``.
 
         """
         errorif(grid.sym, NotImplementedError, msg="Need grid that works with FFTs.")
@@ -353,7 +350,9 @@ class Bounce2D(Bounce):
             "B^zeta": _fourier(
                 grid, jnp.abs(data["B^zeta"]) * Lref / Bref, is_reshaped
             ),
-            "T(z)": fourier_chebyshev(theta, iota, alpha, num_transit),
+            "T(z)": fourier_chebyshev(
+                theta, grid.compress(data["iota"]), alpha, num_transit
+            ),
         }
         Y_B = setdefault(Y_B, theta.shape[-1] * 2)
         if spline:
@@ -600,17 +599,18 @@ class Bounce2D(Bounce):
             as the indices that correspond to that field line.
         f : list[jnp.ndarray] or jnp.ndarray
             Shape (num rho, M, N).
-            Real scalar-valued (2π × 2π/NFP) periodic in (θ, ζ) functions evaluated
-            on the ``grid`` supplied to construct this object. These functions
+            Real scalar-valued periodic functions in (θ, ζ) ∈ [0, 2π) × [0, 2π/NFP)
+            evaluated on the ``grid`` supplied to construct this object. These functions
             should be arguments to the callable ``integrand``. Use the method
             ``Bounce2D.reshape_data`` to reshape the data into the expected shape.
         weight : jnp.ndarray
             Shape (num rho, M, N).
+            Real scalar-valued periodic functions in (θ, ζ) ∈ [0, 2π) × [0, 2π/NFP)
+            evaluated on the ``grid`` supplied to construct this object.
             If supplied, the bounce integral labeled by well j is weighted such that
             the returned value is w(j) ∫ f(λ, ℓ) dℓ, where w(j) is ``weight``
             interpolated to the deepest point in that magnetic well. Use the method
             ``Bounce2D.reshape_data`` to reshape the data into the expected shape.
-            It is assumed ``weight`` is a periodic function.
         points : tuple[jnp.ndarray]
             Shape (num rho, num pitch, num well).
             Optional, output of method ``self.points``.

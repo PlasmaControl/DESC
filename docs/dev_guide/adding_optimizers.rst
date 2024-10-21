@@ -1,7 +1,8 @@
 .. _adding-optimizers:
 
+=====================
 Adding new optimizers
-----------------------
+=====================
 
 This guide walks through adding an interface to a new optimizer. As an example, we will
 write an interface to the popular open source ``ipopt`` interior point method.

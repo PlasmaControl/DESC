@@ -107,6 +107,9 @@ class HarmonicField_to_BiotSavart(_Objective):
         field,
         curve,
         G,
+        surface_grid=None,
+        plasma_grid=None,
+        curve_grid = None,
         #surface,
         target=None,
         bounds=None,
@@ -115,9 +118,6 @@ class HarmonicField_to_BiotSavart(_Objective):
         normalize_target=True,
         loss_function=None,
         deriv_mode="auto",
-        surface_grid=None,
-        plasma_grid=None,
-        curve_grid = None,
         use_softmin=False,
         surface_fixed=False,
         alpha=1.0,
@@ -127,7 +127,10 @@ class HarmonicField_to_BiotSavart(_Objective):
         if target is None and bounds is None:
             bounds = (1, np.inf)
         self._eq = eq
-        self._surface = surface
+        self._field = field
+        self._curve = curve
+        self._G = G
+        #self._surface = surface
         self._surface_grid = surface_grid
         self._plasma_grid = plasma_grid
         self._curve_grid = curve_grid
@@ -135,7 +138,8 @@ class HarmonicField_to_BiotSavart(_Objective):
         self._surface_fixed = surface_fixed
         self._alpha = alpha
         super().__init__(
-            things=[eq, self._surface] if not surface_fixed else [eq],
+            #things=[eq, self._surface] if not surface_fixed else [eq],
+            things=[eq] if not surface_fixed else [eq],
             target=target,
             bounds=bounds,
             weight=weight,
@@ -158,11 +162,13 @@ class HarmonicField_to_BiotSavart(_Objective):
 
         """
         eq = self.things[0]
+        #plasma_grid = self.things[5]
         
-        surface = self._surface if self._surface_fixed else self.things[1]
+        #surface = self._surface if self._surface_fixed else self.things[1]
         # if things[1] is different than self._surface, update self._surface
-        if surface != self._surface:
-            self._surface = surface
+        #if surface != self._surface:
+        #    self._surface = surface
+        
         if self._surface_grid is None:
             surface_grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
         else:
@@ -229,21 +235,21 @@ class HarmonicField_to_BiotSavart(_Objective):
             #"equil_profiles": equil_profiles,
             #"surface_transforms": surface_transforms,
             "quad_weights": w,
-            "G": G,
+            "G": self._G,
         }
 
-        if self._surface_fixed:
+        #if self._surface_fixed:
             # precompute the surface coordinates
             # as the surface is fixed during the optimization
-            surface_coords = compute_fun(
-                self._surface,
-                self._surface_data_keys,
-                params=self._surface.params_dict,
-                transforms=surface_transforms,
-                profiles={},
-                basis="xyz",
-            )["x"]
-            self._constants["surface_coords"] = surface_coords
+        #    surface_coords = compute_fun(
+        #        self._surface,
+        #        self._surface_data_keys,
+        #        params=self._surface.params_dict,
+        #        transforms=surface_transforms,
+        #        profiles={},
+        #        basis="xyz",
+        #    )["x"]
+        #    self._constants["surface_coords"] = surface_coords
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -288,41 +294,41 @@ class HarmonicField_to_BiotSavart(_Objective):
         equil_profiles = get_profiles(
             self._equil_data_keys,
             obj=self._eq,
-            grid=plasma_grid,
-            has_axis=plasma_grid.axis.size,
+            grid=self._plasma_grid,
+            has_axis=self._plasma_grid.axis.size,
         )
         
         equil_transforms = get_transforms(
             self._equil_data_keys,
             obj=self._eq,
-            grid=plasma_grid,
+            grid=self._plasma_grid,
             jitable=True,
         )
         
         curve_transforms = get_transforms(
             self._curve_data_keys,
             obj=self._curve,
-            grid=curve_grid,
+            grid=self._curve_grid,
             jitable=True,
         )
         
         self._constants = {
-            #"equil_transforms": equil_transforms,
+            "equil_transforms": equil_transforms,
             "equil_profiles": equil_profiles,
             #"surface_transforms": surface_transforms,
         }
-        
+
         edata = compute_fun(
             self._eq,
             self._equil_data_keys,
             params=equil_params,
-            transforms=constants["surface_transforms"],
+            transforms=constants["equil_transforms"],
             profiles=constants["equil_profiles"],
             basis="xyz",
         )
         
         # Generate a winding surface as an offset surface from the plasma surface
-        surf_winding = self._eq.surface.constant_offset_surface(offset=1e-2, # desired offset
+        surf_winding = self._eq.surface.constant_offset_surface(offset=5e-2, # desired offset
                                                           M=16, # Poloidal resolution of desired offset surface
                                                           N=8, # Toroidal resolution of desired offset surface
                                                           grid=LinearGrid(M=32,
@@ -331,21 +337,28 @@ class HarmonicField_to_BiotSavart(_Objective):
                                                          ) # grid of points on base surface to evaluate unit normal 
                                                         # and find points on offset surface, generally should be 
                                                         # twice the desired 
-        
+                
         surface_transforms = get_transforms(
             self._surface_data_keys,
-            obj=surf_winding,
-            grid=plasma_grid,
+            obj=surf_winding,#self._eq,
+            grid=self._surface_grid,
             jitable=True,
         )
         
-        sdata = compute_fun(
-            surf_winding._eq,
-            self._surface_data_keys,
-            params=surface_params,
-            transforms=constants["surface_transforms"],
-            basis="rpz",
-        )
+        #surface_transforms = get_transforms(
+        #    self._surface_data_keys,
+        #    obj=surf_winding,
+        #    grid=plasma_grid,
+        #    jitable=True,
+        #)
+        
+        #sdata = compute_fun(
+        #    surf_winding._eq,
+        #    self._surface_data_keys,
+        #    params=surface_params,
+        #    transforms=constants["surface_transforms"],
+        #    basis="rpz",
+        #)
         
         cdata = compute_fun(
             self._curve,
@@ -366,9 +379,12 @@ class HarmonicField_to_BiotSavart(_Objective):
                     N=30 + 2 * max(field.N, field.N_Phi),
                     NFP=field.NFP,
                 )
+                
             field_transforms = get_transforms(
-                G = self.G,
-                ["K", "x"], obj=field, grid=self._field_grid
+                G = self._G,
+                #["K"], 
+                #["K", "x"], 
+                obj = self._field, grid = self._field_grid,
             )
         else:
             field_transforms = None

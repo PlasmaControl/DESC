@@ -12,7 +12,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        jax-version: [0.4.11, 0.4.12, 0.4.13, 0.4.14, 0.4.16, 0.4.17,
+        jax-version: [0.4.12, 0.4.13, 0.4.14, 0.4.16, 0.4.17,
                       0.4.18, 0.4.19, 0.4.20, 0.4.21, 0.4.22, 0.4.23,
                       0.4.24, 0.4.25, 0.4.26, 0.4.27, 0.4.28, 0.4.29,
                       0.4.30, 0.4.31, 0.4.33, 0.4.34]
@@ -36,6 +36,9 @@ jobs:
           cat ./requirements.txt
           pip install -r ./devtools/dev-requirements.txt
           pip install matplotlib==3.7.2
+          if [[ $(echo "${{ matrix.jax-version }} == 0.4.13" | bc -l) -eq 1 ]]; then
+            pip install scipy==1.10.1
+          fi
       - name: Verify dependencies
         run: |
           python --version

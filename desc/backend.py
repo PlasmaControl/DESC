@@ -87,9 +87,12 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
         treedef_is_leaf,
     )
 
-    trapezoid = (
-        jnp.trapezoid if hasattr(jnp, "trapezoid") else jax.scipy.integrate.trapezoid
-    )
+    if hasattr(jnp, "trapezoid"):
+        trapezoid = jnp.trapezoid  # for JAX 0.4.26 and later
+    elif hasattr(jax.scipy, "integrate"):
+        trapezoid = jax.scipy.integrate.trapezoid
+    else:
+        trapezoid = jnp.trapz  # for older versions of JAX, deprecated by jax 0.4.16
 
     def execute_on_cpu(func):
         """Decorator to set default device to CPU for a function.

@@ -6,8 +6,7 @@ from interpax import CubicHermiteSpline, PPoly
 from orthax.legendre import leggauss
 
 from desc.backend import jnp
-from desc.integrals.basis import FourierChebyshevSeries, PiecewiseChebyshevSeries
-from desc.integrals.bounce_utils import (
+from desc.integrals._bounce_utils import (
     _bounce_quadrature,
     _check_bounce_points,
     _check_interp,
@@ -21,20 +20,21 @@ from desc.integrals.bounce_utils import (
     interp_to_argmin,
     plot_ppoly,
 )
-from desc.integrals.interp_utils import (
+from desc.integrals._interp_utils import (
     _fourier,
     idct_non_uniform,
     interp_rfft2,
     irfft2_non_uniform,
     polyder_vec,
 )
-from desc.integrals.quad_utils import (
+from desc.integrals._quad_utils import (
     automorphism_sin,
     bijection_from_disc,
     get_quadrature,
     grad_automorphism_sin,
     grad_bijection_from_disc,
 )
+from desc.integrals.basis import FourierChebyshevSeries, PiecewiseChebyshevSeries
 from desc.io import IOAble
 from desc.utils import atleast_nd, errorif, flatten_matrix, setdefault
 
@@ -300,18 +300,22 @@ class Bounce2D(Bounce):
         quad : tuple[jnp.ndarray]
             Quadrature points xₖ and weights wₖ for the approximate evaluation of an
             integral ∫₋₁¹ g(x) dx = ∑ₖ wₖ g(xₖ). Default is 32 points.
-            For weak singular integrals, use ``chebgauss2`` from
-            ``desc.integrals.quad_utils``.
+            The below recommendations reference the quadratures in
+            ``desc.integrals._quad_utils``.
+            For weak singular integrals, use ``chebgauss2``.
             For strong singular integrals, use ``leggauss``.
+            In some cases, ``chebgauss1`` may be used for strong singular integrals.
         automorphism : tuple[Callable] or None
             The first callable should be an automorphism of the real interval [-1, 1].
             The second callable should be the derivative of the first. This map defines
             a change of variable for the bounce integral. The choice made for the
             automorphism will affect the performance of the quadrature method.
+            The below recommendations reference the quadratures in
+            ``desc.integrals._quad_utils``.
             For weak singular integrals, use ``None``.
             For strong singular integrals, use
-            ``(automorphism_sin,grad_automorphism_sin)`` from
-            ``desc.integrals.quad_utils``.
+            ``(automorphism_sin,grad_automorphism_sin)``
+            with ``leggauss`` or ``None`` with ``chebgauss1``.
         Bref : float
             Optional. Reference magnetic field strength for normalization.
         Lref : float
@@ -534,7 +538,7 @@ class Bounce2D(Bounce):
         kwargs : dict
             Keyword arguments into
             ``desc/integrals/basis.py::PiecewiseChebyshevSeries.plot1d`` or
-            ``desc/integrals/bounce_utils.py::plot_ppoly``.
+            ``desc/integrals/_bounce_utils.py::plot_ppoly``.
 
         Returns
         -------
@@ -994,18 +998,22 @@ class Bounce1D(Bounce):
         quad : tuple[jnp.ndarray]
             Quadrature points xₖ and weights wₖ for the approximate evaluation of an
             integral ∫₋₁¹ g(x) dx = ∑ₖ wₖ g(xₖ). Default is 32 points.
-            For weak singular integrals, use ``chebgauss2`` from
-            ``desc.integrals.quad_utils``.
+            The below recommendations reference the quadratures in
+            ``desc.integrals._quad_utils``.
+            For weak singular integrals, use ``chebgauss2``.
             For strong singular integrals, use ``leggauss``.
+            In some cases, ``chebgauss1`` may be used for strong singular integrals.
         automorphism : tuple[Callable] or None
             The first callable should be an automorphism of the real interval [-1, 1].
             The second callable should be the derivative of the first. This map defines
             a change of variable for the bounce integral. The choice made for the
             automorphism will affect the performance of the quadrature method.
+            The below recommendations reference the quadratures in
+            ``desc.integrals._quad_utils``.
             For weak singular integrals, use ``None``.
             For strong singular integrals, use
-            ``(automorphism_sin,grad_automorphism_sin)`` from
-            ``desc.integrals.quad_utils``.
+            ``(automorphism_sin,grad_automorphism_sin)``
+            with ``leggauss`` or ``None`` with ``chebgauss1``.
         Bref : float
             Optional. Reference magnetic field strength for normalization.
         Lref : float
@@ -1140,7 +1148,7 @@ class Bounce1D(Bounce):
         plot : bool
             Whether to plot the field lines and bounce points of the given pitch angles.
         kwargs
-            Keyword arguments into ``desc/integrals/bounce_utils.py::plot_ppoly``.
+            Keyword arguments into ``desc/integrals/_bounce_utils.py::plot_ppoly``.
 
         Returns
         -------
@@ -1273,7 +1281,7 @@ class Bounce1D(Bounce):
             Optional, 1/λ values whose corresponding bounce points on the field line
             specified by Clebsch coordinate α(m), ρ(l) will be plotted.
         kwargs
-            Keyword arguments into ``desc/integrals/bounce_utils.py::plot_ppoly``.
+            Keyword arguments into ``desc/integrals/_bounce_utils.py::plot_ppoly``.
 
         Returns
         -------

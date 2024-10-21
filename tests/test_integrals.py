@@ -38,8 +38,7 @@ from desc.integrals import (
     surface_variance,
     virtual_casing_biot_savart,
 )
-from desc.integrals.basis import FourierChebyshevSeries
-from desc.integrals.bounce_utils import (
+from desc.integrals._bounce_utils import (
     _get_extrema,
     bounce_points,
     get_pitch_inv_quad,
@@ -47,8 +46,8 @@ from desc.integrals.bounce_utils import (
     interp_to_argmin,
     interp_to_argmin_hard,
 )
-from desc.integrals.interp_utils import fourier_pts, polyder_vec
-from desc.integrals.quad_utils import (
+from desc.integrals._interp_utils import fourier_pts, polyder_vec
+from desc.integrals._quad_utils import (
     automorphism_sin,
     bijection_from_disc,
     chebgauss1,
@@ -60,6 +59,7 @@ from desc.integrals.quad_utils import (
     tanh_sinh,
     uniform,
 )
+from desc.integrals.basis import FourierChebyshevSeries
 from desc.integrals.singularities import _get_quadrature_nodes
 from desc.integrals.surface_integral import _get_grid_surface
 from desc.transform import Transform

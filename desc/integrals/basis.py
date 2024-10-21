@@ -6,7 +6,7 @@ import numpy as np
 from matplotlib import pyplot as plt
 
 from desc.backend import dct, flatnonzero, idct, irfft, jnp, put, rfft
-from desc.integrals.interp_utils import (
+from desc.integrals._interp_utils import (
     _eps,
     _filter_distinct,
     _subtract_first,
@@ -19,7 +19,7 @@ from desc.integrals.interp_utils import (
     idct_non_uniform,
     irfft_non_uniform,
 )
-from desc.integrals.quad_utils import bijection_from_disc, bijection_to_disc
+from desc.integrals._quad_utils import bijection_from_disc, bijection_to_disc
 from desc.io import IOAble
 from desc.utils import (
     atleast_2d_end,
@@ -56,7 +56,7 @@ def _in_epigraph_and(is_intersect, df_dy_sign, /):
 
     Examples
     --------
-    See ``desc/integrals/bounce_utils.py::bounce_points``.
+    See ``desc/integrals/_bounce_utils.py::bounce_points``.
     This is used there to ensure the domains of integration are magnetic wells.
 
     """
@@ -441,7 +441,7 @@ class PiecewiseChebyshevSeries(IOAble):
         y = jnp.where(is_intersect, y.real, 0.0)
 
         # TODO: Multipoint evaluation with FFT.
-        #   See note in integrals/interp_utils.py.
+        #   See note in integrals/_interp_utils.py.
         n = jnp.arange(self.Y)
         #      ∂f/∂y =      ∑ₙ₌₀ᴺ⁻¹ aₙ(x) n Uₙ₋₁(y)
         # sign ∂f/∂y = sign ∑ₙ₌₀ᴺ⁻¹ aₙ(x) n sin(n arcos y)

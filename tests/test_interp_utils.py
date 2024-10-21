@@ -14,8 +14,7 @@ from scipy.fft import dct as sdct
 from scipy.fft import idct as sidct
 
 from desc.backend import dct, idct, rfft
-from desc.integrals.basis import FourierChebyshevSeries
-from desc.integrals.interp_utils import (
+from desc.integrals._interp_utils import (
     cheb_from_dct,
     cheb_pts,
     fourier_pts,
@@ -28,7 +27,8 @@ from desc.integrals.interp_utils import (
     polyroot_vec,
     polyval_vec,
 )
-from desc.integrals.quad_utils import bijection_to_disc
+from desc.integrals._quad_utils import bijection_to_disc
+from desc.integrals.basis import FourierChebyshevSeries
 
 
 class TestPolyUtils:

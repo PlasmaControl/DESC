@@ -289,6 +289,7 @@ class Bounce2D(Bounce):
             Shape (num rho, X, Y).
             DESC coordinates θ sourced from the Clebsch coordinates
             ``FourierChebyshevSeries.nodes(X,Y,rho,domain=(0,2*jnp.pi))``.
+            Use the ``Bounce2D.compute_theta`` method to obtain this.
         Y_B : int
             Desired Chebyshev spectral resolution for |B|.
             Default is to double the resolution of ``theta``.
@@ -332,7 +333,7 @@ class Bounce2D(Bounce):
             at most ``Y_B*num_transit``.
 
         """
-        errorif(grid.sym, NotImplementedError, msg="Need grid that works with FFTs.")
+        errorif(grid.sym, NotImplementedError, msg="Need grid with sym=False for FFTs.")
 
         self._M = grid.num_theta
         self._N = grid.num_zeta
@@ -351,7 +352,10 @@ class Bounce2D(Bounce):
                 grid, jnp.abs(data["B^zeta"]) * Lref / Bref, is_reshaped
             ),
             "T(z)": fourier_chebyshev(
-                theta, grid.compress(data["iota"]), alpha, num_transit
+                theta,
+                data["iota"] if is_reshaped else grid.compress(data["iota"]),
+                alpha,
+                num_transit,
             ),
         }
         Y_B = setdefault(Y_B, theta.shape[-1] * 2)

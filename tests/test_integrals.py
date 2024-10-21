@@ -1619,9 +1619,7 @@ class TestBounce2D:
         argmin_g = np.pi / 2
         h = _f_1d
         nyquist = 2 * max(_f_1d_nyquist_freq(), 7) + 1
-        grid = Grid.create_meshgrid(
-            [1, 0, fourier_pts(nyquist)], period=(np.inf, 2 * np.pi, 2 * np.pi)
-        )
+        grid = LinearGrid(theta=1, zeta=nyquist, sym=False)
         bounce = Bounce2D(
             grid,
             dict.fromkeys(Bounce2D.required_names, g(grid.nodes[:, 2])),
@@ -1669,10 +1667,8 @@ class TestBounce2D:
         # 2. Pick flux surfaces and grid resolution.
         rho = np.linspace(0.1, 1, 6)
         eq = get("HELIOTRON")
-        grid = Grid.create_meshgrid(
-            [rho, fourier_pts(eq.M_grid), fourier_pts(eq.N_grid) / eq.NFP],
-            period=(np.inf, 2 * np.pi, 2 * np.pi / eq.NFP),
-            NFP=eq.NFP,
+        grid = LinearGrid(
+            rho=rho, theta=eq.M_grid, zeta=eq.N_grid, NFP=eq.NFP, sym=False
         )
         # 3. Compute input data.
         data = eq.compute(
@@ -1779,13 +1775,12 @@ class TestBounce2D:
         drift_analytic, _, _, pitch_inv = TestBounce.drift_analytic(data)
 
         eq = things["eq"]
-        grid = Grid.create_meshgrid(
-            [
-                data["rho"],
-                fourier_pts(eq.M_grid),
-                fourier_pts(max(1, eq.N_grid)) / eq.NFP,
-            ],
+        grid = LinearGrid(
+            rho=data["rho"],
+            theta=eq.M_grid,
+            zeta=max(1, eq.N_grid),
             NFP=eq.NFP,
+            sym=False,
         )
         names = ["periodic(cvdrift)", "periodic(gbdrift)", "secular(gbdrift)/phi"]
         grid_data = eq.compute(names=Bounce2D.required_names + names, grid=grid)

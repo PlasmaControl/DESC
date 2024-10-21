@@ -351,7 +351,7 @@ def cheb_from_dct(a, axis=-1):
         Chebyshev coefficients along ``axis``.
 
     """
-    return a.copy().at[Index.get(0, axis, a.ndim)].divide(2.0)
+    return a.at[Index.get(0, axis, a.ndim)].divide(2.0)
 
 
 def dct_from_cheb(cheb, axis=-1):
@@ -370,7 +370,7 @@ def dct_from_cheb(cheb, axis=-1):
         Chebyshev coefficients along ``axis``.
 
     """
-    return cheb.copy().at[Index.get(0, axis, cheb.ndim)].multiply(2.0)
+    return cheb.at[Index.get(0, axis, cheb.ndim)].multiply(2.0)
 
 
 def interp_dct(xq, f, lobatto=False, axis=-1):
@@ -530,7 +530,7 @@ def polyval_vec(*, x, c):
 def _subtract_first(c, k):
     """Subtract ``k`` from first index of last axis of ``c``.
 
-    Semantically same as ``return c.copy().at[...,0].add(-k)``,
+    Semantically same as ``return c.at[...,0].add(-k)``,
     but allows dimension to increase.
     """
     c_0 = c[..., 0] - k
@@ -547,7 +547,7 @@ def _subtract_first(c, k):
 def _subtract_last(c, k):
     """Subtract ``k`` from last index of last axis of ``c``.
 
-    Semantically same as ``return c.copy().at[...,-1].add(-k)``,
+    Semantically same as ``return c.at[...,-1].add(-k)``,
     but allows dimension to increase.
     """
     c_1 = c[..., -1] - k

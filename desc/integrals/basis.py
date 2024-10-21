@@ -121,8 +121,7 @@ class FourierChebyshevSeries(IOAble):
 
     Notes
     -----
-    Performance may improve significantly
-    if the spectral resolutions ``X`` and ``Y`` are powers of two.
+    Performance may improve if ``X`` and ``Y`` are powers of two.
 
 
     Parameters

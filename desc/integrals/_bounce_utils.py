@@ -153,8 +153,6 @@ def bounce_points(
         toroidal Fourier resolution of |B|, respectively, in straight-field line
         PEST coordinates, and ι is the rotational transform normalized by 2π.
         A tighter upper bound than ``num_well=(Aι+B)*num_transit`` is preferable.
-        The ``check_points`` or ``plot`` method is useful to select a reasonable
-        value.
 
         If there were fewer wells detected along a field line than the size of the
         last axis of the returned arrays, then that axis is padded with zero.
@@ -462,9 +460,9 @@ def _interpolate_and_integrate(
     b_sup_z = interp1d_Hermite_vec(
         Q,
         knots,
-        data["B^zeta"] / data["|B|"],
-        data["B^zeta_z|r,a"] / data["|B|"]
-        - data["B^zeta"] * data["|B|_z|r,a"] / data["|B|"] ** 2,
+        data["|B^zeta|"] / data["|B|"],
+        data["|B^zeta|_z|r,a"] / data["|B|"]
+        - data["|B^zeta|"] * data["|B|_z|r,a"] / data["|B|"] ** 2,
     )
     B = interp1d_Hermite_vec(Q, knots, data["|B|"], data["|B|_z|r,a"])
     # Spline each function separately so that operations in the integrand

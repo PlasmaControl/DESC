@@ -336,8 +336,7 @@ class Bounce2D(Bounce):
             at most ``Y_B*num_transit``.
 
         """
-        errorif(grid.sym, NotImplementedError, msg="Need grid with sym=False for FFTs.")
-
+        assert grid.can_fft
         self._M = grid.num_theta
         self._N = grid.num_zeta
         self._NFP = grid.NFP
@@ -1033,13 +1032,14 @@ class Bounce1D(Bounce):
             Flag for debugging. Must be false for JAX transformations.
 
         """
+        assert grid.is_meshgrid
         data = {
             # Strictly increasing zeta knots enforces dζ > 0.
             # To retain dℓ = (|B|/B^ζ) dζ > 0 after fixing dζ > 0, we require
             # B^ζ = B⋅∇ζ > 0. This is equivalent to changing the sign of ∇ζ
             # or (∂ℓ/∂ζ)|ρ,a. Recall dζ = ∇ζ⋅dR ⇔ 1 = ∇ζ⋅(e_ζ|ρ,a).
-            "B^zeta": jnp.abs(data["B^zeta"]) * Lref / Bref,
-            "B^zeta_z|r,a": data["B^zeta_z|r,a"]
+            "|B^zeta|": jnp.abs(data["B^zeta"]) * Lref / Bref,
+            "|B^zeta|_z|r,a": data["B^zeta_z|r,a"]
             * jnp.sign(data["B^zeta"])
             * Lref
             / Bref,

@@ -68,7 +68,7 @@ def test_effective_ripple_1D():
         toroidal=np.linspace(0, num_transit * 2 * np.pi, num_transit * Y_B),
         coordinates="raz",
     )
-    data = eq.compute("effective ripple*", grid=grid)
+    data = eq.compute("effective ripple*", grid=grid, num_well=20 * num_transit)
 
     assert np.isfinite(data["effective ripple*"]).all()
     np.testing.assert_allclose(
@@ -93,14 +93,15 @@ def test_effective_ripple_2D():
     eq = get("W7-X")
     rho = np.linspace(0, 1, 10)
     grid = LinearGrid(rho=rho, theta=eq.M_grid, zeta=eq.N_grid, NFP=eq.NFP, sym=False)
+    num_transit = 10
     data = eq.compute(
         "effective ripple 3/2",
         grid=grid,
         theta=Bounce2D.compute_theta(eq, X=16, Y=64, rho=rho),
         Y_B=100,
-        num_transit=10,
+        num_transit=num_transit,
         num_quad=33,
-        spline=True,
+        num_well=20 * num_transit,
     )
 
     assert np.isfinite(data["effective ripple 3/2"]).all()
@@ -129,7 +130,7 @@ def test_Gamma_c_Velasco_1D():
         toroidal=np.linspace(0, num_transit * 2 * np.pi, num_transit * Y_B),
         coordinates="raz",
     )
-    data = eq.compute("Gamma_c Velasco*", grid=grid)
+    data = eq.compute("Gamma_c Velasco*", grid=grid, num_well=20 * num_transit)
     assert np.isfinite(data["Gamma_c Velasco*"]).all()
     fig, ax = plt.subplots()
     ax.plot(rho, grid.compress(data["Gamma_c Velasco*"]), marker="o")
@@ -151,7 +152,7 @@ def test_Gamma_c_1D():
         toroidal=np.linspace(0, num_transit * 2 * np.pi, num_transit * Y_B),
         coordinates="raz",
     )
-    data = eq.compute("Gamma_c*", grid=grid)
+    data = eq.compute("Gamma_c*", grid=grid, num_well=20 * num_transit)
     assert np.isfinite(data["Gamma_c*"]).all()
     fig, ax = plt.subplots()
     ax.plot(rho, grid.compress(data["Gamma_c*"]), marker="o")
@@ -165,14 +166,19 @@ def test_Gamma_c_2D():
     eq = get("W7-X")
     rho = np.linspace(0, 1, 10)
     grid = LinearGrid(rho=rho, theta=eq.M_grid, zeta=eq.N_grid, NFP=eq.NFP, sym=False)
+    num_transit = 10
     data = eq.compute(
         "Gamma_c",
         grid=grid,
         theta=Bounce2D.compute_theta(eq, X=16, Y=64, rho=rho),
         Y_B=100,
-        num_transit=10,
-        spline=True,
+        num_transit=num_transit,
+        num_well=20 * num_transit,
     )
+    # FIXME: There is a regression against commit where baseline plot was
+    #        generated because currently gives nan on surface closest to axis.
+    #        Go back to the commit where the baseline plot for this
+    #        test was generated and see what changed.
     assert np.isfinite(data["Gamma_c"]).all()
     fig, ax = plt.subplots()
     ax.plot(rho, grid.compress(data["Gamma_c"]), marker="o")

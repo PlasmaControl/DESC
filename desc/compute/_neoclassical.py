@@ -8,11 +8,10 @@ Performance will improve significantly by resolving these GitHub issues.
   * ``1034`` Optimizers/objectives with auxiliary output
 """
 
-# If memory is still an issue, consider computing one pitch at a time. This
-# can be done by copy-pasting the code given at
-# https://github.com/PlasmaControl/DESC/pull/1003#discussion_r1780459450.
-# Note that imap supports computing in batches, so that can also be used.
-# Make sure to benchmark whether this reduces memory in an optimization.
+# TODO: Add ``batch`` kwargs to 2D compute funs to compute ``batch`` pitch values
+#  at a time. This can be done by copy-pasting the code given at
+#  https://github.com/PlasmaControl/DESC/pull/1003#discussion_r1780459450.
+#  add using the ``batch_size`` parameter of ``imap``.
 
 from functools import partial
 
@@ -39,11 +38,13 @@ from .data_index import register_compute_fun
 
 _Bounce1D_doc = {
     "quad": """tuple[jnp.ndarray] :
-        Quadrature points and weights for bounce integrals.
+        Used to compute bounce integrals.
+        Quadrature points xₖ and weights wₖ for the
+        approximate evaluation of the integral ∫₋₁¹ f(x) dx ≈ ∑ₖ wₖ f(xₖ).
         """,
     "num_quad": """int :
         Resolution for quadrature of bounce integrals.
-        Default is 32. This option is ignored if given ``quad``.
+        Default is 32. This parameter is ignored if given ``quad``.
         """,
     "num_pitch": "int : Resolution for quadrature over velocity coordinate.",
     "num_well": """int :
@@ -62,23 +63,33 @@ _Bounce1D_doc = {
     "batch": "bool : Whether to vectorize part of the computation. Default is true.",
 }
 _Bounce2D_doc = {
-    "spline": "bool : Whether to use cubic splines to compute bounce points.",
-    "theta": "jnp.ndarray : DESC coordinates θ of (α,ζ) Fourier Chebyshev basis nodes.",
+    "theta": """jnp.ndarray :
+        DESC coordinates θ sourced from the Clebsch coordinates
+        ``FourierChebyshevSeries.nodes(X,Y,rho,domain=(0,2*jnp.pi))``.
+        Use the ``Bounce2D.compute_theta`` method to obtain this.
+        """,
     "Y_B": """int :
         Desired resolution for |B| along field lines to compute bounce points.
-        Default is to double the resolution of ``theta``.
+        Default is double the resolution of ``theta``.
         """,
-    "num_transit": "int : Number of toroidal transits to follow field line.",
-    "fieldline_quad": """tuple[jnp.ndarray] :
-        Quadrature points xₖ and weights wₖ for the
-        approximate evaluation of the integral ∫₋₁¹ f(x) dx ≈ ∑ₖ wₖ f(xₖ).
-        Used to compute the proper length of the field line ∫ dℓ / |B|.
-        Default is Gauss-Legendre quadrature.
+    "num_transit": """int :
+        Number of toroidal transits to follow field line.
+        For axisymmetric devices, one poloidal transit is sufficient. Otherwise,
+        assuming the surface is not near rational, then more transits will
+        approximate surface averages better, with diminishing returns.
         """,
-    "quad": _Bounce1D_doc["quad"],
     "num_quad": _Bounce1D_doc["num_quad"],
     "num_pitch": _Bounce1D_doc["num_pitch"],
     "num_well": _Bounce1D_doc["num_well"],
+    "fieldline_quad": """tuple[jnp.ndarray] :
+        Used to compute the proper length of the field line ∫ dℓ / |B|.
+        Quadrature points xₖ and weights wₖ for the
+        approximate evaluation of the integral ∫₋₁¹ f(x) dx ≈ ∑ₖ wₖ f(xₖ).
+        Default is Gauss-Legendre quadrature at resolution ``Y_B//2``
+        on each toroidal transit.
+        """,
+    "quad": _Bounce1D_doc["quad"],
+    "spline": "bool : Whether to use cubic splines to compute bounce points.",
 }
 
 
@@ -696,11 +707,8 @@ def _Gamma_c_1D(params, transforms, profiles, data, **kwargs):
 
     # We rewrite equivalents of Nemov et al.'s expression's using single-valued
     # maps of a physical coordinates. This avoids the computational issues of
-    # multivalued maps. It further enables use of more efficient methods, such as
-    # fast transforms and fixed computational grids throughout optimization, which
-    # are used in the numerical methods of the ``Bounce2D`` class. Also, Nemov
-    # assumes B^ϕ > 0 in some comments; this is not true in DESC, but the
-    # computations done here are invariant to the sign.
+    # multivalued maps. Also, Nemov assumes B^ϕ > 0 in some comments; this is
+    # not true in DESC, but the computations done here are invariant to the sign.
 
     # It is assumed the grid is sufficiently dense to reconstruct |B|,
     # so anything smoother than |B| may be captured accurately as a single
@@ -881,11 +889,8 @@ def _Gamma_c_2D(params, transforms, profiles, data, **kwargs):
 
     # We rewrite equivalents of Nemov et al.'s expression's using single-valued
     # maps of a physical coordinates. This avoids the computational issues of
-    # multivalued maps. It further enables use of more efficient methods, such as
-    # fast transforms and fixed computational grids throughout optimization, which
-    # are used in the numerical methods of the ``Bounce2D`` class. Also, Nemov
-    # assumes B^ϕ > 0 in some comments; this is not true in DESC, but the
-    # computations done here are invariant to the sign.
+    # multivalued maps. Also, Nemov assumes B^ϕ > 0 in some comments; this is
+    # not true in DESC, but the computations done here are invariant to the sign.
 
     # It is assumed the grid is sufficiently dense to reconstruct |B|,
     # so anything smoother than |B| may be captured accurately as a single

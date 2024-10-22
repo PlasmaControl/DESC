@@ -63,11 +63,12 @@ class EffectiveRipple(_Objective):
         Preferably power of 2.
     Y_B : int
         Desired resolution for |B| along field lines to compute bounce points.
-        Default is to double ``Y``.
+        Default is double ``Y``.
     num_transit : int
         Number of toroidal transits to follow field line.
         For axisymmetric devices, one poloidal transit is sufficient. Otherwise,
-        more transits will give more accurate result, with diminishing returns.
+        assuming the surface is not near rational, then more transits will
+        approximate surface averages better, with diminishing returns.
     num_quad : int
         Resolution for quadrature of bounce integrals. Default is 32.
     num_pitch : int
@@ -128,8 +129,9 @@ class EffectiveRipple(_Objective):
         self._constants = {"quad_weights": 1}
         self._X = X
         self._Y = Y
+        Y_B = setdefault(Y_B, 2 * Y)
         self._hyperparam = {
-            "Y_B": setdefault(Y_B, 2 * Y),
+            "Y_B": Y_B,
             "num_transit": num_transit,
             "num_quad": num_quad,
             "num_pitch": num_pitch,
@@ -277,11 +279,12 @@ class GammaC(_Objective):
         Preferably power of 2.
     Y_B : int
         Desired resolution for |B| along field lines to compute bounce points.
-        Default is to double ``Y``.
+        Default is double ``Y``.
     num_transit : int
         Number of toroidal transits to follow field line.
         For axisymmetric devices, one poloidal transit is sufficient. Otherwise,
-        more transits will give more accurate result, with diminishing returns.
+        assuming the surface is not near rational, then more transits will
+        approximate surface averages better, with diminishing returns.
     num_quad : int
         Resolution for quadrature of bounce integrals. Default is 32.
     num_pitch : int
@@ -355,8 +358,9 @@ class GammaC(_Objective):
         self._constants = {"quad_weights": 1}
         self._X = X
         self._Y = Y
+        Y_B = setdefault(Y_B, 2 * Y)
         self._hyperparam = {
-            "Y_B": setdefault(Y_B, 2 * Y),
+            "Y_B": Y_B,
             "num_transit": num_transit,
             "num_quad": num_quad,
             "num_pitch": num_pitch,

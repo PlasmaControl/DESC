@@ -290,8 +290,8 @@ class Bounce2D(Bounce):
             ``FourierChebyshevSeries.nodes(X,Y,rho,domain=(0,2*jnp.pi))``.
             Use the ``Bounce2D.compute_theta`` method to obtain this.
         Y_B : int
-            Desired Chebyshev spectral resolution for |B|.
-            Default is to double the resolution of ``theta``.
+            Desired resolution for |B| along field lines to compute bounce points.
+            Default is double ``Y``.
         alpha : float
             Starting field line poloidal label.
         num_transit : int
@@ -350,7 +350,7 @@ class Bounce2D(Bounce):
             # To retain dℓ = (|B|/B^ζ) dζ > 0 after fixing dζ > 0, we require
             # B^ζ = B⋅∇ζ > 0. This is equivalent to changing the sign of ∇ζ
             # or (∂ℓ/∂ζ)|ρ,a. Recall dζ = ∇ζ⋅dR ⇔ 1 = ∇ζ⋅(e_ζ|ρ,a).
-            "B^zeta": _fourier(
+            "|B^zeta|": _fourier(
                 grid, jnp.abs(data["B^zeta"]) * Lref / Bref, is_reshaped
             ),
             "T(z)": fourier_chebyshev(
@@ -725,7 +725,7 @@ class Bounce2D(Bounce):
         B_sup_z = irfft2_non_uniform(
             theta,
             zeta,
-            self._c["B^zeta"][..., jnp.newaxis, :, :],
+            self._c["|B^zeta|"][..., jnp.newaxis, :, :],
             self._M,
             self._N,
             domain1=(0, 2 * jnp.pi / self._NFP),
@@ -765,9 +765,10 @@ class Bounce2D(Bounce):
         Parameters
         ----------
         quad : tuple[jnp.ndarray]
-            Quadrature points xₖ and weights wₖ for the approximate evaluation
-            of the integral ∫₋₁¹ f(x) dx ≈ ∑ₖ wₖ f(xₖ).
-            Resolution equal to half the Chebyshev resolution of |B| works well.
+            Quadrature points xₖ and weights wₖ for the
+            approximate evaluation of the integral ∫₋₁¹ f(x) dx ≈ ∑ₖ wₖ f(xₖ).
+            Default is Gauss-Legendre quadrature at resolution ``Y_B//2``
+            on each toroidal transit.
 
         Returns
         -------
@@ -801,7 +802,7 @@ class Bounce2D(Bounce):
         B_sup_z = irfft2_non_uniform(
             theta,
             zeta,
-            self._c["B^zeta"][..., jnp.newaxis, :, :],
+            self._c["|B^zeta|"][..., jnp.newaxis, :, :],
             self._M,
             self._N,
             domain1=(0, 2 * jnp.pi / self._NFP),

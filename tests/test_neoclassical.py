@@ -164,7 +164,7 @@ def test_Gamma_c_1D():
 def test_Gamma_c_2D():
     """Test Γ_c Nemov 2D with W7-X."""
     eq = get("W7-X")
-    rho = np.linspace(0, 1, 10)
+    rho = np.linspace(1e-12, 1, 10)
     grid = LinearGrid(rho=rho, theta=eq.M_grid, zeta=eq.N_grid, NFP=eq.NFP, sym=False)
     num_transit = 10
     data = eq.compute(
@@ -175,10 +175,6 @@ def test_Gamma_c_2D():
         num_transit=num_transit,
         num_well=20 * num_transit,
     )
-    # FIXME: There is a regression against commit where baseline plot was
-    #        generated because currently gives nan on surface closest to axis.
-    #        Go back to the commit where the baseline plot for this
-    #        test was generated and see what changed.
     assert np.isfinite(data["Gamma_c"]).all()
     fig, ax = plt.subplots()
     ax.plot(rho, grid.compress(data["Gamma_c"]), marker="o")

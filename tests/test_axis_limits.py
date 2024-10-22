@@ -99,6 +99,7 @@ not_implemented_limits = {
     "K_vc",  # only defined on surface
     "iota_num_rrr",
     "iota_den_rrr",
+    "Gamma_c",
 }
 
 

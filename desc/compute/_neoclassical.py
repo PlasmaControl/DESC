@@ -374,12 +374,12 @@ def _effective_ripple_1D(params, transforms, profiles, data, **kwargs):
 @partial(
     jit,
     static_argnames=[
-        "spline",
         "Y_B",
         "num_transit",
         "num_quad",
         "num_pitch",
         "num_well",
+        "spline",
     ],
 )
 def _epsilon_32_2D(params, transforms, profiles, data, **kwargs):
@@ -589,12 +589,12 @@ def _Gamma_c_Velasco_1D(params, transforms, profiles, data, **kwargs):
         "|B|_r|v,p",
         "b",
         "grad(phi)",
-        "e^rho",
+        "grad(psi)",
+        "|grad(psi)|",
         "|grad(rho)|",
         "|e_alpha|r,p|",
         "kappa_g",
         "iota_r",
-        "psi_r",
         "fieldline length",
     ]
     + Bounce1D.required_names,
@@ -632,27 +632,26 @@ def _Gamma_c_1D(params, transforms, profiles, data, **kwargs):
     # α = ϑ − χ(ψ) ϕ where α is the poloidal label of ψ,α Clebsch coordinates.
     # Choosing χ = ι implies ϑ, ϕ are PEST angles.
     # ∂G/∂((λB₀)⁻¹) =     λ²B₀  ∫ dℓ (1 − λ|B|/2) / √(1 − λ|B|) ∂|B|/∂ψ / |B|
-    # ∂V/∂((λB₀)⁻¹) = 3/2 λ²B₀  ∫ dℓ √(1 − λ|B|) K / |B|
+    # ∂V/∂((λB₀)⁻¹) = 3/2 λ²B₀  ∫ dℓ √(1 − λ|B|) R / |B|
     # ∂g/∂((λB₀)⁻¹) =     λ²B₀² ∫ dℓ (1 − λ|B|/2) / √(1 − λ|B|) |∇ψ| κ_g / |B|
+    # K ≝ R dψ/dρ
     # tan(π/2 γ_c) =
-    #              ∫ dℓ (1 − λ|B|/2) / √(1 − λ|B|) |∇ρ| κ_g / |B|
+    #              ∫ dℓ (1 − λ|B|/2) / √(1 − λ|B|) |∇ψ| κ_g / |B|
     #              ----------------------------------------------
-    # (|∇ρ| ‖e_α|ρ,ϕ‖)ᵢ ∫ dℓ [ (1 − λ|B|/2)/√(1 − λ|B|) ∂|B|/∂ψ + √(1 − λ|B|) K ] / |B|
+    # (|∇ρ| ‖e_α|ρ,ϕ‖)ᵢ ∫ dℓ [ (1 − λ|B|/2)/√(1 − λ|B|) ∂|B|/∂ρ + √(1 − λ|B|) K ] / |B|
 
     def d_v_tau(B, pitch):
         return safediv(2.0, jnp.sqrt(jnp.abs(1 - pitch * B)))
 
-    def drift1(grad_rho_norm_kappa_g, B, pitch):
+    def drift1(grad_psi_norm_kappa_g, B, pitch):
         return (
             safediv(1 - 0.5 * pitch * B, jnp.sqrt(jnp.abs(1 - pitch * B)))
-            * grad_rho_norm_kappa_g
+            * grad_psi_norm_kappa_g
             / B
         )
 
-    def drift2(B_psi, B, pitch):
-        return (
-            safediv(1 - 0.5 * pitch * B, jnp.sqrt(jnp.abs(1 - pitch * B))) * B_psi / B
-        )
+    def drift2(B_r, B, pitch):
+        return safediv(1 - 0.5 * pitch * B, jnp.sqrt(jnp.abs(1 - pitch * B))) * B_r / B
 
     def drift3(K, B, pitch):
         return jnp.sqrt(jnp.abs(1 - pitch * B)) * K / B
@@ -669,7 +668,7 @@ def _Gamma_c_1D(params, transforms, profiles, data, **kwargs):
                 bounce.integrate(
                     drift1,
                     data["pitch_inv"],
-                    data["|grad(rho)|*kappa_g"],
+                    data["|grad(psi)|*kappa_g"],
                     points=points,
                     batch=batch,
                 ),
@@ -677,7 +676,7 @@ def _Gamma_c_1D(params, transforms, profiles, data, **kwargs):
                     bounce.integrate(
                         drift2,
                         data["pitch_inv"],
-                        data["|B|_psi|v,p"],
+                        data["|B|_r|v,p"],
                         points=points,
                         batch=batch,
                     )
@@ -705,24 +704,25 @@ def _Gamma_c_1D(params, transforms, profiles, data, **kwargs):
             / data["pitch_inv"] ** 2
         ).sum(axis=-1)
 
-    # We rewrite equivalents of Nemov et al.'s expression's using single-valued
-    # maps of a physical coordinates. This avoids the computational issues of
-    # multivalued maps. Also, Nemov assumes B^ϕ > 0 in some comments; this is
-    # not true in DESC, but the computations done here are invariant to the sign.
+    # We rewrite equivalents of Nemov et al.'s expressions (21, 22) to resolve
+    # the indeterminate form of the limit and using single-valued maps of a
+    # physical coordinates. This avoids the computational issues of multivalued
+    # maps. Also, Nemov assumes B^ϕ > 0 in some comments; this is not true in DESC,
+    # but the computations done here are invariant to the sign.
 
     # It is assumed the grid is sufficiently dense to reconstruct |B|,
     # so anything smoother than |B| may be captured accurately as a single
     # spline rather than splining each component.
     fun_data = {
-        "|grad(rho)|*kappa_g": data["|grad(rho)|"] * data["kappa_g"],
+        "|grad(psi)|*kappa_g": data["|grad(psi)|"] * data["kappa_g"],
         "|grad(rho)|*|e_alpha|r,p|": data["|grad(rho)|"] * data["|e_alpha|r,p|"],
-        "|B|_psi|v,p": data["|B|_r|v,p"] / data["psi_r"],
-        "K": data["iota_r"] * dot(cross(data["e^rho"], data["b"]), data["grad(phi)"])
-        # Behaves as ∂log(|B|²/B^ϕ)/∂ψ |B| if one ignores the issue of a log argument
+        "|B|_r|v,p": data["|B|_r|v,p"],
+        "K": data["iota_r"]
+        * dot(cross(data["grad(psi)"], data["b"]), data["grad(phi)"])
+        # Behaves as ∂log(|B|²/B^ϕ)/∂ρ |B| if one ignores the issue of a log argument
         # with units. Smoothness determined by positive lower bound of log argument,
-        # and hence behaves as ∂log(|B|)/∂ψ |B| = ∂|B|/∂ψ.
-        - (2 * data["|B|_r|v,p"] - data["|B|"] * data["B^phi_r|v,p"] / data["B^phi"])
-        / data["psi_r"],
+        # and hence behaves as ∂log(|B|)/∂ρ |B| = ∂|B|/∂ρ.
+        - (2 * data["|B|_r|v,p"] - data["|B|"] * data["B^phi_r|v,p"] / data["B^phi"]),
     }
     data["Gamma_c*"] = (
         _compute_1D(Gamma_c, fun_data, data, grid, kwargs.get("num_pitch", 64))
@@ -756,12 +756,12 @@ def _Gamma_c_1D(params, transforms, profiles, data, **kwargs):
         "|B|_r|v,p",
         "b",
         "grad(phi)",
-        "e^rho",
+        "grad(psi)",
+        "|grad(psi)|",
         "|grad(rho)|",
         "|e_alpha|r,p|",
         "kappa_g",
         "iota_r",
-        "psi_r",
     ]
     + Bounce2D.required_names,
     resolution_requirement="z",  # FIXME: GitHub issue #1312. Should be "tz".
@@ -772,12 +772,12 @@ def _Gamma_c_1D(params, transforms, profiles, data, **kwargs):
 @partial(
     jit,
     static_argnames=[
-        "spline",
         "Y_B",
         "num_transit",
         "num_quad",
         "num_pitch",
         "num_well",
+        "spline",
     ],
 )
 def _Gamma_c_2D(params, transforms, profiles, data, **kwargs):
@@ -814,27 +814,26 @@ def _Gamma_c_2D(params, transforms, profiles, data, **kwargs):
     # α = ϑ − χ(ψ) ϕ where α is the poloidal label of ψ,α Clebsch coordinates.
     # Choosing χ = ι implies ϑ, ϕ are PEST angles.
     # ∂G/∂((λB₀)⁻¹) =     λ²B₀  ∫ dℓ (1 − λ|B|/2) / √(1 − λ|B|) ∂|B|/∂ψ / |B|
-    # ∂V/∂((λB₀)⁻¹) = 3/2 λ²B₀  ∫ dℓ √(1 − λ|B|) K / |B|
+    # ∂V/∂((λB₀)⁻¹) = 3/2 λ²B₀  ∫ dℓ √(1 − λ|B|) R / |B|
     # ∂g/∂((λB₀)⁻¹) =     λ²B₀² ∫ dℓ (1 − λ|B|/2) / √(1 − λ|B|) |∇ψ| κ_g / |B|
+    # K ≝ R dψ/dρ
     # tan(π/2 γ_c) =
-    #              ∫ dℓ (1 − λ|B|/2) / √(1 − λ|B|) |∇ρ| κ_g / |B|
+    #              ∫ dℓ (1 − λ|B|/2) / √(1 − λ|B|) |∇ψ| κ_g / |B|
     #              ----------------------------------------------
-    # (|∇ρ| ‖e_α|ρ,ϕ‖)ᵢ ∫ dℓ [ (1 − λ|B|/2)/√(1 − λ|B|) ∂|B|/∂ψ + √(1 − λ|B|) K ] / |B|
+    # (|∇ρ| ‖e_α|ρ,ϕ‖)ᵢ ∫ dℓ [ (1 − λ|B|/2)/√(1 − λ|B|) ∂|B|/∂ρ + √(1 − λ|B|) K ] / |B|
 
     def d_v_tau(B, pitch, zeta):
         return safediv(2.0, jnp.sqrt(jnp.abs(1 - pitch * B)))
 
-    def drift1(grad_rho_norm_kappa_g, B, pitch, zeta):
+    def drift1(grad_psi_norm_kappa_g, B, pitch, zeta):
         return (
             safediv(1 - 0.5 * pitch * B, jnp.sqrt(jnp.abs(1 - pitch * B)))
-            * grad_rho_norm_kappa_g
+            * grad_psi_norm_kappa_g
             / B
         )
 
-    def drift2(B_psi, B, pitch, zeta):
-        return (
-            safediv(1 - 0.5 * pitch * B, jnp.sqrt(jnp.abs(1 - pitch * B))) * B_psi / B
-        )
+    def drift2(B_r, B, pitch, zeta):
+        return safediv(1 - 0.5 * pitch * B, jnp.sqrt(jnp.abs(1 - pitch * B))) * B_r / B
 
     def drift3(K, B, pitch, zeta):
         return jnp.sqrt(jnp.abs(1 - pitch * B)) * K / B
@@ -859,12 +858,12 @@ def _Gamma_c_2D(params, transforms, profiles, data, **kwargs):
                 bounce.integrate(
                     drift1,
                     data["pitch_inv"],
-                    data["|grad(rho)|*kappa_g"],
+                    data["|grad(psi)|*kappa_g"],
                     points=points,
                 ),
                 (
                     bounce.integrate(
-                        drift2, data["pitch_inv"], data["|B|_psi|v,p"], points=points
+                        drift2, data["pitch_inv"], data["|B|_r|v,p"], points=points
                     )
                     + bounce.integrate(
                         drift3, data["pitch_inv"], data["K"], points=points, quad=quad2
@@ -887,24 +886,25 @@ def _Gamma_c_2D(params, transforms, profiles, data, **kwargs):
             / data["pitch_inv"] ** 2
         ).sum(axis=-1) / bounce.compute_fieldline_length(fieldline_quad)
 
-    # We rewrite equivalents of Nemov et al.'s expression's using single-valued
-    # maps of a physical coordinates. This avoids the computational issues of
-    # multivalued maps. Also, Nemov assumes B^ϕ > 0 in some comments; this is
-    # not true in DESC, but the computations done here are invariant to the sign.
+    # We rewrite equivalents of Nemov et al.'s expressions (21, 22) to resolve
+    # the indeterminate form of the limit and using single-valued maps of a
+    # physical coordinates. This avoids the computational issues of multivalued
+    # maps. Also, Nemov assumes B^ϕ > 0 in some comments; this is not true in DESC,
+    # but the computations done here are invariant to the sign.
 
     # It is assumed the grid is sufficiently dense to reconstruct |B|,
     # so anything smoother than |B| may be captured accurately as a single
     # Fourier series rather than transforming each component.
     fun_data = {
-        "|grad(rho)|*kappa_g": data["|grad(rho)|"] * data["kappa_g"],
+        "|grad(psi)|*kappa_g": data["|grad(psi)|"] * data["kappa_g"],
         "|grad(rho)|*|e_alpha|r,p|": data["|grad(rho)|"] * data["|e_alpha|r,p|"],
-        "|B|_psi|v,p": data["|B|_r|v,p"] / data["psi_r"],
-        "K": data["iota_r"] * dot(cross(data["e^rho"], data["b"]), data["grad(phi)"])
-        # Behaves as ∂log(|B|²/B^ϕ)/∂ψ |B| if one ignores the issue of a log argument
+        "|B|_r|v,p": data["|B|_r|v,p"],
+        "K": data["iota_r"]
+        * dot(cross(data["grad(psi)"], data["b"]), data["grad(phi)"])
+        # Behaves as ∂log(|B|²/B^ϕ)/∂ρ |B| if one ignores the issue of a log argument
         # with units. Smoothness determined by positive lower bound of log argument,
-        # and hence behaves as ∂log(|B|)/∂ψ |B| = ∂|B|/∂ψ.
-        - (2 * data["|B|_r|v,p"] - data["|B|"] * data["B^phi_r|v,p"] / data["B^phi"])
-        / data["psi_r"],
+        # and hence behaves as ∂log(|B|)/∂ρ |B| = ∂|B|/∂ρ.
+        - (2 * data["|B|_r|v,p"] - data["|B|"] * data["B^phi_r|v,p"] / data["B^phi"]),
     }
     data["Gamma_c"] = _compute_2D(
         Gamma_c, fun_data, data, theta, grid, kwargs.get("num_pitch", 64)

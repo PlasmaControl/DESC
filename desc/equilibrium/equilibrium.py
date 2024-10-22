@@ -25,7 +25,7 @@ from desc.geometry import (
     FourierRZToroidalSurface,
     ZernikeRZToroidalSection,
 )
-from desc.grid import ConcentricGrid, Grid, LinearGrid, QuadratureGrid, _Grid
+from desc.grid import Grid, LinearGrid, QuadratureGrid, _Grid
 from desc.io import IOAble
 from desc.objectives import (
     ForceBalance,
@@ -1881,7 +1881,6 @@ class Equilibrium(IOAble, Optimizable):
         N=None,
         ntheta=None,
         spectral_indexing="ansi",
-        fit_grid_type="linear",
         w=2,
     ):
         """Initialize an Equilibrium from a near-axis solution.
@@ -1903,8 +1902,6 @@ class Equilibrium(IOAble, Optimizable):
             Number of poloidal grid points used in the conversion. Default 2*M+1
         spectral_indexing : str (optional)
             Type of Zernike indexing scheme to use. Default ``'ansi'``
-        fit_grid_type: {"linear","ocs"} (optional)
-            Type of grid to use for fitting. Default ``'linear'``
         w : float
             Weight exponent for fit. Surfaces are fit using a weighted least squares
             using weight = 1/rho**w, so that points near axis are captured more
@@ -1953,19 +1950,8 @@ class Equilibrium(IOAble, Optimizable):
             raise ValueError("Input must be a pyQSC or pyQIC solution.") from e
 
         rho, _ = special.js_roots(L, 2, 2)
-        # TODO: could make this an OCS grid to improve fitting, need to figure out
-        # how concentric grids work with QSC
-        if fit_grid_type == "ocs":
-            assert na_eq.nphi % 2 == 1, "na_eq.nphi must be odd for OCS grid!"
-            grid = ConcentricGrid(
-                L,
-                M=round((na_eq.nphi - 1) / 2),
-                N=round((na_eq.nphi - 1) / 2),
-                NFP=na_eq.nfp,
-                node_pattern="ocs",
-            )
-        else:
-            grid = LinearGrid(rho=rho, theta=ntheta, zeta=na_eq.phi, NFP=na_eq.nfp)
+
+        grid = LinearGrid(rho=rho, theta=ntheta, zeta=na_eq.phi, NFP=na_eq.nfp)
         basis_R = FourierZernikeBasis(
             L=L,
             M=M,
@@ -2003,49 +1989,21 @@ class Equilibrium(IOAble, Optimizable):
         A_Zw = A_Z * W[:, None]
         A_Lw = A_L * W[:, None]
 
-        if fit_grid_type == "linear":
-            rho = grid.nodes[grid.unique_rho_idx, 0]
-            R_1D = np.zeros((grid.num_nodes,))
-            Z_1D = np.zeros((grid.num_nodes,))
-            L_1D = np.zeros((grid.num_nodes,))
-            phi_cyl_ax = np.linspace(
-                0, 2 * np.pi / na_eq.nfp, na_eq.nphi, endpoint=False
-            )
-            nu_B_ax = na_eq.nu_spline(phi_cyl_ax)
-            phi_B = phi_cyl_ax + nu_B_ax
-            for rho_i in rho:
-                R_2D, Z_2D, phi0_2D = na_eq.Frenet_to_cylindrical(r * rho_i, ntheta)
-                nu_B = phi_B - phi0_2D
-                idx = np.nonzero(grid.nodes[:, 0] == rho_i)[0]
-                R_1D[idx] = R_2D.flatten(order="F")
-                Z_1D[idx] = Z_2D.flatten(order="F")
-                L_1D[idx] = -nu_B.flatten(order="F") * na_eq.iota
-        else:
-            all_theta = grid.nodes[:, 1]
-            rho = grid.nodes[grid.unique_rho_idx, 0]
-            R_1D = np.zeros((grid.num_nodes,))
-            Z_1D = np.zeros((grid.num_nodes,))
-            L_1D = np.zeros((grid.num_nodes,))
-            phi_cyl_ax = np.linspace(
-                0, 2 * np.pi / na_eq.nfp, na_eq.nphi, endpoint=False
-            )
-            nu_B_ax = na_eq.nu_spline(phi_cyl_ax)
-            phi_B = phi_cyl_ax + nu_B_ax
-            for rho_i in rho:
-                theta_nodes = all_theta[
-                    np.where(
-                        np.logical_and(
-                            grid.nodes[:, 0] == rho_i, np.isclose(grid.nodes[:, 2], 0)
-                        )
-                    )
-                ]
-                ntheta = theta_nodes.size
-                R_2D, Z_2D, phi0_2D = na_eq.Frenet_to_cylindrical(r * rho_i, ntheta)
-                nu_B = phi_B - phi0_2D
-                idx = np.nonzero(grid.nodes[:, 0] == rho_i)[0]
-                R_1D[idx] = R_2D.flatten(order="F")
-                Z_1D[idx] = Z_2D.flatten(order="F")
-                L_1D[idx] = -nu_B.flatten(order="F") * na_eq.iota
+        rho = grid.nodes[grid.unique_rho_idx, 0]
+        R_1D = np.zeros((grid.num_nodes,))
+        Z_1D = np.zeros((grid.num_nodes,))
+        L_1D = np.zeros((grid.num_nodes,))
+        phi_cyl_ax = np.linspace(0, 2 * np.pi / na_eq.nfp, na_eq.nphi, endpoint=False)
+        nu_B_ax = na_eq.nu_spline(phi_cyl_ax)
+        phi_B = phi_cyl_ax + nu_B_ax
+        for rho_i in rho:
+            R_2D, Z_2D, phi0_2D = na_eq.Frenet_to_cylindrical(r * rho_i, ntheta)
+            nu_B = phi_B - phi0_2D
+            idx = np.nonzero(grid.nodes[:, 0] == rho_i)[0]
+            R_1D[idx] = R_2D.flatten(order="F")
+            Z_1D[idx] = Z_2D.flatten(order="F")
+            L_1D[idx] = -nu_B.flatten(order="F") * na_eq.iota
+
         inputs["R_lmn"] = np.linalg.lstsq(A_Rw, R_1D * W, rcond=None)[0]
         inputs["Z_lmn"] = np.linalg.lstsq(A_Zw, Z_1D * W, rcond=None)[0]
         inputs["L_lmn"] = np.linalg.lstsq(A_Lw, L_1D * W, rcond=None)[0]

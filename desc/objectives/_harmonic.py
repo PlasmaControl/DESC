@@ -236,13 +236,13 @@ class HarmonicField_to_BiotSavart(_Objective):
         w = surface_grid.weights
         w *= jnp.sqrt(surface_grid.num_nodes)
 
-        #self._constants = {
+        self._constants = {
         #    "equil_transforms": equil_transforms,
         #    "equil_profiles": equil_profiles,
         #    #"surface_transforms": surface_transforms,
-        #    "quad_weights": w,
-        #    "G": self._G,
-        #}
+            "quad_weights": w,
+            "G": self._G,
+        }
 
         #if self._surface_fixed:
             # precompute the surface coordinates

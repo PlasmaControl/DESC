@@ -501,13 +501,13 @@ class DoubleFourierSeries(_Basis):
         """
         dim_pol = 2 * M + 1
         dim_tor = 2 * N + 1
-        m = np.arange(dim_pol) - M
-        n = np.arange(dim_tor) - N
-        mm, nn = np.meshgrid(m, n)
+        m = jnp.arange(dim_pol) - M
+        n = jnp.arange(dim_tor) - N
+        mm, nn = jnp.meshgrid(m, n)
         mm = mm.reshape((-1, 1), order="F")
         nn = nn.reshape((-1, 1), order="F")
-        z = np.zeros_like(mm)
-        y = np.hstack([z, mm, nn])
+        z = jnp.zeros_like(mm)
+        y = jnp.hstack([z, mm, nn])
         return y
 
     def evaluate(

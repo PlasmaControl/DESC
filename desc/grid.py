@@ -564,7 +564,7 @@ class _Grid(IOAble, ABC):
             y = fori_loop(0, other_grid.num_nodes, body, y)
         return y
 
-    def replace_at_axis(self, x, y, **kwargs):
+    def replace_at_axis(self, x, y, copy=False, **kwargs):
         """Replace elements of ``x`` with elements of ``y`` at the axis of grid.
 
         Parameters
@@ -575,6 +575,10 @@ class _Grid(IOAble, ABC):
             Replacement values. Should broadcast with arrays of size
             ``grid.num_nodes``. Can also be a function that returns such an
             array. Additional keyword arguments are then input to ``y``.
+        copy : bool
+            If some value of ``x`` is to be replaced by some value in ``y``,
+            then setting ``copy`` to true ensures that ``x`` will not be
+            modified in-place.
 
         Returns
         -------
@@ -584,12 +588,11 @@ class _Grid(IOAble, ABC):
             others match ``x``.
 
         """
-        kwargs.pop("copy", None)
         if self.axis.size:
             if callable(y):
                 y = y(**kwargs)
             x = put(
-                x,
+                x.copy() if copy else x,
                 self.axis,
                 y[self.axis] if jnp.ndim(y) else y,
             )

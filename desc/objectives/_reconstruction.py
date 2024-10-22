@@ -214,7 +214,9 @@ class FluxLoop(_Objective):
                     basis="rpz",
                     source_grid=self._field_grid,
                 )
-                A_dot_dxds = jnp.sum(A * flux_loop_data[i]["x_s"], axis=1)
+                A_dot_dxds = jnp.sum(
+                    A * flux_loop_data[i]["x_s"] * self._flux_loops[i].num_turns, axis=1
+                )
                 Psi = jnp.sum(self._flux_loop_grid.spacing[:, 2] * A_dot_dxds)
                 fluxes.append(Psi)
             fluxes = jnp.array(fluxes)
@@ -321,7 +323,9 @@ class FluxLoop(_Objective):
                 Aplasma = jnp.zeros_like(self._flux_loop_grid.nodes)
             A = Aplasma + Acoil
 
-            A_dot_dxds = jnp.sum(A * flux_loop_data[i]["x_s"], axis=1)
+            A_dot_dxds = jnp.sum(
+                A * flux_loop_data[i]["x_s"] * self._flux_loops[i].num_turns, axis=1
+            )
             Psi = jnp.sum(grid.spacing[:, 2] * A_dot_dxds)
             fluxes.append(Psi)
         fluxes = jnp.asarray(fluxes)

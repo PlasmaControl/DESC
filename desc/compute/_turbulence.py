@@ -10,11 +10,11 @@ expensive computations.
 """
 from .data_index import register_compute_fun
 from ..backend import jnp
-from ..integrals.critical_gradient import fit_drift_peaks
+from ..integrals.critical_gradient import extract_Kd_wells, fit_Kd_wells
 
 
 @register_compute_fun(
-    name="K_d",
+    name="Kd",
     # Exact definition of the dimenstionless drift curvature can be found
     # in https://journals.aps.org/prresearch/pdf/10.1103/PhysRevResearch.4.L032028
     label="\\mathrm{cvdrift} = a^2\\nabla\\alpha\\cdot\\mathbf{b}\\times\\kappa",
@@ -29,8 +29,8 @@ from ..integrals.critical_gradient import fit_drift_peaks
     data=["cvdrift", "|B|", "a"],
 )
 
-def _K_d(params, transforms, profiles, data, **kwargs):
-    data["K_d"] = (
+def _Kd(params, transforms, profiles, data, **kwargs):
+    data["Kd"] = (
         data["a"]**2*jnp.multiply(data["|B|"],data["cvdrift"])
     )
     return data
@@ -48,14 +48,34 @@ def _K_d(params, transforms, profiles, data, **kwargs):
     transforms={"grid": []},
     profiles=[],
     coordinates="rtz",
-    data=["K_d"],
+    data=["Kd"],
 )
 
 def _R_eff(params, transforms, profiles, data, **kwargs):
     grid = transforms["grid"].source_grid
-    out = fit_drift_peaks(grid.nodes[:,2],data["K_d"])
-    R_eff = [row[0] for row in out["values"]]
+    Kd_wells,_,masks = extract_Kd_wells(data["Kd"])
+    _,_,R_eff = fit_Kd_wells(grid.nodes[:,2], Kd_wells, masks)
     data["R_eff"] = R_eff
     return data
 
+@register_compute_fun(
+    name="L_par",
+    # Parallel connection length defined as width of Kd wells
+    label="L_par",
+    units="",
+    units_long="",
+    description="Width of Kd wells along the field line",
+    dim=1,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="rtz",
+    data=["Kd"],
+)
 
+def _L_par(params, transforms, profiles, data, **kwargs):
+    grid = transforms["grid"].source_grid
+    _,length_wells,_ = extract_Kd_wells(data["Kd"],order=True)
+    L_par = jnp.diff(grid.nodes[:,2])[0]*length_wells
+    data["L_par"] = L_par
+    return data

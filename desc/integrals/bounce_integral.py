@@ -336,8 +336,7 @@ class Bounce2D(Bounce):
             at most ``Y_B*num_transit``.
 
         """
-        errorif(grid.sym, NotImplementedError, msg="Need grid with sym=False for FFTs.")
-
+        assert grid.can_fft
         self._M = grid.num_theta
         self._N = grid.num_zeta
         self._NFP = grid.NFP
@@ -471,14 +470,19 @@ class Bounce2D(Bounce):
             as the indices that correspond to that field line.
         num_well : int or None
             Specify to return the first ``num_well`` pairs of bounce points for each
-            pitch along each field line. This is useful if ``num_well`` tightly
-            bounds the actual number. As a reference, there are typically 20 wells
-            per toroidal transit for a given pitch. You can check this by plotting
-            the field lines with the ``check_points`` method.
+            pitch and field line. Default is ``None``, which will detect all wells,
+            but due to current limitations in JAX this will have worse performance.
+            Specifying a number that tightly upper bounds the number of wells will
+            increase performance. In general, an upper bound on the number of wells
+            per toroidal transit is ``Aι+B`` where ``A``,``B`` are the poloidal and
+            toroidal Fourier resolution of |B|, respectively, in straight-field line
+            PEST coordinates, and ι is the rotational transform normalized by 2π.
+            A tighter upper bound than ``num_well=(Aι+B)*num_transit`` is preferable.
+            The ``check_points`` or ``plot`` method is useful to select a reasonable
+            value.
 
-            If not specified, then all bounce points are returned. If there were fewer
-            wells detected along a field line than the size of the last axis of the
-            returned arrays, then that axis is padded with zero.
+            If there were fewer wells detected along a field line than the size of the
+            last axis of the returned arrays, then that axis is padded with zero.
 
         Returns
         -------
@@ -1028,13 +1032,14 @@ class Bounce1D(Bounce):
             Flag for debugging. Must be false for JAX transformations.
 
         """
+        assert grid.is_meshgrid
         data = {
             # Strictly increasing zeta knots enforces dζ > 0.
             # To retain dℓ = (|B|/B^ζ) dζ > 0 after fixing dζ > 0, we require
             # B^ζ = B⋅∇ζ > 0. This is equivalent to changing the sign of ∇ζ
             # or (∂ℓ/∂ζ)|ρ,a. Recall dζ = ∇ζ⋅dR ⇔ 1 = ∇ζ⋅(e_ζ|ρ,a).
-            "B^zeta": jnp.abs(data["B^zeta"]) * Lref / Bref,
-            "B^zeta_z|r,a": data["B^zeta_z|r,a"]
+            "|B^zeta|": jnp.abs(data["B^zeta"]) * Lref / Bref,
+            "|B^zeta|_z|r,a": data["B^zeta_z|r,a"]
             * jnp.sign(data["B^zeta"])
             * Lref
             / Bref,
@@ -1104,14 +1109,19 @@ class Bounce1D(Bounce):
             are interpreted as the indices that correspond to that field line.
         num_well : int or None
             Specify to return the first ``num_well`` pairs of bounce points for each
-            pitch along each field line. This is useful if ``num_well`` tightly
-            bounds the actual number. As a reference, there are typically 20 wells
-            per toroidal transit for a given pitch. You can check this by plotting
-            the field lines with the ``check_points`` method.
+            pitch and field line. Default is ``None``, which will detect all wells,
+            but due to current limitations in JAX this will have worse performance.
+            Specifying a number that tightly upper bounds the number of wells will
+            increase performance. In general, an upper bound on the number of wells
+            per toroidal transit is ``Aι+B`` where ``A``,``B`` are the poloidal and
+            toroidal Fourier resolution of |B|, respectively, in straight-field line
+            PEST coordinates, and ι is the rotational transform normalized by 2π.
+            A tighter upper bound than ``num_well=(Aι+B)*num_transit`` is preferable.
+            The ``check_points`` or ``plot`` method is useful to select a reasonable
+            value.
 
-            If not specified, then all bounce points are returned. If there were fewer
-            wells detected along a field line than the size of the last axis of the
-            returned arrays, then that axis is padded with zero.
+            If there were fewer wells detected along a field line than the size of the
+            last axis of the returned arrays, then that axis is padded with zero.
 
         Returns
         -------

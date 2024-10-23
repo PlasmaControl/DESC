@@ -5,7 +5,7 @@ from abc import ABC, abstractmethod
 from interpax import CubicHermiteSpline, PPoly
 from orthax.legendre import leggauss
 
-from desc.backend import jnp
+from desc.backend import jnp, rfft2
 from desc.integrals._bounce_utils import (
     _bounce_quadrature,
     _check_bounce_points,
@@ -21,7 +21,6 @@ from desc.integrals._bounce_utils import (
     plot_ppoly,
 )
 from desc.integrals._interp_utils import (
-    _fourier,
     idct_non_uniform,
     interp_rfft2,
     irfft2_non_uniform,
@@ -343,16 +342,21 @@ class Bounce2D(Bounce):
         self._alpha = alpha
         self._x, self._w = get_quadrature(quad, automorphism)
 
+        if is_reshaped:
+            B = data["|B|"]
+            B_sup_z = data["B^zeta"]
+        else:
+            B = grid.meshgrid_reshape(data["|B|"], "rtz")
+            B_sup_z = grid.meshgrid_reshape(data["B^zeta"], "rtz")
+
         # spectral coefficients
         self._c = {
-            "|B|": _fourier(grid, data["|B|"] / Bref, is_reshaped),
+            "|B|": Bounce2D.fourier(B / Bref),
             # Strictly increasing zeta knots enforces dζ > 0.
             # To retain dℓ = (|B|/B^ζ) dζ > 0 after fixing dζ > 0, we require
             # B^ζ = B⋅∇ζ > 0. This is equivalent to changing the sign of ∇ζ
             # or (∂ℓ/∂ζ)|ρ,a. Recall dζ = ∇ζ⋅dR ⇔ 1 = ∇ζ⋅(e_ζ|ρ,a).
-            "|B^zeta|": _fourier(
-                grid, jnp.abs(data["B^zeta"]) * Lref / Bref, is_reshaped
-            ),
+            "|B^zeta|": Bounce2D.fourier(B_sup_z * Lref / Bref),
             "T(z)": fourier_chebyshev(
                 theta,
                 data["iota"] if is_reshaped else grid.compress(data["iota"]),
@@ -401,6 +405,26 @@ class Bounce2D(Bounce):
         """
         f = [grid.meshgrid_reshape(d, "rtz") for d in arys]
         return f if len(f) > 1 else f[0]
+
+    @staticmethod
+    def fourier(f):
+        """Transform to DESC spectral domain.
+
+        Parameters
+        ----------
+        f : jnp.ndarray
+            Shape (..., M, N).
+            Real scalar-valued periodic functions in (θ, ζ) ∈ [0, 2π) × [0, 2π/NFP).
+
+        Returns
+        -------
+        a : jnp.ndarray
+            Shape (..., M // 2 + 1, N)
+            Complex coefficients of 2D real FFT of ``f``.
+
+        """
+        # real fft over poloidal since usually M > N
+        return rfft2(f, axes=(-1, -2), norm="forward")
 
     # TODO: After GitHub issue #1034 is resolved, we should pass in the previous
     #  θ(α, ζ) coordinates as an initial guess for the next coordinate mapping.
@@ -581,6 +605,7 @@ class Bounce2D(Bounce):
         weight=None,
         points=None,
         *,
+        is_fourier=False,
         check=False,
         plot=False,
         quad=None,
@@ -628,6 +653,9 @@ class Bounce2D(Bounce):
             Tuple of length two (z1, z2) that stores ζ coordinates of bounce points.
             The points are ordered and grouped such that the straight line path
             between ``z1`` and ``z2`` resides in the epigraph of |B|.
+        is_fourier : bool
+            If true, then it is assumed that ``f`` and ``weight`` are Fourier
+            transforms as returned by ``Bounce2D.fourier``.
         check : bool
             Flag for debugging. Must be false for JAX transformations.
         plot : bool
@@ -662,6 +690,7 @@ class Bounce2D(Bounce):
             setdefault(f, []),
             z1,
             z2,
+            is_fourier,
             check,
             plot,
         )
@@ -679,10 +708,15 @@ class Bounce2D(Bounce):
                 self._c["knots"],
                 self._c["B(z)"],
                 polyder_vec(self._c["B(z)"]),
+                is_fourier=is_fourier,
+                M=self._M,
+                N=self._N,
             )
         return _swap_pl(result)
 
-    def _integrate(self, x, w, integrand, pitch_inv, f, z1, z2, check, plot):
+    def _integrate(
+        self, x, w, integrand, pitch_inv, f, z1, z2, is_fourier, check, plot
+    ):
         """Bounce integrate ∫ f(λ, ℓ) dℓ.
 
         Parameters
@@ -731,16 +765,30 @@ class Bounce2D(Bounce):
             domain1=(0, 2 * jnp.pi / self._NFP),
             axes=(-1, -2),
         )
-        f = [
-            interp_rfft2(
-                theta,
-                zeta,
-                f_i[..., jnp.newaxis, :, :],
-                domain1=(0, 2 * jnp.pi / self._NFP),
-                axes=(-1, -2),
-            )
-            for f_i in f
-        ]
+        if is_fourier:
+            f = [
+                irfft2_non_uniform(
+                    theta,
+                    zeta,
+                    f_i[..., jnp.newaxis, :, :],
+                    self._M,
+                    self._N,
+                    domain1=(0, 2 * jnp.pi / self._NFP),
+                    axes=(-1, -2),
+                )
+                for f_i in f
+            ]
+        else:
+            f = [
+                interp_rfft2(
+                    theta,
+                    zeta,
+                    f_i[..., jnp.newaxis, :, :],
+                    domain1=(0, 2 * jnp.pi / self._NFP),
+                    axes=(-1, -2),
+                )
+                for f_i in f
+            ]
         result = (
             integrand(*f, B=B, pitch=1 / pitch_inv[..., jnp.newaxis], zeta=zeta)
             * B

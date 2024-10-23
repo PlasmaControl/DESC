@@ -431,31 +431,6 @@ def idct_non_uniform(xq, a, n, axis=-1):
     return jnp.linalg.vecdot(jnp.cos(n * jnp.arccos(xq)[..., jnp.newaxis]), a)
 
 
-def _fourier(grid, f, is_reshaped=False):
-    """Transform to DESC spectral domain.
-
-    Parameters
-    ----------
-    grid : Grid
-        Tensor-product grid in (ρ, θ, ζ) with uniformly spaced nodes
-        (θ, ζ) ∈ [0, 2π) × [0, 2π/NFP).
-        Preferably power of 2 for ``grid.num_theta`` and ``grid.num_zeta``.
-    f : jnp.ndarray
-        Function evaluated on ``grid``.
-
-    Returns
-    -------
-    a : jnp.ndarray
-        Shape (..., grid.num_theta // 2 + 1, grid.num_zeta)
-        Complex coefficients of 2D real FFT of ``f``.
-
-    """
-    if not is_reshaped:
-        f = grid.meshgrid_reshape(f, "rtz")
-    # real fft over poloidal since usually M > N
-    return rfft2(f, axes=(-1, -2), norm="forward")
-
-
 # Warning: method must be specified as keyword argument.
 interp1d_vec = jnp.vectorize(
     interp1d, signature="(m),(n),(n)->(m)", excluded={"method"}

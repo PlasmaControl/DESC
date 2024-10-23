@@ -67,7 +67,7 @@ class EffectiveRipple(_Objective):
     num_transit : int
         Number of toroidal transits to follow field line.
         For axisymmetric devices, one poloidal transit is sufficient. Otherwise,
-        assuming the surface is not near rational, then more transits will
+        assuming the surface is not near rational, more transits will
         approximate surface averages better, with diminishing returns.
     num_quad : int
         Resolution for quadrature of bounce integrals. Default is 32.
@@ -85,6 +85,9 @@ class EffectiveRipple(_Objective):
         A tighter upper bound than ``num_well=(Aι+B)*num_transit`` is preferable.
         The ``check_points`` or ``plot`` methods in ``desc.integrals.Bounce2D``
         are useful to select a reasonable value.
+    batch_size : int
+        Number of pitch values with which to compute simultaneously.
+        If given ``None``, then ``batch_size`` defaults to ``num_pitch``.
 
     """
 
@@ -121,6 +124,7 @@ class EffectiveRipple(_Objective):
         num_quad=32,
         num_pitch=50,
         num_well=None,
+        batch_size=None,
     ):
         if target is None and bounds is None:
             target = 0.0
@@ -136,6 +140,7 @@ class EffectiveRipple(_Objective):
             "num_quad": num_quad,
             "num_pitch": num_pitch,
             "num_well": setdefault(num_well, Y_B * num_transit),
+            "batch_size": batch_size,
         }
 
         super().__init__(
@@ -283,7 +288,7 @@ class GammaC(_Objective):
     num_transit : int
         Number of toroidal transits to follow field line.
         For axisymmetric devices, one poloidal transit is sufficient. Otherwise,
-        assuming the surface is not near rational, then more transits will
+        assuming the surface is not near rational, more transits will
         approximate surface averages better, with diminishing returns.
     num_quad : int
         Resolution for quadrature of bounce integrals. Default is 32.
@@ -301,6 +306,9 @@ class GammaC(_Objective):
         A tighter upper bound than ``num_well=(Aι+B)*num_transit`` is preferable.
         The ``check_points`` or ``plot`` methods in ``desc.integrals.Bounce2D``
         are useful to select a reasonable value.
+    batch_size : int
+        Number of pitch values with which to compute simultaneously.
+        If given ``None``, then ``batch_size`` defaults to ``num_pitch``.
     Nemov : bool
         Whether to use the Γ_c as defined by Nemov et al. or Velasco et al.
         Default is Nemov. Set to ``False`` to use Velascos's.
@@ -349,6 +357,7 @@ class GammaC(_Objective):
         num_quad=32,
         num_pitch=64,
         num_well=None,
+        batch_size=None,
         Nemov=True,
     ):
         if target is None and bounds is None:
@@ -365,6 +374,7 @@ class GammaC(_Objective):
             "num_quad": num_quad,
             "num_pitch": num_pitch,
             "num_well": setdefault(num_well, Y_B * num_transit),
+            "batch_size": batch_size,
         }
         if Nemov:
             self._key = "Gamma_c"

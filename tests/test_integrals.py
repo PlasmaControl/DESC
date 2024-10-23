@@ -41,7 +41,6 @@ from desc.integrals import (
 from desc.integrals._bounce_utils import (
     _get_extrema,
     bounce_points,
-    get_pitch_inv_quad,
     interp_fft_to_argmin,
     interp_to_argmin,
     interp_to_argmin_hard,
@@ -1448,7 +1447,7 @@ class TestBounce:
 
         # Exclude singularity not captured by analytic approximation for pitch near
         # the maximum |B|. (This is captured by the numerical integration).
-        pitch_inv = get_pitch_inv_quad(np.min(B), np.max(B), 100)[0][:-1]
+        pitch_inv = Bounce1D.get_pitch_inv_quad(np.min(B), np.max(B), 100)[0][:-1]
         k2 = 0.5 * ((1 - B0 / pitch_inv) / (epsilon * B0 / pitch_inv) + 1)
         I_0, I_1, I_2, I_3, I_4, I_5, I_6, I_7 = (
             TestBounceQuadrature.elliptic_incomplete(k2)

@@ -53,8 +53,9 @@ def _Kd(params, transforms, profiles, data, **kwargs):
 
 def _R_eff(params, transforms, profiles, data, **kwargs):
     grid = transforms["grid"].source_grid
-    Kd_wells,_,masks = extract_Kd_wells(data["Kd"])
-    _,_,R_eff = fit_Kd_wells(grid.nodes[:,2], Kd_wells, masks)
+    n_wells = kwargs.get("n_wells",5)
+    Kd_wells,_,masks = extract_Kd_wells(data["Kd"],n_wells=n_wells)
+    _,_,R_eff = fit_Kd_wells(grid.nodes[:,2],Kd_wells, masks, n_wells=n_wells)
     data["R_eff"] = R_eff
     return data
 
@@ -75,7 +76,8 @@ def _R_eff(params, transforms, profiles, data, **kwargs):
 
 def _L_par(params, transforms, profiles, data, **kwargs):
     grid = transforms["grid"].source_grid
-    _,length_wells,_ = extract_Kd_wells(data["Kd"],order=True)
+    n_wells = kwargs.get("n_wells",5)
+    _,length_wells,_ = extract_Kd_wells(data["Kd"],n_wells=n_wells,order=True)
     L_par = jnp.diff(grid.nodes[:,2])[0]*length_wells
     data["L_par"] = L_par
     return data

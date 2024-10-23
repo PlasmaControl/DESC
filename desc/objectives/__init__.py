@@ -9,6 +9,7 @@ from ._coils import (
     QuadraticFlux,
     SurfaceCurrentRegularization,
     ToroidalFlux,
+    bVariation,
 )
 from ._equilibrium import (
     CurrentDensity,
@@ -29,6 +30,7 @@ from ._geometry import (
     PlasmaVesselDistance,
     PrincipalCurvature,
     Volume,
+    PlasmaVesselDistanceMod,
 )
 from ._omnigenity import (
     Isodynamicity,

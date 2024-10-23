@@ -1348,14 +1348,23 @@ class SurfaceCurrentRegularization(_Objective):
 class bVariation(_Objective):
     """Minimize variation of conductivity distribution
 
-    compute::
+    compute:
 
-        w*(b_t^2 + b_z^2)
+        w*(b_t^2 + b_z^2) or w*b^2
 
-    where K is the winding surface current density, and w is the
-    regularization parameter (the weight on this objective)
+    where w is the regularization parameter (the weight on this objective).
+    b is defined through the equation:
+    
+        x*b_t - y*b_z = z
+        
+    where:
+    
+        z = K_t . e_zeta + K . e_zeta_t - (K_z . e_theta + K . e_theta_z)
+    
+    where K is the winding surface current density, 
+    and K_t, K_z are the toroidal and poloidal derivatives of K
 
-    This is intended to be used with a surface current::
+    This is intended to be used with a surface current:
 
         K = n x ∇ Φ
         Φ(θ,ζ) = Φₛᵥ(θ,ζ) + Gζ/2π + Iθ/2π
@@ -1477,7 +1486,7 @@ class bVariation(_Objective):
         # source_grid.num_nodes for the regularization cost
         self._dim_f = source_grid.num_nodes
         self._surface_data_keys = ["b_t","b_z",
-                                   #"b"
+                                   "b_s"
                                   ]
 
         timer = Timer()
@@ -1533,5 +1542,5 @@ class bVariation(_Objective):
             basis="xyz",
         )
 
-        #K_mag = safenorm(surface_data["K"], axis=-1)
+        #return surface_data["b_s"]**2
         return surface_data["b_t"]**2 + surface_data["b_z"]**2

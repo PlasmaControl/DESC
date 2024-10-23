@@ -181,12 +181,12 @@ class Optimizer(IOAble):
         if eq is not None:
             # check if stage 2 objectives are here:
             all_objs = list(constraints) + list(objective.objectives)
-            errorif(
-                is_any_instance(all_objs, QuadraticFlux),
-                ValueError,
-                "QuadraticFlux objective assumes Equilibrium is fixed but Equilibrium "
-                + "is in things to optimize.",
-            )
+        #    errorif(
+        #        is_any_instance(all_objs, QuadraticFlux),
+        #        ValueError,
+        #        "QuadraticFlux objective assumes Equilibrium is fixed but Equilibrium "
+        #        + "is in things to optimize.",
+        #    )
             errorif(
                 is_any_instance(all_objs, ToroidalFlux),
                 ValueError,

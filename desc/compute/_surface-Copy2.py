@@ -1,4 +1,3 @@
-import jax
 from desc.backend import jnp
 
 from .data_index import register_compute_fun
@@ -923,13 +922,13 @@ def _K_sup_theta_t_FourierCurrentPotentialField(params, transforms, profiles, da
     label="K^{\\theta}_z",
     units="A/m^3",
     units_long="Amperes per cubic meter",
-    description="Toroidal derivative of Contravariant poloidal component of surface current density",
+    description="Contravariant poloidal component of surface current density",
     dim=1,
     params=[],
     transforms={},
     profiles=[],
     coordinates="tz",
-    data=["Phi_z", "|e_theta x e_zeta|",
+    data=["Phi_z", "|e_theta x e_zeta|"
           "Phi_zz", "|e_theta x e_zeta|_z"],
     parameterization=[
         "desc.magnetic_fields._current_potential.FourierCurrentPotentialField",
@@ -1037,146 +1036,3 @@ def _K_z_FourierCurrentPotentialField(params, transforms, profiles, data, **kwar
                    + data["K^zeta"]*data["e_zeta_z"].T 
                   ).T
     return data
-
-################################################################################################################
-# Functions to find variable sigma
-################################################################################################################
-@register_compute_fun(
-    name="b_t",
-    label="b_t",
-    units="~",
-    units_long="~",
-    description="Poloidal derivatiev of Log of electrical conductivity",
-    dim=1,
-    params=[],
-    transforms={},
-    profiles=[],
-    coordinates="tz",
-    data=["theta","zeta","b_s"],
-    parameterization=[
-        "desc.magnetic_fields._current_potential.FourierCurrentPotentialField",
-    ],
-)
-def _b_t_FourierCurrentPotentialField(params, transforms, profiles, data, **kwargs):
-    data["b_t"] = first_derivative_t(data["b_s"], data)
-        
-    return data
-
-@register_compute_fun(
-    name="b_z",
-    label="b_z",
-    units="~",
-    units_long="~",
-    description="Toroidal derivatiev of Log of electrical conductivity",
-    dim=1,
-    params=[],
-    transforms={},
-    profiles=[],
-    coordinates="tz",
-    data=["theta","zeta","b_s"],
-    parameterization=[
-        "desc.magnetic_fields._current_potential.FourierCurrentPotentialField",
-    ],
-)
-def _b_t_FourierCurrentPotentialField(params, transforms, profiles, data, **kwargs):
-    data["b_z"] = first_derivative_z(data["b_s"], data)
-        
-    return data
-
-@register_compute_fun(
-    name="b_s",
-    label="b_s",
-    units="~",
-    units_long="~",
-    description="Log of electrical conductivity",
-    dim=1,
-    params=[],
-    transforms={},
-    profiles=[],
-    coordinates="tz",
-    data=["theta","zeta",
-          "e_theta", "e_zeta",
-          "e_theta_z", "e_zeta_t",
-          "K","K_t", "K_z"
-         ],
-    parameterization=[
-        "desc.magnetic_fields._current_potential.FourierCurrentPotentialField",
-    ],
-)
-def _b_s_FourierCurrentPotentialField(params, transforms, profiles, data, **kwargs):
-    b = find_b(data,)
-    data["b_s"] = b
-        
-    return data
-
-# Invert the matrix and find b
-def find_b(data,):
-    x = jnp.ones(data["theta"].shape[0])
-    rhs = (jnp.sum(data["K_t"]*data["e_zeta"], axis=-1) 
-           + jnp.sum(data["K"]*data["e_zeta_t"], axis=-1) 
-           - ( jnp.sum(data["K_z"]*data["e_theta"], axis=-1) 
-              + jnp.sum(data["K"]*data["e_theta_z"], axis=-1)
-             )
-          )
-    
-    fun_wrapped = lambda x: b_residual(x,data,)
-    A_ = jax.jacfwd(fun_wrapped)(x)
-    
-    return jnp.linalg.pinv(A_)@rhs
-
-# Function to find build a matrix to find the scalar b
-def b_residual(y,data,):
-    f_t = first_derivative_t(y, data)
-    f_z = first_derivative_z(y, data,)
-    
-    return data["K^zeta"]*f_t - data["K^theta"]*f_z
-
-def first_derivative_t(a_mn,data,):
-    # Expecting square grids
-    
-    #n_size = jnp.ones_like(data["theta"])#
-    #n_size = jnp.integer(jnp.sqrt(data["theta"].shape[0]))
-    #n_size = ((jnp.sqrt(data["theta"].shape[0])).astype(int)).item()#[0]
-    #a.reshape(-1)[0]
-    #n_size = jnp.array(jnp.sqrt(data["theta"].shape[0]), int).item()
-    n_size = 31
-    # Rearrange A as a matrix
-    A1 = a_mn.reshape((n_size, n_size)).T
-    
-    # theta-step
-    dt = data["theta"][1] - data["theta"][0]
-                                     
-    # d(sigma)/dt
-    A_t = jnp.zeros_like(A1)
-    # i = 0
-    A_t = A_t.at[0, :].set( (A1[1, :] - A1[n_size-1, :]) * (2 * dt) ** (-1) )
-    # i = n_size
-    A_t = A_t.at[n_size-1, :].set( (A1[0, :] - A1[n_size-2, :]) * (2 * dt) ** (-1) )
-    # Intermediate steps
-    A_t = A_t.at[1:n_size - 1, :].set((A1[2:n_size, :] - A1[0:n_size - 2, :]) * (2 * dt) ** (-1))
-    
-    return (A_t.T).reshape(-1)#.flatten()
-
-def first_derivative_z(a_mn,data,):
-    # Expecting square grids
-    
-    #n_size = #jnp.ones_like(data["zeta"])
-    #n_size = jnp.integer(jnp.sqrt(data["zeta"].shape[0]))
-    #n_size = ((jnp.sqrt(data["zeta"].shape[0])).astype(int)).item()
-    n_size = 31
-    
-    # Rearrange A as a matrix
-    A2 = a_mn.reshape((n_size, n_size)).T
-    
-    # dz-step
-    dz = data["zeta"][n_size] - data["zeta"][0]
-    # d(V)/dz
-    A_z = jnp.zeros_like(A2)
-    # at i = 0
-    A_z = A_z.at[:, 0].set( (A2[:, 1] - A2[:, n_size - 1]) * (2 * dz) ** (-1) )
-    # at i = n_size
-    A_z = A_z.at[:, n_size - 1].set((A2[:, 0] - A2[:, n_size - 2]) * (2 * dz) ** (-1) )
-    # Intermediate steps
-    A_z = A_z.at[:, 1:n_size - 1].set((A2[:, 2:n_size] - A2[:, 0:n_size - 2]) * (2 * dz) ** (-1) )
-    
-    return (A_z.T).reshape(-1)#flatten()

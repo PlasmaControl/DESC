@@ -12,6 +12,13 @@ from .data_index import register_compute_fun
 from ..backend import jnp
 from ..integrals.critical_gradient import extract_Kd_wells, fit_Kd_wells
 
+_doc = {
+    "n_wells": (
+        "int : Number of wells to detect for each pitch and field line. "
+        "Default is 10 wells,"
+    ),
+}
+
 
 @register_compute_fun(
     name="Kd",
@@ -49,6 +56,7 @@ def _Kd(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["Kd"],
+    **_doc,
 )
 
 def _R_eff(params, transforms, profiles, data, **kwargs):

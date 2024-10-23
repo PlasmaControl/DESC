@@ -702,6 +702,15 @@ class PlasmaVesselDistance(_Objective):
             "quad_weights": w,
         }
 
+        data = compute_fun(
+            "desc.equilibrium.equilibrium.Equilibrium",
+            self._equil_data_keys,
+            params=equil_params,
+            transforms=constants["equil_transforms"],
+            profiles=constants["equil_profiles"],
+        )
+        plasma_coords = rpz2xyz(jnp.array([data["R"], data["phi"], data["Z"]]).T)
+        
         if self._surface_fixed:
             # precompute the surface coordinates
             # as the surface is fixed during the optimization
@@ -747,14 +756,15 @@ class PlasmaVesselDistance(_Objective):
         """
         if constants is None:
             constants = self.constants
-        data = compute_fun(
-            "desc.equilibrium.equilibrium.Equilibrium",
-            self._equil_data_keys,
-            params=equil_params,
-            transforms=constants["equil_transforms"],
-            profiles=constants["equil_profiles"],
-        )
-        plasma_coords = rpz2xyz(jnp.array([data["R"], data["phi"], data["Z"]]).T)
+        #data = compute_fun(
+        #    "desc.equilibrium.equilibrium.Equilibrium",
+        #    self._equil_data_keys,
+        #    params=equil_params,
+        #    transforms=constants["equil_transforms"],
+        #    profiles=constants["equil_profiles"],
+        #)
+        #plasma_coords = rpz2xyz(jnp.array([data["R"], data["phi"], data["Z"]]).T)
+        
         if self._surface_fixed:
             surface_coords = constants["surface_coords"]
         else:

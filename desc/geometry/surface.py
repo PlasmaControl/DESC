@@ -460,7 +460,6 @@ class FourierRZToroidalSurface(Surface):
         N = check_nonnegint(N, "N", False)
         NFP = check_posint(NFP, "NFP", False)
         #theta = np.asarray(theta)
-        
         theta = jnp.asarray(theta)
         
         assert (
@@ -509,6 +508,147 @@ class FourierRZToroidalSurface(Surface):
             transform = Transform(
                 nodes, Z_basis, build=True, build_pinv=False, method="direct1"
             )
+            AZ = transform.matrices[transform.method][0][0][0]
+
+            A = block_diag(W @ AR, W @ AZ)
+            b = np.concatenate([w * R, w * Z])
+            x_lmn = np.linalg.lstsq(A, b, rcond=rcond)[0]
+
+            Rb_lmn = x_lmn[0 : R_basis.num_modes]
+            Zb_lmn = x_lmn[R_basis.num_modes :]
+
+        surf = cls(
+            Rb_lmn,
+            Zb_lmn,
+            R_basis.modes[:, 1:],
+            Z_basis.modes[:, 1:],
+            NFP,
+            sym,
+            check_orientation=check_orientation,
+        )
+        return surf
+
+###############################################################################################################
+    @classmethod
+    def from_values_mod(
+        cls,
+        coords,
+        theta,
+        zeta=None,
+        M=6,
+        N=6,
+        NFP=1,
+        sym=True,
+        check_orientation=True,
+        rcond=None,
+        w=None,
+        transformR = None, # Passing in transforms to make this method jittable
+        transformZ = None, # Passing in transforms to make this method jittable
+    ):
+        """Create a surface from given R,Z coordinates in real space.
+
+        Parameters
+        ----------
+        coords : array-like shape(num_points,3) or Grid
+            cylindrical coordinates (R,phi,Z) to fit as a FourierRZToroidalSurface
+        theta : ndarray, shape(num_points,)
+            Locations in poloidal angle theta where real space coordinates are given.
+            Expects same number of angles as coords (num_points),
+            This determines the poloidal angle for the resulting surface.
+        zeta : ndarray, shape(num_points,)
+            Locations in toroidal angle zeta where real space coordinates are given.
+            Expects same number of angles as coords (num_points),
+            This determines the toroidal angle for the resulting surface.
+            if None, defaults to assuming the toroidal angle is the cylindrical phi
+            and so sets zeta = phi = coords[:,1]
+        M : int
+            poloidal resolution of basis used to fit surface with.
+            It is recommended to fit with M < num_theta points per toroidal plane,
+            i.e. if num_points = num_theta*num_zeta , then want to ensure M < num_theta
+        N : int
+            toroidal resolution of basis used to fit surface with
+            It is recommended to fit with N < num_zeta points per poloidal plane.
+            i.e. if num_points = num_theta*num_zeta , then want to ensure N < num_zeta
+        NFP : int
+            number of toroidal field periods for surface
+        sym : bool
+            True if surface is stellarator-symmetric
+        check_orientation : bool
+            whether to check left-handedness of coordinates and flip if necessary.
+        rcond : float
+            Relative condition number of the fit. Singular values smaller than this
+            relative to the largest singular value will be ignored. The default value
+            is len(x)*eps, where eps is the relative precision of the float type, about
+            2e-16 in most cases.
+        w : array-like, shape(num_points,)
+            Weights to apply to the sample coordinates. For gaussian
+            uncertainties, use 1/sigma (not 1/sigma**2).
+
+        Returns
+        -------
+        surface : FourierRZToroidalSurface
+            Surface with Fourier coefficients fitted from input coords.
+
+        """
+        M = check_nonnegint(M, "M", False)
+        N = check_nonnegint(N, "N", False)
+        NFP = check_posint(NFP, "NFP", False)
+        #theta = np.asarray(theta)
+        theta = jnp.asarray(theta)
+        
+        assert (
+            coords.shape[0] == theta.size
+        ), "coords first dimension and theta must have same size"
+        if zeta is None:
+            zeta = coords[:, 1]
+        else:
+            raise NotImplementedError("zeta != phi not yet implemented")
+        nodes = Grid(
+            #np.vstack([np.ones_like(theta), theta, coords[:, 1]]).T,
+            jnp.vstack([jnp.ones_like(theta), theta, coords[:, 1]]).T,
+            sort=False,
+            jitable=True,
+        )
+
+        R = coords[:, 0]
+        Z = coords[:, 2]
+        R_basis = DoubleFourierSeries(M=M, N=N, NFP=NFP, sym="cos" if sym else False)
+        Z_basis = DoubleFourierSeries(M=M, N=N, NFP=NFP, sym="sin" if sym else False)
+        
+        # Need to change this chunk to make it jittable
+        if w is None:  # unweighted fit
+            #transform = Transform(
+            #    nodes, R_basis, build=False, build_pinv=True, rcond=rcond
+            #)
+            
+            Rb_lmn = transformR.fit(R)
+
+            #transform = Transform(
+            #    nodes, Z_basis, build=False, build_pinv=True, rcond=rcond
+            #)
+            
+            Zb_lmn = transformZ.fit(Z)
+            
+        else:  # perform weighted fit
+            # solves system W A x = W b
+            # where A is the transform matrix, W is the diagonal weight matrix
+            # of weights w, and b is the vector of data points
+            #w = np.asarray(w)
+            #W = np.diag(w)
+            w = jnp.asarray(w)
+            W = jnp.diag(w)
+            assert w.size == R.size, "w must same length as number of points being fit"
+
+            #transform = Transform(
+            #    nodes, R_basis, build=True, build_pinv=False, method="direct1"
+            #)
+            
+            AR = transform.matrices[transform.method][0][0][0]
+
+            #transform = Transform(
+            #    nodes, Z_basis, build=True, build_pinv=False, method="direct1"
+            #)
+            
             AZ = transform.matrices[transform.method][0][0][0]
 
             A = block_diag(W @ AR, W @ AZ)
@@ -751,6 +891,137 @@ class FourierRZToroidalSurface(Surface):
             N=N,
             NFP=base_surface.NFP,
             sym=base_surface.sym,
+        )
+        if full_output:
+            return offset_surface, data, (res, niter)
+        else:
+            return offset_surface
+        
+#########################################################################################
+    def constant_offset_surface_mod(
+        self, offset, grid=None, M=None, N=None,
+        transformR = None, # Adding this line to pass in a transform to make it jittable
+        transformZ = None, # Adding this line to pass in a transform to make it jittable
+        full_output = False
+    ):
+        """Create a FourierRZSurface with constant offset from the base surface (self).
+
+        Implementation of algorithm described in Appendix B of
+        "An improved current potential method for fast computation of
+        stellarator coil shapes", Landreman (2017)
+        https://iopscience.iop.org/article/10.1088/1741-4326/aa57d4
+
+        NOTE: Must have the toroidal angle as the cylindrical toroidal angle
+        in order for this algorithm to work properly
+
+        Parameters
+        ----------
+        base_surface : FourierRZToroidalSurface
+            Surface from which the constant offset surface will be found.
+        offset : float
+            constant offset (in m) of the desired surface from the input surface
+            offset will be in the normal direction to the surface.
+        grid : Grid, optional
+            Grid object of the points on the given surface to evaluate the
+            offset points at, from which the offset surface will be created by fitting
+            offset points with the basis defined by the given M and N.
+            If None, defaults to a LinearGrid with M and N and NFP equal to the
+            base_surface.M and base_surface.N and base_surface.NFP
+        M : int, optional
+            Poloidal resolution of the basis used to fit the offset points
+            to create the resulting constant offset surface, by default equal
+            to base_surface.M
+        N : int, optional
+            Toroidal resolution of the basis used to fit the offset points
+            to create the resulting constant offset surface, by default equal
+            to base_surface.N
+        full_output : bool, optional
+            If True, also return a dict of useful data about the surfaces and a
+            tuple where the first element is the residual from
+            the root finding and the second is the number of iterations.
+
+        Returns
+        -------
+        offset_surface : FourierRZToroidalSurface
+            FourierRZToroidalSurface, created from fitting points offset from the input
+            surface by the given constant offset.
+        data : dict
+            dictionary containing  the following data, in the cylindrical basis:
+                ``n`` : (``grid.num_nodes`` x 3) array of the unit surface normal on
+                    the base_surface evaluated at the input ``grid``
+                ``x`` : (``grid.num_nodes`` x 3) array of the position vectors on
+                    the base_surface evaluated at the input ``grid``
+                ``x_offset_surface`` : (``grid.num_nodes`` x 3) array of the
+                    position vectors on the offset surface, corresponding to the
+                    ``x`` points on the base_surface (i.e. the points to which the
+                    offset surface was fit)
+        info : tuple
+            2 element tuple containing residuals and number of iterations
+            for each point. Only returned if ``full_output`` is True
+
+        """
+        M = check_nonnegint(M, "M")
+        N = check_nonnegint(N, "N")
+
+        base_surface = self
+        if grid is None:
+            grid = LinearGrid(
+                M=base_surface.M * 2,
+                N=base_surface.N * 2,
+                NFP=base_surface.NFP,
+                sym=False,
+            )
+        assert isinstance(
+            base_surface, FourierRZToroidalSurface
+        ), "base_surface must be a FourierRZToroidalSurface!"
+        M = base_surface.M if M is None else int(M)
+        N = base_surface.N if N is None else int(N)
+
+        def n_and_r_jax(nodes):
+            data = base_surface.compute(
+                ["X", "Y", "Z", "n_rho"],
+                grid=Grid(nodes, jitable=True, sort=False),
+                method="jitable",
+            )
+
+            phi = nodes[:, 2]
+            re = jnp.vstack([data["X"], data["Y"], data["Z"]]).T
+            n = data["n_rho"]
+            n = rpz2xyz_vec(n, phi=phi)
+            r_offset = re + offset * n
+            return n, re, r_offset
+
+        def fun_jax(zeta_hat, theta, zeta):
+            nodes = jnp.vstack((jnp.ones_like(theta), theta, zeta_hat)).T
+            n, r, r_offset = n_and_r_jax(nodes)
+            return jnp.arctan(r_offset[0, 1] / r_offset[0, 0]) - zeta
+
+        vecroot = jit(vmap(lambda x0, *p: root_scalar(fun_jax, x0, jac=None, args=p)))
+        zetas, (res, niter) = vecroot(
+            grid.nodes[:, 2], grid.nodes[:, 1], grid.nodes[:, 2]
+        )
+
+        #zetas = np.asarray(zetas)
+        #nodes = np.vstack((np.ones_like(grid.nodes[:, 1]), grid.nodes[:, 1], zetas)).T
+        zetas = jnp.asarray(zetas)
+        nodes = jnp.vstack((jnp.ones_like(grid.nodes[:, 1]), grid.nodes[:, 1], zetas)).T
+        
+        n, x, x_offsets = n_and_r_jax(nodes)
+
+        data = {}
+        data["n"] = xyz2rpz_vec(n, phi=nodes[:, 1])
+        data["x"] = xyz2rpz(x)
+        data["x_offset_surface"] = xyz2rpz(x_offsets)
+
+        offset_surface = FourierRZToroidalSurface.from_values_mod(
+            data["x_offset_surface"],
+            theta=nodes[:, 1],
+            M=M,
+            N=N,
+            NFP=base_surface.NFP,
+            sym=base_surface.sym,
+            transformR = transformR,
+            transformZ = transformZ,
         )
         if full_output:
             return offset_surface, data, (res, niter)

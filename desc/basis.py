@@ -507,7 +507,7 @@ class DoubleFourierSeries(_Basis):
         mm = mm.reshape((-1, 1), order="F")
         nn = nn.reshape((-1, 1), order="F")
         z = jnp.zeros_like(mm)
-        y = jnp.hstack([z, mm, nn])
+        y = np.hstack([z, mm, nn])
         return y
 
     def evaluate(

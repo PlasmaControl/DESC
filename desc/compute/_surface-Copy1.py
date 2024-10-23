@@ -501,6 +501,7 @@ def _Phi_z_FourierCurrentPotentialField(params, transforms, profiles, data, **kw
     )
     return data
 
+
 @register_compute_fun(
     name="Phi",
     label="\\Phi",
@@ -829,116 +830,6 @@ def _e_zeta_z_ZernikeRZToroidalSection(params, transforms, profiles, data, **kwa
 
 ##########################################################################################################
 @register_compute_fun(
-    name="Phi_tt",
-    label="\\partial_{\\theta \\theta}\\Phi",
-    units="A",
-    units_long="Amperes",
-    description="Surface current potential, poloidal derivative",
-    dim=1,
-    params=["params"],
-    transforms={"grid": [], "potential_dtheta": []},
-    profiles=[],
-    coordinates="tz",
-    data=[],
-    parameterization="desc.magnetic_fields._current_potential.CurrentPotentialField",
-)
-def _Phi_tt_CurrentPotentialField(params, transforms, profiles, data, **kwargs):
-    data["Phi_t"] = transforms["potential_dtheta"](
-        transforms["grid"].nodes[:, 1],
-        transforms["grid"].nodes[:, 2],
-        **params["params"]
-    )
-    return data
-
-@register_compute_fun(
-    name="Phi_zz",
-    label="\\partial_{\\zeta \\zeta}\\Phi",
-    units="A",
-    units_long="Amperes",
-    description="Surface current potential, toroidal derivative",
-    dim=1,
-    params=["params"],
-    transforms={"grid": [], "potential_dzeta": []},
-    profiles=[],
-    coordinates="tz",
-    data=[],
-    parameterization="desc.magnetic_fields._current_potential.CurrentPotentialField",
-)
-def _Phi_z_CurrentPotentialField(params, transforms, profiles, data, **kwargs):
-    data["Phi_zz"] = transforms["potential_dzeta"](
-        transforms["grid"].nodes[:, 1],
-        transforms["grid"].nodes[:, 2],
-        **params["params"]
-    )
-    return data
-
-@register_compute_fun(
-    name="Phi_tt",
-    label="\\partial_{\\theta \\theta}\\Phi",
-    units="A",
-    units_long="Amperes",
-    description="Surface current potential, poloidal-toroidal derivative",
-    dim=1,
-    params=["Phi_mn"],
-    transforms={"Phi": [[0, 2, 0]]},
-    profiles=[],
-    coordinates="tz",
-    data=[],
-    parameterization=[
-        "desc.magnetic_fields._current_potential.FourierCurrentPotentialField"
-    ],
-)
-def _Phi_tt_FourierCurrentPotentialField(params, transforms, profiles, data, **kwargs):
-    data["Phi_tt"] = (
-        transforms["Phi"].transform(params["Phi_mn"], dt=2,)
-    )
-    return data
-
-@register_compute_fun(
-    name="Phi_zz",
-    label="\\partial_{\\zeta \\zeta}\\Phi",
-    units="A",
-    units_long="Amperes",
-    description="Surface current potential, poloidal-toroidal derivative",
-    dim=1,
-    params=["Phi_mn"],
-    transforms={"Phi": [[0, 0, 2]]},
-    profiles=[],
-    coordinates="tz",
-    data=[],
-    parameterization=[
-        "desc.magnetic_fields._current_potential.FourierCurrentPotentialField"
-    ],
-)
-def _Phi_tt_FourierCurrentPotentialField(params, transforms, profiles, data, **kwargs):
-    data["Phi_zz"] = (
-        transforms["Phi"].transform(params["Phi_mn"], dz = 2)
-    )
-    return data
-
-@register_compute_fun(
-    name="Phi_tz",
-    label="\\partial_{\\theta \\zeta}\\Phi",
-    units="A",
-    units_long="Amperes",
-    description="Surface current potential, poloidal-toroidal derivative",
-    dim=1,
-    params=["Phi_mn"],
-    transforms={"Phi": [[0, 1, 1]]},
-    profiles=[],
-    coordinates="tz",
-    data=[],
-    parameterization=[
-        "desc.magnetic_fields._current_potential.FourierCurrentPotentialField"
-    ],
-)
-def _Phi_tz_FourierCurrentPotentialField(params, transforms, profiles, data, **kwargs):
-    data["Phi_tz"] = (
-        transforms["Phi"].transform(params["Phi_mn"], dt=1, dz = 1)
-    )
-    return data
-
-@register_compute_fun(
     name="K^theta_t",
     label="K^{\\theta}_t",
     units="A/m^3",
@@ -950,14 +841,14 @@ def _Phi_tz_FourierCurrentPotentialField(params, transforms, profiles, data, **k
     profiles=[],
     coordinates="tz",
     data=["Phi_z", "|e_theta x e_zeta|",
-          "Phi_tz", "|e_theta x e_zeta|_t"],
+          "Phi_zt", "|e_theta x e_zeta|_t"],
     parameterization=[
         "desc.magnetic_fields._current_potential.CurrentPotentialField",
         "desc.magnetic_fields._current_potential.FourierCurrentPotentialField",
     ],
 )
 def _K_sup_theta_t_CurrentPotentialField(params, transforms, profiles, data, **kwargs):
-    data["K^theta_t"] = -(data["Phi_tz"] * (1 / data["|e_theta x e_zeta|"])
+    data["K^theta_t"] = -(data["Phi_zt"] * (1 / data["|e_theta x e_zeta|"])
                           + data["Phi_z"] * (- data["|e_theta x e_zeta|_t"] / data["|e_theta x e_zeta|"]**2)
                          )
     return data
@@ -1042,7 +933,7 @@ def _K_sup_zeta_z_CurrentPotentialField(params, transforms, profiles, data, **kw
     units="A/m^3",
     units_long="Amperes per cubic meter",
     description="Contravariant toroidal component of surface current density",
-    dim=3,
+    dim=1,
     params=[],
     transforms={},
     profiles=[],
@@ -1068,7 +959,7 @@ def _K_t_CurrentPotentialField(params, transforms, profiles, data, **kwargs):
     units="A/m^3",
     units_long="Amperes per cubic meter",
     description="Contravariant toroidal component of surface current density",
-    dim=3,
+    dim=1,
     params=[],
     transforms={},
     profiles=[],
@@ -1087,3 +978,127 @@ def _K_z_CurrentPotentialField(params, transforms, profiles, data, **kwargs):
                    + data["K^zeta"]*data["e_zeta_z"].T 
                   ).T
     return data
+
+################################################################################################################
+# Functions to find variable sigma
+################################################################################################################
+@register_compute_fun(
+    name="b_t",
+    label="b_t",
+    units="~",
+    units_long="~",
+    description="Poloidal derivatiev of Log of electrical conductivity",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="tz",
+    data=["theta","zeta","b_s"],
+)
+def _b_t_CurrentPotentialField(params, transforms, profiles, data, **kwargs):
+    data["b_t"] = first_derivative_t(data["b_s"], data)
+        
+    return data
+
+@register_compute_fun(
+    name="b_z",
+    label="b_z",
+    units="~",
+    units_long="~",
+    description="Toroidal derivatiev of Log of electrical conductivity",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="tz",
+    data=["theta","zeta","b_s"],
+)
+def _b_t_CurrentPotentialField(params, transforms, profiles, data, **kwargs):
+    data["b_z"] = first_derivative_z(data["b_s"], data)
+        
+    return data
+
+@register_compute_fun(
+    name="b_s",
+    label="b_s",
+    units="~",
+    units_long="~",
+    description="Log of electrical conductivity",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="tz",
+    data=["e_theta", "e_zeta",
+          "e_theta_z", "e_zeta_t",
+          "K","K_t", "K_z"
+         ],
+)
+def _b_CurrentPotentialField(params, transforms, profiles, data, **kwargs):
+    b = find_b(data,)
+    data["b_s"] = b
+        
+    return data
+
+# Invert the matrix and find b
+def find_b(data,):
+    x = jnp.ones(data["theta"].shape[0])
+    rhs = (jnp.sum(data["K_t"]*data["e_zeta"], axis=-1) 
+           + jnp.sum(data["K"]*data["e_zeta_t"], axis=-1) 
+           - ( jnp.sum(data["K_z"]*data["e_theta"], axis=-1) 
+              + jnp.sum(data["K"]*data["e_theta_z"], axis=-1)
+             )
+          )
+    
+    fun_wrapped = lambda x: u_div_residual(x,data,)
+    A_ = jax.jacfwd(fun_wrapped)(x)
+    
+    return jnp.linalg.pinv(A_)@rhs
+
+# Function to find build a matrix to find the scalar b
+def b_residual(y,data,):
+    f_t = first_derivative_t(y, data)
+    f_z = first_derivative_z(y, data,)
+    
+    return data["K^zeta"]*f_t - data["K^theta"]*f_z
+
+def first_derivative_t(a_mn,data,):
+    # Expecting square grids
+    n_size = int(np.sqrt(data["theta"].shape[0]))
+    
+    # Rearrange A as a matrix
+    A1 = a_mn.reshape((n_size, n_size)).T
+    
+    # theta-step
+    dt = data["theta"][1] - data["theta"][0]
+                                     
+    # d(sigma)/dt
+    A_t = jnp.zeros_like(A1)
+    # i = 0
+    A_t = A_t.at[0, :].set( (A1[1, :] - A1[n_size-1, :]) * (2 * dt) ** (-1) )
+    # i = n_size
+    A_t = A_t.at[n_size-1, :].set( (A1[0, :] - A1[n_size-2, :]) * (2 * dt) ** (-1) )
+    # Intermediate steps
+    A_t = A_t.at[1:n_size - 1, :].set((A1[2:n_size, :] - A1[0:n_size - 2, :]) * (2 * dt) ** (-1))
+    
+    return (A_t.T).reshape(-1)#.flatten()
+
+def first_derivative_z(a_mn,data,):
+    # Expecting square grids
+    n_size = int(np.sqrt(data["zeta"].shape[0]))
+    
+    # Rearrange A as a matrix
+    A2 = a_mn.reshape((n_size, n_size)).T
+    
+    # dz-step
+    dz = data["zeta"][n_size] - data["zeta"][0]
+    # d(V)/dz
+    A_z = jnp.zeros_like(A2)
+    # at i = 0
+    A_z = A_z.at[:, 0].set( (A2[:, 1] - A2[:, n_size - 1]) * (2 * dz) ** (-1) )
+    # at i = n_size
+    A_z = A_z.at[:, n_size - 1].set((A2[:, 0] - A2[:, n_size - 2]) * (2 * dz) ** (-1) )
+    # Intermediate steps
+    A_z = A_z.at[:, 1:n_size - 1].set((A2[:, 2:n_size] - A2[:, 0:n_size - 2]) * (2 * dz) ** (-1) )
+    
+    return (A_z.T).reshape(-1)#flatten()

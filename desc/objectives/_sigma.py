@@ -17,8 +17,8 @@ from .utils import softmin
 
     
 #############################################################################################################################
-class HarmonicField_to_BiotSavart(_Objective):
-    """Target the difference between a Harmonic field on a flux surface and Biot-Savart.
+class VariableSigma(_Objective):
+    """Find variable conductivity distribution and minimize its variation
 
     Computes Biot-Savart Law to find a harmonic magnetic field on a plasma boundary that 
     encloses net-zero current inside the plasma volume.
@@ -194,12 +194,6 @@ class HarmonicField_to_BiotSavart(_Objective):
         # Keys for equilibrium surface are not required since the harmonic fields are computed in the
         # HarmonicSuperPos objective
         self._equil_data_keys = ["R","phi","Z",
-                                 #"theta","zeta",
-                                 #"n_rho",
-                                 #"e^theta_s","e^zeta_s",
-                                 #"e^theta_s_t","e^theta_s_z",
-                                 #"e^zeta_s_t","e^zeta_s_z",
-                                 #"nabla_s^2_theta","nabla_s^2_zeta",
                                 ]
         
         self._surface_data_keys = [#"n_rho",

@@ -182,7 +182,7 @@ check the link to install JAX with the most up-to-date recommendations from the 
 
 .. code-block:: sh
 
-    conda create --name desc-env 'python==3.11'
+    conda create --name desc-env python=3.12 -y
     conda activate desc-env
     pip install -U "jax[cuda12]"
 

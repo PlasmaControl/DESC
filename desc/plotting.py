@@ -110,7 +110,7 @@ _AXIS_LABELS_XYZ = [r"$X ~(\mathrm{m})$", r"$Y ~(\mathrm{m})$", r"$Z ~(\mathrm{m
 
 def _set_tight_layout(fig):
     # compat layer to deal with API changes in mpl 3.6.0
-    if int(matplotlib._version.version.split(".")[1]) < 6:
+    if int(matplotlib.__version__[0]) == 3 and int(matplotlib.__version__[2]) < 6:
         fig.set_tight_layout(True)
     else:
         fig.set_layout_engine("tight")
@@ -118,7 +118,7 @@ def _set_tight_layout(fig):
 
 def _get_cmap(name, n=None):
     # compat layer to deal with API changes in mpl 3.6.0
-    if int(matplotlib._version.version.split(".")[1]) < 6:
+    if int(matplotlib.__version__[0]) == 3 and int(matplotlib.__version__[2]) < 6:
         return matplotlib.cm.get_cmap(name, n)
     else:
         c = matplotlib.colormaps[name]
@@ -864,7 +864,15 @@ def plot_3d(
         * ``cmap``: string denoting colormap to use.
         * ``levels``: array of data values where ticks on colorbar should be placed.
         * ``alpha``: float in [0,1.0], the transparency of the plotted surface
-        * ``showscale``: Bool, whether or not to show the colorbar. True by default
+        * ``showscale``: Bool, whether or not to show the colorbar. True by default.
+        * ``showgrid``: Bool, whether or not to show the coordinate grid lines.
+          True by default.
+        * ``showticklabels``: Bool, whether or not to show the coordinate tick labels.
+          True by default.
+        * ``showaxislabels``: Bool, whether or not to show the coordinate axis labels.
+          True by default.
+        * ``zeroline``: Bool, whether or not to show the zero coordinate axis lines.
+          True by default.
         * ``field``: MagneticField, a magnetic field with which to calculate Bn on
           the surface, must be provided if Bn is entered as the variable to plot.
         * ``field_grid``: MagneticField, a Grid to pass to the field as a source grid
@@ -956,6 +964,10 @@ def plot_3d(
         data = data.reshape((grid.num_theta, grid.num_rho, grid.num_zeta), order="F")
 
         label = r"$\mathbf{B} \cdot \hat{n} ~(\mathrm{T})$"
+    showgrid = kwargs.pop("showgrid", True)
+    zeroline = kwargs.pop("zeroline", True)
+    showticklabels = kwargs.pop("showticklabels", True)
+    showaxislabels = kwargs.pop("showaxislabels", True)
     errorif(
         len(kwargs) != 0,
         ValueError,
@@ -1024,30 +1036,48 @@ def plot_3d(
     if fig is None:
         fig = go.Figure()
     fig.add_trace(meshdata)
+    xaxis_title = (
+        LatexNodes2Text().latex_to_text(_AXIS_LABELS_XYZ[0]) if showaxislabels else ""
+    )
+    yaxis_title = (
+        LatexNodes2Text().latex_to_text(_AXIS_LABELS_XYZ[1]) if showaxislabels else ""
+    )
+    zaxis_title = (
+        LatexNodes2Text().latex_to_text(_AXIS_LABELS_XYZ[2]) if showaxislabels else ""
+    )
 
     fig.update_layout(
         scene=dict(
-            xaxis_title=LatexNodes2Text().latex_to_text(_AXIS_LABELS_XYZ[0]),
-            yaxis_title=LatexNodes2Text().latex_to_text(_AXIS_LABELS_XYZ[1]),
-            zaxis_title=LatexNodes2Text().latex_to_text(_AXIS_LABELS_XYZ[2]),
+            xaxis_title=xaxis_title,
+            yaxis_title=yaxis_title,
+            zaxis_title=zaxis_title,
             aspectmode="data",
             xaxis=dict(
                 backgroundcolor="white",
                 gridcolor="darkgrey",
                 showbackground=False,
                 zerolinecolor="darkgrey",
+                showgrid=showgrid,
+                zeroline=zeroline,
+                showticklabels=showticklabels,
             ),
             yaxis=dict(
                 backgroundcolor="white",
                 gridcolor="darkgrey",
                 showbackground=False,
                 zerolinecolor="darkgrey",
+                showgrid=showgrid,
+                zeroline=zeroline,
+                showticklabels=showticklabels,
             ),
             zaxis=dict(
                 backgroundcolor="white",
                 gridcolor="darkgrey",
                 showbackground=False,
                 zerolinecolor="darkgrey",
+                showgrid=showgrid,
+                zeroline=zeroline,
+                showticklabels=showticklabels,
             ),
         ),
         width=figsize[0] * dpi,
@@ -2016,7 +2046,7 @@ def plot_boundary(eq, phi=None, plot_axis=True, ax=None, return_data=False, **kw
     ax.set_ylabel(_AXIS_LABELS_RPZ[2], fontsize=ylabel_fontsize)
     ax.tick_params(labelbottom=True, labelleft=True)
 
-    fig.legend(**legend_kw)
+    ax.legend(**legend_kw)
     _set_tight_layout(fig)
 
     plot_data = {}
@@ -2120,9 +2150,7 @@ def plot_boundaries(
 
     phi = (1 if eqs[-1].N == 0 else 4) if phi is None else phi
     if isinstance(phi, numbers.Integral):
-        phi = np.linspace(
-            0, 2 * np.pi / eqs[-1].NFP, phi + 1
-        )  # +1 to include pi and 2pi
+        phi = np.linspace(0, 2 * np.pi / eqs[-1].NFP, phi, endpoint=False)
     phi = np.atleast_1d(phi)
 
     neq = len(eqs)
@@ -2173,7 +2201,7 @@ def plot_boundaries(
         plot_data["R"].append(R)
         plot_data["Z"].append(Z)
 
-        for j in range(nz - 1):
+        for j in range(nz):
             (line,) = ax.plot(
                 R[:, -1, j], Z[:, -1, j], color=colors[i], linestyle=ls[i], lw=lw[i]
             )
@@ -2190,7 +2218,7 @@ def plot_boundaries(
     ax.tick_params(labelbottom=True, labelleft=True)
 
     if any(labels) and kwargs.pop("legend", True):
-        fig.legend(**kwargs.pop("legend_kw", {}))
+        ax.legend(**kwargs.pop("legend_kw", {}))
     _set_tight_layout(fig)
 
     assert (
@@ -2416,6 +2444,14 @@ def plot_coils(coils, grid=None, fig=None, return_data=False, **kwargs):
         * ``lw``: float, linewidth of plotted coils
         * ``ls``: str, linestyle of plotted coils
         * ``color``: str, color of plotted coils
+        * ``showgrid``: Bool, whether or not to show the coordinate grid lines.
+          True by default.
+        * ``showticklabels``: Bool, whether or not to show the coordinate tick labels.
+          True by default.
+        * ``showaxislabels``: Bool, whether or not to show the coordinate axis labels.
+          True by default.
+        * ``zeroline``: Bool, whether or not to show the zero coordinate axis lines.
+          True by default.
 
     Returns
     -------
@@ -2430,6 +2466,10 @@ def plot_coils(coils, grid=None, fig=None, return_data=False, **kwargs):
     figsize = kwargs.pop("figsize", (10, 10))
     color = kwargs.pop("color", "black")
     unique = kwargs.pop("unique", False)
+    showgrid = kwargs.pop("showgrid", True)
+    zeroline = kwargs.pop("zeroline", True)
+    showticklabels = kwargs.pop("showticklabels", True)
+    showaxislabels = kwargs.pop("showaxislabels", True)
     errorif(
         len(kwargs) != 0,
         ValueError,
@@ -2497,28 +2537,40 @@ def plot_coils(coils, grid=None, fig=None, return_data=False, **kwargs):
         )
 
         fig.add_trace(trace)
+    xaxis_title = "X (m)" if showaxislabels else ""
+    yaxis_title = "Y (m)" if showaxislabels else ""
+    zaxis_title = "Z (m)" if showaxislabels else ""
     fig.update_layout(
         scene=dict(
-            xaxis_title="X (m)",
-            yaxis_title="Y (m)",
-            zaxis_title="Z (m)",
+            xaxis_title=xaxis_title,
+            yaxis_title=yaxis_title,
+            zaxis_title=zaxis_title,
             xaxis=dict(
                 backgroundcolor="white",
                 gridcolor="darkgrey",
                 showbackground=False,
                 zerolinecolor="darkgrey",
+                showgrid=showgrid,
+                zeroline=zeroline,
+                showticklabels=showticklabels,
             ),
             yaxis=dict(
                 backgroundcolor="white",
                 gridcolor="darkgrey",
                 showbackground=False,
                 zerolinecolor="darkgrey",
+                showgrid=showgrid,
+                zeroline=zeroline,
+                showticklabels=showticklabels,
             ),
             zaxis=dict(
                 backgroundcolor="white",
                 gridcolor="darkgrey",
                 showbackground=False,
                 zerolinecolor="darkgrey",
+                showgrid=showgrid,
+                zeroline=zeroline,
+                showticklabels=showticklabels,
             ),
             aspectmode="data",
         ),
@@ -2706,7 +2758,7 @@ def plot_boozer_modes(  # noqa: C901
     ax.set_ylabel(ylabel, fontsize=ylabel_fontsize)
 
     if kwargs.pop("legend", True):
-        fig.legend(**kwargs.pop("legend_kw", {"loc": "lower right"}))
+        ax.legend(**kwargs.pop("legend_kw", {"loc": "lower right"}))
 
     assert (
         len(kwargs) == 0
@@ -3119,7 +3171,7 @@ def plot_qs_error(  # noqa: 16 fxn too complex
         ax.set_ylabel(ylabel, fontsize=ylabel_fontsize)
 
     if kwargs.pop("legend", True):
-        fig.legend(**kwargs.pop("legend_kw", {"loc": "center right"}))
+        ax.legend(**kwargs.pop("legend_kw", {"loc": "center right"}))
 
     assert (
         len(kwargs) == 0

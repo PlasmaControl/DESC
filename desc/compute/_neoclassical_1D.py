@@ -96,12 +96,17 @@ def _compute(fun, fun_data, data, grid, num_pitch, reduce=True):
 )
 def _fieldline_length(data, transforms, profiles, **kwargs):
     grid = transforms["grid"].source_grid
-    L_ra = simpson(
-        y=grid.meshgrid_reshape(1 / data["B^zeta"], "arz"),
-        x=grid.compress(grid.nodes[:, 2], surface_label="zeta"),
-        axis=-1,
+    data["fieldline length"] = grid.expand(
+        jnp.abs(
+            _alpha_mean(
+                simpson(
+                    y=grid.meshgrid_reshape(1 / data["B^zeta"], "arz"),
+                    x=grid.compress(grid.nodes[:, 2], surface_label="zeta"),
+                    axis=-1,
+                )
+            )
+        )
     )
-    data["fieldline length"] = grid.expand(jnp.abs(_alpha_mean(L_ra)))
     return data
 
 
@@ -123,12 +128,19 @@ def _fieldline_length(data, transforms, profiles, **kwargs):
 )
 def _fieldline_length_over_volume(data, transforms, profiles, **kwargs):
     grid = transforms["grid"].source_grid
-    G_ra = simpson(
-        y=grid.meshgrid_reshape(1 / (data["B^zeta"] * data["sqrt(g)"]), "arz"),
-        x=grid.compress(grid.nodes[:, 2], surface_label="zeta"),
-        axis=-1,
+    data["fieldline length/volume"] = grid.expand(
+        jnp.abs(
+            _alpha_mean(
+                simpson(
+                    y=grid.meshgrid_reshape(
+                        1 / (data["B^zeta"] * data["sqrt(g)"]), "arz"
+                    ),
+                    x=grid.compress(grid.nodes[:, 2], surface_label="zeta"),
+                    axis=-1,
+                )
+            )
+        )
     )
-    data["fieldline length/volume"] = grid.expand(jnp.abs(_alpha_mean(G_ra)))
     return data
 
 
@@ -158,8 +170,7 @@ def _dI(B, pitch):
     ),
     units="~",
     units_long="None",
-    description="Effective ripple modulation amplitude to 3/2 power. "
-    "Uses numerical methods of the Bounce1D class.",
+    description="Effective ripple modulation amplitude to 3/2 power.",
     dim=1,
     params=[],
     transforms={"grid": []},
@@ -211,19 +222,17 @@ def _epsilon_32_1D(params, transforms, profiles, data, **kwargs):
             batch=batch,
         )
         I = bounce.integrate(_dI, data["pitch_inv"], points=points, batch=batch)
-        return (
+        return jnp.sum(
             safediv(H**2, I).sum(axis=-1)
             * data["pitch_inv weight"]
-            / data["pitch_inv"] ** 3
-        ).sum(axis=-1)
+            / data["pitch_inv"] ** 3,
+            axis=-1,
+        )
 
     grid = transforms["grid"].source_grid
     B0 = data["max_tz |B|"]
     data["deprecated(effective ripple 3/2)"] = (
-        jnp.pi
-        / (8 * 2**0.5)
-        * (B0 * data["R0"] / data["<|grad(rho)|>"]) ** 2
-        * _compute(
+        _compute(
             eps_32,
             fun_data={"|grad(rho)|*kappa_g": data["|grad(rho)|"] * data["kappa_g"]},
             data=data,
@@ -231,6 +240,9 @@ def _epsilon_32_1D(params, transforms, profiles, data, **kwargs):
             num_pitch=num_pitch,
         )
         / data["fieldline length"]
+        * (B0 * data["R0"] / data["<|grad(rho)|>"]) ** 2
+        * jnp.pi
+        / (8 * 2**0.5)
     )
     return data
 
@@ -240,8 +252,7 @@ def _epsilon_32_1D(params, transforms, profiles, data, **kwargs):
     label="\\epsilon_{\\mathrm{eff}}",
     units="~",
     units_long="None",
-    description="Effective ripple modulation amplitude. "
-    "Uses numerical methods of the Bounce1D class.",
+    description="Effective ripple modulation amplitude.",
     dim=1,
     params=[],
     transforms={},
@@ -285,8 +296,7 @@ def _f3(K, B, pitch):
     ),
     units="~",
     units_long="None",
-    description="Energetic ion confinement proxy, Nemov et al. "
-    "Uses the numerical methods of the Bounce1D class.",
+    description="Energetic ion confinement proxy, Nemov et al.",
     dim=1,
     params=[],
     transforms={"grid": []},
@@ -379,23 +389,33 @@ def _Gamma_c_1D(params, transforms, profiles, data, **kwargs):
                 ),
             )
         )
-        return (
-            (v_tau * gamma_c**2).sum(axis=-1)
+        return jnp.sum(
+            jnp.sum(v_tau * gamma_c**2, axis=-1)
             * data["pitch_inv weight"]
-            / data["pitch_inv"] ** 2
-        ).sum(axis=-1)
+            / data["pitch_inv"] ** 2,
+            axis=-1,
+        )
 
     grid = transforms["grid"].source_grid
-    fun_data = {
-        "|grad(psi)|*kappa_g": data["|grad(psi)|"] * data["kappa_g"],
-        "|grad(rho)|*|e_alpha|r,p|": data["|grad(rho)|"] * data["|e_alpha|r,p|"],
-        "|B|_r|v,p": data["|B|_r|v,p"],
-        "K": data["iota_r"]
-        * dot(cross(data["grad(psi)"], data["b"]), data["grad(phi)"])
-        - (2 * data["|B|_r|v,p"] - data["|B|"] * data["B^phi_r|v,p"] / data["B^phi"]),
-    }
     data["deprecated(Gamma_c)"] = (
-        _compute(Gamma_c, fun_data, data, grid, num_pitch)
+        _compute(
+            Gamma_c,
+            fun_data={
+                "|grad(psi)|*kappa_g": data["|grad(psi)|"] * data["kappa_g"],
+                "|grad(rho)|*|e_alpha|r,p|": data["|grad(rho)|"]
+                * data["|e_alpha|r,p|"],
+                "|B|_r|v,p": data["|B|_r|v,p"],
+                "K": data["iota_r"]
+                * dot(cross(data["grad(psi)"], data["b"]), data["grad(phi)"])
+                - (
+                    2 * data["|B|_r|v,p"]
+                    - data["|B|"] * data["B^phi_r|v,p"] / data["B^phi"]
+                ),
+            },
+            data=data,
+            grid=grid,
+            num_pitch=num_pitch,
+        )
         / data["fieldline length"]
         / (2**1.5 * jnp.pi)
     )
@@ -415,8 +435,7 @@ def _drift(f, B, pitch):
     ),
     units="~",
     units_long="None",
-    description="Energetic ion confinement proxy. "
-    "Uses the numerical methods of the Bounce1D class.",
+    description="Energetic ion confinement proxy.",
     dim=1,
     params=[],
     transforms={"grid": []},
@@ -471,11 +490,12 @@ def _Gamma_c_Velasco_1D(params, transforms, profiles, data, **kwargs):
                 ),
             )
         )
-        return (
-            (v_tau * gamma_c**2).sum(axis=-1)
+        return jnp.sum(
+            jnp.sum(v_tau * gamma_c**2, axis=-1)
             * data["pitch_inv weight"]
-            / data["pitch_inv"] ** 2
-        ).sum(axis=-1)
+            / data["pitch_inv"] ** 2,
+            axis=-1,
+        )
 
     grid = transforms["grid"].source_grid
     data["Gamma_c Velasco"] = (

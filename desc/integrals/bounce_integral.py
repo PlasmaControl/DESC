@@ -356,7 +356,7 @@ class Bounce2D(Bounce):
             # To retain dℓ = (|B|/B^ζ) dζ > 0 after fixing dζ > 0, we require
             # B^ζ = B⋅∇ζ > 0. This is equivalent to changing the sign of ∇ζ
             # or (∂ℓ/∂ζ)|ρ,a. Recall dζ = ∇ζ⋅dR ⇔ 1 = ∇ζ⋅(e_ζ|ρ,a).
-            "|B^zeta|": Bounce2D.fourier(B_sup_z * Lref / Bref),
+            "|B^zeta|": Bounce2D.fourier(jnp.abs(B_sup_z) * Lref / Bref),
             "T(z)": fourier_chebyshev(
                 theta,
                 data["iota"] if is_reshaped else grid.compress(data["iota"]),

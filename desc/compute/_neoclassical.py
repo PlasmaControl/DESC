@@ -184,8 +184,7 @@ def _dI(B, pitch, zeta):
     ),
     units="~",
     units_long="None",
-    description="Effective ripple modulation amplitude to 3/2 power. "
-    "Uses numerical methods of the Bounce2D class.",
+    description="Effective ripple modulation amplitude to 3/2 power.",
     dim=1,
     params=[],
     transforms={"grid": []},
@@ -265,18 +264,16 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
             I = bounce.integrate(_dI, pitch_inv, points=points)
             return safediv(H**2, I).sum(axis=-1)
 
-        return (
+        return jnp.sum(
             _foreach_pitch(fun, data["pitch_inv"], batch_size)
             * data["pitch_inv weight"]
-            / data["pitch_inv"] ** 3
-        ).sum(axis=-1) / bounce.compute_fieldline_length(fieldline_quad)
+            / data["pitch_inv"] ** 3,
+            axis=-1,
+        ) / bounce.compute_fieldline_length(fieldline_quad)
 
     B0 = data["max_tz |B|"]
     data["effective ripple 3/2"] = (
-        jnp.pi
-        / (8 * 2**0.5)
-        * (B0 * data["R0"] / data["<|grad(rho)|>"]) ** 2
-        * _compute(
+        _compute(
             eps_32,
             fun_data={"|grad(rho)|*kappa_g": data["|grad(rho)|"] * data["kappa_g"]},
             data=data,
@@ -284,6 +281,9 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
             grid=grid,
             num_pitch=num_pitch,
         )
+        * (B0 * data["R0"] / data["<|grad(rho)|>"]) ** 2
+        * jnp.pi
+        / (8 * 2**0.5)
     )
     return data
 
@@ -336,8 +336,7 @@ def _f3(K, B, pitch, zeta):
     ),
     units="~",
     units_long="None",
-    description="Energetic ion confinement proxy, Nemov et al. "
-    "Uses the numerical methods of the Bounce2D class.",
+    description="Energetic ion confinement proxy, Nemov et al.",
     dim=1,
     params=[],
     transforms={"grid": []},
@@ -409,7 +408,6 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
             leggauss(kwargs.get("num_quad", 32)),
             (automorphism_sin, grad_automorphism_sin),
         )
-        quad = chebgauss2(quad[0].size)
     quad2 = kwargs["quad2"] if "quad2" in kwargs else chebgauss2(quad[0].size)
 
     def Gamma_c(data):
@@ -425,7 +423,6 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
             is_reshaped=True,
             spline=spline,
         )
-
         data["|grad(psi)|*kappa_g"] = Bounce2D.fourier(data["|grad(psi)|*kappa_g"])
         data["|B|_r|v,p"] = Bounce2D.fourier(data["|B|_r|v,p"])
         data["K"] = Bounce2D.fourier(data["K"])
@@ -476,29 +473,37 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
                     ),
                 )
             )
-            return (v_tau * gamma_c**2).sum(axis=-1)
+            return jnp.sum(v_tau * gamma_c**2, axis=-1)
 
-        return (
+        return jnp.sum(
             _foreach_pitch(fun, data["pitch_inv"], batch_size)
             * data["pitch_inv weight"]
-            / data["pitch_inv"] ** 2
-        ).sum(axis=-1) / bounce.compute_fieldline_length(fieldline_quad)
+            / data["pitch_inv"] ** 2,
+            axis=-1,
+        ) / bounce.compute_fieldline_length(fieldline_quad)
 
     # It is assumed the grid is sufficiently dense to reconstruct |B|,
     # so anything smoother than |B| may be captured accurately as a single
     # Fourier series rather than transforming each component.
-    fun_data = {
-        "|grad(psi)|*kappa_g": data["|grad(psi)|"] * data["kappa_g"],
-        "|grad(rho)|*|e_alpha|r,p|": data["|grad(rho)|"] * data["|e_alpha|r,p|"],
-        "|B|_r|v,p": data["|B|_r|v,p"],
-        "K": data["iota_r"]
-        * dot(cross(data["grad(psi)"], data["b"]), data["grad(phi)"])
-        - (2 * data["|B|_r|v,p"] - data["|B|"] * data["B^phi_r|v,p"] / data["B^phi"]),
-    }
-    # Last term behaves as ∂log(|B|²/B^ϕ)/∂ρ |B| if one ignores the issue of a log
-    # argument with units. Smoothness determined by positive lower bound of log
-    # argument, and hence behaves as ∂log(|B|)/∂ρ |B| = ∂|B|/∂ρ.
-    data["Gamma_c"] = _compute(Gamma_c, fun_data, data, theta, grid, num_pitch) / (
-        2**1.5 * jnp.pi
-    )
+    # Last term in K behaves as ∂log(|B|²/B^ϕ)/∂ρ |B| if one ignores the issue
+    # of a log argument with units. Smoothness determined by positive lower bound
+    # of log argument, and hence behaves as ∂log(|B|)/∂ρ |B| = ∂|B|/∂ρ.
+    data["Gamma_c"] = _compute(
+        Gamma_c,
+        fun_data={
+            "|grad(psi)|*kappa_g": data["|grad(psi)|"] * data["kappa_g"],
+            "|grad(rho)|*|e_alpha|r,p|": data["|grad(rho)|"] * data["|e_alpha|r,p|"],
+            "|B|_r|v,p": data["|B|_r|v,p"],
+            "K": data["iota_r"]
+            * dot(cross(data["grad(psi)"], data["b"]), data["grad(phi)"])
+            - (
+                2 * data["|B|_r|v,p"]
+                - data["|B|"] * data["B^phi_r|v,p"] / data["B^phi"]
+            ),
+        },
+        data=data,
+        theta=theta,
+        grid=grid,
+        num_pitch=num_pitch,
+    ) / (2**1.5 * jnp.pi)
     return data

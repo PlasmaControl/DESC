@@ -107,9 +107,8 @@ def map_coordinates(  # noqa: C901
 
     profiles = get_profiles(inbasis + basis_derivs, eq)
 
-    # TODO: make this work for permutations of in/out basis
-    if outbasis == ("rho", "theta", "zeta"):
-        if inbasis == ("rho", "alpha", "zeta"):
+    if set(outbasis) == {"rho", "theta", "zeta"}:
+        if set(inbasis) == {"rho", "alpha", "zeta"}:
             if "iota" in kwargs:
                 iota = kwargs.pop("iota")
             else:
@@ -128,7 +127,7 @@ def map_coordinates(  # noqa: C901
                 full_output=full_output,
                 **kwargs,
             )
-        if inbasis == ("rho", "theta_PEST", "zeta"):
+        if set(inbasis) == {"rho", "theta_PEST", "zeta"}:
             return _map_PEST_coordinates(
                 coords=coords,
                 L_lmn=params["L_lmn"],

@@ -864,8 +864,30 @@ def _Phi_tt_CurrentPotentialField(params, transforms, profiles, data, **kwargs):
     data=[],
     parameterization="desc.magnetic_fields._current_potential.CurrentPotentialField",
 )
-def _Phi_z_CurrentPotentialField(params, transforms, profiles, data, **kwargs):
-    data["Phi_zz"] = transforms["potential_dzeta"](
+def _Phi_zz_CurrentPotentialField(params, transforms, profiles, data, **kwargs):
+    data["Phi_z"] = transforms["potential_dzeta"](
+        transforms["grid"].nodes[:, 1],
+        transforms["grid"].nodes[:, 2],
+        **params["params"]
+    )
+    return data
+
+@register_compute_fun(
+    name="Phi_tz",
+    label="\\partial_{\\theta \\zeta}\\Phi",
+    units="A",
+    units_long="Amperes",
+    description="Surface current potential, toroidal derivative",
+    dim=1,
+    params=["params"],
+    transforms={"grid": [], "potential_dzeta": [], "potential_dzeta": []},
+    profiles=[],
+    coordinates="tz",
+    data=[],
+    parameterization="desc.magnetic_fields._current_potential.CurrentPotentialField",
+)
+def _Phi_tz_CurrentPotentialField(params, transforms, profiles, data, **kwargs):
+    data["Phi_tz"] = transforms["potential_dzeta"](
         transforms["grid"].nodes[:, 1],
         transforms["grid"].nodes[:, 2],
         **params["params"]
@@ -877,7 +899,7 @@ def _Phi_z_CurrentPotentialField(params, transforms, profiles, data, **kwargs):
     label="\\partial_{\\theta \\theta}\\Phi",
     units="A",
     units_long="Amperes",
-    description="Surface current potential, poloidal-toroidal derivative",
+    description="Surface current potential, second poloidal derivative",
     dim=1,
     params=["Phi_mn"],
     transforms={"Phi": [[0, 2, 0]]},
@@ -895,30 +917,8 @@ def _Phi_tt_FourierCurrentPotentialField(params, transforms, profiles, data, **k
     return data
 
 @register_compute_fun(
-    name="Phi_zz",
-    label="\\partial_{\\zeta \\zeta}\\Phi",
-    units="A",
-    units_long="Amperes",
-    description="Surface current potential, poloidal-toroidal derivative",
-    dim=1,
-    params=["Phi_mn"],
-    transforms={"Phi": [[0, 0, 2]]},
-    profiles=[],
-    coordinates="tz",
-    data=[],
-    parameterization=[
-        "desc.magnetic_fields._current_potential.FourierCurrentPotentialField"
-    ],
-)
-def _Phi_tt_FourierCurrentPotentialField(params, transforms, profiles, data, **kwargs):
-    data["Phi_zz"] = (
-        transforms["Phi"].transform(params["Phi_mn"], dz = 2)
-    )
-    return data
-
-@register_compute_fun(
     name="Phi_tz",
-    label="\\partial_{\\theta \\zeta}\\Phi",
+    label="\\partial_{\\theta \\theta}\\Phi",
     units="A",
     units_long="Amperes",
     description="Surface current potential, poloidal-toroidal derivative",
@@ -935,6 +935,28 @@ def _Phi_tt_FourierCurrentPotentialField(params, transforms, profiles, data, **k
 def _Phi_tz_FourierCurrentPotentialField(params, transforms, profiles, data, **kwargs):
     data["Phi_tz"] = (
         transforms["Phi"].transform(params["Phi_mn"], dt=1, dz = 1)
+    )
+    return data
+
+@register_compute_fun(
+    name="Phi_zz",
+    label="\\partial_{\\zeta \\zeta}\\Phi",
+    units="A",
+    units_long="Amperes",
+    description="Surface current potential, second toroidal derivative",
+    dim=1,
+    params=["Phi_mn"],
+    transforms={"Phi": [[0, 0, 2]]},
+    profiles=[],
+    coordinates="tz",
+    data=[],
+    parameterization=[
+        "desc.magnetic_fields._current_potential.FourierCurrentPotentialField"
+    ],
+)
+def _Phi_zz_FourierCurrentPotentialField(params, transforms, profiles, data, **kwargs):
+    data["Phi_zz"] = (
+        transforms["Phi"].transform(params["Phi_mn"], dz = 2)
     )
     return data
 
@@ -982,7 +1004,7 @@ def _K_sup_theta_t_CurrentPotentialField(params, transforms, profiles, data, **k
 )
 def _K_sup_theta_z_CurrentPotentialField(params, transforms, profiles, data, **kwargs):
     data["K^theta_z"] = -(data["Phi_zz"] * (1 / data["|e_theta x e_zeta|"])
-                        +data["Phi_z"] * (- data["|e_theta x e_zeta|_z"] / data["|e_theta x e_zeta|"]**2)
+                          + data["Phi_z"] * (- data["|e_theta x e_zeta|_z"] / data["|e_theta x e_zeta|"]**2)
                        )
     return data
 

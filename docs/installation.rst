@@ -165,7 +165,6 @@ Clone and install DESC
 
     git clone https://github.com/PlasmaControl/DESC.git
     cd DESC
-    sed -i '/jax/d' ./requirements.txt
     # installation for users
     pip install --editable .
     # optionally install developer requirements (if you want to run tests)

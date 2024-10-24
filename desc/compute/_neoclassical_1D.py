@@ -16,14 +16,14 @@ from ..integrals._quad_utils import (
 )
 from ..integrals.bounce_integral import Bounce1D
 from ..utils import cross, dot, safediv
-from ._neoclassical import _Bounce2D_doc
+from ._neoclassical import _bounce_doc
 from .data_index import register_compute_fun
 
-_Bounce1D_doc = {
-    "quad": _Bounce2D_doc["quad"],
-    "num_quad": _Bounce2D_doc["num_quad"],
-    "num_pitch": _Bounce2D_doc["num_pitch"],
-    "num_well": _Bounce2D_doc["num_well"],
+_bounce1D_doc = {
+    "quad": _bounce_doc["quad"],
+    "num_quad": _bounce_doc["num_quad"],
+    "num_pitch": _bounce_doc["num_pitch"],
+    "num_well": _bounce_doc["num_well"],
     "batch": "bool : Whether to vectorize part of the computation. Default is true.",
 }
 
@@ -188,7 +188,7 @@ def _dI(B, pitch):
     + Bounce1D.required_names,
     resolution_requirement="z",
     source_grid_requirement={"coordinates": "raz", "is_meshgrid": True},
-    **_Bounce1D_doc,
+    **_bounce1D_doc,
 )
 @partial(jit, static_argnames=["num_quad", "num_pitch", "num_well", "batch"])
 def _epsilon_32_1D(params, transforms, profiles, data, **kwargs):
@@ -320,7 +320,7 @@ def _f3(K, B, pitch):
     ]
     + Bounce1D.required_names,
     source_grid_requirement={"coordinates": "raz", "is_meshgrid": True},
-    **_Bounce1D_doc,
+    **_bounce1D_doc,
     quad2="Same as ``quad`` for the weak singular integrals in particular.",
 )
 @partial(jit, static_argnames=["num_quad", "num_pitch", "num_well", "batch"])
@@ -444,7 +444,7 @@ def _drift(f, B, pitch):
     data=["min_tz |B|", "max_tz |B|", "cvdrift0", "gbdrift", "fieldline length"]
     + Bounce1D.required_names,
     source_grid_requirement={"coordinates": "raz", "is_meshgrid": True},
-    **_Bounce1D_doc,
+    **_bounce1D_doc,
 )
 @partial(jit, static_argnames=["num_quad", "num_pitch", "num_well", "batch"])
 def _Gamma_c_Velasco_1D(params, transforms, profiles, data, **kwargs):

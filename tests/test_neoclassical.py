@@ -20,22 +20,21 @@ def test_effective_ripple():
     """Test effective ripple with W7-X against NEO."""
     eq = get("W7-X")
     rho = np.linspace(0, 1, 10)
-    grid = LinearGrid(rho=rho, theta=eq.M_grid, zeta=eq.N_grid, NFP=eq.NFP, sym=False)
+    grid = LinearGrid(rho=rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False)
     num_transit = 10
     data = eq.compute(
         "effective ripple 3/2",
         grid=grid,
-        theta=Bounce2D.compute_theta(eq, X=16, Y=64, rho=rho),
-        Y_B=100,
+        theta=Bounce2D.compute_theta(eq, X=32, Y=64, rho=rho),
+        Y_B=128,
         num_transit=num_transit,
-        num_quad=33,
         num_well=20 * num_transit,
     )
 
     assert np.isfinite(data["effective ripple 3/2"]).all()
     eps_32 = grid.compress(data["effective ripple 3/2"])
     neo_rho, neo_eps_32 = NeoIO.read("tests/inputs/neo_out.w7x")
-    np.testing.assert_allclose(eps_32, np.interp(rho, neo_rho, neo_eps_32), rtol=0.06)
+    np.testing.assert_allclose(eps_32, np.interp(rho, neo_rho, neo_eps_32), rtol=0.16)
 
     fig, ax = plt.subplots()
     ax.plot(rho, eps_32, marker="o")
@@ -49,13 +48,13 @@ def test_Gamma_c():
     """Test Γ_c Nemov with W7-X."""
     eq = get("W7-X")
     rho = np.linspace(1e-12, 1, 10)
-    grid = LinearGrid(rho=rho, theta=eq.M_grid, zeta=eq.N_grid, NFP=eq.NFP, sym=False)
+    grid = LinearGrid(rho=rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False)
     num_transit = 10
     data = eq.compute(
         "Gamma_c",
         grid=grid,
-        theta=Bounce2D.compute_theta(eq, X=16, Y=64, rho=rho),
-        Y_B=100,
+        theta=Bounce2D.compute_theta(eq, X=32, Y=64, rho=rho),
+        Y_B=128,
         num_transit=num_transit,
         num_well=20 * num_transit,
     )

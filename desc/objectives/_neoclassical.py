@@ -169,9 +169,7 @@ class EffectiveRipple(_Objective):
         """
         eq = self.things[0]
         if self._grid is None:
-            self._grid = LinearGrid(
-                theta=eq.M_grid, zeta=eq.N_grid, NFP=eq.NFP, sym=False
-            )
+            self._grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False)
         assert self._grid.can_fft
         self._constants["clebsch"] = FourierChebyshevSeries.nodes(
             self._X,
@@ -408,9 +406,7 @@ class GammaC(_Objective):
         """
         eq = self.things[0]
         if self._grid is None:
-            self._grid = LinearGrid(
-                theta=eq.M_grid, zeta=eq.N_grid, NFP=eq.NFP, sym=False
-            )
+            self._grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False)
         assert self._grid.can_fft
         self._constants["clebsch"] = FourierChebyshevSeries.nodes(
             self._X,

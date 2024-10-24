@@ -26,7 +26,7 @@ from ..integrals.bounce_integral import Bounce2D
 from ..utils import cross, dot, safediv
 from .data_index import register_compute_fun
 
-_Bounce2D_doc = {
+_bounce_doc = {
     "theta": """jnp.ndarray :
         DESC coordinates θ sourced from the Clebsch coordinates
         ``FourierChebyshevSeries.nodes(X,Y,rho,domain=(0,2*jnp.pi))``.
@@ -122,7 +122,8 @@ def _foreach_pitch(fun, pitch_inv, batch_size):
     ----------
     fun : callable
         Function to compute.
-    pitch_inv : callable
+    pitch_inv : jnp.ndarray
+        Shape (num_pitch, ).
         1/λ values to compute the bounce integrals.
     batch_size : int or None
         Number of pitch values with which to compute simultaneously.
@@ -134,7 +135,7 @@ def _foreach_pitch(fun, pitch_inv, batch_size):
     #  ``fun``` natively supports vectorization.
     return (
         fun(pitch_inv)
-        if batch_size is None
+        if (batch_size is None or batch_size >= pitch_inv.size)
         else imap(fun, pitch_inv, batch_size=batch_size).squeeze(axis=-1)
     )
 
@@ -192,9 +193,9 @@ def _dI(B, pitch, zeta):
     coordinates="r",
     data=["min_tz |B|", "max_tz |B|", "kappa_g", "R0", "|grad(rho)|", "<|grad(rho)|>"]
     + Bounce2D.required_names,
-    resolution_requirement="z",  # FIXME: GitHub issue #1312. Should be "tz".
+    resolution_requirement="tz",
     grid_requirement={"can_fft": True},
-    **_Bounce2D_doc,
+    **_bounce_doc,
 )
 @partial(
     jit,
@@ -358,9 +359,9 @@ def _f3(K, B, pitch, zeta):
         "iota_r",
     ]
     + Bounce2D.required_names,
-    resolution_requirement="z",  # FIXME: GitHub issue #1312. Should be "tz".
+    resolution_requirement="tz",
     grid_requirement={"can_fft": True},
-    **_Bounce2D_doc,
+    **_bounce_doc,
     quad2="Same as ``quad`` for the weak singular integrals in particular.",
 )
 @partial(

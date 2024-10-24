@@ -378,19 +378,6 @@ class ShareParameters(_Objective):
             ]
         )
 
-    def update_target(self, thing):
-        """Update target values using an Optimizable object.
-
-        Parameters
-        ----------
-        thing : Optimizable
-            Optimizable object that will be optimized to satisfy the Objective.
-
-        """
-        self.target = self.compute(thing.params_dict)
-        if not self._use_jit:
-            self._unjit()
-
 
 class BoundaryRSelfConsistency(_Objective):
     """Ensure that the boundary and interior surfaces are self-consistent.

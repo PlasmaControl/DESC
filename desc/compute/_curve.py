@@ -213,8 +213,8 @@ def _x_C0FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
     Y1 = r1 * jnp.sin(data["s"])
     # rotate into place
     Zaxis = jnp.array([0.0, 0.0, 1.0])  # 2D curve in X-Y plane has normal = +Z axis
-    axis1 = cross(Zaxis, normal[:3])
-    angle1 = jnp.arccos(dot(Zaxis, safenormalize(normal[:3])))
+    axis1 = cross(Zaxis, normal)
+    angle1 = jnp.arccos(dot(Zaxis, safenormalize(normal)))
     A1 = rotation_matrix(axis=axis1, angle=angle1)
     coords1 = jnp.array([X1, Y1, Z1]).T  # full coil still
     coords1 = jnp.matmul(coords1, A1.T) + center
@@ -233,8 +233,8 @@ def _x_C0FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
     Y2 = r2 * jnp.sin(data["s"])
     # rotate into place
     Zaxis = jnp.array([0.0, 0.0, 1.0])  # 2D curve in X-Y plane has normal = +Z axis
-    axis2 = cross(Zaxis, normal[3:])
-    angle2 = jnp.arccos(dot(Zaxis, safenormalize(normal[3:])))
+    axis2 = cross(Zaxis, normal)
+    angle2 = jnp.arccos(dot(Zaxis, safenormalize(normal)))
     A2 = rotation_matrix(axis=axis2, angle=angle2)
     coords2 = jnp.array([X2, Y2, Z2]).T  # full coil still
     coords2 = jnp.matmul(coords2, A2.T) + center
@@ -291,16 +291,16 @@ def _x_s_C0FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
     coords1 = jnp.array([dX1, dY1, dZ1]).T
     # rotate into place
     Zaxis = jnp.array([0.0, 0.0, 1.0])  # 2D curve in X-Y plane has normal = +Z axis
-    axis1 = cross(Zaxis, normal[:3])
-    angle1 = jnp.arccos(dot(Zaxis, safenormalize(normal[:3])))
+    axis1 = cross(Zaxis, normal)
+    angle1 = jnp.arccos(dot(Zaxis, safenormalize(normal)))
     A1 = rotation_matrix(axis=axis1, angle=angle1)
     coords1 = jnp.array([dX1, dY1, dZ1]).T
     coords1 = jnp.matmul(coords1, A1.T)
     coords1 = jnp.matmul(coords1, params["rotmat"].reshape((3, 3)).T)
 
-    dX1_half = jnp.where(data["s"] > jnp.pi, coords1[:, 0], 0)
-    dY1_half = jnp.where(data["s"] > jnp.pi, coords1[:, 1], 0)
-    dZ1_half = jnp.where(data["s"] > jnp.pi, coords1[:, 2], 0)
+    dX1_half = jnp.where(data["s"] >= jnp.pi, coords1[:, 0], 0)
+    dY1_half = jnp.where(data["s"] >= jnp.pi, coords1[:, 1], 0)
+    dZ1_half = jnp.where(data["s"] >= jnp.pi, coords1[:, 2], 0)
 
     # pi to 2pi
     r2 = transforms["r"].transform(params["r_n"][len_rn:], dz=0)
@@ -312,8 +312,8 @@ def _x_s_C0FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
     coords2 = jnp.array([dX2, dY2, dZ2]).T
     # rotate into place
     Zaxis = jnp.array([0.0, 0.0, 1.0])  # 2D curve in X-Y plane has normal = +Z axis
-    axis2 = cross(Zaxis, normal[3:])
-    angle2 = jnp.arccos(dot(Zaxis, safenormalize(normal[3:])))
+    axis2 = cross(Zaxis, normal)
+    angle2 = jnp.arccos(dot(Zaxis, safenormalize(normal)))
     A2 = rotation_matrix(axis=axis2, angle=angle2)
     coords2 = jnp.array([dX2, dY2, dZ2]).T
     coords2 = jnp.matmul(coords2, A2.T)

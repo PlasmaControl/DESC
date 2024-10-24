@@ -1555,6 +1555,9 @@ def test_parallel_grad():
             "|e_zeta|r,a|_z|r,a",
             "B^zeta_z|r,a",
             "|B|",
+            "secular(gbdrift)",
+            "secular(gbdrift)/phi",
+            "phi",
         ],
     )
     np.testing.assert_allclose(data["e_zeta|r,a"], (data["B"].T / data["B^zeta"]).T)
@@ -1568,4 +1571,7 @@ def test_parallel_grad():
         * data["B^zeta_z|r,a"]
         * np.sign(data["B^zeta"])
         / data["B^zeta"] ** 2,
+    )
+    np.testing.assert_allclose(
+        data["secular(gbdrift)"], data["secular(gbdrift)/phi"] * data["phi"]
     )

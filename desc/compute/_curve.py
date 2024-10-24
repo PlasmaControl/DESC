@@ -198,6 +198,7 @@ def _center_FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
 )
 def _x_C0FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
     if kwargs.get("basis_in", "xyz").lower() == "rpz":
+        # TODO: THIS IS NOT WORKING
         center = rpz2xyz(params["center"])
         normal = rpz2xyz_vec(params["normal"], phi=params["center"][1])
     else:
@@ -217,7 +218,7 @@ def _x_C0FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
     angle1 = jnp.arccos(dot(Zaxis, safenormalize(normal[:3])))
     A1 = rotation_matrix(axis=axis1, angle=angle1)
     coords1 = jnp.array([X1, Y1, Z1]).T  # full coil still
-    coords1 = jnp.matmul(coords1, A1.T) + center
+    coords1 = jnp.matmul(coords1, A1.T) + center[:3]
     coords1 = jnp.matmul(coords1, params["rotmat"].reshape((3, 3)).T) + params["shift"]
     # convert back to rpz
 
@@ -237,7 +238,7 @@ def _x_C0FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
     angle2 = jnp.arccos(dot(Zaxis, safenormalize(normal[3:])))
     A2 = rotation_matrix(axis=axis2, angle=angle2)
     coords2 = jnp.array([X2, Y2, Z2]).T  # full coil still
-    coords2 = jnp.matmul(coords2, A2.T) + center
+    coords2 = jnp.matmul(coords2, A2.T) + center[3:]
     coords2 = jnp.matmul(coords2, params["rotmat"].reshape((3, 3)).T) + params["shift"]
     # convert back to rpz
 
@@ -298,9 +299,9 @@ def _x_s_C0FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
     coords1 = jnp.matmul(coords1, A1.T)
     coords1 = jnp.matmul(coords1, params["rotmat"].reshape((3, 3)).T)
 
-    dX1_half = jnp.where(data["s"] > jnp.pi, coords1[:, 0], 0)
-    dY1_half = jnp.where(data["s"] > jnp.pi, coords1[:, 1], 0)
-    dZ1_half = jnp.where(data["s"] > jnp.pi, coords1[:, 2], 0)
+    dX1_half = jnp.where(data["s"] >= jnp.pi, coords1[:, 0], 0)
+    dY1_half = jnp.where(data["s"] >= jnp.pi, coords1[:, 1], 0)
+    dZ1_half = jnp.where(data["s"] >= jnp.pi, coords1[:, 2], 0)
 
     # pi to 2pi
     r2 = transforms["r"].transform(params["r_n"][len_rn:], dz=0)

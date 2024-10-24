@@ -869,9 +869,9 @@ class C0FourierPlanarCurve(Curve):
         # stitch together r_ns here
         self._r_n = jnp.concatenate([curve_1.r_n, curve_2.r_n])
         self._normal = jnp.concatenate([curve_1.normal, curve_2.normal])
+        self._center = jnp.concatenate([curve_1.center, curve_2.center])
         self._r_basis = curve_1.r_basis
         self._basis = curve_1.basis
-        self._center = curve_1.center
         len_rn = len(curve_1.r_n)
         self.len_rn = len_rn
 
@@ -931,7 +931,7 @@ class C0FourierPlanarCurve(Curve):
 
     @center.setter
     def center(self, new):
-        if len(new) == 3:
+        if len(new) == 6:
             self._center = np.asarray(new)
         else:
             raise ValueError(

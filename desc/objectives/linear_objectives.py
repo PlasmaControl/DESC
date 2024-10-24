@@ -439,14 +439,19 @@ class BoundaryZSelfConsistency(_Objective):
 class C0FourierPlanarCurveSelfConsistency(_Objective):
     """Objective to enforce C0 continuity of the curve."""
 
+    _linear = True
+    _fixed = False
+    _scalar = False
+    _print_value_fmt = "C0 self-consistency error: "
+
     def __init__(
         self,
-        curves,
+        c0_curve,
         name="",
     ):
         """Initialize the objective."""
         super().__init__(
-            things=curves,
+            things=c0_curve,
             target=0,
             bounds=None,
             weight=1,
@@ -454,18 +459,32 @@ class C0FourierPlanarCurveSelfConsistency(_Objective):
             normalize_target=False,
             name=name,
         )
-        self.curves = curves
+        self.curves = c0_curve
 
     def build(self, use_jit=False, verbose=1):
         """Building."""
-        self._dim_f = 1
-        curve_1 = self.curves[0]
-        self.len_rn = len(curve_1.r_n)
+        self._dim_f = 0
+        self._len_rn = []
+        self._modes = []
+        for curve in self.curves.coils:
+            self._dim_f += 1
+            self._len_rn.append(curve.r_n.size // 2)
+            self._modes.append(
+                np.arange(-(curve.r_n.size // 4), curve.r_n.size // 4 + 1).tolist()
+            )
         super().build(use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
         """Compute error in C0 continuity of the curve."""
-        f = sum(params["r_n"][: self.len_rn]) - sum(params["r_n"][self.len_rn :])
+        modes = self._modes
+        len_rn = self._len_rn
+        f = jnp.array(
+            [
+                sum(params[i]["r_n"][: len_rn[i]][np.array(modes[i]) >= 0])
+                - sum(params[i]["r_n"][len_rn[i] :][np.array(modes[i]) >= 0])
+                for i in range(self._dim_f)
+            ]
+        )
         return f
 
 

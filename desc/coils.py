@@ -20,6 +20,7 @@ from desc.compute import get_params, rpz2xyz, rpz2xyz_vec, xyz2rpz, xyz2rpz_vec
 from desc.compute.geom_utils import reflection_matrix
 from desc.compute.utils import _compute as compute_fun
 from desc.geometry import (
+    C0FourierPlanarCurve,
     FourierPlanarCurve,
     FourierRZCurve,
     FourierXYZCurve,
@@ -907,6 +908,75 @@ class FourierPlanarCoil(_Coil, FourierPlanarCurve):
         )
 
 
+class C0FourierPlanarCoil(_Coil, C0FourierPlanarCurve):
+    """Coil that lines in a plane.
+
+    Parameterized by a point (the center of the coil), a vector (normal to the plane),
+    and a fourier series defining the radius from the center as a function of a polar
+    angle theta.
+
+    Parameters
+    ----------
+    current : float
+        Current through the coil, in Amperes.
+    center : array-like, shape(3,)
+        Coordinates of center of curve, in system determined by basis.
+    normal : array-like, shape(3,)
+        Components of normal vector to planar surface, in system determined by basis.
+    r_n : array-like
+        Fourier coefficients for radius from center as function of polar angle
+    modes : array-like
+        mode numbers associated with r_n
+    basis : {'xyz', 'rpz'}
+        Coordinate system for center and normal vectors. Default = 'xyz'.
+    name : str
+        Name for this coil.
+
+    Examples
+    --------
+    .. code-block:: python
+
+        from desc.coils import FourierPlanarCoil
+        from desc.grid import LinearGrid
+        import numpy as np
+
+        I = 10
+        mu0 = 4 * np.pi * 1e-7
+        R_coil = 10
+        # circular coil given by center at (0,0,0)
+        # and normal vector in Z direction (0,0,1) and radius 10
+        coil = FourierPlanarCoil(
+            current=I,
+            center=[0, 0, 0],
+            normal=[0, 0, 1],
+            r_n=R_coil,
+            modes=[0],
+        )
+        z0 = 10
+        field_evaluated = coil.compute_magnetic_field(
+            np.array([[0, 0, 0], [0, 0, z0]]), basis="rpz"
+        )
+        np.testing.assert_allclose(
+            field_evaluated[0, :], np.array([0, 0, mu0 * I / 2 / R_coil]), atol=1e-8
+        )
+        np.testing.assert_allclose(
+            field_evaluated[1, :],
+            np.array([0, 0, mu0 * I / 2 * R_coil**2 / (R_coil**2 + z0**2) ** (3 / 2)]),
+            atol=1e-8,
+        )
+
+    """
+
+    def __init__(
+        self,
+        current=1,
+        curve_1=None,
+        curve_2=None,
+        name="",
+    ):
+        super().__init__(current, curve_1, curve_2, name)
+
+
 class SplineXYZCoil(_Coil, SplineXYZCurve):
     """Coil parameterized by spline points in X,Y,Z.
 
@@ -1183,6 +1253,7 @@ def _check_type(coil0, coil):
         FourierRZCoil: ["R_basis", "Z_basis", "NFP", "sym"],
         FourierXYZCoil: ["X_basis", "Y_basis", "Z_basis"],
         FourierPlanarCoil: ["r_basis"],
+        C0FourierPlanarCoil: ["r_basis"],
         SplineXYZCoil: ["method", "N", "knots"],
     }
 

@@ -856,6 +856,8 @@ class FourierPlanarCurve(Curve):
 class C0FourierPlanarCurve(Curve):
     """C0 fourier."""
 
+    _io_attrs_ = Curve._io_attrs_ + ["_r_n", "_center", "_normal", "_r_basis", "_basis"]
+
     def __init__(
         self,
         curve_1,
@@ -866,10 +868,10 @@ class C0FourierPlanarCurve(Curve):
         super().__init__(name)
         # stitch together r_ns here
         self._r_n = jnp.concatenate([curve_1.r_n, curve_2.r_n])
-        self.r_basis = curve_1.r_basis
-        self.basis = curve_1.basis
-        self.center = curve_1.center
-        self.normal = curve_1.normal
+        self._normal = jnp.concatenate([curve_1.normal, curve_2.normal])
+        self._r_basis = curve_1.r_basis
+        self._basis = curve_1.basis
+        self._center = curve_1.center
         len_rn = len(curve_1.r_n)
         self.len_rn = len_rn
 
@@ -879,10 +881,64 @@ class C0FourierPlanarCurve(Curve):
         """Spectral coefficients for r."""
         return self._r_n
 
+    @r_n.setter
+    def r_n(self, new):
+        if len(np.asarray(new)) == self.r_basis.num_modes * 2:
+            self._r_n = jnp.asarray(new)
+        else:
+            raise ValueError(
+                f"r_n should have the same size as the basis, got {len(new)} for "
+                + f"basis with {self.r_basis.num_modes} modes."
+            )
+
+    @property
+    def r_basis(self):
+        """Spectral basis for Fourier series."""
+        return self._r_basis
+
     @property
     def N(self):
         """Maximum mode number."""
-        return self.r_basis.N
+        return self._r_basis.N
+
+    @property
+    def basis(self):
+        """Coordinate system for center and normal vectors."""
+        return self._basis
+
+    @optimizable_parameter
+    @property
+    def normal(self):
+        """Normal vector to plane."""
+        return self._normal
+
+    @normal.setter
+    def normal(self, new):
+        if len(np.asarray(new)) == 6:
+            self._normal = np.asarray(new) / np.linalg.norm(new)
+        else:
+            raise ValueError(
+                "normal should be a 3 element vector in "
+                + self.basis
+                + " coordinates, got {}".format(new)
+            )
+
+    @optimizable_parameter
+    @property
+    def center(self):
+        """Center of planar curve polar coordinates."""
+        return self._center
+
+    @center.setter
+    def center(self, new):
+        if len(new) == 3:
+            self._center = np.asarray(new)
+        else:
+            raise ValueError(
+                "center should be a 3 element vector in "
+                + self.basis
+                + " coordinates, got {}".format(new)
+            )
 
     def compute(
         self,
@@ -931,7 +987,7 @@ class C0FourierPlanarCurve(Curve):
             transforms=transforms,
             data=data,
             override_grid=override_grid,
-            basis_in=self.basis,
+            basis_in=self._basis,
             len_rn=self.len_rn,
             **kwargs,
         )

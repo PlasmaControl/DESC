@@ -299,14 +299,13 @@ class ShareParameters(_Objective):
         name="shared parameters",
     ):
         self._params = params
-        # TODO: make this take 2 things
-        # to have multiple things sharing, can simply
-        # change together the ShareParameters objects,
-        # idk of a good way to do this with the current API
-        # ... unless we change the compute to take in *args
-        # then it can be as many as needed... that would work I think
-        assert len(things) == 2, "only implemented for 2 things"
-        assert isinstance(things[0], type(things[1]))
+        assert len(things) > 1, "only makes sense for >1 thing"
+        assert np.all([isinstance(things[0], type(t)) for t in things[1:]])
+        # TODO: some sort of check that all things are same resolution etc?
+        # something like _check_type for coilsets but more general...
+        # maybe can make a _check_type that takes in the user-inputted params.keys
+        # and just ensures that the params being fixed are the same resolution, that
+        # should be all we need to check I think
         super().__init__(
             things=things,
             target=target,
@@ -337,14 +336,14 @@ class ShareParameters(_Objective):
         self._indices = tree_leaves(self._params)
         assert tree_structure(self._params) == tree_structure(default_params)
 
-        self._dim_f = sum(idx.size for idx in self._indices)
+        self._dim_f = sum(idx.size for idx in self._indices) * (len(self.things) - 1)
 
         # default target
         self.target = np.zeros(self._dim_f)
 
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, params_1, params_2, constants=None):
+    def compute(self, *args, constants=None):
         """Compute fixed degree of freedom errors.
 
         Parameters
@@ -366,15 +365,33 @@ class ShareParameters(_Objective):
             Fixed degree of freedom errors.
 
         """
+        # basically, just subtract the first things' params
+        # and every subsequent thing (adding on rows to dim_f if
+        # more than 2 total things) so that the Jacobian of this
+        # ends up being just rows with 1 in the first object's params
+        # indices and -1 in the second objects params indices,
+        # repeated vertically for each additional object
+        # i.e. for a a size-1 param being shared among 4 objects, the
+        # Jacobian looks like
+        #  [ 1 -1  0  0]
+        #  [ 1 0  -1  0]
+        #  [ 1 0   0 -1]
+        params_1 = args[0]
         return jnp.concatenate(
             [
-                jnp.atleast_1d(param[idx])
-                for param, idx in zip(tree_leaves(params_1), self._indices)
-            ]
-        ) - jnp.concatenate(
-            [
-                jnp.atleast_1d(param[idx])
-                for param, idx in zip(tree_leaves(params_2), self._indices)
+                jnp.concatenate(
+                    [
+                        jnp.atleast_1d(param[idx])
+                        for param, idx in zip(tree_leaves(params_1), self._indices)
+                    ]
+                )
+                - jnp.concatenate(
+                    [
+                        jnp.atleast_1d(param[idx])
+                        for param, idx in zip(tree_leaves(params), self._indices)
+                    ]
+                )
+                for params in args[1:]
             ]
         )
 

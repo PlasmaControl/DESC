@@ -28,6 +28,7 @@ from desc.geometry import FourierPlanarCurve, FourierRZToroidalSurface, FourierX
 from desc.grid import ConcentricGrid, LinearGrid, QuadratureGrid
 from desc.io import load
 from desc.magnetic_fields import (
+    CurrentPotentialField,
     FourierCurrentPotentialField,
     OmnigenousField,
     PoloidalMagneticField,
@@ -73,6 +74,7 @@ from desc.objectives import (
     QuasisymmetryTwoTerm,
     RotationalTransform,
     Shear,
+    SurfaceCurrentRegularization,
     ToroidalCurrent,
     ToroidalFlux,
     VacuumBoundaryError,
@@ -1300,6 +1302,56 @@ class TestObjectiveFunction:
         assert abs(d.max() - (-a_s)) < 1e-14
         assert abs(d.min() - (-a_s)) < grid.spacing[0, 1] * a_s
 
+    @pytest.mark.unit
+    def test_surface_current_regularizatio(self):
+        """Test SurfaceCurrentRegularization Calculation."""
+
+        def test(field, grid):
+            obj = SurfaceCurrentRegularization(field, source_grid=grid)
+            obj.build()
+            return obj.compute(field.params_dict)
+
+        field1 = FourierCurrentPotentialField(
+            I=0, G=10, NFP=10, Phi_mn=[[0]], modes_Phi=[[2, 2]]
+        )
+        grid = LinearGrid(M=5, N=5, NFP=field1.NFP)
+        result1 = test(field1, grid)
+        result2 = test(field1, grid=None)
+
+        # test with CurrentPotentialField
+        surface = FourierRZToroidalSurface(
+            R_lmn=jnp.array([10, 1]),
+            Z_lmn=jnp.array([0, -1]),
+            modes_R=jnp.array([[0, 0], [1, 0]]),
+            modes_Z=jnp.array([[0, 0], [-1, 0]]),
+            NFP=10,
+        )
+        surface.change_resolution(M=field1._M_Phi - 1, N=field1._N_Phi - 1)
+        # make a current potential corresponding a purely poloidal current
+        G = 10  # net poloidal current
+        potential = lambda theta, zeta, G: G * zeta / 2 / jnp.pi
+        potential_dtheta = lambda theta, zeta, G: jnp.zeros_like(theta)
+        potential_dzeta = lambda theta, zeta, G: G * jnp.ones_like(theta) / 2 / jnp.pi
+
+        params = {"G": -G}
+
+        field2 = CurrentPotentialField(
+            potential,
+            R_lmn=surface.R_lmn,
+            Z_lmn=surface.Z_lmn,
+            modes_R=surface._R_basis.modes[:, 1:],
+            modes_Z=surface._Z_basis.modes[:, 1:],
+            params=params,
+            potential_dtheta=potential_dtheta,
+            potential_dzeta=potential_dzeta,
+            NFP=surface.NFP,
+        )
+        result3 = test(field2, grid)
+        result4 = test(field2, grid=None)
+
+        np.testing.assert_allclose(result1, result3)
+        np.testing.assert_allclose(result2, result4)
+
 
 @pytest.mark.regression
 def test_derivative_modes():
@@ -2280,6 +2332,7 @@ class TestComputeScalarResolution:
         PlasmaVesselDistance,
         QuadraticFlux,
         ToroidalFlux,
+        SurfaceCurrentRegularization,
         VacuumBoundaryError,
         # need to avoid blowup near the axis
         MercierStability,
@@ -2499,6 +2552,24 @@ class TestComputeScalarResolution:
         np.testing.assert_allclose(f, f[-1], rtol=5e-2)
 
     @pytest.mark.regression
+    def test_compute_scalar_resolution_surface_current_reg(self):
+        """SurfaceCurrentRegularization."""
+        field = FourierCurrentPotentialField(
+            I=1, G=1, Phi_mn=np.array([1, 1]), modes_Phi=np.array([[1, 1], [4, 4]])
+        )
+        M0 = 5
+        N0 = 5
+        f = np.zeros_like(self.res_array, dtype=float)
+        for i, res in enumerate(self.res_array):
+            grid = LinearGrid(M=round(M0 * res), N=round(N0 * res))
+            obj = ObjectiveFunction(
+                SurfaceCurrentRegularization(field, source_grid=grid), use_jit=False
+            )
+            obj.build(verbose=0)
+            f[i] = obj.compute_scalar(obj.x())
+        np.testing.assert_allclose(f, f[-1], rtol=5e-2)
+
+    @pytest.mark.regression
     def test_compute_scalar_resolution_generic_scalar(self):
         """Generic objective with scalar qty."""
         f = np.zeros_like(self.res_array, dtype=float)
@@ -2687,6 +2758,7 @@ class TestObjectiveNaNGrad:
         PlasmaCoilSetMinDistance,
         PlasmaVesselDistance,
         QuadraticFlux,
+        SurfaceCurrentRegularization,
         ToroidalFlux,
         VacuumBoundaryError,
         # we don't test these since they depend too much on what exactly the user wants
@@ -2853,6 +2925,16 @@ class TestObjectiveNaNGrad:
         obj.build()
         g = obj.grad(obj.x(ext_field))
         assert not np.any(np.isnan(g)), "toroidal flux B"
+
+    @pytest.mark.unit
+    def test_objective_no_nangrad_surface_current_reg(self):
+        """SurfaceCurrentRegularization."""
+        field = FourierCurrentPotentialField()
+
+        obj = ObjectiveFunction(SurfaceCurrentRegularization(field), use_jit=False)
+        obj.build()
+        g = obj.grad(obj.x(field))
+        assert not np.any(np.isnan(g)), "surface current regularization"
 
     @pytest.mark.unit
     @pytest.mark.parametrize(

@@ -612,6 +612,94 @@ def singular_integral(
         eval_data, eval_grid, source_data, source_grid, s, kernel, loop
     )
     return out1, out2
+<<<<<<< Updated upstream
+=======
+
+def singular_integral2(
+    eval_data,
+    source_data,
+    K_1,
+    kernel,
+    interpolator,
+    loop=False,
+):
+    """Evaluate a singular integral transform on a surface.
+
+    eg f(θ, ζ) = ∫ ∫ K(θ, ζ, θ', ζ') g(θ', ζ') dθ' dζ'
+
+    Where K(θ, ζ, θ', ζ') is the (singular) kernel and g(θ', ζ') is the metric on the
+    surface. See eq. 3.7 in [1]_, but we have absorbed the density σ into K
+
+    Uses method by Malhotra et. al. [1]_ [2]_
+
+    Parameters
+    ----------
+    eval_data : dict
+        Dictionary of data at evaluation points (eval_grid passed to interpolator).
+        Keys should be those required by kernel as kernel.keys. Vector data should be
+        in rpz basis.
+    source_data : dict
+        Dictionary of data at source points (source_grid passed to interpolator). Keys
+        should be those required by kernel as kernel.keys. Vector data should be in
+        rpz basis.
+    kernel : str or callable
+        Kernel function to evaluate. If str, one of the following:
+            '1_over_r' : 1 / |𝐫 − 𝐫'|
+            'nr_over_r3' : 𝐧'⋅(𝐫 − 𝐫') / |𝐫 − 𝐫'|³
+            'biot_savart' : μ₀/4π 𝐊'×(𝐫 − 𝐫') / |𝐫 − 𝐫'|³
+            'biot_savart_A' : μ₀/4π 𝐊' / |𝐫 − 𝐫'|
+        If callable, should take 3 arguments:
+            eval_data : dict of data at evaluation points (primed)
+            source_data : dict of data at source points (unprimed)
+            diag : boolean, whether to evaluate full cross interactions or just diagonal
+        If a callable, should also have the attributes ``ndim`` and ``keys`` defined.
+        ``ndim`` is an integer representing the dimensionality of the output function f,
+        1 if f is scalar, 3 if f is a vector, etc.
+        ``keys`` is a list of strings of what data is required to evaluate the kernel.
+        The kernel will be called with dictionaries containing this data at source and
+        evaluation points.
+        If vector valued, the input to the kernel function will be in rpz and output
+        should be in xyz.
+    interpolator : callable
+        Function to interpolate from rectangular source grid to polar
+        source grid around each singular point. See ``FFTInterpolator`` or
+        ``DFTInterpolator``
+    loop : bool
+        If True, evaluate integral using loops, as opposed to vmap. Slower, but uses
+        less memory.
+
+    Returns
+    -------
+    f : ndarray, shape(eval_grid.num_nodes, kernel.ndim)
+        Integral transform evaluated at eval_grid. Vectors are in rpz basis.
+
+    References
+    ----------
+    .. [1] Malhotra, Dhairya, et al. "Efficient high-order singular quadrature schemes
+       in magnetic fusion." Plasma Physics and Controlled Fusion 62.2 (2019): 024004.
+    .. [2] Malhotra, Dhairya, et al. "Taylor states in stellarators: A fast high-order
+       boundary integral solver." Journal of Computational Physics 397 (2019): 108791.
+
+    """
+    # sanitize inputs, we need everything as jax arrays so they can be indexed
+    # properly in the loops
+    source_data = {key: jnp.asarray(val) for key, val in source_data.items()}
+    eval_data = {key: jnp.asarray(val) for key, val in eval_data.items()}
+
+    if isinstance(kernel, str):
+        kernel = kernels[kernel]
+
+    s, q = interpolator.s, interpolator.q
+    eval_grid, source_grid = interpolator._eval_grid, interpolator._source_grid
+
+    out2 = _singular_part(
+        eval_data, eval_grid, source_data, source_grid, s, q, kernel, interpolator, loop
+    )
+    out1 = _nonsingular_part(
+        eval_data, eval_grid, source_data, source_grid, s, kernel, loop
+    )
+    return out1, out2
+>>>>>>> Stashed changes
 
 
 def _kernel_nr_over_r3(eval_data, source_data, diag=False):
@@ -681,6 +769,33 @@ def _kernel_biot_savart(eval_data, source_data, diag=False):
 _kernel_biot_savart.ndim = 3
 _kernel_biot_savart.keys = ["R", "phi", "Z", "K_vc"]
 
+
+def _kernel_biot(eval_data, source_data,K_1,diag=False):
+    # K x r / |r|^3
+    source_x = jnp.atleast_2d(
+        rpz2xyz(jnp.array([source_data["R"], source_data["phi"], source_data["Z"]]).T)
+    )
+    eval_x = jnp.atleast_2d(
+        rpz2xyz(jnp.array([eval_data["R"], eval_data["phi"], eval_data["Z"]]).T)
+    )
+    
+    if diag:
+        dx = eval_x - source_x
+        
+    else:
+        dx = eval_x[:, None] - source_x[None]
+    K = rpz2xyz_vec(K_1, phi=source_data["phi"])
+    num = jnp.cross(K, dx, axis=-1)
+    r = safenorm(dx, axis=-1)
+    
+    if diag:
+        r = r[:, None]
+    else:
+        r = r[:, :, None]
+    return 1e-7 * safediv(num, r**3)
+
+_kernel_biot.ndim = 3
+_kernel_biot.keys = ["R", "phi", "Z"]
 
 def _kernel_biot_savart_A(eval_data, source_data, diag=False):
     # K  / |r|
@@ -799,6 +914,7 @@ kernels = {
     "1_over_r": _kernel_1_over_r,
     "nr_over_r3": _kernel_nr_over_r3,
     "biot_savart": _kernel_biot_savart,
+    "biot": _kernel_biot,
     "biot_savart_A": _kernel_biot_savart_A,
     "special": _kernel_special,
 }

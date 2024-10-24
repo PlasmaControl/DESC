@@ -104,10 +104,13 @@ class HarmonicField_to_BiotSavart(_Objective):
     def __init__(
         self,
         eq,
+        field,
         curve,
+        G,
         surface_grid=None,
         plasma_grid=None,
         curve_grid = None,
+        #surface,
         target=None,
         bounds=None,
         weight=1,

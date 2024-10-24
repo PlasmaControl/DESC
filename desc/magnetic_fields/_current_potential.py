@@ -1289,6 +1289,10 @@ def run_regcoil(  # noqa: C901 fxn too complex
     # calclulate I, net toroidal current on winding surface
     if current_helicity == 0:  # modular coils
         I = kappa*G
+<<<<<<< Updated upstream
+=======
+        #I = 0
+>>>>>>> Stashed changes
     else:  # helical coils
         I = G / current_helicity / eq.NFP
 

@@ -1608,6 +1608,7 @@ class PlasmaVesselDistanceMod(_Objective):
             "plasma_coords": plasma_coords,
         }
 
+        surface_params = self._surface.params_dict
         if self._surface_fixed:
             # precompute the surface coordinates
             # as the surface is fixed during the optimization

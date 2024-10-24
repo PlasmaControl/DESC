@@ -1104,7 +1104,6 @@ def test_share_parameters_four_objects():
 
     # check dimensions
     assert subobj.dim_f == 3 * eq1.params_dict["p_l"].size
-    assert subobj.target.size == 3 * eq1.params_dict["p_l"].size
     np.testing.assert_allclose(subobj.target, 0)
 
     # check compute
@@ -1114,7 +1113,7 @@ def test_share_parameters_four_objects():
     J = obj.jac_unscaled(obj.x(eq1, eq2, eq3, eq4))
     # make sure Jacobian is not trivial
     assert not np.allclose(J, 0)
-    # now, check that each row sums to zero, and abs(J) rows sum to 1,
+    # now, check that each row sums to zero, and abs(J) rows sum to 2,
     # meaning each row has only 2 nonzero elements which are 1 and -1,
     J_row_sums = J.sum(axis=1)
     abs_J_row_sums = np.abs(J).sum(axis=1)
@@ -1138,7 +1137,6 @@ def test_share_parameters_two_optimizable_collections_CoilSet():
     # dim_f should be 2 (for the 2 subcoils in each coilset) x 3 (for X_n, Y_n, Z_n)
     # x params["X_n"].size
     assert subobj.dim_f == 2 * 3 * coils1.params_dict[0]["X_n"].size
-    assert subobj.target.size == 2 * 3 * coils1.params_dict[0]["X_n"].size
     np.testing.assert_allclose(subobj.target, 0)
 
     # check compute
@@ -1149,7 +1147,7 @@ def test_share_parameters_two_optimizable_collections_CoilSet():
 
     # make sure Jacobian is not trivial
     assert not np.allclose(J, 0)
-    # now, check that each row sums to zero, and abs(J) rows sum to 1,
+    # now, check that each row sums to zero, and abs(J) rows sum to 2,
     # meaning each row has only 2 nonzero elements which are 1 and -1,
     J_row_sums = J.sum(axis=1)
     abs_J_row_sums = np.abs(J).sum(axis=1)

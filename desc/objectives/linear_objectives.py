@@ -242,7 +242,8 @@ class ShareParameters(_Objective):
     Parameters
     ----------
     things : list of Optimizable
-        list of objects whose degrees of freedom are being fixed to eachother's values.
+        List of objects whose degrees of freedom are being fixed to
+        each other's values.
         Must be at least length 2, but may be of arbitrary length.
         Every object must be of the same type, and have the same size array for the
         desired parameter to be fixed (e.g. same geometric resolution if fixing
@@ -254,31 +255,6 @@ class ShareParameters(_Objective):
         for that parameter.
         Must have the same pytree structure as thing.params_dict.
         The default is to fix all indices of all parameters.
-    target : dict of {float, ndarray}, optional
-        Target value(s) of the objective. Only used if bounds is None.
-        Should have the same tree structure as thing.params. Defaults to things.params.
-        Unused by this objective (as target is always just zero, the diff btwn the two
-        things' params)
-    bounds : tuple of dict {float, ndarray}, optional
-        Lower and upper bounds on the objective. Overrides target.
-        Should have the same tree structure as thing.params.
-        Unused by this objective (as target is always just zero, the diff btwn the two
-        things' params)
-    weight : dict of {float, ndarray}, optional
-        Weighting to apply to the Objective, relative to other Objectives.
-        Should be a scalar or have the same tree structure as thing.params.
-        Unused by this objective (as target is always just zero, the diff btwn the two
-        things' params)
-    normalize : bool, optional
-        Whether to compute the error in physical units or non-dimensionalize.
-        Unused by this objective (as target is always just zero, the diff btwn the two
-        things' params)
-    normalize_target : bool, optional
-        Whether target and bounds should be normalized before comparing to computed
-        values. If `normalize` is `True` and the target is in physical units,
-        this should also be set to True. Has no effect for this objective.
-        Unused by this objective (as target is always just zero, the diff btwn the two
-        things' params)
     name : str, optional
         Name of the objective function.
 
@@ -295,7 +271,7 @@ class ShareParameters(_Objective):
         self,
         things,
         params=None,
-        target=None,
+        target=0,
         bounds=None,
         weight=1,
         normalize=True,
@@ -342,26 +318,18 @@ class ShareParameters(_Objective):
 
         self._dim_f = sum(idx.size for idx in self._indices) * (len(self.things) - 1)
 
-        # default target
-        self.target = np.zeros(self._dim_f)
-
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, *args, constants=None):
+    def compute(self, *params, constants=None):
         """Compute fixed degree of freedom errors.
 
         Parameters
         ----------
-        params_1 : list of dict
-            First thing's list of dictionaries of degrees of freedom,
-            eg CoilSet.params_dict
-        params_2 : list of dict
-            Second thing's list of dictionaries of degrees of freedom,
-            eg CoilSet.params_dict
-
+        params : dict
+            2 or more dictionaries of params to fix parameters between.
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
+            self.constants.
 
         Returns
         -------
@@ -380,7 +348,7 @@ class ShareParameters(_Objective):
         #  [ 1 -1  0  0]
         #  [ 1 0  -1  0]
         #  [ 1 0   0 -1]
-        params_1 = args[0]
+        params_1 = params[0]
         return jnp.concatenate(
             [
                 jnp.concatenate(
@@ -392,10 +360,10 @@ class ShareParameters(_Objective):
                 - jnp.concatenate(
                     [
                         jnp.atleast_1d(param[idx])
-                        for param, idx in zip(tree_leaves(params), self._indices)
+                        for param, idx in zip(tree_leaves(this_params), self._indices)
                     ]
                 )
-                for params in args[1:]
+                for this_params in params[1:]
             ]
         )
 

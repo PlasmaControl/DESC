@@ -1,11 +1,9 @@
 """Base classes for objectives."""
 
 import functools
-import warnings
 from abc import ABC, abstractmethod
 
 import numpy as np
-from termcolor import colored
 
 from desc.backend import (
     desc_config,
@@ -31,22 +29,23 @@ from desc.utils import (
     isposint,
     setdefault,
     unique_list,
+    warnif,
 )
 
 doc_target = """
     target : {float, ndarray}, optional
-        Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f.
+        Target value(s) of the objective. Only used if ``bounds`` is ``None``.
+        Must be broadcastable to ``Objective.dim_f``.
 """
 doc_bounds = """
     bounds : tuple of {float, ndarray}, optional
-        Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to Objective.dim_f
+        Lower and upper bounds on the objective. Overrides ``target``.
+        Both bounds must be broadcastable to ``Objective.dim_f``.
 """
 doc_weight = """
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        Must be broadcastable to Objective.dim_f
+        Must be broadcastable to ``Objective.dim_f``.
 """
 doc_normalize = """
     normalize : bool, optional
@@ -55,8 +54,8 @@ doc_normalize = """
 doc_normalize_target = """
     normalize_target : bool, optional
         Whether target and bounds should be normalized before comparing to computed
-        values. If `normalize` is `True` and the target is in physical units,
-        this should also be set to True.
+        values. If ``normalize`` is ``True`` and the target is in physical units,
+        this should also be set to ``True``.
 """
 doc_loss_function = """
     loss_function : {None, 'mean', 'min', 'max'}, optional
@@ -68,8 +67,8 @@ doc_deriv_mode = """
     deriv_mode : {"auto", "fwd", "rev"}
         Specify how to compute Jacobian matrix, either forward mode or reverse mode AD.
         "auto" selects forward or reverse mode based on the size of the input and output
-        of the objective. Has no effect on self.grad or self.hess which always use
-        reverse mode and forward over reverse mode respectively.
+        of the objective. Has no effect on ``self.grad`` or ``self.hess`` which always
+        use reverse mode and forward over reverse mode respectively.
 """
 doc_name = """
     name : str, optional
@@ -80,13 +79,17 @@ doc_jac_chunk_size = """
         Will calculate the Jacobian
         ``jac_chunk_size`` columns at a time, instead of all at once.
         The memory usage of the Jacobian calculation is roughly
-        ``memory usage = m0 + m1*jac_chunk_size``: the smaller the chunk size,
+        ``memory usage = m0+m1*jac_chunk_size``: the smaller the chunk size,
         the less memory the Jacobian calculation will require (with some baseline
         memory usage). The time it takes to compute the Jacobian is roughly
-        ``t= t0 + t1/jac_chunk_size` so the larger the ``jac_chunk_size``, the faster
+        ``t = t0+t1/jac_chunk_size`` so the larger the ``jac_chunk_size``, the faster
         the calculation takes, at the cost of requiring more memory.
-        If None, it will use the largest size i.e ``obj.dim_x``.
+        If ``None``, it will use the largest size i.e ``obj.dim_x``.
         Defaults to ``chunk_size=None``.
+        Note: When running on a CPU (not a GPU) on a HPC cluster, DESC is unable to
+        accurately estimate the available device memory, so the "auto" chunk_size
+        option will yield a larger chunk size than may be needed. It is recommended
+        to manually choose a chunk_size if an OOM error is experienced in this case.
 """
 docs = {
     "target": doc_target,
@@ -115,23 +118,23 @@ def collect_docs(
     Parameters
     ----------
     overwrite : dict, optional
-        Dict of strings to overwrite from the _Objective's docstring. If None,
+        Dict of strings to overwrite from the ``_Objective``'s docstring. If None,
         all default parameters are included as they are. Use this argument if
         you want to specify a special docstring for a specific parameter in
         your objective definition.
     target_default : str, optional
-        Default value for the target parameter.
+        Default value for the ``target`` parameter.
     bounds_default : str, optional
-        Default value for the bounds parameter.
+        Default value for the ``bounds`` parameter.
     normalize_detail : str, optional
-        Additional information about the normalize parameter.
+        Additional information about the ``normalize`` parameter.
     normalize_target_detail : str, optional
-        Additional information about the normalize_target parameter.
+        Additional information about the ``normalize_target`` parameter.
     loss_detail : str, optional
-        Additional information about the loss function.
+        Additional information about the ``loss`` function.
     coil : bool, optional
-        Whether the objective is a coil objective. If True, adds extra docs to
-        target and loss_function.
+        Whether the objective is a coil objective. If ``True``, adds extra docs
+        to ``target`` and ``loss_function``.
 
     Returns
     -------
@@ -203,18 +206,17 @@ class ObjectiveFunction(IOAble):
     name : str
         Name of the objective function.
     jac_chunk_size : int or "auto", optional
-        If `"batched"` deriv_mode is used, will calculate the Jacobian
+        Will calculate the Jacobian
         ``jac_chunk_size`` columns at a time, instead of all at once.
         The memory usage of the Jacobian calculation is roughly
-        ``memory usage = m0 + m1*jac_chunk_size``: the smaller the chunk size,
+        ``memory usage = m0+m1*jac_chunk_size``: the smaller the chunk size,
         the less memory the Jacobian calculation will require (with some baseline
         memory usage). The time it takes to compute the Jacobian is roughly
-        ``t= t0 + t1/jac_chunk_size` so the larger the ``jac_chunk_size``, the faster
+        ``t = t0+t1/jac_chunk_size`` so the larger the ``jac_chunk_size``, the faster
         the calculation takes, at the cost of requiring more memory.
-        If None, it will use the largest size i.e ``obj.dim_x``.
-        Defaults to ``chunk_size="auto"`` which will use a conservative
-        chunk size based off of a heuristic estimate of the memory usage.
-        NOTE: When running on a CPU (not a GPU) on a HPC cluster, DESC is unable to
+        If ``None``, it will use the largest size i.e ``obj.dim_x``.
+        Defaults to ``chunk_size=None``.
+        Note: When running on a CPU (not a GPU) on a HPC cluster, DESC is unable to
         accurately estimate the available device memory, so the "auto" chunk_size
         option will yield a larger chunk size than may be needed. It is recommended
         to manually choose a chunk_size if an OOM error is experienced in this case.
@@ -239,16 +241,14 @@ class ObjectiveFunction(IOAble):
         assert use_jit in {True, False}
         if deriv_mode == "looped":
             # overwrite the user inputs if deprecated "looped" was given
+            warnif(
+                True,
+                DeprecationWarning,
+                '``deriv_mode="looped"`` is deprecated in favor of'
+                ' ``deriv_mode="batched"`` with ``jac_chunk_size=1``.',
+            )
             deriv_mode = "batched"
             jac_chunk_size = 1
-            warnings.warn(
-                colored(
-                    '``deriv_mode="looped"`` is deprecated in favor of'
-                    ' ``deriv_mode="batched"`` with ``jac_chunk_size=1``.',
-                    "yellow",
-                ),
-                DeprecationWarning,
-            )
         assert deriv_mode in {"auto", "batched", "blocked"}
         assert jac_chunk_size in ["auto", None] or isposint(jac_chunk_size)
 

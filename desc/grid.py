@@ -187,17 +187,25 @@ class _Grid(IOAble, ABC):
     @property
     def L(self):
         """int: Radial grid resolution."""
-        return self.__dict__.setdefault("_L", 0)
+        if getattr(self, "_L", None) is None:
+            self._L = self.num_rho - 1
+        return self._L
 
     @property
     def M(self):
         """int: Poloidal grid resolution."""
-        return self.__dict__.setdefault("_M", 0)
+        if getattr(self, "_M", None) is None:
+            self._M = (
+                (self.num_theta // 2 - 1) if self.sym else (self.num_theta - 1) // 2
+            )
+        return self._M
 
     @property
     def N(self):
         """int: Toroidal grid resolution."""
-        return self.__dict__.setdefault("_N", 0)
+        if getattr(self, "_N", None) is None:
+            self._N = (self.num_zeta - 1) // 2
+        return self._N
 
     @property
     def NFP(self):
@@ -293,7 +301,7 @@ class _Grid(IOAble, ABC):
         errorif(
             not hasattr(self, "_unique_rho_idx"),
             AttributeError,
-            f"{self} does not have unique indices assigned. "
+            "Grid does not have unique indices assigned. "
             "It is not possible to do this automatically on grids made under JIT.",
         )
         return self._unique_rho_idx
@@ -304,7 +312,7 @@ class _Grid(IOAble, ABC):
         errorif(
             not hasattr(self, "_unique_poloidal_idx"),
             AttributeError,
-            f"{self} does not have unique indices assigned. "
+            "Grid does not have unique indices assigned. "
             "It is not possible to do this automatically on grids made under JIT.",
         )
         return self._unique_poloidal_idx
@@ -333,7 +341,7 @@ class _Grid(IOAble, ABC):
         errorif(
             not hasattr(self, "_unique_zeta_idx"),
             AttributeError,
-            f"{self} does not have unique indices assigned. "
+            "Grid does not have unique indices assigned. "
             "It is not possible to do this automatically on grids made under JIT.",
         )
         return self._unique_zeta_idx
@@ -344,7 +352,7 @@ class _Grid(IOAble, ABC):
         errorif(
             not hasattr(self, "_inverse_rho_idx"),
             AttributeError,
-            f"{self} does not have inverse indices assigned. "
+            "Grid does not have inverse indices assigned. "
             "It is not possible to do this automatically on grids made under JIT.",
         )
         return self._inverse_rho_idx
@@ -355,7 +363,7 @@ class _Grid(IOAble, ABC):
         errorif(
             not hasattr(self, "_inverse_poloidal_idx"),
             AttributeError,
-            f"{self} does not have inverse indices assigned. "
+            "Grid does not have inverse indices assigned. "
             "It is not possible to do this automatically on grids made under JIT.",
         )
         return self._inverse_poloidal_idx
@@ -384,7 +392,7 @@ class _Grid(IOAble, ABC):
         errorif(
             not hasattr(self, "_inverse_zeta_idx"),
             AttributeError,
-            f"{self} does not have inverse indices assigned. "
+            "Grid does not have inverse indices assigned. "
             "It is not possible to do this automatically on grids made under JIT.",
         )
         return self._inverse_zeta_idx
@@ -694,8 +702,8 @@ class Grid(_Grid):
         nodes.reshape((num_poloidal, num_radial, num_toroidal, 3), order="F").
     jitable : bool
         Whether to skip certain checks and conditionals that don't work under jit.
-        Allows grid to be created on the fly with custom nodes, but weights, symmetry
-        etc. may be wrong if grid contains duplicate nodes.
+        Allows grid to be created on the fly with custom nodes, but weights,
+        symmetry etc. may be wrong if grid contains duplicate nodes.
     """
 
     def __init__(
@@ -756,6 +764,9 @@ class Grid(_Grid):
             for attr in setable_attr:
                 if attr in kwargs:
                     setattr(self, attr, jnp.asarray(kwargs.pop(attr)))
+            self._L = self.num_nodes
+            self._M = self.num_nodes
+            self._N = self.num_nodes
         else:
             for attr in setable_attr:
                 kwargs.pop(attr, None)
@@ -768,10 +779,9 @@ class Grid(_Grid):
                 self._unique_zeta_idx,
                 self._inverse_zeta_idx,
             ) = self._find_unique_inverse_nodes()
-
-        self._L = self.num_nodes
-        self._M = self.num_nodes
-        self._N = self.num_nodes
+            self._L = self.num_rho - 1
+            self._M = (self.num_theta - 1) // 2
+            self._N = (self.num_zeta - 1) // 2
         errorif(len(kwargs), ValueError, f"Got unexpected kwargs {kwargs.keys()}")
 
     @staticmethod
@@ -781,6 +791,7 @@ class Grid(_Grid):
         coordinates="rtz",
         period=(np.inf, 2 * np.pi, 2 * np.pi),
         NFP=1,
+        jitable=True,
         **kwargs,
     ):
         """Create a tensor-product grid from the given coordinates in a jitable manner.
@@ -807,6 +818,10 @@ class Grid(_Grid):
             Only makes sense to change from 1 if last coordinate is periodic
             with some constant divided by ``NFP`` and the nodes are placed
             within one field period.
+        jitable : bool
+            Whether to skip certain checks and conditionals that don't work under jit.
+            Allows grid to be created on the fly with custom nodes, but weights,
+            symmetry etc. may be wrong if grid contains duplicate nodes.
 
         Returns
         -------
@@ -849,10 +864,7 @@ class Grid(_Grid):
             repeat(unique_a_idx // b.size, b.size, total_repeat_length=a.size * b.size),
             c.size,
         )
-        inverse_b_idx = jnp.tile(
-            unique_b_idx,
-            a.size * c.size,
-        )
+        inverse_b_idx = jnp.tile(unique_b_idx, a.size * c.size)
         inverse_c_idx = repeat(unique_c_idx // (a.size * b.size), (a.size * b.size))
         return Grid(
             nodes=nodes,
@@ -863,7 +875,7 @@ class Grid(_Grid):
             NFP=NFP,
             sort=False,
             is_meshgrid=True,
-            jitable=True,
+            jitable=jitable,
             _unique_rho_idx=unique_a_idx,
             _unique_poloidal_idx=unique_b_idx,
             _unique_zeta_idx=unique_c_idx,
@@ -1064,8 +1076,6 @@ class LinearGrid(_Grid):
         if L is not None:
             self._L = check_nonnegint(L, "L")
             rho = L + 1
-        else:
-            self._L = len(np.atleast_1d(rho))
         if np.isscalar(rho) and (int(rho) == rho) and rho > 0:
             r = np.flipud(np.linspace(1, 0, int(rho), endpoint=axis))
             # choose dr such that each node has the same weight
@@ -1078,8 +1088,6 @@ class LinearGrid(_Grid):
         if M is not None:
             self._M = check_nonnegint(M, "M")
             theta = 2 * (M + 1) if self.sym else 2 * M + 1
-        else:
-            self._M = len(np.atleast_1d(theta))
         if np.isscalar(theta) and (int(theta) == theta) and theta > 0:
             theta = int(theta)
             if self.sym and theta > 1:
@@ -1161,8 +1169,6 @@ class LinearGrid(_Grid):
         if N is not None:
             self._N = check_nonnegint(N, "N")
             zeta = 2 * N + 1
-        else:
-            self._N = len(np.atleast_1d(zeta))
         if np.isscalar(zeta) and (int(zeta) == zeta) and zeta > 0:
             z = np.linspace(0, zeta_period, int(zeta), endpoint=endpoint)
             dz = 2 * np.pi / z.size * np.ones_like(z)

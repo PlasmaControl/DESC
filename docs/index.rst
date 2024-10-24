@@ -33,6 +33,7 @@
    notebooks/tutorials/bootstrap_current.ipynb
    notebooks/tutorials/coil_stage_two_optimization.ipynb
    notebooks/tutorials/ideal_ballooning_stability.ipynb
+   notebooks/tutorials/EffectiveRipple.ipynb
    memory_usage
 
 .. toctree::

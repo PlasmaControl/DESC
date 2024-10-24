@@ -866,7 +866,18 @@ def interp_to_argmin_hard(h, points, knots, g, dg_dz, method="cubic"):
 
 
 def interp_fft_to_argmin(
-    NFP, T, h, points, knots, g, dg_dz, beta=-100, upper_sentinel=1e2
+    NFP,
+    T,
+    h,
+    points,
+    knots,
+    g,
+    dg_dz,
+    beta=-100,
+    upper_sentinel=1e2,
+    is_fourier=False,
+    M=None,
+    N=None,
 ):
     """Interpolate ``h`` to the deepest point of ``g`` between ``z1`` and ``z2``.
 
@@ -908,6 +919,11 @@ def interp_fft_to_argmin(
         Something larger than g. Choose value such that
         exp(max(g)) << exp(``upper_sentinel``). Don't make too large or numerical
         resolution is lost.
+    is_fourier : bool
+        If true, then it is assumed that ``h`` is the Fourier
+        transform as returned by ``Bounce2D.fourier``.
+    M, N : int
+        Fourier resolution.
 
     Warnings
     --------
@@ -929,17 +945,28 @@ def interp_fft_to_argmin(
         beta * _where_for_fft_argmin(points, ext, g_ext, upper_sentinel),
         axis=-1,
     )
-    return jnp.linalg.vecdot(
-        argmin,  # shape is (..., num well, num extrema)
-        interp_rfft2(
-            T.eval1d(ext),
+    theta = T.eval1d(ext)
+    if is_fourier:
+        h = irfft2_non_uniform(
+            theta,
+            ext,
+            h[..., jnp.newaxis, :, :],
+            M,
+            N,
+            domain1=(0, 2 * jnp.pi / NFP),
+            axes=(-1, -2),
+        )
+    else:
+        h = interp_rfft2(
+            theta,
             ext,
             h[..., jnp.newaxis, :, :],
             domain1=(0, 2 * jnp.pi / NFP),
             axes=(-1, -2),
-        )[..., jnp.newaxis, :],
-        # adding axis to broadcast with num well axis
-    )
+        )
+    # argmin shape is (..., num well, num extrema)
+    # adding axis to broadcast with num well axis
+    return jnp.linalg.vecdot(argmin, h[..., jnp.newaxis, :])
 
 
 # TODO: Generalize this beyond ζ = ϕ or just map to Clebsch with ϕ.

@@ -57,6 +57,14 @@ class TestGrid:
             np.testing.assert_allclose(g.spacing.prod(axis=1), g.weights)
 
     @pytest.mark.unit
+    def test_grid_LMN(self):
+        """Make sure grid attributes LMN are set correctly."""
+        grid = LinearGrid(rho=2, theta=5, zeta=6)
+        assert grid.L == grid.num_rho - 1
+        assert grid.M == (grid.num_theta - 1) // 2
+        assert grid.N == (grid.num_zeta - 1) // 2
+
+    @pytest.mark.unit
     def test_linear_grid_spacing_consistency(self):
         """Test consistency between alternate construction methods."""
 

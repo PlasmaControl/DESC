@@ -8,6 +8,7 @@ import numpy as np
 import pytest
 from qic import Qic
 from qsc import Qsc
+from scipy.constants import mu_0
 
 from desc.backend import jnp, tree_leaves
 from desc.coils import (
@@ -25,6 +26,7 @@ from desc.geometry import FourierRZToroidalSurface
 from desc.grid import LinearGrid
 from desc.io import load
 from desc.magnetic_fields import (
+    FourierCurrentPotentialField,
     OmnigenousField,
     SplineMagneticField,
     ToroidalMagneticField,
@@ -64,6 +66,7 @@ from desc.objectives import (
     QuadraticFlux,
     QuasisymmetryBoozer,
     QuasisymmetryTwoTerm,
+    ShareParameters,
     VacuumBoundaryError,
     Volume,
     get_fixed_boundary_constraints,
@@ -1834,3 +1837,136 @@ def test_signed_PlasmaVesselDistance():
         atol=1e-2,
         err_msg="allowing eq to change",
     )
+
+
+@pytest.mark.unit
+def test_share_parameters():
+    """Test ShareParameters for a 2-surface quadratic flux optimization."""
+    ## setup opt problem
+    # use QuadraticFlux as eq's are fixed and want fields to change
+    # use ShareParameters to keep surface geoms constant equal
+    # to eachother as they vary with surface current to reduce Bn
+    eq1 = get("ESTELL")
+    with pytest.warns(UserWarning, match="L"):
+        eq1.change_resolution(8, 3, 3, 12, 6, 6)
+    eq2 = eq1.copy()
+    eq2.change_resolution(8, 2, 2, 12, 4, 4)
+
+    necessary_G_for_eq1 = eq1.compute("G")["G"][-1] / mu_0 * 2 * np.pi
+    necessary_G_for_eq2 = eq2.compute("G")["G"][-1] / mu_0 * 2 * np.pi
+
+    R0 = eq1.compute("R0")["R0"]
+    a = 1
+    surf1 = FourierRZToroidalSurface(
+        R_lmn=[R0, a],
+        Z_lmn=[-a],
+        modes_R=[[0, 0], [1, 0]],
+        modes_Z=[[-1, 0]],
+        NFP=eq1.NFP,
+    )
+    surf1.change_resolution(M=2, N=2)
+    surf1 = FourierCurrentPotentialField.from_surface(
+        surf1, M_Phi=6, N_Phi=6, sym_Phi=False, I=0, G=necessary_G_for_eq1
+    )
+    surf2 = surf1.copy()
+    surf2.G = necessary_G_for_eq2
+
+    ## setup opt problem
+    # first, keep surfs fixed too and just get regcoil-like solutions for each
+    surf_grid = LinearGrid(M=20, N=20, NFP=surf1.NFP)
+    eval_grid = LinearGrid(M=20, N=20, NFP=surf1.NFP)
+    obj = ObjectiveFunction(
+        (
+            QuadraticFlux(
+                eq1,
+                surf1,
+                field_grid=surf_grid,
+                eval_grid=eval_grid,
+                vacuum=True,
+                name="Bn error  eq1",
+            ),
+            QuadraticFlux(
+                eq2,
+                surf2,
+                field_grid=surf_grid,
+                eval_grid=eval_grid,
+                vacuum=True,
+                name="Bn error  eq2",
+            ),
+        )
+    )
+    constraints = (
+        FixParameters(surf1, {"I": True, "G": True, "R_lmn": True, "Z_lmn": True}),
+        FixParameters(surf2, {"I": True, "G": True, "R_lmn": True, "Z_lmn": True}),
+    )  # fix the secular parts as well
+
+    opt = Optimizer("lsq-exact")
+    with pytest.warns(RuntimeWarning):  # bc trust radius is inf
+        (surf1, surf2), _ = opt.optimize(
+            [surf1, surf2],
+            objective=obj,
+            constraints=constraints,
+            verbose=3,
+            maxiter=2,
+            ftol=1e-8,
+            options={"initial_trust_radius": np.inf},
+        )
+
+    # then, let surfs and Phi change while keeping their geometry fixed
+    obj = ObjectiveFunction(
+        (
+            QuadraticFlux(
+                eq1,
+                surf1,
+                field_grid=surf_grid,
+                eval_grid=eval_grid,
+                vacuum=True,
+                name="Bn error  eq1",
+            ),
+            QuadraticFlux(
+                eq2,
+                surf2,
+                field_grid=surf_grid,
+                eval_grid=eval_grid,
+                vacuum=True,
+                name="Bn error  eq2",
+            ),
+            PlasmaVesselDistance(
+                eq1,
+                surf1,
+                bounds=(0.25, np.inf),
+                surface_grid=surf_grid,
+                eq_fixed=True,
+                name="distance error  eq1",
+            ),
+            PlasmaVesselDistance(
+                eq2,
+                surf2,
+                bounds=(0.25, np.inf),
+                surface_grid=surf_grid,
+                eq_fixed=True,
+                name="distance error  eq2",
+            ),
+        )
+    )
+    constraints = (
+        ShareParameters(
+            [surf1, surf2], params={"R_lmn": True, "Z_lmn": True}
+        ),  # make the 2 surfaces have the same geometry
+        FixParameters(surf1, {"I": True, "G": True}),
+        FixParameters(surf2, {"I": True, "G": True}),
+    )  # fix the secular parts as well
+
+    opt = Optimizer("lsq-exact")
+
+    (surf1, surf2), _ = opt.optimize(
+        [surf1, surf2],
+        objective=obj,
+        constraints=constraints,
+        verbose=3,
+        maxiter=2,
+        ftol=1e-8,
+    )
+
+    np.testing.assert_allclose(surf1.R_lmn, surf2.R_lmn)
+    np.testing.assert_allclose(surf1.Z_lmn, surf2.Z_lmn)

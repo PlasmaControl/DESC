@@ -236,6 +236,162 @@ class FixParameters(_Objective):
             self._unjit()
 
 
+class ShareParameters(_Objective):
+    """Fix specific degrees of freedom to be the same between Optimizable things.
+
+    Parameters
+    ----------
+    things : Optimizable
+        list of objects whose degrees of freedom are being fixed to eachother's values.
+    params : nested list of dicts
+        Dict keys are the names of parameters to fix (str), and dict values are the
+        indices to fix for each corresponding parameter (int array).
+        Use True (False) instead of an int array to fix all (none) of the indices
+        for that parameter.
+        Must have the same pytree structure as thing.params_dict.
+        The default is to fix all indices of all parameters.
+    target : dict of {float, ndarray}, optional
+        Target value(s) of the objective. Only used if bounds is None.
+        Should have the same tree structure as thing.params. Defaults to things.params.
+        Unused by this objective (as target is always just zero, the diff btwn the two
+        things' params)
+    bounds : tuple of dict {float, ndarray}, optional
+        Lower and upper bounds on the objective. Overrides target.
+        Should have the same tree structure as thing.params.
+        Unused by this objective (as target is always just zero, the diff btwn the two
+        things' params)
+    weight : dict of {float, ndarray}, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        Should be a scalar or have the same tree structure as thing.params.
+        Unused by this objective (as target is always just zero, the diff btwn the two
+        things' params)
+    normalize : bool, optional
+        Whether to compute the error in physical units or non-dimensionalize.
+        Unused by this objective (as target is always just zero, the diff btwn the two
+        things' params)
+    normalize_target : bool, optional
+        Whether target and bounds should be normalized before comparing to computed
+        values. If `normalize` is `True` and the target is in physical units,
+        this should also be set to True. Has no effect for this objective.
+        Unused by this objective (as target is always just zero, the diff btwn the two
+        things' params)
+    name : str, optional
+        Name of the objective function.
+
+
+    """
+
+    _scalar = False
+    _linear = True
+    _fixed = False
+    _units = "(~)"
+    _print_value_fmt = "Shared parameters error: "
+
+    def __init__(
+        self,
+        things,
+        params=None,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        name="shared parameters",
+    ):
+        self._params = params
+        # TODO: make this take 2 things
+        # to have multiple things sharing, can simply
+        # change together the ShareParameters objects,
+        # idk of a good way to do this with the current API
+        # ... unless we change the compute to take in *args
+        # then it can be as many as needed... that would work I think
+        assert len(things) == 2, "only implemented for 2 things"
+        assert isinstance(things[0], type(things[1]))
+        super().__init__(
+            things=things,
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            name=name,
+        )
+
+    def build(self, use_jit=False, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        thing = self.things[0]
+
+        # default params
+        default_params = tree_map(lambda dim: np.arange(dim), thing.dimensions)
+        self._params = setdefault(self._params, default_params)
+        self._params = broadcast_tree(self._params, default_params)
+        self._indices = tree_leaves(self._params)
+        assert tree_structure(self._params) == tree_structure(default_params)
+
+        self._dim_f = sum(idx.size for idx in self._indices)
+
+        # default target
+        self.target = np.zeros(self._dim_f)
+
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, params_1, params_2, constants=None):
+        """Compute fixed degree of freedom errors.
+
+        Parameters
+        ----------
+        params_1 : list of dict
+            First thing's list of dictionaries of degrees of freedom,
+            eg CoilSet.params_dict
+        params_2 : list of dict
+            Second thing's list of dictionaries of degrees of freedom,
+            eg CoilSet.params_dict
+
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
+
+        Returns
+        -------
+        f : ndarray
+            Fixed degree of freedom errors.
+
+        """
+        return jnp.concatenate(
+            [
+                jnp.atleast_1d(param[idx])
+                for param, idx in zip(tree_leaves(params_1), self._indices)
+            ]
+        ) - jnp.concatenate(
+            [
+                jnp.atleast_1d(param[idx])
+                for param, idx in zip(tree_leaves(params_2), self._indices)
+            ]
+        )
+
+    def update_target(self, thing):
+        """Update target values using an Optimizable object.
+
+        Parameters
+        ----------
+        thing : Optimizable
+            Optimizable object that will be optimized to satisfy the Objective.
+
+        """
+        self.target = self.compute(thing.params_dict)
+        if not self._use_jit:
+            self._unjit()
+
+
 class BoundaryRSelfConsistency(_Objective):
     """Ensure that the boundary and interior surfaces are self-consistent.
 

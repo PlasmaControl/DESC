@@ -241,8 +241,12 @@ class ShareParameters(_Objective):
 
     Parameters
     ----------
-    things : Optimizable
+    things : list of Optimizable
         list of objects whose degrees of freedom are being fixed to eachother's values.
+        Must be at least length 2, but may be of arbitrary length.
+        Every object must be of the same type, and have the same size array for the
+        desired parameter to be fixed (e.g. same geometric resolution if fixing
+         ``R_lmn``, or same pressure profile resolution if fixing ``p_l``)
     params : nested list of dicts
         Dict keys are the names of parameters to fix (str), and dict values are the
         indices to fix for each corresponding parameter (int array).

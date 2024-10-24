@@ -1,63 +1,96 @@
-'''Methods for computing the critical gradient and effective radius of curvature'''
+"""Methods for computing the critical gradient and effective radius of curvature."""
 
-from desc.backend import jnp, jit
 import functools
 
+from desc.backend import jit, jnp
 
-# @functools.partial(jit,static_argnames=["n_wells","order"])
-def extract_Kd_wells(Kd,n_wells=5,order=False):
+
+@functools.partial(jit, static_argnames=["n_wells", "order"])
+def extract_Kd_wells(Kd, n_wells=5, order=False):
+    """Extract wells from the Kd array by identifying sign changes.
+
+    This function detects regions where the Kd values transition between
+    positive and negative, creating a specified number of wells.
+    It can also sort the wells by their lengths if desired.
+
+    Parameters
+    ----------
+    Kd : jnp.ndarray
+        1D array of Kd values.
+    n_wells : int
+        Number of wells to extract from Kd.
+    order : bool
+        Whether to sort the wells by their lengths in descending order.
+
+    Returns
+    -------
+    Kd_wells : jnp.ndarray
+        2D array where each row corresponds to the Kd values of an extracted well.
+    lengths_wells : jnp.ndarray
+        1D array containing the lengths of each extracted well.
+    masks_wells : jnp.ndarray
+        2D boolean array indicating which Kd values belong to each well.
+    """
     # Step 1: Identify sign changes in Kd
     signs = jnp.sign(Kd)
-    
+
     # Create masks for positive and negative crossings of the same size as Kd
     positive_crossings = jnp.zeros_like(Kd, dtype=bool)
     negative_crossings = jnp.zeros_like(Kd, dtype=bool)
 
     # Set negative crossings (from positive to negative)
-    negative_crossings = negative_crossings.at[:-1].set((signs[:-1] == 1) & (signs[1:] == -1))
+    negative_crossings = negative_crossings.at[:-1].set(
+        (signs[:-1] == 1) & (signs[1:] == -1)
+    )
 
     # Set positive crossings (from negative to positive)
-    positive_crossings = positive_crossings.at[:-1].set((signs[:-1] == -1) & (signs[1:] == 1))
+    positive_crossings = positive_crossings.at[:-1].set(
+        (signs[:-1] == -1) & (signs[1:] == 1)
+    )
 
     # Create cumulative sums for positive and negative crossings
     cumulative_positive = jnp.cumsum(positive_crossings)
     cumulative_negative = jnp.cumsum(negative_crossings)
 
-    Kd_wells = jnp.zeros((n_wells, Kd.shape[0]), dtype=Kd.dtype)  # Initialize with zeros
+    Kd_wells = jnp.zeros(
+        (n_wells, Kd.shape[0]), dtype=Kd.dtype
+    )  # Initialize with zeros
     lengths_wells = jnp.zeros(n_wells, dtype=int)
     masks_wells = jnp.zeros((n_wells, Kd.shape[0]), dtype=Kd.dtype)
 
     # Use a loop to fill the lengths array
-    for i in range(1,n_wells+1):
+    for i in range(1, n_wells + 1):
         # Create well masks
-        well_mask = (cumulative_negative == i) & (cumulative_negative == cumulative_positive)        
+        well_mask = (cumulative_negative == i) & (
+            cumulative_negative == cumulative_positive
+        )
         # Fill the corresponding row in the masks array
-        well_values = jnp.where(well_mask,Kd,0)
+        well_values = jnp.where(well_mask, Kd, 0)
         # Store the well values in the corresponding row
-        Kd_wells = Kd_wells.at[i-1, :well_values.size].set(well_values)
-        masks_wells = masks_wells.at[i-1, :well_values.size].set(well_mask.astype(Kd.dtype))  # Store mask as row
-        lengths_wells = lengths_wells.at[i-1].set(well_mask.sum())
+        Kd_wells = Kd_wells.at[i - 1, : well_values.size].set(well_values)
+        masks_wells = masks_wells.at[i - 1, : well_values.size].set(
+            well_mask.astype(Kd.dtype)
+        )  # Store mask as row
+        lengths_wells = lengths_wells.at[i - 1].set(well_mask.sum())
 
-    if order : 
+    if order:
         # Sort wells by lengths
         sort_indices = jnp.argsort(lengths_wells)[::-1]  # Descending order
         Kd_wells = Kd_wells[sort_indices]
         lengths_wells = lengths_wells[sort_indices]
 
-    # return Kd_wells[0:n_return], lengths_wells[0:n_return], masks_wells[0:n_return]
     return Kd_wells, lengths_wells, masks_wells
 
 
-
-# @jit
+@jit
 def weighted_least_squares(l, Kd, mask):
-    """
-    Perform a weighted least-squares quadratic fit:
-    Kd(l) = R_eff_inv * (1 - (l - lc)^2 / ln^2)
+    """Perform a weighted least-squares quadratic fit of Kd.
+
+    Performs a fit of the form Kd(l) = R_eff_inv * (1 - (l - lc)^2 / ln^2)
     using only the values where the mask is True.
 
-    Parameters:
-    -----------
+    Parameters
+    ----------
     l : jnp.ndarray
         The coordinate array for the well.
     Kd : jnp.ndarray
@@ -65,8 +98,8 @@ def weighted_least_squares(l, Kd, mask):
     mask : jnp.ndarray (bool)
         A mask indicating the valid part of the well.
 
-    Returns:
-    --------
+    Returns
+    -------
     R_eff_inv, ln_squared : float
         Fitted parameters for the quadratic fit.
     """
@@ -94,14 +127,12 @@ def weighted_least_squares(l, Kd, mask):
     return R_eff_inv, ln_squared
 
 
-
-# @functools.partial(jit, static_argnames="n_wells")
+@functools.partial(jit, static_argnames="n_wells")
 def fit_Kd_wells(l, Kd_wells, masks, n_wells=5):
-    """
-    Fit the quadratic function to each well using masks.
+    """Fit the quadratic function to each well using masks.
 
     Parameters
-    -----------
+    ----------
     l : jnp.ndarray
         The coordinate array (same for all wells).
     Kd_wells : jnp.ndarray
@@ -111,8 +142,8 @@ def fit_Kd_wells(l, Kd_wells, masks, n_wells=5):
     n_wells : int
         Number of wells to fit.
 
-    Returns:
-    --------
+    Returns
+    -------
     R_eff_inv_array, ln_squared_array : jnp.ndarray
         Arrays containing the fitted parameters for each well.
     """
@@ -129,7 +160,7 @@ def fit_Kd_wells(l, Kd_wells, masks, n_wells=5):
         # Store the results
         R_eff_inv_array = R_eff_inv_array.at[i].set(R_eff_inv)
         ln_squared_array = ln_squared_array.at[i].set(ln_squared)
-    
-    R_eff_array = jnp.abs(1/R_eff_inv_array)
+
+    R_eff_array = jnp.abs(1 / R_eff_inv_array)
 
     return R_eff_inv_array, ln_squared_array, R_eff_array

@@ -236,6 +236,170 @@ class FixParameters(_Objective):
             self._unjit()
 
 
+class ShareParameters(_Objective):
+    """Fix specific degrees of freedom to be the same between Optimizable things.
+
+    Parameters
+    ----------
+    things : list of Optimizable
+        list of objects whose degrees of freedom are being fixed to eachother's values.
+        Must be at least length 2, but may be of arbitrary length.
+        Every object must be of the same type, and have the same size array for the
+        desired parameter to be fixed (e.g. same geometric resolution if fixing
+         ``R_lmn``, or same pressure profile resolution if fixing ``p_l``)
+    params : nested list of dicts
+        Dict keys are the names of parameters to fix (str), and dict values are the
+        indices to fix for each corresponding parameter (int array).
+        Use True (False) instead of an int array to fix all (none) of the indices
+        for that parameter.
+        Must have the same pytree structure as thing.params_dict.
+        The default is to fix all indices of all parameters.
+    target : dict of {float, ndarray}, optional
+        Target value(s) of the objective. Only used if bounds is None.
+        Should have the same tree structure as thing.params. Defaults to things.params.
+        Unused by this objective (as target is always just zero, the diff btwn the two
+        things' params)
+    bounds : tuple of dict {float, ndarray}, optional
+        Lower and upper bounds on the objective. Overrides target.
+        Should have the same tree structure as thing.params.
+        Unused by this objective (as target is always just zero, the diff btwn the two
+        things' params)
+    weight : dict of {float, ndarray}, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        Should be a scalar or have the same tree structure as thing.params.
+        Unused by this objective (as target is always just zero, the diff btwn the two
+        things' params)
+    normalize : bool, optional
+        Whether to compute the error in physical units or non-dimensionalize.
+        Unused by this objective (as target is always just zero, the diff btwn the two
+        things' params)
+    normalize_target : bool, optional
+        Whether target and bounds should be normalized before comparing to computed
+        values. If `normalize` is `True` and the target is in physical units,
+        this should also be set to True. Has no effect for this objective.
+        Unused by this objective (as target is always just zero, the diff btwn the two
+        things' params)
+    name : str, optional
+        Name of the objective function.
+
+
+    """
+
+    _scalar = False
+    _linear = True
+    _fixed = False
+    _units = "(~)"
+    _print_value_fmt = "Shared parameters error: "
+
+    def __init__(
+        self,
+        things,
+        params=None,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        name="shared parameters",
+    ):
+        self._params = params
+        assert len(things) > 1, "only makes sense for >1 thing"
+        assert np.all([isinstance(things[0], type(t)) for t in things[1:]])
+        # TODO: some sort of check that all things are same resolution etc?
+        # something like _check_type for coilsets but more general...
+        # maybe can make a _check_type that takes in the user-inputted params.keys
+        # and just ensures that the params being fixed are the same resolution, that
+        # should be all we need to check I think
+        super().__init__(
+            things=things,
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            name=name,
+        )
+
+    def build(self, use_jit=False, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        thing = self.things[0]
+
+        # default params
+        default_params = tree_map(lambda dim: np.arange(dim), thing.dimensions)
+        self._params = setdefault(self._params, default_params)
+        self._params = broadcast_tree(self._params, default_params)
+        self._indices = tree_leaves(self._params)
+        assert tree_structure(self._params) == tree_structure(default_params)
+
+        self._dim_f = sum(idx.size for idx in self._indices) * (len(self.things) - 1)
+
+        # default target
+        self.target = np.zeros(self._dim_f)
+
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, *args, constants=None):
+        """Compute fixed degree of freedom errors.
+
+        Parameters
+        ----------
+        params_1 : list of dict
+            First thing's list of dictionaries of degrees of freedom,
+            eg CoilSet.params_dict
+        params_2 : list of dict
+            Second thing's list of dictionaries of degrees of freedom,
+            eg CoilSet.params_dict
+
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
+
+        Returns
+        -------
+        f : ndarray
+            Fixed degree of freedom errors.
+
+        """
+        # basically, just subtract the first things' params
+        # and every subsequent thing (adding on rows to dim_f if
+        # more than 2 total things) so that the Jacobian of this
+        # ends up being just rows with 1 in the first object's params
+        # indices and -1 in the second objects params indices,
+        # repeated vertically for each additional object
+        # i.e. for a a size-1 param being shared among 4 objects, the
+        # Jacobian looks like
+        #  [ 1 -1  0  0]
+        #  [ 1 0  -1  0]
+        #  [ 1 0   0 -1]
+        params_1 = args[0]
+        return jnp.concatenate(
+            [
+                jnp.concatenate(
+                    [
+                        jnp.atleast_1d(param[idx])
+                        for param, idx in zip(tree_leaves(params_1), self._indices)
+                    ]
+                )
+                - jnp.concatenate(
+                    [
+                        jnp.atleast_1d(param[idx])
+                        for param, idx in zip(tree_leaves(params), self._indices)
+                    ]
+                )
+                for params in args[1:]
+            ]
+        )
+
+
 class BoundaryRSelfConsistency(_Objective):
     """Ensure that the boundary and interior surfaces are self-consistent.
 

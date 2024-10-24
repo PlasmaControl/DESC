@@ -1,8 +1,7 @@
 # standard install requirements
 -r ../requirements.txt
 
-# use notebooks on cluster, default env won't show-up on
-# interactive sessions otherwise
+# to use jupyter notebooks
 ipykernel
 
 # building the docs

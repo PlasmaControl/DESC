@@ -29,8 +29,7 @@ dependencies:
     - qicna @ git+https://github.com/rogeriojorge/pyQIC/
     - black[jupyter] = 24.3.0
 
-  # use notebooks on cluster, default env won't show-up on
-  # interactive sessions otherwise
+  # to use jupyter notebooks
   - ipykernel
 
   # building the docs

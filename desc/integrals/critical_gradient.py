@@ -77,6 +77,7 @@ def extract_Kd_wells(Kd, n_wells=5, order=False):
         # Sort wells by lengths
         sort_indices = jnp.argsort(lengths_wells)[::-1]  # Descending order
         Kd_wells = Kd_wells[sort_indices]
+        masks_wells = masks_wells[sort_indices]
         lengths_wells = lengths_wells[sort_indices]
 
     return Kd_wells, lengths_wells, masks_wells

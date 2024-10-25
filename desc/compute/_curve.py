@@ -180,6 +180,11 @@ def _center_FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
     return data
 
 
+def get_closest(arr, val):
+    """Get closest index to value in array."""
+    return jnp.argmin(jnp.abs(arr - val))
+
+
 @register_compute_fun(
     name="x",
     label="\\mathbf{x}",
@@ -207,6 +212,8 @@ def _x_C0FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
     len_rn = kwargs.get("len_rn", 1)
 
     # 0 to pi
+    istart = 0
+    istop = get_closest(data["s"], jnp.pi)
     r1 = transforms["r"].transform(jnp.atleast_1d(params["r_n"][:len_rn]), dz=0)
     Z1 = jnp.zeros_like(r1)
     X1 = r1 * jnp.cos(data["s"])
@@ -222,11 +229,14 @@ def _x_C0FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
     # convert back to rpz
 
     # now take half the coil
-    X1_half = jnp.where(data["s"] >= jnp.pi, coords1[:, 0], 0)
-    Y1_half = jnp.where(data["s"] >= jnp.pi, coords1[:, 1], 0)
-    Z1_half = jnp.where(data["s"] >= jnp.pi, coords1[:, 2], 0)
+    # TODO: nothing lower than 0 but need to generalize
+    X1_half = jnp.where(data["s"] >= data["s"][istop], coords1[:, 0], 0)
+    Y1_half = jnp.where(data["s"] >= data["s"][istop], coords1[:, 1], 0)
+    Z1_half = jnp.where(data["s"] >= data["s"][istop], coords1[:, 2], 0)
 
     # pi to 2pi
+    istart = get_closest(data["s"], jnp.pi)
+    istop = -1
     r2 = transforms["r"].transform(jnp.atleast_1d(params["r_n"][len_rn:]), dz=0)
     Z2 = jnp.zeros_like(r2)
     X2 = r2 * jnp.cos(data["s"])
@@ -242,9 +252,9 @@ def _x_C0FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
     # convert back to rpz
 
     # now take half the coil
-    X2_half = jnp.where(data["s"] < jnp.pi, coords2[:, 0], 0)
-    Y2_half = jnp.where(data["s"] < jnp.pi, coords2[:, 1], 0)
-    Z2_half = jnp.where(data["s"] < jnp.pi, coords2[:, 2], 0)
+    X2_half = jnp.where(data["s"] < data["s"][istart], coords2[:, 0], 0)
+    Y2_half = jnp.where(data["s"] < data["s"][istart], coords2[:, 1], 0)
+    Z2_half = jnp.where(data["s"] < data["s"][istart], coords2[:, 2], 0)
 
     X = X1_half + X2_half
     Y = Y1_half + Y2_half
@@ -282,6 +292,8 @@ def _x_s_C0FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
 
     len_rn = kwargs.get("len_rn", 1)
 
+    istart = 0
+    istop = get_closest(data["s"], jnp.pi)
     r1 = transforms["r"].transform(params["r_n"][:len_rn], dz=0)
     dr1 = transforms["r"].transform(params["r_n"][:len_rn], dz=1)
     dX1 = dr1 * jnp.cos(data["s"]) - r1 * jnp.sin(data["s"])
@@ -298,11 +310,13 @@ def _x_s_C0FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
     coords1 = jnp.matmul(coords1, A1.T)
     coords1 = jnp.matmul(coords1, params["rotmat"].reshape((3, 3)).T)
 
-    dX1_half = jnp.where(data["s"] >= jnp.pi, coords1[:, 0], 0)
-    dY1_half = jnp.where(data["s"] >= jnp.pi, coords1[:, 1], 0)
-    dZ1_half = jnp.where(data["s"] >= jnp.pi, coords1[:, 2], 0)
+    dX1_half = jnp.where(data["s"] >= data["s"][istop], coords1[:, 0], 0)
+    dY1_half = jnp.where(data["s"] >= data["s"][istop], coords1[:, 1], 0)
+    dZ1_half = jnp.where(data["s"] >= data["s"][istop], coords1[:, 2], 0)
 
     # pi to 2pi
+    istart = get_closest(data["s"], jnp.pi)
+    istop = -1
     r2 = transforms["r"].transform(params["r_n"][len_rn:], dz=0)
     dr2 = transforms["r"].transform(params["r_n"][len_rn:], dz=1)
     dX2 = dr2 * jnp.cos(data["s"]) - r2 * jnp.sin(data["s"])
@@ -319,9 +333,9 @@ def _x_s_C0FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
     coords2 = jnp.matmul(coords2, A2.T)
     coords2 = jnp.matmul(coords2, params["rotmat"].reshape((3, 3)).T)
 
-    dX2_half = jnp.where(data["s"] < jnp.pi, coords2[:, 0], 0)
-    dY2_half = jnp.where(data["s"] < jnp.pi, coords2[:, 1], 0)
-    dZ2_half = jnp.where(data["s"] < jnp.pi, coords2[:, 2], 0)
+    dX2_half = jnp.where(data["s"] < data["s"][istart], coords2[:, 0], 0)
+    dY2_half = jnp.where(data["s"] < data["s"][istart], coords2[:, 1], 0)
+    dZ2_half = jnp.where(data["s"] < data["s"][istart], coords2[:, 2], 0)
 
     dX = dX1_half + dX2_half
     dY = dY1_half + dY2_half
@@ -349,46 +363,76 @@ def _x_s_C0FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
     basis_in="{'rpz', 'xyz'}: Basis for input params vectors, Default 'xyz'",
 )
 def _x_ss_C0FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
+    # convert to xyz for displacement and rotation
     if kwargs.get("basis_in", "xyz").lower() == "rpz":
-        center = rpz2xyz(params["center"])
         normal = rpz2xyz_vec(params["normal"], phi=params["center"][1])
     else:
-        center = params["center"]
         normal = params["normal"]
 
-    params["r_n"]
+    len_rn = kwargs.get("len_rn", 1)
 
-    # enforce that all curves have same resolution
-    r = transforms["r"].transform(params["r_n"], dz=0)
-    Z = jnp.zeros_like(r)
-
-    # 0 to pi
-    X1 = r[0] * jnp.cos(data["s"])
-    X1 = jnp.where(data["s"] > jnp.pi, X1, 0)
-    Y1 = r[0] * jnp.sin(data["s"])
-    Y1 = jnp.where(data["s"] > jnp.pi, Y1, 0)
-
-    # pi to 2pi
-    X2 = r[1] * jnp.cos(data["s"])
-    X2 = jnp.where(data["s"] < jnp.pi, X2, 0)
-    Y2 = r[1] * jnp.sin(data["s"])
-    Y2 = jnp.where(data["s"] < jnp.pi, Y2, 0)
-
-    X = X1 + X2
-    Y = Y1 + Y2
-
-    coords = jnp.array([X, Y, Z]).T
-
+    r1 = transforms["r"].transform(params["r_n"][:len_rn], dz=0)
+    dr1 = transforms["r"].transform(params["r_n"][:len_rn], dz=1)
+    d2r1 = transforms["r"].transform(params["r_n"][:len_rn], dz=2)
+    d2X1 = (
+        d2r1 * jnp.cos(data["s"])
+        - 2 * dr1 * jnp.sin(data["s"])
+        - r1 * jnp.cos(data["s"])
+    )
+    d2Y1 = (
+        d2r1 * jnp.sin(data["s"])
+        + 2 * dr1 * jnp.cos(data["s"])
+        - r1 * jnp.sin(data["s"])
+    )
+    d2Z1 = jnp.zeros_like(d2X1)
+    coords1 = jnp.array([d2X1, d2Y1, d2Z1]).T
     # rotate into place
     Zaxis = jnp.array([0.0, 0.0, 1.0])  # 2D curve in X-Y plane has normal = +Z axis
-    axis = cross(Zaxis, normal)
-    angle = jnp.arccos(dot(Zaxis, safenormalize(normal)))
-    A = rotation_matrix(axis=axis, angle=angle)
-    coords = jnp.matmul(coords, A.T) + center
-    coords = jnp.matmul(coords, params["rotmat"].reshape((3, 3)).T) + params["shift"]
+    axis1 = cross(Zaxis, normal)
+    angle1 = jnp.arccos(dot(Zaxis, safenormalize(normal)))
+    A1 = rotation_matrix(axis=axis1, angle=angle1)
+    coords1 = jnp.matmul(coords1, A1.T)
+    coords1 = jnp.matmul(coords1, params["rotmat"].reshape((3, 3)).T)
+
+    d2X1_half = jnp.where(data["s"] >= jnp.pi, coords1[:, 0], 0)
+    d2Y1_half = jnp.where(data["s"] >= jnp.pi, coords1[:, 1], 0)
+    d2Z1_half = jnp.where(data["s"] >= jnp.pi, coords1[:, 2], 0)
+
+    # pi to 2pi
+    r2 = transforms["r"].transform(params["r_n"][len_rn:], dz=0)
+    dr2 = transforms["r"].transform(params["r_n"][len_rn:], dz=1)
+    d2r2 = transforms["r"].transform(params["r_n"][len_rn:], dz=2)
+    d2X2 = (
+        d2r2 * jnp.cos(data["s"])
+        - 2 * dr2 * jnp.sin(data["s"])
+        - r2 * jnp.cos(data["s"])
+    )
+    d2Y2 = (
+        d2r2 * jnp.sin(data["s"])
+        + 2 * dr2 * jnp.cos(data["s"])
+        - r2 * jnp.sin(data["s"])
+    )
+    d2Z2 = jnp.zeros_like(d2X2)
+    coords2 = jnp.array([d2X2, d2Y2, d2Z2]).T
+    # rotate into place
+    Zaxis = jnp.array([0.0, 0.0, 1.0])  # 2D curve in X-Y plane has normal = +Z axis
+    axis2 = cross(Zaxis, normal)
+    angle2 = jnp.arccos(dot(Zaxis, safenormalize(normal)))
+    A2 = rotation_matrix(axis=axis2, angle=angle2)
+    coords2 = jnp.matmul(coords2, A2.T)
+    coords2 = jnp.matmul(coords2, params["rotmat"].reshape((3, 3)).T)
+    d2X2_half = jnp.where(data["s"] < jnp.pi, coords2[:, 0], 0)
+    d2Y2_half = jnp.where(data["s"] < jnp.pi, coords2[:, 1], 0)
+    d2Z2_half = jnp.where(data["s"] < jnp.pi, coords2[:, 2], 0)
+
+    d2X = d2X1_half + d2X2_half
+    d2Y = d2Y1_half + d2Y2_half
+    d2Z = d2Z1_half + d2Z2_half
     # convert back to rpz
-    coords = xyz2rpz(coords)
-    data["x"] = coords
+    coords = jnp.array([d2X, d2Y, d2Z]).T
+    coords = xyz2rpz_vec(coords, phi=data["phi"])
+    data["x_ss"] = coords
+    return data
 
 
 @register_compute_fun(

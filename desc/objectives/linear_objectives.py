@@ -462,12 +462,13 @@ class C0FourierPlanarCurveSelfConsistency(_Objective):
         self.curves = c0_curve
 
     def build(self, use_jit=False, verbose=1):
-        """Building."""
+        """Build."""
         self._dim_f = 0
         self._len_rn = []
         self._modes = []
         for curve in self.curves.coils:
             self._dim_f += 1
+            # dividing by 2 because this is the whole c0 curve and we only want half
             self._len_rn.append(curve.r_n.size // 2)
             self._modes.append(
                 np.arange(-(curve.r_n.size // 4), curve.r_n.size // 4 + 1).tolist()
@@ -478,13 +479,27 @@ class C0FourierPlanarCurveSelfConsistency(_Objective):
         """Compute error in C0 continuity of the curve."""
         modes = self._modes
         len_rn = self._len_rn
-        f = jnp.array(
+        f1 = jnp.array(
             [
                 sum(params[i]["r_n"][: len_rn[i]][np.array(modes[i]) >= 0])
                 - sum(params[i]["r_n"][len_rn[i] :][np.array(modes[i]) >= 0])
                 for i in range(self._dim_f)
             ]
         )
+        f2 = jnp.array(
+            [
+                sum(
+                    params[i]["r_n"][: len_rn[i]][np.array(modes[i]) >= 0]
+                    * ((-1.0) ** np.array(modes[i])[np.array(modes[i]) >= 0])
+                )
+                - sum(
+                    params[i]["r_n"][len_rn[i] :][np.array(modes[i]) >= 0]
+                    * ((-1.0) ** np.array(modes[i])[np.array(modes[i]) >= 0])
+                )
+                for i in range(self._dim_f)
+            ]
+        )
+        f = jnp.concatenate([f1, f2])
         return f
 
 

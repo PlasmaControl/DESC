@@ -306,11 +306,15 @@ class ParallelConnectionLength(_Objective):
     target_type : {"max", "mean", "all"}
         Whether to target only the largest value of R_eff,
         the average of the values along the field line,
-        or all the values at the same time TODO see if all is possible
-        Defaults to max
+        or all the values at the same time
+        Defaults to all
     name : str, optional
         Name of the objective function.
     """
+
+    _scalar = False
+    _units = "~"
+    _print_value_fmt = "Parallel connection length L_par: "
 
     def __init__(
         self,

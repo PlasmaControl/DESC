@@ -14,8 +14,6 @@ from orthax.legendre import leggauss
 
 from desc.backend import imap, jit, jnp
 
-from ..integrals._bounce_utils import interp_fft_to_argmin
-from ..integrals._interp_utils import polyder_vec
 from ..integrals._quad_utils import (
     automorphism_sin,
     chebgauss2,
@@ -42,11 +40,6 @@ _bounce_doc = {
         assuming the surface is not near rational, more transits will
         approximate surface averages better, with diminishing returns.
         """,
-    "num_quad": """int :
-        Resolution for quadrature of bounce integrals.
-        Default is 32. This parameter is ignored if given ``quad``.
-        """,
-    "num_pitch": "int : Resolution for quadrature over velocity coordinate.",
     "num_well": """int :
         Maximum number of wells to detect for each pitch and field line.
         Giving ``None`` will detect all wells but due to current limitations in
@@ -60,11 +53,15 @@ _bounce_doc = {
         The ``check_points`` or ``plot`` methods in ``desc.integrals.Bounce2D``
         are useful to select a reasonable value.
         """,
+    "num_quad": """int :
+        Resolution for quadrature of bounce integrals.
+        Default is 32. This parameter is ignored if given ``quad``.
+        """,
+    "num_pitch": "int : Resolution for quadrature over velocity coordinate.",
     "batch_size": """int :
         Number of pitch values with which to compute simultaneously.
         If given ``None``, then ``batch_size`` defaults to ``num_pitch``.
         """,
-    "spline": "bool : Whether to use cubic splines to compute bounce points.",
     "fieldline_quad": """tuple[jnp.ndarray] :
         Used to compute the proper length of the field line ∫ dℓ / |B|.
         Quadrature points xₖ and weights wₖ for the
@@ -77,10 +74,11 @@ _bounce_doc = {
         Quadrature points xₖ and weights wₖ for the
         approximate evaluation of the integral ∫₋₁¹ f(x) dx ≈ ∑ₖ wₖ f(xₖ).
         """,
+    "spline": "bool : Whether to use cubic splines to compute bounce points.",
 }
 
 
-def _compute(fun, fun_data, data, theta, grid, num_pitch):
+def _compute(fun, fun_data, data, theta, grid, num_pitch, simp=False):
     """Compute ``fun`` for each ρ value iteratively to reduce memory usage.
 
     Parameters
@@ -97,18 +95,19 @@ def _compute(fun, fun_data, data, theta, grid, num_pitch):
         Shape (num rho, X, Y).
         DESC coordinates θ sourced from the Clebsch coordinates
         ``FourierChebyshevSeries.nodes(X,Y,rho,domain=(0,2*jnp.pi))``.
+    simp : bool
+        Whether to use an open Simpson rule instead of uniform weights.
 
     """
     for name in Bounce2D.required_names:
         fun_data[name] = data[name]
-    fun_data = dict(
-        zip(fun_data.keys(), Bounce2D.reshape_data(grid, *fun_data.values()))
-    )
+    fun_data = {name: Bounce2D.reshape_data(grid, fun_data[name]) for name in fun_data}
     # These already have expected shape with num rho along first axis.
     fun_data["pitch_inv"], fun_data["pitch_inv weight"] = Bounce2D.get_pitch_inv_quad(
         grid.compress(data["min_tz |B|"]),
         grid.compress(data["max_tz |B|"]),
         num_pitch,
+        simp=simp,
     )
     fun_data["iota"] = grid.compress(data["iota"])
     fun_data["theta"] = theta
@@ -202,9 +201,9 @@ def _dI(B, pitch, zeta):
     static_argnames=[
         "Y_B",
         "num_transit",
+        "num_well",
         "num_quad",
         "num_pitch",
-        "num_well",
         "batch_size",
         "spline",
     ],
@@ -254,15 +253,13 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
         data["|grad(rho)|*kappa_g"] = Bounce2D.fourier(data["|grad(rho)|*kappa_g"])
 
         def fun(pitch_inv):
-            points = bounce.points(pitch_inv, num_well=num_well)
-            H = bounce.integrate(
-                _dH,
+            H, I = bounce.integrate(
+                [_dH, _dI],
                 pitch_inv,
-                data["|grad(rho)|*kappa_g"],
-                points=points,
+                [[data["|grad(rho)|*kappa_g"]], []],
+                bounce.points(pitch_inv, num_well=num_well),
                 is_fourier=True,
             )
-            I = bounce.integrate(_dI, pitch_inv, points=points)
             return safediv(H**2, I).sum(axis=-1)
 
         return jnp.sum(
@@ -281,6 +278,7 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
             theta=theta,
             grid=grid,
             num_pitch=num_pitch,
+            simp=True,
         )
         * (B0 * data["R0"] / data["<|grad(rho)|>"]) ** 2
         * jnp.pi
@@ -369,9 +367,9 @@ def _f3(K, B, pitch, zeta):
     static_argnames=[
         "Y_B",
         "num_transit",
+        "num_well",
         "num_quad",
         "num_pitch",
-        "num_well",
         "batch_size",
         "spline",
     ],
@@ -433,24 +431,18 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
 
         def fun(pitch_inv):
             points = bounce.points(pitch_inv, num_well=num_well)
-            v_tau = bounce.integrate(_v_tau, pitch_inv, points=points)
+            v_tau, f1, f2 = bounce.integrate(
+                [_v_tau, _f1, _f2],
+                pitch_inv,
+                [[], [data["|grad(psi)|*kappa_g"]], [data["|B|_r|v,p"]]],
+                points=points,
+                is_fourier=True,
+            )
             gamma_c = jnp.arctan(
                 safediv(
-                    bounce.integrate(
-                        _f1,
-                        pitch_inv,
-                        data["|grad(psi)|*kappa_g"],
-                        points=points,
-                        is_fourier=True,
-                    ),
+                    f1,
                     (
-                        bounce.integrate(
-                            _f2,
-                            pitch_inv,
-                            data["|B|_r|v,p"],
-                            points=points,
-                            is_fourier=True,
-                        )
+                        f2
                         + bounce.integrate(
                             _f3,
                             pitch_inv,
@@ -460,17 +452,8 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
                             is_fourier=True,
                         )
                     )
-                    * interp_fft_to_argmin(
-                        grid.NFP,
-                        bounce._c["T(z)"],
-                        data["|grad(rho)|*|e_alpha|r,p|"],
-                        points,
-                        bounce._c["knots"],
-                        bounce._c["B(z)"],
-                        polyder_vec(bounce._c["B(z)"]),
-                        is_fourier=True,
-                        M=grid.num_theta,
-                        N=grid.num_zeta,
+                    * bounce.interp_to_argmin(
+                        data["|grad(rho)|*|e_alpha|r,p|"], points, is_fourier=True
                     ),
                 )
             )
@@ -506,5 +489,6 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
         theta=theta,
         grid=grid,
         num_pitch=num_pitch,
+        simp=False,
     ) / (2**1.5 * jnp.pi)
     return data

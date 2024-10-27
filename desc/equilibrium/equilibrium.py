@@ -1007,7 +1007,7 @@ class Equilibrium(IOAble, Optimizable):
                     # and won't override grid to one with more toroidal resolution
                     and not (override_grid and coords in {"r", ""}),
                     ResolutionWarning,
-                    msg("radial") + f" got N_grid={grid.N} < {self._N_grid}.",
+                    msg("toroidal") + f" got N_grid={grid.N} < {self._N_grid}.",
                 )
 
         # Now compute dependencies on the proper grids, passing in any available

@@ -9,7 +9,6 @@ from jax import grad
 from matplotlib import pyplot as plt
 from numpy.polynomial.chebyshev import chebinterpolate, chebroots
 from numpy.polynomial.legendre import leggauss
-from quadax import simpson
 from scipy import integrate
 from scipy.interpolate import CubicHermiteSpline
 from scipy.special import ellipe, ellipkm1
@@ -41,11 +40,10 @@ from desc.integrals import (
 from desc.integrals._bounce_utils import (
     _get_extrema,
     bounce_points,
-    interp_fft_to_argmin,
     interp_to_argmin,
     interp_to_argmin_hard,
 )
-from desc.integrals._interp_utils import fourier_pts, polyder_vec
+from desc.integrals._interp_utils import fourier_pts
 from desc.integrals._quad_utils import (
     automorphism_sin,
     bijection_from_disc,
@@ -55,6 +53,7 @@ from desc.integrals._quad_utils import (
     grad_automorphism_sin,
     grad_bijection_from_disc,
     leggauss_lob,
+    simpson2,
     tanh_sinh,
     uniform,
 )
@@ -1066,11 +1065,11 @@ class TestBounceQuadrature:
 
         truth, info = quadax.quadts(func, interval=(-1, 1))
         print("\n" + 50 * "---" + f"\nTrue value: {truth}, neval: {info[1]}")
-        for n in [8, 16, 32, 64, 128]:
+        for n in [9, 17, 33, 65, 129]:
             x, w = uniform(n)
-            fx = func(x)
-            trap = fx.dot(w)
-            simp = simpson(y=fx, x=x)
+            trap = func(x).dot(w)
+            x, w = simpson2(n)
+            simp = func(x).dot(w)
             x, w = get_quadrature(leggauss(n), auto_sin)
             legs = func(x).dot(w)
             x, w = tanh_sinh(n)
@@ -1313,7 +1312,7 @@ class TestBounce:
                 points=(np.array(0, ndmin=2), np.array(2 * np.pi, ndmin=2)),
                 knots=zeta,
                 g=bounce.B,
-                dg_dz=bounce.dB_dz,
+                dg_dz=bounce._dB_dz,
             ),
             h(argmin_g),
             rtol=1e-3,
@@ -1497,7 +1496,10 @@ class TestBounce:
         )
         points = bounce.points(pitch_inv, num_well=1)
         bounce.check_points(points, pitch_inv, plot=False)
-        f = Bounce1D.reshape_data(things["grid"].source_grid, cvdrift, gbdrift)
+        f = [
+            Bounce1D.reshape_data(things["grid"].source_grid, cvdrift),
+            Bounce1D.reshape_data(things["grid"].source_grid, gbdrift),
+        ]
         drift_numerical_num = bounce.integrate(
             integrand=TestBounce.drift_num_integrand,
             pitch_inv=pitch_inv,
@@ -1508,7 +1510,6 @@ class TestBounce:
         drift_numerical_den = bounce.integrate(
             integrand=TestBounce.drift_den_integrand,
             pitch_inv=pitch_inv,
-            weight=np.ones(data["zeta"].size),
             points=points,
             check=True,
         )
@@ -1520,12 +1521,7 @@ class TestBounce:
             drift_numerical, drift_analytic, atol=5e-3, rtol=5e-2
         )
 
-        TestBounce._test_bounce_autodiff(
-            bounce,
-            TestBounce.drift_num_integrand,
-            f=f,
-            weight=np.ones(data["zeta"].size),
-        )
+        TestBounce._test_bounce_autodiff(bounce, TestBounce.drift_num_integrand, f=f)
 
         fig, ax = plt.subplots()
         ax.plot(pitch_inv, drift_analytic)
@@ -1609,7 +1605,7 @@ class TestBounce2D:
     """Test bounce integration that uses 2D pseudo-spectral methods."""
 
     @pytest.mark.unit
-    def test_interp_fft_to_argmin(self):
+    def test_interp_to_argmin(self):
         """Test interpolation of h to argmin of g."""  # noqa: D202
 
         def g(z):
@@ -1629,14 +1625,9 @@ class TestBounce2D:
             spline=True,
         )
         np.testing.assert_allclose(
-            interp_fft_to_argmin(
-                NFP=bounce._NFP,
-                T=bounce._c["T(z)"],
-                h=grid.meshgrid_reshape(h(grid.nodes[:, 2]), "rtz"),
-                points=(np.array(0, ndmin=1), np.array(2 * np.pi, ndmin=1)),
-                knots=bounce._c["knots"],
-                g=bounce._c["B(z)"],
-                dg_dz=polyder_vec(bounce._c["B(z)"]),
+            bounce.interp_to_argmin(
+                grid.meshgrid_reshape(h(grid.nodes[:, 2]), "rtz"),
+                (np.array(0, ndmin=2), np.array(2 * np.pi, ndmin=2)),
             ),
             h(argmin_g),
             rtol=1e-6,
@@ -1666,9 +1657,7 @@ class TestBounce2D:
         # 2. Pick flux surfaces and grid resolution.
         rho = np.linspace(0.1, 1, 6)
         eq = get("HELIOTRON")
-        grid = LinearGrid(
-            rho=rho, theta=eq.M_grid, zeta=eq.N_grid, NFP=eq.NFP, sym=False
-        )
+        grid = LinearGrid(rho=rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False)
         # 3. Compute input data.
         data = eq.compute(
             Bounce2D.required_names + ["min_tz |B|", "max_tz |B|", "g_zz", "1"],
@@ -1775,11 +1764,7 @@ class TestBounce2D:
 
         eq = things["eq"]
         grid = LinearGrid(
-            rho=data["rho"],
-            theta=eq.M_grid,
-            zeta=max(1, eq.N_grid),
-            NFP=eq.NFP,
-            sym=False,
+            rho=data["rho"], M=eq.M_grid, N=max(1, eq.N_grid), NFP=eq.NFP, sym=False
         )
         names = ["periodic(cvdrift)", "periodic(gbdrift)", "secular(gbdrift)/phi"]
         grid_data = eq.compute(names=Bounce2D.required_names + names, grid=grid)
@@ -1799,7 +1784,7 @@ class TestBounce2D:
         )
         points = bounce.points(pitch_inv, num_well=1)
         bounce.check_points(points, pitch_inv, plot=False)
-        f = Bounce2D.reshape_data(grid, *(grid_data[name] for name in names))
+        f = [Bounce2D.reshape_data(grid, grid_data[name]) for name in names]
         drift_numerical_num = bounce.integrate(
             integrand=TestBounce2D.drift_num_integrand,
             pitch_inv=pitch_inv,

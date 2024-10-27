@@ -69,10 +69,6 @@ class EffectiveRipple(_Objective):
         For axisymmetric devices, one poloidal transit is sufficient. Otherwise,
         assuming the surface is not near rational, more transits will
         approximate surface averages better, with diminishing returns.
-    num_quad : int
-        Resolution for quadrature of bounce integrals. Default is 32.
-    num_pitch : int
-        Resolution for quadrature over velocity coordinate. Default is 64.
     num_well : int
         Maximum number of wells to detect for each pitch and field line.
         Giving ``None`` will detect all wells but due to current limitations in
@@ -85,6 +81,10 @@ class EffectiveRipple(_Objective):
         A tighter upper bound than ``num_well=(Aι+B)*num_transit`` is preferable.
         The ``check_points`` or ``plot`` methods in ``desc.integrals.Bounce2D``
         are useful to select a reasonable value.
+    num_quad : int
+        Resolution for quadrature of bounce integrals. Default is 32.
+    num_pitch : int
+        Resolution for quadrature over velocity coordinate. Default is 64.
     batch_size : int
         Number of pitch values with which to compute simultaneously.
         If given ``None``, then ``batch_size`` defaults to ``num_pitch``.
@@ -121,9 +121,9 @@ class EffectiveRipple(_Objective):
         # Y_B is expensive to increase if one does not fix num well per transit.
         Y_B=None,
         num_transit=20,
+        num_well=None,
         num_quad=32,
         num_pitch=50,
-        num_well=None,
         batch_size=None,
     ):
         if target is None and bounds is None:
@@ -288,10 +288,6 @@ class GammaC(_Objective):
         For axisymmetric devices, one poloidal transit is sufficient. Otherwise,
         assuming the surface is not near rational, more transits will
         approximate surface averages better, with diminishing returns.
-    num_quad : int
-        Resolution for quadrature of bounce integrals. Default is 32.
-    num_pitch : int
-        Resolution for quadrature over velocity coordinate. Default is 64.
     num_well : int
         Maximum number of wells to detect for each pitch and field line.
         Giving ``None`` will detect all wells but due to current limitations in
@@ -304,6 +300,10 @@ class GammaC(_Objective):
         A tighter upper bound than ``num_well=(Aι+B)*num_transit`` is preferable.
         The ``check_points`` or ``plot`` methods in ``desc.integrals.Bounce2D``
         are useful to select a reasonable value.
+    num_quad : int
+        Resolution for quadrature of bounce integrals. Default is 32.
+    num_pitch : int
+        Resolution for quadrature over velocity coordinate. Default is 64.
     batch_size : int
         Number of pitch values with which to compute simultaneously.
         If given ``None``, then ``batch_size`` defaults to ``num_pitch``.
@@ -352,9 +352,9 @@ class GammaC(_Objective):
         # Y_B is expensive to increase if one does not fix num well per transit.
         Y_B=None,
         num_transit=20,
+        num_well=None,
         num_quad=32,
         num_pitch=64,
-        num_well=None,
         batch_size=None,
         Nemov=True,
     ):

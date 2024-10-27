@@ -509,14 +509,13 @@ def _subtract_first(c, k):
     but allows dimension to increase.
     """
     c_0 = c[..., 0] - k
-    c = jnp.concatenate(
+    return jnp.concatenate(
         [
             c_0[..., jnp.newaxis],
             jnp.broadcast_to(c[..., 1:], (*c_0.shape, c.shape[-1] - 1)),
         ],
         axis=-1,
     )
-    return c
 
 
 def _subtract_last(c, k):
@@ -526,14 +525,13 @@ def _subtract_last(c, k):
     but allows dimension to increase.
     """
     c_1 = c[..., -1] - k
-    c = jnp.concatenate(
+    return jnp.concatenate(
         [
             jnp.broadcast_to(c[..., :-1], (*c_1.shape, c.shape[-1] - 1)),
             c_1[..., jnp.newaxis],
         ],
         axis=-1,
     )
-    return c
 
 
 def _filter_distinct(r, sentinel, eps):

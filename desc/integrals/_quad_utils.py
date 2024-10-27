@@ -191,7 +191,7 @@ def leggauss_lob(deg, interior_only=False):
 
 
 def uniform(deg):
-    """Uniform quadrature that is Gauss-Chebyshev in transformed variable.
+    """Uniform open quadrature with nodes closer to boundary.
 
     Returns quadrature points xₖ and weights wₖ for the approximate evaluation
     of the integral ∫₋₁¹ f(x) dx ≈ ∑ₖ wₖ f(xₖ).
@@ -214,6 +214,41 @@ def uniform(deg):
     # Given roots yₖ of Chebyshev polynomial, x(yₖ) below is uniform in (-1, 1).
     x = jnp.arange(-deg + 1, deg + 1, 2) / deg
     w = 2 / deg * jnp.ones(deg)
+    return x, w
+
+
+def simpson2(deg):
+    """Open Simpson rule completed by midpoint at boundary.
+
+    Parameters
+    ----------
+    deg : int
+        Number of quadrature points. Rounds up to odd integer.
+
+    Returns
+    -------
+    x, w : tuple[jnp.ndarray]
+        Shape (deg, ).
+        Quadrature points and weights.
+
+    """
+    assert deg > 3
+    deg -= 1 + (deg % 2)
+    x = jnp.arange(-deg + 1, deg + 1, 2) / deg
+    h_simp = (x[-1] - x[0]) / (deg - 1)
+    h_midp = (x[0] + 1) / 2
+
+    x = jnp.hstack([-1 + h_midp, x, 1 - h_midp], dtype=float)
+    w = jnp.hstack(
+        [
+            2 * h_midp,
+            h_simp
+            / 3
+            * jnp.hstack([1, jnp.tile(jnp.array([4, 2]), (deg - 3) // 2), 4, 1]),
+            2 * h_midp,
+        ],
+        dtype=float,
+    )
     return x, w
 
 

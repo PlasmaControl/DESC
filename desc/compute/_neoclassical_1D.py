@@ -7,7 +7,6 @@ from quadax import simpson
 
 from desc.backend import imap, jit, jnp
 
-from ..integrals._bounce_utils import interp_to_argmin
 from ..integrals._quad_utils import (
     automorphism_sin,
     chebgauss2,
@@ -20,10 +19,10 @@ from ._neoclassical import _bounce_doc
 from .data_index import register_compute_fun
 
 _bounce1D_doc = {
+    "num_well": _bounce_doc["num_well"],
     "quad": _bounce_doc["quad"],
     "num_quad": _bounce_doc["num_quad"],
     "num_pitch": _bounce_doc["num_pitch"],
-    "num_well": _bounce_doc["num_well"],
     "batch": "bool : Whether to vectorize part of the computation. Default is true.",
 }
 
@@ -39,7 +38,7 @@ def _alpha_mean(f):
     return f.mean(axis=0)
 
 
-def _compute(fun, fun_data, data, grid, num_pitch, reduce=True):
+def _compute(fun, fun_data, data, grid, num_pitch, simp=False, reduce=True):
     """Compute ``fun`` for each α and ρ value iteratively to reduce memory usage.
 
     Parameters
@@ -52,6 +51,8 @@ def _compute(fun, fun_data, data, grid, num_pitch, reduce=True):
         Reshaped automatically.
     data : dict[str, jnp.ndarray]
         DESC data dict.
+    simp : bool
+        Whether to use an open Simpson rule instead of uniform weights.
     reduce : bool
         Whether to compute mean over α and expand to grid.
         Default is true.
@@ -61,6 +62,7 @@ def _compute(fun, fun_data, data, grid, num_pitch, reduce=True):
         grid.compress(data["min_tz |B|"]),
         grid.compress(data["max_tz |B|"]),
         num_pitch,
+        simp=simp,
     )
 
     def foreach_rho(x):
@@ -71,9 +73,7 @@ def _compute(fun, fun_data, data, grid, num_pitch, reduce=True):
 
     for name in Bounce1D.required_names:
         fun_data[name] = data[name]
-    fun_data = dict(
-        zip(fun_data.keys(), Bounce1D.reshape_data(grid, *fun_data.values()))
-    )
+    fun_data = {name: Bounce1D.reshape_data(grid, fun_data[name]) for name in fun_data}
     out = imap(foreach_rho, fun_data)
     return grid.expand(_alpha_mean(out)) if reduce else out
 
@@ -190,7 +190,7 @@ def _dI(B, pitch):
     source_grid_requirement={"coordinates": "raz", "is_meshgrid": True},
     **_bounce1D_doc,
 )
-@partial(jit, static_argnames=["num_quad", "num_pitch", "num_well", "batch"])
+@partial(jit, static_argnames=["num_well", "num_quad", "num_pitch", "batch"])
 def _epsilon_32_1D(params, transforms, profiles, data, **kwargs):
     """https://doi.org/10.1063/1.873749.
 
@@ -199,8 +199,8 @@ def _epsilon_32_1D(params, transforms, profiles, data, **kwargs):
     Phys. Plasmas 1 December 1999; 6 (12): 4622–4632.
     """
     # noqa: unused dependency
-    num_pitch = kwargs.get("num_pitch", 50)
     num_well = kwargs.get("num_well", None)
+    num_pitch = kwargs.get("num_pitch", 50)
     batch = kwargs.get("batch", True)
     if "quad" in kwargs:
         quad = kwargs["quad"]
@@ -238,6 +238,7 @@ def _epsilon_32_1D(params, transforms, profiles, data, **kwargs):
             data=data,
             grid=grid,
             num_pitch=num_pitch,
+            simp=True,
         )
         / data["fieldline length"]
         * (B0 * data["R0"] / data["<|grad(rho)|>"]) ** 2
@@ -323,7 +324,7 @@ def _f3(K, B, pitch):
     **_bounce1D_doc,
     quad2="Same as ``quad`` for the weak singular integrals in particular.",
 )
-@partial(jit, static_argnames=["num_quad", "num_pitch", "num_well", "batch"])
+@partial(jit, static_argnames=["num_well", "num_quad", "num_pitch", "batch"])
 def _Gamma_c_1D(params, transforms, profiles, data, **kwargs):
     """Energetic ion confinement proxy as defined by Nemov et al.
 
@@ -380,13 +381,7 @@ def _Gamma_c_1D(params, transforms, profiles, data, **kwargs):
                         quad=quad2,
                     )
                 )
-                * interp_to_argmin(
-                    data["|grad(rho)|*|e_alpha|r,p|"],
-                    points,
-                    bounce.zeta,
-                    bounce.B,
-                    bounce.dB_dz,
-                ),
+                * bounce.interp_to_argmin(data["|grad(rho)|*|e_alpha|r,p|"], points),
             )
         )
         return jnp.sum(
@@ -415,6 +410,7 @@ def _Gamma_c_1D(params, transforms, profiles, data, **kwargs):
             data=data,
             grid=grid,
             num_pitch=num_pitch,
+            simp=False,
         )
         / data["fieldline length"]
         / (2**1.5 * jnp.pi)
@@ -446,7 +442,7 @@ def _drift(f, B, pitch):
     source_grid_requirement={"coordinates": "raz", "is_meshgrid": True},
     **_bounce1D_doc,
 )
-@partial(jit, static_argnames=["num_quad", "num_pitch", "num_well", "batch"])
+@partial(jit, static_argnames=["num_well", "num_quad", "num_pitch", "batch"])
 def _Gamma_c_Velasco_1D(params, transforms, profiles, data, **kwargs):
     """Energetic ion confinement proxy as defined by Velasco et al.
 
@@ -456,8 +452,8 @@ def _Gamma_c_Velasco_1D(params, transforms, profiles, data, **kwargs):
     Equation 16.
     """
     # noqa: unused dependency
-    num_pitch = kwargs.get("num_pitch", 64)
     num_well = kwargs.get("num_well", None)
+    num_pitch = kwargs.get("num_pitch", 64)
     batch = kwargs.get("batch", True)
     if "quad" in kwargs:
         quad = kwargs["quad"]
@@ -505,6 +501,7 @@ def _Gamma_c_Velasco_1D(params, transforms, profiles, data, **kwargs):
             data=data,
             grid=grid,
             num_pitch=num_pitch,
+            simp=False,
         )
         / data["fieldline length"]
         / (2**1.5 * jnp.pi)

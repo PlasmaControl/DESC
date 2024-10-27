@@ -5,12 +5,12 @@ New Features
 
 - Add ``use_signed_distance`` flag to ``PlasmaVesselDistance`` which will use a signed distance as the target, which is positive when the plasma is inside of the vessel surface and negative if the plasma is outside of the vessel surface, to allow optimizer to distinguish if the equilbrium surface exits the vessel surface and guard against it by targeting a positive signed distance.
 - Adds function ``solve_regularized_surface_current`` to ``desc.magnetic_fields`` module that implements the REGCOIL algorithm (Landreman, (2017)) for surface current normal field optimization
-    * Can specify the tuple ``current_helicity=(q,p)``  to determine if resulting contours correspond to  helical topology (both ``(p,q)`` not equal to 0), modular (``p`` equal to 0 and ``q`` nonzero) or windowpane/saddle (``p`` and ``q`` both zero)
+    * Can specify the tuple ``current_helicity=(q,p)`` to determine if resulting contours correspond to helical topology (both ``(p,q)`` not equal to 0), modular (``p`` equal to 0 and ``q`` nonzero) or windowpane/saddle (``p`` and ``q`` both zero)
     * if multiple values of the regularization parameter are input, will return a family of surface current fields (as a list) corresponding to the solution at each regularization value
-- Adds method ``To_CoilSet`` to ``FourierCurrentPotentialField`` which implements a coil cutting algorithm to discretize the surface current into coils
+- Adds method ``to_CoilSet`` to ``FourierCurrentPotentialField`` which implements a coil cutting algorithm to discretize the surface current into coils
     * works for both modular and helical coils
 - Adds a new objective ``SurfaceCurrentRegularization`` (which minimizes ``w*|K|``, the regularization term from surface current in the REGCOIL algorithm, with `w` being the objective weight which act as the regularization parameter)
-    * use of both this and the ``QuadraticFlux`` objective allows for REGCOIL solutions to be obtained through  the optimization framework, and combined with other objectives as well.
+    * use of both this and the ``QuadraticFlux`` objective allows for REGCOIL solutions to be obtained through the optimization framework, and combined with other objectives as well.
 - Adds a new tutorial showing how to use``REGCOIL`` features.
 - Add ``VectorPotentialField`` class to allow calculation of magnetic fields from a user-specified
   vector potential function.

@@ -1303,7 +1303,7 @@ class TestObjectiveFunction:
         assert abs(d.min() - (-a_s)) < grid.spacing[0, 1] * a_s
 
     @pytest.mark.unit
-    def test_surface_current_regularizatio(self):
+    def test_surface_current_regularization(self):
         """Test SurfaceCurrentRegularization Calculation."""
 
         def test(field, grid):
@@ -1348,8 +1348,11 @@ class TestObjectiveFunction:
         )
         result3 = test(field2, grid)
         result4 = test(field2, grid=None)
+        field1.G = 2 * field1.G
+        result5 = test(field1, grid)
 
         np.testing.assert_allclose(result1, result3)
+        np.testing.assert_allclose(result1 * 2, result5)
         np.testing.assert_allclose(result2, result4)
 
 

@@ -15,7 +15,7 @@ from desc.derivatives import Derivative
 from desc.geometry import FourierRZToroidalSurface
 from desc.grid import Grid, LinearGrid
 from desc.integrals import compute_B_plasma
-from desc.optimizable import Optimizable, optimizable_parameter
+from desc.optimizable import optimizable_parameter
 from desc.utils import (
     Timer,
     check_posint,
@@ -359,9 +359,7 @@ class CurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
         )
 
 
-class FourierCurrentPotentialField(
-    _MagneticField, FourierRZToroidalSurface, Optimizable
-):
+class FourierCurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
     """Magnetic field due to a surface current potential on a toroidal surface.
 
     Surface current K is assumed given by

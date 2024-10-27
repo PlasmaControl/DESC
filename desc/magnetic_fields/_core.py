@@ -323,7 +323,7 @@ class _MagneticField(IOAble, ABC):
             size ``grid.num_nodes``.
         coords: ndarray
             the locations (in specified basis) at which the Bnormal was calculated,
-            given as an ``(grid.num_nodes , 3)`` shaped array.
+            given as a ``(grid.num_nodes , 3)`` shaped array.
 
         """
         calc_Bplasma = False

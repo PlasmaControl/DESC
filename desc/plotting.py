@@ -925,6 +925,8 @@ def plot_3d(
     showgrid = kwargs.pop("showgrid", True)
     zeroline = kwargs.pop("zeroline", True)
     showscale = kwargs.pop("showscale", True)
+    showticklabels = kwargs.pop("showticklabels", True)
+    showaxislabels = kwargs.pop("showaxislabels", True)
 
     if name != "B*n":
         data, label = _compute(
@@ -972,10 +974,7 @@ def plot_3d(
         data = data.reshape((grid.num_theta, grid.num_rho, grid.num_zeta), order="F")
 
         label = r"$\mathbf{B} \cdot \hat{n} ~(\mathrm{T})$"
-    showgrid = kwargs.pop("showgrid", True)
-    zeroline = kwargs.pop("zeroline", True)
-    showticklabels = kwargs.pop("showticklabels", True)
-    showaxislabels = kwargs.pop("showaxislabels", True)
+
     errorif(
         len(kwargs) != 0,
         ValueError,

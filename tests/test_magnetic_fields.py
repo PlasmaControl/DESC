@@ -1387,11 +1387,7 @@ class TestMagneticFields:
     @pytest.mark.unit
     def test_solve_current_potential_warnings_and_errors(self):
         """Test solve current potential warnings/errors."""
-        field = FourierCurrentPotentialField(
-            I=0,
-            G=1,
-            sym_Phi="sin",
-        )
+        field = FourierCurrentPotentialField(I=0, G=1, sym_Phi="sin")
         eq = get("SOLOVEV")
         with pytest.warns(UserWarning, match="Reducing radial"):
             eq.change_resolution(L=1, M=1, N=1, L_grid=1, M_grid=1, N_grid=1)
@@ -1404,17 +1400,10 @@ class TestMagneticFields:
                 field, eq, regularization_type="not a valid option"
             )
         with pytest.raises(ValueError, match="Expected Fourier"):
-            solve_regularized_surface_current(
-                ToroidalMagneticField(1, 1),
-                eq,
-            )
+            solve_regularized_surface_current(ToroidalMagneticField(1, 1), eq)
         with pytest.raises(AssertionError, match="Expected MagneticField"):
             solve_regularized_surface_current(field, eq, external_field=eq)
-        field = FourierCurrentPotentialField(
-            I=0,
-            G=1,
-            sym_Phi="cos",
-        )
+        field = FourierCurrentPotentialField(I=0, G=1, sym_Phi="cos")
         grid = LinearGrid(M=1, N=1)
         # nested with pytest.warns, if a warning is not detected it is
         # re-emitted and goes through the higher level context,

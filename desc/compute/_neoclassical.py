@@ -99,9 +99,12 @@ def _compute(fun, fun_data, data, theta, grid, num_pitch, simp=False):
         Whether to use an open Simpson rule instead of uniform weights.
 
     """
+    fun_data = {
+        name: Bounce2D.fourier(Bounce2D.reshape_data(grid, fun_data[name]))
+        for name in fun_data
+    }
     for name in Bounce2D.required_names:
-        fun_data[name] = data[name]
-    fun_data = {name: Bounce2D.reshape_data(grid, fun_data[name]) for name in fun_data}
+        fun_data[name] = Bounce2D.reshape_data(grid, data[name])
     # These already have expected shape with num rho along first axis.
     fun_data["pitch_inv"], fun_data["pitch_inv weight"] = Bounce2D.get_pitch_inv_quad(
         grid.compress(data["min_tz |B|"]),
@@ -248,7 +251,6 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
             is_reshaped=True,
             spline=spline,
         )
-        data["|grad(rho)|*kappa_g"] = Bounce2D.fourier(data["|grad(rho)|*kappa_g"])
 
         def fun(pitch_inv):
             H, I = bounce.integrate(
@@ -419,12 +421,6 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
             is_reshaped=True,
             spline=spline,
         )
-        data["|grad(psi)|*kappa_g"] = Bounce2D.fourier(data["|grad(psi)|*kappa_g"])
-        data["|B|_r|v,p"] = Bounce2D.fourier(data["|B|_r|v,p"])
-        data["K"] = Bounce2D.fourier(data["K"])
-        data["|grad(rho)|*|e_alpha|r,p|"] = Bounce2D.fourier(
-            data["|grad(rho)|*|e_alpha|r,p|"]
-        )
 
         def fun(pitch_inv):
             points = bounce.points(pitch_inv, num_well=num_well)
@@ -583,9 +579,6 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
             is_reshaped=True,
             spline=spline,
         )
-        data["cvdrift0"] = Bounce2D.fourier(data["cvdrift0"])
-        data["periodic(gbdrift)"] = Bounce2D.fourier(data["periodic(gbdrift)"])
-        data["secular(gbdrift)/phi"] = Bounce2D.fourier(data["secular(gbdrift)/phi"])
 
         def fun(pitch_inv):
             v_tau, cvdrift0, gbdrift = bounce.integrate(

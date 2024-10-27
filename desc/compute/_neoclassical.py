@@ -216,8 +216,6 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
     Phys. Plasmas 1 December 1999; 6 (12): 4622–4632.
     """
     # noqa: unused dependency
-    grid = transforms["grid"]
-
     theta = kwargs["theta"]
     Y_B = kwargs.get("Y_B", theta.shape[-1] * 2)
     num_transit = kwargs.get("num_transit", 20)
@@ -269,6 +267,7 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
             axis=-1,
         ) / bounce.compute_fieldline_length(fieldline_quad)
 
+    grid = transforms["grid"]
     B0 = data["max_tz |B|"]
     data["effective ripple 3/2"] = (
         _compute(
@@ -387,8 +386,6 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
     so it is assumed to be zero.
     """
     # noqa: unused dependency
-    grid = transforms["grid"]
-
     theta = kwargs["theta"]
     Y_B = kwargs.get("Y_B", theta.shape[-1] * 2)
     num_transit = kwargs.get("num_transit", 20)
@@ -466,6 +463,7 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
             axis=-1,
         ) / bounce.compute_fieldline_length(fieldline_quad)
 
+    grid = transforms["grid"]
     # It is assumed the grid is sufficiently dense to reconstruct |B|,
     # so anything smoother than |B| may be captured accurately as a single
     # Fourier series rather than transforming each component.
@@ -484,6 +482,140 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
                 2 * data["|B|_r|v,p"]
                 - data["|B|"] * data["B^phi_r|v,p"] / data["B^phi"]
             ),
+        },
+        data=data,
+        theta=theta,
+        grid=grid,
+        num_pitch=num_pitch,
+        simp=False,
+    ) / (2**1.5 * jnp.pi)
+    return data
+
+
+def _cvdrift0(cvdrift0, B, pitch, zeta):
+    return safediv(cvdrift0 * (1 - 0.5 * pitch * B), jnp.sqrt(jnp.abs(1 - pitch * B)))
+
+
+def _gbdrift(periodic_gbdrift, secular_gbdrift_over_phi, B, pitch, zeta):
+    return safediv(
+        (periodic_gbdrift + secular_gbdrift_over_phi * zeta) * (1 - 0.5 * pitch * B),
+        jnp.sqrt(jnp.abs(1 - pitch * B)),
+    )
+
+
+@register_compute_fun(
+    name="Gamma_c Velasco",
+    label=(
+        # Γ_c = π/(8√2) ∫dλ 〈 ∑ⱼ [v τ γ_c²]ⱼ 〉
+        "\\Gamma_c = \\frac{\\pi}{8 \\sqrt{2}} "
+        "\\int d\\lambda \\langle \\sum_j (v \\tau \\gamma_c^2)_j \\rangle"
+    ),
+    units="~",
+    units_long="None",
+    description="Energetic ion confinement proxy, Velasco et al.",
+    dim=1,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="r",
+    data=[
+        "min_tz |B|",
+        "max_tz |B|",
+        "cvdrift0",
+        "periodic(gbdrift)",
+        "secular(gbdrift)/phi",
+    ]
+    + Bounce2D.required_names,
+    resolution_requirement="tz",
+    grid_requirement={"can_fft": True},
+    **_bounce_doc,
+)
+@partial(
+    jit,
+    static_argnames=[
+        "Y_B",
+        "num_transit",
+        "num_well",
+        "num_quad",
+        "num_pitch",
+        "batch_size",
+        "spline",
+    ],
+)
+def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
+    """Energetic ion confinement proxy as defined by Velasco et al.
+
+    A model for the fast evaluation of prompt losses of energetic ions in stellarators.
+    J.L. Velasco et al. 2021 Nucl. Fusion 61 116059.
+    https://doi.org/10.1088/1741-4326/ac2994.
+    Equation 16.
+    """
+    # noqa: unused dependency
+    theta = kwargs["theta"]
+    Y_B = kwargs.get("Y_B", theta.shape[-1] * 2)
+    num_transit = kwargs.get("num_transit", 20)
+    num_pitch = kwargs.get("num_pitch", 64)
+    num_well = kwargs.get("num_well", Y_B * num_transit)
+    batch_size = kwargs.get("batch_size", None)
+    spline = kwargs.get("spline", True)
+    if "fieldline_quad" in kwargs:
+        fieldline_quad = kwargs["fieldline_quad"]
+    else:
+        fieldline_quad = leggauss(Y_B // 2)
+    if "quad" in kwargs:
+        quad = kwargs["quad"]
+    else:
+        quad = get_quadrature(
+            leggauss(kwargs.get("num_quad", 32)),
+            (automorphism_sin, grad_automorphism_sin),
+        )
+
+    def Gamma_c(data):
+        """∫ dλ ∑ⱼ [v τ γ_c²]ⱼ."""
+        bounce = Bounce2D(
+            grid,
+            data,
+            data["theta"],
+            Y_B,
+            num_transit,
+            quad=quad,
+            automorphism=None,
+            is_reshaped=True,
+            spline=spline,
+        )
+        data["cvdrift0"] = Bounce2D.fourier(data["cvdrift0"])
+        data["periodic(gbdrift)"] = Bounce2D.fourier(data["periodic(gbdrift)"])
+        data["secular(gbdrift)/phi"] = Bounce2D.fourier(data["secular(gbdrift)/phi"])
+
+        def fun(pitch_inv):
+            v_tau, cvdrift0, gbdrift = bounce.integrate(
+                [_v_tau, _cvdrift0, _gbdrift],
+                pitch_inv,
+                [
+                    [],
+                    [data["cvdrift0"]],
+                    [data["periodic(gbdrift)"], data["secular(gbdrift)/phi"]],
+                ],
+                points=bounce.points(pitch_inv, num_well=num_well),
+                is_fourier=True,
+            )
+            gamma_c = jnp.arctan(safediv(cvdrift0, gbdrift))
+            return jnp.sum(v_tau * gamma_c**2, axis=-1)
+
+        return jnp.sum(
+            _foreach_pitch(fun, data["pitch_inv"], batch_size)
+            * data["pitch_inv weight"]
+            / data["pitch_inv"] ** 2,
+            axis=-1,
+        ) / bounce.compute_fieldline_length(fieldline_quad)
+
+    grid = transforms["grid"]
+    data["Gamma_c Velasco"] = _compute(
+        Gamma_c,
+        fun_data={
+            "cvdrift0": data["cvdrift0"],
+            "periodic(gbdrift)": data["periodic(gbdrift)"],
+            "secular(gbdrift)/phi": data["secular(gbdrift)/phi"],
         },
         data=data,
         theta=theta,

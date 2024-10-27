@@ -64,6 +64,28 @@ def test_Gamma_c():
     return fig
 
 
+@pytest.mark.unit
+@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
+def test_Gamma_c_Velasco():
+    """Test Γ_c Nemov with W7-X."""
+    eq = get("W7-X")
+    rho = np.linspace(1e-12, 1, 10)
+    grid = LinearGrid(rho=rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False)
+    num_transit = 10
+    data = eq.compute(
+        "Gamma_c Velasco",
+        grid=grid,
+        theta=Bounce2D.compute_theta(eq, X=32, Y=64, rho=rho),
+        Y_B=128,
+        num_transit=num_transit,
+        num_well=20 * num_transit,
+    )
+    assert np.isfinite(data["Gamma_c Velasco"]).all()
+    fig, ax = plt.subplots()
+    ax.plot(rho, grid.compress(data["Gamma_c Velasco"]), marker="o")
+    return fig
+
+
 class NeoIO:
     """Class to interface with NEO."""
 

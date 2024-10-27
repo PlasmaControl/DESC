@@ -87,28 +87,6 @@ def test_effective_ripple_1D():
 
 @pytest.mark.unit
 @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
-def test_Gamma_c_Velasco_1D():
-    """Test Γ_c Velasco 1D with W7-X."""
-    Y_B = 100
-    num_transit = 10
-    eq = get("W7-X")
-    rho = np.linspace(0, 1, 10)
-    grid = get_rtz_grid(
-        eq,
-        rho,
-        poloidal=np.array([0]),
-        toroidal=np.linspace(0, num_transit * 2 * np.pi, num_transit * Y_B),
-        coordinates="raz",
-    )
-    data = eq.compute("Gamma_c Velasco", grid=grid, num_well=20 * num_transit)
-    assert np.isfinite(data["Gamma_c Velasco"]).all()
-    fig, ax = plt.subplots()
-    ax.plot(rho, grid.compress(data["Gamma_c Velasco"]), marker="o")
-    return fig
-
-
-@pytest.mark.unit
-@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
 def test_Gamma_c_1D():
     """Test Γ_c Nemov 1D with W7-X."""
     Y_B = 100
@@ -126,4 +104,28 @@ def test_Gamma_c_1D():
     assert np.isfinite(data["deprecated(Gamma_c)"]).all()
     fig, ax = plt.subplots()
     ax.plot(rho, grid.compress(data["deprecated(Gamma_c)"]), marker="o")
+    return fig
+
+
+@pytest.mark.unit
+@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
+def test_Gamma_c_Velasco_1D():
+    """Test Γ_c Velasco 1D with W7-X."""
+    Y_B = 100
+    num_transit = 10
+    eq = get("W7-X")
+    rho = np.linspace(0, 1, 10)
+    grid = get_rtz_grid(
+        eq,
+        rho,
+        poloidal=np.array([0]),
+        toroidal=np.linspace(0, num_transit * 2 * np.pi, num_transit * Y_B),
+        coordinates="raz",
+    )
+    data = eq.compute(
+        "deprecated(Gamma_c Velasco)", grid=grid, num_well=20 * num_transit
+    )
+    assert np.isfinite(data["deprecated(Gamma_c Velasco)"]).all()
+    fig, ax = plt.subplots()
+    ax.plot(rho, grid.compress(data["deprecated(Gamma_c Velasco)"]), marker="o")
     return fig

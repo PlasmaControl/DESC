@@ -423,7 +423,7 @@ def _drift(f, B, pitch):
 
 
 @register_compute_fun(
-    name="Gamma_c Velasco",
+    name="deprecated(Gamma_c Velasco)",
     label=(
         # Γ_c = π/(8√2) ∫dλ 〈 ∑ⱼ [v τ γ_c²]ⱼ 〉
         "\\Gamma_c = \\frac{\\pi}{8 \\sqrt{2}} "
@@ -494,7 +494,7 @@ def _Gamma_c_Velasco_1D(params, transforms, profiles, data, **kwargs):
         )
 
     grid = transforms["grid"].source_grid
-    data["Gamma_c Velasco"] = (
+    data["deprecated(Gamma_c Velasco)"] = (
         _compute(
             Gamma_c,
             fun_data={"cvdrift0": data["cvdrift0"], "gbdrift": data["gbdrift"]},

@@ -137,9 +137,9 @@ class EffectiveRipple(_Objective):
         self._hyperparam = {
             "Y_B": Y_B,
             "num_transit": num_transit,
+            "num_well": setdefault(num_well, Y_B * num_transit),
             "num_quad": num_quad,
             "num_pitch": num_pitch,
-            "num_well": setdefault(num_well, Y_B * num_transit),
             "batch_size": batch_size,
         }
 
@@ -369,16 +369,15 @@ class GammaC(_Objective):
         self._hyperparam = {
             "Y_B": Y_B,
             "num_transit": num_transit,
+            "num_well": setdefault(num_well, Y_B * num_transit),
             "num_quad": num_quad,
             "num_pitch": num_pitch,
-            "num_well": setdefault(num_well, Y_B * num_transit),
             "batch_size": batch_size,
         }
         if Nemov:
             self._key = "Gamma_c"
         else:
             self._key = "Gamma_c Velasco"
-            raise NotImplementedError
 
         super().__init__(
             things=eq,

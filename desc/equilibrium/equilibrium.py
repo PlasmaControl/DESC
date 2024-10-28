@@ -2040,9 +2040,12 @@ class Equilibrium(IOAble, Optimizable):
             inputs = InputReader().parse_inputs(path)[-1]
         if (inputs["bdry_ratio"] is not None) and (inputs["bdry_ratio"] != 1):
             warnings.warn(
-                "boundary_ratio = {} != 1, surface may not be as expected".format(
-                    inputs["bdry_ratio"]
-                )
+                "`bdry_ratio` is intended as an input for the continuation method."
+                "`bdry_ratio`=1 uses the given surface modes as is, any other scalar "
+                "value will scale the non-axisymmetric  modes by that value. The "
+                "final value of `bdry_ratio` in the input file is "
+                f"{inputs['bdry_ratio']}, this means the created Equilibrium won't "
+                "have the given surface but a scaled version instead."
             )
         inputs["surface"][:, 1:3] = inputs["surface"][:, 1:3].astype(int)
         # remove the keys (pertaining to continuation and solver tols)

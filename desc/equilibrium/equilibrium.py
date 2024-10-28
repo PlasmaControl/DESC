@@ -2,6 +2,7 @@
 
 import copy
 import numbers
+import warnings
 from collections.abc import MutableSequence
 
 import numpy as np
@@ -26,6 +27,7 @@ from desc.geometry import (
     ZernikeRZToroidalSection,
 )
 from desc.grid import Grid, LinearGrid, QuadratureGrid, _Grid
+from desc.input_reader import InputReader
 from desc.io import IOAble
 from desc.objectives import (
     ForceBalance,
@@ -2014,6 +2016,54 @@ class Equilibrium(IOAble, Optimizable):
         eq.surface = eq.get_surface_at(rho=1)
 
         return eq
+
+    @classmethod
+    def from_input_file(cls, path, **kwargs):
+        """Create an Equilibrium from information in a DESC or VMEC input file.
+
+        Parameters
+        ----------
+        path : Path-like or str
+            Path to DESC or VMEC input file.
+        **kwargs : dict, optional
+            keyword arguments to pass to the constructor of the
+            Equilibrium being created.
+
+        Returns
+        -------
+        Equilibrium : Equilibrium
+            Surface with given Fourier coefficients.
+
+        """
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            inputs = InputReader().parse_inputs(path)[-1]
+        if (inputs["bdry_ratio"] is not None) and (inputs["bdry_ratio"] != 1):
+            warnings.warn(
+                "boundary_ratio = {} != 1, surface may not be as expected".format(
+                    inputs["bdry_ratio"]
+                )
+            )
+        inputs["surface"][:, 1:3] = inputs["surface"][:, 1:3].astype(int)
+        # remove the keys (pertaining to continuation and solver tols)
+        # that an Equilibrium does not need
+        unused_keys = [
+            "pres_ratio",
+            "bdry_ratio",
+            "pert_order",
+            "ftol",
+            "xtol",
+            "gtol",
+            "maxiter",
+            "objective",
+            "optimizer",
+            "bdry_mode",
+            "output_path",
+            "verbose",
+        ]
+        [inputs.pop(key) for key in unused_keys]
+        inputs.update(kwargs)
+        return cls(**inputs)
 
     def solve(
         self,

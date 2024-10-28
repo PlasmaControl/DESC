@@ -1,11 +1,12 @@
 # This DESC input file was auto generated from the VMEC input file
-# /DESC/tests/inputs/input.DSHAPE
+# .//tests//inputs//input.DSHAPE
+# on 10/27/2024 at 20:00:46.
 # For details on the various options see https://desc-docs.readthedocs.io/en/stable/input.html
 
 # global parameters
 sym = 1
 NFP =   1
-Psi = 1.00000000
+Psi = 1.00000000e+00
 
 # spectral resolution
 L_rad = 11

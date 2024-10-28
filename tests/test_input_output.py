@@ -227,6 +227,73 @@ def test_near_axis_input_files():
 
 
 @pytest.mark.unit
+def test_from_input_file_equilibrium_desc_vmec_DSHAPE():
+    """Test that from_input_file works for DESC input files."""
+    vmec_path = ".//tests//inputs//input.DSHAPE"
+    desc_path = ".//tests//inputs//input.DSHAPE_desc"
+    kwargs = {"spectral_indexing": "fringe"}
+    with pytest.warns(UserWarning, match="Left handed"):
+        eq = Equilibrium.from_input_file(desc_path, **kwargs)
+    with pytest.warns(UserWarning, match="Left handed"):
+        eq_VMEC = Equilibrium.from_input_file(vmec_path, **kwargs)
+
+    # make sure the loaded eqs are equivalent
+    np.testing.assert_allclose(eq.R_lmn, eq_VMEC.R_lmn)
+    np.testing.assert_allclose(eq.Z_lmn, eq_VMEC.Z_lmn)
+    np.testing.assert_allclose(eq.L_lmn, eq_VMEC.L_lmn)
+    np.testing.assert_allclose(eq.Rb_lmn, eq_VMEC.Rb_lmn)
+    np.testing.assert_allclose(eq.Zb_lmn, eq_VMEC.Zb_lmn)
+    np.testing.assert_allclose(eq.Ra_n, eq_VMEC.Ra_n)
+    np.testing.assert_allclose(eq.Za_n, eq_VMEC.Za_n)
+    np.testing.assert_allclose(eq.Psi, eq_VMEC.Psi)
+    assert eq.pressure.equiv(eq_VMEC.pressure)
+    assert eq.iota.equiv(eq_VMEC.iota)
+    assert eq.current is None
+    assert eq_VMEC.current is None
+    assert eq.sym == eq_VMEC.sym
+
+    # check against the DSHAPE bdry and profiles
+    eq_example = desc.examples.get("DSHAPE")
+    eq.change_resolution(L=eq_example.L, M=eq_example.M)
+    np.testing.assert_allclose(eq.Rb_lmn, eq_example.Rb_lmn)
+    np.testing.assert_allclose(eq.Zb_lmn, eq_example.Zb_lmn)
+    np.testing.assert_allclose(eq.Psi, eq_example.Psi)
+    np.testing.assert_allclose(eq.p_l, eq_example.p_l)
+    # our example's iota is negative of this input files's
+    np.testing.assert_allclose(eq.i_l, -eq_example.i_l)
+    assert eq.sym == eq_example.sym
+
+
+@pytest.mark.unit
+def test_from_input_file_equilibrium_desc_vmec():
+    """Test that from_input_file gives same eq for DESC and VMEC input files."""
+    vmec_path = ".//tests//inputs//input.QSC_r2_5.5_vmec"
+    desc_path = ".//tests//inputs//input.QSC_r2_5.5_desc"
+    kwargs = {"L": 10, "M": 10, "N": 14}
+    eq = Equilibrium.from_input_file(desc_path, **kwargs)
+    # change surface resolution to match the one from after thresholding of VMEC's bdry
+    eq.surface.change_resolution(M=10, N=14)
+    eq_VMEC = Equilibrium.from_input_file(vmec_path, **kwargs)
+
+    np.testing.assert_allclose(eq.R_lmn, eq_VMEC.R_lmn)
+    np.testing.assert_allclose(eq.Z_lmn, eq_VMEC.Z_lmn)
+    np.testing.assert_allclose(eq.L_lmn, eq_VMEC.L_lmn)
+    np.testing.assert_allclose(eq.Rb_lmn, eq_VMEC.Rb_lmn)
+    np.testing.assert_allclose(eq.Zb_lmn, eq_VMEC.Zb_lmn)
+    np.testing.assert_allclose(eq.Ra_n, eq_VMEC.Ra_n)
+    np.testing.assert_allclose(eq.Za_n, eq_VMEC.Za_n)
+    np.testing.assert_allclose(eq.Psi, eq_VMEC.Psi)
+    assert eq.pressure.equiv(eq_VMEC.pressure)
+    assert eq.current.equiv(eq_VMEC.current)
+    assert eq.iota is None
+    assert eq_VMEC.iota is None
+    assert eq.sym == eq_VMEC.sym
+
+    if os.path.exists(".//tests//inputs//input.QSC_r2_5.5_vmec_desc"):
+        os.remove(".//tests//inputs//input.QSC_r2_5.5_vmec_desc")
+
+
+@pytest.mark.unit
 def test_vmec_input_surface_threshold():
     """Test ."""
     path = ".//tests//inputs//input.QSC_r2_5.5_vmec"

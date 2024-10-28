@@ -343,7 +343,7 @@ def _sqrtg_B(params, transforms, profiles, data, **kwargs):
     N_booz="int: Maximum toroidal mode number for Boozer harmonics. Default 2*eq.N",
 )
 def _B_mn(params, transforms, profiles, data, **kwargs):
-    norm = 2 ** (3 - jnp.sum((transforms["B"].basis.modes == 0), axis=1))
+    norm = 2 ** (3 - jnp.sum(transforms["B"].basis.modes == 0, axis=1))
     grid = transforms["grid"]
 
     def fun(rho, theta_B, zeta_B, sqrtg_B, B):

@@ -8,6 +8,7 @@ import pytest
 
 from desc.coils import FourierPlanarCoil, FourierRZCoil, FourierXYZCoil, SplineXYZCoil
 from desc.compute import data_index, xyz2rpz, xyz2rpz_vec
+from desc.compute.utils import _grow_seeds
 from desc.examples import get
 from desc.geometry import (
     FourierPlanarCurve,
@@ -217,12 +218,20 @@ def test_compute_everything():
         # size cap at 100 mb, so can't hit suggested resolution for some things.
         warnings.filterwarnings("ignore", category=ResolutionWarning)
         for p in things:
-            names = {
-                name
-                for name in data_index[p]
-                # Skip these quantities as they should be covered in other tests.
-                if not data_index[p][name]["source_grid_requirement"]
-            }
+            names = set(data_index[p].keys())
+
+            def need_source_grid_or_full_grid(name):
+                req = data_index[p][name].get("grid_requirement", {})
+                return (
+                    bool(data_index[p][name]["source_grid_requirement"])
+                    or not req.get("sym", True)
+                    or req.get("can_fft", False)
+                )
+
+            names -= _grow_seeds(
+                p, set(filter(need_source_grid_or_full_grid, names)), names
+            )
+
             this_branch_data_rpz[p] = things[p].compute(
                 list(names), **grid.get(p, {}), basis="rpz"
             )

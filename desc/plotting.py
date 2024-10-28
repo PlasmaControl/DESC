@@ -12,7 +12,6 @@ import plotly.graph_objects as go
 from matplotlib import cycler, rcParams
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 from pylatexenc.latex2text import LatexNodes2Text
-from termcolor import colored
 
 from desc.backend import sign
 from desc.basis import fourier, zernike_radial_poly
@@ -190,9 +189,7 @@ def _format_ax(ax, is3d=False, rows=1, cols=1, figsize=None, equal=False):
         errorif(
             not isinstance(ax.flatten()[0], matplotlib.axes.Axes),
             TypeError,
-            colored(
-                "ax argument must be None or an axis instance or array of axes", "red"
-            ),
+            "ax argument must be None or an axis instance or array of axes",
         )
         return plt.gcf(), ax
 
@@ -524,7 +521,7 @@ def plot_1d(eq, name, grid=None, log=False, ax=None, return_data=False, **kwargs
         errorif(
             surface_label is None or axis is None,
             NotImplementedError,
-            msg=colored("Grid must be 1D", "red"),
+            msg="Grid must be 1D",
         )
         data = grid.compress(data, surface_label=surface_label)
         nodes = grid.compress(grid.nodes[:, axis], surface_label=surface_label)
@@ -630,7 +627,7 @@ def plot_2d(
         grid_kwargs = {"M": 33, "N": 33, "NFP": eq.NFP, "axis": False}
         grid = _get_grid(**grid_kwargs)
     plot_axes = _get_plot_axes(grid)
-    errorif(len(plot_axes) != 2, msg=colored("Grid must be 2D", "red"))
+    errorif(len(plot_axes) != 2, msg="Grid must be 2D")
     component = kwargs.pop("component", None)
     if name != "B*n":
         data, label = _compute(

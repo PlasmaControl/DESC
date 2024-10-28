@@ -462,9 +462,7 @@ class TestGetSurfaces:
         rho = 0.5
         surf = eq.get_surface_at(rho=rho)
         assert surf.rho == rho
-        np.testing.assert_allclose(
-            surf.compute("S")["S"] * rho, 4 * np.pi**2 * R0 * rho
-        )
+        np.testing.assert_allclose(surf.compute("S")["S"], 4 * np.pi**2 * R0 * rho)
 
     @pytest.mark.unit
     @pytest.mark.xfail(reason="GitHub issue 1127.")

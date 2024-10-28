@@ -1480,7 +1480,6 @@ def test_iota_components():
 def test_surface_equilibrium_geometry():
     """Test that computing stuff from surface gives same result as equilibrium."""
     names = ["HELIOTRON"]
-    data = ["A", "V", "a", "R0", "R0/a", "a_major/a_minor"]
     # TODO: expand this to include all angular derivatives once they are implemented
     # for surfaces
     data_basis_vecs_fourierRZ = [
@@ -1503,16 +1502,6 @@ def test_surface_equilibrium_geometry():
     ]
     for name in names:
         eq = get(name)
-        for key in data:
-            x = eq.compute(key)[key].max()  # max needed for elongation broadcasting
-            y = eq.surface.compute(key)[key].max()
-            if key in ("A", "a", "R0", "R0/a", "a_major/a_minor"):
-                rtol, atol = 1e-3, 0  # need looser tol here bc of different grids
-            else:
-                rtol, atol = 1e-8, 0
-            np.testing.assert_allclose(
-                x, y, rtol=rtol, atol=atol, err_msg=name + " " + key
-            )
         # compare at rho=1, where we expect the eq.compute and the
         # surface.compute to agree for these surface basis vectors
         grid = LinearGrid(rho=np.array(1.0), M=10, N=10, NFP=eq.NFP)

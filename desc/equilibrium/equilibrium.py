@@ -2032,7 +2032,7 @@ class Equilibrium(IOAble, Optimizable):
         Returns
         -------
         Equilibrium : Equilibrium
-            Surface with given Fourier coefficients.
+            Equilibrium generated from the given input file.
 
         """
         with warnings.catch_warnings():

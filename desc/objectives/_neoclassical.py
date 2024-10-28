@@ -544,6 +544,7 @@ class Gammad(_Objective):
     Phys. Plasmas 1 May 2008; 15 (5): 052501.
     https://doi.org/10.1063/1.2912456.
     Equation 61.
+    #UPDATE EQ NUMBER
 
     A model for the fast evaluation of prompt losses of energetic ions in stellarators.
     J.L. Velasco et al. 2021 Nucl. Fusion 61 116059.
@@ -604,17 +605,6 @@ class Gammad(_Objective):
         Default is to detect all wells, but due to limitations in JAX this option
         may consume more memory. Specifying a number that tightly upper bounds
         the number of wells will increase performance.
-    Nemov : bool
-        Whether to use the Γ_d as defined by Nemov et al. or Velasco et al.
-        Default is Nemov. Set to ``False`` to use Velascos's.
-
-        Note that Nemov's Γ_d converges to a finite nonzero value in the
-        infinity limit of the number of toroidal transits.
-        Velasco's expression is defined to be zero on irrational surfaces;
-        and therefore, the numerical computation will converge to zero as the
-        number of toroidal transits increases. This is mentioned to remind
-        users that an optimization using Velasco's metric should be evaluated by
-        measuring decrease in Γ_d at a fixed number of toroidal transits.
     name : str, optional
         Name of the objective function.
     jac_chunk_size : int , optional
@@ -678,11 +668,9 @@ class Gammad(_Objective):
             "num_well": num_well,
         }
         self._keys_1dr = ["iota", "iota_r", "min_tz |B|", "max_tz |B|"]
-        if Nemov:
-            self._key = "Gamma_d"
-            self._constants["quad2"] = chebgauss2(num_quad)
-        else:
-            self._key = "Gamma_d"
+
+        self._key = "Gamma_d Velasco"
+        self._constants["quad2"] = chebgauss2(num_quad)
 
         super().__init__(
             things=eq,

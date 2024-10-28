@@ -181,13 +181,13 @@ def test_elongation():
     )
     assert surf3.sym
     grid = LinearGrid(rho=1, M=3 * surf3.M, N=surf3.N, NFP=surf3.NFP, sym=False)
-    data1 = surf1.compute(["a_major/a_minor"], grid=grid)
-    data2 = surf2.compute(["a_major/a_minor"], grid=grid)
-    data3 = surf3.compute(["a_major/a_minor"], grid=grid)
+    data1 = surf1.compute(["a_major/a_minor LCFS"], grid=grid)
+    data2 = surf2.compute(["a_major/a_minor LCFS"], grid=grid)
+    data3 = surf3.compute(["a_major/a_minor LCFS"], grid=grid)
     # elongation approximation is less accurate as elongation increases
-    np.testing.assert_allclose(1.0, data1["a_major/a_minor"])
-    np.testing.assert_allclose(2.0, data2["a_major/a_minor"], rtol=1e-4)
-    np.testing.assert_allclose(3.0, data3["a_major/a_minor"], rtol=1e-3)
+    np.testing.assert_allclose(1.0, data1["a_major/a_minor LCFS"])
+    np.testing.assert_allclose(2.0, data2["a_major/a_minor LCFS"], rtol=1e-4)
+    np.testing.assert_allclose(3.0, data3["a_major/a_minor LCFS"], rtol=1e-3)
 
 
 @pytest.mark.slow

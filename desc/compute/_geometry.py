@@ -152,6 +152,10 @@ def _V_rrr_of_r(params, transforms, profiles, data, **kwargs):
 
 
 def _compute_A_of_z(grid, data, rho):
+    # TODO: For nonzero omega we need to integrate over theta at constant phi.
+    #  Add source_grid_requirement={"coordinates": "rtp", "is_meshgrid": True}
+    # TODO: In compute_utils recognize when omega = 0 and ignore all source
+    #  grid requirements if the given grid satisfies them with phi replaced by zeta.
     if isinstance(grid, QuadratureGrid):
         return surface_integrals(
             grid,
@@ -199,10 +203,6 @@ def _compute_A_of_z(grid, data, rho):
     parameterization=["desc.equilibrium.equilibrium.Equilibrium"],
     resolution_requirement="t",
     grid_requirement={"sym": False},
-    # FIXME: For nonzero omega we need to integrate over theta at constant phi.
-    #  Add source_grid_requirement={"coordinates": "rtp", "is_meshgrid": True}
-    # TODO: Recognize when omega = 0 and ignore all source grid requirements
-    #  if the given grid satisfies them with phi replaced by zeta.
 )
 def _A_of_z(params, transforms, profiles, data, **kwargs):
     # noqa: unused dependency
@@ -234,10 +234,6 @@ def _A_of_z(params, transforms, profiles, data, **kwargs):
     ],
     resolution_requirement="t",
     grid_requirement={"sym": False},
-    # FIXME: For nonzero omega we need to integrate over theta at constant phi.
-    #  Add source_grid_requirement={"coordinates": "rtp", "is_meshgrid": True}
-    # TODO: Recognize when omega = 0 and ignore all source grid requirements
-    #  if the given grid satisfies them with phi replaced by zeta.
 )
 def _A_of_z_surface(params, transforms, profiles, data, **kwargs):
     # noqa: unused dependency
@@ -265,10 +261,6 @@ def _A_of_z_surface(params, transforms, profiles, data, **kwargs):
     data=["Z", "n_rho", "e_theta|r,p", "rho", "|e_rho x e_theta|"],
     parameterization=["desc.equilibrium.equilibrium.Equilibrium"],
     resolution_requirement="tz",
-    # FIXME: For nonzero omega we need to integrate over theta at constant phi.
-    #  Add source_grid_requirement={"coordinates": "rtp", "is_meshgrid": True}
-    # TODO: Recognize when omega = 0 and ignore all source grid requirements
-    #  if the given grid satisfies them with phi replaced by zeta.
 )
 def _A(params, transforms, profiles, data, **kwargs):
     # noqa: unused dependency
@@ -297,10 +289,6 @@ def _A(params, transforms, profiles, data, **kwargs):
     data=["Z", "n_rho", "e_theta|r,p", "rho", "|e_rho x e_theta|"],
     parameterization=["desc.geometry.core.Surface"],
     resolution_requirement="tz",
-    # FIXME: For nonzero omega we need to integrate over theta at constant phi.
-    #  Add source_grid_requirement={"coordinates": "rtp", "is_meshgrid": True}
-    # TODO: Recognize when omega = 0 and ignore all source grid requirements
-    #  if the given grid satisfies them with phi replaced by zeta.
 )
 def _A_surface(params, transforms, profiles, data, **kwargs):
     # noqa: unused dependency
@@ -341,9 +329,7 @@ def _A_of_r(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="",
     data=["S(r)", "rho"],
-    parameterization=[
-        "desc.equilibrium.equilibrium.Equilibrium",
-    ],
+    parameterization=["desc.equilibrium.equilibrium.Equilibrium"],
 )
 def _S(params, transforms, profiles, data, **kwargs):
     # To approximate surface are at ρ ~ 1, we scale by ρ⁻¹, assuming the integrand
@@ -364,9 +350,7 @@ def _S(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="",
     data=["S(r)"],
-    parameterization=[
-        "desc.geometry.surface.FourierRZToroidalSurface",
-    ],
+    parameterization=["desc.geometry.surface.FourierRZToroidalSurface"],
 )
 def _S_fourier_rz_surface(params, transforms, profiles, data, **kwargs):
     data["S"] = jnp.max(data["S(r)"])
@@ -521,7 +505,7 @@ def _R0_over_a(params, transforms, profiles, data, **kwargs):
     parameterization=["desc.equilibrium.equilibrium.Equilibrium"],
     resolution_requirement="t",
     grid_requirement={"sym": False},
-    # FIXME: For nonzero omega we need to integrate over theta at constant phi.
+    # TODO: For nonzero omega we need to integrate over theta at constant phi.
     #  Add source_grid_requirement={"coordinates": "rtp", "is_meshgrid": True}
     # TODO: Recognize when omega = 0 and ignore all source grid requirements
     #  if the given grid satisfies them with phi replaced by zeta.
@@ -558,10 +542,6 @@ def _perimeter_of_z(params, transforms, profiles, data, **kwargs):
     parameterization=["desc.geometry.core.Surface"],
     resolution_requirement="t",
     grid_requirement={"sym": False},
-    # FIXME: For nonzero omega we need to integrate over theta at constant phi.
-    #  Add source_grid_requirement={"coordinates": "rtp", "is_meshgrid": True}
-    # TODO: Recognize when omega = 0 and ignore all source grid requirements
-    #  if the given grid satisfies them with phi replaced by zeta.
 )
 def _perimeter_of_z_surface(params, transforms, profiles, data, **kwargs):
     data["perimeter(z)"] = line_integrals(
@@ -574,26 +554,7 @@ def _perimeter_of_z_surface(params, transforms, profiles, data, **kwargs):
     return data
 
 
-@register_compute_fun(
-    name="a_major/a_minor",
-    label="a_{\\mathrm{major}} / a_{\\mathrm{minor}}",
-    units="~",
-    units_long="None",
-    description="Elongation at a toroidal cross-section",
-    dim=1,
-    params=[],
-    transforms={"grid": []},
-    profiles=[],
-    coordinates="z",
-    data=["A(z)", "perimeter(z)"],
-    parameterization=[
-        "desc.equilibrium.equilibrium.Equilibrium",
-        "desc.geometry.core.Surface",
-    ],
-)
-def _a_major_over_a_minor(params, transforms, profiles, data, **kwargs):
-    A = transforms["grid"].compress(data["A(z)"], surface_label="zeta")
-    P = transforms["grid"].compress(data["perimeter(z)"], surface_label="zeta")
+def _ramanujan(A, P):
     # derived from Ramanujan approximation for the perimeter of an ellipse
     a = (  # semi-major radius
         jnp.sqrt(3)
@@ -610,7 +571,81 @@ def _a_major_over_a_minor(params, transforms, profiles, data, **kwargs):
         + 3 * P
     ) / (12 * jnp.pi)
     b = A / (jnp.pi * a)  # semi-minor radius
-    data["a_major/a_minor"] = transforms["grid"].expand(a / b, surface_label="zeta")
+    return a / b
+
+
+@register_compute_fun(
+    name="a_major/a_minor",
+    label="a_{\\mathrm{major}} / a_{\\mathrm{minor}}",
+    units="~",
+    units_long="None",
+    description="Elongation at a toroidal cross-section",
+    dim=1,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="z",
+    data=["A(z)", "perimeter(z)"],
+    parameterization=["desc.equilibrium.equilibrium.Equilibrium"],
+    aliases=["a_major/a_minor LCFS"],
+)
+def _a_major_over_a_minor(params, transforms, profiles, data, **kwargs):
+    A = transforms["grid"].compress(data["A(z)"], surface_label="zeta")
+    P = transforms["grid"].compress(data["perimeter(z)"], surface_label="zeta")
+    data["a_major/a_minor"] = transforms["grid"].expand(
+        _ramanujan(A, P), surface_label="zeta"
+    )
+    return data
+
+
+@register_compute_fun(
+    name="a_major/a_minor",
+    label="a_{\\mathrm{major}} / a_{\\mathrm{minor}}",
+    units="~",
+    units_long="None",
+    description="Elongation at a toroidal cross-section",
+    dim=1,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="z",
+    data=["A(z)", "perimeter(z)"],
+    parameterization=["desc.geometry.core.Surface"],
+)
+def _a_major_over_a_minor_surface(params, transforms, profiles, data, **kwargs):
+    A = transforms["grid"].compress(data["A(z)"], surface_label="zeta")
+    P = transforms["grid"].compress(data["perimeter(z)"], surface_label="zeta")
+    data["a_major/a_minor"] = transforms["grid"].expand(
+        _ramanujan(A, P), surface_label="zeta"
+    )
+    return data
+
+
+@register_compute_fun(
+    name="a_major/a_minor LCFS",
+    label="a_{\\mathrm{major}} / a_{\\mathrm{minor}}",
+    units="~",
+    units_long="None",
+    description="Elongation at a toroidal cross-section, "
+    "extrapolated to last closed flux surface.",
+    dim=1,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="z",
+    data=["A(z)", "perimeter(z)", "rho"],
+    parameterization=["desc.geometry.core.Surface"],
+)
+def _a_major_over_a_minor_surface_lcfs(params, transforms, profiles, data, **kwargs):
+    max_rho = jnp.max(data["rho"])
+    A = transforms["grid"].compress(data["A(z)"], surface_label="zeta") / max_rho**2
+    P = (
+        transforms["grid"].compress(data["perimeter(z)"], surface_label="zeta")
+        / max_rho
+    )
+    data["a_major/a_minor LCFS"] = transforms["grid"].expand(
+        _ramanujan(A, P), surface_label="zeta"
+    )
     return data
 
 

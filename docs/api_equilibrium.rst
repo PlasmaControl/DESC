@@ -16,6 +16,17 @@ An ``EquilibriaFamily`` is a ``list`` like object for storing multiple equilibri
     desc.equilibrium.Equilibrium
     desc.equilibrium.EquilibriaFamily
 
+The ``Equilibrium`` class may be instantiated in a couple of ways instead of providing inputs to its constructor.
+- from an existing DESC or VMEC input file with its ``from_input_file`` method
+- from a ``pyQSC`` ``Qsc``  or ``pyQIC`` ``Qic`` near-axis equilibrium with the ``Equilibrium``'s ``from_near_axis`` method
+
+.. autosummary::
+    :toctree: _api/equilibrium
+    :recursive:
+
+    desc.equilibrium.Equilibrium.from_input_file
+    desc.equilibrium.Equilibrium.from_near_axis
+
 
 Geometry
 ********
@@ -34,6 +45,15 @@ the magnetic axis, cross section, and various space curves.
     desc.geometry.FourierPlanarCurve
     desc.geometry.SplineXYZCurve
     desc.geometry.ZernikeRZToroidalSection
+
+The ``FourierRZToroidalSurface`` and the ``FourierRZCurve`` classes may be instantiated from an existing DESC or VMEC input file with their ``from_input_file`` method.
+
+.. autosummary::
+   :toctree: _api/geometry/
+   :recursive:
+
+    desc.geometry.FourierRZToroidalSurface.from_input_file
+    desc.geometry.FourierRZCurve.from_input_file
 
 
 Profiles

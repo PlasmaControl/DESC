@@ -51,7 +51,8 @@ class CurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
     potential : callable
         function to compute the current potential. Should have a signature of
         the form potential(theta,zeta,**params) -> ndarray.
-        theta,zeta are poloidal and toroidal angles on the surface
+        theta,zeta are poloidal and toroidal angles on the surface.
+        Assumed to have units of Amperes.
     potential_dtheta: callable
         function to compute the theta derivative of the current potential
     potential_dzeta: callable
@@ -382,15 +383,16 @@ class FourierCurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
     ----------
     Phi_mn : ndarray
         Fourier coefficients of the double FourierSeries part of the current potential.
+        Has units of Amperes.
     modes_Phi : array-like, shape(k,2)
         Poloidal and Toroidal mode numbers corresponding to passed-in Phi_mn
         coefficients.
     I : float
         Net current linking the plasma and the surface toroidally
-        Denoted I in the algorithm
+        Denoted I in the algorithm, has units of Amperes.
     G : float
         Net current linking the plasma and the surface poloidally
-        Denoted G in the algorithm
+        Denoted G in the algorithm, has units of Amperes.
         NOTE: a negative G will tend to produce a positive toroidal magnetic field
         B in DESC, as in DESC the poloidal angle is taken to be positive
         and increasing when going in the clockwise direction, which with the
@@ -1081,6 +1083,10 @@ def solve_regularized_surface_current(  # noqa: C901 fxn too complex
     complex and large surface currents) and larger `lambda_regularization`
     corresponds to more regularization (consequently, higher Bn error but simpler
     and smaller surface currents).
+
+    If the ``simple`` regularization is used, the problem instead becomes::
+
+        min_Φₛᵥ  (B . n)^2 + λ  ||Φ_mn||^2
 
     Parameters
     ----------

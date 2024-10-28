@@ -1734,8 +1734,8 @@ class SurfaceCurrentRegularization(_Objective):
             M_Phi = surface_current_field._M_Phi
             N_Phi = surface_current_field._N_Phi
         else:
-            M_Phi = surface_current_field.M + 1
-            N_Phi = surface_current_field.N + 1
+            M_Phi = surface_current_field.M
+            N_Phi = surface_current_field.N
 
         if self._source_grid is None:
             source_grid = LinearGrid(

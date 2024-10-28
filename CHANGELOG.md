@@ -27,7 +27,7 @@ Bug Fixes
 
 - Fix error that can occur when `get_NAE_constraints` is called for only fixing the axis
 - Bug fix for `most_rational` with negative arguments
-- Fix bug. in `FixOmniBMax`
+- Fix bug in `FixOmniBMax`
 
 Deprecations
 

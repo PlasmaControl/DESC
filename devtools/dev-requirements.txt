@@ -1,9 +1,6 @@
 # standard install requirements
 -r ../requirements.txt
 
-# to use jupyter notebooks
-ipykernel
-
 # building the docs
 nbsphinx == 0.8.12
 sphinx > 3.0.0

@@ -596,14 +596,22 @@ def _Gamma_d_Velasco(params, transforms, profiles, data, **kwargs):
         """∫ dλ ∑ⱼ [v τ γ_c²]ⱼ."""
         bounce = Bounce1D(grid, data, quad, automorphism=None, is_reshaped=True)
         points = bounce.points(data["pitch_inv"], num_well=num_well)
-        v_tau = bounce.integrate(d_v_tau, points, data["pitch_inv"], batch=batch)
+        v_tau = bounce.integrate(d_v_tau, data["pitch_inv"], points=points, batch=batch)
         gamma_d = jnp.arctan(
             safediv(
                 bounce.integrate(
-                    drift, points, data["pitch_inv"], data["cvdrift0"], batch=batch
+                    drift,
+                    data["pitch_inv"],
+                    data["cvdrift0"],
+                    points=points,
+                    batch=batch,
                 ),
                 bounce.integrate(
-                    drift, points, data["pitch_inv"], data["gbdrift"], batch=batch
+                    drift,
+                    data["pitch_inv"],
+                    data["gbdrift"],
+                    points=points,
+                    batch=batch,
                 ),
             )
         )
@@ -638,6 +646,10 @@ def _Gamma_d_Velasco(params, transforms, profiles, data, **kwargs):
         # Integrating in lambda
         data["Gamma_d Velasco"] = (4 / jnp.pi**2) * (
             gamma_d_1 * _data["pitch_inv"] ** (-2) * _data["pitch_inv weight"]
-        ).sum(axis=-1)
+        ).sum(axis=-1).squeeze()
+        # in case is one 1 element and squeeze removed its only dimension
+        data["Gamma_d Velasco"] = jnp.atleast_1d(data["Gamma_d Velasco"])
+        # must expand back from a 1D array over rho to the original grid nodes
+        data["Gamma_d Velasco"] = grid.expand(data["Gamma_d Velasco"])
 
     return data

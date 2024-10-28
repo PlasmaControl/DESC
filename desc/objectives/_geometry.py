@@ -618,6 +618,18 @@ class PlasmaVesselDistance(_Objective):
         )
 
         # TODO: How to use with generalized toroidal angle?
+        # first check that the number of zeta nodes are the same, which
+        # is a prerequisite to the zeta nodes themselves being the same
+        errorif(
+            self._use_signed_distance
+            and not np.allclose(
+                plasma_grid.num_zeta,
+                surface_grid.num_zeta,
+            ),
+            ValueError,
+            "Plasma grid and surface grid must contain points only at the "
+            "same zeta values in order to use signed distance",
+        )
         errorif(
             self._use_signed_distance
             and not np.allclose(

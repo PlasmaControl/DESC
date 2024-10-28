@@ -188,6 +188,8 @@ class _Grid(IOAble, ABC):
     def L(self):
         """int: Radial grid resolution."""
         if getattr(self, "_L", None) is None:
+            # Setting default values for LinearGrid.
+            # This code will never run for Quadrature and Concentric grid.
             self._L = self.num_rho - 1
         return self._L
 
@@ -195,16 +197,18 @@ class _Grid(IOAble, ABC):
     def M(self):
         """int: Poloidal grid resolution."""
         if getattr(self, "_M", None) is None:
-            self._M = (
-                (self.num_theta // 2 - 1) if self.sym else (self.num_theta - 1) // 2
-            )
+            # Setting default values for LinearGrid.
+            # This code will never run for Quadrature and Concentric grid.
+            self._M = self.num_poloidal - 1 if self.sym else self.num_poloidal // 2
         return self._M
 
     @property
     def N(self):
         """int: Toroidal grid resolution."""
         if getattr(self, "_N", None) is None:
-            self._N = (self.num_zeta - 1) // 2
+            # Setting default values for LinearGrid.
+            # This code will never run for Quadrature and Concentric grid.
+            self._N = self.num_zeta // 2
         return self._N
 
     @property
@@ -759,9 +763,6 @@ class Grid(_Grid):
             for attr in setable_attr:
                 if attr in kwargs:
                     setattr(self, attr, jnp.asarray(kwargs.pop(attr)))
-            self._L = self.num_nodes
-            self._M = self.num_nodes
-            self._N = self.num_nodes
         else:
             for attr in setable_attr:
                 kwargs.pop(attr, None)
@@ -774,9 +775,10 @@ class Grid(_Grid):
                 self._unique_zeta_idx,
                 self._inverse_zeta_idx,
             ) = self._find_unique_inverse_nodes()
-            self._L = self.num_rho - 1
-            self._M = (self.num_theta - 1) // 2
-            self._N = (self.num_zeta - 1) // 2
+        # Assign with logic in setter method if possible else 0.
+        self._L = None if hasattr(self, "num_rho") else 0
+        self._M = None if hasattr(self, "num_poloidal") else 0
+        self._N = None if hasattr(self, "num_zeta") else 0
         errorif(len(kwargs), ValueError, f"Got unexpected kwargs {kwargs.keys()}")
 
     @staticmethod

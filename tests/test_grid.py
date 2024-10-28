@@ -59,10 +59,15 @@ class TestGrid:
     @pytest.mark.unit
     def test_grid_LMN(self):
         """Make sure grid attributes LMN are set correctly."""
-        grid = LinearGrid(rho=2, theta=5, zeta=6)
-        assert grid.L == grid.num_rho - 1
-        assert grid.M == (grid.num_theta - 1) // 2
-        assert grid.N == (grid.num_zeta - 1) // 2
+        theta = 5
+        g1 = LinearGrid(theta=theta, zeta=3, rho=2, sym=True)
+        assert g1.num_theta == (theta + 1) // 2
+        g2 = LinearGrid(M=g1.M, N=g1.N, L=g1.L, sym=True)
+        assert (g1.L, g1.M, g1.N) == (g2.L, g2.M, g2.N)
+        g1 = LinearGrid(theta=theta, zeta=3, rho=2, sym=False)
+        assert g1.num_theta == theta
+        g2 = LinearGrid(M=g1.M, N=g1.N, L=g1.L, sym=False)
+        assert (g1.L, g1.M, g1.N) == (g2.L, g2.M, g2.N)
 
     @pytest.mark.unit
     def test_linear_grid_spacing_consistency(self):

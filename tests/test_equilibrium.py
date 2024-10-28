@@ -87,8 +87,7 @@ def test_map_coordinates_derivative():
     eq = get("DSHAPE")
     with pytest.warns(UserWarning, match="Reducing radial"):
         eq.change_resolution(3, 3, 0, 6, 6, 0)
-    inbasis = ["alpha", "phi", "rho"]
-    outbasis = ["rho", "theta_PEST", "zeta"]
+    inbasis = ["rho", "alpha", "phi"]
 
     rho = np.linspace(0.01, 0.99, 20)
     theta = np.linspace(0, np.pi, 20, endpoint=False)
@@ -104,12 +103,39 @@ def test_map_coordinates_derivative():
     def foo(params, in_coords):
         out = eq.map_coordinates(
             in_coords,
-            inbasis,
-            outbasis,
+            ("rho", "alpha", "phi"),
+            ("rho", "theta_PEST", "zeta"),
             np.array([rho, theta, zeta]).T,
             params,
             period=(2 * np.pi, 2 * np.pi, np.inf),
             maxiter=40,
+        )
+        return out
+
+    J1 = jax.jit(jax.jacfwd(foo))(eq.params_dict, in_coords)
+    J2 = jax.jit(jax.jacrev(foo))(eq.params_dict, in_coords)
+    for j1, j2 in zip(J1.values(), J2.values()):
+        assert ~np.any(np.isnan(j1))
+        assert ~np.any(np.isnan(j2))
+        np.testing.assert_allclose(j1, j2)
+
+    # Check map_coordinates with full_output is still runs without errors
+    # this time _map_clebsch_coordinates is called inside map_coordinates
+    inbasis = ["rho", "alpha", "zeta"]
+    in_data = eq.compute(inbasis, grid=grid)
+    in_coords = np.stack([in_data[k] for k in inbasis], axis=-1)
+
+    @jax.jit
+    def foo(params, in_coords):
+        out, (_, _) = eq.map_coordinates(
+            in_coords,
+            ("rho", "alpha", "zeta"),
+            ("rho", "theta", "zeta"),
+            np.array([rho, theta, zeta]).T,
+            params,
+            period=(2 * np.pi, 2 * np.pi, np.inf),
+            maxiter=40,
+            full_output=True,
         )
         return out
 
@@ -129,10 +155,14 @@ def test_map_coordinates_derivative():
     flux_coords = nodes.copy()
     flux_coords[:, 1] += coords["lambda"]
 
+    # this will call _map_PEST_coordinates inside map_coordinates
     @jax.jit
     def bar(L_lmn):
+        params = {"L_lmn": L_lmn}
         geom_coords = eq.map_coordinates(
-            flux_coords, inbasis=("rho", "theta_PEST", "zeta")
+            flux_coords,
+            inbasis=("rho", "theta_PEST", "zeta"),
+            params=params,
         )
         return geom_coords
 

@@ -23,6 +23,7 @@ The ``Equilibrium`` class may be instantiated in a couple of ways in addition to
 .. autosummary::
     :toctree: _api/equilibrium
     :recursive:
+    :no-index:
 
     desc.equilibrium.Equilibrium.from_input_file
     desc.equilibrium.Equilibrium.from_near_axis

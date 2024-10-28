@@ -564,6 +564,7 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
     ),
     batch="bool : Whether to vectorize part of the computation. Default is true.",
     data_for_plot="bool: whether to output gamma_c or Gamma_d",
+    aliases=["Gamma_d"],
 )
 @partial(jit, static_argnames=["num_pitch", "num_well", "batch", "data_for_plot"])
 def _Gamma_d_Velasco(params, transforms, profiles, data, **kwargs):

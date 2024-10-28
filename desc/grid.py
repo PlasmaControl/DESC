@@ -188,6 +188,8 @@ class _Grid(IOAble, ABC):
     def L(self):
         """int: Radial grid resolution."""
         if getattr(self, "_L", None) is None:
+            # Setting default values for LinearGrid.
+            # This code will never run for Quadrature and Concentric grid.
             self._L = self.num_rho - 1
         return self._L
 
@@ -195,16 +197,18 @@ class _Grid(IOAble, ABC):
     def M(self):
         """int: Poloidal grid resolution."""
         if getattr(self, "_M", None) is None:
-            self._M = (
-                (self.num_theta // 2 - 1) if self.sym else (self.num_theta - 1) // 2
-            )
+            # Setting default values for LinearGrid.
+            # This code will never run for Quadrature and Concentric grid.
+            self._M = self.num_theta - 1 if self.sym else self.num_theta // 2
         return self._M
 
     @property
     def N(self):
         """int: Toroidal grid resolution."""
         if getattr(self, "_N", None) is None:
-            self._N = (self.num_zeta - 1) // 2
+            # Setting default values for LinearGrid.
+            # This code will never run for Quadrature and Concentric grid.
+            self._N = self.num_zeta // 2
         return self._N
 
     @property

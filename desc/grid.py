@@ -757,9 +757,6 @@ class Grid(_Grid):
             for attr in setable_attr:
                 if attr in kwargs:
                     setattr(self, attr, jnp.asarray(kwargs.pop(attr)))
-            self._L = self.num_nodes
-            self._M = self.num_nodes
-            self._N = self.num_nodes
         else:
             for attr in setable_attr:
                 kwargs.pop(attr, None)
@@ -772,9 +769,9 @@ class Grid(_Grid):
                 self._unique_zeta_idx,
                 self._inverse_zeta_idx,
             ) = self._find_unique_inverse_nodes()
-            self._L = self.num_rho - 1
-            self._M = (self.num_theta - 1) // 2
-            self._N = (self.num_zeta - 1) // 2
+        self._L = None
+        self._M = None
+        self._N = None
         errorif(len(kwargs), ValueError, f"Got unexpected kwargs {kwargs.keys()}")
 
     @staticmethod

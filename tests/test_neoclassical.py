@@ -9,6 +9,17 @@ from tests.test_plotting import tol_1d
 
 from desc.examples import get
 from desc.grid import LinearGrid
+from desc.objectives import (
+    FixBoundaryR,
+    FixBoundaryZ,
+    FixCurrent,
+    FixPressure,
+    FixPsi,
+    ForceBalance,
+    GammaC,
+    Gammad,
+    ObjectiveFunction,
+)
 from desc.utils import setdefault
 from desc.vmec import VMECIO
 
@@ -116,6 +127,214 @@ def test_Gamma_d():
     fig, ax = plt.subplots()
     ax.plot(rho, grid.compress(data["Gamma_d"]), marker="o")
     return fig
+
+
+@pytest.mark.regression
+def test_Gamma_d_opt():
+    """Test that an optimizatin with Gamma_d works without failing."""
+    eq = get("ESTELL")
+    with pytest.warns(UserWarning):
+        eq.change_resolution(4, 4, 4, 8, 8, 8)
+    k = 1
+
+    alpha = np.array([0.0])
+    rho = np.linspace(0.80, 0.95, 2)
+
+    objective = ObjectiveFunction(
+        (
+            Gammad(
+                eq=eq,
+                rho=rho,
+                alpha=alpha,
+                deriv_mode="fwd",
+                batch=False,
+                num_pitch=3,
+                num_quad=3,
+                num_transit=2,
+            ),
+        ),
+    )
+    R_modes = np.vstack(
+        (
+            [0, 0, 0],
+            eq.surface.R_basis.modes[
+                np.max(np.abs(eq.surface.R_basis.modes), 1) > k, :
+            ],
+        )
+    )
+    Z_modes = eq.surface.Z_basis.modes[
+        np.max(np.abs(eq.surface.Z_basis.modes), 1) > k, :
+    ]
+    constraints = (
+        ForceBalance(eq),
+        FixBoundaryR(eq=eq, modes=R_modes),
+        FixBoundaryZ(eq=eq, modes=Z_modes),
+        FixPressure(eq=eq),
+        FixCurrent(eq=eq),
+        FixPsi(eq=eq),
+    )
+
+    eq.optimize(
+        objective=objective,
+        constraints=constraints,
+        maxiter=2,  # just testing that no errors occur during JIT/AD of the objective
+    )
+
+
+@pytest.mark.regression
+def test_Gamma_d_opt_batch_true():
+    """Test that an optimizatin with Gamma_d works without failing w/ batch=True."""
+    eq = get("ESTELL")
+    with pytest.warns(UserWarning):
+        eq.change_resolution(4, 4, 4, 8, 8, 8)
+    k = 1
+
+    alpha = np.array([0.0])
+    rho = np.linspace(0.80, 0.95, 2)
+
+    objective = ObjectiveFunction(
+        (
+            Gammad(
+                eq=eq,
+                rho=rho,
+                alpha=alpha,
+                deriv_mode="fwd",
+                batch=True,
+                num_pitch=3,
+                num_quad=3,
+                num_transit=2,
+            ),
+        ),
+    )
+    R_modes = np.vstack(
+        (
+            [0, 0, 0],
+            eq.surface.R_basis.modes[
+                np.max(np.abs(eq.surface.R_basis.modes), 1) > k, :
+            ],
+        )
+    )
+    Z_modes = eq.surface.Z_basis.modes[
+        np.max(np.abs(eq.surface.Z_basis.modes), 1) > k, :
+    ]
+    constraints = (
+        ForceBalance(eq),
+        FixBoundaryR(eq=eq, modes=R_modes),
+        FixBoundaryZ(eq=eq, modes=Z_modes),
+        FixPressure(eq=eq),
+        FixCurrent(eq=eq),
+        FixPsi(eq=eq),
+    )
+
+    eq.optimize(
+        objective=objective,
+        constraints=constraints,
+        maxiter=2,  # just testing that no errors occur during JIT/AD of the objective
+    )
+
+
+@pytest.mark.regression
+def test_Gamma_c_opt():
+    """Test that an optimizatin with Gamma_c works without failing."""
+    eq = get("ESTELL")
+    with pytest.warns(UserWarning):
+        eq.change_resolution(4, 4, 4, 8, 8, 8)
+    k = 1
+
+    alpha = np.array([0.0])
+    rho = np.linspace(0.80, 0.95, 2)
+
+    objective = ObjectiveFunction(
+        (
+            GammaC(
+                eq=eq,
+                rho=rho,
+                alpha=alpha,
+                deriv_mode="fwd",
+                batch=False,
+                num_pitch=3,
+                num_quad=3,
+                num_transit=2,
+            ),
+        ),
+    )
+    R_modes = np.vstack(
+        (
+            [0, 0, 0],
+            eq.surface.R_basis.modes[
+                np.max(np.abs(eq.surface.R_basis.modes), 1) > k, :
+            ],
+        )
+    )
+    Z_modes = eq.surface.Z_basis.modes[
+        np.max(np.abs(eq.surface.Z_basis.modes), 1) > k, :
+    ]
+    constraints = (
+        ForceBalance(eq),
+        FixBoundaryR(eq=eq, modes=R_modes),
+        FixBoundaryZ(eq=eq, modes=Z_modes),
+        FixPressure(eq=eq),
+        FixCurrent(eq=eq),
+        FixPsi(eq=eq),
+    )
+
+    eq.optimize(
+        objective=objective,
+        constraints=constraints,
+        maxiter=2,  # just testing that no errors occur during JIT/AD of the objective
+    )
+
+
+@pytest.mark.regression
+def test_Gamma_c_opt_batch_True():
+    """Test that an optimizatin with Gamma_c works without failing w/ batch=True."""
+    eq = get("ESTELL")
+    with pytest.warns(UserWarning):
+        eq.change_resolution(4, 4, 4, 8, 8, 8)
+    k = 1
+
+    alpha = np.array([0.0])
+    rho = np.linspace(0.80, 0.95, 2)
+
+    objective = ObjectiveFunction(
+        (
+            GammaC(
+                eq=eq,
+                rho=rho,
+                alpha=alpha,
+                deriv_mode="fwd",
+                batch=True,
+                num_pitch=3,
+                num_quad=3,
+                num_transit=2,
+            ),
+        ),
+    )
+    R_modes = np.vstack(
+        (
+            [0, 0, 0],
+            eq.surface.R_basis.modes[
+                np.max(np.abs(eq.surface.R_basis.modes), 1) > k, :
+            ],
+        )
+    )
+    Z_modes = eq.surface.Z_basis.modes[
+        np.max(np.abs(eq.surface.Z_basis.modes), 1) > k, :
+    ]
+    constraints = (
+        ForceBalance(eq),
+        FixBoundaryR(eq=eq, modes=R_modes),
+        FixBoundaryZ(eq=eq, modes=Z_modes),
+        FixPressure(eq=eq),
+        FixCurrent(eq=eq),
+        FixPsi(eq=eq),
+    )
+
+    eq.optimize(
+        objective=objective,
+        constraints=constraints,
+        maxiter=2,  # just testing that no errors occur during JIT/AD of the objective
+    )
 
 
 class NeoIO:

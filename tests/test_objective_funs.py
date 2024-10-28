@@ -53,6 +53,7 @@ from desc.objectives import (
     ForceBalanceAnisotropic,
     FusionPower,
     GammaC,
+    Gammad,
     GenericObjective,
     HeatingPowerISS04,
     Isodynamicity,
@@ -2554,7 +2555,7 @@ class TestComputeScalarResolution:
                 M_grid=int(self.eq.M * res),
                 N_grid=int(self.eq.N * res),
             )
-            if objective in {EffectiveRipple, GammaC}:
+            if objective in {EffectiveRipple, GammaC, Gammad}:
                 obj = ObjectiveFunction(
                     [
                         objective(
@@ -2614,6 +2615,7 @@ class TestObjectiveNaNGrad:
         ForceBalanceAnisotropic,
         FusionPower,
         GammaC,
+        Gammad,
         HeatingPowerISS04,
         Omnigenity,
         PlasmaCoilSetMinDistance,
@@ -2862,6 +2864,19 @@ class TestObjectiveNaNGrad:
             eq.change_resolution(2, 2, 2, 4, 4, 4)
         obj = ObjectiveFunction(
             [GammaC(eq, knots_per_transit=50, num_transit=2, num_pitch=25)]
+        )
+        obj.build(verbose=0)
+        g = obj.grad(obj.x())
+        assert not np.any(np.isnan(g))
+
+    @pytest.mark.unit
+    def test_objective_no_nangrad_Gamma_d(self):
+        """Gamma_d."""
+        eq = get("ESTELL")
+        with pytest.warns(UserWarning, match="Reducing radial"):
+            eq.change_resolution(2, 2, 2, 4, 4, 4)
+        obj = ObjectiveFunction(
+            [Gammad(eq, knots_per_transit=50, num_transit=2, num_pitch=25)]
         )
         obj.build(verbose=0)
         g = obj.grad(obj.x())

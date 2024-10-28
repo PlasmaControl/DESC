@@ -199,7 +199,7 @@ class _Grid(IOAble, ABC):
         if getattr(self, "_M", None) is None:
             # Setting default values for LinearGrid.
             # This code will never run for Quadrature and Concentric grid.
-            self._M = self.num_theta - 1 if self.sym else self.num_theta // 2
+            self._M = self.num_poloidal - 1 if self.sym else self.num_poloidal // 2
         return self._M
 
     @property
@@ -769,9 +769,10 @@ class Grid(_Grid):
                 self._unique_zeta_idx,
                 self._inverse_zeta_idx,
             ) = self._find_unique_inverse_nodes()
-        self._L = None
-        self._M = None
-        self._N = None
+        # Assign with logic in setter method if possible else 0.
+        self._L = None if hasattr(self, "num_rho") else 0
+        self._M = None if hasattr(self, "num_poloidal") else 0
+        self._N = None if hasattr(self, "num_zeta") else 0
         errorif(len(kwargs), ValueError, f"Got unexpected kwargs {kwargs.keys()}")
 
     @staticmethod

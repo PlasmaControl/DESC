@@ -1440,7 +1440,9 @@ def zernike_radial_coeffs(l, m, exact=True):
             # hence they are all integers. So, we can use exact arithmetic with integer
             # division instead of floating point division.
             # [1]https://en.wikipedia.org/wiki/Zernike_polynomials#Other_representations
-            coeffs[ii, s] = ((-1) ** ((ll - s) // 2) * factorial((ll + s) // 2)) // (
+            coeffs[ii, s] = (
+                int((-1) ** ((ll - s) // 2)) * factorial((ll + s) // 2)
+            ) // (
                 factorial((ll - s) // 2)
                 * factorial((s + mm) // 2)
                 * factorial((s - mm) // 2)

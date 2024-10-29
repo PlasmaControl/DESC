@@ -103,7 +103,7 @@ def test_map_coordinates_derivative():
     def foo(params, in_coords):
         out = eq.map_coordinates(
             in_coords,
-            ("rho", "alpha", "phi"),
+            inbasis,
             ("rho", "theta_PEST", "zeta"),
             np.array([rho, theta, zeta]).T,
             params,
@@ -121,15 +121,15 @@ def test_map_coordinates_derivative():
 
     # Check map_coordinates with full_output is still runs without errors
     # this time _map_clebsch_coordinates is called inside map_coordinates
-    inbasis = ["rho", "alpha", "zeta"]
-    in_data = eq.compute(inbasis, grid=grid)
-    in_coords = np.stack([in_data[k] for k in inbasis], axis=-1)
+    inbasis2 = ["rho", "alpha", "zeta"]
+    in_data = eq.compute(inbasis2, grid=grid)
+    in_coords = np.stack([in_data[k] for k in inbasis2], axis=-1)
 
     @jax.jit
     def foo(params, in_coords):
         out, (_, _) = eq.map_coordinates(
             in_coords,
-            ("rho", "alpha", "zeta"),
+            inbasis2,
             ("rho", "theta", "zeta"),
             np.array([rho, theta, zeta]).T,
             params,

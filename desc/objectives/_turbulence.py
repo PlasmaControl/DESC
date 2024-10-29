@@ -226,7 +226,7 @@ class EffectiveRadius(_Objective):
             "shear": iota_data["shear"][0],
             "a": len_data["a"],
         }
-        n_tor = self._n_pol / (data["iota"] * eq.NFP)
+        n_tor = jnp.abs(self._n_pol / (data["iota"] * eq.NFP))
         zeta = jnp.linspace(
             0, 2 * jnp.pi * n_tor, self._n_pol * self._knots_per_transit
         )
@@ -473,7 +473,7 @@ class ParallelConnectionLength(_Objective):
             "shear": iota_data["shear"][0],
             "a": len_data["a"],
         }
-        n_tor = self._n_pol / (data["iota"] * eq.NFP)
+        n_tor = jnp.abs(self._n_pol / (data["iota"] * eq.NFP))
         zeta = jnp.linspace(
             0, 2 * jnp.pi * n_tor, self._n_pol * self._knots_per_transit
         )

@@ -3132,7 +3132,7 @@ class FixOmniBmax(_FixedObjective):
                     np.logical_and((basis.modes[:, 1] % 2 == 0), basis.modes[:, 1] > 0),
                 )
             )[0]
-            mm = basis.modes[idx_m, 2]
+            mm = basis.modes[idx_m, 1]
             self._A[i, idx_0] = 1
             self._A[i, idx_m] = (mm % 2 - 1) * (mm % 4 - 1)
 
@@ -3303,18 +3303,27 @@ class FixNearAxisR(_FixedObjective):
         for con in cons:
             if isinstance(con, FixSumModesR) or isinstance(con, AxisRSelfConsistency):
                 con.build(use_jit=use_jit, verbose=0)
-        self._A = np.stack(
-            [con._A for con in cons if isinstance(con, FixSumModesR)]
-        ).squeeze()
+        cons_that_fix_near_axis = [con for con in cons if isinstance(con, FixSumModesR)]
+        self._A = (
+            np.stack([con._A for con in cons_that_fix_near_axis]).squeeze()
+            if cons_that_fix_near_axis
+            else None
+        )
         # add the axis constraint last if it is in cons
         axis_con = None
         for con in cons:
             if isinstance(con, AxisRSelfConsistency):
-                self._A = np.vstack([self._A, con._A]).squeeze()
+                self._A = (
+                    np.vstack([self._A, con._A]).squeeze()
+                    if np.any(self._A)
+                    else con._A
+                )
                 axis_con = con
 
-        self._target = np.concatenate(
-            [con.target for con in cons if isinstance(con, FixSumModesR)]
+        self._target = (
+            np.concatenate([con.target for con in cons_that_fix_near_axis])
+            if cons_that_fix_near_axis
+            else None
         )
         if axis_con:
             if self._nae_eq is not None:
@@ -3332,7 +3341,11 @@ class FixNearAxisR(_FixedObjective):
                 axis_target = axis.R_n
             else:  # else use eq axis a target
                 axis_target = self._eq.Ra_n
-            self._target = np.append(self._target, axis_target).squeeze()
+            self._target = (
+                np.append(self._target, axis_target).squeeze()
+                if np.any(self._target)
+                else axis_target
+            )
         self._dim_f = self.target.size
         super().build(use_jit=use_jit, verbose=verbose)
 
@@ -3440,17 +3453,26 @@ class FixNearAxisZ(_FixedObjective):
         for con in cons:
             if isinstance(con, FixSumModesZ) or isinstance(con, AxisZSelfConsistency):
                 con.build(use_jit=use_jit, verbose=0)
-        self._A = np.stack(
-            [con._A for con in cons if isinstance(con, FixSumModesZ)]
-        ).squeeze()
+        cons_that_fix_near_axis = [con for con in cons if isinstance(con, FixSumModesZ)]
+        self._A = (
+            np.stack([con._A for con in cons_that_fix_near_axis]).squeeze()
+            if cons_that_fix_near_axis
+            else None
+        )
         # add the axis constraint last if it is in cons
         axis_con = None
         for con in cons:
             if isinstance(con, AxisZSelfConsistency):
-                self._A = np.vstack([self._A, con._A]).squeeze()
+                self._A = (
+                    np.vstack([self._A, con._A]).squeeze()
+                    if np.any(self._A)
+                    else con._A
+                )
                 axis_con = con
-        self._target = np.concatenate(
-            [con.target for con in cons if isinstance(con, FixSumModesZ)]
+        self._target = (
+            np.concatenate([con.target for con in cons_that_fix_near_axis])
+            if cons_that_fix_near_axis
+            else None
         )
         if axis_con:
             if self._nae_eq is not None:
@@ -3468,7 +3490,11 @@ class FixNearAxisZ(_FixedObjective):
                 axis_target = axis.Z_n
             else:  # else use eq axis a target
                 axis_target = self._eq.Za_n
-            self._target = np.append(self._target, axis_target).squeeze()
+            self._target = (
+                np.append(self._target, axis_target).squeeze()
+                if np.any(self._target)
+                else axis_target
+            )
 
         self._dim_f = self.target.size
 

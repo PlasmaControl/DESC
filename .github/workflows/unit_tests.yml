@@ -84,7 +84,6 @@ jobs:
         if: env.has_changes == 'true'
         run: |
           source .venv-${{ matrix.combos.python_version }}/bin/activate
-          pip install matplotlib==3.7.2
           pwd
           lscpu
           python -m pytest -v -m unit \
@@ -113,9 +112,9 @@ jobs:
       - name: Upload coverage
         if: env.has_changes == 'true'
         id : codecov
-        uses: Wandalen/wretry.action@v1.3.0
+        uses: Wandalen/wretry.action@v3.5.0
         with:
-          action: codecov/codecov-action@v3
+          action: codecov/codecov-action@v4
           with: |
             token: ${{ secrets.CODECOV_TOKEN }}
             name: codecov-umbrella

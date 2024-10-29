@@ -887,8 +887,8 @@ def _x_FourierXYZCurve(params, transforms, profiles, data, **kwargs):
     dim=3,
     params=["X_n", "Y_n", "Z_n", "rotmat"],
     transforms={
-        "X": [[0, 0, 0], [0, 0, 1]],
-        "Y": [[0, 0, 0], [0, 0, 1]],
+        "X": [[0, 0, 1]],
+        "Y": [[0, 0, 1]],
         "Z": [[0, 0, 1]],
     },
     profiles=[],

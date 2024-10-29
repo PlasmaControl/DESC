@@ -75,14 +75,7 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
     from jax.numpy import bincount, flatnonzero, repeat, take
     from jax.numpy.fft import irfft, rfft, rfft2
     from jax.scipy.fft import dct, idct
-    from jax.scipy.linalg import (
-        block_diag,
-        cho_factor,
-        cho_solve,
-        eigh_tridiagonal,
-        qr,
-        solve_triangular,
-    )
+    from jax.scipy.linalg import block_diag, cho_factor, cho_solve, qr, solve_triangular
     from jax.scipy.special import gammaln, logsumexp
     from jax.tree_util import (
         register_pytree_node,
@@ -97,6 +90,31 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
     trapezoid = (
         jnp.trapezoid if hasattr(jnp, "trapezoid") else jax.scipy.integrate.trapezoid
     )
+
+    def execute_on_cpu(func):
+        """Decorator to set default device to CPU for a function.
+
+        Parameters
+        ----------
+        func : callable
+            Function to decorate
+
+        Returns
+        -------
+        wrapper : callable
+            Decorated function that will always run on CPU even if
+            there are available GPUs.
+        """
+
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            with jax.default_device(jax.devices("cpu")[0]):
+                return func(*args, **kwargs)
+
+        return wrapper
+
+    # JAX implementation is not differentiable on gpu.
+    eigh_tridiagonal = execute_on_cpu(jax.scipy.linalg.eigh_tridiagonal)
 
     def put(arr, inds, vals):
         """Functional interface for array "fancy indexing".
@@ -115,35 +133,15 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
         Returns
         -------
         arr : array-like
-            Input array with vals inserted at inds.
+            Copy of input array with vals inserted at inds.
+            In some cases JAX may decide a copy is not necessary.
 
         """
         if isinstance(arr, np.ndarray):
+            arr = arr.copy()
             arr[inds] = vals
             return arr
         return jnp.asarray(arr).at[inds].set(vals)
-
-    def execute_on_cpu(func):
-        """Decorator to set default device to CPU for a function.
-
-        Parameters
-        ----------
-        func : callable
-            Function to decorate
-
-        Returns
-        -------
-        wrapper : callable
-            Decorated function that will run always on CPU even if
-            there are available GPUs.
-        """
-
-        @functools.wraps(func)
-        def wrapper(*args, **kwargs):
-            with jax.default_device(jax.devices("cpu")[0]):
-                return func(*args, **kwargs)
-
-        return wrapper
 
     def sign(x):
         """Sign function, but returns 1 for x==0.
@@ -427,7 +425,7 @@ else:  # pragma: no cover
 
     trapezoid = np.trapezoid if hasattr(np, "trapezoid") else np.trapz
 
-    def imap(f, xs, batch_size=None, in_axes=0, out_axes=0):
+    def imap(f, xs, *, batch_size=None, in_axes=0, out_axes=0):
         """Generalizes jax.lax.map; uses numpy."""
         if not isinstance(xs, np.ndarray):
             raise NotImplementedError(
@@ -513,9 +511,10 @@ else:  # pragma: no cover
         Returns
         -------
         arr : array-like
-            Input array with vals inserted at inds.
+            Copy of input array with vals inserted at inds.
 
         """
+        arr = arr.copy()
         arr[inds] = vals
         return arr
 

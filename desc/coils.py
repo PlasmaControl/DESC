@@ -16,6 +16,7 @@ from desc.backend import (
     tree_unstack,
     vmap,
 )
+from desc.basis import FourierSeries
 from desc.compute import get_params, rpz2xyz, rpz2xyz_vec, xyz2rpz, xyz2rpz_vec
 from desc.compute.geom_utils import reflection_matrix
 from desc.compute.utils import _compute as compute_fun
@@ -29,7 +30,7 @@ from desc.geometry import (
 from desc.grid import LinearGrid
 from desc.magnetic_fields import _MagneticField
 from desc.optimizable import Optimizable, OptimizableCollection, optimizable_parameter
-from desc.utils import equals, errorif, flatten_list, warnif
+from desc.utils import copy_coeffs, equals, errorif, flatten_list, warnif
 
 
 @jit
@@ -1012,7 +1013,67 @@ def _check_type(coil0, coil):
         )
 
 
-class _FiniteBuildCoil(_Coil, Optimizable, ABC):
+class _FramedCoil(_Coil, Optimizable, ABC):
+    """Base class representing a magnetic field coil with a frame representing winding angle.
+
+    Parameters
+    ----------
+    alpha_n : array-like
+        Fourier coefficients for the winding angle alpha as a function of toroidal angle phi.
+    modes : array-like
+        Mode numbers associated with alpha_n. If not given defaults to [-n:n].
+    """
+
+    _io_attrs_ = _Coil._io_attrs_ + ["_alpha_n", "_alpha_basis"]
+
+    def __init__(self,        
+        alpha_n=[0, 0, 0],
+        modes=None,
+        *args, **kwargs):
+
+        alpha_n= np.atleast_1d(alpha_n)
+        if modes is None:
+            modes = np.arange(-(alpha_n.size // 2), alpha_n.size // 2 + 1)
+        else:
+            modes = np.asarray(modes)
+
+        assert issubclass(modes.dtype.type, np.integer)
+
+        assert alpha_n.size == modes.size, "alpha_n and modes must be the same size"
+
+        N = np.max(abs(modes))
+        self._alpha_basis = FourierSeries(N, NFP=1, sym=False)
+        self._alpha_n = copy_coeffs(alpha_n, modes, self.alpha_basis.modes[:, 2])
+
+        super().__init__(*args, **kwargs)
+
+    @optimizable_parameter
+    @property
+    def alpha_n(self):
+        """ndarray: Twist angle of the coil, represented as a fourier series."""
+        return self._alpha_n
+
+    @alpha_n.setter
+    def alpha_n(self, new):
+        if len(new) == self.alpha_basis.num_modes:
+            self._alpha_n = jnp.asarray(new)
+        else:
+            raise ValueError(
+                f"alpha_n should have the same size as the basis, got {len(new)} for "
+                + f"basis with {self.alpha_basis.num_modes} modes."
+            )
+        
+    @property
+    def alpha_basis(self):
+        """Spectral basis for alpha Fourier series."""
+        return self._alpha_basis
+    
+    @property
+    def alpha_N(self):
+        """Maximum mode number."""
+        return max(self._alpha_basis.N)
+
+class _FiniteBuildCoil(_FramedCoil, Optimizable, ABC):
     """Base class representing a magnetic field coil with finite build dimensions.
 
     Subclasses should inherit from this class as well as a subclass of Coil.
@@ -1027,7 +1088,7 @@ class _FiniteBuildCoil(_Coil, Optimizable, ABC):
         Shape of the coil cross section, either 'circular' or 'rectangular'.
     """
 
-    _io_attrs_ = _Coil._io_attrs_ + ["_cross_section_shape"] + ["_cross_section_dims"]
+    _io_attrs_ = _FramedCoil._io_attrs_ + ["_cross_section_shape"] + ["_cross_section_dims"]
 
     def __init__(self, cross_section_dims, cross_section_shape, *args, **kwargs):
         if cross_section_shape == "circular":
@@ -1090,7 +1151,7 @@ class FourierPlanarFiniteBuildCoil(_FiniteBuildCoil, FourierPlanarCoil):
     Refer to FourierPlanarCoil for a description of the parameterization for the planar coil centerline.
     In the case of rectangular cross sections, the coil cross section is assumed to remain aligned
     with respect to the coil plane. The first dimension of the rectangular cross section is within the coil plane,
-    and the second dimension is in the coil plane normal direction.
+    and the second dimension is in the coil plane normal direction. No twist angle is assumed for this coil.
 
     Parameters
     ----------
@@ -1128,9 +1189,13 @@ class FourierPlanarFiniteBuildCoil(_FiniteBuildCoil, FourierPlanarCoil):
         basis="xyz",
         name="",
     ):
+        alpha_n = [0,0,0] # by default, this coil has no twist
+        alpha_modes = None
         super().__init__(
             cross_section_dims,
             cross_section_shape,
+            alpha_n,
+            alpha_modes,
             current,
             center,
             normal,
@@ -1141,6 +1206,7 @@ class FourierPlanarFiniteBuildCoil(_FiniteBuildCoil, FourierPlanarCoil):
         )
 
     def compute_self_field(self, self_grid, params=None):
+        #TODO: implement this
         return super().compute_self_field(self_grid, params)
 
 

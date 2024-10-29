@@ -792,7 +792,8 @@ class FourierCurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
             Number of coils to discretize the surface current with.
             If the coils are modular (i.e. I=0), then this is the number of
             coils per field period. If the coils are stellarator-symmetric, then this
-            is the number of coils per half field-period.
+            is the number of coils per half field-period. The coils returned always
+            have a coil which passes through the theta=0 zeta=0 point of the surface.
         step : int, optional
             Amount of points to skip by when saving the coil geometry spline
             by default 1, meaning that every point will be saved
@@ -1119,6 +1120,7 @@ def solve_regularized_surface_current(  # noqa: C901 fxn too complex
     regularization_type : {"simple","regcoil"}
         whether to use a simple regularization based off of just the single-valued
         part of Phi, or to use the full REGCOIL regularization penalizing | K | ^ 2.
+        Defaults to ``"regcoil"``
     source_grid : Grid, optional
         Source grid upon which to evaluate the surface current when calculating
         the normal field on the plasma surface. Defaults to

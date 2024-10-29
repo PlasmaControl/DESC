@@ -4,7 +4,6 @@ from functools import partial
 
 import numpy as np
 import pytest
-import quadax
 from jax import grad
 from matplotlib import pyplot as plt
 from numpy.polynomial.chebyshev import chebinterpolate, chebroots
@@ -12,7 +11,6 @@ from numpy.polynomial.legendre import leggauss
 from scipy import integrate
 from scipy.interpolate import CubicHermiteSpline
 from scipy.special import ellipe, ellipkm1
-from termcolor import colored
 from tests.test_interp_utils import _f_1d, _f_1d_nyquist_freq
 from tests.test_plotting import tol_1d
 
@@ -53,9 +51,7 @@ from desc.integrals._quad_utils import (
     grad_automorphism_sin,
     grad_bijection_from_disc,
     leggauss_lob,
-    simpson2,
     tanh_sinh,
-    uniform,
 )
 from desc.integrals.basis import FourierChebyshevSeries
 from desc.integrals.singularities import _get_quadrature_nodes
@@ -933,33 +929,6 @@ class TestBouncePoints:
 auto_sin = (automorphism_sin, grad_automorphism_sin)
 
 
-def _one_bump(x, h):
-    # B with hump of height h in middle
-    return h * (1 - x**2) ** 2 + x**2 + 1
-
-
-def _bumpy(x, x_peak=(-0.5, 0, 0.5), h_peak=(0.5, 0.75, 0.25), sigma=0.125):
-    """Make |B| with humps.
-
-    Parameters
-    ----------
-    x : jnp.ndarray
-        Points to evaluate.
-    x_peak : jnp.ndarray
-        Peak centers in [-1, 1], excluding endpoints.
-    h_peak : jnp.ndarray
-        Peak heights in [0, 1], excluding endpoints.
-    sigma : float
-        Standard deviation of Gaussian.
-
-    """
-    x, x_peak, h_peak = jnp.atleast_1d(x, x_peak, h_peak)
-    x_peak = jnp.hstack([-1, x_peak, 1])
-    h_peak = jnp.hstack([1, h_peak, 1])
-    basis = jnp.exp(-jnp.square((x[:, jnp.newaxis] - x_peak) / sigma))
-    return basis.dot(h_peak).squeeze() + 1
-
-
 class TestBounceQuadrature:
     """Test bounce quadrature."""
 
@@ -1037,64 +1006,6 @@ class TestBounceQuadrature:
         )
         assert np.count_nonzero(result) == 1
         np.testing.assert_allclose(result.sum(), truth, rtol=1e-4)
-
-    @pytest.mark.parametrize(
-        "is_strong, B",
-        [
-            (False, lambda x: _one_bump(x, 0.75)),
-            (False, lambda x: _one_bump(x, 0.999)),
-            (True, lambda x: _one_bump(x, 0.75)),
-            (True, lambda x: _one_bump(x, 0.999)),
-            (False, _bumpy),
-            (True, _bumpy),
-        ],
-    )
-    @pytest.mark.unit
-    def test_quad_compare(self, is_strong, B):
-        """Compare quadratures in W-shaped wells."""
-        x = np.linspace(-1, 1, 1000)
-        plt.plot(x, B(x))
-
-        def func(x):
-            w1 = jnp.sqrt(jnp.clip(2 - B(x), 0, jnp.inf))
-            if is_strong:
-                w1 = safediv(1, w1)
-            return w1
-
-        plt.plot(x, func(x))
-
-        truth, info = quadax.quadts(func, interval=(-1, 1))
-        print("\n" + 50 * "---" + f"\nTrue value: {truth}, neval: {info[1]}")
-        for n in [9, 17, 33, 65, 129]:
-            x, w = uniform(n)
-            trap = func(x).dot(w)
-            x, w = simpson2(n)
-            simp = func(x).dot(w)
-            x, w = get_quadrature(leggauss(n), auto_sin)
-            legs = func(x).dot(w)
-            x, w = tanh_sinh(n)
-            tanh = func(x).dot(w)
-
-            print(f"\nPoints: {n}")
-            print("Singularity = " + ("strong" if is_strong else "weak"))
-            print(f"Trapezoid:  {trap:.12f}, Error: {abs(trap - truth):.2e}")
-            print(f"Simpson:    {simp:.12f}, Error: {abs(simp - truth):.2e}")
-            print(
-                (colored("Legs sin:   ", "cyan") if is_strong else "Legs sin:   ")
-                + f"{legs:.12f}, Error: {abs(legs - truth):.2e}"
-            )
-            print(f"Tanh-sinh:  {tanh:.12f}, Error: {abs(tanh - truth):.2e}")
-            if is_strong:
-                x, w = chebgauss1(n)
-                cheb1 = func(x).dot(w)
-                print(f"Cheb strg:  {cheb1:.12f}, Error: {abs(cheb1 - truth):.2e}")
-            else:
-                x, w = chebgauss2(n)
-                cheb2 = func(x).dot(w)
-                print(
-                    colored("Cheb weak:  ", "cyan")
-                    + f"{cheb2:.12f}, Error: {abs(cheb2 - truth):.2e}"
-                )
 
     @staticmethod
     @partial(np.vectorize, excluded={0})

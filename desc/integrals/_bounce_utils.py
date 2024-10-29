@@ -817,7 +817,7 @@ def interp_to_argmin_hard(h, points, knots, g, dg_dz, method="cubic"):
     --------
     interp_to_argmin
         Accomplishes the same task, but handles the case of non-unique global minima
-        more correctly. It is also more efficient if ``num_pitch`` >> 1.
+        more correctly. It is also more efficient if num pitch >> 1.
 
     Parameters
     ----------
@@ -1150,8 +1150,7 @@ def cubic_spline(n0, n1, NFP, T, f, Y, check=False):
         Polynomial coefficients of the spline of f in local power basis.
         Last axis enumerates the coefficients of power series. For a polynomial
         given by ∑ᵢⁿ cᵢ xⁱ, coefficient cᵢ is stored at ``f[...,n-i]``.
-        Third axis enumerates the polynomials that compose a particular spline.
-        Second axis enumerates transits.
+        Second axis enumerates the polynomials that compose a particular spline.
         First axis enumerates field lines of a particular flux surface.
     knots : jnp.ndarray
         Shape (num transit * (Y - 1)).

@@ -1106,14 +1106,19 @@ def solve_regularized_surface_current(  # noqa: C901 fxn too complex
         that array and return a list of FourierCurrentPotentialFields, and the
         associated data.
     current_helicity : tuple of size 2, optional
-        Tuple of (q,p) used to determine coil topology, where q is the
-        number of poloidal transits a coil makes in one field period and
-        p is the number of toroidal transits a coil makes in one field period.
-        if p is zero and q nonzero, it corresponds to modular coil topology.
-        If both p,q are nonzero, it corresponds to helical coils.
-        If p,q are both zero, it corresponds to windowpane coils.
-        The net toroidal current (when q is nonzero) is set as
-        I = p(G-G_ext)/q/NFP
+        Tuple of ``(M_coil, N_coil)`` used to determine coil topology, where`` M_coil``
+         is the number of poloidal transits a coil makes before closing back on itself
+        and ``N_coil`` is the number of toroidal transits a coil makes before
+        returning back to itself.
+        if ``N_coil`` is zero and ``M_coil`` nonzero, it corresponds to modular
+        coil topology.
+        If both ``N_coil``,``M_coil`` are nonzero, it corresponds to helical coils.
+        If ``N_coil``,``M_coil`` are both zero, it corresponds to windowpane coils.
+        The net toroidal current (when ``M_coil`` is nonzero) is set as
+        ``I = N_coil(G-G_ext)/M_coil``
+        As an example, if helical coils which make one poloidal transit per field period
+        and close on themselves after one full toroidal transit are desired, that
+        corresponds to ``current_helicity = (1*NFP, 1)``
     vacuum : bool, optional
         if True, will not include the contribution to the normal field from the
         plasma currents.
@@ -1231,8 +1236,8 @@ def solve_regularized_surface_current(  # noqa: C901 fxn too complex
     )
 
     current_potential_field = field.copy()  # copy field so we can modify freely
-    q = current_helicity[0]  # poloidal transits before coil returns to itself
-    p = current_helicity[1]  # toroidal transits before coil returns to itself
+    M_coil = current_helicity[0]  # poloidal transits before coil returns to itself
+    N_coil = current_helicity[1]  # toroidal transits before coil returns to itself
 
     # maybe it is an EquilibriaFamily
     errorif(hasattr(eq, "__len__"), ValueError, "Expected a single equilibrium")
@@ -1296,15 +1301,15 @@ def solve_regularized_surface_current(  # noqa: C901 fxn too complex
     # G needed by surface current is the total G minus the external contribution
     G = G_tot - G_ext
     # calculate I, net toroidal current on winding surface
-    if p == 0 and q == 0:  # windowpane coils
+    if N_coil == 0 and M_coil == 0:  # windowpane coils
         I = G = 0
-    elif p == 0:  # modular coils
+    elif N_coil == 0:  # modular coils
         I = 0
-    elif q == 0:  # only toroidally closed coils, like PF coils
-        I = p * G_tot  # give some toroidal current corr. to p
+    elif M_coil == 0:  # only toroidally closed coils, like PF coils
+        I = N_coil * G_tot  # give some toroidal current corr. to N_coil
         G = 0  # because I==0
     else:  # helical coils
-        I = p * G / q / eq.NFP
+        I = N_coil * G / M_coil
 
     # define functions which will be differentiated
     def Bn_from_K(phi_mn, I, G):

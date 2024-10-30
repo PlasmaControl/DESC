@@ -364,7 +364,7 @@ def regcoil_helical_coils_scan():
         eval_grid=LinearGrid(M=20, N=20, NFP=eq.NFP, sym=True),
         source_grid=LinearGrid(M=40, N=40, NFP=eq.NFP),
         lambda_regularization=np.append(np.array([0.0]), np.logspace(-30, -1, 5)),
-        current_helicity=(1, -1),
+        current_helicity=(1 * eq.NFP, -1),
         vacuum=True,
         regularization_type="regcoil",
     )

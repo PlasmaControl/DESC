@@ -271,8 +271,6 @@ def test_from_input_file_equilibrium_desc_vmec():
     desc_path = ".//tests//inputs//input.QSC_r2_5.5_desc"
     kwargs = {"L": 10, "M": 10, "N": 14}
     eq = Equilibrium.from_input_file(desc_path, **kwargs)
-    # change surface resolution to match the one from after thresholding of VMEC's bdry
-    eq.surface.change_resolution(M=10, N=14)
     with pytest.warns(UserWarning):
         eq_VMEC = Equilibrium.from_input_file(vmec_path, **kwargs)
 

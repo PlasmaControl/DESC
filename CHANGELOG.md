@@ -5,7 +5,8 @@ New Features
 
 - Add ``use_signed_distance`` flag to ``PlasmaVesselDistance`` which will use a signed distance as the target, which is positive when the plasma is inside of the vessel surface and negative if the plasma is outside of the vessel surface, to allow optimizer to distinguish if the equilbrium surface exits the vessel surface and guard against it by targeting a positive signed distance.
 - Adds function ``solve_regularized_surface_current`` to ``desc.magnetic_fields`` module that implements the REGCOIL algorithm (Landreman, (2017)) for surface current normal field optimization
-    * Can specify the tuple ``current_helicity=(q,p)`` to determine if resulting contours correspond to helical topology (both ``(p,q)`` not equal to 0), modular (``p`` equal to 0 and ``q`` nonzero) or windowpane/saddle (``p`` and ``q`` both zero)
+    * Can specify the tuple ``current_helicity=(M_coil, N_coil)`` to determine if resulting contours correspond to helical topology (both ``(M_coil, N_coil)`` not equal to 0), modular (``N_coil`` equal to 0 and ``M_coil`` nonzero) or windowpane/saddle (``M_coil`` and ``N_coil`` both zero)
+    * ``M_coil`` is the number of poloidal transits a coil makes before returning to itself, while ``N_coil`` is the number of toroidal transits a coil makes before returning to itself (this is sort of like the QS ``helicity``)
     * if multiple values of the regularization parameter are input, will return a family of surface current fields (as a list) corresponding to the solution at each regularization value
 - Adds method ``to_CoilSet`` to ``FourierCurrentPotentialField`` which implements a coil cutting algorithm to discretize the surface current into coils
     * works for both modular and helical coils

@@ -235,7 +235,7 @@ class EffectiveRipple(_Objective):
             constants["profiles"],
         )
         # TODO: interpolate all deps to this grid with fft utilities from fourier bounce
-        grid = eq._get_rtz_grid(
+        grid = eq.get_rtz_grid(
             constants["rho"],
             constants["alpha"],
             constants["zeta"],

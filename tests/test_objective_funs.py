@@ -76,6 +76,7 @@ from desc.objectives import (
     Shear,
     ToroidalCurrent,
     ToroidalFlux,
+    UmbilicFieldAligned,
     UmbilicHighCurvature,
     VacuumBoundaryError,
     Volume,
@@ -2321,6 +2322,7 @@ class TestComputeScalarResolution:
         LinearObjectiveFromUser,
         ObjectiveFromUser,
         UmbilicHighCurvature,
+        UmbilicFieldAligned,
     ]
     other_objectives = list(set(objectives) - set(specials))
 
@@ -2732,6 +2734,7 @@ class TestObjectiveNaNGrad:
         ObjectiveFromUser,
         # TODO: add Omnigenity objective (see GH issue #943)
         UmbilicHighCurvature,
+        UmbilicFieldAligned,
     ]
     other_objectives = list(set(objectives) - set(specials))
 
@@ -2967,6 +2970,7 @@ class TestObjectiveNaNGrad:
         g = obj.grad(obj.x())
         assert not np.any(np.isnan(g))
 
+    @pytest.mark.unit
     def test_objective_no_nangrad_ballooning(self):
         """BallooningStability."""
         eq = get("HELIOTRON")

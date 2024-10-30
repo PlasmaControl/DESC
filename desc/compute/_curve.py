@@ -182,7 +182,9 @@ def _center_FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
 
 def get_closest(arr, val):
     """Get closest index to value in array."""
-    return jnp.argmin(jnp.abs(arr - val))
+    arr = jnp.asarray(arr)
+    val_array = jnp.full_like(arr, val)
+    return jnp.argmin(jnp.abs(arr - val_array))
 
 
 @register_compute_fun(

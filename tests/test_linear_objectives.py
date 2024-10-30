@@ -205,6 +205,9 @@ def test_fixed_mode_solve():
         FixIota(eq=eq),
         FixPsi(eq=eq),
         FixBoundaryR(eq=eq),
+        FixBoundaryR(
+            eq=eq, modes=[0, 0, 0]
+        ),  # add a degenerate constraint to test fix of GH #1297 for lsq-exact
         FixBoundaryZ(eq=eq),
         fixR,
         fixZ,

@@ -133,10 +133,12 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
         Returns
         -------
         arr : array-like
-            Input array with vals inserted at inds.
+            Copy of input array with vals inserted at inds.
+            In some cases JAX may decide a copy is not necessary.
 
         """
         if isinstance(arr, np.ndarray):
+            arr = arr.copy()
             arr[inds] = vals
             return arr
         return jnp.asarray(arr).at[inds].set(vals)
@@ -509,9 +511,10 @@ else:  # pragma: no cover
         Returns
         -------
         arr : array-like
-            Input array with vals inserted at inds.
+            Copy of input array with vals inserted at inds.
 
         """
+        arr = arr.copy()
         arr[inds] = vals
         return arr
 

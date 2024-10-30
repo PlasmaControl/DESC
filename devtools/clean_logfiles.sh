@@ -1,6 +1,6 @@
 #!/bin/sh
 
 if [ -f "devtools/pre-commit.log" ]; then
-   echo "delete devtools/pre-commit.log"
+   echo "deleting devtools/pre-commit.log file..."
    rm "devtools/pre-commit.log"
 fi

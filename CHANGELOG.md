@@ -1,6 +1,11 @@
 Changelog
 =========
 
+Bug Fixes
+
+- Fixes bug that occurs when taking the gradient of ``root`` and ``root_scalar`` with newer versions of JAX (>=0.4.34) and unpins the JAX version
+
+
 v0.12.3
 -------
 

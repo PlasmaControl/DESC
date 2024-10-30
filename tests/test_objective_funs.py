@@ -1301,6 +1301,27 @@ class TestObjectiveFunction:
         assert obj.dim_f == d.size
         assert abs(d.max() - (-a_s)) < 1e-14
         assert abs(d.min() - (-a_s)) < grid.spacing[0, 1] * a_s
+        # test errors
+        # differing grid zetas, same num_zeta
+        with pytest.raises(ValueError):
+            obj = PlasmaVesselDistance(
+                eq=eq,
+                surface_grid=grid,
+                plasma_grid=LinearGrid(M=grid.M, N=grid.N, NFP=2),
+                surface=surface,
+                use_signed_distance=True,
+            )
+            obj.build()
+        # test with differing grid.num_zeta
+        with pytest.raises(ValueError):
+            obj = PlasmaVesselDistance(
+                eq=eq,
+                surface_grid=grid,
+                plasma_grid=LinearGrid(M=grid.M, N=grid.N - 2),
+                surface=surface,
+                use_signed_distance=True,
+            )
+            obj.build()
 
     @pytest.mark.unit
     def test_surface_current_regularization(self):

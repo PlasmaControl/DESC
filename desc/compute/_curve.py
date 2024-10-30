@@ -1,3 +1,4 @@
+import numpy as np
 from interpax import interp1d
 
 from desc.backend import jnp, sign
@@ -182,8 +183,8 @@ def _center_FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
 
 def get_closest(arr, val):
     """Get closest index to value in array."""
-    arr = jnp.asarray(arr)
-    return jnp.argmin(jnp.abs(arr - val))
+    arr = np.asarray(arr)
+    return np.argmin(np.abs(arr - val))
 
 
 @register_compute_fun(
@@ -214,7 +215,7 @@ def _x_C0FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
 
     # 0 to pi
     istart = 0
-    istop = get_closest(data["s"], jnp.pi)
+    istop = get_closest(data["s"], np.pi)
     r1 = transforms["r"].transform(jnp.atleast_1d(params["r_n"][:len_rn]), dz=0)
     Z1 = jnp.zeros_like(r1)
     X1 = r1 * jnp.cos(data["s"])

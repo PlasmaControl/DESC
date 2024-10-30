@@ -2055,9 +2055,7 @@ class Equilibrium(IOAble, Optimizable):
             Equilibrium generated from the given input file.
 
         """
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            inputs = InputReader().parse_inputs(path)[-1]
+        inputs = InputReader().parse_inputs(path)[-1]
         if (inputs["bdry_ratio"] is not None) and (inputs["bdry_ratio"] != 1):
             warnings.warn(
                 "`bdry_ratio` is intended as an input for the continuation method."

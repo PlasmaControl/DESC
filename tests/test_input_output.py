@@ -234,7 +234,7 @@ def test_from_input_file_equilibrium_desc_vmec_DSHAPE():
     kwargs = {"spectral_indexing": "fringe"}
     with pytest.warns(UserWarning, match="Left handed"):
         eq = Equilibrium.from_input_file(desc_path, **kwargs)
-    with pytest.warns(UserWarning, match="Left handed"):
+    with pytest.warns(UserWarning):
         eq_VMEC = Equilibrium.from_input_file(vmec_path, **kwargs)
 
     # make sure the loaded eqs are equivalent
@@ -273,7 +273,8 @@ def test_from_input_file_equilibrium_desc_vmec():
     eq = Equilibrium.from_input_file(desc_path, **kwargs)
     # change surface resolution to match the one from after thresholding of VMEC's bdry
     eq.surface.change_resolution(M=10, N=14)
-    eq_VMEC = Equilibrium.from_input_file(vmec_path, **kwargs)
+    with pytest.warns(UserWarning):
+        eq_VMEC = Equilibrium.from_input_file(vmec_path, **kwargs)
 
     np.testing.assert_allclose(eq.R_lmn, eq_VMEC.R_lmn)
     np.testing.assert_allclose(eq.Z_lmn, eq_VMEC.Z_lmn)

@@ -796,7 +796,7 @@ class InputReader:
         xtol=1e-6,
         gtol=1e-6,
         maxiter=100,
-        threshold=1e-10,
+        threshold=0,
     ):
         """Generate a DESC input file from a DESC output file.
 

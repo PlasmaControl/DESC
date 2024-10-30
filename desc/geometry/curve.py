@@ -856,7 +856,14 @@ class FourierPlanarCurve(Curve):
 class C0FourierPlanarCurve(Curve):
     """C0 fourier."""
 
-    _io_attrs_ = Curve._io_attrs_ + ["_r_n", "_center", "_normal", "_r_basis", "_basis"]
+    _io_attrs_ = Curve._io_attrs_ + [
+        "_r_n",
+        "_center",
+        "_normal",
+        "_r_basis",
+        "_basis",
+        "len_rn",
+    ]
 
     def __init__(
         self,

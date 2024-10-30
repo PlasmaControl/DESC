@@ -239,7 +239,7 @@ def _x_C0FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
     Z1_half = jnp.where(data["s"] >= data["s"][istop], coords1[:, 2], 0)
 
     # pi to 2pi
-    istart = get_closest(data["s"], jnp.pi)
+    istart = get_closest(data["s"], np.pi)
     istop = -1
     r2 = transforms["r"].transform(jnp.atleast_1d(params["r_n"][len_rn:]), dz=0)
     Z2 = jnp.zeros_like(r2)
@@ -297,7 +297,7 @@ def _x_s_C0FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
     len_rn = kwargs.get("len_rn", 1)
 
     istart = 0
-    istop = get_closest(data["s"], jnp.pi)
+    istop = get_closest(data["s"], np.pi)
     r1 = transforms["r"].transform(params["r_n"][:len_rn], dz=0)
     dr1 = transforms["r"].transform(params["r_n"][:len_rn], dz=1)
     dX1 = dr1 * jnp.cos(data["s"]) - r1 * jnp.sin(data["s"])
@@ -319,7 +319,7 @@ def _x_s_C0FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
     dZ1_half = jnp.where(data["s"] >= data["s"][istop], coords1[:, 2], 0)
 
     # pi to 2pi
-    istart = get_closest(data["s"], jnp.pi)
+    istart = get_closest(data["s"], np.pi)
     istop = -1
     r2 = transforms["r"].transform(params["r_n"][len_rn:], dz=0)
     dr2 = transforms["r"].transform(params["r_n"][len_rn:], dz=1)

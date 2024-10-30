@@ -9,12 +9,14 @@ computational grid has a node on the magnetic axis to avoid potentially
 expensive computations.
 """
 
-from scipy.constants import mu_0
+from interpax import interp1d
+from scipy.constants import elementary_charge, mu_0
 
 from desc.backend import jnp
 
+from ..integrals.surface_integral import surface_averages
+from ..utils import cross, dot, safediv, safenorm
 from .data_index import register_compute_fun
-from .utils import cross, dot, safediv, safenorm, surface_averages
 
 
 @register_compute_fun(
@@ -376,6 +378,7 @@ def _J_dot_B(params, transforms, profiles, data, **kwargs):
     coordinates="r",
     data=["J*sqrt(g)", "B", "V_r(r)"],
     axis_limit_data=["(J*sqrt(g))_r", "V_rr(r)"],
+    resolution_requirement="tz",
 )
 def _J_dot_B_fsa(params, transforms, profiles, data, **kwargs):
     J = transforms["grid"].replace_at_axis(
@@ -534,6 +537,7 @@ def _Fmag(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="",
     data=["|F|", "sqrt(g)", "V"],
+    resolution_requirement="rtz",
 )
 def _Fmag_vol(params, transforms, profiles, data, **kwargs):
     data["<|F|>_vol"] = (
@@ -621,7 +625,7 @@ def _e_sup_helical_times_sqrt_g_mag(params, transforms, profiles, data, **kwargs
 
 @register_compute_fun(
     name="F_anisotropic",
-    label="F_{anisotropic}",
+    label="F_{\\mathrm{anisotropic}}",
     units="N \\cdot m^{-3}",
     units_long="Newtons / cubic meter",
     description="Anisotropic force balance error",
@@ -655,6 +659,7 @@ def _F_anisotropic(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="",
     data=["|B|", "sqrt(g)"],
+    resolution_requirement="rtz",
 )
 def _W_B(params, transforms, profiles, data, **kwargs):
     data["W_B"] = jnp.sum(
@@ -675,6 +680,7 @@ def _W_B(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="",
     data=["B", "sqrt(g)"],
+    resolution_requirement="rtz",
 )
 def _W_Bpol(params, transforms, profiles, data, **kwargs):
     data["W_Bpol"] = jnp.sum(
@@ -697,6 +703,7 @@ def _W_Bpol(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="",
     data=["B", "sqrt(g)"],
+    resolution_requirement="rtz",
 )
 def _W_Btor(params, transforms, profiles, data, **kwargs):
     data["W_Btor"] = jnp.sum(
@@ -718,6 +725,7 @@ def _W_Btor(params, transforms, profiles, data, **kwargs):
     coordinates="",
     data=["p", "sqrt(g)"],
     gamma="float: Adiabatic index. Default 0",
+    resolution_requirement="rtz",
 )
 def _W_p(params, transforms, profiles, data, **kwargs):
     data["W_p"] = jnp.sum(data["p"] * data["sqrt(g)"] * transforms["grid"].weights) / (
@@ -795,4 +803,73 @@ def _beta_volpol(params, transforms, profiles, data, **kwargs):
 )
 def _beta_voltor(params, transforms, profiles, data, **kwargs):
     data["<beta_tor>_vol"] = jnp.abs(data["W_p"] / data["W_Btor"])
+    return data
+
+
+@register_compute_fun(
+    name="P_ISS04",
+    label="P_{ISS04}",
+    units="W",
+    units_long="Watts",
+    description="Heating power required by the ISS04 energy confinement time scaling",
+    dim=0,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="",
+    data=["a", "iota", "rho", "R0", "W_p", "<ne>_vol", "<|B|>_axis"],
+    method="str: Interpolation method. Default 'cubic'.",
+    H_ISS04="float: ISS04 confinement enhancement factor. Default 1.",
+)
+def _P_ISS04(params, transforms, profiles, data, **kwargs):
+    rho = transforms["grid"].compress(data["rho"], surface_label="rho")
+    iota = transforms["grid"].compress(data["iota"], surface_label="rho")
+    fx = {}
+    if "iota_r" in data:
+        fx["fx"] = transforms["grid"].compress(
+            data["iota_r"]
+        )  # noqa: unused dependency
+    iota_23 = interp1d(2 / 3, rho, iota, method=kwargs.get("method", "cubic"), **fx)
+    data["P_ISS04"] = 1e6 * (  # MW -> W
+        jnp.abs(data["W_p"] / 1e6)  # J -> MJ
+        / (
+            0.134
+            * data["a"] ** 2.28  # m
+            * data["R0"] ** 0.64  # m
+            * (data["<ne>_vol"] / 1e19) ** 0.54  # 1/m^3 -> 1e19/m^3
+            * data["<|B|>_axis"] ** 0.84  # T
+            * iota_23**0.41
+            * kwargs.get("H_ISS04", 1)
+        )
+    ) ** (1 / 0.39)
+    return data
+
+
+@register_compute_fun(
+    name="P_fusion",
+    label="P_{fusion}",
+    units="W",
+    units_long="Watts",
+    description="Fusion power",
+    dim=0,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="",
+    data=["ni", "<sigma*nu>", "sqrt(g)"],
+    resolution_requirement="rtz",
+    fuel="str: Fusion fuel, assuming a 50/50 mix. One of {'DT'}. Default is 'DT'.",
+)
+def _P_fusion(params, transforms, profiles, data, **kwargs):
+    energies = {"DT": 3.52e6 + 14.06e6}  # eV
+    fuel = kwargs.get("fuel", "DT")
+    energy = energies.get(fuel)
+
+    reaction_rate = jnp.sum(
+        data["ni"] ** 2
+        * data["<sigma*nu>"]
+        * data["sqrt(g)"]
+        * transforms["grid"].weights
+    )  # reactions/s
+    data["P_fusion"] = reaction_rate * energy * elementary_charge  # J/s
     return data

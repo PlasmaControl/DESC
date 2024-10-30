@@ -4,7 +4,16 @@ import warnings
 
 import numpy as np
 
-from desc.backend import block_diag, jit, jnp, put, root_scalar, sign, vmap
+from desc.backend import (
+    block_diag,
+    execute_on_cpu,
+    jit,
+    jnp,
+    put,
+    root_scalar,
+    sign,
+    vmap,
+)
 from desc.basis import DoubleFourierSeries, ZernikePolynomial
 from desc.compute import rpz2xyz_vec, xyz2rpz, xyz2rpz_vec
 from desc.grid import Grid, LinearGrid
@@ -57,6 +66,7 @@ class FourierRZToroidalSurface(Surface):
         "_rho",
     ]
 
+    @execute_on_cpu
     def __init__(
         self,
         R_lmn=None,
@@ -124,7 +134,7 @@ class FourierRZToroidalSurface(Surface):
 
         self._R_lmn = copy_coeffs(R_lmn, modes_R, self.R_basis.modes[:, 1:])
         self._Z_lmn = copy_coeffs(Z_lmn, modes_Z, self.Z_basis.modes[:, 1:])
-        self._sym = sym
+        self._sym = bool(sym)
         self._rho = rho
 
         if check_orientation and self._compute_orientation() == -1:
@@ -165,6 +175,7 @@ class FourierRZToroidalSurface(Surface):
     def rho(self, rho):
         self._rho = rho
 
+    @execute_on_cpu
     def change_resolution(self, *args, **kwargs):
         """Change the maximum poloidal and toroidal resolution."""
         assert (
@@ -245,7 +256,7 @@ class FourierRZToroidalSurface(Surface):
         else:
             raise ValueError(
                 f"Z_lmn should have the same size as the basis, got {len(new)} for "
-                + f"basis with {self.R_basis.num_modes} modes."
+                + f"basis with {self.Z_basis.num_modes} modes."
             )
 
     def get_coeffs(self, m, n=0):
@@ -287,13 +298,16 @@ class FourierRZToroidalSurface(Surface):
                 self.Z_lmn = put(self.Z_lmn, idxZ, ZZ)
 
     @classmethod
-    def from_input_file(cls, path):
+    def from_input_file(cls, path, **kwargs):
         """Create a surface from Fourier coefficients in a DESC or VMEC input file.
 
         Parameters
         ----------
         path : Path-like or str
             Path to DESC or VMEC input file.
+        **kwargs : dict, optional
+            keyword arguments to pass to the constructor of the
+            FourierRZToroidalSurface being created.
 
         Returns
         -------
@@ -301,7 +315,9 @@ class FourierRZToroidalSurface(Surface):
             Surface with given Fourier coefficients.
 
         """
-        inputs = InputReader().parse_inputs(path)[-1]
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            inputs = InputReader().parse_inputs(path)[-1]
         if (inputs["bdry_ratio"] is not None) and (inputs["bdry_ratio"] != 1):
             warnings.warn(
                 "boundary_ratio = {} != 1, surface may not be as expected".format(
@@ -315,6 +331,7 @@ class FourierRZToroidalSurface(Surface):
             inputs["surface"][:, 1:3].astype(int),
             inputs["NFP"],
             inputs["sym"],
+            **kwargs,
         )
         return surf
 
@@ -332,6 +349,8 @@ class FourierRZToroidalSurface(Surface):
         positive_iota=True,
     ):
         """Create a surface from a near-axis model for quasi-poloidal symmetry.
+
+        Model is based off of section III of Goodman et. al. [1]_
 
         Parameters
         ----------
@@ -358,6 +377,11 @@ class FourierRZToroidalSurface(Surface):
         -------
         surface : FourierRZToroidalSurface
             Surface with given geometric properties.
+
+        References
+        ----------
+        .. [1] Goodman, Alan, et al. "Constructing Precisely Quasi-Isodynamic
+          Magnetic Fields." Journal of Plasma Physics 89.5 (2023): 905890504.
 
         """
         assert mirror_ratio <= 1
@@ -799,6 +823,7 @@ class ZernikeRZToroidalSection(Surface):
         "_zeta",
     ]
 
+    @execute_on_cpu
     def __init__(
         self,
         R_lmn=None,
@@ -870,8 +895,8 @@ class ZernikeRZToroidalSection(Surface):
 
         self._R_lmn = copy_coeffs(R_lmn, modes_R, self.R_basis.modes[:, :2])
         self._Z_lmn = copy_coeffs(Z_lmn, modes_Z, self.Z_basis.modes[:, :2])
-        self._sym = sym
-        self._spectral_indexing = spectral_indexing
+        self._sym = bool(sym)
+        self._spectral_indexing = str(spectral_indexing)
 
         self._zeta = zeta
 
@@ -910,6 +935,7 @@ class ZernikeRZToroidalSection(Surface):
     def zeta(self, zeta):
         self._zeta = zeta
 
+    @execute_on_cpu
     def change_resolution(self, *args, **kwargs):
         """Change the maximum radial and poloidal resolution."""
         assert (

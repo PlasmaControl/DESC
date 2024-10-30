@@ -6,6 +6,7 @@ import scipy.linalg
 from qsc import Qsc
 
 import desc.examples
+from desc.backend import jnp
 from desc.equilibrium import Equilibrium
 from desc.geometry import FourierRZToroidalSurface
 from desc.grid import LinearGrid
@@ -32,16 +33,22 @@ from desc.objectives import (
     FixModeLambda,
     FixModeR,
     FixModeZ,
+    FixNearAxisLambda,
+    FixNearAxisR,
+    FixNearAxisZ,
+    FixOmniBmax,
     FixOmniMap,
     FixOmniWell,
     FixParameters,
     FixPressure,
     FixPsi,
+    FixSumCoilCurrent,
     FixSumModesLambda,
     FixSumModesR,
     FixSumModesZ,
     FixThetaSFL,
     GenericObjective,
+    LinearObjectiveFromUser,
     ObjectiveFunction,
     get_equilibrium_objective,
     get_fixed_axis_constraints,
@@ -60,7 +67,8 @@ def test_LambdaGauge_sym(DummyStellarator):
     """Test that lambda is fixed correctly for symmetric equilibrium."""
     # symmetric cases automatically satisfy gauge freedom, no constraint needed.
     eq = load(load_from=str(DummyStellarator["output_path"]), file_format="hdf5")
-    eq.change_resolution(L=2, M=1, N=1)
+    with pytest.warns(UserWarning, match="Reducing radial"):
+        eq.change_resolution(L=2, M=1, N=1)
     correct_constraint_matrix = np.zeros((0, 5))
     lam_con = FixLambdaGauge(eq)
     lam_con.build()
@@ -197,6 +205,9 @@ def test_fixed_mode_solve():
         FixIota(eq=eq),
         FixPsi(eq=eq),
         FixBoundaryR(eq=eq),
+        FixBoundaryR(
+            eq=eq, modes=[0, 0, 0]
+        ),  # add a degenerate constraint to test fix of GH #1297 for lsq-exact
         FixBoundaryZ(eq=eq),
         fixR,
         fixZ,
@@ -302,13 +313,8 @@ def test_fixed_axis_and_theta_SFL_solve():
     orig_R_val = eq.axis.R_n
     orig_Z_val = eq.axis.Z_n
 
-    constraints = (
-        FixThetaSFL(eq=eq),
-        FixPressure(eq=eq),
-        FixCurrent(eq=eq),
-        FixPsi(eq=eq),
-        FixAxisR(eq=eq),
-        FixAxisZ(eq=eq),
+    constraints = (FixThetaSFL(eq=eq),) + get_NAE_constraints(
+        eq, None, order=0, fix_lambda=False
     )
 
     eq.solve(
@@ -410,13 +416,14 @@ def test_correct_indexing_passed_modes():
     """Test indexing when passing in specified modes, related to gh issue #380."""
     n = 1
     eq = desc.examples.get("W7-X")
-    eq.change_resolution(3, 3, 3, 6, 6, 6)
+    with pytest.warns(UserWarning, match="Reducing radial"):
+        eq.change_resolution(3, 3, 3, 6, 6, 6)
     eq.surface = eq.get_surface_at(1.0)
 
     objective = ObjectiveFunction(
         (
             # just need dummy objective for factorizing constraints
-            GenericObjective("0", eq=eq),
+            GenericObjective("0", thing=eq),
         ),
         use_jit=False,
     )
@@ -443,7 +450,7 @@ def test_correct_indexing_passed_modes():
     constraint = ObjectiveFunction(constraints, use_jit=False)
     constraint.build()
 
-    xp, A, b, Z, unfixed_idx, project, recover = factorize_linear_constraints(
+    xp, A, b, Z, D, unfixed_idx, project, recover = factorize_linear_constraints(
         objective, constraint
     )
 
@@ -453,8 +460,8 @@ def test_correct_indexing_passed_modes():
     atol = 2e-15
     np.testing.assert_allclose(x1, x2, atol=atol)
     np.testing.assert_allclose(A @ xp[unfixed_idx], b, atol=atol)
-    np.testing.assert_allclose(A @ x1[unfixed_idx], b, atol=atol)
-    np.testing.assert_allclose(A @ x2[unfixed_idx], b, atol=atol)
+    np.testing.assert_allclose(A @ (x1[unfixed_idx] / D[unfixed_idx]), b, atol=atol)
+    np.testing.assert_allclose(A @ (x2[unfixed_idx] / D[unfixed_idx]), b, atol=atol)
     np.testing.assert_allclose(A @ Z, 0, atol=atol)
 
 
@@ -463,11 +470,12 @@ def test_correct_indexing_passed_modes_and_passed_target():
     """Test indexing when passing in specified modes, related to gh issue #380."""
     n = 1
     eq = desc.examples.get("W7-X")
-    eq.change_resolution(3, 3, 3, 6, 6, 6)
+    with pytest.warns(UserWarning, match="Reducing radial"):
+        eq.change_resolution(3, 3, 3, 6, 6, 6)
     eq.surface = eq.get_surface_at(1.0)
 
     objective = ObjectiveFunction(
-        (GenericObjective("0", eq=eq),),
+        (GenericObjective("0", thing=eq),),
         use_jit=False,
     )
     objective.build()
@@ -505,7 +513,7 @@ def test_correct_indexing_passed_modes_and_passed_target():
     constraint = ObjectiveFunction(constraints, use_jit=False)
     constraint.build()
 
-    xp, A, b, Z, unfixed_idx, project, recover = factorize_linear_constraints(
+    xp, A, b, Z, D, unfixed_idx, project, recover = factorize_linear_constraints(
         objective, constraint
     )
 
@@ -515,8 +523,8 @@ def test_correct_indexing_passed_modes_and_passed_target():
     atol = 2e-15
     np.testing.assert_allclose(x1, x2, atol=atol)
     np.testing.assert_allclose(A @ xp[unfixed_idx], b, atol=atol)
-    np.testing.assert_allclose(A @ x1[unfixed_idx], b, atol=atol)
-    np.testing.assert_allclose(A @ x2[unfixed_idx], b, atol=atol)
+    np.testing.assert_allclose(A @ (x1[unfixed_idx] / D[unfixed_idx]), b, atol=atol)
+    np.testing.assert_allclose(A @ (x2[unfixed_idx] / D[unfixed_idx]), b, atol=atol)
     np.testing.assert_allclose(A @ Z, 0, atol=atol)
 
 
@@ -525,12 +533,13 @@ def test_correct_indexing_passed_modes_axis():
     """Test indexing when passing in specified axis modes, related to gh issue #380."""
     n = 1
     eq = desc.examples.get("W7-X")
-    eq.change_resolution(3, 3, 3, 6, 6, 6)
+    with pytest.warns(UserWarning, match="Reducing radial"):
+        eq.change_resolution(3, 3, 3, 6, 6, 6)
     eq.surface = eq.get_surface_at(1.0)
     eq.axis = eq.get_axis()
 
     objective = ObjectiveFunction(
-        (GenericObjective("0", eq=eq),),
+        (GenericObjective("0", thing=eq),),
         use_jit=False,
     )
     objective.build()
@@ -564,7 +573,7 @@ def test_correct_indexing_passed_modes_axis():
     constraint = ObjectiveFunction(constraints, use_jit=False)
     constraint.build()
 
-    xp, A, b, Z, unfixed_idx, project, recover = factorize_linear_constraints(
+    xp, A, b, Z, D, unfixed_idx, project, recover = factorize_linear_constraints(
         objective, constraint
     )
 
@@ -574,8 +583,8 @@ def test_correct_indexing_passed_modes_axis():
     atol = 2e-15
     np.testing.assert_allclose(x1, x2, atol=atol)
     np.testing.assert_allclose(A @ xp[unfixed_idx], b, atol=atol)
-    np.testing.assert_allclose(A @ x1[unfixed_idx], b, atol=atol)
-    np.testing.assert_allclose(A @ x2[unfixed_idx], b, atol=atol)
+    np.testing.assert_allclose(A @ (x1[unfixed_idx] / D[unfixed_idx]), b, atol=atol)
+    np.testing.assert_allclose(A @ (x2[unfixed_idx] / D[unfixed_idx]), b, atol=atol)
     np.testing.assert_allclose(A @ Z, 0, atol=atol)
 
 
@@ -585,12 +594,13 @@ def test_correct_indexing_passed_modes_and_passed_target_axis():
     n = 1
 
     eq = desc.examples.get("W7-X")
-    eq.change_resolution(4, 4, 4, 8, 8, 8)
+    with pytest.warns(UserWarning, match="Reducing radial"):
+        eq.change_resolution(4, 4, 4, 8, 8, 8)
     eq.surface = eq.get_surface_at(1.0)
     eq.axis = eq.get_axis()
 
     objective = ObjectiveFunction(
-        (GenericObjective("0", eq=eq),),
+        (GenericObjective("0", thing=eq),),
         use_jit=False,
     )
     objective.build()
@@ -692,7 +702,7 @@ def test_correct_indexing_passed_modes_and_passed_target_axis():
     constraint = ObjectiveFunction(constraints, use_jit=False)
     constraint.build()
 
-    xp, A, b, Z, unfixed_idx, project, recover = factorize_linear_constraints(
+    xp, A, b, Z, D, unfixed_idx, project, recover = factorize_linear_constraints(
         objective, constraint
     )
 
@@ -702,8 +712,8 @@ def test_correct_indexing_passed_modes_and_passed_target_axis():
     atol = 2e-15
     np.testing.assert_allclose(x1, x2, atol=atol)
     np.testing.assert_allclose(A @ xp[unfixed_idx], b, atol=atol)
-    np.testing.assert_allclose(A @ x1[unfixed_idx], b, atol=atol)
-    np.testing.assert_allclose(A @ x2[unfixed_idx], b, atol=atol)
+    np.testing.assert_allclose(A @ (x1[unfixed_idx] / D[unfixed_idx]), b, atol=atol)
+    np.testing.assert_allclose(A @ (x2[unfixed_idx] / D[unfixed_idx]), b, atol=atol)
     np.testing.assert_allclose(A @ Z, 0, atol=atol)
 
 
@@ -844,21 +854,27 @@ def test_FixNAE_util_correct_objectives():
     eq = Equilibrium()
     qsc = Qsc.from_paper("precise QA")
     cs = get_NAE_constraints(eq, qsc)
-    assert _is_any_instance(cs, FixAxisR)
-    assert _is_any_instance(cs, FixAxisZ)
+    for c in cs:
+        c.build()
     assert _is_any_instance(cs, FixPsi)
-    assert _is_any_instance(cs, FixSumModesR)
-    assert _is_any_instance(cs, FixSumModesZ)
+    assert _is_any_instance(cs, FixNearAxisR)
+    assert _is_any_instance(cs, FixNearAxisZ)
+    assert _is_any_instance(cs, FixPressure)
+    assert _is_any_instance(cs, FixCurrent)
+
+    cs = get_NAE_constraints(eq, qsc, fix_lambda=1)
+    assert _is_any_instance(cs, FixPsi)
+    assert _is_any_instance(cs, FixNearAxisR)
+    assert _is_any_instance(cs, FixNearAxisZ)
+    assert _is_any_instance(cs, FixNearAxisLambda)
     assert _is_any_instance(cs, FixPressure)
     assert _is_any_instance(cs, FixCurrent)
 
     eq = Equilibrium(electron_temperature=1, electron_density=1, iota=1)
     cs = get_NAE_constraints(eq, qsc)
-    assert _is_any_instance(cs, FixAxisR)
-    assert _is_any_instance(cs, FixAxisZ)
     assert _is_any_instance(cs, FixPsi)
-    assert _is_any_instance(cs, FixSumModesR)
-    assert _is_any_instance(cs, FixSumModesZ)
+    assert _is_any_instance(cs, FixNearAxisR)
+    assert _is_any_instance(cs, FixNearAxisZ)
     assert _is_any_instance(cs, FixElectronDensity)
     assert _is_any_instance(cs, FixElectronTemperature)
     assert _is_any_instance(cs, FixIonTemperature)
@@ -901,6 +917,26 @@ def test_fix_omni_indices():
     constraint = FixOmniMap(field=field, indices=indices)
     constraint.build()
     assert constraint.dim_f == indices.size
+
+
+@pytest.mark.unit
+def test_fix_omni_Bmax():
+    """Test that omnigenity parameters are constrained for B_max to be a straight line.
+
+    Test for GH issue #1266.
+    """
+
+    def _test(M_x, N_x, NFP, sum):
+        field = OmnigenousField(L_x=2, M_x=M_x, N_x=N_x, NFP=NFP, helicity=(1, NFP))
+        constraint = FixOmniBmax(field=field)
+        constraint.build()
+        assert constraint.dim_f == (2 * field.N_x + 1) * (field.L_x + 1)
+        # 0 - 2 + 4 - 6 + 8 ...
+        np.testing.assert_allclose(constraint._A @ field.x_basis.modes[:, 1], sum)
+
+    _test(M_x=6, N_x=3, NFP=1, sum=-4)
+    _test(M_x=9, N_x=4, NFP=2, sum=4)
+    _test(M_x=12, N_x=5, NFP=3, sum=6)
 
 
 @pytest.mark.unit
@@ -954,16 +990,14 @@ def test_fix_subset_of_params_in_collection(DummyMixedCoilSet):
     params = [
         [
             {"current": True},
-            {"center": True, "normal": np.array([1])},
-            {"r_n": True},
-            {},
         ],
         {"shift": True, "rotmat": True},
         {"X_n": np.array([1, 2]), "Y_n": False, "Z_n": np.array([0])},
+        {},
     ]
     target = np.concatenate(
         (
-            np.array([3, 2, 0, 0, 1, 1]),
+            np.array([3]),
             np.eye(3).flatten(),
             np.array([0, 0, 0]),
             np.eye(3).flatten(),
@@ -993,13 +1027,61 @@ def test_fix_coil_current(DummyMixedCoilSet):
     # fix all coil currents
     obj = FixCoilCurrent(coil=coilset)
     obj.build()
-    assert obj.dim_f == 8
-    np.testing.assert_allclose(obj.target, [3, 3, 3, 3, -1, -1, -1, 2])
+    assert obj.dim_f == 6
+    np.testing.assert_allclose(obj.target, [3, -1, -1, -1, 2, 1])
 
     # only fix currents of some coils in the coil set
     obj = FixCoilCurrent(
-        coil=coilset, indices=[[True, False, True, False], False, True]
+        coil=coilset, indices=[[True], [True, False, True], True, False]
     )
     obj.build()
-    assert obj.dim_f == 3
-    np.testing.assert_allclose(obj.target, [3, 3, 2])
+    assert obj.dim_f == 4
+    np.testing.assert_allclose(obj.target, [3, -1, -1, 2])
+
+
+@pytest.mark.unit
+def test_fix_sum_coil_current(DummyMixedCoilSet):
+    """Tests FixSumCoilCurrent."""
+    coilset = load(load_from=str(DummyMixedCoilSet["output_path"]), file_format="hdf5")
+
+    # sum a single coil current
+    obj = FixSumCoilCurrent(coil=coilset.coils[1].coils[0])
+    obj.build()
+    params = coilset.coils[1].coils[0].params_dict
+    np.testing.assert_allclose(obj.compute(params), -1)
+
+    # sum all coil currents
+    obj = FixSumCoilCurrent(coil=coilset)
+    obj.build()
+    params = coilset.params_dict
+    np.testing.assert_allclose(obj.compute(params), 3)
+    # the default target should be the original sum
+    np.testing.assert_allclose(obj.compute_scaled_error(params), 0)
+
+    # only sum currents of some coils in the coil set
+    obj = FixSumCoilCurrent(
+        coil=coilset, indices=[[True], [True, False, True], True, False]
+    )
+    obj.build()
+    np.testing.assert_allclose(obj.compute(params), 3)
+
+
+@pytest.mark.unit
+def test_linear_objective_from_user_on_collection(DummyCoilSet):
+    """Test LinearObjectiveFromUser on an OptimizableCollection."""
+    # test that LinearObjectiveFromUser can be used for the same functionality as
+    # FixSumCoilCurrent to sum all currents in a CoilSet
+
+    coilset = load(load_from=str(DummyCoilSet["output_path_asym"]), file_format="hdf5")
+    params = coilset.params_dict
+
+    obj1 = FixSumCoilCurrent(coil=coilset)
+    obj1.build()
+
+    obj2 = LinearObjectiveFromUser(
+        lambda params: jnp.sum(jnp.array([param["current"] for param in params])),
+        coilset,
+    )
+    obj2.build()
+
+    np.testing.assert_allclose(obj1.compute(params), obj2.compute(params))

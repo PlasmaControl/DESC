@@ -20,10 +20,11 @@ from .utils import area_difference, compute_coords
 
 
 @pytest.mark.unit
-def test_compute_theta_coords():
-    """Test root finding for theta(theta*,lambda(theta))."""
+def test_map_PEST_coordinates():
+    """Test root finding for theta(theta_PEST,lambda(theta))."""
     eq = get("DSHAPE_CURRENT")
-    eq.change_resolution(3, 3, 0, 6, 6, 0)
+    with pytest.warns(UserWarning, match="Reducing radial"):
+        eq.change_resolution(3, 3, 0, 6, 6, 0)
     rho = np.linspace(0.01, 0.99, 200)
     theta = np.linspace(0, 2 * np.pi, 200, endpoint=False)
     zeta = np.linspace(0, 2 * np.pi, 200, endpoint=False)
@@ -33,7 +34,7 @@ def test_compute_theta_coords():
     flux_coords = nodes.copy()
     flux_coords[:, 1] += coords["lambda"]
 
-    geom_coords = eq.compute_theta_coords(flux_coords)
+    geom_coords = eq.map_coordinates(flux_coords, inbasis=("rho", "theta_PEST", "zeta"))
     geom_coords = np.array(geom_coords)
 
     # catch difference between 0 and 2*pi
@@ -48,16 +49,12 @@ def test_map_coordinates():
     """Test root finding for (rho,theta,zeta) for common use cases."""
     # finding coordinates along a single field line
     eq = get("NCSX")
-    eq.change_resolution(3, 3, 3, 6, 6, 6)
+    with pytest.warns(UserWarning, match="Reducing radial"):
+        eq.change_resolution(3, 3, 3, 6, 6, 6)
     n = 100
     coords = np.array([np.ones(n), np.zeros(n), np.linspace(0, 10 * np.pi, n)]).T
-    out = eq.map_coordinates(
-        coords,
-        ["rho", "alpha", "zeta"],
-        ["rho", "theta", "zeta"],
-        period=(np.inf, 2 * np.pi, 10 * np.pi),
-    )
-    assert not np.any(np.isnan(out))
+    out = eq.map_coordinates(coords, inbasis=["rho", "alpha", "zeta"])
+    assert np.isfinite(out).all()
 
     eq = get("DSHAPE")
 
@@ -70,9 +67,9 @@ def test_map_coordinates():
 
     grid = Grid(np.vstack([rho, theta, zeta]).T, sort=False)
     in_data = eq.compute(inbasis, grid=grid)
-    in_coords = np.stack([in_data[k] for k in inbasis], axis=-1)
+    in_coords = np.column_stack([in_data[k] for k in inbasis])
     out_data = eq.compute(outbasis, grid=grid)
-    out_coords = np.stack([out_data[k] for k in outbasis], axis=-1)
+    out_coords = np.column_stack([out_data[k] for k in outbasis])
 
     out = eq.map_coordinates(
         in_coords,
@@ -88,7 +85,8 @@ def test_map_coordinates():
 def test_map_coordinates_derivative():
     """Test root finding for (rho,theta,zeta) from (R,phi,Z)."""
     eq = get("DSHAPE")
-    eq.change_resolution(3, 3, 0, 6, 6, 0)
+    with pytest.warns(UserWarning, match="Reducing radial"):
+        eq.change_resolution(3, 3, 0, 6, 6, 0)
     inbasis = ["alpha", "phi", "rho"]
     outbasis = ["rho", "theta_PEST", "zeta"]
 
@@ -133,7 +131,9 @@ def test_map_coordinates_derivative():
 
     @jax.jit
     def bar(L_lmn):
-        geom_coords = eq.compute_theta_coords(flux_coords, L_lmn)
+        geom_coords = eq.map_coordinates(
+            flux_coords, inbasis=("rho", "theta_PEST", "zeta")
+        )
         return geom_coords
 
     J1 = jax.jit(jax.jacfwd(bar))(eq.params_dict["L_lmn"])
@@ -149,7 +149,8 @@ def test_map_coordinates_derivative():
 def test_to_sfl():
     """Test converting an equilibrium to straight field line coordinates."""
     eq = get("DSHAPE_CURRENT")
-    eq.change_resolution(6, 6, 0, 12, 12, 0)
+    with pytest.warns(UserWarning, match="Reducing radial"):
+        eq.change_resolution(6, 6, 0, 12, 12, 0)
     Rr1, Zr1, Rv1, Zv1 = compute_coords(eq)
     Rr2, Zr2, Rv2, Zv2 = compute_coords(eq.to_sfl())
     rho_err, theta_err = area_difference(Rr1, Rr2, Zr1, Zr2, Rv1, Rv2, Zv1, Zv2)
@@ -330,7 +331,8 @@ def test_change_NFP():
     with warnings.catch_warnings():
         warnings.simplefilter("error")
         eq = get("HELIOTRON")
-        eq.change_resolution(3, 3, 1, 6, 6, 2)
+        with pytest.warns(UserWarning, match="Reducing radial"):
+            eq.change_resolution(3, 3, 1, 6, 6, 2)
         eq.change_resolution(NFP=4)
         obj = get_equilibrium_objective(eq=eq)
         obj.build()
@@ -364,7 +366,8 @@ def test_backward_compatible_load_and_resolve():
         eq = EquilibriaFamily.load(load_from=".//tests//inputs//NCSX_older.h5")[-1]
 
     # reducing resolution since we only want to test eq.solve
-    eq.change_resolution(4, 4, 4, 4, 4, 4)
+    with pytest.warns(UserWarning, match="Reducing radial"):
+        eq.change_resolution(4, 4, 4, 4, 4, 4)
 
     f_obj = ForceBalance(eq=eq)
     obj = ObjectiveFunction(f_obj, use_jit=False)

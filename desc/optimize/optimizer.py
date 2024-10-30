@@ -14,6 +14,7 @@ from desc.objectives import (
 )
 from desc.objectives.utils import combine_args
 from desc.utils import (
+    PRINT_WIDTH,
     Timer,
     errorif,
     flatten_list,
@@ -202,13 +203,15 @@ class Optimizer(IOAble):
         options = {} if options is None else options
         _, method = _parse_method(self.method)
 
+        timer.start("Initializing the optimization")
         # parse and combine constraints into linear & nonlinear objective functions
         linear_constraints, nonlinear_constraints = _parse_constraints(constraints)
         objective, nonlinear_constraints = _maybe_wrap_nonlinear_constraints(
             eq, objective, nonlinear_constraints, self.method, options
         )
-        if not isinstance(objective, ProximalProjection) and eq is not None:
-            linear_constraints = maybe_add_self_consistency(eq, linear_constraints)
+        if not isinstance(objective, ProximalProjection):
+            for t in things:
+                linear_constraints = maybe_add_self_consistency(t, linear_constraints)
         linear_constraint = _combine_constraints(linear_constraints)
         nonlinear_constraint = _combine_constraints(nonlinear_constraints)
 
@@ -295,9 +298,12 @@ class Optimizer(IOAble):
                         nonlinear_constraint.dim_f - num_equality
                     )
                 )
+        timer.stop("Initializing the optimization")
+        if verbose > 1:
+            timer.disp("Initializing the optimization")
 
         if verbose > 0:
-            print("Starting optimization")
+            print("\nStarting optimization")
             print("Using method: " + str(self.method))
 
         timer.start("Solution time")
@@ -348,29 +354,24 @@ class Optimizer(IOAble):
             things[ind].params_dict = params
 
         if verbose > 0:
-            print("Start of solver")
-            # need to check index of things bc things0 contains copies of
-            # things, so they are not the same exact Python objects
-            objective.print_value(
-                objective.x(*[things0[things.index(t)] for t in objective.things])
-            )
-            for con in constraints:
-                arg_inds_for_this_con = [
-                    things.index(t) for t in things if t in con.things
-                ]
-                args_for_this_con = [things0[ind] for ind in arg_inds_for_this_con]
-                con.print_value(*con.xs(*args_for_this_con))
+            state_0 = [things0[things.index(t)] for t in objective.things]
+            state = [things[things.index(t)] for t in objective.things]
 
-            print("End of solver")
-            objective.print_value(
-                objective.x(*[things[things.index(t)] for t in objective.things])
-            )
+            # put a divider
+            w_divider = 50
+            print("{:=<{}}".format("", PRINT_WIDTH + w_divider))
+
+            print(f"{'Start  -->   End':>{PRINT_WIDTH+21}}")
+            objective.print_value(objective.x(*state), objective.x(*state_0))
             for con in constraints:
                 arg_inds_for_this_con = [
                     things.index(t) for t in things if t in con.things
                 ]
                 args_for_this_con = [things[ind] for ind in arg_inds_for_this_con]
-                con.print_value(*con.xs(*args_for_this_con))
+                args0_for_this_con = [things0[ind] for ind in arg_inds_for_this_con]
+                con.print_value(con.xs(*args_for_this_con), con.xs(*args0_for_this_con))
+
+            print("{:=<{}}".format("", PRINT_WIDTH + w_divider))
 
         if copy:
             # need to swap things and things0, since things should be unchanged

@@ -87,9 +87,12 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
         treedef_is_leaf,
     )
 
-    trapezoid = (
-        jnp.trapezoid if hasattr(jnp, "trapezoid") else jax.scipy.integrate.trapezoid
-    )
+    if hasattr(jnp, "trapezoid"):
+        trapezoid = jnp.trapezoid  # for JAX 0.4.26 and later
+    elif hasattr(jax.scipy, "integrate"):
+        trapezoid = jax.scipy.integrate.trapezoid
+    else:
+        trapezoid = jnp.trapz  # for older versions of JAX, deprecated by jax 0.4.16
 
     def execute_on_cpu(func):
         """Decorator to set default device to CPU for a function.
@@ -200,6 +203,7 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
         maxiter_ls=5,
         alpha=0.1,
         fixup=None,
+        full_output=False,
     ):
         """Find x where fun(x, *args) == 0.
 
@@ -227,6 +231,9 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
         fixup : callable, optional
             Function to modify x after each update, ie to enforce periodicity. Should
             have a signature of the form fixup(x, *args) -> x'.
+        full_output : bool, optional
+            If True, also return a tuple where the first element is the residual from
+            the root finding and the second is the number of iterations.
 
         Returns
         -------
@@ -271,18 +278,25 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
                 xk1, fk1 = backtrack(xk1, fk1, d)
                 return xk1, fk1, k1 + 1
 
-            state = guess, res(guess), 0
+            state = guess, res(guess), 0.0
             state = jax.lax.while_loop(condfun, bodyfun, state)
-            return state[0], state[1:]
+            if full_output:
+                return state[0], state[1:]
+            else:
+                return state[0]
 
         def tangent_solve(g, y):
             A = jax.jacfwd(g)(y)
             return y / A
 
-        x, (res, niter) = jax.lax.custom_root(
-            res, x0, solve, tangent_solve, has_aux=True
-        )
-        return x, (abs(res), niter)
+        if full_output:
+            x, (res, niter) = jax.lax.custom_root(
+                res, x0, solve, tangent_solve, has_aux=True
+            )
+            return x, (abs(res), niter)
+        else:
+            x = jax.lax.custom_root(res, x0, solve, tangent_solve, has_aux=False)
+            return x
 
     def root(
         fun,
@@ -294,6 +308,7 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
         maxiter_ls=0,
         alpha=0.1,
         fixup=None,
+        full_output=False,
     ):
         """Find x where fun(x, *args) == 0.
 
@@ -321,6 +336,9 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
         fixup : callable, optional
             Function to modify x after each update, ie to enforce periodicity. Should
             have a signature of the form fixup(x, *args) -> 1d array.
+        full_output : bool, optional
+            If True, also return a tuple where the first element is the residual from
+            the root finding and the second is the number of iterations.
 
         Returns
         -------
@@ -388,19 +406,26 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
             state = (
                 jnp.atleast_1d(jnp.asarray(guess)),
                 jnp.atleast_1d(resfun(guess)),
-                0,
+                0.0,
             )
             state = jax.lax.while_loop(condfun, bodyfun, state)
-            return state[0], state[1:]
+            if full_output:
+                return state[0], state[1:]
+            else:
+                return state[0]
 
         def tangent_solve(g, y):
             A = jnp.atleast_2d(jax.jacfwd(g)(y))
             return _lstsq(A, jnp.atleast_1d(y))
 
-        x, (res, niter) = jax.lax.custom_root(
-            res, x0, solve, tangent_solve, has_aux=True
-        )
-        return x, (safenorm(res), niter)
+        if full_output:
+            x, (res, niter) = jax.lax.custom_root(
+                res, x0, solve, tangent_solve, has_aux=True
+            )
+            return x, (safenorm(res), niter)
+        else:
+            x = jax.lax.custom_root(res, x0, solve, tangent_solve, has_aux=False)
+            return x
 
 
 # we can't really test the numpy backend stuff in automated testing, so we ignore it
@@ -711,6 +736,7 @@ else:  # pragma: no cover
         maxiter_ls=5,
         alpha=0.1,
         fixup=None,
+        full_output=False,
     ):
         """Find x where fun(x, *args) == 0.
 
@@ -738,6 +764,9 @@ else:  # pragma: no cover
         fixup : callable, optional
             Function to modify x after each update, ie to enforce periodicity. Should
             have a signature of the form fixup(x) -> x'.
+        full_output : bool, optional
+            If True, also return a tuple where the first element is the residual from
+            the root finding and the second is the number of iterations.
 
         Returns
         -------
@@ -750,7 +779,10 @@ else:  # pragma: no cover
         out = scipy.optimize.root_scalar(
             fun, args, x0=x0, fprime=jac, xtol=tol, rtol=tol
         )
-        return out.root, out
+        if full_output:
+            return out.root, out
+        else:
+            return out.root
 
     def root(
         fun,
@@ -762,6 +794,7 @@ else:  # pragma: no cover
         maxiter_ls=0,
         alpha=0.1,
         fixup=None,
+        full_output=False,
     ):
         """Find x where fun(x, *args) == 0.
 
@@ -789,6 +822,9 @@ else:  # pragma: no cover
         fixup : callable, optional
             Function to modify x after each update, ie to enforce periodicity. Should
             have a signature of the form fixup(x, *args) -> 1d array.
+        full_output : bool, optional
+            If True, also return a tuple where the first element is the residual from
+            the root finding and the second is the number of iterations.
 
         Returns
         -------
@@ -803,7 +839,10 @@ else:  # pragma: no cover
         will solve it in a least squares sense.
         """
         out = scipy.optimize.root(fun, x0, args, jac=jac, tol=tol)
-        return out.x, out
+        if full_output:
+            return out.x, out
+        else:
+            return out.x
 
     def flatnonzero(a, size=None, fill_value=0):
         """A numpy implementation of jnp.flatnonzero."""

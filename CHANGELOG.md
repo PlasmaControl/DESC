@@ -24,6 +24,7 @@ Bug Fixes
 
 - Fixes bugs that occur when saving asymmetric equilibria as wout files
 - Fixes bug that occurs when using ``VMECIO.plot_vmec_comparison`` to compare to an asymmetric wout file
+- Fixes bug that occurs when taking the gradient of ``root`` and ``root_scalar`` with newer versions of JAX (>=0.4.34) and unpins the JAX version
 
 Deprecations
 

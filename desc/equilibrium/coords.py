@@ -214,6 +214,7 @@ def map_coordinates(  # noqa: C901
                 fixup=fixup,
                 tol=tol,
                 maxiter=maxiter,
+                full_output=full_output,
                 **kwargs,
             )
         )
@@ -221,7 +222,10 @@ def map_coordinates(  # noqa: C901
     # See description here
     # https://github.com/PlasmaControl/DESC/pull/504#discussion_r1194172532
     # except we make sure properly handle periodic coordinates.
-    yk, (res, niter) = vecroot(yk, coords)
+    if full_output:
+        yk, (res, niter) = vecroot(yk, coords)
+    else:
+        yk = vecroot(yk, coords)
 
     out = compute(yk, outbasis)
     if full_output:
@@ -369,18 +373,28 @@ def _map_PEST_coordinates(
                 fixup=fixup,
                 tol=tol,
                 maxiter=maxiter,
+                full_output=full_output,
                 **kwargs,
             )
         )
     )
     rho, theta_PEST, zeta = coords.T
-    theta, (res, niter) = vecroot(
-        # Assume λ=0 for default initial guess.
-        setdefault(guess, theta_PEST),
-        theta_PEST,
-        rho,
-        zeta,
-    )
+    if full_output:
+        theta, (res, niter) = vecroot(
+            # Assume λ=0 for default initial guess.
+            setdefault(guess, theta_PEST),
+            theta_PEST,
+            rho,
+            zeta,
+        )
+    else:
+        theta = vecroot(
+            # Assume λ=0 for default initial guess.
+            setdefault(guess, theta_PEST),
+            theta_PEST,
+            rho,
+            zeta,
+        )
     out = jnp.column_stack([rho, jnp.atleast_1d(theta.squeeze()), zeta])
     if full_output:
         return out, (res, niter)
@@ -472,6 +486,7 @@ def _map_clebsch_coordinates(
                 fixup=fixup,
                 tol=tol,
                 maxiter=maxiter,
+                full_output=full_output,
                 **kwargs,
             )
         )
@@ -480,7 +495,10 @@ def _map_clebsch_coordinates(
     if guess is None:
         # Assume λ=0 for default initial guess.
         guess = alpha + iota * zeta
-    theta, (res, niter) = vecroot(guess, alpha, rho, zeta, iota)
+    if full_output:
+        theta, (res, niter) = vecroot(guess, alpha, rho, zeta, iota)
+    else:
+        theta = vecroot(guess, alpha, rho, zeta, iota)
 
     out = jnp.column_stack([rho, jnp.atleast_1d(theta.squeeze()), zeta])
     if full_output:

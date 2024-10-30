@@ -1,6 +1,6 @@
 #!/bin/sh
 
-if [ -f "pre-commit.log" ]; then
+if [ -f "devtools/pre-commit.log" ]; then
     echo "Error in earlier pre-commit! Skipping unmarked tests check."
     exit 1
 fi

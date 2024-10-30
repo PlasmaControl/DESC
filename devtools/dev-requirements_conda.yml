@@ -29,9 +29,6 @@ dependencies:
     - qicna @ git+https://github.com/rogeriojorge/pyQIC/
     - black[jupyter] = 24.3.0
 
-  # to use jupyter notebooks
-  - ipykernel
-
   # building the docs
   - nbsphinx == 0.8.12
   - pandoc

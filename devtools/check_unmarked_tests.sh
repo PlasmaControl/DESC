@@ -1,5 +1,10 @@
 #!/bin/sh
 
+if [ -f "pre-commit.log" ]; then
+    echo "Error in earlier pre-commit! Skipping unmarked tests check."
+    exit 1
+fi
+
 # Start the timer using date (in seconds since epoch)
 start_time=$(date +%s)
 

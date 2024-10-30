@@ -3,6 +3,7 @@ repos:
     rev: 24.3.0
     hooks:
       - id: black-jupyter
+        log_file: devtools/pre-commit.log
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v4.3.0
     hooks:
@@ -37,3 +38,9 @@ repos:
         files: ^tests/
         types: [python]
         pass_filenames: true
+  - repo: local
+    hooks:
+    - id: clean_logfiles
+      name: clean_logfiles
+      entry: devtools/clean_logfiles.sh
+      language: script

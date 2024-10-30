@@ -34,6 +34,7 @@ from desc.objectives import (
     AspectRatio,
     BallooningStability,
     BoundaryError,
+    CoilArclengthVariance,
     CoilCurvature,
     CoilLength,
     CoilSetMinDistance,
@@ -178,6 +179,8 @@ def test_1d_optimization():
     constraints = (
         ForceBalance(eq=eq),
         FixBoundaryR(eq=eq),
+        FixBoundaryR(eq=eq, modes=[0, 0, 0]),  # add a degenerate constraint to confirm
+        # proximal-lsq-exact not affected by GH #1297
         FixBoundaryZ(eq=eq, modes=eq.surface.Z_basis.modes[0:-1, :]),
         FixPressure(eq=eq),
         FixIota(eq=eq),
@@ -644,6 +647,9 @@ def test_multiobject_optimization_al():
         FixParameters(surf, {"R_lmn": np.array([0]), "Z_lmn": np.array([3])}),
         FixParameters(eq, {"Psi": True, "i_l": True}),
         FixBoundaryR(eq, modes=[[0, 0, 0]]),
+        FixBoundaryR(
+            eq=eq, modes=[0, 0, 0]
+        ),  # add a degenerate constraint to test fix of GH #1297 for lsq-auglag
         PlasmaVesselDistance(surface=surf, eq=eq, target=1),
     )
 
@@ -1043,6 +1049,7 @@ def test_freeb_vacuum():
     objective = ObjectiveFunction(
         VacuumBoundaryError(eq=eq, field=ext_field, field_fixed=True),
         jac_chunk_size=1000,
+        deriv_mode="batched",
     )
     eq, _ = eq.optimize(
         objective,
@@ -1560,6 +1567,45 @@ def test_coilset_geometry_optimization():
         abs(surf_opt.Z_lmn[surf_opt.Z_basis.get_idx(M=-1, N=0)]) + offset,
         rtol=2e-2,
     )
+
+
+@pytest.mark.unit
+@pytest.mark.optimize
+def test_coil_arclength_optimization():
+    """Test coil arclength variance optimization."""
+    c1 = FourierXYZCoil()
+    c1.change_resolution(N=5)
+    target_length = 2 * c1.compute("length")["length"]
+    obj = ObjectiveFunction(
+        (
+            CoilLength(c1, target=target_length),
+            CoilCurvature(c1, target=1, weight=1e-2),
+        )
+    )
+    obj2 = ObjectiveFunction(
+        (
+            CoilLength(c1, target=target_length),
+            CoilCurvature(c1, target=1, weight=1e-2),
+            CoilArclengthVariance(c1, target=0, weight=100),
+        )
+    )
+    opt = Optimizer("lsq-exact")
+    (coil_opt_without_arc_obj,), _ = opt.optimize(
+        c1, objective=obj, verbose=3, copy=True, ftol=1e-6
+    )
+    (coil_opt_with_arc_obj,), _ = opt.optimize(
+        c1, objective=obj2, verbose=3, copy=True, ftol=1e-6, maxiter=200
+    )
+    xs1 = coil_opt_with_arc_obj.compute("x_s")["x_s"]
+    xs2 = coil_opt_without_arc_obj.compute("x_s")["x_s"]
+    np.testing.assert_allclose(
+        coil_opt_without_arc_obj.compute("length")["length"], target_length, rtol=1e-4
+    )
+    np.testing.assert_allclose(
+        coil_opt_with_arc_obj.compute("length")["length"], target_length, rtol=1e-4
+    )
+    np.testing.assert_allclose(np.var(np.linalg.norm(xs1, axis=1)), 0, atol=1e-5)
+    assert np.var(np.linalg.norm(xs1, axis=1)) < np.var(np.linalg.norm(xs2, axis=1))
 
 
 @pytest.mark.regression

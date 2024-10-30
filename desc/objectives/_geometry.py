@@ -9,7 +9,7 @@ from desc.grid import LinearGrid, QuadratureGrid
 from desc.utils import Timer, errorif, parse_argname_change, safenorm, warnif
 
 from .normalization import compute_scaling_factors
-from .objective_funs import _Objective
+from .objective_funs import _Objective, collect_docs
 from .utils import check_if_points_are_inside_perimeter, softmin
 
 
@@ -21,51 +21,20 @@ class AspectRatio(_Objective):
     eq : Equilibrium or FourierRZToroidalSurface
         Equilibrium or FourierRZToroidalSurface that
         will be optimized to satisfy the Objective.
-    target : {float, ndarray}, optional
-        Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f. Defaults to ``target=2``.
-    bounds : tuple of {float, ndarray}, optional
-        Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f.
-        Defaults to ``target=2``.
-    weight : {float, ndarray}, optional
-        Weighting to apply to the Objective, relative to other Objectives.
-        Must be broadcastable to to Objective.dim_f
-    normalize : bool, optional
-        Whether to compute the error in physical units or non-dimensionalize.
-        Has no effect for this objective.
-    normalize_target : bool, optional
-        Whether target and bounds should be normalized before comparing to computed
-        values. If `normalize` is `True` and the target is in physical units,
-        this should also be set to True. Note: Has no effect for this objective.
-    loss_function : {None, 'mean', 'min', 'max'}, optional
-        Loss function to apply to the objective values once computed. This loss function
-        is called on the raw compute value, before any shifting, scaling, or
-        normalization. Note: Has no effect for this objective.
-    deriv_mode : {"auto", "fwd", "rev"}
-        Specify how to compute jacobian matrix, either forward mode or reverse mode AD.
-        "auto" selects forward or reverse mode based on the size of the input and output
-        of the objective. Has no effect on self.grad or self.hess which always use
-        reverse mode and forward over reverse mode respectively.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at. Defaults to
         ``QuadratureGrid(eq.L_grid, eq.M_grid, eq.N_grid)`` for ``Equilibrium``
         or ``LinearGrid(M=2*eq.M, N=2*eq.N)`` for ``FourierRZToroidalSurface``.
-    name : str, optional
-        Name of the objective function.
-    jac_chunk_size : int , optional
-        Will calculate the Jacobian for this objective ``jac_chunk_size``
-        columns at a time, instead of all at once. The memory usage of the
-        Jacobian calculation is roughly ``memory usage = m0 + m1*jac_chunk_size``:
-        the smaller the chunk size, the less memory the Jacobian calculation
-        will require (with some baseline memory usage). The time to compute the
-        Jacobian is roughly ``t=t0 +t1/jac_chunk_size``, so the larger the
-        ``jac_chunk_size``, the faster the calculation takes, at the cost of
-        requiring more memory. A ``jac_chunk_size`` of 1 corresponds to the least
-        memory intensive, but slowest method of calculating the Jacobian.
-        If None, it will use the largest size i.e ``obj.dim_x``.
 
     """
+
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``target=2``.",
+        bounds_default="``target=2``.",
+        normalize_detail=" Note: Has no effect for this objective.",
+        normalize_target_detail=" Note: Has no effect for this objective.",
+        loss_detail=" Note: Has no effect for this objective.",
+    )
 
     _scalar = True
     _units = "(dimensionless)"
@@ -196,51 +165,19 @@ class Elongation(_Objective):
     eq : Equilibrium or FourierRZToroidalSurface
         Equilibrium or FourierRZToroidalSurface that
         will be optimized to satisfy the Objective.
-    target : {float, ndarray}, optional
-        Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f. Defaults to ``target=1``.
-    bounds : tuple of {float, ndarray}, optional
-        Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f.
-        Defaults to ``target=1``.
-    weight : {float, ndarray}, optional
-        Weighting to apply to the Objective, relative to other Objectives.
-        Must be broadcastable to to Objective.dim_f
-    normalize : bool, optional
-        Whether to compute the error in physical units or non-dimensionalize.
-        Has no effect for this objective.
-    normalize_target : bool, optional
-        Whether target and bounds should be normalized before comparing to computed
-        values. If `normalize` is `True` and the target is in physical units,
-        this should also be set to True. Note: Has no effect for this objective.
-    loss_function : {None, 'mean', 'min', 'max'}, optional
-        Loss function to apply to the objective values once computed. This loss function
-        is called on the raw compute value, before any shifting, scaling, or
-        normalization. Note: Has no effect for this objective.
-    deriv_mode : {"auto", "fwd", "rev"}
-        Specify how to compute jacobian matrix, either forward mode or reverse mode AD.
-        "auto" selects forward or reverse mode based on the size of the input and output
-        of the objective. Has no effect on self.grad or self.hess which always use
-        reverse mode and forward over reverse mode respectively.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at. Defaults to
         ``QuadratureGrid(eq.L_grid, eq.M_grid, eq.N_grid)`` for ``Equilibrium``
         or ``LinearGrid(M=2*eq.M, N=2*eq.N)`` for ``FourierRZToroidalSurface``.
-    name : str, optional
-        Name of the objective function.
-    jac_chunk_size : int , optional
-        Will calculate the Jacobian for this objective ``jac_chunk_size``
-        columns at a time, instead of all at once. The memory usage of the
-        Jacobian calculation is roughly ``memory usage = m0 + m1*jac_chunk_size``:
-        the smaller the chunk size, the less memory the Jacobian calculation
-        will require (with some baseline memory usage). The time to compute the
-        Jacobian is roughly ``t=t0 +t1/jac_chunk_size``, so the larger the
-        ``jac_chunk_size``, the faster the calculation takes, at the cost of
-        requiring more memory. A ``jac_chunk_size`` of 1 corresponds to the least
-        memory intensive, but slowest method of calculating the Jacobian.
-        If None, it will use the largest size i.e ``obj.dim_x``.
 
     """
+
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``target=1``.",
+        bounds_default="``target=1``.",
+        normalize_detail=" Note: Has no effect for this objective.",
+        normalize_target_detail=" Note: Has no effect for this objective.",
+    )
 
     _scalar = True
     _units = "(dimensionless)"
@@ -370,51 +307,18 @@ class Volume(_Objective):
     eq : Equilibrium or FourierRZToroidalSurface
         Equilibrium or FourierRZToroidalSurface that
         will be optimized to satisfy the Objective.
-    target : {float, ndarray}, optional
-        Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f. Defaults to ``target=1``.
-    bounds : tuple of {float, ndarray}, optional
-        Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f.
-        Defaults to ``target=1``.
-    weight : {float, ndarray}, optional
-        Weighting to apply to the Objective, relative to other Objectives.
-        Must be broadcastable to to Objective.dim_f
-    normalize : bool, optional
-        Whether to compute the error in physical units or non-dimensionalize.
-    normalize_target : bool, optional
-        Whether target and bounds should be normalized before comparing to computed
-        values. If `normalize` is `True` and the target is in physical units,
-        this should also be set to True.
-        be set to True.
-    loss_function : {None, 'mean', 'min', 'max'}, optional
-        Loss function to apply to the objective values once computed. This loss function
-        is called on the raw compute value, before any shifting, scaling, or
-        normalization. Note: Has no effect for this objective.
-    deriv_mode : {"auto", "fwd", "rev"}
-        Specify how to compute jacobian matrix, either forward mode or reverse mode AD.
-        "auto" selects forward or reverse mode based on the size of the input and output
-        of the objective. Has no effect on self.grad or self.hess which always use
-        reverse mode and forward over reverse mode respectively.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at. Defaults to
         ``QuadratureGrid(eq.L_grid, eq.M_grid, eq.N_grid)`` for ``Equilibrium``
         or ``LinearGrid(M=2*eq.M, N=2*eq.N)`` for ``FourierRZToroidalSurface``.
-    name : str, optional
-        Name of the objective function.
-    jac_chunk_size : int , optional
-        Will calculate the Jacobian for this objective ``jac_chunk_size``
-        columns at a time, instead of all at once. The memory usage of the
-        Jacobian calculation is roughly ``memory usage = m0 + m1*jac_chunk_size``:
-        the smaller the chunk size, the less memory the Jacobian calculation
-        will require (with some baseline memory usage). The time to compute the
-        Jacobian is roughly ``t=t0 +t1/jac_chunk_size``, so the larger the
-        ``jac_chunk_size``, the faster the calculation takes, at the cost of
-        requiring more memory. A ``jac_chunk_size`` of 1 corresponds to the least
-        memory intensive, but slowest method of calculating the Jacobian.
-        If None, it will use the largest size i.e ``obj.dim_x``.
 
     """
+
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``target=1``.",
+        bounds_default="``target=1``.",
+        loss_detail=" Note: Has no effect for this objective.",
+    )
 
     _scalar = True
     _units = "(m^3)"
@@ -570,31 +474,6 @@ class PlasmaVesselDistance(_Objective):
         Equilibrium that will be optimized to satisfy the Objective.
     surface : Surface
         Bounding surface to penalize distance to.
-    target : {float, ndarray}, optional
-        Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f. Defaults to ``bounds=(1,np.inf)``.
-    bounds : tuple of {float, ndarray}, optional
-        Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f.
-        Defaults to ``bounds=(1,np.inf)``.
-    weight : {float, ndarray}, optional
-        Weighting to apply to the Objective, relative to other Objectives.
-        Must be broadcastable to to Objective.dim_f
-    normalize : bool, optional
-        Whether to compute the error in physical units or non-dimensionalize.
-    normalize_target : bool
-        Whether target should be normalized before comparing to computed values.
-        if `normalize` is `True` and the target is in physical units, this should also
-        be set to True.
-    loss_function : {None, 'mean', 'min', 'max'}, optional
-        Loss function to apply to the objective values once computed. This loss function
-        is called on the raw compute value, before any shifting, scaling, or
-        normalization.
-    deriv_mode : {"auto", "fwd", "rev"}
-        Specify how to compute jacobian matrix, either forward mode or reverse mode AD.
-        "auto" selects forward or reverse mode based on the size of the input and output
-        of the objective. Has no effect on self.grad or self.hess which always use
-        reverse mode and forward over reverse mode respectively.
     surface_grid : Grid, optional
         Collocation grid containing the nodes to evaluate surface geometry at.
         Defaults to ``LinearGrid(M=eq.M_grid, N=eq.N_grid)``.
@@ -623,21 +502,13 @@ class PlasmaVesselDistance(_Objective):
         the array by 2/min_val to ensure that softmin_alpha*array>1. Making
         softmin_alpha larger than this minimum value will make the softmin a
         more accurate approximation of the true min.
-    name : str, optional
-        Name of the objective function.
-    jac_chunk_size : int , optional
-        Will calculate the Jacobian for this objective ``jac_chunk_size``
-        columns at a time, instead of all at once. The memory usage of the
-        Jacobian calculation is roughly ``memory usage = m0 + m1*jac_chunk_size``:
-        the smaller the chunk size, the less memory the Jacobian calculation
-        will require (with some baseline memory usage). The time to compute the
-        Jacobian is roughly ``t=t0 +t1/jac_chunk_size``, so the larger the
-        ``jac_chunk_size``, the faster the calculation takes, at the cost of
-        requiring more memory. A ``jac_chunk_size`` of 1 corresponds to the least
-        memory intensive, but slowest method of calculating the Jacobian.
-        If None, it will use the largest size i.e ``obj.dim_x``.
 
     """
+
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``bounds=(1,np.inf)``.",
+        bounds_default="``bounds=(1,np.inf)``.",
+    )
 
     _coordinates = "rtz"
     _units = "(m)"
@@ -745,6 +616,18 @@ class PlasmaVesselDistance(_Objective):
         )
 
         # TODO: How to use with generalized toroidal angle?
+        # first check that the number of zeta nodes are the same, which
+        # is a prerequisite to the zeta nodes themselves being the same
+        errorif(
+            self._use_signed_distance
+            and not np.allclose(
+                plasma_grid.num_zeta,
+                surface_grid.num_zeta,
+            ),
+            ValueError,
+            "Plasma grid and surface grid must contain points only at the "
+            "same zeta values in order to use signed distance",
+        )
         errorif(
             self._use_signed_distance
             and not np.allclose(
@@ -946,50 +829,17 @@ class MeanCurvature(_Objective):
     eq : Equilibrium or FourierRZToroidalSurface
         Equilibrium or FourierRZToroidalSurface that
         will be optimized to satisfy the Objective.
-    target : {float, ndarray}, optional
-        Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f. Defaults to ``bounds=(-np.inf, 0)``.
-    bounds : tuple of {float, ndarray}, optional
-        Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f.
-        Defaults to ``bounds=(-np.inf, 0)``.
-    weight : {float, ndarray}, optional
-        Weighting to apply to the Objective, relative to other Objectives.
-        Must be broadcastable to to Objective.dim_f
-    normalize : bool, optional
-        Whether to compute the error in physical units or non-dimensionalize.
-    normalize_target : bool
-        Whether target should be normalized before comparing to computed values.
-        if `normalize` is `True` and the target is in physical units, this should also
-        be set to True.
-    loss_function : {None, 'mean', 'min', 'max'}, optional
-        Loss function to apply to the objective values once computed. This loss function
-        is called on the raw compute value, before any shifting, scaling, or
-        normalization.
-    deriv_mode : {"auto", "fwd", "rev"}
-        Specify how to compute jacobian matrix, either forward mode or reverse mode AD.
-        "auto" selects forward or reverse mode based on the size of the input and output
-        of the objective. Has no effect on self.grad or self.hess which always use
-        reverse mode and forward over reverse mode respectively.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at. Defaults to
         ``LinearGrid(M=eq.M_grid, N=eq.N_grid)`` for ``Equilibrium``
         or ``LinearGrid(M=2*eq.M, N=2*eq.N)`` for ``FourierRZToroidalSurface``.
-    name : str, optional
-        Name of the objective function.
-    jac_chunk_size : int , optional
-        Will calculate the Jacobian for this objective ``jac_chunk_size``
-        columns at a time, instead of all at once. The memory usage of the
-        Jacobian calculation is roughly ``memory usage = m0 + m1*jac_chunk_size``:
-        the smaller the chunk size, the less memory the Jacobian calculation
-        will require (with some baseline memory usage). The time to compute the
-        Jacobian is roughly ``t=t0 +t1/jac_chunk_size``, so the larger the
-        ``jac_chunk_size``, the faster the calculation takes, at the cost of
-        requiring more memory. A ``jac_chunk_size`` of 1 corresponds to the least
-        memory intensive, but slowest method of calculating the Jacobian.
-        If None, it will use the largest size i.e ``obj.dim_x``.
 
     """
+
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``bounds=(-np.inf,0)``.",
+        bounds_default="``bounds=(-np.inf,0)``.",
+    )
 
     _coordinates = "rtz"
     _units = "(m^-1)"
@@ -1119,50 +969,17 @@ class PrincipalCurvature(_Objective):
     eq : Equilibrium or FourierRZToroidalSurface
         Equilibrium or FourierRZToroidalSurface that
         will be optimized to satisfy the Objective.
-    target : {float, ndarray}, optional
-        Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f. Defaults to ``target=1``.
-    bounds : tuple of {float, ndarray}, optional
-        Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f.
-        Defaults to ``target=1``.
-    weight : {float, ndarray}, optional
-        Weighting to apply to the Objective, relative to other Objectives.
-        Must be broadcastable to to Objective.dim_f
-    normalize : bool, optional
-        Whether to compute the error in physical units or non-dimensionalize.
-    normalize_target : bool
-        Whether target should be normalized before comparing to computed values.
-        if `normalize` is `True` and the target is in physical units, this should also
-        be set to True.
-    loss_function : {None, 'mean', 'min', 'max'}, optional
-        Loss function to apply to the objective values once computed. This loss function
-        is called on the raw compute value, before any shifting, scaling, or
-        normalization.
-    deriv_mode : {"auto", "fwd", "rev"}
-        Specify how to compute jacobian matrix, either forward mode or reverse mode AD.
-        "auto" selects forward or reverse mode based on the size of the input and output
-        of the objective. Has no effect on self.grad or self.hess which always use
-        reverse mode and forward over reverse mode respectively.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at. Defaults to
         ``LinearGrid(M=eq.M_grid, N=eq.N_grid)`` for ``Equilibrium``
         or ``LinearGrid(M=2*eq.M, N=2*eq.N)`` for ``FourierRZToroidalSurface``.
-    name : str, optional
-        Name of the objective function.
-    jac_chunk_size : int , optional
-        Will calculate the Jacobian for this objective ``jac_chunk_size``
-        columns at a time, instead of all at once. The memory usage of the
-        Jacobian calculation is roughly ``memory usage = m0 + m1*jac_chunk_size``:
-        the smaller the chunk size, the less memory the Jacobian calculation
-        will require (with some baseline memory usage). The time to compute the
-        Jacobian is roughly ``t=t0 +t1/jac_chunk_size``, so the larger the
-        ``jac_chunk_size``, the faster the calculation takes, at the cost of
-        requiring more memory. A ``jac_chunk_size`` of 1 corresponds to the least
-        memory intensive, but slowest method of calculating the Jacobian.
-        If None, it will use the largest size i.e ``obj.dim_x``.
 
     """
+
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``target=1``.",
+        bounds_default="``target=1``.",
+    )
 
     _coordinates = "rtz"
     _units = "(m^-1)"
@@ -1288,49 +1105,16 @@ class BScaleLength(_Objective):
     ----------
     eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
-    target : {float, ndarray}, optional
-        Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f. Defaults to ``bounds=(1,np.inf)``.
-    bounds : tuple of {float, ndarray}, optional
-        Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f.
-        Defaults to ``bounds=(1,np.inf)``.
-    weight : {float, ndarray}, optional
-        Weighting to apply to the Objective, relative to other Objectives.
-        Must be broadcastable to to Objective.dim_f
-    normalize : bool, optional
-        Whether to compute the error in physical units or non-dimensionalize.
-    normalize_target : bool
-        Whether target should be normalized before comparing to computed values.
-        if `normalize` is `True` and the target is in physical units, this should also
-        be set to True.
-    loss_function : {None, 'mean', 'min', 'max'}, optional
-        Loss function to apply to the objective values once computed. This loss function
-        is called on the raw compute value, before any shifting, scaling, or
-        normalization.
-    deriv_mode : {"auto", "fwd", "rev"}
-        Specify how to compute jacobian matrix, either forward mode or reverse mode AD.
-        "auto" selects forward or reverse mode based on the size of the input and output
-        of the objective. Has no effect on self.grad or self.hess which always use
-        reverse mode and forward over reverse mode respectively.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at. Defaults to
         ``LinearGrid(M=eq.M_grid, N=eq.N_grid)``.
-    name : str, optional
-        Name of the objective function.
-    jac_chunk_size : int , optional
-        Will calculate the Jacobian for this objective ``jac_chunk_size``
-        columns at a time, instead of all at once. The memory usage of the
-        Jacobian calculation is roughly ``memory usage = m0 + m1*jac_chunk_size``:
-        the smaller the chunk size, the less memory the Jacobian calculation
-        will require (with some baseline memory usage). The time to compute the
-        Jacobian is roughly ``t=t0 +t1/jac_chunk_size``, so the larger the
-        ``jac_chunk_size``, the faster the calculation takes, at the cost of
-        requiring more memory. A ``jac_chunk_size`` of 1 corresponds to the least
-        memory intensive, but slowest method of calculating the Jacobian.
-        If None, it will use the largest size i.e ``obj.dim_x``.
 
     """
+
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``bounds=(1,np.inf)``.",
+        bounds_default="``bounds=(1,np.inf)``.",
+    )
 
     _coordinates = "rtz"
     _units = "(m)"
@@ -1453,48 +1237,15 @@ class GoodCoordinates(_Objective):
         Equilibrium that will be optimized to satisfy the Objective.
     sigma : float
         Relative weight between the Jacobian and radial terms.
-    target : {float, ndarray}, optional
-        Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f. Defaults to ``target=0``.
-    bounds : tuple of {float, ndarray}, optional
-        Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f.
-        Defaults to ``target=0``.
-    weight : {float, ndarray}, optional
-        Weighting to apply to the Objective, relative to other Objectives.
-        Must be broadcastable to to Objective.dim_f
-    normalize : bool, optional
-        Whether to compute the error in physical units or non-dimensionalize.
-    normalize_target : bool, optional
-        Whether target and bounds should be normalized before comparing to computed
-        values. If `normalize` is `True` and the target is in physical units,
-        this should also be set to True.
-    loss_function : {None, 'mean', 'min', 'max'}, optional
-        Loss function to apply to the objective values once computed. This loss function
-        is called on the raw compute value, before any shifting, scaling, or
-        normalization.
-    deriv_mode : {"auto", "fwd", "rev"}
-        Specify how to compute jacobian matrix, either forward mode or reverse mode AD.
-        "auto" selects forward or reverse mode based on the size of the input and output
-        of the objective. Has no effect on self.grad or self.hess which always use
-        reverse mode and forward over reverse mode respectively.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
-    name : str, optional
-        Name of the objective function.
-    jac_chunk_size : int , optional
-        Will calculate the Jacobian for this objective ``jac_chunk_size``
-        columns at a time, instead of all at once. The memory usage of the
-        Jacobian calculation is roughly ``memory usage = m0 + m1*jac_chunk_size``:
-        the smaller the chunk size, the less memory the Jacobian calculation
-        will require (with some baseline memory usage). The time to compute the
-        Jacobian is roughly ``t=t0 +t1/jac_chunk_size``, so the larger the
-        ``jac_chunk_size``, the faster the calculation takes, at the cost of
-        requiring more memory. A ``jac_chunk_size`` of 1 corresponds to the least
-        memory intensive, but slowest method of calculating the Jacobian.
-        If None, it will use the largest size i.e ``obj.dim_x``.
 
     """
+
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``target=0``.",
+        bounds_default="``target=0``.",
+    )
 
     _scalar = False
     _units = "(dimensionless)"

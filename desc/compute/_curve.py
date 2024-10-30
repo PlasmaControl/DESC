@@ -183,8 +183,8 @@ def _center_FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
 
 def get_closest(arr, val):
     """Get closest index to value in array."""
-    arr = np.asarray(arr)
-    return np.argmin(np.abs(arr - val))
+    arr = jnp.asarray(arr)
+    return (jnp.argmin(jnp.abs(arr - val))).astype(int)
 
 
 @register_compute_fun(
@@ -212,10 +212,12 @@ def _x_C0FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
         normal = params["normal"]
 
     len_rn = kwargs.get("len_rn", 1)
+    s = jnp.asarray(data["s"])
 
     # 0 to pi
+    mid_point = jnp.pi
     istart = 0
-    istop = get_closest(data["s"], np.pi)
+    istop = get_closest(s, mid_point)
     r1 = transforms["r"].transform(jnp.atleast_1d(params["r_n"][:len_rn]), dz=0)
     Z1 = jnp.zeros_like(r1)
     X1 = r1 * jnp.cos(data["s"])
@@ -232,14 +234,12 @@ def _x_C0FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
 
     # now take half the coil
     # TODO: nothing lower than 0 but need to generalize
-    print(type(data["s"]))
-    print(type(istop))
-    X1_half = jnp.where(data["s"] >= data["s"][istop], coords1[:, 0], 0)
-    Y1_half = jnp.where(data["s"] >= data["s"][istop], coords1[:, 1], 0)
-    Z1_half = jnp.where(data["s"] >= data["s"][istop], coords1[:, 2], 0)
+    X1_half = jnp.where(s >= s[istop], coords1[:, 0], 0)
+    Y1_half = jnp.where(s >= s[istop], coords1[:, 1], 0)
+    Z1_half = jnp.where(s >= s[istop], coords1[:, 2], 0)
 
     # pi to 2pi
-    istart = get_closest(data["s"], np.pi)
+    istart = get_closest(s, mid_point)
     istop = -1
     r2 = transforms["r"].transform(jnp.atleast_1d(params["r_n"][len_rn:]), dz=0)
     Z2 = jnp.zeros_like(r2)
@@ -256,9 +256,9 @@ def _x_C0FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
     # convert back to rpz
 
     # now take half the coil
-    X2_half = jnp.where(data["s"] < data["s"][istart], coords2[:, 0], 0)
-    Y2_half = jnp.where(data["s"] < data["s"][istart], coords2[:, 1], 0)
-    Z2_half = jnp.where(data["s"] < data["s"][istart], coords2[:, 2], 0)
+    X2_half = jnp.where(s < s[istart], coords2[:, 0], 0)
+    Y2_half = jnp.where(s < s[istart], coords2[:, 1], 0)
+    Z2_half = jnp.where(s < s[istart], coords2[:, 2], 0)
 
     X = X1_half + X2_half
     Y = Y1_half + Y2_half
@@ -295,6 +295,7 @@ def _x_s_C0FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
         normal = params["normal"]
 
     len_rn = kwargs.get("len_rn", 1)
+    s = jnp.asarray(data["s"])
 
     istart = 0
     istop = get_closest(data["s"], np.pi)
@@ -314,9 +315,9 @@ def _x_s_C0FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
     coords1 = jnp.matmul(coords1, A1.T)
     coords1 = jnp.matmul(coords1, params["rotmat"].reshape((3, 3)).T)
 
-    dX1_half = jnp.where(data["s"] >= data["s"][istop], coords1[:, 0], 0)
-    dY1_half = jnp.where(data["s"] >= data["s"][istop], coords1[:, 1], 0)
-    dZ1_half = jnp.where(data["s"] >= data["s"][istop], coords1[:, 2], 0)
+    dX1_half = jnp.where(s >= s[istop], coords1[:, 0], 0)
+    dY1_half = jnp.where(s >= s[istop], coords1[:, 1], 0)
+    dZ1_half = jnp.where(s >= s[istop], coords1[:, 2], 0)
 
     # pi to 2pi
     istart = get_closest(data["s"], np.pi)
@@ -337,9 +338,9 @@ def _x_s_C0FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
     coords2 = jnp.matmul(coords2, A2.T)
     coords2 = jnp.matmul(coords2, params["rotmat"].reshape((3, 3)).T)
 
-    dX2_half = jnp.where(data["s"] < data["s"][istart], coords2[:, 0], 0)
-    dY2_half = jnp.where(data["s"] < data["s"][istart], coords2[:, 1], 0)
-    dZ2_half = jnp.where(data["s"] < data["s"][istart], coords2[:, 2], 0)
+    dX2_half = jnp.where(s < s[istart], coords2[:, 0], 0)
+    dY2_half = jnp.where(s < s[istart], coords2[:, 1], 0)
+    dZ2_half = jnp.where(s < s[istart], coords2[:, 2], 0)
 
     dX = dX1_half + dX2_half
     dY = dY1_half + dY2_half
@@ -375,6 +376,13 @@ def _x_ss_C0FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
 
     len_rn = kwargs.get("len_rn", 1)
 
+    s = jnp.asarray(data["s"])
+    mid_point = jnp.pi
+
+    # 0 to pi
+    istart = 0
+    istop = get_closest(s, mid_point)
+
     r1 = transforms["r"].transform(params["r_n"][:len_rn], dz=0)
     dr1 = transforms["r"].transform(params["r_n"][:len_rn], dz=1)
     d2r1 = transforms["r"].transform(params["r_n"][:len_rn], dz=2)
@@ -398,11 +406,13 @@ def _x_ss_C0FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
     coords1 = jnp.matmul(coords1, A1.T)
     coords1 = jnp.matmul(coords1, params["rotmat"].reshape((3, 3)).T)
 
-    d2X1_half = jnp.where(data["s"] >= jnp.pi, coords1[:, 0], 0)
-    d2Y1_half = jnp.where(data["s"] >= jnp.pi, coords1[:, 1], 0)
-    d2Z1_half = jnp.where(data["s"] >= jnp.pi, coords1[:, 2], 0)
+    d2X1_half = jnp.where(s >= s[istop], coords1[:, 0], 0)
+    d2Y1_half = jnp.where(s >= s[istop], coords1[:, 1], 0)
+    d2Z1_half = jnp.where(s >= s[istop], coords1[:, 2], 0)
 
     # pi to 2pi
+    istart = get_closest(data["s"], np.pi)
+    istop = -1
     r2 = transforms["r"].transform(params["r_n"][len_rn:], dz=0)
     dr2 = transforms["r"].transform(params["r_n"][len_rn:], dz=1)
     d2r2 = transforms["r"].transform(params["r_n"][len_rn:], dz=2)
@@ -425,9 +435,9 @@ def _x_ss_C0FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
     A2 = rotation_matrix(axis=axis2, angle=angle2)
     coords2 = jnp.matmul(coords2, A2.T)
     coords2 = jnp.matmul(coords2, params["rotmat"].reshape((3, 3)).T)
-    d2X2_half = jnp.where(data["s"] < jnp.pi, coords2[:, 0], 0)
-    d2Y2_half = jnp.where(data["s"] < jnp.pi, coords2[:, 1], 0)
-    d2Z2_half = jnp.where(data["s"] < jnp.pi, coords2[:, 2], 0)
+    d2X2_half = jnp.where(s < s[istart], coords2[:, 0], 0)
+    d2Y2_half = jnp.where(s < s[istart], coords2[:, 1], 0)
+    d2Z2_half = jnp.where(s < s[istart], coords2[:, 2], 0)
 
     d2X = d2X1_half + d2X2_half
     d2Y = d2Y1_half + d2Y2_half

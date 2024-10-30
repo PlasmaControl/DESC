@@ -183,8 +183,7 @@ def _center_FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
 def get_closest(arr, val):
     """Get closest index to value in array."""
     arr = jnp.asarray(arr)
-    val_array = jnp.full_like(arr, val)
-    return jnp.argmin(jnp.abs(arr - val_array))
+    return jnp.argmin(jnp.abs(arr - val))
 
 
 @register_compute_fun(
@@ -232,6 +231,8 @@ def _x_C0FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
 
     # now take half the coil
     # TODO: nothing lower than 0 but need to generalize
+    print(type(data["s"]))
+    print(type(istop))
     X1_half = jnp.where(data["s"] >= data["s"][istop], coords1[:, 0], 0)
     Y1_half = jnp.where(data["s"] >= data["s"][istop], coords1[:, 1], 0)
     Z1_half = jnp.where(data["s"] >= data["s"][istop], coords1[:, 2], 0)

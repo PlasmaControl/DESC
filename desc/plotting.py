@@ -44,6 +44,7 @@ __all__ = [
     "plot_qs_error",
     "plot_section",
     "plot_surfaces",
+    "poincare_plot",
 ]
 
 
@@ -110,7 +111,7 @@ _AXIS_LABELS_XYZ = [r"$X ~(\mathrm{m})$", r"$Y ~(\mathrm{m})$", r"$Z ~(\mathrm{m
 
 def _set_tight_layout(fig):
     # compat layer to deal with API changes in mpl 3.6.0
-    if int(matplotlib._version.version.split(".")[1]) < 6:
+    if int(matplotlib.__version__[0]) == 3 and int(matplotlib.__version__[2]) < 6:
         fig.set_tight_layout(True)
     else:
         fig.set_layout_engine("tight")
@@ -118,7 +119,7 @@ def _set_tight_layout(fig):
 
 def _get_cmap(name, n=None):
     # compat layer to deal with API changes in mpl 3.6.0
-    if int(matplotlib._version.version.split(".")[1]) < 6:
+    if int(matplotlib.__version__[0]) == 3 and int(matplotlib.__version__[2]) < 6:
         return matplotlib.cm.get_cmap(name, n)
     else:
         c = matplotlib.colormaps[name]

@@ -897,6 +897,7 @@ class Equilibrium(IOAble, Optimizable):
                 "v": "theta_PEST",
                 "a": "alpha",
                 "z": "zeta",
+                "p": "phi",
             }
             rtz_nodes = self.map_coordinates(
                 grid.nodes,
@@ -945,13 +946,13 @@ class Equilibrium(IOAble, Optimizable):
             # the compute logic assume input data is evaluated on those coordinates.
             # We exclude these from the depXdx sets below since the grids we will
             # use to compute those dependencies are coordinate-blind.
-            # Example, "<L|r,a>" has coordinates="r", but requires computing on
-            # field line following source grid.
+            # Example, "fieldline length" has coordinates="r", but requires computing
+            # on field line following source grid.
             return bool(data_index[p][name]["source_grid_requirement"])
 
-        # Need to call _grow_seeds so that some other quantity like K = 2 * <L|r,a>,
-        # which does not need a source grid to evaluate, does not compute <L|r,a> on a
-        # grid that does not follow field lines.
+        # Need to call _grow_seeds so that e.g. "max(fieldline length)" which does not
+        # need a source grid to evaluate, still computes "fieldline length"
+        # on a grid whose source grid follows field lines.
         # Maybe this can help explain:
         # https://github.com/PlasmaControl/DESC/pull/1024#discussion_r1664918897.
         need_src_deps = _grow_seeds(p, set(filter(need_src, deps)), deps)
@@ -1026,7 +1027,7 @@ class Equilibrium(IOAble, Optimizable):
                     # and won't override grid to one with more radial resolution
                     and not (override_grid and coords in {"z", ""}),
                     ResolutionWarning,
-                    msg("radial"),
+                    msg("radial") + f" got L_grid={grid.L} < {self._L_grid}.",
                 )
                 warnif(
                     # if need more poloidal resolution
@@ -1034,7 +1035,7 @@ class Equilibrium(IOAble, Optimizable):
                     # and won't override grid to one with more poloidal resolution
                     and not (override_grid and coords in {"r", "z", ""}),
                     ResolutionWarning,
-                    msg("poloidal"),
+                    msg("poloidal") + f" got M_grid={grid.M} < {self._M_grid}.",
                 )
                 warnif(
                     # if need more toroidal resolution
@@ -1042,7 +1043,7 @@ class Equilibrium(IOAble, Optimizable):
                     # and won't override grid to one with more toroidal resolution
                     and not (override_grid and coords in {"r", ""}),
                     ResolutionWarning,
-                    msg("toroidal"),
+                    msg("toroidal") + f" got N_grid={grid.N} < {self._N_grid}.",
                 )
 
         # Now compute dependencies on the proper grids, passing in any available
@@ -1091,7 +1092,13 @@ class Equilibrium(IOAble, Optimizable):
                 M=self.M_grid,
                 N=self.N_grid,
                 NFP=self.NFP,
-                sym=self.sym,
+                sym=self.sym
+                and all(
+                    data_index[p][dep]["grid_requirement"].get("sym", True)
+                    # TODO: GitHub issue #1206.
+                    and not data_index[p][dep]["grid_requirement"].get("can_fft", False)
+                    for dep in dep1dr
+                ),
             )
             data1dr_seed = {
                 key: grid1dr.copy_data_from_other(data[key], grid, surface_label="rho")
@@ -1133,7 +1140,13 @@ class Equilibrium(IOAble, Optimizable):
                 L=self.L_grid,
                 M=self.M_grid,
                 NFP=grid.NFP,  # ex: self.NFP>1 but grid.NFP=1 for plot_3d
-                sym=self.sym,
+                sym=self.sym
+                and all(
+                    data_index[p][dep]["grid_requirement"].get("sym", True)
+                    # TODO: GitHub issue #1206.
+                    and not data_index[p][dep]["grid_requirement"].get("can_fft", False)
+                    for dep in dep1dz
+                ),
             )
             data1dz_seed = {
                 key: grid1dz.copy_data_from_other(data[key], grid, surface_label="zeta")
@@ -1257,7 +1270,7 @@ class Equilibrium(IOAble, Optimizable):
             **kwargs,
         )
 
-    def _get_rtz_grid(
+    def get_rtz_grid(
         self,
         radial,
         poloidal,

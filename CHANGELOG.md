@@ -18,12 +18,15 @@ to compute the toroidal flux when possible, as opposed to a 2D surface integral 
   - if an ``int``, this is the chunk size to be used.
   - if ``"auto"`` for the ``ObjectiveFunction``, will use a heuristic for the maximum ``jac_chunk_size`` needed to fit the jacobian calculation on the available device memory, according to the formula: ``max_jac_chunk_size = (desc_config.get("avail_mem") / estimated_memory_usage - 0.22)  / 0.85  * self.dim_x`` with ``estimated_memory_usage = 2.4e-7 * self.dim_f * self.dim_x + 1``
 - the ``ObjectiveFunction`` ``jac_chunk_size`` is used if ``deriv_mode="batched"``, and the ``_Objective`` ``jac_chunk_size`` will be used if ``deriv_mode="blocked"``
+- Add ``from_input_file`` method to ``Equilibrium`` class to generate an ``Equilibrium`` object with boundary, profiles, resolution and flux specified in a given DESC or VMEC input file
+
 
 
 Bug Fixes
 
 - Fixes bugs that occur when saving asymmetric equilibria as wout files
 - Fixes bug that occurs when using ``VMECIO.plot_vmec_comparison`` to compare to an asymmetric wout file
+- Fixes bug that occurs when taking the gradient of ``root`` and ``root_scalar`` with newer versions of JAX (>=0.4.34) and unpins the JAX version
 
 Deprecations
 

@@ -1510,6 +1510,8 @@ def test_second_stage_optimization():
         constraints=constraints,
         ftol=0,
         xtol=0,
+        gtol=0,
+        maxiter=100,
         verbose=2,
     )
     np.testing.assert_allclose(field[0].R0, 3.5)  # this value was fixed

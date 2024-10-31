@@ -1111,11 +1111,6 @@ class QuadraticFlux(_Objective):
     vacuum : bool
         If true, B_plasma (the contribution to the normal field on the boundary from the
         plasma currents) is set to zero.
-    sqrt_area_weighting : bool
-        Whether or not to square the local area weighting on the objective, i.e.
-        whether to return Bn * ||e_theta x e_zeta|| or Bn * sqrt(||e_theta x e_zeta||).
-        If True, when combined with SurfaceCurrentRegularization, the resulting problem
-        is equivalent to the REGCOIL algorithm.
 
     """
 
@@ -1143,7 +1138,6 @@ class QuadraticFlux(_Objective):
         eval_grid=None,
         field_grid=None,
         vacuum=False,
-        sqrt_area_weighting=False,
         name="Quadratic flux",
         jac_chunk_size=None,
     ):
@@ -1155,7 +1149,6 @@ class QuadraticFlux(_Objective):
         self._field = field
         self._field_grid = field_grid
         self._vacuum = vacuum
-        self._sqrt_area_weighting = sqrt_area_weighting
         things = [field]
         super().__init__(
             things=things,
@@ -1209,11 +1202,6 @@ class QuadraticFlux(_Objective):
             params=eq.params_dict,
             transforms=eval_transforms,
             profiles=eval_profiles,
-        )
-        eval_data["area_weighting"] = (
-            jnp.sqrt(eval_data["|e_theta x e_zeta|"])
-            if self._sqrt_area_weighting
-            else eval_data["|e_theta x e_zeta|"]
         )
 
         # pre-compute B_plasma because we are assuming eq is fixed
@@ -1276,7 +1264,7 @@ class QuadraticFlux(_Objective):
             params=field_params,
         )
         B_ext = jnp.sum(B_ext * eval_data["n_rho"], axis=-1)
-        f = (B_ext + B_plasma) * eval_data["area_weighting"]
+        f = (B_ext + B_plasma) * jnp.sqrt(eval_data["|e_theta x e_zeta|"])
         return f
 
 
@@ -1619,7 +1607,7 @@ class SurfaceCurrentRegularization(_Objective):
 
     compute::
 
-        w * ||K|| * ||e_theta x e_zeta||
+        w * ||K|| * sqrt(||e_theta x e_zeta||)
 
     where K is the winding surface current density, w is the
     regularization parameter (the weight on this objective),
@@ -1667,7 +1655,6 @@ class SurfaceCurrentRegularization(_Objective):
     __doc__ = __doc__.rstrip() + collect_docs(
         target_default="``target=0``.",
         bounds_default="``target=0``.",
-        loss_detail=" Note: has no effect for this objective.",
         overwrite={"weight": weight_str},
     )
 

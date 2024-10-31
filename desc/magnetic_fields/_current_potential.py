@@ -1756,16 +1756,19 @@ def _find_current_potential_contours(
     )
 
     if show_plots:
-        plt.figure(figsize=plot_kwargs.get("figsize", (8, 6)))
+        plt.figure(figsize=plot_kwargs.pop("figsize", (8, 6)))
         plt.contourf(
             zeta_full_2D.T,
             theta_full_2D.T,
             jnp.transpose(phi_total_full),
-            contours,
+            levels=100,
             **plot_kwargs,
         )
         plt.xlabel(r"$\zeta$")
         plt.ylabel(r"$\theta$")
+        plt.xlim([np.min(zeta_full), np.max(zeta_full)])
+        plt.ylim([np.min(theta_full), np.max(theta_full)])
+
     for j in range(num_coils):
         contour_zeta.append(contours_theta_zeta[j][:, 0])
         contour_theta.append(contours_theta_zeta[j][:, 1])

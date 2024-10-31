@@ -809,6 +809,10 @@ def interp_to_argmin_hard(h, points, knots, g, dg_dz, method="cubic"):
 
     Let E = {ζ ∣ ζ₁ < ζ < ζ₂} and A ∈ argmin_E g(ζ). Returns h(A).
 
+    The argmin operation is defined as the expected value under the softmax
+    probability distribution.
+    s : x ∈ ℝᶜ, β ∈ ℝ ↦ [eᵝˣ⁽¹⁾, …, eᵝˣ⁽ⁿ⁾] / ∑ₖ₌₁ᶜ eᵝˣ⁽ᵏ⁾.
+
     See Also
     --------
     interp_to_argmin
@@ -871,6 +875,10 @@ def interp_fft_to_argmin(
     """Interpolate ``h`` to the deepest point of ``g`` between ``z1`` and ``z2``.
 
     Let E = {ζ ∣ ζ₁ < ζ < ζ₂} and A = argmin_E g(ζ). Returns mean_A h(ζ).
+
+    The argmin operation is defined as the expected value under the softmax
+    probability distribution.
+    s : x ∈ ℝᶜ, β ∈ ℝ ↦ [eᵝˣ⁽¹⁾, …, eᵝˣ⁽ⁿ⁾] / ∑ₖ₌₁ᶜ eᵝˣ⁽ᵏ⁾.
 
     Parameters
     ----------
@@ -994,7 +1002,8 @@ def fourier_chebyshev(theta, iota, alpha, num_transit):
     T : PiecewiseChebyshevSeries
         Set of 1D Chebyshev spectral coefficients of θ along field line.
         {θ_α : ζ ↦ θ(α, ζ) | α ∈ A} where A = (α₀, α₁, …, αₘ₋₁) is the same
-        field line as ``alpha``.
+        field line as ``alpha``. Each Chebyshev series approximates θ over
+        one toroidal transit. This map is infinitely differentiable on ζ ∈ ℝ.
 
     Notes
     -----

@@ -10,7 +10,7 @@ from tests.test_plotting import tol_1d
 from desc.examples import get
 from desc.grid import LinearGrid
 from desc.integrals import Bounce2D
-from desc.utils import errorif, setdefault
+from desc.utils import setdefault
 from desc.vmec import VMECIO
 
 
@@ -113,7 +113,6 @@ class NeoIO:
 
     def write(self):
         """Write neo input file."""
-        errorif(not self.eq.solved, msg="eq must be set to solved for NEO")
         print(f"Writing VMEC wout to {self.vmec_file}")
         VMECIO.save(self.eq, self.vmec_file, surfs=self.ns, verbose=0)
         self._write_booz()

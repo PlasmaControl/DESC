@@ -147,8 +147,7 @@ def _foreach_pitch(fun, pitch_inv, batch_size):
     label="\\epsilon_{\\mathrm{eff}}",
     units="~",
     units_long="None",
-    description="Effective ripple modulation amplitude. "
-    "Uses numerical methods of the Bounce2D class.",
+    description="Effective ripple modulation amplitude.",
     dim=1,
     params=[],
     transforms={},

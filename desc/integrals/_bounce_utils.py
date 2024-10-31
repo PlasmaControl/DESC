@@ -811,7 +811,7 @@ def interp_to_argmin_hard(h, points, knots, g, dg_dz, method="cubic"):
 
     The argmin operation is defined as the expected value under the softmax
     probability distribution.
-    s : x ∈ ℝᶜ, β ∈ ℝ ↦ [eᵝˣ⁽¹⁾, …, eᵝˣ⁽ⁿ⁾] / ∑ₖ₌₁ᶜ eᵝˣ⁽ᵏ⁾.
+    s : x ∈ ℝⁿ, β ∈ ℝ ↦ [eᵝˣ⁽¹⁾, …, eᵝˣ⁽ⁿ⁾] / ∑ₖ₌₁ⁿ eᵝˣ⁽ᵏ⁾
 
     See Also
     --------
@@ -878,14 +878,15 @@ def interp_fft_to_argmin(
 
     The argmin operation is defined as the expected value under the softmax
     probability distribution.
-    s : x ∈ ℝᶜ, β ∈ ℝ ↦ [eᵝˣ⁽¹⁾, …, eᵝˣ⁽ⁿ⁾] / ∑ₖ₌₁ᶜ eᵝˣ⁽ᵏ⁾.
+    s : x ∈ ℝⁿ, β ∈ ℝ ↦ [eᵝˣ⁽¹⁾, …, eᵝˣ⁽ⁿ⁾] / ∑ₖ₌₁ⁿ eᵝˣ⁽ᵏ⁾
 
     Parameters
     ----------
     T : PiecewiseChebyshevSeries
         Set of 1D Chebyshev spectral coefficients of θ along field line.
         {θ_α : ζ ↦ θ(α, ζ) | α ∈ A} where A = (α₀, α₁, …, αₘ₋₁) is the same
-        field line.
+        field line as ``alpha``. Each Chebyshev series approximates θ over
+        one toroidal transit.
     h : jnp.ndarray
         Shape (..., grid.num_theta, grid.num_zeta)
         Periodic function evaluated on tensor-product grid in (ρ, θ, ζ) with
@@ -1003,7 +1004,7 @@ def fourier_chebyshev(theta, iota, alpha, num_transit):
         Set of 1D Chebyshev spectral coefficients of θ along field line.
         {θ_α : ζ ↦ θ(α, ζ) | α ∈ A} where A = (α₀, α₁, …, αₘ₋₁) is the same
         field line as ``alpha``. Each Chebyshev series approximates θ over
-        one toroidal transit. This map is infinitely differentiable on ζ ∈ ℝ.
+        one toroidal transit.
 
     Notes
     -----
@@ -1045,7 +1046,8 @@ def fourier_chebyshev(theta, iota, alpha, num_transit):
     This works to remove the small discontinuity between cuts of the field line
     because the first cut is on α=0, which is a knot of the Fourier series, and
     the Chebyshev points include a knot near endpoints, so θ at the next cut of
-    the field line is known with precision.
+    the field line is known with precision. This map is infinitely differentiable
+    on ζ ∈ ℝ.
 
     """
     # peeling off field lines
@@ -1067,7 +1069,8 @@ def chebyshev(n0, n1, NFP, T, f, Y):
     T : PiecewiseChebyshevSeries
         Set of 1D Chebyshev spectral coefficients of θ along field line.
         {θ_α : ζ ↦ θ(α, ζ) | α ∈ A} where A = (α₀, α₁, …, αₘ₋₁) is the same
-        field line.
+        field line as ``alpha``. Each Chebyshev series approximates θ over
+        one toroidal transit.
     f : jnp.ndarray
         Fourier transform of f(θ, ζ) as returned by ``_fourier``.
         ``n0=grid.num_theta``, ``n1=grid.num_zeta``, ``NFP=grid.NFP``.
@@ -1079,7 +1082,7 @@ def chebyshev(n0, n1, NFP, T, f, Y):
     f : PiecewiseChebyshevSeries
         Set of 1D Chebyshev spectral coefficients of θ along field line.
         {f_α : ζ ↦ f(α, ζ) | α ∈ A} where A = (α₀, α₁, …, αₘ₋₁) is the same
-        field line.
+        field line. Each Chebyshev series approximates f over one toroidal transit.
 
     """
     # When f = |B|, it is expected that Y > T.Y so the code immediately below
@@ -1112,7 +1115,8 @@ def cubic_spline(n0, n1, NFP, T, f, Y, check=False):
     T : PiecewiseChebyshevSeries
         Set of 1D Chebyshev spectral coefficients of θ along field line.
         {θ_α : ζ ↦ θ(α, ζ) | α ∈ A} where A = (α₀, α₁, …, αₘ₋₁) is the same
-        field line.
+        field line as ``alpha``. Each Chebyshev series approximates θ over
+        one toroidal transit.
     f : jnp.ndarray
         Fourier transform of f(θ, ζ) as returned by ``_fourier``.
         ``n0=grid.num_theta``, ``n1=grid.num_zeta``, ``NFP=grid.NFP``.

@@ -1139,13 +1139,13 @@ class TestObjectiveFunction:
 
         obj = QuadraticFlux(eq, t_field, eval_grid=eval_grid, source_grid=source_grid)
         Bnorm = t_field.compute_Bnormal(
-            eq.surface, eval_grid=eval_grid, source_grid=source_grid
+            eq, eval_grid=eval_grid, source_grid=source_grid
         )[0]
         obj.build(eq)
         dA = eq.compute("|e_theta x e_zeta|", grid=eval_grid)["|e_theta x e_zeta|"]
-        f = obj.compute(field_params=t_field.params_dict)
+        f = obj.compute_unscaled(t_field.params_dict)
 
-        np.testing.assert_allclose(f, Bnorm * dA, atol=2e-4, rtol=1e-2)
+        np.testing.assert_allclose(f, Bnorm * np.sqrt(dA), atol=2e-4, rtol=1e-2)
 
         # equilibrium that has B_plasma == 0
         eq = load("./tests/inputs/vacuum_nonaxisym.h5")
@@ -1163,7 +1163,7 @@ class TestObjectiveFunction:
         f = obj.compute(field_params=t_field.params_dict)
         dA = eq.compute("|e_theta x e_zeta|", grid=eval_grid)["|e_theta x e_zeta|"]
         # check that they're the same since we set B_plasma = 0
-        np.testing.assert_allclose(f, Bnorm * dA, atol=1e-14)
+        np.testing.assert_allclose(f, Bnorm * np.sqrt(dA), atol=1e-14)
 
     @pytest.mark.unit
     def test_toroidal_flux(self):
@@ -1347,7 +1347,7 @@ class TestObjectiveFunction:
             modes_Z=jnp.array([[0, 0], [-1, 0]]),
             NFP=10,
         )
-        surface.change_resolution(M=field1._M_Phi - 1, N=field1._N_Phi - 1)
+        surface.change_resolution(M=field1._M_Phi, N=field1._N_Phi)
         # make a current potential corresponding a purely poloidal current
         G = 10  # net poloidal current
         potential = lambda theta, zeta, G: G * zeta / 2 / jnp.pi

@@ -1108,7 +1108,7 @@ def solve_regularized_surface_current(  # noqa: C901 fxn too complex
         associated data.
     current_helicity : tuple of size 2, optional
         Tuple of ``(M_coil, N_coil)`` used to determine coil topology, where`` M_coil``
-         is the number of poloidal transits a coil makes before closing back on itself
+        is the number of poloidal transits a coil makes before closing back on itself
         and ``N_coil`` is the number of toroidal transits a coil makes before
         returning back to itself.
         if ``N_coil`` is zero and ``M_coil`` nonzero, it corresponds to modular

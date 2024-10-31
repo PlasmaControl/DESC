@@ -1621,7 +1621,7 @@ def zernike_radial(r, l, m, dr=0):
             "Analytic radial derivatives of Zernike polynomials for order>4 "
             + "have not been implemented."
         )
-    return s * jnp.where((l - m) % 2 == 0, out, 0)
+    return s * jnp.where((l - m) % 2 == 0, out, 0.0)
 
 
 def power_coeffs(l):
@@ -1785,7 +1785,7 @@ def _binom(n, k):
     return b
 
 
-@custom_jvp
+@functools.partial(custom_jvp, nondiff_argnums=(4,))
 @jit
 @jnp.vectorize
 def _jacobi(n, alpha, beta, x, dx=0):
@@ -1857,13 +1857,13 @@ def _jacobi(n, alpha, beta, x, dx=0):
 
 
 @_jacobi.defjvp
-def _jacobi_jvp(x, xdot):
-    (n, alpha, beta, x, dx) = x
-    (ndot, alphadot, betadot, xdot, dxdot) = xdot
+def _jacobi_jvp(dx, x, xdot):
+    (n, alpha, beta, x) = x
+    (*_, xdot) = xdot
     f = _jacobi(n, alpha, beta, x, dx)
     df = _jacobi(n, alpha, beta, x, dx + 1)
     # in theory n, alpha, beta, dx aren't differentiable (they're integers)
     # but marking them as non-diff argnums seems to cause escaped tracer values.
     # probably a more elegant fix, but just setting those derivatives to zero seems
     # to work fine.
-    return f, df * xdot + 0 * ndot + 0 * alphadot + 0 * betadot + 0 * dxdot
+    return f, df * xdot

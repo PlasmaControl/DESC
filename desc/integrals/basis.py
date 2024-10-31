@@ -456,6 +456,15 @@ class PiecewiseChebyshevSeries(IOAble):
     def intersect1d(self, k=0.0, *, num_intersect=None, pad_value=0.0):
         """Coordinates z(x, yᵢ) such that fₓ(yᵢ) = k for every x.
 
+        Examples
+        --------
+        In ``Bounce2D.points``, the labels x, y, z, f, k are
+          * z = ζ = (ϑ−α)/ι̅-ω ∈ ℝ
+          * y = ζ mod (2π) ∈ [0, 2π]
+          * x = α mod (2π) ∈ [0, 2π]
+          * f = ‖B‖
+          * k = 1/λ
+
         Parameters
         ----------
         k : jnp.ndarray

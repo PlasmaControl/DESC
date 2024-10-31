@@ -769,7 +769,7 @@ class FourierCurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
         show_plots=False,
         npts=128,
         stell_sym=False,
-        figsize=(8, 6),
+        plot_kwargs={"figsize": (8, 6)},
     ):
         """Find helical or modular coils from this surface current potential.
 
@@ -809,9 +809,10 @@ class FourierCurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
         stell_sym : bool
             whether the coils are stellarator-symmetric or not. Defaults to False. Only
             matters for modular coils (currently)
-        figsize : tuple
-            figsize to pass to matplotlib figure call, to control size of figure
-            if ``show_plots=True``
+        plot_kwargs : dict
+            dict of kwargs to use when plotting the contour plots if ``show_plots=True``
+            ``figsize`` is used for the figure size, and the rest are passed to
+            ``plt.contourf``
 
         Returns
         -------
@@ -856,7 +857,7 @@ class FourierCurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
             net_poloidal_current,
             net_toroidal_current,
             helicity,
-            figsize=figsize,
+            plot_kwargs=plot_kwargs,
         )
 
         ################################################################
@@ -1545,7 +1546,7 @@ def _find_current_potential_contours(
     net_poloidal_current=None,
     net_toroidal_current=None,
     helicity=None,
-    figsize=(8, 6),
+    plot_kwargs={},
 ):
     """Find contours of constant current potential (i.e. coils).
 
@@ -1587,7 +1588,7 @@ def _find_current_potential_contours(
         the helicity of the coil currents, should be consistent with the passed-in
         net currents. If None, will use the correct ratio of net poloidal and net
         toroidal currents.
-    figsize : tuple
+    plot_kwargs : tuple
             figsize to pass to matplotlib figure call, to control size of figure
             if ``show_plots=True``
 
@@ -1755,9 +1756,13 @@ def _find_current_potential_contours(
     )
 
     if show_plots:
-        plt.figure(figsize=figsize)
+        plt.figure(figsize=plot_kwargs.get("figsize", (8, 6)))
         plt.contourf(
-            zeta_full_2D.T, theta_full_2D.T, jnp.transpose(phi_total_full), contours
+            zeta_full_2D.T,
+            theta_full_2D.T,
+            jnp.transpose(phi_total_full),
+            contours,
+            **plot_kwargs,
         )
         plt.xlabel(r"$\zeta$")
         plt.ylabel(r"$\theta$")

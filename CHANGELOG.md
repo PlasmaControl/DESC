@@ -2,8 +2,7 @@ Changelog
 =========
 
 New Features
-
-- Add ``use_signed_distance`` flag to ``PlasmaVesselDistance`` which will use a signed distance as the target, which is positive when the plasma is inside of the vessel surface and negative if the plasma is outside of the vessel surface, to allow optimizer to distinguish if the equilbrium surface exits the vessel surface and guard against it by targeting a positive signed distance.
+- Adds ``from_input_file`` method to ``Equilibrium`` class to generate an ``Equilibrium`` object with boundary, profiles, resolution and flux specified in a given DESC or VMEC input file
 - Adds function ``solve_regularized_surface_current`` to ``desc.magnetic_fields`` module that implements the REGCOIL algorithm (Landreman, (2017)) for surface current normal field optimization
     * Can specify the tuple ``current_helicity=(M_coil, N_coil)`` to determine if resulting contours correspond to helical topology (both ``(M_coil, N_coil)`` not equal to 0), modular (``N_coil`` equal to 0 and ``M_coil`` nonzero) or windowpane/saddle (``M_coil`` and ``N_coil`` both zero)
     * ``M_coil`` is the number of poloidal transits a coil makes before returning to itself, while ``N_coil`` is the number of toroidal transits a coil makes before returning to itself (this is sort of like the QS ``helicity``)
@@ -13,33 +12,63 @@ New Features
 - Adds a new objective ``SurfaceCurrentRegularization`` (which minimizes ``w*|K|``, the regularization term from surface current in the REGCOIL algorithm, with `w` being the objective weight which act as the regularization parameter)
     * use of both this and the ``QuadraticFlux`` objective allows for REGCOIL solutions to be obtained through the optimization framework, and combined with other objectives as well.
 - Adds a new tutorial showing how to use``REGCOIL`` features.
-- Add ``VectorPotentialField`` class to allow calculation of magnetic fields from a user-specified
-  vector potential function.
-- Add ``compute_magnetic_vector_potential`` methods to most ``MagneticField`` objects to allow vector potential
-  computation.
-- Add ability to save and load vector potential information from ``mgrid`` files.
-- Changes ``ToroidalFlux`` objective to default using a 1D loop integral of the vector potential
-to compute the toroidal flux when possible, as opposed to a 2D surface integral of the magnetic field dotted with ``n_zeta``.
-- Allow specification of Nyquist spectrum maximum modenumbers when using ``VMECIO.save`` to save a DESC .h5 file as a VMEC-format wout file
-- Added and tested infinite-n ideal-ballooning stability solver implemented as a part of the BallooningStability Objective. DESC can use reverse-mode AD to now optimize equilibria against infinite-n ideal ballooning modes.
+
+
+Bug Fixes
+
+- Fixes bug that occurs when taking the gradient of ``root`` and ``root_scalar`` with newer versions of JAX (>=0.4.34) and unpins the JAX version
+
+
+v0.12.3
+-------
+
+[Github Commits](https://github.com/PlasmaControl/DESC/compare/v0.12.2...v0.12.3)
+
+New Features
+
+- Add infinite-n ideal-ballooning stability solver implemented as a part of the ``BallooningStability`` Objective. DESC can use reverse-mode AD to now optimize equilibria against infinite-n ideal ballooning modes.
 - Add ``jac_chunk_size`` to ``ObjectiveFunction`` and ``_Objective`` to control the above chunk size for the ``fwd`` mode Jacobian calculation
   - if ``None``, the chunk size is equal to ``dim_x``, so no chunking is done
   - if an ``int``, this is the chunk size to be used.
   - if ``"auto"`` for the ``ObjectiveFunction``, will use a heuristic for the maximum ``jac_chunk_size`` needed to fit the jacobian calculation on the available device memory, according to the formula: ``max_jac_chunk_size = (desc_config.get("avail_mem") / estimated_memory_usage - 0.22)  / 0.85  * self.dim_x`` with ``estimated_memory_usage = 2.4e-7 * self.dim_f * self.dim_x + 1``
 - the ``ObjectiveFunction`` ``jac_chunk_size`` is used if ``deriv_mode="batched"``, and the ``_Objective`` ``jac_chunk_size`` will be used if ``deriv_mode="blocked"``
-- Add ``from_input_file`` method to ``Equilibrium`` class to generate an ``Equilibrium`` object with boundary, profiles, resolution and flux specified in a given DESC or VMEC input file
-
-
+- Make naming of grids kwargs among free boundary objectives more uniform
+- Add kwarg options to plot 3d without any axis visible
+- Pin jax version temporarily to avoid JAX-related bug
 
 Bug Fixes
 
-- Fixes bugs that occur when saving asymmetric equilibria as wout files
-- Fixes bug that occurs when using ``VMECIO.plot_vmec_comparison`` to compare to an asymmetric wout file
-- Fixes bug that occurs when taking the gradient of ``root`` and ``root_scalar`` with newer versions of JAX (>=0.4.34) and unpins the JAX version
+- Fix error that can occur when `get_NAE_constraints` is called for only fixing the axis
+- Bug fix for `most_rational` with negative arguments
+- Fix bug in `FixOmniBMax`
 
 Deprecations
 
 - ``deriv_mode="looped"`` in ``ObjectiveFunction`` is deprecated and will be removed in a future version in favored of ``deriv_mode="batched"`` with ``jac_chunk_size=1``,
+
+
+
+
+v0.12.2
+-------
+
+[Github Commits](https://github.com/PlasmaControl/DESC/compare/v0.12.1...v0.12.2)
+
+- Add Vector Potential Calculation to `Coil` classes and Most `MagneticField` Classes
+- Add automatic intersection checking to `CoilSet` objects, and a method `is_self_intersecting` which check if the coils in the `CoilSet` intersect one another.
+- Add `flip_theta` compatibility function to switch the zero-point of the poloidal angle between the inboard/outboard side of the plasma.
+- Change field line integration to use `diffrax` package instead of the deprecated `jax.experimental.odeint` function, allowing for specifying the integration method, the step-size used, and more. See the documentation of [`field_line_integrate`](https://desc-docs.readthedocs.io/en/latest/_api/magnetic_fields/desc.magnetic_fields.field_line_integrate.html#desc.magnetic_fields.field_line_integrate) and [`diffrax`](https://docs.kidger.site/diffrax/api/diffeqsolve/) for more details.
+- Add `use_signed_distance` keyword to `PlasmaVesselDistance` objective to allow for specifying the desired relative position of the plasma and surface.
+- Vectorize Boozer transform over multiple surfaces, to allow for calculation of Boozer-related quantities on grids that contain multiple radial surfaces.
+- Optimizer now automatically scales linearly-constrained optimization parameters to be of roughly the same magnitude, to improve optimization when parameter values range many orders of magnitude
+- Add `HermiteSplineProfile` class, which allows for profile derivative information to be specified along with profile value information.
+- Add installation instructions for RAVEN cluster at IPP to the docs
+- Change optimizer printed output to be easier to read
+- Add `HeatingPower` and `FusionPower` objectives
+- Reduce `QuadratureGrid` number of radial points to match its intended functionality
+- Fix some plotting issues that arose when NFP differs from 1 for objects, or when passed-in phi exceeds 2pi/nfp
+- Update `VMECIO` to allow specification of Nyquist spectrum and fix some bugs with asymmetric wout files
+- The code no longer mods non-periodic angles (such as the field line label $\alpha$) by $2\pi$, as in field-line-following contexts, functions may not be periodic in these angles.
 
 
 v0.12.1

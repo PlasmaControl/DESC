@@ -2,6 +2,7 @@
 
 import copy
 import numbers
+import warnings
 from collections.abc import MutableSequence
 
 import numpy as np
@@ -26,6 +27,7 @@ from desc.geometry import (
     ZernikeRZToroidalSection,
 )
 from desc.grid import Grid, LinearGrid, QuadratureGrid, _Grid
+from desc.input_reader import InputReader
 from desc.io import IOAble
 from desc.objectives import (
     ForceBalance,
@@ -2070,6 +2072,55 @@ class Equilibrium(IOAble, Optimizable):
         eq.surface = eq.get_surface_at(rho=1)
 
         return eq
+
+    @classmethod
+    def from_input_file(cls, path, **kwargs):
+        """Create an Equilibrium from information in a DESC or VMEC input file.
+
+        Parameters
+        ----------
+        path : Path-like or str
+            Path to DESC or VMEC input file.
+        **kwargs : dict, optional
+            keyword arguments to pass to the constructor of the
+            Equilibrium being created.
+
+        Returns
+        -------
+        Equilibrium : Equilibrium
+            Equilibrium generated from the given input file.
+
+        """
+        inputs = InputReader().parse_inputs(path)[-1]
+        if (inputs["bdry_ratio"] is not None) and (inputs["bdry_ratio"] != 1):
+            warnings.warn(
+                "`bdry_ratio` is intended as an input for the continuation method."
+                "`bdry_ratio`=1 uses the given surface modes as is, any other scalar "
+                "value will scale the non-axisymmetric  modes by that value. The "
+                "final value of `bdry_ratio` in the input file is "
+                f"{inputs['bdry_ratio']}, this means the created Equilibrium won't "
+                "have the given surface but a scaled version instead."
+            )
+        inputs["surface"][:, 1:3] = inputs["surface"][:, 1:3].astype(int)
+        # remove the keys (pertaining to continuation and solver tols)
+        # that an Equilibrium does not need
+        unused_keys = [
+            "pres_ratio",
+            "bdry_ratio",
+            "pert_order",
+            "ftol",
+            "xtol",
+            "gtol",
+            "maxiter",
+            "objective",
+            "optimizer",
+            "bdry_mode",
+            "output_path",
+            "verbose",
+        ]
+        [inputs.pop(key) for key in unused_keys]
+        inputs.update(kwargs)
+        return cls(**inputs)
 
     def solve(
         self,

@@ -92,7 +92,7 @@ def _compute(fun, interp_data, data, grid, num_pitch, reduce=True):
 
 
 @register_compute_fun(
-    name="<L|r,a>",
+    name="fieldline length",
     label="\\int_{\\zeta_{\\mathrm{min}}}^{\\zeta_{\\mathrm{max}}}"
     " \\frac{d\\zeta}{|B^{\\zeta}|}",
     units="m / T",
@@ -107,19 +107,19 @@ def _compute(fun, interp_data, data, grid, num_pitch, reduce=True):
     resolution_requirement="z",
     source_grid_requirement={"coordinates": "raz", "is_meshgrid": True},
 )
-def _L_ra_fsa(data, transforms, profiles, **kwargs):
+def _fieldline_length(data, transforms, profiles, **kwargs):
     grid = transforms["grid"].source_grid
     L_ra = simpson(
         y=grid.meshgrid_reshape(1 / data["B^zeta"], "arz"),
         x=grid.compress(grid.nodes[:, 2], surface_label="zeta"),
         axis=-1,
     )
-    data["<L|r,a>"] = grid.expand(jnp.abs(_alpha_mean(L_ra)))
+    data["fieldline length"] = grid.expand(jnp.abs(_alpha_mean(L_ra)))
     return data
 
 
 @register_compute_fun(
-    name="<G|r,a>",
+    name="fieldline length/volume",
     label="\\int_{\\zeta_{\\mathrm{min}}}^{\\zeta_{\\mathrm{max}}}"
     " \\frac{d\\zeta}{|B^{\\zeta} \\sqrt g|}",
     units="1 / Wb",
@@ -134,14 +134,14 @@ def _L_ra_fsa(data, transforms, profiles, **kwargs):
     resolution_requirement="z",
     source_grid_requirement={"coordinates": "raz", "is_meshgrid": True},
 )
-def _G_ra_fsa(data, transforms, profiles, **kwargs):
+def _fieldline_length_over_volume(data, transforms, profiles, **kwargs):
     grid = transforms["grid"].source_grid
     G_ra = simpson(
         y=grid.meshgrid_reshape(1 / (data["B^zeta"] * data["sqrt(g)"]), "arz"),
         x=grid.compress(grid.nodes[:, 2], surface_label="zeta"),
         axis=-1,
     )
-    data["<G|r,a>"] = grid.expand(jnp.abs(_alpha_mean(G_ra)))
+    data["fieldline length/volume"] = grid.expand(jnp.abs(_alpha_mean(G_ra)))
     return data
 
 
@@ -165,11 +165,11 @@ def _G_ra_fsa(data, transforms, profiles, **kwargs):
     data=[
         "min_tz |B|",
         "max_tz |B|",
-        "|grad(rho)|",
         "kappa_g",
-        "<L|r,a>",
         "R0",
+        "|grad(rho)|",
         "<|grad(rho)|>",
+        "fieldline length",
     ]
     + Bounce1D.required_names,
     resolution_requirement="z",
@@ -249,7 +249,7 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
         / (8 * 2**0.5)
         * (B0 * data["R0"] / data["<|grad(rho)|>"]) ** 2
         * _compute(eps_32, interp_data, data, grid, kwargs.get("num_pitch", 50))
-        / data["<L|r,a>"]
+        / data["fieldline length"]
     )
     return data
 

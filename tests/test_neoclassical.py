@@ -10,13 +10,13 @@ from tests.test_plotting import tol_1d
 from desc.equilibrium.coords import get_rtz_grid
 from desc.examples import get
 from desc.grid import LinearGrid
-from desc.utils import errorif, setdefault
+from desc.utils import setdefault
 from desc.vmec import VMECIO
 
 
 @pytest.mark.unit
-def test_field_line_average():
-    """Test that field line average converges to surface average."""
+def test_fieldline_average():
+    """Test that fieldline average converges to surface average."""
     rho = np.array([1])
     alpha = np.array([0])
     eq = get("DSHAPE")
@@ -25,23 +25,31 @@ def test_field_line_average():
     # For axisymmetric devices, one poloidal transit must be exact.
     zeta = np.linspace(0, 2 * np.pi / iota, 25)
     grid = get_rtz_grid(eq, rho, alpha, zeta, coordinates="raz")
-    data = eq.compute(["<L|r,a>", "<G|r,a>", "V_r(r)"], grid=grid)
-    np.testing.assert_allclose(
-        data["<L|r,a>"] / data["<G|r,a>"], data["V_r(r)"] / (4 * np.pi**2), rtol=1e-3
+    data = eq.compute(
+        ["fieldline length", "fieldline length/volume", "V_r(r)"], grid=grid
     )
-    assert np.all(np.sign(data["<L|r,a>"]) > 0)
-    assert np.all(np.sign(data["<G|r,a>"]) > 0)
+    np.testing.assert_allclose(
+        data["fieldline length"] / data["fieldline length/volume"],
+        data["V_r(r)"] / (4 * np.pi**2),
+        rtol=1e-3,
+    )
+    assert np.all(data["fieldline length"] > 0)
+    assert np.all(data["fieldline length/volume"] > 0)
 
     # Otherwise, many toroidal transits are necessary to sample surface.
     eq = get("W7-X")
     zeta = np.linspace(0, 40 * np.pi, 300)
     grid = get_rtz_grid(eq, rho, alpha, zeta, coordinates="raz")
-    data = eq.compute(["<L|r,a>", "<G|r,a>", "V_r(r)"], grid=grid)
-    np.testing.assert_allclose(
-        data["<L|r,a>"] / data["<G|r,a>"], data["V_r(r)"] / (4 * np.pi**2), rtol=1e-3
+    data = eq.compute(
+        ["fieldline length", "fieldline length/volume", "V_r(r)"], grid=grid
     )
-    assert np.all(np.sign(data["<L|r,a>"]) > 0)
-    assert np.all(np.sign(data["<G|r,a>"]) > 0)
+    np.testing.assert_allclose(
+        data["fieldline length"] / data["fieldline length/volume"],
+        data["V_r(r)"] / (4 * np.pi**2),
+        rtol=1e-3,
+    )
+    assert np.all(data["fieldline length"] > 0)
+    assert np.all(data["fieldline length/volume"] > 0)
 
 
 @pytest.mark.unit
@@ -96,7 +104,6 @@ class NeoIO:
 
     def write(self):
         """Write neo input file."""
-        errorif(not self.eq.solved, msg="eq must be set to solved for NEO")
         print(f"Writing VMEC wout to {self.vmec_file}")
         VMECIO.save(self.eq, self.vmec_file, surfs=self.ns, verbose=0)
         self._write_booz()

@@ -2550,7 +2550,7 @@ class EquilibriaFamily(IOAble, MutableSequence):
             )
         self._equilibria = list(equil)
 
-    def __getitem__(self, i):
+    def __getitem__(self, i) -> Equilibrium:
         return self._equilibria[i]
 
     def __setitem__(self, i, new_item):

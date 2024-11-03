@@ -1090,7 +1090,7 @@ class QuadraticFlux(_Objective):
     Parameters
     ----------
     eq : Equilibrium
-        Equilibrium  upon whose surface the normal field error
+        Equilibrium upon whose surface the normal field error
         will be minimized. The equilibrium is kept fixed during the optimization
         with this objective.
     field : MagneticField

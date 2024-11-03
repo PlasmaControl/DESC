@@ -84,7 +84,7 @@ class EffectiveRipple(_Objective):
     num_quad : int
         Resolution for quadrature of bounce integrals. Default is 32.
     num_pitch : int
-        Resolution for quadrature over velocity coordinate. Default is 64.
+        Resolution for quadrature over velocity coordinate. Default is 50.
     batch_size : int
         Number of pitch values with which to compute simultaneously.
         If given ``None``, then ``batch_size`` defaults to ``num_pitch``.

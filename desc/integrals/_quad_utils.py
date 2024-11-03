@@ -1,4 +1,15 @@
-"""Utilities for quadratures."""
+"""Utilities for quadratures.
+
+Notes
+-----
+Bounce integrals with bounce points where the derivative of |B| does
+not vanish have 1/2 power law singularities. The strongly singular integrals
+at the local extrema of |B| are not integrable. Hence, everywhere except the
+extrema, a Chebyshev or Legendre quadrature under a change of variables works
+because √(1−z²) / √(1−λ|B|(z)) ~ g(z, λ) where g(z, λ) is smooth in z.
+Empirically, quadratic node clustering near the singularities is sufficient
+for estimation of g(z).
+"""
 
 from orthax.chebyshev import chebgauss, chebweight
 from orthax.legendre import legder, legval
@@ -30,7 +41,9 @@ def automorphism_arcsin(x, gamma=jnp.cos(0.5)):
     """[-1, 1] ∋ x ↦ y ∈ [−1, 1].
 
     This map decreases node density near the boundary by the asymptotic factor
-    √(1−γ²x²) and adds a 1/√(1−γ²x²) factor to the integrand.
+    √(1−γ²x²) and adds a 1/√(1−γ²x²) factor to the integrand. When applied
+    to any Gaussian quadrature, the default setting modifies the quadrature
+    to be almost-equispaced without sacrificing spectral convergence.
 
     References
     ----------

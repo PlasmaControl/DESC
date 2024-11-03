@@ -26,13 +26,14 @@ from .data_index import register_compute_fun
 
 _bounce_doc = {
     "theta": """jnp.ndarray :
+        Shape (num rho, X, Y).
         DESC coordinates θ sourced from the Clebsch coordinates
         ``FourierChebyshevSeries.nodes(X,Y,rho,domain=(0,2*jnp.pi))``.
         Use the ``Bounce2D.compute_theta`` method to obtain this.
         """,
     "Y_B": """int :
         Desired resolution for |B| along field lines to compute bounce points.
-        Default is double the resolution of ``theta``.
+        Default is double ``Y``.
         """,
     "num_transit": """int :
         Number of toroidal transits to follow field line.
@@ -137,7 +138,7 @@ def _foreach_pitch(fun, pitch_inv, batch_size):
     #  ``fun``` natively supports vectorization.
     return (
         fun(pitch_inv)
-        if (batch_size is None or batch_size >= pitch_inv.size)
+        if (batch_size is None or batch_size >= (pitch_inv.size - 1))
         else imap(fun, pitch_inv, batch_size=batch_size).squeeze(axis=-1)
     )
 

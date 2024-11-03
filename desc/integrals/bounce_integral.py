@@ -183,8 +183,7 @@ class Bounce2D(Bounce):
     quadrature nodes. Quadrature is chosen over Runge-Kutta methods of the form
         ∂Fᵢ/∂ζ = f(λ,ζ,{Gⱼ}) subject to Fᵢ(ζ₁) = 0
     A fourth order Runge-Kutta method is equivalent to a quadrature
-    with Simpson's rule. Our quadratures resolve these integrals more
-    efficiently, and the fixed nature of quadrature performs better on GPUs.
+    with Simpson's rule. The quadratures resolve these integrals more efficiently.
 
     Fast transforms are used where possible. Fast multipoint methods are not
     implemented. For non-uniform interpolation, MMTs are used. It will be
@@ -300,22 +299,11 @@ class Bounce2D(Bounce):
         quad : tuple[jnp.ndarray]
             Quadrature points xₖ and weights wₖ for the approximate evaluation of an
             integral ∫₋₁¹ g(x) dx = ∑ₖ wₖ g(xₖ). Default is 32 points.
-            The below recommendations reference the quadratures in
-            ``desc.integrals._quad_utils``.
-            For weak singular integrals, use ``chebgauss2``.
-            For strong singular integrals, use ``leggauss``.
-            In some cases, ``chebgauss1`` may be used for strong singular integrals.
         automorphism : tuple[Callable] or None
             The first callable should be an automorphism of the real interval [-1, 1].
             The second callable should be the derivative of the first. This map defines
             a change of variable for the bounce integral. The choice made for the
             automorphism will affect the performance of the quadrature method.
-            The below recommendations reference the quadratures in
-            ``desc.integrals._quad_utils``.
-            For weak singular integrals, use ``None``.
-            For strong singular integrals, use
-            ``(automorphism_sin,grad_automorphism_sin)``
-            with ``leggauss`` or ``None`` with ``chebgauss1``.
         Bref : float
             Optional. Reference magnetic field strength for normalization.
         Lref : float
@@ -1031,13 +1019,11 @@ class Bounce1D(Bounce):
     nodes. Quadrature is chosen over Runge-Kutta methods of the form
         ∂Fᵢ/∂ζ = f(λ,ζ,{Gⱼ}) subject to Fᵢ(ζ₁) = 0
     A fourth order Runge-Kutta method is equivalent to a quadrature
-    with Simpson's rule. Our quadratures resolve these integrals more
-    efficiently, and the fixed nature of quadrature performs better on GPUs.
+    with Simpson's rule. The quadratures resolve these integrals more efficiently.
 
     See Also
     --------
-    Bounce2D
-        Uses two-dimensional pseudo-spectral techniques for the same task.
+    Bounce2D : Uses two-dimensional pseudo-spectral techniques for the same task.
 
     Examples
     --------
@@ -1088,22 +1074,11 @@ class Bounce1D(Bounce):
         quad : tuple[jnp.ndarray]
             Quadrature points xₖ and weights wₖ for the approximate evaluation of an
             integral ∫₋₁¹ g(x) dx = ∑ₖ wₖ g(xₖ). Default is 32 points.
-            The below recommendations reference the quadratures in
-            ``desc.integrals._quad_utils``.
-            For weak singular integrals, use ``chebgauss2``.
-            For strong singular integrals, use ``leggauss``.
-            In some cases, ``chebgauss1`` may be used for strong singular integrals.
         automorphism : tuple[Callable] or None
             The first callable should be an automorphism of the real interval [-1, 1].
             The second callable should be the derivative of the first. This map defines
             a change of variable for the bounce integral. The choice made for the
             automorphism will affect the performance of the quadrature method.
-            The below recommendations reference the quadratures in
-            ``desc.integrals._quad_utils``.
-            For weak singular integrals, use ``None``.
-            For strong singular integrals, use
-            ``(automorphism_sin,grad_automorphism_sin)``
-            with ``leggauss`` or ``None`` with ``chebgauss1``.
         Bref : float
             Optional. Reference magnetic field strength for normalization.
         Lref : float

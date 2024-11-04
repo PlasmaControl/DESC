@@ -554,26 +554,41 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
     data=["min_tz |B|", "max_tz |B|", "cvdrift0", "gbdrift", "<L|r,a>"]
     + Bounce1D.required_names,
     source_grid_requirement={"coordinates": "raz", "is_meshgrid": True},
-    quad="jnp.ndarray : Optional, quadrature points and weights for bounce integrals.",
-    num_pitch="int : Resolution for quadrature over velocity coordinate. Default 64.",
+    quad=(
+        "jnp.ndarray : Optional, quadrature points and weights for bounce integrals."
+    ),
+    num_pitch=("int : Resolution for quadrature over velocity coordinate. Default 64."),
     num_well=(
         "int : Maximum number of wells to detect for each pitch and field line. "
         "Default is to detect all wells, but due to limitations in JAX this option "
         "may consume more memory. Specifying a number that tightly upper bounds "
-        "the number of wells will increase performance. "
+        "the number of wells will increase performance."
+    ),
+    thresh=(
+        "float : The heaviside function subtracts a threshold value from the "
+        "function max(γ*_c (α|λ)), the maximum value of γ∗_c that can be found "
+        "moving in α at fixed λ. The threshold should roughly correspond to the ratio "
+        "of bounce-averaged tangential drift to the flux surface to bounce averaged "
+        "radial drift to the flux surface. This ratio is the inverse of γ*_c. "
+        "Default value is 0.2."
     ),
     batch="bool : Whether to vectorize part of the computation. Default is true.",
     data_for_plot="bool: whether to output gamma_c or Gamma_d",
     aliases=["Gamma_d"],
 )
-@partial(jit, static_argnames=["num_pitch", "num_well", "batch", "data_for_plot"])
+@partial(
+    jit, static_argnames=["num_pitch", "num_well", "thresh", "batch", "data_for_plot"]
+)
 def _Gamma_d_Velasco(params, transforms, profiles, data, **kwargs):
     """Energetic ion confinement proxy as defined by Velasco et al.
 
     A model for the fast evaluation of prompt losses of energetic ions in stellarators.
     J.L. Velasco et al. 2021 Nucl. Fusion 61 116059.
     https://doi.org/10.1088/1741-4326/ac2994.
-    Equation 16.
+    Equation 22.
+
+    Gamma_d incorporates a step function on the Gamma_c proxy to detect whether
+    a superbanana exists or not for that value of λ.
     """
     quad = (
         kwargs["quad"]

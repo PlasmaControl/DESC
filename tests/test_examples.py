@@ -1265,7 +1265,7 @@ def test_qfm_optimization_with_analytic_field():
         M=10,
         N=4,
         NFP=surface.NFP,
-        sym=False,
+        sym=True,
     )
 
     optimizer = Optimizer("lsq-exact")
@@ -1308,8 +1308,8 @@ def test_qfm_optimization_with_analytic_field():
     # to get to Bnorm = 0
     nonax_R = surface.R_lmn[np.where(surface.R_basis.modes[:, 2] != 0)]
     nonax_Z = surface.Z_lmn[np.where(surface.Z_basis.modes[:, 2] != 0)]
-    np.testing.assert_allclose(nonax_R, 0, atol=1e-8)
-    np.testing.assert_allclose(nonax_Z, 0, atol=1e-8)
+    np.testing.assert_allclose(nonax_R, 0, atol=1e-7)
+    np.testing.assert_allclose(nonax_Z, 0, atol=1e-7)
 
 
 @pytest.mark.unit

@@ -1138,7 +1138,7 @@ class _FiniteBuildCoil(_FramedCoil, Optimizable, ABC):
         Parameters
         ----------
         self_grid : Grid, int or None
-            Grid used to evaluate the field on the coil itself. If an integer, uses that many equally spaced points in the coil volume.
+            Grid used to evaluate the field on the coil itself. If an integer, uses that many equally spaced points in each dimension of the cross section.
         params : dict, optional
             Parameters to pass to the coil object. This is where current could be overriden with a 'current' key.
         """
@@ -1206,8 +1206,28 @@ class FourierPlanarFiniteBuildCoil(_FiniteBuildCoil, FourierPlanarCoil):
         )
 
     def compute_self_field(self, self_grid, params=None):
-        #TODO: implement this
-        return super().compute_self_field(self_grid, params)
+        if self.cross_section_shape == "circular":
+            return self.compute_self_field_circ(self_grid, params)
+        if self.cross_section_shape == "rectangular":
+            return self.compute_self_field_rect(self_grid, params)
+    
+    def compute_self_field_rect(self, self_grid, params=None):
+
+        # set cross section grid if not provided for u,v cross sectional coordinates
+        if self_grid is None:
+            self_grid = LinearGrid(M=10, N=10)
+        if isinstance(self_grid, int):
+            self_grid = LinearGrid(M=self_grid, N=self_grid)
+
+        # compute on grid for u v points in physical space 
+        #TODO: potentially need to override self.compute for cross section comps?
+        print(compute_fun(self,"u_fb", transforms={"grid":self_grid}, params=params, profiles={}))
+        print(compute_fun(self,"v_fb", transforms={"grid":self_grid}, params=params, profiles={}))
+
+        return NotImplementedError("Rectangular cross section self field not implemented yet")
+
+    def compute_self_field_circ(self, self_grid, params=None):
+        return NotImplementedError("Circular cross section self field not implemented yet")
 
 
 class CoilSet(OptimizableCollection, _Coil, MutableSequence):

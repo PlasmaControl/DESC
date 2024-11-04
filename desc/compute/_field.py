@@ -3516,3 +3516,61 @@ def _L_grad_B(params, transforms, profiles, data, **kwargs):
 def _K_vc(params, transforms, profiles, data, **kwargs):
     data["K_vc"] = cross(data["n_rho"], data["B"]) / mu_0
     return data
+
+@register_compute_fun(
+    name="u_fb",
+    label="u_{FB}",
+    units="",
+    units_long="",
+    description="U coordinate for finite build expansion",
+    dim=1,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="rtz",
+    data=[],
+    parameterization="desc.coils.FourierPlanarFiniteBuildCoil", #for now, will change to full finite build
+)
+def _u_fb(params, transforms, profiles, data, **kwargs):
+    grid = transforms["grid"]
+    #TODO: check that grid is LinearGrid?
+    u = (grid.nodes[:, 1] - jnp.pi)/(jnp.pi) #rescale to [-1,1]
+    return u
+
+@register_compute_fun(
+    name="v_fb",
+    label="v_{FB}",
+    units="",
+    units_long="",
+    description="V coordinate for finite build expansion",
+    dim=1,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="rtz",
+    data=[],
+    parameterization="desc.coils.FourierPlanarFiniteBuildCoil", #for now, will change to full finite build
+)
+def _v_fb(params, transforms, profiles, data, **kwargs):
+    grid = transforms["grid"]
+    #TODO: check that grid is LinearGrid?
+    v = (grid.nodes[:, 2] - jnp.pi)/(jnp.pi) #rescale to [-1,1]
+    return v
+
+@register_compute_fun(
+    name="B_0_fb",
+    label="B_{0,FB}",
+    units="T",
+    units_long="Tesla",
+    description="B_0 term in finite build expansion",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=[], #TODO: implement dependencies depending on u,v calculation
+    parameterization="desc.coils.FourierPlanarFiniteBuildCoil", #for now, will change to full finite build
+)
+def _B_0_fb(params, transforms, profiles, data, **kwargs):
+    
+    return

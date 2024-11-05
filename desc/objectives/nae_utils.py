@@ -548,7 +548,7 @@ def _calc_2nd_order_NAE_coeffs(qsc, desc_eq, N=None, use_simple=True):
     Z2sNAE = qsc.Z2s_untwisted
     Z2cNAE = qsc.Z2c_untwisted
 
-    # need dvarphi_dphi to convert dX_d_dvarphi derivs to dX_d_dphi
+    # use dvarphi_dphi to convert dX_d_dvarphi derivs to dX_d_dphi
     # formula from https://github.com/landreman/pyQSC/blob/main/qsc/init_axis.py#L110
     dvphi_dp = qsc.nphi / (np.sum(qsc.d_l_d_phi)) * qsc.d_l_d_phi
 
@@ -980,25 +980,28 @@ def _calc_2nd_order_NAE_coeffs(qsc, desc_eq, N=None, use_simple=True):
     ddZ0 = stel.Z0pp
 
     x1_cos = (
-        stel.X1c * stel.normal_cylindrical.transpose()
-        + stel.Y1c * stel.binormal_cylindrical.transpose()
+        stel.X1c_untwisted * stel.normal_cylindrical.transpose()
+        + stel.Y1c_untwisted * stel.binormal_cylindrical.transpose()
     )
-    x1_sin = stel.Y1s * stel.binormal_cylindrical.transpose()
+    x1_sin = (
+        stel.Y1s_untwisted * stel.binormal_cylindrical.transpose()
+        + stel.X1s_untwisted * stel.normal_cylindrical.transpose()
+    )
 
     x2_0 = (
-        stel.X20 * stel.normal_cylindrical.transpose()
-        + stel.Y20 * stel.binormal_cylindrical.transpose()
-        + stel.Z20 * stel.tangent_cylindrical.transpose()
+        stel.X20_untwisted * stel.normal_cylindrical.transpose()
+        + stel.Y20_untwisted * stel.binormal_cylindrical.transpose()
+        + stel.Z20_untwisted * stel.tangent_cylindrical.transpose()
     )
     x2_cos = (
-        stel.X2c * stel.normal_cylindrical.transpose()
-        + stel.Y2c * stel.binormal_cylindrical.transpose()
-        + stel.Z2c * stel.tangent_cylindrical.transpose()
+        stel.X2c_untwisted * stel.normal_cylindrical.transpose()
+        + stel.Y2c_untwisted * stel.binormal_cylindrical.transpose()
+        + stel.Z2c_untwisted * stel.tangent_cylindrical.transpose()
     )
     x2_sin = (
-        stel.X2s * stel.normal_cylindrical.transpose()
-        + stel.Y2s * stel.binormal_cylindrical.transpose()
-        + stel.Z2s * stel.tangent_cylindrical.transpose()
+        stel.X2s_untwisted * stel.normal_cylindrical.transpose()
+        + stel.Y2s_untwisted * stel.binormal_cylindrical.transpose()
+        + stel.Z2s_untwisted * stel.tangent_cylindrical.transpose()
     )
 
     X1Rc = x1_cos[0, :]

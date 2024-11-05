@@ -1028,3 +1028,67 @@ def _length_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
         # but also works if grid.endpoint is False
         data["length"] = jnp.sum(T * data["ds"])
     return data
+
+@register_compute_fun(
+    name="centroid_tangent",
+    label="\\mathbf{T}_{\\mathrm{Centroid}}",
+    units="~",
+    units_long="None",
+    description="Tangent unit vector to curve in centroid frame (see Singh et al. 2020, section 3.1)",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="s",
+    data=["x_s"],
+    parameterization="desc.geometry.core.Curve",
+)
+def _centroid_tangent(params, transforms, profiles, data, **kwargs):
+    #this is defined identically to the Frenet-Serret tangent
+    data["centroid_tangent"] = (
+        data["x_s"] / jnp.linalg.norm(data["x_s"], axis=-1)[:, None]
+    )
+    return data
+
+@register_compute_fun(
+    name="centroid_normal",
+    label="\\mathbf{N}_{\\mathrm{Centroid}}",
+    units="~",
+    units_long="None",
+    description="Normal unit vector to curve in centroid frame (see Singh et al. 2020, section 3.1)",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="s",
+    data=["x", "center", "centroid_tangent"],
+    parameterization="desc.geometry.core.Curve",
+)
+def _centroid_normal(params, transforms, profiles, data, **kwargs):
+    delta = data["x"] - data["center"] #do I need to convert this to xyz?
+    delta_orth = delta - dot(delta, data["centroid_tangent"])[:, None] * data["centroid_tangent"]
+    delta_orth = delta_orth / jnp.linalg.norm(delta_orth, axis=-1)[:, None]
+    data["centroid_normal"] = delta_orth
+
+    return data
+
+@register_compute_fun(
+    name="centroid_binormal",
+    label="\\mathbf{B}_{\\mathrm{Centroid}}",
+    units="~",
+    units_long="None",
+    description="Binormal unit vector to curve in centroid frame (see Singh et al. 2020, section 3.1)",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="s",
+    data=["centroid_tangent", "centroid_normal"],
+    parameterization="desc.geometry.core.Curve",
+)
+def _centroid_binormal(params, transforms, profiles, data, **kwargs):
+    data["centroid_binormal"] = cross(
+        data["centroid_tangent"], data["centroid_normal"]
+    ) #TODO: figure out if rotation is necessary for these unit vecs
+
+    return data

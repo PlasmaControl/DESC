@@ -1205,28 +1205,28 @@ class FourierPlanarFiniteBuildCoil(_FiniteBuildCoil, FourierPlanarCoil):
             name,
         )
 
-    def compute_self_field(self, self_grid, params=None):
+    def compute_self_field(self, xsection_grid, centerline_grid=None, params=None):
         if self.cross_section_shape == "circular":
-            return self.compute_self_field_circ(self_grid, params)
+            return self.compute_self_field_circ(xsection_grid, centerline_grid, params)
         if self.cross_section_shape == "rectangular":
-            return self.compute_self_field_rect(self_grid, params)
+            return self.compute_self_field_rect(xsection_grid, centerline_grid, params)
     
-    def compute_self_field_rect(self, self_grid, params=None):
+    def compute_self_field_rect(self, xsection_grid, centerline_grid=None, params=None):
 
         # set cross section grid if not provided for u,v cross sectional coordinates
-        if self_grid is None:
-            self_grid = LinearGrid(M=10, N=10)
-        if isinstance(self_grid, int):
-            self_grid = LinearGrid(M=self_grid, N=self_grid)
+        if xsection_grid is None:
+            xsection_grid = LinearGrid(M=10, N=10, endpoint=True)
+        if isinstance(xsection_grid, numbers.Integral):
+            xsection_grid = LinearGrid(M=xsection_grid, N=xsection_grid, endpoint=True)
 
         # compute on grid for u v points in physical space 
-        #TODO: potentially need to override self.compute for cross section comps?
-        print(compute_fun(self,"u_fb", transforms={"grid":self_grid}, params=params, profiles={}))
-        print(compute_fun(self,"v_fb", transforms={"grid":self_grid}, params=params, profiles={}))
+        #TODO: get u,v, vector series, pass in as DATA to cross section computation for B0 type terms
+        print(compute_fun(self,"u_fb", transforms={"grid":xsection_grid}, params=params, profiles={}))
+        print(self.compute("p_frame", grid=centerline_grid, params=params)["p_frame"])
 
         return NotImplementedError("Rectangular cross section self field not implemented yet")
 
-    def compute_self_field_circ(self, self_grid, params=None):
+    def compute_self_field_circ(self, xsection_grid, centerline_grid=None, params=None):
         return NotImplementedError("Circular cross section self field not implemented yet")
 
 

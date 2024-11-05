@@ -3517,6 +3517,52 @@ def _K_vc(params, transforms, profiles, data, **kwargs):
     data["K_vc"] = cross(data["n_rho"], data["B"]) / mu_0
     return data
 
+
+@register_compute_fun(
+    name="p_frame",
+    label="\\mathbf{p}_{\\mathrm{Frame}}",
+    units="~",
+    units_long="None",
+    description="P unit vector for framed coil with arbitrary rotation fourier series",
+    dim=3,
+    params=["alpha_n"],
+    transforms={"alpha": [[0, 0, 0]]},
+    profiles=[],
+    coordinates="s",
+    data=["centroid_normal", "centroid_binormal"],
+    parameterization="desc.coils.FourierPlanarFiniteBuildCoil", #should be framedcoil ABC?
+)
+def _p_frame(params, transforms, profiles, data, **kwargs):
+    alpha = transforms["alpha"].transform(params["alpha_n"], dz=0) #TODO: check if this is right
+
+    p_frame = data["centroid_normal"] * jnp.cos(alpha)[:, jnp.newaxis] + data["centroid_binormal"] * jnp.sin(alpha)[:, jnp.newaxis]
+
+    data["p_frame"] = p_frame
+    return data
+
+@register_compute_fun(
+    name="q_frame",
+    label="\\mathbf{q}_{\\mathrm{Frame}}",
+    units="~",
+    units_long="None",
+    description="Q unit vector for framed coil with arbitrary rotation fourier series",
+    dim=3,
+    params=["alpha_n"],
+    transforms={"alpha": [[0, 0, 0]]},
+    profiles=[],
+    coordinates="s",
+    data=["centroid_normal", "centroid_binormal"],
+    parameterization="desc.coils.FourierPlanarFiniteBuildCoil",
+)
+def _q_frame(params, transforms, profiles, data, **kwargs):
+    alpha = transforms["alpha"].transform(params["alpha_n"], dz=0) 
+
+    q_frame = -data["centroid_normal"] * jnp.sin(alpha)[:, jnp.newaxis] + data["centroid_binormal"] * jnp.cos(alpha)[:, jnp.newaxis]
+
+    data["q_frame"] = q_frame
+    return data
+
+
 @register_compute_fun(
     name="u_fb",
     label="u_{FB}",
@@ -3527,15 +3573,15 @@ def _K_vc(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={"grid": []},
     profiles=[],
-    coordinates="rtz",
+    coordinates="rt", #just two degrees of freedom  
     data=[],
     parameterization="desc.coils.FourierPlanarFiniteBuildCoil", #for now, will change to full finite build
 )
 def _u_fb(params, transforms, profiles, data, **kwargs):
     grid = transforms["grid"]
     #TODO: check that grid is LinearGrid?
-    u = (grid.nodes[:, 1] - jnp.pi)/(jnp.pi) #rescale to [-1,1]
-    return u
+    data["u_fb"] = (grid.nodes[:, 1] - jnp.pi)/(jnp.pi) #rescale to [-1,1]
+    return data
 
 @register_compute_fun(
     name="v_fb",
@@ -3547,15 +3593,15 @@ def _u_fb(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={"grid": []},
     profiles=[],
-    coordinates="rtz",
+    coordinates="rt",
     data=[],
     parameterization="desc.coils.FourierPlanarFiniteBuildCoil", #for now, will change to full finite build
 )
 def _v_fb(params, transforms, profiles, data, **kwargs):
     grid = transforms["grid"]
     #TODO: check that grid is LinearGrid?
-    v = (grid.nodes[:, 2] - jnp.pi)/(jnp.pi) #rescale to [-1,1]
-    return v
+    data["v_fb"] = (grid.nodes[:, 2] - jnp.pi)/(jnp.pi) #rescale to [-1,1]
+    return data
 
 @register_compute_fun(
     name="B_0_fb",

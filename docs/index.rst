@@ -70,7 +70,6 @@
    dev_guide/notebooks/coils.ipynb
    dev_guide/notebooks/compute.ipynb
    dev_guide/notebooks/grid.ipynb
-   dev_guide/notebooks/objectives.ipynb
    dev_guide/notebooks/optimization_objectives_constraints.ipynb
    dev_guide/notebooks/transform.ipynb
 

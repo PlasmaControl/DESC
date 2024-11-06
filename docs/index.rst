@@ -65,35 +65,14 @@
    dev_guide/adding_objectives.rst
    dev_guide/adding_optimizers.rst
    dev_guide/backend.rst
-   dev_guide/compute.rst
-   dev_guide/compute_notebook.ipynb
-   dev_guide/compute_2.ipynb
    dev_guide/configuration_equilibrium.rst
    dev_guide/grid.ipynb
-   dev_guide/objectives.rst
-   dev_guide/transform_2.ipynb
-   dev_guide/notebooks/backend.ipynb
-   dev_guide/notebooks/basis.ipynb
    dev_guide/notebooks/coils.ipynb
-   dev_guide/notebooks/compute_notebook_2.ipynb
-   dev_guide/notebooks/configuration.ipynb
-   dev_guide/notebooks/derivatives.ipynb
-   dev_guide/notebooks/equilibrium.ipynb
-   dev_guide/notebooks/examples.ipynb
-   dev_guide/notebooks/geometry.ipynb
+   dev_guide/notebooks/compute.ipynb
    dev_guide/notebooks/grid.ipynb
-   dev_guide/notebooks/interpolate.ipynb
-   dev_guide/notebooks/io.ipynb
-   dev_guide/notebooks/magnetic_fields.ipynb
    dev_guide/notebooks/objectives.ipynb
    dev_guide/notebooks/optimization_objectives_constraints.ipynb
-   dev_guide/notebooks/optimize.ipynb
-   dev_guide/notebooks/perturbations.ipynb
-   dev_guide/notebooks/plotting.ipynb
    dev_guide/notebooks/transform.ipynb
-   dev_guide/notebooks/utils.ipynb
-   dev_guide/notebooks/vmec_utils.ipynb
-   dev_guide/notebooks/vmec.ipynb
 
 
 

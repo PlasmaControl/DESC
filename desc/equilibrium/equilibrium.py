@@ -2,6 +2,7 @@
 
 import copy
 import numbers
+import warnings
 from collections.abc import MutableSequence
 
 import numpy as np
@@ -26,6 +27,7 @@ from desc.geometry import (
     ZernikeRZToroidalSection,
 )
 from desc.grid import Grid, LinearGrid, QuadratureGrid, _Grid
+from desc.input_reader import InputReader
 from desc.io import IOAble
 from desc.objectives import (
     ForceBalance,
@@ -861,6 +863,7 @@ class Equilibrium(IOAble, Optimizable):
                 "v": "theta_PEST",
                 "a": "alpha",
                 "z": "zeta",
+                "p": "phi",
             }
             rtz_nodes = self.map_coordinates(
                 grid.nodes,
@@ -909,13 +912,13 @@ class Equilibrium(IOAble, Optimizable):
             # the compute logic assume input data is evaluated on those coordinates.
             # We exclude these from the depXdx sets below since the grids we will
             # use to compute those dependencies are coordinate-blind.
-            # Example, "<L|r,a>" has coordinates="r", but requires computing on
-            # field line following source grid.
+            # Example, "fieldline length" has coordinates="r", but requires computing
+            # on field line following source grid.
             return bool(data_index[p][name]["source_grid_requirement"])
 
-        # Need to call _grow_seeds so that some other quantity like K = 2 * <L|r,a>,
-        # which does not need a source grid to evaluate, does not compute <L|r,a> on a
-        # grid that does not follow field lines.
+        # Need to call _grow_seeds so that e.g. "max(fieldline length)" which does not
+        # need a source grid to evaluate, still computes "fieldline length"
+        # on a grid whose source grid follows field lines.
         # Maybe this can help explain:
         # https://github.com/PlasmaControl/DESC/pull/1024#discussion_r1664918897.
         need_src_deps = _grow_seeds(p, set(filter(need_src, deps)), deps)
@@ -990,7 +993,7 @@ class Equilibrium(IOAble, Optimizable):
                     # and won't override grid to one with more radial resolution
                     and not (override_grid and coords in {"z", ""}),
                     ResolutionWarning,
-                    msg("radial"),
+                    msg("radial") + f" got L_grid={grid.L} < {self._L_grid}.",
                 )
                 warnif(
                     # if need more poloidal resolution
@@ -998,7 +1001,7 @@ class Equilibrium(IOAble, Optimizable):
                     # and won't override grid to one with more poloidal resolution
                     and not (override_grid and coords in {"r", "z", ""}),
                     ResolutionWarning,
-                    msg("poloidal"),
+                    msg("poloidal") + f" got M_grid={grid.M} < {self._M_grid}.",
                 )
                 warnif(
                     # if need more toroidal resolution
@@ -1006,7 +1009,7 @@ class Equilibrium(IOAble, Optimizable):
                     # and won't override grid to one with more toroidal resolution
                     and not (override_grid and coords in {"r", ""}),
                     ResolutionWarning,
-                    msg("toroidal"),
+                    msg("toroidal") + f" got N_grid={grid.N} < {self._N_grid}.",
                 )
 
         # Now compute dependencies on the proper grids, passing in any available
@@ -1055,7 +1058,13 @@ class Equilibrium(IOAble, Optimizable):
                 M=self.M_grid,
                 N=self.N_grid,
                 NFP=self.NFP,
-                sym=self.sym,
+                sym=self.sym
+                and all(
+                    data_index[p][dep]["grid_requirement"].get("sym", True)
+                    # TODO: GitHub issue #1206.
+                    and not data_index[p][dep]["grid_requirement"].get("can_fft", False)
+                    for dep in dep1dr
+                ),
             )
             data1dr_seed = {
                 key: grid1dr.copy_data_from_other(data[key], grid, surface_label="rho")
@@ -1097,7 +1106,13 @@ class Equilibrium(IOAble, Optimizable):
                 L=self.L_grid,
                 M=self.M_grid,
                 NFP=grid.NFP,  # ex: self.NFP>1 but grid.NFP=1 for plot_3d
-                sym=self.sym,
+                sym=self.sym
+                and all(
+                    data_index[p][dep]["grid_requirement"].get("sym", True)
+                    # TODO: GitHub issue #1206.
+                    and not data_index[p][dep]["grid_requirement"].get("can_fft", False)
+                    for dep in dep1dz
+                ),
             )
             data1dz_seed = {
                 key: grid1dz.copy_data_from_other(data[key], grid, surface_label="zeta")
@@ -1222,7 +1237,14 @@ class Equilibrium(IOAble, Optimizable):
         )
 
     def get_rtz_grid(
-        self, radial, poloidal, toroidal, coordinates, period, jitable=True, **kwargs
+        self,
+        radial,
+        poloidal,
+        toroidal,
+        coordinates,
+        period=(np.inf, np.inf, np.inf),
+        jitable=True,
+        **kwargs,
     ):
         """Return DESC grid in (rho, theta, zeta) coordinates from given coordinates.
 
@@ -1243,8 +1265,8 @@ class Equilibrium(IOAble, Optimizable):
             rvp : rho, theta_PEST, phi
             rtz : rho, theta, zeta
         period : tuple of float
-            Assumed periodicity for each quantity in inbasis.
-            Use np.inf to denote no periodicity.
+            Assumed periodicity of the given coordinates.
+            Use ``np.inf`` to denote no periodicity.
         jitable : bool, optional
             If false the returned grid has additional attributes.
             Required to be false to retain nodes at magnetic axis.
@@ -2014,6 +2036,55 @@ class Equilibrium(IOAble, Optimizable):
         eq.surface = eq.get_surface_at(rho=1)
 
         return eq
+
+    @classmethod
+    def from_input_file(cls, path, **kwargs):
+        """Create an Equilibrium from information in a DESC or VMEC input file.
+
+        Parameters
+        ----------
+        path : Path-like or str
+            Path to DESC or VMEC input file.
+        **kwargs : dict, optional
+            keyword arguments to pass to the constructor of the
+            Equilibrium being created.
+
+        Returns
+        -------
+        Equilibrium : Equilibrium
+            Equilibrium generated from the given input file.
+
+        """
+        inputs = InputReader().parse_inputs(path)[-1]
+        if (inputs["bdry_ratio"] is not None) and (inputs["bdry_ratio"] != 1):
+            warnings.warn(
+                "`bdry_ratio` is intended as an input for the continuation method."
+                "`bdry_ratio`=1 uses the given surface modes as is, any other scalar "
+                "value will scale the non-axisymmetric  modes by that value. The "
+                "final value of `bdry_ratio` in the input file is "
+                f"{inputs['bdry_ratio']}, this means the created Equilibrium won't "
+                "have the given surface but a scaled version instead."
+            )
+        inputs["surface"][:, 1:3] = inputs["surface"][:, 1:3].astype(int)
+        # remove the keys (pertaining to continuation and solver tols)
+        # that an Equilibrium does not need
+        unused_keys = [
+            "pres_ratio",
+            "bdry_ratio",
+            "pert_order",
+            "ftol",
+            "xtol",
+            "gtol",
+            "maxiter",
+            "objective",
+            "optimizer",
+            "bdry_mode",
+            "output_path",
+            "verbose",
+        ]
+        [inputs.pop(key) for key in unused_keys]
+        inputs.update(kwargs)
+        return cls(**inputs)
 
     def solve(
         self,

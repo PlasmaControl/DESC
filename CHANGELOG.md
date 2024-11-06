@@ -3,7 +3,9 @@ Changelog
 
 New Features
 - Add ``from_input_file`` method to ``Equilibrium`` class to generate an ``Equilibrium`` object with boundary, profiles, resolution and flux specified in a given DESC or VMEC input file
-
+- Add ``QuadraticFluxMinimizingSurface`` objective which minimizes the quadratic magnetic flux through a ``FourierRZToroidalSurface`` object, allowing for optimizing for Quadratic flux minimizing (QFM) surfaces.
+- Allow ``ToroidalFlux`` objective to accept ``FourierRZToroidalSurface`` so it can be used to specify the toroidal flux through a QFM surface.
+- Add tutorial notebook showcasing QFM surface capability.
 
 Bug Fixes
 

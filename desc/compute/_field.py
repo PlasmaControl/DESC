@@ -3580,7 +3580,7 @@ def _q_frame(params, transforms, profiles, data, **kwargs):
 def _u_fb(params, transforms, profiles, data, **kwargs):
     grid = transforms["grid"]
     #TODO: check that grid is LinearGrid?
-    data["u_fb"] = (grid.nodes[:, 1] - jnp.pi)/(jnp.pi) #rescale to [-1,1]
+    data["u_fb"] = (grid.nodes[:, 0] - 0.5)/(0.5)*0.999 #rescale to [-0.999,0.999], as the finite build term is singular at the edge
     return data
 
 @register_compute_fun(
@@ -3600,7 +3600,7 @@ def _u_fb(params, transforms, profiles, data, **kwargs):
 def _v_fb(params, transforms, profiles, data, **kwargs):
     grid = transforms["grid"]
     #TODO: check that grid is LinearGrid?
-    data["v_fb"] = (grid.nodes[:, 2] - jnp.pi)/(jnp.pi) #rescale to [-1,1]
+    data["v_fb"] = (grid.nodes[:, 1] - jnp.pi)/(jnp.pi)*0.999 #rescale to [-0.999,0.999]
     return data
 
 @register_compute_fun(
@@ -3610,13 +3610,42 @@ def _v_fb(params, transforms, profiles, data, **kwargs):
     units_long="Tesla",
     description="B_0 term in finite build expansion",
     dim=3,
-    params=[],
+    params=["p_frame", "q_frame","current", "cross_section_dims"],
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=[], #TODO: implement dependencies depending on u,v calculation
+    data=["u_fb", "v_fb"], 
     parameterization="desc.coils.FourierPlanarFiniteBuildCoil", #for now, will change to full finite build
 )
 def _B_0_fb(params, transforms, profiles, data, **kwargs):
-    
-    return
+    grid = transforms["grid"]
+
+    #fed in externally
+    p_frame = params["p_frame"]
+    q_frame = params["q_frame"]
+
+    #scalars
+    current = params["current"]
+    a = params["cross_section_dims"][0]
+    b = params["cross_section_dims"][1]
+
+    p_frame = grid.expand(p_frame, "zeta")
+    q_frame = grid.expand(q_frame, "zeta")
+
+    #u and v are computed
+    u = data["u_fb"]
+    v = data["v_fb"]
+
+    #add dimension to u and v
+    u = u[:, jnp.newaxis]
+    v = v[:, jnp.newaxis]
+
+    def G(x,y):
+        return (y * jnp.arctan(x/y) + x/2*jnp.log(1+(y/x)**2))
+
+    data["B_0_fb"] = mu_0 * current/(a*b) * ( (q_frame * G(b*(v+1), a*(u+1)) - p_frame * G(a*(u+1), b*(v+1))) + 
+                                (-1) * (q_frame * G(b*(v+1), a*(u-1)) - p_frame * G(a*(u-1), b*(v+1))) + 
+                                (-1) * (q_frame * G(b*(v-1), a*(u+1)) - p_frame * G(a*(u+1), b*(v-1))) + 
+                                (q_frame * G(b*(v-1), a*(u-1)) - p_frame * G(a*(u-1), b*(v-1))))
+
+    return data

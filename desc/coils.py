@@ -1215,16 +1215,34 @@ class FourierPlanarFiniteBuildCoil(_FiniteBuildCoil, FourierPlanarCoil):
 
         # set cross section grid if not provided for u,v cross sectional coordinates
         if xsection_grid is None:
-            xsection_grid = LinearGrid(M=10, N=10, endpoint=True)
-        if isinstance(xsection_grid, numbers.Integral):
-            xsection_grid = LinearGrid(M=xsection_grid, N=xsection_grid, endpoint=True)
+            xsection_grid = LinearGrid(L=10, M=10, endpoint=True)
+        elif isinstance(xsection_grid, numbers.Integral):
+            xsection_grid = LinearGrid(L=xsection_grid, M=xsection_grid, endpoint=True)
+        else:
+            xsection_grid = xsection_grid.copy() #is this memory efficient? Don't want to mutate the input grid
 
-        # compute on grid for u v points in physical space 
-        #TODO: get u,v, vector series, pass in as DATA to cross section computation for B0 type terms
-        print(compute_fun(self,"u_fb", transforms={"grid":xsection_grid}, params=params, profiles={}))
-        print(self.compute("p_frame", grid=centerline_grid, params=params)["p_frame"])
+        # set centerline grid if not provided for phi cross sectional coordinates
+        if centerline_grid is None:
+            centerline_grid = LinearGrid(N=50)
+        elif isinstance(centerline_grid, numbers.Integral):
+            centerline_grid = LinearGrid(N=centerline_grid)
+        
+        #expand the xsection grid to include the centerline grid dimensions
+        L = xsection_grid.L
+        M = xsection_grid.M
+        N = centerline_grid.N
+        xsection_grid.change_resolution(L, M, N)
 
-        return NotImplementedError("Rectangular cross section self field not implemented yet")
+        #get vector series along the coil centerlines
+        p_frame = self.compute("p_frame", grid=centerline_grid, params=params)["p_frame"]
+        q_frame = self.compute("q_frame", grid=centerline_grid, params=params)["q_frame"]
+
+        B_fb_params = {"p_frame": p_frame, "q_frame": q_frame, "current": self.current, "cross_section_dims": self.cross_section_dims}
+        B_fb_params = params | B_fb_params if params is not None else B_fb_params
+
+        B_0_fb = compute_fun(self, "B_0_fb", transforms={"grid":xsection_grid}, params=B_fb_params, profiles={})["B_0_fb"]
+
+        return B_0_fb
 
     def compute_self_field_circ(self, xsection_grid, centerline_grid=None, params=None):
         return NotImplementedError("Circular cross section self field not implemented yet")

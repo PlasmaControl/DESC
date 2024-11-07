@@ -25,6 +25,7 @@ def terpsichore(
     processes=1,
     path="",
     exec="",
+    scalar=True,
     mode_family=-1,
     surfs=32,
     lssl=1000,
@@ -94,6 +95,8 @@ def terpsichore(
                 0,
                 path=tmp_path,
                 exec=exec,
+                scalar=scalar,
+                surfs=surfs,
                 al0=al0,
                 sleep_time=sleep_time,
                 stop_time=stop_time,
@@ -520,8 +523,8 @@ def _write_terps_input(  # noqa: C901
     f.close()
 
 
-def _pool_fun(k, path, exec, al0, sleep_time, stop_time):
-    """Run TERPSICHORE and read growth rate for equilibrium with index k."""
+def _pool_fun(k, path, exec, scalar, surfs, al0, sleep_time, stop_time):
+    """Run TERPSICHORE and read output for equilibrium with index k."""
     idx_path = os.path.join(path, str(k))
     exec_path = os.path.join(idx_path, exec)
     fort16_path = os.path.join(idx_path, "fort.16")
@@ -537,14 +540,15 @@ def _pool_fun(k, path, exec, al0, sleep_time, stop_time):
             sleep_time=sleep_time,
             stop_time=stop_time,
         )
-        growth_rate = _read_terps_output(path=fort16_path)
+        output = _read_terps_output(path=fort16_path, scalar=scalar, surfs=surfs)
     except RuntimeError:
         warnif(
             True, UserWarning, "TERPSICHORE growth rate not found, using default value."
         )
-        growth_rate = abs(al0)  # default growth rate if it was unable to find one
+        # default values if it was unable to find a growth rate
+        output = abs(al0) if scalar else np.ones(surfs - 1) * al0**2
 
-    return np.atleast_1d(growth_rate)
+    return np.atleast_1d(output)
 
 
 def _run_terps(dir, exec, input, wout, sleep_time, stop_time):
@@ -597,34 +601,52 @@ def _is_terps_complete(path, run_time, stop_time, terps_subprocess):
         return False
 
 
-def _read_terps_output(path):
-    """Read TERPSICHORE output file and return the growth rate."""
+def _read_terps_output(path, scalar, surfs):
+    """Read TERPSICHORE output file and return the growth rate / dW values."""
     errorif(
-        not os.path.exists(path), RuntimeError, "TERPS fort.16 output file not found!"
+        not os.path.exists(path),
+        RuntimeError,
+        "TERPSICHORE fort.16 output file not found!",
     )
 
     file = open(path)
-    growth_rates = []
-    for line in file:
+    line_num = 0
+    growth_rate = []
+    delta_W = []
+    for k, line in enumerate(file):
         index = line.find("GROWTH RATE")
         if index != -1:
-            growth_rates.append(float(line.strip().split("=")[1]))
+            growth_rate.append(float(line.strip().split("=")[1]))
+            continue
+        index = line.find("DELTAW")
+        if index != -1:
+            line_num = k + 4  # table values start 4 lines below heading
+            continue
+        if line_num > 0 and k == line_num:
+            row = line.strip().split()
+            delta_W.append(float(row[2]))
+            surf_idx = int(row[0])
+            line_num = line_num + 1
+            if surf_idx >= surfs - 1:
+                break  # NOTE: not including vacuum surfaces
     file.close()
 
-    errorif(len(growth_rates) == 0, RuntimeError, "Growth rate not found!")
+    errorif(len(growth_rate) == 0, RuntimeError, "Growth rate not found!")
     errorif(
-        len(growth_rates) > 1,
+        len(growth_rate) > 1,
         NotImplementedError,
         "Not capable of handling multiple growth rates.",
     )
+    errorif(len(delta_W) != surfs - 1, RuntimeError, "Incorrect number of dW values!")
 
-    return growth_rates[0]
+    return growth_rate[0] if scalar else delta_W
 
 
 class TERPSICHORE(ExternalObjective):
     """Computes linear MHD stability from calls to the code TERPSICHORE.
 
-    Returns the linear growth rate of the fastest growing instability.
+    Returns the linear growth rate of the fastest growing instability,
+    or the ΔW values at each flux surface.
 
     Parameters
     ----------
@@ -656,13 +678,14 @@ class TERPSICHORE(ExternalObjective):
 
     # TODO: update Parameters docs
     # If mode_family < 0, includes all modes in desired range
+    # If scalar = True return growth rate, if scalar = False return dW at surfaces
     # NOTE: that TERPSICHORE assumes theta=0 is defined on the outboard midplane!
     # TODO: include documentation of example script for multiprocessing
 
     """
 
     _units = "(dimensionless)"  # normalized by Alfven frequency
-    _print_value_fmt = "TERPSICHORE growth rate: "
+    _print_value_fmt = "TERPSICHORE "
 
     def __init__(
         self,
@@ -678,6 +701,7 @@ class TERPSICHORE(ExternalObjective):
         processes=1,
         path="",
         exec="",
+        scalar=True,
         mode_family=-1,
         surfs=32,
         lssl=1000,
@@ -702,7 +726,7 @@ class TERPSICHORE(ExternalObjective):
         super().__init__(
             eq=eq,
             fun=terpsichore,
-            dim_f=1,
+            dim_f=1 if scalar else surfs - 1,
             target=target,
             bounds=bounds,
             weight=weight,
@@ -715,6 +739,7 @@ class TERPSICHORE(ExternalObjective):
             processes=processes,
             path=path,
             exec=exec,
+            scalar=scalar,
             mode_family=mode_family,
             surfs=surfs,
             lssl=lssl,
@@ -734,6 +759,7 @@ class TERPSICHORE(ExternalObjective):
             stop_time=stop_time,
             name=name,
         )
+        self._print_value_fmt += "growth rate: " if scalar else "delta W: "
 
     def build(self, use_jit=True, verbose=1):
         """Build constant arrays.

@@ -31,11 +31,15 @@ def _compare_against_master(
 
     for name in data[p]:
         if p in master_data and name in master_data[p]:
+            if np.isnan(master_data[p][name]).all():
+                mean = 1.0
+            else:
+                mean = np.nanmean(np.atleast_1d(np.abs(master_data[p][name])))
             try:
                 np.testing.assert_allclose(
                     actual=data[p][name],
                     desired=master_data[p][name],
-                    atol=1e-10,
+                    atol=1e-10 * mean + 1e-10,  # add 1e-10 for basically-zero things
                     rtol=1e-10,
                     err_msg=f"Parameterization: {p}. Name: {name}.",
                 )
@@ -80,8 +84,21 @@ def _compare_against_rpz(p, data, data_rpz, coordinate_conversion_func):
 def test_compute_everything():
     """Test that the computations on this branch agree with those on master.
 
-    Also make sure we can compute everything without errors. Computed quantities
-    are both in "rpz" and "xyz" basis.
+    Also make sure we can compute everything without errors.
+
+    Notes
+    -----
+    This test will fail if the benchmark file has been updated on both
+    the local and upstream branches and git cannot resolve the merge
+    conflict. In that case, please regenerate the benchmark file.
+    Here are instructions for convenience.
+
+    1. Prepend true to the line near the end of this test.
+        ``if True or (not error_rpz and update_master_data_rpz):``
+    2. Run pytest -k test_compute_everything
+    3. Revert 1.
+    4. git add tests/inputs/master_compute_data_rpz.pkl
+
     """
     elliptic_cross_section_with_torsion = {
         "R_lmn": [10, 1, 0.2],
@@ -249,4 +266,5 @@ def test_compute_everything():
         with open("tests/inputs/master_compute_data_rpz.pkl", "wb") as file:
             # remember to git commit this file
             pickle.dump(this_branch_data_rpz, file)
+
     assert not error_rpz

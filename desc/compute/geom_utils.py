@@ -4,7 +4,7 @@ import functools
 
 from desc.backend import jnp
 
-from .utils import safenorm, safenormalize
+from ..utils import safenorm, safenormalize
 
 
 def reflection_matrix(normal):

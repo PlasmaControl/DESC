@@ -177,7 +177,7 @@ class _CoilObjective(_Objective):
         Returns
         -------
         f : float or array of floats
-            Coil length.
+            Coil objective value(s).
 
         """
         if constants is None:
@@ -958,6 +958,128 @@ class PlasmaCoilSetMinDistance(_Objective):
         return min_dist_per_coil
 
 
+class CoilArclengthVariance(_CoilObjective):
+    """Variance of ||dx/ds|| along the curve.
+
+    This objective is meant to combat any issues corresponding to non-uniqueness of
+    the representation of a curve, in that the same physical curve can be represented
+    by different parametrizations by changing the curve parameter [1]_. Note that this
+    objective has no effect for ``FourierRZCoil`` and ``FourierPlanarCoil`` which have
+    a single unique parameterization (the objective will always return 0 for these
+    types).
+
+    References
+    ----------
+    .. [1] Wechsung, et al. "Precise stellarator quasi-symmetry can be achieved
+       with electromagnetic coils." PNAS (2022)
+
+    Parameters
+    ----------
+    coil : CoilSet or Coil
+        Coil(s) that are to be optimized
+    grid : Grid, optional
+        Collocation grid containing the nodes to evaluate at.
+        Defaults to ``LinearGrid(N=2 * coil.N + 5)``
+
+    """
+
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``target=0``.",
+        bounds_default="``target=0``.",
+        coil=True,
+    )
+
+    _scalar = False  # Not always a scalar, if a coilset is passed in
+    _units = "(m^2)"
+    _print_value_fmt = "Coil Arclength Variance: "
+
+    def __init__(
+        self,
+        coils,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        loss_function=None,
+        deriv_mode="auto",
+        grid=None,
+        name="coil arclength variance",
+    ):
+        if target is None and bounds is None:
+            target = 0
+
+        super().__init__(
+            coils,
+            ["x_s"],
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            loss_function=loss_function,
+            deriv_mode=deriv_mode,
+            grid=grid,
+            name=name,
+        )
+
+    def build(self, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        super().build(use_jit=use_jit, verbose=verbose)
+
+        self._dim_f = self._num_coils
+        self._constants["quad_weights"] = 1
+
+        coilset = self.things[0]
+        # local import to avoid circular import
+        from desc.coils import CoilSet, FourierXYZCoil, SplineXYZCoil, _Coil
+
+        def _is_single_coil(c):
+            return isinstance(c, _Coil) and not isinstance(c, CoilSet)
+
+        coils = tree_leaves(coilset, is_leaf=_is_single_coil)
+        self._constants["mask"] = np.array(
+            [int(isinstance(coil, (FourierXYZCoil, SplineXYZCoil))) for coil in coils]
+        )
+
+        if self._normalize:
+            self._normalization = np.mean([scale["a"] ** 2 for scale in self._scales])
+
+        _Objective.build(self, use_jit=use_jit, verbose=verbose)
+
+    def compute(self, params, constants=None):
+        """Compute coil arclength variance.
+
+        Parameters
+        ----------
+        params : dict
+            Dictionary of the coil's degrees of freedom.
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self._constants.
+
+        Returns
+        -------
+        f : float or array of floats
+            Coil arclength variance.
+        """
+        if constants is None:
+            constants = self.constants
+        data = super().compute(params, constants=constants)
+        data = tree_leaves(data, is_leaf=lambda x: isinstance(x, dict))
+        out = jnp.array([jnp.var(jnp.linalg.norm(dat["x_s"], axis=1)) for dat in data])
+        return out * constants["mask"]
+
+
 class QuadraticFlux(_Objective):
     """Target B*n = 0 on LCFS.
 
@@ -1362,3 +1484,118 @@ class ToroidalFlux(_Objective):
             )
 
         return Psi
+
+
+class CoilSetLinkingNumber(_Objective):
+    """Prevents coils from becoming interlinked.
+
+    The linking number of 2 curves is (approximately) 0 if they are not linked, and
+    (approximately) +/-1 if they are (with the sign indicating the helicity of the
+    linking).
+
+    This objective returns a single value for each coil in the coilset, with that number
+    being the sum of the absolute value of the linking numbers of that coil with every
+    other coil in the coilset, approximating the number of other coils that are linked
+
+    Parameters
+    ----------
+    coil : CoilSet
+        Coil(s) that are to be optimized.
+    grid : Grid, list, optional
+        Collocation grid used to discretize each coil. Defaults to
+        ``LinearGrid(N=50)``
+
+    """
+
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``target=0``.",
+        bounds_default="``target=0``.",
+        coil=True,
+    )
+
+    _scalar = False
+    _units = "(dimensionless)"
+    _print_value_fmt = "Coil linking number: "
+
+    def __init__(
+        self,
+        coil,
+        grid=None,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        loss_function=None,
+        deriv_mode="auto",
+        jac_chunk_size=None,
+        name="coil-coil linking number",
+    ):
+        from desc.coils import CoilSet
+
+        if target is None and bounds is None:
+            target = 0
+        self._grid = grid
+        errorif(
+            not isinstance(coil, CoilSet),
+            ValueError,
+            "coil must be of type CoilSet, not an individual Coil",
+        )
+        super().__init__(
+            things=coil,
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            loss_function=loss_function,
+            deriv_mode=deriv_mode,
+            jac_chunk_size=jac_chunk_size,
+            name=name,
+        )
+
+    def build(self, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        coilset = self.things[0]
+        grid = self._grid or LinearGrid(N=50)
+
+        self._dim_f = coilset.num_coils
+        self._constants = {"coilset": coilset, "grid": grid, "quad_weights": 1.0}
+
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, params, constants=None):
+        """Compute linking numbers between coils.
+
+        Parameters
+        ----------
+        params : dict
+            Dictionary of coilset degrees of freedom, eg CoilSet.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc.
+            Defaults to self._constants.
+
+        Returns
+        -------
+        f : array of floats
+            For each coil, the sum of the absolute value of the linking numbers between
+            that coil and every other coil in the coilset, which approximates the
+            number of coils linked with that coil.
+
+        """
+        if constants is None:
+            constants = self.constants
+        link = constants["coilset"]._compute_linking_number(
+            params=params, grid=constants["grid"]
+        )
+
+        return jnp.abs(link).sum(axis=0)

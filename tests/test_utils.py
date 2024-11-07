@@ -1,11 +1,13 @@
 """Tests for utility functions."""
 
+from functools import partial
+
 import numpy as np
 import pytest
 
-from desc.backend import jax, jnp, tree_leaves, tree_structure
+from desc.backend import flatnonzero, jax, jnp, tree_leaves, tree_structure
 from desc.grid import LinearGrid
-from desc.utils import broadcast_tree, isalmostequal, islinspaced, jaxify
+from desc.utils import broadcast_tree, isalmostequal, islinspaced, jaxify, take_mask
 
 
 @pytest.mark.unit
@@ -234,3 +236,35 @@ def test_jaxify():
     np.testing.assert_allclose(df_rel1, df_true, rtol=2e-1)
     np.testing.assert_allclose(df_rel2, df_true, rtol=2e-2)
     np.testing.assert_allclose(df_rel3, df_true, rtol=3e-3)
+
+
+@partial(jnp.vectorize, signature="(m)->()")
+def _last_value(a):
+    """Return the last non-nan value in ``a``."""
+    a = a[::-1]
+    idx = jnp.squeeze(flatnonzero(~jnp.isnan(a), size=1, fill_value=0))
+    return a[idx]
+
+
+@pytest.mark.unit
+def test_take_mask():
+    """Test custom masked array operation."""
+    rows = 5
+    cols = 7
+    a = np.random.rand(rows, cols)
+    nan_idx = np.random.choice(rows * cols, size=(rows * cols) // 2, replace=False)
+    a.ravel()[nan_idx] = np.nan
+    taken = take_mask(a, ~np.isnan(a))
+    last = _last_value(taken)
+    for i in range(rows):
+        desired = a[i, ~np.isnan(a[i])]
+        assert np.array_equal(
+            taken[i],
+            np.pad(desired, (0, cols - desired.size), constant_values=np.nan),
+            equal_nan=True,
+        )
+        assert np.array_equal(
+            last[i],
+            desired[-1] if desired.size else np.nan,
+            equal_nan=True,
+        )

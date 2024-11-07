@@ -12,13 +12,12 @@ from desc.backend import (
 )
 from desc.compute import get_profiles, get_transforms, rpz2xyz
 from desc.compute.utils import _compute as compute_fun
-from desc.compute.utils import safenorm
 from desc.grid import LinearGrid, _Grid
 from desc.integrals import compute_B_plasma
-from desc.utils import Timer, errorif, warnif
+from desc.utils import Timer, errorif, safenorm, warnif
 
 from .normalization import compute_scaling_factors
-from .objective_funs import _Objective
+from .objective_funs import _Objective, collect_docs
 
 
 class _CoilObjective(_Objective):
@@ -30,38 +29,15 @@ class _CoilObjective(_Objective):
         Coil for which the data keys will be optimized.
     data_keys : list of str
         data keys that will be optimized when this class is inherited.
-    target : float, ndarray, optional
-        Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f.
-    bounds : tuple of float, ndarray, optional
-        Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f
-    weight : float, ndarray, optional
-        Weighting to apply to the Objective, relative to other Objectives.
-        Must be broadcastable to to Objective.dim_f
-    normalize : bool, optional
-        Whether to compute the error in physical units or non-dimensionalize.
-    normalize_target : bool, optional
-        Whether target and bounds should be normalized before comparing to computed
-        values. If `normalize` is `True` and the target is in physical units,
-        this should also be set to True.
-        be set to True.
-    loss_function : {None, 'mean', 'min', 'max'}, optional
-        Loss function to apply to the objective values once computed. This loss function
-        is called on the raw compute value, before any shifting, scaling, or
-        normalization. Operates over all coils, not each individual coil.
-    deriv_mode : {"auto", "fwd", "rev"}
-        Specify how to compute jacobian matrix, either forward mode or reverse mode AD.
-        "auto" selects forward or reverse mode based on the size of the input and output
-        of the objective. Has no effect on self.grad or self.hess which always use
-        reverse mode and forward over reverse mode respectively.
     grid : Grid, list, optional
         Collocation grid containing the nodes to evaluate at.
         If a list, must have the same structure as coil.
-    name : str, optional
-        Name of the objective function.
 
     """
+
+    __doc__ = __doc__.rstrip() + collect_docs(
+        coil=True,
+    )
 
     def __init__(
         self,
@@ -76,6 +52,7 @@ class _CoilObjective(_Objective):
         deriv_mode="auto",
         grid=None,
         name=None,
+        jac_chunk_size=None,
     ):
         self._grid = grid
         self._data_keys = data_keys
@@ -90,6 +67,7 @@ class _CoilObjective(_Objective):
             loss_function=loss_function,
             deriv_mode=deriv_mode,
             name=name,
+            jac_chunk_size=jac_chunk_size,
         )
 
     def build(self, use_jit=True, verbose=1):  # noqa:C901
@@ -124,6 +102,12 @@ class _CoilObjective(_Objective):
 
         # get individual coils from coilset
         coils, structure = tree_flatten(coil, is_leaf=_is_single_coil)
+        for c in coils:
+            errorif(
+                not isinstance(c, _Coil),
+                TypeError,
+                f"Expected object of type Coil, got {type(c)}",
+            )
         self._num_coils = len(coils)
 
         # map grid to list of length coils
@@ -193,7 +177,7 @@ class _CoilObjective(_Objective):
         Returns
         -------
         f : float or array of floats
-            Coil length.
+            Coil objective value(s).
 
         """
         if constants is None:
@@ -217,40 +201,17 @@ class CoilLength(_CoilObjective):
     ----------
     coil : CoilSet or Coil
         Coil(s) that are to be optimized
-    target : float, ndarray, optional
-        Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f. If array, it has to
-        be flattened according to the number of inputs. Defaults to ``target=2*np.pi``.
-    bounds : tuple of float, ndarray, optional
-        Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f.
-        Defaults to ``target=2*np.pi``.
-    weight : float, ndarray, optional
-        Weighting to apply to the Objective, relative to other Objectives.
-        Must be broadcastable to to Objective.dim_f
-    normalize : bool, optional
-        Whether to compute the error in physical units or non-dimensionalize.
-    normalize_target : bool, optional
-        Whether target and bounds should be normalized before comparing to computed
-        values. If `normalize` is `True` and the target is in physical units,
-        this should also be set to True.
-        be set to True.
-    loss_function : {None, 'mean', 'min', 'max'}, optional
-        Loss function to apply to the objective values once computed. This loss function
-        is called on the raw compute value, before any shifting, scaling, or
-        normalization. Operates over all coils, not each individual coil.
-    deriv_mode : {"auto", "fwd", "rev"}
-        Specify how to compute jacobian matrix, either forward mode or reverse mode AD.
-        "auto" selects forward or reverse mode based on the size of the input and output
-        of the objective. Has no effect on self.grad or self.hess which always use
-        reverse mode and forward over reverse mode respectively.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
         Defaults to ``LinearGrid(N=2 * coil.N + 5)``
-    name : str, optional
-        Name of the objective function.
 
     """
+
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``target=2*np.pi``.",
+        bounds_default="``target=2*np.pi``.",
+        coil=True,
+    )
 
     _scalar = False  # Not always a scalar, if a coilset is passed in
     _units = "(m)"
@@ -268,6 +229,7 @@ class CoilLength(_CoilObjective):
         deriv_mode="auto",
         grid=None,
         name="coil length",
+        jac_chunk_size=None,
     ):
         if target is None and bounds is None:
             target = 2 * np.pi
@@ -284,6 +246,7 @@ class CoilLength(_CoilObjective):
             deriv_mode=deriv_mode,
             grid=grid,
             name=name,
+            jac_chunk_size=jac_chunk_size,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -342,40 +305,17 @@ class CoilCurvature(_CoilObjective):
     ----------
     coil : CoilSet or Coil
         Coil(s) that are to be optimized
-    target : float, ndarray, optional
-        Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f. If array, it has to
-        be flattened according to the number of inputs. Defaults to ``bounds=(0,1)``.
-    bounds : tuple of float, ndarray, optional
-        Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f.
-        Defaults to ``bounds=(0,1)``.
-    weight : float, ndarray, optional
-        Weighting to apply to the Objective, relative to other Objectives.
-        Must be broadcastable to to Objective.dim_f
-    normalize : bool, optional
-        Whether to compute the error in physical units or non-dimensionalize.
-    normalize_target : bool, optional
-        Whether target and bounds should be normalized before comparing to computed
-        values. If `normalize` is `True` and the target is in physical units,
-        this should also be set to True.
-        be set to True.
-    loss_function : {None, 'mean', 'min', 'max'}, optional
-        Loss function to apply to the objective values once computed. This loss function
-        is called on the raw compute value, before any shifting, scaling, or
-        normalization. Operates over all coils, not each individual coil.
-    deriv_mode : {"auto", "fwd", "rev"}
-        Specify how to compute jacobian matrix, either forward mode or reverse mode AD.
-        "auto" selects forward or reverse mode based on the size of the input and output
-        of the objective. Has no effect on self.grad or self.hess which always use
-        reverse mode and forward over reverse mode respectively.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
         Defaults to ``LinearGrid(N=2 * coil.N + 5)``
-    name : str, optional
-        Name of the objective function.
 
     """
+
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``bounds=(0,1).``",
+        bounds_default="``bounds=(0,1).``",
+        coil=True,
+    )
 
     _scalar = False
     _units = "(m^-1)"
@@ -393,6 +333,7 @@ class CoilCurvature(_CoilObjective):
         deriv_mode="auto",
         grid=None,
         name="coil curvature",
+        jac_chunk_size=None,
     ):
         if target is None and bounds is None:
             bounds = (0, 1)
@@ -409,6 +350,7 @@ class CoilCurvature(_CoilObjective):
             deriv_mode=deriv_mode,
             grid=grid,
             name=name,
+            jac_chunk_size=jac_chunk_size,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -462,40 +404,17 @@ class CoilTorsion(_CoilObjective):
     ----------
     coil : CoilSet or Coil
         Coil(s) that are to be optimized
-    target : float, ndarray, optional
-        Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f. If array, it has to
-        be flattened according to the number of inputs. Defaults to ``target=0``.
-    bounds : tuple of float, ndarray, optional
-        Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f.
-        Defaults to ``target=0``.
-    weight : float, ndarray, optional
-        Weighting to apply to the Objective, relative to other Objectives.
-        Must be broadcastable to to Objective.dim_f
-    normalize : bool, optional
-        Whether to compute the error in physical units or non-dimensionalize.
-    normalize_target : bool, optional
-        Whether target and bounds should be normalized before comparing to computed
-        values. If `normalize` is `True` and the target is in physical units,
-        this should also be set to True.
-        be set to True.
-    loss_function : {None, 'mean', 'min', 'max'}, optional
-        Loss function to apply to the objective values once computed. This loss function
-        is called on the raw compute value, before any shifting, scaling, or
-        normalization. Operates over all coils, not each individual coil.
-    deriv_mode : {"auto", "fwd", "rev"}
-        Specify how to compute jacobian matrix, either forward mode or reverse mode AD.
-        "auto" selects forward or reverse mode based on the size of the input and output
-        of the objective. Has no effect on self.grad or self.hess which always use
-        reverse mode and forward over reverse mode respectively.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
         Defaults to ``LinearGrid(N=2 * coil.N + 5)``
-    name : str, optional
-        Name of the objective function.
 
     """
+
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``target=0``.",
+        bounds_default="``target=0``.",
+        coil=True,
+    )
 
     _scalar = False
     _units = "(m^-1)"
@@ -513,6 +432,7 @@ class CoilTorsion(_CoilObjective):
         deriv_mode="auto",
         grid=None,
         name="coil torsion",
+        jac_chunk_size=None,
     ):
         if target is None and bounds is None:
             target = 0
@@ -529,6 +449,7 @@ class CoilTorsion(_CoilObjective):
             deriv_mode=deriv_mode,
             grid=grid,
             name=name,
+            jac_chunk_size=jac_chunk_size,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -582,40 +503,17 @@ class CoilCurrentLength(CoilLength):
     ----------
     coil : CoilSet or Coil
         Coil(s) that are to be optimized
-    target : float, ndarray, optional
-        Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f. If array, it has to
-        be flattened according to the number of inputs. Defaults to ``target=0``.
-    bounds : tuple of float, ndarray, optional
-        Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f.
-        Defaults to ``target=0``.
-    weight : float, ndarray, optional
-        Weighting to apply to the Objective, relative to other Objectives.
-        Must be broadcastable to to Objective.dim_f
-    normalize : bool, optional
-        Whether to compute the error in physical units or non-dimensionalize.
-    normalize_target : bool, optional
-        Whether target and bounds should be normalized before comparing to computed
-        values. If `normalize` is `True` and the target is in physical units,
-        this should also be set to True.
-        be set to True.
-    loss_function : {None, 'mean', 'min', 'max'}, optional
-        Loss function to apply to the objective values once computed. This loss function
-        is called on the raw compute value, before any shifting, scaling, or
-        normalization. Operates over all coils, not each individual coil.
-    deriv_mode : {"auto", "fwd", "rev"}
-        Specify how to compute jacobian matrix, either forward mode or reverse mode AD.
-        "auto" selects forward or reverse mode based on the size of the input and output
-        of the objective. Has no effect on self.grad or self.hess which always use
-        reverse mode and forward over reverse mode respectively.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
         Defaults to ``LinearGrid(N=2 * coil.N + 5)``
-    name : str, optional
-        Name of the objective function.
 
     """
+
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``target=0``.",
+        bounds_default="``target=0``.",
+        coil=True,
+    )
 
     _scalar = False
     _units = "(A*m)"
@@ -633,6 +531,7 @@ class CoilCurrentLength(CoilLength):
         deriv_mode="auto",
         grid=None,
         name="coil current length",
+        jac_chunk_size=None,
     ):
         if target is None and bounds is None:
             target = 0
@@ -648,6 +547,7 @@ class CoilCurrentLength(CoilLength):
             deriv_mode=deriv_mode,
             grid=grid,
             name=name,
+            jac_chunk_size=jac_chunk_size,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -710,40 +610,18 @@ class CoilSetMinDistance(_Objective):
     ----------
     coil : CoilSet
         Coil(s) that are to be optimized.
-    target : float, ndarray, optional
-        Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f. If array, it has to
-        be flattened according to the number of inputs.
-    bounds : tuple of float, ndarray, optional
-        Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f
-    weight : float, ndarray, optional
-        Weighting to apply to the Objective, relative to other Objectives.
-        Must be broadcastable to to Objective.dim_f
-    normalize : bool, optional
-        Whether to compute the error in physical units or non-dimensionalize.
-    normalize_target : bool, optional
-        Whether target and bounds should be normalized before comparing to computed
-        values. If `normalize` is `True` and the target is in physical units,
-        this should also be set to True.
-        be set to True.
-    loss_function : {None, 'mean', 'min', 'max'}, optional
-        Loss function to apply to the objective values once computed. This loss function
-        is called on the raw compute value, before any shifting, scaling, or
-        normalization. Operates over all coils, not each individial coil.
-    deriv_mode : {"auto", "fwd", "rev"}
-        Specify how to compute jacobian matrix, either forward mode or reverse mode AD.
-        "auto" selects forward or reverse mode based on the size of the input and output
-        of the objective. Has no effect on self.grad or self.hess which always use
-        reverse mode and forward over reverse mode respectively.
     grid : Grid, list, optional
         Collocation grid used to discretize each coil. Defaults to the default grid
         for the given coil-type, see ``coils.py`` and ``curve.py`` for more details.
         If a list, must have the same structure as coils.
-    name : str, optional
-        Name of the objective function.
 
     """
+
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``bounds=(1,np.inf)``.",
+        bounds_default="``bounds=(1,np.inf)``.",
+        coil=True,
+    )
 
     _scalar = False
     _units = "(m)"
@@ -761,6 +639,7 @@ class CoilSetMinDistance(_Objective):
         deriv_mode="auto",
         grid=None,
         name="coil-coil minimum distance",
+        jac_chunk_size=None,
     ):
         from desc.coils import CoilSet
 
@@ -782,6 +661,7 @@ class CoilSetMinDistance(_Objective):
             loss_function=loss_function,
             deriv_mode=deriv_mode,
             name=name,
+            jac_chunk_size=jac_chunk_size,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -868,32 +748,6 @@ class PlasmaCoilSetMinDistance(_Objective):
         to satisfy the Objective.
     coil : CoilSet
         Coil(s) that are to be optimized.
-    target : float, ndarray, optional
-        Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f. If array, it has to
-        be flattened according to the number of inputs.
-    bounds : tuple of float, ndarray, optional
-        Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f
-    weight : float, ndarray, optional
-        Weighting to apply to the Objective, relative to other Objectives.
-        Must be broadcastable to to Objective.dim_f
-    normalize : bool, optional
-        Whether to compute the error in physical units or non-dimensionalize.
-    normalize_target : bool, optional
-        Whether target and bounds should be normalized before comparing to computed
-        values. If `normalize` is `True` and the target is in physical units,
-        this should also be set to True.
-        be set to True.
-    loss_function : {None, 'mean', 'min', 'max'}, optional
-        Loss function to apply to the objective values once computed. This loss function
-        is called on the raw compute value, before any shifting, scaling, or
-        normalization. Operates over all coils, not each individial coil.
-    deriv_mode : {"auto", "fwd", "rev"}
-        Specify how to compute jacobian matrix, either forward mode or reverse mode AD.
-        "auto" selects forward or reverse mode based on the size of the input and output
-        of the objective. Has no effect on self.grad or self.hess which always use
-        reverse mode and forward over reverse mode respectively.
     plasma_grid : Grid, optional
         Collocation grid containing the nodes to evaluate plasma geometry at.
         Defaults to ``LinearGrid(M=eq.M_grid, N=eq.N_grid)``.
@@ -914,10 +768,14 @@ class PlasmaCoilSetMinDistance(_Objective):
         during optimization, and self.things = [eq] only.
         If False, the coil coordinates are computed at every iteration.
         False by default, so that self.things = [coil, eq].
-    name : str, optional
-        Name of the objective function.
 
     """
+
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``bounds=(1,np.inf)``.",
+        bounds_default="``bounds=(1,np.inf)``.",
+        coil=True,
+    )
 
     _scalar = False
     _units = "(m)"
@@ -939,6 +797,7 @@ class PlasmaCoilSetMinDistance(_Objective):
         eq_fixed=False,
         coils_fixed=False,
         name="plasma-coil minimum distance",
+        jac_chunk_size=None,
     ):
         if target is None and bounds is None:
             bounds = (1, np.inf)
@@ -964,6 +823,7 @@ class PlasmaCoilSetMinDistance(_Objective):
             loss_function=loss_function,
             deriv_mode=deriv_mode,
             name=name,
+            jac_chunk_size=jac_chunk_size,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -1098,6 +958,128 @@ class PlasmaCoilSetMinDistance(_Objective):
         return min_dist_per_coil
 
 
+class CoilArclengthVariance(_CoilObjective):
+    """Variance of ||dx/ds|| along the curve.
+
+    This objective is meant to combat any issues corresponding to non-uniqueness of
+    the representation of a curve, in that the same physical curve can be represented
+    by different parametrizations by changing the curve parameter [1]_. Note that this
+    objective has no effect for ``FourierRZCoil`` and ``FourierPlanarCoil`` which have
+    a single unique parameterization (the objective will always return 0 for these
+    types).
+
+    References
+    ----------
+    .. [1] Wechsung, et al. "Precise stellarator quasi-symmetry can be achieved
+       with electromagnetic coils." PNAS (2022)
+
+    Parameters
+    ----------
+    coil : CoilSet or Coil
+        Coil(s) that are to be optimized
+    grid : Grid, optional
+        Collocation grid containing the nodes to evaluate at.
+        Defaults to ``LinearGrid(N=2 * coil.N + 5)``
+
+    """
+
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``target=0``.",
+        bounds_default="``target=0``.",
+        coil=True,
+    )
+
+    _scalar = False  # Not always a scalar, if a coilset is passed in
+    _units = "(m^2)"
+    _print_value_fmt = "Coil Arclength Variance: "
+
+    def __init__(
+        self,
+        coils,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        loss_function=None,
+        deriv_mode="auto",
+        grid=None,
+        name="coil arclength variance",
+    ):
+        if target is None and bounds is None:
+            target = 0
+
+        super().__init__(
+            coils,
+            ["x_s"],
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            loss_function=loss_function,
+            deriv_mode=deriv_mode,
+            grid=grid,
+            name=name,
+        )
+
+    def build(self, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        super().build(use_jit=use_jit, verbose=verbose)
+
+        self._dim_f = self._num_coils
+        self._constants["quad_weights"] = 1
+
+        coilset = self.things[0]
+        # local import to avoid circular import
+        from desc.coils import CoilSet, FourierXYZCoil, SplineXYZCoil, _Coil
+
+        def _is_single_coil(c):
+            return isinstance(c, _Coil) and not isinstance(c, CoilSet)
+
+        coils = tree_leaves(coilset, is_leaf=_is_single_coil)
+        self._constants["mask"] = np.array(
+            [int(isinstance(coil, (FourierXYZCoil, SplineXYZCoil))) for coil in coils]
+        )
+
+        if self._normalize:
+            self._normalization = np.mean([scale["a"] ** 2 for scale in self._scales])
+
+        _Objective.build(self, use_jit=use_jit, verbose=verbose)
+
+    def compute(self, params, constants=None):
+        """Compute coil arclength variance.
+
+        Parameters
+        ----------
+        params : dict
+            Dictionary of the coil's degrees of freedom.
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self._constants.
+
+        Returns
+        -------
+        f : float or array of floats
+            Coil arclength variance.
+        """
+        if constants is None:
+            constants = self.constants
+        data = super().compute(params, constants=constants)
+        data = tree_leaves(data, is_leaf=lambda x: isinstance(x, dict))
+        out = jnp.array([jnp.var(jnp.linalg.norm(dat["x_s"], axis=1)) for dat in data])
+        return out * constants["mask"]
+
+
 class QuadraticFlux(_Objective):
     """Target B*n = 0 on LCFS.
 
@@ -1113,22 +1095,6 @@ class QuadraticFlux(_Objective):
     field : MagneticField
         External field produced by coils or other source, which will be optimized to
         minimize the normal field error on the provided equilibrium's surface.
-    target : float, ndarray, optional
-        Target value(s) of the objective. Only used if bounds is None.
-        len(target) must be equal to Objective.dim_f.
-        Default target is zero.
-    bounds : tuple, optional
-        Lower and upper bounds on the objective. Overrides target.
-        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
-    weight : float, ndarray, optional
-        Weighting to apply to the Objective, relative to other Objectives.
-        len(weight) must be equal to Objective.dim_f
-    normalize : bool
-        Whether to compute the error in physical units or non-dimensionalize.
-    normalize_target : bool
-        Whether target and bounds should be normalized before comparing to computed
-        values. If `normalize` is `True` and the target is in physical units,
-        this should also be set to True.
     source_grid : Grid, optional
         Collocation grid containing the nodes for plasma source terms.
         Default grid is detailed in the docs for ``compute_B_plasma``
@@ -1144,10 +1110,13 @@ class QuadraticFlux(_Objective):
     vacuum : bool
         If true, B_plasma (the contribution to the normal field on the boundary from the
         plasma currents) is set to zero.
-    name : str
-        Name of the objective function.
 
     """
+
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``target=0``.",
+        bounds_default="``target=0``.",
+    )
 
     _scalar = False
     _linear = False
@@ -1169,6 +1138,7 @@ class QuadraticFlux(_Objective):
         field_grid=None,
         vacuum=False,
         name="Quadratic flux",
+        jac_chunk_size=None,
     ):
         if target is None and bounds is None:
             target = 0
@@ -1187,6 +1157,7 @@ class QuadraticFlux(_Objective):
             normalize=normalize,
             normalize_target=normalize_target,
             name=name,
+            jac_chunk_size=jac_chunk_size,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -1304,6 +1275,14 @@ class ToroidalFlux(_Objective):
     by making the coil currents zero. Instead, this objective ensures
     the coils create the necessary toroidal flux for the equilibrium field.
 
+    Will try to use the vector potential method to calculate the toroidal flux
+    (Φ = ∮ 𝐀 ⋅ 𝐝𝐥 over the perimeter of a constant zeta plane)
+    instead of the brute force method using the magnetic field
+    (Φ = ∯ 𝐁 ⋅ 𝐝𝐒 over a constant zeta XS). The vector potential method
+    is much more efficient, however not every ``MagneticField`` object
+    has a vector potential available to compute, so in those cases
+    the magnetic field method is used.
+
     Parameters
     ----------
     eq : Equilibrium
@@ -1313,30 +1292,6 @@ class ToroidalFlux(_Objective):
     field : MagneticField
         MagneticField object, the parameters of this will be optimized
         to minimize the objective.
-    target : {float, ndarray}, optional
-        Target value(s) of the objective. Only used if bounds is None.
-        Defaults to eq.Psi. Must be broadcastable to Objective.dim_f.
-    bounds : tuple of {float, ndarray}, optional
-        Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f
-    weight : {float, ndarray}, optional
-        Weighting to apply to the Objective, relative to other Objectives.
-        Must be broadcastable to to Objective.dim_f
-    normalize : bool, optional
-        Whether to compute the error in physical units or non-dimensionalize.
-    normalize_target : bool
-        Whether target should be normalized before comparing to computed values.
-        if `normalize` is `True` and the target is in physical units, this should also
-        be set to True.
-    loss_function : {None, 'mean', 'min', 'max'}, optional
-        Loss function to apply to the objective values once computed. This function
-        is called on the raw compute value, before any shifting, scaling, or
-        normalization. Note: has no effect for this objective
-    deriv_mode : {"auto", "fwd", "rev"}
-        Specify how to compute jacobian matrix, either forward mode or reverse mode AD.
-        "auto" selects forward or reverse mode based on the size of the input and output
-        of the objective. Has no effect on self.grad or self.hess which always use
-        reverse mode and forward over reverse mode respectively.
     field_grid : Grid, optional
         Grid containing the nodes to evaluate field source at on
         the winding surface. (used if e.g. field is a CoilSet or
@@ -1346,10 +1301,14 @@ class ToroidalFlux(_Objective):
         Collocation grid containing the nodes to evaluate the normal magnetic field at
         plasma geometry at. Defaults to a LinearGrid(L=eq.L_grid, M=eq.M_grid,
         zeta=jnp.array(0.0), NFP=eq.NFP).
-    name : str, optional
-        Name of the objective function.
 
     """
+
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``target=eq.Psi``.",
+        bounds_default="``target=eq.Psi``.",
+        loss_detail=" Note: has no effect for this objective.",
+    )
 
     _coordinates = "rtz"
     _units = "(Wb)"
@@ -1369,6 +1328,7 @@ class ToroidalFlux(_Objective):
         field_grid=None,
         eval_grid=None,
         name="toroidal-flux",
+        jac_chunk_size=None,
     ):
         if target is None and bounds is None:
             target = eq.Psi
@@ -1376,6 +1336,7 @@ class ToroidalFlux(_Objective):
         self._field_grid = field_grid
         self._eval_grid = eval_grid
         self._eq = eq
+        # TODO: add eq_fixed option so this can be used in single stage
 
         super().__init__(
             things=[field],
@@ -1387,6 +1348,7 @@ class ToroidalFlux(_Objective):
             loss_function=loss_function,
             deriv_mode=deriv_mode,
             name=name,
+            jac_chunk_size=jac_chunk_size,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -1401,9 +1363,17 @@ class ToroidalFlux(_Objective):
 
         """
         eq = self._eq
+        self._use_vector_potential = True
+        try:
+            self._field.compute_magnetic_vector_potential([0, 0, 0])
+        except (NotImplementedError, ValueError):
+            self._use_vector_potential = False
         if self._eval_grid is None:
             eval_grid = LinearGrid(
-                L=eq.L_grid, M=eq.M_grid, zeta=jnp.array(0.0), NFP=eq.NFP
+                L=eq.L_grid if not self._use_vector_potential else 0,
+                M=eq.M_grid,
+                zeta=jnp.array(0.0),
+                NFP=eq.NFP,
             )
             self._eval_grid = eval_grid
         eval_grid = self._eval_grid
@@ -1438,10 +1408,12 @@ class ToroidalFlux(_Objective):
         if verbose > 0:
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
-
-        data = eq.compute(
-            ["R", "phi", "Z", "|e_rho x e_theta|", "n_zeta"], grid=eval_grid
-        )
+        data_keys = ["R", "phi", "Z"]
+        if self._use_vector_potential:
+            data_keys += ["e_theta"]
+        else:
+            data_keys += ["|e_rho x e_theta|", "n_zeta"]
+        data = eq.compute(data_keys, grid=eval_grid)
 
         plasma_coords = jnp.array([data["R"], data["phi"], data["Z"]]).T
 
@@ -1483,22 +1455,147 @@ class ToroidalFlux(_Objective):
 
         data = constants["equil_data"]
         plasma_coords = constants["plasma_coords"]
-
-        B = constants["field"].compute_magnetic_field(
-            plasma_coords,
-            basis="rpz",
-            source_grid=constants["field_grid"],
-            params=field_params,
-        )
         grid = constants["eval_grid"]
 
-        B_dot_n_zeta = jnp.sum(B * data["n_zeta"], axis=1)
+        if self._use_vector_potential:
+            A = constants["field"].compute_magnetic_vector_potential(
+                plasma_coords,
+                basis="rpz",
+                source_grid=constants["field_grid"],
+                params=field_params,
+            )
 
-        Psi = jnp.sum(
-            grid.spacing[:, 0]
-            * grid.spacing[:, 1]
-            * data["|e_rho x e_theta|"]
-            * B_dot_n_zeta
-        )
+            A_dot_e_theta = jnp.sum(A * data["e_theta"], axis=1)
+            Psi = jnp.sum(grid.spacing[:, 1] * A_dot_e_theta)
+        else:
+            B = constants["field"].compute_magnetic_field(
+                plasma_coords,
+                basis="rpz",
+                source_grid=constants["field_grid"],
+                params=field_params,
+            )
+
+            B_dot_n_zeta = jnp.sum(B * data["n_zeta"], axis=1)
+            Psi = jnp.sum(
+                grid.spacing[:, 0]
+                * grid.spacing[:, 1]
+                * data["|e_rho x e_theta|"]
+                * B_dot_n_zeta
+            )
 
         return Psi
+
+
+class CoilSetLinkingNumber(_Objective):
+    """Prevents coils from becoming interlinked.
+
+    The linking number of 2 curves is (approximately) 0 if they are not linked, and
+    (approximately) +/-1 if they are (with the sign indicating the helicity of the
+    linking).
+
+    This objective returns a single value for each coil in the coilset, with that number
+    being the sum of the absolute value of the linking numbers of that coil with every
+    other coil in the coilset, approximating the number of other coils that are linked
+
+    Parameters
+    ----------
+    coil : CoilSet
+        Coil(s) that are to be optimized.
+    grid : Grid, list, optional
+        Collocation grid used to discretize each coil. Defaults to
+        ``LinearGrid(N=50)``
+
+    """
+
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``target=0``.",
+        bounds_default="``target=0``.",
+        coil=True,
+    )
+
+    _scalar = False
+    _units = "(dimensionless)"
+    _print_value_fmt = "Coil linking number: "
+
+    def __init__(
+        self,
+        coil,
+        grid=None,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        loss_function=None,
+        deriv_mode="auto",
+        jac_chunk_size=None,
+        name="coil-coil linking number",
+    ):
+        from desc.coils import CoilSet
+
+        if target is None and bounds is None:
+            target = 0
+        self._grid = grid
+        errorif(
+            not isinstance(coil, CoilSet),
+            ValueError,
+            "coil must be of type CoilSet, not an individual Coil",
+        )
+        super().__init__(
+            things=coil,
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            loss_function=loss_function,
+            deriv_mode=deriv_mode,
+            jac_chunk_size=jac_chunk_size,
+            name=name,
+        )
+
+    def build(self, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        coilset = self.things[0]
+        grid = self._grid or LinearGrid(N=50)
+
+        self._dim_f = coilset.num_coils
+        self._constants = {"coilset": coilset, "grid": grid, "quad_weights": 1.0}
+
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, params, constants=None):
+        """Compute linking numbers between coils.
+
+        Parameters
+        ----------
+        params : dict
+            Dictionary of coilset degrees of freedom, eg CoilSet.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc.
+            Defaults to self._constants.
+
+        Returns
+        -------
+        f : array of floats
+            For each coil, the sum of the absolute value of the linking numbers between
+            that coil and every other coil in the coilset, which approximates the
+            number of coils linked with that coil.
+
+        """
+        if constants is None:
+            constants = self.constants
+        link = constants["coilset"]._compute_linking_number(
+            params=params, grid=constants["grid"]
+        )
+
+        return jnp.abs(link).sum(axis=0)

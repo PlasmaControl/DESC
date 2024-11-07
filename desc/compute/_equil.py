@@ -14,9 +14,9 @@ from scipy.constants import elementary_charge, mu_0
 
 from desc.backend import jnp
 
-from ..integrals import surface_averages
+from ..integrals.surface_integral import surface_averages
+from ..utils import cross, dot, safediv, safenorm
 from .data_index import register_compute_fun
-from .utils import cross, dot, safediv, safenorm
 
 
 @register_compute_fun(
@@ -625,7 +625,7 @@ def _e_sup_helical_times_sqrt_g_mag(params, transforms, profiles, data, **kwargs
 
 @register_compute_fun(
     name="F_anisotropic",
-    label="F_{anisotropic}",
+    label="F_{\\mathrm{anisotropic}}",
     units="N \\cdot m^{-3}",
     units_long="Newtons / cubic meter",
     description="Anisotropic force balance error",

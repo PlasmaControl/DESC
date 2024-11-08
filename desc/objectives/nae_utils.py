@@ -550,13 +550,12 @@ def _calc_2nd_order_NAE_coeffs(qsc, desc_eq, N=None, use_simple=True):
 
     # use dvarphi_dphi to convert dX_d_dvarphi derivs to dX_d_dphi
     # formula from https://github.com/landreman/pyQSC/blob/main/qsc/init_axis.py#L110
-    dvphi_dp = qsc.nphi / (np.sum(qsc.d_l_d_phi)) * qsc.d_l_d_phi
 
     # coefficient derivatives
-    X1cp = qsc.d_X1c_d_varphi * dvphi_dp
-    X1sp = qsc.d_X1s_d_varphi * dvphi_dp
-    Y1cp = qsc.d_Y1c_d_varphi * dvphi_dp
-    Y1sp = qsc.d_Y1s_d_varphi * dvphi_dp
+    X1cp = np.matmul(qsc.d_d_phi, X1c)
+    X1sp = np.matmul(qsc.d_d_phi, X1s)
+    Y1cp = np.matmul(qsc.d_d_phi, Y1c)
+    Y1sp = np.matmul(qsc.d_d_phi, Y1s)
 
     # 2nd order terms
     # expressions found from mathematica and converted to python

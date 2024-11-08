@@ -7,7 +7,7 @@ from math import factorial
 import mpmath
 import numpy as np
 
-from desc.backend import custom_jvp, fori_loop, gammaln, jit, jnp, sign
+from desc.backend import custom_jvp, fori_loop, jit, jnp, sign
 from desc.io import IOAble
 from desc.utils import check_nonnegint, check_posint, flatten_list
 
@@ -188,7 +188,8 @@ class _Basis(IOAble, ABC):
 
     @property
     def sym(self):
-        """str: {``'cos'``, ``'sin'``, ``False``} Type of symmetry."""
+        """str: Type of symmetry."""
+        # one of: {'even', 'sin', 'cos', 'cos(t)', False}
         return self.__dict__.setdefault("_sym", False)
 
     @property
@@ -238,7 +239,7 @@ class PowerSeries(_Basis):
         self._M = 0
         self._N = 0
         self._NFP = 1
-        self._sym = sym
+        self._sym = bool(sym) if not sym else str(sym)
         self._spectral_indexing = "linear"
 
         self._modes = self._get_modes(L=self.L)
@@ -351,7 +352,7 @@ class FourierSeries(_Basis):
         self._M = 0
         self._N = check_nonnegint(N, "N", False)
         self._NFP = check_posint(NFP, "NFP", False)
-        self._sym = sym
+        self._sym = bool(sym) if not sym else str(sym)
         self._spectral_indexing = "linear"
 
         self._modes = self._get_modes(N=self.N)
@@ -474,7 +475,7 @@ class DoubleFourierSeries(_Basis):
         self._M = check_nonnegint(M, "M", False)
         self._N = check_nonnegint(N, "N", False)
         self._NFP = check_posint(NFP, "NFP", False)
-        self._sym = sym
+        self._sym = bool(sym) if not sym else str(sym)
         self._spectral_indexing = "linear"
 
         self._modes = self._get_modes(M=self.M, N=self.N)
@@ -635,8 +636,8 @@ class ZernikePolynomial(_Basis):
         self._M = check_nonnegint(M, "M", False)
         self._N = 0
         self._NFP = 1
-        self._sym = sym
-        self._spectral_indexing = spectral_indexing
+        self._sym = bool(sym) if not sym else str(sym)
+        self._spectral_indexing = str(spectral_indexing)
 
         self._modes = self._get_modes(
             L=self.L, M=self.M, spectral_indexing=self.spectral_indexing
@@ -831,7 +832,7 @@ class ChebyshevDoubleFourierBasis(_Basis):
         self._M = check_nonnegint(M, "M", False)
         self._N = check_nonnegint(N, "N", False)
         self._NFP = check_posint(NFP, "NFP", False)
-        self._sym = sym
+        self._sym = bool(sym) if not sym else str(sym)
         self._spectral_indexing = "linear"
 
         self._modes = self._get_modes(L=self.L, M=self.M, N=self.N)
@@ -983,8 +984,8 @@ class FourierZernikeBasis(_Basis):
         self._M = check_nonnegint(M, "M", False)
         self._N = check_nonnegint(N, "N", False)
         self._NFP = check_posint(NFP, "NFP", False)
-        self._sym = sym
-        self._spectral_indexing = spectral_indexing
+        self._sym = bool(sym) if not sym else str(sym)
+        self._spectral_indexing = str(spectral_indexing)
 
         self._modes = self._get_modes(
             L=self.L, M=self.M, N=self.N, spectral_indexing=self.spectral_indexing
@@ -1389,6 +1390,16 @@ def _polyval_jax(p, x):
 def zernike_radial_coeffs(l, m, exact=True):
     """Polynomial coefficients for radial part of zernike basis.
 
+    The for loop ranges from m to l+1 in steps of 2, as opposed to the
+    formula in the zernike_eval notebook. This is to make the coeffs array in
+    ascending powers of r, which is more natural for polynomial evaluation.
+    So, one should substitute s=(l-k)/s in the formula in the notebook to get
+    the coding implementation below.
+
+                                 (-1)^((l-k)/2) * ((l+k)/2)!
+    R_l^m(r) = sum_{k=m}^l  -------------------------------------
+                             ((l-k)/2)! * ((k+m)/2)! * ((k-m)/2)!
+
     Parameters
     ----------
     l : ndarray of int, shape(K,)
@@ -1424,14 +1435,15 @@ def zernike_radial_coeffs(l, m, exact=True):
         ll = lms[ii, 0]
         mm = lms[ii, 1]
         for s in range(mm, ll + 1, 2):
-            coeffs[ii, s] = (
-                (-1) ** ((ll - s) // 2)
-                * factorial((ll + s) // 2)
-                // (
-                    factorial((ll - s) // 2)
-                    * factorial((s + mm) // 2)
-                    * factorial((s - mm) // 2)
-                )
+            # Zernike polynomials can also be written in the form of [1] which
+            # states that the coefficients are given by the binomial coefficients
+            # hence they are all integers. So, we can use exact arithmetic with integer
+            # division instead of floating point division.
+            # [1]https://en.wikipedia.org/wiki/Zernike_polynomials#Other_representations
+            coeffs[ii, s] = ((-1) ** ((ll - s) // 2) * factorial((ll + s) // 2)) // (
+                factorial((ll - s) // 2)
+                * factorial((s + mm) // 2)
+                * factorial((s - mm) // 2)
             )
     c = np.fliplr(np.where(lm_even, coeffs, 0))
     if not exact:
@@ -1561,7 +1573,7 @@ def zernike_radial(r, l, m, dr=0):
             "Analytic radial derivatives of Zernike polynomials for order>4 "
             + "have not been implemented."
         )
-    return s * jnp.where((l - m) % 2 == 0, out, 0)
+    return s * jnp.where((l - m) % 2 == 0, out, 0.0)
 
 
 def power_coeffs(l):
@@ -1720,7 +1732,7 @@ def _binom(n, k):
     return b
 
 
-@custom_jvp
+@functools.partial(custom_jvp, nondiff_argnums=(4,))
 @jit
 @jnp.vectorize
 def _jacobi(n, alpha, beta, x, dx=0):
@@ -1762,12 +1774,16 @@ def _jacobi(n, alpha, beta, x, dx=0):
     n, alpha, beta, x = map(jnp.asarray, (n, alpha, beta, x))
 
     # coefficient for derivative
-    c = (
-        gammaln(alpha + beta + n + 1 + dx)
-        - dx * jnp.log(2)
-        - gammaln(alpha + beta + n + 1)
+    coeffs = jnp.array(
+        [
+            1,
+            (alpha + n + 1) / 2,
+            (alpha + n + 2) * (alpha + n + 1) / 4,
+            (alpha + n + 3) * (alpha + n + 2) * (alpha + n + 1) / 8,
+            (alpha + n + 4) * (alpha + n + 3) * (alpha + n + 2) * (alpha + n + 1) / 16,
+        ]
     )
-    c = jnp.exp(c)
+    c = coeffs[dx]
     # taking derivative is same as coeff*jacobi but for shifted n,a,b
     n -= dx
     alpha += dx
@@ -1788,13 +1804,13 @@ def _jacobi(n, alpha, beta, x, dx=0):
 
 
 @_jacobi.defjvp
-def _jacobi_jvp(x, xdot):
-    (n, alpha, beta, x, dx) = x
-    (ndot, alphadot, betadot, xdot, dxdot) = xdot
+def _jacobi_jvp(dx, x, xdot):
+    (n, alpha, beta, x) = x
+    (*_, xdot) = xdot
     f = _jacobi(n, alpha, beta, x, dx)
     df = _jacobi(n, alpha, beta, x, dx + 1)
     # in theory n, alpha, beta, dx aren't differentiable (they're integers)
     # but marking them as non-diff argnums seems to cause escaped tracer values.
     # probably a more elegant fix, but just setting those derivatives to zero seems
     # to work fine.
-    return f, df * xdot + 0 * ndot + 0 * alphadot + 0 * betadot + 0 * dxdot
+    return f, df * xdot

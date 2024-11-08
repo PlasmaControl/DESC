@@ -15,9 +15,11 @@ dependencies:
   - pip:
     # Conda only parses a single list of pip requirements.
     # If two pip lists are given, all but the last list is skipped.
-    - interpax
-    - jax[cpu] >= 0.3.2, < 0.5.0
+    - jax >= 0.4.24, < 0.5.0
+    - diffrax >= 0.4.1
+    - interpax >= 0.3.3
     - nvgpu
+    - orthax
     - plotly >= 5.16, < 6.0
     - pylatexenc >= 2.0, < 3.0
     # building the docs
@@ -25,17 +27,19 @@ dependencies:
     # testing and benchmarking
     - qsc
     - qicna @ git+https://github.com/rogeriojorge/pyQIC/
+    - black[jupyter] = 24.3.0
 
   # building the docs
   - nbsphinx == 0.8.12
   - pandoc
   - sphinx > 3.0.0
-  - sphinx-argparse
+  # TODO: Remove sphinx-argparse <0.5.0 pin once upstream build issue is fixed
+  # <https://github.com/sphinx-doc/sphinx-argparse/issues/56>
+  - sphinx-argparse < 0.5.0
   - sphinx-copybutton
   - sphinx_rtd_theme >= 1.0, < 2.0
 
   # linting
-  - black = 24.3.0
   - flake8 >= 5.0.0, <6.0.0
   - flake8-docstrings >= 1.0.0, <2.0.0
   - flake8-eradicate >= 1.0.0, <2.0.0

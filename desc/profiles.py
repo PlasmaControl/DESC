@@ -17,6 +17,7 @@ from desc.utils import (
     copy_coeffs,
     errorif,
     multinomial_coefficients,
+    setdefault,
     warnif,
 )
 
@@ -42,11 +43,11 @@ class _Profile(IOAble, ABC):
     @property
     def name(self):
         """str: Name of the profile."""
-        return self._name
+        return self.__dict__.setdefault("_name", "")
 
     @name.setter
     def name(self, new):
-        self._name = new
+        self._name = str(new)
 
     @property
     @abstractmethod
@@ -536,6 +537,7 @@ class PowerSeriesProfile(_Profile):
         Whether the basis should only contain even powers (True) or all powers (False).
     name : str
         Name of the profile.
+
     """
 
     _io_attrs_ = _Profile._io_attrs_ + ["_basis"]
@@ -612,7 +614,7 @@ class PowerSeriesProfile(_Profile):
 
     def set_params(self, l, a=None):
         """Set specific power series coefficients."""
-        l, a = np.atleast_1d(l), np.atleast_1d(a)
+        l, a = np.atleast_1d(l, a)
         a = np.broadcast_to(a, l.shape)
         for ll, aa in zip(l, a):
             idx = self.basis.get_idx(ll, 0, 0)
@@ -792,24 +794,25 @@ class TwoPowerProfile(_Profile):
 
 
 class SplineProfile(_Profile):
-    """Profile represented by a piecewise cubic spline.
+    """Radial profile represented by a piecewise cubic spline.
 
     Parameters
     ----------
-    params: array-like
-        Values of the function at knot locations.
-    knots : int or ndarray
-        x locations to use for spline. If an integer, uses that many points linearly
-        spaced between 0,1
+    values: array-like
+        1-D array containing values of the dependent variable.
+    knots : array-like
+        1-D array containing values of the independent variable.
+        Must be real, finite, and in strictly increasing order in [0, 1].
+        If ``None``, assumes ``values`` is given on knots uniformly spaced in [0, 1].
     method : str
-        method of interpolation
+        Method of interpolation. Default is cubic2.
         - `'nearest'`: nearest neighbor interpolation
         - `'linear'`: linear interpolation
         - `'cubic'`: C1 cubic splines (aka local splines)
         - `'cubic2'`: C2 cubic splines (aka natural splines)
         - `'catmull-rom'`: C1 cubic centripetal "tension" splines
     name : str
-        name of the profile
+        Optional name of the profile.
 
     """
 
@@ -820,11 +823,12 @@ class SplineProfile(_Profile):
 
         if values is None:
             values = [0, 0, 0]
-        values = np.atleast_1d(values)
+        values = jnp.atleast_1d(values)
         if knots is None:
-            knots = np.linspace(0, 1, values.size)
-        else:
-            knots = np.atleast_1d(knots)
+            knots = jnp.linspace(0, 1, values.size)
+        knots = jnp.atleast_1d(knots)
+        errorif(values.shape[-1] != knots.shape[-1])
+        errorif(not (values.ndim == knots.ndim == 1), NotImplementedError)
         self._knots = knots
         self._params = values
         self._method = method
@@ -833,7 +837,7 @@ class SplineProfile(_Profile):
         """Get the string form of the object."""
         s = super().__repr__()
         s = s[:-1]
-        s += ", method={}, num_knots={})".format(self._method, len(self._knots))
+        s += ", method={}, num_knots={})".format(self._method, self._knots.size)
         return s
 
     @property
@@ -848,13 +852,12 @@ class SplineProfile(_Profile):
 
     @params.setter
     def params(self, new):
-        if len(new) == len(self._knots):
-            self._params = jnp.asarray(new)
-        else:
-            raise ValueError(
-                "params should have the same size as the knots, "
-                + f"got {len(new)} values for {len(self._knots)} knots"
-            )
+        errorif(
+            len(new) != self._knots.size,
+            msg="params should have the same size as the knots, "
+            + f"got {len(new)} values for {self._knots.size} knots",
+        )
+        self._params = jnp.asarray(new)
 
     def compute(self, grid, params=None, dr=0, dt=0, dz=0):
         """Compute values of profile at specified nodes.
@@ -862,10 +865,10 @@ class SplineProfile(_Profile):
         Parameters
         ----------
         grid : Grid
-            locations to compute values at.
+            Locations to compute values at.
         params : array-like
-            spline values to use. If not given, uses the
-            values given by the params attribute
+            Values of the function at ``self.knots``.
+            If not given, uses ``self.params``.
         dr, dt, dz : int
             derivative order in rho, theta, zeta
 
@@ -875,15 +878,112 @@ class SplineProfile(_Profile):
             values of the profile or its derivative at the points specified
 
         """
-        if params is None:
-            params = self.params
         if dt != 0 or dz != 0:
             return jnp.zeros_like(grid.nodes[:, 0])
-        x = self.knots
-        f = params
-        xq = grid.nodes[:, 0]
-        fq = interp1d(xq, x, f, method=self._method, derivative=dr, extrap=True)
-        return fq
+        params = setdefault(params, self._params)
+        return interp1d(
+            xq=grid.nodes[:, 0],
+            x=self._knots,
+            f=params,
+            method=self._method,
+            derivative=dr,
+            extrap=True,
+        )
+
+
+class HermiteSplineProfile(_Profile):
+    """Radial profile represented by a piecewise cubic Hermite spline.
+
+    Parameters
+    ----------
+    f: array-like
+        1-D array containing values of the dependent variable.
+    df: array-like
+        1-D array containing derivatives of the dependent variable.
+    knots : array-like
+        1-D array containing values of the independent variable.
+        Must be real, finite, and in strictly increasing order in [0, 1].
+        If ``None``, assumes ``f`` and ``df`` are given on knots uniformly
+        spaced in [0, 1].
+    name : str
+        Optional name of the profile.
+
+    """
+
+    _io_attrs_ = _Profile._io_attrs_ + ["_knots", "_params"]
+
+    def __init__(self, f, df, knots=None, name=""):
+        super().__init__(name)
+
+        f, df = jnp.atleast_1d(f, df)
+        if knots is None:
+            knots = jnp.linspace(0, 1, f.size)
+        knots = jnp.atleast_1d(knots)
+        errorif(not (f.shape[-1] == df.shape[-1] == knots.shape[-1]))
+        errorif(not (f.ndim == df.ndim == knots.ndim == 1), NotImplementedError)
+        self._knots = knots
+        self._params = jnp.concatenate([f, df])
+
+    def __repr__(self):
+        """Get the string form of the object."""
+        s = super().__repr__()
+        s = s[:-1]
+        s += ", num_knots={})".format(self._knots.size)
+        return s
+
+    @property
+    def knots(self):
+        """ndarray: Knot locations."""
+        return self._knots
+
+    @property
+    def params(self):
+        """ndarray: Parameters for computation.
+
+        First (second) half stores function (derivative) values at ``knots``.
+        """
+        return self._params
+
+    @params.setter
+    def params(self, new):
+        new = jnp.asarray(new)
+        errorif(
+            new.ndim != 1 or new.size != 2 * self._knots.size,
+            msg="Params should be 1D with size twice number of knots. "
+            f"Got {new.shape} params for {self._knots.size} knots.",
+        )
+        self._params = new
+
+    def compute(self, grid, params=None, dr=0, dt=0, dz=0):
+        """Compute values of profile at specified nodes.
+
+        Parameters
+        ----------
+        grid : Grid
+            Locations to compute values at.
+        params : array-like
+            First (second) half stores function (derivative) values at ``knots``.
+            If not given, uses ``self.params``.
+        dr, dt, dz : int
+            derivative order in rho, theta, zeta
+
+        Returns
+        -------
+        f : ndarray
+            Array containing values of the dependent variable at the points specified.
+
+        """
+        if dt != 0 or dz != 0:
+            return jnp.zeros_like(grid.nodes[:, 0])
+        params = setdefault(params, self._params)
+        return interp1d(
+            xq=grid.nodes[:, 0],
+            x=self._knots,
+            f=params[: self._knots.size],
+            fx=params[self._knots.size :],
+            derivative=dr,
+            extrap=True,
+        )
 
 
 class MTanhProfile(_Profile):
@@ -1176,8 +1276,7 @@ class FourierZernikeProfile(_Profile):
             else:
                 sym = False
 
-        self._basis = FourierZernikeBasis(L=L, M=M, N=N, NFP=NFP, sym=sym)
-
+        self._basis = FourierZernikeBasis(L=L, M=M, N=N, NFP=int(NFP), sym=sym)
         self._params = copy_coeffs(params, modes, self.basis.modes)
 
     def __repr__(self):

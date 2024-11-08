@@ -2179,7 +2179,6 @@ class Equilibrium(IOAble, Optimizable):
             "maxiter",
             "objective",
             "optimizer",
-            "bdry_mode",
             "output_path",
             "verbose",
         ]

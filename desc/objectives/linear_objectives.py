@@ -1450,7 +1450,7 @@ class FixAxisR(FixParameters):
         normalize=True,
         normalize_target=True,
         modes=True,
-        name="axis R",
+        name="fixed axis R",
     ):
         if isinstance(modes, bool):
             indices = modes
@@ -1531,7 +1531,7 @@ class FixAxisZ(FixParameters):
         normalize=True,
         normalize_target=True,
         modes=True,
-        name="axis Z",
+        name="fixed axis Z",
     ):
         if isinstance(modes, bool):
             indices = modes

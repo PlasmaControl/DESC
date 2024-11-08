@@ -392,6 +392,8 @@ def maybe_add_self_consistency(thing, constraints):  # noqa: C901
         constraints, FixSectionR
     ):
         mode = "lcfs"
+    else:
+        mode = "other"
 
     if {"R_lmn", "Rb_lmn"} <= params and not is_any_instance(
         constraints, BoundaryRSelfConsistency

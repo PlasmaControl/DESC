@@ -124,8 +124,6 @@ class hdf5Reader(hdf5IO, Reader):
         loc = self.resolve_where(where)
         for attr in obj._io_attrs_:
             if attr not in loc.keys():
-                # --no-verify pdb.set_trace()
-                # --no-verify print(loc.keys(), obj._io_attrs_)
                 warnings.warn(
                     colored(
                         "\n"

@@ -71,11 +71,7 @@ def compute_scaling_factors(thing):
         Z10 = get_lowest_mode(thing.Z_basis, thing.Z_lmn)
 
         scales["R0"] = R00
-        len_scale = np.sqrt(np.abs(R10 * Z10))
-        if len_scale > 1e-3:
-            scales["a"] = len_scale
-        else:
-            scales["a"] = 0.2
+        scales["a"] = np.sqrt(np.abs(R10 * Z10))
         scales["A"] = np.pi * scales["a"] ** 2
         scales["V"] = 2 * np.pi * scales["R0"] * scales["A"]
 

@@ -62,7 +62,6 @@ def load(load_from, file_format=None):
                 cls = pydoc.locate(cls_name)
                 obj = cls.__new__(cls)
                 reader = reader_factory(load_from, file_format)
-                # --no-verify pdb.set_trace()
                 reader.read_obj(obj)
                 reader.close()
             else:

@@ -68,9 +68,6 @@ print(
 if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assign?
     from jax import custom_jvp, jit, vmap
 
-    # --no-verifyfrom jax import custom_jvp, vmap
-    # --no-verifyjit = lambda func, *args, **kwargs: func
-
     imap = jax.lax.map
     from jax.experimental.ode import odeint
     from jax.lax import cond, fori_loop, scan, switch, while_loop

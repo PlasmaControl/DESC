@@ -1557,6 +1557,9 @@ def test_parallel_grad():
             "|e_zeta|r,a|_z|r,a",
             "B^zeta_z|r,a",
             "|B|",
+            "secular(gbdrift)",
+            "secular(gbdrift)/phi",
+            "phi",
         ],
     )
     np.testing.assert_allclose(data["e_zeta|r,a"], (data["B"].T / data["B^zeta"]).T)
@@ -1617,4 +1620,7 @@ def test_parallel_grad_fd(DummyStellarator):
         fd[2:-2],
         rtol=1e-2,
         atol=1e-2 * np.mean(np.abs(data["B^zeta_z|r,a"])),
+    )
+    np.testing.assert_allclose(
+        data["secular(gbdrift)"], data["secular(gbdrift)/phi"] * data["phi"]
     )

@@ -1272,7 +1272,7 @@ class Equilibrium(IOAble, Optimizable):
             **kwargs,
         )
 
-    def get_rtz_grid(
+    def _get_rtz_grid(
         self,
         radial,
         poloidal,

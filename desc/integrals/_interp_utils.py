@@ -73,7 +73,7 @@ def cheb_pts(n, domain=(-1, 1), lobatto=False):
 
 def fourier_pts(n):
     """Get ``n`` Fourier points in [0, 2π)."""
-    # [0, 2π] instead of [-π, π] required to match our definition of α.
+    # [0, 2π) instead of [-π, π) required to match our definition of α.
     return 2 * jnp.pi * jnp.arange(n) / n
 
 
@@ -431,31 +431,6 @@ def idct_non_uniform(xq, a, n, axis=-1):
     return jnp.linalg.vecdot(jnp.cos(n * jnp.arccos(xq)[..., jnp.newaxis]), a)
 
 
-def _fourier(grid, f, is_reshaped=False):
-    """Transform to DESC spectral domain.
-
-    Parameters
-    ----------
-    grid : Grid
-        Tensor-product grid in (ρ, θ, ζ) with uniformly spaced nodes
-        (θ, ζ) ∈ [0, 2π) × [0, 2π/NFP).
-        Preferably power of 2 for ``grid.num_theta`` and ``grid.num_zeta``.
-    f : jnp.ndarray
-        Function evaluated on ``grid``.
-
-    Returns
-    -------
-    a : jnp.ndarray
-        Shape (..., grid.num_theta // 2 + 1, grid.num_zeta)
-        Complex coefficients of 2D real FFT of ``f``.
-
-    """
-    if not is_reshaped:
-        f = grid.meshgrid_reshape(f, "rtz")
-    # real fft over poloidal since usually M > N
-    return rfft2(f, axes=(-1, -2), norm="forward")
-
-
 # Warning: method must be specified as keyword argument.
 interp1d_vec = jnp.vectorize(
     interp1d, signature="(m),(n),(n)->(m)", excluded={"method"}
@@ -534,14 +509,13 @@ def _subtract_first(c, k):
     but allows dimension to increase.
     """
     c_0 = c[..., 0] - k
-    c = jnp.concatenate(
+    return jnp.concatenate(
         [
             c_0[..., jnp.newaxis],
             jnp.broadcast_to(c[..., 1:], (*c_0.shape, c.shape[-1] - 1)),
         ],
         axis=-1,
     )
-    return c
 
 
 def _subtract_last(c, k):
@@ -551,14 +525,13 @@ def _subtract_last(c, k):
     but allows dimension to increase.
     """
     c_1 = c[..., -1] - k
-    c = jnp.concatenate(
+    return jnp.concatenate(
         [
             jnp.broadcast_to(c[..., :-1], (*c_1.shape, c.shape[-1] - 1)),
             c_1[..., jnp.newaxis],
         ],
         axis=-1,
     )
-    return c
 
 
 def _filter_distinct(r, sentinel, eps):

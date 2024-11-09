@@ -35,7 +35,7 @@ from ._geometry import (
     UmbilicHighCurvature,
     Volume,
 )
-from ._neoclassical import EffectiveRipple
+from ._neoclassical import EffectiveRipple, GammaC
 from ._omnigenity import (
     Isodynamicity,
     Omnigenity,

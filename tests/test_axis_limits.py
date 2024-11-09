@@ -28,8 +28,8 @@ from desc.utils import dot, errorif
 zero_limits = {"rho", "psi", "psi_r", "psi_rrr", "e_theta", "sqrt(g)", "B_t"}
 
 # These compute quantities require kinetic profiles, which are not defined for all
-# configurations (giving NaN values)
-not_continuous_limits = {"current Redl", "P_ISS04", "P_fusion", "<sigma*nu>"}
+# configurations (giving NaN values). Gamma_c is 0 on axis.
+not_continuous_limits = {"current Redl", "P_ISS04", "P_fusion", "<sigma*nu>", "Gamma_c"}
 
 not_finite_limits = {
     "D_Mercier",

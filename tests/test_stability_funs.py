@@ -1,4 +1,4 @@
-"""Tests for Mercier stability functions."""
+"""Tests for stability functions."""
 
 import numpy as np
 import pytest

@@ -234,7 +234,11 @@ def test_compute_everything():
             names = set(data_index[p].keys())
 
             def need_src(name):
-                return bool(data_index[p][name]["source_grid_requirement"])
+                return (
+                    bool(data_index[p][name]["source_grid_requirement"])
+                    or "effective ripple" in name
+                    or "Gamma_c" in name
+                )
 
             names -= _grow_seeds(p, set(filter(need_src, names)), names)
 

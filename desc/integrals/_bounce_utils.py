@@ -19,6 +19,7 @@ from desc.integrals._interp_utils import (
 from desc.integrals._quad_utils import (
     bijection_from_disc,
     grad_bijection_from_disc,
+    simpson2,
     uniform,
 )
 from desc.integrals.basis import (
@@ -38,7 +39,7 @@ from desc.utils import (
 )
 
 
-def get_pitch_inv_quad(min_B, max_B, num_pitch):
+def get_pitch_inv_quad(min_B, max_B, num_pitch, simp=False):
     """Return 1/λ values and weights for quadrature between ``min_B`` and ``max_B``.
 
     Parameters
@@ -49,6 +50,8 @@ def get_pitch_inv_quad(min_B, max_B, num_pitch):
         Maximum |B| value.
     num_pitch : int
         Number of values.
+    simp : bool
+        Whether to use an open Simpson rule instead of uniform weights.
 
     Returns
     -------
@@ -62,10 +65,10 @@ def get_pitch_inv_quad(min_B, max_B, num_pitch):
         msg="Floating point error impedes detection of bounce points "
         f"near global extrema. Choose {num_pitch} < 1e5.",
     )
-    # Samples should be uniformly spaced in |B| and not λ (GitHub issue #1228).
+    # Samples should be uniformly spaced in |B| and not λ.
     # Important to do an open quadrature since the bounce integrals at the
     # global maxima of |B| are not computable even ignoring precision issues.
-    x, w = uniform(num_pitch)
+    x, w = simpson2(num_pitch) if simp else uniform(num_pitch)
     x = bijection_from_disc(x, min_B[..., jnp.newaxis], max_B[..., jnp.newaxis])
     w = w * grad_bijection_from_disc(min_B, max_B)[..., jnp.newaxis]
     return x, w
@@ -479,7 +482,7 @@ def _interpolate_and_integrate(
     return result
 
 
-def _check_interp(shape, Q, b_sup_z, B, result, f, plot):
+def _check_interp(shape, Q, b_sup_z, B, result, f=None, plot=True):
     """Check for interpolation failures and floating point issues.
 
     Parameters
@@ -511,6 +514,7 @@ def _check_interp(shape, Q, b_sup_z, B, result, f, plot):
 
     assert goal == (marked & jnp.isfinite(b_sup_z).reshape(shape).all(axis=-1)).sum()
     assert goal == (marked & jnp.isfinite(B).reshape(shape).all(axis=-1)).sum()
+    f = setdefault(f, [])
     for f_i in f:
         assert goal == (marked & jnp.isfinite(f_i).reshape(shape).all(axis=-1)).sum()
 
@@ -870,7 +874,18 @@ def interp_to_argmin_hard(h, points, knots, g, dg_dz, method="cubic"):
 
 
 def interp_fft_to_argmin(
-    NFP, T, h, points, knots, g, dg_dz, beta=-100, upper_sentinel=1e2
+    NFP,
+    T,
+    h,
+    points,
+    knots,
+    g,
+    dg_dz,
+    beta=-100,
+    upper_sentinel=1e2,
+    is_fourier=False,
+    M=None,
+    N=None,
 ):
     """Interpolate ``h`` to the deepest point of ``g`` between ``z1`` and ``z2``.
 
@@ -917,6 +932,11 @@ def interp_fft_to_argmin(
         Something larger than g. Choose value such that
         exp(max(g)) << exp(``upper_sentinel``). Don't make too large or numerical
         resolution is lost.
+    is_fourier : bool
+        If true, then it is assumed that ``h`` is the Fourier
+        transform as returned by ``Bounce2D.fourier``.
+    M, N : int
+        Fourier resolution.
 
     Warnings
     --------
@@ -938,17 +958,28 @@ def interp_fft_to_argmin(
         beta * _where_for_fft_argmin(points, ext, g_ext, upper_sentinel),
         axis=-1,
     )
-    return jnp.linalg.vecdot(
-        argmin,  # shape is (..., num well, num extrema)
-        interp_rfft2(
-            T.eval1d(ext),
+    theta = T.eval1d(ext)
+    if is_fourier:
+        h = irfft2_non_uniform(
+            theta,
+            ext,
+            h[..., jnp.newaxis, :, :],
+            M,
+            N,
+            domain1=(0, 2 * jnp.pi / NFP),
+            axes=(-1, -2),
+        )
+    else:
+        h = interp_rfft2(
+            theta,
             ext,
             h[..., jnp.newaxis, :, :],
             domain1=(0, 2 * jnp.pi / NFP),
             axes=(-1, -2),
-        )[..., jnp.newaxis, :],
-        # adding axis to broadcast with num well axis
-    )
+        )
+    # argmin shape is (..., num well, num extrema)
+    # adding axis to broadcast with num well axis
+    return jnp.linalg.vecdot(argmin, h[..., jnp.newaxis, :])
 
 
 # TODO: Generalize this beyond ζ = ϕ or just map to Clebsch with ϕ.

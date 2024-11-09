@@ -18,7 +18,7 @@ def _periodic(x, period):
 
 def _fixup_residual(r, period):
     r = _periodic(r, period)
-    # r should be between -period and period
+    # r should be between -period/2 and period/2
     return jnp.where((r > period / 2) & jnp.isfinite(period), -period + r, r)
 
 
@@ -105,7 +105,11 @@ def map_coordinates(  # noqa: C901
             f"don't have recipe to compute partial derivative {key}",
         )
 
-    profiles = get_profiles(inbasis + basis_derivs, eq)
+    profiles = (
+        kwargs["profiles"]
+        if "profiles" in kwargs
+        else get_profiles(inbasis + basis_derivs, eq)
+    )
 
     # TODO: make this work for permutations of in/out basis
     if outbasis == ("rho", "theta", "zeta"):
@@ -114,7 +118,9 @@ def map_coordinates(  # noqa: C901
                 iota = kwargs.pop("iota")
             else:
                 if profiles["iota"] is None:
-                    profiles["iota"] = eq.get_profile(["iota", "iota_r"], params=params)
+                    profiles["iota"] = eq.get_profile(
+                        ["iota", "iota_r"], params=params, **kwargs
+                    )
                 iota = profiles["iota"].compute(Grid(coords, sort=False, jitable=True))
             return _map_clebsch_coordinates(
                 coords=coords,
@@ -143,7 +149,7 @@ def map_coordinates(  # noqa: C901
 
     # do surface average to get iota once
     if "iota" in profiles and profiles["iota"] is None:
-        profiles["iota"] = eq.get_profile(["iota", "iota_r"], params=params)
+        profiles["iota"] = eq.get_profile(["iota", "iota_r"], params=params, **kwargs)
         params["i_l"] = profiles["iota"].params
 
     rhomin = kwargs.pop("rhomin", tol / 10)
@@ -729,7 +735,10 @@ def get_rtz_grid(
 
     """
     grid = Grid.create_meshgrid(
-        [radial, poloidal, toroidal], coordinates=coordinates, period=period
+        [radial, poloidal, toroidal],
+        coordinates=coordinates,
+        period=period,
+        jitable=jitable,
     )
     if "iota" in kwargs:
         kwargs["iota"] = grid.expand(jnp.atleast_1d(kwargs["iota"]))

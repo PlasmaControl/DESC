@@ -1725,7 +1725,7 @@ class UmbilicFieldAligned(_Objective):
 
         self._dim_f = int(curve_grid.num_nodes)
 
-        self._curve_data_keys = ["A"]
+        self._curve_data_keys = ["UC"]
         self._eq_iota_keys = ["iota", "iota_r", "shear"]
 
         timer = Timer()

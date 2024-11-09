@@ -15,13 +15,13 @@ __all__ = ["FourierUmbilicCurve"]
 
 
 class FourierUmbilicCurve(UmbilicCurve):
-    """Curve parameterized by Fourier series for A in terms of toroidal angle phi.
+    """Curve parameterized by Fourier series for UC in terms of toroidal angle phi.
 
     Parameters
     ----------
-    A_n: array-like
+    UC_n: array-like
         Fourier coefficients fo Z.
-    modes_A : array-like, optional
+    modes_UC : array-like, optional
         Mode numbers associated with Z_n, If not given defaults to [-n:n]].
     NFP : int
         Number of field periods.
@@ -36,8 +36,8 @@ class FourierUmbilicCurve(UmbilicCurve):
     """
 
     _io_attrs_ = UmbilicCurve._io_attrs_ + [
-        "_A_n",
-        "_A_basis",
+        "_UC_n",
+        "_UC_basis",
         "_sym",
         "_NFP",
         "_NFP_umbilic_factor",
@@ -45,48 +45,50 @@ class FourierUmbilicCurve(UmbilicCurve):
 
     def __init__(
         self,
-        A_n=0,
-        modes_A=None,
+        UC_n=0,
+        modes_UC=None,
         NFP=1,
         NFP_umbilic_factor=1,
         sym="auto",
         name="",
     ):
         super().__init__(name)
-        A_n = np.atleast_1d(A_n)
-        if modes_A is None:
-            modes_A = np.arange(-(A_n.size // 2), A_n.size // 2 + 1)
+        UC_n = np.atleast_1d(UC_n)
+        if modes_UC is None:
+            modes_UC = np.arange(-(UC_n.size // 2), UC_n.size // 2 + 1)
 
-        if A_n.size == 0:
-            A_n = np.array([0.0])
-            modes_A = np.array([0])
+        if UC_n.size == 0:
+            UC_n = np.array([0.0])
+            modes_UC = np.array([0])
 
-        modes_A = np.asarray(modes_A)
+        modes_UC = np.asarray(modes_UC)
 
-        assert A_n.size == modes_A.size, "A_n size and modes_A must be the same size"
+        assert (
+            UC_n.size == modes_UC.size
+        ), "UC_n size and modes_UC must be the same size"
 
-        assert issubclass(modes_A.dtype.type, np.integer)
+        assert issubclass(modes_UC.dtype.type, np.integer)
 
         if sym == "auto":
-            if np.all(A_n[modes_A >= 0] == 0):
+            if np.all(UC_n[modes_UC >= 0] == 0):
                 sym = True
             else:
                 sym = False
         self._sym = sym
-        NA = np.max(abs(modes_A))
-        N = NA
+        NUC = np.max(abs(modes_UC))
+        N = NUC
         self._NFP = check_posint(NFP, "NFP", False)
         self._NFP_umbilic_factor = check_posint(
             NFP_umbilic_factor, "NFP_umbilic_factor", False
         )
-        self._A_basis = FourierSeries(
+        self._UC_basis = FourierSeries(
             N,
             int(NFP),
             NFP_umbilic_factor=int(NFP_umbilic_factor),
             sym="sin" if sym else False,
         )
 
-        self._A_n = copy_coeffs(A_n, modes_A, self.A_basis.modes[:, 2])
+        self._UC_n = copy_coeffs(UC_n, modes_UC, self.UC_basis.modes[:, 2])
 
     @property
     def sym(self):
@@ -94,9 +96,9 @@ class FourierUmbilicCurve(UmbilicCurve):
         return self._sym
 
     @property
-    def A_basis(self):
-        """Spectral basis for A_Fourier series."""
-        return self._A_basis
+    def UC_basis(self):
+        """Spectral basis for UC_Fourier series."""
+        return self._UC_basis
 
     @property
     def NFP(self):
@@ -115,43 +117,43 @@ class FourierUmbilicCurve(UmbilicCurve):
     @property
     def N(self):
         """Maximum mode number."""
-        return self.A_basis.N
+        return self.UC_basis.N
 
     def get_coeffs(self, n):
         """Get Fourier coefficients for given mode number(s)."""
         ## CURRENTLY ONLY OUTPUTS COEFFICIENTS FOR NEGATIVE n
         ## values
         n = np.atleast_1d(n).astype(int)
-        A = np.zeros_like(n).astype(float)
+        UC = np.zeros_like(n).astype(float)
 
-        idxA = np.where(n[:, np.newaxis] == self.A_basis.modes[:, 2])
+        idxUC = np.where(n[:, np.newaxis] == self.UC_basis.modes[:, 2])
 
-        A[idxA[0]] = self.A_n[idxA[1]]
-        return A
+        UC[idxUC[0]] = self.UC_n[idxUC[1]]
+        return UC
 
-    def set_coeffs(self, n, A=None):
+    def set_coeffs(self, n, UC=None):
         """Set specific Fourier coefficients."""
-        n, A = np.atleast_1d(n), np.atleast_1d(A)
-        A = np.broadcast_to(A, n.shape)
-        for nn, AA in zip(n, A):
-            if AA is not None:
-                idxA = self.A_basis.get_idx(0, 0, nn)
-                self.A_n = put(self.A_n, idxA, AA)
+        n, UC = np.atleast_1d(n), np.atleast_1d(UC)
+        UC = np.broadcast_to(UC, n.shape)
+        for nn, nUC in zip(n, UC):
+            if nUC is not None:
+                idxUC = self.UC_basis.get_idx(0, 0, nn)
+                self.UC_n = put(self.UC_n, idxUC, nUC)
 
     @optimizable_parameter
     @property
-    def A_n(self):
+    def UC_n(self):
         """Spectral coefficients for Z."""
-        return self._A_n
+        return self._UC_n
 
-    @A_n.setter
-    def A_n(self, new):
-        if len(new) == self.A_basis.num_modes:
-            self._A_n = jnp.asarray(new)
+    @UC_n.setter
+    def UC_n(self, new):
+        if len(new) == self.UC_basis.num_modes:
+            self._UC_n = jnp.asarray(new)
         else:
             raise ValueError(
-                f"A_n should have the same size as the basis, got {len(new)} for "
-                + f"basis with {self.A_basis.num_modes} modes"
+                f"UC_n should have the same size as the basis, got {len(new)} for "
+                + f"basis with {self.UC_basis.num_modes} modes"
             )
 
     @classmethod
@@ -172,8 +174,6 @@ class FourierUmbilicCurve(UmbilicCurve):
             closing on themselves.
         sym : bool
             Whether to enforce stellarator symmetry.
-        basis : {"rpz", "xyz"}
-            basis for input coordinates. Defaults to "rpz"
         name : str
             Name for this curve.
 
@@ -184,18 +184,18 @@ class FourierUmbilicCurve(UmbilicCurve):
 
         """
         phi = coords[:, 0]
-        A = coords[:, 1]
+        UC = coords[:, 1]
 
         grid = LinearGrid(zeta=phi, NFP=1, NFP_umbilic_factor=1, sym=sym)
         basis = FourierSeries(N=N, NFP=1, sym=sym)
         transform = Transform(grid, basis, build_pinv=True)
-        A_n = transform.fit(A)
+        UC_n = transform.fit(UC)
 
         return FourierUmbilicCurve(
-            A_n=A_n,
+            UC_n=UC_n,
             NFP=NFP,
             NFP_umbilic_factor=NFP_umbilic_factor,
-            modes_A=basis.modes[:, 2],
+            modes_UC=basis.modes[:, 2],
             sym=sym,
             name=name,
         )

@@ -265,6 +265,7 @@ class Bounce2D(Bounce):
         Bref=1.0,
         Lref=1.0,
         is_reshaped=False,
+        is_fourier=False,
         check=False,
         spline=True,
     ):
@@ -314,6 +315,9 @@ class Bounce2D(Bounce):
             compute bounce integrals one flux surface at a time, reducing memory usage
             To do so, set to true and provide only those axes of the reshaped data.
             Default is false.
+        is_fourier : bool
+            If true, then it is assumed that ``data`` holds Fourier transforms
+            as returned by ``Bounce2D.fourier``. Default is false.
         check : bool
             Flag for debugging. Must be false for JAX transformations.
         spline : bool
@@ -325,6 +329,7 @@ class Bounce2D(Bounce):
             at most ``Y_B*num_transit``.
 
         """
+        is_reshaped = is_reshaped or is_fourier
         assert grid.can_fft
         self._M = grid.num_theta
         self._N = grid.num_zeta
@@ -332,21 +337,9 @@ class Bounce2D(Bounce):
         self._alpha = alpha
         self._x, self._w = get_quadrature(quad, automorphism)
 
-        if is_reshaped:
-            B = data["|B|"]
-            B_sup_z = data["B^zeta"]
-        else:
-            B = Bounce2D.reshape_data(grid, data["|B|"])
-            B_sup_z = Bounce2D.reshape_data(grid, data["B^zeta"])
-
-        # spectral coefficients
         self._c = {
-            "|B|": Bounce2D.fourier(B / Bref),
-            # Strictly increasing zeta knots enforces dζ > 0.
-            # To retain dℓ = (|B|/B^ζ) dζ > 0 after fixing dζ > 0, we require
-            # B^ζ = B⋅∇ζ > 0. This is equivalent to changing the sign of ∇ζ
-            # or (∂ℓ/∂ζ)|ρ,a. Recall dζ = ∇ζ⋅dR ⇔ 1 = ∇ζ⋅(e_ζ|ρ,a).
-            "|B^zeta|": Bounce2D.fourier(jnp.abs(B_sup_z) * Lref / Bref),
+            "|B|": data["|B|"] / Bref,
+            "B^zeta": data["B^zeta"] * Lref / Bref,
             "T(z)": fourier_chebyshev(
                 theta,
                 data["iota"] if is_reshaped else grid.compress(data["iota"]),
@@ -354,6 +347,13 @@ class Bounce2D(Bounce):
                 num_transit,
             ),
         }
+        if not is_reshaped:
+            self._c["|B|"] = Bounce2D.reshape_data(grid, self._c["|B|"])
+            self._c["B^zeta"] = Bounce2D.reshape_data(grid, self._c["B^zeta"])
+        if not is_fourier:
+            self._c["|B|"] = Bounce2D.fourier(self._c["|B|"])
+            self._c["B^zeta"] = Bounce2D.fourier(self._c["B^zeta"])
+
         Y_B = setdefault(Y_B, theta.shape[-1] * 2)
         if spline:
             self._c["B(z)"], self._c["knots"] = cubic_spline(
@@ -530,7 +530,7 @@ class Bounce2D(Bounce):
         return z1, z2
 
     def _polish_points(self, points, pitch_inv):
-        # TODO: One application of Newton on Fourier series |B| - pitch_inv.
+        # TODO: One application of secant on Fourier series |B| - pitch_inv.
         raise NotImplementedError
 
     def check_points(self, points, pitch_inv, *, plot=True, **kwargs):
@@ -609,7 +609,7 @@ class Bounce2D(Bounce):
 
         Parameters
         ----------
-        integrand : callable
+        integrand : callable or list[callable]
             The composition operator on the set of functions in ``f`` that maps the
             functions in ``f`` to the integrand f(λ, ℓ) in ∫ f(λ, ℓ) dℓ. It should
             accept the arrays in ``f`` as arguments as well as the additional keyword
@@ -719,14 +719,20 @@ class Bounce2D(Bounce):
             domain1=(0, 2 * jnp.pi / self._NFP),
             axes=(-1, -2),
         )
-        B_sup_z = irfft2_non_uniform(
-            theta,
-            zeta,
-            self._c["|B^zeta|"][..., jnp.newaxis, :, :],
-            self._M,
-            self._N,
-            domain1=(0, 2 * jnp.pi / self._NFP),
-            axes=(-1, -2),
+        # Strictly increasing zeta knots enforces dζ > 0.
+        # To retain dℓ = |B|/(B⋅∇ζ) dζ > 0 after fixing dζ > 0, we require
+        # B⋅∇ζ > 0. This is equivalent to changing the sign of ∇ζ
+        # or (∂ℓ/∂ζ)|ρ,a. Recall dζ = ∇ζ⋅dR ⇔ 1 = ∇ζ⋅(e_ζ|ρ,a).
+        B_sup_z = jnp.abs(
+            irfft2_non_uniform(
+                theta,
+                zeta,
+                self._c["B^zeta"][..., jnp.newaxis, :, :],
+                self._M,
+                self._N,
+                domain1=(0, 2 * jnp.pi / self._NFP),
+                axes=(-1, -2),
+            )
         )
         result = [
             _swap_pl(
@@ -873,14 +879,16 @@ class Bounce2D(Bounce):
             bijection_from_disc(x, 0, 2 * jnp.pi), (self._c["T(z)"].X, w.size)
         ).ravel()
 
-        B_sup_z = irfft2_non_uniform(
-            theta,
-            zeta,
-            self._c["|B^zeta|"][..., jnp.newaxis, :, :],
-            self._M,
-            self._N,
-            domain1=(0, 2 * jnp.pi / self._NFP),
-            axes=(-1, -2),
+        B_sup_z = jnp.abs(
+            irfft2_non_uniform(
+                theta,
+                zeta,
+                self._c["B^zeta"][..., jnp.newaxis, :, :],
+                self._M,
+                self._N,
+                domain1=(0, 2 * jnp.pi / self._NFP),
+                axes=(-1, -2),
+            )
         ).reshape(*shape[:-1], self._c["T(z)"].X, w.size)
 
         # Gradient of change of variable from [−1, 1] → [0, 2π] is π.
@@ -1097,8 +1105,8 @@ class Bounce1D(Bounce):
         assert grid.is_meshgrid
         data = {
             # Strictly increasing zeta knots enforces dζ > 0.
-            # To retain dℓ = (|B|/B^ζ) dζ > 0 after fixing dζ > 0, we require
-            # B^ζ = B⋅∇ζ > 0. This is equivalent to changing the sign of ∇ζ
+            # To retain dℓ = |B|/(B⋅∇ζ) dζ > 0 after fixing dζ > 0, we require
+            # B⋅∇ζ > 0. This is equivalent to changing the sign of ∇ζ
             # or (∂ℓ/∂ζ)|ρ,a. Recall dζ = ∇ζ⋅dR ⇔ 1 = ∇ζ⋅(e_ζ|ρ,a).
             "|B^zeta|": jnp.abs(data["B^zeta"]) * Lref / Bref,
             "|B^zeta|_z|r,a": data["B^zeta_z|r,a"]

@@ -87,9 +87,7 @@ def _compute(fun, fun_data, data, theta, grid, num_pitch, simp=False):
     fun : callable
         Function to compute.
     fun_data : dict[str, jnp.ndarray]
-        Data to provide to ``fun``.
-        Names in ``Bounce2D.required_names`` will be overridden.
-        Reshaped automatically.
+        Data to provide to ``fun``. This dict will be modified.
     data : dict[str, jnp.ndarray]
         DESC data dict.
     theta : jnp.ndarray
@@ -100,21 +98,19 @@ def _compute(fun, fun_data, data, theta, grid, num_pitch, simp=False):
         Whether to use an open Simpson rule instead of uniform weights.
 
     """
-    fun_data = {
-        name: Bounce2D.fourier(Bounce2D.reshape_data(grid, fun_data[name]))
-        for name in fun_data
-    }
     for name in Bounce2D.required_names:
-        fun_data[name] = Bounce2D.reshape_data(grid, data[name])
-    # These already have expected shape with num rho along first axis.
+        fun_data[name] = data[name]
+    fun_data.pop("iota", None)
+    for name in fun_data:
+        fun_data[name] = Bounce2D.fourier(Bounce2D.reshape_data(grid, fun_data[name]))
+    fun_data["iota"] = grid.compress(data["iota"])
+    fun_data["theta"] = theta
     fun_data["pitch_inv"], fun_data["pitch_inv weight"] = Bounce2D.get_pitch_inv_quad(
         grid.compress(data["min_tz |B|"]),
         grid.compress(data["max_tz |B|"]),
         num_pitch,
         simp=simp,
     )
-    fun_data["iota"] = grid.compress(data["iota"])
-    fun_data["theta"] = theta
     return grid.expand(imap(fun, fun_data))
 
 
@@ -248,7 +244,7 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
             num_transit,
             quad=quad,
             automorphism=None,
-            is_reshaped=True,
+            is_fourier=True,
             spline=spline,
         )
 
@@ -418,7 +414,7 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
             num_transit,
             quad=quad,
             automorphism=None,
-            is_reshaped=True,
+            is_fourier=True,
             spline=spline,
         )
 
@@ -576,7 +572,7 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
             num_transit,
             quad=quad,
             automorphism=None,
-            is_reshaped=True,
+            is_fourier=True,
             spline=spline,
         )
 

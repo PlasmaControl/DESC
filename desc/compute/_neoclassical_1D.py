@@ -46,9 +46,7 @@ def _compute(fun, fun_data, data, grid, num_pitch, simp=False, reduce=True):
     fun : callable
         Function to compute.
     fun_data : dict[str, jnp.ndarray]
-        Data to provide to ``fun``.
-        Names in ``Bounce1D.required_names`` will be overridden.
-        Reshaped automatically.
+        Data to provide to ``fun``. This dict will be modified.
     data : dict[str, jnp.ndarray]
         DESC data dict.
     simp : bool
@@ -73,7 +71,8 @@ def _compute(fun, fun_data, data, grid, num_pitch, simp=False, reduce=True):
 
     for name in Bounce1D.required_names:
         fun_data[name] = data[name]
-    fun_data = {name: Bounce1D.reshape_data(grid, fun_data[name]) for name in fun_data}
+    for name in fun_data:
+        fun_data[name] = Bounce1D.reshape_data(grid, fun_data[name])
     out = imap(foreach_rho, fun_data)
     return grid.expand(_alpha_mean(out)) if reduce else out
 

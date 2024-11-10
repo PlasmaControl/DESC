@@ -304,12 +304,12 @@ def _check_bounce_points(z1, z2, pitch_inv, knots, B, plot=True, **kwargs):
 def _bounce_quadrature(
     x,
     w,
-    integrand,
-    points,
-    pitch_inv,
-    f,
-    data,
     knots,
+    integrand,
+    pitch_inv,
+    data,
+    names,
+    points,
     *,
     method="cubic",
     batch=True,
@@ -326,31 +326,33 @@ def _bounce_quadrature(
     w : jnp.ndarray
         Shape (num quad, ).
         Quadrature weights.
-    integrand : callable
-        The composition operator on the set of functions in ``f`` that maps the
-        functions in ``f`` to the integrand f(λ, ℓ) in ∫ f(λ, ℓ) dℓ. It should
-        accept the arrays in ``f`` as arguments as well as the additional keyword
-        arguments: ``B`` and ``pitch``. A quadrature will be performed to
-        approximate the bounce integral of ``integrand(*f,B=B,pitch=pitch)``.
-    points : jnp.ndarray
-        Shape (..., num pitch, num well).
-        ζ coordinates of bounce points. The points are ordered and grouped such
-        that the straight line path between ``z1`` and ``z2`` resides in the
-        epigraph of |B|.
-    pitch_inv : jnp.ndarray
-        Shape (..., num pitch).
-        1/λ values to compute the bounce integrals.
-    f : list[jnp.ndarray]
-        Shape (..., N).
-        Real scalar-valued functions evaluated on the ``knots``.
-        These functions should be arguments to the callable ``integrand``.
-    data : dict[str, jnp.ndarray]
-        Shape (..., 1, N).
-        Required data evaluated on ``grid`` and reshaped with ``Bounce1D.reshape_data``.
-        Must include names in ``Bounce1D.required_names``.
     knots : jnp.ndarray
         Shape (N, ).
         Unique ζ coordinates where the arrays in ``data`` and ``f`` were evaluated.
+    integrand : callable
+        The composition operator on the set of functions in ``data`` that
+        maps that determines ``f`` in ∫ f(λ, ℓ) dℓ. It should accept a dictionary
+        which stores the interpolated data and the keyword argument ``pitch``.
+    pitch_inv : jnp.ndarray
+        Shape (num alpha, num rho, num pitch).
+        1/λ values to compute the bounce integrals. 1/λ(α,ρ) is specified by
+        ``pitch_inv[α,ρ]`` where in the latter the labels are interpreted
+        as the indices that correspond to that field line.
+    data : dict[str, jnp.ndarray]
+        Shape (num alpha, num rho, num zeta).
+        Real scalar-valued periodic functions in (θ, ζ) ∈ [0, 2π) × [0, 2π/NFP)
+        evaluated on the ``grid`` supplied to construct this object.
+        Use the method ``Bounce1D.reshape_data`` to reshape the data into the
+        expected shape. Do not include the keys ``|B|`` or ``|B^zeta|``,
+        which will be automatically added.
+    names : str or list[str]
+        Names in ``data`` to interpolate. Default is all keys in ``data``.
+    points : tuple[jnp.ndarray]
+        Shape (num alpha, num rho, num pitch, num well).
+        Optional, output of method ``self.points``.
+        Tuple of length two (z1, z2) that stores ζ coordinates of bounce points.
+        The points are ordered and grouped such that the straight line path
+        between ``z1`` and ``z2`` resides in the epigraph of |B|.
     method : str
         Method of interpolation.
         See https://interpax.readthedocs.io/en/latest/_api/interpax.interp1d.html.
@@ -376,19 +378,17 @@ def _bounce_quadrature(
     z1, z2 = points
     errorif(z1.ndim < 2 or z1.shape != z2.shape)
     pitch_inv = jnp.atleast_1d(pitch_inv)
-    if not isinstance(f, (list, tuple)):
-        f = [f]
 
     # Integrate and complete the change of variable.
     if batch:
         result = _interpolate_and_integrate(
             w=w,
             Q=bijection_from_disc(x, z1[..., jnp.newaxis], z2[..., jnp.newaxis]),
+            knots=knots,
             integrand=integrand,
             pitch_inv=pitch_inv,
-            f=f,
             data=data,
-            knots=knots,
+            names=names,
             method=method,
             check=check,
             plot=plot,
@@ -401,11 +401,11 @@ def _bounce_quadrature(
             return None, _interpolate_and_integrate(
                 w=w,
                 Q=bijection_from_disc(x, z1[..., jnp.newaxis], z2[..., jnp.newaxis]),
+                knots=knots,
                 integrand=integrand,
                 pitch_inv=pitch_inv,
-                f=f,
                 data=data,
-                knots=knots,
+                names=names,
                 method=method,
                 check=False,
                 plot=False,
@@ -425,11 +425,12 @@ def _bounce_quadrature(
 def _interpolate_and_integrate(
     w,
     Q,
+    knots,
     integrand,
     pitch_inv,
-    f,
     data,
-    knots,
+    names,
+    *,
     method,
     check,
     plot,
@@ -463,21 +464,41 @@ def _interpolate_and_integrate(
     b_sup_z = interp1d_Hermite_vec(
         Q,
         knots,
-        data["|B^zeta|"] / data["|B|"],
-        data["|B^zeta|_z|r,a"] / data["|B|"]
-        - data["|B^zeta|"] * data["|B|_z|r,a"] / data["|B|"] ** 2,
+        (data["|B^zeta|"] / data["|B|"])[..., jnp.newaxis, :],
+        (
+            data["|B^zeta|_z|r,a"] / data["|B|"]
+            - data["|B^zeta|"] * data["|B|_z|r,a"] / data["|B|"] ** 2
+        )[..., jnp.newaxis, :],
     )
-    B = interp1d_Hermite_vec(Q, knots, data["|B|"], data["|B|_z|r,a"])
+    B = interp1d_Hermite_vec(
+        Q,
+        knots,
+        data["|B|"][..., jnp.newaxis, :],
+        data["|B|_z|r,a"][..., jnp.newaxis, :],
+    )
     # Spline each function separately so that operations in the integrand
     # that do not preserve smoothness can be captured.
-    f = [interp1d_vec(Q, knots, f_i[..., jnp.newaxis, :], method=method) for f_i in f]
+    data = {
+        name: interp1d_vec(Q, knots, data[name][..., jnp.newaxis, :], method=method)
+        for name in names
+    }
+    data["|B|"] = B
     result = (
-        (integrand(*f, B=B, pitch=1 / pitch_inv[..., jnp.newaxis]) / b_sup_z)
+        (integrand(data, pitch=1 / pitch_inv[..., jnp.newaxis]) / b_sup_z)
         .reshape(shape)
         .dot(w)
     )
+
     if check:
-        _check_interp(shape, Q, b_sup_z, B, result, f, plot)
+        _check_interp(
+            shape,
+            Q,
+            b_sup_z,
+            B,
+            result,
+            [data[name] for name in names],
+            plot=plot,
+        )
 
     return result
 

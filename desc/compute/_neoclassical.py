@@ -157,19 +157,19 @@ def _effective_ripple(params, transforms, profiles, data, **kwargs):
     return data
 
 
-def _dH(grad_rho_norm_kappa_g, B, pitch, zeta):
+def _dH(data, pitch):
     """Integrand of Nemov eq. 30 with |∂ψ/∂ρ| (λB₀)¹ᐧ⁵ removed."""
     return (
-        jnp.sqrt(jnp.abs(1 - pitch * B))
-        * (4 / (pitch * B) - 1)
-        * grad_rho_norm_kappa_g
-        / B
+        jnp.sqrt(jnp.abs(1 - pitch * data["|B|"]))
+        * (4 / (pitch * data["|B|"]) - 1)
+        * data["|grad(rho)|*kappa_g"]
+        / data["|B|"]
     )
 
 
-def _dI(B, pitch, zeta):
+def _dI(data, pitch):
     """Integrand of Nemov eq. 31."""
-    return jnp.sqrt(jnp.abs(1 - pitch * B)) / B
+    return jnp.sqrt(jnp.abs(1 - pitch * data["|B|"])) / data["|B|"]
 
 
 @register_compute_fun(
@@ -252,7 +252,8 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
             H, I = bounce.integrate(
                 [_dH, _dI],
                 pitch_inv,
-                [[data["|grad(rho)|*kappa_g"]], []],
+                data,
+                "|grad(rho)|*kappa_g",
                 bounce.points(pitch_inv, num_well=num_well),
                 is_fourier=True,
             )
@@ -301,26 +302,35 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
 # (|∇ρ| ‖e_α|ρ,ϕ‖)ᵢ ∫ dℓ [ (1 − λ|B|/2)/√(1 − λ|B|) ∂|B|/∂ρ + √(1 − λ|B|) K ] / |B|
 
 
-def _v_tau(B, pitch, zeta):
+def _v_tau(data, pitch):
     # Note v τ = 4λ⁻²B₀⁻¹ ∂I/∂((λB₀)⁻¹) where v is the particle velocity,
     # τ is the bounce time, and I is defined in Nemov eq. 36.
-    return safediv(2.0, jnp.sqrt(jnp.abs(1 - pitch * B)))
+    return safediv(2.0, jnp.sqrt(jnp.abs(1 - pitch * data["|B|"])))
 
 
-def _f1(grad_psi_norm_kappa_g, B, pitch, zeta):
+def _f1(data, pitch):
     return (
-        safediv(1 - 0.5 * pitch * B, jnp.sqrt(jnp.abs(1 - pitch * B)))
-        * grad_psi_norm_kappa_g
-        / B
+        safediv(
+            1 - 0.5 * pitch * data["|B|"],
+            jnp.sqrt(jnp.abs(1 - pitch * data["|B|"])),
+        )
+        * data["|grad(psi)|*kappa_g"]
+        / data["|B|"]
     )
 
 
-def _f2(B_r, B, pitch, zeta):
-    return safediv(1 - 0.5 * pitch * B, jnp.sqrt(jnp.abs(1 - pitch * B))) * B_r / B
+def _f2(data, pitch):
+    return (
+        safediv(
+            1 - 0.5 * pitch * data["|B|"], jnp.sqrt(jnp.abs(1 - pitch * data["|B|"]))
+        )
+        * data["|B|_r|v,p"]
+        / data["|B|"]
+    )
 
 
-def _f3(K, B, pitch, zeta):
-    return jnp.sqrt(jnp.abs(1 - pitch * B)) * K / B
+def _f3(data, pitch):
+    return jnp.sqrt(jnp.abs(1 - pitch * data["|B|"])) * data["K"] / data["|B|"]
 
 
 @register_compute_fun(
@@ -423,8 +433,9 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
             v_tau, f1, f2 = bounce.integrate(
                 [_v_tau, _f1, _f2],
                 pitch_inv,
-                [[], [data["|grad(psi)|*kappa_g"]], [data["|B|_r|v,p"]]],
-                points=points,
+                data,
+                ["|grad(psi)|*kappa_g", "|B|_r|v,p"],
+                points,
                 is_fourier=True,
             )
             gamma_c = jnp.arctan(
@@ -435,8 +446,9 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
                         + bounce.integrate(
                             _f3,
                             pitch_inv,
-                            data["K"],
-                            points=points,
+                            data,
+                            "K",
+                            points,
                             quad=quad2,
                             is_fourier=True,
                         )
@@ -484,14 +496,18 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
     return data
 
 
-def _cvdrift0(cvdrift0, B, pitch, zeta):
-    return safediv(cvdrift0 * (1 - 0.5 * pitch * B), jnp.sqrt(jnp.abs(1 - pitch * B)))
-
-
-def _gbdrift(periodic_gbdrift, secular_gbdrift_over_phi, B, pitch, zeta):
+def _cvdrift0(data, pitch):
     return safediv(
-        (periodic_gbdrift + secular_gbdrift_over_phi * zeta) * (1 - 0.5 * pitch * B),
-        jnp.sqrt(jnp.abs(1 - pitch * B)),
+        data["cvdrift0"] * (1 - 0.5 * pitch * data["|B|"]),
+        jnp.sqrt(jnp.abs(1 - pitch * data["|B|"])),
+    )
+
+
+def _gbdrift(data, pitch):
+    return safediv(
+        (data["periodic(gbdrift)"] + data["secular(gbdrift)/phi"] * data["zeta"])
+        * (1 - 0.5 * pitch * data["|B|"]),
+        jnp.sqrt(jnp.abs(1 - pitch * data["|B|"])),
     )
 
 
@@ -580,12 +596,9 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
             v_tau, cvdrift0, gbdrift = bounce.integrate(
                 [_v_tau, _cvdrift0, _gbdrift],
                 pitch_inv,
-                [
-                    [],
-                    [data["cvdrift0"]],
-                    [data["periodic(gbdrift)"], data["secular(gbdrift)/phi"]],
-                ],
-                points=bounce.points(pitch_inv, num_well=num_well),
+                data,
+                ["cvdrift0", "periodic(gbdrift)", "secular(gbdrift)/phi"],
+                bounce.points(pitch_inv, num_well=num_well),
                 is_fourier=True,
             )
             gamma_c = jnp.arctan(safediv(cvdrift0, gbdrift))

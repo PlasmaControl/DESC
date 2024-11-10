@@ -15,7 +15,7 @@ from ..integrals._quad_utils import (
 )
 from ..integrals.bounce_integral import Bounce1D
 from ..utils import cross, dot, safediv
-from ._neoclassical import _bounce_doc
+from ._neoclassical import _bounce_doc, _cvdrift0, _dH, _dI, _f1, _f2, _f3, _v_tau
 from .data_index import register_compute_fun
 
 _bounce1D_doc = {
@@ -143,21 +143,6 @@ def _fieldline_length_over_volume(data, transforms, profiles, **kwargs):
     return data
 
 
-def _dH(grad_rho_norm_kappa_g, B, pitch):
-    """Integrand of Nemov eq. 30 with |∂ψ/∂ρ| (λB₀)¹ᐧ⁵ removed."""
-    return (
-        jnp.sqrt(jnp.abs(1 - pitch * B))
-        * (4 / (pitch * B) - 1)
-        * grad_rho_norm_kappa_g
-        / B
-    )
-
-
-def _dI(B, pitch):
-    """Integrand of Nemov eq. 31."""
-    return jnp.sqrt(jnp.abs(1 - pitch * B)) / B
-
-
 @register_compute_fun(
     name="deprecated(effective ripple 3/2)",
     label=(
@@ -216,8 +201,9 @@ def _epsilon_32_1D(params, transforms, profiles, data, **kwargs):
         H = bounce.integrate(
             _dH,
             data["pitch_inv"],
-            data["|grad(rho)|*kappa_g"],
-            points=points,
+            data,
+            "|grad(rho)|*kappa_g",
+            points,
             batch=batch,
         )
         I = bounce.integrate(_dI, data["pitch_inv"], points=points, batch=batch)
@@ -265,26 +251,6 @@ def _effective_ripple_1D(params, transforms, profiles, data, **kwargs):
         2 / 3
     )
     return data
-
-
-def _v_tau(B, pitch):
-    return safediv(2.0, jnp.sqrt(jnp.abs(1 - pitch * B)))
-
-
-def _f1(grad_psi_norm_kappa_g, B, pitch):
-    return (
-        safediv(1 - 0.5 * pitch * B, jnp.sqrt(jnp.abs(1 - pitch * B)))
-        * grad_psi_norm_kappa_g
-        / B
-    )
-
-
-def _f2(B_r, B, pitch):
-    return safediv(1 - 0.5 * pitch * B, jnp.sqrt(jnp.abs(1 - pitch * B))) * B_r / B
-
-
-def _f3(K, B, pitch):
-    return jnp.sqrt(jnp.abs(1 - pitch * B)) * K / B
 
 
 @register_compute_fun(
@@ -359,23 +325,26 @@ def _Gamma_c_1D(params, transforms, profiles, data, **kwargs):
                 bounce.integrate(
                     _f1,
                     data["pitch_inv"],
-                    data["|grad(psi)|*kappa_g"],
-                    points=points,
+                    data,
+                    "|grad(psi)|*kappa_g",
+                    points,
                     batch=batch,
                 ),
                 (
                     bounce.integrate(
                         _f2,
                         data["pitch_inv"],
-                        data["|B|_r|v,p"],
-                        points=points,
+                        data,
+                        "|B|_r|v,p",
+                        points,
                         batch=batch,
                     )
                     + bounce.integrate(
                         _f3,
                         data["pitch_inv"],
-                        data["K"],
-                        points=points,
+                        data,
+                        "K",
+                        points,
                         batch=batch,
                         quad=quad2,
                     )
@@ -417,8 +386,11 @@ def _Gamma_c_1D(params, transforms, profiles, data, **kwargs):
     return data
 
 
-def _drift(f, B, pitch):
-    return safediv(f * (1 - 0.5 * pitch * B), jnp.sqrt(jnp.abs(1 - pitch * B)))
+def _gbdrift(data, pitch):
+    return safediv(
+        data["gbdrift"] * (1 - 0.5 * pitch * data["|B|"]),
+        jnp.sqrt(jnp.abs(1 - pitch * data["|B|"])),
+    )
 
 
 @register_compute_fun(
@@ -470,17 +442,19 @@ def _Gamma_c_Velasco_1D(params, transforms, profiles, data, **kwargs):
         gamma_c = jnp.arctan(
             safediv(
                 bounce.integrate(
-                    _drift,
+                    _cvdrift0,
                     data["pitch_inv"],
-                    data["cvdrift0"],
-                    points=points,
+                    data,
+                    "cvdrift0",
+                    points,
                     batch=batch,
                 ),
                 bounce.integrate(
-                    _drift,
+                    _gbdrift,
                     data["pitch_inv"],
-                    data["gbdrift"],
-                    points=points,
+                    data,
+                    "gbdrift",
+                    points,
                     batch=batch,
                 ),
             )

@@ -2228,20 +2228,18 @@ def test_objective_target_bounds():
 def test_softmax_and_softmin():
     """Test softmax and softmin function."""
     arr = np.arange(-17, 17, 5)
-    # expect this to not be equal to the max but rather be more
-    # since softmax is a conservative estimate of the max
+    # expect this to not be equal to the max but approximately so
     sftmax = softmax(arr, alpha=1)
-    assert sftmax >= np.max(arr)
+    np.testing.assert_allclose(sftmax, np.max(arr), rtol=1e-2)
 
     # expect this to be equal to the max
     # as alpha -> infinity, softmax -> max
     sftmax = softmax(arr, alpha=100)
     np.testing.assert_almost_equal(sftmax, np.max(arr))
 
-    # expect this to not be equal to the min but rather be less
-    # since softmin is a conservative estimate of the min
+    # expect this to not be equal to the min but approximately so
     sftmin = softmin(arr, alpha=1)
-    assert sftmin <= np.min(arr)
+    np.testing.assert_allclose(sftmin, np.min(arr), rtol=1e-2)
 
     # expect this to be equal to the min
     # as alpha -> infinity, softmin -> min

@@ -76,7 +76,7 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
     from jax.numpy.fft import irfft, rfft, rfft2
     from jax.scipy.fft import dct, idct
     from jax.scipy.linalg import block_diag, cho_factor, cho_solve, qr, solve_triangular
-    from jax.scipy.special import gammaln, logsumexp
+    from jax.scipy.special import gammaln
     from jax.tree_util import (
         register_pytree_node,
         tree_flatten,
@@ -445,7 +445,7 @@ else:  # pragma: no cover
         qr,
         solve_triangular,
     )
-    from scipy.special import gammaln, logsumexp  # noqa: F401
+    from scipy.special import gammaln  # noqa: F401
     from scipy.special import softmax as softargmax  # noqa: F401
 
     trapezoid = np.trapezoid if hasattr(np, "trapezoid") else np.trapz

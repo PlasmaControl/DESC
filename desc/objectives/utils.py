@@ -5,7 +5,7 @@ Functions in this module should not depend on any other submodules in desc.objec
 
 import numpy as np
 
-from desc.backend import cond, jit, jnp, logsumexp, put
+from desc.backend import jit, jnp, put, softargmax
 from desc.io import IOAble
 from desc.utils import Index, errorif, flatten_list, svd_inv_null, unique_list, warnif
 
@@ -288,11 +288,6 @@ def softmax(arr, alpha):
     Inspired by https://www.johndcook.com/blog/2010/01/13/soft-maximum/
     and https://www.johndcook.com/blog/2010/01/20/how-to-compute-the-soft-maximum/
 
-    Will automatically multiply array values by 2 / min_val if the min_val of
-    the array is <1. This is to avoid inaccuracies that arise when values <1
-    are present in the softmax, which can cause inaccurate maxes or even incorrect
-    signs of the softmax versus the actual max.
-
     Parameters
     ----------
     arr : ndarray
@@ -309,18 +304,7 @@ def softmax(arr, alpha):
 
     """
     arr_times_alpha = alpha * arr
-    min_val = jnp.min(jnp.abs(arr_times_alpha)) + 1e-4  # buffer value in case min is 0
-    return cond(
-        jnp.any(min_val < 1),
-        lambda arr_times_alpha: logsumexp(
-            arr_times_alpha / min_val * 2
-        )  # adjust to make vals>1
-        / alpha
-        * min_val
-        / 2,
-        lambda arr_times_alpha: logsumexp(arr_times_alpha) / alpha,
-        arr_times_alpha,
-    )
+    return softargmax(arr_times_alpha).dot(arr)
 
 
 def softmin(arr, alpha):

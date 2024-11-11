@@ -1212,8 +1212,10 @@ class FourierPlanarFiniteBuildCoil(_FiniteBuildCoil, FourierPlanarCoil):
         ----------
         xsection_grid : LinearGrid, int or None
             Grid used to evaluate the field on the coil cross section. If an integer, uses that many equally spaced points in each dimension of the cross section.
+            If provided, must be a 2D grid with L and M dimensions corresponding to the cross section spacing desired.
         centerline_grid : LinearGrid or int, optional
             Grid used to evaluate the coil centerline. If an integer, uses that many equally spaced points.
+            If provided, must be a 1D grid with N dimension corresponding to the centerline spacing desired.
         params : dict, optional
             Parameters to pass to the coil object.
 

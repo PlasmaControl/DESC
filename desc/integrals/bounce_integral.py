@@ -666,7 +666,6 @@ class Bounce2D(Bounce):
 
         if points is None:
             points = self.points(pitch_inv)
-
         # We move num pitch axis to front so that the num rho axis broadcasts
         # with the spectral coefficients (whose first axis is also num rho),
         # assuming this axis exists.
@@ -757,16 +756,14 @@ class Bounce2D(Bounce):
                     axes=(-1, -2),
                 )
 
+        pitch = 1 / pitch_inv[..., jnp.newaxis]
+        cov = grad_bijection_from_disc(z1, z2)
         result = [
             _swap_pl(
-                (
-                    f(_data, pitch=1 / pitch_inv[..., jnp.newaxis])
-                    * _data["|B|"]
-                    / _data["|B^zeta|"]
-                )
+                (f(_data, pitch=pitch) * _data["|B|"] / _data["|B^zeta|"])
                 .reshape(shape)
                 .dot(w)
-                * grad_bijection_from_disc(z1, z2)
+                * cov
             )
             for f in integrand
         ]
@@ -1255,7 +1252,7 @@ class Bounce1D(Bounce):
 
         Parameters
         ----------
-        integrand : callable
+        integrand : callable or list[callable]
             The composition operator on the set of functions in ``data`` that
             maps that determines ``f`` in ∫ f(λ, ℓ) dℓ. It should accept a dictionary
             which stores the interpolated data and the keyword argument ``pitch``.
@@ -1302,6 +1299,8 @@ class Bounce1D(Bounce):
             flux surface, and pitch value.
 
         """
+        if not isinstance(integrand, (list, tuple)):
+            integrand = [integrand]
         data = setdefault(data, {})
         if names is None:
             names = data.keys()
@@ -1310,7 +1309,7 @@ class Bounce1D(Bounce):
 
         if points is None:
             points = self.points(pitch_inv)
-        return _bounce_quadrature(
+        result = _bounce_quadrature(
             x=self._x if quad is None else quad[0],
             w=self._w if quad is None else quad[1],
             knots=self._zeta,
@@ -1324,6 +1323,7 @@ class Bounce1D(Bounce):
             check=check,
             plot=plot,
         )
+        return result[0] if len(result) == 1 else result
 
     def interp_to_argmin(self, f, points, *, method="cubic"):
         """Interpolates ``f`` to the deepest point pⱼ in magnetic well j.

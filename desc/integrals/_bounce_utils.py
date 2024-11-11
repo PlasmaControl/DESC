@@ -329,7 +329,7 @@ def _bounce_quadrature(
     knots : jnp.ndarray
         Shape (N, ).
         Unique ζ coordinates where the arrays in ``data`` and ``f`` were evaluated.
-    integrand : callable
+    integrand : callable or list[callable]
         The composition operator on the set of functions in ``data`` that
         maps that determines ``f`` in ∫ f(λ, ℓ) dℓ. It should accept a dictionary
         which stores the interpolated data and the keyword argument ``pitch``.
@@ -343,8 +343,7 @@ def _bounce_quadrature(
         Real scalar-valued periodic functions in (θ, ζ) ∈ [0, 2π) × [0, 2π/NFP)
         evaluated on the ``grid`` supplied to construct this object.
         Use the method ``Bounce1D.reshape_data`` to reshape the data into the
-        expected shape. Do not include the keys ``|B|`` or ``|B^zeta|``,
-        which will be automatically added.
+        expected shape.
     names : str or list[str]
         Names in ``data`` to interpolate. Default is all keys in ``data``.
     points : tuple[jnp.ndarray]
@@ -382,85 +381,70 @@ def _bounce_quadrature(
     # Integrate and complete the change of variable.
     if batch:
         result = _interpolate_and_integrate(
+            batch=True,
+            x=x,
             w=w,
-            Q=bijection_from_disc(x, z1[..., jnp.newaxis], z2[..., jnp.newaxis]),
             knots=knots,
             integrand=integrand,
             pitch_inv=pitch_inv,
             data=data,
             names=names,
+            points=points,
             method=method,
             check=check,
             plot=plot,
         )
     else:
 
-        def loop(z):  # over num well axis
-            z1, z2 = z
+        def loop(points):  # over num well axis
             # Need to return tuple because input was tuple; artifact of JAX map.
             return None, _interpolate_and_integrate(
+                batch=False,
+                x=x,
                 w=w,
-                Q=bijection_from_disc(x, z1[..., jnp.newaxis], z2[..., jnp.newaxis]),
                 knots=knots,
                 integrand=integrand,
                 pitch_inv=pitch_inv,
                 data=data,
                 names=names,
+                points=points,
                 method=method,
                 check=False,
                 plot=False,
-                batch=False,
             )
 
-        result = jnp.moveaxis(
-            # TODO: Use batch_size arg of imap after increasing JAX version requirement.
-            imap(loop, (jnp.moveaxis(z1, -1, 0), jnp.moveaxis(z2, -1, 0)))[1],
-            source=0,
-            destination=-1,
-        )
+        # TODO: Use batch_size arg of imap after increasing JAX version requirement.
+        result = imap(loop, (jnp.moveaxis(z1, -1, 0), jnp.moveaxis(z2, -1, 0)))[1]
+        result = [jnp.moveaxis(r, source=0, destination=-1) for r in result]
 
-    return result * grad_bijection_from_disc(z1, z2)
+    return result
 
 
 def _interpolate_and_integrate(
+    batch,
+    x,
     w,
-    Q,
     knots,
     integrand,
     pitch_inv,
     data,
     names,
+    points,
     *,
-    method,
-    check,
-    plot,
-    batch=True,
+    method="cubic",
+    check=False,
+    plot=False,
 ):
-    """Interpolate given functions to points ``Q`` and perform quadrature.
-
-    Parameters
-    ----------
-    w : jnp.ndarray
-        Shape (num quad, ).
-        Quadrature weights.
-    Q : jnp.ndarray
-        Shape (..., num pitch, num well, num quad).
-        Quadrature points in ζ coordinates.
-
-    Returns
-    -------
-    result : jnp.ndarray
-        Shape (..., num pitch, num well).
-        Quadrature result.
-
-    """
+    z1, z2 = points
+    # shape (..., num pitch, num well, num quad)
+    Q = bijection_from_disc(x, z1[..., jnp.newaxis], z2[..., jnp.newaxis])
     assert w.ndim == 1 and Q.shape[-1] == w.size
     assert Q.shape[-3 + (not batch)] == pitch_inv.shape[-1]
     assert data["|B|"].shape[-1] == knots.size
-
     shape = Q.shape
     if batch:
         Q = flatten_matrix(Q)
+
     b_sup_z = interp1d_Hermite_vec(
         Q,
         knots,
@@ -483,19 +467,19 @@ def _interpolate_and_integrate(
         for name in names
     }
     data["|B|"] = B
-    result = (
-        (integrand(data, pitch=1 / pitch_inv[..., jnp.newaxis]) / b_sup_z)
-        .reshape(shape)
-        .dot(w)
-    )
+    pitch = 1 / pitch_inv[..., jnp.newaxis]
+    cov = grad_bijection_from_disc(z1, z2)
+    result = [
+        (f(data, pitch=pitch) / b_sup_z).reshape(shape).dot(w) * cov for f in integrand
+    ]
 
     if check:
         _check_interp(
             shape,
             Q,
             b_sup_z,
-            B,
-            result,
+            data["|B|"],
+            result[0],
             [data[name] for name in names],
             plot=plot,
         )

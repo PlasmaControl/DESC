@@ -197,16 +197,14 @@ def _epsilon_32_1D(params, transforms, profiles, data, **kwargs):
         # Nemov's ∑ⱼ Hⱼ²/Iⱼ = (∂ψ/∂ρ)² (λB₀)³ ``(H**2 / I).sum(axis=-1)``.
         # (λB₀)³ d(λB₀)⁻¹ = B₀² λ³ d(λ⁻¹) = -B₀² λ dλ.
         bounce = Bounce1D(grid, data, quad, automorphism=None, is_reshaped=True)
-        points = bounce.points(data["pitch_inv"], num_well=num_well)
-        H = bounce.integrate(
-            _dH,
+        H, I = bounce.integrate(
+            [_dH, _dI],
             data["pitch_inv"],
             data,
             "|grad(rho)|*kappa_g",
-            points,
+            bounce.points(data["pitch_inv"], num_well=num_well),
             batch=batch,
         )
-        I = bounce.integrate(_dI, data["pitch_inv"], points=points, batch=batch)
         return jnp.sum(
             safediv(H**2, I).sum(axis=-1)
             * data["pitch_inv weight"]
@@ -319,26 +317,19 @@ def _Gamma_c_1D(params, transforms, profiles, data, **kwargs):
         """∫ dλ ∑ⱼ [v τ γ_c²]ⱼ."""
         bounce = Bounce1D(grid, data, quad, automorphism=None, is_reshaped=True)
         points = bounce.points(data["pitch_inv"], num_well=num_well)
-        v_tau = bounce.integrate(_v_tau, data["pitch_inv"], points=points, batch=batch)
+        v_tau, f1, f2 = bounce.integrate(
+            [_v_tau, _f1, _f2],
+            data["pitch_inv"],
+            data,
+            ["|grad(psi)|*kappa_g", "|B|_r|v,p"],
+            points,
+            batch=batch,
+        )
         gamma_c = jnp.arctan(
             safediv(
-                bounce.integrate(
-                    _f1,
-                    data["pitch_inv"],
-                    data,
-                    "|grad(psi)|*kappa_g",
-                    points,
-                    batch=batch,
-                ),
+                f1,
                 (
-                    bounce.integrate(
-                        _f2,
-                        data["pitch_inv"],
-                        data,
-                        "|B|_r|v,p",
-                        points,
-                        batch=batch,
-                    )
+                    f2
                     + bounce.integrate(
                         _f3,
                         data["pitch_inv"],
@@ -438,27 +429,15 @@ def _Gamma_c_Velasco_1D(params, transforms, profiles, data, **kwargs):
         """∫ dλ ∑ⱼ [v τ γ_c²]ⱼ."""
         bounce = Bounce1D(grid, data, quad, automorphism=None, is_reshaped=True)
         points = bounce.points(data["pitch_inv"], num_well=num_well)
-        v_tau = bounce.integrate(_v_tau, data["pitch_inv"], points=points, batch=batch)
-        gamma_c = jnp.arctan(
-            safediv(
-                bounce.integrate(
-                    _cvdrift0,
-                    data["pitch_inv"],
-                    data,
-                    "cvdrift0",
-                    points,
-                    batch=batch,
-                ),
-                bounce.integrate(
-                    _gbdrift,
-                    data["pitch_inv"],
-                    data,
-                    "gbdrift",
-                    points,
-                    batch=batch,
-                ),
-            )
+        v_tau, cvdrift0, gbdrift = bounce.integrate(
+            [_v_tau, _cvdrift0, _gbdrift],
+            data["pitch_inv"],
+            data,
+            ["cvdrift0", "gbdrift"],
+            points,
+            batch=batch,
         )
+        gamma_c = jnp.arctan(safediv(cvdrift0, gbdrift))
         return jnp.sum(
             jnp.sum(v_tau * gamma_c**2, axis=-1)
             * data["pitch_inv weight"]

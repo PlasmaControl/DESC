@@ -149,8 +149,8 @@ def finite_build_regularization_rect(a, b):
     """
 
     k = (
-        -(a ^ 4 - 6 * a ^ 2 * b ^ 2 + b ^ 4)
-        / (6 * a ^ 2 * b ^ 2)
+        -(a ** 4 - 6 * a ** 2 * b ** 2 + b ** 4)
+        / (6 * a ** 2 * b ** 2)
         * jnp.log(a / b + b / a)
     )
     +b * b / (6 * a * a) * jnp.log(b / a)
@@ -1206,12 +1206,32 @@ class FourierPlanarFiniteBuildCoil(_FiniteBuildCoil, FourierPlanarCoil):
         )
 
     def compute_self_field(self, xsection_grid, centerline_grid=None, params=None):
+        """Compute the magnetic field from the coil on the coil itself, with a rectangular cross section.
+
+        Parameters
+        ----------
+        xsection_grid : LinearGrid, int or None
+            Grid used to evaluate the field on the coil cross section. If an integer, uses that many equally spaced points in each dimension of the cross section.
+        centerline_grid : LinearGrid or int, optional
+            Grid used to evaluate the coil centerline. If an integer, uses that many equally spaced points.
+        params : dict, optional
+            Parameters to pass to the coil object.
+
+        Returns
+        -------
+        field : ndarray, shape(n,3)
+            magnetic field at specified points, at a combination of the coil centerline and cross section grids.
+        """    
+
         if self.cross_section_shape == "circular":
             return self.compute_self_field_circ(xsection_grid, centerline_grid, params)
         if self.cross_section_shape == "rectangular":
             return self.compute_self_field_rect(xsection_grid, centerline_grid, params)
     
     def compute_self_field_rect(self, xsection_grid, centerline_grid=None, params=None):
+        """
+        Compute the magnetic field from the coil on the coil itself, with a rectangular cross section.
+        """  
 
         # set cross section grid if not provided for u,v cross sectional coordinates
         if xsection_grid is None:
@@ -1237,12 +1257,40 @@ class FourierPlanarFiniteBuildCoil(_FiniteBuildCoil, FourierPlanarCoil):
         p_frame = self.compute("p_frame", grid=centerline_grid, params=params)["p_frame"]
         q_frame = self.compute("q_frame", grid=centerline_grid, params=params)["q_frame"]
 
-        B_fb_params = {"p_frame": p_frame, "q_frame": q_frame, "current": self.current, "cross_section_dims": self.cross_section_dims}
+        #also need curvature parameters
+        curv1_frame = self.compute("curv1_frame", grid=centerline_grid, params=params)["curv1_frame"]
+        curv2_frame = self.compute("curv2_frame", grid=centerline_grid, params=params)["curv2_frame"]
+
+        #expand the vector series to include the cross section dimensions
+        p_frame = xsection_grid.expand(p_frame, "zeta")
+        q_frame = xsection_grid.expand(q_frame, "zeta")
+        curv1_frame = xsection_grid.expand(curv1_frame, "zeta")
+        curv2_frame = xsection_grid.expand(curv2_frame, "zeta")
+
+        delta = finite_build_regularization_rect(self.cross_section_dims[0], self.cross_section_dims[1])
+
+        #B_b and B_reg reg are only computed on the centerline
+        B_b_fb = self.compute("B_b_fb", grid=centerline_grid, params=params)["B_b_fb"]
+
+        #compute regularized self field integral
+        regularization = finite_build_regularization_rect(self.cross_section_dims[0], self.cross_section_dims[1])
+        data = self.compute(["x", "x_s", "ds"], grid=centerline_grid, params=params)
+        B_reg_fb = biot_savart_quad_regularized(
+            data["x"], data["x"], data["x_s"] * data["ds"][:, None], self.current, regularization
+        )
+
+        B_b_fb = xsection_grid.expand(B_b_fb, "zeta")
+        B_reg_fb = xsection_grid.expand(B_reg_fb, "zeta")
+
+        #pack the parameters for the self field computation
+        B_fb_params = {"p_frame": p_frame, "q_frame": q_frame, "current": self.current, "cross_section_dims": self.cross_section_dims,
+                       "curv1_frame": curv1_frame, "curv2_frame": curv2_frame, "delta": delta}
         B_fb_params = params | B_fb_params if params is not None else B_fb_params
 
         B_0_fb = compute_fun(self, "B_0_fb", transforms={"grid":xsection_grid}, params=B_fb_params, profiles={})["B_0_fb"]
+        B_kappa_fb = compute_fun(self, "B_kappa_fb", transforms={"grid":xsection_grid}, params=B_fb_params, profiles={})["B_kappa_fb"]
 
-        return B_0_fb
+        return B_0_fb + B_kappa_fb + B_b_fb + B_reg_fb
 
     def compute_self_field_circ(self, xsection_grid, centerline_grid=None, params=None):
         return NotImplementedError("Circular cross section self field not implemented yet")

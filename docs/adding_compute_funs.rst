@@ -161,3 +161,61 @@ This test is a regression test to ensure that compute quantities in each new upd
 from previous versions of DESC.
 Since the new quantity did not exist in previous versions of DESC, one must run this test
 and commit the outputted ``tests/inputs/master_compute_data.pkl`` file which is updated automatically when a new quantity is detected.
+
+Compute function may take additional ``**kwargs`` arguments to provide more information to the function which cannot be get from other input arguments or dependencies in ``data``. One example of this kind of compute function is ``P_ISS04``.
+::
+
+  @register_compute_fun(
+    name="P_ISS04",
+    label="P_{ISS04}",
+    units="W",
+    units_long="Watts",
+    description="Heating power required by the ISS04 energy confinement time scaling",
+    dim=0,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="",
+    data=["a", "iota", "rho", "R0", "W_p", "<ne>_vol", "<|B|>_axis"],
+    method="str: Interpolation method. Default 'cubic'.",
+    H_ISS04="float: ISS04 confinement enhancement factor. Default 1.",
+  )
+  def _P_ISS04(params, transforms, profiles, data, **kwargs):
+      rho = transforms["grid"].compress(data["rho"], surface_label="rho")
+      iota = transforms["grid"].compress(data["iota"], surface_label="rho")
+      fx = {}
+      if "iota_r" in data:
+          fx["fx"] = transforms["grid"].compress(
+              data["iota_r"]
+          )  # noqa: unused dependency
+      iota_23 = interp1d(2 / 3, rho, iota, method=kwargs.get("method", "cubic"), **fx)
+      data["P_ISS04"] = 1e6 * (  # MW -> W
+          jnp.abs(data["W_p"] / 1e6)  # J -> MJ
+          / (
+              0.134
+              * data["a"] ** 2.28  # m
+              * data["R0"] ** 0.64  # m
+              * (data["<ne>_vol"] / 1e19) ** 0.54  # 1/m^3 -> 1e19/m^3
+              * data["<|B|>_axis"] ** 0.84  # T
+              * iota_23**0.41
+              * kwargs.get("H_ISS04", 1)
+          )
+      ) ** (1 / 0.39)
+      return data
+
+
+This function can be called by following notation,
+::
+
+  # Compute P_ISS04
+  # specify gamma and H_ISS04 values as keyword arguments
+  data = compute_fun(
+            "desc.equilibrium.equilibrium.Equilibrium",
+            "P_ISS04",
+            params=params,
+            transforms=transforms,
+            profiles=profiles,
+            gamma=gamma,
+            H_ISS04=H_ISS04,
+        )
+  P_ISS04 = data["P_ISS04"]

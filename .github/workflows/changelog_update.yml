@@ -8,7 +8,7 @@ on:
 
 jobs:
   check_changelog_updated:
-    if: ${{contains(github.event.pull_request.labels.*.name, 'skip_changelog') == false}}
+    if: contains(github.event.pull_request.labels.*.name, 'skip_changelog') == false
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

@@ -209,9 +209,11 @@ class Optimizer(IOAble):
         objective, nonlinear_constraints = _maybe_wrap_nonlinear_constraints(
             eq, objective, nonlinear_constraints, self.method, options
         )
-        if not isinstance(objective, ProximalProjection):
-            for t in things:
-                linear_constraints = maybe_add_self_consistency(t, linear_constraints)
+        is_prox = isinstance(objective, ProximalProjection)
+        for t in things:
+            if isinstance(t, Equilibrium) and is_prox:
+                continue  # don't add Equilibrium self-consistency if proximal is used
+            linear_constraints = maybe_add_self_consistency(t, linear_constraints)
         linear_constraint = _combine_constraints(linear_constraints)
         nonlinear_constraint = _combine_constraints(nonlinear_constraints)
 

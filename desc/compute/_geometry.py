@@ -194,7 +194,7 @@ def _A_of_z(params, transforms, profiles, data, **kwargs):
     data=["Z", "n_rho", "e_theta|r,p", "rho"],
     parameterization=["desc.geometry.surface.FourierRZToroidalSurface"],
     resolution_requirement="rt",  # just need max(rho) near 1
-    # TODO: Add source grid requirement once omega is nonzero.
+    # TODO(#568): Add source grid requirement once omega is nonzero.
 )
 def _A_of_z_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs):
     # Denote any vector v = [vᴿ, v^ϕ, vᶻ] with a tuple of its contravariant components.
@@ -213,7 +213,7 @@ def _A_of_z_FourierRZToroidalSurface(params, transforms, profiles, data, **kwarg
         line_integrals(
             transforms["grid"],
             data["Z"] * n[:, 2] * safenorm(data["e_theta|r,p"], axis=-1),
-            # TODO: Works currently for omega = zero, but for nonzero omega
+            # TODO(#568): Works currently for omega = zero, but for nonzero omega
             #  we need to integrate over theta at constant phi.
             #  Should be simple once we have coordinate mapping and source grid
             #  logic from GitHub pull request #1024.
@@ -449,7 +449,7 @@ def _perimeter_of_z(params, transforms, profiles, data, **kwargs):
         line_integrals(
             transforms["grid"],
             safenorm(data["e_theta|r,p"], axis=-1),
-            # TODO: Works currently for omega = zero, but for nonzero omega
+            # TODO(#568): Works currently for omega = zero, but for nonzero omega
             #  we need to integrate over theta at constant phi.
             #  Should be simple once we have coordinate mapping and source grid
             #  logic from GitHub pull request #1024.

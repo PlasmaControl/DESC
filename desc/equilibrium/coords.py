@@ -286,7 +286,7 @@ def _initial_guess_nn_search(coords, inbasis, eq, period, compute):
     return yg[idx]
 
 
-# TODO: decide later whether to assume given phi instead of zeta.
+# TODO(#568): decide later whether to assume given phi instead of zeta.
 def _map_PEST_coordinates(
     coords,
     L_lmn,
@@ -395,7 +395,7 @@ def _map_PEST_coordinates(
     return out
 
 
-# TODO: decide later whether to assume given phi instead of zeta.
+# TODO(#568): decide later whether to assume given phi instead of zeta.
 def _map_clebsch_coordinates(
     coords,
     iota,

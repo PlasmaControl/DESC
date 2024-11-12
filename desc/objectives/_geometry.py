@@ -615,7 +615,7 @@ class PlasmaVesselDistance(_Objective):
             "Plasma grid includes interior points, should be rho=1.",
         )
 
-        # TODO: How to use with generalized toroidal angle?
+        # TODO(#568): How to use with generalized toroidal angle?
         # first check that the number of zeta nodes are the same, which
         # is a prerequisite to the zeta nodes themselves being the same
         errorif(

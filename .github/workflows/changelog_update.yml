@@ -8,11 +8,11 @@ on:
 
 jobs:
   check_changelog_updated:
-    if: ${{ !contains(github.event.pull_request.labels.*.name, 'skip_changelog') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: danieljimeneznz/ensure-files-changed@v4.1.0
+      - if: ${{ !contains(github.event.pull_request.labels.*.name, 'skip_changelog') }}
+        uses: danieljimeneznz/ensure-files-changed@v4.1.0
         with:
           require-changes-to: |
             CHANGELOG.md

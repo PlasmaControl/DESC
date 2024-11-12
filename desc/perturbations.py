@@ -173,6 +173,7 @@ def perturb(  # noqa: C901
 
     warnif(
         objective.dim_f < objective.dim_x,
+        UserWarning,
         "Perturbing an underdetermined system may give bad results",
     )
 

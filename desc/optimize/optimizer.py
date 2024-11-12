@@ -77,7 +77,7 @@ class Optimizer(IOAble):
             )
         self._method = method
 
-    def optimize(  # noqa: C901 - FIXME: simplify this
+    def optimize(  # noqa: C901
         self,
         things,
         objective,
@@ -198,7 +198,6 @@ class Optimizer(IOAble):
             eq_params_init = eq.params_dict.copy()
 
         options = {} if options is None else options
-        # TODO: document options
         timer = Timer()
         options = {} if options is None else options
         _, method = _parse_method(self.method)

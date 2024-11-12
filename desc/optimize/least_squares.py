@@ -28,7 +28,7 @@ from .utils import (
 )
 
 
-def lsqtr(  # noqa: C901 - FIXME: simplify this
+def lsqtr(  # noqa: C901
     fun,
     x0,
     jac,

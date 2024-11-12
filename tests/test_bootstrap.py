@@ -86,7 +86,7 @@ class TestBootstrapCompute:
             modB = np.where(
                 mask, 9.0 + 3.7 * np.sin(theta - NFP * zeta), 13.0 + 2.6 * np.cos(theta)
             )
-            # todo: find value for sqrt_g_r value to test axis limit
+            # TODO: find value for sqrt_g_r value to test axis limit
             f_t_data = trapped_fraction(grid, modB, sqrt_g, sqrt_g_r=np.nan)
             # The average of (b0 + b1 cos(theta))^2 is b0^2 + (1/2) * b1^2
             np.testing.assert_allclose(

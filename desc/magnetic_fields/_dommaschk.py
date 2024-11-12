@@ -80,7 +80,7 @@ class DommaschkPotentialField(ScalarPotentialField):
         super().__init__(dommaschk_potential, params)
 
     @classmethod
-    def fit_magnetic_field(  # noqa: C901 - FIXME - simplify
+    def fit_magnetic_field(  # noqa: C901
         cls, field, coords, max_m, max_l, sym=False, verbose=1, NFP=1
     ):
         """Fit a vacuum magnetic field with a Dommaschk Potential field.

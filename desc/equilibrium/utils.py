@@ -160,7 +160,7 @@ def parse_axis(axis, NFP=1, sym=True, surface=None):
                 NFP=NFP,
             )
         elif isinstance(surface, ZernikeRZToroidalSection):
-            # FIXME: include m=0 l!=0 modes
+            # TODO: include m=0 l!=0 modes
             axis = FourierRZCurve(
                 R_n=surface.R_lmn[
                     np.where(

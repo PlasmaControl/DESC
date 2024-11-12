@@ -2697,7 +2697,7 @@ class MixedCoilSet(CoilSet):
         self._coils.insert(i, new_item)
 
     @classmethod
-    def from_makegrid_coilfile(  # noqa: C901 - FIXME: simplify this
+    def from_makegrid_coilfile(  # noqa: C901
         cls, coil_file, method="cubic", ignore_groups=False, check_intersection=True
     ):
         """Create a MixedCoilSet of SplineXYZCoils from a MAKEGRID coil txtfile.

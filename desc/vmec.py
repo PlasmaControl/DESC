@@ -208,9 +208,7 @@ class VMECIO:
         return eq
 
     @classmethod
-    def save(  # noqa: C901 - FIXME - simplify
-        cls, eq, path, surfs=128, verbose=1, M_nyq=None, N_nyq=None
-    ):
+    def save(cls, eq, path, surfs=128, verbose=1, M_nyq=None, N_nyq=None):  # noqa: C901
         """Save an Equilibrium as a netCDF file in the VMEC format.
 
         Parameters

@@ -18,7 +18,7 @@ from desc.objectives import (
 from desc.objectives.utils import factorize_linear_constraints
 from desc.optimize.tr_subproblems import trust_region_step_exact_svd
 from desc.optimize.utils import compute_jac_scale, evaluate_quadratic_form_jac
-from desc.utils import Timer, get_instance
+from desc.utils import Timer, get_instance, warnif
 
 __all__ = ["get_deltas", "perturb", "optimal_perturb"]
 
@@ -91,7 +91,7 @@ def get_deltas(things1, things2):  # noqa: C901
     return deltas
 
 
-def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
+def perturb(  # noqa: C901
     eq,
     objective,
     constraints,
@@ -171,10 +171,10 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
     constraint = ObjectiveFunction(constraints)
     constraint.build(verbose=verbose)
 
-    if objective.scalar:  # FIXME: change to num objectives >= num parameters
-        raise AttributeError(
-            "Cannot perturb with a scalar objective: {}.".format(objective)
-        )
+    warnif(
+        objective.dim_f < objective.dim_x,
+        "Perturbing an underdetermined system may give bad results",
+    )
 
     if verbose > 0:
         print("Perturbing {}".format(", ".join(deltas.keys())))
@@ -412,7 +412,7 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
     return eq_new
 
 
-def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
+def optimal_perturb(  # noqa: C901
     eq,
     objective_f,
     objective_g,
@@ -539,7 +539,6 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
         print("Number of parameters: {}".format(dim_opt))
         print("Number of objectives: {}".format(objective_g.dim_f))
 
-    # FIXME: generalize to other constraints
     constraints = get_fixed_boundary_constraints(eq=eq)
     constraints = maybe_add_self_consistency(eq, constraints)
     constraint = ObjectiveFunction(constraints)

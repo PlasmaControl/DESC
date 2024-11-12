@@ -1364,7 +1364,6 @@ def polyval_vec(p, x, prec=None):
 def _polyval_exact(p, x, prec):
     p = np.atleast_2d(p)
     x = np.atleast_1d(x).flatten()
-    # TODO: possibly multithread this bit
     mpmath.mp.dps = prec
     y = np.array([np.asarray(mpmath.polyval(list(pi), x)) for pi in p])
     return y.astype(float)

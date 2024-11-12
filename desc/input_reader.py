@@ -137,7 +137,7 @@ class InputReader:
         """
         return get_parser()
 
-    def parse_inputs(self, fname=None):  # noqa: C901 - FIXME: simplify this
+    def parse_inputs(self, fname=None):  # noqa: C901
         """Read input from DESC input file; converts from VMEC input if necessary.
 
         Parameters
@@ -970,7 +970,7 @@ class InputReader:
         InputReader.write_desc_input(desc_fname, inputs, header)
 
     @staticmethod
-    def parse_vmec_inputs(vmec_fname, threshold=0):  # noqa: C901 - FIXME: simplify this
+    def parse_vmec_inputs(vmec_fname, threshold=0):  # noqa: C901
         """Parse a VMEC input file into a dictionary of DESC inputs.
 
         Parameters

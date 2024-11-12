@@ -45,8 +45,8 @@ class _FixedObjective(_Objective):
     def _parse_target_from_user(
         self, target_from_user, default_target, default_bounds, idx
     ):
-        # FIXME: add logic here to deal with `target_from_user` as a pytree?
-        # FIXME: does this actually need idx?
+        # TODO: add logic here to deal with `target_from_user` as a pytree?
+        # TODO: does this actually need idx?
         if target_from_user is None:
             target = default_target
             bounds = default_bounds

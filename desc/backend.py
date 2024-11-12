@@ -65,7 +65,7 @@ print(
     )
 )
 
-if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assign?
+if use_jax:  # noqa: C901
     from jax import custom_jvp, jit, vmap
 
     imap = jax.lax.map

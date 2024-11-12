@@ -799,7 +799,7 @@ def jaxify(func, abstract_eval, vectorized=False, abs_step=1e-4, rel_step=0):
                 func,
                 result_shape_dtype,
                 *args,
-                vmap_method="legacy_vectorized",  # TODO: use "expand_dims" instead?
+                vmap_method="expand_dims" if vectorized else "sequential",
                 **kwargs,
             )
 

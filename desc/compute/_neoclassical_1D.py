@@ -377,10 +377,10 @@ def _Gamma_c_1D(params, transforms, profiles, data, **kwargs):
     return data
 
 
-def _gbdrift(data, pitch):
+def _gbdrift(data, B, pitch):
     return safediv(
-        data["gbdrift"] * (1 - 0.5 * pitch * data["|B|"]),
-        jnp.sqrt(jnp.abs(1 - pitch * data["|B|"])),
+        data["gbdrift"] * (1 - 0.5 * pitch * B),
+        jnp.sqrt(jnp.abs(1 - pitch * B)),
     )
 
 

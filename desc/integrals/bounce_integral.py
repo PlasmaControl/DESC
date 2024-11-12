@@ -615,7 +615,7 @@ class Bounce2D(Bounce):
         integrand : callable or list[callable]
             The composition operator on the set of functions in ``data`` that
             maps that determines ``f`` in ∫ f(λ, ℓ) dℓ. It should accept a dictionary
-            which stores the interpolated data and the keyword argument ``pitch``.
+            which stores the interpolated data and the arguments ``B`` and ``pitch``.
         pitch_inv : jnp.ndarray
             Shape (num rho, num pitch).
             1/λ values to compute the bounce integrals. 1/λ(ρ) is specified by
@@ -626,8 +626,7 @@ class Bounce2D(Bounce):
             Real scalar-valued periodic functions in (θ, ζ) ∈ [0, 2π) × [0, 2π/NFP)
             evaluated on the ``grid`` supplied to construct this object.
             Use the method ``Bounce2D.reshape_data`` to reshape the data into the
-            expected shape. Do not include the keys ``|B|`` or ``|B^zeta|``,
-            which will be automatically added.
+            expected shape.
         names : str or list[str]
             Names in ``data`` to interpolate. Default is all keys in ``data``.
         points : tuple[jnp.ndarray]
@@ -673,7 +672,9 @@ class Bounce2D(Bounce):
             x=self._x if quad is None else quad[0],
             w=self._w if quad is None else quad[1],
             integrand=integrand,
-            pitch_inv=atleast_nd(self._c["T(z)"].cheb.ndim - 1, pitch_inv).T,
+            pitch=atleast_nd(self._c["T(z)"].cheb.ndim - 1, 1 / pitch_inv).T[
+                ..., jnp.newaxis
+            ],
             data=data,
             names=names,
             points=map(_swap_pl, points),
@@ -688,7 +689,7 @@ class Bounce2D(Bounce):
         x,
         w,
         integrand,
-        pitch_inv,
+        pitch,
         data,
         names,
         points,
@@ -700,19 +701,18 @@ class Bounce2D(Bounce):
         z1, z2 = points
         shape = [*z1.shape, x.size]  # num pitch, num rho, num well, num quad
         # ζ ∈ ℝ and θ ∈ ℝ coordinates of quadrature points
-        _data = {}
-        _data["zeta"] = flatten_matrix(
+        zeta = flatten_matrix(
             bijection_from_disc(x, z1[..., jnp.newaxis], z2[..., jnp.newaxis])
         )
-        _data["theta"] = self._c["T(z)"].eval1d(_data["zeta"])
+        theta = self._c["T(z)"].eval1d(zeta)
 
         # Compute |B| from Fourier series instead of spline approximation
         # because integrals are sensitive to |B|. Using the ``polish_points``
         # method should resolve any issues. For now, we integrate with √|1−λB|
         # as justified in doi.org/10.1063/5.0160282.
-        _data["|B|"] = irfft2_non_uniform(
-            _data["theta"],
-            _data["zeta"],
+        B = irfft2_non_uniform(
+            theta,
+            zeta,
             self._c["|B|"][..., jnp.newaxis, :, :],
             self._M,
             self._N,
@@ -723,10 +723,10 @@ class Bounce2D(Bounce):
         # To retain dℓ = |B|/(B⋅∇ζ) dζ > 0 after fixing dζ > 0, we require
         # B⋅∇ζ > 0. This is equivalent to changing the sign of ∇ζ
         # or (∂ℓ/∂ζ)|ρ,a. Recall dζ = ∇ζ⋅dR ⇔ 1 = ∇ζ⋅(e_ζ|ρ,a).
-        _data["|B^zeta|"] = jnp.abs(
+        dl_dz = B / jnp.abs(
             irfft2_non_uniform(
-                _data["theta"],
-                _data["zeta"],
+                theta,
+                zeta,
                 self._c["B^zeta"][..., jnp.newaxis, :, :],
                 self._M,
                 self._N,
@@ -736,35 +736,34 @@ class Bounce2D(Bounce):
         )
 
         if is_fourier:
-            for name in names:
-                _data[name] = irfft2_non_uniform(
-                    _data["theta"],
-                    _data["zeta"],
+            data = {
+                name: irfft2_non_uniform(
+                    theta,
+                    zeta,
                     data[name][..., jnp.newaxis, :, :],
                     self._M,
                     self._N,
                     domain1=(0, 2 * jnp.pi / self._NFP),
                     axes=(-1, -2),
                 )
+                for name in names
+            }
         else:
-            for name in names:
-                _data[name] = interp_rfft2(
-                    _data["theta"],
-                    _data["zeta"],
+            data = {
+                name: interp_rfft2(
+                    theta,
+                    zeta,
                     data[name][..., jnp.newaxis, :, :],
                     domain1=(0, 2 * jnp.pi / self._NFP),
                     axes=(-1, -2),
                 )
-
-        pitch = 1 / pitch_inv[..., jnp.newaxis]
+                for name in names
+            }
+        data["theta"] = theta
+        data["zeta"] = zeta
         cov = grad_bijection_from_disc(z1, z2)
         result = [
-            _swap_pl(
-                (f(_data, pitch=pitch) * _data["|B|"] / _data["|B^zeta|"])
-                .reshape(shape)
-                .dot(w)
-                * cov
-            )
+            _swap_pl((f(data, B, pitch) * dl_dz).reshape(shape).dot(w) * cov)
             for f in integrand
         ]
 
@@ -773,9 +772,9 @@ class Bounce2D(Bounce):
             _check_interp(
                 # shape is num alpha = 1, num rho, num pitch, num well, num quad
                 (1, *shape),
-                *map(_swap_pl, (_data["zeta"], _data["|B^zeta|"], _data["|B|"])),
+                *map(_swap_pl, (zeta, 1 / dl_dz, B)),
                 result[0],
-                [_swap_pl(_data[name]) for name in names],
+                [_swap_pl(data[name]) for name in names],
                 plot=plot,
             )
 
@@ -1255,7 +1254,7 @@ class Bounce1D(Bounce):
         integrand : callable or list[callable]
             The composition operator on the set of functions in ``data`` that
             maps that determines ``f`` in ∫ f(λ, ℓ) dℓ. It should accept a dictionary
-            which stores the interpolated data and the keyword argument ``pitch``.
+            which stores the interpolated data and the arguments ``B`` and ``pitch``.
         pitch_inv : jnp.ndarray
             Shape (num alpha, num rho, num pitch).
             1/λ values to compute the bounce integrals. 1/λ(α,ρ) is specified by
@@ -1266,8 +1265,7 @@ class Bounce1D(Bounce):
             Real scalar-valued periodic functions in (θ, ζ) ∈ [0, 2π) × [0, 2π/NFP)
             evaluated on the ``grid`` supplied to construct this object.
             Use the method ``Bounce1D.reshape_data`` to reshape the data into the
-            expected shape. Do not include the key ``|B|`,
-            which will be automatically added.
+            expected shape.
         names : str or list[str]
             Names in ``data`` to interpolate. Default is all keys in ``data``.
         points : tuple[jnp.ndarray]

@@ -466,11 +466,10 @@ def _interpolate_and_integrate(
         name: interp1d_vec(Q, knots, data[name][..., jnp.newaxis, :], method=method)
         for name in names
     }
-    data["|B|"] = B
     pitch = 1 / pitch_inv[..., jnp.newaxis]
     cov = grad_bijection_from_disc(z1, z2)
     result = [
-        (f(data, pitch=pitch) / b_sup_z).reshape(shape).dot(w) * cov for f in integrand
+        (f(data, B, pitch) / b_sup_z).reshape(shape).dot(w) * cov for f in integrand
     ]
 
     if check:
@@ -478,7 +477,7 @@ def _interpolate_and_integrate(
             shape,
             Q,
             b_sup_z,
-            data["|B|"],
+            B,
             result[0],
             [data[name] for name in names],
             plot=plot,

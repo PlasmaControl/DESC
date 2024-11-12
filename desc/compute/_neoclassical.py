@@ -157,19 +157,19 @@ def _effective_ripple(params, transforms, profiles, data, **kwargs):
     return data
 
 
-def _dH(data, pitch):
+def _dH(data, B, pitch):
     """Integrand of Nemov eq. 30 with |∂ψ/∂ρ| (λB₀)¹ᐧ⁵ removed."""
     return (
-        jnp.sqrt(jnp.abs(1 - pitch * data["|B|"]))
-        * (4 / (pitch * data["|B|"]) - 1)
+        jnp.sqrt(jnp.abs(1 - pitch * B))
+        * (4 / (pitch * B) - 1)
         * data["|grad(rho)|*kappa_g"]
-        / data["|B|"]
+        / B
     )
 
 
-def _dI(data, pitch):
+def _dI(data, B, pitch):
     """Integrand of Nemov eq. 31."""
-    return jnp.sqrt(jnp.abs(1 - pitch * data["|B|"])) / data["|B|"]
+    return jnp.sqrt(jnp.abs(1 - pitch * B)) / B
 
 
 @register_compute_fun(
@@ -302,35 +302,33 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
 # (|∇ρ| ‖e_α|ρ,ϕ‖)ᵢ ∫ dℓ [ (1 − λ|B|/2)/√(1 − λ|B|) ∂|B|/∂ρ + √(1 − λ|B|) K ] / |B|
 
 
-def _v_tau(data, pitch):
+def _v_tau(data, B, pitch):
     # Note v τ = 4λ⁻²B₀⁻¹ ∂I/∂((λB₀)⁻¹) where v is the particle velocity,
     # τ is the bounce time, and I is defined in Nemov eq. 36.
-    return safediv(2.0, jnp.sqrt(jnp.abs(1 - pitch * data["|B|"])))
+    return safediv(2.0, jnp.sqrt(jnp.abs(1 - pitch * B)))
 
 
-def _f1(data, pitch):
+def _f1(data, B, pitch):
     return (
         safediv(
-            1 - 0.5 * pitch * data["|B|"],
-            jnp.sqrt(jnp.abs(1 - pitch * data["|B|"])),
+            1 - 0.5 * pitch * B,
+            jnp.sqrt(jnp.abs(1 - pitch * B)),
         )
         * data["|grad(psi)|*kappa_g"]
-        / data["|B|"]
+        / B
     )
 
 
-def _f2(data, pitch):
+def _f2(data, B, pitch):
     return (
-        safediv(
-            1 - 0.5 * pitch * data["|B|"], jnp.sqrt(jnp.abs(1 - pitch * data["|B|"]))
-        )
+        safediv(1 - 0.5 * pitch * B, jnp.sqrt(jnp.abs(1 - pitch * B)))
         * data["|B|_r|v,p"]
-        / data["|B|"]
+        / B
     )
 
 
-def _f3(data, pitch):
-    return jnp.sqrt(jnp.abs(1 - pitch * data["|B|"])) * data["K"] / data["|B|"]
+def _f3(data, B, pitch):
+    return jnp.sqrt(jnp.abs(1 - pitch * B)) * data["K"] / B
 
 
 @register_compute_fun(
@@ -496,18 +494,18 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
     return data
 
 
-def _cvdrift0(data, pitch):
+def _cvdrift0(data, B, pitch):
     return safediv(
-        data["cvdrift0"] * (1 - 0.5 * pitch * data["|B|"]),
-        jnp.sqrt(jnp.abs(1 - pitch * data["|B|"])),
+        data["cvdrift0"] * (1 - 0.5 * pitch * B),
+        jnp.sqrt(jnp.abs(1 - pitch * B)),
     )
 
 
-def _gbdrift(data, pitch):
+def _gbdrift(data, B, pitch):
     return safediv(
         (data["periodic(gbdrift)"] + data["secular(gbdrift)/phi"] * data["zeta"])
-        * (1 - 0.5 * pitch * data["|B|"]),
-        jnp.sqrt(jnp.abs(1 - pitch * data["|B|"])),
+        * (1 - 0.5 * pitch * B),
+        jnp.sqrt(jnp.abs(1 - pitch * B)),
     )
 
 

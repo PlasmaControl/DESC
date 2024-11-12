@@ -109,6 +109,8 @@ def terpsichore(
                     _pool_fun,
                     path=tmp_path,
                     exec=exec,
+                    scalar=scalar,
+                    surfs=surfs,
                     al0=al0,
                     sleep_time=sleep_time,
                     stop_time=stop_time,

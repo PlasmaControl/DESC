@@ -1,0 +1,19 @@
+name: Check changelog updated
+
+on:
+  pull_request:
+    branches:
+      - master
+  workflow_dispatch:
+
+jobs:
+  check_changelog_updated:
+    if: ${{contains(github.event.pull_request.labels.*.name, 'skip_changelog') == false}}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: danieljimeneznz/ensure-files-changed@v4.1.0
+        with:
+          require-changes-to: |
+            CHANGELOG.md
+          token: ${{ secrets.GITHUB_TOKEN }}

@@ -320,9 +320,13 @@ class FourierRZToroidalSurface(Surface):
             inputs = InputReader().parse_inputs(path)[-1]
         if (inputs["bdry_ratio"] is not None) and (inputs["bdry_ratio"] != 1):
             warnings.warn(
-                "boundary_ratio = {} != 1, surface may not be as expected".format(
-                    inputs["bdry_ratio"]
-                )
+                "`bdry_ratio` is intended as an input for the continuation method."
+                "`bdry_ratio`=1 uses the given surface modes as is, any other  "
+                "scalar value will scale the non-axisymmetric  modes by that "
+                "value. The final value of `bdry_ratio` in the input file is "
+                f"{inputs['bdry_ratio']}, this means the created "
+                "FourierRZToroidalSurface will be a scaled version of the "
+                "input file boundary."
             )
         surf = cls(
             inputs["surface"][:, 3],
@@ -741,10 +745,19 @@ class FourierRZToroidalSurface(Surface):
             n, r, r_offset = n_and_r_jax(nodes)
             return jnp.arctan(r_offset[0, 1] / r_offset[0, 0]) - zeta
 
-        vecroot = jit(vmap(lambda x0, *p: root_scalar(fun_jax, x0, jac=None, args=p)))
-        zetas, (res, niter) = vecroot(
-            grid.nodes[:, 2], grid.nodes[:, 1], grid.nodes[:, 2]
+        vecroot = jit(
+            vmap(
+                lambda x0, *p: root_scalar(
+                    fun_jax, x0, jac=None, args=p, full_output=full_output
+                )
+            )
         )
+        if full_output:
+            zetas, (res, niter) = vecroot(
+                grid.nodes[:, 2], grid.nodes[:, 1], grid.nodes[:, 2]
+            )
+        else:
+            zetas = vecroot(grid.nodes[:, 2], grid.nodes[:, 1], grid.nodes[:, 2])
 
         zetas = np.asarray(zetas)
         nodes = np.vstack((np.ones_like(grid.nodes[:, 1]), grid.nodes[:, 1], zetas)).T

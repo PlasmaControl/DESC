@@ -15,7 +15,7 @@ Other package managers like venv could be used instead of conda, we have just ch
 
 **NOTE: If you are on Windows, consider using the Windows Subsystem for Linux (WSL) to install DESC.**
 
-We don't test DESC on Windows and there have been some instances that numerical discrepancies on Windows cause failures or wrong results. For how to install WSL see `here <https://learn.microsoft.com/en-us/windows/wsl/install>`__. For using WSL in VS Code see `here <https://code.visualstudio.com/docs/remote/wsl>`__.
+We don't test or support DESC on Windows OS, and there have been some instances that numerical discrepancies on Windows can cause failures or wrong results. For instructions on how to install WSL see `here <https://learn.microsoft.com/en-us/windows/wsl/install>`__. For using WSL in VS Code see `here <https://code.visualstudio.com/docs/remote/wsl>`__.
 
 
 On Your Local Machine

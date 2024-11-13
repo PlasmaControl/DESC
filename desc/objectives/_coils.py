@@ -1514,7 +1514,7 @@ class LinkingCurrent(_Objective):
 
     _scalar = True
     _units = "(A)"
-    _print_value_fmt = "Linking current: "
+    _print_value_fmt = "Linking current error: "
 
     def __init__(
         self,
@@ -1617,7 +1617,7 @@ class LinkingCurrent(_Objective):
                 profiles=profiles,
             )
             eq_linking_current = 2 * jnp.pi * data["G"][0] / mu_0
-            self._constants["eq_linking_current"] = (eq_linking_current,)
+            self._constants["eq_linking_current"] = eq_linking_current
         else:
             self._constants["profiles"] = profiles
             self._constants["transforms"] = transforms

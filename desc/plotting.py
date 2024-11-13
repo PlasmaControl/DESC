@@ -1360,6 +1360,8 @@ def plot_section(
         * ``phi``: float, int or array-like. Toroidal angles to plot. If an integer,
           plot that number equally spaced in [0,2pi/NFP). Default 1 for axisymmetry and
           6 for non-axisymmetry
+        * ``fill`` : bool,  Whether the contours are filled, i.e. whether to use
+          `contourf` or `contour`. Default to ``fill=True``
 
     Returns
     -------
@@ -1448,7 +1450,7 @@ def plot_section(
     R = coords["R"].reshape((nt, nr, nz), order="F")
     Z = coords["Z"].reshape((nt, nr, nz), order="F")
     data = data.reshape((nt, nr, nz), order="F")
-
+    op = "contour" + ("f" if kwargs.pop("fill", True) else "")
     contourf_kwargs = {}
     if log:
         data = np.abs(data)  # ensure data is positive for log plot
@@ -1480,7 +1482,9 @@ def plot_section(
     for i in range(nphi):
         divider = make_axes_locatable(ax[i])
 
-        cntr = ax[i].contourf(R[:, :, i], Z[:, :, i], data[:, :, i], **contourf_kwargs)
+        cntr = getattr(ax[i], op)(
+            R[:, :, i], Z[:, :, i], data[:, :, i], **contourf_kwargs
+        )
         cax = divider.append_axes("right", **cax_kwargs)
         cbar = fig.colorbar(cntr, cax=cax)
         cbar.update_ticks()

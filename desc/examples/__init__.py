@@ -3,6 +3,7 @@
 import os
 
 import desc.io
+from desc.backend import execute_on_cpu
 
 
 def listall():
@@ -13,6 +14,7 @@ def listall():
     return names_stripped
 
 
+@execute_on_cpu
 def get(name, data=None):
     """Get example equilibria and data.
 

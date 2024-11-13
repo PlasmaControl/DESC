@@ -494,10 +494,10 @@ def trust_region_step_exact_direct(
 
     Parameters
     ----------
-    f : ndarray
-        Vector of residuals.
-    J : ndarray
-        Jacobian matrix.
+    fp : ndarray
+        Vector of residuals. fp=-J.T@f
+    JTJ : ndarray
+        Jacobian matrix. JTJ=J.T@J
     trust_radius : float
         Radius of a trust region.
     initial_alpha : float, optional

@@ -222,4 +222,9 @@ This function can be called by following notation,
         )
   P_ISS04 = data["P_ISS04"]
 
-Note: Here we used `_compute` instead of `compute` to be able to call this function inside a jitted objective function. However, for normal use both functions should work.
+Note: Here we used `_compute` instead of `compute` to be able to call this function inside a jitted objective function. However, for normal use both functions should work. `**kwargs` can also be passed to `eq.compute`.
+
+::
+
+  data = eq.compute(names="P_ISS04", gamma=gamma, H_ISS04=H_ISS04)
+  P_ISS04 = data["P_ISS04"]

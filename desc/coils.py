@@ -2884,7 +2884,7 @@ def _linking_number(x1, x2, x1_s, x2_s, dx1, dx2):
 def initialize_modular_coils(eq, num_coils, r_over_a=1.5):
     """Initilize a CoilSet of modular coils for stage 2 optimization.
 
-    The coils will be centered on the equilibrium magnetic axis, and aligned such that
+    The coils will be planar, circular coils centered on the equilibrium magnetic axis, and aligned such that
     the normal to the coil points along the axis. The currents will be set to match
     the equilibrium required poloidal linking current.
 

@@ -5,12 +5,15 @@ from abc import ABC, abstractmethod
 import numpy as np
 import scipy
 from interpax import fft_interp2d
+from jax.experimental.sparse import jacfwd
+from scipy.constants import mu_0
 
 from desc.backend import fori_loop, jnp, put, vmap
 from desc.basis import DoubleFourierSeries
 from desc.compute.geom_utils import rpz2xyz, rpz2xyz_vec, xyz2rpz_vec
 from desc.grid import LinearGrid
 from desc.io import IOAble
+from desc.transform import Transform
 from desc.utils import dot, isalmostequal, islinspaced, safediv, safenorm
 
 
@@ -716,9 +719,7 @@ def _kernel_Bn_over_r(eval_data, source_data, diag=False):
         dx = eval_x - source_x
     else:
         dx = eval_x[:, None] - source_x[None]
-    r = safenorm(dx, axis=-1)
-    out = safediv(source_data["Bn"], r)
-    return out
+    return safediv(source_data["Bn"], safenorm(dx, axis=-1))
 
 
 _kernel_Bn_over_r.ndim = 1
@@ -726,7 +727,7 @@ _kernel_Bn_over_r.keys = ["R", "phi", "Z", "Bn"]
 
 
 def _kernel_Phi_dG_dn(eval_data, source_data, diag=False):
-    # Phi * dG/dn = Phi * n dot r / r^3
+    # Phi * dG(x,x')/dn' = -Phi * n dot r / r^3 where Phi has units tesla-meters.
     source_x = jnp.atleast_2d(
         rpz2xyz(jnp.array([source_data["R"], source_data["phi"], source_data["Z"]]).T)
     )
@@ -738,10 +739,10 @@ def _kernel_Phi_dG_dn(eval_data, source_data, diag=False):
     else:
         dx = eval_x[:, None] - source_x[None]
     n = rpz2xyz_vec(source_data["n_rho"], phi=source_data["phi"])
-    num = dot(n, dx, axis=-1) * source_data["Phi"] * source_data["|e_theta x e_zeta|"]
-    r = safenorm(dx, axis=-1)
-    out = 1e-7 * safediv(num, r**3)
-    return out
+    return safediv(
+        source_data["Phi"] * dot(n, dx, axis=-1),
+        safenorm(dx, axis=-1) ** 3,
+    )
 
 
 _kernel_Phi_dG_dn.ndim = 1
@@ -901,3 +902,119 @@ def compute_B_plasma(eq, eval_grid, source_grid=None, normal_only=False):
     if normal_only:
         Bplasma = jnp.sum(Bplasma * eval_data["n_rho"], axis=1)
     return Bplasma
+
+
+def compute_B_laplace(eq, eval_grid, source_grid=None, B0=None, G=1, R0=1):
+    """Compute magnetic field in vacuum interior of plasma.
+
+    Let D denote the interior and D^∁ the exterior of a toroidal region
+    with boundary ∂D. Computes the magnetic field 𝐁 in units of Tesla
+    such that
+             𝐁 = 𝐁₀ + ∇Φ on D
+         ∇ × 𝐁 = ∇ × 𝐁₀  on D ∪ D^∁ (i.e. Φ is single-valued or periodic)
+        ∇ × 𝐁₀ = μ₀ 𝐉    on D ∪ D^∁
+        𝐁 * ∇ρ = 0       on ∂D
+          ∇²Φ  = 0       on D
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Configuration with surface geometry defining ∂D.
+    eval_grid : Grid
+        Evaluation points for the magnetic field.
+    source_grid : Grid, optional
+        Source points for integral.
+    B0 : MagneticField
+        Magnetic field such that ∇ × 𝐁₀ = μ₀ 𝐉
+        where 𝐉 is the current in amperes everywhere.
+        Default is toroidal magnetic field ``B0=G*R0/R``
+        where ``R`` is distance from major axis and ``G*R0=1`` Tesla-meter.
+    G : float
+        ∫ (∫ 𝐁₀ ⋅ dℓ) dθ = ∫ 𝐁₀ ⋅ e_ζ dθ dζ over LCFS.
+        Enclosed (including boundary) net poloidal current in Tesla-meter.
+        divided by 2π. Default is 1. Ignored if ``B0`` is given.
+    R0 : float
+        Major radius. Ignored if ``B0`` is given.
+
+    Returns
+    -------
+    B : jnp.ndarray
+        Shape (eval_grid.num_nodes, 3).
+        Magnetic field evaluated at eval_grid.
+
+    """
+    from desc.magnetic_fields import FourierCurrentPotentialField, ToroidalMagneticField
+
+    if source_grid is None:
+        source_NFP = eq.NFP if eq.N > 0 else 64  # why not higher?
+        source_grid = LinearGrid(
+            rho=np.array([1.0]),
+            M=eq.M_grid,
+            N=eq.N_grid,
+            NFP=source_NFP,
+            sym=False,
+        )
+
+    data_keys = ["R", "phi", "Z", "n_rho", "|e_theta x e_zeta|"]
+    eval_data = eq.compute(data_keys, grid=eval_grid)
+    source_data = eq.compute(data_keys, grid=source_grid)
+    if B0 is None:
+        B0 = ToroidalMagneticField(B0=G, R0=R0)
+    source_data["Bn"], _ = B0.compute_Bnormal(eq.surface, eval_grid=eval_grid)
+
+    Phi_basis = DoubleFourierSeries(M=eq.M, N=eq.N, NFP=eq.NFP, sym="sin")
+    Phi_trans_eval = Transform(basis=Phi_basis, grid=eval_grid)
+    Phi_trans_source = Transform(basis=Phi_basis, grid=source_grid)
+
+    # If we didn't boost Fourier basis, we would need NFP*num zeta toroidal resolution.
+    # Malhotra recommends s = q = N⁰ᐧ²⁵ where N² is num theta * num zeta*NFP,
+    # but using same defaults as above.
+    k = min(source_grid.num_theta, source_grid.num_zeta * source_grid.NFP)
+    s = k - 1
+    q = k // 2 + int(np.sqrt(k))
+    try:
+        interpolator = FFTInterpolator(eval_grid, source_grid, s, q)
+    except AssertionError as e:
+        print(
+            f"Unable to create FFTInterpolator, got error {e},"
+            "falling back to DFT method which is much slower"
+        )
+        interpolator = DFTInterpolator(eval_grid, source_grid, s, q)
+
+    def LHS(Phi_mn):
+        # After Fourier analysis, the LHS is linear in the spectral coefficients Φₘₙ.
+        # Numerically, we approximate this as finite-dimensional, which enables
+        # writing the left hand side as A @ Φₘₙ. Then Φₘₙ is found by solving
+        # LHS(Φₘₙ) = A @ Φₘₙ = RHS.
+        source_data["Phi"] = Phi_trans_source.transform(Phi_mn)
+        integral = singular_integral(
+            eval_data,
+            source_data,
+            _kernel_Phi_dG_dn,
+            interpolator,
+            loop=True,
+        ).squeeze()
+        Phi = Phi_trans_eval.transform(Phi_mn)
+        return Phi + integral / (2 * jnp.pi)
+
+    # LHS is expensive, so it is better to construct full Jacobian once
+    # rather than iterative solves like jax.scipy.sparse.linalg.cg.
+    RHS = -singular_integral(
+        eval_data,
+        source_data,
+        _kernel_Bn_over_r,
+        interpolator,
+        loop=True,
+    ) / (2 * jnp.pi)
+    # Fourier coefficients of Φ on boundary
+    Phi_mn = jnp.linalg.solve(jacfwd(LHS)(jnp.ones(Phi_basis.num_modes)), RHS)
+    # ∇Φ, aka B_vacuum, in the interior. See Merkel eq. 1.4.
+    grad_Phi = FourierCurrentPotentialField.from_surface(
+        eq.surface,
+        # expects units of amperes
+        Phi_mn / mu_0,
+        Phi_basis.modes[:, 1:],
+    )
+    # Note that Merkel eq. 3.5 has wrong sign on the first integral.
+    B = B0 + grad_Phi  # eq. 3.7
+    return B

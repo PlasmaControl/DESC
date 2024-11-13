@@ -2,7 +2,7 @@
 
 from scipy.optimize import OptimizeResult
 
-from desc.backend import jax, jnp, qr
+from desc.backend import jnp, qr
 from desc.utils import errorif, setdefault
 
 from .bound_utils import (
@@ -272,7 +272,7 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
             U, s, Vt = jnp.linalg.svd(J_a, full_matrices=False)
         elif tr_method == "cho":
             B_h = jnp.dot(J_a.T, J_a)
-        elif tr_method == "qr":
+        elif tr_method == "qr" or tr_method == "direct":
             # try full newton step
             tall = J_a.shape[0] >= J_a.shape[1]
             if tall:
@@ -281,10 +281,9 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
             else:
                 Q, R = qr(J_a.T, mode="economic")
                 p_newton = Q @ solve_triangular_regularized(R.T, -f_a, lower=True)
-        elif tr_method == "direct":
+        if tr_method == "direct":
             JTJ = J_a.T @ J_a
             fp = -J_a.T @ f_a
-            p_newton = jax.scipy.linalg.solve(JTJ, fp, assume_a="sym")
 
         actual_reduction = -1
 

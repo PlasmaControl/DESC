@@ -1599,7 +1599,7 @@ class LinkingCurrent(_Objective):
             eq.axis.Z_basis.modes[:, 2],
             eq.axis.NFP,
         )
-        dummy_coilset = MixedCoilSet(axis_coil, coil)
+        dummy_coilset = MixedCoilSet(axis_coil, coil, check_intersection=False)
         # linking number for coils with axis
         link = np.round(dummy_coilset._compute_linking_number())[0, 1:]
 
@@ -1670,6 +1670,7 @@ class LinkingCurrent(_Objective):
                 for param, idx in zip(tree_leaves(coil_params), self._indices)
             ]
         )
+        coil_currents = self.things[0]._all_currents(coil_currents)
         coil_linking_current = jnp.sum(constants["link"] * coil_currents)
         return eq_linking_current - coil_linking_current
 

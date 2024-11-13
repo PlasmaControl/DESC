@@ -1300,6 +1300,15 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         for coil, cur in zip(self.coils, new):
             coil.current = cur
 
+    def _all_currents(self, currents=None):
+        """Return an array of all the currents (including those in virtual coils)."""
+        if currents is None:
+            currents = self.current
+        currents = jnp.asarray(currents)
+        if self.sym:
+            currents = jnp.concatenate([currents, -1 * currents[::-1]])
+        return jnp.tile(currents, self.NFP)
+
     def _make_arraylike(self, x):
         if isinstance(x, dict):
             x = [x] * len(self)
@@ -2317,6 +2326,22 @@ class MixedCoilSet(CoilSet):
     def num_coils(self):
         """int: Number of coils."""
         return sum([c.num_coils for c in self])
+
+    def _all_currents(self, currents=None):
+        """Return an array of all the currents (including those in virtual coils)."""
+        if currents is None:
+            currents = jnp.array(flatten_list(self.current))
+        all_currents = []
+        i = 0
+        for coil in self.coils:
+            if isinstance(coil, CoilSet):
+                curr = currents[i : i + len(coil)]
+                all_currents += [coil._all_currents(curr)]
+                i += len(coil)
+            else:
+                all_currents += [jnp.atleast_1d(currents[i])]
+                i += 1
+        return jnp.concatenate(all_currents)
 
     def compute(
         self,

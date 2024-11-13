@@ -6,6 +6,7 @@ from desc.backend import (
     cho_factor,
     cho_solve,
     cond,
+    jax,
     jit,
     jnp,
     qr,
@@ -471,6 +472,100 @@ def trust_region_step_exact_qr(
         Ji = jnp.vstack([J, jnp.sqrt(alpha) * jnp.eye(J.shape[1])])
         Q, R = qr(Ji, mode="economic")
         p = solve_triangular(R, -Q.T @ fp)
+
+        # Make the norm of p equal to trust_radius; p is changed only slightly.
+        # This is done to prevent p from lying outside the trust region
+        # (which can cause problems later).
+        p *= trust_radius / jnp.linalg.norm(p)
+
+        return p, True, alpha
+
+    return cond(jnp.linalg.norm(p_newton) <= trust_radius, truefun, falsefun, None)
+
+
+@jit
+def trust_region_step_exact_direct(
+    p_newton, fp, JTJ, trust_radius, initial_alpha=None, rtol=0.01, max_iter=10
+):
+    """Solve a trust-region problem using a semi-exact method.
+
+    Solves problems of the form
+        min_p ||J*p + f||^2,  ||p|| < trust_radius
+
+    Parameters
+    ----------
+    f : ndarray
+        Vector of residuals.
+    J : ndarray
+        Jacobian matrix.
+    trust_radius : float
+        Radius of a trust region.
+    initial_alpha : float, optional
+        Initial guess for alpha, which might be available from a previous
+        iteration. If None, determined automatically.
+    rtol : float, optional
+        Stopping tolerance for the root-finding procedure. Namely, the
+        solution ``p`` will satisfy
+        ``abs(norm(p) - trust_radius) < rtol * trust_radius``.
+    max_iter : int, optional
+        Maximum allowed number of iterations for the root-finding procedure.
+
+    Returns
+    -------
+    p : ndarray, shape (n,)
+        Found solution of a trust-region problem.
+    hits_boundary : bool
+        True if the proposed step is on the boundary of the trust region.
+    alpha : float
+        Positive value such that (J.T*J + alpha*I)*p = -J.T*f.
+        Sometimes called Levenberg-Marquardt parameter.
+
+    """
+
+    def truefun(*_):
+        return p_newton, False, 0.0
+
+    def falsefun(*_):
+        alpha_upper = jnp.linalg.norm(fp) / trust_radius
+        alpha_lower = 0.0
+        alpha = setdefault(
+            initial_alpha,
+            0.01 * alpha_upper,
+        )
+        k = 0
+
+        def loop_cond(state):
+            alpha, alpha_lower, alpha_upper, phi, k = state
+            return (jnp.abs(phi) > rtol * trust_radius) & (k < max_iter)
+
+        def loop_body(state):
+            alpha, alpha_lower, alpha_upper, phi, k = state
+            alpha_prev = alpha
+            phi_prev = phi
+
+            # In future, maybe try to find an update to inverse instead of
+            # resolving from scratch
+            p = jax.scipy.linalg.solve(
+                JTJ + alpha * jnp.eye(JTJ.shape[0]), fp, assume_a="sym"
+            )
+            p_norm = jnp.linalg.norm(p)
+            phi = p_norm - trust_radius
+            alpha_upper = jnp.where(phi < 0, alpha, alpha_upper)
+            alpha_lower = jnp.where(phi > 0, alpha, alpha_lower)
+
+            phi_diff = phi - phi_prev
+            alpha -= phi * (alpha - alpha_prev) / (phi_diff + 1e-10)
+
+            k += 1
+            return alpha, alpha_lower, alpha_upper, phi, k
+
+        alpha, *_ = while_loop(
+            loop_cond, loop_body, (alpha, alpha_lower, alpha_upper, jnp.inf, k)
+        )
+
+        p = jax.scipy.linalg.solve(
+            JTJ + alpha * jnp.eye(JTJ.shape[0]), fp, assume_a="sym"
+        )
 
         # Make the norm of p equal to trust_radius; p is changed only slightly.
         # This is done to prevent p from lying outside the trust region

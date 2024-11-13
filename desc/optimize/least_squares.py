@@ -2,7 +2,7 @@
 
 from scipy.optimize import OptimizeResult
 
-from desc.backend import jnp, qr
+from desc.backend import jax, jnp, qr
 from desc.utils import errorif, setdefault
 
 from .bound_utils import (
@@ -14,6 +14,7 @@ from .bound_utils import (
 )
 from .tr_subproblems import (
     trust_region_step_exact_cho,
+    trust_region_step_exact_direct,
     trust_region_step_exact_qr,
     trust_region_step_exact_svd,
     update_tr_radius,
@@ -224,7 +225,7 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
     tr_decrease_threshold = options.pop("tr_decrease_threshold", 0.25)
     tr_increase_ratio = options.pop("tr_increase_ratio", 2)
     tr_decrease_ratio = options.pop("tr_decrease_ratio", 0.25)
-    tr_method = options.pop("tr_method", "qr")
+    tr_method = options.pop("tr_method", "direct")
 
     errorif(
         len(options) > 0,
@@ -232,9 +233,11 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
         "Unknown options: {}".format([key for key in options]),
     )
     errorif(
-        tr_method not in ["cho", "svd", "qr"],
+        tr_method not in ["cho", "svd", "qr", "direct"],
         ValueError,
-        "tr_method should be one of 'cho', 'svd', 'qr', got {}".format(tr_method),
+        "tr_method should be one of 'cho', 'svd', 'qr', 'direct', got {}".format(
+            tr_method
+        ),
     )
 
     callback = setdefault(callback, lambda *args: False)
@@ -278,6 +281,10 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
             else:
                 Q, R = qr(J_a.T, mode="economic")
                 p_newton = Q @ solve_triangular_regularized(R.T, -f_a, lower=True)
+        elif tr_method == "direct":
+            JTJ = J_a.T @ J_a
+            fp = -J_a.T @ f_a
+            p_newton = jax.scipy.linalg.solve(JTJ, fp, assume_a="sym")
 
         actual_reduction = -1
 
@@ -300,6 +307,10 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
             elif tr_method == "qr":
                 step_h, hits_boundary, alpha = trust_region_step_exact_qr(
                     p_newton, f_a, J_a, trust_radius, alpha
+                )
+            elif tr_method == "direct":
+                step_h, hits_boundary, alpha = trust_region_step_exact_direct(
+                    p_newton, fp, JTJ, trust_radius, alpha
                 )
             step = d * step_h  # Trust-region solution in the original space.
 

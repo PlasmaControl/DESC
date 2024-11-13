@@ -44,6 +44,7 @@ __all__ = [
     "plot_qs_error",
     "plot_section",
     "plot_surfaces",
+    "poincare_plot",
 ]
 
 
@@ -110,7 +111,7 @@ _AXIS_LABELS_XYZ = [r"$X ~(\mathrm{m})$", r"$Y ~(\mathrm{m})$", r"$Z ~(\mathrm{m
 
 def _set_tight_layout(fig):
     # compat layer to deal with API changes in mpl 3.6.0
-    if int(matplotlib._version.version.split(".")[1]) < 6:
+    if int(matplotlib.__version__[0]) == 3 and int(matplotlib.__version__[2]) < 6:
         fig.set_tight_layout(True)
     else:
         fig.set_layout_engine("tight")
@@ -118,7 +119,7 @@ def _set_tight_layout(fig):
 
 def _get_cmap(name, n=None):
     # compat layer to deal with API changes in mpl 3.6.0
-    if int(matplotlib._version.version.split(".")[1]) < 6:
+    if int(matplotlib.__version__[0]) == 3 and int(matplotlib.__version__[2]) < 6:
         return matplotlib.cm.get_cmap(name, n)
     else:
         c = matplotlib.colormaps[name]
@@ -1353,6 +1354,8 @@ def plot_section(
         * ``phi``: float, int or array-like. Toroidal angles to plot. If an integer,
           plot that number equally spaced in [0,2pi/NFP). Default 1 for axisymmetry and
           6 for non-axisymmetry
+        * ``fill`` : bool,  Whether the contours are filled, i.e. whether to use
+          `contourf` or `contour`. Default to ``fill=True``
 
     Returns
     -------
@@ -1441,7 +1444,7 @@ def plot_section(
     R = coords["R"].reshape((nt, nr, nz), order="F")
     Z = coords["Z"].reshape((nt, nr, nz), order="F")
     data = data.reshape((nt, nr, nz), order="F")
-
+    op = "contour" + ("f" if kwargs.pop("fill", True) else "")
     contourf_kwargs = {}
     if log:
         data = np.abs(data)  # ensure data is positive for log plot
@@ -1473,7 +1476,9 @@ def plot_section(
     for i in range(nphi):
         divider = make_axes_locatable(ax[i])
 
-        cntr = ax[i].contourf(R[:, :, i], Z[:, :, i], data[:, :, i], **contourf_kwargs)
+        cntr = getattr(ax[i], op)(
+            R[:, :, i], Z[:, :, i], data[:, :, i], **contourf_kwargs
+        )
         cax = divider.append_axes("right", **cax_kwargs)
         cbar = fig.colorbar(cntr, cax=cax)
         cbar.update_ticks()

@@ -532,16 +532,20 @@ def trust_region_step_exact_direct(
             initial_alpha,
             0.001 * alpha_upper,
         )
+        alpha_prev = 0.9 * alpha
+        p = jax.scipy.linalg.solve(
+            JTJ + alpha_prev * jnp.eye(JTJ.shape[0]), fp, assume_a="sym"
+        )
+        p_norm = jnp.linalg.norm(p)
+        phi_prev = p_norm - trust_radius
         k = 0
 
         def loop_cond(state):
-            alpha, alpha_lower, alpha_upper, phi, k = state
+            alpha, alpha_prev, alpha_lower, alpha_upper, phi, phi_prev, k = state
             return (jnp.abs(phi) > rtol * trust_radius) & (k < max_iter)
 
         def loop_body(state):
-            alpha, alpha_lower, alpha_upper, phi, k = state
-            alpha_prev = alpha
-            phi_prev = phi
+            alpha, alpha_prev, alpha_lower, alpha_upper, phi, phi_prev, k = state
 
             # In future, maybe try to find an update to inverse instead of
             # resolving from scratch
@@ -553,20 +557,22 @@ def trust_region_step_exact_direct(
             alpha_upper = jnp.where(phi < 0, alpha, alpha_upper)
             alpha_lower = jnp.where(phi > 0, alpha, alpha_lower)
 
-            phi_diff = phi - phi_prev
-            alpha -= phi * (alpha - alpha_prev) / (phi_diff + 1e-10)
+            alpha_new = alpha - phi * (alpha - alpha_prev) / (phi - phi_prev + 1e-10)
+            alpha_prev = alpha
 
-            alpha = jnp.where(
-                (alpha < alpha_lower) | (alpha > alpha_upper),
+            alpha_new = jnp.where(
+                (alpha_new < alpha_lower) | (alpha_new > alpha_upper),
                 0.001 * alpha_upper,
-                alpha,
+                alpha_new,
             )
 
             k += 1
-            return alpha, alpha_lower, alpha_upper, phi, k
+            return alpha_new, alpha_prev, alpha_lower, alpha_upper, phi, phi_prev, k
 
         alpha, *_ = while_loop(
-            loop_cond, loop_body, (alpha, alpha_lower, alpha_upper, jnp.inf, k)
+            loop_cond,
+            loop_body,
+            (alpha, alpha_prev, alpha_lower, alpha_upper, jnp.inf, phi_prev, k),
         )
 
         p = jax.scipy.linalg.solve(

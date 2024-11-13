@@ -172,7 +172,7 @@ def perturb(  # noqa: C901
     constraint.build(verbose=verbose)
 
     warnif(
-        objective.dim_f < objective.dim_x,
+        objective.dim_f < (objective.dim_x - constraint.dim_f),
         UserWarning,
         "Perturbing an underdetermined system may give bad results",
     )

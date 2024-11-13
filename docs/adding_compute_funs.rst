@@ -207,6 +207,8 @@ Compute function may take additional ``**kwargs`` arguments to provide more info
 This function can be called by following notation,
 ::
 
+  from desc.compute.utils import _compute as compute_fun
+
   # Compute P_ISS04
   # specify gamma and H_ISS04 values as keyword arguments
   data = compute_fun(
@@ -219,3 +221,5 @@ This function can be called by following notation,
             H_ISS04=H_ISS04,
         )
   P_ISS04 = data["P_ISS04"]
+
+Note: Here we used `_compute` instead of `compute` to be able to call this function inside a jitted objective function. However, for normal use both functions should work.

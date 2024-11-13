@@ -530,7 +530,7 @@ def trust_region_step_exact_direct(
         alpha_lower = 0.0
         alpha = setdefault(
             initial_alpha,
-            0.01 * alpha_upper,
+            0.001 * alpha_upper,
         )
         k = 0
 

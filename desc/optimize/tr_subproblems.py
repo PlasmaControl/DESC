@@ -556,6 +556,12 @@ def trust_region_step_exact_direct(
             phi_diff = phi - phi_prev
             alpha -= phi * (alpha - alpha_prev) / (phi_diff + 1e-10)
 
+            alpha = jnp.where(
+                (alpha < alpha_lower) | (alpha > alpha_upper),
+                0.001 * alpha_upper,
+                alpha,
+            )
+
             k += 1
             return alpha, alpha_lower, alpha_upper, phi, k
 

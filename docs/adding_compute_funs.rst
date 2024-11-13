@@ -162,7 +162,7 @@ from previous versions of DESC.
 Since the new quantity did not exist in previous versions of DESC, one must run this test
 and commit the outputted ``tests/inputs/master_compute_data.pkl`` file which is updated automatically when a new quantity is detected.
 
-Compute function may take additional ``**kwargs`` arguments to provide more information to the function which cannot be get from other input arguments or dependencies in ``data``. One example of this kind of compute function is ``P_ISS04``.
+Compute function may take additional ``**kwargs`` arguments to provide more information to the function. One example of this kind of compute function is ``P_ISS04`` which has a keyword argument ``H_ISS04``.
 ::
 
   @register_compute_fun(

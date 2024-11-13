@@ -708,7 +708,7 @@ _kernel_biot_savart_A.keys = ["R", "phi", "Z", "K_vc"]
 
 
 def _kernel_Bn_over_r(eval_data, source_data, diag=False):
-    # Bn / |r|
+    # B dot n' / |r|
     source_x = jnp.atleast_2d(
         rpz2xyz(jnp.array([source_data["R"], source_data["phi"], source_data["Z"]]).T)
     )
@@ -727,7 +727,7 @@ _kernel_Bn_over_r.keys = ["R", "phi", "Z", "Bn"]
 
 
 def _kernel_Phi_dG_dn(eval_data, source_data, diag=False):
-    # Phi * dG(x,x')/dn' = -Phi * n dot r / r^3 where Phi has units tesla-meters.
+    # Phi * dG(x,x')/dn' = -Phi * n' dot r / r^3 where Phi has units tesla-meters.
     source_x = jnp.atleast_2d(
         rpz2xyz(jnp.array([source_data["R"], source_data["phi"], source_data["Z"]]).T)
     )
@@ -740,7 +740,7 @@ def _kernel_Phi_dG_dn(eval_data, source_data, diag=False):
         dx = eval_x[:, None] - source_x[None]
     n = rpz2xyz_vec(source_data["n_rho"], phi=source_data["phi"])
     return safediv(
-        source_data["Phi"] * dot(n, dx, axis=-1),
+        -source_data["Phi"] * dot(n, dx, axis=-1),
         safenorm(dx, axis=-1) ** 3,
     )
 
@@ -904,12 +904,11 @@ def compute_B_plasma(eq, eval_grid, source_grid=None, normal_only=False):
     return Bplasma
 
 
-def compute_B_laplace(eq, eval_grid, source_grid=None, B0=None, G=1, R0=1):
+def compute_B_laplace(eq, eval_grid, source_grid=None, B0=None, G=1, R0=1, sym="sin"):
     """Compute magnetic field in vacuum interior of plasma.
 
-    Let D denote the interior and D^∁ the exterior of a toroidal region
-    with boundary ∂D. Computes the magnetic field 𝐁 in units of Tesla
-    such that
+    Let D, D^∁ denote the interior, exterior of a toroidal region with
+    boundary ∂D. Computes the magnetic field 𝐁 in units of Tesla such that
              𝐁 = 𝐁₀ + ∇Φ on D
          ∇ × 𝐁 = ∇ × 𝐁₀  on D ∪ D^∁ (i.e. Φ is single-valued or periodic)
         ∇ × 𝐁₀ = μ₀ 𝐉    on D ∪ D^∁
@@ -935,12 +934,13 @@ def compute_B_laplace(eq, eval_grid, source_grid=None, B0=None, G=1, R0=1):
         divided by 2π. Default is 1. Ignored if ``B0`` is given.
     R0 : float
         Major radius. Ignored if ``B0`` is given.
+    sym : str
+        ``DoubleFourierSeries`` basis symmetry.
 
     Returns
     -------
-    B : jnp.ndarray
-        Shape (eval_grid.num_nodes, 3).
-        Magnetic field evaluated at eval_grid.
+    B0, grad_Phi : MagneticField, FourierCurrentPotentialField
+        Magnetic fields.
 
     """
     from desc.magnetic_fields import FourierCurrentPotentialField, ToroidalMagneticField
@@ -960,11 +960,13 @@ def compute_B_laplace(eq, eval_grid, source_grid=None, B0=None, G=1, R0=1):
     source_data = eq.compute(data_keys, grid=source_grid)
     if B0 is None:
         B0 = ToroidalMagneticField(B0=G, R0=R0)
-    source_data["Bn"], _ = B0.compute_Bnormal(eq.surface, eval_grid=eval_grid)
+    source_data["Bn"], _ = B0.compute_Bnormal(
+        eq.surface, eval_grid=source_grid, source_grid=source_grid
+    )
 
-    Phi_basis = DoubleFourierSeries(M=eq.M, N=eq.N, NFP=eq.NFP, sym="sin")
-    Phi_trans_eval = Transform(basis=Phi_basis, grid=eval_grid)
-    Phi_trans_source = Transform(basis=Phi_basis, grid=source_grid)
+    basis = DoubleFourierSeries(M=eq.M, N=eq.N, NFP=eq.NFP, sym=sym)
+    trans_evl = Transform(eval_grid, basis)
+    trans_src = Transform(source_grid, basis)
 
     # If we didn't boost Fourier basis, we would need NFP*num zeta toroidal resolution.
     # Malhotra recommends s = q = N⁰ᐧ²⁵ where N² is num theta * num zeta*NFP,
@@ -982,11 +984,10 @@ def compute_B_laplace(eq, eval_grid, source_grid=None, B0=None, G=1, R0=1):
         interpolator = DFTInterpolator(eval_grid, source_grid, s, q)
 
     def LHS(Phi_mn):
-        # After Fourier analysis, the LHS is linear in the spectral coefficients Φₘₙ.
-        # Numerically, we approximate this as finite-dimensional, which enables
-        # writing the left hand side as A @ Φₘₙ. Then Φₘₙ is found by solving
-        # LHS(Φₘₙ) = A @ Φₘₙ = RHS.
-        source_data["Phi"] = Phi_trans_source.transform(Phi_mn)
+        # After Fourier transform, the LHS is linear in the spectral coefficients Φₘₙ.
+        # We approximate this as finite-dimensional, which enables writing the left
+        # hand side as A @ Φₘₙ. Then Φₘₙ is found by solving LHS(Φₘₙ) = A @ Φₘₙ = RHS.
+        source_data["Phi"] = trans_src.transform(Phi_mn)
         integral = singular_integral(
             eval_data,
             source_data,
@@ -994,27 +995,26 @@ def compute_B_laplace(eq, eval_grid, source_grid=None, B0=None, G=1, R0=1):
             interpolator,
             loop=True,
         ).squeeze()
-        Phi = Phi_trans_eval.transform(Phi_mn)
+        Phi = trans_evl.transform(Phi_mn)
         return Phi + integral / (2 * jnp.pi)
 
     # LHS is expensive, so it is better to construct full Jacobian once
     # rather than iterative solves like jax.scipy.sparse.linalg.cg.
+    A = jacfwd(LHS)(jnp.ones(basis.num_modes))
     RHS = -singular_integral(
         eval_data,
         source_data,
         _kernel_Bn_over_r,
         interpolator,
         loop=True,
-    ) / (2 * jnp.pi)
+    ).squeeze() / (2 * jnp.pi)
     # Fourier coefficients of Φ on boundary
-    Phi_mn = jnp.linalg.solve(jacfwd(LHS)(jnp.ones(Phi_basis.num_modes)), RHS)
-    # ∇Φ, aka B_vacuum, in the interior. See Merkel eq. 1.4.
+    Phi_mn, _, _, _ = jnp.linalg.lstsq(A, RHS)
+
+    # 𝐁 - 𝐁₀ = ∇Φ = 𝐁_vacuum in the interior.
+    # Merkel eq. 1.4 is the Green's function solution to ∇²Φ = 0 in the interior.
+    # Note that 𝐁₀′ in eq. 3.5 has the wrong sign.
     grad_Phi = FourierCurrentPotentialField.from_surface(
-        eq.surface,
-        # expects units of amperes
-        Phi_mn / mu_0,
-        Phi_basis.modes[:, 1:],
+        eq.surface, Phi_mn / mu_0, basis.modes[:, 1:]
     )
-    # Note that Merkel eq. 3.5 has wrong sign on the first integral.
-    B = B0 + grad_Phi  # eq. 3.7
-    return B
+    return B0, grad_Phi

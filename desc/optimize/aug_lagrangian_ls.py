@@ -339,12 +339,12 @@ def lsq_auglag(  # noqa: C901 - FIXME: simplify this
         success, message = True, STATUS_MESSAGES["gtol"]
 
     # notation following Conn & Gould, algorithm 14.4.2, but with our mu = their mu^-1
-    omega = options.pop("omega", g_norm if scaled_termination else 1.0)
-    eta = options.pop("eta", constr_violation if scaled_termination else 1.0)
+    omega = options.pop("omega", min(g_norm, 1e-2) if scaled_termination else 1.0)
+    eta = options.pop("eta", min(constr_violation, 1e-2) if scaled_termination else 1.0)
     alpha_omega = options.pop("alpha_omega", 1.0)
     beta_omega = options.pop("beta_omega", 1.0)
-    alpha_eta = options.pop("alpha_eta", 1.0 if scaled_termination else 0.1)
-    beta_eta = options.pop("beta_eta", 1.0 if scaled_termination else 0.9)
+    alpha_eta = options.pop("alpha_eta", 0.1)
+    beta_eta = options.pop("beta_eta", 0.9)
     tau = options.pop("tau", 10)
 
     gtolk = max(omega / jnp.mean(mu) ** alpha_omega, gtol)

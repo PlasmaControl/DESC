@@ -877,7 +877,7 @@ def test_omnigenity_optimization():
     )
     optimizer = Optimizer("lsq-auglag")
     (eq, field), _ = optimizer.optimize(
-        (eq, field), objective, constraints, maxiter=100, verbose=3
+        (eq, field), objective, constraints, maxiter=150, verbose=3
     )
     eq, _ = eq.solve(objective="force", verbose=3)
 

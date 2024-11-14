@@ -11,7 +11,7 @@ from desc.compute.utils import _compute as compute_fun
 from desc.compute.utils import _parse_parameterization, get_profiles, get_transforms
 from desc.grid import QuadratureGrid
 from desc.optimizable import OptimizableCollection
-from desc.utils import errorif, parse_argname_change
+from desc.utils import errorif, parse_argname_change, setdefault
 
 from .linear_objectives import _FixedObjective
 from .objective_funs import _Objective, collect_docs
@@ -29,6 +29,8 @@ class GenericObjective(_Objective):
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at. Defaults to
         ``QuadratureGrid(eq.L_grid, eq.M_grid, eq.N_grid)`` if thing is an Equilibrium.
+    compute_kwargs : dict
+        Optional keyword arguments passed to core compute function, eg ``helicity``.
 
     """
 
@@ -37,6 +39,7 @@ class GenericObjective(_Objective):
     )
 
     _print_value_fmt = "Generic objective value: "
+    _static_attrs = ["_compute_kwargs"]
 
     def __init__(
         self,
@@ -52,6 +55,7 @@ class GenericObjective(_Objective):
         grid=None,
         name="generic",
         jac_chunk_size=None,
+        compute_kwargs=None,
         **kwargs,
     ):
         errorif(
@@ -64,6 +68,7 @@ class GenericObjective(_Objective):
             target = 0
         self.f = f
         self._grid = grid
+        self._compute_kwargs = setdefault(compute_kwargs, {})
         super().__init__(
             things=thing,
             target=target,
@@ -110,7 +115,9 @@ class GenericObjective(_Objective):
         else:
             self._dim_f = grid.num_nodes * np.prod(data_index[self._p][self.f]["dim"])
         profiles = get_profiles(self.f, obj=thing, grid=grid)
-        transforms = get_transforms(self.f, obj=thing, grid=grid)
+        transforms = get_transforms(
+            self.f, obj=thing, grid=grid, **self._compute_kwargs
+        )
         self._constants = {
             "transforms": transforms,
             "profiles": profiles,
@@ -142,6 +149,7 @@ class GenericObjective(_Objective):
             params=params,
             transforms=constants["transforms"],
             profiles=constants["profiles"],
+            **self._compute_kwargs,
         )
         f = data[self.f]
         if self._coordinates == "r":
@@ -279,6 +287,8 @@ class ObjectiveFromUser(_Objective):
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at. Defaults to
         ``QuadratureGrid(eq.L_grid, eq.M_grid, eq.N_grid)`` if thing is an Equilibrium.
+    compute_kwargs : dict
+        Optional keyword arguments passed to core compute function, eg ``helicity``.
 
     """
 
@@ -307,6 +317,7 @@ class ObjectiveFromUser(_Objective):
 
     _units = "(Unknown)"
     _print_value_fmt = "Custom objective value: "
+    _static_attrs = ["_compute_kwargs"]
 
     def __init__(
         self,
@@ -322,6 +333,7 @@ class ObjectiveFromUser(_Objective):
         grid=None,
         name="custom",
         jac_chunk_size=None,
+        compute_kwargs=None,
         **kwargs,
     ):
         errorif(
@@ -334,6 +346,7 @@ class ObjectiveFromUser(_Objective):
             target = 0
         self._fun = fun
         self._grid = grid
+        self._compute_kwargs = setdefault(compute_kwargs, {})
         super().__init__(
             things=thing,
             target=target,
@@ -394,7 +407,9 @@ class ObjectiveFromUser(_Objective):
         self._dim_f = jax.eval_shape(self._fun_wrapped, dummy_data).size
         self._scalar = self._dim_f == 1
         profiles = get_profiles(self._data_keys, obj=thing, grid=grid)
-        transforms = get_transforms(self._data_keys, obj=thing, grid=grid)
+        transforms = get_transforms(
+            self._data_keys, obj=thing, grid=grid, **self._compute_kwargs
+        )
         self._constants = {
             "transforms": transforms,
             "profiles": profiles,
@@ -428,6 +443,7 @@ class ObjectiveFromUser(_Objective):
             params=params,
             transforms=constants["transforms"],
             profiles=constants["profiles"],
+            **self._compute_kwargs,
         )
         f = self._fun_wrapped(data)
         return f

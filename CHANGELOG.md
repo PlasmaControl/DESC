@@ -2,7 +2,8 @@ Changelog
 =========
 
 New Features
-- Add ``from_input_file`` method to ``Equilibrium`` class to generate an ``Equilibrium`` object with boundary, profiles, resolution and flux specified in a given DESC or VMEC input file
+- Add ``from_input_file`` method to ``Equilibrium`` class to generate an ``Equilibrium`` object with boundary, profiles, resolution and flux specified in a given DESC or VMEC input file.
+- Add ``desc.coils.initialize_modular_coils`` and ``desc.coils.initialize_saddle_coils`` for creating an initial guess for stage 2 optimization.
 
 
 Bug Fixes

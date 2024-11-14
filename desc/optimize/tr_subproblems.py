@@ -485,7 +485,7 @@ def trust_region_step_exact_qr(
 
 @jit
 def trust_region_step_exact_direct(
-    p_newton, fp, JTJ, trust_radius, initial_alpha=None, rtol=0.01, max_iter=10
+    p_newton, fp, JTJ, trust_radius, initial_alpha=None, rtol=0.005, max_iter=10
 ):
     """Solve a trust-region problem using a semi-exact method.
 

@@ -532,6 +532,7 @@ def _omni_map_theta_B(params, transforms, profiles, data, **kwargs):
 
 
 def _omnigenity_mapping(M, N, iota, alpha, h, grid):
+    iota = jnp.atleast_1d(iota)
     assert (
         len(iota) == grid.num_rho
     ), f"got ({len(iota)}) iota values for grid with {grid.num_rho} surfaces"

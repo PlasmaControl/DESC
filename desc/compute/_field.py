@@ -3394,6 +3394,10 @@ def _B_dot_gradB_z(params, transforms, profiles, data, **kwargs):
     coordinates="r",
     data=["|B|"],
     resolution_requirement="tz",
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.magnetic_fields._core.OmnigenousField",
+    ],
 )
 def _min_tz_modB(params, transforms, profiles, data, **kwargs):
     data["min_tz |B|"] = surface_min(transforms["grid"], data["|B|"])
@@ -3413,6 +3417,10 @@ def _min_tz_modB(params, transforms, profiles, data, **kwargs):
     coordinates="r",
     data=["|B|"],
     resolution_requirement="tz",
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.magnetic_fields._core.OmnigenousField",
+    ],
 )
 def _max_tz_modB(params, transforms, profiles, data, **kwargs):
     data["max_tz |B|"] = surface_max(transforms["grid"], data["|B|"])
@@ -3431,6 +3439,10 @@ def _max_tz_modB(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="r",
     data=["min_tz |B|", "max_tz |B|"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.magnetic_fields._core.OmnigenousField",
+    ],
 )
 def _mirror_ratio(params, transforms, profiles, data, **kwargs):
     data["mirror ratio"] = (data["max_tz |B|"] - data["min_tz |B|"]) / (

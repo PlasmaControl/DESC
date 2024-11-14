@@ -1,5 +1,6 @@
 """Classes for magnetic field coils."""
 
+import functools
 import numbers
 from abc import ABC
 from collections.abc import MutableSequence
@@ -28,7 +29,7 @@ from desc.geometry import (
 from desc.grid import LinearGrid
 from desc.magnetic_fields import _MagneticField
 from desc.optimizable import Optimizable, OptimizableCollection, optimizable_parameter
-from desc.utils import equals, errorif, flatten_list, safenorm, warnif
+from desc.utils import cross, dot, equals, errorif, flatten_list, safenorm, warnif
 
 
 @jit
@@ -245,7 +246,7 @@ class _Coil(_MagneticField, Optimizable, ABC):
         """int: Number of coils."""
         return 1
 
-    def _compute_position(self, params=None, grid=None, **kwargs):
+    def _compute_position(self, params=None, grid=None, dx1=False, **kwargs):
         """Compute coil positions accounting for stellarator symmetry.
 
         Parameters
@@ -255,18 +256,31 @@ class _Coil(_MagneticField, Optimizable, ABC):
         grid : Grid or int, optional
             Grid of coordinates to evaluate at. Defaults to a Linear grid.
             If an integer, uses that many equally spaced points.
+        dx1 : bool
+            If True, also return dx/ds for the curve.
 
         Returns
         -------
         x : ndarray, shape(len(self),source_grid.num_nodes,3)
             Coil positions, in [R,phi,Z] or [X,Y,Z] coordinates.
+        x_s : ndarray, shape(len(self),source_grid.num_nodes,3)
+            Coil position derivatives, in [R,phi,Z] or [X,Y,Z] coordinates.
+            Only returned if dx1=True.
 
         """
-        x = self.compute("x", grid=grid, params=params, **kwargs)["x"]
-        x = jnp.transpose(jnp.atleast_3d(x), [2, 0, 1])  # shape=(1,num_nodes,3)
-        basis = kwargs.pop("basis", "xyz")
+        kwargs.setdefault("basis", "xyz")
+        keys = ["x", "x_s"] if dx1 else ["x"]
+        data = self.compute(keys, grid=grid, params=params, **kwargs)
+        x = jnp.transpose(jnp.atleast_3d(data["x"]), [2, 0, 1])  # shape=(1,num_nodes,3)
+        if dx1:
+            x_s = jnp.transpose(
+                jnp.atleast_3d(data["x_s"]), [2, 0, 1]
+            )  # shape=(1,num_nodes,3)
+        basis = kwargs.get("basis", "xyz")
         if basis.lower() == "rpz":
             x = x.at[:, :, 1].set(jnp.mod(x[:, :, 1], 2 * jnp.pi))
+        if dx1:
+            return x, x_s
         return x
 
     def _compute_A_or_B(
@@ -446,7 +460,7 @@ class _Coil(_MagneticField, Optimizable, ABC):
             + " (name={}, current={})".format(self.name, self.current)
         )
 
-    def to_FourierXYZ(self, N=10, grid=None, s=None, name=""):
+    def to_FourierXYZ(self, N=10, grid=None, s=None, name="", **kwargs):
         """Convert coil to FourierXYZCoil representation.
 
         Parameters
@@ -479,7 +493,7 @@ class _Coil(_MagneticField, Optimizable, ABC):
             self.current, coords, N=N, s=s, basis="xyz", name=name
         )
 
-    def to_SplineXYZ(self, knots=None, grid=None, method="cubic", name=""):
+    def to_SplineXYZ(self, knots=None, grid=None, method="cubic", name="", **kwargs):
         """Convert coil to SplineXYZCoil.
 
         Parameters
@@ -519,7 +533,7 @@ class _Coil(_MagneticField, Optimizable, ABC):
             self.current, coords, knots=knots, method=method, name=name, basis="xyz"
         )
 
-    def to_FourierRZ(self, N=10, grid=None, NFP=None, sym=False, name=""):
+    def to_FourierRZ(self, N=10, grid=None, NFP=None, sym=False, name="", **kwargs):
         """Convert Coil to FourierRZCoil representation.
 
         Note that some types of coils may not be representable in this basis.
@@ -553,7 +567,7 @@ class _Coil(_MagneticField, Optimizable, ABC):
             self.current, coords, N=N, NFP=NFP, basis="xyz", sym=sym, name=name
         )
 
-    def to_FourierPlanar(self, N=10, grid=None, basis="xyz", name=""):
+    def to_FourierPlanar(self, N=10, grid=None, basis="xyz", name="", **kwargs):
         """Convert Coil to FourierPlanarCoil representation.
 
         Note that some types of coils may not be representable in this basis.
@@ -1359,8 +1373,86 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         """Flip the coils across a plane."""
         [coil.flip(*args, **kwargs) for coil in self.coils]
 
-    def _compute_position(self, params=None, grid=None, **kwargs):
+    def _compute_position(self, params=None, grid=None, dx1=False, **kwargs):
         """Compute coil positions accounting for stellarator symmetry.
+
+        Parameters
+        ----------
+        params : dict or array-like of dict, optional
+            Parameters to pass to coils, either the same for all coils or one for each.
+        grid : Grid or int, optional
+            Grid of coordinates to evaluate at. Defaults to a Linear grid.
+            If an integer, uses that many equally spaced points.
+        dx1 : bool
+            If True, also return dx/ds for each curve.
+
+        Returns
+        -------
+        x : ndarray, shape(len(self),source_grid.num_nodes,3)
+            Coil positions, in [R,phi,Z] or [X,Y,Z] coordinates.
+        x_s : ndarray, shape(len(self),source_grid.num_nodes,3)
+            Coil position derivatives, in [R,phi,Z] or [X,Y,Z] coordinates.
+            Only returned if dx1=True.
+
+        """
+        basis = kwargs.pop("basis", "xyz")
+        keys = ["x", "x_s"] if dx1 else ["x"]
+        if params is None:
+            params = [get_params(keys, coil, basis=basis) for coil in self]
+        data = self.compute(keys, grid=grid, params=params, basis=basis, **kwargs)
+        data = tree_leaves(data, is_leaf=lambda x: isinstance(x, dict))
+        x = jnp.dstack([d["x"].T for d in data]).T  # shape=(ncoils,num_nodes,3)
+        if dx1:
+            x_s = jnp.dstack([d["x_s"].T for d in data]).T  # shape=(ncoils,num_nodes,3)
+        # stellarator symmetry is easiest in [X,Y,Z] coordinates
+        xyz = rpz2xyz(x) if basis.lower() == "rpz" else x
+        if dx1:
+            xyz_s = (
+                rpz2xyz_vec(x_s, xyz[:, :, 0], xyz[:, :, 1])
+                if basis.lower() == "rpz"
+                else x_s
+            )
+
+        # if stellarator symmetric, add reflected coils from the other half field period
+        if self.sym:
+            normal = jnp.array(
+                [-jnp.sin(jnp.pi / self.NFP), jnp.cos(jnp.pi / self.NFP), 0]
+            )
+            xyz_sym = xyz @ reflection_matrix(normal).T @ reflection_matrix([0, 0, 1]).T
+            xyz = jnp.vstack((xyz, jnp.flipud(xyz_sym)))
+            if dx1:
+                xyz_s_sym = (
+                    xyz_s @ reflection_matrix(normal).T @ reflection_matrix([0, 0, 1]).T
+                )
+                xyz_s = jnp.vstack((xyz_s, jnp.flipud(xyz_s_sym)))
+
+        # field period rotation is easiest in [R,phi,Z] coordinates
+        rpz = xyz2rpz(xyz)
+        if dx1:
+            rpz_s = xyz2rpz_vec(xyz_s, xyz[:, :, 0], xyz[:, :, 1])
+
+        # if field period symmetry, add rotated coils from other field periods
+        rpz0 = rpz
+        for k in range(1, self.NFP):
+            rpz = jnp.vstack((rpz, rpz0 + jnp.array([0, 2 * jnp.pi * k / self.NFP, 0])))
+        if dx1:
+            rpz_s = jnp.tile(rpz_s, (self.NFP, 1, 1))
+
+        # ensure phi in [0, 2pi)
+        rpz = rpz.at[:, :, 1].set(jnp.mod(rpz[:, :, 1], 2 * jnp.pi))
+
+        x = rpz2xyz(rpz) if basis.lower() == "xyz" else rpz
+        if dx1:
+            x_s = (
+                rpz2xyz_vec(rpz_s, phi=rpz[:, :, 1])
+                if basis.lower() == "xyz"
+                else rpz_s
+            )
+            return x, x_s
+        return x
+
+    def _compute_linking_number(self, params=None, grid=None):
+        """Calculate linking numbers for coils in the coilset.
 
         Parameters
         ----------
@@ -1372,50 +1464,19 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
 
         Returns
         -------
-        x : ndarray, shape(len(self),source_grid.num_nodes,3)
-            Coil positions, in [R,phi,Z] or [X,Y,Z] coordinates.
+        link : ndarray, shape(num_coils, num_coils)
+            Linking number of each coil with each other coil. link=0 means they are not
+            linked, +/- 1 means the coils link each other in one direction or another.
 
         """
-        basis = kwargs.pop("basis", "xyz")
-        if params is None:
-            params = [get_params("x", coil, basis=basis) for coil in self]
-        data = self.compute("x", grid=grid, params=params, basis=basis, **kwargs)
-        data = tree_leaves(data, is_leaf=lambda x: isinstance(x, dict))
-        x = jnp.dstack([d["x"].T for d in data]).T  # shape=(ncoils,num_nodes,3)
-
-        # stellarator symmetry is easiest in [X,Y,Z] coordinates
-        if basis.lower() == "rpz":
-            xyz = rpz2xyz(x)
-        else:
-            xyz = x
-
-        # if stellarator symmetric, add reflected coils from the other half field period
-        if self.sym:
-            normal = jnp.array(
-                [-jnp.sin(jnp.pi / self.NFP), jnp.cos(jnp.pi / self.NFP), 0]
-            )
-            xyz_sym = xyz @ reflection_matrix(normal).T @ reflection_matrix([0, 0, 1]).T
-            xyz = jnp.vstack((xyz, jnp.flipud(xyz_sym)))
-
-        # field period rotation is easiest in [R,phi,Z] coordinates
-        rpz = xyz2rpz(xyz)
-
-        # if field period symmetry, add rotated coils from other field periods
-        if self.NFP > 1:
-            rpz0 = rpz
-            for k in range(1, self.NFP):
-                rpz = jnp.vstack(
-                    (rpz, rpz0 + jnp.array([0, 2 * jnp.pi * k / self.NFP, 0]))
-                )
-
-        # ensure phi in [0, 2pi)
-        rpz = rpz.at[:, :, 1].set(jnp.mod(rpz[:, :, 1], 2 * jnp.pi))
-
-        if basis.lower() == "xyz":
-            x = rpz2xyz(rpz)
-        else:
-            x = rpz
-        return x
+        if grid is None:
+            grid = LinearGrid(N=50)
+        dx = grid.spacing[:, 2]
+        x, x_s = self._compute_position(params, grid, dx1=True, basis="xyz")
+        link = _linking_number(
+            x[:, None], x[None, :], x_s[:, None], x_s[None, :], dx, dx
+        )
+        return link / (4 * jnp.pi)
 
     def _compute_A_or_B(
         self,
@@ -1705,7 +1766,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         return cls(*coilset)
 
     @classmethod
-    def from_makegrid_coilfile(cls, coil_file, method="cubic"):
+    def from_makegrid_coilfile(cls, coil_file, method="cubic", check_intersection=True):
         """Create a CoilSet of SplineXYZCoils from a MAKEGRID-formatted coil txtfile.
 
         If the MAKEGRID contains more than one coil group (denoted by the number listed
@@ -1730,6 +1791,8 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
               the data, and will not introduce new extrema in the interpolated points
             - ``'monotonic-0'``: same as `'monotonic'` but with 0 first derivatives at
               both endpoints
+        check_intersection : bool
+            whether to check the resulting coilsets for intersecting coils.
 
         """
         coils = []  # list of SplineXYZCoils, ignoring coil groups
@@ -1805,7 +1868,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             )
 
         try:
-            return cls(*coils)
+            return cls(*coils, check_intersection=check_intersection)
         except ValueError as e:
             errorif(
                 True,
@@ -2305,7 +2368,7 @@ class MixedCoilSet(CoilSet):
             )
         ]
 
-    def _compute_position(self, params=None, grid=None, **kwargs):
+    def _compute_position(self, params=None, grid=None, dx1=False, **kwargs):
         """Compute coil positions accounting for stellarator symmetry.
 
         Parameters
@@ -2316,11 +2379,16 @@ class MixedCoilSet(CoilSet):
             Grid of coordinates to evaluate at. Defaults to a Linear grid.
             If an integer, uses that many equally spaced points.
             If array-like, should be 1 value per coil.
+        dx1 : bool
+            If True, also return dx/ds for each curve.
 
         Returns
         -------
         x : ndarray, shape(len(self),source_grid.num_nodes,3)
             Coil positions, in [R,phi,Z] or [X,Y,Z] coordinates.
+        x_s : ndarray, shape(len(self),source_grid.num_nodes,3)
+            Coil position derivatives, in [R,phi,Z] or [X,Y,Z] coordinates.
+            Only returned if dx1=True.
 
         """
         errorif(
@@ -2329,15 +2397,17 @@ class MixedCoilSet(CoilSet):
             "grid must be supplied to MixedCoilSet._compute_position, since the "
             + "default grid for each coil could have a different number of nodes.",
         )
+        kwargs.setdefault("basis", "xyz")
         params = self._make_arraylike(params)
         grid = self._make_arraylike(grid)
-        x = jnp.vstack(
-            [
-                coil._compute_position(par, grd, **kwargs)
-                for coil, par, grd in zip(self.coils, params, grid)
-            ]
-        )
-        return x
+        out = []
+        for coil, par, grd in zip(self.coils, params, grid):
+            out.append(coil._compute_position(par, grd, dx1, **kwargs))
+        if dx1:
+            x = jnp.vstack([foo[0] for foo in out])
+            x_s = jnp.vstack([foo[1] for foo in out])
+            return x, x_s
+        return jnp.vstack(out)
 
     def _compute_A_or_B(
         self,
@@ -2458,7 +2528,7 @@ class MixedCoilSet(CoilSet):
         return self._compute_A_or_B(coords, params, basis, source_grid, transforms, "A")
 
     def to_FourierPlanar(
-        self, N=10, grid=None, basis="xyz", name="", check_intersection=False
+        self, N=10, grid=None, basis="xyz", name="", check_intersection=True
     ):
         """Convert all coils to FourierPlanarCoil representation.
 
@@ -2487,7 +2557,12 @@ class MixedCoilSet(CoilSet):
             minor radius r in a plane specified by a center position and normal vector.
 
         """
-        coils = [coil.to_FourierPlanar(N=N, grid=grid, basis=basis) for coil in self]
+        coils = [
+            coil.to_FourierPlanar(
+                N=N, grid=grid, basis=basis, check_intersection=check_intersection
+            )
+            for coil in self
+        ]
         return self.__class__(*coils, name=name, check_intersection=check_intersection)
 
     def to_FourierRZ(
@@ -2520,7 +2595,12 @@ class MixedCoilSet(CoilSet):
             New representation of the coilset parameterized by a Fourier series for R,Z.
 
         """
-        coils = [coil.to_FourierRZ(N=N, grid=grid, NFP=NFP, sym=sym) for coil in self]
+        coils = [
+            coil.to_FourierRZ(
+                N=N, grid=grid, NFP=NFP, sym=sym, check_intersection=check_intersection
+            )
+            for coil in self
+        ]
         return self.__class__(*coils, name=name, check_intersection=check_intersection)
 
     def to_FourierXYZ(self, N=10, grid=None, s=None, name="", check_intersection=True):
@@ -2548,7 +2628,10 @@ class MixedCoilSet(CoilSet):
             X,Y,Z.
 
         """
-        coils = [coil.to_FourierXYZ(N, grid, s) for coil in self]
+        coils = [
+            coil.to_FourierXYZ(N, grid, s, check_intersection=check_intersection)
+            for coil in self
+        ]
         return self.__class__(*coils, name=name, check_intersection=check_intersection)
 
     def to_SplineXYZ(
@@ -2586,7 +2669,12 @@ class MixedCoilSet(CoilSet):
             New representation of the coilset parameterized by a spline for X,Y,Z.
 
         """
-        coils = [coil.to_SplineXYZ(knots, grid, method) for coil in self]
+        coils = [
+            coil.to_SplineXYZ(
+                knots, grid, method, check_intersection=check_intersection
+            )
+            for coil in self
+        ]
         return self.__class__(*coils, name=name, check_intersection=check_intersection)
 
     def __add__(self, other):
@@ -2610,7 +2698,7 @@ class MixedCoilSet(CoilSet):
 
     @classmethod
     def from_makegrid_coilfile(  # noqa: C901 - FIXME: simplify this
-        cls, coil_file, method="cubic", ignore_groups=False
+        cls, coil_file, method="cubic", ignore_groups=False, check_intersection=True
     ):
         """Create a MixedCoilSet of SplineXYZCoils from a MAKEGRID coil txtfile.
 
@@ -2645,6 +2733,9 @@ class MixedCoilSet(CoilSet):
             single coilgroup. If there is only a single group, however, this will not
             return a nested coilset, but just a single coilset for that group. if True,
             return the coils as just a single MixedCoilSet.
+        check_intersection : bool
+            whether to check the resulting coilsets for intersecting coils.
+
 
         """
         coils = {}  # dict of list of SplineXYZCoils, one list per coilgroup
@@ -2741,18 +2832,49 @@ class MixedCoilSet(CoilSet):
         # nested coilset
         groupinds = list(coils.keys())
         if len(groupinds) == 1:
-            return cls(*coils[groupinds[0]], name=groupnames[0])
+            return cls(
+                *coils[groupinds[0]],
+                name=groupnames[0],
+                check_intersection=check_intersection,
+            )
 
         # if not, possibly return a nested coilset, containing one coilset per coilgroup
         coilsets = []  # list of coilsets, so we can attempt to use CoilSet for each one
         for groupname, groupind in zip(groupnames, groupinds):
             try:
                 # try making the coilgroup use a CoilSet
-                coilsets.append(CoilSet(*coils[groupind], name=groupname))
+                coilsets.append(
+                    CoilSet(
+                        *coils[groupind],
+                        name=groupname,
+                        check_intersection=check_intersection,
+                    )
+                )
             except ValueError:  # can't load as a CoilSet if any of the coils have
                 # different length of knots, so load as MixedCoilSet instead
-                coilsets.append(cls(*coils[groupind], name=groupname))
-        cset = cls(*coilsets)
+                coilsets.append(
+                    cls(
+                        *coils[groupind],
+                        name=groupname,
+                        check_intersection=check_intersection,
+                    )
+                )
+        cset = cls(*coilsets, check_intersection=check_intersection)
         if ignore_groups:
-            cset = cls(*flatten_coils(cset))
+            cset = cls(*flatten_coils(cset), check_intersection=check_intersection)
         return cset
+
+
+@functools.partial(jnp.vectorize, signature="(m,3),(n,3),(m,3),(n,3),(m),(n)->()")
+def _linking_number(x1, x2, x1_s, x2_s, dx1, dx2):
+    """Linking number between curves x1 and x2 with tangents x1_s, x2_s."""
+    x1_s *= dx1[:, None]
+    x2_s *= dx2[:, None]
+    dx = x1[:, None, :] - x2[None, :, :]  # shape(m,n,3)
+    dx_norm = safenorm(dx, axis=-1)  # shape(m,n)
+    den = dx_norm**3
+    dr1xdr2 = cross(x1_s[:, None, :], x2_s[None, :, :], axis=-1)  # shape(m,n,3)
+    num = dot(dx, dr1xdr2, axis=-1)  # shape(m,n)
+    small = dx_norm < jnp.finfo(x1.dtype).eps
+    ratio = jnp.where(small, 0.0, num / jnp.where(small, 1.0, den))
+    return ratio.sum()

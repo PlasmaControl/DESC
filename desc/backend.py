@@ -75,14 +75,7 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
     from jax.numpy import bincount, flatnonzero, repeat, take
     from jax.numpy.fft import irfft, rfft, rfft2
     from jax.scipy.fft import dct, idct
-    from jax.scipy.linalg import (
-        block_diag,
-        cho_factor,
-        cho_solve,
-        eigh_tridiagonal,
-        qr,
-        solve_triangular,
-    )
+    from jax.scipy.linalg import block_diag, cho_factor, cho_solve, qr, solve_triangular
     from jax.scipy.special import gammaln, logsumexp
     from jax.tree_util import (
         register_pytree_node,
@@ -94,9 +87,37 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
         treedef_is_leaf,
     )
 
-    trapezoid = (
-        jnp.trapezoid if hasattr(jnp, "trapezoid") else jax.scipy.integrate.trapezoid
-    )
+    if hasattr(jnp, "trapezoid"):
+        trapezoid = jnp.trapezoid  # for JAX 0.4.26 and later
+    elif hasattr(jax.scipy, "integrate"):
+        trapezoid = jax.scipy.integrate.trapezoid
+    else:
+        trapezoid = jnp.trapz  # for older versions of JAX, deprecated by jax 0.4.16
+
+    def execute_on_cpu(func):
+        """Decorator to set default device to CPU for a function.
+
+        Parameters
+        ----------
+        func : callable
+            Function to decorate
+
+        Returns
+        -------
+        wrapper : callable
+            Decorated function that will always run on CPU even if
+            there are available GPUs.
+        """
+
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            with jax.default_device(jax.devices("cpu")[0]):
+                return func(*args, **kwargs)
+
+        return wrapper
+
+    # JAX implementation is not differentiable on gpu.
+    eigh_tridiagonal = execute_on_cpu(jax.scipy.linalg.eigh_tridiagonal)
 
     def put(arr, inds, vals):
         """Functional interface for array "fancy indexing".
@@ -115,35 +136,15 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
         Returns
         -------
         arr : array-like
-            Input array with vals inserted at inds.
+            Copy of input array with vals inserted at inds.
+            In some cases JAX may decide a copy is not necessary.
 
         """
         if isinstance(arr, np.ndarray):
+            arr = arr.copy()
             arr[inds] = vals
             return arr
         return jnp.asarray(arr).at[inds].set(vals)
-
-    def execute_on_cpu(func):
-        """Decorator to set default device to CPU for a function.
-
-        Parameters
-        ----------
-        func : callable
-            Function to decorate
-
-        Returns
-        -------
-        wrapper : callable
-            Decorated function that will run always on CPU even if
-            there are available GPUs.
-        """
-
-        @functools.wraps(func)
-        def wrapper(*args, **kwargs):
-            with jax.default_device(jax.devices("cpu")[0]):
-                return func(*args, **kwargs)
-
-        return wrapper
 
     def sign(x):
         """Sign function, but returns 1 for x==0.
@@ -202,6 +203,7 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
         maxiter_ls=5,
         alpha=0.1,
         fixup=None,
+        full_output=False,
     ):
         """Find x where fun(x, *args) == 0.
 
@@ -229,6 +231,9 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
         fixup : callable, optional
             Function to modify x after each update, ie to enforce periodicity. Should
             have a signature of the form fixup(x, *args) -> x'.
+        full_output : bool, optional
+            If True, also return a tuple where the first element is the residual from
+            the root finding and the second is the number of iterations.
 
         Returns
         -------
@@ -273,18 +278,25 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
                 xk1, fk1 = backtrack(xk1, fk1, d)
                 return xk1, fk1, k1 + 1
 
-            state = guess, res(guess), 0
+            state = guess, res(guess), 0.0
             state = jax.lax.while_loop(condfun, bodyfun, state)
-            return state[0], state[1:]
+            if full_output:
+                return state[0], state[1:]
+            else:
+                return state[0]
 
         def tangent_solve(g, y):
             A = jax.jacfwd(g)(y)
             return y / A
 
-        x, (res, niter) = jax.lax.custom_root(
-            res, x0, solve, tangent_solve, has_aux=True
-        )
-        return x, (abs(res), niter)
+        if full_output:
+            x, (res, niter) = jax.lax.custom_root(
+                res, x0, solve, tangent_solve, has_aux=True
+            )
+            return x, (abs(res), niter)
+        else:
+            x = jax.lax.custom_root(res, x0, solve, tangent_solve, has_aux=False)
+            return x
 
     def root(
         fun,
@@ -296,6 +308,7 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
         maxiter_ls=0,
         alpha=0.1,
         fixup=None,
+        full_output=False,
     ):
         """Find x where fun(x, *args) == 0.
 
@@ -323,6 +336,9 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
         fixup : callable, optional
             Function to modify x after each update, ie to enforce periodicity. Should
             have a signature of the form fixup(x, *args) -> 1d array.
+        full_output : bool, optional
+            If True, also return a tuple where the first element is the residual from
+            the root finding and the second is the number of iterations.
 
         Returns
         -------
@@ -390,19 +406,26 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
             state = (
                 jnp.atleast_1d(jnp.asarray(guess)),
                 jnp.atleast_1d(resfun(guess)),
-                0,
+                0.0,
             )
             state = jax.lax.while_loop(condfun, bodyfun, state)
-            return state[0], state[1:]
+            if full_output:
+                return state[0], state[1:]
+            else:
+                return state[0]
 
         def tangent_solve(g, y):
             A = jnp.atleast_2d(jax.jacfwd(g)(y))
             return _lstsq(A, jnp.atleast_1d(y))
 
-        x, (res, niter) = jax.lax.custom_root(
-            res, x0, solve, tangent_solve, has_aux=True
-        )
-        return x, (safenorm(res), niter)
+        if full_output:
+            x, (res, niter) = jax.lax.custom_root(
+                res, x0, solve, tangent_solve, has_aux=True
+            )
+            return x, (safenorm(res), niter)
+        else:
+            x = jax.lax.custom_root(res, x0, solve, tangent_solve, has_aux=False)
+            return x
 
 
 # we can't really test the numpy backend stuff in automated testing, so we ignore it
@@ -427,7 +450,7 @@ else:  # pragma: no cover
 
     trapezoid = np.trapezoid if hasattr(np, "trapezoid") else np.trapz
 
-    def imap(f, xs, batch_size=None, in_axes=0, out_axes=0):
+    def imap(f, xs, *, batch_size=None, in_axes=0, out_axes=0):
         """Generalizes jax.lax.map; uses numpy."""
         if not isinstance(xs, np.ndarray):
             raise NotImplementedError(
@@ -513,9 +536,10 @@ else:  # pragma: no cover
         Returns
         -------
         arr : array-like
-            Input array with vals inserted at inds.
+            Copy of input array with vals inserted at inds.
 
         """
+        arr = arr.copy()
         arr[inds] = vals
         return arr
 
@@ -712,6 +736,7 @@ else:  # pragma: no cover
         maxiter_ls=5,
         alpha=0.1,
         fixup=None,
+        full_output=False,
     ):
         """Find x where fun(x, *args) == 0.
 
@@ -739,6 +764,9 @@ else:  # pragma: no cover
         fixup : callable, optional
             Function to modify x after each update, ie to enforce periodicity. Should
             have a signature of the form fixup(x) -> x'.
+        full_output : bool, optional
+            If True, also return a tuple where the first element is the residual from
+            the root finding and the second is the number of iterations.
 
         Returns
         -------
@@ -751,7 +779,10 @@ else:  # pragma: no cover
         out = scipy.optimize.root_scalar(
             fun, args, x0=x0, fprime=jac, xtol=tol, rtol=tol
         )
-        return out.root, out
+        if full_output:
+            return out.root, out
+        else:
+            return out.root
 
     def root(
         fun,
@@ -763,6 +794,7 @@ else:  # pragma: no cover
         maxiter_ls=0,
         alpha=0.1,
         fixup=None,
+        full_output=False,
     ):
         """Find x where fun(x, *args) == 0.
 
@@ -790,6 +822,9 @@ else:  # pragma: no cover
         fixup : callable, optional
             Function to modify x after each update, ie to enforce periodicity. Should
             have a signature of the form fixup(x, *args) -> 1d array.
+        full_output : bool, optional
+            If True, also return a tuple where the first element is the residual from
+            the root finding and the second is the number of iterations.
 
         Returns
         -------
@@ -804,7 +839,10 @@ else:  # pragma: no cover
         will solve it in a least squares sense.
         """
         out = scipy.optimize.root(fun, x0, args, jac=jac, tol=tol)
-        return out.x, out
+        if full_output:
+            return out.x, out
+        else:
+            return out.x
 
     def flatnonzero(a, size=None, fill_value=0):
         """A numpy implementation of jnp.flatnonzero."""

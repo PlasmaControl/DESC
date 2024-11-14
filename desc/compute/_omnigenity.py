@@ -595,7 +595,7 @@ def _omni_map_zeta_B(params, transforms, profiles, data, **kwargs):
     description="Magnitude of omnigenous magnetic field",
     dim=1,
     params=["B_lm"],
-    transforms={"B": [[0, 0, 0]]},
+    transforms={"grid": [], "B": [[0, 0, 0]]},
     profiles=[],
     coordinates="rtz",
     data=["eta"],
@@ -604,15 +604,32 @@ def _omni_map_zeta_B(params, transforms, profiles, data, **kwargs):
 def _B_omni(params, transforms, profiles, data, **kwargs):
     # reshaped to size (L_B, M_B)
     B_lm = params["B_lm"].reshape((transforms["B"].basis.L + 1, -1))
-    # assuming single flux surface, so only take first row (single node)
-    B_input = vmap(lambda x: transforms["B"].transform(x))(B_lm.T)[:, 0]
-    B_input = jnp.sort(B_input)  # sort to ensure monotonicity
-    eta_input = jnp.linspace(0, jnp.pi / 2, num=B_input.size)
+
+    def _transform(x):
+        y = transforms["B"].transform(x)
+        return transforms["grid"].compress(y)
+
+    B_input = vmap(_transform)(B_lm.T)
+    # B_input has shape (num_knots, num_rho)
+    B_input = jnp.sort(B_input, axis=0)  # sort to ensure monotonicity
+    eta_input = jnp.linspace(0, jnp.pi / 2, num=B_input.shape[0])
+    eta = transforms["grid"].meshgrid_reshape(data["eta"], "rtz")
+    eta = eta.reshape((transforms["grid"].num_rho, -1))
+
+    def _interp(x, B):
+        return interp1d(x, eta_input, B, method="monotonic-0")
 
     # |B|_omnigeneous is an even function so B(-eta) = B(+eta) = B(|eta|)
-    data["|B|"] = interp1d(
-        jnp.abs(data["eta"]), eta_input, B_input, method="monotonic-0"
+    B = vmap(_interp)(jnp.abs(eta), B_input.T)  # shape (nr, nt*nz)
+    B = B.reshape(
+        (
+            transforms["grid"].num_rho,
+            transforms["grid"].num_poloidal,
+            transforms["grid"].num_zeta,
+        )
     )
+    B = jnp.moveaxis(B, 0, 1)
+    data["|B|"] = B.flatten(order="F")
     return data
 
 

@@ -1334,16 +1334,27 @@ class TestObjectiveFunction:
             NFP=1,
             sym=True,
         )
-        eq = Equilibrium(Psi=6e-3, M=4, N=4, surface=surf)
+        eq = Equilibrium(
+            Psi=6e-3,
+            M=4,
+            N=4,
+            surface=surf,
+            iota=PowerSeriesProfile(1, 0, -1),  # ensure diff surfs have diff iota
+        )
         field = OmnigenousField(
-            L_B=0,
-            M_B=2,
+            L_B=1,
+            M_B=3,
             L_x=1,
             M_x=1,
             N_x=1,
             NFP=eq.NFP,
             helicity=(1, 1),
-            B_lm=np.array([0.8, 1.2]),
+            B_lm=np.array(
+                [
+                    [0.8, 1.0, 1.2],
+                    [-0.4, 0.0, 0.6],  # radially varying B
+                ]
+            ).flatten(),
         )
         grid1 = LinearGrid(rho=0.5, M=eq.M_grid, N=eq.N_grid)
         grid2 = LinearGrid(rho=1.0, M=eq.M_grid, N=eq.N_grid)

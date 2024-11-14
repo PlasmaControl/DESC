@@ -548,7 +548,7 @@ def _pool_fun(k, path, exec, scalar, surfs, al0, sleep_time, stop_time):
             True, UserWarning, "TERPSICHORE growth rate not found, using default value."
         )
         # default values if it was unable to find a growth rate
-        output = abs(al0) if scalar else np.ones(surfs - 1) * al0**2
+        output = abs(al0) if scalar else -np.ones(surfs - 1) * al0**2
 
     return np.atleast_1d(output)
 
@@ -724,7 +724,8 @@ class TERPSICHORE(ExternalObjective):
         name="terpsichore",
     ):
         if target is None and bounds is None:
-            bounds = (-np.inf, 0)
+            # want to minimize growth rate or maximize delta W
+            bounds = (-np.inf, 0) if scalar else (0, np.inf)
         super().__init__(
             eq=eq,
             fun=terpsichore,

@@ -532,14 +532,17 @@ def _omni_map_theta_B(params, transforms, profiles, data, **kwargs):
 
 
 def _omnigenity_mapping(M, N, iota, alpha, h, grid):
+    assert (
+        len(iota) == grid.num_rho
+    ), f"got ({len(iota)}) iota values for grid with {grid.num_rho} surfaces"
     matrix = jnp.atleast_3d(_omnigenity_mapping_matrix(M, N, iota))
     # solve for (theta_B,zeta_B) corresponding to (eta,alpha)
     alpha = grid.meshgrid_reshape(alpha, "trz")
     h = grid.meshgrid_reshape(h, "trz")
     coords = jnp.stack((alpha, h))
     # matrix has shape (nr,2,2), coords is shape (2, nt, nr, nz)
-    # we vectorize the matmul over rho, indexed by j
-    booz = jnp.einsum("jpl,lijk->pijk", matrix, coords)
+    # we vectorize the matmul over rho
+    booz = jnp.einsum("rij,jtrz->itrz", matrix, coords)
     theta_B = booz[0].flatten(order="F")
     zeta_B = booz[1].flatten(order="F")
     return theta_B, zeta_B

@@ -2039,7 +2039,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
     def to_FourierRZ(
         self, N=10, grid=None, NFP=None, sym=False, name="", check_intersection=True
     ):
-        """Convert all coils to FourierRZCoil representaion.
+        """Convert all coils to FourierRZCoil representation.
 
         Note that some types of coils may not be representable in this basis.
 
@@ -2058,7 +2058,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         name : str
             Name for this coilset.
         check_intersection: bool
-            Whether or not to check the coils in the new coiilset for intersections.
+            Whether or not to check the coils in the new coilset for intersections.
 
         Returns
         -------
@@ -2091,7 +2091,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         name : str
             Name for the new CoilSet.
         check_intersection: bool
-            Whether or not to check the coils in the new coiilset for intersections.
+            Whether or not to check the coils in the new coilset for intersections.
 
         Returns
         -------
@@ -2136,7 +2136,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         name : str
             Name for the new CoilSet.
         check_intersection: bool
-            Whether or not to check the coils in the new coiilset for intersections.
+            Whether or not to check the coils in the new coilset for intersections.
 
         Returns
         -------
@@ -2549,7 +2549,7 @@ class MixedCoilSet(CoilSet):
         name : str
             Name for the new MixedCoilSet.
         check_intersection: bool
-            Whether or not to check the coils in the new coiilset for intersections.
+            Whether or not to check the coils in the new coilset for intersections.
 
         Returns
         -------
@@ -2588,7 +2588,7 @@ class MixedCoilSet(CoilSet):
         name : str
             Name for the new MixedCoilSet.
         check_intersection: bool
-            Whether or not to check the coils in the new coiilset for intersections.
+            Whether or not to check the coils in the new coilset for intersections.
 
         Returns
         -------
@@ -2620,7 +2620,7 @@ class MixedCoilSet(CoilSet):
         name : str
             Name for the new MixedCoilSet.
         check_intersection: bool
-            Whether or not to check the coils in the new coiilset for intersections.
+            Whether or not to check the coils in the new coilset for intersections.
 
         Returns
         -------
@@ -2662,7 +2662,7 @@ class MixedCoilSet(CoilSet):
         name : str
             Name for the new MixedCoilSet.
         check_intersection: bool
-            Whether or not to check the coils in the new coiilset for intersections.
+            Whether or not to check the coils in the new coilset for intersections.
 
         Returns
         -------
@@ -2881,15 +2881,15 @@ def _linking_number(x1, x2, x1_s, x2_s, dx1, dx2):
     return ratio.sum()
 
 
-def initialize_modular_coils(eq, num_coils, r_over_a=1.5):
-    """Initilize a CoilSet of modular coils for stage 2 optimization.
+def initialize_modular_coils(eq, num_coils, r_over_a=2.0):
+    """Initialize a CoilSet of modular coils for stage 2 optimization.
 
-    The coils will be planar, circular coils centered on the equilibrium magnetic axis, and aligned such that
-    the normal to the coil points along the axis. The currents will be set to match
-    the equilibrium required poloidal linking current.
+    The coils will be planar, circular coils centered on the equilibrium magnetic axis,
+    and aligned such that the normal to the coil points along the axis. The currents
+    will be set to match the equilibrium required poloidal linking current.
 
-    The coils will be FourierPlanarCoils, if another type is desired use
-    ``coilset.to_FourierXYZ()``, ``coilset.to_SplineXYZ()`` etc.
+    The coils will be ``FourierPlanarCoil`` with N=0, if another type is desired use
+    ``coilset.to_FourierXYZ(N=10)``, ``coilset.to_SplineXYZ()`` etc.
 
     Parameters
     ----------
@@ -2899,7 +2899,9 @@ def initialize_modular_coils(eq, num_coils, r_over_a=1.5):
         Number of coils to create per field period. For stellarator symmetric
         equilibria, this will be the number of coils per half-period.
     r_over_a : float
-        Minor radius of the coils, in units of equilibrium minor radius.
+        Minor radius of the coils, in units of equilibrium minor radius. Note that for
+        strongly shaped equilibria this may need to be large to avoid having the coils
+        intersect the plasma.
 
     Returns
     -------
@@ -2932,14 +2934,14 @@ def initialize_modular_coils(eq, num_coils, r_over_a=1.5):
 
 
 def initialize_saddle_coils(eq, num_coils, r_over_a=0.5, offset=2.0, position="outer"):
-    """Initilize a CoilSet of saddle coils for stage 2 optimization.
+    """Initialize a CoilSet of saddle coils for stage 2 optimization.
 
-    The coils will be positioned around the plasma without linking it, and aligned
-    such that the normal to the coil points towards the magnetic axis. The currents
-    will be initialized to zero.
+    The coils will be planar, circular coils positioned around the plasma without
+    linking it, and aligned such that the normal to the coil points towards the
+    magnetic axis. The currents will be initialized to zero.
 
-    The coils will be FourierPlanarCoils, if another type is desired use
-    ``coilset.to_FourierXYZ()``, ``coilset.to_SplineXYZ()`` etc.
+    The coils will be ``FourierPlanarCoil`` with N=0, if another type is desired use
+    ``coilset.to_FourierXYZ(N=10)``, ``coilset.to_SplineXYZ()`` etc.
 
     Parameters
     ----------
@@ -2952,6 +2954,8 @@ def initialize_saddle_coils(eq, num_coils, r_over_a=0.5, offset=2.0, position="o
         Minor radius of the coils, in units of equilibrium minor radius.
     offset : float
         Distance from coil to magnetic axis, in units of equilibrium minor radius.
+        Note that for strongly shaped equilibria this may need to be large to avoid
+        having the coils intersect the plasma.
     position : {"outer", "inner", "top", "bottom"}
         Placement of coils relative to plasma. "outer" will place coils on the outboard
         side, "inner" on the inboard side, "top" will place coils above the plasma,

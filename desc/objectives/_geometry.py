@@ -1358,3 +1358,146 @@ class GoodCoordinates(_Objective):
         f = data["g_rr"]
 
         return jnp.concatenate([g, constants["sigma"] * f])
+
+
+class MirrorRatio(_Objective):
+    """Target a particular value mirror ratio.
+
+    The mirror ratio is defined as:
+
+    (Bₘₐₓ - Bₘᵢₙ) / (Bₘₐₓ + Bₘᵢₙ)
+
+    Where Bₘₐₓ and Bₘᵢₙ are the maximum and minimum values of ||B|| on given surface.
+    Returns one value for each surface in ``grid``.
+
+    Parameters
+    ----------
+    eq : Equilibrium or OmnigenousField
+        Equilibrium or OmnigenousField that
+        will be optimized to satisfy the Objective.
+    grid : Grid, optional
+        Collocation grid containing the nodes to evaluate at. Defaults to
+        ``LinearGrid(M=eq.M_grid, N=eq.N_grid)`` for ``Equilibrium``
+        or ``LinearGrid(theta=2*eq.M_B, N=2*eq.N_x)`` for ``OmnigenousField``.
+
+    """
+
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``target=0.2``.",
+        bounds_default="``target=0.2``.",
+    )
+
+    _coordinates = "r"
+    _units = "(dimensionless)"
+    _print_value_fmt = "Mirror ratio: "
+
+    def __init__(
+        self,
+        eq,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        loss_function=None,
+        deriv_mode="auto",
+        grid=None,
+        name="mirror ratio",
+        jac_chunk_size=None,
+    ):
+        if target is None and bounds is None:
+            target = 0.2
+        self._grid = grid
+        super().__init__(
+            things=eq,
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            loss_function=loss_function,
+            deriv_mode=deriv_mode,
+            name=name,
+            jac_chunk_size=jac_chunk_size,
+        )
+
+    def build(self, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        eq = self.things[0]
+        from desc.equilibrium import Equilibrium
+        from desc.magnetic_fields import OmnigenousField
+
+        if self._grid is None and isinstance(eq, Equilibrium):
+            grid = LinearGrid(
+                M=eq.M_grid,
+                N=eq.N_grid,
+                NFP=eq.NFP,
+                sym=eq.sym,
+            )
+        elif self._grid is None and isinstance(eq, OmnigenousField):
+            grid = LinearGrid(
+                theta=2 * eq.M_B,
+                N=2 * eq.N_x,
+                NFP=eq.NFP,
+            )
+        else:
+            grid = self._grid
+
+        self._dim_f = grid.num_rho
+        self._data_keys = ["mirror ratio"]
+
+        timer = Timer()
+        if verbose > 0:
+            print("Precomputing transforms")
+        timer.start("Precomputing transforms")
+
+        profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
+        transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
+        self._constants = {
+            "transforms": transforms,
+            "profiles": profiles,
+        }
+
+        timer.stop("Precomputing transforms")
+        if verbose > 1:
+            timer.disp("Precomputing transforms")
+
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, params, constants=None):
+        """Compute mirro ratio.
+
+        Parameters
+        ----------
+        params : dict
+            Dictionary of equilibrium or field degrees of freedom,
+            eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
+
+        Returns
+        -------
+        M : ndarray
+            Mirror ratio on each surface.
+
+        """
+        if constants is None:
+            constants = self.constants
+        data = compute_fun(
+            self.things[0],
+            self._data_keys,
+            params=params,
+            transforms=constants["transforms"],
+            profiles=constants["profiles"],
+        )
+        return constants["transforms"]["grid"].compress(data["mirror ratio"])

@@ -60,6 +60,7 @@ from desc.objectives import (
     MagneticWell,
     MeanCurvature,
     MercierStability,
+    MirrorRatio,
     ObjectiveFromUser,
     ObjectiveFunction,
     Omnigenity,
@@ -1321,6 +1322,44 @@ class TestObjectiveFunction:
                 use_signed_distance=True,
             )
             obj.build()
+
+    @pytest.mark.unit
+    def test_mirror_ratio_equilibrium(self):
+        """Test mirror ratio objective for Equilibrium."""
+        # axisymmetry, no iota, so B ~ B0/R
+        eq = Equilibrium()
+        eq.solve()
+        # R0 = 10, a=1, so Bmax = B0/9, Bmin = B0/11
+        mirror_ratio = (1 / 9 - 1 / 11) / (1 / 9 + 1 / 11)
+        obj = MirrorRatio(eq)
+        obj.build()
+        f = obj.compute(eq.params_dict)
+        # not perfect agreement bc eq is low res, so B isnt exactly B0/R
+        np.testing.assert_allclose(f, mirror_ratio, rtol=0.13)
+
+    @pytest.mark.unit
+    def test_mirror_ratio_omni_field(self):
+        """Test mirror ratio objective for OmnigenousField."""
+        field = OmnigenousField(
+            L_B=1,
+            M_B=3,
+            L_x=1,
+            M_x=1,
+            N_x=1,
+            NFP=1,
+            helicity=(0, 1),
+            B_lm=np.array(
+                [
+                    [0.8, 1.0, 1.2],  # taken from omnigenity tutorial
+                    [0, 0, 0],
+                ]
+            ).flatten(),
+        )
+        mirror_ratio = (1.2 - 0.8) / (1.2 + 0.8)
+        obj = MirrorRatio(field)
+        obj.build()
+        f = obj.compute(field.params_dict)
+        np.testing.assert_allclose(f, mirror_ratio)
 
 
 @pytest.mark.regression

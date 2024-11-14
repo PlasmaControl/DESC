@@ -29,6 +29,7 @@ from ._geometry import (
     Elongation,
     GoodCoordinates,
     MeanCurvature,
+    MirrorRatio,
     PlasmaVesselDistance,
     PrincipalCurvature,
     Volume,

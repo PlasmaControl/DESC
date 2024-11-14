@@ -12,7 +12,7 @@ import numpy as np
 from termcolor import colored
 
 from desc.backend import execute_on_cpu, jnp, tree_leaves, tree_map, tree_structure
-from desc.basis import zernike_radial, zernike_radial_coeffs
+from desc.basis import zernike_radial
 from desc.geometry import FourierRZCurve
 from desc.utils import broadcast_tree, errorif, setdefault
 
@@ -774,8 +774,8 @@ class FixBoundaryZ(FixParameters):
         super().build(use_jit=use_jit, verbose=verbose)
 
 
-class FixLambdaGauge(_Objective):
-    """Fixes gauge freedom for lambda: lambda(theta=0,zeta=0)=0.
+class FixLambdaGauge(FixParameters):
+    """Fixes gauge freedom for lambda, which sets the flux surface avg of lambda to 0.
 
     Note: this constraint is automatically applied when needed, and does not need to be
     included by the user.
@@ -793,87 +793,35 @@ class FixLambdaGauge(_Objective):
 
     """
 
-    _scalar = False
-    _linear = True
-    _fixed = False  # not "diagonal", since it is fixing a sum
     _units = "(rad)"
     _print_value_fmt = "lambda gauge error: "
 
     def __init__(
         self,
         eq,
+        target=0,
+        bounds=None,
+        weight=1,
         normalize=True,
         normalize_target=True,
         name="lambda gauge",
     ):
+        if eq.sym:
+            indices = False
+        else:
+            indices = np.where(
+                np.logical_and(eq.L_basis.modes[:, 1] == 0, eq.L_basis.modes[:, 2] == 0)
+            )[0]
         super().__init__(
-            things=eq,
-            target=0,
-            bounds=None,
-            weight=1,
+            thing=eq,
+            params={"L_lmn": indices},
+            target=target,
+            bounds=bounds,
+            weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
             name=name,
         )
-
-    def build(self, use_jit=False, verbose=1):
-        """Build constant arrays.
-
-        Parameters
-        ----------
-        use_jit : bool, optional
-            Whether to just-in-time compile the objective and derivatives.
-        verbose : int, optional
-            Level of output.
-
-        """
-        eq = self.things[0]
-        L_basis = eq.L_basis
-
-        if L_basis.sym:
-            self._A = np.zeros((0, L_basis.num_modes))
-        else:
-            # l(rho,0,0) = 0
-            # at theta=zeta=0, basis for lambda reduces to just a polynomial in rho
-            # what this constraint does is make all the coefficients of each power
-            # of rho equal to zero
-            # i.e. if lambda = (L_200 + 2*L_310) rho**2 + (L_100 + 2*L_210)*rho
-            # this constraint will make
-            # L_200 + 2*L_310 = 0
-            # L_100 + 2*L_210 = 0
-            L_modes = L_basis.modes
-            mnpos = np.where((L_modes[:, 1:] >= [0, 0]).all(axis=1))[0]
-            l_lmn = L_modes[mnpos, :]
-            if len(l_lmn) > 0:
-                c = zernike_radial_coeffs(l_lmn[:, 0], l_lmn[:, 1])
-            else:
-                c = np.zeros((0, 0))
-
-            A = np.zeros((c.shape[1], L_basis.num_modes))
-            A[:, mnpos] = c.T
-            self._A = A
-
-        self._dim_f = self._A.shape[0]
-        super().build(use_jit=use_jit, verbose=verbose)
-
-    def compute(self, params, constants=None):
-        """Compute lambda gauge freedom errors.
-
-        Parameters
-        ----------
-        params : dict
-            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
-        constants : dict
-            Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
-
-        Returns
-        -------
-        f : ndarray
-            gauge freedom errors.
-
-        """
-        return jnp.dot(self._A, params["L_lmn"])
 
 
 class FixThetaSFL(FixParameters):

@@ -1166,12 +1166,12 @@ def test_vmec_save_asym(VMEC_save_asym):
             rtol=rtol_vmec_desc_wout,
         )
 
-    # R & Z & lambda
+    # R & Z
     test("rmn", "R", use_nyq=False)
     test("zmn", "Z", use_nyq=False, atol_vmec_desc_wout=4e-2)
-    test(
-        "lmn", "lambda", use_nyq=False, negate_DESC_quant=True, atol_vmec_desc_wout=4e-2
-    )
+
+    # don't test lambda because VMEC and DESC find different solutions
+    # for the SFL poloidal angle, so the lambda are different.
 
     # |B|
     test("bmn", "|B|", rtol_desc_desc_wout=7e-4)

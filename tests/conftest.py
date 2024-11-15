@@ -292,13 +292,13 @@ def DummyMixedCoilSet(tmpdir_factory):
         vf_coil, displacement=[0, 0, 2], n=3, endpoint=True
     )
     xyz_coil = FourierXYZCoil(current=2)
-    phi = 2 * np.pi * np.linspace(0, 1, 20, endpoint=True) ** 2
+    phi = 2 * np.pi * np.linspace(0, 1, 20, endpoint=True)
     spline_coil = SplineXYZCoil(
         current=1,
         X=np.cos(phi),
         Y=np.sin(phi),
         Z=np.zeros_like(phi),
-        knots=np.linspace(0, 2 * np.pi, len(phi)),
+        knots=phi,
     )
     full_coilset = MixedCoilSet(
         (tf_coilset, vf_coilset, xyz_coil, spline_coil), check_intersection=False

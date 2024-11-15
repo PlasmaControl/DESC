@@ -1169,12 +1169,15 @@ def test_vmec_save_asym(VMEC_save_asym):
     # R & Z & lambda
     test("rmn", "R", use_nyq=False)
     test("zmn", "Z", use_nyq=False, atol_vmec_desc_wout=4e-2)
+    test(
+        "lmn", "lambda", use_nyq=False, negate_DESC_quant=True, atol_vmec_desc_wout=4e-2
+    )
 
     # |B|
     test("bmn", "|B|", rtol_desc_desc_wout=7e-4)
 
     # B^zeta
-    test("bsupvmn", "B^zeta")  # ,rtol_desc_desc_wout=6e-5)
+    test("bsupvmn", "B^zeta")
 
     # B_zeta
     test("bsubvmn", "B_zeta", rtol_desc_desc_wout=3e-4)

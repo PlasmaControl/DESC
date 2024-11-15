@@ -799,9 +799,6 @@ class FixLambdaGauge(FixParameters):
     def __init__(
         self,
         eq,
-        target=0,
-        bounds=None,
-        weight=1,
         normalize=True,
         normalize_target=True,
         name="lambda gauge",
@@ -815,9 +812,7 @@ class FixLambdaGauge(FixParameters):
         super().__init__(
             thing=eq,
             params={"L_lmn": indices},
-            target=target,
-            bounds=bounds,
-            weight=weight,
+            target=0,
             normalize=normalize,
             normalize_target=normalize_target,
             name=name,

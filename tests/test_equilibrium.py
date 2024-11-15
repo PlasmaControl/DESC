@@ -20,8 +20,8 @@ from .utils import area_difference, compute_coords
 
 
 @pytest.mark.unit
-def test_compute_theta_coords():
-    """Test root finding for theta(theta*,lambda(theta))."""
+def test_map_PEST_coordinates():
+    """Test root finding for theta(theta_PEST,lambda(theta))."""
     eq = get("DSHAPE_CURRENT")
     with pytest.warns(UserWarning, match="Reducing radial"):
         eq.change_resolution(3, 3, 0, 6, 6, 0)
@@ -34,7 +34,7 @@ def test_compute_theta_coords():
     flux_coords = nodes.copy()
     flux_coords[:, 1] += coords["lambda"]
 
-    geom_coords = eq.compute_theta_coords(flux_coords)
+    geom_coords = eq.map_coordinates(flux_coords, inbasis=("rho", "theta_PEST", "zeta"))
     geom_coords = np.array(geom_coords)
 
     # catch difference between 0 and 2*pi
@@ -53,13 +53,8 @@ def test_map_coordinates():
         eq.change_resolution(3, 3, 3, 6, 6, 6)
     n = 100
     coords = np.array([np.ones(n), np.zeros(n), np.linspace(0, 10 * np.pi, n)]).T
-    out = eq.map_coordinates(
-        coords,
-        ["rho", "alpha", "zeta"],
-        ["rho", "theta", "zeta"],
-        period=(np.inf, 2 * np.pi, 10 * np.pi),
-    )
-    assert not np.any(np.isnan(out))
+    out = eq.map_coordinates(coords, inbasis=["rho", "alpha", "zeta"])
+    assert np.isfinite(out).all()
 
     eq = get("DSHAPE")
 
@@ -72,9 +67,9 @@ def test_map_coordinates():
 
     grid = Grid(np.vstack([rho, theta, zeta]).T, sort=False)
     in_data = eq.compute(inbasis, grid=grid)
-    in_coords = np.stack([in_data[k] for k in inbasis], axis=-1)
+    in_coords = np.column_stack([in_data[k] for k in inbasis])
     out_data = eq.compute(outbasis, grid=grid)
-    out_coords = np.stack([out_data[k] for k in outbasis], axis=-1)
+    out_coords = np.column_stack([out_data[k] for k in outbasis])
 
     out = eq.map_coordinates(
         in_coords,
@@ -92,8 +87,7 @@ def test_map_coordinates_derivative():
     eq = get("DSHAPE")
     with pytest.warns(UserWarning, match="Reducing radial"):
         eq.change_resolution(3, 3, 0, 6, 6, 0)
-    inbasis = ["alpha", "phi", "rho"]
-    outbasis = ["rho", "theta_PEST", "zeta"]
+    inbasis = ["rho", "alpha", "phi"]
 
     rho = np.linspace(0.01, 0.99, 20)
     theta = np.linspace(0, np.pi, 20, endpoint=False)
@@ -110,11 +104,38 @@ def test_map_coordinates_derivative():
         out = eq.map_coordinates(
             in_coords,
             inbasis,
-            outbasis,
+            ("rho", "theta_PEST", "zeta"),
             np.array([rho, theta, zeta]).T,
             params,
             period=(2 * np.pi, 2 * np.pi, np.inf),
             maxiter=40,
+        )
+        return out
+
+    J1 = jax.jit(jax.jacfwd(foo))(eq.params_dict, in_coords)
+    J2 = jax.jit(jax.jacrev(foo))(eq.params_dict, in_coords)
+    for j1, j2 in zip(J1.values(), J2.values()):
+        assert ~np.any(np.isnan(j1))
+        assert ~np.any(np.isnan(j2))
+        np.testing.assert_allclose(j1, j2)
+
+    # Check map_coordinates with full_output is still runs without errors
+    # this time _map_clebsch_coordinates is called inside map_coordinates
+    inbasis2 = ["rho", "alpha", "zeta"]
+    in_data = eq.compute(inbasis2, grid=grid)
+    in_coords = np.stack([in_data[k] for k in inbasis2], axis=-1)
+
+    @jax.jit
+    def foo(params, in_coords):
+        out, (_, _) = eq.map_coordinates(
+            in_coords,
+            inbasis2,
+            ("rho", "theta", "zeta"),
+            np.array([rho, theta, zeta]).T,
+            params,
+            period=(2 * np.pi, 2 * np.pi, np.inf),
+            maxiter=40,
+            full_output=True,
         )
         return out
 
@@ -134,9 +155,15 @@ def test_map_coordinates_derivative():
     flux_coords = nodes.copy()
     flux_coords[:, 1] += coords["lambda"]
 
+    # this will call _map_PEST_coordinates inside map_coordinates
     @jax.jit
     def bar(L_lmn):
-        geom_coords = eq.compute_theta_coords(flux_coords, L_lmn)
+        params = {"L_lmn": L_lmn}
+        geom_coords = eq.map_coordinates(
+            flux_coords,
+            inbasis=("rho", "theta_PEST", "zeta"),
+            params=params,
+        )
         return geom_coords
 
     J1 = jax.jit(jax.jacfwd(bar))(eq.params_dict["L_lmn"])

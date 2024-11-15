@@ -2,9 +2,9 @@ from interpax import interp1d
 
 from desc.backend import jnp, sign
 
+from ..utils import cross, dot, safenormalize
 from .data_index import register_compute_fun
 from .geom_utils import rotation_matrix, rpz2xyz, rpz2xyz_vec, xyz2rpz, xyz2rpz_vec
-from .utils import cross, dot, safenormalize
 
 
 @register_compute_fun(
@@ -31,7 +31,10 @@ def _s(params, transforms, profiles, data, **kwargs):
     label="ds",
     units="~",
     units_long="None",
-    description="Spacing of curve parameter",
+    description=(
+        "Quadrature weights for integration along the curve,"
+        + " i.e. an alias for ``grid.spacing[:,2]``"
+    ),
     dim=1,
     params=[],
     transforms={"grid": []},
@@ -568,8 +571,8 @@ def _x_FourierXYZCurve(params, transforms, profiles, data, **kwargs):
     dim=3,
     params=["X_n", "Y_n", "Z_n", "rotmat"],
     transforms={
-        "X": [[0, 0, 0], [0, 0, 1]],
-        "Y": [[0, 0, 0], [0, 0, 1]],
+        "X": [[0, 0, 1]],
+        "Y": [[0, 0, 1]],
         "Z": [[0, 0, 1]],
     },
     profiles=[],

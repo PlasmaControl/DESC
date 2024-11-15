@@ -63,6 +63,7 @@ def register_compute_fun(  # noqa: C901
     aliases=None,
     parameterization="desc.equilibrium.equilibrium.Equilibrium",
     resolution_requirement="",
+    grid_requirement=None,
     source_grid_requirement=None,
     **kwargs,
 ):
@@ -105,7 +106,16 @@ def register_compute_fun(  # noqa: C901
         or `'desc.equilibrium.Equilibrium'`.
     resolution_requirement : str
         Resolution requirements in coordinates. I.e. "r" expects radial resolution
-        in the grid, "rtz" expects a grid with radial, poloidal, and toroidal resolution.
+        in the grid. Likewise, "rtz" is shorthand for "rho, theta, zeta" and indicates
+        the computation expects a grid with radial, poloidal, and toroidal resolution.
+        If the computation simply performs pointwise operations, instead of a
+        reduction (such as integration) over a coordinate, then an empty string may
+        be used to indicate no requirements.
+    grid_requirement : dict
+        Attributes of the grid that the compute function requires.
+        Also assumes dependencies were computed on such a grid.
+        As an example, quantities that require tensor product grids over 2 or more
+        coordinates may specify ``grid_requirement={"is_meshgrid": True}``.
     source_grid_requirement : dict
         Attributes of the source grid that the compute function requires.
         Also assumes dependencies were computed on such a grid.
@@ -126,8 +136,12 @@ def register_compute_fun(  # noqa: C901
         aliases = []
     if source_grid_requirement is None:
         source_grid_requirement = {}
+    if grid_requirement is None:
+        grid_requirement = {}
     if not isinstance(parameterization, (tuple, list)):
         parameterization = [parameterization]
+    if not isinstance(aliases, (tuple, list)):
+        aliases = [aliases]
 
     deps = {
         "params": params,
@@ -162,6 +176,7 @@ def register_compute_fun(  # noqa: C901
             "dependencies": deps,
             "aliases": aliases,
             "resolution_requirement": resolution_requirement,
+            "grid_requirement": grid_requirement,
             "source_grid_requirement": source_grid_requirement,
         }
         for p in parameterization:
@@ -172,10 +187,11 @@ def register_compute_fun(  # noqa: C901
                     if name in data_index[base_class]:
                         if p == data_index[base_class][name]["parameterization"]:
                             raise ValueError(
-                                f"Already registered function with parameterization {p} and name {name}."
+                                f"Already registered function with parameterization {p}"
+                                f" and name {name}."
                             )
-                        # if it was already registered from a parent class, we prefer
-                        # the child class.
+                        # if it was already registered from a parent class, we
+                        # prefer the child class.
                         inheritance_order = [base_class] + superclasses
                         if inheritance_order.index(p) > inheritance_order.index(
                             data_index[base_class][name]["parameterization"]

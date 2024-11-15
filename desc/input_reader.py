@@ -695,7 +695,7 @@ class InputReader:
         f.write("# global parameters\n")
         f.write("sym = {:1d} \n".format(inputs[0]["sym"]))
         f.write("NFP = {:3d} \n".format(int(inputs[0]["NFP"])))
-        f.write("Psi = {:.8f} \n".format(inputs[0]["Psi"]))
+        f.write("Psi = {:.8e} \n".format(inputs[0]["Psi"]))
 
         f.write("\n# spectral resolution\n")
         for key, val in {
@@ -796,7 +796,7 @@ class InputReader:
         xtol=1e-6,
         gtol=1e-6,
         maxiter=100,
-        threshold=1e-10,
+        threshold=0,
     ):
         """Generate a DESC input file from a DESC output file.
 

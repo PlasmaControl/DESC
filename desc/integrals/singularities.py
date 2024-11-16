@@ -14,7 +14,7 @@ from desc.compute.geom_utils import rpz2xyz, rpz2xyz_vec, xyz2rpz_vec
 from desc.grid import LinearGrid
 from desc.io import IOAble
 from desc.transform import Transform
-from desc.utils import dot, isalmostequal, islinspaced, safediv, safenorm
+from desc.utils import dot, isalmostequal, islinspaced, safediv, safenorm, setdefault
 
 
 def _get_quadrature_nodes(q):
@@ -904,106 +904,143 @@ def compute_B_plasma(eq, eval_grid, source_grid=None, normal_only=False):
     return Bplasma
 
 
-def compute_B_laplace(eq, eval_grid, source_grid=None, B0=None, G=1, R0=1, sym="sin"):
-    """Compute magnetic field in vacuum interior of plasma.
+def compute_B_laplace(
+    eq,
+    B0,
+    eval_grid,
+    source_grid=None,
+    Phi_grid=None,
+    Phi_M=None,
+    Phi_N=None,
+    sym=False,
+):
+    """Compute magnetic field in interior of plasma due to vacuum potential.
 
     Let D, D^∁ denote the interior, exterior of a toroidal region with
     boundary ∂D. Computes the magnetic field 𝐁 in units of Tesla such that
              𝐁 = 𝐁₀ + ∇Φ on D
-         ∇ × 𝐁 = ∇ × 𝐁₀  on D ∪ D^∁ (i.e. Φ is single-valued or periodic)
+         ∇ × 𝐁 = ∇ × 𝐁₀  on D ∪ D^∁ (i.e. ∇Φ is single-valued or periodic)
         ∇ × 𝐁₀ = μ₀ 𝐉    on D ∪ D^∁
         𝐁 * ∇ρ = 0       on ∂D
           ∇²Φ  = 0       on D
+
+    Examples
+    --------
+    In a vacuum, the magnetic field may be written 𝐁 = ∇𝛷.
+    The solution to ∇²𝛷 = 0, under a homogenous boundary
+    condition 𝐁 * ∇ρ = 0, is 𝛷 = 0. To obtain a non-trivial solution,
+    the boundary condition may be modified.
+    Let 𝐁 = 𝐁₀ + ∇Φ.
+    If 𝐁₀ ≠ 0 and satisfies ∇ × 𝐁₀ = 0, then ∇²Φ = 0 solved
+    under an inhomogeneous boundary condition yields a non-trivial solution.
+    If 𝐁₀ ≠ -∇Φ, then 𝐁 ≠ 0.
+    Note that 𝐁₀ is not chosen. It must be the solution to ∇ × 𝐁₀ = μ₀ 𝐉.
 
     Parameters
     ----------
     eq : Equilibrium
         Configuration with surface geometry defining ∂D.
-    eval_grid : Grid
-        Evaluation points for the magnetic field.
-    source_grid : Grid, optional
-        Source points for integral.
     B0 : MagneticField
         Magnetic field such that ∇ × 𝐁₀ = μ₀ 𝐉
         where 𝐉 is the current in amperes everywhere.
-        Default is toroidal magnetic field ``B0=G*R0/R``
-        where ``R`` is distance from major axis and ``G*R0=1`` Tesla-meter.
-    G : float
-        ∫ (∫ 𝐁₀ ⋅ dℓ) dθ = ∫ 𝐁₀ ⋅ e_ζ dθ dζ over LCFS.
-        Enclosed (including boundary) net poloidal current in Tesla-meter.
-        divided by 2π. Default is 1. Ignored if ``B0`` is given.
-    R0 : float
-        Major radius. Ignored if ``B0`` is given.
+    eval_grid : Grid
+        Evaluation points on D for the magnetic field.
+    source_grid : Grid
+        Source points on ∂D for quadrature of kernels.
+        Resolution determines the accuracy of the boundary condition,
+        and evaluation of the magnetic field.
+    Phi_grid : Grid, optional
+        Source points on ∂D.
+        Resolution determines accuracy of the spectral coefficients.
+        Should have resolution at least ``M=Phi_M`` and ``N=Phi_N``.
+    Phi_M : int
+        Number of poloidal Fourier modes.
+        Default is ``eq.M``.
+    Phi_N : int
+        Number of toroidal Fourier modes.
+        Default is ``eq.N``.
     sym : str
         ``DoubleFourierSeries`` basis symmetry.
+        Default is no symmetry.
 
     Returns
     -------
-    B0, grad_Phi : MagneticField, FourierCurrentPotentialField
-        Magnetic fields.
+    B : jnp.ndarray
+        Magnetic field evaluated on ``eval_grid``.
 
     """
-    from desc.magnetic_fields import FourierCurrentPotentialField, ToroidalMagneticField
+    from desc.magnetic_fields import FourierCurrentPotentialField
+
+    basis = DoubleFourierSeries(
+        M=setdefault(Phi_M, eq.M),
+        N=setdefault(Phi_N, eq.N),
+        NFP=eq.NFP,
+        sym=sym,
+    )
 
     if source_grid is None:
-        source_NFP = eq.NFP if eq.N > 0 else 64  # why not higher?
         source_grid = LinearGrid(
             rho=np.array([1.0]),
             M=eq.M_grid,
             N=eq.N_grid,
-            NFP=source_NFP,
+            NFP=eq.NFP if eq.N > 0 else 64,
             sym=False,
         )
+    if Phi_grid is None:
+        Phi_grid = LinearGrid(
+            rho=np.array([1.0]),
+            M=eq.M_grid,
+            N=eq.N_grid,
+            NFP=eq.NFP if eq.N > 0 else 64,
+            sym=False,
+        )
+    assert source_grid.is_meshgrid
+    assert Phi_grid.is_meshgrid
 
-    data_keys = ["R", "phi", "Z", "n_rho", "|e_theta x e_zeta|"]
-    eval_data = eq.compute(data_keys, grid=eval_grid)
-    source_data = eq.compute(data_keys, grid=source_grid)
-    if B0 is None:
-        B0 = ToroidalMagneticField(B0=G, R0=R0)
-    source_data["Bn"], _ = B0.compute_Bnormal(
-        eq.surface, eval_grid=source_grid, source_grid=source_grid
-    )
-
-    basis = DoubleFourierSeries(M=eq.M, N=eq.N, NFP=eq.NFP, sym=sym)
-    trans_evl = Transform(eval_grid, basis)
-    trans_src = Transform(source_grid, basis)
-
-    # If we didn't boost Fourier basis, we would need NFP*num zeta toroidal resolution.
     # Malhotra recommends s = q = N⁰ᐧ²⁵ where N² is num theta * num zeta*NFP,
     # but using same defaults as above.
     k = min(source_grid.num_theta, source_grid.num_zeta * source_grid.NFP)
     s = k - 1
     q = k // 2 + int(np.sqrt(k))
     try:
-        interpolator = FFTInterpolator(eval_grid, source_grid, s, q)
+        interpolator = FFTInterpolator(Phi_grid, source_grid, s, q)
     except AssertionError as e:
         print(
             f"Unable to create FFTInterpolator, got error {e},"
             "falling back to DFT method which is much slower"
         )
-        interpolator = DFTInterpolator(eval_grid, source_grid, s, q)
+        interpolator = DFTInterpolator(Phi_grid, source_grid, s, q)
+
+    data_keys = ["R", "phi", "Z", "n_rho", "|e_theta x e_zeta|"]
+    data_src_grid = eq.compute(data_keys, grid=source_grid)
+    data_Phi_grid = eq.compute(data_keys, grid=Phi_grid)
+    data_src_grid["Bn"], _ = B0.compute_Bnormal(
+        eq.surface, eval_grid=source_grid, source_grid=source_grid
+    )
+    trans_src_grid = Transform(source_grid, basis)
+    trans_Phi_grid = Transform(Phi_grid, basis)
 
     def LHS(Phi_mn):
         # After Fourier transform, the LHS is linear in the spectral coefficients Φₘₙ.
         # We approximate this as finite-dimensional, which enables writing the left
         # hand side as A @ Φₘₙ. Then Φₘₙ is found by solving LHS(Φₘₙ) = A @ Φₘₙ = RHS.
-        source_data["Phi"] = trans_src.transform(Phi_mn)
+        data_src_grid["Phi"] = trans_src_grid.transform(Phi_mn)
         integral = singular_integral(
-            eval_data,
-            source_data,
+            data_Phi_grid,
+            data_src_grid,
             _kernel_Phi_dG_dn,
             interpolator,
             loop=True,
         ).squeeze()
-        Phi = trans_evl.transform(Phi_mn)
+        Phi = trans_Phi_grid.transform(Phi_mn)
         return Phi + integral / (2 * jnp.pi)
 
     # LHS is expensive, so it is better to construct full Jacobian once
     # rather than iterative solves like jax.scipy.sparse.linalg.cg.
     A = jacfwd(LHS)(jnp.ones(basis.num_modes))
     RHS = -singular_integral(
-        eval_data,
-        source_data,
+        data_Phi_grid,
+        data_src_grid,
         _kernel_Bn_over_r,
         interpolator,
         loop=True,
@@ -1017,4 +1054,7 @@ def compute_B_laplace(eq, eval_grid, source_grid=None, B0=None, G=1, R0=1, sym="
     grad_Phi = FourierCurrentPotentialField.from_surface(
         eq.surface, Phi_mn / mu_0, basis.modes[:, 1:]
     )
-    return B0, grad_Phi
+    data = eq.compute(["R", "phi", "Z"], grid=eval_grid)
+    coords = jnp.column_stack([data["R"], data["phi"], data["Z"]])
+    B = (B0 + grad_Phi).compute_magnetic_field(coords, source_grid=source_grid)
+    return B

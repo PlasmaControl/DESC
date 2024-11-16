@@ -33,7 +33,7 @@ from desc.integrals import compute_B_plasma
 from desc.io import IOAble
 from desc.optimizable import Optimizable, OptimizableCollection, optimizable_parameter
 from desc.transform import Transform
-from desc.utils import copy_coeffs, errorif, flatten_list, setdefault, warnif
+from desc.utils import copy_coeffs, dot, errorif, flatten_list, setdefault, warnif
 from desc.vmec_utils import ptolemy_identity_fwd, ptolemy_identity_rev
 
 
@@ -342,7 +342,7 @@ class _MagneticField(IOAble, ABC):
         B = self.compute_magnetic_field(
             coords, basis="rpz", source_grid=source_grid, params=params
         )
-        Bnorm = jnp.sum(B * surf_normal, axis=-1)
+        Bnorm = dot(B, surf_normal)
 
         if calc_Bplasma:
             Bplasma = compute_B_plasma(eq, eval_grid, vc_source_grid, normal_only=True)

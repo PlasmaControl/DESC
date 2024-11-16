@@ -1,10 +1,9 @@
 name: Benchmarks
 
 on:
-  pull_request:
+  pull_request_target:
     branches:
       - master
-  pull_request_target:
     types: [opened, synchronize]
   workflow_dispatch:
     inputs:
@@ -75,6 +74,7 @@ jobs:
           source .venv-${{ matrix.python-version }}/bin/activate
           python -m pip install --upgrade pip
           pip install -r devtools/dev-requirements.txt
+          pip install matplotlib==3.9.2
 
       - name: Benchmark with pytest-benchmark (PR)
         if: env.has_changes == 'true'

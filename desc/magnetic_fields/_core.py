@@ -1816,10 +1816,10 @@ class SplineMagneticField(_MagneticField, Optimizable):
         ir = int(mgrid["ir"][()])  # number of grid points in the R coordinate
         jz = int(mgrid["jz"][()])  # number of grid points in the Z coordinate
         kp = int(mgrid["kp"][()])  # number of grid points in the phi coordinate
-        Rmin = mgrid["rmin"][()]  # Minimum R coordinate (m)
-        Rmax = mgrid["rmax"][()]  # Maximum R coordinate (m)
-        Zmin = mgrid["zmin"][()]  # Minimum Z coordinate (m)
-        Zmax = mgrid["zmax"][()]  # Maximum Z coordinate (m)
+        Rmin = mgrid["rmin"][()].filled()  # Minimum R coordinate (m)
+        Rmax = mgrid["rmax"][()].filled()  # Maximum R coordinate (m)
+        Zmin = mgrid["zmin"][()].filled()  # Minimum Z coordinate (m)
+        Zmax = mgrid["zmax"][()].filled()  # Maximum Z coordinate (m)
         nfp = int(mgrid["nfp"][()])  # Number of field periods
         Rgrid = np.linspace(Rmin, Rmax, ir)
         Zgrid = np.linspace(Zmin, Zmax, jz)
@@ -1831,9 +1831,15 @@ class SplineMagneticField(_MagneticField, Optimizable):
         bz = np.zeros([kp, jz, ir, nextcur])
         for i in range(nextcur):
             coil_id = "%03d" % (i + 1,)
-            br[:, :, :, i] += mgrid["br_" + coil_id][()]  # B_R radial magnetic field
-            bp[:, :, :, i] += mgrid["bp_" + coil_id][()]  # B_phi toroidal field (T)
-            bz[:, :, :, i] += mgrid["bz_" + coil_id][()]  # B_Z vertical magnetic field
+            br[:, :, :, i] += mgrid["br_" + coil_id][
+                ()
+            ].filled()  # B_R radial magnetic field
+            bp[:, :, :, i] += mgrid["bp_" + coil_id][
+                ()
+            ].filled()  # B_phi toroidal field (T)
+            bz[:, :, :, i] += mgrid["bz_" + coil_id][
+                ()
+            ].filled()  # B_Z vertical magnetic field
 
         # shift axes to correct order
         br = np.moveaxis(br, (0, 1, 2), (1, 2, 0))
@@ -1849,13 +1855,13 @@ class SplineMagneticField(_MagneticField, Optimizable):
                 coil_id = "%03d" % (i + 1,)
                 ar[:, :, :, i] += mgrid["ar_" + coil_id][
                     ()
-                ]  # A_R radial mag. vec. potential
+                ].filled()  # A_R radial mag. vec. potential
                 ap[:, :, :, i] += mgrid["ap_" + coil_id][
                     ()
-                ]  # A_phi toroidal mag. vec. potential
+                ].filled()  # A_phi toroidal mag. vec. potential
                 az[:, :, :, i] += mgrid["az_" + coil_id][
                     ()
-                ]  # A_Z vertical mag. vec. potential
+                ].filled()  # A_Z vertical mag. vec. potential
 
             # shift axes to correct order
             ar = np.moveaxis(ar, (0, 1, 2), (1, 2, 0))

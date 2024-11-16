@@ -172,6 +172,21 @@ def _dI(data, B, pitch):
     return jnp.sqrt(jnp.abs(1 - pitch * B)) / B
 
 
+def _Jnum(data, B, pitch):
+    """Numerator of the second adiabatic invariant J||."""
+    return jnp.sqrt(jnp.abs(1 - pitch * B))
+
+
+def _dJ_ds_num(data, B, pitch):
+    """Integrand of numerator of bounce averaged binormal drift."""
+    g = jnp.sqrt(jnp.abs(1 - pitch * B))
+    return (
+        (data["cvdrift"] * g)
+        - (0.5 * g * data["gbdrift"])
+        + (0.5 * data["gbdrift"] / g)
+    )
+
+
 @register_compute_fun(
     name="effective ripple 3/2",
     label=(
@@ -283,6 +298,215 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
         / (8 * 2**0.5)
     )
     return data
+
+
+@register_compute_fun(
+    name="Jpar",
+    label=(
+        # ε¹ᐧ⁵ = π/(8√2) R₀²〈|∇ψ|〉⁻² B₀⁻¹ ∫dλ λ⁻² 〈 ∑ⱼ Hⱼ²/Iⱼ 〉
+        "\\J_{\\parallel} = \\integrate v_{\\parallel} dl"
+        "\\integrate dl / v_{\\parallel}"
+    ),
+    units="~",
+    units_long="m^2-s^2",
+    description="Second adiabatic invariant of motion.",
+    dim=1,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="r",
+    data=["min_tz |B|", "max_tz |B|", "R0"] + Bounce2D.required_names,
+    resolution_requirement="tz",
+    grid_requirement={"can_fft": True},
+    **_bounce_doc,
+)
+@partial(
+    jit,
+    static_argnames=[
+        "Y_B",
+        "num_transit",
+        "num_well",
+        "num_quad",
+        "num_pitch",
+        "batch_size",
+        "spline",
+    ],
+)
+def _Jpar(params, transforms, profiles, data, **kwargs):
+    """https://doi.org/10.1063/1.873749.
+
+    Evaluation of 1/ν neoclassical transport in stellarators.
+    V. V. Nemov, S. V. Kasilov, W. Kernbichler, M. F. Heyn.
+    Phys. Plasmas 1 December 1999; 6 (12): 4622–4632.
+    """
+    # noqa: unused dependency
+    theta = kwargs["theta"]
+    Y_B = kwargs.get("Y_B", theta.shape[-1] * 2)
+    num_transit = kwargs.get("num_transit", 20)
+    num_pitch = kwargs.get("num_pitch", 50)
+    num_well = kwargs.get("num_well", Y_B * num_transit)
+    batch_size = kwargs.get("batch_size", None)
+    spline = kwargs.get("spline", True)
+    if "fieldline_quad" in kwargs:
+        fieldline_quad = kwargs["fieldline_quad"]
+    else:
+        fieldline_quad = leggauss(Y_B // 2)
+    if "quad" in kwargs:
+        quad = kwargs["quad"]
+    else:
+        quad = chebgauss2(kwargs.get("num_quad", 32))
+
+    def Jpar(data):
+        bounce = Bounce2D(
+            grid,
+            data,
+            data["theta"],
+            Y_B,
+            num_transit,
+            quad=quad,
+            automorphism=None,
+            is_fourier=True,
+            spline=spline,
+        )
+
+        def fun(pitch_inv):
+            Jnum, v_tau = bounce.integrate(
+                [_Jnum, _v_tau],
+                pitch_inv,
+                data,
+                # --no-verify should there be a "1" for efficiency
+                bounce.points(pitch_inv, num_well=num_well),
+                is_fourier=True,
+            )
+            return safediv(Jnum, v_tau).sum(axis=-1)
+
+        return jnp.sum(
+            _foreach_pitch(fun, data["pitch_inv"], batch_size)
+            * data["pitch_inv weight"]
+            / data["pitch_inv"] ** 3,
+            axis=-1,
+        ) / bounce.compute_fieldline_length(fieldline_quad)
+
+    grid = transforms["grid"]
+    B0 = data["max_tz |B|"]
+    data["Jpar"] = (
+        _compute(
+            Jpar,
+            data=data,
+            theta=theta,
+            grid=grid,
+            num_pitch=num_pitch,
+            simp=True,
+        )
+        * (B0 * data["R0"]) ** 2
+        * jnp.pi
+        / (8 * 2**0.5)
+    )
+
+
+@register_compute_fun(
+    name="dJpar_ds",
+    label=(
+        # ε¹ᐧ⁵ = π/(8√2) R₀²〈|∇ψ|〉⁻² B₀⁻¹ ∫dλ λ⁻² 〈 ∑ⱼ Hⱼ²/Iⱼ 〉
+        "\\J_{\\parallel} = \\integrate v_{\\parallel} dl"
+        "\\integrate dl / v_{\\parallel}"
+    ),
+    units="~",
+    units_long="m^2-s^2",
+    description="Radial derivative of the second adiabatic invariant.",
+    dim=1,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="r",
+    data=["min_tz |B|", "max_tz |B|", "R0"] + Bounce2D.required_names,
+    resolution_requirement="tz",
+    grid_requirement={"can_fft": True},
+    **_bounce_doc,
+)
+@partial(
+    jit,
+    static_argnames=[
+        "Y_B",
+        "num_transit",
+        "num_well",
+        "num_quad",
+        "num_pitch",
+        "batch_size",
+        "spline",
+    ],
+)
+def _dJpar_ds(params, transforms, profiles, data, **kwargs):
+    """https://doi.org/10.1063/1.873749.
+
+    Evaluation of 1/ν neoclassical transport in stellarators.
+    V. V. Nemov, S. V. Kasilov, W. Kernbichler, M. F. Heyn.
+    Phys. Plasmas 1 December 1999; 6 (12): 4622–4632.
+    """
+    # noqa: unused dependency
+    theta = kwargs["theta"]
+    Y_B = kwargs.get("Y_B", theta.shape[-1] * 2)
+    num_transit = kwargs.get("num_transit", 20)
+    num_pitch = kwargs.get("num_pitch", 50)
+    num_well = kwargs.get("num_well", Y_B * num_transit)
+    batch_size = kwargs.get("batch_size", None)
+    spline = kwargs.get("spline", True)
+    if "fieldline_quad" in kwargs:
+        fieldline_quad = kwargs["fieldline_quad"]
+    else:
+        fieldline_quad = leggauss(Y_B // 2)
+    if "quad" in kwargs:
+        quad = kwargs["quad"]
+    else:
+        quad = chebgauss2(kwargs.get("num_quad", 32))
+
+    def dJpar_ds(data):
+        bounce = Bounce2D(
+            grid,
+            data,
+            data["theta"],
+            Y_B,
+            num_transit,
+            quad=quad,
+            automorphism=None,
+            is_fourier=True,
+            spline=spline,
+        )
+
+        def fun(pitch_inv):
+            dJpar_ds, v_tau = bounce.integrate(
+                [_dJpar_ds, _v_tau],
+                pitch_inv,
+                data,
+                ["cvdrift", "gbdrift"],
+                bounce.points(pitch_inv, num_well=num_well),
+                is_fourier=True,
+            )
+            return safediv(dJpar_ds, v_tau).sum(axis=-1)
+
+        return jnp.sum(
+            _foreach_pitch(fun, data["pitch_inv"], batch_size)
+            * data["pitch_inv weight"]
+            / data["pitch_inv"] ** 3,
+            axis=-1,
+        ) / bounce.compute_fieldline_length(fieldline_quad)
+
+    grid = transforms["grid"]
+    B0 = data["max_tz |B|"]
+    data["dJpar_ds"] = (
+        _compute(
+            dJpar_ds,
+            fun_data={"cvdrift": data["cvdrift"], "gbdrift": data["gbdrift"]},
+            data=data,
+            theta=theta,
+            grid=grid,
+            num_pitch=num_pitch,
+            simp=True,
+        )
+        * (B0 * data["R0"]) ** 2
+        * jnp.pi
+        / (8 * 2**0.5)
+    )
 
 
 # We rewrite equivalents of Nemov et al.'s expressions (21, 22) to resolve

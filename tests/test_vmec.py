@@ -1176,7 +1176,7 @@ def test_vmec_save_asym(VMEC_save_asym):
             rtol=rtol_vmec_desc_wout,
         )
 
-    # R & Z & lambda
+    # R & Z
     test("rmn", "R", use_nyq=False)
     test("zmn", "Z", use_nyq=False, atol_vmec_desc_wout=1e-2)
     test(

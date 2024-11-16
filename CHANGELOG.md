@@ -2,6 +2,12 @@ Changelog
 =========
 
 New Features
+- Bounce integrals.
+- Some optimization metrics.
+- Coordinate mapping utilities in desc/integrals.
+- See GitHub pull requests #1003, #1042, #1119, and #1290 for more details.
+
+New Features
 - Add ``from_input_file`` method to ``Equilibrium`` class to generate an ``Equilibrium`` object with boundary, profiles, resolution and flux specified in a given DESC or VMEC input file
 
 

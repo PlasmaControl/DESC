@@ -97,14 +97,16 @@ def factorize_linear_constraints(objective, constraint, x_scale="auto"):  # noqa
     # which are duplicate rows of A that also have duplicate entries of b,
     # if the entries of b aren't the same then the constraints are actually
     # incompatible and so we will leave those to be caught later.
-    A_augmented = np.hstack([A, np.reshape(b, (A.shape[0], 1))])
+    A_augmented = jnp.hstack([A, jnp.reshape(b, (A.shape[0], 1))])
 
     # Find unique rows of A_augmented
-    unique_rows, unique_indices = np.unique(A_augmented, axis=0, return_index=True)
+    unique_rows, unique_indices = jnp.unique(A_augmented, axis=0, return_index=True)
 
     # Sort the indices to preserve the order of appearance
-    unique_indices = np.sort(unique_indices)
+    unique_indices = jnp.sort(unique_indices)
 
+    # while loop has problems updating JAX arrays, convert them to numpy arrays
+    A_augmented = np.array(A_augmented)
     # Extract the unique rows
     A_augmented = A_augmented[unique_indices]
     A = A_augmented[:, :-1]
@@ -114,9 +116,6 @@ def factorize_linear_constraints(objective, constraint, x_scale="auto"):  # noqa
     indices_row = np.arange(A.shape[0])
     indices_idx = np.arange(A.shape[1])
 
-    # while loop has problems updating JAX arrays, convert them to numpy arrays
-    A = np.array(A)
-    b = np.array(b)
     while len(np.where(np.count_nonzero(A, axis=1) == 1)[0]):
         # fixed just means there is a single element in A, so A_ij*x_j = b_i
         fixed_rows = np.where(np.count_nonzero(A, axis=1) == 1)[0]

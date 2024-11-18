@@ -68,12 +68,12 @@ from desc.objectives import (
     Pressure,
     PrincipalCurvature,
     QuadraticFlux,
-    QuadraticFluxMinimizingSurface,
     QuasisymmetryBoozer,
     QuasisymmetryTripleProduct,
     QuasisymmetryTwoTerm,
     RotationalTransform,
     Shear,
+    SurfaceQuadraticFlux,
     ToroidalCurrent,
     ToroidalFlux,
     VacuumBoundaryError,
@@ -1172,7 +1172,7 @@ class TestObjectiveFunction:
         # test that torus (axisymmetric) Bnorm is exactly 0
         eq = load("./tests/inputs/vacuum_circular_tokamak.h5")
         surf = eq.surface
-        obj = QuadraticFluxMinimizingSurface(surf, t_field)
+        obj = SurfaceQuadraticFlux(surf, t_field)
         obj.build(eq, verbose=2)
         f = obj.compute(params_1=surf.params_dict, params_2=t_field.params_dict)
         np.testing.assert_allclose(f, 0, rtol=1e-14, atol=1e-14)
@@ -1189,9 +1189,7 @@ class TestObjectiveFunction:
             sym=False,
         )
 
-        obj = QuadraticFluxMinimizingSurface(
-            surf, t_field, eval_grid=eval_grid, field_fixed=True
-        )
+        obj = SurfaceQuadraticFlux(surf, t_field, eval_grid=eval_grid, field_fixed=True)
         Bnorm = t_field.compute_Bnormal(
             eq.surface, eval_grid=eval_grid, source_grid=eval_grid
         )[0]
@@ -2349,7 +2347,7 @@ class TestComputeScalarResolution:
         PlasmaCoilSetMinDistance,
         PlasmaVesselDistance,
         QuadraticFlux,
-        QuadraticFluxMinimizingSurface,
+        SurfaceQuadraticFlux,
         ToroidalFlux,
         VacuumBoundaryError,
         # need to avoid blowup near the axis
@@ -2535,7 +2533,7 @@ class TestComputeScalarResolution:
 
     @pytest.mark.regression
     def test_compute_scalar_resolution_quadratic_flux_minimizing(self):
-        """QuadraticFluxMinimizingSurface."""
+        """SurfaceQuadraticFlux."""
         ext_field = ToroidalMagneticField(1.0, 1.0)
 
         surf = FourierRZToroidalSurface(
@@ -2553,7 +2551,7 @@ class TestComputeScalarResolution:
                 N=int(surf.N * res),
             )
             obj = ObjectiveFunction(
-                QuadraticFluxMinimizingSurface(surf, ext_field), use_jit=False
+                SurfaceQuadraticFlux(surf, ext_field), use_jit=False
             )
             obj.build(verbose=0)
             f[i] = obj.compute_scalar(obj.x())
@@ -2784,7 +2782,7 @@ class TestObjectiveNaNGrad:
         PlasmaCoilSetMinDistance,
         PlasmaVesselDistance,
         QuadraticFlux,
-        QuadraticFluxMinimizingSurface,
+        SurfaceQuadraticFlux,
         ToroidalFlux,
         VacuumBoundaryError,
         # we don't test these since they depend too much on what exactly the user wants
@@ -2935,7 +2933,7 @@ class TestObjectiveNaNGrad:
 
     @pytest.mark.unit
     def test_objective_no_nangrad_quadratic_flux_minimizing(self):
-        """QuadraticFluxMinimizingSurface."""
+        """SurfaceQuadraticFlux."""
         ext_field = ToroidalMagneticField(1.0, 1.0)
 
         surf = FourierRZToroidalSurface(
@@ -2946,9 +2944,7 @@ class TestObjectiveNaNGrad:
             NFP=1,
         )
 
-        obj = ObjectiveFunction(
-            QuadraticFluxMinimizingSurface(surf, ext_field), use_jit=False
-        )
+        obj = ObjectiveFunction(SurfaceQuadraticFlux(surf, ext_field), use_jit=False)
         obj.build()
         g = obj.grad(obj.x(surf, ext_field))
         assert not np.any(np.isnan(g)), "quadratic flux"

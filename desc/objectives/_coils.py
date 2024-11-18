@@ -1155,8 +1155,8 @@ class QuadraticFlux(_Objective):
             isinstance(eq, FourierRZToroidalSurface),
             TypeError,
             "Detected FourierRZToroidalSurface object "
-            "if attempting to find qfm_surface=True, please use "
-            "QuadraticFluxMinimizingSurface objective instead.",
+            "if attempting to find a QFM surface, please use "
+            "SurfaceQuadraticFlux objective instead.",
         )
         things = [field]
         super().__init__(
@@ -1246,7 +1246,7 @@ class QuadraticFlux(_Objective):
         super().build(use_jit=use_jit, verbose=verbose)
 
     def compute(self, field_params, constants=None):
-        """Compute boundary force error.
+        """Compute normal field error on boundary.
 
         Parameters
         ----------
@@ -1283,12 +1283,12 @@ class QuadraticFlux(_Objective):
         return f
 
 
-class QuadraticFluxMinimizingSurface(_Objective):
+class SurfaceQuadraticFlux(_Objective):
     """Target B*n = 0 on a surface.
 
     Used to find a quadratic-flux-minimizing (QFM) surface, so a
     `FourierRZToroidalSurface` should be passed to the objective.
-    Should always be used along with a ``ToroidalFlux`` objective to
+    Should always be used along with a ``ToroidalFlux`` or ``Volume`` objective to
     ensure that the resulting QFM surface has the desired amount of
     flux enclosed and avoid trivial solutions.
 
@@ -1298,7 +1298,8 @@ class QuadraticFluxMinimizingSurface(_Objective):
         QFM surface upon which the normal field error will be minimized.
     field : MagneticField
         External field produced by coils or other source, which will be optimized to
-        minimize the normal field error on the provided QFM surface.
+        minimize the normal field error on the provided QFM surface. May be fixed
+        by passing in ``field_fixed=True``
     eval_grid : Grid, optional
         Collocation grid containing the nodes on the surface at which the
         magnetic field is being calculated and where to evaluate Bn errors.
@@ -1335,7 +1336,7 @@ class QuadraticFluxMinimizingSurface(_Objective):
         normalize_target=True,
         eval_grid=None,
         field_grid=None,
-        name="Quadratic Flux Minimizing Surface",
+        name="Surface Quadratic Flux",
         field_fixed=False,
         jac_chunk_size=None,
     ):
@@ -1429,7 +1430,7 @@ class QuadraticFluxMinimizingSurface(_Objective):
         super().build(use_jit=use_jit, verbose=verbose)
 
     def compute(self, params_1, params_2=None, constants=None):
-        """Compute boundary force error.
+        """Compute normal field on surface.
 
         Parameters
         ----------
@@ -1494,8 +1495,6 @@ class ToroidalFlux(_Objective):
     ----------
     eq : Equilibrium or FourierRZToroidalSurface
         Equilibrium (or QFM surface) for which the toroidal flux will be calculated.
-        The equilibrium is kept fixed during the optimization with this objective,
-        but if qfm_surface=True is passed, then the surface will be allowed to vary.
     field : MagneticField
         MagneticField object, the parameters of this will be optimized
         to minimize the objective.
@@ -1508,14 +1507,11 @@ class ToroidalFlux(_Objective):
         Collocation grid containing the nodes to evaluate the normal magnetic field at
         plasma geometry at. Defaults to a LinearGrid(L=eq.L_grid, M=eq.M_grid,
         zeta=jnp.array(0.0), NFP=eq.NFP).
-    qfm_surface : bool
-        Whether to look for quadratic-flux-minimizing surfaces or not.
-        If True, the passed-in object must be a surface, not an equilibrium,
-        and it will be allowed to vary in order to target toroidal flux
-        passing through it.
     field_fixed : bool
         Whether or not to fix the field's DOFs during the optimization.
-        Only allowed to be True if `qfm_surface=True`.
+    eq_fixed : bool
+        Whether or not to fix the equilibrium (or QFM surface) DOFs
+        during the optimization.
 
     """
 
@@ -1549,8 +1545,8 @@ class ToroidalFlux(_Objective):
         field_grid=None,
         eval_grid=None,
         name="toroidal-flux",
-        qfm_surface=False,
         field_fixed=False,
+        eq_fixed=False,
         jac_chunk_size=None,
     ):
         if target is None and bounds is None:
@@ -1559,21 +1555,16 @@ class ToroidalFlux(_Objective):
         self._field_grid = field_grid
         self._eval_grid = eval_grid
         self._eq = eq
-        # TODO: add eq_fixed option so this can be used in single stage
-        self._qfm_surface = qfm_surface
-        errorif(
-            qfm_surface and hasattr(eq, "L_lmn"),
-            TypeError,
-            "Must pass in a FourierRZToroidalSurface object "
-            "if qfm_surface=True, not an Equilibrium.",
-        )
         self._field_fixed = field_fixed
+        self._eq_fixed = eq_fixed
         errorif(
-            not qfm_surface and field_fixed,
+            eq_fixed and field_fixed,
             ValueError,
-            "Cannot have `field_fixed=True` and `qfm_surface=False`",
+            "Cannot have both `field_fixed=True` `eq_fixed=True`",
         )
-        things = [eq] if qfm_surface else []
+        things = []
+        if not eq_fixed:
+            things += [eq]
         if not field_fixed:
             things += [field]
         super().__init__(
@@ -1600,6 +1591,8 @@ class ToroidalFlux(_Objective):
             Level of output.
 
         """
+        from desc.geometry import FourierRZToroidalSurface
+
         eq = self._eq
         self._use_vector_potential = True
         try:
@@ -1607,7 +1600,8 @@ class ToroidalFlux(_Objective):
         except (NotImplementedError, ValueError) as e:
             self._use_vector_potential = False
             errorif(
-                self._qfm_surface and not self._use_vector_potential,
+                isinstance(eq, FourierRZToroidalSurface)
+                and not self._use_vector_potential,
                 ValueError,
                 "Targeting a QFM surface requires the vector potential to be "
                 "calculated from the field, however the field cannot calculate "
@@ -1630,7 +1624,7 @@ class ToroidalFlux(_Objective):
         )
         if self._normalize:
             self._normalization = 1.0 if not hasattr(eq, "Psi") else eq.Psi
-        if not self._qfm_surface:
+        if not isinstance(eq, FourierRZToroidalSurface):
             # ensure vacuum eq, as is unneeded for finite beta
             pres = np.max(np.abs(eq.compute("p")["p"]))
             curr = np.max(np.abs(eq.compute("current")["current"]))
@@ -1647,7 +1641,7 @@ class ToroidalFlux(_Objective):
                 + "this objective is unneeded at finite beta.",
             )
 
-        # eval_grid.num_nodes for quad flux cost,
+        # eval_grid.num_nodes for quad flux cost
         self._dim_f = 1
         timer = Timer()
         if verbose > 0:
@@ -1710,13 +1704,13 @@ class ToroidalFlux(_Objective):
         """
         if constants is None:
             constants = self.constants
-        field_params = params_2 if self._qfm_surface else params_1
+        field_params = params_2 if not self._eq_fixed else params_1
         field_params = (
             constants["field"].params_dict if self._field_fixed else field_params
         )
-        surf_params = params_1 if self._qfm_surface else None
+        surf_params = params_1 if not self._eq_fixed else None
 
-        if self._qfm_surface:
+        if not self._eq_fixed:
             data = compute_fun(
                 self._eq,
                 self._data_keys,

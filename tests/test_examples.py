@@ -62,9 +62,9 @@ from desc.objectives import (
     PlasmaVesselDistance,
     PrincipalCurvature,
     QuadraticFlux,
-    QuadraticFluxMinimizingSurface,
     QuasisymmetryBoozer,
     QuasisymmetryTwoTerm,
+    SurfaceQuadraticFlux,
     ToroidalFlux,
     VacuumBoundaryError,
     Volume,
@@ -1271,7 +1271,7 @@ def test_qfm_optimization_with_analytic_field():
     optimizer = Optimizer("lsq-exact")
 
     constraints = ()
-    quadflux_obj = QuadraticFluxMinimizingSurface(
+    quadflux_obj = SurfaceQuadraticFlux(
         surface=surface,
         field=field,
         eval_grid=eval_grid,

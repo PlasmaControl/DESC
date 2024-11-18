@@ -1022,7 +1022,7 @@ def test_vmec_save_asym(VMEC_save_asym):
         vmec.variables["jcurv"][20:100], desc.variables["jcurv"][20:100], rtol=2
     )
     np.testing.assert_allclose(
-        vmec.variables["DShear"][20:100], desc.variables["DShear"][20:100], rtol=3e-2
+        vmec.variables["DShear"][20:100], desc.variables["DShear"][20:100], rtol=6e-2
     )
     np.testing.assert_allclose(
         vmec.variables["DCurr"][20:100],
@@ -1074,13 +1074,22 @@ def test_vmec_save_asym(VMEC_save_asym):
     # Next, calculate some quantities and compare
     # the DESC wout -> DESC (should be very close)
     # and the DESC wout -> VMEC wout (should be approximately close)
+    surfs = desc.variables["ns"][:]
+    s_full = np.linspace(0, 1, surfs)
+    s_half = s_full[0:-1] + 0.5 / (surfs - 1)
+    r_full = np.sqrt(s_full)
+    r_half = np.sqrt(s_half)
+
     vol_grid = LinearGrid(
-        rho=np.sqrt(
-            abs(
-                vmec.variables["phi"][:].filled()
-                / np.max(np.abs(vmec.variables["phi"][:].filled()))
-            )
-        )[10::10],
+        rho=r_full[10::10],
+        M=15,
+        N=15,
+        NFP=eq.NFP,
+        axis=False,
+        sym=False,
+    )
+    vol_half_grid = LinearGrid(
+        rho=r_half[10::10],
         M=15,
         N=15,
         NFP=eq.NFP,
@@ -1100,12 +1109,13 @@ def test_vmec_save_asym(VMEC_save_asym):
         atol_vmec_desc_wout=1e-5,
         rtol_vmec_desc_wout=1e-2,
         grid=vol_grid,
+        is_half_grid=False,
     ):
         """Helper fxn to evaluate Fourier series from wout and compare to DESC."""
         xm = desc.variables["xm_nyq"][:] if use_nyq else desc.variables["xm"][:]
         xn = desc.variables["xn_nyq"][:] if use_nyq else desc.variables["xn"][:]
 
-        si = abs(vmec.variables["phi"][:] / np.max(np.abs(vmec.variables["phi"][:])))
+        si = np.insert(s_half, 0, 0) if is_half_grid else s_full
         rho = grid.nodes[:, 0]
         s = rho**2
         # some quantities must be negated before comparison bc
@@ -1166,18 +1176,26 @@ def test_vmec_save_asym(VMEC_save_asym):
             rtol=rtol_vmec_desc_wout,
         )
 
-    # R & Z & lambda
+    # R & Z
     test("rmn", "R", use_nyq=False)
-    test("zmn", "Z", use_nyq=False, atol_vmec_desc_wout=4e-2)
-
+    test("zmn", "Z", use_nyq=False, atol_vmec_desc_wout=1e-2)
+    test(
+        "lmn",
+        "lambda",
+        use_nyq=False,
+        atol_vmec_desc_wout=1e-2,
+        negate_DESC_quant=True,
+        grid=vol_half_grid,
+        is_half_grid=True,
+    )
     # |B|
     test("bmn", "|B|", rtol_desc_desc_wout=7e-4)
 
     # B^zeta
-    test("bsupvmn", "B^zeta")  # ,rtol_desc_desc_wout=6e-5)
+    test("bsupvmn", "B^zeta")
 
     # B_zeta
-    test("bsubvmn", "B_zeta", rtol_desc_desc_wout=3e-4)
+    test("bsubvmn", "B_zeta", grid=vol_half_grid, is_half_grid=True)
 
     # hard to compare to VMEC for the currents, since
     # VMEC F error is worse and equilibria are not exactly similar
@@ -1185,30 +1203,22 @@ def test_vmec_save_asym(VMEC_save_asym):
     test("currumn", "J^theta", atol_vmec_desc_wout=1e4)
     test("currvmn", "J^zeta", negate_DESC_quant=True, atol_vmec_desc_wout=1e5)
 
-    # can only compare lambda, sqrt(g) B_psi B^theta and B_theta at bdry
-    test(
-        "lmn",
-        "lambda",
-        use_nyq=False,
-        negate_DESC_quant=True,
-        grid=bdry_grid,
-        atol_desc_desc_wout=4e-4,
-        atol_vmec_desc_wout=5e-2,
-    )
     test(
         "gmn",
         "sqrt(g)",
         convert_sqrt_g_or_B_rho=True,
         negate_DESC_quant=True,
-        grid=bdry_grid,
-        rtol_desc_desc_wout=5e-4,
-        rtol_vmec_desc_wout=4e-2,
+        grid=vol_half_grid,
+        is_half_grid=True,
     )
+
+    # Compare B_psi B^theta and B_theta at bdry only
     test(
         "bsupumn",
         "B^theta",
         negate_DESC_quant=True,
         grid=bdry_grid,
+        is_half_grid=True,
         atol_vmec_desc_wout=6e-4,
     )
     test(
@@ -1216,16 +1226,14 @@ def test_vmec_save_asym(VMEC_save_asym):
         "B_theta",
         negate_DESC_quant=True,
         grid=bdry_grid,
-        atol_desc_desc_wout=1e-4,
-        atol_vmec_desc_wout=4e-4,
+        is_half_grid=True,
     )
     test(
         "bsubsmn",
         "B_rho",
-        grid=bdry_grid,
         convert_sqrt_g_or_B_rho=True,
-        rtol_vmec_desc_wout=6e-2,
-        atol_vmec_desc_wout=9e-3,
+        grid=bdry_grid,
+        atol_vmec_desc_wout=2e-3,
     )
 
 

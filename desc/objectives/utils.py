@@ -97,13 +97,13 @@ def factorize_linear_constraints(objective, constraint, x_scale="auto"):  # noqa
     # which are duplicate rows of A that also have duplicate entries of b,
     # if the entries of b aren't the same then the constraints are actually
     # incompatible and so we will leave those to be caught later.
-    A_augmented = jnp.hstack([A, jnp.reshape(b, (A.shape[0], 1))])
+    A_augmented = np.hstack([A, np.reshape(b, (A.shape[0], 1))])
 
     # Find unique rows of A_augmented
-    unique_rows, unique_indices = jnp.unique(A_augmented, axis=0, return_index=True)
+    unique_rows, unique_indices = np.unique(A_augmented, axis=0, return_index=True)
 
     # Sort the indices to preserve the order of appearance
-    unique_indices = jnp.sort(unique_indices)
+    unique_indices = np.sort(unique_indices)
 
     # while loop has problems updating JAX arrays, convert them to numpy arrays
     A_augmented = np.array(A_augmented)

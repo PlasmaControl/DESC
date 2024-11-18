@@ -261,3 +261,66 @@ def rescale(
     eq.surface = eq.get_surface_at(rho=1)
 
     return eq
+
+
+def rotate_zeta(eq, angle, copy=False):
+    """Rotate the equilibrium about the toroidal direction.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Equilibrium to rotate.
+    angle : float
+        Angle to rotate the equilibrium in radians. The actual physical rotation
+        is by angle / self.NFP.
+    copy : bool, optional
+        Whether to update the existing equilibrium or make a copy (Default).
+
+    Returns
+    -------
+    eq_rotated : Equilibrium
+        Equilibrium rotated about the toroidal direction
+    """
+    eq_rotated = eq.copy() if copy else eq
+    if eq.sym and not (angle % np.pi == 0) and eq.N != 0:
+        warnings.warn(
+            "Rotating a stellarator symmetric equilibrium by an angle "
+            "that is not a multiple of pi will break the symmetry. "
+            "Changing the symmetry to False to rotate the equilibrium."
+        )
+        eq_rotated.change_resolution(sym=0)
+
+    def _get_new_coeffs(fun):
+        if fun == "R":
+            f_lmn = np.array(eq_rotated.R_lmn)
+            modes = eq_rotated.R_basis.modes
+        elif fun == "Z":
+            f_lmn = np.array(eq_rotated.Z_lmn)
+            modes = eq_rotated.Z_basis.modes
+        elif fun == "L":
+            f_lmn = np.array(eq_rotated.L_lmn)
+            modes = eq_rotated.L_basis.modes
+        else:
+            raise ValueError("fun must be 'R', 'Z' or 'L'")
+
+        new_coeffs = f_lmn.copy()
+        mode_lookup = {(l, m, n): idx for idx, (l, m, n) in enumerate(modes)}
+        for i, (l, m, n) in enumerate(modes):
+            id_sin = mode_lookup.get((l, m, -n), None)
+            v_sin = np.sin(np.abs(n) * angle)
+            v_cos = np.cos(np.abs(n) * angle)
+            c_sin = f_lmn[id_sin] if id_sin is not None else 0
+            if n >= 0:
+                new_coeffs[i] = f_lmn[i] * v_cos + c_sin * v_sin
+            elif n < 0:
+                new_coeffs[i] = f_lmn[i] * v_cos - c_sin * v_sin
+        return new_coeffs
+
+    eq_rotated.R_lmn = _get_new_coeffs(fun="R")
+    eq_rotated.Z_lmn = _get_new_coeffs(fun="Z")
+    eq_rotated.L_lmn = _get_new_coeffs(fun="L")
+
+    eq_rotated.surface = eq_rotated.get_surface_at(rho=1.0)
+    eq_rotated.axis = eq_rotated.get_axis()
+
+    return eq_rotated

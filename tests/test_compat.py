@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 
-from desc.compat import flip_helicity, flip_theta, rescale
+from desc.compat import flip_helicity, flip_theta, rescale, rotate_zeta
 from desc.examples import get
 from desc.grid import Grid, LinearGrid, QuadratureGrid
 
@@ -277,3 +277,25 @@ def test_rescale():
     np.testing.assert_allclose(new_vals["B_max"], 2)
     np.testing.assert_allclose(new_vals["R0/a"], old_vals["R0/a"])
     np.testing.assert_allclose(new_vals["err"], old_vals["err"], atol=1e-10)
+
+
+@pytest.mark.unit
+@pytest.mark.solve
+def test_rotate_zeta():
+    """Test rotating Equilibrium around Z axis."""
+    eq = get("ARIES-CS")
+    eq_no_sym = eq.copy()
+    eq_no_sym.change_resolution(sym=False)
+    with pytest.warns():
+        eq1 = rotate_zeta(eq, np.pi / 2, copy=True)
+    eq2 = rotate_zeta(eq1, 3 * np.pi / 2, copy=False)
+
+    assert np.allclose(eq_no_sym.R_lmn, eq2.R_lmn)
+    assert np.allclose(eq_no_sym.Z_lmn, eq2.Z_lmn)
+    assert np.allclose(eq_no_sym.L_lmn, eq2.L_lmn)
+
+    eq = get("DSHAPE")
+    eq3 = rotate_zeta(eq, np.pi / 3, copy=True)
+    assert np.allclose(eq.R_lmn, eq3.R_lmn)
+    assert np.allclose(eq.Z_lmn, eq3.Z_lmn)
+    assert np.allclose(eq.L_lmn, eq3.L_lmn)

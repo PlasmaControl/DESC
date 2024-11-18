@@ -3,6 +3,7 @@ Changelog
 
 New Features
 - Add ``from_input_file`` method to ``Equilibrium`` class to generate an ``Equilibrium`` object with boundary, profiles, resolution and flux specified in a given DESC or VMEC input file
+- Add ``rotate_zeta`` method to ``Equilibrium`` class to rotate an ``Equilibrium`` around Z axis.
 
 
 Bug Fixes

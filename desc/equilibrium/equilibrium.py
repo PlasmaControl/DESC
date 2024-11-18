@@ -1425,7 +1425,7 @@ class Equilibrium(IOAble, Optimizable):
             Equilibrium rotated about the toroidal direction
         """
         eq = self.copy() if copy else self
-        if eq.sym and not (angle % np.pi == 0):
+        if eq.sym and not (angle % np.pi == 0) and eq.N != 0:
             warnings.warn(
                 "Rotating a stellarator symmetric equilibrium by an angle "
                 "that is not a multiple of pi will break the symmetry. "

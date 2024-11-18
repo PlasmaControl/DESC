@@ -1633,7 +1633,14 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
 
     @classmethod
     def linspaced_angular(
-        cls, coil, current=None, axis=[0, 0, 1], angle=2 * np.pi, n=10, endpoint=False
+        cls,
+        coil,
+        current=None,
+        axis=[0, 0, 1],
+        angle=2 * np.pi,
+        n=10,
+        endpoint=False,
+        check_intersection=True,
     ):
         """Create a CoilSet by repeating a coil at equal spacing around the torus.
 
@@ -1651,6 +1658,8 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             Number of copies of original coil.
         endpoint : bool
             Whether to include a coil at final rotation angle. Default = False.
+        check_intersection : bool
+            whether to check the resulting coilsets for intersecting coils.
 
         """
         assert isinstance(coil, _Coil) and not isinstance(coil, CoilSet)
@@ -1664,11 +1673,17 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             coili.rotate(axis=axis, angle=phi[i])
             coili.current = currents[i]
             coils.append(coili)
-        return cls(*coils)
+        return cls(*coils, check_intersection=check_intersection)
 
     @classmethod
     def linspaced_linear(
-        cls, coil, current=None, displacement=[2, 0, 0], n=4, endpoint=False
+        cls,
+        coil,
+        current=None,
+        displacement=[2, 0, 0],
+        n=4,
+        endpoint=False,
+        check_intersection=True,
     ):
         """Create a CoilSet by repeating a coil at equal spacing in a straight line.
 
@@ -1685,6 +1700,8 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             Number of copies of original coil.
         endpoint : bool
             Whether to include a coil at final displacement location. Default = False.
+        check_intersection : bool
+            whether to check the resulting coilsets for intersecting coils.
 
         """
         assert isinstance(coil, _Coil) and not isinstance(coil, CoilSet)
@@ -1699,10 +1716,10 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             coili.translate(a[i] * displacement)
             coili.current = currents[i]
             coils.append(coili)
-        return cls(*coils)
+        return cls(*coils, check_intersection=check_intersection)
 
     @classmethod
-    def from_symmetry(cls, coils, NFP=1, sym=False):
+    def from_symmetry(cls, coils, NFP=1, sym=False, check_intersection=True):
         """Create a coil group by reflection and symmetry.
 
         Given coils over one field period, repeat coils NFP times between
@@ -1721,6 +1738,8 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         sym : bool (optional)
             Whether to enforce stellarator symmetry.
             If True, the coils will be duplicated 2*NFP times. Default = False.
+        check_intersection : bool
+            whether to check the resulting coilsets for intersecting coils.
 
         Returns
         -------
@@ -1763,7 +1782,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             rotated_coils.rotate(axis=[0, 0, 1], angle=2 * jnp.pi * k / NFP)
             coilset += rotated_coils
 
-        return cls(*coilset)
+        return cls(*coilset, check_intersection=check_intersection)
 
     @classmethod
     def from_makegrid_coilfile(cls, coil_file, method="cubic", check_intersection=True):

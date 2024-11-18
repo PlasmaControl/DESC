@@ -1098,13 +1098,13 @@ class FourierZernikeBasis(_Basis):
         if not len(modes):
             return np.array([]).reshape((len(nodes), 0))
 
-        # TODO: avoid duplicate calculations when mixing derivatives
+        # TODO(#1243): avoid duplicate calculations when mixing derivatives
         r, t, z = nodes.T
         l, m, n = modes.T
         lm = modes[:, :2]
 
         if unique:
-            # TODO: can avoid this here by using grid.unique_idx etc
+            # TODO(#1243): can avoid this here by using grid.unique_idx etc
             # and adding unique_modes attributes to basis
             _, ridx, routidx = np.unique(
                 r, return_index=True, return_inverse=True, axis=0

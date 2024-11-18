@@ -107,7 +107,7 @@ def map_coordinates(  # noqa: C901
 
     profiles = get_profiles(inbasis + basis_derivs, eq)
 
-    # TODO: make this work for permutations of in/out basis
+    # TODO (#1382): make this work for permutations of in/out basis
     if outbasis == ("rho", "theta", "zeta"):
         if inbasis == ("rho", "alpha", "zeta"):
             if "iota" in kwargs:
@@ -766,7 +766,7 @@ def get_rtz_grid(
     return desc_grid
 
 
-# TODO: deprecated, remove eventually
+# TODO(#1383): deprecated, remove eventually
 def compute_theta_coords(
     eq, flux_coords, L_lmn=None, tol=1e-6, maxiter=20, full_output=False, **kwargs
 ):

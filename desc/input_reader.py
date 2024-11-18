@@ -386,7 +386,6 @@ class InputReader:
             if match:
                 inputs["bdry_mode"] = words[0].lower()
                 flag = True
-                # TODO: set bdry_mode automatically based on bdry coeffs
 
             # coefficient indices
             match = re.search(r"l\s*:\s*" + num_form, command, re.IGNORECASE)

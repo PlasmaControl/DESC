@@ -1901,8 +1901,8 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             if None, will default to the coil compute functions's
             default grid
         """
-        # TODO: name each group based off of CoilSet name?
-        # TODO: have CoilGroup be automatically assigned based off of
+        # TODO(#1376): name each group based off of CoilSet name?
+        # TODO(#1376): have CoilGroup be automatically assigned based off of
         # CoilSet if current coilset is a collection of coilsets?
 
         NFP = 1 if NFP is None else NFP

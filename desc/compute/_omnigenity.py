@@ -47,7 +47,7 @@ def _B_theta_mn(params, transforms, profiles, data, **kwargs):
     return data
 
 
-# TODO: do math to change definition of nu so that we can just use B_zeta_mn here
+# TODO (#568): do math to change definition of nu so that we can just use B_zeta_mn here
 @register_compute_fun(
     name="B_phi_mn",
     label="B_{\\phi, m, n}",

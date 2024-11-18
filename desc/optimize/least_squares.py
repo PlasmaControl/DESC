@@ -344,7 +344,7 @@ def lsqtr(  # noqa: C901
             )
             alltr.append(trust_radius)
             alpha *= tr_old / trust_radius
-            # TODO: does this need to move to the outer loop?
+            # TODO (#1395): does this need to move to the outer loop?
             success, message = check_termination(
                 actual_reduction,
                 cost,

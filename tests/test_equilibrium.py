@@ -402,3 +402,25 @@ def test_backward_compatible_load_and_resolve():
     f_obj = ForceBalance(eq=eq)
     obj = ObjectiveFunction(f_obj, use_jit=False)
     eq.solve(maxiter=1, objective=obj)
+
+
+@pytest.mark.unit
+@pytest.mark.solve
+def test_rotate_zeta():
+    """Test rotating Equilibrium around Z axis."""
+    eq = get("ARIES-CS")
+    eq_no_sym = eq.copy()
+    eq_no_sym.change_resolution(sym=False)
+    with pytest.warns():
+        eq1 = eq.rotate_zeta(np.pi / 2, copy=True)
+    eq2 = eq1.rotate_zeta(3 * np.pi / 2, copy=False)
+
+    assert np.allclose(eq_no_sym.R_lmn, eq2.R_lmn)
+    assert np.allclose(eq_no_sym.Z_lmn, eq2.Z_lmn)
+    assert np.allclose(eq_no_sym.L_lmn, eq2.L_lmn)
+
+    eq = get("DSHAPE")
+    eq3 = eq.rotate_zeta(np.pi / 3, copy=True)
+    assert np.allclose(eq.R_lmn, eq3.R_lmn)
+    assert np.allclose(eq.Z_lmn, eq3.Z_lmn)
+    assert np.allclose(eq.L_lmn, eq3.L_lmn)

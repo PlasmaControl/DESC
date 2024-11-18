@@ -98,27 +98,15 @@ def factorize_linear_constraints(objective, constraint, x_scale="auto"):  # noqa
     # if the entries of b aren't the same then the constraints are actually
     # incompatible and so we will leave those to be caught later.
     A_augmented = np.hstack([A, np.reshape(b, (A.shape[0], 1))])
-    row_idx_to_delete = np.array([], dtype=int)
-    for row_idx in range(A_augmented.shape[0]):
-        # find all rows equal to this row
-        rows_equal_to_this_row = np.where(
-            np.all(A_augmented[row_idx, :] == A_augmented, axis=1)
-        )[0]
-        # find the rows equal to this row that are not this row
-        rows_equal_to_this_row_but_not_this_row = rows_equal_to_this_row[
-            rows_equal_to_this_row != row_idx
-        ]
-        # if there are rows equal to this row that aren't this row, AND this particular
-        # row has not already been detected as a duplicate of an earlier one and slated
-        # for deletion, add the duplicate row indices to the array of
-        # rows to be deleted
-        if (
-            rows_equal_to_this_row_but_not_this_row.size
-            and row_idx not in row_idx_to_delete
-        ):
-            row_idx_to_delete = np.append(row_idx_to_delete, rows_equal_to_this_row[1:])
-    # delete the affected rows, and also the corresponding rows of b
-    A_augmented = np.delete(A_augmented, row_idx_to_delete, axis=0)
+
+    # Find unique rows of A_augmented
+    unique_rows, unique_indices = np.unique(A_augmented, axis=0, return_index=True)
+
+    # Sort the indices to preserve the order of appearance
+    unique_indices = np.sort(unique_indices)
+
+    # Extract the unique rows
+    A_augmented = A_augmented[unique_indices]
     A = A_augmented[:, :-1]
     b = np.atleast_1d(A_augmented[:, -1].squeeze())
 

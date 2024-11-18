@@ -2,14 +2,12 @@
 
 import numpy as np
 import pytest
-import scipy.linalg
 from qsc import Qsc
 
 import desc.examples
 from desc.backend import jnp
 from desc.equilibrium import Equilibrium
 from desc.geometry import FourierRZToroidalSurface
-from desc.grid import LinearGrid
 from desc.io import load
 from desc.magnetic_fields import OmnigenousField
 from desc.objectives import (
@@ -69,10 +67,10 @@ def test_LambdaGauge_sym(DummyStellarator):
     eq = load(load_from=str(DummyStellarator["output_path"]), file_format="hdf5")
     with pytest.warns(UserWarning, match="Reducing radial"):
         eq.change_resolution(L=2, M=1, N=1)
-    correct_constraint_matrix = np.zeros((0, 5))
     lam_con = FixLambdaGauge(eq)
     lam_con.build()
-    np.testing.assert_array_equal(lam_con._A, correct_constraint_matrix)
+    # should have no indices to fix
+    assert lam_con._params["L_lmn"].size == 0
 
 
 @pytest.mark.unit
@@ -105,13 +103,10 @@ def test_LambdaGauge_asym():
     lam_con = FixLambdaGauge(eq)
     lam_con.build()
 
-    # make sure that any lambda in the null space gives lambda==0 at theta=zeta=0
-    Z = scipy.linalg.null_space(lam_con._A)
-    grid = LinearGrid(L=10, theta=[0], zeta=[0])
-    for z in Z.T:
-        eq.L_lmn = z
-        lam = eq.compute("lambda", grid=grid)["lambda"]
-        np.testing.assert_allclose(lam, 0, atol=1e-15)
+    indices = np.where(
+        np.logical_and(eq.L_basis.modes[:, 1] == 0, eq.L_basis.modes[:, 2] == 0)
+    )[0]
+    np.testing.assert_allclose(indices, lam_con._params["L_lmn"])
 
 
 @pytest.mark.regression

@@ -137,7 +137,9 @@ class Optimizer(IOAble):
             Maximum number of iterations. Defaults to 100.
         options : dict, optional
             Dictionary of optional keyword arguments to override default solver
-            settings. See the code for more details.
+            settings. See the documentation page ``Optimizers Supported`` for
+            more details (https://desc-docs.readthedocs.io/en/stable/optimizers.html)
+            to check the options for each specific available optimizer.
         copy : bool
             Whether to return the current things or a copy (leaving the original
             unchanged).

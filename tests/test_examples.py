@@ -1280,7 +1280,7 @@ def test_qfm_optimization_with_analytic_field():
     torflux = ToroidalFlux(
         eq=surface,
         field=field,
-        qfm_surface=True,
+        eq_fixed=False,
         field_fixed=True,
     )
     torflux.build()
@@ -1288,7 +1288,7 @@ def test_qfm_optimization_with_analytic_field():
     torflux = ToroidalFlux(
         eq=surface,
         field=field,
-        qfm_surface=True,
+        eq_fixed=False,
         field_fixed=True,
         target=current_torflux,
     )

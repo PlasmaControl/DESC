@@ -1204,18 +1204,43 @@ class TestObjectiveFunction:
         """Test calculation of toroidal flux from coils."""
         grid1 = LinearGrid(L=0, M=40, zeta=np.array(0.0))
 
-        def test(eq, field, correct_value, rtol=1e-14, grid=None):
+        def test(
+            eq,
+            field,
+            correct_value,
+            rtol=1e-14,
+            grid=None,
+            eq_fixed=True,
+            field_fixed=True,
+        ):
             obj = ToroidalFlux(
                 eq=eq,
                 field=field,
                 eval_grid=grid,
+                eq_fixed=eq_fixed,
+                field_fixed=field_fixed,
             )
             obj.build(verbose=2)
-            torflux = obj.compute_unscaled(*obj.xs(field))
+            if eq_fixed:
+                torflux = obj.compute_unscaled(*obj.xs(field))
+            elif field_fixed:
+                torflux = obj.compute_unscaled(*obj.xs(eq))
+            else:
+                torflux = obj.compute_unscaled(*obj.xs(eq, field))
             np.testing.assert_allclose(torflux, correct_value, rtol=rtol)
 
         eq = Equilibrium(iota=PowerSeriesProfile(0))
-        test(eq, VerticalMagneticField(B0=1), 0, grid=grid1)
+        test(eq, VerticalMagneticField(B0=1), 0, grid=grid1, field_fixed=False)
+        test(eq, VerticalMagneticField(B0=1), 0, grid=grid1, eq_fixed=False)
+        test(
+            eq,
+            VerticalMagneticField(B0=1),
+            0,
+            grid=grid1,
+            field_fixed=False,
+            eq_fixed=False,
+        )
+
         field = ToroidalMagneticField(B0=1, R0=1)
         # calc field Psi
 
@@ -1229,19 +1254,20 @@ class TestObjectiveFunction:
         psi_from_field = np.sum(grid1.spacing[:, 1] * A_dot_e_theta)
         eq.change_resolution(L_grid=20, M_grid=20)
 
-        test(eq, field, psi_from_field)
-        test(eq, field, psi_from_field, rtol=1e-3)
+        test(eq, field, psi_from_field, field_fixed=False)
+        test(eq, field, psi_from_field, rtol=1e-3, field_fixed=False)
 
-        with pytest.raises(TypeError, match="Equilibrium"):
-            ToroidalFlux(eq, field, qfm_surface=True)
-        with pytest.raises(ValueError, match="qfm_surface=False"):
-            ToroidalFlux(eq, field, qfm_surface=False, field_fixed=True)
+        with pytest.raises(ValueError, match="Cannot have"):
+            ToroidalFlux(eq, field, eq_fixed=True, field_fixed=True)
 
         # test on field with no vector potential
         pfield = PoloidalMagneticField(1, 1, 1)
-        test(eq, pfield, 0.0)
+        test(eq, pfield, 0.0, field_fixed=False)
+        test(eq, pfield, 0.0, eq_fixed=False)
+        test(eq, pfield, 0.0, eq_fixed=False, field_fixed=False)
+
         with pytest.raises(ValueError, match="vector potential"):
-            obj = ToroidalFlux(eq.surface, pfield, qfm_surface=True)
+            obj = ToroidalFlux(eq.surface, pfield)
             obj.build()
 
     @pytest.mark.unit
@@ -2570,7 +2596,9 @@ class TestComputeScalarResolution:
             eq.change_resolution(
                 L_grid=int(eq.L * res), M_grid=int(eq.M * res), N_grid=int(eq.N * res)
             )
-            obj = ObjectiveFunction(ToroidalFlux(eq, ext_field), use_jit=False)
+            obj = ObjectiveFunction(
+                ToroidalFlux(eq, ext_field, eq_fixed=True), use_jit=False
+            )
             obj.build(verbose=0)
             f[i] = obj.compute_scalar(obj.x())
         np.testing.assert_allclose(f, f[-1], rtol=5e-2)
@@ -2588,7 +2616,9 @@ class TestComputeScalarResolution:
             eq.change_resolution(
                 L_grid=int(eq.L * res), M_grid=int(eq.M * res), N_grid=int(eq.N * res)
             )
-            obj = ObjectiveFunction(ToroidalFlux(eq, ext_field), use_jit=False)
+            obj = ObjectiveFunction(
+                ToroidalFlux(eq, ext_field, eq_fixed=True), use_jit=False
+            )
             obj.build(verbose=0)
             f[i] = obj.compute_scalar(obj.x())
         np.testing.assert_allclose(f, f[-1], rtol=5e-2)
@@ -2960,12 +2990,12 @@ class TestObjectiveNaNGrad:
 
         obj = ObjectiveFunction(ToroidalFlux(eq, ext_field), use_jit=False)
         obj.build()
-        g = obj.grad(obj.x(ext_field))
+        g = obj.grad(obj.x(eq, ext_field))
         assert not np.any(np.isnan(g)), "toroidal flux A"
 
         obj = ObjectiveFunction(ToroidalFlux(eq, ext_field), use_jit=False)
         obj.build()
-        g = obj.grad(obj.x(ext_field))
+        g = obj.grad(obj.x(eq, ext_field))
         assert not np.any(np.isnan(g)), "toroidal flux B"
 
     @pytest.mark.unit

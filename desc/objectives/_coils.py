@@ -1560,7 +1560,7 @@ class ToroidalFlux(_Objective):
         errorif(
             eq_fixed and field_fixed,
             ValueError,
-            "Cannot have both `field_fixed=True` `eq_fixed=True`",
+            "Cannot have both `field_fixed=True` and `eq_fixed=True`",
         )
         things = []
         if not eq_fixed:

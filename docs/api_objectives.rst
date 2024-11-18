@@ -97,6 +97,7 @@ Coil Optimization
 
 
     desc.objectives.QuadraticFlux
+    desc.objective.SurfaceQuadraticFlux
     desc.objectives.CoilLength
     desc.objectives.CoilCurvature
     desc.objectives.CoilTorsion

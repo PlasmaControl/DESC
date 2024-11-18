@@ -223,6 +223,7 @@ Objective Functions
     desc.objectives.RadialForceBalance
     desc.objectives.RotationalTransform
     desc.objectives.Shear
+    desc.objectives.SurfaceQuadraticFlux
     desc.objectives.ToroidalCurrent
     desc.objectives.ToroidalFlux
     desc.objectives.VacuumBoundaryError

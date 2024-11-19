@@ -1006,7 +1006,7 @@ class TestObjectiveFunction:
                 grid=LinearGrid(zeta=4),
                 expect_intersect=True,
             )
-        # TODO: move this coil set to conftest?
+        # TODO (#1400, 914): move this coil set to conftest?
 
     @pytest.mark.unit
     def test_plasma_coil_min_distance(self):
@@ -1130,8 +1130,6 @@ class TestObjectiveFunction:
             eq_fixed=False,
             coils_fixed=True,
         )
-
-        # TODO: add more complex test case with a stellarator and/or MixedCoilSet
 
     @pytest.mark.unit
     def test_quadratic_flux(self):

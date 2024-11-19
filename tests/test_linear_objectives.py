@@ -56,7 +56,7 @@ from desc.objectives import (
 from desc.objectives.utils import factorize_linear_constraints
 from desc.profiles import PowerSeriesProfile
 
-# TODO: check for all bdryR things if work when False is passed in
+# TODO (#1348): check for all bdryR things if work when False is passed in
 # bc empty array indexed will lead to an error
 
 
@@ -781,7 +781,7 @@ def test_FixMode_passed_target_no_passed_modes_error():
 @pytest.mark.unit
 def test_FixSumModes_passed_target_too_long():
     """Test Fixing Modes with more than a size-1 target."""
-    # TODO: remove this test if FixSumModes is generalized
+    # TODO (#1399): remove this test if FixSumModes is generalized
     # to accept multiple targets and sets of modes at a time
     eq = Equilibrium(L=3, M=4)
     with pytest.raises(ValueError):

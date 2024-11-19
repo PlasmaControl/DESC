@@ -29,7 +29,7 @@ from .utils import (
 )
 
 
-def lsq_auglag(  # noqa: C901 - FIXME: simplify this
+def lsq_auglag(  # noqa: C901
     fun,
     x0,
     jac,
@@ -502,7 +502,7 @@ def lsq_auglag(  # noqa: C901 - FIXME: simplify this
             )
 
             # updating augmented lagrangian params
-            if g_norm < gtolk:  # TODO: maybe also add ftolk, xtolk?
+            if g_norm < gtolk:
                 y = jnp.where(jnp.abs(c) < ctolk, y - mu * c, y)
                 mu = jnp.where(jnp.abs(c) >= ctolk, tau * mu, mu)
                 if constr_violation < ctolk:

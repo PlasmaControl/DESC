@@ -64,7 +64,8 @@ def get_vmec_data(path, quantity):
 
     """
     f = Dataset(path)
-    rho = np.sqrt(f.variables["phi"] / np.array(f.variables["phi"])[-1])
+    phi = np.array(f.variables["phi"])
+    rho = np.sqrt(phi / phi[-1])
     q = np.array(f.variables[quantity])
     f.close()
     return rho, q

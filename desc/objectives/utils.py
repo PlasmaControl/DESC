@@ -105,8 +105,6 @@ def factorize_linear_constraints(objective, constraint, x_scale="auto"):  # noqa
     # Sort the indices to preserve the order of appearance
     unique_indices = np.sort(unique_indices)
 
-    # while loop has problems updating JAX arrays, convert them to numpy arrays
-    A_augmented = np.array(A_augmented)
     # Extract the unique rows
     A_augmented = A_augmented[unique_indices]
     A = A_augmented[:, :-1]

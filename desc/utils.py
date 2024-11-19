@@ -461,7 +461,8 @@ def qr_inv_null(A, b, tol=1e-10):
 
     # Null space is columns of Q[:, rank:]
     Z = Q[:, rank:]
-    x_p = Q1 @ solve_triangular(R1.T, b, lower=True)
+    # If rank is 0, then there is no particular solution
+    x_p = Q1 @ solve_triangular(R1.T, b, lower=True) if rank != 0 else 0
     return x_p, Z
 
 

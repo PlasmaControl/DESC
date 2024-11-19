@@ -1920,8 +1920,8 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             if None, will default to the coil compute functions's
             default grid
         """
-        # TODO: name each group based off of CoilSet name?
-        # TODO: have CoilGroup be automatically assigned based off of
+        # TODO(#1376): name each group based off of CoilSet name?
+        # TODO(#1376): have CoilGroup be automatically assigned based off of
         # CoilSet if current coilset is a collection of coilsets?
 
         NFP = 1 if NFP is None else NFP
@@ -2716,7 +2716,7 @@ class MixedCoilSet(CoilSet):
         self._coils.insert(i, new_item)
 
     @classmethod
-    def from_makegrid_coilfile(  # noqa: C901 - FIXME: simplify this
+    def from_makegrid_coilfile(  # noqa: C901
         cls, coil_file, method="cubic", ignore_groups=False, check_intersection=True
     ):
         """Create a MixedCoilSet of SplineXYZCoils from a MAKEGRID coil txtfile.

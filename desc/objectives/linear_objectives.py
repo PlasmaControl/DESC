@@ -20,7 +20,7 @@ from .normalization import compute_scaling_factors
 from .objective_funs import _Objective
 
 
-# TODO: get rid of this class and inherit from FixParameters instead?
+# TODO (#1391): get rid of this class and inherit from FixParameters instead?
 class _FixedObjective(_Objective):
     _fixed = True
     _linear = True
@@ -45,8 +45,8 @@ class _FixedObjective(_Objective):
     def _parse_target_from_user(
         self, target_from_user, default_target, default_bounds, idx
     ):
-        # FIXME: add logic here to deal with `target_from_user` as a pytree?
-        # FIXME: does this actually need idx?
+        # TODO (#1391): add logic here to deal with `target_from_user` as a pytree?
+        # TODO (#1391: does this actually need idx?
         if target_from_user is None:
             target = default_target
             bounds = default_bounds
@@ -2513,7 +2513,6 @@ class FixCurveShift(FixParameters):
             normalize_target=normalize_target,
             name=name,
         )
-        # TODO: add normalization?
 
 
 class FixCurveRotation(FixParameters):
@@ -2879,7 +2878,6 @@ class FixOmniWell(FixParameters):
             normalize_target=normalize_target,
             name=name,
         )
-        # TODO: add normalization?
 
 
 class FixOmniMap(FixParameters):
@@ -3094,7 +3092,6 @@ class FixSheetCurrent(FixParameters):
             normalize_target=normalize_target,
             name=name,
         )
-        # TODO: add normalization?
 
 
 class FixNearAxisR(_FixedObjective):

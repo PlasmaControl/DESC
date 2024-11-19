@@ -725,6 +725,8 @@ class TERPSICHORE(ExternalObjective):
     ):
         if target is None and bounds is None:
             # want to minimize growth rate or maximize delta W
+            # good threshold for growth rate is < -1e-3
+            # good threshold for delta W is > +1e-4
             bounds = (-np.inf, 0) if scalar else (0, np.inf)
         super().__init__(
             eq=eq,

@@ -2403,7 +2403,7 @@ class OmnigenousField(Optimizable, IOAble):
             assert len(x_lmn) == self.x_basis.num_modes
             self._x_lmn = x_lmn
 
-        # TODO: should we not allow some types of helicity?
+        # TODO (#1390): should we not allow some types of helicity?
         helicity_sign = sign(helicity[0]) * sign(helicity[1])
         warnif(
             self.helicity != (0, self.NFP * helicity_sign)

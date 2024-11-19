@@ -82,7 +82,7 @@ def polyval_vec(*, x, c):
     )
 
 
-# TODO: Eventually do a PR to move this stuff into interpax.
+# TODO (#1388): Eventually do a PR to move this stuff into interpax.
 
 
 def _subtract_last(c, k):

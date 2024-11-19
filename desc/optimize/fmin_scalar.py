@@ -27,7 +27,7 @@ from .utils import (
 )
 
 
-def fmintr(  # noqa: C901 - FIXME: simplify this
+def fmintr(  # noqa: C901
     fun,
     x0,
     grad,

@@ -28,7 +28,7 @@ from .utils import (
 )
 
 
-def lsqtr(  # noqa: C901 - FIXME: simplify this
+def lsqtr(  # noqa: C901
     fun,
     x0,
     jac,
@@ -344,7 +344,7 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
             )
             alltr.append(trust_radius)
             alpha *= tr_old / trust_radius
-            # TODO: does this need to move to the outer loop?
+            # TODO (#1395): does this need to move to the outer loop?
             success, message = check_termination(
                 actual_reduction,
                 cost,

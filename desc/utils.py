@@ -9,7 +9,7 @@ import numpy as np
 from scipy.special import factorial
 from termcolor import colored
 
-from desc.backend import flatnonzero, fori_loop, jit, jnp, qr, take
+from desc.backend import flatnonzero, fori_loop, jit, jnp, qr, solve_triangular, take
 
 
 class Timer:
@@ -461,7 +461,7 @@ def qr_inv_null(A, b, tol=1e-10):
 
     # Null space is columns of Q[:, rank:]
     Z = Q[:, rank:]
-    x_p = Q1 @ jnp.linalg.solve(R1.T, b)
+    x_p = Q1 @ solve_triangular(R1.T, b, lower=True)
     return x_p, Z
 
 

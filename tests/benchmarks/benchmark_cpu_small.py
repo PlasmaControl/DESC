@@ -414,48 +414,59 @@ def test_proximal_freeb_jac(benchmark):
 @pytest.mark.slow
 @pytest.mark.benchmark
 def test_solve_fixed_iter_compiled(benchmark):
-    """Benchmark running eq.solve for fixed iteration count."""
-    jax.clear_caches()
-    eq = desc.examples.get("ESTELL")
-    with pytest.warns(UserWarning, match="Reducing radial"):
-        eq.change_resolution(6, 6, 6, 12, 12, 12)
-    eq.solve(maxiter=1, ftol=0, xtol=0, gtol=0)
+    """Benchmark running eq.solve for fixed iteration count after compilation."""
+
+    def setup():
+        jax.clear_caches()
+        eq = desc.examples.get("ESTELL")
+        with pytest.warns(UserWarning, match="Reducing radial"):
+            eq.change_resolution(6, 6, 6, 12, 12, 12)
+        eq.solve(maxiter=1, ftol=0, xtol=0, gtol=0)
+
+        return eq
 
     def run(eq):
         eq.solve(maxiter=20, ftol=0, xtol=0, gtol=0)
 
-    benchmark.pedantic(run, args=(eq,), rounds=5, iterations=1)
+    benchmark.pedantic(run, setup=setup, rounds=5, iterations=1)
 
 
 @pytest.mark.slow
 @pytest.mark.benchmark
 def test_solve_fixed_iter(benchmark):
     """Benchmark running eq.solve for fixed iteration count."""
-    jax.clear_caches()
-    eq = desc.examples.get("ESTELL")
-    with pytest.warns(UserWarning, match="Reducing radial"):
-        eq.change_resolution(6, 6, 6, 12, 12, 12)
+
+    def setup():
+        jax.clear_caches()
+        eq = desc.examples.get("ESTELL")
+        with pytest.warns(UserWarning, match="Reducing radial"):
+            eq.change_resolution(6, 6, 6, 12, 12, 12)
+
+        return eq
 
     def run(eq):
         jax.clear_caches()
         eq.solve(maxiter=20, ftol=0, xtol=0, gtol=0)
 
-    benchmark.pedantic(run, args=(eq,), rounds=5, iterations=1)
+    benchmark.pedantic(run, setup=setup, rounds=5, iterations=1)
 
 
 @pytest.mark.slow
 @pytest.mark.benchmark
 def test_LinearConstraintProjection_build(benchmark):
     """Benchmark LinearConstraintProjection build."""
-    jax.clear_caches()
-    eq = desc.examples.get("W7-X")
 
-    obj = ObjectiveFunction(ForceBalance(eq))
-    con = get_fixed_boundary_constraints(eq)
-    con = maybe_add_self_consistency(eq, con)
-    con = ObjectiveFunction(con)
-    obj.build()
-    con.build()
+    def setup():
+        jax.clear_caches()
+        eq = desc.examples.get("W7-X")
+
+        obj = ObjectiveFunction(ForceBalance(eq))
+        con = get_fixed_boundary_constraints(eq)
+        con = maybe_add_self_consistency(eq, con)
+        con = ObjectiveFunction(con)
+        obj.build()
+        con.build()
+        return obj, con
 
     def run(obj, con):
         lc = LinearConstraintProjection(obj, con)
@@ -463,7 +474,7 @@ def test_LinearConstraintProjection_build(benchmark):
 
     benchmark.pedantic(
         run,
-        args=(obj, con),
+        setup=setup,
         rounds=10,
         iterations=1,
     )

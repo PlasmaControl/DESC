@@ -9,7 +9,7 @@ import numpy as np
 from scipy.special import factorial
 from termcolor import colored
 
-from desc.backend import flatnonzero, fori_loop, jit, jnp, take
+from desc.backend import flatnonzero, fori_loop, jit, jnp, qr, take
 
 
 class Timer:
@@ -429,6 +429,40 @@ def svd_inv_null(A):
     Ainv = np.matmul(vhk.T, np.multiply(s[..., np.newaxis], uk.T))
     Z = vh[num:, :].T.conj()
     return Ainv, Z
+
+
+def qr_inv_null(A, b, tol=1e-10):
+    """Compute pseudo-inverse and null space of a matrix using QR.
+
+    Parameters
+    ----------
+    A : ndarray
+        Matrix to invert and find null space of.
+    b : ndarray
+        Right-hand side of Ax = b.
+
+    Returns
+    -------
+    x_p : ndarray
+        Particular solution to Ax = b.
+    Z : ndarray
+        Null space of A.
+
+    """
+    # Linear constraint matrix A is usually wide
+    # QR decomposition of A^T
+    Q, R = qr(A.T)
+    # Determine rank
+    diag = jnp.abs(jnp.diag(R))
+    rank = jnp.sum(diag > tol)
+
+    R1 = R[:rank, :rank]
+    Q1 = Q[:, :rank]
+
+    # Null space is columns of Q[:, rank:]
+    Z = Q[:, rank:]
+    x_p = Q1 @ jnp.linalg.solve(R1.T, b)
+    return x_p, Z
 
 
 def combination_permutation(m, n, equals=True):

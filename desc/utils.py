@@ -431,13 +431,13 @@ def svd_inv_null(A):
     return Ainv, Z
 
 
-def qr_inv_null(A, b, tol=1e-10):
-    """Compute pseudo-inverse and null space of a matrix using QR.
+def qr_xp_null(A, b, tol=1e-10):
+    """Compute null space of a matrix and particular solution Ax=b using QR.
 
     Parameters
     ----------
     A : ndarray
-        Matrix to invert and find null space of.
+        Matrix to find null space of.
     b : ndarray
         Right-hand side of Ax = b.
 
@@ -446,7 +446,7 @@ def qr_inv_null(A, b, tol=1e-10):
     x_p : ndarray
         Particular solution to Ax = b.
     Z : ndarray
-        Null space of A.
+        Null space of A such that AZ=0 and Z.T@Z=I.
 
     """
     # Linear constraint matrix A is usually wide

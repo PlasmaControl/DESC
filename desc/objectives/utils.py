@@ -7,11 +7,11 @@ import numpy as np
 
 from desc.backend import cond, jit, jnp, logsumexp, put
 from desc.io import IOAble
-from desc.utils import Index, errorif, flatten_list, qr_inv_null, unique_list, warnif
+from desc.utils import Index, errorif, flatten_list, qr_xp_null, unique_list, warnif
 
 
 def factorize_linear_constraints(objective, constraint, x_scale="auto"):  # noqa: C901
-    """Compute and factorize A to get pseudoinverse and nullspace.
+    """Compute and factorize A to get particular solution and nullspace.
 
     Given constraints of the form Ax=b, factorize A to find a particular solution xp
     and the null space Z st. Axp=b and AZ=0, so that the full space of solutions to
@@ -170,7 +170,7 @@ def factorize_linear_constraints(objective, constraint, x_scale="auto"):  # noqa
     # null space & particular solution
     A = A * D[None, unfixed_idx]
     if A.size:
-        x_p, Z = qr_inv_null(A, b)
+        x_p, Z = qr_xp_null(A, b)
         xp = put(xp, unfixed_idx, x_p)
     else:
         A_inv = A.T
@@ -197,7 +197,7 @@ def factorize_linear_constraints(objective, constraint, x_scale="auto"):  # noqa
 
         # If the error is very large, likely want to error out as
         # it probably is due to a real mistake instead of just numerical
-        # roundoff errors.
+        # round-off errors.
         np.testing.assert_allclose(
             y1,
             y2,
@@ -208,7 +208,7 @@ def factorize_linear_constraints(objective, constraint, x_scale="auto"):  # noqa
         )
 
         # else check with tighter tols and throw an error, these tolerances
-        # could be tripped due to just numerical roundoff or poor scaling between
+        # could be tripped due to just numerical round-off or poor scaling between
         # constraints, so don't want to error out but we do want to warn the user.
         atol = 3e-14
         rtol = 3e-14

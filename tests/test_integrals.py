@@ -997,9 +997,6 @@ class TestBounceQuadrature:
         quad = integrand(Z, k).dot(w) * grad_bijection_from_disc(a, b)
         return quad
 
-    # TODO: add the analytical test that converts incomplete elliptic integrals to
-    #  complete ones using the Reciprocal Modulus transformation
-    #  https://dlmf.nist.gov/19.7#E4.
     @staticmethod
     def elliptic_incomplete(k2):
         """Calculate elliptic integrals for bounce averaged binormal drift.
@@ -1240,7 +1237,6 @@ class TestBounce1D:
         things = {"grid": grid, "eq": eq}
         return data, things
 
-    # TODO: stellarator geometry test with ripples
     @staticmethod
     def drift_analytic(data):
         """Compute analytic approximation for bounce-averaged binormal drift.

@@ -431,6 +431,14 @@ class TestPlotSection:
 
     @pytest.mark.unit
     @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
+    def test_section_chi_contour(self):
+        """Test plotting poincare section of poloidal flux, with fill=False."""
+        eq = get("DSHAPE_CURRENT")
+        fig, ax = plot_section(eq, "chi", fill=False, levels=20)
+        return fig
+
+    @pytest.mark.unit
+    @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
     def test_section_F(self):
         """Test plotting poincare section of radial force."""
         eq = get("DSHAPE_CURRENT")

@@ -748,7 +748,6 @@ def solve_continuation(  # noqa: C901
         if len(deltas) > 0:
             if verbose > 0:
                 print("Perturbing equilibrium")
-            # TODO: pass Jx if available
             eqp = eqfam[ii - 1].copy()
             objective_i = get_equilibrium_objective(
                 eq=eqp, mode=objective, jac_chunk_size=jac_chunk_size

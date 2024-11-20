@@ -22,7 +22,6 @@ __all__ = [
 class _Grid(IOAble, ABC):
     """Base class for collocation grids."""
 
-    # TODO: calculate weights automatically using voronoi / delaunay triangulation
     _io_attrs_ = [
         "_L",
         "_M",

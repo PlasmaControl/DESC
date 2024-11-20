@@ -613,7 +613,7 @@ class ObjectiveFunction(IOAble):
 
     def x(self, *things):
         """Return the full state vector from the Optimizable objects things."""
-        # TODO: also check resolution etc?
+        # TODO (#1392): also check resolution of the things etc?
         things = things or self.things
         errorif(
             len(things) != len(self.things),

@@ -219,14 +219,14 @@ class EffectiveRipple(_Objective):
             Effective ripple as a function of the flux surface label.
 
         """
-        # TODO: GitHub pull request #1094.
+        # TODO (#1094)
         if constants is None:
             constants = self.constants
         eq = self.things[0]
         data = compute_fun(
             eq, "iota", params, constants["transforms"], constants["profiles"]
         )
-        # TODO: GitHub issue #1034. Use old theta values as initial guess.
+        # TODO (#1034): Use old theta values as initial guess.
         data = compute_fun(
             eq,
             "effective ripple",
@@ -465,7 +465,7 @@ class GammaC(_Objective):
         data = compute_fun(
             eq, "iota", params, constants["transforms"], constants["profiles"]
         )
-        # TODO: GitHub issue #1034. Use old theta values as initial guess.
+        # TODO (#1034): Use old theta values as initial guess.
         data = compute_fun(
             eq,
             self._key,

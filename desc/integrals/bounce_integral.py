@@ -258,7 +258,7 @@ class Bounce2D(Bounce):
         theta,
         Y_B=None,
         num_transit=32,
-        # TODO: Allow multiple starting labels for near-rational surfaces.
+        # TODO (#1309): Allow multiple starting labels for near-rational surfaces.
         #  Can just add axis for piecewise chebyshev stuff cheb.
         alpha=0.0,
         quad=leggauss(32),
@@ -417,9 +417,9 @@ class Bounce2D(Bounce):
         # real fft over poloidal since usually M > N
         return rfft2(f, axes=(-1, -2), norm="forward")
 
-    # TODO: After GitHub issue #1034 is resolved, we should pass in the previous
+    # TODO (#1034): Pass in the previous
     #  θ(α, ζ) coordinates as an initial guess for the next coordinate mapping.
-    #  Think more about whether possible to perturb the coefficients of the
+    #  Might be possible to perturb the coefficients of the
     #  θ(α, ζ) since these are related to lambda.
 
     @staticmethod
@@ -532,7 +532,7 @@ class Bounce2D(Bounce):
         return z1, z2
 
     def _polish_points(self, points, pitch_inv):
-        # TODO: One application of secant on Fourier series |B| - pitch_inv.
+        # TODO (#1154): One application of secant on Fourier series |B| - 1/λ.
         raise NotImplementedError
 
     def check_points(self, points, pitch_inv, *, plot=True, **kwargs):
@@ -1228,9 +1228,9 @@ class Bounce1D(Bounce):
             **kwargs,
         )
 
-    # TODO: Add option for adaptive quadrature with quadax.
-    #  quadax.quadgk with the currently used c.o.v. seems to work nice.
-    #  without change of variable one needs to use quadax.quadts.
+    # TODO: Add option for adaptive quadrature with quadax
+    #  quadax.quadgk with the c.o.v. used for legendre works best.
+    #  Some people want more accurate computation on W shaped wells.
     def integrate(
         self,
         integrand,

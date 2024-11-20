@@ -1303,8 +1303,8 @@ class SurfaceQuadraticFlux(_Objective):
     eval_grid : Grid, optional
         Collocation grid containing the nodes on the surface at which the
         magnetic field is being calculated and where to evaluate Bn errors.
-        Default grid is: ``LinearGrid``(rho=np.array([1.0]), M=surface.M_grid,
-        N=surface.N_grid, NFP=surface.NFP, sym=False)
+        Default grid is: ``LinearGrid(rho=np.array([1.0]), M=surface.M_grid,``
+        ``N=surface.N_grid, NFP=surface.NFP, sym=False)``
     field_grid : Grid, optional
         Grid used to discretize field (e.g. grid for the magnetic field source from
         coils). Default grid is determined by the specific MagneticField object, see

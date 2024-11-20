@@ -272,7 +272,7 @@ def rotate_zeta(eq, angle, copy=False):
         Equilibrium to rotate.
     angle : float
         Angle to rotate the equilibrium in radians. The actual physical rotation
-        is by angle / self.NFP.
+        is by angle radians.
     copy : bool, optional
         Whether to update the existing equilibrium or make a copy (Default).
 
@@ -282,7 +282,9 @@ def rotate_zeta(eq, angle, copy=False):
         Equilibrium rotated about the toroidal direction
     """
     eq_rotated = eq.copy() if copy else eq
-    if eq.sym and not (angle % np.pi == 0) and eq.N != 0:
+    # We will apply the rotation in NFP domain
+    angle = angle * eq.NFP
+    if eq.sym and not np.isclose(angle % np.pi, 0, atol=1e-10) and eq.N != 0:
         warnings.warn(
             "Rotating a stellarator symmetric equilibrium by an angle "
             "that is not a multiple of pi will break the symmetry. "
@@ -293,23 +295,22 @@ def rotate_zeta(eq, angle, copy=False):
     def _get_new_coeffs(fun):
         if fun == "R":
             f_lmn = np.array(eq_rotated.R_lmn)
-            modes = eq_rotated.R_basis.modes
+            basis = eq_rotated.R_basis
         elif fun == "Z":
             f_lmn = np.array(eq_rotated.Z_lmn)
-            modes = eq_rotated.Z_basis.modes
+            basis = eq_rotated.Z_basis
         elif fun == "L":
             f_lmn = np.array(eq_rotated.L_lmn)
-            modes = eq_rotated.L_basis.modes
+            basis = eq_rotated.L_basis
         else:
             raise ValueError("fun must be 'R', 'Z' or 'L'")
 
         new_coeffs = f_lmn.copy()
-        mode_lookup = {(l, m, n): idx for idx, (l, m, n) in enumerate(modes)}
-        for i, (l, m, n) in enumerate(modes):
-            id_sin = mode_lookup.get((l, m, -n), None)
+        for i, (l, m, n) in enumerate(basis.modes):
+            id_sin = basis.get_idx(l, m, -n, error=False)
             v_sin = np.sin(np.abs(n) * angle)
             v_cos = np.cos(np.abs(n) * angle)
-            c_sin = f_lmn[id_sin] if id_sin is not None else 0
+            c_sin = f_lmn[id_sin] if id_sin is not np.array([], int) else 0
             if n >= 0:
                 new_coeffs[i] = f_lmn[i] * v_cos + c_sin * v_sin
             elif n < 0:

@@ -77,7 +77,7 @@ class Optimizer(IOAble):
             )
         self._method = method
 
-    def optimize(  # noqa: C901 - FIXME: simplify this
+    def optimize(  # noqa: C901
         self,
         things,
         objective,
@@ -137,7 +137,9 @@ class Optimizer(IOAble):
             Maximum number of iterations. Defaults to 100.
         options : dict, optional
             Dictionary of optional keyword arguments to override default solver
-            settings. See the code for more details.
+            settings. See the documentation page ``Optimizers Supported`` for
+            more details (https://desc-docs.readthedocs.io/en/stable/optimizers.html)
+            to check the options for each specific available optimizer.
         copy : bool
             Whether to return the current things or a copy (leaving the original
             unchanged).
@@ -198,7 +200,6 @@ class Optimizer(IOAble):
             eq_params_init = eq.params_dict.copy()
 
         options = {} if options is None else options
-        # TODO: document options
         timer = Timer()
         options = {} if options is None else options
         _, method = _parse_method(self.method)
@@ -209,9 +210,11 @@ class Optimizer(IOAble):
         objective, nonlinear_constraints = _maybe_wrap_nonlinear_constraints(
             eq, objective, nonlinear_constraints, self.method, options
         )
-        if not isinstance(objective, ProximalProjection):
-            for t in things:
-                linear_constraints = maybe_add_self_consistency(t, linear_constraints)
+        is_prox = isinstance(objective, ProximalProjection)
+        for t in things:
+            if isinstance(t, Equilibrium) and is_prox:
+                continue  # don't add Equilibrium self-consistency if proximal is used
+            linear_constraints = maybe_add_self_consistency(t, linear_constraints)
         linear_constraint = _combine_constraints(linear_constraints)
         nonlinear_constraint = _combine_constraints(nonlinear_constraints)
 

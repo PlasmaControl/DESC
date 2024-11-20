@@ -66,4 +66,5 @@ equilibria to a given size and/or field strength.
 
     desc.compat.ensure_positive_jacobian
     desc.compat.flip_helicity
+    desc.compat.flip_theta
     desc.compat.rescale

@@ -33,7 +33,9 @@ def _parse_parameterization(p):
     return module + "." + klass.__qualname__
 
 
-def compute(parameterization, names, params, transforms, profiles, data=None, **kwargs):
+def compute(  # noqa: C901
+    parameterization, names, params, transforms, profiles, data=None, **kwargs
+):
     """Compute the quantity given by name on grid.
 
     Parameters
@@ -88,6 +90,15 @@ def compute(parameterization, names, params, transforms, profiles, data=None, **
     if "grid" in transforms:
 
         def check_fun(name):
+            reqs = data_index[p][name]["grid_requirement"]
+            for req in reqs:
+                errorif(
+                    not hasattr(transforms["grid"], req)
+                    or reqs[req] != getattr(transforms["grid"], req),
+                    AttributeError,
+                    f"Expected grid with '{req}:{reqs[req]}' to compute {name}.",
+                )
+
             reqs = data_index[p][name]["source_grid_requirement"]
             errorif(
                 reqs and not hasattr(transforms["grid"], "source_grid"),
@@ -517,6 +528,7 @@ def get_transforms(
 
     """
     from desc.basis import DoubleFourierSeries
+    from desc.grid import LinearGrid
     from desc.transform import Transform
 
     method = "jitable" if jitable or kwargs.get("method") == "jitable" else "auto"
@@ -556,8 +568,15 @@ def get_transforms(
                 )
             transforms[c] = c_transform
         elif c == "B":  # used for Boozer transform
+            # assume grid is a meshgrid but only care about a single surface
+            if grid.num_rho > 1:
+                theta = grid.nodes[grid.unique_theta_idx, 1]
+                zeta = grid.nodes[grid.unique_zeta_idx, 2]
+                grid_B = LinearGrid(theta=theta, zeta=zeta, NFP=grid.NFP, sym=grid.sym)
+            else:
+                grid_B = grid
             transforms["B"] = Transform(
-                grid,
+                grid_B,
                 DoubleFourierSeries(
                     M=kwargs.get("M_booz", 2 * obj.M),
                     N=kwargs.get("N_booz", 2 * obj.N),
@@ -570,8 +589,15 @@ def get_transforms(
                 method=method,
             )
         elif c == "w":  # used for Boozer transform
+            # assume grid is a meshgrid but only care about a single surface
+            if grid.num_rho > 1:
+                theta = grid.nodes[grid.unique_theta_idx, 1]
+                zeta = grid.nodes[grid.unique_zeta_idx, 2]
+                grid_w = LinearGrid(theta=theta, zeta=zeta, NFP=grid.NFP, sym=grid.sym)
+            else:
+                grid_w = grid
             transforms["w"] = Transform(
-                grid,
+                grid_w,
                 DoubleFourierSeries(
                     M=kwargs.get("M_booz", 2 * obj.M),
                     N=kwargs.get("N_booz", 2 * obj.N),
@@ -685,187 +711,3 @@ def _has_transforms(qty, transforms, parameterization):
                 [d in transforms[key].derivatives.tolist() for d in derivs[key]]
             ).all()
     return all(flags.values())
-
-
-def dot(a, b, axis=-1):
-    """Batched vector dot product.
-
-    Parameters
-    ----------
-    a : array-like
-        First array of vectors.
-    b : array-like
-        Second array of vectors.
-    axis : int
-        Axis along which vectors are stored.
-
-    Returns
-    -------
-    y : array-like
-        y = sum(a*b, axis=axis)
-
-    """
-    return jnp.sum(a * b, axis=axis, keepdims=False)
-
-
-def cross(a, b, axis=-1):
-    """Batched vector cross product.
-
-    Parameters
-    ----------
-    a : array-like
-        First array of vectors.
-    b : array-like
-        Second array of vectors.
-    axis : int
-        Axis along which vectors are stored.
-
-    Returns
-    -------
-    y : array-like
-        y = a x b
-
-    """
-    return jnp.cross(a, b, axis=axis)
-
-
-def safenorm(x, ord=None, axis=None, fill=0, threshold=0):
-    """Like jnp.linalg.norm, but without nan gradient at x=0.
-
-    Parameters
-    ----------
-    x : ndarray
-        Vector or array to norm.
-    ord : {non-zero int, inf, -inf, 'fro', 'nuc'}, optional
-        Order of norm.
-    axis : {None, int, 2-tuple of ints}, optional
-        Axis to take norm along.
-    fill : float, ndarray, optional
-        Value to return where x is zero.
-    threshold : float >= 0
-        How small is x allowed to be.
-
-    """
-    is_zero = (jnp.abs(x) <= threshold).all(axis=axis, keepdims=True)
-    y = jnp.where(is_zero, jnp.ones_like(x), x)  # replace x with ones if is_zero
-    n = jnp.linalg.norm(y, ord=ord, axis=axis)
-    n = jnp.where(is_zero.squeeze(), fill, n)  # replace norm with zero if is_zero
-    return n
-
-
-def safenormalize(x, ord=None, axis=None, fill=0, threshold=0):
-    """Normalize a vector to unit length, but without nan gradient at x=0.
-
-    Parameters
-    ----------
-    x : ndarray
-        Vector or array to norm.
-    ord : {non-zero int, inf, -inf, 'fro', 'nuc'}, optional
-        Order of norm.
-    axis : {None, int, 2-tuple of ints}, optional
-        Axis to take norm along.
-    fill : float, ndarray, optional
-        Value to return where x is zero.
-    threshold : float >= 0
-        How small is x allowed to be.
-
-    """
-    is_zero = (jnp.abs(x) <= threshold).all(axis=axis, keepdims=True)
-    y = jnp.where(is_zero, jnp.ones_like(x), x)  # replace x with ones if is_zero
-    n = safenorm(x, ord, axis, fill, threshold) * jnp.ones_like(x)
-    # return unit vector with equal components if norm <= threshold
-    return jnp.where(n <= threshold, jnp.ones_like(y) / jnp.sqrt(y.size), y / n)
-
-
-def safediv(a, b, fill=0, threshold=0):
-    """Divide a/b with guards for division by zero.
-
-    Parameters
-    ----------
-    a, b : ndarray
-        Numerator and denominator.
-    fill : float, ndarray, optional
-        Value to return where b is zero.
-    threshold : float >= 0
-        How small is b allowed to be.
-    """
-    mask = jnp.abs(b) <= threshold
-    num = jnp.where(mask, fill, a)
-    den = jnp.where(mask, 1, b)
-    return num / den
-
-
-def cumtrapz(y, x=None, dx=1.0, axis=-1, initial=None):
-    """Cumulatively integrate y(x) using the composite trapezoidal rule.
-
-    Taken from SciPy, but changed NumPy references to JAX.NumPy:
-        https://github.com/scipy/scipy/blob/v1.10.1/scipy/integrate/_quadrature.py
-
-    Parameters
-    ----------
-    y : array_like
-        Values to integrate.
-    x : array_like, optional
-        The coordinate to integrate along. If None (default), use spacing `dx`
-        between consecutive elements in `y`.
-    dx : float, optional
-        Spacing between elements of `y`. Only used if `x` is None.
-    axis : int, optional
-        Specifies the axis to cumulate. Default is -1 (last axis).
-    initial : scalar, optional
-        If given, insert this value at the beginning of the returned result.
-        Typically, this value should be 0. Default is None, which means no
-        value at ``x[0]`` is returned and `res` has one element less than `y`
-        along the axis of integration.
-
-    Returns
-    -------
-    res : ndarray
-        The result of cumulative integration of `y` along `axis`.
-        If `initial` is None, the shape is such that the axis of integration
-        has one less value than `y`. If `initial` is given, the shape is equal
-        to that of `y`.
-
-    """
-    y = jnp.asarray(y)
-    if x is None:
-        d = dx
-    else:
-        x = jnp.asarray(x)
-        if x.ndim == 1:
-            d = jnp.diff(x)
-            # reshape to correct shape
-            shape = [1] * y.ndim
-            shape[axis] = -1
-            d = d.reshape(shape)
-        elif len(x.shape) != len(y.shape):
-            raise ValueError("If given, shape of x must be 1-D or the " "same as y.")
-        else:
-            d = jnp.diff(x, axis=axis)
-
-        if d.shape[axis] != y.shape[axis] - 1:
-            raise ValueError(
-                "If given, length of x along axis must be the " "same as y."
-            )
-
-    def tupleset(t, i, value):
-        l = list(t)
-        l[i] = value
-        return tuple(l)
-
-    nd = len(y.shape)
-    slice1 = tupleset((slice(None),) * nd, axis, slice(1, None))
-    slice2 = tupleset((slice(None),) * nd, axis, slice(None, -1))
-    res = jnp.cumsum(d * (y[slice1] + y[slice2]) / 2.0, axis=axis)
-
-    if initial is not None:
-        if not jnp.isscalar(initial):
-            raise ValueError("`initial` parameter should be a scalar.")
-
-        shape = list(res.shape)
-        shape[axis] = 1
-        res = jnp.concatenate(
-            [jnp.full(shape, initial, dtype=res.dtype), res], axis=axis
-        )
-
-    return res

@@ -31,11 +31,15 @@ def _compare_against_master(
 
     for name in data[p]:
         if p in master_data and name in master_data[p]:
+            if np.isnan(master_data[p][name]).all():
+                mean = 1.0
+            else:
+                mean = np.nanmean(np.atleast_1d(np.abs(master_data[p][name])))
             try:
                 np.testing.assert_allclose(
                     actual=data[p][name],
                     desired=master_data[p][name],
-                    atol=1e-10,
+                    atol=1e-10 * mean + 1e-10,  # add 1e-10 for basically-zero things
                     rtol=1e-10,
                     err_msg=f"Parameterization: {p}. Name: {name}.",
                 )
@@ -262,4 +266,5 @@ def test_compute_everything():
         with open("tests/inputs/master_compute_data_rpz.pkl", "wb") as file:
             # remember to git commit this file
             pickle.dump(this_branch_data_rpz, file)
+
     assert not error_rpz

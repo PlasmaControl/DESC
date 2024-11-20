@@ -335,3 +335,22 @@ def VMEC_save(SOLOVEV, tmpdir_factory):
     )
     desc = Dataset(str(SOLOVEV["desc_nc_path"]), mode="r")
     return vmec, desc
+
+
+@pytest.fixture(scope="session")
+def VMEC_save_asym(tmpdir_factory):
+    """Save an asymmetric equilibrium in VMEC netcdf format for comparison."""
+    tmpdir = tmpdir_factory.mktemp("asym_wout")
+    filename = tmpdir.join("wout_HELIO_asym_desc.nc")
+    vmec = Dataset("./tests/inputs/wout_HELIOTRON_asym_NTHETA50_NZETA100.nc", mode="r")
+    eq = Equilibrium.load("./tests/inputs/HELIO_asym.h5")
+    VMECIO.save(
+        eq,
+        filename,
+        surfs=vmec.variables["ns"][:],
+        verbose=0,
+        M_nyq=round(np.max(vmec.variables["xm_nyq"][:])),
+        N_nyq=round(np.max(vmec.variables["xn_nyq"][:]) / eq.NFP),
+    )
+    desc = Dataset(filename, mode="r")
+    return vmec, desc, eq

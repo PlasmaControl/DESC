@@ -187,17 +187,29 @@ class _Grid(IOAble, ABC):
     @property
     def L(self):
         """int: Radial grid resolution."""
-        return self.__dict__.setdefault("_L", 0)
+        if getattr(self, "_L", None) is None:
+            # Setting default values for LinearGrid.
+            # This code will never run for Quadrature and Concentric grid.
+            self._L = self.num_rho - 1
+        return self._L
 
     @property
     def M(self):
         """int: Poloidal grid resolution."""
-        return self.__dict__.setdefault("_M", 0)
+        if getattr(self, "_M", None) is None:
+            # Setting default values for LinearGrid.
+            # This code will never run for Quadrature and Concentric grid.
+            self._M = self.num_poloidal - 1 if self.sym else self.num_poloidal // 2
+        return self._M
 
     @property
     def N(self):
         """int: Toroidal grid resolution."""
-        return self.__dict__.setdefault("_N", 0)
+        if getattr(self, "_N", None) is None:
+            # Setting default values for LinearGrid.
+            # This code will never run for Quadrature and Concentric grid.
+            self._N = self.num_zeta // 2
+        return self._N
 
     @property
     def NFP(self):
@@ -283,7 +295,7 @@ class _Grid(IOAble, ABC):
         errorif(
             not hasattr(self, "_unique_rho_idx"),
             AttributeError,
-            f"{self} does not have unique indices assigned. "
+            "Grid does not have unique indices assigned. "
             "It is not possible to do this automatically on grids made under JIT.",
         )
         return self._unique_rho_idx
@@ -294,7 +306,7 @@ class _Grid(IOAble, ABC):
         errorif(
             not hasattr(self, "_unique_poloidal_idx"),
             AttributeError,
-            f"{self} does not have unique indices assigned. "
+            "Grid does not have unique indices assigned. "
             "It is not possible to do this automatically on grids made under JIT.",
         )
         return self._unique_poloidal_idx
@@ -323,7 +335,7 @@ class _Grid(IOAble, ABC):
         errorif(
             not hasattr(self, "_unique_zeta_idx"),
             AttributeError,
-            f"{self} does not have unique indices assigned. "
+            "Grid does not have unique indices assigned. "
             "It is not possible to do this automatically on grids made under JIT.",
         )
         return self._unique_zeta_idx
@@ -334,7 +346,7 @@ class _Grid(IOAble, ABC):
         errorif(
             not hasattr(self, "_inverse_rho_idx"),
             AttributeError,
-            f"{self} does not have inverse indices assigned. "
+            "Grid does not have inverse indices assigned. "
             "It is not possible to do this automatically on grids made under JIT.",
         )
         return self._inverse_rho_idx
@@ -345,7 +357,7 @@ class _Grid(IOAble, ABC):
         errorif(
             not hasattr(self, "_inverse_poloidal_idx"),
             AttributeError,
-            f"{self} does not have inverse indices assigned. "
+            "Grid does not have inverse indices assigned. "
             "It is not possible to do this automatically on grids made under JIT.",
         )
         return self._inverse_poloidal_idx
@@ -374,7 +386,7 @@ class _Grid(IOAble, ABC):
         errorif(
             not hasattr(self, "_inverse_zeta_idx"),
             AttributeError,
-            f"{self} does not have inverse indices assigned. "
+            "Grid does not have inverse indices assigned. "
             "It is not possible to do this automatically on grids made under JIT.",
         )
         return self._inverse_zeta_idx
@@ -619,6 +631,7 @@ class _Grid(IOAble, ABC):
         -------
         x : ndarray
             Data reshaped to align with grid nodes.
+
         """
         errorif(
             not self.is_meshgrid,
@@ -637,7 +650,8 @@ class _Grid(IOAble, ABC):
             vec = True
             shape += (-1,)
         x = x.reshape(shape, order="F")
-        x = jnp.moveaxis(x, 1, 0)  # now shape rtz/raz etc
+        # swap to change shape from trz/arz to rtz/raz etc.
+        x = jnp.swapaxes(x, 1, 0)
         newax = tuple(self.coordinates.index(c) for c in order)
         if vec:
             newax += (3,)
@@ -755,10 +769,10 @@ class Grid(_Grid):
                 self._unique_zeta_idx,
                 self._inverse_zeta_idx,
             ) = self._find_unique_inverse_nodes()
-
-        self._L = self.num_nodes
-        self._M = self.num_nodes
-        self._N = self.num_nodes
+        # Assign with logic in setter method if possible else 0.
+        self._L = None if hasattr(self, "num_rho") else 0
+        self._M = None if hasattr(self, "num_poloidal") else 0
+        self._N = None if hasattr(self, "num_zeta") else 0
         errorif(len(kwargs), ValueError, f"Got unexpected kwargs {kwargs.keys()}")
 
     @staticmethod
@@ -788,10 +802,11 @@ class Grid(_Grid):
             rtz : rho, theta, zeta
         period : tuple of float
             Assumed periodicity for each coordinate.
-            Use np.inf to denote no periodicity.
+            Use ``np.inf`` to denote no periodicity.
         NFP : int
             Number of field periods (Default = 1).
-            Only makes sense to change from 1 if ``period[2]==2π``.
+            Only makes sense to change from 1 if last coordinate is periodic
+            with some constant divided by ``NFP``.
 
         Returns
         -------
@@ -1034,6 +1049,8 @@ class LinearGrid(_Grid):
         """
         self._NFP = check_posint(NFP, "NFP", False)
         self._period = (np.inf, 2 * np.pi, 2 * np.pi / self._NFP)
+        # TODO:
+        #  https://github.com/PlasmaControl/DESC/pull/1204#pullrequestreview-2246771337
         axis = bool(axis)
         endpoint = bool(endpoint)
         theta_period = self.period[1]
@@ -1043,8 +1060,6 @@ class LinearGrid(_Grid):
         if L is not None:
             self._L = check_nonnegint(L, "L")
             rho = L + 1
-        else:
-            self._L = len(np.atleast_1d(rho))
         if np.isscalar(rho) and (int(rho) == rho) and rho > 0:
             r = np.flipud(np.linspace(1, 0, int(rho), endpoint=axis))
             # choose dr such that each node has the same weight
@@ -1057,8 +1072,6 @@ class LinearGrid(_Grid):
         if M is not None:
             self._M = check_nonnegint(M, "M")
             theta = 2 * (M + 1) if self.sym else 2 * M + 1
-        else:
-            self._M = len(np.atleast_1d(theta))
         if np.isscalar(theta) and (int(theta) == theta) and theta > 0:
             theta = int(theta)
             if self.sym and theta > 1:
@@ -1140,8 +1153,6 @@ class LinearGrid(_Grid):
         if N is not None:
             self._N = check_nonnegint(N, "N")
             zeta = 2 * N + 1
-        else:
-            self._N = len(np.atleast_1d(zeta))
         if np.isscalar(zeta) and (int(zeta) == zeta) and zeta > 0:
             z = np.linspace(0, zeta_period, int(zeta), endpoint=endpoint)
             dz = 2 * np.pi / z.size * np.ones_like(z)
@@ -1643,24 +1654,26 @@ def most_rational(a, b, itol=1e-14):
     """
     a = float(_round(a, itol))
     b = float(_round(b, itol))
-    # handle empty range
+
+    # Handle empty range
     if a == b:
         return a
-    # ensure a < b
-    elif a > b:
-        c = a
-        a = b
-        b = c
-    # return 0 if in range
+
+    # Return 0 if in range
     if np.sign(a * b) <= 0:
         return 0
-    # handle negative ranges
-    elif np.sign(a) < 0:
+
+    # Handle negative ranges
+    if np.sign(a) < 0:
         s = -1
         a *= -1
         b *= -1
     else:
         s = 1
+
+    # Ensure a < b
+    if a > b:
+        a, b = b, a
 
     a_cf = dec_to_cf(a)
     b_cf = dec_to_cf(b)
@@ -1885,8 +1898,13 @@ def _periodic_spacing(x, period=2 * jnp.pi, sort=False, jnp=jnp):
         x = jnp.sort(x, axis=0)
     # choose dx to be half the distance between its neighbors
     if x.size > 1:
-        dx_0 = x[1] + (period - x[-1]) % period
-        dx_1 = x[0] + (period - x[-2]) % period
+        if np.isfinite(period):
+            dx_0 = x[1] + (period - x[-1]) % period
+            dx_1 = x[0] + (period - x[-2]) % period
+        else:
+            # just set to 0 to stop nan gradient, even though above gives expected value
+            dx_0 = 0
+            dx_1 = 0
         if x.size == 2:
             # then dx[0] == period and dx[-1] == 0, so fix this
             dx_1 = dx_0

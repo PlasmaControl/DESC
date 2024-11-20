@@ -1443,7 +1443,6 @@ class Equilibrium(IOAble, Optimizable):
     @property
     def spectral_indexing(self):
         """str: Type of indexing used for the spectral basis."""
-        # TODO: allow this to change?
         return self._spectral_indexing
 
     @property
@@ -1972,7 +1971,6 @@ class Equilibrium(IOAble, Optimizable):
             raise ValueError("Input must be a pyQSC or pyQIC solution.") from e
 
         rho, _ = special.js_roots(L, 2, 2)
-
         grid = LinearGrid(rho=rho, theta=ntheta, zeta=na_eq.phi, NFP=na_eq.nfp)
         basis_R = FourierZernikeBasis(
             L=L,

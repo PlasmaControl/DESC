@@ -296,10 +296,10 @@ def _make_RZ_cons_order_rho(  # noqa: C901 - FIXME - simplify
         the O(rho) behavior of the equilibrium R coefficients to match the NAE.
     Zconstraints : tuple of Objective
         tuple of constraints of type FixSumModesZ, which enforce
-        the O(rho) behavior of the equilibrium Z coefficents to match the NAE.
+        the O(rho) behavior of the equilibrium Z coefficients to match the NAE.
     Lconstraints : tuple of Objective
         tuple of constraints of type FixSumModesLambda, which enforce
-        the O(rho) behavior of the equilibrium lambda coefficents to match the NAE.
+        the O(rho) behavior of the equilibrium lambda coefficients to match the NAE.
         Tuple is empty if fix_lambda=False.
 
     """
@@ -307,7 +307,6 @@ def _make_RZ_cons_order_rho(  # noqa: C901 - FIXME - simplify
         # r is the ratio  r_NAE / rho_DESC
         r = np.sqrt(2 * abs(desc_eq.Psi / qsc.Bbar) / 2 / np.pi)
     else:
-        # TODO: is this true?
         r = 1  # using DESC equilibrium's behavior, no conversion is needed
 
     Rconstraints = ()

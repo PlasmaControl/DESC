@@ -526,7 +526,7 @@ class TestObjectiveFunction:
     def test_boundary_error_biestsc(self):
         """Test calculation of boundary error using BIEST w/ sheet current."""
         coil = FourierXYZCoil(5e5)
-        coilset = CoilSet.linspaced_angular(coil, n=100)
+        coilset = CoilSet.linspaced_angular(coil, n=100, check_intersection=False)
         coil_grid = LinearGrid(N=20)
         eq = Equilibrium(L=3, M=3, N=3, Psi=np.pi)
         eq.surface = FourierCurrentPotentialField.from_surface(
@@ -548,7 +548,7 @@ class TestObjectiveFunction:
     def test_boundary_error_biest(self):
         """Test calculation of boundary error using BIEST."""
         coil = FourierXYZCoil(5e5)
-        coilset = CoilSet.linspaced_angular(coil, n=100)
+        coilset = CoilSet.linspaced_angular(coil, n=100, check_intersection=False)
         coil_grid = LinearGrid(N=20)
         eq = Equilibrium(L=3, M=3, N=3, Psi=np.pi)
         eq.solve()
@@ -565,7 +565,7 @@ class TestObjectiveFunction:
     def test_boundary_error_vacuum(self):
         """Test calculation of vacuum boundary error."""
         coil = FourierXYZCoil(5e5)
-        coilset = CoilSet.linspaced_angular(coil, n=100)
+        coilset = CoilSet.linspaced_angular(coil, n=100, check_intersection=False)
         coil_grid = LinearGrid(N=20)
         eq = Equilibrium(L=3, M=3, N=3, Psi=np.pi)
         eq.solve()
@@ -582,7 +582,7 @@ class TestObjectiveFunction:
     def test_boundary_error_nestor(self):
         """Test calculation of boundary error using NESTOR."""
         coil = FourierXYZCoil(5e5)
-        coilset = CoilSet.linspaced_angular(coil, n=100)
+        coilset = CoilSet.linspaced_angular(coil, n=100, check_intersection=False)
         coil_grid = LinearGrid(N=20)
         eq = Equilibrium(L=3, M=3, N=3, Psi=np.pi)
         eq.solve()
@@ -833,8 +833,12 @@ class TestObjectiveFunction:
             assert len(f) == obj.dim_f
 
         coil = FourierPlanarCoil(r_n=2, basis="rpz")
-        coils = CoilSet.linspaced_linear(coil, n=3, displacement=[0, 3, 0])
-        mixed_coils = MixedCoilSet.linspaced_linear(coil, n=2, displacement=[0, 7, 0])
+        coils = CoilSet.linspaced_linear(
+            coil, n=3, displacement=[0, 3, 0], check_intersection=False
+        )
+        mixed_coils = MixedCoilSet.linspaced_linear(
+            coil, n=2, displacement=[0, 7, 0], check_intersection=False
+        )
         nested_coils = MixedCoilSet(coils, mixed_coils, check_intersection=False)
 
         grid = None  # default grid
@@ -856,8 +860,12 @@ class TestObjectiveFunction:
             assert f.shape == (obj.dim_f,)
 
         coil = FourierPlanarCoil(r_n=2, basis="rpz")
-        coils = CoilSet.linspaced_linear(coil, n=3, displacement=[0, 3, 0])
-        mixed_coils = MixedCoilSet.linspaced_linear(coil, n=2, displacement=[0, 7, 0])
+        coils = CoilSet.linspaced_linear(
+            coil, n=3, displacement=[0, 3, 0], check_intersection=False
+        )
+        mixed_coils = MixedCoilSet.linspaced_linear(
+            coil, n=2, displacement=[0, 7, 0], check_intersection=False
+        )
         nested_coils = MixedCoilSet(coils, mixed_coils, check_intersection=False)
 
         grid = LinearGrid(N=5)  # single grid
@@ -879,8 +887,12 @@ class TestObjectiveFunction:
             assert len(f) == obj.dim_f
 
         coil = FourierPlanarCoil(r_n=2, basis="rpz")
-        coils = CoilSet.linspaced_linear(coil, n=3, displacement=[0, 3, 0])
-        mixed_coils = MixedCoilSet.linspaced_linear(coil, n=2, displacement=[0, 7, 0])
+        coils = CoilSet.linspaced_linear(
+            coil, n=3, displacement=[0, 3, 0], check_intersection=False
+        )
+        mixed_coils = MixedCoilSet.linspaced_linear(
+            coil, n=2, displacement=[0, 7, 0], check_intersection=False
+        )
         nested_coils = MixedCoilSet(coils, mixed_coils, check_intersection=False)
 
         grid = [LinearGrid(N=5)] * 5  # single list of grids
@@ -902,8 +914,12 @@ class TestObjectiveFunction:
             assert len(f) == obj.dim_f
 
         coil = FourierPlanarCoil(r_n=2, basis="rpz")
-        coils = CoilSet.linspaced_linear(coil, n=3, displacement=[0, 3, 0])
-        mixed_coils = MixedCoilSet.linspaced_linear(coil, n=2, displacement=[0, 7, 0])
+        coils = CoilSet.linspaced_linear(
+            coil, n=3, displacement=[0, 3, 0], check_intersection=False
+        )
+        mixed_coils = MixedCoilSet.linspaced_linear(
+            coil, n=2, displacement=[0, 7, 0], check_intersection=False
+        )
         nested_coils = MixedCoilSet(coils, mixed_coils, check_intersection=False)
 
         grid = [[LinearGrid(N=5)] * 3, [LinearGrid(N=5)] * 2]  # nested list of grids
@@ -937,7 +953,9 @@ class TestObjectiveFunction:
         n = 3
         disp = 5
         coil = FourierPlanarCoil(r_n=1, normal=[0, 0, 1])
-        coils_linear = CoilSet.linspaced_linear(coil, n=n, displacement=[0, 0, disp])
+        coils_linear = CoilSet.linspaced_linear(
+            coil, n=n, displacement=[0, 0, disp], check_intersection=False
+        )
         test(coils_linear, disp / n)
 
         # planar toroidal coils, without symmetry
@@ -946,7 +964,7 @@ class TestObjectiveFunction:
         center = 3
         r = 1
         coil = FourierPlanarCoil(center=[center, 0, 0], normal=[0, 1, 0], r_n=r)
-        coils_angular = CoilSet.linspaced_angular(coil, n=4)
+        coils_angular = CoilSet.linspaced_angular(coil, n=4, check_intersection=False)
         test(
             coils_angular, np.sqrt(2) * (center - r), grid=LinearGrid(zeta=4), tol=1e-5
         )
@@ -957,7 +975,9 @@ class TestObjectiveFunction:
         center = 3
         r = 1
         coil = FourierPlanarCoil(center=[center, 0, 0], normal=[0, 1, 0], r_n=r)
-        coils = CoilSet.linspaced_angular(coil, angle=np.pi / 2, n=5, endpoint=True)
+        coils = CoilSet.linspaced_angular(
+            coil, angle=np.pi / 2, n=5, endpoint=True, check_intersection=False
+        )
         coils_sym = CoilSet(coils[1::2], NFP=2, sym=True)
         test(coils_sym, 2 * (center - r) * np.sin(np.pi / 8), grid=LinearGrid(zeta=4))
 
@@ -965,10 +985,14 @@ class TestObjectiveFunction:
         # TF coils instersect with the middle VF coil
         # extra coil is 5 m from middle VF coil
         tf_coil = FourierPlanarCoil(center=[2, 0, 0], normal=[0, 1, 0], r_n=1)
-        tf_coilset = CoilSet.linspaced_angular(tf_coil, n=4)
+        tf_coilset = CoilSet.linspaced_angular(tf_coil, n=4, check_intersection=False)
         vf_coil = FourierRZCoil(R_n=3, Z_n=-1)
         vf_coilset = CoilSet.linspaced_linear(
-            vf_coil, displacement=[0, 0, 2], n=3, endpoint=True
+            vf_coil,
+            displacement=[0, 0, 2],
+            n=3,
+            endpoint=True,
+            check_intersection=False,
         )
         xyz_coil = FourierXYZCoil(X_n=[0, 6, 1], Y_n=[0, 0, 0], Z_n=[-1, 0, 0])
         coils_mixed = MixedCoilSet(
@@ -981,7 +1005,7 @@ class TestObjectiveFunction:
                 grid=LinearGrid(zeta=4),
                 expect_intersect=True,
             )
-        # TODO: move this coil set to conftest?
+        # TODO (#1400, 914): move this coil set to conftest?
 
     @pytest.mark.unit
     def test_plasma_coil_min_distance(self):
@@ -1029,7 +1053,7 @@ class TestObjectiveFunction:
         )
         eq = Equilibrium(surface=surf, NFP=1, M=2, N=0, sym=True)
         coil = FourierPlanarCoil(center=[R0, 0, 0], normal=[0, 1, 0], r_n=[a + offset])
-        coils = CoilSet.linspaced_angular(coil, n=8)
+        coils = CoilSet.linspaced_angular(coil, n=8, check_intersection=False)
         test(
             eq,
             coils,
@@ -1059,7 +1083,9 @@ class TestObjectiveFunction:
         )
         eq = Equilibrium(surface=surf, NFP=1, M=2, N=0, sym=True)
         coil = FourierPlanarCoil(center=[R0, 0, 0], normal=[0, 1, 0], r_n=[a + offset])
-        coils = CoilSet.linspaced_angular(coil, angle=np.pi / 2, n=5, endpoint=True)
+        coils = CoilSet.linspaced_angular(
+            coil, angle=np.pi / 2, n=5, endpoint=True, check_intersection=False
+        )
         coils = CoilSet(coils[1::2], NFP=2, sym=True)
         test(
             eq,
@@ -1090,7 +1116,9 @@ class TestObjectiveFunction:
         )
         eq = Equilibrium(surface=surf, NFP=1, M=2, N=0, sym=True)
         coil = FourierPlanarCoil(center=[R0, 0, 0], normal=[0, 1, 0], r_n=[a + offset])
-        coils = CoilSet.linspaced_angular(coil, angle=np.pi / 2, n=5, endpoint=True)
+        coils = CoilSet.linspaced_angular(
+            coil, angle=np.pi / 2, n=5, endpoint=True, check_intersection=False
+        )
         coils = CoilSet(coils[1::2], NFP=2, sym=True)
         test(
             eq,
@@ -1101,8 +1129,6 @@ class TestObjectiveFunction:
             eq_fixed=False,
             coils_fixed=True,
         )
-
-        # TODO: add more complex test case with a stellarator and/or MixedCoilSet
 
     @pytest.mark.unit
     def test_quadratic_flux(self):
@@ -1204,10 +1230,10 @@ class TestObjectiveFunction:
         coil = FourierPlanarCoil(center=[10, 1, 0])
         # regular modular coilset from symmetry, so that there are 10 coils, half going
         # one way and half going the other way
-        coilset = CoilSet.from_symmetry(coil, NFP=5, sym=True)
+        coilset = CoilSet.from_symmetry(coil, NFP=5, sym=True, check_intersection=False)
         coil2 = FourierRZCoil()
         # add a coil along the axis that links all the other coils
-        coilset2 = MixedCoilSet(coilset, coil2)
+        coilset2 = MixedCoilSet(coilset, coil2, check_intersection=False)
 
         obj = CoilSetLinkingNumber(coilset2)
         obj.build()
@@ -1788,7 +1814,7 @@ def test_plasma_vessel_distance_print(capsys):
 def test_boundary_error_print(capsys):
     """Test that the boundary error objectives print correctly."""
     coil = FourierXYZCoil(5e5)
-    coilset = CoilSet.linspaced_angular(coil, n=100)
+    coilset = CoilSet.linspaced_angular(coil, n=100, check_intersection=False)
     coil_grid = LinearGrid(N=20)
     eq = Equilibrium(L=3, M=3, N=3, Psi=np.pi)
 
@@ -2665,7 +2691,7 @@ class TestComputeScalarResolution:
     def test_compute_scalar_resolution_coils(self, objective):
         """Coil objectives."""
         coil = FourierXYZCoil()
-        coilset = CoilSet.linspaced_angular(coil)
+        coilset = CoilSet.linspaced_angular(coil, check_intersection=False)
         f = np.zeros_like(self.res_array, dtype=float)
         for i, res in enumerate(self.res_array):
             obj = ObjectiveFunction(
@@ -2902,7 +2928,7 @@ class TestObjectiveNaNGrad:
     def test_objective_no_nangrad_coils(self, objective):
         """Coil objectives."""
         coil = FourierXYZCoil()
-        coilset = CoilSet.linspaced_angular(coil, n=3)
+        coilset = CoilSet.linspaced_angular(coil, n=3, check_intersection=False)
         obj = ObjectiveFunction(objective(coilset), use_jit=False)
         obj.build(verbose=0)
         g = obj.grad(obj.x())

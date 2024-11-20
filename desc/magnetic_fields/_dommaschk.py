@@ -80,7 +80,7 @@ class DommaschkPotentialField(ScalarPotentialField):
         super().__init__(dommaschk_potential, params)
 
     @classmethod
-    def fit_magnetic_field(  # noqa: C901 - FIXME - simplify
+    def fit_magnetic_field(  # noqa: C901
         cls, field, coords, max_m, max_l, sym=False, verbose=1, NFP=1
     ):
         """Fit a vacuum magnetic field with a Dommaschk Potential field.
@@ -117,7 +117,7 @@ class DommaschkPotentialField(ScalarPotentialField):
             B = field(coords)
         else:  # it must be the field evaluated at the passed-in coords
             B = field
-        # TODO: add basis argument for if passed-in field or callable
+        # TODO (#928): add basis argument for if passed-in field or callable
         # evaluates rpz or xyz basis magnetic field vector,
         # and what basis coords is
 
@@ -132,7 +132,7 @@ class DommaschkPotentialField(ScalarPotentialField):
         # b is made, now do A
         #####################
         num_modes = 1 + (max_l) * (max_m + 1) * 4
-        # TODO: if symmetric, technically only need half the modes
+        # TODO (#928): if symmetric, technically only need half the modes
         # however, the field and functions are setup to accept equal
         # length arrays for a,b,c,d, so we will just zero out the
         # modes that don't fit symmetry, but in future
@@ -141,7 +141,7 @@ class DommaschkPotentialField(ScalarPotentialField):
         # and the modes array can then be [m,l,x] where x is 0,1,2,3
         # and we dont need to keep track of a,b,c,d separately
 
-        # TODO: technically we can drop some modes
+        # TODO (#928): technically we can drop some modes
         # since if max_l=0, there are only ever nonzero terms for a and b
         # and if max_m=0, there are only ever nonzero terms for a and c
         # but since we are only fitting in a least squares sense,
@@ -247,7 +247,7 @@ class DommaschkPotentialField(ScalarPotentialField):
 
         # now solve Ac=b for the coefficients c
 
-        # TODO: use min singular value to give sense of cond number?
+        # TODO (#928): use min singular value to give sense of cond number?
         c, res, _, _ = jnp.linalg.lstsq(A, rhs)
 
         if verbose > 0:
@@ -258,7 +258,7 @@ class DommaschkPotentialField(ScalarPotentialField):
         B0 = c[0]
 
         # we zero out the terms that should be zero due to symmetry here
-        # TODO: should also just not return any zeroed-out modes, but
+        # TODO (#928): should also just not return any zeroed-out modes, but
         # the way the modes are cataloged here with the ls and ms arrays,
         # it is not straightforward to do that
         a_arr = c[1 : n + 1] * abcd_zero_due_to_sym_inds[0]

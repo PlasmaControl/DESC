@@ -96,7 +96,7 @@ def _check_spline_shape(knots, g, dg_dz, pitch_inv=None):
         to that field line.
 
     """
-    errorif(knots.ndim != 1, msg=f"knots should be 1d; got shape {knots.shape}.")
+    errorif(knots.ndim != 1, msg=f"knots should be 1d, got shape {knots.shape}.")
     errorif(
         g.shape[-2] != (knots.size - 1),
         msg=(
@@ -410,7 +410,8 @@ def _bounce_quadrature(
             )
 
         result = jnp.moveaxis(
-            # TODO: Use batch_size arg of imap after increasing JAX version requirement.
+            # TODO (#1386): Use batch_size arg of imap after
+            #  increasing JAX version requirement.
             imap(loop, (jnp.moveaxis(z1, -1, 0), jnp.moveaxis(z2, -1, 0)))[1],
             source=0,
             destination=-1,
@@ -951,7 +952,7 @@ def interp_fft_to_argmin(
     )
 
 
-# TODO: Generalize this beyond ζ = ϕ or just map to Clebsch with ϕ.
+# TODO (#568): Generalize this beyond ζ = ϕ or just map to Clebsch with ϕ.
 def get_fieldline(alpha_0, iota, num_transit, period):
     """Get sequence of poloidal coordinates A = (α₀, α₁, …, αₘ₋₁) of field line.
 

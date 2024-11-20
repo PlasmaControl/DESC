@@ -17,7 +17,9 @@ from desc.backend import dct, jnp, rfft, rfft2, take
 from desc.integrals._quad_utils import bijection_from_disc
 from desc.utils import Index, errorif, safediv
 
-# TODO:
+# TODO (#1154):
+#  We use the spline method to compute roots right now, but with the following
+#  algorithm, the Chebyshev method will be more efficient except when NFP is high.
 #  1. Boyd's method 𝒪(n²) instead of Chebyshev companion matrix 𝒪(n³).
 #  John P. Boyd, Computing real roots of a polynomial in Chebyshev series
 #  form through subdivision. https://doi.org/10.1016/j.apnum.2005.09.007.
@@ -149,7 +151,7 @@ def harmonic_vander(x, n, domain=(0, 2 * jnp.pi)):
     return basis
 
 
-# TODO: For inverse transforms, use non-uniform fast transforms (NFFT).
+# TODO (#1294): For inverse transforms, use non-uniform fast transforms (NFFT).
 #   https://github.com/flatironinstitute/jax-finufft.
 #   Let spectral resolution be F, (e.g. F = M N for 2D transform),
 #   and number of points (non-uniform) to evaluate be Q. A non-uniform
@@ -524,7 +526,7 @@ def polyval_vec(*, x, c):
     )
 
 
-# TODO: Eventually do a PR to move this stuff into interpax.
+# TODO (#1388): Eventually do a PR to move this stuff into interpax.
 
 
 def _subtract_first(c, k):

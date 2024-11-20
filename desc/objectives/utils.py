@@ -285,9 +285,6 @@ class _Recover(IOAble):
 def softmax(arr, alpha):
     """JAX softmax implementation.
 
-    Inspired by https://www.johndcook.com/blog/2010/01/13/soft-maximum/
-    and https://www.johndcook.com/blog/2010/01/20/how-to-compute-the-soft-maximum/
-
     Parameters
     ----------
     arr : ndarray

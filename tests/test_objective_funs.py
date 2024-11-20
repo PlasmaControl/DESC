@@ -716,7 +716,7 @@ class TestObjectiveFunction:
                 warnings.simplefilter("error")
                 obj.build()
 
-        # test softmin, should give value less than true minimum
+        # test softmin, should give approximate value
         surf_grid = LinearGrid(M=5, N=6)
         plas_grid = LinearGrid(M=5, N=6)
         obj = PlasmaVesselDistance(
@@ -725,11 +725,12 @@ class TestObjectiveFunction:
             surface_grid=surf_grid,
             surface=surface,
             use_softmin=True,
+            softmin_alpha=5,
         )
         obj.build()
         d = obj.compute_unscaled(*obj.xs(eq, surface))
         assert d.size == obj.dim_f
-        assert np.all(np.abs(d) < a_s - a_p)
+        np.testing.assert_allclose(np.abs(d).min(), a_s - a_p, rtol=1.5e-1)
 
         # for large enough alpha, should be same as actual min
         obj = PlasmaVesselDistance(

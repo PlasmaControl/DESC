@@ -284,7 +284,7 @@ def rotate_zeta(eq, angle, copy=False):
     eq_rotated = eq.copy() if copy else eq
     # We will apply the rotation in NFP domain
     angle = angle * eq.NFP
-    if eq.sym and not np.isclose(angle % np.pi, 0, atol=1e-10) and eq.N != 0:
+    if eq.sym and not angle % np.pi == 0 and eq.N != 0:
         warnings.warn(
             "Rotating a stellarator symmetric equilibrium by an angle "
             "that is not a multiple of pi will break the symmetry. "
@@ -307,10 +307,10 @@ def rotate_zeta(eq, angle, copy=False):
 
         new_coeffs = f_lmn.copy()
         for i, (l, m, n) in enumerate(basis.modes):
-            id_sin = basis.get_idx(l, m, -n, error=False)
+            id_sin = basis.get_idx(L=l, M=m, N=-n, error=False)
             v_sin = np.sin(np.abs(n) * angle)
             v_cos = np.cos(np.abs(n) * angle)
-            c_sin = f_lmn[id_sin] if id_sin is not np.array([], int) else 0
+            c_sin = f_lmn[id_sin] if isinstance(id_sin, int) else 0
             if n >= 0:
                 new_coeffs[i] = f_lmn[i] * v_cos + c_sin * v_sin
             elif n < 0:

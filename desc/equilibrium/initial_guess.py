@@ -20,7 +20,7 @@ from desc.transform import Transform
 from desc.utils import copy_coeffs, warnif
 
 
-def set_initial_guess(eq, *args, ensure_nested=True):  # noqa: C901 - FIXME: simplify
+def set_initial_guess(eq, *args, ensure_nested=True):  # noqa: C901
     """Set the initial guess for the flux surfaces, eg R_lmn, Z_lmn, L_lmn.
 
     Parameters

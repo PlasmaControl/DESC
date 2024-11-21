@@ -406,6 +406,20 @@ class _Grid(IOAble, ABC):
         return self.__dict__.setdefault("_nodes", np.array([]).reshape((0, 3)))
 
     @property
+    def fft_poloidal(self):
+        """bool: whether this grid is compatible with fft in the poloidal direction."""
+        if not hasattr(self, "_fft_poloidal"):
+            self._fft_poloidal = False
+        return self._fft_poloidal
+
+    @property
+    def fft_toroidal(self):
+        """bool: whether this grid is compatible with fft in the toroidal direction."""
+        if not hasattr(self, "_fft_toroidal"):
+            self._fft_toroidal = False
+        return self._fft_toroidal
+
+    @property
     def spacing(self):
         """Quadrature weights for integration over surfaces.
 
@@ -698,6 +712,11 @@ class Grid(_Grid):
         etc. may be wrong if grid contains duplicate nodes.
     """
 
+    # if you're using a custom grid it almost always isnt uniform, or is under jit
+    # where we can't properly check this anyways, so just set to false
+    _fft_poloidal = False
+    _fft_toroidal = False
+
     def __init__(
         self,
         nodes,
@@ -971,8 +990,12 @@ class LinearGrid(_Grid):
         self._NFP = check_posint(NFP, "NFP", False)
         self._sym = sym
         self._endpoint = bool(endpoint)
+        # these are just default values that may get overwritten in _create_nodes
         self._poloidal_endpoint = False
         self._toroidal_endpoint = False
+        self._fft_poloidal = False
+        self._fft_toroidal = False
+
         self._node_pattern = "linear"
         self._coordinates = "rtz"
         self._is_meshgrid = True
@@ -1099,6 +1122,8 @@ class LinearGrid(_Grid):
                 dt *= t.size / (t.size - 1)
                 # scale_weights() will reduce endpoint (dt[0] and dt[-1])
                 # duplicate node weight
+            # if custom theta used usually safe to assume its non-uniform so no fft
+            self._fft_poloidal = (theta % 2 == 1) and not endpoint
         elif theta is not None:
             t = np.atleast_1d(theta).astype(float)
             # enforce periodicity
@@ -1153,6 +1178,7 @@ class LinearGrid(_Grid):
         else:
             t = jnp.array(0.0, ndmin=1)
             dt = theta_period * np.ones_like(t)
+            self._fft_poloidal = True  # trivially true
 
         # zeta
         # note: dz spacing should not depend on NFP
@@ -1162,13 +1188,16 @@ class LinearGrid(_Grid):
             self._N = check_nonnegint(N, "N")
             zeta = 2 * N + 1
         if np.isscalar(zeta) and (int(zeta) == zeta) and zeta > 0:
-            z = np.linspace(0, zeta_period, int(zeta), endpoint=endpoint)
+            zeta = int(zeta)
+            z = np.linspace(0, zeta_period, zeta, endpoint=endpoint)
             dz = 2 * np.pi / z.size * np.ones_like(z)
             if endpoint and z.size > 1:
                 # increase node weight to account for duplicate node
                 dz *= z.size / (z.size - 1)
                 # scale_weights() will reduce endpoint (dz[0] and dz[-1])
                 # duplicate node weight
+            # if custom zeta used usually safe to assume its non-uniform so no fft
+            self._fft_toroidal = (zeta % 2 == 1) and not endpoint
         elif zeta is not None:
             z, dz = _periodic_spacing(zeta, zeta_period, sort=True, jnp=np)
             dz = dz * NFP
@@ -1182,6 +1211,7 @@ class LinearGrid(_Grid):
         else:
             z = np.array(0.0, ndmin=1)
             dz = zeta_period * np.ones_like(z)
+            self._fft_toroidal = True  # trivially true
 
         self._poloidal_endpoint = (
             t.size > 0
@@ -1264,6 +1294,9 @@ class QuadratureGrid(_Grid):
         number of field periods (Default = 1)
 
     """
+
+    _fft_poloidal = True
+    _fft_toroidal = True
 
     def __init__(self, L, M, N, NFP=1):
         self._L = check_nonnegint(L, "L", False)
@@ -1409,6 +1442,9 @@ class ConcentricGrid(_Grid):
             * ``linear`` : linear spacing in r=[0,1]
 
     """
+
+    _fft_poloidal = False
+    _fft_toroidal = True
 
     def __init__(self, L, M, N, NFP=1, sym=False, axis=False, node_pattern="jacobi"):
         self._L = check_nonnegint(L, "L", False)

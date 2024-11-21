@@ -170,7 +170,7 @@ def factorize_linear_constraints(objective, constraint, x_scale="auto"):  # noqa
     # null space & particular solution
     A = A * D[None, unfixed_idx]
     if A.size:
-        A_inv, Z = svd_inv_null(A, b)
+        A_inv, Z = svd_inv_null(A)
     else:
         A_inv = A.T
         Z = np.eye(A.shape[1])

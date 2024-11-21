@@ -431,7 +431,7 @@ def svd_inv_null(A):
     return Ainv, Z
 
 
-def qr_xp_null(A, b, tol=1e-10):
+def qr_xp_null(A, b):
     """Compute null space of a matrix and particular solution Ax=b using QR.
 
     Parameters
@@ -454,6 +454,7 @@ def qr_xp_null(A, b, tol=1e-10):
     Q, R = qr(A.T)
     # Determine rank
     diag = jnp.abs(jnp.diag(R))
+    tol = np.finfo(A.dtype).eps * max(A.shape) * jnp.amax(diag)
     rank = jnp.sum(diag > tol)
 
     R1 = R[:rank, :rank]

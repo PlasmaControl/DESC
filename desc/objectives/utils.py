@@ -7,7 +7,7 @@ import numpy as np
 
 from desc.backend import cond, jit, jnp, logsumexp, put
 from desc.io import IOAble
-from desc.utils import Index, errorif, flatten_list, qr_xp_null, unique_list, warnif
+from desc.utils import Index, errorif, flatten_list, svd_inv_null, unique_list, warnif
 
 
 def factorize_linear_constraints(objective, constraint, x_scale="auto"):  # noqa: C901
@@ -170,12 +170,11 @@ def factorize_linear_constraints(objective, constraint, x_scale="auto"):  # noqa
     # null space & particular solution
     A = A * D[None, unfixed_idx]
     if A.size:
-        x_p, Z = qr_xp_null(A, b)
-        xp = put(xp, unfixed_idx, x_p)
+        A_inv, Z = svd_inv_null(A, b)
     else:
         A_inv = A.T
         Z = np.eye(A.shape[1])
-        xp = put(xp, unfixed_idx, A_inv @ b)
+    xp = put(xp, unfixed_idx, A_inv @ b)
     xp = put(xp, fixed_idx, ((1 / D) * xp)[fixed_idx])
     # cast to jnp arrays
     xp = jnp.asarray(xp)

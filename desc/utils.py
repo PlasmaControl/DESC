@@ -9,7 +9,7 @@ import numpy as np
 from scipy.special import factorial
 from termcolor import colored
 
-from desc.backend import flatnonzero, fori_loop, jit, jnp, qr, solve_triangular, take
+from desc.backend import flatnonzero, fori_loop, jit, jnp, take
 
 
 class Timer:
@@ -430,42 +430,6 @@ def svd_inv_null(A):
     Ainv = vhk.T @ jnp.diag(s) @ uk.T
     Z = vh[num:, :].T.conj()
     return Ainv, Z
-
-
-def qr_xp_null(A, b):
-    """Compute null space of a matrix and particular solution Ax=b using QR.
-
-    Parameters
-    ----------
-    A : ndarray
-        Matrix to find null space of.
-    b : ndarray
-        Right-hand side of Ax = b.
-
-    Returns
-    -------
-    x_p : ndarray
-        Particular solution to Ax = b.
-    Z : ndarray
-        Null space of A such that AZ=0 and Z.T@Z=I.
-
-    """
-    # Linear constraint matrix A is usually wide
-    # QR decomposition of A^T
-    Q, R = qr(A.T)
-    # Determine rank
-    diag = jnp.abs(jnp.diag(R))
-    tol = np.finfo(A.dtype).eps * max(A.shape) * jnp.amax(diag)
-    rank = jnp.sum(diag > tol)
-
-    R1 = R[:rank, :rank]
-    Q1 = Q[:, :rank]
-
-    # Null space is columns of Q[:, rank:]
-    Z = Q[:, rank:]
-    # If rank is 0, then there is no particular solution
-    x_p = Q1 @ solve_triangular(R1.T, b, lower=True) if rank != 0 else 0
-    return x_p, Z
 
 
 def combination_permutation(m, n, equals=True):

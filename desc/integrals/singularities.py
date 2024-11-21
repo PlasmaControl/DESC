@@ -11,7 +11,7 @@ from desc.basis import DoubleFourierSeries
 from desc.compute.geom_utils import rpz2xyz, rpz2xyz_vec, xyz2rpz_vec
 from desc.grid import LinearGrid
 from desc.io import IOAble
-from desc.utils import isalmostequal, islinspaced, safediv, safenorm
+from desc.utils import safediv, safenorm
 
 
 def _get_quadrature_nodes(q):
@@ -125,60 +125,33 @@ class FFTInterpolator(_BIESTInterpolator):
 
         # need source_grid to be linearly spaced in theta, zeta,
         # and contain only 1 rho value
-        assert isalmostequal(
-            source_grid.nodes[:, 0]
+        assert (
+            source_grid.num_rho == 1
         ), "singular integration requires source grid on a single surface"
-        assert source_grid.num_nodes == (
-            source_grid.num_theta * source_grid.num_zeta
-        ), "singular integration requires a tensor product grid in theta and zeta"
-        source_theta = source_grid.nodes[:, 1].reshape(
-            (source_grid.num_zeta, source_grid.num_theta)
-        )
-        source_zeta = source_grid.nodes[:, 2].reshape(
-            (source_grid.num_zeta, source_grid.num_theta)
-        )
-        assert isalmostequal(
-            source_theta, axis=0
-        ), "singular integration requires rectangular source grid in theta and zeta"
-        assert isalmostequal(
-            source_zeta, axis=1
-        ), "singular integration requires rectangular source grid in theta and zeta"
-        assert islinspaced(
-            source_theta, axis=1
-        ), "singular integration requires source nodes be equally spaced in theta"
-        assert islinspaced(
-            source_zeta, axis=0
-        ), "singular integration requires source nodes be equally spaced in zeta"
-
-        # need eval_grid to be linearly spaced in theta, zeta,
-        # and contain only 1 rho value
-        assert isalmostequal(
-            eval_grid.nodes[:, 0]
+        assert (
+            eval_grid.num_rho == 1
         ), "singular integration requires eval grid on a single surface"
+        assert (
+            source_grid.is_meshgrid
+        ), "singular integration requires tensor product source grid in theta and zeta"
+        assert (
+            eval_grid.is_meshgrid
+        ), "singular integration requires tensor product eval grid in theta and zeta"
+        assert (
+            source_grid.fft_poloidal
+        ), "singular integration requires source nodes be equally spaced in theta"
+        assert (
+            eval_grid.fft_poloidal
+        ), "singular integration requires eval nodes be equally spaced in theta"
+        assert (
+            source_grid.fft_toroidal
+        ), "singular integration requires source nodes be equally spaced in zeta"
+        assert (
+            eval_grid.fft_toroidal
+        ), "singular integration requires eval nodes be equally spaced in zeta"
         assert np.all(source_grid.nodes[:, 0] == eval_grid.nodes[0, 0]) and np.all(
             eval_grid.nodes[:, 0] == source_grid.nodes[0, 0]
         ), "singular integration requires source and eval grids on the same surface."
-        assert eval_grid.num_nodes == (
-            eval_grid.num_theta * eval_grid.num_zeta
-        ), "singular integration requires a tensor product grid in theta and zeta"
-        eval_theta = eval_grid.nodes[:, 1].reshape(
-            (eval_grid.num_zeta, eval_grid.num_theta)
-        )
-        eval_zeta = eval_grid.nodes[:, 2].reshape(
-            (eval_grid.num_zeta, eval_grid.num_theta)
-        )
-        assert isalmostequal(
-            eval_theta, axis=0
-        ), "singular integration requires rectangular eval grid in theta and zeta"
-        assert isalmostequal(
-            eval_zeta, axis=1
-        ), "singular integration requires rectangular eval grid in theta and zeta"
-        assert islinspaced(
-            eval_theta, axis=1
-        ), "singular integration requires eval nodes be equally spaced in theta"
-        assert islinspaced(
-            eval_zeta, axis=0
-        ), "singular integration requires eval nodes be equally spaced in zeta"
 
         self._eval_grid = eval_grid
         self._source_grid = source_grid
@@ -248,29 +221,19 @@ class DFTInterpolator(_BIESTInterpolator):
     def __init__(self, eval_grid, source_grid, s, q):
         # need source_grid to be linearly spaced in theta, zeta,
         # and contain only 1 rho value
-        assert isalmostequal(
-            source_grid.nodes[:, 0]
+        assert (
+            source_grid.num_rho == 1
         ), "singular integration requires source grid on a single surface"
-        assert source_grid.num_nodes == (
-            source_grid.num_theta * source_grid.num_zeta
-        ), "singular integration requires a tensor product grid in theta and zeta"
-        source_theta = source_grid.nodes[:, 1].reshape(
-            (source_grid.num_zeta, source_grid.num_theta)
-        )
-        source_zeta = source_grid.nodes[:, 2].reshape(
-            (source_grid.num_zeta, source_grid.num_theta)
-        )
-        assert isalmostequal(
-            source_theta, axis=0
-        ), "singular integration requires rectangular source grid in theta and zeta"
-        assert isalmostequal(
-            source_zeta, axis=1
-        ), "singular integration requires rectangular source grid in theta and zeta"
-        assert islinspaced(
-            source_theta, axis=1
+        assert (
+            source_grid.is_meshgrid
+        ), "singular integration requires tensor product source grid in theta and zeta"
+        # we need source grid to be tensor product and equally spaced in theta/zeta
+        # which is the same as the requirements for fft so easier to check that
+        assert (
+            source_grid.fft_poloidal
         ), "singular integration requires source nodes be equally spaced in theta"
-        assert islinspaced(
-            source_zeta, axis=0
+        assert (
+            source_grid.fft_toroidal
         ), "singular integration requires source nodes be equally spaced in zeta"
         assert np.all(source_grid.nodes[:, 0] == eval_grid.nodes[0, 0]) and np.all(
             eval_grid.nodes[:, 0] == source_grid.nodes[0, 0]

@@ -958,10 +958,13 @@ class LinearGrid(_Grid):
         sym=False,
         axis=True,
         endpoint=False,
-        rho=np.array(1.0),
-        theta=np.array(0.0),
-        zeta=np.array(0.0),
+        rho=None,
+        theta=None,
+        zeta=None,
     ):
+        assert (L is None) or (rho is None), "cannot specify both L and rho"
+        assert (M is None) or (theta is None), "cannot specify both M and theta"
+        assert (N is None) or (zeta is None), "cannot specify both N and zeta"
         self._L = check_nonnegint(L, "L")
         self._M = check_nonnegint(M, "M")
         self._N = check_nonnegint(N, "N")
@@ -1063,9 +1066,12 @@ class LinearGrid(_Grid):
             r = np.flipud(np.linspace(1, 0, int(rho), endpoint=axis))
             # choose dr such that each node has the same weight
             dr = np.ones_like(r) / r.size
-        else:
+        elif rho is not None:
             r = np.sort(np.atleast_1d(rho))
             dr = _midpoint_spacing(r, jnp=np)
+        else:
+            r = np.array(1.0, ndmin=1)
+            dr = np.ones_like(r)
 
         # theta
         if M is not None:
@@ -1093,7 +1099,7 @@ class LinearGrid(_Grid):
                 dt *= t.size / (t.size - 1)
                 # scale_weights() will reduce endpoint (dt[0] and dt[-1])
                 # duplicate node weight
-        else:
+        elif theta is not None:
             t = np.atleast_1d(theta).astype(float)
             # enforce periodicity
             t[t != theta_period] %= theta_period
@@ -1144,6 +1150,9 @@ class LinearGrid(_Grid):
                         # The scale_weights() function will handle this.
             else:
                 dt = np.array([theta_period])
+        else:
+            t = jnp.array(0.0, ndmin=1)
+            dt = theta_period * np.ones_like(t)
 
         # zeta
         # note: dz spacing should not depend on NFP
@@ -1160,7 +1169,7 @@ class LinearGrid(_Grid):
                 dz *= z.size / (z.size - 1)
                 # scale_weights() will reduce endpoint (dz[0] and dz[-1])
                 # duplicate node weight
-        else:
+        elif zeta is not None:
             z, dz = _periodic_spacing(zeta, zeta_period, sort=True, jnp=np)
             dz = dz * NFP
             if z[0] == 0 and z[-1] == zeta_period:
@@ -1170,6 +1179,9 @@ class LinearGrid(_Grid):
                 # counteract the reduction that will be done there.
                 dz[0] += dz[-1]
                 dz[-1] = dz[0]
+        else:
+            z = np.array(0.0, ndmin=1)
+            dz = zeta_period * np.ones_like(z)
 
         self._poloidal_endpoint = (
             t.size > 0

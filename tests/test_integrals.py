@@ -1619,10 +1619,10 @@ class TestBounce2D:
         """Integrand of numerator of bounce averaged binormal drift."""
         g = jnp.sqrt(jnp.abs(1 - pitch * B))
         cvdrift = (
-            data["periodic(cvdrift)"] + data["secular(gbdrift)/phi"] * data["zeta"]
+            data["cvdrift (periodic)"] + data["gbdrift (secular)/phi"] * data["zeta"]
         )
         gbdrift = (
-            data["periodic(gbdrift)"] + data["secular(gbdrift)/phi"] * data["zeta"]
+            data["gbdrift (periodic)"] + data["gbdrift (secular)/phi"] * data["zeta"]
         )
         return (cvdrift * g) - (0.5 * g * gbdrift) + (0.5 * gbdrift / g)
 
@@ -1637,7 +1637,7 @@ class TestBounce2D:
         grid = LinearGrid(
             rho=data["rho"], M=eq.M_grid, N=max(1, eq.N_grid), NFP=eq.NFP, sym=False
         )
-        names = ["periodic(cvdrift)", "periodic(gbdrift)", "secular(gbdrift)/phi"]
+        names = ["cvdrift (periodic)", "gbdrift (periodic)", "gbdrift (secular)/phi"]
         grid_data = eq.compute(names=Bounce2D.required_names + names, grid=grid)
         for name in names:
             grid_data[name] = grid_data[name] * data["normalization"]

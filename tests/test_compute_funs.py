@@ -1565,8 +1565,8 @@ def test_clebsch_sfl_funs():
                 "grad(alpha)",
                 "grad(phi)",
                 "B_phi",
-                "secular(gbdrift)",
-                "secular(gbdrift)/phi",
+                "gbdrift (secular)",
+                "gbdrift (secular)/phi",
                 "phi",
             ],
         )
@@ -1592,7 +1592,7 @@ def test_clebsch_sfl_funs():
         np.testing.assert_allclose(data["B^phi"], dot(data["B"], data["grad(phi)"]))
         np.testing.assert_allclose(data["B_phi"], data["B"][:, 1])
         np.testing.assert_allclose(
-            data["secular(gbdrift)"], data["secular(gbdrift)/phi"] * data["phi"]
+            data["gbdrift (secular)"], data["gbdrift (secular)/phi"] * data["phi"]
         )
 
     test(get("W7-X"))

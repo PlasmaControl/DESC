@@ -503,7 +503,7 @@ def _cvdrift0(data, B, pitch):
 
 def _gbdrift(data, B, pitch):
     return safediv(
-        (data["periodic(gbdrift)"] + data["secular(gbdrift)/phi"] * data["zeta"])
+        (data["gbdrift (periodic)"] + data["gbdrift (secular)/phi"] * data["zeta"])
         * (1 - 0.5 * pitch * B),
         jnp.sqrt(jnp.abs(1 - pitch * B)),
     )
@@ -528,8 +528,8 @@ def _gbdrift(data, B, pitch):
         "min_tz |B|",
         "max_tz |B|",
         "cvdrift0",
-        "periodic(gbdrift)",
-        "secular(gbdrift)/phi",
+        "gbdrift (periodic)",
+        "gbdrift (secular)/phi",
     ]
     + Bounce2D.required_names,
     resolution_requirement="tz",
@@ -595,7 +595,7 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
                 [_v_tau, _cvdrift0, _gbdrift],
                 pitch_inv,
                 data,
-                ["cvdrift0", "periodic(gbdrift)", "secular(gbdrift)/phi"],
+                ["cvdrift0", "gbdrift (periodic)", "gbdrift (secular)/phi"],
                 bounce.points(pitch_inv, num_well=num_well),
                 is_fourier=True,
             )
@@ -614,8 +614,8 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
         Gamma_c,
         fun_data={
             "cvdrift0": data["cvdrift0"],
-            "periodic(gbdrift)": data["periodic(gbdrift)"],
-            "secular(gbdrift)/phi": data["secular(gbdrift)/phi"],
+            "gbdrift (periodic)": data["gbdrift (periodic)"],
+            "gbdrift (secular)/phi": data["gbdrift (secular)/phi"],
         },
         data=data,
         theta=theta,

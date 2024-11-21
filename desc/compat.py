@@ -272,7 +272,8 @@ def rotate_zeta(eq, angle, copy=False):
         Equilibrium to rotate.
     angle : float
         Angle to rotate the equilibrium in radians. The actual physical rotation
-        is by angle radians.
+        is by angle radians. Any rotation that is not a multiple of pi/NFP will
+        break the symmetry of a stellarator symmetric equilibrium.
     copy : bool, optional
         Whether to update the existing equilibrium or make a copy (Default).
 
@@ -284,10 +285,14 @@ def rotate_zeta(eq, angle, copy=False):
     eq_rotated = eq.copy() if copy else eq
     # We will apply the rotation in NFP domain
     angle = angle * eq.NFP
-    if eq.sym and not angle % np.pi == 0 and eq.N != 0:
+    # Check if the angle is a multiple of pi/NFP
+    kpi = np.isclose(angle % np.pi, 0, 1e-8, 1e-8) or np.isclose(
+        angle % np.pi, np.pi, 1e-8, 1e-8
+    )
+    if eq.sym and not kpi and eq.N != 0:
         warnings.warn(
             "Rotating a stellarator symmetric equilibrium by an angle "
-            "that is not a multiple of pi will break the symmetry. "
+            "that is not a multiple of pi/NFP will break the symmetry. "
             "Changing the symmetry to False to rotate the equilibrium."
         )
         eq_rotated.change_resolution(sym=0)

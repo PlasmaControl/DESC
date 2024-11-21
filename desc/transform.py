@@ -410,7 +410,7 @@ class Transform(IOAble):
             return
         rcond = None if self.rcond == "auto" else self.rcond
         if self.method in ["direct1", "jitable"]:
-            A = self.basis.evaluate(self.grid.nodes, np.array([0, 0, 0]))
+            A = self.basis.evaluate(self.grid, np.array([0, 0, 0]))
             self.matrices["pinv"] = (
                 scipy.linalg.pinv(A, rtol=rcond) if A.size else np.zeros_like(A.T)
             )

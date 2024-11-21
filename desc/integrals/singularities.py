@@ -297,7 +297,7 @@ class DFTInterpolator(_BIESTInterpolator):
         basis = DoubleFourierSeries(
             M=source_grid.M, N=source_grid.N, NFP=source_grid.NFP
         )
-        A = basis.evaluate(source_grid.nodes)
+        A = basis.evaluate(source_grid)
         Ainv = jnp.linalg.pinv(A)
 
         B = jnp.zeros((*theta_q.shape, basis.num_modes))

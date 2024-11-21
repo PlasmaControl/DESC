@@ -1358,7 +1358,7 @@ class FourierZernikeProfile(_Profile):
         """
         if params is None:
             params = self.params
-        A = self.basis.evaluate(grid.nodes, [dr, dt, dz])
+        A = self.basis.evaluate(grid, [dr, dt, dz])
         return A @ params
 
     @classmethod

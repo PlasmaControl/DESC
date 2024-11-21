@@ -45,6 +45,16 @@ class _Basis(IOAble, ABC):
         self._N = int(self._N)
         self._NFP = int(self._NFP)
         self._modes = self._modes.astype(int)
+        (
+            self._unique_L_idx,
+            self._inverse_L_idx,
+            self._unique_M_idx,
+            self._inverse_M_idx,
+            self._unique_N_idx,
+            self._inverse_N_idx,
+            self._unique_LM_idx,
+            self._inverse_LM_idx,
+        ) = self._find_unique_inverse_modes()
 
     def _set_up(self):
         """Do things after loading or changing resolution."""
@@ -59,6 +69,16 @@ class _Basis(IOAble, ABC):
         self._N = int(self._N)
         self._NFP = int(self._NFP)
         self._modes = self._modes.astype(int)
+        (
+            self._unique_L_idx,
+            self._inverse_L_idx,
+            self._unique_M_idx,
+            self._inverse_M_idx,
+            self._unique_N_idx,
+            self._inverse_N_idx,
+            self._unique_LM_idx,
+            self._inverse_LM_idx,
+        ) = self._find_unique_inverse_modes()
 
     def _enforce_symmetry(self):
         """Enforce stellarator symmetry."""
@@ -86,6 +106,32 @@ class _Basis(IOAble, ABC):
             self._modes = self.modes[np.asarray(sign(self.modes[:, 1]) >= 0)]
         elif self.sym is None:
             self._sym = False
+
+    def _find_unique_inverse_modes(self):
+        """Find unique values of modes and their indices."""
+        __, unique_L_idx, inverse_L_idx = np.unique(
+            self.modes[:, 0], return_index=True, return_inverse=True
+        )
+        __, unique_M_idx, inverse_M_idx = np.unique(
+            self.modes[:, 1], return_index=True, return_inverse=True
+        )
+        __, unique_N_idx, inverse_N_idx = np.unique(
+            self.modes[:, 2], return_index=True, return_inverse=True
+        )
+        __, unique_LM_idx, inverse_LM_idx = np.unique(
+            self.modes[:, :2], axis=0, return_index=True, return_inverse=True
+        )
+
+        return (
+            unique_L_idx,
+            inverse_L_idx,
+            unique_M_idx,
+            inverse_M_idx,
+            unique_N_idx,
+            inverse_N_idx,
+            unique_LM_idx,
+            inverse_LM_idx,
+        )
 
     def _sort_modes(self):
         """Sorts modes for use with FFT."""
@@ -207,6 +253,60 @@ class _Basis(IOAble, ABC):
         """str: Type of indexing used for the spectral basis."""
         return self.__dict__.setdefault("_spectral_indexing", "linear")
 
+    @property
+    def fft_poloidal(self):
+        """bool: whether this basis is compatible with fft in the poloidal direction."""
+        if not hasattr(self, "_fft_poloidal"):
+            self._fft_poloidal = False
+        return self._fft_poloidal
+
+    @property
+    def fft_toroidal(self):
+        """bool: whether this basis is compatible with fft in the toroidal direction."""
+        if not hasattr(self, "_fft_toroidal"):
+            self._fft_toroidal = False
+        return self._fft_toroidal
+
+    @property
+    def unique_L_idx(self):
+        """ndarray: Indices of unique radial modes."""
+        return self._unique_L_idx
+
+    @property
+    def unique_M_idx(self):
+        """ndarray: Indices of unique poloidal modes."""
+        return self._unique_M_idx
+
+    @property
+    def unique_N_idx(self):
+        """ndarray: Indices of unique toroidal modes."""
+        return self._unique_N_idx
+
+    @property
+    def unique_LM_idx(self):
+        """ndarray: Indices of unique radial/poloidal mode pairs."""
+        return self._unique_LM_idx
+
+    @property
+    def inverse_L_idx(self):
+        """ndarray: Indices of unique_L_idx that recover the radial modes."""
+        return self._inverse_L_idx
+
+    @property
+    def inverse_M_idx(self):
+        """ndarray: Indices of unique_M_idx that recover the poloidal modes."""
+        return self._inverse_M_idx
+
+    @property
+    def inverse_N_idx(self):
+        """ndarray: Indices of unique_N_idx that recover the toroidal modes."""
+        return self._inverse_N_idx
+
+    @property
+    def inverse_LM_idx(self):
+        """ndarray: Indices of unique_LM_idx that recover the LM mode pairs."""
+        return self._inverse_LM_idx
+
     def __repr__(self):
         """Get the string form of the object."""
         return (
@@ -233,6 +333,9 @@ class PowerSeries(_Basis):
         on the disc. False uses the full (odd + even) powers.
 
     """
+
+    _fft_poloidal = True  # trivially true
+    _fft_toroidal = True
 
     def __init__(self, L, sym="even"):
         self._L = check_nonnegint(L, "L", False)
@@ -346,6 +449,9 @@ class FourierSeries(_Basis):
         * ``False`` for no symmetry (Default)
 
     """
+
+    _fft_poloidal = True
+    _fft_toroidal = True
 
     def __init__(self, N, NFP=1, sym=False):
         self._L = 0
@@ -469,6 +575,9 @@ class DoubleFourierSeries(_Basis):
         * ``False`` for no symmetry (Default)
 
     """
+
+    _fft_poloidal = True
+    _fft_toroidal = True
 
     def __init__(self, M, N, NFP=1, sym=False):
         self._L = 0
@@ -630,6 +739,9 @@ class ZernikePolynomial(_Basis):
         For L > 2*M, adds chevrons to the bottom, making a hexagonal diamond.
 
     """
+
+    _fft_poloidal = False
+    _fft_toroidal = True
 
     def __init__(self, L, M, sym=False, spectral_indexing="ansi"):
         self._L = check_nonnegint(L, "L", False)
@@ -827,6 +939,9 @@ class ChebyshevDoubleFourierBasis(_Basis):
 
     """
 
+    _fft_poloidal = True
+    _fft_toroidal = True
+
     def __init__(self, L, M, N, NFP=1, sym=False):
         self._L = check_nonnegint(L, "L", False)
         self._M = check_nonnegint(M, "M", False)
@@ -978,6 +1093,9 @@ class FourierZernikeBasis(_Basis):
         For L > 2*M, adds chevrons to the bottom, making a hexagonal diamond.
 
     """
+
+    _fft_poloidal = False
+    _fft_toroidal = True
 
     def __init__(self, L, M, N, NFP=1, sym=False, spectral_indexing="ansi"):
         self._L = check_nonnegint(L, "L", False)
@@ -1184,6 +1302,9 @@ class ChebyshevPolynomial(_Basis):
         Maximum radial resolution.
 
     """
+
+    _fft_poloidal = True  # trivially true
+    _fft_toroidal = True
 
     def __init__(self, L):
         self._L = check_nonnegint(L, "L", False)

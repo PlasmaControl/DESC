@@ -67,8 +67,8 @@ not_finite_limits = {
     "gbdrift",
     "grad(alpha)",
     "periodic(grad(alpha))",
-    "periodic(gbdrift)",
-    "periodic(cvdrift)",
+    "gbdrift (periodic)",
+    "cvdrift (periodic)",
     "|e^helical|",
     "|grad(theta)|",
     "<J*B> Redl",  # may not exist for all configurations
@@ -294,8 +294,8 @@ class TestAxisLimits:
             "grad(B)": {"rtol": 1e-4},
             "secular(alpha_r)": {"atol": 1e-4},
             "secular(grad(alpha))": {"atol": 1e-4},
-            "secular(gbdrift)": {"atol": 1e-4},
-            "secular(gbdrift)/phi": {"atol": 1e-4},
+            "gbdrift (secular)": {"atol": 1e-4},
+            "gbdrift (secular)/phi": {"atol": 1e-4},
         }
         zero_map = dict.fromkeys(zero_limits, {"desired_at_axis": 0})
         kwargs = weaker_tolerance | zero_map

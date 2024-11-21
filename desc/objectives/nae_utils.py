@@ -1024,6 +1024,7 @@ def _calc_2nd_order_NAE_coeffs(qsc, desc_eq, N=None, use_simple=True):
     X2phic = x2_cos[1, :]
     X2zc = x2_cos[2, :]
 
+    coeffs = {}
     if use_simple:
         R_2_0 = (
             X2R0
@@ -1049,6 +1050,24 @@ def _calc_2nd_order_NAE_coeffs(qsc, desc_eq, N=None, use_simple=True):
                 + 3 * (X1phic**2 + X1phis**2) * ddR0
             )
         )
+        coeffs["R_2_0_old"] = R_2_0.copy()
+        # new one from Dario transcribing from mathematica
+        R_2_0 = (
+            (X1phic**2 + X1phis**2) / 4 / R0
+            + X2R0
+            + (X1Rc * X1phic * dR0) / 2 / R0**2
+            + (X1Rs * X1phis * dR0) / 2 / R0**2
+            - X2phi0 * dR0 / R0
+            - X1phic**2 * dR0**2 / 2 / R0**3
+            - X1phis**2 * dR0**2 / 2 / R0**3
+            - X1phic * dX1Rc / 2 / R0
+            - X1phis * dX1Rs / 2 / R0
+            + X1phic * dR0 * dX1phic / 2 / R0**2
+            + X1phis * dR0 * dX1phis / 2 / R0**2
+            + X1phic**2 * ddR0 / 4 / R0**2
+            + X1phis**2 * ddR0 / 4 / R0**2
+        )
+        coeffs["R_2_0_new"] = R_2_0.copy()
 
         R_2_neg2 = (
             X2Rs
@@ -1064,6 +1083,23 @@ def _calc_2nd_order_NAE_coeffs(qsc, desc_eq, N=None, use_simple=True):
             )
             / (2 * R0**2)
         )
+        coeffs["R_2_neg2_old"] = R_2_neg2.copy()
+
+        R_2_neg2 = (
+            X1phic * X1phis / 2 / R0
+            + X2Rs
+            + X1Rs * X1phic * dR0 / 2 / R0**2
+            + X1Rc * X1phis * dR0 / 2 / R0**2
+            - X2phis * dR0 / R0
+            - X1phic * X1phis * dR0**2 / R0**3
+            - X1phis * dX1Rc / 2 / R0
+            - X1phic * dX1Rs / 2 / R0
+            + X1phis * dR0 * dX1phic / 2 / R0**2
+            + X1phic * dR0 * dX1phis / 2 / R0**2
+            + X1phic * X1phis * ddR0 / 2 / R0**2
+        )
+        coeffs["R_2_neg2_new"] = R_2_neg2.copy()
+
         R_2_2 = (
             X2Rc
             + (-(X1phic**2) + X1phis**2) * dR0**2 / (2 * R0**3)
@@ -1088,6 +1124,24 @@ def _calc_2nd_order_NAE_coeffs(qsc, desc_eq, N=None, use_simple=True):
                 + (X1phic**2 - X1phis**2) * ddR0
             )
         )
+        coeffs["R_2_2_old"] = R_2_2.copy()
+
+        R_2_2 = (
+            (X1phic**2 - X1phis**2) / 4 / R0
+            + X2Rc
+            + X1Rc * X1phic * dR0 / 2 / R0**2
+            - X1Rs * X1phis * dR0 / 2 / R0**2
+            - X2phic * dR0 / R0
+            - X1phic**2 * dR0**2 / 2 / R0**3
+            + X1phis**2 * dR0**2 / 2 / R0**3
+            - X1phic * dX1Rc / 2 / R0
+            + X1phis * dX1Rs / 2 / R0
+            + X1phic * dR0 * dX1phic / 2 / R0**2
+            - X1phis * dR0 * dX1phis / 2 / R0**2
+            + X1phic**2 * ddR0 / 4 / R0**2
+            - X1phis**2 * ddR0 / 4 / R0**2
+        )
+        coeffs["R_2_2_new"] = R_2_2.copy()
 
         Z_2_0 = (
             X2z0
@@ -1098,6 +1152,17 @@ def _calc_2nd_order_NAE_coeffs(qsc, desc_eq, N=None, use_simple=True):
             / R0**2
             + (X1phic**2 + X1phis**2) * ddZ0 / 4 / R0**2
             - (X1phic**2 + X1phis**2) * dR0 * dZ0 / 2 / R0**3
+        )
+        coeffs["Z_2_0_old"] = Z_2_0.copy()
+
+        Z_2_0 = (
+            X2z0
+            - (X1phic * dX1zc + X1phis * dX1zs) / 2 / R0
+            + (X1Rc * X1phic + X1Rs * X1phis) * dZ0 / 2 / R0**2
+            - X2phi0 * dZ0 / R0
+            - (X1phic**2 + X1phis**2) * dR0 * dZ0 / 2 / R0**3
+            + (X1phic * dX1phic + X1phis * dX1phis) * dZ0 / 2 / R0**2
+            + (X1phic**2 + X1phis**2) * ddZ0 / 4 / R0**2
         )
 
         Z_2_neg2 = (
@@ -1112,6 +1177,19 @@ def _calc_2nd_order_NAE_coeffs(qsc, desc_eq, N=None, use_simple=True):
             / R0**2
             - (X1phic * X1phis * dR0 * dZ0) / R0**3
         )
+        coeffs["Z_2_neg2_old"] = Z_2_neg2.copy()
+
+        Z_2_neg2 = (
+            X2zs
+            - (X1phis * dX1zc + X1phic * dX1zs) / 2 / R0
+            + (X1Rs * X1phic + X1Rc * X1phis + X1phis * dX1phic + X1phic * dX1phis)
+            * dZ0
+            / 2
+            / R0**2
+            - X2phis * dZ0 / R0
+            - X1phic * X1phis * dR0 * dZ0 / R0**3
+            + X1phic * X1phis * ddZ0 / 2 / R0**2
+        )
 
         Z_2_2 = (
             X2zc
@@ -1123,9 +1201,28 @@ def _calc_2nd_order_NAE_coeffs(qsc, desc_eq, N=None, use_simple=True):
             - +(X1phic**2 - X1phis**2) * ddZ0 / 4 / R0**2
             - (X1phic**2 - X1phis**2) * dR0 * dZ0 / 2 / R0**3
         )
+        coeffs["Z_2_2_old"] = Z_2_2.copy()
+
+        Z_2_2 = (
+            X2zc
+            + (-X1phic * dX1zc + X1phis * dX1zs) / 2 / R0
+            + (X1Rc * X1phic - X1Rs * X1phis + X1phic * dX1phic - X1phis * dX1phis)
+            * dZ0
+            / 2
+            / R0**2
+            - X2phic * dZ0 / R0
+            + (X1phis**2 - X1phic**2) * dR0 * dZ0 / 2 / R0**3
+            + (X1phic**2 - X1phis**2) * ddZ0 / 4 / R0**2
+        )
+    coeffs["R_2_0_new"] = R_2_0.copy()
+    coeffs["R_2_neg2_new"] = R_2_neg2.copy()
+    coeffs["R_2_2_new"] = R_2_2.copy()
+    coeffs["Z_2_0_new"] = Z_2_0.copy()
+    coeffs["Z_2_neg2_new"] = Z_2_neg2.copy()
+    coeffs["Z_2_2_new"] = Z_2_2.copy()
 
     # Fourier Transform in toroidal angle phi
-    coeffs = {}
+
     bases = {}
 
     nfp = qsc.nfp

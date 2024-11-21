@@ -1,4 +1,5 @@
-&INDATA
+! Comment line before INDATA start
+&indata
   ! DSHAPE Tokamak from Hirshman and Whitson 1983
   MGRID_FILE = 'none'
   LFREEB =  F

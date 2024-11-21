@@ -21,7 +21,6 @@ maxiter = 50
 optimizer         = scipy-trust-exact
 objective         = energy
 spectral_indexing = ansi
-node_pattern      = quad
 
 # pressure and rotational transform profiles
 l:   0  p =  0.125  i =  -1.0

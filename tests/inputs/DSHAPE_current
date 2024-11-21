@@ -29,7 +29,6 @@ maxiter = 100
 optimizer         = scipy-trf
 objective         = force
 spectral_indexing = fringe
-node_pattern      = cheb2
 
 # pressure and rotational transform/current profiles
 l:   0  p =  1.6E+3  c =  0

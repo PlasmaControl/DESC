@@ -1,18 +1,19 @@
 # This DESC input file was auto generated from the VMEC input file
-# /DESC/tests/inputs/input.DSHAPE
+# .//tests//inputs//input.DSHAPE
+# on 10/30/2024 at 14:22:23.
 # For details on the various options see https://desc-docs.readthedocs.io/en/stable/input.html
 
 # global parameters
 sym = 1
 NFP =   1
-Psi = 1.00000000
+Psi = 1.00000000e+00
 
 # spectral resolution
-L_rad = 12
-M_pol = 12
+L_rad = 11
+M_pol = 11
 N_tor = 0
-L_grid = 24
-M_grid = 24
+L_grid = 22
+M_grid = 22
 N_grid = 0
 
 # continuation parameters
@@ -25,7 +26,6 @@ optimizer = lsq-exact
 objective = force
 bdry_mode = lcfs
 spectral_indexing = ansi
-node_pattern = jacobi
 
 # pressure and rotational transform/current profiles
 l:   0	p =   1.60000000E+03	i =   1.00000000E+00

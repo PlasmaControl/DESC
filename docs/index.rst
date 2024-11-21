@@ -18,47 +18,55 @@
 
 .. toctree::
    :maxdepth: 1
-   :caption: Getting Started
-
-   installation
-   command_line
-   input
-   output
-
-.. toctree::
-   :maxdepth: 1
-   :caption: Examples
-
-   notebooks/hands_on
-   notebooks/Spline_Basis
-   notebooks/Saving_Equilibria_in_VMEC_Format
-   notebooks/DESC_Fixed_Axis_NAE_Constraint
-   notebooks/Toroidal_current_constraint
-   precise_qa
-
-.. toctree::
-   :maxdepth: 1
    :caption: Tutorials
 
-   notebooks/tutorials/00_Getting_Started_with_DESC.ipynb
-   notebooks/tutorials/01_Using_DESC_Outputs.ipynb
-   notebooks/tutorials/02_Script_Interface.ipynb
-   notebooks/tutorials/03_Quasi-Symmetry_Optimization.ipynb
-
-.. toctree::
-   :maxdepth: 1
-   :caption: Developer guides
-
-   adding_compute_funs
-   adding_objectives
-   adding_optimizers
-   notebooks/dev_guide/grid.ipynb
+   installation
+   notebooks/tutorials/basic_equilibrium.ipynb
+   notebooks/tutorials/advanced_equilibrium_continuation.ipynb
+   notebooks/tutorials/continuation_step_by_step.ipynb
+   notebooks/tutorials/free_boundary_equilibrium.ipynb
+   notebooks/tutorials/use_outputs.ipynb
+   notebooks/tutorials/basic_optimization.ipynb
+   notebooks/tutorials/advanced_optimization.ipynb
+   notebooks/tutorials/omnigenity.ipynb
+   notebooks/tutorials/nae_constraint.ipynb
+   notebooks/tutorials/bootstrap_current.ipynb
+   notebooks/tutorials/coil_stage_two_optimization.ipynb
+   notebooks/tutorials/ideal_ballooning_stability.ipynb
+   memory_usage
 
 .. toctree::
    :maxdepth: 1
    :caption: Public API
 
+   api_equilibrium
+   api_objectives
+   api_io
+   api_plotting
+   api_continuation
+   api_fields
    api
+
+
+.. toctree::
+   :maxdepth: 1
+   :caption: Command Line Interface and I/O
+
+   command_line
+   input
+   output
+
+
+.. toctree::
+   :maxdepth: 1
+   :caption: Developer guides
+
+   notebooks/dev_guide/getting-started-eq-solve.ipynb
+   notebooks/dev_guide/grid.ipynb
+   adding_compute_funs
+   adding_objectives
+   adding_optimizers
+
 
 
 Indices and tables

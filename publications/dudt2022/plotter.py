@@ -6,15 +6,14 @@ from matplotlib.colors import LogNorm, Normalize
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 from desc.basis import DoubleFourierSeries
-from desc.compute import (
-    compute_boozer_coords,
-    compute_geometry,
-    compute_quasisymmetry_error,
-)
+from desc.compute.utils import get_params, get_profiles, get_transforms
 from desc.equilibrium import Equilibrium
 from desc.grid import LinearGrid, QuadratureGrid
 from desc.transform import Transform
+from desc.vmec_utils import ptolemy_linear_transform
 
+plt.rcParams["font.family"] = "DejaVu Sans"
+plt.rcParams["mathtext.fontset"] = "dejavusans"
 plt.rcParams["font.size"] = 14
 dim = 11
 
@@ -27,23 +26,14 @@ eq = Equilibrium.load("data/initial.h5")
 
 grid = LinearGrid(M=6 * eq.M + 1, N=6 * eq.N + 1, NFP=eq.NFP, sym=False, rho=1.0)
 qgrid = QuadratureGrid(M=3 * eq.M + 1, N=3 * eq.N + 1, L=3 * eq.L + 1, NFP=eq.NFP)
-R_transform = Transform(qgrid, eq.R_basis, derivs=3)
-Z_transform = Transform(qgrid, eq.Z_basis, derivs=3)
-L_transform = Transform(qgrid, eq.L_basis, derivs=3)
-B_transform = Transform(
-    qgrid,
-    DoubleFourierSeries(M=2 * eq.M, N=2 * eq.N, sym=eq.R_basis.sym, NFP=eq.NFP),
-    derivs=0,
-    build_pinv=True,
-)
-w_transform = Transform(
-    qgrid,
-    DoubleFourierSeries(M=2 * eq.M, N=2 * eq.N, sym=eq.Z_basis.sym, NFP=eq.NFP),
-    derivs=1,
-)
 
-iota = eq.iota.copy()
-iota.grid = qgrid
+names = ["|B|_mn", "f_C", "f_T"]
+profiles = get_profiles(names, eq=eq, grid=qgrid)
+transforms = get_transforms(names, eq=eq, grid=qgrid, M_booz=2 * eq.M, N_booz=2 * eq.N)
+
+matrix, modes, idx = ptolemy_linear_transform(
+    transforms["B"].basis.modes, helicity=(1, eq.NFP), NFP=eq.NFP
+)
 
 
 def qs_errors(eq):
@@ -51,48 +41,14 @@ def qs_errors(eq):
     eq.surface.R_basis._create_idx()
     eq.surface.Z_basis._create_idx()
 
-    data = compute_geometry(eq.R_lmn, eq.Z_lmn, R_transform, Z_transform)
-    data = compute_boozer_coords(
-        eq.R_lmn,
-        eq.Z_lmn,
-        eq.L_lmn,
-        eq.i_l,
-        eq.Psi,
-        R_transform,
-        Z_transform,
-        L_transform,
-        B_transform,
-        w_transform,
-        iota,
-        data=data,
-    )
-    data = compute_quasisymmetry_error(
-        eq.R_lmn,
-        eq.Z_lmn,
-        eq.L_lmn,
-        eq.i_l,
-        eq.Psi,
-        R_transform,
-        Z_transform,
-        L_transform,
-        iota,
-        helicity=(1, eq.NFP),
-        data=data,
-    )
+    params = get_params(names, eq=eq)
+    data = eq.compute(names, params=params, profiles=profiles, transforms=transforms)
 
-    idx_00 = B_transform.basis.get_idx(M=0, N=0)
-    idx_MN = np.where(
-        B_transform.basis.modes[:, 1] / B_transform.basis.modes[:, 2] == 1
-    )[0]
-    idx = np.ones((B_transform.basis.num_modes,), bool)
-    idx[idx_00] = False
-    idx[idx_MN] = False
+    B_mn = matrix @ data["|B|_mn"]
     R0 = np.mean(data["R"] * data["sqrt(g)"]) / np.mean(data["sqrt(g)"])
     B0 = np.mean(data["|B|"] * data["sqrt(g)"]) / np.mean(data["sqrt(g)"])
 
-    f_B = np.sqrt(np.sum(data["|B|_mn"][idx] ** 2)) / np.sqrt(
-        np.sum(data["|B|_mn"] ** 2)
-    )
+    f_B = np.sqrt(np.sum(B_mn[idx] ** 2)) / np.sqrt(np.sum(B_mn**2))
     f_C = (
         np.mean(np.abs(data["f_C"]) * data["sqrt(g)"])
         / np.mean(data["sqrt(g)"])
@@ -225,35 +181,44 @@ ax.set_ylabel("Normalized Error")
 ax.legend(loc="upper left")
 fig.tight_layout()
 plt.savefig("data/errors.png")
+plt.savefig("data/fig6.eps")
 
 # Boozer comparison
 fig, (ax0, ax1) = plt.subplots(nrows=2, figsize=(7, 10), sharex=True, sharey=True)
-grid_plot = LinearGrid(M=100, N=100, NFP=eq.NFP, sym=False, endpoint=True)
-xx = grid_plot.nodes[:, 2].reshape((grid_plot.M, grid_plot.N), order="F").squeeze()
-yy = grid_plot.nodes[:, 1].reshape((grid_plot.M, grid_plot.N), order="F").squeeze()
+grid_plot = LinearGrid(theta=100, zeta=100, NFP=eq.NFP, sym=False, endpoint=True)
+xx = (
+    grid_plot.nodes[:, 2]
+    .reshape((grid_plot.num_theta, grid_plot.num_zeta), order="F")
+    .squeeze()
+)
+yy = (
+    grid_plot.nodes[:, 1]
+    .reshape((grid_plot.num_theta, grid_plot.num_zeta), order="F")
+    .squeeze()
+)
 B_transform = Transform(
     grid_plot,
     DoubleFourierSeries(M=2 * eq.M, N=2 * eq.N, sym=eq.R_basis.sym, NFP=eq.NFP),
 )
 data0 = eq.compute("|B|_mn", grid)
 data0 = B_transform.transform(data0["|B|_mn"])
-data0 = data0.reshape((grid_plot.M, grid_plot.N), order="F")
-eq = Equilibrium.load("data/eq_fB_or2.h5")
+data0 = data0.reshape((grid_plot.num_theta, grid_plot.num_zeta), order="F")
+eq = Equilibrium.load("data/eq_fT_or2.h5")
 data1 = eq.compute("|B|_mn", grid)
 data1 = B_transform.transform(data1["|B|_mn"])
-data1 = data1.reshape((grid_plot.M, grid_plot.N), order="F")
+data1 = data1.reshape((grid_plot.num_theta, grid_plot.num_zeta), order="F")
 amin = min(np.nanmin(data0), np.nanmin(data1))
 amax = max(np.nanmax(data0), np.nanmax(data1))
-contourf_kwargs = {}
-contourf_kwargs["norm"] = Normalize()
-contourf_kwargs["levels"] = np.linspace(amin, amax, 100)
-contourf_kwargs["cmap"] = "jet"
-contourf_kwargs["extend"] = "both"
+contour_kwargs = {}
+# contour_kwargs["norm"] = Normalize()
+# contour_kwargs["levels"] = np.linspace(amin, amax, 50)
+contour_kwargs["cmap"] = "jet"
+contour_kwargs["extend"] = "both"
 cax_kwargs = {"size": "5%", "pad": 0.05}
 div0 = make_axes_locatable(ax0)
 div1 = make_axes_locatable(ax1)
-im0 = ax0.contourf(xx, yy, data0, **contourf_kwargs)
-im1 = ax1.contourf(xx, yy, data1, **contourf_kwargs)
+im0 = ax0.contour(xx, yy, data0, 50, **contour_kwargs)
+im1 = ax1.contour(xx, yy, data1, 50, **contour_kwargs)
 cax0 = div0.append_axes("right", **cax_kwargs)
 cax1 = div1.append_axes("right", **cax_kwargs)
 cbar0 = fig.colorbar(im0, cax=cax0)
@@ -267,6 +232,7 @@ ax0.set_title(r"Initial $|\mathbf{B}|~(T)$")
 ax1.set_title(r"Optimized $|\mathbf{B}|~(T)$")
 fig.tight_layout()
 plt.savefig("data/Booz.png")
+plt.savefig("data/fig5.eps")
 
 # f_B
 fig, ax = plt.subplots(figsize=(7, 6), sharex=True, sharey=True)
@@ -306,6 +272,7 @@ ax.set_ylabel(r"$ZBS(2,1)$")
 ax.set_title(r"$\hat{f}_{B}$")
 fig.tight_layout()
 plt.savefig("data/f_B.png")
+plt.savefig("data/fig1.eps")
 
 # f_C
 fig, ax = plt.subplots(figsize=(7, 6), sharex=True, sharey=True)
@@ -345,6 +312,7 @@ ax.set_ylabel(r"$ZBS(2,1)$")
 ax.set_title(r"$\hat{f}_{C}$")
 fig.tight_layout()
 plt.savefig("data/f_C.png")
+plt.savefig("data/fig2.eps")
 
 # f_T
 fig, ax = plt.subplots(figsize=(7, 6), sharex=True, sharey=True)
@@ -384,5 +352,29 @@ ax.set_ylabel(r"$ZBS(2,1)$")
 ax.set_title(r"$\hat{f}_{T}$")
 fig.tight_layout()
 plt.savefig("data/f_T.png")
+plt.savefig("data/fig3.eps")
+
+fig, ax = plt.subplots(figsize=(7, 7), sharex=True, sharey=True)
+grid = LinearGrid(theta=100, zeta=5, NFP=eq_initial.NFP, endpoint=True)
+for i, eq in enumerate((eq_initial, eq_fT_or2)):
+    coords = eq.compute(["R", "Z"], grid=grid)
+    R = coords["R"].reshape((grid.num_theta, grid.num_rho, grid.num_zeta), order="F")
+    Z = coords["Z"].reshape((grid.num_theta, grid.num_rho, grid.num_zeta), order="F")
+    for j in range(grid.num_zeta - 1):
+        (line,) = ax.plot(
+            R[:, -1, j],
+            Z[:, -1, j],
+            color=blue if i == 0 else green,
+            linestyle="-",
+            lw=4,
+        )
+        if j == 0:
+            line.set_label("Initial" if i == 0 else "Optimized")
+ax.legend(loc="upper right")
+ax.set_xlabel(r"$R$ (m)")
+ax.set_ylabel(r"$Z$ (m)")
+fig.tight_layout()
+plt.savefig("data/boundaries.png")
+plt.savefig("data/fig4.eps")
 
 print("figures saved!")

@@ -1,6 +1,8 @@
 Adding new physics quantities
 -----------------------------
 
+.. role:: console(code)
+   :language: console
 
 All calculation of physics quantities takes place in ``desc.compute``
 
@@ -25,6 +27,7 @@ The full code is below:
         coordinates="rtz",
         data=["sqrt(g)", "B_zeta_t", "B_theta_z"],
         axis_limit_data=["sqrt(g)_r", "B_zeta_rt", "B_theta_rz"],
+        resolution_requirement="",
         parameterization="desc.equilibrium.equilibrium.Equilibrium",
     )
     def _J_sup_rho(params, transforms, profiles, data, **kwargs):
@@ -94,12 +97,25 @@ metadata about the quantity. The necessary fields are detailed below:
   the quantities mentioned above to evaluate the magnetic axis limit. These dependencies
   are specified in ``axis_limit_data``. The dependencies specified in this list are
   marked to be computed only when there is a node at the magnetic axis.
+* ``resolution_requirement``: Resolution requirements in coordinates.
+  I.e. "r" expects radial resolution in the grid. Likewise, "rtz" is shorthand for
+  "rho, theta, zeta" and indicates the computation expects a grid with radial,
+  poloidal, and toroidal resolution. If the computation simply performs
+  pointwise operations, instead of a reduction (such as integration) over a
+  coordinate, then an empty string may be used to indicate no requirements.
 * ``parameterization``: what sorts of DESC objects is this function for. Most functions
-  will just be for ``Equilibrium``, but some methods may also be for ``desc.geometry.Curve``,
-  or specific types eg ``desc.geometry.FourierRZCurve``.
+  will just be for ``Equilibrium``, but some methods may also be for ``desc.geometry.core.Curve``,
+  or specific types eg ``desc.geometry.curve.FourierRZCurve``. If a quantity is computed differently
+  for a subclass versus a superclass, then one may define a compute function for the superclass
+  (e.g. for ``desc.geometry.Curve``) which will be used for that class and any of its subclasses,
+  and then if a specific subclass requires a different method, one may define a second compute function for
+  the same quantity, with a parameterization for that subclass (e.g. ``desc.geometry.curve.SplineXYZCurve``).
+  See the compute definitions for the ``length`` quantity in ``compute/_curve.py`` for an example of this,
+  which is similar to the inheritance structure of Python classes.
 * ``kwargs``: If the compute function requires any additional arguments they should
-  be specified like ``kwarg="thing"`` where the value is the name of the keyword argument
-  that will be passed to the compute function. Most quantities do not take kwargs.
+  be specified like ``kwarg="description"`` where ``kwarg`` is replaced by the actual
+  keyword argument, and ``"description"`` is a string describing what it is.
+  Most quantities do not take kwargs.
 
 
 The function itself should have a signature of the form
@@ -114,3 +130,101 @@ as long as it is registered.
 dependencies specified by the decorator. The function itself should do any calculation
 needed using these dependencies and then add the output to the ``data`` dictionary and
 return it. The key in the ``data`` dictionary should match the ``name`` of the quantity.
+
+Once a new quantity is added to the ``desc.compute`` module, there are two final steps involving the testing suite which must be checked.
+The first step is implementing the correct axis limit, or marking it as not finite or not implemented.
+We can check whether the axis limit currently evaluates as finite by computing the quantity on a grid with nodes at the axis.
+::
+
+    from desc.examples import get
+    from desc.grid import LinearGrid
+    import numpy as np
+
+    eq = get("HELIOTRON")
+    grid = LinearGrid(rho=np.array([0.0]), M=4, N=8, axis=True)
+    new_quantity = eq.compute(name="new_quantity_name", grid=grid)["new_quantity_name"]
+    print(np.isfinite(new_quantity).all())
+
+if ``False`` is printed, then the limit of the quantity does not evaluate as finite which can be due to 3 reasons:
+
+
+* The limit is actually not finite, in which case please add the new quantity to the ``not_finite_limits`` set in ``tests/test_axis_limits.py``.
+* The new quantity has an indeterminate expression at the magnetic axis, in which case you should try to implement the correct limit as done in the example for ``J^rho`` above.
+  If you wish to skip implementing the limit at the magnetic axis, please add the new quantity to the ``not_implemented_limits`` set in ``tests/test_axis_limits.py``.
+* The new quantity includes a dependency whose limit at the magnetic axis has not been implemented.
+  The tests automatically detect this, so no further action is needed from developers in this case.
+
+
+The second step is to run the ``test_compute_everything`` test located in the ``tests/test_compute_everything.py`` file.
+This can be done with the command :console:`pytest tests/test_compute_everything.py`.
+This test is a regression test to ensure that compute quantities in each new update of DESC do not differ significantly
+from previous versions of DESC.
+Since the new quantity did not exist in previous versions of DESC, one must run this test
+and commit the outputted ``tests/inputs/master_compute_data.pkl`` file which is updated automatically when a new quantity is detected.
+
+Compute function may take additional ``**kwargs`` arguments to provide more information to the function. One example of this kind of compute function is ``P_ISS04`` which has a keyword argument ``H_ISS04``.
+::
+
+  @register_compute_fun(
+    name="P_ISS04",
+    label="P_{ISS04}",
+    units="W",
+    units_long="Watts",
+    description="Heating power required by the ISS04 energy confinement time scaling",
+    dim=0,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="",
+    data=["a", "iota", "rho", "R0", "W_p", "<ne>_vol", "<|B|>_axis"],
+    method="str: Interpolation method. Default 'cubic'.",
+    H_ISS04="float: ISS04 confinement enhancement factor. Default 1.",
+  )
+  def _P_ISS04(params, transforms, profiles, data, **kwargs):
+      rho = transforms["grid"].compress(data["rho"], surface_label="rho")
+      iota = transforms["grid"].compress(data["iota"], surface_label="rho")
+      fx = {}
+      if "iota_r" in data:
+          fx["fx"] = transforms["grid"].compress(
+              data["iota_r"]
+          )  # noqa: unused dependency
+      iota_23 = interp1d(2 / 3, rho, iota, method=kwargs.get("method", "cubic"), **fx)
+      data["P_ISS04"] = 1e6 * (  # MW -> W
+          jnp.abs(data["W_p"] / 1e6)  # J -> MJ
+          / (
+              0.134
+              * data["a"] ** 2.28  # m
+              * data["R0"] ** 0.64  # m
+              * (data["<ne>_vol"] / 1e19) ** 0.54  # 1/m^3 -> 1e19/m^3
+              * data["<|B|>_axis"] ** 0.84  # T
+              * iota_23**0.41
+              * kwargs.get("H_ISS04", 1)
+          )
+      ) ** (1 / 0.39)
+      return data
+
+
+This function can be called by following notation,
+::
+
+  from desc.compute.utils import _compute as compute_fun
+
+  # Compute P_ISS04
+  # specify gamma and H_ISS04 values as keyword arguments
+  data = compute_fun(
+            "desc.equilibrium.equilibrium.Equilibrium",
+            "P_ISS04",
+            params=params,
+            transforms=transforms,
+            profiles=profiles,
+            gamma=gamma,
+            H_ISS04=H_ISS04,
+        )
+  P_ISS04 = data["P_ISS04"]
+
+Note: Here we used `_compute` instead of `compute` to be able to call this function inside a jitted objective function. However, for normal use both functions should work. `**kwargs` can also be passed to `eq.compute`.
+
+::
+
+  data = eq.compute(names="P_ISS04", gamma=gamma, H_ISS04=H_ISS04)
+  P_ISS04 = data["P_ISS04"]

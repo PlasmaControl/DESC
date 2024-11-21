@@ -445,20 +445,11 @@ class TestTransform:
 
         g = Grid(np.array([[0, 0, 0], [1, 1, 0], [1, 1, 1]]))
         b = ZernikePolynomial(L=2, M=2)
-        with pytest.warns(UserWarning, match="same number of nodes on each zeta plane"):
+        with pytest.warns(UserWarning, match="compatible grid"):
             t = Transform(g, b, method="fft")
         assert t.method == "direct1"
 
-        g = LinearGrid(rho=2, theta=2, zeta=2)
-        b = DoubleFourierSeries(M=2, N=2)
-        b._modes = b.modes[np.random.permutation(25)]
-        with pytest.warns(
-            UserWarning, match="zernike indices to be sorted by toroidal mode"
-        ):
-            t = Transform(g, b, method="fft")
-        assert t.method == "direct1"
-
-        g = LinearGrid(rho=2, theta=2, zeta=2, NFP=2)
+        g = LinearGrid(rho=2, M=2, N=2, NFP=2)
         b = DoubleFourierSeries(M=2, N=2)
         # this actually will emit 2 warnings, one for the NFP for
         # basis and grid not matching, and one for nodes completing 1 full period
@@ -473,73 +464,34 @@ class TestTransform:
         for r in record:
             if "Unequal number of field periods" in str(r.message):
                 NFP_grid_basis_warning_exists = True
-            if "nodes complete 1 full field period" in str(r.message):
+            if "grid and basis to have the same NFP" in str(r.message):
                 nodes_warning_exists = True
         assert NFP_grid_basis_warning_exists and nodes_warning_exists
 
-        g = LinearGrid(rho=2, theta=2, zeta=2)
-        b = DoubleFourierSeries(M=1, N=1)
-        b._modes[:, 2] = np.where(b._modes[:, 2] == 1, 2, b._modes[:, 2])
-        with pytest.warns(UserWarning, match="toroidal modes are equally spaced in n"):
-            t = Transform(g, b, method="fft")
-        assert t.method == "direct1"
-
-        g = LinearGrid(rho=2, theta=2, zeta=2)
+        g = LinearGrid(rho=2, M=2, N=2)
         b = DoubleFourierSeries(M=1, N=3)
         with pytest.warns(UserWarning, match="can not undersample in zeta"):
             t = Transform(g, b, method="fft")
         assert t.method == "direct2"
 
-        g = LinearGrid(rho=2, theta=2, zeta=4)
-        b = DoubleFourierSeries(M=1, N=1)
-        with pytest.warns(
-            UserWarning, match="requires an odd number of toroidal nodes"
-        ):
-            t = Transform(g, b, method="fft")
-        assert t.method == "direct2"
-
-        g = LinearGrid(rho=2, theta=2, zeta=5)
-        b = DoubleFourierSeries(M=1, N=1)
-        g._nodes = g._nodes[::-1]
-        with pytest.warns(UserWarning, match="nodes to be sorted by toroidal angle"):
+        b._fft_toroidal = False
+        g = LinearGrid(2, 3, 4)
+        with pytest.warns(UserWarning, match="compatible basis"):
             t = Transform(g, b, method="fft")
         assert t.method == "direct1"
-
-        g = LinearGrid(rho=2, theta=2, zeta=5)
-        b = DoubleFourierSeries(M=1, N=1)
-        g._nodes[:, 2] = np.where(g._nodes[:, 2] == 0, 0.01, g.nodes[:, 2])
-        with pytest.warns(UserWarning, match="nodes to be equally spaced in zeta"):
-            t = Transform(g, b, method="fft")
-        assert t.method == "direct2"
 
     @pytest.mark.unit
     def test_direct2_warnings(self):
         """Test that warnings are thrown when trying to use direct2 if it won't work."""
-        g = LinearGrid(rho=2, theta=2, zeta=5)
-        b = DoubleFourierSeries(M=1, N=1)
-        g._nodes = g._nodes[::-1]
-        with pytest.warns(UserWarning, match="nodes to be sorted by toroidal angle"):
-            t = Transform(g, b, method="direct2")
-        assert t.method == "direct1"
-
-        g = Grid(np.array([[0, 0, 0], [1, 1, 0], [1, 1, 1]]))
-        b = ZernikePolynomial(L=2, M=2)
-        with pytest.warns(UserWarning, match="same number of nodes on each zeta plane"):
-            t = Transform(g, b, method="direct2")
-        assert t.method == "direct1"
-
         g = Grid(np.array([[0, 0, -1], [1, 1, 0], [1, 1, 1]]))
         b = ZernikePolynomial(L=2, M=2)
-        with pytest.warns(UserWarning, match="node pattern is the same"):
+        with pytest.warns(UserWarning, match="requires compatible grid"):
             t = Transform(g, b, method="direct2")
         assert t.method == "direct1"
 
-        g = LinearGrid(rho=2, theta=2, zeta=2)
-        b = DoubleFourierSeries(M=2, N=2)
-        b._modes = b.modes[np.random.permutation(25)]
-        with pytest.warns(
-            UserWarning, match="zernike indices to be sorted by toroidal mode"
-        ):
+        b._fft_toroidal = False
+        g = LinearGrid(2, 3, 4)
+        with pytest.warns(UserWarning, match="compatible basis"):
             t = Transform(g, b, method="direct2")
         assert t.method == "direct1"
 
@@ -643,10 +595,10 @@ def test_transform_pytree():
 def test_NFP_warning():
     """Make sure we only warn about basis/grid NFP in cases where it matters."""
     rho = np.linspace(0, 1, 20)
-    g01 = LinearGrid(rho=rho, L=5, N=0, NFP=1)
-    g02 = LinearGrid(rho=rho, L=5, N=0, NFP=2)
-    g21 = LinearGrid(rho=rho, L=5, N=5, NFP=1)
-    g22 = LinearGrid(rho=rho, L=5, N=5, NFP=2)
+    g01 = LinearGrid(rho=rho, M=5, N=0, NFP=1)
+    g02 = LinearGrid(rho=rho, M=5, N=0, NFP=2)
+    g21 = LinearGrid(rho=rho, M=5, N=5, NFP=1)
+    g22 = LinearGrid(rho=rho, M=5, N=5, NFP=2)
     b01 = FourierZernikeBasis(L=2, M=2, N=0, NFP=1)
     b02 = FourierZernikeBasis(L=2, M=2, N=0, NFP=2)
     b21 = FourierZernikeBasis(L=2, M=2, N=2, NFP=1)

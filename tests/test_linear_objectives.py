@@ -6,6 +6,7 @@ from qsc import Qsc
 
 import desc.examples
 from desc.backend import jnp
+from desc.coils import CoilSet, FourierXYZCoil
 from desc.equilibrium import Equilibrium
 from desc.geometry import FourierRZToroidalSurface
 from desc.io import load
@@ -48,6 +49,7 @@ from desc.objectives import (
     GenericObjective,
     LinearObjectiveFromUser,
     ObjectiveFunction,
+    ShareParameters,
     get_equilibrium_objective,
     get_fixed_axis_constraints,
     get_fixed_boundary_constraints,
@@ -1080,3 +1082,70 @@ def test_linear_objective_from_user_on_collection(DummyCoilSet):
     obj2.build()
 
     np.testing.assert_allclose(obj1.compute(params), obj2.compute(params))
+
+
+@pytest.mark.unit
+def test_share_parameters_four_objects():
+    """Tests ShareParameters with 4 objects."""
+    eq1 = desc.examples.get("SOLOVEV")
+    eq2 = eq1.copy()
+    eq3 = eq1.copy()
+    eq4 = eq1.copy()
+
+    subobj = ShareParameters([eq1, eq2, eq3, eq4], {"p_l": True})
+    subobj.build()
+    obj = ObjectiveFunction(subobj)
+    obj.build()
+
+    # check dimensions
+    assert subobj.dim_f == 3 * eq1.params_dict["p_l"].size
+    np.testing.assert_allclose(subobj.target, 0)
+
+    # check compute
+    np.testing.assert_allclose(obj.compute_unscaled(obj.x(eq1, eq2, eq3, eq4)), 0)
+
+    # check the jacobian
+    J = obj.jac_unscaled(obj.x(eq1, eq2, eq3, eq4))
+    # make sure Jacobian is not trivial
+    assert not np.allclose(J, 0)
+    # now, check that each row sums to zero, and abs(J) rows sum to 2,
+    # meaning each row has only 2 nonzero elements which are 1 and -1,
+    J_row_sums = J.sum(axis=1)
+    abs_J_row_sums = np.abs(J).sum(axis=1)
+    np.testing.assert_allclose(abs_J_row_sums, 2)
+    np.testing.assert_allclose(J_row_sums, 0)
+    # TODO: add more tests for when not every index of given param is fixed
+
+
+@pytest.mark.unit
+def test_share_parameters_two_optimizable_collections_CoilSet():
+    """Tests ShareParameters with 2 CoilSets."""
+    coils1 = CoilSet.linspaced_angular(FourierXYZCoil(), n=2)
+    coils2 = coils1.copy()
+
+    subobj = ShareParameters([coils1, coils2], {"X_n": True, "Y_n": True, "Z_n": True})
+    subobj.build()
+    obj = ObjectiveFunction(subobj)
+    obj.build()
+
+    # check dimensions
+    # dim_f should be 2 (for the 2 subcoils in each coilset) x 3 (for X_n, Y_n, Z_n)
+    # x params["X_n"].size
+    assert subobj.dim_f == 2 * 3 * coils1.params_dict[0]["X_n"].size
+    np.testing.assert_allclose(subobj.target, 0)
+
+    # check compute
+    np.testing.assert_allclose(obj.compute_unscaled(obj.x(coils1, coils2)), 0)
+
+    # check the jacobian
+    J = obj.jac_unscaled(obj.x(coils1, coils2))
+
+    # make sure Jacobian is not trivial
+    assert not np.allclose(J, 0)
+    # now, check that each row sums to zero, and abs(J) rows sum to 2,
+    # meaning each row has only 2 nonzero elements which are 1 and -1,
+    J_row_sums = J.sum(axis=1)
+    abs_J_row_sums = np.abs(J).sum(axis=1)
+    np.testing.assert_allclose(abs_J_row_sums, 2)
+    np.testing.assert_allclose(J_row_sums, 0)
+    # TODO: add more tests for when not every index of given param is fixed

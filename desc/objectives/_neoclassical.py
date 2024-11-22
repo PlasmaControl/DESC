@@ -8,7 +8,7 @@ from desc.compute.utils import _compute as compute_fun
 from desc.grid import LinearGrid
 from desc.utils import Timer
 
-from ..integrals.quad_utils import (
+from ..integrals.quad_utils import (  # chebgauss,
     automorphism_sin,
     chebgauss2,
     get_quadrature,
@@ -368,6 +368,8 @@ class GammaC(_Objective):
 
     """
 
+    _static_attrs = ["rho"]
+
     _coordinates = "r"
     _units = "~"
     _print_value_fmt = "Γ_c: "
@@ -400,13 +402,16 @@ class GammaC(_Objective):
 
         rho, alpha = np.atleast_1d(rho, alpha)
         self._dim_f = rho.size
-        self._constants = {
+        self._rho = np.atleast_1d(rho)  # setting self.rho as an instance attirbute
+
+        zeta = np.linspace(
+            0, 2 * np.pi * num_transit, knots_per_transit * num_transit
+        )  # define zeta earlier
+        grid = LinearGrid(rho=rho, theta=alpha, zeta=zeta)
+
+        self._constants = {  # remove rho from constants, add grid
+            "grid": grid,  # replace rho, zeta, alpha with combined linear grid
             "quad_weights": 1,
-            "rho": rho,
-            "alpha": alpha,
-            "zeta": np.linspace(
-                0, 2 * np.pi * num_transit, knots_per_transit * num_transit
-            ),
         }
         self._hyperparameters = {
             "num_quad": num_quad,
@@ -447,14 +452,14 @@ class GammaC(_Objective):
         """
         eq = self.things[0]
         self._grid_1dr = LinearGrid(
-            rho=self._constants["rho"], M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym
+            rho=self._rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym
         )
         self._constants["quad"] = get_quadrature(
             leggauss(self._hyperparameters.pop("num_quad")),
             (automorphism_sin, grad_automorphism_sin),
         )
         self._target, self._bounds = _parse_callable_target_bounds(
-            self._target, self._bounds, self._constants["rho"]
+            self._target, self._bounds, self._rho
         )
 
         timer = Timer()
@@ -496,7 +501,12 @@ class GammaC(_Objective):
         if constants is None:
             constants = self.constants
         eq = self.things[0]
-        # TODO: compute all deps of gamma here
+        # TO DO: compute all deps of gamma here
+
+        # Access rho, alpha, zeta from unified grid
+
+        rtzgrid = constants["grid"]
+
         data = compute_fun(
             eq,
             self._keys_1dr,
@@ -504,15 +514,18 @@ class GammaC(_Objective):
             constants["transforms_1dr"],
             constants["profiles"],
         )
-        # TODO: interpolate all deps to this grid with fft utilities from fourier bounce
+
         grid = eq._get_rtz_grid(
-            constants["rho"],
-            constants["alpha"],
-            constants["zeta"],
+            rtzgrid.nodes[rtzgrid.unique_rho_idx, 0],
+            rtzgrid.nodes[rtzgrid.unique_theta_idx, 1],
+            rtzgrid.nodes[rtzgrid.unique_zeta_idx, 2],
             coordinates="raz",
             iota=self._grid_1dr.compress(data["iota"]),
             params=params,
         )
+
+        # TODO: interpolate all deps to this grid with fft utilities from fourier bounce
+
         data = {
             key: grid.copy_data_from_other(data[key], self._grid_1dr)
             for key in self._keys_1dr
@@ -621,6 +634,8 @@ class Gammad(_Objective):
 
     """
 
+    _static_attrs = ["rho"]
+
     _coordinates = "r"
     _units = "~"
     _print_value_fmt = "Γ_d: "
@@ -653,9 +668,13 @@ class Gammad(_Objective):
 
         rho, alpha = np.atleast_1d(rho, alpha)
         self._dim_f = rho.size
+
+        # setting self.rho as an instance attirbute
+        self._rho = np.atleast_1d(rho)
+
+        # removing rho from constants
         self._constants = {
             "quad_weights": 1,
-            "rho": rho,
             "alpha": alpha,
             "zeta": np.linspace(
                 0, 2 * np.pi * num_transit, knots_per_transit * num_transit
@@ -670,6 +689,7 @@ class Gammad(_Objective):
         self._keys_1dr = ["iota", "iota_r", "min_tz |B|", "max_tz |B|"]
 
         self._key = "Gamma_d Velasco"
+        self._constants["quad"] = chebgauss2(num_quad)
         self._constants["quad2"] = chebgauss2(num_quad)
 
         super().__init__(
@@ -697,15 +717,18 @@ class Gammad(_Objective):
 
         """
         eq = self.things[0]
+
+        # Change from constants here
         self._grid_1dr = LinearGrid(
-            rho=self._constants["rho"], M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym
+            rho=self._rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym
         )
-        self._constants["quad"] = get_quadrature(
-            leggauss(self._hyperparameters.pop("num_quad")),
-            (automorphism_sin, grad_automorphism_sin),
-        )
+        # and here
         self._target, self._bounds = _parse_callable_target_bounds(
-            self._target, self._bounds, self._constants["rho"]
+            self._target, self._bounds, self._rho
+        )
+
+        self._target, self._bounds = _parse_callable_target_bounds(
+            self._target, self._bounds, self._rho
         )
 
         timer = Timer()
@@ -756,8 +779,9 @@ class Gammad(_Objective):
             constants["profiles"],
         )
         # TODO: interpolate all deps to this grid with fft utilities from fourier bounce
+        # update rho here
         grid = eq._get_rtz_grid(
-            constants["rho"],
+            self._rho,
             constants["alpha"],
             constants["zeta"],
             coordinates="raz",

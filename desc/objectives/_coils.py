@@ -1088,6 +1088,9 @@ class QuadraticFlux(_Objective):
     (B_coil + B_plasma)*n. The equilibrium is kept fixed while the
     field is unfixed.
 
+    Note: This objective is intended for coil optimization. For finding the surface
+    that minimizes the normal field error, use the SurfaceQuadraticFlux objective.
+
     Parameters
     ----------
     eq : Equilibrium
@@ -1292,6 +1295,10 @@ class SurfaceQuadraticFlux(_Objective):
     Should always be used along with a ``ToroidalFlux`` or ``Volume`` objective to
     ensure that the resulting QFM surface has the desired amount of
     flux enclosed and avoid trivial solutions.
+
+    Note: This objective can be used with ``field_fixed=True`` to find the QFM surface
+    by fixing the coils, however the surface is always free to change. For coil
+    optimization, use the ``QuadraticFlux`` objective.
 
     Parameters
     ----------

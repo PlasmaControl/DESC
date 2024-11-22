@@ -9,6 +9,8 @@ Bug Fixes
 
 - Fixes bug that occurs when taking the gradient of ``root`` and ``root_scalar`` with newer versions of JAX (>=0.4.34) and unpins the JAX version
 - Changes ``FixLambdaGauge`` constraint to now enforce zero flux surface average for lambda, instead of enforcing lambda(rho,0,0)=0 as it was incorrectly doing before.
+- Fixes bug in ``softmin/softmax`` implementation.
+
 
 v0.12.3
 -------

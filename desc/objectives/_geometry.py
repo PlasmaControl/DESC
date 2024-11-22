@@ -496,12 +496,9 @@ class PlasmaVesselDistance(_Objective):
         False by default, so that self.things = [eq, surface]
         Both cannot be True.
     softmin_alpha: float, optional
-        Parameter used for softmin. The larger softmin_alpha, the closer the softmin
-        approximates the hardmin. softmin -> hardmin as softmin_alpha -> infinity.
-        if softmin_alpha*array < 1, the underlying softmin will automatically multiply
-        the array by 2/min_val to ensure that softmin_alpha*array>1. Making
-        softmin_alpha larger than this minimum value will make the softmin a
-        more accurate approximation of the true min.
+        Parameter used for softmin. The larger ``softmin_alpha``, the closer the
+        softmin approximates the hardmin. softmin -> hardmin as
+        ``softmin_alpha`` -> infinity.
 
     """
 

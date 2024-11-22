@@ -1,4 +1,5 @@
 import numbers
+import warnings
 
 import numpy as np
 
@@ -1279,7 +1280,7 @@ class QuadraticFlux(_Objective):
             params=field_params,
         )
         B_ext = jnp.sum(B_ext * eval_data["n_rho"], axis=-1)
-        f = (B_ext + B_plasma) * eval_data["|e_theta x e_zeta|"]
+        f = (B_ext + B_plasma) * jnp.sqrt(eval_data["|e_theta x e_zeta|"])
         return f
 
 
@@ -1867,3 +1868,210 @@ class CoilSetLinkingNumber(_Objective):
         )
 
         return jnp.abs(link).sum(axis=0)
+
+
+class SurfaceCurrentRegularization(_Objective):
+    """Target the surface current magnitude.
+
+    compute::
+
+        w * ||K|| * sqrt(||e_theta x e_zeta||)
+
+    where K is the winding surface current density, w is the
+    regularization parameter (the weight on this objective),
+    and ||e_theta x e_zeta|| is the magnitude of the surface normal i.e. the
+    surface jacobian ||e_theta x e_zeta||
+
+    This is intended to be used with a surface current::
+
+        K = n x ∇ Φ
+
+    i.e. a CurrentPotentialField
+
+    Intended to be used with a QuadraticFlux objective, to form
+    a problem similar to the REGCOIL algorithm described in [1]_ (if used with a
+    ``FourierCurrentPotentialField``, is equivalent to the ``simple``
+    regularization of the ``solve_regularized_surface_current`` method).
+
+    References
+    ----------
+    .. [1] Landreman, Matt. "An improved current potential method for fast computation
+      of stellarator coil shapes." Nuclear Fusion (2017).
+
+    Parameters
+    ----------
+    surface_current_field : CurrentPotentialField
+        Surface current which is producing the magnetic field, the parameters
+        of this will be optimized to minimize the objective.
+    source_grid : Grid, optional
+        Collocation grid containing the nodes to evaluate current source at on
+        the winding surface. If used in conjunction with the QuadraticFlux objective,
+        with its ``field_grid`` matching this ``source_grid``, this replicates the
+        REGCOIL algorithm described in [1]_ .
+
+    """
+
+    weight_str = (
+        "weight : {float, ndarray}, optional"
+        "\n\tWeighting to apply to the Objective, relative to other Objectives."
+        "\n\tMust be broadcastable to to Objective.dim_f"
+        "\n\tWhen used with QuadraticFlux objective, this acts as the regularization"
+        "\n\tparameter (with w^2 = lambda), with 0 corresponding to no regularization."
+        "\n\tThe larger this parameter is, the less complex the surface current will "
+        "be,\n\tbut the worse the normal field."
+    )
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``target=0``.",
+        bounds_default="``target=0``.",
+        overwrite={"weight": weight_str},
+    )
+
+    _coordinates = "tz"
+    _units = "A/m"
+    _print_value_fmt = "Surface Current Regularization: "
+
+    def __init__(
+        self,
+        surface_current_field,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        loss_function=None,
+        deriv_mode="auto",
+        source_grid=None,
+        name="surface-current-regularization",
+    ):
+        from desc.magnetic_fields import (
+            CurrentPotentialField,
+            FourierCurrentPotentialField,
+        )
+
+        if target is None and bounds is None:
+            target = 0
+        assert isinstance(
+            surface_current_field, (CurrentPotentialField, FourierCurrentPotentialField)
+        ), (
+            "surface_current_field must be a CurrentPotentialField or "
+            + f"FourierCurrentPotentialField, instead got {type(surface_current_field)}"
+        )
+        self._surface_current_field = surface_current_field
+        self._source_grid = source_grid
+
+        super().__init__(
+            things=[surface_current_field],
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            loss_function=loss_function,
+            deriv_mode=deriv_mode,
+            name=name,
+        )
+
+    def build(self, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        from desc.magnetic_fields import FourierCurrentPotentialField
+
+        surface_current_field = self.things[0]
+        if isinstance(surface_current_field, FourierCurrentPotentialField):
+            M_Phi = surface_current_field._M_Phi
+            N_Phi = surface_current_field._N_Phi
+        else:
+            M_Phi = surface_current_field.M
+            N_Phi = surface_current_field.N
+
+        if self._source_grid is None:
+            source_grid = LinearGrid(
+                M=3 * M_Phi + 1,
+                N=3 * N_Phi + 1,
+                NFP=surface_current_field.NFP,
+            )
+        else:
+            source_grid = self._source_grid
+
+        if not np.allclose(source_grid.nodes[:, 0], 1):
+            warnings.warn("Source grid includes off-surface pts, should be rho=1")
+
+        # source_grid.num_nodes for the regularization cost
+        self._dim_f = source_grid.num_nodes
+        self._surface_data_keys = ["K", "|e_theta x e_zeta|"]
+
+        timer = Timer()
+        if verbose > 0:
+            print("Precomputing transforms")
+        timer.start("Precomputing transforms")
+
+        surface_transforms = get_transforms(
+            self._surface_data_keys,
+            obj=surface_current_field,
+            grid=source_grid,
+            has_axis=source_grid.axis.size,
+        )
+        if self._normalize:
+            if isinstance(surface_current_field, FourierCurrentPotentialField):
+                self._normalization = np.max(
+                    [abs(surface_current_field.I) + abs(surface_current_field.G), 1]
+                )
+            else:  # it does not have I,G bc is CurrentPotentialField
+                Phi = surface_current_field.compute("Phi", grid=source_grid)["Phi"]
+                self._normalization = np.max(
+                    [
+                        np.mean(np.abs(Phi)),
+                        1,
+                    ]
+                )
+
+        self._constants = {
+            "surface_transforms": surface_transforms,
+            "quad_weights": source_grid.weights * jnp.sqrt(source_grid.num_nodes),
+        }
+
+        timer.stop("Precomputing transforms")
+        if verbose > 1:
+            timer.disp("Precomputing transforms")
+
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, surface_params=None, constants=None):
+        """Compute surface current regularization.
+
+        Parameters
+        ----------
+        surface_params : dict
+            Dictionary of surface degrees of freedom,
+            eg FourierCurrentPotential.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
+
+        Returns
+        -------
+        f : ndarray
+            The surface current density magnitude on the source surface.
+
+        """
+        if constants is None:
+            constants = self.constants
+
+        surface_data = compute_fun(
+            self._surface_current_field,
+            self._surface_data_keys,
+            params=surface_params,
+            transforms=constants["surface_transforms"],
+            profiles={},
+        )
+
+        K_mag = safenorm(surface_data["K"], axis=-1)
+        return K_mag * jnp.sqrt(surface_data["|e_theta x e_zeta|"])

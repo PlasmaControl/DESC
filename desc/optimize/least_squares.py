@@ -2,7 +2,7 @@
 
 from scipy.optimize import OptimizeResult
 
-from desc.backend import jax, jnp, qr
+from desc.backend import jnp, qr
 from desc.utils import errorif, setdefault
 
 from .bound_utils import (
@@ -272,7 +272,7 @@ def lsqtr(  # noqa: C901
             U, s, Vt = jnp.linalg.svd(J_a, full_matrices=False)
         elif tr_method == "cho":
             B_h = jnp.dot(J_a.T, J_a)
-        elif tr_method == "qr":
+        elif tr_method == "qr" or tr_method == "direct":
             # try full newton step
             tall = J_a.shape[0] >= J_a.shape[1]
             if tall:
@@ -281,10 +281,6 @@ def lsqtr(  # noqa: C901
             else:
                 Q, R = qr(J_a.T, mode="economic")
                 p_newton = Q @ solve_triangular_regularized(R.T, -f_a, lower=True)
-        elif tr_method == "direct":
-            JTJ = J_a.T @ J_a
-            fp = -J_a.T @ f_a
-            p_newton = jax.scipy.linalg.solve(JTJ, fp, assume_a="sym")
 
         actual_reduction = -1
 
@@ -310,7 +306,7 @@ def lsqtr(  # noqa: C901
                 )
             elif tr_method == "direct":
                 step_h, hits_boundary, alpha = trust_region_step_exact_direct(
-                    p_newton, fp, JTJ, trust_radius, alpha
+                    p_newton, f_a, Q, R, trust_radius, alpha
                 )
             step = d * step_h  # Trust-region solution in the original space.
 

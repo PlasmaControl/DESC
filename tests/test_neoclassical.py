@@ -237,7 +237,7 @@ def test_Gamma_d_opt_batch_true():
 
 @pytest.mark.regression
 def test_Gamma_c_opt():
-    """Test that an optimizatin with Gamma_c works without failing."""
+    """Test that an optimization with Gamma_c works without failing."""
     eq = get("ESTELL")
     with pytest.warns(UserWarning):
         eq.change_resolution(4, 4, 4, 8, 8, 8)
@@ -289,12 +289,10 @@ def test_Gamma_c_opt():
 
 @pytest.mark.regression
 def test_Gamma_c_opt_batch_True():
-    """Test that an optimizatin with Gamma_c works without failing w/ batch=True."""
+    """Test that an optimization with Gamma_c works without failing w/ batch=True."""
     eq = get("ESTELL")
-    # FIXME: needs diff res than the other test to avoid an error with jit caching,
-    # once fixed, make it same res
     with pytest.warns(UserWarning):
-        eq.change_resolution(4, 3, 3, 6, 6, 6)
+        eq.change_resolution(4, 4, 4, 8, 8, 8)
     k = 1
 
     alpha = np.array([0.0])

@@ -285,6 +285,12 @@ def test_Gamma_c_opt():
         constraints=constraints,
         maxiter=2,  # just testing that no errors occur during JIT/AD of the objective
     )
+    # run same thing again to ensure the bug in #1288 is fixed
+    eq.optimize(
+        objective=objective,
+        constraints=constraints,
+        maxiter=2,  # just testing that no errors occur during JIT/AD of the objective
+    )
 
 
 @pytest.mark.regression

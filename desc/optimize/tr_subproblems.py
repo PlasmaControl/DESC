@@ -484,7 +484,7 @@ def trust_region_step_exact_qr(
 
 @jit
 def trust_region_step_exact_direct(
-    p_newton, fa, Q, R, trust_radius, initial_alpha=None, rtol=0.005, max_iter=10
+    p_newton, fa, Q, R, trust_radius, initial_alpha=None, rtol=1e-5, max_iter=100
 ):
     """Solve a trust-region problem using a semi-exact method.
 
@@ -532,7 +532,7 @@ def trust_region_step_exact_direct(
         alpha_lower = 0.0
         alpha = setdefault(initial_alpha, 0.001 * alpha_upper)
         alpha_prev = 0.8 * alpha
-        p = solve_triangular(R + alpha_prev * jnp.eye(R.shape[0]), QTf)
+        p = solve_triangular_regularized(R + alpha_prev * jnp.eye(R.shape[0]), QTf)
         phi_prev = jnp.linalg.norm(p) - trust_radius
         k = 0
 
@@ -548,7 +548,7 @@ def trust_region_step_exact_direct(
                 alpha,
             )
 
-            p = solve_triangular(R + alpha * jnp.eye(R.shape[0]), QTf)
+            p = solve_triangular_regularized(R + alpha * jnp.eye(R.shape[0]), QTf)
             p_norm = jnp.linalg.norm(p)
             phi = p_norm - trust_radius
             alpha_upper = jnp.where(phi < 0, alpha, alpha_upper)

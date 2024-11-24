@@ -1,5 +1,6 @@
 """Tests for magnetic field classes."""
 
+import matplotlib.pyplot as plt
 import numpy as np
 import pytest
 from diffrax import Dopri5
@@ -28,6 +29,7 @@ from desc.magnetic_fields import (
     VerticalMagneticField,
     field_line_integrate,
     read_BNORM_file,
+    solve_regularized_surface_current,
 )
 from desc.magnetic_fields._dommaschk import CD_m_k, CN_m_k
 from desc.utils import dot
@@ -558,6 +560,123 @@ class TestMagneticFields:
         )
 
     @pytest.mark.unit
+    @pytest.mark.mpl_image_compare(remove_text=True, tolerance=10)
+    def test_fourier_current_potential_field_modular_coil_cut(self):
+        """Test Fourier current potential coil cut against analytic solenoid."""
+        surface = FourierRZToroidalSurface(
+            R_lmn=jnp.array([20, 3]),
+            Z_lmn=jnp.array([0, -3]),
+            modes_R=jnp.array([[0, 0], [1, 0]]),
+            modes_Z=jnp.array([[0, 0], [-1, 0]]),
+            NFP=5,
+        )
+        # make a current potential corresponding a purely poloidal current
+        G = 1e4  # net poloidal current
+        correct_field = lambda R, phi, Z: jnp.array([[0, mu_0 * G / 2 / jnp.pi / R, 0]])
+
+        field = FourierCurrentPotentialField(
+            I=0,
+            G=-G,
+            sym_Phi="sin",
+            R_lmn=surface.R_lmn,
+            Z_lmn=surface.Z_lmn,
+            modes_R=surface._R_basis.modes[:, 1:],
+            modes_Z=surface._Z_basis.modes[:, 1:],
+            NFP=surface.NFP,
+        )
+        coils = field.to_CoilSet(10, stell_sym=True, show_plots=True).to_FourierXYZ(
+            N=2, grid=LinearGrid(N=8), check_intersection=False
+        )
+
+        np.testing.assert_allclose(
+            coils.compute_magnetic_field(
+                [20.0, 0, 0],
+            ),
+            correct_field(20.0, 0, 0),
+            atol=1e-8,
+            rtol=1e-8,
+        )
+        np.testing.assert_allclose(
+            coils.compute_magnetic_field([20.0, np.pi / 4, 0]),
+            correct_field(20.0, np.pi / 4, 0),
+            atol=1e-8,
+            rtol=1e-8,
+        )
+        return plt.gcf()
+
+    @pytest.mark.unit
+    def test_fourier_current_potential_field_helical_coil_cut(self):
+        """Test Fourier current potential helix coil cut against analytic solenoid."""
+        surface = FourierRZToroidalSurface(
+            R_lmn=jnp.array([20, 3]),
+            Z_lmn=jnp.array([0, -3]),
+            modes_R=jnp.array([[0, 0], [1, 0]]),
+            modes_Z=jnp.array([[0, 0], [-1, 0]]),
+            NFP=10,
+        )
+        # make a current potential corresponding a helical current
+        # with a sharp pitch (approximating a toroidal solenoid)
+        G = 2e2  # net poloidal current
+        I = 1
+        correct_field = lambda R, phi, Z: jnp.array([[0, mu_0 * G / 2 / jnp.pi / R, 0]])
+
+        field = FourierCurrentPotentialField(
+            I=I,
+            G=-G,
+            sym_Phi="sin",
+            R_lmn=surface.R_lmn,
+            Z_lmn=surface.Z_lmn,
+            modes_R=surface._R_basis.modes[:, 1:],
+            modes_Z=surface._Z_basis.modes[:, 1:],
+            NFP=10,
+        )
+
+        coils = field.to_CoilSet(1)
+
+        np.testing.assert_allclose(
+            coils.compute_magnetic_field([20.0, 0, 0], source_grid=LinearGrid(N=700)),
+            correct_field(20.0, 0, 0),
+            atol=2e-8,
+            rtol=1e-8,
+        )
+        np.testing.assert_allclose(
+            coils.compute_magnetic_field(
+                [20.0, np.pi / 4, 0], source_grid=LinearGrid(N=700)
+            ),
+            correct_field(20.0, np.pi / 4, 0),
+            atol=2e-8,
+            rtol=1e-8,
+        )
+        # check with opposite helicity current
+        field = FourierCurrentPotentialField(
+            I=I,
+            G=G,
+            sym_Phi="sin",
+            R_lmn=surface.R_lmn,
+            Z_lmn=surface.Z_lmn,
+            modes_R=surface._R_basis.modes[:, 1:],
+            modes_Z=surface._Z_basis.modes[:, 1:],
+            NFP=10,
+        )
+
+        coils = field.to_CoilSet(1)
+
+        np.testing.assert_allclose(
+            -coils.compute_magnetic_field([20.0, 0, 0], source_grid=LinearGrid(N=700)),
+            correct_field(20.0, 0, 0),
+            atol=2e-8,
+            rtol=1e-8,
+        )
+        np.testing.assert_allclose(
+            -coils.compute_magnetic_field(
+                [20.0, np.pi / 4, 0], source_grid=LinearGrid(N=700)
+            ),
+            correct_field(20.0, np.pi / 4, 0),
+            atol=2e-8,
+            rtol=1e-8,
+        )
+
+    @pytest.mark.unit
     def test_fourier_current_potential_vector_potential(self):
         """Test Fourier current potential vector potential against analytic result."""
         R0 = 10
@@ -901,6 +1020,27 @@ class TestMagneticFields:
         # ensure can compute field at a point without incompatible size error
         field.compute_magnetic_field([10.0, 0, 0])
 
+    @pytest.mark.unit
+    def test_fourier_current_potential_field_coil_cut_warnings(self):
+        """Test Fourier current potential coil cut method warning."""
+        curr = 1e4
+        # with this choice of Phi_mn, the constant Phi contours
+        # move so much that they intersect the boundaries of where we
+        # plot them, that should return a warning
+        # TODO: When we switch from the visual coil cutting method, remove this
+        field = FourierCurrentPotentialField(
+            I=curr,
+            G=curr,
+            Phi_mn=np.array([-4 * curr / 13]),
+            modes_Phi=np.array([[-1, 0]]),
+        )
+
+        with pytest.warns(
+            UserWarning,
+            match="Detected",
+        ):
+            field.to_CoilSet(2)
+
     @pytest.mark.slow
     @pytest.mark.unit
     def test_spline_field(self, tmpdir_factory):
@@ -1243,6 +1383,44 @@ class TestMagneticFields:
         np.testing.assert_allclose(B_axis_lowres, B_axis_highres, rtol=6e-3)
         np.testing.assert_allclose(B_half_lowres, B_half_highres, rtol=3e-3)
         np.testing.assert_allclose(B_lcfs_lowres, B_lcfs_highres, rtol=4e-3)
+
+    @pytest.mark.unit
+    def test_solve_current_potential_warnings_and_errors(self):
+        """Test solve current potential warnings/errors."""
+        field = FourierCurrentPotentialField(I=0, G=1, sym_Phi="sin")
+        eq = get("SOLOVEV")
+        with pytest.warns(UserWarning, match="Reducing radial"):
+            eq.change_resolution(L=1, M=1, N=1, L_grid=1, M_grid=1, N_grid=1)
+        with pytest.raises(ValueError, match="length"):
+            solve_regularized_surface_current(field, eq, current_helicity=(1, 1, 1))
+        with pytest.raises(ValueError, match="integer"):
+            solve_regularized_surface_current(field, eq, current_helicity=(1.2, 1))
+        with pytest.raises(ValueError, match="regularization"):
+            solve_regularized_surface_current(
+                field, eq, regularization_type="not a valid option"
+            )
+        with pytest.raises(ValueError, match="Expected Fourier"):
+            solve_regularized_surface_current(ToroidalMagneticField(1, 1), eq)
+        with pytest.raises(AssertionError, match="Expected MagneticField"):
+            solve_regularized_surface_current(field, eq, external_field=eq)
+        field = FourierCurrentPotentialField(I=0, G=1, sym_Phi="cos")
+        grid = LinearGrid(M=1, N=1)
+        # nested with pytest.warns, if a warning is not detected it is
+        # re-emitted and goes through the higher level context,
+        #  this lets us test 3 different warnings with one fxn
+        # call here
+        with pytest.warns(UserWarning, match="Detected"):
+            with pytest.warns(UserWarning, match="Pressure"):
+                with pytest.warns(UserWarning, match="Current"):
+                    solve_regularized_surface_current(
+                        field,
+                        eq,
+                        eval_grid=grid,
+                        source_grid=grid,
+                        vc_source_grid=grid,
+                        verbose=0,
+                        vacuum=True,
+                    )
 
 
 @pytest.mark.unit

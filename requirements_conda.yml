@@ -22,3 +22,4 @@ dependencies:
     - plotly >= 5.16, < 6.0
     - pylatexenc >= 2.0, < 3.0
     - quadax >= 0.2.2
+    - scikit-image

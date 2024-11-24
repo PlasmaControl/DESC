@@ -33,9 +33,9 @@ _bounce_overwrite = {
     "deriv_mode": """
     deriv_mode : {"auto", "fwd", "rev"}
         Specify how to compute Jacobian matrix, either forward mode or reverse mode AD.
-        "auto" selects forward or reverse mode based on the size of the input and output
-        of the objective. Has no effect on ``self.grad`` or ``self.hess`` which always
-        use reverse mode and forward over reverse mode respectively.
+        ``auto`` selects forward or reverse mode based on the size of the input and
+        output of the objective. Has no effect on ``self.grad`` or ``self.hess`` which
+        always use reverse mode and forward over reverse mode respectively.
 
         Default is ``fwd``. If ``rev`` is chosen, then ``jac_chunk_size=1`` is chosen
         by default. In ``rev`` mode, reducing the pitch angle parameter ``batch_size``
@@ -493,7 +493,7 @@ class GammaC(_Objective):
         """
         if constants is None:
             constants = self.constants
-        if "quad2" in constants:
+        if "quad2 x" in constants:
             self._hyperparam["quad2"] = (constants["quad2 x"], constants["quad2 w"])
 
         eq = self.things[0]

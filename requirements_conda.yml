@@ -9,7 +9,7 @@ dependencies:
   - netcdf4 >= 1.5.4, < 2.0
   - numpy >= 1.20.0
   - psutil
-  - scipy >= 1.7.0, < 2.0
+  - scipy >= 1.7.0
   - termcolor
   - pip
   - pip:
@@ -22,3 +22,4 @@ dependencies:
     - plotly >= 5.16, < 6.0
     - pylatexenc >= 2.0, < 3.0
     - quadax >= 0.2.2
+    - scikit-image

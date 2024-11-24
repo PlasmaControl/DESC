@@ -1382,7 +1382,7 @@ def _iota_num_rrr(params, transforms, profiles, data, **kwargs):
                 - beta * data["sqrt(g)_rrr"],
                 data["sqrt(g)"],
             ),
-            # Todo: axis limit of beta_rrr
+            # TODO(#587): axis limit of beta_rrr
             #   Computed with four applications of l’Hôpital’s rule.
             #   Requires sqrt(g)_rrrr and fourth derivatives of basis vectors.
             jnp.nan,
@@ -1660,7 +1660,7 @@ def _iota_den_rrr(params, transforms, profiles, data, **kwargs):
             - gamma * data["sqrt(g)_rrr"],
             data["sqrt(g)"],
         ),
-        # Todo: axis limit
+        # TODO(#587): axis limit
         #   Computed with four applications of l’Hôpital’s rule.
         #   Requires sqrt(g)_rrrr and fourth derivatives of basis vectors.
         jnp.nan,
@@ -1717,7 +1717,7 @@ def _q(params, transforms, profiles, data, **kwargs):
     return data
 
 
-# TODO: add K(rho,theta,zeta)*grad(rho) term
+# TODO (#1381): add K(rho,theta,zeta)*grad(rho) term
 @register_compute_fun(
     name="I",
     label="I",

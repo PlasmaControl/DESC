@@ -319,9 +319,11 @@ class _MagneticField(IOAble, ABC):
         Returns
         -------
         Bnorm : ndarray
-            The normal magnetic field to the surface given, of size grid.num_nodes.
+            The normal magnetic field to the surface given, as an array of
+            size ``grid.num_nodes``.
         coords: ndarray
-            the locations (in specified basis) at which the Bnormal was calculated
+            the locations (in specified basis) at which the Bnormal was calculated,
+            given as a ``(grid.num_nodes , 3)`` shaped array.
 
         """
         calc_Bplasma = False
@@ -2401,7 +2403,7 @@ class OmnigenousField(Optimizable, IOAble):
             assert len(x_lmn) == self.x_basis.num_modes
             self._x_lmn = x_lmn
 
-        # TODO: should we not allow some types of helicity?
+        # TODO (#1390): should we not allow some types of helicity?
         helicity_sign = sign(helicity[0]) * sign(helicity[1])
         warnif(
             self.helicity != (0, self.NFP * helicity_sign)

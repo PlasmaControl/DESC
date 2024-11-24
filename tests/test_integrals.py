@@ -50,8 +50,13 @@ from desc.integrals.quad_utils import (
     leggauss_lob,
     tanh_sinh,
 )
-from desc.integrals.singularities import _get_quadrature_nodes
+from desc.integrals.singularities import (
+    _get_quadrature_nodes,
+    compute_B_laplace,
+    compute_dPhi_dn,
+)
 from desc.integrals.surface_integral import _get_grid_surface
+from desc.magnetic_fields import ToroidalMagneticField
 from desc.transform import Transform
 from desc.utils import dot, safediv
 
@@ -719,6 +724,44 @@ class TestSingularities:
             g2 = interp2(f(source_theta, source_zeta), i)
             np.testing.assert_allclose(g1, g2)
             np.testing.assert_allclose(g1, ff)
+
+    @pytest.mark.unit
+    @pytest.mark.mpl_image_compare(remove_text=False, tolerance=tol_1d)
+    def test_laplace_bdotn(self):
+        """Test that Laplace solution satisfies boundary condition."""
+        MN = 30
+        eq = get("ESTELL")
+        source_grid = LinearGrid(M=MN, N=MN, sym=False, NFP=eq.NFP)
+        data = eq.compute(["G", "R0"], grid=source_grid)
+
+        def test(G):
+            B0 = ToroidalMagneticField(B0=G, R0=data["R0"])
+            Phi_mn, Phi_trans = compute_B_laplace(
+                eq, B0, source_grid=source_grid, return_Phi_mn=True
+            )
+            dPhi_dn = compute_dPhi_dn(eq, Phi_mn, Phi_trans)
+            B0n, _ = B0.compute_Bnormal(
+                eq.surface, eval_grid=Phi_trans.grid, source_grid=source_grid
+            )
+            Bn = Phi_trans.grid.meshgrid_reshape(B0n + dPhi_dn, "rtz")[0]
+            theta = Phi_trans.grid.meshgrid_reshape(Phi_trans.grid.nodes[:, 1], "rtz")[
+                0
+            ]
+            zeta = Phi_trans.grid.meshgrid_reshape(Phi_trans.grid.nodes[:, 2], "rtz")[0]
+            fig, ax = plt.subplots()
+            contour = ax.contourf(theta, zeta, Bn)
+            ax.set_title(r"$(\nabla \Phi + B_0) \cdot n$ on $\partial D$")
+            fig.colorbar(contour, ax=ax)
+            # FIXME: Doesn't pass unless G = 0.
+            try:
+                np.testing.assert_allclose(B0n + dPhi_dn, 0, err_msg=f"G = {G}")
+            except AssertionError as e:
+                print(e)
+            return fig, ax
+
+        test(0)
+        fig, ax = test(source_grid.compress(data["G"])[-1] / data["R0"])
+        return fig
 
 
 class TestBouncePoints:

@@ -5,7 +5,7 @@ from abc import ABC, abstractmethod
 import numpy as np
 import scipy
 from interpax import fft_interp2d
-from jax.experimental.sparse import jacfwd
+from jax import jacfwd
 from scipy.constants import mu_0
 
 from desc.backend import fori_loop, jnp, put, vmap
@@ -907,12 +907,13 @@ def compute_B_plasma(eq, eval_grid, source_grid=None, normal_only=False):
 def compute_B_laplace(
     eq,
     B0,
-    eval_grid,
+    eval_grid=None,
     source_grid=None,
     Phi_grid=None,
     Phi_M=None,
     Phi_N=None,
     sym=False,
+    return_Phi_mn=False,
 ):
     """Compute magnetic field in interior of plasma due to vacuum potential.
 
@@ -934,7 +935,7 @@ def compute_B_laplace(
     If 𝐁₀ ≠ 0 and satisfies ∇ × 𝐁₀ = 0, then ∇²Φ = 0 solved
     under an inhomogeneous boundary condition yields a non-trivial solution.
     If 𝐁₀ ≠ -∇Φ, then 𝐁 ≠ 0.
-    Note that 𝐁₀ is not chosen. It must be the solution to ∇ × 𝐁₀ = μ₀ 𝐉.
+    Note that 𝐁₀ is not chosen. It must be a solution to ∇ × 𝐁₀ = μ₀ 𝐉.
 
     Parameters
     ----------
@@ -962,11 +963,15 @@ def compute_B_laplace(
     sym : str
         ``DoubleFourierSeries`` basis symmetry.
         Default is no symmetry.
+    return_Phi_mn : bool
+        Whether to return Fourier coefficients of Φ on the boundary.
 
     Returns
     -------
     B : jnp.ndarray
         Magnetic field evaluated on ``eval_grid``.
+    Phi_mn, Phi_trans : jnp.ndarray, Transform
+        Fourier coefficients of Φ on the boundary and transforms.
 
     """
     from desc.magnetic_fields import FourierCurrentPotentialField
@@ -978,6 +983,7 @@ def compute_B_laplace(
         sym=sym,
     )
 
+    assert eval_grid is not None or return_Phi_mn
     if source_grid is None:
         source_grid = LinearGrid(
             rho=np.array([1.0]),
@@ -1047,6 +1053,9 @@ def compute_B_laplace(
     ).squeeze() / (2 * jnp.pi)
     # Fourier coefficients of Φ on boundary
     Phi_mn, _, _, _ = jnp.linalg.lstsq(A, RHS)
+    # np.testing.assert_allclose(LHS(Phi_mn), A @ Phi_mn, atol=1e-12)  # noqa: E801
+    if return_Phi_mn:
+        return Phi_mn, trans_Phi_grid
 
     # 𝐁 - 𝐁₀ = ∇Φ = 𝐁_vacuum in the interior.
     # Merkel eq. 1.4 is the Green's function solution to ∇²Φ = 0 in the interior.
@@ -1058,3 +1067,35 @@ def compute_B_laplace(
     coords = jnp.column_stack([data["R"], data["phi"], data["Z"]])
     B = (B0 + grad_Phi).compute_magnetic_field(coords, source_grid=source_grid)
     return B
+
+
+def compute_dPhi_dn(eq, Phi_mn, Phi_trans):
+    """Computes ∇Φ ⋅ n on ∂D.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Configuration with surface geometry defining ∂D.
+    Phi_mn : jnp.ndarray
+        Fourier coefficients of Φ on the boundary.
+    Phi_trans : Transform
+        Transform of ``DoubleFourierSeries`` built on ``Phi_grid``,
+        i.e. points on ∂D.
+
+    Returns
+    -------
+    dPhi_dn : jnp.ndarray
+        Shape (``Phi_trans.grid.num_nodes``, ).
+        ∇Φ ⋅ n on ∂D.
+
+    """
+    Phi_trans.change_derivatives(1)
+    Phi_t = Phi_trans.transform(Phi_mn, dt=1)
+    Phi_z = Phi_trans.transform(Phi_mn, dz=1)
+    data = eq.compute(["e^theta", "e^zeta", "n_rho"], grid=Phi_trans.grid)
+    dPhi_dn = dot(
+        Phi_t[:, jnp.newaxis] * data["e^theta"]
+        + Phi_z[:, jnp.newaxis] * data["e^zeta"],
+        data["n_rho"],
+    )
+    return dPhi_dn

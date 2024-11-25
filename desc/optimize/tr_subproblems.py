@@ -427,11 +427,11 @@ def trust_region_step_exact_qr(
         fp = jnp.pad(f, (0, J.shape[1]))
 
         def loop_cond(state):
-            alpha, alpha_lower, alpha_upper, phi, k = state
+            p, alpha, alpha_lower, alpha_upper, phi, k = state
             return (jnp.abs(phi) > rtol * trust_radius) & (k < max_iter)
 
         def loop_body(state):
-            alpha, alpha_lower, alpha_upper, phi, k = state
+            p, alpha, alpha_lower, alpha_upper, phi, k = state
 
             alpha = jnp.where((alpha < alpha_lower), alpha_lower, alpha)
             alpha = jnp.where((alpha > alpha_upper), alpha_upper, alpha)
@@ -453,15 +453,13 @@ def trust_region_step_exact_qr(
             alpha = jnp.where((alpha < alpha_lower), alpha_lower, alpha)
             alpha = jnp.where((alpha > alpha_upper), alpha_upper, alpha)
             k += 1
-            return alpha, alpha_lower, alpha_upper, phi, k
+            return p, alpha, alpha_lower, alpha_upper, phi, k
 
-        alpha, *_ = while_loop(
-            loop_cond, loop_body, (alpha, alpha_lower, alpha_upper, jnp.inf, k)
+        p, alpha, *_ = while_loop(
+            loop_cond,
+            loop_body,
+            (p_newton, alpha, alpha_lower, alpha_upper, jnp.inf, k),
         )
-
-        Ji = jnp.vstack([J, jnp.sqrt(alpha) * jnp.eye(J.shape[1])])
-        Q, R = qr(Ji, mode="economic")
-        p = solve_triangular(R, -Q.T @ fp)
 
         # Make the norm of p equal to trust_radius; p is changed only slightly.
         # This is done to prevent p from lying outside the trust region

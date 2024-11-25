@@ -4,10 +4,7 @@ from desc.backend import jnp
 from desc.compute import get_profiles, get_transforms
 from desc.compute.utils import _compute as compute_fun
 from desc.grid import LinearGrid
-from desc.magnetic_fields._current_potential import (
-    _compute_A_or_B_from_CurrentPotentialField,
-)
-from desc.utils import Timer, warnif
+from desc.utils import Timer
 
 from .objective_funs import _Objective
 
@@ -163,32 +160,40 @@ class FluxLoop(_Objective):
             Level of output.
 
         """
+        from desc.magnetic_fields._current_potential import (
+            _compute_A_or_B_from_CurrentPotentialField,
+        )
+
+        self._compute_A_or_B_from_CurrentPotentialField = (
+            _compute_A_or_B_from_CurrentPotentialField
+        )
         eq = self._eq
 
         if self._normalize:
             self._normalization = eq.Psi
-
-        # ensure vacuum eq, as is unneeded for finite beta
-        pres = np.max(np.abs(eq.compute("p")["p"]))
-        curr = np.max(np.abs(eq.compute("current")["current"]))
-        warnif(
-            pres > 1e-8,
-            UserWarning,
-            f"Pressure appears to be non-zero (max {pres} Pa), "
-            + "this objective is unneeded at finite beta.",
-        )
-        warnif(
-            curr > 1e-8,
-            UserWarning,
-            f"Current appears to be non-zero (max {curr} A), "
-            + "this objective is unneeded at finite beta.",
-        )
 
         timer = Timer()
         if verbose > 0:
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
         self._eq_vc_data_keys = ["K_vc", "R", "phi", "Z"]
+
+        if self._vc_source_grid is None:
+            # for axisymmetry we still need to know about toroidal effects, so its
+            # cheapest to pretend there are extra field periods
+            self._vc_source_grid = LinearGrid(
+                rho=np.array([1.0]),
+                M=eq.M_grid,
+                N=eq.N_grid,
+                NFP=eq.NFP if eq.N > 0 else 64,
+                sym=False,
+            )
+        if self._flux_loop_grid is None:
+            # for axisymmetry we still need to know about toroidal effects, so its
+            # cheapest to pretend there are extra field periods
+            self._flux_loop_grid = LinearGrid(
+                N=50,
+            )
 
         eq_transforms = get_transforms(
             self._eq_vc_data_keys, self._eq, grid=self._vc_source_grid
@@ -312,8 +317,8 @@ class FluxLoop(_Objective):
 
             # get plasma contribution
             if not self._vacuum:
-                Aplasma = _compute_A_or_B_from_CurrentPotentialField(
-                    self._coils,
+                Aplasma = self._compute_A_or_B_from_CurrentPotentialField(
+                    self._coils,  # this is unused, just pass a dummy variable in
                     flux_loop_data[i]["x"],
                     source_grid=constants["vc_source_grid"],
                     compute_A_or_B="A",
@@ -479,6 +484,14 @@ class RogowskiLoop(_Objective):
             Level of output.
 
         """
+        from desc.magnetic_fields._current_potential import (
+            _compute_A_or_B_from_CurrentPotentialField,
+        )
+
+        self._compute_A_or_B_from_CurrentPotentialField = (
+            _compute_A_or_B_from_CurrentPotentialField
+        )
+
         eq = self._eq
 
         if self._normalize:
@@ -493,22 +506,6 @@ class RogowskiLoop(_Objective):
                 NFP=eq.NFP if eq.N > 0 else 64,
                 sym=False,
             )
-
-        # ensure vacuum eq, as is unneeded for finite beta
-        pres = np.max(np.abs(eq.compute("p")["p"]))
-        curr = np.max(np.abs(eq.compute("current")["current"]))
-        warnif(
-            pres > 1e-8,
-            UserWarning,
-            f"Pressure appears to be non-zero (max {pres} Pa), "
-            + "this objective is unneeded at finite beta.",
-        )
-        warnif(
-            curr > 1e-8,
-            UserWarning,
-            f"Current appears to be non-zero (max {curr} A), "
-            + "this objective is unneeded at finite beta.",
-        )
 
         timer = Timer()
         if verbose > 0:
@@ -636,7 +633,7 @@ class RogowskiLoop(_Objective):
 
             # get plasma contribution
             if not self._vacuum:
-                Bplasma = _compute_A_or_B_from_CurrentPotentialField(
+                Bplasma = self._compute_A_or_B_from_CurrentPotentialField(
                     self._coils,
                     flux_loop_data[i]["x"],
                     source_grid=constants["vc_source_grid"],

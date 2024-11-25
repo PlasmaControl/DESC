@@ -727,32 +727,42 @@ class TestSingularities:
 
     @pytest.mark.unit
     @pytest.mark.mpl_image_compare(remove_text=False, tolerance=tol_1d)
-    def test_laplace_bdotn(self):
+    @pytest.mark.parametrize("eq", [get("DSHAPE"), get("ESTELL")])
+    def test_laplace_bdotn(self, eq):
         """Test that Laplace solution satisfies boundary condition."""
-        MN = 30
-        eq = get("ESTELL")
+        MN = 40
         source_grid = LinearGrid(M=MN, N=MN, sym=False, NFP=eq.NFP)
         data = eq.compute(["G", "R0"], grid=source_grid)
 
         def test(G):
-            B0 = ToroidalMagneticField(B0=G, R0=data["R0"])
+            B0 = ToroidalMagneticField(B0=G / data["R0"], R0=data["R0"])
             Phi_mn, Phi_trans = compute_B_laplace(
-                eq, B0, source_grid=source_grid, return_Phi_mn=True
+                eq,
+                B0,
+                source_grid=source_grid,
+                Phi_N=max(eq.N, 1),
+                return_Phi_mn=True,
             )
             dPhi_dn = compute_dPhi_dn(eq, Phi_mn, Phi_trans)
             B0n, _ = B0.compute_Bnormal(
                 eq.surface, eval_grid=Phi_trans.grid, source_grid=source_grid
             )
+
+            # Get data as function of theta, zeta on the only flux surface (LCFS).
             Bn = Phi_trans.grid.meshgrid_reshape(B0n + dPhi_dn, "rtz")[0]
             theta = Phi_trans.grid.meshgrid_reshape(Phi_trans.grid.nodes[:, 1], "rtz")[
                 0
             ]
             zeta = Phi_trans.grid.meshgrid_reshape(Phi_trans.grid.nodes[:, 2], "rtz")[0]
+
             fig, ax = plt.subplots()
             contour = ax.contourf(theta, zeta, Bn)
             ax.set_title(r"$(\nabla \Phi + B_0) \cdot n$ on $\partial D$")
             fig.colorbar(contour, ax=ax)
-            # FIXME: Doesn't pass unless G = 0.
+            # FIXME: Doesn't pass unless G = 0 for stellarators, indicating some bug
+            #  in the computation of Phi_mn and hence the surface integrals. grad Phi
+            #  is a periodic function, and Phi should be as well so Phi_mn should
+            #  capture Phi.
             try:
                 np.testing.assert_allclose(B0n + dPhi_dn, 0, err_msg=f"G = {G}")
             except AssertionError as e:
@@ -760,7 +770,7 @@ class TestSingularities:
             return fig, ax
 
         test(0)
-        fig, ax = test(source_grid.compress(data["G"])[-1] / data["R0"])
+        fig, ax = test(source_grid.compress(data["G"])[-1])
         return fig
 
 

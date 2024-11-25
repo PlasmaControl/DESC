@@ -995,9 +995,9 @@ def compute_B_laplace(
     if Phi_grid is None:
         Phi_grid = LinearGrid(
             rho=np.array([1.0]),
-            M=eq.M_grid,
-            N=eq.N_grid,
-            NFP=eq.NFP if eq.N > 0 else 64,
+            M=2 * basis.M,
+            N=2 * basis.N,
+            NFP=basis.NFP if basis.N > 0 else 64,
             sym=False,
         )
     assert source_grid.is_meshgrid

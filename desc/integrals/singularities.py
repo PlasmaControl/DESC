@@ -747,7 +747,7 @@ def _kernel_Phi_dG_dn(eval_data, source_data, diag=False):
 
 
 _kernel_Phi_dG_dn.ndim = 1
-_kernel_Phi_dG_dn.keys = ["R", "phi", "Z", "Phi", "|e_theta x e_zeta|", "n_rho"]
+_kernel_Phi_dG_dn.keys = ["R", "phi", "Z", "Phi", "n_rho"]
 
 kernels = {
     "1_over_r": _kernel_1_over_r,
@@ -1079,9 +1079,9 @@ def compute_Phi_mn(
         )
         interpolator = DFTInterpolator(Phi_grid, source_grid, s, q)
 
-    names = ["R", "phi", "Z", "n_rho"]
+    names = ["R", "phi", "Z"]
     Phi_data = eq.compute(names, grid=Phi_grid)
-    src_data = eq.compute(names + ["|e_theta x e_zeta|"], grid=source_grid)
+    src_data = eq.compute(names + ["n_rho"], grid=source_grid)
     src_data["Bn"] = B0n
     src_transform = Transform(source_grid, basis)
     Phi_transform = Transform(Phi_grid, basis)
@@ -1170,7 +1170,7 @@ def compute_grad_Phi(
         )
         interpolator = DFTInterpolator(eval_grid, source_grid, s, q)
 
-    names = ["R", "phi", "Z", "n_rho"]
+    names = ["R", "phi", "Z"]
     evl_data = eq.compute(names, grid=eval_grid)
     transform = Transform(source_grid, basis, derivs=1)
     src_data = {
@@ -1182,16 +1182,17 @@ def compute_grad_Phi(
         grid=source_grid,
         data=src_data,
     )
-    src_data["K^zeta"] = src_data["Phi_t"] / src_data["|e_theta x e_zeta|"]
     src_data["K^theta"] = -src_data["Phi_z"] / src_data["|e_theta x e_zeta|"]
+    src_data["K^zeta"] = src_data["Phi_t"] / src_data["|e_theta x e_zeta|"]
     src_data["K_vc"] = (
-        src_data["K^zeta"][:, jnp.newaxis] * src_data["e_zeta"]
-        + src_data["K^theta"][:, jnp.newaxis] * src_data["e_theta"]
+        src_data["K^theta"][:, jnp.newaxis] * src_data["e_theta"]
+        + src_data["K^zeta"][:, jnp.newaxis] * src_data["e_zeta"]
     )
 
     # ∇Φ = ∂Φ/∂ρ ∇ρ + ∂Φ/∂θ ∇θ + ∂Φ/∂ζ ∇ζ
     # but we can not obtain ∂Φ/∂ρ from Φₘₙ. Biot-Savart gives
-    # ∇Φ(x ∈ ∂D) = 1/2π ∫_∂D df' (n × ∇Φ) × ∇G(x,x')
+    # K_vc = n × ∇Φ
+    # ∇Φ(x ∈ ∂D) = 1/2π ∫_∂D df' K_vc × ∇G(x,x')
     # where ∇G is the double layer Green's kernel.
     # (Same instructions but divide by 2 for x ∈ D).
     grad_Phi = (
@@ -1258,7 +1259,7 @@ def _dPhi_dn_triple_layer(
 
     names = ["R", "phi", "Z", "n_rho"]
     evl_data = eq.compute(names, grid=eval_grid)
-    src_data = eq.compute(names + ["|e_theta x e_zeta|"], grid=source_grid)
+    src_data = eq.compute(names, grid=source_grid)
     src_data["Bn"] = B0n
     I2 = -singular_integral(
         evl_data,

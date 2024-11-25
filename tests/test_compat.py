@@ -284,9 +284,11 @@ def test_rescale():
 def test_rotate_zeta():
     """Test rotating Equilibrium around Z axis."""
     eq = get("ARIES-CS")
+    with pytest.warns(UserWarning, match="Reducing radial"):
+        eq.change_resolution(L=5, M=5, N=5)
     eq_no_sym = eq.copy()
     eq_no_sym.change_resolution(sym=False)
-    with pytest.warns():
+    with pytest.warns(UserWarning, match="Rotating"):
         dzeta1 = np.pi / 2
         eq1 = rotate_zeta(eq, dzeta1, copy=True)
 
@@ -302,6 +304,14 @@ def test_rotate_zeta():
     assert np.allclose(eq_no_sym.R_lmn, eq2.R_lmn)
     assert np.allclose(eq_no_sym.Z_lmn, eq2.Z_lmn)
     assert np.allclose(eq_no_sym.L_lmn, eq2.L_lmn)
+
+    # check that rotating by pi/NFP and -pi/NFP is the same
+    dzeta3 = -np.pi * eq.NFP
+    eq3 = rotate_zeta(eq, dzeta3, copy=True)
+    eq4 = rotate_zeta(eq, -dzeta3, copy=True)
+    assert np.allclose(eq4.R_lmn, eq3.R_lmn)
+    assert np.allclose(eq4.Z_lmn, eq3.Z_lmn)
+    assert np.allclose(eq4.L_lmn, eq3.L_lmn)
 
     # check that rotation of AS eq stays the same
     eq = get("DSHAPE")

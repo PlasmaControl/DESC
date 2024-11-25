@@ -14,7 +14,6 @@ from .bound_utils import (
 )
 from .tr_subproblems import (
     trust_region_step_exact_cho,
-    trust_region_step_exact_direct,
     trust_region_step_exact_qr,
     trust_region_step_exact_svd,
     update_tr_radius,
@@ -233,11 +232,9 @@ def lsqtr(  # noqa: C901
         "Unknown options: {}".format([key for key in options]),
     )
     errorif(
-        tr_method not in ["cho", "svd", "qr", "direct"],
+        tr_method not in ["cho", "svd", "qr"],
         ValueError,
-        "tr_method should be one of 'cho', 'svd', 'qr', 'direct', got {}".format(
-            tr_method
-        ),
+        "tr_method should be one of 'cho', 'svd', 'qr', got {}".format(tr_method),
     )
 
     callback = setdefault(callback, lambda *args: False)
@@ -272,7 +269,7 @@ def lsqtr(  # noqa: C901
             U, s, Vt = jnp.linalg.svd(J_a, full_matrices=False)
         elif tr_method == "cho":
             B_h = jnp.dot(J_a.T, J_a)
-        elif tr_method == "qr" or tr_method == "direct":
+        elif tr_method == "qr":
             # try full newton step
             tall = J_a.shape[0] >= J_a.shape[1]
             if tall:
@@ -303,10 +300,6 @@ def lsqtr(  # noqa: C901
             elif tr_method == "qr":
                 step_h, hits_boundary, alpha = trust_region_step_exact_qr(
                     p_newton, f_a, J_a, trust_radius, alpha
-                )
-            elif tr_method == "direct":
-                step_h, hits_boundary, alpha = trust_region_step_exact_direct(
-                    p_newton, f_a, Q, R, trust_radius, alpha
                 )
             step = d * step_h  # Trust-region solution in the original space.
 

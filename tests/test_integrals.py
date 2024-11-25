@@ -52,7 +52,7 @@ from desc.integrals.quad_utils import (
 )
 from desc.integrals.singularities import (
     _get_quadrature_nodes,
-    compute_grad_Phi,
+    compute_dPhi_dn,
     compute_Phi_mn,
 )
 from desc.integrals.surface_integral import _get_grid_surface
@@ -743,15 +743,13 @@ class TestSingularities:
                 eq=eq, B0n=B0n, source_grid=src_grid, Phi_N=max(eq.N, 1)
             )
             evl_grid = Phi_transform.grid
-            grad_Phi, evl_data = compute_grad_Phi(
+            dPhi_dn = compute_dPhi_dn(
                 eq=eq,
                 eval_grid=evl_grid,
                 source_grid=src_grid,
                 Phi_mn=Phi_mn,
                 basis=Phi_transform.basis,
-                return_data=True,
             )
-            dPhi_dn = dot(grad_Phi, evl_data["n_rho"])
             B0n, _ = B0.compute_Bnormal(
                 eq.surface, eval_grid=evl_grid, source_grid=src_grid
             )

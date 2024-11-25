@@ -1117,15 +1117,8 @@ def compute_Phi_mn(
     return Phi_mn, Phi_transform
 
 
-def compute_grad_Phi(
-    eq,
-    eval_grid,
-    source_grid,
-    Phi_mn,
-    basis,
-    return_data=False,
-):
-    """Computes vacuum field ∇Φ on ∂D.
+def compute_dPhi_dn(eq, eval_grid, source_grid, Phi_mn, basis):
+    """Computes vacuum field ∇Φ ⋅ n on ∂D.
 
     Let D, D^∁ denote the interior, exterior of a toroidal region with
     boundary ∂D. Computes the magnetic field 𝐁 in units of Tesla such that
@@ -1148,14 +1141,12 @@ def compute_grad_Phi(
         Fourier coefficients of Φ on the boundary.
     basis : DoubleFourierSeries
         Basis for Φₘₙ.
-    return_data : bool
-        Whether to return data evaluated on ``eval_grid``.
 
     Returns
     -------
-    grad_Phi : jnp.ndarray
+    dPhi_dn : jnp.ndarray
         Shape (``eval_grid.grid.num_nodes``, 3).
-        Vacuum field ∇Φ on ∂D.
+        Vacuum field ∇Φ ⋅ n on ∂D.
 
     """
     k = min(source_grid.num_theta, source_grid.num_zeta * source_grid.NFP)
@@ -1171,7 +1162,7 @@ def compute_grad_Phi(
         interpolator = DFTInterpolator(eval_grid, source_grid, s, q)
 
     names = ["R", "phi", "Z"]
-    evl_data = eq.compute(names, grid=eval_grid)
+    evl_data = eq.compute(names + ["n_rho"], grid=eval_grid)
     transform = Transform(source_grid, basis, derivs=1)
     src_data = {
         "Phi_t": transform.transform(Phi_mn, dt=1),
@@ -1193,25 +1184,18 @@ def compute_grad_Phi(
     # but we can not obtain ∂Φ/∂ρ from Φₘₙ. Biot-Savart gives
     # K_vc = n × ∇Φ
     # ∇Φ(x ∈ ∂D) = 1/2π ∫_∂D df' K_vc × ∇G(x,x')
-    # where ∇G is the double layer Green's kernel.
     # (Same instructions but divide by 2 for x ∈ D).
-    grad_Phi = (
-        1e7  # kernel assumes Phi in units of amperes but here it is Tesla-meter.
-        / (2 * jnp.pi)
+    dPhi_dn = dot(
+        1e7  # Biot-Savart kernel assumes Φ in units of amperes but ours is Tesla-meters
         * singular_integral(
-            evl_data,
-            src_data,
-            _kernel_biot_savart,
-            interpolator,
-            loop=True,
-        )
-    )
-    if return_data:
-        return grad_Phi, evl_data
-    return grad_Phi
+            evl_data, src_data, _kernel_biot_savart, interpolator, loop=True
+        ),
+        evl_data["n_rho"],
+    ) / (2 * jnp.pi)
+    return dPhi_dn
 
 
-# TODO: Correctness validation: test this gives same output as compute_dPhi_dn.
+# TODO: surface integral correctness validation: should match output of compute_dPhi_dn.
 def _dPhi_dn_triple_layer(
     eq,
     B0n,
@@ -1277,7 +1261,6 @@ def _dPhi_dn_triple_layer(
         interpolator,
         loop=True,
     )
-    # Gradient of eq. 1.3 in Merkel.
     dPhi_dn = -I1 + I2
     return dPhi_dn
 

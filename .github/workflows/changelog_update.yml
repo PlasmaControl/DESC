@@ -1,0 +1,35 @@
+name: Check changelog updated
+
+on:
+  pull_request:
+    branches:
+      - master
+    types: [opened, synchronize, labeled, unlabeled]
+
+jobs:
+  check_changelog_updated:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Filter changes
+        id: changes
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            has_changes:
+              - 'desc/**'
+              - 'requirements.txt'
+              - 'requirements_conda.yml'
+              - '.github/workflows/changelog_update.yml'
+
+      - name: Check for relevant changes
+        id: check_changes
+        run: echo "has_changes=${{ steps.changes.outputs.has_changes }}" >> $GITHUB_ENV
+
+      - uses: actions/checkout@v4
+
+      - if: ${{ !contains(github.event.pull_request.labels.*.name, 'skip_changelog') && env.has_changes == 'true'}}
+        uses: danieljimeneznz/ensure-files-changed@v4.1.1
+        with:
+          require-changes-to: |
+            CHANGELOG.md
+          token: ${{ secrets.GITHUB_TOKEN }}

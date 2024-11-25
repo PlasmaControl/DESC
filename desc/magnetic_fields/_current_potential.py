@@ -15,7 +15,7 @@ from desc.derivatives import Derivative
 from desc.geometry import FourierRZToroidalSurface
 from desc.grid import Grid, LinearGrid
 from desc.integrals import compute_B_plasma
-from desc.optimizable import Optimizable, optimizable_parameter
+from desc.optimizable import optimizable_parameter
 from desc.utils import (
     Timer,
     check_posint,
@@ -51,7 +51,8 @@ class CurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
     potential : callable
         function to compute the current potential. Should have a signature of
         the form potential(theta,zeta,**params) -> ndarray.
-        theta,zeta are poloidal and toroidal angles on the surface
+        theta,zeta are poloidal and toroidal angles on the surface.
+        Assumed to have units of Amperes.
     potential_dtheta: callable
         function to compute the theta derivative of the current potential
     potential_dzeta: callable
@@ -359,9 +360,7 @@ class CurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
         )
 
 
-class FourierCurrentPotentialField(
-    _MagneticField, FourierRZToroidalSurface, Optimizable
-):
+class FourierCurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
     """Magnetic field due to a surface current potential on a toroidal surface.
 
     Surface current K is assumed given by
@@ -384,15 +383,16 @@ class FourierCurrentPotentialField(
     ----------
     Phi_mn : ndarray
         Fourier coefficients of the double FourierSeries part of the current potential.
+        Has units of Amperes.
     modes_Phi : array-like, shape(k,2)
         Poloidal and Toroidal mode numbers corresponding to passed-in Phi_mn
         coefficients.
     I : float
         Net current linking the plasma and the surface toroidally
-        Denoted I in the algorithm
+        Denoted I in the algorithm, has units of Amperes.
     G : float
         Net current linking the plasma and the surface poloidally
-        Denoted G in the algorithm
+        Denoted G in the algorithm, has units of Amperes.
         NOTE: a negative G will tend to produce a positive toroidal magnetic field
         B in DESC, as in DESC the poloidal angle is taken to be positive
         and increasing when going in the clockwise direction, which with the
@@ -769,7 +769,7 @@ class FourierCurrentPotentialField(
         show_plots=False,
         npts=128,
         stell_sym=False,
-        figsize=(8, 6),
+        plot_kwargs={"figsize": (8, 6)},
     ):
         """Find helical or modular coils from this surface current potential.
 
@@ -792,7 +792,8 @@ class FourierCurrentPotentialField(
             Number of coils to discretize the surface current with.
             If the coils are modular (i.e. I=0), then this is the number of
             coils per field period. If the coils are stellarator-symmetric, then this
-            is the number of coils per half field-period.
+            is the number of coils per half field-period. The coils returned always
+            have a coil which passes through the theta=0 zeta=0 point of the surface.
         step : int, optional
             Amount of points to skip by when saving the coil geometry spline
             by default 1, meaning that every point will be saved
@@ -808,9 +809,10 @@ class FourierCurrentPotentialField(
         stell_sym : bool
             whether the coils are stellarator-symmetric or not. Defaults to False. Only
             matters for modular coils (currently)
-        figsize : tuple
-            figsize to pass to matplotlib figure call, to control size of figure
-            if ``show_plots=True``
+        plot_kwargs : dict
+            dict of kwargs to use when plotting the contour plots if ``show_plots=True``
+            ``figsize`` is used for the figure size, and the rest are passed to
+            ``plt.contourf``
 
         Returns
         -------
@@ -855,7 +857,7 @@ class FourierCurrentPotentialField(
             net_poloidal_current,
             net_toroidal_current,
             helicity,
-            figsize=figsize,
+            plot_kwargs=plot_kwargs,
         )
 
         ################################################################
@@ -1084,6 +1086,10 @@ def solve_regularized_surface_current(  # noqa: C901 fxn too complex
     corresponds to more regularization (consequently, higher Bn error but simpler
     and smaller surface currents).
 
+    If the ``simple`` regularization is used, the problem instead becomes::
+
+        min_Φₛᵥ  (B . n)^2 + λ  ||Φ_mn||^2
+
     Parameters
     ----------
     field : FourierCurrentPotentialField
@@ -1101,20 +1107,26 @@ def solve_regularized_surface_current(  # noqa: C901 fxn too complex
         that array and return a list of FourierCurrentPotentialFields, and the
         associated data.
     current_helicity : tuple of size 2, optional
-        Tuple of (q,p) used to determine coil topology, where q is the
-        number of poloidal transits a coil makes in one field period and
-        p is the number of toroidal transits a coil makes in one field period.
-        if p is zero and q nonzero, it corresponds to modular coil topology.
-        If both p,q are nonzero, it corresponds to helical coils.
-        If p,q are both zero, it corresponds to windowpane coils.
-        The net toroidal current (when q is nonzero) is set as
-        I = p(G-G_ext)/q/NFP
+        Tuple of ``(M_coil, N_coil)`` used to determine coil topology, where`` M_coil``
+        is the number of poloidal transits a coil makes before closing back on itself
+        and ``N_coil`` is the number of toroidal transits a coil makes before
+        returning back to itself.
+        if ``N_coil`` is zero and ``M_coil`` nonzero, it corresponds to modular
+        coil topology.
+        If both ``N_coil``,``M_coil`` are nonzero, it corresponds to helical coils.
+        If ``N_coil``,``M_coil`` are both zero, it corresponds to windowpane coils.
+        The net toroidal current (when ``M_coil`` is nonzero) is set as
+        ``I = N_coil(G-G_ext)/M_coil``
+        As an example, if helical coils which make one poloidal transit per field period
+        and close on themselves after one full toroidal transit are desired, that
+        corresponds to ``current_helicity = (1*NFP, 1)``
     vacuum : bool, optional
         if True, will not include the contribution to the normal field from the
         plasma currents.
     regularization_type : {"simple","regcoil"}
         whether to use a simple regularization based off of just the single-valued
         part of Phi, or to use the full REGCOIL regularization penalizing | K | ^ 2.
+        Defaults to ``"regcoil"``
     source_grid : Grid, optional
         Source grid upon which to evaluate the surface current when calculating
         the normal field on the plasma surface. Defaults to
@@ -1225,8 +1237,8 @@ def solve_regularized_surface_current(  # noqa: C901 fxn too complex
     )
 
     current_potential_field = field.copy()  # copy field so we can modify freely
-    q = current_helicity[0]  # poloidal transits before coil returns to itself
-    p = current_helicity[1]  # toroidal transits before coil returns to itself
+    M_coil = current_helicity[0]  # poloidal transits before coil returns to itself
+    N_coil = current_helicity[1]  # toroidal transits before coil returns to itself
 
     # maybe it is an EquilibriaFamily
     errorif(hasattr(eq, "__len__"), ValueError, "Expected a single equilibrium")
@@ -1290,15 +1302,15 @@ def solve_regularized_surface_current(  # noqa: C901 fxn too complex
     # G needed by surface current is the total G minus the external contribution
     G = G_tot - G_ext
     # calculate I, net toroidal current on winding surface
-    if p == 0 and q == 0:  # windowpane coils
+    if N_coil == 0 and M_coil == 0:  # windowpane coils
         I = G = 0
-    elif p == 0:  # modular coils
+    elif N_coil == 0:  # modular coils
         I = 0
-    elif q == 0:  # only toroidally closed coils, like PF coils
-        I = p * G_tot  # give some toroidal current corr. to p
+    elif M_coil == 0:  # only toroidally closed coils, like PF coils
+        I = N_coil * G_tot  # give some toroidal current corr. to N_coil
         G = 0  # because I==0
     else:  # helical coils
-        I = p * G / q / eq.NFP
+        I = N_coil * G / M_coil
 
     # define functions which will be differentiated
     def Bn_from_K(phi_mn, I, G):
@@ -1534,7 +1546,7 @@ def _find_current_potential_contours(
     net_poloidal_current=None,
     net_toroidal_current=None,
     helicity=None,
-    figsize=(8, 6),
+    plot_kwargs={},
 ):
     """Find contours of constant current potential (i.e. coils).
 
@@ -1576,7 +1588,7 @@ def _find_current_potential_contours(
         the helicity of the coil currents, should be consistent with the passed-in
         net currents. If None, will use the correct ratio of net poloidal and net
         toroidal currents.
-    figsize : tuple
+    plot_kwargs : tuple
             figsize to pass to matplotlib figure call, to control size of figure
             if ``show_plots=True``
 
@@ -1744,12 +1756,19 @@ def _find_current_potential_contours(
     )
 
     if show_plots:
-        plt.figure(figsize=figsize)
+        plt.figure(figsize=plot_kwargs.pop("figsize", (8, 6)))
         plt.contourf(
-            zeta_full_2D.T, theta_full_2D.T, jnp.transpose(phi_total_full), contours
+            zeta_full_2D.T,
+            theta_full_2D.T,
+            jnp.transpose(phi_total_full),
+            levels=100,
+            **plot_kwargs,
         )
         plt.xlabel(r"$\zeta$")
         plt.ylabel(r"$\theta$")
+        plt.xlim([np.min(zeta_full), np.max(zeta_full)])
+        plt.ylim([np.min(theta_full), np.max(theta_full)])
+
     for j in range(num_coils):
         contour_zeta.append(contours_theta_zeta[j][:, 0])
         contour_theta.append(contours_theta_zeta[j][:, 1])

@@ -292,13 +292,13 @@ def DummyMixedCoilSet(tmpdir_factory):
         vf_coil, displacement=[0, 0, 2], n=3, endpoint=True
     )
     xyz_coil = FourierXYZCoil(current=2)
-    phi = 2 * np.pi * np.linspace(0, 1, 20, endpoint=True) ** 2
+    phi = 2 * np.pi * np.linspace(0, 1, 20, endpoint=True)
     spline_coil = SplineXYZCoil(
         current=1,
         X=np.cos(phi),
         Y=np.sin(phi),
         Z=np.zeros_like(phi),
-        knots=np.linspace(0, 2 * np.pi, len(phi)),
+        knots=phi,
     )
     full_coilset = MixedCoilSet(
         (tf_coilset, vf_coilset, xyz_coil, spline_coil), check_intersection=False
@@ -364,7 +364,7 @@ def regcoil_helical_coils_scan():
         eval_grid=LinearGrid(M=20, N=20, NFP=eq.NFP, sym=True),
         source_grid=LinearGrid(M=40, N=40, NFP=eq.NFP),
         lambda_regularization=np.append(np.array([0.0]), np.logspace(-30, -1, 5)),
-        current_helicity=(1, -1),
+        current_helicity=(1 * eq.NFP, -1),
         vacuum=True,
         regularization_type="regcoil",
     )

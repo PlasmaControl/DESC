@@ -1254,10 +1254,7 @@ def test_regcoil_axisymmetric():
     np.testing.assert_allclose(
         surface_current_field.compute("Phi", grid=grid)["Phi"], correct_phi, atol=5e-9
     )
-    surface_current_field.change_Phi_resolution(
-        M=2,
-        N=2,
-    )
+    surface_current_field.change_Phi_resolution(M=2, N=2)
     # test with lambda_regularization large, should have no phi_mn
     surface_current_field, data = solve_regularized_surface_current(
         surface_current_field,
@@ -1366,11 +1363,7 @@ def test_regcoil_windowpane_check_B(regcoil_windowpane_coils):
 @pytest.mark.slow
 def test_regcoil_PF_check_B(regcoil_PF_coils):
     """Test precise QA PF (helicity=(0,2)) regcoil solution."""
-    (
-        data,
-        surface_current_field,
-        eq,
-    ) = regcoil_PF_coils
+    (data, surface_current_field, eq) = regcoil_PF_coils
     assert surface_current_field.G == 0
     assert abs(surface_current_field.I) > 0
     chi_B = data["chi^2_B"][0]
@@ -1394,11 +1387,7 @@ def test_regcoil_helical_coils_check_objective_method(
     regcoil_helical_coils_scan,
 ):
     """Test precise QA helical coil regcoil solution."""
-    (
-        data,
-        initial_surface_current_field,
-        eq,
-    ) = regcoil_helical_coils_scan
+    (data, initial_surface_current_field, eq) = regcoil_helical_coils_scan
     lam_index = 1
     lam = data["lambda_regularization"][lam_index]
     initial_surface_current_field.Phi_mn = data["Phi_mn"][lam_index]
@@ -1421,7 +1410,6 @@ def test_regcoil_helical_coils_check_objective_method(
         eval_grid=eval_grid,
         field_grid=sgrid,
         vacuum=True,
-        sqrt_area_weighting=True,
     )
 
     objective = ObjectiveFunction(
@@ -1522,6 +1510,8 @@ def test_second_stage_optimization():
         constraints=constraints,
         ftol=0,
         xtol=0,
+        gtol=0,
+        maxiter=100,
         verbose=2,
     )
     np.testing.assert_allclose(field[0].R0, 3.5)  # this value was fixed
@@ -1584,7 +1574,20 @@ def test_second_stage_optimization_CoilSet():
 
 @pytest.mark.slow
 @pytest.mark.unit
-def test_optimize_with_all_coil_types(DummyCoilSet, DummyMixedCoilSet):
+@pytest.mark.parametrize(
+    "coil_type",
+    [
+        "FourierPlanarCoil",
+        "FourierRZCoil",
+        "FourierXYZCoil",
+        "SplineXYZCoil",
+        "CoilSet sym",
+        "CoilSet asym",
+        "MixedCoilSet",
+        "nested CoilSet",
+    ],
+)
+def test_optimize_with_all_coil_types(DummyCoilSet, DummyMixedCoilSet, coil_type):
     """Test optimizing for every type of coil and dummy coil sets."""
     sym_coils = load(load_from=str(DummyCoilSet["output_path_sym"]), file_format="hdf5")
     asym_coils = load(
@@ -1600,66 +1603,63 @@ def test_optimize_with_all_coil_types(DummyCoilSet, DummyMixedCoilSet):
     quad_eval_grid = LinearGrid(M=2, sym=True)
     quad_field_grid = LinearGrid(N=2)
 
-    def test(c, method):
-        target = 11
-        rtol = 1e-3
-        # first just check that quad flux works for a couple iterations
-        # as this is an expensive objective to compute
-        obj = ObjectiveFunction(
-            QuadraticFlux(
-                eq=eq,
-                field=c,
-                vacuum=True,
-                weight=1e-4,
-                eval_grid=quad_eval_grid,
-                field_grid=quad_field_grid,
-            )
-        )
-        optimizer = Optimizer(method)
-        (c,), _ = optimizer.optimize(c, obj, maxiter=2, ftol=0, xtol=1e-15)
-
-        # now check with optimizing geometry and actually check result
-        objs = [
-            CoilLength(c, target=target),
-        ]
-        extra_msg = ""
-        if isinstance(c, MixedCoilSet):
-            # just to check they work without error
-            objs.extend(
-                [
-                    CoilCurvature(c, target=0.5, weight=1e-2),
-                    CoilTorsion(c, target=0, weight=1e-2),
-                ]
-            )
-            rtol = 3e-2
-            extra_msg = " with curvature and torsion obj"
-
-        obj = ObjectiveFunction(objs)
-
-        (c,), _ = optimizer.optimize(c, obj, maxiter=25, ftol=5e-3, xtol=1e-15)
-        flattened_coils = tree_leaves(
-            c, is_leaf=lambda x: isinstance(x, _Coil) and not isinstance(x, CoilSet)
-        )
-        lengths = [coil.compute("length")["length"] for coil in flattened_coils]
-        np.testing.assert_allclose(
-            lengths, target, rtol=rtol, err_msg=f"lengths {c}" + extra_msg
-        )
-
     spline_coil = mixed_coils.coils[-1].copy()
 
-    # single coil
-    test(FourierPlanarCoil(), "fmintr")
-    test(FourierRZCoil(), "fmintr")
-    test(FourierXYZCoil(), "fmintr")
-    test(spline_coil, "fmintr")
+    types = {
+        "FourierPlanarCoil": (FourierPlanarCoil(), "fmintr"),
+        "FourierRZCoil": (FourierRZCoil(), "fmintr"),
+        "FourierXYZCoil": (FourierXYZCoil(), "fmintr"),
+        "SplineXYZCoil": (spline_coil, "fmintr"),
+        "CoilSet sym": (sym_coils, "lsq-exact"),
+        "CoilSet asym": (asym_coils, "lsq-exact"),
+        "MixedCoilSet": (mixed_coils, "lsq-exact"),
+        "nested CoilSet": (nested_coils, "lsq-exact"),
+    }
+    c, method = types[coil_type]
 
-    # CoilSet
-    test(sym_coils, "lsq-exact")
-    test(asym_coils, "lsq-exact")
+    target = 11
+    rtol = 1e-3
+    # first just check that quad flux works for a couple iterations
+    # as this is an expensive objective to compute
+    obj = ObjectiveFunction(
+        QuadraticFlux(
+            eq=eq,
+            field=c,
+            vacuum=True,
+            weight=1e-4,
+            eval_grid=quad_eval_grid,
+            field_grid=quad_field_grid,
+        )
+    )
+    optimizer = Optimizer(method)
+    (cc,), _ = optimizer.optimize(c, obj, maxiter=2, ftol=0, xtol=1e-8, copy=True)
 
-    # MixedCoilSet
-    test(mixed_coils, "lsq-exact")
-    test(nested_coils, "lsq-exact")
+    # now check with optimizing geometry and actually check result
+    objs = [
+        CoilLength(c, target=target),
+    ]
+    extra_msg = ""
+    if isinstance(c, MixedCoilSet):
+        # just to check they work without error
+        objs.extend(
+            [
+                CoilCurvature(c, target=0.5, weight=1e-2),
+                CoilTorsion(c, target=0, weight=1e-2),
+            ]
+        )
+        rtol = 3e-2
+        extra_msg = " with curvature and torsion obj"
+
+    obj = ObjectiveFunction(objs)
+
+    (c,), _ = optimizer.optimize(c, obj, maxiter=25, ftol=5e-3, xtol=1e-8)
+    flattened_coils = tree_leaves(
+        c, is_leaf=lambda x: isinstance(x, _Coil) and not isinstance(x, CoilSet)
+    )
+    lengths = [coil.compute("length")["length"] for coil in flattened_coils]
+    np.testing.assert_allclose(
+        lengths, target, rtol=rtol, err_msg=f"lengths {c}" + extra_msg
+    )
 
 
 @pytest.mark.unit

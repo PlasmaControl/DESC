@@ -1029,6 +1029,7 @@ def _length_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
         data["length"] = jnp.sum(T * data["ds"])
     return data
 
+
 @register_compute_fun(
     name="centroid_tangent",
     label="\\mathbf{T}_{\\mathrm{Centroid}}",
@@ -1044,11 +1045,12 @@ def _length_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
     parameterization="desc.geometry.core.Curve",
 )
 def _centroid_tangent(params, transforms, profiles, data, **kwargs):
-    #this is defined identically to the Frenet-Serret tangent
+    # this is defined identically to the Frenet-Serret tangent
     data["centroid_tangent"] = (
         data["x_s"] / jnp.linalg.norm(data["x_s"], axis=-1)[:, None]
     )
     return data
+
 
 @register_compute_fun(
     name="centroid_normal",
@@ -1065,12 +1067,15 @@ def _centroid_tangent(params, transforms, profiles, data, **kwargs):
     parameterization="desc.geometry.core.Curve",
 )
 def _centroid_normal(params, transforms, profiles, data, **kwargs):
-    delta = data["x"] - data["center"] #do I need to convert this to xyz?
-    delta_orth = delta - dot(delta, data["centroid_tangent"])[:, None] * data["centroid_tangent"]
+    delta = data["x"] - data["center"]  # do I need to convert this to xyz?
+    delta_orth = (
+        delta - dot(delta, data["centroid_tangent"])[:, None] * data["centroid_tangent"]
+    )
     delta_orth = delta_orth / jnp.linalg.norm(delta_orth, axis=-1)[:, None]
     data["centroid_normal"] = delta_orth
 
     return data
+
 
 @register_compute_fun(
     name="centroid_binormal",
@@ -1089,6 +1094,6 @@ def _centroid_normal(params, transforms, profiles, data, **kwargs):
 def _centroid_binormal(params, transforms, profiles, data, **kwargs):
     data["centroid_binormal"] = cross(
         data["centroid_tangent"], data["centroid_normal"]
-    ) #TODO: figure out if rotation is necessary for these unit vecs
+    )  # TODO: figure out if rotation is necessary for these unit vecs
 
     return data

@@ -21,6 +21,7 @@ from desc.compute import get_params, rpz2xyz, rpz2xyz_vec, xyz2rpz, xyz2rpz_vec
 from desc.compute.geom_utils import reflection_matrix
 from desc.compute.utils import _compute as compute_fun
 from desc.compute.utils import safenorm
+from desc.compute.utils import dot
 from desc.geometry import (
     FourierPlanarCurve,
     FourierRZCurve,
@@ -148,11 +149,7 @@ def finite_build_regularization_rect(a, b):
     and self-inductance for electromagnetic coils. II. Rectangular cross-section" (2023)
     """
 
-    k = (
-        -(a ** 4 - 6 * a ** 2 * b ** 2 + b ** 4)
-        / (6 * a ** 2 * b ** 2)
-        * jnp.log(a / b + b / a)
-    )
+    k = -(a**4 - 6 * a**2 * b**2 + b**4) / (6 * a**2 * b**2) * jnp.log(a / b + b / a)
     +b * b / (6 * a * a) * jnp.log(b / a)
     +a * a / (6 * b * b) * jnp.log(a / b)
     +(4.0 * b) / (3 * a) * jnp.arctan(a / b)
@@ -163,7 +160,7 @@ def finite_build_regularization_rect(a, b):
     return a * b * delta
 
 
-@jit #TODO upgrade this with singularity subtraction method
+@jit  # TODO upgrade this with singularity subtraction method
 def biot_savart_quad_regularized(eval_pts, coil_pts, tangents, current, regularization):
     """Regularized Biot-Savart law for filamentary coil using numerical quadrature.
 
@@ -1026,12 +1023,9 @@ class _FramedCoil(_Coil, Optimizable, ABC):
 
     _io_attrs_ = _Coil._io_attrs_ + ["_alpha_n", "_alpha_basis"]
 
-    def __init__(self,        
-        alpha_n=[0, 0, 0],
-        modes=None,
-        *args, **kwargs):
+    def __init__(self, alpha_n=[0, 0, 0], modes=None, *args, **kwargs):
 
-        alpha_n= np.atleast_1d(alpha_n)
+        alpha_n = np.atleast_1d(alpha_n)
         if modes is None:
             modes = np.arange(-(alpha_n.size // 2), alpha_n.size // 2 + 1)
         else:
@@ -1062,16 +1056,17 @@ class _FramedCoil(_Coil, Optimizable, ABC):
                 f"alpha_n should have the same size as the basis, got {len(new)} for "
                 + f"basis with {self.alpha_basis.num_modes} modes."
             )
-        
+
     @property
     def alpha_basis(self):
         """Spectral basis for alpha Fourier series."""
         return self._alpha_basis
-    
+
     @property
     def alpha_N(self):
         """Maximum mode number."""
         return max(self._alpha_basis.N)
+
 
 class _FiniteBuildCoil(_FramedCoil, Optimizable, ABC):
     """Base class representing a magnetic field coil with finite build dimensions.
@@ -1088,7 +1083,9 @@ class _FiniteBuildCoil(_FramedCoil, Optimizable, ABC):
         Shape of the coil cross section, either 'circular' or 'rectangular'.
     """
 
-    _io_attrs_ = _FramedCoil._io_attrs_ + ["_cross_section_shape"] + ["_cross_section_dims"]
+    _io_attrs_ = (
+        _FramedCoil._io_attrs_ + ["_cross_section_shape"] + ["_cross_section_dims"]
+    )
 
     def __init__(self, cross_section_dims, cross_section_shape, *args, **kwargs):
         if cross_section_shape == "circular":
@@ -1189,7 +1186,7 @@ class FourierPlanarFiniteBuildCoil(_FiniteBuildCoil, FourierPlanarCoil):
         basis="xyz",
         name="",
     ):
-        alpha_n = [0,0,0] # by default, this coil has no twist
+        alpha_n = [0, 0, 0]  # by default, this coil has no twist
         alpha_modes = None
         super().__init__(
             cross_section_dims,
@@ -1205,7 +1202,9 @@ class FourierPlanarFiniteBuildCoil(_FiniteBuildCoil, FourierPlanarCoil):
             name,
         )
 
-    def compute_self_field(self, xsection_grid, centerline_grid=None, params=None):
+    def compute_self_field(
+        self, xsection_grid, centerline_grid=None, coil_frame=False, params=None
+    ):
         """Compute the magnetic field from the coil on the coil itself, with a rectangular cross section.
 
         Parameters
@@ -1216,6 +1215,8 @@ class FourierPlanarFiniteBuildCoil(_FiniteBuildCoil, FourierPlanarCoil):
         centerline_grid : LinearGrid or int, optional
             Grid used to evaluate the coil centerline. If an integer, uses that many equally spaced points.
             If provided, must be a 1D grid with N dimension corresponding to the centerline spacing desired.
+        coil_frame : bool, optional
+            Whether to compute the field in the t, p ,q coil frame. Default is False, which computes the field in the lab frame.
         params : dict, optional
             Parameters to pass to the coil object.
 
@@ -1223,17 +1224,23 @@ class FourierPlanarFiniteBuildCoil(_FiniteBuildCoil, FourierPlanarCoil):
         -------
         field : ndarray, shape(n,3)
             magnetic field at specified points, at a combination of the coil centerline and cross section grids.
-        """    
+        """
 
         if self.cross_section_shape == "circular":
-            return self.compute_self_field_circ(xsection_grid, centerline_grid, params)
+            return self.compute_self_field_circ(
+                xsection_grid, centerline_grid, coil_frame, params
+            )
         if self.cross_section_shape == "rectangular":
-            return self.compute_self_field_rect(xsection_grid, centerline_grid, params)
-    
-    def compute_self_field_rect(self, xsection_grid, centerline_grid=None, params=None):
+            return self.compute_self_field_rect(
+                xsection_grid, centerline_grid, coil_frame, params
+            )
+
+    def compute_self_field_rect(
+        self, xsection_grid, centerline_grid=None, coil_frame=False, params=None
+    ):
         """
         Compute the magnetic field from the coil on the coil itself, with a rectangular cross section.
-        """  
+        """
 
         # set cross section grid if not provided for u,v cross sectional coordinates
         if xsection_grid is None:
@@ -1241,15 +1248,23 @@ class FourierPlanarFiniteBuildCoil(_FiniteBuildCoil, FourierPlanarCoil):
         elif isinstance(xsection_grid, numbers.Integral):
             xsection_grid = LinearGrid(L=xsection_grid, M=xsection_grid, endpoint=True)
         else:
-            xsection_grid = xsection_grid.copy() #is this memory efficient? Don't want to mutate the input grid
+            xsection_grid = (
+                xsection_grid.copy()
+            )  # is this memory efficient? Don't want to mutate the input grid
 
         # set centerline grid if not provided for phi cross sectional coordinates
         if centerline_grid is None:
             centerline_grid = LinearGrid(N=50)
         elif isinstance(centerline_grid, numbers.Integral):
             centerline_grid = LinearGrid(N=centerline_grid)
-        
-        #expand the xsection grid to include the centerline grid dimensions
+
+        # validate the grid dimensions
+        if xsection_grid.N != 1:
+            raise ValueError("The cross section grid must have dimension N=1")
+        if centerline_grid.L != 1 or centerline_grid.M != 1:
+            raise ValueError("The centerline grid must have dimension L=1 and M=1")
+
+        # expand the xsection grid to include the centerline grid dimensions
         L = xsection_grid.L
         M = xsection_grid.M
         N = centerline_grid.N
@@ -1263,39 +1278,83 @@ class FourierPlanarFiniteBuildCoil(_FiniteBuildCoil, FourierPlanarCoil):
         curv1_frame = self.compute("curv1_frame", grid=centerline_grid, params=params)["curv1_frame"]
         curv2_frame = self.compute("curv2_frame", grid=centerline_grid, params=params)["curv2_frame"]
 
-        #expand the vector series to include the cross section dimensions
+        # expand the vector series to include the cross section dimensions
         p_frame = xsection_grid.expand(p_frame, "zeta")
         q_frame = xsection_grid.expand(q_frame, "zeta")
         curv1_frame = xsection_grid.expand(curv1_frame, "zeta")
         curv2_frame = xsection_grid.expand(curv2_frame, "zeta")
 
-        delta = finite_build_regularization_rect(self.cross_section_dims[0], self.cross_section_dims[1])
+        delta = finite_build_regularization_rect(
+            self.cross_section_dims[0], self.cross_section_dims[1]
+        )
 
-        #B_b and B_reg reg are only computed on the centerline
+        # B_b and B_reg reg are only computed on the centerline
         B_b_fb = self.compute("B_b_fb", grid=centerline_grid, params=params)["B_b_fb"]
 
-        #compute regularized self field integral
-        regularization = finite_build_regularization_rect(self.cross_section_dims[0], self.cross_section_dims[1])
+        # compute regularized self field integral
+        regularization = finite_build_regularization_rect(
+            self.cross_section_dims[0], self.cross_section_dims[1]
+        )
         data = self.compute(["x", "x_s", "ds"], grid=centerline_grid, params=params)
         B_reg_fb = biot_savart_quad_regularized(
-            data["x"], data["x"], data["x_s"] * data["ds"][:, None], self.current, regularization
+            data["x"],
+            data["x"],
+            data["x_s"] * data["ds"][:, None],
+            self.current,
+            regularization,
         )
 
         B_b_fb = xsection_grid.expand(B_b_fb, "zeta")
         B_reg_fb = xsection_grid.expand(B_reg_fb, "zeta")
 
-        #pack the parameters for the self field computation
-        B_fb_params = {"p_frame": p_frame, "q_frame": q_frame, "current": self.current, "cross_section_dims": self.cross_section_dims,
-                       "curv1_frame": curv1_frame, "curv2_frame": curv2_frame, "delta": delta}
+        # pack the parameters for the self field computation
+        B_fb_params = {
+            "p_frame": p_frame,
+            "q_frame": q_frame,
+            "current": self.current,
+            "cross_section_dims": self.cross_section_dims,
+            "curv1_frame": curv1_frame,
+            "curv2_frame": curv2_frame,
+            "delta": delta,
+        }
         B_fb_params = params | B_fb_params if params is not None else B_fb_params
 
-        B_0_fb = compute_fun(self, "B_0_fb", transforms={"grid":xsection_grid}, params=B_fb_params, profiles={})["B_0_fb"]
-        B_kappa_fb = compute_fun(self, "B_kappa_fb", transforms={"grid":xsection_grid}, params=B_fb_params, profiles={})["B_kappa_fb"]
+        B_0_fb = compute_fun(
+            self,
+            "B_0_fb",
+            transforms={"grid": xsection_grid},
+            params=B_fb_params,
+            profiles={},
+        )["B_0_fb"]
+        B_kappa_fb = compute_fun(
+            self,
+            "B_kappa_fb",
+            transforms={"grid": xsection_grid},
+            params=B_fb_params,
+            profiles={},
+        )["B_kappa_fb"]
 
-        return B_0_fb + B_kappa_fb + B_b_fb + B_reg_fb
+        B_self = B_0_fb + B_kappa_fb + B_b_fb + B_reg_fb
 
-    def compute_self_field_circ(self, xsection_grid, centerline_grid=None, params=None):
-        return NotImplementedError("Circular cross section self field not implemented yet")
+        if coil_frame:  # reproject the field to the t,p,q frame
+            t_frame = self.compute(
+                "centroid_tangent", grid=centerline_grid, params=params
+            )["centroid_tangent"]
+            t_frame = xsection_grid.expand(t_frame, "zeta")
+
+            B_t = dot(B_self, t_frame)
+            B_p = dot(B_self, p_frame)
+            B_q = dot(B_self, q_frame)
+            B_self = jnp.stack((B_t, B_p, B_q), axis=-1)
+
+        return B_self
+
+    def compute_self_field_circ(
+        self, xsection_grid, centerline_grid=None, coil_frame=False, params=None
+    ):
+        return NotImplementedError(
+            "Circular cross section self field not implemented yet"
+        )
 
 
 class CoilSet(OptimizableCollection, _Coil, MutableSequence):

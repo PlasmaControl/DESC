@@ -3530,15 +3530,21 @@ def _K_vc(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="s",
     data=["centroid_normal", "centroid_binormal"],
-    parameterization="desc.coils.FourierPlanarFiniteBuildCoil", #should be framedcoil ABC?
+    parameterization="desc.coils.FourierPlanarFiniteBuildCoil",  # should be framedcoil ABC?
 )
 def _p_frame(params, transforms, profiles, data, **kwargs):
-    alpha = transforms["alpha"].transform(params["alpha_n"], dz=0) #TODO: check if this is right
+    alpha = transforms["alpha"].transform(
+        params["alpha_n"], dz=0
+    )  # TODO: check if this is right
 
-    p_frame = data["centroid_normal"] * jnp.cos(alpha)[:, jnp.newaxis] + data["centroid_binormal"] * jnp.sin(alpha)[:, jnp.newaxis]
+    p_frame = (
+        data["centroid_normal"] * jnp.cos(alpha)[:, jnp.newaxis]
+        + data["centroid_binormal"] * jnp.sin(alpha)[:, jnp.newaxis]
+    )
 
     data["p_frame"] = p_frame
     return data
+
 
 @register_compute_fun(
     name="q_frame",
@@ -3555,12 +3561,16 @@ def _p_frame(params, transforms, profiles, data, **kwargs):
     parameterization="desc.coils.FourierPlanarFiniteBuildCoil",
 )
 def _q_frame(params, transforms, profiles, data, **kwargs):
-    alpha = transforms["alpha"].transform(params["alpha_n"], dz=0) 
+    alpha = transforms["alpha"].transform(params["alpha_n"], dz=0)
 
-    q_frame = -data["centroid_normal"] * jnp.sin(alpha)[:, jnp.newaxis] + data["centroid_binormal"] * jnp.cos(alpha)[:, jnp.newaxis]
+    q_frame = (
+        -data["centroid_normal"] * jnp.sin(alpha)[:, jnp.newaxis]
+        + data["centroid_binormal"] * jnp.cos(alpha)[:, jnp.newaxis]
+    )
 
     data["q_frame"] = q_frame
     return data
+
 
 @register_compute_fun(
     name="curv1_frame",
@@ -3577,9 +3587,12 @@ def _q_frame(params, transforms, profiles, data, **kwargs):
     parameterization="desc.coils.FourierPlanarFiniteBuildCoil",
 )
 def _curv1_frame(params, transforms, profiles, data, **kwargs):
-    data["curv1_frame"] = data["curvature"] * dot(data["frenet_normal"], data["p_frame"])
+    data["curv1_frame"] = data["curvature"] * dot(
+        data["frenet_normal"], data["p_frame"]
+    )
 
     return data
+
 
 @register_compute_fun(
     name="curv2_frame",
@@ -3596,9 +3609,12 @@ def _curv1_frame(params, transforms, profiles, data, **kwargs):
     parameterization="desc.coils.FourierPlanarFiniteBuildCoil",
 )
 def _curv2_frame(params, transforms, profiles, data, **kwargs):
-    data["curv2_frame"] = data["curvature"] * dot(data["frenet_normal"], data["q_frame"])
-    
+    data["curv2_frame"] = data["curvature"] * dot(
+        data["frenet_normal"], data["q_frame"]
+    )
+
     return data
+
 
 @register_compute_fun(
     name="u_fb",
@@ -3610,15 +3626,18 @@ def _curv2_frame(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={"grid": []},
     profiles=[],
-    coordinates="rt", #just two degrees of freedom  
+    coordinates="rt",  # just two degrees of freedom
     data=[],
-    parameterization="desc.coils.FourierPlanarFiniteBuildCoil", #for now, will change to full finite build
+    parameterization="desc.coils.FourierPlanarFiniteBuildCoil",  # for now, will change to full finite build
 )
 def _u_fb(params, transforms, profiles, data, **kwargs):
     grid = transforms["grid"]
-    #TODO: check that grid is LinearGrid?
-    data["u_fb"] = (grid.nodes[:, 0] - 0.5)/(0.5)*0.999 #rescale to [-0.999,0.999], as the finite build term is singular at the edge
+    # TODO: check that grid is LinearGrid?
+    data["u_fb"] = (
+        (grid.nodes[:, 0] - 0.5) / (0.5) * 0.999
+    )  # rescale to [-0.999,0.999], as the finite build term is singular at the edge
     return data
+
 
 @register_compute_fun(
     name="v_fb",
@@ -3632,13 +3651,16 @@ def _u_fb(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rt",
     data=[],
-    parameterization="desc.coils.FourierPlanarFiniteBuildCoil", #for now, will change to full finite build
+    parameterization="desc.coils.FourierPlanarFiniteBuildCoil",  # for now, will change to full finite build
 )
 def _v_fb(params, transforms, profiles, data, **kwargs):
     grid = transforms["grid"]
-    #TODO: check that grid is LinearGrid?
-    data["v_fb"] = (grid.nodes[:, 1] - jnp.pi)/(jnp.pi)*0.999 #rescale to [-0.999,0.999]
+    # TODO: check that grid is LinearGrid?
+    data["v_fb"] = (
+        (grid.nodes[:, 1] - jnp.pi) / (jnp.pi) * 0.999
+    )  # rescale to [-0.999,0.999]
     return data
+
 
 @register_compute_fun(
     name="B_0_fb",
@@ -3647,33 +3669,33 @@ def _v_fb(params, transforms, profiles, data, **kwargs):
     units_long="Tesla",
     description="B_0 term in finite build expansion",
     dim=3,
-    params=["p_frame", "q_frame","current", "cross_section_dims"],
+    params=["p_frame", "q_frame", "current", "cross_section_dims"],
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["u_fb", "v_fb"], 
-    parameterization="desc.coils.FourierPlanarFiniteBuildCoil", #for now, will change to full finite build
+    data=["u_fb", "v_fb"],
+    parameterization="desc.coils.FourierPlanarFiniteBuildCoil",  # for now, will change to full finite build
 )
 def _B_0_fb(params, transforms, profiles, data, **kwargs):
-    #fed in externally
+    # fed in externally
     p_frame = params["p_frame"]
     q_frame = params["q_frame"]
 
-    #scalars
+    # scalars
     current = params["current"]
     a = params["cross_section_dims"][0]
     b = params["cross_section_dims"][1]
 
-    #u and v are computed
+    # u and v are computed
     u = data["u_fb"]
     v = data["v_fb"]
 
-    #add dimension to u and v to accomodate vectorized operations
+    # add dimension to u and v to accomodate vectorized operations
     u = u[:, jnp.newaxis]
     v = v[:, jnp.newaxis]
 
-    def G(x,y):
-        return (y * jnp.arctan(x/y) + x/2*jnp.log(1+(y/x)**2))
+    def G(x, y):
+        return y * jnp.arctan(x / y) + x / 2 * jnp.log(1 + (y / x) ** 2)
 
     data["B_0_fb"] = mu_0 * current/(a*b) * ( (q_frame * G(b*(v+1), a*(u+1)) - p_frame * G(a*(u+1), b*(v+1))) + 
                                 (-1) * (q_frame * G(b*(v+1), a*(u-1)) - p_frame * G(a*(u-1), b*(v+1))) + 
@@ -3682,6 +3704,7 @@ def _B_0_fb(params, transforms, profiles, data, **kwargs):
 
     return data
 
+
 @register_compute_fun(
     name="B_kappa_fb",
     label="B_{\\kappa,FB}",
@@ -3689,30 +3712,37 @@ def _B_0_fb(params, transforms, profiles, data, **kwargs):
     units_long="Tesla",
     description="B_kappa term in finite build expansion",
     dim=3,
-    params=["p_frame", "q_frame","current", "cross_section_dims", "curv1_frame", "curv2_frame"],
+    params=[
+        "p_frame",
+        "q_frame",
+        "current",
+        "cross_section_dims",
+        "curv1_frame",
+        "curv2_frame",
+    ],
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["u_fb", "v_fb"], 
-    parameterization="desc.coils.FourierPlanarFiniteBuildCoil", #for now, will change to full finite build
+    data=["u_fb", "v_fb"],
+    parameterization="desc.coils.FourierPlanarFiniteBuildCoil",  # for now, will change to full finite build
 )
 def _B_kappa_fb(params, transforms, profiles, data, **kwargs):
-    #fed in externally
+    # fed in externally
     p_frame = params["p_frame"]
     q_frame = params["q_frame"]
     curv1_frame = params["curv1_frame"]
     curv2_frame = params["curv2_frame"]
 
-    #scalars
+    # scalars
     current = params["current"]
     a = params["cross_section_dims"][0]
     b = params["cross_section_dims"][1]
 
-    #u and v are computed
+    # u and v are computed
     u = data["u_fb"]
     v = data["v_fb"]
 
-    #add dimension to scalars to accomodate vectorized operations
+    # add dimension to scalars to accomodate vectorized operations
     u = u[:, jnp.newaxis]
     v = v[:, jnp.newaxis]
     curv1_frame = curv1_frame[:, jnp.newaxis]
@@ -3741,24 +3771,20 @@ def _B_kappa_fb(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="r",
-    data=["curvature", "frenet_binormal"], 
-    parameterization="desc.coils.FourierPlanarFiniteBuildCoil", #for now, will change to full finite build
+    data=["curvature", "frenet_binormal"],
+    parameterization="desc.coils.FourierPlanarFiniteBuildCoil",  # for now, will change to full finite build
 )
 def _B_b_fb(params, transforms, profiles, data, **kwargs):
-    #scalars, external
+    # scalars, external
     current = params["current"]
     a = params["cross_section_dims"][0]
     b = params["cross_section_dims"][1]
 
-    #u and v are computed
+    # u and v are computed
     curvature = data["curvature"][:, jnp.newaxis]
     binormal = data["frenet_binormal"]
 
-    k = (
-        -(a ** 4 - 6 * a ** 2 * b ** 2 + b ** 4)
-        / (6 * a ** 2 * b ** 2)
-        * jnp.log(a / b + b / a)
-        )
+    k = -(a**4 - 6 * a**2 * b**2 + b**4) / (6 * a**2 * b**2) * jnp.log(a / b + b / a)
     +b * b / (6 * a * a) * jnp.log(b / a)
     +a * a / (6 * b * b) * jnp.log(a / b)
     +(4.0 * b) / (3 * a) * jnp.arctan(a / b)

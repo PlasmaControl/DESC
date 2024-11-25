@@ -52,8 +52,8 @@ from desc.integrals.quad_utils import (
 )
 from desc.integrals.singularities import (
     _get_quadrature_nodes,
-    compute_B_laplace,
-    compute_dPhi_dn,
+    compute_grad_Phi,
+    compute_Phi_mn,
 )
 from desc.integrals.surface_integral import _get_grid_surface
 from desc.magnetic_fields import ToroidalMagneticField
@@ -731,29 +731,35 @@ class TestSingularities:
     def test_laplace_bdotn(self, eq):
         """Test that Laplace solution satisfies boundary condition."""
         MN = 40
-        source_grid = LinearGrid(M=MN, N=MN, sym=False, NFP=eq.NFP)
-        data = eq.compute(["G", "R0"], grid=source_grid)
+        src_grid = LinearGrid(M=MN, N=MN, sym=False, NFP=eq.NFP)
+        data = eq.compute(["G", "R0"], grid=src_grid)
 
         def test(G):
             B0 = ToroidalMagneticField(B0=G / data["R0"], R0=data["R0"])
-            Phi_mn, Phi_trans = compute_B_laplace(
-                eq,
-                B0,
-                source_grid=source_grid,
-                Phi_N=max(eq.N, 1),
-                return_Phi_mn=True,
-            )
-            dPhi_dn = compute_dPhi_dn(eq, Phi_mn, Phi_trans)
             B0n, _ = B0.compute_Bnormal(
-                eq.surface, eval_grid=Phi_trans.grid, source_grid=source_grid
+                eq.surface, eval_grid=src_grid, source_grid=src_grid
+            )
+            Phi_mn, Phi_transform = compute_Phi_mn(
+                eq=eq, B0n=B0n, source_grid=src_grid, Phi_N=max(eq.N, 1)
+            )
+            evl_grid = Phi_transform.grid
+            grad_Phi, evl_data = compute_grad_Phi(
+                eq=eq,
+                eval_grid=evl_grid,
+                source_grid=src_grid,
+                Phi_mn=Phi_mn,
+                basis=Phi_transform.basis,
+                return_data=True,
+            )
+            dPhi_dn = dot(grad_Phi, evl_data["n_rho"])
+            B0n, _ = B0.compute_Bnormal(
+                eq.surface, eval_grid=evl_grid, source_grid=src_grid
             )
 
             # Get data as function of theta, zeta on the only flux surface (LCFS).
-            Bn = Phi_trans.grid.meshgrid_reshape(B0n + dPhi_dn, "rtz")[0]
-            theta = Phi_trans.grid.meshgrid_reshape(Phi_trans.grid.nodes[:, 1], "rtz")[
-                0
-            ]
-            zeta = Phi_trans.grid.meshgrid_reshape(Phi_trans.grid.nodes[:, 2], "rtz")[0]
+            Bn = evl_grid.meshgrid_reshape(B0n + dPhi_dn, "rtz")[0]
+            theta = evl_grid.meshgrid_reshape(evl_grid.nodes[:, 1], "rtz")[0]
+            zeta = evl_grid.meshgrid_reshape(evl_grid.nodes[:, 2], "rtz")[0]
 
             fig, ax = plt.subplots()
             contour = ax.contourf(theta, zeta, Bn)
@@ -767,7 +773,7 @@ class TestSingularities:
             return fig, ax
 
         test(0)
-        fig, ax = test(source_grid.compress(data["G"])[-1])
+        fig, ax = test(src_grid.compress(data["G"])[-1])
         return fig
 
 

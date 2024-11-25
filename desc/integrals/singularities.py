@@ -708,7 +708,7 @@ _kernel_biot_savart_A.keys = ["R", "phi", "Z", "K_vc"]
 
 
 def _kernel_Bn_over_r(eval_data, source_data, diag=False):
-    # B dot n' / |r|
+    # B dot n' / |dx|
     source_x = jnp.atleast_2d(
         rpz2xyz(jnp.array([source_data["R"], source_data["phi"], source_data["Z"]]).T)
     )
@@ -727,7 +727,8 @@ _kernel_Bn_over_r.keys = ["R", "phi", "Z", "Bn"]
 
 
 def _kernel_Phi_dG_dn(eval_data, source_data, diag=False):
-    # Phi * dG(x,x')/dn' = -Phi * n' dot r / r^3 where Phi has units tesla-meters.
+    # Phi(x') * dG(x,x')/dn' = Phi' * n' dot dx / |dx|^3
+    # where Phi has units tesla-meters.
     source_x = jnp.atleast_2d(
         rpz2xyz(jnp.array([source_data["R"], source_data["phi"], source_data["Z"]]).T)
     )
@@ -740,7 +741,7 @@ def _kernel_Phi_dG_dn(eval_data, source_data, diag=False):
         dx = eval_x[:, None] - source_x[None]
     n = rpz2xyz_vec(source_data["n_rho"], phi=source_data["phi"])
     return safediv(
-        -source_data["Phi"] * dot(n, dx, axis=-1),
+        source_data["Phi"] * dot(n, dx),
         safenorm(dx, axis=-1) ** 3,
     )
 
@@ -907,23 +908,23 @@ def compute_B_plasma(eq, eval_grid, source_grid=None, normal_only=False):
 def compute_B_laplace(
     eq,
     B0,
-    eval_grid=None,
+    eval_grid,
     source_grid=None,
     Phi_grid=None,
     Phi_M=None,
     Phi_N=None,
     sym=False,
-    return_Phi_mn=False,
 ):
     """Compute magnetic field in interior of plasma due to vacuum potential.
 
     Let D, D^∁ denote the interior, exterior of a toroidal region with
     boundary ∂D. Computes the magnetic field 𝐁 in units of Tesla such that
-             𝐁 = 𝐁₀ + ∇Φ on D
-         ∇ × 𝐁 = ∇ × 𝐁₀  on D ∪ D^∁ (i.e. ∇Φ is single-valued or periodic)
-        ∇ × 𝐁₀ = μ₀ 𝐉    on D ∪ D^∁
-        𝐁 * ∇ρ = 0       on ∂D
-          ∇²Φ  = 0       on D
+
+    - 𝐁 = 𝐁₀ + ∇Φ     on D
+    - ∇ × 𝐁 = ∇ × 𝐁₀  on D ∪ D^∁ (i.e. ∇Φ is single-valued or periodic)
+    - ∇ × 𝐁₀ = μ₀ 𝐉    on D ∪ D^∁
+    - 𝐁 * ∇ρ = 0      on ∂D
+    - ∇²Φ = 0         on D
 
     Examples
     --------
@@ -935,7 +936,6 @@ def compute_B_laplace(
     If 𝐁₀ ≠ 0 and satisfies ∇ × 𝐁₀ = 0, then ∇²Φ = 0 solved
     under an inhomogeneous boundary condition yields a non-trivial solution.
     If 𝐁₀ ≠ -∇Φ, then 𝐁 ≠ 0.
-    Note that 𝐁₀ is not chosen. It must be a solution to ∇ × 𝐁₀ = μ₀ 𝐉.
 
     Parameters
     ----------
@@ -950,7 +950,7 @@ def compute_B_laplace(
         Source points on ∂D for quadrature of kernels.
         Resolution determines the accuracy of the boundary condition,
         and evaluation of the magnetic field.
-    Phi_grid : Grid, optional
+    Phi_grid : Grid
         Source points on ∂D.
         Resolution determines accuracy of the spectral coefficients.
         Should have resolution at least ``M=Phi_M`` and ``N=Phi_N``.
@@ -963,27 +963,15 @@ def compute_B_laplace(
     sym : str
         ``DoubleFourierSeries`` basis symmetry.
         Default is no symmetry.
-    return_Phi_mn : bool
-        Whether to return Fourier coefficients of Φ on the boundary.
 
     Returns
     -------
     B : jnp.ndarray
         Magnetic field evaluated on ``eval_grid``.
-    Phi_mn, Phi_trans : jnp.ndarray, Transform
-        Fourier coefficients of Φ on the boundary and transforms.
 
     """
     from desc.magnetic_fields import FourierCurrentPotentialField
 
-    basis = DoubleFourierSeries(
-        M=setdefault(Phi_M, eq.M),
-        N=setdefault(Phi_N, eq.N),
-        NFP=eq.NFP,
-        sym=sym,
-    )
-
-    assert eval_grid is not None or return_Phi_mn
     if source_grid is None:
         source_grid = LinearGrid(
             rho=np.array([1.0]),
@@ -992,6 +980,80 @@ def compute_B_laplace(
             NFP=eq.NFP if eq.N > 0 else 64,
             sym=False,
         )
+    Bn, _ = B0.compute_Bnormal(
+        eq.surface, eval_grid=source_grid, source_grid=source_grid
+    )
+    Phi_mn, Phi_transform = compute_Phi_mn(
+        eq, Bn, source_grid, Phi_grid, Phi_M, Phi_N, sym
+    )
+    # 𝐁 - 𝐁₀ = ∇Φ = 𝐁_vacuum in the interior.
+    # Merkel eq. 1.4 is the Green's function solution to ∇²Φ = 0 in the interior.
+    # Note that 𝐁₀′ in eq. 3.5 has the wrong sign.
+    grad_Phi = FourierCurrentPotentialField.from_surface(
+        eq.surface, Phi_mn / mu_0, Phi_transform.basis.modes[:, 1:]
+    )
+    data = eq.compute(["R", "phi", "Z"], grid=eval_grid)
+    coords = jnp.column_stack([data["R"], data["phi"], data["Z"]])
+    B = (B0 + grad_Phi).compute_magnetic_field(coords, source_grid=source_grid)
+    return B
+
+
+def compute_Phi_mn(
+    eq,
+    B0n,
+    source_grid,
+    Phi_grid=None,
+    Phi_M=None,
+    Phi_N=None,
+    sym=False,
+):
+    """Compute Fourier coefficients of vacuum potential Φ on ∂D.
+
+    Let D, D^∁ denote the interior, exterior of a toroidal region with
+    boundary ∂D. Computes the magnetic field 𝐁 in units of Tesla such that
+
+    - 𝐁 = 𝐁₀ + ∇Φ     on D
+    - ∇ × 𝐁 = ∇ × 𝐁₀  on D ∪ D^∁ (i.e. ∇Φ is single-valued or periodic)
+    - ∇ × 𝐁₀ = μ₀ 𝐉    on D ∪ D^∁
+    - 𝐁 * ∇ρ = 0      on ∂D
+    - ∇²Φ = 0         on D
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Configuration with surface geometry defining ∂D.
+    B0n : MagneticField
+        𝐁₀ * ∇ρ / |∇ρ| evaluated on ``source_grid`` of magnetic field
+        such that ∇ × 𝐁₀ = μ₀ 𝐉 where 𝐉 is the current in amperes everywhere.
+    source_grid : Grid
+        Source points on ∂D for quadrature of kernels.
+        Resolution determines the accuracy of the boundary condition.
+    Phi_grid : Grid
+        Source points on ∂D.
+        Resolution determines accuracy of the spectral coefficients.
+        Should have resolution at least ``M=Phi_M`` and ``N=Phi_N``.
+    Phi_M : int
+        Number of poloidal Fourier modes.
+        Default is ``eq.M``.
+    Phi_N : int
+        Number of toroidal Fourier modes.
+        Default is ``eq.N``.
+    sym : str
+        ``DoubleFourierSeries`` basis symmetry.
+        Default is no symmetry.
+
+    Returns
+    -------
+    Phi_mn, Phi_transform : jnp.ndarray, Transform
+        Fourier coefficients of Φ on ∂D.
+
+    """
+    basis = DoubleFourierSeries(
+        M=setdefault(Phi_M, eq.M),
+        N=setdefault(Phi_N, eq.N),
+        NFP=eq.NFP,
+        sym=sym,
+    )
     if Phi_grid is None:
         Phi_grid = LinearGrid(
             rho=np.array([1.0]),
@@ -1017,36 +1079,34 @@ def compute_B_laplace(
         )
         interpolator = DFTInterpolator(Phi_grid, source_grid, s, q)
 
-    data_keys = ["R", "phi", "Z", "n_rho", "|e_theta x e_zeta|"]
-    data_src_grid = eq.compute(data_keys, grid=source_grid)
-    data_Phi_grid = eq.compute(data_keys, grid=Phi_grid)
-    data_src_grid["Bn"], _ = B0.compute_Bnormal(
-        eq.surface, eval_grid=source_grid, source_grid=source_grid
-    )
-    trans_src_grid = Transform(source_grid, basis)
-    trans_Phi_grid = Transform(Phi_grid, basis)
+    names = ["R", "phi", "Z", "n_rho"]
+    Phi_data = eq.compute(names, grid=Phi_grid)
+    src_data = eq.compute(names + ["|e_theta x e_zeta|"], grid=source_grid)
+    src_data["Bn"] = B0n
+    src_transform = Transform(source_grid, basis)
+    Phi_transform = Transform(Phi_grid, basis)
 
     def LHS(Phi_mn):
         # After Fourier transform, the LHS is linear in the spectral coefficients Φₘₙ.
         # We approximate this as finite-dimensional, which enables writing the left
         # hand side as A @ Φₘₙ. Then Φₘₙ is found by solving LHS(Φₘₙ) = A @ Φₘₙ = RHS.
-        data_src_grid["Phi"] = trans_src_grid.transform(Phi_mn)
-        integral = singular_integral(
-            data_Phi_grid,
-            data_src_grid,
+        src_data["Phi"] = src_transform.transform(Phi_mn)
+        I = singular_integral(
+            Phi_data,
+            src_data,
             _kernel_Phi_dG_dn,
             interpolator,
             loop=True,
         ).squeeze()
-        Phi = trans_Phi_grid.transform(Phi_mn)
-        return Phi + integral / (2 * jnp.pi)
+        Phi = Phi_transform.transform(Phi_mn)
+        return Phi + I / (2 * jnp.pi)
 
     # LHS is expensive, so it is better to construct full Jacobian once
     # rather than iterative solves like jax.scipy.sparse.linalg.cg.
     A = jacfwd(LHS)(jnp.ones(basis.num_modes))
     RHS = -singular_integral(
-        data_Phi_grid,
-        data_src_grid,
+        Phi_data,
+        src_data,
         _kernel_Bn_over_r,
         interpolator,
         loop=True,
@@ -1054,34 +1114,128 @@ def compute_B_laplace(
     # Fourier coefficients of Φ on boundary
     Phi_mn, _, _, _ = jnp.linalg.lstsq(A, RHS)
     # np.testing.assert_allclose(LHS(Phi_mn), A @ Phi_mn, atol=1e-12)  # noqa: E801
-    if return_Phi_mn:
-        return Phi_mn, trans_Phi_grid
-
-    # 𝐁 - 𝐁₀ = ∇Φ = 𝐁_vacuum in the interior.
-    # Merkel eq. 1.4 is the Green's function solution to ∇²Φ = 0 in the interior.
-    # Note that 𝐁₀′ in eq. 3.5 has the wrong sign.
-    grad_Phi = FourierCurrentPotentialField.from_surface(
-        eq.surface, Phi_mn / mu_0, basis.modes[:, 1:]
-    )
-    data = eq.compute(["R", "phi", "Z"], grid=eval_grid)
-    coords = jnp.column_stack([data["R"], data["phi"], data["Z"]])
-    B = (B0 + grad_Phi).compute_magnetic_field(coords, source_grid=source_grid)
-    return B
+    return Phi_mn, Phi_transform
 
 
-# FIXME: Need to interpolate Phi_mn to Phi_lmn to compute.
-def compute_dPhi_dn(eq, Phi_mn, Phi_trans):
-    """Computes ∇Φ ⋅ n on ∂D.
+def compute_grad_Phi(
+    eq,
+    eval_grid,
+    source_grid,
+    Phi_mn,
+    basis,
+    return_data=False,
+):
+    """Computes vacuum field ∇Φ on ∂D.
+
+    Let D, D^∁ denote the interior, exterior of a toroidal region with
+    boundary ∂D. Computes the magnetic field 𝐁 in units of Tesla such that
+
+    - 𝐁 = 𝐁₀ + ∇Φ     on D
+    - ∇ × 𝐁 = ∇ × 𝐁₀  on D ∪ D^∁ (i.e. ∇Φ is single-valued or periodic)
+    - ∇ × 𝐁₀ = μ₀ 𝐉    on D ∪ D^∁
+    - 𝐁 * ∇ρ = 0      on ∂D
+    - ∇²Φ = 0         on D
 
     Parameters
     ----------
     eq : Equilibrium
         Configuration with surface geometry defining ∂D.
+    eval_grid : Grid
+        Evaluation points on ∂D.
+    source_grid : Grid
+        Source points on ∂D for quadrature of kernels.
     Phi_mn : jnp.ndarray
         Fourier coefficients of Φ on the boundary.
-    Phi_trans : Transform
-        Transform of ``DoubleFourierSeries`` built on ``Phi_grid``,
-        i.e. points on ∂D.
+    basis : DoubleFourierSeries
+        Basis for Φₘₙ.
+    return_data : bool
+        Whether to return data evaluated on ``eval_grid``.
+
+    Returns
+    -------
+    grad_Phi : jnp.ndarray
+        Shape (``eval_grid.grid.num_nodes``, 3).
+        Vacuum field ∇Φ on ∂D.
+
+    """
+    k = min(source_grid.num_theta, source_grid.num_zeta * source_grid.NFP)
+    s = k - 1
+    q = k // 2 + int(np.sqrt(k))
+    try:
+        interpolator = FFTInterpolator(eval_grid, source_grid, s, q)
+    except AssertionError as e:
+        print(
+            f"Unable to create FFTInterpolator, got error {e},"
+            "falling back to DFT method which is much slower"
+        )
+        interpolator = DFTInterpolator(eval_grid, source_grid, s, q)
+
+    names = ["R", "phi", "Z", "n_rho"]
+    evl_data = eq.compute(names, grid=eval_grid)
+    transform = Transform(source_grid, basis, derivs=1)
+    src_data = {
+        "Phi_t": transform.transform(Phi_mn, dt=1),
+        "Phi_z": transform.transform(Phi_mn, dz=1),
+    }
+    src_data = eq.compute(
+        names + ["|e_theta x e_zeta|", "e_theta", "e_zeta"],
+        grid=source_grid,
+        data=src_data,
+    )
+    src_data["K^zeta"] = src_data["Phi_t"] / src_data["|e_theta x e_zeta|"]
+    src_data["K^theta"] = -src_data["Phi_z"] / src_data["|e_theta x e_zeta|"]
+    src_data["K_vc"] = (
+        src_data["K^zeta"][:, jnp.newaxis] * src_data["e_zeta"]
+        + src_data["K^theta"][:, jnp.newaxis] * src_data["e_theta"]
+    )
+
+    # ∇Φ = ∂Φ/∂ρ ∇ρ + ∂Φ/∂θ ∇θ + ∂Φ/∂ζ ∇ζ
+    # but we can not obtain ∂Φ/∂ρ from Φₘₙ. Biot-Savart gives
+    # ∇Φ(x ∈ ∂D) = 1/2π ∫_∂D df' (n × ∇Φ) × ∇G(x,x')
+    # where ∇G is the double layer Green's kernel.
+    # (Same instructions but divide by 2 for x ∈ D).
+    grad_Phi = (
+        1e7  # kernel assumes Phi in units of amperes but here it is Tesla-meter.
+        / (2 * jnp.pi)
+        * singular_integral(
+            evl_data,
+            src_data,
+            _kernel_biot_savart,
+            interpolator,
+            loop=True,
+        )
+    )
+    if return_data:
+        return grad_Phi, evl_data
+    return grad_Phi
+
+
+# TODO: Correctness validation: test this gives same output as compute_dPhi_dn.
+def _dPhi_dn_triple_layer(
+    eq,
+    B0n,
+    eval_grid,
+    source_grid,
+    Phi_mn,
+    basis,
+):
+    """Compute ∇Φ ⋅ n on ∂D.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Configuration with surface geometry defining ∂D.
+    B0n : MagneticField
+        𝐁₀ * ∇ρ / |∇ρ| evaluated on ``source_grid`` of magnetic field
+        such that ∇ × 𝐁₀ = μ₀ 𝐉 where 𝐉 is the current in amperes everywhere.
+    eval_grid : Grid
+        Evaluation points on ∂D.
+    source_grid : Grid
+        Source points on ∂D for quadrature of kernels.
+    Phi_mn : jnp.ndarray
+        Fourier coefficients of Φ on the boundary.
+    basis : DoubleFourierSeries
+        Basis for Φₘₙ.
 
     Returns
     -------
@@ -1090,15 +1244,84 @@ def compute_dPhi_dn(eq, Phi_mn, Phi_trans):
         ∇Φ ⋅ n on ∂D.
 
     """
-    Phi_trans.change_derivatives(1)
-    Phi_r = jnp.zeros(Phi_trans.grid.num_nodes)
-    Phi_t = Phi_trans.transform(Phi_mn, dt=1)
-    Phi_z = Phi_trans.transform(Phi_mn, dz=1)
-    data = eq.compute(["e^rho", "e^theta", "e^zeta", "n_rho"], grid=Phi_trans.grid)
-    dPhi_dn = dot(
-        Phi_r[:, jnp.newaxis] * data["e^rho"]
-        + Phi_t[:, jnp.newaxis] * data["e^theta"]
-        + Phi_z[:, jnp.newaxis] * data["e^zeta"],
-        data["n_rho"],
+    k = min(source_grid.num_theta, source_grid.num_zeta * source_grid.NFP)
+    s = k - 1
+    q = k // 2 + int(np.sqrt(k))
+    try:
+        interpolator = FFTInterpolator(eval_grid, source_grid, s, q)
+    except AssertionError as e:
+        print(
+            f"Unable to create FFTInterpolator, got error {e},"
+            "falling back to DFT method which is much slower"
+        )
+        interpolator = DFTInterpolator(eval_grid, source_grid, s, q)
+
+    names = ["R", "phi", "Z", "n_rho"]
+    evl_data = eq.compute(names, grid=eval_grid)
+    src_data = eq.compute(names + ["|e_theta x e_zeta|"], grid=source_grid)
+    src_data["Bn"] = B0n
+    I2 = -singular_integral(
+        evl_data,
+        src_data,
+        _kernel_Bn_grad_G_dot_n,
+        interpolator,
+        loop=True,
     )
+    src_data["Phi"] = Transform(source_grid, basis).transform(Phi_mn)
+    I1 = singular_integral(
+        evl_data,
+        src_data,
+        # triple layer kernel may need more resolution
+        _kernel_Phi_grad_dG_dn_dot_m,
+        interpolator,
+        loop=True,
+    )
+    # Gradient of eq. 1.3 in Merkel.
+    dPhi_dn = -I1 + I2
     return dPhi_dn
+
+
+def _kernel_Phi_grad_dG_dn_dot_m(eval_data, source_data, diag=False):
+    #   Phi(x') * grad dG(x,x')/dn' dot n
+    # = Phi' * n' dot (grad(dx) / |dx|^3 - 3 dx transpose(dx) / |dx|^5) dot n
+    # = Phi' * n' dot (n / |dx|^3 - 3 dx (dx dot n) / |dx|^5)
+    # = Phi' * n' dot [n |dx|^2 - 3 dx (dx dot n)] / |dx|^5
+    # where Phi has units tesla-meters.
+    source_x = jnp.atleast_2d(
+        rpz2xyz(jnp.array([source_data["R"], source_data["phi"], source_data["Z"]]).T)
+    )
+    eval_x = jnp.atleast_2d(
+        rpz2xyz(jnp.array([eval_data["R"], eval_data["phi"], eval_data["Z"]]).T)
+    )
+    if diag:
+        dx = eval_x - source_x
+    else:
+        dx = eval_x[:, None] - source_x[None]
+    # this is n'
+    nn = rpz2xyz_vec(source_data["n_rho"], phi=source_data["phi"])
+    # this is n
+    n = rpz2xyz_vec(eval_data["n_rho"], phi=eval_data["phi"])
+    dx_norm = safenorm(dx, axis=-1)
+    return safediv(
+        source_data["Phi"] * (dot(nn, n) * dx_norm**2 - 3 * dot(nn, dx) * dot(dx, n)),
+        dx_norm**5,
+    )
+
+
+def _kernel_Bn_grad_G_dot_n(eval_data, source_data, diag=False):
+    # Bn(x') * dG(x,x')/dn = - Bn * n dot dx / |dx|^3
+    source_x = jnp.atleast_2d(
+        rpz2xyz(jnp.array([source_data["R"], source_data["phi"], source_data["Z"]]).T)
+    )
+    eval_x = jnp.atleast_2d(
+        rpz2xyz(jnp.array([eval_data["R"], eval_data["phi"], eval_data["Z"]]).T)
+    )
+    if diag:
+        dx = eval_x - source_x
+    else:
+        dx = eval_x[:, None] - source_x[None]
+    n = rpz2xyz_vec(eval_data["n_rho"], phi=eval_data["phi"])
+    return safediv(
+        -source_data["Bn"] * dot(n, dx),
+        safenorm(dx, axis=-1) ** 3,
+    )

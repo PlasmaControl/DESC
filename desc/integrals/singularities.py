@@ -1069,6 +1069,7 @@ def compute_B_laplace(
     return B
 
 
+# FIXME: Need to interpolate Phi_mn to Phi_lmn to compute.
 def compute_dPhi_dn(eq, Phi_mn, Phi_trans):
     """Computes ∇Φ ⋅ n on ∂D.
 
@@ -1090,11 +1091,13 @@ def compute_dPhi_dn(eq, Phi_mn, Phi_trans):
 
     """
     Phi_trans.change_derivatives(1)
+    Phi_r = jnp.zeros(Phi_trans.grid.num_nodes)
     Phi_t = Phi_trans.transform(Phi_mn, dt=1)
     Phi_z = Phi_trans.transform(Phi_mn, dz=1)
-    data = eq.compute(["e^theta", "e^zeta", "n_rho"], grid=Phi_trans.grid)
+    data = eq.compute(["e^rho", "e^theta", "e^zeta", "n_rho"], grid=Phi_trans.grid)
     dPhi_dn = dot(
-        Phi_t[:, jnp.newaxis] * data["e^theta"]
+        Phi_r[:, jnp.newaxis] * data["e^rho"]
+        + Phi_t[:, jnp.newaxis] * data["e^theta"]
         + Phi_z[:, jnp.newaxis] * data["e^zeta"],
         data["n_rho"],
     )

@@ -759,10 +759,7 @@ class TestSingularities:
             contour = ax.contourf(theta, zeta, Bn)
             ax.set_title(r"$(\nabla \Phi + B_0) \cdot n$ on $\partial D$")
             fig.colorbar(contour, ax=ax)
-            # FIXME: Doesn't pass unless G = 0 for stellarators, indicating some bug
-            #  in the computation of Phi_mn and hence the surface integrals. grad Phi
-            #  is a periodic function, and Phi should be as well so Phi_mn should
-            #  capture Phi.
+            # FIXME: Doesn't pass unless G = 0 for stellarators.
             try:
                 np.testing.assert_allclose(B0n + dPhi_dn, 0, err_msg=f"G = {G}")
             except AssertionError as e:

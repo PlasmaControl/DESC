@@ -421,10 +421,7 @@ def trust_region_step_exact_qr(
     def falsefun(*_):
         alpha_upper = jnp.linalg.norm(J.T @ f) / trust_radius
         alpha_lower = 0.0
-        alpha = setdefault(
-            initial_alpha,
-            jnp.maximum(0.001 * alpha_upper, (alpha_lower * alpha_upper) ** 0.5),
-        )
+        alpha = setdefault(initial_alpha, alpha_lower)
         k = 0
         # algorithm 4.3 from Nocedal & Wright
         fp = jnp.pad(f, (0, J.shape[1]))
@@ -436,11 +433,8 @@ def trust_region_step_exact_qr(
         def loop_body(state):
             alpha, alpha_lower, alpha_upper, phi, k = state
 
-            alpha = jnp.where(
-                (alpha < alpha_lower) | (alpha > alpha_upper),
-                jnp.maximum(0.001 * alpha_upper, (alpha_lower * alpha_upper) ** 0.5),
-                alpha,
-            )
+            alpha = jnp.where((alpha < alpha_lower), alpha_lower, alpha)
+            alpha = jnp.where((alpha > alpha_upper), alpha_upper, alpha)
 
             Ji = jnp.vstack([J, jnp.sqrt(alpha) * jnp.eye(J.shape[1])])
             # Ji is always tall since its padded by alpha*I
@@ -456,11 +450,8 @@ def trust_region_step_exact_qr(
             q_norm = jnp.linalg.norm(q)
 
             alpha += (p_norm / q_norm) ** 2 * phi / trust_radius
-            alpha = jnp.where(
-                (alpha < alpha_lower) | (alpha > alpha_upper),
-                jnp.maximum(0.001 * alpha_upper, (alpha_lower * alpha_upper) ** 0.5),
-                alpha,
-            )
+            alpha = jnp.where((alpha < alpha_lower), alpha_lower, alpha)
+            alpha = jnp.where((alpha > alpha_upper), alpha_upper, alpha)
             k += 1
             return alpha, alpha_lower, alpha_upper, phi, k
 

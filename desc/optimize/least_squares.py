@@ -233,7 +233,7 @@ def lsqtr(  # noqa: C901
         "Unknown options: {}".format([key for key in options]),
     )
     errorif(
-        tr_method not in ["cho", "svd", "qr", "direct"],
+        tr_method not in ["cho", "svd", "qr", "qr"],
         ValueError,
         "tr_method should be one of 'cho', 'svd', 'qr', 'direct', got {}".format(
             tr_method

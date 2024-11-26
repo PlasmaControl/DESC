@@ -71,7 +71,9 @@ rotational_transform = desc.profiles.PowerSeriesProfile([1, 0, 1.5])
 # ======================================================================================
 
 
-def solve_the_equilibrium(file_name: str = "equilibrium"):
+def solve_the_equilibrium(
+    file_name: str = "equilibrium",
+):
     # ======================================================================================
     # Answer this question: What is the unique magnetic field in 3D space that will hold
     # the plasma with the given LCFS, pressure profile, and rotational transform in
@@ -89,10 +91,9 @@ def solve_the_equilibrium(file_name: str = "equilibrium"):
         Psi=1.0,
     )
 
-    family_of_equilibria: desc.equilibrium.EquilibriaFamily = (
-        desc.continuation.solve_continuation_automatic(equilibrium, verbose=3)
+    family_of_equilibria = desc.continuation.solve_continuation_automatic(
+        equilibrium, verbose=3
     )
-    assert isinstance(family_of_equilibria, desc.equilibrium.EquilibriaFamily)
 
     the_best_equilibrium = family_of_equilibria[-1]
     the_best_equilibrium.save(file_name)
@@ -195,5 +196,5 @@ if __name__ == "__main__":
 
     desc.plotting.plot_comparison(
         [original_equilibrium, equilibrium], labels=["Original", "Optimized"]
-    ) # Q: No difference between the two plots?
+    )  # Q: No difference between the two plots?
     plt.show()

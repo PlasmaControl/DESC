@@ -107,7 +107,7 @@ def map_coordinates(  # noqa: C901
 
     profiles = get_profiles(inbasis + basis_derivs, eq)
 
-    # TODO: make this work for permutations of in/out basis
+    # TODO (#1382): make this work for permutations of in/out basis
     if outbasis == ("rho", "theta", "zeta"):
         if inbasis == ("rho", "alpha", "zeta"):
             if "iota" in kwargs:
@@ -286,7 +286,7 @@ def _initial_guess_nn_search(coords, inbasis, eq, period, compute):
     return yg[idx]
 
 
-# TODO: decide later whether to assume given phi instead of zeta.
+# TODO(#568): decide later whether to assume given phi instead of zeta.
 def _map_PEST_coordinates(
     coords,
     L_lmn,
@@ -395,7 +395,7 @@ def _map_PEST_coordinates(
     return out
 
 
-# TODO: decide later whether to assume given phi instead of zeta.
+# TODO(#568): decide later whether to assume given phi instead of zeta.
 def _map_clebsch_coordinates(
     coords,
     iota,
@@ -766,7 +766,7 @@ def get_rtz_grid(
     return desc_grid
 
 
-# TODO: deprecated, remove eventually
+# TODO(#1383): deprecated, remove eventually
 def compute_theta_coords(
     eq, flux_coords, L_lmn=None, tol=1e-6, maxiter=20, full_output=False, **kwargs
 ):

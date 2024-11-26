@@ -247,7 +247,8 @@ def test_compute_everything():
             if p in no_xyz_things:
                 continue
             # remove quantities that are not implemented in the XYZ basis
-            # TODO: generalize this instead of hard-coding for "grad(B)" & dependencies
+            # TODO (#1110): generalize this instead of hard-coding for
+            #  the quantities "grad(B)" & dependencies
             names_xyz = (
                 names - {"grad(B)", "|grad(B)|", "L_grad(B)"}
                 if "grad(B)" in names

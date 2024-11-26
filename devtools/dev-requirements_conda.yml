@@ -23,6 +23,7 @@ dependencies:
     - plotly >= 5.16, < 6.0
     - pylatexenc >= 2.0, < 3.0
     - quadax >= 0.2.2
+    - scikit-image
     # building the docs
     - sphinx-github-style >= 1.0, < 2.0
     # testing and benchmarking
@@ -34,7 +35,7 @@ dependencies:
   - nbsphinx == 0.8.12
   - pandoc
   - sphinx > 3.0.0
-  # TODO: Remove sphinx-argparse <0.5.0 pin once upstream build issue is fixed
+  # TODO (#1396): Remove sphinx-argparse <0.5.0 pin once upstream build issue is fixed
   # <https://github.com/sphinx-doc/sphinx-argparse/issues/56>
   - sphinx-argparse < 0.5.0
   - sphinx-copybutton

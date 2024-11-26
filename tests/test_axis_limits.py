@@ -191,7 +191,8 @@ def assert_is_continuous(
     """
     if kwargs is None:
         kwargs = {}
-    # TODO: remove when boozer transform works with multiple surfaces
+    # TODO ( #671, #1206):currently skip Boozer quants because it need sym=False
+    #      grid (#1206) and Boozer axis limits are not yet implemented (#671)
     names = [
         name
         for name in names

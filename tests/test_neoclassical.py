@@ -190,8 +190,6 @@ def test_Gamma_d_opt():
 def test_Gamma_d_opt_batch_true():
     """Test that an optimization with Gamma_d works without failing w/ batch=True."""
     eq = get("ESTELL")
-    # FIXME: needs diff res than the other test to avoid an error with jit caching,
-    # once fixed, make it same res
     with pytest.warns(UserWarning):
         eq.change_resolution(4, 3, 3, 6, 6, 6)
     k = 1

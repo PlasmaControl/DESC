@@ -179,11 +179,16 @@ def test_Gamma_d_opt():
         constraints=constraints,
         maxiter=2,  # just testing that no errors occur during JIT/AD of the objective
     )
+    eq.optimize(
+        objective=objective,
+        constraints=constraints,
+        maxiter=2,  # just testing that no errors occur during JIT/AD of the objective
+    )
 
 
 @pytest.mark.regression
 def test_Gamma_d_opt_batch_true():
-    """Test that an optimizatin with Gamma_d works without failing w/ batch=True."""
+    """Test that an optimization with Gamma_d works without failing w/ batch=True."""
     eq = get("ESTELL")
     # FIXME: needs diff res than the other test to avoid an error with jit caching,
     # once fixed, make it same res

@@ -42,7 +42,7 @@ from ._omnigenity import (
 )
 from ._power_balance import FusionPower, HeatingPowerISS04
 from ._profiles import Pressure, RotationalTransform, Shear, ToroidalCurrent
-from ._reconstruction import FluxLoop, RogowskiLoop
+from ._reconstruction import FluxLoop, PointBMeasurement, RogowskiLoop
 from ._stability import BallooningStability, MagneticWell, MercierStability
 from .getters import (
     get_equilibrium_objective,

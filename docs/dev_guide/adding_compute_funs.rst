@@ -1,5 +1,6 @@
+=============================
 Adding new physics quantities
------------------------------
+=============================
 
 .. role:: console(code)
    :language: console

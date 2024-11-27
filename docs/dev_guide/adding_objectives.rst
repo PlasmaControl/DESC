@@ -1,5 +1,6 @@
+==============================
 Adding new objective functions
-------------------------------
+==============================
 
 This guide walks through creating a new objective to optimize using Quasi-symmetry as
 an example. The primary methods needed for a new objective are ``__init__``, ``build``,

@@ -76,7 +76,6 @@ A full example objective with comments describing the key points is given below:
             jac_chunk_size=None,
         ):
             # we don't have to do much here, mostly just call ``super().__init__()``
-            # to inherit common initialization logic from ``desc.objectives._Objective``
             if target is None and bounds is None:
                 target = 0 # default target value
             self._grid = grid
@@ -112,13 +111,9 @@ A full example objective with comments describing the key points is given below:
             else:
                 grid = self._grid
             # dim_f = size of the output vector returned by self.compute
-            # self.compute refers to the objective's own compute method
-            # Typically an objective returns the output of a quantity computed in
-            # ``desc.compute``, with some additional scale factor.
-            # In these cases dim_f should match the size of the quantity calculated in
-            # ``desc.compute`` (for example self.grid.num_nodes).
-            # If the objective does post-processing on the quantity, like downsampling or
-            # averaging, then dim_f should be changed accordingly.
+            # usually the same as self.grid.num_nodes, unless you're doing some downsampling
+            # or averaging etc.
+            self._dim_f = self.grid.num_nodes
             # What data from desc.compute is needed? Here we want the QS triple product.
             self._data_keys = ["f_T"]
 

@@ -64,9 +64,8 @@
    dev_guide/adding_compute_funs.rst
    dev_guide/adding_objectives.rst
    dev_guide/adding_optimizers.rst
-   dev_guide/backend.rst
-   dev_guide/configuration_equilibrium.rst
    dev_guide/grid.ipynb
+   dev_guide/notebooks/backend.ipynb
    dev_guide/notebooks/transform.ipynb
 
 

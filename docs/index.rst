@@ -62,8 +62,8 @@
    :maxdepth: 1
    :caption: Developer guides
 
-   notebooks/dev_guide/getting-started-eq-solve.ipynb
-   dev_guide/grid.ipynb
+   dev_guide/notebooks/getting-started-eq-solve.ipynb
+   dev_guide/notebooks/grid.ipynb
    dev_guide/adding_compute_funs.rst
    dev_guide/adding_objectives.rst
    dev_guide/adding_optimizers.rst

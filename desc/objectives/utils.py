@@ -122,6 +122,8 @@ def factorize_linear_constraints(objective, constraint, x_scale="auto"):  # noqa
     A = A_augmented[:, :-1]
     b = np.atleast_1d(A_augmented[:, -1].squeeze())
 
+    A_nondegenerate = A.copy()
+
     # will store the global index of the unfixed rows, idx
     indices_row = np.arange(A.shape[0])
     indices_idx = np.arange(A.shape[1])
@@ -244,7 +246,19 @@ def factorize_linear_constraints(objective, constraint, x_scale="auto"):  # noqa
                 "or be due to floating point error.",
             )
 
-    return xp, A, b, Z, D, unfixed_idx, project, recover
+    return (
+        xp,
+        A,
+        b,
+        Z,
+        D,
+        unfixed_idx,
+        project,
+        recover,
+        A_inv,
+        A_nondegenerate,
+        row_idx_to_delete,
+    )
 
 
 class _Project(IOAble):

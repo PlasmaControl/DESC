@@ -186,7 +186,7 @@ def perturb(  # noqa: C901
     if verbose > 0:
         print("Factorizing linear constraints")
     timer.start("linear constraint factorize")
-    xp, _, _, Z, D, unfixed_idx, project, recover = factorize_linear_constraints(
+    xp, _, _, Z, D, unfixed_idx, project, recover, *_ = factorize_linear_constraints(
         objective, constraint
     )
     timer.stop("linear constraint factorize")
@@ -750,7 +750,9 @@ def optimal_perturb(  # noqa: C901
             con.update_target(eq_new)
     constraint = ObjectiveFunction(constraints)
     constraint.build(verbose=verbose)
-    _, _, _, _, _, _, _, recover = factorize_linear_constraints(objective_f, constraint)
+    _, _, _, _, _, _, _, recover, *_ = factorize_linear_constraints(
+        objective_f, constraint
+    )
 
     # update other attributes
     dx_reduced = dx1_reduced + dx2_reduced

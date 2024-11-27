@@ -28,6 +28,7 @@
    notebooks/tutorials/use_outputs.ipynb
    notebooks/tutorials/basic_optimization.ipynb
    notebooks/tutorials/advanced_optimization.ipynb
+   notebooks/tutorials/coil_optimization_REGCOIL.ipynb
    notebooks/tutorials/omnigenity.ipynb
    notebooks/tutorials/nae_constraint.ipynb
    notebooks/tutorials/bootstrap_current.ipynb
@@ -61,10 +62,11 @@
    :maxdepth: 1
    :caption: Developer guides
 
+   notebooks/dev_guide/getting-started-eq-solve.ipynb
+   dev_guide/grid.ipynb
    dev_guide/adding_compute_funs.rst
    dev_guide/adding_objectives.rst
    dev_guide/adding_optimizers.rst
-   dev_guide/grid.ipynb
    dev_guide/notebooks/backend.ipynb
    dev_guide/notebooks/transform.ipynb
 

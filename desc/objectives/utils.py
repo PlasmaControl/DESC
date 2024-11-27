@@ -5,7 +5,7 @@ Functions in this module should not depend on any other submodules in desc.objec
 
 import numpy as np
 
-from desc.backend import cond, jit, jnp, logsumexp, put
+from desc.backend import jit, jnp, put, softargmax
 from desc.io import IOAble
 from desc.utils import Index, errorif, flatten_list, svd_inv_null, unique_list, warnif
 
@@ -92,6 +92,36 @@ def factorize_linear_constraints(objective, constraint, x_scale="auto"):  # noqa
         A = A[:, cols]
     assert A.shape[1] == xp.size
 
+    # check for degenerate rows and delete if necessary
+    # augment A with b so that it only deletes actual degenerate constraints
+    # which are duplicate rows of A that also have duplicate entries of b,
+    # if the entries of b aren't the same then the constraints are actually
+    # incompatible and so we will leave those to be caught later.
+    A_augmented = np.hstack([A, np.reshape(b, (A.shape[0], 1))])
+    row_idx_to_delete = np.array([], dtype=int)
+    for row_idx in range(A_augmented.shape[0]):
+        # find all rows equal to this row
+        rows_equal_to_this_row = np.where(
+            np.all(A_augmented[row_idx, :] == A_augmented, axis=1)
+        )[0]
+        # find the rows equal to this row that are not this row
+        rows_equal_to_this_row_but_not_this_row = rows_equal_to_this_row[
+            rows_equal_to_this_row != row_idx
+        ]
+        # if there are rows equal to this row that aren't this row, AND this particular
+        # row has not already been detected as a duplicate of an earlier one and slated
+        # for deletion, add the duplicate row indices to the array of
+        # rows to be deleted
+        if (
+            rows_equal_to_this_row_but_not_this_row.size
+            and row_idx not in row_idx_to_delete
+        ):
+            row_idx_to_delete = np.append(row_idx_to_delete, rows_equal_to_this_row[1:])
+    # delete the affected rows, and also the corresponding rows of b
+    A_augmented = np.delete(A_augmented, row_idx_to_delete, axis=0)
+    A = A_augmented[:, :-1]
+    b = np.atleast_1d(A_augmented[:, -1].squeeze())
+
     # will store the global index of the unfixed rows, idx
     indices_row = np.arange(A.shape[0])
     indices_idx = np.arange(A.shape[1])
@@ -161,7 +191,6 @@ def factorize_linear_constraints(objective, constraint, x_scale="auto"):  # noqa
         Z = np.eye(A.shape[1])
     xp = put(xp, unfixed_idx, A_inv @ b)
     xp = put(xp, fixed_idx, ((1 / D) * xp)[fixed_idx])
-
     # cast to jnp arrays
     xp = jnp.asarray(xp)
     A = jnp.asarray(A)
@@ -256,14 +285,6 @@ class _Recover(IOAble):
 def softmax(arr, alpha):
     """JAX softmax implementation.
 
-    Inspired by https://www.johndcook.com/blog/2010/01/13/soft-maximum/
-    and https://www.johndcook.com/blog/2010/01/20/how-to-compute-the-soft-maximum/
-
-    Will automatically multiply array values by 2 / min_val if the min_val of
-    the array is <1. This is to avoid inaccuracies that arise when values <1
-    are present in the softmax, which can cause inaccurate maxes or even incorrect
-    signs of the softmax versus the actual max.
-
     Parameters
     ----------
     arr : ndarray
@@ -280,18 +301,7 @@ def softmax(arr, alpha):
 
     """
     arr_times_alpha = alpha * arr
-    min_val = jnp.min(jnp.abs(arr_times_alpha)) + 1e-4  # buffer value in case min is 0
-    return cond(
-        jnp.any(min_val < 1),
-        lambda arr_times_alpha: logsumexp(
-            arr_times_alpha / min_val * 2
-        )  # adjust to make vals>1
-        / alpha
-        * min_val
-        / 2,
-        lambda arr_times_alpha: logsumexp(arr_times_alpha) / alpha,
-        arr_times_alpha,
-    )
+    return softargmax(arr_times_alpha).dot(arr)
 
 
 def softmin(arr, alpha):

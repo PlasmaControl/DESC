@@ -104,7 +104,9 @@ Coil Optimization
     desc.objectives.CoilSetMinDistance
     desc.objectives.PlasmaCoilSetMinDistance
     desc.objectives.CoilCurrentLength
+    desc.objectives.CoilArclengthVariance
     desc.objectives.ToroidalFlux
+    desc.objectives.SurfaceCurrentRegularization
 
 
 Profiles

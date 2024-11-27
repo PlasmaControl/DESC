@@ -2,6 +2,7 @@
 
 from ._bootstrap import BootstrapRedlConsistency
 from ._coils import (
+    CoilArclengthVariance,
     CoilCurrentLength,
     CoilCurvature,
     CoilLength,
@@ -10,6 +11,7 @@ from ._coils import (
     CoilTorsion,
     PlasmaCoilSetMinDistance,
     QuadraticFlux,
+    SurfaceCurrentRegularization,
     ToroidalFlux,
 )
 from ._equilibrium import (

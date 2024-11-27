@@ -1098,13 +1098,13 @@ class FourierZernikeBasis(_Basis):
         if not len(modes):
             return np.array([]).reshape((len(nodes), 0))
 
-        # TODO: avoid duplicate calculations when mixing derivatives
+        # TODO(#1243): avoid duplicate calculations when mixing derivatives
         r, t, z = nodes.T
         l, m, n = modes.T
         lm = modes[:, :2]
 
         if unique:
-            # TODO: can avoid this here by using grid.unique_idx etc
+            # TODO(#1243): can avoid this here by using grid.unique_idx etc
             # and adding unique_modes attributes to basis
             _, ridx, routidx = np.unique(
                 r, return_index=True, return_inverse=True, axis=0
@@ -1364,7 +1364,6 @@ def polyval_vec(p, x, prec=None):
 def _polyval_exact(p, x, prec):
     p = np.atleast_2d(p)
     x = np.atleast_1d(x).flatten()
-    # TODO: possibly multithread this bit
     mpmath.mp.dps = prec
     y = np.array([np.asarray(mpmath.polyval(list(pi), x)) for pi in p])
     return y.astype(float)
@@ -1440,7 +1439,9 @@ def zernike_radial_coeffs(l, m, exact=True):
             # hence they are all integers. So, we can use exact arithmetic with integer
             # division instead of floating point division.
             # [1]https://en.wikipedia.org/wiki/Zernike_polynomials#Other_representations
-            coeffs[ii, s] = ((-1) ** ((ll - s) // 2) * factorial((ll + s) // 2)) // (
+            coeffs[ii, s] = (
+                int((-1) ** ((ll - s) // 2)) * factorial((ll + s) // 2)
+            ) // (
                 factorial((ll - s) // 2)
                 * factorial((s + mm) // 2)
                 * factorial((s - mm) // 2)
@@ -1573,7 +1574,7 @@ def zernike_radial(r, l, m, dr=0):
             "Analytic radial derivatives of Zernike polynomials for order>4 "
             + "have not been implemented."
         )
-    return s * jnp.where((l - m) % 2 == 0, out, 0)
+    return s * jnp.where((l - m) % 2 == 0, out, 0.0)
 
 
 def power_coeffs(l):
@@ -1732,7 +1733,7 @@ def _binom(n, k):
     return b
 
 
-@custom_jvp
+@functools.partial(custom_jvp, nondiff_argnums=(4,))
 @jit
 @jnp.vectorize
 def _jacobi(n, alpha, beta, x, dx=0):
@@ -1804,13 +1805,13 @@ def _jacobi(n, alpha, beta, x, dx=0):
 
 
 @_jacobi.defjvp
-def _jacobi_jvp(x, xdot):
-    (n, alpha, beta, x, dx) = x
-    (ndot, alphadot, betadot, xdot, dxdot) = xdot
+def _jacobi_jvp(dx, x, xdot):
+    (n, alpha, beta, x) = x
+    (*_, xdot) = xdot
     f = _jacobi(n, alpha, beta, x, dx)
     df = _jacobi(n, alpha, beta, x, dx + 1)
     # in theory n, alpha, beta, dx aren't differentiable (they're integers)
     # but marking them as non-diff argnums seems to cause escaped tracer values.
     # probably a more elegant fix, but just setting those derivatives to zero seems
     # to work fine.
-    return f, df * xdot + 0 * ndot + 0 * alphadot + 0 * betadot + 0 * dxdot
+    return f, df * xdot

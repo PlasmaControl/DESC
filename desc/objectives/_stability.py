@@ -589,6 +589,7 @@ class BallooningStability(_Objective):
 
         # we prime the data dict with the correct iota values so we don't recompute them
         # using the wrong grid
+        # RG: This would have to be modified for multiple rho values
         data = {
             "iota": iota_data["iota"][0],
             "iota_r": iota_data["iota_r"][0],
@@ -603,6 +604,7 @@ class BallooningStability(_Objective):
             coordinates="raz",
             period=(np.inf, 2 * np.pi, np.inf),
             params=params,
+            iota=data["iota"],
         )
 
         lam = compute_fun(

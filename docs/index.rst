@@ -67,10 +67,6 @@
    dev_guide/backend.rst
    dev_guide/configuration_equilibrium.rst
    dev_guide/grid.ipynb
-   dev_guide/notebooks/coils.ipynb
-   dev_guide/notebooks/compute.ipynb
-   dev_guide/notebooks/grid.ipynb
-   dev_guide/notebooks/optimization_objectives_constraints.ipynb
    dev_guide/notebooks/transform.ipynb
 
 

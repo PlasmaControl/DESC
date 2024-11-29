@@ -179,6 +179,11 @@ def test_Gamma_d_opt():
         constraints=constraints,
         maxiter=2,  # just testing that no errors occur during JIT/AD of the objective
     )
+    eq.optimize(
+        objective=objective,
+        constraints=constraints,
+        maxiter=2,  # testing JIT grid error
+    )
 
 
 @pytest.mark.regression
@@ -233,6 +238,11 @@ def test_Gamma_d_opt_batch_true():
         constraints=constraints,
         maxiter=2,  # just testing that no errors occur during JIT/AD of the objective
     )
+    eq.optimize(
+        objective=objective,
+        constraints=constraints,
+        maxiter=2,  # testing JIT grid error
+    )
 
 
 @pytest.mark.regression
@@ -284,6 +294,11 @@ def test_Gamma_c_opt():
         objective=objective,
         constraints=constraints,
         maxiter=2,  # just testing that no errors occur during JIT/AD of the objective
+    )
+    eq.optimize(
+        objective=objective,
+        constraints=constraints,
+        maxiter=2,  # testing JIT grid error
     )
 
 
@@ -338,6 +353,11 @@ def test_Gamma_c_opt_batch_True():
         objective=objective,
         constraints=constraints,
         maxiter=2,  # just testing that no errors occur during JIT/AD of the objective
+    )
+    eq.optimize(
+        objective=objective,
+        constraints=constraints,
+        maxiter=2,  # testing JIT grid error
     )
 
 

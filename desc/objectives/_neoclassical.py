@@ -282,7 +282,8 @@ class GammaC(_Objective):
     https://doi.org/10.1063/1.2912456.
     Equation 61.
 
-    A model for the fast evaluation of prompt losses of energetic ions in stellarators.
+    A model for the fast evaluation of prompt losses of energetic ions in
+    stellarators.
     J.L. Velasco et al. 2021 Nucl. Fusion 61 116059.
     https://doi.org/10.1088/1741-4326/ac2994.
     Equation 16.
@@ -368,8 +369,6 @@ class GammaC(_Objective):
 
     """
 
-    _static_attrs = ["rho"]
-
     _coordinates = "r"
     _units = "~"
     _print_value_fmt = "Γ_c: "
@@ -402,15 +401,13 @@ class GammaC(_Objective):
 
         rho, alpha = np.atleast_1d(rho, alpha)
         self._dim_f = rho.size
-        self._rho = np.atleast_1d(rho)  # setting self.rho as an instance attirbute
 
-        zeta = np.linspace(
-            0, 2 * np.pi * num_transit, knots_per_transit * num_transit
-        )  # define zeta earlier
+        zeta = np.linspace(0, 2 * np.pi * num_transit, knots_per_transit * num_transit)
+
         grid = LinearGrid(rho=rho, theta=alpha, zeta=zeta)
 
-        self._constants = {  # remove rho from constants, add grid
-            "grid": grid,  # replace rho, zeta, alpha with combined linear grid
+        self._constants = {
+            "grid": grid,
             "quad_weights": 1,
         }
         self._hyperparameters = {
@@ -419,12 +416,15 @@ class GammaC(_Objective):
             "batch": batch,
             "num_well": num_well,
         }
+
         self._keys_1dr = ["iota", "iota_r", "min_tz |B|", "max_tz |B|"]
         if Nemov:
             self._key = "Gamma_c"
             self._constants["quad2"] = chebgauss2(num_quad)
         else:
             self._key = "Gamma_c Velasco"
+
+        self._constants["quad2"] = chebgauss2(num_quad)
 
         super().__init__(
             things=eq,
@@ -439,7 +439,7 @@ class GammaC(_Objective):
             jac_chunk_size=jac_chunk_size,
         )
 
-    def build(self, use_jit=True, verbose=1):
+    def build(self, use_jit=True, verbose=1, constants=None):
         """Build constant arrays.
 
         Parameters
@@ -450,16 +450,24 @@ class GammaC(_Objective):
             Level of output.
 
         """
+        if constants is None:
+            constants = self.constants
+        rtzgrid = constants["grid"]
+
         eq = self.things[0]
         self._grid_1dr = LinearGrid(
-            rho=self._rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym
+            rho=rtzgrid.nodes[rtzgrid.unique_rho_idx, 0],
+            M=eq.M_grid,
+            N=eq.N_grid,
+            NFP=eq.NFP,
+            sym=eq.sym,
         )
         self._constants["quad"] = get_quadrature(
             leggauss(self._hyperparameters.pop("num_quad")),
             (automorphism_sin, grad_automorphism_sin),
         )
         self._target, self._bounds = _parse_callable_target_bounds(
-            self._target, self._bounds, self._rho
+            self._target, self._bounds, rtzgrid.nodes[rtzgrid.unique_rho_idx, 0]
         )
 
         timer = Timer()
@@ -501,9 +509,6 @@ class GammaC(_Objective):
         if constants is None:
             constants = self.constants
         eq = self.things[0]
-        # TO DO: compute all deps of gamma here
-
-        # Access rho, alpha, zeta from unified grid
 
         rtzgrid = constants["grid"]
 
@@ -524,8 +529,6 @@ class GammaC(_Objective):
             params=params,
         )
 
-        # TODO: interpolate all deps to this grid with fft utilities from fourier bounce
-
         data = {
             key: grid.copy_data_from_other(data[key], self._grid_1dr)
             for key in self._keys_1dr
@@ -545,9 +548,6 @@ class GammaC(_Objective):
             **self._hyperparameters,
         )
         return grid.compress(data[self._key])
-
-
-#######################################
 
 
 class Gammad(_Objective):
@@ -614,17 +614,6 @@ class Gammad(_Objective):
         Default is to detect all wells, but due to limitations in JAX this option
         may consume more memory. Specifying a number that tightly upper bounds
         the number of wells will increase performance.
-    Nemov : bool
-        Whether to use the Γ_c as defined by Nemov et al. or Velasco et al.
-        Default is Nemov. Set to ``False`` to use Velascos's.
-
-        Note that Nemov's Γ_c converges to a finite nonzero value in the
-        infinity limit of the number of toroidal transits.
-        Velasco's expression is defined to be zero on irrational surfaces;
-        and therefore, the numerical computation will converge to zero as the
-        number of toroidal transits increases. This is mentioned to remind
-        users that an optimization using Velasco's metric should be evaluated by
-        measuring decrease in Γ_c at a fixed number of toroidal transits.
     name : str, optional
         Name of the objective function.
     jac_chunk_size : int , optional
@@ -641,12 +630,9 @@ class Gammad(_Objective):
 
     """
 
-    # if rho is a constant, this is commented out
-    # _static_attrs = ["rho"]
-
     _coordinates = "r"
     _units = "~"
-    _print_value_fmt = "Γ_c: "
+    _print_value_fmt = "Γ_d: "
 
     def __init__(
         self,
@@ -671,21 +657,19 @@ class Gammad(_Objective):
         name="Gamma_c",
         jac_chunk_size=None,
     ):
+
         if target is None and bounds is None:
             target = 0.0
 
         rho, alpha = np.atleast_1d(rho, alpha)
         self._dim_f = rho.size
-        # self._rho = np.atleast_1d(rho)  # setting self.rho as an instance attirbute
 
-        zeta = np.linspace(
-            0, 2 * np.pi * num_transit, knots_per_transit * num_transit
-        )  # define zeta earlier
+        zeta = np.linspace(0, 2 * np.pi * num_transit, knots_per_transit * num_transit)
 
         grid = LinearGrid(rho=rho, theta=alpha, zeta=zeta)
 
-        self._constants = {  # remove rho from constants, add grid
-            "grid": grid,  # replace rho, zeta, alpha with combined linear grid
+        self._constants = {
+            "grid": grid,
             "quad_weights": 1,
         }
         self._hyperparameters = {
@@ -782,9 +766,6 @@ class Gammad(_Objective):
         if constants is None:
             constants = self.constants
         eq = self.things[0]
-        # TO DO: compute all deps of gamma here
-
-        # Access rho, alpha, zeta from unified grid
 
         rtzgrid = constants["grid"]
 
@@ -805,8 +786,6 @@ class Gammad(_Objective):
             params=params,
         )
 
-        # TODO: interpolate all deps to this grid with fft utilities from fourier bounce
-
         data = {
             key: grid.copy_data_from_other(data[key], self._grid_1dr)
             for key in self._keys_1dr
@@ -826,158 +805,3 @@ class Gammad(_Objective):
             **self._hyperparameters,
         )
         return grid.compress(data[self._key])
-
-
-# class Gammad(_Objective):
-#     """Γ_d is a proxy for measuring energetic ion confinement.
-
-#     Parameters
-#     ----------
-#     (Same as before, but `rho` is now treated as a constant.)
-#     """
-
-#     _static_attrs = ["rho"]
-
-#     _coordinates = "r"
-#     _units = "~"
-#     _print_value_fmt = "Γ_d: "
-
-#     def __init__(
-#         self,
-#         eq,
-#         target=None,
-#         bounds=None,
-#         weight=1,
-#         normalize=True,
-#         normalize_target=True,
-#         loss_function=None,
-#         deriv_mode="auto",
-#         rho=np.linspace(0.5, 1, 3),
-#         alpha=np.array([0]),
-#         *,
-#         num_transit=10,
-#         knots_per_transit=100,
-#         num_quad=32,
-#         num_pitch=64,
-#         batch=True,
-#         num_well=None,
-#         Nemov=True,
-#         name="Gamma_d",
-#         jac_chunk_size=None,
-#     ):
-#         if target is None and bounds is None:
-#             target = 0.0
-
-#         alpha = np.atleast_1d(alpha)
-#         self._dim_f = 3  # Adjust this based on the fixed rho
-
-#         # Add rho as a constant
-#         self._constants = {
-#             "rho": rho,  # Example range, adjust as needed
-#             "alpha": alpha,
-#             "zeta": np.linspace(
-#                 0, 2 * np.pi * num_transit, knots_per_transit * num_transit
-#             ),
-#         }
-#         self._hyperparameters = {
-#             "num_quad": num_quad,
-#             "num_pitch": num_pitch,
-#             "batch": batch,
-#             "num_well": num_well,
-#         }
-#         self._keys_1dr = ["iota", "iota_r", "min_tz |B|", "max_tz |B|"]
-
-#         self._key = "Gamma_d Velasco"
-#         self._constants["quad"] = chebgauss2(num_quad)
-#         self._constants["quad2"] = chebgauss2(num_quad)
-
-#         super().__init__(
-#             things=eq,
-#             target=target,
-#             bounds=bounds,
-#             weight=weight,
-#             normalize=normalize,
-#             normalize_target=normalize_target,
-#             loss_function=loss_function,
-#             deriv_mode=deriv_mode,
-#             name=name,
-#             jac_chunk_size=jac_chunk_size,
-#         )
-
-#     def build(self, use_jit=True, verbose=1):
-#         """Build constant arrays."""
-#         eq = self.things[0]
-
-#         self._grid_1dr = LinearGrid(
-#             rho=self._constants["rho"],  # Use rho from constants
-#             M=eq.M_grid,
-#             N=eq.N_grid,
-#             NFP=eq.NFP,
-#             sym=eq.sym,
-#         )
-#         self._target, self._bounds = _parse_callable_target_bounds(
-#             self._target, self._bounds, self._constants["rho"]  # Use rho from constants
-#         )
-
-#         timer = Timer()
-#         if verbose > 0:
-#             print("Precomputing transforms")
-#         timer.start("Precomputing transforms")
-
-#         self._constants["transforms_1dr"] = get_transforms(
-#             self._keys_1dr, eq, self._grid_1dr
-#         )
-#         self._constants["profiles"] = get_profiles(
-#             self._keys_1dr + [self._key], eq, self._grid_1dr
-#         )
-
-#         timer.stop("Precomputing transforms")
-#         if verbose > 1:
-#             timer.disp("Precomputing transforms")
-
-#         super().build(use_jit=use_jit, verbose=verbose)
-
-#     def compute(self, params, constants=None):
-#         """Compute Γ_d."""
-#         if constants is None:
-#             constants = self.constants
-#         eq = self.things[0]
-#         rtzgrid = constants["grid"]
-
-#         # Compute all dependencies of gamma_d here
-#         data = compute_fun(
-#             eq,
-#             self._keys_1dr,
-#             params,
-#             constants["transforms_1dr"],
-#             constants["profiles"],
-#         )
-
-#         grid = eq._get_rtz_grid(
-#             rtzgrid.nodes[rtzgrid.unique_rho_idx, 0],
-#             rtzgrid.nodes[rtzgrid.unique_theta_idx, 1],
-#             rtzgrid.nodes[rtzgrid.unique_zeta_idx, 2],
-#             coordinates="raz",
-#             iota=self._grid_1dr.compress(data["iota"]),
-#             params=params,
-#         )
-
-#         data = {
-#             key: grid.copy_data_from_other(data[key], self._grid_1dr)
-#             for key in self._keys_1dr
-#         }
-#         quad2 = {}
-#         if "quad2" in constants:
-#             quad2["quad2"] = constants["quad2"]
-#         data = compute_fun(
-#             eq,
-#             self._key,
-#             params,
-#             get_transforms(self._key, eq, grid, jitable=True),
-#             constants["profiles"],
-#             data=data,
-#             quad=constants["quad"],
-#             **quad2,
-#             **self._hyperparameters,
-#         )
-#         return grid.compress(data[self._key])

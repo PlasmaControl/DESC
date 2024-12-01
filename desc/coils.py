@@ -981,6 +981,8 @@ class C0FourierPlanarCoil(_Coil, C0FourierPlanarCurve):
 
     """
 
+    _io_attrs_ = _Coil._io_attrs_ + C0FourierPlanarCurve._io_attrs_
+
     def __init__(
         self,
         current=1,

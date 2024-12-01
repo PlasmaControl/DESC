@@ -13,9 +13,11 @@ from termcolor import colored
 
 from desc.backend import execute_on_cpu, jnp, tree_leaves, tree_map, tree_structure
 from desc.basis import zernike_radial, zernike_radial_coeffs
+from desc.compute.geom_utils import rotation_matrix
 from desc.geometry import FourierRZCurve
 from desc.utils import broadcast_tree, errorif, setdefault
 
+from ..utils import cross, dot, safenormalize
 from .normalization import compute_scaling_factors
 from .objective_funs import _Objective
 
@@ -463,11 +465,10 @@ class C0FourierPlanarCurveSelfConsistency(_Objective):
 
     def build(self, use_jit=False, verbose=1):
         """Building."""
-        self._dim_f = 0
+        self._dim_f = 32
         self._len_rn = []
         self._modes = []
         for curve in self.curves.coils:
-            self._dim_f += 1
             self._len_rn.append(curve.r_n.size // 2)
             self._modes.append(
                 np.arange(-(curve.r_n.size // 4), curve.r_n.size // 4 + 1).tolist()
@@ -478,13 +479,73 @@ class C0FourierPlanarCurveSelfConsistency(_Objective):
         """Compute error in C0 continuity of the curve."""
         modes = self._modes
         len_rn = self._len_rn
-        f = jnp.array(
+        n_coils = len(self.curves.coils)
+
+        # for theta = 0
+        f1 = jnp.array(
             [
                 sum(params[i]["r_n"][: len_rn[i]][np.array(modes[i]) >= 0])
                 - sum(params[i]["r_n"][len_rn[i] :][np.array(modes[i]) >= 0])
-                for i in range(self._dim_f)
+                for i in range(n_coils)
             ]
         )
+        # for theta = pi
+        f2 = jnp.array(
+            [
+                sum(
+                    params[i]["r_n"][: len_rn[i]][np.array(modes[i]) >= 0]
+                    * ((-1.0) ** np.array(modes[i])[np.array(modes[i]) >= 0])
+                )
+                - sum(
+                    params[i]["r_n"][len_rn[i] :][np.array(modes[i]) >= 0]
+                    * ((-1.0) ** np.array(modes[i])[np.array(modes[i]) >= 0])
+                )
+                for i in range(n_coils)
+            ]
+        )
+
+        # for different normals/centers
+        f3 = []
+        f4 = []
+        for i in range(n_coils):
+            normal = params[i]["normal"]
+            center = params[i]["center"]
+            Zaxis = jnp.array([0.0, 0.0, 1.0])
+            axis1 = cross(Zaxis, normal[:3])
+            angle1 = jnp.arccos(dot(Zaxis, safenormalize(normal[:3])))
+            A1 = rotation_matrix(axis=axis1, angle=angle1)
+
+            axis2 = cross(Zaxis, normal[3:])
+            angle2 = jnp.arccos(dot(Zaxis, safenormalize(normal[3:])))
+            A2 = rotation_matrix(axis=axis2, angle=angle2)
+
+            # for theta = 0
+            f3.append(
+                jnp.matmul(jnp.array([jnp.cos(angle1), jnp.sin(angle1), 0.0]), A1.T)
+                * f1[i]
+                + center[:3]
+                - (
+                    jnp.matmul(jnp.array([jnp.cos(angle2), jnp.sin(angle2), 0.0]), A2.T)
+                    * f1[i]
+                    + center[3:]
+                )
+            )
+            # for theta = pi
+            f4.append(
+                jnp.matmul(jnp.array([jnp.cos(angle1), jnp.sin(angle1), 0.0]), A1.T)
+                * f2[i]
+                + center[:3]
+                - (
+                    jnp.matmul(jnp.array([jnp.cos(angle2), jnp.sin(angle2), 0.0]), A2.T)
+                    * f2[i]
+                    + center[3:]
+                )
+            )
+
+        f3 = jnp.array(f3).flatten()
+        f4 = jnp.array(f4).flatten()
+
+        f = jnp.concatenate([f1, f2, f3, f4])
         return f
 
 

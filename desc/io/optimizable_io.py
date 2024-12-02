@@ -1,6 +1,7 @@
 """Functions and methods for saving and loading equilibria and other objects."""
 
 import copy
+import functools
 import os
 import pickle
 import pydoc
@@ -86,7 +87,9 @@ def _unjittable(x):
         return any([_unjittable(y) for y in x.values()])
     if hasattr(x, "dtype") and np.ndim(x) == 0:
         return np.issubdtype(x.dtype, np.bool_) or np.issubdtype(x.dtype, np.int_)
-    return isinstance(x, (str, types.FunctionType, bool, int, np.int_))
+    return isinstance(
+        x, (str, types.FunctionType, functools.partial, bool, int, np.int_)
+    )
 
 
 def _make_hashable(x):
@@ -166,16 +169,17 @@ class IOAble(ABC, metaclass=_CombinedMeta):
     """Abstract Base Class for savable and loadable objects.
 
     Objects inheriting from this class can be saved and loaded via hdf5 or pickle.
-    To save properly, each object should have an attribute `_io_attrs_` which
+    To save properly, each object should have an attribute ``_io_attrs_`` which
     is a list of strings of the object attributes or properties that should be
     saved and loaded.
 
-    For saved objects to be loaded correctly, the __init__ method of any custom
-    types being saved should only assign attributes that are listed in `_io_attrs_`.
+    For saved objects to be loaded correctly, the ``__init__`` method of any custom
+    types being saved should only assign attributes that are listed in ``_io_attrs_``.
     Other attributes or other initialization should be done in a separate
-    `set_up()` method that can be called during __init__. The loading process
-    will involve creating an empty object, bypassing init, then setting any `_io_attrs_`
-    of the object, then calling `_set_up()` without any arguments, if it exists.
+    ``set_up()`` method that can be called during ``__init__``. The loading process
+    will involve creating an empty object, bypassing init, then setting any
+    ``_io_attrs_`` of the object, then calling ``_set_up()`` without any arguments,
+    if it exists.
 
     """
 

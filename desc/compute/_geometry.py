@@ -11,8 +11,9 @@ expensive computations.
 
 from desc.backend import jnp
 
+from ..integrals.surface_integral import line_integrals, surface_integrals
+from ..utils import cross, dot, safenorm
 from .data_index import register_compute_fun
-from .utils import cross, dot, line_integrals, safenorm, surface_integrals
 
 
 @register_compute_fun(
@@ -193,7 +194,7 @@ def _A_of_z(params, transforms, profiles, data, **kwargs):
     data=["Z", "n_rho", "e_theta|r,p", "rho"],
     parameterization=["desc.geometry.surface.FourierRZToroidalSurface"],
     resolution_requirement="rt",  # just need max(rho) near 1
-    # FIXME: Add source grid requirement once omega is nonzero.
+    # TODO(#568): Add source grid requirement once omega is nonzero.
 )
 def _A_of_z_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs):
     # Denote any vector v = [vᴿ, v^ϕ, vᶻ] with a tuple of its contravariant components.
@@ -212,7 +213,7 @@ def _A_of_z_FourierRZToroidalSurface(params, transforms, profiles, data, **kwarg
         line_integrals(
             transforms["grid"],
             data["Z"] * n[:, 2] * safenorm(data["e_theta|r,p"], axis=-1),
-            # FIXME: Works currently for omega = zero, but for nonzero omega
+            # TODO(#568): Works currently for omega = zero, but for nonzero omega
             #  we need to integrate over theta at constant phi.
             #  Should be simple once we have coordinate mapping and source grid
             #  logic from GitHub pull request #1024.
@@ -448,7 +449,7 @@ def _perimeter_of_z(params, transforms, profiles, data, **kwargs):
         line_integrals(
             transforms["grid"],
             safenorm(data["e_theta|r,p"], axis=-1),
-            # FIXME: Works currently for omega = zero, but for nonzero omega
+            # TODO(#568): Works currently for omega = zero, but for nonzero omega
             #  we need to integrate over theta at constant phi.
             #  Should be simple once we have coordinate mapping and source grid
             #  logic from GitHub pull request #1024.
@@ -625,32 +626,14 @@ def _curvature_k1_rho(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["g_tt", "g_tz", "g_zz", "L_sff_rho", "M_sff_rho", "N_sff_rho"],
+    data=["curvature_k1_rho"],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.FourierRZToroidalSurface",
     ],
 )
 def _curvature_k2_rho(params, transforms, profiles, data, **kwargs):
-    # following notation from
-    # https://en.wikipedia.org/wiki/Parametric_surface
-    E = data["g_tt"]
-    F = data["g_tz"]
-    G = data["g_zz"]
-    L = data["L_sff_rho"]
-    M = data["M_sff_rho"]
-    N = data["N_sff_rho"]
-    a = E * G - F**2
-    b = 2 * F * M - L * G - E * N
-    c = L * N - M**2
-    r1 = (-b + jnp.sqrt(b**2 - 4 * a * c)) / (2 * a)
-    r2 = (-b - jnp.sqrt(b**2 - 4 * a * c)) / (2 * a)
-    # In the axis limit, the matrix of the first fundamental form is singular.
-    # The diagonal of the shape operator becomes unbounded,
-    # so the eigenvalues do not exist.
-    data["curvature_k1_rho"] = jnp.maximum(r1, r2)
-    data["curvature_k2_rho"] = jnp.minimum(r1, r2)
-    return data
+    return data  # noqa: unused dependency
 
 
 @register_compute_fun(
@@ -804,25 +787,10 @@ def _curvature_k1_theta(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["g_rr", "g_rz", "g_zz", "L_sff_theta", "M_sff_theta", "N_sff_theta"],
+    data=["curvature_k1_theta"],
 )
 def _curvature_k2_theta(params, transforms, profiles, data, **kwargs):
-    # following notation from
-    # https://en.wikipedia.org/wiki/Parametric_surface
-    E = data["g_zz"]
-    F = data["g_rz"]
-    G = data["g_rr"]
-    L = data["L_sff_theta"]
-    M = data["M_sff_theta"]
-    N = data["N_sff_theta"]
-    a = E * G - F**2
-    b = 2 * F * M - L * G - E * N
-    c = L * N - M**2
-    r1 = (-b + jnp.sqrt(b**2 - 4 * a * c)) / (2 * a)
-    r2 = (-b - jnp.sqrt(b**2 - 4 * a * c)) / (2 * a)
-    data["curvature_k1_theta"] = jnp.maximum(r1, r2)
-    data["curvature_k2_theta"] = jnp.minimum(r1, r2)
-    return data
+    return data  # noqa: unused dependency
 
 
 @register_compute_fun(
@@ -989,32 +957,14 @@ def _curvature_k1_zeta(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["g_rr", "g_rt", "g_tt", "L_sff_zeta", "M_sff_zeta", "N_sff_zeta"],
+    data=["curvature_k1_zeta"],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.ZernikeRZToroidalSection",
     ],
 )
 def _curvature_k2_zeta(params, transforms, profiles, data, **kwargs):
-    # following notation from
-    # https://en.wikipedia.org/wiki/Parametric_surface
-    E = data["g_rr"]
-    F = data["g_rt"]
-    G = data["g_tt"]
-    L = data["L_sff_zeta"]
-    M = data["M_sff_zeta"]
-    N = data["N_sff_zeta"]
-    a = E * G - F**2
-    b = 2 * F * M - L * G - E * N
-    c = L * N - M**2
-    r1 = (-b + jnp.sqrt(b**2 - 4 * a * c)) / (2 * a)
-    r2 = (-b - jnp.sqrt(b**2 - 4 * a * c)) / (2 * a)
-    # In the axis limit, the matrix of the first fundamental form is singular.
-    # The diagonal of the shape operator becomes unbounded,
-    # so the eigenvalues do not exist.
-    data["curvature_k1_zeta"] = jnp.maximum(r1, r2)
-    data["curvature_k2_zeta"] = jnp.minimum(r1, r2)
-    return data
+    return data  # noqa: unused dependency
 
 
 @register_compute_fun(

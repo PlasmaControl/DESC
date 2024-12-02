@@ -27,6 +27,7 @@ The full code is below:
         coordinates="rtz",
         data=["sqrt(g)", "B_zeta_t", "B_theta_z"],
         axis_limit_data=["sqrt(g)_r", "B_zeta_rt", "B_theta_rz"],
+        resolution_requirement="",
         parameterization="desc.equilibrium.equilibrium.Equilibrium",
     )
     def _J_sup_rho(params, transforms, profiles, data, **kwargs):
@@ -96,6 +97,12 @@ metadata about the quantity. The necessary fields are detailed below:
   the quantities mentioned above to evaluate the magnetic axis limit. These dependencies
   are specified in ``axis_limit_data``. The dependencies specified in this list are
   marked to be computed only when there is a node at the magnetic axis.
+* ``resolution_requirement``: Resolution requirements in coordinates.
+  I.e. "r" expects radial resolution in the grid. Likewise, "rtz" is shorthand for
+  "rho, theta, zeta" and indicates the computation expects a grid with radial,
+  poloidal, and toroidal resolution. If the computation simply performs
+  pointwise operations, instead of a reduction (such as integration) over a
+  coordinate, then an empty string may be used to indicate no requirements.
 * ``parameterization``: what sorts of DESC objects is this function for. Most functions
   will just be for ``Equilibrium``, but some methods may also be for ``desc.geometry.core.Curve``,
   or specific types eg ``desc.geometry.curve.FourierRZCurve``. If a quantity is computed differently
@@ -148,9 +155,76 @@ if ``False`` is printed, then the limit of the quantity does not evaluate as fin
   The tests automatically detect this, so no further action is needed from developers in this case.
 
 
-The second step is to run the ``test_compute_everything`` test located in the ``tests/test_compute_funs.py`` file.
-This can be done with the command :console:`pytest -k test_compute_everything tests/test_compute_funs.py`.
+The second step is to run the ``test_compute_everything`` test located in the ``tests/test_compute_everything.py`` file.
+This can be done with the command :console:`pytest tests/test_compute_everything.py`.
 This test is a regression test to ensure that compute quantities in each new update of DESC do not differ significantly
 from previous versions of DESC.
 Since the new quantity did not exist in previous versions of DESC, one must run this test
 and commit the outputted ``tests/inputs/master_compute_data.pkl`` file which is updated automatically when a new quantity is detected.
+
+Compute function may take additional ``**kwargs`` arguments to provide more information to the function. One example of this kind of compute function is ``P_ISS04`` which has a keyword argument ``H_ISS04``.
+::
+
+  @register_compute_fun(
+    name="P_ISS04",
+    label="P_{ISS04}",
+    units="W",
+    units_long="Watts",
+    description="Heating power required by the ISS04 energy confinement time scaling",
+    dim=0,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="",
+    data=["a", "iota", "rho", "R0", "W_p", "<ne>_vol", "<|B|>_axis"],
+    method="str: Interpolation method. Default 'cubic'.",
+    H_ISS04="float: ISS04 confinement enhancement factor. Default 1.",
+  )
+  def _P_ISS04(params, transforms, profiles, data, **kwargs):
+      rho = transforms["grid"].compress(data["rho"], surface_label="rho")
+      iota = transforms["grid"].compress(data["iota"], surface_label="rho")
+      fx = {}
+      if "iota_r" in data:
+          fx["fx"] = transforms["grid"].compress(
+              data["iota_r"]
+          )  # noqa: unused dependency
+      iota_23 = interp1d(2 / 3, rho, iota, method=kwargs.get("method", "cubic"), **fx)
+      data["P_ISS04"] = 1e6 * (  # MW -> W
+          jnp.abs(data["W_p"] / 1e6)  # J -> MJ
+          / (
+              0.134
+              * data["a"] ** 2.28  # m
+              * data["R0"] ** 0.64  # m
+              * (data["<ne>_vol"] / 1e19) ** 0.54  # 1/m^3 -> 1e19/m^3
+              * data["<|B|>_axis"] ** 0.84  # T
+              * iota_23**0.41
+              * kwargs.get("H_ISS04", 1)
+          )
+      ) ** (1 / 0.39)
+      return data
+
+
+This function can be called by following notation,
+::
+
+  from desc.compute.utils import _compute as compute_fun
+
+  # Compute P_ISS04
+  # specify gamma and H_ISS04 values as keyword arguments
+  data = compute_fun(
+            "desc.equilibrium.equilibrium.Equilibrium",
+            "P_ISS04",
+            params=params,
+            transforms=transforms,
+            profiles=profiles,
+            gamma=gamma,
+            H_ISS04=H_ISS04,
+        )
+  P_ISS04 = data["P_ISS04"]
+
+Note: Here we used `_compute` instead of `compute` to be able to call this function inside a jitted objective function. However, for normal use both functions should work. `**kwargs` can also be passed to `eq.compute`.
+
+::
+
+  data = eq.compute(names="P_ISS04", gamma=gamma, H_ISS04=H_ISS04)
+  P_ISS04 = data["P_ISS04"]

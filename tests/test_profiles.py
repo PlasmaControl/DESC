@@ -6,6 +6,7 @@ from scipy.constants import elementary_charge
 from scipy.interpolate import interp1d
 
 from desc.equilibrium import Equilibrium
+from desc.examples import get
 from desc.grid import LinearGrid
 from desc.io import InputReader
 from desc.objectives import (
@@ -15,6 +16,7 @@ from desc.objectives import (
 )
 from desc.profiles import (
     FourierZernikeProfile,
+    HermiteSplineProfile,
     MTanhProfile,
     PowerSeriesProfile,
     SplineProfile,
@@ -408,7 +410,6 @@ class TestProfiles:
         Te = PowerSeriesProfile(2.0e3 * np.array([1, -1]), modes=[0, 2])
         Ti = Te
         pressure = elementary_charge * (ne * Te + ne * Ti)
-        print("pressure params:", pressure.params)
 
         LM_resolution = 6
         eq1 = Equilibrium(
@@ -461,7 +462,6 @@ class TestProfiles:
         Te = PowerSeriesProfile(2.0e3 * np.array([1, -1]), modes=[0, 2])
         Ti = Te
         pressure = elementary_charge * (ne * Te + ne * Ti)
-        print("pressure params:", pressure.params)
 
         LM_resolution = 6
         eq1 = Equilibrium(
@@ -507,3 +507,14 @@ class TestProfiles:
         assert np.all(data2["Te_r"] == data2["Ti_r"])
         np.testing.assert_allclose(data1["p"], data2["p"])
         np.testing.assert_allclose(data1["p_r"], data2["p_r"])
+
+    @pytest.mark.unit
+    def test_hermite_spline_solve(self):
+        """Test that spline with double number of parameters is optimized."""
+        eq = get("DSHAPE")
+        rho = np.linspace(0, 1.0, 20, endpoint=True)
+        eq.pressure = HermiteSplineProfile(
+            eq.pressure(rho), eq.pressure(rho, dr=1), rho
+        )
+        eq.solve()
+        assert eq.is_nested()

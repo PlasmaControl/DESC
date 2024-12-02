@@ -41,6 +41,7 @@ Compatibility
 
     desc.compat.ensure_positive_jacobian
     desc.compat.flip_helicity
+    desc.compat.flip_theta
     desc.compat.rescale
 
 Continuation
@@ -146,6 +147,7 @@ Magnetic Fields
     desc.magnetic_fields.VerticalMagneticField
     desc.magnetic_fields.field_line_integrate
     desc.magnetic_fields.read_BNORM_file
+    desc.magnetic_fields.solve_regularized_surface_current
 
 Objective Functions
 *******************
@@ -159,9 +161,11 @@ Objective Functions
     desc.objectives.BootstrapRedlConsistency
     desc.objectives.BoundaryError
     desc.objectives.BScaleLength
+    desc.objectives.CoilArclengthVariance
     desc.objectives.CoilCurrentLength
     desc.objectives.CoilCurvature
     desc.objectives.CoilLength
+    desc.objectives.CoilSetLinkingNumber
     desc.objectives.CoilSetMinDistance
     desc.objectives.CoilTorsion
     desc.objectives.CurrentDensity
@@ -289,6 +293,7 @@ Profiles
     desc.profiles.PowerSeriesProfile
     desc.profiles.TwoPowerProfile
     desc.profiles.SplineProfile
+    desc.profiles.HermiteSplineProfile
     desc.profiles.MTanhProfile
     desc.profiles.ScaledProfile
     desc.profiles.SumProfile

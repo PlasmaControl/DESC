@@ -13,8 +13,8 @@ from scipy.constants import elementary_charge, mu_0
 from scipy.special import roots_legendre
 
 from ..backend import fori_loop, jnp
+from ..integrals.surface_integral import surface_averages_map
 from .data_index import register_compute_fun
-from .utils import surface_averages_map
 
 
 @register_compute_fun(

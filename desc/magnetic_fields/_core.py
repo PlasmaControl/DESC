@@ -1912,7 +1912,7 @@ class SplineMagneticField(_MagneticField, Optimizable):
         shp = rr.shape
         coords = np.array([rr.flatten(), pp.flatten(), zz.flatten()]).T
         BR, BP, BZ = field.compute_magnetic_field(coords, params, basis="rpz").T
-        NFP = setdefault(field.NFP, 1, hasattr(field, "_NFP"))
+        NFP = getattr(field, "_NFP", 1)
         try:
             AR, AP, AZ = field.compute_magnetic_vector_potential(
                 coords, params, basis="rpz"

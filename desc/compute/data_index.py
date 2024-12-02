@@ -247,6 +247,8 @@ _class_inheritance = {
         "desc.geometry.core.Curve",
     ],
     "desc.coils.FourierPlanarFiniteBuildCoil": [
+        "desc.coils._FramedCoil",
+        "desc.coils._FiniteBuildCoil",
         "desc.coils.FourierPlanarCoil",
         "desc.geometry.curve.FourierPlanarCurve",
         "desc.geometry.core.Curve",

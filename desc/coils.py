@@ -1069,10 +1069,9 @@ class _FramedCoil(_Coil, Optimizable, ABC):
 
 
 class _FiniteBuildCoil(_FramedCoil, Optimizable, ABC):
-    """Base class representing a magnetic field coil with finite build dimensions.
+    """Base class representing a magnetic field coil with finite build dimensions. Implements the compute_self_field method.
 
     Subclasses should inherit from this class as well as a subclass of Coil.
-    Subclasses must implement the `compute_self_field` method.
 
     Parameters
     ----------
@@ -1127,80 +1126,6 @@ class _FiniteBuildCoil(_FramedCoil, Optimizable, ABC):
     def cross_section_shape(self):
         """str: Shape of the coil cross section, either 'circular' or 'rectangular'."""
         return self._cross_section_shape
-
-    @abstractmethod
-    def compute_self_field(self, self_grid, params=None):
-        """Compute the field from the coil on the coil itself. The evaluation points are provided by the coil grid passed in.
-
-        Parameters
-        ----------
-        self_grid : Grid, int or None
-            Grid used to evaluate the field on the coil itself. If an integer, uses that many equally spaced points in each dimension of the cross section.
-        params : dict, optional
-            Parameters to pass to the coil object. This is where current could be overriden with a 'current' key.
-        """
-        pass
-
-
-class FourierPlanarFiniteBuildCoil(_FiniteBuildCoil, FourierPlanarCoil):
-    """Coil that lies in a plane, with a finite cross section.
-
-    Refer to FourierPlanarCoil for a description of the parameterization for the planar coil centerline.
-    In the case of rectangular cross sections, the coil cross section is assumed to remain aligned
-    with respect to the coil plane. The first dimension of the rectangular cross section is within the coil plane,
-    and the second dimension is in the coil plane normal direction. No twist angle is assumed for this coil.
-
-    Parameters
-    ----------
-    cross_section_dims : array-like
-        Dimensions of the coil cross section, with 1 or 2 dimensions depending on the cross section shape (circular or rectangular).
-    cross_section_shape : str
-        Shape of the coil cross section, either 'circular' or 'rectangular'.
-    current : float
-        Current through the coil, in Amperes.
-    center : array-like, shape(3,)
-        Coordinates of center of curve, in system determined by basis.
-    normal : array-like, shape(3,)
-        Components of normal vector to planar surface, in system determined by basis.
-    r_n : array-like
-        Fourier coefficients for radius from center as function of polar angle
-    modes : array-like
-        mode numbers associated with r_n
-    basis : {'xyz', 'rpz'}
-        Coordinate system for center and normal vectors. Default = 'xyz'.
-    name : str
-        Name for this coil.
-    """
-
-    _io_attrs_ = _FiniteBuildCoil._io_attrs_ + FourierPlanarCoil._io_attrs_
-
-    def __init__(
-        self,
-        cross_section_dims=[0.1],
-        cross_section_shape="circular",
-        current=1,
-        center=[10, 0, 0],
-        normal=[0, 1, 0],
-        r_n=2,
-        modes=None,
-        basis="xyz",
-        name="",
-    ):
-        alpha_n = [0, 0, 0]  # by default, this coil has no twist
-        alpha_modes = None
-        super().__init__(
-            cross_section_dims,
-            cross_section_shape,
-            alpha_n,
-            alpha_modes,
-            current,
-            center,
-            normal,
-            r_n,
-            modes,
-            basis,
-            name,
-        )
 
     def compute_self_field(
         self, xsection_grid, centerline_grid=None, coil_frame=False, params=None
@@ -1354,6 +1279,67 @@ class FourierPlanarFiniteBuildCoil(_FiniteBuildCoil, FourierPlanarCoil):
     ):
         return NotImplementedError(
             "Circular cross section self field not implemented yet"
+        )
+
+
+class FourierPlanarFiniteBuildCoil(_FiniteBuildCoil, FourierPlanarCoil):
+    """Coil that lies in a plane, with a finite cross section.
+
+    Refer to FourierPlanarCoil for a description of the parameterization for the planar coil centerline.
+    In the case of rectangular cross sections, the coil cross section is assumed to remain aligned
+    with respect to the coil plane. The first dimension of the rectangular cross section is within the coil plane,
+    and the second dimension is in the coil plane normal direction. No twist angle is assumed for this coil.
+
+    Parameters
+    ----------
+    cross_section_dims : array-like
+        Dimensions of the coil cross section, with 1 or 2 dimensions depending on the cross section shape (circular or rectangular).
+    cross_section_shape : str
+        Shape of the coil cross section, either 'circular' or 'rectangular'.
+    current : float
+        Current through the coil, in Amperes.
+    center : array-like, shape(3,)
+        Coordinates of center of curve, in system determined by basis.
+    normal : array-like, shape(3,)
+        Components of normal vector to planar surface, in system determined by basis.
+    r_n : array-like
+        Fourier coefficients for radius from center as function of polar angle
+    modes : array-like
+        mode numbers associated with r_n
+    basis : {'xyz', 'rpz'}
+        Coordinate system for center and normal vectors. Default = 'xyz'.
+    name : str
+        Name for this coil.
+    """
+
+    _io_attrs_ = _FiniteBuildCoil._io_attrs_ + FourierPlanarCoil._io_attrs_
+
+    def __init__(
+        self,
+        cross_section_dims=[0.1],
+        cross_section_shape="circular",
+        current=1,
+        center=[10, 0, 0],
+        normal=[0, 1, 0],
+        r_n=2,
+        modes=None,
+        basis="xyz",
+        name="",
+    ):
+        alpha_n = [0, 0, 0]  # by default, this coil has no twist
+        alpha_modes = None
+        super().__init__(
+            cross_section_dims,
+            cross_section_shape,
+            alpha_n,
+            alpha_modes,
+            current,
+            center,
+            normal,
+            r_n,
+            modes,
+            basis,
+            name,
         )
 
 

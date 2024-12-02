@@ -3530,7 +3530,7 @@ def _K_vc(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="s",
     data=["centroid_normal", "centroid_binormal"],
-    parameterization="desc.coils.FourierPlanarFiniteBuildCoil",  # should be framedcoil ABC?
+    parameterization="desc.coils._FramedCoil",
 )
 def _p_frame(params, transforms, profiles, data, **kwargs):
     alpha = transforms["alpha"].transform(
@@ -3558,7 +3558,7 @@ def _p_frame(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="s",
     data=["centroid_normal", "centroid_binormal"],
-    parameterization="desc.coils.FourierPlanarFiniteBuildCoil",
+    parameterization="desc.coils._FramedCoil",
 )
 def _q_frame(params, transforms, profiles, data, **kwargs):
     alpha = transforms["alpha"].transform(params["alpha_n"], dz=0)
@@ -3584,7 +3584,7 @@ def _q_frame(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="s",
     data=["curvature", "frenet_normal", "p_frame"],
-    parameterization="desc.coils.FourierPlanarFiniteBuildCoil",
+    parameterization="desc.coils._FramedCoil",
 )
 def _curv1_frame(params, transforms, profiles, data, **kwargs):
     data["curv1_frame"] = data["curvature"] * dot(
@@ -3606,7 +3606,7 @@ def _curv1_frame(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="s",
     data=["curvature", "frenet_normal", "q_frame"],
-    parameterization="desc.coils.FourierPlanarFiniteBuildCoil",
+    parameterization="desc.coils._FramedCoil",
 )
 def _curv2_frame(params, transforms, profiles, data, **kwargs):
     data["curv2_frame"] = data["curvature"] * dot(
@@ -3628,7 +3628,7 @@ def _curv2_frame(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rt",  # just two degrees of freedom
     data=[],
-    parameterization="desc.coils.FourierPlanarFiniteBuildCoil",  # for now, will change to full finite build
+    parameterization="desc.coils._FiniteBuildCoil",
 )
 def _u_fb(params, transforms, profiles, data, **kwargs):
     grid = transforms["grid"]
@@ -3651,7 +3651,7 @@ def _u_fb(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rt",
     data=[],
-    parameterization="desc.coils.FourierPlanarFiniteBuildCoil",  # for now, will change to full finite build
+    parameterization="desc.coils._FiniteBuildCoil", 
 )
 def _v_fb(params, transforms, profiles, data, **kwargs):
     grid = transforms["grid"]
@@ -3674,7 +3674,7 @@ def _v_fb(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["u_fb", "v_fb"],
-    parameterization="desc.coils.FourierPlanarFiniteBuildCoil",  # for now, will change to full finite build
+    parameterization="desc.coils._FiniteBuildCoil",
 )
 def _B_0_fb(params, transforms, profiles, data, **kwargs):
     # fed in externally
@@ -3724,7 +3724,7 @@ def _B_0_fb(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["u_fb", "v_fb"],
-    parameterization="desc.coils.FourierPlanarFiniteBuildCoil",  # for now, will change to full finite build
+    parameterization="desc.coils._FiniteBuildCoil", 
 )
 def _B_kappa_fb(params, transforms, profiles, data, **kwargs):
     # fed in externally
@@ -3772,7 +3772,7 @@ def _B_kappa_fb(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="r",
     data=["curvature", "frenet_binormal"],
-    parameterization="desc.coils.FourierPlanarFiniteBuildCoil",  # for now, will change to full finite build
+    parameterization="desc.coils._FiniteBuildCoil",  
 )
 def _B_b_fb(params, transforms, profiles, data, **kwargs):
     # scalars, external

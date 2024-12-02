@@ -1045,11 +1045,11 @@ class TestMagneticFields:
     @pytest.mark.unit
     def test_spline_field(self, tmpdir_factory):
         """Test accuracy of spline magnetic field."""
-        field1 = ScalarPotentialField(phi_lm, args)
+        field1 = ScalarPotentialField(phi_lm, args, NFP=5)
         R = np.linspace(0.5, 1.5, 20)
         Z = np.linspace(-1.5, 1.5, 20)
         p = np.linspace(0, 2 * np.pi / 5, 40)
-        field2 = SplineMagneticField.from_field(field1, R, p, Z, NFP=5)
+        field2 = SplineMagneticField.from_field(field1, R, p, Z)
 
         np.testing.assert_allclose(
             field1([1.0, 1.0, 1.0]), field2([1.0, 1.0, 1.0]), rtol=1e-2, atol=1e-2

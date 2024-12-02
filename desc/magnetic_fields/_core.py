@@ -1885,7 +1885,7 @@ class SplineMagneticField(_MagneticField, Optimizable):
 
     @classmethod
     def from_field(
-        cls, field, R, phi, Z, params=None, method="cubic", extrap=False, NFP=1
+        cls, field, R, phi, Z, params=None, method="cubic", extrap=False, NFP=None
     ):
         """Create a splined magnetic field from another field for faster evaluation.
 
@@ -1903,7 +1903,8 @@ class SplineMagneticField(_MagneticField, Optimizable):
         extrap : bool
             whether to extrapolate splines beyond specified R,phi,Z
         NFP : int, optional
-            Number of toroidal field periods.
+            Number of toroidal field periods.  If not provided, will default to 1 or
+        the provided field's NFP, if it has that attribute.
 
         """
         R, phi, Z = map(np.asarray, (R, phi, Z))
@@ -1911,6 +1912,7 @@ class SplineMagneticField(_MagneticField, Optimizable):
         shp = rr.shape
         coords = np.array([rr.flatten(), pp.flatten(), zz.flatten()]).T
         BR, BP, BZ = field.compute_magnetic_field(coords, params, basis="rpz").T
+        NFP = setdefault(field.NFP, 1, hasattr(field, "_NFP"))
         try:
             AR, AP, AZ = field.compute_magnetic_vector_potential(
                 coords, params, basis="rpz"

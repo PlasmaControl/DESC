@@ -1450,11 +1450,13 @@ def test_dommaschk_field_errors():
     b_arr = [1]
     c_arr = [1]
     d_arr = [1, 1]  # length is not equal to the rest
-    with pytest.raises(AssertionError):
+    with pytest.raises(AssertionError, match="size"):
         DommaschkPotentialField(ms, ls, a_arr, b_arr, c_arr, d_arr)
-    d_arr = [1]
+    d_arr = [1]  # test with incorrect NFP
+    with pytest.raises(AssertionError, match="desired NFP"):
+        DommaschkPotentialField(ms, ls, a_arr, b_arr, c_arr, d_arr, NFP=2)
     ms = [-1]  # negative mode number
-    with pytest.raises(AssertionError):
+    with pytest.raises(AssertionError, match=">= 0"):
         DommaschkPotentialField(ms, ls, a_arr, b_arr, c_arr, d_arr)
 
 

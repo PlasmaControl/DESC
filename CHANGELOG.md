@@ -13,6 +13,7 @@ New Features
     * use of both this and the ``QuadraticFlux`` objective allows for REGCOIL solutions to be obtained through the optimization framework, and combined with other objectives as well.
 - Changes local area weighting of Bn in QuadraticFlux objective to be the square root of the local area element (Note that any existing optimizations using this objective may need different weights to achieve the same result now.)
 - Adds a new tutorial showing how to use``REGCOIL`` features.
+- Adds an ``NFP`` attribute to ``ScalarPotentialField``, ``VectorPotentialField`` and ``DommaschkPotentialField``, to allow ``SplineMagneticField.from_field`` and ``MagneticField.save_mgrid`` to efficiently take advantage of the discrete toroidal symmetry of these fields, if present.
 
 
 Bug Fixes

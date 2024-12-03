@@ -13,6 +13,7 @@ from .test_neoclassical import NeoIO
 
 
 @pytest.mark.unit
+@pytest.mark.slow
 def test_fieldline_average():
     """Test that fieldline average converges to surface average."""
     rho = np.array([1])
@@ -51,6 +52,7 @@ def test_fieldline_average():
 
 
 @pytest.mark.unit
+@pytest.mark.slow
 @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
 def test_effective_ripple_1D():
     """Test effective ripple 1D with W7-X against NEO."""
@@ -86,6 +88,7 @@ def test_effective_ripple_1D():
 
 
 @pytest.mark.unit
+@pytest.mark.slow
 @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
 def test_Gamma_c_1D():
     """Test Γ_c Nemov 1D with W7-X."""
@@ -108,6 +111,7 @@ def test_Gamma_c_1D():
 
 
 @pytest.mark.unit
+@pytest.mark.slow
 @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
 def test_Gamma_c_Velasco_1D():
     """Test Γ_c Velasco 1D with W7-X."""

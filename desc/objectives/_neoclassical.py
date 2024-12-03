@@ -76,8 +76,10 @@ class EffectiveRipple(_Objective):
         Grid resolution in toroidal direction for Clebsch coordinate grid.
         Preferably power of 2.
     Y_B : int
-        Desired resolution for |B| along field lines to compute bounce points.
-        Default is double ``Y``.
+        Desired resolution for algorithm to compute bounce points.
+        Default is double ``Y``. Something like 100 is usually sufficient.
+        Currently, this is the number of knots per toroidal transit over
+        to approximate |B| with cubic splines.
     num_transit : int
         Number of toroidal transits to follow field line.
         For axisymmetric devices, one poloidal transit is sufficient. Otherwise,
@@ -308,8 +310,10 @@ class GammaC(_Objective):
         Grid resolution in toroidal direction for Clebsch coordinate grid.
         Preferably power of 2.
     Y_B : int
-        Desired resolution for |B| along field lines to compute bounce points.
-        Default is double ``Y``.
+        Desired resolution for algorithm to compute bounce points.
+        Default is double ``Y``. Something like 100 is usually sufficient.
+        Currently, this is the number of knots per toroidal transit over
+        to approximate |B| with cubic splines.
     num_transit : int
         Number of toroidal transits to follow field line.
         For axisymmetric devices, one poloidal transit is sufficient. Otherwise,
@@ -344,8 +348,8 @@ class GammaC(_Objective):
         to zero as the number of toroidal transits increases if the quadratures
         are unable to average out the secular term from all the singular integrals.
         So an optimization using Velasco's metric may need to be evaluated by
-        measuring decrease in Γ_c at a fixed number of toroidal transits until
-        unless an adaptive quadrature is used.
+        measuring decrease in Γ_c at a fixed number of toroidal transits
+        unless a high resolution or adaptive quadrature is used.
 
     """
 

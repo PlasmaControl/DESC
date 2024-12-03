@@ -244,6 +244,17 @@ class _Profile(IOAble, ABC):
         """Subtract another profile from this one."""
         return self.__add__(-x)
 
+    def __pow__(self, x):
+        """Raise this profile to a power."""
+        if np.isscalar(x):
+            return PoweredProfile(x, self)
+        else:
+            raise NotImplementedError()
+
+    def __rpow__(self, x):
+        """Raise this profile to a power."""
+        return self.__pow__(x)
+
 
 class ScaledProfile(_Profile):
     """Profile times a constant value.

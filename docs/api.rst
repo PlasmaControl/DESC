@@ -290,14 +290,16 @@ Profiles
     :recursive:
     :template: class.rst
 
-    desc.profiles.PowerSeriesProfile
-    desc.profiles.TwoPowerProfile
-    desc.profiles.SplineProfile
+    desc.profiles.FourierZernikeProfile
     desc.profiles.HermiteSplineProfile
     desc.profiles.MTanhProfile
-    desc.profiles.ScaledProfile
-    desc.profiles.SumProfile
+    desc.profiles.PoweredProfile
+    desc.profiles.PowerSeriesProfile
     desc.profiles.ProductProfile
+    desc.profiles.ScaledProfile
+    desc.profiles.SplineProfile
+    desc.profiles.SumProfile
+    desc.profiles.TwoPowerProfile
 
 Transform
 *********

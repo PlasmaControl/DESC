@@ -14,7 +14,7 @@ New Features
     * use of both this and the ``QuadraticFlux`` objective allows for REGCOIL solutions to be obtained through the optimization framework, and combined with other objectives as well.
 - Changes local area weighting of Bn in QuadraticFlux objective to be the square root of the local area element (Note that any existing optimizations using this objective may need different weights to achieve the same result now.)
 - Adds a new tutorial showing how to use``REGCOIL`` features.
-- Adds a new profile class ``PoweredProfile`` for rasing profiles to a power.
+- Adds a new profile class ``PoweredProfile`` for raising profiles to a power.
 - Adds ``SurfaceQuadraticFlux`` objective which minimizes the quadratic magnetic flux through a ``FourierRZToroidalSurface`` object, allowing for optimizing for Quadratic flux minimizing (QFM) surfaces.
 - Allows ``ToroidalFlux`` objective to accept ``FourierRZToroidalSurface`` so it can be used to specify the toroidal flux through a QFM surface.
 - Adds ``eq_fixed`` flag to ``ToroidalFlux`` to allow for the equilibrium/QFM surface to vary during optimization, useful for single-stage optimizations.

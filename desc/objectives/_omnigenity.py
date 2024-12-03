@@ -533,13 +533,13 @@ class Omnigenity(_Objective):
     eq_fixed: bool, optional
         Whether the Equilibrium `eq` is fixed or not.
         If True, the equilibrium is fixed and its values are precomputed, which saves on
-        computation time during optimization and self.things = [field] only.
+        computation time during optimization and only ``field`` is allowed to change.
         If False, the equilibrium is allowed to change during the optimization and its
         associated data are re-computed at every iteration (Default).
     field_fixed: bool, optional
         Whether the OmnigenousField `field` is fixed or not.
         If True, the field is fixed and its values are precomputed, which saves on
-        computation time during optimization and self.things = [eq] only.
+        computation time during optimization and only ``eq`` is allowed to change.
         If False, the field is allowed to change during the optimization and its
         associated data are re-computed at every iteration (Default).
 

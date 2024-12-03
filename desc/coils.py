@@ -1076,7 +1076,10 @@ class _FiniteBuildCoil(_FramedCoil, Optimizable, ABC):
     Parameters
     ----------
     cross_section_dims : array-like
-        Dimensions of the coil cross section, with 1 or 2 dimensions depending on the cross section shape (circular or rectangular).
+        Dimensions of the coil cross section, with 1 or 2 dimensions depending on the cross section shape (circular or rectangular).\
+        For circular cross sections, this should be a single value representing the radius.\
+        For rectangular cross sections, this should be a 2-element array representing the dimensions in the p and q directions, respectively.\
+        Refer to figure 3 in https://arxiv.org/pdf/2310.12087 for the p and q directions.
 
     cross_section_shape : str
         Shape of the coil cross section, either 'circular' or 'rectangular'.
@@ -1138,7 +1141,7 @@ class _FiniteBuildCoil(_FramedCoil, Optimizable, ABC):
             Grid used to evaluate the field on the coil cross section. If an integer, uses that many equally spaced points in each dimension of the cross section.
             If provided, must be a 2D grid with L and M dimensions corresponding to the cross section spacing desired.
         centerline_grid : LinearGrid or int, optional
-            Grid used to evaluate the coil centerline. If an integer, uses that many equally spaced points.
+            Grid used to evaluate the coil centerline. If an integer, uses 2x that many equally spaced points in each dimension.
             If provided, must be a 1D grid with N dimension corresponding to the centerline spacing desired.
         coil_frame : bool, optional
             Whether to compute the field in the t, p ,q coil frame. Default is False, which computes the field in the lab frame.
@@ -1149,6 +1152,8 @@ class _FiniteBuildCoil(_FramedCoil, Optimizable, ABC):
         -------
         field : ndarray, shape(n,3)
             magnetic field at specified points, at a combination of the coil centerline and cross section grids.
+        positions : ndarray, shape(n,3)
+            positions of the field points in the lab frame.
         """
 
         if self.cross_section_shape == "circular":
@@ -1168,10 +1173,11 @@ class _FiniteBuildCoil(_FramedCoil, Optimizable, ABC):
         """
 
         # set cross section grid if not provided for u,v cross sectional coordinates
+        # L has a doubled grid size to be consistent with how M and N work
         if xsection_grid is None:
-            xsection_grid = LinearGrid(L=10, M=10, endpoint=True)
+            xsection_grid = LinearGrid(L=4, M=2, endpoint=True)
         elif isinstance(xsection_grid, numbers.Integral):
-            xsection_grid = LinearGrid(L=xsection_grid, M=xsection_grid, endpoint=True)
+            xsection_grid = LinearGrid(L=xsection_grid*2, M=xsection_grid, endpoint=True) 
         else:
             xsection_grid = (
                 xsection_grid.copy()
@@ -1195,13 +1201,21 @@ class _FiniteBuildCoil(_FramedCoil, Optimizable, ABC):
         N = centerline_grid.N
         xsection_grid.change_resolution(L, M, N)
 
-        #get vector series along the coil centerlines
-        p_frame = self.compute("p_frame", grid=centerline_grid, params=params)["p_frame"]
-        q_frame = self.compute("q_frame", grid=centerline_grid, params=params)["q_frame"]
+        # get vector series along the coil centerlines
+        p_frame = self.compute("p_frame", grid=centerline_grid, params=params)[
+            "p_frame"
+        ]
+        q_frame = self.compute("q_frame", grid=centerline_grid, params=params)[
+            "q_frame"
+        ]
 
-        #also need curvature parameters
-        curv1_frame = self.compute("curv1_frame", grid=centerline_grid, params=params)["curv1_frame"]
-        curv2_frame = self.compute("curv2_frame", grid=centerline_grid, params=params)["curv2_frame"]
+        # also need curvature parameters
+        curv1_frame = self.compute("curv1_frame", grid=centerline_grid, params=params)[
+            "curv1_frame"
+        ]
+        curv2_frame = self.compute("curv2_frame", grid=centerline_grid, params=params)[
+            "curv2_frame"
+        ]
 
         # expand the vector series to include the cross section dimensions
         p_frame = xsection_grid.expand(p_frame, "zeta")
@@ -1217,18 +1231,16 @@ class _FiniteBuildCoil(_FramedCoil, Optimizable, ABC):
         B_b_fb = self.compute("B_b_fb", grid=centerline_grid, params=params)["B_b_fb"]
 
         # compute regularized self field integral
-        regularization = finite_build_regularization_rect(
-            self.cross_section_dims[0], self.cross_section_dims[1]
-        )
         data = self.compute(["x", "x_s", "ds"], grid=centerline_grid, params=params)
         B_reg_fb = biot_savart_quad_regularized(
             data["x"],
             data["x"],
             data["x_s"] * data["ds"][:, None],
             self.current,
-            regularization,
+            delta,
         )
 
+        x_centerline = xsection_grid.expand(data["x"], "zeta") # needed to get lab frame coordinates of the coil points
         B_b_fb = xsection_grid.expand(B_b_fb, "zeta")
         B_reg_fb = xsection_grid.expand(B_reg_fb, "zeta")
 
@@ -1241,6 +1253,7 @@ class _FiniteBuildCoil(_FramedCoil, Optimizable, ABC):
             "curv1_frame": curv1_frame,
             "curv2_frame": curv2_frame,
             "delta": delta,
+            "x_centerline": x_centerline,
         }
         B_fb_params = params | B_fb_params if params is not None else B_fb_params
 
@@ -1261,6 +1274,15 @@ class _FiniteBuildCoil(_FramedCoil, Optimizable, ABC):
 
         B_self = B_0_fb + B_kappa_fb + B_b_fb + B_reg_fb
 
+        #get position of field measurement points in lab frame
+        x_fb = compute_fun(
+            self,
+            "x_fb",
+            transforms={"grid": xsection_grid},
+            params=B_fb_params,
+            profiles={},
+        )["x_fb"]
+
         if coil_frame:  # reproject the field to the t,p,q frame
             t_frame = self.compute(
                 "centroid_tangent", grid=centerline_grid, params=params
@@ -1272,7 +1294,7 @@ class _FiniteBuildCoil(_FramedCoil, Optimizable, ABC):
             B_q = dot(B_self, q_frame)
             B_self = jnp.stack((B_t, B_p, B_q), axis=-1)
 
-        return B_self
+        return B_self, x_fb
 
     def compute_self_field_circ(
         self, xsection_grid, centerline_grid=None, coil_frame=False, params=None

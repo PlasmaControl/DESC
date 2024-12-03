@@ -12,6 +12,7 @@ from ._coils import (
     PlasmaCoilSetMinDistance,
     QuadraticFlux,
     SurfaceCurrentRegularization,
+    SurfaceQuadraticFlux,
     ToroidalFlux,
 )
 from ._equilibrium import (

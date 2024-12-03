@@ -636,7 +636,7 @@ def polyroot_vec(
         and not (jnp.iscomplexobj(c) or jnp.iscomplexobj(k))
     ):
         # Compute from analytic formula to avoid the issue of complex roots with small
-        # imaginary parts and to avoid nan in gradient.
+        # imaginary parts and to avoid nan in gradient. Also consumes less memory.
         r = func[num_coef](C=c, sentinel=sentinel, eps=eps, distinct=distinct)
         # We already filtered distinct roots for quadratics.
         distinct = distinct and num_coef > 3

@@ -53,15 +53,15 @@ profiles together by addition, multiplication, or scaling.
     :recursive:
     :template: class.rst
 
-    desc.profiles.HermiteSplineProfile
-    desc.profiles.MTanhProfile
-    desc.profiles.PoweredProfile
     desc.profiles.PowerSeriesProfile
-    desc.profiles.ProductProfile
-    desc.profiles.ScaledProfile
     desc.profiles.SplineProfile
-    desc.profiles.SumProfile
+    desc.profiles.MTanhProfile
     desc.profiles.TwoPowerProfile
+    desc.profiles.HermiteSplineProfile
+    desc.profiles.ScaledProfile
+    desc.profiles.ProductProfile
+    desc.profiles.SumProfile
+    desc.profiles.PoweredProfile
 
 
 Utilities

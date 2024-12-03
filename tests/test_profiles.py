@@ -425,6 +425,10 @@ class TestProfiles:
             tp.compute(grid, dr=3)
         with pytest.raises(NotImplementedError):
             mp.compute(grid, dr=3)
+        with pytest.raises(UserWarning):
+            tp.params = [1, 0.3, 0.7]
+        with pytest.raises(UserWarning):
+            a = sp**-1
 
     @pytest.mark.unit
     def test_default_profiles(self):

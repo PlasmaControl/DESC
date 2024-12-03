@@ -373,8 +373,20 @@ class PoweredProfile(_Profile):
         self._profile = profile.copy()
         self._power = power
 
+        self._check_params()
+
         kwargs.setdefault("name", profile.name)
         super().__init__(**kwargs)
+
+    def _check_params(self, params=None):
+        """Check params and throw warnings or errors if necessary."""
+        params = self.params if params is None else params
+        power, params = self._parse_params(params)
+        warnif(
+            power < 0,
+            UserWarning,
+            "This profile may be undefined at some points because power < 0.",
+        )
 
     @property
     def params(self):
@@ -383,6 +395,7 @@ class PoweredProfile(_Profile):
 
     @params.setter
     def params(self, x):
+        self._check_params(x)
         self._power, self._profile.params = self._parse_params(x)
 
     def _parse_params(self, x):
@@ -844,17 +857,24 @@ class TwoPowerProfile(_Profile):
             params = [0, 1, 1]
         self._params = np.atleast_1d(params)
 
+        self._check_params()
+
+    def _check_params(self, params=None):
+        """Check params and throw warnings or errors if necessary."""
+        params = self.params if params is None else params
         errorif(
-            self._params.size != 3, ValueError, "params must be an array of size 3."
+            params.size != 3,
+            ValueError,
+            f"params must be an array of size 3, got {len(params)}.",
         )
         warnif(
-            self._params[1] < 1,
+            params[1] < 1,
             UserWarning,
             "Derivatives of this profile will be infinite at rho=0 "
             + "because params[1] < 1.",
         )
         warnif(
-            self._params[2] < 1,
+            params[2] < 1,
             UserWarning,
             "Derivatives of this profile will be infinite at rho=1 "
             + "because params[2] < 1.",
@@ -868,10 +888,8 @@ class TwoPowerProfile(_Profile):
     @params.setter
     def params(self, new):
         new = jnp.atleast_1d(jnp.asarray(new))
-        if new.size == 3:
-            self._params = jnp.asarray(new)
-        else:
-            raise ValueError(f"params should be an array of size 3, got {len(new)}.")
+        self._check_params(new)
+        self._params = new
 
     def compute(self, grid, params=None, dr=0, dt=0, dz=0):
         """Compute values of profile at specified nodes.

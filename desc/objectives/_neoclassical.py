@@ -132,11 +132,6 @@ class EffectiveRipple(_Objective):
 
         rho, alpha = np.atleast_1d(rho, alpha)
         self._dim_f = rho.size
-
-        zeta = np.linspace(0, 2 * np.pi * num_transit, knots_per_transit * num_transit)
-
-        grid = LinearGrid(rho=rho, theta=alpha, zeta=zeta)
-
         self._keys_1dr = [
             "iota",
             "iota_r",
@@ -146,8 +141,12 @@ class EffectiveRipple(_Objective):
             "R0",  # TODO: GitHub PR #1094
         ]
         self._constants = {
-            "grid": grid,
             "quad_weights": 1,
+            "rho": rho,
+            "alpha": alpha,
+            "zeta": np.linspace(
+                0, 2 * np.pi * num_transit, knots_per_transit * num_transit
+            ),
             "quad": chebgauss2(num_quad),
         }
         self._hyperparameters = {
@@ -169,7 +168,7 @@ class EffectiveRipple(_Objective):
             jac_chunk_size=jac_chunk_size,
         )
 
-    def build(self, use_jit=True, verbose=1, constants=None):
+    def build(self, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -180,20 +179,12 @@ class EffectiveRipple(_Objective):
             Level of output.
 
         """
-        if constants is None:
-            constants = self.constants
-        rtzgrid = constants["grid"]
-
         eq = self.things[0]
         self._grid_1dr = LinearGrid(
-            rho=rtzgrid.nodes[rtzgrid.unique_rho_idx, 0],
-            M=eq.M_grid,
-            N=eq.N_grid,
-            NFP=eq.NFP,
-            sym=eq.sym,
+            rho=self._constants["rho"], M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym
         )
         self._target, self._bounds = _parse_callable_target_bounds(
-            self._target, self._bounds, rtzgrid.nodes[rtzgrid.unique_rho_idx, 0]
+            self._target, self._bounds, self._constants["rho"]
         )
 
         timer = Timer()
@@ -235,9 +226,6 @@ class EffectiveRipple(_Objective):
         if constants is None:
             constants = self.constants
         eq = self.things[0]
-
-        rtzgrid = constants["grid"]
-
         # TODO: compute all deps of effective ripple here
         data = compute_fun(
             eq,
@@ -247,16 +235,14 @@ class EffectiveRipple(_Objective):
             constants["profiles"],
         )
         # TODO: interpolate all deps to this grid with fft utilities from fourier bounce
-
         grid = eq._get_rtz_grid(
-            rtzgrid.nodes[rtzgrid.unique_rho_idx, 0],
-            rtzgrid.nodes[rtzgrid.unique_theta_idx, 1],
-            rtzgrid.nodes[rtzgrid.unique_zeta_idx, 2],
+            constants["rho"],
+            constants["alpha"],
+            constants["zeta"],
             coordinates="raz",
             iota=self._grid_1dr.compress(data["iota"]),
             params=params,
         )
-
         data = {
             key: (
                 grid.copy_data_from_other(data[key], self._grid_1dr)

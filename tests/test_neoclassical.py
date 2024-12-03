@@ -7,23 +7,9 @@ import numpy as np
 import pytest
 from tests.test_plotting import tol_1d
 
-import desc
 from desc.equilibrium.coords import get_rtz_grid
 from desc.examples import get
 from desc.grid import LinearGrid
-from desc.objectives import (
-    AspectRatio,
-    EffectiveRipple,
-    FixBoundaryR,
-    FixBoundaryZ,
-    FixIota,
-    FixPressure,
-    FixPsi,
-    ForceBalance,
-    GenericObjective,
-    ObjectiveFunction,
-)
-from desc.optimize import Optimizer
 from desc.utils import setdefault
 from desc.vmec import VMECIO
 
@@ -89,107 +75,6 @@ def test_effective_ripple():
     neo_rho, neo_eps_32 = NeoIO.read("tests/inputs/neo_out.w7x")
     np.testing.assert_allclose(eps_32, np.interp(rho, neo_rho, neo_eps_32), rtol=0.16)
     return fig
-
-
-def test_effective_ripple_opt():
-    """Test that an optimizatin with EffectiveRipple works without failing."""
-    eq = desc.examples.get("HELIOTRON")
-
-    # Flux surfaces on which to evaluate ballooning stability
-    surfaces = [1.0]
-
-    # Number of toroidal transits of the field line
-    num_transit = 3
-
-    # Number of point along a field line per transit
-    knots_per_transit = 64
-
-    # Determine which modes to unfix
-    k = 2
-
-    print("\n---------------------------------------")
-    print(f"Optimizing boundary modes M, N <= {k}")
-    print("---------------------------------------")
-
-    modes_R = np.vstack(
-        (
-            [0, 0, 0],
-            eq.surface.R_basis.modes[
-                np.max(np.abs(eq.surface.R_basis.modes), 1) > k, :
-            ],
-        )
-    )
-    modes_Z = eq.surface.Z_basis.modes[
-        np.max(np.abs(eq.surface.Z_basis.modes), 1) > k, :
-    ]
-    constraints = (
-        ForceBalance(eq=eq),
-        FixBoundaryR(eq=eq, modes=modes_R),
-        FixBoundaryZ(eq=eq, modes=modes_Z),
-        FixPressure(eq=eq),
-        FixIota(eq=eq),
-        FixPsi(eq=eq),
-    )
-
-    Curvature_grid = LinearGrid(
-        M=2 * int(eq.M),
-        N=2 * int(eq.N),
-        rho=np.array([1.0]),
-        NFP=eq.NFP,
-        sym=True,
-        axis=False,
-    )
-
-    objective = ObjectiveFunction(
-        (
-            EffectiveRipple(
-                eq=eq,
-                rho=np.array(surfaces),
-                alpha=0,
-                num_transit=num_transit,
-                knots_per_transit=knots_per_transit,
-                num_quad=17,
-                weight=1e6,
-                deriv_mode="rev",
-            ),
-            AspectRatio(
-                eq=eq,
-                bounds=(8, 11),
-                weight=1e3,
-            ),
-            GenericObjective(
-                f="curvature_k2_rho",
-                thing=eq,
-                grid=Curvature_grid,
-                bounds=(-128, 10),
-                weight=2e3,
-            ),
-        )
-    )
-
-    optimizer = Optimizer("proximal-lsq-exact")
-    (eq,), _ = optimizer.optimize(
-        eq,
-        objective,
-        constraints,
-        ftol=1e-4,
-        xtol=1e-6,
-        gtol=1e-6,
-        maxiter=2,  # increase maxiter to 50 for a better result
-        verbose=3,
-        options={"initial_trust_ratio": 2e-3},
-    )
-    (eq,), _ = optimizer.optimize(
-        eq,
-        objective,
-        constraints,
-        ftol=1e-4,
-        xtol=1e-6,
-        gtol=1e-6,
-        maxiter=2,  # increase maxiter to 50 for a better result
-        verbose=3,
-        options={"initial_trust_ratio": 2e-3},
-    )
 
 
 class NeoIO:

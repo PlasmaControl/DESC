@@ -1088,11 +1088,15 @@ class QuadraticFlux(_Objective):
     (B_coil + B_plasma)*n. The equilibrium is kept fixed while the
     field is unfixed.
 
+    Note: This objective is intended for coil optimization. For finding the surface
+    that minimizes the normal field error, use the SurfaceQuadraticFlux objective.
+
     Parameters
     ----------
     eq : Equilibrium
-        Equilibrium upon whose surface the normal field error will be minimized.
-        The equilibrium is kept fixed during the optimization with this objective.
+        Equilibrium upon whose surface the normal field error
+        will be minimized. The equilibrium is kept fixed during the optimization
+        with this objective.
     field : MagneticField
         External field produced by coils or other source, which will be optimized to
         minimize the normal field error on the provided equilibrium's surface.
@@ -1100,7 +1104,7 @@ class QuadraticFlux(_Objective):
         Collocation grid containing the nodes for plasma source terms.
         Default grid is detailed in the docs for ``compute_B_plasma``
     eval_grid : Grid, optional
-        Collocation grid containing the nodes on the plasma surface at which the
+        Collocation grid containing the nodes on the surface at which the
         magnetic field is being calculated and where to evaluate Bn errors.
         Default grid is: ``LinearGrid(rho=np.array([1.0]), M=eq.M_grid, N=eq.N_grid,
         NFP=eq.NFP, sym=False)``
@@ -1141,6 +1145,8 @@ class QuadraticFlux(_Objective):
         name="Quadratic flux",
         jac_chunk_size=None,
     ):
+        from desc.geometry import FourierRZToroidalSurface
+
         if target is None and bounds is None:
             target = 0
         self._source_grid = source_grid
@@ -1149,6 +1155,13 @@ class QuadraticFlux(_Objective):
         self._field = field
         self._field_grid = field_grid
         self._vacuum = vacuum
+        errorif(
+            isinstance(eq, FourierRZToroidalSurface),
+            TypeError,
+            "Detected FourierRZToroidalSurface object "
+            "if attempting to find a QFM surface, please use "
+            "SurfaceQuadraticFlux objective instead.",
+        )
         things = [field]
         super().__init__(
             things=things,
@@ -1176,7 +1189,11 @@ class QuadraticFlux(_Objective):
 
         if self._eval_grid is None:
             eval_grid = LinearGrid(
-                rho=np.array([1.0]), M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False
+                rho=np.array([1.0]),
+                M=eq.M_grid,
+                N=eq.N_grid,
+                NFP=eq.NFP,
+                sym=False,
             )
             self._eval_grid = eval_grid
         else:
@@ -1197,7 +1214,7 @@ class QuadraticFlux(_Objective):
         eval_profiles = get_profiles(self._data_keys, obj=eq, grid=eval_grid)
         eval_transforms = get_transforms(self._data_keys, obj=eq, grid=eval_grid)
         eval_data = compute_fun(
-            "desc.equilibrium.equilibrium.Equilibrium",
+            eq,
             self._data_keys,
             params=eq.params_dict,
             transforms=eval_transforms,
@@ -1217,6 +1234,8 @@ class QuadraticFlux(_Objective):
             "field_grid": self._field_grid,
             "quad_weights": w,
             "eval_data": eval_data,
+            "eval_transforms": eval_transforms,
+            "eval_profiles": eval_profiles,
             "B_plasma": Bplasma,
         }
 
@@ -1231,7 +1250,7 @@ class QuadraticFlux(_Objective):
         super().build(use_jit=use_jit, verbose=verbose)
 
     def compute(self, field_params, constants=None):
-        """Compute boundary force error.
+        """Compute normal field error on boundary.
 
         Parameters
         ----------
@@ -1268,6 +1287,202 @@ class QuadraticFlux(_Objective):
         return f
 
 
+class SurfaceQuadraticFlux(_Objective):
+    """Target B*n = 0 on a surface.
+
+    Used to find a quadratic-flux-minimizing (QFM) surface, so a
+    `FourierRZToroidalSurface` should be passed to the objective.
+    Should always be used along with a ``ToroidalFlux`` or ``Volume`` objective to
+    ensure that the resulting QFM surface has the desired amount of
+    flux enclosed and avoid trivial solutions.
+
+    Note: This objective can be used with ``field_fixed=True`` to find the QFM surface
+    by fixing the coils, however the surface is always free to change. For coil
+    optimization, use the ``QuadraticFlux`` objective.
+
+    Parameters
+    ----------
+    surface : FourierRZToroidalSurface
+        QFM surface upon which the normal field error will be minimized.
+    field : MagneticField
+        External field produced by coils or other source, which will be optimized to
+        minimize the normal field error on the provided QFM surface. May be fixed
+        by passing in ``field_fixed=True``
+    eval_grid : Grid, optional
+        Collocation grid containing the nodes on the surface at which the
+        magnetic field is being calculated and where to evaluate Bn errors.
+        Default grid is: ``LinearGrid(rho=np.array([1.0]), M=surface.M_grid,``
+        ``N=surface.N_grid, NFP=surface.NFP, sym=False)``
+    field_grid : Grid, optional
+        Grid used to discretize field (e.g. grid for the magnetic field source from
+        coils). Default grid is determined by the specific MagneticField object, see
+        the docs of that object's ``compute_magnetic_field`` method for more detail.
+    field_fixed : bool
+        Whether or not to fix the magnetic field's DOFs during the optimization.
+
+    """
+
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``target=0``.",
+        bounds_default="``target=0``.",
+    )
+
+    _scalar = False
+    _linear = False
+    _print_value_fmt = "QFM surface normal field error: "
+    _units = "(T m^2)"
+    _coordinates = "rtz"
+
+    def __init__(
+        self,
+        surface,
+        field,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        eval_grid=None,
+        field_grid=None,
+        name="Surface Quadratic Flux",
+        field_fixed=False,
+        jac_chunk_size=None,
+    ):
+        if target is None and bounds is None:
+            target = 0
+        self._eval_grid = eval_grid
+        self._surface = surface
+        self._field = field
+        self._field_grid = field_grid
+        self._field_fixed = field_fixed
+
+        things = [surface]
+        if not field_fixed:
+            things += [field]
+        super().__init__(
+            things=things,
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            name=name,
+            jac_chunk_size=jac_chunk_size,
+        )
+
+    def build(self, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        surface = self._surface
+
+        if self._eval_grid is None:
+            eval_grid = LinearGrid(
+                rho=np.array([1.0]),
+                M=2 * surface.M,
+                N=2 * surface.N,
+                NFP=surface.NFP,
+                sym=False,
+            )
+            self._eval_grid = eval_grid
+        else:
+            eval_grid = self._eval_grid
+
+        self._data_keys = ["R", "Z", "n_rho", "phi", "|e_theta x e_zeta|"]
+
+        timer = Timer()
+        if verbose > 0:
+            print("Precomputing transforms")
+        timer.start("Precomputing transforms")
+
+        self._dim_f = eval_grid.num_nodes
+
+        w = eval_grid.weights
+        w *= jnp.sqrt(eval_grid.num_nodes)
+
+        eval_profiles = get_profiles(self._data_keys, obj=surface, grid=eval_grid)
+        eval_transforms = get_transforms(self._data_keys, obj=surface, grid=eval_grid)
+        eval_data = compute_fun(
+            surface,
+            self._data_keys,
+            params=surface.params_dict,
+            transforms=eval_transforms,
+            profiles=eval_profiles,
+        )
+
+        self._constants = {
+            "field": self._field,
+            "field_grid": self._field_grid,
+            "quad_weights": w,
+            "eval_data": eval_data,
+            "eval_transforms": eval_transforms,
+            "eval_profiles": eval_profiles,
+        }
+
+        timer.stop("Precomputing transforms")
+        if verbose > 1:
+            timer.disp("Precomputing transforms")
+
+        if self._normalize:
+            scales = compute_scaling_factors(surface)
+            Bscale = 1.0  # surface has no inherent B scale
+            self._normalization = Bscale * scales["R0"] * scales["a"]
+
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, params_1, params_2=None, constants=None):
+        """Compute normal field on surface.
+
+        Parameters
+        ----------
+        params_1 : dict
+            Dictionary of the surface's degrees of freedom.
+        params_2 : dict
+            Dictionary of the external field's degrees of freedom, only provided if
+            if field_fixed=False.
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
+
+        Returns
+        -------
+        f : ndarray
+            Bnorm on the QFM surface from the external field
+
+        """
+        if constants is None:
+            constants = self.constants
+        field_params = params_2 if not self._field_fixed else None
+        surf_params = params_1
+
+        eval_data = compute_fun(
+            self._surface,
+            self._data_keys,
+            surf_params,
+            constants["eval_transforms"],
+            constants["eval_profiles"],
+        )
+        x = jnp.array([eval_data["R"], eval_data["phi"], eval_data["Z"]]).T
+        if field_params is None:
+            field_params = constants["field"].params_dict
+        B_ext = constants["field"].compute_magnetic_field(
+            x,
+            source_grid=constants["field_grid"],
+            basis="rpz",
+            params=field_params,
+        )
+        B_ext = jnp.sum(B_ext * eval_data["n_rho"], axis=-1)
+        f = (B_ext) * jnp.sqrt(eval_data["|e_theta x e_zeta|"])
+        return f
+
+
 class ToroidalFlux(_Objective):
     """Target the toroidal flux in an equilibrium from a magnetic field.
 
@@ -1286,10 +1501,8 @@ class ToroidalFlux(_Objective):
 
     Parameters
     ----------
-    eq : Equilibrium
-        Equilibrium for which the toroidal flux will be calculated.
-        The Equilibrium is assumed to be held fixed when using this
-        objective.
+    eq : Equilibrium or FourierRZToroidalSurface
+        Equilibrium (or QFM surface) for which the toroidal flux will be calculated.
     field : MagneticField
         MagneticField object, the parameters of this will be optimized
         to minimize the objective.
@@ -1302,12 +1515,23 @@ class ToroidalFlux(_Objective):
         Collocation grid containing the nodes to evaluate the normal magnetic field at
         plasma geometry at. Defaults to a LinearGrid(L=eq.L_grid, M=eq.M_grid,
         zeta=jnp.array(0.0), NFP=eq.NFP).
+    field_fixed : bool
+        Whether or not to fix the field's DOFs during the optimization.
+    eq_fixed : bool
+        Whether or not to fix the equilibrium (or QFM surface) DOFs
+        during the optimization.
 
     """
 
     __doc__ = __doc__.rstrip() + collect_docs(
-        target_default="``target=eq.Psi``.",
-        bounds_default="``target=eq.Psi``.",
+        target_default=(
+            "``target=eq.Psi`` if an Equilibrium is passed,"
+            + " or ``target=1.0`` if a surface."
+        ),
+        bounds_default=(
+            "``target=eq.Psi`` if an Equilibrium is passed,"
+            + " or ``target=1.0`` if a surface."
+        ),
         loss_detail=" Note: has no effect for this objective.",
     )
 
@@ -1329,18 +1553,30 @@ class ToroidalFlux(_Objective):
         field_grid=None,
         eval_grid=None,
         name="toroidal-flux",
+        field_fixed=False,
+        eq_fixed=False,
         jac_chunk_size=None,
     ):
         if target is None and bounds is None:
-            target = eq.Psi
+            target = 1.0 if not hasattr(eq, "Psi") else eq.Psi
         self._field = field
         self._field_grid = field_grid
         self._eval_grid = eval_grid
         self._eq = eq
-        # TODO: add eq_fixed option so this can be used in single stage
-
+        self._field_fixed = field_fixed
+        self._eq_fixed = eq_fixed
+        errorif(
+            eq_fixed and field_fixed,
+            ValueError,
+            "Cannot have both `field_fixed=True` and `eq_fixed=True`",
+        )
+        things = []
+        if not eq_fixed:
+            things += [eq]
+        if not field_fixed:
+            things += [field]
         super().__init__(
-            things=[field],
+            things=things,
             target=target,
             bounds=bounds,
             weight=weight,
@@ -1363,16 +1599,26 @@ class ToroidalFlux(_Objective):
             Level of output.
 
         """
+        from desc.geometry import FourierRZToroidalSurface
+
         eq = self._eq
         self._use_vector_potential = True
         try:
             self._field.compute_magnetic_vector_potential([0, 0, 0])
-        except (NotImplementedError, ValueError):
+        except (NotImplementedError, ValueError) as e:
             self._use_vector_potential = False
+            errorif(
+                isinstance(eq, FourierRZToroidalSurface)
+                and not self._use_vector_potential,
+                ValueError,
+                "Targeting a QFM surface requires the vector potential to be "
+                "calculated from the field, however the field cannot calculate "
+                f"the vector potential, encountered error {e}",
+            )
         if self._eval_grid is None:
             eval_grid = LinearGrid(
                 L=eq.L_grid if not self._use_vector_potential else 0,
-                M=eq.M_grid,
+                M=eq.M_grid if hasattr(eq, "M_grid") else 3 * eq.M,
                 zeta=jnp.array(0.0),
                 NFP=eq.NFP,
             )
@@ -1385,25 +1631,25 @@ class ToroidalFlux(_Objective):
             "Evaluation grid should be at constant zeta",
         )
         if self._normalize:
-            self._normalization = eq.Psi
+            self._normalization = 1.0 if not hasattr(eq, "Psi") else eq.Psi
+        if not isinstance(eq, FourierRZToroidalSurface):
+            # ensure vacuum eq, as is unneeded for finite beta
+            pres = np.max(np.abs(eq.compute("p")["p"]))
+            curr = np.max(np.abs(eq.compute("current")["current"]))
+            warnif(
+                pres > 1e-8,
+                UserWarning,
+                f"Pressure appears to be non-zero (max {pres} Pa), "
+                + "this objective is unneeded at finite beta.",
+            )
+            warnif(
+                curr > 1e-8,
+                UserWarning,
+                f"Current appears to be non-zero (max {curr} A), "
+                + "this objective is unneeded at finite beta.",
+            )
 
-        # ensure vacuum eq, as is unneeded for finite beta
-        pres = np.max(np.abs(eq.compute("p")["p"]))
-        curr = np.max(np.abs(eq.compute("current")["current"]))
-        warnif(
-            pres > 1e-8,
-            UserWarning,
-            f"Pressure appears to be non-zero (max {pres} Pa), "
-            + "this objective is unneeded at finite beta.",
-        )
-        warnif(
-            curr > 1e-8,
-            UserWarning,
-            f"Current appears to be non-zero (max {curr} A), "
-            + "this objective is unneeded at finite beta.",
-        )
-
-        # eval_grid.num_nodes for quad flux cost,
+        # eval_grid.num_nodes for quad flux cost
         self._dim_f = 1
         timer = Timer()
         if verbose > 0:
@@ -1414,7 +1660,16 @@ class ToroidalFlux(_Objective):
             data_keys += ["e_theta"]
         else:
             data_keys += ["|e_rho x e_theta|", "n_zeta"]
-        data = eq.compute(data_keys, grid=eval_grid)
+        self._data_keys = data_keys
+        eval_profiles = get_profiles(self._data_keys, obj=eq, grid=eval_grid)
+        eval_transforms = get_transforms(self._data_keys, obj=eq, grid=eval_grid)
+        data = compute_fun(
+            eq,
+            self._data_keys,
+            params=eq.params_dict,
+            transforms=eval_transforms,
+            profiles=eval_profiles,
+        )
 
         plasma_coords = jnp.array([data["R"], data["phi"], data["Z"]]).T
 
@@ -1424,6 +1679,8 @@ class ToroidalFlux(_Objective):
             "quad_weights": 1.0,
             "field": self._field,
             "field_grid": self._field_grid,
+            "eval_transforms": eval_transforms,
+            "eval_profiles": eval_profiles,
             "eval_grid": eval_grid,
         }
 
@@ -1433,14 +1690,16 @@ class ToroidalFlux(_Objective):
 
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, field_params=None, constants=None):
+    def compute(self, params_1, params_2=None, constants=None):
         """Compute toroidal flux.
 
         Parameters
         ----------
-        field_params : dict
-            Dictionary of field degrees of freedom,
-            eg FourierCurrentPotential.params_dict or CoilSet.params_dict
+        params_1 : dict
+            Dictionary of the external field's degrees of freedom, or the surface's
+            degrees of freedom if qfm_surface=True.
+        params_2 : dict
+            Dictionary of the external field's degrees of freedom, if qfm_surface=True.
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc. Defaults to
             self.constants
@@ -1453,9 +1712,25 @@ class ToroidalFlux(_Objective):
         """
         if constants is None:
             constants = self.constants
+        field_params = params_2 if not self._eq_fixed else params_1
+        field_params = (
+            constants["field"].params_dict if self._field_fixed else field_params
+        )
+        surf_params = params_1 if not self._eq_fixed else None
 
-        data = constants["equil_data"]
-        plasma_coords = constants["plasma_coords"]
+        if not self._eq_fixed:
+            data = compute_fun(
+                self._eq,
+                self._data_keys,
+                surf_params,
+                constants["eval_transforms"],
+                constants["eval_profiles"],
+            )
+            plasma_coords = jnp.array([data["R"], data["phi"], data["Z"]]).T
+        else:
+            data = constants["equil_data"]
+            plasma_coords = constants["plasma_coords"]
+
         grid = constants["eval_grid"]
 
         if self._use_vector_potential:

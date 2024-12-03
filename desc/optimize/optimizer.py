@@ -177,7 +177,7 @@ class Optimizer(IOAble):
 
         # need local import to avoid circular dependencies
         from desc.equilibrium import Equilibrium
-        from desc.objectives import QuadraticFlux, ToroidalFlux
+        from desc.objectives import QuadraticFlux
 
         # eq may be None
         eq = get_instance(things, Equilibrium)
@@ -188,12 +188,6 @@ class Optimizer(IOAble):
                 is_any_instance(all_objs, QuadraticFlux),
                 ValueError,
                 "QuadraticFlux objective assumes Equilibrium is fixed but Equilibrium "
-                + "is in things to optimize.",
-            )
-            errorif(
-                is_any_instance(all_objs, ToroidalFlux),
-                ValueError,
-                "ToroidalFlux objective assumes Equilibrium is fixed but Equilibrium "
                 + "is in things to optimize.",
             )
             # save these for later

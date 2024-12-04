@@ -10,6 +10,7 @@ from ._coils import (
     PlasmaCoilSetMinDistance,
     QuadraticFlux,
     ToroidalFlux,
+    CoilSetMaxNormB,
 )
 from ._equilibrium import (
     CurrentDensity,

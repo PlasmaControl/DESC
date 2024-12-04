@@ -11,6 +11,7 @@ def compute_scaling_factors(thing):
     # local import to avoid circular import
     from desc.equilibrium import Equilibrium
     from desc.geometry import FourierRZToroidalSurface
+    from desc.coils import _Coil
 
     scales = {}
 
@@ -69,6 +70,9 @@ def compute_scaling_factors(thing):
 
     elif isinstance(thing, Curve):
         scales["a"] = thing.compute("length")["length"] / (2 * np.pi)
+        
+        if isinstance(thing, _Coil):
+            scales["B"] = mu_0 * thing.current / (2 * scales["a"]) # field at center of equivalent loop
 
     # replace 0 scales to avoid normalizing by zero
     for scale in scales.keys():

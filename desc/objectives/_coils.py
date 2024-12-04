@@ -9,6 +9,8 @@ from desc.backend import (
     tree_leaves,
     tree_map,
     tree_unflatten,
+    scan,
+    tree_stack,
 )
 from desc.compute import get_profiles, get_transforms, rpz2xyz
 from desc.compute.utils import _compute as compute_fun
@@ -847,6 +849,204 @@ class CoilSetMinDistance(_Objective):
             jnp.zeros(self.dim_f),
         )
         return min_dist_per_coil
+
+
+class CoilSetMaxNormB(_Objective):
+    """Target the maximum magnetic field magnetic field on coil for a given coilset.
+    Self field on the coil is computed with the finite build method, and field from other
+    coils on the coil is computed with the filamentary method.
+
+    Will yield one value for each coil in the coilset, which is the maximum magnitude
+    of magnetic field on that coil. All coils in the coilset must inherit from _FiniteBuildCoil.
+
+    Parameters
+    ----------
+    coil : CoilSet
+        Coil(s) that are to be optimized.
+    target : float, ndarray, optional
+        Target value(s) of the objective. Only used if bounds is None.
+        Must be broadcastable to Objective.dim_f. If array, it has to
+        be flattened according to the number of inputs.
+    bounds : tuple of float, ndarray, optional
+        Lower and upper bounds on the objective. Overrides target.
+        Both bounds must be broadcastable to to Objective.dim_f
+    weight : float, ndarray, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        Must be broadcastable to to Objective.dim_f
+    normalize : bool, optional
+        Whether to compute the error in physical units or non-dimensionalize.
+    normalize_target : bool, optional
+        Whether target and bounds should be normalized before comparing to computed
+        values. If `normalize` is `True` and the target is in physical units,
+        this should also be set to True.
+        be set to True.
+    loss_function : {None, 'mean', 'min', 'max'}, optional
+        Loss function to apply to the objective values once computed. This loss function
+        is called on the raw compute value, before any shifting, scaling, or
+        normalization. Operates over all coils, not each individial coil.
+    deriv_mode : {"auto", "fwd", "rev"}
+        Specify how to compute jacobian matrix, either forward mode or reverse mode AD.
+        "auto" selects forward or reverse mode based on the size of the input and output
+        of the objective. Has no effect on self.grad or self.hess which always use
+        reverse mode and forward over reverse mode respectively.
+    xsection_grid : Grid, list, optional
+        Collocation grid used to discretize each coil cross section. Defaults to the default grid
+        for the given coil-type, see ``coils.py`` for more details. If a list, must have the
+        same structure as coils.
+    centerline_grid : Grid, list, optional
+        Collocation grid used to discretize each coil centerline. Defaults to the default grid
+        for the given coil-type, see ``coils.py`` and ``curve.py`` for more details.
+        If a list, must have the same structure as coils.
+    name : str, optional
+        Name of the objective function.
+
+    """
+
+    _scalar = False
+    _units = "(T)"
+    _print_value_fmt = "Maximum field magnitude on coil: {:10.3e} "
+
+    def __init__(
+        self,
+        coil,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        loss_function=None,
+        deriv_mode="fwd",
+        xsection_grid=None,
+        centerline_grid=None,
+        name="field magnitude on coil distance",
+    ):
+        from desc.coils import CoilSet, _FiniteBuildCoil
+
+        if target is None and bounds is None:
+            bounds = (1, np.inf)
+
+        self._xsection_grid = xsection_grid
+        self._centerline_grid = centerline_grid
+
+        errorif(
+            not type(coil) is CoilSet,
+            ValueError,
+            "coil must be of type CoilSet, not an individual Coil. Mixed coil sets are not supported.",
+        )
+        errorif(
+            not all([isinstance(c, _FiniteBuildCoil) for c in coil.coils]),
+            ValueError,
+            "All coils in the CoilSet must inherit from _FiniteBuildCoil",
+        )
+        super().__init__(
+            things=coil,
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            loss_function=loss_function,
+            deriv_mode=deriv_mode,
+            name=name,
+        )
+
+    def build(self, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        coilset = self.things[0]
+        xsection_grid = self._xsection_grid or None
+        centerline_grid = self._centerline_grid or None
+
+        self._dim_f = coilset.num_coils
+        self._constants = {
+            "coilset": coilset,
+            "xsection_grid": xsection_grid,
+            "centerline_grid": centerline_grid,
+            "quad_weights": 1.0,
+        }
+
+        if self._normalize:
+            coils = tree_leaves(coilset, is_leaf=lambda x: not hasattr(x, "__len__"))
+            scales = [compute_scaling_factors(coil)["B"] for coil in coils]
+            self._normalization = np.mean(
+                scales
+            )  # mean centerline field strength of coils
+
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, params, constants=None):
+        """Compute maximum field magnitude on each coil.
+
+        Parameters
+        ----------
+        params : dict
+            Dictionary of coilset degrees of freedom, eg CoilSet.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc.
+            Defaults to self._constants.
+
+        Returns
+        -------
+        f : array of floats
+            Maximum field on coil for each coil in the coilset.
+
+        """
+        if constants is None:
+            constants = self.constants
+
+
+        def body(index, x):
+            # compute self field and other coil field to find maximum field magnitude on the coil k
+            coil = constants["coilset"][0]
+            self_field, quad_points = coil.compute_self_field(
+                xsection_grid=constants["xsection_grid"],
+                centerline_grid=constants["centerline_grid"],
+                params=x,  # just this coil's parameters
+            )
+
+            # compute field from other coils and subtract the coil computation to prevent double counting
+            other_field = constants["coilset"].compute_magnetic_field(
+                quad_points,
+                params=params,  # all coils' parameters
+                basis="xyz",
+                source_grid=constants["centerline_grid"],
+            )
+            other_field -= coil.compute_magnetic_field(
+                quad_points,
+                params=x,
+                basis="xyz",
+                source_grid=constants["centerline_grid"],
+            )
+
+            total_field = self_field + other_field
+            field_mag = safenorm(total_field, axis=-1)
+
+            # return maximum field magnitude on the coil. NaNs could be generated on the coil axis where the filament has a singularity
+            # in effect, the coil centerline points are not used in the field computation, which is ok since the field is not maximal on the coil axis
+            max_mag = jnp.nanmax(field_mag, initial=0)
+
+            index += 1 
+
+            return index, max_mag
+
+        _, max_field_per_coil = scan(body, 0, tree_stack(params))
+        
+        #reshape this to the same shape as the coilset
+        if constants["coilset"].sym:
+            max_field_per_coil = jnp.concatenate([max_field_per_coil, jnp.flip(max_field_per_coil)])
+
+        if constants["coilset"].NFP > 1:
+            max_field_per_coil = jnp.repeat(max_field_per_coil, constants["coilset"].NFP)
+
+        return max_field_per_coil
 
 
 class PlasmaCoilSetMinDistance(_Objective):

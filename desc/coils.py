@@ -994,6 +994,7 @@ def _check_type(coil0, coil):
         FourierXYZCoil: ["X_basis", "Y_basis", "Z_basis"],
         FourierPlanarCoil: ["r_basis"],
         SplineXYZCoil: ["method", "N", "knots"],
+        FourierPlanarFiniteBuildCoil: ["r_basis"],
     }
 
     for attr in attrs[coil0.__class__]:
@@ -1153,7 +1154,7 @@ class _FiniteBuildCoil(_FramedCoil, Optimizable, ABC):
         field : ndarray, shape(n,3)
             magnetic field at specified points, at a combination of the coil centerline and cross section grids.
         positions : ndarray, shape(n,3)
-            positions of the field points in the lab frame.
+            positions of the field points in the lab frame, currently in X,Y,Z coordinates.
         """
 
         if self.cross_section_shape == "circular":
@@ -1231,7 +1232,7 @@ class _FiniteBuildCoil(_FramedCoil, Optimizable, ABC):
         B_b_fb = self.compute("B_b_fb", grid=centerline_grid, params=params)["B_b_fb"]
 
         # compute regularized self field integral
-        data = self.compute(["x", "x_s", "ds"], grid=centerline_grid, params=params)
+        data = self.compute(["x", "x_s", "ds"], grid=centerline_grid, params=params, basis="xyz")
         B_reg_fb = biot_savart_quad_regularized(
             data["x"],
             data["x"],

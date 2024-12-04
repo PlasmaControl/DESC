@@ -1,6 +1,10 @@
 Changelog
 =========
 
+New Feature
+
+- Adds a new profile class ``PowerProfile`` for raising profiles to a power.
+
 v0.13.0
 -------
 
@@ -23,7 +27,6 @@ New Features
 - Adds ``eq_fixed`` flag to ``ToroidalFlux`` to allow for the equilibrium/QFM surface to vary during optimization, useful for single-stage optimizations.
 - Adds tutorial notebook showcasing QFM surface capability.
 - Adds ``rotate_zeta`` function to ``desc.compat`` to rotate an ``Equilibrium`` around Z axis.
-
 
 Bug Fixes
 

@@ -1045,11 +1045,11 @@ class TestMagneticFields:
     @pytest.mark.unit
     def test_spline_field(self, tmpdir_factory):
         """Test accuracy of spline magnetic field."""
-        field1 = ScalarPotentialField(phi_lm, args)
+        field1 = ScalarPotentialField(phi_lm, args, NFP=5)
         R = np.linspace(0.5, 1.5, 20)
         Z = np.linspace(-1.5, 1.5, 20)
         p = np.linspace(0, 2 * np.pi / 5, 40)
-        field2 = SplineMagneticField.from_field(field1, R, p, Z, NFP=5)
+        field2 = SplineMagneticField.from_field(field1, R, p, Z)
 
         np.testing.assert_allclose(
             field1([1.0, 1.0, 1.0]), field2([1.0, 1.0, 1.0]), rtol=1e-2, atol=1e-2
@@ -1450,11 +1450,13 @@ def test_dommaschk_field_errors():
     b_arr = [1]
     c_arr = [1]
     d_arr = [1, 1]  # length is not equal to the rest
-    with pytest.raises(AssertionError):
+    with pytest.raises(AssertionError, match="size"):
         DommaschkPotentialField(ms, ls, a_arr, b_arr, c_arr, d_arr)
-    d_arr = [1]
+    d_arr = [1]  # test with incorrect NFP
+    with pytest.raises(AssertionError, match="desired NFP"):
+        DommaschkPotentialField(ms, ls, a_arr, b_arr, c_arr, d_arr, NFP=2)
     ms = [-1]  # negative mode number
-    with pytest.raises(AssertionError):
+    with pytest.raises(AssertionError, match=">= 0"):
         DommaschkPotentialField(ms, ls, a_arr, b_arr, c_arr, d_arr)
 
 

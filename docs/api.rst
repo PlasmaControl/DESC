@@ -43,6 +43,7 @@ Compatibility
     desc.compat.flip_helicity
     desc.compat.flip_theta
     desc.compat.rescale
+    desc.compat.rotate_zeta
 
 Continuation
 ************
@@ -147,6 +148,7 @@ Magnetic Fields
     desc.magnetic_fields.VerticalMagneticField
     desc.magnetic_fields.field_line_integrate
     desc.magnetic_fields.read_BNORM_file
+    desc.magnetic_fields.solve_regularized_surface_current
 
 Objective Functions
 *******************
@@ -223,6 +225,7 @@ Objective Functions
     desc.objectives.RadialForceBalance
     desc.objectives.RotationalTransform
     desc.objectives.Shear
+    desc.objectives.SurfaceQuadraticFlux
     desc.objectives.ToroidalCurrent
     desc.objectives.ToroidalFlux
     desc.objectives.VacuumBoundaryError

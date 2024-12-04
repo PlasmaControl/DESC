@@ -1,6 +1,9 @@
 Changelog
 =========
 
+v0.13.0
+-------
+
 New Features
 
 - Adds ``from_input_file`` method to ``Equilibrium`` class to generate an ``Equilibrium`` object with boundary, profiles, resolution and flux specified in a given DESC or VMEC input file

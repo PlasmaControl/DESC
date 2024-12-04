@@ -56,9 +56,12 @@ profiles together by addition, multiplication, or scaling.
     desc.profiles.PowerSeriesProfile
     desc.profiles.SplineProfile
     desc.profiles.MTanhProfile
+    desc.profiles.TwoPowerProfile
+    desc.profiles.HermiteSplineProfile
     desc.profiles.ScaledProfile
-    desc.profiles.SumProfile
     desc.profiles.ProductProfile
+    desc.profiles.SumProfile
+    desc.profiles.PowerProfile
 
 
 Utilities

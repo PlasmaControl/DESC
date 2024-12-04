@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 
-from desc.compat import flip_helicity, flip_theta, rescale
+from desc.compat import flip_helicity, flip_theta, rescale, rotate_zeta
 from desc.examples import get
 from desc.grid import Grid, LinearGrid, QuadratureGrid
 
@@ -277,3 +277,49 @@ def test_rescale():
     np.testing.assert_allclose(new_vals["B_max"], 2)
     np.testing.assert_allclose(new_vals["R0/a"], old_vals["R0/a"])
     np.testing.assert_allclose(new_vals["err"], old_vals["err"], atol=1e-10)
+
+
+@pytest.mark.unit
+@pytest.mark.solve
+def test_rotate_zeta():
+    """Test rotating Equilibrium around Z axis."""
+    eq = get("ARIES-CS")
+    with pytest.warns(UserWarning, match="Reducing radial"):
+        eq.change_resolution(L=5, M=5, N=5)
+    eq_no_sym = eq.copy()
+    eq_no_sym.change_resolution(sym=False)
+    with pytest.warns(UserWarning, match="Rotating"):
+        dzeta1 = np.pi / 2
+        eq1 = rotate_zeta(eq, dzeta1, copy=True)
+
+    # check arbitrary rotation works
+    surf1 = eq_no_sym.get_surface_at(zeta=dzeta1)
+    surf2 = eq1.get_surface_at(zeta=0)
+    assert np.allclose(surf1.R_lmn, surf2.R_lmn)
+    assert np.allclose(surf1.Z_lmn, surf2.Z_lmn)
+
+    # check that rotating by 2pi is the same as original
+    dzeta2 = 2 * np.pi - dzeta1
+    eq2 = rotate_zeta(eq1, dzeta2, copy=True)
+    assert np.allclose(eq_no_sym.R_lmn, eq2.R_lmn)
+    assert np.allclose(eq_no_sym.Z_lmn, eq2.Z_lmn)
+    assert np.allclose(eq_no_sym.L_lmn, eq2.L_lmn)
+
+    # check that rotating by pi/NFP and -pi/NFP is the same
+    dzeta3 = -np.pi * eq.NFP
+    eq3 = rotate_zeta(eq, dzeta3, copy=True)
+    eq4 = rotate_zeta(eq, -dzeta3, copy=True)
+    assert np.allclose(eq4.R_lmn, eq3.R_lmn)
+    assert np.allclose(eq4.Z_lmn, eq3.Z_lmn)
+    assert np.allclose(eq4.L_lmn, eq3.L_lmn)
+
+    # check that rotation of AS eq stays the same
+    eq = get("DSHAPE")
+    eq3 = rotate_zeta(eq, dzeta1, copy=True)
+    assert np.allclose(eq.R_lmn, eq3.R_lmn)
+    assert np.allclose(eq.Z_lmn, eq3.Z_lmn)
+    assert np.allclose(eq.L_lmn, eq3.L_lmn)
+
+    dzeta4 = np.pi / eq.NFP
+    eq4 = rotate_zeta(eq, dzeta4, copy=True)
+    assert eq4.sym

@@ -4,7 +4,7 @@ from desc.backend import jnp
 from desc.compute import get_profiles, get_transforms, xyz2rpz
 from desc.compute.utils import _compute as compute_fun
 from desc.grid import LinearGrid
-from desc.utils import Timer
+from desc.utils import Timer, dot
 
 from .normalization import compute_scaling_factors
 from .objective_funs import _Objective
@@ -676,8 +676,12 @@ class PointBMeasurement(_Objective):
         Array of points at which the magnetic field B is measured.
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f
-        which is the number of measurement points.
+        Must be broadcastable to Objective.dim_f which is the
+        number of measurement points if ``direction`` is passed in, or
+        3 times the number of measurement points if ``direction`` is not passed in.
+        If ``direction`` is not passed in, target is assumed to be the
+        flattened array of the field vector at the measurement points i.e.
+        ``B_array.flatten()``.
     bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
         Both bounds must be broadcastable to to Objective.dim_f
@@ -723,10 +727,16 @@ class PointBMeasurement(_Objective):
         requiring more memory. A ``jac_chunk_size`` of 1 corresponds to the least
         memory intensive, but slowest method of calculating the Jacobian.
         If None, it will use the largest size i.e ``obj.dim_x``.
-    vacuum : bool
+    coils_fixed : bool, optional
+        whether or not to fix the coilset DOFs during optimization. False by default
+    vacuum : bool, optional
         whether eq is vacuum, in which case plasma contribution to B won't be
         calculated.
-
+    directions : array (n,3), optional
+        the directions of the measured B field for each of the n sensors, i.e. if a
+        sensor is measuring the poloidal field and is located at (R,phi,Z) = (1,0,0),
+        its ``direction`` might be [0,0,+/- 1]. If not passed, will default to instead
+        comparing the entire magnetic field vector at the points passed in.
 
     """
 
@@ -753,8 +763,8 @@ class PointBMeasurement(_Objective):
         jac_chunk_size=None,
         coils_fixed=False,
         vacuum=False,
-    ):  # TODO: Add a normal/direction vector for each point, if passed, will dot B
-        # and that is the measurement (for B probes that only measure in one direction)
+        directions=None,
+    ):
         if target is None and bounds is None:
             target = 0
         self._coils = coilset
@@ -766,6 +776,7 @@ class PointBMeasurement(_Objective):
             self._measurement_coords = xyz2rpz(measurement_coords)
         else:
             raise ValueError(f"basis must be either rpz or xyz, instead got {basis}")
+        self._directions = directions
         self._eq = eq
         self._vacuum = vacuum
         self._sheet_current = hasattr(self._eq.surface, "Phi_mn")
@@ -854,9 +865,14 @@ class PointBMeasurement(_Objective):
             "equil_transforms": eq_transforms,
             "equil_profiles": eq_profiles,
             "vc_source_grid": self._vc_source_grid,
+            "directions": self._directions,
         }
         if self._coils_fixed:
-            self._constants["B_from_coils"] = B_from_coils
+            self._constants["B_from_coils"] = (
+                B_from_coils
+                if self._directions is not None
+                else dot(B_from_coils, self._directions)
+            )
         if self._sheet_current:
             self._sheet_data_keys = ["K"]
             sheet_source_transforms = get_transforms(
@@ -945,6 +961,8 @@ class PointBMeasurement(_Objective):
         else:
             Bplasma = jnp.zeros_like(self._measurement_coords)
         B = Bplasma + Bcoil
+        if constants["directions"] is not None:
+            B = dot(B, constants["directions"])
 
         if self._coils_fixed:
             B += constants["B_from_coils"]

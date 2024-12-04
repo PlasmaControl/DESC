@@ -331,6 +331,7 @@ def maybe_add_self_consistency(thing, constraints):
         constraints += (AxisZSelfConsistency(eq=thing),)
 
     # Curve
+    # TODO: these have to be removed to perform coil+field optimization
     if {"shift"} <= params and not is_any_instance(constraints, FixCurveShift):
         constraints += (FixCurveShift(curve=thing),)
     if {"rotmat"} <= params and not is_any_instance(constraints, FixCurveRotation):

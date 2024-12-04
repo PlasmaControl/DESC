@@ -189,7 +189,7 @@ class TestProfiles:
         assert "SumProfile" in str(pp + zp)
         assert "ProductProfile" in str(pp * zp)
         assert "ScaledProfile" in str(2 * zp)
-        assert "PoweredProfile" in str(zp**2)
+        assert "PowerProfile" in str(zp**2)
 
     @pytest.mark.unit
     def test_get_set(self):

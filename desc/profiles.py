@@ -247,7 +247,7 @@ class _Profile(IOAble, ABC):
     def __pow__(self, x):
         """Raise this profile to a power."""
         if np.isscalar(x):
-            return PoweredProfile(x, self)
+            return PowerProfile(x, self)
         else:
             raise NotImplementedError()
 
@@ -346,7 +346,7 @@ class ScaledProfile(_Profile):
         return s
 
 
-class PoweredProfile(_Profile):
+class PowerProfile(_Profile):
     """Profile raised to a power.
 
     f_1(x) = f(x)**a
@@ -365,7 +365,7 @@ class PoweredProfile(_Profile):
     def __init__(self, power, profile, **kwargs):
         assert isinstance(
             profile, _Profile
-        ), "profile in a PoweredProfile must be a Profile or subclass, got {}.".format(
+        ), "profile in a PowerProfile must be a Profile or subclass, got {}.".format(
             str(profile)
         )
         assert np.isscalar(power), "power must be a scalar."
@@ -415,7 +415,7 @@ class PoweredProfile(_Profile):
             power = x[0]
             params = x[1:]
         else:
-            raise ValueError("Got wrong number of parameters for PoweredProfile")
+            raise ValueError("Got wrong number of parameters for PowerProfile")
         return power, params
 
     def compute(self, grid, params=None, dr=0, dt=0, dz=0):
@@ -439,7 +439,7 @@ class PoweredProfile(_Profile):
         """
         if dt > 0 or dz > 0:
             raise NotImplementedError(
-                "Poloidal and toroidal derivatives of PoweredProfile have not been "
+                "Poloidal and toroidal derivatives of PowerProfile have not been "
                 + "implemented yet."
             )
         power, params = self._parse_params(params)
@@ -457,7 +457,7 @@ class PoweredProfile(_Profile):
         elif dr == 2:
             f = power * ((power - 1) * fn2 * df1**2 + fn1 * df2)
         else:
-            raise NotImplementedError("dr > 2 not implemented for PoweredProfile!")
+            raise NotImplementedError("dr > 2 not implemented for PowerProfile!")
         return f
 
     def __repr__(self):

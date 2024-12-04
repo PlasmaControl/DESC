@@ -295,7 +295,7 @@ Profiles
     desc.profiles.FourierZernikeProfile
     desc.profiles.HermiteSplineProfile
     desc.profiles.MTanhProfile
-    desc.profiles.PoweredProfile
+    desc.profiles.PowerProfile
     desc.profiles.PowerSeriesProfile
     desc.profiles.ProductProfile
     desc.profiles.ScaledProfile

@@ -61,7 +61,7 @@ profiles together by addition, multiplication, or scaling.
     desc.profiles.ScaledProfile
     desc.profiles.ProductProfile
     desc.profiles.SumProfile
-    desc.profiles.PoweredProfile
+    desc.profiles.PowerProfile
 
 
 Utilities

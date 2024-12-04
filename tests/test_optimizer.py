@@ -325,6 +325,44 @@ def test_no_iterations():
 
 
 @pytest.mark.regression
+@pytest.mark.optimize
+def test_proximal_scalar():
+    """Test that proximal scalar optimization works."""
+    # test fix for GH issue #1403
+
+    # optimize to reduce DSHAPE volume from 100 m^3 to 90 m^3
+    eq = desc.examples.get("DSHAPE")
+    optimizer = Optimizer("proximal-fmintr")  # proximal scalar optimizer
+    R_modes = np.vstack(
+        (
+            [0, 0, 0],
+            eq.surface.R_basis.modes[
+                np.max(np.abs(eq.surface.R_basis.modes), 1) > 1, :
+            ],
+        )
+    )
+    Z_modes = eq.surface.Z_basis.modes[
+        np.max(np.abs(eq.surface.Z_basis.modes), 1) > 1, :
+    ]
+    objective = ObjectiveFunction(Volume(eq=eq, target=90))  # scalar objective function
+    constraints = (
+        FixBoundaryR(eq=eq, modes=R_modes),
+        FixBoundaryZ(eq=eq, modes=Z_modes),
+        FixIota(eq=eq),
+        FixPressure(eq=eq),
+        FixPsi(eq=eq),
+        ForceBalance(eq=eq),  # force balance constraint for proximal projection
+    )
+    [eq], _ = optimizer.optimize(
+        things=eq,
+        objective=objective,
+        constraints=constraints,
+        verbose=3,
+    )
+    np.testing.assert_allclose(eq.compute("V")["V"], 90)
+
+
+@pytest.mark.regression
 @pytest.mark.slow
 @pytest.mark.optimize
 def test_overstepping():

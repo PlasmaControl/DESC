@@ -19,6 +19,7 @@ from desc.integrals._interp_utils import (
 from desc.integrals._quad_utils import (
     bijection_from_disc,
     grad_bijection_from_disc,
+    simpson2,
     uniform,
 )
 from desc.integrals.basis import (
@@ -38,7 +39,7 @@ from desc.utils import (
 )
 
 
-def get_pitch_inv_quad(min_B, max_B, num_pitch):
+def get_pitch_inv_quad(min_B, max_B, num_pitch, simp=False):
     """Return 1/λ values and weights for quadrature between ``min_B`` and ``max_B``.
 
     Parameters
@@ -49,6 +50,8 @@ def get_pitch_inv_quad(min_B, max_B, num_pitch):
         Maximum |B| value.
     num_pitch : int
         Number of values.
+    simp : bool
+        Whether to use an open Simpson rule instead of uniform weights.
 
     Returns
     -------
@@ -62,10 +65,10 @@ def get_pitch_inv_quad(min_B, max_B, num_pitch):
         msg="Floating point error impedes detection of bounce points "
         f"near global extrema. Choose {num_pitch} < 1e5.",
     )
-    # Samples should be uniformly spaced in |B| and not λ (GitHub issue #1228).
+    # Samples should be uniformly spaced in |B| and not λ.
     # Important to do an open quadrature since the bounce integrals at the
     # global maxima of |B| are not computable even ignoring precision issues.
-    x, w = uniform(num_pitch)
+    x, w = simpson2(num_pitch) if simp else uniform(num_pitch)
     x = bijection_from_disc(x, min_B[..., jnp.newaxis], max_B[..., jnp.newaxis])
     w = w * grad_bijection_from_disc(min_B, max_B)[..., jnp.newaxis]
     return x, w
@@ -301,12 +304,12 @@ def _check_bounce_points(z1, z2, pitch_inv, knots, B, plot=True, **kwargs):
 def _bounce_quadrature(
     x,
     w,
-    integrand,
-    points,
-    pitch_inv,
-    f,
-    data,
     knots,
+    integrand,
+    pitch_inv,
+    data,
+    names,
+    points,
     *,
     method="cubic",
     batch=True,
@@ -323,31 +326,32 @@ def _bounce_quadrature(
     w : jnp.ndarray
         Shape (num quad, ).
         Quadrature weights.
-    integrand : callable
-        The composition operator on the set of functions in ``f`` that maps the
-        functions in ``f`` to the integrand f(λ, ℓ) in ∫ f(λ, ℓ) dℓ. It should
-        accept the arrays in ``f`` as arguments as well as the additional keyword
-        arguments: ``B`` and ``pitch``. A quadrature will be performed to
-        approximate the bounce integral of ``integrand(*f,B=B,pitch=pitch)``.
-    points : jnp.ndarray
-        Shape (..., num pitch, num well).
-        ζ coordinates of bounce points. The points are ordered and grouped such
-        that the straight line path between ``z1`` and ``z2`` resides in the
-        epigraph of |B|.
-    pitch_inv : jnp.ndarray
-        Shape (..., num pitch).
-        1/λ values to compute the bounce integrals.
-    f : list[jnp.ndarray]
-        Shape (..., N).
-        Real scalar-valued functions evaluated on the ``knots``.
-        These functions should be arguments to the callable ``integrand``.
-    data : dict[str, jnp.ndarray]
-        Shape (..., 1, N).
-        Required data evaluated on ``grid`` and reshaped with ``Bounce1D.reshape_data``.
-        Must include names in ``Bounce1D.required_names``.
     knots : jnp.ndarray
         Shape (N, ).
         Unique ζ coordinates where the arrays in ``data`` and ``f`` were evaluated.
+    integrand : callable or list[callable]
+        The composition operator on the set of functions in ``data`` that
+        maps that determines ``f`` in ∫ f(λ, ℓ) dℓ. It should accept a dictionary
+        which stores the interpolated data and the keyword argument ``pitch``.
+    pitch_inv : jnp.ndarray
+        Shape (num alpha, num rho, num pitch).
+        1/λ values to compute the bounce integrals. 1/λ(α,ρ) is specified by
+        ``pitch_inv[α,ρ]`` where in the latter the labels are interpreted
+        as the indices that correspond to that field line.
+    data : dict[str, jnp.ndarray]
+        Shape (num alpha, num rho, num zeta).
+        Real scalar-valued periodic functions in (θ, ζ) ∈ [0, 2π) × [0, 2π/NFP)
+        evaluated on the ``grid`` supplied to construct this object.
+        Use the method ``Bounce1D.reshape_data`` to reshape the data into the
+        expected shape.
+    names : str or list[str]
+        Names in ``data`` to interpolate. Default is all keys in ``data``.
+    points : tuple[jnp.ndarray]
+        Shape (num alpha, num rho, num pitch, num well).
+        Optional, output of method ``self.points``.
+        Tuple of length two (z1, z2) that stores ζ coordinates of bounce points.
+        The points are ordered and grouped such that the straight line path
+        between ``z1`` and ``z2`` resides in the epigraph of |B|.
     method : str
         Method of interpolation.
         See https://interpax.readthedocs.io/en/latest/_api/interpax.interp1d.html.
@@ -373,114 +377,117 @@ def _bounce_quadrature(
     z1, z2 = points
     errorif(z1.ndim < 2 or z1.shape != z2.shape)
     pitch_inv = jnp.atleast_1d(pitch_inv)
-    if not isinstance(f, (list, tuple)):
-        f = [f]
 
     # Integrate and complete the change of variable.
     if batch:
         result = _interpolate_and_integrate(
+            batch=True,
+            x=x,
             w=w,
-            Q=bijection_from_disc(x, z1[..., jnp.newaxis], z2[..., jnp.newaxis]),
+            knots=knots,
             integrand=integrand,
             pitch_inv=pitch_inv,
-            f=f,
             data=data,
-            knots=knots,
+            names=names,
+            points=points,
             method=method,
             check=check,
             plot=plot,
         )
     else:
 
-        def loop(z):  # over num well axis
-            z1, z2 = z
+        def loop(points):  # over num well axis
             # Need to return tuple because input was tuple; artifact of JAX map.
             return None, _interpolate_and_integrate(
+                batch=False,
+                x=x,
                 w=w,
-                Q=bijection_from_disc(x, z1[..., jnp.newaxis], z2[..., jnp.newaxis]),
+                knots=knots,
                 integrand=integrand,
                 pitch_inv=pitch_inv,
-                f=f,
                 data=data,
-                knots=knots,
+                names=names,
+                points=points,
                 method=method,
                 check=False,
                 plot=False,
-                batch=False,
             )
 
-        result = jnp.moveaxis(
-            # TODO (#1386): Use batch_size arg of imap after
-            #  increasing JAX version requirement.
-            imap(loop, (jnp.moveaxis(z1, -1, 0), jnp.moveaxis(z2, -1, 0)))[1],
-            source=0,
-            destination=-1,
-        )
-
-    return result * grad_bijection_from_disc(z1, z2)
-
-
-def _interpolate_and_integrate(
-    w,
-    Q,
-    integrand,
-    pitch_inv,
-    f,
-    data,
-    knots,
-    method,
-    check,
-    plot,
-    batch=True,
-):
-    """Interpolate given functions to points ``Q`` and perform quadrature.
-
-    Parameters
-    ----------
-    w : jnp.ndarray
-        Shape (num quad, ).
-        Quadrature weights.
-    Q : jnp.ndarray
-        Shape (..., num pitch, num well, num quad).
-        Quadrature points in ζ coordinates.
-
-    Returns
-    -------
-    result : jnp.ndarray
-        Shape (..., num pitch, num well).
-        Quadrature result.
-
-    """
-    assert w.ndim == 1 and Q.shape[-1] == w.size
-    assert Q.shape[-3 + (not batch)] == pitch_inv.shape[-1]
-    assert data["|B|"].shape[-1] == knots.size
-
-    shape = Q.shape
-    if batch:
-        Q = flatten_matrix(Q)
-    b_sup_z = interp1d_Hermite_vec(
-        Q,
-        knots,
-        data["|B^zeta|"] / data["|B|"],
-        data["|B^zeta|_z|r,a"] / data["|B|"]
-        - data["|B^zeta|"] * data["|B|_z|r,a"] / data["|B|"] ** 2,
-    )
-    B = interp1d_Hermite_vec(Q, knots, data["|B|"], data["|B|_z|r,a"])
-    # Spline each function separately so that operations in the integrand
-    # that do not preserve smoothness can be captured.
-    f = [interp1d_vec(Q, knots, f_i[..., jnp.newaxis, :], method=method) for f_i in f]
-    result = (
-        (integrand(*f, B=B, pitch=1 / pitch_inv[..., jnp.newaxis]) / b_sup_z)
-        .reshape(shape)
-        .dot(w)
-    )
-    if check:
-        _check_interp(shape, Q, b_sup_z, B, result, f, plot)
+        # TODO (#1386): Use batch_size arg of imap after
+        #  increasing JAX version requirement.
+        result = imap(loop, (jnp.moveaxis(z1, -1, 0), jnp.moveaxis(z2, -1, 0)))[1]
+        result = [jnp.moveaxis(r, source=0, destination=-1) for r in result]
 
     return result
 
 
-def _check_interp(shape, Q, b_sup_z, B, result, f, plot):
+def _interpolate_and_integrate(
+    batch,
+    x,
+    w,
+    knots,
+    integrand,
+    pitch_inv,
+    data,
+    names,
+    points,
+    *,
+    method="cubic",
+    check=False,
+    plot=False,
+):
+    z1, z2 = points
+    # shape (..., num pitch, num well, num quad)
+    Q = bijection_from_disc(x, z1[..., jnp.newaxis], z2[..., jnp.newaxis])
+    assert w.ndim == 1 and Q.shape[-1] == w.size
+    assert Q.shape[-3 + (not batch)] == pitch_inv.shape[-1]
+    assert data["|B|"].shape[-1] == knots.size
+    shape = Q.shape
+    if batch:
+        Q = flatten_matrix(Q)
+
+    b_sup_z = interp1d_Hermite_vec(
+        Q,
+        knots,
+        (data["|B^zeta|"] / data["|B|"])[..., jnp.newaxis, :],
+        (
+            data["|B^zeta|_z|r,a"] / data["|B|"]
+            - data["|B^zeta|"] * data["|B|_z|r,a"] / data["|B|"] ** 2
+        )[..., jnp.newaxis, :],
+    )
+    B = interp1d_Hermite_vec(
+        Q,
+        knots,
+        data["|B|"][..., jnp.newaxis, :],
+        data["|B|_z|r,a"][..., jnp.newaxis, :],
+    )
+    # Spline each function separately so that operations in the integrand
+    # that do not preserve smoothness can be captured.
+    data = {
+        name: interp1d_vec(Q, knots, data[name][..., jnp.newaxis, :], method=method)
+        for name in names
+    }
+    pitch = 1 / pitch_inv[..., jnp.newaxis]
+    cov = grad_bijection_from_disc(z1, z2)
+    result = [
+        (f(data, B, pitch) / b_sup_z).reshape(shape).dot(w) * cov for f in integrand
+    ]
+
+    if check:
+        _check_interp(
+            shape,
+            Q,
+            b_sup_z,
+            B,
+            result[0],
+            [data[name] for name in names],
+            plot=plot,
+        )
+
+    return result
+
+
+def _check_interp(shape, Q, b_sup_z, B, result, f=None, plot=True):
     """Check for interpolation failures and floating point issues.
 
     Parameters
@@ -512,6 +519,7 @@ def _check_interp(shape, Q, b_sup_z, B, result, f, plot):
 
     assert goal == (marked & jnp.isfinite(b_sup_z).reshape(shape).all(axis=-1)).sum()
     assert goal == (marked & jnp.isfinite(B).reshape(shape).all(axis=-1)).sum()
+    f = setdefault(f, [])
     for f_i in f:
         assert goal == (marked & jnp.isfinite(f_i).reshape(shape).all(axis=-1)).sum()
 
@@ -871,7 +879,18 @@ def interp_to_argmin_hard(h, points, knots, g, dg_dz, method="cubic"):
 
 
 def interp_fft_to_argmin(
-    NFP, T, h, points, knots, g, dg_dz, beta=-100, upper_sentinel=1e2
+    NFP,
+    T,
+    h,
+    points,
+    knots,
+    g,
+    dg_dz,
+    beta=-100,
+    upper_sentinel=1e2,
+    is_fourier=False,
+    M=None,
+    N=None,
 ):
     """Interpolate ``h`` to the deepest point of ``g`` between ``z1`` and ``z2``.
 
@@ -918,6 +937,11 @@ def interp_fft_to_argmin(
         Something larger than g. Choose value such that
         exp(max(g)) << exp(``upper_sentinel``). Don't make too large or numerical
         resolution is lost.
+    is_fourier : bool
+        If true, then it is assumed that ``h`` is the Fourier
+        transform as returned by ``Bounce2D.fourier``.
+    M, N : int
+        Fourier resolution.
 
     Warnings
     --------
@@ -939,17 +963,28 @@ def interp_fft_to_argmin(
         beta * _where_for_fft_argmin(points, ext, g_ext, upper_sentinel),
         axis=-1,
     )
-    return jnp.linalg.vecdot(
-        argmin,  # shape is (..., num well, num extrema)
-        interp_rfft2(
-            T.eval1d(ext),
+    theta = T.eval1d(ext)
+    if is_fourier:
+        h = irfft2_non_uniform(
+            theta,
+            ext,
+            h[..., jnp.newaxis, :, :],
+            M,
+            N,
+            domain1=(0, 2 * jnp.pi / NFP),
+            axes=(-1, -2),
+        )
+    else:
+        h = interp_rfft2(
+            theta,
             ext,
             h[..., jnp.newaxis, :, :],
             domain1=(0, 2 * jnp.pi / NFP),
             axes=(-1, -2),
-        )[..., jnp.newaxis, :],
-        # adding axis to broadcast with num well axis
-    )
+        )
+    # argmin shape is (..., num well, num extrema)
+    # adding axis to broadcast with num well axis
+    return jnp.linalg.vecdot(argmin, h[..., jnp.newaxis, :])
 
 
 # TODO (#568): Generalize this beyond ζ = ϕ or just map to Clebsch with ϕ.

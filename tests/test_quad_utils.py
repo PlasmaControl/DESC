@@ -18,6 +18,7 @@ from desc.integrals._quad_utils import (
     grad_automorphism_sin,
     grad_bijection_from_disc,
     leggauss_lob,
+    simpson2,
     tanh_sinh,
     uniform,
 )
@@ -118,3 +119,11 @@ def test_chebgauss():
     x, w = roots_chebyu(deg)
     w *= chebweight(x)
     np.testing.assert_allclose(chebgauss2(deg), (x, w))
+
+    n = 5
+    x, w = simpson2(n)
+    np.testing.assert_allclose(x, [-5 / 6, -2 / 3, 0, 2 / 3, 5 / 6])
+    np.testing.assert_allclose(w.sum(), 2)
+    np.testing.assert_allclose(
+        f(x).dot(w), scipy.integrate.quad(f, -1, 1)[0], rtol=2.5e-2
+    )

@@ -14,7 +14,7 @@ from scipy.special import ellipe, ellipkm1
 from tests.test_interp_utils import _f_1d, _f_1d_nyquist_freq
 from tests.test_plotting import tol_1d
 
-from desc.backend import jnp
+from desc.backend import jnp, vmap
 from desc.basis import FourierZernikeBasis
 from desc.equilibrium import Equilibrium
 from desc.equilibrium.coords import get_rtz_grid
@@ -38,12 +38,10 @@ from desc.integrals import (
 from desc.integrals._bounce_utils import (
     _get_extrema,
     bounce_points,
-    get_pitch_inv_quad,
-    interp_fft_to_argmin,
     interp_to_argmin,
     interp_to_argmin_hard,
 )
-from desc.integrals._interp_utils import fourier_pts, polyder_vec
+from desc.integrals._interp_utils import fourier_pts
 from desc.integrals._quad_utils import (
     automorphism_sin,
     bijection_from_disc,
@@ -59,7 +57,7 @@ from desc.integrals.basis import FourierChebyshevSeries
 from desc.integrals.singularities import _get_quadrature_nodes
 from desc.integrals.surface_integral import _get_grid_surface
 from desc.transform import Transform
-from desc.utils import dot, errorif, safediv, setdefault
+from desc.utils import dot, errorif, safediv
 
 
 class TestSurfaceIntegral:
@@ -938,93 +936,66 @@ class TestBounceQuadrature:
     @pytest.mark.parametrize(
         "is_strong, quad, automorphism",
         [
-            (True, tanh_sinh(40), None),
+            (True, tanh_sinh(30), None),
             (False, tanh_sinh(20), None),
-            # Node density near boundary is 1/(1−x²).
             (True, leggauss(25), auto_sin),
-            (True, chebgauss1(30), auto_sin),
-            # Lobatto nodes
+            # chebgauss1 without c.o.v. is sensitive to approximation error
+            (True, chebgauss1(25), auto_sin),
             (False, leggauss_lob(8, interior_only=True), auto_sin),
-            # Node density near boundary is 1/√(1−x²).
-            (False, leggauss_lob(13, interior_only=True), None),
-            (False, chebgauss2(8), None),
+            (False, chebgauss2(21), None),
         ],
     )
     def test_bounce_quadrature(self, is_strong, quad, automorphism):
-        """Test quadrature matches singular (strong and weak) elliptic integrals.
-
-        Notes
-        -----
-        Empirical testing shows asymptotic density of nodes needs to be at least
-        1/√(1−x²) and quadrature needs a cosine factor in Jacobian for accurate
-        bounce integrals. This is satisfied by ``chebgauss2`` and ``leggauss`` with
-        the sin automorphism. The former has less clustering near boundary by a factor
-        of 1/√(1−x²), so we choose it for weakly singular bounce integrals. This will
-        capture more features in the integral, especially the W shaped wells. Less
-        clustering will also make non-uniform FFTs more accurate.
-
-        For the strongly singular bounce integrals, another cosine factor is preferred
-        to supress the derivative (as expected from chain rule), so we need to use the
-        sin automorphism. We choose to apply that map to ``leggauss`` instead of
-        ``chebgauss1`` because the extra cosine term in ``chebgauss1`` increases the
-        polynomial complexity of the integrand and suppresses the derivative too strong
-        for a quadrature that already clusters near edge with density 1/(1−x²). This is
-        why ``chebgauss1`` required more nodes in this test, and in general would
-        require more nodes for functions with more features.
-
-        """
-        p = 1e-4
-        m = 1 - p
+        """Test quadrature matches singular (strong and weak) elliptic integrals."""
         # Some prime number that doesn't appear anywhere in calculation.
         # Ensures no lucky cancellation occurs from ζ₂ − ζ₁ / π = π / (ζ₂ − ζ₁)
         # which could mask errors since π appears often in transformations.
-        v = 7
-        z1 = -np.pi / 2 * v
-        z2 = -z1
-        knots = np.linspace(z1, z2, 50)
-        pitch_inv = 1 - 50 * jnp.finfo(jnp.array(1.0).dtype).eps
-        b = np.clip(np.sin(knots / v) ** 2, 1e-7, 1)
-        db = np.sin(2 * knots / v) / v
-        data = {"B^zeta": b, "B^zeta_z|r,a": db, "|B|": b, "|B|_z|r,a": db}
-
-        if is_strong:
-            integrand = lambda B, pitch: 1 / jnp.sqrt(1 - m * pitch * B)
-            truth = v * 2 * ellipkm1(p)
-        else:
-            integrand = lambda B, pitch: jnp.sqrt(1 - m * pitch * B)
-            truth = v * 2 * ellipe(m)
+        v = 3
+        knots = np.linspace(-np.pi / 2 * v, np.pi / 2 * v, 50)
+        B = np.sin(knots / v) ** 2 + 1
+        dB_dz = np.sin(2 * knots / v) / v
         bounce = Bounce1D(
             Grid.create_meshgrid([1, 0, knots], coordinates="raz"),
-            data,
-            quad,
-            automorphism,
+            data={"B^zeta": B, "B^zeta_z|r,a": dB_dz, "|B|": B, "|B|_z|r,a": dB_dz},
+            quad=quad,
+            automorphism=automorphism,
             check=True,
         )
-        points = bounce.points(pitch_inv, num_well=1)
-        np.testing.assert_allclose(points[0], z1)
-        np.testing.assert_allclose(points[1], z2)
-        result = bounce.integrate(
-            integrand, pitch_inv, points=points, check=True, plot=True
+
+        m = 1 - 1e-3
+        # integral(integrand) = truth iff pitch_inv = 2
+        pitch_inv = 2 - 1e-12
+        k = pitch_inv * m  # m = k * pitch
+        if is_strong:
+            integrand = lambda data, B, pitch: 1 / jnp.sqrt(1 - k * pitch * (B - 1))
+            truth = v * 2 * ellipkm1(1 - m)
+        else:
+            integrand = lambda data, B, pitch: jnp.sqrt(1 - k * pitch * (B - 1))
+            truth = v * 2 * ellipe(m)
+        np.testing.assert_allclose(
+            bounce.integrate(integrand, pitch_inv, check=True, plot=False).sum(),
+            truth,
+            rtol=1e-4,
         )
-        assert np.count_nonzero(result) == 1
-        np.testing.assert_allclose(result.sum(), truth, rtol=1e-4)
 
     @staticmethod
     @partial(np.vectorize, excluded={0})
     def _adaptive_elliptic(integrand, k):
         a = 0
         b = 2 * np.arcsin(k)
-        return integrate.quad(integrand, a, b, args=(k,), points=b)[0]
+        return integrate.quad(
+            integrand, a, b, args=(k,), points=b, epsrel=1e-10, epsabs=1e-10
+        )[0]
 
     @staticmethod
     def _fixed_elliptic(integrand, k, deg):
         k = np.atleast_1d(k)
-        a = np.zeros_like(k)
+        a = -2 * np.arcsin(k)
         b = 2 * np.arcsin(k)
         x, w = get_quadrature(leggauss(deg), (automorphism_sin, grad_automorphism_sin))
         Z = bijection_from_disc(x, a[..., np.newaxis], b[..., np.newaxis])
         k = k[..., np.newaxis]
-        quad = integrand(Z, k).dot(w) * grad_bijection_from_disc(a, b)
+        quad = integrand(Z, k).dot(w) * grad_bijection_from_disc(a, b) / 2
         return quad
 
     @staticmethod
@@ -1045,7 +1016,7 @@ class TestBounceQuadrature:
         E = TestBounceQuadrature._adaptive_elliptic(E_integrand, k)
         # Make sure scipy's adaptive quadrature is not broken.
         np.testing.assert_allclose(
-            K, TestBounceQuadrature._fixed_elliptic(K_integrand, k, 10)
+            K, TestBounceQuadrature._fixed_elliptic(K_integrand, k, 12)
         )
         np.testing.assert_allclose(
             E, TestBounceQuadrature._fixed_elliptic(E_integrand, k, 10)
@@ -1090,7 +1061,7 @@ class TestBounceQuadrature:
             TestBounceQuadrature._fixed_elliptic(
                 lambda Z, k: 2 / np.sqrt(k**2 - np.sin(Z / 2) ** 2) * np.cos(Z),
                 k,
-                deg=11,
+                deg=12,
             ),
         )
         np.testing.assert_allclose(
@@ -1106,12 +1077,12 @@ class TestBounce:
     """Test bounce integration with one-dimensional local spline methods."""
 
     @staticmethod
-    def _example_numerator(g_zz, B, pitch):
-        f = (1 - 0.5 * pitch * B) * g_zz
+    def _example_numerator(data, B, pitch):
+        f = (1 - 0.5 * pitch * B) * data["g_zz"]
         return safediv(f, jnp.sqrt(jnp.abs(1 - pitch * B)))
 
     @staticmethod
-    def _example_denominator(B, pitch):
+    def _example_denominator(data, B, pitch):
         return safediv(1, jnp.sqrt(jnp.abs(1 - pitch * B)))
 
     @pytest.mark.unit
@@ -1155,7 +1126,7 @@ class TestBounce:
         num = bounce.integrate(
             integrand=TestBounce._example_numerator,
             pitch_inv=pitch_inv,
-            f=Bounce1D.reshape_data(grid.source_grid, data["g_zz"]),
+            data={"g_zz": Bounce1D.reshape_data(grid.source_grid, data["g_zz"])},
             points=points,
             check=True,
         )
@@ -1222,7 +1193,7 @@ class TestBounce:
                 points=(np.array(0, ndmin=2), np.array(2 * np.pi, ndmin=2)),
                 knots=zeta,
                 g=bounce.B,
-                dg_dz=bounce.dB_dz,
+                dg_dz=bounce._dB_dz,
             ),
             h(argmin_g),
             rtol=1e-3,
@@ -1355,7 +1326,7 @@ class TestBounce:
 
         # Exclude singularity not captured by analytic approximation for pitch near
         # the maximum |B|. (This is captured by the numerical integration).
-        pitch_inv = get_pitch_inv_quad(np.min(B), np.max(B), 100)[0][:-1]
+        pitch_inv = Bounce1D.get_pitch_inv_quad(np.min(B), np.max(B), 100)[0][:-1]
         k2 = 0.5 * ((1 - B0 / pitch_inv) / (epsilon * B0 / pitch_inv) + 1)
         I_0, I_1, I_2, I_3, I_4, I_5, I_6, I_7 = (
             TestBounceQuadrature.elliptic_incomplete(k2)
@@ -1379,13 +1350,17 @@ class TestBounce:
         return drift_analytic, cvdrift, gbdrift, pitch_inv
 
     @staticmethod
-    def drift_num_integrand(cvdrift, gbdrift, B, pitch):
+    def drift_num_integrand(data, B, pitch):
         """Integrand of numerator of bounce averaged binormal drift."""
         g = jnp.sqrt(jnp.abs(1 - pitch * B))
-        return (cvdrift * g) - (0.5 * g * gbdrift) + (0.5 * gbdrift / g)
+        return (
+            (data["cvdrift"] * g)
+            - (0.5 * g * data["gbdrift"])
+            + (0.5 * data["gbdrift"] / g)
+        )
 
     @staticmethod
-    def drift_den_integrand(B, pitch):
+    def drift_den_integrand(data, B, pitch):
         """Integrand of denominator of bounce averaged binormal drift."""
         return 1 / jnp.sqrt(jnp.abs(1 - pitch * B))
 
@@ -1405,18 +1380,20 @@ class TestBounce:
         )
         points = bounce.points(pitch_inv, num_well=1)
         bounce.check_points(points, pitch_inv, plot=False)
-        f = Bounce1D.reshape_data(things["grid"].source_grid, cvdrift, gbdrift)
+        interp_data = {
+            "cvdrift": Bounce1D.reshape_data(things["grid"].source_grid, cvdrift),
+            "gbdrift": Bounce1D.reshape_data(things["grid"].source_grid, gbdrift),
+        }
         drift_numerical_num = bounce.integrate(
             integrand=TestBounce.drift_num_integrand,
             pitch_inv=pitch_inv,
-            f=f,
+            data=interp_data,
             points=points,
             check=True,
         )
         drift_numerical_den = bounce.integrate(
             integrand=TestBounce.drift_den_integrand,
             pitch_inv=pitch_inv,
-            weight=np.ones(data["zeta"].size),
             points=points,
             check=True,
         )
@@ -1429,10 +1406,7 @@ class TestBounce:
         )
 
         TestBounce._test_bounce_autodiff(
-            bounce,
-            TestBounce.drift_num_integrand,
-            f=f,
-            weight=np.ones(data["zeta"].size),
+            bounce, TestBounce.drift_num_integrand, interp_data
         )
 
         fig, ax = plt.subplots()
@@ -1441,9 +1415,7 @@ class TestBounce:
         return fig
 
     @staticmethod
-    def _test_bounce_autodiff(
-        bounce, integrand, pitch_argnum=-1, num_args=None, **kwargs
-    ):
+    def _test_bounce_autodiff(bounce, integrand, data):
         """Make sure reverse mode AD works correctly on this algorithm.
 
         Non-differentiable operations (e.g. ``take_mask``) are used in computation.
@@ -1484,21 +1456,20 @@ class TestBounce:
 
         """
 
-        def integrand_grad(*args, **kwargs2):
-            grad_fun = jnp.vectorize(
-                grad(integrand, pitch_argnum),
-                signature="()," * setdefault(num_args, len(kwargs["f"])) + "(),()->()",
-            )
-            return grad_fun(*args, *kwargs2.values())
+        def integrand_grad(data, B, pitch):
+            grad_fun = grad(integrand, -1)
+            for _ in range(B.ndim):
+                grad_fun = vmap(grad_fun)
+            return grad_fun(data, B, jnp.broadcast_to(pitch, B.shape))
 
         def fun1(pitch):
             return bounce.integrate(
-                integrand=integrand, pitch_inv=1 / pitch, check=False, **kwargs
+                integrand=integrand, pitch_inv=1 / pitch, data=data, check=False
             ).sum()
 
         def fun2(pitch):
             return bounce.integrate(
-                integrand=integrand_grad, pitch_inv=1 / pitch, check=True, **kwargs
+                integrand=integrand_grad, pitch_inv=1 / pitch, data=data, check=True
             ).sum()
 
         pitch = 1.0
@@ -1517,7 +1488,7 @@ class TestBounce2D:
     """Test bounce integration that uses 2D pseudo-spectral methods."""
 
     @pytest.mark.unit
-    def test_interp_fft_to_argmin(self):
+    def test_interp_to_argmin(self):
         """Test interpolation of h to argmin of g."""  # noqa: D202
 
         def g(z):
@@ -1537,27 +1508,13 @@ class TestBounce2D:
             spline=True,
         )
         np.testing.assert_allclose(
-            interp_fft_to_argmin(
-                NFP=bounce._NFP,
-                T=bounce._c["T(z)"],
-                h=grid.meshgrid_reshape(h(grid.nodes[:, 2]), "rtz"),
-                points=(np.array(0, ndmin=1), np.array(2 * np.pi, ndmin=1)),
-                knots=bounce._c["knots"],
-                g=bounce._c["B(z)"],
-                dg_dz=polyder_vec(bounce._c["B(z)"]),
+            bounce.interp_to_argmin(
+                grid.meshgrid_reshape(h(grid.nodes[:, 2]), "rtz"),
+                (np.array(0, ndmin=2), np.array(2 * np.pi, ndmin=2)),
             ),
             h(argmin_g),
             rtol=1e-6,
         )
-
-    @staticmethod
-    def _example_numerator(g_zz, B, pitch, zeta):
-        f = (1 - 0.5 * pitch * B) * g_zz
-        return safediv(f, jnp.sqrt(jnp.abs(1 - pitch * B)))
-
-    @staticmethod
-    def _example_denominator(B, pitch, zeta):
-        return safediv(1, jnp.sqrt(jnp.abs(1 - pitch * B)))
 
     @pytest.mark.unit
     @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d * 4)
@@ -1574,9 +1531,7 @@ class TestBounce2D:
         # 2. Pick flux surfaces and grid resolution.
         rho = np.linspace(0.1, 1, 6)
         eq = get("HELIOTRON")
-        grid = LinearGrid(
-            rho=rho, theta=eq.M_grid, zeta=eq.N_grid, NFP=eq.NFP, sym=False
-        )
+        grid = LinearGrid(rho=rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False)
         # 3. Compute input data.
         data = eq.compute(
             Bounce2D.required_names + ["min_tz |B|", "max_tz |B|", "g_zz", "1"],
@@ -1599,14 +1554,14 @@ class TestBounce2D:
         bounce.check_points(points, pitch_inv, plot=False)
         # 8. Integrate.
         num = bounce.integrate(
-            integrand=TestBounce2D._example_numerator,
+            integrand=TestBounce._example_numerator,
             pitch_inv=pitch_inv,
-            f=Bounce2D.reshape_data(grid, data["g_zz"]),
+            data={"g_zz": Bounce2D.reshape_data(grid, data["g_zz"])},
             points=points,
             check=True,
         )
         den = bounce.integrate(
-            integrand=TestBounce2D._example_denominator,
+            integrand=TestBounce._example_denominator,
             pitch_inv=pitch_inv,
             points=points,
             check=True,
@@ -1660,19 +1615,16 @@ class TestBounce2D:
         return fig
 
     @staticmethod
-    def drift_num_integrand(
-        periodic_cvdrift, periodic_gbdrift, secular_gbdrift_over_phi, B, pitch, zeta
-    ):
+    def drift_num_integrand(data, B, pitch):
         """Integrand of numerator of bounce averaged binormal drift."""
         g = jnp.sqrt(jnp.abs(1 - pitch * B))
-        cvdrift = periodic_cvdrift + secular_gbdrift_over_phi * zeta
-        gbdrift = periodic_gbdrift + secular_gbdrift_over_phi * zeta
+        cvdrift = (
+            data["cvdrift (periodic)"] + data["gbdrift (secular)/phi"] * data["zeta"]
+        )
+        gbdrift = (
+            data["gbdrift (periodic)"] + data["gbdrift (secular)/phi"] * data["zeta"]
+        )
         return (cvdrift * g) - (0.5 * g * gbdrift) + (0.5 * gbdrift / g)
-
-    @staticmethod
-    def drift_den_integrand(B, pitch, zeta):
-        """Integrand of denominator of bounce averaged binormal drift."""
-        return 1 / jnp.sqrt(jnp.abs(1 - pitch * B))
 
     @pytest.mark.unit
     @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
@@ -1683,13 +1635,9 @@ class TestBounce2D:
 
         eq = things["eq"]
         grid = LinearGrid(
-            rho=data["rho"],
-            theta=eq.M_grid,
-            zeta=max(1, eq.N_grid),
-            NFP=eq.NFP,
-            sym=False,
+            rho=data["rho"], M=eq.M_grid, N=max(1, eq.N_grid), NFP=eq.NFP, sym=False
         )
-        names = ["periodic(cvdrift)", "periodic(gbdrift)", "secular(gbdrift)/phi"]
+        names = ["cvdrift (periodic)", "gbdrift (periodic)", "gbdrift (secular)/phi"]
         grid_data = eq.compute(names=Bounce2D.required_names + names, grid=grid)
         for name in names:
             grid_data[name] = grid_data[name] * data["normalization"]
@@ -1707,16 +1655,18 @@ class TestBounce2D:
         )
         points = bounce.points(pitch_inv, num_well=1)
         bounce.check_points(points, pitch_inv, plot=False)
-        f = Bounce2D.reshape_data(grid, *(grid_data[name] for name in names))
+        interp_data = {
+            name: Bounce2D.reshape_data(grid, grid_data[name]) for name in names
+        }
         drift_numerical_num = bounce.integrate(
             integrand=TestBounce2D.drift_num_integrand,
             pitch_inv=pitch_inv,
-            f=f,
+            data=interp_data,
             points=points,
             check=True,
         )
         drift_numerical_den = bounce.integrate(
-            integrand=TestBounce2D.drift_den_integrand,
+            integrand=TestBounce.drift_den_integrand,
             pitch_inv=pitch_inv,
             points=points,
             check=True,
@@ -1730,13 +1680,7 @@ class TestBounce2D:
         )
 
         TestBounce._test_bounce_autodiff(
-            bounce,
-            TestBounce2D.drift_num_integrand,
-            pitch_argnum=-2,
-            # add 1 to num args since the integrand functions expect the
-            # additional keyword argument "zeta" for computing secular terms
-            num_args=len(f) + 1,
-            f=f,
+            bounce, TestBounce2D.drift_num_integrand, interp_data
         )
 
         fig, ax = plt.subplots()

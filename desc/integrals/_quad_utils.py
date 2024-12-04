@@ -1,4 +1,15 @@
-"""Utilities for quadratures."""
+"""Utilities for quadratures.
+
+Notes
+-----
+Bounce integrals with bounce points where the derivative of |B| does
+not vanish have 1/2 power law singularities. The strongly singular integrals
+at the local extrema of |B| are not integrable. Hence, everywhere except the
+extrema, a Chebyshev or Legendre quadrature under a change of variables works
+because √(1−z²) / √(1−λ|B|(z)) ~ g(z, λ) where g(z, λ) is smooth in z.
+Empirically, quadratic node clustering near the singularities is sufficient
+for estimation of g(z).
+"""
 
 from orthax.chebyshev import chebgauss, chebweight
 from orthax.legendre import legder, legval
@@ -30,7 +41,9 @@ def automorphism_arcsin(x, gamma=jnp.cos(0.5)):
     """[-1, 1] ∋ x ↦ y ∈ [−1, 1].
 
     This map decreases node density near the boundary by the asymptotic factor
-    √(1−γ²x²) and adds a 1/√(1−γ²x²) factor to the integrand.
+    √(1−γ²x²) and adds a 1/√(1−γ²x²) factor to the integrand. When applied
+    to any Gaussian quadrature, the default setting modifies the quadrature
+    to be almost-equispaced without sacrificing spectral convergence.
 
     References
     ----------
@@ -191,7 +204,7 @@ def leggauss_lob(deg, interior_only=False):
 
 
 def uniform(deg):
-    """Uniform quadrature that is Gauss-Chebyshev in transformed variable.
+    """Uniform open quadrature with nodes closer to boundary.
 
     Returns quadrature points xₖ and weights wₖ for the approximate evaluation
     of the integral ∫₋₁¹ f(x) dx ≈ ∑ₖ wₖ f(xₖ).
@@ -214,6 +227,41 @@ def uniform(deg):
     # Given roots yₖ of Chebyshev polynomial, x(yₖ) below is uniform in (-1, 1).
     x = jnp.arange(-deg + 1, deg + 1, 2) / deg
     w = 2 / deg * jnp.ones(deg)
+    return x, w
+
+
+def simpson2(deg):
+    """Open Simpson rule completed by midpoint at boundary.
+
+    Parameters
+    ----------
+    deg : int
+        Number of quadrature points. Rounds up to odd integer.
+
+    Returns
+    -------
+    x, w : tuple[jnp.ndarray]
+        Shape (deg, ).
+        Quadrature points and weights.
+
+    """
+    assert deg > 3
+    deg -= 1 + (deg % 2)
+    x = jnp.arange(-deg + 1, deg + 1, 2) / deg
+    h_simp = (x[-1] - x[0]) / (deg - 1)
+    h_midp = (x[0] + 1) / 2
+
+    x = jnp.hstack([-1 + h_midp, x, 1 - h_midp], dtype=float)
+    w = jnp.hstack(
+        [
+            2 * h_midp,
+            h_simp
+            / 3
+            * jnp.hstack([1, jnp.tile(jnp.array([4, 2]), (deg - 3) // 2), 4, 1]),
+            2 * h_midp,
+        ],
+        dtype=float,
+    )
     return x, w
 
 

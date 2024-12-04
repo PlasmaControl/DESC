@@ -43,6 +43,7 @@ Compatibility
     desc.compat.flip_helicity
     desc.compat.flip_theta
     desc.compat.rescale
+    desc.compat.rotate_zeta
 
 Continuation
 ************

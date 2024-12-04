@@ -38,6 +38,10 @@ class DommaschkPotentialField(ScalarPotentialField):
         d_m_l coefficients of V_m_l terms, which multiply the sin(m*phi)*N_m_l-1 terms
     B0: float
         scale strength of the magnetic field's 1/R portion
+    NFP : int, optional
+        Whether the field has a discrete periodicity. This is only used when making
+        a ``SplineMagneticField`` from this field using its ``from_field`` method,
+        or when saving this field as an mgrid file using the ``save_mgrid`` method.
 
     """
 
@@ -50,6 +54,7 @@ class DommaschkPotentialField(ScalarPotentialField):
         c_arr=jnp.array([0.0]),
         d_arr=jnp.array([0.0]),
         B0=1.0,
+        NFP=1,
     ):
         ms = jnp.atleast_1d(jnp.asarray(ms))
         ls = jnp.atleast_1d(jnp.asarray(ls))
@@ -68,6 +73,11 @@ class DommaschkPotentialField(ScalarPotentialField):
             jnp.isscalar(B0) or jnp.atleast_1d(B0).size == 1
         ), "B0 should be a scalar value!"
 
+        ms_over_NFP = ms / NFP
+        assert jnp.allclose(
+            ms_over_NFP, ms_over_NFP.astype(int)
+        ), "To enforce desired NFP, `ms` should be all integer multiples of NFP"
+
         params = {}
         params["ms"] = ms
         params["ls"] = ls
@@ -77,7 +87,7 @@ class DommaschkPotentialField(ScalarPotentialField):
         params["d_arr"] = d_arr
         params["B0"] = B0
 
-        super().__init__(dommaschk_potential, params)
+        super().__init__(dommaschk_potential, params, NFP)
 
     @classmethod
     def fit_magnetic_field(  # noqa: C901

@@ -870,7 +870,7 @@ class PointBMeasurement(_Objective):
         if self._coils_fixed:
             self._constants["B_from_coils"] = (
                 B_from_coils
-                if self._directions is not None
+                if self._directions is None
                 else dot(B_from_coils, self._directions)
             )
         if self._sheet_current:

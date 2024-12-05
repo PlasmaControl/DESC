@@ -16,7 +16,6 @@ from quadax import simpson
 from desc.backend import imap, jit, jnp
 
 from ..integrals.bounce_integral import Bounce1D
-from ..integrals.bounce_utils import get_pitch_inv_quad
 from ..integrals.quad_utils import chebgauss2
 from ..utils import safediv
 from .data_index import register_compute_fun
@@ -70,7 +69,7 @@ def _compute(fun, interp_data, data, grid, num_pitch, reduce=True):
         Default is true.
 
     """
-    pitch_inv, pitch_inv_weight = get_pitch_inv_quad(
+    pitch_inv, pitch_inv_weight = Bounce1D.get_pitch_inv_quad(
         grid.compress(data["min_tz |B|"]),
         grid.compress(data["max_tz |B|"]),
         num_pitch,

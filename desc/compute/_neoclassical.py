@@ -17,7 +17,6 @@ from quadax import simpson
 from desc.backend import imap, jit, jnp
 
 from ..integrals.bounce_integral import Bounce1D
-from ..integrals.bounce_utils import get_pitch_inv_quad, interp_to_argmin
 from ..integrals.quad_utils import (
     automorphism_sin,
     chebgauss2,
@@ -58,42 +57,41 @@ def _alpha_mean(f):
     return f.mean(axis=0)
 
 
-def _compute(fun, interp_data, data, grid, num_pitch, reduce=True):
+def _compute(fun, fun_data, data, grid, num_pitch, simp=False, reduce=True):
     """Compute ``fun`` for each α and ρ value iteratively to reduce memory usage.
 
     Parameters
     ----------
     fun : callable
         Function to compute.
-    interp_data : dict[str, jnp.ndarray]
-        Data to provide to ``fun``.
-        Names in ``Bounce1D.required_names`` will be overridden.
-        Reshaped automatically.
+    fun_data : dict[str, jnp.ndarray]
+        Data to provide to ``fun``. This dict will be modified.
     data : dict[str, jnp.ndarray]
         DESC data dict.
+    simp : bool
+        Whether to use an open Simpson rule instead of uniform weights.
     reduce : bool
         Whether to compute mean over α and expand to grid.
         Default is true.
-
     """
-    pitch_inv, pitch_inv_weight = get_pitch_inv_quad(
+    pitch_inv, pitch_inv_weight = Bounce1D.get_pitch_inv_quad(
         grid.compress(data["min_tz |B|"]),
         grid.compress(data["max_tz |B|"]),
         num_pitch,
+        simp=simp,
     )
 
-    def for_each_rho(x):
+    def foreach_rho(x):
         # using same λ values for every field line α on flux surface ρ
         x["pitch_inv"] = pitch_inv
         x["pitch_inv weight"] = pitch_inv_weight
         return imap(fun, x)
 
     for name in Bounce1D.required_names:
-        interp_data[name] = data[name]
-    interp_data = dict(
-        zip(interp_data.keys(), Bounce1D.reshape_data(grid, *interp_data.values()))
-    )
-    out = imap(for_each_rho, interp_data)
+        fun_data[name] = data[name]
+    for name in fun_data:
+        fun_data[name] = Bounce1D.reshape_data(grid, fun_data[name])
+    out = imap(foreach_rho, fun_data)
     return grid.expand(_alpha_mean(out)) if reduce else out
 
 
@@ -213,16 +211,16 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
     batch = kwargs.get("batch", True)
     grid = transforms["grid"].source_grid
 
-    def dH(grad_rho_norm_kappa_g, B, pitch):
+    def dH(data, B, pitch):
         # Integrand of Nemov eq. 30 with |∂ψ/∂ρ| (λB₀)¹ᐧ⁵ removed.
         return (
             jnp.sqrt(jnp.abs(1 - pitch * B))
             * (4 / (pitch * B) - 1)
-            * grad_rho_norm_kappa_g
+            * data["|grad(rho)|*kappa_g"]
             / B
         )
 
-    def dI(B, pitch):
+    def dI(data, B, pitch):
         # Integrand of Nemov eq. 31.
         return jnp.sqrt(jnp.abs(1 - pitch * B)) / B
 
@@ -232,15 +230,14 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
         # Nemov's ∑ⱼ Hⱼ²/Iⱼ = (∂ψ/∂ρ)² (λB₀)³ ``(H**2 / I).sum(axis=-1)``.
         # (λB₀)³ d(λB₀)⁻¹ = B₀² λ³ d(λ⁻¹) = -B₀² λ dλ.
         bounce = Bounce1D(grid, data, quad, automorphism=None, is_reshaped=True)
-        points = bounce.points(data["pitch_inv"], num_well=num_well)
-        H = bounce.integrate(
-            dH,
+        H, I = bounce.integrate(
+            [dH, dI],
             data["pitch_inv"],
-            data["|grad(rho)|*kappa_g"],
-            points=points,
+            data,
+            "|grad(rho)|*kappa_g",
+            points=bounce.points(data["pitch_inv"], num_well=num_well),
             batch=batch,
         )
-        I = bounce.integrate(dI, data["pitch_inv"], points=points, batch=batch)
         return (
             safediv(H**2, I).sum(axis=-1)
             * data["pitch_inv"] ** (-3)
@@ -248,13 +245,18 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
         ).sum(axis=-1)
 
     # Interpolate |∇ρ| κ_g since it is smoother than κ_g alone.
-    interp_data = {"|grad(rho)|*kappa_g": data["|grad(rho)|"] * data["kappa_g"]}
     B0 = data["max_tz |B|"]
     data["effective ripple 3/2"] = (
         jnp.pi
         / (8 * 2**0.5)
         * (B0 * data["R0"] / data["<|grad(rho)|>"]) ** 2
-        * _compute(eps_32, interp_data, data, grid, kwargs.get("num_pitch", 50))
+        * _compute(
+            eps_32,
+            {"|grad(rho)|*kappa_g": data["|grad(rho)|"] * data["kappa_g"]},
+            data,
+            grid,
+            kwargs.get("num_pitch", 50),
+        )
         / data["fieldline length"]
     )
     return data
@@ -322,44 +324,44 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
     def d_v_tau(B, pitch):
         return safediv(2.0, jnp.sqrt(jnp.abs(1 - pitch * B)))
 
-    def drift(f, B, pitch):
-        return safediv(f * (1 - 0.5 * pitch * B), jnp.sqrt(jnp.abs(1 - pitch * B)))
+    def _cvdrift0(data, B, pitch):
+        return safediv(
+            data["cvdrift0"] * (1 - 0.5 * pitch * B), jnp.sqrt(jnp.abs(1 - pitch * B))
+        )
+
+    def _gbdrift(data, B, pitch):
+        return safediv(
+            data["gbdrift"] * (1 - 0.5 * pitch * B), jnp.sqrt(jnp.abs(1 - pitch * B))
+        )
 
     def Gamma_c_Velasco(data):
         """∫ dλ ∑ⱼ [v τ γ_c²]ⱼ."""
         bounce = Bounce1D(grid, data, quad, automorphism=None, is_reshaped=True)
         points = bounce.points(data["pitch_inv"], num_well=num_well)
-        v_tau = bounce.integrate(d_v_tau, data["pitch_inv"], points=points, batch=batch)
-        gamma_c = jnp.arctan(
-            safediv(
-                bounce.integrate(
-                    drift,
-                    data["pitch_inv"],
-                    data["cvdrift0"],
-                    points=points,
-                    batch=batch,
-                ),
-                bounce.integrate(
-                    drift,
-                    data["pitch_inv"],
-                    data["gbdrift"],
-                    points=points,
-                    batch=batch,
-                ),
-            )
+        v_tau, cvdrift0, gbdrift = bounce.integrate(
+            [d_v_tau, _cvdrift0, _gbdrift],
+            data["pitch_inv"],
+            data,
+            ["cvdrift0", "gbdrift"],
+            points=points,
+            batch=batch,
         )
+        gamma_c = jnp.arctan(safediv(cvdrift0, gbdrift))
         return (4 / jnp.pi**2) * (
             (v_tau * gamma_c**2).sum(axis=-1)
             * data["pitch_inv"] ** (-2)
             * data["pitch_inv weight"]
         ).sum(axis=-1)
 
-    interp_data = {"cvdrift0": data["cvdrift0"], "gbdrift": data["gbdrift"]}
     data["Gamma_c Velasco"] = (
         jnp.pi
         / (8 * 2**0.5)
         * _compute(
-            Gamma_c_Velasco, interp_data, data, grid, kwargs.get("num_pitch", 64)
+            Gamma_c_Velasco,
+            {"cvdrift0": data["cvdrift0"], "gbdrift": data["gbdrift"]},
+            data,
+            grid,
+            kwargs.get("num_pitch", 64),
         )
         / data["fieldline length"]
     )
@@ -439,19 +441,21 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
     #              ----------------------------------------------
     # (|∇ρ| ‖e_α|ρ,ϕ‖)ᵢ ∫ dℓ [ (1 − λ|B|/2)/√(1 − λ|B|) ∂|B|/∂ψ + √(1 − λ|B|) K ] / |B|
 
-    def d_v_tau(B, pitch):
+    def d_v_tau(data, B, pitch):
         return safediv(2.0, jnp.sqrt(jnp.abs(1 - pitch * B)))
 
-    def drift1(grad_rho_norm_kappa_g, B, pitch):
+    def drift1(data, B, pitch):
         return (
             safediv(1 - 0.5 * pitch * B, jnp.sqrt(jnp.abs(1 - pitch * B)))
-            * grad_rho_norm_kappa_g
+            * data["|grad(rho)|*kappa_g"]
             / B
         )
 
-    def drift2(B_psi, B, pitch):
+    def drift2(data, B, pitch):
         return (
-            safediv(1 - 0.5 * pitch * B, jnp.sqrt(jnp.abs(1 - pitch * B))) * B_psi / B
+            safediv(1 - 0.5 * pitch * B, jnp.sqrt(jnp.abs(1 - pitch * B)))
+            * data["|B|_psi|v,p"]
+            / B
         )
 
     def drift3(K, B, pitch):
@@ -463,40 +467,30 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
         # τ is the bounce time, and I is defined in Nemov eq. 36.
         bounce = Bounce1D(grid, data, quad, automorphism=None, is_reshaped=True)
         points = bounce.points(data["pitch_inv"], num_well=num_well)
-        v_tau = bounce.integrate(d_v_tau, data["pitch_inv"], points=points, batch=batch)
+        v_tau, f1, f2 = bounce.integrate(
+            [d_v_tau, drift1, drift1],
+            data["pitch_inv"],
+            data,
+            ["|grad(rho)|*kappa_g", "|B|_psi|v,p"],
+            points=points,
+            batch=batch,
+        )
         gamma_c = jnp.arctan(
             safediv(
-                bounce.integrate(
-                    drift1,
-                    data["pitch_inv"],
-                    data["|grad(rho)|*kappa_g"],
-                    points=points,
-                    batch=batch,
-                ),
+                f1,
                 (
-                    bounce.integrate(
-                        drift2,
-                        data["pitch_inv"],
-                        data["|B|_psi|v,p"],
-                        points=points,
-                        batch=batch,
-                    )
+                    f2
                     + bounce.integrate(
                         drift3,
                         data["pitch_inv"],
-                        data["K"],
+                        data,
+                        "K",
                         points=points,
                         batch=batch,
                         quad=quad2,
                     )
                 )
-                * interp_to_argmin(
-                    data["|grad(rho)|*|e_alpha|r,p|"],
-                    points,
-                    bounce.zeta,
-                    bounce.B,
-                    bounce.dB_dz,
-                ),
+                * bounce.interp_to_argmin(data["|grad(rho)|*|e_alpha|r,p|"], points),
             )
         )
         return (4 / jnp.pi**2) * (
@@ -516,7 +510,7 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
     # It is assumed the grid is sufficiently dense to reconstruct |B|,
     # so anything smoother than |B| may be captured accurately as a single
     # spline rather than splining each component.
-    interp_data = {
+    fun_data = {
         "|grad(rho)|*kappa_g": data["|grad(rho)|"] * data["kappa_g"],
         "|grad(rho)|*|e_alpha|r,p|": data["|grad(rho)|"] * data["|e_alpha|r,p|"],
         "|B|_psi|v,p": data["|B|_r|v,p"] / data["psi_r"],
@@ -530,7 +524,7 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
     data["Gamma_c"] = (
         jnp.pi
         / (8 * 2**0.5)
-        * _compute(Gamma_c, interp_data, data, grid, kwargs.get("num_pitch", 64))
+        * _compute(Gamma_c, fun_data, data, grid, kwargs.get("num_pitch", 64))
         / data["fieldline length"]
     )
     return data

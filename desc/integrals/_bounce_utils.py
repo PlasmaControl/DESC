@@ -316,7 +316,7 @@ def _bounce_quadrature(
     check=False,
     plot=False,
 ):
-    """Bounce integrate ∫ f(λ, ℓ) dℓ.
+    """Bounce integrate ∫ f(ρ,α,λ,ℓ) dℓ.
 
     Parameters
     ----------
@@ -331,7 +331,7 @@ def _bounce_quadrature(
         Unique ζ coordinates where the arrays in ``data`` and ``f`` were evaluated.
     integrand : callable or list[callable]
         The composition operator on the set of functions in ``data`` that
-        maps that determines ``f`` in ∫ f(λ, ℓ) dℓ. It should accept a dictionary
+        maps that determines ``f`` in ∫ f(ρ,α,λ,ℓ) dℓ. It should accept a dictionary
         which stores the interpolated data and the keyword argument ``pitch``.
     pitch_inv : jnp.ndarray
         Shape (num alpha, num rho, num pitch).
@@ -818,7 +818,7 @@ def interp_to_argmin_hard(h, points, knots, g, dg_dz, method="cubic"):
 
     Let E = {ζ ∣ ζ₁ < ζ < ζ₂} and A ∈ argmin_E g(ζ). Returns h(A).
 
-    The argmin operation is defined as the expected value under the softmax
+    The argmax operation is defined as the expected value under the softmax
     probability distribution.
     s : x ∈ ℝⁿ, β ∈ ℝ ↦ [eᵝˣ⁽¹⁾, …, eᵝˣ⁽ⁿ⁾] / ∑ₖ₌₁ⁿ eᵝˣ⁽ᵏ⁾
 
@@ -896,7 +896,7 @@ def interp_fft_to_argmin(
 
     Let E = {ζ ∣ ζ₁ < ζ < ζ₂} and A = argmin_E g(ζ). Returns mean_A h(ζ).
 
-    The argmin operation is defined as the expected value under the softmax
+    The argmax operation is defined as the expected value under the softmax
     probability distribution.
     s : x ∈ ℝⁿ, β ∈ ℝ ↦ [eᵝˣ⁽¹⁾, …, eᵝˣ⁽ⁿ⁾] / ∑ₖ₌₁ⁿ eᵝˣ⁽ᵏ⁾
 
@@ -1047,7 +1047,7 @@ def fourier_chebyshev(theta, iota, alpha, num_transit):
     The field line label α changes discontinuously, so the approximation
     g defined with basis function in (α, ζ) coordinates to some continuous
     function f does not guarantee continuity between cuts of the field line
-    until full convergence of g to f.
+    until sufficient convergence of g to f.
 
     Note if g were defined with basis functions in straight field line
     coordinates, then continuity between cuts of the field line, as

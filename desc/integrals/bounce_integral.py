@@ -55,7 +55,7 @@ class Bounce(IOAble, ABC):
     def integrate(
         self, integrand, pitch_inv, data=None, names=None, points=None, *, quad=None
     ):
-        """Bounce integrate ∫ f(λ, ℓ) dℓ."""
+        """Bounce integrate ∫ f(ρ,α,λ,ℓ) dℓ."""
 
     @abstractmethod
     def interp_to_argmin(self, f, points):
@@ -72,11 +72,11 @@ def _swap_pl(f):
 class Bounce2D(Bounce):
     """Computes bounce integrals using two-dimensional pseudo-spectral methods.
 
-    The bounce integral is defined as ∫ f(λ, ℓ) dℓ where
+    The bounce integral is defined as ∫ f(ρ,α,λ,ℓ) dℓ where
 
     * dℓ parameterizes the distance along the field line in meters.
-    * f(λ, ℓ) is the quantity to integrate along the field line.
-    * The boundaries of the integral are bounce points ℓ₁, ℓ₂ s.t. λ|B|(ℓᵢ) = 1.
+    * f(ρ,α,λ,ℓ) is the quantity to integrate along the field line.
+    * The boundaries of the integral are bounce points ℓ₁, ℓ₂ s.t. λ|B|(ρ,α,ℓᵢ) = 1.
     * λ is a constant defining the integral proportional to the magnetic moment
       over energy.
     * |B| is the norm of the magnetic field.
@@ -101,7 +101,7 @@ class Bounce2D(Bounce):
     Interpolate smooth components of integrand with FFTs.
       G : α, ζ ↦ gₘₙ exp(j [m θ(α,ζ) + n ζ] )
     Perform Gaussian quadrature after removing singularities.
-      Fᵢ : λ, ζ₁, ζ₂ ↦  ∫ᵢ f(λ, ζ, {Gⱼ}) dζ
+      Fᵢ : ρ, α, λ, ζ₁, ζ₂ ↦  ∫ᵢ f(ρ,α,λ,ζ,{Gⱼ}) dζ
 
     If the map G is multivalued at a physical location, then it is still
     permissible if separable into single valued and multivalued parts.
@@ -136,15 +136,14 @@ class Bounce2D(Bounce):
 
     The frequency transform of a map under the chosen basis must be concentrated
     at low frequencies for the series to converge fast. For periodic
-    (non-periodic) maps, the best basis is a Fourier (Chebyshev) series. Both
-    converge exponentially, but the larger region of convergence in the complex
-    plane of Fourier series make it preferable in practice to choose coordinate
-    systems such that the function to approximate is periodic. The Chebyshev
-    polynomials are preferred to other orthogonal polynomial series since
+    (non-periodic) maps, the standard choice for the basis is a Fourier (Chebyshev)
+    series. Both converge exponentially, but the larger region of convergence in the
+    complex plane of Fourier series makes it preferable to choose coordinate
+    systems such that the function to approximate is periodic. One reason Chebyshev
+    polynomials are preferred to other orthogonal polynomial series is
     fast discrete polynomial transforms (DPT) are implemented via fast transform
-    to Chebyshev then DCT. Although nothing prohibits a direct DPT, we want to
-    rely on existing libraries. Therefore, a Fourier-Chebyshev series is chosen
-    to interpolate θ(α,ζ), and a piecewise Chebyshev series interpolates |B|(ζ).
+    to Chebyshev then DCT. Therefore, a Fourier-Chebyshev series is chosen
+    to interpolate θ(α,ζ) and a piecewise Chebyshev series interpolates |B|(ζ).
 
     * An alternative to Chebyshev series is
       [filtered Fourier series](doi.org/10.1016/j.aml.2006.10.001).
@@ -183,34 +182,13 @@ class Bounce2D(Bounce):
     By default, this is a Gauss quadrature after removing the singularity.
     Fast fourier transforms interpolate smooth functions in the integrand to the
     quadrature nodes. Quadrature is chosen over Runge-Kutta methods of the form
-        ∂Fᵢ/∂ζ = f(λ,ζ,{Gⱼ}) subject to Fᵢ(ζ₁) = 0
+        ∂Fᵢ/∂ζ = f(ρ,α,λ,ζ,{Gⱼ}) subject to Fᵢ(ζ₁) = 0
     A fourth order Runge-Kutta method is equivalent to a quadrature
     with Simpson's rule. The quadratures resolve these integrals more efficiently.
 
     Fast transforms are used where possible. Fast multipoint methods are not
     implemented. For non-uniform interpolation, MMTs are used. It will be
     worthwhile to use the inverse non-uniform fast transforms.
-
-    Additional notes on multivalued coordinates:
-    The definition of α in B = ∇ρ × ∇α on an irrational magnetic surface
-    implies the angle θ(α, ζ) is multivalued at a physical location.
-    In particular, following an irrational field, the single-valued θ grows
-    to ∞ as ζ → ∞. Therefore, it is impossible to approximate this map using
-    single-valued basis functions defined on a bounded subset of ℝ²
-    (recall continuous functions on compact sets attain their maximum).
-    Still, it suffices to interpolate θ over one branch cut. We choose the
-    branch cut defined by α, ζ ∈ [0, 2π).
-
-    Likewise, α is multivalued. As the field line is followed, the label
-    jumps to α ∉ [0, 2π) after completing some toroidal transit. Therefore,
-    the map θ(α, ζ) must be periodic in α with period 2π. At every point
-    ζₚ ∈ [2π k, 2π ℓ] where k, ℓ ∈ ℤ where the field line completes a
-    poloidal transit there is guaranteed to exist a discrete jump
-    discontinuity in θ at ζ = 2π ℓ(p), starting the toroidal transit.
-    Recall a jump discontinuity appears as an infinitely sharp cut without
-    Gibbs effects. To recover the single-valued θ(α, ζ) from the function
-    approximation over one branch cut, at every ζ = 2π ℓ we can add either
-    an integer multiple of 2π to the next cut of θ.
 
     Examples
     --------
@@ -332,7 +310,7 @@ class Bounce2D(Bounce):
 
         """
         is_reshaped = is_reshaped or is_fourier
-        assert grid.can_fft
+        assert grid.can_fft2
         self._M = grid.num_theta
         self._N = grid.num_zeta
         self._NFP = grid.NFP
@@ -601,9 +579,9 @@ class Bounce2D(Bounce):
         plot=False,
         quad=None,
     ):
-        """Bounce integrate ∫ f(λ, ℓ) dℓ.
+        """Bounce integrate ∫ f(ρ,α,λ,ℓ) dℓ.
 
-        Computes the bounce integral ∫ f(λ, ℓ) dℓ for every field line and pitch.
+        Computes the bounce integral ∫ f(ρ,α,λ,ℓ) dℓ for every field line and pitch.
 
         Notes
         -----
@@ -614,7 +592,7 @@ class Bounce2D(Bounce):
         ----------
         integrand : callable or list[callable]
             The composition operator on the set of functions in ``data`` that
-            maps that determines ``f`` in ∫ f(λ, ℓ) dℓ. It should accept a dictionary
+            maps that determines ``f`` in ∫ f(ρ,α,λ,ℓ) dℓ. It should accept a dictionary
             which stores the interpolated data and the arguments ``B`` and ``pitch``.
         pitch_inv : jnp.ndarray
             Shape (num rho, num pitch).
@@ -971,11 +949,11 @@ class Bounce2D(Bounce):
 class Bounce1D(Bounce):
     """Computes bounce integrals using one-dimensional local spline methods.
 
-    The bounce integral is defined as ∫ f(λ, ℓ) dℓ where
+    The bounce integral is defined as ∫ f(ρ,α,λ,ℓ) dℓ where
 
     * dℓ parameterizes the distance along the field line in meters.
-    * f(λ, ℓ) is the quantity to integrate along the field line.
-    * The boundaries of the integral are bounce points ℓ₁, ℓ₂ s.t. λ|B|(ℓᵢ) = 1.
+    * f(ρ,α,λ,ℓ) is the quantity to integrate along the field line.
+    * The boundaries of the integral are bounce points ℓ₁, ℓ₂ s.t. λ|B|(ρ,α,ℓᵢ) = 1.
     * λ is a constant defining the integral proportional to the magnetic moment
       over energy.
     * |B| is the norm of the magnetic field.
@@ -1228,7 +1206,7 @@ class Bounce1D(Bounce):
             **kwargs,
         )
 
-    # TODO: Add option for adaptive quadrature with quadax
+    # TODO (#1428): Add option for adaptive quadrature with quadax
     #  quadax.quadgk with the c.o.v. used for legendre works best.
     #  Some people want more accurate computation on W shaped wells.
     def integrate(
@@ -1245,15 +1223,15 @@ class Bounce1D(Bounce):
         plot=False,
         quad=None,
     ):
-        """Bounce integrate ∫ f(λ, ℓ) dℓ.
+        """Bounce integrate ∫ f(ρ,α,λ,ℓ) dℓ.
 
-        Computes the bounce integral ∫ f(λ, ℓ) dℓ for every field line and pitch.
+        Computes the bounce integral ∫ f(ρ,α,λ,ℓ) dℓ for every field line and pitch.
 
         Parameters
         ----------
         integrand : callable or list[callable]
             The composition operator on the set of functions in ``data`` that
-            maps that determines ``f`` in ∫ f(λ, ℓ) dℓ. It should accept a dictionary
+            maps that determines ``f`` in ∫ f(ρ,α,λ,ℓ) dℓ. It should accept a dictionary
             which stores the interpolated data and the arguments ``B`` and ``pitch``.
         pitch_inv : jnp.ndarray
             Shape (num alpha, num rho, num pitch).

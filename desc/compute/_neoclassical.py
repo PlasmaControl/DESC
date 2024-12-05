@@ -441,6 +441,11 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
                     f1,
                     (
                         f2
+                        # TODO: Once people are happy with benchmarking
+                        #       we can push this integral into f2.
+                        #       The quadrature is less optimal, but
+                        #       it still works and it would be more efficient
+                        #       since we don't have to interpolate twice.
                         + bounce.integrate(
                             _f3,
                             pitch_inv,

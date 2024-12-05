@@ -191,7 +191,7 @@ class EffectiveRipple(_Objective):
         eq = self.things[0]
         if self._grid is None:
             self._grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False)
-        assert self._grid.can_fft
+        assert self._grid.can_fft2
         # Constants can only hold 1D arrays for some reason.
         self._constants["clebsch"] = FourierChebyshevSeries.nodes(
             self._X,
@@ -442,7 +442,7 @@ class GammaC(_Objective):
         eq = self.things[0]
         if self._grid is None:
             self._grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False)
-        assert self._grid.can_fft
+        assert self._grid.can_fft2
         # Constants can only hold 1D arrays for some reason.
         self._constants["clebsch"] = FourierChebyshevSeries.nodes(
             self._X,
@@ -497,8 +497,9 @@ class GammaC(_Objective):
         """
         if constants is None:
             constants = self.constants
+        quad2 = {}
         if "quad2 x" in constants:
-            self._hyperparam["quad2"] = (constants["quad2 x"], constants["quad2 w"])
+            quad2["quad2"] = (constants["quad2 x"], constants["quad2 w"])
 
         eq = self.things[0]
         data = compute_fun(
@@ -527,6 +528,7 @@ class GammaC(_Objective):
                 constants["fieldline quad w"],
             ),
             quad=(constants["quad x"], constants["quad w"]),
+            **quad2,
             **self._hyperparam,
         )
         return constants["transforms"]["grid"].compress(data[self._key])

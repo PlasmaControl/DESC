@@ -35,7 +35,6 @@ jobs:
           sed -i '1i\jax[cpu] == ${{ matrix.jax-version }}' ./requirements.txt
           cat ./requirements.txt
           pip install -r ./devtools/dev-requirements.txt
-          pip install matplotlib==3.7.2
       - name: Verify dependencies
         run: |
           python --version

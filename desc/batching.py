@@ -102,7 +102,6 @@ def scan_append(f, x):
     return res_append
 
 
-# TODO in_axes a la vmap?
 def _scanmap(fun, scan_fun, argnums=0):
     """A helper function to wrap f with a scan_fun."""
 

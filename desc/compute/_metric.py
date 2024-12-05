@@ -2040,16 +2040,16 @@ def _secular_gbdrift_over_phi(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["periodic(cvdrift)", "gbdrift (secular)"],
+    data=["cvdrift (periodic)", "gbdrift (secular)"],
 )
 def _cvdrift(params, transforms, profiles, data, **kwargs):
-    data["cvdrift"] = data["periodic(cvdrift)"] + data["gbdrift (secular)"]
+    data["cvdrift"] = data["cvdrift (periodic)"] + data["gbdrift (secular)"]
     return data
 
 
 @register_compute_fun(
-    name="periodic(cvdrift)",
-    label="\\mathrm{periodic(cvdrift)}",
+    name="cvdrift (periodic)",
+    label="\\mathrm{cvdrift (periodic)}",
     units="1 / Wb",
     units_long="Inverse webers",
     description="Periodic, binormal, geometric part of the curvature drift.",
@@ -2061,7 +2061,7 @@ def _cvdrift(params, transforms, profiles, data, **kwargs):
     data=["p_r", "psi_r", "|B|^2", "gbdrift (periodic)"],
 )
 def _periodic_cvdrift(params, transforms, profiles, data, **kwargs):
-    data["periodic(cvdrift)"] = (
+    data["cvdrift (periodic)"] = (
         mu_0 * data["p_r"] / data["psi_r"] / data["|B|^2"] + data["gbdrift (periodic)"]
     )
     return data

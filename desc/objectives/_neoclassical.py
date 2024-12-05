@@ -19,13 +19,13 @@ from desc.grid import LinearGrid
 from desc.utils import Timer, setdefault
 
 from ..integrals import Bounce2D
-from ..integrals._quad_utils import (
+from ..integrals.basis import FourierChebyshevSeries
+from ..integrals.quad_utils import (
     automorphism_sin,
     chebgauss2,
     get_quadrature,
     grad_automorphism_sin,
 )
-from ..integrals.basis import FourierChebyshevSeries
 from .objective_funs import _Objective, collect_docs
 from .utils import _parse_callable_target_bounds
 

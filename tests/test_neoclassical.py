@@ -70,7 +70,7 @@ def test_Gamma_c():
 @pytest.mark.slow
 @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
 def test_Gamma_c_Velasco():
-    """Test Γ_c Nemov with W7-X."""
+    """Test Γ_c Velasco with W7-X."""
     eq = get("W7-X")
     rho = np.linspace(1e-12, 1, 10)
     grid = LinearGrid(rho=rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False)

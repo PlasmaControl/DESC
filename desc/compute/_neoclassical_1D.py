@@ -7,13 +7,13 @@ from quadax import simpson
 
 from desc.backend import imap, jit, jnp
 
-from ..integrals._quad_utils import (
+from ..integrals.bounce_integral import Bounce1D
+from ..integrals.quad_utils import (
     automorphism_sin,
     chebgauss2,
     get_quadrature,
     grad_automorphism_sin,
 )
-from ..integrals.bounce_integral import Bounce1D
 from ..utils import cross, dot, safediv
 from ._neoclassical import _bounce_doc, _cvdrift0, _dH, _dI, _f1, _f2, _f3, _v_tau
 from .data_index import register_compute_fun

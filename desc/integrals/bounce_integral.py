@@ -26,14 +26,14 @@ from desc.integrals._interp_utils import (
     irfft2_non_uniform,
     polyder_vec,
 )
-from desc.integrals._quad_utils import (
+from desc.integrals.basis import FourierChebyshevSeries, PiecewiseChebyshevSeries
+from desc.integrals.quad_utils import (
     automorphism_sin,
     bijection_from_disc,
     get_quadrature,
     grad_automorphism_sin,
     grad_bijection_from_disc,
 )
-from desc.integrals.basis import FourierChebyshevSeries, PiecewiseChebyshevSeries
 from desc.io import IOAble
 from desc.utils import atleast_nd, errorif, flatten_matrix, setdefault
 

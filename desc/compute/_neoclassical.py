@@ -14,13 +14,13 @@ from orthax.legendre import leggauss
 
 from desc.backend import imap, jit, jnp
 
-from ..integrals._quad_utils import (
+from ..integrals.bounce_integral import Bounce2D
+from ..integrals.quad_utils import (
     automorphism_sin,
     chebgauss2,
     get_quadrature,
     grad_automorphism_sin,
 )
-from ..integrals.bounce_integral import Bounce2D
 from ..utils import cross, dot, safediv
 from .data_index import register_compute_fun
 

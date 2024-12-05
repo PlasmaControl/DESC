@@ -51,42 +51,41 @@ def _alpha_mean(f):
     return f.mean(axis=0)
 
 
-def _compute(fun, interp_data, data, grid, num_pitch, reduce=True):
+def _compute(fun, fun_data, data, grid, num_pitch, simp=False, reduce=True):
     """Compute ``fun`` for each α and ρ value iteratively to reduce memory usage.
 
     Parameters
     ----------
     fun : callable
         Function to compute.
-    interp_data : dict[str, jnp.ndarray]
-        Data to provide to ``fun``.
-        Names in ``Bounce1D.required_names`` will be overridden.
-        Reshaped automatically.
+    fun_data : dict[str, jnp.ndarray]
+        Data to provide to ``fun``. This dict will be modified.
     data : dict[str, jnp.ndarray]
         DESC data dict.
+    simp : bool
+        Whether to use an open Simpson rule instead of uniform weights.
     reduce : bool
         Whether to compute mean over α and expand to grid.
         Default is true.
-
     """
     pitch_inv, pitch_inv_weight = Bounce1D.get_pitch_inv_quad(
         grid.compress(data["min_tz |B|"]),
         grid.compress(data["max_tz |B|"]),
         num_pitch,
+        simp=simp,
     )
 
-    def for_each_rho(x):
+    def foreach_rho(x):
         # using same λ values for every field line α on flux surface ρ
         x["pitch_inv"] = pitch_inv
         x["pitch_inv weight"] = pitch_inv_weight
         return imap(fun, x)
 
     for name in Bounce1D.required_names:
-        interp_data[name] = data[name]
-    interp_data = dict(
-        zip(interp_data.keys(), Bounce1D.reshape_data(grid, *interp_data.values()))
-    )
-    out = imap(for_each_rho, interp_data)
+        fun_data[name] = data[name]
+    for name in fun_data:
+        fun_data[name] = Bounce1D.reshape_data(grid, fun_data[name])
+    out = imap(foreach_rho, fun_data)
     return grid.expand(_alpha_mean(out)) if reduce else out
 
 
@@ -206,16 +205,16 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
     batch = kwargs.get("batch", True)
     grid = transforms["grid"].source_grid
 
-    def dH(grad_rho_norm_kappa_g, B, pitch):
+    def dH(data, B, pitch):
         # Integrand of Nemov eq. 30 with |∂ψ/∂ρ| (λB₀)¹ᐧ⁵ removed.
         return (
             jnp.sqrt(jnp.abs(1 - pitch * B))
             * (4 / (pitch * B) - 1)
-            * grad_rho_norm_kappa_g
+            * data["|grad(rho)|*kappa_g"]
             / B
         )
 
-    def dI(B, pitch):
+    def dI(data, B, pitch):
         # Integrand of Nemov eq. 31.
         return jnp.sqrt(jnp.abs(1 - pitch * B)) / B
 
@@ -225,15 +224,14 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
         # Nemov's ∑ⱼ Hⱼ²/Iⱼ = (∂ψ/∂ρ)² (λB₀)³ ``(H**2 / I).sum(axis=-1)``.
         # (λB₀)³ d(λB₀)⁻¹ = B₀² λ³ d(λ⁻¹) = -B₀² λ dλ.
         bounce = Bounce1D(grid, data, quad, automorphism=None, is_reshaped=True)
-        points = bounce.points(data["pitch_inv"], num_well=num_well)
-        H = bounce.integrate(
-            dH,
+        H, I = bounce.integrate(
+            [dH, dI],
             data["pitch_inv"],
-            data["|grad(rho)|*kappa_g"],
-            points=points,
+            data,
+            "|grad(rho)|*kappa_g",
+            points=bounce.points(data["pitch_inv"], num_well=num_well),
             batch=batch,
         )
-        I = bounce.integrate(dI, data["pitch_inv"], points=points, batch=batch)
         return (
             safediv(H**2, I).sum(axis=-1)
             * data["pitch_inv"] ** (-3)
@@ -241,13 +239,18 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
         ).sum(axis=-1)
 
     # Interpolate |∇ρ| κ_g since it is smoother than κ_g alone.
-    interp_data = {"|grad(rho)|*kappa_g": data["|grad(rho)|"] * data["kappa_g"]}
     B0 = data["max_tz |B|"]
     data["effective ripple 3/2"] = (
         jnp.pi
         / (8 * 2**0.5)
         * (B0 * data["R0"] / data["<|grad(rho)|>"]) ** 2
-        * _compute(eps_32, interp_data, data, grid, kwargs.get("num_pitch", 50))
+        * _compute(
+            eps_32,
+            {"|grad(rho)|*kappa_g": data["|grad(rho)|"] * data["kappa_g"]},
+            data,
+            grid,
+            kwargs.get("num_pitch", 50),
+        )
         / data["fieldline length"]
     )
     return data

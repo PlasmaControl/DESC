@@ -67,7 +67,7 @@ class EffectiveRipple(_Objective):
         Unique coordinate values specifying flux surfaces to compute on.
     alpha : ndarray
         Unique coordinate values specifying field line labels to compute on.
-    knots_per_transit : int
+    Y_B : int
         Number of points per toroidal transit at which to sample data along field
         line. Default is 100.
     num_transit : int
@@ -115,10 +115,10 @@ class EffectiveRipple(_Objective):
         normalize_target=True,
         loss_function=None,
         deriv_mode="auto",
+        *,
         rho=1.0,
         alpha=0.0,
-        *,
-        knots_per_transit=100,
+        Y_B=100,
         num_transit=10,
         num_quad=32,
         num_pitch=50,
@@ -144,11 +144,9 @@ class EffectiveRipple(_Objective):
             "quad_weights": 1,
             "rho": rho,
             "alpha": alpha,
-            "zeta": np.linspace(
-                0, 2 * np.pi * num_transit, knots_per_transit * num_transit
-            ),
-            "quad": chebgauss2(num_quad),
+            "zeta": np.linspace(0, 2 * np.pi * num_transit, Y_B * num_transit),
         }
+        self._constants["quad x"], self._constants["quad w"] = chebgauss2(num_quad)
         self._hyperparameters = {
             "num_pitch": num_pitch,
             "batch": batch,
@@ -258,7 +256,7 @@ class EffectiveRipple(_Objective):
             get_transforms("effective ripple", eq, grid, jitable=True),
             constants["profiles"],
             data=data,
-            quad=constants["quad"],
+            quad=(constants["quad x"], constants["quad w"]),
             **self._hyperparameters,
         )
         return grid.compress(data["effective ripple"])

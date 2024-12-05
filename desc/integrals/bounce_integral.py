@@ -1090,10 +1090,10 @@ class Bounce1D(Bounce):
         self._x, self._w = get_quadrature(quad, automorphism)
 
         # Compute local splines.
-        self.zeta = grid.compress(grid.nodes[:, 2], surface_label="zeta")
+        self._zeta = grid.compress(grid.nodes[:, 2], surface_label="zeta")
         self.B = jnp.moveaxis(
             CubicHermiteSpline(
-                x=self.zeta,
+                x=self._zeta,
                 y=self._data["|B|"],
                 dydx=self._data["|B|_z|r,a"],
                 axis=-1,
@@ -1167,7 +1167,7 @@ class Bounce1D(Bounce):
             line and pitch, is padded with zero.
 
         """
-        return bounce_points(pitch_inv, self.zeta, self.B, self._dB_dz, num_well)
+        return bounce_points(pitch_inv, self._zeta, self.B, self._dB_dz, num_well)
 
     def check_points(self, points, pitch_inv, *, plot=True, **kwargs):
         """Check that bounce points are computed correctly.
@@ -1200,7 +1200,7 @@ class Bounce1D(Bounce):
             z1=points[0],
             z2=points[1],
             pitch_inv=pitch_inv,
-            knots=self.zeta,
+            knots=self._zeta,
             B=self.B,
             plot=plot,
             **kwargs,
@@ -1288,7 +1288,7 @@ class Bounce1D(Bounce):
         result = _bounce_quadrature(
             x=self._x if quad is None else quad[0],
             w=self._w if quad is None else quad[1],
-            knots=self.zeta,
+            knots=self._zeta,
             integrand=integrand,
             pitch_inv=pitch_inv,
             data=data | self._data,
@@ -1329,7 +1329,7 @@ class Bounce1D(Bounce):
             ``f`` interpolated to the deepest point between ``points``.
 
         """
-        return interp_to_argmin(f, points, self.zeta, self.B, self._dB_dz, method)
+        return interp_to_argmin(f, points, self._zeta, self.B, self._dB_dz, method)
 
     def plot(self, m, l, pitch_inv=None, **kwargs):
         """Plot the field line and bounce points of the given pitch angles.
@@ -1364,9 +1364,9 @@ class Bounce1D(Bounce):
                 jnp.ndim(pitch_inv) > 1,
                 msg=f"Got pitch_inv.ndim={jnp.ndim(pitch_inv)}, but expected 1.",
             )
-            z1, z2 = bounce_points(pitch_inv, self.zeta, B, dB_dz)
+            z1, z2 = bounce_points(pitch_inv, self._zeta, B, dB_dz)
             kwargs["z1"] = z1
             kwargs["z2"] = z2
             kwargs["k"] = pitch_inv
-        fig, ax = plot_ppoly(PPoly(B.T, self.zeta), **_set_default_plot_kwargs(kwargs))
+        fig, ax = plot_ppoly(PPoly(B.T, self._zeta), **_set_default_plot_kwargs(kwargs))
         return fig, ax

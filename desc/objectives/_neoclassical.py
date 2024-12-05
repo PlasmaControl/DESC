@@ -413,7 +413,9 @@ class GammaC(_Objective):
         self._keys_1dr = ["iota", "iota_r", "min_tz |B|", "max_tz |B|"]
         if Nemov:
             self._key = "Gamma_c"
-            self._constants["quad2"] = chebgauss2(num_quad)
+            self._constants["quad2 x"], self._constants["quad2 w"] = chebgauss2(
+                num_quad
+            )
         else:
             self._key = "Gamma_c Velasco"
 
@@ -445,7 +447,7 @@ class GammaC(_Objective):
         self._grid_1dr = LinearGrid(
             rho=self._constants["rho"], M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym
         )
-        self._constants["quad"] = get_quadrature(
+        self._constants["quad x"], self._constants["quad w"] = get_quadrature(
             leggauss(self._hyperparameters.pop("num_quad")),
             (automorphism_sin, grad_automorphism_sin),
         )
@@ -514,8 +516,8 @@ class GammaC(_Objective):
             for key in self._keys_1dr
         }
         quad2 = {}
-        if "quad2" in constants:
-            quad2["quad2"] = constants["quad2"]
+        if "quad2 x" in constants:
+            quad2["quad2"] = (constants["quad2 x"], constants["quad2 w"])
         data = compute_fun(
             eq,
             self._key,
@@ -523,7 +525,7 @@ class GammaC(_Objective):
             get_transforms(self._key, eq, grid, jitable=True),
             constants["profiles"],
             data=data,
-            quad=constants["quad"],
+            quad=(constants["quad x"], constants["quad w"]),
             **quad2,
             **self._hyperparameters,
         )

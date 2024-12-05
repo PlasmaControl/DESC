@@ -321,7 +321,7 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
     batch = kwargs.get("batch", True)
     grid = transforms["grid"].source_grid
 
-    def d_v_tau(B, pitch):
+    def d_v_tau(data, B, pitch):
         return safediv(2.0, jnp.sqrt(jnp.abs(1 - pitch * B)))
 
     def _cvdrift0(data, B, pitch):
@@ -458,8 +458,8 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
             / B
         )
 
-    def drift3(K, B, pitch):
-        return jnp.sqrt(jnp.abs(1 - pitch * B)) * K / B
+    def drift3(data, B, pitch):
+        return jnp.sqrt(jnp.abs(1 - pitch * B)) * data["K"] / B
 
     def Gamma_c(data):
         """∫ dλ ∑ⱼ [v τ γ_c²]ⱼ."""
@@ -468,7 +468,7 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
         bounce = Bounce1D(grid, data, quad, automorphism=None, is_reshaped=True)
         points = bounce.points(data["pitch_inv"], num_well=num_well)
         v_tau, f1, f2 = bounce.integrate(
-            [d_v_tau, drift1, drift1],
+            [d_v_tau, drift1, drift2],
             data["pitch_inv"],
             data,
             ["|grad(rho)|*kappa_g", "|B|_psi|v,p"],

@@ -189,6 +189,7 @@ class TestProfiles:
         assert "SumProfile" in str(pp + zp)
         assert "ProductProfile" in str(pp * zp)
         assert "ScaledProfile" in str(2 * zp)
+        assert "PowerProfile" in str(zp**2)
 
     @pytest.mark.unit
     def test_get_set(self):
@@ -348,6 +349,47 @@ class TestProfiles:
         np.testing.assert_allclose(f(x), 8 * (pp(x)), atol=1e-3)
 
     @pytest.mark.unit
+    def test_powered_profiles(self):
+        """Test raising profiles to a power."""
+        pp = PowerSeriesProfile(
+            modes=np.array([0, 1, 2, 4]), params=np.array([1, 0, -2, 1]), sym="auto"
+        )
+
+        f = pp**3
+        x = np.linspace(0, 1, 50)
+        np.testing.assert_allclose(f(x), (pp(x)) ** 3, atol=1e-3)
+
+        params = f.params
+        assert params[0] == 3
+        assert all(params[1:] == pp.params)
+
+        f.params = 2
+        np.testing.assert_allclose(f(x), (pp(x)) ** 2, atol=1e-3)
+
+        f.params = 0.5
+        np.testing.assert_allclose(f(x), np.sqrt(pp(x)), atol=1e-3)
+
+    @pytest.mark.unit
+    def test_powered_profiles_derivative(self):
+        """Test that powered profiles computes the derivative correctly."""
+        x = np.linspace(0, 1, 50)
+        p1 = PowerSeriesProfile(
+            modes=np.array([0, 1, 2, 4]), params=np.array([1, 3, -2, 4]), sym="auto"
+        )
+        p2 = p1 * p1
+        p3 = p1 * p2
+
+        f3 = p1**3
+        np.testing.assert_allclose(f3(x, dr=0), p3(x, dr=0))
+        np.testing.assert_allclose(f3(x, dr=1), p3(x, dr=1))
+        np.testing.assert_allclose(f3(x, dr=2), p3(x, dr=2))
+
+        f2 = f3 ** (2 / 3)
+        np.testing.assert_allclose(f2(x, dr=0), p2(x, dr=0))
+        np.testing.assert_allclose(f2(x, dr=1), p2(x, dr=1))
+        np.testing.assert_allclose(f2(x, dr=2), p2(x, dr=2))
+
+    @pytest.mark.unit
     def test_profile_errors(self):
         """Test error checking when creating and working with profiles."""
         pp = PowerSeriesProfile(
@@ -383,6 +425,10 @@ class TestProfiles:
             tp.compute(grid, dr=3)
         with pytest.raises(NotImplementedError):
             mp.compute(grid, dr=3)
+        with pytest.raises(UserWarning):
+            tp.params = [1, 0.3, 0.7]
+        with pytest.raises(UserWarning):
+            a = sp**-1
 
     @pytest.mark.unit
     def test_default_profiles(self):

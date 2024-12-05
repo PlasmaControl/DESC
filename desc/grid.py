@@ -43,6 +43,7 @@ class _Grid(IOAble, ABC):
         "_inverse_poloidal_idx",
         "_inverse_zeta_idx",
         "_is_meshgrid",
+        "_can_fft2",
     ]
 
     @abstractmethod
@@ -230,6 +231,16 @@ class _Grid(IOAble, ABC):
         nodes.reshape((num_poloidal, num_radial, num_toroidal, 3), order="F").
         """
         return self.__dict__.setdefault("_is_meshgrid", False)
+
+    @property
+    def can_fft2(self):
+        """bool: Whether this grid is compatible with 2D FFT.
+
+        Tensor product grid with uniformly spaced points on
+        (θ, ζ) ∈ [0, 2π) × [0, 2π/NFP).
+        """
+        # TODO: GitHub issue 1243?
+        return self.__dict__.setdefault("_can_fft2", self.is_meshgrid and not self.sym)
 
     @property
     def coordinates(self):
@@ -682,6 +693,7 @@ class Grid(_Grid):
         Use np.inf to denote no periodicity.
     NFP : int
         Number of field periods (Default = 1).
+        Change this only if your nodes are placed within one field period.
     source_grid : Grid
         Grid from which coordinates were mapped from.
     sort : bool
@@ -805,7 +817,8 @@ class Grid(_Grid):
         NFP : int
             Number of field periods (Default = 1).
             Only makes sense to change from 1 if last coordinate is periodic
-            with some constant divided by ``NFP``.
+            with some constant divided by ``NFP`` and the nodes are placed
+            within one field period.
 
         Returns
         -------
@@ -927,6 +940,8 @@ class LinearGrid(_Grid):
         Toroidal grid resolution.
     NFP : int
         Number of field periods (Default = 1).
+        Change this only if your nodes are placed within one field period
+        or should be interpreted as spanning one field period.
     sym : bool
         True for stellarator symmetry, False otherwise (Default = False).
     axis : bool
@@ -1022,6 +1037,8 @@ class LinearGrid(_Grid):
             Toroidal grid resolution.
         NFP : int
             Number of field periods (Default = 1).
+            Only change this if your nodes are placed within one field period
+            or should be interpreted as spanning one field period.
         axis : bool
             True to include a point at rho=0 (default), False for rho[0] = rho[1]/2.
         endpoint : bool

@@ -43,6 +43,7 @@ Compatibility
     desc.compat.flip_helicity
     desc.compat.flip_theta
     desc.compat.rescale
+    desc.compat.rotate_zeta
 
 Continuation
 ************
@@ -224,6 +225,7 @@ Objective Functions
     desc.objectives.RadialForceBalance
     desc.objectives.RotationalTransform
     desc.objectives.Shear
+    desc.objectives.SurfaceQuadraticFlux
     desc.objectives.ToroidalCurrent
     desc.objectives.ToroidalFlux
     desc.objectives.VacuumBoundaryError
@@ -290,14 +292,16 @@ Profiles
     :recursive:
     :template: class.rst
 
-    desc.profiles.PowerSeriesProfile
-    desc.profiles.TwoPowerProfile
-    desc.profiles.SplineProfile
+    desc.profiles.FourierZernikeProfile
     desc.profiles.HermiteSplineProfile
     desc.profiles.MTanhProfile
-    desc.profiles.ScaledProfile
-    desc.profiles.SumProfile
+    desc.profiles.PowerProfile
+    desc.profiles.PowerSeriesProfile
     desc.profiles.ProductProfile
+    desc.profiles.ScaledProfile
+    desc.profiles.SplineProfile
+    desc.profiles.SumProfile
+    desc.profiles.TwoPowerProfile
 
 Transform
 *********

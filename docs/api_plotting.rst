@@ -27,6 +27,7 @@ Plotting Flux Surfaces
     desc.plotting.plot_comparison
     desc.plotting.plot_boundary
     desc.plotting.plot_boundaries
+    desc.plotting.poincare_plot
 
 
 Contour Plots of 2-D data

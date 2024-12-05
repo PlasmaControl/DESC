@@ -1885,7 +1885,7 @@ class SplineMagneticField(_MagneticField, Optimizable):
 
     @classmethod
     def from_field(
-        cls, field, R, phi, Z, params=None, method="cubic", extrap=False, NFP=1
+        cls, field, R, phi, Z, params=None, method="cubic", extrap=False, NFP=None
     ):
         """Create a splined magnetic field from another field for faster evaluation.
 
@@ -1903,7 +1903,8 @@ class SplineMagneticField(_MagneticField, Optimizable):
         extrap : bool
             whether to extrapolate splines beyond specified R,phi,Z
         NFP : int, optional
-            Number of toroidal field periods.
+            Number of toroidal field periods.  If not provided, will default to 1 or
+        the provided field's NFP, if it has that attribute.
 
         """
         R, phi, Z = map(np.asarray, (R, phi, Z))
@@ -1911,6 +1912,7 @@ class SplineMagneticField(_MagneticField, Optimizable):
         shp = rr.shape
         coords = np.array([rr.flatten(), pp.flatten(), zz.flatten()]).T
         BR, BP, BZ = field.compute_magnetic_field(coords, params, basis="rpz").T
+        NFP = getattr(field, "_NFP", 1)
         try:
             AR, AP, AZ = field.compute_magnetic_vector_potential(
                 coords, params, basis="rpz"
@@ -1948,12 +1950,22 @@ class ScalarPotentialField(_MagneticField):
         R,phi,Z are arrays of cylindrical coordinates.
     params : dict, optional
         default parameters to pass to potential function
+    NFP : int, optional
+        Whether the field has a discrete periodicity. This is only used when making
+        a ``SplineMagneticField`` from this field using its ``from_field`` method,
+        or when saving this field as an mgrid file using the ``save_mgrid`` method.
 
     """
 
-    def __init__(self, potential, params=None):
+    def __init__(self, potential, params=None, NFP=1):
         self._potential = potential
         self._params = params
+        self._NFP = NFP
+
+    @property
+    def NFP(self):
+        """int: Number of (toroidal) field periods."""
+        return self._NFP
 
     def compute_magnetic_field(
         self, coords, params=None, basis="rpz", source_grid=None, transforms=None
@@ -2042,12 +2054,22 @@ class VectorPotentialField(_MagneticField):
         R,phi,Z are arrays of cylindrical coordinates.
     params : dict, optional
         default parameters to pass to potential function
+    NFP : int, optional
+        Whether the field has a discrete periodicity. This is only used when making
+        a ``SplineMagneticField`` from this field using its ``from_field`` method,
+        or when saving this field as an mgrid file using the ``save_mgrid`` method.
 
     """
 
-    def __init__(self, potential, params=None):
+    def __init__(self, potential, params=None, NFP=1):
         self._potential = potential
         self._params = params
+        self._NFP = NFP
+
+    @property
+    def NFP(self):
+        """int: Number of (toroidal) field periods."""
+        return self._NFP
 
     def _compute_A_or_B(
         self,

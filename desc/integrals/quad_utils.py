@@ -2,13 +2,15 @@
 
 Notes
 -----
-Bounce integrals with bounce points where the derivative of |B| does
-not vanish have 1/2 power law singularities. The strongly singular integrals
-at the local extrema of |B| are not integrable. Hence, everywhere except the
-extrema, a Chebyshev or Legendre quadrature under a change of variables works
-because √(1−z²) / √(1−λ|B|(z)) ~ g(z, λ) where g(z, λ) is smooth in z.
-Empirically, quadratic node clustering near the singularities is sufficient
-for estimation of g(z).
+Bounce integrals with bounce points where the derivative of |B| does not vanish
+have 1/2 power law singularities. However, strongly singular integrals where the
+domain of the integral ends at the local extrema of |B| are not integrable.
+
+Hence, everywhere except for the extrema, an implicit Chebyshev (``chebgauss1``
+or ``chebgauss2`` or modified Legendre quadrature (with ``automorphism_sin``)
+captures the integral because √(1−ζ²) / √ (1−λ|B|) ∼ k(λ, ζ) is smooth in ζ.
+The clustering of the nodes near the singularities is sufficient to estimate
+k(ζ, λ).
 """
 
 from orthax.chebyshev import chebgauss, chebweight
@@ -33,10 +35,6 @@ def grad_bijection_from_disc(a, b):
     return 0.5 * (b - a)
 
 
-# This map was tested as a change of variables to interpolate with
-# Chebyshev series on a more uniform grid. Although it fit to
-# oscillatory functions better, it gives small wiggles due to Runge
-# effects near boundary.
 def automorphism_arcsin(x, gamma=jnp.cos(0.5)):
     """[-1, 1] ∋ x ↦ y ∈ [−1, 1].
 
@@ -74,18 +72,16 @@ def grad_automorphism_arcsin(x, gamma=jnp.cos(0.5)):
 grad_automorphism_arcsin.__doc__ += "\n" + automorphism_arcsin.__doc__
 
 
-def automorphism_sin(x, s=0, m=10):
+def automorphism_sin(x, m=10):
     """[-1, 1] ∋ x ↦ y ∈ [−1, 1].
 
     This map increases node density near the boundary by the asymptotic factor
-    1/√(1−x²) and adds a cosine factor to the integrand when ``s=0``.
+    1/√(1−x²) and adds a cosine factor to the integrand.
 
     Parameters
     ----------
     x : jnp.ndarray
         Points to transform.
-    s : float
-        Strength of derivative suppression, s ∈ [0, 1].
     m : float
         Number of machine epsilons used for floating point error buffer.
 
@@ -95,23 +91,16 @@ def automorphism_sin(x, s=0, m=10):
         Transformed points.
 
     """
-    errorif(not (0 <= s <= 1))
-    # s = 0 -> derivative vanishes like cosine.
-    # s = 1 -> derivative vanishes like cosine^k.
-    y0 = jnp.sin(0.5 * jnp.pi * x)
-    y1 = x + jnp.sin(jnp.pi * x) / jnp.pi  # k = 2
-    y = (1 - s) * y0 + s * y1
+    y = jnp.sin(0.5 * jnp.pi * x)
     # y is an expansion, so y(x) > x near x ∈ {−1, 1} and there is a tendency
     # for floating point error to overshoot the true value.
     eps = m * jnp.finfo(jnp.array(1.0).dtype).eps
     return jnp.clip(y, -1 + eps, 1 - eps)
 
 
-def grad_automorphism_sin(x, s=0):
+def grad_automorphism_sin(x):
     """Gradient of sin automorphism."""
-    dy0_dx = 0.5 * jnp.pi * jnp.cos(0.5 * jnp.pi * x)
-    dy1_dx = 1.0 + jnp.cos(jnp.pi * x)
-    return (1 - s) * dy0_dx + s * dy1_dx
+    return 0.5 * jnp.pi * jnp.cos(0.5 * jnp.pi * x)
 
 
 grad_automorphism_sin.__doc__ += "\n" + automorphism_sin.__doc__

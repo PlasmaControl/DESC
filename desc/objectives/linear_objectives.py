@@ -12,7 +12,7 @@ import numpy as np
 from termcolor import colored
 
 from desc.backend import execute_on_cpu, jnp, tree_leaves, tree_map, tree_structure
-from desc.basis import zernike_radial, zernike_radial_coeffs
+from desc.basis import zernike_radial
 from desc.geometry import FourierRZCurve
 from desc.utils import broadcast_tree, errorif, setdefault
 
@@ -20,7 +20,7 @@ from .normalization import compute_scaling_factors
 from .objective_funs import _Objective
 
 
-# TODO: get rid of this class and inherit from FixParameters instead?
+# TODO (#1391): get rid of this class and inherit from FixParameters instead?
 class _FixedObjective(_Objective):
     _fixed = True
     _linear = True
@@ -39,14 +39,14 @@ class _FixedObjective(_Objective):
         assert len(new_target) == len(self.target)
         self.target = new_target
         self._target_from_user = self.target  # in case the Objective is re-built
-        if self._use_jit:
-            self.jit()
+        if not self._use_jit:
+            self._unjit()
 
     def _parse_target_from_user(
         self, target_from_user, default_target, default_bounds, idx
     ):
-        # FIXME: add logic here to deal with `target_from_user` as a pytree?
-        # FIXME: does this actually need idx?
+        # TODO (#1391): add logic here to deal with `target_from_user` as a pytree?
+        # TODO (#1391: does this actually need idx?
         if target_from_user is None:
             target = default_target
             bounds = default_bounds
@@ -141,7 +141,7 @@ class FixParameters(_Objective):
     _linear = True
     _fixed = True
     _units = "(~)"
-    _print_value_fmt = "Fixed parameters error: {:10.3e} "
+    _print_value_fmt = "Fixed parameters error: "
 
     def __init__(
         self,
@@ -232,8 +232,8 @@ class FixParameters(_Objective):
 
         """
         self.target = self.compute(thing.params_dict)
-        if self._use_jit:
-            self.jit()
+        if not self._use_jit:
+            self._unjit()
 
 
 class BoundaryRSelfConsistency(_Objective):
@@ -257,7 +257,7 @@ class BoundaryRSelfConsistency(_Objective):
     _linear = True
     _fixed = False  # not "diagonal", since it is fixing a sum
     _units = "(m)"
-    _print_value_fmt = "R boundary self consistency error: {:10.3e} "
+    _print_value_fmt = "R boundary self consistency error: "
 
     def __init__(
         self,
@@ -356,7 +356,7 @@ class BoundaryZSelfConsistency(_Objective):
     _linear = True
     _fixed = False  # not "diagonal", since it is fixing a sum
     _units = "(m)"
-    _print_value_fmt = "Z boundary self consistency error: {:10.3e} "
+    _print_value_fmt = "Z boundary self consistency error: "
 
     def __init__(
         self,
@@ -454,7 +454,8 @@ class AxisRSelfConsistency(_Objective):
     _scalar = False
     _linear = True
     _fixed = False  # not "diagonal", since it is fixing a sum
-    _print_value_fmt = "R axis self consistency error: {:10.3e} (m)"
+    _units = "(m)"
+    _print_value_fmt = "R axis self consistency error: "
 
     def __init__(
         self,
@@ -541,7 +542,8 @@ class AxisZSelfConsistency(_Objective):
     _scalar = False
     _linear = True
     _fixed = False  # not "diagonal", since it is fixing a sum
-    _print_value_fmt = "Z axis self consistency error: {:10.3e} (m)"
+    _units = "(m)"
+    _print_value_fmt = "Z axis self consistency error: "
 
     def __init__(
         self,
@@ -643,7 +645,7 @@ class FixBoundaryR(FixParameters):
     """
 
     _units = "(m)"
-    _print_value_fmt = "R boundary error: {:10.3e} "
+    _print_value_fmt = "R boundary error: "
 
     def __init__(
         self,
@@ -724,7 +726,7 @@ class FixBoundaryZ(FixParameters):
     """
 
     _units = "(m)"
-    _print_value_fmt = "Z boundary error: {:10.3e} "
+    _print_value_fmt = "Z boundary error: "
 
     def __init__(
         self,
@@ -772,8 +774,8 @@ class FixBoundaryZ(FixParameters):
         super().build(use_jit=use_jit, verbose=verbose)
 
 
-class FixLambdaGauge(_Objective):
-    """Fixes gauge freedom for lambda: lambda(theta=0,zeta=0)=0.
+class FixLambdaGauge(FixParameters):
+    """Fixes gauge freedom for lambda, which sets the flux surface avg of lambda to 0.
 
     Note: this constraint is automatically applied when needed, and does not need to be
     included by the user.
@@ -791,11 +793,8 @@ class FixLambdaGauge(_Objective):
 
     """
 
-    _scalar = False
-    _linear = True
-    _fixed = False  # not "diagonal", since it is fixing a sum
     _units = "(rad)"
-    _print_value_fmt = "lambda gauge error: {:10.3e} "
+    _print_value_fmt = "lambda gauge error: "
 
     def __init__(
         self,
@@ -804,74 +803,20 @@ class FixLambdaGauge(_Objective):
         normalize_target=True,
         name="lambda gauge",
     ):
+        if eq.sym:
+            indices = False
+        else:
+            indices = np.where(
+                np.logical_and(eq.L_basis.modes[:, 1] == 0, eq.L_basis.modes[:, 2] == 0)
+            )[0]
         super().__init__(
-            things=eq,
+            thing=eq,
+            params={"L_lmn": indices},
             target=0,
-            bounds=None,
-            weight=1,
             normalize=normalize,
             normalize_target=normalize_target,
             name=name,
         )
-
-    def build(self, use_jit=False, verbose=1):
-        """Build constant arrays.
-
-        Parameters
-        ----------
-        use_jit : bool, optional
-            Whether to just-in-time compile the objective and derivatives.
-        verbose : int, optional
-            Level of output.
-
-        """
-        eq = self.things[0]
-        L_basis = eq.L_basis
-
-        if L_basis.sym:
-            self._A = np.zeros((0, L_basis.num_modes))
-        else:
-            # l(rho,0,0) = 0
-            # at theta=zeta=0, basis for lambda reduces to just a polynomial in rho
-            # what this constraint does is make all the coefficients of each power
-            # of rho equal to zero
-            # i.e. if lambda = (L_200 + 2*L_310) rho**2 + (L_100 + 2*L_210)*rho
-            # this constraint will make
-            # L_200 + 2*L_310 = 0
-            # L_100 + 2*L_210 = 0
-            L_modes = L_basis.modes
-            mnpos = np.where((L_modes[:, 1:] >= [0, 0]).all(axis=1))[0]
-            l_lmn = L_modes[mnpos, :]
-            if len(l_lmn) > 0:
-                c = zernike_radial_coeffs(l_lmn[:, 0], l_lmn[:, 1])
-            else:
-                c = np.zeros((0, 0))
-
-            A = np.zeros((c.shape[1], L_basis.num_modes))
-            A[:, mnpos] = c.T
-            self._A = A
-
-        self._dim_f = self._A.shape[0]
-        super().build(use_jit=use_jit, verbose=verbose)
-
-    def compute(self, params, constants=None):
-        """Compute lambda gauge freedom errors.
-
-        Parameters
-        ----------
-        params : dict
-            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
-        constants : dict
-            Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
-
-        Returns
-        -------
-        f : ndarray
-            gauge freedom errors.
-
-        """
-        return jnp.dot(self._A, params["L_lmn"])
 
 
 class FixThetaSFL(FixParameters):
@@ -894,7 +839,7 @@ class FixThetaSFL(FixParameters):
     """
 
     _units = "(rad)"
-    _print_value_fmt = "theta - theta SFL error: {:10.3e} "
+    _print_value_fmt = "theta - theta SFL error: "
 
     def __init__(
         self,
@@ -949,7 +894,7 @@ class FixAxisR(FixParameters):
     """
 
     _units = "(m)"
-    _print_value_fmt = "R axis error: {:10.3e} "
+    _print_value_fmt = "R axis error: "
 
     def __init__(
         self,
@@ -1030,7 +975,7 @@ class FixAxisZ(FixParameters):
     """
 
     _units = "(m)"
-    _print_value_fmt = "Z axis error: {:10.3e} "
+    _print_value_fmt = "Z axis error: "
 
     def __init__(
         self,
@@ -1111,7 +1056,7 @@ class FixModeR(FixParameters):
     """
 
     _units = "(m)"
-    _print_value_fmt = "Fixed-R modes error: {:10.3e} "
+    _print_value_fmt = "Fixed-R modes error: "
 
     def __init__(
         self,
@@ -1192,7 +1137,7 @@ class FixModeZ(FixParameters):
     """
 
     _units = "(m)"
-    _print_value_fmt = "Fixed-Z modes error: {:10.3e} "
+    _print_value_fmt = "Fixed-Z modes error: "
 
     def __init__(
         self,
@@ -1272,7 +1217,7 @@ class FixModeLambda(FixParameters):
     """
 
     _units = "(rad)"
-    _print_value_fmt = "Fixed lambda modes error: {:10.3e} "
+    _print_value_fmt = "Fixed lambda modes error: "
 
     def __init__(
         self,
@@ -1341,7 +1286,7 @@ class FixSumModesR(_FixedObjective):
 
     _fixed = False  # not "diagonal", since it is fixing a sum
     _units = "(m)"
-    _print_value_fmt = "Fixed-R sum modes error: {:10.3e} "
+    _print_value_fmt = "Fixed-R sum modes error: "
 
     def __init__(
         self,
@@ -1507,7 +1452,7 @@ class FixSumModesZ(_FixedObjective):
 
     _fixed = False  # not "diagonal", since it is fixing a sum
     _units = "(m)"
-    _print_value_fmt = "Fixed-Z sum modes error: {:10.3e} "
+    _print_value_fmt = "Fixed-Z sum modes error: "
 
     def __init__(
         self,
@@ -1674,7 +1619,7 @@ class FixSumModesLambda(_FixedObjective):
 
     _fixed = False  # not "diagonal", since it is fixing a sum
     _units = "(rad)"
-    _print_value_fmt = "Fixed-lambda sum modes error: {:10.3e} "
+    _print_value_fmt = "Fixed-lambda sum modes error: "
 
     def __init__(
         self,
@@ -1840,7 +1785,7 @@ class FixPressure(FixParameters):
     """
 
     _units = "(Pa)"
-    _print_value_fmt = "Fixed pressure profile error: {:10.3e} "
+    _print_value_fmt = "Fixed pressure profile error: "
 
     def __init__(
         self,
@@ -1920,7 +1865,7 @@ class FixAnisotropy(FixParameters):
     """
 
     _units = "(dimensionless)"
-    _print_value_fmt = "Fixed anisotropy profile error: {:10.3e} "
+    _print_value_fmt = "Fixed anisotropy profile error: "
 
     def __init__(
         self,
@@ -1997,7 +1942,7 @@ class FixIota(FixParameters):
     """
 
     _units = "(dimensionless)"
-    _print_value_fmt = "Fixed iota profile error: {:10.3e} "
+    _print_value_fmt = "Fixed iota profile error: "
 
     def __init__(
         self,
@@ -2076,7 +2021,7 @@ class FixCurrent(FixParameters):
     """
 
     _units = "(A)"
-    _print_value_fmt = "Fixed current profile error: {:10.3e} "
+    _print_value_fmt = "Fixed current profile error: "
 
     def __init__(
         self,
@@ -2158,7 +2103,7 @@ class FixElectronTemperature(FixParameters):
     """
 
     _units = "(eV)"
-    _print_value_fmt = "Fixed electron temperature profile error: {:10.3e} "
+    _print_value_fmt = "Fixed electron temperature profile error: "
 
     def __init__(
         self,
@@ -2242,7 +2187,7 @@ class FixElectronDensity(FixParameters):
     """
 
     _units = "(m^-3)"
-    _print_value_fmt = "Fixed electron density profile error: {:10.3e} "
+    _print_value_fmt = "Fixed electron density profile error: "
 
     def __init__(
         self,
@@ -2324,7 +2269,7 @@ class FixIonTemperature(FixParameters):
     """
 
     _units = "(eV)"
-    _print_value_fmt = "Fixed ion temperature profile error: {:10.3e} "
+    _print_value_fmt = "Fixed ion temperature profile error: "
 
     def __init__(
         self,
@@ -2404,7 +2349,7 @@ class FixAtomicNumber(FixParameters):
     """
 
     _units = "(dimensionless)"
-    _print_value_fmt = "Fixed atomic number profile error: {:10.3e} "
+    _print_value_fmt = "Fixed atomic number profile error: "
 
     def __init__(
         self,
@@ -2477,7 +2422,7 @@ class FixPsi(FixParameters):
     """
 
     _units = "(Wb)"
-    _print_value_fmt = "Fixed Psi error: {:10.3e} "
+    _print_value_fmt = "Fixed Psi error: "
 
     def __init__(
         self,
@@ -2546,7 +2491,7 @@ class FixCurveShift(FixParameters):
     """
 
     _units = "(m)"
-    _print_value_fmt = "Fixed shift error: {:10.3e} "
+    _print_value_fmt = "Fixed shift error: "
 
     def __init__(
         self,
@@ -2568,7 +2513,6 @@ class FixCurveShift(FixParameters):
             normalize_target=normalize_target,
             name=name,
         )
-        # TODO: add normalization?
 
 
 class FixCurveRotation(FixParameters):
@@ -2597,7 +2541,7 @@ class FixCurveRotation(FixParameters):
     """
 
     _units = "(rad)"
-    _print_value_fmt = "Fixed rotation error: {:10.3e} "
+    _print_value_fmt = "Fixed rotation error: "
 
     def __init__(
         self,
@@ -2687,7 +2631,7 @@ class FixCoilCurrent(FixParameters):
     """
 
     _units = "(A)"
-    _print_value_fmt = "Fixed coil current error: {:10.3e} "
+    _print_value_fmt = "Fixed coil current error: "
 
     def __init__(
         self,
@@ -2812,7 +2756,7 @@ class FixSumCoilCurrent(FixCoilCurrent):
     _linear = True
     _fixed = False
     _units = "(A)"
-    _print_value_fmt = "Summed coil current error: {:10.3e} "
+    _print_value_fmt = "Summed coil current error: "
 
     def __init__(
         self,
@@ -2911,7 +2855,7 @@ class FixOmniWell(FixParameters):
     """
 
     _units = "(T)"
-    _print_value_fmt = "Fixed omnigenity well error: {:10.3e} "
+    _print_value_fmt = "Fixed omnigenity well error: "
 
     def __init__(
         self,
@@ -2934,7 +2878,6 @@ class FixOmniWell(FixParameters):
             normalize_target=normalize_target,
             name=name,
         )
-        # TODO: add normalization?
 
 
 class FixOmniMap(FixParameters):
@@ -2964,7 +2907,7 @@ class FixOmniMap(FixParameters):
     """
 
     _units = "(rad)"
-    _print_value_fmt = "Fixed omnigenity map error: {:10.3e} "
+    _print_value_fmt = "Fixed omnigenity map error: "
 
     def __init__(
         self,
@@ -3013,7 +2956,7 @@ class FixOmniBmax(_FixedObjective):
 
     _fixed = False  # not "diagonal", since it is fixing a sum
     _units = "(rad)"
-    _print_value_fmt = "Fixed omnigenity B_max error: {:10.3e} "
+    _print_value_fmt = "Fixed omnigenity B_max error: "
 
     def __init__(
         self,
@@ -3063,7 +3006,7 @@ class FixOmniBmax(_FixedObjective):
                     np.logical_and((basis.modes[:, 1] % 2 == 0), basis.modes[:, 1] > 0),
                 )
             )[0]
-            mm = basis.modes[idx_m, 2]
+            mm = basis.modes[idx_m, 1]
             self._A[i, idx_0] = 1
             self._A[i, idx_m] = (mm % 2 - 1) * (mm % 4 - 1)
 
@@ -3127,7 +3070,7 @@ class FixSheetCurrent(FixParameters):
     """
 
     _units = "(~)"
-    _print_value_fmt = "Fixed sheet current error: {:10.3e} "
+    _print_value_fmt = "Fixed sheet current error: "
 
     def __init__(
         self,
@@ -3149,7 +3092,6 @@ class FixSheetCurrent(FixParameters):
             normalize_target=normalize_target,
             name=name,
         )
-        # TODO: add normalization?
 
 
 class FixNearAxisR(_FixedObjective):
@@ -3184,10 +3126,11 @@ class FixNearAxisR(_FixedObjective):
 
     """
 
+    _static_attrs = ["_nae_eq"]
     _target_arg = "R_lmn"
     _fixed = False  # not "diagonal", since its fixing a sum
     _units = "(m)"
-    _print_value_fmt = "Fixed-Near-Axis R Behavior error: {:10.3e} "
+    _print_value_fmt = "Fixed-Near-Axis R Behavior error: "
 
     def __init__(
         self,
@@ -3233,18 +3176,27 @@ class FixNearAxisR(_FixedObjective):
         for con in cons:
             if isinstance(con, FixSumModesR) or isinstance(con, AxisRSelfConsistency):
                 con.build(use_jit=use_jit, verbose=0)
-        self._A = np.stack(
-            [con._A for con in cons if isinstance(con, FixSumModesR)]
-        ).squeeze()
+        cons_that_fix_near_axis = [con for con in cons if isinstance(con, FixSumModesR)]
+        self._A = (
+            np.stack([con._A for con in cons_that_fix_near_axis]).squeeze()
+            if cons_that_fix_near_axis
+            else None
+        )
         # add the axis constraint last if it is in cons
         axis_con = None
         for con in cons:
             if isinstance(con, AxisRSelfConsistency):
-                self._A = np.vstack([self._A, con._A]).squeeze()
+                self._A = (
+                    np.vstack([self._A, con._A]).squeeze()
+                    if np.any(self._A)
+                    else con._A
+                )
                 axis_con = con
 
-        self._target = np.concatenate(
-            [con.target for con in cons if isinstance(con, FixSumModesR)]
+        self._target = (
+            np.concatenate([con.target for con in cons_that_fix_near_axis])
+            if cons_that_fix_near_axis
+            else None
         )
         if axis_con:
             if self._nae_eq is not None:
@@ -3262,7 +3214,11 @@ class FixNearAxisR(_FixedObjective):
                 axis_target = axis.R_n
             else:  # else use eq axis a target
                 axis_target = self._eq.Ra_n
-            self._target = np.append(self._target, axis_target).squeeze()
+            self._target = (
+                np.append(self._target, axis_target).squeeze()
+                if np.any(self._target)
+                else axis_target
+            )
         self._dim_f = self.target.size
         super().build(use_jit=use_jit, verbose=verbose)
 
@@ -3320,10 +3276,11 @@ class FixNearAxisZ(_FixedObjective):
 
     """
 
+    _static_attrs = ["_nae_eq"]
     _target_arg = "Z_lmn"
     _fixed = False  # not "diagonal", since its fixing a sum
     _units = "(m)"
-    _print_value_fmt = "Fixed-Near-Axis Z Behavior error: {:10.3e} "
+    _print_value_fmt = "Fixed-Near-Axis Z Behavior error: "
 
     def __init__(
         self,
@@ -3369,17 +3326,26 @@ class FixNearAxisZ(_FixedObjective):
         for con in cons:
             if isinstance(con, FixSumModesZ) or isinstance(con, AxisZSelfConsistency):
                 con.build(use_jit=use_jit, verbose=0)
-        self._A = np.stack(
-            [con._A for con in cons if isinstance(con, FixSumModesZ)]
-        ).squeeze()
+        cons_that_fix_near_axis = [con for con in cons if isinstance(con, FixSumModesZ)]
+        self._A = (
+            np.stack([con._A for con in cons_that_fix_near_axis]).squeeze()
+            if cons_that_fix_near_axis
+            else None
+        )
         # add the axis constraint last if it is in cons
         axis_con = None
         for con in cons:
             if isinstance(con, AxisZSelfConsistency):
-                self._A = np.vstack([self._A, con._A]).squeeze()
+                self._A = (
+                    np.vstack([self._A, con._A]).squeeze()
+                    if np.any(self._A)
+                    else con._A
+                )
                 axis_con = con
-        self._target = np.concatenate(
-            [con.target for con in cons if isinstance(con, FixSumModesZ)]
+        self._target = (
+            np.concatenate([con.target for con in cons_that_fix_near_axis])
+            if cons_that_fix_near_axis
+            else None
         )
         if axis_con:
             if self._nae_eq is not None:
@@ -3397,7 +3363,11 @@ class FixNearAxisZ(_FixedObjective):
                 axis_target = axis.Z_n
             else:  # else use eq axis a target
                 axis_target = self._eq.Za_n
-            self._target = np.append(self._target, axis_target).squeeze()
+            self._target = (
+                np.append(self._target, axis_target).squeeze()
+                if np.any(self._target)
+                else axis_target
+            )
 
         self._dim_f = self.target.size
 
@@ -3462,10 +3432,11 @@ class FixNearAxisLambda(_FixedObjective):
 
     """
 
+    _static_attrs = ["_nae_eq"]
     _target_arg = "L_lmn"
     _fixed = False  # not "diagonal", since its fixing a sum
     _units = "(dimensionless)"
-    _print_value_fmt = "Fixed-Near-Axis Lambda Behavior error: {:10.3e} "
+    _print_value_fmt = "Fixed-Near-Axis Lambda Behavior error: "
 
     def __init__(
         self,

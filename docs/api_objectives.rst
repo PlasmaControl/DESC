@@ -97,13 +97,17 @@ Coil Optimization
 
 
     desc.objectives.QuadraticFlux
+    desc.objectives.SurfaceQuadraticFlux
     desc.objectives.CoilLength
     desc.objectives.CoilCurvature
     desc.objectives.CoilTorsion
+    desc.objectives.CoilSetLinkingNumber
     desc.objectives.CoilSetMinDistance
     desc.objectives.PlasmaCoilSetMinDistance
     desc.objectives.CoilCurrentLength
+    desc.objectives.CoilArclengthVariance
     desc.objectives.ToroidalFlux
+    desc.objectives.SurfaceCurrentRegularization
 
 
 Profiles

@@ -1053,7 +1053,6 @@ class Equilibrium(IOAble, Optimizable):
         else:
             data0d_seed = {}
         if calc1dr and override_grid:
-            can_fft = data_index[p][dep]["grid_requirement"].get("can_fft2", False)
             grid1dr = LinearGrid(
                 rho=grid.compress(grid.nodes[:, 0], surface_label="rho"),
                 M=self.M_grid,
@@ -1063,7 +1062,9 @@ class Equilibrium(IOAble, Optimizable):
                 and all(
                     data_index[p][dep]["grid_requirement"].get("sym", True)
                     # TODO (#1206)
-                    and not can_fft
+                    and not data_index[p][dep]["grid_requirement"].get(
+                        "can_fft2", False
+                    )
                     for dep in dep1dr
                 ),
             )
@@ -1102,7 +1103,6 @@ class Equilibrium(IOAble, Optimizable):
             data.update(data1dr)
 
         if calc1dz and override_grid:
-            can_fft = data_index[p][dep]["grid_requirement"].get("can_fft2", False)
             grid1dz = LinearGrid(
                 zeta=grid.compress(grid.nodes[:, 2], surface_label="zeta"),
                 L=self.L_grid,
@@ -1112,7 +1112,9 @@ class Equilibrium(IOAble, Optimizable):
                 and all(
                     data_index[p][dep]["grid_requirement"].get("sym", True)
                     # TODO (#1206)
-                    and not can_fft
+                    and not data_index[p][dep]["grid_requirement"].get(
+                        "can_fft2", False
+                    )
                     for dep in dep1dz
                 ),
             )

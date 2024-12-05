@@ -1921,7 +1921,7 @@ class SurfaceCurrentRegularization(_Objective):
     weight_str = (
         "weight : {float, ndarray}, optional"
         "\n\tWeighting to apply to the Objective, relative to other Objectives."
-        "\n\tMust be broadcastable to to Objective.dim_f"
+        "\n\tMust be broadcastable to to ``Objective.dim_f``"
         "\n\tWhen used with QuadraticFlux objective, this acts as the regularization"
         "\n\tparameter (with w^2 = lambda), with 0 corresponding to no regularization."
         "\n\tThe larger this parameter is, the less complex the surface current will "

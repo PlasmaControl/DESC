@@ -75,7 +75,7 @@ doc_name = """
         Name of the objective.
 """
 doc_jac_chunk_size = """
-    jac_chunk_size : int or "auto", optional
+    jac_chunk_size : int or ``auto``, optional
         Will calculate the Jacobian
         ``jac_chunk_size`` columns at a time, instead of all at once.
         The memory usage of the Jacobian calculation is roughly
@@ -87,7 +87,7 @@ doc_jac_chunk_size = """
         If ``None``, it will use the largest size i.e ``obj.dim_x``.
         Defaults to ``chunk_size=None``.
         Note: When running on a CPU (not a GPU) on a HPC cluster, DESC is unable to
-        accurately estimate the available device memory, so the "auto" chunk_size
+        accurately estimate the available device memory, so the ``auto`` chunk_size
         option will yield a larger chunk size than may be needed. It is recommended
         to manually choose a chunk_size if an OOM error is experienced in this case.
 """
@@ -194,19 +194,19 @@ class ObjectiveFunction(IOAble):
     use_jit : bool, optional
         Whether to just-in-time compile the objectives and derivatives.
     deriv_mode : {"auto", "batched", "blocked"}
-        Method for computing Jacobian matrices. "batched" uses forward mode, applied to
-        the entire objective at once, and is generally the fastest for vector valued
-        objectives. Its memory intensity vs. speed may be traded off through the
-        ``jac_chunk_size`` keyword argument. "blocked" builds the Jacobian for
+        Method for computing Jacobian matrices. ``batched`` uses forward mode, applied
+        to the entire objective at once, and is generally the fastest for vector
+        valued objectives. Its memory intensity vs. speed may be traded off through
+        the ``jac_chunk_size`` keyword argument. "blocked" builds the Jacobian for
         each objective separately, using each objective's preferred AD mode (and
         each objective's `jac_chunk_size`). Generally the most efficient option when
         mixing scalar and vector valued objectives.
-        "auto" defaults to "batched" if all sub-objectives are set to "fwd",
-        otherwise "blocked".
+        ``auto`` defaults to ``batched`` if all sub-objectives are set to ``fwd``,
+        otherwise ``blocked``.
     name : str
         Name of the objective function.
-    jac_chunk_size : int or "auto", optional
-        Will calculate the Jacobian
+    jac_chunk_size : int or ``auto``, optional
+         If ``batched`` deriv_mode is used, will calculate the Jacobian
         ``jac_chunk_size`` columns at a time, instead of all at once.
         The memory usage of the Jacobian calculation is roughly
         ``memory usage = m0+m1*jac_chunk_size``: the smaller the chunk size,
@@ -1010,46 +1010,7 @@ class _Objective(IOAble, ABC):
     Parameters
     ----------
     things : Optimizable or tuple/list of Optimizable
-        Objects that will be optimized to satisfy the Objective.
-    target : {float, ndarray}, optional
-        Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f.
-    bounds : tuple of {float, ndarray}, optional
-        Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to Objective.dim_f
-    weight : {float, ndarray}, optional
-        Weighting to apply to the Objective, relative to other Objectives.
-        Must be broadcastable to Objective.dim_f
-    normalize : bool, optional
-        Whether to compute the error in physical units or non-dimensionalize.
-    normalize_target : bool, optional
-        Whether target and bounds should be normalized before comparing to computed
-        values. If `normalize` is `True` and the target is in physical units,
-        this should also be set to True.
-    loss_function : {None, 'mean', 'min', 'max'}, optional
-        Loss function to apply to the objective values once computed. This loss function
-        is called on the raw compute value, before any shifting, scaling, or
-        normalization.
-    deriv_mode : {"auto", "fwd", "rev"}
-        Specify how to compute Jacobian matrix, either forward mode or reverse mode AD.
-        "auto" selects forward or reverse mode based on the size of the input and output
-        of the objective. Has no effect on self.grad or self.hess which always use
-        reverse mode and forward over reverse mode respectively.
-    name : str, optional
-        Name of the objective.
-    jac_chunk_size : int or "auto", optional
-        Will calculate the Jacobian
-        ``jac_chunk_size`` columns at a time, instead of all at once.
-        The memory usage of the Jacobian calculation is roughly
-        ``memory usage = m0 + m1*jac_chunk_size``: the smaller the chunk size,
-        the less memory the Jacobian calculation will require (with some baseline
-        memory usage). The time it takes to compute the Jacobian is roughly
-        ``t= t0 + t1/jac_chunk_size` so the larger the ``jac_chunk_size``, the faster
-        the calculation takes, at the cost of requiring more memory.
-        If None, it will use the largest size i.e ``obj.dim_x``.
-        Defaults to ``chunk_size=None``.
-
-    """
+        Objects that will be optimized to satisfy the Objective."""  # noqa: D208, D209
 
     _scalar = False
     _linear = False
@@ -1633,6 +1594,8 @@ class _Objective(IOAble, ABC):
         # can maybe improve this later to not rebuild if resolution is the same
         self._built = False
 
+
+_Objective.__doc__ += "".join(value.rstrip("\n") for value in docs.values())
 
 # local functions assigned as attributes aren't hashable so they cause stuff to
 # recompile, so instead we define a hashable class to do the same thing.

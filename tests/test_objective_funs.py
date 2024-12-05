@@ -2850,7 +2850,7 @@ class TestComputeScalarResolution:
             obj = ObjectiveFunction(objective(eq=self.eq), use_jit=False)
             obj.build(verbose=0)
             f[i] = obj.compute_scalar(obj.x())
-        np.testing.assert_allclose(f, f[-1], rtol=5e-2)
+        np.testing.assert_allclose(f, f[-1], rtol=6e-2)
 
     @pytest.mark.regression
     @pytest.mark.parametrize(

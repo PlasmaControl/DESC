@@ -192,7 +192,7 @@ def _dI(data, B, pitch):
     data=["min_tz |B|", "max_tz |B|", "kappa_g", "R0", "|grad(rho)|", "<|grad(rho)|>"]
     + Bounce2D.required_names,
     resolution_requirement="tz",
-    grid_requirement={"can_fft": True},
+    grid_requirement={"can_fft2": True},
     **_bounce_doc,
 )
 @partial(
@@ -363,7 +363,7 @@ def _f3(data, B, pitch):
     ]
     + Bounce2D.required_names,
     resolution_requirement="tz",
-    grid_requirement={"can_fft": True},
+    grid_requirement={"can_fft2": True},
     **_bounce_doc,
     quad2="Same as ``quad`` for the weak singular integrals in particular.",
 )
@@ -533,7 +533,7 @@ def _gbdrift(data, B, pitch):
     ]
     + Bounce2D.required_names,
     resolution_requirement="tz",
-    grid_requirement={"can_fft": True},
+    grid_requirement={"can_fft2": True},
     **_bounce_doc,
 )
 @partial(

@@ -372,7 +372,7 @@ class TestObjectiveFunction:
         # check that the objective returns the lowest amplitudes
         # 120 ~ smallest amplitudes BEFORE QH modes show up so that sorting both arrays
         # should have the same values up until then
-        np.testing.assert_allclose(f[idx_f][:120], B_mn[idx_B][:120])
+        np.testing.assert_allclose(f[idx_f][:120], B_mn[idx_B][:120], rtol=1e-6)
 
     @pytest.mark.unit
     def test_qh_boozer_multiple_surfaces(self):

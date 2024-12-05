@@ -3223,15 +3223,15 @@ def _e_sub_zeta_zz(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["periodic(grad(alpha))", "secular(grad(alpha))"],
+    data=["grad(alpha) (periodic)", "grad(alpha) (secular)"],
 )
 def _grad_alpha(params, transforms, profiles, data, **kwargs):
-    data["grad(alpha)"] = data["periodic(grad(alpha))"] + data["secular(grad(alpha))"]
+    data["grad(alpha)"] = data["grad(alpha) (periodic)"] + data["grad(alpha) (secular)"]
     return data
 
 
 @register_compute_fun(
-    name="periodic(grad(alpha))",
+    name="grad(alpha) (periodic)",
     label="\\mathrm{periodic}(\\nabla \\alpha)",
     units="m^{-1}",
     units_long="Inverse meters",
@@ -3244,11 +3244,11 @@ def _grad_alpha(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["e^rho", "e^theta", "e^zeta", "periodic(alpha_r)", "alpha_t", "alpha_z"],
+    data=["e^rho", "e^theta", "e^zeta", "alpha_r (periodic)", "alpha_t", "alpha_z"],
 )
 def _periodic_grad_alpha(params, transforms, profiles, data, **kwargs):
-    data["periodic(grad(alpha))"] = (
-        data["periodic(alpha_r)"] * data["e^rho"].T
+    data["grad(alpha) (periodic)"] = (
+        data["alpha_r (periodic)"] * data["e^rho"].T
         + data["alpha_t"] * data["e^theta"].T
         + data["alpha_z"] * data["e^zeta"].T
     ).T
@@ -3256,7 +3256,7 @@ def _periodic_grad_alpha(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
-    name="secular(grad(alpha))",
+    name="grad(alpha) (secular)",
     label="\\mathrm{secular}(\\nabla \\alpha)",
     units="m^{-1}",
     units_long="Inverse meters",
@@ -3269,11 +3269,11 @@ def _periodic_grad_alpha(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["e^rho", "secular(alpha_r)"],
+    data=["e^rho", "alpha_r (secular)"],
 )
 def _secular_grad_alpha(params, transforms, profiles, data, **kwargs):
-    data["secular(grad(alpha))"] = (
-        data["secular(alpha_r)"][:, jnp.newaxis] * data["e^rho"]
+    data["grad(alpha) (secular)"] = (
+        data["alpha_r (secular)"][:, jnp.newaxis] * data["e^rho"]
     )
     return data
 

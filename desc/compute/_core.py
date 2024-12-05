@@ -1518,15 +1518,15 @@ def _alpha(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["periodic(alpha_r)", "secular(alpha_r)"],
+    data=["alpha_r (periodic)", "alpha_r (secular)"],
 )
 def _alpha_r(params, transforms, profiles, data, **kwargs):
-    data["alpha_r"] = data["periodic(alpha_r)"] + data["secular(alpha_r)"]
+    data["alpha_r"] = data["alpha_r (periodic)"] + data["alpha_r (secular)"]
     return data
 
 
 @register_compute_fun(
-    name="periodic(alpha_r)",
+    name="alpha_r (periodic)",
     label="\\mathrm{periodic}(\\partial_\\rho \\alpha)",
     units="~",
     units_long="None",
@@ -1540,12 +1540,12 @@ def _alpha_r(params, transforms, profiles, data, **kwargs):
     data=["theta_PEST_r", "iota", "phi_r"],
 )
 def _periodic_alpha_r(params, transforms, profiles, data, **kwargs):
-    data["periodic(alpha_r)"] = data["theta_PEST_r"] - data["iota"] * data["phi_r"]
+    data["alpha_r (periodic)"] = data["theta_PEST_r"] - data["iota"] * data["phi_r"]
     return data
 
 
 @register_compute_fun(
-    name="secular(alpha_r)",
+    name="alpha_r (secular)",
     label="\\mathrm{secular}(\\partial_\\rho \\alpha)",
     units="~",
     units_long="None",
@@ -1559,7 +1559,7 @@ def _periodic_alpha_r(params, transforms, profiles, data, **kwargs):
     data=["iota_r", "phi"],
 )
 def _secular_alpha_r(params, transforms, profiles, data, **kwargs):
-    data["secular(alpha_r)"] = -data["iota_r"] * data["phi"]
+    data["alpha_r (secular)"] = -data["iota_r"] * data["phi"]
     return data
 
 

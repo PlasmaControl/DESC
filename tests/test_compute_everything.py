@@ -221,14 +221,12 @@ def test_compute_everything():
 
             names = set(data_index[p].keys())
 
-            def need_src(name):
-                return (
-                    bool(data_index[p][name]["source_grid_requirement"])
-                    or "effective ripple" in name
-                    or "Gamma_c" in name
+            def need_special(name):
+                return bool(data_index[p][name]["source_grid_requirement"]) or bool(
+                    data_index[p][name]["grid_requirement"]
                 )
 
-            names -= _grow_seeds(p, set(filter(need_src, names)), names)
+            names -= _grow_seeds(p, set(filter(need_special, names)), names)
 
             this_branch_data_rpz[p] = things[p].compute(
                 list(names), **grid.get(p, {}), basis="rpz"

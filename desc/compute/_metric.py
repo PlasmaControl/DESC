@@ -1970,11 +1970,11 @@ def _gbdrift(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["|B|^2", "b", "periodic(grad(alpha))", "grad(|B|)"],
+    data=["|B|^2", "b", "grad(alpha) (periodic)", "grad(|B|)"],
 )
 def _periodic_gbdrift(params, transforms, profiles, data, **kwargs):
     data["gbdrift (periodic)"] = (
-        dot(data["b"], cross(data["grad(|B|)"], data["periodic(grad(alpha))"]))
+        dot(data["b"], cross(data["grad(|B|)"], data["grad(alpha) (periodic)"]))
         / data["|B|^2"]
     )
     return data
@@ -1991,11 +1991,11 @@ def _periodic_gbdrift(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["|B|^2", "b", "secular(grad(alpha))", "grad(|B|)"],
+    data=["|B|^2", "b", "grad(alpha) (secular)", "grad(|B|)"],
 )
 def _secular_gbdrift(params, transforms, profiles, data, **kwargs):
     data["gbdrift (secular)"] = (
-        dot(data["b"], cross(data["grad(|B|)"], data["secular(grad(alpha))"]))
+        dot(data["b"], cross(data["grad(|B|)"], data["grad(alpha) (secular)"]))
         / data["|B|^2"]
     )
     return data

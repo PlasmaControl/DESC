@@ -1062,7 +1062,7 @@ class Equilibrium(IOAble, Optimizable):
                 and all(
                     data_index[p][dep]["grid_requirement"].get("sym", True)
                     # TODO: GitHub issue #1206.
-                    and not data_index[p][dep]["grid_requirement"].get("can_fft", False)
+                    and not data_index[p][dep]["grid_requirement"].get("can_fft2", False)
                     for dep in dep1dr
                 ),
             )
@@ -1110,7 +1110,7 @@ class Equilibrium(IOAble, Optimizable):
                 and all(
                     data_index[p][dep]["grid_requirement"].get("sym", True)
                     # TODO: GitHub issue #1206.
-                    and not data_index[p][dep]["grid_requirement"].get("can_fft", False)
+                    and not data_index[p][dep]["grid_requirement"].get("can_fft2", False)
                     for dep in dep1dz
                 ),
             )

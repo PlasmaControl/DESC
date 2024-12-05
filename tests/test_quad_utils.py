@@ -8,7 +8,7 @@ from numpy.polynomial.chebyshev import chebgauss, chebweight
 from scipy.special import roots_chebyu
 
 from desc.backend import jnp
-from desc.integrals.quad_utils import (
+from desc.integrals._quad_utils import (
     automorphism_arcsin,
     automorphism_sin,
     bijection_from_disc,
@@ -18,6 +18,7 @@ from desc.integrals.quad_utils import (
     grad_automorphism_sin,
     grad_bijection_from_disc,
     leggauss_lob,
+    simpson2,
     tanh_sinh,
     uniform,
 )
@@ -32,18 +33,22 @@ def test_automorphism():
     x_1 = bijection_from_disc(y, a, b)
     np.testing.assert_allclose(x_1, x)
     np.testing.assert_allclose(bijection_to_disc(x_1, a, b), y)
-    np.testing.assert_allclose(automorphism_arcsin(automorphism_sin(y)), y, atol=5e-7)
-    np.testing.assert_allclose(automorphism_sin(automorphism_arcsin(y)), y, atol=5e-7)
+    np.testing.assert_allclose(
+        automorphism_arcsin(automorphism_sin(y), gamma=1), y, atol=5e-7
+    )
+    np.testing.assert_allclose(
+        automorphism_sin(automorphism_arcsin(y, gamma=1)), y, atol=5e-7
+    )
 
     np.testing.assert_allclose(grad_bijection_from_disc(a, b), 1 / (2 / (b - a)))
     np.testing.assert_allclose(
         grad_automorphism_sin(y),
-        1 / grad_automorphism_arcsin(automorphism_sin(y)),
+        1 / grad_automorphism_arcsin(automorphism_sin(y), gamma=1),
         atol=2e-6,
     )
     np.testing.assert_allclose(
-        1 / grad_automorphism_arcsin(y),
-        grad_automorphism_sin(automorphism_arcsin(y)),
+        1 / grad_automorphism_arcsin(y, gamma=1),
+        grad_automorphism_sin(automorphism_arcsin(y, gamma=1)),
         atol=2e-6,
     )
 
@@ -54,7 +59,7 @@ def test_automorphism():
     assert np.isfinite(y).all()
     y = 1 / np.sqrt(1 - np.abs(automorphism_sin(x)))
     assert np.isfinite(y).all()
-    y = 1 / np.sqrt(1 - np.abs(automorphism_arcsin(x)))
+    y = 1 / np.sqrt(1 - np.abs(automorphism_arcsin(x, gamma=1)))
     assert np.isfinite(y).all()
 
 
@@ -114,3 +119,11 @@ def test_chebgauss():
     x, w = roots_chebyu(deg)
     w *= chebweight(x)
     np.testing.assert_allclose(chebgauss2(deg), (x, w))
+
+    n = 5
+    x, w = simpson2(n)
+    np.testing.assert_allclose(x, [-5 / 6, -2 / 3, 0, 2 / 3, 5 / 6])
+    np.testing.assert_allclose(w.sum(), 2)
+    np.testing.assert_allclose(
+        f(x).dot(w), scipy.integrate.quad(f, -1, 1)[0], rtol=2.5e-2
+    )

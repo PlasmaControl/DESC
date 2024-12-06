@@ -125,6 +125,7 @@ def biot_savart_quad(eval_pts, coil_pts, tangents, current):
     return B
 
 
+@jit
 def finite_build_regularization_rect(a, b):
     """Computes the regularization term for a rectangular finite-build coil.
 
@@ -160,7 +161,7 @@ def finite_build_regularization_rect(a, b):
     return a * b * delta
 
 
-@jit  # TODO upgrade this with singularity subtraction method
+@jit
 def biot_savart_quad_regularized(eval_pts, coil_pts, tangents, current, regularization):
     """Regularized Biot-Savart law for filamentary coil using numerical quadrature.
 
@@ -194,6 +195,99 @@ def biot_savart_quad_regularized(eval_pts, coil_pts, tangents, current, regulari
 
     # 1e-7 == mu_0/(4 pi)
     B = jnp.sum(1.0e-7 * current * vec / denom[:, :, None], axis=0)
+    return B
+
+
+@jit
+def biot_savart_quad_regularized_singularity_sub(
+    ds,
+    eval_pts,
+    coil_pts,
+    eval_angles,
+    coil_angles,
+    eval_prime,
+    coil_prime,
+    eval_prime_prime,
+    curvatures,
+    binormals,
+    current,
+    regularization,
+):
+    """Regularized Biot-Savart law for filamentary coil using numerical quadrature.
+    Uses singularity subtraction method for coils outlined in [1]. Requires that the
+    evaluation points are on the coil centerline -- usually this means that eval_points = coil_points
+    and eval_angles = coil_angles, etc.
+
+    Parameters
+    ----------
+    ds : array-like shape(m,)
+        Spacing between points in the coil discretization
+    eval_pts : array-like shape(n,3)
+        Evaluation points in cartesian coordinates
+    coil_pts : array-like shape(m,3)
+        Points in cartesian space defining coil
+    eval_angles : array-like shape(n,)
+        Angles of the evaluation points (curve parameter s), in radians with a periodicity of 2*pi
+    coil_angles : array-like shape(m,)
+        Angles of the coil points (curve parameter s), in radians with a periodicity of 2*pi
+    eval_prime : array-like shape(n,3)
+        Derivative of the evaluation points with respect to the curve parameter, dx/ds for curve x(s)
+    coil_prime : array-like shape(m,3)
+        Derivative of the coil points with respect to the curve parameter, dx/ds for curve x(s)
+    eval_prime_prime : array-like shape(n,3)
+        Second derivative of the evaluation points with respect to the curve parameter, d^2x/ds^2 for curve x(s)
+    curvatures : array-like shape(n,)
+        Curvature of the coil centerline at the evaluation points
+    binormals : array-like shape(n,3)
+        Frenet-Serret binormal vectors at the evaluation points
+    current : float
+        Current through the coil (in Amps).
+    regularization : float
+        Regularization term for the Biot Savart denominator
+
+    Returns
+    -------
+    B : ndarray, shape(n,3)
+        magnetic field in cartesian components at specified points
+
+    [1] Landreman et. al, "Efficient calculation of self magnetic field, self-force,
+    and self-inductance for electromagnetic coils. II. Rectangular cross-section" (2023)
+    """
+
+    R_vec = eval_pts[jnp.newaxis, :] - coil_pts[:, jnp.newaxis, :]
+    R_mag = safenorm(R_vec, axis=-1) #used because of potential singularity at R=0 if eval and coil points are the same
+    ds = ds[:, jnp.newaxis]
+
+    vec = jnp.cross(coil_prime[:, jnp.newaxis, :], R_vec, axis=-1)
+    denom = (R_mag**2 + regularization) ** (3 / 2) / ds
+
+    phi_diff = coil_angles[:, jnp.newaxis] - eval_angles[jnp.newaxis, :]
+
+    eval_prime_squared = safenorm(eval_prime, axis=-1) ** 2
+
+    vec2 = (
+        -jnp.cross(eval_prime, eval_prime_prime, axis=-1)[jnp.newaxis, :, :]
+        * (1 - jnp.cos(phi_diff))[:, :, jnp.newaxis]
+    )
+    denom2 = (
+        (2 - 2 * jnp.cos(phi_diff)) * eval_prime_squared[jnp.newaxis, :]
+        + regularization
+    ) ** (3 / 2) / ds
+
+    B = jnp.sum(
+        vec / denom[:, :, jnp.newaxis] + vec2 / denom2[:, :, jnp.newaxis], axis=0
+    )
+
+    B += (
+        0.5
+        * curvatures[:, jnp.newaxis]
+        * binormals
+        * (-2 + jnp.log(64 * eval_prime_squared / regularization))[:, jnp.newaxis]
+    )
+
+    # 1e-7 == mu_0/(4 pi)
+    B = 1.0e-7 * current * B
+
     return B
 
 
@@ -1135,12 +1229,13 @@ class _FiniteBuildCoil(_FramedCoil, Optimizable, ABC):
         self, xsection_grid, centerline_grid=None, coil_frame=False, params=None
     ):
         """Compute the magnetic field from the coil on the coil itself, with a rectangular cross section.
+        A mask is returned to indicate which points are on the coil centerline, to allow for separate handling of the field on the centerline.
 
         Parameters
         ----------
         xsection_grid : LinearGrid, int or None
             Grid used to evaluate the field on the coil cross section. If an integer, uses that many equally spaced points in each dimension of the cross section.
-            If provided, must be a 2D grid with L and M dimensions corresponding to the cross section spacing desired.
+            If provided, must be a 2D grid with L and M dimensions corresponding to the cross section spacing desired with endpoint = True.
         centerline_grid : LinearGrid or int, optional
             Grid used to evaluate the coil centerline. If an integer, uses 2x that many equally spaced points in each dimension.
             If provided, must be a 1D grid with N dimension corresponding to the centerline spacing desired.
@@ -1155,6 +1250,8 @@ class _FiniteBuildCoil(_FramedCoil, Optimizable, ABC):
             magnetic field at specified points, at a combination of the coil centerline and cross section grids.
         positions : ndarray, shape(n,3)
             positions of the field points in the lab frame, currently in X,Y,Z coordinates.
+        centerline_mask : ndarray, shape(n,)
+            boolean mask indicating whether the field point is on the coil centerline or not.
         """
 
         if self.cross_section_shape == "circular":
@@ -1170,15 +1267,30 @@ class _FiniteBuildCoil(_FramedCoil, Optimizable, ABC):
         self, xsection_grid, centerline_grid=None, coil_frame=False, params=None
     ):
         """
-        Compute the magnetic field from the coil on the coil itself, with a rectangular cross section.
-        """
+        # Compute the magnetic field from the coil on the coil itself, with a rectangular cross section.
+        #"""
+
+        if params is None:
+            current = self.current
+            cross_section_dims = self.cross_section_dims
+        else:
+            current = params.get("current", self.current)
+            cross_section_dims = params.get(
+                "cross_section_dims", self.cross_section_dims
+            )
 
         # set cross section grid if not provided for u,v cross sectional coordinates
         # L has a doubled grid size to be consistent with how M and N work
         if xsection_grid is None:
             xsection_grid = LinearGrid(L=4, M=2, endpoint=True)
         elif isinstance(xsection_grid, numbers.Integral):
-            xsection_grid = LinearGrid(L=xsection_grid*2, M=xsection_grid, endpoint=True) 
+            xsection_grid = LinearGrid(
+                L=xsection_grid * 2, M=xsection_grid, endpoint=True
+            )
+        elif isinstance(xsection_grid, LinearGrid) and not xsection_grid.endpoint:
+            raise ValueError(
+                "The cross section grid must have endpoint=True to compute the self field"
+            )
         else:
             xsection_grid = (
                 xsection_grid.copy()
@@ -1202,6 +1314,35 @@ class _FiniteBuildCoil(_FramedCoil, Optimizable, ABC):
         N = centerline_grid.N
         xsection_grid.change_resolution(L, M, N)
 
+        abdelta = finite_build_regularization_rect(
+            cross_section_dims[0], cross_section_dims[1]
+        )
+
+        # B_b and B_reg are only computed on the centerline
+        B_b_fb = self.compute("B_b_fb", grid=centerline_grid, params=params)["B_b_fb"]
+
+        # compute regularized self field integral
+        data = self.compute(
+            ["x", "x_s", "x_ss", "ds", "s", "curvature", "frenet_binormal"],
+            grid=centerline_grid,
+            params=params,
+            basis="xyz",
+        )
+        B_reg_fb = biot_savart_quad_regularized_singularity_sub(
+            data["ds"],
+            data["x"],
+            data["x"],
+            data["s"],
+            data["s"],
+            data["x_s"],
+            data["x_s"],
+            data["x_ss"],
+            data["curvature"],
+            data["frenet_binormal"],
+            current,
+            abdelta,
+        )
+
         # get vector series along the coil centerlines
         p_frame = self.compute("p_frame", grid=centerline_grid, params=params)[
             "p_frame"
@@ -1223,25 +1364,9 @@ class _FiniteBuildCoil(_FramedCoil, Optimizable, ABC):
         q_frame = xsection_grid.expand(q_frame, "zeta")
         curv1_frame = xsection_grid.expand(curv1_frame, "zeta")
         curv2_frame = xsection_grid.expand(curv2_frame, "zeta")
-
-        delta = finite_build_regularization_rect(
-            self.cross_section_dims[0], self.cross_section_dims[1]
-        )
-
-        # B_b and B_reg reg are only computed on the centerline
-        B_b_fb = self.compute("B_b_fb", grid=centerline_grid, params=params)["B_b_fb"]
-
-        # compute regularized self field integral
-        data = self.compute(["x", "x_s", "ds"], grid=centerline_grid, params=params, basis="xyz")
-        B_reg_fb = biot_savart_quad_regularized(
-            data["x"],
-            data["x"],
-            data["x_s"] * data["ds"][:, None],
-            self.current,
-            delta,
-        )
-
-        x_centerline = xsection_grid.expand(data["x"], "zeta") # needed to get lab frame coordinates of the coil points
+        x_centerline = xsection_grid.expand(
+            data["x"], "zeta"
+        )  # needed to get lab frame coordinates of the coil points
         B_b_fb = xsection_grid.expand(B_b_fb, "zeta")
         B_reg_fb = xsection_grid.expand(B_reg_fb, "zeta")
 
@@ -1249,11 +1374,10 @@ class _FiniteBuildCoil(_FramedCoil, Optimizable, ABC):
         B_fb_params = {
             "p_frame": p_frame,
             "q_frame": q_frame,
-            "current": self.current,
-            "cross_section_dims": self.cross_section_dims,
+            "current": current,
+            "cross_section_dims": cross_section_dims,
             "curv1_frame": curv1_frame,
             "curv2_frame": curv2_frame,
-            "delta": delta,
             "x_centerline": x_centerline,
         }
         B_fb_params = params | B_fb_params if params is not None else B_fb_params
@@ -1275,7 +1399,7 @@ class _FiniteBuildCoil(_FramedCoil, Optimizable, ABC):
 
         B_self = B_0_fb + B_kappa_fb + B_b_fb + B_reg_fb
 
-        #get position of field measurement points in lab frame
+        # get position of field measurement points in lab frame
         x_fb = compute_fun(
             self,
             "x_fb",
@@ -1295,7 +1419,11 @@ class _FiniteBuildCoil(_FramedCoil, Optimizable, ABC):
             B_q = dot(B_self, q_frame)
             B_self = jnp.stack((B_t, B_p, B_q), axis=-1)
 
-        return B_self, x_fb
+        # find mask for the grid axis to prevent downstream singularities with biot savart
+        centerline_mask = jnp.ones(len(xsection_grid.nodes), dtype=bool)
+        centerline_mask.at[(L + 1) * (2 * M + 1) // 2 :: (L + 1) * (2 * M + 1)].set(False)
+
+        return B_self, x_fb, centerline_mask
 
     def compute_self_field_circ(
         self, xsection_grid, centerline_grid=None, coil_frame=False, params=None

@@ -856,7 +856,7 @@ class CoilSetMaxNormB(_Objective):
     Self field on the coil is computed with the finite build method, and field from other
     coils on the coil is computed with the filamentary method.
 
-    Will yield one value for each coil in the coilset, which is the maximum magnitude
+    Will yield one value for each unique coil in the coilset, which is the maximum magnitude
     of magnetic field on that coil. All coils in the coilset must inherit from _FiniteBuildCoil.
 
     Parameters
@@ -915,7 +915,7 @@ class CoilSetMaxNormB(_Objective):
         normalize=True,
         normalize_target=True,
         loss_function=None,
-        deriv_mode="fwd",
+        deriv_mode="auto",
         xsection_grid=None,
         centerline_grid=None,
         name="field magnitude on coil distance",
@@ -923,7 +923,7 @@ class CoilSetMaxNormB(_Objective):
         from desc.coils import CoilSet, _FiniteBuildCoil
 
         if target is None and bounds is None:
-            bounds = (1, np.inf)
+            bounds = (-0.0, 20.0)
 
         self._xsection_grid = xsection_grid
         self._centerline_grid = centerline_grid
@@ -1002,15 +1002,18 @@ class CoilSetMaxNormB(_Objective):
         if constants is None:
             constants = self.constants
 
-
-        def body(index, x):
+        def body(dummy, x):
             # compute self field and other coil field to find maximum field magnitude on the coil k
             coil = constants["coilset"][0]
-            self_field, quad_points = coil.compute_self_field(
+            self_field, quad_points, centerline_mask = coil.compute_self_field(
                 xsection_grid=constants["xsection_grid"],
                 centerline_grid=constants["centerline_grid"],
                 params=x,  # just this coil's parameters
             )
+
+            quad_points = jnp.where(
+                centerline_mask[:, None], 100, quad_points
+            )  # TODO: better way to do this
 
             # compute field from other coils and subtract the coil computation to prevent double counting
             other_field = constants["coilset"].compute_magnetic_field(
@@ -1027,24 +1030,17 @@ class CoilSetMaxNormB(_Objective):
             )
 
             total_field = self_field + other_field
+            total_field = jnp.where(centerline_mask[:, None], 0, total_field)
+
             field_mag = safenorm(total_field, axis=-1)
 
             # return maximum field magnitude on the coil. NaNs could be generated on the coil axis where the filament has a singularity
             # in effect, the coil centerline points are not used in the field computation, which is ok since the field is not maximal on the coil axis
-            max_mag = jnp.nanmax(field_mag, initial=0)
+            max_mag = jnp.max(field_mag, initial=0)
 
-            index += 1 
-
-            return index, max_mag
+            return 0, max_mag
 
         _, max_field_per_coil = scan(body, 0, tree_stack(params))
-        
-        #reshape this to the same shape as the coilset
-        if constants["coilset"].sym:
-            max_field_per_coil = jnp.concatenate([max_field_per_coil, jnp.flip(max_field_per_coil)])
-
-        if constants["coilset"].NFP > 1:
-            max_field_per_coil = jnp.repeat(max_field_per_coil, constants["coilset"].NFP)
 
         return max_field_per_coil
 

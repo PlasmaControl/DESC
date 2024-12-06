@@ -16,18 +16,18 @@ from desc.integrals._interp_utils import (
     polyroot_vec,
     polyval_vec,
 )
-from desc.integrals._quad_utils import (
-    bijection_from_disc,
-    grad_bijection_from_disc,
-    simpson2,
-    uniform,
-)
 from desc.integrals.basis import (
     FourierChebyshevSeries,
     PiecewiseChebyshevSeries,
     _add2legend,
     _in_epigraph_and,
     _plot_intersect,
+)
+from desc.integrals.quad_utils import (
+    bijection_from_disc,
+    grad_bijection_from_disc,
+    simpson2,
+    uniform,
 )
 from desc.utils import (
     atleast_nd,

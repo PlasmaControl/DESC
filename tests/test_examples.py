@@ -1965,7 +1965,7 @@ def test_ballooning_stability_opt():
     for i in range(len(surfaces)):
         rho = surfaces[i]
 
-        grid = eq.get_rtz_grid(
+        grid = eq._get_rtz_grid(
             rho,
             alpha,
             zeta,
@@ -2045,7 +2045,7 @@ def test_ballooning_stability_opt():
     for i in range(len(surfaces)):
         rho = surfaces[i]
 
-        grid = eq.get_rtz_grid(
+        grid = eq._get_rtz_grid(
             rho,
             alpha,
             zeta,

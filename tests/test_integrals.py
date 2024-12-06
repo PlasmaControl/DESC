@@ -43,7 +43,8 @@ from desc.integrals._bounce_utils import (
     interp_to_argmin_hard,
 )
 from desc.integrals._interp_utils import fourier_pts
-from desc.integrals._quad_utils import (
+from desc.integrals.basis import FourierChebyshevSeries
+from desc.integrals.quad_utils import (
     automorphism_sin,
     bijection_from_disc,
     chebgauss1,
@@ -54,7 +55,6 @@ from desc.integrals._quad_utils import (
     leggauss_lob,
     tanh_sinh,
 )
-from desc.integrals.basis import FourierChebyshevSeries
 from desc.integrals.singularities import (
     _get_quadrature_nodes,
     compute_B_dot_n_from_K,

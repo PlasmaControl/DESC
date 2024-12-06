@@ -47,7 +47,7 @@ def _B_theta_mn(params, transforms, profiles, data, **kwargs):
     return data
 
 
-# TODO: do math to change definition of nu so that we can just use B_zeta_mn here
+# TODO (#568): do math to change definition of nu so that we can just use B_zeta_mn here
 @register_compute_fun(
     name="B_phi_mn",
     label="B_{\\phi, m, n}",
@@ -63,7 +63,7 @@ def _B_theta_mn(params, transforms, profiles, data, **kwargs):
     data=["B_phi|r,t"],
     resolution_requirement="tz",
     grid_requirement={"is_meshgrid": True},
-    aliases="B_zeta_mn",  # TODO: remove when phi != zeta
+    aliases="B_zeta_mn",  # TODO(#568): remove when phi != zeta
     M_booz="int: Maximum poloidal mode number for Boozer harmonics. Default 2*eq.M",
     N_booz="int: Maximum toroidal mode number for Boozer harmonics. Default 2*eq.N",
 )
@@ -608,10 +608,10 @@ def _B_omni(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["b", "grad(|B|)", "|B|", "grad(psi)"],
+    data=["b", "grad(|B|)", "|B|^2", "grad(psi)"],
 )
 def _isodynamicity(params, transforms, profiles, data, **kwargs):
     data["isodynamicity"] = (
-        dot(cross(data["b"], data["grad(|B|)"]), data["grad(psi)"]) / data["|B|"] ** 2
+        dot(cross(data["b"], data["grad(|B|)"]), data["grad(psi)"]) / data["|B|^2"]
     )
     return data

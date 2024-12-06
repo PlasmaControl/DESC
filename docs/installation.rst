@@ -13,6 +13,11 @@ Other package managers like venv could be used instead of conda, we have just ch
 **NOTE: DESC requires python>=3.9.**
 **If you have python2 also locally installed, replace all `pip` commands with `pip3` and all `python` commands with `python3` to ensure the correct python version is used.**
 
+**NOTE: If you are on Windows, consider using the Windows Subsystem for Linux (WSL) to install DESC.**
+
+We don't test or support DESC on Windows OS, and there have been some instances that numerical discrepancies on Windows can cause failures or wrong results. For these reasons, we recommend using WSL if you have a Windows machine. For instructions on how to install WSL see `here <https://learn.microsoft.com/en-us/windows/wsl/install>`__. For using WSL in VS Code see `here <https://code.visualstudio.com/docs/remote/wsl>`__.
+
+
 On Your Local Machine
 *********************
 
@@ -165,7 +170,6 @@ Clone and install DESC
 
     git clone https://github.com/PlasmaControl/DESC.git
     cd DESC
-    sed -i '/jax/d' ./requirements.txt
     # installation for users
     pip install --editable .
     # optionally install developer requirements (if you want to run tests)
@@ -182,9 +186,9 @@ check the link to install JAX with the most up-to-date recommendations from the 
 
 .. code-block:: sh
 
-    conda create --name desc-env 'python==3.11'
+    conda create --name desc-env python=3.12 -y
     conda activate desc-env
-    pip install -U "jax[cuda12_pip]" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
+    pip install -U "jax[cuda12]"
 
 Then, install DESC,
 
@@ -192,14 +196,11 @@ Then, install DESC,
 
     git clone https://github.com/PlasmaControl/DESC.git
     cd DESC
-    # remove the jax lines from requirements.txt, as we already have installed them above
-    sed -i '/jax/d' ./requirements.txt
-    # then install as usual
     pip install --editable .
     # optionally install developer requirements (if you want to run tests)
     pip install -r devtools/dev-requirements.txt
 
-Tested and confirmed to work on the Della and Stellar clusters at Princeton as of June 20, 2024.
+Tested and confirmed to work on the Della and Stellar clusters at Princeton as of October 23, 2024.
 
 
 RAVEN (IPP, Germany)
@@ -220,7 +221,6 @@ Clone DESC
 
     git clone https://github.com/PlasmaControl/DESC
     cd DESC
-    sed -i '/jax/d' ./requirements.txt
 
 In the requirements.txt file, change the scipy version from
 

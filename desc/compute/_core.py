@@ -1518,14 +1518,48 @@ def _alpha(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["theta_PEST_r", "phi", "phi_r", "iota", "iota_r"],
+    data=["alpha_r (periodic)", "alpha_r (secular)"],
 )
 def _alpha_r(params, transforms, profiles, data, **kwargs):
-    data["alpha_r"] = (
-        data["theta_PEST_r"]
-        - data["iota_r"] * data["phi"]
-        - data["iota"] * data["phi_r"]
-    )
+    data["alpha_r"] = data["alpha_r (periodic)"] + data["alpha_r (secular)"]
+    return data
+
+
+@register_compute_fun(
+    name="alpha_r (periodic)",
+    label="\\mathrm{periodic}(\\partial_\\rho \\alpha)",
+    units="~",
+    units_long="None",
+    description="Field line label, derivative wrt radial coordinate, "
+    "periodic component",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["theta_PEST_r", "iota", "phi_r"],
+)
+def _periodic_alpha_r(params, transforms, profiles, data, **kwargs):
+    data["alpha_r (periodic)"] = data["theta_PEST_r"] - data["iota"] * data["phi_r"]
+    return data
+
+
+@register_compute_fun(
+    name="alpha_r (secular)",
+    label="\\mathrm{secular}(\\partial_\\rho \\alpha)",
+    units="~",
+    units_long="None",
+    description="Field line label, derivative wrt radial coordinate, "
+    "secular component",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["iota_r", "phi"],
+)
+def _secular_alpha_r(params, transforms, profiles, data, **kwargs):
+    data["alpha_r (secular)"] = -data["iota_r"] * data["phi"]
     return data
 
 

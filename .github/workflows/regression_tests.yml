@@ -66,6 +66,7 @@ jobs:
           source .venv-${{ matrix.python-version }}/bin/activate
           python -m pip install --upgrade pip
           pip install -r devtools/dev-requirements.txt
+          pip install matplotlib==3.9.2
 
       - name: Set Swap Space
         if: env.has_changes == 'true'

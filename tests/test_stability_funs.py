@@ -64,7 +64,8 @@ def get_vmec_data(path, quantity):
 
     """
     f = Dataset(path)
-    rho = np.sqrt(f.variables["phi"] / np.array(f.variables["phi"])[-1])
+    phi = np.array(f.variables["phi"])
+    rho = np.sqrt(phi / phi[-1])
     q = np.array(f.variables[quantity])
     f.close()
     return rho, q
@@ -416,6 +417,7 @@ def test_ballooning_geometry(tmpdir_factory):
             "g^ra",
             "g^rr",
             "cvdrift",
+            "gbdrift",
             "cvdrift0",
             "|B|",
             "B^zeta",
@@ -448,11 +450,9 @@ def test_ballooning_geometry(tmpdir_factory):
         sign_psi = psi_s / np.abs(psi_s)
         sign_iota = iotas / np.abs(iotas)
 
-        modB = data["|B|"]
         x = Lref * np.sqrt(psi)
         shat = -x / iotas * shears / Lref
 
-        psi_r = data["psi_r"]
         grad_alpha = data["grad(alpha)"]
 
         g_sup_rr = data["g^rr"]

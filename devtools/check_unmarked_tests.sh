@@ -1,11 +1,16 @@
 #!/bin/sh
 
+if [ -f "devtools/pre-commit.log" ]; then
+    echo "Error in earlier pre-commit! Skipping unmarked tests check."
+    exit 1
+fi
+
 # Start the timer using date (in seconds since epoch)
 start_time=$(date +%s)
 
 echo "Files to check: $@"
 # Collect unmarked tests for the specific file and suppress errors
-unmarked=$(pytest "$@" --collect-only -m "not unit and not regression" -q 2> /dev/null | head -n -2)
+unmarked=$(pytest "$@" --collect-only -m "not unit and not regression and not benchmark" -q 2> /dev/null | head -n -2)
 
 # Count the number of unmarked tests found, ignoring empty lines
 num_unmarked=$(echo "$unmarked" | sed '/^\s*$/d' | wc -l)

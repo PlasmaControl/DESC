@@ -598,7 +598,7 @@ def test_ballooning_stability_eval():
         # against one another
         psi_b = data01["Psi"][-1] / (2 * jnp.pi)
         # Calculating a_N accurately requires a QuadratureGrid
-        # but for some reason it gives the correct value even with a LinearGrid here.
+        # which is automatically accounted for inside of eq.compute
         a_N = data01["a"]
         B_N = 2 * psi_b / a_N**2
 

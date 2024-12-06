@@ -6,6 +6,7 @@ from scipy.signal import convolve2d
 
 from desc.compute import rpz2xyz_vec
 from desc.equilibrium import Equilibrium
+from desc.equilibrium.coords import get_rtz_grid
 from desc.examples import get
 from desc.geometry import FourierRZToroidalSurface
 from desc.grid import LinearGrid
@@ -1104,7 +1105,7 @@ def test_BdotgradB(DummyStellarator):
 @pytest.mark.solve
 def test_boozer_transform():
     """Test that Boozer coordinate transform agrees with BOOZ_XFORM."""
-    # TODO: add test with stellarator example
+    # TODO (#680): add test with stellarator example
     eq = get("DSHAPE_CURRENT")
     grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
     data = eq.compute("|B|_mn", grid=grid, M_booz=eq.M, N_booz=eq.N)
@@ -1477,8 +1478,8 @@ def test_surface_equilibrium_geometry():
     """Test that computing stuff from surface gives same result as equilibrium."""
     names = ["HELIOTRON"]
     data = ["A", "V", "a", "R0", "R0/a", "a_major/a_minor"]
-    # TODO: expand this to include all angular derivatives once they are implemented
-    # for surfaces
+    # TODO (#1397): expand this to include all angular derivatives
+    # once they are implemented for surfaces
     data_basis_vecs_fourierRZ = [
         "e_theta",
         "e_zeta",
@@ -1555,6 +1556,9 @@ def test_parallel_grad():
             "|e_zeta|r,a|_z|r,a",
             "B^zeta_z|r,a",
             "|B|",
+            "gbdrift (secular)",
+            "gbdrift (secular)/phi",
+            "phi",
         ],
     )
     np.testing.assert_allclose(data["e_zeta|r,a"], (data["B"].T / data["B^zeta"]).T)
@@ -1568,4 +1572,54 @@ def test_parallel_grad():
         * data["B^zeta_z|r,a"]
         * np.sign(data["B^zeta"])
         / data["B^zeta"] ** 2,
+    )
+    np.testing.assert_allclose(
+        data["gbdrift (secular)"], data["gbdrift (secular)/phi"] * data["phi"]
+    )
+
+
+@pytest.mark.unit
+def test_parallel_grad_fd(DummyStellarator):
+    """Test that the parallel gradients match with numerical gradients."""
+    eq = load(load_from=str(DummyStellarator["output_path"]), file_format="hdf5")
+    grid = get_rtz_grid(
+        eq,
+        0.5,
+        0,
+        np.linspace(0, 2 * np.pi, 50),
+        coordinates="raz",
+        period=(np.inf, 2 * np.pi, np.inf),
+    )
+    data = eq.compute(
+        [
+            "|B|",
+            "|B|_z|r,a",
+            "|e_zeta|r,a|",
+            "|e_zeta|r,a|_z|r,a",
+            "B^zeta",
+            "B^zeta_z|r,a",
+        ],
+        grid=grid,
+    )
+    dz = grid.source_grid.spacing[:, 2]
+    fd = np.convolve(data["|B|"], FD_COEF_1_4, "same") / dz
+    np.testing.assert_allclose(
+        data["|B|_z|r,a"][2:-2],
+        fd[2:-2],
+        rtol=1e-2,
+        atol=1e-2 * np.mean(np.abs(data["|B|_z|r,a"])),
+    )
+    fd = np.convolve(data["|e_zeta|r,a|"], FD_COEF_1_4, "same") / dz
+    np.testing.assert_allclose(
+        data["|e_zeta|r,a|_z|r,a"][2:-2],
+        fd[2:-2],
+        rtol=1e-2,
+        atol=1e-2 * np.mean(np.abs(data["|e_zeta|r,a|_z|r,a"])),
+    )
+    fd = np.convolve(data["B^zeta"], FD_COEF_1_4, "same") / dz
+    np.testing.assert_allclose(
+        data["B^zeta_z|r,a"][2:-2],
+        fd[2:-2],
+        rtol=1e-2,
+        atol=1e-2 * np.mean(np.abs(data["B^zeta_z|r,a"])),
     )

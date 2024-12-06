@@ -415,18 +415,17 @@ def svd_inv_null(A):
         Null space of A.
 
     """
-    u, s, vh = np.linalg.svd(A, full_matrices=True)
+    u, s, vh = jnp.linalg.svd(A, full_matrices=True)
     M, N = u.shape[0], vh.shape[1]
     K = min(M, N)
     rcond = np.finfo(A.dtype).eps * max(M, N)
-    tol = np.amax(s) * rcond
+    tol = jnp.amax(s) * rcond
     large = s > tol
-    num = np.sum(large, dtype=int)
+    num = jnp.sum(large, dtype=int)
     uk = u[:, :K]
     vhk = vh[:K, :]
-    s = np.divide(1, s, where=large, out=s)
-    s[(~large,)] = 0
-    Ainv = np.matmul(vhk.T, np.multiply(s[..., np.newaxis], uk.T))
+    s = jnp.where(large, 1 / s, 0)
+    Ainv = vhk.T @ jnp.diag(s) @ uk.T
     Z = vh[num:, :].T.conj()
     return Ainv, Z
 
@@ -744,6 +743,18 @@ def atleast_nd(ndmin, ary):
     return jnp.array(ary, ndmin=ndmin) if jnp.ndim(ary) < ndmin else ary
 
 
+def atleast_3d_mid(ary):
+    """Like np.atleast_3d but if adds dim at axis 1 for 2d arrays."""
+    ary = jnp.atleast_2d(ary)
+    return ary[:, jnp.newaxis] if ary.ndim == 2 else ary
+
+
+def atleast_2d_end(ary):
+    """Like np.atleast_2d but if adds dim at axis 1 for 1d arrays."""
+    ary = jnp.atleast_1d(ary)
+    return ary[:, jnp.newaxis] if ary.ndim == 1 else ary
+
+
 PRINT_WIDTH = 60  # current longest name is BootstrapRedlConsistency with pre-text
 
 
@@ -853,82 +864,6 @@ def safediv(a, b, fill=0, threshold=0):
     num = jnp.where(mask, fill, a)
     den = jnp.where(mask, 1, b)
     return num / den
-
-
-def cumtrapz(y, x=None, dx=1.0, axis=-1, initial=None):
-    """Cumulatively integrate y(x) using the composite trapezoidal rule.
-
-    Taken from SciPy, but changed NumPy references to JAX.NumPy:
-        https://github.com/scipy/scipy/blob/v1.10.1/scipy/integrate/_quadrature.py
-
-    Parameters
-    ----------
-    y : array_like
-        Values to integrate.
-    x : array_like, optional
-        The coordinate to integrate along. If None (default), use spacing `dx`
-        between consecutive elements in `y`.
-    dx : float, optional
-        Spacing between elements of `y`. Only used if `x` is None.
-    axis : int, optional
-        Specifies the axis to cumulate. Default is -1 (last axis).
-    initial : scalar, optional
-        If given, insert this value at the beginning of the returned result.
-        Typically, this value should be 0. Default is None, which means no
-        value at ``x[0]`` is returned and `res` has one element less than `y`
-        along the axis of integration.
-
-    Returns
-    -------
-    res : ndarray
-        The result of cumulative integration of `y` along `axis`.
-        If `initial` is None, the shape is such that the axis of integration
-        has one less value than `y`. If `initial` is given, the shape is equal
-        to that of `y`.
-
-    """
-    y = jnp.asarray(y)
-    if x is None:
-        d = dx
-    else:
-        x = jnp.asarray(x)
-        if x.ndim == 1:
-            d = jnp.diff(x)
-            # reshape to correct shape
-            shape = [1] * y.ndim
-            shape[axis] = -1
-            d = d.reshape(shape)
-        elif len(x.shape) != len(y.shape):
-            raise ValueError("If given, shape of x must be 1-D or the " "same as y.")
-        else:
-            d = jnp.diff(x, axis=axis)
-
-        if d.shape[axis] != y.shape[axis] - 1:
-            raise ValueError(
-                "If given, length of x along axis must be the " "same as y."
-            )
-
-    def tupleset(t, i, value):
-        l = list(t)
-        l[i] = value
-        return tuple(l)
-
-    nd = len(y.shape)
-    slice1 = tupleset((slice(None),) * nd, axis, slice(1, None))
-    slice2 = tupleset((slice(None),) * nd, axis, slice(None, -1))
-    res = jnp.cumsum(d * (y[slice1] + y[slice2]) / 2.0, axis=axis)
-
-    if initial is not None:
-        if not jnp.isscalar(initial):
-            raise ValueError("`initial` parameter should be a scalar.")
-
-        shape = list(res.shape)
-        shape[axis] = 1
-        res = jnp.concatenate(
-            [jnp.full(shape, initial, dtype=res.dtype), res], axis=axis
-        )
-
-    return res
 
 
 def ensure_tuple(x):

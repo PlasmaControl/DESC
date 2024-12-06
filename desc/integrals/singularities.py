@@ -1309,3 +1309,156 @@ def _kernel_Bn_grad_G_dot_n(eval_data, source_data, diag=False):
         -source_data["Bn"] * dot(n, dx),
         safenorm(dx, axis=-1) ** 3,
     )
+
+
+def compute_K_mn(
+    eq,
+    G,
+    grid=None,
+    K_M=None,
+    K_N=None,
+    sym=False,
+):
+    """Compute Fourier coefficients of surface current on ∂D.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Configuration with surface geometry defining ∂D.
+    G : float
+        Secular term of poloidal current in amperes.
+        Should be ``2*np.pi/mu_0*data["G"]``.
+    grid : Grid
+        Points on ∂D.
+    K_M : int
+        Number of poloidal Fourier modes.
+        Default is ``eq.M``.
+    K_N : int
+        Number of toroidal Fourier modes.
+        Default is ``eq.N``.
+    sym : str
+        ``DoubleFourierSeries`` basis symmetry.
+        Default is no symmetry.
+
+    Returns
+    -------
+    K_mn, K_sec, K_transform : jnp.ndarray, Transform
+        Fourier coefficients of surface current on ∂D.
+
+    """
+    from desc.magnetic_fields import FourierCurrentPotentialField
+
+    K_sec = FourierCurrentPotentialField.from_surface(
+        eq.surface,
+        G=G,
+    )
+    basis = DoubleFourierSeries(
+        M=setdefault(K_M, eq.M),
+        N=setdefault(K_N, eq.N),
+        NFP=eq.NFP,
+        sym=sym,
+    )
+    if grid is None:
+        grid = LinearGrid(
+            rho=np.array([1.0]),
+            M=2 * basis.M,
+            N=2 * basis.N,
+            NFP=basis.NFP if basis.N > 0 else 64,
+            sym=False,
+        )
+    assert grid.is_meshgrid
+    transform = Transform(grid, basis)
+
+    def LHS(K_mn):
+        # After Fourier transform, the LHS is linear in the spectral coefficients Φₘₙ.
+        # We approximate this as finite-dimensional, which enables writing the left
+        # hand side as A @ Φₘₙ. Then Φₘₙ is found by solving LHS(Φₘₙ) = A @ Φₘₙ = RHS.
+        num_coef = K_mn.size // 3
+        K_R = transform.transform(K_mn[:num_coef])
+        K_phi = transform.transform(K_mn[num_coef : 2 * num_coef])
+        K_Z = transform.transform(K_mn[2 * num_coef :])
+        K_fourier = jnp.column_stack([K_R, K_phi, K_Z])
+        K_secular = K_sec.compute("K", grid=grid)["K"]
+        n = eq.compute("n_rho", grid=grid)["n_rho"]
+        return dot(K_fourier + K_secular, n)
+
+    # LHS is expensive, so it is better to construct full Jacobian once
+    # rather than iterative solves like jax.scipy.sparse.linalg.cg.
+    A = jacfwd(LHS)(jnp.ones(basis.num_modes * 3))
+    # Fourier coefficients of K on boundary
+    K_mn, _, _, _ = jnp.linalg.lstsq(A, jnp.zeros(grid.num_nodes))
+    np.testing.assert_allclose(LHS(K_mn), A @ K_mn, atol=1e-8)  # noqa: E801
+    return K_mn, K_sec, transform
+
+
+def compute_B_dot_n_from_K(eq, eval_grid, source_grid, K_mn, K_sec, basis):
+    """Computes vacuum field ∇Φ ⋅ n on ∂D from surface current.
+
+    Let D, D^∁ denote the interior, exterior of a toroidal region with
+    boundary ∂D. Computes the magnetic field 𝐁 in units of Tesla such that
+
+    - 𝐁 = 𝐁₀ + ∇Φ     on D
+    - ∇ × 𝐁 = ∇ × 𝐁₀  on D ∪ D^∁ (i.e. ∇Φ is single-valued or periodic)
+    - ∇ × 𝐁₀ = μ₀ 𝐉    on D ∪ D^∁
+    - 𝐁 * ∇ρ = 0      on ∂D
+    - ∇²Φ = 0         on D
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Configuration with surface geometry defining ∂D.
+    eval_grid : Grid
+        Evaluation points on ∂D.
+    source_grid : Grid
+        Source points on ∂D for quadrature of kernels.
+    K_mn : jnp.ndarray
+        Fourier coefficients of surface current on ∂D.
+    K_sec : FourierCurrentPotentialField
+        Secular part of Fourier current potential field.
+    basis : DoubleFourierSeries
+        Basis for Kₘₙ.
+
+    Returns
+    -------
+    dPhi_dn : jnp.ndarray
+        Shape (``eval_grid.grid.num_nodes``, 3).
+        Vacuum field ∇Φ ⋅ n on ∂D.
+
+    """
+    k = min(source_grid.num_theta, source_grid.num_zeta * source_grid.NFP)
+    s = k - 1
+    q = k // 2 + int(np.sqrt(k))
+    try:
+        interpolator = FFTInterpolator(eval_grid, source_grid, s, q)
+    except AssertionError as e:
+        print(
+            f"Unable to create FFTInterpolator, got error {e},"
+            "falling back to DFT method which is much slower"
+        )
+        interpolator = DFTInterpolator(eval_grid, source_grid, s, q)
+
+    names = ["R", "phi", "Z"]
+    evl_data = eq.compute(names + ["n_rho"], grid=eval_grid)
+    transform = Transform(source_grid, basis)
+    src_data = eq.compute(names + ["|e_theta x e_zeta|"], grid=source_grid)
+    num_coef = K_mn.size // 3
+    K_R = transform.transform(K_mn[:num_coef])
+    K_phi = transform.transform(K_mn[num_coef : 2 * num_coef])
+    K_Z = transform.transform(K_mn[2 * num_coef :])
+    K_fourier = jnp.column_stack([K_R, K_phi, K_Z])
+    K_secular = K_sec.compute("K", grid=source_grid)["K"]
+    src_data["K_vc"] = K_fourier + K_secular
+
+    # ∇Φ = ∂Φ/∂ρ ∇ρ + ∂Φ/∂θ ∇θ + ∂Φ/∂ζ ∇ζ
+    # but we can not obtain ∂Φ/∂ρ from Φₘₙ. Biot-Savart gives
+    # K_vc = n × ∇Φ
+    # ∇Φ(x ∈ ∂D) = 1/2π ∫_∂D df' K_vc × ∇G(x,x')
+    # (Same instructions but divide by 2 for x ∈ D).
+    Bn = dot(
+        1e7  # Biot-Savart kernel assumes Φ in units of amperes but ours is Tesla-meters
+        * singular_integral(
+            evl_data, src_data, _kernel_biot_savart, interpolator, loop=True
+        ),
+        evl_data["n_rho"],
+    ) / (2 * jnp.pi)
+    return Bn

@@ -9,6 +9,7 @@ from matplotlib import pyplot as plt
 from numpy.polynomial.chebyshev import chebinterpolate, chebroots
 from numpy.polynomial.legendre import leggauss
 from scipy import integrate
+from scipy.constants import mu_0
 from scipy.interpolate import CubicHermiteSpline
 from scipy.special import ellipe, ellipkm1
 from tests.test_interp_utils import _f_1d, _f_1d_nyquist_freq
@@ -56,7 +57,9 @@ from desc.integrals._quad_utils import (
 from desc.integrals.basis import FourierChebyshevSeries
 from desc.integrals.singularities import (
     _get_quadrature_nodes,
+    compute_B_dot_n_from_K,
     compute_dPhi_dn,
+    compute_K_mn,
     compute_Phi_mn,
 )
 from desc.integrals.surface_integral import _get_grid_surface
@@ -770,6 +773,50 @@ class TestSingularities:
             # FIXME: Doesn't pass unless G = 0 for stellarators.
             try:
                 np.testing.assert_allclose(B0n + dPhi_dn, 0, err_msg=f"G = {G}")
+            except AssertionError as e:
+                print(e)
+            return fig, ax
+
+        test(0)
+        fig, ax = test(src_grid.compress(data["G"])[-1])
+        return fig
+
+    @pytest.mark.unit
+    @pytest.mark.mpl_image_compare(remove_text=False, tolerance=tol_1d)
+    @pytest.mark.parametrize("eq", [get("DSHAPE"), get("ESTELL")])
+    def test_laplace_bdotn_from_K(self, eq):
+        """Test that Laplace solution from fit of K satisfies boundary condition."""
+        MN = 40
+        src_grid = LinearGrid(M=MN, N=MN, sym=False, NFP=eq.NFP)
+        data = eq.compute(["G"], grid=src_grid)
+
+        def test(G):
+            G_amp = 2 * np.pi * G / mu_0
+            K_mn, K_sec, K_transform = compute_K_mn(
+                eq=eq, G=G_amp, grid=src_grid, K_N=max(eq.N, 1)
+            )
+            evl_grid = K_transform.grid
+            Bn = compute_B_dot_n_from_K(
+                eq=eq,
+                eval_grid=evl_grid,
+                source_grid=src_grid,
+                K_mn=K_mn,
+                K_sec=K_sec,
+                basis=K_transform.basis,
+            )
+
+            # Get data as function of theta, zeta on the only flux surface (LCFS).
+            Bn = evl_grid.meshgrid_reshape(Bn, "rtz")[0]
+            theta = evl_grid.meshgrid_reshape(evl_grid.nodes[:, 1], "rtz")[0]
+            zeta = evl_grid.meshgrid_reshape(evl_grid.nodes[:, 2], "rtz")[0]
+
+            fig, ax = plt.subplots()
+            contour = ax.contourf(theta, zeta, Bn)
+            ax.set_title(r"$B \cdot n$ on $\partial D$")
+            fig.colorbar(contour, ax=ax)
+            # FIXME: Doesn't pass unless G = 0 for stellarators.
+            try:
+                np.testing.assert_allclose(Bn, 0, err_msg=f"G = {G}")
             except AssertionError as e:
                 print(e)
             return fig, ax

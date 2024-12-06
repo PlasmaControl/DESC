@@ -1420,8 +1420,8 @@ class _FiniteBuildCoil(_FramedCoil, Optimizable, ABC):
             B_self = jnp.stack((B_t, B_p, B_q), axis=-1)
 
         # find mask for the grid axis to prevent downstream singularities with biot savart
-        centerline_mask = jnp.ones(len(xsection_grid.nodes), dtype=bool)
-        centerline_mask.at[(L + 1) * (2 * M + 1) // 2 :: (L + 1) * (2 * M + 1)].set(False)
+        centerline_mask = jnp.zeros(len(xsection_grid.nodes), dtype=bool)
+        centerline_mask = centerline_mask.at[(L + 1) * (2 * M + 1) // 2 :: (L + 1) * (2 * M + 1)].set(True)
 
         return B_self, x_fb, centerline_mask
 

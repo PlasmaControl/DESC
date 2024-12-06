@@ -83,6 +83,109 @@ def extract_Kd_wells(Kd, n_wells=5, order=False):
     return Kd_wells, lengths_wells, masks_wells
 
 
+@functools.partial(jit, static_argnames=["n_wells"])
+def extract_Kd_wells_and_peaks(Kd, n_wells=5):
+    """Extract wells from the Kd array by identifying sign changes.
+
+    This function detects regions where the Kd values transition between
+    positive and negative, creating a specified number of wells.
+    It can also sort the wells by their lengths if desired.
+
+    Parameters
+    ----------
+    Kd : jnp.ndarray
+        1D array of Kd values.
+    n_wells : int
+        Number of wells to extract from Kd.
+
+    Returns
+    -------
+    Kd_wells : jnp.ndarray
+        2D array where each row corresponds to the Kd values of an extracted well.
+    lengths_wells : jnp.ndarray
+        1D array containing the lengths of each extracted well.
+    masks_wells : jnp.ndarray
+        2D boolean array indicating which Kd values belong to each well.
+    """
+    # Step 1: Identify sign changes in Kd
+    signs = jnp.sign(Kd)
+
+    # Create masks for positive and negative crossings of the same size as Kd
+    positive_crossings = jnp.zeros_like(Kd, dtype=bool)
+    negative_crossings = jnp.zeros_like(Kd, dtype=bool)
+
+    # Set negative crossings (from positive to negative)
+    negative_crossings = negative_crossings.at[:-1].set(
+        (signs[:-1] == 1) & (signs[1:] == -1)
+    )
+
+    # Set positive crossings (from negative to positive)
+    positive_crossings = positive_crossings.at[:-1].set(
+        (signs[:-1] == -1) & (signs[1:] == 1)
+    )
+
+    # Create cumulative sums for positive and negative crossings
+    cumulative_positive = jnp.cumsum(positive_crossings)
+    cumulative_negative = jnp.cumsum(negative_crossings)
+
+    Kd_wells = jnp.zeros(
+        (n_wells, Kd.shape[0]), dtype=Kd.dtype
+    )  # Initialize with zeros
+    lengths_wells = jnp.zeros(n_wells, dtype=int)
+    masks_wells = jnp.zeros((n_wells, Kd.shape[0]), dtype=Kd.dtype)
+
+    Kd_peaks = jnp.zeros(
+        (n_wells, Kd.shape[0]), dtype=Kd.dtype
+    )  # Initialize with zeros
+    lengths_peaks = jnp.zeros(n_wells, dtype=int)
+    masks_peaks = jnp.zeros((n_wells, Kd.shape[0]), dtype=Kd.dtype)
+
+    # Use a loop to fill the lengths array
+    for i in range(n_wells):
+
+        well_mask = (cumulative_negative == i + 1) & (
+            cumulative_negative == cumulative_positive
+        )
+        peak_mask = (cumulative_positive == i + 1) & (
+            cumulative_negative == cumulative_positive - 1
+        )
+        lengths_wells = lengths_wells.at[i].set(well_mask.sum())
+        lengths_peaks = lengths_peaks.at[i].set(peak_mask.sum())
+
+        # Fill the corresponding row in the masks array
+        masks_wells = masks_wells.at[i].set(
+            well_mask.astype(Kd.dtype)
+        )  # Store mask as row
+        well_values = jnp.where(well_mask, Kd, 0)
+        # Store the well values in the corresponding row
+        Kd_wells = Kd_wells.at[i, : well_values.size].set(well_values)
+
+        # Fill the corresponding row in the masks array
+        masks_peaks = masks_peaks.at[i].set(
+            peak_mask.astype(Kd.dtype)
+        )  # Store mask as row
+        peak_values = jnp.where(peak_mask, Kd, 0)
+        # Store the well values in the corresponding row
+        Kd_peaks = Kd_peaks.at[i, : peak_values.size].set(peak_values)
+
+    Kd_cut = {
+        "Kd_wells": Kd_wells,
+        "Kd_peaks": Kd_peaks,
+    }
+
+    masks = {
+        "masks_wells": masks_wells,
+        "masks_peaks": masks_peaks,
+    }
+
+    lengths = {
+        "lengths_wells": lengths_wells,
+        "lengths_peaks": lengths_peaks,
+    }
+
+    return Kd_cut, masks, lengths
+
+
 @jit
 def weighted_least_squares(l, Kd, mask):
     """Perform a weighted least-squares quadratic fit of Kd.

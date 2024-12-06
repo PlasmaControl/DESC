@@ -9,14 +9,22 @@ computational grid has a node on the magnetic axis to avoid potentially
 expensive computations.
 """
 
-from ..backend import jnp
-from ..integrals.critical_gradient import extract_Kd_wells, fit_Kd_wells
+from ..backend import jnp, trapezoid
+from ..integrals.critical_gradient import (
+    extract_Kd_wells,
+    extract_Kd_wells_and_peaks,
+    fit_Kd_wells,
+)
 from .data_index import register_compute_fun
 
 _doc = {
     "n_wells": (
         "int : Number of wells to detect for each pitch and field line. "
         "Default is 10 wells,"
+    ),
+    "curvature": (
+        "str : good or bad curvature regions for the calculation of R_eff and L_par "
+        "Default is bad curvature regions"
     ),
 }
 
@@ -77,14 +85,18 @@ def _R_eff(params, transforms, profiles, data, **kwargs):
     transforms={"grid": []},
     profiles=[],
     coordinates="rtz",
-    data=["Kd"],
+    data=["Kd", "|e_zeta|r,a|"],
     **_doc,
 )
 def _L_par(params, transforms, profiles, data, **kwargs):
     # Parallel connection length defined as width of Kd wells
     grid = transforms["grid"].source_grid
     n_wells = kwargs.get("n_wells", 5)
-    _, length_wells, _ = extract_Kd_wells(data["Kd"], n_wells=n_wells, order=True)
-    L_par = jnp.diff(grid.nodes[:, 2])[0] * length_wells
+    curvature = kwargs.get("curvature", "bad")
+    _, masks, _ = extract_Kd_wells_and_peaks(data["Kd"], n_wells=n_wells)
+    if curvature == "good":
+        L_par = trapezoid(data["|e_zeta|r,a|"] * masks["masks_peaks"], grid.nodes[:, 2])
+    else:
+        L_par = trapezoid(data["|e_zeta|r,a|"] * masks["masks_wells"], grid.nodes[:, 2])
     data["L_par"] = L_par
     return data

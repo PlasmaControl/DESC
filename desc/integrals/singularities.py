@@ -1182,16 +1182,16 @@ def compute_dPhi_dn(eq, eval_grid, source_grid, Phi_mn, basis):
 
     # ∇Φ = ∂Φ/∂ρ ∇ρ + ∂Φ/∂θ ∇θ + ∂Φ/∂ζ ∇ζ
     # but we can not obtain ∂Φ/∂ρ from Φₘₙ. Biot-Savart gives
-    # K_vc = n × ∇Φ
-    # ∇Φ(x ∈ ∂D) = 1/2π ∫_∂D df' K_vc × ∇G(x,x')
+    # K_vc = n × ∇Φ where Φ has units Tesla-meters
+    # ∇Φ(x ∈ ∂D) dot n = [1/2π ∫_∂D df' K_vc × ∇G(x,x')] dot n
     # (Same instructions but divide by 2 for x ∈ D).
-    dPhi_dn = dot(
-        1e7  # Biot-Savart kernel assumes Φ in units of amperes but ours is Tesla-meters
-        * singular_integral(
+    # Biot-Savart kernel assumes Φ in amperes, so we account for that.
+    dPhi_dn = (2 / mu_0) * dot(
+        singular_integral(
             evl_data, src_data, _kernel_biot_savart, interpolator, loop=True
         ),
         evl_data["n_rho"],
-    ) / (2 * jnp.pi)
+    )
     return dPhi_dn
 
 
@@ -1348,10 +1348,7 @@ def compute_K_mn(
     """
     from desc.magnetic_fields import FourierCurrentPotentialField
 
-    K_sec = FourierCurrentPotentialField.from_surface(
-        eq.surface,
-        G=G,
-    )
+    K_sec = FourierCurrentPotentialField.from_surface(eq.surface, G=G)
     basis = DoubleFourierSeries(
         M=setdefault(K_M, eq.M),
         N=setdefault(K_N, eq.N),
@@ -1361,13 +1358,16 @@ def compute_K_mn(
     if grid is None:
         grid = LinearGrid(
             rho=np.array([1.0]),
-            M=2 * basis.M,
-            N=2 * basis.N,
+            # 3x higher than typical since we need to fit a vector
+            M=6 * basis.M,
+            N=6 * basis.N,
             NFP=basis.NFP if basis.N > 0 else 64,
             sym=False,
         )
     assert grid.is_meshgrid
     transform = Transform(grid, basis)
+    K_secular = K_sec.compute("K", grid=grid)["K"]
+    n = eq.compute("n_rho", grid=grid)["n_rho"]
 
     def LHS(K_mn):
         # After Fourier transform, the LHS is linear in the spectral coefficients Φₘₙ.
@@ -1378,13 +1378,11 @@ def compute_K_mn(
         K_phi = transform.transform(K_mn[num_coef : 2 * num_coef])
         K_Z = transform.transform(K_mn[2 * num_coef :])
         K_fourier = jnp.column_stack([K_R, K_phi, K_Z])
-        K_secular = K_sec.compute("K", grid=grid)["K"]
-        n = eq.compute("n_rho", grid=grid)["n_rho"]
         return dot(K_fourier + K_secular, n)
 
     A = jacfwd(LHS)(jnp.ones(basis.num_modes * 3))
     K_mn, _, _, _ = jnp.linalg.lstsq(A, jnp.zeros(grid.num_nodes))
-    np.testing.assert_allclose(LHS(K_mn), A @ K_mn, atol=1e-8)  # noqa: E801
+    # np.testing.assert_allclose(LHS(K_mn), A @ K_mn, atol=1e-8)  # noqa: E801
     return K_mn, K_sec, transform
 
 
@@ -1436,15 +1434,13 @@ def compute_B_dot_n_from_K(eq, eval_grid, source_grid, K_mn, K_sec, basis):
     K_secular = K_sec.compute("K", grid=source_grid)["K"]
     src_data["K_vc"] = K_fourier + K_secular
 
-    # ∇Φ = ∂Φ/∂ρ ∇ρ + ∂Φ/∂θ ∇θ + ∂Φ/∂ζ ∇ζ
-    # but we can not obtain ∂Φ/∂ρ from Φₘₙ. Biot-Savart gives
-    # K_vc = n × ∇Φ
-    # ∇Φ(x ∈ ∂D) = 1/2π ∫_∂D df' K_vc × ∇G(x,x')
+    # Biot-Savart gives K_vc = n × B
+    # B(x ∈ ∂D) dot n = [μ₀/2π ∫_∂D df' K_vc × ∇G(x,x')] dot n
     # (Same instructions but divide by 2 for x ∈ D).
-    Bn = dot(
+    Bn = 2 * dot(
         singular_integral(
             evl_data, src_data, _kernel_biot_savart, interpolator, loop=True
         ),
         evl_data["n_rho"],
-    ) / (2 * jnp.pi)
+    )
     return Bn

@@ -1071,8 +1071,10 @@ class Equilibrium(IOAble, Optimizable):
                 sym=self.sym
                 and all(
                     data_index[p][dep]["grid_requirement"].get("sym", True)
-                    # TODO: GitHub issue #1206.
-                    and not data_index[p][dep]["grid_requirement"].get("can_fft", False)
+                    # TODO (#1206)
+                    and not data_index[p][dep]["grid_requirement"].get(
+                        "can_fft2", False
+                    )
                     for dep in dep1dr
                 ),
             )
@@ -1119,8 +1121,10 @@ class Equilibrium(IOAble, Optimizable):
                 sym=self.sym
                 and all(
                     data_index[p][dep]["grid_requirement"].get("sym", True)
-                    # TODO: GitHub issue #1206.
-                    and not data_index[p][dep]["grid_requirement"].get("can_fft", False)
+                    # TODO (#1206)
+                    and not data_index[p][dep]["grid_requirement"].get(
+                        "can_fft2", False
+                    )
                     for dep in dep1dz
                 ),
             )
@@ -1246,7 +1250,7 @@ class Equilibrium(IOAble, Optimizable):
             **kwargs,
         )
 
-    def get_rtz_grid(
+    def _get_rtz_grid(
         self,
         radial,
         poloidal,

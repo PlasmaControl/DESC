@@ -218,19 +218,15 @@ def test_compute_everything():
         # size cap at 100 mb, so can't hit suggested resolution for some things.
         warnings.filterwarnings("ignore", category=ResolutionWarning)
         for p in things:
+
             names = set(data_index[p].keys())
 
-            def need_source_grid_or_full_grid(name):
-                req = data_index[p][name].get("grid_requirement", {})
-                return (
-                    bool(data_index[p][name]["source_grid_requirement"])
-                    or not req.get("sym", True)
-                    or req.get("can_fft", False)
+            def need_special(name):
+                return bool(data_index[p][name]["source_grid_requirement"]) or bool(
+                    data_index[p][name]["grid_requirement"]
                 )
 
-            names -= _grow_seeds(
-                p, set(filter(need_source_grid_or_full_grid, names)), names
-            )
+            names -= _grow_seeds(p, set(filter(need_special, names)), names)
 
             this_branch_data_rpz[p] = things[p].compute(
                 list(names), **grid.get(p, {}), basis="rpz"

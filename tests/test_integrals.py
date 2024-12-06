@@ -20,6 +20,7 @@ from desc.basis import FourierZernikeBasis
 from desc.equilibrium import Equilibrium
 from desc.equilibrium.coords import get_rtz_grid
 from desc.examples import get
+from desc.geometry import FourierRZToroidalSurface
 from desc.grid import ConcentricGrid, Grid, LinearGrid, QuadratureGrid
 from desc.integrals import (
     Bounce1D,
@@ -63,7 +64,8 @@ from desc.integrals.singularities import (
     compute_Phi_mn,
 )
 from desc.integrals.surface_integral import _get_grid_surface
-from desc.magnetic_fields import ToroidalMagneticField
+from desc.magnetic_fields import DommaschkPotentialField, ToroidalMagneticField
+from desc.plotting import plot_boundary
 from desc.transform import Transform
 from desc.utils import dot, errorif, safediv
 
@@ -822,6 +824,88 @@ class TestSingularities:
         test(0)
         fig, ax = test(grid.compress(data["G"])[-1])
         return fig
+
+    @pytest.mark.unit
+    @pytest.mark.mpl_image_compare(remove_text=False, tolerance=tol_1d)
+    def test_laplace_dommaschk(self):
+        """Use Dommaschk potentials to generate benchmark test and compare."""
+        modes = [
+            [0, -2],
+            [0, -1],
+            [0, 0],
+            [0, 1],
+            [0, 2],
+            [1, -2],
+            [1, -1],
+            [1, 0],
+            [1, 1],
+            [1, 2],
+            [2, -2],
+            [2, -1],
+            [2, 0],
+            [2, 1],
+            [2, 2],
+            [3, -2],
+            [3, -1],
+            [3, 0],
+            [3, 1],
+            [3, 2],
+        ]
+        surf = FourierRZToroidalSurface(
+            R_lmn=[
+                0.000056,
+                -0.000921,
+                0.997922,
+                -0.000921,
+                0.000056,
+                -0.000067,
+                -0.034645,
+                0.093260,
+                0.000880,
+                0.000178,
+                0.000373,
+                0.000575,
+                0.002916,
+                -0.000231,
+                0.000082,
+                0.000462,
+                -0.001509,
+                0.001748,
+                -0.000239,
+                0.000052,
+            ],
+            Z_lmn=[
+                0.000076,
+                0.000923,
+                0.000000,
+                -0.000923,
+                -0.000076,
+                0.000069,
+                0.035178,
+                0.099830,
+                0.000860,
+                -0.000179,
+                -0.000374,
+                0.000257,
+                0.003096,
+                0.000321,
+                0.000007,
+                -0.000518,
+                0.002233,
+                0.001828,
+                0.000257,
+                0.000035,
+            ],
+            modes_R=modes,
+            modes_Z=modes,
+            sym=True,
+        )
+        eq = Equilibrium(surface=surf)
+        plot_boundary(eq, phi=[0, 1, 2])
+        plt.show()
+        a = -1.495873  # noqa: F841
+        b = -3.270651  # noqa: F841
+        dp = DommaschkPotentialField()  # noqa: F841
 
 
 class TestBouncePoints:

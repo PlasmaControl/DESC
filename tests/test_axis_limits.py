@@ -18,7 +18,7 @@ from desc.examples import get
 from desc.grid import LinearGrid
 from desc.integrals import surface_integrals_map
 from desc.objectives import GenericObjective, ObjectiveFunction
-from desc.utils import dot
+from desc.utils import dot, errorif
 
 # Unless mentioned in the source code of the compute function, the assumptions
 # made to compute the magnetic axis limit can be reduced to assuming that these
@@ -44,6 +44,7 @@ not_finite_limits = {
     "curvature_k1_zeta",
     "curvature_k2_rho",
     "curvature_k2_zeta",
+    "cvdrift",
     "e^helical",
     "e^theta",
     "e^theta_r",
@@ -61,12 +62,13 @@ not_finite_limits = {
     "g^tz_r",
     "g^tz_t",
     "g^tz_z",
-    "grad(alpha)",
     "g^aa",
     "g^ra",
     "gbdrift",
-    "cvdrift",
     "grad(alpha)",
+    "grad(alpha) (periodic)",
+    "gbdrift (periodic)",
+    "cvdrift (periodic)",
     "|e^helical|",
     "|grad(theta)|",
     "<J*B> Redl",  # may not exist for all configurations
@@ -217,10 +219,10 @@ def assert_is_continuous(
         if name in not_continuous_limits:
             continue
         elif name in not_finite_limits:
-            assert (np.isfinite(data[name]).T != axis).all(), name
+            errorif(np.any(np.isfinite(data[name]).T == axis), AssertionError, msg=name)
             continue
         else:
-            assert np.isfinite(data[name]).all(), name
+            errorif(not np.isfinite(data[name]).all(), AssertionError, msg=name)
 
         if (
             data_index[p][name]["coordinates"] == ""
@@ -290,6 +292,10 @@ class TestAxisLimits:
             "iota_r": {"atol": 1e-6},
             "iota_num_rr": {"atol": 5e-5},
             "grad(B)": {"rtol": 1e-4},
+            "alpha_r (secular)": {"atol": 1e-4},
+            "grad(alpha) (secular)": {"atol": 1e-4},
+            "gbdrift (secular)": {"atol": 1e-4},
+            "gbdrift (secular)/phi": {"atol": 1e-4},
         }
         zero_map = dict.fromkeys(zero_limits, {"desired_at_axis": 0})
         kwargs = weaker_tolerance | zero_map

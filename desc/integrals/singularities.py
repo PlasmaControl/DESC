@@ -1382,26 +1382,14 @@ def compute_K_mn(
         n = eq.compute("n_rho", grid=grid)["n_rho"]
         return dot(K_fourier + K_secular, n)
 
-    # LHS is expensive, so it is better to construct full Jacobian once
-    # rather than iterative solves like jax.scipy.sparse.linalg.cg.
     A = jacfwd(LHS)(jnp.ones(basis.num_modes * 3))
-    # Fourier coefficients of K on boundary
     K_mn, _, _, _ = jnp.linalg.lstsq(A, jnp.zeros(grid.num_nodes))
     np.testing.assert_allclose(LHS(K_mn), A @ K_mn, atol=1e-8)  # noqa: E801
     return K_mn, K_sec, transform
 
 
 def compute_B_dot_n_from_K(eq, eval_grid, source_grid, K_mn, K_sec, basis):
-    """Computes vacuum field ∇Φ ⋅ n on ∂D from surface current.
-
-    Let D, D^∁ denote the interior, exterior of a toroidal region with
-    boundary ∂D. Computes the magnetic field 𝐁 in units of Tesla such that
-
-    - 𝐁 = 𝐁₀ + ∇Φ     on D
-    - ∇ × 𝐁 = ∇ × 𝐁₀  on D ∪ D^∁ (i.e. ∇Φ is single-valued or periodic)
-    - ∇ × 𝐁₀ = μ₀ 𝐉    on D ∪ D^∁
-    - 𝐁 * ∇ρ = 0      on ∂D
-    - ∇²Φ = 0         on D
+    """Computes B ⋅ n on ∂D from surface current.
 
     Parameters
     ----------
@@ -1420,9 +1408,8 @@ def compute_B_dot_n_from_K(eq, eval_grid, source_grid, K_mn, K_sec, basis):
 
     Returns
     -------
-    dPhi_dn : jnp.ndarray
+    B_dot_n : jnp.ndarray
         Shape (``eval_grid.grid.num_nodes``, 3).
-        Vacuum field ∇Φ ⋅ n on ∂D.
 
     """
     k = min(source_grid.num_theta, source_grid.num_zeta * source_grid.NFP)
@@ -1455,8 +1442,7 @@ def compute_B_dot_n_from_K(eq, eval_grid, source_grid, K_mn, K_sec, basis):
     # ∇Φ(x ∈ ∂D) = 1/2π ∫_∂D df' K_vc × ∇G(x,x')
     # (Same instructions but divide by 2 for x ∈ D).
     Bn = dot(
-        1e7  # Biot-Savart kernel assumes Φ in units of amperes but ours is Tesla-meters
-        * singular_integral(
+        singular_integral(
             evl_data, src_data, _kernel_biot_savart, interpolator, loop=True
         ),
         evl_data["n_rho"],

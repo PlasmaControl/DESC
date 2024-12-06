@@ -787,28 +787,26 @@ class TestSingularities:
     def test_laplace_bdotn_from_K(self, eq):
         """Test that Laplace solution from fit of K satisfies boundary condition."""
         MN = 40
-        src_grid = LinearGrid(M=MN, N=MN, sym=False, NFP=eq.NFP)
-        data = eq.compute(["G"], grid=src_grid)
+        grid = LinearGrid(M=MN, N=MN, sym=False, NFP=eq.NFP)
+        data = eq.compute(["G"], grid=grid)
 
         def test(G):
             G_amp = 2 * np.pi * G / mu_0
             K_mn, K_sec, K_transform = compute_K_mn(
-                eq=eq, G=G_amp, grid=src_grid, K_N=max(eq.N, 1)
+                eq=eq, G=G_amp, grid=grid, K_N=max(eq.N, 1)
             )
-            evl_grid = K_transform.grid
             Bn = compute_B_dot_n_from_K(
                 eq=eq,
-                eval_grid=evl_grid,
-                source_grid=src_grid,
+                eval_grid=grid,
+                source_grid=grid,
                 K_mn=K_mn,
                 K_sec=K_sec,
                 basis=K_transform.basis,
             )
-
             # Get data as function of theta, zeta on the only flux surface (LCFS).
-            Bn = evl_grid.meshgrid_reshape(Bn, "rtz")[0]
-            theta = evl_grid.meshgrid_reshape(evl_grid.nodes[:, 1], "rtz")[0]
-            zeta = evl_grid.meshgrid_reshape(evl_grid.nodes[:, 2], "rtz")[0]
+            Bn = grid.meshgrid_reshape(Bn, "rtz")[0]
+            theta = grid.meshgrid_reshape(grid.nodes[:, 1], "rtz")[0]
+            zeta = grid.meshgrid_reshape(grid.nodes[:, 2], "rtz")[0]
 
             fig, ax = plt.subplots()
             contour = ax.contourf(theta, zeta, Bn)
@@ -822,7 +820,7 @@ class TestSingularities:
             return fig, ax
 
         test(0)
-        fig, ax = test(src_grid.compress(data["G"])[-1])
+        fig, ax = test(grid.compress(data["G"])[-1])
         return fig
 
 

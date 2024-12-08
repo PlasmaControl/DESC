@@ -67,6 +67,7 @@ from desc.objectives import (
     Omnigenity,
     PlasmaCoilSetMinDistance,
     PlasmaVesselDistance,
+    PointBMeasurement,
     Pressure,
     PrincipalCurvature,
     QuadraticFlux,
@@ -1132,6 +1133,109 @@ class TestObjectiveFunction:
             plasma_grid=plasma_grid,
             coil_grid=coil_grid,
             eq_fixed=False,
+            coils_fixed=True,
+        )
+
+    @pytest.mark.unit
+    def test_point_B_measurement(self):
+        """Tests point B measurement from plasma and coilset."""
+
+        def test(
+            eq,
+            coils,
+            correct_B,
+            coords,
+            directions=None,
+            vc_source_grid=None,
+            coil_grid=None,
+            coils_fixed=False,
+        ):
+            obj = PointBMeasurement(
+                eq=eq,
+                coilset=coils,
+                measurement_coords=coords,
+                directions=directions,
+                vc_source_grid=vc_source_grid,
+                field_grid=coil_grid,
+                coils_fixed=coils_fixed,
+            )
+            obj.build()
+            if coils_fixed:
+                f = obj.compute(eq_params=eq.params_dict)
+            else:
+                f = obj.compute(
+                    eq_params=eq.params_dict, field_params=coils.params_dict
+                )
+            if directions is None:
+                assert f.size == coords.size
+            else:
+                assert f.size == coords.shape[0]
+            np.testing.assert_allclose(f, correct_B, atol=1e-1, rtol=1e-5)
+
+        # B from a toroidal field 1/R, and a vacuum stell (should be just 1/R field)
+        eq = get("ESTELL")
+        plasma_grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
+
+        field = ToroidalMagneticField(B0=1, R0=1)
+        coords_R = np.concatenate([np.linspace(0.2, 0.8, 5), np.linspace(1.9, 2.5, 5)])
+        coords_phi = np.linspace(0, 2 * np.pi / eq.NFP, coords_R.size)
+        coords_Z = np.zeros_like(coords_R)
+        coords = np.vstack([coords_R, coords_phi, coords_Z]).T
+        correct_BR = np.zeros_like(coords_R)
+        correct_Bphi = 1 / coords_R
+        correct_BZ = correct_BR
+        correct_B = np.vstack([correct_BR, correct_Bphi, correct_BZ]).T
+
+        test(
+            eq,
+            field,
+            correct_B.flatten(),
+            coords,
+            vc_source_grid=plasma_grid,
+            coils_fixed=True,
+        )
+        test(
+            eq,
+            field,
+            correct_B.flatten(),
+            coords,
+            vc_source_grid=None,
+            coils_fixed=False,
+        )
+        # test dotted with R hat direction
+        directions = np.zeros_like(coords)
+        directions[:, 0] = 1.0
+        test(
+            eq,
+            field,
+            correct_B[:, 0],
+            coords,
+            directions=directions,
+            vc_source_grid=plasma_grid,
+            coils_fixed=True,
+        )
+        # test dotted with phi hat direction
+        directions = np.zeros_like(coords)
+        directions[:, 1] = 1.0
+        test(
+            eq,
+            field,
+            correct_B[:, 1],
+            coords,
+            directions=directions,
+            vc_source_grid=plasma_grid,
+            coils_fixed=False,
+        )
+        # test dotted with Z hat direction
+        directions = np.zeros_like(coords)
+        directions[:, 2] = 1.0
+        test(
+            eq,
+            field,
+            correct_B[:, 2],
+            coords,
+            directions=directions,
+            vc_source_grid=plasma_grid,
             coils_fixed=True,
         )
 
@@ -2462,6 +2566,7 @@ class TestComputeScalarResolution:
         Omnigenity,
         PlasmaCoilSetMinDistance,
         PlasmaVesselDistance,
+        PointBMeasurement,
         QuadraticFlux,
         SurfaceQuadraticFlux,
         ToroidalFlux,
@@ -2844,6 +2949,34 @@ class TestComputeScalarResolution:
         np.testing.assert_allclose(f, f[-1], rtol=1e-3)
 
     @pytest.mark.regression
+    def test_compute_scalar_resolution_point_B_measurement(self):
+        """Tests point B measurement scalar resolution from plasma and coilset."""
+        # B from a toroidal field 1/R, and a vacuum stell (should be just 1/R field)
+        eq = get("ESTELL")
+
+        field = ToroidalMagneticField(B0=1, R0=1)
+        coords_R = np.concatenate([np.linspace(0.2, 0.8, 5), np.linspace(1.9, 2.5, 5)])
+        coords_phi = np.linspace(0, 2 * np.pi / eq.NFP, coords_R.size)
+        coords_Z = np.zeros_like(coords_R)
+        coords = np.vstack([coords_R, coords_phi, coords_Z]).T
+
+        f = np.zeros_like(self.res_array, dtype=float)
+        for i, res in enumerate(self.res_array):  # omnigenity needs higher res
+            eq.change_resolution(
+                L_grid=int(eq.L * res), M_grid=int(eq.M * res), N_grid=int(eq.N * res)
+            )
+            obj = ObjectiveFunction(
+                PointBMeasurement(
+                    eq=eq,
+                    coilset=field,
+                    measurement_coords=coords,
+                )
+            )
+            obj.build(verbose=0)
+            f[i] = obj.compute_scalar(obj.x(eq, field))
+        np.testing.assert_allclose(f, f[-1], rtol=1e-3)
+
+    @pytest.mark.regression
     @pytest.mark.parametrize(
         "objective", sorted(other_objectives, key=lambda x: str(x.__name__))
     )
@@ -2922,6 +3055,7 @@ class TestObjectiveNaNGrad:
         Omnigenity,
         PlasmaCoilSetMinDistance,
         PlasmaVesselDistance,
+        PointBMeasurement,
         QuadraticFlux,
         SurfaceCurrentRegularization,
         SurfaceQuadraticFlux,

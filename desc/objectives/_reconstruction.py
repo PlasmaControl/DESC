@@ -109,6 +109,12 @@ class PointBMeasurement(_Objective):
         eq,
         coilset,
         measurement_coords,
+        field_grid=None,
+        vc_source_grid=None,
+        coils_fixed=False,
+        vacuum=False,
+        directions=None,
+        basis="rpz",
         target=None,
         bounds=None,
         weight=1,
@@ -116,20 +122,16 @@ class PointBMeasurement(_Objective):
         normalize_target=True,
         loss_function=None,
         deriv_mode="auto",
-        field_grid=None,
-        vc_source_grid=None,
-        basis="rpz",
-        name="toroidal-flux",
+        name="Magnetic-Point-Measurement",
         jac_chunk_size=None,
-        coils_fixed=False,
-        vacuum=False,
-        directions=None,
     ):
         # TODO: I want the output to be like "measurement error", but that means
         # having the compute method subtract the measured values, and then the
         # target should be zero, but I'd like target to be the diagnostic targets.
         # could also just define a custom print_value to use
         # compute - target instead of just compute
+        # TODO: change coils name to field and make naming consistent
+        # TODO: use new docstring collect fxn
         if target is None and bounds is None:
             target = 0
         self._coils = coilset

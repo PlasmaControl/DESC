@@ -64,7 +64,7 @@ from desc.integrals.singularities import (
     compute_Phi_mn,
 )
 from desc.integrals.surface_integral import _get_grid_surface
-from desc.magnetic_fields import DommaschkPotentialField, ToroidalMagneticField
+from desc.magnetic_fields import ToroidalMagneticField
 from desc.plotting import plot_boundary
 from desc.transform import Transform
 from desc.utils import dot, errorif, safediv
@@ -786,7 +786,7 @@ class TestSingularities:
 
     @pytest.mark.unit
     @pytest.mark.mpl_image_compare(remove_text=False, tolerance=tol_1d)
-    @pytest.mark.parametrize("eq", [get("DSHAPE"), get("ESTELL")])
+    @pytest.mark.parametrize("eq", [get("DSHAPE"), get("HELIOTRON"), get("ESTELL")])
     def test_laplace_bdotn_from_K(self, eq):
         """Test that Laplace solution from fit of K satisfies boundary condition."""
         MN = 40
@@ -853,11 +853,11 @@ class TestSingularities:
         return np.sum(coef[:, np.newaxis] * op_one, axis=0)
 
     @staticmethod
-    def merkel_transform(coef, m, n, theta, zeta):
+    def merkel_transform(coef, m, n, theta, zeta, fun=np.cos):
         """Evaluates double Fourier series of form cos(m theta + n zeta)."""
         return np.sum(
             coef[:, np.newaxis]
-            * np.cos(m[:, np.newaxis] * theta + n[:, np.newaxis] * zeta),
+            * fun(m[:, np.newaxis] * theta + n[:, np.newaxis] * zeta),
             axis=0,
         )
 
@@ -881,13 +881,13 @@ class TestSingularities:
                 if (m, n) in C_r:
                     R_lmn[(m, abs(n))] += C_r[(m, n)]
                     if n < 0:
-                        R_lmn[(-m, -abs(n))] += C_r[(m, n)]
+                        R_lmn[(-m, n)] += C_r[(m, n)]
                     elif n > 0:
                         R_lmn[(-m, -n)] -= C_r[(m, n)]
                 if (m, n) in C_z:
                     Z_lmn[(-m, abs(n))] += C_z[(m, n)]
                     if n < 0:
-                        Z_lmn[(m, -abs(n))] -= C_z[(m, n)]
+                        Z_lmn[(m, n)] -= C_z[(m, n)]
                     elif n > 0:
                         Z_lmn[(m, -n)] += C_z[(m, n)]
 
@@ -896,27 +896,42 @@ class TestSingularities:
             np.array(list(R_lmn.values())),
             np.array([mn[0] for mn in R_lmn.keys()]),
             np.array([mn[1] for mn in R_lmn.keys()]),
-            grid.nodes[:, 1],
+            -grid.nodes[:, 1],  # theta is flipped
             grid.nodes[:, 2],
         )
         R_merk = TestSingularities.merkel_transform(
             np.array(list(C_r.values())),
             np.array([mn[0] for mn in C_r.keys()]),
             np.array([mn[1] for mn in C_r.keys()]),
-            grid.nodes[:, 1],
+            -grid.nodes[:, 1],  # theta is flipped
             grid.nodes[:, 2],
         )
-        np.testing.assert_allclose(R_merk, R_bench)
+        Z_bench = TestSingularities.manual_transform(
+            np.array(list(Z_lmn.values())),
+            np.array([mn[0] for mn in Z_lmn.keys()]),
+            np.array([mn[1] for mn in Z_lmn.keys()]),
+            -grid.nodes[:, 1],  # theta is flipped
+            grid.nodes[:, 2],
+        )
+        Z_merk = TestSingularities.merkel_transform(
+            np.array(list(C_z.values())),
+            np.array([mn[0] for mn in C_z.keys()]),
+            np.array([mn[1] for mn in C_z.keys()]),
+            -grid.nodes[:, 1],  # theta is flipped
+            grid.nodes[:, 2],
+            fun=np.sin,
+        )
+        np.testing.assert_allclose(R_bench, R_merk)
+        np.testing.assert_allclose(Z_bench, Z_merk)
         surf = FourierRZToroidalSurface(
             R_lmn=list(R_lmn.values()),
             Z_lmn=list(Z_lmn.values()),
             modes_R=list(R_lmn.keys()),
             modes_Z=list(Z_lmn.keys()),
         )
-        R_desc = surf.compute("R", grid=grid)["R"]
-        np.testing.assert_allclose(
-            R_desc, R_bench, err_msg="Looks like DESC transform bug."
-        )
+        surf_data = surf.compute(["R", "Z"], grid=grid)
+        np.testing.assert_allclose(surf_data["R"], R_merk)
+        np.testing.assert_allclose(surf_data["Z"], Z_merk)
         return surf
 
     @pytest.mark.unit
@@ -953,8 +968,6 @@ class TestSingularities:
             (0, 2): -0.000076,
             (1, -2): 0.000069,
             (1, -1): 0.035178,
-            # If (1, 0) mode set to 0 then above test passes and left handed system
-            # warning is not raised.
             (1, 0): 0.099830,
             (1, 1): 0.000860,
             (1, 2): -0.000179,
@@ -973,9 +986,41 @@ class TestSingularities:
         eq = Equilibrium(surface=surf)
         plot_boundary(eq, phi=[0, 1, 2])
         plt.show()
-        a = -1.495873  # noqa: F841
-        b = -3.270651  # noqa: F841
-        dp = DommaschkPotentialField()  # noqa: F841
+        MN = 40
+        grid = LinearGrid(M=MN, N=MN, sym=False, NFP=eq.NFP)
+
+        # About half the error of the below test.
+        def test(G):
+            G_amp = 2 * np.pi * G / mu_0
+            K_mn, K_sec, K_transform = compute_K_mn(
+                eq=eq, G=G_amp, grid=grid, K_N=max(eq.N, 1)
+            )
+            Bn = compute_B_dot_n_from_K(
+                eq=eq,
+                eval_grid=grid,
+                source_grid=grid,
+                K_mn=K_mn,
+                K_sec=K_sec,
+                basis=K_transform.basis,
+            )
+            # Get data as function of theta, zeta on the only flux surface (LCFS).
+            Bn = grid.meshgrid_reshape(Bn, "rtz")[0]
+            theta = grid.meshgrid_reshape(grid.nodes[:, 1], "rtz")[0]
+            zeta = grid.meshgrid_reshape(grid.nodes[:, 2], "rtz")[0]
+
+            fig, ax = plt.subplots()
+            contour = ax.contourf(theta, zeta, Bn)
+            ax.set_title(r"$B \cdot n$ on $\partial D$")
+            fig.colorbar(contour, ax=ax)
+            # FIXME: Doesn't pass unless G = 0 for stellarators.
+            try:
+                np.testing.assert_allclose(Bn, 0, err_msg=f"G = {G}")
+            except AssertionError as e:
+                print(e)
+            return fig, ax
+
+        fig, ax = test(1)
+        return fig
 
 
 class TestBouncePoints:

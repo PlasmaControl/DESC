@@ -751,6 +751,7 @@ class TestSingularities:
             Phi_mn, Phi_transform = compute_Phi_mn(
                 eq=eq, B0n=B0n, source_grid=src_grid, Phi_N=max(eq.N, 1)
             )
+
             evl_grid = Phi_transform.grid
             dPhi_dn = compute_dPhi_dn(
                 eq=eq,
@@ -825,81 +826,150 @@ class TestSingularities:
         fig, ax = test(grid.compress(data["G"])[-1])
         return fig
 
+    @staticmethod
+    def manual_transform(coef, m, n, theta, zeta):
+        """Evaluates Double Fourier Series of form G_n^m at theta and zeta pts."""
+        op_four = np.where(
+            ((m < 0) & (n < 0))[:, np.newaxis],
+            np.sin(np.abs(m)[:, np.newaxis] * theta)
+            * np.sin(np.abs(n)[:, np.newaxis] * zeta),
+            n[:, np.newaxis] * zeta * np.nan,
+        )
+        op_three = np.where(
+            ((m < 0) & (n >= 0))[:, np.newaxis],
+            np.sin(np.abs(m)[:, np.newaxis] * theta) * np.cos(n[:, np.newaxis] * zeta),
+            op_four,
+        )
+        op_two = np.where(
+            ((m >= 0) & (n < 0))[:, np.newaxis],
+            np.cos(m[:, np.newaxis] * theta) * np.sin(np.abs(n)[:, np.newaxis] * zeta),
+            op_three,
+        )
+        op_one = np.where(
+            ((m >= 0) & (n >= 0))[:, np.newaxis],
+            np.cos(m[:, np.newaxis] * theta) * np.cos(n[:, np.newaxis] * zeta),
+            op_two,
+        )
+        return np.sum(coef[:, np.newaxis] * op_one, axis=0)
+
+    @staticmethod
+    def merkel_transform(coef, m, n, theta, zeta):
+        """Evaluates double Fourier series of form cos(m theta + n zeta)."""
+        return np.sum(
+            coef[:, np.newaxis]
+            * np.cos(m[:, np.newaxis] * theta + n[:, np.newaxis] * zeta),
+            axis=0,
+        )
+
+    @staticmethod
+    def _merkel_surf(C_r, C_z):
+        """Convert merkel coefficients to DESC coefficients and check."""
+        m_b = max(
+            max(abs(mn[0]) for mn in C_r.keys()), max(abs(mn[0]) for mn in C_z.keys())
+        )
+        n_b = max(
+            max(abs(mn[1]) for mn in C_r.keys()), max(abs(mn[1]) for mn in C_z.keys())
+        )
+        R_lmn = {
+            (m, n): 0.0 for m in range(-m_b, m_b + 1) for n in range(-n_b, n_b + 1)
+        }
+        Z_lmn = {
+            (m, n): 0.0 for m in range(-m_b, m_b + 1) for n in range(-n_b, n_b + 1)
+        }
+        for m in range(0, m_b + 1):
+            for n in range(-n_b, n_b + 1):
+                if (m, n) in C_r:
+                    R_lmn[(m, abs(n))] += C_r[(m, n)]
+                    if n < 0:
+                        R_lmn[(-m, -abs(n))] += C_r[(m, n)]
+                    elif n > 0:
+                        R_lmn[(-m, -n)] -= C_r[(m, n)]
+                if (m, n) in C_z:
+                    Z_lmn[(-m, abs(n))] += C_z[(m, n)]
+                    if n < 0:
+                        Z_lmn[(m, -abs(n))] -= C_z[(m, n)]
+                    elif n > 0:
+                        Z_lmn[(m, -n)] += C_z[(m, n)]
+
+        grid = LinearGrid(rho=1, M=5, N=5)
+        R_bench = TestSingularities.manual_transform(
+            np.array(list(R_lmn.values())),
+            np.array([mn[0] for mn in R_lmn.keys()]),
+            np.array([mn[1] for mn in R_lmn.keys()]),
+            grid.nodes[:, 1],
+            grid.nodes[:, 2],
+        )
+        R_merk = TestSingularities.merkel_transform(
+            np.array(list(C_r.values())),
+            np.array([mn[0] for mn in C_r.keys()]),
+            np.array([mn[1] for mn in C_r.keys()]),
+            grid.nodes[:, 1],
+            grid.nodes[:, 2],
+        )
+        np.testing.assert_allclose(R_merk, R_bench)
+        surf = FourierRZToroidalSurface(
+            R_lmn=list(R_lmn.values()),
+            Z_lmn=list(Z_lmn.values()),
+            modes_R=list(R_lmn.keys()),
+            modes_Z=list(Z_lmn.keys()),
+        )
+        R_desc = surf.compute("R", grid=grid)["R"]
+        np.testing.assert_allclose(
+            R_desc, R_bench, err_msg="Looks like DESC transform bug."
+        )
+        return surf
+
     @pytest.mark.unit
     @pytest.mark.mpl_image_compare(remove_text=False, tolerance=tol_1d)
     def test_laplace_dommaschk(self):
         """Use Dommaschk potentials to generate benchmark test and compare."""
-        modes = [
-            [0, -2],
-            [0, -1],
-            [0, 0],
-            [0, 1],
-            [0, 2],
-            [1, -2],
-            [1, -1],
-            [1, 0],
-            [1, 1],
-            [1, 2],
-            [2, -2],
-            [2, -1],
-            [2, 0],
-            [2, 1],
-            [2, 2],
-            [3, -2],
-            [3, -1],
-            [3, 0],
-            [3, 1],
-            [3, 2],
-        ]
-        surf = FourierRZToroidalSurface(
-            R_lmn=[
-                0.000056,
-                -0.000921,
-                0.997922,
-                -0.000921,
-                0.000056,
-                -0.000067,
-                -0.034645,
-                0.093260,
-                0.000880,
-                0.000178,
-                0.000373,
-                0.000575,
-                0.002916,
-                -0.000231,
-                0.000082,
-                0.000462,
-                -0.001509,
-                0.001748,
-                -0.000239,
-                0.000052,
-            ],
-            Z_lmn=[
-                0.000076,
-                0.000923,
-                0.000000,
-                -0.000923,
-                -0.000076,
-                0.000069,
-                0.035178,
-                0.099830,
-                0.000860,
-                -0.000179,
-                -0.000374,
-                0.000257,
-                0.003096,
-                0.000321,
-                0.000007,
-                -0.000518,
-                0.002233,
-                0.001828,
-                0.000257,
-                0.000035,
-            ],
-            modes_R=modes,
-            modes_Z=modes,
-            sym=True,
-        )
+        C_r = {
+            (0, -2): 0.000056,
+            (0, -1): -0.000921,
+            (0, 0): 0.997922,
+            (0, 1): -0.000921,
+            (0, 2): 0.000056,
+            (1, -2): -0.000067,
+            (1, -1): -0.034645,
+            (1, 0): 0.093260,
+            (1, 1): 0.000880,
+            (1, 2): 0.000178,
+            (2, -2): 0.000373,
+            (2, -1): 0.000575,
+            (2, 0): 0.002916,
+            (2, 1): -0.000231,
+            (2, 2): 0.000082,
+            (3, -2): 0.000462,
+            (3, -1): -0.001509,
+            (3, 0): 0.001748,
+            (3, 1): -0.000239,
+            (3, 2): 0.000052,
+        }
+        C_z = {
+            (0, -2): 0.000076,
+            (0, -1): 0.000923,
+            (0, 0): 0.000000,
+            (0, 1): -0.000923,
+            (0, 2): -0.000076,
+            (1, -2): 0.000069,
+            (1, -1): 0.035178,
+            # If (1, 0) mode set to 0 then above test passes and left handed system
+            # warning is not raised.
+            (1, 0): 0.099830,
+            (1, 1): 0.000860,
+            (1, 2): -0.000179,
+            (2, -2): -0.000374,
+            (2, -1): 0.000257,
+            (2, 0): 0.003096,
+            (2, 1): 0.003021,
+            (2, 2): 0.000007,
+            (3, -2): -0.000518,
+            (3, -1): 0.002233,
+            (3, 0): 0.001828,
+            (3, 1): 0.000257,
+            (3, 2): 0.000035,
+        }
+        surf = self._merkel_surf(C_r, C_z)
         eq = Equilibrium(surface=surf)
         plot_boundary(eq, phi=[0, 1, 2])
         plt.show()

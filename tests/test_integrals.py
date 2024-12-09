@@ -617,12 +617,10 @@ class TestSingularities:
         So we integrate the kernel n⋅(r-r')/|r-r'|³ and can benchmark the residual.
 
         """
-        eq = Equilibrium()
-        Nv = np.array([30, 45, 60, 90, 120, 150, 240])
-        Nu = np.array([13, 13, 13, 19, 19, 25, 37])
-        ss = np.array([13, 13, 13, 19, 19, 25, 37])
-        qs = np.array([10, 12, 12, 16, 18, 20, 24])
-        es = np.array([0.4, 2e-2, 3e-3, 5e-5, 4e-6, 1e-6, 1e-9])
+        eq = get("W7-X")
+        Nv = np.array([500])
+        Nu = np.array([500])
+        es = np.array([1e-9])
         eval_grid = LinearGrid(M=5, N=6, NFP=eq.NFP)
 
         for i, (m, n) in enumerate(zip(Nu, Nv)):
@@ -633,8 +631,9 @@ class TestSingularities:
             eval_data = eq.compute(
                 ["R", "Z", "phi", "e^rho", "|e_theta x e_zeta|"], grid=eval_grid
             )
-            s = ss[i]
-            q = qs[i]
+            k = min(source_grid.num_theta, source_grid.num_zeta * source_grid.NFP)
+            s = k - 1
+            q = k // 2 + int(np.sqrt(k))
             interpolator = FFTInterpolator(eval_grid, source_grid, s, q)
 
             err = singular_integral(

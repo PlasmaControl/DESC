@@ -304,10 +304,16 @@ class ParallelConnectionLength(_Objective):
         Number of points per poloidal transit at which to sample data along field
         line. Default is 200.
     target_type : {"max", "mean", "all"}
-        Whether to target only the largest value of R_eff,
+        Whether to target only the largest value of L_par,
         the average of the values along the field line,
         or all the values at the same time
         Defaults to all
+    n_wells : int
+        Number of wells to target if target_type is set to "mean" or "all"
+    curvature : {"good", "bad"}
+        Whether to target regions of bad curvature, making them smaller or
+        regions of good curvature to make them larger.
+        Define two objectives to target both
     name : str, optional
         Name of the objective function.
     """
@@ -330,8 +336,9 @@ class ParallelConnectionLength(_Objective):
         alpha=0.0,
         n_pol=10,
         knots_per_transit=200,
-        n_wells=10,
         target_type="all",
+        n_wells=5,
+        curvature="bad",
         name="Parallel connection length",
     ):
         if target is None and bounds is None:
@@ -342,6 +349,7 @@ class ParallelConnectionLength(_Objective):
         self._knots_per_transit = knots_per_transit
         self._n_wells = n_wells
         self._target_type = target_type
+        self._curvature = curvature
         super().__init__(
             things=eq,
             target=target,
@@ -405,6 +413,7 @@ class ParallelConnectionLength(_Objective):
 
         self._hyperparameters = {
             "n_wells": self._n_wells,
+            "curvature": self._curvature,
         }
 
         self._constants = {
@@ -473,7 +482,7 @@ class ParallelConnectionLength(_Objective):
             "shear": iota_data["shear"][0],
             "a": len_data["a"],
         }
-        n_tor = jnp.abs(self._n_pol / (data["iota"] * eq.NFP))
+        n_tor = jnp.abs(self._n_pol / (data["iota"]))
         zeta = jnp.linspace(
             0, 2 * jnp.pi * n_tor, self._n_pol * self._knots_per_transit
         )
@@ -498,8 +507,13 @@ class ParallelConnectionLength(_Objective):
         )
 
         if self._target_type == "max":
-            return jnp.max(data["L_par"])
+            L_par = jnp.max(data["L_par"])
         elif self._target_type == "mean":
-            return jnp.mean(data["L_par"])
+            L_par = jnp.mean(data["L_par"])
         elif self._target_type == "all":
-            return data["L_par"]
+            L_par = data["L_par"]
+        
+        if self._hyperparameters.curvature == "good":
+            return 1/L_par
+        else : 
+            return L_par

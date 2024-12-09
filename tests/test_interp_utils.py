@@ -27,8 +27,8 @@ from desc.integrals._interp_utils import (
     polyroot_vec,
     polyval_vec,
 )
-from desc.integrals._quad_utils import bijection_to_disc
 from desc.integrals.basis import FourierChebyshevSeries
+from desc.integrals.quad_utils import bijection_to_disc
 
 
 class TestPolyUtils:

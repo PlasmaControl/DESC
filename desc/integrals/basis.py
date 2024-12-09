@@ -19,7 +19,7 @@ from desc.integrals._interp_utils import (
     idct_non_uniform,
     irfft_non_uniform,
 )
-from desc.integrals._quad_utils import bijection_from_disc, bijection_to_disc
+from desc.integrals.quad_utils import bijection_from_disc, bijection_to_disc
 from desc.io import IOAble
 from desc.utils import (
     atleast_2d_end,

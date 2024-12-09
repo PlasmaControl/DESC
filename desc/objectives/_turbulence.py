@@ -513,7 +513,7 @@ class ParallelConnectionLength(_Objective):
         elif self._target_type == "all":
             L_par = data["L_par"]
         
-        if self._hyperparameters.curvature == "good":
+        if self._hyperparameters["curvature"] == "good":
             return 1/L_par
         else : 
             return L_par

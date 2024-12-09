@@ -5,7 +5,7 @@ import numpy as np
 from desc.backend import jnp
 from desc.compute import get_params, get_profiles, get_transforms
 from desc.compute.utils import _compute as compute_fun
-from desc.grid import LinearGrid
+from desc.grid import LinearGrid, QuadratureGrid
 from desc.utils import Timer, errorif, setdefault, warnif
 
 from .normalization import compute_scaling_factors
@@ -491,7 +491,8 @@ class BallooningStability(_Objective):
         iota_transforms = get_transforms(self._iota_keys, obj=eq, grid=iota_grid)
 
         # Separate grid to calculate the right length scale for normalization
-        len_grid = LinearGrid(rho=1.0, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
+        len_grid = QuadratureGrid(L=eq.L, M=eq.M, N=eq.N, NFP=eq.NFP)
+
         self._len_keys = ["a"]
         len_profiles = get_profiles(self._len_keys, obj=eq, grid=len_grid)
         len_transforms = get_transforms(self._len_keys, obj=eq, grid=len_grid)

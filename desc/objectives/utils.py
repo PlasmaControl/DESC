@@ -5,13 +5,13 @@ Functions in this module should not depend on any other submodules in desc.objec
 
 import numpy as np
 
-from desc.backend import cond, jit, jnp, logsumexp, put
+from desc.backend import jit, jnp, put, softargmax
 from desc.io import IOAble
 from desc.utils import Index, errorif, flatten_list, svd_inv_null, unique_list, warnif
 
 
 def factorize_linear_constraints(objective, constraint, x_scale="auto"):  # noqa: C901
-    """Compute and factorize A to get pseudoinverse and nullspace.
+    """Compute and factorize A to get particular solution and nullspace.
 
     Given constraints of the form Ax=b, factorize A to find a particular solution xp
     and the null space Z st. Axp=b and AZ=0, so that the full space of solutions to
@@ -98,27 +98,15 @@ def factorize_linear_constraints(objective, constraint, x_scale="auto"):  # noqa
     # if the entries of b aren't the same then the constraints are actually
     # incompatible and so we will leave those to be caught later.
     A_augmented = np.hstack([A, np.reshape(b, (A.shape[0], 1))])
-    row_idx_to_delete = np.array([], dtype=int)
-    for row_idx in range(A_augmented.shape[0]):
-        # find all rows equal to this row
-        rows_equal_to_this_row = np.where(
-            np.all(A_augmented[row_idx, :] == A_augmented, axis=1)
-        )[0]
-        # find the rows equal to this row that are not this row
-        rows_equal_to_this_row_but_not_this_row = rows_equal_to_this_row[
-            rows_equal_to_this_row != row_idx
-        ]
-        # if there are rows equal to this row that aren't this row, AND this particular
-        # row has not already been detected as a duplicate of an earlier one and slated
-        # for deletion, add the duplicate row indices to the array of
-        # rows to be deleted
-        if (
-            rows_equal_to_this_row_but_not_this_row.size
-            and row_idx not in row_idx_to_delete
-        ):
-            row_idx_to_delete = np.append(row_idx_to_delete, rows_equal_to_this_row[1:])
-    # delete the affected rows, and also the corresponding rows of b
-    A_augmented = np.delete(A_augmented, row_idx_to_delete, axis=0)
+
+    # Find unique rows of A_augmented
+    unique_rows, unique_indices = np.unique(A_augmented, axis=0, return_index=True)
+
+    # Sort the indices to preserve the order of appearance
+    unique_indices = np.sort(unique_indices)
+
+    # Extract the unique rows
+    A_augmented = A_augmented[unique_indices]
     A = A_augmented[:, :-1]
     b = np.atleast_1d(A_augmented[:, -1].squeeze())
 
@@ -126,9 +114,6 @@ def factorize_linear_constraints(objective, constraint, x_scale="auto"):  # noqa
     indices_row = np.arange(A.shape[0])
     indices_idx = np.arange(A.shape[1])
 
-    # while loop has problems updating JAX arrays, convert them to numpy arrays
-    A = np.array(A)
-    b = np.array(b)
     while len(np.where(np.count_nonzero(A, axis=1) == 1)[0]):
         # fixed just means there is a single element in A, so A_ij*x_j = b_i
         fixed_rows = np.where(np.count_nonzero(A, axis=1) == 1)[0]
@@ -211,7 +196,7 @@ def factorize_linear_constraints(objective, constraint, x_scale="auto"):  # noqa
 
         # If the error is very large, likely want to error out as
         # it probably is due to a real mistake instead of just numerical
-        # roundoff errors.
+        # round-off errors.
         np.testing.assert_allclose(
             y1,
             y2,
@@ -221,8 +206,8 @@ def factorize_linear_constraints(objective, constraint, x_scale="auto"):  # noqa
             + f"{con}.",
         )
 
-        # else check with tighter tols and throw a warning, these tolerances
-        # could be tripped due to just numerical roundoff or poor scaling between
+        # else check with tighter tols and throw an error, these tolerances
+        # could be tripped due to just numerical round-off or poor scaling between
         # constraints, so don't want to error out but we do want to warn the user.
         atol = 3e-14
         rtol = 3e-14
@@ -285,14 +270,6 @@ class _Recover(IOAble):
 def softmax(arr, alpha):
     """JAX softmax implementation.
 
-    Inspired by https://www.johndcook.com/blog/2010/01/13/soft-maximum/
-    and https://www.johndcook.com/blog/2010/01/20/how-to-compute-the-soft-maximum/
-
-    Will automatically multiply array values by 2 / min_val if the min_val of
-    the array is <1. This is to avoid inaccuracies that arise when values <1
-    are present in the softmax, which can cause inaccurate maxes or even incorrect
-    signs of the softmax versus the actual max.
-
     Parameters
     ----------
     arr : ndarray
@@ -309,18 +286,7 @@ def softmax(arr, alpha):
 
     """
     arr_times_alpha = alpha * arr
-    min_val = jnp.min(jnp.abs(arr_times_alpha)) + 1e-4  # buffer value in case min is 0
-    return cond(
-        jnp.any(min_val < 1),
-        lambda arr_times_alpha: logsumexp(
-            arr_times_alpha / min_val * 2
-        )  # adjust to make vals>1
-        / alpha
-        * min_val
-        / 2,
-        lambda arr_times_alpha: logsumexp(arr_times_alpha) / alpha,
-        arr_times_alpha,
-    )
+    return softargmax(arr_times_alpha).dot(arr)
 
 
 def softmin(arr, alpha):

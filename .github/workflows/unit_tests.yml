@@ -86,6 +86,7 @@ jobs:
           source .venv-${{ matrix.combos.python_version }}/bin/activate
           pwd
           lscpu
+          pip list
           python -m pytest -v -m unit \
             --durations=0 \
             --cov-report xml:cov.xml \

@@ -55,7 +55,7 @@ Option 2: Using conda to install packages (this will only install DESC + JAX wit
 .. code-block:: sh
 
     conda env create --file requirements_conda.yml
-    # option B: with developer requirements (if you want to run tests)
+    # optionally: install developer requirements (if you want to run tests)
     conda install --file devtools/dev-requirements_conda.yml
 
     # to add DESC to your Python path

@@ -111,7 +111,6 @@ jobs:
         with:
           action: codecov/codecov-action@v5
           with: |
-            token: ${{ secrets.CODECOV_TOKEN }}
             name: codecov-umbrella
             files: ./cov.xml
             fail_ci_if_error: true

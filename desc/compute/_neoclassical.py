@@ -289,7 +289,8 @@ def _effective_ripple(params, transforms, profiles, data, **kwargs):
     ),
     units="~",
     units_long="None",
-    description="Energetic ion confinement proxy",
+    description="Energetic ion confinement proxy "
+    "as defined by Velasco (doi:10.1088/1741-4326/ac2994)",
     dim=1,
     params=[],
     transforms={"grid": []},
@@ -503,9 +504,7 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
     # maps of a physical coordinates. This avoids the computational issues of
     # multivalued maps. It further enables use of more efficient methods, such as
     # fast transforms and fixed computational grids throughout optimization, which
-    # are used in the ``Bounce2D`` operator on a developer branch. Also, Nemov
-    # assumes B^ϕ > 0 in some comments; this is not true in DESC, but the
-    # computations done here are invariant to the sign.
+    # are used in the ``Bounce2D`` operator on a developer branch.
 
     # It is assumed the grid is sufficiently dense to reconstruct |B|,
     # so anything smoother than |B| may be captured accurately as a single

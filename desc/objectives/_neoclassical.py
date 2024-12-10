@@ -14,8 +14,22 @@ from ..integrals.quad_utils import (
     get_quadrature,
     grad_automorphism_sin,
 )
-from .objective_funs import _Objective
+from .objective_funs import _Objective, collect_docs
 from .utils import _parse_callable_target_bounds
+
+_bounce_overwrite = {
+    "deriv_mode": """
+    deriv_mode : {"auto", "fwd", "rev"}
+        Specify how to compute Jacobian matrix, either forward mode or reverse mode AD.
+        ``auto`` selects forward or reverse mode based on the size of the input and
+        output of the objective. Has no effect on ``self.grad`` or ``self.hess`` which
+        always use reverse mode and forward over reverse mode respectively.
+
+        Default is ``fwd``. If ``rev`` is chosen, then ``jac_chunk_size=1`` is chosen
+        by default. In ``rev`` mode, reducing the pitch angle parameter ``batch_size``
+        does not reduce memory, so it is recommended to retain the default for that.
+        """
+}
 
 
 class EffectiveRipple(_Objective):
@@ -39,73 +53,49 @@ class EffectiveRipple(_Objective):
     Parameters
     ----------
     eq : Equilibrium
-        Equilibrium that will be optimized to satisfy the Objective.
-    target : {float, ndarray, callable}, optional
-        Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f. If a callable, should take a
-        single argument ``rho`` and return the desired value of the profile at those
-        locations. Defaults to 0.
-    bounds : tuple of {float, ndarray, callable}, optional
-        Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to Objective.dim_f.
-        If a callable, each should take a single argument ``rho`` and return the
-        desired bound (lower or upper) of the profile at those locations.
-    weight : {float, ndarray}, optional
-        Weighting to apply to the Objective, relative to other Objectives.
-        Must be broadcastable to Objective.dim_f
-    normalize : bool, optional
-        This quantity is already normalized so this parameter is ignored.
-        Whether to compute the error in physical units or non-dimensionalize.
-    normalize_target : bool, optional
-        Whether target and bounds should be normalized before comparing to computed
-        values. If `normalize` is ``True`` and the target is in physical units,
-        this should also be set to True.
-    loss_function : {None, 'mean', 'min', 'max'}, optional
-        Loss function to apply to the objective values once computed. This loss function
-        is called on the raw compute value, before any shifting, scaling, or
-        normalization.
-    deriv_mode : {"auto", "fwd", "rev"}
-        Specify how to compute Jacobian matrix, either forward mode or reverse mode AD.
-        "auto" selects forward or reverse mode based on the size of the input and output
-        of the objective. Has no effect on self.grad or self.hess which always use
-        reverse mode and forward over reverse mode respectively.
+        ``Equilibrium`` to be optimized.
     rho : ndarray
         Unique coordinate values specifying flux surfaces to compute on.
     alpha : ndarray
         Unique coordinate values specifying field line labels to compute on.
+    batch : bool
+        Whether to vectorize part of the computation. Default is true.
     Y_B : int
-        Number of points per toroidal transit at which to sample data along field
-        line. Default is 100.
+        Desired resolution for algorithm to compute bounce points.
+        Default is double ``Y``. Something like 100 is usually sufficient.
+        Currently, this is the number of knots per toroidal transit over
+        to approximate |B| with cubic splines.
     num_transit : int
         Number of toroidal transits to follow field line.
         For axisymmetric devices, one poloidal transit is sufficient. Otherwise,
-        more transits will give more accurate result, with diminishing returns.
+        assuming the surface is not near rational, more transits will
+        approximate surface averages better, with diminishing returns.
+    num_well : int
+        Maximum number of wells to detect for each pitch and field line.
+        Giving ``None`` will detect all wells but due to current limitations in
+        JAX this will have worse performance.
+        Specifying a number that tightly upper bounds the number of wells will
+        increase performance. In general, an upper bound on the number of wells
+        per toroidal transit is ``Aι+B`` where ``A``,``B`` are the poloidal and
+        toroidal Fourier resolution of |B|, respectively, in straight-field line
+        PEST coordinates, and ι is the rotational transform normalized by 2π.
+        A tighter upper bound than ``num_well=(Aι+B)*num_transit`` is preferable.
+        The ``check_points`` or ``plot`` methods in ``desc.integrals.Bounce2D``
+        are useful to select a reasonable value.
     num_quad : int
         Resolution for quadrature of bounce integrals. Default is 32.
     num_pitch : int
         Resolution for quadrature over velocity coordinate. Default is 50.
-    batch : bool
-        Whether to vectorize part of the computation. Default is true.
-    num_well : int
-        Maximum number of wells to detect for each pitch and field line.
-        Default is to detect all wells, but due to limitations in JAX this option
-        may consume more memory. Specifying a number that tightly upper bounds
-        the number of wells will increase performance.
-    name : str, optional
-        Name of the objective function.
-    jac_chunk_size : int , optional
-        Will calculate the Jacobian for this objective ``jac_chunk_size``
-        columns at a time, instead of all at once. The memory usage of the
-        Jacobian calculation is roughly ``memory usage = m0 + m1*jac_chunk_size``:
-        the smaller the chunk size, the less memory the Jacobian calculation
-        will require (with some baseline memory usage). The time to compute the
-        Jacobian is roughly ``t=t0 +t1/jac_chunk_size``, so the larger the
-        ``jac_chunk_size``, the faster the calculation takes, at the cost of
-        requiring more memory. A ``jac_chunk_size`` of 1 corresponds to the least
-        memory intensive, but slowest method of calculating the Jacobian.
-        If None, it will use the largest size i.e ``obj.dim_x``.
 
     """
+
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``target=0``.",
+        bounds_default="``target=0``.",
+        normalize_detail=" Note: Has no effect for this objective.",
+        normalize_target_detail=" Note: Has no effect for this objective.",
+        overwrite=_bounce_overwrite,
+    )
 
     _coordinates = "r"
     _units = "~"
@@ -124,11 +114,11 @@ class EffectiveRipple(_Objective):
         *,
         rho=1.0,
         alpha=0.0,
+        batch=True,
         Y_B=100,
         num_transit=10,
         num_quad=32,
         num_pitch=50,
-        batch=True,
         num_well=None,
         name="Effective ripple",
         jac_chunk_size=None,
@@ -147,12 +137,12 @@ class EffectiveRipple(_Objective):
             "R0",  # TODO: GitHub PR #1094
         ]
         self._constants = {
-            "quad_weights": 1,
+            "quad_weights": 1.0,
             "rho": rho,
             "alpha": alpha,
             "zeta": np.linspace(0, 2 * np.pi * num_transit, Y_B * num_transit),
+            "quad": chebgauss2(num_quad),
         }
-        self._constants["quad x"], self._constants["quad w"] = chebgauss2(num_quad)
         self._hyperparameters = {
             "num_pitch": num_pitch,
             "batch": batch,
@@ -230,7 +220,6 @@ class EffectiveRipple(_Objective):
         if constants is None:
             constants = self.constants
         eq = self.things[0]
-        # TODO: compute all deps of effective ripple here
         data = compute_fun(
             eq,
             self._keys_1dr,
@@ -238,7 +227,6 @@ class EffectiveRipple(_Objective):
             constants["transforms_1dr"],
             constants["profiles"],
         )
-        # TODO: interpolate all deps to this grid with fft utilities from fourier bounce
         grid = eq._get_rtz_grid(
             constants["rho"],
             constants["alpha"],
@@ -262,7 +250,7 @@ class EffectiveRipple(_Objective):
             get_transforms("effective ripple", eq, grid, jitable=True),
             constants["profiles"],
             data=data,
-            quad=(constants["quad x"], constants["quad w"]),
+            quad=constants["quad"],
             **self._hyperparameters,
         )
         return grid.compress(data["effective ripple"])
@@ -287,84 +275,60 @@ class GammaC(_Objective):
     Parameters
     ----------
     eq : Equilibrium
-        Equilibrium that will be optimized to satisfy the Objective.
-    target : {float, ndarray, callable}, optional
-        Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f. If a callable, should take a
-        single argument ``rho`` and return the desired value of the profile at those
-        locations. Defaults to 0.
-    bounds : tuple of {float, ndarray, callable}, optional
-        Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to Objective.dim_f.
-        If a callable, each should take a single argument ``rho`` and return the
-        desired bound (lower or upper) of the profile at those locations.
-    weight : {float, ndarray}, optional
-        Weighting to apply to the Objective, relative to other Objectives.
-        Must be broadcastable to Objective.dim_f
-    normalize : bool, optional
-        Whether to compute the error in physical units or non-dimensionalize.
-    normalize_target : bool, optional
-        Whether target and bounds should be normalized before comparing to computed
-        values. If `normalize` is `True` and the target is in physical units,
-        this should also be set to True.
-    loss_function : {None, 'mean', 'min', 'max'}, optional
-        Loss function to apply to the objective values once computed. This loss function
-        is called on the raw compute value, before any shifting, scaling, or
-        normalization.
-    deriv_mode : {"auto", "fwd", "rev"}
-        Specify how to compute Jacobian matrix, either forward mode or reverse mode AD.
-        "auto" selects forward or reverse mode based on the size of the input and output
-        of the objective. Has no effect on self.grad or self.hess which always use
-        reverse mode and forward over reverse mode respectively.
+        ``Equilibrium`` to be optimized.
     rho : ndarray
         Unique coordinate values specifying flux surfaces to compute on.
     alpha : ndarray
         Unique coordinate values specifying field line labels to compute on.
+    batch : bool
+        Whether to vectorize part of the computation. Default is true.
+    Y_B : int
+        Desired resolution for algorithm to compute bounce points.
+        Default is double ``Y``. Something like 100 is usually sufficient.
+        Currently, this is the number of knots per toroidal transit over
+        to approximate |B| with cubic splines.
     num_transit : int
         Number of toroidal transits to follow field line.
         For axisymmetric devices, one poloidal transit is sufficient. Otherwise,
-        more transits will give more accurate result, with diminishing returns.
-    Y_B : int
-        Number of points per toroidal transit at which to sample data along field
-        line. Default is 100.
+        assuming the surface is not near rational, more transits will
+        approximate surface averages better, with diminishing returns.
+    num_well : int
+        Maximum number of wells to detect for each pitch and field line.
+        Giving ``None`` will detect all wells but due to current limitations in
+        JAX this will have worse performance.
+        Specifying a number that tightly upper bounds the number of wells will
+        increase performance. In general, an upper bound on the number of wells
+        per toroidal transit is ``Aι+B`` where ``A``,``B`` are the poloidal and
+        toroidal Fourier resolution of |B|, respectively, in straight-field line
+        PEST coordinates, and ι is the rotational transform normalized by 2π.
+        A tighter upper bound than ``num_well=(Aι+B)*num_transit`` is preferable.
+        The ``check_points`` or ``plot`` methods in ``desc.integrals.Bounce2D``
+        are useful to select a reasonable value.
     num_quad : int
         Resolution for quadrature of bounce integrals. Default is 32.
     num_pitch : int
         Resolution for quadrature over velocity coordinate. Default is 64.
-    batch : bool
-        Whether to vectorize part of the computation. Default is true.
-    num_well : int
-        Maximum number of wells to detect for each pitch and field line.
-        Default is to detect all wells, but due to limitations in JAX this option
-        may consume more memory. Specifying a number that tightly upper bounds
-        the number of wells will increase performance.
     Nemov : bool
         Whether to use the Γ_c as defined by Nemov et al. or Velasco et al.
         Default is Nemov. Set to ``False`` to use Velascos's.
 
-        Note that Nemov's Γ_c converges to a finite nonzero value in the
-        infinity limit of the number of toroidal transits.
-        Velasco's expression has a secular term that will drive the result
-        to zero as the number of toroidal transits increases unless the
-        secular term is averaged out from all the singular integrals.
-        Therefore, an optimization using Velasco's metric should be evaluated by
-        measuring decrease in Γ_c at a fixed number of toroidal transits until
-        unless an adaptive quadrature is used.
-    name : str, optional
-        Name of the objective function.
-    jac_chunk_size : int , optional
-        Will calculate the Jacobian for this objective ``jac_chunk_size``
-        columns at a time, instead of all at once. The memory usage of the
-        Jacobian calculation is roughly ``memory usage = m0 + m1*jac_chunk_size``:
-        the smaller the chunk size, the less memory the Jacobian calculation
-        will require (with some baseline memory usage). The time to compute the
-        Jacobian is roughly ``t=t0 +t1/jac_chunk_size``, so the larger the
-        ``jac_chunk_size``, the faster the calculation takes, at the cost of
-        requiring more memory. A ``jac_chunk_size`` of 1 corresponds to the least
-        memory intensive, but slowest method of calculating the Jacobian.
-        If None, it will use the largest size i.e ``obj.dim_x``.
+        Nemov's Γ_c converges to a finite nonzero value in the infinity limit
+        of the number of toroidal transits. Velasco's expression has a secular
+        term that drives the result to zero as the number of toroidal transits
+        increases if the secular term is not averaged out from the singular
+        integrals. Currently, an optimization using Velasco's metric may need
+        to be evaluated by measuring decrease in Γ_c at a fixed number of toroidal
+        transits.
 
     """
+
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``target=0``.",
+        bounds_default="``target=0``.",
+        normalize_detail=" Note: Has no effect for this objective.",
+        normalize_target_detail=" Note: Has no effect for this objective.",
+        overwrite=_bounce_overwrite,
+    )
 
     _coordinates = "r"
     _units = "~"
@@ -380,14 +344,14 @@ class GammaC(_Objective):
         normalize_target=True,
         loss_function=None,
         deriv_mode="auto",
+        *,
         rho=np.linspace(0.5, 1, 3),
         alpha=np.array([0]),
-        *,
+        batch=True,
         num_transit=10,
         Y_B=100,
         num_quad=32,
         num_pitch=64,
-        batch=True,
         num_well=None,
         Nemov=True,
         name="Gamma_c",
@@ -399,7 +363,7 @@ class GammaC(_Objective):
         rho, alpha = np.atleast_1d(rho, alpha)
         self._dim_f = rho.size
         self._constants = {
-            "quad_weights": 1,
+            "quad_weights": 1.0,
             "rho": rho,
             "alpha": alpha,
             "zeta": np.linspace(0, 2 * np.pi * num_transit, Y_B * num_transit),
@@ -411,13 +375,7 @@ class GammaC(_Objective):
             "num_well": num_well,
         }
         self._keys_1dr = ["iota", "iota_r", "min_tz |B|", "max_tz |B|"]
-        if Nemov:
-            self._key = "Gamma_c"
-            self._constants["quad2 x"], self._constants["quad2 w"] = chebgauss2(
-                num_quad
-            )
-        else:
-            self._key = "Gamma_c Velasco"
+        self._key = "Gamma_c" if Nemov else "Gamma_c Velasco"
 
         super().__init__(
             things=eq,
@@ -447,10 +405,13 @@ class GammaC(_Objective):
         self._grid_1dr = LinearGrid(
             rho=self._constants["rho"], M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym
         )
-        self._constants["quad x"], self._constants["quad w"] = get_quadrature(
-            leggauss(self._hyperparameters.pop("num_quad")),
+        num_quad = self._hyperparameters.pop("num_quad")
+        self._constants["quad"] = get_quadrature(
+            leggauss(num_quad),
             (automorphism_sin, grad_automorphism_sin),
         )
+        if self._key == "Gamma_c":
+            self._constants["quad2"] = chebgauss2(num_quad)
         self._target, self._bounds = _parse_callable_target_bounds(
             self._target, self._bounds, self._constants["rho"]
         )
@@ -494,7 +455,6 @@ class GammaC(_Objective):
         if constants is None:
             constants = self.constants
         eq = self.things[0]
-        # TODO: compute all deps of gamma here
         data = compute_fun(
             eq,
             self._keys_1dr,
@@ -502,7 +462,6 @@ class GammaC(_Objective):
             constants["transforms_1dr"],
             constants["profiles"],
         )
-        # TODO: interpolate all deps to this grid with fft utilities from fourier bounce
         grid = eq._get_rtz_grid(
             constants["rho"],
             constants["alpha"],
@@ -516,8 +475,8 @@ class GammaC(_Objective):
             for key in self._keys_1dr
         }
         quad2 = {}
-        if "quad2 x" in constants:
-            quad2["quad2"] = (constants["quad2 x"], constants["quad2 w"])
+        if self._key == "Gamma_c":
+            quad2["quad2"] = constants["quad2"]
         data = compute_fun(
             eq,
             self._key,
@@ -525,7 +484,7 @@ class GammaC(_Objective):
             get_transforms(self._key, eq, grid, jitable=True),
             constants["profiles"],
             data=data,
-            quad=(constants["quad x"], constants["quad w"]),
+            quad=constants["quad"],
             **quad2,
             **self._hyperparameters,
         )

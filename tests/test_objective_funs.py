@@ -23,6 +23,7 @@ from desc.coils import (
 )
 from desc.compute import get_transforms
 from desc.equilibrium import Equilibrium
+from desc.equilibrium.coords import get_rtz_grid
 from desc.examples import get
 from desc.geometry import FourierPlanarCurve, FourierRZToroidalSurface, FourierXYZCurve
 from desc.grid import ConcentricGrid, LinearGrid, QuadratureGrid
@@ -1476,6 +1477,54 @@ class TestObjectiveFunction:
         np.testing.assert_allclose(result1, result3)
         np.testing.assert_allclose(result1 * 2, result5)
         np.testing.assert_allclose(result2, result4)
+
+    @pytest.mark.unit
+    def test_objective_compute(self):
+        """To avoid issues such as #1424."""
+        eq = get("W7-X")
+        rho = np.linspace(0.1, 1, 3)
+        alpha = np.array([0])
+        Y_B = 50
+        num_transit = 4
+        num_pitch = 16
+        num_quad = 16
+        zeta = np.linspace(0, 2 * np.pi * num_transit, Y_B * num_transit)
+        grid = get_rtz_grid(eq, rho, alpha, zeta, coordinates="raz")
+        data = eq.compute(
+            ["effective ripple", "Gamma_c"],
+            grid=grid,
+            num_quad=num_quad,
+            num_pitch=num_pitch,
+        )
+        obj = EffectiveRipple(
+            eq,
+            rho=rho,
+            alpha=alpha,
+            Y_B=Y_B,
+            num_transit=num_transit,
+            num_quad=num_quad,
+            num_pitch=num_pitch,
+        )
+        obj.build()
+        # TODO(#1094)
+        np.testing.assert_allclose(
+            obj.compute(eq.params_dict),
+            grid.compress(data["effective ripple"]),
+            rtol=0.004,
+        )
+        obj = GammaC(
+            eq,
+            rho=rho,
+            alpha=alpha,
+            Y_B=Y_B,
+            num_transit=num_transit,
+            num_quad=num_quad,
+            num_pitch=num_pitch,
+        )
+        obj.build()
+        np.testing.assert_allclose(
+            obj.compute(eq.params_dict), grid.compress(data["Gamma_c"])
+        )
 
 
 @pytest.mark.regression

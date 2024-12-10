@@ -10,7 +10,6 @@ from tests.test_plotting import tol_1d
 from desc.equilibrium.coords import get_rtz_grid
 from desc.examples import get
 from desc.grid import LinearGrid
-from desc.objectives import EffectiveRipple, GammaC
 from desc.utils import setdefault
 from desc.vmec import VMECIO
 
@@ -114,53 +113,6 @@ def test_Gamma_c():
     fig, ax = plt.subplots()
     ax.plot(rho, grid.compress(data["Gamma_c"]), marker="o")
     return fig
-
-
-@pytest.mark.unit
-def test_objective_compute():
-    """To avoid issues such as #1424."""
-    eq = get("W7-X")
-    rho = np.linspace(0, 1, 4)
-    alpha = np.array([0])
-    Y_B = 50
-    num_transit = 4
-    num_pitch = 16
-    num_quad = 16
-    zeta = np.linspace(0, 2 * np.pi * num_transit, Y_B * num_transit)
-    grid = get_rtz_grid(eq, rho, alpha, zeta, coordinates="raz")
-    data = eq.compute(
-        ["effective ripple", "Gamma_c"],
-        grid=grid,
-        num_quad=num_quad,
-        num_pitch=num_pitch,
-    )
-    obj = EffectiveRipple(
-        eq,
-        rho=rho,
-        alpha=alpha,
-        Y_B=Y_B,
-        num_transit=num_transit,
-        num_quad=num_quad,
-        num_pitch=num_pitch,
-    )
-    obj.build()
-    # TODO(#1094)
-    np.testing.assert_allclose(
-        obj.compute(eq.params_dict), grid.compress(data["effective ripple"]), rtol=0.002
-    )
-    obj = GammaC(
-        eq,
-        rho=rho,
-        alpha=alpha,
-        Y_B=Y_B,
-        num_transit=num_transit,
-        num_quad=num_quad,
-        num_pitch=num_pitch,
-    )
-    obj.build()
-    np.testing.assert_allclose(
-        obj.compute(eq.params_dict), grid.compress(data["Gamma_c"])
-    )
 
 
 class NeoIO:

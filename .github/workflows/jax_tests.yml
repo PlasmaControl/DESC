@@ -44,6 +44,7 @@ jobs:
         run: |
           pwd
           lscpu
+          pip list
           python -m pytest -m unit \
             --durations=0 \
             --mpl \

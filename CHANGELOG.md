@@ -7,6 +7,10 @@ New Feature
 - Add ``desc.objectives.LinkingCurrent`` for ensuring that coils in a stage 2 or single stage optimization provide the required linking current for a given equilibrium.
 
 
+Bug Fixes
+
+- Small bug fix to use the correct normalization length ``a`` in the BallooningStability objective
+
 v0.13.0
 -------
 

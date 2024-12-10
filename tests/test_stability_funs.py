@@ -417,6 +417,7 @@ def test_ballooning_geometry(tmpdir_factory):
             "g^ra",
             "g^rr",
             "cvdrift",
+            "gbdrift",
             "cvdrift0",
             "|B|",
             "B^zeta",
@@ -449,11 +450,9 @@ def test_ballooning_geometry(tmpdir_factory):
         sign_psi = psi_s / np.abs(psi_s)
         sign_iota = iotas / np.abs(iotas)
 
-        modB = data["|B|"]
         x = Lref * np.sqrt(psi)
         shat = -x / iotas * shears / Lref
 
-        psi_r = data["psi_r"]
         grad_alpha = data["grad(alpha)"]
 
         g_sup_rr = data["g^rr"]
@@ -597,6 +596,8 @@ def test_ballooning_stability_eval():
         # different numerics than "ideal ballooning lambda" so that we can verify them
         # against one another
         psi_b = data01["Psi"][-1] / (2 * jnp.pi)
+        # Calculating a_N accurately requires a QuadratureGrid
+        # which is automatically accounted for inside of eq.compute
         a_N = data01["a"]
         B_N = 2 * psi_b / a_N**2
 
@@ -755,8 +756,6 @@ def test_ballooning_compare_with_COBRAVMEC():
 
     # Flux surfaces on which to evaluate ballooning stability
     surfaces = [0.98, 0.985, 0.99, 0.995, 1.0]
-
-    grid = LinearGrid(rho=jnp.array(surfaces), NFP=eq.NFP)
 
     Nalpha = 8  # Number of field lines
 

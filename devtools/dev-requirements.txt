@@ -4,7 +4,7 @@
 # building the docs
 nbsphinx == 0.8.12
 sphinx > 3.0.0
-# TODO (#1396): Remove sphinx-argparse <0.5.0 pin once upstream build issue is fixed
+# TODO (#1396): Remove sphinx-argparse <0.6.0 pin once upstream build issue is fixed
 # <https://github.com/sphinx-doc/sphinx-argparse/issues/56>
 sphinx-argparse < 0.5.0
 sphinx_copybutton

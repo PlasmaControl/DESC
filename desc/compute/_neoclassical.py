@@ -290,7 +290,7 @@ def _effective_ripple(params, transforms, profiles, data, **kwargs):
     units="~",
     units_long="None",
     description="Energetic ion confinement proxy "
-    "as defined by Velasco (doi:10.1088/1741-4326/ac2994)",
+    "as defined by Velasco et al. (doi:10.1088/1741-4326/ac2994)",
     dim=1,
     params=[],
     transforms={"grid": []},

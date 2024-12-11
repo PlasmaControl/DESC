@@ -147,7 +147,7 @@ class EffectiveRipple(_Objective):
             target = 0.0
 
         self._grid = grid
-        self._constants = {"quad_weights": 1}
+        self._constants = {"quad_weights": 1.0}
         self._X = X
         self._Y = Y
         Y_B = setdefault(Y_B, 2 * Y)
@@ -192,19 +192,14 @@ class EffectiveRipple(_Objective):
         if self._grid is None:
             self._grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False)
         assert self._grid.can_fft2
-        # Constants can only hold 1D arrays for some reason.
         self._constants["clebsch"] = FourierChebyshevSeries.nodes(
             self._X,
             self._Y,
             self._grid.compress(self._grid.nodes[:, 0]),
             domain=(0, 2 * np.pi),
-        ).ravel()
-        self._constants["fieldline quad x"], self._constants["fieldline quad w"] = (
-            leggauss(self._hyperparam["Y_B"] // 2)
         )
-        self._constants["quad x"], self._constants["quad w"] = chebgauss2(
-            self._hyperparam.pop("num_quad")
-        )
+        self._constants["fieldline quad"] = leggauss(self._hyperparam["Y_B"] // 2)
+        self._constants["quad"] = chebgauss2(self._hyperparam.pop("num_quad"))
 
         self._dim_f = self._grid.num_rho
         self._target, self._bounds = _parse_callable_target_bounds(
@@ -265,16 +260,13 @@ class EffectiveRipple(_Objective):
                 self._X,
                 self._Y,
                 iota=constants["transforms"]["grid"].compress(data["iota"]),
-                clebsch=constants["clebsch"].reshape(-1, 3),
+                clebsch=constants["clebsch"],
                 # Pass in params so that root finding is done with the new
                 # perturbed λ coefficients and not the original equilibrium's.
                 params=params,
             ),
-            fieldline_quad=(
-                constants["fieldline quad x"],
-                constants["fieldline quad w"],
-            ),
-            quad=(constants["quad x"], constants["quad w"]),
+            fieldline_quad=constants["fieldline quad"],
+            quad=constants["quad"],
             **self._hyperparam,
         )
         return constants["transforms"]["grid"].compress(data["effective ripple"])
@@ -342,14 +334,13 @@ class GammaC(_Objective):
         Whether to use the Γ_c as defined by Nemov et al. or Velasco et al.
         Default is Nemov. Set to ``False`` to use Velascos's.
 
-        Note that Nemov's Γ_c converges to a finite nonzero value in the
-        infinity limit of the number of toroidal transits.
-        Velasco's expression has a secular term that may drive the result
-        to zero as the number of toroidal transits increases if the quadratures
-        are unable to average out the secular term from all the singular integrals.
-        So an optimization using Velasco's metric may need to be evaluated by
-        measuring decrease in Γ_c at a fixed number of toroidal transits
-        unless a high resolution or adaptive quadrature is used.
+        Nemov's Γ_c converges to a finite nonzero value in the infinity limit
+        of the number of toroidal transits. Velasco's expression has a secular
+        term that drives the result to zero as the number of toroidal transits
+        increases if the secular term is not averaged out from the singular
+        integrals. Currently, an optimization using Velasco's metric may need
+        to be evaluated by measuring decrease in Γ_c at a fixed number of toroidal
+        transits.
 
     """
 
@@ -394,7 +385,7 @@ class GammaC(_Objective):
             target = 0.0
 
         self._grid = grid
-        self._constants = {"quad_weights": 1}
+        self._constants = {"quad_weights": 1.0}
         self._X = X
         self._Y = Y
         Y_B = setdefault(Y_B, 2 * Y)
@@ -406,10 +397,7 @@ class GammaC(_Objective):
             "num_pitch": num_pitch,
             "batch_size": batch_size,
         }
-        if Nemov:
-            self._key = "Gamma_c"
-        else:
-            self._key = "Gamma_c Velasco"
+        self._key = "Gamma_c" if Nemov else "Gamma_c Velasco"
         if deriv_mode == "rev" and jac_chunk_size is None:
             # Reverse mode is bottlenecked by coordinate mapping.
             # Compute Jacobian one flux surface at a time.
@@ -443,22 +431,20 @@ class GammaC(_Objective):
         if self._grid is None:
             self._grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False)
         assert self._grid.can_fft2
-        # Constants can only hold 1D arrays for some reason.
         self._constants["clebsch"] = FourierChebyshevSeries.nodes(
             self._X,
             self._Y,
             self._grid.compress(self._grid.nodes[:, 0]),
             domain=(0, 2 * np.pi),
-        ).ravel()
-        self._constants["fieldline quad x"], self._constants["fieldline quad w"] = (
-            leggauss(self._hyperparam["Y_B"] // 2)
         )
+        self._constants["fieldline quad"] = leggauss(self._hyperparam["Y_B"] // 2)
         num_quad = self._hyperparam.pop("num_quad")
-        self._constants["quad x"], self._constants["quad w"] = get_quadrature(
+        self._constants["quad"] = get_quadrature(
             leggauss(num_quad),
             (automorphism_sin, grad_automorphism_sin),
         )
-        self._constants["quad2 x"], self._constants["quad2 w"] = chebgauss2(num_quad)
+        if self._key == "Gamma_c":
+            self._constants["quad2"] = chebgauss2(num_quad)
 
         self._dim_f = self._grid.num_rho
         self._target, self._bounds = _parse_callable_target_bounds(
@@ -498,8 +484,8 @@ class GammaC(_Objective):
         if constants is None:
             constants = self.constants
         quad2 = {}
-        if "quad2 x" in constants:
-            quad2["quad2"] = (constants["quad2 x"], constants["quad2 w"])
+        if self._key == "Gamma_c":
+            quad2["quad2"] = constants["quad2"]
 
         eq = self.things[0]
         data = compute_fun(
@@ -518,16 +504,13 @@ class GammaC(_Objective):
                 self._X,
                 self._Y,
                 iota=constants["transforms"]["grid"].compress(data["iota"]),
-                clebsch=constants["clebsch"].reshape(-1, 3),
+                clebsch=constants["clebsch"],
                 # Pass in params so that root finding is done with the new
                 # perturbed λ coefficients and not the original equilibrium's.
                 params=params,
             ),
-            fieldline_quad=(
-                constants["fieldline quad x"],
-                constants["fieldline quad w"],
-            ),
-            quad=(constants["quad x"], constants["quad w"]),
+            fieldline_quad=constants["fieldline quad"],
+            quad=constants["quad"],
             **quad2,
             **self._hyperparam,
         )

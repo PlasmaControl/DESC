@@ -314,7 +314,7 @@ def _Gamma_c_1D(params, transforms, profiles, data, **kwargs):
     quad2 = kwargs["quad2"] if "quad2" in kwargs else chebgauss2(quad[0].size)
 
     def Gamma_c(data):
-        """∫ dλ ∑ⱼ [v τ γ_c²]ⱼ."""
+        """∫ dλ ∑ⱼ [v τ γ_c²]ⱼ π²/4."""
         bounce = Bounce1D(grid, data, quad, automorphism=None, is_reshaped=True)
         points = bounce.points(data["pitch_inv"], num_well=num_well)
         v_tau, f1, f2 = bounce.integrate(
@@ -325,6 +325,7 @@ def _Gamma_c_1D(params, transforms, profiles, data, **kwargs):
             points,
             batch=batch,
         )
+        # This is γ_c π/2.
         gamma_c = jnp.arctan(
             safediv(
                 f1,
@@ -431,7 +432,7 @@ def _Gamma_c_Velasco_1D(params, transforms, profiles, data, **kwargs):
         )
 
     def Gamma_c(data):
-        """∫ dλ ∑ⱼ [v τ γ_c²]ⱼ."""
+        """∫ dλ ∑ⱼ [v τ γ_c²]ⱼ π²/4."""
         bounce = Bounce1D(grid, data, quad, automorphism=None, is_reshaped=True)
         points = bounce.points(data["pitch_inv"], num_well=num_well)
         v_tau, cvdrift0, gbdrift = bounce.integrate(
@@ -442,7 +443,7 @@ def _Gamma_c_Velasco_1D(params, transforms, profiles, data, **kwargs):
             points,
             batch=batch,
         )
-        gamma_c = jnp.arctan(safediv(cvdrift0, gbdrift))
+        gamma_c = jnp.arctan(safediv(cvdrift0, gbdrift))  # This is γ_c π/2.
         return jnp.sum(
             jnp.sum(v_tau * gamma_c**2, axis=-1)
             * data["pitch_inv weight"]

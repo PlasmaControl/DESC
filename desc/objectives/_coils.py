@@ -1763,8 +1763,14 @@ class ToroidalFlux(_Objective):
         return Psi
 
 
-class LinkingCurrent(_Objective):
+class LinkingCurrentConsistency(_Objective):
     """Target the self-consistent poloidal linking current between the plasma and coils.
+
+    A self-consistent coil + plasma configuration must have the sum of the signed
+    currents in the coils that poloidally link the plasma equal to the total poloidal
+    current in the plasma G. This objective computes the difference between these two
+    quantities, such that a value of zero means the coils create the correct net
+    poloidal current.
 
     Assumes the coil topology does not change (ie the linking number with the plasma
     is fixed).
@@ -1796,6 +1802,9 @@ class LinkingCurrent(_Objective):
         self,
         eq,
         coil,
+        *,
+        grid=None,
+        eq_fixed=False,
         target=None,
         bounds=None,
         weight=1,
@@ -1803,8 +1812,6 @@ class LinkingCurrent(_Objective):
         normalize_target=True,
         loss_function=None,
         deriv_mode="auto",
-        grid=None,
-        eq_fixed=False,
         jac_chunk_size=None,
         name="linking current",
     ):

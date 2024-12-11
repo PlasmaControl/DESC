@@ -4,7 +4,7 @@ Changelog
 New Feature
 
 - Adds a new profile class ``PowerProfile`` for raising profiles to a power.
-- Add ``desc.objectives.LinkingCurrent`` for ensuring that coils in a stage 2 or single stage optimization provide the required linking current for a given equilibrium.
+- Add ``desc.objectives.LinkingCurrentConsistency`` for ensuring that coils in a stage 2 or single stage optimization provide the required linking current for a given equilibrium.
 
 
 Bug Fixes

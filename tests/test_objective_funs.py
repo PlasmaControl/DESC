@@ -59,7 +59,7 @@ from desc.objectives import (
     HeatingPowerISS04,
     Isodynamicity,
     LinearObjectiveFromUser,
-    LinkingCurrent,
+    LinkingCurrentConsistency,
     MagneticWell,
     MeanCurvature,
     MercierStability,
@@ -1445,7 +1445,7 @@ class TestObjectiveFunction:
             -c * 1.5,
         ]
         np.testing.assert_allclose(coilset1._all_currents(), expected_currents)
-        obj = LinkingCurrent(eq, coilset1)
+        obj = LinkingCurrentConsistency(eq, coilset1)
         obj.build()
         f = obj.compute(coilset1.params_dict, eq.params_dict)
         np.testing.assert_allclose(f, 0)
@@ -1453,7 +1453,7 @@ class TestObjectiveFunction:
         # same with virtual coils
         coilset2 = CoilSet(coil1, coil2, NFP=2, sym=True)
         np.testing.assert_allclose(coilset2._all_currents(), expected_currents)
-        obj = LinkingCurrent(eq, coilset2)
+        obj = LinkingCurrentConsistency(eq, coilset2)
         obj.build()
         f = obj.compute(coilset2.params_dict, eq.params_dict)
         np.testing.assert_allclose(f, 0)
@@ -1464,7 +1464,7 @@ class TestObjectiveFunction:
         np.testing.assert_allclose(
             coilset3._all_currents(), expected_currents + expected_currents
         )
-        obj = LinkingCurrent(eq, coilset3)
+        obj = LinkingCurrentConsistency(eq, coilset3)
         obj.build()
         f = obj.compute(coilset3.params_dict, eq.params_dict)
         np.testing.assert_allclose(f, -G)  # coils provide 2G so error is -G
@@ -1474,7 +1474,7 @@ class TestObjectiveFunction:
         np.testing.assert_allclose(
             coilset4._all_currents(), expected_currents + [0.5 * G / 8]
         )
-        obj = LinkingCurrent(eq, coilset4)
+        obj = LinkingCurrentConsistency(eq, coilset4)
         obj.build()
         f = obj.compute(coilset4.params_dict, eq.params_dict)
         np.testing.assert_allclose(f, -0.5 * G / 8)
@@ -2515,7 +2515,7 @@ class TestComputeScalarResolution:
         FusionPower,
         GenericObjective,
         HeatingPowerISS04,
-        LinkingCurrent,
+        LinkingCurrentConsistency,
         Omnigenity,
         PlasmaCoilSetMinDistance,
         PlasmaVesselDistance,
@@ -2949,14 +2949,14 @@ class TestComputeScalarResolution:
 
     @pytest.mark.unit
     def test_compute_scalar_resolution_linking_current(self):
-        """LinkingCurrent."""
+        """LinkingCurrentConsistency."""
         coil = FourierPlanarCoil(center=[10, 1, 0])
         eq = Equilibrium()
         coilset = CoilSet.from_symmetry(coil, NFP=4, sym=True)
         f = np.zeros_like(self.res_array, dtype=float)
         for i, res in enumerate(self.res_array):
             obj = ObjectiveFunction(
-                LinkingCurrent(
+                LinkingCurrentConsistency(
                     eq,
                     coilset,
                     grid=LinearGrid(M=int(eq.M_grid * res), N=int(eq.N_grid * res)),
@@ -2996,7 +2996,7 @@ class TestObjectiveNaNGrad:
         ForceBalanceAnisotropic,
         FusionPower,
         HeatingPowerISS04,
-        LinkingCurrent,
+        LinkingCurrentConsistency,
         Omnigenity,
         PlasmaCoilSetMinDistance,
         PlasmaVesselDistance,
@@ -3283,11 +3283,11 @@ class TestObjectiveNaNGrad:
 
     @pytest.mark.unit
     def test_objective_no_nangrad_linking_current(self):
-        """LinkingCurrent."""
+        """LinkingCurrentConsistency."""
         coil = FourierPlanarCoil(center=[10, 1, 0])
         coilset = CoilSet.from_symmetry(coil, NFP=4, sym=True)
         eq = Equilibrium()
-        obj = ObjectiveFunction(LinkingCurrent(eq, coilset))
+        obj = ObjectiveFunction(LinkingCurrentConsistency(eq, coilset))
         obj.build()
         g = obj.grad(obj.x())
         assert not np.any(np.isnan(g))

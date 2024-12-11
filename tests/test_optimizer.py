@@ -35,7 +35,7 @@ from desc.objectives import (
     FixPsi,
     ForceBalance,
     GenericObjective,
-    LinkingCurrent,
+    LinkingCurrentConsistency,
     MagneticWell,
     MeanCurvature,
     ObjectiveFunction,
@@ -1405,7 +1405,7 @@ def test_optimize_coil_currents(DummyCoilSet):
         coil.current = current / coils.num_coils
 
     objective = ObjectiveFunction(QuadraticFlux(eq=eq, field=coils, vacuum=True))
-    constraints = LinkingCurrent(eq, coils, eq_fixed=True)
+    constraints = LinkingCurrentConsistency(eq, coils, eq_fixed=True)
     optimizer = Optimizer("lsq-exact")
     [coils_opt], _ = optimizer.optimize(
         things=coils,

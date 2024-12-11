@@ -3025,6 +3025,27 @@ class TestObjectiveNaNGrad:
         assert not np.any(np.isnan(g)), "boundary error"
 
     @pytest.mark.unit
+    def test_objective_no_nangrad_boundary_error_with_coil(self):
+        """BoundaryError."""
+        ext_field = FourierPlanarCoil(center=[0, 0, 10], normal=[0, 0, 1])
+
+        pres = PowerSeriesProfile([1.25e-1, 0, -1.25e-1])
+        iota = PowerSeriesProfile([-4.9e-1, 0, 3.0e-1])
+        surf = FourierRZToroidalSurface(
+            R_lmn=[4.0, 1.0],
+            modes_R=[[0, 0], [1, 0]],
+            Z_lmn=[-1.0],
+            modes_Z=[[-1, 0]],
+            NFP=1,
+        )
+
+        eq = Equilibrium(M=6, N=0, Psi=1.0, surface=surf, pressure=pres, iota=iota)
+        obj = ObjectiveFunction(BoundaryError(eq, ext_field), use_jit=False)
+        obj.build()
+        g = obj.grad(obj.x(eq, ext_field))
+        assert not np.any(np.isnan(g)), "boundary error"
+
+    @pytest.mark.unit
     def test_objective_no_nangrad_vacuum_boundary_error(self):
         """VacuumBoundaryError."""
         with pytest.warns(UserWarning):

@@ -23,7 +23,7 @@ pre-commit
 # testing and benchmarking
 markupsafe == 2.0.1
 nbmake
-pytest ~= 8.0.0
+pytest ~= 8.3.4
 pytest-benchmark
 pytest-cov >= 2.6.0
 pytest-monitor

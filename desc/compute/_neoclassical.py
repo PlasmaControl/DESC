@@ -144,7 +144,7 @@ def _foreach_pitch(fun, pitch_inv, batch_size):
     label="\\epsilon_{\\mathrm{eff}}",
     units="~",
     units_long="None",
-    description="Effective ripple modulation amplitude.",
+    description="Effective ripple modulation amplitude",
     dim=1,
     params=[],
     transforms={},
@@ -183,7 +183,7 @@ def _dI(data, B, pitch):
     ),
     units="~",
     units_long="None",
-    description="Effective ripple modulation amplitude to 3/2 power.",
+    description="Effective ripple modulation amplitude to 3/2 power",
     dim=1,
     params=[],
     transforms={"grid": []},
@@ -208,10 +208,11 @@ def _dI(data, B, pitch):
     ],
 )
 def _epsilon_32(params, transforms, profiles, data, **kwargs):
-    """https://doi.org/10.1063/1.873749.
+    """Effective ripple modulation amplitude to 3/2 power.
 
     Evaluation of 1/ν neoclassical transport in stellarators.
     V. V. Nemov, S. V. Kasilov, W. Kernbichler, M. F. Heyn.
+    https://doi.org/10.1063/1.873749.
     Phys. Plasmas 1 December 1999; 6 (12): 4622–4632.
     """
     # noqa: unused dependency
@@ -340,7 +341,7 @@ def _f3(data, B, pitch):
     ),
     units="~",
     units_long="None",
-    description="Energetic ion confinement proxy, Nemov et al.",
+    description="Energetic ion confinement proxy",
     dim=1,
     params=[],
     transforms={"grid": []},
@@ -413,7 +414,7 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
     quad2 = kwargs["quad2"] if "quad2" in kwargs else chebgauss2(quad[0].size)
 
     def Gamma_c(data):
-        """∫ dλ ∑ⱼ [v τ γ_c²]ⱼ."""
+        """∫ dλ ∑ⱼ [v τ γ_c²]ⱼ π²/4."""
         bounce = Bounce2D(
             grid,
             data,
@@ -436,6 +437,7 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
                 points,
                 is_fourier=True,
             )
+            # This is γ_c π/2.
             gamma_c = jnp.arctan(
                 safediv(
                     f1,
@@ -523,7 +525,8 @@ def _gbdrift(data, B, pitch):
     ),
     units="~",
     units_long="None",
-    description="Energetic ion confinement proxy, Velasco et al.",
+    description="Energetic ion confinement proxy "
+    "as defined by Velasco et al. (doi:10.1088/1741-4326/ac2994)",
     dim=1,
     params=[],
     transforms={"grid": []},
@@ -582,7 +585,7 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
         )
 
     def Gamma_c(data):
-        """∫ dλ ∑ⱼ [v τ γ_c²]ⱼ."""
+        """∫ dλ ∑ⱼ [v τ γ_c²]ⱼ π²/4."""
         bounce = Bounce2D(
             grid,
             data,
@@ -604,7 +607,7 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
                 bounce.points(pitch_inv, num_well=num_well),
                 is_fourier=True,
             )
-            gamma_c = jnp.arctan(safediv(cvdrift0, gbdrift))
+            gamma_c = jnp.arctan(safediv(cvdrift0, gbdrift))  # This is γ_c π/2.
             return jnp.sum(v_tau * gamma_c**2, axis=-1)
 
         return jnp.sum(

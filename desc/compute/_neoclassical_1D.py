@@ -154,7 +154,7 @@ def _fieldline_length_over_volume(data, transforms, profiles, **kwargs):
     ),
     units="~",
     units_long="None",
-    description="Effective ripple modulation amplitude to 3/2 power.",
+    description="Effective ripple modulation amplitude to 3/2 power",
     dim=1,
     params=[],
     transforms={"grid": []},
@@ -176,10 +176,11 @@ def _fieldline_length_over_volume(data, transforms, profiles, **kwargs):
 )
 @partial(jit, static_argnames=["num_well", "num_quad", "num_pitch", "batch"])
 def _epsilon_32_1D(params, transforms, profiles, data, **kwargs):
-    """https://doi.org/10.1063/1.873749.
+    """Effective ripple modulation amplitude to 3/2 power.
 
     Evaluation of 1/ν neoclassical transport in stellarators.
     V. V. Nemov, S. V. Kasilov, W. Kernbichler, M. F. Heyn.
+    https://doi.org/10.1063/1.873749.
     Phys. Plasmas 1 December 1999; 6 (12): 4622–4632.
     """
     # noqa: unused dependency
@@ -236,7 +237,7 @@ def _epsilon_32_1D(params, transforms, profiles, data, **kwargs):
     label="\\epsilon_{\\mathrm{eff}}",
     units="~",
     units_long="None",
-    description="Effective ripple modulation amplitude.",
+    description="Effective ripple modulation amplitude",
     dim=1,
     params=[],
     transforms={},
@@ -260,7 +261,7 @@ def _effective_ripple_1D(params, transforms, profiles, data, **kwargs):
     ),
     units="~",
     units_long="None",
-    description="Energetic ion confinement proxy, Nemov et al.",
+    description="Energetic ion confinement proxy",
     dim=1,
     params=[],
     transforms={"grid": []},
@@ -399,7 +400,8 @@ def _gbdrift(data, B, pitch):
     ),
     units="~",
     units_long="None",
-    description="Energetic ion confinement proxy.",
+    description="Energetic ion confinement proxy "
+    "as defined by Velasco et al. (doi:10.1088/1741-4326/ac2994)",
     dim=1,
     params=[],
     transforms={"grid": []},

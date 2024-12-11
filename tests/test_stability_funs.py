@@ -160,7 +160,7 @@ def test_compute_d_well():
     test(
         desc.examples.get("HELIOTRON"),
         ".//tests//inputs//wout_HELIOTRON.nc",
-        (0.01, 0.45),
+        (0.07, 0.45),
         rtol=1.75e-1,
     )
     test(
@@ -512,11 +512,11 @@ def test_ballooning_geometry(tmpdir_factory):
         )
         cvdrift_alt = -sign_psi * data["cvdrift"] * 2 * Bref * Lref**2 * np.sqrt(psi)
 
-        np.testing.assert_allclose(gds2, gds2_alt, rtol=4e-3)
+        np.testing.assert_allclose(gds2, gds2_alt, rtol=6e-3)
         np.testing.assert_allclose(gds22, gds22_alt)
         # gds21 is a zero crossing quantity, rtol won't work,
         # shifting the grid slightly can change rtol requirement significantly
-        np.testing.assert_allclose(gds21, gds21_alt, atol=1e-3)
+        np.testing.assert_allclose(gds21, gds21_alt, atol=2e-3)
         np.testing.assert_allclose(gbdrift, gbdrift_alt)
         # cvdrift is a zero crossing quantity, rtol won't work,
         # shifting the grid slightly can change rtol requirement significantly

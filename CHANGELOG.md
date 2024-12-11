@@ -5,6 +5,10 @@ New Feature
 
 - Adds a new profile class ``PowerProfile`` for raising profiles to a power.
 
+Bug Fixes
+
+- Small bug fix to use the correct normalization length ``a`` in the BallooningStability objective
+
 v0.13.0
 -------
 

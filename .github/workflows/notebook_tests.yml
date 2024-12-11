@@ -75,6 +75,7 @@ jobs:
           source .venv-${{ matrix.python-version }}/bin/activate
           pwd
           lscpu
+          pip list
           export PYTHONPATH=$(pwd)
           pytest -v --nbmake "./docs/notebooks" \
             --nbmake-timeout=2000 \

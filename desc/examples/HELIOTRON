@@ -7,10 +7,10 @@ NFP = 19
 Psi = 1.0
 
 # spectral resolution
-L_rad  = 12:6:24
-M_pol  =  6:3:12
+L_rad  =  8, 18
+M_pol  =  6, 12
 N_tor  =  0,  0,  3
-M_grid = 12, 18
+M_grid =  12, 18
 N_grid =  0,  0,  6
 
 # continuation parameters

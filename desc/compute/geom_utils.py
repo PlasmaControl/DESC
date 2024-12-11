@@ -4,7 +4,7 @@ import functools
 
 from desc.backend import jnp
 
-from ..utils import safenorm, safenormalize
+from ..utils import cross, dot, safediv, safenorm, safenormalize
 
 
 def reflection_matrix(normal):
@@ -28,6 +28,10 @@ def reflection_matrix(normal):
 def rotation_matrix(axis, angle=None):
     """Matrix to rotate points about axis by given angle.
 
+    NOTE: not correct if a and b are antiparallel, will
+    simply return identity when in reality negative identity
+    is correct.
+
     Parameters
     ----------
     axis : array-like, shape(3,)
@@ -50,6 +54,45 @@ def rotation_matrix(axis, angle=None):
     R1 = jnp.cos(angle) * jnp.eye(3)
     R2 = jnp.sin(angle) * jnp.cross(axis, jnp.identity(axis.shape[0]) * -1)
     R3 = (1 - jnp.cos(angle)) * jnp.outer(axis, axis)
+    return jnp.where(norm < eps, jnp.eye(3), R1 + R2 + R3)  # if axis=0, no rotation
+
+
+def _skew_matrix(a):
+    return jnp.array([[0, -a[2], a[1]], [a[2], 0, -a[0]], [-a[1], a[0], 0]])
+
+
+def rotation_matrix_vector_vector(a, b):
+    """Matrix to rotate vector a onto b.
+
+    NOTE: not correct if a and b are antiparallel, will
+    simply return identity when in reality negative identity
+    is correct.
+
+    Parameters
+    ----------
+    a,b : array-like, shape(3,)
+        Vectors, in cartesian (X,Y,Z) coordinates
+        Matrix will correspond to rotating a onto b
+
+
+    Returns
+    -------
+    rotmat : ndarray, shape(3,3)
+        Matrix to rotate points in cartesian (X,Y,Z) coordinates.
+
+    """
+    a = jnp.asarray(a)
+    b = jnp.asarray(b)
+    a = safenormalize(a)
+    b = safenormalize(b)
+    axis = cross(a, b)
+    norm = safenorm(axis)
+    axis = safenormalize(axis)
+    eps = 1e2 * jnp.finfo(axis.dtype).eps
+    skew = _skew_matrix(axis)
+    R1 = jnp.eye(3)
+    R2 = skew
+    R3 = (skew @ skew) * safediv(1, 1 + dot(a, b))
     return jnp.where(norm < eps, jnp.eye(3), R1 + R2 + R3)  # if axis=0, no rotation
 
 

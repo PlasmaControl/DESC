@@ -151,7 +151,7 @@ jobs:
 
       - name: Comment PR with the results
         if: env.has_changes == 'true'
-        uses: thollander/actions-comment-pull-request@v2
+        uses: thollander/actions-comment-pull-request@v3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:

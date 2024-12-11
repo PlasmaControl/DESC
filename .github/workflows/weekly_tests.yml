@@ -35,6 +35,7 @@ jobs:
         run: |
           pwd
           lscpu
+          pip list
           python -m pytest -v -m unit \
             --durations=0 \
             --splits 4 \

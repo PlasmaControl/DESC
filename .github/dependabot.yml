@@ -7,6 +7,36 @@ updates:
     directory: "/" # Location of package manifests
     schedule:
       interval: "weekly"
+    groups:
+      # group similar dependencies together into fewer PRs
+      docs:
+        patterns:
+          - "sphinx"
+      linting:
+        patterns:
+          - "flake8"
+          - "black"
+          - "pre-commit"
+      testing:
+        patterns:
+          - "pytest"
+          - "qic"
+          - "qsc"
+          - "shapely"
+      minor_packages:
+        patterns:
+          - "colorama"
+          - "nvgpu"
+          - "psutil"
+          - "pylatexenc"
+          - "termcolor"
+      jax:
+        patterns:
+          - "jax"
+          - "diffrax"
+          - "interpax"
+          - "orthax"
+          - "quadax"
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:

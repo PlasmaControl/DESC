@@ -36,11 +36,9 @@ First download the repository from GitHub.
     git clone https://github.com/PlasmaControl/DESC.git
     cd DESC
 
-Now pick one of the installation options below.
+Now use pip to install packages (this will only install DESC + JAX with CPU capabilities, NOT GPU)
 
-Option 1: Using pip to install packages (this will only install DESC + JAX with CPU capabilities, NOT GPU)
-
-`Option 1 tested to work on M1 Macbook on May 3, 2023`
+`tested to work on M1 Macbook on May 3, 2023`
 
 .. code-block:: sh
 
@@ -50,17 +48,6 @@ Option 1: Using pip to install packages (this will only install DESC + JAX with 
     # optionally install developer requirements (if you want to run tests)
     pip install -r devtools/dev-requirements.txt
 
-Option 2: Using conda to install packages (this will only install DESC + JAX with CPU capabilities, NOT GPU)
-
-.. code-block:: sh
-
-    conda env create --file requirements_conda.yml
-    # optionally: install developer requirements (if you want to run tests)
-    conda install --file devtools/dev-requirements_conda.yml
-
-    # to add DESC to your Python path
-    conda activate desc-env
-    pip install --no-deps --editable .
 
 On Most Linux Computing Clusters
 ********************************
@@ -88,9 +75,7 @@ First download the repository from GitHub.
     # load your python module
     module load anaconda  # this command may vary depending on cluster
 
-Now pick one of the installation options below.
-
-Option 1: Using pip to install packages (this will only install DESC + JAX with CPU capabilities, NOT GPU)
+Now use pip to install packages (this will only install DESC + JAX with CPU capabilities, NOT GPU)
 
 .. code-block:: sh
 
@@ -100,19 +85,6 @@ Option 1: Using pip to install packages (this will only install DESC + JAX with 
     # optionally install developer requirements (if you want to run tests)
     pip install -r devtools/dev-requirements.txt
 
-Option 2: Using conda to install packages (this will only install DESC + JAX with CPU capabilities, NOT GPU)
-
-.. code-block:: sh
-
-    # only need to do one of these conda env create commands, not both
-    # option A: without developer requirements
-    conda env create --file requirements_conda.yml
-    # option B: with developer requirements (if you want to run tests)
-    conda env create --file devtools/dev-requirements_conda.yml
-
-    # to add DESC to your Python path
-    conda activate desc-env
-    pip install --no-deps --editable .
 
 With CPU+GPU support
 --------------------

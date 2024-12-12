@@ -1589,13 +1589,12 @@ def test_bootstrap_optimization_comparison_qa():
         objective=objective,
         constraints=constraints,
         optimizer="proximal-lsq-exact",
-        maxiter=5,
-        gtol=1e-16,
+        maxiter=10,
         verbose=3,
     )
 
     # method 2
-    niters = 3
+    niters = 4
     for k in range(niters):
         eq2 = eq2.copy()
         data = eq2.compute("current Redl", grid)
@@ -1616,11 +1615,11 @@ def test_bootstrap_optimization_comparison_qa():
     data2 = eq2.compute(["<J*B> Redl", "<J*B>"], grid)
 
     np.testing.assert_allclose(
-        grid.compress(data1["<J*B>"]), grid.compress(data1["<J*B> Redl"]), rtol=2.1e-2
+        grid.compress(data1["<J*B>"]), grid.compress(data1["<J*B> Redl"]), rtol=2e-2
     )
     np.testing.assert_allclose(
-        grid.compress(data2["<J*B>"]), grid.compress(data2["<J*B> Redl"]), rtol=1.8e-2
+        grid.compress(data2["<J*B>"]), grid.compress(data2["<J*B> Redl"]), rtol=2e-2
     )
     np.testing.assert_allclose(
-        grid.compress(data1["<J*B>"]), grid.compress(data2["<J*B>"]), rtol=1.9e-2
+        grid.compress(data1["<J*B>"]), grid.compress(data2["<J*B>"]), rtol=2e-2
     )

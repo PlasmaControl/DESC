@@ -1,5 +1,19 @@
-"""Utilities for quadratures."""
+"""Utilities for quadratures.
 
+Notes
+-----
+Bounce integrals with bounce points where the derivative of |B| does not vanish
+have 1/2 power law singularities. However, strongly singular integrals where the
+domain of the integral ends at the local extrema of |B| are not integrable.
+
+Hence, everywhere except for the extrema, an implicit Chebyshev (``chebgauss1``
+or ``chebgauss2`` or modified Legendre quadrature (with ``automorphism_sin``)
+captures the integral because √(1−ζ²) / √ (1−λ|B|) ∼ k(λ, ζ) is smooth in ζ.
+The clustering of the nodes near the singularities is sufficient to estimate
+k(ζ, λ).
+"""
+
+from orthax.chebyshev import chebgauss, chebweight
 from orthax.legendre import legder, legval
 
 from desc.backend import eigh_tridiagonal, jnp, put
@@ -8,32 +22,38 @@ from desc.utils import errorif
 
 def bijection_to_disc(x, a, b):
     """[a, b] ∋ x ↦ y ∈ [−1, 1]."""
-    y = 2.0 * (x - a) / (b - a) - 1.0
-    return y
+    return 2.0 * (x - a) / (b - a) - 1.0
 
 
 def bijection_from_disc(x, a, b):
     """[−1, 1] ∋ x ↦ y ∈ [a, b]."""
-    y = 0.5 * (b - a) * (x + 1.0) + a
-    return y
+    return 0.5 * (b - a) * (x + 1.0) + a
 
 
 def grad_bijection_from_disc(a, b):
     """Gradient wrt ``x`` of ``bijection_from_disc``."""
-    dy_dx = 0.5 * (b - a)
-    return dy_dx
+    return 0.5 * (b - a)
 
 
-def automorphism_arcsin(x):
+def automorphism_arcsin(x, gamma=jnp.cos(0.5)):
     """[-1, 1] ∋ x ↦ y ∈ [−1, 1].
 
     This map decreases node density near the boundary by the asymptotic factor
-    √(1−x²) and adds a 1/√(1−x²) factor to the integrand.
+    √(1−γ²x²) and adds a 1/√(1−γ²x²) factor to the integrand. When applied
+    to any Gaussian quadrature, the default setting modifies the quadrature
+    to be almost-equispaced without sacrificing spectral convergence.
+
+    References
+    ----------
+    Kosloff and Tal-Ezer almost-equispaced grid where γ = 1−β.
+    See Boyd, Chebyshev and Fourier Spectral Methods section 16.9.
 
     Parameters
     ----------
     x : jnp.ndarray
         Points to transform.
+    gamma : float
+        Transformation parameter γ = 1−β. Default is cos(0.5).
 
     Returns
     -------
@@ -41,31 +61,27 @@ def automorphism_arcsin(x):
         Transformed points.
 
     """
-    y = 2.0 * jnp.arcsin(x) / jnp.pi
-    return y
+    return jnp.arcsin(gamma * x) / jnp.arcsin(gamma)
 
 
-def grad_automorphism_arcsin(x):
+def grad_automorphism_arcsin(x, gamma=jnp.cos(0.5)):
     """Gradient of arcsin automorphism."""
-    dy_dx = 2.0 / (jnp.sqrt(1.0 - x**2) * jnp.pi)
-    return dy_dx
+    return gamma / jnp.arcsin(gamma) / jnp.sqrt(1 - (gamma * x) ** 2)
 
 
 grad_automorphism_arcsin.__doc__ += "\n" + automorphism_arcsin.__doc__
 
 
-def automorphism_sin(x, s=0, m=10):
+def automorphism_sin(x, m=10):
     """[-1, 1] ∋ x ↦ y ∈ [−1, 1].
 
     This map increases node density near the boundary by the asymptotic factor
-    1/√(1−x²) and adds a √(1−x²) factor to the integrand.
+    1/√(1−x²) and adds a cosine factor to the integrand.
 
     Parameters
     ----------
     x : jnp.ndarray
         Points to transform.
-    s : float
-        Strength of derivative suppression, s ∈ [0, 1].
     m : float
         Number of machine epsilons used for floating point error buffer.
 
@@ -75,24 +91,16 @@ def automorphism_sin(x, s=0, m=10):
         Transformed points.
 
     """
-    errorif(not (0 <= s <= 1))
-    # s = 0 -> derivative vanishes like cosine.
-    # s = 1 -> derivative vanishes like cosine^k.
-    y0 = jnp.sin(0.5 * jnp.pi * x)
-    y1 = x + jnp.sin(jnp.pi * x) / jnp.pi  # k = 2
-    y = (1 - s) * y0 + s * y1
+    y = jnp.sin(0.5 * jnp.pi * x)
     # y is an expansion, so y(x) > x near x ∈ {−1, 1} and there is a tendency
     # for floating point error to overshoot the true value.
     eps = m * jnp.finfo(jnp.array(1.0).dtype).eps
     return jnp.clip(y, -1 + eps, 1 - eps)
 
 
-def grad_automorphism_sin(x, s=0):
+def grad_automorphism_sin(x):
     """Gradient of sin automorphism."""
-    dy0_dx = 0.5 * jnp.pi * jnp.cos(0.5 * jnp.pi * x)
-    dy1_dx = 1.0 + jnp.cos(jnp.pi * x)
-    dy_dx = (1 - s) * dy0_dx + s * dy1_dx
-    return dy_dx
+    return 0.5 * jnp.pi * jnp.cos(0.5 * jnp.pi * x)
 
 
 grad_automorphism_sin.__doc__ += "\n" + automorphism_sin.__doc__
@@ -115,7 +123,7 @@ def tanh_sinh(deg, m=10):
 
     Returns
     -------
-    x, w : (jnp.ndarray, jnp.ndarray)
+    x, w : tuple[jnp.ndarray]
         Shape (deg, ).
         Quadrature points and weights.
 
@@ -150,7 +158,7 @@ def leggauss_lob(deg, interior_only=False):
 
     Returns
     -------
-    x, w : (jnp.ndarray, jnp.ndarray)
+    x, w : tuple[jnp.ndarray]
         Shape (deg, ).
         Quadrature points and weights.
 
@@ -185,7 +193,7 @@ def leggauss_lob(deg, interior_only=False):
 
 
 def uniform(deg):
-    """Uniform quadrature that is Gauss-Chebyshev in transformed variable.
+    """Uniform open quadrature with nodes closer to boundary.
 
     Returns quadrature points xₖ and weights wₖ for the approximate evaluation
     of the integral ∫₋₁¹ f(x) dx ≈ ∑ₖ wₖ f(xₖ).
@@ -197,7 +205,7 @@ def uniform(deg):
 
     Returns
     -------
-    x, w : (jnp.ndarray, jnp.ndarray)
+    x, w : tuple[jnp.ndarray]
         Shape (deg, ).
         Quadrature points and weights.
 
@@ -209,6 +217,63 @@ def uniform(deg):
     x = jnp.arange(-deg + 1, deg + 1, 2) / deg
     w = 2 / deg * jnp.ones(deg)
     return x, w
+
+
+def simpson2(deg):
+    """Open Simpson rule completed by midpoint at boundary.
+
+    Parameters
+    ----------
+    deg : int
+        Number of quadrature points. Rounds up to odd integer.
+
+    Returns
+    -------
+    x, w : tuple[jnp.ndarray]
+        Shape (deg, ).
+        Quadrature points and weights.
+
+    """
+    assert deg > 3
+    deg -= 1 + (deg % 2)
+    x = jnp.arange(-deg + 1, deg + 1, 2) / deg
+    h_simp = (x[-1] - x[0]) / (deg - 1)
+    h_midp = (x[0] + 1) / 2
+
+    x = jnp.hstack([-1 + h_midp, x, 1 - h_midp], dtype=float)
+    w = jnp.hstack(
+        [
+            2 * h_midp,
+            h_simp
+            / 3
+            * jnp.hstack([1, jnp.tile(jnp.array([4, 2]), (deg - 3) // 2), 4, 1]),
+            2 * h_midp,
+        ],
+        dtype=float,
+    )
+    return x, w
+
+
+def chebgauss1(deg):
+    """Gauss-Chebyshev quadrature of the first kind with implicit weighting.
+
+    Returns quadrature points xₖ and weights wₖ for the approximate evaluation
+    of the integral ∫₋₁¹ f(x) dx ≈ ∑ₖ wₖ f(xₖ) where f(x) = g(x) / √(1−x²).
+
+    Parameters
+    ----------
+    deg : int
+        Number of quadrature points.
+
+    Returns
+    -------
+    x, w : tuple[jnp.ndarray]
+        Shape (deg, ).
+        Quadrature points and weights.
+
+    """
+    x, w = chebgauss(deg)
+    return x, w / chebweight(x)
 
 
 def chebgauss2(deg):
@@ -224,7 +289,7 @@ def chebgauss2(deg):
 
     Returns
     -------
-    x, w : (jnp.ndarray, jnp.ndarray)
+    x, w : tuple[jnp.ndarray]
         Shape (deg, ).
         Quadrature points and weights.
 
@@ -242,10 +307,10 @@ def get_quadrature(quad, automorphism):
 
     Parameters
     ----------
-    quad : (jnp.ndarray, jnp.ndarray)
+    quad : tuple[jnp.ndarray]
         Quadrature points xₖ and weights wₖ for the approximate evaluation of
         the integral ∫₋₁¹ g(x) dx = ∑ₖ wₖ g(xₖ).
-    automorphism : (Callable, Callable) or None
+    automorphism : tuple[Callable] or None
         The first callable should be an automorphism of the real interval [-1, 1].
         The second callable should be the derivative of the first. This map defines
         a change of variable for the bounce integral. The choice made for the
@@ -253,7 +318,7 @@ def get_quadrature(quad, automorphism):
 
     Returns
     -------
-    x, w : (jnp.ndarray, jnp.ndarray)
+    x, w : tuple[jnp.ndarray]
         Quadrature points and weights.
 
     """

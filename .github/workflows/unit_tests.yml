@@ -85,9 +85,10 @@ jobs:
         run: |
           pwd
           ls -a
+          ls -a .venv-${{ matrix.combos.python_version }}/bin
           lscpu
           source .venv-${{ matrix.combos.python_version }}/bin/activate
-          ls -a
+          ls -a .venv-${{ matrix.combos.python_version }}/bin
           pip list
 
       - name: Test with pytest

@@ -1364,14 +1364,13 @@ class MirrorRatio(_Objective):
 
     (Bₘₐₓ - Bₘᵢₙ) / (Bₘₐₓ + Bₘᵢₙ)
 
-    Where Bₘₐₓ and Bₘᵢₙ are the maximum and minimum values of ||B|| on given surface.
+    Where Bₘₐₓ and Bₘᵢₙ are the maximum and minimum values of ||B|| on a given surface.
     Returns one value for each surface in ``grid``.
 
     Parameters
     ----------
     eq : Equilibrium or OmnigenousField
-        Equilibrium or OmnigenousField that
-        will be optimized to satisfy the Objective.
+        Equilibrium or OmnigenousField that will be optimized to satisfy the Objective.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at. Defaults to
         ``LinearGrid(M=eq.M_grid, N=eq.N_grid)`` for ``Equilibrium``
@@ -1391,6 +1390,8 @@ class MirrorRatio(_Objective):
     def __init__(
         self,
         eq,
+        *,
+        grid=None,
         target=None,
         bounds=None,
         weight=1,
@@ -1398,7 +1399,6 @@ class MirrorRatio(_Objective):
         normalize_target=True,
         loss_function=None,
         deriv_mode="auto",
-        grid=None,
         name="mirror ratio",
         jac_chunk_size=None,
     ):

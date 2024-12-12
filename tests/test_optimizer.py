@@ -1407,13 +1407,15 @@ def test_optimize_coil_currents(DummyCoilSet):
     objective = ObjectiveFunction(QuadraticFlux(eq=eq, field=coils, vacuum=True))
     constraints = LinkingCurrentConsistency(eq, coils, eq_fixed=True)
     optimizer = Optimizer("lsq-exact")
-    [coils_opt], _ = optimizer.optimize(
-        things=coils,
-        objective=objective,
-        constraints=constraints,
-        verbose=2,
-        copy=True,
-    )
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", message=".*\n.*\nIncompatible")
+        [coils_opt], _ = optimizer.optimize(
+            things=coils,
+            objective=objective,
+            constraints=constraints,
+            verbose=2,
+            copy=True,
+        )
     # check that optimized coil currents changed by more than 15% from initial values
     np.testing.assert_array_less(
         np.asarray(coils.current).mean() * 0.15,

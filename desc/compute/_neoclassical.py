@@ -14,13 +14,13 @@ from orthax.legendre import leggauss
 
 from desc.backend import imap, jit, jnp
 
-from ..integrals._quad_utils import (
+from ..integrals.bounce_integral import Bounce2D
+from ..integrals.quad_utils import (
     automorphism_sin,
     chebgauss2,
     get_quadrature,
     grad_automorphism_sin,
 )
-from ..integrals.bounce_integral import Bounce2D
 from ..utils import cross, dot, safediv
 from .data_index import register_compute_fun
 
@@ -144,7 +144,7 @@ def _foreach_pitch(fun, pitch_inv, batch_size):
     label="\\epsilon_{\\mathrm{eff}}",
     units="~",
     units_long="None",
-    description="Effective ripple modulation amplitude.",
+    description="Effective ripple modulation amplitude",
     dim=1,
     params=[],
     transforms={},
@@ -198,7 +198,7 @@ def _dJ_ds_num(data, B, pitch):
     ),
     units="~",
     units_long="None",
-    description="Effective ripple modulation amplitude to 3/2 power.",
+    description="Effective ripple modulation amplitude to 3/2 power",
     dim=1,
     params=[],
     transforms={"grid": []},
@@ -207,7 +207,7 @@ def _dJ_ds_num(data, B, pitch):
     data=["min_tz |B|", "max_tz |B|", "kappa_g", "R0", "|grad(rho)|", "<|grad(rho)|>"]
     + Bounce2D.required_names,
     resolution_requirement="tz",
-    grid_requirement={"can_fft": True},
+    grid_requirement={"can_fft2": True},
     **_bounce_doc,
 )
 @partial(
@@ -223,10 +223,11 @@ def _dJ_ds_num(data, B, pitch):
     ],
 )
 def _epsilon_32(params, transforms, profiles, data, **kwargs):
-    """https://doi.org/10.1063/1.873749.
+    """Effective ripple modulation amplitude to 3/2 power.
 
     Evaluation of 1/ν neoclassical transport in stellarators.
     V. V. Nemov, S. V. Kasilov, W. Kernbichler, M. F. Heyn.
+    https://doi.org/10.1063/1.873749.
     Phys. Plasmas 1 December 1999; 6 (12): 4622–4632.
     """
     # noqa: unused dependency
@@ -564,7 +565,7 @@ def _f3(data, B, pitch):
     ),
     units="~",
     units_long="None",
-    description="Energetic ion confinement proxy, Nemov et al.",
+    description="Energetic ion confinement proxy",
     dim=1,
     params=[],
     transforms={"grid": []},
@@ -587,7 +588,7 @@ def _f3(data, B, pitch):
     ]
     + Bounce2D.required_names,
     resolution_requirement="tz",
-    grid_requirement={"can_fft": True},
+    grid_requirement={"can_fft2": True},
     **_bounce_doc,
     quad2="Same as ``quad`` for the weak singular integrals in particular.",
 )
@@ -637,7 +638,7 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
     quad2 = kwargs["quad2"] if "quad2" in kwargs else chebgauss2(quad[0].size)
 
     def Gamma_c(data):
-        """∫ dλ ∑ⱼ [v τ γ_c²]ⱼ."""
+        """∫ dλ ∑ⱼ [v τ γ_c²]ⱼ π²/4."""
         bounce = Bounce2D(
             grid,
             data,
@@ -660,11 +661,17 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
                 points,
                 is_fourier=True,
             )
+            # This is γ_c π/2.
             gamma_c = jnp.arctan(
                 safediv(
                     f1,
                     (
                         f2
+                        # TODO: Once people are happy with benchmarking
+                        #       we can push this integral into f2.
+                        #       The quadrature is less optimal, but
+                        #       it still works and it would be more efficient
+                        #       since we don't have to interpolate twice.
                         + bounce.integrate(
                             _f3,
                             pitch_inv,
@@ -727,7 +734,7 @@ def _cvdrift0(data, B, pitch):
 
 def _gbdrift(data, B, pitch):
     return safediv(
-        (data["periodic(gbdrift)"] + data["secular(gbdrift)/phi"] * data["zeta"])
+        (data["gbdrift (periodic)"] + data["gbdrift (secular)/phi"] * data["zeta"])
         * (1 - 0.5 * pitch * B),
         jnp.sqrt(jnp.abs(1 - pitch * B)),
     )
@@ -742,7 +749,8 @@ def _gbdrift(data, B, pitch):
     ),
     units="~",
     units_long="None",
-    description="Energetic ion confinement proxy, Velasco et al.",
+    description="Energetic ion confinement proxy "
+    "as defined by Velasco et al. (doi:10.1088/1741-4326/ac2994)",
     dim=1,
     params=[],
     transforms={"grid": []},
@@ -752,12 +760,12 @@ def _gbdrift(data, B, pitch):
         "min_tz |B|",
         "max_tz |B|",
         "cvdrift0",
-        "periodic(gbdrift)",
-        "secular(gbdrift)/phi",
+        "gbdrift (periodic)",
+        "gbdrift (secular)/phi",
     ]
     + Bounce2D.required_names,
     resolution_requirement="tz",
-    grid_requirement={"can_fft": True},
+    grid_requirement={"can_fft2": True},
     **_bounce_doc,
 )
 @partial(
@@ -801,7 +809,7 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
         )
 
     def Gamma_c(data):
-        """∫ dλ ∑ⱼ [v τ γ_c²]ⱼ."""
+        """∫ dλ ∑ⱼ [v τ γ_c²]ⱼ π²/4."""
         bounce = Bounce2D(
             grid,
             data,
@@ -819,11 +827,11 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
                 [_v_tau, _cvdrift0, _gbdrift],
                 pitch_inv,
                 data,
-                ["cvdrift0", "periodic(gbdrift)", "secular(gbdrift)/phi"],
+                ["cvdrift0", "gbdrift (periodic)", "gbdrift (secular)/phi"],
                 bounce.points(pitch_inv, num_well=num_well),
                 is_fourier=True,
             )
-            gamma_c = jnp.arctan(safediv(cvdrift0, gbdrift))
+            gamma_c = jnp.arctan(safediv(cvdrift0, gbdrift))  # This is γ_c π/2.
             return jnp.sum(v_tau * gamma_c**2, axis=-1)
 
         return jnp.sum(
@@ -838,8 +846,8 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
         Gamma_c,
         fun_data={
             "cvdrift0": data["cvdrift0"],
-            "periodic(gbdrift)": data["periodic(gbdrift)"],
-            "secular(gbdrift)/phi": data["secular(gbdrift)/phi"],
+            "gbdrift (periodic)": data["gbdrift (periodic)"],
+            "gbdrift (secular)/phi": data["gbdrift (secular)/phi"],
         },
         data=data,
         theta=theta,

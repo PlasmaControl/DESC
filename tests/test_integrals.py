@@ -42,7 +42,8 @@ from desc.integrals._bounce_utils import (
     interp_to_argmin_hard,
 )
 from desc.integrals._interp_utils import fourier_pts
-from desc.integrals._quad_utils import (
+from desc.integrals.basis import FourierChebyshevSeries
+from desc.integrals.quad_utils import (
     automorphism_sin,
     bijection_from_disc,
     chebgauss1,
@@ -53,7 +54,6 @@ from desc.integrals._quad_utils import (
     leggauss_lob,
     tanh_sinh,
 )
-from desc.integrals.basis import FourierChebyshevSeries
 from desc.integrals.singularities import _get_quadrature_nodes
 from desc.integrals.surface_integral import _get_grid_surface
 from desc.transform import Transform
@@ -998,9 +998,6 @@ class TestBounceQuadrature:
         quad = integrand(Z, k).dot(w) * grad_bijection_from_disc(a, b) / 2
         return quad
 
-    # TODO: add the analytical test that converts incomplete elliptic integrals to
-    #  complete ones using the Reciprocal Modulus transformation
-    #  https://dlmf.nist.gov/19.7#E4.
     @staticmethod
     def elliptic_incomplete(k2):
         """Calculate elliptic integrals for bounce averaged binormal drift.
@@ -1247,7 +1244,6 @@ class TestBounce:
         things = {"grid": grid, "eq": eq}
         return data, things
 
-    # TODO: stellarator geometry test with ripples
     @staticmethod
     def drift_analytic(data):
         """Compute analytic approximation for bounce-averaged binormal drift.
@@ -1623,10 +1619,10 @@ class TestBounce2D:
         """Integrand of numerator of bounce averaged binormal drift."""
         g = jnp.sqrt(jnp.abs(1 - pitch * B))
         cvdrift = (
-            data["periodic(cvdrift)"] + data["secular(gbdrift)/phi"] * data["zeta"]
+            data["cvdrift (periodic)"] + data["gbdrift (secular)/phi"] * data["zeta"]
         )
         gbdrift = (
-            data["periodic(gbdrift)"] + data["secular(gbdrift)/phi"] * data["zeta"]
+            data["gbdrift (periodic)"] + data["gbdrift (secular)/phi"] * data["zeta"]
         )
         return (cvdrift * g) - (0.5 * g * gbdrift) + (0.5 * gbdrift / g)
 
@@ -1641,7 +1637,7 @@ class TestBounce2D:
         grid = LinearGrid(
             rho=data["rho"], M=eq.M_grid, N=max(1, eq.N_grid), NFP=eq.NFP, sym=False
         )
-        names = ["periodic(cvdrift)", "periodic(gbdrift)", "secular(gbdrift)/phi"]
+        names = ["cvdrift (periodic)", "gbdrift (periodic)", "gbdrift (secular)/phi"]
         grid_data = eq.compute(names=Bounce2D.required_names + names, grid=grid)
         for name in names:
             grid_data[name] = grid_data[name] * data["normalization"]

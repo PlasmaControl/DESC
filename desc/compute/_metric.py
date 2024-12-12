@@ -1952,15 +1952,15 @@ def _g_sup_ra(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["periodic(gbdrift)", "secular(gbdrift)"],
+    data=["gbdrift (periodic)", "gbdrift (secular)"],
 )
 def _gbdrift(params, transforms, profiles, data, **kwargs):
-    data["gbdrift"] = data["periodic(gbdrift)"] + data["secular(gbdrift)"]
+    data["gbdrift"] = data["gbdrift (periodic)"] + data["gbdrift (secular)"]
     return data
 
 
 @register_compute_fun(
-    name="periodic(gbdrift)",
+    name="gbdrift (periodic)",
     label="\\mathrm{periodic}(\\nabla \\vert B \\vert)_{\\mathrm{drift}}",
     units="1 / Wb",
     units_long="Inverse webers",
@@ -1970,18 +1970,18 @@ def _gbdrift(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["|B|^2", "b", "periodic(grad(alpha))", "grad(|B|)"],
+    data=["|B|^2", "b", "grad(alpha) (periodic)", "grad(|B|)"],
 )
 def _periodic_gbdrift(params, transforms, profiles, data, **kwargs):
-    data["periodic(gbdrift)"] = (
-        dot(data["b"], cross(data["grad(|B|)"], data["periodic(grad(alpha))"]))
+    data["gbdrift (periodic)"] = (
+        dot(data["b"], cross(data["grad(|B|)"], data["grad(alpha) (periodic)"]))
         / data["|B|^2"]
     )
     return data
 
 
 @register_compute_fun(
-    name="secular(gbdrift)",
+    name="gbdrift (secular)",
     label="\\mathrm{secular}(\\nabla \\vert B \\vert)_{\\mathrm{drift}}",
     units="1 / Wb",
     units_long="Inverse webers",
@@ -1991,18 +1991,18 @@ def _periodic_gbdrift(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["|B|^2", "b", "secular(grad(alpha))", "grad(|B|)"],
+    data=["|B|^2", "b", "grad(alpha) (secular)", "grad(|B|)"],
 )
 def _secular_gbdrift(params, transforms, profiles, data, **kwargs):
-    data["secular(gbdrift)"] = (
-        dot(data["b"], cross(data["grad(|B|)"], data["secular(grad(alpha))"]))
+    data["gbdrift (secular)"] = (
+        dot(data["b"], cross(data["grad(|B|)"], data["grad(alpha) (secular)"]))
         / data["|B|^2"]
     )
     return data
 
 
 @register_compute_fun(
-    name="secular(gbdrift)/phi",
+    name="gbdrift (secular)/phi",
     label="\\mathrm{secular}(\\nabla \\vert B \\vert)_{\\mathrm{drift}} / \\phi",
     units="1 / Wb",
     units_long="Inverse webers",
@@ -2016,7 +2016,7 @@ def _secular_gbdrift(params, transforms, profiles, data, **kwargs):
     data=["|B|^2", "b", "e^rho", "grad(|B|)", "iota_r"],
 )
 def _secular_gbdrift_over_phi(params, transforms, profiles, data, **kwargs):
-    data["secular(gbdrift)/phi"] = (
+    data["gbdrift (secular)/phi"] = (
         dot(data["b"], cross(data["e^rho"], data["grad(|B|)"]))
         * data["iota_r"]
         / data["|B|^2"]
@@ -2040,16 +2040,16 @@ def _secular_gbdrift_over_phi(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["periodic(cvdrift)", "secular(gbdrift)"],
+    data=["cvdrift (periodic)", "gbdrift (secular)"],
 )
 def _cvdrift(params, transforms, profiles, data, **kwargs):
-    data["cvdrift"] = data["periodic(cvdrift)"] + data["secular(gbdrift)"]
+    data["cvdrift"] = data["cvdrift (periodic)"] + data["gbdrift (secular)"]
     return data
 
 
 @register_compute_fun(
-    name="periodic(cvdrift)",
-    label="\\mathrm{periodic(cvdrift)}",
+    name="cvdrift (periodic)",
+    label="\\mathrm{cvdrift (periodic)}",
     units="1 / Wb",
     units_long="Inverse webers",
     description="Periodic, binormal, geometric part of the curvature drift.",
@@ -2058,11 +2058,11 @@ def _cvdrift(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["p_r", "psi_r", "|B|^2", "periodic(gbdrift)"],
+    data=["p_r", "psi_r", "|B|^2", "gbdrift (periodic)"],
 )
 def _periodic_cvdrift(params, transforms, profiles, data, **kwargs):
-    data["periodic(cvdrift)"] = (
-        mu_0 * data["p_r"] / data["psi_r"] / data["|B|^2"] + data["periodic(gbdrift)"]
+    data["cvdrift (periodic)"] = (
+        mu_0 * data["p_r"] / data["psi_r"] / data["|B|^2"] + data["gbdrift (periodic)"]
     )
     return data
 

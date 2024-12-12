@@ -221,14 +221,12 @@ def test_compute_everything():
 
             names = set(data_index[p].keys())
 
-            def need_src(name):
-                return (
-                    bool(data_index[p][name]["source_grid_requirement"])
-                    or "effective ripple" in name
-                    or "Gamma_c" in name
+            def need_special(name):
+                return bool(data_index[p][name]["source_grid_requirement"]) or bool(
+                    data_index[p][name]["grid_requirement"]
                 )
 
-            names -= _grow_seeds(p, set(filter(need_src, names)), names)
+            names -= _grow_seeds(p, set(filter(need_special, names)), names)
 
             this_branch_data_rpz[p] = things[p].compute(
                 list(names), **grid.get(p, {}), basis="rpz"
@@ -251,7 +249,8 @@ def test_compute_everything():
             if p in no_xyz_things:
                 continue
             # remove quantities that are not implemented in the XYZ basis
-            # TODO: generalize this instead of hard-coding for "grad(B)" & dependencies
+            # TODO (#1110): generalize this instead of hard-coding for
+            #  the quantities "grad(B)" & dependencies
             names_xyz = (
                 names - {"grad(B)", "|grad(B)|", "L_grad(B)"}
                 if "grad(B)" in names

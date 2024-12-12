@@ -19,15 +19,29 @@ from desc.grid import LinearGrid
 from desc.utils import Timer, setdefault
 
 from ..integrals import Bounce2D
-from ..integrals._quad_utils import (
+from ..integrals.basis import FourierChebyshevSeries
+from ..integrals.quad_utils import (
     automorphism_sin,
     chebgauss2,
     get_quadrature,
     grad_automorphism_sin,
 )
-from ..integrals.basis import FourierChebyshevSeries
 from .objective_funs import _Objective, collect_docs
 from .utils import _parse_callable_target_bounds
+
+_bounce_overwrite = {
+    "deriv_mode": """
+    deriv_mode : {"auto", "fwd", "rev"}
+        Specify how to compute Jacobian matrix, either forward mode or reverse mode AD.
+        ``auto`` selects forward or reverse mode based on the size of the input and
+        output of the objective. Has no effect on ``self.grad`` or ``self.hess`` which
+        always use reverse mode and forward over reverse mode respectively.
+
+        Default is ``fwd``. If ``rev`` is chosen, then ``jac_chunk_size=1`` is chosen
+        by default. In ``rev`` mode, reducing the pitch angle parameter ``batch_size``
+        does not reduce memory, so it is recommended to retain the default for that.
+        """
+}
 
 
 class EffectiveRipple(_Objective):
@@ -62,8 +76,10 @@ class EffectiveRipple(_Objective):
         Grid resolution in toroidal direction for Clebsch coordinate grid.
         Preferably power of 2.
     Y_B : int
-        Desired resolution for |B| along field lines to compute bounce points.
-        Default is double ``Y``.
+        Desired resolution for algorithm to compute bounce points.
+        Default is double ``Y``. Something like 100 is usually sufficient.
+        Currently, this is the number of knots per toroidal transit over
+        to approximate |B| with cubic splines.
     num_transit : int
         Number of toroidal transits to follow field line.
         For axisymmetric devices, one poloidal transit is sufficient. Otherwise,
@@ -96,6 +112,7 @@ class EffectiveRipple(_Objective):
         bounds_default="``target=0``.",
         normalize_detail=" Note: Has no effect for this objective.",
         normalize_target_detail=" Note: Has no effect for this objective.",
+        overwrite=_bounce_overwrite,
     )
 
     _coordinates = "r"
@@ -111,7 +128,7 @@ class EffectiveRipple(_Objective):
         normalize=True,
         normalize_target=True,
         loss_function=None,
-        deriv_mode="auto",
+        deriv_mode="fwd",
         grid=None,
         name="Effective ripple",
         jac_chunk_size=None,
@@ -130,7 +147,7 @@ class EffectiveRipple(_Objective):
             target = 0.0
 
         self._grid = grid
-        self._constants = {"quad_weights": 1}
+        self._constants = {"quad_weights": 1.0}
         self._X = X
         self._Y = Y
         Y_B = setdefault(Y_B, 2 * Y)
@@ -142,6 +159,10 @@ class EffectiveRipple(_Objective):
             "num_pitch": num_pitch,
             "batch_size": batch_size,
         }
+        if deriv_mode == "rev" and jac_chunk_size is None:
+            # Reverse mode is bottlenecked by coordinate mapping.
+            # Compute Jacobian one flux surface at a time.
+            jac_chunk_size = 1
 
         super().__init__(
             things=eq,
@@ -170,14 +191,14 @@ class EffectiveRipple(_Objective):
         eq = self.things[0]
         if self._grid is None:
             self._grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False)
-        assert self._grid.can_fft
+        assert self._grid.can_fft2
         self._constants["clebsch"] = FourierChebyshevSeries.nodes(
             self._X,
             self._Y,
             self._grid.compress(self._grid.nodes[:, 0]),
             domain=(0, 2 * np.pi),
         )
-        self._constants["fieldline_quad"] = leggauss(self._hyperparam["Y_B"] // 2)
+        self._constants["fieldline quad"] = leggauss(self._hyperparam["Y_B"] // 2)
         self._constants["quad"] = chebgauss2(self._hyperparam.pop("num_quad"))
 
         self._dim_f = self._grid.num_rho
@@ -219,14 +240,14 @@ class EffectiveRipple(_Objective):
             Effective ripple as a function of the flux surface label.
 
         """
-        # TODO: GitHub pull request #1094.
+        # TODO (#1094)
         if constants is None:
             constants = self.constants
         eq = self.things[0]
         data = compute_fun(
             eq, "iota", params, constants["transforms"], constants["profiles"]
         )
-        # TODO: GitHub issue #1034. Use old theta values as initial guess.
+        # TODO (#1034): Use old theta values as initial guess.
         data = compute_fun(
             eq,
             "effective ripple",
@@ -244,7 +265,7 @@ class EffectiveRipple(_Objective):
                 # perturbed λ coefficients and not the original equilibrium's.
                 params=params,
             ),
-            fieldline_quad=constants["fieldline_quad"],
+            fieldline_quad=constants["fieldline quad"],
             quad=constants["quad"],
             **self._hyperparam,
         )
@@ -281,8 +302,10 @@ class GammaC(_Objective):
         Grid resolution in toroidal direction for Clebsch coordinate grid.
         Preferably power of 2.
     Y_B : int
-        Desired resolution for |B| along field lines to compute bounce points.
-        Default is double ``Y``.
+        Desired resolution for algorithm to compute bounce points.
+        Default is double ``Y``. Something like 100 is usually sufficient.
+        Currently, this is the number of knots per toroidal transit over
+        to approximate |B| with cubic splines.
     num_transit : int
         Number of toroidal transits to follow field line.
         For axisymmetric devices, one poloidal transit is sufficient. Otherwise,
@@ -311,14 +334,13 @@ class GammaC(_Objective):
         Whether to use the Γ_c as defined by Nemov et al. or Velasco et al.
         Default is Nemov. Set to ``False`` to use Velascos's.
 
-        Note that Nemov's Γ_c converges to a finite nonzero value in the
-        infinity limit of the number of toroidal transits.
-        Velasco's expression has a secular term that will drive the result
-        to zero as the number of toroidal transits increases unless the
-        secular term is averaged out from all the singular integrals.
-        Therefore, an optimization using Velasco's metric should be evaluated by
-        measuring decrease in Γ_c at a fixed number of toroidal transits until
-        unless an adaptive quadrature is used.
+        Nemov's Γ_c converges to a finite nonzero value in the infinity limit
+        of the number of toroidal transits. Velasco's expression has a secular
+        term that drives the result to zero as the number of toroidal transits
+        increases if the secular term is not averaged out from the singular
+        integrals. Currently, an optimization using Velasco's metric may need
+        to be evaluated by measuring decrease in Γ_c at a fixed number of toroidal
+        transits.
 
     """
 
@@ -327,6 +349,7 @@ class GammaC(_Objective):
         bounds_default="``target=0``.",
         normalize_detail=" Note: Has no effect for this objective.",
         normalize_target_detail=" Note: Has no effect for this objective.",
+        overwrite=_bounce_overwrite,
     )
 
     _coordinates = "r"
@@ -342,7 +365,7 @@ class GammaC(_Objective):
         normalize=True,
         normalize_target=True,
         loss_function=None,
-        deriv_mode="auto",
+        deriv_mode="fwd",
         grid=None,
         name="Gamma_c",
         jac_chunk_size=None,
@@ -362,7 +385,7 @@ class GammaC(_Objective):
             target = 0.0
 
         self._grid = grid
-        self._constants = {"quad_weights": 1}
+        self._constants = {"quad_weights": 1.0}
         self._X = X
         self._Y = Y
         Y_B = setdefault(Y_B, 2 * Y)
@@ -374,10 +397,11 @@ class GammaC(_Objective):
             "num_pitch": num_pitch,
             "batch_size": batch_size,
         }
-        if Nemov:
-            self._key = "Gamma_c"
-        else:
-            self._key = "Gamma_c Velasco"
+        self._key = "Gamma_c" if Nemov else "Gamma_c Velasco"
+        if deriv_mode == "rev" and jac_chunk_size is None:
+            # Reverse mode is bottlenecked by coordinate mapping.
+            # Compute Jacobian one flux surface at a time.
+            jac_chunk_size = 1
 
         super().__init__(
             things=eq,
@@ -406,20 +430,21 @@ class GammaC(_Objective):
         eq = self.things[0]
         if self._grid is None:
             self._grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False)
-        assert self._grid.can_fft
+        assert self._grid.can_fft2
         self._constants["clebsch"] = FourierChebyshevSeries.nodes(
             self._X,
             self._Y,
             self._grid.compress(self._grid.nodes[:, 0]),
             domain=(0, 2 * np.pi),
         )
-        self._constants["fieldline_quad"] = leggauss(self._hyperparam["Y_B"] // 2)
+        self._constants["fieldline quad"] = leggauss(self._hyperparam["Y_B"] // 2)
         num_quad = self._hyperparam.pop("num_quad")
         self._constants["quad"] = get_quadrature(
             leggauss(num_quad),
             (automorphism_sin, grad_automorphism_sin),
         )
-        self._constants["quad2"] = chebgauss2(num_quad)
+        if self._key == "Gamma_c":
+            self._constants["quad2"] = chebgauss2(num_quad)
 
         self._dim_f = self._grid.num_rho
         self._target, self._bounds = _parse_callable_target_bounds(
@@ -458,14 +483,15 @@ class GammaC(_Objective):
         """
         if constants is None:
             constants = self.constants
-        if "quad2" in constants:
-            self._hyperparam["quad2"] = constants["quad2"]
+        quad2 = {}
+        if self._key == "Gamma_c":
+            quad2["quad2"] = constants["quad2"]
 
         eq = self.things[0]
         data = compute_fun(
             eq, "iota", params, constants["transforms"], constants["profiles"]
         )
-        # TODO: GitHub issue #1034. Use old theta values as initial guess.
+        # TODO (#1034): Use old theta values as initial guess.
         data = compute_fun(
             eq,
             self._key,
@@ -483,8 +509,9 @@ class GammaC(_Objective):
                 # perturbed λ coefficients and not the original equilibrium's.
                 params=params,
             ),
-            fieldline_quad=constants["fieldline_quad"],
+            fieldline_quad=constants["fieldline quad"],
             quad=constants["quad"],
+            **quad2,
             **self._hyperparam,
         )
         return constants["transforms"]["grid"].compress(data[self._key])

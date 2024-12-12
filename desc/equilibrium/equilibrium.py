@@ -1061,8 +1061,10 @@ class Equilibrium(IOAble, Optimizable):
                 sym=self.sym
                 and all(
                     data_index[p][dep]["grid_requirement"].get("sym", True)
-                    # TODO: GitHub issue #1206.
-                    and not data_index[p][dep]["grid_requirement"].get("can_fft", False)
+                    # TODO (#1206)
+                    and not data_index[p][dep]["grid_requirement"].get(
+                        "can_fft2", False
+                    )
                     for dep in dep1dr
                 ),
             )
@@ -1109,8 +1111,10 @@ class Equilibrium(IOAble, Optimizable):
                 sym=self.sym
                 and all(
                     data_index[p][dep]["grid_requirement"].get("sym", True)
-                    # TODO: GitHub issue #1206.
-                    and not data_index[p][dep]["grid_requirement"].get("can_fft", False)
+                    # TODO (#1206)
+                    and not data_index[p][dep]["grid_requirement"].get(
+                        "can_fft2", False
+                    )
                     for dep in dep1dz
                 ),
             )
@@ -1443,7 +1447,6 @@ class Equilibrium(IOAble, Optimizable):
     @property
     def spectral_indexing(self):
         """str: Type of indexing used for the spectral basis."""
-        # TODO: allow this to change?
         return self._spectral_indexing
 
     @property
@@ -1972,8 +1975,6 @@ class Equilibrium(IOAble, Optimizable):
             raise ValueError("Input must be a pyQSC or pyQIC solution.") from e
 
         rho, _ = special.js_roots(L, 2, 2)
-        # TODO: could make this an OCS grid to improve fitting, need to figure out
-        # how concentric grids work with QSC
         grid = LinearGrid(rho=rho, theta=ntheta, zeta=na_eq.phi, NFP=na_eq.nfp)
         basis_R = FourierZernikeBasis(
             L=L,

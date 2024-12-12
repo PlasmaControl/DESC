@@ -66,9 +66,9 @@ not_finite_limits = {
     "g^ra",
     "gbdrift",
     "grad(alpha)",
-    "periodic(grad(alpha))",
-    "periodic(gbdrift)",
-    "periodic(cvdrift)",
+    "grad(alpha) (periodic)",
+    "gbdrift (periodic)",
+    "cvdrift (periodic)",
     "|e^helical|",
     "|grad(theta)|",
     "<J*B> Redl",  # may not exist for all configurations
@@ -139,12 +139,14 @@ def _skip_this(eq, name):
         or (eq.anisotropy is None and "beta_a" in name)
         or (eq.pressure is not None and "<J*B> Redl" in name)
         or (eq.current is None and "iota_num" in name)
-        # These quantities require a coordinate mapping to compute and special grids, so
-        # it's not economical to test their axis limits here. Instead, a grid that
-        # includes the axis should be used in existing unit tests for these quantities.
         or bool(
             data_index["desc.equilibrium.equilibrium.Equilibrium"][name][
                 "source_grid_requirement"
+            ]
+        )
+        or bool(
+            data_index["desc.equilibrium.equilibrium.Equilibrium"][name][
+                "grid_requirement"
             ]
         )
     )
@@ -193,7 +195,8 @@ def assert_is_continuous(
     """
     if kwargs is None:
         kwargs = {}
-    # TODO: remove when boozer transform works with multiple surfaces
+    # TODO ( #671, #1206):currently skip Boozer quants because it need sym=False
+    #      grid (#1206) and Boozer axis limits are not yet implemented (#671)
     names = [
         name
         for name in names
@@ -291,10 +294,10 @@ class TestAxisLimits:
             "iota_r": {"atol": 1e-6},
             "iota_num_rr": {"atol": 5e-5},
             "grad(B)": {"rtol": 1e-4},
-            "secular(alpha_r)": {"atol": 1e-4},
-            "secular(grad(alpha))": {"atol": 1e-4},
-            "secular(gbdrift)": {"atol": 1e-4},
-            "secular(gbdrift)/phi": {"atol": 1e-4},
+            "alpha_r (secular)": {"atol": 1e-4},
+            "grad(alpha) (secular)": {"atol": 1e-4},
+            "gbdrift (secular)": {"atol": 1e-4},
+            "gbdrift (secular)/phi": {"atol": 1e-4},
         }
         zero_map = dict.fromkeys(zero_limits, {"desired_at_axis": 0})
         kwargs = weaker_tolerance | zero_map

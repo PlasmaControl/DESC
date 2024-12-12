@@ -16,18 +16,18 @@ from desc.integrals._interp_utils import (
     polyroot_vec,
     polyval_vec,
 )
-from desc.integrals._quad_utils import (
-    bijection_from_disc,
-    grad_bijection_from_disc,
-    simpson2,
-    uniform,
-)
 from desc.integrals.basis import (
     FourierChebyshevSeries,
     PiecewiseChebyshevSeries,
     _add2legend,
     _in_epigraph_and,
     _plot_intersect,
+)
+from desc.integrals.quad_utils import (
+    bijection_from_disc,
+    grad_bijection_from_disc,
+    simpson2,
+    uniform,
 )
 from desc.utils import (
     atleast_nd,
@@ -99,7 +99,7 @@ def _check_spline_shape(knots, g, dg_dz, pitch_inv=None):
         to that field line.
 
     """
-    errorif(knots.ndim != 1, msg=f"knots should be 1d; got shape {knots.shape}.")
+    errorif(knots.ndim != 1, msg=f"knots should be 1d, got shape {knots.shape}.")
     errorif(
         g.shape[-2] != (knots.size - 1),
         msg=(
@@ -316,7 +316,7 @@ def _bounce_quadrature(
     check=False,
     plot=False,
 ):
-    """Bounce integrate ∫ f(λ, ℓ) dℓ.
+    """Bounce integrate ∫ f(ρ,α,λ,ℓ) dℓ.
 
     Parameters
     ----------
@@ -331,7 +331,7 @@ def _bounce_quadrature(
         Unique ζ coordinates where the arrays in ``data`` and ``f`` were evaluated.
     integrand : callable or list[callable]
         The composition operator on the set of functions in ``data`` that
-        maps that determines ``f`` in ∫ f(λ, ℓ) dℓ. It should accept a dictionary
+        maps that determines ``f`` in ∫ f(ρ,α,λ,ℓ) dℓ. It should accept a dictionary
         which stores the interpolated data and the keyword argument ``pitch``.
     pitch_inv : jnp.ndarray
         Shape (num alpha, num rho, num pitch).
@@ -413,7 +413,8 @@ def _bounce_quadrature(
                 plot=False,
             )
 
-        # TODO: Use batch_size arg of imap after increasing JAX version requirement.
+        # TODO (#1386): Use batch_size arg of imap after
+        #  increasing JAX version requirement.
         result = imap(loop, (jnp.moveaxis(z1, -1, 0), jnp.moveaxis(z2, -1, 0)))[1]
         result = [jnp.moveaxis(r, source=0, destination=-1) for r in result]
 
@@ -817,7 +818,7 @@ def interp_to_argmin_hard(h, points, knots, g, dg_dz, method="cubic"):
 
     Let E = {ζ ∣ ζ₁ < ζ < ζ₂} and A ∈ argmin_E g(ζ). Returns h(A).
 
-    The argmin operation is defined as the expected value under the softmax
+    The argmax operation is defined as the expected value under the softmax
     probability distribution.
     s : x ∈ ℝⁿ, β ∈ ℝ ↦ [eᵝˣ⁽¹⁾, …, eᵝˣ⁽ⁿ⁾] / ∑ₖ₌₁ⁿ eᵝˣ⁽ᵏ⁾
 
@@ -895,7 +896,7 @@ def interp_fft_to_argmin(
 
     Let E = {ζ ∣ ζ₁ < ζ < ζ₂} and A = argmin_E g(ζ). Returns mean_A h(ζ).
 
-    The argmin operation is defined as the expected value under the softmax
+    The argmax operation is defined as the expected value under the softmax
     probability distribution.
     s : x ∈ ℝⁿ, β ∈ ℝ ↦ [eᵝˣ⁽¹⁾, …, eᵝˣ⁽ⁿ⁾] / ∑ₖ₌₁ⁿ eᵝˣ⁽ᵏ⁾
 
@@ -986,7 +987,7 @@ def interp_fft_to_argmin(
     return jnp.linalg.vecdot(argmin, h[..., jnp.newaxis, :])
 
 
-# TODO: Generalize this beyond ζ = ϕ or just map to Clebsch with ϕ.
+# TODO (#568): Generalize this beyond ζ = ϕ or just map to Clebsch with ϕ.
 def get_fieldline(alpha_0, iota, num_transit, period):
     """Get sequence of poloidal coordinates A = (α₀, α₁, …, αₘ₋₁) of field line.
 
@@ -1046,7 +1047,7 @@ def fourier_chebyshev(theta, iota, alpha, num_transit):
     The field line label α changes discontinuously, so the approximation
     g defined with basis function in (α, ζ) coordinates to some continuous
     function f does not guarantee continuity between cuts of the field line
-    until full convergence of g to f.
+    until sufficient convergence of g to f.
 
     Note if g were defined with basis functions in straight field line
     coordinates, then continuity between cuts of the field line, as

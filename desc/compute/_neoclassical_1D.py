@@ -7,13 +7,13 @@ from quadax import simpson
 
 from desc.backend import imap, jit, jnp
 
-from ..integrals._quad_utils import (
+from ..integrals.bounce_integral import Bounce1D
+from ..integrals.quad_utils import (
     automorphism_sin,
     chebgauss2,
     get_quadrature,
     grad_automorphism_sin,
 )
-from ..integrals.bounce_integral import Bounce1D
 from ..utils import cross, dot, safediv
 from ._neoclassical import _bounce_doc, _cvdrift0, _dH, _dI, _f1, _f2, _f3, _v_tau
 from .data_index import register_compute_fun
@@ -154,7 +154,7 @@ def _fieldline_length_over_volume(data, transforms, profiles, **kwargs):
     ),
     units="~",
     units_long="None",
-    description="Effective ripple modulation amplitude to 3/2 power.",
+    description="Effective ripple modulation amplitude to 3/2 power",
     dim=1,
     params=[],
     transforms={"grid": []},
@@ -176,10 +176,11 @@ def _fieldline_length_over_volume(data, transforms, profiles, **kwargs):
 )
 @partial(jit, static_argnames=["num_well", "num_quad", "num_pitch", "batch"])
 def _epsilon_32_1D(params, transforms, profiles, data, **kwargs):
-    """https://doi.org/10.1063/1.873749.
+    """Effective ripple modulation amplitude to 3/2 power.
 
     Evaluation of 1/ν neoclassical transport in stellarators.
     V. V. Nemov, S. V. Kasilov, W. Kernbichler, M. F. Heyn.
+    https://doi.org/10.1063/1.873749.
     Phys. Plasmas 1 December 1999; 6 (12): 4622–4632.
     """
     # noqa: unused dependency
@@ -236,7 +237,7 @@ def _epsilon_32_1D(params, transforms, profiles, data, **kwargs):
     label="\\epsilon_{\\mathrm{eff}}",
     units="~",
     units_long="None",
-    description="Effective ripple modulation amplitude.",
+    description="Effective ripple modulation amplitude",
     dim=1,
     params=[],
     transforms={},
@@ -260,7 +261,7 @@ def _effective_ripple_1D(params, transforms, profiles, data, **kwargs):
     ),
     units="~",
     units_long="None",
-    description="Energetic ion confinement proxy, Nemov et al.",
+    description="Energetic ion confinement proxy",
     dim=1,
     params=[],
     transforms={"grid": []},
@@ -314,7 +315,7 @@ def _Gamma_c_1D(params, transforms, profiles, data, **kwargs):
     quad2 = kwargs["quad2"] if "quad2" in kwargs else chebgauss2(quad[0].size)
 
     def Gamma_c(data):
-        """∫ dλ ∑ⱼ [v τ γ_c²]ⱼ."""
+        """∫ dλ ∑ⱼ [v τ γ_c²]ⱼ π²/4."""
         bounce = Bounce1D(grid, data, quad, automorphism=None, is_reshaped=True)
         points = bounce.points(data["pitch_inv"], num_well=num_well)
         v_tau, f1, f2 = bounce.integrate(
@@ -325,11 +326,17 @@ def _Gamma_c_1D(params, transforms, profiles, data, **kwargs):
             points,
             batch=batch,
         )
+        # This is γ_c π/2.
         gamma_c = jnp.arctan(
             safediv(
                 f1,
                 (
                     f2
+                    # TODO: Once people are happy with benchmarking
+                    #       we can push this integral into f2.
+                    #       The quadrature is less optimal, but
+                    #       it still works and it would be more efficient
+                    #       since we don't have to interpolate twice.
                     + bounce.integrate(
                         _f3,
                         data["pitch_inv"],
@@ -393,7 +400,8 @@ def _gbdrift(data, B, pitch):
     ),
     units="~",
     units_long="None",
-    description="Energetic ion confinement proxy.",
+    description="Energetic ion confinement proxy "
+    "as defined by Velasco et al. (doi:10.1088/1741-4326/ac2994)",
     dim=1,
     params=[],
     transforms={"grid": []},
@@ -426,7 +434,7 @@ def _Gamma_c_Velasco_1D(params, transforms, profiles, data, **kwargs):
         )
 
     def Gamma_c(data):
-        """∫ dλ ∑ⱼ [v τ γ_c²]ⱼ."""
+        """∫ dλ ∑ⱼ [v τ γ_c²]ⱼ π²/4."""
         bounce = Bounce1D(grid, data, quad, automorphism=None, is_reshaped=True)
         points = bounce.points(data["pitch_inv"], num_well=num_well)
         v_tau, cvdrift0, gbdrift = bounce.integrate(
@@ -437,7 +445,7 @@ def _Gamma_c_Velasco_1D(params, transforms, profiles, data, **kwargs):
             points,
             batch=batch,
         )
-        gamma_c = jnp.arctan(safediv(cvdrift0, gbdrift))
+        gamma_c = jnp.arctan(safediv(cvdrift0, gbdrift))  # This is γ_c π/2.
         return jnp.sum(
             jnp.sum(v_tau * gamma_c**2, axis=-1)
             * data["pitch_inv weight"]

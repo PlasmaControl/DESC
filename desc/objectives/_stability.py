@@ -16,15 +16,15 @@ overwrite_stability = {
     "target": """
     target : {float, ndarray, callable}, optional
         Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f. If a callable, should take a
-        single argument `rho` and return the desired value of the profile at those
+        Must be broadcastable to ``Objective.dim_f``. If a callable, should take a
+        single argument ``rho`` and return the desired value of the profile at those
         locations. Defaults to ``bounds=(0, np.inf)``
     """,
     "bounds": """
     bounds : tuple of {float, ndarray, callable}, optional
         Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f
-        If a callable, each should take a single argument `rho` and return the
+        Both bounds must be broadcastable to ``Objective.dim_f``
+        If a callable, each should take a single argument ``rho`` and return the
         desired bound (lower or upper) of the profile at those locations.
         Defaults to ``bounds=(0, np.inf)``
     """,
@@ -355,44 +355,16 @@ class BallooningStability(_Objective):
 
     Parameters
     ----------
-    eq : Equilibrium
-        Equilibrium that will be optimized to satisfy the Objective.
-    target : {float, ndarray}, optional
-        Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f. Default is ``target=0``
-    bounds : tuple of {float, ndarray}, optional
-        Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f. Default is ``target=0``
-    weight : {float, ndarray}, optional
-        Weighting to apply to the Objective, relative to other Objectives.
-        Must be broadcastable to to Objective.dim_f
-    normalize : bool, optional
-        Whether to compute the error in physical units or non-dimensionalize.
-        Not used since the growth rate is always normalized.
-    normalize_target : bool, optional
-        Whether target and bounds should be normalized before comparing to computed
-        values. If `normalize` is `True` and the target is in physical units,
-        this should also be set to True. Not used since the growth rate is always
-        normalized.
-    loss_function : {None, 'mean', 'min', 'max'}, optional
-        Loss function to apply to the objective values once computed. This loss function
-        is called on the raw compute value, before any shifting, scaling, or
-        normalization. Has no effect for this objective.
-    deriv_mode : {"auto", "fwd", "rev"}
-        Specify how to compute jacobian matrix, either forward mode or reverse mode AD.
-        "auto" selects forward or reverse mode based on the size of the input and output
-        of the objective. Has no effect on self.grad or self.hess which always use
-        reverse mode and forward over reverse mode respectively.
     rho : float
         Flux surface to optimize on. To optimize over multiple surfaces, use multiple
         objectives each with a single rho value.
     alpha : float, ndarray
-        Field line labels to optimize. Values should be in [0, 2pi). Default is alpha=0
-        for axisymmetric equilibria, or 8 field lines linearly spaced in [0, pi] for
-        non-axisymmetric cases.
+        Field line labels to optimize. Values should be in [0, 2π). Default is
+        ``alpha=0`` for axisymmetric equilibria, or 8 field lines linearly spaced
+        in [0, π] for non-axisymmetric cases.
     nturns : int
         Number of toroidal transits of a field line to consider. Field line
-        will run from -π*nturns to π*nturns. Default 3.
+        will run from -π*``nturns`` to π*``nturns``. Default 3.
     nzetaperturn : int
         Number of points along the field line per toroidal transit. Total number of
         points is ``nturns*nzetaperturn``. Default 100.
@@ -407,6 +379,13 @@ class BallooningStability(_Objective):
         Name of the objective function.
 
     """
+
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``target=0``.",
+        bounds_default="``target=0``.",
+        normalize_detail=" Note: Has no effect for this objective.",
+        normalize_target_detail=" Note: Has no effect for this objective.",
+    )
 
     _coordinates = ""  # not vectorized over rho, always a scalar
     _scalar = True

@@ -1105,7 +1105,7 @@ def test_BdotgradB(DummyStellarator):
 @pytest.mark.solve
 def test_boozer_transform():
     """Test that Boozer coordinate transform agrees with BOOZ_XFORM."""
-    # TODO: add test with stellarator example
+    # TODO (#680): add test with stellarator example
     eq = get("DSHAPE_CURRENT")
     grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
     data = eq.compute("|B|_mn", grid=grid, M_booz=eq.M, N_booz=eq.N)
@@ -1478,8 +1478,8 @@ def test_surface_equilibrium_geometry():
     """Test that computing stuff from surface gives same result as equilibrium."""
     names = ["HELIOTRON"]
     data = ["A", "V", "a", "R0", "R0/a", "a_major/a_minor"]
-    # TODO: expand this to include all angular derivatives once they are implemented
-    # for surfaces
+    # TODO (#1397): expand this to include all angular derivatives
+    # once they are implemented for surfaces
     data_basis_vecs_fourierRZ = [
         "e_theta",
         "e_zeta",
@@ -1565,8 +1565,8 @@ def test_clebsch_sfl_funs():
                 "grad(alpha)",
                 "grad(phi)",
                 "B_phi",
-                "secular(gbdrift)",
-                "secular(gbdrift)/phi",
+                "gbdrift (secular)",
+                "gbdrift (secular)/phi",
                 "phi",
             ],
         )
@@ -1592,7 +1592,7 @@ def test_clebsch_sfl_funs():
         np.testing.assert_allclose(data["B^phi"], dot(data["B"], data["grad(phi)"]))
         np.testing.assert_allclose(data["B_phi"], data["B"][:, 1])
         np.testing.assert_allclose(
-            data["secular(gbdrift)"], data["secular(gbdrift)/phi"] * data["phi"]
+            data["gbdrift (secular)"], data["gbdrift (secular)/phi"] * data["phi"]
         )
 
     test(get("W7-X"))

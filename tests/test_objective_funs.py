@@ -1451,16 +1451,25 @@ class TestObjectiveFunction:
             helicity=(0, 1),
             B_lm=np.array(
                 [
-                    [0.8, 1.0, 1.2],  # taken from omnigenity tutorial
-                    [0, 0, 0],
+                    # f(r) = B0 + B1*(2r-1)
+                    # f(0) = [0.8, 1.0, 1.2]
+                    # f(1) = [1.0, 1.0, 1.0]
+                    [0.9, 1.0, 1.1],  # B0
+                    [0.1, 0.0, -0.1],  # B1
                 ]
             ).flatten(),
         )
-        mirror_ratio = (1.2 - 0.8) / (1.2 + 0.8)
-        obj = MirrorRatio(field)
+
+        mirror_ratio_axis = (1.2 - 0.8) / (1.2 + 0.8)
+        mirror_ratio_edge = 0.0
+        grid = LinearGrid(L=5, theta=6, N=2)
+        rho = grid.nodes[grid.unique_rho_idx, 0]
+        obj = MirrorRatio(field, grid=grid)
         obj.build()
         f = obj.compute(field.params_dict)
-        np.testing.assert_allclose(f, mirror_ratio)
+        np.testing.assert_allclose(
+            f, mirror_ratio_axis * (1 - rho) + mirror_ratio_edge * rho
+        )
 
     @pytest.mark.unit
     def test_omnigenity_multiple_surfaces(self):

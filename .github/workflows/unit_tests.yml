@@ -95,6 +95,8 @@ jobs:
           lscpu
           source .venv-${{ matrix.combos.python_version }}/bin/activate
           ls -a .venv-${{ matrix.combos.python_version }}/bin
+          python -m pip install --upgrade pip
+          pip install -r devtools/dev-requirements.txt
           pip list
 
       - name: Test with pytest

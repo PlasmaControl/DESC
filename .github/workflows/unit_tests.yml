@@ -83,20 +83,11 @@ jobs:
       - name: Action Details
         if: env.has_changes == 'true'
         run: |
-          echo "Checking virtual environment directory"
-          ls -la .venv-${{ matrix.combos.venv_suffix }}/bin
-          echo "Trying to activate virtual environment"
           source .venv-${{ matrix.combos.venv_suffix }}/bin/activate
           which python
           python --version
           pwd
-          ls -a
-          ls -a .venv-${{ matrix.combos.venv_suffix }}/bin
           lscpu
-          source .venv-${{ matrix.combos.venv_suffix }}/bin/activate
-          ls -a .venv-${{ matrix.combos.venv_suffix }}/bin
-          python -m pip install --upgrade pip
-          pip install -r devtools/dev-requirements.txt
           pip list
 
       - name: Test with pytest

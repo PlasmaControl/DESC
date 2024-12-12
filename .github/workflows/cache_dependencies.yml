@@ -31,7 +31,8 @@ jobs:
       - name: Check full Python version
         run: |
           python --version
-          python_version=$(python --version)
+          python_version=$(python --version 2>&1 | cut -d' ' -f2)
+          echo $python_version
 
       - name: Delete old cached file with same python version
         run: |

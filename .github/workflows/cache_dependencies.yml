@@ -17,8 +17,8 @@ jobs:
         combos:
           - {python_version: '3.9', venv_suffix: '9'}
           - {python_version: '3.10', venv_suffix: '10'}
-          - {python_version: '3.11', venv_suffix: '11'}
-          - {python_version: '3.12', venv_suffix: '12'}
+          - {python_version: '3.11.11', venv_suffix: '11'}
+          - {python_version: '3.12.8', venv_suffix: '12'}
 
     steps:
       - uses: actions/checkout@v4

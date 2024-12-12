@@ -31,13 +31,13 @@ jobs:
         run: |
           gh cache list
           python -m venv .venv-${{ matrix.python-version }}
-          source .venv-${{ env.PYTHON_MINOR_VERSION }}/bin/activate
+          source .venv-${{ matrix.python-version }}/bin/activate
           python -m pip install --upgrade pip
           pip install -r devtools/dev-requirements.txt
 
       - name: Check files using the black formatter
         run: |
-          source .venv-${{ env.PYTHON_MINOR_VERSION }}/bin/activate
+          source .venv-${{ matrix.python-version }}/bin/activate
           black --version
           black --check desc/ tests/ || black_return_code=$?
           echo "BLACK_RETURN_CODE=$black_return_code" >> $GITHUB_ENV

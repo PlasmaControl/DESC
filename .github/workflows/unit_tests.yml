@@ -22,14 +22,14 @@ jobs:
       GH_TOKEN: ${{ github.token }}
     strategy:
       matrix:
-        combos: [{group: 1, python_version: '3.9'},
-                 {group: 2, python_version: '3.10'},
-                 {group: 3, python_version: '3.11'},
-                 {group: 4, python_version: '3.12'},
-                 {group: 5, python_version: '3.12'},
-                 {group: 6, python_version: '3.12'},
-                 {group: 7, python_version: '3.12'},
-                 {group: 8, python_version: '3.12'}]
+        combos: [{group: 1, python_version: '3.9', venv_suffix: '9'},
+                 {group: 2, python_version: '3.10', venv_suffix: '10'},
+                 {group: 3, python_version: '3.11', venv_suffix: '11'},
+                 {group: 4, python_version: '3.12', venv_suffix: '12'},
+                 {group: 5, python_version: '3.12', venv_suffix: '12'},
+                 {group: 6, python_version: '3.12', venv_suffix: '12'},
+                 {group: 7, python_version: '3.12', venv_suffix: '12'},
+                 {group: 8, python_version: '3.12', venv_suffix: '12'}]
 
     steps:
       - uses: actions/checkout@v4
@@ -51,29 +51,25 @@ jobs:
         id: check_changes
         run: echo "has_changes=${{ steps.changes.outputs.has_changes }}" >> $GITHUB_ENV
 
-      - name: Set up Python ${{ env.PYTHON_MINOR_VERSION }}
+      - name: Set up Python ${{ matrix.combos.python_version }}
         uses: actions/setup-python@v5
         with:
-          python-version: ${{ env.PYTHON_MINOR_VERSION }}
-
-      - name: Extract Python Minor Version
-        id: extract_version
-        run: echo "PYTHON_MINOR_VERSION=$(echo '${{ env.PYTHON_MINOR_VERSION }}' | cut -d'.' -f2)" >> $GITHUB_ENV
+          python-version: ${{ matrix.combos.python_version }}
 
       - name: Restore Python environment cache
         if: env.has_changes == 'true'
         id: restore-env
         uses: actions/cache/restore@v4
         with:
-          path: .venv-${{ env.PYTHON_MINOR_VERSION }}
-          key: ${{ runner.os }}-venv-${{ env.PYTHON_MINOR_VERSION }}-${{ hashFiles('devtools/dev-requirements.txt', 'requirements.txt') }}
+          path: .venv-${{ matrix.combos.venv_suffix }}
+          key: ${{ runner.os }}-venv-${{ matrix.combos.venv_suffix }}-${{ hashFiles('devtools/dev-requirements.txt', 'requirements.txt') }}
 
       - name: Set up virtual environment if not restored from cache
         if: steps.restore-env.outputs.cache-hit != 'true' && env.has_changes == 'true'
         run: |
           gh cache list
-          python -m venv .venv-${{ env.PYTHON_MINOR_VERSION }}
-          source .venv-${{ env.PYTHON_MINOR_VERSION }}/bin/activate
+          python -m venv .venv-${{ matrix.combos.venv_suffix }}
+          source .venv-${{ matrix.combos.venv_suffix }}/bin/activate
           python -m pip install --upgrade pip
           pip install -r devtools/dev-requirements.txt
           pip install matplotlib==3.9.2
@@ -88,17 +84,17 @@ jobs:
         if: env.has_changes == 'true'
         run: |
           echo "Checking virtual environment directory"
-          ls -la .venv-${{ env.PYTHON_MINOR_VERSION }}/bin
+          ls -la .venv-${{ matrix.combos.venv_suffix }}/bin
           echo "Trying to activate virtual environment"
-          source .venv-${{ env.PYTHON_MINOR_VERSION }}/bin/activate
+          source .venv-${{ matrix.combos.venv_suffix }}/bin/activate
           which python
           python --version
           pwd
           ls -a
-          ls -a .venv-${{ env.PYTHON_MINOR_VERSION }}/bin
+          ls -a .venv-${{ matrix.combos.venv_suffix }}/bin
           lscpu
-          source .venv-${{ env.PYTHON_MINOR_VERSION }}/bin/activate
-          ls -a .venv-${{ env.PYTHON_MINOR_VERSION }}/bin
+          source .venv-${{ matrix.combos.venv_suffix }}/bin/activate
+          ls -a .venv-${{ matrix.combos.venv_suffix }}/bin
           python -m pip install --upgrade pip
           pip install -r devtools/dev-requirements.txt
           pip list
@@ -106,7 +102,7 @@ jobs:
       - name: Test with pytest
         if: env.has_changes == 'true'
         run: |
-          source .venv-${{ env.PYTHON_MINOR_VERSION }}/bin/activate
+          source .venv-${{ matrix.combos.venv_suffix }}/bin/activate
           python -m pytest -v -m unit \
             --durations=0 \
             --cov-report xml:cov.xml \

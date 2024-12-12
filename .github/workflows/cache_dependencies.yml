@@ -14,19 +14,15 @@ jobs:
       GH_TOKEN: ${{ github.token }}
     strategy:
       matrix:
-        combos:
-          - {python_version: '3.9', venv_suffix: '9'}
-          - {python_version: '3.10', venv_suffix: '10'}
-          - {python_version: '3.11.11', venv_suffix: '11'}
-          - {python_version: '3.12.8', venv_suffix: '12'}
+        python-version: ['3.9', '3.10', '3.11', '3.12']
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python ${{ matrix.combos.python_version }}
+      - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
         with:
-          python-version: ${{ matrix.combos.python_version }}
+          python-version: ${{ matrix.python-version }}
 
       - name: Check full Python version
         run: |

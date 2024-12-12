@@ -848,9 +848,6 @@ def atleast_2d_end(ary):
     return ary[:, jnp.newaxis] if ary.ndim == 1 else ary
 
 
-PRINT_WIDTH = 60  # current longest name is BootstrapRedlConsistency with pre-text
-
-
 def dot(a, b, axis=-1):
     """Batched vector dot product.
 

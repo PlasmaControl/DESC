@@ -80,12 +80,14 @@ jobs:
         with:
           swap-size-gb: 10
 
-      - name: List of Used Dependencies
+      - name: Action Details
         if: env.has_changes == 'true'
         run: |
           pwd
+          ls -l
           lscpu
           source .venv-${{ matrix.combos.python_version }}/bin/activate
+          ls -l
           pip list
 
       - name: Test with pytest

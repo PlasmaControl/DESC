@@ -83,6 +83,12 @@ jobs:
       - name: Action Details
         if: env.has_changes == 'true'
         run: |
+          echo "Checking virtual environment directory"
+          ls -la .venv-${{ matrix.combos.python_version }}/bin
+          echo "Trying to activate virtual environment"
+          source .venv-${{ matrix.combos.python_version }}/bin/activate
+          which python
+          python --version
           pwd
           ls -a
           ls -a .venv-${{ matrix.combos.python_version }}/bin
@@ -121,14 +127,9 @@ jobs:
       - name: Upload coverage
         if: env.has_changes == 'true'
         id : codecov
-        uses: Wandalen/wretry.action@v3.5.0
+        uses: codecov/codecov-action@v5
         with:
-          action: codecov/codecov-action@v4
-          with: |
-            token: ${{ secrets.CODECOV_TOKEN }}
-            name: codecov-umbrella
-            files: ./cov.xml
-            fail_ci_if_error: true
-            verbose: true
-          attempt_limit: 10
-          attempt_delay: 60000 # ms, 1 min
+          name: codecov-umbrella
+          files: ./cov.xml
+          fail_ci_if_error: true
+          verbose: true

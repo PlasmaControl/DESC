@@ -50,20 +50,24 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
+      - name: Extract Python Minor Version
+        id: extract_version
+        run: echo "PYTHON_MINOR_VERSION=$(echo '${{ matrix.python_version }}' | cut -d'.' -f2)" >> $GITHUB_ENV
+
       - name: Restore Python environment cache
         if: env.has_changes == 'true'
         id: restore-env
         uses: actions/cache/restore@v4
         with:
-          path: .venv-${{ matrix.python-version | split('.')[1] }}
-          key: ${{ runner.os }}-venv-${{ matrix.python-version | split('.')[1] }}-${{ hashFiles('devtools/dev-requirements.txt', 'requirements.txt') }}
+          path: .venv-${{ env.PYTHON_MINOR_VERSION }}
+          key: ${{ runner.os }}-venv-${{ env.PYTHON_MINOR_VERSION }}-${{ hashFiles('devtools/dev-requirements.txt', 'requirements.txt') }}
 
       - name: Set up virtual environment if not restored from cache
         if: steps.restore-env.outputs.cache-hit != 'true' && env.has_changes == 'true'
         run: |
           gh cache list
-          python -m venv .venv-${{ matrix.python-version | split('.')[1] }}
-          source .venv-${{ matrix.python-version | split('.')[1] }}/bin/activate
+          python -m venv .venv-${{ env.PYTHON_MINOR_VERSION }}
+          source .venv-${{ env.PYTHON_MINOR_VERSION }}/bin/activate
           python -m pip install --upgrade pip
           pip install -r devtools/dev-requirements.txt
           pip install matplotlib==3.9.2
@@ -77,7 +81,7 @@ jobs:
       - name: Test with pytest
         if: env.has_changes == 'true'
         run: |
-          source .venv-${{ matrix.python-version | split('.')[1] }}/bin/activate
+          source .venv-${{ env.PYTHON_MINOR_VERSION }}/bin/activate
           pwd
           lscpu
           pip list

@@ -282,7 +282,7 @@ class Transform(IOAble):
             self._built = True
             return
 
-        if self.method in ["direct1", "jitable]"]:
+        if self.method in ["direct1", "jitable"]:
             for d in self.derivatives:
                 self.matrices["direct1"][d[0]][d[1]][d[2]] = self.basis.evaluate(
                     self.grid, d

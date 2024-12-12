@@ -28,12 +28,17 @@ jobs:
         with:
           python-version: ${{ matrix.combos.python_version }}
 
+      - name: Check full Python version
+        run: |
+          python --version
+          python_version=$(python --version)
+
       - name: Delete old cached file with same python version
         run: |
           echo "Current Cached files list"
           gh cache list
-          echo "Deleting cached files with pattern: ${{ runner.os }}-venv-${{ matrix.combos.venv_suffix }}-"
-          for cache_key in $(gh cache list --json key -q ".[] | select(.key | startswith(\"${{ runner.os }}-venv-${{ matrix.combos.venv_suffix }}-\")) | .key"); do
+          echo "Deleting cached files with pattern: ${{ runner.os }}-venv-${python_version}-"
+          for cache_key in $(gh cache list --json key -q ".[] | select(.key | startswith(\"${{ runner.os }}-venv-${python_version}-\")) | .key"); do
             echo "Deleting cache with key: $cache_key"
             gh cache delete "$cache_key"
           done
@@ -41,8 +46,8 @@ jobs:
       # Update the matplotlib version if needed later
       - name: Set up virtual environment
         run: |
-          python -m venv .venv-${{ matrix.combos.venv_suffix }}
-          source .venv-${{ matrix.combos.venv_suffix }}/bin/activate
+          python -m venv .venv-${python_version}
+          source .venv-${python_version}/bin/activate
           python -m pip install --upgrade pip
           pip install -r devtools/dev-requirements.txt
           pip install matplotlib==3.9.2
@@ -51,12 +56,12 @@ jobs:
         id: cache-env
         uses: actions/cache@v4
         with:
-          path: .venv-${{ matrix.combos.venv_suffix }}
-          key: ${{ runner.os }}-venv-${{ matrix.combos.venv_suffix }}-${{ hashFiles('devtools/dev-requirements.txt', 'requirements.txt') }}
+          path: .venv-${python_version}
+          key: ${{ runner.os }}-venv-${python_version}-${{ hashFiles('devtools/dev-requirements.txt', 'requirements.txt') }}
 
       - name: Verify virtual environment activation
         run: |
-          source .venv-${{ matrix.combos.venv_suffix }}/bin/activate
+          source .venv-${python_version}/bin/activate
           which python
           python --version
           pip --version

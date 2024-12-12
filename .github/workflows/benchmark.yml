@@ -82,6 +82,7 @@ jobs:
           source .venv-${{ matrix.python-version }}/bin/activate
           pwd
           lscpu
+          pip list
           cd tests/benchmarks
           python -m pytest benchmark_cpu_small.py -vv \
             --benchmark-save='Latest_Commit' \
@@ -108,6 +109,7 @@ jobs:
           source .venv-${{ matrix.python-version }}/bin/activate
           pwd
           lscpu
+          pip list
           cd tests/benchmarks
           python -m pytest benchmark_cpu_small.py -vv \
             --benchmark-save='master' \
@@ -149,12 +151,12 @@ jobs:
 
       - name: Comment PR with the results
         if: env.has_changes == 'true'
-        uses: thollander/actions-comment-pull-request@v2
+        uses: thollander/actions-comment-pull-request@v3
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
         with:
-          filePath: tests/benchmarks/commit_msg.txt
-          comment_tag: benchmark
+          file-path: tests/benchmarks/commit_msg.txt
+          comment-tag: benchmark
 
       - name: Upload benchmark data
         if: always() && env.has_changes == 'true'

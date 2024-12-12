@@ -84,10 +84,10 @@ jobs:
         if: env.has_changes == 'true'
         run: |
           pwd
-          ls -l
+          ls -a
           lscpu
           source .venv-${{ matrix.combos.python_version }}/bin/activate
-          ls -l
+          ls -a
           pip list
 
       - name: Test with pytest

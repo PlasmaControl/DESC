@@ -86,7 +86,7 @@ jobs:
           pwd
           lscpu
           source .venv-${{ matrix.combos.python_version }}/bin/activate
-          python -m pip list
+          pip list
 
       - name: Test with pytest
         if: env.has_changes == 'true'

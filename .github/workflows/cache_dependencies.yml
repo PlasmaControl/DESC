@@ -57,6 +57,7 @@ jobs:
       - name: Verify virtual environment activation
         run: |
           source .venv-${{ matrix.combos.venv_suffix }}/bin/activate
+          which python
           python --version
           pip --version
           pip list

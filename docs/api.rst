@@ -212,6 +212,7 @@ Objective Functions
     desc.objectives.MagneticWell
     desc.objectives.MeanCurvature
     desc.objectives.MercierStability
+    desc.objectives.MirrorRatio
     desc.objectives.ObjectiveFromUser
     desc.objectives.ObjectiveFunction
     desc.objectives.Omnigenity

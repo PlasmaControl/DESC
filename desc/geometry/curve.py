@@ -612,6 +612,9 @@ class FourierPlanarCurve(Curve):
         assert issubclass(modes.dtype.type, np.integer)
         assert r_n.size == modes.size, "r_n size and modes must be the same size"
         assert basis.lower() in ["xyz", "rpz"]
+        assert not np.allclose(
+            (normal / np.linalg.norm(normal)), [0, 0, -1]
+        ), "normal vector cannot be antiparallel to z-axis"
 
         N = np.max(abs(modes))
         self._r_basis = FourierSeries(N, NFP=1, sym=False)

@@ -193,6 +193,7 @@ A full example objective with comments describing the key points is given below:
             # and to make the objective value independent of grid resolution.
             return f
 
+
 Converting to Cartesian coordinates
 -----------------------------------
 

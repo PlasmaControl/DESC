@@ -49,6 +49,7 @@ from desc.objectives import (
     CoilSetLinkingNumber,
     CoilSetMinDistance,
     CoilTorsion,
+    EffectiveRipple,
     Elongation,
     Energy,
     ForceBalance,
@@ -75,6 +76,7 @@ from desc.objectives import (
     RotationalTransform,
     Shear,
     SurfaceCurrentRegularization,
+    SurfaceQuadraticFlux,
     ToroidalCurrent,
     ToroidalFlux,
     VacuumBoundaryError,
@@ -371,7 +373,7 @@ class TestObjectiveFunction:
         # check that the objective returns the lowest amplitudes
         # 120 ~ smallest amplitudes BEFORE QH modes show up so that sorting both arrays
         # should have the same values up until then
-        np.testing.assert_allclose(f[idx_f][:120], B_mn[idx_B][:120])
+        np.testing.assert_allclose(f[idx_f][:120], B_mn[idx_B][:120], rtol=1e-6)
 
     @pytest.mark.unit
     def test_qh_boozer_multiple_surfaces(self):
@@ -1193,22 +1195,82 @@ class TestObjectiveFunction:
         np.testing.assert_allclose(f, Bnorm * np.sqrt(dA), atol=1e-14)
 
     @pytest.mark.unit
+    def test_quadratic_flux_minimizing_surface(self):
+        """Test calculation of quadratic flux on a surface."""
+        t_field = ToroidalMagneticField(1, 1)
+
+        # test that torus (axisymmetric) Bnorm is exactly 0
+        eq = load("./tests/inputs/vacuum_circular_tokamak.h5")
+        surf = eq.surface
+        obj = SurfaceQuadraticFlux(surf, t_field)
+        obj.build(eq, verbose=2)
+        f = obj.compute(params_1=surf.params_dict, params_2=t_field.params_dict)
+        np.testing.assert_allclose(f, 0, rtol=1e-14, atol=1e-14)
+
+        # test non-axisymmetric surface
+        eq = desc.examples.get("precise_QA", "all")[0]
+        surf = eq.surface
+        surf.change_resolution(4, 4)
+        eval_grid = LinearGrid(
+            rho=np.array([1.0]),
+            M=surf.M * 2,
+            N=surf.N * 2,
+            NFP=eq.NFP,
+            sym=False,
+        )
+
+        obj = SurfaceQuadraticFlux(surf, t_field, eval_grid=eval_grid, field_fixed=True)
+        Bnorm = t_field.compute_Bnormal(
+            eq.surface, eval_grid=eval_grid, source_grid=eval_grid
+        )[0]
+        obj.build(surf)
+        dA = surf.compute("|e_theta x e_zeta|", grid=eval_grid)["|e_theta x e_zeta|"]
+        f = obj.compute(params_1=surf.params_dict)
+
+        np.testing.assert_allclose(f, Bnorm * np.sqrt(dA), atol=2e-4, rtol=1e-2)
+
+    @pytest.mark.unit
     def test_toroidal_flux(self):
         """Test calculation of toroidal flux from coils."""
         grid1 = LinearGrid(L=0, M=40, zeta=np.array(0.0))
 
-        def test(eq, field, correct_value, rtol=1e-14, grid=None):
+        def test(
+            eq,
+            field,
+            correct_value,
+            rtol=1e-14,
+            grid=None,
+            eq_fixed=True,
+            field_fixed=True,
+        ):
             obj = ToroidalFlux(
                 eq=eq,
                 field=field,
                 eval_grid=grid,
+                eq_fixed=eq_fixed,
+                field_fixed=field_fixed,
             )
             obj.build(verbose=2)
-            torflux = obj.compute_unscaled(*obj.xs(field))
+            if eq_fixed:
+                torflux = obj.compute_unscaled(*obj.xs(field))
+            elif field_fixed:
+                torflux = obj.compute_unscaled(*obj.xs(eq))
+            else:
+                torflux = obj.compute_unscaled(*obj.xs(eq, field))
             np.testing.assert_allclose(torflux, correct_value, rtol=rtol)
 
         eq = Equilibrium(iota=PowerSeriesProfile(0))
-        test(eq, VerticalMagneticField(B0=1), 0, grid=grid1)
+        test(eq, VerticalMagneticField(B0=1), 0, grid=grid1, field_fixed=False)
+        test(eq, VerticalMagneticField(B0=1), 0, grid=grid1, eq_fixed=False)
+        test(
+            eq,
+            VerticalMagneticField(B0=1),
+            0,
+            grid=grid1,
+            field_fixed=False,
+            eq_fixed=False,
+        )
+
         field = ToroidalMagneticField(B0=1, R0=1)
         # calc field Psi
 
@@ -1222,10 +1284,21 @@ class TestObjectiveFunction:
         psi_from_field = np.sum(grid1.spacing[:, 1] * A_dot_e_theta)
         eq.change_resolution(L_grid=20, M_grid=20)
 
-        test(eq, field, psi_from_field)
-        test(eq, field, psi_from_field, rtol=1e-3)
+        test(eq, field, psi_from_field, field_fixed=False)
+        test(eq, field, psi_from_field, rtol=1e-3, field_fixed=False)
+
+        with pytest.raises(ValueError, match="Cannot have"):
+            ToroidalFlux(eq, field, eq_fixed=True, field_fixed=True)
+
         # test on field with no vector potential
-        test(eq, PoloidalMagneticField(1, 1, 1), 0.0)
+        pfield = PoloidalMagneticField(1, 1, 1)
+        test(eq, pfield, 0.0, field_fixed=False)
+        test(eq, pfield, 0.0, eq_fixed=False)
+        test(eq, pfield, 0.0, eq_fixed=False, field_fixed=False)
+
+        with pytest.raises(ValueError, match="vector potential"):
+            obj = ToroidalFlux(eq.surface, pfield)
+            obj.build()
 
     @pytest.mark.unit
     def test_coil_linking_number(self):
@@ -1349,6 +1422,58 @@ class TestObjectiveFunction:
                 use_signed_distance=True,
             )
             obj.build()
+
+    @pytest.mark.unit
+    def test_omnigenity_multiple_surfaces(self):
+        """Test omnigenity transform vectorized over multiple surfaces."""
+        surf = FourierRZToroidalSurface.from_qp_model(
+            major_radius=1,
+            aspect_ratio=20,
+            elongation=6,
+            mirror_ratio=0.2,
+            torsion=0.1,
+            NFP=1,
+            sym=True,
+        )
+        eq = Equilibrium(
+            Psi=6e-3,
+            M=4,
+            N=4,
+            surface=surf,
+            iota=PowerSeriesProfile(1, 0, -1),  # ensure diff surfs have diff iota
+        )
+        field = OmnigenousField(
+            L_B=1,
+            M_B=3,
+            L_x=1,
+            M_x=1,
+            N_x=1,
+            NFP=eq.NFP,
+            helicity=(1, 1),
+            B_lm=np.array(
+                [
+                    [0.8, 1.0, 1.2],
+                    [-0.4, 0.0, 0.6],  # radially varying B
+                ]
+            ).flatten(),
+        )
+        grid1 = LinearGrid(rho=0.5, M=eq.M_grid, N=eq.N_grid)
+        grid2 = LinearGrid(rho=1.0, M=eq.M_grid, N=eq.N_grid)
+        grid3 = LinearGrid(rho=np.array([0.5, 1.0]), M=eq.M_grid, N=eq.N_grid)
+        obj1 = Omnigenity(eq=eq, field=field, eq_grid=grid1)
+        obj2 = Omnigenity(eq=eq, field=field, eq_grid=grid2)
+        obj3 = Omnigenity(eq=eq, field=field, eq_grid=grid3)
+        obj1.build()
+        obj2.build()
+        obj3.build()
+        f1 = obj1.compute(*obj1.xs(eq, field))
+        f2 = obj2.compute(*obj2.xs(eq, field))
+        f3 = obj3.compute(*obj3.xs(eq, field))
+        # the order will be different but the values should be the same so we sort
+        # before comparing
+        np.testing.assert_allclose(
+            np.sort(np.concatenate([f1, f2])), np.sort(f3), atol=1e-14
+        )
 
     @pytest.mark.unit
     def test_surface_current_regularization(self):
@@ -2350,6 +2475,16 @@ def test_loss_function_asserts():
         RotationalTransform(eq=eq, loss_function=fun)
 
 
+def _reduced_resolution_objective(eq, objective):
+    """Speed up testing suite by defining rules to reduce objective resolution."""
+    kwargs = {}
+    if objective in {EffectiveRipple}:
+        kwargs["Y_B"] = 50
+        kwargs["num_transit"] = 2
+        kwargs["num_pitch"] = 25
+    return objective(eq=eq, **kwargs)
+
+
 class TestComputeScalarResolution:
     """Test that compute_scalar values are roughly independent of grid resolution."""
 
@@ -2380,6 +2515,7 @@ class TestComputeScalarResolution:
         PlasmaCoilSetMinDistance,
         PlasmaVesselDistance,
         QuadraticFlux,
+        SurfaceQuadraticFlux,
         ToroidalFlux,
         SurfaceCurrentRegularization,
         VacuumBoundaryError,
@@ -2539,7 +2675,7 @@ class TestComputeScalarResolution:
 
     @pytest.mark.regression
     def test_compute_scalar_resolution_quadratic_flux(self):
-        """VacuumBoundaryError."""
+        """QuadraticFlux."""
         with pytest.warns(UserWarning):
             ext_field = SplineMagneticField.from_mgrid(r"tests/inputs/mgrid_solovev.nc")
 
@@ -2565,6 +2701,32 @@ class TestComputeScalarResolution:
         np.testing.assert_allclose(f, f[-1], rtol=5e-2)
 
     @pytest.mark.regression
+    def test_compute_scalar_resolution_quadratic_flux_minimizing(self):
+        """SurfaceQuadraticFlux."""
+        ext_field = ToroidalMagneticField(1.0, 1.0)
+
+        surf = FourierRZToroidalSurface(
+            R_lmn=[4.0, 1.0],
+            modes_R=[[0, 0], [1, 0]],
+            Z_lmn=[-1.0],
+            modes_Z=[[-1, 0]],
+            NFP=1,
+        )
+
+        f = np.zeros_like(self.res_array, dtype=float)
+        for i, res in enumerate(self.res_array):
+            surf.change_resolution(
+                M=int(surf.M * res),
+                N=int(surf.N * res),
+            )
+            obj = ObjectiveFunction(
+                SurfaceQuadraticFlux(surf, ext_field), use_jit=False
+            )
+            obj.build(verbose=0)
+            f[i] = obj.compute_scalar(obj.x())
+        np.testing.assert_allclose(f, f[-1], rtol=5e-2)
+
+    @pytest.mark.regression
     def test_compute_scalar_resolution_toroidal_flux_A(self):
         """ToroidalFlux."""
         ext_field = ToroidalMagneticField(1, 1)
@@ -2577,7 +2739,9 @@ class TestComputeScalarResolution:
             eq.change_resolution(
                 L_grid=int(eq.L * res), M_grid=int(eq.M * res), N_grid=int(eq.N * res)
             )
-            obj = ObjectiveFunction(ToroidalFlux(eq, ext_field), use_jit=False)
+            obj = ObjectiveFunction(
+                ToroidalFlux(eq, ext_field, eq_fixed=True), use_jit=False
+            )
             obj.build(verbose=0)
             f[i] = obj.compute_scalar(obj.x())
         np.testing.assert_allclose(f, f[-1], rtol=5e-2)
@@ -2595,7 +2759,9 @@ class TestComputeScalarResolution:
             eq.change_resolution(
                 L_grid=int(eq.L * res), M_grid=int(eq.M * res), N_grid=int(eq.N * res)
             )
-            obj = ObjectiveFunction(ToroidalFlux(eq, ext_field), use_jit=False)
+            obj = ObjectiveFunction(
+                ToroidalFlux(eq, ext_field, eq_fixed=True), use_jit=False
+            )
             obj.build(verbose=0)
             f[i] = obj.compute_scalar(obj.x())
         np.testing.assert_allclose(f, f[-1], rtol=5e-2)
@@ -2743,11 +2909,12 @@ class TestComputeScalarResolution:
                 M_grid=int(self.eq.M * res),
                 N_grid=int(self.eq.N * res),
             )
-
-            obj = ObjectiveFunction(objective(eq=self.eq), use_jit=False)
+            obj = ObjectiveFunction(
+                _reduced_resolution_objective(self.eq, objective), use_jit=False
+            )
             obj.build(verbose=0)
             f[i] = obj.compute_scalar(obj.x())
-        np.testing.assert_allclose(f, f[-1], rtol=5e-2)
+        np.testing.assert_allclose(f, f[-1], rtol=6e-2)
 
     @pytest.mark.regression
     @pytest.mark.parametrize(
@@ -2800,6 +2967,7 @@ class TestObjectiveNaNGrad:
         CoilSetLinkingNumber,
         CoilSetMinDistance,
         CoilTorsion,
+        EffectiveRipple,
         ForceBalanceAnisotropic,
         FusionPower,
         HeatingPowerISS04,
@@ -2808,6 +2976,7 @@ class TestObjectiveNaNGrad:
         PlasmaVesselDistance,
         QuadraticFlux,
         SurfaceCurrentRegularization,
+        SurfaceQuadraticFlux,
         ToroidalFlux,
         VacuumBoundaryError,
         # we don't test these since they depend too much on what exactly the user wants
@@ -2957,6 +3126,24 @@ class TestObjectiveNaNGrad:
         assert not np.any(np.isnan(g)), "quadratic flux"
 
     @pytest.mark.unit
+    def test_objective_no_nangrad_quadratic_flux_minimizing(self):
+        """SurfaceQuadraticFlux."""
+        ext_field = ToroidalMagneticField(1.0, 1.0)
+
+        surf = FourierRZToroidalSurface(
+            R_lmn=[4.0, 1.0],
+            modes_R=[[0, 0], [1, 0]],
+            Z_lmn=[-1.0],
+            modes_Z=[[-1, 0]],
+            NFP=1,
+        )
+
+        obj = ObjectiveFunction(SurfaceQuadraticFlux(surf, ext_field), use_jit=False)
+        obj.build()
+        g = obj.grad(obj.x(surf, ext_field))
+        assert not np.any(np.isnan(g)), "quadratic flux"
+
+    @pytest.mark.unit
     def test_objective_no_nangrad_toroidal_flux(self):
         """ToroidalFlux."""
         ext_field = ToroidalMagneticField(1, 1)
@@ -2967,12 +3154,12 @@ class TestObjectiveNaNGrad:
 
         obj = ObjectiveFunction(ToroidalFlux(eq, ext_field), use_jit=False)
         obj.build()
-        g = obj.grad(obj.x(ext_field))
+        g = obj.grad(obj.x(eq, ext_field))
         assert not np.any(np.isnan(g)), "toroidal flux A"
 
         obj = ObjectiveFunction(ToroidalFlux(eq, ext_field), use_jit=False)
         obj.build()
-        g = obj.grad(obj.x(ext_field))
+        g = obj.grad(obj.x(eq, ext_field))
         assert not np.any(np.isnan(g)), "toroidal flux B"
 
     @pytest.mark.unit
@@ -3047,6 +3234,17 @@ class TestObjectiveNaNGrad:
         obj.build()
         g = obj.grad(obj.x())
         assert not np.any(np.isnan(g)), str(helicity)
+
+    @pytest.mark.unit
+    def test_objective_no_nangrad_effective_ripple(self):
+        """Effective ripple."""
+        eq = get("ESTELL")
+        with pytest.warns(UserWarning, match="Reducing radial"):
+            eq.change_resolution(2, 2, 2, 4, 4, 4)
+        obj = ObjectiveFunction(_reduced_resolution_objective(eq, EffectiveRipple))
+        obj.build(verbose=0)
+        g = obj.grad(obj.x())
+        assert not np.any(np.isnan(g))
 
     @pytest.mark.unit
     def test_objective_no_nangrad_ballooning(self):

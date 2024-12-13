@@ -56,9 +56,12 @@ profiles together by addition, multiplication, or scaling.
     desc.profiles.PowerSeriesProfile
     desc.profiles.SplineProfile
     desc.profiles.MTanhProfile
+    desc.profiles.TwoPowerProfile
+    desc.profiles.HermiteSplineProfile
     desc.profiles.ScaledProfile
-    desc.profiles.SumProfile
     desc.profiles.ProductProfile
+    desc.profiles.SumProfile
+    desc.profiles.PowerProfile
 
 
 Utilities
@@ -74,3 +77,4 @@ equilibria to a given size and/or field strength.
     desc.compat.flip_helicity
     desc.compat.flip_theta
     desc.compat.rescale
+    desc.compat.rotate_zeta

@@ -68,6 +68,8 @@ from desc.objectives import (
     QuasisymmetryBoozer,
     QuasisymmetryTwoTerm,
     SurfaceCurrentRegularization,
+    SurfaceQuadraticFlux,
+    ToroidalFlux,
     VacuumBoundaryError,
     Volume,
     get_fixed_boundary_constraints,
@@ -881,7 +883,7 @@ def test_omnigenity_optimization():
     )
     optimizer = Optimizer("lsq-auglag")
     (eq, field), _ = optimizer.optimize(
-        (eq, field), objective, constraints, maxiter=100, verbose=3
+        (eq, field), objective, constraints, maxiter=150, verbose=3
     )
     eq, _ = eq.solve(objective="force", verbose=3)
 
@@ -1497,6 +1499,68 @@ def test_quadratic_flux_optimization_with_analytic_field():
 
 
 @pytest.mark.unit
+def test_qfm_optimization_with_analytic_field():
+    """Test analytic field optimization to reduce quadratic flux.
+
+    Checks that surface becomes axisymmetric with non-axisymmetric surface
+    and axisymmetric field.
+    """
+    surface = get("HELIOTRON", data="boundary")
+    surface.change_resolution(M=2, N=1)
+    field = ToroidalMagneticField(1, 1)
+    eval_grid = LinearGrid(
+        rho=np.array([1.0]),
+        M=10,
+        N=4,
+        NFP=surface.NFP,
+        sym=True,
+    )
+
+    optimizer = Optimizer("lsq-exact")
+
+    constraints = ()
+    quadflux_obj = SurfaceQuadraticFlux(
+        surface=surface,
+        field=field,
+        eval_grid=eval_grid,
+        field_fixed=True,
+    )
+    torflux = ToroidalFlux(
+        eq=surface,
+        field=field,
+        eq_fixed=False,
+        field_fixed=True,
+    )
+    torflux.build()
+    current_torflux = torflux.compute(surface.params_dict)
+    torflux = ToroidalFlux(
+        eq=surface,
+        field=field,
+        eq_fixed=False,
+        field_fixed=True,
+        target=current_torflux,
+    )
+
+    objective = ObjectiveFunction((quadflux_obj, torflux))
+    (surface,), __ = optimizer.optimize(
+        surface,
+        objective=objective,
+        constraints=constraints,
+        ftol=1e-14,
+        gtol=1e-14,
+        xtol=1e-14,
+        verbose=3,
+    )
+
+    # optimizer should make surface basically axisymmetric
+    # to get to Bnorm = 0
+    nonax_R = surface.R_lmn[np.where(surface.R_basis.modes[:, 2] != 0)]
+    nonax_Z = surface.Z_lmn[np.where(surface.Z_basis.modes[:, 2] != 0)]
+    np.testing.assert_allclose(nonax_R, 0, atol=1e-7)
+    np.testing.assert_allclose(nonax_Z, 0, atol=1e-7)
+
+
+@pytest.mark.unit
 def test_second_stage_optimization():
     """Test optimizing magnetic field for a fixed axisymmetric equilibrium."""
     eq = get("DSHAPE")
@@ -1901,7 +1965,7 @@ def test_ballooning_stability_opt():
     for i in range(len(surfaces)):
         rho = surfaces[i]
 
-        grid = eq.get_rtz_grid(
+        grid = eq._get_rtz_grid(
             rho,
             alpha,
             zeta,
@@ -1981,7 +2045,7 @@ def test_ballooning_stability_opt():
     for i in range(len(surfaces)):
         rho = surfaces[i]
 
-        grid = eq.get_rtz_grid(
+        grid = eq._get_rtz_grid(
             rho,
             alpha,
             zeta,

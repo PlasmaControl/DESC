@@ -445,6 +445,10 @@ def perturb(  # noqa: C901
     if verbose > 1:
         timer.disp("Total perturbation")
 
+    eq_new.surface = eq_new.get_surface_at(rho=1.0)
+    eq_new.axis = eq_new.get_axis()
+    eq_new.xsection = eq_new.get_surface_at(zeta=0)
+
     return eq_new
 
 

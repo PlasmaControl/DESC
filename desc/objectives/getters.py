@@ -362,41 +362,6 @@ def maybe_add_self_consistency(thing, constraints):  # noqa: C901
     """Add self consistency constraints if needed."""
     params = set(unique_list(flatten_list(thing.optimizable_params))[0])
 
-    # check which boundary mode we are in
-    if (
-        is_any_instance(constraints, FixBoundaryR)
-        and is_any_instance(constraints, FixSectionR)
-        and is_any_instance(constraints, BoundaryRSelfConsistency)
-        and is_any_instance(constraints, SectionRSelfConsistency)
-    ):
-        raise ValueError(
-            "Cannot have both FixBoundaryR and FixSectionR constraints! "
-            "The boundary condition can be LCFS or Poincare, but not both."
-        )
-
-    if is_any_instance(constraints, FixBoundaryR) and is_any_instance(
-        constraints, BoundaryRSelfConsistency
-    ):
-        mode = "lcfs"
-    elif is_any_instance(constraints, FixSectionR) and is_any_instance(
-        constraints, SectionRSelfConsistency
-    ):
-        mode = "poincare"
-    elif is_any_instance(constraints, FixBoundaryR) and not is_any_instance(
-        constraints, FixSectionR
-    ):
-        mode = "lcfs"
-    elif is_any_instance(constraints, FixSectionR) and not is_any_instance(
-        constraints, FixBoundaryR
-    ):
-        mode = "poincare"
-    elif not is_any_instance(constraints, FixBoundaryR) and not is_any_instance(
-        constraints, FixSectionR
-    ):
-        mode = "lcfs"
-    else:
-        mode = "other"
-
     if {"R_lmn", "Rb_lmn"} <= params and not is_any_instance(
         constraints, BoundaryRSelfConsistency
     ):
@@ -421,7 +386,6 @@ def maybe_add_self_consistency(thing, constraints):  # noqa: C901
         {"R_lmn", "Rp_lmn"} <= params
         and not is_any_instance(constraints, SectionRSelfConsistency)
         and is_any_instance(constraints, FixSectionR)
-        and mode == "poincare"
     ):
         constraints += (SectionRSelfConsistency(eq=thing),)
     elif {"R_lmn", "Rp_lmn"} <= params and not is_any_instance(
@@ -432,7 +396,6 @@ def maybe_add_self_consistency(thing, constraints):  # noqa: C901
         {"Z_lmn", "Zp_lmn"} <= params
         and not is_any_instance(constraints, SectionZSelfConsistency)
         and is_any_instance(constraints, FixSectionZ)
-        and mode == "poincare"
     ):
         constraints += (SectionZSelfConsistency(eq=thing),)
     elif {"Z_lmn", "Zp_lmn"} <= params and not is_any_instance(
@@ -443,7 +406,6 @@ def maybe_add_self_consistency(thing, constraints):  # noqa: C901
         {"L_lmn", "Lp_lmn"} <= params
         and not is_any_instance(constraints, SectionLambdaSelfConsistency)
         and is_any_instance(constraints, FixSectionLambda)
-        and mode == "poincare"
     ):
         constraints += (SectionLambdaSelfConsistency(eq=thing),)
     elif {"L_lmn", "Lp_lmn"} <= params and not is_any_instance(

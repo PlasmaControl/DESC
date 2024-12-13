@@ -37,7 +37,7 @@ the magnetic axis, cross section, and various space curves.
     desc.geometry.FourierXYZCurve
     desc.geometry.FourierPlanarCurve
     desc.geometry.SplineXYZCurve
-    desc.geometry.ZernikeRZLToroidalSection
+    desc.geometry.ZernikeRZToroidalSection
 
 The ``FourierRZToroidalSurface`` and the ``FourierRZCurve`` classes may be instantiated from an existing DESC or VMEC input file with their ``from_input_file`` method.
 

@@ -426,7 +426,7 @@ class BoundaryZSelfConsistency(_Objective):
 
 
 class SectionRSelfConsistency(_Objective):
-    """Ensure that the boundary and interior surfaces are self-consistent.
+    """Ensure that the R_lmn and Rp_lmn are self-consistent.
 
     Note: this constraint is automatically applied when needed, and does not need to be
     included by the user.
@@ -435,8 +435,6 @@ class SectionRSelfConsistency(_Objective):
     ----------
     eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
-    surface_label : float, optional
-        Surface to enforce boundary conditions on. Defaults to Equilibrium.surface.rho
     name : str, optional
         Name of the objective function.
 
@@ -497,10 +495,7 @@ class SectionRSelfConsistency(_Objective):
         super().build(use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
-        """Compute boundary R self-consistency errors.
-
-        IE, the mismatch between the Fourier-Zernike basis evaluated at rho=1 and the
-        double Fourier series defining the equilibrium LCFS
+        """Compute cross-section R self-consistency errors.
 
         Parameters
         ----------
@@ -513,14 +508,14 @@ class SectionRSelfConsistency(_Objective):
         Returns
         -------
         f : ndarray
-            boundary R self-consistency errors.
+            cross-section R self-consistency errors.
 
         """
         return jnp.dot(self._A, params["R_lmn"]) - params["Rp_lmn"]
 
 
 class SectionZSelfConsistency(_Objective):
-    """Keeps the coefficients same as the given cross-section values at cross-section.
+    """Ensure that the Z_lmn and Zp_lmn are self-consistent.
 
     Note: this constraint is automatically applied when needed, and does not need to be
     included by the user.
@@ -529,8 +524,6 @@ class SectionZSelfConsistency(_Objective):
     ----------
     eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
-    surface_label : float, optional
-        Surface to enforce boundary conditions on. Defaults to Equilibrium.surface.rho
     name : str, optional
         Name of the objective function.
 
@@ -593,27 +586,38 @@ class SectionZSelfConsistency(_Objective):
         super().build(use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
-        """Compute deviation from desired boundary."""
+        """Compute cross-section Z self-consistency errors.
+
+        Parameters
+        ----------
+        params : dict
+            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
+
+        Returns
+        -------
+        f : ndarray
+            cross-section Z self-consistency errors.
+
+        """
         return jnp.dot(self._A, params["Z_lmn"]) - params["Zp_lmn"]
 
 
 class SectionLambdaSelfConsistency(_Objective):
-    """Enforces lambda values at cross-section.
+    """Ensure that the L_lmn and Lp_lmn are self-consistent.
+
+    Note: this constraint is automatically applied when needed, and does not need to be
+    included by the user.
 
     Parameters
     ----------
     eq : Equilibrium, optional
         Equilibrium that will be optimized to satisfy the Objective.
-    target : float, ndarray, optional
-        Value to fix lambda to at rho=0 and (theta=0,zeta=0)
-    bounds : tuple of {float, ndarray}, optional
-        Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f
-    weight : float, ndarray, optional
-        Weighting to apply to the Objective, relative to other Objectives.
-        len(weight) must be equal to Objective.dim_f
     name : str
         Name of the objective function.
+
     """
 
     _scalar = False
@@ -625,7 +629,6 @@ class SectionLambdaSelfConsistency(_Objective):
     def __init__(
         self,
         eq,
-        surface_label=None,
         name="self_consistency section λ",
     ):
         super().__init__(
@@ -677,7 +680,22 @@ class SectionLambdaSelfConsistency(_Objective):
         super().build(use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
-        """Compute deviation from desired boundary."""
+        """Compute cross-section L self-consistency errors.
+
+        Parameters
+        ----------
+        params : dict
+            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
+
+        Returns
+        -------
+        f : ndarray
+            cross-section L self-consistency errors.
+
+        """
         return jnp.dot(self._A, params["L_lmn"]) - params["Lp_lmn"]
 
 
@@ -1028,11 +1046,11 @@ class FixSectionR(FixParameters):
         Equilibrium that will be optimized to satisfy the Objective.
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f. Defaults to ``target=eq.Rb_lmn``.
+        Must be broadcastable to Objective.dim_f. Defaults to ``target=eq.Rp_lmn``.
     bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
         Both bounds must be broadcastable to to Objective.dim_f.
-        Defaults to ``target=eq.Rb_lmn``.
+        Defaults to ``target=eq.Rp_lmn``.
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
         Must be broadcastable to to Objective.dim_f
@@ -1109,11 +1127,11 @@ class FixSectionZ(FixParameters):
         Equilibrium that will be optimized to satisfy the Objective.
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f. Defaults to ``target=eq.Rb_lmn``.
+        Must be broadcastable to Objective.dim_f. Defaults to ``target=eq.Zp_lmn``.
     bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
         Both bounds must be broadcastable to to Objective.dim_f.
-        Defaults to ``target=eq.Rb_lmn``.
+        Defaults to ``target=eq.Zp_lmn``.
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
         Must be broadcastable to to Objective.dim_f
@@ -1190,11 +1208,11 @@ class FixSectionLambda(FixParameters):
         Equilibrium that will be optimized to satisfy the Objective.
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f. Defaults to ``target=eq.Rb_lmn``.
+        Must be broadcastable to Objective.dim_f. Defaults to ``target=eq.Lp_lmn``.
     bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
         Both bounds must be broadcastable to to Objective.dim_f.
-        Defaults to ``target=eq.Rb_lmn``.
+        Defaults to ``target=eq.Lp_lmn``.
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
         Must be broadcastable to to Objective.dim_f

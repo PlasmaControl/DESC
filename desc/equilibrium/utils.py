@@ -9,7 +9,7 @@ from desc.geometry import (
     FourierRZCurve,
     FourierRZToroidalSurface,
     Surface,
-    ZernikeRZLToroidalSection,
+    ZernikeRZToroidalSection,
 )
 from desc.profiles import PowerSeriesProfile, _Profile
 
@@ -114,7 +114,7 @@ def parse_axis(axis, NFP=1, sym=True, surface=None, xsection=None):
         Stellarator symmetry of the Equilibrium.
     surface: FourierRZToroidalSurface
         Last closed flux surface to get axis from
-    xsection: ZernikeRZLToroidalSection
+    xsection: ZernikeRZToroidalSection
         Poincare cross-section at given zeta toroidal angle
         If supplied, axis will be axisymmetic
 
@@ -148,7 +148,7 @@ def parse_axis(axis, NFP=1, sym=True, surface=None, xsection=None):
                 ],
                 NFP=NFP,
             )
-        elif isinstance(xsection, ZernikeRZLToroidalSection):
+        elif isinstance(xsection, ZernikeRZToroidalSection):
             # FIXME: include m=0 l!=0 modes
             axis = FourierRZCurve(
                 R_n=xsection.R_lmn[
@@ -177,11 +177,11 @@ def parse_axis(axis, NFP=1, sym=True, surface=None, xsection=None):
 
 
 def parse_section(xsection=None, surface=None, sym=True):
-    """Parse section input into ZernikeRZLToroidalSection object.
+    """Parse section input into ZernikeRZToroidalSection object.
 
     Parameters
     ----------
-    xsection : ZernikeRZLToroidalSection, None
+    xsection : ZernikeRZToroidalSection, None
         Poincare surface object to parse.
     NFP : int
         Number of field periods of the Equilibrium.
@@ -190,17 +190,17 @@ def parse_section(xsection=None, surface=None, sym=True):
 
     Returns
     -------
-    xsection : ZernikeRZLToroidalSection
+    xsection : ZernikeRZToroidalSection
         Parsed Poincare surface object.
     """
-    if isinstance(xsection, ZernikeRZLToroidalSection):
+    if isinstance(xsection, ZernikeRZToroidalSection):
         _xsection = xsection
     elif isinstance(xsection, (np.ndarray, jnp.ndarray)):
-        # This is temporary, until we have a proper ZernikeRZLToroidalSection
+        # This is temporary, until we have a proper ZernikeRZToroidalSection
         # constructor from input file
         raise NotImplementedError(
-            "ZernikeRZLToroidalSection from input file not implemented"
+            "ZernikeRZToroidalSection from input file not implemented"
         )
     else:
-        _xsection = ZernikeRZLToroidalSection(L=surface.M, M=surface.M, sym=sym)
+        _xsection = ZernikeRZToroidalSection(L=surface.M, M=surface.M, sym=sym)
     return _xsection

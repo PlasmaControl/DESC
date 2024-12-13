@@ -176,6 +176,8 @@ def get_fixed_xsection_constraints(
         If True, also include constraints to fix all profiles assigned to equilibrium.
     normalize : bool
         Whether to apply constraints in normalized units.
+    fix_lambda : bool
+        Whether to fix the λ coefficients to match the cross-section.
 
     Returns
     -------

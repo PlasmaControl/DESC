@@ -24,7 +24,7 @@ from desc.compute.utils import (
 from desc.geometry import (
     FourierRZCurve,
     FourierRZToroidalSurface,
-    ZernikeRZLToroidalSection,
+    ZernikeRZToroidalSection,
 )
 from desc.grid import Grid, LinearGrid, QuadratureGrid, _Grid
 from desc.input_reader import InputReader
@@ -678,7 +678,7 @@ class Equilibrium(IOAble, Optimizable):
         -------
         surf : Surface
             object representing the given surface, either a FourierRZToroidalSurface
-            for surfaces of constant rho, or a ZernikeRZLToroidalSection for
+            for surfaces of constant rho, or a ZernikeRZToroidalSection for
             surfaces of constant zeta.
 
         """
@@ -748,7 +748,7 @@ class Equilibrium(IOAble, Optimizable):
                 "The lambda value of the returned surface will not be correct "
                 "for zeta != 0. The lambda value is taken for zeta=0.",
             )
-            surface = ZernikeRZLToroidalSection(
+            surface = ZernikeRZToroidalSection(
                 sym=self.sym, zeta=zeta % (2 * np.pi / self.NFP)
             )
             surface.change_resolution(self.L, self.M)
@@ -1503,8 +1503,8 @@ class Equilibrium(IOAble, Optimizable):
     @xsection.setter
     def xsection(self, new):
         assert isinstance(
-            new, ZernikeRZLToroidalSection
-        ), f"surfaces should be of type ZernikeRZLToroidalSection, got {new}"
+            new, ZernikeRZToroidalSection
+        ), f"surfaces should be of type ZernikeRZToroidalSection, got {new}"
         assert (
             self.sym == new.sym
         ), "Surface and Equilibrium must have the same symmetry"

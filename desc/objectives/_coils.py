@@ -1768,7 +1768,7 @@ class LinkingCurrentConsistency(_Objective):
 
     A self-consistent coil + plasma configuration must have the sum of the signed
     currents in the coils that poloidally link the plasma equal to the total poloidal
-    current in the plasma G. This objective computes the difference between these two
+    current required to be linked by the plasma according to the loop integral of its toroidal magnetic field, given by `G(rho=1)`. This objective computes the difference between these two
     quantities, such that a value of zero means the coils create the correct net
     poloidal current.
 

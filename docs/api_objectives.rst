@@ -109,6 +109,7 @@ Coil Optimization
     desc.objectives.CoilArclengthVariance
     desc.objectives.ToroidalFlux
     desc.objectives.SurfaceCurrentRegularization
+    desc.objectives.LinkingCurrentConsistency
 
 
 Profiles

@@ -26,9 +26,11 @@ class DommaschkPotentialField(ScalarPotentialField, Optimizable):
     Parameters
     ----------
     ms : 1D array-like of int
-        first indices of V_m_l terms (eq. 12 of reference)
+        first indices of V_m_l terms (eq. 12 of reference),
+        corresponds to the toroidal periodicity of the mode.
     ls : 1D array-like of int
-        second indices of V_m_l terms (eq. 12 of reference)
+        second indices of V_m_l terms (eq. 12 of reference),
+        corresponds to the poloidal periodicity of the mode.
     a_arr : 1D array-like of float
         a_m_l coefficients of V_m_l terms, which multiply the cos(m*phi)*D_m_l terms
     b_arr : 1D array-like of float
@@ -39,6 +41,10 @@ class DommaschkPotentialField(ScalarPotentialField, Optimizable):
         d_m_l coefficients of V_m_l terms, which multiply the sin(m*phi)*N_m_l-1 terms
     B0: float
         scale strength of the magnetic field's 1/R portion
+    NFP : int, optional
+        Whether the field has a discrete periodicity. This is only used when making
+        a ``SplineMagneticField`` from this field using its ``from_field`` method,
+        or when saving this field as an mgrid file using the ``save_mgrid`` method.
 
     """
 
@@ -51,6 +57,7 @@ class DommaschkPotentialField(ScalarPotentialField, Optimizable):
         c_arr=jnp.array([0.0]),
         d_arr=jnp.array([0.0]),
         B0=1.0,
+        NFP=1,
     ):
         ms = jnp.atleast_1d(jnp.asarray(ms))
         ls = jnp.atleast_1d(jnp.asarray(ls))
@@ -69,6 +76,11 @@ class DommaschkPotentialField(ScalarPotentialField, Optimizable):
             jnp.isscalar(B0) or jnp.atleast_1d(B0).size == 1
         ), "B0 should be a scalar value!"
 
+        ms_over_NFP = ms / NFP
+        assert jnp.allclose(
+            ms_over_NFP, ms_over_NFP.astype(int)
+        ), "To enforce desired NFP, `ms` should be all integer multiples of NFP"
+
         params = {}
         params["ms"] = ms
         params["ls"] = ls
@@ -78,7 +90,7 @@ class DommaschkPotentialField(ScalarPotentialField, Optimizable):
         params["d_arr"] = d_arr
         params["B0"] = B0
 
-        super().__init__(dommaschk_potential, params)
+        super().__init__(dommaschk_potential, params, NFP)
 
     @property
     def ms(self):
@@ -186,8 +198,8 @@ class DommaschkPotentialField(ScalarPotentialField, Optimizable):
         self._params["B0"] = float(np.squeeze(new))
 
     @classmethod
-    def fit_magnetic_field(  # noqa: C901 - FIXME - simplify
-        cls, field, coords, max_m, max_l, sym=False, verbose=1
+    def fit_magnetic_field(  # noqa: C901
+        cls, field, coords, max_m, max_l, sym=False, verbose=1, NFP=1
     ):
         """Fit a vacuum magnetic field with a Dommaschk Potential field.
 
@@ -199,11 +211,16 @@ class DommaschkPotentialField(ScalarPotentialField, Optimizable):
             if ndarray, must be an ndarray of the magnetic field in rpz,
                 of shape (num_nodes,3) with the columns being (B_R, B_phi, B_Z)
         coords (ndarray): shape (num_nodes,3) of R,phi,Z points to fit field at
-        max_m (int): maximum m to use for Dommaschk Potentials
+        max_m (int): maximum m to use for Dommaschk Potentials, within one field period
+            i.e. if NFP= 2 and max_m = 3, then modes with arguments up to 3*2*phi will
+            be included
         max_l (int): maximum l to use for Dommaschk Potentials
         sym (bool): if field is stellarator symmetric or not.
             if True, only stellarator-symmetric modes will
             be included in the fitting
+        NFP (int): if the field being fit has a discrete toroidal symmetry
+            with field period NFP. This will only allow Dommaschk m modes
+            that are integer multiples of NFP.
         verbose (int): verbosity level of fitting routine, > 0 prints residuals
         """
         # We seek c in  Ac = b
@@ -218,7 +235,7 @@ class DommaschkPotentialField(ScalarPotentialField, Optimizable):
             B = field(coords)
         else:  # it must be the field evaluated at the passed-in coords
             B = field
-        # TODO: add basis argument for if passed-in field or callable
+        # TODO (#928): add basis argument for if passed-in field or callable
         # evaluates rpz or xyz basis magnetic field vector,
         # and what basis coords is
 
@@ -232,8 +249,8 @@ class DommaschkPotentialField(ScalarPotentialField, Optimizable):
         #####################
         # b is made, now do A
         #####################
-        num_modes = 1 + (max_l + 1) * (max_m + 1) * 4
-        # TODO: if symmetric, technically only need half the modes
+        num_modes = 1 + (max_l) * (max_m + 1) * 4
+        # TODO (#928): if symmetric, technically only need half the modes
         # however, the field and functions are setup to accept equal
         # length arrays for a,b,c,d, so we will just zero out the
         # modes that don't fit symmetry, but in future
@@ -242,7 +259,7 @@ class DommaschkPotentialField(ScalarPotentialField, Optimizable):
         # and the modes array can then be [m,l,x] where x is 0,1,2,3
         # and we dont need to keep track of a,b,c,d separately
 
-        # TODO: technically we can drop some modes
+        # TODO (#928): technically we can drop some modes
         # since if max_l=0, there are only ever nonzero terms for a and b
         # and if max_m=0, there are only ever nonzero terms for a and c
         # but since we are only fitting in a least squares sense,
@@ -268,13 +285,13 @@ class DommaschkPotentialField(ScalarPotentialField, Optimizable):
         # if sym is True, when l is even then we need a=d=0
         # and if l is odd then b=c=0
 
-        for l in range(max_l + 1):
-            for m in range(max_m + 1):
+        for l in range(1, max_l + 1):
+            for m in range(0, max_m * NFP + 1, NFP):
                 if not sym:
                     pass  # no sym, use all coefs
-                elif l // 2 == 0:
+                elif l % 2 == 0:
                     zero_due_to_sym_inds = [0, 3]  # a=d=0 for even l with sym
-                elif l // 2 == 1:
+                elif l % 2 == 1:
                     zero_due_to_sym_inds = [1, 2]  # b=c=0 for odd l with sym
                 for which_coef in range(4):
                     if which_coef == 0:
@@ -289,7 +306,6 @@ class DommaschkPotentialField(ScalarPotentialField, Optimizable):
                         abcd_zero_due_to_sym_inds[which_coef].append(0)
                     else:
                         abcd_zero_due_to_sym_inds[which_coef].append(1)
-
                 ms.append(m)
                 ls.append(l)
         for i in range(4):
@@ -349,7 +365,7 @@ class DommaschkPotentialField(ScalarPotentialField, Optimizable):
 
         # now solve Ac=b for the coefficients c
 
-        # TODO: use min singular value to give sense of cond number?
+        # TODO (#928): use min singular value to give sense of cond number?
         c, res, _, _ = jnp.linalg.lstsq(A, rhs)
 
         if verbose > 0:
@@ -360,10 +376,9 @@ class DommaschkPotentialField(ScalarPotentialField, Optimizable):
         B0 = c[0]
 
         # we zero out the terms that should be zero due to symmetry here
-        # TODO: should also just not return any zeroed-out modes, but
+        # TODO (#928): should also just not return any zeroed-out modes, but
         # the way the modes are cataloged here with the ls and ms arrays,
-        # it is not straightforward to do that. By that I mean
-        # say ls = [1,2] ms = [1,1]
+        # it is not straightforward to do that
         a_arr = c[1 : n + 1] * abcd_zero_due_to_sym_inds[0]
         b_arr = c[n + 1 : 2 * n + 1] * abcd_zero_due_to_sym_inds[1]
         c_arr = c[2 * n + 1 : 3 * n + 1] * abcd_zero_due_to_sym_inds[2]
@@ -520,9 +535,9 @@ def D_m_n(R, Z, m, n):
     def body_fun(k, val):
         coef = CD_m_k(R, m, k) / gamma(n - 2 * k + 1)
         exp = n - 2 * k
-        # derivative of 0**0 is ill defined, so we do this to enforce it being 0
-        exp = jnp.where((Z == 0) & (exp == 0), 1, exp)
-        return val + coef * Z**exp
+        mask = (Z == 0) & (exp == 0)
+        exp = jnp.where(mask, 1, exp)
+        return val + coef * jnp.where(mask, 1, Z**exp)
 
     return fori_loop(0, n // 2 + 1, body_fun, jnp.zeros_like(R))
 
@@ -535,9 +550,9 @@ def N_m_n(R, Z, m, n):
     def body_fun(k, val):
         coef = CN_m_k(R, m, k) / gamma(n - 2 * k + 1)
         exp = n - 2 * k
-        # derivative of 0**0 is ill defined, so we do this to enforce it being 0
-        exp = jnp.where((Z == 0) & (exp == 0), 1, exp)
-        return val + coef * Z**exp
+        mask = (Z == 0) & (exp == 0)
+        exp = jnp.where(mask, 1, exp)
+        return val + coef * jnp.where(mask, 1, Z**exp)
 
     return fori_loop(0, n // 2 + 1, body_fun, jnp.zeros_like(R))
 

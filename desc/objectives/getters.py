@@ -370,16 +370,12 @@ def maybe_add_self_consistency(thing, constraints):  # noqa: C901
     # For example, if we are fixing the boundary R, then we add a dummy fixed
     # parameter for the section R. This is not ideal, but it is a workaround.
     # This helps with the factorization of the linear constraints matrix.
-    if (
-        {"R_lmn", "Rb_lmn"} <= params
-        and not is_any_instance(constraints, BoundaryRSelfConsistency)
-        and not is_any_instance(constraints, SectionRSelfConsistency)
+    if {"R_lmn", "Rb_lmn"} <= params and not is_any_instance(
+        constraints, BoundaryRSelfConsistency
     ):
         constraints += (BoundaryRSelfConsistency(eq=thing),)
-    if (
-        {"Z_lmn", "Zb_lmn"} <= params
-        and not is_any_instance(constraints, BoundaryZSelfConsistency)
-        and not is_any_instance(constraints, SectionZSelfConsistency)
+    if {"Z_lmn", "Zb_lmn"} <= params and not is_any_instance(
+        constraints, BoundaryZSelfConsistency
     ):
         constraints += (BoundaryZSelfConsistency(eq=thing),)
 
@@ -397,7 +393,6 @@ def maybe_add_self_consistency(thing, constraints):  # noqa: C901
     if (
         {"R_lmn", "Rp_lmn"} <= params
         and not is_any_instance(constraints, SectionRSelfConsistency)
-        and not is_any_instance(constraints, BoundaryRSelfConsistency)
         and is_any_instance(constraints, FixSectionR)
     ):
         constraints += (SectionRSelfConsistency(eq=thing),)
@@ -408,7 +403,6 @@ def maybe_add_self_consistency(thing, constraints):  # noqa: C901
     if (
         {"Z_lmn", "Zp_lmn"} <= params
         and not is_any_instance(constraints, SectionZSelfConsistency)
-        and not is_any_instance(constraints, BoundaryZSelfConsistency)
         and is_any_instance(constraints, FixSectionZ)
     ):
         constraints += (SectionZSelfConsistency(eq=thing),)
@@ -419,9 +413,6 @@ def maybe_add_self_consistency(thing, constraints):  # noqa: C901
     if (
         {"L_lmn", "Lp_lmn"} <= params
         and not is_any_instance(constraints, SectionLambdaSelfConsistency)
-        # if constraints has BoundarySelfConsistency, then we don't need to add
-        # SectionLambdaSelfConsistency, becuase we are solving fixed boundary
-        and not is_any_instance(constraints, BoundaryZSelfConsistency)
         and is_any_instance(constraints, FixSectionLambda)
     ):
         constraints += (SectionLambdaSelfConsistency(eq=thing),)

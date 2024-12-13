@@ -1428,7 +1428,7 @@ class TestObjectiveFunction:
     def test_mirror_ratio_equilibrium(self):
         """Test mirror ratio objective for Equilibrium."""
         # axisymmetry, no iota, so B ~ B0/R
-        eq = Equilibrium()
+        eq = Equilibrium(L=8, M=8)
         eq.solve()
         # R0 = 10, a=1, so Bmax = B0/9, Bmin = B0/11
         mirror_ratio = (1 / 9 - 1 / 11) / (1 / 9 + 1 / 11)
@@ -1436,7 +1436,7 @@ class TestObjectiveFunction:
         obj.build()
         f = obj.compute(eq.params_dict)
         # not perfect agreement bc eq is low res, so B isnt exactly B0/R
-        np.testing.assert_allclose(f, mirror_ratio, rtol=0.13)
+        np.testing.assert_allclose(f, mirror_ratio, rtol=3e-3)
 
     @pytest.mark.unit
     def test_mirror_ratio_omni_field(self):

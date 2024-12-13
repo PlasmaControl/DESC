@@ -21,7 +21,7 @@ from desc.objectives import (
 from desc.objectives.utils import factorize_linear_constraints
 from desc.optimize.tr_subproblems import trust_region_step_exact_svd
 from desc.optimize.utils import compute_jac_scale, evaluate_quadratic_form_jac
-from desc.utils import Timer, get_instance, warnif
+from desc.utils import Timer, get_instance, is_any_instance, warnif
 
 __all__ = ["get_deltas", "perturb", "optimal_perturb"]
 
@@ -445,9 +445,14 @@ def perturb(  # noqa: C901
     if verbose > 1:
         timer.disp("Total perturbation")
 
-    eq_new.surface = eq_new.get_surface_at(rho=1.0)
-    eq_new.axis = eq_new.get_axis()
-    eq_new.xsection = eq_new.get_surface_at(zeta=0)
+    constraints = maybe_add_self_consistency(eq_new, constraints)
+    # TODO: make this more general and probably put it somewhere else
+    if not is_any_instance(constraints, BoundaryRSelfConsistency):
+        eq_new.surface = eq_new.get_surface_at(rho=1.0)
+    if not is_any_instance(constraints, AxisRSelfConsistency):
+        eq_new.axis = eq_new.get_axis()
+    if not is_any_instance(constraints, SectionRSelfConsistency):
+        eq_new.xsection = eq_new.get_surface_at(zeta=0)
 
     return eq_new
 

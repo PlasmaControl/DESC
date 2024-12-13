@@ -883,7 +883,7 @@ def test_omnigenity_optimization():
     )
     optimizer = Optimizer("lsq-auglag")
     (eq, field), _ = optimizer.optimize(
-        (eq, field), objective, constraints, maxiter=100, verbose=3
+        (eq, field), objective, constraints, maxiter=150, verbose=3
     )
     eq, _ = eq.solve(objective="force", verbose=3)
 
@@ -1965,7 +1965,7 @@ def test_ballooning_stability_opt():
     for i in range(len(surfaces)):
         rho = surfaces[i]
 
-        grid = eq.get_rtz_grid(
+        grid = eq._get_rtz_grid(
             rho,
             alpha,
             zeta,
@@ -2045,7 +2045,7 @@ def test_ballooning_stability_opt():
     for i in range(len(surfaces)):
         rho = surfaces[i]
 
-        grid = eq.get_rtz_grid(
+        grid = eq._get_rtz_grid(
             rho,
             alpha,
             zeta,

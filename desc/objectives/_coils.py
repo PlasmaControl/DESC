@@ -2,6 +2,7 @@ import numbers
 import warnings
 
 import numpy as np
+from scipy.constants import mu_0
 
 from desc.backend import (
     fori_loop,
@@ -15,7 +16,7 @@ from desc.compute import get_profiles, get_transforms, rpz2xyz
 from desc.compute.utils import _compute as compute_fun
 from desc.grid import LinearGrid, _Grid
 from desc.integrals import compute_B_plasma
-from desc.utils import Timer, errorif, safenorm, warnif
+from desc.utils import Timer, broadcast_tree, errorif, safenorm, warnif
 
 from .normalization import compute_scaling_factors
 from .objective_funs import _Objective, collect_docs
@@ -1760,6 +1761,202 @@ class ToroidalFlux(_Objective):
             )
 
         return Psi
+
+
+class LinkingCurrentConsistency(_Objective):
+    """Target the self-consistent poloidal linking current between the plasma and coils.
+
+    A self-consistent coil + plasma configuration must have the sum of the signed
+    currents in the coils that poloidally link the plasma equal to the total poloidal
+    current required to be linked by the plasma according to the loop integral of its
+    toroidal magnetic field, given by `G(rho=1)`. This objective computes the difference
+    between these two quantities, such that a value of zero means the coils create the
+    correct net poloidal current.
+
+    Assumes the coil topology does not change (ie the linking number with the plasma
+    is fixed).
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Equilibrium that will be optimized to satisfy the Objective.
+    coil : CoilSet
+        Coil(s) that are to be optimized.
+    grid : Grid, optional
+        Collocation grid containing the nodes to evaluate plasma current at.
+        Defaults to ``LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)``.
+    eq_fixed : bool
+        Whether the equilibrium is assumed fixed (should be true for stage 2, false
+        for single stage).
+    """
+
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``target=0``.",
+        bounds_default="``target=0``.",
+    )
+
+    _scalar = True
+    _units = "(A)"
+    _print_value_fmt = "Linking current error: "
+
+    def __init__(
+        self,
+        eq,
+        coil,
+        *,
+        grid=None,
+        eq_fixed=False,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        loss_function=None,
+        deriv_mode="auto",
+        jac_chunk_size=None,
+        name="linking current",
+    ):
+        if target is None and bounds is None:
+            target = 0
+        self._grid = grid
+        self._eq_fixed = eq_fixed
+        self._linear = eq_fixed
+        self._eq = eq
+        self._coil = coil
+
+        super().__init__(
+            things=[coil] if eq_fixed else [coil, eq],
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            loss_function=loss_function,
+            deriv_mode=deriv_mode,
+            jac_chunk_size=jac_chunk_size,
+            name=name,
+        )
+
+    def build(self, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        eq = self._eq
+        coil = self._coil
+        grid = self._grid or LinearGrid(
+            M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym
+        )
+        warnif(
+            not np.allclose(grid.nodes[:, 0], 1),
+            UserWarning,
+            "grid includes interior points, should be rho=1.",
+        )
+
+        self._dim_f = 1
+        self._data_keys = ["G"]
+
+        all_params = tree_map(lambda dim: np.arange(dim), coil.dimensions)
+        current_params = tree_map(lambda idx: {"current": idx}, True)
+        # indices of coil currents
+        self._indices = tree_leaves(broadcast_tree(current_params, all_params))
+        self._num_coils = coil.num_coils
+
+        profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
+        transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
+
+        # compute linking number of coils with plasma. To do this we add a fake "coil"
+        # along the magnetic axis and compute the linking number of that coilset
+        from desc.coils import FourierRZCoil, MixedCoilSet
+
+        axis_coil = FourierRZCoil(
+            1.0,
+            eq.axis.R_n,
+            eq.axis.Z_n,
+            eq.axis.R_basis.modes[:, 2],
+            eq.axis.Z_basis.modes[:, 2],
+            eq.axis.NFP,
+        )
+        dummy_coilset = MixedCoilSet(axis_coil, coil, check_intersection=False)
+        # linking number for coils with axis
+        link = np.round(dummy_coilset._compute_linking_number())[0, 1:]
+
+        self._constants = {
+            "quad_weights": 1.0,
+            "link": link,
+        }
+
+        if self._eq_fixed:
+            data = compute_fun(
+                "desc.equilibrium.equilibrium.Equilibrium",
+                self._data_keys,
+                params=eq.params_dict,
+                transforms=transforms,
+                profiles=profiles,
+            )
+            eq_linking_current = 2 * jnp.pi * data["G"][0] / mu_0
+            self._constants["eq_linking_current"] = eq_linking_current
+        else:
+            self._constants["profiles"] = profiles
+            self._constants["transforms"] = transforms
+
+        if self._normalize:
+            params = tree_leaves(
+                coil.params_dict, is_leaf=lambda x: isinstance(x, dict)
+            )
+            self._normalization = np.sum([np.abs(param["current"]) for param in params])
+
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, coil_params, eq_params=None, constants=None):
+        """Compute linking current error.
+
+        Parameters
+        ----------
+        coil_params : dict
+            Dictionary of coilset degrees of freedom, eg ``CoilSet.params_dict``
+        eq_params : dict
+            Dictionary of equilibrium degrees of freedom, eg ``Equilibrium.params_dict``
+            Only required if eq_fixed=False.
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc.
+            Defaults to self._constants.
+
+        Returns
+        -------
+        f : array of floats
+            Linking current error.
+
+        """
+        if constants is None:
+            constants = self.constants
+        if self._eq_fixed:
+            eq_linking_current = constants["eq_linking_current"]
+        else:
+            data = compute_fun(
+                "desc.equilibrium.equilibrium.Equilibrium",
+                self._data_keys,
+                params=eq_params,
+                transforms=constants["transforms"],
+                profiles=constants["profiles"],
+            )
+            eq_linking_current = 2 * jnp.pi * data["G"][0] / mu_0
+
+        coil_currents = jnp.concatenate(
+            [
+                jnp.atleast_1d(param[idx])
+                for param, idx in zip(tree_leaves(coil_params), self._indices)
+            ]
+        )
+        coil_currents = self.things[0]._all_currents(coil_currents)
+        coil_linking_current = jnp.sum(constants["link"] * coil_currents)
+        return eq_linking_current - coil_linking_current
 
 
 class CoilSetLinkingNumber(_Objective):

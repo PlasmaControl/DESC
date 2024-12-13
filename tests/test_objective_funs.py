@@ -23,6 +23,7 @@ from desc.coils import (
 )
 from desc.compute import get_transforms
 from desc.equilibrium import Equilibrium
+from desc.equilibrium.coords import get_rtz_grid
 from desc.examples import get
 from desc.geometry import FourierPlanarCurve, FourierRZToroidalSurface, FourierXYZCurve
 from desc.grid import ConcentricGrid, LinearGrid, QuadratureGrid
@@ -55,6 +56,7 @@ from desc.objectives import (
     ForceBalance,
     ForceBalanceAnisotropic,
     FusionPower,
+    GammaC,
     GenericObjective,
     HeatingPowerISS04,
     Isodynamicity,
@@ -1528,6 +1530,54 @@ class TestObjectiveFunction:
         np.testing.assert_allclose(result1 * 2, result5)
         np.testing.assert_allclose(result2, result4)
 
+    @pytest.mark.unit
+    def test_objective_compute(self):
+        """To avoid issues such as #1424."""
+        eq = get("W7-X")
+        rho = np.linspace(0.1, 1, 3)
+        alpha = np.array([0])
+        Y_B = 50
+        num_transit = 4
+        num_pitch = 16
+        num_quad = 16
+        zeta = np.linspace(0, 2 * np.pi * num_transit, Y_B * num_transit)
+        grid = get_rtz_grid(eq, rho, alpha, zeta, coordinates="raz")
+        data = eq.compute(
+            ["effective ripple", "Gamma_c"],
+            grid=grid,
+            num_quad=num_quad,
+            num_pitch=num_pitch,
+        )
+        obj = EffectiveRipple(
+            eq,
+            rho=rho,
+            alpha=alpha,
+            Y_B=Y_B,
+            num_transit=num_transit,
+            num_quad=num_quad,
+            num_pitch=num_pitch,
+        )
+        obj.build()
+        # TODO(#1094)
+        np.testing.assert_allclose(
+            obj.compute(eq.params_dict),
+            grid.compress(data["effective ripple"]),
+            rtol=0.004,
+        )
+        obj = GammaC(
+            eq,
+            rho=rho,
+            alpha=alpha,
+            Y_B=Y_B,
+            num_transit=num_transit,
+            num_quad=num_quad,
+            num_pitch=num_pitch,
+        )
+        obj.build()
+        np.testing.assert_allclose(
+            obj.compute(eq.params_dict), grid.compress(data["Gamma_c"])
+        )
+
 
 @pytest.mark.regression
 def test_derivative_modes():
@@ -2478,7 +2528,7 @@ def test_loss_function_asserts():
 def _reduced_resolution_objective(eq, objective):
     """Speed up testing suite by defining rules to reduce objective resolution."""
     kwargs = {}
-    if objective in {EffectiveRipple}:
+    if objective in {EffectiveRipple, GammaC}:
         kwargs["Y_B"] = 50
         kwargs["num_transit"] = 2
         kwargs["num_pitch"] = 25
@@ -2970,6 +3020,7 @@ class TestObjectiveNaNGrad:
         EffectiveRipple,
         ForceBalanceAnisotropic,
         FusionPower,
+        GammaC,
         HeatingPowerISS04,
         Omnigenity,
         PlasmaCoilSetMinDistance,
@@ -3242,6 +3293,17 @@ class TestObjectiveNaNGrad:
         with pytest.warns(UserWarning, match="Reducing radial"):
             eq.change_resolution(2, 2, 2, 4, 4, 4)
         obj = ObjectiveFunction(_reduced_resolution_objective(eq, EffectiveRipple))
+        obj.build(verbose=0)
+        g = obj.grad(obj.x())
+        assert not np.any(np.isnan(g))
+
+    @pytest.mark.unit
+    def test_objective_no_nangrad_Gamma_c(self):
+        """Gamma_c."""
+        eq = get("ESTELL")
+        with pytest.warns(UserWarning, match="Reducing radial"):
+            eq.change_resolution(2, 2, 2, 4, 4, 4)
+        obj = ObjectiveFunction(_reduced_resolution_objective(eq, GammaC))
         obj.build(verbose=0)
         g = obj.grad(obj.x())
         assert not np.any(np.isnan(g))

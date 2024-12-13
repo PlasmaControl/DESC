@@ -61,6 +61,7 @@ from desc.objectives import (
     HeatingPowerISS04,
     Isodynamicity,
     LinearObjectiveFromUser,
+    LinkingCurrentConsistency,
     MagneticWell,
     MeanCurvature,
     MercierStability,
@@ -1426,6 +1427,61 @@ class TestObjectiveFunction:
             obj.build()
 
     @pytest.mark.unit
+    def test_linking_current(self):
+        """Test calculation of signed linking current from coils to plasma."""
+        eq = Equilibrium()
+        G = eq.compute("G", grid=LinearGrid(rho=1.0))["G"][0] * 2 * jnp.pi / mu_0
+        c = G / 8
+        coil1 = FourierPlanarCoil(current=1.5 * c, center=[10, 1, 0])
+        coil2 = FourierPlanarCoil(current=0.5 * c, center=[10, 2, 0])
+        # explicit symmetry coils
+        coilset1 = CoilSet.from_symmetry((coil1, coil2), NFP=2, sym=True)
+        expected_currents = [
+            c * 1.5,  # these are the 2 actual coils, with different currents
+            c * 0.5,
+            -c * 0.5,  # these are the stellarator symmetric ones in first field period
+            -c * 1.5,
+            c * 1.5,  # these next 4 are the ones from the 2nd field period
+            c * 0.5,
+            -c * 0.5,
+            -c * 1.5,
+        ]
+        np.testing.assert_allclose(coilset1._all_currents(), expected_currents)
+        obj = LinkingCurrentConsistency(eq, coilset1)
+        obj.build()
+        f = obj.compute(coilset1.params_dict, eq.params_dict)
+        np.testing.assert_allclose(f, 0)
+
+        # same with virtual coils
+        coilset2 = CoilSet(coil1, coil2, NFP=2, sym=True)
+        np.testing.assert_allclose(coilset2._all_currents(), expected_currents)
+        obj = LinkingCurrentConsistency(eq, coilset2)
+        obj.build()
+        f = obj.compute(coilset2.params_dict, eq.params_dict)
+        np.testing.assert_allclose(f, 0)
+
+        # both coilsets together. These have overlapping coils but it doesn't
+        # affect the linking number
+        coilset3 = MixedCoilSet(coilset1, coilset2, check_intersection=False)
+        np.testing.assert_allclose(
+            coilset3._all_currents(), expected_currents + expected_currents
+        )
+        obj = LinkingCurrentConsistency(eq, coilset3)
+        obj.build()
+        f = obj.compute(coilset3.params_dict, eq.params_dict)
+        np.testing.assert_allclose(f, -G)  # coils provide 2G so error is -G
+
+        # CoilSet + 1 extra coil
+        coilset4 = MixedCoilSet(coilset1, coil2, check_intersection=False)
+        np.testing.assert_allclose(
+            coilset4._all_currents(), expected_currents + [0.5 * G / 8]
+        )
+        obj = LinkingCurrentConsistency(eq, coilset4)
+        obj.build()
+        f = obj.compute(coilset4.params_dict, eq.params_dict)
+        np.testing.assert_allclose(f, -0.5 * G / 8)
+
+    @pytest.mark.unit
     def test_omnigenity_multiple_surfaces(self):
         """Test omnigenity transform vectorized over multiple surfaces."""
         surf = FourierRZToroidalSurface.from_qp_model(
@@ -2561,6 +2617,7 @@ class TestComputeScalarResolution:
         FusionPower,
         GenericObjective,
         HeatingPowerISS04,
+        LinkingCurrentConsistency,
         Omnigenity,
         PlasmaCoilSetMinDistance,
         PlasmaVesselDistance,
@@ -2992,6 +3049,26 @@ class TestComputeScalarResolution:
             f[i] = obj.compute_scalar(obj.x())
         np.testing.assert_allclose(f, f[-1], rtol=1e-2, atol=1e-12)
 
+    @pytest.mark.unit
+    def test_compute_scalar_resolution_linking_current(self):
+        """LinkingCurrentConsistency."""
+        coil = FourierPlanarCoil(center=[10, 1, 0])
+        eq = Equilibrium()
+        coilset = CoilSet.from_symmetry(coil, NFP=4, sym=True)
+        f = np.zeros_like(self.res_array, dtype=float)
+        for i, res in enumerate(self.res_array):
+            obj = ObjectiveFunction(
+                LinkingCurrentConsistency(
+                    eq,
+                    coilset,
+                    grid=LinearGrid(M=int(eq.M_grid * res), N=int(eq.N_grid * res)),
+                ),
+                use_jit=False,
+            )
+            obj.build(verbose=0)
+            f[i] = obj.compute_scalar(obj.x())
+        np.testing.assert_allclose(f, f[-1], rtol=1e-2, atol=1e-12)
+
 
 class TestObjectiveNaNGrad:
     """Make sure reverse mode AD works correctly for all objectives."""
@@ -3022,6 +3099,7 @@ class TestObjectiveNaNGrad:
         FusionPower,
         GammaC,
         HeatingPowerISS04,
+        LinkingCurrentConsistency,
         Omnigenity,
         PlasmaCoilSetMinDistance,
         PlasmaVesselDistance,
@@ -3313,6 +3391,17 @@ class TestObjectiveNaNGrad:
         """BallooningStability."""
         eq = get("HELIOTRON")
         obj = ObjectiveFunction(BallooningStability(eq=eq))
+        obj.build()
+        g = obj.grad(obj.x())
+        assert not np.any(np.isnan(g))
+
+    @pytest.mark.unit
+    def test_objective_no_nangrad_linking_current(self):
+        """LinkingCurrentConsistency."""
+        coil = FourierPlanarCoil(center=[10, 1, 0])
+        coilset = CoilSet.from_symmetry(coil, NFP=4, sym=True)
+        eq = Equilibrium()
+        obj = ObjectiveFunction(LinkingCurrentConsistency(eq, coilset))
         obj.build()
         g = obj.grad(obj.x())
         assert not np.any(np.isnan(g))

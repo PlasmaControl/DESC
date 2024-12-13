@@ -58,20 +58,27 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
+      - name: Check full Python version
+        run: |
+          python --version
+          python_version=$(python --version 2>&1 | cut -d' ' -f2)
+          echo "Python version: $python_version"
+          echo "version=$python_version" >> $GITHUB_ENV
+
       - name: Restore Python environment cache
         if: env.has_changes == 'true'
         id: restore-env
         uses: actions/cache/restore@v4
         with:
-          path: .venv-${{ matrix.python-version }}
-          key: ${{ runner.os }}-venv-${{ matrix.python-version }}-${{ hashFiles('devtools/dev-requirements.txt', 'requirements.txt') }}
+          path: .venv-${{ env.version }}
+          key: ${{ runner.os }}-venv-${{ env.version }}-${{ hashFiles('devtools/dev-requirements.txt', 'requirements.txt') }}
 
       - name: Set up virtual environment if not restored from cache
         if: steps.restore-env.outputs.cache-hit != 'true' && env.has_changes == 'true'
         run: |
           gh cache list
-          python -m venv .venv-${{ matrix.python-version }}
-          source .venv-${{ matrix.python-version }}/bin/activate
+          python -m venv .venv-${{ env.version }}
+          source .venv-${{ env.version }}/bin/activate
           python -m pip install --upgrade pip
           pip install -r devtools/dev-requirements.txt
           pip install matplotlib==3.9.2
@@ -79,7 +86,7 @@ jobs:
       - name: Benchmark with pytest-benchmark (PR)
         if: env.has_changes == 'true'
         run: |
-          source .venv-${{ matrix.python-version }}/bin/activate
+          source .venv-${{ env.version }}/bin/activate
           pwd
           lscpu
           pip list
@@ -106,7 +113,7 @@ jobs:
       - name: Benchmark with pytest-benchmark (MASTER)
         if: env.has_changes == 'true'
         run: |
-          source .venv-${{ matrix.python-version }}/bin/activate
+          source .venv-${{ env.version }}/bin/activate
           pwd
           lscpu
           pip list
@@ -122,7 +129,7 @@ jobs:
       - name: Put benchmark results in same folder
         if: env.has_changes == 'true'
         run: |
-          source .venv-${{ matrix.python-version }}/bin/activate
+          source .venv-${{ env.version }}/bin/activate
           pwd
           cd tests/benchmarks
           find .benchmarks/ -type f -printf "%T@ %p\n" | sort -n | cut -d' ' -f 2- | tail -n 1 > temp1
@@ -143,7 +150,7 @@ jobs:
       - name: Compare latest commit results to the master branch results
         if: env.has_changes == 'true'
         run: |
-          source .venv-${{ matrix.python-version }}/bin/activate
+          source .venv-${{ env.version }}/bin/activate
           cd tests/benchmarks
           pwd
           python compare_bench_results.py

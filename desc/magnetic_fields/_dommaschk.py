@@ -452,6 +452,9 @@ def betastar(m, n):
     return cond(jnp.logical_or(n < 0, n >= m), true_fun, false_fun, (m, n))
 
 
+# TODO: don't need this cond if beta has the same cond, so can simplify this.
+
+
 @jit
 def gamma_n(m, n):
     """gamma_n of eq 33."""
@@ -475,6 +478,9 @@ def gamma_nstar(m, n):
         return (2 * n + m) * gamma_n(m, n)
 
     return cond(n <= 0, true_fun, false_fun, (m, n))
+
+
+# TODO: don't need this cond if gamma_n has the same cond, so can simplify this.
 
 
 @jit

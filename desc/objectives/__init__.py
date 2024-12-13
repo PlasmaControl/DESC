@@ -9,6 +9,7 @@ from ._coils import (
     CoilSetLinkingNumber,
     CoilSetMinDistance,
     CoilTorsion,
+    LinkingCurrentConsistency,
     PlasmaCoilSetMinDistance,
     QuadraticFlux,
     SurfaceCurrentRegularization,

@@ -4,6 +4,7 @@ Changelog
 New Feature
 
 - Adds a new profile class ``PowerProfile`` for raising profiles to a power.
+- Add ``desc.objectives.LinkingCurrentConsistency`` for ensuring that coils in a stage 2 or single stage optimization provide the required linking current for a given equilibrium.
 - Adds an option ``scaled_termination`` (defaults to True) to all of the desc optimizers to measure the norms for ``xtol`` and ``gtol`` in the scaled norm provided by ``x_scale`` (which defaults to using an adaptive scaling based on the Jacobian or Hessian). This should make things more robust when optimizing parameters with widely different magnitudes. The old behavior can be recovered by passing ``options={"scaled_termination": False}``.
 - ``desc.objectives.Omnigenity`` is now vectorized and able to optimize multiple surfaces at the same time. Previously it was required to use a different objective for each surface.
 
@@ -16,7 +17,6 @@ v0.13.0
 -------
 
 New Features
-
 - Adds ``from_input_file`` method to ``Equilibrium`` class to generate an ``Equilibrium`` object with boundary, profiles, resolution and flux specified in a given DESC or VMEC input file
 - Adds function ``solve_regularized_surface_current`` to ``desc.magnetic_fields`` module that implements the REGCOIL algorithm (Landreman, (2017)) for surface current normal field optimization
     * Can specify the tuple ``current_helicity=(M_coil, N_coil)`` to determine if resulting contours correspond to helical topology (both ``(M_coil, N_coil)`` not equal to 0), modular (``N_coil`` equal to 0 and ``M_coil`` nonzero) or windowpane/saddle (``M_coil`` and ``N_coil`` both zero)
@@ -299,7 +299,7 @@ optimization. Set to False by default.
 non-singular, non-degenerate) coordinate mappings for initial guesses. This is applied
 automatically when creating a new `Equilibrium` if the default initial guess of scaling
 the boundary surface produces self-intersecting surfaces. This can be disabled by
-passing `ensure_nested=False` when constructing the `Equilibrum`.
+passing `ensure_nested=False` when constructing the `Equilibrium`.
 - Adds `loss_function` argument to all `Objective`s for applying one of min/max/mean
 to objective function values (for targeting the average value of a profile, etc).
 - `Equilibrium.get_profile` now allows user to choose a profile type (power series, spline, etc)
@@ -451,7 +451,7 @@ Breaking changes
 - Renames ``theta_sfl`` to ``theta_PEST`` in compute functions to avoid confusion with
 other straight field line coordinate systems.
 - Makes plotting kwargs a bit more uniform. ``zeta``, ``nzeta``, ``nphi`` have all been
-superceded by ``phi`` which can be an integer for equally spaced angles or a float or
+superseded by ``phi`` which can be an integer for equally spaced angles or a float or
 array of float to specify angles manually.
 
 Bug fixes
@@ -521,7 +521,7 @@ the future all quantities should evaluate correctly at the magnetic axis. Note t
 evaluating quantities at the axis generally requires higher order derivatives and so
 can be much more expensive than evaluating at nonsingular points, so during optimization
 it is not recommended to include a grid point at the axis. Generally a small finite value
-such as ``rho = 1e-6`` will avoid the singuarlity with a negligible loss in accuracy for
+such as ``rho = 1e-6`` will avoid the singularity with a negligible loss in accuracy for
 analytic quantities.
 - Adds new optimizers ``fmin-auglag`` and ``lsq-auglag`` for performing constrained
 optimization using the augmented Lagrangian method. These generally perform much better
@@ -537,7 +537,7 @@ the existing methods ``compute_theta_coordinates`` and ``compute_flux_coordinate
 but allows mapping between arbitrary coordinates.
 - Adds calculation of $\nabla \mathbf{B}$ tensor and corresponding $L_{\nabla B}$ metric
 - Adds objective ``BScaleLength`` for penalizing strong magnetic field curvature.
-- Adds objective ``ObjectiveFromUser`` for wrapping an arbitary user defined function.
+- Adds objective ``ObjectiveFromUser`` for wrapping an arbitrary user defined function.
 - Adds utilities ``desc.grid.find_least_rational_surfaces`` and
 ``desc.grid.find_most_rational_surfaces`` for finding the least/most rational surfaces
 for a given rotational transform profile.
@@ -1073,7 +1073,7 @@ New Features:
 -   Updates `Equilibrium` to make creating them more straightforward.
     -   Instead of a dictionary of arrays and values, init method now
         takes individual arguments. These can either be objects of the
-        correct type (ie `Surface` objects for boundary condiitons,
+        correct type (ie `Surface` objects for boundary conditions,
         `Profile` for pressure and iota etc,) or ndarrays which will get
         parsed into objects of the correct type (for backwards
         compatibility)
@@ -1357,7 +1357,7 @@ Major changes:
     indexing, where only M+1 points were used instead of the correct
     2\*M+1
 -   Rotated concentric grids by 2pi/3M to avoid symmetry plane at
-    theta=0,pi. Previously, for stellarator symmetic cases, the nodes at
+    theta=0,pi. Previously, for stellarator symmetric cases, the nodes at
     theta=0 did not contribute to helical force balance.
 -   Added [L\_grid]{.title-ref} parameter to specify radial resolution
     of grid nodes directly and making the API more consistent.
@@ -1523,7 +1523,7 @@ saved, and objectives getting compiled more often than necessary
 
 Major Changes:
 
--   Changes to Equilibium/EquilibriaFamily:
+-   Changes to Equilibrium/EquilibriaFamily:
     -   general switching to using properties rather than direct
         attributes when referencing things (ie, `eq.foo`, not
         `eq._foo`). This allows getter methods to have safeguards if

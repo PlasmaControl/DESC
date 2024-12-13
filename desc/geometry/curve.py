@@ -820,7 +820,8 @@ class FourierPlanarCurve(Curve):
         coords_rotated = coords_centered @ rotmat  # rotate to X-Y plane
 
         warnif(
-            np.max(np.abs(coords_rotated[:, 2])) > 1e-14,  # check that Z=0 for all points
+            np.max(np.abs(coords_rotated[:, 2]))
+            > 1e-14,  # check that Z=0 for all points
             UserWarning,
             "Curve values are not planar! Using the projection onto a plane.",
         )
@@ -828,15 +829,27 @@ class FourierPlanarCurve(Curve):
         # polar angle
         s = np.arctan2(coords_rotated[:, 1], coords_rotated[:, 0])
         unwrapped_s = np.unwrap(s)
-        curve_sign = np.sign(unwrapped_s[-1] - unwrapped_s[0])
+        # Determine if the sequence is monotonically increasing or decreasing
+        if np.all(np.diff(unwrapped_s) > 0):
+            curve_sign = 1
+        elif np.all(np.diff(unwrapped_s) < 0):
+            curve_sign = -1
+        else:
+            warnings.warn(
+                "The curve parameter s is not strictly increasing or decreasing. "
+                "Assuming default direction.",
+                UserWarning,
+            )
+            curve_sign = 1
 
-        if curve_sign == -1: #original curve was parameterized "backwards" (clockwise) compared to FourierPlanarCurve assumption
-            normal = -normal # flip normal vector direction
-            axis = np.cross(Z_axis, normal)
-            angle = np.arccos(np.dot(Z_axis, normal))
-
-            rotmat = rotation_matrix(axis, angle)
-            coords_rotated = coords_centered @ rotmat  # rotate to X-Y plane
+        if curve_sign == -1:
+            # original curve was parameterized "backwards" (clockwise),
+            # compared to FourierPlanarCurve assumption
+            normal = -normal  # flip normal vector direction
+            rotmat = rotation_matrix(axis, np.pi)
+            coords_rotated = (
+                coords_rotated @ rotmat
+            )  # flip on X-Y plane to match normal vector
 
         # polar radius and angle
         r = np.sqrt(coords_rotated[:, 0] ** 2 + coords_rotated[:, 1] ** 2)

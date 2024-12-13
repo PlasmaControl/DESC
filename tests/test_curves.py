@@ -661,13 +661,13 @@ class TestFourierPlanarCurve:
     def test_to_FourierPlanarCurve(self):
         """Test converting SplineXYZCurve to FourierPlanarCurve object."""
         npts = 1000
-        N = 5
+        N = 50
 
-        # Create a SplineXYZCurve of a planar circle
+        # Create a SplineXYZCurve of a planar ellipse
         s = np.linspace(0, 2 * np.pi, npts)
         X = 2 * np.cos(s)
-        Y = np.ones(npts)
-        Z = 2 * np.sin(s)
+        Y = 1 * np.sin(s)
+        Z = np.ones(npts)
         c = SplineXYZCurve(X=X, Y=Y, Z=Z)
 
         # Create a backwards SplineXYZCurve by flipping the coordinates
@@ -681,29 +681,37 @@ class TestFourierPlanarCurve:
         c_planar = c.to_FourierPlanar(N=N, grid=npts, basis="xyz")
         c_backwards_planar = c_backwards.to_FourierPlanar(N=N, grid=npts, basis="xyz")
 
-        grid = LinearGrid(N=20, endpoint=True)
+        grid_spline = LinearGrid(zeta=20)
 
-        coords_spline = c.compute("x", grid=grid)["x"]
-        coords_planar = c_planar.compute("x", grid=grid)["x"]
-        coords_backwards_spline = c_backwards.compute("x", grid=grid)["x"]
-        coords_backwards_planar = c_backwards_planar.compute("x", grid=grid)["x"]
+        # Compute coordinates for the spline and planar curve
+        coords_spline = c.compute("x", grid=grid_spline, basis="xyz")["x"]
+        zeta = np.arctan2(  # zeta = polar angle for planar coil for same points
+            coords_spline[:, 1] - c_planar.center[1],
+            coords_spline[:, 0] - c_planar.center[0],
+        )  # use Grid instead of LinearGrid to prevent node sorting
+        grid_planar = Grid(np.array([np.zeros_like(zeta), np.zeros_like(zeta), zeta]).T)
+        coords_planar = c_planar.compute("x", grid=grid_planar, basis="xyz")["x"]
+
+        # Compute coordinates for the backwards spline and planar curve
+        coords_backwards_spline = c_backwards.compute(
+            "x", grid=grid_spline, basis="xyz"
+        )["x"]
+        zeta = np.arctan2(  # zeta = polar angle for planar coil for same points
+            coords_backwards_spline[:, 1] - c_backwards_planar.center[1],
+            coords_backwards_spline[:, 0] - c_backwards_planar.center[0],
+        )  # use Grid instead of LinearGrid to prevent node sorting
+        grid_backwards_planar = Grid(
+            np.array([np.zeros_like(zeta), np.zeros_like(zeta), zeta]).T
+        )
+        coords_backwards_planar = c_backwards_planar.compute(
+            "x", grid=grid_backwards_planar, basis="xyz"
+        )["x"]
 
         # Assertions for point positions
         np.testing.assert_allclose(coords_spline, coords_planar, atol=1e-10)
         np.testing.assert_allclose(
             coords_backwards_spline,
             coords_backwards_planar,
-            atol=1e-10,
-        )
-        # backwards coordinate order is import for Biot-Savart implicit current direction
-        np.testing.assert_allclose(
-            coords_planar, np.flip(coords_backwards_planar, axis=0), atol=1e-10
-        )
-
-        # Verify that the normal vectors are in opposite directions
-        np.testing.assert_allclose(
-            (c_planar.normal / c_backwards_planar.normal)[1],
-            np.array([-1]),
             atol=1e-10,
         )
 

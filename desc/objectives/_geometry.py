@@ -1471,7 +1471,7 @@ class MirrorRatio(_Objective):
         super().build(use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
-        """Compute mirro ratio.
+        """Compute mirror ratio.
 
         Parameters
         ----------

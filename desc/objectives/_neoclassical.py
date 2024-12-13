@@ -104,6 +104,7 @@ class EffectiveRipple(_Objective):
     def __init__(
         self,
         eq,
+        *,
         target=None,
         bounds=None,
         weight=1,
@@ -111,7 +112,6 @@ class EffectiveRipple(_Objective):
         normalize_target=True,
         loss_function=None,
         deriv_mode="auto",
-        *,
         rho=1.0,
         alpha=0.0,
         batch=True,
@@ -337,6 +337,7 @@ class GammaC(_Objective):
     def __init__(
         self,
         eq,
+        *,
         target=None,
         bounds=None,
         weight=1,
@@ -344,7 +345,6 @@ class GammaC(_Objective):
         normalize_target=True,
         loss_function=None,
         deriv_mode="auto",
-        *,
         rho=np.linspace(0.5, 1, 3),
         alpha=np.array([0]),
         batch=True,

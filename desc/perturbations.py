@@ -445,9 +445,11 @@ def perturb(  # noqa: C901
     if verbose > 1:
         timer.disp("Total perturbation")
 
-    constraints = maybe_add_self_consistency(eq_new, constraints)
     # TODO: make this more general and probably put it somewhere else
-    if not is_any_instance(constraints, BoundaryRSelfConsistency):
+    if not (
+        is_any_instance(constraints, BoundaryRSelfConsistency)
+        and is_any_instance(constraints, AxisRSelfConsistency)
+    ):
         eq_new.surface = eq_new.get_surface_at(rho=1.0)
     if not is_any_instance(constraints, AxisRSelfConsistency):
         eq_new.axis = eq_new.get_axis()

@@ -2284,7 +2284,10 @@ class Equilibrium(IOAble, Optimizable):
 
         constraints = maybe_add_self_consistency(self, constraints)
         # TODO: make this more general and probably put it somewhere else
-        if not is_any_instance(constraints, BoundaryRSelfConsistency):
+        if not (
+            is_any_instance(constraints, BoundaryRSelfConsistency)
+            and is_any_instance(constraints, AxisRSelfConsistency)
+        ):
             things[0].surface = things[0].get_surface_at(rho=1.0)
         if not is_any_instance(constraints, AxisRSelfConsistency):
             things[0].axis = things[0].get_axis()
@@ -2382,7 +2385,10 @@ class Equilibrium(IOAble, Optimizable):
 
         constraints = maybe_add_self_consistency(self, constraints)
         # TODO: make this more general and probably put it somewhere else
-        if not is_any_instance(constraints, BoundaryRSelfConsistency):
+        if not (
+            is_any_instance(constraints, BoundaryRSelfConsistency)
+            and is_any_instance(constraints, AxisRSelfConsistency)
+        ):
             things[0].surface = things[0].get_surface_at(rho=1.0)
         if not is_any_instance(constraints, AxisRSelfConsistency):
             things[0].axis = things[0].get_axis()

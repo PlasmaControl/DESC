@@ -28,11 +28,13 @@
    notebooks/tutorials/use_outputs.ipynb
    notebooks/tutorials/basic_optimization.ipynb
    notebooks/tutorials/advanced_optimization.ipynb
+   notebooks/tutorials/coil_optimization_REGCOIL.ipynb
    notebooks/tutorials/omnigenity.ipynb
    notebooks/tutorials/nae_constraint.ipynb
    notebooks/tutorials/bootstrap_current.ipynb
    notebooks/tutorials/poincare_boundary_condition.ipynb
    notebooks/tutorials/coil_stage_two_optimization.ipynb
+   notebooks/tutorials/QFM_surface.ipynb
    notebooks/tutorials/ideal_ballooning_stability.ipynb
    memory_usage
 
@@ -62,10 +64,11 @@
    :maxdepth: 1
    :caption: Developer guides
 
+   notebooks/dev_guide/getting-started-eq-solve.ipynb
+   notebooks/dev_guide/grid.ipynb
    adding_compute_funs
    adding_objectives
    adding_optimizers
-   notebooks/dev_guide/grid.ipynb
 
 
 

@@ -715,7 +715,7 @@ class ProximalProjection(ObjectiveFunction):
 
     def x(self, *things):
         """Return the full state vector from the Optimizable objects things."""
-        # TODO: also check resolution etc?
+        # TODO (#1392): also check resolution etc?
         things = things or self.things
         assert [type(t1) is type(t2) for t1, t2 in zip(things, self.things)]
         xs = []
@@ -847,6 +847,25 @@ class ProximalProjection(ObjectiveFunction):
         xopt, _ = self._update_equilibrium(x, store=False)
         return self._objective.compute_scaled_error(xopt, constants[0])
 
+    def compute_scalar(self, x, constants=None):
+        """Compute the sum of squares error.
+
+        Parameters
+        ----------
+        x : ndarray
+            State vector.
+        constants : list
+            Constant parameters passed to sub-objectives.
+
+        Returns
+        -------
+        f : float
+            Objective function scalar value.
+
+        """
+        f = jnp.sum(self.compute_scaled_error(x, constants=constants) ** 2) / 2
+        return f
+
     def compute_unscaled(self, x, constants=None):
         """Compute the raw value of the objective function.
 
@@ -883,7 +902,7 @@ class ProximalProjection(ObjectiveFunction):
             gradient vector.
 
         """
-        # TODO: figure out projected vjp to make this better
+        # TODO (#1393): figure out projected vjp to make this better
         f = jnp.atleast_1d(self.compute_scaled_error(x, constants))
         J = self.jac_scaled_error(x, constants)
         return f.T @ J

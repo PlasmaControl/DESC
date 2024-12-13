@@ -264,3 +264,72 @@ def rescale(
     eq.xsection = eq.get_surface_at(zeta=eq.xsection.zeta)
 
     return eq
+
+
+def rotate_zeta(eq, angle, copy=False):
+    """Rotate the equilibrium about the toroidal direction.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Equilibrium to rotate.
+    angle : float
+        Angle to rotate the equilibrium in radians. The actual physical rotation
+        is by angle radians. Any rotation that is not a multiple of pi/NFP will
+        break the symmetry of a stellarator symmetric equilibrium.
+    copy : bool, optional
+        Whether to update the existing equilibrium or make a copy (Default).
+
+    Returns
+    -------
+    eq_rotated : Equilibrium
+        Equilibrium rotated about the toroidal direction
+    """
+    eq_rotated = eq.copy() if copy else eq
+    # We will apply the rotation in NFP domain
+    angle = angle * eq.NFP
+    # Check if the angle is a multiple of pi/NFP
+    kpi = np.isclose(angle % np.pi, 0, 1e-8, 1e-8) or np.isclose(
+        angle % np.pi, np.pi, 1e-8, 1e-8
+    )
+    if eq.sym and not kpi and eq.N != 0:
+        warnings.warn(
+            "Rotating a stellarator symmetric equilibrium by an angle "
+            "that is not a multiple of pi/NFP will break the symmetry. "
+            "Changing the symmetry to False to rotate the equilibrium."
+        )
+        eq_rotated.change_resolution(sym=0)
+
+    def _get_new_coeffs(fun):
+        if fun == "R":
+            f_lmn = np.array(eq_rotated.R_lmn)
+            basis = eq_rotated.R_basis
+        elif fun == "Z":
+            f_lmn = np.array(eq_rotated.Z_lmn)
+            basis = eq_rotated.Z_basis
+        elif fun == "L":
+            f_lmn = np.array(eq_rotated.L_lmn)
+            basis = eq_rotated.L_basis
+        else:
+            raise ValueError("fun must be 'R', 'Z' or 'L'")
+
+        new_coeffs = f_lmn.copy()
+        for i, (l, m, n) in enumerate(basis.modes):
+            id_sin = basis.get_idx(L=l, M=m, N=-n, error=False)
+            v_sin = np.sin(np.abs(n) * angle)
+            v_cos = np.cos(np.abs(n) * angle)
+            c_sin = f_lmn[id_sin] if isinstance(id_sin, int) else 0
+            if n >= 0:
+                new_coeffs[i] = f_lmn[i] * v_cos + c_sin * v_sin
+            elif n < 0:
+                new_coeffs[i] = f_lmn[i] * v_cos - c_sin * v_sin
+        return new_coeffs
+
+    eq_rotated.R_lmn = _get_new_coeffs(fun="R")
+    eq_rotated.Z_lmn = _get_new_coeffs(fun="Z")
+    eq_rotated.L_lmn = _get_new_coeffs(fun="L")
+
+    eq_rotated.surface = eq_rotated.get_surface_at(rho=1.0)
+    eq_rotated.axis = eq_rotated.get_axis()
+
+    return eq_rotated

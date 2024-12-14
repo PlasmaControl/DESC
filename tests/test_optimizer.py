@@ -33,9 +33,9 @@ from desc.objectives import (
     FixParameters,
     FixPressure,
     FixPsi,
-    FixSumCoilCurrent,
     ForceBalance,
     GenericObjective,
+    LinkingCurrentConsistency,
     MagneticWell,
     MeanCurvature,
     ObjectiveFunction,
@@ -1405,15 +1405,17 @@ def test_optimize_coil_currents(DummyCoilSet):
         coil.current = current / coils.num_coils
 
     objective = ObjectiveFunction(QuadraticFlux(eq=eq, field=coils, vacuum=True))
-    constraints = FixSumCoilCurrent(coils)
+    constraints = LinkingCurrentConsistency(eq, coils, eq_fixed=True)
     optimizer = Optimizer("lsq-exact")
-    [coils_opt], _ = optimizer.optimize(
-        things=coils,
-        objective=objective,
-        constraints=constraints,
-        verbose=2,
-        copy=True,
-    )
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", message=".*\n.*\nIncompatible")
+        [coils_opt], _ = optimizer.optimize(
+            things=coils,
+            objective=objective,
+            constraints=constraints,
+            verbose=2,
+            copy=True,
+        )
     # check that on average optimized coil currents changed by more than
     # 15% from initial values
     np.testing.assert_array_less(

@@ -2275,22 +2275,11 @@ class Equilibrium(IOAble, Optimizable):
             options=options,
             copy=copy,
         )
-        from desc.objectives import (
-            AxisRSelfConsistency,
-            BoundaryRSelfConsistency,
-            SectionRSelfConsistency,
-        )
+        from desc.objectives import SectionRSelfConsistency
         from desc.objectives.getters import maybe_add_self_consistency
 
         constraints = maybe_add_self_consistency(self, constraints)
         # TODO: make this more general and probably put it somewhere else
-        if not (
-            is_any_instance(constraints, BoundaryRSelfConsistency)
-            and is_any_instance(constraints, AxisRSelfConsistency)
-        ):
-            things[0].surface = things[0].get_surface_at(rho=1.0)
-        if not is_any_instance(constraints, AxisRSelfConsistency):
-            things[0].axis = things[0].get_axis()
         if not is_any_instance(constraints, SectionRSelfConsistency):
             things[0].xsection = things[0].get_surface_at(zeta=0)
 
@@ -2376,22 +2365,11 @@ class Equilibrium(IOAble, Optimizable):
             options=options,
             copy=copy,
         )
-        from desc.objectives import (
-            AxisRSelfConsistency,
-            BoundaryRSelfConsistency,
-            SectionRSelfConsistency,
-        )
+        from desc.objectives import SectionRSelfConsistency
         from desc.objectives.getters import maybe_add_self_consistency
 
         constraints = maybe_add_self_consistency(self, constraints)
         # TODO: make this more general and probably put it somewhere else
-        if not (
-            is_any_instance(constraints, BoundaryRSelfConsistency)
-            and is_any_instance(constraints, AxisRSelfConsistency)
-        ):
-            things[0].surface = things[0].get_surface_at(rho=1.0)
-        if not is_any_instance(constraints, AxisRSelfConsistency):
-            things[0].axis = things[0].get_axis()
         if not is_any_instance(constraints, SectionRSelfConsistency):
             things[0].xsection = things[0].get_surface_at(zeta=0)
 

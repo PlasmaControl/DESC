@@ -446,13 +446,6 @@ def perturb(  # noqa: C901
         timer.disp("Total perturbation")
 
     # TODO: make this more general and probably put it somewhere else
-    if not (
-        is_any_instance(constraints, BoundaryRSelfConsistency)
-        and is_any_instance(constraints, AxisRSelfConsistency)
-    ):
-        eq_new.surface = eq_new.get_surface_at(rho=1.0)
-    if not is_any_instance(constraints, AxisRSelfConsistency):
-        eq_new.axis = eq_new.get_axis()
     if not is_any_instance(constraints, SectionRSelfConsistency):
         eq_new.xsection = eq_new.get_surface_at(zeta=0)
 

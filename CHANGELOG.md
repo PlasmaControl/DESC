@@ -11,7 +11,8 @@ New Feature
 
 Bug Fixes
 
-- Small bug fix to use the correct normalization length ``a`` in the BallooningStability objective
+- Small bug fix to use the correct normalization length ``a`` in the BallooningStability objective.
+- Fixed I/O bug when saving/loading ``_Profile`` classes that do not have a ``_params`` attribute.
 
 v0.13.0
 -------

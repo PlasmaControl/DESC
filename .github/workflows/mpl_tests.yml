@@ -55,6 +55,8 @@ jobs:
           - mpl-version: 3.8.4
           - mpl-version: 3.9.0
           - mpl-version: 3.9.2
+          - mpl-version: 3.9.3
+          - mpl-version: 3.10.0
 
     steps:
       - uses: actions/checkout@v4

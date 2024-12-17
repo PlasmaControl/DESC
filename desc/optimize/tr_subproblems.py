@@ -205,10 +205,11 @@ def trust_region_step_exact_svd(
         """
         denom = s**2 + alpha
         denom = jnp.where(denom == 0, 1, denom)
-        p_norm = jnp.linalg.norm(suf / denom)
+        p = -v.dot(suf / denom)
+        p_norm = jnp.linalg.norm(p)
         phi = p_norm - trust_radius
         phi_prime = -jnp.sum(suf**2 / denom**3) / p_norm
-        return phi, phi_prime
+        return p, phi, phi_prime
 
     # Check if J has full rank and try Gauss-Newton step.
     threshold = setdefault(threshold, jnp.finfo(s.dtype).eps * f.size)
@@ -224,44 +225,31 @@ def trust_region_step_exact_svd(
     def falsefun(*_):
         alpha_upper = jnp.linalg.norm(suf) / trust_radius
         alpha_lower = 0.0
-        alpha = setdefault(
-            initial_alpha,
-            0.001 * alpha_upper,
-        )
-        alpha = jnp.where(
-            (alpha < alpha_lower) | (alpha > alpha_upper),
-            0.001 * alpha_upper,
-            alpha,
-        )
+        alpha = setdefault(initial_alpha, 0.0)
+        alpha = jnp.clip(alpha, alpha_lower, alpha_upper)
 
-        phi, phi_prime = phi_and_derivative(alpha, suf, s, trust_radius)
+        _, phi, phi_prime = phi_and_derivative(alpha, suf, s, trust_radius)
         k = 0
 
         def loop_cond(state):
-            alpha, alpha_lower, alpha_upper, phi, k = state
+            p, alpha, alpha_lower, alpha_upper, phi, k = state
             return (jnp.abs(phi) > rtol * trust_radius) & (k < max_iter)
 
         def loop_body(state):
-            alpha, alpha_lower, alpha_upper, phi, k = state
+            p, alpha, alpha_lower, alpha_upper, phi, k = state
 
-            phi, phi_prime = phi_and_derivative(alpha, suf, s, trust_radius)
+            p, phi, phi_prime = phi_and_derivative(alpha, suf, s, trust_radius)
             alpha_upper = jnp.where(phi < 0, alpha, alpha_upper)
             ratio = phi / phi_prime
             alpha_lower = jnp.maximum(alpha_lower, alpha - ratio)
             alpha -= (phi + trust_radius) * ratio / trust_radius
-            alpha = jnp.where(
-                (alpha < alpha_lower) | (alpha > alpha_upper),
-                jnp.maximum(0.001 * alpha_upper, (alpha_lower * alpha_upper) ** 0.5),
-                alpha,
-            )
+            alpha = jnp.clip(alpha, alpha_lower, alpha_upper)
             k += 1
-            return alpha, alpha_lower, alpha_upper, phi, k
+            return p, alpha, alpha_lower, alpha_upper, phi, k
 
-        alpha, *_ = while_loop(
-            loop_cond, loop_body, (alpha, alpha_lower, alpha_upper, phi, k)
+        p, alpha, *_ = while_loop(
+            loop_cond, loop_body, (p_newton, alpha, alpha_lower, alpha_upper, phi, k)
         )
-
-        p = -v.dot(suf / (s**2 + alpha))
 
         # Make the norm of p equal to trust_radius; p is changed only slightly.
         # This is done to prevent p from lying outside the trust region

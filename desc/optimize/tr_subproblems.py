@@ -222,13 +222,11 @@ def trust_region_step_exact_svd(
         return p_newton, False, 0.0
 
     def falsefun(*_):
-
         alpha_upper = jnp.linalg.norm(suf) / trust_radius
         alpha_lower = 0.0
-        alpha = setdefault(
-            initial_alpha,
-            jnp.maximum(0.001 * alpha_upper, (alpha_lower * alpha_upper) ** 0.5),
-        )
+        # the final alpha value is very small. So, starting from 0
+        # is faster for root finding
+        alpha = setdefault(initial_alpha, alpha_lower)
 
         phi, phi_prime = phi_and_derivative(alpha, suf, s, trust_radius)
         k = 0
@@ -239,17 +237,13 @@ def trust_region_step_exact_svd(
 
         def loop_body(state):
             alpha, alpha_lower, alpha_upper, phi, k = state
-            alpha = jnp.where(
-                (alpha < alpha_lower) | (alpha > alpha_upper),
-                jnp.maximum(0.001 * alpha_upper, (alpha_lower * alpha_upper) ** 0.5),
-                alpha,
-            )
 
             phi, phi_prime = phi_and_derivative(alpha, suf, s, trust_radius)
             alpha_upper = jnp.where(phi < 0, alpha, alpha_upper)
             ratio = phi / phi_prime
             alpha_lower = jnp.maximum(alpha_lower, alpha - ratio)
             alpha -= (phi + trust_radius) * ratio / trust_radius
+            alpha = jnp.clip(alpha, alpha_lower, alpha_upper)
             k += 1
             return alpha, alpha_lower, alpha_upper, phi, k
 
@@ -318,10 +312,9 @@ def trust_region_step_exact_cho(
     def falsefun(*_):
         alpha_upper = jnp.linalg.norm(g) / trust_radius
         alpha_lower = 0.0
-        alpha = setdefault(
-            initial_alpha,
-            jnp.maximum(0.001 * alpha_upper, (alpha_lower * alpha_upper) ** 0.5),
-        )
+        # the final alpha value is very small. So, starting from 0
+        # is faster for root finding
+        alpha = setdefault(initial_alpha, alpha_lower)
         k = 0
         # algorithm 4.3 from Nocedal & Wright
 
@@ -331,12 +324,6 @@ def trust_region_step_exact_cho(
 
         def loop_body(state):
             alpha, alpha_lower, alpha_upper, phi, k = state
-
-            alpha = jnp.where(
-                (alpha < alpha_lower) | (alpha > alpha_upper),
-                jnp.maximum(0.001 * alpha_upper, (alpha_lower * alpha_upper) ** 0.5),
-                alpha,
-            )
 
             Bi = B + alpha * jnp.eye(B.shape[0])
             R = chol(Bi)
@@ -350,11 +337,7 @@ def trust_region_step_exact_cho(
             q_norm = jnp.linalg.norm(q)
 
             alpha += (p_norm / q_norm) ** 2 * phi / trust_radius
-            alpha = jnp.where(
-                (alpha < alpha_lower) | (alpha > alpha_upper),
-                jnp.maximum(0.001 * alpha_upper, (alpha_lower * alpha_upper) ** 0.5),
-                alpha,
-            )
+            alpha = jnp.clip(alpha, alpha_lower, alpha_upper)
 
             k += 1
             return alpha, alpha_lower, alpha_upper, phi, k
@@ -384,6 +367,15 @@ def trust_region_step_exact_qr(
 
     Solves problems of the form
         min_p ||J*p + f||^2,  ||p|| < trust_radius
+
+    Introduces a Levenberg-Marquardt parameter alpha to make the problem
+    well-conditioned.
+        min_p ||J*p + f||^2 + alpha*||p||^2,  ||p|| < trust_radius
+
+    The objective function can be written as
+        p.T(J.T@J + alpha*I)p + 2f.TJp + f.Tf
+    which is equavalent to
+        || [J; sqrt(alpha)*I].Tp - [f; 0].T ||^2
 
     Parameters
     ----------
@@ -421,9 +413,11 @@ def trust_region_step_exact_qr(
     def falsefun(*_):
         alpha_upper = jnp.linalg.norm(J.T @ f) / trust_radius
         alpha_lower = 0.0
+        # the final alpha value is very small. So, starting from 0
+        # is faster for root finding
         alpha = setdefault(initial_alpha, alpha_lower)
         k = 0
-        # algorithm 4.3 from Nocedal & Wright
+
         fp = jnp.pad(f, (0, J.shape[1]))
 
         def loop_cond(state):
@@ -432,9 +426,6 @@ def trust_region_step_exact_qr(
 
         def loop_body(state):
             p, alpha, alpha_lower, alpha_upper, phi, k = state
-
-            alpha = jnp.where((alpha < alpha_lower), alpha_lower, alpha)
-            alpha = jnp.where((alpha > alpha_upper), alpha_upper, alpha)
 
             Ji = jnp.vstack([J, jnp.sqrt(alpha) * jnp.eye(J.shape[1])])
             # Ji is always tall since its padded by alpha*I
@@ -450,8 +441,7 @@ def trust_region_step_exact_qr(
             q_norm = jnp.linalg.norm(q)
 
             alpha += (p_norm / q_norm) ** 2 * phi / trust_radius
-            alpha = jnp.where((alpha < alpha_lower), alpha_lower, alpha)
-            alpha = jnp.where((alpha > alpha_upper), alpha_upper, alpha)
+            alpha = jnp.clip(alpha, alpha_lower, alpha_upper)
             k += 1
             return p, alpha, alpha_lower, alpha_upper, phi, k
 

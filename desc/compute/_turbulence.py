@@ -102,3 +102,26 @@ def _L_par(params, transforms, profiles, data, **kwargs):
         L_par = trapezoid(data["|e_zeta|r,a|"] * masks["masks_wells"], grid.nodes[:, 2])
     data["L_par"] = L_par
     return data
+
+
+@register_compute_fun(
+    name="xi",
+    label="ξ",
+    units="m^2",
+    units_long="meters squared",
+    description="Target for spacing of flux surfaces",
+    dim=1,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="rtz",
+    data=["a", "|grad(rho)|", "Kd"],
+    **_doc,
+)
+def _xi(params, transforms, profiles, data, **kwargs):
+    # Parallel connection length defined as width of Kd wells
+    grid = transforms["grid"]
+    mask = jnp.where(data["Kd"] < 0, 1.0, 0.0)
+    xi = (2 * data["a"] * mask * data["|grad(rho)|"] * grid.nodes[:, 0][0]) ** 2
+    data["xi"] = xi
+    return data

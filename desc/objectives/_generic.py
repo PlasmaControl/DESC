@@ -25,17 +25,17 @@ class ExternalObjective(_Objective, ABC):
     computed with finite differences instead of AD. The function does not need not be
     JAX transformable.
 
-    The user supplied function must take an Equilibrium as its only positional argument,
-    but can take additional keyword arguments.
+    The user supplied function must take an Equilibrium or a list of Equilibria as its
+    only positional argument, but can take additional keyword arguments.
 
     Parameters
     ----------
     eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
     fun : callable
-        External objective function. It must take an Equilibrium as its only positional
-        argument, but can take additional kewyord arguments. It does not need to be JAX
-        transformable.
+        External objective function. It must take an Equilibrium or list of Equilibria
+        as its only positional argument, but can take additional kewyord arguments.
+        It does not need to be JAX transformable.
     dim_f : int
         Dimension of the output of ``fun``.
     target : {float, ndarray}, optional
@@ -60,7 +60,8 @@ class ExternalObjective(_Objective, ABC):
         is called on the raw compute value, before any shifting, scaling, or
         normalization.
     vectorized : bool, optional
-        Whether or not ``fun`` is vectorized. Default = False.
+        Set to False if ``fun`` takes a single Equilibrium as its positional argument.
+        Set to True if ``fun`` instead takes a list of Equilibria. Default = False.
     abs_step : float, optional
         Absolute finite difference step size. Default = 1e-4.
         Total step size is ``abs_step + rel_step * mean(abs(x))``.
@@ -71,8 +72,6 @@ class ExternalObjective(_Objective, ABC):
         Name of the objective function.
     kwargs : any, optional
         Keyword arguments that are passed as inputs to ``fun``.
-
-    # TODO: add example
 
     """
 

@@ -170,6 +170,7 @@ Objective Functions
     desc.objectives.CoilSetMinDistance
     desc.objectives.CoilTorsion
     desc.objectives.CurrentDensity
+    desc.objectives.EffectiveRipple
     desc.objectives.Elongation
     desc.objectives.Energy
     desc.objectives.FixAnisotropy
@@ -199,6 +200,7 @@ Objective Functions
     desc.objectives.FixThetaSFL
     desc.objectives.ForceBalance
     desc.objectives.ForceBalanceAnisotropic
+    desc.objectives.GammaC
     desc.objectives.GenericObjective
     desc.objectives.get_equilibrium_objective
     desc.objectives.get_fixed_axis_constraints
@@ -208,9 +210,11 @@ Objective Functions
     desc.objectives.HelicalForceBalance
     desc.objectives.Isodynamicity
     desc.objectives.LinearObjectiveFromUser
+    desc.objectives.LinkingCurrentConsistency
     desc.objectives.MagneticWell
     desc.objectives.MeanCurvature
     desc.objectives.MercierStability
+    desc.objectives.MirrorRatio
     desc.objectives.ObjectiveFromUser
     desc.objectives.ObjectiveFunction
     desc.objectives.Omnigenity

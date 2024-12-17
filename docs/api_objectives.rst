@@ -49,7 +49,19 @@ Geometry
     desc.objectives.PrincipalCurvature
     desc.objectives.PlasmaVesselDistance
     desc.objectives.BScaleLength
+    desc.objectives.MirrorRatio
     desc.objectives.GoodCoordinates
+
+
+Neoclassical
+------------
+.. autosummary::
+    :toctree: _api/objectives
+    :recursive:
+    :template: class.rst
+
+    desc.objectives.EffectiveRipple
+    desc.objectives.GammaC
 
 
 Omnigenity
@@ -108,6 +120,7 @@ Coil Optimization
     desc.objectives.CoilArclengthVariance
     desc.objectives.ToroidalFlux
     desc.objectives.SurfaceCurrentRegularization
+    desc.objectives.LinkingCurrentConsistency
 
 
 Profiles

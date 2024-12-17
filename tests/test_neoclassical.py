@@ -34,6 +34,7 @@ def test_effective_ripple():
 
     assert np.isfinite(data["effective ripple 3/2"]).all()
     eps_32 = grid.compress(data["effective ripple 3/2"])
+    # TODO: Compute at higher boozer resolution once Neo works again.
     neo_rho, neo_eps_32 = NeoIO.read("tests/inputs/neo_out.w7x")
     np.testing.assert_allclose(eps_32, np.interp(rho, neo_rho, neo_eps_32), rtol=0.16)
 
@@ -101,8 +102,8 @@ class NeoIO:
 
         self.eq = eq
         self.ns = ns  # number of surfaces
-        self.M_booz = setdefault(M_booz, 3 * eq.M + 1)
-        self.N_booz = setdefault(N_booz, 3 * eq.N)
+        self.M_booz = setdefault(M_booz, 5 * eq.M + 1)
+        self.N_booz = setdefault(N_booz, 5 * eq.N)
 
     @staticmethod
     def read(name):

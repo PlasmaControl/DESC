@@ -1,4 +1,4 @@
-"""Compute functions for Mercier stability objectives.
+"""Compute functions for stability objectives.
 
 Notes
 -----
@@ -76,7 +76,7 @@ def _D_current(params, transforms, profiles, data, **kwargs):
                 / data["|grad(psi)|"] ** 3
                 * dot(Xi, data["B"])
             ),
-            # Todo: implement equivalent of equation 4.3 in desc coordinates
+            # TODO(#671): implement equivalent of equation 4.3 in desc coordinates
             jnp.nan,
         )
     )

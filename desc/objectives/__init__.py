@@ -9,8 +9,11 @@ from ._coils import (
     CoilSetLinkingNumber,
     CoilSetMinDistance,
     CoilTorsion,
+    LinkingCurrentConsistency,
     PlasmaCoilSetMinDistance,
     QuadraticFlux,
+    SurfaceCurrentRegularization,
+    SurfaceQuadraticFlux,
     ToroidalFlux,
 )
 from ._equilibrium import (
@@ -34,10 +37,12 @@ from ._geometry import (
     Elongation,
     GoodCoordinates,
     MeanCurvature,
+    MirrorRatio,
     PlasmaVesselDistance,
     PrincipalCurvature,
     Volume,
 )
+from ._neoclassical import EffectiveRipple, GammaC
 from ._omnigenity import (
     Isodynamicity,
     Omnigenity,

@@ -33,9 +33,9 @@ from desc.objectives import (
     FixParameters,
     FixPressure,
     FixPsi,
-    FixSumCoilCurrent,
     ForceBalance,
     GenericObjective,
+    LinkingCurrentConsistency,
     MagneticWell,
     MeanCurvature,
     ObjectiveFunction,
@@ -322,6 +322,44 @@ def test_no_iterations():
 
     np.testing.assert_allclose(x0, out1["x"])
     np.testing.assert_allclose(x0, out2["x"])
+
+
+@pytest.mark.regression
+@pytest.mark.optimize
+def test_proximal_scalar():
+    """Test that proximal scalar optimization works."""
+    # test fix for GH issue #1403
+
+    # optimize to reduce DSHAPE volume from 100 m^3 to 90 m^3
+    eq = desc.examples.get("DSHAPE")
+    optimizer = Optimizer("proximal-fmintr")  # proximal scalar optimizer
+    R_modes = np.vstack(
+        (
+            [0, 0, 0],
+            eq.surface.R_basis.modes[
+                np.max(np.abs(eq.surface.R_basis.modes), 1) > 1, :
+            ],
+        )
+    )
+    Z_modes = eq.surface.Z_basis.modes[
+        np.max(np.abs(eq.surface.Z_basis.modes), 1) > 1, :
+    ]
+    objective = ObjectiveFunction(Volume(eq=eq, target=90))  # scalar objective function
+    constraints = (
+        FixBoundaryR(eq=eq, modes=R_modes),
+        FixBoundaryZ(eq=eq, modes=Z_modes),
+        FixIota(eq=eq),
+        FixPressure(eq=eq),
+        FixPsi(eq=eq),
+        ForceBalance(eq=eq),  # force balance constraint for proximal projection
+    )
+    [eq], _ = optimizer.optimize(
+        things=eq,
+        objective=objective,
+        constraints=constraints,
+        verbose=3,
+    )
+    np.testing.assert_allclose(eq.compute("V")["V"], 90)
 
 
 @pytest.mark.regression
@@ -837,9 +875,9 @@ def test_auglag():
         args=(),
         x_scale="auto",
         ftol=0,
-        xtol=1e-6,
-        gtol=1e-6,
-        ctol=1e-6,
+        xtol=1e-8,
+        gtol=1e-8,
+        ctol=1e-8,
         verbose=3,
         maxiter=None,
         options={"initial_multipliers": "least_squares"},
@@ -854,9 +892,9 @@ def test_auglag():
         args=(),
         x_scale="auto",
         ftol=0,
-        xtol=1e-6,
-        gtol=1e-6,
-        ctol=1e-6,
+        xtol=1e-8,
+        gtol=1e-8,
+        ctol=1e-8,
         verbose=3,
         maxiter=None,
         options={"initial_multipliers": "least_squares", "tr_method": "cho"},
@@ -881,9 +919,9 @@ def test_auglag():
         args=(),
         x_scale="auto",
         ftol=0,
-        xtol=1e-6,
-        gtol=1e-6,
-        ctol=1e-6,
+        xtol=1e-8,
+        gtol=1e-8,
+        ctol=1e-8,
         verbose=3,
         maxiter=None,
         options={"initial_multipliers": "least_squares"},
@@ -1367,17 +1405,19 @@ def test_optimize_coil_currents(DummyCoilSet):
         coil.current = current / coils.num_coils
 
     objective = ObjectiveFunction(QuadraticFlux(eq=eq, field=coils, vacuum=True))
-    constraints = FixSumCoilCurrent(coils)
+    constraints = LinkingCurrentConsistency(eq, coils, eq_fixed=True)
     optimizer = Optimizer("lsq-exact")
-    [coils_opt], _ = optimizer.optimize(
-        things=coils,
-        objective=objective,
-        constraints=constraints,
-        verbose=2,
-        copy=True,
-    )
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", message=".*\n.*\nIncompatible")
+        [coils_opt], _ = optimizer.optimize(
+            things=coils,
+            objective=objective,
+            constraints=constraints,
+            verbose=2,
+            copy=True,
+        )
     # check that optimized coil currents changed by more than 15% from initial values
     np.testing.assert_array_less(
-        np.asarray(coils.current) * 0.15,
-        np.abs(np.asarray(coils_opt.current) - np.asarray(coils.current)),
+        np.asarray(coils.current).mean() * 0.15,
+        np.abs(np.asarray(coils_opt.current) - np.asarray(coils.current)).mean(),
     )

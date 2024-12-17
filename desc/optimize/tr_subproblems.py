@@ -318,11 +318,11 @@ def trust_region_step_exact_cho(
         # algorithm 4.3 from Nocedal & Wright
 
         def loop_cond(state):
-            alpha, alpha_lower, alpha_upper, phi, k = state
+            p, alpha, alpha_lower, alpha_upper, phi, k = state
             return (jnp.abs(phi) > rtol * trust_radius) & (k < max_iter)
 
         def loop_body(state):
-            alpha, alpha_lower, alpha_upper, phi, k = state
+            p, alpha, alpha_lower, alpha_upper, phi, k = state
 
             Bi = B + alpha * jnp.eye(B.shape[0])
             R = chol(Bi)
@@ -339,14 +339,13 @@ def trust_region_step_exact_cho(
             alpha = jnp.clip(alpha, alpha_lower, alpha_upper)
 
             k += 1
-            return alpha, alpha_lower, alpha_upper, phi, k
+            return p, alpha, alpha_lower, alpha_upper, phi, k
 
-        alpha, *_ = while_loop(
-            loop_cond, loop_body, (alpha, alpha_lower, alpha_upper, jnp.inf, k)
+        p, alpha, *_ = while_loop(
+            loop_cond,
+            loop_body,
+            (p_newton, alpha, alpha_lower, alpha_upper, jnp.inf, k),
         )
-        Bi = B + alpha * jnp.eye(B.shape[0])
-        R = chol(Bi)
-        p = cho_solve((R, True), -g)
 
         # Make the norm of p equal to trust_radius; p is changed only slightly.
         # This is done to prevent p from lying outside the trust region

@@ -438,13 +438,10 @@ class GammaC(_Objective):
             domain=(0, 2 * np.pi),
         )
         self._constants["fieldline quad"] = leggauss(self._hyperparam["Y_B"] // 2)
-        num_quad = self._hyperparam.pop("num_quad")
         self._constants["quad"] = get_quadrature(
-            leggauss(num_quad),
+            leggauss(self._hyperparam.pop("num_quad")),
             (automorphism_sin, grad_automorphism_sin),
         )
-        if self._key == "Gamma_c":
-            self._constants["quad2"] = chebgauss2(num_quad)
 
         self._dim_f = self._grid.num_rho
         self._target, self._bounds = _parse_callable_target_bounds(
@@ -483,10 +480,6 @@ class GammaC(_Objective):
         """
         if constants is None:
             constants = self.constants
-        quad2 = {}
-        if self._key == "Gamma_c":
-            quad2["quad2"] = constants["quad2"]
-
         eq = self.things[0]
         data = compute_fun(
             eq, "iota", params, constants["transforms"], constants["profiles"]
@@ -511,7 +504,6 @@ class GammaC(_Objective):
             ),
             fieldline_quad=constants["fieldline quad"],
             quad=constants["quad"],
-            **quad2,
             **self._hyperparam,
         )
         return constants["transforms"]["grid"].compress(data[self._key])

@@ -208,9 +208,11 @@ Objective Functions
     desc.objectives.HelicalForceBalance
     desc.objectives.Isodynamicity
     desc.objectives.LinearObjectiveFromUser
+    desc.objectives.LinkingCurrentConsistency
     desc.objectives.MagneticWell
     desc.objectives.MeanCurvature
     desc.objectives.MercierStability
+    desc.objectives.MirrorRatio
     desc.objectives.ObjectiveFromUser
     desc.objectives.ObjectiveFunction
     desc.objectives.Omnigenity

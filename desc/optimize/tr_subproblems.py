@@ -224,15 +224,13 @@ def trust_region_step_exact_svd(
     def falsefun(*_):
         alpha_upper = jnp.linalg.norm(suf) / trust_radius
         alpha_lower = 0.0
-        # the final alpha value is very small. So, starting from 0
-        # is faster for root finding
         alpha = setdefault(
             initial_alpha,
-            jnp.maximum(0.001 * alpha_upper, (alpha_lower * alpha_upper) ** 0.5),
+            0.001 * alpha_upper,
         )
         alpha = jnp.where(
             (alpha < alpha_lower) | (alpha > alpha_upper),
-            jnp.maximum(0.001 * alpha_upper, (alpha_lower * alpha_upper) ** 0.5),
+            0.001 * alpha_upper,
             alpha,
         )
 

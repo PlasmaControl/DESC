@@ -374,7 +374,7 @@ def trust_region_step_exact_qr(
 
     The objective function can be written as
         p.T(J.T@J + alpha*I)p + 2f.TJp + f.Tf
-    which is equavalent to
+    which is equivalent to
         || [J; sqrt(alpha)*I].Tp - [f; 0].T ||^2
 
     Parameters

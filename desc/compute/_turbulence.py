@@ -15,6 +15,7 @@ from ..integrals.critical_gradient import (
     extract_Kd_wells_and_peaks,
     fit_Kd_wells,
 )
+from ..utils import cumtrapz
 from .data_index import register_compute_fun
 
 _doc = {
@@ -60,7 +61,7 @@ def _Kd(params, transforms, profiles, data, **kwargs):
     transforms={"grid": []},
     profiles=[],
     coordinates="rtz",
-    data=["Kd"],
+    data=["Kd", "|e_zeta|r,a|"],
     **_doc,
 )
 def _R_eff(params, transforms, profiles, data, **kwargs):
@@ -69,7 +70,8 @@ def _R_eff(params, transforms, profiles, data, **kwargs):
     grid = transforms["grid"].source_grid
     n_wells = kwargs.get("n_wells", 5)
     Kd_wells, _, masks = extract_Kd_wells(data["Kd"], n_wells=n_wells)
-    _, _, R_eff = fit_Kd_wells(grid.nodes[:, 2], Kd_wells, masks, n_wells=n_wells)
+    l = cumtrapz(data["|e_zeta|r,a|"], x=grid.nodes[:, 2], initial=0)
+    _, _, R_eff = fit_Kd_wells(l, Kd_wells, masks, n_wells=n_wells)
     data["R_eff"] = R_eff
     return data
 

@@ -513,12 +513,12 @@ class VMECIO:
 
         wb = file.createVariable("wb", np.float64)
         wb.long_name = "plasma magnetic energy * mu_0/(4*pi^2)"
-        wb.units = "J^2/A^2"
+        wb.units = "T^2*m^3"
         wb[:] = data_quad["W_B"] * mu_0 / (4 * np.pi**2)
 
         wp = file.createVariable("wp", np.float64)
         wp.long_name = "plasma thermodynamic energy * mu_0/(4*pi^2)"
-        wp.units = "J^2/A^2"
+        wp.units = "T^2*m^3"
         wp[:] = np.abs(data_quad["W_p"]) * mu_0 / (4 * np.pi**2)
 
         # scalars computed at the magnetic axis

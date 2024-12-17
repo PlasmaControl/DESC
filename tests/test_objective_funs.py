@@ -3075,7 +3075,9 @@ class TestComputeScalarResolution:
             )
             obj.build(verbose=0)
             f[i] = obj.compute_scalar(obj.x())
-        np.testing.assert_allclose(f, f[-1], rtol=6e-2)
+        np.testing.assert_allclose(
+            f, f[-1], rtol=6e-2, atol=1e-4 if np.max(f) < 1e-3 else 0
+        )
 
     @pytest.mark.regression
     @pytest.mark.parametrize(

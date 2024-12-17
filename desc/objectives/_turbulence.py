@@ -342,7 +342,7 @@ class ParallelConnectionLength(_Objective):
         name="Parallel connection length",
     ):
         if target is None and bounds is None:
-            target = 0.0
+            target = 0
         self._rho = rho
         self._alpha = alpha
         self._n_pol = n_pol
@@ -507,13 +507,18 @@ class ParallelConnectionLength(_Objective):
         )
 
         if self._target_type == "max":
-            L_par = jnp.max(data["L_par"])
+            if self._curvature == "good":
+                L_par = jnp.min(data["L_par"])
+            else:
+                L_par = jnp.max(data["L_par"])
         elif self._target_type == "mean":
             L_par = jnp.mean(data["L_par"])
         elif self._target_type == "all":
             L_par = data["L_par"]
-        
+
         if self._hyperparameters["curvature"] == "good":
-            return 1/L_par
-        else : 
+            return 1 / L_par
+        else:
             return L_par
+
+        return L_par

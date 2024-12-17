@@ -309,27 +309,20 @@ def _v_tau(data, B, pitch):
     return safediv(2.0, jnp.sqrt(jnp.abs(1 - pitch * B)))
 
 
-def _f1(data, B, pitch):
+def _drift1(data, B, pitch):
     return (
-        safediv(
-            1 - 0.5 * pitch * B,
-            jnp.sqrt(jnp.abs(1 - pitch * B)),
-        )
+        safediv(1 - 0.5 * pitch * B, jnp.sqrt(jnp.abs(1 - pitch * B)))
         * data["|grad(psi)|*kappa_g"]
         / B
     )
 
 
-def _f2(data, B, pitch):
+def _drift2(data, B, pitch):
     return (
         safediv(1 - 0.5 * pitch * B, jnp.sqrt(jnp.abs(1 - pitch * B)))
         * data["|B|_r|v,p"]
-        / B
-    )
-
-
-def _f3(data, B, pitch):
-    return jnp.sqrt(jnp.abs(1 - pitch * B)) * data["K"] / B
+        + jnp.sqrt(jnp.abs(1 - pitch * B)) * data["K"]
+    ) / B
 
 
 @register_compute_fun(
@@ -366,7 +359,6 @@ def _f3(data, B, pitch):
     resolution_requirement="tz",
     grid_requirement={"can_fft2": True},
     **_bounce_doc,
-    quad2="Same as ``quad`` for the weak singular integrals in particular.",
 )
 @partial(
     jit,
@@ -411,7 +403,6 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
             leggauss(kwargs.get("num_quad", 32)),
             (automorphism_sin, grad_automorphism_sin),
         )
-    quad2 = kwargs["quad2"] if "quad2" in kwargs else chebgauss2(quad[0].size)
 
     def Gamma_c(data):
         """∫ dλ ∑ⱼ [v τ γ_c²]ⱼ π²/4."""
@@ -429,35 +420,19 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
 
         def fun(pitch_inv):
             points = bounce.points(pitch_inv, num_well=num_well)
-            v_tau, f1, f2 = bounce.integrate(
-                [_v_tau, _f1, _f2],
+            v_tau, drift1, drift2 = bounce.integrate(
+                [_v_tau, _drift1, _drift2],
                 pitch_inv,
                 data,
-                ["|grad(psi)|*kappa_g", "|B|_r|v,p"],
+                ["|grad(psi)|*kappa_g", "|B|_r|v,p", "K"],
                 points,
                 is_fourier=True,
             )
             # This is γ_c π/2.
             gamma_c = jnp.arctan(
                 safediv(
-                    f1,
-                    (
-                        f2
-                        # TODO: Once people are happy with benchmarking
-                        #       we can push this integral into f2.
-                        #       The quadrature is less optimal, but
-                        #       it still works and it would be more efficient
-                        #       since we don't have to interpolate twice.
-                        + bounce.integrate(
-                            _f3,
-                            pitch_inv,
-                            data,
-                            "K",
-                            points,
-                            quad=quad2,
-                            is_fourier=True,
-                        )
-                    )
+                    drift1,
+                    drift2
                     * bounce.interp_to_argmin(
                         data["|grad(rho)|*|e_alpha|r,p|"], points, is_fourier=True
                     ),

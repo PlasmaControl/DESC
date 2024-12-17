@@ -15,7 +15,7 @@ from ..integrals.quad_utils import (
     grad_automorphism_sin,
 )
 from ..utils import cross, dot, safediv
-from ._neoclassical import _bounce_doc, _cvdrift0, _dH, _dI, _f1, _f2, _f3, _v_tau
+from ._neoclassical import _bounce_doc, _cvdrift0, _dH, _dI, _drift1, _drift2, _v_tau
 from .data_index import register_compute_fun
 
 _bounce1D_doc = {
@@ -286,7 +286,6 @@ def _effective_ripple_1D(params, transforms, profiles, data, **kwargs):
     + Bounce1D.required_names,
     source_grid_requirement={"coordinates": "raz", "is_meshgrid": True},
     **_bounce1D_doc,
-    quad2="Same as ``quad`` for the weak singular integrals in particular.",
 )
 @partial(jit, static_argnames=["num_well", "num_quad", "num_pitch", "batch"])
 def _Gamma_c_1D(params, transforms, profiles, data, **kwargs):
@@ -312,41 +311,24 @@ def _Gamma_c_1D(params, transforms, profiles, data, **kwargs):
             leggauss(kwargs.get("num_quad", 32)),
             (automorphism_sin, grad_automorphism_sin),
         )
-    quad2 = kwargs["quad2"] if "quad2" in kwargs else chebgauss2(quad[0].size)
 
     def Gamma_c(data):
         """∫ dλ ∑ⱼ [v τ γ_c²]ⱼ π²/4."""
         bounce = Bounce1D(grid, data, quad, automorphism=None, is_reshaped=True)
         points = bounce.points(data["pitch_inv"], num_well=num_well)
-        v_tau, f1, f2 = bounce.integrate(
-            [_v_tau, _f1, _f2],
+        v_tau, drift1, drift2 = bounce.integrate(
+            [_v_tau, _drift1, _drift2],
             data["pitch_inv"],
             data,
-            ["|grad(psi)|*kappa_g", "|B|_r|v,p"],
+            ["|grad(psi)|*kappa_g", "|B|_r|v,p", "K"],
             points,
             batch=batch,
         )
         # This is γ_c π/2.
         gamma_c = jnp.arctan(
             safediv(
-                f1,
-                (
-                    f2
-                    # TODO: Once people are happy with benchmarking
-                    #       we can push this integral into f2.
-                    #       The quadrature is less optimal, but
-                    #       it still works and it would be more efficient
-                    #       since we don't have to interpolate twice.
-                    + bounce.integrate(
-                        _f3,
-                        data["pitch_inv"],
-                        data,
-                        "K",
-                        points,
-                        batch=batch,
-                        quad=quad2,
-                    )
-                )
+                drift1,
+                drift2
                 * bounce.interp_to_argmin(data["|grad(rho)|*|e_alpha|r,p|"], points),
             )
         )

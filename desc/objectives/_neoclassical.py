@@ -122,6 +122,7 @@ class EffectiveRipple(_Objective):
     def __init__(
         self,
         eq,
+        *,
         target=None,
         bounds=None,
         weight=1,
@@ -129,10 +130,9 @@ class EffectiveRipple(_Objective):
         normalize_target=True,
         loss_function=None,
         deriv_mode="fwd",
-        grid=None,
-        name="Effective ripple",
         jac_chunk_size=None,
-        *,
+        name="Effective ripple",
+        grid=None,
         X=16,  # X is cheap to increase.
         Y=32,
         # Y_B is expensive to increase if one does not fix num well per transit.
@@ -359,6 +359,7 @@ class GammaC(_Objective):
     def __init__(
         self,
         eq,
+        *,
         target=None,
         bounds=None,
         weight=1,
@@ -366,10 +367,9 @@ class GammaC(_Objective):
         normalize_target=True,
         loss_function=None,
         deriv_mode="fwd",
-        grid=None,
-        name="Gamma_c",
         jac_chunk_size=None,
-        *,
+        name="Gamma_c",
+        grid=None,
         X=16,  # X is cheap to increase.
         Y=32,
         # Y_B is expensive to increase if one does not fix num well per transit.

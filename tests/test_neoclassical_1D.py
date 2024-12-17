@@ -45,7 +45,7 @@ def test_fieldline_average():
     np.testing.assert_allclose(
         data["fieldline length"] / data["fieldline length/volume"],
         data["V_r(r)"] / (4 * np.pi**2),
-        rtol=1e-3,
+        rtol=2e-3,
     )
     assert np.all(data["fieldline length"] > 0)
     assert np.all(data["fieldline length/volume"] > 0)

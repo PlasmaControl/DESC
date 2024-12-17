@@ -226,7 +226,15 @@ def trust_region_step_exact_svd(
         alpha_lower = 0.0
         # the final alpha value is very small. So, starting from 0
         # is faster for root finding
-        alpha = setdefault(initial_alpha, alpha_lower)
+        alpha = setdefault(
+            initial_alpha,
+            jnp.maximum(0.001 * alpha_upper, (alpha_lower * alpha_upper) ** 0.5),
+        )
+        alpha = jnp.where(
+            (alpha < alpha_lower) | (alpha > alpha_upper),
+            jnp.maximum(0.001 * alpha_upper, (alpha_lower * alpha_upper) ** 0.5),
+            alpha,
+        )
 
         phi, phi_prime = phi_and_derivative(alpha, suf, s, trust_radius)
         k = 0
@@ -243,7 +251,11 @@ def trust_region_step_exact_svd(
             ratio = phi / phi_prime
             alpha_lower = jnp.maximum(alpha_lower, alpha - ratio)
             alpha -= (phi + trust_radius) * ratio / trust_radius
-            alpha = jnp.clip(alpha, alpha_lower, alpha_upper)
+            alpha = jnp.where(
+                (alpha < alpha_lower) | (alpha > alpha_upper),
+                jnp.maximum(0.001 * alpha_upper, (alpha_lower * alpha_upper) ** 0.5),
+                alpha,
+            )
             k += 1
             return alpha, alpha_lower, alpha_upper, phi, k
 
@@ -315,6 +327,7 @@ def trust_region_step_exact_cho(
         # the final alpha value is very small. So, starting from 0
         # is faster for root finding
         alpha = setdefault(initial_alpha, alpha_lower)
+        alpha = jnp.clip(alpha, alpha_lower, alpha_upper)
         k = 0
         # algorithm 4.3 from Nocedal & Wright
 
@@ -416,6 +429,7 @@ def trust_region_step_exact_qr(
         # the final alpha value is very small. So, starting from 0
         # is faster for root finding
         alpha = setdefault(initial_alpha, alpha_lower)
+        alpha = jnp.clip(alpha, alpha_lower, alpha_upper)
         k = 0
 
         fp = jnp.pad(f, (0, J.shape[1]))

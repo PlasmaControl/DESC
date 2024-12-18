@@ -74,6 +74,9 @@ if use_jax:  # noqa: C901
     from jax.nn import softmax as softargmax
     from jax.numpy import bincount, flatnonzero, repeat, take
     from jax.numpy.fft import ifft, irfft, irfft2, rfft, rfft2
+    from jax.random import key as jax_random_key
+    from jax.random import multivariate_normal
+    from jax.random import split as jax_random_split
     from jax.scipy.fft import dct, idct
     from jax.scipy.linalg import block_diag, cho_factor, cho_solve, qr, solve_triangular
     from jax.scipy.special import gammaln

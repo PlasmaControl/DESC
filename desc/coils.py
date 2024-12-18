@@ -9,8 +9,10 @@ import numpy as np
 
 from desc.backend import (
     fori_loop,
+    jax_random_split,
     jit,
     jnp,
+    multivariate_normal,
     scan,
     tree_leaves,
     tree_stack,
@@ -30,6 +32,16 @@ from desc.grid import LinearGrid
 from desc.magnetic_fields import _MagneticField
 from desc.optimizable import Optimizable, OptimizableCollection, optimizable_parameter
 from desc.utils import cross, dot, equals, errorif, flatten_list, safenorm, warnif
+
+
+@jit
+def stochastic_perturbation(stochastic):
+    """Apply a stochastic perturbation."""
+    # TODO: make actually random, rn is sampling from 0*pertsize to scale_length
+    _, key = jax_random_split(stochastic["key"])
+    return (
+        multivariate_normal(key=key, mean=stochastic["zeros"], cov=stochastic["cov"])
+    ) * stochastic["scale_length"]
 
 
 @jit
@@ -291,6 +303,7 @@ class _Coil(_MagneticField, Optimizable, ABC):
         source_grid=None,
         transforms=None,
         compute_A_or_B="B",
+        stochastic=False,
     ):
         """Compute magnetic field or vector potential at a set of points.
 
@@ -349,10 +362,12 @@ class _Coil(_MagneticField, Optimizable, ABC):
             # NFP=1 to ensure points span the entire length of the coil
             # multiply resolution by NFP to ensure Biot-Savart integration is accurate
             source_grid = LinearGrid(N=2 * self.N * getattr(self, "NFP", 1) + 5)
-
+        data_keys = ["x", "x_s", "ds"]
+        if stochastic:
+            data_keys += ["frenet_normal", "frenet_binormal"]
         if not params or not transforms:
             data = self.compute(
-                ["x", "x_s", "ds"],
+                data_keys,
                 grid=source_grid,
                 params=params,
                 transforms=transforms,
@@ -361,14 +376,18 @@ class _Coil(_MagneticField, Optimizable, ABC):
         else:
             data = compute_fun(
                 self,
-                names=["x", "x_s", "ds"],
+                names=data_keys,
                 params=params,
                 transforms=transforms,
                 profiles={},
             )
             data["x_s"] = rpz2xyz_vec(data["x_s"], phi=data["x"][:, 1])
             data["x"] = rpz2xyz(data["x"])
-
+        if stochastic:
+            data["x"] += (
+                data["frenet_normal"] * stochastic_perturbation(stochastic)[:, None]
+                + data["frenet_binormal"] * stochastic_perturbation(stochastic)[:, None]
+            )
         AB = op(coords, data["x"], data["x_s"] * data["ds"][:, None], current)
 
         if basis.lower() == "rpz":
@@ -376,7 +395,13 @@ class _Coil(_MagneticField, Optimizable, ABC):
         return AB
 
     def compute_magnetic_field(
-        self, coords, params=None, basis="rpz", source_grid=None, transforms=None
+        self,
+        coords,
+        params=None,
+        basis="rpz",
+        source_grid=None,
+        transforms=None,
+        stochastic=False,
     ):
         """Compute magnetic field at a set of points.
 
@@ -396,6 +421,12 @@ class _Coil(_MagneticField, Optimizable, ABC):
             points. Should NOT include endpoint at 2pi.
         transforms : dict of Transform or array-like
             Transforms for R, Z, lambda, etc. Default is to build from grid.
+        stochastic : dict, optional
+            dictionary of parameters to pass to stochastic perturbations, for use
+            in stochastic coil optimization for robustness. Perturbations are
+            applied to both the normal and binormal directions  Dict contains
+            "sigma" : float, the std dev of the Gaussian perturbations
+            "scale_length" : float, the scale length of the perturbations
 
 
         Returns
@@ -411,7 +442,9 @@ class _Coil(_MagneticField, Optimizable, ABC):
         may not be zero if not fully converged.
 
         """
-        return self._compute_A_or_B(coords, params, basis, source_grid, transforms, "B")
+        return self._compute_A_or_B(
+            coords, params, basis, source_grid, transforms, "B", stochastic
+        )
 
     def compute_magnetic_vector_potential(
         self, coords, params=None, basis="rpz", source_grid=None, transforms=None
@@ -1495,6 +1528,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         source_grid=None,
         transforms=None,
         compute_A_or_B="B",
+        stochastic=False,
     ):
         """Compute magnetic field at a set of points.
 
@@ -1529,10 +1563,11 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         )
         assert basis.lower() in ["rpz", "xyz"]
         coords = jnp.atleast_2d(jnp.asarray(coords))
+        data_keys = ["x_s", "x", "s", "ds"]
+        if stochastic:
+            data_keys += ["frenet_normal", "frenet_binormal"]
         if params is None:
-            params = [
-                get_params(["x_s", "x", "s", "ds"], coil, basis=basis) for coil in self
-            ]
+            params = [get_params(data_keys, coil, basis=basis) for coil in self]
             for par, coil in zip(params, self):
                 par["current"] = coil.current
 
@@ -1566,7 +1601,13 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             coords_nfp = coords_rpz + jnp.array([0, 2 * jnp.pi * k / self.NFP, 0])
 
             def body(AB, x):
-                AB += op(coords_nfp, params=x, basis="rpz", source_grid=source_grid)
+                AB += op(
+                    coords_nfp,
+                    params=x,
+                    basis="rpz",
+                    source_grid=source_grid,
+                    stochastic=stochastic,
+                )
                 return AB, None
 
             AB += scan(body, jnp.zeros(coords_nfp.shape), tree_stack(params))[0]
@@ -1586,7 +1627,13 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         return AB
 
     def compute_magnetic_field(
-        self, coords, params=None, basis="rpz", source_grid=None, transforms=None
+        self,
+        coords,
+        params=None,
+        basis="rpz",
+        source_grid=None,
+        transforms=None,
+        stochastic=False,
     ):
         """Compute magnetic field at a set of points.
 
@@ -1610,7 +1657,9 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             Magnetic field at specified nodes, in [R,phi,Z] or [X,Y,Z] coordinates.
 
         """
-        return self._compute_A_or_B(coords, params, basis, source_grid, transforms, "B")
+        return self._compute_A_or_B(
+            coords, params, basis, source_grid, transforms, "B", stochastic
+        )
 
     def compute_magnetic_vector_potential(
         self, coords, params=None, basis="rpz", source_grid=None, transforms=None

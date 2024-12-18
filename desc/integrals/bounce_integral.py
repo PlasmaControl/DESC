@@ -87,108 +87,23 @@ class Bounce2D(Bounce):
     the particle's guiding center trajectory traveling in the direction of increasing
     field-line-following coordinate ζ.
 
-
     Overview
     --------
-    Magnetic field line with label α, defined by B = ∇ρ × ∇α, is determined from
+    Magnetic field line with label α, defined by B = ∇ψ × ∇α, is determined from
       α : ρ, θ, ζ ↦ θ + λ(ρ,θ,ζ) − ι(ρ) [ζ + ω(ρ,θ,ζ)]
     Interpolate Fourier-Chebyshev series to DESC poloidal coordinate.
-      θ : α, ζ ↦ tₘₙ exp(jmα) Tₙ(ζ)
-    Compute |B| along field lines.
-      |B| : α, ζ ↦  bₙ(θ(α, ζ)) Tₙ(ζ)
+      θ : ρ, α, ζ ↦ tₘₙ(ρ) exp(jmα) Tₙ(ζ)
     Compute bounce points.
       r(ζₖ) = |B|(ζₖ) − 1/λ = 0
-    Interpolate smooth components of integrand with FFTs.
-      G : α, ζ ↦ gₘₙ exp(j [m θ(α,ζ) + n ζ] )
+    Interpolate smooth periodic components of integrand with FFTs.
+      G : ρ, α, ζ ↦ gₘₙ(ρ) exp(j [m θ(α,ζ) + n ζ])
     Perform Gaussian quadrature after removing singularities.
       Fᵢ : ρ, α, λ, ζ₁, ζ₂ ↦  ∫ᵢ f(ρ,α,λ,ζ,{Gⱼ}) dζ
 
     If the map G is multivalued at a physical location, then it is still
-    permissible if separable into single valued and multivalued parts.
-    In that case, supply the single valued parts, which will be interpolated
+    permissible if separable into periodic and secular components.
+    In that case, supply the periodic component, which will be interpolated
     with FFTs, and use the provided coordinates θ,ζ ∈ ℝ to compose G.
-
-    Notes
-    -----
-    For applications which reduce to computing a nonlinear function of distance
-    along field lines between bounce points, it is required to identify these
-    points with field-line-following coordinates. (In the special case of a linear
-    function summing integrals between bounce points over a flux surface, arbitrary
-    coordinate systems may be used as that task reduces to a surface integral,
-    which is invariant to the order of summation).
-
-    The DESC coordinate system is related to field-line-following coordinate
-    systems by a relation whose solution is best found with Newton iteration
-    since this solution is unique. Newton iteration is not a globally
-    convergent algorithm to find the real roots of r : ζ ↦ |B|(ζ) − 1/λ where
-    ζ is a field-line-following coordinate. For this, function approximation
-    of |B| is necessary.
-
-    Therefore, to compute bounce points {(ζ₁, ζ₂)}, we approximate |B| by a
-    series expansion of basis functions parameterized by a single variable ζ,
-    restricting the class of basis functions to low order (e.g. n = 2ᵏ where
-    k is small) algebraic or trigonometric polynomial with integer frequencies.
-    These are the two classes useful for function approximation and for which
-    there exists globally convergent root-finding algorithms. We require low
-    order because the computation expenses grow with the number of potential
-    roots, and the theorem of algebra states that number is n (2n) for algebraic
-    (trigonometric) polynomials of degree n.
-
-    The frequency transform of a map under the chosen basis must be concentrated
-    at low frequencies for the series to converge fast. For periodic
-    (non-periodic) maps, the standard choice for the basis is a Fourier (Chebyshev)
-    series. Both converge exponentially, but the larger region of convergence in the
-    complex plane of Fourier series makes it preferable to choose coordinate
-    systems such that the function to approximate is periodic. One reason Chebyshev
-    polynomials are preferred to other orthogonal polynomial series is
-    fast discrete polynomial transforms (DPT) are implemented via fast transform
-    to Chebyshev then DCT. Therefore, a Fourier-Chebyshev series is chosen
-    to interpolate θ(α,ζ) and a piecewise Chebyshev series interpolates |B|(ζ).
-
-    * An alternative to Chebyshev series is
-      [filtered Fourier series](doi.org/10.1016/j.aml.2006.10.001).
-      We did not implement or benchmark against that.
-    * θ is not interpolated with a double Fourier series θ(ϑ, ζ) because
-      it is impossible to approximate an unbounded function with a finite Fourier
-      series. Due to Gibbs effects, this statement holds even when the goal is to
-      approximate θ over one branch cut. The proof uses analytic continuation.
-    * The advantage of Fourier series in DESC coordinates is that they may use the
-      spectrally condensed variable ζ* = NFP ζ. This cannot be done in any other
-      coordinate system, regardless of whether the basis functions are periodic.
-      The strategy of parameterizing |B| along field lines with a single variable
-      in Clebsch coordinates (as opposed to two variables in straight-field line
-      coordinates) also serves to minimize this penalty since evaluation of |B|
-      when computing bounce points will be less expensive (assuming the 2D
-      Fourier resolution of |B|(ϑ, ϕ) is larger than the 1D Chebyshev resolution).
-
-    Computing accurate series expansions in (α, ζ) coordinates demands
-    particular interpolation points in that coordinate system. Newton iteration
-    is used to compute θ at these points. Note that interpolation is necessary
-    because there is no transformation that converts series coefficients in
-    periodic coordinates, e.g. (ϑ, ϕ), to a low order polynomial basis in
-    non-periodic coordinates. For example, one can obtain series coefficients in
-    (α, ϕ) coordinates from those in (ϑ, ϕ) as follows
-      g : ϑ, ϕ ↦ ∑ₘₙ aₘₙ exp(j [mϑ + nϕ])
-
-      g : α, ϕ ↦ ∑ₘₙ aₘₙ exp(j [mα + (m ι + n)ϕ])
-    However, the basis for the latter are trigonometric functions with
-    irrational frequencies, courtesy of the irrational rotational transform.
-    Globally convergent root-finding schemes for that basis (at fixed α) are
-    not known. The denominator of a close rational could be absorbed into the
-    coordinate ϕ, but this balloons the frequency, and hence the degree of the
-    series.
-
-    After computing the bounce points, the supplied quadrature is performed.
-    By default, this is a Gauss quadrature after removing the singularity.
-    Fast fourier transforms interpolate smooth functions in the integrand to the
-    quadrature nodes. Quadrature is chosen over Runge-Kutta methods of the form
-        ∂Fᵢ/∂ζ = f(ρ,α,λ,ζ,{Gⱼ}) subject to Fᵢ(ζ₁) = 0
-    A fourth order Runge-Kutta method is equivalent to a quadrature
-    with Simpson's rule. The quadratures resolve these integrals more efficiently.
-
-    Fast transforms are used where possible. Fast multipoint methods are not
-    implemented. For non-uniform interpolation, MMTs are used. It will be
-    worthwhile to use the inverse non-uniform fast transforms.
 
     Examples
     --------
@@ -226,6 +141,88 @@ class Bounce2D(Bounce):
         Names in ``data_index`` required to compute bounce integrals.
 
     """
+
+    # Notes
+    # -----
+    # For applications which reduce to computing a nonlinear function of distance
+    # along field lines between bounce points, it is required to identify these
+    # points with field-line-following coordinates. (In the special case of a linear
+    # function summing integrals between bounce points over a flux surface, arbitrary
+    # coordinate systems may be used as that task reduces to a surface integral,
+    # which is invariant to the order of summation).
+    #
+    # The DESC coordinate system is related to field-line-following coordinate
+    # systems by a relation whose solution is best found with Newton iteration
+    # since this solution is unique. Newton iteration is not a globally
+    # convergent algorithm to find the real roots of r : ζ ↦ |B|(ζ) − 1/λ where
+    # ζ is a field-line-following coordinate. For this, function approximation
+    # of |B| is necessary.
+    #
+    # Therefore, to compute bounce points {(ζ₁, ζ₂)}, we approximate |B| by a
+    # series expansion of basis functions parameterized by a single variable ζ,
+    # restricting the class of basis functions to low order (e.g. n = 2ᵏ where
+    # k is small) algebraic or trigonometric polynomial with integer frequencies.
+    # These are the two classes useful for function approximation and for which
+    # there exists globally convergent root-finding algorithms. We require low
+    # order because the computation expenses grow with the number of potential
+    # roots, and the theorem of algebra states that number is n (2n) for algebraic
+    # (trigonometric) polynomials of degree n.
+    #
+    # The frequency transform of a map under the chosen basis must be concentrated
+    # at low frequencies for the series to converge fast. For periodic
+    # (non-periodic) maps, the standard choice for the basis is a Fourier (Chebyshev)
+    # series. Both converge exponentially, but the larger region of convergence in the
+    # complex plane of Fourier series makes it preferable to choose coordinate
+    # systems such that the function to approximate is periodic. One reason Chebyshev
+    # polynomials are preferred to other orthogonal polynomial series is
+    # fast discrete polynomial transforms (DPT) are implemented via fast transform
+    # to Chebyshev then DCT. Therefore, a Fourier-Chebyshev series is chosen
+    # to interpolate θ(α,ζ) and a piecewise Chebyshev series interpolates |B|(ζ).
+    #
+    # * An alternative to Chebyshev series is
+    #   [filtered Fourier series](doi.org/10.1016/j.aml.2006.10.001).
+    #   We did not implement or benchmark against that.
+    # * θ is not interpolated with a double Fourier series θ(ϑ, ζ) because
+    #   it is impossible to approximate an unbounded function with a finite Fourier
+    #   series. Due to Gibbs effects, this statement holds even when the goal is to
+    #   approximate θ over one branch cut. The proof uses analytic continuation.
+    # * The advantage of Fourier series in DESC coordinates is that they may use the
+    #   spectrally condensed variable ζ* = NFP ζ. This cannot be done in any other
+    #   coordinate system, regardless of whether the basis functions are periodic.
+    #   The strategy of parameterizing |B| along field lines with a single variable
+    #   in Clebsch coordinates (as opposed to two variables in straight-field line
+    #   coordinates) also serves to minimize this penalty since evaluation of |B|
+    #   when computing bounce points will be less expensive (assuming the 2D
+    #   Fourier resolution of |B|(ϑ, ϕ) is larger than the 1D Chebyshev resolution).
+    #
+    # Computing accurate series expansions in (α, ζ) coordinates demands
+    # particular interpolation points in that coordinate system. Newton iteration
+    # is used to compute θ at these points. Note that interpolation is necessary
+    # because there is no transformation that converts series coefficients in
+    # periodic coordinates, e.g. (ϑ, ϕ), to a low order polynomial basis in
+    # non-periodic coordinates. For example, one can obtain series coefficients in
+    # (α, ϕ) coordinates from those in (ϑ, ϕ) as follows
+    #   g : ϑ, ϕ ↦ ∑ₘₙ aₘₙ exp(j [mϑ + nϕ])
+    #
+    #   g : α, ϕ ↦ ∑ₘₙ aₘₙ exp(j [mα + (m ι + n)ϕ])
+    # However, the basis for the latter are trigonometric functions with
+    # irrational frequencies, courtesy of the irrational rotational transform.
+    # Globally convergent root-finding schemes for that basis (at fixed α) are
+    # not known. The denominator of a close rational could be absorbed into the
+    # coordinate ϕ, but this balloons the frequency, and hence the degree of the
+    # series.
+    #
+    # After computing the bounce points, the supplied quadrature is performed.
+    # By default, this is a Gauss quadrature after removing the singularity.
+    # Fast fourier transforms interpolate smooth functions in the integrand to the
+    # quadrature nodes. Quadrature is chosen over Runge-Kutta methods of the form
+    #     ∂Fᵢ/∂ζ = f(ρ,α,λ,ζ,{Gⱼ}) subject to Fᵢ(ζ₁) = 0
+    # A fourth order Runge-Kutta method is equivalent to a quadrature
+    # with Simpson's rule. The quadratures resolve these integrals more efficiently.
+    #
+    # Fast transforms are used where possible. Fast multipoint methods are not
+    # implemented. For non-uniform interpolation, MMTs are used. It will be
+    # worthwhile to use the inverse non-uniform fast transforms.
 
     required_names = ["B^zeta", "|B|", "iota"]
 
@@ -409,10 +406,10 @@ class Bounce2D(Bounce):
         eq : Equilibrium
             Equilibrium to use defining the coordinate mapping.
         X : int
-            Grid resolution in poloidal direction for Clebsch coordinate grid.
+            Poloidal Fourier grid resolution to interpolate the map α, ζ ↦ θ(α, ζ).
             Preferably power of 2.
         Y : int
-            Grid resolution in toroidal direction for Clebsch coordinate grid.
+            Toroidal Chebyshev grid resolution to interpolate the map α, ζ ↦ θ(α, ζ).
             Preferably power of 2.
         rho : float or jnp.ndarray
             Shape (num rho, ).
@@ -966,20 +963,6 @@ class Bounce1D(Bounce):
 
     Notes
     -----
-    For applications which reduce to computing a nonlinear function of distance
-    along field lines between bounce points, it is required to identify these
-    points with field-line-following coordinates. (In the special case of a linear
-    function summing integrals between bounce points over a flux surface, arbitrary
-    coordinate systems may be used as that task reduces to a surface integral,
-    which is invariant to the order of summation).
-
-    The DESC coordinate system is related to field-line-following coordinate
-    systems by a relation whose solution is best found with Newton iteration
-    since this solution is unique. Newton iteration is not a globally
-    convergent algorithm to find the real roots of r : ζ ↦ |B|(ζ) − 1/λ where
-    ζ is a field-line-following coordinate. For this, function approximation
-    of |B| is necessary.
-
     The function approximation in ``Bounce1D`` is ignorant that the objects to
     approximate are defined on a bounded subset of ℝ². Instead, the domain is
     projected to ℝ, where information sampled about the function at infinity

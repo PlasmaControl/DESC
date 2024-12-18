@@ -117,6 +117,17 @@ Grid
     desc.grid.find_least_rational_surfaces
     desc.grid.find_most_rational_surfaces
 
+Integrals
+*********
+
+.. autosummary::
+    :toctree: _api/integrals
+    :recursive:
+    :template: class.rst
+
+    desc.integrals.Bounce2D
+    desc.integrals.Bounce1D
+
 IO
 ***
 

@@ -69,17 +69,19 @@ class EffectiveRipple(_Objective):
     grid : Grid
         Optional, tensor-product grid in (ρ, θ, ζ) with uniformly spaced nodes
         (θ, ζ) ∈ [0, 2π) × [0, 2π/NFP). Powers of two are preferable.
+        Determines the flux surfaces to compute on.
+        Default grid samples the boundary surface at ρ=1.
     X : int
-        Grid resolution in poloidal direction for Clebsch coordinate grid.
+        Poloidal Fourier grid resolution to interpolate the map α, ζ ↦ θ(α, ζ).
         Preferably power of 2.
     Y : int
-        Grid resolution in toroidal direction for Clebsch coordinate grid.
+        Toroidal Chebyshev grid resolution to interpolate the map α, ζ ↦ θ(α, ζ).
         Preferably power of 2.
     Y_B : int
         Desired resolution for algorithm to compute bounce points.
         Default is double ``Y``. Something like 100 is usually sufficient.
         Currently, this is the number of knots per toroidal transit over
-        to approximate |B| with cubic splines.
+        to approximate |B| with cubic splines to find bounce points.
     num_transit : int
         Number of toroidal transits to follow field line.
         For axisymmetric devices, one poloidal transit is sufficient. Otherwise,
@@ -236,7 +238,7 @@ class EffectiveRipple(_Objective):
 
         Returns
         -------
-        eps_eff : ndarray
+        epsilon : ndarray
             Effective ripple as a function of the flux surface label.
 
         """
@@ -248,6 +250,16 @@ class EffectiveRipple(_Objective):
             eq, "iota", params, constants["transforms"], constants["profiles"]
         )
         # TODO (#1034): Use old theta values as initial guess.
+        theta = Bounce2D.compute_theta(
+            eq,
+            self._X,
+            self._Y,
+            iota=constants["transforms"]["grid"].compress(data["iota"]),
+            clebsch=constants["clebsch"],
+            # Pass in params so that root finding is done with the new
+            # perturbed λ coefficients and not the original equilibrium's.
+            params=params,
+        )
         data = compute_fun(
             eq,
             "effective ripple",
@@ -255,16 +267,7 @@ class EffectiveRipple(_Objective):
             constants["transforms"],
             constants["profiles"],
             data,
-            theta=Bounce2D.compute_theta(
-                eq,
-                self._X,
-                self._Y,
-                iota=constants["transforms"]["grid"].compress(data["iota"]),
-                clebsch=constants["clebsch"],
-                # Pass in params so that root finding is done with the new
-                # perturbed λ coefficients and not the original equilibrium's.
-                params=params,
-            ),
+            theta=theta,
             fieldline_quad=constants["fieldline quad"],
             quad=constants["quad"],
             **self._hyperparam,
@@ -295,17 +298,19 @@ class GammaC(_Objective):
     grid : Grid
         Optional, tensor-product grid in (ρ, θ, ζ) with uniformly spaced nodes
         (θ, ζ) ∈ [0, 2π) × [0, 2π/NFP). Powers of two are preferable.
+        Determines the flux surfaces to compute on.
+        Default grid samples the boundary surface at ρ=1.
     X : int
-        Grid resolution in poloidal direction for Clebsch coordinate grid.
+        Poloidal Fourier grid resolution to interpolate the map α, ζ ↦ θ(α, ζ).
         Preferably power of 2.
     Y : int
-        Grid resolution in toroidal direction for Clebsch coordinate grid.
+        Toroidal Chebyshev grid resolution to interpolate the map α, ζ ↦ θ(α, ζ).
         Preferably power of 2.
     Y_B : int
         Desired resolution for algorithm to compute bounce points.
         Default is double ``Y``. Something like 100 is usually sufficient.
         Currently, this is the number of knots per toroidal transit over
-        to approximate |B| with cubic splines.
+        to approximate |B| with cubic splines to find bounce points.
     num_transit : int
         Number of toroidal transits to follow field line.
         For axisymmetric devices, one poloidal transit is sufficient. Otherwise,
@@ -485,6 +490,16 @@ class GammaC(_Objective):
             eq, "iota", params, constants["transforms"], constants["profiles"]
         )
         # TODO (#1034): Use old theta values as initial guess.
+        theta = Bounce2D.compute_theta(
+            eq,
+            self._X,
+            self._Y,
+            iota=constants["transforms"]["grid"].compress(data["iota"]),
+            clebsch=constants["clebsch"],
+            # Pass in params so that root finding is done with the new
+            # perturbed λ coefficients and not the original equilibrium's.
+            params=params,
+        )
         data = compute_fun(
             eq,
             self._key,
@@ -492,16 +507,7 @@ class GammaC(_Objective):
             constants["transforms"],
             constants["profiles"],
             data,
-            theta=Bounce2D.compute_theta(
-                eq,
-                self._X,
-                self._Y,
-                iota=constants["transforms"]["grid"].compress(data["iota"]),
-                clebsch=constants["clebsch"],
-                # Pass in params so that root finding is done with the new
-                # perturbed λ coefficients and not the original equilibrium's.
-                params=params,
-            ),
+            theta=theta,
             fieldline_quad=constants["fieldline quad"],
             quad=constants["quad"],
             **self._hyperparam,

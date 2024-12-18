@@ -295,7 +295,16 @@ class VMECIO:
         grid_full = LinearGrid(M=M_nyq, N=N_nyq, NFP=NFP, rho=r_full)
 
         data_quad = eq.compute(
-            ["R0/a", "V", "<|B|>_rms", "<beta>_vol", "<beta_pol>_vol", "<beta_tor>_vol"]
+            [
+                "R0/a",
+                "V",
+                "W_B",
+                "W_p",
+                "<|B|>_rms",
+                "<beta>_vol",
+                "<beta_pol>_vol",
+                "<beta_tor>_vol",
+            ]
         )
         data_axis = eq.compute(["G", "p", "R", "<|B|^2>", "<|B|>"], grid=grid_axis)
         data_lcfs = eq.compute(["G", "I", "R", "Z"], grid=grid_lcfs)
@@ -507,6 +516,16 @@ class VMECIO:
         betator.long_name = "normalized toroidal plasma pressure"
         betator.units = "None"
         betator[:] = data_quad["<beta_tor>_vol"]
+
+        wb = file.createVariable("wb", np.float64)
+        wb.long_name = "plasma magnetic energy * mu_0/(4*pi^2)"
+        wb.units = "T^2*m^3"
+        wb[:] = data_quad["W_B"] * mu_0 / (4 * np.pi**2)
+
+        wp = file.createVariable("wp", np.float64)
+        wp.long_name = "plasma thermodynamic energy * mu_0/(4*pi^2)"
+        wp.units = "T^2*m^3"
+        wp[:] = np.abs(data_quad["W_p"]) * mu_0 / (4 * np.pi**2)
 
         # scalars computed at the magnetic axis
 
@@ -1344,16 +1363,8 @@ class VMECIO:
         specw = file.createVariable("specw", np.float64, ("radius",))
         specw[:] = np.zeros((file.dimensions["radius"].size,))
 
-        # this is not the same as DESC's "W_B"
-        wb = file.createVariable("wb", np.float64)
-        wb[:] = 0.0
-
         wdot = file.createVariable("wdot", np.float64, ("time",))
         wdot[:] = np.zeros((file.dimensions["time"].size,))
-
-        # this is not the same as DESC's "W_p"
-        wp = file.createVariable("wp", np.float64)
-        wp[:] = 0.0
         """
 
         file.close()

@@ -12,11 +12,10 @@ from desc.backend import execute_on_cpu, jnp
 from desc.basis import DoubleFourierSeries
 from desc.compute.utils import get_transforms
 from desc.grid import LinearGrid
+from desc.objectives import ExternalObjective
 from desc.transform import Transform
 from desc.utils import errorif, warnif
 from desc.vmec_utils import ptolemy_identity_rev, zernike_to_fourier
-
-from ._generic import ExternalObjective
 
 
 @execute_on_cpu

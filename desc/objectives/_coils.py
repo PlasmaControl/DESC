@@ -6,6 +6,7 @@ from scipy.constants import mu_0
 
 from desc.backend import (
     fori_loop,
+    jax_random_key,
     jnp,
     tree_flatten,
     tree_leaves,
@@ -1145,6 +1146,7 @@ class QuadraticFlux(_Objective):
         vacuum=False,
         name="Quadratic flux",
         jac_chunk_size=None,
+        stochastic=False,
     ):
         from desc.geometry import FourierRZToroidalSurface
 
@@ -1156,6 +1158,7 @@ class QuadraticFlux(_Objective):
         self._field = field
         self._field_grid = field_grid
         self._vacuum = vacuum
+        self._stochastic = stochastic
         errorif(
             isinstance(eq, FourierRZToroidalSurface),
             TypeError,
@@ -1201,7 +1204,6 @@ class QuadraticFlux(_Objective):
             eval_grid = self._eval_grid
 
         self._data_keys = ["R", "Z", "n_rho", "phi", "|e_theta x e_zeta|"]
-
         timer = Timer()
         if verbose > 0:
             print("Precomputing transforms")
@@ -1230,6 +1232,14 @@ class QuadraticFlux(_Objective):
                 eq, eval_grid, self._source_grid, normal_only=True
             )
 
+        if self._stochastic:
+            seed = self._stochastic.get("seed", 0)
+            self._stochastic["key"] = jax_random_key(seed)
+            self._stochastic["zeros"] = jnp.zeros(self._field_grid.num_zeta)
+            self._stochastic["cov"] = (
+                jnp.eye(self._field_grid.num_zeta) * self._stochastic["sigma"]
+            )
+
         self._constants = {
             "field": self._field,
             "field_grid": self._field_grid,
@@ -1238,6 +1248,9 @@ class QuadraticFlux(_Objective):
             "eval_transforms": eval_transforms,
             "eval_profiles": eval_profiles,
             "B_plasma": Bplasma,
+            "stochastic": self._stochastic,
+            # FIXME can't do range(stochastic)
+            "stochastic_ns": jnp.arange(self._stochastic["nsamples"]),
         }
 
         timer.stop("Precomputing transforms")
@@ -1276,16 +1289,38 @@ class QuadraticFlux(_Objective):
 
         x = jnp.array([eval_data["R"], eval_data["phi"], eval_data["Z"]]).T
 
-        # B_ext is not pre-computed because field is not fixed
-        B_ext = constants["field"].compute_magnetic_field(
-            x,
-            source_grid=constants["field_grid"],
-            basis="rpz",
-            params=field_params,
-        )
-        B_ext = jnp.sum(B_ext * eval_data["n_rho"], axis=-1)
-        f = (B_ext + B_plasma) * jnp.sqrt(eval_data["|e_theta x e_zeta|"])
-        return f
+        if not self._stochastic:
+            # B_ext is not pre-computed because field is not fixed
+            B_ext = constants["field"].compute_magnetic_field(
+                x,
+                source_grid=constants["field_grid"],
+                basis="rpz",
+                params=field_params,
+            )
+            B_ext = jnp.sum(B_ext * eval_data["n_rho"], axis=-1)
+            f = (B_ext + B_plasma) * jnp.sqrt(eval_data["|e_theta x e_zeta|"])
+            return f
+        else:
+            # perform some amt of stochastic perturbations on the coil,
+            # and return the approximated expected value of the objective
+            aggregate_f = jnp.zeros(self._dim_f)
+            for n in constants["stochastic_ns"]:
+                constants["stochastic"]["n"] = n
+                # ideally, this would be a method of the coilset?
+                # or a flag to pass into compute_magnetic_field
+                # to then apply the perturbation down the line?
+                B_ext = constants["field"].compute_magnetic_field(
+                    x,
+                    source_grid=constants["field_grid"],
+                    basis="rpz",
+                    params=field_params,
+                    stochastic=constants["stochastic"],
+                )
+                B_ext = jnp.sum(B_ext * eval_data["n_rho"], axis=-1)
+                aggregate_f += (B_ext + B_plasma) * jnp.sqrt(
+                    eval_data["|e_theta x e_zeta|"]
+                )
+            return 1 / constants["stochastic"]["nsamples"] * aggregate_f
 
 
 class SurfaceQuadraticFlux(_Objective):

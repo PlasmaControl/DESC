@@ -107,8 +107,8 @@ def _L_par(params, transforms, profiles, data, **kwargs):
 @register_compute_fun(
     name="xi",
     label="ξ",
-    units="m^2",
-    units_long="meters squared",
+    units="",
+    units_long="",
     description="Target for spacing of flux surfaces",
     dim=1,
     params=[],

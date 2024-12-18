@@ -1972,7 +1972,13 @@ def test_external_vs_generic_objectives(tmpdir_factory):
     path = dir.join("wout_result.nc")
     objective = ObjectiveFunction(
         ExternalObjective(
-            eq=eq0, fun=data_from_vmec, dim_f=4, target=target, path=path, surfs=8
+            eq=eq0,
+            fun=data_from_vmec,
+            dim_f=4,
+            vectorized=False,
+            target=target,
+            path=path,
+            surfs=8,
         )
     )
     constraints = FixParameters(

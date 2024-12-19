@@ -740,6 +740,7 @@ class TERPSICHORE(ExternalObjective):
     def __init__(
         self,
         eq,
+        *,
         target=None,
         bounds=None,
         weight=1,

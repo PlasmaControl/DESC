@@ -70,7 +70,7 @@ def _swap_pl(f):
 
 
 class Bounce2D(Bounce):
-    """Computes bounce integrals using two-dimensional pseudo-spectral methods.
+    """Computes bounce integrals using pseudo-spectral methods.
 
     The bounce integral is defined as ∫ f(ρ,α,λ,ℓ) dℓ where
 

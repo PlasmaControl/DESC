@@ -130,10 +130,9 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
     num_well = kwargs.get("num_well", Y_B * num_transit)
     batch_size = kwargs.get("batch_size", None)
     spline = kwargs.get("spline", True)
-    if "fieldline_quad" in kwargs:
-        fieldline_quad = kwargs["fieldline_quad"]
-    else:
-        fieldline_quad = leggauss(Y_B // 2)
+    fieldline_quad = (
+        kwargs["fieldline_quad"] if "fieldline_quad" in kwargs else leggauss(Y_B // 2)
+    )
     quad = (
         kwargs["quad"]
         if "quad" in kwargs

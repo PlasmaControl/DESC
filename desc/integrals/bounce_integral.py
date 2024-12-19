@@ -267,7 +267,7 @@ class Bounce2D(Bounce):
             ``FourierChebyshevSeries.nodes(X,Y,rho,domain=(0,2*jnp.pi))``.
             Use the ``Bounce2D.compute_theta`` method to obtain this.
         Y_B : int
-            Desired resolution for |B| along field lines to compute bounce points.
+            Desired resolution for algorithm to compute bounce points.
             Default is double ``Y``.
         alpha : float
             Starting field line poloidal label.

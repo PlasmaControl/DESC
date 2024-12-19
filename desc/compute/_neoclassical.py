@@ -19,7 +19,7 @@ _bounce_doc = {
         Use the ``Bounce2D.compute_theta`` method to obtain this.
         """,
     "Y_B": """int :
-        Desired resolution for |B| along field lines to compute bounce points.
+        Desired resolution for algorithm to compute bounce points.
         Default is double ``Y``.
         """,
     "num_transit": """int :

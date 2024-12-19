@@ -114,10 +114,10 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
     A 3D stellarator magnetic field admits ripple wells that lead to enhanced
     radial drift of trapped particles. The energetic particle confinement
     metric γ_c quantifies whether the contours of the second adiabatic invariant
-    close on the flux surfaces. In the limit the poloidal drift velocity
+    close on the flux surfaces. In the limit where the poloidal drift velocity
     majorizes the radial drift velocity, the contours lie parallel to flux
     surfaces. The optimization metric Γ_c averages γ_c² over the distribution
-    of trapped articles on each flux surface.
+    of trapped particles on each flux surface.
 
     The radial electric field has a negligible effect, since fast particles
     have high energy with collisionless orbits, so it is assumed to be zero.

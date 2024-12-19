@@ -26,7 +26,7 @@ def terpsichore(
     exec="",
     scalar=True,
     mode_family=-1,
-    surfs=32,
+    surfs=101,
     lssl=1000,
     lssd=1000,
     M_max=8,

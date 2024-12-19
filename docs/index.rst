@@ -49,7 +49,6 @@
    api_fields
    api
 
-
 .. toctree::
    :maxdepth: 1
    :caption: Command Line Interface and I/O
@@ -57,7 +56,6 @@
    command_line
    input
    output
-
 
 .. toctree::
    :maxdepth: 1
@@ -67,9 +65,8 @@
    notebooks/dev_guide/grid.ipynb
    adding_compute_funs
    adding_objectives
+   external_objectives
    adding_optimizers
-
-
 
 Indices and tables
 ==================

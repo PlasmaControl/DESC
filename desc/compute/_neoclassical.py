@@ -199,7 +199,7 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
     )
 
     def eps_32(data):
-        """(∂ψ/∂ρ)⁻² B₀⁻³ ∫ dλ λ⁻² ∑ⱼ Hⱼ²/Iⱼ."""
+        """(∂ψ/∂ρ)⁻² B₀⁻³ ∫ dλ λ⁻² 〈 ∑ⱼ Hⱼ²/Iⱼ 〉."""
         # B₀ has units of λ⁻¹.
         # Nemov's ∑ⱼ Hⱼ²/Iⱼ = (∂ψ/∂ρ)² (λB₀)³ ``(H**2 / I).sum(axis=-1)``.
         # (λB₀)³ d(λB₀)⁻¹ = B₀² λ³ d(λ⁻¹) = -B₀² λ dλ.

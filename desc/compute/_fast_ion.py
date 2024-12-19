@@ -143,7 +143,7 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
     )
 
     def Gamma_c(data):
-        """∫ dλ ∑ⱼ [v τ γ_c²]ⱼ π²/4."""
+        """∫ dλ 〈 ∑ⱼ [v τ γ_c²]ⱼ 〉 π²/4."""
         bounce = Bounce2D(
             grid,
             data,
@@ -297,7 +297,7 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
     )
 
     def Gamma_c(data):
-        """∫ dλ ∑ⱼ [v τ γ_c²]ⱼ π²/4."""
+        """∫ dλ 〈 ∑ⱼ [v τ γ_c²]ⱼ 〉 π²/4."""
         bounce = Bounce2D(
             grid,
             data,

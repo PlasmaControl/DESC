@@ -41,39 +41,20 @@ class ExternalObjective(_Objective, ABC):
     vectorized : bool
         Set to False if ``fun`` takes a single Equilibrium as its positional argument.
         Set to True if ``fun`` instead takes a list of Equilibria.
-    target : {float, ndarray}, optional
-        Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f. Defaults to ``target=0``.
-    bounds : tuple of {float, ndarray}, optional
-        Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f.
-        Defaults to ``target=0``.
-    weight : {float, ndarray}, optional
-        Weighting to apply to the Objective, relative to other Objectives.
-        Must be broadcastable to to Objective.dim_f
-    normalize : bool, optional
-        Whether to compute the error in physical units or non-dimensionalize.
-        Has no effect for this objective.
-    normalize_target : bool, optional
-        Whether target and bounds should be normalized before comparing to computed
-        values. If `normalize` is `True` and the target is in physical units,
-        this should also be set to True.
-    loss_function : {None, 'mean', 'min', 'max'}, optional
-        Loss function to apply to the objective values once computed. This loss function
-        is called on the raw compute value, before any shifting, scaling, or
-        normalization.
     abs_step : float, optional
         Absolute finite difference step size. Default = 1e-4.
         Total step size is ``abs_step + rel_step * mean(abs(x))``.
     rel_step : float, optional
         Relative finite difference step size. Default = 0.
         Total step size is ``abs_step + rel_step * mean(abs(x))``.
-    name : str, optional
-        Name of the objective function.
     kwargs : any, optional
         Keyword arguments that are passed as inputs to ``fun``.
 
     """
+
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``target=0``.", bounds_default="``target=0``."
+    )
 
     _units = "(Unknown)"
     _print_value_fmt = "External objective value: "
@@ -82,17 +63,18 @@ class ExternalObjective(_Objective, ABC):
     def __init__(
         self,
         eq,
+        *,
         fun,
         dim_f,
         vectorized,
+        abs_step=1e-4,
+        rel_step=0,
         target=None,
         bounds=None,
         weight=1,
         normalize=False,
         normalize_target=False,
         loss_function=None,
-        abs_step=1e-4,
-        rel_step=0,
         name="external",
         **kwargs,
     ):

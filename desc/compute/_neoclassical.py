@@ -6,6 +6,7 @@ from orthax.legendre import leggauss
 
 from desc.backend import imap, jit, jnp
 
+from ..batching import _chunk_vmapped_function
 from ..integrals.bounce_integral import Bounce2D
 from ..integrals.quad_utils import chebgauss2
 from ..utils import safediv
@@ -116,13 +117,11 @@ def _foreach_pitch(fun, pitch_inv, batch_size):
         If given ``None``, then computes everything simultaneously.
 
     """
-    # FIXME: Make this work with older JAX versions.
-    #  We don't need to rely on JAX to iteratively vectorize since
-    #  ``fun``` natively supports vectorization.
     return (
         fun(pitch_inv)
         if (batch_size is None or batch_size >= (pitch_inv.size - 1))
-        else imap(fun, pitch_inv, batch_size=batch_size).squeeze(axis=-1)
+        # else imap(fun, pitch_inv, batch_size=batch_size).squeeze(axis=-1) # noqa: E800
+        else _chunk_vmapped_function(fun, chunk_size=batch_size)(pitch_inv)
     )
 
 

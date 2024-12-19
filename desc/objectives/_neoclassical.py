@@ -1,4 +1,4 @@
-"""Objectives for targeting neoclassical transport."""
+"""Objectives for neoclassical transport."""
 
 import numpy as np
 from orthax.legendre import leggauss

@@ -6,6 +6,7 @@ from interpax import CubicHermiteSpline, PPoly
 from orthax.legendre import leggauss
 
 from desc.backend import jnp, rfft2
+from desc.integrals._basis import FourierChebyshevSeries, PiecewiseChebyshevSeries
 from desc.integrals._bounce_utils import (
     _bounce_quadrature,
     _check_bounce_points,
@@ -26,7 +27,6 @@ from desc.integrals._interp_utils import (
     irfft2_non_uniform,
     polyder_vec,
 )
-from desc.integrals.basis import FourierChebyshevSeries, PiecewiseChebyshevSeries
 from desc.integrals.quad_utils import (
     automorphism_sin,
     bijection_from_disc,
@@ -96,7 +96,7 @@ class Bounce2D(Bounce):
     Compute bounce points.
       r(ζₖ) = |B|(ζₖ) − 1/λ = 0
     Interpolate smooth periodic components of integrand with FFTs.
-      G : ρ, α, ζ ↦ gₘₙ(ρ) exp(j [m θ(α,ζ) + n ζ])
+      G : ρ, α, ζ ↦ gₘₙ(ρ) exp(j [m θ(ρ,α,ζ) + n ζ])
     Perform Gaussian quadrature after removing singularities.
       Fᵢ : ρ, α, λ, ζ₁, ζ₂ ↦  ∫ᵢ f(ρ,α,λ,ζ,{Gⱼ}) dζ
 
@@ -123,12 +123,11 @@ class Bounce2D(Bounce):
     it is often a bottleneck.
 
     * The function approximation done here requires DESC transforms on a fixed
-      grid with typical resolution, using FFTs to compute the map α,ζ ↦ θ(α,ζ)
-      between coordinate systems. This enables evaluating functions along
-      field lines without root-finding.
-    * The faster convergence of spectral interpolation requires a less dense
+      grid with typical resolution, using FFTs to compute the map between
+      coordinate systems. This enables evaluating functions along field lines
+      without root-finding.
+    * The faster convergence of spectral methods requires a less dense
       grid to interpolate onto from DESC's 3D transforms.
-    * Spectral approximation is more accurate than cubic splines.
     * 2D interpolation enables tracing the field line for many toroidal transits.
     * The drawback is that evaluating a Fourier series with resolution F at Q
       non-uniform quadrature points takes 𝒪([F+Q] log[F] log[1/ε]) time
@@ -530,7 +529,7 @@ class Bounce2D(Bounce):
             Whether to plot the field lines and bounce points of the given pitch angles.
         kwargs : dict
             Keyword arguments into
-            ``desc/integrals/basis.py::PiecewiseChebyshevSeries.plot1d`` or
+            ``desc/integrals/_basis.py::PiecewiseChebyshevSeries.plot1d`` or
             ``desc/integrals/_bounce_utils.py::plot_ppoly``.
 
         Returns
@@ -873,7 +872,7 @@ class Bounce2D(Bounce):
             specified by Clebsch coordinate ρ(l) will be plotted.
         kwargs
             Keyword arguments into
-            ``desc/integrals/basis.py::PiecewiseChebyshevSeries.plot1d``.
+            ``desc/integrals/_basis.py::PiecewiseChebyshevSeries.plot1d``.
 
         Returns
         -------
@@ -919,7 +918,7 @@ class Bounce2D(Bounce):
             ``rho=grid.compress(grid.nodes[:,0])[l]``.
         kwargs
             Keyword arguments into
-            ``desc/integrals/basis.py::PiecewiseChebyshevSeries.plot1d``.
+            ``desc/integrals/_basis.py::PiecewiseChebyshevSeries.plot1d``.
 
         Returns
         -------
@@ -992,14 +991,6 @@ class Bounce1D(Bounce):
     ----------
     required_names : list
         Names in ``data_index`` required to compute bounce integrals.
-    B : jnp.ndarray
-        Shape (num alpha, num rho, N - 1, B.shape[-1]).
-        Polynomial coefficients of the spline of |B| in local power basis.
-        Last axis enumerates the coefficients of power series. For a polynomial
-        given by ∑ᵢⁿ cᵢ xⁱ, coefficient cᵢ is stored at ``B[...,n-i]``.
-        Third axis enumerates the polynomials that compose a particular spline.
-        Second axis enumerates flux surfaces.
-        First axis enumerates field lines of a particular flux surface.
 
     """
 
@@ -1073,8 +1064,12 @@ class Bounce1D(Bounce):
         self._x, self._w = get_quadrature(quad, automorphism)
 
         # Compute local splines.
+        # Note it is simple to do FFT across field line axis, and spline
+        # Fourier coefficients across ζ to obtain Fourier-CubicSpline of functions.
+        # The point of Bounce2D is to do such a 2D interpolation but also do so
+        # without rebuilding DESC transforms each time an objective is computed.
         self._zeta = grid.compress(grid.nodes[:, 2], surface_label="zeta")
-        self.B = jnp.moveaxis(
+        self._B = jnp.moveaxis(
             CubicHermiteSpline(
                 x=self._zeta,
                 y=self._data["|B|"],
@@ -1085,11 +1080,14 @@ class Bounce1D(Bounce):
             source=(0, 1),
             destination=(-1, -2),
         )
-        self._dB_dz = polyder_vec(self.B)
-        # Note it is simple to do FFT across field line axis, and spline
-        # Fourier coefficients across ζ to obtain Fourier-CubicSpline of functions.
-        # The point of Bounce2D is to do such a 2D interpolation but also do so
-        # without rebuilding DESC transforms each time an objective is computed.
+        # Shape (num alpha, num rho, N - 1, -1).
+        # Polynomial coefficients of the spline of |B| in local power basis.
+        # Last axis enumerates the coefficients of power series. For a polynomial
+        # given by ∑ᵢⁿ cᵢ xⁱ, coefficient cᵢ is stored at ``B[...,n-i]``.
+        # Third axis enumerates the polynomials that compose a particular spline.
+        # Second axis enumerates flux surfaces.
+        # First axis enumerates field lines of a particular flux surface.
+        self._dB_dz = polyder_vec(self._B)
 
     @staticmethod
     def reshape_data(grid, f):
@@ -1150,7 +1148,7 @@ class Bounce1D(Bounce):
             line and pitch, is padded with zero.
 
         """
-        return bounce_points(pitch_inv, self._zeta, self.B, self._dB_dz, num_well)
+        return bounce_points(pitch_inv, self._zeta, self._B, self._dB_dz, num_well)
 
     def check_points(self, points, pitch_inv, *, plot=True, **kwargs):
         """Check that bounce points are computed correctly.
@@ -1184,7 +1182,7 @@ class Bounce1D(Bounce):
             z2=points[1],
             pitch_inv=pitch_inv,
             knots=self._zeta,
-            B=self.B,
+            B=self._B,
             plot=plot,
             **kwargs,
         )
@@ -1312,7 +1310,7 @@ class Bounce1D(Bounce):
             ``f`` interpolated to the deepest point between ``points``.
 
         """
-        return interp_to_argmin(f, points, self._zeta, self.B, self._dB_dz, method)
+        return interp_to_argmin(f, points, self._zeta, self._B, self._dB_dz, method)
 
     def plot(self, m, l, pitch_inv=None, **kwargs):
         """Plot the field line and bounce points of the given pitch angles.
@@ -1335,7 +1333,7 @@ class Bounce1D(Bounce):
             Matplotlib (fig, ax) tuple.
 
         """
-        B, dB_dz = self.B, self._dB_dz
+        B, dB_dz = self._B, self._dB_dz
         if B.ndim == 4:
             B = B[m]
             dB_dz = dB_dz[m]

@@ -85,7 +85,7 @@ def test_effective_ripple_1D():
 @pytest.mark.unit
 @pytest.mark.slow
 @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
-def test_Gamma_c_1D():
+def test_Gamma_c_Nemov_1D():
     """Test Γ_c Nemov 1D with W7-X."""
     eq = get("W7-X")
     Y_B = 100

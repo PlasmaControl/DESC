@@ -35,14 +35,9 @@ from desc.integrals import (
     surface_variance,
     virtual_casing_biot_savart,
 )
-from desc.integrals._bounce_utils import (
-    _get_extrema,
-    bounce_points,
-    interp_to_argmin,
-    interp_to_argmin_hard,
-)
+from desc.integrals._basis import FourierChebyshevSeries
+from desc.integrals._bounce_utils import _get_extrema, bounce_points, interp_to_argmin
 from desc.integrals._interp_utils import fourier_pts
-from desc.integrals.basis import FourierChebyshevSeries
 from desc.integrals.quad_utils import (
     automorphism_sin,
     bijection_from_disc,
@@ -1163,8 +1158,7 @@ class TestBounce:
         return fig
 
     @pytest.mark.unit
-    @pytest.mark.parametrize("func", [interp_to_argmin, interp_to_argmin_hard])
-    def test_interp_to_argmin(self, func):
+    def test_interp_to_argmin(self):
         """Test interpolation of h to argmin g."""  # noqa: D202
 
         # Test functions chosen with purpose; don't change unless plotted and compared.
@@ -1188,11 +1182,11 @@ class TestBounce:
         data["|B|_z|r,a"] = dg_dz(zeta)
         bounce = Bounce1D(Grid.create_meshgrid([1, 0, zeta], coordinates="raz"), data)
         np.testing.assert_allclose(
-            func(
+            interp_to_argmin(
                 h=h(zeta),
                 points=(np.array(0, ndmin=2), np.array(2 * np.pi, ndmin=2)),
                 knots=zeta,
-                g=bounce.B,
+                g=bounce._B,
                 dg_dz=bounce._dB_dz,
             ),
             h(argmin_g),

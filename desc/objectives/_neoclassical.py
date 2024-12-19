@@ -19,7 +19,7 @@ from desc.grid import LinearGrid
 from desc.utils import Timer, setdefault
 
 from ..integrals import Bounce2D
-from ..integrals.basis import FourierChebyshevSeries
+from ..integrals._basis import FourierChebyshevSeries
 from ..integrals.quad_utils import (
     automorphism_sin,
     chebgauss2,

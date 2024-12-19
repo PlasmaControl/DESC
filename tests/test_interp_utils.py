@@ -14,6 +14,7 @@ from scipy.fft import dct as sdct
 from scipy.fft import idct as sidct
 
 from desc.backend import dct, idct, rfft
+from desc.integrals._basis import FourierChebyshevSeries
 from desc.integrals._interp_utils import (
     cheb_from_dct,
     cheb_pts,
@@ -27,7 +28,6 @@ from desc.integrals._interp_utils import (
     polyroot_vec,
     polyval_vec,
 )
-from desc.integrals.basis import FourierChebyshevSeries
 from desc.integrals.quad_utils import bijection_to_disc
 
 

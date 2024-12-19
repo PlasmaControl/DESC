@@ -1416,7 +1416,8 @@ def test_optimize_coil_currents(DummyCoilSet):
             verbose=2,
             copy=True,
         )
-    # check that optimized coil currents changed by more than 15% from initial values
+    # check that on average optimized coil currents changed by more than
+    # 15% from initial values
     np.testing.assert_array_less(
         np.asarray(coils.current).mean() * 0.15,
         np.abs(np.asarray(coils_opt.current) - np.asarray(coils.current)).mean(),

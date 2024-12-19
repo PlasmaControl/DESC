@@ -1045,9 +1045,10 @@ class Bounce1D(Bounce):
         # Compute local splines.
         # Note it is simple to do FFT across field line axis, and spline
         # Fourier coefficients across ζ to obtain Fourier-CubicSpline of functions.
-        # The point of Bounce2D is to do such a 2D interpolation but also do so
-        # without rebuilding DESC transforms each time an objective is computed.
+        # The point of Bounce2D is to do such a 2D interpolation without
+        # rebuilding DESC transforms each time an objective is computed.
         self._zeta = grid.compress(grid.nodes[:, 2], surface_label="zeta")
+        # Shape is (num alpha, num rho, N - 1, -1).
         self._B = jnp.moveaxis(
             CubicHermiteSpline(
                 x=self._zeta,
@@ -1059,13 +1060,6 @@ class Bounce1D(Bounce):
             source=(0, 1),
             destination=(-1, -2),
         )
-        # Shape (num alpha, num rho, N - 1, -1).
-        # Polynomial coefficients of the spline of |B| in local power basis.
-        # Last axis enumerates the coefficients of power series. For a polynomial
-        # given by ∑ᵢⁿ cᵢ xⁱ, coefficient cᵢ is stored at ``B[...,n-i]``.
-        # Third axis enumerates the polynomials that compose a particular spline.
-        # Second axis enumerates flux surfaces.
-        # First axis enumerates field lines of a particular flux surface.
         self._dB_dz = polyder_vec(self._B)
 
     @staticmethod

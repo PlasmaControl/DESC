@@ -6,7 +6,7 @@ from orthax.legendre import leggauss
 
 from desc.backend import imap, jit, jnp
 
-from ..batching import _chunk_vmapped_function
+from ..batching import _eval_fun_in_chunks
 from ..integrals.bounce_integral import Bounce2D
 from ..integrals.quad_utils import chebgauss2
 from ..utils import safediv
@@ -121,7 +121,7 @@ def _foreach_pitch(fun, pitch_inv, batch_size):
         fun(pitch_inv)
         if (batch_size is None or batch_size >= (pitch_inv.size - 1))
         # else imap(fun, pitch_inv, batch_size=batch_size).squeeze(axis=-1) # noqa: E800
-        else _chunk_vmapped_function(fun, chunk_size=batch_size)(pitch_inv)
+        else _eval_fun_in_chunks(fun, batch_size, (0,), pitch_inv)
     )
 
 
@@ -199,7 +199,7 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
     )
 
     def eps_32(data):
-        """(∂ψ/∂ρ)⁻² B₀⁻² ∫ dλ λ⁻² ∑ⱼ Hⱼ²/Iⱼ."""
+        """(∂ψ/∂ρ)⁻² B₀⁻³ ∫ dλ λ⁻² ∑ⱼ Hⱼ²/Iⱼ."""
         # B₀ has units of λ⁻¹.
         # Nemov's ∑ⱼ Hⱼ²/Iⱼ = (∂ψ/∂ρ)² (λB₀)³ ``(H**2 / I).sum(axis=-1)``.
         # (λB₀)³ d(λB₀)⁻¹ = B₀² λ³ d(λ⁻¹) = -B₀² λ dλ.

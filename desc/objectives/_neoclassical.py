@@ -46,6 +46,15 @@ class EffectiveRipple(_Objective):
     V. V. Nemov, S. V. Kasilov, W. Kernbichler, M. F. Heyn.
     Phys. Plasmas 1 December 1999; 6 (12): 4622–4632.
 
+    Notes
+    -----
+    Performance will improve significantly by resolving these GitHub issues.
+      * ``1154`` Improve coordinate mapping performance
+      * ``1294`` Nonuniform fast transforms
+      * ``1303`` Patch for differentiable code with dynamic shapes
+      * ``1206`` Upsample data above midplane to full grid assuming stellarator symmetry
+      * ``1034`` Optimizers/objectives with auxiliary output
+
     Parameters
     ----------
     eq : Equilibrium
@@ -77,7 +86,7 @@ class EffectiveRipple(_Objective):
         JAX this will have worse performance.
         Specifying a number that tightly upper bounds the number of wells will
         increase performance. In general, an upper bound on the number of wells
-        per toroidal transit is ``Aι+B`` where ``A``,``B`` are the poloidal and
+        per toroidal transit is ``Aι+B`` where ``A``, ``B`` are the poloidal and
         toroidal Fourier resolution of B, respectively, in straight-field line
         PEST coordinates, and ι is the rotational transform normalized by 2π.
         A tighter upper bound than ``num_well=(Aι+B)*num_transit`` is preferable.
@@ -90,15 +99,6 @@ class EffectiveRipple(_Objective):
     batch_size : int
         Number of pitch values with which to compute simultaneously.
         If given ``None``, then ``batch_size`` defaults to ``num_pitch``.
-
-    Notes
-    -----
-    Performance will improve significantly by resolving these GitHub issues.
-      * ``1154`` Improve coordinate mapping performance
-      * ``1294`` Nonuniform fast transforms
-      * ``1303`` Patch for differentiable code with dynamic shapes
-      * ``1206`` Upsample data above midplane to full grid assuming stellarator symmetry
-      * ``1034`` Optimizers/objectives with auxiliary output
 
     """
 

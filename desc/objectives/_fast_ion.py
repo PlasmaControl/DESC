@@ -47,6 +47,15 @@ class GammaC(_Objective):
     https://doi.org/10.1088/1741-4326/ac2994.
     Equation 16.
 
+    Notes
+    -----
+    Performance will improve significantly by resolving these GitHub issues.
+      * ``1154`` Improve coordinate mapping performance
+      * ``1294`` Nonuniform fast transforms
+      * ``1303`` Patch for differentiable code with dynamic shapes
+      * ``1206`` Upsample data above midplane to full grid assuming stellarator symmetry
+      * ``1034`` Optimizers/objectives with auxiliary output
+
     Parameters
     ----------
     eq : Equilibrium
@@ -78,7 +87,7 @@ class GammaC(_Objective):
         JAX this will have worse performance.
         Specifying a number that tightly upper bounds the number of wells will
         increase performance. In general, an upper bound on the number of wells
-        per toroidal transit is ``Aι+B`` where ``A``,``B`` are the poloidal and
+        per toroidal transit is ``Aι+B`` where ``A``, ``B`` are the poloidal and
         toroidal Fourier resolution of B, respectively, in straight-field line
         PEST coordinates, and ι is the rotational transform normalized by 2π.
         A tighter upper bound than ``num_well=(Aι+B)*num_transit`` is preferable.
@@ -102,15 +111,6 @@ class GammaC(_Objective):
         integrals. Currently, an optimization using Velasco's metric may need
         to be evaluated by measuring decrease in Γ_c at a fixed number of toroidal
         transits.
-
-    Notes
-    -----
-    Performance will improve significantly by resolving these GitHub issues.
-      * ``1154`` Improve coordinate mapping performance
-      * ``1294`` Nonuniform fast transforms
-      * ``1303`` Patch for differentiable code with dynamic shapes
-      * ``1206`` Upsample data above midplane to full grid assuming stellarator symmetry
-      * ``1034`` Optimizers/objectives with auxiliary output
 
     """
 

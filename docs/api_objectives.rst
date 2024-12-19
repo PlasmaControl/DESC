@@ -35,6 +35,16 @@ Equilibrium
     desc.objectives.HelicalForceBalance
 
 
+Fast ion confinement
+--------------------
+.. autosummary::
+    :toctree: _api/objectives
+    :recursive:
+    :template: class.rst
+
+    desc.objectives.GammaC
+
+
 Geometry
 --------
 .. autosummary::
@@ -61,7 +71,6 @@ Neoclassical
     :template: class.rst
 
     desc.objectives.EffectiveRipple
-    desc.objectives.GammaC
 
 
 Omnigenity

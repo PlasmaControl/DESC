@@ -87,8 +87,8 @@ class Bounce2D(Bounce):
     the particle's guiding center trajectory traveling in the direction of increasing
     field-line-following coordinate ζ.
 
-    Overview
-    --------
+    Notes
+    -----
     Magnetic field line with label α, defined by B = ∇ψ × ∇α, is determined from
       α : ρ, θ, ζ ↦ θ + λ(ρ,θ,ζ) − ι(ρ) [ζ + ω(ρ,θ,ζ)]
     Interpolate Fourier-Chebyshev series to DESC poloidal coordinate.
@@ -112,27 +112,6 @@ class Bounce2D(Bounce):
     See Also
     --------
     Bounce1D : Uses one-dimensional local spline methods for the same task.
-
-
-    Comparison to Bounce1D
-    ----------------------
-    ``Bounce2D`` solves the dominant cost of optimization objectives relying on
-    ``Bounce1D``: interpolating DESC's 3D transforms to an optimization-step
-    dependent grid that is dense enough for function approximation with local
-    splines. This is sometimes referred to as off-grid interpolation in literature;
-    it is often a bottleneck.
-
-    * The function approximation done here requires DESC transforms on a fixed
-      grid with typical resolution, using FFTs to compute the map between
-      coordinate systems. This enables evaluating functions along field lines
-      without root-finding.
-    * The faster convergence of spectral methods requires a less dense
-      grid to interpolate onto from DESC's 3D transforms.
-    * 2D interpolation enables tracing the field line for many toroidal transits.
-    * The drawback is that evaluating a Fourier series with resolution F at Q
-      non-uniform quadrature points takes 𝒪([F+Q] log[F] log[1/ε]) time
-      whereas cubic splines take 𝒪(C Q) time. However, as NFP increases,
-      F decreases whereas C increases. Also, Q >> F and Q >> C.
 
     """
 
@@ -217,6 +196,24 @@ class Bounce2D(Bounce):
     # Fast transforms are used where possible. Fast multipoint methods are not
     # implemented. For non-uniform interpolation, MMTs are used. It will be
     # worthwhile to use the inverse non-uniform fast transforms.
+    #
+    # ``Bounce2D`` solves the dominant cost of optimization objectives relying on
+    # ``Bounce1D``: interpolating DESC's 3D transforms to an optimization-step
+    # dependent grid that is dense enough for function approximation with local
+    # splines. This is sometimes referred to as off-grid interpolation in literature;
+    # it is often a bottleneck.
+    #
+    # * The function approximation done here requires DESC transforms on a fixed
+    #   grid with typical resolution, using FFTs to compute the map between
+    #   coordinate systems. This enables evaluating functions along field lines
+    #   without root-finding.
+    # * The faster convergence of spectral methods requires a less dense
+    #   grid to interpolate onto from DESC's 3D transforms.
+    # * 2D interpolation enables tracing the field line for many toroidal transits.
+    # * The drawback is that evaluating a Fourier series with resolution F at Q
+    #   non-uniform quadrature points takes 𝒪([F+Q] log[F] log[1/ε]) time
+    #   whereas cubic splines take 𝒪(C Q) time. However, as NFP increases,
+    #   F decreases whereas C increases. Also, Q >> F and Q >> C.
 
     required_names = ["B^zeta", "|B|", "iota"]
 
@@ -458,7 +455,7 @@ class Bounce2D(Bounce):
             but due to current limitations in JAX this will have worse performance.
             Specifying a number that tightly upper bounds the number of wells will
             increase performance. In general, an upper bound on the number of wells
-            per toroidal transit is ``Aι+B`` where ``A``,``B`` are the poloidal and
+            per toroidal transit is ``Aι+B`` where ``A``, ``B`` are the poloidal and
             toroidal Fourier resolution of B, respectively, in straight-field line
             PEST coordinates, and ι is the rotational transform normalized by 2π.
             A tighter upper bound than ``num_well=(Aι+B)*num_transit`` is preferable.
@@ -582,8 +579,8 @@ class Bounce2D(Bounce):
         Parameters
         ----------
         integrand : callable or list[callable]
-            The composition operator on the set of functions in ``data`` that
-            maps that determines ``f`` in ∫ f(ρ,α,λ,ℓ) dℓ. It should accept a dictionary
+            The composition operator on the set of functions in ``data``
+            that determines ``f`` in ∫ f(ρ,α,λ,ℓ) dℓ. It should accept a dictionary
             which stores the interpolated data and the arguments ``B`` and ``pitch``.
         pitch_inv : jnp.ndarray
             Shape (num rho, num pitch).
@@ -968,7 +965,7 @@ class Bounce1D(Bounce):
 
     See Also
     --------
-    Bounce2D : Uses two-dimensional pseudo-spectral techniques for the same task.
+    Bounce2D : Uses pseudo-spectral methods for the same task.
 
     Examples
     --------
@@ -1107,7 +1104,7 @@ class Bounce1D(Bounce):
             but due to current limitations in JAX this will have worse performance.
             Specifying a number that tightly upper bounds the number of wells will
             increase performance. In general, an upper bound on the number of wells
-            per toroidal transit is ``Aι+B`` where ``A``,``B`` are the poloidal and
+            per toroidal transit is ``Aι+B`` where ``A``, ``B`` are the poloidal and
             toroidal Fourier resolution of B, respectively, in straight-field line
             PEST coordinates, and ι is the rotational transform normalized by 2π.
             A tighter upper bound than ``num_well=(Aι+B)*num_transit`` is preferable.
@@ -1193,8 +1190,8 @@ class Bounce1D(Bounce):
         Parameters
         ----------
         integrand : callable or list[callable]
-            The composition operator on the set of functions in ``data`` that
-            maps that determines ``f`` in ∫ f(ρ,α,λ,ℓ) dℓ. It should accept a dictionary
+            The composition operator on the set of functions in ``data``
+            that determines ``f`` in ∫ f(ρ,α,λ,ℓ) dℓ. It should accept a dictionary
             which stores the interpolated data and the arguments ``B`` and ``pitch``.
         pitch_inv : jnp.ndarray
             Shape (num alpha, num rho, num pitch).

@@ -152,7 +152,7 @@ def bounce_points(
         but due to current limitations in JAX this will have worse performance.
         Specifying a number that tightly upper bounds the number of wells will
         increase performance. In general, an upper bound on the number of wells
-        per toroidal transit is ``Aι+B`` where ``A``,``B`` are the poloidal and
+        per toroidal transit is ``Aι+B`` where ``A``, ``B`` are the poloidal and
         toroidal Fourier resolution of B, respectively, in straight-field line
         PEST coordinates, and ι is the rotational transform normalized by 2π.
         A tighter upper bound than ``num_well=(Aι+B)*num_transit`` is preferable.
@@ -330,9 +330,9 @@ def _bounce_quadrature(
         Shape (N, ).
         Unique ζ coordinates where the arrays in ``data`` and ``f`` were evaluated.
     integrand : callable or list[callable]
-        The composition operator on the set of functions in ``data`` that
-        maps that determines ``f`` in ∫ f(ρ,α,λ,ℓ) dℓ. It should accept a dictionary
-        which stores the interpolated data and the keyword argument ``pitch``.
+        The composition operator on the set of functions in ``data``
+        that determines ``f`` in ∫ f(ρ,α,λ,ℓ) dℓ. It should accept a dictionary
+        which stores the interpolated data and the arguments ``B`` and ``pitch``.
     pitch_inv : jnp.ndarray
         Shape (num alpha, num rho, num pitch).
         1/λ values to compute the bounce integrals. 1/λ(α,ρ) is specified by

@@ -66,7 +66,7 @@ class GammaC(_Objective):
         Desired resolution for algorithm to compute bounce points.
         Default is double ``Y``. Something like 100 is usually sufficient.
         Currently, this is the number of knots per toroidal transit over
-        to approximate |B| with cubic splines.
+        to approximate B with cubic splines.
     num_transit : int
         Number of toroidal transits to follow field line.
         For axisymmetric devices, one poloidal transit is sufficient. Otherwise,
@@ -79,7 +79,7 @@ class GammaC(_Objective):
         Specifying a number that tightly upper bounds the number of wells will
         increase performance. In general, an upper bound on the number of wells
         per toroidal transit is ``Aι+B`` where ``A``,``B`` are the poloidal and
-        toroidal Fourier resolution of |B|, respectively, in straight-field line
+        toroidal Fourier resolution of B, respectively, in straight-field line
         PEST coordinates, and ι is the rotational transform normalized by 2π.
         A tighter upper bound than ``num_well=(Aι+B)*num_transit`` is preferable.
         The ``check_points`` or ``plot`` methods in ``desc.integrals.Bounce2D``

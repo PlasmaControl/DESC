@@ -36,7 +36,7 @@ _bounce_doc = {
         Specifying a number that tightly upper bounds the number of wells will
         increase performance. In general, an upper bound on the number of wells
         per toroidal transit is ``Aι+B`` where ``A``,``B`` are the poloidal and
-        toroidal Fourier resolution of |B|, respectively, in straight-field line
+        toroidal Fourier resolution of B, respectively, in straight-field line
         PEST coordinates, and ι is the rotational transform normalized by 2π.
         A tighter upper bound than ``num_well=(Aι+B)*num_transit`` is preferable.
         The ``check_points`` or ``plot`` methods in ``desc.integrals.Bounce2D``
@@ -52,7 +52,7 @@ _bounce_doc = {
         If given ``None``, then ``batch_size`` defaults to ``num_pitch``.
         """,
     "fieldline_quad": """tuple[jnp.ndarray] :
-        Used to compute the proper length of the field line ∫ dℓ / |B|.
+        Used to compute the proper length of the field line ∫ dℓ / B.
         Quadrature points xₖ and weights wₖ for the
         approximate evaluation of the integral ∫₋₁¹ f(x) dx ≈ ∑ₖ wₖ f(xₖ).
         Default is Gauss-Legendre quadrature at resolution ``Y_B//2``

@@ -45,9 +45,9 @@ def get_pitch_inv_quad(min_B, max_B, num_pitch, simp=False):
     Parameters
     ----------
     min_B : jnp.ndarray
-        Minimum |B| value.
+        Minimum B value.
     max_B : jnp.ndarray
-        Maximum |B| value.
+        Maximum B value.
     num_pitch : int
         Number of values.
     simp : bool
@@ -56,7 +56,7 @@ def get_pitch_inv_quad(min_B, max_B, num_pitch, simp=False):
     Returns
     -------
     x, w : tuple[jnp.ndarray]
-        Shape (*min_B.shape, num pitch).
+        Shape (min_B.shape, num pitch).
         1/λ values and weights.
 
     """
@@ -126,7 +126,7 @@ def _check_spline_shape(knots, g, dg_dz, pitch_inv=None):
 def bounce_points(
     pitch_inv, knots, B, dB_dz, num_well=None, check=False, plot=True, **kwargs
 ):
-    """Compute the bounce points given spline of |B| and pitch λ.
+    """Compute the bounce points given spline of B and pitch λ.
 
     Parameters
     ----------
@@ -138,12 +138,12 @@ def bounce_points(
         ζ coordinates of spline knots. Must be strictly increasing.
     B : jnp.ndarray
         Shape (..., N - 1, B.shape[-1]).
-        Polynomial coefficients of the spline of |B| in local power basis.
+        Polynomial coefficients of the spline of B in local power basis.
         Last axis enumerates the coefficients of power series. Second to
         last axis enumerates the polynomials that compose a particular spline.
     dB_dz : jnp.ndarray
         Shape (..., N - 1, B.shape[-1] - 1).
-        Polynomial coefficients of the spline of (∂|B|/∂ζ)|(ρ,α) in local power basis.
+        Polynomial coefficients of the spline of (∂B/∂ζ)|(ρ,α) in local power basis.
         Last axis enumerates the coefficients of power series. Second to
         last axis enumerates the polynomials that compose a particular spline.
     num_well : int or None
@@ -153,7 +153,7 @@ def bounce_points(
         Specifying a number that tightly upper bounds the number of wells will
         increase performance. In general, an upper bound on the number of wells
         per toroidal transit is ``Aι+B`` where ``A``,``B`` are the poloidal and
-        toroidal Fourier resolution of |B|, respectively, in straight-field line
+        toroidal Fourier resolution of B, respectively, in straight-field line
         PEST coordinates, and ι is the rotational transform normalized by 2π.
         A tighter upper bound than ``num_well=(Aι+B)*num_transit`` is preferable.
 
@@ -172,7 +172,7 @@ def bounce_points(
         Shape (..., num pitch, num well).
         ζ coordinates of bounce points. The points are ordered and grouped such
         that the straight line path between ``z1`` and ``z2`` resides in the
-        epigraph of |B|.
+        epigraph of B.
 
         If there were less than ``num_well`` wells detected along a field line,
         then the last axis, which enumerates bounce points for a particular field
@@ -351,7 +351,7 @@ def _bounce_quadrature(
         Optional, output of method ``self.points``.
         Tuple of length two (z1, z2) that stores ζ coordinates of bounce points.
         The points are ordered and grouped such that the straight line path
-        between ``z1`` and ``z2`` resides in the epigraph of |B|.
+        between ``z1`` and ``z2`` resides in the epigraph of B.
     method : str
         Method of interpolation.
         See https://interpax.readthedocs.io/en/latest/_api/interpax.interp1d.html.

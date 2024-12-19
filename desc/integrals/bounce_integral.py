@@ -76,10 +76,10 @@ class Bounce2D(Bounce):
 
     * dℓ parameterizes the distance along the field line in meters.
     * f(ρ,α,λ,ℓ) is the quantity to integrate along the field line.
-    * The boundaries of the integral are bounce points ℓ₁, ℓ₂ s.t. λ|B|(ρ,α,ℓᵢ) = 1.
+    * The boundaries of the integral are bounce points ℓ₁, ℓ₂ s.t. λB(ρ,α,ℓᵢ) = 1.
     * λ is a constant defining the integral proportional to the magnetic moment
       over energy.
-    * |B| is the norm of the magnetic field.
+    * B is the norm of the magnetic field.
 
     For a particle with fixed λ, bounce points are defined to be the location on the
     field line such that the particle's velocity parallel to the magnetic field is zero.
@@ -94,7 +94,7 @@ class Bounce2D(Bounce):
     Interpolate Fourier-Chebyshev series to DESC poloidal coordinate.
       θ : ρ, α, ζ ↦ tₘₙ(ρ) exp(jmα) Tₙ(ζ)
     Compute bounce points.
-      r(ζₖ) = |B|(ζₖ) − 1/λ = 0
+      r(ζₖ) = B(ζₖ) − 1/λ = 0
     Interpolate smooth periodic components of integrand with FFTs.
       G : ρ, α, ζ ↦ gₘₙ(ρ) exp(j [m θ(ρ,α,ζ) + n ζ])
     Perform Gaussian quadrature after removing singularities.
@@ -134,11 +134,6 @@ class Bounce2D(Bounce):
       whereas cubic splines take 𝒪(C Q) time. However, as NFP increases,
       F decreases whereas C increases. Also, Q >> F and Q >> C.
 
-    Attributes
-    ----------
-    required_names : list
-        Names in ``data_index`` required to compute bounce integrals.
-
     """
 
     # Notes
@@ -153,11 +148,11 @@ class Bounce2D(Bounce):
     # The DESC coordinate system is related to field-line-following coordinate
     # systems by a relation whose solution is best found with Newton iteration
     # since this solution is unique. Newton iteration is not a globally
-    # convergent algorithm to find the real roots of r : ζ ↦ |B|(ζ) − 1/λ where
+    # convergent algorithm to find the real roots of r : ζ ↦ B(ζ) − 1/λ where
     # ζ is a field-line-following coordinate. For this, function approximation
-    # of |B| is necessary.
+    # of B is necessary.
     #
-    # Therefore, to compute bounce points {(ζ₁, ζ₂)}, we approximate |B| by a
+    # Therefore, to compute bounce points {(ζ₁, ζ₂)}, we approximate B by a
     # series expansion of basis functions parameterized by a single variable ζ,
     # restricting the class of basis functions to low order (e.g. n = 2ᵏ where
     # k is small) algebraic or trigonometric polynomial with integer frequencies.
@@ -176,7 +171,7 @@ class Bounce2D(Bounce):
     # polynomials are preferred to other orthogonal polynomial series is
     # fast discrete polynomial transforms (DPT) are implemented via fast transform
     # to Chebyshev then DCT. Therefore, a Fourier-Chebyshev series is chosen
-    # to interpolate θ(α,ζ) and a piecewise Chebyshev series interpolates |B|(ζ).
+    # to interpolate θ(α,ζ) and a piecewise Chebyshev series interpolates B(ζ).
     #
     # * An alternative to Chebyshev series is
     #   [filtered Fourier series](doi.org/10.1016/j.aml.2006.10.001).
@@ -188,11 +183,11 @@ class Bounce2D(Bounce):
     # * The advantage of Fourier series in DESC coordinates is that they may use the
     #   spectrally condensed variable ζ* = NFP ζ. This cannot be done in any other
     #   coordinate system, regardless of whether the basis functions are periodic.
-    #   The strategy of parameterizing |B| along field lines with a single variable
+    #   The strategy of parameterizing B along field lines with a single variable
     #   in Clebsch coordinates (as opposed to two variables in straight-field line
-    #   coordinates) also serves to minimize this penalty since evaluation of |B|
+    #   coordinates) also serves to minimize this penalty since evaluation of B
     #   when computing bounce points will be less expensive (assuming the 2D
-    #   Fourier resolution of |B|(ϑ, ϕ) is larger than the 1D Chebyshev resolution).
+    #   Fourier resolution of B(ϑ, ϕ) is larger than the 1D Chebyshev resolution).
     #
     # Computing accurate series expansions in (α, ζ) coordinates demands
     # particular interpolation points in that coordinate system. Newton iteration
@@ -464,7 +459,7 @@ class Bounce2D(Bounce):
             Specifying a number that tightly upper bounds the number of wells will
             increase performance. In general, an upper bound on the number of wells
             per toroidal transit is ``Aι+B`` where ``A``,``B`` are the poloidal and
-            toroidal Fourier resolution of |B|, respectively, in straight-field line
+            toroidal Fourier resolution of B, respectively, in straight-field line
             PEST coordinates, and ι is the rotational transform normalized by 2π.
             A tighter upper bound than ``num_well=(Aι+B)*num_transit`` is preferable.
             The ``check_points`` or ``plot`` method is useful to select a reasonable
@@ -479,7 +474,7 @@ class Bounce2D(Bounce):
             Shape (num rho, num pitch, num well).
             Tuple of length two (z1, z2) that stores ζ coordinates of bounce points.
             The points are ordered and grouped such that the straight line path
-            between ``z1`` and ``z2`` resides in the epigraph of |B|.
+            between ``z1`` and ``z2`` resides in the epigraph of B.
 
             If there were less than ``num_well`` wells detected along a field line,
             then the last axis, which enumerates bounce points for a particular field
@@ -506,7 +501,7 @@ class Bounce2D(Bounce):
         return z1, z2
 
     def _polish_points(self, points, pitch_inv):
-        # TODO (#1154): One application of secant on Fourier series |B| - 1/λ.
+        # TODO (#1154): One application of secant on Fourier series B - 1/λ.
         raise NotImplementedError
 
     def check_points(self, points, pitch_inv, *, plot=True, **kwargs):
@@ -519,7 +514,7 @@ class Bounce2D(Bounce):
             Output of method ``self.points``.
             Tuple of length two (z1, z2) that stores ζ coordinates of bounce points.
             The points are ordered and grouped such that the straight line path
-            between ``z1`` and ``z2`` resides in the epigraph of |B|.
+            between ``z1`` and ``z2`` resides in the epigraph of B.
         pitch_inv : jnp.ndarray
             Shape (num rho, num pitch).
             1/λ values to compute the bounce integrals. 1/λ(ρ) is specified by
@@ -581,7 +576,7 @@ class Bounce2D(Bounce):
 
         Notes
         -----
-        Make sure to replace √(1−λ|B|) with √|1−λ|B|| in ``integrand`` to account
+        Make sure to replace √(1−λB) with √|1−λB| in ``integrand`` to account
         for imperfect computation of bounce points.
 
         Parameters
@@ -608,7 +603,7 @@ class Bounce2D(Bounce):
             Optional, output of method ``self.points``.
             Tuple of length two (z1, z2) that stores ζ coordinates of bounce points.
             The points are ordered and grouped such that the straight line path
-            between ``z1`` and ``z2`` resides in the epigraph of |B|.
+            between ``z1`` and ``z2`` resides in the epigraph of B.
         is_fourier : bool
             If true, then it is assumed that ``data`` holds Fourier transforms
             as returned by ``Bounce2D.fourier``. Default is false.
@@ -770,7 +765,7 @@ class Bounce2D(Bounce):
             Optional, output of method ``self.points``.
             Tuple of length two (z1, z2) that stores ζ coordinates of bounce points.
             The points are ordered and grouped such that the straight line path
-            between ``z1`` and ``z2`` resides in the epigraph of |B|.
+            between ``z1`` and ``z2`` resides in the epigraph of B.
         is_fourier : bool
             If true, then it is assumed that ``f`` is the Fourier transforms
             as returned by ``Bounce2D.fourier``. Default is false.
@@ -804,7 +799,7 @@ class Bounce2D(Bounce):
         )
 
     def compute_fieldline_length(self, quad=None):
-        """Compute the proper length of the field line ∫ dℓ / |B|.
+        """Compute the proper length of the field line ∫ dℓ / B.
 
         Parameters
         ----------
@@ -949,10 +944,10 @@ class Bounce1D(Bounce):
 
     * dℓ parameterizes the distance along the field line in meters.
     * f(ρ,α,λ,ℓ) is the quantity to integrate along the field line.
-    * The boundaries of the integral are bounce points ℓ₁, ℓ₂ s.t. λ|B|(ρ,α,ℓᵢ) = 1.
+    * The boundaries of the integral are bounce points ℓ₁, ℓ₂ s.t. λB(ρ,α,ℓᵢ) = 1.
     * λ is a constant defining the integral proportional to the magnetic moment
       over energy.
-    * |B| is the norm of the magnetic field.
+    * B is the norm of the magnetic field.
 
     For a particle with fixed λ, bounce points are defined to be the location on the
     field line such that the particle's velocity parallel to the magnetic field is zero.
@@ -971,14 +966,6 @@ class Bounce1D(Bounce):
     This is useful if one can efficiently obtain data along field lines and the
     number of toroidal transits to follow a field line is not large.
 
-    After computing the bounce points, the supplied quadrature is performed.
-    By default, this is a Gauss quadrature after removing the singularity.
-    Local splines interpolate smooth functions in the integrand to the quadrature
-    nodes. Quadrature is chosen over Runge-Kutta methods of the form
-        ∂Fᵢ/∂ζ = f(λ,ζ,{Gⱼ}) subject to Fᵢ(ζ₁) = 0
-    A fourth order Runge-Kutta method is equivalent to a quadrature
-    with Simpson's rule. The quadratures resolve these integrals more efficiently.
-
     See Also
     --------
     Bounce2D : Uses two-dimensional pseudo-spectral techniques for the same task.
@@ -986,11 +973,6 @@ class Bounce1D(Bounce):
     Examples
     --------
     See ``tests/test_integrals.py::TestBounce::test_bounce1d_checks``.
-
-    Attributes
-    ----------
-    required_names : list
-        Names in ``data_index`` required to compute bounce integrals.
 
     """
 
@@ -1126,7 +1108,7 @@ class Bounce1D(Bounce):
             Specifying a number that tightly upper bounds the number of wells will
             increase performance. In general, an upper bound on the number of wells
             per toroidal transit is ``Aι+B`` where ``A``,``B`` are the poloidal and
-            toroidal Fourier resolution of |B|, respectively, in straight-field line
+            toroidal Fourier resolution of B, respectively, in straight-field line
             PEST coordinates, and ι is the rotational transform normalized by 2π.
             A tighter upper bound than ``num_well=(Aι+B)*num_transit`` is preferable.
             The ``check_points`` or ``plot`` method is useful to select a reasonable
@@ -1141,7 +1123,7 @@ class Bounce1D(Bounce):
             Shape (num alpha, num rho, num pitch, num well).
             Tuple of length two (z1, z2) that stores ζ coordinates of bounce points.
             The points are ordered and grouped such that the straight line path
-            between ``z1`` and ``z2`` resides in the epigraph of |B|.
+            between ``z1`` and ``z2`` resides in the epigraph of B.
 
             If there were less than ``num_well`` wells detected along a field line,
             then the last axis, which enumerates bounce points for a particular field
@@ -1160,7 +1142,7 @@ class Bounce1D(Bounce):
             Output of method ``self.points``.
             Tuple of length two (z1, z2) that stores ζ coordinates of bounce points.
             The points are ordered and grouped such that the straight line path
-            between ``z1`` and ``z2`` resides in the epigraph of |B|.
+            between ``z1`` and ``z2`` resides in the epigraph of B.
         pitch_inv : jnp.ndarray
             Shape (num alpha, num rho, num pitch).
             1/λ values to compute the bounce points at each field line. 1/λ(α,ρ) is
@@ -1232,7 +1214,7 @@ class Bounce1D(Bounce):
             Optional, output of method ``self.points``.
             Tuple of length two (z1, z2) that stores ζ coordinates of bounce points.
             The points are ordered and grouped such that the straight line path
-            between ``z1`` and ``z2`` resides in the epigraph of |B|.
+            between ``z1`` and ``z2`` resides in the epigraph of B.
         method : str
             Method of interpolation.
             See https://interpax.readthedocs.io/en/latest/_api/interpax.interp1d.html.
@@ -1297,7 +1279,7 @@ class Bounce1D(Bounce):
             Optional, output of method ``self.points``.
             Tuple of length two (z1, z2) that stores ζ coordinates of bounce points.
             The points are ordered and grouped such that the straight line path
-            between ``z1`` and ``z2`` resides in the epigraph of |B|.
+            between ``z1`` and ``z2`` resides in the epigraph of B.
         method : str
             Method of interpolation.
             See https://interpax.readthedocs.io/en/latest/_api/interpax.interp1d.html.

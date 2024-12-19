@@ -349,13 +349,13 @@ def gamma_n(m, n):
     """gamma_n of eq 33."""
 
     def body_fun(i, val):
-        return val + 1 / i + 1 / (m + i)
+        return val + 1 / i
 
     def false_fun(m_n):
         m, n = m_n
-        return alpha(m, n) / 2 * fori_loop(1, n, body_fun, 0)
+        return fori_loop(1, n, body_fun, 0) + fori_loop(1, m + n, body_fun, 0)
 
-    return cond(n <= 0, true_fun, false_fun, (m, n))
+    return cond(n < 0, true_fun, false_fun, (m, n)) * alpha(m, n) / 2
 
 
 @jit
@@ -370,7 +370,7 @@ def gamma_nstar(m, n):
 
 
 @jit
-def CD_m_k(R, m, k):
+def CD_m_k_any_mk(R, m, k):
     """Eq 31 of Dommaschk paper."""
 
     def body_fun(j, val):
@@ -397,7 +397,59 @@ def CD_m_k(R, m, k):
 
 
 @jit
-def CN_m_k(R, m, k):
+def alphaj_betak_m_k(m, j, k):
+    """Eqn 29."""
+    out = ((-1) ** j) / gamma(j + 1) / gamma(k - j + 1) / (2 ** (2 * k + 1))
+
+    def body_fun(ind, val):
+        result = val * (m + j - ind)
+        return result
+
+    return out / fori_loop(0, k + 1, body_fun, 1.0)
+
+
+@jit
+def alphaj_betastark_m_k(m, j, k):
+    """Eqn 29."""
+    return alphaj_betak_m_k(m, j, k) * (2 * k - 2 * j - m)
+
+
+@jit
+def alphak_m_j_betaj(m, j, k):
+    """Eqn 30."""
+    out = ((-1) ** (k - j)) / gamma(j + 1) / gamma(k - j + 1) / 2 ** (2 * k + 1)
+
+    def body_fun(ind, val):
+        result = val * (m - j + ind)
+        return result
+
+    return out / fori_loop(0, k + 1, body_fun, 1.0)
+
+
+@jit
+def alphastark_m_j_betaj(m, j, k):
+    """Eqn 30."""
+    return alphak_m_j_betaj(m, j, k) * (2 * k - 2 * j + m)
+
+
+@jit
+def CD_m_k(R, m, k):
+    """Eq 25 of Dommaschk paper."""
+
+    def body_fun(j, val):
+        result = (
+            val
+            - R ** (m + 2 * j) * alphaj_betastark_m_k(m, j, k)
+            + R ** (2 * j - m) * alphastark_m_j_betaj(m, j, k)
+        )
+
+        return result
+
+    return fori_loop(0, k + 1, body_fun, jnp.zeros_like(R))
+
+
+@jit
+def CN_m_k_any_mk(R, m, k):
     """Eq 32 of Dommaschk paper."""
 
     def body_fun(j, val):
@@ -412,7 +464,24 @@ def CN_m_k(R, m, k):
                 )
                 * R ** (2 * j + m)
             )
-            - beta(m, j) * alpha(m, k - j) * R ** (2 * j - m)
+            - alpha(m, k - j) * beta(m, j) * R ** (2 * j - m)
+        )
+        return result
+
+    return fori_loop(0, k + 1, body_fun, jnp.zeros_like(R))
+
+
+@jit
+def CN_m_k(R, m, k):
+    """Eq 26 of Dommaschk paper."""
+
+    def body_fun(j, val):
+        result = (
+            val
+            + R ** (m + 2 * j)
+            * alphaj_betak_m_k(m, j, k)  # alpha(m, j) * beta(m, k - j)
+            - R ** (2 * j - m)
+            * alphak_m_j_betaj(m, k, j)  # alpha(m, k - j) * beta(m, j)
         )
         return result
 
@@ -422,10 +491,15 @@ def CN_m_k(R, m, k):
 @jit
 def D_m_n(R, Z, m, n):
     """D_m_n term in eqn 8 of Dommaschk paper."""
-    # the sum comes from fact that D_mn = I_mn and the def of I_mn in eq 2 of the paper
 
+    def bool_fun(m, k):
+        return m > k
+
+    # the sum comes from fact that D_mn = I_mn and the def of I_mn in eq 2 of the paper
     def body_fun(k, val):
-        coef = CD_m_k(R, m, k) / gamma(n - 2 * k + 1)
+        coef = cond(bool_fun(m, k), CD_m_k, CD_m_k_any_mk, R, m, k) / gamma(
+            n - 2 * k + 1
+        )
         exp = n - 2 * k
         mask = (Z == 0) & (exp == 0)
         exp = jnp.where(mask, 1, exp)
@@ -437,10 +511,15 @@ def D_m_n(R, Z, m, n):
 @jit
 def N_m_n(R, Z, m, n):
     """N_m_n term in eqn 9 of Dommaschk paper."""
-    # the sum comes from fact that N_mn = I_mn and the def of I_mn in eq 2 of the paper
 
+    def bool_fun(m, k):
+        return m > k
+
+    # the sum comes from fact that N_mn = I_mn and the def of I_mn in eq 2 of the paper
     def body_fun(k, val):
-        coef = CN_m_k(R, m, k) / gamma(n - 2 * k + 1)
+        coef = cond(bool_fun(m, k), CN_m_k, CN_m_k_any_mk, R, m, k) / gamma(
+            n - 2 * k + 1
+        )
         exp = n - 2 * k
         mask = (Z == 0) & (exp == 0)
         exp = jnp.where(mask, 1, exp)

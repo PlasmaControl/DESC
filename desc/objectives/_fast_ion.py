@@ -10,41 +10,42 @@ from desc.utils import Timer, setdefault
 
 from ..integrals import Bounce2D
 from ..integrals.basis import FourierChebyshevSeries
-from ..integrals.quad_utils import chebgauss2
+from ..integrals.quad_utils import (
+    automorphism_sin,
+    get_quadrature,
+    grad_automorphism_sin,
+)
+from ._neoclassical import _bounce_overwrite
 from .objective_funs import _Objective, collect_docs
 from .utils import _parse_callable_target_bounds
 
-_bounce_overwrite = {
-    "deriv_mode": """
-    deriv_mode : {"auto", "fwd", "rev"}
-        Specify how to compute Jacobian matrix, either forward mode or reverse mode AD.
-        ``auto`` selects forward or reverse mode based on the size of the input and
-        output of the objective. Has no effect on ``self.grad`` or ``self.hess`` which
-        always use reverse mode and forward over reverse mode respectively.
 
-        Default is ``fwd``. If ``rev`` is chosen, then ``jac_chunk_size=1`` is chosen
-        by default. In ``rev`` mode, reducing the pitch angle parameter ``batch_size``
-        does not reduce memory, so it is recommended to retain the default for that.
-        """
-}
-
-
-class EffectiveRipple(_Objective):
-    """Proxy for neoclassical transport in the banana regime.
+class GammaC(_Objective):
+    """Proxy for fast ion confinement.
 
     A 3D stellarator magnetic field admits ripple wells that lead to enhanced
-    radial drift of trapped particles. In the banana regime, neoclassical (thermal)
-    transport from ripple wells can become the dominant transport channel.
-    The effective ripple (ε) proxy estimates the neoclassical transport
-    coefficients in the banana regime. To ensure low neoclassical transport,
-    a stellarator is typically optimized so that ε < 0.02.
+    radial drift of trapped particles. The energetic particle confinement
+    metric γ_c quantifies whether the contours of the second adiabatic invariant
+    close on the flux surfaces. In the limit the poloidal drift velocity
+    majorizes the radial drift velocity, the contours lie parallel to flux
+    surfaces. The optimization metric Γ_c averages γ_c² over the distribution
+    of trapped articles on each flux surface.
+
+    The radial electric field has a negligible effect, since fast particles
+    have high energy with collisionless orbits, so it is assumed to be zero.
 
     References
     ----------
-    https://doi.org/10.1063/1.873749.
-    Evaluation of 1/ν neoclassical transport in stellarators.
-    V. V. Nemov, S. V. Kasilov, W. Kernbichler, M. F. Heyn.
-    Phys. Plasmas 1 December 1999; 6 (12): 4622–4632.
+    Poloidal motion of trapped particle orbits in real-space coordinates.
+    V. V. Nemov, S. V. Kasilov, W. Kernbichler, G. O. Leitold.
+    Phys. Plasmas 1 May 2008; 15 (5): 052501.
+    https://doi.org/10.1063/1.2912456.
+    Equation 61.
+
+    A model for the fast evaluation of prompt losses of energetic ions in stellarators.
+    J.L. Velasco et al. 2021 Nucl. Fusion 61 116059.
+    https://doi.org/10.1088/1741-4326/ac2994.
+    Equation 16.
 
     Parameters
     ----------
@@ -86,10 +87,21 @@ class EffectiveRipple(_Objective):
     num_quad : int
         Resolution for quadrature of bounce integrals. Default is 32.
     num_pitch : int
-        Resolution for quadrature over velocity coordinate. Default is 50.
+        Resolution for quadrature over velocity coordinate. Default is 64.
     batch_size : int
         Number of pitch values with which to compute simultaneously.
         If given ``None``, then ``batch_size`` defaults to ``num_pitch``.
+    Nemov : bool
+        Whether to use the Γ_c as defined by Nemov et al. or Velasco et al.
+        Default is Nemov. Set to ``False`` to use Velascos's.
+
+        Nemov's Γ_c converges to a finite nonzero value in the infinity limit
+        of the number of toroidal transits. Velasco's expression has a secular
+        term that drives the result to zero as the number of toroidal transits
+        increases if the secular term is not averaged out from the singular
+        integrals. Currently, an optimization using Velasco's metric may need
+        to be evaluated by measuring decrease in Γ_c at a fixed number of toroidal
+        transits.
 
     Notes
     -----
@@ -112,7 +124,7 @@ class EffectiveRipple(_Objective):
 
     _coordinates = "r"
     _units = "~"
-    _print_value_fmt = "Effective ripple ε: "
+    _print_value_fmt = "Γ_c: "
 
     def __init__(
         self,
@@ -126,7 +138,7 @@ class EffectiveRipple(_Objective):
         loss_function=None,
         deriv_mode="fwd",
         jac_chunk_size=None,
-        name="Effective ripple",
+        name="Gamma_c",
         grid=None,
         X=16,  # X is cheap to increase.
         Y=32,
@@ -135,8 +147,9 @@ class EffectiveRipple(_Objective):
         num_transit=20,
         num_well=None,
         num_quad=32,
-        num_pitch=50,
+        num_pitch=64,
         batch_size=None,
+        Nemov=True,
     ):
         if target is None and bounds is None:
             target = 0.0
@@ -154,6 +167,7 @@ class EffectiveRipple(_Objective):
             "num_pitch": num_pitch,
             "batch_size": batch_size,
         }
+        self._key = "Gamma_c" if Nemov else "Gamma_c Velasco"
         if deriv_mode == "rev" and jac_chunk_size is None:
             # Reverse mode is bottlenecked by coordinate mapping.
             # Compute Jacobian one flux surface at a time.
@@ -194,7 +208,10 @@ class EffectiveRipple(_Objective):
             domain=(0, 2 * np.pi),
         )
         self._constants["fieldline quad"] = leggauss(self._hyperparam["Y_B"] // 2)
-        self._constants["quad"] = chebgauss2(self._hyperparam.pop("num_quad"))
+        self._constants["quad"] = get_quadrature(
+            leggauss(self._hyperparam.pop("num_quad")),
+            (automorphism_sin, grad_automorphism_sin),
+        )
 
         self._dim_f = self._grid.num_rho
         self._target, self._bounds = _parse_callable_target_bounds(
@@ -205,12 +222,8 @@ class EffectiveRipple(_Objective):
         if verbose > 0:
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
-        self._constants["transforms"] = get_transforms(
-            "effective ripple", eq, grid=self._grid
-        )
-        self._constants["profiles"] = get_profiles(
-            "effective ripple", eq, grid=self._grid
-        )
+        self._constants["transforms"] = get_transforms(self._key, eq, grid=self._grid)
+        self._constants["profiles"] = get_profiles(self._key, eq, grid=self._grid)
         timer.stop("Precomputing transforms")
         if verbose > 1:
             timer.disp("Precomputing transforms")
@@ -218,7 +231,7 @@ class EffectiveRipple(_Objective):
         super().build(use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
-        """Compute the effective ripple.
+        """Compute Γ_c.
 
         Parameters
         ----------
@@ -231,11 +244,10 @@ class EffectiveRipple(_Objective):
 
         Returns
         -------
-        epsilon : ndarray
-            Effective ripple as a function of the flux surface label.
+        Gamma_c : ndarray
+            Γ_c as a function of the flux surface label.
 
         """
-        # TODO (#1094)
         if constants is None:
             constants = self.constants
         eq = self.things[0]
@@ -255,7 +267,7 @@ class EffectiveRipple(_Objective):
         )
         data = compute_fun(
             eq,
-            "effective ripple",
+            self._key,
             params,
             constants["transforms"],
             constants["profiles"],
@@ -265,4 +277,4 @@ class EffectiveRipple(_Objective):
             quad=constants["quad"],
             **self._hyperparam,
         )
-        return constants["transforms"]["grid"].compress(data["effective ripple"])
+        return constants["transforms"]["grid"].compress(data[self._key])

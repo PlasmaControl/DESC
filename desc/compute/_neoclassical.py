@@ -1,12 +1,4 @@
-"""Compute functions for neoclassical transport.
-
-Performance will improve significantly by resolving these GitHub issues.
-  * ``1154`` Improve coordinate mapping performance
-  * ``1294`` Nonuniform fast transforms
-  * ``1303`` Patch for differentiable code with dynamic shapes
-  * ``1206`` Upsample data above midplane to full grid assuming stellarator symmetry
-  * ``1034`` Optimizers/objectives with auxiliary output
-"""
+"""Compute functions for neoclassical transport."""
 
 from functools import partial
 
@@ -15,13 +7,8 @@ from orthax.legendre import leggauss
 from desc.backend import imap, jit, jnp
 
 from ..integrals.bounce_integral import Bounce2D
-from ..integrals.quad_utils import (
-    automorphism_sin,
-    chebgauss2,
-    get_quadrature,
-    grad_automorphism_sin,
-)
-from ..utils import cross, dot, safediv
+from ..integrals.quad_utils import chebgauss2
+from ..utils import safediv
 from .data_index import register_compute_fun
 
 _bounce_doc = {
@@ -80,7 +67,7 @@ _bounce_doc = {
 
 
 def _compute(fun, fun_data, data, theta, grid, num_pitch, simp=False):
-    """Compute ``fun`` for each ρ value iteratively to reduce memory usage.
+    """Compute ``fun`` for each ρ value iteratively.
 
     Parameters
     ----------
@@ -137,24 +124,6 @@ def _foreach_pitch(fun, pitch_inv, batch_size):
         if (batch_size is None or batch_size >= (pitch_inv.size - 1))
         else imap(fun, pitch_inv, batch_size=batch_size).squeeze(axis=-1)
     )
-
-
-@register_compute_fun(
-    name="effective ripple",
-    label="\\epsilon_{\\mathrm{eff}}",
-    units="~",
-    units_long="None",
-    description="Effective ripple modulation amplitude",
-    dim=1,
-    params=[],
-    transforms={},
-    profiles=[],
-    coordinates="r",
-    data=["effective ripple 3/2"],
-)
-def _effective_ripple(params, transforms, profiles, data, **kwargs):
-    data["effective ripple"] = data["effective ripple 3/2"] ** (2 / 3)
-    return data
 
 
 def _dH(data, B, pitch):
@@ -223,14 +192,12 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
     num_well = kwargs.get("num_well", Y_B * num_transit)
     batch_size = kwargs.get("batch_size", None)
     spline = kwargs.get("spline", True)
-    if "fieldline_quad" in kwargs:
-        fieldline_quad = kwargs["fieldline_quad"]
-    else:
-        fieldline_quad = leggauss(Y_B // 2)
-    if "quad" in kwargs:
-        quad = kwargs["quad"]
-    else:
-        quad = chebgauss2(kwargs.get("num_quad", 32))
+    fieldline_quad = (
+        kwargs["fieldline_quad"] if "fieldline_quad" in kwargs else leggauss(Y_B // 2)
+    )
+    quad = (
+        kwargs["quad"] if "quad" in kwargs else chebgauss2(kwargs.get("num_quad", 32))
+    )
 
     def eps_32(data):
         """(∂ψ/∂ρ)⁻² B₀⁻² ∫ dλ λ⁻² ∑ⱼ Hⱼ²/Iⱼ."""
@@ -286,324 +253,27 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
     return data
 
 
-# We rewrite equivalents of Nemov et al.'s expressions (21, 22) to resolve
-# the indeterminate form of the limit and using single-valued maps of a
-# physical coordinates. This avoids the computational issues of multivalued
-# maps.
-# The derivative (∂/∂ψ)|ϑ,ϕ belongs to flux coordinates which satisfy
-# α = ϑ − χ(ψ) ϕ where α is the poloidal label of ψ,α Clebsch coordinates.
-# Choosing χ = ι implies ϑ, ϕ are PEST angles.
-# ∂G/∂((λB₀)⁻¹) =     λ²B₀  ∫ dℓ (1 − λ|B|/2) / √(1 − λ|B|) ∂|B|/∂ψ / |B|
-# ∂V/∂((λB₀)⁻¹) = 3/2 λ²B₀  ∫ dℓ √(1 − λ|B|) R / |B|
-# ∂g/∂((λB₀)⁻¹) =     λ²B₀² ∫ dℓ (1 − λ|B|/2) / √(1 − λ|B|) |∇ψ| κ_g / |B|
-# K ≝ R dψ/dρ
-# tan(π/2 γ_c) =
-#              ∫ dℓ (1 − λ|B|/2) / √(1 − λ|B|) |∇ψ| κ_g / |B|
-#              ----------------------------------------------
-# (|∇ρ| ‖e_α|ρ,ϕ‖)ᵢ ∫ dℓ [ (1 − λ|B|/2)/√(1 − λ|B|) ∂|B|/∂ρ + √(1 − λ|B|) K ] / |B|
-
-
-def _v_tau(data, B, pitch):
-    # Note v τ = 4λ⁻²B₀⁻¹ ∂I/∂((λB₀)⁻¹) where v is the particle velocity,
-    # τ is the bounce time, and I is defined in Nemov eq. 36.
-    return safediv(2.0, jnp.sqrt(jnp.abs(1 - pitch * B)))
-
-
-def _drift1(data, B, pitch):
-    return (
-        safediv(1 - 0.5 * pitch * B, jnp.sqrt(jnp.abs(1 - pitch * B)))
-        * data["|grad(psi)|*kappa_g"]
-        / B
-    )
-
-
-def _drift2(data, B, pitch):
-    return (
-        safediv(1 - 0.5 * pitch * B, jnp.sqrt(jnp.abs(1 - pitch * B)))
-        * data["|B|_r|v,p"]
-        + jnp.sqrt(jnp.abs(1 - pitch * B)) * data["K"]
-    ) / B
-
-
 @register_compute_fun(
-    name="Gamma_c",
-    label=(
-        # Γ_c = π/(8√2) ∫dλ 〈 ∑ⱼ [v τ γ_c²]ⱼ 〉
-        "\\Gamma_c = \\frac{\\pi}{8 \\sqrt{2}} "
-        "\\int d\\lambda \\langle \\sum_j (v \\tau \\gamma_c^2)_j \\rangle"
-    ),
+    name="effective ripple",
+    label="\\epsilon_{\\mathrm{eff}}",
     units="~",
     units_long="None",
-    description="Energetic ion confinement proxy",
+    description="Neoclassical transport in the banana regime",
     dim=1,
     params=[],
-    transforms={"grid": []},
+    transforms={},
     profiles=[],
     coordinates="r",
-    data=[
-        "min_tz |B|",
-        "max_tz |B|",
-        "B^phi",
-        "B^phi_r|v,p",
-        "|B|_r|v,p",
-        "b",
-        "grad(phi)",
-        "grad(psi)",
-        "|grad(psi)|",
-        "|grad(rho)|",
-        "|e_alpha|r,p|",
-        "kappa_g",
-        "iota_r",
-    ]
-    + Bounce2D.required_names,
-    resolution_requirement="tz",
-    grid_requirement={"can_fft2": True},
-    **_bounce_doc,
+    data=["effective ripple 3/2"],
 )
-@partial(
-    jit,
-    static_argnames=[
-        "Y_B",
-        "num_transit",
-        "num_well",
-        "num_quad",
-        "num_pitch",
-        "batch_size",
-        "spline",
-    ],
-)
-def _Gamma_c(params, transforms, profiles, data, **kwargs):
-    """Energetic ion confinement proxy as defined by Nemov et al.
+def _effective_ripple(params, transforms, profiles, data, **kwargs):
+    """Proxy for neoclassical transport in the banana regime.
 
-    Poloidal motion of trapped particle orbits in real-space coordinates.
-    V. V. Nemov, S. V. Kasilov, W. Kernbichler, G. O. Leitold.
-    Phys. Plasmas 1 May 2008; 15 (5): 052501.
-    https://doi.org/10.1063/1.2912456.
-    Equation 61.
-
-    The radial electric field has a negligible effect on alpha particle confinement,
-    so it is assumed to be zero.
+    A 3D stellarator magnetic field admits ripple wells that lead to enhanced
+    radial drift of trapped particles. In the banana regime, neoclassical (thermal)
+    transport from ripple wells can become the dominant transport channel.
+    The effective ripple (ε) proxy estimates the neoclassical transport
+    coefficients in the banana regime.
     """
-    # noqa: unused dependency
-    theta = kwargs["theta"]
-    Y_B = kwargs.get("Y_B", theta.shape[-1] * 2)
-    num_transit = kwargs.get("num_transit", 20)
-    num_pitch = kwargs.get("num_pitch", 64)
-    num_well = kwargs.get("num_well", Y_B * num_transit)
-    batch_size = kwargs.get("batch_size", None)
-    spline = kwargs.get("spline", True)
-    if "fieldline_quad" in kwargs:
-        fieldline_quad = kwargs["fieldline_quad"]
-    else:
-        fieldline_quad = leggauss(Y_B // 2)
-    if "quad" in kwargs:
-        quad = kwargs["quad"]
-    else:
-        quad = get_quadrature(
-            leggauss(kwargs.get("num_quad", 32)),
-            (automorphism_sin, grad_automorphism_sin),
-        )
-
-    def Gamma_c(data):
-        """∫ dλ ∑ⱼ [v τ γ_c²]ⱼ π²/4."""
-        bounce = Bounce2D(
-            grid,
-            data,
-            data["theta"],
-            Y_B,
-            num_transit,
-            quad=quad,
-            automorphism=None,
-            is_fourier=True,
-            spline=spline,
-        )
-
-        def fun(pitch_inv):
-            points = bounce.points(pitch_inv, num_well=num_well)
-            v_tau, drift1, drift2 = bounce.integrate(
-                [_v_tau, _drift1, _drift2],
-                pitch_inv,
-                data,
-                ["|grad(psi)|*kappa_g", "|B|_r|v,p", "K"],
-                points,
-                is_fourier=True,
-            )
-            # This is γ_c π/2.
-            gamma_c = jnp.arctan(
-                safediv(
-                    drift1,
-                    drift2
-                    * bounce.interp_to_argmin(
-                        data["|grad(rho)|*|e_alpha|r,p|"], points, is_fourier=True
-                    ),
-                )
-            )
-            return jnp.sum(v_tau * gamma_c**2, axis=-1)
-
-        return jnp.sum(
-            _foreach_pitch(fun, data["pitch_inv"], batch_size)
-            * data["pitch_inv weight"]
-            / data["pitch_inv"] ** 2,
-            axis=-1,
-        ) / bounce.compute_fieldline_length(fieldline_quad)
-
-    grid = transforms["grid"]
-    # It is assumed the grid is sufficiently dense to reconstruct |B|,
-    # so anything smoother than |B| may be captured accurately as a single
-    # Fourier series rather than transforming each component.
-    # Last term in K behaves as ∂log(|B|²/B^ϕ)/∂ρ |B| if one ignores the issue
-    # of a log argument with units. Smoothness determined by positive lower bound
-    # of log argument, and hence behaves as ∂log(|B|)/∂ρ |B| = ∂|B|/∂ρ.
-    data["Gamma_c"] = _compute(
-        Gamma_c,
-        fun_data={
-            "|grad(psi)|*kappa_g": data["|grad(psi)|"] * data["kappa_g"],
-            "|grad(rho)|*|e_alpha|r,p|": data["|grad(rho)|"] * data["|e_alpha|r,p|"],
-            "|B|_r|v,p": data["|B|_r|v,p"],
-            "K": data["iota_r"]
-            * dot(cross(data["grad(psi)"], data["b"]), data["grad(phi)"])
-            - (
-                2 * data["|B|_r|v,p"]
-                - data["|B|"] * data["B^phi_r|v,p"] / data["B^phi"]
-            ),
-        },
-        data=data,
-        theta=theta,
-        grid=grid,
-        num_pitch=num_pitch,
-        simp=False,
-    ) / (2**1.5 * jnp.pi)
-    return data
-
-
-def _cvdrift0(data, B, pitch):
-    return safediv(
-        data["cvdrift0"] * (1 - 0.5 * pitch * B),
-        jnp.sqrt(jnp.abs(1 - pitch * B)),
-    )
-
-
-def _gbdrift(data, B, pitch):
-    return safediv(
-        (data["gbdrift (periodic)"] + data["gbdrift (secular)/phi"] * data["zeta"])
-        * (1 - 0.5 * pitch * B),
-        jnp.sqrt(jnp.abs(1 - pitch * B)),
-    )
-
-
-@register_compute_fun(
-    name="Gamma_c Velasco",
-    label=(
-        # Γ_c = π/(8√2) ∫dλ 〈 ∑ⱼ [v τ γ_c²]ⱼ 〉
-        "\\Gamma_c = \\frac{\\pi}{8 \\sqrt{2}} "
-        "\\int d\\lambda \\langle \\sum_j (v \\tau \\gamma_c^2)_j \\rangle"
-    ),
-    units="~",
-    units_long="None",
-    description="Energetic ion confinement proxy "
-    "as defined by Velasco et al. (doi:10.1088/1741-4326/ac2994)",
-    dim=1,
-    params=[],
-    transforms={"grid": []},
-    profiles=[],
-    coordinates="r",
-    data=[
-        "min_tz |B|",
-        "max_tz |B|",
-        "cvdrift0",
-        "gbdrift (periodic)",
-        "gbdrift (secular)/phi",
-    ]
-    + Bounce2D.required_names,
-    resolution_requirement="tz",
-    grid_requirement={"can_fft2": True},
-    **_bounce_doc,
-)
-@partial(
-    jit,
-    static_argnames=[
-        "Y_B",
-        "num_transit",
-        "num_well",
-        "num_quad",
-        "num_pitch",
-        "batch_size",
-        "spline",
-    ],
-)
-def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
-    """Energetic ion confinement proxy as defined by Velasco et al.
-
-    A model for the fast evaluation of prompt losses of energetic ions in stellarators.
-    J.L. Velasco et al. 2021 Nucl. Fusion 61 116059.
-    https://doi.org/10.1088/1741-4326/ac2994.
-    Equation 16.
-    """
-    # noqa: unused dependency
-    theta = kwargs["theta"]
-    Y_B = kwargs.get("Y_B", theta.shape[-1] * 2)
-    num_transit = kwargs.get("num_transit", 20)
-    num_pitch = kwargs.get("num_pitch", 64)
-    num_well = kwargs.get("num_well", Y_B * num_transit)
-    batch_size = kwargs.get("batch_size", None)
-    spline = kwargs.get("spline", True)
-    if "fieldline_quad" in kwargs:
-        fieldline_quad = kwargs["fieldline_quad"]
-    else:
-        fieldline_quad = leggauss(Y_B // 2)
-    if "quad" in kwargs:
-        quad = kwargs["quad"]
-    else:
-        quad = get_quadrature(
-            leggauss(kwargs.get("num_quad", 32)),
-            (automorphism_sin, grad_automorphism_sin),
-        )
-
-    def Gamma_c(data):
-        """∫ dλ ∑ⱼ [v τ γ_c²]ⱼ π²/4."""
-        bounce = Bounce2D(
-            grid,
-            data,
-            data["theta"],
-            Y_B,
-            num_transit,
-            quad=quad,
-            automorphism=None,
-            is_fourier=True,
-            spline=spline,
-        )
-
-        def fun(pitch_inv):
-            v_tau, cvdrift0, gbdrift = bounce.integrate(
-                [_v_tau, _cvdrift0, _gbdrift],
-                pitch_inv,
-                data,
-                ["cvdrift0", "gbdrift (periodic)", "gbdrift (secular)/phi"],
-                bounce.points(pitch_inv, num_well=num_well),
-                is_fourier=True,
-            )
-            gamma_c = jnp.arctan(safediv(cvdrift0, gbdrift))  # This is γ_c π/2.
-            return jnp.sum(v_tau * gamma_c**2, axis=-1)
-
-        return jnp.sum(
-            _foreach_pitch(fun, data["pitch_inv"], batch_size)
-            * data["pitch_inv weight"]
-            / data["pitch_inv"] ** 2,
-            axis=-1,
-        ) / bounce.compute_fieldline_length(fieldline_quad)
-
-    grid = transforms["grid"]
-    data["Gamma_c Velasco"] = _compute(
-        Gamma_c,
-        fun_data={
-            "cvdrift0": data["cvdrift0"],
-            "gbdrift (periodic)": data["gbdrift (periodic)"],
-            "gbdrift (secular)/phi": data["gbdrift (secular)/phi"],
-        },
-        data=data,
-        theta=theta,
-        grid=grid,
-        num_pitch=num_pitch,
-        simp=False,
-    ) / (2**1.5 * jnp.pi)
+    data["effective ripple"] = data["effective ripple 3/2"] ** (2 / 3)
     return data

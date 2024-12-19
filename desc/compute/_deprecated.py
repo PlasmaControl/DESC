@@ -1,9 +1,12 @@
-"""Deprecated compute functions for neoclassical transport."""
+"""Deprecated compute functions.
+
+These are kept for verification purposes. They do not
+appear in the public documentation under the list of variables.
+"""
 
 from functools import partial
 
 from orthax.legendre import leggauss
-from quadax import simpson
 
 from desc.backend import imap, jit, jnp
 
@@ -15,31 +18,20 @@ from ..integrals.quad_utils import (
     grad_automorphism_sin,
 )
 from ..utils import cross, dot, safediv
-from ._neoclassical import _bounce_doc, _cvdrift0, _dH, _dI, _drift1, _drift2, _v_tau
+from ._fast_ion import _cvdrift0, _drift1, _drift2, _v_tau
+from ._neoclassical import _bounce_doc, _dH, _dI
 from .data_index import register_compute_fun
 
 _bounce1D_doc = {
     "num_well": _bounce_doc["num_well"],
-    "quad": _bounce_doc["quad"],
     "num_quad": _bounce_doc["num_quad"],
     "num_pitch": _bounce_doc["num_pitch"],
-    "batch": "bool : Whether to vectorize part of the computation. Default is true.",
+    "quad": _bounce_doc["quad"],
 }
 
 
-def _alpha_mean(f):
-    """Simple mean over field lines.
-
-    Simple mean rather than integrating over α and dividing by 2π
-    (i.e. f.T.dot(dα) / dα.sum()), because when the toroidal angle extends
-    beyond one transit we need to weight all field lines uniformly, regardless
-    of their spacing wrt α.
-    """
-    return f.mean(axis=0)
-
-
 def _compute(fun, fun_data, data, grid, num_pitch, simp=False, reduce=True):
-    """Compute ``fun`` for each α and ρ value iteratively to reduce memory usage.
+    """Compute ``fun`` for each α and ρ value iteratively.
 
     Parameters
     ----------
@@ -74,73 +66,11 @@ def _compute(fun, fun_data, data, grid, num_pitch, simp=False, reduce=True):
     for name in fun_data:
         fun_data[name] = Bounce1D.reshape_data(grid, fun_data[name])
     out = imap(foreach_rho, fun_data)
-    return grid.expand(_alpha_mean(out)) if reduce else out
-
-
-@register_compute_fun(
-    name="fieldline length",
-    label="\\int_{\\zeta_{\\mathrm{min}}}^{\\zeta_{\\mathrm{max}}}"
-    " \\frac{d\\zeta}{|B^{\\zeta}|}",
-    units="m / T",
-    units_long="Meter / tesla",
-    description="(Mean) proper length of field line(s)",
-    dim=1,
-    params=[],
-    transforms={"grid": []},
-    profiles=[],
-    coordinates="r",
-    data=["B^zeta"],
-    resolution_requirement="z",
-    source_grid_requirement={"coordinates": "raz", "is_meshgrid": True},
-)
-def _fieldline_length(data, transforms, profiles, **kwargs):
-    grid = transforms["grid"].source_grid
-    data["fieldline length"] = grid.expand(
-        jnp.abs(
-            _alpha_mean(
-                simpson(
-                    y=grid.meshgrid_reshape(1 / data["B^zeta"], "arz"),
-                    x=grid.compress(grid.nodes[:, 2], surface_label="zeta"),
-                    axis=-1,
-                )
-            )
-        )
-    )
-    return data
-
-
-@register_compute_fun(
-    name="fieldline length/volume",
-    label="\\int_{\\zeta_{\\mathrm{min}}}^{\\zeta_{\\mathrm{max}}}"
-    " \\frac{d\\zeta}{|B^{\\zeta} \\sqrt g|}",
-    units="1 / Wb",
-    units_long="Inverse webers",
-    description="(Mean) proper length over volume of field line(s)",
-    dim=1,
-    params=[],
-    transforms={"grid": []},
-    profiles=[],
-    coordinates="r",
-    data=["B^zeta", "sqrt(g)"],
-    resolution_requirement="z",
-    source_grid_requirement={"coordinates": "raz", "is_meshgrid": True},
-)
-def _fieldline_length_over_volume(data, transforms, profiles, **kwargs):
-    grid = transforms["grid"].source_grid
-    data["fieldline length/volume"] = grid.expand(
-        jnp.abs(
-            _alpha_mean(
-                simpson(
-                    y=grid.meshgrid_reshape(
-                        1 / (data["B^zeta"] * data["sqrt(g)"]), "arz"
-                    ),
-                    x=grid.compress(grid.nodes[:, 2], surface_label="zeta"),
-                    axis=-1,
-                )
-            )
-        )
-    )
-    return data
+    # Simple mean over α rather than integrating over α and dividing by 2π
+    # (i.e. f.T.dot(dα) / dα.sum()), because when the toroidal angle extends
+    # beyond one transit we need to weight all field lines uniformly, regardless
+    # of their spacing wrt α.
+    return grid.expand(out.mean(axis=0)) if reduce else out
 
 
 @register_compute_fun(
@@ -174,7 +104,7 @@ def _fieldline_length_over_volume(data, transforms, profiles, **kwargs):
     source_grid_requirement={"coordinates": "raz", "is_meshgrid": True},
     **_bounce1D_doc,
 )
-@partial(jit, static_argnames=["num_well", "num_quad", "num_pitch", "batch"])
+@partial(jit, static_argnames=["num_well", "num_quad", "num_pitch"])
 def _epsilon_32_1D(params, transforms, profiles, data, **kwargs):
     """Effective ripple modulation amplitude to 3/2 power.
 
@@ -186,11 +116,9 @@ def _epsilon_32_1D(params, transforms, profiles, data, **kwargs):
     # noqa: unused dependency
     num_well = kwargs.get("num_well", None)
     num_pitch = kwargs.get("num_pitch", 50)
-    batch = kwargs.get("batch", True)
-    if "quad" in kwargs:
-        quad = kwargs["quad"]
-    else:
-        quad = chebgauss2(kwargs.get("num_quad", 32))
+    quad = (
+        kwargs["quad"] if "quad" in kwargs else chebgauss2(kwargs.get("num_quad", 32))
+    )
 
     def eps_32(data):
         """(∂ψ/∂ρ)⁻² B₀⁻² ∫ dλ λ⁻² ∑ⱼ Hⱼ²/Iⱼ."""
@@ -204,7 +132,6 @@ def _epsilon_32_1D(params, transforms, profiles, data, **kwargs):
             data,
             "|grad(rho)|*kappa_g",
             bounce.points(data["pitch_inv"], num_well=num_well),
-            batch=batch,
         )
         return jnp.sum(
             safediv(H**2, I).sum(axis=-1)
@@ -237,7 +164,7 @@ def _epsilon_32_1D(params, transforms, profiles, data, **kwargs):
     label="\\epsilon_{\\mathrm{eff}}",
     units="~",
     units_long="None",
-    description="Effective ripple modulation amplitude",
+    description="Neoclassical transport in the banana regime",
     dim=1,
     params=[],
     transforms={},
@@ -246,6 +173,14 @@ def _epsilon_32_1D(params, transforms, profiles, data, **kwargs):
     data=["deprecated(effective ripple 3/2)"],
 )
 def _effective_ripple_1D(params, transforms, profiles, data, **kwargs):
+    """Proxy for neoclassical transport in the banana regime.
+
+    A 3D stellarator magnetic field admits ripple wells that lead to enhanced
+    radial drift of trapped particles. In the banana regime, neoclassical (thermal)
+    transport from ripple wells can become the dominant transport channel.
+    The effective ripple (ε) proxy estimates the neoclassical transport
+    coefficients in the banana regime.
+    """
     data["deprecated(effective ripple)"] = data["deprecated(effective ripple 3/2)"] ** (
         2 / 3
     )
@@ -261,7 +196,7 @@ def _effective_ripple_1D(params, transforms, profiles, data, **kwargs):
     ),
     units="~",
     units_long="None",
-    description="Energetic ion confinement proxy",
+    description="Fast ion confinement proxy",
     dim=1,
     params=[],
     transforms={"grid": []},
@@ -287,9 +222,9 @@ def _effective_ripple_1D(params, transforms, profiles, data, **kwargs):
     source_grid_requirement={"coordinates": "raz", "is_meshgrid": True},
     **_bounce1D_doc,
 )
-@partial(jit, static_argnames=["num_well", "num_quad", "num_pitch", "batch"])
+@partial(jit, static_argnames=["num_well", "num_quad", "num_pitch"])
 def _Gamma_c_1D(params, transforms, profiles, data, **kwargs):
-    """Energetic ion confinement proxy as defined by Nemov et al.
+    """Fast ion confinement proxy as defined by Nemov et al.
 
     Poloidal motion of trapped particle orbits in real-space coordinates.
     V. V. Nemov, S. V. Kasilov, W. Kernbichler, G. O. Leitold.
@@ -297,20 +232,28 @@ def _Gamma_c_1D(params, transforms, profiles, data, **kwargs):
     https://doi.org/10.1063/1.2912456.
     Equation 61.
 
-    The radial electric field has a negligible effect on alpha particle confinement,
-    so it is assumed to be zero.
+    A 3D stellarator magnetic field admits ripple wells that lead to enhanced
+    radial drift of trapped particles. The energetic particle confinement
+    metric γ_c quantifies whether the contours of the second adiabatic invariant
+    close on the flux surfaces. In the limit the poloidal drift velocity
+    majorizes the radial drift velocity, the contours lie parallel to flux
+    surfaces. The optimization metric Γ_c averages γ_c² over the distribution
+    of trapped articles on each flux surface.
+
+    The radial electric field has a negligible effect, since fast particles
+    have high energy with collisionless orbits, so it is assumed to be zero.
     """
     # noqa: unused dependency
     num_pitch = kwargs.get("num_pitch", 64)
     num_well = kwargs.get("num_well", None)
-    batch = kwargs.get("batch", True)
-    if "quad" in kwargs:
-        quad = kwargs["quad"]
-    else:
-        quad = get_quadrature(
+    quad = (
+        kwargs["quad"]
+        if "quad" in kwargs
+        else get_quadrature(
             leggauss(kwargs.get("num_quad", 32)),
             (automorphism_sin, grad_automorphism_sin),
         )
+    )
 
     def Gamma_c(data):
         """∫ dλ ∑ⱼ [v τ γ_c²]ⱼ π²/4."""
@@ -322,7 +265,6 @@ def _Gamma_c_1D(params, transforms, profiles, data, **kwargs):
             data,
             ["|grad(psi)|*kappa_g", "|B|_r|v,p", "K"],
             points,
-            batch=batch,
         )
         # This is γ_c π/2.
         gamma_c = jnp.arctan(
@@ -368,8 +310,7 @@ def _Gamma_c_1D(params, transforms, profiles, data, **kwargs):
 
 def _gbdrift(data, B, pitch):
     return safediv(
-        data["gbdrift"] * (1 - 0.5 * pitch * B),
-        jnp.sqrt(jnp.abs(1 - pitch * B)),
+        data["gbdrift"] * (1 - 0.5 * pitch * B), jnp.sqrt(jnp.abs(1 - pitch * B))
     )
 
 
@@ -382,7 +323,7 @@ def _gbdrift(data, B, pitch):
     ),
     units="~",
     units_long="None",
-    description="Energetic ion confinement proxy "
+    description="Fast ion confinement proxy "
     "as defined by Velasco et al. (doi:10.1088/1741-4326/ac2994)",
     dim=1,
     params=[],
@@ -394,9 +335,9 @@ def _gbdrift(data, B, pitch):
     source_grid_requirement={"coordinates": "raz", "is_meshgrid": True},
     **_bounce1D_doc,
 )
-@partial(jit, static_argnames=["num_well", "num_quad", "num_pitch", "batch"])
+@partial(jit, static_argnames=["num_well", "num_quad", "num_pitch"])
 def _Gamma_c_Velasco_1D(params, transforms, profiles, data, **kwargs):
-    """Energetic ion confinement proxy as defined by Velasco et al.
+    """Fast ion confinement proxy as defined by Velasco et al.
 
     A model for the fast evaluation of prompt losses of energetic ions in stellarators.
     J.L. Velasco et al. 2021 Nucl. Fusion 61 116059.
@@ -406,14 +347,14 @@ def _Gamma_c_Velasco_1D(params, transforms, profiles, data, **kwargs):
     # noqa: unused dependency
     num_well = kwargs.get("num_well", None)
     num_pitch = kwargs.get("num_pitch", 64)
-    batch = kwargs.get("batch", True)
-    if "quad" in kwargs:
-        quad = kwargs["quad"]
-    else:
-        quad = get_quadrature(
+    quad = (
+        kwargs["quad"]
+        if "quad" in kwargs
+        else get_quadrature(
             leggauss(kwargs.get("num_quad", 32)),
             (automorphism_sin, grad_automorphism_sin),
         )
+    )
 
     def Gamma_c(data):
         """∫ dλ ∑ⱼ [v τ γ_c²]ⱼ π²/4."""
@@ -425,7 +366,6 @@ def _Gamma_c_Velasco_1D(params, transforms, profiles, data, **kwargs):
             data,
             ["cvdrift0", "gbdrift"],
             points,
-            batch=batch,
         )
         gamma_c = jnp.arctan(safediv(cvdrift0, gbdrift))  # This is γ_c π/2.
         return jnp.sum(

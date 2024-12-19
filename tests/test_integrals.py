@@ -35,9 +35,9 @@ from desc.integrals import (
     surface_variance,
     virtual_casing_biot_savart,
 )
-from desc.integrals._basis import FourierChebyshevSeries
 from desc.integrals._bounce_utils import _get_extrema, bounce_points, interp_to_argmin
 from desc.integrals._interp_utils import fourier_pts
+from desc.integrals.basis import FourierChebyshevSeries
 from desc.integrals.quad_utils import (
     automorphism_sin,
     bijection_from_disc,

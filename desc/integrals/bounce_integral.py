@@ -6,7 +6,6 @@ from interpax import CubicHermiteSpline, PPoly
 from orthax.legendre import leggauss
 
 from desc.backend import jnp, rfft2
-from desc.integrals._basis import FourierChebyshevSeries, PiecewiseChebyshevSeries
 from desc.integrals._bounce_utils import (
     _bounce_quadrature,
     _check_bounce_points,
@@ -27,6 +26,7 @@ from desc.integrals._interp_utils import (
     irfft2_non_uniform,
     polyder_vec,
 )
+from desc.integrals.basis import FourierChebyshevSeries, PiecewiseChebyshevSeries
 from desc.integrals.quad_utils import (
     automorphism_sin,
     bijection_from_disc,
@@ -529,7 +529,7 @@ class Bounce2D(Bounce):
             Whether to plot the field lines and bounce points of the given pitch angles.
         kwargs : dict
             Keyword arguments into
-            ``desc/integrals/_basis.py::PiecewiseChebyshevSeries.plot1d`` or
+            ``desc/integrals/basis.py::PiecewiseChebyshevSeries.plot1d`` or
             ``desc/integrals/_bounce_utils.py::plot_ppoly``.
 
         Returns
@@ -872,7 +872,7 @@ class Bounce2D(Bounce):
             specified by Clebsch coordinate ρ(l) will be plotted.
         kwargs
             Keyword arguments into
-            ``desc/integrals/_basis.py::PiecewiseChebyshevSeries.plot1d``.
+            ``desc/integrals/basis.py::PiecewiseChebyshevSeries.plot1d``.
 
         Returns
         -------
@@ -918,7 +918,7 @@ class Bounce2D(Bounce):
             ``rho=grid.compress(grid.nodes[:,0])[l]``.
         kwargs
             Keyword arguments into
-            ``desc/integrals/_basis.py::PiecewiseChebyshevSeries.plot1d``.
+            ``desc/integrals/basis.py::PiecewiseChebyshevSeries.plot1d``.
 
         Returns
         -------

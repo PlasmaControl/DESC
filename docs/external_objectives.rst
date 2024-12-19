@@ -241,7 +241,7 @@ here for simplicity.)
 ::
 
     class TERPSICHORE(ExternalObjective):
-        """Computes linear MHD stability from calls to the code TERPSICHORE."""
+        """Computes ideal MHD linear stability from calls to the code TERPSICHORE."""
 
         def __init__(self, eq, processes=1, path="", exec=""):
             super().__init__(
@@ -285,14 +285,14 @@ threads that are available.
         from desc.objectives import (
             ForceBalance,
             FixBoundaryR,
-            FixCurrent,
+            FixIota,
             FixPressure,
             FixPsi,
             ObjectiveFunction,
         )
         from desc.optimize import Optimizer
 
-        eq = get("precise_QA")
+        eq = get("W7-X")
         optimizer = Optimizer("proximal-lsq-exact")
         objective = ObjectiveFunction(
             (
@@ -308,7 +308,7 @@ threads that are available.
         )
         constraints = (
             FixBoundaryR(eq=eq, modes=np.array([[0, 0, 0]])),
-            FixCurrent(eq=eq),
+            FixIota(eq=eq),
             FixPressure(eq=eq),
             FixPsi(eq=eq),
             ForceBalance(eq=eq),

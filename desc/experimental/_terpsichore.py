@@ -644,7 +644,7 @@ def _read_terps_output(path, scalar, surfs):
 
 
 class TERPSICHORE(ExternalObjective):
-    """Computes linear MHD stability from calls to the code TERPSICHORE.
+    """Computes ideal MHD linear stability from calls to the code TERPSICHORE.
 
     Returns the linear growth rate of the fastest growing instability,
     or the ΔW values at each flux surface.

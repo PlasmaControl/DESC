@@ -104,8 +104,8 @@ TERPSICHORE objective
 This section walks through the implementation of wrapping the ideal MHD linear stability
 code TERPSICHORE, which is written in FORTRAN. It summarizes how the external function
 was written to call TERPSICHORE from DESC, and can be used as a template for wrapping
-other codes. The code is abbreviated for brevity, but the full source code can be found
-in ``desc/experimental/_terpsichore.py``.
+other codes. The code shown here is abbreviated and slightly modified for brevity, but
+the full source code can be found in ``desc/experimental/_terpsichore.py``.
 
 The external function in this case is named ``terpsichore``, and takes the following
 arguments:
@@ -143,14 +143,13 @@ issues with multiprocessing.
     @execute_on_cpu
     def terpsichore(eq, processes=1, path="", exec=""):
         """TERPSICHORE driver function."""
-        # these indices are used to give each equilibrium's I/O files unique file names
-        idxs = list(range(len(eq)))  # equilibrium indices
-
         # create temporary directory to store I/O files
         tmp_path = os.path.join(path, "tmp-TERPS")
         os.mkdir(tmp_path)
 
         # write input files for each equilibrium in serial
+        # these indices are used to give each equilibrium's I/O files unique file names
+        idxs = list(range(len(eq)))  # equilibrium indices
         for k in idxs:
             # create a sub-directory for each equilibrium
             idx_path = os.path.join(tmp_path, str(k))
@@ -190,7 +189,8 @@ this guide.
 ``_pool_fun`` is the function that is run in parallel for each Equilibrium. It calls
 ``_run_terps`` (also shown below) to execute the TERPSICHORE Fortran code through a
 Python subprocess call, and ``_read_terps_output`` (not shown) to parse the output file
-and extract the instability growth rate.
+and extract the instability growth rate. If TERPSICHORE fails to execute for any reason
+or takes too long to run, a large unstable growth rate is returned.
 
 ::
 

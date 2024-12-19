@@ -10,9 +10,11 @@ from netCDF4 import Dataset, stringtochar
 
 from desc.backend import execute_on_cpu, jnp
 from desc.basis import DoubleFourierSeries
+from desc.compat import flip_theta
 from desc.compute.utils import get_transforms
 from desc.grid import LinearGrid
 from desc.objectives import ExternalObjective
+from desc.objectives.objective_funs import collect_docs
 from desc.transform import Transform
 from desc.utils import errorif, warnif
 from desc.vmec_utils import ptolemy_identity_rev, zernike_to_fourier
@@ -35,8 +37,7 @@ def terpsichore(
     M_booz_max=19,
     N_booz_max=18,
     awall=2.0,
-    xplo=1e-6,
-    deltajp=1e-2,
+    deltaJp=1e-2,
     modelk=1,
     nev=1,
     al0=-5e-1,
@@ -44,15 +45,19 @@ def terpsichore(
     stop_time=60,
     data_transforms=None,
     fit_transform=None,
+    theta0_outboard=True,
 ):
     """TERPSICHORE driver function."""
-    idxs = list(range(len(eq)))  # equilibrium indices
+    # TERPSICHORE assumes theta=0 is on the outboard midplane
+    if not theta0_outboard:
+        eq = flip_theta(eq)
 
     # create temporary directory to store I/O files
     tmp_path = os.path.join(path, "tmp-TERPS")
     os.mkdir(tmp_path)
 
     # write input files for each equilibrium in serial
+    idxs = list(range(len(eq)))  # equilibrium indices
     for k in idxs:
         idx_path = os.path.join(tmp_path, str(k))
         os.mkdir(idx_path)
@@ -79,8 +84,7 @@ def terpsichore(
             M_booz_max=M_booz_max,
             N_booz_max=N_booz_max,
             awall=awall,
-            xplo=xplo,
-            deltajp=deltajp,
+            deltaJp=deltaJp,
             modelk=modelk,
             nfp=eq[k].NFP,
             nev=nev,
@@ -382,8 +386,7 @@ def _write_terps_input(  # noqa: C901
     M_booz_max,
     N_booz_max,
     awall,
-    xplo,
-    deltajp,
+    deltaJp,
     modelk,
     nfp,
     nev,
@@ -474,9 +477,7 @@ def _write_terps_input(  # noqa: C901
     f.write("C\n")
     f.write("C    RPLMIN       XPLO      DELTAJP       WCT        CURFAC\n")
     f.write(
-        "  1.0000e-05  {:10.4e}  {:10.4e}  6.6667e-01  1.0000e-00\n".format(
-            xplo, deltajp
-        )
+        "  1.0000e-05  1.0000e-06  {:10.4e}  6.6667e-01  1.0000e-00\n".format(deltaJp)
     )
     f.write("C\n")
     f.write(
@@ -653,39 +654,87 @@ class TERPSICHORE(ExternalObjective):
     ----------
     eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
-    target : {float, ndarray}, optional
-        Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f. Defaults to ``target=0``.
-    bounds : tuple of {float, ndarray}, optional
-        Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f.
-        Defaults to ``target=0``.
-    weight : {float, ndarray}, optional
-        Weighting to apply to the Objective, relative to other Objectives.
-        Must be broadcastable to to Objective.dim_f
-    normalize : bool, optional
-        Whether to compute the error in physical units or non-dimensionalize.
-        Has no effect for this objective.
-    normalize_target : bool, optional
-        Whether target and bounds should be normalized before comparing to computed
-        values. If `normalize` is `True` and the target is in physical units,
-        this should also be set to True.
-    loss_function : {None, 'mean', 'min', 'max'}, optional
-        Loss function to apply to the objective values once computed. This loss function
-        is called on the raw compute value, before any shifting, scaling, or
-        normalization.
-    name : str, optional
-        Name of the objective function.
-
-    # TODO: update Parameters docs
-    # If mode_family < 0, includes all modes in desired range
-    # If scalar = True return growth rate, if scalar = False return dW at surfaces
-    # NOTE: that TERPSICHORE assumes theta=0 is defined on the outboard midplane!
-    # TODO: include documentation of example script for multiprocessing
+    abs_step : float, optional
+        Absolute finite difference step size. Default = 1e-4.
+        Total step size is ``abs_step + rel_step * mean(abs(x))``.
+    rel_step : float, optional
+        Relative finite difference step size. Default = 0.
+        Total step size is ``abs_step + rel_step * mean(abs(x))``.
+    processes : int, optional
+        Maximum number of CPU threads to use for multiprocessing. Default = 1.
+    path : str, optional
+        Path to the directory where temporary files will be stored.
+    exec : str, optional
+        File name of the TERPSICHORE executable. Must be located in the directory
+        specified by ``path``.
+    scalar : bool, optional
+        If Ture, returns the growth rate of the fastest growing instability (default).
+        If False, returns the ΔW values at each flux surface.
+    mode_family : int, optional
+        The mode family of the instabilities to consider. Only implemented for NFP =
+        2 or 3, which only have two mode families: N=0 and N=1. If ``mode_family < 0``,
+        both mode families are considered. Default = -1.
+    surfs : int, optional
+        Number of surfaces to include in the equilibrium input. More surfaces provides
+        more accuracy at the cost of longer compute times. Default = 101.
+    lssl : int, optional
+        Minimum number of possible permutations of Boozer mode combinations
+        (determined by ``M_booz_max`` and ``N_booz_max``). If TERPSICHORE fails to run,
+        try increasing this parameter. Default = 1000.
+    lssd : int, optional
+        Minimum number of possible permutations of stability mode combinations
+        (determined by ``M_max`` and ``N_max``). If TERPSICHORE fails to run,
+        try increasing this parameter. Default = 1000.
+    M_max : int, optional
+        Maximum poloidal mode number of stability modes to consider. Will include modes
+        with m ∈ [0,M_max] (if ``mode_family < 0``). Default = 8.
+    N_min : int, optional
+        Minimum toroidal mode number of stability modes to consider. Will include modes
+        with n ∈ [N_min,N_max] (if ``mode_family < 0``). Default = -4.
+    N_max : int, optional
+        Maximum toroidal mode number of stability modes to consider. Will include modes
+        with n ∈ [N_min,N_max] (if ``mode_family < 0``). Default = 4.
+    M_booz_max : int, optional
+        Maximum poloidal mode number of Boozer spectrum. Will include modes with
+        m ∈ [0,M_booz_max]. Default = 19.
+    N_booz_max : int, optional
+        Maximum poloidal mode number of Boozer spectrum. Will include modes with
+        n ∈ [-N_booz_max,N_booz_max]. Default = 18.
+    awall : float, optional
+        Ratio of the radius of the conformal conducting wall to the plasma minor radius.
+        The conducting wall is obtained by scaling the m ≠ 0 Fourier components of the
+        plasma boundary by ``awall``. A shorter wall offset will help stabilize the
+        plasma. If TERPSICHORE fails to run, try decreasing this parameter. Default = 2.
+    deltaJp : float, optional
+        Resonance detuning parameter to resolve parallel current density singularities.
+        Default = 0.5.
+    modelk : int, optional
+        0 = Noninteracting anisotropic fast particle stability model with reduced
+        kintetic energy. 1 = Kruskal-Oberman anisotropic energy principle model with
+        reduced kinetic energy. 2 = Noninteracting anisotropic fast particle stability
+        model with physical kinetic energy. 3 = Kruskal-Oberman anisotropic energy
+        principle model with physical kinetic energy. Default = 0.
+    nev : int, optional
+        Number of eigenvalue computations. Default = 1.
+    al0 : float, optional
+        Initial guess of the eigenvalue. Use a sufficiently negative value to find the
+        most unstable growth rate. If TERPSICHORE fails to run, the objective will
+        return a growth rate of ``abs(al0)``. Default = -0.5.
+    sleep_time : float, optional
+        Time in seconds to wait between checks to determine if TERPSICHORE has finished
+        executing. Default = 1.
+    stop_time : float, optional
+        Time in seconds to wait for TERPSICHORE to execute before terminating its run.
+        Default = 60.
 
     """
 
-    _units = "(dimensionless)"  # normalized by Alfven frequency
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``bounds=(-np.inf, 0)``.",
+        bounds_default="``bounds=(-np.inf, 0)``.",
+    )
+
+    _units = "(dimensionless)"
     _print_value_fmt = "TERPSICHORE "
 
     def __init__(
@@ -713,8 +762,7 @@ class TERPSICHORE(ExternalObjective):
         M_booz_max=19,
         N_booz_max=18,
         awall=2.0,
-        xplo=1e-6,
-        deltajp=5e-1,
+        deltaJp=5e-1,
         modelk=0,
         nev=1,
         al0=-5e-1,
@@ -754,8 +802,7 @@ class TERPSICHORE(ExternalObjective):
             M_booz_max=M_booz_max,
             N_booz_max=N_booz_max,
             awall=awall,
-            xplo=xplo,
-            deltajp=deltajp,
+            deltaJp=deltaJp,
             modelk=modelk,
             nev=nev,
             al0=al0,
@@ -763,6 +810,7 @@ class TERPSICHORE(ExternalObjective):
             stop_time=stop_time,
             name=name,
         )
+        self._scalar = scalar
         self._print_value_fmt += "growth rate: " if scalar else "delta W: "
 
     def build(self, use_jit=True, verbose=1):
@@ -776,6 +824,15 @@ class TERPSICHORE(ExternalObjective):
             Level of output.
 
         """
+        # check if theta needs to be flipped so that theta=0 is on the outboard midplane
+        R0 = self._eq.Rb_lmn[self._eq.surface.R_basis.get_idx(M=0, N=0)]
+        R1 = np.sum(
+            self._eq.Rb_lmn[
+                np.where((self._eq.surface.R_basis.modes[:, 1:] >= 0).all(axis=1))[0]
+            ]
+        )
+        self._kwargs["theta0_outboard"] = R1 > R0  # R(rho=1,theta=0,phi=0) > R(rho=0)
+
         # transforms for writing the wout file
         surfs = self._kwargs.get("surfs")
         NFP = self._eq.NFP

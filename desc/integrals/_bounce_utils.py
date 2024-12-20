@@ -220,7 +220,7 @@ def bounce_points(
     z2 = jnp.where(mask, z2, 0.0)
 
     if check:
-        errorif(jnp.min(knots) <= sentinel, msg="Decrease sentinel.")
+        errorif(knots[0] <= sentinel, msg="Decrease sentinel.")
         _check_bounce_points(z1, z2, pitch_inv, knots, B, plot, **kwargs)
 
     return z1, z2

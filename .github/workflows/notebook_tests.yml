@@ -90,6 +90,7 @@ jobs:
         if: env.has_changes == 'true'
         run: |
           source .venv-${{ env.version }}/bin/activate
+          export PYTHONPATH=$(pwd)
           pytest -v --nbmake "./docs/notebooks" \
             --nbmake-timeout=2000 \
             --ignore=./docs/notebooks/zernike_eval.ipynb \

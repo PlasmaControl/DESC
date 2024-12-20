@@ -76,14 +76,20 @@ jobs:
           pip install -r devtools/dev-requirements.txt
           pip install matplotlib==3.9.2
 
+      - name: Action Details
+        if: env.has_changes == 'true'
+        run: |
+          source .venv-${{ env.version }}/bin/activate
+          which python
+          python --version
+          pwd
+          lscpu
+          pip list
+
       - name: Test notebooks with pytest and nbmake
         if: env.has_changes == 'true'
         run: |
           source .venv-${{ env.version }}/bin/activate
-          pwd
-          lscpu
-          pip list
-          export PYTHONPATH=$(pwd)
           pytest -v --nbmake "./docs/notebooks" \
             --nbmake-timeout=2000 \
             --ignore=./docs/notebooks/zernike_eval.ipynb \

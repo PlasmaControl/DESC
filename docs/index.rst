@@ -21,6 +21,7 @@
    :caption: Tutorials
 
    installation
+   performance_tips
    notebooks/tutorials/basic_equilibrium.ipynb
    notebooks/tutorials/advanced_equilibrium_continuation.ipynb
    notebooks/tutorials/continuation_step_by_step.ipynb
@@ -35,7 +36,6 @@
    notebooks/tutorials/coil_stage_two_optimization.ipynb
    notebooks/tutorials/QFM_surface.ipynb
    notebooks/tutorials/ideal_ballooning_stability.ipynb
-   performance_tips
 
 .. toctree::
    :maxdepth: 1

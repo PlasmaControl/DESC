@@ -647,8 +647,8 @@ def _read_terps_output(path, scalar, surfs):
 class TERPSICHORE(ExternalObjective):
     """Computes ideal MHD linear stability from calls to the code TERPSICHORE.
 
-    Returns the linear growth rate of the fastest growing instability,
-    or the ΔW values at each flux surface.
+    Returns the linear growth rate of the fastest growing instability, or the ΔW values
+    at each flux surface. A positive growth rate or negative ΔW denotes instability.
 
     Parameters
     ----------
@@ -730,8 +730,10 @@ class TERPSICHORE(ExternalObjective):
     """
 
     __doc__ = __doc__.rstrip() + collect_docs(
-        target_default="``bounds=(-np.inf, 0)``.",
-        bounds_default="``bounds=(-np.inf, 0)``.",
+        target_default="``bounds=(-np.inf, 0)`` if ``scalar=True`` "
+        + "else ``bounds=(0, np.inf)``.",
+        bounds_default="``bounds=(-np.inf, 0)`` if ``scalar=True`` "
+        + "else ``bounds=(0, np.inf)``.",
     )
 
     _units = "(dimensionless)"
@@ -772,9 +774,6 @@ class TERPSICHORE(ExternalObjective):
         name="terpsichore",
     ):
         if target is None and bounds is None:
-            # want to minimize growth rate or maximize delta W
-            # good threshold for growth rate is < -1e-3
-            # good threshold for delta W is > +1e-4
             bounds = (-np.inf, 0) if scalar else (0, np.inf)
         super().__init__(
             eq=eq,

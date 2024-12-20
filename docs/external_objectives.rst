@@ -278,8 +278,6 @@ threads that are available.
 
         set_device("gpu")
 
-        import numpy as np
-
         from desc.examples import get
         from desc.experimental import TERPSICHORE
         from desc.objectives import (

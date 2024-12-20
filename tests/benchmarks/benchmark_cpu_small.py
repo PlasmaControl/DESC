@@ -403,6 +403,8 @@ def test_solve_fixed_iter_compiled(benchmark):
             eq.change_resolution(6, 6, 6, 12, 12, 12)
         eq.solve(maxiter=1, ftol=0, xtol=0, gtol=0)
 
+        return (eq,), {}
+
     def run(eq):
         eq.solve(maxiter=20, ftol=0, xtol=0, gtol=0)
 

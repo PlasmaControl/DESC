@@ -277,7 +277,7 @@ class Bounce2D(Bounce):
         data,
         theta,
         Y_B=None,
-        num_transit=32,
+        num_transit=20,
         # TODO (#1309): Allow multiple starting labels for near-rational surfaces.
         #  Can just add axis for piecewise chebyshev stuff cheb.
         alpha=0.0,
@@ -947,6 +947,10 @@ class Bounce1D(Bounce):
     the particle's guiding center trajectory traveling in the direction of increasing
     field-line-following coordinate ζ.
 
+    Examples
+    --------
+    See ``tests/test_integrals.py::TestBounce::test_bounce1d_checks``.
+
     See Also
     --------
     Bounce2D
@@ -959,10 +963,6 @@ class Bounce1D(Bounce):
         techniques are not used. Instead, function approximation is done with local
         splines. This is useful if one can efficiently obtain data along field lines
         and the number of toroidal transits to follow a field line is not large.
-
-    Examples
-    --------
-    See ``tests/test_integrals.py::TestBounce::test_bounce1d_checks``.
 
     Parameters
     ----------

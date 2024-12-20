@@ -35,7 +35,7 @@ from desc.integrals import (
     surface_variance,
     virtual_casing_biot_savart,
 )
-from desc.integrals._bounce_utils import _get_extrema, bounce_points, interp_to_argmin
+from desc.integrals._bounce_utils import _get_extrema, bounce_points
 from desc.integrals._interp_utils import fourier_pts
 from desc.integrals.basis import FourierChebyshevSeries
 from desc.integrals.quad_utils import (
@@ -1181,16 +1181,9 @@ class TestBounce:
         data = dict.fromkeys(Bounce1D.required_names, g(zeta))
         data["|B|_z|r,a"] = dg_dz(zeta)
         bounce = Bounce1D(Grid.create_meshgrid([1, 0, zeta], coordinates="raz"), data)
+        points = np.array(0, ndmin=2), np.array(2 * np.pi, ndmin=2)
         np.testing.assert_allclose(
-            interp_to_argmin(
-                h=h(zeta),
-                points=(np.array(0, ndmin=2), np.array(2 * np.pi, ndmin=2)),
-                knots=zeta,
-                g=bounce._B,
-                dg_dz=bounce._dB_dz,
-            ),
-            h(argmin_g),
-            rtol=1e-3,
+            bounce.interp_to_argmin(h(zeta), points), h(argmin_g), rtol=1e-3
         )
 
     @staticmethod
@@ -1501,10 +1494,10 @@ class TestBounce2D:
             num_transit=1,
             spline=True,
         )
+        points = np.array(0, ndmin=2), np.array(2 * np.pi, ndmin=2)
         np.testing.assert_allclose(
             bounce.interp_to_argmin(
-                grid.meshgrid_reshape(h(grid.nodes[:, 2]), "rtz"),
-                (np.array(0, ndmin=2), np.array(2 * np.pi, ndmin=2)),
+                grid.meshgrid_reshape(h(grid.nodes[:, 2]), "rtz"), points
             ),
             h(argmin_g),
             rtol=1e-6,

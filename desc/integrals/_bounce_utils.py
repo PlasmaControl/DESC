@@ -4,7 +4,7 @@ import numpy as np
 from interpax import CubicSpline, PPoly
 from matplotlib import pyplot as plt
 
-from desc.backend import dct, imap, jnp
+from desc.backend import dct, imap, jnp, softargmax
 from desc.integrals._interp_utils import (
     cheb_from_dct,
     cheb_pts,
@@ -210,7 +210,7 @@ def bounce_points(
     # Transform out of local power basis expansion.
     intersect = flatten_matrix(intersect + knots[:-1, jnp.newaxis])
     # New versions of JAX only like static sentinels.
-    sentinel = -10000000.0  # instead of knots[0] - 1
+    sentinel = -100000.0  # instead of knots[0] - 1
     z1 = take_mask(intersect, is_z1, size=num_well, fill_value=sentinel)
     z2 = take_mask(intersect, is_z2, size=num_well, fill_value=sentinel)
 
@@ -220,6 +220,7 @@ def bounce_points(
     z2 = jnp.where(mask, z2, 0.0)
 
     if check:
+        errorif(jnp.min(knots) <= sentinel, msg="Decrease sentinel.")
         _check_bounce_points(z1, z2, pitch_inv, knots, B, plot, **kwargs)
 
     return z1, z2
@@ -877,6 +878,55 @@ def interp_fft_to_argmin(
     return jnp.take_along_axis(h, _fft_argmin(z1, z2, ext, g_ext), axis=-1).squeeze(
         axis=-1
     )
+
+
+# This is kept for the inevitable nan debugging.
+def _interp_fft_to_argmin_soft(
+    NFP, T, h, points, knots, g, dg_dz, is_fourier=False, M=None, N=None, beta=-1e4
+):
+    """Interpolate ``h`` to the deepest point of ``g`` between ``z1`` and ``z2``.
+
+    Let E = {ζ ∣ ζ₁ < ζ < ζ₂} and A = argmin_E g(ζ). Returns mean_A h(ζ).
+
+    Parameters
+    ----------
+    beta : float
+        More negative gives exponentially better approximation.
+        The argmin operation is defined as the expected value under the softmin
+        probability distribution.
+        s : x ∈ ℝⁿ, β ∈ ℝ ↦ [eᵝˣ⁽¹⁾, …, eᵝˣ⁽ⁿ⁾] / ∑ₖ₌₁ⁿ eᵝˣ⁽ᵏ⁾
+
+    """
+    ext, g_ext = _get_extrema(knots, g, dg_dz, sentinel=0)
+    theta = T.eval1d(ext)
+    if is_fourier:
+        h = irfft2_non_uniform(
+            theta,
+            ext,
+            h[..., jnp.newaxis, :, :],
+            M,
+            N,
+            domain1=(0, 2 * jnp.pi / NFP),
+            axes=(-1, -2),
+        )
+    else:
+        h = interp_rfft2(
+            theta,
+            ext,
+            h[..., jnp.newaxis, :, :],
+            domain1=(0, 2 * jnp.pi / NFP),
+            axes=(-1, -2),
+        )
+    z1, z2 = points
+    where = jnp.where(
+        (z1[..., jnp.newaxis] < ext[..., jnp.newaxis, :])
+        & (ext[..., jnp.newaxis, :] < z2[..., jnp.newaxis]),
+        g_ext[..., jnp.newaxis, :],
+        jnp.finfo(jnp.float16).max,
+    )
+    # softargmax does the proper shift to compute softargmax(x - max(x))
+    assert beta < 0
+    return jnp.linalg.vecdot(softargmax(beta * where, axis=-1), h[..., jnp.newaxis, :])
 
 
 # TODO (#568): Generalize this beyond ζ = ϕ or just map to Clebsch with ϕ.

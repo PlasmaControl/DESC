@@ -35,7 +35,7 @@
    notebooks/tutorials/coil_stage_two_optimization.ipynb
    notebooks/tutorials/QFM_surface.ipynb
    notebooks/tutorials/ideal_ballooning_stability.ipynb
-   memory_usage
+   performance-tips
 
 .. toctree::
    :maxdepth: 1

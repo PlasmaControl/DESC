@@ -44,6 +44,7 @@ from desc.objectives import (
     BoundaryError,
     BScaleLength,
     CoilArclengthVariance,
+    CoilConvexity,
     CoilCurrentLength,
     CoilCurvature,
     CoilLength,
@@ -937,6 +938,46 @@ class TestObjectiveFunction:
         test(coils)
         test(mixed_coils)
         test(nested_coils, grid=grid)
+
+    @pytest.mark.unit
+    def test_coil_convexity(self):
+        """Tests coil convexity."""
+
+        def test(coil, grid=None, ans=0):
+            obj = CoilConvexity(coil, grid=grid)
+            obj.build()
+            f = obj.compute(params=coil.params_dict)
+            np.testing.assert_allclose(f, ans, atol=1e-6)
+            assert f.shape == (obj.dim_f,)
+
+        # convex coils
+        coil = FourierPlanarCoil(r_n=[0.3, 1, 0.3], basis="rpz")
+        coils = CoilSet.linspaced_linear(
+            coil, n=3, displacement=[0, 3, 0], check_intersection=False
+        )
+        mixed_coils = MixedCoilSet.linspaced_linear(
+            coil, n=2, displacement=[0, 7, 0], check_intersection=False
+        )
+        nested_coils = MixedCoilSet(coils, mixed_coils, check_intersection=False)
+        test(coil)
+        test(coils)
+        test(mixed_coils)
+        test(nested_coils)
+
+        # not convex coils
+        coil = FourierPlanarCoil(r_n=[0.5, 1, 0.5], basis="rpz")
+        coils = CoilSet.linspaced_linear(
+            coil, n=3, displacement=[0, 3, 0], check_intersection=False
+        )
+        mixed_coils = MixedCoilSet.linspaced_linear(
+            coil, n=2, displacement=[0, 7, 0], check_intersection=False
+        )
+        nested_coils = MixedCoilSet(coils, mixed_coils, check_intersection=False)
+        ans = 1.036488
+        test(coil, ans=ans)
+        test(coils, ans=ans)
+        test(mixed_coils, ans=ans)
+        test(nested_coils, ans=ans)
 
     @pytest.mark.unit
     def test_coil_type_error(self):
@@ -2656,6 +2697,7 @@ class TestComputeScalarResolution:
         BootstrapRedlConsistency,
         BoundaryError,
         CoilArclengthVariance,
+        CoilConvexity,
         CoilCurrentLength,
         CoilCurvature,
         CoilLength,
@@ -3076,6 +3118,7 @@ class TestComputeScalarResolution:
         "objective",
         [
             CoilArclengthVariance,
+            CoilConvexity,
             CoilCurrentLength,
             CoilCurvature,
             CoilLength,
@@ -3086,12 +3129,16 @@ class TestComputeScalarResolution:
     )
     def test_compute_scalar_resolution_coils(self, objective):
         """Coil objectives."""
+        endpoint = objective.__name__ == "CoilConvexity"
         coil = FourierXYZCoil()
         coilset = CoilSet.linspaced_angular(coil, check_intersection=False)
         f = np.zeros_like(self.res_array, dtype=float)
         for i, res in enumerate(self.res_array):
             obj = ObjectiveFunction(
-                objective(coilset, grid=LinearGrid(N=int(5 + 3 * res))), use_jit=False
+                objective(
+                    coilset, grid=LinearGrid(N=int(5 + 3 * res), endpoint=endpoint)
+                ),
+                use_jit=False,
             )
             obj.build(verbose=0)
             f[i] = obj.compute_scalar(obj.x())
@@ -3136,9 +3183,10 @@ class TestObjectiveNaNGrad:
         BootstrapRedlConsistency,
         BoundaryError,
         CoilArclengthVariance,
-        CoilLength,
+        CoilConvexity,
         CoilCurrentLength,
         CoilCurvature,
+        CoilLength,
         CoilSetLinkingNumber,
         CoilSetMinDistance,
         CoilTorsion,
@@ -3366,6 +3414,7 @@ class TestObjectiveNaNGrad:
         "objective",
         [
             CoilArclengthVariance,
+            CoilConvexity,
             CoilCurrentLength,
             CoilCurvature,
             CoilLength,

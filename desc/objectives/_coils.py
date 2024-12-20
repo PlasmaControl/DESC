@@ -7,6 +7,7 @@ from scipy.constants import mu_0
 from desc.backend import (
     fori_loop,
     jnp,
+    trapezoid,
     tree_flatten,
     tree_leaves,
     tree_map,
@@ -112,11 +113,15 @@ class _CoilObjective(_Objective):
             )
         self._num_coils = len(coils)
 
+        endpoint = isinstance(self, CoilConvexity)
+
         # map grid to list of length coils
         if grid is None:
             grid = []
             for c in coils:
-                grid.append(LinearGrid(N=2 * c.N * getattr(c, "NFP", 1) + 5))
+                grid.append(
+                    LinearGrid(N=2 * c.N * getattr(c, "NFP", 1) + 5, endpoint=endpoint)
+                )
         if isinstance(grid, numbers.Integral):
             grid = LinearGrid(N=self._grid)
         if isinstance(grid, _Grid):
@@ -133,6 +138,11 @@ class _CoilObjective(_Objective):
             np.any([g.num_rho > 1 or g.num_theta > 1 for g in grid]),
             ValueError,
             "Only use toroidal resolution for coil grids.",
+        )
+        errorif(
+            endpoint and np.any([not g.endpoint for g in grid]),
+            ValueError,
+            "CoilConvexity requires a grid with endpoint=True.",
         )
 
         self._dim_f = np.sum([g.num_nodes for g in grid])
@@ -599,6 +609,107 @@ class CoilCurrentLength(CoilLength):
         params = tree_leaves(params, is_leaf=lambda x: isinstance(x, dict))
         currents = jnp.concatenate([param["current"] for param in params])
         out = jnp.atleast_1d(lengths * currents)
+        return out
+
+
+class CoilConvexity(_CoilObjective):
+    """Coil convexity.
+
+    If a curve is convex, then the following condition must be true: ∫ κ |∂ₛx| ds = 2π.
+
+    Parameters
+    ----------
+    coil : CoilSet or Coil
+        Coil(s) that are to be optimized
+    grid : Grid, optional
+        Collocation grid containing the nodes to evaluate at.
+        Defaults to ``LinearGrid(N=2 * coil.N + 5, endpoint=True)``
+
+    """
+
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``target=0``.", bounds_default="``target=0``.", coil=True
+    )
+
+    _scalar = False  # Not always a scalar, if a coilset is passed in
+    _units = "(dimensionless)"
+    _print_value_fmt = "Coil convexity: "
+
+    def __init__(
+        self,
+        coil,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        loss_function=None,
+        deriv_mode="auto",
+        grid=None,
+        name="coil convexity",
+        jac_chunk_size=None,
+    ):
+        super().__init__(
+            coil,
+            ["s", "x_s", "curvature"],
+            target=0,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            loss_function=loss_function,
+            deriv_mode=deriv_mode,
+            grid=grid,
+            name=name,
+            jac_chunk_size=jac_chunk_size,
+        )
+
+    def build(self, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        super().build(use_jit=use_jit, verbose=verbose)
+
+        self._dim_f = self._num_coils
+        self._constants["quad_weights"] = 1
+
+        _Objective.build(self, use_jit=use_jit, verbose=verbose)
+
+    def compute(self, params, constants=None):
+        """Compute coil convexity error.
+
+        Parameters
+        ----------
+        params : dict
+            Dictionary of the coil's degrees of freedom.
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self._constants.
+
+        Returns
+        -------
+        f : array of floats
+            Coil convexity error.
+
+        """
+        data = super().compute(params, constants=constants)
+        data = tree_leaves(data, is_leaf=lambda x: isinstance(x, dict))
+        out = jnp.array(
+            [
+                trapezoid(
+                    jnp.abs(dat["curvature"]) * safenorm(dat["x_s"], axis=1), dat["s"]
+                )
+                - 2 * jnp.pi
+                for dat in data
+            ]
+        )
         return out
 
 

@@ -105,6 +105,7 @@ Coil Optimization
     desc.objectives.CoilSetLinkingNumber
     desc.objectives.CoilSetMinDistance
     desc.objectives.PlasmaCoilSetMinDistance
+    desc.objectives.CoilConvexity
     desc.objectives.CoilCurrentLength
     desc.objectives.CoilArclengthVariance
     desc.objectives.ToroidalFlux

@@ -125,7 +125,7 @@ def _epsilon_32_1D(params, transforms, profiles, data, **kwargs):
         # B₀ has units of λ⁻¹.
         # Nemov's ∑ⱼ Hⱼ²/Iⱼ = (∂ψ/∂ρ)² (λB₀)³ ``(H**2 / I).sum(axis=-1)``.
         # (λB₀)³ d(λB₀)⁻¹ = B₀² λ³ d(λ⁻¹) = -B₀² λ dλ.
-        bounce = Bounce1D(grid, data, quad, automorphism=None, is_reshaped=True)
+        bounce = Bounce1D(grid, data, quad, is_reshaped=True)
         H, I = bounce.integrate(
             [_dH, _dI],
             data["pitch_inv"],
@@ -257,7 +257,7 @@ def _Gamma_c_1D(params, transforms, profiles, data, **kwargs):
 
     def Gamma_c(data):
         """∫ dλ ∑ⱼ [v τ γ_c²]ⱼ π²/4."""
-        bounce = Bounce1D(grid, data, quad, automorphism=None, is_reshaped=True)
+        bounce = Bounce1D(grid, data, quad, is_reshaped=True)
         points = bounce.points(data["pitch_inv"], num_well=num_well)
         v_tau, drift1, drift2 = bounce.integrate(
             [_v_tau, _drift1, _drift2],
@@ -353,7 +353,7 @@ def _Gamma_c_Velasco_1D(params, transforms, profiles, data, **kwargs):
 
     def Gamma_c(data):
         """∫ dλ ∑ⱼ [v τ γ_c²]ⱼ π²/4."""
-        bounce = Bounce1D(grid, data, quad, automorphism=None, is_reshaped=True)
+        bounce = Bounce1D(grid, data, quad, is_reshaped=True)
         points = bounce.points(data["pitch_inv"], num_well=num_well)
         v_tau, cvdrift0, gbdrift = bounce.integrate(
             [_v_tau, _cvdrift0, _gbdrift],

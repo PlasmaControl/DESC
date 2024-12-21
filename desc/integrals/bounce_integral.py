@@ -69,8 +69,10 @@ def _swap_pl(f):
     return jnp.swapaxes(f, 0, -2)
 
 
-default_quad = leggauss(32)
-default_auto = (automorphism_sin, grad_automorphism_sin)
+default_quad = get_quadrature(
+    leggauss(32),
+    (automorphism_sin, grad_automorphism_sin),
+)
 
 
 class Bounce2D(Bounce):
@@ -282,7 +284,7 @@ class Bounce2D(Bounce):
         #  Can just add axis for piecewise chebyshev stuff cheb.
         alpha=0.0,
         quad=default_quad,
-        automorphism=default_auto,
+        automorphism=None,
         *,
         Bref=1.0,
         Lref=1.0,
@@ -612,8 +614,8 @@ class Bounce2D(Bounce):
         -------
         result : jnp.ndarray
             Shape (num rho, num pitch, num well).
-            Last axis enumerates the bounce integrals for a given field line,
-            flux surface, and pitch value.
+            Last axis enumerates the bounce integrals for a given
+            flux surface and pitch value.
 
         """
         if not isinstance(integrand, (list, tuple)):
@@ -1008,7 +1010,7 @@ class Bounce1D(Bounce):
         grid,
         data,
         quad=default_quad,
-        automorphism=default_auto,
+        automorphism=None,
         *,
         Bref=1.0,
         Lref=1.0,

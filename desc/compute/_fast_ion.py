@@ -156,7 +156,6 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
             Y_B,
             num_transit,
             quad=quad,
-            automorphism=None,
             is_fourier=True,
             spline=spline,
         )
@@ -315,7 +314,6 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
             Y_B,
             num_transit,
             quad=quad,
-            automorphism=None,
             is_fourier=True,
             spline=spline,
         )

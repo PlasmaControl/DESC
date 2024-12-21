@@ -1107,7 +1107,7 @@ class TestBounce:
             Bounce1D.required_names + ["min_tz |B|", "max_tz |B|", "g_zz"], grid=grid
         )
         # 5. Make the bounce integration operator.
-        bounce = Bounce1D(grid.source_grid, data, quad=leggauss(3), check=True)
+        bounce = Bounce1D(grid.source_grid, data, check=True)
         pitch_inv, _ = bounce.get_pitch_inv_quad(
             min_B=grid.compress(data["min_tz |B|"]),
             max_B=grid.compress(data["max_tz |B|"]),
@@ -1492,7 +1492,6 @@ class TestBounce2D:
             theta=grid.meshgrid_reshape(grid.nodes[:, 1], "rtz"),
             Y_B=2 * nyquist,
             num_transit=1,
-            spline=True,
         )
         points = np.array(0, ndmin=2), np.array(2 * np.pi, ndmin=2)
         np.testing.assert_allclose(
@@ -1527,9 +1526,7 @@ class TestBounce2D:
         # 4. Compute DESC coordinates of optimal interpolation nodes.
         theta = Bounce2D.compute_theta(eq, X=8, Y=64, rho=rho)
         # 5. Make the bounce integration operator.
-        bounce = Bounce2D(
-            grid, data, theta, num_transit=2, quad=leggauss(3), check=True, spline=False
-        )
+        bounce = Bounce2D(grid, data, theta, num_transit=2, check=True, spline=False)
         pitch_inv, _ = bounce.get_pitch_inv_quad(
             min_B=grid.compress(data["min_tz |B|"]),
             max_B=grid.compress(data["max_tz |B|"]),

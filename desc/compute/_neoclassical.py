@@ -203,7 +203,6 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
             Y_B,
             num_transit,
             quad=quad,
-            automorphism=None,
             is_fourier=True,
             spline=spline,
         )

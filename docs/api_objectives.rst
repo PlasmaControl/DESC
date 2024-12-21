@@ -49,6 +49,7 @@ Geometry
     desc.objectives.PrincipalCurvature
     desc.objectives.PlasmaVesselDistance
     desc.objectives.BScaleLength
+    desc.objectives.MirrorRatio
     desc.objectives.GoodCoordinates
 
 
@@ -97,6 +98,7 @@ Coil Optimization
 
 
     desc.objectives.QuadraticFlux
+    desc.objectives.SurfaceQuadraticFlux
     desc.objectives.CoilLength
     desc.objectives.CoilCurvature
     desc.objectives.CoilTorsion
@@ -106,6 +108,8 @@ Coil Optimization
     desc.objectives.CoilCurrentLength
     desc.objectives.CoilArclengthVariance
     desc.objectives.ToroidalFlux
+    desc.objectives.SurfaceCurrentRegularization
+    desc.objectives.LinkingCurrentConsistency
 
 
 Profiles

@@ -415,18 +415,17 @@ def svd_inv_null(A):
         Null space of A.
 
     """
-    u, s, vh = np.linalg.svd(A, full_matrices=True)
+    u, s, vh = jnp.linalg.svd(A, full_matrices=True)
     M, N = u.shape[0], vh.shape[1]
     K = min(M, N)
     rcond = np.finfo(A.dtype).eps * max(M, N)
-    tol = np.amax(s) * rcond
+    tol = jnp.amax(s) * rcond
     large = s > tol
-    num = np.sum(large, dtype=int)
+    num = jnp.sum(large, dtype=int)
     uk = u[:, :K]
     vhk = vh[:K, :]
-    s = np.divide(1, s, where=large, out=s)
-    s[(~large,)] = 0
-    Ainv = np.matmul(vhk.T, np.multiply(s[..., np.newaxis], uk.T))
+    s = jnp.where(large, 1 / s, 0)
+    Ainv = vhk.T @ jnp.diag(s) @ uk.T
     Z = vh[num:, :].T.conj()
     return Ainv, Z
 
@@ -742,6 +741,18 @@ def flatten_matrix(y):
 def atleast_nd(ndmin, ary):
     """Adds dimensions to front if necessary."""
     return jnp.array(ary, ndmin=ndmin) if jnp.ndim(ary) < ndmin else ary
+
+
+def atleast_3d_mid(ary):
+    """Like np.atleast_3d but if adds dim at axis 1 for 2d arrays."""
+    ary = jnp.atleast_2d(ary)
+    return ary[:, jnp.newaxis] if ary.ndim == 2 else ary
+
+
+def atleast_2d_end(ary):
+    """Like np.atleast_2d but if adds dim at axis 1 for 1d arrays."""
+    ary = jnp.atleast_1d(ary)
+    return ary[:, jnp.newaxis] if ary.ndim == 1 else ary
 
 
 PRINT_WIDTH = 60  # current longest name is BootstrapRedlConsistency with pre-text

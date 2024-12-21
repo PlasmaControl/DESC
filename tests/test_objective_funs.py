@@ -23,11 +23,13 @@ from desc.coils import (
 )
 from desc.compute import get_transforms
 from desc.equilibrium import Equilibrium
+from desc.equilibrium.coords import get_rtz_grid
 from desc.examples import get
 from desc.geometry import FourierPlanarCurve, FourierRZToroidalSurface, FourierXYZCurve
 from desc.grid import ConcentricGrid, LinearGrid, QuadratureGrid
 from desc.io import load
 from desc.magnetic_fields import (
+    CurrentPotentialField,
     FourierCurrentPotentialField,
     OmnigenousField,
     PoloidalMagneticField,
@@ -54,13 +56,16 @@ from desc.objectives import (
     ForceBalance,
     ForceBalanceAnisotropic,
     FusionPower,
+    GammaC,
     GenericObjective,
     HeatingPowerISS04,
     Isodynamicity,
     LinearObjectiveFromUser,
+    LinkingCurrentConsistency,
     MagneticWell,
     MeanCurvature,
     MercierStability,
+    MirrorRatio,
     ObjectiveFromUser,
     ObjectiveFunction,
     Omnigenity,
@@ -74,6 +79,8 @@ from desc.objectives import (
     QuasisymmetryTwoTerm,
     RotationalTransform,
     Shear,
+    SurfaceCurrentRegularization,
+    SurfaceQuadraticFlux,
     ToroidalCurrent,
     ToroidalFlux,
     UmbilicFieldAligned,
@@ -372,7 +379,7 @@ class TestObjectiveFunction:
         # check that the objective returns the lowest amplitudes
         # 120 ~ smallest amplitudes BEFORE QH modes show up so that sorting both arrays
         # should have the same values up until then
-        np.testing.assert_allclose(f[idx_f][:120], B_mn[idx_B][:120])
+        np.testing.assert_allclose(f[idx_f][:120], B_mn[idx_B][:120], rtol=1e-6)
 
     @pytest.mark.unit
     def test_qh_boozer_multiple_surfaces(self):
@@ -529,7 +536,7 @@ class TestObjectiveFunction:
     def test_boundary_error_biestsc(self):
         """Test calculation of boundary error using BIEST w/ sheet current."""
         coil = FourierXYZCoil(5e5)
-        coilset = CoilSet.linspaced_angular(coil, n=100)
+        coilset = CoilSet.linspaced_angular(coil, n=100, check_intersection=False)
         coil_grid = LinearGrid(N=20)
         eq = Equilibrium(L=3, M=3, N=3, Psi=np.pi)
         eq.surface = FourierCurrentPotentialField.from_surface(
@@ -551,7 +558,7 @@ class TestObjectiveFunction:
     def test_boundary_error_biest(self):
         """Test calculation of boundary error using BIEST."""
         coil = FourierXYZCoil(5e5)
-        coilset = CoilSet.linspaced_angular(coil, n=100)
+        coilset = CoilSet.linspaced_angular(coil, n=100, check_intersection=False)
         coil_grid = LinearGrid(N=20)
         eq = Equilibrium(L=3, M=3, N=3, Psi=np.pi)
         eq.solve()
@@ -568,7 +575,7 @@ class TestObjectiveFunction:
     def test_boundary_error_vacuum(self):
         """Test calculation of vacuum boundary error."""
         coil = FourierXYZCoil(5e5)
-        coilset = CoilSet.linspaced_angular(coil, n=100)
+        coilset = CoilSet.linspaced_angular(coil, n=100, check_intersection=False)
         coil_grid = LinearGrid(N=20)
         eq = Equilibrium(L=3, M=3, N=3, Psi=np.pi)
         eq.solve()
@@ -585,7 +592,7 @@ class TestObjectiveFunction:
     def test_boundary_error_nestor(self):
         """Test calculation of boundary error using NESTOR."""
         coil = FourierXYZCoil(5e5)
-        coilset = CoilSet.linspaced_angular(coil, n=100)
+        coilset = CoilSet.linspaced_angular(coil, n=100, check_intersection=False)
         coil_grid = LinearGrid(N=20)
         eq = Equilibrium(L=3, M=3, N=3, Psi=np.pi)
         eq.solve()
@@ -719,7 +726,7 @@ class TestObjectiveFunction:
                 warnings.simplefilter("error")
                 obj.build()
 
-        # test softmin, should give value less than true minimum
+        # test softmin, should give approximate value
         surf_grid = LinearGrid(M=5, N=6)
         plas_grid = LinearGrid(M=5, N=6)
         obj = PlasmaVesselDistance(
@@ -728,11 +735,12 @@ class TestObjectiveFunction:
             surface_grid=surf_grid,
             surface=surface,
             use_softmin=True,
+            softmin_alpha=5,
         )
         obj.build()
         d = obj.compute_unscaled(*obj.xs(eq, surface))
         assert d.size == obj.dim_f
-        assert np.all(np.abs(d) < a_s - a_p)
+        np.testing.assert_allclose(np.abs(d).min(), a_s - a_p, rtol=1.5e-1)
 
         # for large enough alpha, should be same as actual min
         obj = PlasmaVesselDistance(
@@ -836,8 +844,12 @@ class TestObjectiveFunction:
             assert len(f) == obj.dim_f
 
         coil = FourierPlanarCoil(r_n=2, basis="rpz")
-        coils = CoilSet.linspaced_linear(coil, n=3, displacement=[0, 3, 0])
-        mixed_coils = MixedCoilSet.linspaced_linear(coil, n=2, displacement=[0, 7, 0])
+        coils = CoilSet.linspaced_linear(
+            coil, n=3, displacement=[0, 3, 0], check_intersection=False
+        )
+        mixed_coils = MixedCoilSet.linspaced_linear(
+            coil, n=2, displacement=[0, 7, 0], check_intersection=False
+        )
         nested_coils = MixedCoilSet(coils, mixed_coils, check_intersection=False)
 
         grid = None  # default grid
@@ -859,8 +871,12 @@ class TestObjectiveFunction:
             assert f.shape == (obj.dim_f,)
 
         coil = FourierPlanarCoil(r_n=2, basis="rpz")
-        coils = CoilSet.linspaced_linear(coil, n=3, displacement=[0, 3, 0])
-        mixed_coils = MixedCoilSet.linspaced_linear(coil, n=2, displacement=[0, 7, 0])
+        coils = CoilSet.linspaced_linear(
+            coil, n=3, displacement=[0, 3, 0], check_intersection=False
+        )
+        mixed_coils = MixedCoilSet.linspaced_linear(
+            coil, n=2, displacement=[0, 7, 0], check_intersection=False
+        )
         nested_coils = MixedCoilSet(coils, mixed_coils, check_intersection=False)
 
         grid = LinearGrid(N=5)  # single grid
@@ -882,8 +898,12 @@ class TestObjectiveFunction:
             assert len(f) == obj.dim_f
 
         coil = FourierPlanarCoil(r_n=2, basis="rpz")
-        coils = CoilSet.linspaced_linear(coil, n=3, displacement=[0, 3, 0])
-        mixed_coils = MixedCoilSet.linspaced_linear(coil, n=2, displacement=[0, 7, 0])
+        coils = CoilSet.linspaced_linear(
+            coil, n=3, displacement=[0, 3, 0], check_intersection=False
+        )
+        mixed_coils = MixedCoilSet.linspaced_linear(
+            coil, n=2, displacement=[0, 7, 0], check_intersection=False
+        )
         nested_coils = MixedCoilSet(coils, mixed_coils, check_intersection=False)
 
         grid = [LinearGrid(N=5)] * 5  # single list of grids
@@ -905,8 +925,12 @@ class TestObjectiveFunction:
             assert len(f) == obj.dim_f
 
         coil = FourierPlanarCoil(r_n=2, basis="rpz")
-        coils = CoilSet.linspaced_linear(coil, n=3, displacement=[0, 3, 0])
-        mixed_coils = MixedCoilSet.linspaced_linear(coil, n=2, displacement=[0, 7, 0])
+        coils = CoilSet.linspaced_linear(
+            coil, n=3, displacement=[0, 3, 0], check_intersection=False
+        )
+        mixed_coils = MixedCoilSet.linspaced_linear(
+            coil, n=2, displacement=[0, 7, 0], check_intersection=False
+        )
         nested_coils = MixedCoilSet(coils, mixed_coils, check_intersection=False)
 
         grid = [[LinearGrid(N=5)] * 3, [LinearGrid(N=5)] * 2]  # nested list of grids
@@ -940,7 +964,9 @@ class TestObjectiveFunction:
         n = 3
         disp = 5
         coil = FourierPlanarCoil(r_n=1, normal=[0, 0, 1])
-        coils_linear = CoilSet.linspaced_linear(coil, n=n, displacement=[0, 0, disp])
+        coils_linear = CoilSet.linspaced_linear(
+            coil, n=n, displacement=[0, 0, disp], check_intersection=False
+        )
         test(coils_linear, disp / n)
 
         # planar toroidal coils, without symmetry
@@ -949,7 +975,7 @@ class TestObjectiveFunction:
         center = 3
         r = 1
         coil = FourierPlanarCoil(center=[center, 0, 0], normal=[0, 1, 0], r_n=r)
-        coils_angular = CoilSet.linspaced_angular(coil, n=4)
+        coils_angular = CoilSet.linspaced_angular(coil, n=4, check_intersection=False)
         test(
             coils_angular, np.sqrt(2) * (center - r), grid=LinearGrid(zeta=4), tol=1e-5
         )
@@ -960,7 +986,9 @@ class TestObjectiveFunction:
         center = 3
         r = 1
         coil = FourierPlanarCoil(center=[center, 0, 0], normal=[0, 1, 0], r_n=r)
-        coils = CoilSet.linspaced_angular(coil, angle=np.pi / 2, n=5, endpoint=True)
+        coils = CoilSet.linspaced_angular(
+            coil, angle=np.pi / 2, n=5, endpoint=True, check_intersection=False
+        )
         coils_sym = CoilSet(coils[1::2], NFP=2, sym=True)
         test(coils_sym, 2 * (center - r) * np.sin(np.pi / 8), grid=LinearGrid(zeta=4))
 
@@ -968,10 +996,14 @@ class TestObjectiveFunction:
         # TF coils instersect with the middle VF coil
         # extra coil is 5 m from middle VF coil
         tf_coil = FourierPlanarCoil(center=[2, 0, 0], normal=[0, 1, 0], r_n=1)
-        tf_coilset = CoilSet.linspaced_angular(tf_coil, n=4)
+        tf_coilset = CoilSet.linspaced_angular(tf_coil, n=4, check_intersection=False)
         vf_coil = FourierRZCoil(R_n=3, Z_n=-1)
         vf_coilset = CoilSet.linspaced_linear(
-            vf_coil, displacement=[0, 0, 2], n=3, endpoint=True
+            vf_coil,
+            displacement=[0, 0, 2],
+            n=3,
+            endpoint=True,
+            check_intersection=False,
         )
         xyz_coil = FourierXYZCoil(X_n=[0, 6, 1], Y_n=[0, 0, 0], Z_n=[-1, 0, 0])
         coils_mixed = MixedCoilSet(
@@ -984,7 +1016,7 @@ class TestObjectiveFunction:
                 grid=LinearGrid(zeta=4),
                 expect_intersect=True,
             )
-        # TODO: move this coil set to conftest?
+        # TODO (#1400, 914): move this coil set to conftest?
 
     @pytest.mark.unit
     def test_plasma_coil_min_distance(self):
@@ -1032,7 +1064,7 @@ class TestObjectiveFunction:
         )
         eq = Equilibrium(surface=surf, NFP=1, M=2, N=0, sym=True)
         coil = FourierPlanarCoil(center=[R0, 0, 0], normal=[0, 1, 0], r_n=[a + offset])
-        coils = CoilSet.linspaced_angular(coil, n=8)
+        coils = CoilSet.linspaced_angular(coil, n=8, check_intersection=False)
         test(
             eq,
             coils,
@@ -1062,7 +1094,9 @@ class TestObjectiveFunction:
         )
         eq = Equilibrium(surface=surf, NFP=1, M=2, N=0, sym=True)
         coil = FourierPlanarCoil(center=[R0, 0, 0], normal=[0, 1, 0], r_n=[a + offset])
-        coils = CoilSet.linspaced_angular(coil, angle=np.pi / 2, n=5, endpoint=True)
+        coils = CoilSet.linspaced_angular(
+            coil, angle=np.pi / 2, n=5, endpoint=True, check_intersection=False
+        )
         coils = CoilSet(coils[1::2], NFP=2, sym=True)
         test(
             eq,
@@ -1093,7 +1127,9 @@ class TestObjectiveFunction:
         )
         eq = Equilibrium(surface=surf, NFP=1, M=2, N=0, sym=True)
         coil = FourierPlanarCoil(center=[R0, 0, 0], normal=[0, 1, 0], r_n=[a + offset])
-        coils = CoilSet.linspaced_angular(coil, angle=np.pi / 2, n=5, endpoint=True)
+        coils = CoilSet.linspaced_angular(
+            coil, angle=np.pi / 2, n=5, endpoint=True, check_intersection=False
+        )
         coils = CoilSet(coils[1::2], NFP=2, sym=True)
         test(
             eq,
@@ -1104,8 +1140,6 @@ class TestObjectiveFunction:
             eq_fixed=False,
             coils_fixed=True,
         )
-
-        # TODO: add more complex test case with a stellarator and/or MixedCoilSet
 
     @pytest.mark.unit
     def test_quadratic_flux(self):
@@ -1140,13 +1174,13 @@ class TestObjectiveFunction:
 
         obj = QuadraticFlux(eq, t_field, eval_grid=eval_grid, source_grid=source_grid)
         Bnorm = t_field.compute_Bnormal(
-            eq.surface, eval_grid=eval_grid, source_grid=source_grid
+            eq, eval_grid=eval_grid, source_grid=source_grid
         )[0]
         obj.build(eq)
         dA = eq.compute("|e_theta x e_zeta|", grid=eval_grid)["|e_theta x e_zeta|"]
-        f = obj.compute(field_params=t_field.params_dict)
+        f = obj.compute_unscaled(t_field.params_dict)
 
-        np.testing.assert_allclose(f, Bnorm * dA, atol=2e-4, rtol=1e-2)
+        np.testing.assert_allclose(f, Bnorm * np.sqrt(dA), atol=2e-4, rtol=1e-2)
 
         # equilibrium that has B_plasma == 0
         eq = load("./tests/inputs/vacuum_nonaxisym.h5")
@@ -1164,25 +1198,85 @@ class TestObjectiveFunction:
         f = obj.compute(field_params=t_field.params_dict)
         dA = eq.compute("|e_theta x e_zeta|", grid=eval_grid)["|e_theta x e_zeta|"]
         # check that they're the same since we set B_plasma = 0
-        np.testing.assert_allclose(f, Bnorm * dA, atol=1e-14)
+        np.testing.assert_allclose(f, Bnorm * np.sqrt(dA), atol=1e-14)
+
+    @pytest.mark.unit
+    def test_quadratic_flux_minimizing_surface(self):
+        """Test calculation of quadratic flux on a surface."""
+        t_field = ToroidalMagneticField(1, 1)
+
+        # test that torus (axisymmetric) Bnorm is exactly 0
+        eq = load("./tests/inputs/vacuum_circular_tokamak.h5")
+        surf = eq.surface
+        obj = SurfaceQuadraticFlux(surf, t_field)
+        obj.build(eq, verbose=2)
+        f = obj.compute(params_1=surf.params_dict, params_2=t_field.params_dict)
+        np.testing.assert_allclose(f, 0, rtol=1e-14, atol=1e-14)
+
+        # test non-axisymmetric surface
+        eq = desc.examples.get("precise_QA", "all")[0]
+        surf = eq.surface
+        surf.change_resolution(4, 4)
+        eval_grid = LinearGrid(
+            rho=np.array([1.0]),
+            M=surf.M * 2,
+            N=surf.N * 2,
+            NFP=eq.NFP,
+            sym=False,
+        )
+
+        obj = SurfaceQuadraticFlux(surf, t_field, eval_grid=eval_grid, field_fixed=True)
+        Bnorm = t_field.compute_Bnormal(
+            eq.surface, eval_grid=eval_grid, source_grid=eval_grid
+        )[0]
+        obj.build(surf)
+        dA = surf.compute("|e_theta x e_zeta|", grid=eval_grid)["|e_theta x e_zeta|"]
+        f = obj.compute(params_1=surf.params_dict)
+
+        np.testing.assert_allclose(f, Bnorm * np.sqrt(dA), atol=2e-4, rtol=1e-2)
 
     @pytest.mark.unit
     def test_toroidal_flux(self):
         """Test calculation of toroidal flux from coils."""
         grid1 = LinearGrid(L=0, M=40, zeta=np.array(0.0))
 
-        def test(eq, field, correct_value, rtol=1e-14, grid=None):
+        def test(
+            eq,
+            field,
+            correct_value,
+            rtol=1e-14,
+            grid=None,
+            eq_fixed=True,
+            field_fixed=True,
+        ):
             obj = ToroidalFlux(
                 eq=eq,
                 field=field,
                 eval_grid=grid,
+                eq_fixed=eq_fixed,
+                field_fixed=field_fixed,
             )
             obj.build(verbose=2)
-            torflux = obj.compute_unscaled(*obj.xs(field))
+            if eq_fixed:
+                torflux = obj.compute_unscaled(*obj.xs(field))
+            elif field_fixed:
+                torflux = obj.compute_unscaled(*obj.xs(eq))
+            else:
+                torflux = obj.compute_unscaled(*obj.xs(eq, field))
             np.testing.assert_allclose(torflux, correct_value, rtol=rtol)
 
         eq = Equilibrium(iota=PowerSeriesProfile(0))
-        test(eq, VerticalMagneticField(B0=1), 0, grid=grid1)
+        test(eq, VerticalMagneticField(B0=1), 0, grid=grid1, field_fixed=False)
+        test(eq, VerticalMagneticField(B0=1), 0, grid=grid1, eq_fixed=False)
+        test(
+            eq,
+            VerticalMagneticField(B0=1),
+            0,
+            grid=grid1,
+            field_fixed=False,
+            eq_fixed=False,
+        )
+
         field = ToroidalMagneticField(B0=1, R0=1)
         # calc field Psi
 
@@ -1196,10 +1290,21 @@ class TestObjectiveFunction:
         psi_from_field = np.sum(grid1.spacing[:, 1] * A_dot_e_theta)
         eq.change_resolution(L_grid=20, M_grid=20)
 
-        test(eq, field, psi_from_field)
-        test(eq, field, psi_from_field, rtol=1e-3)
+        test(eq, field, psi_from_field, field_fixed=False)
+        test(eq, field, psi_from_field, rtol=1e-3, field_fixed=False)
+
+        with pytest.raises(ValueError, match="Cannot have"):
+            ToroidalFlux(eq, field, eq_fixed=True, field_fixed=True)
+
         # test on field with no vector potential
-        test(eq, PoloidalMagneticField(1, 1, 1), 0.0)
+        pfield = PoloidalMagneticField(1, 1, 1)
+        test(eq, pfield, 0.0, field_fixed=False)
+        test(eq, pfield, 0.0, eq_fixed=False)
+        test(eq, pfield, 0.0, eq_fixed=False, field_fixed=False)
+
+        with pytest.raises(ValueError, match="vector potential"):
+            obj = ToroidalFlux(eq.surface, pfield)
+            obj.build()
 
     @pytest.mark.unit
     def test_coil_linking_number(self):
@@ -1207,10 +1312,10 @@ class TestObjectiveFunction:
         coil = FourierPlanarCoil(center=[10, 1, 0])
         # regular modular coilset from symmetry, so that there are 10 coils, half going
         # one way and half going the other way
-        coilset = CoilSet.from_symmetry(coil, NFP=5, sym=True)
+        coilset = CoilSet.from_symmetry(coil, NFP=5, sym=True, check_intersection=False)
         coil2 = FourierRZCoil()
         # add a coil along the axis that links all the other coils
-        coilset2 = MixedCoilSet(coilset, coil2)
+        coilset2 = MixedCoilSet(coilset, coil2, check_intersection=False)
 
         obj = CoilSetLinkingNumber(coilset2)
         obj.build()
@@ -1302,7 +1407,6 @@ class TestObjectiveFunction:
         assert obj.dim_f == d.size
         assert abs(d.max() - (-a_s)) < 1e-14
         assert abs(d.min() - (-a_s)) < grid.spacing[0, 1] * a_s
-
         # test errors
         # differing grid zetas, same num_zeta
         with pytest.raises(ValueError):
@@ -1324,6 +1428,261 @@ class TestObjectiveFunction:
                 use_signed_distance=True,
             )
             obj.build()
+
+    @pytest.mark.unit
+    def test_mirror_ratio_equilibrium(self):
+        """Test mirror ratio objective for Equilibrium."""
+        # axisymmetry, no iota, so B ~ B0/R
+        eq = Equilibrium(L=8, M=8)
+        eq.solve()
+        # R0 = 10, a=1, so Bmax = B0/9, Bmin = B0/11
+        mirror_ratio = (1 / 9 - 1 / 11) / (1 / 9 + 1 / 11)
+        obj = MirrorRatio(eq)
+        obj.build()
+        f = obj.compute(eq.params_dict)
+        # not perfect agreement bc eq is low res, so B isnt exactly B0/R
+        np.testing.assert_allclose(f, mirror_ratio, rtol=3e-3)
+
+    @pytest.mark.unit
+    def test_mirror_ratio_omni_field(self):
+        """Test mirror ratio objective for OmnigenousField."""
+        field = OmnigenousField(
+            L_B=1,
+            M_B=3,
+            L_x=1,
+            M_x=1,
+            N_x=1,
+            NFP=1,
+            helicity=(0, 1),
+            B_lm=np.array(
+                [
+                    # f(r) = B0 + B1*(2r-1)
+                    # f(0) = [0.8, 1.0, 1.2]
+                    # f(1) = [1.0, 1.0, 1.0]
+                    [0.9, 1.0, 1.1],  # B0
+                    [0.1, 0.0, -0.1],  # B1
+                ]
+            ).flatten(),
+        )
+
+        mirror_ratio_axis = (1.2 - 0.8) / (1.2 + 0.8)
+        mirror_ratio_edge = 0.0
+        grid = LinearGrid(L=5, theta=6, N=2)
+        rho = grid.nodes[grid.unique_rho_idx, 0]
+        obj = MirrorRatio(field, grid=grid)
+        obj.build()
+        f = obj.compute(field.params_dict)
+        np.testing.assert_allclose(
+            f, mirror_ratio_axis * (1 - rho) + mirror_ratio_edge * rho
+        )
+
+    @pytest.mark.unit
+    def test_linking_current(self):
+        """Test calculation of signed linking current from coils to plasma."""
+        eq = Equilibrium()
+        G = eq.compute("G", grid=LinearGrid(rho=1.0))["G"][0] * 2 * jnp.pi / mu_0
+        c = G / 8
+        coil1 = FourierPlanarCoil(current=1.5 * c, center=[10, 1, 0])
+        coil2 = FourierPlanarCoil(current=0.5 * c, center=[10, 2, 0])
+        # explicit symmetry coils
+        coilset1 = CoilSet.from_symmetry((coil1, coil2), NFP=2, sym=True)
+        expected_currents = [
+            c * 1.5,  # these are the 2 actual coils, with different currents
+            c * 0.5,
+            -c * 0.5,  # these are the stellarator symmetric ones in first field period
+            -c * 1.5,
+            c * 1.5,  # these next 4 are the ones from the 2nd field period
+            c * 0.5,
+            -c * 0.5,
+            -c * 1.5,
+        ]
+        np.testing.assert_allclose(coilset1._all_currents(), expected_currents)
+        obj = LinkingCurrentConsistency(eq, coilset1)
+        obj.build()
+        f = obj.compute(coilset1.params_dict, eq.params_dict)
+        np.testing.assert_allclose(f, 0)
+
+        # same with virtual coils
+        coilset2 = CoilSet(coil1, coil2, NFP=2, sym=True)
+        np.testing.assert_allclose(coilset2._all_currents(), expected_currents)
+        obj = LinkingCurrentConsistency(eq, coilset2)
+        obj.build()
+        f = obj.compute(coilset2.params_dict, eq.params_dict)
+        np.testing.assert_allclose(f, 0)
+
+        # both coilsets together. These have overlapping coils but it doesn't
+        # affect the linking number
+        coilset3 = MixedCoilSet(coilset1, coilset2, check_intersection=False)
+        np.testing.assert_allclose(
+            coilset3._all_currents(), expected_currents + expected_currents
+        )
+        obj = LinkingCurrentConsistency(eq, coilset3)
+        obj.build()
+        f = obj.compute(coilset3.params_dict, eq.params_dict)
+        np.testing.assert_allclose(f, -G)  # coils provide 2G so error is -G
+
+        # CoilSet + 1 extra coil
+        coilset4 = MixedCoilSet(coilset1, coil2, check_intersection=False)
+        np.testing.assert_allclose(
+            coilset4._all_currents(), expected_currents + [0.5 * G / 8]
+        )
+        obj = LinkingCurrentConsistency(eq, coilset4)
+        obj.build()
+        f = obj.compute(coilset4.params_dict, eq.params_dict)
+        np.testing.assert_allclose(f, -0.5 * G / 8)
+
+    @pytest.mark.unit
+    def test_omnigenity_multiple_surfaces(self):
+        """Test omnigenity transform vectorized over multiple surfaces."""
+        surf = FourierRZToroidalSurface.from_qp_model(
+            major_radius=1,
+            aspect_ratio=20,
+            elongation=6,
+            mirror_ratio=0.2,
+            torsion=0.1,
+            NFP=1,
+            sym=True,
+        )
+        eq = Equilibrium(
+            Psi=6e-3,
+            M=4,
+            N=4,
+            surface=surf,
+            iota=PowerSeriesProfile(1, 0, -1),  # ensure diff surfs have diff iota
+        )
+        field = OmnigenousField(
+            L_B=1,
+            M_B=3,
+            L_x=1,
+            M_x=1,
+            N_x=1,
+            NFP=eq.NFP,
+            helicity=(1, 1),
+            B_lm=np.array(
+                [
+                    [0.8, 1.0, 1.2],
+                    [-0.4, 0.0, 0.6],  # radially varying B
+                ]
+            ).flatten(),
+        )
+        grid1 = LinearGrid(rho=0.5, M=eq.M_grid, N=eq.N_grid)
+        grid2 = LinearGrid(rho=1.0, M=eq.M_grid, N=eq.N_grid)
+        grid3 = LinearGrid(rho=np.array([0.5, 1.0]), M=eq.M_grid, N=eq.N_grid)
+        obj1 = Omnigenity(eq=eq, field=field, eq_grid=grid1)
+        obj2 = Omnigenity(eq=eq, field=field, eq_grid=grid2)
+        obj3 = Omnigenity(eq=eq, field=field, eq_grid=grid3)
+        obj1.build()
+        obj2.build()
+        obj3.build()
+        f1 = obj1.compute(*obj1.xs(eq, field))
+        f2 = obj2.compute(*obj2.xs(eq, field))
+        f3 = obj3.compute(*obj3.xs(eq, field))
+        # the order will be different but the values should be the same so we sort
+        # before comparing
+        np.testing.assert_allclose(
+            np.sort(np.concatenate([f1, f2])), np.sort(f3), atol=1e-14
+        )
+
+    @pytest.mark.unit
+    def test_surface_current_regularization(self):
+        """Test SurfaceCurrentRegularization Calculation."""
+
+        def test(field, grid):
+            obj = SurfaceCurrentRegularization(field, source_grid=grid)
+            obj.build()
+            return obj.compute(field.params_dict)
+
+        field1 = FourierCurrentPotentialField(
+            I=0, G=10, NFP=10, Phi_mn=[[0]], modes_Phi=[[2, 2]]
+        )
+        grid = LinearGrid(M=5, N=5, NFP=field1.NFP)
+        result1 = test(field1, grid)
+        result2 = test(field1, grid=None)
+
+        # test with CurrentPotentialField
+        surface = FourierRZToroidalSurface(
+            R_lmn=jnp.array([10, 1]),
+            Z_lmn=jnp.array([0, -1]),
+            modes_R=jnp.array([[0, 0], [1, 0]]),
+            modes_Z=jnp.array([[0, 0], [-1, 0]]),
+            NFP=10,
+        )
+        surface.change_resolution(M=field1._M_Phi, N=field1._N_Phi)
+        # make a current potential corresponding a purely poloidal current
+        G = 10  # net poloidal current
+        potential = lambda theta, zeta, G: G * zeta / 2 / jnp.pi
+        potential_dtheta = lambda theta, zeta, G: jnp.zeros_like(theta)
+        potential_dzeta = lambda theta, zeta, G: G * jnp.ones_like(theta) / 2 / jnp.pi
+
+        params = {"G": -G}
+
+        field2 = CurrentPotentialField(
+            potential,
+            R_lmn=surface.R_lmn,
+            Z_lmn=surface.Z_lmn,
+            modes_R=surface._R_basis.modes[:, 1:],
+            modes_Z=surface._Z_basis.modes[:, 1:],
+            params=params,
+            potential_dtheta=potential_dtheta,
+            potential_dzeta=potential_dzeta,
+            NFP=surface.NFP,
+        )
+        result3 = test(field2, grid)
+        result4 = test(field2, grid=None)
+        field1.G = 2 * field1.G
+        result5 = test(field1, grid)
+
+        np.testing.assert_allclose(result1, result3)
+        np.testing.assert_allclose(result1 * 2, result5)
+        np.testing.assert_allclose(result2, result4)
+
+    @pytest.mark.unit
+    def test_objective_compute(self):
+        """To avoid issues such as #1424."""
+        eq = get("W7-X")
+        rho = np.linspace(0.1, 1, 3)
+        alpha = np.array([0])
+        Y_B = 50
+        num_transit = 4
+        num_pitch = 16
+        num_quad = 16
+        zeta = np.linspace(0, 2 * np.pi * num_transit, Y_B * num_transit)
+        grid = get_rtz_grid(eq, rho, alpha, zeta, coordinates="raz")
+        data = eq.compute(
+            ["effective ripple", "Gamma_c"],
+            grid=grid,
+            num_quad=num_quad,
+            num_pitch=num_pitch,
+        )
+        obj = EffectiveRipple(
+            eq,
+            rho=rho,
+            alpha=alpha,
+            Y_B=Y_B,
+            num_transit=num_transit,
+            num_quad=num_quad,
+            num_pitch=num_pitch,
+        )
+        obj.build()
+        # TODO(#1094)
+        np.testing.assert_allclose(
+            obj.compute(eq.params_dict),
+            grid.compress(data["effective ripple"]),
+            rtol=0.004,
+        )
+        obj = GammaC(
+            eq,
+            rho=rho,
+            alpha=alpha,
+            Y_B=Y_B,
+            num_transit=num_transit,
+            num_quad=num_quad,
+            num_pitch=num_pitch,
+        )
+        obj.build()
+        np.testing.assert_allclose(
+            obj.compute(eq.params_dict), grid.compress(data["Gamma_c"])
+        )
 
 
 @pytest.mark.regression
@@ -1791,7 +2150,7 @@ def test_plasma_vessel_distance_print(capsys):
 def test_boundary_error_print(capsys):
     """Test that the boundary error objectives print correctly."""
     coil = FourierXYZCoil(5e5)
-    coilset = CoilSet.linspaced_angular(coil, n=100)
+    coilset = CoilSet.linspaced_angular(coil, n=100, check_intersection=False)
     coil_grid = LinearGrid(N=20)
     eq = Equilibrium(L=3, M=3, N=3, Psi=np.pi)
 
@@ -2231,20 +2590,18 @@ def test_objective_target_bounds():
 def test_softmax_and_softmin():
     """Test softmax and softmin function."""
     arr = np.arange(-17, 17, 5)
-    # expect this to not be equal to the max but rather be more
-    # since softmax is a conservative estimate of the max
+    # expect this to not be equal to the max but approximately so
     sftmax = softmax(arr, alpha=1)
-    assert sftmax >= np.max(arr)
+    np.testing.assert_allclose(sftmax, np.max(arr), rtol=1e-2)
 
     # expect this to be equal to the max
     # as alpha -> infinity, softmax -> max
     sftmax = softmax(arr, alpha=100)
     np.testing.assert_almost_equal(sftmax, np.max(arr))
 
-    # expect this to not be equal to the min but rather be less
-    # since softmin is a conservative estimate of the min
+    # expect this to not be equal to the min but approximately so
     sftmin = softmin(arr, alpha=1)
-    assert sftmin <= np.min(arr)
+    np.testing.assert_allclose(sftmin, np.min(arr), rtol=1e-2)
 
     # expect this to be equal to the min
     # as alpha -> infinity, softmin -> min
@@ -2277,8 +2634,8 @@ def test_loss_function_asserts():
 def _reduced_resolution_objective(eq, objective):
     """Speed up testing suite by defining rules to reduce objective resolution."""
     kwargs = {}
-    if objective in {EffectiveRipple}:
-        kwargs["knots_per_transit"] = 50
+    if objective in {EffectiveRipple, GammaC}:
+        kwargs["Y_B"] = 50
         kwargs["num_transit"] = 2
         kwargs["num_pitch"] = 25
     return objective(eq=eq, **kwargs)
@@ -2310,11 +2667,14 @@ class TestComputeScalarResolution:
         FusionPower,
         GenericObjective,
         HeatingPowerISS04,
+        LinkingCurrentConsistency,
         Omnigenity,
         PlasmaCoilSetMinDistance,
         PlasmaVesselDistance,
         QuadraticFlux,
+        SurfaceQuadraticFlux,
         ToroidalFlux,
+        SurfaceCurrentRegularization,
         VacuumBoundaryError,
         # need to avoid blowup near the axis
         MercierStability,
@@ -2474,7 +2834,7 @@ class TestComputeScalarResolution:
 
     @pytest.mark.regression
     def test_compute_scalar_resolution_quadratic_flux(self):
-        """VacuumBoundaryError."""
+        """QuadraticFlux."""
         with pytest.warns(UserWarning):
             ext_field = SplineMagneticField.from_mgrid(r"tests/inputs/mgrid_solovev.nc")
 
@@ -2500,6 +2860,32 @@ class TestComputeScalarResolution:
         np.testing.assert_allclose(f, f[-1], rtol=5e-2)
 
     @pytest.mark.regression
+    def test_compute_scalar_resolution_quadratic_flux_minimizing(self):
+        """SurfaceQuadraticFlux."""
+        ext_field = ToroidalMagneticField(1.0, 1.0)
+
+        surf = FourierRZToroidalSurface(
+            R_lmn=[4.0, 1.0],
+            modes_R=[[0, 0], [1, 0]],
+            Z_lmn=[-1.0],
+            modes_Z=[[-1, 0]],
+            NFP=1,
+        )
+
+        f = np.zeros_like(self.res_array, dtype=float)
+        for i, res in enumerate(self.res_array):
+            surf.change_resolution(
+                M=int(surf.M * res),
+                N=int(surf.N * res),
+            )
+            obj = ObjectiveFunction(
+                SurfaceQuadraticFlux(surf, ext_field), use_jit=False
+            )
+            obj.build(verbose=0)
+            f[i] = obj.compute_scalar(obj.x())
+        np.testing.assert_allclose(f, f[-1], rtol=5e-2)
+
+    @pytest.mark.regression
     def test_compute_scalar_resolution_toroidal_flux_A(self):
         """ToroidalFlux."""
         ext_field = ToroidalMagneticField(1, 1)
@@ -2512,7 +2898,9 @@ class TestComputeScalarResolution:
             eq.change_resolution(
                 L_grid=int(eq.L * res), M_grid=int(eq.M * res), N_grid=int(eq.N * res)
             )
-            obj = ObjectiveFunction(ToroidalFlux(eq, ext_field), use_jit=False)
+            obj = ObjectiveFunction(
+                ToroidalFlux(eq, ext_field, eq_fixed=True), use_jit=False
+            )
             obj.build(verbose=0)
             f[i] = obj.compute_scalar(obj.x())
         np.testing.assert_allclose(f, f[-1], rtol=5e-2)
@@ -2530,7 +2918,27 @@ class TestComputeScalarResolution:
             eq.change_resolution(
                 L_grid=int(eq.L * res), M_grid=int(eq.M * res), N_grid=int(eq.N * res)
             )
-            obj = ObjectiveFunction(ToroidalFlux(eq, ext_field), use_jit=False)
+            obj = ObjectiveFunction(
+                ToroidalFlux(eq, ext_field, eq_fixed=True), use_jit=False
+            )
+            obj.build(verbose=0)
+            f[i] = obj.compute_scalar(obj.x())
+        np.testing.assert_allclose(f, f[-1], rtol=5e-2)
+
+    @pytest.mark.regression
+    def test_compute_scalar_resolution_surface_current_reg(self):
+        """SurfaceCurrentRegularization."""
+        field = FourierCurrentPotentialField(
+            I=1, G=1, Phi_mn=np.array([1, 1]), modes_Phi=np.array([[1, 1], [4, 4]])
+        )
+        M0 = 5
+        N0 = 5
+        f = np.zeros_like(self.res_array, dtype=float)
+        for i, res in enumerate(self.res_array):
+            grid = LinearGrid(M=round(M0 * res), N=round(N0 * res))
+            obj = ObjectiveFunction(
+                SurfaceCurrentRegularization(field, source_grid=grid), use_jit=False
+            )
             obj.build(verbose=0)
             f[i] = obj.compute_scalar(obj.x())
         np.testing.assert_allclose(f, f[-1], rtol=5e-2)
@@ -2665,7 +3073,7 @@ class TestComputeScalarResolution:
             )
             obj.build(verbose=0)
             f[i] = obj.compute_scalar(obj.x())
-        np.testing.assert_allclose(f, f[-1], rtol=5e-2)
+        np.testing.assert_allclose(f, f[-1], rtol=6e-2)
 
     @pytest.mark.regression
     @pytest.mark.parametrize(
@@ -2683,11 +3091,31 @@ class TestComputeScalarResolution:
     def test_compute_scalar_resolution_coils(self, objective):
         """Coil objectives."""
         coil = FourierXYZCoil()
-        coilset = CoilSet.linspaced_angular(coil)
+        coilset = CoilSet.linspaced_angular(coil, check_intersection=False)
         f = np.zeros_like(self.res_array, dtype=float)
         for i, res in enumerate(self.res_array):
             obj = ObjectiveFunction(
                 objective(coilset, grid=LinearGrid(N=int(5 + 3 * res))), use_jit=False
+            )
+            obj.build(verbose=0)
+            f[i] = obj.compute_scalar(obj.x())
+        np.testing.assert_allclose(f, f[-1], rtol=1e-2, atol=1e-12)
+
+    @pytest.mark.unit
+    def test_compute_scalar_resolution_linking_current(self):
+        """LinkingCurrentConsistency."""
+        coil = FourierPlanarCoil(center=[10, 1, 0])
+        eq = Equilibrium()
+        coilset = CoilSet.from_symmetry(coil, NFP=4, sym=True)
+        f = np.zeros_like(self.res_array, dtype=float)
+        for i, res in enumerate(self.res_array):
+            obj = ObjectiveFunction(
+                LinkingCurrentConsistency(
+                    eq,
+                    coilset,
+                    grid=LinearGrid(M=int(eq.M_grid * res), N=int(eq.N_grid * res)),
+                ),
+                use_jit=False,
             )
             obj.build(verbose=0)
             f[i] = obj.compute_scalar(obj.x())
@@ -2721,11 +3149,15 @@ class TestObjectiveNaNGrad:
         EffectiveRipple,
         ForceBalanceAnisotropic,
         FusionPower,
+        GammaC,
         HeatingPowerISS04,
+        LinkingCurrentConsistency,
         Omnigenity,
         PlasmaCoilSetMinDistance,
         PlasmaVesselDistance,
         QuadraticFlux,
+        SurfaceCurrentRegularization,
+        SurfaceQuadraticFlux,
         ToroidalFlux,
         VacuumBoundaryError,
         # we don't test these since they depend too much on what exactly the user wants
@@ -2878,6 +3310,24 @@ class TestObjectiveNaNGrad:
         assert not np.any(np.isnan(g)), "quadratic flux"
 
     @pytest.mark.unit
+    def test_objective_no_nangrad_quadratic_flux_minimizing(self):
+        """SurfaceQuadraticFlux."""
+        ext_field = ToroidalMagneticField(1.0, 1.0)
+
+        surf = FourierRZToroidalSurface(
+            R_lmn=[4.0, 1.0],
+            modes_R=[[0, 0], [1, 0]],
+            Z_lmn=[-1.0],
+            modes_Z=[[-1, 0]],
+            NFP=1,
+        )
+
+        obj = ObjectiveFunction(SurfaceQuadraticFlux(surf, ext_field), use_jit=False)
+        obj.build()
+        g = obj.grad(obj.x(surf, ext_field))
+        assert not np.any(np.isnan(g)), "quadratic flux"
+
+    @pytest.mark.unit
     def test_objective_no_nangrad_toroidal_flux(self):
         """ToroidalFlux."""
         ext_field = ToroidalMagneticField(1, 1)
@@ -2888,13 +3338,23 @@ class TestObjectiveNaNGrad:
 
         obj = ObjectiveFunction(ToroidalFlux(eq, ext_field), use_jit=False)
         obj.build()
-        g = obj.grad(obj.x(ext_field))
+        g = obj.grad(obj.x(eq, ext_field))
         assert not np.any(np.isnan(g)), "toroidal flux A"
 
         obj = ObjectiveFunction(ToroidalFlux(eq, ext_field), use_jit=False)
         obj.build()
-        g = obj.grad(obj.x(ext_field))
+        g = obj.grad(obj.x(eq, ext_field))
         assert not np.any(np.isnan(g)), "toroidal flux B"
+
+    @pytest.mark.unit
+    def test_objective_no_nangrad_surface_current_reg(self):
+        """SurfaceCurrentRegularization."""
+        field = FourierCurrentPotentialField()
+
+        obj = ObjectiveFunction(SurfaceCurrentRegularization(field), use_jit=False)
+        obj.build()
+        g = obj.grad(obj.x(field))
+        assert not np.any(np.isnan(g)), "surface current regularization"
 
     @pytest.mark.unit
     @pytest.mark.parametrize(
@@ -2924,7 +3384,7 @@ class TestObjectiveNaNGrad:
     def test_objective_no_nangrad_coils(self, objective):
         """Coil objectives."""
         coil = FourierXYZCoil()
-        coilset = CoilSet.linspaced_angular(coil, n=3)
+        coilset = CoilSet.linspaced_angular(coil, n=3, check_intersection=False)
         obj = ObjectiveFunction(objective(coilset), use_jit=False)
         obj.build(verbose=0)
         g = obj.grad(obj.x())
@@ -2971,10 +3431,32 @@ class TestObjectiveNaNGrad:
         assert not np.any(np.isnan(g))
 
     @pytest.mark.unit
+    def test_objective_no_nangrad_Gamma_c(self):
+        """Gamma_c."""
+        eq = get("ESTELL")
+        with pytest.warns(UserWarning, match="Reducing radial"):
+            eq.change_resolution(2, 2, 2, 4, 4, 4)
+        obj = ObjectiveFunction(_reduced_resolution_objective(eq, GammaC))
+        obj.build(verbose=0)
+        g = obj.grad(obj.x())
+        assert not np.any(np.isnan(g))
+
+    @pytest.mark.unit
     def test_objective_no_nangrad_ballooning(self):
         """BallooningStability."""
         eq = get("HELIOTRON")
         obj = ObjectiveFunction(BallooningStability(eq=eq))
+        obj.build()
+        g = obj.grad(obj.x())
+        assert not np.any(np.isnan(g))
+
+    @pytest.mark.unit
+    def test_objective_no_nangrad_linking_current(self):
+        """LinkingCurrentConsistency."""
+        coil = FourierPlanarCoil(center=[10, 1, 0])
+        coilset = CoilSet.from_symmetry(coil, NFP=4, sym=True)
+        eq = Equilibrium()
+        obj = ObjectiveFunction(LinkingCurrentConsistency(eq, coilset))
         obj.build()
         g = obj.grad(obj.x())
         assert not np.any(np.isnan(g))

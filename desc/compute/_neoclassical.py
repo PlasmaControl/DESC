@@ -11,14 +11,19 @@ expensive computations.
 
 from functools import partial
 
+from orthax.legendre import leggauss
 from quadax import simpson
 
 from desc.backend import imap, jit, jnp
 
 from ..integrals.bounce_integral import Bounce1D
-from ..integrals.bounce_utils import get_pitch_inv_quad
-from ..integrals.quad_utils import chebgauss2
-from ..utils import safediv
+from ..integrals.quad_utils import (
+    automorphism_sin,
+    chebgauss2,
+    get_quadrature,
+    grad_automorphism_sin,
+)
+from ..utils import cross, dot, safediv
 from .data_index import register_compute_fun
 
 _bounce_doc = {
@@ -52,42 +57,41 @@ def _alpha_mean(f):
     return f.mean(axis=0)
 
 
-def _compute(fun, interp_data, data, grid, num_pitch, reduce=True):
+def _compute(fun, fun_data, data, grid, num_pitch, simp=False, reduce=True):
     """Compute ``fun`` for each α and ρ value iteratively to reduce memory usage.
 
     Parameters
     ----------
     fun : callable
         Function to compute.
-    interp_data : dict[str, jnp.ndarray]
-        Data to provide to ``fun``.
-        Names in ``Bounce1D.required_names`` will be overridden.
-        Reshaped automatically.
+    fun_data : dict[str, jnp.ndarray]
+        Data to provide to ``fun``. This dict will be modified.
     data : dict[str, jnp.ndarray]
         DESC data dict.
+    simp : bool
+        Whether to use an open Simpson rule instead of uniform weights.
     reduce : bool
         Whether to compute mean over α and expand to grid.
         Default is true.
-
     """
-    pitch_inv, pitch_inv_weight = get_pitch_inv_quad(
+    pitch_inv, pitch_inv_weight = Bounce1D.get_pitch_inv_quad(
         grid.compress(data["min_tz |B|"]),
         grid.compress(data["max_tz |B|"]),
         num_pitch,
+        simp=simp,
     )
 
-    def for_each_rho(x):
+    def foreach_rho(x):
         # using same λ values for every field line α on flux surface ρ
         x["pitch_inv"] = pitch_inv
         x["pitch_inv weight"] = pitch_inv_weight
         return imap(fun, x)
 
     for name in Bounce1D.required_names:
-        interp_data[name] = data[name]
-    interp_data = dict(
-        zip(interp_data.keys(), Bounce1D.reshape_data(grid, *interp_data.values()))
-    )
-    out = imap(for_each_rho, interp_data)
+        fun_data[name] = data[name]
+    for name in fun_data:
+        fun_data[name] = Bounce1D.reshape_data(grid, fun_data[name])
+    out = imap(foreach_rho, fun_data)
     return grid.expand(_alpha_mean(out)) if reduce else out
 
 
@@ -207,16 +211,16 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
     batch = kwargs.get("batch", True)
     grid = transforms["grid"].source_grid
 
-    def dH(grad_rho_norm_kappa_g, B, pitch):
+    def dH(data, B, pitch):
         # Integrand of Nemov eq. 30 with |∂ψ/∂ρ| (λB₀)¹ᐧ⁵ removed.
         return (
             jnp.sqrt(jnp.abs(1 - pitch * B))
             * (4 / (pitch * B) - 1)
-            * grad_rho_norm_kappa_g
+            * data["|grad(rho)|*kappa_g"]
             / B
         )
 
-    def dI(B, pitch):
+    def dI(data, B, pitch):
         # Integrand of Nemov eq. 31.
         return jnp.sqrt(jnp.abs(1 - pitch * B)) / B
 
@@ -226,15 +230,14 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
         # Nemov's ∑ⱼ Hⱼ²/Iⱼ = (∂ψ/∂ρ)² (λB₀)³ ``(H**2 / I).sum(axis=-1)``.
         # (λB₀)³ d(λB₀)⁻¹ = B₀² λ³ d(λ⁻¹) = -B₀² λ dλ.
         bounce = Bounce1D(grid, data, quad, automorphism=None, is_reshaped=True)
-        points = bounce.points(data["pitch_inv"], num_well=num_well)
-        H = bounce.integrate(
-            dH,
+        H, I = bounce.integrate(
+            [dH, dI],
             data["pitch_inv"],
-            data["|grad(rho)|*kappa_g"],
-            points=points,
+            data,
+            "|grad(rho)|*kappa_g",
+            points=bounce.points(data["pitch_inv"], num_well=num_well),
             batch=batch,
         )
-        I = bounce.integrate(dI, data["pitch_inv"], points=points, batch=batch)
         return (
             safediv(H**2, I).sum(axis=-1)
             * data["pitch_inv"] ** (-3)
@@ -242,13 +245,18 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
         ).sum(axis=-1)
 
     # Interpolate |∇ρ| κ_g since it is smoother than κ_g alone.
-    interp_data = {"|grad(rho)|*kappa_g": data["|grad(rho)|"] * data["kappa_g"]}
     B0 = data["max_tz |B|"]
     data["effective ripple 3/2"] = (
         jnp.pi
         / (8 * 2**0.5)
         * (B0 * data["R0"] / data["<|grad(rho)|>"]) ** 2
-        * _compute(eps_32, interp_data, data, grid, kwargs.get("num_pitch", 50))
+        * _compute(
+            eps_32,
+            {"|grad(rho)|*kappa_g": data["|grad(rho)|"] * data["kappa_g"]},
+            data,
+            grid,
+            kwargs.get("num_pitch", 50),
+        )
         / data["fieldline length"]
     )
     return data
@@ -269,4 +277,253 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
 )
 def _effective_ripple(params, transforms, profiles, data, **kwargs):
     data["effective ripple"] = data["effective ripple 3/2"] ** (2 / 3)
+    return data
+
+
+@register_compute_fun(
+    name="Gamma_c Velasco",
+    label=(
+        # Γ_c = π/(8√2) ∫dλ 〈 ∑ⱼ [v τ γ_c²]ⱼ 〉
+        "\\Gamma_c = \\frac{\\pi}{8 \\sqrt{2}} "
+        "\\int d\\lambda \\langle \\sum_j (v \\tau \\gamma_c^2)_j \\rangle"
+    ),
+    units="~",
+    units_long="None",
+    description="Energetic ion confinement proxy "
+    "as defined by Velasco et al. (doi:10.1088/1741-4326/ac2994)",
+    dim=1,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="r",
+    data=["min_tz |B|", "max_tz |B|", "cvdrift0", "gbdrift", "fieldline length"]
+    + Bounce1D.required_names,
+    source_grid_requirement={"coordinates": "raz", "is_meshgrid": True},
+    **_bounce_doc,
+)
+@partial(jit, static_argnames=["num_quad", "num_pitch", "num_well", "batch"])
+def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
+    """Energetic ion confinement proxy as defined by Velasco et al.
+
+    A model for the fast evaluation of prompt losses of energetic ions in stellarators.
+    J.L. Velasco et al. 2021 Nucl. Fusion 61 116059.
+    https://doi.org/10.1088/1741-4326/ac2994.
+    Equation 16.
+    """
+    # noqa: unused dependency
+    if "quad" in kwargs:
+        quad = kwargs["quad"]
+    else:
+        quad = get_quadrature(
+            leggauss(kwargs.get("num_quad", 32)),
+            (automorphism_sin, grad_automorphism_sin),
+        )
+    num_well = kwargs.get("num_well", None)
+    batch = kwargs.get("batch", True)
+    grid = transforms["grid"].source_grid
+
+    def d_v_tau(data, B, pitch):
+        return safediv(2.0, jnp.sqrt(jnp.abs(1 - pitch * B)))
+
+    def _cvdrift0(data, B, pitch):
+        return safediv(
+            data["cvdrift0"] * (1 - 0.5 * pitch * B), jnp.sqrt(jnp.abs(1 - pitch * B))
+        )
+
+    def _gbdrift(data, B, pitch):
+        return safediv(
+            data["gbdrift"] * (1 - 0.5 * pitch * B), jnp.sqrt(jnp.abs(1 - pitch * B))
+        )
+
+    def Gamma_c_Velasco(data):
+        """∫ dλ ∑ⱼ [v τ γ_c²]ⱼ."""
+        bounce = Bounce1D(grid, data, quad, automorphism=None, is_reshaped=True)
+        points = bounce.points(data["pitch_inv"], num_well=num_well)
+        v_tau, cvdrift0, gbdrift = bounce.integrate(
+            [d_v_tau, _cvdrift0, _gbdrift],
+            data["pitch_inv"],
+            data,
+            ["cvdrift0", "gbdrift"],
+            points=points,
+            batch=batch,
+        )
+        gamma_c = jnp.arctan(safediv(cvdrift0, gbdrift))
+        return (4 / jnp.pi**2) * (
+            (v_tau * gamma_c**2).sum(axis=-1)
+            * data["pitch_inv"] ** (-2)
+            * data["pitch_inv weight"]
+        ).sum(axis=-1)
+
+    data["Gamma_c Velasco"] = (
+        jnp.pi
+        / (8 * 2**0.5)
+        * _compute(
+            Gamma_c_Velasco,
+            {"cvdrift0": data["cvdrift0"], "gbdrift": data["gbdrift"]},
+            data,
+            grid,
+            kwargs.get("num_pitch", 64),
+        )
+        / data["fieldline length"]
+    )
+    return data
+
+
+@register_compute_fun(
+    name="Gamma_c",
+    label=(
+        # Γ_c = π/(8√2) ∫dλ 〈 ∑ⱼ [v τ γ_c²]ⱼ 〉
+        "\\Gamma_c = \\frac{\\pi}{8 \\sqrt{2}} "
+        "\\int d\\lambda \\langle \\sum_j (v \\tau \\gamma_c^2)_j \\rangle"
+    ),
+    units="~",
+    units_long="None",
+    description="Energetic ion confinement proxy, Nemov et al.",
+    dim=1,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="r",
+    data=[
+        "min_tz |B|",
+        "max_tz |B|",
+        "B^phi",
+        "B^phi_r|v,p",
+        "b",
+        "|B|_r|v,p",
+        "iota_r",
+        "grad(phi)",
+        "e^rho",
+        "|grad(rho)|",
+        "|e_alpha|r,p|",
+        "kappa_g",
+        "psi_r",
+        "fieldline length",
+    ]
+    + Bounce1D.required_names,
+    source_grid_requirement={"coordinates": "raz", "is_meshgrid": True},
+    **_bounce_doc,
+    quad2="Same as ``quad`` for the weak singular integrals in particular.",
+)
+@partial(jit, static_argnames=["num_quad", "num_pitch", "num_well", "batch"])
+def _Gamma_c(params, transforms, profiles, data, **kwargs):
+    """Energetic ion confinement proxy as defined by Nemov et al.
+
+    Poloidal motion of trapped particle orbits in real-space coordinates.
+    V. V. Nemov, S. V. Kasilov, W. Kernbichler, G. O. Leitold.
+    Phys. Plasmas 1 May 2008; 15 (5): 052501.
+    https://doi.org/10.1063/1.2912456.
+    Equation 61.
+
+    The radial electric field has a negligible effect on alpha particle confinement,
+    so it is assumed to be zero.
+    """
+    # noqa: unused dependency
+    if "quad" in kwargs:
+        quad = kwargs["quad"]
+    else:
+        quad = get_quadrature(
+            leggauss(kwargs.get("num_quad", 32)),
+            (automorphism_sin, grad_automorphism_sin),
+        )
+    quad2 = kwargs["quad2"] if "quad2" in kwargs else chebgauss2(quad[0].size)
+    num_well = kwargs.get("num_well", None)
+    batch = kwargs.get("batch", True)
+    grid = transforms["grid"].source_grid
+
+    # The derivative (∂/∂ψ)|ϑ,ϕ belongs to flux coordinates which satisfy
+    # α = ϑ − χ(ψ) ϕ where α is the poloidal label of ψ,α Clebsch coordinates.
+    # Choosing χ = ι implies ϑ, ϕ are PEST angles.
+    # ∂G/∂((λB₀)⁻¹) =     λ²B₀  ∫ dℓ (1 − λ|B|/2) / √(1 − λ|B|) ∂|B|/∂ψ / |B|
+    # ∂V/∂((λB₀)⁻¹) = 3/2 λ²B₀  ∫ dℓ √(1 − λ|B|) K / |B|
+    # ∂g/∂((λB₀)⁻¹) =     λ²B₀² ∫ dℓ (1 − λ|B|/2) / √(1 − λ|B|) |∇ψ| κ_g / |B|
+    # tan(π/2 γ_c) =
+    #              ∫ dℓ (1 − λ|B|/2) / √(1 − λ|B|) |∇ρ| κ_g / |B|
+    #              ----------------------------------------------
+    # (|∇ρ| ‖e_α|ρ,ϕ‖)ᵢ ∫ dℓ [ (1 − λ|B|/2)/√(1 − λ|B|) ∂|B|/∂ψ + √(1 − λ|B|) K ] / |B|
+
+    def d_v_tau(data, B, pitch):
+        return safediv(2.0, jnp.sqrt(jnp.abs(1 - pitch * B)))
+
+    def drift1(data, B, pitch):
+        return (
+            safediv(1 - 0.5 * pitch * B, jnp.sqrt(jnp.abs(1 - pitch * B)))
+            * data["|grad(rho)|*kappa_g"]
+            / B
+        )
+
+    def drift2(data, B, pitch):
+        return (
+            safediv(1 - 0.5 * pitch * B, jnp.sqrt(jnp.abs(1 - pitch * B)))
+            * data["|B|_psi|v,p"]
+            / B
+        )
+
+    def drift3(data, B, pitch):
+        return jnp.sqrt(jnp.abs(1 - pitch * B)) * data["K"] / B
+
+    def Gamma_c(data):
+        """∫ dλ ∑ⱼ [v τ γ_c²]ⱼ."""
+        # Note v τ = 4λ⁻²B₀⁻¹ ∂I/∂((λB₀)⁻¹) where v is the particle velocity,
+        # τ is the bounce time, and I is defined in Nemov eq. 36.
+        bounce = Bounce1D(grid, data, quad, automorphism=None, is_reshaped=True)
+        points = bounce.points(data["pitch_inv"], num_well=num_well)
+        v_tau, f1, f2 = bounce.integrate(
+            [d_v_tau, drift1, drift2],
+            data["pitch_inv"],
+            data,
+            ["|grad(rho)|*kappa_g", "|B|_psi|v,p"],
+            points=points,
+            batch=batch,
+        )
+        gamma_c = jnp.arctan(
+            safediv(
+                f1,
+                (
+                    f2
+                    + bounce.integrate(
+                        drift3,
+                        data["pitch_inv"],
+                        data,
+                        "K",
+                        points=points,
+                        batch=batch,
+                        quad=quad2,
+                    )
+                )
+                * bounce.interp_to_argmin(data["|grad(rho)|*|e_alpha|r,p|"], points),
+            )
+        )
+        return (4 / jnp.pi**2) * (
+            (v_tau * gamma_c**2).sum(axis=-1)
+            * data["pitch_inv"] ** (-2)
+            * data["pitch_inv weight"]
+        ).sum(axis=-1)
+
+    # We rewrite equivalents of Nemov et al.'s expression's using single-valued
+    # maps of a physical coordinates. This avoids the computational issues of
+    # multivalued maps. It further enables use of more efficient methods, such as
+    # fast transforms and fixed computational grids throughout optimization, which
+    # are used in the ``Bounce2D`` operator on a developer branch.
+
+    # It is assumed the grid is sufficiently dense to reconstruct |B|,
+    # so anything smoother than |B| may be captured accurately as a single
+    # spline rather than splining each component.
+    fun_data = {
+        "|grad(rho)|*kappa_g": data["|grad(rho)|"] * data["kappa_g"],
+        "|grad(rho)|*|e_alpha|r,p|": data["|grad(rho)|"] * data["|e_alpha|r,p|"],
+        "|B|_psi|v,p": data["|B|_r|v,p"] / data["psi_r"],
+        "K": data["iota_r"] * dot(cross(data["e^rho"], data["b"]), data["grad(phi)"])
+        # Behaves as ∂log(|B|²/B^ϕ)/∂ψ |B| if one ignores the issue of a log argument
+        # with units. Smoothness determined by positive lower bound of log argument,
+        # and hence behaves as ∂log(|B|)/∂ψ |B| = ∂|B|/∂ψ.
+        - (2 * data["|B|_r|v,p"] - data["|B|"] * data["B^phi_r|v,p"] / data["B^phi"])
+        / data["psi_r"],
+    }
+    data["Gamma_c"] = (
+        jnp.pi
+        / (8 * 2**0.5)
+        * _compute(Gamma_c, fun_data, data, grid, kwargs.get("num_pitch", 64))
+        / data["fieldline length"]
+    )
     return data

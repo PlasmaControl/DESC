@@ -615,6 +615,8 @@ def plot_2d(
           the surface, must be provided if Bn is entered as the variable to plot.
         * ``field_grid``: MagneticField, a Grid to pass to the field as a source grid
           from which to calculate Bn, by default None.
+        * ``filled`` : bool, whether to fill contours or not i.e. whether to use
+          `contourf` or `contour`
 
     Returns
     -------
@@ -730,6 +732,7 @@ def plot_2d(
     title_fontsize = kwargs.pop("title_fontsize", None)
     xlabel_fontsize = kwargs.pop("xlabel_fontsize", None)
     ylabel_fontsize = kwargs.pop("ylabel_fontsize", None)
+    filled = kwargs.pop("filled", True)
     assert len(kwargs) == 0, f"plot_2d got unexpected keyword argument: {kwargs.keys()}"
 
     cax_kwargs = {"size": "5%", "pad": 0.05}
@@ -744,8 +747,10 @@ def plot_2d(
         .reshape((grid.num_theta, grid.num_rho, grid.num_zeta), order="F")
         .squeeze()
     )
-
-    im = ax.contourf(xx, yy, data, **contourf_kwargs)
+    if not filled:
+        im = ax.contour(xx, yy, data, **contourf_kwargs)
+    else:
+        im = ax.contourf(xx, yy, data, **contourf_kwargs)
     cax = divider.append_axes("right", **cax_kwargs)
     cbar = fig.colorbar(im, cax=cax)
     cbar.update_ticks()
@@ -926,7 +931,11 @@ def plot_3d(
     title = kwargs.pop("title", "")
     levels = kwargs.pop("levels", None)
     component = kwargs.pop("component", None)
+    showgrid = kwargs.pop("showgrid", True)
+    zeroline = kwargs.pop("zeroline", True)
     showscale = kwargs.pop("showscale", True)
+    showticklabels = kwargs.pop("showticklabels", True)
+    showaxislabels = kwargs.pop("showaxislabels", True)
 
     if name != "B*n":
         data, label = _compute(
@@ -974,10 +983,7 @@ def plot_3d(
         data = data.reshape((grid.num_theta, grid.num_rho, grid.num_zeta), order="F")
 
         label = r"$\mathbf{B} \cdot \hat{n} ~(\mathrm{T})$"
-    showgrid = kwargs.pop("showgrid", True)
-    zeroline = kwargs.pop("zeroline", True)
-    showticklabels = kwargs.pop("showticklabels", True)
-    showaxislabels = kwargs.pop("showaxislabels", True)
+
     errorif(
         len(kwargs) != 0,
         ValueError,
@@ -3360,7 +3366,7 @@ def plot_basis(basis, return_data=False, **kwargs):
     """
     title_fontsize = kwargs.pop("title_fontsize", None)
 
-    # TODO: add all other Basis classes
+    # TODO(#1377): add all other Basis classes
     if basis.__class__.__name__ == "PowerSeries":
         grid = LinearGrid(rho=100, endpoint=True)
         r = grid.nodes[:, 0]

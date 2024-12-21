@@ -352,7 +352,7 @@ class FourierRZToroidalSurface(Surface):
         )
         return surf
 
-    # TODO: add k value for number of rotations per field period
+    # TODO (#1385): add k value for number of rotations per field period
     @classmethod
     def from_qp_model(
         cls,

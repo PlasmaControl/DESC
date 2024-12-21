@@ -9,6 +9,8 @@ computational grid has a node on the magnetic axis to avoid potentially
 expensive computations.
 """
 
+import functools
+
 from interpax import interp1d
 
 from desc.backend import jnp, sign, vmap
@@ -47,7 +49,7 @@ def _B_theta_mn(params, transforms, profiles, data, **kwargs):
     return data
 
 
-# TODO: do math to change definition of nu so that we can just use B_zeta_mn here
+# TODO (#568): do math to change definition of nu so that we can just use B_zeta_mn here
 @register_compute_fun(
     name="B_phi_mn",
     label="B_{\\phi, m, n}",
@@ -63,7 +65,7 @@ def _B_theta_mn(params, transforms, profiles, data, **kwargs):
     data=["B_phi|r,t"],
     resolution_requirement="tz",
     grid_requirement={"is_meshgrid": True},
-    aliases="B_zeta_mn",  # TODO: remove when phi != zeta
+    aliases="B_zeta_mn",  # TODO(#568): remove when phi != zeta
     M_booz="int: Maximum poloidal mode number for Boozer harmonics. Default 2*eq.M",
     N_booz="int: Maximum toroidal mode number for Boozer harmonics. Default 2*eq.N",
 )
@@ -509,7 +511,7 @@ def _omni_angle(params, transforms, profiles, data, **kwargs):
     description="Boozer poloidal angle",
     dim=1,
     params=[],
-    transforms={},
+    transforms={"grid": []},
     profiles=[],
     coordinates="rtz",
     data=["alpha", "h"],
@@ -519,9 +521,36 @@ def _omni_angle(params, transforms, profiles, data, **kwargs):
 )
 def _omni_map_theta_B(params, transforms, profiles, data, **kwargs):
     M, N = kwargs.get("helicity", (1, 0))
-    iota = kwargs.get("iota", 1)
+    iota = kwargs.get("iota", jnp.ones(transforms["grid"].num_rho))
 
-    # coordinate mapping matrix from (alpha,h) to (theta_B,zeta_B)
+    theta_B, zeta_B = _omnigenity_mapping(
+        M, N, iota, data["alpha"], data["h"], transforms["grid"]
+    )
+    data["theta_B"] = theta_B
+    data["zeta_B"] = zeta_B
+    return data
+
+
+def _omnigenity_mapping(M, N, iota, alpha, h, grid):
+    iota = jnp.atleast_1d(iota)
+    assert (
+        len(iota) == grid.num_rho
+    ), f"got ({len(iota)}) iota values for grid with {grid.num_rho} surfaces"
+    matrix = jnp.atleast_3d(_omnigenity_mapping_matrix(M, N, iota))
+    # solve for (theta_B,zeta_B) corresponding to (eta,alpha)
+    alpha = grid.meshgrid_reshape(alpha, "trz")
+    h = grid.meshgrid_reshape(h, "trz")
+    coords = jnp.stack((alpha, h))
+    # matrix has shape (nr,2,2), coords is shape (2, nt, nr, nz)
+    # we vectorize the matmul over rho
+    booz = jnp.einsum("rij,jtrz->itrz", matrix, coords)
+    theta_B = booz[0].flatten(order="F")
+    zeta_B = booz[1].flatten(order="F")
+    return theta_B, zeta_B
+
+
+@functools.partial(jnp.vectorize, signature="(),(),()->(2,2)")
+def _omnigenity_mapping_matrix(M, N, iota):
     # need a bunch of wheres to avoid division by zero causing NaN in backward pass
     # this is fine since the incorrect values get ignored later, except in OT or OH
     # where fieldlines are exactly parallel to |B| contours, but this is a degenerate
@@ -541,12 +570,7 @@ def _omni_map_theta_B(params, transforms, profiles, data, **kwargs):
             mat_OH,
         ),
     )
-
-    # solve for (theta_B,zeta_B) corresponding to (eta,alpha)
-    booz = matrix @ jnp.vstack((data["alpha"], data["h"]))
-    data["theta_B"] = booz[0, :]
-    data["zeta_B"] = booz[1, :]
-    return data
+    return matrix
 
 
 @register_compute_fun(
@@ -575,7 +599,7 @@ def _omni_map_zeta_B(params, transforms, profiles, data, **kwargs):
     description="Magnitude of omnigenous magnetic field",
     dim=1,
     params=["B_lm"],
-    transforms={"B": [[0, 0, 0]]},
+    transforms={"grid": [], "B": [[0, 0, 0]]},
     profiles=[],
     coordinates="rtz",
     data=["eta"],
@@ -584,15 +608,32 @@ def _omni_map_zeta_B(params, transforms, profiles, data, **kwargs):
 def _B_omni(params, transforms, profiles, data, **kwargs):
     # reshaped to size (L_B, M_B)
     B_lm = params["B_lm"].reshape((transforms["B"].basis.L + 1, -1))
-    # assuming single flux surface, so only take first row (single node)
-    B_input = vmap(lambda x: transforms["B"].transform(x))(B_lm.T)[:, 0]
-    B_input = jnp.sort(B_input)  # sort to ensure monotonicity
-    eta_input = jnp.linspace(0, jnp.pi / 2, num=B_input.size)
+
+    def _transform(x):
+        y = transforms["B"].transform(x)
+        return transforms["grid"].compress(y)
+
+    B_input = vmap(_transform)(B_lm.T)
+    # B_input has shape (num_knots, num_rho)
+    B_input = jnp.sort(B_input, axis=0)  # sort to ensure monotonicity
+    eta_input = jnp.linspace(0, jnp.pi / 2, num=B_input.shape[0])
+    eta = transforms["grid"].meshgrid_reshape(data["eta"], "rtz")
+    eta = eta.reshape((transforms["grid"].num_rho, -1))
+
+    def _interp(x, B):
+        return interp1d(x, eta_input, B, method="monotonic-0")
 
     # |B|_omnigeneous is an even function so B(-eta) = B(+eta) = B(|eta|)
-    data["|B|"] = interp1d(
-        jnp.abs(data["eta"]), eta_input, B_input, method="monotonic-0"
+    B = vmap(_interp)(jnp.abs(eta), B_input.T)  # shape (nr, nt*nz)
+    B = B.reshape(
+        (
+            transforms["grid"].num_rho,
+            transforms["grid"].num_poloidal,
+            transforms["grid"].num_zeta,
+        )
     )
+    B = jnp.moveaxis(B, 0, 1)
+    data["|B|"] = B.flatten(order="F")
     return data
 
 

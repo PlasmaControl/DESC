@@ -1,6 +1,5 @@
 """Benchmarks for timing comparison on cpu (that are small enough to run on CI)."""
 
-import jax
 import numpy as np
 import pytest
 
@@ -8,6 +7,7 @@ import desc
 
 desc.set_device("cpu")
 import desc.examples
+from desc.backend import jax
 from desc.basis import FourierZernikeBasis
 from desc.equilibrium import Equilibrium
 from desc.grid import ConcentricGrid, LinearGrid
@@ -99,7 +99,7 @@ def test_equilibrium_init_lowres(benchmark):
         N = 5
         _ = Equilibrium(L=L, M=M, N=N)
 
-    benchmark.pedantic(build, setup=setup, iterations=1, rounds=15)
+    benchmark.pedantic(build, setup=setup, iterations=1, rounds=20)
 
 
 @pytest.mark.benchmark()
@@ -115,7 +115,7 @@ def test_equilibrium_init_medres(benchmark):
         N = 15
         _ = Equilibrium(L=L, M=M, N=N)
 
-    benchmark.pedantic(build, setup=setup, iterations=1, rounds=15)
+    benchmark.pedantic(build, setup=setup, iterations=1, rounds=20)
 
 
 @pytest.mark.benchmark()
@@ -131,7 +131,7 @@ def test_equilibrium_init_highres(benchmark):
         N = 25
         _ = Equilibrium(L=L, M=M, N=N)
 
-    benchmark.pedantic(build, setup=setup, iterations=1, rounds=10)
+    benchmark.pedantic(build, setup=setup, iterations=1, rounds=20)
 
 
 @pytest.mark.slow
@@ -234,7 +234,7 @@ def test_objective_jac_dshape_current(benchmark):
     def run(x, objective):
         objective.jac_scaled_error(x, objective.constants).block_until_ready()
 
-    benchmark.pedantic(run, args=(x, objective), rounds=50, iterations=1)
+    benchmark.pedantic(run, args=(x, objective), rounds=80, iterations=1)
 
 
 @pytest.mark.slow
@@ -288,7 +288,7 @@ def test_perturb_1(benchmark):
         }
         return args, kwargs
 
-    benchmark.pedantic(perturb, setup=setup, rounds=8, iterations=1)
+    benchmark.pedantic(perturb, setup=setup, rounds=10, iterations=1)
 
 
 @pytest.mark.slow
@@ -321,14 +321,13 @@ def test_perturb_2(benchmark):
         }
         return args, kwargs
 
-    benchmark.pedantic(perturb, setup=setup, rounds=8, iterations=1)
+    benchmark.pedantic(perturb, setup=setup, rounds=10, iterations=1)
 
 
 @pytest.mark.slow
 @pytest.mark.benchmark
 def test_proximal_jac_atf(benchmark):
     """Benchmark computing jacobian of constrained proximal projection."""
-    jax.clear_caches()
     eq = desc.examples.get("ATF")
     grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, rho=np.linspace(0.1, 1, 10))
     objective = ObjectiveFunction(QuasisymmetryTwoTerm(eq, grid=grid))

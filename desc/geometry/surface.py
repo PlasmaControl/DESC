@@ -102,7 +102,6 @@ class FourierRZToroidalSurface(Surface):
 
         assert issubclass(modes_R.dtype.type, np.integer)
         assert issubclass(modes_Z.dtype.type, np.integer)
-
         MR = np.max(abs(modes_R[:, 0]))
         NR = np.max(abs(modes_R[:, 1]))
         MZ = np.max(abs(modes_Z[:, 0]))
@@ -126,14 +125,21 @@ class FourierRZToroidalSurface(Surface):
                 sym = False
 
         self._R_basis = DoubleFourierSeries(
-            M=self._M, N=self._N, NFP=NFP, sym="cos" if sym else False
+            M=MR,
+            N=NR,
+            NFP=NFP,
+            sym="cos" if sym else False,
         )
         self._Z_basis = DoubleFourierSeries(
-            M=self._M, N=self._N, NFP=NFP, sym="sin" if sym else False
+            M=MZ,
+            N=NZ,
+            NFP=NFP,
+            sym="sin" if sym else False,
         )
 
         self._R_lmn = copy_coeffs(R_lmn, modes_R, self.R_basis.modes[:, 1:])
         self._Z_lmn = copy_coeffs(Z_lmn, modes_Z, self.Z_basis.modes[:, 1:])
+        self._NFP = NFP
         self._sym = bool(sym)
         self._rho = rho
 
@@ -184,7 +190,8 @@ class FourierRZToroidalSurface(Surface):
             or (len(args) == 0)
         ), (
             "change_resolution should be called with 2 (M,N) or 3 (L,M,N) "
-            + "positional arguments or only keyword arguments."
+            + "positional arguments or only keyword arguments"
+            + f"but got {len(args)} positional arguments and {len(kwargs)} kwargs."
         )
         L = kwargs.pop("L", None)
         M = kwargs.pop("M", None)
@@ -217,10 +224,16 @@ class FourierRZToroidalSurface(Surface):
             R_modes_old = self.R_basis.modes
             Z_modes_old = self.Z_basis.modes
             self.R_basis.change_resolution(
-                M=M, N=N, NFP=self.NFP, sym="cos" if self.sym else self.sym
+                M=M,
+                N=N,
+                NFP=self.NFP,
+                sym="cos" if self.sym else self.sym,
             )
             self.Z_basis.change_resolution(
-                M=M, N=N, NFP=self.NFP, sym="sin" if self.sym else self.sym
+                M=M,
+                N=N,
+                NFP=self.NFP,
+                sym="sin" if self.sym else self.sym,
             )
             self.R_lmn = copy_coeffs(self.R_lmn, R_modes_old, self.R_basis.modes)
             self.Z_lmn = copy_coeffs(self.Z_lmn, Z_modes_old, self.Z_basis.modes)
@@ -496,11 +509,21 @@ class FourierRZToroidalSurface(Surface):
             sort=False,
             jitable=True,
         )
-
         R = coords[:, 0]
         Z = coords[:, 2]
-        R_basis = DoubleFourierSeries(M=M, N=N, NFP=NFP, sym="cos" if sym else False)
-        Z_basis = DoubleFourierSeries(M=M, N=N, NFP=NFP, sym="sin" if sym else False)
+        R_basis = DoubleFourierSeries(
+            M=M,
+            N=N,
+            NFP=NFP,
+            sym="cos" if sym else False,
+        )
+        Z_basis = DoubleFourierSeries(
+            M=M,
+            N=N,
+            NFP=NFP,
+            sym="sin" if sym else False,
+        )
+
         if w is None:  # unweighted fit
             transform = Transform(
                 nodes, R_basis, build=False, build_pinv=True, rcond=rcond

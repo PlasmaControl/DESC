@@ -94,6 +94,12 @@ class GenericObjective(_Objective):
         """
         thing = self.things[0]
         if self._grid is None:
+            grid = QuadratureGrid(
+                thing.L_grid,
+                thing.M_grid,
+                thing.N_grid,
+                thing.NFP,
+            )
             errorif(
                 self._p != "desc.equilibrium.equilibrium.Equilibrium",
                 ValueError,

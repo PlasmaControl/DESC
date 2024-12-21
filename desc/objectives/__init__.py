@@ -35,6 +35,8 @@ from ._geometry import (
     MirrorRatio,
     PlasmaVesselDistance,
     PrincipalCurvature,
+    UmbilicFieldAligned,
+    UmbilicHighCurvature,
     Volume,
 )
 from ._neoclassical import EffectiveRipple, GammaC

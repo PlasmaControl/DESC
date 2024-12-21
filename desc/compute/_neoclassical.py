@@ -4,9 +4,9 @@ from functools import partial
 
 from orthax.legendre import leggauss
 
-from desc.backend import imap, jit, jnp
+from desc.backend import jit, jnp
 
-from ..batching import _eval_fun_in_chunks
+from ..batching import batch_map
 from ..integrals.bounce_integral import Bounce2D
 from ..integrals.quad_utils import chebgauss2
 from ..utils import safediv
@@ -47,9 +47,15 @@ _bounce_doc = {
         Default is 32. This parameter is ignored if given ``quad``.
         """,
     "num_pitch": "int : Resolution for quadrature over velocity coordinate.",
-    "batch_size": """int :
+    "pitch_batch_size": """int :
         Number of pitch values with which to compute simultaneously.
-        If given ``None``, then ``batch_size`` defaults to ``num_pitch``.
+        If given ``None``, then ``pitch_batch_size`` is ``num_pitch``.
+        Default is ``num_pitch``.
+        """,
+    "surf_batch_size": """int :
+        Number of flux surfaces with which to compute simultaneously.
+        If given ``None``, then ``surf_batch_size`` is ``grid.num_rho``.
+        Default is ``1``. Only consider increasing if ``pitch_batch_size`` is ``None``.
         """,
     "fieldline_quad": """tuple[jnp.ndarray] :
         Used to compute the proper length of the field line ∫ dℓ / B.
@@ -67,7 +73,9 @@ _bounce_doc = {
 }
 
 
-def _compute(fun, fun_data, data, theta, grid, num_pitch, simp=False):
+def _compute(
+    fun, fun_data, data, theta, grid, num_pitch, simp=False, surf_batch_size=1
+):
     """Compute ``fun`` for each ρ value iteratively.
 
     Parameters
@@ -84,13 +92,16 @@ def _compute(fun, fun_data, data, theta, grid, num_pitch, simp=False):
         ``FourierChebyshevSeries.nodes(X,Y,rho,domain=(0,2*jnp.pi))``.
     simp : bool
         Whether to use an open Simpson rule instead of uniform weights.
+    surf_batch_size : int
+        Number of flux surfaces with which to compute simultaneously.
+        Default is ``1``.
 
     """
     for name in Bounce2D.required_names:
         fun_data[name] = data[name]
     fun_data.pop("iota", None)
     for name in fun_data:
-        fun_data[name] = Bounce2D.fourier(Bounce2D.reshape_data(grid, fun_data[name]))
+        fun_data[name] = Bounce2D.fourier(Bounce2D.reshape(grid, fun_data[name]))
     fun_data["iota"] = grid.compress(data["iota"])
     fun_data["theta"] = theta
     fun_data["pitch_inv"], fun_data["pitch_inv weight"] = Bounce2D.get_pitch_inv_quad(
@@ -99,30 +110,7 @@ def _compute(fun, fun_data, data, theta, grid, num_pitch, simp=False):
         num_pitch,
         simp=simp,
     )
-    return grid.expand(imap(fun, fun_data))
-
-
-def _foreach_pitch(fun, pitch_inv, batch_size):
-    """Compute ``fun`` for pitch values iteratively to reduce memory usage.
-
-    Parameters
-    ----------
-    fun : callable
-        Function to compute.
-    pitch_inv : jnp.ndarray
-        Shape (num_pitch, ).
-        1/λ values to compute the bounce integrals.
-    batch_size : int or None
-        Number of pitch values with which to compute simultaneously.
-        If given ``None``, then computes everything simultaneously.
-
-    """
-    return (
-        fun(pitch_inv)
-        if (batch_size is None or batch_size >= (pitch_inv.size - 1))
-        # else imap(fun, pitch_inv, batch_size=batch_size).squeeze(axis=-1) # noqa: E800
-        else _eval_fun_in_chunks(fun, batch_size, (0,), pitch_inv)
-    )
+    return grid.expand(batch_map(fun, fun_data, surf_batch_size))
 
 
 def _dH(data, B, pitch):
@@ -171,7 +159,8 @@ def _dI(data, B, pitch):
         "num_well",
         "num_quad",
         "num_pitch",
-        "batch_size",
+        "pitch_batch_size",
+        "surf_batch_size",
         "spline",
     ],
 )
@@ -187,9 +176,13 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
     theta = kwargs["theta"]
     Y_B = kwargs.get("Y_B", theta.shape[-1] * 2)
     num_transit = kwargs.get("num_transit", 20)
-    num_pitch = kwargs.get("num_pitch", 50)
+    num_pitch = kwargs.get("num_pitch", 51)
     num_well = kwargs.get("num_well", Y_B * num_transit)
-    batch_size = kwargs.get("batch_size", None)
+    pitch_batch_size = kwargs.get("pitch_batch_size", None)
+    surf_batch_size = kwargs.get("surf_batch_size", 1)
+    assert (
+        surf_batch_size == 1 or pitch_batch_size is None
+    ), f"Expected pitch_batch_size to be None, got {pitch_batch_size}."
     spline = kwargs.get("spline", True)
     fieldline_quad = (
         kwargs["fieldline_quad"] if "fieldline_quad" in kwargs else leggauss(Y_B // 2)
@@ -227,7 +220,7 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
             return safediv(H**2, I).sum(axis=-1)
 
         return jnp.sum(
-            _foreach_pitch(fun, data["pitch_inv"], batch_size)
+            batch_map(fun, data["pitch_inv"], pitch_batch_size)
             * data["pitch_inv weight"]
             / data["pitch_inv"] ** 3,
             axis=-1,
@@ -244,6 +237,7 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
             grid=grid,
             num_pitch=num_pitch,
             simp=True,
+            surf_batch_size=surf_batch_size,
         )
         * (B0 * data["R0"] / data["<|grad(rho)|>"]) ** 2
         * jnp.pi

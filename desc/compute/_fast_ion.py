@@ -6,6 +6,7 @@ from orthax.legendre import leggauss
 
 from desc.backend import jit, jnp
 
+from ..batching import batch_map
 from ..integrals.bounce_integral import Bounce2D
 from ..integrals.quad_utils import (
     automorphism_sin,
@@ -13,7 +14,7 @@ from ..integrals.quad_utils import (
     grad_automorphism_sin,
 )
 from ..utils import cross, dot, safediv
-from ._neoclassical import _bounce_doc, _compute, _foreach_pitch
+from ._neoclassical import _bounce_doc, _compute
 from .data_index import register_compute_fun
 
 # We rewrite equivalents of Nemov et al.'s expressions (21, 22) to resolve
@@ -58,7 +59,7 @@ def _drift2(data, B, pitch):
 @register_compute_fun(
     name="Gamma_c",
     label=(
-        # Γ_c = π/(8√2) ∫dλ 〈 ∑ⱼ [v τ γ_c²]ⱼ 〉
+        # Γ_c = π/(8√2) ∫ dλ 〈 ∑ⱼ [v τ γ_c²]ⱼ 〉
         "\\Gamma_c = \\frac{\\pi}{8 \\sqrt{2}} "
         "\\int d\\lambda \\langle \\sum_j (v \\tau \\gamma_c^2)_j \\rangle"
     ),
@@ -98,7 +99,8 @@ def _drift2(data, B, pitch):
         "num_well",
         "num_quad",
         "num_pitch",
-        "batch_size",
+        "pitch_batch_size",
+        "surf_batch_size",
         "spline",
     ],
 )
@@ -128,7 +130,11 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
     num_transit = kwargs.get("num_transit", 20)
     num_pitch = kwargs.get("num_pitch", 64)
     num_well = kwargs.get("num_well", Y_B * num_transit)
-    batch_size = kwargs.get("batch_size", None)
+    pitch_batch_size = kwargs.get("pitch_batch_size", None)
+    surf_batch_size = kwargs.get("surf_batch_size", 1)
+    assert (
+        surf_batch_size == 1 or pitch_batch_size is None
+    ), f"Expected pitch_batch_size to be None, got {pitch_batch_size}."
     spline = kwargs.get("spline", True)
     fieldline_quad = (
         kwargs["fieldline_quad"] if "fieldline_quad" in kwargs else leggauss(Y_B // 2)
@@ -143,7 +149,6 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
     )
 
     def Gamma_c(data):
-        """∫ dλ 〈 ∑ⱼ [v τ γ_c²]ⱼ 〉 π²/4."""
         bounce = Bounce2D(
             grid,
             data,
@@ -179,11 +184,11 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
             return jnp.sum(v_tau * gamma_c**2, axis=-1)
 
         return jnp.sum(
-            _foreach_pitch(fun, data["pitch_inv"], batch_size)
+            batch_map(fun, data["pitch_inv"], pitch_batch_size)
             * data["pitch_inv weight"]
             / data["pitch_inv"] ** 2,
             axis=-1,
-        ) / bounce.compute_fieldline_length(fieldline_quad)
+        ) / (bounce.compute_fieldline_length(fieldline_quad) * 2**1.5 * jnp.pi)
 
     grid = transforms["grid"]
     # It is assumed the grid is sufficiently dense to reconstruct |B|,
@@ -210,7 +215,8 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
         grid=grid,
         num_pitch=num_pitch,
         simp=False,
-    ) / (2**1.5 * jnp.pi)
+        surf_batch_size=surf_batch_size,
+    )
     return data
 
 
@@ -231,7 +237,7 @@ def _gbdrift(data, B, pitch):
 @register_compute_fun(
     name="Gamma_c Velasco",
     label=(
-        # Γ_c = π/(8√2) ∫dλ 〈 ∑ⱼ [v τ γ_c²]ⱼ 〉
+        # Γ_c = π/(8√2) ∫ dλ 〈 ∑ⱼ [v τ γ_c²]ⱼ 〉
         "\\Gamma_c = \\frac{\\pi}{8 \\sqrt{2}} "
         "\\int d\\lambda \\langle \\sum_j (v \\tau \\gamma_c^2)_j \\rangle"
     ),
@@ -264,7 +270,8 @@ def _gbdrift(data, B, pitch):
         "num_well",
         "num_quad",
         "num_pitch",
-        "batch_size",
+        "pitch_batch_size",
+        "surf_batch_size",
         "spline",
     ],
 )
@@ -282,7 +289,11 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
     num_transit = kwargs.get("num_transit", 20)
     num_pitch = kwargs.get("num_pitch", 64)
     num_well = kwargs.get("num_well", Y_B * num_transit)
-    batch_size = kwargs.get("batch_size", None)
+    pitch_batch_size = kwargs.get("pitch_batch_size", None)
+    surf_batch_size = kwargs.get("surf_batch_size", 1)
+    assert (
+        surf_batch_size == 1 or pitch_batch_size is None
+    ), f"Expected pitch_batch_size to be None, got {pitch_batch_size}."
     spline = kwargs.get("spline", True)
     fieldline_quad = (
         kwargs["fieldline_quad"] if "fieldline_quad" in kwargs else leggauss(Y_B // 2)
@@ -297,7 +308,6 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
     )
 
     def Gamma_c(data):
-        """∫ dλ 〈 ∑ⱼ [v τ γ_c²]ⱼ 〉 π²/4."""
         bounce = Bounce2D(
             grid,
             data,
@@ -323,11 +333,11 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
             return jnp.sum(v_tau * gamma_c**2, axis=-1)
 
         return jnp.sum(
-            _foreach_pitch(fun, data["pitch_inv"], batch_size)
+            batch_map(fun, data["pitch_inv"], pitch_batch_size)
             * data["pitch_inv weight"]
             / data["pitch_inv"] ** 2,
             axis=-1,
-        ) / bounce.compute_fieldline_length(fieldline_quad)
+        ) / (bounce.compute_fieldline_length(fieldline_quad) * 2**1.5 * jnp.pi)
 
     grid = transforms["grid"]
     data["Gamma_c Velasco"] = _compute(
@@ -342,5 +352,6 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
         grid=grid,
         num_pitch=num_pitch,
         simp=False,
-    ) / (2**1.5 * jnp.pi)
+        surf_batch_size=surf_batch_size,
+    )
     return data

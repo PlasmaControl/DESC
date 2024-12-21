@@ -46,7 +46,6 @@ def test_effective_ripple_2D():
 
 
 @pytest.mark.unit
-@pytest.mark.slow
 @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
 def test_effective_ripple_1D():
     """Test effective ripple 1D with W7-X against NEO."""

@@ -65,11 +65,11 @@ class EffectiveRipple(_Objective):
         Determines the flux surfaces to compute on and resolution of FFTs.
         Default grid samples the boundary surface at ρ=1.
     X : int
-        Poloidal Fourier grid resolution to interpolate the map α, ζ ↦ θ(α, ζ).
-        Preferably power of 2.
+        Poloidal Fourier grid resolution to interpolate the poloidal coordinate.
+        Preferably rounded down to power of 2.
     Y : int
-        Toroidal Chebyshev grid resolution to interpolate the map α, ζ ↦ θ(α, ζ).
-        Preferably power of 2.
+        Toroidal Chebyshev grid resolution to interpolate the poloidal coordinate.
+        Preferably rounded down to power of 2.
     Y_B : int
         Desired resolution for algorithm to compute bounce points.
         Default is double ``Y``. Something like 100 is usually sufficient.
@@ -95,10 +95,15 @@ class EffectiveRipple(_Objective):
     num_quad : int
         Resolution for quadrature of bounce integrals. Default is 32.
     num_pitch : int
-        Resolution for quadrature over velocity coordinate. Default is 50.
-    batch_size : int
+        Resolution for quadrature over velocity coordinate. Default is 51.
+    pitch_batch_size : int
         Number of pitch values with which to compute simultaneously.
-        If given ``None``, then ``batch_size`` defaults to ``num_pitch``.
+        If given ``None``, then ``pitch_batch_size`` is ``num_pitch``.
+        Default is ``num_pitch``.
+    surf_batch_size : int
+        Number of flux surfaces with which to compute simultaneously.
+        If given ``None``, then ``surf_batch_size`` is ``grid.num_rho``.
+        Default is ``1``. Only consider increasing if ``pitch_batch_size`` is ``None``.
 
     """
 
@@ -128,15 +133,16 @@ class EffectiveRipple(_Objective):
         jac_chunk_size=None,
         name="Effective ripple",
         grid=None,
-        X=16,  # X is cheap to increase.
+        X=16,
         Y=32,
         # Y_B is expensive to increase if one does not fix num well per transit.
         Y_B=None,
         num_transit=20,
         num_well=None,
         num_quad=32,
-        num_pitch=50,
-        batch_size=None,
+        num_pitch=51,
+        pitch_batch_size=None,
+        surf_batch_size=1,
     ):
         if target is None and bounds is None:
             target = 0.0
@@ -152,7 +158,8 @@ class EffectiveRipple(_Objective):
             "num_well": setdefault(num_well, Y_B * num_transit),
             "num_quad": num_quad,
             "num_pitch": num_pitch,
-            "batch_size": batch_size,
+            "pitch_batch_size": pitch_batch_size,
+            "surf_batch_size": surf_batch_size,
         }
         if deriv_mode == "rev" and jac_chunk_size is None:
             # Reverse mode is bottlenecked by coordinate mapping.

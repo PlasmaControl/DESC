@@ -343,7 +343,7 @@ def _bounce_quadrature(
         Shape (num alpha, num rho, num zeta).
         Real scalar-valued periodic functions in (θ, ζ) ∈ [0, 2π) × [0, 2π/NFP)
         evaluated on the ``grid`` supplied to construct this object.
-        Use the method ``Bounce1D.reshape_data`` to reshape the data into the
+        Use the method ``Bounce1D.reshape`` to reshape the data into the
         expected shape.
     names : str or list[str]
         Names in ``data`` to interpolate. Default is all keys in ``data``.
@@ -711,46 +711,10 @@ def _get_extrema(knots, g, dg_dz, sentinel=jnp.nan):
     return ext, g_ext
 
 
-# We can use the non-differentiable min because we actually want the gradients
+# We can use the non-differentiable argmin because we actually want the gradients
 # to accumulate through only the minimum since we are differentiating how our
 # physics objective changes wrt equilibrium perturbations not wrt which of the
 # extrema get interpolated to.
-
-
-def _argmin(z1, z2, ext, g_ext):
-    assert z1.ndim > 1 and z2.ndim > 1
-    # Given
-    #      z1 and z2 with shape (..., num pitch, num well)
-    # and ext, g_ext with shape (..., num extrema),
-    # add dims to broadcast
-    #      z1 and z2 with shape (..., num pitch, num well, 1).
-    # and ext, g_ext with shape (...,         1,        1, num extrema).
-    where = jnp.where(
-        (z1[..., jnp.newaxis] < ext[..., jnp.newaxis, jnp.newaxis, :])
-        & (ext[..., jnp.newaxis, jnp.newaxis, :] < z2[..., jnp.newaxis]),
-        g_ext[..., jnp.newaxis, jnp.newaxis, :],
-        jnp.inf,
-    )
-    # shape is (..., num pitch, num well, 1)
-    return jnp.argmin(where, axis=-1, keepdims=True)
-
-
-def _fft_argmin(z1, z2, ext, g_ext):
-    assert z1.ndim >= 1 and z2.ndim >= 1
-    # Given
-    #      z1 and z2 with shape (..., num well)
-    # and ext, g_ext with shape (..., num extrema),
-    # add dims to broadcast
-    #      z1 and z2 with shape (..., num well, 1).
-    # and ext, g_ext with shape (...,        1, num extrema).
-    where = jnp.where(
-        (z1[..., jnp.newaxis] < ext[..., jnp.newaxis, :])
-        & (ext[..., jnp.newaxis, :] < z2[..., jnp.newaxis]),
-        g_ext[..., jnp.newaxis, :],
-        jnp.inf,
-    )
-    # shape is (..., num well, 1)
-    return jnp.argmin(where, axis=-1, keepdims=True)
 
 
 def interp_to_argmin(h, points, knots, g, dg_dz, method="cubic"):
@@ -791,12 +755,29 @@ def interp_to_argmin(h, points, knots, g, dg_dz, method="cubic"):
         Shape (..., num pitch, num well).
 
     """
-    z1, z2 = points
     ext, g_ext = _get_extrema(knots, g, dg_dz, sentinel=0)
+
+    z1, z2 = points
+    assert z1.ndim > 1 and z2.ndim > 1
+    # Given
+    #      z1 and z2 with shape (..., num pitch, num well)
+    # and ext, g_ext with shape (..., num extrema),
+    # add dims to broadcast
+    #      z1 and z2 with shape (..., num pitch, num well, 1).
+    # and ext, g_ext with shape (...,         1,        1, num extrema).
+    where = jnp.where(
+        (z1[..., jnp.newaxis] < ext[..., jnp.newaxis, jnp.newaxis, :])
+        & (ext[..., jnp.newaxis, jnp.newaxis, :] < z2[..., jnp.newaxis]),
+        g_ext[..., jnp.newaxis, jnp.newaxis, :],
+        jnp.inf,
+    )
+    # shape is (..., num pitch, num well, 1)
+    argmin = jnp.argmin(where, axis=-1, keepdims=True)
+
     return jnp.take_along_axis(
         # adding axes to broadcast with num pitch and num well axes
         interp1d_vec(ext, knots, h, method=method)[..., jnp.newaxis, jnp.newaxis, :],
-        _argmin(z1, z2, ext, g_ext),
+        argmin,
         axis=-1,
     ).squeeze(axis=-1)
 
@@ -852,6 +833,24 @@ def interp_fft_to_argmin(
 
     """
     ext, g_ext = _get_extrema(knots, g, dg_dz, sentinel=0)
+
+    z1, z2 = points
+    assert z1.ndim >= 1 and z2.ndim >= 1
+    # Given
+    #      z1 and z2 with shape (..., num well)
+    # and ext, g_ext with shape (..., num extrema),
+    # add dims to broadcast
+    #      z1 and z2 with shape (..., num well, 1).
+    # and ext, g_ext with shape (...,        1, num extrema).
+    where = jnp.where(
+        (z1[..., jnp.newaxis] < ext[..., jnp.newaxis, :])
+        & (ext[..., jnp.newaxis, :] < z2[..., jnp.newaxis]),
+        g_ext[..., jnp.newaxis, :],
+        jnp.inf,
+    )
+    # shape is (..., num well, 1)
+    argmin = jnp.argmin(where, axis=-1, keepdims=True)
+
     theta = T.eval1d(ext)
     if is_fourier:
         h = irfft2_non_uniform(
@@ -871,13 +870,10 @@ def interp_fft_to_argmin(
             domain1=(0, 2 * jnp.pi / NFP),
             axes=(-1, -2),
         )
-    h = h[..., jnp.newaxis, :]  # to broadcast with num well axis
-    z1, z2 = points
-    if z1[0].ndim == h.ndim - 1:
+    if z1.ndim == h.ndim + 1:
         h = h[jnp.newaxis]  # to broadcast with num pitch axis
-    return jnp.take_along_axis(h, _fft_argmin(z1, z2, ext, g_ext), axis=-1).squeeze(
-        axis=-1
-    )
+    # add axis to broadcast with num well axis
+    return jnp.take_along_axis(h[..., jnp.newaxis, :], argmin, axis=-1).squeeze(axis=-1)
 
 
 # This is kept for the inevitable nan debugging.
@@ -898,6 +894,16 @@ def _interp_fft_to_argmin_soft(
 
     """
     ext, g_ext = _get_extrema(knots, g, dg_dz, sentinel=0)
+
+    z1, z2 = points
+    assert z1.ndim >= 1 and z2.ndim >= 1
+    where = jnp.where(
+        (z1[..., jnp.newaxis] < ext[..., jnp.newaxis, :])
+        & (ext[..., jnp.newaxis, :] < z2[..., jnp.newaxis]),
+        g_ext[..., jnp.newaxis, :],
+        jnp.finfo(jnp.float16).max,
+    )
+
     theta = T.eval1d(ext)
     if is_fourier:
         h = irfft2_non_uniform(
@@ -917,16 +923,10 @@ def _interp_fft_to_argmin_soft(
             domain1=(0, 2 * jnp.pi / NFP),
             axes=(-1, -2),
         )
-    z1, z2 = points
-    where = jnp.where(
-        (z1[..., jnp.newaxis] < ext[..., jnp.newaxis, :])
-        & (ext[..., jnp.newaxis, :] < z2[..., jnp.newaxis]),
-        g_ext[..., jnp.newaxis, :],
-        jnp.finfo(jnp.float16).max,
-    )
+    # add axis to broadcast with num well axis
     # softargmax does the proper shift to compute softargmax(x - max(x))
     assert beta < 0
-    return jnp.linalg.vecdot(softargmax(beta * where, axis=-1), h[..., jnp.newaxis, :])
+    return jnp.linalg.vecdot(h[..., jnp.newaxis, :], softargmax(beta * where, axis=-1))
 
 
 # TODO (#568): Generalize this beyond ζ = ϕ or just map to Clebsch with ϕ.

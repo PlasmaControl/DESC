@@ -311,8 +311,8 @@ class Bounce2D(Bounce):
             ),
         }
         if not is_reshaped:
-            self._c["|B|"] = Bounce2D.reshape_data(grid, self._c["|B|"])
-            self._c["B^zeta"] = Bounce2D.reshape_data(grid, self._c["B^zeta"])
+            self._c["|B|"] = Bounce2D.reshape(grid, self._c["|B|"])
+            self._c["B^zeta"] = Bounce2D.reshape(grid, self._c["B^zeta"])
         if not is_fourier:
             self._c["|B|"] = Bounce2D.fourier(self._c["|B|"])
             self._c["B^zeta"] = Bounce2D.fourier(self._c["B^zeta"])
@@ -339,7 +339,7 @@ class Bounce2D(Bounce):
             )
 
     @staticmethod
-    def reshape_data(grid, f):
+    def reshape(grid, f):
         """Reshape arrays for acceptable input to ``integrate``.
 
         Parameters
@@ -392,11 +392,11 @@ class Bounce2D(Bounce):
         eq : Equilibrium
             Equilibrium to use defining the coordinate mapping.
         X : int
-            Poloidal Fourier grid resolution to interpolate the map α, ζ ↦ θ(α, ζ).
-            Preferably power of 2.
+            Poloidal Fourier grid resolution to interpolate the poloidal coordinate.
+            Preferably rounded down to power of 2.
         Y : int
-            Toroidal Chebyshev grid resolution to interpolate the map α, ζ ↦ θ(α, ζ).
-            Preferably power of 2.
+            Toroidal Chebyshev grid resolution to interpolate the poloidal coordinate.
+            Preferably rounded down to power of 2.
         rho : float or jnp.ndarray
             Shape (num rho, ).
             Flux surfaces labels in [0, 1] on which to compute.
@@ -586,7 +586,7 @@ class Bounce2D(Bounce):
             Shape (num rho, M, N).
             Real scalar-valued periodic functions in (θ, ζ) ∈ [0, 2π) × [0, 2π/NFP)
             evaluated on the ``grid`` supplied to construct this object.
-            Use the method ``Bounce2D.reshape_data`` to reshape the data into the
+            Use the method ``Bounce2D.reshape`` to reshape the data into the
             expected shape.
         names : str or list[str]
             Names in ``data`` to interpolate. Default is all keys in ``data``.
@@ -750,7 +750,7 @@ class Bounce2D(Bounce):
             Shape (num rho, M, N).
             Real scalar-valued periodic function in (θ, ζ) ∈ [0, 2π) × [0, 2π/NFP)
             evaluated on the ``grid`` supplied to construct this object.
-            Use the method ``Bounce2D.reshape_data`` to reshape the data into the
+            Use the method ``Bounce2D.reshape`` to reshape the data into the
             expected shape.
         points : tuple[jnp.ndarray]
             Shape (num rho, num pitch, num well).
@@ -777,17 +777,19 @@ class Bounce2D(Bounce):
         # We move num pitch axis to front so that the num rho axis broadcasts
         # with the spectral coefficients (whose first axis is also num rho),
         # assuming this axis exists.
-        return interp_fft_to_argmin(
-            self._NFP,
-            self._c["T(z)"],
-            f,
-            map(_swap_pl, points),
-            self._c["knots"],
-            self._c["B(z)"],
-            polyder_vec(self._c["B(z)"]),
-            is_fourier=is_fourier,
-            M=self._M,
-            N=self._N,
+        return _swap_pl(
+            interp_fft_to_argmin(
+                self._NFP,
+                self._c["T(z)"],
+                f,
+                map(_swap_pl, points),
+                self._c["knots"],
+                self._c["B(z)"],
+                polyder_vec(self._c["B(z)"]),
+                is_fourier=is_fourier,
+                M=self._M,
+                N=self._N,
+            )
         )
 
     def compute_fieldline_length(self, quad=None):
@@ -1030,7 +1032,7 @@ class Bounce1D(Bounce):
         }
         if not is_reshaped:
             for name in self._data:
-                self._data[name] = Bounce1D.reshape_data(grid, self._data[name])
+                self._data[name] = Bounce1D.reshape(grid, self._data[name])
         self._x, self._w = get_quadrature(quad, automorphism)
 
         # Compute local splines.
@@ -1054,7 +1056,7 @@ class Bounce1D(Bounce):
         self._dB_dz = polyder_vec(self._B)
 
     @staticmethod
-    def reshape_data(grid, f):
+    def reshape(grid, f):
         """Reshape arrays for acceptable input to ``integrate``.
 
         Parameters
@@ -1187,7 +1189,7 @@ class Bounce1D(Bounce):
             Shape (num alpha, num rho, num zeta).
             Real scalar-valued periodic functions in (θ, ζ) ∈ [0, 2π) × [0, 2π/NFP)
             evaluated on the ``grid`` supplied to construct this object.
-            Use the method ``Bounce1D.reshape_data`` to reshape the data into the
+            Use the method ``Bounce1D.reshape`` to reshape the data into the
             expected shape.
         names : str or list[str]
             Names in ``data`` to interpolate. Default is all keys in ``data``.
@@ -1254,7 +1256,7 @@ class Bounce1D(Bounce):
         f : jnp.ndarray
             Shape (num alpha, num rho, num zeta).
             Real scalar-valued functions evaluated on the ``grid`` supplied to
-            construct this object. Use the method ``Bounce1D.reshape_data`` to
+            construct this object. Use the method ``Bounce1D.reshape`` to
             reshape the data into the expected shape.
         points : tuple[jnp.ndarray]
             Shape (num alpha, num rho, num pitch, num well).
@@ -1283,7 +1285,7 @@ class Bounce1D(Bounce):
         ----------
         m, l : int, int
             Indices into the nodes of the grid supplied to make this object.
-            ``alpha,rho=Bounce1D.reshape_data(grid,grid.nodes[:,:2])[m,l,0]``.
+            ``alpha,rho=Bounce1D.reshape(grid,grid.nodes[:,:2])[m,l,0]``.
         pitch_inv : jnp.ndarray
             Shape (num pitch, ).
             Optional, 1/λ values whose corresponding bounce points on the field line

@@ -1121,7 +1121,7 @@ class TestBounce:
         num = bounce.integrate(
             integrand=TestBounce._example_numerator,
             pitch_inv=pitch_inv,
-            data={"g_zz": Bounce1D.reshape_data(grid.source_grid, data["g_zz"])},
+            data={"g_zz": Bounce1D.reshape(grid.source_grid, data["g_zz"])},
             points=points,
             check=True,
         )
@@ -1368,8 +1368,8 @@ class TestBounce:
         points = bounce.points(pitch_inv, num_well=1)
         bounce.check_points(points, pitch_inv, plot=False)
         interp_data = {
-            "cvdrift": Bounce1D.reshape_data(things["grid"].source_grid, cvdrift),
-            "gbdrift": Bounce1D.reshape_data(things["grid"].source_grid, gbdrift),
+            "cvdrift": Bounce1D.reshape(things["grid"].source_grid, cvdrift),
+            "gbdrift": Bounce1D.reshape(things["grid"].source_grid, gbdrift),
         }
         drift_numerical_num = bounce.integrate(
             integrand=TestBounce.drift_num_integrand,
@@ -1543,7 +1543,7 @@ class TestBounce2D:
         num = bounce.integrate(
             integrand=TestBounce._example_numerator,
             pitch_inv=pitch_inv,
-            data={"g_zz": Bounce2D.reshape_data(grid, data["g_zz"])},
+            data={"g_zz": Bounce2D.reshape(grid, data["g_zz"])},
             points=points,
             check=True,
         )
@@ -1642,9 +1642,7 @@ class TestBounce2D:
         )
         points = bounce.points(pitch_inv, num_well=1)
         bounce.check_points(points, pitch_inv, plot=False)
-        interp_data = {
-            name: Bounce2D.reshape_data(grid, grid_data[name]) for name in names
-        }
+        interp_data = {name: Bounce2D.reshape(grid, grid_data[name]) for name in names}
         drift_numerical_num = bounce.integrate(
             integrand=TestBounce2D.drift_num_integrand,
             pitch_inv=pitch_inv,

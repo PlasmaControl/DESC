@@ -64,7 +64,7 @@ def _compute(fun, fun_data, data, grid, num_pitch, simp=False, reduce=True):
     for name in Bounce1D.required_names:
         fun_data[name] = data[name]
     for name in fun_data:
-        fun_data[name] = Bounce1D.reshape_data(grid, fun_data[name])
+        fun_data[name] = Bounce1D.reshape(grid, fun_data[name])
     out = imap(foreach_rho, fun_data)
     # Simple mean over α rather than integrating over α and dividing by 2π
     # (i.e. f.T.dot(dα) / dα.sum()), because when the toroidal angle extends
@@ -115,7 +115,7 @@ def _epsilon_32_1D(params, transforms, profiles, data, **kwargs):
     """
     # noqa: unused dependency
     num_well = kwargs.get("num_well", None)
-    num_pitch = kwargs.get("num_pitch", 50)
+    num_pitch = kwargs.get("num_pitch", 51)
     quad = (
         kwargs["quad"] if "quad" in kwargs else chebgauss2(kwargs.get("num_quad", 32))
     )
@@ -190,7 +190,7 @@ def _effective_ripple_1D(params, transforms, profiles, data, **kwargs):
 @register_compute_fun(
     name="deprecated(Gamma_c)",
     label=(
-        # Γ_c = π/(8√2) ∫dλ 〈 ∑ⱼ [v τ γ_c²]ⱼ 〉
+        # Γ_c = π/(8√2) ∫ dλ 〈 ∑ⱼ [v τ γ_c²]ⱼ 〉
         "\\Gamma_c = \\frac{\\pi}{8 \\sqrt{2}} "
         "\\int d\\lambda \\langle \\sum_j (v \\tau \\gamma_c^2)_j \\rangle"
     ),
@@ -282,29 +282,24 @@ def _Gamma_c_1D(params, transforms, profiles, data, **kwargs):
         )
 
     grid = transforms["grid"].source_grid
-    data["deprecated(Gamma_c)"] = (
-        _compute(
-            Gamma_c,
-            fun_data={
-                "|grad(psi)|*kappa_g": data["|grad(psi)|"] * data["kappa_g"],
-                "|grad(rho)|*|e_alpha|r,p|": data["|grad(rho)|"]
-                * data["|e_alpha|r,p|"],
-                "|B|_r|v,p": data["|B|_r|v,p"],
-                "K": data["iota_r"]
-                * dot(cross(data["grad(psi)"], data["b"]), data["grad(phi)"])
-                - (
-                    2 * data["|B|_r|v,p"]
-                    - data["|B|"] * data["B^phi_r|v,p"] / data["B^phi"]
-                ),
-            },
-            data=data,
-            grid=grid,
-            num_pitch=num_pitch,
-            simp=False,
-        )
-        / data["fieldline length"]
-        / (2**1.5 * jnp.pi)
-    )
+    data["deprecated(Gamma_c)"] = _compute(
+        Gamma_c,
+        fun_data={
+            "|grad(psi)|*kappa_g": data["|grad(psi)|"] * data["kappa_g"],
+            "|grad(rho)|*|e_alpha|r,p|": data["|grad(rho)|"] * data["|e_alpha|r,p|"],
+            "|B|_r|v,p": data["|B|_r|v,p"],
+            "K": data["iota_r"]
+            * dot(cross(data["grad(psi)"], data["b"]), data["grad(phi)"])
+            - (
+                2 * data["|B|_r|v,p"]
+                - data["|B|"] * data["B^phi_r|v,p"] / data["B^phi"]
+            ),
+        },
+        data=data,
+        grid=grid,
+        num_pitch=num_pitch,
+        simp=False,
+    ) / (data["fieldline length"] * 2**1.5 * jnp.pi)
     return data
 
 
@@ -317,7 +312,7 @@ def _gbdrift(data, B, pitch):
 @register_compute_fun(
     name="deprecated(Gamma_c Velasco)",
     label=(
-        # Γ_c = π/(8√2) ∫dλ 〈 ∑ⱼ [v τ γ_c²]ⱼ 〉
+        # Γ_c = π/(8√2) ∫ dλ 〈 ∑ⱼ [v τ γ_c²]ⱼ 〉
         "\\Gamma_c = \\frac{\\pi}{8 \\sqrt{2}} "
         "\\int d\\lambda \\langle \\sum_j (v \\tau \\gamma_c^2)_j \\rangle"
     ),
@@ -376,16 +371,12 @@ def _Gamma_c_Velasco_1D(params, transforms, profiles, data, **kwargs):
         )
 
     grid = transforms["grid"].source_grid
-    data["deprecated(Gamma_c Velasco)"] = (
-        _compute(
-            Gamma_c,
-            fun_data={"cvdrift0": data["cvdrift0"], "gbdrift": data["gbdrift"]},
-            data=data,
-            grid=grid,
-            num_pitch=num_pitch,
-            simp=False,
-        )
-        / data["fieldline length"]
-        / (2**1.5 * jnp.pi)
-    )
+    data["deprecated(Gamma_c Velasco)"] = _compute(
+        Gamma_c,
+        fun_data={"cvdrift0": data["cvdrift0"], "gbdrift": data["gbdrift"]},
+        data=data,
+        grid=grid,
+        num_pitch=num_pitch,
+        simp=False,
+    ) / (data["fieldline length"] * 2**1.5 * jnp.pi)
     return data

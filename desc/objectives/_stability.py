@@ -355,6 +355,8 @@ class BallooningStability(_Objective):
 
     Parameters
     ----------
+    eq : Equilibrium
+        ``Equilibrium`` to be optimized.
     rho : float
         Flux surface to optimize on. To optimize over multiple surfaces, use multiple
         objectives each with a single rho value.

@@ -89,7 +89,7 @@ def test_Gamma_c_Velasco():
     Y_B = 100
     num_transit = 10
     zeta = np.linspace(0, 2 * np.pi * num_transit, Y_B * num_transit)
-    grid = eq._get_rtz_grid(rho, alpha, zeta, coordinates="raz")
+    grid = get_rtz_grid(rho, alpha, zeta, coordinates="raz")
     data = eq.compute("Gamma_c Velasco", grid=grid)
     assert np.isfinite(data["Gamma_c Velasco"]).all()
     fig, ax = plt.subplots()
@@ -107,7 +107,7 @@ def test_Gamma_c():
     Y_B = 100
     num_transit = 10
     zeta = np.linspace(0, 2 * np.pi * num_transit, Y_B * num_transit)
-    grid = eq._get_rtz_grid(rho, alpha, zeta, coordinates="raz")
+    grid = get_rtz_grid(rho, alpha, zeta, coordinates="raz")
     data = eq.compute("Gamma_c", grid=grid)
     assert np.isfinite(data["Gamma_c"]).all()
     fig, ax = plt.subplots()

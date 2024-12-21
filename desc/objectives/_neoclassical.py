@@ -227,7 +227,7 @@ class EffectiveRipple(_Objective):
             constants["transforms_1dr"],
             constants["profiles"],
         )
-        grid = eq._get_rtz_grid(
+        grid = eq.get_rtz_grid(
             constants["rho"],
             constants["alpha"],
             constants["zeta"],
@@ -462,7 +462,7 @@ class GammaC(_Objective):
             constants["transforms_1dr"],
             constants["profiles"],
         )
-        grid = eq._get_rtz_grid(
+        grid = eq.get_rtz_grid(
             constants["rho"],
             constants["alpha"],
             constants["zeta"],

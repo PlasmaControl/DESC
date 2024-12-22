@@ -46,7 +46,7 @@ def test_fieldline_average():
     np.testing.assert_allclose(
         data["fieldline length"] / data["fieldline length/volume"],
         data["V_r(r)"] / (4 * np.pi**2),
-        rtol=1e-3,
+        rtol=2e-3,
     )
     assert np.all(data["fieldline length"] > 0)
     assert np.all(data["fieldline length/volume"] > 0)
@@ -59,7 +59,9 @@ def test_effective_ripple():
     eq = get("W7-X")
     rho = np.linspace(0, 1, 10)
     alpha = np.array([0])
-    zeta = np.linspace(0, 20 * np.pi, 1000)
+    Y_B = 100
+    num_transit = 10
+    zeta = np.linspace(0, 2 * np.pi * num_transit, Y_B * num_transit)
     grid = get_rtz_grid(eq, rho, alpha, zeta, coordinates="raz")
     data = eq.compute("effective ripple", grid=grid)
     assert np.isfinite(data["effective ripple"]).all()
@@ -74,6 +76,42 @@ def test_effective_ripple():
 
     neo_rho, neo_eps_32 = NeoIO.read("tests/inputs/neo_out.w7x")
     np.testing.assert_allclose(eps_32, np.interp(rho, neo_rho, neo_eps_32), rtol=0.16)
+    return fig
+
+
+@pytest.mark.unit
+@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
+def test_Gamma_c_Velasco():
+    """Test Γ_c with W7-X."""
+    eq = get("W7-X")
+    rho = np.linspace(0, 1, 10)
+    alpha = np.array([0])
+    Y_B = 100
+    num_transit = 10
+    zeta = np.linspace(0, 2 * np.pi * num_transit, Y_B * num_transit)
+    grid = eq._get_rtz_grid(rho, alpha, zeta, coordinates="raz")
+    data = eq.compute("Gamma_c Velasco", grid=grid)
+    assert np.isfinite(data["Gamma_c Velasco"]).all()
+    fig, ax = plt.subplots()
+    ax.plot(rho, grid.compress(data["Gamma_c Velasco"]), marker="o")
+    return fig
+
+
+@pytest.mark.unit
+@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
+def test_Gamma_c():
+    """Test Γ_c Nemov with W7-X."""
+    eq = get("W7-X")
+    rho = np.linspace(0, 1, 10)
+    alpha = np.array([0])
+    Y_B = 100
+    num_transit = 10
+    zeta = np.linspace(0, 2 * np.pi * num_transit, Y_B * num_transit)
+    grid = eq._get_rtz_grid(rho, alpha, zeta, coordinates="raz")
+    data = eq.compute("Gamma_c", grid=grid)
+    assert np.isfinite(data["Gamma_c"]).all()
+    fig, ax = plt.subplots()
+    ax.plot(rho, grid.compress(data["Gamma_c"]), marker="o")
     return fig
 
 

@@ -36,11 +36,9 @@ First download the repository from GitHub.
     git clone https://github.com/PlasmaControl/DESC.git
     cd DESC
 
-Now pick one of the installation options below.
+Now use pip to install packages (this will only install DESC + JAX with CPU capabilities, NOT GPU)
 
-Option 1: Using pip to install packages (this will only install DESC + JAX with CPU capabilities, NOT GPU)
-
-`Option 1 tested to work on M1 Macbook on May 3, 2023`
+`tested to work on M1 Macbook on May 3, 2023`
 
 .. code-block:: sh
 
@@ -50,17 +48,6 @@ Option 1: Using pip to install packages (this will only install DESC + JAX with 
     # optionally install developer requirements (if you want to run tests)
     pip install -r devtools/dev-requirements.txt
 
-Option 2: Using conda to install packages (this will only install DESC + JAX with CPU capabilities, NOT GPU)
-
-.. code-block:: sh
-
-    conda env create --file requirements_conda.yml
-    # optionally: install developer requirements (if you want to run tests)
-    conda install --file devtools/dev-requirements_conda.yml
-
-    # to add DESC to your Python path
-    conda activate desc-env
-    pip install --no-deps --editable .
 
 On Most Linux Computing Clusters
 ********************************
@@ -88,9 +75,7 @@ First download the repository from GitHub.
     # load your python module
     module load anaconda  # this command may vary depending on cluster
 
-Now pick one of the installation options below.
-
-Option 1: Using pip to install packages (this will only install DESC + JAX with CPU capabilities, NOT GPU)
+Now use pip to install packages (this will only install DESC + JAX with CPU capabilities, NOT GPU)
 
 .. code-block:: sh
 
@@ -100,19 +85,6 @@ Option 1: Using pip to install packages (this will only install DESC + JAX with 
     # optionally install developer requirements (if you want to run tests)
     pip install -r devtools/dev-requirements.txt
 
-Option 2: Using conda to install packages (this will only install DESC + JAX with CPU capabilities, NOT GPU)
-
-.. code-block:: sh
-
-    # only need to do one of these conda env create commands, not both
-    # option A: without developer requirements
-    conda env create --file requirements_conda.yml
-    # option B: with developer requirements (if you want to run tests)
-    conda env create --file devtools/dev-requirements_conda.yml
-
-    # to add DESC to your Python path
-    conda activate desc-env
-    pip install --no-deps --editable .
 
 With CPU+GPU support
 --------------------
@@ -124,17 +96,18 @@ specific JAX GPU installation instructions, as that is the main installation dif
 
 **Note that DESC does not always test on or guarantee support of the latest version of JAX (which does not have a stable 1.0 release yet), and thus older versions of GPU-accelerated versions of JAX may need to be installed, which may in turn require lower versions of JaxLib, as well as CUDA and CuDNN.**
 
+
 Perlmutter (NERSC)
 ++++++++++++++++++++++++++++++
-These instructions were tested and confirmed to work on the Perlmutter supercomputer at NERSC on June 18, 2024.
+These instructions were tested and confirmed to work on the Perlmutter supercomputer at NERSC on December 17, 2024.
 
 Set up the correct cuda environment for jax installation
 
 .. code-block:: sh
 
-    module load cudatoolkit/12.2
+    module load cudatoolkit/12.4
     module load cudnn/8.9.3_cuda12
-    module load python
+    module load python/3.11
 
 Check that you have loaded these modules
 
@@ -146,21 +119,9 @@ Create a conda environment for DESC (`following these instructions <https://docs
 
 .. code-block:: sh
 
-    conda create -n desc-env python=3.9
+    conda create -n desc-env python=3.11
     conda activate desc-env
-    pip install --no-cache-dir "jax==0.4.23" "jaxlib[cuda12_cudnn89]==0.4.23" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
-
-For Perlmutter installation, please change the scipy version from
-
-.. code-block:: sh
-
-    scipy >= 1.7.0, < 2.0.0
-
-to
-
-.. code-block:: sh
-
-    scipy >= 1.7.0, <= 1.11.3
+    pip install --upgrade "jax[cuda12]"
 
 Clone and install DESC
 

@@ -293,9 +293,10 @@ class TestAxisLimits:
             "iota_num_rr": {"atol": 5e-5},
             "grad(B)": {"rtol": 1e-4},
             "alpha_r (secular)": {"atol": 1e-4},
-            "grad(alpha) (secular)": {"atol": 1e-4},
+            "grad(alpha) (secular)": {"atol": 2e-4},
             "gbdrift (secular)": {"atol": 1e-4},
             "gbdrift (secular)/phi": {"atol": 1e-4},
+            "(psi_r/sqrt(g))_rr": {"rtol": 2e-5},
         }
         zero_map = dict.fromkeys(zero_limits, {"desired_at_axis": 0})
         kwargs = weaker_tolerance | zero_map

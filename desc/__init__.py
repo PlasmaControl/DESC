@@ -61,7 +61,7 @@ BANNER = colored(_BANNER, "magenta")
 config = {"device": None, "avail_mem": None, "kind": None}
 
 
-def set_device(kind="cpu",gpuid=None):
+def set_device(kind="cpu", gpuid=None):
     """Sets the device to use for computation.
 
     If kind==``'gpu'``, checks available GPUs and selects the one with the most

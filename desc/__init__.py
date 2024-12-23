@@ -61,7 +61,7 @@ BANNER = colored(_BANNER, "magenta")
 config = {"device": None, "avail_mem": None, "kind": None}
 
 
-def set_device(kind="cpu"):
+def set_device(kind="cpu",gpuid=None):
     """Sets the device to use for computation.
 
     If kind==``'gpu'``, checks available GPUs and selects the one with the most
@@ -127,11 +127,15 @@ def set_device(kind="cpu"):
             set_device(kind="cpu")
             return
         devices = [dev for dev in devices if dev["index"] in gpu_ids]
-        for dev in devices:
-            mem = dev["mem_total"] - dev["mem_used"]
-            if mem > maxmem:
-                maxmem = mem
-                selected_gpu = dev
+
+        if (not (gpuid == None)) and (str(gpuid) in gpu_ids):
+            selected_gpu = [dev for dev in devices if dev["index"] == str(gpuid)][0]
+        else:
+            for dev in devices:
+                mem = dev["mem_total"] - dev["mem_used"]
+                if mem > maxmem:
+                    maxmem = mem
+                    selected_gpu = dev
         config["device"] = selected_gpu["type"] + " (id={})".format(
             selected_gpu["index"]
         )

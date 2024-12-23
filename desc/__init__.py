@@ -65,7 +65,7 @@ def set_device(kind="cpu", gpuid=None):
     """Sets the device to use for computation.
 
     If kind==``'gpu'`` and a gpuid is specified, uses the specified GPU. If 
-    gpud==``None`` or a wrong GPU id is given, checks available GPUs and selects the
+    gpuid==``None`` or a wrong GPU id is given, checks available GPUs and selects the
     one with the most available memory.
     Respects environment variable CUDA_VISIBLE_DEVICES for selecting from multiple
     available GPUs

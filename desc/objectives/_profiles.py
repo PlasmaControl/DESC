@@ -15,14 +15,14 @@ profile_overwrite = {
     "target": """
     target : {float, ndarray, callable}, optional
         Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f. If a callable, should take a
+        Must be broadcastable to ``Objective.dim_f``. If a callable, should take a
         single argument `rho` and return the desired value of the profile at those
         locations. Defaults to ``target=0``.
         """,
     "bounds": """
     bounds : tuple of {float, ndarray, callable}, optional
         Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f
+        Both bounds must be broadcastable to to ``Objective.dim_f``
         If a callable, each should take a single argument `rho` and return the
         desired bound (lower or upper) of the profile at those locations.
         Defaults to ``target=0``.

@@ -35,12 +35,7 @@ from desc.integrals import (
     surface_variance,
     virtual_casing_biot_savart,
 )
-from desc.integrals._bounce_utils import (
-    _get_extrema,
-    bounce_points,
-    interp_to_argmin,
-    interp_to_argmin_hard,
-)
+from desc.integrals._bounce_utils import _get_extrema, bounce_points
 from desc.integrals._interp_utils import fourier_pts
 from desc.integrals.basis import FourierChebyshevSeries
 from desc.integrals.quad_utils import (
@@ -1112,7 +1107,7 @@ class TestBounce:
             Bounce1D.required_names + ["min_tz |B|", "max_tz |B|", "g_zz"], grid=grid
         )
         # 5. Make the bounce integration operator.
-        bounce = Bounce1D(grid.source_grid, data, quad=leggauss(3), check=True)
+        bounce = Bounce1D(grid.source_grid, data, check=True)
         pitch_inv, _ = bounce.get_pitch_inv_quad(
             min_B=grid.compress(data["min_tz |B|"]),
             max_B=grid.compress(data["max_tz |B|"]),
@@ -1126,7 +1121,7 @@ class TestBounce:
         num = bounce.integrate(
             integrand=TestBounce._example_numerator,
             pitch_inv=pitch_inv,
-            data={"g_zz": Bounce1D.reshape_data(grid.source_grid, data["g_zz"])},
+            data={"g_zz": Bounce1D.reshape(grid.source_grid, data["g_zz"])},
             points=points,
             check=True,
         )
@@ -1163,8 +1158,7 @@ class TestBounce:
         return fig
 
     @pytest.mark.unit
-    @pytest.mark.parametrize("func", [interp_to_argmin, interp_to_argmin_hard])
-    def test_interp_to_argmin(self, func):
+    def test_interp_to_argmin(self):
         """Test interpolation of h to argmin g."""  # noqa: D202
 
         # Test functions chosen with purpose; don't change unless plotted and compared.
@@ -1187,16 +1181,9 @@ class TestBounce:
         data = dict.fromkeys(Bounce1D.required_names, g(zeta))
         data["|B|_z|r,a"] = dg_dz(zeta)
         bounce = Bounce1D(Grid.create_meshgrid([1, 0, zeta], coordinates="raz"), data)
+        points = np.array(0, ndmin=2), np.array(2 * np.pi, ndmin=2)
         np.testing.assert_allclose(
-            func(
-                h=h(zeta),
-                points=(np.array(0, ndmin=2), np.array(2 * np.pi, ndmin=2)),
-                knots=zeta,
-                g=bounce.B,
-                dg_dz=bounce._dB_dz,
-            ),
-            h(argmin_g),
-            rtol=1e-3,
+            bounce.interp_to_argmin(h(zeta), points), h(argmin_g), rtol=1e-3
         )
 
     @staticmethod
@@ -1381,8 +1368,8 @@ class TestBounce:
         points = bounce.points(pitch_inv, num_well=1)
         bounce.check_points(points, pitch_inv, plot=False)
         interp_data = {
-            "cvdrift": Bounce1D.reshape_data(things["grid"].source_grid, cvdrift),
-            "gbdrift": Bounce1D.reshape_data(things["grid"].source_grid, gbdrift),
+            "cvdrift": Bounce1D.reshape(things["grid"].source_grid, cvdrift),
+            "gbdrift": Bounce1D.reshape(things["grid"].source_grid, gbdrift),
         }
         drift_numerical_num = bounce.integrate(
             integrand=TestBounce.drift_num_integrand,
@@ -1505,12 +1492,11 @@ class TestBounce2D:
             theta=grid.meshgrid_reshape(grid.nodes[:, 1], "rtz"),
             Y_B=2 * nyquist,
             num_transit=1,
-            spline=True,
         )
+        points = np.array(0, ndmin=2), np.array(2 * np.pi, ndmin=2)
         np.testing.assert_allclose(
             bounce.interp_to_argmin(
-                grid.meshgrid_reshape(h(grid.nodes[:, 2]), "rtz"),
-                (np.array(0, ndmin=2), np.array(2 * np.pi, ndmin=2)),
+                grid.meshgrid_reshape(h(grid.nodes[:, 2]), "rtz"), points
             ),
             h(argmin_g),
             rtol=1e-6,
@@ -1540,9 +1526,7 @@ class TestBounce2D:
         # 4. Compute DESC coordinates of optimal interpolation nodes.
         theta = Bounce2D.compute_theta(eq, X=8, Y=64, rho=rho)
         # 5. Make the bounce integration operator.
-        bounce = Bounce2D(
-            grid, data, theta, num_transit=2, quad=leggauss(3), check=True, spline=False
-        )
+        bounce = Bounce2D(grid, data, theta, num_transit=2, check=True, spline=False)
         pitch_inv, _ = bounce.get_pitch_inv_quad(
             min_B=grid.compress(data["min_tz |B|"]),
             max_B=grid.compress(data["max_tz |B|"]),
@@ -1556,7 +1540,7 @@ class TestBounce2D:
         num = bounce.integrate(
             integrand=TestBounce._example_numerator,
             pitch_inv=pitch_inv,
-            data={"g_zz": Bounce2D.reshape_data(grid, data["g_zz"])},
+            data={"g_zz": Bounce2D.reshape(grid, data["g_zz"])},
             points=points,
             check=True,
         )
@@ -1655,9 +1639,7 @@ class TestBounce2D:
         )
         points = bounce.points(pitch_inv, num_well=1)
         bounce.check_points(points, pitch_inv, plot=False)
-        interp_data = {
-            name: Bounce2D.reshape_data(grid, grid_data[name]) for name in names
-        }
+        interp_data = {name: Bounce2D.reshape(grid, grid_data[name]) for name in names}
         drift_numerical_num = bounce.integrate(
             integrand=TestBounce2D.drift_num_integrand,
             pitch_inv=pitch_inv,

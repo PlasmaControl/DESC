@@ -208,12 +208,12 @@ def lsqtr(  # noqa: C901
     # conngould : norm of the cauchy point, as recommended in ch17 of Conn & Gould
     # scipy : norm of the scaled x, as used in scipy
     # mix : geometric mean of conngould and scipy
-    scipy = jnp.linalg.norm(x * scale_inv / v**0.5)
+    tr_scipy = jnp.linalg.norm(x * scale_inv / v**0.5)
     conngould = safediv(jnp.sum(g_h**2), jnp.sum((J_h @ g_h) ** 2))
     init_tr = {
-        "scipy": scipy,
+        "scipy": tr_scipy,
         "conngould": conngould,
-        "mix": jnp.sqrt(conngould * scipy),
+        "mix": jnp.sqrt(conngould * tr_scipy),
     }
     trust_radius = options.pop("initial_trust_radius", "scipy")
     tr_ratio = options.pop("initial_trust_ratio", 1.0)

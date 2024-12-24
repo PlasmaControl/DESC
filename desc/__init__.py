@@ -64,7 +64,7 @@ config = {"device": None, "avail_mem": None, "kind": None}
 def set_device(kind="cpu", gpuid=None):
     """Sets the device to use for computation.
 
-    If kind==``'gpu'`` and a gpuid is specified, uses the specified GPU. If 
+    If kind==``'gpu'`` and a gpuid is specified, uses the specified GPU. If
     gpuid==``None`` or a wrong GPU id is given, checks available GPUs and selects the
     one with the most available memory.
     Respects environment variable CUDA_VISIBLE_DEVICES for selecting from multiple
@@ -141,8 +141,13 @@ def set_device(kind="cpu", gpuid=None):
             selected_gpu["index"]
         )
         if gpuid is not None and not (str(gpuid) in gpu_ids):
-            warnings.warn(colored("Specified gpuid {} not found, falling back to ".format(
-                                  str(gpuid)) + config["device"], "yellow"))
+            warnings.warn(
+                colored(
+                    "Specified gpuid {} not found, falling back to ".format(str(gpuid))
+                    + config["device"],
+                    "yellow",
+                )
+            )
         config["avail_mem"] = (
             selected_gpu["mem_total"] - selected_gpu["mem_used"]
         ) / 1024  # in GB

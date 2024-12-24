@@ -884,14 +884,14 @@ class FixBoundaryR(FixParameters):
         Equilibrium that will be optimized to satisfy the Objective.
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f. Defaults to ``target=eq.Rb_lmn``.
+        Must be broadcastable to ``Objective.dim_f``. Defaults to ``target=eq.Rb_lmn``.
     bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to Objective.dim_f.
+        Both bounds must be broadcastable to ``Objective.dim_f``.
         Defaults to ``target=eq.Rb_lmn``.
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        Must be broadcastable to Objective.dim_f
+        Must be broadcastable to ``Objective.dim_f``
     normalize : bool, optional
         Whether to compute the error in physical units or non-dimensionalize.
     normalize_target : bool, optional
@@ -965,14 +965,14 @@ class FixBoundaryZ(FixParameters):
         Equilibrium that will be optimized to satisfy the Objective.
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f. Defaults to ``target=eq.Zb_lmn``.
+        Must be broadcastable to ``Objective.dim_f``. Defaults to ``target=eq.Zb_lmn``.
     bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to Objective.dim_f.
+        Both bounds must be broadcastable to ``Objective.dim_f``.
         Defaults to ``target=eq.Zb_lmn``.
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        Must be broadcastable to Objective.dim_f
+        Must be broadcastable to ``Objective.dim_f``
     normalize : bool, optional
         Whether to compute the error in physical units or non-dimensionalize.
     normalize_target : bool, optional
@@ -1334,7 +1334,7 @@ class FixThetaSFL(FixParameters):
         Equilibrium that will be optimized to satisfy the Objective.
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        Must be broadcastable to Objective.dim_f
+        Must be broadcastable to ``Objective.dim_f``
     normalize : bool, optional
         Has no effect for this objective.
     normalize_target : bool, optional
@@ -1376,14 +1376,14 @@ class FixAxisR(FixParameters):
         Equilibrium that will be optimized to satisfy the Objective.
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f. Defaults to ``target=eq.Ra_n``.
+        Must be broadcastable to ``Objective.dim_f``. Defaults to ``target=eq.Ra_n``.
     bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to Objective.dim_f.
+        Both bounds must be broadcastable to ``Objective.dim_f``.
         Defaults to ``target=eq.Ra_n``.
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        Must be broadcastable to Objective.dim_f
+        Must be broadcastable to ``Objective.dim_f``
     normalize : bool, optional
         Whether to compute the error in physical units or non-dimensionalize.
     normalize_target : bool, optional
@@ -1457,14 +1457,14 @@ class FixAxisZ(FixParameters):
         Equilibrium that will be optimized to satisfy the Objective.
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f. Defaults to ``target=eq.Za_n``.
+        Must be broadcastable to ``Objective.dim_f``. Defaults to ``target=eq.Za_n``.
     bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to Objective.dim_f.
+        Both bounds must be broadcastable to ``Objective.dim_f``.
         Defaults to ``target=eq.Za_n``.
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        Must be broadcastable to Objective.dim_f
+        Must be broadcastable to ``Objective.dim_f``
     normalize : bool, optional
         Whether to compute the error in physical units or non-dimensionalize.
     normalize_target : bool, optional
@@ -1538,14 +1538,14 @@ class FixModeR(FixParameters):
         Equilibrium that will be optimized to satisfy the Objective.
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f. Defaults to ``target=eq.R_lmn``.
+        Must be broadcastable to ``Objective.dim_f``. Defaults to ``target=eq.R_lmn``.
     bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to Objective.dim_f.
+        Both bounds must be broadcastable to ``Objective.dim_f``.
         Defaults to ``target=eq.R_lmn``.
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        Must be broadcastable to Objective.dim_f
+        Must be broadcastable to ``Objective.dim_f``
     normalize : bool, optional
         Whether to compute the error in physical units or non-dimensionalize.
     normalize_target : bool, optional
@@ -1619,14 +1619,14 @@ class FixModeZ(FixParameters):
         Equilibrium that will be optimized to satisfy the Objective.
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f. Defaults to ``target=eq.Z_lmn``.
+        Must be broadcastable to ``Objective.dim_f``. Defaults to ``target=eq.Z_lmn``.
     bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to Objective.dim_f.
+        Both bounds must be broadcastable to ``Objective.dim_f``.
         Defaults to ``target=eq.Z_lmn``.
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        Must be broadcastable to Objective.dim_f
+        Must be broadcastable to ``Objective.dim_f``
     normalize : bool, optional
         Whether to compute the error in physical units or non-dimensionalize.
     normalize_target : bool, optional
@@ -1700,15 +1700,15 @@ class FixModeLambda(FixParameters):
         Equilibrium that will be optimized to satisfy the Objective.
     target : float, ndarray, optional
         Fourier-Zernike lambda coefficient target values.
-        Must be broadcastable to Objective.dim_f.
+        Must be broadcastable to ``Objective.dim_f``.
         Defaults to ``target=eq.L_lmn``.
     bounds : tuple, optional
         Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to Objective.dim_f.
+        Both bounds must be broadcastable to ``Objective.dim_f``.
         Defaults to ``target=eq.L_lmn``.
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        Must be broadcastable to Objective.dim_f.
+        Must be broadcastable to ``Objective.dim_f``.
     normalize : bool, optional
         Has no effect for this objective.
     normalize_target : bool, optional
@@ -1763,14 +1763,14 @@ class FixSumModesR(_FixedObjective):
         Equilibrium that will be optimized to satisfy the Objective.
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f. Defaults to ``target=eq.R_lmn``.
+        Must be broadcastable to ``Objective.dim_f``. Defaults to ``target=eq.R_lmn``.
     bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to Objective.dim_f.
+        Both bounds must be broadcastable to ``Objective.dim_f``.
         Defaults to ``target=eq.R_lmn``.
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        Must be broadcastable to Objective.dim_f
+        Must be broadcastable to ``Objective.dim_f``
     normalize : bool, optional
         Whether to compute the error in physical units or non-dimensionalize.
     normalize_target : bool, optional
@@ -1929,14 +1929,14 @@ class FixSumModesZ(_FixedObjective):
         Equilibrium that will be optimized to satisfy the Objective.
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f. Defaults to ``target=eq.Z_lmn``.
+        Must be broadcastable to ``Objective.dim_f``. Defaults to ``target=eq.Z_lmn``.
     bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to Objective.dim_f.
+        Both bounds must be broadcastable to ``Objective.dim_f``.
         Defaults to ``target=eq.Z_lmn``.
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        Must be broadcastable to Objective.dim_f
+        Must be broadcastable to ``Objective.dim_f``
     normalize : bool, optional
         Whether to compute the error in physical units or non-dimensionalize.
     normalize_target : bool, optional
@@ -2096,14 +2096,14 @@ class FixSumModesLambda(_FixedObjective):
         Equilibrium that will be optimized to satisfy the Objective.
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f. Defaults to ``target=eq.L_lmn``.
+        Must be broadcastable to ``Objective.dim_f``. Defaults to ``target=eq.L_lmn``.
     bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to Objective.dim_f.
+        Both bounds must be broadcastable to ``Objective.dim_f``.
         Defaults to ``target=eq.L_lmn``.
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        Must be broadcastable to Objective.dim_f.
+        Must be broadcastable to ``Objective.dim_f``.
     normalize : bool, optional
         Has no effect for this objective.
     normalize_target : bool, optional
@@ -2265,14 +2265,14 @@ class FixPressure(FixParameters):
         Equilibrium that will be optimized to satisfy the Objective.
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f. Defaults to ``target=eq.p_l``.
+        Must be broadcastable to ``Objective.dim_f``. Defaults to ``target=eq.p_l``.
     bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to Objective.dim_f.
+        Both bounds must be broadcastable to ``Objective.dim_f``.
         Defaults to ``target=eq.p_l``.
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        Must be broadcastable to Objective.dim_f
+        Must be broadcastable to ``Objective.dim_f``
     normalize : bool, optional
         Whether to compute the error in physical units or non-dimensionalize.
     normalize_target : bool, optional
@@ -2347,14 +2347,14 @@ class FixAnisotropy(FixParameters):
         Equilibrium that will be optimized to satisfy the Objective.
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f. Defaults to ``target=eq.a_lmn``.
+        Must be broadcastable to ``Objective.dim_f``. Defaults to ``target=eq.a_lmn``.
     bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to Objective.dim_f.
+        Both bounds must be broadcastable to ``Objective.dim_f``.
         Defaults to ``target=eq.a_lmn``.
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        Must be broadcastable to Objective.dim_f
+        Must be broadcastable to ``Objective.dim_f``
     normalize : bool, optional
         Has no effect for this objective.
     normalize_target : bool, optional
@@ -2424,14 +2424,14 @@ class FixIota(FixParameters):
         Equilibrium that will be optimized to satisfy the Objective.
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f. Defaults to ``target=eq.i_l``.
+        Must be broadcastable to ``Objective.dim_f``. Defaults to ``target=eq.i_l``.
     bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to Objective.dim_f.
+        Both bounds must be broadcastable to ``Objective.dim_f``.
         Defaults to ``target=eq.i_l``.
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        Must be broadcastable to Objective.dim_f
+        Must be broadcastable to ``Objective.dim_f``
     normalize : bool, optional
         Has no effect for this objective.
     normalize_target : bool, optional
@@ -2501,14 +2501,14 @@ class FixCurrent(FixParameters):
         Equilibrium that will be optimized to satisfy the Objective.
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f. Defaults to ``target=eq.c_l``.
+        Must be broadcastable to ``Objective.dim_f``. Defaults to ``target=eq.c_l``.
     bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to Objective.dim_f.
+        Both bounds must be broadcastable to ``Objective.dim_f``.
         Defaults to ``target=eq.c_l``.
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        Must be broadcastable to Objective.dim_f
+        Must be broadcastable to ``Objective.dim_f``
     normalize : bool, optional
         Whether to compute the error in physical units or non-dimensionalize.
     normalize_target : bool, optional
@@ -2583,14 +2583,14 @@ class FixElectronTemperature(FixParameters):
         Equilibrium that will be optimized to satisfy the Objective.
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f. Defaults to ``target=eq.Te_l``.
+        Must be broadcastable to ``Objective.dim_f``. Defaults to ``target=eq.Te_l``.
     bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to Objective.dim_f.
+        Both bounds must be broadcastable to ``Objective.dim_f``.
         Defaults to ``target=eq.Te_l``.
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        Must be broadcastable to Objective.dim_f
+        Must be broadcastable to ``Objective.dim_f``
     normalize : bool, optional
         Whether to compute the error in physical units or non-dimensionalize.
     normalize_target : bool, optional
@@ -2665,14 +2665,14 @@ class FixElectronDensity(FixParameters):
         Equilibrium that will be optimized to satisfy the Objective.
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f. Defaults to ``target=eq.ne_l``.
+        Must be broadcastable to ``Objective.dim_f``. Defaults to ``target=eq.ne_l``.
     bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to Objective.dim_f.
+        Both bounds must be broadcastable to ``Objective.dim_f``.
         Defaults to ``target=eq.ne_l``.
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        Must be broadcastable to Objective.dim_f
+        Must be broadcastable to ``Objective.dim_f``
     normalize : bool, optional
         Whether to compute the error in physical units or non-dimensionalize.
     normalize_target : bool, optional
@@ -2749,14 +2749,14 @@ class FixIonTemperature(FixParameters):
         Equilibrium that will be optimized to satisfy the Objective.
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f. Defaults to ``target=eq.Ti_l``.
+        Must be broadcastable to ``Objective.dim_f``. Defaults to ``target=eq.Ti_l``.
     bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to Objective.dim_f.
+        Both bounds must be broadcastable to ``Objective.dim_f``.
         Defaults to ``target=eq.Ti_l``.
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        Must be broadcastable to Objective.dim_f
+        Must be broadcastable to ``Objective.dim_f``
     normalize : bool, optional
         Whether to compute the error in physical units or non-dimensionalize.
     normalize_target : bool, optional
@@ -2831,14 +2831,14 @@ class FixAtomicNumber(FixParameters):
         Equilibrium that will be optimized to satisfy the Objective.
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f. Defaults to ``target=eq.Zeff_l``.
+        Must be broadcastable to ``Objective.dim_f``. Defaults to ``target=eq.Zeff_l``.
     bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to Objective.dim_f.
+        Both bounds must be broadcastable to ``Objective.dim_f``.
         Defaults to ``target=eq.Zeff_l``.
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        Must be broadcastable to Objective.dim_f
+        Must be broadcastable to ``Objective.dim_f``
     normalize : bool, optional
         Has no effect for this objective.
     normalize_target : bool, optional
@@ -2908,14 +2908,14 @@ class FixPsi(FixParameters):
         Equilibrium that will be optimized to satisfy the Objective.
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f. Default is ``target=eq.Psi``.
+        Must be broadcastable to ``Objective.dim_f``. Default is ``target=eq.Psi``.
     bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to Objective.dim_f.
+        Both bounds must be broadcastable to ``Objective.dim_f``.
         Default is ``target=eq.Psi``.
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        Must be broadcastable to Objective.dim_f
+        Must be broadcastable to ``Objective.dim_f``
     normalize : bool, optional
         Whether to compute the error in physical units or non-dimensionalize.
     normalize_target : bool, optional
@@ -2978,13 +2978,13 @@ class FixCurveShift(FixParameters):
         Curve that will be optimized to satisfy the Objective.
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f.
+        Must be broadcastable to ``Objective.dim_f``.
     bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to Objective.dim_f
+        Both bounds must be broadcastable to ``Objective.dim_f``
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        Must be broadcastable to Objective.dim_f
+        Must be broadcastable to ``Objective.dim_f``
     normalize : bool, optional
         Whether to compute the error in physical units or non-dimensionalize.
     normalize_target : bool, optional
@@ -3030,13 +3030,13 @@ class FixCurveRotation(FixParameters):
         Curve that will be optimized to satisfy the Objective.
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f.
+        Must be broadcastable to ``Objective.dim_f``.
     bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to Objective.dim_f
+        Both bounds must be broadcastable to ``Objective.dim_f``
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        Must be broadcastable to Objective.dim_f
+        Must be broadcastable to ``Objective.dim_f``
     normalize : bool, optional
         Has no effect for this objective.
     normalize_target : bool, optional
@@ -3197,15 +3197,15 @@ class FixSumCoilCurrent(FixCoilCurrent):
         Coil(s) that will be optimized to satisfy the Objective.
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f.
+        Must be broadcastable to ``Objective.dim_f``.
         Default is the objective value for the coil.
     bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f.
+        Both bounds must be broadcastable to ``Objective.dim_f``.
         Default is to use the target instead.
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        Must be broadcastable to to Objective.dim_f
+        Must be broadcastable to ``Objective.dim_f``
     normalize : bool, optional
         Whether to compute the error in physical units or non-dimensionalize.
     normalize_target : bool, optional
@@ -3555,15 +3555,15 @@ class FixSheetCurrent(FixParameters):
         Equilibrium that will be optimized to satisfy the Objective.
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f.
+        Must be broadcastable to ``Objective.dim_f``.
         Defaults to the equilibrium sheet current parameters.
     bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to Objective.dim_f.
+        Both bounds must be broadcastable to ``Objective.dim_f``.
         Default is to use target.
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        Must be broadcastable to Objective.dim_f
+        Must be broadcastable to ``Objective.dim_f``
     normalize : bool, optional
         Whether to compute the error in physical units or non-dimensionalize.
     normalize_target : bool, optional
@@ -3618,7 +3618,7 @@ class FixNearAxisR(_FixedObjective):
         axis behavior.
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        Must be broadcastable to to Objective.dim_f
+        Must be broadcastable to ``Objective.dim_f``
     normalize : bool, optional
         Whether to compute the error in physical units or non-dimensionalize.
         Unused by this objective
@@ -3768,7 +3768,7 @@ class FixNearAxisZ(_FixedObjective):
         axis behavior.
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        Must be broadcastable to to Objective.dim_f
+        Must be broadcastable to ``Objective.dim_f``
     normalize : bool, optional
         Whether to compute the error in physical units or non-dimensionalize.
         Unused by this objective
@@ -3919,12 +3919,12 @@ class FixNearAxisLambda(_FixedObjective):
         axis behavior.
     bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f
+        Both bounds must be broadcastable to ``Objective.dim_f``
         Unused for this objective, as target will be automatically
         set according to the ``nae_eq``
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        Must be broadcastable to to Objective.dim_f
+        Must be broadcastable to ``Objective.dim_f``
     normalize : bool, optional
         Whether to compute the error in physical units or non-dimensionalize.
         Unused by this objective

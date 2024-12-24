@@ -51,6 +51,8 @@ def write_csv(parameterization):
                 }
                 # stuff like |x| is interpreted as a substitution by rst, need to escape
                 d["Description"] = _escape(d["Description"])
+                if "deprecated" in d["Name"]:
+                    continue
                 writer.writerow(d)
 
 

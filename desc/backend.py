@@ -60,14 +60,14 @@ else:
             )
         )
 
-if desc_config["num_devices"] == 1:
+if desc_config["num_device"] == 1:
     print(
         "Using device: {}, with {:.2f} GB available memory".format(
             desc_config.get("device"), desc_config.get("avail_mem")
         )
     )
 else:
-    print(f"Using {len(desc_config["devices"])} devices:")
+    print(f"Using {desc_config["num_device"]} devices:")
     for i, dev in enumerate(desc_config["devices"]):
         print(
             f"\t Device {i}: {dev} with {desc_config["avail_mems"][i]:.2f} "

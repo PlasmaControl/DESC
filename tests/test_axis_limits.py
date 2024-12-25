@@ -12,12 +12,13 @@ import numpy as np
 import pytest
 
 from desc.compute import data_index
-from desc.compute.utils import _grow_seeds, dot
+from desc.compute.utils import _grow_seeds
 from desc.equilibrium import Equilibrium
 from desc.examples import get
 from desc.grid import LinearGrid
 from desc.integrals import surface_integrals_map
 from desc.objectives import GenericObjective, ObjectiveFunction
+from desc.utils import dot, errorif
 
 # Unless mentioned in the source code of the compute function, the assumptions
 # made to compute the magnetic axis limit can be reduced to assuming that these
@@ -27,8 +28,8 @@ from desc.objectives import GenericObjective, ObjectiveFunction
 zero_limits = {"rho", "psi", "psi_r", "psi_rrr", "e_theta", "sqrt(g)", "B_t"}
 
 # These compute quantities require kinetic profiles, which are not defined for all
-# configurations (giving NaN values)
-not_continuous_limits = {"current Redl", "P_ISS04", "P_fusion", "<sigma*nu>"}
+# configurations (giving NaN values). Gamma_c is 0 on axis.
+not_continuous_limits = {"current Redl", "P_ISS04", "P_fusion", "<sigma*nu>", "Gamma_c"}
 
 not_finite_limits = {
     "D_Mercier",
@@ -43,6 +44,7 @@ not_finite_limits = {
     "curvature_k1_zeta",
     "curvature_k2_rho",
     "curvature_k2_zeta",
+    "cvdrift",
     "e^helical",
     "e^theta",
     "e^theta_r",
@@ -60,10 +62,13 @@ not_finite_limits = {
     "g^tz_r",
     "g^tz_t",
     "g^tz_z",
+    "g^aa",
+    "g^ra",
     "gbdrift",
-    "cvdrift",
     "grad(alpha)",
-    "cvdrift0",
+    "grad(alpha) (periodic)",
+    "gbdrift (periodic)",
+    "cvdrift (periodic)",
     "|e^helical|",
     "|grad(theta)|",
     "<J*B> Redl",  # may not exist for all configurations
@@ -94,7 +99,6 @@ not_implemented_limits = {
     "K_vc",  # only defined on surface
     "iota_num_rrr",
     "iota_den_rrr",
-    "cvdrift0",
 }
 
 
@@ -135,6 +139,16 @@ def _skip_this(eq, name):
         or (eq.anisotropy is None and "beta_a" in name)
         or (eq.pressure is not None and "<J*B> Redl" in name)
         or (eq.current is None and "iota_num" in name)
+        or bool(
+            data_index["desc.equilibrium.equilibrium.Equilibrium"][name][
+                "source_grid_requirement"
+            ]
+        )
+        or bool(
+            data_index["desc.equilibrium.equilibrium.Equilibrium"][name][
+                "grid_requirement"
+            ]
+        )
     )
 
 
@@ -181,7 +195,8 @@ def assert_is_continuous(
     """
     if kwargs is None:
         kwargs = {}
-    # TODO: remove when boozer transform works with multiple surfaces
+    # TODO ( #671, #1206):currently skip Boozer quants because it need sym=False
+    #      grid (#1206) and Boozer axis limits are not yet implemented (#671)
     names = [
         name
         for name in names
@@ -206,10 +221,10 @@ def assert_is_continuous(
         if name in not_continuous_limits:
             continue
         elif name in not_finite_limits:
-            assert (np.isfinite(data[name]).T != axis).all(), name
+            errorif(np.any(np.isfinite(data[name]).T == axis), AssertionError, msg=name)
             continue
         else:
-            assert np.isfinite(data[name]).all(), name
+            errorif(not np.isfinite(data[name]).all(), AssertionError, msg=name)
 
         if (
             data_index[p][name]["coordinates"] == ""
@@ -279,6 +294,11 @@ class TestAxisLimits:
             "iota_r": {"atol": 1e-6},
             "iota_num_rr": {"atol": 5e-5},
             "grad(B)": {"rtol": 1e-4},
+            "alpha_r (secular)": {"atol": 1e-4},
+            "grad(alpha) (secular)": {"atol": 2e-4},
+            "gbdrift (secular)": {"atol": 1e-4},
+            "gbdrift (secular)/phi": {"atol": 1e-4},
+            "(psi_r/sqrt(g))_rr": {"rtol": 2e-5},
         }
         zero_map = dict.fromkeys(zero_limits, {"desired_at_axis": 0})
         kwargs = weaker_tolerance | zero_map
@@ -388,3 +408,4 @@ def test_reverse_mode_ad_axis(name):
     obj.build(verbose=0)
     g = obj.grad(obj.x())
     assert not np.any(np.isnan(g))
+    print(np.count_nonzero(g), name)

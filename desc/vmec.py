@@ -208,9 +208,7 @@ class VMECIO:
         return eq
 
     @classmethod
-    def save(  # noqa: C901 - FIXME - simplify
-        cls, eq, path, surfs=128, verbose=1, M_nyq=None, N_nyq=None
-    ):
+    def save(cls, eq, path, surfs=128, verbose=1, M_nyq=None, N_nyq=None):  # noqa: C901
         """Save an Equilibrium as a netCDF file in the VMEC format.
 
         Parameters
@@ -291,7 +289,16 @@ class VMECIO:
         grid_full = LinearGrid(M=M_nyq, N=N_nyq, NFP=NFP, rho=r_full)
 
         data_quad = eq.compute(
-            ["R0/a", "V", "<|B|>_rms", "<beta>_vol", "<beta_pol>_vol", "<beta_tor>_vol"]
+            [
+                "R0/a",
+                "V",
+                "W_B",
+                "W_p",
+                "<|B|>_rms",
+                "<beta>_vol",
+                "<beta_pol>_vol",
+                "<beta_tor>_vol",
+            ]
         )
         data_axis = eq.compute(["G", "p", "R", "<|B|^2>", "<|B|>"], grid=grid_axis)
         data_lcfs = eq.compute(["G", "I", "R", "Z"], grid=grid_lcfs)
@@ -348,7 +355,8 @@ class VMECIO:
             np.array([" " * 100], "S" + str(file.dimensions["dim_00100"].size))
         )  # VMEC input filename: input.[input_extension]
 
-        # TODO: instead of hard-coding for fixed-boundary, also allow for free-boundary?
+        # TODO(#1378): instead of hard-coding for fixed-boundary,
+        # also allow for free-boundary?
         mgrid_mode = file.createVariable("mgrid_mode", "S1", ("dim_00001",))
         mgrid_mode[:] = stringtochar(
             np.array([""], "S" + str(file.dimensions["dim_00001"].size))
@@ -442,7 +450,7 @@ class VMECIO:
         nextcur.long_name = "number of coils (external currents)"
         nextcur[:] = 0  # hard-coded assuming fixed-boundary solve
 
-        # TODO: add option for saving spline profiles
+        # TODO(#183): add option for saving spline profiles
         power_series = stringtochar(
             np.array(
                 ["power_series" + " " * 8], "S" + str(file.dimensions["dim_00020"].size)
@@ -502,6 +510,16 @@ class VMECIO:
         betator.long_name = "normalized toroidal plasma pressure"
         betator.units = "None"
         betator[:] = data_quad["<beta_tor>_vol"]
+
+        wb = file.createVariable("wb", np.float64)
+        wb.long_name = "plasma magnetic energy * mu_0/(4*pi^2)"
+        wb.units = "T^2*m^3"
+        wb[:] = data_quad["W_B"] * mu_0 / (4 * np.pi**2)
+
+        wp = file.createVariable("wp", np.float64)
+        wp.long_name = "plasma thermodynamic energy * mu_0/(4*pi^2)"
+        wp.units = "T^2*m^3"
+        wp[:] = np.abs(data_quad["W_p"]) * mu_0 / (4 * np.pi**2)
 
         # scalars computed at the magnetic axis
 
@@ -1085,7 +1103,7 @@ class VMECIO:
         bsubsmns[0, :] = (  # linear extrapolation for coefficient at the magnetic axis
             s[1, :] - (s[2, :] - s[1, :]) / (s_full[2] - s_full[1]) * s_full[1]
         )
-        # TODO: evaluate current at rho=0 nodes instead of extrapolation
+        # TODO (#1379): evaluate current at rho=0 nodes instead of extrapolation
         if not eq.sym:
             bsubsmnc[:, :] = c
             bsubsmnc[0, :] = (
@@ -1221,7 +1239,7 @@ class VMECIO:
         currumnc[0, :] = (  # linear extrapolation for coefficient at the magnetic axis
             s[1, :] - (c[2, :] - c[1, :]) / (s_full[2] - s_full[1]) * s_full[1]
         )
-        # TODO: evaluate current at rho=0 nodes instead of extrapolation
+        # TODO (#1379): evaluate current at rho=0 nodes instead of extrapolation
         if not eq.sym:
             currumns[:, :] = s
             currumns[0, :] = (
@@ -1271,7 +1289,7 @@ class VMECIO:
         currvmnc[0, :] = -(  # linear extrapolation for coefficient at the magnetic axis
             s[1, :] - (c[2, :] - c[1, :]) / (s_full[2] - s_full[1]) * s_full[1]
         )
-        # TODO: evaluate current at rho=0 nodes instead of extrapolation
+        # TODO (#1379): evaluate current at rho=0 nodes instead of extrapolation
         if not eq.sym:
             currvmns[:, :] = -s
             currumns[0, :] = -(
@@ -1281,7 +1299,7 @@ class VMECIO:
         if verbose > 1:
             timer.disp("J^zeta*sqrt(g)")
 
-        # TODO: these output quantities need to be added
+        # TODO (#1380): these output quantities need to be added
         bdotgradv = file.createVariable("bdotgradv", np.float64, ("radius",))
         bdotgradv[:] = np.zeros((file.dimensions["radius"].size,))
         bdotgradv.long_name = "Not Implemented: This output is hard-coded to 0!"
@@ -1339,16 +1357,8 @@ class VMECIO:
         specw = file.createVariable("specw", np.float64, ("radius",))
         specw[:] = np.zeros((file.dimensions["radius"].size,))
 
-        # this is not the same as DESC's "W_B"
-        wb = file.createVariable("wb", np.float64)
-        wb[:] = 0.0
-
         wdot = file.createVariable("wdot", np.float64, ("time",))
         wdot[:] = np.zeros((file.dimensions["time"].size,))
-
-        # this is not the same as DESC's "W_p"
-        wp = file.createVariable("wp", np.float64)
-        wp[:] = 0.0
         """
 
         file.close()
@@ -1664,7 +1674,7 @@ class VMECIO:
     def compute_theta_coords(
         cls, lmns, xm, xn, s, theta_star, zeta, si=None, lmnc=None
     ):
-        """Find theta such that theta + lambda(theta) == theta_star.
+        """Find θ (theta_DESC) for given PEST straight field line ϑ (theta_star).
 
         Parameters
         ----------
@@ -1693,6 +1703,7 @@ class VMECIO:
             theta such that theta + lambda(theta) == theta_star
 
         """
+        theta_PEST = theta_star
         if si is None:
             si = np.linspace(0, 1, lmns.shape[0])
             si[1:] = si[0:-1] + 0.5 / (lmns.shape[0] - 1)
@@ -1702,9 +1713,7 @@ class VMECIO:
         else:
             lmbda_mnc = interpolate.CubicSpline(si, lmnc)
 
-        # Note: theta* (also known as vartheta) is the poloidal straight field line
-        # angle in PEST-like flux coordinates
-
+        # Root finding for θₖ such that r(θₖ) = ϑₖ(ρ, θₖ, ζ) − ϑ = 0.
         def root_fun(theta):
             lmbda = np.sum(
                 lmbda_mns(s)
@@ -1721,12 +1730,12 @@ class VMECIO:
                 ),
                 axis=-1,
             )
-            theta_star_k = theta + lmbda  # theta* = theta + lambda
-            err = theta_star - theta_star_k  # FIXME: mod by 2pi
-            return err
+            theta_PEST_k = theta + lmbda
+            r = theta_PEST_k - theta_PEST
+            return -r  # the negative sign is necessary
 
         out = optimize.root(
-            root_fun, x0=theta_star, method="diagbroyden", options={"ftol": 1e-6}
+            root_fun, x0=theta_PEST, method="diagbroyden", options={"ftol": 1e-6}
         )
         return out.x
 

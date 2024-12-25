@@ -9,11 +9,13 @@ computational grid has a node on the magnetic axis to avoid potentially
 expensive computations.
 """
 
+from quadax import simpson
+
 from desc.backend import jnp
 
 from ..integrals.surface_integral import line_integrals, surface_integrals
+from ..utils import cross, dot, safenorm
 from .data_index import register_compute_fun
-from .utils import cross, dot, safenorm
 
 
 @register_compute_fun(
@@ -194,7 +196,7 @@ def _A_of_z(params, transforms, profiles, data, **kwargs):
     data=["Z", "n_rho", "e_theta|r,p", "rho"],
     parameterization=["desc.geometry.surface.FourierRZToroidalSurface"],
     resolution_requirement="rt",  # just need max(rho) near 1
-    # FIXME: Add source grid requirement once omega is nonzero.
+    # TODO(#568): Add source grid requirement once omega is nonzero.
 )
 def _A_of_z_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs):
     # Denote any vector v = [vᴿ, v^ϕ, vᶻ] with a tuple of its contravariant components.
@@ -213,7 +215,7 @@ def _A_of_z_FourierRZToroidalSurface(params, transforms, profiles, data, **kwarg
         line_integrals(
             transforms["grid"],
             data["Z"] * n[:, 2] * safenorm(data["e_theta|r,p"], axis=-1),
-            # FIXME: Works currently for omega = zero, but for nonzero omega
+            # TODO(#568): Works currently for omega = zero, but for nonzero omega
             #  we need to integrate over theta at constant phi.
             #  Should be simple once we have coordinate mapping and source grid
             #  logic from GitHub pull request #1024.
@@ -449,7 +451,7 @@ def _perimeter_of_z(params, transforms, profiles, data, **kwargs):
         line_integrals(
             transforms["grid"],
             safenorm(data["e_theta|r,p"], axis=-1),
-            # FIXME: Works currently for omega = zero, but for nonzero omega
+            # TODO(#568): Works currently for omega = zero, but for nonzero omega
             #  we need to integrate over theta at constant phi.
             #  Should be simple once we have coordinate mapping and source grid
             #  logic from GitHub pull request #1024.
@@ -1014,4 +1016,64 @@ def _curvature_H_zeta(params, transforms, profiles, data, **kwargs):
     data["curvature_H_zeta"] = (
         data["curvature_k1_zeta"] + data["curvature_k2_zeta"]
     ) / 2
+    return data
+
+
+@register_compute_fun(
+    name="fieldline length",
+    label="\\int_{\\zeta_{\\mathrm{min}}}^{\\zeta_{\\mathrm{max}}}"
+    " \\frac{d\\zeta}{|B^{\\zeta}|}",
+    units="m / T",
+    units_long="Meter / tesla",
+    description="(Mean) proper length of field line(s)",
+    dim=1,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="r",
+    data=["B^zeta"],
+    resolution_requirement="z",
+    source_grid_requirement={"coordinates": "raz", "is_meshgrid": True},
+)
+def _fieldline_length(data, transforms, profiles, **kwargs):
+    grid = transforms["grid"].source_grid
+    data["fieldline length"] = grid.expand(
+        jnp.abs(
+            simpson(
+                y=grid.meshgrid_reshape(1 / data["B^zeta"], "arz"),
+                x=grid.compress(grid.nodes[:, 2], surface_label="zeta"),
+                axis=-1,
+            ).mean(axis=0)
+        )
+    )
+    return data
+
+
+@register_compute_fun(
+    name="fieldline length/volume",
+    label="\\int_{\\zeta_{\\mathrm{min}}}^{\\zeta_{\\mathrm{max}}}"
+    " \\frac{d\\zeta}{|B^{\\zeta} \\sqrt g|}",
+    units="1 / Wb",
+    units_long="Inverse webers",
+    description="(Mean) proper length over volume of field line(s)",
+    dim=1,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="r",
+    data=["B^zeta", "sqrt(g)"],
+    resolution_requirement="z",
+    source_grid_requirement={"coordinates": "raz", "is_meshgrid": True},
+)
+def _fieldline_length_over_volume(data, transforms, profiles, **kwargs):
+    grid = transforms["grid"].source_grid
+    data["fieldline length/volume"] = grid.expand(
+        jnp.abs(
+            simpson(
+                y=grid.meshgrid_reshape(1 / (data["B^zeta"] * data["sqrt(g)"]), "arz"),
+                x=grid.compress(grid.nodes[:, 2], surface_label="zeta"),
+                axis=-1,
+            ).mean(axis=0)
+        )
+    )
     return data

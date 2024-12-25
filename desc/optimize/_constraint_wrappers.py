@@ -5,6 +5,7 @@ import functools
 import numpy as np
 
 from desc.backend import jit, jnp
+from desc.batching import batched_vectorize
 from desc.objectives import (
     BoundaryRSelfConsistency,
     BoundaryZSelfConsistency,
@@ -288,12 +289,6 @@ class LinearConstraintProjection(ObjectiveFunction):
 
     def _jac(self, x_reduced, constants=None, op="scaled"):
         x = self.recover(x_reduced)
-        if self._objective._deriv_mode == "blocked":
-            fun = getattr(self._objective, "jac_" + op)
-            return fun(x, constants)[:, self._unfixed_idx] @ (
-                self._Z * self._D[self._unfixed_idx, None]
-            )
-
         v = self._unfixed_idx_mat
         df = getattr(self._objective, "jvp_" + op)(v.T, x, constants)
         return df.T
@@ -709,7 +704,7 @@ class ProximalProjection(ObjectiveFunction):
 
     def x(self, *things):
         """Return the full state vector from the Optimizable objects things."""
-        # TODO: also check resolution etc?
+        # TODO (#1392): also check resolution etc?
         things = things or self.things
         assert [type(t1) is type(t2) for t1, t2 in zip(things, self.things)]
         xs = []
@@ -841,6 +836,25 @@ class ProximalProjection(ObjectiveFunction):
         xopt, _ = self._update_equilibrium(x, store=False)
         return self._objective.compute_scaled_error(xopt, constants[0])
 
+    def compute_scalar(self, x, constants=None):
+        """Compute the sum of squares error.
+
+        Parameters
+        ----------
+        x : ndarray
+            State vector.
+        constants : list
+            Constant parameters passed to sub-objectives.
+
+        Returns
+        -------
+        f : float
+            Objective function scalar value.
+
+        """
+        f = jnp.sum(self.compute_scaled_error(x, constants=constants) ** 2) / 2
+        return f
+
     def compute_unscaled(self, x, constants=None):
         """Compute the raw value of the objective function.
 
@@ -877,7 +891,7 @@ class ProximalProjection(ObjectiveFunction):
             gradient vector.
 
         """
-        # TODO: figure out projected vjp to make this better
+        # TODO (#1393): figure out projected vjp to make this better
         f = jnp.atleast_1d(self.compute_scaled_error(x, constants))
         J = self.jac_scaled_error(x, constants)
         return f.T @ J
@@ -978,7 +992,9 @@ class ProximalProjection(ObjectiveFunction):
         constants = setdefault(constants, self.constants)
         xg, xf = self._update_equilibrium(x, store=True)
         jvpfun = lambda u: self._jvp(u, xf, xg, constants, op="scaled")
-        return jnp.vectorize(jvpfun, signature="(n)->(k)")(v)
+        return batched_vectorize(
+            jvpfun, signature="(n)->(k)", chunk_size=self._objective._jac_chunk_size
+        )(v)
 
     def jvp_scaled_error(self, v, x, constants=None):
         """Compute Jacobian-vector product of self.compute_scaled_error.
@@ -998,7 +1014,9 @@ class ProximalProjection(ObjectiveFunction):
         constants = setdefault(constants, self.constants)
         xg, xf = self._update_equilibrium(x, store=True)
         jvpfun = lambda u: self._jvp(u, xf, xg, constants, op="scaled_error")
-        return jnp.vectorize(jvpfun, signature="(n)->(k)")(v)
+        return batched_vectorize(
+            jvpfun, signature="(n)->(k)", chunk_size=self._objective._jac_chunk_size
+        )(v)
 
     def jvp_unscaled(self, v, x, constants=None):
         """Compute Jacobian-vector product of self.compute_unscaled.
@@ -1018,7 +1036,9 @@ class ProximalProjection(ObjectiveFunction):
         constants = setdefault(constants, self.constants)
         xg, xf = self._update_equilibrium(x, store=True)
         jvpfun = lambda u: self._jvp(u, xf, xg, constants, op="unscaled")
-        return jnp.vectorize(jvpfun, signature="(n)->(k)")(v)
+        return batched_vectorize(
+            jvpfun, signature="(n)->(k)", chunk_size=self._objective._jac_chunk_size
+        )(v)
 
     def _jvp(self, v, xf, xg, constants, op):
         # we're replacing stuff like this with jvps
@@ -1059,7 +1079,7 @@ class ProximalProjection(ObjectiveFunction):
             ]
         )
         tangent = self._unfixed_idx_mat @ dfdc - dxdcv
-        if self._objective._deriv_mode in ["batched", "looped"]:
+        if self._objective._deriv_mode in ["batched"]:
             out = getattr(self._objective, "jvp_" + op)(tangent, xg, constants[0])
         else:  # deriv_mode == "blocked"
             vgs = jnp.split(tangent, np.cumsum(self._dimx_per_thing))

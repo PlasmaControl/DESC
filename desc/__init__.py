@@ -61,7 +61,7 @@ BANNER = colored(_BANNER, "magenta")
 config = {"device": None, "avail_mem": None, "kind": None}
 
 
-def set_device(kind="cpu"):
+def set_device(kind="cpu", multigpu=False):  # noqa: C901
     """Sets the device to use for computation.
 
     If kind==``'gpu'``, checks available GPUs and selects the one with the most
@@ -73,6 +73,8 @@ def set_device(kind="cpu"):
     ----------
     kind : {``'cpu'``, ``'gpu'``}
         whether to use CPU or GPU.
+    multigpu : bool
+        whether to use multiple GPUs or not. Default is False.
 
     """
     config["kind"] = kind
@@ -85,7 +87,7 @@ def set_device(kind="cpu"):
         config["device"] = "CPU"
         config["avail_mem"] = cpu_mem
 
-    if kind == "gpu":
+    if kind == "gpu" and not multigpu:
         # Set CUDA_DEVICE_ORDER so the IDs assigned by CUDA match those from nvidia-smi
         os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
         import nvgpu
@@ -139,3 +141,49 @@ def set_device(kind="cpu"):
             selected_gpu["mem_total"] - selected_gpu["mem_used"]
         ) / 1024  # in GB
         os.environ["CUDA_VISIBLE_DEVICES"] = str(selected_gpu["index"])
+
+    if kind == "gpu" and multigpu:
+        # Set CUDA_DEVICE_ORDER so the IDs assigned by CUDA match those from nvidia-smi
+        os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+        import nvgpu
+
+        try:
+            devices = nvgpu.gpu_info()
+        except FileNotFoundError:
+            devices = []
+        if len(devices) == 0:
+            warnings.warn(colored("No GPU found, falling back to CPU", "yellow"))
+            set_device(kind="cpu")
+            return
+
+        gpu_ids = [dev["index"] for dev in devices]
+        if len(gpu_ids) == 0:
+            # cuda visible devices = '' -> don't use any gpu
+            warnings.warn(
+                colored(
+                    (
+                        "CUDA_VISIBLE_DEVICES={} ".format(
+                            os.environ["CUDA_VISIBLE_DEVICES"]
+                        )
+                        + "did not match any physical GPU "
+                        + "(id={}), falling back to CPU".format(
+                            [dev["index"] for dev in devices]
+                        )
+                    ),
+                    "yellow",
+                )
+            )
+            set_device(kind="cpu")
+            return
+
+        devices = [dev for dev in devices if dev["index"] in gpu_ids]
+        memories = {}
+        for dev in devices:
+            mem = dev["mem_total"] - dev["mem_used"]
+            memories[dev["index"]] = mem
+        config["devices"] = [
+            dev["type"] + " (id={})".format(dev["index"]) for dev in devices
+        ]
+        config["avail_mems"] = [
+            memories[dev["index"]] / 1024 for dev in devices
+        ]  # in GB

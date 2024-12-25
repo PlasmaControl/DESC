@@ -59,11 +59,20 @@ else:
                 desc.__version__, np.__version__, y.dtype
             )
         )
-print(
-    "Using device: {}, with {:.2f} GB available memory".format(
-        desc_config.get("device"), desc_config.get("avail_mem")
+
+if hasattr(desc_config, "device"):
+    print(
+        "Using device: {}, with {:.2f} GB available memory".format(
+            desc_config.get("device"), desc_config.get("avail_mem")
+        )
     )
-)
+elif hasattr(desc_config, "devices"):
+    print(f"Using {len(desc_config["devices"])} devices:")
+    for i, dev in enumerate(desc_config["devices"]):
+        print(
+            f"\t Device {i}: {dev} with {desc_config["avail_mems"][i]:.2f} "
+            "GB available memory"
+        )
 
 if use_jax:  # noqa: C901
     from jax import custom_jvp, jit, vmap

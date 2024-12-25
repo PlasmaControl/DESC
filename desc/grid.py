@@ -1211,7 +1211,7 @@ class LinearGrid(_Grid):
         nodes = np.column_stack([r, t, z])
         spacing = np.column_stack([dr, dt, dz])
 
-        return nodes, spacing
+        return jnp.asarray(nodes), jnp.asarray(spacing)
 
     def change_resolution(self, L, M, N, NFP=None):
         """Change the resolution of the grid.
@@ -1349,7 +1349,7 @@ class QuadratureGrid(_Grid):
         nodes = np.column_stack([r, t, z])
         spacing = np.column_stack([dr, dt, dz])
 
-        return nodes, spacing
+        return jnp.asarray(nodes), jnp.asarray(spacing)
 
     def change_resolution(self, L, M, N, NFP=None):
         """Change the resolution of the grid.
@@ -1551,7 +1551,7 @@ class ConcentricGrid(_Grid):
         nodes = np.column_stack([r, t, z])
         spacing = np.column_stack([dr, dt, dz])
 
-        return nodes, spacing
+        return jnp.asarray(nodes), jnp.asarray(spacing)
 
     def change_resolution(self, L, M, N, NFP=None):
         """Change the resolution of the grid.

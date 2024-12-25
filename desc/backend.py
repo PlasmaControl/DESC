@@ -67,10 +67,10 @@ if desc_config["num_device"] == 1:
         )
     )
 else:
-    print(f"Using {desc_config["num_device"]} devices:")
+    print(f"Using {desc_config['num_device']} devices:")
     for i, dev in enumerate(desc_config["devices"]):
         print(
-            f"\t Device {i}: {dev} with {desc_config["avail_mems"][i]:.2f} "
+            f"\t Device {i}: {dev} with {desc_config['avail_mems'][i]:.2f} "
             "GB available memory"
         )
 

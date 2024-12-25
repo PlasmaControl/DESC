@@ -1150,19 +1150,19 @@ class _Objective(IOAble, ABC):
                 num_gpu = len(desc_config["avail_mems"])
                 mesh = jax.make_mesh((num_gpu,), ("grid"))
                 grid._nodes = jax.device_put(
-                    grid.nodes,
+                    jnp.asarray(grid.nodes),
                     jax.sharding.NamedSharding(
                         mesh, jax.sharding.PartitionSpec("grid")
                     ),
                 )
                 grid._spacing = jax.device_put(
-                    grid.spacing,
+                    jnp.asarray(grid.spacing),
                     jax.sharding.NamedSharding(
                         mesh, jax.sharding.PartitionSpec("grid")
                     ),
                 )
                 grid._weights = jax.device_put(
-                    grid.weights,
+                    jnp.asarray(grid.weights),
                     jax.sharding.NamedSharding(
                         mesh, jax.sharding.PartitionSpec("grid")
                     ),

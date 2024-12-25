@@ -143,8 +143,6 @@ def set_device(kind="cpu", multigpu=False):  # noqa: C901
         os.environ["CUDA_VISIBLE_DEVICES"] = str(selected_gpu["index"])
 
     if kind == "gpu" and multigpu:
-        # Set CUDA_DEVICE_ORDER so the IDs assigned by CUDA match those from nvidia-smi
-        os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
         import nvgpu
 
         try:

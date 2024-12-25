@@ -157,6 +157,12 @@ def set_device(kind="cpu", multigpu=False):  # noqa: C901
             return
 
         gpu_ids = [dev["index"] for dev in devices]
+        if "CUDA_VISIBLE_DEVICES" in os.environ:
+            cuda_ids = [
+                s for s in re.findall(r"\b\d+\b", os.environ["CUDA_VISIBLE_DEVICES"])
+            ]
+            # check that the visible devices actually exist and are gpus
+            gpu_ids = [i for i in cuda_ids if i in gpu_ids]
         if len(gpu_ids) == 0:
             # cuda visible devices = '' -> don't use any gpu
             warnings.warn(

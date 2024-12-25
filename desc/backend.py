@@ -60,13 +60,13 @@ else:
             )
         )
 
-if "device" in desc_config.keys():
+if "devices" not in desc_config.keys():
     print(
         "Using device: {}, with {:.2f} GB available memory".format(
             desc_config.get("device"), desc_config.get("avail_mem")
         )
     )
-elif "devices" in desc_config.keys():
+else:
     print(f"Using {len(desc_config["devices"])} devices:")
     for i, dev in enumerate(desc_config["devices"]):
         print(

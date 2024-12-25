@@ -4,7 +4,7 @@ import functools
 
 import numpy as np
 
-from desc.backend import jit, jnp
+from desc.backend import desc_config, jax, jit, jnp
 from desc.batching import batched_vectorize
 from desc.objectives import (
     BoundaryRSelfConsistency,
@@ -129,7 +129,16 @@ class LinearConstraintProjection(ObjectiveFunction):
 
     def recover(self, x_reduced):
         """Recover the full state vector from the reduced optimization vector."""
-        return self._recover(x_reduced)
+        x_full = self._recover(x_reduced)
+        if "avail_mems" in desc_config.keys():
+            if hasattr(self, "_constants"):
+                num_gpu = len(desc_config["avail_mems"])
+                mesh = jax.make_mesh((num_gpu,), ("grid"))
+                x_full = jax.device_put(
+                    x_full,
+                    jax.sharding.NamedSharding(mesh, jax.sharding.PartitionSpec()),
+                )
+        return x_full
 
     def x(self, *things):
         """Return the reduced state vector from the Equilibrium eq."""

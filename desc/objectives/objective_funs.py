@@ -1144,11 +1144,11 @@ class _Objective(IOAble, ABC):
         self._check_dimensions()
         self._set_derivatives()
 
-        if "avail_mems" in desc_config.keys():
+        if desc_config["num_device"] != 1:
             if hasattr(self, "_constants"):
                 grid = self._constants["transforms"]["grid"]
-                num_gpu = len(desc_config["avail_mems"])
-                mesh = jax.make_mesh((num_gpu,), ("grid"))
+                mesh = jax.make_mesh((desc_config["num_device"],), ("grid"))
+                # shard nodes, spacing, and weights across devices
                 grid._nodes = jax.device_put(
                     jnp.asarray(grid.nodes),
                     jax.sharding.NamedSharding(
@@ -1167,6 +1167,15 @@ class _Objective(IOAble, ABC):
                         mesh, jax.sharding.PartitionSpec("grid")
                     ),
                 )
+
+                # replicate profiles across devices
+                # TODO: profiles are dict of arrays, need to shard each array
+                if False:
+                    profiles = self._constants["profiles"]
+                    profiles = jax.device_put(
+                        profiles,
+                        jax.sharding.NamedSharding(mesh, jax.sharding.PartitionSpec()),
+                    )
 
         # set quadrature weights if they haven't been
         if hasattr(self, "_constants") and ("quad_weights" not in self._constants):

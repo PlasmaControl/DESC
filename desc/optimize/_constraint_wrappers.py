@@ -130,14 +130,12 @@ class LinearConstraintProjection(ObjectiveFunction):
     def recover(self, x_reduced):
         """Recover the full state vector from the reduced optimization vector."""
         x_full = self._recover(x_reduced)
-        if "avail_mems" in desc_config.keys():
-            if hasattr(self, "_constants"):
-                num_gpu = len(desc_config["avail_mems"])
-                mesh = jax.make_mesh((num_gpu,), ("grid"))
-                x_full = jax.device_put(
-                    x_full,
-                    jax.sharding.NamedSharding(mesh, jax.sharding.PartitionSpec()),
-                )
+        if desc_config["num_device"] != 1:
+            mesh = jax.make_mesh((desc_config["num_device"],), ("grid"))
+            x_full = jax.device_put(
+                x_full,
+                jax.sharding.NamedSharding(mesh, jax.sharding.PartitionSpec()),
+            )
         return x_full
 
     def x(self, *things):
@@ -300,6 +298,8 @@ class LinearConstraintProjection(ObjectiveFunction):
         x = self.recover(x_reduced)
         v = self._unfixed_idx_mat
         df = getattr(self._objective, "jvp_" + op)(v.T, x, constants)
+        if desc_config["num_device"] != 1:
+            df = jax.device_put(df, jax.devices("gpu")[0])
         return df.T
 
     def jac_scaled(self, x_reduced, constants=None):
@@ -360,6 +360,8 @@ class LinearConstraintProjection(ObjectiveFunction):
         x = self.recover(x_reduced)
         v = self._unfixed_idx_mat @ v
         df = getattr(self._objective, op)(v, x, constants)
+        if desc_config["num_device"] != 1:
+            df = jax.device_put(df, jax.devices("gpu")[0])
         return df
 
     def jvp_scaled(self, v, x_reduced, constants=None):

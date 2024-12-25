@@ -58,7 +58,7 @@ _BANNER = r"""
 BANNER = colored(_BANNER, "magenta")
 
 
-config = {"device": None, "avail_mem": None, "kind": None, "num_device": 1}
+config = {"device": None, "avail_mem": None, "kind": None, "num_device": None}
 
 
 def set_device(kind="cpu", num_device=1):  # noqa: C901
@@ -86,6 +86,7 @@ def set_device(kind="cpu", num_device=1):  # noqa: C901
         cpu_mem = psutil.virtual_memory().available / 1024**3  # RAM in GB
         config["device"] = "CPU"
         config["avail_mem"] = cpu_mem
+        config["num_device"] = 1
 
     if kind == "gpu" and num_device == 1:
         # Set CUDA_DEVICE_ORDER so the IDs assigned by CUDA match those from nvidia-smi
@@ -140,6 +141,7 @@ def set_device(kind="cpu", num_device=1):  # noqa: C901
         config["avail_mem"] = (
             selected_gpu["mem_total"] - selected_gpu["mem_used"]
         ) / 1024  # in GB
+        config["num_device"] = 1
         os.environ["CUDA_VISIBLE_DEVICES"] = str(selected_gpu["index"])
 
     # TODO: merge the "gpu" and "num_device" cases in single if block

@@ -1145,21 +1145,28 @@ class _Objective(IOAble, ABC):
         self._set_derivatives()
 
         if "avail_mems" in desc_config.keys():
-            grid = self._constants["transforms"]["grid"]
-            num_gpu = len(desc_config["avail_mems"])
-            mesh = jax.make_mesh((num_gpu,), ("grid"))
-            grid._nodes = jax.device_put(
-                grid.nodes,
-                jax.sharding.NamedSharding(mesh, jax.sharding.PartitionSpec("grid")),
-            )
-            grid._spacing = jax.device_put(
-                grid.spacing,
-                jax.sharding.NamedSharding(mesh, jax.sharding.PartitionSpec("grid")),
-            )
-            grid._weights = jax.device_put(
-                grid.weights,
-                jax.sharding.NamedSharding(mesh, jax.sharding.PartitionSpec("grid")),
-            )
+            if hasattr(self, "_constants"):
+                grid = self._constants["transforms"]["grid"]
+                num_gpu = len(desc_config["avail_mems"])
+                mesh = jax.make_mesh((num_gpu,), ("grid"))
+                grid._nodes = jax.device_put(
+                    grid.nodes,
+                    jax.sharding.NamedSharding(
+                        mesh, jax.sharding.PartitionSpec("grid")
+                    ),
+                )
+                grid._spacing = jax.device_put(
+                    grid.spacing,
+                    jax.sharding.NamedSharding(
+                        mesh, jax.sharding.PartitionSpec("grid")
+                    ),
+                )
+                grid._weights = jax.device_put(
+                    grid.weights,
+                    jax.sharding.NamedSharding(
+                        mesh, jax.sharding.PartitionSpec("grid")
+                    ),
+                )
 
         # set quadrature weights if they haven't been
         if hasattr(self, "_constants") and ("quad_weights" not in self._constants):

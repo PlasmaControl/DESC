@@ -60,7 +60,7 @@ else:
             )
         )
 
-if "devices" not in desc_config.keys():
+if desc_config["num_devices"] == 1:
     print(
         "Using device: {}, with {:.2f} GB available memory".format(
             desc_config.get("device"), desc_config.get("avail_mem")

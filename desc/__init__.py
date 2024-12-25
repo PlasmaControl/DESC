@@ -61,7 +61,7 @@ BANNER = colored(_BANNER, "magenta")
 config = {"device": None, "avail_mem": None, "kind": None, "num_device": 1}
 
 
-def set_device(kind="cpu", num_device=None):  # noqa: C901
+def set_device(kind="cpu", num_device=1):  # noqa: C901
     """Sets the device to use for computation.
 
     If kind==``'gpu'``, checks available GPUs and selects the one with the most
@@ -87,7 +87,7 @@ def set_device(kind="cpu", num_device=None):  # noqa: C901
         config["device"] = "CPU"
         config["avail_mem"] = cpu_mem
 
-    if kind == "gpu" and (num_device is None or num_device == 1):
+    if kind == "gpu" and num_device == 1:
         # Set CUDA_DEVICE_ORDER so the IDs assigned by CUDA match those from nvidia-smi
         os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
         import nvgpu
@@ -142,7 +142,8 @@ def set_device(kind="cpu", num_device=None):  # noqa: C901
         ) / 1024  # in GB
         os.environ["CUDA_VISIBLE_DEVICES"] = str(selected_gpu["index"])
 
-    if kind == "gpu" and num_device is not None and num_device > 1:
+    # TODO: merge the "gpu" and "num_device" cases in single if block
+    if kind == "gpu" and num_device > 1:
         import nvgpu
 
         try:

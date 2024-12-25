@@ -328,6 +328,13 @@ def _Gamma_c_Velasco_1D(params, transforms, profiles, data, **kwargs):
     J.L. Velasco et al. 2021 Nucl. Fusion 61 116059.
     https://doi.org/10.1088/1741-4326/ac2994.
     Equation 16.
+
+    This expression has a secular term that drives the result to zero as the number
+    of toroidal transits increases if the secular term is not averaged out from the
+    singular integrals. It is observed that this implementation does not average
+    out the secular term. Currently, an optimization using this metric may need
+    to be evaluated by measuring decrease in Γ_c at a fixed number of toroidal
+    transits.
     """
     # noqa: unused dependency
     num_well = kwargs.get("num_well", None)

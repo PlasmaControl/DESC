@@ -87,7 +87,7 @@ def set_device(kind="cpu", num_device=None):  # noqa: C901
         config["device"] = "CPU"
         config["avail_mem"] = cpu_mem
 
-    if kind == "gpu" and num_device is None:
+    if kind == "gpu" and (num_device is None or num_device == 1):
         # Set CUDA_DEVICE_ORDER so the IDs assigned by CUDA match those from nvidia-smi
         os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
         import nvgpu

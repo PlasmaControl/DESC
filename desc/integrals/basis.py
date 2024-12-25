@@ -453,7 +453,7 @@ class PiecewiseChebyshevSeries(IOAble):
         y = bijection_from_disc(y, self.domain[0], self.domain[-1])
         return y, is_intersect, df_dy_sign
 
-    def intersect1d(self, k=0.0, *, num_intersect=None, pad_value=0.0):
+    def intersect1d(self, k=0.0, num_intersect=None, pad_value=0.0):
         """Coordinates z(x, yᵢ) such that fₓ(yᵢ) = k for every x.
 
         Examples

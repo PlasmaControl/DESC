@@ -94,9 +94,7 @@ def _check_spline_shape(knots, g, dg_dz, pitch_inv=None):
         last axis enumerates the polynomials that compose a particular spline.
     pitch_inv : jnp.ndarray
         Shape (..., num pitch).
-        1/λ values. 1/λ(α,ρ) is specified by ``pitch_inv[α,ρ]`` where in
-        the latter the labels are interpreted as the indices that correspond
-        to that field line.
+        1/λ values to compute the bounce points.
 
     """
     errorif(knots.ndim != 1, msg=f"knots should be 1d, got shape {knots.shape}.")
@@ -115,6 +113,9 @@ def _check_spline_shape(knots, g, dg_dz, pitch_inv=None):
     g, dg_dz = jnp.atleast_2d(g, dg_dz)
     if pitch_inv is not None:
         pitch_inv = jnp.atleast_1d(pitch_inv)
+        # if rho axis exists, then add alpha axis
+        if pitch_inv.ndim == 2:
+            pitch_inv = pitch_inv[:, jnp.newaxis]
         errorif(
             pitch_inv.ndim > 3
             or not is_broadcastable(pitch_inv.shape[:-1], g.shape[:-2]),
@@ -126,7 +127,7 @@ def _check_spline_shape(knots, g, dg_dz, pitch_inv=None):
 def bounce_points(
     pitch_inv, knots, B, dB_dz, num_well=None, check=False, plot=True, **kwargs
 ):
-    """Compute the bounce points given spline of B and pitch λ.
+    """Compute the bounce points given 1D spline of B and pitch λ.
 
     Parameters
     ----------
@@ -220,7 +221,7 @@ def bounce_points(
     z2 = jnp.where(mask, z2, 0.0)
 
     if check:
-        errorif(knots[0] <= sentinel, msg="Decrease sentinel.")
+        assert knots[0] > sentinel, "Reduce the sentinel value in the above code."
         _check_bounce_points(z1, z2, pitch_inv, knots, B, plot, **kwargs)
 
     return z1, z2
@@ -250,6 +251,12 @@ def _check_bounce_points(z1, z2, pitch_inv, knots, B, plot=True, **kwargs):
     assert z1.shape == z2.shape
     z1 = atleast_nd(4, z1)
     z2 = atleast_nd(4, z2)
+    # if rho axis exists, then add alpha axis
+    if jnp.ndim(pitch_inv) == 2:
+        pitch_inv = pitch_inv[:, jnp.newaxis]
+        # do not need to broadcast to full size because
+        # https://jax.readthedocs.io/en/latest/notebooks/
+        # Common_Gotchas_in_JAX.html#out-of-bounds-indexing
     pitch_inv = atleast_nd(3, pitch_inv)
     B = atleast_nd(4, B)
     mask = (z1 - z2) != 0.0
@@ -260,10 +267,10 @@ def _check_bounce_points(z1, z2, pitch_inv, knots, B, plot=True, **kwargs):
     err_2 = jnp.any(z1[..., 1:] < z2[..., :-1], axis=-1)
 
     eps = kwargs.pop("eps", jnp.finfo(jnp.array(1.0).dtype).eps * 10)
-    for ml in np.ndindex(B.shape[:-2]):
-        ppoly = PPoly(B[ml].T, knots)
+    for lm in np.ndindex(B.shape[:-2]):
+        ppoly = PPoly(B[lm].T, knots)
         for p in range(pitch_inv.shape[-1]):
-            idx = (*ml, p)
+            idx = (*lm, p)
             B_midpoint = ppoly((z1[idx] + z2[idx]) / 2)
             err_3 = jnp.any(B_midpoint > pitch_inv[idx] + eps)
             if not (err_1[idx] or err_2[idx] or err_3):
@@ -276,7 +283,7 @@ def _check_bounce_points(z1, z2, pitch_inv, knots, B, plot=True, **kwargs):
                     z1=_z1,
                     z2=_z2,
                     k=pitch_inv[idx],
-                    title=kwargs.pop("title") + f", (m,l,p)={idx}",
+                    title=kwargs.pop("title") + f", (l,m,p)={idx}",
                     **kwargs,
                 )
 
@@ -293,9 +300,9 @@ def _check_bounce_points(z1, z2, pitch_inv, knots, B, plot=True, **kwargs):
             plots.append(
                 plot_ppoly(
                     ppoly=ppoly,
-                    z1=z1[ml],
-                    z2=z2[ml],
-                    k=pitch_inv[ml],
+                    z1=z1[lm],
+                    z2=z2[lm],
+                    k=pitch_inv[lm],
                     **kwargs,
                 )
             )
@@ -335,12 +342,12 @@ def _bounce_quadrature(
         that determines ``f`` in ∫ f(ρ,α,λ,ℓ) dℓ. It should accept a dictionary
         which stores the interpolated data and the arguments ``B`` and ``pitch``.
     pitch_inv : jnp.ndarray
-        Shape (num alpha, num rho, num pitch).
-        1/λ values to compute the bounce integrals. 1/λ(α,ρ) is specified by
-        ``pitch_inv[α,ρ]`` where in the latter the labels are interpreted
+        Shape (num rho, num pitch).
+        1/λ values to compute the bounce integrals. 1/λ(ρ) is specified by
+        ``pitch_inv[ρ]`` where in the latter the labels are interpreted
         as the indices that correspond to that field line.
     data : dict[str, jnp.ndarray]
-        Shape (num alpha, num rho, num zeta).
+        Shape (num rho, num alpha, num zeta).
         Real scalar-valued periodic functions in (θ, ζ) ∈ [0, 2π) × [0, 2π/NFP)
         evaluated on the ``grid`` supplied to construct this object.
         Use the method ``Bounce1D.reshape`` to reshape the data into the
@@ -348,7 +355,7 @@ def _bounce_quadrature(
     names : str or list[str]
         Names in ``data`` to interpolate. Default is all keys in ``data``.
     points : tuple[jnp.ndarray]
-        Shape (num alpha, num rho, num pitch, num well).
+        Shape (num rho, num alpha, num pitch, num well).
         Optional, output of method ``self.points``.
         Tuple of length two (z1, z2) that stores ζ coordinates of bounce points.
         The points are ordered and grouped such that the straight line path
@@ -378,6 +385,9 @@ def _bounce_quadrature(
     z1, z2 = points
     errorif(z1.ndim < 2 or z1.shape != z2.shape)
     pitch_inv = jnp.atleast_1d(pitch_inv)
+    # if rho axis exists, then add alpha axis
+    if pitch_inv.ndim == 2:
+        pitch_inv = pitch_inv[:, jnp.newaxis]
 
     # Integrate and complete the change of variable.
     if batch:
@@ -548,10 +558,10 @@ def _plot_check_interp(Q, V, name=""):
         # interpolations for every pitch simultaneously.
         Q = Q.squeeze(axis=-2)
         V = V.squeeze(axis=-2)
-        label = "(m,l)"
+        label = "(l,m)"
         shape = Q.shape[:2]
     else:
-        label = "(m,l,p)"
+        label = "(l,m,p)"
         shape = Q.shape[:3]
     for idx in np.ndindex(shape):
         marked = jnp.nonzero(jnp.any(Q[idx] != 0.0, axis=-1))[0]
@@ -877,32 +887,31 @@ def interp_fft_to_argmin(
 
 
 # TODO (#568): Generalize this beyond ζ = ϕ or just map to Clebsch with ϕ.
-def get_fieldline(alpha_0, iota, num_transit, period):
+def get_fieldline(alpha, iota, num_transit):
     """Get sequence of poloidal coordinates A = (α₀, α₁, …, αₘ₋₁) of field line.
 
     Parameters
     ----------
-    alpha_0 : float
-        Starting field line poloidal label.
+    alpha : jnp.ndarray
+        Shape (num alpha, ).
+        Starting field line poloidal labels.
     iota : jnp.ndarray
         Shape (num rho, ).
         Rotational transform normalized by 2π.
-    num_transit : float
-        Number of ``period``s to follow field line.
-    period : float
-        Toroidal period after which to update label.
+    num_transit : int
+        Number of toroidal transits to follow field line.
 
     Returns
     -------
     fieldline : jnp.ndarray
-        Shape (num rho, num transit) or broadcastable.
+        Shape (num alpha, num rho, num transit).
         Sequence of poloidal coordinates A = (α₀, α₁, …, αₘ₋₁) that specify field line.
 
     """
+    iota = jnp.atleast_1d(iota)[:, jnp.newaxis]
+    alpha = alpha[:, jnp.newaxis, jnp.newaxis]
     # Δϕ (∂α/∂ϕ) = Δϕ ι̅ = Δϕ ι/2π = Δϕ data["iota"]
-    return alpha_0 + period * (
-        iota if iota.size == 1 else iota[:, jnp.newaxis]
-    ) * jnp.arange(num_transit)
+    return alpha + 2 * jnp.pi * jnp.arange(num_transit) * iota
 
 
 def fourier_chebyshev(theta, iota, alpha, num_transit):
@@ -918,7 +927,7 @@ def fourier_chebyshev(theta, iota, alpha, num_transit):
     iota : jnp.ndarray
         Shape (num rho, ).
         Rotational transform normalized by 2π.
-    alpha : float
+    alpha : jnp.ndarray
         Starting field line poloidal label.
     num_transit : int
         Number of toroidal transits to follow field line.
@@ -955,11 +964,7 @@ def fourier_chebyshev(theta, iota, alpha, num_transit):
     (Visually, the small discontinuity apparent in g(α, ζ) at cuts of the field
     line will not be visible in g(ϑ, ζ) because when moving along the field line
     with g(ϑ, ζ) one is continuously flowing away from the starting field line,
-    (whereas g(α, ζ) has to "decide" at the cut what the next field line is).
-    (If full convergence is difficult to achieve, then in the context of surface
-    averaging bounce integrals, function approximation in (α, ζ) coordinates
-    might be preferable because most of the bounce integrals do not stretch
-    across toroidal transits).)
+    whereas g(α, ζ) has to "decide" at the cut what the next field line is).
 
     Note that if g is an unbounded function, as all coordinates are, then
     it is impossible to approximate it with a finite number of periodic
@@ -976,7 +981,10 @@ def fourier_chebyshev(theta, iota, alpha, num_transit):
 
     """
     # peeling off field lines
-    fieldline = get_fieldline(alpha, iota, num_transit, 2 * jnp.pi)
+    fieldline = get_fieldline(alpha, iota, num_transit)
+    if theta.ndim == 2:
+        # Then squeeze out the rho axis.
+        fieldline = fieldline.squeeze(axis=1)
     # Evaluating set of single variable maps is more efficient than evaluating
     # multivariable map, so we project θ to a set of Chebyshev series.
     T = FourierChebyshevSeries(f=theta, domain=(0, 2 * jnp.pi)).compute_cheb(fieldline)
@@ -1016,7 +1024,7 @@ def chebyshev(n0, n1, NFP, T, f, Y):
     # is then up-sampling the Chebyshev resolution, which is good since the
     # spectrum of |B| is wider than θ.
 
-    # θ at Chebyshev points, reshaped to (num rho, num transit * num points)
+    # θ at Chebyshev points, reshaped to (..., num transit * num points)
     theta = T.evaluate(Y).reshape(*T.cheb.shape[:-2], T.X * Y)
     zeta = jnp.broadcast_to(cheb_pts(Y, domain=T.domain), (T.X, Y)).ravel()
 
@@ -1057,12 +1065,12 @@ def cubic_spline(n0, n1, NFP, T, f, Y, check=False):
     Returns
     -------
     f : jnp.ndarray
-        Shape (num rho, num transit * (Y - 1), 4).
+        Shape (..., num transit * (Y - 1), 4).
         Polynomial coefficients of the spline of f in local power basis.
         Last axis enumerates the coefficients of power series. For a polynomial
         given by ∑ᵢⁿ cᵢ xⁱ, coefficient cᵢ is stored at ``f[...,n-i]``.
-        Second axis enumerates the polynomials that compose a particular spline.
-        First axis enumerates field lines of a particular flux surface.
+        Second to last axis enumerates the polynomials that compose a particular
+        spline.
     knots : jnp.ndarray
         Shape (num transit * (Y - 1)).
         Knots of spline ``f``.
@@ -1071,30 +1079,27 @@ def cubic_spline(n0, n1, NFP, T, f, Y, check=False):
     knots = jnp.linspace(-1, 1, Y, endpoint=False)
     # θ at uniformly spaced points along field line
     theta = idct_non_uniform(knots, T.cheb[..., jnp.newaxis, :], T.Y).reshape(
-        *T.cheb.shape[:-2], T.X * Y  # num rho, num transit * num points
+        *T.cheb.shape[:-2], T.X * Y  # num transit * num points
     )
-    knots = (
+    knots = jnp.ravel(
         bijection_from_disc(knots, T.domain[0], T.domain[-1])
         + (T.domain[-1] - T.domain[0]) * jnp.arange(T.X)[:, jnp.newaxis]
-    ).ravel()
-
-    f = jnp.moveaxis(
-        CubicSpline(
-            x=knots,
-            y=irfft2_non_uniform(
-                theta,
-                knots,
-                f[..., jnp.newaxis, :, :],
-                n0=n0,
-                n1=n1,
-                domain1=(0, 2 * jnp.pi / NFP),
-                axes=(-1, -2),
-            ),
-            axis=-1,
-            check=check,
-        ).c,
-        source=(0, 1),
-        destination=(-1, -2),
     )
+
+    f = CubicSpline(
+        x=knots,
+        y=irfft2_non_uniform(
+            theta,
+            knots,
+            f[..., jnp.newaxis, :, :],
+            n0=n0,
+            n1=n1,
+            domain1=(0, 2 * jnp.pi / NFP),
+            axes=(-1, -2),
+        ),
+        axis=-1,
+        check=check,
+    ).c
+    f = jnp.moveaxis(f, source=(0, 1), destination=(-1, -2))
     assert f.shape[-2:] == (T.X * Y - 1, 4)
     return f, knots

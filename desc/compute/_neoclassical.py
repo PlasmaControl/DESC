@@ -18,16 +18,25 @@ _bounce_doc = {
         DESC coordinates θ sourced from the Clebsch coordinates
         ``FourierChebyshevSeries.nodes(X,Y,rho,domain=(0,2*jnp.pi))``.
         Use the ``Bounce2D.compute_theta`` method to obtain this.
+        ``X`` and ``Y`` are preferably rounded down to powers of two.
         """,
     "Y_B": """int :
         Desired resolution for algorithm to compute bounce points.
         Default is double ``Y``.
         """,
+    "alpha": """jnp.ndarray :
+        Shape (num alpha, ).
+        Starting field line poloidal labels.
+        Default is single field line. To compute a surface average
+        on a rational surface, it is necessary to average over multiple
+        field lines until the surface is covered sufficiently.
+    """,
     "num_transit": """int :
         Number of toroidal transits to follow field line.
-        For axisymmetric devices, one poloidal transit is sufficient. Otherwise,
-        assuming the surface is not near rational, more transits will
-        approximate surface averages better, with diminishing returns.
+        In an axisymmetric device, field line integration over a single poloidal
+        transit is sufficient to capture a surface average. For a 3D
+        configuration, more transits will approximate surface averages on an
+        irrational magnetic surface better, with diminishing returns.
         """,
     "num_well": """int :
         Maximum number of wells to detect for each pitch and field line.
@@ -76,7 +85,7 @@ _bounce_doc = {
 def _compute(
     fun, fun_data, data, theta, grid, num_pitch, simp=False, surf_batch_size=1
 ):
-    """Compute ``fun`` for each ρ value iteratively.
+    """Compute Bounce2D integral quantity with ``fun``.
 
     Parameters
     ----------
@@ -90,6 +99,8 @@ def _compute(
         Shape (num rho, X, Y).
         DESC coordinates θ sourced from the Clebsch coordinates
         ``FourierChebyshevSeries.nodes(X,Y,rho,domain=(0,2*jnp.pi))``.
+        Use the ``Bounce2D.compute_theta`` method to obtain this.
+        ``X`` and ``Y`` are preferably rounded down to powers of two.
     simp : bool
         Whether to use an open Simpson rule instead of uniform weights.
     surf_batch_size : int
@@ -110,10 +121,12 @@ def _compute(
         num_pitch,
         simp=simp,
     )
-    return grid.expand(batch_map(fun, fun_data, surf_batch_size))
+    out = batch_map(fun, fun_data, surf_batch_size)
+    assert out.ndim == 1
+    return grid.expand(out)
 
 
-def _dH(data, B, pitch):
+def _dH_ripple(data, B, pitch):
     """Integrand of Nemov eq. 30 with |∂ψ/∂ρ| (λB₀)¹ᐧ⁵ removed."""
     return (
         jnp.sqrt(jnp.abs(1 - pitch * B))
@@ -123,7 +136,7 @@ def _dH(data, B, pitch):
     )
 
 
-def _dI(data, B, pitch):
+def _dI_ripple(data, B, pitch):
     """Integrand of Nemov eq. 31."""
     return jnp.sqrt(jnp.abs(1 - pitch * B)) / B
 
@@ -131,7 +144,7 @@ def _dI(data, B, pitch):
 @register_compute_fun(
     name="effective ripple 3/2",
     label=(
-        # ε¹ᐧ⁵ = π/(8√2) R₀²〈|∇ψ|〉⁻² B₀⁻¹ ∫dλ λ⁻² 〈 ∑ⱼ Hⱼ²/Iⱼ 〉
+        # ε¹ᐧ⁵ = π/(8√2) R₀²〈|∇ψ|〉⁻² B₀⁻¹ ∫ dλ λ⁻² 〈 ∑ⱼ Hⱼ²/Iⱼ 〉
         "\\epsilon_{\\mathrm{eff}}^{3/2} = \\frac{\\pi}{8 \\sqrt{2}} "
         "R_0^2 \\langle \\vert\\nabla \\psi\\vert \\rangle^{-2} "
         "B_0^{-1} \\int d\\lambda \\lambda^{-2} "
@@ -175,6 +188,7 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
     # noqa: unused dependency
     theta = kwargs["theta"]
     Y_B = kwargs.get("Y_B", theta.shape[-1] * 2)
+    alpha = kwargs.get("alpha", jnp.array([0.0]))
     num_transit = kwargs.get("num_transit", 20)
     num_pitch = kwargs.get("num_pitch", 51)
     num_well = kwargs.get("num_well", Y_B * num_transit)
@@ -184,7 +198,7 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
         surf_batch_size == 1 or pitch_batch_size is None
     ), f"Expected pitch_batch_size to be None, got {pitch_batch_size}."
     spline = kwargs.get("spline", True)
-    fieldline_quad = (
+    fl_quad = (
         kwargs["fieldline_quad"] if "fieldline_quad" in kwargs else leggauss(Y_B // 2)
     )
     quad = (
@@ -201,29 +215,30 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
             data,
             data["theta"],
             Y_B,
+            alpha,
             num_transit,
-            quad=quad,
+            quad,
             is_fourier=True,
             spline=spline,
         )
 
         def fun(pitch_inv):
             H, I = bounce.integrate(
-                [_dH, _dI],
+                [_dH_ripple, _dI_ripple],
                 pitch_inv,
                 data,
                 "|grad(rho)|*kappa_g",
-                bounce.points(pitch_inv, num_well=num_well),
+                bounce.points(pitch_inv, num_well),
                 is_fourier=True,
             )
-            return safediv(H**2, I).sum(axis=-1)
+            return safediv(H**2, I).sum(axis=-1).mean(axis=-2)
 
         return jnp.sum(
             batch_map(fun, data["pitch_inv"], pitch_batch_size)
             * data["pitch_inv weight"]
             / data["pitch_inv"] ** 3,
             axis=-1,
-        ) / bounce.compute_fieldline_length(fieldline_quad)
+        ) / bounce.compute_fieldline_length(fl_quad)
 
     grid = transforms["grid"]
     B0 = data["max_tz |B|"]

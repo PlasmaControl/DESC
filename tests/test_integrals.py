@@ -968,7 +968,7 @@ class TestBounceQuadrature:
             integrand = lambda data, B, pitch: jnp.sqrt(1 - k * pitch * (B - 1))
             truth = v * 2 * ellipe(m)
         np.testing.assert_allclose(
-            bounce.integrate(integrand, pitch_inv, check=True, plot=False).sum(),
+            bounce.integrate(integrand, pitch_inv, check=True, plot=True).sum(),
             truth,
             rtol=1e-4,
         )
@@ -1097,7 +1097,6 @@ class TestBounce:
         rho = np.linspace(0.1, 1, 6)
         alpha = np.array([0, 0.5])
         zeta = np.linspace(-2 * np.pi, 2 * np.pi, 200)
-
         eq = get("HELIOTRON")
 
         # 3. Convert above coordinates to DESC computational coordinates.
@@ -1142,19 +1141,19 @@ class TestBounce:
         )
 
         # 9. Example manipulation of the output
-        # Sum all bounce averages across a particular field line, for every field line.
+        # Sum all bounce averages on a particular field line, for every field line.
         result = avg.sum(axis=-1)
         # The result stored at
-        m, l, p = 0, 1, 3
-        print("Result(α, ρ, λ):", result[m, l, p])
+        l, m, p = 1, 0, 3
+        print("Result(ρ, α, λ):", result[l, m, p])
         # corresponds to the 1/λ value
-        print("1/λ(α, ρ):", pitch_inv[l, p])
-        # for the Clebsch-type field line coordinates
-        nodes = grid.source_grid.meshgrid_reshape(grid.source_grid.nodes[:, :2], "arz")
-        print("(ρ, α):", nodes[m, l, 0])
+        print("1/λ(ρ, λ):", pitch_inv[l, p])
+        # for the Clebsch field line coordinates
+        nodes = bounce.reshape(grid.source_grid, grid.source_grid.nodes[:, :2])
+        print("(ρ, α):", nodes[l, m, 0])
 
         # 10. Plotting
-        fig, ax = bounce.plot(m, l, pitch_inv[l], include_legend=False, show=False)
+        fig, ax = bounce.plot(l, m, pitch_inv[l], include_legend=False, show=False)
         return fig
 
     @pytest.mark.unit
@@ -1489,19 +1488,18 @@ class TestBounce2D:
             grid,
             dict.fromkeys(Bounce2D.required_names, g(grid.nodes[:, 2])),
             # dummy value; h depends on ζ alone,so doesn't matter what θ(α, ζ) is
-            theta=grid.meshgrid_reshape(grid.nodes[:, 1], "rtz"),
+            theta=Bounce2D.reshape(grid, grid.nodes[:, 1]),
             Y_B=2 * nyquist,
             num_transit=1,
         )
         points = np.array(0, ndmin=2), np.array(2 * np.pi, ndmin=2)
         np.testing.assert_allclose(
-            bounce.interp_to_argmin(
-                grid.meshgrid_reshape(h(grid.nodes[:, 2]), "rtz"), points
-            ),
+            bounce.interp_to_argmin(bounce.reshape(grid, h(grid.nodes[:, 2])), points),
             h(argmin_g),
             rtol=1e-6,
         )
 
+    @pytest.mark.slow
     @pytest.mark.unit
     @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d * 4)
     def test_bounce2d_checks(self):
@@ -1516,6 +1514,7 @@ class TestBounce2D:
         # 1. Define python functions for the integrands. We do that above.
         # 2. Pick flux surfaces and grid resolution.
         rho = np.linspace(0.1, 1, 6)
+        alpha = np.array([0, 0.5])
         eq = get("HELIOTRON")
         grid = LinearGrid(rho=rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False)
         # 3. Compute input data.
@@ -1524,9 +1523,17 @@ class TestBounce2D:
             grid=grid,
         )
         # 4. Compute DESC coordinates of optimal interpolation nodes.
-        theta = Bounce2D.compute_theta(eq, X=8, Y=64, rho=rho)
+        theta = Bounce2D.compute_theta(eq, X=16, Y=64, rho=rho)
         # 5. Make the bounce integration operator.
-        bounce = Bounce2D(grid, data, theta, num_transit=2, check=True, spline=False)
+        bounce = Bounce2D(
+            grid,
+            data,
+            theta,
+            alpha=alpha,
+            num_transit=2,
+            check=True,
+            spline=False,
+        )
         pitch_inv, _ = bounce.get_pitch_inv_quad(
             min_B=grid.compress(data["min_tz |B|"]),
             max_B=grid.compress(data["max_tz |B|"]),
@@ -1560,41 +1567,40 @@ class TestBounce2D:
         )
 
         # 9. Example manipulation of the output
-        # Sum all bounce averages across a particular field line, for every field line.
+        # Sum all bounce averages on a particular field line, for every field line.
         result = avg.sum(axis=-1)
         # The result stored at
-        l, p = 1, 3
-        print("Result(ρ, λ):", result[l, p])
+        l, m, p = 1, 0, 3
+        print("Result(ρ, α, λ):", result[l, m, p])
         # corresponds to the 1/λ value
-        print("1/λ(ρ):", pitch_inv[l, p])
-        # for the flux surface
-        print("ρ:", rho[l])
+        print("1/λ(ρ, λ):", pitch_inv[l, p])
+        # for the Clebsch field line coordinates
+        print("(ρ, α):", rho[l], alpha[m])
 
         np.testing.assert_allclose(
             bounce.compute_fieldline_length(),
-            # Computed below through "fieldline length" with Simpson's rule 800 points.
-            # The difference is likely due to interpolation and floating point error.
-            # (On the version of JAX on which rtol was set, there is a bug with DCT
-            # and FFT that limit the accuracy to something comparable to 32 bit).
+            # Crossref w/ "fieldline length" in data index with 1000 points.
             [
-                384.77892007,
-                361.60220181,
-                345.33817065,
-                333.00781712,
-                352.16277188,
-                440.09424799,
+                385.20520905,
+                361.94836747,
+                345.64342394,
+                333.29485717,
+                352.15451128,
+                440.10036239,
             ],
-            rtol=3e-3,
+            rtol=1e-2,
         )
 
         # 10. Plotting
-        fig, ax = bounce.plot(l, pitch_inv[l], include_legend=False, show=False)
-        _, _ = bounce.plot_theta(l, show=False)
+        fig, ax = bounce.plot(l, m, pitch_inv[l], include_legend=False, show=False)
+        _, _ = bounce.plot_theta(l, m, show=False)
 
         # make sure tests pass when spline=True
-        b = Bounce2D(grid, data, theta, num_transit=2, check=True, spline=True)
+        b = Bounce2D(
+            grid, data, theta, alpha=alpha, num_transit=2, check=True, spline=True
+        )
         b.check_points(b.points(pitch_inv), pitch_inv, plot=False)
-        _, _ = b.plot(l, pitch_inv[l], show=False)
+        _, _ = b.plot(l, m, pitch_inv[l], show=False)
 
         return fig
 
@@ -1630,8 +1636,8 @@ class TestBounce2D:
             grid,
             grid_data,
             Bounce2D.compute_theta(eq, X=8, Y=8, rho=data["rho"], iota=data["iota"]),
-            num_transit=3,
             alpha=data["alpha"] - 2.5 * np.pi * data["iota"],
+            num_transit=3,
             Bref=data["Bref"],
             Lref=data["a"],
             check=True,

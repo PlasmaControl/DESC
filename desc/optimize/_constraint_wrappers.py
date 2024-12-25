@@ -298,8 +298,6 @@ class LinearConstraintProjection(ObjectiveFunction):
         x = self.recover(x_reduced)
         v = self._unfixed_idx_mat
         df = getattr(self._objective, "jvp_" + op)(v.T, x, constants)
-        if desc_config["num_device"] != 1:
-            df = jax.device_put(df, jax.devices("gpu")[0])
         return df.T
 
     def jac_scaled(self, x_reduced, constants=None):
@@ -360,8 +358,6 @@ class LinearConstraintProjection(ObjectiveFunction):
         x = self.recover(x_reduced)
         v = self._unfixed_idx_mat @ v
         df = getattr(self._objective, op)(v, x, constants)
-        if desc_config["num_device"] != 1:
-            df = jax.device_put(df, jax.devices("gpu")[0])
         return df
 
     def jvp_scaled(self, v, x_reduced, constants=None):

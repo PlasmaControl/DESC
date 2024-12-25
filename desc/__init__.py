@@ -185,6 +185,8 @@ def set_device(kind="cpu", multigpu=False):  # noqa: C901
         for dev in devices:
             mem = dev["mem_total"] - dev["mem_used"]
             memories[dev["index"]] = mem
+
+        config["device"] = "gpu"
         config["devices"] = [
             dev["type"] + " (id={})".format(dev["index"]) for dev in devices
         ]

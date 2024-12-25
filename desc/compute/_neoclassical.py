@@ -83,7 +83,7 @@ _bounce_doc = {
 
 
 def _compute(
-    fun, fun_data, data, theta, grid, num_pitch, simp=False, surf_batch_size=1
+    fun, fun_data, data, theta, grid, num_pitch, surf_batch_size=1, simp=False
 ):
     """Compute Bounce2D integral quantity with ``fun``.
 
@@ -101,11 +101,15 @@ def _compute(
         ``FourierChebyshevSeries.nodes(X,Y,rho,domain=(0,2*jnp.pi))``.
         Use the ``Bounce2D.compute_theta`` method to obtain this.
         ``X`` and ``Y`` are preferably rounded down to powers of two.
-    simp : bool
-        Whether to use an open Simpson rule instead of uniform weights.
+    grid : Grid
+        Grid that can expand and compress.
+    num_pitch : int
+        Resolution for quadrature over velocity coordinate.
     surf_batch_size : int
         Number of flux surfaces with which to compute simultaneously.
         Default is ``1``.
+    simp : bool
+        Whether to use an open Simpson rule instead of uniform weights.
 
     """
     for name in Bounce2D.required_names:
@@ -245,13 +249,13 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
     data["effective ripple 3/2"] = (
         _compute(
             eps_32,
-            fun_data={"|grad(rho)|*kappa_g": data["|grad(rho)|"] * data["kappa_g"]},
-            data=data,
-            theta=theta,
-            grid=grid,
-            num_pitch=num_pitch,
+            {"|grad(rho)|*kappa_g": data["|grad(rho)|"] * data["kappa_g"]},
+            data,
+            theta,
+            grid,
+            num_pitch,
+            surf_batch_size,
             simp=True,
-            surf_batch_size=surf_batch_size,
         )
         * (B0 * data["R0"] / data["<|grad(rho)|>"]) ** 2
         * jnp.pi

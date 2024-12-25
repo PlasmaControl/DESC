@@ -207,13 +207,7 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
     }
     grid = transforms["grid"]
     data["Gamma_c"] = _compute(
-        Gamma_c,
-        fun_data=fun_data,
-        data=data,
-        theta=theta,
-        grid=grid,
-        num_pitch=num_pitch,
-        surf_batch_size=surf_batch_size,
+        Gamma_c, fun_data, data, theta, grid, num_pitch, surf_batch_size
     )
     return data
 
@@ -342,15 +336,15 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
     grid = transforms["grid"]
     data["Gamma_c Velasco"] = _compute(
         Gamma_c,
-        fun_data={
+        {
             "cvdrift0": data["cvdrift0"],
             "gbdrift (periodic)": data["gbdrift (periodic)"],
             "gbdrift (secular)/phi": data["gbdrift (secular)/phi"],
         },
-        data=data,
-        theta=theta,
-        grid=grid,
-        num_pitch=num_pitch,
-        surf_batch_size=surf_batch_size,
+        data,
+        theta,
+        grid,
+        num_pitch,
+        surf_batch_size,
     )
     return data

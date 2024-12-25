@@ -32,7 +32,7 @@ _bounce1D_doc = {
 }
 
 
-def _compute(fun, fun_data, data, grid, num_pitch, simp=False, surf_batch_size=1):
+def _compute(fun, fun_data, data, grid, num_pitch, surf_batch_size=1, simp=False):
     """Compute Bounce1D integral quantity with ``fun``.
 
     Parameters
@@ -43,11 +43,15 @@ def _compute(fun, fun_data, data, grid, num_pitch, simp=False, surf_batch_size=1
         Data to provide to ``fun``. This dict will be modified.
     data : dict[str, jnp.ndarray]
         DESC data dict.
-    simp : bool
-        Whether to use an open Simpson rule instead of uniform weights.
+    grid : Grid
+        Grid that can expand and compress.
+    num_pitch : int
+        Resolution for quadrature over velocity coordinate.
     surf_batch_size : int
         Number of flux surfaces with which to compute simultaneously.
         Default is ``1``.
+    simp : bool
+        Whether to use an open Simpson rule instead of uniform weights.
 
     """
     for name in Bounce1D.required_names:
@@ -138,12 +142,12 @@ def _epsilon_32_1D(params, transforms, profiles, data, **kwargs):
     data["old effective ripple 3/2"] = (
         _compute(
             eps_32,
-            fun_data={"|grad(rho)|*kappa_g": data["|grad(rho)|"] * data["kappa_g"]},
-            data=data,
-            grid=grid,
-            num_pitch=num_pitch,
+            {"|grad(rho)|*kappa_g": data["|grad(rho)|"] * data["kappa_g"]},
+            data,
+            grid,
+            num_pitch,
+            surf_batch_size,
             simp=True,
-            surf_batch_size=surf_batch_size,
         )
         / data["fieldline length"]
         * (B0 * data["R0"] / data["<|grad(rho)|>"]) ** 2
@@ -283,14 +287,7 @@ def _Gamma_c_1D(params, transforms, profiles, data, **kwargs):
     }
     grid = transforms["grid"].source_grid
     data["old Gamma_c"] = (
-        _compute(
-            Gamma_c,
-            fun_data=fun_data,
-            data=data,
-            grid=grid,
-            num_pitch=num_pitch,
-            surf_batch_size=surf_batch_size,
-        )
+        _compute(Gamma_c, fun_data, data, grid, num_pitch, surf_batch_size)
         / data["fieldline length"]
     )
     return data
@@ -368,11 +365,11 @@ def _Gamma_c_Velasco_1D(params, transforms, profiles, data, **kwargs):
     data["old Gamma_c Velasco"] = (
         _compute(
             Gamma_c,
-            fun_data={"cvdrift0": data["cvdrift0"], "gbdrift": data["gbdrift"]},
-            data=data,
-            grid=grid,
-            num_pitch=num_pitch,
-            surf_batch_size=surf_batch_size,
+            {"cvdrift0": data["cvdrift0"], "gbdrift": data["gbdrift"]},
+            data,
+            grid,
+            num_pitch,
+            surf_batch_size,
         )
         / data["fieldline length"]
     )

@@ -779,7 +779,7 @@ class Bounce2D(Bounce):
         Returns
         -------
         f_j : jnp.ndarray
-            Shape (num rho, num pitch, num well).
+            Shape (num rho, num alpha, num pitch, num well).
             ``f`` interpolated to the deepest point between ``points``.
 
         """

@@ -289,10 +289,10 @@ class LinearConstraintProjection(ObjectiveFunction):
 
     def _jac(self, x_reduced, constants=None, op="scaled"):
         x = self.recover(x_reduced)
-        vT = self._unfixed_idx_mat.T
+        v = self._unfixed_idx_mat
         if desc_config["num_device"] != 1:
-            vT = jax.device_put(vT, desc_config["sharding"])
-        df = getattr(self._objective, "jvp_" + op)(vT, x, constants)
+            v = jax.device_put(v, desc_config["sharding"])
+        df = getattr(self._objective, "jvp_" + op)(v.T, x, constants)
         return df.T
 
     def jac_scaled(self, x_reduced, constants=None):

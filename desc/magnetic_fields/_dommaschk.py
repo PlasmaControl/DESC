@@ -5,10 +5,15 @@ https://doi.org/10.1016/0010-4655(86)90109-8
 
 """
 
-from desc.backend import cond, fori_loop, gammaln, jit, jnp
+import numpy as np
+import sympy as sp
+from sympy.abc import x
+from sympy.vector import CoordSys3D, gradient
+
+from desc.backend import jit, jnp
 from desc.derivatives import Derivative
 
-from ._core import ScalarPotentialField, _MagneticField
+from ._core import ScalarPotentialField, _MagneticField, rpz2xyz_vec, xyz2rpz
 
 
 class DommaschkPotentialField(ScalarPotentialField):
@@ -88,6 +93,81 @@ class DommaschkPotentialField(ScalarPotentialField):
         params["B0"] = B0
 
         super().__init__(dommaschk_potential, params, NFP)
+
+        self._set_potentials()
+
+    def _set_potentials(self):
+        """Creates the potential and B function using sympy."""
+        cyl = CoordSys3D(
+            "cyl", transformation="cylindrical", variable_names=("R", "phi", "Z")
+        )
+        keys = list(self._params.keys())
+
+        params = dict(
+            zip(
+                keys, [list(np.array(self._params[key])) for key in keys if key != "B0"]
+            )
+        )
+        params["B0"] = float(self._params["B0"])
+
+        self._domm_pot = dommaschk_potential(cyl.R, cyl.phi, cyl.Z, **params)
+        self._B_function = gradient(self._domm_pot)
+
+    def compute_magnetic_field(
+        self, coords, params=None, basis="rpz", source_grid=None, transforms=None
+    ):
+        """Compute magnetic field at a set of points.
+
+            For the Dommaschk potentials, we use Sympy to
+            find the potentials by recursive symbolic integration,
+            then find their gradient symbolically, and finally convert
+            the gradient (the B field) to JAX-enabled functions.
+
+        Parameters
+        ----------
+        coords : array-like shape(n,3)
+            Nodes to evaluate field at in [R,phi,Z] or [X,Y,Z] coordinates.
+        params : dict or array-like of dict, optional
+            Dictionary of optimizable parameters, eg field.params_dict.
+        basis : {"rpz", "xyz"}
+            Basis for input coordinates and returned magnetic field.
+        source_grid : Grid, int or None
+            Unused by this MagneticField class.
+        transforms : dict of Transform
+            Transforms for R, Z, lambda, etc. Default is to build from source_grid
+            Unused by this MagneticField class.
+
+        Returns
+        -------
+        field : ndarray, shape(N,3)
+            magnetic field at specified points
+
+        """
+        assert basis.lower() in ["rpz", "xyz"]
+        coords = jnp.atleast_2d(jnp.asarray(coords))
+        coords = coords.astype(float)
+        if basis == "xyz":
+            coords = xyz2rpz(coords)
+
+        if params is None:
+            params = self._params
+        cyl = CoordSys3D(
+            "cyl", transformation="cylindrical", variable_names=("R", "phi", "Z")
+        )
+        BR = sp.lambdify([cyl.R, cyl.phi, cyl.Z], self._B_function.coeff(cyl.i), "jax")
+        Bphi = sp.lambdify(
+            [cyl.R, cyl.phi, cyl.Z], self._B_function.coeff(cyl.j), "jax"
+        )
+        BZ = sp.lambdify([cyl.R, cyl.phi, cyl.Z], self._B_function.coeff(cyl.k), "jax")
+
+        r, p, z = coords.T
+        br = BR(r, p, z)
+        bp = Bphi(r, p, z)
+        bz = BZ(r, p, z)
+        B = jnp.array([br, bp / r, bz]).T
+        if basis == "xyz":
+            B = rpz2xyz_vec(B, phi=coords[:, 1])
+        return B
 
     @classmethod
     def fit_magnetic_field(  # noqa: C901
@@ -279,256 +359,103 @@ class DommaschkPotentialField(ScalarPotentialField):
         return cls(ms, ls, a_arr, b_arr, c_arr, d_arr, B0)
 
 
-true_fun = lambda m_n: 0.0  # used for returning 0 when conditionals evaluate to True
+# Given the desired modenumbers,
+# have sympy integrate the expressions at the time the potential is initiated
 
 
-@jit
 def gamma(n):
     """Gamma function, only implemented for integers (equiv to factorial of (n-1))."""
-    return jnp.exp(gammaln(n))
+    return sp.factorial(n - 1)  # sp.prod(np.arange(1, n))
 
 
-@jit
-def alpha(m, n):
-    """Alpha of eq 27, 1st ind comes from C_m_k, 2nd is the subscript of alpha."""
-    # modified for eqns 31 and 32
-
-    def false_fun(m_n):
-        m, n = m_n
-        return (-1) ** n / (gamma(m + n + 1) * gamma(n + 1) * 2.0 ** (2 * n + m))
-
-    def bool_fun(n):
-        return n < 0
-
-    return cond(
-        bool_fun(n),
-        true_fun,
-        false_fun,
-        (
-            m,
-            n,
-        ),
-    )
+def CD_0_0(R):
+    """Eq 8, CD_m_k at m=0 k=0."""
+    return 1
 
 
-@jit
-def alphastar(m, n):
-    """Alphastar of eq 27, 1st ind comes from C_m_k, 2nd is the subscript of alpha."""
-
-    def false_fun(m_n):  # modified for eqns 31 and 32
-        m, n = m_n
-        return (2 * n + m) * alpha(m, n)
-
-    return cond(n < 0, true_fun, false_fun, (m, n))
+def CD_m_0(R, m):
+    """Eq 8, CD_m_k at m>0, k=0."""
+    return (R**m + R ** (-m)) / 2
 
 
-@jit
-def beta(m, n):
-    """Beta of eq 28, modified for eqns 31 and 32."""
-
-    def false_fun(m_n):
-        m, n = m_n
-        return gamma(m - n) / (gamma(n + 1) * 2.0 ** (2 * n - m + 1))
-
-    return cond(jnp.logical_or(n < 0, n >= m), true_fun, false_fun, (m, n))
-
-
-@jit
-def betastar(m, n):
-    """Beta* of eq 28, modified for eqns 31 and 32."""
-
-    def false_fun(m_n):
-        m, n = m_n
-        return (2 * n - m) * beta(m, n)
-
-    return cond(jnp.logical_or(n < 0, n >= m), true_fun, false_fun, (m, n))
-
-
-@jit
-def gamma_n(m, n):
-    """gamma_n of eq 33."""
-
-    def body_fun(i, val):
-        return val + 1 / i
-
-    def false_fun(m_n):
-        m, n = m_n
-        return fori_loop(1, n, body_fun, 0) + fori_loop(1, m + n, body_fun, 0)
-
-    return cond(n < 0, true_fun, false_fun, (m, n)) * alpha(m, n) / 2
-
-
-@jit
-def gamma_nstar(m, n):
-    """gamma_n star of eq 33."""
-
-    def false_fun(m_n):
-        m, n = m_n
-        return (2 * n + m) * gamma_n(m, n)
-
-    return cond(n <= 0, true_fun, false_fun, (m, n))
-
-
-@jit
-def CD_m_k_any_mk(R, m, k):
-    """Eq 31 of Dommaschk paper."""
-
-    def body_fun(j, val):
-        result = (
-            val
-            + (
-                -(
-                    alpha(m, j)
-                    * (
-                        alphastar(m, k - m - j) * jnp.log(R)
-                        + gamma_nstar(m, k - m - j)
-                        - alpha(m, k - m - j)
-                    )
-                    - gamma_n(m, j) * alphastar(m, k - m - j)
-                    + alpha(m, j) * betastar(m, k - j)
-                )
-                * R ** (2 * j + m)
-            )
-            + beta(m, j) * alphastar(m, k - j) * R ** (2 * j - m)
-        )
-        return result
-
-    return fori_loop(0, k + 1, body_fun, jnp.zeros_like(R))
-
-
-@jit
-def alphaj_betak_m_k(m, j, k):
-    """Eqn 29."""
-    out = ((-1) ** j) / gamma(j + 1) / gamma(k - j + 1) / (2 ** (2 * k + 1))
-
-    def body_fun(ind, val):
-        result = val * (m + j - ind)
-        return result
-
-    return out / fori_loop(0, k + 1, body_fun, 1.0)
-
-
-@jit
-def alphaj_betastark_m_k(m, j, k):
-    """Eqn 29."""
-    return alphaj_betak_m_k(m, j, k) * (2 * k - 2 * j - m)
-
-
-@jit
-def alphak_m_j_betaj(m, j, k):
-    """Eqn 30."""
-    out = ((-1) ** (k - j)) / gamma(j + 1) / gamma(k - j + 1) / 2 ** (2 * k + 1)
-
-    def body_fun(ind, val):
-        result = val * (m - j + ind)
-        return result
-
-    return out / fori_loop(0, k + 1, body_fun, 1.0)
-
-
-@jit
-def alphastark_m_j_betaj(m, j, k):
-    """Eqn 30."""
-    return alphak_m_j_betaj(m, j, k) * (2 * k - 2 * j + m)
-
-
-@jit
 def CD_m_k(R, m, k):
-    """Eq 25 of Dommaschk paper."""
-
-    def body_fun(j, val):
-        result = (
-            val
-            - R ** (m + 2 * j) * alphaj_betastark_m_k(m, j, k)
-            + R ** (2 * j - m) * alphastark_m_j_betaj(m, j, k)
+    """Eq 6 and 7 of Dommaschk paper, for system in Eq 8."""
+    if m == 0:
+        if k == 0:
+            return CD_0_0(R)
+        # call itself recursively
+        # Eq 6
+        return sp.integrate(
+            CD_m_k(x, 0, k - 1) * (sp.log(x) - sp.log(R)) * x, (x, 1, R)
         )
-
-        return result
-
-    return fori_loop(0, k + 1, body_fun, jnp.zeros_like(R))
-
-
-@jit
-def CN_m_k_any_mk(R, m, k):
-    """Eq 32 of Dommaschk paper."""
-
-    def body_fun(j, val):
-        result = (
-            val
-            + (
-                (
-                    alpha(m, j)
-                    * (alpha(m, k - m - j) * jnp.log(R) + gamma_n(m, k - m - j))
-                    - gamma_n(m, j) * alpha(m, k - m - j)
-                    + alpha(m, j) * beta(m, k - j)
-                )
-                * R ** (2 * j + m)
+    elif k == 0:
+        return CD_m_0(R, m)
+    else:
+        # Eq 7
+        return (
+            sp.integrate(
+                CD_m_k(x, m, k - 1) * ((x / R) ** m - (R / x) ** m) * x, (x, 1, R)
             )
-            - alpha(m, k - j) * beta(m, j) * R ** (2 * j - m)
+            / 2
+            / m
         )
-        return result
-
-    return fori_loop(0, k + 1, body_fun, jnp.zeros_like(R))
 
 
-@jit
+def CN_0_0(R):
+    """Eq 9, CN_m_k at m=0 k=0."""
+    return sp.log(R)
+
+
+def CN_m_0(R, m):
+    """Eq 9, CN_m_k at m>0 k=0."""
+    return (R**m - R ** (-m)) / 2 / m
+
+
 def CN_m_k(R, m, k):
-    """Eq 26 of Dommaschk paper."""
-
-    def body_fun(j, val):
-        result = (
-            val
-            + R ** (m + 2 * j)
-            * alphaj_betak_m_k(m, j, k)  # alpha(m, j) * beta(m, k - j)
-            - R ** (2 * j - m)
-            * alphak_m_j_betaj(m, k, j)  # alpha(m, k - j) * beta(m, j)
+    """Eq 6/7 of Dommaschk paper, for system in Eq 9."""
+    if m == 0:
+        if k == 0:
+            return CN_0_0(R)
+        # call itself recursively
+        # Eq 6
+        return sp.integrate(
+            CN_m_k(x, 0, k - 1) * (sp.log(x) - sp.log(R)) * x, (x, 1, R)
         )
-        return result
+    elif k == 0:
+        return CN_m_0(R, m)
+    else:
+        # Eq 7
+        return (
+            sp.integrate(
+                CN_m_k(x, m, k - 1) * ((x / R) ** m - (R / x) ** m) * x, (x, 1, R)
+            )
+            / 2
+            / m
+        )
 
-    return fori_loop(0, k + 1, body_fun, jnp.zeros_like(R))
 
-
-@jit
 def D_m_n(R, Z, m, n):
     """D_m_n term in eqn 8 of Dommaschk paper."""
-
-    def bool_fun(m, k):
-        return m > k
-
-    # the sum comes from fact that D_mn = I_mn and the def of I_mn in eq 2 of the paper
-    def body_fun(k, val):
-        coef = cond(bool_fun(m, k), CD_m_k, CD_m_k_any_mk, R, m, k) / gamma(
-            n - 2 * k + 1
-        )
-        exp = n - 2 * k
-        mask = (Z == 0) & (exp == 0)
-        exp = jnp.where(mask, 1, exp)
-        return val + coef * jnp.where(mask, 1, Z**exp)
-
-    return fori_loop(0, n // 2 + 1, body_fun, jnp.zeros_like(R))
+    result = 0.0
+    for k in range(n + 1):
+        if 2 * k <= n:
+            coef = CD_m_k(R, m, k) / gamma(n - 2 * k + 1)
+            exp = n - 2 * k
+            result += coef * Z**exp
+    return result
 
 
-@jit
 def N_m_n(R, Z, m, n):
     """N_m_n term in eqn 9 of Dommaschk paper."""
-
-    def bool_fun(m, k):
-        return m > k
-
-    # the sum comes from fact that N_mn = I_mn and the def of I_mn in eq 2 of the paper
-    def body_fun(k, val):
-        coef = cond(bool_fun(m, k), CN_m_k, CN_m_k_any_mk, R, m, k) / gamma(
-            n - 2 * k + 1
-        )
-        exp = n - 2 * k
-        mask = (Z == 0) & (exp == 0)
-        exp = jnp.where(mask, 1, exp)
-        return val + coef * jnp.where(mask, 1, Z**exp)
-
-    return fori_loop(0, n // 2 + 1, body_fun, jnp.zeros_like(R))
+    result = 0.0
+    for k in range(n + 1):
+        if 2 * k <= n:
+            coef = CN_m_k(R, m, k) / gamma(n - 2 * k + 1)
+            exp = n - 2 * k
+            result += coef * Z**exp
+    return result
 
 
-@jit
 def V_m_l(R, phi, Z, m, l, a, b, c, d):
     """Eq 12 of Dommaschk paper.
 
@@ -557,12 +484,11 @@ def V_m_l(R, phi, Z, m, l, a, b, c, d):
         (same size as the size of the given R,phi, or Z arrays).
 
     """
-    return (a * jnp.cos(m * phi) + b * jnp.sin(m * phi)) * D_m_n(R, Z, m, l) + (
-        c * jnp.cos(m * phi) + d * jnp.sin(m * phi)
+    return (a * sp.cos(m * phi) + b * sp.sin(m * phi)) * D_m_n(R, Z, m, l) + (
+        c * sp.cos(m * phi) + d * sp.sin(m * phi)
     ) * N_m_n(R, Z, m, l - 1)
 
 
-@jit
 def dommaschk_potential(R, phi, Z, ms, ls, a_arr, b_arr, c_arr, d_arr, B0=1):
     """Eq 1 of Dommaschk paper.
 
@@ -596,19 +522,9 @@ def dommaschk_potential(R, phi, Z, ms, ls, a_arr, b_arr, c_arr, d_arr, B0=1):
         Value of the total dommaschk potential evaluated
         at the given R,phi,Z points
         (same size as the size of the given R,phi, Z arrays).
+
     """
-    ms, ls, a_arr, b_arr, c_arr, d_arr = map(
-        jnp.atleast_1d, (ms, ls, a_arr, b_arr, c_arr, d_arr)
-    )
-    R, phi, Z = map(jnp.atleast_1d, (R, phi, Z))
-    R, phi, Z = jnp.broadcast_arrays(R, phi, Z)
-    ms, ls, a_arr, b_arr, c_arr, d_arr = jnp.broadcast_arrays(
-        ms, ls, a_arr, b_arr, c_arr, d_arr
-    )
     value = B0 * phi  # phi term
-
-    def body(i, val):
-        val += V_m_l(R, phi, Z, ms[i], ls[i], a_arr[i], b_arr[i], c_arr[i], d_arr[i])
-        return val
-
-    return fori_loop(0, len(ms), body, value)
+    for i in range(len(ms)):
+        value += V_m_l(R, phi, Z, ms[i], ls[i], a_arr[i], b_arr[i], c_arr[i], d_arr[i])
+    return value

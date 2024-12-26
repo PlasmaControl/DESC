@@ -15,7 +15,6 @@ from desc.integrals._bounce_utils import (
     chebyshev,
     cubic_spline,
     fourier_chebyshev,
-    get_pitch_inv_quad,
     interp_fft_to_argmin,
     interp_to_argmin,
     plot_ppoly,
@@ -33,6 +32,8 @@ from desc.integrals.quad_utils import (
     get_quadrature,
     grad_automorphism_sin,
     grad_bijection_from_disc,
+    simpson2,
+    uniform,
 )
 from desc.io import IOAble
 from desc.utils import atleast_nd, errorif, flatten_matrix, setdefault
@@ -41,7 +42,40 @@ from desc.utils import atleast_nd, errorif, flatten_matrix, setdefault
 class Bounce(IOAble, ABC):
     """Abstract class for bounce integrals."""
 
-    get_pitch_inv_quad = staticmethod(get_pitch_inv_quad)
+    @staticmethod
+    def get_pitch_inv_quad(min_B, max_B, num_pitch, simp=False):
+        """Return 1/λ values and weights for quadrature between ``min_B`` and ``max_B``.
+
+        Parameters
+        ----------
+        min_B : jnp.ndarray
+            Minimum B value.
+        max_B : jnp.ndarray
+            Maximum B value.
+        num_pitch : int
+            Number of values.
+        simp : bool
+            Whether to use an open Simpson rule instead of uniform weights.
+
+        Returns
+        -------
+        x, w : tuple[jnp.ndarray]
+            Shape (min_B.shape, num pitch).
+            1/λ values and weights.
+
+        """
+        errorif(
+            num_pitch > 1e5,
+            msg="Floating point error impedes detection of bounce points "
+            f"near global extrema. Choose {num_pitch} < 1e5.",
+        )
+        # Samples should be uniformly spaced in |B| and not λ.
+        # Important to do an open quadrature since the bounce integrals at the
+        # global maxima of |B| are not computable even ignoring precision issues.
+        x, w = simpson2(num_pitch) if simp else uniform(num_pitch)
+        x = bijection_from_disc(x, min_B[..., jnp.newaxis], max_B[..., jnp.newaxis])
+        w = w * grad_bijection_from_disc(min_B, max_B)[..., jnp.newaxis]
+        return x, w
 
     @abstractmethod
     def points(self, pitch_inv, num_well=None):

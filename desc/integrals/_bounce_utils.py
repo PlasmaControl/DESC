@@ -23,12 +23,7 @@ from desc.integrals.basis import (
     _in_epigraph_and,
     _plot_intersect,
 )
-from desc.integrals.quad_utils import (
-    bijection_from_disc,
-    grad_bijection_from_disc,
-    simpson2,
-    uniform,
-)
+from desc.integrals.quad_utils import bijection_from_disc, grad_bijection_from_disc
 from desc.utils import (
     atleast_nd,
     errorif,
@@ -37,41 +32,6 @@ from desc.utils import (
     setdefault,
     take_mask,
 )
-
-
-def get_pitch_inv_quad(min_B, max_B, num_pitch, simp=False):
-    """Return 1/λ values and weights for quadrature between ``min_B`` and ``max_B``.
-
-    Parameters
-    ----------
-    min_B : jnp.ndarray
-        Minimum B value.
-    max_B : jnp.ndarray
-        Maximum B value.
-    num_pitch : int
-        Number of values.
-    simp : bool
-        Whether to use an open Simpson rule instead of uniform weights.
-
-    Returns
-    -------
-    x, w : tuple[jnp.ndarray]
-        Shape (min_B.shape, num pitch).
-        1/λ values and weights.
-
-    """
-    errorif(
-        num_pitch > 1e5,
-        msg="Floating point error impedes detection of bounce points "
-        f"near global extrema. Choose {num_pitch} < 1e5.",
-    )
-    # Samples should be uniformly spaced in |B| and not λ.
-    # Important to do an open quadrature since the bounce integrals at the
-    # global maxima of |B| are not computable even ignoring precision issues.
-    x, w = simpson2(num_pitch) if simp else uniform(num_pitch)
-    x = bijection_from_disc(x, min_B[..., jnp.newaxis], max_B[..., jnp.newaxis])
-    w = w * grad_bijection_from_disc(min_B, max_B)[..., jnp.newaxis]
-    return x, w
 
 
 def _check_spline_shape(knots, g, dg_dz, pitch_inv):

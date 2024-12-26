@@ -185,9 +185,10 @@ def factorize_linear_constraints(objective, constraint, x_scale="auto"):  # noqa
 
     if desc_config["num_device"] != 1:
         mesh = jax.make_mesh((desc_config["num_device"],), ("grid"))
+        mesh2 = jax.make_mesh((1, desc_config["num_device"]), ("grid"))
         Z = jax.device_put(
             Z,
-            jax.sharding.NamedSharding(mesh, jax.sharding.PartitionSpec("grid")),
+            jax.sharding.NamedSharding(mesh2, jax.sharding.PartitionSpec("grid")),
         )
         D = jax.device_put(
             D,

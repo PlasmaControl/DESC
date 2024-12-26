@@ -196,10 +196,6 @@ def factorize_linear_constraints(objective, constraint, x_scale="auto"):  # noqa
             D,
             jax.sharding.NamedSharding(mesh, jax.sharding.PartitionSpec("grid")),
         )
-        A = jax.device_put(
-            A,
-            jax.sharding.NamedSharding(mesh, jax.sharding.PartitionSpec("grid")),
-        )
 
     project = _Project(Z, D, xp, unfixed_idx)
     recover = _Recover(Z, D, xp, unfixed_idx, objective.dim_x)

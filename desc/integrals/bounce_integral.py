@@ -339,8 +339,6 @@ class Bounce2D(Bounce):
                 Y_B,
                 check=check,
             )
-            if self._c["B(z)"].ndim == 4:
-                self._c["B(z)"] = jnp.swapaxes(self._c["B(z)"], 0, 1)
         else:
             self._c["B(z)"] = chebyshev(
                 self._M,
@@ -493,10 +491,9 @@ class Bounce2D(Bounce):
 
         """
         if isinstance(self._c["B(z)"], PiecewiseChebyshevSeries):
-            z1, z2 = map(
-                _swap_shape,
-                self._c["B(z)"].intersect1d(self._swap_pitch(pitch_inv), num_well),
-            )
+            z1, z2 = self._c["B(z)"].intersect1d(self._swap_pitch(pitch_inv), num_well)
+            z1 = _swap_shape(z1)
+            z2 = _swap_shape(z2)
         else:
             z1, z2 = bounce_points(
                 pitch_inv,
@@ -505,10 +502,18 @@ class Bounce2D(Bounce):
                 polyder_vec(self._c["B(z)"]),
                 num_well,
             )
+            if z1.ndim == 4:
+                # move rho axis to 0 and alpha axis to 1
+                z1 = jnp.swapaxes(z1, 0, 1)
+                z2 = jnp.swapaxes(z2, 0, 1)
         return z1, z2
 
     def _polish_points(self, points, pitch_inv):
-        # TODO (#1154): One application of secant on Fourier series B - 1/λ.
+        # TODO after (#1405): One application of Newton on Fourier series B - 1/λ.
+        #  Need fourier coeffs of lambda, but that is already known.
+        #  The idea is one can get away with les resolution
+        #  for the global root finding algorithm and rely on the local one once
+        #  good neigboorhood is found.
         raise NotImplementedError
 
     def check_points(self, points, pitch_inv, *, plot=True, **kwargs):
@@ -550,12 +555,16 @@ class Bounce2D(Bounce):
                 **kwargs,
             )
         else:
+            B = self._c["B(z)"]
+            if B.ndim == 4:
+                # move rho axis to 0 and alpha axis to 1
+                B = jnp.swapaxes(B, 0, 1)
             return _check_bounce_points(
                 z1=points[0],
                 z2=points[1],
                 pitch_inv=pitch_inv,
                 knots=self._c["knots"],
-                B=self._c["B(z)"],
+                B=B,
                 plot=plot,
                 **kwargs,
             )
@@ -639,14 +648,15 @@ class Bounce2D(Bounce):
             points = self.points(pitch_inv)
 
         result = self._integrate(
-            x=self._x if quad is None else quad[0],
-            w=self._w if quad is None else quad[1],
-            integrand=integrand,
+            self._x if quad is None else quad[0],
+            self._w if quad is None else quad[1],
+            integrand,
             # add axis to broadcast against quadrature points
-            pitch=self._swap_pitch(1 / pitch_inv)[..., jnp.newaxis],
-            data=data,
-            names=names,
-            points=map(_swap_shape, points),
+            self._swap_pitch(1 / pitch_inv)[..., jnp.newaxis],
+            data,
+            names,
+            _swap_shape(points[0]),
+            _swap_shape(points[1]),
             is_fourier=is_fourier,
             check=check,
             plot=plot,
@@ -661,13 +671,13 @@ class Bounce2D(Bounce):
         pitch,
         data,
         names,
-        points,
+        z1,
+        z2,
         *,
         is_fourier,
         check,
         plot,
     ):
-        z1, z2 = points
         # num pitch, num alpha, num rho, num well, num quad
         shape = [*z1.shape, x.size]
         # ζ ∈ ℝ and θ ∈ ℝ coordinates of quadrature points
@@ -783,9 +793,6 @@ class Bounce2D(Bounce):
             NotImplementedError,
             msg="Set spline to true until implemented.",
         )
-        B = self._c["B(z)"]
-        if B.ndim == 4:
-            B = jnp.swapaxes(B, 0, 1)
         return _swap_shape(
             interp_fft_to_argmin(
                 self._NFP,
@@ -793,11 +800,11 @@ class Bounce2D(Bounce):
                 f,
                 map(_swap_shape, points),
                 self._c["knots"],
-                B,
-                polyder_vec(B),
-                is_fourier=is_fourier,
-                M=self._M,
-                N=self._N,
+                self._c["B(z)"],
+                polyder_vec(self._c["B(z)"]),
+                is_fourier,
+                self._M,
+                self._N,
             )
         )
 
@@ -904,8 +911,8 @@ class Bounce2D(Bounce):
             fig, ax = B.plot1d(B.cheb, **kwargs)
         else:
             if B.ndim == 4:
-                B = B[l]
-            if B.ndim == 3:
+                B = B[m, l]
+            elif B.ndim == 3:
                 B = B[m]
             if pitch_inv is not None:
                 z1, z2 = bounce_points(pitch_inv, self._c["knots"], B, polyder_vec(B))
@@ -1133,6 +1140,9 @@ class Bounce1D(Bounce):
             line and pitch, is padded with zero.
 
         """
+        # if rho axis exists, then add alpha axis
+        if jnp.ndim(pitch_inv) == 2:
+            pitch_inv = pitch_inv[:, jnp.newaxis]
         return bounce_points(pitch_inv, self._zeta, self._B, self._dB_dz, num_well)
 
     def check_points(self, points, pitch_inv, *, plot=True, **kwargs):
@@ -1249,8 +1259,12 @@ class Bounce1D(Bounce):
         elif isinstance(names, str):
             names = [names]
 
+        # if rho axis exists, then add alpha axis
+        if jnp.ndim(pitch_inv) == 2:
+            pitch_inv = pitch_inv[:, jnp.newaxis]
         if points is None:
-            points = self.points(pitch_inv)
+            points = bounce_points(pitch_inv, self._zeta, self._B, self._dB_dz)
+
         result = _bounce_quadrature(
             x=self._x if quad is None else quad[0],
             w=self._w if quad is None else quad[1],

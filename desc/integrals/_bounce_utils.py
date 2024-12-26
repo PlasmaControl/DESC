@@ -74,7 +74,7 @@ def get_pitch_inv_quad(min_B, max_B, num_pitch, simp=False):
     return x, w
 
 
-def _check_spline_shape(knots, g, dg_dz, pitch_inv=None):
+def _check_spline_shape(knots, g, dg_dz, pitch_inv):
     """Ensure inputs have compatible shape.
 
     Parameters
@@ -98,6 +98,7 @@ def _check_spline_shape(knots, g, dg_dz, pitch_inv=None):
 
     """
     errorif(knots.ndim != 1, msg=f"knots should be 1d, got shape {knots.shape}.")
+    errorif(not (g.ndim == dg_dz.ndim == 2), msg="g and dg_dz should have ndim 2.")
     errorif(
         g.shape[-2] != (knots.size - 1),
         msg=(
@@ -110,18 +111,10 @@ def _check_spline_shape(knots, g, dg_dz, pitch_inv=None):
         or g.shape != (*dg_dz.shape[:-1], dg_dz.shape[-1] + 1),
         msg=f"Invalid shape {g.shape} for spline and derivative {dg_dz.shape}.",
     )
-    g, dg_dz = jnp.atleast_2d(g, dg_dz)
-    if pitch_inv is not None:
-        pitch_inv = jnp.atleast_1d(pitch_inv)
-        # if rho axis exists, then add alpha axis
-        if pitch_inv.ndim == 2:
-            pitch_inv = pitch_inv[:, jnp.newaxis]
-        errorif(
-            pitch_inv.ndim > 3
-            or not is_broadcastable(pitch_inv.shape[:-1], g.shape[:-2]),
-            msg=f"Invalid shape {pitch_inv.shape} for pitch angles.",
-        )
-    return g, dg_dz, pitch_inv
+    errorif(
+        pitch_inv.ndim > 3 or not is_broadcastable(pitch_inv.shape[:-1], g.shape[:-2]),
+        msg=f"Invalid shape {pitch_inv.shape} for pitch angles.",
+    )
 
 
 def bounce_points(
@@ -180,7 +173,9 @@ def bounce_points(
         line and pitch, is padded with zero.
 
     """
-    B, dB_dz, pitch_inv = _check_spline_shape(knots, B, dB_dz, pitch_inv)
+    pitch_inv = jnp.atleast_1d(pitch_inv)
+    if check:
+        _check_spline_shape(knots, B, dB_dz, pitch_inv)
     intersect = polyroot_vec(
         c=B[..., jnp.newaxis, :, :],  # add num pitch axis
         k=pitch_inv[..., jnp.newaxis],  # add polynomial axis
@@ -385,9 +380,6 @@ def _bounce_quadrature(
     z1, z2 = points
     errorif(z1.ndim < 2 or z1.shape != z2.shape)
     pitch_inv = jnp.atleast_1d(pitch_inv)
-    # if rho axis exists, then add alpha axis
-    if pitch_inv.ndim == 2:
-        pitch_inv = pitch_inv[:, jnp.newaxis]
 
     # Integrate and complete the change of variable.
     if batch:
@@ -709,7 +701,6 @@ def _get_extrema(knots, g, dg_dz, sentinel=jnp.nan):
         Sorting order of extrema is arbitrary.
 
     """
-    g, dg_dz, _ = _check_spline_shape(knots, g, dg_dz)
     ext = polyroot_vec(
         c=dg_dz, a_min=jnp.array([0.0]), a_max=jnp.diff(knots), sentinel=sentinel
     )
@@ -920,10 +911,11 @@ def fourier_chebyshev(theta, iota, alpha, num_transit):
     Parameters
     ----------
     theta : jnp.ndarray
-        Shape (num rho, X, Y) or (X, Y).
+        Shape (num rho, X, Y).
         DESC coordinates θ sourced from the Clebsch coordinates
-        ``FourierChebyshevSeries.nodes(M,N,domain=(0,2*jnp.pi))``.
+        ``FourierChebyshevSeries.nodes(X,Y,rho,domain=(0,2*jnp.pi))``.
         Use the ``Bounce2D.compute_theta`` method to obtain this.
+        ``X`` and ``Y`` are preferably rounded down to powers of two.
     iota : jnp.ndarray
         Shape (num rho, ).
         Rotational transform normalized by 2π.

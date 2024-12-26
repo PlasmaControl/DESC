@@ -1147,25 +1147,18 @@ class _Objective(IOAble, ABC):
         if desc_config["num_device"] != 1:
             if hasattr(self, "_constants"):
                 grid = self._constants["transforms"]["grid"]
-                mesh = jax.make_mesh((desc_config["num_device"],), ("grid"))
                 # shard nodes, spacing, and weights across devices
                 grid._nodes = jax.device_put(
                     jnp.asarray(grid.nodes),
-                    jax.sharding.NamedSharding(
-                        mesh, jax.sharding.PartitionSpec("grid")
-                    ),
+                    desc_config["sharding"],
                 )
                 grid._spacing = jax.device_put(
                     jnp.asarray(grid.spacing),
-                    jax.sharding.NamedSharding(
-                        mesh, jax.sharding.PartitionSpec("grid")
-                    ),
+                    desc_config["sharding"],
                 )
                 grid._weights = jax.device_put(
                     jnp.asarray(grid.weights),
-                    jax.sharding.NamedSharding(
-                        mesh, jax.sharding.PartitionSpec("grid")
-                    ),
+                    desc_config["sharding"],
                 )
 
                 # replicate profiles across devices
@@ -1174,7 +1167,7 @@ class _Objective(IOAble, ABC):
                     profiles = self._constants["profiles"]
                     profiles = jax.device_put(
                         profiles,
-                        jax.sharding.NamedSharding(mesh, jax.sharding.PartitionSpec()),
+                        desc_config["sharding"],
                     )
 
         # set quadrature weights if they haven't been

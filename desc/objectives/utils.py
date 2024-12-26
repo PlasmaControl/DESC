@@ -177,25 +177,12 @@ def factorize_linear_constraints(objective, constraint, x_scale="auto"):  # noqa
     xp = put(xp, unfixed_idx, A_inv @ b)
     xp = put(xp, fixed_idx, ((1 / D) * xp)[fixed_idx])
     # cast to jnp arrays
+    # TODO: might consider sharding these too
     xp = jnp.asarray(xp)
     A = jnp.asarray(A)
     b = jnp.asarray(b)
     Z = jnp.asarray(Z)
     D = jnp.asarray(D)
-
-    if desc_config["num_device"] != 1:
-        mesh = jax.make_mesh((desc_config["num_device"],), ("grid"))
-        mesh2 = jax.make_mesh((1, desc_config["num_device"]), ("vert", "horz"))
-        Z = jax.device_put(
-            Z,
-            jax.sharding.NamedSharding(
-                mesh2, jax.sharding.PartitionSpec("vert", "horz")
-            ),
-        )
-        D = jax.device_put(
-            D,
-            jax.sharding.NamedSharding(mesh, jax.sharding.PartitionSpec("grid")),
-        )
 
     project = _Project(Z, D, xp, unfixed_idx)
     recover = _Recover(Z, D, xp, unfixed_idx, objective.dim_x)
@@ -279,11 +266,7 @@ class _Recover(IOAble):
         dx = put(jnp.zeros(self.dim_x), self.unfixed_idx, self.Z @ x_reduced)
         x_full = self.D * (self.xp + dx)
         if desc_config["num_device"] != 1:
-            mesh = jax.make_mesh((desc_config["num_device"],), ("grid"))
-            x_full = jax.device_put(
-                x_full,
-                jax.sharding.NamedSharding(mesh, jax.sharding.PartitionSpec()),
-            )
+            x_full = jax.device_put(x_full, desc_config["sharding_replicated"])
         return jnp.atleast_1d(jnp.squeeze(x_full))
 
 

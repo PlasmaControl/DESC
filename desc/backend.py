@@ -32,6 +32,14 @@ else:
             from jax import config as jax_config
 
             jax_config.update("jax_enable_x64", True)
+            if desc_config["num_device"] != 1:
+                mesh = jax.make_mesh((desc_config["num_device"],), ("grid"))
+                desc_config["sharding"] = jax.sharding.NamedSharding(
+                    mesh, jax.sharding.PartitionSpec("grid")
+                )
+                desc_config["sharding_replicated"] = jax.sharding.NamedSharding(
+                    mesh, jax.sharding.PartitionSpec()
+                )
             if desc_config.get("kind") == "gpu" and len(jax.devices("gpu")) == 0:
                 warnings.warn(
                     "JAX failed to detect GPU, are you sure you "

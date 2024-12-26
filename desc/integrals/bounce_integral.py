@@ -450,13 +450,8 @@ class Bounce2D(Bounce):
     def _swap_pitch(self, pitch_inv):
         # Move num pitch axis to front so that the num rho axis broadcasts with
         # the spectral coefficients of the Fourier series defined on that surface.
-        ndim = self._c["T(z)"].cheb.ndim - 1
-        pitch_inv = atleast_nd(ndim, pitch_inv).T
-        # shape is (num pitch, num rho, 1)
-        if ndim == 3:
-            pitch_inv = jnp.swapaxes(pitch_inv, 1, 2)
-            # shape is (num pitch, 1, num rho)
-        return pitch_inv
+        # Shape is (num pitch, 1, num rho) or (num pitch, num rho) or (num pitch, ).
+        return jnp.moveaxis(atleast_nd(self._c["T(z)"].cheb.ndim - 1, pitch_inv), -1, 0)
 
     def points(self, pitch_inv, num_well=None):
         """Compute bounce points.
@@ -872,8 +867,8 @@ class Bounce2D(Bounce):
         l, m : int, int
             Index into the nodes of the grid supplied to make this object.
             The rho value corresponds to
-            ``rho=grid.compress(grid.nodes[:,0])[l]``.
-            and the alpha value to ``alpha[m]`` or the ``m``th index into
+            ``rho=grid.compress(grid.nodes[:,0])[l]``
+            and the alpha value to ``alpha[m]`` or the ``m`` index into
             the ``alpha`` array to make this object.
         pitch_inv : jnp.ndarray
             Shape (num pitch, ).
@@ -928,8 +923,8 @@ class Bounce2D(Bounce):
         l, m : int, int
             Index into the nodes of the grid supplied to make this object.
             The rho value corresponds to
-            ``rho=grid.compress(grid.nodes[:,0])[l]``.
-            and the alpha value to ``alpha[m]`` or the ``m``th index into
+            ``rho=grid.compress(grid.nodes[:,0])[l]``
+            and the alpha value to ``alpha[m]`` or the ``m`` index into
             the ``alpha`` array to make this object.
         kwargs
             Keyword arguments into

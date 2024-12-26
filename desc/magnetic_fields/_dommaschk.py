@@ -108,10 +108,69 @@ class DommaschkPotentialField(ScalarPotentialField):
                 keys, [list(np.array(self._params[key])) for key in keys if key != "B0"]
             )
         )
-        params["B0"] = float(self._params["B0"])
+        params["a_arr"] = sp.symbols(
+            " ".join([f"a_{l}{m}" for l, m in zip(params["ls"], params["ms"])])
+        )
+        params["b_arr"] = sp.symbols(
+            " ".join([f"b_{l}{m}" for l, m in zip(params["ls"], params["ms"])])
+        )
+        params["c_arr"] = sp.symbols(
+            " ".join([f"c_{l}{m}" for l, m in zip(params["ls"], params["ms"])])
+        )
+        params["d_arr"] = sp.symbols(
+            " ".join([f"d_{l}{m}" for l, m in zip(params["ls"], params["ms"])])
+        )
+
+        params["B0"] = sp.symbols("B0")
 
         self._domm_pot = dommaschk_potential(cyl.R, cyl.phi, cyl.Z, **params)
         self._B_function = gradient(self._domm_pot)
+
+        cyl = CoordSys3D(
+            "cyl", transformation="cylindrical", variable_names=("R", "phi", "Z")
+        )
+        self._BR = sp.lambdify(
+            [
+                cyl.R,
+                cyl.phi,
+                cyl.Z,
+                params["a_arr"],
+                params["b_arr"],
+                params["c_arr"],
+                params["d_arr"],
+                params["B0"],
+            ],
+            self._B_function.coeff(cyl.i),
+            "jax",
+        )
+        self._Bphi = sp.lambdify(
+            [
+                cyl.R,
+                cyl.phi,
+                cyl.Z,
+                params["a_arr"],
+                params["b_arr"],
+                params["c_arr"],
+                params["d_arr"],
+                params["B0"],
+            ],
+            self._B_function.coeff(cyl.j),
+            "jax",
+        )
+        self._BZ = sp.lambdify(
+            [
+                cyl.R,
+                cyl.phi,
+                cyl.Z,
+                params["a_arr"],
+                params["b_arr"],
+                params["c_arr"],
+                params["d_arr"],
+                params["B0"],
+            ],
+            self._B_function.coeff(cyl.k),
+            "jax",
+        )
 
     def compute_magnetic_field(
         self, coords, params=None, basis="rpz", source_grid=None, transforms=None
@@ -151,19 +210,38 @@ class DommaschkPotentialField(ScalarPotentialField):
 
         if params is None:
             params = self._params
-        cyl = CoordSys3D(
-            "cyl", transformation="cylindrical", variable_names=("R", "phi", "Z")
-        )
-        BR = sp.lambdify([cyl.R, cyl.phi, cyl.Z], self._B_function.coeff(cyl.i), "jax")
-        Bphi = sp.lambdify(
-            [cyl.R, cyl.phi, cyl.Z], self._B_function.coeff(cyl.j), "jax"
-        )
-        BZ = sp.lambdify([cyl.R, cyl.phi, cyl.Z], self._B_function.coeff(cyl.k), "jax")
 
         r, p, z = coords.T
-        br = BR(r, p, z)
-        bp = Bphi(r, p, z)
-        bz = BZ(r, p, z)
+        br = self._BR(
+            r,
+            p,
+            z,
+            params["a_arr"],
+            params["b_arr"],
+            params["c_arr"],
+            params["d_arr"],
+            params["B0"],
+        )
+        bp = self._Bphi(
+            r,
+            p,
+            z,
+            params["a_arr"],
+            params["b_arr"],
+            params["c_arr"],
+            params["d_arr"],
+            params["B0"],
+        )
+        bz = self._BZ(
+            r,
+            p,
+            z,
+            params["a_arr"],
+            params["b_arr"],
+            params["c_arr"],
+            params["d_arr"],
+            params["B0"],
+        )
         B = jnp.array([br, bp / r, bz]).T
         if basis == "xyz":
             B = rpz2xyz_vec(B, phi=coords[:, 1])
@@ -527,4 +605,5 @@ def dommaschk_potential(R, phi, Z, ms, ls, a_arr, b_arr, c_arr, d_arr, B0=1):
     value = B0 * phi  # phi term
     for i in range(len(ms)):
         value += V_m_l(R, phi, Z, ms[i], ls[i], a_arr[i], b_arr[i], c_arr[i], d_arr[i])
+
     return value

@@ -8,12 +8,12 @@ https://doi.org/10.1016/0010-4655(86)90109-8
 import numpy as np
 import sympy as sp
 from sympy.abc import x
-from sympy.vector import CoordSys3D, gradient
+from sympy.vector import CoordSys3D
 
 from desc.backend import jit, jnp
 from desc.derivatives import Derivative
 
-from ._core import ScalarPotentialField, _MagneticField, rpz2xyz_vec, xyz2rpz
+from ._core import ScalarPotentialField, _MagneticField
 
 
 class DommaschkPotentialField(ScalarPotentialField):
@@ -60,6 +60,7 @@ class DommaschkPotentialField(ScalarPotentialField):
         d_arr=jnp.array([0.0]),
         B0=1.0,
         NFP=1,
+        symbolic_gradient=False,
     ):
         ms = jnp.atleast_1d(jnp.asarray(ms))
         ls = jnp.atleast_1d(jnp.asarray(ls))
@@ -91,6 +92,7 @@ class DommaschkPotentialField(ScalarPotentialField):
         params["c_arr"] = c_arr
         params["d_arr"] = d_arr
         params["B0"] = B0
+        self._full_params = params
 
         super().__init__(dommaschk_potential, params, NFP)
 
@@ -101,11 +103,12 @@ class DommaschkPotentialField(ScalarPotentialField):
         cyl = CoordSys3D(
             "cyl", transformation="cylindrical", variable_names=("R", "phi", "Z")
         )
-        keys = list(self._params.keys())
+        keys = list(self._full_params.keys())
 
         params = dict(
             zip(
-                keys, [list(np.array(self._params[key])) for key in keys if key != "B0"]
+                keys,
+                [list(np.array(self._full_params[key])) for key in keys if key != "B0"],
             )
         )
         params["a_arr"] = sp.symbols(
@@ -123,13 +126,9 @@ class DommaschkPotentialField(ScalarPotentialField):
 
         params["B0"] = sp.symbols("B0")
 
-        self._domm_pot = dommaschk_potential(cyl.R, cyl.phi, cyl.Z, **params)
-        self._B_function = gradient(self._domm_pot)
+        domm_pot = dommaschk_potential(cyl.R, cyl.phi, cyl.Z, **params)
 
-        cyl = CoordSys3D(
-            "cyl", transformation="cylindrical", variable_names=("R", "phi", "Z")
-        )
-        self._BR = sp.lambdify(
+        potential_fxn = sp.lambdify(
             [
                 cyl.R,
                 cyl.phi,
@@ -140,112 +139,27 @@ class DommaschkPotentialField(ScalarPotentialField):
                 params["d_arr"],
                 params["B0"],
             ],
-            self._B_function.coeff(cyl.i),
+            domm_pot,
             "jax",
         )
-        self._Bphi = sp.lambdify(
-            [
-                cyl.R,
-                cyl.phi,
-                cyl.Z,
-                params["a_arr"],
-                params["b_arr"],
-                params["c_arr"],
-                params["d_arr"],
-                params["B0"],
-            ],
-            self._B_function.coeff(cyl.j),
-            "jax",
-        )
-        self._BZ = sp.lambdify(
-            [
-                cyl.R,
-                cyl.phi,
-                cyl.Z,
-                params["a_arr"],
-                params["b_arr"],
-                params["c_arr"],
-                params["d_arr"],
-                params["B0"],
-            ],
-            self._B_function.coeff(cyl.k),
-            "jax",
-        )
-
-    def compute_magnetic_field(
-        self, coords, params=None, basis="rpz", source_grid=None, transforms=None
-    ):
-        """Compute magnetic field at a set of points.
-
-            For the Dommaschk potentials, we use Sympy to
-            find the potentials by recursive symbolic integration,
-            then find their gradient symbolically, and finally convert
-            the gradient (the B field) to JAX-enabled functions.
-
-        Parameters
-        ----------
-        coords : array-like shape(n,3)
-            Nodes to evaluate field at in [R,phi,Z] or [X,Y,Z] coordinates.
-        params : dict or array-like of dict, optional
-            Dictionary of optimizable parameters, eg field.params_dict.
-        basis : {"rpz", "xyz"}
-            Basis for input coordinates and returned magnetic field.
-        source_grid : Grid, int or None
-            Unused by this MagneticField class.
-        transforms : dict of Transform
-            Transforms for R, Z, lambda, etc. Default is to build from source_grid
-            Unused by this MagneticField class.
-
-        Returns
-        -------
-        field : ndarray, shape(N,3)
-            magnetic field at specified points
-
-        """
-        assert basis.lower() in ["rpz", "xyz"]
-        coords = jnp.atleast_2d(jnp.asarray(coords))
-        coords = coords.astype(float)
-        if basis == "xyz":
-            coords = xyz2rpz(coords)
-
-        if params is None:
-            params = self._params
-
-        r, p, z = coords.T
-        br = self._BR(
+        # resulting function from lambdify does not take kwargs, so we need to
+        # wrap it in a lambda function that does
+        self._potential = lambda r, p, z, a_arr, b_arr, c_arr, d_arr, B0: potential_fxn(
             r,
             p,
             z,
-            params["a_arr"],
-            params["b_arr"],
-            params["c_arr"],
-            params["d_arr"],
-            params["B0"],
+            a_arr,
+            b_arr,
+            c_arr,
+            d_arr,
+            B0,
         )
-        bp = self._Bphi(
-            r,
-            p,
-            z,
-            params["a_arr"],
-            params["b_arr"],
-            params["c_arr"],
-            params["d_arr"],
-            params["B0"],
-        )
-        bz = self._BZ(
-            r,
-            p,
-            z,
-            params["a_arr"],
-            params["b_arr"],
-            params["c_arr"],
-            params["d_arr"],
-            params["B0"],
-        )
-        B = jnp.array([br, bp / r, bz]).T
-        if basis == "xyz":
-            B = rpz2xyz_vec(B, phi=coords[:, 1])
-        return B
+        self._potential = jit(self._potential)
+
+        # remove ms and ls as are no longer needed in params, they are instead baked
+        # into the potential function
+        self._params.pop("ms")
+        self._params.pop("ls")
 
     @classmethod
     def fit_magnetic_field(  # noqa: C901
@@ -375,7 +289,7 @@ class DommaschkPotentialField(ScalarPotentialField):
             round(num_modes - 1) / 4
         )  # how many l-m mode pairs there are, also is len(a_s)
         n = int(n)
-        domm_field = DommaschkPotentialField(0, 0, 0, 0, 0, 0, 1)
+        domm_field = DommaschkPotentialField(**params)
 
         def get_B_dom(coords, X, ms, ls):
             """Fxn wrapper to find jacobian of dommaschk B wrt coefs a,b,c,d."""
@@ -385,8 +299,6 @@ class DommaschkPotentialField(ScalarPotentialField):
             return domm_field.compute_magnetic_field(
                 coords,
                 params={
-                    "ms": jnp.asarray(ms),
-                    "ls": jnp.asarray(ls),
                     "a_arr": jnp.asarray(X[1 : n + 1]) * abcd_zero_due_to_sym_inds[0],
                     "b_arr": jnp.asarray(X[n + 1 : 2 * n + 1])
                     * abcd_zero_due_to_sym_inds[1],
@@ -437,10 +349,7 @@ class DommaschkPotentialField(ScalarPotentialField):
         return cls(ms, ls, a_arr, b_arr, c_arr, d_arr, B0)
 
 
-# Given the desired modenumbers,
-# have sympy integrate the expressions at the time the potential is initiated
-
-
+# Dommaschk potential utility functions
 def gamma(n):
     """Gamma function, only implemented for integers (equiv to factorial of (n-1))."""
     return sp.factorial(n - 1)  # sp.prod(np.arange(1, n))
@@ -603,7 +512,11 @@ def dommaschk_potential(R, phi, Z, ms, ls, a_arr, b_arr, c_arr, d_arr, B0=1):
 
     """
     value = B0 * phi  # phi term
-    for i in range(len(ms)):
-        value += V_m_l(R, phi, Z, ms[i], ls[i], a_arr[i], b_arr[i], c_arr[i], d_arr[i])
-
+    if len(ms) > 1:
+        for i in range(len(ms)):
+            value += V_m_l(
+                R, phi, Z, ms[i], ls[i], a_arr[i], b_arr[i], c_arr[i], d_arr[i]
+            )
+    else:
+        value += V_m_l(R, phi, Z, ms[0], ls[0], a_arr, b_arr, c_arr, d_arr)
     return value

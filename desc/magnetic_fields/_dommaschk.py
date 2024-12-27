@@ -290,7 +290,7 @@ class DommaschkPotentialField(ScalarPotentialField):
         n = int(n)
         domm_field = DommaschkPotentialField(**params)
 
-        def get_B_dom(coords, X, ms, ls):
+        def get_B_dom(coords, X):
             """Fxn wrapper to find jacobian of dommaschk B wrt coefs a,b,c,d."""
             # zero out any terms that should be zero due to symmetry, which
             # we cataloged earlier for each a_arr,b_arr,c_arr,d_arr
@@ -318,20 +318,22 @@ class DommaschkPotentialField(ScalarPotentialField):
                 X += [obj]
         X = jnp.asarray(X)
 
-        jac = jit(Derivative(get_B_dom, argnum=1))(
-            coords, X, params["ms"], params["ls"]
-        )
+        jac = jit(Derivative(get_B_dom, argnum=1))(coords, X)
 
         A = jac.reshape((rhs.size, len(X)), order="F")
 
         # now solve Ac=b for the coefficients c
 
         # TODO (#928): use min singular value to give sense of cond number?
-        c, res, _, _ = jnp.linalg.lstsq(A, rhs)
+        c, res, rank, s = jnp.linalg.lstsq(A, rhs)
 
         if verbose > 0:
             # res is a list of len(1) so index into it
-            print(f"Sum of Squares Residual of fit: {res[0]:1.4e} T")
+            print(f"Sum of Squares Residual of fit: {res[0]:1.4e} T^2")
+            res_at_pts = A @ c - rhs
+            print(f"Max Residual: {jnp.max(abs(res_at_pts)):1.4e} T")
+            print(f"Min Residual: {jnp.min(abs(res_at_pts)):1.4e} T")
+            print(f"Mean Residual: {jnp.mean(abs(res_at_pts)):1.4e} T")
 
         # recover the params from the c coefficient vector
         B0 = c[0]

@@ -60,7 +60,6 @@ class DommaschkPotentialField(ScalarPotentialField):
         d_arr=jnp.array([0.0]),
         B0=1.0,
         NFP=1,
-        symbolic_gradient=False,
     ):
         ms = jnp.atleast_1d(jnp.asarray(ms))
         ls = jnp.atleast_1d(jnp.asarray(ls))
@@ -92,7 +91,7 @@ class DommaschkPotentialField(ScalarPotentialField):
         params["c_arr"] = c_arr
         params["d_arr"] = d_arr
         params["B0"] = B0
-        self._full_params = params
+        self._full_params = params.copy()
 
         super().__init__(dommaschk_potential, params, NFP)
 

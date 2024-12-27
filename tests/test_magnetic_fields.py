@@ -1533,7 +1533,9 @@ def test_dommaschk_fit_vertical_and_toroidal_field():
 
     # only nonzero coefficient of the field should be the B0 and a_ml = a_01
     np.testing.assert_allclose(B._params["B0"], B0, atol=1e-13)
-    for coef, m, l in zip(B._params["a_arr"], B._params["ms"], B._params["ls"]):
+    for coef, m, l in zip(
+        B._params["a_arr"], B._full_params["ms"], B._full_params["ls"]
+    ):
         if m == 0 and l == 1:
             np.testing.assert_allclose(coef, B0_Z)
         else:

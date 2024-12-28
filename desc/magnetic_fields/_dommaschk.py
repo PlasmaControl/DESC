@@ -98,7 +98,7 @@ class DommaschkPotentialField(ScalarPotentialField):
         self._set_potentials()
 
     def _set_potentials(self):
-        """Creates the potential and B function using sympy."""
+        """Creates the potential using sympy."""
         cyl = CoordSys3D(
             "cyl", transformation="cylindrical", variable_names=("R", "phi", "Z")
         )

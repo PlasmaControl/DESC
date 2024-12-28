@@ -32,6 +32,7 @@ from desc.magnetic_fields import (
     solve_regularized_surface_current,
 )
 from desc.magnetic_fields._dommaschk import CD_m_k, CN_m_k
+from desc.plotting import poincare_plot
 from desc.utils import dot
 
 
@@ -1560,3 +1561,227 @@ def test_domm_field_is_nonzero_and_continuous_across_Z_0():
     Bnew = new_field.compute_magnetic_field(np.vstack([Rs, phis, Zs]).T)
 
     assert not np.any(np.isclose(Bnew[:, 1], 0))
+
+
+@pytest.mark.mpl_image_compare(remove_text=True, tolerance=10)
+@pytest.mark.unit
+def test_domm_W7AS():
+    """Test can get flux surfaces from W7-AS Dommashk coefficients."""
+    # W7-AS
+    # The coefficients are taken from IPP-Report IPP_0_48 by Dommaschk et al.
+    B0 = 1.00
+    # toroidal harmonics
+    ms = [
+        0,
+        5,
+        10,
+        15,
+        0,
+        5,
+        10,
+        15,
+        0,
+        5,
+        10,
+        15,
+        0,
+        5,
+        10,
+        15,
+        0,
+        5,
+        10,
+        15,
+        0,
+        5,
+        10,
+        15,
+        0,
+        5,
+        10,
+        15,
+    ]
+    # poloidal harmonics
+    ls = [
+        0,
+        0,
+        0,
+        0,
+        1,
+        1,
+        1,
+        1,
+        2,
+        2,
+        2,
+        2,
+        3,
+        3,
+        3,
+        3,
+        4,
+        4,
+        4,
+        4,
+        5,
+        5,
+        5,
+        5,
+        6,
+        6,
+        6,
+        6,
+    ]
+    a_w7as = [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0094324,
+        0.0112792,
+        0.0147238,
+        -0.00100904,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0410242,
+        -4.15263,
+        -3.33006,
+        0.0359866,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        -29.9792,
+        -135.852,
+        60.1416,
+        -215.314,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+    ]
+
+    b_w7as = [
+        0.0,
+        -0.0121413,
+        0.000471873,
+        4.58071e-05,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.25878,
+        0.237015,
+        -0.0403158,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        4.06992,
+        38.1763,
+        15.0701,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        -3192.22,
+        376.945,
+        2621.02,
+    ]
+
+    c_w7as = [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.255341,
+        1.35643,
+        0.351854,
+        0.0165178,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        -14.022,
+        -9.04059,
+        40.75,
+        5.76041,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        -3877.26,
+        -17583.9,
+        -20976.0,
+        937.2,
+    ]
+
+    d_w7as = [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.190922,
+        -0.0105725,
+        0.00335741,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.163836,
+        1.60217,
+        -0.136241,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        120.441,
+        344.756,
+        193.934,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+    ]
+
+    Bw7as_dom = DommaschkPotentialField(
+        B0=B0,
+        a_arr=a_w7as,
+        b_arr=b_w7as,
+        c_arr=c_w7as,
+        d_arr=d_w7as,
+        ms=ms,
+        ls=ls,
+        NFP=5,
+    )
+    ntransit = 300  # how many toroidal transits to trace
+    NFP = 5
+    r0 = np.linspace(0.88245, 1.0, 11)
+    z0 = np.zeros_like(r0)
+    fig, _ = poincare_plot(
+        field=Bw7as_dom,
+        R0=r0,  # initial R positions for the field line trajectories
+        Z0=z0,  # initial R positions for the field line trajectories
+        ntransit=ntransit,  # number of toroidal transits we want to trace
+        NFP=NFP,
+        # bounds_R and bounds_Z set a cylindrical shell where,
+        # if the B trajectory exits, it will stop the integration.
+        # this saves time by not tracking trajectories which are going off to infinity
+        bounds_R=[0.75, 1.25],
+        bounds_Z=[-0.25, 0.25],
+        size=0.10,  # markersize for the plotted points
+        marker="d",
+    )
+    return fig

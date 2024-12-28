@@ -229,6 +229,9 @@ class DommaschkPotentialField(ScalarPotentialField):
         # and max_l and max_m should probably be both nonzero anyways,
         # this is not an issue right now
 
+        # TODO: Add REGCOIL-like option to perform a least squares minimization
+        # of Bn, potentially also with some sort of regularization.
+
         # mode numbers
         ms = []
         ls = []
@@ -247,6 +250,7 @@ class DommaschkPotentialField(ScalarPotentialField):
         ]  # indices that should be 0 due to symmetry
         # if sym is True, when l is even then we need a=d=0
         # and if l is odd then b=c=0
+        # TODO: does the sym hold if the eq is not "centered" about R=1?
 
         for l in range(1, max_l + 1):
             for m in range(0, max_m * NFP + 1, NFP):

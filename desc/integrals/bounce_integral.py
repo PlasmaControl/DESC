@@ -93,7 +93,11 @@ class Bounce(IOAble, ABC):
 
     @abstractmethod
     def interp_to_argmin(self, f, points):
-        """Interpolates ``f`` to the deepest point pⱼ in magnetic well j."""
+        """Interpolate ``f`` to the deepest point pⱼ in magnetic well j."""
+
+    @abstractmethod
+    def plot(self, l, m, pitch_inv=None, **kwargs):
+        """Plot |B| and bounce points on the specified field line."""
 
 
 def _swap_shape(f):
@@ -795,7 +799,7 @@ class Bounce2D(Bounce):
         return result
 
     def interp_to_argmin(self, f, points, *, is_fourier=False):
-        """Interpolates ``f`` to the deepest point pⱼ in magnetic well j.
+        """Interpolate ``f`` to the deepest point pⱼ in magnetic well j.
 
         Parameters
         ----------
@@ -901,7 +905,7 @@ class Bounce2D(Bounce):
         # Gradient of change of variable from [−1, 1] → [0, 2π] is π.
 
     def plot(self, l, m, pitch_inv=None, **kwargs):
-        """Plot the field line and bounce points of the given pitch angles.
+        """Plot |B| and bounce points on the specified field line.
 
         Parameters
         ----------
@@ -957,7 +961,7 @@ class Bounce2D(Bounce):
         return fig, ax
 
     def plot_theta(self, l, m, **kwargs):
-        """Plot θ(α, ζ) on the specified flux surface.
+        """Plot θ on the specified field line.
 
         Parameters
         ----------
@@ -1316,7 +1320,7 @@ class Bounce1D(Bounce):
         return result[0] if len(result) == 1 else result
 
     def interp_to_argmin(self, f, points, *, method="cubic"):
-        """Interpolates ``f`` to the deepest point pⱼ in magnetic well j.
+        """Interpolate ``f`` to the deepest point pⱼ in magnetic well j.
 
         Parameters
         ----------
@@ -1346,7 +1350,7 @@ class Bounce1D(Bounce):
         return interp_to_argmin(f, points, self._zeta, self._B, self._dB_dz, method)
 
     def plot(self, l, m, pitch_inv=None, **kwargs):
-        """Plot the field line and bounce points of the given pitch angles.
+        """Plot |B| and bounce points on the specified field line.
 
         Parameters
         ----------

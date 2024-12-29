@@ -268,7 +268,7 @@ def _bounce_quadrature(
 
     Returns
     -------
-    result : jnp.ndarray
+    result : jnp.ndarray or list[jnp.ndarray]
         Shape (..., num pitch, num well).
         Last axis enumerates the bounce integrals for a field line,
         flux surface, and pitch.
@@ -277,7 +277,8 @@ def _bounce_quadrature(
     assert x.ndim == 1 and x.shape == w.shape
     z1, z2 = points
     assert z1.ndim > 1 and z1.shape == z2.shape
-    pitch_inv = jnp.atleast_1d(pitch_inv)
+    # add axis to broadcast against quadrature points
+    pitch = jnp.atleast_1d(1 / pitch_inv)[..., jnp.newaxis]
 
     # Integrate and complete the change of variable.
     if batch:
@@ -287,7 +288,7 @@ def _bounce_quadrature(
             w=w,
             knots=knots,
             integrand=integrand,
-            pitch_inv=pitch_inv,
+            pitch=pitch,
             data=data,
             names=names,
             points=points,
@@ -305,7 +306,7 @@ def _bounce_quadrature(
                 w=w,
                 knots=knots,
                 integrand=integrand,
-                pitch_inv=pitch_inv,
+                pitch=pitch,
                 data=data,
                 names=names,
                 points=points,
@@ -328,7 +329,7 @@ def _interpolate_and_integrate(
     w,
     knots,
     integrand,
-    pitch_inv,
+    pitch,
     data,
     names,
     points,
@@ -341,7 +342,6 @@ def _interpolate_and_integrate(
     # shape (..., num pitch, num well, num quad)
     Q = bijection_from_disc(x, z1[..., jnp.newaxis], z2[..., jnp.newaxis])
     assert w.ndim == 1 and Q.shape[-1] == w.size
-    assert Q.shape[-3 + (not batch)] == pitch_inv.shape[-1]
     assert data["|B|"].shape[-1] == knots.size
     shape = Q.shape
     if batch:
@@ -368,7 +368,6 @@ def _interpolate_and_integrate(
         name: interp1d_vec(Q, knots, data[name][..., jnp.newaxis, :], method=method)
         for name in names
     }
-    pitch = 1 / pitch_inv[..., jnp.newaxis]
     cov = grad_bijection_from_disc(z1, z2)
     result = [
         (f(data, B, pitch) / b_sup_z).reshape(shape).dot(w) * cov for f in integrand

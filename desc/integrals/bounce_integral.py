@@ -668,7 +668,7 @@ class Bounce2D(Bounce):
 
         Returns
         -------
-        result : jnp.ndarray
+        result : jnp.ndarray or list[jnp.ndarray]
             Shape (num rho, num alpha, num pitch, num well).
             Last axis enumerates the bounce integrals for a given
             flux surface and pitch value.
@@ -909,12 +909,13 @@ class Bounce2D(Bounce):
 
         Parameters
         ----------
-        l, m : int
+        l : int
             Index into the nodes of the grid supplied to make this object.
             The rho value corresponds to
-            ``rho=grid.compress(grid.nodes[:,0])[l]``
-            and the alpha value to ``alpha[m]`` or the ``m`` index into
-            the ``alpha`` array to make this object.
+            ``rho=grid.compress(grid.nodes[:,0])[l]``.
+        m : int
+            Index into the ``alpha`` array supplied to make this object.
+            The alpha value to ``alpha[m]``.
         pitch_inv : jnp.ndarray
             Shape (num pitch, ).
             Optional, 1/λ values whose corresponding bounce points on the field line
@@ -965,12 +966,13 @@ class Bounce2D(Bounce):
 
         Parameters
         ----------
-        l, m : int
+        l : int
             Index into the nodes of the grid supplied to make this object.
             The rho value corresponds to
-            ``rho=grid.compress(grid.nodes[:,0])[l]``
-            and the alpha value to ``alpha[m]`` or the ``m`` index into
-            the ``alpha`` array to make this object.
+            ``rho=grid.compress(grid.nodes[:,0])[l]``.
+        m : int
+            Index into the ``alpha`` array supplied to make this object.
+            The alpha value to ``alpha[m]``.
         kwargs
             Keyword arguments into
             ``desc/integrals/basis.py::PiecewiseChebyshevSeries.plot1d``.
@@ -1283,7 +1285,7 @@ class Bounce1D(Bounce):
 
         Returns
         -------
-        result : jnp.ndarray
+        result : jnp.ndarray or list[jnp.ndarray]
             Shape (num rho, num alpha, num pitch, num well).
             Last axis enumerates the bounce integrals for a given field line,
             flux surface, and pitch value.
@@ -1304,14 +1306,14 @@ class Bounce1D(Bounce):
             points = bounce_points(pitch_inv, self._zeta, self._B, self._dB_dz)
 
         result = _bounce_quadrature(
-            x=self._x if quad is None else quad[0],
-            w=self._w if quad is None else quad[1],
-            knots=self._zeta,
-            integrand=integrand,
-            pitch_inv=pitch_inv,
-            data=data | self._data,
-            names=names,
-            points=points,
+            self._x if quad is None else quad[0],
+            self._w if quad is None else quad[1],
+            self._zeta,
+            integrand,
+            pitch_inv,
+            data | self._data,
+            names,
+            points,
             method=method,
             batch=batch,
             check=check,

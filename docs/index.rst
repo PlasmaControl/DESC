@@ -36,6 +36,8 @@
    notebooks/tutorials/coil_stage_two_optimization.ipynb
    notebooks/tutorials/QFM_surface.ipynb
    notebooks/tutorials/ideal_ballooning_stability.ipynb
+   notebooks/tutorials/EffectiveRipple.ipynb
+
 
 .. toctree::
    :maxdepth: 1

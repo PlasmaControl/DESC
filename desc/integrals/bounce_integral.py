@@ -69,17 +69,23 @@ def _swap_pl(f):
     return jnp.swapaxes(f, 0, -2)
 
 
+default_quad = get_quadrature(
+    leggauss(32),
+    (automorphism_sin, grad_automorphism_sin),
+)
+
+
 class Bounce2D(Bounce):
-    """Computes bounce integrals using two-dimensional pseudo-spectral methods.
+    """Computes bounce integrals using pseudo-spectral methods.
 
     The bounce integral is defined as ∫ f(ρ,α,λ,ℓ) dℓ where
 
     * dℓ parameterizes the distance along the field line in meters.
     * f(ρ,α,λ,ℓ) is the quantity to integrate along the field line.
-    * The boundaries of the integral are bounce points ℓ₁, ℓ₂ s.t. λ|B|(ρ,α,ℓᵢ) = 1.
+    * The boundaries of the integral are bounce points ℓ₁, ℓ₂ s.t. λB(ρ,α,ℓᵢ) = 1.
     * λ is a constant defining the integral proportional to the magnetic moment
       over energy.
-    * |B| is the norm of the magnetic field.
+    * B is the norm of the magnetic field.
 
     For a particle with fixed λ, bounce points are defined to be the location on the
     field line such that the particle's velocity parallel to the magnetic field is zero.
@@ -87,108 +93,23 @@ class Bounce2D(Bounce):
     the particle's guiding center trajectory traveling in the direction of increasing
     field-line-following coordinate ζ.
 
-
-    Overview
-    --------
-    Magnetic field line with label α, defined by B = ∇ρ × ∇α, is determined from
+    Notes
+    -----
+    Magnetic field line with label α, defined by B = ∇ψ × ∇α, is determined from
       α : ρ, θ, ζ ↦ θ + λ(ρ,θ,ζ) − ι(ρ) [ζ + ω(ρ,θ,ζ)]
     Interpolate Fourier-Chebyshev series to DESC poloidal coordinate.
-      θ : α, ζ ↦ tₘₙ exp(jmα) Tₙ(ζ)
-    Compute |B| along field lines.
-      |B| : α, ζ ↦  bₙ(θ(α, ζ)) Tₙ(ζ)
+      θ : ρ, α, ζ ↦ tₘₙ(ρ) exp(jmα) Tₙ(ζ)
     Compute bounce points.
-      r(ζₖ) = |B|(ζₖ) − 1/λ = 0
-    Interpolate smooth components of integrand with FFTs.
-      G : α, ζ ↦ gₘₙ exp(j [m θ(α,ζ) + n ζ] )
+      r(ζₖ) = B(ζₖ) − 1/λ = 0
+    Interpolate smooth periodic components of integrand with FFTs.
+      G : ρ, α, ζ ↦ gₘₙ(ρ) exp(j [m θ(ρ,α,ζ) + n ζ])
     Perform Gaussian quadrature after removing singularities.
       Fᵢ : ρ, α, λ, ζ₁, ζ₂ ↦  ∫ᵢ f(ρ,α,λ,ζ,{Gⱼ}) dζ
 
     If the map G is multivalued at a physical location, then it is still
-    permissible if separable into single valued and multivalued parts.
-    In that case, supply the single valued parts, which will be interpolated
+    permissible if separable into periodic and secular components.
+    In that case, supply the periodic component, which will be interpolated
     with FFTs, and use the provided coordinates θ,ζ ∈ ℝ to compose G.
-
-    Notes
-    -----
-    For applications which reduce to computing a nonlinear function of distance
-    along field lines between bounce points, it is required to identify these
-    points with field-line-following coordinates. (In the special case of a linear
-    function summing integrals between bounce points over a flux surface, arbitrary
-    coordinate systems may be used as that task reduces to a surface integral,
-    which is invariant to the order of summation).
-
-    The DESC coordinate system is related to field-line-following coordinate
-    systems by a relation whose solution is best found with Newton iteration
-    since this solution is unique. Newton iteration is not a globally
-    convergent algorithm to find the real roots of r : ζ ↦ |B|(ζ) − 1/λ where
-    ζ is a field-line-following coordinate. For this, function approximation
-    of |B| is necessary.
-
-    Therefore, to compute bounce points {(ζ₁, ζ₂)}, we approximate |B| by a
-    series expansion of basis functions parameterized by a single variable ζ,
-    restricting the class of basis functions to low order (e.g. n = 2ᵏ where
-    k is small) algebraic or trigonometric polynomial with integer frequencies.
-    These are the two classes useful for function approximation and for which
-    there exists globally convergent root-finding algorithms. We require low
-    order because the computation expenses grow with the number of potential
-    roots, and the theorem of algebra states that number is n (2n) for algebraic
-    (trigonometric) polynomials of degree n.
-
-    The frequency transform of a map under the chosen basis must be concentrated
-    at low frequencies for the series to converge fast. For periodic
-    (non-periodic) maps, the standard choice for the basis is a Fourier (Chebyshev)
-    series. Both converge exponentially, but the larger region of convergence in the
-    complex plane of Fourier series makes it preferable to choose coordinate
-    systems such that the function to approximate is periodic. One reason Chebyshev
-    polynomials are preferred to other orthogonal polynomial series is
-    fast discrete polynomial transforms (DPT) are implemented via fast transform
-    to Chebyshev then DCT. Therefore, a Fourier-Chebyshev series is chosen
-    to interpolate θ(α,ζ) and a piecewise Chebyshev series interpolates |B|(ζ).
-
-    * An alternative to Chebyshev series is
-      [filtered Fourier series](doi.org/10.1016/j.aml.2006.10.001).
-      We did not implement or benchmark against that.
-    * θ is not interpolated with a double Fourier series θ(ϑ, ζ) because
-      it is impossible to approximate an unbounded function with a finite Fourier
-      series. Due to Gibbs effects, this statement holds even when the goal is to
-      approximate θ over one branch cut. The proof uses analytic continuation.
-    * The advantage of Fourier series in DESC coordinates is that they may use the
-      spectrally condensed variable ζ* = NFP ζ. This cannot be done in any other
-      coordinate system, regardless of whether the basis functions are periodic.
-      The strategy of parameterizing |B| along field lines with a single variable
-      in Clebsch coordinates (as opposed to two variables in straight-field line
-      coordinates) also serves to minimize this penalty since evaluation of |B|
-      when computing bounce points will be less expensive (assuming the 2D
-      Fourier resolution of |B|(ϑ, ϕ) is larger than the 1D Chebyshev resolution).
-
-    Computing accurate series expansions in (α, ζ) coordinates demands
-    particular interpolation points in that coordinate system. Newton iteration
-    is used to compute θ at these points. Note that interpolation is necessary
-    because there is no transformation that converts series coefficients in
-    periodic coordinates, e.g. (ϑ, ϕ), to a low order polynomial basis in
-    non-periodic coordinates. For example, one can obtain series coefficients in
-    (α, ϕ) coordinates from those in (ϑ, ϕ) as follows
-      g : ϑ, ϕ ↦ ∑ₘₙ aₘₙ exp(j [mϑ + nϕ])
-
-      g : α, ϕ ↦ ∑ₘₙ aₘₙ exp(j [mα + (m ι + n)ϕ])
-    However, the basis for the latter are trigonometric functions with
-    irrational frequencies, courtesy of the irrational rotational transform.
-    Globally convergent root-finding schemes for that basis (at fixed α) are
-    not known. The denominator of a close rational could be absorbed into the
-    coordinate ϕ, but this balloons the frequency, and hence the degree of the
-    series.
-
-    After computing the bounce points, the supplied quadrature is performed.
-    By default, this is a Gauss quadrature after removing the singularity.
-    Fast fourier transforms interpolate smooth functions in the integrand to the
-    quadrature nodes. Quadrature is chosen over Runge-Kutta methods of the form
-        ∂Fᵢ/∂ζ = f(ρ,α,λ,ζ,{Gⱼ}) subject to Fᵢ(ζ₁) = 0
-    A fourth order Runge-Kutta method is equivalent to a quadrature
-    with Simpson's rule. The quadratures resolve these integrals more efficiently.
-
-    Fast transforms are used where possible. Fast multipoint methods are not
-    implemented. For non-uniform interpolation, MMTs are used. It will be
-    worthwhile to use the inverse non-uniform fast transforms.
 
     Examples
     --------
@@ -196,36 +117,159 @@ class Bounce2D(Bounce):
 
     See Also
     --------
-    Bounce1D : Uses one-dimensional local spline methods for the same task.
+    Bounce1D
+        ``Bounce1D`` uses one-dimensional splines for the same task.
+        ``Bounce2D`` solves the dominant cost of optimization objectives in DESC
+        relying on ``Bounce1D``: interpolating FourierZernike transforms to an
+        optimization-step dependent grid that is dense enough for function
+        approximation with local splines.
+        The function approximation done here requires FourierZernike transforms on a
+        fixed grid with typical resolution, using FFTs to compute the map between
+        coordinate systems.
+        The faster convergence of spectral methods requires a less dense
+        grid to interpolate onto from FourierZernike transforms.
+        2D interpolation enables tracing the field line for many toroidal transits.
+        The drawback is that evaluating a Fourier series with resolution F at Q
+        non-uniform quadrature points takes 𝒪(-(F+Q) log(F) log(ε)) time
+        whereas cubic splines take 𝒪(C Q) time. However, as NFP increases,
+        F decreases whereas C increases. Also, Q >> F and Q >> C.
 
-
-    Comparison to Bounce1D
-    ----------------------
-    ``Bounce2D`` solves the dominant cost of optimization objectives relying on
-    ``Bounce1D``: interpolating DESC's 3D transforms to an optimization-step
-    dependent grid that is dense enough for function approximation with local
-    splines. This is sometimes referred to as off-grid interpolation in literature;
-    it is often a bottleneck.
-
-    * The function approximation done here requires DESC transforms on a fixed
-      grid with typical resolution, using FFTs to compute the map α,ζ ↦ θ(α,ζ)
-      between coordinate systems. This enables evaluating functions along
-      field lines without root-finding.
-    * The faster convergence of spectral interpolation requires a less dense
-      grid to interpolate onto from DESC's 3D transforms.
-    * Spectral approximation is more accurate than cubic splines.
-    * 2D interpolation enables tracing the field line for many toroidal transits.
-    * The drawback is that evaluating a Fourier series with resolution F at Q
-      non-uniform quadrature points takes 𝒪([F+Q] log[F] log[1/ε]) time
-      whereas cubic splines take 𝒪(C Q) time. However, as NFP increases,
-      F decreases whereas C increases. Also, Q >> F and Q >> C.
-
-    Attributes
+    Parameters
     ----------
-    required_names : list
-        Names in ``data_index`` required to compute bounce integrals.
+    grid : Grid
+        Tensor-product grid in (ρ, θ, ζ) with uniformly spaced nodes
+        (θ, ζ) ∈ [0, 2π) × [0, 2π/NFP). The ζ coordinates (the unique values prior
+        to taking the tensor-product) must be strictly increasing.
+        Below shape notation defines ``M=grid.num_theta`` and ``N=grid.num_zeta``.
+        ``M`` and ``N`` are preferably powers of two.
+    data : dict[str, jnp.ndarray]
+        Data evaluated on ``grid``.
+        Must include names in ``Bounce2D.required_names``.
+    theta : jnp.ndarray
+        Shape (num rho, X, Y).
+        DESC coordinates θ sourced from the Clebsch coordinates
+        ``FourierChebyshevSeries.nodes(X,Y,rho,domain=(0,2*jnp.pi))``.
+        Use the ``Bounce2D.compute_theta`` method to obtain this.
+        ``X`` and ``Y`` are preferably powers of two.
+    Y_B : int
+        Desired resolution for algorithm to compute bounce points.
+        Default is double ``Y``.
+    alpha : float
+        Starting field line poloidal label.
+    num_transit : int
+        Number of toroidal transits to follow field line.
+    quad : tuple[jnp.ndarray]
+        Quadrature points xₖ and weights wₖ for the approximate evaluation of an
+        integral ∫₋₁¹ g(x) dx = ∑ₖ wₖ g(xₖ). Default is 32 points.
+    automorphism : tuple[Callable] or None
+        The first callable should be an automorphism of the real interval [-1, 1].
+        The second callable should be the derivative of the first. This map defines
+        a change of variable for the bounce integral. The choice made for the
+        automorphism will affect the performance of the quadrature.
+    Bref : float
+        Optional. Reference magnetic field strength for normalization.
+    Lref : float
+        Optional. Reference length scale for normalization.
+    is_reshaped : bool
+        Whether the arrays in ``data`` are already reshaped to the expected form of
+        shape (..., M, N) or (num rho, M, N). This option can be used to iteratively
+        compute bounce integrals one flux surface at a time, reducing memory usage
+        To do so, set to true and provide only those axes of the reshaped data.
+        Default is false.
+    is_fourier : bool
+        If true, then it is assumed that ``data`` holds Fourier transforms
+        as returned by ``Bounce2D.fourier``. Default is false.
+    check : bool
+        Flag for debugging. Must be false for JAX transformations.
+    spline : bool
+        Whether to use cubic splines to compute bounce points.
+        Default is true, because the algorithm for efficient root-finding on
+        Chebyshev series algorithm is not yet implemented.
+        When using splines, it is recommended to reduce the ``num_well``
+        parameter in the ``points`` method from ``3*Y_B*num_transit`` to
+        at most ``Y_B*num_transit``.
 
     """
+
+    # For applications which reduce to computing a nonlinear function of distance
+    # along field lines between bounce points, it is required to identify these
+    # points with field-line-following coordinates. (In the special case of a linear
+    # function summing integrals between bounce points over a flux surface, arbitrary
+    # coordinate systems may be used as that task reduces to a surface integral,
+    # which is invariant to the order of summation).
+    #
+    # The DESC coordinate system is related to field-line-following coordinate
+    # systems by a relation whose solution is best found with Newton iteration
+    # since this solution is unique. Newton iteration is not a globally
+    # convergent algorithm to find the real roots of r : ζ ↦ B(ζ) − 1/λ where
+    # ζ is a field-line-following coordinate. For this, function approximation
+    # of B is necessary.
+    #
+    # Therefore, to compute bounce points {(ζ₁, ζ₂)}, we approximate B by a
+    # series expansion of basis functions parameterized by a single variable ζ,
+    # restricting the class of basis functions to low order (e.g. n = 2ᵏ where
+    # k is small) algebraic or trigonometric polynomial with integer frequencies.
+    # These are the two classes useful for function approximation and for which
+    # there exists globally convergent root-finding algorithms. We require low
+    # order because the computation expenses grow with the number of potential
+    # roots, and the theorem of algebra states that number is n (2n) for algebraic
+    # (trigonometric) polynomials of degree n.
+    #
+    # The frequency transform of a map under the chosen basis must be concentrated
+    # at low frequencies for the series to converge fast. For periodic
+    # (non-periodic) maps, the standard choice for the basis is a Fourier (Chebyshev)
+    # series. Both converge exponentially, but the larger region of convergence in the
+    # complex plane of Fourier series makes it preferable to choose coordinate
+    # systems such that the function to approximate is periodic. One reason Chebyshev
+    # polynomials are preferred to other orthogonal polynomial series is
+    # fast discrete polynomial transforms (DPT) are implemented via fast transform
+    # to Chebyshev then DCT. Therefore, a Fourier-Chebyshev series is chosen
+    # to interpolate θ(α,ζ) and a piecewise Chebyshev series interpolates B(ζ).
+    #
+    # * An alternative to Chebyshev series is
+    #   [filtered Fourier series](doi.org/10.1016/j.aml.2006.10.001).
+    #   We did not implement or benchmark against that.
+    # * θ is not interpolated with a double Fourier series θ(ϑ, ζ) because
+    #   it is impossible to approximate an unbounded function with a finite Fourier
+    #   series. Due to Gibbs effects, this statement holds even when the goal is to
+    #   approximate θ over one branch cut. The proof uses analytic continuation.
+    # * The advantage of Fourier series in DESC coordinates is that they may use the
+    #   spectrally condensed variable ζ* = NFP ζ. This cannot be done in any other
+    #   coordinate system, regardless of whether the basis functions are periodic.
+    #   The strategy of parameterizing B along field lines with a single variable
+    #   in Clebsch coordinates (as opposed to two variables in straight-field line
+    #   coordinates) also serves to minimize this penalty since evaluation of B
+    #   when computing bounce points will be less expensive (assuming the 2D
+    #   Fourier resolution of B(ϑ, ϕ) is larger than the 1D Chebyshev resolution).
+    #
+    # Computing accurate series expansions in (α, ζ) coordinates demands
+    # particular interpolation points in that coordinate system. Newton iteration
+    # is used to compute θ at these points. Note that interpolation is necessary
+    # because there is no transformation that converts series coefficients in
+    # periodic coordinates, e.g. (ϑ, ϕ), to a low order polynomial basis in
+    # non-periodic coordinates. For example, one can obtain series coefficients in
+    # (α, ϕ) coordinates from those in (ϑ, ϕ) as follows
+    #   g : ϑ, ϕ ↦ ∑ₘₙ aₘₙ exp(j [mϑ + nϕ])
+    #
+    #   g : α, ϕ ↦ ∑ₘₙ aₘₙ exp(j [mα + (m ι + n)ϕ])
+    # However, the basis for the latter are trigonometric functions with
+    # irrational frequencies, courtesy of the irrational rotational transform.
+    # Globally convergent root-finding schemes for that basis (at fixed α) are
+    # not known. The denominator of a close rational could be absorbed into the
+    # coordinate ϕ, but this balloons the frequency, and hence the degree of the
+    # series.
+    #
+    # After computing the bounce points, the supplied quadrature is performed.
+    # By default, this is a Gauss quadrature after removing the singularity.
+    # Fast fourier transforms interpolate smooth functions in the integrand to the
+    # quadrature nodes. Quadrature is chosen over Runge-Kutta methods of the form
+    #     ∂Fᵢ/∂ζ = f(ρ,α,λ,ζ,{Gⱼ}) subject to Fᵢ(ζ₁) = 0
+    # A fourth order Runge-Kutta method is equivalent to a quadrature
+    # with Simpson's rule. The quadratures resolve these integrals more efficiently.
+    #
+    # Fast transforms are used where possible. Fast multipoint methods are not
+    # implemented. For non-uniform interpolation, MMTs are used. It will be
+    # worthwhile to use the inverse non-uniform fast transforms.
 
     required_names = ["B^zeta", "|B|", "iota"]
 
@@ -235,12 +279,12 @@ class Bounce2D(Bounce):
         data,
         theta,
         Y_B=None,
-        num_transit=32,
+        num_transit=20,
         # TODO (#1309): Allow multiple starting labels for near-rational surfaces.
         #  Can just add axis for piecewise chebyshev stuff cheb.
         alpha=0.0,
-        quad=leggauss(32),
-        automorphism=(automorphism_sin, grad_automorphism_sin),
+        quad=default_quad,
+        automorphism=None,
         *,
         Bref=1.0,
         Lref=1.0,
@@ -249,66 +293,7 @@ class Bounce2D(Bounce):
         check=False,
         spline=True,
     ):
-        """Returns an object to compute bounce integrals.
-
-        Notes
-        -----
-        Performance may improve if ``M``,``N``,``X``,``Y``,``Y_B`` are powers of two.
-
-        Parameters
-        ----------
-        grid : Grid
-            Tensor-product grid in (ρ, θ, ζ) with uniformly spaced nodes
-            (θ, ζ) ∈ [0, 2π) × [0, 2π/NFP). The ζ coordinates (the unique values prior
-            to taking the tensor-product) must be strictly increasing.
-            Below shape notation defines ``M=grid.num_theta`` and ``N=grid.num_zeta``.
-        data : dict[str, jnp.ndarray]
-            Data evaluated on ``grid``.
-            Must include names in ``Bounce2D.required_names``.
-        theta : jnp.ndarray
-            Shape (num rho, X, Y).
-            DESC coordinates θ sourced from the Clebsch coordinates
-            ``FourierChebyshevSeries.nodes(X,Y,rho,domain=(0,2*jnp.pi))``.
-            Use the ``Bounce2D.compute_theta`` method to obtain this.
-        Y_B : int
-            Desired resolution for |B| along field lines to compute bounce points.
-            Default is double ``Y``.
-        alpha : float
-            Starting field line poloidal label.
-        num_transit : int
-            Number of toroidal transits to follow field line.
-        quad : tuple[jnp.ndarray]
-            Quadrature points xₖ and weights wₖ for the approximate evaluation of an
-            integral ∫₋₁¹ g(x) dx = ∑ₖ wₖ g(xₖ). Default is 32 points.
-        automorphism : tuple[Callable] or None
-            The first callable should be an automorphism of the real interval [-1, 1].
-            The second callable should be the derivative of the first. This map defines
-            a change of variable for the bounce integral. The choice made for the
-            automorphism will affect the performance of the quadrature method.
-        Bref : float
-            Optional. Reference magnetic field strength for normalization.
-        Lref : float
-            Optional. Reference length scale for normalization.
-        is_reshaped : bool
-            Whether the arrays in ``data`` are already reshaped to the expected form of
-            shape (..., M, N) or (num rho, M, N). This option can be used to iteratively
-            compute bounce integrals one flux surface at a time, reducing memory usage
-            To do so, set to true and provide only those axes of the reshaped data.
-            Default is false.
-        is_fourier : bool
-            If true, then it is assumed that ``data`` holds Fourier transforms
-            as returned by ``Bounce2D.fourier``. Default is false.
-        check : bool
-            Flag for debugging. Must be false for JAX transformations.
-        spline : bool
-            Whether to use cubic splines to compute bounce points.
-            Default is true, because the algorithm for efficient root-finding on
-            Chebyshev series algorithm is not yet implemented.
-            When using splines, it is recommended to reduce the ``num_well``
-            parameter in the ``points`` method from ``3*Y_B*num_transit`` to
-            at most ``Y_B*num_transit``.
-
-        """
+        """Returns an object to compute bounce integrals."""
         is_reshaped = is_reshaped or is_fourier
         assert grid.can_fft2
         self._M = grid.num_theta
@@ -328,8 +313,8 @@ class Bounce2D(Bounce):
             ),
         }
         if not is_reshaped:
-            self._c["|B|"] = Bounce2D.reshape_data(grid, self._c["|B|"])
-            self._c["B^zeta"] = Bounce2D.reshape_data(grid, self._c["B^zeta"])
+            self._c["|B|"] = Bounce2D.reshape(grid, self._c["|B|"])
+            self._c["B^zeta"] = Bounce2D.reshape(grid, self._c["B^zeta"])
         if not is_fourier:
             self._c["|B|"] = Bounce2D.fourier(self._c["|B|"])
             self._c["B^zeta"] = Bounce2D.fourier(self._c["B^zeta"])
@@ -356,8 +341,8 @@ class Bounce2D(Bounce):
             )
 
     @staticmethod
-    def reshape_data(grid, f):
-        """Reshape ``data`` arrays for acceptable input to ``integrate``.
+    def reshape(grid, f):
+        """Reshape arrays for acceptable input to ``integrate``.
 
         Parameters
         ----------
@@ -409,11 +394,11 @@ class Bounce2D(Bounce):
         eq : Equilibrium
             Equilibrium to use defining the coordinate mapping.
         X : int
-            Grid resolution in poloidal direction for Clebsch coordinate grid.
-            Preferably power of 2.
+            Poloidal Fourier grid resolution to interpolate the poloidal coordinate.
+            Preferably rounded down to power of 2.
         Y : int
-            Grid resolution in toroidal direction for Clebsch coordinate grid.
-            Preferably power of 2.
+            Toroidal Chebyshev grid resolution to interpolate the poloidal coordinate.
+            Preferably rounded down to power of 2.
         rho : float or jnp.ndarray
             Shape (num rho, ).
             Flux surfaces labels in [0, 1] on which to compute.
@@ -467,8 +452,8 @@ class Bounce2D(Bounce):
             but due to current limitations in JAX this will have worse performance.
             Specifying a number that tightly upper bounds the number of wells will
             increase performance. In general, an upper bound on the number of wells
-            per toroidal transit is ``Aι+B`` where ``A``,``B`` are the poloidal and
-            toroidal Fourier resolution of |B|, respectively, in straight-field line
+            per toroidal transit is ``Aι+B`` where ``A``, ``B`` are the poloidal and
+            toroidal Fourier resolution of B, respectively, in straight-field line
             PEST coordinates, and ι is the rotational transform normalized by 2π.
             A tighter upper bound than ``num_well=(Aι+B)*num_transit`` is preferable.
             The ``check_points`` or ``plot`` method is useful to select a reasonable
@@ -483,7 +468,7 @@ class Bounce2D(Bounce):
             Shape (num rho, num pitch, num well).
             Tuple of length two (z1, z2) that stores ζ coordinates of bounce points.
             The points are ordered and grouped such that the straight line path
-            between ``z1`` and ``z2`` resides in the epigraph of |B|.
+            between ``z1`` and ``z2`` resides in the epigraph of B.
 
             If there were less than ``num_well`` wells detected along a field line,
             then the last axis, which enumerates bounce points for a particular field
@@ -510,7 +495,7 @@ class Bounce2D(Bounce):
         return z1, z2
 
     def _polish_points(self, points, pitch_inv):
-        # TODO (#1154): One application of secant on Fourier series |B| - 1/λ.
+        # TODO (#1154): One application of secant on Fourier series B - 1/λ.
         raise NotImplementedError
 
     def check_points(self, points, pitch_inv, *, plot=True, **kwargs):
@@ -523,7 +508,7 @@ class Bounce2D(Bounce):
             Output of method ``self.points``.
             Tuple of length two (z1, z2) that stores ζ coordinates of bounce points.
             The points are ordered and grouped such that the straight line path
-            between ``z1`` and ``z2`` resides in the epigraph of |B|.
+            between ``z1`` and ``z2`` resides in the epigraph of B.
         pitch_inv : jnp.ndarray
             Shape (num rho, num pitch).
             1/λ values to compute the bounce integrals. 1/λ(ρ) is specified by
@@ -585,14 +570,14 @@ class Bounce2D(Bounce):
 
         Notes
         -----
-        Make sure to replace √(1−λ|B|) with √|1−λ|B|| in ``integrand`` to account
+        Make sure to replace √(1−λB) with √|1−λB| in ``integrand`` to account
         for imperfect computation of bounce points.
 
         Parameters
         ----------
         integrand : callable or list[callable]
-            The composition operator on the set of functions in ``data`` that
-            maps that determines ``f`` in ∫ f(ρ,α,λ,ℓ) dℓ. It should accept a dictionary
+            The composition operator on the set of functions in ``data``
+            that determines ``f`` in ∫ f(ρ,α,λ,ℓ) dℓ. It should accept a dictionary
             which stores the interpolated data and the arguments ``B`` and ``pitch``.
         pitch_inv : jnp.ndarray
             Shape (num rho, num pitch).
@@ -603,7 +588,7 @@ class Bounce2D(Bounce):
             Shape (num rho, M, N).
             Real scalar-valued periodic functions in (θ, ζ) ∈ [0, 2π) × [0, 2π/NFP)
             evaluated on the ``grid`` supplied to construct this object.
-            Use the method ``Bounce2D.reshape_data`` to reshape the data into the
+            Use the method ``Bounce2D.reshape`` to reshape the data into the
             expected shape.
         names : str or list[str]
             Names in ``data`` to interpolate. Default is all keys in ``data``.
@@ -612,7 +597,7 @@ class Bounce2D(Bounce):
             Optional, output of method ``self.points``.
             Tuple of length two (z1, z2) that stores ζ coordinates of bounce points.
             The points are ordered and grouped such that the straight line path
-            between ``z1`` and ``z2`` resides in the epigraph of |B|.
+            between ``z1`` and ``z2`` resides in the epigraph of B.
         is_fourier : bool
             If true, then it is assumed that ``data`` holds Fourier transforms
             as returned by ``Bounce2D.fourier``. Default is false.
@@ -629,8 +614,8 @@ class Bounce2D(Bounce):
         -------
         result : jnp.ndarray
             Shape (num rho, num pitch, num well).
-            Last axis enumerates the bounce integrals for a given field line,
-            flux surface, and pitch value.
+            Last axis enumerates the bounce integrals for a given
+            flux surface and pitch value.
 
         """
         if not isinstance(integrand, (list, tuple)):
@@ -767,14 +752,14 @@ class Bounce2D(Bounce):
             Shape (num rho, M, N).
             Real scalar-valued periodic function in (θ, ζ) ∈ [0, 2π) × [0, 2π/NFP)
             evaluated on the ``grid`` supplied to construct this object.
-            Use the method ``Bounce2D.reshape_data`` to reshape the data into the
+            Use the method ``Bounce2D.reshape`` to reshape the data into the
             expected shape.
         points : tuple[jnp.ndarray]
             Shape (num rho, num pitch, num well).
             Optional, output of method ``self.points``.
             Tuple of length two (z1, z2) that stores ζ coordinates of bounce points.
             The points are ordered and grouped such that the straight line path
-            between ``z1`` and ``z2`` resides in the epigraph of |B|.
+            between ``z1`` and ``z2`` resides in the epigraph of B.
         is_fourier : bool
             If true, then it is assumed that ``f`` is the Fourier transforms
             as returned by ``Bounce2D.fourier``. Default is false.
@@ -794,21 +779,23 @@ class Bounce2D(Bounce):
         # We move num pitch axis to front so that the num rho axis broadcasts
         # with the spectral coefficients (whose first axis is also num rho),
         # assuming this axis exists.
-        return interp_fft_to_argmin(
-            self._NFP,
-            self._c["T(z)"],
-            f,
-            map(_swap_pl, points),
-            self._c["knots"],
-            self._c["B(z)"],
-            polyder_vec(self._c["B(z)"]),
-            is_fourier=is_fourier,
-            M=self._M,
-            N=self._N,
+        return _swap_pl(
+            interp_fft_to_argmin(
+                self._NFP,
+                self._c["T(z)"],
+                f,
+                map(_swap_pl, points),
+                self._c["knots"],
+                self._c["B(z)"],
+                polyder_vec(self._c["B(z)"]),
+                is_fourier=is_fourier,
+                M=self._M,
+                N=self._N,
+            )
         )
 
     def compute_fieldline_length(self, quad=None):
-        """Compute the proper length of the field line ∫ dℓ / |B|.
+        """Compute the proper length of the field line ∫ dℓ / B.
 
         Parameters
         ----------
@@ -953,10 +940,10 @@ class Bounce1D(Bounce):
 
     * dℓ parameterizes the distance along the field line in meters.
     * f(ρ,α,λ,ℓ) is the quantity to integrate along the field line.
-    * The boundaries of the integral are bounce points ℓ₁, ℓ₂ s.t. λ|B|(ρ,α,ℓᵢ) = 1.
+    * The boundaries of the integral are bounce points ℓ₁, ℓ₂ s.t. λB(ρ,α,ℓᵢ) = 1.
     * λ is a constant defining the integral proportional to the magnetic moment
       over energy.
-    * |B| is the norm of the magnetic field.
+    * B is the norm of the magnetic field.
 
     For a particle with fixed λ, bounce points are defined to be the location on the
     field line such that the particle's velocity parallel to the magnetic field is zero.
@@ -964,59 +951,55 @@ class Bounce1D(Bounce):
     the particle's guiding center trajectory traveling in the direction of increasing
     field-line-following coordinate ζ.
 
-    Notes
-    -----
-    For applications which reduce to computing a nonlinear function of distance
-    along field lines between bounce points, it is required to identify these
-    points with field-line-following coordinates. (In the special case of a linear
-    function summing integrals between bounce points over a flux surface, arbitrary
-    coordinate systems may be used as that task reduces to a surface integral,
-    which is invariant to the order of summation).
-
-    The DESC coordinate system is related to field-line-following coordinate
-    systems by a relation whose solution is best found with Newton iteration
-    since this solution is unique. Newton iteration is not a globally
-    convergent algorithm to find the real roots of r : ζ ↦ |B|(ζ) − 1/λ where
-    ζ is a field-line-following coordinate. For this, function approximation
-    of |B| is necessary.
-
-    The function approximation in ``Bounce1D`` is ignorant that the objects to
-    approximate are defined on a bounded subset of ℝ². Instead, the domain is
-    projected to ℝ, where information sampled about the function at infinity
-    cannot support reconstruction of the function near the origin. As the
-    functions of interest do not vanish at infinity, pseudo-spectral techniques
-    are not used. Instead, function approximation is done with local splines.
-    This is useful if one can efficiently obtain data along field lines and the
-    number of toroidal transits to follow a field line is not large.
-
-    After computing the bounce points, the supplied quadrature is performed.
-    By default, this is a Gauss quadrature after removing the singularity.
-    Local splines interpolate smooth functions in the integrand to the quadrature
-    nodes. Quadrature is chosen over Runge-Kutta methods of the form
-        ∂Fᵢ/∂ζ = f(λ,ζ,{Gⱼ}) subject to Fᵢ(ζ₁) = 0
-    A fourth order Runge-Kutta method is equivalent to a quadrature
-    with Simpson's rule. The quadratures resolve these integrals more efficiently.
-
-    See Also
-    --------
-    Bounce2D : Uses two-dimensional pseudo-spectral techniques for the same task.
-
     Examples
     --------
     See ``tests/test_integrals.py::TestBounce::test_bounce1d_checks``.
 
-    Attributes
+    See Also
+    --------
+    Bounce2D
+        ``Bounce2D`` uses 2D pseudo-spectral methods for the same task.
+        The function approximation in ``Bounce1D`` is ignorant
+        that the objects to approximate are defined on a bounded subset of ℝ².
+        The domain is projected to ℝ, where information sampled about the function
+        at infinity cannot support reconstruction of the function near the origin.
+        As the functions of interest do not vanish at infinity, pseudo-spectral
+        techniques are not used. Instead, function approximation is done with local
+        splines. This is useful if one can efficiently obtain data along field lines
+        and the number of toroidal transits to follow a field line is not large.
+
+    Parameters
     ----------
-    required_names : list
-        Names in ``data_index`` required to compute bounce integrals.
-    B : jnp.ndarray
-        Shape (num alpha, num rho, N - 1, B.shape[-1]).
-        Polynomial coefficients of the spline of |B| in local power basis.
-        Last axis enumerates the coefficients of power series. For a polynomial
-        given by ∑ᵢⁿ cᵢ xⁱ, coefficient cᵢ is stored at ``B[...,n-i]``.
-        Third axis enumerates the polynomials that compose a particular spline.
-        Second axis enumerates flux surfaces.
-        First axis enumerates field lines of a particular flux surface.
+    grid : Grid
+        Tensor-product grid in (ρ, α, ζ) Clebsch coordinates.
+        The ζ coordinates (the unique values prior to taking the tensor-product)
+        must be strictly increasing and preferably uniformly spaced. These are used
+        as knots to construct splines. A reference knot density is 100 knots per
+        toroidal transit.
+    data : dict[str, jnp.ndarray]
+        Data evaluated on ``grid``.
+        Must include names in ``Bounce1D.required_names``.
+    quad : tuple[jnp.ndarray]
+        Quadrature points xₖ and weights wₖ for the approximate evaluation of an
+        integral ∫₋₁¹ g(x) dx = ∑ₖ wₖ g(xₖ). Default is 32 points.
+    automorphism : tuple[Callable] or None
+        The first callable should be an automorphism of the real interval [-1, 1].
+        The second callable should be the derivative of the first. This map defines
+        a change of variable for the bounce integral. The choice made for the
+        automorphism will affect the performance of the quadrature.
+    Bref : float
+        Optional. Reference magnetic field strength for normalization.
+    Lref : float
+        Optional. Reference length scale for normalization.
+    is_reshaped : bool
+        Whether the arrays in ``data`` are already reshaped to the expected form of
+        shape (..., num zeta) or (..., num rho, num zeta) or
+        (num alpha, num rho, num zeta). This option can be used to iteratively
+        compute bounce integrals one field line or one flux surface at a time,
+        respectively, reducing memory usage. To do so, set to true and provide
+        only those axes of the reshaped data. Default is false.
+    check : bool
+        Flag for debugging. Must be false for JAX transformations.
 
     """
 
@@ -1026,50 +1009,15 @@ class Bounce1D(Bounce):
         self,
         grid,
         data,
-        quad=leggauss(32),
-        automorphism=(automorphism_sin, grad_automorphism_sin),
+        quad=default_quad,
+        automorphism=None,
         *,
         Bref=1.0,
         Lref=1.0,
         is_reshaped=False,
         check=False,
     ):
-        """Returns an object to compute bounce integrals.
-
-        Parameters
-        ----------
-        grid : Grid
-            Tensor-product grid in (ρ, α, ζ) Clebsch coordinates.
-            The ζ coordinates (the unique values prior to taking the tensor-product)
-            must be strictly increasing and preferably uniformly spaced. These are used
-            as knots to construct splines. A reference knot density is 100 knots per
-            toroidal transit.
-        data : dict[str, jnp.ndarray]
-            Data evaluated on ``grid``.
-            Must include names in ``Bounce1D.required_names``.
-        quad : tuple[jnp.ndarray]
-            Quadrature points xₖ and weights wₖ for the approximate evaluation of an
-            integral ∫₋₁¹ g(x) dx = ∑ₖ wₖ g(xₖ). Default is 32 points.
-        automorphism : tuple[Callable] or None
-            The first callable should be an automorphism of the real interval [-1, 1].
-            The second callable should be the derivative of the first. This map defines
-            a change of variable for the bounce integral. The choice made for the
-            automorphism will affect the performance of the quadrature method.
-        Bref : float
-            Optional. Reference magnetic field strength for normalization.
-        Lref : float
-            Optional. Reference length scale for normalization.
-        is_reshaped : bool
-            Whether the arrays in ``data`` are already reshaped to the expected form of
-            shape (..., num zeta) or (..., num rho, num zeta) or
-            (num alpha, num rho, num zeta). This option can be used to iteratively
-            compute bounce integrals one field line or one flux surface at a time,
-            respectively, reducing memory usage. To do so, set to true and provide
-            only those axes of the reshaped data. Default is false.
-        check : bool
-            Flag for debugging. Must be false for JAX transformations.
-
-        """
+        """Returns an object to compute bounce integrals."""
         assert grid.is_meshgrid
         self._data = {
             # Strictly increasing zeta knots enforces dζ > 0.
@@ -1086,12 +1034,17 @@ class Bounce1D(Bounce):
         }
         if not is_reshaped:
             for name in self._data:
-                self._data[name] = Bounce1D.reshape_data(grid, self._data[name])
+                self._data[name] = Bounce1D.reshape(grid, self._data[name])
         self._x, self._w = get_quadrature(quad, automorphism)
 
         # Compute local splines.
+        # Note it is simple to do FFT across field line axis, and spline
+        # Fourier coefficients across ζ to obtain Fourier-CubicSpline of functions.
+        # The point of Bounce2D is to do such a 2D interpolation without
+        # rebuilding DESC transforms each time an objective is computed.
         self._zeta = grid.compress(grid.nodes[:, 2], surface_label="zeta")
-        self.B = jnp.moveaxis(
+        # Shape is (num alpha, num rho, N - 1, -1).
+        self._B = jnp.moveaxis(
             CubicHermiteSpline(
                 x=self._zeta,
                 y=self._data["|B|"],
@@ -1102,14 +1055,10 @@ class Bounce1D(Bounce):
             source=(0, 1),
             destination=(-1, -2),
         )
-        self._dB_dz = polyder_vec(self.B)
-        # Note it is simple to do FFT across field line axis, and spline
-        # Fourier coefficients across ζ to obtain Fourier-CubicSpline of functions.
-        # The point of Bounce2D is to do such a 2D interpolation but also do so
-        # without rebuilding DESC transforms each time an objective is computed.
+        self._dB_dz = polyder_vec(self._B)
 
     @staticmethod
-    def reshape_data(grid, f):
+    def reshape(grid, f):
         """Reshape arrays for acceptable input to ``integrate``.
 
         Parameters
@@ -1144,8 +1093,8 @@ class Bounce1D(Bounce):
             but due to current limitations in JAX this will have worse performance.
             Specifying a number that tightly upper bounds the number of wells will
             increase performance. In general, an upper bound on the number of wells
-            per toroidal transit is ``Aι+B`` where ``A``,``B`` are the poloidal and
-            toroidal Fourier resolution of |B|, respectively, in straight-field line
+            per toroidal transit is ``Aι+B`` where ``A``, ``B`` are the poloidal and
+            toroidal Fourier resolution of B, respectively, in straight-field line
             PEST coordinates, and ι is the rotational transform normalized by 2π.
             A tighter upper bound than ``num_well=(Aι+B)*num_transit`` is preferable.
             The ``check_points`` or ``plot`` method is useful to select a reasonable
@@ -1160,14 +1109,14 @@ class Bounce1D(Bounce):
             Shape (num alpha, num rho, num pitch, num well).
             Tuple of length two (z1, z2) that stores ζ coordinates of bounce points.
             The points are ordered and grouped such that the straight line path
-            between ``z1`` and ``z2`` resides in the epigraph of |B|.
+            between ``z1`` and ``z2`` resides in the epigraph of B.
 
             If there were less than ``num_well`` wells detected along a field line,
             then the last axis, which enumerates bounce points for a particular field
             line and pitch, is padded with zero.
 
         """
-        return bounce_points(pitch_inv, self._zeta, self.B, self._dB_dz, num_well)
+        return bounce_points(pitch_inv, self._zeta, self._B, self._dB_dz, num_well)
 
     def check_points(self, points, pitch_inv, *, plot=True, **kwargs):
         """Check that bounce points are computed correctly.
@@ -1179,7 +1128,7 @@ class Bounce1D(Bounce):
             Output of method ``self.points``.
             Tuple of length two (z1, z2) that stores ζ coordinates of bounce points.
             The points are ordered and grouped such that the straight line path
-            between ``z1`` and ``z2`` resides in the epigraph of |B|.
+            between ``z1`` and ``z2`` resides in the epigraph of B.
         pitch_inv : jnp.ndarray
             Shape (num alpha, num rho, num pitch).
             1/λ values to compute the bounce points at each field line. 1/λ(α,ρ) is
@@ -1201,7 +1150,7 @@ class Bounce1D(Bounce):
             z2=points[1],
             pitch_inv=pitch_inv,
             knots=self._zeta,
-            B=self.B,
+            B=self._B,
             plot=plot,
             **kwargs,
         )
@@ -1230,8 +1179,8 @@ class Bounce1D(Bounce):
         Parameters
         ----------
         integrand : callable or list[callable]
-            The composition operator on the set of functions in ``data`` that
-            maps that determines ``f`` in ∫ f(ρ,α,λ,ℓ) dℓ. It should accept a dictionary
+            The composition operator on the set of functions in ``data``
+            that determines ``f`` in ∫ f(ρ,α,λ,ℓ) dℓ. It should accept a dictionary
             which stores the interpolated data and the arguments ``B`` and ``pitch``.
         pitch_inv : jnp.ndarray
             Shape (num alpha, num rho, num pitch).
@@ -1242,7 +1191,7 @@ class Bounce1D(Bounce):
             Shape (num alpha, num rho, num zeta).
             Real scalar-valued periodic functions in (θ, ζ) ∈ [0, 2π) × [0, 2π/NFP)
             evaluated on the ``grid`` supplied to construct this object.
-            Use the method ``Bounce1D.reshape_data`` to reshape the data into the
+            Use the method ``Bounce1D.reshape`` to reshape the data into the
             expected shape.
         names : str or list[str]
             Names in ``data`` to interpolate. Default is all keys in ``data``.
@@ -1251,7 +1200,7 @@ class Bounce1D(Bounce):
             Optional, output of method ``self.points``.
             Tuple of length two (z1, z2) that stores ζ coordinates of bounce points.
             The points are ordered and grouped such that the straight line path
-            between ``z1`` and ``z2`` resides in the epigraph of |B|.
+            between ``z1`` and ``z2`` resides in the epigraph of B.
         method : str
             Method of interpolation.
             See https://interpax.readthedocs.io/en/latest/_api/interpax.interp1d.html.
@@ -1309,14 +1258,14 @@ class Bounce1D(Bounce):
         f : jnp.ndarray
             Shape (num alpha, num rho, num zeta).
             Real scalar-valued functions evaluated on the ``grid`` supplied to
-            construct this object. Use the method ``Bounce1D.reshape_data`` to
+            construct this object. Use the method ``Bounce1D.reshape`` to
             reshape the data into the expected shape.
         points : tuple[jnp.ndarray]
             Shape (num alpha, num rho, num pitch, num well).
             Optional, output of method ``self.points``.
             Tuple of length two (z1, z2) that stores ζ coordinates of bounce points.
             The points are ordered and grouped such that the straight line path
-            between ``z1`` and ``z2`` resides in the epigraph of |B|.
+            between ``z1`` and ``z2`` resides in the epigraph of B.
         method : str
             Method of interpolation.
             See https://interpax.readthedocs.io/en/latest/_api/interpax.interp1d.html.
@@ -1329,7 +1278,7 @@ class Bounce1D(Bounce):
             ``f`` interpolated to the deepest point between ``points``.
 
         """
-        return interp_to_argmin(f, points, self._zeta, self.B, self._dB_dz, method)
+        return interp_to_argmin(f, points, self._zeta, self._B, self._dB_dz, method)
 
     def plot(self, m, l, pitch_inv=None, **kwargs):
         """Plot the field line and bounce points of the given pitch angles.
@@ -1338,7 +1287,7 @@ class Bounce1D(Bounce):
         ----------
         m, l : int, int
             Indices into the nodes of the grid supplied to make this object.
-            ``alpha,rho=Bounce1D.reshape_data(grid,grid.nodes[:,:2])[m,l,0]``.
+            ``alpha,rho=Bounce1D.reshape(grid,grid.nodes[:,:2])[m,l,0]``.
         pitch_inv : jnp.ndarray
             Shape (num pitch, ).
             Optional, 1/λ values whose corresponding bounce points on the field line
@@ -1352,7 +1301,7 @@ class Bounce1D(Bounce):
             Matplotlib (fig, ax) tuple.
 
         """
-        B, dB_dz = self.B, self._dB_dz
+        B, dB_dz = self._B, self._dB_dz
         if B.ndim == 4:
             B = B[m]
             dB_dz = dB_dz[m]

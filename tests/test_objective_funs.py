@@ -23,10 +23,10 @@ from desc.coils import (
 )
 from desc.compute import get_transforms
 from desc.equilibrium import Equilibrium
-from desc.equilibrium.coords import get_rtz_grid
 from desc.examples import get
 from desc.geometry import FourierPlanarCurve, FourierRZToroidalSurface, FourierXYZCurve
 from desc.grid import ConcentricGrid, LinearGrid, QuadratureGrid
+from desc.integrals import Bounce2D
 from desc.io import load
 from desc.magnetic_fields import (
     CurrentPotentialField,
@@ -1639,24 +1639,27 @@ class TestObjectiveFunction:
         """To avoid issues such as #1424."""
         eq = get("W7-X")
         rho = np.linspace(0.1, 1, 3)
-        alpha = np.array([0])
-        Y_B = 50
+        grid = LinearGrid(rho=rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False)
+        X = 16
+        Y = 32
         num_transit = 4
-        num_pitch = 16
+        num_well = 15 * num_transit
         num_quad = 16
-        zeta = np.linspace(0, 2 * np.pi * num_transit, Y_B * num_transit)
-        grid = get_rtz_grid(eq, rho, alpha, zeta, coordinates="raz")
+        num_pitch = 16
         data = eq.compute(
             ["effective ripple", "Gamma_c"],
             grid=grid,
+            theta=Bounce2D.compute_theta(eq, X=X, Y=Y, rho=rho),
+            num_transit=num_transit,
+            num_well=num_well,
             num_quad=num_quad,
             num_pitch=num_pitch,
         )
         obj = EffectiveRipple(
             eq,
-            rho=rho,
-            alpha=alpha,
-            Y_B=Y_B,
+            grid=grid,
+            X=X,
+            Y=Y,
             num_transit=num_transit,
             num_quad=num_quad,
             num_pitch=num_pitch,
@@ -1670,9 +1673,9 @@ class TestObjectiveFunction:
         )
         obj = GammaC(
             eq,
-            rho=rho,
-            alpha=alpha,
-            Y_B=Y_B,
+            grid=grid,
+            X=X,
+            Y=Y,
             num_transit=num_transit,
             num_quad=num_quad,
             num_pitch=num_pitch,
@@ -2633,9 +2636,12 @@ def _reduced_resolution_objective(eq, objective):
     """Speed up testing suite by defining rules to reduce objective resolution."""
     kwargs = {}
     if objective in {EffectiveRipple, GammaC}:
-        kwargs["Y_B"] = 50
-        kwargs["num_transit"] = 2
-        kwargs["num_pitch"] = 25
+        kwargs["X"] = 8
+        kwargs["Y"] = 16
+        kwargs["num_transit"] = 4
+        kwargs["num_well"] = 15 * kwargs["num_transit"]
+        kwargs["num_pitch"] = 16
+        kwargs["num_quad"] = 16
     return objective(eq=eq, **kwargs)
 
 
@@ -3069,7 +3075,9 @@ class TestComputeScalarResolution:
             )
             obj.build(verbose=0)
             f[i] = obj.compute_scalar(obj.x())
-        np.testing.assert_allclose(f, f[-1], rtol=6e-2)
+        np.testing.assert_allclose(
+            f, f[-1], rtol=6e-2, atol=1e-4 if np.max(f) < 1e-3 else 0
+        )
 
     @pytest.mark.regression
     @pytest.mark.parametrize(

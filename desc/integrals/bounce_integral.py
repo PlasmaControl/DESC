@@ -97,7 +97,7 @@ class Bounce(IOAble, ABC):
 
     @abstractmethod
     def plot(self, l, m, pitch_inv=None, **kwargs):
-        """Plot |B| and bounce points on the specified field line."""
+        """Plot B and bounce points on the specified field line."""
 
 
 def _swap_shape(f):
@@ -905,7 +905,7 @@ class Bounce2D(Bounce):
         # Gradient of change of variable from [−1, 1] → [0, 2π] is π.
 
     def plot(self, l, m, pitch_inv=None, **kwargs):
-        """Plot |B| and bounce points on the specified field line.
+        """Plot B and bounce points on the specified field line.
 
         Parameters
         ----------
@@ -1350,7 +1350,7 @@ class Bounce1D(Bounce):
         return interp_to_argmin(f, points, self._zeta, self._B, self._dB_dz, method)
 
     def plot(self, l, m, pitch_inv=None, **kwargs):
-        """Plot |B| and bounce points on the specified field line.
+        """Plot B and bounce points on the specified field line.
 
         Parameters
         ----------

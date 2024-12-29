@@ -35,7 +35,11 @@ from desc.integrals import (
     surface_variance,
     virtual_casing_biot_savart,
 )
-from desc.integrals._bounce_utils import _get_extrema, bounce_points
+from desc.integrals._bounce_utils import (
+    _check_bounce_points,
+    _get_extrema,
+    bounce_points,
+)
 from desc.integrals._interp_utils import fourier_pts
 from desc.integrals.basis import FourierChebyshevSeries
 from desc.integrals.quad_utils import (
@@ -742,13 +746,12 @@ class TestBouncePoints:
         """Case where straight line through first two intersects is in epigraph."""
         start = np.pi / 3
         end = 6 * np.pi
-        knots = np.linspace(start, end, 5)
-        B = CubicHermiteSpline(knots, np.cos(knots), -np.sin(knots))
+        k = np.linspace(start, end, 5)
+        B = CubicHermiteSpline(k, np.cos(k), -np.sin(k))
         pitch_inv = 0.5
         intersect = B.solve(pitch_inv, extrapolate=False)
-        z1, z2 = bounce_points(
-            pitch_inv, knots, B.c.T, B.derivative().c.T, check=True, include_knots=True
-        )
+        z1, z2 = bounce_points(pitch_inv, k, B.c.T, B.derivative().c.T)
+        _check_bounce_points(z1, z2, pitch_inv, k, B.c.T, plot=True, include_knots=True)
         z1, z2 = TestBouncePoints.filter(z1, z2)
         assert z1.size and z2.size
         np.testing.assert_allclose(z1, intersect[0::2])
@@ -763,9 +766,8 @@ class TestBouncePoints:
         B = CubicHermiteSpline(k, np.cos(k), -np.sin(k))
         pitch_inv = 0.5
         intersect = B.solve(pitch_inv, extrapolate=False)
-        z1, z2 = bounce_points(
-            pitch_inv, k, B.c.T, B.derivative().c.T, check=True, include_knots=True
-        )
+        z1, z2 = bounce_points(pitch_inv, k, B.c.T, B.derivative().c.T)
+        _check_bounce_points(z1, z2, pitch_inv, k, B.c.T, plot=True, include_knots=True)
         z1, z2 = TestBouncePoints.filter(z1, z2)
         assert z1.size and z2.size
         np.testing.assert_allclose(z1, intersect[1:-1:2])
@@ -784,9 +786,8 @@ class TestBouncePoints:
         )
         dB_dz = B.derivative()
         pitch_inv = B(dB_dz.roots(extrapolate=False))[3] - 1e-13
-        z1, z2 = bounce_points(
-            pitch_inv, k, B.c.T, dB_dz.c.T, check=True, include_knots=True
-        )
+        z1, z2 = bounce_points(pitch_inv, k, B.c.T, dB_dz.c.T)
+        _check_bounce_points(z1, z2, pitch_inv, k, B.c.T, plot=True, include_knots=True)
         z1, z2 = TestBouncePoints.filter(z1, z2)
         assert z1.size and z2.size
         intersect = B.solve(pitch_inv, extrapolate=False)
@@ -811,9 +812,8 @@ class TestBouncePoints:
         )
         dB_dz = B.derivative()
         pitch_inv = B(dB_dz.roots(extrapolate=False))[2]
-        z1, z2 = bounce_points(
-            pitch_inv, k, B.c.T, dB_dz.c.T, check=True, include_knots=True
-        )
+        z1, z2 = bounce_points(pitch_inv, k, B.c.T, dB_dz.c.T)
+        _check_bounce_points(z1, z2, pitch_inv, k, B.c.T, plot=True, include_knots=True)
         z1, z2 = TestBouncePoints.filter(z1, z2)
         assert z1.size and z2.size
         intersect = B.solve(pitch_inv, extrapolate=False)
@@ -834,14 +834,16 @@ class TestBouncePoints:
         )
         dB_dz = B.derivative()
         pitch_inv = B(dB_dz.roots(extrapolate=False))[2] + 1e-13
-        z1, z2 = bounce_points(
+        z1, z2 = bounce_points(pitch_inv, k[2:], B.c[:, 2:].T, dB_dz.c[:, 2:].T)
+        _check_bounce_points(
+            z1,
+            z2,
             pitch_inv,
             k[2:],
             B.c[:, 2:].T,
-            dB_dz.c[:, 2:].T,
-            check=True,
-            start=k[2],
+            plot=True,
             include_knots=True,
+            start=k[2],
         )
         z1, z2 = TestBouncePoints.filter(z1, z2)
         assert z1.size and z2.size
@@ -865,9 +867,8 @@ class TestBouncePoints:
         )
         dB_dz = B.derivative()
         pitch_inv = B(dB_dz.roots(extrapolate=False))[1] - 1e-13
-        z1, z2 = bounce_points(
-            pitch_inv, k, B.c.T, dB_dz.c.T, check=True, include_knots=True
-        )
+        z1, z2 = bounce_points(pitch_inv, k, B.c.T, dB_dz.c.T)
+        _check_bounce_points(z1, z2, pitch_inv, k, B.c.T, plot=True, include_knots=True)
         z1, z2 = TestBouncePoints.filter(z1, z2)
         assert z1.size and z2.size
         # Our routine correctly detects intersection, while scipy, jnp.root fails.

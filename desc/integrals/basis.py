@@ -539,7 +539,7 @@ class PiecewiseChebyshevSeries(IOAble):
         z2 = atleast_nd(self.cheb.ndim, z2)
         # Cheb has shape    (..., X, Y) and others
         #     have shape (K, ..., W)
-        errorif(not (z1.ndim == z2.ndim == k.ndim == self.cheb.ndim))
+        assert z1.ndim == z2.ndim == k.ndim == self.cheb.ndim
         return z1, z2, k
 
     def check_intersect1d(self, z1, z2, k, plot=True, **kwargs):

@@ -909,7 +909,7 @@ class Bounce2D(Bounce):
 
         Parameters
         ----------
-        l, m : int, int
+        l, m : int
             Index into the nodes of the grid supplied to make this object.
             The rho value corresponds to
             ``rho=grid.compress(grid.nodes[:,0])[l]``
@@ -965,7 +965,7 @@ class Bounce2D(Bounce):
 
         Parameters
         ----------
-        l, m : int, int
+        l, m : int
             Index into the nodes of the grid supplied to make this object.
             The rho value corresponds to
             ``rho=grid.compress(grid.nodes[:,0])[l]``
@@ -1354,7 +1354,7 @@ class Bounce1D(Bounce):
 
         Parameters
         ----------
-        l, m : int, int
+        l, m : int
             Indices into the nodes of the grid supplied to make this object.
             ``rho,alpha=Bounce1D.reshape(grid,grid.nodes[:,:2])[l,m,0]``.
         pitch_inv : jnp.ndarray

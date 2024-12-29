@@ -24,62 +24,13 @@ from desc.integrals.basis import (
     _plot_intersect,
 )
 from desc.integrals.quad_utils import bijection_from_disc, grad_bijection_from_disc
-from desc.utils import (
-    atleast_nd,
-    errorif,
-    flatten_matrix,
-    is_broadcastable,
-    setdefault,
-    take_mask,
-)
+from desc.utils import atleast_nd, flatten_matrix, setdefault, take_mask
+
+# New versions of JAX only like static sentinels.
+_sentinel = -100000.0  # instead of knots[0] - 1
 
 
-def _check_spline_shape(knots, g, dg_dz, pitch_inv):
-    """Ensure inputs have compatible shape.
-
-    Parameters
-    ----------
-    knots : jnp.ndarray
-        Shape (N, ).
-        ζ coordinates of spline knots. Must be strictly increasing.
-    g : jnp.ndarray
-        Shape (..., N - 1, g.shape[-1]).
-        Polynomial coefficients of the spline of g in local power basis.
-        Last axis enumerates the coefficients of power series. Second to
-        last axis enumerates the polynomials that compose a particular spline.
-    dg_dz : jnp.ndarray
-        Shape (..., N - 1, g.shape[-1] - 1).
-        Polynomial coefficients of the spline of ∂g/∂ζ in local power basis.
-        Last axis enumerates the coefficients of power series. Second to
-        last axis enumerates the polynomials that compose a particular spline.
-    pitch_inv : jnp.ndarray
-        Shape (..., num pitch).
-        1/λ values to compute the bounce points.
-
-    """
-    errorif(knots.ndim != 1, msg=f"knots should be 1d, got shape {knots.shape}.")
-    errorif(not (g.ndim == dg_dz.ndim == 2), msg="g and dg_dz should have ndim 2.")
-    errorif(
-        g.shape[-2] != (knots.size - 1),
-        msg=(
-            "Second to last axis does not enumerate polynomials of spline. "
-            f"Spline shape {g.shape}. Knots shape {knots.shape}."
-        ),
-    )
-    errorif(
-        not (g.ndim == dg_dz.ndim < 5)
-        or g.shape != (*dg_dz.shape[:-1], dg_dz.shape[-1] + 1),
-        msg=f"Invalid shape {g.shape} for spline and derivative {dg_dz.shape}.",
-    )
-    errorif(
-        pitch_inv.ndim > 3 or not is_broadcastable(pitch_inv.shape[:-1], g.shape[:-2]),
-        msg=f"Invalid shape {pitch_inv.shape} for pitch angles.",
-    )
-
-
-def bounce_points(
-    pitch_inv, knots, B, dB_dz, num_well=None, check=False, plot=True, **kwargs
-):
+def bounce_points(pitch_inv, knots, B, dB_dz, num_well=None):
     """Compute the bounce points given 1D spline of B and pitch λ.
 
     Parameters
@@ -113,12 +64,6 @@ def bounce_points(
 
         If there were fewer wells detected along a field line than the size of the
         last axis of the returned arrays, then that axis is padded with zero.
-    check : bool
-        Flag for debugging. Must be false for JAX transformations.
-    plot : bool
-        Whether to plot some things if check is true. Default is true.
-    kwargs
-        Keyword arguments into ``plot_ppoly``.
 
     Returns
     -------
@@ -133,23 +78,16 @@ def bounce_points(
         line and pitch, is padded with zero.
 
     """
-    pitch_inv = jnp.atleast_1d(pitch_inv)
-    if check:
-        _check_spline_shape(knots, B, dB_dz, pitch_inv)
     intersect = polyroot_vec(
         c=B[..., jnp.newaxis, :, :],  # add num pitch axis
-        k=pitch_inv[..., jnp.newaxis],  # add polynomial axis
+        k=jnp.atleast_1d(pitch_inv)[..., jnp.newaxis],  # add polynomial axis
         a_min=jnp.array([0.0]),
         a_max=jnp.diff(knots),
         sort=True,
         sentinel=-1.0,
         distinct=True,
     )
-    assert intersect.shape[-3:] == (
-        pitch_inv.shape[-1],
-        knots.size - 1,
-        B.shape[-1] - 1,
-    )
+    assert intersect.shape[-2:] == (knots.size - 1, B.shape[-1] - 1)
 
     # Reshape so that last axis enumerates intersects of a pitch along a field line.
     dB_sign = flatten_matrix(
@@ -165,20 +103,13 @@ def bounce_points(
 
     # Transform out of local power basis expansion.
     intersect = flatten_matrix(intersect + knots[:-1, jnp.newaxis])
-    # New versions of JAX only like static sentinels.
-    sentinel = -100000.0  # instead of knots[0] - 1
-    z1 = take_mask(intersect, is_z1, size=num_well, fill_value=sentinel)
-    z2 = take_mask(intersect, is_z2, size=num_well, fill_value=sentinel)
+    z1 = take_mask(intersect, is_z1, size=num_well, fill_value=_sentinel)
+    z2 = take_mask(intersect, is_z2, size=num_well, fill_value=_sentinel)
 
-    mask = (z1 > sentinel) & (z2 > sentinel)
+    mask = (z1 > _sentinel) & (z2 > _sentinel)
     # Set outside mask to same value so integration is over set of measure zero.
     z1 = jnp.where(mask, z1, 0.0)
     z2 = jnp.where(mask, z2, 0.0)
-
-    if check:
-        assert knots[0] > sentinel, "Reduce the sentinel value in the above code."
-        _check_bounce_points(z1, z2, pitch_inv, knots, B, plot, **kwargs)
-
     return z1, z2
 
 
@@ -200,10 +131,17 @@ def _set_default_plot_kwargs(kwargs):
 
 def _check_bounce_points(z1, z2, pitch_inv, knots, B, plot=True, **kwargs):
     """Check that bounce points are computed correctly."""
+    assert z1.shape == z2.shape
+    assert knots.ndim == 1, f"knots should be 1d, got shape {knots.shape}."
+    assert B.shape[-2] == (knots.size - 1), (
+        "Second to last axis does not enumerate polynomials of spline. "
+        f"Spline shape {B.shape}. Knots shape {knots.shape}."
+    )
+    assert knots[0] > _sentinel, "Reduce sentinel in desc/integrals/_bounce_utils.py."
+
     kwargs = _set_default_plot_kwargs(kwargs)
     plots = []
 
-    assert z1.shape == z2.shape
     z1 = atleast_nd(4, z1)
     z2 = atleast_nd(4, z2)
     # if rho axis exists, then add alpha axis
@@ -336,9 +274,9 @@ def _bounce_quadrature(
         flux surface, and pitch.
 
     """
-    errorif(x.ndim != 1 or x.shape != w.shape)
+    assert x.ndim == 1 and x.shape == w.shape
     z1, z2 = points
-    errorif(z1.ndim < 2 or z1.shape != z2.shape)
+    assert z1.ndim > 1 and z1.shape == z2.shape
     pitch_inv = jnp.atleast_1d(pitch_inv)
 
     # Integrate and complete the change of variable.
@@ -480,11 +418,11 @@ def _check_interp(shape, Q, b_sup_z, B, result, f=None, plot=True):
     marked = jnp.any(Q.reshape(shape) != 0.0, axis=-1)
     goal = marked.sum()
 
-    assert goal == (marked & jnp.isfinite(b_sup_z).reshape(shape).all(axis=-1)).sum()
-    assert goal == (marked & jnp.isfinite(B).reshape(shape).all(axis=-1)).sum()
+    assert goal == jnp.sum(marked & jnp.isfinite(b_sup_z).reshape(shape).all(axis=-1))
+    assert goal == jnp.sum(marked & jnp.isfinite(B).reshape(shape).all(axis=-1))
     f = setdefault(f, [])
     for f_i in f:
-        assert goal == (marked & jnp.isfinite(f_i).reshape(shape).all(axis=-1)).sum()
+        assert goal == jnp.sum(marked & jnp.isfinite(f_i).reshape(shape).all(axis=-1))
 
     if plot:
         Q = Q.reshape(shape)
@@ -496,7 +434,7 @@ def _check_interp(shape, Q, b_sup_z, B, result, f=None, plot=True):
             _plot_check_interp(Q, f_i.reshape(shape), name=f"f_{i}")
 
     # Number of those integrals that were computed.
-    actual = (marked & jnp.isfinite(result)).sum()
+    actual = jnp.sum(marked & jnp.isfinite(result))
     assert goal == actual, (
         f"Lost {goal - actual} integrals from NaN generation in the integrand. This "
         "is caused by floating point error, usually due to a poor quadrature choice."

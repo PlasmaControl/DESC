@@ -915,7 +915,7 @@ class Bounce2D(Bounce):
             ``rho=grid.compress(grid.nodes[:,0])[l]``.
         m : int
             Index into the ``alpha`` array supplied to make this object.
-            The alpha value to ``alpha[m]``.
+            The alpha value corresponds to ``alpha[m]``.
         pitch_inv : jnp.ndarray
             Shape (num pitch, ).
             Optional, 1/λ values whose corresponding bounce points on the field line
@@ -972,7 +972,7 @@ class Bounce2D(Bounce):
             ``rho=grid.compress(grid.nodes[:,0])[l]``.
         m : int
             Index into the ``alpha`` array supplied to make this object.
-            The alpha value to ``alpha[m]``.
+            The alpha value corresponds to ``alpha[m]``.
         kwargs
             Keyword arguments into
             ``desc/integrals/basis.py::PiecewiseChebyshevSeries.plot1d``.

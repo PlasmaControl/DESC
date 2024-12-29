@@ -5,7 +5,7 @@ from functools import partial
 import numpy as np
 from matplotlib import pyplot as plt
 
-from desc.backend import dct, flatnonzero, idct, irfft, jnp, put, rfft
+from desc.backend import dct, flatnonzero, idct, irfft, jnp, rfft
 from desc.integrals._interp_utils import (
     _eps,
     _filter_distinct,
@@ -82,7 +82,7 @@ def _in_epigraph_and(is_intersect, df_dy_sign, /):
         # due to floating point errors grows, so the real solution is to pick a less
         # degenerate pitch value - one that does not ride the global extrema of f.
     )
-    return put(is_intersect, idx[0], edge_case)
+    return is_intersect.at[idx[0]].set(edge_case)
 
 
 def _chebcast(cheb, arr):

@@ -16,7 +16,13 @@ from desc.utils import check_nonnegint, check_posint, copy_coeffs, errorif, warn
 
 from .core import Curve
 
-__all__ = ["FourierRZCurve", "FourierXYZCurve", "FourierPlanarCurve", "SplineXYZCurve"]
+__all__ = [
+    "FourierPlanarCurve",
+    "FourierRZCurve",
+    "FourierXYCurve",
+    "FourierXYZCurve",
+    "SplineXYZCurve",
+]
 
 
 class FourierRZCurve(Curve):
@@ -853,7 +859,7 @@ class FourierPlanarCurve(Curve):
         )
 
 
-class FourierXYPlanarCurve(Curve):
+class FourierXYCurve(Curve):
     """Curve that lies in a plane.
 
     Parameterized by a point (the center of the curve), a vector (normal to the plane),
@@ -1113,15 +1119,15 @@ class FourierXYPlanarCurve(Curve):
 
     @classmethod
     def from_values(cls, coords, N=10, basis="xyz", name=""):
-        """Fit coordinates to FourierXYPlanarCurve representation.
+        """Fit coordinates to FourierXYCurve representation.
 
         Parameters
         ----------
         coords: ndarray, shape (num_coords,3)
-            Coordinates to fit a FourierPlanarCurve object with each column
+            Coordinates to fit a FourierXYCurve object with each column
             corresponding to xyz or rpz depending on the basis argument.
         N : int
-            Fourier resolution of the new r representation.
+            Fourier resolution of the new X & Y representation.
         basis : {"rpz", "xyz"}
             Basis for input coordinates. Defaults to "xyz".
         name : str
@@ -1129,7 +1135,7 @@ class FourierXYPlanarCurve(Curve):
 
         Returns
         -------
-        curve : FourierXYPlanarCurve
+        curve : FourierXYCurve
             New representation of the curve parameterized by Fourier series for X and Y.
 
         """
@@ -1175,7 +1181,7 @@ class FourierXYPlanarCurve(Curve):
         X_n = transform.fit(X)
         Y_n = transform.fit(Y)
 
-        return FourierXYPlanarCurve(
+        return FourierXYCurve(
             center=center,
             normal=normal,
             X_n=X_n,

@@ -13,6 +13,7 @@ New Features
 - ``desc.objectives.Omnigenity`` is now vectorized and able to optimize multiple surfaces at the same time. Previously it was required to use a different objective for each surface.
 - Adds a new objective ``desc.objectives.MirrorRatio`` for targeting a particular mirror ratio on each flux surface, for either an ``Equilibrium`` or ``OmnigenousField``.
 - Adds the output quantities ``wb`` and ``wp`` to ``VMECIO.save``.
+- Adds the classes ``FourierXYCurve`` and ``FourierXYCoil`` to represent planar curves/coils with Fourier series for X and Y instead of the radius.
 
 Bug Fixes
 

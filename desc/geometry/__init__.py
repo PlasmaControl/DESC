@@ -4,7 +4,7 @@ from .core import Curve, Surface
 from .curve import (
     FourierPlanarCurve,
     FourierRZCurve,
-    FourierXYPlanarCurve,
+    FourierXYCurve,
     FourierXYZCurve,
     SplineXYZCurve,
 )

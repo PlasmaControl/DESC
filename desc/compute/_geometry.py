@@ -1185,10 +1185,10 @@ def _fieldline_length(data, transforms, profiles, **kwargs):
     data["fieldline length"] = grid.expand(
         jnp.abs(
             simpson(
-                y=grid.meshgrid_reshape(1 / data["B^zeta"], "arz"),
+                y=grid.meshgrid_reshape(1 / data["B^zeta"], "raz"),
                 x=grid.compress(grid.nodes[:, 2], surface_label="zeta"),
                 axis=-1,
-            ).mean(axis=0)
+            ).mean(axis=-1)
         )
     )
     return data
@@ -1215,10 +1215,10 @@ def _fieldline_length_over_volume(data, transforms, profiles, **kwargs):
     data["fieldline length/volume"] = grid.expand(
         jnp.abs(
             simpson(
-                y=grid.meshgrid_reshape(1 / (data["B^zeta"] * data["sqrt(g)"]), "arz"),
+                y=grid.meshgrid_reshape(1 / (data["B^zeta"] * data["sqrt(g)"]), "raz"),
                 x=grid.compress(grid.nodes[:, 2], surface_label="zeta"),
                 axis=-1,
-            ).mean(axis=0)
+            ).mean(axis=-1)
         )
     )
     return data

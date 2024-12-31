@@ -5,7 +5,7 @@ from functools import partial
 import numpy as np
 from matplotlib import pyplot as plt
 
-from desc.backend import dct, flatnonzero, idct, irfft, jnp, put, rfft
+from desc.backend import dct, flatnonzero, idct, irfft, jnp, rfft
 from desc.integrals._interp_utils import (
     _eps,
     _filter_distinct,
@@ -82,7 +82,7 @@ def _in_epigraph_and(is_intersect, df_dy_sign, /):
         # due to floating point errors grows, so the real solution is to pick a less
         # degenerate pitch value - one that does not ride the global extrema of f.
     )
-    return put(is_intersect, idx[0], edge_case)
+    return is_intersect.at[idx[0]].set(edge_case)
 
 
 def _chebcast(cheb, arr):
@@ -453,7 +453,7 @@ class PiecewiseChebyshevSeries(IOAble):
         y = bijection_from_disc(y, self.domain[0], self.domain[-1])
         return y, is_intersect, df_dy_sign
 
-    def intersect1d(self, k=0.0, *, num_intersect=None, pad_value=0.0):
+    def intersect1d(self, k=0.0, num_intersect=None, pad_value=0.0):
         """Coordinates z(x, yᵢ) such that fₓ(yᵢ) = k for every x.
 
         Examples
@@ -539,7 +539,7 @@ class PiecewiseChebyshevSeries(IOAble):
         z2 = atleast_nd(self.cheb.ndim, z2)
         # Cheb has shape    (..., X, Y) and others
         #     have shape (K, ..., W)
-        errorif(not (z1.ndim == z2.ndim == k.ndim == self.cheb.ndim))
+        assert z1.ndim == z2.ndim == k.ndim == self.cheb.ndim
         return z1, z2, k
 
     def check_intersect1d(self, z1, z2, k, plot=True, **kwargs):

@@ -269,13 +269,11 @@ class Bounce2D(Bounce):
     # or the more recent Fourier continuation methods.
     # We did not benchmark that.
     #
-    # Computing accurate series expansions in (α, ζ) coordinates demands
-    # particular interpolation points in that coordinate system. Newton iteration
-    # is used to compute θ at these points. Note that interpolation is necessary
-    # because there is no transformation that converts series coefficients in
-    # periodic coordinates, e.g. (ϑ, ϕ), to a low order polynomial basis in
-    # non-periodic coordinates. For example, one can obtain series coefficients in
-    # (α, ϕ) coordinates from those in (ϑ, ϕ) as follows
+    # Function approximation in (α, ζ) coordinates demands particular interpolation
+    # points in that coordinate system because there is no transformation that converts
+    # series coefficients in periodic coordinates, e.g. (ϑ, ϕ), to a low order
+    # polynomial basis in non-periodic coordinates. For example, one can obtain series
+    # coefficients in (α, ϕ) coordinates from those in (ϑ, ϕ) as follows
     #   g : ϑ, ϕ ↦ ∑ₘₙ aₘₙ exp(j [mϑ + nϕ])
     #
     #   g : α, ϕ ↦ ∑ₘₙ aₘₙ exp(j [mα + (m ι + n)ϕ])
@@ -283,8 +281,7 @@ class Bounce2D(Bounce):
     # irrational frequencies, courtesy of the irrational rotational transform.
     # Globally convergent root-finding schemes for that basis (at fixed α) are
     # not known. The denominator of a close rational could be absorbed into the
-    # coordinate ϕ, but this balloons the frequency, and hence the degree of the
-    # series.
+    # coordinate ϕ, but this balloons the frequency, and hence degree of the series.
     #
     # Quadrature is chosen over Runge-Kutta methods of the form
     #     ∂Fᵢ/∂ζ = f(ρ,α,λ,ζ,{Gⱼ}) subject to Fᵢ(ζ₁) = 0

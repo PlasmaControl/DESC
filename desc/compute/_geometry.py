@@ -9,6 +9,8 @@ computational grid has a node on the magnetic axis to avoid potentially
 expensive computations.
 """
 
+from quadax import simpson
+
 from desc.backend import jnp
 
 from ..grid import QuadratureGrid
@@ -1159,4 +1161,64 @@ def _curvature_H_zeta(params, transforms, profiles, data, **kwargs):
     data["curvature_H_zeta"] = (
         data["curvature_k1_zeta"] + data["curvature_k2_zeta"]
     ) / 2
+    return data
+
+
+@register_compute_fun(
+    name="fieldline length",
+    label="\\int_{\\zeta_{\\mathrm{min}}}^{\\zeta_{\\mathrm{max}}}"
+    " \\frac{d\\zeta}{|B^{\\zeta}|}",
+    units="m / T",
+    units_long="Meter / tesla",
+    description="(Mean) proper length of field line(s)",
+    dim=1,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="r",
+    data=["B^zeta"],
+    resolution_requirement="z",
+    source_grid_requirement={"coordinates": "raz", "is_meshgrid": True},
+)
+def _fieldline_length(data, transforms, profiles, **kwargs):
+    grid = transforms["grid"].source_grid
+    data["fieldline length"] = grid.expand(
+        jnp.abs(
+            simpson(
+                y=grid.meshgrid_reshape(1 / data["B^zeta"], "arz"),
+                x=grid.compress(grid.nodes[:, 2], surface_label="zeta"),
+                axis=-1,
+            ).mean(axis=0)
+        )
+    )
+    return data
+
+
+@register_compute_fun(
+    name="fieldline length/volume",
+    label="\\int_{\\zeta_{\\mathrm{min}}}^{\\zeta_{\\mathrm{max}}}"
+    " \\frac{d\\zeta}{|B^{\\zeta} \\sqrt g|}",
+    units="1 / Wb",
+    units_long="Inverse webers",
+    description="(Mean) proper length over volume of field line(s)",
+    dim=1,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="r",
+    data=["B^zeta", "sqrt(g)"],
+    resolution_requirement="z",
+    source_grid_requirement={"coordinates": "raz", "is_meshgrid": True},
+)
+def _fieldline_length_over_volume(data, transforms, profiles, **kwargs):
+    grid = transforms["grid"].source_grid
+    data["fieldline length/volume"] = grid.expand(
+        jnp.abs(
+            simpson(
+                y=grid.meshgrid_reshape(1 / (data["B^zeta"] * data["sqrt(g)"]), "arz"),
+                x=grid.compress(grid.nodes[:, 2], surface_label="zeta"),
+                axis=-1,
+            ).mean(axis=0)
+        )
+    )
     return data

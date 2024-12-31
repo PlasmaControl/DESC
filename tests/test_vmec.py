@@ -500,6 +500,10 @@ def test_vmec_save_1(VMEC_save):
     np.testing.assert_allclose(
         vmec.variables["betator"][:], desc.variables["betator"][:], rtol=1e-5
     )
+    np.testing.assert_allclose(vmec.variables["wb"][:], desc.variables["wb"][:])
+    np.testing.assert_allclose(
+        vmec.variables["wp"][:], desc.variables["wp"][:], rtol=1e-6
+    )
     np.testing.assert_allclose(
         vmec.variables["ctor"][:], desc.variables["ctor"][:], rtol=1e-5
     )

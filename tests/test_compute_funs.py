@@ -11,7 +11,7 @@ from desc.examples import get
 from desc.geometry import FourierRZToroidalSurface
 from desc.grid import LinearGrid
 from desc.io import load
-from desc.utils import dot
+from desc.utils import cross, dot
 
 # convolve kernel is reverse of FD coeffs
 FD_COEF_1_2 = np.array([-1 / 2, 0, 1 / 2])[::-1]
@@ -1536,41 +1536,62 @@ def test_surface_equilibrium_geometry():
 
 
 @pytest.mark.unit
-def test_parallel_grad():
-    """Test geometric and physical methods of computing parallel gradients agree."""
-    eq = get("W7-X")
-    with pytest.warns(UserWarning, match="Reducing radial"):
-        eq.change_resolution(2, 2, 2, 4, 4, 4)
-    data = eq.compute(
-        [
-            "e_zeta|r,a",
-            "B",
-            "B^zeta",
-            "|B|_z|r,a",
-            "grad(|B|)",
-            "|e_zeta|r,a|_z|r,a",
-            "B^zeta_z|r,a",
-            "|B|",
-            "gbdrift (secular)",
-            "gbdrift (secular)/phi",
-            "phi",
-        ],
-    )
-    np.testing.assert_allclose(data["e_zeta|r,a"], (data["B"].T / data["B^zeta"]).T)
-    np.testing.assert_allclose(
-        data["|B|_z|r,a"], dot(data["grad(|B|)"], data["e_zeta|r,a"])
-    )
-    np.testing.assert_allclose(
-        data["|e_zeta|r,a|_z|r,a"],
-        data["|B|_z|r,a"] / np.abs(data["B^zeta"])
-        - data["|B|"]
-        * data["B^zeta_z|r,a"]
-        * np.sign(data["B^zeta"])
-        / data["B^zeta"] ** 2,
-    )
-    np.testing.assert_allclose(
-        data["gbdrift (secular)"], data["gbdrift (secular)/phi"] * data["phi"]
-    )
+def test_clebsch_sfl_funs():
+    """Test geometric and physical methods of computing B agree."""
+
+    def test(eq):
+        with pytest.warns(UserWarning, match="Reducing radial"):
+            eq.change_resolution(2, 2, 2, 4, 4, 4)
+        data = eq.compute(
+            [
+                "e_zeta|r,a",
+                "B",
+                "B^zeta",
+                "B^phi",
+                "|B|_z|r,a",
+                "grad(|B|)",
+                "|e_zeta|r,a|_z|r,a",
+                "B^zeta_z|r,a",
+                "|B|",
+                "sqrt(g)_Clebsch",
+                "sqrt(g)_PEST",
+                "psi_r",
+                "grad(psi)",
+                "grad(alpha)",
+                "grad(phi)",
+                "B_phi",
+                "gbdrift (secular)",
+                "gbdrift (secular)/phi",
+                "phi",
+            ],
+        )
+        np.testing.assert_allclose(data["e_zeta|r,a"], (data["B"].T / data["B^zeta"]).T)
+        np.testing.assert_allclose(
+            data["|B|_z|r,a"], dot(data["grad(|B|)"], data["e_zeta|r,a"])
+        )
+        np.testing.assert_allclose(
+            data["|e_zeta|r,a|_z|r,a"],
+            data["|B|_z|r,a"] / np.abs(data["B^zeta"])
+            - data["|B|"]
+            * data["B^zeta_z|r,a"]
+            * np.sign(data["B^zeta"])
+            / data["B^zeta"] ** 2,
+        )
+        np.testing.assert_allclose(
+            data["B"], cross(data["grad(psi)"], data["grad(alpha)"])
+        )
+        np.testing.assert_allclose(
+            data["B^zeta"], data["psi_r"] / data["sqrt(g)_Clebsch"]
+        )
+        np.testing.assert_allclose(data["B^phi"], data["psi_r"] / data["sqrt(g)_PEST"])
+        np.testing.assert_allclose(data["B^phi"], dot(data["B"], data["grad(phi)"]))
+        np.testing.assert_allclose(data["B_phi"], data["B"][:, 1])
+        np.testing.assert_allclose(
+            data["gbdrift (secular)"], data["gbdrift (secular)/phi"] * data["phi"]
+        )
+
+    test(get("W7-X"))
+    test(get("NCSX"))
 
 
 @pytest.mark.unit

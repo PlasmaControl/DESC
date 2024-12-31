@@ -471,6 +471,9 @@ class BallooningStability(_Objective):
         iota_profiles = get_profiles(self._iota_keys, obj=eq, grid=iota_grid)
         iota_transforms = get_transforms(self._iota_keys, obj=eq, grid=iota_grid)
 
+        # TODO: Generalize balloning stabilty funs to multiple flux surfaces,
+        #       include last closed flux surface requirement, and remove quadrature
+        #       transforms.
         # Separate grid to calculate the right length scale for normalization
         len_grid = QuadratureGrid(L=eq.L, M=eq.M, N=eq.N, NFP=eq.NFP)
 

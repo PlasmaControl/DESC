@@ -251,7 +251,6 @@ class EffectiveRipple(_Objective):
             Effective ripple as a function of the flux surface label.
 
         """
-        # TODO (#1094)
         if constants is None:
             constants = self.constants
         eq = self.things[0]

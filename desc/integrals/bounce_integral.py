@@ -5,11 +5,11 @@ from abc import ABC, abstractmethod
 from interpax import CubicHermiteSpline, PPoly
 from orthax.legendre import leggauss
 
-from desc.backend import jnp, rfft2
+from desc.backend import imap, jnp, rfft2
 from desc.integrals._bounce_utils import (
-    _bounce_quadrature,
     _check_bounce_points,
     _check_interp,
+    _interpolate_and_integrate,
     _set_default_plot_kwargs,
     bounce_points,
     chebyshev,
@@ -255,16 +255,6 @@ class Bounce2D(Bounce):
     # ζ is a field-line-following coordinate. For this, function approximation
     # of B is necessary.
     #
-    # Therefore, to compute bounce points {(ζ₁, ζ₂)}, we approximate B by a
-    # series expansion of basis functions parameterized by a single variable ζ,
-    # restricting the class of basis functions to low order (e.g. n = 2ᵏ where
-    # k is small) algebraic or trigonometric polynomial with integer frequencies.
-    # These are the two classes useful for function approximation and for which
-    # there exists globally convergent root-finding algorithms. We require low
-    # order because the computation expenses grow with the number of potential
-    # roots, and the theorem of algebra states that number is n (2n) for algebraic
-    # (trigonometric) polynomials of degree n.
-    #
     # The frequency transform of a map under the chosen basis must be concentrated
     # at low frequencies for the series to converge fast. For periodic
     # (non-periodic) maps, the standard choice for the basis is a Fourier (Chebyshev)
@@ -274,23 +264,10 @@ class Bounce2D(Bounce):
     # polynomials are preferred to other orthogonal polynomial series is
     # fast discrete polynomial transforms (DPT) are implemented via fast transform
     # to Chebyshev then DCT. Therefore, a Fourier-Chebyshev series is chosen
-    # to interpolate θ(α,ζ) and a piecewise Chebyshev series interpolates B(ζ).
-    #
-    # * An alternative to Chebyshev series is
-    #   [filtered Fourier series](doi.org/10.1016/j.aml.2006.10.001).
-    #   We did not implement or benchmark against that.
-    # * θ is not interpolated with a double Fourier series θ(ϑ, ζ) because
-    #   it is impossible to approximate an unbounded function with a finite Fourier
-    #   series. Due to Gibbs effects, this statement holds even when the goal is to
-    #   approximate θ over one branch cut. The proof uses analytic continuation.
-    # * The advantage of Fourier series in DESC coordinates is that they may use the
-    #   spectrally condensed variable ζ* = NFP ζ. This cannot be done in any other
-    #   coordinate system, regardless of whether the basis functions are periodic.
-    #   The strategy of parameterizing B along field lines with a single variable
-    #   in Clebsch coordinates (as opposed to two variables in straight-field line
-    #   coordinates) also serves to minimize this penalty since evaluation of B
-    #   when computing bounce points will be less expensive (assuming the 2D
-    #   Fourier resolution of B(ϑ, ϕ) is larger than the 1D Chebyshev resolution).
+    # to interpolate θ(α,ζ). An alternative to Chebyshev series is a
+    # [filtered Fourier series](doi.org/10.1016/j.aml.2006.10.001)
+    # or the more recent Fourier continuation methods.
+    # We did not benchmark that.
     #
     # Computing accurate series expansions in (α, ζ) coordinates demands
     # particular interpolation points in that coordinate system. Newton iteration
@@ -309,17 +286,10 @@ class Bounce2D(Bounce):
     # coordinate ϕ, but this balloons the frequency, and hence the degree of the
     # series.
     #
-    # After computing the bounce points, the supplied quadrature is performed.
-    # By default, this is a Gauss quadrature after removing the singularity.
-    # Fast fourier transforms interpolate smooth functions in the integrand to the
-    # quadrature nodes. Quadrature is chosen over Runge-Kutta methods of the form
+    # Quadrature is chosen over Runge-Kutta methods of the form
     #     ∂Fᵢ/∂ζ = f(ρ,α,λ,ζ,{Gⱼ}) subject to Fᵢ(ζ₁) = 0
     # A fourth order Runge-Kutta method is equivalent to a quadrature
     # with Simpson's rule. The quadratures resolve these integrals more efficiently.
-    #
-    # Fast transforms are used where possible. Fast multipoint methods are not
-    # implemented. For non-uniform interpolation, MMTs are used. It will be
-    # worthwhile to use the inverse non-uniform fast transforms.
 
     required_names = ["B^zeta", "|B|", "iota"]
 
@@ -695,26 +665,14 @@ class Bounce2D(Bounce):
             names,
             _swap_shape(points[0]),
             _swap_shape(points[1]),
-            is_fourier=is_fourier,
-            check=check,
-            plot=plot,
+            is_fourier,
+            check,
+            plot,
         )
         return result[0] if len(result) == 1 else result
 
     def _integrate(
-        self,
-        x,
-        w,
-        integrand,
-        pitch,
-        data,
-        names,
-        z1,
-        z2,
-        *,
-        is_fourier,
-        check,
-        plot,
+        self, x, w, integrand, pitch, data, names, z1, z2, is_fourier, check, plot
     ):
         # num pitch, num alpha, num rho, num well, num quad
         shape = [*z1.shape, x.size]
@@ -1305,21 +1263,66 @@ class Bounce1D(Bounce):
         if points is None:
             points = bounce_points(pitch_inv, self._zeta, self._B, self._dB_dz)
 
-        result = _bounce_quadrature(
+        result = self._integrate(
             self._x if quad is None else quad[0],
             self._w if quad is None else quad[1],
-            self._zeta,
             integrand,
-            pitch_inv,
+            # add axis to broadcast against quadrature points
+            jnp.atleast_1d(1 / pitch_inv)[..., jnp.newaxis],
             data | self._data,
             names,
             points,
-            method=method,
-            batch=batch,
-            check=check,
-            plot=plot,
+            method,
+            batch,
+            check,
+            plot,
         )
         return result[0] if len(result) == 1 else result
+
+    def _integrate(
+        self, x, w, integrand, pitch, data, names, points, method, batch, check, plot
+    ):
+        if batch:
+            result = _interpolate_and_integrate(
+                batch=True,
+                x=x,
+                w=w,
+                knots=self._zeta,
+                integrand=integrand,
+                pitch=pitch,
+                data=data,
+                names=names,
+                points=points,
+                method=method,
+                check=check,
+                plot=plot,
+            )
+        else:
+
+            def loop(points):  # over num well axis
+                # Need to return tuple because input was tuple; artifact of JAX map.
+                return None, _interpolate_and_integrate(
+                    batch=False,
+                    x=x,
+                    w=w,
+                    knots=self._zeta,
+                    integrand=integrand,
+                    pitch=pitch,
+                    data=data,
+                    names=names,
+                    points=points,
+                    method=method,
+                    check=False,
+                    plot=False,
+                )
+
+            # TODO (#1386): Use batch_size arg of imap after
+            #  increasing JAX version requirement.
+            z1, z2 = points
+            result = imap(loop, (jnp.moveaxis(z1, -1, 0), jnp.moveaxis(z2, -1, 0)))[1]
+            result = [jnp.moveaxis(r, 0, -1) for r in result]
+
+        return result
 
     def interp_to_argmin(self, f, points, *, method="cubic"):
         """Interpolate ``f`` to the deepest point pⱼ in magnetic well j.

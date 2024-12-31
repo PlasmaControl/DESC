@@ -4,7 +4,7 @@ import numpy as np
 from interpax import CubicSpline, PPoly
 from matplotlib import pyplot as plt
 
-from desc.backend import dct, imap, jnp
+from desc.backend import dct, jnp
 from desc.integrals._interp_utils import (
     cheb_from_dct,
     cheb_pts,
@@ -200,127 +200,6 @@ def _check_bounce_points(z1, z2, pitch_inv, knots, B, plot=True, **kwargs):
                 )
             )
     return plots
-
-
-def _bounce_quadrature(
-    x,
-    w,
-    knots,
-    integrand,
-    pitch_inv,
-    data,
-    names,
-    points,
-    *,
-    method="cubic",
-    batch=True,
-    check=False,
-    plot=False,
-):
-    """Bounce integrate ∫ f(ρ,α,λ,ℓ) dℓ.
-
-    Parameters
-    ----------
-    x : jnp.ndarray
-        Shape (num quad, ).
-        Quadrature points in [-1, 1].
-    w : jnp.ndarray
-        Shape (num quad, ).
-        Quadrature weights.
-    knots : jnp.ndarray
-        Shape (N, ).
-        Unique ζ coordinates where the arrays in ``data`` and ``f`` were evaluated.
-    integrand : callable or list[callable]
-        The composition operator on the set of functions in ``data``
-        that determines ``f`` in ∫ f(ρ,α,λ,ℓ) dℓ. It should accept a dictionary
-        which stores the interpolated data and the arguments ``B`` and ``pitch``.
-    pitch_inv : jnp.ndarray
-        Shape (num rho, num pitch).
-        1/λ values to compute the bounce integrals. 1/λ(ρ) is specified by
-        ``pitch_inv[ρ]`` where in the latter the labels are interpreted
-        as the indices that correspond to that field line.
-    data : dict[str, jnp.ndarray]
-        Shape (num rho, num alpha, num zeta).
-        Real scalar-valued periodic functions in (θ, ζ) ∈ [0, 2π) × [0, 2π/NFP)
-        evaluated on the ``grid`` supplied to construct this object.
-        Use the method ``Bounce1D.reshape`` to reshape the data into the
-        expected shape.
-    names : str or list[str]
-        Names in ``data`` to interpolate. Default is all keys in ``data``.
-    points : tuple[jnp.ndarray]
-        Shape (num rho, num alpha, num pitch, num well).
-        Optional, output of method ``self.points``.
-        Tuple of length two (z1, z2) that stores ζ coordinates of bounce points.
-        The points are ordered and grouped such that the straight line path
-        between ``z1`` and ``z2`` resides in the epigraph of B.
-    method : str
-        Method of interpolation.
-        See https://interpax.readthedocs.io/en/latest/_api/interpax.interp1d.html.
-        Default is cubic C1 local spline.
-    batch : bool
-        Whether to perform computation in a batched manner. Default is true.
-    check : bool
-        Flag for debugging. Must be false for JAX transformations.
-        Ignored if ``batch`` is false.
-    plot : bool
-        Whether to plot the quantities in the integrand interpolated to the
-        quadrature points of each integral. Ignored if ``check`` is false.
-
-    Returns
-    -------
-    result : jnp.ndarray or list[jnp.ndarray]
-        Shape (..., num pitch, num well).
-        Last axis enumerates the bounce integrals for a field line,
-        flux surface, and pitch.
-
-    """
-    assert x.ndim == 1 and x.shape == w.shape
-    z1, z2 = points
-    assert z1.ndim > 1 and z1.shape == z2.shape
-    # add axis to broadcast against quadrature points
-    pitch = jnp.atleast_1d(1 / pitch_inv)[..., jnp.newaxis]
-
-    # Integrate and complete the change of variable.
-    if batch:
-        result = _interpolate_and_integrate(
-            batch=True,
-            x=x,
-            w=w,
-            knots=knots,
-            integrand=integrand,
-            pitch=pitch,
-            data=data,
-            names=names,
-            points=points,
-            method=method,
-            check=check,
-            plot=plot,
-        )
-    else:
-
-        def loop(points):  # over num well axis
-            # Need to return tuple because input was tuple; artifact of JAX map.
-            return None, _interpolate_and_integrate(
-                batch=False,
-                x=x,
-                w=w,
-                knots=knots,
-                integrand=integrand,
-                pitch=pitch,
-                data=data,
-                names=names,
-                points=points,
-                method=method,
-                check=False,
-                plot=False,
-            )
-
-        # TODO (#1386): Use batch_size arg of imap after
-        #  increasing JAX version requirement.
-        result = imap(loop, (jnp.moveaxis(z1, -1, 0), jnp.moveaxis(z2, -1, 0)))[1]
-        result = [jnp.moveaxis(r, source=0, destination=-1) for r in result]
-
-    return result
 
 
 def _interpolate_and_integrate(

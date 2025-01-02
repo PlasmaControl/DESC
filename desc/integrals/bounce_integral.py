@@ -9,7 +9,6 @@ from desc.backend import imap, jnp, rfft2
 from desc.integrals._bounce_utils import (
     _check_bounce_points,
     _check_interp,
-    _interpolate_and_integrate,
     _set_default_plot_kwargs,
     bounce_points,
     chebyshev,
@@ -21,6 +20,8 @@ from desc.integrals._bounce_utils import (
 )
 from desc.integrals._interp_utils import (
     idct_non_uniform,
+    interp1d_Hermite_vec,
+    interp1d_vec,
     interp_rfft2,
     irfft2_non_uniform,
     polyder_vec,
@@ -1043,14 +1044,14 @@ class Bounce1D(Bounce):
             # To retain dℓ = |B|/(B⋅∇ζ) dζ > 0 after fixing dζ > 0, we require
             # B⋅∇ζ > 0. This is equivalent to changing the sign of ∇ζ
             # or (∂ℓ/∂ζ)|ρ,a. Recall dζ = ∇ζ⋅dR ⇔ 1 = ∇ζ⋅(e_ζ|ρ,a).
-            "|B^zeta|": jnp.abs(data["B^zeta"]) * Lref / Bref,
-            "|B^zeta|_z|r,a": data["B^zeta_z|r,a"]
-            * jnp.sign(data["B^zeta"])
-            * Lref
-            / Bref,
+            "|b^zeta|": jnp.abs(data["B^zeta"]) * Lref / data["|B|"],
             "|B|": data["|B|"] / Bref,
             "|B|_z|r,a": data["|B|_z|r,a"] / Bref,  # This is already the correct sign.
         }
+        self._data["|b^zeta|_z|r,a"] = (
+            data["B^zeta_z|r,a"] * jnp.sign(data["B^zeta"]) * Lref
+            - self._data["|b^zeta|"] * data["|B|_z|r,a"]
+        ) / data["|B|"]
         if not is_reshaped:
             for name in self._data:
                 self._data[name] = Bounce1D.reshape(grid, self._data[name])
@@ -1189,10 +1190,10 @@ class Bounce1D(Bounce):
         points=None,
         *,
         method="cubic",
-        batch=True,
         check=False,
         plot=False,
         quad=None,
+        **kwargs,
     ):
         """Bounce integrate ∫ f(ρ,α,λ,ℓ) dℓ.
 
@@ -1227,8 +1228,6 @@ class Bounce1D(Bounce):
             Method of interpolation.
             See https://interpax.readthedocs.io/en/latest/_api/interpax.interp1d.html.
             Default is cubic C1 local spline.
-        batch : bool
-            Whether to perform computation in a batched manner. Default is true.
         check : bool
             Flag for debugging. Must be false for JAX transformations.
         plot : bool
@@ -1260,64 +1259,96 @@ class Bounce1D(Bounce):
         if points is None:
             points = bounce_points(pitch_inv, self._zeta, self._B, self._dB_dz)
 
-        result = self._integrate(
-            self._x if quad is None else quad[0],
-            self._w if quad is None else quad[1],
-            integrand,
-            # add axis to broadcast against quadrature points
-            jnp.atleast_1d(1 / pitch_inv)[..., jnp.newaxis],
-            data | self._data,
-            names,
-            points,
-            method,
-            batch,
-            check,
-            plot,
-        )
-        return result[0] if len(result) == 1 else result
+        x = self._x if quad is None else quad[0]
+        w = self._w if quad is None else quad[1]
+        # add axis to broadcast against quadrature points
+        pitch = jnp.atleast_1d(1 / pitch_inv)[..., jnp.newaxis]
 
-    def _integrate(
-        self, x, w, integrand, pitch, data, names, points, method, batch, check, plot
-    ):
-        if batch:
-            result = _interpolate_and_integrate(
+        if kwargs.get("batch", True):
+            result = self._integrate(
+                x,
+                w,
+                integrand,
+                pitch,
+                data,
+                names,
+                points,
+                method,
+                check,
+                plot,
                 batch=True,
-                x=x,
-                w=w,
-                knots=self._zeta,
-                integrand=integrand,
-                pitch=pitch,
-                data=data,
-                names=names,
-                points=points,
-                method=method,
-                check=check,
-                plot=plot,
             )
         else:
-
+            # Perform integrals for a particular field line and pitch one at a time.
             def loop(points):  # over num well axis
                 # Need to return tuple because input was tuple; artifact of JAX map.
-                return None, _interpolate_and_integrate(
-                    batch=False,
-                    x=x,
-                    w=w,
-                    knots=self._zeta,
-                    integrand=integrand,
-                    pitch=pitch,
-                    data=data,
-                    names=names,
-                    points=points,
-                    method=method,
+                return None, self._integrate(
+                    x,
+                    w,
+                    integrand,
+                    pitch,
+                    data,
+                    names,
+                    points,
+                    method,
                     check=False,
                     plot=False,
+                    batch=False,
                 )
 
-            # TODO (#1386): Use batch_size arg of imap after
-            #  increasing JAX version requirement.
             z1, z2 = points
             result = imap(loop, (jnp.moveaxis(z1, -1, 0), jnp.moveaxis(z2, -1, 0)))[1]
             result = [jnp.moveaxis(r, 0, -1) for r in result]
+
+        return result[0] if len(result) == 1 else result
+
+    def _integrate(
+        self, x, w, integrand, pitch, data, names, points, method, check, plot, batch
+    ):
+        z1, z2 = points
+        # (..., num pitch, num well, num quad)
+        shape = (*z1.shape, x.size)
+        # ζ ∈ ℝ coordinates of quadrature points
+        zeta = bijection_from_disc(x, z1[..., jnp.newaxis], z2[..., jnp.newaxis])
+        if batch:
+            zeta = flatten_matrix(zeta)
+
+        b_sup_z = interp1d_Hermite_vec(
+            zeta,
+            self._zeta,
+            self._data["|b^zeta|"][..., jnp.newaxis, :],
+            self._data["|b^zeta|_z|r,a"][..., jnp.newaxis, :],
+        )
+        B = interp1d_Hermite_vec(
+            zeta,
+            self._zeta,
+            self._data["|B|"][..., jnp.newaxis, :],
+            self._data["|B|_z|r,a"][..., jnp.newaxis, :],
+        )
+
+        # Spline each function separately so that operations in the integrand
+        # that do not preserve smoothness can be captured.
+        data = {
+            name: interp1d_vec(
+                zeta, self._zeta, data[name][..., jnp.newaxis, :], method=method
+            )
+            for name in names
+        }
+        cov = grad_bijection_from_disc(z1, z2)
+        result = [
+            (f(data, B, pitch) / b_sup_z).reshape(shape).dot(w) * cov for f in integrand
+        ]
+
+        if check:
+            _check_interp(
+                shape,
+                zeta,
+                b_sup_z,
+                B,
+                result[0],
+                [data[name] for name in names],
+                plot=plot,
+            )
 
         return result
 

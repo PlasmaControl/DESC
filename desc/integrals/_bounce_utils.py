@@ -9,7 +9,6 @@ from desc.integrals._interp_utils import (
     cheb_from_dct,
     cheb_pts,
     idct_non_uniform,
-    interp1d_Hermite_vec,
     interp1d_vec,
     interp_rfft2,
     irfft2_non_uniform,
@@ -23,7 +22,7 @@ from desc.integrals.basis import (
     _in_epigraph_and,
     _plot_intersect,
 )
-from desc.integrals.quad_utils import bijection_from_disc, grad_bijection_from_disc
+from desc.integrals.quad_utils import bijection_from_disc
 from desc.utils import atleast_nd, flatten_matrix, setdefault, take_mask
 
 # New versions of JAX only like static sentinels.
@@ -200,70 +199,6 @@ def _check_bounce_points(z1, z2, pitch_inv, knots, B, plot=True, **kwargs):
                 )
             )
     return plots
-
-
-def _interpolate_and_integrate(
-    batch,
-    x,
-    w,
-    knots,
-    integrand,
-    pitch,
-    data,
-    names,
-    points,
-    *,
-    method="cubic",
-    check=False,
-    plot=False,
-):
-    z1, z2 = points
-    # shape (..., num pitch, num well, num quad)
-    Q = bijection_from_disc(x, z1[..., jnp.newaxis], z2[..., jnp.newaxis])
-    assert w.ndim == 1 and Q.shape[-1] == w.size
-    assert data["|B|"].shape[-1] == knots.size
-    shape = Q.shape
-    if batch:
-        Q = flatten_matrix(Q)
-
-    b_sup_z = interp1d_Hermite_vec(
-        Q,
-        knots,
-        (data["|B^zeta|"] / data["|B|"])[..., jnp.newaxis, :],
-        (
-            data["|B^zeta|_z|r,a"] / data["|B|"]
-            - data["|B^zeta|"] * data["|B|_z|r,a"] / data["|B|"] ** 2
-        )[..., jnp.newaxis, :],
-    )
-    B = interp1d_Hermite_vec(
-        Q,
-        knots,
-        data["|B|"][..., jnp.newaxis, :],
-        data["|B|_z|r,a"][..., jnp.newaxis, :],
-    )
-    # Spline each function separately so that operations in the integrand
-    # that do not preserve smoothness can be captured.
-    data = {
-        name: interp1d_vec(Q, knots, data[name][..., jnp.newaxis, :], method=method)
-        for name in names
-    }
-    cov = grad_bijection_from_disc(z1, z2)
-    result = [
-        (f(data, B, pitch) / b_sup_z).reshape(shape).dot(w) * cov for f in integrand
-    ]
-
-    if check:
-        _check_interp(
-            shape,
-            Q,
-            b_sup_z,
-            B,
-            result[0],
-            [data[name] for name in names],
-            plot=plot,
-        )
-
-    return result
 
 
 def _check_interp(shape, Q, b_sup_z, B, result, f=None, plot=True):

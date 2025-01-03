@@ -827,9 +827,9 @@ class TERPSICHORE(ExternalObjective):
         # check if theta needs to be flipped so that theta=0 is on the outboard midplane
         grid0 = LinearGrid(rho=0.0, M=0, N=0)
         grid1 = LinearGrid(rho=1.0, M=0, N=0)
-        R0 = self._eq.compute("R", grid0)["R"][0]
-        R1 = self._eq.compute("R", grid1)["R"][0]
-        self._kwargs["theta0_outboard"] = R1 > R0  # R(rho=1,theta=0,phi=0) > R(rho=0)
+        R0 = self._eq.compute("R", grid0)["R"][0]  # R(rho=0)
+        R1 = self._eq.compute("R", grid1)["R"][0]  # R(rho=1,theta=0,phi=0)
+        self._kwargs["theta0_outboard"] = bool(R1 > R0)
 
         # transforms for writing the wout file
         surfs = self._kwargs.get("surfs")

@@ -3,7 +3,7 @@
 from scipy.optimize import BFGS, OptimizeResult
 
 from desc.backend import jnp
-from desc.utils import errorif, setdefault
+from desc.utils import errorif, safediv, setdefault
 
 from .bound_utils import (
     cl_scaling_vector,
@@ -247,12 +247,12 @@ def fmintr(  # noqa: C901
     # conngould : norm of the cauchy point, as recommended in ch17 of Conn & Gould
     # scipy : norm of the scaled x, as used in scipy
     # mix : geometric mean of conngould and scipy
+    tr_scipy = jnp.linalg.norm(x * scale_inv / v**0.5)
+    conngould = safediv(g_h @ g_h, abs(g_h @ H_h @ g_h))
     init_tr = {
-        "scipy": jnp.linalg.norm(x * scale_inv / v**0.5),
-        "conngould": (g_h @ g_h) / abs(g_h @ H_h @ g_h),
-        "mix": jnp.sqrt(
-            (g_h @ g_h) / abs(g_h @ H_h @ g_h) * jnp.linalg.norm(x * scale_inv / v**0.5)
-        ),
+        "scipy": tr_scipy,
+        "conngould": conngould,
+        "mix": jnp.sqrt(conngould * tr_scipy),
     }
     trust_radius = options.pop("initial_trust_radius", "scipy")
     tr_ratio = options.pop("initial_trust_ratio", 1.0)

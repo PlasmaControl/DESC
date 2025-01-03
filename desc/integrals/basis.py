@@ -566,7 +566,10 @@ class PiecewiseChebyshevSeries(IOAble):
             Matplotlib (fig, ax) tuples for the 1D plot of each field line.
 
         """
+        kwargs.setdefault("title", r"Intersects $z$ in epigraph$(f)$ s.t. $f(z) = k$")
+        title = kwargs.pop("title")
         plots = []
+
         z1, z2, k = self._check_shape(z1, z2, k)
         mask = (z1 - z2) != 0.0
         z1 = jnp.where(mask, z1, jnp.nan)
@@ -598,10 +601,8 @@ class PiecewiseChebyshevSeries(IOAble):
                         z1=_z1,
                         z2=_z2,
                         k=k[idx],
-                        title=kwargs.pop(
-                            "title", r"Intersects $z$ in epigraph($f$) s.t. $f(z) = k$"
-                        )
-                        + f", (p,l)={idx}",
+                        title=title
+                        + rf" on field line $\alpha(m)$, $\rho(l)$, $(m,l)=${l}",
                         **kwargs,
                     )
                 print("      z1    |    z2")
@@ -621,6 +622,8 @@ class PiecewiseChebyshevSeries(IOAble):
                         z1=z1[idx],
                         z2=z2[idx],
                         k=k[idx],
+                        title=title
+                        + rf" on field line $\alpha(m)$, $\rho(l)$, $(m,l)=${l}",
                         **kwargs,
                     )
                 )
@@ -635,7 +638,7 @@ class PiecewiseChebyshevSeries(IOAble):
         k=None,
         k_transparency=0.5,
         klabel=r"$k$",
-        title=r"Intersects $z$ in epigraph($f$) s.t. $f(z) = k$",
+        title=r"Intersects $z$ in epigraph$(f)$ s.t. $f(z) = k$",
         hlabel=r"$z$",
         vlabel=r"$f$",
         show=True,

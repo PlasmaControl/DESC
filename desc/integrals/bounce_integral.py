@@ -515,11 +515,10 @@ class Bounce2D(Bounce):
         return z1, z2
 
     def _polish_points(self, points, pitch_inv):
-        # TODO after (#1405): One application of Newton on Fourier series B - 1/λ.
-        #  Need fourier coeffs of lambda, but that is already known.
-        #  The idea is one can get away with les resolution
-        #  for the global root finding algorithm and rely on the local one once
-        #  good neigboorhood is found.
+        # TODO after (#1243): One application of Newton on Fourier series B - 1/λ.
+        #  Need Fourier coefficients of lambda, but that is already known.
+        #  Then can use less resolution for the global root finding algorithm
+        #  and rely on the local one once good neighbourhood is found.
         raise NotImplementedError
 
     def check_points(self, points, pitch_inv, *, plot=True, **kwargs):
@@ -638,8 +637,8 @@ class Bounce2D(Bounce):
         -------
         result : jnp.ndarray or list[jnp.ndarray]
             Shape (num rho, num alpha, num pitch, num well).
-            Last axis enumerates the bounce integrals for a given
-            flux surface and pitch value.
+            Last axis enumerates the bounce integrals for a given field line
+            and pitch value.
 
         """
         if not isinstance(integrand, (list, tuple)):
@@ -653,9 +652,10 @@ class Bounce2D(Bounce):
         if points is None:
             points = self.points(pitch_inv)
 
+        x, w = self._x, self._w if quad is None else quad
         result = self._integrate(
-            self._x if quad is None else quad[0],
-            self._w if quad is None else quad[1],
+            x,
+            w,
             integrand,
             # add axis to broadcast against quadrature points
             self._swap_pitch(1 / pitch_inv)[..., jnp.newaxis],
@@ -744,10 +744,9 @@ class Bounce2D(Bounce):
         if check:
             shape[-3], shape[0] = shape[0], shape[-3]
             _check_interp(
-                # shape is num rho, num alpha, num pitch, num well, num quad
                 shape,
                 *map(_swap_shape, (zeta, 1 / dl_dz, B)),
-                result[0],
+                result,
                 [_swap_shape(data[name]) for name in names],
                 plot=plot,
             )
@@ -890,7 +889,7 @@ class Bounce2D(Bounce):
             pitch_inv is not None and jnp.ndim(pitch_inv) > 1,
             msg=f"Got pitch_inv.ndim={jnp.ndim(pitch_inv)}, but expected 1.",
         )
-        kwargs = _set_default_plot_kwargs(kwargs)
+        kwargs = _set_default_plot_kwargs(kwargs, l, m)
 
         B = self._c["B(z)"]
         if isinstance(B, PiecewiseChebyshevSeries):
@@ -946,10 +945,10 @@ class Bounce2D(Bounce):
             T = PiecewiseChebyshevSeries(T.cheb[m], T.domain)
         kwargs.setdefault(
             "title",
-            r"DESC poloidal angle $\theta(\rho(l), \alpha(m), \zeta)$",
+            rf"Poloidal angle $\theta$ on field line $\rho(l={l})$, $\alpha(m={m})$",
         )
         kwargs.setdefault("vlabel", r"$\theta$")
-        fig, ax = T.plot1d(T.cheb, **_set_default_plot_kwargs(kwargs))
+        fig, ax = T.plot1d(T.cheb, **_set_default_plot_kwargs(kwargs, l, m))
         return fig, ax
 
 
@@ -1241,8 +1240,8 @@ class Bounce1D(Bounce):
         -------
         result : jnp.ndarray or list[jnp.ndarray]
             Shape (num rho, num alpha, num pitch, num well).
-            Last axis enumerates the bounce integrals for a given field line,
-            flux surface, and pitch value.
+            Last axis enumerates the bounce integrals for a given field line
+            and pitch value.
 
         """
         if not isinstance(integrand, (list, tuple)):
@@ -1259,8 +1258,7 @@ class Bounce1D(Bounce):
         if points is None:
             points = bounce_points(pitch_inv, self._zeta, self._B, self._dB_dz)
 
-        x = self._x if quad is None else quad[0]
-        w = self._w if quad is None else quad[1]
+        x, w = self._x, self._w if quad is None else quad
         # add axis to broadcast against quadrature points
         pitch = jnp.atleast_1d(1 / pitch_inv)[..., jnp.newaxis]
 
@@ -1345,7 +1343,7 @@ class Bounce1D(Bounce):
                 zeta,
                 b_sup_z,
                 B,
-                result[0],
+                result,
                 [data[name] for name in names],
                 plot=plot,
             )
@@ -1419,5 +1417,7 @@ class Bounce1D(Bounce):
             kwargs["z1"] = z1
             kwargs["z2"] = z2
             kwargs["k"] = pitch_inv
-        fig, ax = plot_ppoly(PPoly(B.T, self._zeta), **_set_default_plot_kwargs(kwargs))
+        fig, ax = plot_ppoly(
+            PPoly(B.T, self._zeta), **_set_default_plot_kwargs(kwargs, l, m)
+        )
         return fig, ax

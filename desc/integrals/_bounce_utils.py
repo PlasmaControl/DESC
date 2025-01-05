@@ -4,12 +4,11 @@ import numpy as np
 from interpax import CubicSpline, PPoly
 from matplotlib import pyplot as plt
 
-from desc.backend import dct, imap, jnp
+from desc.backend import dct, jnp
 from desc.integrals._interp_utils import (
     cheb_from_dct,
     cheb_pts,
     idct_non_uniform,
-    interp1d_Hermite_vec,
     interp1d_vec,
     interp_rfft2,
     irfft2_non_uniform,
@@ -23,7 +22,7 @@ from desc.integrals.basis import (
     _in_epigraph_and,
     _plot_intersect,
 )
-from desc.integrals.quad_utils import bijection_from_disc, grad_bijection_from_disc
+from desc.integrals.quad_utils import bijection_from_disc
 from desc.utils import atleast_nd, flatten_matrix, setdefault, take_mask
 
 # New versions of JAX only like static sentinels.
@@ -113,16 +112,15 @@ def bounce_points(pitch_inv, knots, B, dB_dz, num_well=None):
     return z1, z2
 
 
-def _set_default_plot_kwargs(kwargs):
+def _set_default_plot_kwargs(kwargs, l=None, m=None):
     vlabel = r"$\vert B \vert$"
-    kwargs.setdefault(
-        "title",
-        r"Intersects $\zeta$ in epigraph("
-        + vlabel
-        + ") s.t. "
-        + vlabel
-        + r"$(\zeta) = 1/\lambda$",
+    default_title = (
+        rf"Intersects $\zeta$ in epigraph$(${vlabel}$)$ "
+        + rf"s.t. {vlabel}$(\zeta) = 1/\lambda$"
     )
+    if l is not None and m is not None:
+        default_title += rf" on field line $\rho(l={l})$, $\alpha(m={m})$"
+    kwargs.setdefault("title", default_title)
     kwargs.setdefault("klabel", r"$1/\lambda$")
     kwargs.setdefault("hlabel", r"$\zeta$")
     kwargs.setdefault("vlabel", vlabel)
@@ -130,17 +128,23 @@ def _set_default_plot_kwargs(kwargs):
 
 
 def _check_bounce_points(z1, z2, pitch_inv, knots, B, plot=True, **kwargs):
-    """Check that bounce points are computed correctly."""
+    """Check that bounce points are computed correctly.
+
+    For the plotting labels ρ(l), α(m), it is assumed that the axis of B that
+    enumerates the flux surfaces is before the axis that enumerates the poloidal
+    field line labels.
+    """
+    kwargs = _set_default_plot_kwargs(kwargs)
+    title = kwargs.pop("title")
+    plots = []
+
     assert z1.shape == z2.shape
-    assert knots.ndim == 1, f"knots should be 1d, got shape {knots.shape}."
+    assert knots.ndim == 1, f"knots should have ndim 1, got shape {knots.shape}."
     assert B.shape[-2] == (knots.size - 1), (
         "Second to last axis does not enumerate polynomials of spline. "
         f"Spline shape {B.shape}. Knots shape {knots.shape}."
     )
     assert knots[0] > _sentinel, "Reduce sentinel in desc/integrals/_bounce_utils.py."
-
-    kwargs = _set_default_plot_kwargs(kwargs)
-    plots = []
 
     z1 = atleast_nd(4, z1)
     z2 = atleast_nd(4, z2)
@@ -176,7 +180,8 @@ def _check_bounce_points(z1, z2, pitch_inv, knots, B, plot=True, **kwargs):
                     z1=_z1,
                     z2=_z2,
                     k=pitch_inv[idx],
-                    title=kwargs.pop("title") + f", (l,m,p)={idx}",
+                    title=title
+                    + rf" on field line $\rho(l={lm[0]})$, $\alpha(m={lm[1]})$",
                     **kwargs,
                 )
 
@@ -196,225 +201,43 @@ def _check_bounce_points(z1, z2, pitch_inv, knots, B, plot=True, **kwargs):
                     z1=z1[lm],
                     z2=z2[lm],
                     k=pitch_inv[lm],
+                    title=title
+                    + rf" on field line $\rho(l={lm[0]})$, $\alpha(m={lm[1]})$",
                     **kwargs,
                 )
             )
     return plots
 
 
-def _bounce_quadrature(
-    x,
-    w,
-    knots,
-    integrand,
-    pitch_inv,
-    data,
-    names,
-    points,
-    *,
-    method="cubic",
-    batch=True,
-    check=False,
-    plot=False,
-):
-    """Bounce integrate ∫ f(ρ,α,λ,ℓ) dℓ.
-
-    Parameters
-    ----------
-    x : jnp.ndarray
-        Shape (num quad, ).
-        Quadrature points in [-1, 1].
-    w : jnp.ndarray
-        Shape (num quad, ).
-        Quadrature weights.
-    knots : jnp.ndarray
-        Shape (N, ).
-        Unique ζ coordinates where the arrays in ``data`` and ``f`` were evaluated.
-    integrand : callable or list[callable]
-        The composition operator on the set of functions in ``data``
-        that determines ``f`` in ∫ f(ρ,α,λ,ℓ) dℓ. It should accept a dictionary
-        which stores the interpolated data and the arguments ``B`` and ``pitch``.
-    pitch_inv : jnp.ndarray
-        Shape (num rho, num pitch).
-        1/λ values to compute the bounce integrals. 1/λ(ρ) is specified by
-        ``pitch_inv[ρ]`` where in the latter the labels are interpreted
-        as the indices that correspond to that field line.
-    data : dict[str, jnp.ndarray]
-        Shape (num rho, num alpha, num zeta).
-        Real scalar-valued periodic functions in (θ, ζ) ∈ [0, 2π) × [0, 2π/NFP)
-        evaluated on the ``grid`` supplied to construct this object.
-        Use the method ``Bounce1D.reshape`` to reshape the data into the
-        expected shape.
-    names : str or list[str]
-        Names in ``data`` to interpolate. Default is all keys in ``data``.
-    points : tuple[jnp.ndarray]
-        Shape (num rho, num alpha, num pitch, num well).
-        Optional, output of method ``self.points``.
-        Tuple of length two (z1, z2) that stores ζ coordinates of bounce points.
-        The points are ordered and grouped such that the straight line path
-        between ``z1`` and ``z2`` resides in the epigraph of B.
-    method : str
-        Method of interpolation.
-        See https://interpax.readthedocs.io/en/latest/_api/interpax.interp1d.html.
-        Default is cubic C1 local spline.
-    batch : bool
-        Whether to perform computation in a batched manner. Default is true.
-    check : bool
-        Flag for debugging. Must be false for JAX transformations.
-        Ignored if ``batch`` is false.
-    plot : bool
-        Whether to plot the quantities in the integrand interpolated to the
-        quadrature points of each integral. Ignored if ``check`` is false.
-
-    Returns
-    -------
-    result : jnp.ndarray or list[jnp.ndarray]
-        Shape (..., num pitch, num well).
-        Last axis enumerates the bounce integrals for a field line,
-        flux surface, and pitch.
-
-    """
-    assert x.ndim == 1 and x.shape == w.shape
-    z1, z2 = points
-    assert z1.ndim > 1 and z1.shape == z2.shape
-    # add axis to broadcast against quadrature points
-    pitch = jnp.atleast_1d(1 / pitch_inv)[..., jnp.newaxis]
-
-    # Integrate and complete the change of variable.
-    if batch:
-        result = _interpolate_and_integrate(
-            batch=True,
-            x=x,
-            w=w,
-            knots=knots,
-            integrand=integrand,
-            pitch=pitch,
-            data=data,
-            names=names,
-            points=points,
-            method=method,
-            check=check,
-            plot=plot,
-        )
-    else:
-
-        def loop(points):  # over num well axis
-            # Need to return tuple because input was tuple; artifact of JAX map.
-            return None, _interpolate_and_integrate(
-                batch=False,
-                x=x,
-                w=w,
-                knots=knots,
-                integrand=integrand,
-                pitch=pitch,
-                data=data,
-                names=names,
-                points=points,
-                method=method,
-                check=False,
-                plot=False,
-            )
-
-        # TODO (#1386): Use batch_size arg of imap after
-        #  increasing JAX version requirement.
-        result = imap(loop, (jnp.moveaxis(z1, -1, 0), jnp.moveaxis(z2, -1, 0)))[1]
-        result = [jnp.moveaxis(r, source=0, destination=-1) for r in result]
-
-    return result
-
-
-def _interpolate_and_integrate(
-    batch,
-    x,
-    w,
-    knots,
-    integrand,
-    pitch,
-    data,
-    names,
-    points,
-    *,
-    method="cubic",
-    check=False,
-    plot=False,
-):
-    z1, z2 = points
-    # shape (..., num pitch, num well, num quad)
-    Q = bijection_from_disc(x, z1[..., jnp.newaxis], z2[..., jnp.newaxis])
-    assert w.ndim == 1 and Q.shape[-1] == w.size
-    assert data["|B|"].shape[-1] == knots.size
-    shape = Q.shape
-    if batch:
-        Q = flatten_matrix(Q)
-
-    b_sup_z = interp1d_Hermite_vec(
-        Q,
-        knots,
-        (data["|B^zeta|"] / data["|B|"])[..., jnp.newaxis, :],
-        (
-            data["|B^zeta|_z|r,a"] / data["|B|"]
-            - data["|B^zeta|"] * data["|B|_z|r,a"] / data["|B|"] ** 2
-        )[..., jnp.newaxis, :],
-    )
-    B = interp1d_Hermite_vec(
-        Q,
-        knots,
-        data["|B|"][..., jnp.newaxis, :],
-        data["|B|_z|r,a"][..., jnp.newaxis, :],
-    )
-    # Spline each function separately so that operations in the integrand
-    # that do not preserve smoothness can be captured.
-    data = {
-        name: interp1d_vec(Q, knots, data[name][..., jnp.newaxis, :], method=method)
-        for name in names
-    }
-    cov = grad_bijection_from_disc(z1, z2)
-    result = [
-        (f(data, B, pitch) / b_sup_z).reshape(shape).dot(w) * cov for f in integrand
-    ]
-
-    if check:
-        _check_interp(
-            shape,
-            Q,
-            b_sup_z,
-            B,
-            result[0],
-            [data[name] for name in names],
-            plot=plot,
-        )
-
-    return result
-
-
-def _check_interp(shape, Q, b_sup_z, B, result, f=None, plot=True):
+def _check_interp(shape, zeta, b_sup_z, B, result, f=None, plot=True):
     """Check for interpolation failures and floating point issues.
 
     Parameters
     ----------
     shape : tuple
-        (..., num pitch, num well, num quad).
-    Q : jnp.ndarray
+        Shape is (num rho, num alpha, num pitch, num well, num quad).
+    zeta : jnp.ndarray
         Quadrature points in ζ coordinates.
     b_sup_z : jnp.ndarray
-        Contravariant toroidal component of magnetic field, interpolated to Q.
+        Contravariant toroidal component of magnetic field, interpolated to ``zeta``.
     B : jnp.ndarray
-        Norm of magnetic field, interpolated to Q.
-    result : jnp.ndarray
-        Output of ``_interpolate_and_integrate``.
+        Norm of magnetic field, interpolated to ``zeta``.
+    result : list[jnp.ndarray]
+        Output of ``_integrate``.
     f : list[jnp.ndarray]
-        Arguments to the integrand, interpolated to Q.
+        Arguments to the integrand, interpolated to ``zeta``.
     plot : bool
         Whether to plot stuff.
 
     """
-    assert jnp.isfinite(Q).all(), "NaN interpolation point."
+    assert isinstance(result, list)
+    assert jnp.isfinite(zeta).all(), "NaN interpolation point."
     assert not (
         jnp.isclose(B, 0).any() or jnp.isclose(b_sup_z, 0).any()
     ), "|B| has vanished, violating the hairy ball theorem."
 
     # Integrals that we should be computing.
-    marked = jnp.any(Q.reshape(shape) != 0.0, axis=-1)
+    marked = jnp.any(zeta.reshape(shape) != 0.0, axis=-1)
     goal = marked.sum()
 
     assert goal == jnp.sum(marked & jnp.isfinite(b_sup_z).reshape(shape).all(axis=-1))
@@ -424,44 +247,46 @@ def _check_interp(shape, Q, b_sup_z, B, result, f=None, plot=True):
         assert goal == jnp.sum(marked & jnp.isfinite(f_i).reshape(shape).all(axis=-1))
 
     if plot:
-        Q = Q.reshape(shape)
-        _plot_check_interp(Q, B.reshape(shape), name=r"$\vert B \vert$")
+        zeta = zeta.reshape(shape)
+        _plot_check_interp(zeta, B.reshape(shape), name=r"$\vert B \vert$")
         _plot_check_interp(
-            Q, b_sup_z.reshape(shape), name=r"$(B / \vert B \vert) \cdot e^{\zeta}$"
+            zeta, b_sup_z.reshape(shape), name=r"$B / \vert B \vert \cdot \nabla \zeta$"
         )
         for i, f_i in enumerate(f):
-            _plot_check_interp(Q, f_i.reshape(shape), name=f"f_{i}")
+            _plot_check_interp(zeta, f_i.reshape(shape), name=f"f_{i}")
 
     # Number of those integrals that were computed.
-    actual = jnp.sum(marked & jnp.isfinite(result))
-    assert goal == actual, (
-        f"Lost {goal - actual} integrals from NaN generation in the integrand. This "
-        "is caused by floating point error, usually due to a poor quadrature choice."
-    )
+    for res in result:
+        actual = jnp.sum(marked & jnp.isfinite(res))
+        assert goal == actual, (
+            f"Lost {goal - actual} integrals from NaN generation in the integrand."
+            f" This is caused by floating point error due to a poor quadrature choice."
+        )
 
 
-def _plot_check_interp(Q, V, name=""):
-    """Plot V[..., λ, (ζ₁, ζ₂)](Q)."""
-    if Q.shape[-2] == 1:
+def _plot_check_interp(zeta, V, name=""):
+    """Plot V[..., λ, (ζ₁, ζ₂)](ζ)."""
+    if zeta.shape[-2] == 1:
         # Just one well along the field line, so plot
         # interpolations for every pitch simultaneously.
-        Q = Q.squeeze(axis=-2)
+        zeta = zeta.squeeze(axis=-2)
         V = V.squeeze(axis=-2)
-        label = "(l,m)"
-        shape = Q.shape[:2]
+        shape = zeta.shape[:2]
     else:
-        label = "(l,m,p)"
-        shape = Q.shape[:3]
+        shape = zeta.shape[:3]
     for idx in np.ndindex(shape):
-        marked = jnp.nonzero(jnp.any(Q[idx] != 0.0, axis=-1))[0]
+        marked = jnp.nonzero(jnp.any(zeta[idx] != 0.0, axis=-1))[0]
         if marked.size == 0:
             continue
         fig, ax = plt.subplots()
         ax.set_xlabel(r"$\zeta$")
         ax.set_ylabel(name)
-        ax.set_title(f"Interpolation of {name} to quadrature points, {label}={idx}")
+        ax.set_title(
+            f"Interpolation of {name} to quadrature points"
+            + rf" on field line $\rho(l={idx[0]})$, $\alpha(m={idx[1]})$"
+        )
         for i in marked:
-            ax.plot(Q[(*idx, i)], V[(*idx, i)], marker="o")
+            ax.plot(zeta[(*idx, i)], V[(*idx, i)], marker="o")
         fig.text(0.01, 0.01, "Each color specifies a bounce integral.")
         plt.tight_layout()
         plt.show()
@@ -475,14 +300,14 @@ def plot_ppoly(
     k=None,
     k_transparency=0.5,
     klabel=r"$k$",
-    title=r"Intersects $z$ in epigraph($f$) s.t. $f(z) = k$",
+    title=r"Intersects $z$ in epigraph$(f)$ s.t. $f(z) = k$",
     hlabel=r"$z$",
     vlabel=r"$f$",
     show=True,
     start=None,
     stop=None,
     include_knots=False,
-    knot_transparency=0.2,
+    knot_transparency=0.4,
     include_legend=True,
 ):
     """Plot the piecewise polynomial ``ppoly``.

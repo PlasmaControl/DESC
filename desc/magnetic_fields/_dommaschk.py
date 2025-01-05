@@ -5,7 +5,8 @@ https://doi.org/10.1016/0010-4655(86)90109-8
 
 """
 
-import numpy as np
+import time
+
 import sympy as sp
 from sympy.abc import x
 from sympy.vector import CoordSys3D
@@ -107,7 +108,7 @@ class DommaschkPotentialField(ScalarPotentialField):
         params = dict(
             zip(
                 keys,
-                [list(np.array(self._full_params[key])) for key in keys if key != "B0"],
+                [self._full_params[key].tolist() for key in keys if key != "B0"],
             )
         )
         params["a_arr"] = sp.symbols(
@@ -183,7 +184,8 @@ class DommaschkPotentialField(ScalarPotentialField):
         NFP (int): if the field being fit has a discrete toroidal symmetry
             with field period NFP. This will only allow Dommaschk m modes
             that are integer multiples of NFP.
-        verbose (int): verbosity level of fitting routine, > 0 prints residuals
+        verbose (int): verbosity level of fitting routine, > 0 prints residuals,
+             >1 prints timing info
         """
         # We seek c in  Ac = b
         # A will be the BR, Bphi and BZ from each individual
@@ -291,7 +293,10 @@ class DommaschkPotentialField(ScalarPotentialField):
             round(num_modes - 1) / 4
         )  # how many l-m mode pairs there are, also is len(a_s)
         n = int(n)
+        t0 = time.time()
         domm_field = DommaschkPotentialField(**params)
+        if verbose > 1:
+            print(f"Time to make domm field: {time.time() - t0}")
 
         def get_B_dom(coords, X):
             """Fxn wrapper to find jacobian of dommaschk B wrt coefs a,b,c,d."""
@@ -320,8 +325,10 @@ class DommaschkPotentialField(ScalarPotentialField):
             else:
                 X += [obj]
         X = jnp.asarray(X)
-
+        t0 = time.time()
         jac = jit(Derivative(get_B_dom, argnum=1))(coords, X)
+        if verbose > 1:
+            print(f"Time to compute jacobian: {time.time() - t0}")
 
         A = jac.reshape((rhs.size, len(X)), order="F")
 
@@ -359,6 +366,14 @@ class DommaschkPotentialField(ScalarPotentialField):
 
 
 # Dommaschk potential utility functions
+# these kwargs found to make sp.integrate faster
+sp_integrate_kwargs = {
+    "meijerg": None,
+    "heurisch": False,
+    "manual": False,
+}
+
+
 def gamma(n):
     """Gamma function, only implemented for integers (equiv to factorial of (n-1))."""
     return sp.factorial(n - 1)
@@ -382,7 +397,9 @@ def CD_m_k(R, m, k):
         # call itself recursively
         # Eq 6
         return sp.integrate(
-            CD_m_k(x, 0, k - 1) * (sp.log(x) - sp.log(R)) * x, (x, 1, R)
+            CD_m_k(x, 0, k - 1) * (sp.log(x) - sp.log(R)) * x,
+            (x, 1, R),
+            **sp_integrate_kwargs,
         )
     elif k == 0:
         return CD_m_0(R, m)
@@ -390,7 +407,9 @@ def CD_m_k(R, m, k):
         # Eq 7
         return (
             sp.integrate(
-                CD_m_k(x, m, k - 1) * ((x / R) ** m - (R / x) ** m) * x, (x, 1, R)
+                CD_m_k(x, m, k - 1) * ((x / R) ** m - (R / x) ** m) * x,
+                (x, 1, R),
+                **sp_integrate_kwargs,
             )
             / 2
             / m
@@ -415,7 +434,9 @@ def CN_m_k(R, m, k):
         # call itself recursively
         # Eq 6
         return sp.integrate(
-            CN_m_k(x, 0, k - 1) * (sp.log(x) - sp.log(R)) * x, (x, 1, R)
+            CN_m_k(x, 0, k - 1) * (sp.log(x) - sp.log(R)) * x,
+            (x, 1, R),
+            **sp_integrate_kwargs,
         )
     elif k == 0:
         return CN_m_0(R, m)
@@ -423,7 +444,9 @@ def CN_m_k(R, m, k):
         # Eq 7
         return (
             sp.integrate(
-                CN_m_k(x, m, k - 1) * ((x / R) ** m - (R / x) ** m) * x, (x, 1, R)
+                CN_m_k(x, m, k - 1) * ((x / R) ** m - (R / x) ** m) * x,
+                (x, 1, R),
+                **sp_integrate_kwargs,
             )
             / 2
             / m
@@ -435,7 +458,8 @@ def D_m_n(R, Z, m, n):
     result = 0.0
     for k in range(n + 1):
         if 2 * k <= n:
-            coef = CD_m_k(R, m, k) / gamma(n - 2 * k + 1)
+            # sp.expand here found to make later AD of potential faster
+            coef = sp.expand(CD_m_k(R, m, k)) / gamma(n - 2 * k + 1)
             exp = n - 2 * k
             result += coef * Z**exp
     return result
@@ -446,7 +470,8 @@ def N_m_n(R, Z, m, n):
     result = 0.0
     for k in range(n + 1):
         if 2 * k <= n:
-            coef = CN_m_k(R, m, k) / gamma(n - 2 * k + 1)
+            # sp.expand here found to make later AD of potential faster
+            coef = sp.expand(CN_m_k(R, m, k)) / gamma(n - 2 * k + 1)
             exp = n - 2 * k
             result += coef * Z**exp
     return result
@@ -526,6 +551,7 @@ def dommaschk_potential(R, phi, Z, ms, ls, a_arr, b_arr, c_arr, d_arr, B0=1):
             value += V_m_l(
                 R, phi, Z, ms[i], ls[i], a_arr[i], b_arr[i], c_arr[i], d_arr[i]
             )
+
     else:
         value += V_m_l(R, phi, Z, ms[0], ls[0], a_arr, b_arr, c_arr, d_arr)
     return value

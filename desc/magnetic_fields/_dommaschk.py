@@ -153,7 +153,6 @@ class DommaschkPotentialField(ScalarPotentialField):
             d_arr,
             B0,
         )
-        self._potential = jit(self._potential)
 
         # remove ms and ls as are no longer needed in params, they are instead baked
         # into the potential function
@@ -351,13 +350,18 @@ class DommaschkPotentialField(ScalarPotentialField):
         c_arr = c[2 * n + 1 : 3 * n + 1] * abcd_zero_due_to_sym_inds[2]
         d_arr = c[3 * n + 1 : 4 * n + 1] * abcd_zero_due_to_sym_inds[3]
 
-        return cls(ms, ls, a_arr, b_arr, c_arr, d_arr, B0)
+        domm_field._params["B0"] = B0
+        domm_field._params["a_arr"] = a_arr
+        domm_field._params["b_arr"] = b_arr
+        domm_field._params["c_arr"] = c_arr
+        domm_field._params["d_arr"] = d_arr
+        return domm_field
 
 
 # Dommaschk potential utility functions
 def gamma(n):
     """Gamma function, only implemented for integers (equiv to factorial of (n-1))."""
-    return sp.factorial(n - 1)  # sp.prod(np.arange(1, n))
+    return sp.factorial(n - 1)
 
 
 def CD_0_0(R):

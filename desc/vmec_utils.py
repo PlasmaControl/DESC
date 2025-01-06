@@ -299,7 +299,7 @@ def fourier_to_zernike(m, n, x_mn, basis):
     surfs = x_mn.shape[0]
     rho = np.sqrt(np.linspace(0, 1, surfs))
 
-    As = zernike_radial(rho, basis.modes[:, 0], basis.modes[:, 1])
+    As = zernike_radial(rho[:, np.newaxis], basis.modes[:, 0], basis.modes[:, 1])
     for k in range(len(m)):
         idx = np.where((basis.modes[:, 1:] == [m[k], n[k]]).all(axis=1))[0]
         if len(idx):
@@ -334,7 +334,8 @@ def zernike_to_fourier(x_lmn, basis, rho):
         axis to the boundary.
 
     """
-    # FIXME: this always returns the full double Fourier basis regardless of symmetry
+    # TODO (PR #680): this always returns the full double Fourier basis
+    # regardless of symmetry
     M = basis.M
     N = basis.N
 
@@ -343,7 +344,7 @@ def zernike_to_fourier(x_lmn, basis, rho):
     n = mn[:, 1]
 
     x_mn = np.zeros((rho.size, m.size))
-    As = zernike_radial(rho, basis.modes[:, 0], basis.modes[:, 1])
+    As = zernike_radial(rho[:, np.newaxis], basis.modes[:, 0], basis.modes[:, 1])
     for k in range(len(m)):
         idx = np.where((basis.modes[:, 1:] == [m[k], n[k]]).all(axis=1))[0]
         if len(idx):

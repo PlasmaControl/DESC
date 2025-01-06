@@ -13,7 +13,16 @@ from desc.objectives import (
     maybe_add_self_consistency,
 )
 from desc.objectives.utils import combine_args
-from desc.utils import Timer, flatten_list, get_instance, unique_list, warnif
+from desc.utils import (
+    PRINT_WIDTH,
+    Timer,
+    errorif,
+    flatten_list,
+    get_instance,
+    is_any_instance,
+    unique_list,
+    warnif,
+)
 
 from ._constraint_wrappers import LinearConstraintProjection, ProximalProjection
 
@@ -68,7 +77,7 @@ class Optimizer(IOAble):
             )
         self._method = method
 
-    def optimize(  # noqa: C901 - FIXME: simplify this
+    def optimize(  # noqa: C901
         self,
         things,
         objective,
@@ -128,7 +137,9 @@ class Optimizer(IOAble):
             Maximum number of iterations. Defaults to 100.
         options : dict, optional
             Dictionary of optional keyword arguments to override default solver
-            settings. See the code for more details.
+            settings. See the documentation page ``Optimizers Supported`` for
+            more details (https://desc-docs.readthedocs.io/en/stable/optimizers.html)
+            to check the options for each specific available optimizer.
         copy : bool
             Whether to return the current things or a copy (leaving the original
             unchanged).
@@ -147,6 +158,11 @@ class Optimizer(IOAble):
         """
         if not isinstance(constraints, (tuple, list)):
             constraints = (constraints,)
+        errorif(
+            not isinstance(objective, ObjectiveFunction),
+            TypeError,
+            "objective should be of type ObjectiveFunction.",
+        )
 
         # get unique things
         things, indices = unique_list(flatten_list(things, flatten_tuple=True))
@@ -161,26 +177,38 @@ class Optimizer(IOAble):
 
         # need local import to avoid circular dependencies
         from desc.equilibrium import Equilibrium
+        from desc.objectives import QuadraticFlux
 
         # eq may be None
         eq = get_instance(things, Equilibrium)
         if eq is not None:
+            # check if stage 2 objectives are here:
+            all_objs = list(constraints) + list(objective.objectives)
+            errorif(
+                is_any_instance(all_objs, QuadraticFlux),
+                ValueError,
+                "QuadraticFlux objective assumes Equilibrium is fixed but Equilibrium "
+                + "is in things to optimize.",
+            )
             # save these for later
             eq_params_init = eq.params_dict.copy()
 
         options = {} if options is None else options
-        # TODO: document options
         timer = Timer()
         options = {} if options is None else options
         _, method = _parse_method(self.method)
 
+        timer.start("Initializing the optimization")
         # parse and combine constraints into linear & nonlinear objective functions
         linear_constraints, nonlinear_constraints = _parse_constraints(constraints)
         objective, nonlinear_constraints = _maybe_wrap_nonlinear_constraints(
             eq, objective, nonlinear_constraints, self.method, options
         )
-        if not isinstance(objective, ProximalProjection) and eq is not None:
-            linear_constraints = maybe_add_self_consistency(eq, linear_constraints)
+        is_prox = isinstance(objective, ProximalProjection)
+        for t in things:
+            if isinstance(t, Equilibrium) and is_prox:
+                continue  # don't add Equilibrium self-consistency if proximal is used
+            linear_constraints = maybe_add_self_consistency(t, linear_constraints)
         linear_constraint = _combine_constraints(linear_constraints)
         nonlinear_constraint = _combine_constraints(nonlinear_constraints)
 
@@ -267,9 +295,12 @@ class Optimizer(IOAble):
                         nonlinear_constraint.dim_f - num_equality
                     )
                 )
+        timer.stop("Initializing the optimization")
+        if verbose > 1:
+            timer.disp("Initializing the optimization")
 
         if verbose > 0:
-            print("Starting optimization")
+            print("\nStarting optimization")
             print("Using method: " + str(self.method))
 
         timer.start("Solution time")
@@ -320,29 +351,24 @@ class Optimizer(IOAble):
             things[ind].params_dict = params
 
         if verbose > 0:
-            print("Start of solver")
-            # need to check index of things bc things0 contains copies of
-            # things, so they are not the same exact Python objects
-            objective.print_value(
-                objective.x(*[things0[things.index(t)] for t in objective.things])
-            )
-            for con in constraints:
-                arg_inds_for_this_con = [
-                    things.index(t) for t in things if t in con.things
-                ]
-                args_for_this_con = [things0[ind] for ind in arg_inds_for_this_con]
-                con.print_value(*con.xs(*args_for_this_con))
+            state_0 = [things0[things.index(t)] for t in objective.things]
+            state = [things[things.index(t)] for t in objective.things]
 
-            print("End of solver")
-            objective.print_value(
-                objective.x(*[things[things.index(t)] for t in objective.things])
-            )
+            # put a divider
+            w_divider = 50
+            print("{:=<{}}".format("", PRINT_WIDTH + w_divider))
+
+            print(f"{'Start  -->   End':>{PRINT_WIDTH+21}}")
+            objective.print_value(objective.x(*state), objective.x(*state_0))
             for con in constraints:
                 arg_inds_for_this_con = [
                     things.index(t) for t in things if t in con.things
                 ]
                 args_for_this_con = [things[ind] for ind in arg_inds_for_this_con]
-                con.print_value(*con.xs(*args_for_this_con))
+                args0_for_this_con = [things0[ind] for ind in arg_inds_for_this_con]
+                con.print_value(con.xs(*args_for_this_con), con.xs(*args0_for_this_con))
+
+            print("{:=<{}}".format("", PRINT_WIDTH + w_divider))
 
         if copy:
             # need to swap things and things0, since things should be unchanged

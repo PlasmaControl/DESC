@@ -120,8 +120,7 @@ def _L_par(params, transforms, profiles, data, **kwargs):
 )
 def _xi(params, transforms, profiles, data, **kwargs):
     # Parallel connection length defined as width of Kd wells
-    grid = transforms["grid"]
     mask = jnp.where(data["Kd"] < 0, 1.0, 0.0)
-    xi = (2 * data["a"] * mask * data["|grad(rho)|"] * grid.nodes[:, 0][0]) ** 2
+    xi = (data["a"] * mask * data["|grad(rho)|"]) ** 2
     data["xi"] = xi
     return data

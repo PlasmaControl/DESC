@@ -522,8 +522,8 @@ class ParallelConnectionLength(_Objective):
             return L_par
 
 
-class GradS(_Objective):
-    """Grad s is a proxy for turbulent transport.
+class GradRho(_Objective):
+    """Grad Rho is a proxy for turbulent transport.
 
     TODO Finish descirption
 
@@ -566,7 +566,7 @@ class GradS(_Objective):
 
     _scalar = True
     _units = "~"
-    _print_value_fmt = "Grad s: "
+    _print_value_fmt = "Grad rho: "
 
     def __init__(
         self,
@@ -580,7 +580,7 @@ class GradS(_Objective):
         deriv_mode="auto",
         grid=None,
         rho=jnp.array([0.5]),
-        name="GradS",
+        name="GradRho",
     ):
         if target is None and bounds is None:
             target = 0.0

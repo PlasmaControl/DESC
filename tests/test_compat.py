@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 
-from desc.compat import flip_helicity, rescale
+from desc.compat import flip_helicity, flip_theta, rescale, rotate_zeta
 from desc.examples import get
 from desc.grid import Grid, LinearGrid, QuadratureGrid
 
@@ -47,7 +47,6 @@ def test_flip_helicity_axisym():
 
 
 @pytest.mark.unit
-@pytest.mark.solve
 def test_flip_helicity_iota():
     """Test flip_helicity on an Equilibrium with an iota profile."""
     eq = get("HELIOTRON")
@@ -90,7 +89,6 @@ def test_flip_helicity_iota():
 
 
 @pytest.mark.unit
-@pytest.mark.solve
 def test_flip_helicity_current():
     """Test flip_helicity on an Equilibrium with a current profile."""
     eq = get("HSX")
@@ -133,6 +131,87 @@ def test_flip_helicity_current():
     # check that the QH errors now need the opposite helicity
     # (equivalent collocation points now corresond to the opposite zeta values)
     np.testing.assert_allclose(data_old["f_C"], data_flip["f_C"], atol=1e-8)
+
+
+@pytest.mark.unit
+def test_flip_theta_axisym():
+    """Test flip_theta on an axisymmetric Equilibrium."""
+    eq = get("DSHAPE")
+
+    grid = LinearGrid(
+        L=eq.L_grid,
+        theta=2 * eq.M_grid,
+        N=eq.N_grid,
+        NFP=eq.NFP,
+        sym=eq.sym,
+        axis=False,
+    )
+    data_keys = ["current", "|F|", "D_Mercier"]
+
+    data_old = eq.compute(data_keys, grid=grid)
+    eq = flip_theta(eq)
+    data_new = eq.compute(data_keys, grid=grid)
+
+    # check that Jacobian and force balance did not change
+    np.testing.assert_allclose(
+        data_old["sqrt(g)"].reshape((grid.num_rho, grid.num_theta)),
+        np.fliplr(data_new["sqrt(g)"].reshape((grid.num_rho, grid.num_theta))),
+    )
+    np.testing.assert_allclose(
+        data_old["|F|"].reshape((grid.num_rho, grid.num_theta)),
+        np.fliplr(data_new["|F|"].reshape((grid.num_rho, grid.num_theta))),
+        rtol=2e-5,
+    )
+
+    # check that profiles did not change
+    np.testing.assert_allclose(
+        grid.compress(data_old["iota"]), grid.compress(data_new["iota"])
+    )
+    np.testing.assert_allclose(
+        grid.compress(data_old["current"]), grid.compress(data_new["current"])
+    )
+    np.testing.assert_allclose(
+        grid.compress(data_old["D_Mercier"]), grid.compress(data_new["D_Mercier"])
+    )
+
+
+@pytest.mark.unit
+def test_flip_theta_nonaxisym():
+    """Test flip_theta on a non-axisymmetric Equilibrium."""
+    eq = get("HSX")
+
+    grid = QuadratureGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
+    nodes = grid.nodes.copy()
+    nodes[:, 1] = np.mod(nodes[:, 1] + np.pi, 2 * np.pi)
+    grid_flip = Grid(nodes)  # grid with flipped theta values
+    data_keys = ["current", "|F|", "D_Mercier", "f_C"]
+
+    data_old = eq.compute(data_keys, grid=grid, helicity=(1, eq.NFP))
+    eq = flip_theta(eq)
+    data_new = eq.compute(data_keys, grid=grid_flip, helicity=(1, eq.NFP))
+
+    # check that basis vectors did not change
+    np.testing.assert_allclose(data_old["e_rho"], data_new["e_rho"], atol=1e-15)
+    np.testing.assert_allclose(data_old["e_theta"], data_new["e_theta"], atol=1e-15)
+    np.testing.assert_allclose(data_old["e^zeta"], data_new["e^zeta"], atol=1e-15)
+
+    # check that Jacobian is still positive
+    np.testing.assert_array_less(0, grid.compress(data_new["sqrt(g)"]))
+
+    # check that stability did not change
+    np.testing.assert_allclose(
+        grid.compress(data_old["D_Mercier"]),
+        grid.compress(data_new["D_Mercier"]),
+        rtol=2e-2,
+    )
+
+    # check that the total force balance error on each surface did not change
+    # (equivalent collocation points now corresond to theta + pi)
+    np.testing.assert_allclose(data_old["|F|"], data_new["|F|"], rtol=1e-3)
+
+    # check that the QH helicity did not change
+    # (equivalent collocation points now corresond to theta + pi)
+    np.testing.assert_allclose(data_old["f_C"], data_new["f_C"], atol=1e-8)
 
 
 @pytest.mark.unit
@@ -198,3 +277,49 @@ def test_rescale():
     np.testing.assert_allclose(new_vals["B_max"], 2)
     np.testing.assert_allclose(new_vals["R0/a"], old_vals["R0/a"])
     np.testing.assert_allclose(new_vals["err"], old_vals["err"], atol=1e-10)
+
+
+@pytest.mark.unit
+@pytest.mark.solve
+def test_rotate_zeta():
+    """Test rotating Equilibrium around Z axis."""
+    eq = get("ARIES-CS")
+    with pytest.warns(UserWarning, match="Reducing radial"):
+        eq.change_resolution(L=5, M=5, N=5)
+    eq_no_sym = eq.copy()
+    eq_no_sym.change_resolution(sym=False)
+    with pytest.warns(UserWarning, match="Rotating"):
+        dzeta1 = np.pi / 2
+        eq1 = rotate_zeta(eq, dzeta1, copy=True)
+
+    # check arbitrary rotation works
+    surf1 = eq_no_sym.get_surface_at(zeta=dzeta1)
+    surf2 = eq1.get_surface_at(zeta=0)
+    assert np.allclose(surf1.R_lmn, surf2.R_lmn)
+    assert np.allclose(surf1.Z_lmn, surf2.Z_lmn)
+
+    # check that rotating by 2pi is the same as original
+    dzeta2 = 2 * np.pi - dzeta1
+    eq2 = rotate_zeta(eq1, dzeta2, copy=True)
+    assert np.allclose(eq_no_sym.R_lmn, eq2.R_lmn)
+    assert np.allclose(eq_no_sym.Z_lmn, eq2.Z_lmn)
+    assert np.allclose(eq_no_sym.L_lmn, eq2.L_lmn)
+
+    # check that rotating by pi/NFP and -pi/NFP is the same
+    dzeta3 = -np.pi * eq.NFP
+    eq3 = rotate_zeta(eq, dzeta3, copy=True)
+    eq4 = rotate_zeta(eq, -dzeta3, copy=True)
+    assert np.allclose(eq4.R_lmn, eq3.R_lmn)
+    assert np.allclose(eq4.Z_lmn, eq3.Z_lmn)
+    assert np.allclose(eq4.L_lmn, eq3.L_lmn)
+
+    # check that rotation of AS eq stays the same
+    eq = get("DSHAPE")
+    eq3 = rotate_zeta(eq, dzeta1, copy=True)
+    assert np.allclose(eq.R_lmn, eq3.R_lmn)
+    assert np.allclose(eq.Z_lmn, eq3.Z_lmn)
+    assert np.allclose(eq.L_lmn, eq3.L_lmn)
+
+    dzeta4 = np.pi / eq.NFP
+    eq4 = rotate_zeta(eq, dzeta4, copy=True)
+    assert eq4.sym

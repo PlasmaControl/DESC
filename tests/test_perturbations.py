@@ -128,7 +128,8 @@ def test_optimal_perturb():
     # particular solution. Here we do a simple test to ensure the interior and boundary
     # agree
     eq1 = desc.examples.get("DSHAPE")
-    eq1.change_resolution(3, 3, 0, 6, 6, 0)
+    with pytest.warns(UserWarning, match="Reducing radial"):
+        eq1.change_resolution(3, 3, 0, 6, 6, 0)
     eq1.change_resolution(N=1, N_grid=5)
     eq1.surface = eq1.get_surface_at(1.0)
     objective = ObjectiveFunction(

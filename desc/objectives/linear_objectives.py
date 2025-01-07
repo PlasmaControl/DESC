@@ -11,15 +11,16 @@ import warnings
 import numpy as np
 from termcolor import colored
 
-from desc.backend import jnp, tree_leaves, tree_map, tree_structure
-from desc.basis import zernike_radial, zernike_radial_coeffs
+from desc.backend import execute_on_cpu, jnp, tree_leaves, tree_map, tree_structure
+from desc.basis import zernike_radial
+from desc.geometry import FourierRZCurve
 from desc.utils import broadcast_tree, errorif, setdefault
 
 from .normalization import compute_scaling_factors
 from .objective_funs import _Objective
 
 
-# TODO: get rid of this class and inherit from FixParameters instead?
+# TODO (#1391): get rid of this class and inherit from FixParameters instead?
 class _FixedObjective(_Objective):
     _fixed = True
     _linear = True
@@ -38,14 +39,14 @@ class _FixedObjective(_Objective):
         assert len(new_target) == len(self.target)
         self.target = new_target
         self._target_from_user = self.target  # in case the Objective is re-built
-        if self._use_jit:
-            self.jit()
+        if not self._use_jit:
+            self._unjit()
 
     def _parse_target_from_user(
         self, target_from_user, default_target, default_bounds, idx
     ):
-        # FIXME: add logic here to deal with `target_from_user` as a pytree?
-        # FIXME: does this actually need idx?
+        # TODO (#1391): add logic here to deal with `target_from_user` as a pytree?
+        # TODO (#1391: does this actually need idx?
         if target_from_user is None:
             target = default_target
             bounds = default_bounds
@@ -140,7 +141,7 @@ class FixParameters(_Objective):
     _linear = True
     _fixed = True
     _units = "(~)"
-    _print_value_fmt = "Fixed parameters error: {:10.3e} "
+    _print_value_fmt = "Fixed parameters error: "
 
     def __init__(
         self,
@@ -151,7 +152,7 @@ class FixParameters(_Objective):
         weight=1,
         normalize=True,
         normalize_target=True,
-        name="Fixed parameters",
+        name="fixed parameters",
     ):
         self._params = params
         super().__init__(
@@ -231,8 +232,8 @@ class FixParameters(_Objective):
 
         """
         self.target = self.compute(thing.params_dict)
-        if self._use_jit:
-            self.jit()
+        if not self._use_jit:
+            self._unjit()
 
 
 class BoundaryRSelfConsistency(_Objective):
@@ -256,7 +257,7 @@ class BoundaryRSelfConsistency(_Objective):
     _linear = True
     _fixed = False  # not "diagonal", since it is fixing a sum
     _units = "(m)"
-    _print_value_fmt = "R boundary self consistency error: {:10.3e} "
+    _print_value_fmt = "R boundary self consistency error: "
 
     def __init__(
         self,
@@ -275,6 +276,7 @@ class BoundaryRSelfConsistency(_Objective):
             name=name,
         )
 
+    @execute_on_cpu
     def build(self, use_jit=False, verbose=1):
         """Build constant arrays.
 
@@ -354,7 +356,7 @@ class BoundaryZSelfConsistency(_Objective):
     _linear = True
     _fixed = False  # not "diagonal", since it is fixing a sum
     _units = "(m)"
-    _print_value_fmt = "Z boundary self consistency error: {:10.3e} "
+    _print_value_fmt = "Z boundary self consistency error: "
 
     def __init__(
         self,
@@ -373,6 +375,7 @@ class BoundaryZSelfConsistency(_Objective):
             name=name,
         )
 
+    @execute_on_cpu
     def build(self, use_jit=False, verbose=1):
         """Build constant arrays.
 
@@ -451,7 +454,8 @@ class AxisRSelfConsistency(_Objective):
     _scalar = False
     _linear = True
     _fixed = False  # not "diagonal", since it is fixing a sum
-    _print_value_fmt = "R axis self consistency error: {:10.3e} (m)"
+    _units = "(m)"
+    _print_value_fmt = "R axis self consistency error: "
 
     def __init__(
         self,
@@ -467,6 +471,7 @@ class AxisRSelfConsistency(_Objective):
             normalize_target=False,
         )
 
+    @execute_on_cpu
     def build(self, use_jit=False, verbose=1):
         """Build constant arrays.
 
@@ -537,7 +542,8 @@ class AxisZSelfConsistency(_Objective):
     _scalar = False
     _linear = True
     _fixed = False  # not "diagonal", since it is fixing a sum
-    _print_value_fmt = "Z axis self consistency error: {:10.3e} (m)"
+    _units = "(m)"
+    _print_value_fmt = "Z axis self consistency error: "
 
     def __init__(
         self,
@@ -553,6 +559,7 @@ class AxisZSelfConsistency(_Objective):
             normalize_target=False,
         )
 
+    @execute_on_cpu
     def build(self, use_jit=False, verbose=1):
         """Build constant arrays.
 
@@ -614,14 +621,14 @@ class FixBoundaryR(FixParameters):
         Equilibrium that will be optimized to satisfy the Objective.
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f. Defaults to ``target=eq.Rb_lmn``.
+        Must be broadcastable to ``Objective.dim_f``. Defaults to ``target=eq.Rb_lmn``.
     bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f.
+        Both bounds must be broadcastable to ``Objective.dim_f``.
         Defaults to ``target=eq.Rb_lmn``.
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        Must be broadcastable to to Objective.dim_f
+        Must be broadcastable to ``Objective.dim_f``
     normalize : bool, optional
         Whether to compute the error in physical units or non-dimensionalize.
     normalize_target : bool, optional
@@ -638,7 +645,7 @@ class FixBoundaryR(FixParameters):
     """
 
     _units = "(m)"
-    _print_value_fmt = "R boundary error: {:10.3e} "
+    _print_value_fmt = "R boundary error: "
 
     def __init__(
         self,
@@ -695,14 +702,14 @@ class FixBoundaryZ(FixParameters):
         Equilibrium that will be optimized to satisfy the Objective.
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f. Defaults to ``target=eq.Zb_lmn``.
+        Must be broadcastable to ``Objective.dim_f``. Defaults to ``target=eq.Zb_lmn``.
     bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f.
+        Both bounds must be broadcastable to ``Objective.dim_f``.
         Defaults to ``target=eq.Zb_lmn``.
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        Must be broadcastable to to Objective.dim_f
+        Must be broadcastable to ``Objective.dim_f``
     normalize : bool, optional
         Whether to compute the error in physical units or non-dimensionalize.
     normalize_target : bool, optional
@@ -719,7 +726,7 @@ class FixBoundaryZ(FixParameters):
     """
 
     _units = "(m)"
-    _print_value_fmt = "Z boundary error: {:10.3e} "
+    _print_value_fmt = "Z boundary error: "
 
     def __init__(
         self,
@@ -767,8 +774,8 @@ class FixBoundaryZ(FixParameters):
         super().build(use_jit=use_jit, verbose=verbose)
 
 
-class FixLambdaGauge(_Objective):
-    """Fixes gauge freedom for lambda: lambda(theta=0,zeta=0)=0.
+class FixLambdaGauge(FixParameters):
+    """Fixes gauge freedom for lambda, which sets the flux surface avg of lambda to 0.
 
     Note: this constraint is automatically applied when needed, and does not need to be
     included by the user.
@@ -786,11 +793,8 @@ class FixLambdaGauge(_Objective):
 
     """
 
-    _scalar = False
-    _linear = True
-    _fixed = False  # not "diagonal", since it is fixing a sum
     _units = "(rad)"
-    _print_value_fmt = "lambda gauge error: {:10.3e} "
+    _print_value_fmt = "lambda gauge error: "
 
     def __init__(
         self,
@@ -799,74 +803,20 @@ class FixLambdaGauge(_Objective):
         normalize_target=True,
         name="lambda gauge",
     ):
+        if eq.sym:
+            indices = False
+        else:
+            indices = np.where(
+                np.logical_and(eq.L_basis.modes[:, 1] == 0, eq.L_basis.modes[:, 2] == 0)
+            )[0]
         super().__init__(
-            things=eq,
+            thing=eq,
+            params={"L_lmn": indices},
             target=0,
-            bounds=None,
-            weight=1,
             normalize=normalize,
             normalize_target=normalize_target,
             name=name,
         )
-
-    def build(self, use_jit=False, verbose=1):
-        """Build constant arrays.
-
-        Parameters
-        ----------
-        use_jit : bool, optional
-            Whether to just-in-time compile the objective and derivatives.
-        verbose : int, optional
-            Level of output.
-
-        """
-        eq = self.things[0]
-        L_basis = eq.L_basis
-
-        if L_basis.sym:
-            self._A = np.zeros((0, L_basis.num_modes))
-        else:
-            # l(rho,0,0) = 0
-            # at theta=zeta=0, basis for lambda reduces to just a polynomial in rho
-            # what this constraint does is make all the coefficients of each power
-            # of rho equal to zero
-            # i.e. if lambda = (L_200 + 2*L_310) rho**2 + (L_100 + 2*L_210)*rho
-            # this constraint will make
-            # L_200 + 2*L_310 = 0
-            # L_100 + 2*L_210 = 0
-            L_modes = L_basis.modes
-            mnpos = np.where((L_modes[:, 1:] >= [0, 0]).all(axis=1))[0]
-            l_lmn = L_modes[mnpos, :]
-            if len(l_lmn) > 0:
-                c = zernike_radial_coeffs(l_lmn[:, 0], l_lmn[:, 1])
-            else:
-                c = np.zeros((0, 0))
-
-            A = np.zeros((c.shape[1], L_basis.num_modes))
-            A[:, mnpos] = c.T
-            self._A = A
-
-        self._dim_f = self._A.shape[0]
-        super().build(use_jit=use_jit, verbose=verbose)
-
-    def compute(self, params, constants=None):
-        """Compute lambda gauge freedom errors.
-
-        Parameters
-        ----------
-        params : dict
-            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
-        constants : dict
-            Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
-
-        Returns
-        -------
-        f : ndarray
-            gauge freedom errors.
-
-        """
-        return jnp.dot(self._A, params["L_lmn"])
 
 
 class FixThetaSFL(FixParameters):
@@ -878,7 +828,7 @@ class FixThetaSFL(FixParameters):
         Equilibrium that will be optimized to satisfy the Objective.
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        Must be broadcastable to to Objective.dim_f
+        Must be broadcastable to ``Objective.dim_f``
     normalize : bool, optional
         Has no effect for this objective.
     normalize_target : bool, optional
@@ -889,7 +839,7 @@ class FixThetaSFL(FixParameters):
     """
 
     _units = "(rad)"
-    _print_value_fmt = "theta - theta SFL error: {:10.3e} "
+    _print_value_fmt = "theta - theta SFL error: "
 
     def __init__(
         self,
@@ -920,14 +870,14 @@ class FixAxisR(FixParameters):
         Equilibrium that will be optimized to satisfy the Objective.
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f. Defaults to ``target=eq.Ra_n``.
+        Must be broadcastable to ``Objective.dim_f``. Defaults to ``target=eq.Ra_n``.
     bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f.
+        Both bounds must be broadcastable to ``Objective.dim_f``.
         Defaults to ``target=eq.Ra_n``.
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        Must be broadcastable to to Objective.dim_f
+        Must be broadcastable to ``Objective.dim_f``
     normalize : bool, optional
         Whether to compute the error in physical units or non-dimensionalize.
     normalize_target : bool, optional
@@ -944,7 +894,7 @@ class FixAxisR(FixParameters):
     """
 
     _units = "(m)"
-    _print_value_fmt = "R axis error: {:10.3e} "
+    _print_value_fmt = "R axis error: "
 
     def __init__(
         self,
@@ -1001,14 +951,14 @@ class FixAxisZ(FixParameters):
         Equilibrium that will be optimized to satisfy the Objective.
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f. Defaults to ``target=eq.Za_n``.
+        Must be broadcastable to ``Objective.dim_f``. Defaults to ``target=eq.Za_n``.
     bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f.
+        Both bounds must be broadcastable to ``Objective.dim_f``.
         Defaults to ``target=eq.Za_n``.
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        Must be broadcastable to to Objective.dim_f
+        Must be broadcastable to ``Objective.dim_f``
     normalize : bool, optional
         Whether to compute the error in physical units or non-dimensionalize.
     normalize_target : bool, optional
@@ -1025,7 +975,7 @@ class FixAxisZ(FixParameters):
     """
 
     _units = "(m)"
-    _print_value_fmt = "Z axis error: {:10.3e} "
+    _print_value_fmt = "Z axis error: "
 
     def __init__(
         self,
@@ -1082,14 +1032,14 @@ class FixModeR(FixParameters):
         Equilibrium that will be optimized to satisfy the Objective.
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f. Defaults to ``target=eq.R_lmn``.
+        Must be broadcastable to ``Objective.dim_f``. Defaults to ``target=eq.R_lmn``.
     bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f.
+        Both bounds must be broadcastable to ``Objective.dim_f``.
         Defaults to ``target=eq.R_lmn``.
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        Must be broadcastable to to Objective.dim_f
+        Must be broadcastable to ``Objective.dim_f``
     normalize : bool, optional
         Whether to compute the error in physical units or non-dimensionalize.
     normalize_target : bool, optional
@@ -1106,7 +1056,7 @@ class FixModeR(FixParameters):
     """
 
     _units = "(m)"
-    _print_value_fmt = "Fixed-R modes error: {:10.3e} "
+    _print_value_fmt = "Fixed-R modes error: "
 
     def __init__(
         self,
@@ -1163,14 +1113,14 @@ class FixModeZ(FixParameters):
         Equilibrium that will be optimized to satisfy the Objective.
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f. Defaults to ``target=eq.Z_lmn``.
+        Must be broadcastable to ``Objective.dim_f``. Defaults to ``target=eq.Z_lmn``.
     bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f.
+        Both bounds must be broadcastable to ``Objective.dim_f``.
         Defaults to ``target=eq.Z_lmn``.
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        Must be broadcastable to to Objective.dim_f
+        Must be broadcastable to ``Objective.dim_f``
     normalize : bool, optional
         Whether to compute the error in physical units or non-dimensionalize.
     normalize_target : bool, optional
@@ -1187,7 +1137,7 @@ class FixModeZ(FixParameters):
     """
 
     _units = "(m)"
-    _print_value_fmt = "Fixed-Z modes error: {:10.3e} "
+    _print_value_fmt = "Fixed-Z modes error: "
 
     def __init__(
         self,
@@ -1244,15 +1194,15 @@ class FixModeLambda(FixParameters):
         Equilibrium that will be optimized to satisfy the Objective.
     target : float, ndarray, optional
         Fourier-Zernike lambda coefficient target values.
-        Must be broadcastable to Objective.dim_f.
+        Must be broadcastable to ``Objective.dim_f``.
         Defaults to ``target=eq.L_lmn``.
     bounds : tuple, optional
         Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f.
+        Both bounds must be broadcastable to ``Objective.dim_f``.
         Defaults to ``target=eq.L_lmn``.
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        Must be broadcastable to Objective.dim_f.
+        Must be broadcastable to ``Objective.dim_f``.
     normalize : bool, optional
         Has no effect for this objective.
     normalize_target : bool, optional
@@ -1267,7 +1217,7 @@ class FixModeLambda(FixParameters):
     """
 
     _units = "(rad)"
-    _print_value_fmt = "Fixed lambda modes error: {:10.3e} "
+    _print_value_fmt = "Fixed lambda modes error: "
 
     def __init__(
         self,
@@ -1307,14 +1257,14 @@ class FixSumModesR(_FixedObjective):
         Equilibrium that will be optimized to satisfy the Objective.
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f. Defaults to ``target=eq.R_lmn``.
+        Must be broadcastable to ``Objective.dim_f``. Defaults to ``target=eq.R_lmn``.
     bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f.
+        Both bounds must be broadcastable to ``Objective.dim_f``.
         Defaults to ``target=eq.R_lmn``.
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        Must be broadcastable to to Objective.dim_f
+        Must be broadcastable to ``Objective.dim_f``
     normalize : bool, optional
         Whether to compute the error in physical units or non-dimensionalize.
     normalize_target : bool, optional
@@ -1336,7 +1286,7 @@ class FixSumModesR(_FixedObjective):
 
     _fixed = False  # not "diagonal", since it is fixing a sum
     _units = "(m)"
-    _print_value_fmt = "Fixed-R sum modes error: {:10.3e} "
+    _print_value_fmt = "Fixed-R sum modes error: "
 
     def __init__(
         self,
@@ -1473,14 +1423,14 @@ class FixSumModesZ(_FixedObjective):
         Equilibrium that will be optimized to satisfy the Objective.
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f. Defaults to ``target=eq.Z_lmn``.
+        Must be broadcastable to ``Objective.dim_f``. Defaults to ``target=eq.Z_lmn``.
     bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f.
+        Both bounds must be broadcastable to ``Objective.dim_f``.
         Defaults to ``target=eq.Z_lmn``.
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        Must be broadcastable to to Objective.dim_f
+        Must be broadcastable to ``Objective.dim_f``
     normalize : bool, optional
         Whether to compute the error in physical units or non-dimensionalize.
     normalize_target : bool, optional
@@ -1502,7 +1452,7 @@ class FixSumModesZ(_FixedObjective):
 
     _fixed = False  # not "diagonal", since it is fixing a sum
     _units = "(m)"
-    _print_value_fmt = "Fixed-Z sum modes error: {:10.3e} "
+    _print_value_fmt = "Fixed-Z sum modes error: "
 
     def __init__(
         self,
@@ -1548,6 +1498,7 @@ class FixSumModesZ(_FixedObjective):
             normalize_target=normalize_target,
         )
 
+    @execute_on_cpu
     def build(self, use_jit=False, verbose=1):
         """Build constant arrays.
 
@@ -1639,14 +1590,14 @@ class FixSumModesLambda(_FixedObjective):
         Equilibrium that will be optimized to satisfy the Objective.
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f. Defaults to ``target=eq.L_lmn``.
+        Must be broadcastable to ``Objective.dim_f``. Defaults to ``target=eq.L_lmn``.
     bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f.
+        Both bounds must be broadcastable to ``Objective.dim_f``.
         Defaults to ``target=eq.L_lmn``.
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        Must be broadcastable to to Objective.dim_f.
+        Must be broadcastable to ``Objective.dim_f``.
     normalize : bool, optional
         Has no effect for this objective.
     normalize_target : bool, optional
@@ -1668,7 +1619,7 @@ class FixSumModesLambda(_FixedObjective):
 
     _fixed = False  # not "diagonal", since it is fixing a sum
     _units = "(rad)"
-    _print_value_fmt = "Fixed-lambda sum modes error: {:10.3e} "
+    _print_value_fmt = "Fixed-lambda sum modes error: "
 
     def __init__(
         self,
@@ -1714,6 +1665,7 @@ class FixSumModesLambda(_FixedObjective):
             name=name,
         )
 
+    @execute_on_cpu
     def build(self, use_jit=False, verbose=1):
         """Build constant arrays.
 
@@ -1807,14 +1759,14 @@ class FixPressure(FixParameters):
         Equilibrium that will be optimized to satisfy the Objective.
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f. Defaults to ``target=eq.p_l``.
+        Must be broadcastable to ``Objective.dim_f``. Defaults to ``target=eq.p_l``.
     bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f.
+        Both bounds must be broadcastable to ``Objective.dim_f``.
         Defaults to ``target=eq.p_l``.
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        Must be broadcastable to to Objective.dim_f
+        Must be broadcastable to ``Objective.dim_f``
     normalize : bool, optional
         Whether to compute the error in physical units or non-dimensionalize.
     normalize_target : bool, optional
@@ -1833,7 +1785,7 @@ class FixPressure(FixParameters):
     """
 
     _units = "(Pa)"
-    _print_value_fmt = "Fixed pressure profile error: {:10.3e} "
+    _print_value_fmt = "Fixed pressure profile error: "
 
     def __init__(
         self,
@@ -1889,14 +1841,14 @@ class FixAnisotropy(FixParameters):
         Equilibrium that will be optimized to satisfy the Objective.
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f. Defaults to ``target=eq.a_lmn``.
+        Must be broadcastable to ``Objective.dim_f``. Defaults to ``target=eq.a_lmn``.
     bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f.
+        Both bounds must be broadcastable to ``Objective.dim_f``.
         Defaults to ``target=eq.a_lmn``.
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        Must be broadcastable to to Objective.dim_f
+        Must be broadcastable to ``Objective.dim_f``
     normalize : bool, optional
         Has no effect for this objective.
     normalize_target : bool, optional
@@ -1913,7 +1865,7 @@ class FixAnisotropy(FixParameters):
     """
 
     _units = "(dimensionless)"
-    _print_value_fmt = "Fixed anisotropy profile error: {:10.3e} "
+    _print_value_fmt = "Fixed anisotropy profile error: "
 
     def __init__(
         self,
@@ -1966,14 +1918,14 @@ class FixIota(FixParameters):
         Equilibrium that will be optimized to satisfy the Objective.
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f. Defaults to ``target=eq.i_l``.
+        Must be broadcastable to ``Objective.dim_f``. Defaults to ``target=eq.i_l``.
     bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f.
+        Both bounds must be broadcastable to ``Objective.dim_f``.
         Defaults to ``target=eq.i_l``.
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        Must be broadcastable to to Objective.dim_f
+        Must be broadcastable to ``Objective.dim_f``
     normalize : bool, optional
         Has no effect for this objective.
     normalize_target : bool, optional
@@ -1990,7 +1942,7 @@ class FixIota(FixParameters):
     """
 
     _units = "(dimensionless)"
-    _print_value_fmt = "Fixed iota profile error: {:10.3e} "
+    _print_value_fmt = "Fixed iota profile error: "
 
     def __init__(
         self,
@@ -2043,14 +1995,14 @@ class FixCurrent(FixParameters):
         Equilibrium that will be optimized to satisfy the Objective.
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f. Defaults to ``target=eq.c_l``.
+        Must be broadcastable to ``Objective.dim_f``. Defaults to ``target=eq.c_l``.
     bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f.
+        Both bounds must be broadcastable to ``Objective.dim_f``.
         Defaults to ``target=eq.c_l``.
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        Must be broadcastable to to Objective.dim_f
+        Must be broadcastable to ``Objective.dim_f``
     normalize : bool, optional
         Whether to compute the error in physical units or non-dimensionalize.
     normalize_target : bool, optional
@@ -2069,7 +2021,7 @@ class FixCurrent(FixParameters):
     """
 
     _units = "(A)"
-    _print_value_fmt = "Fixed current profile error: {:10.3e} "
+    _print_value_fmt = "Fixed current profile error: "
 
     def __init__(
         self,
@@ -2125,14 +2077,14 @@ class FixElectronTemperature(FixParameters):
         Equilibrium that will be optimized to satisfy the Objective.
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f. Defaults to ``target=eq.Te_l``.
+        Must be broadcastable to ``Objective.dim_f``. Defaults to ``target=eq.Te_l``.
     bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f.
+        Both bounds must be broadcastable to ``Objective.dim_f``.
         Defaults to ``target=eq.Te_l``.
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        Must be broadcastable to to Objective.dim_f
+        Must be broadcastable to ``Objective.dim_f``
     normalize : bool, optional
         Whether to compute the error in physical units or non-dimensionalize.
     normalize_target : bool, optional
@@ -2151,7 +2103,7 @@ class FixElectronTemperature(FixParameters):
     """
 
     _units = "(eV)"
-    _print_value_fmt = "Fixed electron temperature profile error: {:10.3e} "
+    _print_value_fmt = "Fixed electron temperature profile error: "
 
     def __init__(
         self,
@@ -2207,14 +2159,14 @@ class FixElectronDensity(FixParameters):
         Equilibrium that will be optimized to satisfy the Objective.
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f. Defaults to ``target=eq.ne_l``.
+        Must be broadcastable to ``Objective.dim_f``. Defaults to ``target=eq.ne_l``.
     bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f.
+        Both bounds must be broadcastable to ``Objective.dim_f``.
         Defaults to ``target=eq.ne_l``.
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        Must be broadcastable to to Objective.dim_f
+        Must be broadcastable to ``Objective.dim_f``
     normalize : bool, optional
         Whether to compute the error in physical units or non-dimensionalize.
     normalize_target : bool, optional
@@ -2235,7 +2187,7 @@ class FixElectronDensity(FixParameters):
     """
 
     _units = "(m^-3)"
-    _print_value_fmt = "Fixed electron density profile error: {:10.3e} "
+    _print_value_fmt = "Fixed electron density profile error: "
 
     def __init__(
         self,
@@ -2291,14 +2243,14 @@ class FixIonTemperature(FixParameters):
         Equilibrium that will be optimized to satisfy the Objective.
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f. Defaults to ``target=eq.Ti_l``.
+        Must be broadcastable to ``Objective.dim_f``. Defaults to ``target=eq.Ti_l``.
     bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f.
+        Both bounds must be broadcastable to ``Objective.dim_f``.
         Defaults to ``target=eq.Ti_l``.
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        Must be broadcastable to to Objective.dim_f
+        Must be broadcastable to ``Objective.dim_f``
     normalize : bool, optional
         Whether to compute the error in physical units or non-dimensionalize.
     normalize_target : bool, optional
@@ -2317,7 +2269,7 @@ class FixIonTemperature(FixParameters):
     """
 
     _units = "(eV)"
-    _print_value_fmt = "Fixed ion temperature profile error: {:10.3e} "
+    _print_value_fmt = "Fixed ion temperature profile error: "
 
     def __init__(
         self,
@@ -2373,14 +2325,14 @@ class FixAtomicNumber(FixParameters):
         Equilibrium that will be optimized to satisfy the Objective.
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f. Defaults to ``target=eq.Zeff_l``.
+        Must be broadcastable to ``Objective.dim_f``. Defaults to ``target=eq.Zeff_l``.
     bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f.
+        Both bounds must be broadcastable to ``Objective.dim_f``.
         Defaults to ``target=eq.Zeff_l``.
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        Must be broadcastable to to Objective.dim_f
+        Must be broadcastable to ``Objective.dim_f``
     normalize : bool, optional
         Has no effect for this objective.
     normalize_target : bool, optional
@@ -2397,7 +2349,7 @@ class FixAtomicNumber(FixParameters):
     """
 
     _units = "(dimensionless)"
-    _print_value_fmt = "Fixed atomic number profile error: {:10.3e} "
+    _print_value_fmt = "Fixed atomic number profile error: "
 
     def __init__(
         self,
@@ -2450,14 +2402,14 @@ class FixPsi(FixParameters):
         Equilibrium that will be optimized to satisfy the Objective.
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f. Default is ``target=eq.Psi``.
+        Must be broadcastable to ``Objective.dim_f``. Default is ``target=eq.Psi``.
     bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f.
+        Both bounds must be broadcastable to ``Objective.dim_f``.
         Default is ``target=eq.Psi``.
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        Must be broadcastable to to Objective.dim_f
+        Must be broadcastable to ``Objective.dim_f``
     normalize : bool, optional
         Whether to compute the error in physical units or non-dimensionalize.
     normalize_target : bool, optional
@@ -2470,7 +2422,7 @@ class FixPsi(FixParameters):
     """
 
     _units = "(Wb)"
-    _print_value_fmt = "Fixed Psi error: {:10.3e} "
+    _print_value_fmt = "Fixed Psi error: "
 
     def __init__(
         self,
@@ -2520,13 +2472,13 @@ class FixCurveShift(FixParameters):
         Curve that will be optimized to satisfy the Objective.
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f.
+        Must be broadcastable to ``Objective.dim_f``.
     bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f
+        Both bounds must be broadcastable to ``Objective.dim_f``
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        Must be broadcastable to to Objective.dim_f
+        Must be broadcastable to ``Objective.dim_f``
     normalize : bool, optional
         Whether to compute the error in physical units or non-dimensionalize.
     normalize_target : bool, optional
@@ -2539,7 +2491,7 @@ class FixCurveShift(FixParameters):
     """
 
     _units = "(m)"
-    _print_value_fmt = "Fixed shift error: {:10.3e} "
+    _print_value_fmt = "Fixed shift error: "
 
     def __init__(
         self,
@@ -2561,7 +2513,6 @@ class FixCurveShift(FixParameters):
             normalize_target=normalize_target,
             name=name,
         )
-        # TODO: add normalization?
 
 
 class FixCurveRotation(FixParameters):
@@ -2573,13 +2524,13 @@ class FixCurveRotation(FixParameters):
         Curve that will be optimized to satisfy the Objective.
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f.
+        Must be broadcastable to ``Objective.dim_f``.
     bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f
+        Both bounds must be broadcastable to ``Objective.dim_f``
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        Must be broadcastable to to Objective.dim_f
+        Must be broadcastable to ``Objective.dim_f``
     normalize : bool, optional
         Has no effect for this objective.
     normalize_target : bool, optional
@@ -2590,7 +2541,7 @@ class FixCurveRotation(FixParameters):
     """
 
     _units = "(rad)"
-    _print_value_fmt = "Fixed rotation error: {:10.3e} "
+    _print_value_fmt = "Fixed rotation error: "
 
     def __init__(
         self,
@@ -2680,7 +2631,7 @@ class FixCoilCurrent(FixParameters):
     """
 
     _units = "(A)"
-    _print_value_fmt = "Fixed coil current error: {:10.3e} "
+    _print_value_fmt = "Fixed coil current error: "
 
     def __init__(
         self,
@@ -2726,6 +2677,155 @@ class FixCoilCurrent(FixParameters):
         super().build(use_jit=use_jit, verbose=verbose)
 
 
+class FixSumCoilCurrent(FixCoilCurrent):
+    """Fixes the sum of coil current(s) in a Coil or CoilSet.
+
+    NOTE: When using this objective, take care in knowing the signs of the current in
+    the coils and the orientations of the coils. It is possible for coils with the same
+    signs of their current to have currents flowing in differing directions in physical
+    space due to the orientation of the coils.
+
+    Parameters
+    ----------
+    coil : Coil
+        Coil(s) that will be optimized to satisfy the Objective.
+    target : {float, ndarray}, optional
+        Target value(s) of the objective. Only used if bounds is None.
+        Must be broadcastable to ``Objective.dim_f``.
+        Default is the objective value for the coil.
+    bounds : tuple of {float, ndarray}, optional
+        Lower and upper bounds on the objective. Overrides target.
+        Both bounds must be broadcastable to ``Objective.dim_f``.
+        Default is to use the target instead.
+    weight : {float, ndarray}, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        Must be broadcastable to ``Objective.dim_f``
+    normalize : bool, optional
+        Whether to compute the error in physical units or non-dimensionalize.
+    normalize_target : bool, optional
+        Whether target and bounds should be normalized before comparing to computed
+        values. If `normalize` is `True` and the target is in physical units,
+        this should also be set to True.
+    indices : nested list of bool, optional
+        Pytree of bool specifying which coil currents to sum together.
+        See the example for how to use this on a mixed coil set.
+        If True/False sums all/none of the coil currents.
+    name : str, optional
+        Name of the objective function.
+
+    Examples
+    --------
+    .. code-block:: python
+
+        import numpy as np
+        from desc.coils import (
+            CoilSet, FourierPlanarCoil, FourierRZCoil, FourierXYZCoil, MixedCoilSet
+        )
+        from desc.objectives import FixSumCoilCurrent
+
+        # toroidal field coil set with 4 coils
+        tf_coil = FourierPlanarCoil(
+            current=3, center=[2, 0, 0], normal=[0, 1, 0], r_n=[1]
+        )
+        tf_coilset = CoilSet.linspaced_angular(tf_coil, n=4)
+        # vertical field coil set with 3 coils
+        vf_coil = FourierRZCoil(current=-1, R_n=3, Z_n=-1)
+        vf_coilset = CoilSet.linspaced_linear(
+            vf_coil, displacement=[0, 0, 2], n=3, endpoint=True
+        )
+        # another single coil
+        xyz_coil = FourierXYZCoil(current=2)
+        # full coil set with TF coils, VF coils, and other single coil
+        full_coilset = MixedCoilSet((tf_coilset, vf_coilset, xyz_coil))
+
+        # equilibrium G(rho=1) determines the necessary net poloidal current through
+        # the coils (as dictated by Ampere's law)
+        # the sign convention is positive poloidal current flows up through the torus
+        # hole
+        grid_at_surf = LinearGrid(rho=1.0, M=eq.M_grid, N=eq.N_grid)
+        G_tot = 2*jnp.pi*eq.compute("G", grid=grid_at_surf)["G"][0] / mu_0
+
+        # to use this objective to satisfy Ampere's law for the targeted equilibrium,
+        # only coils that link the equilibrium poloidally should be included in the sum,
+        # which is the TF coil set and the FourierXYZ coil, but not the VF coil set
+        obj = FixSumCoilCurrent(full_coilset, indices=[True, False, True], target=G_tot)
+
+    """
+
+    _scalar = True
+    _linear = True
+    _fixed = False
+    _units = "(A)"
+    _print_value_fmt = "Summed coil current error: "
+
+    def __init__(
+        self,
+        coil,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        indices=True,
+        name="summed coil current",
+    ):
+        self._default_target = False
+        if target is None and bounds is None:
+            self._default_target = True
+        super().__init__(
+            coil=coil,
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            indices=indices,
+            name=name,
+        )
+
+    def build(self, use_jit=False, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        super().build(use_jit=use_jit, verbose=verbose)
+        self._dim_f = 1
+        if self._default_target:
+            self.update_target(thing=self.things[0])
+
+    def compute(self, params, constants=None):
+        """Compute sum of coil currents.
+
+        Parameters
+        ----------
+        params : list of dict
+            List of dictionaries of degrees of freedom, eg CoilSet.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
+
+        Returns
+        -------
+        f : ndarray
+            Sum of coil currents.
+
+        """
+        return jnp.sum(
+            jnp.concatenate(
+                [
+                    jnp.atleast_1d(param[idx])
+                    for param, idx in zip(tree_leaves(params), self._indices)
+                ]
+            )
+        )
+
+
 class FixOmniWell(FixParameters):
     """Fixes OmnigenousField.B_lm coefficients.
 
@@ -2755,7 +2855,7 @@ class FixOmniWell(FixParameters):
     """
 
     _units = "(T)"
-    _print_value_fmt = "Fixed omnigenity well error: {:10.3e} "
+    _print_value_fmt = "Fixed omnigenity well error: "
 
     def __init__(
         self,
@@ -2778,7 +2878,6 @@ class FixOmniWell(FixParameters):
             normalize_target=normalize_target,
             name=name,
         )
-        # TODO: add normalization?
 
 
 class FixOmniMap(FixParameters):
@@ -2808,7 +2907,7 @@ class FixOmniMap(FixParameters):
     """
 
     _units = "(rad)"
-    _print_value_fmt = "Fixed omnigenity map error: {:10.3e} "
+    _print_value_fmt = "Fixed omnigenity map error: "
 
     def __init__(
         self,
@@ -2857,7 +2956,7 @@ class FixOmniBmax(_FixedObjective):
 
     _fixed = False  # not "diagonal", since it is fixing a sum
     _units = "(rad)"
-    _print_value_fmt = "Fixed omnigenity B_max error: {:10.3e} "
+    _print_value_fmt = "Fixed omnigenity B_max error: "
 
     def __init__(
         self,
@@ -2880,6 +2979,7 @@ class FixOmniBmax(_FixedObjective):
             name=name,
         )
 
+    @execute_on_cpu
     def build(self, use_jit=True, verbose=1):
         """Build constant arrays.
 
@@ -2906,7 +3006,7 @@ class FixOmniBmax(_FixedObjective):
                     np.logical_and((basis.modes[:, 1] % 2 == 0), basis.modes[:, 1] > 0),
                 )
             )[0]
-            mm = basis.modes[idx_m, 2]
+            mm = basis.modes[idx_m, 1]
             self._A[i, idx_0] = 1
             self._A[i, idx_m] = (mm % 2 - 1) * (mm % 4 - 1)
 
@@ -2949,15 +3049,15 @@ class FixSheetCurrent(FixParameters):
         Equilibrium that will be optimized to satisfy the Objective.
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f.
+        Must be broadcastable to ``Objective.dim_f``.
         Defaults to the equilibrium sheet current parameters.
     bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f.
+        Both bounds must be broadcastable to ``Objective.dim_f``.
         Default is to use target.
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        Must be broadcastable to to Objective.dim_f
+        Must be broadcastable to ``Objective.dim_f``
     normalize : bool, optional
         Whether to compute the error in physical units or non-dimensionalize.
     normalize_target : bool, optional
@@ -2970,7 +3070,7 @@ class FixSheetCurrent(FixParameters):
     """
 
     _units = "(~)"
-    _print_value_fmt = "Fixed sheet current error: {:10.3e} "
+    _print_value_fmt = "Fixed sheet current error: "
 
     def __init__(
         self,
@@ -2992,4 +3092,429 @@ class FixSheetCurrent(FixParameters):
             normalize_target=normalize_target,
             name=name,
         )
-        # TODO: add normalization?
+
+
+class FixNearAxisR(_FixedObjective):
+    """Fixes an equilibrium's near-axis behavior in R to specified order.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Equilibrium that will be optimized to satisfy the Objective.
+    order : {0,1,2}
+        order (in rho) of near-axis behavior to constrain
+    N : int
+        max toroidal resolution to constrain.
+        If `None`, defaults to equilibrium's toroidal resolution
+    target : Qsc, optional
+        pyQSC Qsc object describing the NAE solution to fix the equilibrium's
+        near-axis behavior to. If None, will fix the equilibrium's current near
+        axis behavior.
+    weight : {float, ndarray}, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        Must be broadcastable to ``Objective.dim_f``
+    normalize : bool, optional
+        Whether to compute the error in physical units or non-dimensionalize.
+        Unused by this objective
+    normalize_target : bool, optional
+        Whether target and bounds should be normalized before comparing to computed
+        values. If `normalize` is `True` and the target is in physical units,
+        this should also be set to True.
+        Unused by this objective
+    name : str, optional
+        Name of the objective function.
+
+    """
+
+    _static_attrs = ["_nae_eq"]
+    _target_arg = "R_lmn"
+    _fixed = False  # not "diagonal", since its fixing a sum
+    _units = "(m)"
+    _print_value_fmt = "Fixed-Near-Axis R Behavior error: "
+
+    def __init__(
+        self,
+        eq,
+        order=1,
+        N=None,
+        target=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        name="Fix Near Axis R Behavior",
+    ):
+        self._nae_eq = target
+        self._eq = eq
+        self._order = order
+        self._N = N
+        super().__init__(
+            things=eq,
+            target=None,
+            weight=weight,
+            name=name,
+            normalize=normalize,
+            normalize_target=normalize_target,
+        )
+
+    def build(self, use_jit=False, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        from .getters import _get_NAE_constraints
+
+        eq = self.things[0]
+        cons = _get_NAE_constraints(
+            eq, self._nae_eq, order=self._order, N=self._N, fix_lambda=False
+        )
+        for con in cons:
+            if isinstance(con, FixSumModesR) or isinstance(con, AxisRSelfConsistency):
+                con.build(use_jit=use_jit, verbose=0)
+        cons_that_fix_near_axis = [con for con in cons if isinstance(con, FixSumModesR)]
+        self._A = (
+            np.stack([con._A for con in cons_that_fix_near_axis]).squeeze()
+            if cons_that_fix_near_axis
+            else None
+        )
+        # add the axis constraint last if it is in cons
+        axis_con = None
+        for con in cons:
+            if isinstance(con, AxisRSelfConsistency):
+                self._A = (
+                    np.vstack([self._A, con._A]).squeeze()
+                    if np.any(self._A)
+                    else con._A
+                )
+                axis_con = con
+
+        self._target = (
+            np.concatenate([con.target for con in cons_that_fix_near_axis])
+            if cons_that_fix_near_axis
+            else None
+        )
+        if axis_con:
+            if self._nae_eq is not None:
+                # use NAE axis as target
+                axis = FourierRZCurve(
+                    R_n=np.concatenate(
+                        (np.flipud(self._nae_eq.rs[1:]), self._nae_eq.rc)
+                    ),
+                    Z_n=np.concatenate(
+                        (np.flipud(self._nae_eq.zs[1:]), self._nae_eq.zc)
+                    ),
+                    NFP=self._nae_eq.nfp,
+                )
+                axis.change_resolution(N=self._eq.N)
+                axis_target = axis.R_n
+            else:  # else use eq axis a target
+                axis_target = self._eq.Ra_n
+            self._target = (
+                np.append(self._target, axis_target).squeeze()
+                if np.any(self._target)
+                else axis_target
+            )
+        self._dim_f = self.target.size
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, params, constants=None):
+        """Compute fixed near axis R behavior errors.
+
+        Parameters
+        ----------
+        params : dict
+            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
+
+        Returns
+        -------
+        f : ndarray
+            Fixed near axis behavior errors.
+
+        """
+        f = jnp.dot(self._A, params["R_lmn"]).squeeze()
+
+        return f
+
+
+class FixNearAxisZ(_FixedObjective):
+    """Fixes an equilibrium's near-axis behavior in Z to specified order.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Equilibrium that will be optimized to satisfy the Objective.
+    order : {0,1,2}
+        order (in rho) of near-axis behavior to constrain
+    N : int
+        max toroidal resolution to constrain.
+        If `None`, defaults to equilibrium's toroidal resolution
+    target : Qsc, optional
+        pyQSC Qsc object describing the NAE solution to fix the equilibrium's
+        near-axis behavior to. If None, will fix the equilibrium's current near
+        axis behavior.
+    weight : {float, ndarray}, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        Must be broadcastable to ``Objective.dim_f``
+    normalize : bool, optional
+        Whether to compute the error in physical units or non-dimensionalize.
+        Unused by this objective
+    normalize_target : bool, optional
+        Whether target and bounds should be normalized before comparing to computed
+        values. If `normalize` is `True` and the target is in physical units,
+        this should also be set to True.
+        Unused by this objective
+    name : str, optional
+        Name of the objective function.
+
+    """
+
+    _static_attrs = ["_nae_eq"]
+    _target_arg = "Z_lmn"
+    _fixed = False  # not "diagonal", since its fixing a sum
+    _units = "(m)"
+    _print_value_fmt = "Fixed-Near-Axis Z Behavior error: "
+
+    def __init__(
+        self,
+        eq,
+        order=1,
+        N=None,
+        target=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        name="Fix Near Axis Z Behavior",
+    ):
+        self._nae_eq = target
+        self._eq = eq
+        self._order = order
+        self._N = N
+        super().__init__(
+            things=eq,
+            target=None,
+            weight=weight,
+            name=name,
+            normalize=normalize,
+            normalize_target=normalize_target,
+        )
+
+    def build(self, use_jit=False, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        from .getters import _get_NAE_constraints
+
+        eq = self.things[0]
+        cons = _get_NAE_constraints(
+            eq, self._nae_eq, order=self._order, N=self._N, fix_lambda=False
+        )
+        for con in cons:
+            if isinstance(con, FixSumModesZ) or isinstance(con, AxisZSelfConsistency):
+                con.build(use_jit=use_jit, verbose=0)
+        cons_that_fix_near_axis = [con for con in cons if isinstance(con, FixSumModesZ)]
+        self._A = (
+            np.stack([con._A for con in cons_that_fix_near_axis]).squeeze()
+            if cons_that_fix_near_axis
+            else None
+        )
+        # add the axis constraint last if it is in cons
+        axis_con = None
+        for con in cons:
+            if isinstance(con, AxisZSelfConsistency):
+                self._A = (
+                    np.vstack([self._A, con._A]).squeeze()
+                    if np.any(self._A)
+                    else con._A
+                )
+                axis_con = con
+        self._target = (
+            np.concatenate([con.target for con in cons_that_fix_near_axis])
+            if cons_that_fix_near_axis
+            else None
+        )
+        if axis_con:
+            if self._nae_eq is not None:
+                # use NAE axis as target
+                axis = FourierRZCurve(
+                    R_n=np.concatenate(
+                        (np.flipud(self._nae_eq.rs[1:]), self._nae_eq.rc)
+                    ),
+                    Z_n=np.concatenate(
+                        (np.flipud(self._nae_eq.zs[1:]), self._nae_eq.zc)
+                    ),
+                    NFP=self._nae_eq.nfp,
+                )
+                axis.change_resolution(N=self._eq.N)
+                axis_target = axis.Z_n
+            else:  # else use eq axis a target
+                axis_target = self._eq.Za_n
+            self._target = (
+                np.append(self._target, axis_target).squeeze()
+                if np.any(self._target)
+                else axis_target
+            )
+
+        self._dim_f = self.target.size
+
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, params, constants=None):
+        """Compute fixed near axis Z behavior errors.
+
+        Parameters
+        ----------
+        params : dict
+            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
+
+        Returns
+        -------
+        f : ndarray
+            Fixed near axis behavior errors.
+
+        """
+        f = jnp.dot(self._A, params["Z_lmn"]).squeeze()
+
+        return f
+
+
+class FixNearAxisLambda(_FixedObjective):
+    """Fixes an equilibrium's near-axis behavior in lambda to specified order.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Equilibrium that will be optimized to satisfy the Objective.
+    order : int
+        order (in rho) of near-axis lambda behavior to constrain
+    N : int
+        max toroidal resolution to constrain.
+        If `None`, defaults to equilibrium's toroidal resolution
+    target : Qsc, optional
+        pyQSC Qsc object describing the NAE solution to fix the equilibrium's
+        near-axis behavior to. If None, will fix the equilibrium's current near
+        axis behavior.
+    bounds : tuple of {float, ndarray}, optional
+        Lower and upper bounds on the objective. Overrides target.
+        Both bounds must be broadcastable to ``Objective.dim_f``
+        Unused for this objective, as target will be automatically
+        set according to the ``nae_eq``
+    weight : {float, ndarray}, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        Must be broadcastable to ``Objective.dim_f``
+    normalize : bool, optional
+        Whether to compute the error in physical units or non-dimensionalize.
+        Unused by this objective
+    normalize_target : bool, optional
+        Whether target and bounds should be normalized before comparing to computed
+        values. If `normalize` is `True` and the target is in physical units,
+        this should also be set to True.
+        Unused by this objective
+    name : str, optional
+        Name of the objective function.
+
+    """
+
+    _static_attrs = ["_nae_eq"]
+    _target_arg = "L_lmn"
+    _fixed = False  # not "diagonal", since its fixing a sum
+    _units = "(dimensionless)"
+    _print_value_fmt = "Fixed-Near-Axis Lambda Behavior error: "
+
+    def __init__(
+        self,
+        eq,
+        order=1,
+        N=None,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        name="Fix Near Axis Lambda Behavior",
+    ):
+        self._nae_eq = target
+        self._order = order
+        self._N = N
+        self._target_from_user = setdefault(bounds, None)
+        super().__init__(
+            things=eq,
+            target=None,
+            bounds=bounds,
+            weight=weight,
+            name=name,
+            normalize=normalize,
+            normalize_target=normalize_target,
+        )
+
+    def build(self, use_jit=False, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        from .getters import _get_NAE_constraints
+
+        eq = self.things[0]
+        cons = _get_NAE_constraints(
+            eq,
+            self._nae_eq,
+            order=self._order,
+            N=self._N,
+            fix_lambda=self._order,
+        )
+        for con in cons:
+            if isinstance(con, FixSumModesLambda):
+                con.build(use_jit=use_jit, verbose=0)
+        self._A = np.vstack(
+            [con._A for con in cons if isinstance(con, FixSumModesLambda)]
+        )
+        self._target = np.concatenate(
+            [con.target for con in cons if isinstance(con, FixSumModesLambda)]
+        )
+
+        self._dim_f = self.target.size
+
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, params, constants=None):
+        """Compute fixed near axis Lambda behavior errors.
+
+        Parameters
+        ----------
+        params : dict
+            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
+
+        Returns
+        -------
+        f : ndarray
+            Fixed near axis Lambda behavior errors.
+
+        """
+        f = jnp.dot(self._A, params["L_lmn"]).squeeze()
+        return f

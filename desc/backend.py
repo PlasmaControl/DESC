@@ -65,19 +65,18 @@ print(
     )
 )
 
-if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assign?
-    jit = jax.jit
-    fori_loop = jax.lax.fori_loop
-    cond = jax.lax.cond
-    switch = jax.lax.switch
-    while_loop = jax.lax.while_loop
-    vmap = jax.vmap
-    scan = jax.lax.scan
-    bincount = jnp.bincount
-    from jax import custom_jvp
+if use_jax:  # noqa: C901
+    from jax import custom_jvp, jit, vmap
+
+    imap = jax.lax.map
     from jax.experimental.ode import odeint
+    from jax.lax import cond, fori_loop, scan, switch, while_loop
+    from jax.nn import softmax as softargmax
+    from jax.numpy import bincount, flatnonzero, repeat, take
+    from jax.numpy.fft import ifft, irfft, irfft2, rfft, rfft2
+    from jax.scipy.fft import dct, idct
     from jax.scipy.linalg import block_diag, cho_factor, cho_solve, qr, solve_triangular
-    from jax.scipy.special import gammaln, logsumexp
+    from jax.scipy.special import gammaln
     from jax.tree_util import (
         register_pytree_node,
         tree_flatten,
@@ -87,6 +86,38 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
         tree_unflatten,
         treedef_is_leaf,
     )
+
+    if hasattr(jnp, "trapezoid"):
+        trapezoid = jnp.trapezoid  # for JAX 0.4.26 and later
+    elif hasattr(jax.scipy, "integrate"):
+        trapezoid = jax.scipy.integrate.trapezoid
+    else:
+        trapezoid = jnp.trapz  # for older versions of JAX, deprecated by jax 0.4.16
+
+    def execute_on_cpu(func):
+        """Decorator to set default device to CPU for a function.
+
+        Parameters
+        ----------
+        func : callable
+            Function to decorate
+
+        Returns
+        -------
+        wrapper : callable
+            Decorated function that will always run on CPU even if
+            there are available GPUs.
+        """
+
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            with jax.default_device(jax.devices("cpu")[0]):
+                return func(*args, **kwargs)
+
+        return wrapper
+
+    # JAX implementation is not differentiable on gpu.
+    eigh_tridiagonal = execute_on_cpu(jax.scipy.linalg.eigh_tridiagonal)
 
     def put(arr, inds, vals):
         """Functional interface for array "fancy indexing".
@@ -105,10 +136,12 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
         Returns
         -------
         arr : array-like
-            Input array with vals inserted at inds.
+            Copy of input array with vals inserted at inds.
+            In some cases JAX may decide a copy is not necessary.
 
         """
         if isinstance(arr, np.ndarray):
+            arr = arr.copy()
             arr[inds] = vals
             return arr
         return jnp.asarray(arr).at[inds].set(vals)
@@ -170,6 +203,7 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
         maxiter_ls=5,
         alpha=0.1,
         fixup=None,
+        full_output=False,
     ):
         """Find x where fun(x, *args) == 0.
 
@@ -197,6 +231,9 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
         fixup : callable, optional
             Function to modify x after each update, ie to enforce periodicity. Should
             have a signature of the form fixup(x, *args) -> x'.
+        full_output : bool, optional
+            If True, also return a tuple where the first element is the residual from
+            the root finding and the second is the number of iterations.
 
         Returns
         -------
@@ -241,18 +278,25 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
                 xk1, fk1 = backtrack(xk1, fk1, d)
                 return xk1, fk1, k1 + 1
 
-            state = guess, res(guess), 0
+            state = guess, res(guess), 0.0
             state = jax.lax.while_loop(condfun, bodyfun, state)
-            return state[0], state[1:]
+            if full_output:
+                return state[0], state[1:]
+            else:
+                return state[0]
 
         def tangent_solve(g, y):
             A = jax.jacfwd(g)(y)
             return y / A
 
-        x, (res, niter) = jax.lax.custom_root(
-            res, x0, solve, tangent_solve, has_aux=True
-        )
-        return x, (abs(res), niter)
+        if full_output:
+            x, (res, niter) = jax.lax.custom_root(
+                res, x0, solve, tangent_solve, has_aux=True
+            )
+            return x, (abs(res), niter)
+        else:
+            x = jax.lax.custom_root(res, x0, solve, tangent_solve, has_aux=False)
+            return x
 
     def root(
         fun,
@@ -264,6 +308,7 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
         maxiter_ls=0,
         alpha=0.1,
         fixup=None,
+        full_output=False,
     ):
         """Find x where fun(x, *args) == 0.
 
@@ -291,6 +336,9 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
         fixup : callable, optional
             Function to modify x after each update, ie to enforce periodicity. Should
             have a signature of the form fixup(x, *args) -> 1d array.
+        full_output : bool, optional
+            If True, also return a tuple where the first element is the residual from
+            the root finding and the second is the number of iterations.
 
         Returns
         -------
@@ -304,6 +352,8 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
         This routine may be used on over or under-determined systems, in which case it
         will solve it in a least squares / least norm sense.
         """
+        from desc.utils import safenorm
+
         if fixup is None:
             fixup = lambda x, *args: x
         if jac is None:
@@ -356,174 +406,82 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
             state = (
                 jnp.atleast_1d(jnp.asarray(guess)),
                 jnp.atleast_1d(resfun(guess)),
-                0,
+                0.0,
             )
             state = jax.lax.while_loop(condfun, bodyfun, state)
-            return state[0], state[1:]
+            if full_output:
+                return state[0], state[1:]
+            else:
+                return state[0]
 
         def tangent_solve(g, y):
             A = jnp.atleast_2d(jax.jacfwd(g)(y))
             return _lstsq(A, jnp.atleast_1d(y))
 
-        x, (res, niter) = jax.lax.custom_root(
-            res, x0, solve, tangent_solve, has_aux=True
-        )
-        return x, (jnp.linalg.norm(res), niter)
-
-    from jax._src.numpy.vectorize import (
-        _apply_excluded,
-        _check_output_dims,
-        _parse_gufunc_signature,
-        _parse_input_dimensions,
-    )
-    from netket.jax import vmap_chunked
-
-    def batched_vectorize(
-        pyfunc, *, excluded=frozenset(), signature=None, chunk_size=12
-    ):
-        """Define a vectorized function with broadcasting and batching.
-
-        below is taken from JAX
-        FIXME: change restof docstring
-        :func:`vectorize` is a convenience wrapper for defining vectorized
-        functions with broadcasting, in the style of NumPy's
-        `generalized universal functions
-        <https://numpy.org/doc/stable/reference/c-api/generalized-ufuncs.html>`_.
-        It allows for defining functions that are automatically repeated across
-        any leading dimensions, without the implementation of the function needing to
-        be concerned about how to handle higher dimensional inputs.
-
-        :func:`jax.numpy.vectorize` has the same interface as
-        :class:`numpy.vectorize`, but it is syntactic sugar for an auto-batching
-        transformation (:func:`vmap`) rather than a Python loop. This should be
-        considerably more efficient, but the implementation must be written in terms
-        of functions that act on JAX arrays.
-
-        Args
-        ----
-            pyfunc: function to vectorize.
-            excluded: optional set of integers representing positional arguments for
-            which the function will not be vectorized. These will be passed directly
-            to ``pyfunc`` unmodified.
-            signature: optional generalized universal function signature, e.g.,
-            ``(m,n),(n)->(m)`` for vectorized matrix-vector multiplication. If
-            provided, ``pyfunc`` will be called with (and expected to return) arrays
-            with shapes given by the size of corresponding core dimensions. By
-            default, pyfunc is assumed to take scalars arrays as input and output.
-            chunk_size: the size of the batches to pass to vmap. if 1, will only
-
-        Returns
-        -------
-            Vectorized version of the given function.
-
-        """
-        if any(not isinstance(exclude, (str, int)) for exclude in excluded):
-            raise TypeError(
-                "jax.numpy.vectorize can only exclude integer or string arguments, "
-                "but excluded={!r}".format(excluded)
+        if full_output:
+            x, (res, niter) = jax.lax.custom_root(
+                res, x0, solve, tangent_solve, has_aux=True
             )
-        if any(isinstance(e, int) and e < 0 for e in excluded):
-            raise ValueError(f"excluded={excluded!r} contains negative numbers")
-
-        @functools.wraps(pyfunc)
-        def wrapped(*args, **kwargs):
-            error_context = (
-                "on vectorized function with excluded={!r} and "
-                "signature={!r}".format(excluded, signature)
-            )
-            excluded_func, args, kwargs = _apply_excluded(
-                pyfunc, excluded, args, kwargs
-            )
-
-            if signature is not None:
-                input_core_dims, output_core_dims = _parse_gufunc_signature(signature)
-            else:
-                input_core_dims = [()] * len(args)
-                output_core_dims = None
-
-            none_args = {i for i, arg in enumerate(args) if arg is None}
-            if any(none_args):
-                if any(input_core_dims[i] != () for i in none_args):
-                    raise ValueError(
-                        f"Cannot pass None at locations {none_args} with {signature=}"
-                    )
-                excluded_func, args, _ = _apply_excluded(
-                    excluded_func, none_args, args, {}
-                )
-                input_core_dims = [
-                    dim for i, dim in enumerate(input_core_dims) if i not in none_args
-                ]
-
-            args = tuple(map(jnp.asarray, args))
-
-            broadcast_shape, dim_sizes = _parse_input_dimensions(
-                args, input_core_dims, error_context
-            )
-
-            checked_func = _check_output_dims(
-                excluded_func, dim_sizes, output_core_dims, error_context
-            )
-
-            # Rather than broadcasting all arguments to full broadcast shapes, prefer
-            # expanding dimensions using vmap. By pushing broadcasting
-            # into vmap, we can make use of more efficient batching rules for
-            # primitives where only some arguments are batched (e.g., for
-            # lax_linalg.triangular_solve), and avoid instantiating large broadcasted
-            # arrays.
-
-            squeezed_args = []
-            rev_filled_shapes = []
-
-            for arg, core_dims in zip(args, input_core_dims):
-                noncore_shape = arg.shape[: arg.ndim - len(core_dims)]
-
-                pad_ndim = len(broadcast_shape) - len(noncore_shape)
-                filled_shape = pad_ndim * (1,) + noncore_shape
-                rev_filled_shapes.append(filled_shape[::-1])
-
-                squeeze_indices = tuple(
-                    i for i, size in enumerate(noncore_shape) if size == 1
-                )
-                squeezed_arg = jnp.squeeze(arg, axis=squeeze_indices)
-                squeezed_args.append(squeezed_arg)
-
-            vectorized_func = checked_func
-            dims_to_expand = []
-            for negdim, axis_sizes in enumerate(zip(*rev_filled_shapes)):
-                in_axes = tuple(None if size == 1 else 0 for size in axis_sizes)
-                if all(axis is None for axis in in_axes):
-                    dims_to_expand.append(len(broadcast_shape) - 1 - negdim)
-                else:
-                    # change the vmap here to chunked_vmap
-                    vectorized_func = vmap_chunked(
-                        vectorized_func, in_axes, chunk_size=chunk_size
-                    )
-            result = vectorized_func(*squeezed_args)
-
-            if not dims_to_expand:
-                return result
-            elif isinstance(result, tuple):
-                return tuple(jnp.expand_dims(r, axis=dims_to_expand) for r in result)
-            else:
-                return jnp.expand_dims(result, axis=dims_to_expand)
-
-        return wrapped
+            return x, (safenorm(res), niter)
+        else:
+            x = jax.lax.custom_root(res, x0, solve, tangent_solve, has_aux=False)
+            return x
 
 
 # we can't really test the numpy backend stuff in automated testing, so we ignore it
 # for coverage purposes
 else:  # pragma: no cover
     jit = lambda func, *args, **kwargs: func
+    execute_on_cpu = lambda func: func
     import scipy.optimize
+    from numpy.fft import ifft, irfft, irfft2, rfft, rfft2  # noqa: F401
+    from scipy.fft import dct, idct  # noqa: F401
     from scipy.integrate import odeint  # noqa: F401
     from scipy.linalg import (  # noqa: F401
         block_diag,
         cho_factor,
         cho_solve,
+        eigh_tridiagonal,
         qr,
         solve_triangular,
     )
-    from scipy.special import gammaln, logsumexp  # noqa: F401
+    from scipy.special import gammaln  # noqa: F401
+    from scipy.special import softmax as softargmax  # noqa: F401
+
+    trapezoid = np.trapezoid if hasattr(np, "trapezoid") else np.trapz
+
+    def imap(f, xs, *, batch_size=None, in_axes=0, out_axes=0):
+        """Generalizes jax.lax.map; uses numpy."""
+        if not isinstance(xs, np.ndarray):
+            raise NotImplementedError(
+                "Require numpy array input, or install jax to support pytrees."
+            )
+        xs = np.moveaxis(xs, source=in_axes, destination=0)
+        return np.stack([f(x) for x in xs], axis=out_axes)
+
+    def vmap(fun, in_axes=0, out_axes=0):
+        """A numpy implementation of jax.lax.map whose API is a subset of jax.vmap.
+
+        Like Python's builtin map,
+        except inputs and outputs are in the form of stacked arrays,
+        and the returned object is a vectorized version of the input function.
+
+        Parameters
+        ----------
+        fun: callable
+            Function (A -> B)
+        in_axes: int
+            Axis to map over.
+        out_axes: int
+            An integer indicating where the mapped axis should appear in the output.
+
+        Returns
+        -------
+        fun_vmap: callable
+            Vectorized version of fun.
+
+        """
+        return lambda xs: imap(fun, xs, in_axes=in_axes, out_axes=out_axes)
 
     def tree_stack(*args, **kwargs):
         """Stack pytree for numpy backend."""
@@ -578,9 +536,10 @@ else:  # pragma: no cover
         Returns
         -------
         arr : array-like
-            Input array with vals inserted at inds.
+            Copy of input array with vals inserted at inds.
 
         """
+        arr = arr.copy()
         arr[inds] = vals
         return arr
 
@@ -706,32 +665,6 @@ else:  # pragma: no cover
             val = body_fun(val)
         return val
 
-    def vmap(fun, out_axes=0):
-        """A numpy implementation of jax.lax.map whose API is a subset of jax.vmap.
-
-        Like Python's builtin map,
-        except inputs and outputs are in the form of stacked arrays,
-        and the returned object is a vectorized version of the input function.
-
-        Parameters
-        ----------
-        fun: callable
-            Function (A -> B)
-        out_axes: int
-            An integer indicating where the mapped axis should appear in the output.
-
-        Returns
-        -------
-        fun_vmap: callable
-            Vectorized version of fun.
-
-        """
-
-        def fun_vmap(fun_inputs):
-            return np.stack([fun(fun_input) for fun_input in fun_inputs], axis=out_axes)
-
-        return fun_vmap
-
     def scan(f, init, xs, length=None, reverse=False, unroll=1):
         """Scan a function over leading array axes while carrying along state.
 
@@ -771,9 +704,21 @@ else:  # pragma: no cover
             ys.append(y)
         return carry, np.stack(ys)
 
-    def bincount(x, weights=None, minlength=None, length=None):
-        """Same as np.bincount but with a dummy parameter to match jnp.bincount API."""
-        return np.bincount(x, weights, minlength)
+    def bincount(x, weights=None, minlength=0, length=None):
+        """A numpy implementation of jnp.bincount."""
+        x = np.clip(x, 0, None)
+        if length is None:
+            length = max(minlength, x.max() + 1)
+        else:
+            minlength = max(minlength, length)
+        return np.bincount(x, weights, minlength)[:length]
+
+    def repeat(a, repeats, axis=None, total_repeat_length=None):
+        """A numpy implementation of jnp.repeat."""
+        out = np.repeat(a, repeats, axis)
+        if total_repeat_length is not None:
+            out = out[:total_repeat_length]
+        return out
 
     def custom_jvp(fun, *args, **kwargs):
         """Dummy function for custom_jvp without JAX."""
@@ -791,6 +736,7 @@ else:  # pragma: no cover
         maxiter_ls=5,
         alpha=0.1,
         fixup=None,
+        full_output=False,
     ):
         """Find x where fun(x, *args) == 0.
 
@@ -818,6 +764,9 @@ else:  # pragma: no cover
         fixup : callable, optional
             Function to modify x after each update, ie to enforce periodicity. Should
             have a signature of the form fixup(x) -> x'.
+        full_output : bool, optional
+            If True, also return a tuple where the first element is the residual from
+            the root finding and the second is the number of iterations.
 
         Returns
         -------
@@ -830,7 +779,10 @@ else:  # pragma: no cover
         out = scipy.optimize.root_scalar(
             fun, args, x0=x0, fprime=jac, xtol=tol, rtol=tol
         )
-        return out.root, out
+        if full_output:
+            return out.root, out
+        else:
+            return out.root
 
     def root(
         fun,
@@ -842,6 +794,7 @@ else:  # pragma: no cover
         maxiter_ls=0,
         alpha=0.1,
         fixup=None,
+        full_output=False,
     ):
         """Find x where fun(x, *args) == 0.
 
@@ -869,6 +822,9 @@ else:  # pragma: no cover
         fixup : callable, optional
             Function to modify x after each update, ie to enforce periodicity. Should
             have a signature of the form fixup(x, *args) -> 1d array.
+        full_output : bool, optional
+            If True, also return a tuple where the first element is the residual from
+            the root finding and the second is the number of iterations.
 
         Returns
         -------
@@ -883,4 +839,48 @@ else:  # pragma: no cover
         will solve it in a least squares sense.
         """
         out = scipy.optimize.root(fun, x0, args, jac=jac, tol=tol)
-        return out.x, out
+        if full_output:
+            return out.x, out
+        else:
+            return out.x
+
+    def flatnonzero(a, size=None, fill_value=0):
+        """A numpy implementation of jnp.flatnonzero."""
+        nz = np.flatnonzero(a)
+        if size is not None:
+            nz = np.pad(nz, (0, max(size - nz.size, 0)), constant_values=fill_value)
+        return nz
+
+    def take(
+        a,
+        indices,
+        axis=None,
+        out=None,
+        mode="fill",
+        unique_indices=False,
+        indices_are_sorted=False,
+        fill_value=None,
+    ):
+        """A numpy implementation of jnp.take."""
+        if mode == "fill":
+            if fill_value is None:
+                # copy jax logic
+                # https://jax.readthedocs.io/en/latest/_modules/jax/_src/lax/slicing.html#gather
+                if np.issubdtype(a.dtype, np.inexact):
+                    fill_value = np.nan
+                elif np.issubdtype(a.dtype, np.signedinteger):
+                    fill_value = np.iinfo(a.dtype).min
+                elif np.issubdtype(a.dtype, np.unsignedinteger):
+                    fill_value = np.iinfo(a.dtype).max
+                elif a.dtype == np.bool_:
+                    fill_value = True
+                else:
+                    raise ValueError(f"Unsupported dtype {a.dtype}.")
+            out = np.where(
+                (-a.size <= indices) & (indices < a.size),
+                np.take(a, indices, axis, out, mode="wrap"),
+                fill_value,
+            )
+        else:
+            out = np.take(a, indices, axis, out, mode)
+        return out

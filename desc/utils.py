@@ -1,5 +1,6 @@
 """Utility functions, independent of the rest of DESC."""
 
+import functools
 import operator
 import warnings
 from itertools import combinations_with_replacement, permutations
@@ -8,7 +9,7 @@ import numpy as np
 from scipy.special import factorial
 from termcolor import colored
 
-from desc.backend import fori_loop, jit, jnp
+from desc.backend import flatnonzero, fori_loop, jit, jnp, take
 
 
 class Timer:
@@ -183,6 +184,13 @@ class _Indexable:
 
     def __getitem__(self, index):
         return index
+
+    @staticmethod
+    def get(stuff, axis, ndim):
+        slices = [slice(None)] * ndim
+        slices[axis] = stuff
+        slices = tuple(slices)
+        return slices
 
 
 """
@@ -407,18 +415,17 @@ def svd_inv_null(A):
         Null space of A.
 
     """
-    u, s, vh = np.linalg.svd(A, full_matrices=True)
+    u, s, vh = jnp.linalg.svd(A, full_matrices=True)
     M, N = u.shape[0], vh.shape[1]
     K = min(M, N)
     rcond = np.finfo(A.dtype).eps * max(M, N)
-    tol = np.amax(s) * rcond
+    tol = jnp.amax(s) * rcond
     large = s > tol
-    num = np.sum(large, dtype=int)
+    num = jnp.sum(large, dtype=int)
     uk = u[:, :K]
     vhk = vh[:K, :]
-    s = np.divide(1, s, where=large, out=s)
-    s[(~large,)] = 0
-    Ainv = np.matmul(vhk.T, np.multiply(s[..., np.newaxis], uk.T))
+    s = jnp.where(large, 1 / s, 0)
+    Ainv = vhk.T @ jnp.diag(s) @ uk.T
     Z = vh[num:, :].T.conj()
     return Ainv, Z
 
@@ -457,8 +464,8 @@ def combination_permutation(m, n, equals=True):
 def multinomial_coefficients(m, n):
     """Number of ways to place n objects into m bins."""
     k = combination_permutation(m, n)
-    num = factorial(n)
-    den = factorial(k).prod(axis=-1)
+    num = factorial(n, exact=True)
+    den = factorial(k, exact=True).prod(axis=-1)
     return num / den
 
 
@@ -532,13 +539,19 @@ def errorif(cond, err=ValueError, msg=""):
     just AssertionError.
     """
     if cond:
-        raise err(msg)
+        raise err(colored(msg, "red"))
+
+
+class ResolutionWarning(UserWarning):
+    """Warning for insufficient resolution."""
+
+    pass
 
 
 def warnif(cond, err=UserWarning, msg=""):
     """Throw a warning if condition is met."""
     if cond:
-        warnings.warn(msg, err)
+        warnings.warn(colored(msg, "yellow"), err)
 
 
 def check_nonnegint(x, name="", allow_none=True):
@@ -676,3 +689,187 @@ def broadcast_tree(tree_in, tree_out, dtype=int):
     # invalid tree structure
     else:
         raise ValueError("trees must be nested lists of dicts")
+
+
+@functools.partial(
+    jnp.vectorize, signature="(m),(m)->(n)", excluded={"size", "fill_value"}
+)
+def take_mask(a, mask, /, *, size=None, fill_value=None):
+    """JIT compilable method to return ``a[mask][:size]`` padded by ``fill_value``.
+
+    Parameters
+    ----------
+    a : jnp.ndarray
+        The source array.
+    mask : jnp.ndarray
+        Boolean mask to index into ``a``. Should have same shape as ``a``.
+    size : int
+        Elements of ``a`` at the first size True indices of ``mask`` will be returned.
+        If there are fewer elements than size indicates, the returned array will be
+        padded with ``fill_value``. The size default is ``mask.size``.
+    fill_value : Any
+        When there are fewer than the indicated number of elements, the remaining
+        elements will be filled with ``fill_value``. Defaults to NaN for inexact types,
+        the largest negative value for signed types, the largest positive value for
+        unsigned types, and True for booleans.
+
+    Returns
+    -------
+    result : jnp.ndarray
+        Shape (size, ).
+
+    """
+    assert a.shape == mask.shape
+    idx = flatnonzero(mask, size=setdefault(size, mask.size), fill_value=mask.size)
+    return take(
+        a,
+        idx,
+        mode="fill",
+        fill_value=fill_value,
+        unique_indices=True,
+        indices_are_sorted=True,
+    )
+
+
+def flatten_matrix(y):
+    """Flatten matrix to vector."""
+    return y.reshape(*y.shape[:-2], -1)
+
+
+# TODO: Eventually remove and use numpy's stuff.
+# https://github.com/numpy/numpy/issues/25805
+def atleast_nd(ndmin, ary):
+    """Adds dimensions to front if necessary."""
+    return jnp.array(ary, ndmin=ndmin) if jnp.ndim(ary) < ndmin else ary
+
+
+def atleast_3d_mid(ary):
+    """Like np.atleast_3d but if adds dim at axis 1 for 2d arrays."""
+    ary = jnp.atleast_2d(ary)
+    return ary[:, jnp.newaxis] if ary.ndim == 2 else ary
+
+
+def atleast_2d_end(ary):
+    """Like np.atleast_2d but if adds dim at axis 1 for 1d arrays."""
+    ary = jnp.atleast_1d(ary)
+    return ary[:, jnp.newaxis] if ary.ndim == 1 else ary
+
+
+PRINT_WIDTH = 60  # current longest name is BootstrapRedlConsistency with pre-text
+
+
+def dot(a, b, axis=-1):
+    """Batched vector dot product.
+
+    Parameters
+    ----------
+    a : array-like
+        First array of vectors.
+    b : array-like
+        Second array of vectors.
+    axis : int
+        Axis along which vectors are stored.
+
+    Returns
+    -------
+    y : array-like
+        y = sum(a*b, axis=axis)
+
+    """
+    return jnp.sum(a * b, axis=axis, keepdims=False)
+
+
+def cross(a, b, axis=-1):
+    """Batched vector cross product.
+
+    Parameters
+    ----------
+    a : array-like
+        First array of vectors.
+    b : array-like
+        Second array of vectors.
+    axis : int
+        Axis along which vectors are stored.
+
+    Returns
+    -------
+    y : array-like
+        y = a x b
+
+    """
+    return jnp.cross(a, b, axis=axis)
+
+
+def safenorm(x, ord=None, axis=None, fill=0, threshold=0):
+    """Like jnp.linalg.norm, but without nan gradient at x=0.
+
+    Parameters
+    ----------
+    x : ndarray
+        Vector or array to norm.
+    ord : {non-zero int, inf, -inf, 'fro', 'nuc'}, optional
+        Order of norm.
+    axis : {None, int, 2-tuple of ints}, optional
+        Axis to take norm along.
+    fill : float, ndarray, optional
+        Value to return where x is zero.
+    threshold : float >= 0
+        How small is x allowed to be.
+
+    """
+    is_zero = (jnp.abs(x) <= threshold).all(axis=axis, keepdims=True)
+    y = jnp.where(is_zero, jnp.ones_like(x), x)  # replace x with ones if is_zero
+    n = jnp.linalg.norm(y, ord=ord, axis=axis)
+    n = jnp.where(is_zero.squeeze(), fill, n)  # replace norm with zero if is_zero
+    return n
+
+
+def safenormalize(x, ord=None, axis=None, fill=0, threshold=0):
+    """Normalize a vector to unit length, but without nan gradient at x=0.
+
+    Parameters
+    ----------
+    x : ndarray
+        Vector or array to norm.
+    ord : {non-zero int, inf, -inf, 'fro', 'nuc'}, optional
+        Order of norm.
+    axis : {None, int, 2-tuple of ints}, optional
+        Axis to take norm along.
+    fill : float, ndarray, optional
+        Value to return where x is zero.
+    threshold : float >= 0
+        How small is x allowed to be.
+
+    """
+    is_zero = (jnp.abs(x) <= threshold).all(axis=axis, keepdims=True)
+    y = jnp.where(is_zero, jnp.ones_like(x), x)  # replace x with ones if is_zero
+    n = safenorm(x, ord, axis, fill, threshold) * jnp.ones_like(x)
+    # return unit vector with equal components if norm <= threshold
+    return jnp.where(n <= threshold, jnp.ones_like(y) / jnp.sqrt(y.size), y / n)
+
+
+def safediv(a, b, fill=0, threshold=0):
+    """Divide a/b with guards for division by zero.
+
+    Parameters
+    ----------
+    a, b : ndarray
+        Numerator and denominator.
+    fill : float, ndarray, optional
+        Value to return where b is zero.
+    threshold : float >= 0
+        How small is b allowed to be.
+    """
+    mask = jnp.abs(b) <= threshold
+    num = jnp.where(mask, fill, a)
+    den = jnp.where(mask, 1, b)
+    return num / den
+
+
+def ensure_tuple(x):
+    """Returns x as a tuple of arrays."""
+    if isinstance(x, tuple):
+        return x
+    if isinstance(x, list):
+        return tuple(x)
+    return (x,)

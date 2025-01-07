@@ -118,7 +118,8 @@ class TestConstrainCurrent:
                 )
 
         eq = desc.examples.get("DSHAPE")
-        eq.change_resolution(3, 3, 0, 6, 6, 0)
+        with pytest.warns(UserWarning, match="Reducing radial"):
+            eq.change_resolution(3, 3, 0, 6, 6, 0)
         # Only makes sense to test on configurations with fixed iota profiles.
         test(eq, QuadratureGrid)
         test(eq, ConcentricGrid)
@@ -191,7 +192,8 @@ class TestConstrainCurrent:
 
         # Only makes sense to test on configurations with fixed current profiles.
         eq = desc.examples.get("ESTELL")
-        eq.change_resolution(3, 3, 3, 6, 6, 6)
+        with pytest.warns(UserWarning, match="Reducing radial"):
+            eq.change_resolution(3, 3, 3, 6, 6, 6)
         test(eq, QuadratureGrid)
         test(eq, ConcentricGrid)
         test(eq, LinearGrid)

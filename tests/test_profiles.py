@@ -6,6 +6,7 @@ from scipy.constants import elementary_charge
 from scipy.interpolate import interp1d
 
 from desc.equilibrium import Equilibrium
+from desc.examples import get
 from desc.grid import LinearGrid
 from desc.io import InputReader
 from desc.objectives import (
@@ -15,9 +16,11 @@ from desc.objectives import (
 )
 from desc.profiles import (
     FourierZernikeProfile,
+    HermiteSplineProfile,
     MTanhProfile,
     PowerSeriesProfile,
     SplineProfile,
+    TwoPowerProfile,
 )
 
 from .utils import area_difference, compute_coords
@@ -58,7 +61,9 @@ class TestProfiles:
         with pytest.warns(UserWarning):
             mp = pp.to_mtanh(order=4, ftol=1e-12, xtol=1e-12)
         zp = pp.to_fourierzernike()
-        x = np.linspace(0, 0.8, 10)
+        # don't test to rho=1 bc mtanh is very non-polynomial there,
+        # don't test at axis bc splines and mtanh don't enforce zero slope exactly.
+        x = np.linspace(0.1, 0.8, 10)
 
         np.testing.assert_allclose(pp(x), sp(x), rtol=1e-5, atol=1e-3)
         np.testing.assert_allclose(pp(x, dr=2), mp(x, dr=2), rtol=1e-2, atol=1e-1)
@@ -86,6 +91,15 @@ class TestProfiles:
         np.testing.assert_allclose(sp(x, dz=1), 0)
         np.testing.assert_allclose(mp(x, dt=1), 0)
         np.testing.assert_allclose(mp(x, dz=1), 0)
+
+        pp = PowerSeriesProfile([0.5, 0, -1, 0, 0.5])
+        tp = TwoPowerProfile([0.5, 2, 2])
+        np.testing.assert_allclose(pp(x), tp(x))
+        np.testing.assert_allclose(pp(x, dr=1), tp(x, dr=1))
+        np.testing.assert_allclose(pp(x, dr=2), tp(x, dr=2))
+        np.testing.assert_allclose(
+            pp.params, tp.to_powerseries(order=4, sym=True).params
+        )
 
     @pytest.mark.unit
     def test_PowerSeriesProfile_even_sym(self):
@@ -163,16 +177,19 @@ class TestProfiles:
     def test_repr(self):
         """Test string representation of profile classes."""
         pp = PowerSeriesProfile(modes=np.array([0, 2, 4]), params=np.array([1, -2, 1]))
+        tp = TwoPowerProfile([1, 2, 1])
         sp = pp.to_spline()
         mp = pp.to_mtanh(order=4, ftol=1e-4, xtol=1e-4)
         zp = pp.to_fourierzernike()
         assert "PowerSeriesProfile" in str(pp)
+        assert "TwoPowerProfile" in str(tp)
         assert "SplineProfile" in str(sp)
         assert "MTanhProfile" in str(mp)
         assert "FourierZernikeProfile" in str(zp)
         assert "SumProfile" in str(pp + zp)
         assert "ProductProfile" in str(pp * zp)
         assert "ScaledProfile" in str(2 * zp)
+        assert "PowerProfile" in str(zp**2)
 
     @pytest.mark.unit
     def test_get_set(self):
@@ -192,6 +209,11 @@ class TestProfiles:
         sp = pp.to_spline()
         sp.params = sp.params + 1
         np.testing.assert_allclose(sp.params, 1 + pp(sp._knots))
+
+        tp = TwoPowerProfile([1, 2, 3])
+        np.testing.assert_allclose(tp.params, [1, 2, 3])
+        tp.params = [1 / 2, 3 / 2, 4 / 3]
+        np.testing.assert_allclose(tp.params, [1 / 2, 3 / 2, 4 / 3])
 
         zp = FourierZernikeProfile([1 - 1 / 3 - 1 / 6, -1 / 2, 1 / 6])
         assert zp.get_params(2, 0, 0) == -1 / 2
@@ -327,6 +349,47 @@ class TestProfiles:
         np.testing.assert_allclose(f(x), 8 * (pp(x)), atol=1e-3)
 
     @pytest.mark.unit
+    def test_powered_profiles(self):
+        """Test raising profiles to a power."""
+        pp = PowerSeriesProfile(
+            modes=np.array([0, 1, 2, 4]), params=np.array([1, 0, -2, 1]), sym="auto"
+        )
+
+        f = pp**3
+        x = np.linspace(0, 1, 50)
+        np.testing.assert_allclose(f(x), (pp(x)) ** 3, atol=1e-3)
+
+        params = f.params
+        assert params[0] == 3
+        assert all(params[1:] == pp.params)
+
+        f.params = 2
+        np.testing.assert_allclose(f(x), (pp(x)) ** 2, atol=1e-3)
+
+        f.params = 0.5
+        np.testing.assert_allclose(f(x), np.sqrt(pp(x)), atol=1e-3)
+
+    @pytest.mark.unit
+    def test_powered_profiles_derivative(self):
+        """Test that powered profiles computes the derivative correctly."""
+        x = np.linspace(0, 1, 50)
+        p1 = PowerSeriesProfile(
+            modes=np.array([0, 1, 2, 4]), params=np.array([1, 3, -2, 4]), sym="auto"
+        )
+        p2 = p1 * p1
+        p3 = p1 * p2
+
+        f3 = p1**3
+        np.testing.assert_allclose(f3(x, dr=0), p3(x, dr=0))
+        np.testing.assert_allclose(f3(x, dr=1), p3(x, dr=1))
+        np.testing.assert_allclose(f3(x, dr=2), p3(x, dr=2))
+
+        f2 = f3 ** (2 / 3)
+        np.testing.assert_allclose(f2(x, dr=0), p2(x, dr=0))
+        np.testing.assert_allclose(f2(x, dr=1), p2(x, dr=1))
+        np.testing.assert_allclose(f2(x, dr=2), p2(x, dr=2))
+
+    @pytest.mark.unit
     def test_profile_errors(self):
         """Test error checking when creating and working with profiles."""
         pp = PowerSeriesProfile(
@@ -335,6 +398,8 @@ class TestProfiles:
         sp = pp.to_spline()
         zp = pp.to_fourierzernike()
         mp = pp.to_mtanh(order=4, ftol=1e-4, xtol=1e-4)
+        tp = TwoPowerProfile(params=np.array([0.5, 2, 1.5]))
+        grid = LinearGrid(L=9)
 
         with pytest.raises(ValueError):
             zp.params = 4
@@ -354,32 +419,43 @@ class TestProfiles:
         with pytest.raises(ValueError):
             a = sp * pp
             a.params = sp.params
+        with pytest.raises(ValueError):
+            _ = TwoPowerProfile([1, 2, 3, 4])
+        with pytest.raises(NotImplementedError):
+            tp.compute(grid, dr=3)
+        with pytest.raises(NotImplementedError):
+            mp.compute(grid, dr=3)
+        with pytest.raises(UserWarning):
+            tp.params = [1, 0.3, 0.7]
+        with pytest.raises(UserWarning):
+            a = sp**-1
 
     @pytest.mark.unit
     def test_default_profiles(self):
         """Test that default profiles are just zeros."""
         pp = PowerSeriesProfile()
+        tp = TwoPowerProfile()
         sp = SplineProfile()
         mp = MTanhProfile()
         zp = FourierZernikeProfile()
 
         x = np.linspace(0, 1, 10)
         np.testing.assert_allclose(pp(x), 0)
+        np.testing.assert_allclose(tp(x), 0)
         np.testing.assert_allclose(sp(x), 0)
         np.testing.assert_allclose(mp(x), 0)
         np.testing.assert_allclose(zp(x), 0)
 
-    @pytest.mark.unit
+    @pytest.mark.regression
     def test_solve_with_combined(self):
         """Make sure combined profiles work correctly for solving equilibrium.
 
-        Test for gh issue #347
+        Test for GH issue #347.
         """
         ne = PowerSeriesProfile(3.0e19 * np.array([1, -1]), modes=[0, 10])
         Te = PowerSeriesProfile(2.0e3 * np.array([1, -1]), modes=[0, 2])
         Ti = Te
         pressure = elementary_charge * (ne * Te + ne * Ti)
-        print("pressure params:", pressure.params)
 
         LM_resolution = 6
         eq1 = Equilibrium(
@@ -432,7 +508,6 @@ class TestProfiles:
         Te = PowerSeriesProfile(2.0e3 * np.array([1, -1]), modes=[0, 2])
         Ti = Te
         pressure = elementary_charge * (ne * Te + ne * Ti)
-        print("pressure params:", pressure.params)
 
         LM_resolution = 6
         eq1 = Equilibrium(
@@ -478,3 +553,14 @@ class TestProfiles:
         assert np.all(data2["Te_r"] == data2["Ti_r"])
         np.testing.assert_allclose(data1["p"], data2["p"])
         np.testing.assert_allclose(data1["p_r"], data2["p_r"])
+
+    @pytest.mark.unit
+    def test_hermite_spline_solve(self):
+        """Test that spline with double number of parameters is optimized."""
+        eq = get("DSHAPE")
+        rho = np.linspace(0, 1.0, 20, endpoint=True)
+        eq.pressure = HermiteSplineProfile(
+            eq.pressure(rho), eq.pressure(rho, dr=1), rho
+        )
+        eq.solve()
+        assert eq.is_nested()

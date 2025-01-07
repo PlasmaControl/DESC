@@ -20,7 +20,7 @@ from desc.transform import Transform
 from desc.utils import copy_coeffs, warnif
 
 
-def set_initial_guess(eq, *args, ensure_nested=True):  # noqa: C901 - FIXME: simplify
+def set_initial_guess(eq, *args, ensure_nested=True):  # noqa: C901
     """Set the initial guess for the flux surfaces, eg R_lmn, Z_lmn, L_lmn.
 
     Parameters
@@ -301,12 +301,15 @@ def _initial_guess_surface(x_basis, b_lmn, b_basis, axis=None, mode=None, coord=
         # first do all the m != 0 modes, easiest since no special logic needed
         def body(k, x_lmn):
             l, m, n = b_modes[k]
-            scale = zernike_radial(coord, abs(m), m)
+            scale = scales[k]
             # index of basis mode with lowest radial power (l = |m|)
             mask0 = (x_modes == jnp.array([abs(m), m, n])).all(axis=1)
             x_lmn = jnp.where(mask0, b_lmn[k] / scale, x_lmn)
             return x_lmn
 
+        # Get scale values for all modes
+        m_values = b_modes[:, 1]
+        scales = zernike_radial(coord, abs(m_values), m_values)
         x_lmn = fori_loop(0, b_basis.num_modes, body, x_lmn)
 
         # now overwrite stuff to deal with the axis

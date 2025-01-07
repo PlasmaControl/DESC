@@ -1494,7 +1494,7 @@ def _Z_zzz(params, transforms, profiles, data, **kwargs):
     label="\\alpha",
     units="~",
     units_long="None",
-    description="Field line label, defined on [0, 2pi)",
+    description="Field line label",
     dim=1,
     params=[],
     transforms={},
@@ -1503,7 +1503,7 @@ def _Z_zzz(params, transforms, profiles, data, **kwargs):
     data=["theta_PEST", "phi", "iota"],
 )
 def _alpha(params, transforms, profiles, data, **kwargs):
-    data["alpha"] = (data["theta_PEST"] - data["iota"] * data["phi"]) % (2 * jnp.pi)
+    data["alpha"] = data["theta_PEST"] - data["iota"] * data["phi"]
     return data
 
 
@@ -1518,14 +1518,48 @@ def _alpha(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["theta_PEST_r", "phi", "phi_r", "iota", "iota_r"],
+    data=["alpha_r (periodic)", "alpha_r (secular)"],
 )
 def _alpha_r(params, transforms, profiles, data, **kwargs):
-    data["alpha_r"] = (
-        data["theta_PEST_r"]
-        - data["iota_r"] * data["phi"]
-        - data["iota"] * data["phi_r"]
-    )
+    data["alpha_r"] = data["alpha_r (periodic)"] + data["alpha_r (secular)"]
+    return data
+
+
+@register_compute_fun(
+    name="alpha_r (periodic)",
+    label="\\mathrm{periodic}(\\partial_\\rho \\alpha)",
+    units="~",
+    units_long="None",
+    description="Field line label, derivative wrt radial coordinate, "
+    "periodic component",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["theta_PEST_r", "iota", "phi_r"],
+)
+def _periodic_alpha_r(params, transforms, profiles, data, **kwargs):
+    data["alpha_r (periodic)"] = data["theta_PEST_r"] - data["iota"] * data["phi_r"]
+    return data
+
+
+@register_compute_fun(
+    name="alpha_r (secular)",
+    label="\\mathrm{secular}(\\partial_\\rho \\alpha)",
+    units="~",
+    units_long="None",
+    description="Field line label, derivative wrt radial coordinate, "
+    "secular component",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["iota_r", "phi"],
+)
+def _secular_alpha_r(params, transforms, profiles, data, **kwargs):
+    data["alpha_r (secular)"] = -data["iota_r"] * data["phi"]
     return data
 
 
@@ -1544,24 +1578,6 @@ def _alpha_r(params, transforms, profiles, data, **kwargs):
 )
 def _alpha_t(params, transforms, profiles, data, **kwargs):
     data["alpha_t"] = data["theta_PEST_t"] - data["iota"] * data["phi_t"]
-    return data
-
-
-@register_compute_fun(
-    name="alpha_tt",
-    label="\\partial_{\\theta \\theta} \\alpha",
-    units="~",
-    units_long="None",
-    description="Field line label, second derivative wrt poloidal coordinate",
-    dim=1,
-    params=[],
-    transforms={},
-    profiles=[],
-    coordinates="rtz",
-    data=["theta_PEST_tt", "phi_tt", "iota"],
-)
-def _alpha_tt(params, transforms, profiles, data, **kwargs):
-    data["alpha_tt"] = data["theta_PEST_tt"] - data["iota"] * data["phi_tt"]
     return data
 
 
@@ -1602,11 +1618,29 @@ def _alpha_z(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="alpha_tt",
+    label="\\partial_{\\theta \\theta} \\alpha",
+    units="~",
+    units_long="None",
+    description="Field line label, second-order derivative wrt poloidal coordinate",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["phi_tt", "iota", "theta_PEST_tt"],
+)
+def _alpha_tt(params, transforms, profiles, data, **kwargs):
+    data["alpha_tt"] = data["theta_PEST_tt"] - data["iota"] * data["phi_tt"]
+    return data
+
+
+@register_compute_fun(
     name="alpha_zz",
     label="\\partial_{\\zeta \\zeta} \\alpha",
     units="~",
     units_long="None",
-    description="Field line label, second derivative wrt toroidal coordinate",
+    description="Field line label, second-order derivative wrt toroidal coordinate",
     dim=1,
     params=[],
     transforms={},
@@ -3148,7 +3182,7 @@ def _theta(params, transforms, profiles, data, **kwargs):
     data=["theta", "lambda"],
 )
 def _theta_PEST(params, transforms, profiles, data, **kwargs):
-    data["theta_PEST"] = (data["theta"] + data["lambda"]) % (2 * jnp.pi)
+    data["theta_PEST"] = data["theta"] + data["lambda"]
     return data
 
 
@@ -3176,8 +3210,8 @@ def _theta_PEST_r(params, transforms, profiles, data, **kwargs):
     label="\\partial_{\\rho \\theta} \\vartheta",
     units="rad",
     units_long="radians",
-    description="PEST straight field line poloidal angular coordinate, derivative wrt "
-    "radial and DESC poloidal coordinate",
+    description="PEST straight field line poloidal angular coordinate,"
+    "derivative wrt poloidal and radial coordinate",
     dim=1,
     params=[],
     transforms={},
@@ -3187,6 +3221,25 @@ def _theta_PEST_r(params, transforms, profiles, data, **kwargs):
 )
 def _theta_PEST_rt(params, transforms, profiles, data, **kwargs):
     data["theta_PEST_rt"] = data["lambda_rt"]
+    return data
+
+
+@register_compute_fun(
+    name="theta_PEST_rz",
+    label="\\partial_{\\rho \\zeta} \\vartheta",
+    units="rad",
+    units_long="radians",
+    description="PEST straight field line poloidal angular coordinate, derivative wrt "
+    "radial and DESC toroidal coordinate",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["lambda_rz"],
+)
+def _theta_PEST_rz(params, transforms, profiles, data, **kwargs):
+    data["theta_PEST_rz"] = data["lambda_rz"]
     return data
 
 
@@ -3272,8 +3325,8 @@ def _theta_PEST_t(params, transforms, profiles, data, **kwargs):
     label="\\partial_{\\theta \\theta} \\vartheta",
     units="rad",
     units_long="radians",
-    description="PEST straight field line poloidal angular coordinate, second "
-    "derivative wrt poloidal coordinate",
+    description="PEST straight field line poloidal angular coordinate,"
+    "second derivative wrt poloidal coordinate",
     dim=1,
     params=[],
     transforms={},
@@ -3348,8 +3401,8 @@ def _theta_PEST_tzz(params, transforms, profiles, data, **kwargs):
     label="\\partial_{\\zeta} \\vartheta",
     units="rad",
     units_long="radians",
-    description="PEST straight field line poloidal angular coordinate, derivative wrt "
-    "toroidal coordinate",
+    description="PEST straight field line poloidal angular coordinate,"
+    " derivative wrt toroidal coordinate",
     dim=1,
     params=[],
     transforms={},

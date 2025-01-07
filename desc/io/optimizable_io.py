@@ -82,9 +82,9 @@ def _unjittable(x):
     # strings and functions can't be args to jitted functions, and ints/bools are pretty
     # much always flags or array sizes which also need to be a compile time constant
     if isinstance(x, (list, tuple)):
-        return any([_unjittable(y) for y in x])
+        return all([_unjittable(y) or y is None for y in x])
     if isinstance(x, dict):
-        return any([_unjittable(y) for y in x.values()])
+        return all([_unjittable(y) or y is None for y in x.values()])
     if hasattr(x, "dtype") and np.ndim(x) == 0:
         return np.issubdtype(x.dtype, np.bool_) or np.issubdtype(x.dtype, np.int_)
     return isinstance(
@@ -94,6 +94,12 @@ def _unjittable(x):
 
 def _make_hashable(x):
     # turn unhashable ndarray of ints into a hashable tuple
+    if isinstance(x, list):
+        return [_make_hashable(y) for y in x]
+    if isinstance(x, tuple):
+        return tuple([_make_hashable(y) for y in x])
+    if isinstance(x, dict):
+        return {key: _make_hashable(val) for key, val in x.items()}
     if hasattr(x, "shape"):
         return ("ndarray", x.shape, tuple(x.flatten()))
     return x
@@ -103,6 +109,12 @@ def _unmake_hashable(x):
     # turn tuple of ints and shape to ndarray
     if isinstance(x, tuple) and x[0] == "ndarray":
         return np.array(x[2]).reshape(x[1])
+    if isinstance(x, list):
+        return [_unmake_hashable(y) for y in x]
+    if isinstance(x, tuple):
+        return tuple([_unmake_hashable(y) for y in x])
+    if isinstance(x, dict):
+        return {key: _unmake_hashable(val) for key, val in x.items()}
     return x
 
 

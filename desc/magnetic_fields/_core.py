@@ -1,14 +1,23 @@
 """Classes for magnetic fields."""
 
+import warnings
 from abc import ABC, abstractmethod
 from collections.abc import MutableSequence
 
 import numpy as np
 import scipy.linalg
+from diffrax import (
+    DiscreteTerminatingEvent,
+    ODETerm,
+    PIDController,
+    SaveAt,
+    Tsit5,
+    diffeqsolve,
+)
 from interpax import approx_df, interp1d, interp2d, interp3d
 from netCDF4 import Dataset, chartostring, stringtochar
 
-from desc.backend import fori_loop, jit, jnp, odeint, sign
+from desc.backend import fori_loop, jit, jnp, sign
 from desc.basis import (
     ChebyshevDoubleFourierBasis,
     ChebyshevPolynomial,
@@ -314,7 +323,7 @@ class _MagneticField(IOAble, ABC):
             size ``grid.num_nodes``.
         coords: ndarray
             the locations (in specified basis) at which the Bnormal was calculated,
-            given as an ``(grid.num_nodes , 3)`` shaped array.
+            given as a ``(grid.num_nodes , 3)`` shaped array.
 
         """
         calc_Bplasma = False
@@ -1809,10 +1818,10 @@ class SplineMagneticField(_MagneticField, Optimizable):
         ir = int(mgrid["ir"][()])  # number of grid points in the R coordinate
         jz = int(mgrid["jz"][()])  # number of grid points in the Z coordinate
         kp = int(mgrid["kp"][()])  # number of grid points in the phi coordinate
-        Rmin = mgrid["rmin"][()]  # Minimum R coordinate (m)
-        Rmax = mgrid["rmax"][()]  # Maximum R coordinate (m)
-        Zmin = mgrid["zmin"][()]  # Minimum Z coordinate (m)
-        Zmax = mgrid["zmax"][()]  # Maximum Z coordinate (m)
+        Rmin = mgrid["rmin"][()].filled()  # Minimum R coordinate (m)
+        Rmax = mgrid["rmax"][()].filled()  # Maximum R coordinate (m)
+        Zmin = mgrid["zmin"][()].filled()  # Minimum Z coordinate (m)
+        Zmax = mgrid["zmax"][()].filled()  # Maximum Z coordinate (m)
         nfp = int(mgrid["nfp"][()])  # Number of field periods
         Rgrid = np.linspace(Rmin, Rmax, ir)
         Zgrid = np.linspace(Zmin, Zmax, jz)
@@ -1824,9 +1833,15 @@ class SplineMagneticField(_MagneticField, Optimizable):
         bz = np.zeros([kp, jz, ir, nextcur])
         for i in range(nextcur):
             coil_id = "%03d" % (i + 1,)
-            br[:, :, :, i] += mgrid["br_" + coil_id][()]  # B_R radial magnetic field
-            bp[:, :, :, i] += mgrid["bp_" + coil_id][()]  # B_phi toroidal field (T)
-            bz[:, :, :, i] += mgrid["bz_" + coil_id][()]  # B_Z vertical magnetic field
+            br[:, :, :, i] += mgrid["br_" + coil_id][
+                ()
+            ].filled()  # B_R radial magnetic field
+            bp[:, :, :, i] += mgrid["bp_" + coil_id][
+                ()
+            ].filled()  # B_phi toroidal field (T)
+            bz[:, :, :, i] += mgrid["bz_" + coil_id][
+                ()
+            ].filled()  # B_Z vertical magnetic field
 
         # shift axes to correct order
         br = np.moveaxis(br, (0, 1, 2), (1, 2, 0))
@@ -1842,13 +1857,13 @@ class SplineMagneticField(_MagneticField, Optimizable):
                 coil_id = "%03d" % (i + 1,)
                 ar[:, :, :, i] += mgrid["ar_" + coil_id][
                     ()
-                ]  # A_R radial mag. vec. potential
+                ].filled()  # A_R radial mag. vec. potential
                 ap[:, :, :, i] += mgrid["ap_" + coil_id][
                     ()
-                ]  # A_phi toroidal mag. vec. potential
+                ].filled()  # A_phi toroidal mag. vec. potential
                 az[:, :, :, i] += mgrid["az_" + coil_id][
                     ()
-                ]  # A_Z vertical mag. vec. potential
+                ].filled()  # A_Z vertical mag. vec. potential
 
             # shift axes to correct order
             ar = np.moveaxis(ar, (0, 1, 2), (1, 2, 0))
@@ -1870,7 +1885,7 @@ class SplineMagneticField(_MagneticField, Optimizable):
 
     @classmethod
     def from_field(
-        cls, field, R, phi, Z, params=None, method="cubic", extrap=False, NFP=1
+        cls, field, R, phi, Z, params=None, method="cubic", extrap=False, NFP=None
     ):
         """Create a splined magnetic field from another field for faster evaluation.
 
@@ -1888,7 +1903,8 @@ class SplineMagneticField(_MagneticField, Optimizable):
         extrap : bool
             whether to extrapolate splines beyond specified R,phi,Z
         NFP : int, optional
-            Number of toroidal field periods.
+            Number of toroidal field periods.  If not provided, will default to 1 or
+        the provided field's NFP, if it has that attribute.
 
         """
         R, phi, Z = map(np.asarray, (R, phi, Z))
@@ -1896,6 +1912,7 @@ class SplineMagneticField(_MagneticField, Optimizable):
         shp = rr.shape
         coords = np.array([rr.flatten(), pp.flatten(), zz.flatten()]).T
         BR, BP, BZ = field.compute_magnetic_field(coords, params, basis="rpz").T
+        NFP = getattr(field, "_NFP", 1)
         try:
             AR, AP, AZ = field.compute_magnetic_vector_potential(
                 coords, params, basis="rpz"
@@ -1933,12 +1950,22 @@ class ScalarPotentialField(_MagneticField):
         R,phi,Z are arrays of cylindrical coordinates.
     params : dict, optional
         default parameters to pass to potential function
+    NFP : int, optional
+        Whether the field has a discrete periodicity. This is only used when making
+        a ``SplineMagneticField`` from this field using its ``from_field`` method,
+        or when saving this field as an mgrid file using the ``save_mgrid`` method.
 
     """
 
-    def __init__(self, potential, params=None):
+    def __init__(self, potential, params=None, NFP=1):
         self._potential = potential
         self._params = params
+        self._NFP = NFP
+
+    @property
+    def NFP(self):
+        """int: Number of (toroidal) field periods."""
+        return self._NFP
 
     def compute_magnetic_field(
         self, coords, params=None, basis="rpz", source_grid=None, transforms=None
@@ -2027,12 +2054,22 @@ class VectorPotentialField(_MagneticField):
         R,phi,Z are arrays of cylindrical coordinates.
     params : dict, optional
         default parameters to pass to potential function
+    NFP : int, optional
+        Whether the field has a discrete periodicity. This is only used when making
+        a ``SplineMagneticField`` from this field using its ``from_field`` method,
+        or when saving this field as an mgrid file using the ``save_mgrid`` method.
 
     """
 
-    def __init__(self, potential, params=None):
+    def __init__(self, potential, params=None, NFP=1):
         self._potential = potential
         self._params = params
+        self._NFP = NFP
+
+    @property
+    def NFP(self):
+        """int: Number of (toroidal) field periods."""
+        return self._NFP
 
     def _compute_A_or_B(
         self,
@@ -2177,11 +2214,13 @@ def field_line_integrate(
     rtol=1e-8,
     atol=1e-8,
     maxstep=1000,
+    min_step_size=1e-8,
+    solver=Tsit5(),
     bounds_R=(0, np.inf),
     bounds_Z=(-np.inf, np.inf),
-    decay_accel=1e6,
+    **kwargs,
 ):
-    """Trace field lines by integration.
+    """Trace field lines by integration, using diffrax package.
 
     Parameters
     ----------
@@ -2193,7 +2232,7 @@ def field_line_integrate(
         and the negative toroidal angle for negative Bphi
     field : MagneticField
         source of magnetic field to integrate
-    params: dict
+    params: dict, optional
         parameters passed to field
     source_grid : Grid, optional
         Collocation points used to discretize source field.
@@ -2201,25 +2240,21 @@ def field_line_integrate(
         relative and absolute tolerances for ode integration
     maxstep : int
         maximum number of steps between different phis
+    min_step_size: float
+        minimum step size (in phi) that the integration can take. default is 1e-8
+    solver: diffrax.Solver
+        diffrax Solver object to use in integration,
+        defaults to Tsit5(), a RK45 explicit solver
     bounds_R : tuple of (float,float), optional
-        R bounds for field line integration bounding box.
-        If supplied, the RHS of the field line equations will be
-        multiplied by exp(-r) where r is the distance to the bounding box,
-        this is meant to prevent the field lines which escape to infinity from
-        slowing the integration down by being traced to infinity.
-        defaults to (0,np.inf)
+        R bounds for field line integration bounding box. Trajectories that leave this
+        box will be stopped, and NaN returned for points outside the box.
+        Defaults to (0,np.inf)
     bounds_Z : tuple of (float,float), optional
-        Z bounds for field line integration bounding box.
-        If supplied, the RHS of the field line equations will be
-        multiplied by exp(-r) where r is the distance to the bounding box,
-        this is meant to prevent the field lines which escape to infinity from
-        slowing the integration down by being traced to infinity.
+        Z bounds for field line integration bounding box. Trajectories that leave this
+        box will be stopped, and NaN returned for points outside the box.
         Defaults to (-np.inf,np.inf)
-    decay_accel : float, optional
-        An extra factor to the exponential that decays the RHS, i.e.
-        the RHS is multiplied by exp(-r * decay_accel), this is to
-        accelerate the decay of the RHS and stop the integration sooner
-        after exiting the bounds. Defaults to 1e6
+    kwargs: dict
+        keyword arguments to be passed into the ``diffrax.diffeqsolve``
 
     Returns
     -------
@@ -2229,60 +2264,64 @@ def field_line_integrate(
     """
     r0, z0, phis = map(jnp.asarray, (r0, z0, phis))
     assert r0.shape == z0.shape, "r0 and z0 must have the same shape"
-    assert decay_accel > 0, "decay_accel must be positive"
     rshape = r0.shape
     r0 = r0.flatten()
     z0 = z0.flatten()
     x0 = jnp.array([r0, phis[0] * jnp.ones_like(r0), z0]).T
 
     @jit
-    def odefun(rpz, s):
+    def odefun(s, rpz, args):
         rpz = rpz.reshape((3, -1)).T
         r = rpz[:, 0]
-        z = rpz[:, 2]
-        # if bounds are given, will decay the magnetic field line eqn
-        # RHS if the trajectory is outside of bounds to avoid
-        # integrating the field line to infinity, which is costly
-        # and not useful in most cases
-        decay_factor = jnp.where(
-            jnp.array(
-                [
-                    jnp.less(r, bounds_R[0]),
-                    jnp.greater(r, bounds_R[1]),
-                    jnp.less(z, bounds_Z[0]),
-                    jnp.greater(z, bounds_Z[1]),
-                ]
-            ),
-            jnp.array(
-                [
-                    # we multiply by decay_accel to accelerate the decay so that the
-                    # integration is stopped soon after the bounds are exited.
-                    jnp.exp(-(decay_accel * (r - bounds_R[0]) ** 2)),
-                    jnp.exp(-(decay_accel * (r - bounds_R[1]) ** 2)),
-                    jnp.exp(-(decay_accel * (z - bounds_Z[0]) ** 2)),
-                    jnp.exp(-(decay_accel * (z - bounds_Z[1]) ** 2)),
-                ]
-            ),
-            1.0,
-        )
-        # multiply all together, the conditions that are not violated
-        # are just one while the violated ones are continuous decaying exponentials
-        decay_factor = jnp.prod(decay_factor, axis=0)
-
         br, bp, bz = field.compute_magnetic_field(
             rpz, params, basis="rpz", source_grid=source_grid
         ).T
-        return (
-            decay_factor
-            * jnp.array(
-                [r * br / bp * jnp.sign(bp), jnp.sign(bp), r * bz / bp * jnp.sign(bp)]
-            ).squeeze()
-        )
+        return jnp.array(
+            [r * br / bp * jnp.sign(bp), jnp.sign(bp), r * bz / bp * jnp.sign(bp)]
+        ).squeeze()
 
-    intfun = lambda x: odeint(odefun, x, phis, rtol=rtol, atol=atol, mxstep=maxstep)
-    x = jnp.vectorize(intfun, signature="(k)->(n,k)")(x0)
-    r = x[:, :, 0].T.reshape((len(phis), *rshape))
-    z = x[:, :, 2].T.reshape((len(phis), *rshape))
+    # diffrax parameters
+
+    def default_terminating_event_fxn(state, **kwargs):
+        R_out = jnp.any(jnp.array([state.y[0] < bounds_R[0], state.y[0] > bounds_R[1]]))
+        Z_out = jnp.any(jnp.array([state.y[2] < bounds_Z[0], state.y[2] > bounds_Z[1]]))
+        return jnp.any(jnp.array([R_out, Z_out]))
+
+    kwargs.setdefault(
+        "stepsize_controller", PIDController(rtol=rtol, atol=atol, dtmin=min_step_size)
+    )
+    kwargs.setdefault(
+        "discrete_terminating_event",
+        DiscreteTerminatingEvent(default_terminating_event_fxn),
+    )
+
+    term = ODETerm(odefun)
+    saveat = SaveAt(ts=phis)
+
+    intfun = lambda x: diffeqsolve(
+        term,
+        solver,
+        y0=x,
+        t0=phis[0],
+        t1=phis[-1],
+        saveat=saveat,
+        max_steps=maxstep * len(phis),
+        dt0=min_step_size,
+        **kwargs,
+    ).ys
+
+    # suppress warnings till its fixed upstream:
+    # https://github.com/patrick-kidger/diffrax/issues/445
+    # also ignore deprecation warning for now until we actually need to deal with it
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", message="unhashable type")
+        warnings.filterwarnings("ignore", message="`diffrax.*discrete_terminating")
+        x = jnp.vectorize(intfun, signature="(k)->(n,k)")(x0)
+
+    x = jnp.where(jnp.isinf(x), jnp.nan, x)
+    r = x[:, :, 0].squeeze().T.reshape((len(phis), *rshape))
+    z = x[:, :, 2].squeeze().T.reshape((len(phis), *rshape))
+
     return r, z
 
 
@@ -2386,7 +2425,7 @@ class OmnigenousField(Optimizable, IOAble):
             assert len(x_lmn) == self.x_basis.num_modes
             self._x_lmn = x_lmn
 
-        # TODO: should we not allow some types of helicity?
+        # TODO (#1390): should we not allow some types of helicity?
         helicity_sign = sign(helicity[0]) * sign(helicity[1])
         warnif(
             self.helicity != (0, self.NFP * helicity_sign)

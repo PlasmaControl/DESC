@@ -19,11 +19,7 @@ from desc.geometry import FourierRZToroidalSurface, FourierXYZCurve
 from desc.grid import ConcentricGrid, Grid, LinearGrid, QuadratureGrid
 from desc.integrals import surface_averages
 from desc.io import load
-from desc.magnetic_fields import (
-    OmnigenousField,
-    SplineMagneticField,
-    ToroidalMagneticField,
-)
+from desc.magnetic_fields import OmnigenousField, ToroidalMagneticField
 from desc.plotting import (
     plot_1d,
     plot_2d,
@@ -40,17 +36,15 @@ from desc.plotting import (
     plot_grid,
     plot_logo,
     plot_qs_error,
-    plot_regcoil_outputs,
     plot_section,
     plot_surfaces,
     poincare_plot,
 )
 from desc.utils import isalmostequal
-from desc.vmec import VMECIO
 
-tol_1d = 7.8
-tol_2d = 15
-tol_3d = 15
+tol_1d = 4.5
+tol_2d = 10
+tol_3d = 10
 
 
 @pytest.mark.unit
@@ -285,7 +279,15 @@ class TestPlot3D:
     def test_plot_3d_surface(self):
         """Test 3d plotting of surface object."""
         surf = FourierRZToroidalSurface()
-        fig = plot_3d(surf, "curvature_H_rho")
+        fig = plot_3d(
+            surf,
+            "curvature_H_rho",
+            showgrid=False,
+            showscale=False,
+            zeroline=False,
+            showticklabels=False,
+            showaxislabels=False,
+        )
         return fig
 
     @pytest.mark.unit
@@ -424,6 +426,14 @@ class TestPlotSection:
 
     @pytest.mark.unit
     @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
+    def test_section_chi_contour(self):
+        """Test plotting poincare section of poloidal flux, with fill=False."""
+        eq = get("DSHAPE_CURRENT")
+        fig, ax = plot_section(eq, "chi", fill=False, levels=20)
+        return fig
+
+    @pytest.mark.unit
+    @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
     def test_section_F(self):
         """Test plotting poincare section of radial force."""
         eq = get("DSHAPE_CURRENT")
@@ -508,7 +518,7 @@ class TestPlotBoundary:
         return fig
 
     @pytest.mark.unit
-    @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
+    @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
     def test_plot_boundaries(self):
         """Test plotting boundaries."""
         eq1 = get("SOLOVEV")
@@ -517,6 +527,11 @@ class TestPlotBoundary:
         eq4 = get("ESTELL")
         with pytest.raises(ValueError, match="differing field periods"):
             fig, ax = plot_boundaries([eq3, eq4], theta=0)
+        _, _, data1 = plot_boundaries(
+            (eq1, eq2, eq3),
+            phi=4,
+            return_data=True,
+        )
         fig, ax, data = plot_boundaries(
             (eq1, eq2, eq3),
             phi=np.linspace(0, 2 * np.pi / eq3.NFP, 4, endpoint=False),
@@ -526,6 +541,12 @@ class TestPlotBoundary:
         assert "Z" in data.keys()
         assert len(data["R"]) == 3
         assert len(data["Z"]) == 3
+        assert (
+            data["R"][-1].shape == data1["R"][-1].shape
+        ), "Passing phi as an integer or array results in different behavior"
+        assert (
+            data["Z"][-1].shape == data1["Z"][-1].shape
+        ), "Passing phi as an integer or array results in different behavior"
 
         return fig
 
@@ -842,6 +863,40 @@ def test_plot_coils():
 
 
 @pytest.mark.unit
+def test_plot_coils_no_grid():
+    """Test 3d plotting of coils with currents without any gridlines."""
+    N = 48
+    NFP = 4
+    I = 1
+    coil = FourierXYZCoil()
+    coil.rotate(angle=np.pi / N)
+    coils = CoilSet.linspaced_angular(coil, I, [0, 0, 1], np.pi / NFP, N // NFP // 2)
+    with pytest.raises(ValueError, match="Expected `coils`"):
+        plot_coils("not a coil")
+    fig, data = plot_coils(
+        coils,
+        unique=True,
+        return_data=True,
+        showgrid=False,
+        zeroline=False,
+        showticklabels=False,
+        showaxislabels=False,
+    )
+
+    def flatten_coils(coilset):
+        if hasattr(coilset, "__len__"):
+            return [a for i in coilset for a in flatten_coils(i)]
+        else:
+            return [coilset]
+
+    coil_list = flatten_coils(coils)
+    for string in ["X", "Y", "Z"]:
+        assert string in data.keys()
+        assert len(data[string]) == len(coil_list)
+    return fig
+
+
+@pytest.mark.unit
 @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
 def test_plot_b_mag():
     """Test plot of |B| on longer field lines for gyrokinetic simulations."""
@@ -885,124 +940,6 @@ def test_plot_coefficients():
     return fig
 
 
-# TODO: change these plot tests as if they get split up, the regcoil stuff
-# has to run a bunch on different nodes for no reason. Should load in
-# a saved result instead.
-@pytest.mark.unit
-@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
-def test_plot_Bn_scan_regcoil(regcoil_helical_coils_scan):
-    """Test Bn scan plot from run_regcoil method."""
-    (
-        data,
-        surface_current,
-        eq,
-    ) = regcoil_helical_coils_scan
-    figdata, axdata = plot_regcoil_outputs(surface_current, data, eq, vacuum=True)
-    assert len(list(figdata.keys())) == len(list(axdata.keys()))
-    fig = figdata["fig_scan_Bn"]
-    for key in figdata.keys():
-        if key != "fig_scan_Bn":
-            plt.close(figdata[key])
-    return fig
-
-
-@pytest.mark.unit
-@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
-def test_plot_Phi_scan_regcoil(regcoil_helical_coils_scan):
-    """Test Phi scan plot from run_regcoil method."""
-    (
-        data,
-        surface_current,
-        eq,
-    ) = regcoil_helical_coils_scan
-    figdata, axdata = plot_regcoil_outputs(surface_current, data, eq, vacuum=True)
-    assert len(list(figdata.keys())) == len(list(axdata.keys()))
-    fig = figdata["fig_scan_Phi"]
-    for key in figdata.keys():
-        if key != "fig_scan_Phi":
-            plt.close(figdata[key])
-    return fig
-
-
-@pytest.mark.unit
-@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
-def test_plot_chi2B_lambda_regularization_scan_regcoil(regcoil_helical_coils_scan):
-    """Test chi^2_B vs alpha plot from run_regcoil method."""
-    (
-        data,
-        surface_current,
-        eq,
-    ) = regcoil_helical_coils_scan
-    figdata, axdata = plot_regcoil_outputs(surface_current, data, eq, vacuum=True)
-    assert len(list(figdata.keys())) == len(list(axdata.keys()))
-    fig = figdata["fig_chi^2_B_vs_lambda_regularization"]
-    for key in figdata.keys():
-        if key != "fig_chi^2_B_vs_lambda_regularization":
-            plt.close(figdata[key])
-
-    return fig
-
-
-@pytest.mark.unit
-@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
-def test_plot_chi2B_chi2K_scan_regcoil(regcoil_helical_coils_scan):
-    """Test chi^2_B vs chi^2_K plot from run_regcoil method."""
-    (
-        data,
-        surface_current,
-        eq,
-    ) = regcoil_helical_coils_scan
-    figdata, axdata = plot_regcoil_outputs(surface_current, data, eq, vacuum=True)
-    assert len(list(figdata.keys())) == len(list(axdata.keys()))
-    fig = figdata["fig_chi^2_B_vs_chi^2_K"]
-    for key in figdata.keys():
-        if key != "fig_chi^2_B_vs_chi^2_K":
-            plt.close(figdata[key])
-
-    return fig
-
-
-# TODO: can just call one single function to plot inside conftest,
-# then pass the dictionary and grab the fig for each of these tests?
-# Unsure though if pytest will try to close all the figs each time...
-@pytest.mark.unit
-@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
-def test_plot_Bn_regcoil(regcoil_modular_coils):
-    """Test Bn plot from run_regcoil method."""
-    (
-        data,
-        surface_current,
-        eq,
-    ) = regcoil_modular_coils
-    figdata, axdata = plot_regcoil_outputs(surface_current, data, eq, vacuum=True)
-    assert len(list(figdata.keys())) == len(list(axdata.keys()))
-    fig = figdata["fig_Bn"]
-    for key in figdata.keys():
-        if key != "fig_Bn":
-            plt.close(figdata[key])
-
-    return fig
-
-
-@pytest.mark.unit
-@pytest.mark.slow
-@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
-def test_plot_Phi_regcoil(regcoil_modular_coils):
-    """Test Phi plot from run_regcoil method."""
-    (
-        data,
-        surface_current,
-        eq,
-    ) = regcoil_modular_coils
-    figdata, axdata = plot_regcoil_outputs(surface_current, data, eq, vacuum=True)
-    assert len(list(figdata.keys())) == len(list(axdata.keys()))
-    fig = figdata["fig_Phi"]
-    for key in figdata.keys():
-        if key != "fig_Phi":
-            plt.close(figdata[key])
-    return fig
-
-
 @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
 @pytest.mark.unit
 def test_plot_logo():
@@ -1015,14 +952,8 @@ def test_plot_logo():
 @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
 def test_plot_poincare():
     """Test making a poincare plot."""
-    # TODO: tracing from spline field seems a lot slower than from a coilset, we
-    # can probably make this test a lot faster if we make some example coilsets
-    extcur = [4700.0, 1000.0]
-    ext_field = SplineMagneticField.from_mgrid(
-        "tests/inputs/mgrid_test.nc", extcur=extcur
-    )
-    with pytest.warns(UserWarning, match="VMEC output"):
-        eq = VMECIO.load("tests/inputs/wout_test_freeb.nc")
+    ext_field = load("tests/inputs/precise_QA_helical_coils.h5")
+    eq = get("precise_QA")
     grid_trace = LinearGrid(rho=np.linspace(0, 1, 9))
     r0 = eq.compute("R", grid=grid_trace)["R"]
     z0 = eq.compute("Z", grid=grid_trace)["Z"]

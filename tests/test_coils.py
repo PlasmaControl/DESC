@@ -16,12 +16,12 @@ from desc.coils import (
     SplineXYZCoil,
 )
 from desc.compute import get_params, get_transforms, rpz2xyz, xyz2rpz, xyz2rpz_vec
-from desc.compute.utils import dot
 from desc.examples import get
 from desc.geometry import FourierRZCurve, FourierRZToroidalSurface, FourierXYZCurve
 from desc.grid import Grid, LinearGrid
 from desc.io import load
 from desc.magnetic_fields import SumMagneticField, VerticalMagneticField
+from desc.utils import dot
 
 
 class TestCoil:
@@ -1282,3 +1282,26 @@ def test_repr():
 
     coils.name = "MyCoils"
     assert "MyCoils" in str(coils)
+
+
+@pytest.mark.unit
+def test_linking_number():
+    """Test calculation of linking number."""
+    coil = FourierPlanarCoil(center=[10, 1, 0])
+    grid = LinearGrid(N=25)
+    # regular modular coilset from symmetry, so that there are 10 coils, half going
+    # one way and half going the other way
+    coilset = CoilSet(coil, NFP=5, sym=True)
+    coil2 = FourierRZCoil()
+    # add a coil along the axis that links all the other coils
+    coilset2 = MixedCoilSet(coilset, coil2)
+    link = coilset2._compute_linking_number(grid=grid)
+
+    # modular coils don't link each other
+    np.testing.assert_allclose(link[:-1, :-1], 0, atol=1e-14)
+    # axis coil doesn't link itself
+    np.testing.assert_allclose(link[-1, -1], 0, atol=1e-14)
+    # we expect the axis coil to link all the modular coils, with alternating sign
+    # due to alternating orientation of the coils due to symmetry.
+    expected = [1, -1] * 5
+    np.testing.assert_allclose(link[-1, :-1], expected, rtol=1e-3)

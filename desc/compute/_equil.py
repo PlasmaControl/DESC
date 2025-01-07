@@ -15,8 +15,8 @@ from scipy.constants import elementary_charge, mu_0
 from desc.backend import jnp
 
 from ..integrals.surface_integral import surface_averages
+from ..utils import cross, dot, safediv, safenorm
 from .data_index import register_compute_fun
-from .utils import cross, dot, safediv, safenorm
 
 
 @register_compute_fun(
@@ -658,12 +658,12 @@ def _F_anisotropic(params, transforms, profiles, data, **kwargs):
     transforms={"grid": []},
     profiles=[],
     coordinates="",
-    data=["|B|", "sqrt(g)"],
+    data=["|B|^2", "sqrt(g)"],
     resolution_requirement="rtz",
 )
 def _W_B(params, transforms, profiles, data, **kwargs):
     data["W_B"] = jnp.sum(
-        data["|B|"] ** 2 * data["sqrt(g)"] * transforms["grid"].weights
+        data["|B|^2"] * data["sqrt(g)"] * transforms["grid"].weights
     ) / (2 * mu_0)
     return data
 

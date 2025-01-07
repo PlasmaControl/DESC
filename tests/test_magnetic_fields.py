@@ -1,13 +1,15 @@
 """Tests for magnetic field classes."""
 
+import matplotlib.pyplot as plt
 import numpy as np
 import pytest
+from diffrax import Dopri5
 from scipy.constants import mu_0
 
 from desc.backend import jit, jnp
 from desc.basis import DoubleFourierSeries
 from desc.compute import rpz2xyz, rpz2xyz_vec, xyz2rpz_vec
-from desc.compute.utils import dot, get_params, get_transforms
+from desc.compute.utils import get_params, get_transforms
 from desc.derivatives import FiniteDiffDerivative as Derivative
 from desc.examples import get
 from desc.geometry import FourierRZToroidalSurface, FourierXYZCurve
@@ -27,8 +29,10 @@ from desc.magnetic_fields import (
     VerticalMagneticField,
     field_line_integrate,
     read_BNORM_file,
+    solve_regularized_surface_current,
 )
 from desc.magnetic_fields._dommaschk import CD_m_k, CN_m_k
+from desc.utils import dot
 
 
 def phi_lm(R, phi, Z, a, m):
@@ -556,6 +560,7 @@ class TestMagneticFields:
         )
 
     @pytest.mark.unit
+    @pytest.mark.mpl_image_compare(remove_text=True, tolerance=10)
     def test_fourier_current_potential_field_modular_coil_cut(self):
         """Test Fourier current potential coil cut against analytic solenoid."""
         surface = FourierRZToroidalSurface(
@@ -579,7 +584,7 @@ class TestMagneticFields:
             modes_Z=surface._Z_basis.modes[:, 1:],
             NFP=surface.NFP,
         )
-        coils = field.to_CoilSet(10, stell_sym=True).to_FourierXYZ(
+        coils = field.to_CoilSet(10, stell_sym=True, show_plots=True).to_FourierXYZ(
             N=2, grid=LinearGrid(N=8), check_intersection=False
         )
 
@@ -597,6 +602,7 @@ class TestMagneticFields:
             atol=1e-8,
             rtol=1e-8,
         )
+        return plt.gcf()
 
     @pytest.mark.unit
     def test_fourier_current_potential_field_helical_coil_cut(self):
@@ -625,7 +631,7 @@ class TestMagneticFields:
             NFP=10,
         )
 
-        coils = field.to_CoilSet(1)  # .to_FourierXYZ(N=100,grid=LinearGrid(N=200))
+        coils = field.to_CoilSet(1)
 
         np.testing.assert_allclose(
             coils.compute_magnetic_field([20.0, 0, 0], source_grid=LinearGrid(N=700)),
@@ -653,7 +659,7 @@ class TestMagneticFields:
             NFP=10,
         )
 
-        coils = field.to_CoilSet(1)  # .to_FourierXYZ(N=100,grid=LinearGrid(N=200))
+        coils = field.to_CoilSet(1)
 
         np.testing.assert_allclose(
             -coils.compute_magnetic_field([20.0, 0, 0], source_grid=LinearGrid(N=700)),
@@ -1039,11 +1045,11 @@ class TestMagneticFields:
     @pytest.mark.unit
     def test_spline_field(self, tmpdir_factory):
         """Test accuracy of spline magnetic field."""
-        field1 = ScalarPotentialField(phi_lm, args)
+        field1 = ScalarPotentialField(phi_lm, args, NFP=5)
         R = np.linspace(0.5, 1.5, 20)
         Z = np.linspace(-1.5, 1.5, 20)
         p = np.linspace(0, 2 * np.pi / 5, 40)
-        field2 = SplineMagneticField.from_field(field1, R, p, Z, NFP=5)
+        field2 = SplineMagneticField.from_field(field1, R, p, Z)
 
         np.testing.assert_allclose(
             field1([1.0, 1.0, 1.0]), field2([1.0, 1.0, 1.0]), rtol=1e-2, atol=1e-2
@@ -1173,24 +1179,51 @@ class TestMagneticFields:
         np.testing.assert_allclose(z[-1], 0.001, rtol=1e-6, atol=1e-6)
 
     @pytest.mark.unit
-    def test_field_line_integrate_bounds(self):
-        """Test field line integration with bounding box."""
+    def test_field_line_integrate_long(self):
+        """Test field line integration for long distance along line."""
         # q=4, field line should rotate 1/4 turn after 1 toroidal transit
         # from outboard midplane to top center
         field = ToroidalMagneticField(2, 10) + PoloidalMagneticField(2, 10, 0.25)
-        # test that bounds work correctly, and stop integration when trajectory
-        # hits the bounds
-        r0 = [10.1]
+        r0 = [10.001]
         z0 = [0.0]
-        phis = [0, 2 * np.pi]
-        # this will hit the R bound
-        # (there is no Z bound, and R would go to 10.0 if not bounded)
-        r, z = field_line_integrate(r0, z0, phis, field, bounds_R=(10.05, np.inf))
-        np.testing.assert_allclose(r[-1], 10.05, rtol=3e-4)
-        # this will hit the Z bound
-        # (there is no R bound, and Z would go to 0.1 if not bounded)
-        r, z = field_line_integrate(r0, z0, phis, field, bounds_Z=(-np.inf, 0.05))
-        np.testing.assert_allclose(z[-1], 0.05, atol=3e-3)
+        phis = [0, 2 * np.pi * 25]
+        r, z = field_line_integrate(r0, z0, phis, field, solver=Dopri5())
+        np.testing.assert_allclose(r[-1], 10, rtol=1e-6, atol=1e-6)
+        np.testing.assert_allclose(z[-1], 0.001, rtol=1e-6, atol=1e-6)
+
+    @pytest.mark.unit
+    def test_field_line_integrate_early_terminate_default(self):
+        """Test field line integration with default early termination criterion."""
+        # q=4, field line should rotate 1/4 turn after 1 toroidal transit
+        # from outboard midplane to top center
+        # early terminate when it crosses towards the inboard side (R=10),
+        field1 = ToroidalMagneticField(2, 10) + PoloidalMagneticField(2, 10, 0.25)
+        # make a SplineMagneticField only defined in a tiny region around initial point
+        field = SplineMagneticField.from_field(
+            field=field1,
+            R=np.linspace(10.0, 10.005, 40),
+            phi=np.linspace(0, 2 * np.pi, 40),
+            Z=np.linspace(-5e-3, 5e-3, 40),
+            extrap=True,
+        )
+        r0 = [10.001]
+        z0 = [0.0]
+        phis = [0, 2 * np.pi, 2 * np.pi * 2]
+
+        r, z = field_line_integrate(
+            r0,
+            z0,
+            phis,
+            field,
+            bounds_R=(np.min(field._R), np.max(field._R)),
+            bounds_Z=(np.min(field._Z), np.max(field._Z)),
+            min_step_size=1e-2,
+        )
+        np.testing.assert_allclose(r[1], 10, rtol=1e-6, atol=1e-6)
+        np.testing.assert_allclose(z[1], 0.001, rtol=1e-6, atol=1e-6)
+        # if early terinated, the values at the un-integrated phi points are inf
+        assert np.isnan(r[-1])
+        assert np.isnan(z[-1])
 
     @pytest.mark.unit
     def test_Bnormal_calculation(self):
@@ -1351,6 +1384,44 @@ class TestMagneticFields:
         np.testing.assert_allclose(B_half_lowres, B_half_highres, rtol=3e-3)
         np.testing.assert_allclose(B_lcfs_lowres, B_lcfs_highres, rtol=4e-3)
 
+    @pytest.mark.unit
+    def test_solve_current_potential_warnings_and_errors(self):
+        """Test solve current potential warnings/errors."""
+        field = FourierCurrentPotentialField(I=0, G=1, sym_Phi="sin")
+        eq = get("SOLOVEV")
+        with pytest.warns(UserWarning, match="Reducing radial"):
+            eq.change_resolution(L=1, M=1, N=1, L_grid=1, M_grid=1, N_grid=1)
+        with pytest.raises(ValueError, match="length"):
+            solve_regularized_surface_current(field, eq, current_helicity=(1, 1, 1))
+        with pytest.raises(ValueError, match="integer"):
+            solve_regularized_surface_current(field, eq, current_helicity=(1.2, 1))
+        with pytest.raises(ValueError, match="regularization"):
+            solve_regularized_surface_current(
+                field, eq, regularization_type="not a valid option"
+            )
+        with pytest.raises(ValueError, match="Expected Fourier"):
+            solve_regularized_surface_current(ToroidalMagneticField(1, 1), eq)
+        with pytest.raises(AssertionError, match="Expected MagneticField"):
+            solve_regularized_surface_current(field, eq, external_field=eq)
+        field = FourierCurrentPotentialField(I=0, G=1, sym_Phi="cos")
+        grid = LinearGrid(M=1, N=1)
+        # nested with pytest.warns, if a warning is not detected it is
+        # re-emitted and goes through the higher level context,
+        #  this lets us test 3 different warnings with one fxn
+        # call here
+        with pytest.warns(UserWarning, match="Detected"):
+            with pytest.warns(UserWarning, match="Pressure"):
+                with pytest.warns(UserWarning, match="Current"):
+                    solve_regularized_surface_current(
+                        field,
+                        eq,
+                        eval_grid=grid,
+                        source_grid=grid,
+                        vc_source_grid=grid,
+                        verbose=0,
+                        vacuum=True,
+                    )
+
 
 @pytest.mark.unit
 def test_dommaschk_CN_CD_m_0():
@@ -1379,11 +1450,13 @@ def test_dommaschk_field_errors():
     b_arr = [1]
     c_arr = [1]
     d_arr = [1, 1]  # length is not equal to the rest
-    with pytest.raises(AssertionError):
+    with pytest.raises(AssertionError, match="size"):
         DommaschkPotentialField(ms, ls, a_arr, b_arr, c_arr, d_arr)
-    d_arr = [1]
+    d_arr = [1]  # test with incorrect NFP
+    with pytest.raises(AssertionError, match="desired NFP"):
+        DommaschkPotentialField(ms, ls, a_arr, b_arr, c_arr, d_arr, NFP=2)
     ms = [-1]  # negative mode number
-    with pytest.raises(AssertionError):
+    with pytest.raises(AssertionError, match=">= 0"):
         DommaschkPotentialField(ms, ls, a_arr, b_arr, c_arr, d_arr)
 
 

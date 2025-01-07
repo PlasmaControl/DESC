@@ -9,13 +9,14 @@ computational grid has a node on the magnetic axis to avoid potentially
 expensive computations.
 """
 
+from quadax import cumulative_simpson
 from scipy.constants import elementary_charge, mu_0
 
 from desc.backend import cond, jnp
 
 from ..integrals.surface_integral import surface_averages, surface_integrals
+from ..utils import dot, safediv
 from .data_index import register_compute_fun
-from .utils import cumtrapz, dot, safediv
 
 
 @register_compute_fun(
@@ -142,8 +143,11 @@ def _chi_r(params, transforms, profiles, data, **kwargs):
     resolution_requirement="r",
 )
 def _chi(params, transforms, profiles, data, **kwargs):
-    chi_r = transforms["grid"].compress(data["chi_r"])
-    chi = cumtrapz(chi_r, transforms["grid"].compress(data["rho"]), initial=0)
+    chi = cumulative_simpson(
+        y=transforms["grid"].compress(data["chi_r"]),
+        x=transforms["grid"].compress(data["rho"]),
+        initial=0,
+    )
     data["chi"] = transforms["grid"].expand(chi)
     return data
 
@@ -1378,7 +1382,7 @@ def _iota_num_rrr(params, transforms, profiles, data, **kwargs):
                 - beta * data["sqrt(g)_rrr"],
                 data["sqrt(g)"],
             ),
-            # Todo: axis limit of beta_rrr
+            # TODO(#587): axis limit of beta_rrr
             #   Computed with four applications of l’Hôpital’s rule.
             #   Requires sqrt(g)_rrrr and fourth derivatives of basis vectors.
             jnp.nan,
@@ -1656,7 +1660,7 @@ def _iota_den_rrr(params, transforms, profiles, data, **kwargs):
             - gamma * data["sqrt(g)_rrr"],
             data["sqrt(g)"],
         ),
-        # Todo: axis limit
+        # TODO(#587): axis limit
         #   Computed with four applications of l’Hôpital’s rule.
         #   Requires sqrt(g)_rrrr and fourth derivatives of basis vectors.
         jnp.nan,
@@ -1713,7 +1717,7 @@ def _q(params, transforms, profiles, data, **kwargs):
     return data
 
 
-# TODO: add K(rho,theta,zeta)*grad(rho) term
+# TODO (#1381): add K(rho,theta,zeta)*grad(rho) term
 @register_compute_fun(
     name="I",
     label="I",

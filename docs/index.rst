@@ -33,6 +33,10 @@
    notebooks/tutorials/nae_constraint.ipynb
    notebooks/tutorials/bootstrap_current.ipynb
    notebooks/tutorials/coil_stage_two_optimization.ipynb
+   notebooks/tutorials/QFM_surface.ipynb
+   notebooks/tutorials/ideal_ballooning_stability.ipynb
+   notebooks/tutorials/EffectiveRipple.ipynb
+   memory_usage
 
 .. toctree::
    :maxdepth: 1
@@ -60,10 +64,11 @@
    :maxdepth: 1
    :caption: Developer guides
 
+   notebooks/dev_guide/getting-started-eq-solve.ipynb
+   notebooks/dev_guide/grid.ipynb
    adding_compute_funs
    adding_objectives
    adding_optimizers
-   notebooks/dev_guide/grid.ipynb
 
 
 

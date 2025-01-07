@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 
-from desc.backend import put, sign, vmap
+from desc.backend import jax, jnp, put, root, root_scalar, sign, vmap
 
 
 @pytest.mark.unit
@@ -35,3 +35,77 @@ def test_vmap():
     outputs = np.array([[0, 1, 8], [125, 64, 27], [0, -1, -8]])
     np.testing.assert_allclose(vmap(f)(inputs), outputs)
     np.testing.assert_allclose(vmap(f, out_axes=1)(inputs), outputs.T)
+
+
+@pytest.mark.unit
+def test_root():
+    """Test root and its derivative works properly."""
+
+    def fun(x, a):
+        return a * x - 1
+
+    def find_root(a):
+        x0 = jnp.zeros_like(a)
+        xk = root(fun, x0, args=(a,))
+        return xk
+
+    def find_root_full(a):
+        x0 = jnp.zeros_like(a)
+        xk, aux = root(fun, x0, args=(a,), full_output=True)
+        return xk, aux
+
+    a = 2 * jnp.ones(10)
+    x = find_root(a)
+    x_full, _ = find_root_full(a)
+
+    exact = 1 / a
+    np.testing.assert_allclose(x, exact)
+    np.testing.assert_allclose(x_full, exact)
+
+    J = jax.jit(jax.jacfwd(find_root))(a)
+    J_rev = jax.jit(jax.jacrev(find_root))(a)
+    J_full, _ = jax.jit(jax.jacfwd(find_root_full))(a)
+    J_full_rev, _ = jax.jit(jax.jacrev(find_root_full))(a)
+    J_exact = jnp.diag(-1 / a**2)
+
+    np.testing.assert_allclose(J, J_exact)
+    np.testing.assert_allclose(J_full, J_exact)
+    np.testing.assert_allclose(J_rev, J_exact)
+    np.testing.assert_allclose(J_full_rev, J_exact)
+
+
+@pytest.mark.unit
+def test_root_scalar():
+    """Test root_scalar and its derivative works properly."""
+
+    def fun(x, a):
+        return a * x - 1
+
+    def find_root(a):
+        x0 = 0.0
+        xk = root_scalar(fun, x0, args=(a,))
+        return xk
+
+    def find_root_full(a):
+        x0 = 0.0
+        xk, aux = root_scalar(fun, x0, args=(a,), full_output=True)
+        return xk, aux
+
+    a = 2.0
+    x = find_root(a)
+    x_full, _ = find_root_full(a)
+
+    exact = 1 / a
+    np.testing.assert_allclose(x, exact)
+    np.testing.assert_allclose(x_full, exact)
+
+    J = jax.jit(jax.jacfwd(find_root))(a)
+    J_rev = jax.jit(jax.jacrev(find_root))(a)
+    J_full, _ = jax.jit(jax.jacfwd(find_root_full))(a)
+    J_full_rev, _ = jax.jit(jax.jacrev(find_root_full))(a)
+    J_exact = -1 / a**2
+
+    np.testing.assert_allclose(J, J_exact)
+    np.testing.assert_allclose(J_full, J_exact)
+    np.testing.assert_allclose(J_rev, J_exact)
+    np.testing.assert_allclose(J_full_rev, J_exact)

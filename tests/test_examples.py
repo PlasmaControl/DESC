@@ -532,9 +532,9 @@ def test_NAE_QSC_2nd_order_solve():
 
     eq.solve(
         verbose=3,
-        ftol=1e-2,
+        ftol=1e-3,
         objective=obj,
-        maxiter=50,
+        maxiter=75,
         xtol=1e-6,
         constraints=cs,
     )

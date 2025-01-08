@@ -23,6 +23,7 @@ from desc.compute.utils import _compute as compute_fun
 from desc.geometry import (
     FourierPlanarCurve,
     FourierRZCurve,
+    FourierXYCurve,
     FourierXYZCurve,
     SplineXYZCurve,
 )
@@ -600,6 +601,39 @@ class _Coil(_MagneticField, Optimizable, ABC):
             self.current, coords, N=N, basis=basis, name=name
         )
 
+    def to_FourierXY(self, N=10, grid=None, basis="xyz", name="", **kwargs):
+        """Convert Coil to FourierXYCoil representation.
+
+        Note that some types of coils may not be representable in this basis.
+        In this case, a least-squares fit will be done to find the
+        planar coil that best represents the coil.
+
+        Parameters
+        ----------
+        N : int
+            Fourier resolution of the new FourierXYCoil representation.
+        grid : Grid, int or None
+            Grid used to evaluate curve coordinates on to fit with FourierXYCoil.
+            If an integer, uses that many equally spaced points.
+        basis : {'xyz', 'rpz'}
+            Coordinate system for center and normal vectors. Default = 'xyz'.
+        name : str
+            Name for this coil.
+
+        Returns
+        -------
+        coil : FourierXYCoil
+            New representation of the coil parameterized by Fourier series for the X and
+            Y coordinates in a plane specified by a center position and normal vector.
+
+        """
+        if grid is None:
+            grid = LinearGrid(N=2 * N + 1)
+        coords = self.compute("x", grid=grid, basis=basis)["x"]
+        return FourierXYCoil.from_values(
+            self.current, coords, N=N, basis=basis, name=name
+        )
+
 
 class FourierRZCoil(_Coil, FourierRZCurve):
     """Coil parameterized by fourier series for R,Z in terms of toroidal angle phi.
@@ -816,7 +850,7 @@ class FourierPlanarCoil(_Coil, FourierPlanarCurve):
     """Coil that lines in a plane.
 
     Parameterized by a point (the center of the coil), a vector (normal to the plane),
-    and a fourier series defining the radius from the center as a function of a polar
+    and a Fourier series defining the radius from the center as a function of the polar
     angle theta.
 
     Parameters
@@ -915,6 +949,86 @@ class FourierPlanarCoil(_Coil, FourierPlanarCurve):
             center=curve.center,
             normal=curve.normal,
             r_n=curve.r_n,
+            modes=curve.r_basis.modes[:, 2],
+            basis="xyz",
+            name=name,
+        )
+
+
+class FourierXYCoil(_Coil, FourierXYCurve):
+    """Coil that lines in a plane.
+
+    Parameterized by a point (the center of the coil), a vector (normal to the plane),
+    and a Fourier series defining the X and Y coordinates in the plane as a function of
+    the polar angle theta.
+
+    Parameters
+    ----------
+    current : float
+        Current through the coil, in Amperes.
+    center : array-like, shape(3,)
+        Coordinates of center of curve, in system determined by basis.
+    normal : array-like, shape(3,)
+        Components of normal vector to planar surface, in system determined by basis.
+    X_n : array-like
+        Fourier coefficients of the X coordinate in the plane.
+    Y_n : array-like
+        Fourier coefficients of the Y coordinate in the plane.
+    modes : array-like
+        mode numbers associated with X_n and Y_n.
+    basis : {'xyz', 'rpz'}
+        Coordinate system for center and normal vectors. Default = 'xyz'.
+    name : str
+        Name for this coil.
+
+    """
+
+    _io_attrs_ = _Coil._io_attrs_ + FourierXYCurve._io_attrs_
+
+    def __init__(
+        self,
+        current=1,
+        center=[10, 0, 0],
+        normal=[0, 1, 0],
+        X_n=[0, 2, 1],
+        Y_n=[1, 2, 0],
+        modes=None,
+        basis="xyz",
+        name="",
+    ):
+        super().__init__(current, center, normal, X_n, Y_n, modes, basis, name)
+
+    @classmethod
+    def from_values(cls, current, coords, N=10, basis="xyz", name=""):
+        """Fit coordinates to FourierXYCoil representation.
+
+        Parameters
+        ----------
+        current : float
+            Current through the coil, in Amperes.
+        coords: ndarray, shape (num_coords,3)
+            Coordinates to fit a FourierXYCurve object with each column
+            corresponding to xyz or rpz depending on the basis argument.
+        N : int
+            Fourier resolution of the new X & Y representation.
+        basis : {"rpz", "xyz"}
+            Basis for input coordinates. Defaults to "xyz".
+        name : str
+            Name for this curve.
+
+        Returns
+        -------
+        curve : FourierXYCoil
+            New representation of the coil parameterized by a Fourier series for X & Y.
+
+        """
+        curve = super().from_values(coords=coords, N=N, basis=basis, name=name)
+        return FourierXYCoil(
+            current=current,
+            center=curve.center,
+            normal=curve.normal,
+            X_n=curve.X_n,
+            Y_n=curve.Y_n,
             modes=curve.r_basis.modes[:, 2],
             basis="xyz",
             name=name,

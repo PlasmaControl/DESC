@@ -3,6 +3,7 @@ Changelog
 
 New Features
 
+- Enable tracking multiple fieldlines in ``Bounce2D``.
 - Bounce integral methods with ``desc.integrals.Bounce2D``.
 - Effective ripple ``desc.objectives.EffectiveRipple`` and Gamma_c ``desc.objectives.Gamma_c`` optimization objectives.
 - See GitHub pull requests [#1003](https://github.com/PlasmaControl/DESC/pull/1003), [#1042](https://github.com/PlasmaControl/DESC/pull/1042), [#1119](https://github.com/PlasmaControl/DESC/pull/1119), and [#1290](https://github.com/PlasmaControl/DESC/pull/1290) for more details.
@@ -13,6 +14,7 @@ New Features
 - ``desc.objectives.Omnigenity`` is now vectorized and able to optimize multiple surfaces at the same time. Previously it was required to use a different objective for each surface.
 - Adds a new objective ``desc.objectives.MirrorRatio`` for targeting a particular mirror ratio on each flux surface, for either an ``Equilibrium`` or ``OmnigenousField``.
 - Adds the output quantities ``wb`` and ``wp`` to ``VMECIO.save``.
+- Changes hessian computation to use chunked ``jacfwd`` and ``jacrev``, allowing ``jac_chunk_size`` to now reduce hessian memory usage as well.
 - Adds ``desc.vmec_utils.make_boozmn_output `` for writing boozmn.nc style output files
 for compatibility with other codes which expect such files from the Booz_Xform code.
 - Renames compute quantity ``sqrt(g)_B`` to ``sqrt(g)_Boozer_DESC`` to more accurately reflect what the quantiy is (the jacobian from (rho,theta_B,zeta_B) to (rho,theta,zeta)), and adds a new function to compute ``sqrt(g)_B`` which is the jacobian from (rho,theta_B,zeta_B) to (R,phi,Z).

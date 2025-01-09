@@ -285,8 +285,8 @@ class EffectiveRipple(_Objective):
         return constants["transforms"]["grid"].compress(data["effective ripple"])
 
 
-class OldEffectiveRipple(EffectiveRipple):
-    """Objective is efficient only if ``num_transit`` and ``alpha.size`` are small."""
+class OldEffectiveRipple(EffectiveRipple):  # noqa: D101
+    # Objective is efficient only if ``num_transit`` and ``alpha.size`` are small.
 
     def build(self, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -399,4 +399,4 @@ class OldEffectiveRipple(EffectiveRipple):
         return grid.compress(data["old effective ripple"])
 
 
-OldEffectiveRipple.__doc__ += "\n\n" + EffectiveRipple.__doc__
+OldEffectiveRipple.__doc__ = EffectiveRipple.__doc__

@@ -297,8 +297,8 @@ class GammaC(_Objective):
         return constants["transforms"]["grid"].compress(data[self._key])
 
 
-class OldGammaC(GammaC):
-    """Objective is efficient only if ``num_transit`` and ``alpha.size`` are small."""
+class OldGammaC(GammaC):  # noqa: D101
+    # Objective is efficient only if ``num_transit`` and ``alpha.size`` are small.
 
     def build(self, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -404,4 +404,4 @@ class OldGammaC(GammaC):
         return grid.compress(data[self._key])
 
 
-OldGammaC.__doc__ += "\n\n" + GammaC.__doc__
+OldGammaC.__doc__ = GammaC.__doc__

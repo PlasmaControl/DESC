@@ -43,6 +43,7 @@ Fast ion confinement
     :template: class.rst
 
     desc.objectives.GammaC
+    desc.objectives.OldGammaC
 
 
 Geometry
@@ -71,6 +72,7 @@ Neoclassical
     :template: class.rst
 
     desc.objectives.EffectiveRipple
+    desc.objectives.OldEffectiveRipple
 
 
 Omnigenity

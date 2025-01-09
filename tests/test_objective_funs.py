@@ -68,6 +68,8 @@ from desc.objectives import (
     MirrorRatio,
     ObjectiveFromUser,
     ObjectiveFunction,
+    OldEffectiveRipple,
+    OldGammaC,
     Omnigenity,
     PlasmaCoilSetMinDistance,
     PlasmaVesselDistance,
@@ -2635,7 +2637,7 @@ def test_loss_function_asserts():
 def _reduced_resolution_objective(eq, objective):
     """Speed up testing suite by defining rules to reduce objective resolution."""
     kwargs = {}
-    if objective in {EffectiveRipple, GammaC}:
+    if objective in {EffectiveRipple, OldEffectiveRipple, GammaC, OldGammaC}:
         kwargs["X"] = 8
         kwargs["Y"] = 16
         kwargs["num_transit"] = 4
@@ -3156,6 +3158,8 @@ class TestObjectiveNaNGrad:
         GammaC,
         HeatingPowerISS04,
         LinkingCurrentConsistency,
+        OldEffectiveRipple,
+        OldGammaC,
         Omnigenity,
         PlasmaCoilSetMinDistance,
         PlasmaVesselDistance,
@@ -3430,6 +3434,10 @@ class TestObjectiveNaNGrad:
         obj.build(verbose=0)
         g = obj.grad(obj.x())
         assert not np.any(np.isnan(g))
+        obj = ObjectiveFunction(_reduced_resolution_objective(eq, OldEffectiveRipple))
+        obj.build(verbose=0)
+        g = obj.grad(obj.x())
+        assert not np.any(np.isnan(g))
 
     @pytest.mark.unit
     def test_objective_no_nangrad_Gamma_c(self):
@@ -3438,6 +3446,10 @@ class TestObjectiveNaNGrad:
         with pytest.warns(UserWarning, match="Reducing radial"):
             eq.change_resolution(2, 2, 2, 4, 4, 4)
         obj = ObjectiveFunction(_reduced_resolution_objective(eq, GammaC))
+        obj.build(verbose=0)
+        g = obj.grad(obj.x())
+        assert not np.any(np.isnan(g))
+        obj = ObjectiveFunction(_reduced_resolution_objective(eq, OldGammaC))
         obj.build(verbose=0)
         g = obj.grad(obj.x())
         assert not np.any(np.isnan(g))

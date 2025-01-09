@@ -283,3 +283,120 @@ class EffectiveRipple(_Objective):
             **self._hyperparam,
         )
         return constants["transforms"]["grid"].compress(data["effective ripple"])
+
+
+class OldEffectiveRipple(EffectiveRipple):
+    """Objective is efficient only if ``num_transit`` and ``alpha.size`` are small."""
+
+    def build(self, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        self._keys_1dr = [
+            "iota",
+            "iota_r",
+            "<|grad(rho)|>",
+            "min_tz |B|",
+            "max_tz |B|",
+            "R0",  # TODO: GitHub PR #1094
+        ]
+        num_transit = self._hyperparam.pop("num_transit")
+        Y_B = self._hyperparam.pop("Y_B")
+        self._hyperparam.pop("pitch_batch_size")
+
+        eq = self.things[0]
+        if self._grid is None:
+            self._grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
+        assert self._grid.is_meshgrid and eq.sym == self._grid.sym
+        self._constants["rho"] = self._grid.compress(self._grid.nodes[:, 0])
+        self._constants["zeta"] = np.linspace(
+            0, 2 * np.pi * num_transit, Y_B * num_transit
+        )
+        self._constants["quad"] = chebgauss2(self._hyperparam.pop("num_quad"))
+
+        self._dim_f = self._grid.num_rho
+        self._target, self._bounds = _parse_callable_target_bounds(
+            self._target, self._bounds, self._constants["rho"]
+        )
+
+        timer = Timer()
+        if verbose > 0:
+            print("Precomputing transforms")
+        timer.start("Precomputing transforms")
+        self._constants["transforms_1dr"] = get_transforms(
+            self._keys_1dr, eq, self._grid
+        )
+        self._constants["profiles"] = get_profiles(
+            self._keys_1dr + ["old effective ripple"], eq, self._grid
+        )
+        timer.stop("Precomputing transforms")
+        if verbose > 1:
+            timer.disp("Precomputing transforms")
+
+        _Objective.build(self, use_jit=use_jit, verbose=verbose)
+
+    def compute(self, params, constants=None):
+        """Compute the effective ripple.
+
+        Parameters
+        ----------
+        params : dict
+            Dictionary of equilibrium degrees of freedom, e.g.
+            ``Equilibrium.params_dict``.
+        constants : dict
+            Dictionary of constant data, e.g. transforms, profiles etc.
+            Defaults to ``self.constants``.
+
+        Returns
+        -------
+        epsilon : ndarray
+            Effective ripple as a function of the flux surface label.
+
+        """
+        if constants is None:
+            constants = self.constants
+        eq = self.things[0]
+        data = compute_fun(
+            eq,
+            self._keys_1dr,
+            params,
+            constants["transforms_1dr"],
+            constants["profiles"],
+        )
+        grid = eq._get_rtz_grid(
+            constants["rho"],
+            constants["alpha"],
+            constants["zeta"],
+            coordinates="raz",
+            iota=self._grid.compress(data["iota"]),
+            params=params,
+        )
+        data = {
+            key: (
+                grid.copy_data_from_other(data[key], self._grid)
+                if key != "R0"
+                else data[key]
+            )
+            for key in self._keys_1dr
+        }
+        data = compute_fun(
+            eq,
+            "old effective ripple",
+            params,
+            transforms=get_transforms("old effective ripple", eq, grid, jitable=True),
+            profiles=constants["profiles"],
+            data=data,
+            quad=constants["quad"],
+            **self._hyperparam,
+        )
+        return grid.compress(data["old effective ripple"])
+
+
+OldEffectiveRipple.__doc__ += "\n\n" + EffectiveRipple.__doc__

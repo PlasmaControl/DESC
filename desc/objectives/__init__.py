@@ -96,3 +96,5 @@ from .linear_objectives import (
     FixThetaSFL,
 )
 from .objective_funs import ObjectiveFunction
+
+from ._tracer import ParticleTracer

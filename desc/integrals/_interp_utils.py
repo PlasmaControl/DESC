@@ -397,7 +397,6 @@ def interp_dct(xq, f, lobatto=False, axis=-1):
         Real function value at query points.
 
     """
-    lobatto = bool(lobatto)
     errorif(lobatto, NotImplementedError, "JAX hasn't implemented type 1 DCT.")
     a = cheb_from_dct(dct(f, type=2 - lobatto, axis=axis), axis) / (
         f.shape[axis] - lobatto

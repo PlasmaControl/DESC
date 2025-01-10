@@ -948,6 +948,7 @@ def _compute_A_or_B_from_CurrentPotentialField(
     basis="rpz",
     transforms=None,
     compute_A_or_B="B",
+    data=None,
 ):
     """Compute magnetic field or vector potential at a set of points.
 
@@ -967,6 +968,11 @@ def _compute_A_or_B_from_CurrentPotentialField(
     compute_A_or_B: {"A", "B"}, optional
         whether to compute the magnetic vector potential "A" or the magnetic field
         "B". Defaults to "B"
+    data : dict
+        if provided, do not compute any dependency data, but instead use provided
+        dictionary corresponding to the source_grid.
+        data dictionary requires keys `"K", "| e_theta x e_zeta |"` and `"x"`,
+        with `"K"` and `"x"` in rpz basis.
 
 
     Returns
@@ -989,23 +995,24 @@ def _compute_A_or_B_from_CurrentPotentialField(
     ]
     # compute surface current, and store grid quantities
     # needed for integration in class
-    if not params or not transforms:
-        data = field.compute(
-            ["K", "x"],
-            grid=source_grid,
-            basis="rpz",
-            params=params,
-            transforms=transforms,
-            jitable=True,
-        )
-    else:
-        data = compute_fun(
-            field,
-            names=["K", "x"],
-            params=params,
-            transforms=transforms,
-            profiles={},
-        )
+    if data is None:
+        if not params or not transforms:
+            data = field.compute(
+                ["K", "x"],
+                grid=source_grid,
+                basis="rpz",
+                params=params,
+                transforms=transforms,
+                jitable=True,
+            )
+        else:
+            data = compute_fun(
+                field,
+                names=["K", "x"],
+                params=params,
+                transforms=transforms,
+                profiles={},
+            )
 
     _rs = data["x"]
     _K = data["K"]

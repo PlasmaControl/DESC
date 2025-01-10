@@ -130,7 +130,7 @@ class ForceBalance(_Objective):
 
         if self._normalize:
             scales = compute_scaling_factors(eq)
-            self._normalization = scales["f"]
+            self._normalization = scales["F"]
 
         super().build(use_jit=use_jit, verbose=verbose)
 
@@ -279,7 +279,7 @@ class ForceBalanceAnisotropic(_Objective):
 
         if self._normalize:
             scales = compute_scaling_factors(eq)
-            self._normalization = scales["f"]
+            self._normalization = scales["F"]
 
         super().build(use_jit=use_jit, verbose=verbose)
 
@@ -416,7 +416,7 @@ class RadialForceBalance(_Objective):
 
         if self._normalize:
             scales = compute_scaling_factors(eq)
-            self._normalization = scales["f"]
+            self._normalization = scales["F"]
 
         super().build(use_jit=use_jit, verbose=verbose)
 
@@ -553,7 +553,7 @@ class HelicalForceBalance(_Objective):
 
         if self._normalize:
             scales = compute_scaling_factors(eq)
-            self._normalization = scales["f"]
+            self._normalization = scales["F"]
 
         super().build(use_jit=use_jit, verbose=verbose)
 

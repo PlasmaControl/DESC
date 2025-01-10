@@ -108,6 +108,9 @@ class LinearConstraintProjection(ObjectiveFunction):
             self._unfixed_idx,
             self._project,
             self._recover,
+            self._Ainv,
+            self._A_full_nondegenerate,
+            self._degenerate_idx,  # maybe we need those for b_new
         ) = factorize_linear_constraints(
             self._objective,
             self._constraint,
@@ -163,6 +166,28 @@ class LinearConstraintProjection(ObjectiveFunction):
             )
         x = self.recover(x)
         return self._objective.unpack_state(x, per_objective)
+
+    def update_constraint_target(self, eq_new):
+        """Update the target of the constraint."""
+        for con in self._constraint.objectives:
+            if hasattr(con, "update_target"):
+                con.update_target(eq_new)
+
+        x0 = jnp.zeros(self._constraint.dim_x)
+        b_new = -self._constraint.compute_scaled_error(x0)
+        b_new = np.delete(b_new, self._degenerate_idx)
+        xp_new = jnp.zeros_like(self._xp)
+        fixed_idx = np.setdiff1d(np.arange(self._xp.size), self._unfixed_idx)
+        xp_new[fixed_idx] = b_new[fixed_idx]
+        xp_new[self._unfixed_idx] = self._Ainv @ (
+            b_new - self._A_full_nondegenerate[:, fixed_idx] @ xp_new[fixed_idx]
+        )
+        from desc.objectives.utils import _Project, _Recover
+
+        self._project = _Project(self._Z, self._D, xp_new, self._unfixed_idx)
+        self._recover = _Recover(
+            self._Z, self._D, xp_new, self._unfixed_idx, self._objective.dim_x
+        )
 
     def compute_unscaled(self, x_reduced, constants=None):
         """Compute the unscaled form of the objective function.
@@ -533,7 +558,7 @@ class ProximalProjection(ObjectiveFunction):
             self._args.remove(arg)
         linear_constraint = ObjectiveFunction(self._linear_constraints)
         linear_constraint.build()
-        _, _, _, self._Z, self._D, self._unfixed_idx, _, _ = (
+        (_, _, _, self._Z, self._D, self._unfixed_idx, *_) = (
             factorize_linear_constraints(self._constraint, linear_constraint)
         )
 
@@ -591,6 +616,12 @@ class ProximalProjection(ObjectiveFunction):
 
         for constraint in self._linear_constraints:
             constraint.build(use_jit=use_jit, verbose=verbose)
+
+        self._eq_solve_objective = LinearConstraintProjection(
+            self._constraint,
+            ObjectiveFunction(self._linear_constraints),
+        )
+        self._eq_solve_objective.build()
 
         errorif(
             self._constraint.things != [eq],
@@ -759,6 +790,9 @@ class ProximalProjection(ObjectiveFunction):
             x_dict = x_list[self._eq_idx]
             x_dict_old = x_list_old[self._eq_idx]
             deltas = {str(key): x_dict[key] - x_dict_old[key] for key in x_dict}
+            # Add some logic to perturb and solve to take single
+            # LinearConstraintProjection!
+            self._eq_solve_objective.update_constraint_target(self._eq)
             self._eq = self._eq.perturb(
                 objective=self._constraint,
                 constraints=self._linear_constraints,

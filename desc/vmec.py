@@ -192,7 +192,7 @@ class VMECIO:
         constraints = maybe_add_self_consistency(eq, constraints)
         objective = ObjectiveFunction(constraints)
         objective.build(verbose=0)
-        _, _, _, _, _, _, project, recover = factorize_linear_constraints(
+        _, _, _, _, _, _, project, recover, *_ = factorize_linear_constraints(
             objective, objective
         )
         args = objective.unpack_state(recover(project(objective.x(eq))), False)[0]

@@ -445,7 +445,7 @@ def test_correct_indexing_passed_modes():
     constraint = ObjectiveFunction(constraints, use_jit=False)
     constraint.build()
 
-    xp, A, b, Z, D, unfixed_idx, project, recover = factorize_linear_constraints(
+    xp, A, b, Z, D, unfixed_idx, project, recover, *_ = factorize_linear_constraints(
         objective, constraint
     )
 
@@ -508,7 +508,7 @@ def test_correct_indexing_passed_modes_and_passed_target():
     constraint = ObjectiveFunction(constraints, use_jit=False)
     constraint.build()
 
-    xp, A, b, Z, D, unfixed_idx, project, recover = factorize_linear_constraints(
+    xp, A, b, Z, D, unfixed_idx, project, recover, *_ = factorize_linear_constraints(
         objective, constraint
     )
 
@@ -568,7 +568,7 @@ def test_correct_indexing_passed_modes_axis():
     constraint = ObjectiveFunction(constraints, use_jit=False)
     constraint.build()
 
-    xp, A, b, Z, D, unfixed_idx, project, recover = factorize_linear_constraints(
+    xp, A, b, Z, D, unfixed_idx, project, recover, *_ = factorize_linear_constraints(
         objective, constraint
     )
 
@@ -697,7 +697,7 @@ def test_correct_indexing_passed_modes_and_passed_target_axis():
     constraint = ObjectiveFunction(constraints, use_jit=False)
     constraint.build()
 
-    xp, A, b, Z, D, unfixed_idx, project, recover = factorize_linear_constraints(
+    xp, A, b, Z, D, unfixed_idx, project, recover, *_ = factorize_linear_constraints(
         objective, constraint
     )
 

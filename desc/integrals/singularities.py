@@ -4,8 +4,8 @@ from abc import ABC, abstractmethod
 
 import numpy as np
 import scipy
-import scipy.constants
 from interpax import fft_interp2d
+from scipy.constants import mu_0
 
 from desc.backend import fori_loop, jnp, put, vmap
 from desc.basis import DoubleFourierSeries
@@ -673,7 +673,7 @@ def _kernel_biot_savart(eval_data, source_data, diag=False):
         r = r[:, None]
     else:
         r = r[:, :, None]
-    return scipy.constants.mu_0 / 4 / jnp.pi * safediv(num, r**3)
+    return mu_0 / 4 / jnp.pi * safediv(num, r**3)
 
 
 _kernel_biot_savart.ndim = 3
@@ -698,7 +698,7 @@ def _kernel_biot_savart_A(eval_data, source_data, diag=False):
         r = r[:, None]
     else:
         r = r[:, :, None]
-    return scipy.constants.mu_0 / 4 / jnp.pi * safediv(K, r)
+    return mu_0 / 4 / jnp.pi * safediv(K, r)
 
 
 _kernel_biot_savart_A.ndim = 3

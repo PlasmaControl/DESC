@@ -4,10 +4,9 @@ import numpy as np
 from netCDF4 import Dataset, stringtochar
 from scipy.linalg import null_space
 
-from desc.backend import block_diag, jit, sign
+from desc.backend import block_diag, jnp, sign
 from desc.basis import DoubleFourierSeries, zernike_radial
-from desc.compute import compute as compute_fun
-from desc.compute import get_profiles, get_transforms
+from desc.compute import get_transforms
 from desc.grid import LinearGrid
 from desc.utils import Timer
 
@@ -541,10 +540,7 @@ def make_boozmn_output(  # noqa: 16 fxn too complex
     r_full = np.sqrt(s_full)
     r_half = np.sqrt(s_half)
 
-    # rho=1.0 here is a dummy value to ensure we just have one surface,
-    # as we are only using the DoubleFourierSeries transform which has
-    # no rho dependence
-    grid = LinearGrid(M=2 * M_booz, N=2 * N_booz, NFP=eq.NFP, rho=1.0, sym=False)
+    grid = LinearGrid(M=2 * M_booz, N=2 * N_booz, NFP=eq.NFP, rho=r_half, sym=False)
 
     transforms = get_transforms(
         "|B|_mn_B",
@@ -587,7 +583,6 @@ def make_boozmn_output(  # noqa: 16 fxn too complex
     Nu_mn = np.array([[]])
     Sqrt_g_B_mn = np.array([[]])
 
-    vol_grid = LinearGrid(M=2 * M_booz, N=2 * N_booz, NFP=eq.NFP, rho=r_half, sym=False)
     # precompute the needed data for the boozer surface computations
     # (except those which have to be computed on a single surface only,
     # like B_theta_mn, B_zeta_mn, theta_B, zeta_B or nu)
@@ -606,151 +601,59 @@ def make_boozmn_output(  # noqa: 16 fxn too complex
         "lambda_t",
         "lambda_z",
     ]
-    data_vol = eq.compute(keys, grid=vol_grid)
-
-    B_transform = transforms["B"]
-    w_transform = transforms["w"]
+    data_vol = eq.compute(keys, grid=grid)
 
     data_keys = ["|B|_mn_B", "R_mn_B", "sqrt(g)_B_mn", "psi_r"]
     data_keys = data_keys + ["Z_mn_B", "nu_mn"] if not eq.sym else data_keys
     data_keys_sin = ["Z_mn_B", "nu_mn"]
 
-    @jit
-    def compute_data(grid, data):
-        trans = get_transforms(
-            ["|B|", "sqrt(g)"],
-            obj=eq,
-            grid=grid,
-            M_booz=M_booz - 1,
-            N_booz=N_booz,
-            jitable=True,
-        )
-
-        trans["B"] = B_transform
-        trans["w"] = w_transform
-
-        profiles = get_profiles(data_keys, obj=eq, grid=grid)
-        # compute data
-        d = compute_fun(
-            "desc.equilibrium.equilibrium.Equilibrium",
-            data_keys,
-            params=eq.params_dict,
-            transforms=trans,
-            profiles=profiles,
-            data=data,
-        )
-
-        return d
-
-    @jit
-    def compute_data_sin_sym(grid, data):
-        # don't need to get transforms because all quantities that
-        # needed transforms other than the "B" and "w" are already
-        # computed from the compute_data call above
-        # and we have those transforms in transforms_sin
-        profiles = get_profiles(data_keys_sin, obj=eq, grid=grid)
-        # compute data
-        d = compute_fun(
-            "desc.equilibrium.equilibrium.Equilibrium",
+    data = eq.compute(data_keys, grid=grid, data=data_vol.copy(), transforms=transforms)
+    if eq.sym:
+        data_sin = eq.compute(
             data_keys_sin,
-            params=eq.params_dict,
-            transforms=transforms_sin,
-            profiles=profiles,
-            data=data,
+            grid=grid,
+            transforms=transforms_sin,  # data=data_vol,
         )
+    m_neg_inds = jnp.where(transforms["B"].basis.modes[:, 1] < 0)
 
-        return d
+    b_mn = data["|B|_mn_B"].reshape((grid.num_rho, -1))
+    mask = jnp.zeros_like(b_mn)
+    mask = mask.at[:, m_neg_inds].set(True)
+    b_mn = jnp.where(mask, -b_mn, b_mn)
+    B_mn = jnp.atleast_2d(matrix @ b_mn.T).T
 
-    # define these variables now so that code linting
-    # does not complain that they are not defined in the loop
-    boozer_inner_product_norm = boozer_inner_product_norm_sin = None
-    for i, r in enumerate(r_half):
-        if verbose > 0:
-            printstring = f"Calculating Surf {i} at rho={r:1.3f}"
-            print("#" * len(printstring) + "\n" + printstring + "\n")
+    r_mn = data["R_mn_B"].reshape((grid.num_rho, -1))
+    r_mn = jnp.where(mask, -r_mn, r_mn)
+    R_mn = jnp.atleast_2d(matrix @ r_mn.T).T
 
-        data = {}
-        for key in keys:
-            # populate the pre-computed data for this surface
-            data[key] = data_vol[key][np.where(vol_grid.nodes[:, 0] == r)]
+    # must divide by dpsi/drho so that the jacobian is
+    # for (psi,theta_B, zeta_B) -> (R,phi,Z)
+    # instead of (rho,theta_B, zeta_B)
+    sqrt_g_B_mn = (
+        data["sqrt(g)_B_mn"].reshape((grid.num_rho, -1))
+        / grid.compress(data["psi_r"])[:, None]
+    )
+    sqrt_g_B_mn = np.where(mask, -sqrt_g_B_mn, sqrt_g_B_mn)
+    Sqrt_g_B_mn = np.atleast_2d(matrix @ sqrt_g_B_mn.T).T
+    if not eq.sym:
+        z_mn = data["Z_mn_B"].reshape((grid.num_rho, -1))
+        z_mn = jnp.where(mask, -z_mn, z_mn)
+        Z_mn = np.atleast_2d(matrix @ z_mn.T).T
 
-        ## calculate boozer transform for this surface
-        grid = LinearGrid(
-            M=2 * M_booz, N=2 * N_booz, NFP=eq.NFP, rho=np.array(r), sym=False
-        )
-        if i > 0:
-            data["Boozer transform modes norm"] = boozer_inner_product_norm
-        # cos symmetric terms
-        data = compute_data(grid, data)
+        nu_mn = data["nu_mn"].reshape((grid.num_rho, -1))
+        nu_mn = jnp.where(mask, -nu_mn, nu_mn)
+        Nu_mn = np.atleast_2d(matrix @ nu_mn.T).T
+    else:
+        z_mn = data_sin["Z_mn_B"].reshape((grid.num_rho, -1))
+        mask = jnp.zeros_like(z_mn)
+        m_neg_inds = jnp.where(transforms_sin["B"].basis.modes[:, 1] < 0)
+        mask = mask.at[:, m_neg_inds].set(True)
+        z_mn = jnp.where(mask, -z_mn, z_mn)
+        Z_mn = np.atleast_2d(matrix_sin @ z_mn.T).T
 
-        if i == 0:
-            # save the norm of modes calculated for future use
-            boozer_inner_product_norm = data["Boozer transform modes norm"]
-
-        if eq.sym:
-            # Z and nu are sin-symmetric, but the "B" transforms used
-            # before are cos symmetric.
-            # We want to use the base data, but the prefactor
-            # was calculated with the wrong symmetry, so must pop it
-            # so it can be recalculated here
-            data.pop("Boozer transform matrix")
-            data.pop("Boozer transform modes norm")
-            data_sin = data
-            if i > 0:
-                data_sin["Boozer transform modes norm"] = boozer_inner_product_norm_sin
-
-            data_sin = compute_data_sin_sym(grid, data_sin)
-
-            if i == 0:
-                # save the prefactor calculated for future use
-                boozer_inner_product_norm_sin = data_sin["Boozer transform modes norm"]
-
-        else:
-            data_sin = data
-        b_mn = np.where(
-            transforms["B"].basis.modes[:, 1] < 0, -data["|B|_mn_B"], data["|B|_mn_B"]
-        )
-        b_mn = np.atleast_2d(matrix @ b_mn)
-        B_mn = np.vstack((B_mn, b_mn)) if B_mn.size else b_mn
-
-        r_mn = np.where(
-            transforms["B"].basis.modes[:, 1] < 0, -data["R_mn_B"], data["R_mn_B"]
-        )
-        r_mn = np.atleast_2d(matrix @ r_mn)
-        R_mn = np.vstack((R_mn, r_mn)) if R_mn.size else r_mn
-
-        # must divide by dpsi/drho so that the jacobian is
-        # for (psi,theta_B, zeta_B) -> (R,phi,Z)
-        # instead of (rho,theta_B, zeta_B)
-
-        sqrt_g_B_mn = np.where(
-            transforms["B"].basis.modes[:, 1] < 0,
-            -data["sqrt(g)_B_mn"],
-            data["sqrt(g)_B_mn"],
-        )
-        sqrt_g_B_mn = np.atleast_2d(matrix @ sqrt_g_B_mn) / data["psi_r"][0]
-        Sqrt_g_B_mn = (
-            np.vstack((Sqrt_g_B_mn, sqrt_g_B_mn)) if Sqrt_g_B_mn.size else sqrt_g_B_mn
-        )
-
-        z_mn = np.where(
-            transforms_sin["B"].basis.modes[:, 1] < 0,
-            -data_sin["Z_mn_B"],
-            data_sin["Z_mn_B"],
-        )
-
-        z_mn = np.atleast_2d(matrix_sin @ z_mn)
-
-        Z_mn = np.vstack((Z_mn, z_mn)) if Z_mn.size else z_mn
-
-        nu_mn = np.where(
-            transforms_sin["B"].basis.modes[:, 1] < 0,
-            -data_sin["nu_mn"],
-            data_sin["nu_mn"],
-        )
-
-        nu_mn = np.atleast_2d(matrix_sin @ nu_mn)
-        Nu_mn = np.vstack((Nu_mn, nu_mn)) if Nu_mn.size else nu_mn
+        nu_mn = data_sin["nu_mn"].reshape((grid.num_rho, -1))
+        nu_mn = jnp.where(mask, -nu_mn, nu_mn)
+        Nu_mn = np.atleast_2d(matrix_sin @ nu_mn.T).T
 
     timer.stop("Boozer Transform")
     if verbose > 1:

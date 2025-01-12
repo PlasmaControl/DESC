@@ -584,8 +584,6 @@ def make_boozmn_output(  # noqa: 16 fxn too complex
     Sqrt_g_B_mn = np.array([[]])
 
     # precompute the needed data for the boozer surface computations
-    # (except those which have to be computed on a single surface only,
-    # like B_theta_mn, B_zeta_mn, theta_B, zeta_B or nu)
     keys = [
         "|B|",
         "R",
@@ -600,6 +598,12 @@ def make_boozmn_output(  # noqa: 16 fxn too complex
         "I",
         "lambda_t",
         "lambda_z",
+        # need to precompute these so that when eq.sym==True,
+        # the sin-symmetric coefficients have the correct values,
+        # since these quantities below rely on cos-symmetric transforms
+        "w_Boozer",
+        "nu",
+        "sqrt(g)_Boozer_DESC",
     ]
     data_vol = eq.compute(keys, grid=grid)
 
@@ -612,7 +616,8 @@ def make_boozmn_output(  # noqa: 16 fxn too complex
         data_sin = eq.compute(
             data_keys_sin,
             grid=grid,
-            transforms=transforms_sin,  # data=data_vol,
+            transforms=transforms_sin,
+            data=data_vol.copy(),
         )
     m_neg_inds = jnp.where(transforms["B"].basis.modes[:, 1] < 0)
 

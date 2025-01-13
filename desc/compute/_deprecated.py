@@ -8,8 +8,9 @@ from functools import partial
 
 from orthax.legendre import leggauss
 
-from desc.backend import imap, jit, jnp
+from desc.backend import jit, jnp
 
+from ..batching import batch_map
 from ..integrals.bounce_integral import Bounce1D
 from ..integrals.quad_utils import (
     automorphism_sin,
@@ -18,20 +19,21 @@ from ..integrals.quad_utils import (
     grad_automorphism_sin,
 )
 from ..utils import cross, dot, safediv
-from ._fast_ion import _cvdrift0, _drift1, _drift2, _v_tau
-from ._neoclassical import _bounce_doc, _dH, _dI
+from ._fast_ion import _drift1, _drift2, _radial_drift, _v_tau
+from ._neoclassical import _bounce_doc, _dH_ripple, _dI_ripple
 from .data_index import register_compute_fun
 
 _bounce1D_doc = {
     "num_well": _bounce_doc["num_well"],
     "num_quad": _bounce_doc["num_quad"],
     "num_pitch": _bounce_doc["num_pitch"],
+    "surf_batch_size": _bounce_doc["surf_batch_size"],
     "quad": _bounce_doc["quad"],
 }
 
 
-def _compute(fun, fun_data, data, grid, num_pitch, simp=False, reduce=True):
-    """Compute ``fun`` for each α and ρ value iteratively.
+def _compute(fun, fun_data, data, grid, num_pitch, surf_batch_size=1, simp=False):
+    """Compute Bounce1D integral quantity with ``fun``.
 
     Parameters
     ----------
@@ -41,42 +43,36 @@ def _compute(fun, fun_data, data, grid, num_pitch, simp=False, reduce=True):
         Data to provide to ``fun``. This dict will be modified.
     data : dict[str, jnp.ndarray]
         DESC data dict.
+    grid : Grid
+        Grid that can expand and compress.
+    num_pitch : int
+        Resolution for quadrature over velocity coordinate.
+    surf_batch_size : int
+        Number of flux surfaces with which to compute simultaneously.
+        Default is ``1``.
     simp : bool
         Whether to use an open Simpson rule instead of uniform weights.
-    reduce : bool
-        Whether to compute mean over α and expand to grid.
-        Default is true.
 
     """
-    pitch_inv, pitch_inv_weight = Bounce1D.get_pitch_inv_quad(
+    for name in Bounce1D.required_names:
+        fun_data[name] = data[name]
+    for name in fun_data:
+        fun_data[name] = Bounce1D.reshape(grid, fun_data[name])
+    fun_data["pitch_inv"], fun_data["pitch_inv weight"] = Bounce1D.get_pitch_inv_quad(
         grid.compress(data["min_tz |B|"]),
         grid.compress(data["max_tz |B|"]),
         num_pitch,
         simp=simp,
     )
-
-    def foreach_rho(x):
-        # using same λ values for every field line α on flux surface ρ
-        x["pitch_inv"] = pitch_inv
-        x["pitch_inv weight"] = pitch_inv_weight
-        return imap(fun, x)
-
-    for name in Bounce1D.required_names:
-        fun_data[name] = data[name]
-    for name in fun_data:
-        fun_data[name] = Bounce1D.reshape(grid, fun_data[name])
-    out = imap(foreach_rho, fun_data)
-    # Simple mean over α rather than integrating over α and dividing by 2π
-    # (i.e. f.T.dot(dα) / dα.sum()), because when the toroidal angle extends
-    # beyond one transit we need to weight all field lines uniformly, regardless
-    # of their spacing wrt α.
-    return grid.expand(out.mean(axis=0)) if reduce else out
+    out = batch_map(fun, fun_data, surf_batch_size)
+    assert out.ndim == 1
+    return grid.expand(out)
 
 
 @register_compute_fun(
-    name="deprecated(effective ripple 3/2)",
+    name="old effective ripple 3/2",
     label=(
-        # ε¹ᐧ⁵ = π/(8√2) R₀²〈|∇ψ|〉⁻² B₀⁻¹ ∫dλ λ⁻² 〈 ∑ⱼ Hⱼ²/Iⱼ 〉
+        # ε¹ᐧ⁵ = π/(8√2) R₀²〈|∇ψ|〉⁻² B₀⁻¹ ∫ dλ λ⁻² 〈 ∑ⱼ Hⱼ²/Iⱼ 〉
         "\\epsilon_{\\mathrm{eff}}^{3/2} = \\frac{\\pi}{8 \\sqrt{2}} "
         "R_0^2 \\langle \\vert\\nabla \\psi\\vert \\rangle^{-2} "
         "B_0^{-1} \\int d\\lambda \\lambda^{-2} "
@@ -104,7 +100,7 @@ def _compute(fun, fun_data, data, grid, num_pitch, simp=False, reduce=True):
     source_grid_requirement={"coordinates": "raz", "is_meshgrid": True},
     **_bounce1D_doc,
 )
-@partial(jit, static_argnames=["num_well", "num_quad", "num_pitch"])
+@partial(jit, static_argnames=["num_well", "num_quad", "num_pitch", "surf_batch_size"])
 def _epsilon_32_1D(params, transforms, profiles, data, **kwargs):
     """Effective ripple modulation amplitude to 3/2 power.
 
@@ -116,6 +112,7 @@ def _epsilon_32_1D(params, transforms, profiles, data, **kwargs):
     # noqa: unused dependency
     num_well = kwargs.get("num_well", None)
     num_pitch = kwargs.get("num_pitch", 51)
+    surf_batch_size = kwargs.get("surf_batch_size", 1)
     quad = (
         kwargs["quad"] if "quad" in kwargs else chebgauss2(kwargs.get("num_quad", 32))
     )
@@ -127,14 +124,14 @@ def _epsilon_32_1D(params, transforms, profiles, data, **kwargs):
         # (λB₀)³ d(λB₀)⁻¹ = B₀² λ³ d(λ⁻¹) = -B₀² λ dλ.
         bounce = Bounce1D(grid, data, quad, is_reshaped=True)
         H, I = bounce.integrate(
-            [_dH, _dI],
+            [_dH_ripple, _dI_ripple],
             data["pitch_inv"],
             data,
             "|grad(rho)|*kappa_g",
-            bounce.points(data["pitch_inv"], num_well=num_well),
+            bounce.points(data["pitch_inv"], num_well),
         )
         return jnp.sum(
-            safediv(H**2, I).sum(axis=-1)
+            safediv(H**2, I).sum(axis=-1).mean(axis=-2)
             * data["pitch_inv weight"]
             / data["pitch_inv"] ** 3,
             axis=-1,
@@ -142,13 +139,14 @@ def _epsilon_32_1D(params, transforms, profiles, data, **kwargs):
 
     grid = transforms["grid"].source_grid
     B0 = data["max_tz |B|"]
-    data["deprecated(effective ripple 3/2)"] = (
+    data["old effective ripple 3/2"] = (
         _compute(
             eps_32,
-            fun_data={"|grad(rho)|*kappa_g": data["|grad(rho)|"] * data["kappa_g"]},
-            data=data,
-            grid=grid,
-            num_pitch=num_pitch,
+            {"|grad(rho)|*kappa_g": data["|grad(rho)|"] * data["kappa_g"]},
+            data,
+            grid,
+            num_pitch,
+            surf_batch_size,
             simp=True,
         )
         / data["fieldline length"]
@@ -160,7 +158,7 @@ def _epsilon_32_1D(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
-    name="deprecated(effective ripple)",
+    name="old effective ripple",
     label="\\epsilon_{\\mathrm{eff}}",
     units="~",
     units_long="None",
@@ -170,7 +168,7 @@ def _epsilon_32_1D(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="r",
-    data=["deprecated(effective ripple 3/2)"],
+    data=["old effective ripple 3/2"],
 )
 def _effective_ripple_1D(params, transforms, profiles, data, **kwargs):
     """Proxy for neoclassical transport in the banana regime.
@@ -181,14 +179,12 @@ def _effective_ripple_1D(params, transforms, profiles, data, **kwargs):
     The effective ripple (ε) proxy estimates the neoclassical transport
     coefficients in the banana regime.
     """
-    data["deprecated(effective ripple)"] = data["deprecated(effective ripple 3/2)"] ** (
-        2 / 3
-    )
+    data["old effective ripple"] = data["old effective ripple 3/2"] ** (2 / 3)
     return data
 
 
 @register_compute_fun(
-    name="deprecated(Gamma_c)",
+    name="old Gamma_c",
     label=(
         # Γ_c = π/(8√2) ∫ dλ 〈 ∑ⱼ [v τ γ_c²]ⱼ 〉
         "\\Gamma_c = \\frac{\\pi}{8 \\sqrt{2}} "
@@ -222,7 +218,7 @@ def _effective_ripple_1D(params, transforms, profiles, data, **kwargs):
     source_grid_requirement={"coordinates": "raz", "is_meshgrid": True},
     **_bounce1D_doc,
 )
-@partial(jit, static_argnames=["num_well", "num_quad", "num_pitch"])
+@partial(jit, static_argnames=["num_well", "num_quad", "num_pitch", "surf_batch_size"])
 def _Gamma_c_1D(params, transforms, profiles, data, **kwargs):
     """Fast ion confinement proxy as defined by Nemov et al.
 
@@ -246,6 +242,7 @@ def _Gamma_c_1D(params, transforms, profiles, data, **kwargs):
     # noqa: unused dependency
     num_pitch = kwargs.get("num_pitch", 64)
     num_well = kwargs.get("num_well", None)
+    surf_batch_size = kwargs.get("surf_batch_size", 1)
     quad = (
         kwargs["quad"]
         if "quad" in kwargs
@@ -256,9 +253,8 @@ def _Gamma_c_1D(params, transforms, profiles, data, **kwargs):
     )
 
     def Gamma_c(data):
-        """∫ dλ ∑ⱼ [v τ γ_c²]ⱼ π²/4."""
         bounce = Bounce1D(grid, data, quad, is_reshaped=True)
-        points = bounce.points(data["pitch_inv"], num_well=num_well)
+        points = bounce.points(data["pitch_inv"], num_well)
         v_tau, drift1, drift2 = bounce.integrate(
             [_v_tau, _drift1, _drift2],
             data["pitch_inv"],
@@ -275,42 +271,36 @@ def _Gamma_c_1D(params, transforms, profiles, data, **kwargs):
             )
         )
         return jnp.sum(
-            jnp.sum(v_tau * gamma_c**2, axis=-1)
+            jnp.sum(v_tau * gamma_c**2, axis=-1).mean(axis=-2)
             * data["pitch_inv weight"]
             / data["pitch_inv"] ** 2,
             axis=-1,
-        )
+        ) / (2**1.5 * jnp.pi)
 
+    fun_data = {
+        "|grad(psi)|*kappa_g": data["|grad(psi)|"] * data["kappa_g"],
+        "|grad(rho)|*|e_alpha|r,p|": data["|grad(rho)|"] * data["|e_alpha|r,p|"],
+        "|B|_r|v,p": data["|B|_r|v,p"],
+        "K": data["iota_r"]
+        * dot(cross(data["grad(psi)"], data["b"]), data["grad(phi)"])
+        - (2 * data["|B|_r|v,p"] - data["|B|"] * data["B^phi_r|v,p"] / data["B^phi"]),
+    }
     grid = transforms["grid"].source_grid
-    data["deprecated(Gamma_c)"] = _compute(
-        Gamma_c,
-        fun_data={
-            "|grad(psi)|*kappa_g": data["|grad(psi)|"] * data["kappa_g"],
-            "|grad(rho)|*|e_alpha|r,p|": data["|grad(rho)|"] * data["|e_alpha|r,p|"],
-            "|B|_r|v,p": data["|B|_r|v,p"],
-            "K": data["iota_r"]
-            * dot(cross(data["grad(psi)"], data["b"]), data["grad(phi)"])
-            - (
-                2 * data["|B|_r|v,p"]
-                - data["|B|"] * data["B^phi_r|v,p"] / data["B^phi"]
-            ),
-        },
-        data=data,
-        grid=grid,
-        num_pitch=num_pitch,
-        simp=False,
-    ) / (data["fieldline length"] * 2**1.5 * jnp.pi)
+    data["old Gamma_c"] = (
+        _compute(Gamma_c, fun_data, data, grid, num_pitch, surf_batch_size)
+        / data["fieldline length"]
+    )
     return data
 
 
-def _gbdrift(data, B, pitch):
+def _poloidal_drift(data, B, pitch):
     return safediv(
         data["gbdrift"] * (1 - 0.5 * pitch * B), jnp.sqrt(jnp.abs(1 - pitch * B))
     )
 
 
 @register_compute_fun(
-    name="deprecated(Gamma_c Velasco)",
+    name="old Gamma_c Velasco",
     label=(
         # Γ_c = π/(8√2) ∫ dλ 〈 ∑ⱼ [v τ γ_c²]ⱼ 〉
         "\\Gamma_c = \\frac{\\pi}{8 \\sqrt{2}} "
@@ -330,7 +320,7 @@ def _gbdrift(data, B, pitch):
     source_grid_requirement={"coordinates": "raz", "is_meshgrid": True},
     **_bounce1D_doc,
 )
-@partial(jit, static_argnames=["num_well", "num_quad", "num_pitch"])
+@partial(jit, static_argnames=["num_well", "num_quad", "num_pitch", "surf_batch_size"])
 def _Gamma_c_Velasco_1D(params, transforms, profiles, data, **kwargs):
     """Fast ion confinement proxy as defined by Velasco et al.
 
@@ -338,10 +328,18 @@ def _Gamma_c_Velasco_1D(params, transforms, profiles, data, **kwargs):
     J.L. Velasco et al. 2021 Nucl. Fusion 61 116059.
     https://doi.org/10.1088/1741-4326/ac2994.
     Equation 16.
+
+    This expression has a secular term that drives the result to zero as the number
+    of toroidal transits increases if the secular term is not averaged out from the
+    singular integrals. It is observed that this implementation does not average
+    out the secular term. Currently, an optimization using this metric may need
+    to be evaluated by measuring decrease in Γ_c at a fixed number of toroidal
+    transits.
     """
     # noqa: unused dependency
     num_well = kwargs.get("num_well", None)
     num_pitch = kwargs.get("num_pitch", 64)
+    surf_batch_size = kwargs.get("surf_batch_size", 1)
     quad = (
         kwargs["quad"]
         if "quad" in kwargs
@@ -352,31 +350,34 @@ def _Gamma_c_Velasco_1D(params, transforms, profiles, data, **kwargs):
     )
 
     def Gamma_c(data):
-        """∫ dλ ∑ⱼ [v τ γ_c²]ⱼ π²/4."""
         bounce = Bounce1D(grid, data, quad, is_reshaped=True)
-        points = bounce.points(data["pitch_inv"], num_well=num_well)
-        v_tau, cvdrift0, gbdrift = bounce.integrate(
-            [_v_tau, _cvdrift0, _gbdrift],
+        points = bounce.points(data["pitch_inv"], num_well)
+        v_tau, radial_drift, poloidal_drift = bounce.integrate(
+            [_v_tau, _radial_drift, _poloidal_drift],
             data["pitch_inv"],
             data,
             ["cvdrift0", "gbdrift"],
             points,
         )
-        gamma_c = jnp.arctan(safediv(cvdrift0, gbdrift))  # This is γ_c π/2.
+        # This is γ_c π/2.
+        gamma_c = jnp.arctan(safediv(radial_drift, poloidal_drift))
         return jnp.sum(
-            jnp.sum(v_tau * gamma_c**2, axis=-1)
+            jnp.sum(v_tau * gamma_c**2, axis=-1).mean(axis=-2)
             * data["pitch_inv weight"]
             / data["pitch_inv"] ** 2,
             axis=-1,
-        )
+        ) / (2**1.5 * jnp.pi)
 
     grid = transforms["grid"].source_grid
-    data["deprecated(Gamma_c Velasco)"] = _compute(
-        Gamma_c,
-        fun_data={"cvdrift0": data["cvdrift0"], "gbdrift": data["gbdrift"]},
-        data=data,
-        grid=grid,
-        num_pitch=num_pitch,
-        simp=False,
-    ) / (data["fieldline length"] * 2**1.5 * jnp.pi)
+    data["old Gamma_c Velasco"] = (
+        _compute(
+            Gamma_c,
+            {"cvdrift0": data["cvdrift0"], "gbdrift": data["gbdrift"]},
+            data,
+            grid,
+            num_pitch,
+            surf_batch_size,
+        )
+        / data["fieldline length"]
+    )
     return data

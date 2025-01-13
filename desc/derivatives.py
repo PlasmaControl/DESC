@@ -336,7 +336,11 @@ class AutoDiffDerivative(_Derivative):
         elif self._mode == "grad":
             self._compute = jax.grad(self._fun, self._argnum)
         elif self._mode == "hess":
-            self._compute = jax.hessian(self._fun, self._argnum)
+            self._compute = jacfwd_chunked(
+                jacrev_chunked(self._fun, self._argnum, chunk_size=self._chunk_size),
+                self._argnum,
+                chunk_size=self._chunk_size,
+            )
         elif self._mode == "jvp":
             self._compute = self._compute_jvp
 

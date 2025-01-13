@@ -31,6 +31,7 @@ def test_effective_ripple_2D():
         Y_B=128,
         num_transit=num_transit,
         num_well=20 * num_transit,
+        surf_batch_size=2,
     )
 
     assert np.isfinite(data["effective ripple 3/2"]).all()
@@ -57,15 +58,17 @@ def test_effective_ripple_1D():
     alpha = np.array([0])
     zeta = np.linspace(0, num_transit * 2 * np.pi, num_transit * Y_B)
     grid = get_rtz_grid(eq, rho, alpha, zeta, coordinates="raz")
-    data = eq.compute("deprecated(effective ripple)", grid=grid, num_well=num_well)
+    data = eq.compute(
+        "old effective ripple", grid=grid, num_well=num_well, surf_batch_size=2
+    )
 
-    assert np.isfinite(data["deprecated(effective ripple)"]).all()
+    assert np.isfinite(data["old effective ripple"]).all()
     np.testing.assert_allclose(
-        data["deprecated(effective ripple 3/2)"] ** (2 / 3),
-        data["deprecated(effective ripple)"],
+        data["old effective ripple 3/2"] ** (2 / 3),
+        data["old effective ripple"],
         err_msg="Bug in source grid logic in eq.compute.",
     )
-    eps_32 = grid.compress(data["deprecated(effective ripple 3/2)"])
+    eps_32 = grid.compress(data["old effective ripple 3/2"])
     neo_rho, neo_eps_32 = NeoIO.read("tests/inputs/neo_out.w7x")
     np.testing.assert_allclose(eps_32, np.interp(rho, neo_rho, neo_eps_32), rtol=0.16)
 

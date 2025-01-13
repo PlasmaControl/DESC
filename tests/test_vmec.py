@@ -1511,20 +1511,21 @@ def test_make_boozmn_output_against_hidden_symmetries_booz_xform(TmpDir):
     """Test that booz_xform-style outputs compare well against C++ implementation."""
     # testing against https://github.com/hiddenSymmetries/booz_xform/tree/main
     # commit 881907058ece03
-    # load in HELIOTRON equilibrium
-    eq = get("HELIOTRON")
+    # load in precise_QA equilibrium
+    eq = get("precise_QA")
     output_path = str(TmpDir.join("boozmn_out.nc"))
 
-    boozer_res_M = 35
-    boozer_res_N = 15
+    boozer_res_M = 25
+    boozer_res_N = 25
 
-    # compare against a 100 surface Mboz=Nboz=20 run of HELIOTRONx
+    # compare against a 100 surface Mboz=Nboz=40 run of precise QA
     # with the hidden symmetries C++ booz_xform implementation
-    # (ran on a wout created with VMECIO.save of HELIOTRON example with 100 surfs)
+    # (ran on a wout created with VMECIO.save of precise QA example with 100 surfs
+    # and Mnyq = Nnyq = 30)
     surfs = 100
     Cpp_booz_output_path = (
-        f"./tests/inputs/boozmn_{surfs}_surfs_heliotron"
-        + f"_sims_mbooz_{boozer_res_M}_nbooz_{boozer_res_N}.nc"
+        f"./tests/inputs/boozmn_{surfs}_surfs_precise_QA"
+        + f"_sims_booz_{boozer_res_M}.nc"
     )
 
     # Use DESC to calculate the boozer harmonics and create a booz_xform style .nc file
@@ -1615,15 +1616,15 @@ def test_make_boozmn_output_against_hidden_symmetries_booz_xform(TmpDir):
     ## test these quantities by evaluating on a grid
     # create grid on which to check values btwn DESC eq.compute and the
     # evaluated Boozer harmonics for each quantity from each booz xform implementation
-    M = 40
-    N = 40
+    M = 20
+    N = 20
     # make half grid in s
     s_full = np.linspace(0, 1, surfs)
     hs = 1 / (surfs - 1)
     s_half = s_full[0:-1] + hs / 2
 
     quants_that_pass_zero = ["Z", "nu"]
-    for surf_index in range(surfs - 1):
+    for surf_index in range(0, surfs - 1):
         rho = np.sqrt(s_half[surf_index])
         grid = LinearGrid(rho=rho, M=M, N=N, NFP=eq.NFP)
         data = eq.compute(
@@ -1754,7 +1755,7 @@ def test_make_boozmn_output_against_hidden_symmetries_booz_xform(TmpDir):
             "ns_b",
         ]:
             np.testing.assert_allclose(
-                file.variables[key], file_cpp.variables[key], err_msg=key
+                file.variables[key], file_cpp.variables[key], err_msg=key, atol=1e-16
             )
 
 

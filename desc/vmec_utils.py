@@ -577,12 +577,6 @@ def make_boozmn_output(  # noqa: 16 fxn too complex
 
     timer.start("Boozer Transform")
 
-    B_mn = np.array([[]])
-    R_mn = np.array([[]])
-    Z_mn = np.array([[]])
-    Nu_mn = np.array([[]])
-    Sqrt_g_B_mn = np.array([[]])
-
     # precompute the needed data for the boozer surface computations
     keys = [
         "|B|",

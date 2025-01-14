@@ -534,3 +534,92 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
         / data["fieldline length"]
     )
     return data
+
+
+##########################################################################
+
+
+@register_compute_fun(
+    name="gamma_c_star",
+    label="\\gamma_c = \\arctan \\left( \\frac{drift_1}{drift_2 + drift_3} \\right)",
+    units="~",
+    units_long="None",
+    description="Arctangent of drift ratio for energetic ion confinement, Nemov et al.",
+    dim=1,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="r",
+    data=[
+        "min_tz |B|",
+        "max_tz |B|",
+        "B^phi",
+        "B^phi_r|v,p",
+        "b",
+        "|B|_r|v,p",
+        "iota_r",
+        "grad(phi)",
+        "e^rho",
+        "|grad(rho)|",
+        "|e_alpha|r,p|",
+        "kappa_g",
+        "psi_r",
+        "fieldline length",
+    ]
+    + Bounce1D.required_names,
+)
+@partial(jit, static_argnames=["num_quad", "num_pitch", "num_well", "batch"])
+def compute_gamma_c_star(params, transforms, profiles, data, **kwargs):
+    """Compute gamma_c as arctan of the ratio of drifts."""
+    quad = kwargs.get(
+        "quad", get_quadrature(leggauss(32), (automorphism_sin, grad_automorphism_sin))
+    )
+    num_well = kwargs.get("num_well", None)
+    batch = kwargs.get("batch", True)
+    grid = transforms["grid"].source_grid
+
+    def drift1(grad_rho_norm_kappa_g, B, pitch):
+        return (
+            safediv(1 - 0.5 * pitch * B, jnp.sqrt(jnp.abs(1 - pitch * B)))
+            * grad_rho_norm_kappa_g
+            / B
+        )
+
+    def drift2(B_psi, B, pitch):
+        return (
+            safediv(1 - 0.5 * pitch * B, jnp.sqrt(jnp.abs(1 - pitch * B))) * B_psi / B
+        )
+
+    def drift3(K, B, pitch):
+        return jnp.sqrt(jnp.abs(1 - pitch * B)) * K / B
+
+    bounce = Bounce1D(grid, data, quad, automorphism=None, is_reshaped=True)
+    points = bounce.points(data["pitch_inv"], num_well=num_well)
+
+    # Compute individual drifts
+    drift1_val = bounce.integrate(
+        drift1,
+        data["pitch_inv"],
+        data["|grad(rho)|*kappa_g"],
+        points=points,
+        batch=batch,
+    )
+    drift2_val = bounce.integrate(
+        drift2,
+        data["pitch_inv"],
+        data["|B|_psi|v,p"],
+        points=points,
+        batch=batch,
+    )
+    drift3_val = bounce.integrate(
+        drift3,
+        data["pitch_inv"],
+        data["K"],
+        points=points,
+        batch=batch,
+    )
+
+    # Compute gamma_c
+    gamma_c = jnp.arctan(safediv(drift1_val, drift2_val + drift3_val))
+    data["gamma_c_star"] = gamma_c
+    return data

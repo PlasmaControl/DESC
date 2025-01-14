@@ -1283,7 +1283,7 @@ def test_vmec_boundary_subspace(DummyStellarator):
 @pytest.mark.unit
 def test_make_boozmn_output_DESC(TmpDir):
     """Test that booz_xform-style outputs accurately reconstruct quantities."""
-    # load in HELIOTRON equilibrium
+    # load in precise QA equilibrium
     eq = get("precise_QA")
     output_path = str(TmpDir.join("boozmn_out.nc"))
 

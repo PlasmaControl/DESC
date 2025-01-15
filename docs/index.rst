@@ -28,11 +28,14 @@
    notebooks/tutorials/use_outputs.ipynb
    notebooks/tutorials/basic_optimization.ipynb
    notebooks/tutorials/advanced_optimization.ipynb
+   notebooks/tutorials/coil_optimization_REGCOIL.ipynb
    notebooks/tutorials/omnigenity.ipynb
    notebooks/tutorials/nae_constraint.ipynb
    notebooks/tutorials/bootstrap_current.ipynb
    notebooks/tutorials/coil_stage_two_optimization.ipynb
+   notebooks/tutorials/QFM_surface.ipynb
    notebooks/tutorials/ideal_ballooning_stability.ipynb
+   notebooks/tutorials/EffectiveRipple.ipynb
    memory_usage
 
 .. toctree::

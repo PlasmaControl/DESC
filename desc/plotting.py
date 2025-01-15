@@ -495,13 +495,21 @@ def plot_1d(eq, name, grid=None, log=False, ax=None, return_data=False, **kwargs
                 log=log,
                 ax=ax,
                 return_data=return_data,
+                grid=grid,
                 **kwargs,
             )
         rho = grid.nodes[:, 0]
         if not np.all(np.isclose(rho, rho[0])):
             # rho nodes are not constant, so user must be plotting against rho
             return plot_fsa(
-                eq, name, rho=rho, log=log, ax=ax, return_data=return_data, **kwargs
+                eq,
+                name,
+                rho=rho,
+                log=log,
+                ax=ax,
+                return_data=return_data,
+                grid=grid,
+                **kwargs,
             )
 
     elif data_index[parameterization][name]["coordinates"] == "s":  # curve qtys
@@ -606,6 +614,8 @@ def plot_2d(
           the surface, must be provided if Bn is entered as the variable to plot.
         * ``field_grid``: MagneticField, a Grid to pass to the field as a source grid
           from which to calculate Bn, by default None.
+        * ``filled`` : bool, whether to fill contours or not i.e. whether to use
+          `contourf` or `contour`
 
     Returns
     -------
@@ -721,6 +731,7 @@ def plot_2d(
     title_fontsize = kwargs.pop("title_fontsize", None)
     xlabel_fontsize = kwargs.pop("xlabel_fontsize", None)
     ylabel_fontsize = kwargs.pop("ylabel_fontsize", None)
+    filled = kwargs.pop("filled", True)
     assert len(kwargs) == 0, f"plot_2d got unexpected keyword argument: {kwargs.keys()}"
 
     cax_kwargs = {"size": "5%", "pad": 0.05}
@@ -735,8 +746,10 @@ def plot_2d(
         .reshape((grid.num_theta, grid.num_rho, grid.num_zeta), order="F")
         .squeeze()
     )
-
-    im = ax.contourf(xx, yy, data, **contourf_kwargs)
+    if not filled:
+        im = ax.contour(xx, yy, data, **contourf_kwargs)
+    else:
+        im = ax.contourf(xx, yy, data, **contourf_kwargs)
     cax = divider.append_axes("right", **cax_kwargs)
     cbar = fig.colorbar(im, cax=cax)
     cbar.update_ticks()
@@ -917,7 +930,11 @@ def plot_3d(
     title = kwargs.pop("title", "")
     levels = kwargs.pop("levels", None)
     component = kwargs.pop("component", None)
+    showgrid = kwargs.pop("showgrid", True)
+    zeroline = kwargs.pop("zeroline", True)
     showscale = kwargs.pop("showscale", True)
+    showticklabels = kwargs.pop("showticklabels", True)
+    showaxislabels = kwargs.pop("showaxislabels", True)
 
     if name != "B*n":
         data, label = _compute(
@@ -965,10 +982,7 @@ def plot_3d(
         data = data.reshape((grid.num_theta, grid.num_rho, grid.num_zeta), order="F")
 
         label = r"$\mathbf{B} \cdot \hat{n} ~(\mathrm{T})$"
-    showgrid = kwargs.pop("showgrid", True)
-    zeroline = kwargs.pop("zeroline", True)
-    showticklabels = kwargs.pop("showticklabels", True)
-    showaxislabels = kwargs.pop("showaxislabels", True)
+
     errorif(
         len(kwargs) != 0,
         ValueError,
@@ -1105,6 +1119,7 @@ def plot_fsa(  # noqa: C901
     norm_F=False,
     ax=None,
     return_data=False,
+    grid=None,
     **kwargs,
 ):
     """Plot flux surface averages of quantities.
@@ -1142,7 +1157,10 @@ def plot_fsa(  # noqa: C901
     ax : matplotlib AxesSubplot, optional
         Axis to plot on.
     return_data : bool
-        If True, return the data plotted as well as fig,ax
+        if True, return the data plotted as well as fig,ax
+    grid : _Grid
+        Grid to compute name on. If provided, the parameters
+        ``rho``, ``M``, and ``N`` are ignored.
     **kwargs : dict, optional
         Specify properties of the figure, axis, and plot appearance e.g.::
 
@@ -1180,22 +1198,24 @@ def plot_fsa(  # noqa: C901
         fig, ax = plot_fsa(eq, "B_theta", with_sqrt_g=False)
 
     """
-    if np.isscalar(rho) and (int(rho) == rho):
-        rho = np.linspace(0, 1, rho + 1)
-    rho = np.atleast_1d(rho)
     if M is None:
         M = eq.M_grid
     if N is None:
         N = eq.N_grid
+    if grid is None:
+        if np.isscalar(rho) and (int(rho) == rho):
+            rho = np.linspace(0, 1, rho + 1)
+        rho = np.atleast_1d(rho)
+        grid = LinearGrid(M=M, N=N, NFP=eq.NFP, sym=eq.sym, rho=rho)
+    else:
+        rho = grid.compress(grid.nodes[:, 0])
+
     linecolor = kwargs.pop("linecolor", colorblind_colors[0])
     ls = kwargs.pop("ls", "-")
     lw = kwargs.pop("lw", 1)
     fig, ax = _format_ax(ax, figsize=kwargs.pop("figsize", (4, 4)))
 
     label = kwargs.pop("label", None)
-
-    grid = LinearGrid(M=M, N=N, NFP=eq.NFP, rho=rho)
-
     p = "desc.equilibrium.equilibrium.Equilibrium"
     if "<" + name + ">" in data_index[p]:
         # If we identify the quantity to plot as something in data_index, then

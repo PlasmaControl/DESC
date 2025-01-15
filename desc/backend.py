@@ -73,10 +73,10 @@ if use_jax:  # noqa: C901
     from jax.lax import cond, fori_loop, scan, switch, while_loop
     from jax.nn import softmax as softargmax
     from jax.numpy import bincount, flatnonzero, repeat, take
-    from jax.numpy.fft import irfft, rfft, rfft2
+    from jax.numpy.fft import ifft, irfft, irfft2, rfft, rfft2
     from jax.scipy.fft import dct, idct
     from jax.scipy.linalg import block_diag, cho_factor, cho_solve, qr, solve_triangular
-    from jax.scipy.special import gammaln, logsumexp
+    from jax.scipy.special import gammaln
     from jax.tree_util import (
         register_pytree_node,
         tree_flatten,
@@ -434,7 +434,7 @@ else:  # pragma: no cover
     jit = lambda func, *args, **kwargs: func
     execute_on_cpu = lambda func: func
     import scipy.optimize
-    from numpy.fft import irfft, rfft, rfft2  # noqa: F401
+    from numpy.fft import ifft, irfft, irfft2, rfft, rfft2  # noqa: F401
     from scipy.fft import dct, idct  # noqa: F401
     from scipy.integrate import odeint  # noqa: F401
     from scipy.linalg import (  # noqa: F401
@@ -445,7 +445,7 @@ else:  # pragma: no cover
         qr,
         solve_triangular,
     )
-    from scipy.special import gammaln, logsumexp  # noqa: F401
+    from scipy.special import gammaln  # noqa: F401
     from scipy.special import softmax as softargmax  # noqa: F401
 
     trapezoid = np.trapezoid if hasattr(np, "trapezoid") else np.trapz

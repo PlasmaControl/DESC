@@ -5,9 +5,8 @@ from abc import ABC, abstractmethod
 from interpax import CubicHermiteSpline, PPoly
 from orthax.legendre import leggauss
 
-from desc.backend import jnp, rfft2
+from desc.backend import imap, jnp, rfft2
 from desc.integrals._bounce_utils import (
-    _bounce_quadrature,
     _check_bounce_points,
     _check_interp,
     _set_default_plot_kwargs,
@@ -15,13 +14,14 @@ from desc.integrals._bounce_utils import (
     chebyshev,
     cubic_spline,
     fourier_chebyshev,
-    get_pitch_inv_quad,
     interp_fft_to_argmin,
     interp_to_argmin,
     plot_ppoly,
 )
 from desc.integrals._interp_utils import (
     idct_non_uniform,
+    interp1d_Hermite_vec,
+    interp1d_vec,
     interp_rfft2,
     irfft2_non_uniform,
     polyder_vec,
@@ -33,6 +33,8 @@ from desc.integrals.quad_utils import (
     get_quadrature,
     grad_automorphism_sin,
     grad_bijection_from_disc,
+    simpson2,
+    uniform,
 )
 from desc.io import IOAble
 from desc.utils import atleast_nd, errorif, flatten_matrix, setdefault
@@ -41,10 +43,43 @@ from desc.utils import atleast_nd, errorif, flatten_matrix, setdefault
 class Bounce(IOAble, ABC):
     """Abstract class for bounce integrals."""
 
-    get_pitch_inv_quad = staticmethod(get_pitch_inv_quad)
+    @staticmethod
+    def get_pitch_inv_quad(min_B, max_B, num_pitch, simp=False):
+        """Return 1/λ values and weights for quadrature between ``min_B`` and ``max_B``.
+
+        Parameters
+        ----------
+        min_B : jnp.ndarray
+            Minimum B value.
+        max_B : jnp.ndarray
+            Maximum B value.
+        num_pitch : int
+            Number of values.
+        simp : bool
+            Whether to use an open Simpson rule instead of uniform weights.
+
+        Returns
+        -------
+        x, w : tuple[jnp.ndarray]
+            Shape (min_B.shape, num pitch).
+            1/λ values and weights.
+
+        """
+        errorif(
+            num_pitch > 1e5,
+            msg="Floating point error impedes detection of bounce points "
+            f"near global extrema. Choose {num_pitch} < 1e5.",
+        )
+        # Samples should be uniformly spaced in |B| and not λ.
+        # Important to do an open quadrature since the bounce integrals at the
+        # global maxima of |B| are not computable even ignoring precision issues.
+        x, w = simpson2(num_pitch) if simp else uniform(num_pitch)
+        x = bijection_from_disc(x, min_B[..., jnp.newaxis], max_B[..., jnp.newaxis])
+        w = w * grad_bijection_from_disc(min_B, max_B)[..., jnp.newaxis]
+        return x, w
 
     @abstractmethod
-    def points(self, pitch_inv, *, num_well=None):
+    def points(self, pitch_inv, num_well=None):
         """Compute bounce points."""
 
     @abstractmethod
@@ -59,13 +94,24 @@ class Bounce(IOAble, ABC):
 
     @abstractmethod
     def interp_to_argmin(self, f, points):
-        """Interpolates ``f`` to the deepest point pⱼ in magnetic well j."""
+        """Interpolate ``f`` to the deepest point pⱼ in magnetic well j."""
+
+    @abstractmethod
+    def plot(self, l, m, pitch_inv=None, **kwargs):
+        """Plot B and bounce points on the specified field line."""
 
 
-def _swap_pl(f):
-    # Given shape (num rho, num pitch, -1) or (num pitch, num rho, -1)
-    # or (num pitch, -1), swap num rho and num pitch axes.
-    assert f.ndim <= 3
+def _swap_shape(f):
+    """Use to swap between the following shapes.
+
+    The LHS shape enables the simplest broadcasting so it is used internally,
+    while the RHS shape is the returned shape which enables simplest to use API
+    for computing various quantities.
+    (num pitch, num alpha, num rho, -1) <-> (num rho, num alpha, num pitch, -1)
+    (num pitch, num alpha,          -1) <-> (num alpha, num pitch,          -1)
+    (num pitch,                     -1) <-> (num pitch,                     -1)
+    """
+    assert f.ndim <= 4
     return jnp.swapaxes(f, 0, -2)
 
 
@@ -100,7 +146,7 @@ class Bounce2D(Bounce):
     Interpolate Fourier-Chebyshev series to DESC poloidal coordinate.
       θ : ρ, α, ζ ↦ tₘₙ(ρ) exp(jmα) Tₙ(ζ)
     Compute bounce points.
-      r(ζₖ) = B(ζₖ) − 1/λ = 0
+      λ B(ζₖ) = 1
     Interpolate smooth periodic components of integrand with FFTs.
       G : ρ, α, ζ ↦ gₘₙ(ρ) exp(j [m θ(ρ,α,ζ) + n ζ])
     Perform Gaussian quadrature after removing singularities.
@@ -141,7 +187,7 @@ class Bounce2D(Bounce):
         (θ, ζ) ∈ [0, 2π) × [0, 2π/NFP). The ζ coordinates (the unique values prior
         to taking the tensor-product) must be strictly increasing.
         Below shape notation defines ``M=grid.num_theta`` and ``N=grid.num_zeta``.
-        ``M`` and ``N`` are preferably powers of two.
+        ``M`` and ``N`` are preferably rounded down to powers of two.
     data : dict[str, jnp.ndarray]
         Data evaluated on ``grid``.
         Must include names in ``Bounce2D.required_names``.
@@ -150,14 +196,22 @@ class Bounce2D(Bounce):
         DESC coordinates θ sourced from the Clebsch coordinates
         ``FourierChebyshevSeries.nodes(X,Y,rho,domain=(0,2*jnp.pi))``.
         Use the ``Bounce2D.compute_theta`` method to obtain this.
-        ``X`` and ``Y`` are preferably powers of two.
+        ``X`` and ``Y`` are preferably rounded down to powers of two.
     Y_B : int
         Desired resolution for algorithm to compute bounce points.
         Default is double ``Y``.
-    alpha : float
-        Starting field line poloidal label.
+    alpha : jnp.ndarray
+        Shape (num alpha, ).
+        Starting field line poloidal labels.
+        Default is single field line. To compute a surface average
+        on a rational surface, it is necessary to average over multiple
+        field lines until the surface is covered sufficiently.
     num_transit : int
         Number of toroidal transits to follow field line.
+        In an axisymmetric device, field line integration over a single poloidal
+        transit is sufficient to capture a surface average. For a 3D
+        configuration, more transits will approximate surface averages on an
+        irrational magnetic surface better, with diminishing returns.
     quad : tuple[jnp.ndarray]
         Quadrature points xₖ and weights wₖ for the approximate evaluation of an
         integral ∫₋₁¹ g(x) dx = ∑ₖ wₖ g(xₖ). Default is 32 points.
@@ -184,10 +238,7 @@ class Bounce2D(Bounce):
     spline : bool
         Whether to use cubic splines to compute bounce points.
         Default is true, because the algorithm for efficient root-finding on
-        Chebyshev series algorithm is not yet implemented.
-        When using splines, it is recommended to reduce the ``num_well``
-        parameter in the ``points`` method from ``3*Y_B*num_transit`` to
-        at most ``Y_B*num_transit``.
+        Chebyshev series is not yet implemented.
 
     """
 
@@ -205,16 +256,6 @@ class Bounce2D(Bounce):
     # ζ is a field-line-following coordinate. For this, function approximation
     # of B is necessary.
     #
-    # Therefore, to compute bounce points {(ζ₁, ζ₂)}, we approximate B by a
-    # series expansion of basis functions parameterized by a single variable ζ,
-    # restricting the class of basis functions to low order (e.g. n = 2ᵏ where
-    # k is small) algebraic or trigonometric polynomial with integer frequencies.
-    # These are the two classes useful for function approximation and for which
-    # there exists globally convergent root-finding algorithms. We require low
-    # order because the computation expenses grow with the number of potential
-    # roots, and the theorem of algebra states that number is n (2n) for algebraic
-    # (trigonometric) polynomials of degree n.
-    #
     # The frequency transform of a map under the chosen basis must be concentrated
     # at low frequencies for the series to converge fast. For periodic
     # (non-periodic) maps, the standard choice for the basis is a Fourier (Chebyshev)
@@ -224,31 +265,16 @@ class Bounce2D(Bounce):
     # polynomials are preferred to other orthogonal polynomial series is
     # fast discrete polynomial transforms (DPT) are implemented via fast transform
     # to Chebyshev then DCT. Therefore, a Fourier-Chebyshev series is chosen
-    # to interpolate θ(α,ζ) and a piecewise Chebyshev series interpolates B(ζ).
+    # to interpolate θ(α,ζ). An alternative to Chebyshev series is a
+    # [filtered Fourier series](doi.org/10.1016/j.aml.2006.10.001)
+    # or the more recent Fourier continuation methods.
+    # We did not benchmark that.
     #
-    # * An alternative to Chebyshev series is
-    #   [filtered Fourier series](doi.org/10.1016/j.aml.2006.10.001).
-    #   We did not implement or benchmark against that.
-    # * θ is not interpolated with a double Fourier series θ(ϑ, ζ) because
-    #   it is impossible to approximate an unbounded function with a finite Fourier
-    #   series. Due to Gibbs effects, this statement holds even when the goal is to
-    #   approximate θ over one branch cut. The proof uses analytic continuation.
-    # * The advantage of Fourier series in DESC coordinates is that they may use the
-    #   spectrally condensed variable ζ* = NFP ζ. This cannot be done in any other
-    #   coordinate system, regardless of whether the basis functions are periodic.
-    #   The strategy of parameterizing B along field lines with a single variable
-    #   in Clebsch coordinates (as opposed to two variables in straight-field line
-    #   coordinates) also serves to minimize this penalty since evaluation of B
-    #   when computing bounce points will be less expensive (assuming the 2D
-    #   Fourier resolution of B(ϑ, ϕ) is larger than the 1D Chebyshev resolution).
-    #
-    # Computing accurate series expansions in (α, ζ) coordinates demands
-    # particular interpolation points in that coordinate system. Newton iteration
-    # is used to compute θ at these points. Note that interpolation is necessary
-    # because there is no transformation that converts series coefficients in
-    # periodic coordinates, e.g. (ϑ, ϕ), to a low order polynomial basis in
-    # non-periodic coordinates. For example, one can obtain series coefficients in
-    # (α, ϕ) coordinates from those in (ϑ, ϕ) as follows
+    # Function approximation in (α, ζ) coordinates demands particular interpolation
+    # points in that coordinate system because there is no transformation that converts
+    # series coefficients in periodic coordinates, e.g. (ϑ, ϕ), to a low order
+    # polynomial basis in non-periodic coordinates. For example, one can obtain series
+    # coefficients in (α, ϕ) coordinates from those in (ϑ, ϕ) as follows
     #   g : ϑ, ϕ ↦ ∑ₘₙ aₘₙ exp(j [mϑ + nϕ])
     #
     #   g : α, ϕ ↦ ∑ₘₙ aₘₙ exp(j [mα + (m ι + n)ϕ])
@@ -256,20 +282,12 @@ class Bounce2D(Bounce):
     # irrational frequencies, courtesy of the irrational rotational transform.
     # Globally convergent root-finding schemes for that basis (at fixed α) are
     # not known. The denominator of a close rational could be absorbed into the
-    # coordinate ϕ, but this balloons the frequency, and hence the degree of the
-    # series.
+    # coordinate ϕ, but this balloons the frequency, and hence degree of the series.
     #
-    # After computing the bounce points, the supplied quadrature is performed.
-    # By default, this is a Gauss quadrature after removing the singularity.
-    # Fast fourier transforms interpolate smooth functions in the integrand to the
-    # quadrature nodes. Quadrature is chosen over Runge-Kutta methods of the form
+    # Quadrature is chosen over Runge-Kutta methods of the form
     #     ∂Fᵢ/∂ζ = f(ρ,α,λ,ζ,{Gⱼ}) subject to Fᵢ(ζ₁) = 0
     # A fourth order Runge-Kutta method is equivalent to a quadrature
     # with Simpson's rule. The quadratures resolve these integrals more efficiently.
-    #
-    # Fast transforms are used where possible. Fast multipoint methods are not
-    # implemented. For non-uniform interpolation, MMTs are used. It will be
-    # worthwhile to use the inverse non-uniform fast transforms.
 
     required_names = ["B^zeta", "|B|", "iota"]
 
@@ -279,13 +297,11 @@ class Bounce2D(Bounce):
         data,
         theta,
         Y_B=None,
+        alpha=jnp.array([0.0]),
         num_transit=20,
-        # TODO (#1309): Allow multiple starting labels for near-rational surfaces.
-        #  Can just add axis for piecewise chebyshev stuff cheb.
-        alpha=0.0,
         quad=default_quad,
-        automorphism=None,
         *,
+        automorphism=None,
         Bref=1.0,
         Lref=1.0,
         is_reshaped=False,
@@ -294,12 +310,11 @@ class Bounce2D(Bounce):
         spline=True,
     ):
         """Returns an object to compute bounce integrals."""
-        is_reshaped = is_reshaped or is_fourier
         assert grid.can_fft2
+        is_reshaped = is_reshaped or is_fourier
         self._M = grid.num_theta
         self._N = grid.num_zeta
         self._NFP = grid.NFP
-        self._alpha = alpha
         self._x, self._w = get_quadrature(quad, automorphism)
 
         self._c = {
@@ -308,7 +323,7 @@ class Bounce2D(Bounce):
             "T(z)": fourier_chebyshev(
                 theta,
                 data["iota"] if is_reshaped else grid.compress(data["iota"]),
-                alpha,
+                jnp.atleast_1d(alpha),
                 num_transit,
             ),
         }
@@ -436,7 +451,13 @@ class Bounce2D(Bounce):
             **kwargs,
         ).reshape(-1, X, Y, 3)[..., 1]
 
-    def points(self, pitch_inv, *, num_well=None):
+    def _swap_pitch(self, pitch_inv):
+        # Move num pitch axis to front so that the num rho axis broadcasts with
+        # the spectral coefficients of the Fourier series defined on that surface.
+        # Shape is (num pitch, 1, num rho) or (num pitch, num rho) or (num pitch, ).
+        return jnp.moveaxis(atleast_nd(self._c["T(z)"].cheb.ndim - 1, pitch_inv), -1, 0)
+
+    def points(self, pitch_inv, num_well=None):
         """Compute bounce points.
 
         Parameters
@@ -465,7 +486,7 @@ class Bounce2D(Bounce):
         Returns
         -------
         z1, z2 : tuple[jnp.ndarray]
-            Shape (num rho, num pitch, num well).
+            Shape (num rho, num alpha, num pitch, num well).
             Tuple of length two (z1, z2) that stores ζ coordinates of bounce points.
             The points are ordered and grouped such that the straight line path
             between ``z1`` and ``z2`` resides in the epigraph of B.
@@ -476,14 +497,9 @@ class Bounce2D(Bounce):
 
         """
         if isinstance(self._c["B(z)"], PiecewiseChebyshevSeries):
-            # We move num pitch axis to front so that the num rho axis broadcasts
-            # with the spectral coefficients (whose first axis is also num rho),
-            # assuming this axis exists.
-            pitch_inv = atleast_nd(self._c["T(z)"].cheb.ndim - 1, pitch_inv).T
-            z1, z2 = map(
-                _swap_pl,
-                self._c["B(z)"].intersect1d(pitch_inv, num_intersect=num_well),
-            )
+            z1, z2 = self._c["B(z)"].intersect1d(self._swap_pitch(pitch_inv), num_well)
+            z1 = _swap_shape(z1)
+            z2 = _swap_shape(z2)
         else:
             z1, z2 = bounce_points(
                 pitch_inv,
@@ -492,10 +508,17 @@ class Bounce2D(Bounce):
                 polyder_vec(self._c["B(z)"]),
                 num_well,
             )
+            if z1.ndim == 4:
+                # move rho axis to 0 and alpha axis to 1
+                z1 = jnp.swapaxes(z1, 0, 1)
+                z2 = jnp.swapaxes(z2, 0, 1)
         return z1, z2
 
     def _polish_points(self, points, pitch_inv):
-        # TODO (#1154): One application of secant on Fourier series B - 1/λ.
+        # TODO after (#1243): One application of Newton on Fourier series B - 1/λ.
+        #  Need Fourier coefficients of lambda, but that is already known.
+        #  Then can use less resolution for the global root finding algorithm
+        #  and rely on the local one once good neighbourhood is found.
         raise NotImplementedError
 
     def check_points(self, points, pitch_inv, *, plot=True, **kwargs):
@@ -504,7 +527,7 @@ class Bounce2D(Bounce):
         Parameters
         ----------
         points : tuple[jnp.ndarray]
-            Shape (num rho, num pitch, num well).
+            Shape (num rho, num alpha, num pitch, num well).
             Output of method ``self.points``.
             Tuple of length two (z1, z2) that stores ζ coordinates of bounce points.
             The points are ordered and grouped such that the straight line path
@@ -527,26 +550,26 @@ class Bounce2D(Bounce):
             Matplotlib (fig, ax) tuples for the 1D plot of each field line.
 
         """
-        kwargs.setdefault("hlabel", r"$\alpha = $" + str(self._alpha) + r", $\zeta$")
         kwargs = _set_default_plot_kwargs(kwargs)
         if isinstance(self._c["B(z)"], PiecewiseChebyshevSeries):
             return self._c["B(z)"].check_intersect1d(
-                # We move num pitch axis to front so that the num rho axis broadcasts
-                # with the spectral coefficients (whose first axis is also num rho),
-                # assuming this axis exists.
-                z1=_swap_pl(points[0]),
-                z2=_swap_pl(points[1]),
-                k=atleast_nd(self._c["B(z)"].cheb.ndim - 1, pitch_inv).T,
+                z1=_swap_shape(points[0]),
+                z2=_swap_shape(points[1]),
+                k=self._swap_pitch(pitch_inv),
                 plot=plot,
                 **kwargs,
             )
         else:
+            B = self._c["B(z)"]
+            if B.ndim == 4:
+                # move rho axis to 0 and alpha axis to 1
+                B = jnp.swapaxes(B, 0, 1)
             return _check_bounce_points(
                 z1=points[0],
                 z2=points[1],
                 pitch_inv=pitch_inv,
                 knots=self._c["knots"],
-                B=self._c["B(z)"],
+                B=B,
                 plot=plot,
                 **kwargs,
             )
@@ -593,7 +616,7 @@ class Bounce2D(Bounce):
         names : str or list[str]
             Names in ``data`` to interpolate. Default is all keys in ``data``.
         points : tuple[jnp.ndarray]
-            Shape (num rho, num pitch, num well).
+            Shape (num rho, num alpha, num pitch, num well).
             Optional, output of method ``self.points``.
             Tuple of length two (z1, z2) that stores ζ coordinates of bounce points.
             The points are ordered and grouped such that the straight line path
@@ -612,10 +635,10 @@ class Bounce2D(Bounce):
 
         Returns
         -------
-        result : jnp.ndarray
-            Shape (num rho, num pitch, num well).
-            Last axis enumerates the bounce integrals for a given
-            flux surface and pitch value.
+        result : jnp.ndarray or list[jnp.ndarray]
+            Shape (num rho, num alpha, num pitch, num well).
+            Last axis enumerates the bounce integrals for a given field line
+            and pitch value.
 
         """
         if not isinstance(integrand, (list, tuple)):
@@ -628,41 +651,29 @@ class Bounce2D(Bounce):
 
         if points is None:
             points = self.points(pitch_inv)
-        # We move num pitch axis to front so that the num rho axis broadcasts
-        # with the spectral coefficients (whose first axis is also num rho),
-        # assuming this axis exists.
+
+        x, w = self._x, self._w if quad is None else quad
         result = self._integrate(
-            x=self._x if quad is None else quad[0],
-            w=self._w if quad is None else quad[1],
-            integrand=integrand,
-            pitch=atleast_nd(self._c["T(z)"].cheb.ndim - 1, 1 / pitch_inv).T[
-                ..., jnp.newaxis
-            ],
-            data=data,
-            names=names,
-            points=map(_swap_pl, points),
-            is_fourier=is_fourier,
-            check=check,
-            plot=plot,
+            x,
+            w,
+            integrand,
+            # add axis to broadcast against quadrature points
+            self._swap_pitch(1 / pitch_inv)[..., jnp.newaxis],
+            data,
+            names,
+            _swap_shape(points[0]),
+            _swap_shape(points[1]),
+            is_fourier,
+            check,
+            plot,
         )
         return result[0] if len(result) == 1 else result
 
     def _integrate(
-        self,
-        x,
-        w,
-        integrand,
-        pitch,
-        data,
-        names,
-        points,
-        *,
-        is_fourier,
-        check,
-        plot,
+        self, x, w, integrand, pitch, data, names, z1, z2, is_fourier, check, plot
     ):
-        z1, z2 = points
-        shape = [*z1.shape, x.size]  # num pitch, num rho, num well, num quad
+        # num pitch, num alpha, num rho, num well, num quad
+        shape = [*z1.shape, x.size]
         # ζ ∈ ℝ and θ ∈ ℝ coordinates of quadrature points
         zeta = flatten_matrix(
             bijection_from_disc(x, z1[..., jnp.newaxis], z2[..., jnp.newaxis])
@@ -726,25 +737,24 @@ class Bounce2D(Bounce):
         data["zeta"] = zeta
         cov = grad_bijection_from_disc(z1, z2)
         result = [
-            _swap_pl((f(data, B, pitch) * dl_dz).reshape(shape).dot(w) * cov)
+            _swap_shape((f(data, B, pitch) * dl_dz).reshape(shape).dot(w) * cov)
             for f in integrand
         ]
 
         if check:
             shape[-3], shape[0] = shape[0], shape[-3]
             _check_interp(
-                # shape is num alpha = 1, num rho, num pitch, num well, num quad
-                (1, *shape),
-                *map(_swap_pl, (zeta, 1 / dl_dz, B)),
-                result[0],
-                [_swap_pl(data[name]) for name in names],
+                shape,
+                *map(_swap_shape, (zeta, 1 / dl_dz, B)),
+                result,
+                [_swap_shape(data[name]) for name in names],
                 plot=plot,
             )
 
         return result
 
     def interp_to_argmin(self, f, points, *, is_fourier=False):
-        """Interpolates ``f`` to the deepest point pⱼ in magnetic well j.
+        """Interpolate ``f`` to the deepest point pⱼ in magnetic well j.
 
         Parameters
         ----------
@@ -755,7 +765,7 @@ class Bounce2D(Bounce):
             Use the method ``Bounce2D.reshape`` to reshape the data into the
             expected shape.
         points : tuple[jnp.ndarray]
-            Shape (num rho, num pitch, num well).
+            Shape (num rho, num alpha, num pitch, num well).
             Optional, output of method ``self.points``.
             Tuple of length two (z1, z2) that stores ζ coordinates of bounce points.
             The points are ordered and grouped such that the straight line path
@@ -767,7 +777,7 @@ class Bounce2D(Bounce):
         Returns
         -------
         f_j : jnp.ndarray
-            Shape (num rho, num pitch, num well).
+            Shape (num rho, num alpha, num pitch, num well).
             ``f`` interpolated to the deepest point between ``points``.
 
         """
@@ -776,26 +786,26 @@ class Bounce2D(Bounce):
             NotImplementedError,
             msg="Set spline to true until implemented.",
         )
-        # We move num pitch axis to front so that the num rho axis broadcasts
-        # with the spectral coefficients (whose first axis is also num rho),
-        # assuming this axis exists.
-        return _swap_pl(
+        return _swap_shape(
             interp_fft_to_argmin(
                 self._NFP,
                 self._c["T(z)"],
                 f,
-                map(_swap_pl, points),
+                map(_swap_shape, points),
                 self._c["knots"],
                 self._c["B(z)"],
                 polyder_vec(self._c["B(z)"]),
-                is_fourier=is_fourier,
-                M=self._M,
-                N=self._N,
+                is_fourier,
+                self._M,
+                self._N,
             )
         )
 
     def compute_fieldline_length(self, quad=None):
-        """Compute the proper length of the field line ∫ dℓ / B.
+        """Compute the (mean) proper length of the field line ∫ dℓ / B.
+
+        Computes mean_A ∫ dℓ / B where A is the set of field line labels
+        given when making this object.
 
         Parameters
         ----------
@@ -811,21 +821,19 @@ class Bounce2D(Bounce):
             Shape (num rho, ).
 
         """
+        num_transit = self._c["T(z)"].X
         # Integrating an analytic oscillatory map so a high order quadrature is ideal.
         # Difficult to pick the right frequency for Filon quadrature in general, which
         # would work best, especially at high NFP. Gauss-Legendre is superior to
         # Clenshaw-Curtis for smooth oscillatory maps.
         deg = (
-            self._c["B(z)"].Y // 2
+            self._c["B(z)"].Y
             if isinstance(self._c["B(z)"], PiecewiseChebyshevSeries)
-            else self._c["T(z)"].Y
-        )
+            else self._c["knots"].size // num_transit
+        ) // 2
         x, w = leggauss(deg) if quad is None else quad
 
-        shape = (
-            *self._c["T(z)"].cheb.shape[:-2],  # num rho
-            self._c["T(z)"].X * w.size,  # num transit * num quad points
-        )
+        shape = (*self._c["T(z)"].cheb.shape[:-2], num_transit * w.size)
         # θ at quadrature points
         theta = idct_non_uniform(
             x, self._c["T(z)"].cheb[..., jnp.newaxis, :], self._c["T(z)"].Y
@@ -845,22 +853,28 @@ class Bounce2D(Bounce):
                 axes=(-1, -2),
             )
         ).reshape(*shape[:-1], self._c["T(z)"].X, w.size)
-
+        # Simple mean over α because when the toroidal angle extends
+        # beyond one transit we need to weight all field lines uniformly,
+        # regardless of their area wrt α.
+        return (1 / B_sup_z).dot(w).sum(axis=-1).mean(axis=0) * jnp.pi
         # Gradient of change of variable from [−1, 1] → [0, 2π] is π.
-        return (1 / B_sup_z).dot(w).sum(axis=-1) * jnp.pi
 
-    def plot(self, l, pitch_inv=None, **kwargs):
-        """Plot the field line and bounce points of the given pitch angles.
+    def plot(self, l, m, pitch_inv=None, **kwargs):
+        """Plot B and bounce points on the specified field line.
 
         Parameters
         ----------
         l : int
             Index into the nodes of the grid supplied to make this object.
+            The rho value corresponds to
             ``rho=grid.compress(grid.nodes[:,0])[l]``.
+        m : int
+            Index into the ``alpha`` array supplied to make this object.
+            The alpha value corresponds to ``alpha[m]``.
         pitch_inv : jnp.ndarray
             Shape (num pitch, ).
             Optional, 1/λ values whose corresponding bounce points on the field line
-            specified by Clebsch coordinate ρ(l) will be plotted.
+            specified by Clebsch coordinate ρ(l), α(m) will be plotted.
         kwargs
             Keyword arguments into
             ``desc/integrals/basis.py::PiecewiseChebyshevSeries.plot1d``.
@@ -875,13 +889,14 @@ class Bounce2D(Bounce):
             pitch_inv is not None and jnp.ndim(pitch_inv) > 1,
             msg=f"Got pitch_inv.ndim={jnp.ndim(pitch_inv)}, but expected 1.",
         )
-        kwargs.setdefault("hlabel", r"$\alpha = $" + str(self._alpha) + r", $\zeta$")
-        kwargs = _set_default_plot_kwargs(kwargs)
+        kwargs = _set_default_plot_kwargs(kwargs, l, m)
 
         B = self._c["B(z)"]
         if isinstance(B, PiecewiseChebyshevSeries):
-            if B.cheb.ndim > 2:
-                B = PiecewiseChebyshevSeries(B.cheb[l], B.domain)
+            if B.cheb.ndim == 4:
+                B = PiecewiseChebyshevSeries(B.cheb[m, l], B.domain)
+            elif B.cheb.ndim == 3:
+                B = PiecewiseChebyshevSeries(B.cheb[m], B.domain)
             if pitch_inv is not None:
                 z1, z2 = B.intersect1d(pitch_inv)
                 kwargs["z1"] = z1
@@ -889,8 +904,10 @@ class Bounce2D(Bounce):
                 kwargs["k"] = pitch_inv
             fig, ax = B.plot1d(B.cheb, **kwargs)
         else:
-            if B.ndim == 3:
-                B = B[l]
+            if B.ndim == 4:
+                B = B[m, l]
+            elif B.ndim == 3:
+                B = B[m]
             if pitch_inv is not None:
                 z1, z2 = bounce_points(pitch_inv, self._c["knots"], B, polyder_vec(B))
                 kwargs["z1"] = z1
@@ -899,14 +916,18 @@ class Bounce2D(Bounce):
             fig, ax = plot_ppoly(PPoly(B.T, self._c["knots"]), **kwargs)
         return fig, ax
 
-    def plot_theta(self, l, **kwargs):
-        """Plot θ(α, ζ) on the specified flux surface.
+    def plot_theta(self, l, m, **kwargs):
+        """Plot θ on the specified field line.
 
         Parameters
         ----------
         l : int
             Index into the nodes of the grid supplied to make this object.
+            The rho value corresponds to
             ``rho=grid.compress(grid.nodes[:,0])[l]``.
+        m : int
+            Index into the ``alpha`` array supplied to make this object.
+            The alpha value corresponds to ``alpha[m]``.
         kwargs
             Keyword arguments into
             ``desc/integrals/basis.py::PiecewiseChebyshevSeries.plot1d``.
@@ -918,18 +939,16 @@ class Bounce2D(Bounce):
 
         """
         T = self._c["T(z)"]
-        if T.cheb.ndim > 2:
-            T = PiecewiseChebyshevSeries(T.cheb[l], T.domain)
+        if T.cheb.ndim == 4:
+            T = PiecewiseChebyshevSeries(T.cheb[m, l], T.domain)
+        elif T.cheb.ndim == 3:
+            T = PiecewiseChebyshevSeries(T.cheb[m], T.domain)
         kwargs.setdefault(
             "title",
-            r"DESC poloidal angle $\theta($"
-            + r"$\alpha=$"
-            + str(self._alpha)
-            + r"$, \zeta)$",
+            rf"Poloidal angle $\theta$ on field line $\rho(l={l})$, $\alpha(m={m})$",
         )
-        kwargs.setdefault("hlabel", r"$\alpha = $" + str(self._alpha) + r", $\zeta$")
         kwargs.setdefault("vlabel", r"$\theta$")
-        fig, ax = T.plot1d(T.cheb, **_set_default_plot_kwargs(kwargs))
+        fig, ax = T.plot1d(T.cheb, **_set_default_plot_kwargs(kwargs, l, m))
         return fig, ax
 
 
@@ -993,9 +1012,9 @@ class Bounce1D(Bounce):
         Optional. Reference length scale for normalization.
     is_reshaped : bool
         Whether the arrays in ``data`` are already reshaped to the expected form of
-        shape (..., num zeta) or (..., num rho, num zeta) or
-        (num alpha, num rho, num zeta). This option can be used to iteratively
-        compute bounce integrals one field line or one flux surface at a time,
+        shape (..., num zeta) or (..., num alpha, num zeta) or
+        (num rho, num alpha, num zeta). This option can be used to iteratively
+        compute bounce integrals one flux surface or one field line at a time,
         respectively, reducing memory usage. To do so, set to true and provide
         only those axes of the reshaped data. Default is false.
     check : bool
@@ -1010,8 +1029,8 @@ class Bounce1D(Bounce):
         grid,
         data,
         quad=default_quad,
-        automorphism=None,
         *,
+        automorphism=None,
         Bref=1.0,
         Lref=1.0,
         is_reshaped=False,
@@ -1024,14 +1043,14 @@ class Bounce1D(Bounce):
             # To retain dℓ = |B|/(B⋅∇ζ) dζ > 0 after fixing dζ > 0, we require
             # B⋅∇ζ > 0. This is equivalent to changing the sign of ∇ζ
             # or (∂ℓ/∂ζ)|ρ,a. Recall dζ = ∇ζ⋅dR ⇔ 1 = ∇ζ⋅(e_ζ|ρ,a).
-            "|B^zeta|": jnp.abs(data["B^zeta"]) * Lref / Bref,
-            "|B^zeta|_z|r,a": data["B^zeta_z|r,a"]
-            * jnp.sign(data["B^zeta"])
-            * Lref
-            / Bref,
+            "|b^zeta|": jnp.abs(data["B^zeta"]) * Lref / data["|B|"],
             "|B|": data["|B|"] / Bref,
             "|B|_z|r,a": data["|B|_z|r,a"] / Bref,  # This is already the correct sign.
         }
+        self._data["|b^zeta|_z|r,a"] = (
+            data["B^zeta_z|r,a"] * jnp.sign(data["B^zeta"]) * Lref
+            - self._data["|b^zeta|"] * data["|B|_z|r,a"]
+        ) / data["|B|"]
         if not is_reshaped:
             for name in self._data:
                 self._data[name] = Bounce1D.reshape(grid, self._data[name])
@@ -1043,7 +1062,7 @@ class Bounce1D(Bounce):
         # The point of Bounce2D is to do such a 2D interpolation without
         # rebuilding DESC transforms each time an objective is computed.
         self._zeta = grid.compress(grid.nodes[:, 2], surface_label="zeta")
-        # Shape is (num alpha, num rho, N - 1, -1).
+        # Shape is (num rho, num alpha, N - 1, -1).
         self._B = jnp.moveaxis(
             CubicHermiteSpline(
                 x=self._zeta,
@@ -1071,22 +1090,22 @@ class Bounce1D(Bounce):
         Returns
         -------
         f : jnp.ndarray
-            Shape (num alpha, num rho, num zeta).
+            Shape (num rho, num alpha, num zeta).
             Reshaped data which may be given to ``integrate``.
 
         """
-        return grid.meshgrid_reshape(f, "arz")
+        return grid.meshgrid_reshape(f, "raz")
 
-    def points(self, pitch_inv, *, num_well=None):
+    def points(self, pitch_inv, num_well=None):
         """Compute bounce points.
 
         Parameters
         ----------
         pitch_inv : jnp.ndarray
-            Shape (num alpha, num rho, num pitch).
-            1/λ values to compute the bounce points at each field line. 1/λ(α,ρ) is
-            specified by ``pitch_inv[α,ρ]`` where in the latter the labels
-            are interpreted as the indices that correspond to that field line.
+            Shape (num rho, num pitch).
+            1/λ values to compute the bounce integrals. 1/λ(ρ) is specified by
+            ``pitch_inv[ρ]`` where in the latter the labels are interpreted
+            as the indices that correspond to that field line.
         num_well : int or None
             Specify to return the first ``num_well`` pairs of bounce points for each
             pitch and field line. Default is ``None``, which will detect all wells,
@@ -1106,7 +1125,7 @@ class Bounce1D(Bounce):
         Returns
         -------
         z1, z2 : tuple[jnp.ndarray]
-            Shape (num alpha, num rho, num pitch, num well).
+            Shape (num rho, num alpha, num pitch, num well).
             Tuple of length two (z1, z2) that stores ζ coordinates of bounce points.
             The points are ordered and grouped such that the straight line path
             between ``z1`` and ``z2`` resides in the epigraph of B.
@@ -1116,6 +1135,9 @@ class Bounce1D(Bounce):
             line and pitch, is padded with zero.
 
         """
+        # if rho axis exists, then add alpha axis
+        if jnp.ndim(pitch_inv) == 2:
+            pitch_inv = pitch_inv[:, jnp.newaxis]
         return bounce_points(pitch_inv, self._zeta, self._B, self._dB_dz, num_well)
 
     def check_points(self, points, pitch_inv, *, plot=True, **kwargs):
@@ -1124,16 +1146,16 @@ class Bounce1D(Bounce):
         Parameters
         ----------
         points : tuple[jnp.ndarray]
-            Shape (num alpha, num rho, num pitch, num well).
+            Shape (num rho, num alpha, num pitch, num well).
             Output of method ``self.points``.
             Tuple of length two (z1, z2) that stores ζ coordinates of bounce points.
             The points are ordered and grouped such that the straight line path
             between ``z1`` and ``z2`` resides in the epigraph of B.
         pitch_inv : jnp.ndarray
-            Shape (num alpha, num rho, num pitch).
-            1/λ values to compute the bounce points at each field line. 1/λ(α,ρ) is
-            specified by ``pitch_inv[α,ρ]`` where in the latter the labels
-            are interpreted as the indices that correspond to that field line.
+            Shape (num rho, num pitch).
+            1/λ values to compute the bounce integrals. 1/λ(ρ) is specified by
+            ``pitch_inv[ρ]`` where in the latter the labels are interpreted
+            as the indices that correspond to that field line.
         plot : bool
             Whether to plot the field lines and bounce points of the given pitch angles.
         kwargs
@@ -1167,10 +1189,10 @@ class Bounce1D(Bounce):
         points=None,
         *,
         method="cubic",
-        batch=True,
         check=False,
         plot=False,
         quad=None,
+        **kwargs,
     ):
         """Bounce integrate ∫ f(ρ,α,λ,ℓ) dℓ.
 
@@ -1183,12 +1205,12 @@ class Bounce1D(Bounce):
             that determines ``f`` in ∫ f(ρ,α,λ,ℓ) dℓ. It should accept a dictionary
             which stores the interpolated data and the arguments ``B`` and ``pitch``.
         pitch_inv : jnp.ndarray
-            Shape (num alpha, num rho, num pitch).
-            1/λ values to compute the bounce integrals. 1/λ(α,ρ) is specified by
-            ``pitch_inv[α,ρ]`` where in the latter the labels are interpreted
+            Shape (num rho, num pitch).
+            1/λ values to compute the bounce integrals. 1/λ(ρ) is specified by
+            ``pitch_inv[ρ]`` where in the latter the labels are interpreted
             as the indices that correspond to that field line.
         data : dict[str, jnp.ndarray]
-            Shape (num alpha, num rho, num zeta).
+            Shape (num rho, num alpha, num zeta).
             Real scalar-valued periodic functions in (θ, ζ) ∈ [0, 2π) × [0, 2π/NFP)
             evaluated on the ``grid`` supplied to construct this object.
             Use the method ``Bounce1D.reshape`` to reshape the data into the
@@ -1196,7 +1218,7 @@ class Bounce1D(Bounce):
         names : str or list[str]
             Names in ``data`` to interpolate. Default is all keys in ``data``.
         points : tuple[jnp.ndarray]
-            Shape (num alpha, num rho, num pitch, num well).
+            Shape (num rho, num alpha, num pitch, num well).
             Optional, output of method ``self.points``.
             Tuple of length two (z1, z2) that stores ζ coordinates of bounce points.
             The points are ordered and grouped such that the straight line path
@@ -1205,8 +1227,6 @@ class Bounce1D(Bounce):
             Method of interpolation.
             See https://interpax.readthedocs.io/en/latest/_api/interpax.interp1d.html.
             Default is cubic C1 local spline.
-        batch : bool
-            Whether to perform computation in a batched manner. Default is true.
         check : bool
             Flag for debugging. Must be false for JAX transformations.
         plot : bool
@@ -1218,10 +1238,10 @@ class Bounce1D(Bounce):
 
         Returns
         -------
-        result : jnp.ndarray
-            Shape (num alpha, num rho, num pitch, num well).
-            Last axis enumerates the bounce integrals for a given field line,
-            flux surface, and pitch value.
+        result : jnp.ndarray or list[jnp.ndarray]
+            Shape (num rho, num alpha, num pitch, num well).
+            Last axis enumerates the bounce integrals for a given field line
+            and pitch value.
 
         """
         if not isinstance(integrand, (list, tuple)):
@@ -1232,36 +1252,116 @@ class Bounce1D(Bounce):
         elif isinstance(names, str):
             names = [names]
 
+        # if rho axis exists, then add alpha axis
+        if jnp.ndim(pitch_inv) == 2:
+            pitch_inv = pitch_inv[:, jnp.newaxis]
         if points is None:
-            points = self.points(pitch_inv)
-        result = _bounce_quadrature(
-            x=self._x if quad is None else quad[0],
-            w=self._w if quad is None else quad[1],
-            knots=self._zeta,
-            integrand=integrand,
-            pitch_inv=pitch_inv,
-            data=data | self._data,
-            names=names,
-            points=points,
-            method=method,
-            batch=batch,
-            check=check,
-            plot=plot,
-        )
+            points = bounce_points(pitch_inv, self._zeta, self._B, self._dB_dz)
+
+        x, w = self._x, self._w if quad is None else quad
+        # add axis to broadcast against quadrature points
+        pitch = jnp.atleast_1d(1 / pitch_inv)[..., jnp.newaxis]
+
+        if kwargs.get("batch", True):
+            result = self._integrate(
+                x,
+                w,
+                integrand,
+                pitch,
+                data,
+                names,
+                points,
+                method,
+                check,
+                plot,
+                batch=True,
+            )
+        else:
+            # Perform integrals for a particular field line and pitch one at a time.
+            def loop(points):  # over num well axis
+                # Need to return tuple because input was tuple; artifact of JAX map.
+                return None, self._integrate(
+                    x,
+                    w,
+                    integrand,
+                    pitch,
+                    data,
+                    names,
+                    points,
+                    method,
+                    check=False,
+                    plot=False,
+                    batch=False,
+                )
+
+            z1, z2 = points
+            result = imap(loop, (jnp.moveaxis(z1, -1, 0), jnp.moveaxis(z2, -1, 0)))[1]
+            result = [jnp.moveaxis(r, 0, -1) for r in result]
+
         return result[0] if len(result) == 1 else result
 
+    def _integrate(
+        self, x, w, integrand, pitch, data, names, points, method, check, plot, batch
+    ):
+        z1, z2 = points
+        # (..., num pitch, num well, num quad)
+        shape = (*z1.shape, x.size)
+        # ζ ∈ ℝ coordinates of quadrature points
+        zeta = bijection_from_disc(x, z1[..., jnp.newaxis], z2[..., jnp.newaxis])
+        if batch:
+            zeta = flatten_matrix(zeta)
+
+        b_sup_z = interp1d_Hermite_vec(
+            zeta,
+            self._zeta,
+            self._data["|b^zeta|"][..., jnp.newaxis, :],
+            self._data["|b^zeta|_z|r,a"][..., jnp.newaxis, :],
+        )
+        B = interp1d_Hermite_vec(
+            zeta,
+            self._zeta,
+            self._data["|B|"][..., jnp.newaxis, :],
+            self._data["|B|_z|r,a"][..., jnp.newaxis, :],
+        )
+
+        # Spline each function separately so that operations in the integrand
+        # that do not preserve smoothness can be captured.
+        data = {
+            name: interp1d_vec(
+                zeta, self._zeta, data[name][..., jnp.newaxis, :], method=method
+            )
+            for name in names
+        }
+        cov = grad_bijection_from_disc(z1, z2)
+        result = [
+            (f(data, B, pitch) / b_sup_z).reshape(shape).dot(w) * cov for f in integrand
+        ]
+
+        if check:
+            _check_interp(
+                shape,
+                zeta,
+                b_sup_z,
+                B,
+                result,
+                [data[name] for name in names],
+                plot=plot,
+            )
+
+        return result
+
     def interp_to_argmin(self, f, points, *, method="cubic"):
-        """Interpolates ``f`` to the deepest point pⱼ in magnetic well j.
+        """Interpolate ``f`` to the deepest point pⱼ in magnetic well j.
 
         Parameters
         ----------
         f : jnp.ndarray
-            Shape (num alpha, num rho, num zeta).
+            Shape (num rho, num alpha, num zeta).
             Real scalar-valued functions evaluated on the ``grid`` supplied to
             construct this object. Use the method ``Bounce1D.reshape`` to
             reshape the data into the expected shape.
         points : tuple[jnp.ndarray]
-            Shape (num alpha, num rho, num pitch, num well).
+            Shape (num rho, num alpha, num pitch, num well).
             Optional, output of method ``self.points``.
             Tuple of length two (z1, z2) that stores ζ coordinates of bounce points.
             The points are ordered and grouped such that the straight line path
@@ -1274,24 +1374,24 @@ class Bounce1D(Bounce):
         Returns
         -------
         f_j : jnp.ndarray
-            Shape (num alpha, num rho, num pitch, num well).
+            Shape (num rho, num alpha, num pitch, num well).
             ``f`` interpolated to the deepest point between ``points``.
 
         """
         return interp_to_argmin(f, points, self._zeta, self._B, self._dB_dz, method)
 
-    def plot(self, m, l, pitch_inv=None, **kwargs):
-        """Plot the field line and bounce points of the given pitch angles.
+    def plot(self, l, m, pitch_inv=None, **kwargs):
+        """Plot B and bounce points on the specified field line.
 
         Parameters
         ----------
-        m, l : int, int
+        l, m : int
             Indices into the nodes of the grid supplied to make this object.
-            ``alpha,rho=Bounce1D.reshape(grid,grid.nodes[:,:2])[m,l,0]``.
+            ``rho,alpha=Bounce1D.reshape(grid,grid.nodes[:,:2])[l,m,0]``.
         pitch_inv : jnp.ndarray
             Shape (num pitch, ).
             Optional, 1/λ values whose corresponding bounce points on the field line
-            specified by Clebsch coordinate α(m), ρ(l) will be plotted.
+            specified by Clebsch coordinate ρ(l), α(m) will be plotted.
         kwargs
             Keyword arguments into ``desc/integrals/_bounce_utils.py::plot_ppoly``.
 
@@ -1303,11 +1403,11 @@ class Bounce1D(Bounce):
         """
         B, dB_dz = self._B, self._dB_dz
         if B.ndim == 4:
-            B = B[m]
-            dB_dz = dB_dz[m]
-        if B.ndim == 3:
             B = B[l]
             dB_dz = dB_dz[l]
+        if B.ndim == 3:
+            B = B[m]
+            dB_dz = dB_dz[m]
         if pitch_inv is not None:
             errorif(
                 jnp.ndim(pitch_inv) > 1,
@@ -1317,5 +1417,7 @@ class Bounce1D(Bounce):
             kwargs["z1"] = z1
             kwargs["z2"] = z2
             kwargs["k"] = pitch_inv
-        fig, ax = plot_ppoly(PPoly(B.T, self._zeta), **_set_default_plot_kwargs(kwargs))
+        fig, ax = plot_ppoly(
+            PPoly(B.T, self._zeta), **_set_default_plot_kwargs(kwargs, l, m)
+        )
         return fig, ax

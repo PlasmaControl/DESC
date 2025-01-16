@@ -3,6 +3,7 @@
 from desc.backend import jnp
 from desc.compute.utils import _compute as compute_fun
 from desc.compute.utils import get_params, get_profiles, get_transforms
+from desc.equilibrium.coords import get_rtz_grid
 from desc.grid import LinearGrid
 from desc.utils import Timer
 
@@ -233,7 +234,8 @@ class EffectiveRadius(_Objective):
             (self._n_pol + 1) * self._knots_per_transit,
         )
 
-        grid = eq.get_rtz_grid(
+        grid = get_rtz_grid(
+            eq,
             rho,
             alpha,
             zeta,
@@ -491,7 +493,8 @@ class ParallelConnectionLength(_Objective):
             (self._n_pol + 1) * self._knots_per_transit,
         )
 
-        grid = eq.get_rtz_grid(
+        grid = get_rtz_grid(
+            eq,
             rho,
             alpha,
             zeta,

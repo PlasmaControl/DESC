@@ -9,9 +9,8 @@ computational grid has a node on the magnetic axis to avoid potentially
 expensive computations.
 """
 
-from scipy.integrate import cumulative_trapezoid
-
 from ..backend import jnp, trapezoid
+from ..compute.utils import cumtrapz
 from ..integrals.critical_gradient import (
     extract_Kd_wells,
     extract_Kd_wells_and_peaks,
@@ -71,7 +70,7 @@ def _R_eff(params, transforms, profiles, data, **kwargs):
     grid = transforms["grid"].source_grid
     n_wells = kwargs.get("n_wells", 5)
     Kd_wells, _, masks = extract_Kd_wells(data["Kd"], n_wells=n_wells)
-    l = cumulative_trapezoid(data["|e_zeta|r,a|"], x=grid.nodes[:, 2], initial=0)
+    l = cumtrapz(data["|e_zeta|r,a|"], x=grid.nodes[:, 2], initial=0)
     _, _, R_eff = fit_Kd_wells(l, Kd_wells, masks, n_wells=n_wells)
     data["R_eff"] = R_eff
     return data

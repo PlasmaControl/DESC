@@ -228,7 +228,9 @@ class EffectiveRadius(_Objective):
         }
         n_tor = jnp.abs(self._n_pol / (data["iota"]))
         zeta = jnp.linspace(
-            0, 2 * jnp.pi * n_tor, self._n_pol * self._knots_per_transit
+            -2 * jnp.pi / jnp.abs(data["iota"]),
+            2 * jnp.pi * n_tor,
+            (self._n_pol + 1) * self._knots_per_transit,
         )
 
         grid = eq.get_rtz_grid(
@@ -484,7 +486,9 @@ class ParallelConnectionLength(_Objective):
         }
         n_tor = jnp.abs(self._n_pol / (data["iota"]))
         zeta = jnp.linspace(
-            0, 2 * jnp.pi * n_tor, self._n_pol * self._knots_per_transit
+            -2 * jnp.pi / jnp.abs(data["iota"]),
+            2 * jnp.pi * n_tor,
+            (self._n_pol + 1) * self._knots_per_transit,
         )
 
         grid = eq.get_rtz_grid(

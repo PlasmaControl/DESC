@@ -11,7 +11,7 @@ from numpy.polynomial.legendre import leggauss
 from scipy import integrate
 from scipy.interpolate import CubicHermiteSpline
 from scipy.special import ellipe, ellipkm1
-from tests.test_interp_utils import _f_1d, _f_1d_nyquist_freq
+from tests.test_interp_utils import _f_1d, _f_1d_nyquist_freq, _f_2d, _f_2d_nyquist_freq
 from tests.test_plotting import tol_1d
 
 from desc.backend import jnp, vmap
@@ -600,6 +600,7 @@ class TestSingularities:
 
     """
 
+    # FIXME
     @pytest.mark.unit
     def test_singular_integral_greens_id(self):
         """Test high order singular integration using greens identity.
@@ -633,6 +634,7 @@ class TestSingularities:
             k = min(source_grid.num_theta, source_grid.num_zeta * source_grid.NFP)
             s = k - 1
             q = k // 2 + int(np.sqrt(k))
+            # Like other test FFT and DFT interpolators give different results.
             interpolator = FFTInterpolator(eval_grid, source_grid, s, q)
 
             err = singular_integral(
@@ -687,18 +689,19 @@ class TestSingularities:
         # resolution of singular integral won't really make Bplasma less.
         np.testing.assert_array_less(B, 0.05)
 
+    # FIXME:
     @pytest.mark.unit
     def test_biest_interpolators(self):
         """Test that FFT and DFT interpolation gives same result for standard grids."""
-        sgrid = LinearGrid(0, 5, 6)
-        egrid = LinearGrid(0, 4, 7)
+        sgrid = LinearGrid(0, _f_2d_nyquist_freq()[0], _f_2d_nyquist_freq()[1])
+        egrid = LinearGrid(0, 14, 7)
         s = 3
         q = 4
         r, w, dr, dw = _get_quadrature_nodes(q)
         interp1 = FFTInterpolator(egrid, sgrid, s, q)
         interp2 = DFTInterpolator(egrid, sgrid, s, q)
 
-        f = lambda t, z: np.sin(4 * t) + np.cos(3 * z)
+        f = _f_2d
 
         source_dtheta = sgrid.spacing[:, 1]
         source_dzeta = sgrid.spacing[:, 2] / sgrid.NFP

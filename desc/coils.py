@@ -71,7 +71,8 @@ def biot_savart_hh(eval_pts, coil_pts_start, coil_pts_end, current):
     Ri_p_Rf = Ri + Rf
 
     B_mag = (
-        2.0e-7  #  == 2 * mu_0/(4 pi)
+        mu_0
+        / (2 * jnp.pi)
         * current
         * Ri_p_Rf
         / (Ri * Rf * (Ri_p_Rf * Ri_p_Rf - (L * L)[:, jnp.newaxis]))
@@ -123,7 +124,7 @@ def biot_savart_vector_potential_hh(eval_pts, coil_pts_start, coil_pts_end, curr
 
     eps = L[:, jnp.newaxis] / (Ri_p_Rf)
 
-    A_mag = 1.0e-7 * current * jnp.log((1 + eps) / (1 - eps))  # 1.0e-7 ==  mu_0/(4 pi)
+    A_mag = mu_0 / (4 * jnp.pi) * current * jnp.log((1 + eps) / (1 - eps))
 
     # Now just need  to multiply by e^ = d_vec/L = (x_f - x_i)/L
     A = jnp.sum(A_mag[:, :, jnp.newaxis] * d_vec_over_L[:, jnp.newaxis, :], axis=0)
@@ -166,8 +167,7 @@ def biot_savart_quad(eval_pts, coil_pts, tangents, current):
     vec = jnp.cross(dl[:, jnp.newaxis, :], R_vec, axis=-1)
     denom = R_mag**3
 
-    # 1e-7 == mu_0/(4 pi)
-    B = jnp.sum(1.0e-7 * current * vec / denom[:, :, None], axis=0)
+    B = jnp.sum(mu_0 / (4 * jnp.pi) * current * vec / denom[:, :, None], axis=0)
     return B
 
 
@@ -202,8 +202,7 @@ def biot_savart_vector_potential_quad(eval_pts, coil_pts, tangents, current):
     vec = dl[:, jnp.newaxis, :]
     denom = R_mag
 
-    # 1e-7 == mu_0/(4 pi)
-    A = jnp.sum(1.0e-7 * current * vec / denom[:, :, None], axis=0)
+    A = jnp.sum(mu_0 / (4 * jnp.pi) * current * vec / denom[:, :, None], axis=0)
     return A
 
 

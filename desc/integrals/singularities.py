@@ -6,7 +6,7 @@ import numpy as np
 import scipy
 from interpax import fft_interp2d
 
-from desc.backend import fori_loop, imap, jnp, put, vmap
+from desc.backend import fori_loop, imap, jnp, vmap
 from desc.basis import DoubleFourierSeries
 from desc.compute.geom_utils import rpz2xyz, rpz2xyz_vec, xyz2rpz_vec
 from desc.grid import LinearGrid
@@ -301,11 +301,9 @@ def _nonsingular_part(
         def eval_pt_vmap(i):
             # this calculates the effect at a single evaluation point, from all others
             # in a single field period. vmap this to get all pts
-            k = kernel(
-                {key: eval_data[key][i] for key in keys},
-                source_data,
-            ).reshape(1, source_grid.num_nodes, kernel.ndim)
-
+            k = kernel({key: eval_data[key][i] for key in keys}, source_data).reshape(
+                -1, source_grid.num_nodes, kernel.ndim
+            )
             rho = _rho(
                 source_theta,
                 source_data["zeta"],  # to account for different field periods
@@ -315,22 +313,13 @@ def _nonsingular_part(
                 h_z,
                 s,
             )
-
             eta = _chi(rho)  # from eq 36 of [2]
-            k = (1 - eta)[None, :, None] * k
-            f_temp = jnp.sum(k * w[None, :, None], axis=1)
-            return f_temp
-
-        def eval_pt_loop(i, fj):
-            # this calculates the effect at a single evaluation point, from all others
-            # in a single field period. loop this to get all pts
-            f_temp = eval_pt_vmap(i)
-            return put(fj, i, f_temp.reshape(fj[i].shape))
+            return jnp.sum(k * (w * (1 - eta))[None, :, None], axis=1)
 
         # vmap for inner part found more efficient than fori_loop, especially on gpu,
         # but for jacobian looped seems to be better and less memory
         if loop:
-            fj = fori_loop(0, eval_grid.num_nodes, eval_pt_loop, jnp.zeros_like(f))
+            fj = imap(eval_pt_vmap, jnp.arange(eval_grid.num_nodes))
         else:
             fj = vmap(eval_pt_vmap)(jnp.arange(eval_grid.num_nodes))
 
@@ -377,36 +366,49 @@ def _singular_part(
     eta = _chi(r)
     # integrand of eq 38 in [2] except stuff that needs to be interpolated
     v = eta * s**2 * h_t * h_z / 4 * abs(r) * dr * dw
-    keys = list(set(["|e_theta x e_zeta|"] + kernel.keys))
+    dt = s / 2 * h_t * r * jnp.sin(w)
+    dz = s / 2 * h_z * r * jnp.cos(w)
+    keys = set(["|e_theta x e_zeta|"] + kernel.keys)
+    if "alpha" in keys:
+        keys.add("theta_PEST")
+        keys.add("phi")
+        # grid only has one surface
+        iota = source_data.get("iota", eval_data.get("iota", None))[0]
+    if "theta_PEST" in keys:
+        keys.add("lambda")
     if "phi" in keys:
-        keys += ["omega"]
+        keys.add("omega")
+    keys = list(keys)
     fsource = [source_data[key] for key in keys]
 
     def polar_pt_vmap(i):
         # evaluate the effect from a single polar node around each eval point
         # on that eval point. Polar grids from other singularities have no effect
         # See sec 3.2.2 of [2]
-        dt = s / 2 * h_t * r[i] * jnp.sin(w[i])
-        dz = s / 2 * h_z * r[i] * jnp.cos(w[i])
-        theta_i = eval_theta + dt
-        zeta_i = eval_zeta + dz
-
         # data interpolated to each eval pt offset by dt,dz
-        # FIXME: unnecessary FFTs here; cache ft of val
+        # todo:? unnecessary FFTs here; cache ft of val
         source_data_polar = {
             key: interpolator(val, i) for key, val in zip(keys, fsource)
         }
-
-        # can't interpolate phi directly since its not periodic, so we interpolate
-        # omega and add it back in
-        source_data_polar["zeta"] = zeta_i
-        source_data_polar["theta"] = theta_i
+        source_data_polar["theta"] = eval_theta + dt[i]
+        source_data_polar["zeta"] = eval_zeta + dz[i]
+        # These quantities are not periodic in theta and zeta.
+        if "theta_PEST" in keys:
+            source_data_polar["theta_PEST"] = (
+                source_data_polar["theta"] + source_data_polar["lambda"]
+            )
         if "phi" in keys:
-            source_data_polar["phi"] = zeta_i + source_data_polar["omega"]
+            source_data_polar["phi"] = (
+                source_data_polar["zeta"] + source_data_polar["omega"]
+            )
+        if "alpha" in keys:
+            source_data_polar["alpha"] = (
+                source_data_polar["theta_PEST"] - iota * source_data_polar["phi"]
+            )
 
         # eval pts x source pts for 1 polar grid offset
         # only need diagonal term because polar grid points
-        # don't contribute to other eval pts since the c.o.v decays rapidly
+        # don't contribute to other eval pts due to the c.o.v.
         k = kernel(eval_data, source_data_polar, diag=True).reshape(
             eval_grid.num_nodes, kernel.ndim
         )
@@ -418,11 +420,11 @@ def _singular_part(
         # this calculates the effect at a single evaluation point, from all others
         # in a single field period. loop this to get all pts
         f_temp = polar_pt_vmap(i)
-        return f + f_temp.reshape(eval_grid.num_nodes, kernel.ndim)
+        return f + f_temp
 
-    f = jnp.zeros((eval_grid.num_nodes, kernel.ndim))
     # vmap found more efficient than fori_loop, esp on gpu, but uses more memory
     if loop:
+        f = jnp.zeros((eval_grid.num_nodes, kernel.ndim))
         f = fori_loop(0, v.size, polar_pt_loop, f)
     else:
         f = vmap(polar_pt_vmap)(jnp.arange(v.size)).sum(axis=0)
@@ -533,7 +535,7 @@ def _kernel_nr_over_r3(eval_data, source_data, diag=False):
     else:
         dx = eval_x[:, None] - source_x[None]
     n = rpz2xyz_vec(source_data["e^rho"], phi=source_data["phi"])
-    n = n / jnp.linalg.norm(n, axis=-1)[:, None]
+    n = n / jnp.linalg.norm(n, axis=-1, keepdims=True)
     r = safenorm(dx, axis=-1)
     return safediv(jnp.sum(n * dx, axis=-1), r**3)
 

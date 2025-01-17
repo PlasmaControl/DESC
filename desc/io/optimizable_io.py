@@ -86,10 +86,7 @@ def _unjittable(x):
     if isinstance(x, dict):
         return all([_unjittable(y) or y is None for y in x.values()])
     if hasattr(x, "dtype") and np.ndim(x) == 0:
-        try:
-            return np.issubdtype(x.dtype, np.bool_) or np.issubdtype(x.dtype, np.int_)
-        except TypeError:
-            return True
+        return np.issubdtype(x.dtype, np.bool_) or np.issubdtype(x.dtype, np.int_)
     return isinstance(
         x, (str, types.FunctionType, functools.partial, bool, int, np.int_)
     )

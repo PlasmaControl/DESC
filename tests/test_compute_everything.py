@@ -6,7 +6,13 @@ import warnings
 import numpy as np
 import pytest
 
-from desc.coils import FourierPlanarCoil, FourierRZCoil, FourierXYZCoil, SplineXYZCoil
+from desc.coils import (
+    FourierPlanarCoil,
+    FourierRZCoil,
+    FourierRZWindingSurfaceCoil,
+    FourierXYZCoil,
+    SplineXYZCoil,
+)
 from desc.compute import data_index, xyz2rpz, xyz2rpz_vec
 from desc.compute.utils import _grow_seeds
 from desc.examples import get
@@ -14,6 +20,7 @@ from desc.geometry import (
     FourierPlanarCurve,
     FourierRZCurve,
     FourierRZToroidalSurface,
+    FourierRZWindingSurfaceCurve,
     FourierXYZCurve,
     ZernikeRZToroidalSection,
 )
@@ -123,6 +130,16 @@ def test_compute_everything():
         "desc.geometry.curve.SplineXYZCurve": FourierXYZCurve(
             X_n=[5, 10, 2], Y_n=[1, 2, 3], Z_n=[-4, -5, -6]
         ).to_SplineXYZ(grid=LinearGrid(N=50)),
+        "desc.geometry.curve.FourierRZWindingSurfaceCurve": (
+            FourierRZWindingSurfaceCurve(
+                surface=(
+                    FourierRZToroidalSurface(**elliptic_cross_section_with_torsion)
+                ),
+                theta_n=[0.5, 0.5, 0.5],
+                zeta_n=[0.5, 0.5, 0.5],
+                secular_zeta=2,
+            )
+        ),
         # surfaces
         "desc.geometry.surface.FourierRZToroidalSurface": FourierRZToroidalSurface(
             **elliptic_cross_section_with_torsion
@@ -170,6 +187,13 @@ def test_compute_everything():
         ),
         "desc.coils.SplineXYZCoil": SplineXYZCoil(
             current=5, X=[5, 10, 2, 5], Y=[1, 2, 3, 1], Z=[-4, -5, -6, -4]
+        ),
+        "desc.coils.FourierRZWindingSurfaceCoil": FourierRZWindingSurfaceCoil(
+            surface=FourierRZToroidalSurface(**elliptic_cross_section_with_torsion),
+            theta_n=[0.5, 0.5, 0.5],
+            zeta_n=[0.5, 0.5, 0.5],
+            secular_zeta=2,
+            current=5,
         ),
     }
     assert things.keys() == data_index.keys(), (

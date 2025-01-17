@@ -2792,6 +2792,10 @@ def _phi_r(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["omega_rr"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.core.Surface",
+    ],
 )
 def _phi_rr(params, transforms, profiles, data, **kwargs):
     data["phi_rr"] = data["omega_rr"]
@@ -2811,6 +2815,10 @@ def _phi_rr(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["omega_rrz"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.core.Surface",
+    ],
 )
 def _phi_rrz(params, transforms, profiles, data, **kwargs):
     data["phi_rrz"] = data["omega_rrz"]
@@ -2830,6 +2838,10 @@ def _phi_rrz(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["omega_rt"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.core.Surface",
+    ],
 )
 def _phi_rt(params, transforms, profiles, data, **kwargs):
     data["phi_rt"] = data["omega_rt"]
@@ -2849,6 +2861,10 @@ def _phi_rt(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["omega_rtz"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.core.Surface",
+    ],
 )
 def _phi_rtz(params, transforms, profiles, data, **kwargs):
     data["phi_rtz"] = data["omega_rtz"]
@@ -2868,6 +2884,10 @@ def _phi_rtz(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["omega_rz"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.core.Surface",
+    ],
 )
 def _phi_rz(params, transforms, profiles, data, **kwargs):
     data["phi_rz"] = data["omega_rz"]
@@ -2887,6 +2907,10 @@ def _phi_rz(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["omega_rzz"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.core.Surface",
+    ],
 )
 def _phi_rzz(params, transforms, profiles, data, **kwargs):
     data["phi_rzz"] = data["omega_rzz"]
@@ -2928,9 +2952,36 @@ def _phi_t(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["omega_tt"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.core.Surface",
+    ],
 )
 def _phi_tt(params, transforms, profiles, data, **kwargs):
     data["phi_tt"] = data["omega_tt"]
+    return data
+
+
+@register_compute_fun(
+    name="phi_ttt",
+    label="\\partial_{\\theta \\theta \\theta} \\phi",
+    units="rad",
+    units_long="radians",
+    description="Toroidal angle in lab frame, third derivative wrt poloidal "
+    "coordinate",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["omega_ttt"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.core.Surface",
+    ],
+)
+def _phi_ttt(params, transforms, profiles, data, **kwargs):
+    data["phi_ttt"] = data["omega_ttt"]
     return data
 
 
@@ -2947,6 +2998,10 @@ def _phi_tt(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["omega_ttz"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.core.Surface",
+    ],
 )
 def _phi_ttz(params, transforms, profiles, data, **kwargs):
     data["phi_ttz"] = data["omega_ttz"]
@@ -2966,6 +3021,10 @@ def _phi_ttz(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["omega_tz"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.core.Surface",
+    ],
 )
 def _phi_tz(params, transforms, profiles, data, **kwargs):
     data["phi_tz"] = data["omega_tz"]
@@ -2985,6 +3044,10 @@ def _phi_tz(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["omega_tzz"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.core.Surface",
+    ],
 )
 def _phi_tzz(params, transforms, profiles, data, **kwargs):
     data["phi_tzz"] = data["omega_tzz"]
@@ -3026,6 +3089,10 @@ def _phi_z(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["omega_zz"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.core.Surface",
+    ],
 )
 def _phi_zz(params, transforms, profiles, data, **kwargs):
     data["phi_zz"] = data["omega_zz"]
@@ -3045,6 +3112,10 @@ def _phi_zz(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["omega_zzz"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.core.Surface",
+    ],
 )
 def _phi_zzz(params, transforms, profiles, data, **kwargs):
     data["phi_zzz"] = data["omega_zzz"]

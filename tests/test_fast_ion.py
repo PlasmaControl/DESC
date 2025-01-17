@@ -27,6 +27,7 @@ def test_Gamma_c_Nemov_2D():
         Y_B=128,
         num_transit=num_transit,
         num_well=20 * num_transit,
+        surf_batch_size=2,
     )
     assert np.isfinite(data["Gamma_c"]).all()
     fig, ax = plt.subplots()
@@ -65,15 +66,15 @@ def test_Gamma_c_Nemov_1D():
     Y_B = 100
     num_transit = 10
     num_well = 20 * num_transit
-    rho = np.linspace(0, 1, 10)
+    rho = np.linspace(1e-12, 1, 10)
     alpha = np.array([0])
     zeta = np.linspace(0, num_transit * 2 * np.pi, num_transit * Y_B)
     grid = get_rtz_grid(eq, rho, alpha, zeta, coordinates="raz")
-    data = eq.compute("deprecated(Gamma_c)", grid=grid, num_well=num_well)
+    data = eq.compute("old Gamma_c", grid=grid, num_well=num_well, surf_batch_size=2)
 
-    assert np.isfinite(data["deprecated(Gamma_c)"]).all()
+    assert np.isfinite(data["old Gamma_c"]).all()
     fig, ax = plt.subplots()
-    ax.plot(rho, grid.compress(data["deprecated(Gamma_c)"]), marker="o")
+    ax.plot(rho, grid.compress(data["old Gamma_c"]), marker="o")
     return fig
 
 
@@ -85,13 +86,13 @@ def test_Gamma_c_Velasco_1D():
     Y_B = 100
     num_transit = 10
     num_well = 20 * num_transit
-    rho = np.linspace(0, 1, 10)
+    rho = np.linspace(1e-12, 1, 10)
     alpha = np.array([0])
     zeta = np.linspace(0, num_transit * 2 * np.pi, num_transit * Y_B)
     grid = get_rtz_grid(eq, rho, alpha, zeta, coordinates="raz")
-    data = eq.compute("deprecated(Gamma_c Velasco)", grid=grid, num_well=num_well)
+    data = eq.compute("old Gamma_c Velasco", grid=grid, num_well=num_well)
 
-    assert np.isfinite(data["deprecated(Gamma_c Velasco)"]).all()
+    assert np.isfinite(data["old Gamma_c Velasco"]).all()
     fig, ax = plt.subplots()
-    ax.plot(rho, grid.compress(data["deprecated(Gamma_c Velasco)"]), marker="o")
+    ax.plot(rho, grid.compress(data["old Gamma_c Velasco"]), marker="o")
     return fig

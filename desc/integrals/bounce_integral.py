@@ -1279,8 +1279,7 @@ class Bounce1D(Bounce):
         else:
             # Perform integrals for a particular field line and pitch one at a time.
             def loop(points):  # over num well axis
-                # Need to return tuple because input was tuple; artifact of JAX map.
-                return None, self._integrate(
+                return self._integrate(
                     x,
                     w,
                     integrand,
@@ -1295,7 +1294,7 @@ class Bounce1D(Bounce):
                 )
 
             z1, z2 = points
-            result = imap(loop, (jnp.moveaxis(z1, -1, 0), jnp.moveaxis(z2, -1, 0)))[1]
+            result = imap(loop, (jnp.moveaxis(z1, -1, 0), jnp.moveaxis(z2, -1, 0)))
             result = [jnp.moveaxis(r, 0, -1) for r in result]
 
         return result[0] if len(result) == 1 else result

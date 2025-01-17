@@ -53,7 +53,11 @@ from desc.integrals.quad_utils import (
     leggauss_lob,
     tanh_sinh,
 )
-from desc.integrals.singularities import _get_quadrature_nodes
+from desc.integrals.singularities import (
+    _get_default_sq,
+    _get_quadrature_nodes,
+    _kernel_nr_over_r3,
+)
 from desc.integrals.surface_integral import _get_grid_surface
 from desc.transform import Transform
 from desc.utils import dot, errorif, safediv
@@ -600,7 +604,6 @@ class TestSingularities:
 
     """
 
-    # FIXME
     @pytest.mark.unit
     def test_singular_integral_greens_id(self):
         """Test high order singular integration using greens identity.
@@ -617,43 +620,38 @@ class TestSingularities:
         So we integrate the kernel n⋅(r-r')/|r-r'|³ and can benchmark the residual.
 
         """
-        eq = get("W7-X")
-        Nv = np.array([500])
-        Nu = np.array([500])
-        es = np.array([1e-9])
-        eval_grid = LinearGrid(M=5, N=6, NFP=eq.NFP)
+        eq = Equilibrium()
+        Nu = [13, 13, 13, 19, 19, 25, 37]
+        Nv = [30, 45, 60, 90, 120, 150, 240]
+        ss = [13, 13, 13, 19, 19, 25, 37]
+        qs = [10, 12, 12, 16, 18, 20, 24]
+        es = [0.4, 2e-2, 3e-3, 5e-5, 4e-6, 1e-6, 1e-9]
 
-        for i, (m, n) in enumerate(zip(Nu, Nv)):
-            source_grid = LinearGrid(M=m // 2, N=n // 2, NFP=eq.NFP)
-            source_data = eq.compute(
-                ["R", "Z", "phi", "e^rho", "|e_theta x e_zeta|"], grid=source_grid
+        for i in range(len(Nu)):
+            grid = LinearGrid(M=Nu[i] // 2, N=Nv[i] // 2, NFP=eq.NFP)
+            interpolator = FFTInterpolator(grid, grid, ss[i], qs[i])
+            data = eq.compute(
+                _kernel_nr_over_r3.keys + ["|e_theta x e_zeta|"], grid=grid
             )
-            eval_data = eq.compute(
-                ["R", "Z", "phi", "e^rho", "|e_theta x e_zeta|"], grid=eval_grid
-            )
-            k = min(source_grid.num_theta, source_grid.num_zeta * source_grid.NFP)
-            s = k - 1
-            q = k // 2 + int(np.sqrt(k))
-            # Like other test FFT and DFT interpolators give different results.
-            interpolator = FFTInterpolator(eval_grid, source_grid, s, q)
-
-            err = singular_integral(
-                eval_data,
-                source_data,
-                "nr_over_r3",
-                interpolator,
-                loop=True,
-            )
+            err = singular_integral(data, data, "nr_over_r3", interpolator, loop=True)
             np.testing.assert_array_less(np.abs(2 * np.pi + err), es[i])
+
+        eq = get("W7-X")
+        Nu = 100
+        Nv = 100
+        es = 1e-7
+        grid = LinearGrid(M=Nu // 2, N=Nv // 2, NFP=eq.NFP)
+        s, q = _get_default_sq(grid)
+        interpolator = FFTInterpolator(grid, grid, s, q)
+        data = eq.compute(_kernel_nr_over_r3.keys + ["|e_theta x e_zeta|"], grid=grid)
+        err = singular_integral(data, data, "nr_over_r3", interpolator, loop=True)
+        np.testing.assert_array_less(np.abs(2 * np.pi + err), es)
 
     @pytest.mark.unit
     def test_singular_integral_vac_estell(self):
         """Test calculating Bplasma for vacuum estell, which should be near 0."""
         eq = get("ESTELL")
-        eval_grid = LinearGrid(M=8, N=8, NFP=eq.NFP)
-
-        source_grid = LinearGrid(M=18, N=18, NFP=eq.NFP)
-
+        grid = LinearGrid(M=25, N=25, NFP=eq.NFP)
         keys = [
             "K_vc",
             "B",
@@ -665,65 +663,38 @@ class TestSingularities:
             "n_rho",
             "|e_theta x e_zeta|",
         ]
-
-        source_data = eq.compute(keys, grid=source_grid)
-        eval_data = eq.compute(keys, grid=eval_grid)
-
-        k = min(source_grid.num_theta, source_grid.num_zeta)
-        s = k // 2 + int(np.sqrt(k))
-        q = k // 2 + int(np.sqrt(k))
-
-        interpolator = FFTInterpolator(eval_grid, source_grid, s, q)
-        Bplasma = virtual_casing_biot_savart(
-            eval_data,
-            source_data,
-            interpolator,
-            loop=True,
-        )
+        data = eq.compute(keys, grid=grid)
+        s, q = _get_default_sq(grid)
+        interpolator = FFTInterpolator(grid, grid, s, q)
+        Bplasma = virtual_casing_biot_savart(data, data, interpolator, loop=True)
         # need extra factor of B/2 bc we're evaluating on plasma surface
-        Bplasma += eval_data["B"] / 2
+        Bplasma += data["B"] / 2
         Bplasma = np.linalg.norm(Bplasma, axis=-1)
         # scale by total field magnitude
-        B = Bplasma / np.mean(np.linalg.norm(eval_data["B"], axis=-1))
-        # this isn't a perfect vacuum equilibrium (|J| ~ 1e3 A/m^2), so increasing
-        # resolution of singular integral won't really make Bplasma less.
-        np.testing.assert_array_less(B, 0.05)
+        B = Bplasma / np.linalg.norm(data["B"], axis=-1).mean()
+        np.testing.assert_allclose(B, 0, atol=0.005)
 
-    # FIXME:
     @pytest.mark.unit
-    def test_biest_interpolators(self):
+    @pytest.mark.parametrize("interpolator", [FFTInterpolator, DFTInterpolator])
+    def test_biest_interpolators(self, interpolator):
         """Test that FFT and DFT interpolation gives same result for standard grids."""
-        sgrid = LinearGrid(0, _f_2d_nyquist_freq()[0], _f_2d_nyquist_freq()[1])
-        egrid = LinearGrid(0, 14, 7)
+        grid = LinearGrid(0, *_f_2d_nyquist_freq())
+        h_t = 2 * np.pi / grid.num_theta
+        h_z = 2 * np.pi / grid.num_zeta / grid.NFP
+
         s = 3
         q = 4
-        r, w, dr, dw = _get_quadrature_nodes(q)
-        interp1 = FFTInterpolator(egrid, sgrid, s, q)
-        interp2 = DFTInterpolator(egrid, sgrid, s, q)
+        r, w, _, _ = _get_quadrature_nodes(q)
+        dt = s / 2 * h_t * r * np.sin(w)
+        dz = s / 2 * h_z * r * np.cos(w)
 
-        f = _f_2d
-
-        source_dtheta = sgrid.spacing[:, 1]
-        source_dzeta = sgrid.spacing[:, 2] / sgrid.NFP
-        source_theta = sgrid.nodes[:, 1]
-        source_zeta = sgrid.nodes[:, 2]
-        eval_theta = egrid.nodes[:, 1]
-        eval_zeta = egrid.nodes[:, 2]
-
-        h_t = np.mean(source_dtheta)
-        h_z = np.mean(source_dzeta)
-
-        for i in range(len(r)):
-            dt = s / 2 * h_t * r[i] * np.sin(w[i])
-            dz = s / 2 * h_z * r[i] * np.cos(w[i])
-            theta_i = eval_theta + dt
-            zeta_i = eval_zeta + dz
-            ff = f(theta_i, zeta_i)
-
-            g1 = interp1(f(source_theta, source_zeta), i)
-            g2 = interp2(f(source_theta, source_zeta), i)
-            np.testing.assert_allclose(g1, g2)
-            np.testing.assert_allclose(g1, ff)
+        interp = interpolator(grid, grid, s, q)
+        theta = grid.nodes[:, 1]
+        zeta = grid.nodes[:, 2]
+        f = _f_2d(theta, zeta)
+        for i in range(dt.size):
+            truth = _f_2d(theta + dt[i], zeta + dz[i])
+            np.testing.assert_allclose(interp(f, i), truth)
 
 
 class TestBouncePoints:

@@ -9,6 +9,7 @@ from scipy.constants import mu_0
 
 from desc.backend import fori_loop, imap, jnp, vmap
 from desc.basis import DoubleFourierSeries
+from desc.batching import batch_map
 from desc.compute.geom_utils import rpz2xyz, rpz2xyz_vec, xyz2rpz_vec
 from desc.grid import LinearGrid
 from desc.io import IOAble
@@ -16,7 +17,7 @@ from desc.utils import safediv, safenorm, warnif
 
 
 def _get_default_sq(grid):
-    k = min(grid.num_theta, grid.num_zeta * grid.NFP)
+    k = max(min(grid.num_theta, grid.num_zeta * grid.NFP), 2)
     s = k - 1
     q = k // 2 + int(np.sqrt(k))
     return s, q
@@ -86,9 +87,10 @@ class _BIESTInterpolator(IOAble, ABC):
             "Polar grid is invalid. "
             f"Got s = {s} > {source_grid.num_theta} = source_grid.num_theta."
         )
-        assert s <= source_grid.num_zeta, (
+        assert s <= source_grid.num_zeta * source_grid.NFP, (
             "Polar grid is invalid. "
-            f"Got s = {s} > {source_grid.num_zeta} = source_grid.num_theta."
+            f"Got s = {s} > {source_grid.num_zeta * source_grid.NFP} = "
+            f"source_grid.num_zeta * source_grid.NFP."
         )
         self._eval_grid = eval_grid
         self._source_grid = source_grid
@@ -185,7 +187,7 @@ class FFTInterpolator(_BIESTInterpolator):
         Returns
         -------
         fi : ndarray
-            Source data interpolated to ith polar node of the ``source_grid``.
+            Source data interpolated to ith polar node.
 
         """
         shape = f.shape[1:]
@@ -265,7 +267,7 @@ class DFTInterpolator(_BIESTInterpolator):
         Returns
         -------
         fi : ndarray
-            Source data interpolated to ith polar node of the ``eval_grid``.
+            Source data interpolated to ith polar node.
 
         """
         return self._mat[:, i] @ f
@@ -319,7 +321,7 @@ def _nonsingular_part(
 
         # nest this def to avoid having to pass the modified source_data around the loop
         # easier to just close over it and let JAX figure it out
-        def eval_pt_vmap(i):
+        def eval_pt(i):
             # this calculates the effect at a single evaluation point, from all others
             # in a single field period. vmap this to get all pts
             k = kernel({key: eval_data[key][i] for key in keys}, source_data).reshape(
@@ -337,14 +339,13 @@ def _nonsingular_part(
             eta = _chi(rho)  # from eq 36 of [2]
             return jnp.sum(k * (w * (1 - eta))[None, :, None], axis=1)
 
-        # vmap for inner part found more efficient than fori_loop, especially on gpu,
+        # vmap for inner part found more efficient than loop, especially on gpu,
         # but for jacobian looped seems to be better and less memory
-        if loop:
-            fj = imap(eval_pt_vmap, jnp.arange(eval_grid.num_nodes))
-        else:
-            fj = vmap(eval_pt_vmap)(jnp.arange(eval_grid.num_nodes))
-
-        f += fj.reshape(eval_grid.num_nodes, kernel.ndim)
+        f += batch_map(
+            eval_pt,
+            jnp.arange(eval_grid.num_nodes),
+            1 if loop else None,
+        ).reshape(eval_grid.num_nodes, kernel.ndim)
         return f, source_data
 
     f = jnp.zeros((eval_grid.num_nodes, kernel.ndim))
@@ -396,7 +397,7 @@ def _singular_part(
     keys = list(keys)
     fsource = [source_data[key] for key in keys]
 
-    def polar_pt_vmap(i):
+    def polar_pt(i):
         """See sec 3.2.2 of [2].
 
         Evaluate the effect from a single polar node around each eval point
@@ -436,7 +437,7 @@ def _singular_part(
     def polar_pt_loop(i, f):
         # this calculates the effect at a single evaluation point, from all others
         # in a single field period. loop this to get all pts
-        f_temp = polar_pt_vmap(i)
+        f_temp = polar_pt(i)
         return f + f_temp
 
     # vmap found more efficient than fori_loop, esp on gpu, but uses more memory
@@ -444,7 +445,7 @@ def _singular_part(
         f = jnp.zeros((eval_grid.num_nodes, kernel.ndim))
         f = fori_loop(0, v.size, polar_pt_loop, f)
     else:
-        f = vmap(polar_pt_vmap)(jnp.arange(v.size)).sum(axis=0)
+        f = vmap(polar_pt)(jnp.arange(v.size)).sum(axis=0)
 
     # we sum distance vectors, so they need to be in xyz for that to work
     # but then need to convert vectors back to rpz

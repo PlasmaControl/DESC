@@ -491,10 +491,14 @@ class BoundaryError(_Objective):
             "Source grids for singular integrals must be non-symmetric",
         )
         if self._s is None:
-            k = min(source_grid.num_theta, source_grid.num_zeta * source_grid.NFP)
+            k = max(
+                min(source_grid.num_theta, source_grid.num_zeta * source_grid.NFP), 2
+            )
             self._s = k - 1
         if self._q is None:
-            k = min(source_grid.num_theta, source_grid.num_zeta * source_grid.NFP)
+            k = max(
+                min(source_grid.num_theta, source_grid.num_zeta * source_grid.NFP), 2
+            )
             self._q = k // 2 + int(np.sqrt(k))
 
         try:

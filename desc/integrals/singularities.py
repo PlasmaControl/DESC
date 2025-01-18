@@ -399,7 +399,14 @@ def _singular_part(
     if "phi" in keys:
         keys.add("omega")
     keys = list(keys)
-    fsource = [source_data[key] for key in keys]
+    fsource = [
+        (
+            rpz2xyz_vec(val, phi=source_data["phi"])
+            if (val := source_data[key]).ndim > 1
+            else val
+        )
+        for key in keys
+    ]
 
     def polar_pt_vmap(i):
         """See sec 3.2.2 of [2].
@@ -556,7 +563,7 @@ def _kernel_nr_over_r3(eval_data, source_data, diag=False):
         dx = eval_x - source_x
     else:
         dx = eval_x[:, None] - source_x[None]
-    n = rpz2xyz_vec(source_data["e^rho"], phi=source_data["phi"])
+    n = source_data["e^rho"]
     n = n / jnp.linalg.norm(n, axis=-1, keepdims=True)
     r = safenorm(dx, axis=-1)
     return safediv(jnp.sum(n * dx, axis=-1), r**3)
@@ -598,7 +605,7 @@ def _kernel_biot_savart(eval_data, source_data, diag=False):
         dx = eval_x - source_x
     else:
         dx = eval_x[:, None] - source_x[None]
-    K = rpz2xyz_vec(source_data["K_vc"], phi=source_data["phi"])
+    K = source_data["K_vc"]
     num = jnp.cross(K, dx, axis=-1)
     r = safenorm(dx, axis=-1)
     if diag:
@@ -624,7 +631,7 @@ def _kernel_biot_savart_A(eval_data, source_data, diag=False):
         dx = eval_x - source_x
     else:
         dx = eval_x[:, None] - source_x[None]
-    K = rpz2xyz_vec(source_data["K_vc"], phi=source_data["phi"])
+    K = source_data["K_vc"]
     r = safenorm(dx, axis=-1)
     if diag:
         r = r[:, None]

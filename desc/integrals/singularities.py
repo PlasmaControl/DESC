@@ -10,6 +10,7 @@ from scipy.constants import mu_0
 
 from desc.backend import fori_loop, imap, jnp, vmap
 from desc.basis import DoubleFourierSeries
+from desc.batching import batch_map
 from desc.compute.geom_utils import rpz2xyz, rpz2xyz_vec, xyz2rpz_vec
 from desc.grid import LinearGrid
 from desc.io import IOAble
@@ -18,7 +19,7 @@ from desc.utils import dot, safediv, safenorm, setdefault, warnif
 
 
 def _get_default_sq(grid):
-    k = min(grid.num_theta, grid.num_zeta * grid.NFP)
+    k = max(min(grid.num_theta, grid.num_zeta * grid.NFP), 2)
     s = k - 1
     q = k // 2 + int(np.sqrt(k))
     return s, q
@@ -88,9 +89,10 @@ class _BIESTInterpolator(IOAble, ABC):
             "Polar grid is invalid. "
             f"Got s = {s} > {source_grid.num_theta} = source_grid.num_theta."
         )
-        assert s <= source_grid.num_zeta, (
+        assert s <= source_grid.num_zeta * source_grid.NFP, (
             "Polar grid is invalid. "
-            f"Got s = {s} > {source_grid.num_zeta} = source_grid.num_theta."
+            f"Got s = {s} > {source_grid.num_zeta * source_grid.NFP} = "
+            f"source_grid.num_zeta * source_grid.NFP."
         )
         self._eval_grid = eval_grid
         self._source_grid = source_grid
@@ -149,10 +151,6 @@ class FFTInterpolator(_BIESTInterpolator):
     def __init__(self, eval_grid, source_grid, s, q):
         assert eval_grid.can_fft2, "Got False for eval_grid.can_fft2."
         assert source_grid.can_fft2, "Got False for source_grid.can_fft2."
-        assert eval_grid.NFP == source_grid.NFP, (
-            "NFP does not match. "
-            f"Got eval_grid.NFP={eval_grid.NFP} and source_grid.NFP={source_grid.NFP}."
-        )
         # Otherwise frequency spectrum is truncated.
         assert eval_grid.num_theta >= source_grid.num_theta, (
             f"Got eval_grid.num_theta = {eval_grid.num_theta} < "
@@ -161,6 +159,11 @@ class FFTInterpolator(_BIESTInterpolator):
         assert eval_grid.num_zeta >= source_grid.num_zeta, (
             f"Got eval_grid.num_zeta = {eval_grid.num_zeta} < "
             f"{source_grid.num_zeta} = source_grid.num_zeta."
+        )
+        # NFP may be different only if there is no toroidal variation.
+        assert (eval_grid.NFP == source_grid.NFP) or eval_grid.num_zeta == 1, (
+            "NFP does not match. "
+            f"Got eval_grid.NFP={eval_grid.NFP} and source_grid.NFP={source_grid.NFP}."
         )
         super().__init__(eval_grid, source_grid, s, q)
 
@@ -186,7 +189,7 @@ class FFTInterpolator(_BIESTInterpolator):
         Returns
         -------
         fi : ndarray
-            Source data interpolated to ith polar node of the ``source_grid``.
+            Source data interpolated to ith polar node.
 
         """
         shape = f.shape[1:]
@@ -249,9 +252,9 @@ class DFTInterpolator(_BIESTInterpolator):
         B = imap(vandermonde, (theta_q, zeta_q))
         A = basis.evaluate(source_grid.nodes)
         self._mat = B @ jnp.linalg.pinv(A)
-        # Consider change to use ``rfft2`` to compute Ainv @ f and retain B,
-        # which would be more efficient than ``FFTInterpolator`` when
-        # ``eval_grid`` is smaller than ``source_grid``.
+        # TODO (#1522): Change to use ``rfft2`` to compute Ainv @ f and retain B.
+        #  This would also be more efficient than ``FFTInterpolator`` when
+        #  ``eval_grid`` is smaller than ``source_grid``.
 
     def __call__(self, f, i):
         """Interpolate data to polar grid points.
@@ -266,7 +269,7 @@ class DFTInterpolator(_BIESTInterpolator):
         Returns
         -------
         fi : ndarray
-            Source data interpolated to ith polar node of the ``eval_grid``.
+            Source data interpolated to ith polar node.
 
         """
         return self._mat[:, i] @ f
@@ -320,7 +323,7 @@ def _nonsingular_part(
 
         # nest this def to avoid having to pass the modified source_data around the loop
         # easier to just close over it and let JAX figure it out
-        def eval_pt_vmap(i):
+        def eval_pt(i):
             # this calculates the effect at a single evaluation point, from all others
             # in a single field period. vmap this to get all pts
             k = kernel({key: eval_data[key][i] for key in keys}, source_data).reshape(
@@ -338,14 +341,13 @@ def _nonsingular_part(
             eta = _chi(rho)  # from eq 36 of [2]
             return jnp.sum(k * (w * (1 - eta))[None, :, None], axis=1)
 
-        # vmap for inner part found more efficient than fori_loop, especially on gpu,
+        # vmap for inner part found more efficient than loop, especially on gpu,
         # but for jacobian looped seems to be better and less memory
-        if loop:
-            fj = imap(eval_pt_vmap, jnp.arange(eval_grid.num_nodes))
-        else:
-            fj = vmap(eval_pt_vmap)(jnp.arange(eval_grid.num_nodes))
-
-        f += fj.reshape(eval_grid.num_nodes, kernel.ndim)
+        f += batch_map(
+            eval_pt,
+            jnp.arange(eval_grid.num_nodes),
+            1 if loop else None,
+        ).reshape(eval_grid.num_nodes, kernel.ndim)
         return f, source_data
 
     f = jnp.zeros((eval_grid.num_nodes, kernel.ndim))
@@ -384,13 +386,6 @@ def _singular_part(
     eval_theta = jnp.asarray(eval_grid.nodes[:, 1])
     eval_zeta = jnp.asarray(eval_grid.nodes[:, 2])
 
-    if isinstance(interpolator, FFTInterpolator):
-        eval_zeta = eval_zeta * (eval_grid.NFP / source_grid.NFP)
-        # This is required for vector quantities to be computed correctly
-        # (as required for e.g. Biot-Savart kernels). Recall for axisymmetric
-        # devices we set source_grid.NFP = 64 which may differ from eval_grid.NFP,
-        # See GitHub issue #1524.
-
     r, w, dr, dw = _get_quadrature_nodes(q)
     eta = _chi(r)
     # integrand of eq 38 in [2] except stuff that needs to be interpolated
@@ -399,11 +394,12 @@ def _singular_part(
     dz = s / 2 * h_z * r * jnp.cos(w)
     keys = set(["|e_theta x e_zeta|"] + kernel.keys)
     if "phi" in keys:
+        keys.remove("phi")
         keys.add("omega")
     keys = list(keys)
     fsource = [source_data[key] for key in keys]
 
-    def polar_pt_vmap(i):
+    def polar_pt(i):
         """See sec 3.2.2 of [2].
 
         Evaluate the effect from a single polar node around each eval point
@@ -417,7 +413,7 @@ def _singular_part(
         # there will be no difference, and that is the only time the
         # source grid and eval grid may have different NFP.
         source_data_polar = {
-            # Todo: unnecessary FFTs here; cache ft of val
+            # TODO: Cache FFT of val. https://github.com/f0uriest/interpax/issues/53.
             key: interpolator(val, i)
             for key, val in zip(keys, fsource)
         }
@@ -425,7 +421,7 @@ def _singular_part(
         source_data_polar["theta"] = eval_theta + dt[i]
         source_data_polar["zeta"] = eval_zeta + dz[i]
         # ϕ is not periodic map of θ, ζ.
-        if "phi" in keys:
+        if "omega" in keys:
             source_data_polar["phi"] = (
                 source_data_polar["zeta"] + source_data_polar["omega"]
             )
@@ -443,7 +439,7 @@ def _singular_part(
     def polar_pt_loop(i, f):
         # this calculates the effect at a single evaluation point, from all others
         # in a single field period. loop this to get all pts
-        f_temp = polar_pt_vmap(i)
+        f_temp = polar_pt(i)
         return f + f_temp
 
     # vmap found more efficient than fori_loop, esp on gpu, but uses more memory
@@ -451,7 +447,7 @@ def _singular_part(
         f = jnp.zeros((eval_grid.num_nodes, kernel.ndim))
         f = fori_loop(0, v.size, polar_pt_loop, f)
     else:
-        f = vmap(polar_pt_vmap)(jnp.arange(v.size)).sum(axis=0)
+        f = vmap(polar_pt)(jnp.arange(v.size)).sum(axis=0)
 
     # we sum distance vectors, so they need to be in xyz for that to work
     # but then need to convert vectors back to rpz
@@ -569,7 +565,7 @@ _kernel_nr_over_r3.keys = ["R", "phi", "Z", "e^rho"]
 
 
 def _kernel_1_over_r(eval_data, source_data, diag=False):
-    # 1/ |r|
+    # 1/|r|
     source_x = jnp.atleast_2d(
         rpz2xyz(jnp.array([source_data["R"], source_data["phi"], source_data["Z"]]).T)
     )
@@ -602,11 +598,7 @@ def _kernel_biot_savart(eval_data, source_data, diag=False):
         dx = eval_x[:, None] - source_x[None]
     K = rpz2xyz_vec(source_data["K_vc"], phi=source_data["phi"])
     num = jnp.cross(K, dx, axis=-1)
-    r = safenorm(dx, axis=-1)
-    if diag:
-        r = r[:, None]
-    else:
-        r = r[:, :, None]
+    r = safenorm(dx, axis=-1)[..., None]
     return mu_0 / 4 / jnp.pi * safediv(num, r**3)
 
 
@@ -626,12 +618,8 @@ def _kernel_biot_savart_A(eval_data, source_data, diag=False):
         dx = eval_x - source_x
     else:
         dx = eval_x[:, None] - source_x[None]
+    r = safenorm(dx, axis=-1)[..., None]
     K = rpz2xyz_vec(source_data["K_vc"], phi=source_data["phi"])
-    r = safenorm(dx, axis=-1)
-    if diag:
-        r = r[:, None]
-    else:
-        r = r[:, :, None]
     return mu_0 / 4 / jnp.pi * safediv(K, r)
 
 

@@ -247,9 +247,9 @@ class DFTInterpolator(_BIESTInterpolator):
         B = imap(vandermonde, (theta_q, zeta_q))
         A = basis.evaluate(source_grid.nodes)
         self._mat = B @ jnp.linalg.pinv(A)
-        # Consider change to use ``rfft2`` to compute Ainv @ f and retain B,
-        # which would be more efficient than ``FFTInterpolator`` when
-        # ``eval_grid`` is smaller than ``source_grid``.
+        # TODO (#1522): Change to use ``rfft2`` to compute Ainv @ f and retain B.
+        #  This would also be more efficient than ``FFTInterpolator`` when
+        #  ``eval_grid`` is smaller than ``source_grid``.
 
     def __call__(self, f, i):
         """Interpolate data to polar grid points.
@@ -384,10 +384,10 @@ def _singular_part(
 
     if isinstance(interpolator, FFTInterpolator):
         eval_zeta = eval_zeta * (eval_grid.NFP / source_grid.NFP)
-        # This is required for vector quantities to be computed correctly
-        # (as required for e.g. Biot-Savart kernels). Recall for axisymmetric
-        # devices we set source_grid.NFP = 64 which may differ from eval_grid.NFP,
-        # See GitHub issue #1524.
+        # This is required for vector quantities to be computed correctly.
+        # Recall for axisymmetric devices we set source_grid.NFP = 64 which
+        # may differ from eval_grid.NFP.
+        # See GitHub issue #1524 for related info.
 
     r, w, dr, dw = _get_quadrature_nodes(q)
     eta = _chi(r)
@@ -397,8 +397,10 @@ def _singular_part(
     dz = s / 2 * h_z * r * jnp.cos(w)
     keys = set(["|e_theta x e_zeta|"] + kernel.keys)
     if "phi" in keys:
+        keys.remove("phi")
         keys.add("omega")
     keys = list(keys)
+    # Need to switch to Cartesian before interpolation (GitHub issue #1524).
     fsource = [
         (
             rpz2xyz_vec(val, phi=source_data["phi"])
@@ -421,8 +423,9 @@ def _singular_part(
         # be different at these points. For functions with no toroidal variation
         # there will be no difference, and that is the only time the
         # source grid and eval grid may have different NFP.
+        # TODO: vectors might still be different
         source_data_polar = {
-            # Todo: unnecessary FFTs here; cache ft of val
+            # TODO: Cache FFT of val. https://github.com/f0uriest/interpax/issues/53.
             key: interpolator(val, i)
             for key, val in zip(keys, fsource)
         }
@@ -430,7 +433,7 @@ def _singular_part(
         source_data_polar["theta"] = eval_theta + dt[i]
         source_data_polar["zeta"] = eval_zeta + dz[i]
         # ϕ is not periodic map of θ, ζ.
-        if "phi" in keys:
+        if "omega" in keys:
             source_data_polar["phi"] = (
                 source_data_polar["zeta"] + source_data_polar["omega"]
             )
@@ -461,6 +464,7 @@ def _singular_part(
     # we sum distance vectors, so they need to be in xyz for that to work
     # but then need to convert vectors back to rpz
     if kernel.ndim == 3:
+        # TODO: for axisymetric was computed on first field period not at eval_data phi
         f = xyz2rpz_vec(f, phi=eval_data["phi"])
 
     return f
@@ -574,7 +578,7 @@ _kernel_nr_over_r3.keys = ["R", "phi", "Z", "e^rho"]
 
 
 def _kernel_1_over_r(eval_data, source_data, diag=False):
-    # 1/ |r|
+    # 1/|r|
     source_x = jnp.atleast_2d(
         rpz2xyz(jnp.array([source_data["R"], source_data["phi"], source_data["Z"]]).T)
     )
@@ -605,13 +609,8 @@ def _kernel_biot_savart(eval_data, source_data, diag=False):
         dx = eval_x - source_x
     else:
         dx = eval_x[:, None] - source_x[None]
-    K = source_data["K_vc"]
-    num = jnp.cross(K, dx, axis=-1)
-    r = safenorm(dx, axis=-1)
-    if diag:
-        r = r[:, None]
-    else:
-        r = r[:, :, None]
+    num = jnp.cross(source_data["K_vc"], dx, axis=-1)
+    r = safenorm(dx, axis=-1)[..., None]
     return mu_0 / 4 / jnp.pi * safediv(num, r**3)
 
 
@@ -631,13 +630,8 @@ def _kernel_biot_savart_A(eval_data, source_data, diag=False):
         dx = eval_x - source_x
     else:
         dx = eval_x[:, None] - source_x[None]
-    K = source_data["K_vc"]
-    r = safenorm(dx, axis=-1)
-    if diag:
-        r = r[:, None]
-    else:
-        r = r[:, :, None]
-    return mu_0 / 4 / jnp.pi * safediv(K, r)
+    r = safenorm(dx, axis=-1)[..., None]
+    return mu_0 / 4 / jnp.pi * safediv(source_data["K_vc"], r)
 
 
 _kernel_biot_savart_A.ndim = 3

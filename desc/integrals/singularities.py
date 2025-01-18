@@ -147,10 +147,6 @@ class FFTInterpolator(_BIESTInterpolator):
     def __init__(self, eval_grid, source_grid, s, q):
         assert eval_grid.can_fft2, "Got False for eval_grid.can_fft2."
         assert source_grid.can_fft2, "Got False for source_grid.can_fft2."
-        assert eval_grid.NFP == source_grid.NFP, (
-            "NFP does not match. "
-            f"Got eval_grid.NFP={eval_grid.NFP} and source_grid.NFP={source_grid.NFP}."
-        )
         # Otherwise frequency spectrum is truncated.
         assert eval_grid.num_theta >= source_grid.num_theta, (
             f"Got eval_grid.num_theta = {eval_grid.num_theta} < "
@@ -159,6 +155,11 @@ class FFTInterpolator(_BIESTInterpolator):
         assert eval_grid.num_zeta >= source_grid.num_zeta, (
             f"Got eval_grid.num_zeta = {eval_grid.num_zeta} < "
             f"{source_grid.num_zeta} = source_grid.num_zeta."
+        )
+        # NFP may be different only if there is no toroidal variation.
+        assert (eval_grid.NFP == source_grid.NFP) or eval_grid.num_zeta == 1, (
+            "NFP does not match. "
+            f"Got eval_grid.NFP={eval_grid.NFP} and source_grid.NFP={source_grid.NFP}."
         )
         super().__init__(eval_grid, source_grid, s, q)
 
@@ -382,13 +383,6 @@ def _singular_part(
     eval_theta = jnp.asarray(eval_grid.nodes[:, 1])
     eval_zeta = jnp.asarray(eval_grid.nodes[:, 2])
 
-    if isinstance(interpolator, FFTInterpolator):
-        eval_zeta = eval_zeta * (eval_grid.NFP / source_grid.NFP)
-        # This is required for vector quantities to be computed correctly.
-        # Recall for axisymmetric devices we set source_grid.NFP = 64 which
-        # may differ from eval_grid.NFP.
-        # See GitHub issue #1524 for related info.
-
     r, w, dr, dw = _get_quadrature_nodes(q)
     eta = _chi(r)
     # integrand of eq 38 in [2] except stuff that needs to be interpolated
@@ -400,15 +394,7 @@ def _singular_part(
         keys.remove("phi")
         keys.add("omega")
     keys = list(keys)
-    # Need to switch to Cartesian before interpolation (GitHub issue #1524).
-    fsource = [
-        (
-            rpz2xyz_vec(val, phi=source_data["phi"])
-            if (val := source_data[key]).ndim > 1
-            else val
-        )
-        for key in keys
-    ]
+    fsource = [source_data[key] for key in keys]
 
     def polar_pt_vmap(i):
         """See sec 3.2.2 of [2].
@@ -423,7 +409,6 @@ def _singular_part(
         # be different at these points. For functions with no toroidal variation
         # there will be no difference, and that is the only time the
         # source grid and eval grid may have different NFP.
-        # TODO: vectors might still be different
         source_data_polar = {
             # TODO: Cache FFT of val. https://github.com/f0uriest/interpax/issues/53.
             key: interpolator(val, i)
@@ -464,7 +449,6 @@ def _singular_part(
     # we sum distance vectors, so they need to be in xyz for that to work
     # but then need to convert vectors back to rpz
     if kernel.ndim == 3:
-        # TODO: for axisymetric was computed on first field period not at eval_data phi
         f = xyz2rpz_vec(f, phi=eval_data["phi"])
 
     return f
@@ -567,7 +551,7 @@ def _kernel_nr_over_r3(eval_data, source_data, diag=False):
         dx = eval_x - source_x
     else:
         dx = eval_x[:, None] - source_x[None]
-    n = source_data["e^rho"]
+    n = rpz2xyz_vec(source_data["e^rho"], phi=source_data["phi"])
     n = n / jnp.linalg.norm(n, axis=-1, keepdims=True)
     r = safenorm(dx, axis=-1)
     return safediv(jnp.sum(n * dx, axis=-1), r**3)
@@ -609,7 +593,8 @@ def _kernel_biot_savart(eval_data, source_data, diag=False):
         dx = eval_x - source_x
     else:
         dx = eval_x[:, None] - source_x[None]
-    num = jnp.cross(source_data["K_vc"], dx, axis=-1)
+    K = rpz2xyz_vec(source_data["K_vc"], phi=source_data["phi"])
+    num = jnp.cross(K, dx, axis=-1)
     r = safenorm(dx, axis=-1)[..., None]
     return mu_0 / 4 / jnp.pi * safediv(num, r**3)
 
@@ -631,7 +616,8 @@ def _kernel_biot_savart_A(eval_data, source_data, diag=False):
     else:
         dx = eval_x[:, None] - source_x[None]
     r = safenorm(dx, axis=-1)[..., None]
-    return mu_0 / 4 / jnp.pi * safediv(source_data["K_vc"], r)
+    K = rpz2xyz_vec(source_data["K_vc"], phi=source_data["phi"])
+    return mu_0 / 4 / jnp.pi * safediv(K, r)
 
 
 _kernel_biot_savart_A.ndim = 3

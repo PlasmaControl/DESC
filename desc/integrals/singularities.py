@@ -14,7 +14,7 @@ from desc.compute.geom_utils import rpz2xyz, rpz2xyz_vec, xyz2rpz_vec
 from desc.grid import LinearGrid
 from desc.io import IOAble
 from desc.transform import Transform
-from desc.utils import dot, safediv, safenorm, setdefault
+from desc.utils import dot, safediv, safenorm, setdefault, warnif
 
 
 def _get_default_sq(grid):
@@ -84,8 +84,14 @@ class _BIESTInterpolator(IOAble, ABC):
         assert (
             source_grid.nodes[0, 0] == eval_grid.nodes[0, 0]
         ), "Singular integration requires grids on the same surface."
-        assert s <= source_grid.num_theta
-        assert s <= source_grid.num_zeta
+        assert s <= source_grid.num_theta, (
+            "Polar grid is invalid. "
+            f"Got s = {s} > {source_grid.num_theta} = source_grid.num_theta."
+        )
+        assert s <= source_grid.num_zeta, (
+            "Polar grid is invalid. "
+            f"Got s = {s} > {source_grid.num_zeta} = source_grid.num_theta."
+        )
         self._eval_grid = eval_grid
         self._source_grid = source_grid
         self._s = s
@@ -116,6 +122,7 @@ class _BIESTInterpolator(IOAble, ABC):
         -------
         fi : ndarray
             Source data interpolated to ith polar node.
+
         """
 
 
@@ -140,12 +147,21 @@ class FFTInterpolator(_BIESTInterpolator):
     _io_attrs_ = _BIESTInterpolator._io_attrs_ + ["_h_t", "_h_z", "_st", "_sz"]
 
     def __init__(self, eval_grid, source_grid, s, q):
-        assert eval_grid.can_fft2
-        assert source_grid.can_fft2
-        assert eval_grid.NFP == source_grid.NFP
+        assert eval_grid.can_fft2, "Got False for eval_grid.can_fft2."
+        assert source_grid.can_fft2, "Got False for source_grid.can_fft2."
+        assert eval_grid.NFP == source_grid.NFP, (
+            "NFP does not match. "
+            f"Got eval_grid.NFP={eval_grid.NFP} and source_grid.NFP={source_grid.NFP}."
+        )
         # Otherwise frequency spectrum is truncated.
-        assert eval_grid.num_theta >= source_grid.num_theta
-        assert eval_grid.num_zeta >= source_grid.num_zeta
+        assert eval_grid.num_theta >= source_grid.num_theta, (
+            f"Got eval_grid.num_theta = {eval_grid.num_theta} < "
+            f"{source_grid.num_theta} = source_grid.num_theta."
+        )
+        assert eval_grid.num_zeta >= source_grid.num_zeta, (
+            f"Got eval_grid.num_zeta = {eval_grid.num_zeta} < "
+            f"{source_grid.num_zeta} = source_grid.num_zeta."
+        )
         super().__init__(eval_grid, source_grid, s, q)
 
         self._h_t = 2 * jnp.pi / source_grid.num_theta
@@ -170,7 +186,7 @@ class FFTInterpolator(_BIESTInterpolator):
         Returns
         -------
         fi : ndarray
-            Source data interpolated to ith polar node.
+            Source data interpolated to ith polar node of the ``source_grid``.
 
         """
         shape = f.shape[1:]
@@ -207,13 +223,16 @@ class DFTInterpolator(_BIESTInterpolator):
     _io_attrs_ = _BIESTInterpolator._io_attrs_ + ["_mat"]
 
     def __init__(self, eval_grid, source_grid, s, q):
-        assert source_grid.can_fft2
+        assert source_grid.can_fft2, "Got False for source_grid.can_fft2."
         super().__init__(eval_grid, source_grid, s, q)
 
         h_t = 2 * jnp.pi / source_grid.num_theta
         h_z = 2 * jnp.pi / source_grid.num_zeta / source_grid.NFP
         eval_theta = eval_grid.nodes[:, 1]
         eval_zeta = eval_grid.nodes[:, 2]
+        # Change of variable requires s = M for the mapping to be bijective.
+        # For s < M, the partition of unity c.o.v. ensures
+        # the portion of the integral that is lost is negligible.
         r, w, _, _ = _get_quadrature_nodes(q)
         theta_q = eval_theta[:, None] + s / 2 * h_t * r * jnp.sin(w)
         zeta_q = eval_zeta[:, None] + s / 2 * h_z * r * jnp.cos(w)
@@ -247,7 +266,7 @@ class DFTInterpolator(_BIESTInterpolator):
         Returns
         -------
         fi : ndarray
-            Source data interpolated to ith polar node.
+            Source data interpolated to ith polar node of the ``eval_grid``.
 
         """
         return self._mat[:, i] @ f
@@ -365,6 +384,13 @@ def _singular_part(
     eval_theta = jnp.asarray(eval_grid.nodes[:, 1])
     eval_zeta = jnp.asarray(eval_grid.nodes[:, 2])
 
+    if isinstance(interpolator, FFTInterpolator):
+        eval_zeta = eval_zeta * (eval_grid.NFP / source_grid.NFP)
+        # This is required for vector quantities to be computed correctly
+        # (as required for e.g. Biot-Savart kernels). Recall for axisymmetric
+        # devices we set source_grid.NFP = 64 which may differ from eval_grid.NFP,
+        # See GitHub issue #1524.
+
     r, w, dr, dw = _get_quadrature_nodes(q)
     eta = _chi(r)
     # integrand of eq 38 in [2] except stuff that needs to be interpolated
@@ -372,41 +398,36 @@ def _singular_part(
     dt = s / 2 * h_t * r * jnp.sin(w)
     dz = s / 2 * h_z * r * jnp.cos(w)
     keys = set(["|e_theta x e_zeta|"] + kernel.keys)
-    if "alpha" in keys:
-        keys.add("theta_PEST")
-        keys.add("phi")
-        # grid only has one surface
-        iota = source_data.get("iota", eval_data.get("iota", None))[0]
-    if "theta_PEST" in keys:
-        keys.add("lambda")
     if "phi" in keys:
         keys.add("omega")
     keys = list(keys)
     fsource = [source_data[key] for key in keys]
 
     def polar_pt_vmap(i):
-        # evaluate the effect from a single polar node around each eval point
-        # on that eval point. Polar grids from other singularities have no effect
-        # See sec 3.2.2 of [2]
-        # data interpolated to each eval pt offset by dt,dz
-        # todo:? unnecessary FFTs here; cache ft of val
+        """See sec 3.2.2 of [2].
+
+        Evaluate the effect from a single polar node around each eval point
+        on that eval point. Polar grids from other singularities have no effect.
+        """
+        # The ``FFTInterpolator`` interpolates to polar node i of the source grid, while
+        # the ``DFTInterpolator`` interpolates to polar node i of the eval   grid.
+        # When the source grid and eval grid have different NFP, the values taken
+        # by a function that is periodic with source grid NFP will in general
+        # be different at these points. For functions with no toroidal variation
+        # there will be no difference, and that is the only time the
+        # source grid and eval grid may have different NFP.
         source_data_polar = {
-            key: interpolator(val, i) for key, val in zip(keys, fsource)
+            # Todo: unnecessary FFTs here; cache ft of val
+            key: interpolator(val, i)
+            for key, val in zip(keys, fsource)
         }
+        # The (θ, ζ) coordinates at which the maps above were evaluated.
         source_data_polar["theta"] = eval_theta + dt[i]
         source_data_polar["zeta"] = eval_zeta + dz[i]
-        # These quantities are not periodic in theta and zeta.
-        if "theta_PEST" in keys:
-            source_data_polar["theta_PEST"] = (
-                source_data_polar["theta"] + source_data_polar["lambda"]
-            )
+        # ϕ is not periodic map of θ, ζ.
         if "phi" in keys:
             source_data_polar["phi"] = (
                 source_data_polar["zeta"] + source_data_polar["omega"]
-            )
-        if "alpha" in keys:
-            source_data_polar["alpha"] = (
-                source_data_polar["theta_PEST"] - iota * source_data_polar["phi"]
             )
 
         # eval pts x source pts for 1 polar grid offset
@@ -798,9 +819,10 @@ def compute_B_plasma(eq, eval_grid, source_grid=None, normal_only=False):
     try:
         interpolator = FFTInterpolator(eval_grid, source_grid, s, q)
     except AssertionError as e:
-        print(
-            f"Unable to create FFTInterpolator, got error {e},"
-            "falling back to DFT method which is much slower"
+        warnif(
+            True,
+            msg="Could not build fft interpolator, switching to dft which is slow."
+            "\nReason: " + str(e),
         )
         interpolator = DFTInterpolator(eval_grid, source_grid, s, q)
     if hasattr(eq.surface, "Phi_mn"):

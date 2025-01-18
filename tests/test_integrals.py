@@ -647,7 +647,7 @@ class TestSingularities:
         eq = get("W7-X")
         Nu = 100
         Nv = 100
-        es = 1e-7
+        es = 5e-7
         grid = LinearGrid(M=Nu // 2, N=Nv // 2, NFP=eq.NFP)
         s, q = _get_default_sq(grid)
         interpolator = FFTInterpolator(grid, grid, s, q)

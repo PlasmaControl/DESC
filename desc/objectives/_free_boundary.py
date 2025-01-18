@@ -1,7 +1,5 @@
 """Objectives for solving free boundary equilibria."""
 
-import warnings
-
 import numpy as np
 from scipy.constants import mu_0
 
@@ -502,9 +500,10 @@ class BoundaryError(_Objective):
         try:
             interpolator = FFTInterpolator(eval_grid, source_grid, self._s, self._q)
         except AssertionError as e:
-            warnings.warn(
-                "Could not built fft interpolator, switching to dft method which is"
-                " much slower. Reason: " + str(e)
+            warnif(
+                True,
+                msg="Could not build fft interpolator, switching to dft which is slow."
+                "\nReason: " + str(e),
             )
             interpolator = DFTInterpolator(eval_grid, source_grid, self._s, self._q)
 

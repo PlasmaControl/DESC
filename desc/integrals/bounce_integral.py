@@ -441,7 +441,7 @@ class Bounce2D(Bounce):
             clebsch = FourierChebyshevSeries.nodes(X, Y, rho, domain=(0, 2 * jnp.pi))
         if iota is not None:
             iota = jnp.atleast_1d(iota)
-            kwargs["iota"] = jnp.broadcast_to(iota, shape=(Y, X, iota.size)).T.ravel()
+            kwargs["iota"] = jnp.broadcast_to(iota, shape=(X * Y, iota.size)).T.ravel()
         return eq.map_coordinates(
             coords=clebsch,
             inbasis=("rho", "alpha", "zeta"),

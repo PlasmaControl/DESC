@@ -2,24 +2,23 @@
 
 from abc import ABC, abstractmethod
 
-import numpy as np
 import scipy
 from interpax import fft_interp2d
 from scipy.constants import mu_0
 
-from desc.backend import fori_loop, imap, jnp, vmap
+from desc.backend import fori_loop, jnp, rfft2, vmap
 from desc.basis import DoubleFourierSeries
 from desc.batching import batch_map
 from desc.compute.geom_utils import rpz2xyz, rpz2xyz_vec, xyz2rpz_vec
 from desc.grid import LinearGrid
 from desc.io import IOAble
-from desc.utils import safediv, safenorm, warnif
+from desc.utils import errorif, safediv, safenorm, warnif
 
 
 def _get_default_sq(grid):
     k = max(min(grid.num_theta, grid.num_zeta * grid.NFP), 2)
     s = k - 1
-    q = k // 2 + int(np.sqrt(k))
+    q = k // 2 + int(jnp.sqrt(k))
     return s, q
 
 
@@ -174,7 +173,7 @@ class FFTInterpolator(_BIESTInterpolator):
         self._st = s / 2 * self._h_t * r * jnp.sin(w)
         self._sz = s / 2 * self._h_z * r * jnp.cos(w)
 
-    def __call__(self, f, i):
+    def __call__(self, f, i, is_fourier=False):
         """Interpolate data to polar grid points.
 
         Parameters
@@ -183,6 +182,9 @@ class FFTInterpolator(_BIESTInterpolator):
             Data at source grid points to interpolate.
         i : int
             Index of polar node.
+        is_fourier : bool
+            Whether ``f`` holds Fourier coefficients as returned by
+            ``self.fourier``. Default is false.
 
         Returns
         -------
@@ -190,9 +192,10 @@ class FFTInterpolator(_BIESTInterpolator):
             Source data interpolated to ith polar node.
 
         """
+        errorif(is_fourier, NotImplementedError)
         shape = f.shape[1:]
         f = self._source_grid.meshgrid_reshape(f, "rtz")[0]
-        g = fft_interp2d(
+        return fft_interp2d(
             f,
             self._eval_grid.num_theta,
             self._eval_grid.num_zeta,
@@ -200,8 +203,7 @@ class FFTInterpolator(_BIESTInterpolator):
             sy=self._sz[i],
             dx=self._h_t,
             dy=self._h_z,
-        )
-        return g.reshape(self._eval_grid.num_nodes, *shape, order="F")
+        ).reshape(self._eval_grid.num_nodes, *shape, order="F")
 
 
 class DFTInterpolator(_BIESTInterpolator):
@@ -221,7 +223,7 @@ class DFTInterpolator(_BIESTInterpolator):
 
     """
 
-    _io_attrs_ = _BIESTInterpolator._io_attrs_ + ["_mat"]
+    _io_attrs_ = _BIESTInterpolator._io_attrs_ + ["_basis", "_theta_q", "_zeta_q"]
 
     def __init__(self, eval_grid, source_grid, s, q):
         assert source_grid.can_fft2, "Got False for source_grid.can_fft2."
@@ -235,26 +237,27 @@ class DFTInterpolator(_BIESTInterpolator):
         # For s < M, the partition of unity c.o.v. ensures
         # the portion of the integral that is lost is negligible.
         r, w, _, _ = _get_quadrature_nodes(q)
-        theta_q = eval_theta[:, None] + s / 2 * h_t * r * jnp.sin(w)
-        zeta_q = eval_zeta[:, None] + s / 2 * h_z * r * jnp.cos(w)
-
-        basis = DoubleFourierSeries(
-            M=source_grid.M, N=source_grid.N, NFP=source_grid.NFP
+        self._theta_q = eval_theta[:, None] + s / 2 * h_t * r * jnp.sin(w)
+        self._zeta_q = eval_zeta[:, None] + s / 2 * h_z * r * jnp.cos(w)
+        self._basis = DoubleFourierSeries(
+            M=source_grid.M, N=source_grid.N, NFP=source_grid.NFP, complex_vander=True
         )
 
-        def vandermonde(nodes):
-            theta, zeta = nodes
-            x = jnp.array([jnp.zeros_like(theta), theta, zeta]).T
-            return basis.evaluate(jnp.atleast_2d(x))
+    def fourier(self, f):
+        """Return real FFT of ``f``."""
+        return rfft2(
+            self._source_grid.meshgrid_reshape(f, "rtz")[0],
+            axes=(0, 1),
+            norm="forward",
+        ).reshape(-1, *f.shape[1:])
 
-        B = imap(vandermonde, (theta_q, zeta_q))
-        A = basis.evaluate(source_grid.nodes)
-        self._mat = B @ jnp.linalg.pinv(A)
-        # TODO (#1522): Change to use ``rfft2`` to compute Ainv @ f and retain B.
-        #  This would also be more efficient than ``FFTInterpolator`` when
-        #  ``eval_grid`` is smaller than ``source_grid``.
+    def _evaluate_polar_vandermonde(self, i):
+        theta = self._theta_q[:, i]
+        zeta = self._zeta_q[:, i]
+        x = jnp.array([jnp.zeros_like(theta), theta, zeta]).T
+        return self._basis._evaluate_complex_vander(jnp.atleast_2d(x))
 
-    def __call__(self, f, i):
+    def __call__(self, f, i, is_fourier=False):
         """Interpolate data to polar grid points.
 
         Parameters
@@ -263,6 +266,9 @@ class DFTInterpolator(_BIESTInterpolator):
             Data at source grid points to interpolate.
         i : int
             Index of polar node.
+        is_fourier : bool
+            Whether ``f`` holds Fourier coefficients as returned by
+            ``self.fourier``. Default is false.
 
         Returns
         -------
@@ -270,7 +276,9 @@ class DFTInterpolator(_BIESTInterpolator):
             Source data interpolated to ith polar node.
 
         """
-        return self._mat[:, i] @ f
+        if not is_fourier:
+            f = self.fourier(f)
+        return jnp.real(self._evaluate_polar_vandermonde(i) @ f)
 
 
 def _chi(rho):
@@ -280,10 +288,10 @@ def _chi(rho):
 
 def _rho(theta, zeta, theta0, zeta0, dtheta, dzeta, s):
     """Polar grid radial coordinate. Argument of Chi in eq. 36 in [2]."""
-    dt = abs(theta - theta0)
-    dz = abs(zeta - zeta0)
-    dt = jnp.minimum(dt, 2 * np.pi - dt)
-    dz = jnp.minimum(dz, 2 * np.pi - dz)
+    dt = jnp.abs(theta - theta0)
+    dz = jnp.abs(zeta - zeta0)
+    dt = jnp.minimum(dt, 2 * jnp.pi - dt)
+    dz = jnp.minimum(dz, 2 * jnp.pi - dz)
     return 2 / s * jnp.sqrt((dt / dtheta) ** 2 + (dz / dzeta) ** 2)
 
 
@@ -295,28 +303,28 @@ def _nonsingular_part(
     Generally follows sec 3.2.1 of [2].
     """
     assert source_grid.NFP == int(source_grid.NFP)
-    assert "zeta" in source_data and "phi" in source_data
-
     source_theta = source_grid.nodes[:, 1]
-    source_zeta = source_grid.nodes[:, 2]
+    # make sure source dict has zeta and phi to avoid
+    # adding keys to dict during iteration
+    source_zeta = source_data.setdefault("zeta", source_grid.nodes[:, 2])
+    source_phi = source_data["phi"]
     eval_theta = jnp.asarray(eval_grid.nodes[:, 1])
     eval_zeta = jnp.asarray(eval_grid.nodes[:, 2])
     h_t = 2 * jnp.pi / source_grid.num_theta
     h_z = 2 * jnp.pi / source_grid.num_zeta / source_grid.NFP
-    w = source_data["|e_theta x e_zeta|"] * h_t * h_z
+    w = source_data["|e_theta x e_zeta|"][jnp.newaxis] * h_t * h_z
 
-    source_phi = source_data["phi"]
     keys = kernel.keys
 
     def nfp_loop(j, f_data):
         # calculate effects at all eval pts from all source pts on a single field
         # period, summing over field periods
         f, source_data = f_data
-        source_data["zeta"] = (source_zeta + j * 2 * np.pi / source_grid.NFP) % (
-            2 * np.pi
+        source_data["zeta"] = (source_zeta + j * 2 * jnp.pi / source_grid.NFP) % (
+            2 * jnp.pi
         )
-        source_data["phi"] = (source_phi + j * 2 * np.pi / source_grid.NFP) % (
-            2 * np.pi
+        source_data["phi"] = (source_phi + j * 2 * jnp.pi / source_grid.NFP) % (
+            2 * jnp.pi
         )
 
         # nest this def to avoid having to pass the modified source_data around the loop
@@ -330,14 +338,14 @@ def _nonsingular_part(
             rho = _rho(
                 source_theta,
                 source_data["zeta"],  # to account for different field periods
-                eval_theta[i],
-                eval_zeta[i],
+                eval_theta[i][:, jnp.newaxis],
+                eval_zeta[i][:, jnp.newaxis],
                 h_t,
                 h_z,
                 s,
             )
             eta = _chi(rho)  # from eq 36 of [2]
-            return jnp.sum(k * (w * (1 - eta))[None, :, None], axis=1)
+            return jnp.sum(k * (w * (1 - eta))[..., jnp.newaxis], axis=1)
 
         # vmap for inner part found more efficient than loop, especially on gpu,
         # but for jacobian looped seems to be better and less memory
@@ -358,6 +366,7 @@ def _nonsingular_part(
     # but then need to convert vectors back to rpz
     if kernel.ndim == 3:
         f = xyz2rpz_vec(f, phi=eval_data["phi"])
+
     return f
 
 
@@ -384,10 +393,11 @@ def _singular_part(
     eval_theta = jnp.asarray(eval_grid.nodes[:, 1])
     eval_zeta = jnp.asarray(eval_grid.nodes[:, 2])
 
+    # could maybe cache these in the interpolator
     r, w, dr, dw = _get_quadrature_nodes(q)
     eta = _chi(r)
     # integrand of eq 38 in [2] except stuff that needs to be interpolated
-    v = eta * s**2 * h_t * h_z / 4 * abs(r) * dr * dw
+    v = eta * s**2 * h_t * h_z / 4 * jnp.abs(r) * dr * dw
     dt = s / 2 * h_t * r * jnp.sin(w)
     dz = s / 2 * h_z * r * jnp.cos(w)
     keys = set(["|e_theta x e_zeta|"] + kernel.keys)
@@ -396,6 +406,12 @@ def _singular_part(
         keys.add("omega")
     keys = list(keys)
     fsource = [source_data[key] for key in keys]
+    if isinstance(interpolator, DFTInterpolator):
+        fsource = [interpolator.fourier(val) for val in fsource]
+        is_fourier = True
+    else:
+        # TODO: https://github.com/f0uriest/interpax/issues/53.
+        is_fourier = False
 
     def polar_pt(i):
         """See sec 3.2.2 of [2].
@@ -411,9 +427,7 @@ def _singular_part(
         # there will be no difference, and that is the only time the
         # source grid and eval grid may have different NFP.
         source_data_polar = {
-            # TODO: Cache FFT of val. https://github.com/f0uriest/interpax/issues/53.
-            key: interpolator(val, i)
-            for key, val in zip(keys, fsource)
+            key: interpolator(val, i, is_fourier) for key, val in zip(keys, fsource)
         }
         # The (θ, ζ) coordinates at which the maps above were evaluated.
         source_data_polar["theta"] = eval_theta + dt[i]
@@ -435,15 +449,13 @@ def _singular_part(
         return fi
 
     def polar_pt_loop(i, f):
-        # this calculates the effect at a single evaluation point, from all others
-        # in a single field period. loop this to get all pts
-        f_temp = polar_pt(i)
-        return f + f_temp
+        return f + polar_pt(i)
 
     # vmap found more efficient than fori_loop, esp on gpu, but uses more memory
     if loop:
-        f = jnp.zeros((eval_grid.num_nodes, kernel.ndim))
-        f = fori_loop(0, v.size, polar_pt_loop, f)
+        f = fori_loop(
+            0, v.size, polar_pt_loop, jnp.zeros((eval_grid.num_nodes, kernel.ndim))
+        )
     else:
         f = vmap(polar_pt)(jnp.arange(v.size)).sum(axis=0)
 
@@ -745,12 +757,11 @@ def compute_B_plasma(eq, eval_grid, source_grid=None, normal_only=False):
 
     """
     if source_grid is None:
-        source_NFP = eq.NFP if eq.N > 0 else 64
         source_grid = LinearGrid(
-            rho=np.array([1.0]),
+            rho=jnp.array([1.0]),
             M=eq.M_grid,
             N=eq.N_grid,
-            NFP=source_NFP,
+            NFP=eq.NFP if eq.N > 0 else 64,
             sym=False,
         )
 

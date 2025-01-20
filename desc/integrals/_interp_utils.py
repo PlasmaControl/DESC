@@ -95,8 +95,11 @@ def harmonic(a, n, axis=-1):
     -------
     h : jnp.ndarray
         Nyquist trigonometric interpolant coefficients.
-        Coefficients ordered along ``axis`` of size ``n`` to match ordering of
-        [1, cos(x), ..., cos(nx), sin(x), sin(2x), ..., sin(nx)] basis.
+
+        Coefficients are ordered along ``axis`` of size ``n`` to match
+        Vandermonde matrix with order
+        [1, cos(x), ..., cos(kx), sin(kx), ..., sin(x)].
+        When ``n`` is even the sin(kx) coefficient is zero and is excluded.
 
     """
     is_even = (n % 2) == 0
@@ -108,12 +111,15 @@ def harmonic(a, n, axis=-1):
         .divide(1.0 + is_even)
     )
     # sin(nx) coefficients
-    bn = -2.0 * take(
-        a.imag,
-        jnp.arange(1, a.shape[axis] - is_even),
-        axis,
-        unique_indices=True,
-        indices_are_sorted=True,
+    bn = -2.0 * jnp.flip(
+        take(
+            a.imag,
+            jnp.arange(1, a.shape[axis] - is_even),
+            axis,
+            unique_indices=True,
+            indices_are_sorted=True,
+        ),
+        axis=axis,
     )
     h = jnp.concatenate([an, bn], axis=axis)
     assert h.shape[axis] == n
@@ -138,14 +144,15 @@ def harmonic_vander(x, n, domain=(0, 2 * jnp.pi)):
     basis : jnp.ndarray
         Shape (*x.shape, n).
         Vandermonde matrix of degree ``n-1`` and sample points ``x``.
-        Last axis ordered as [1, cos(x), ..., cos(nx), sin(x), sin(2x), ..., sin(nx)].
+        Last axis ordered as [1, cos(x), ..., cos(kx), sin(kx), ..., sin(x)].
+        When ``n`` is even the sin(kx) basis function is excluded.
 
     """
     is_even = (n % 2) == 0
     n_rfft = jnp.fft.rfftfreq(n, d=(domain[-1] - domain[0]) / (2 * jnp.pi * n))
     nx = n_rfft * (x - domain[0])[..., jnp.newaxis]
     basis = jnp.concatenate(
-        [jnp.cos(nx), jnp.sin(nx[..., 1 : n_rfft.size - is_even])], axis=-1
+        [jnp.cos(nx), jnp.sin(nx[..., n_rfft.size - is_even - 1 : 0 : -1])], axis=-1
     )
     assert basis.shape[-1] == n
     return basis
@@ -255,7 +262,7 @@ def interp_rfft2(
     axes : tuple[int]
         Axes along which to transform.
         The real transform is done along ``axes[1]``, so it will be more
-        efficient for that to denote the larger size axis in ``axes``.
+        efficient for that to denote the smaller size axis in ``axes``.
 
     Returns
     -------

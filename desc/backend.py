@@ -5,6 +5,7 @@ import os
 import warnings
 
 import numpy as np
+import sympy as sp
 from termcolor import colored
 
 import desc

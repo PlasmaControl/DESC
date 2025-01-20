@@ -22,6 +22,18 @@ __all__ = [
 ]
 
 
+# TODO: Should instead compute
+#  1D mode matrices of radial, poloidal, toroidal basis functions
+#  and take their outer product to form the 3D Vandermonde matrix.
+#  This significantly reduces computational cost of calling ``evaluate``
+#  from O(N^3 M^3 L^3) to O(N M L) since just need to evaluate 3 N M L
+#  basis functions and take outer product of three
+#  matrices of size N M L as opposed to evaluating N^3 M^3 L^3 basis
+#  functions.
+#  This works even if the evaluation grid is not a meshgrid.
+#  After implementing this, the unique_idx modes are irrelevant.
+
+
 class _Basis(IOAble, ABC):
     """Basis is an abstract base class for spectral basis sets."""
 
@@ -261,9 +273,9 @@ class PowerSeries(_Basis):
             Each row is one basis function with modes (l,m,n).
 
         """
-        l = np.arange(L + 1).reshape((-1, 1))
-        z = np.zeros((L + 1, 2))
-        return np.hstack([l, z])
+        l = np.arange(L + 1)
+        z = np.zeros_like(l)
+        return np.array([l, z, z]).T
 
     def evaluate(
         self, nodes, derivatives=np.array([0, 0, 0]), modes=None, unique=False
@@ -374,10 +386,9 @@ class FourierSeries(_Basis):
             Each row is one basis function with modes (l,m,n).
 
         """
-        dim_tor = 2 * N + 1
-        n = np.arange(dim_tor).reshape((-1, 1)) - N
-        z = np.zeros((dim_tor, 2))
-        return np.hstack([z, n])
+        n = np.arange(-N, N + 1)
+        z = np.zeros_like(n)
+        return np.array([z, z, n]).T
 
     def evaluate(
         self, nodes, derivatives=np.array([0, 0, 0]), modes=None, unique=False
@@ -400,6 +411,10 @@ class FourierSeries(_Basis):
         -------
         y : ndarray, shape(num_nodes,num_modes)
             Basis functions evaluated at nodes.
+
+            The Vandermonde matrix when ``modes is None`` is
+            given by ``y.reshape(-1,2*N+1)`` and is ordered
+            [sin(Nx), ..., sin(x), 1, cos(x), ..., cos(Nx)].
 
         """
         if modes is None:
@@ -470,7 +485,7 @@ class DoubleFourierSeries(_Basis):
 
     """
 
-    def __init__(self, M, N, NFP=1, sym=False):
+    def __init__(self, M, N, NFP=1, sym=False, **kwargs):
         self._L = 0
         self._M = check_nonnegint(M, "M", False)
         self._N = check_nonnegint(N, "N", False)
@@ -478,9 +493,13 @@ class DoubleFourierSeries(_Basis):
         self._sym = bool(sym) if not sym else str(sym)
         self._spectral_indexing = "linear"
 
-        self._modes = self._get_modes(M=self.M, N=self.N)
-
-        super().__init__()
+        if kwargs.get("complex_vander", False):
+            self._modes = DoubleFourierSeries._get_complex_vander_modes(
+                self.M, self.N, self.NFP
+            )
+        else:
+            self._modes = self._get_modes(M=self.M, N=self.N)
+            super().__init__()
 
     def _get_modes(self, M, N):
         """Get mode numbers for double Fourier series.
@@ -499,16 +518,21 @@ class DoubleFourierSeries(_Basis):
             Each row is one basis function with modes (l,m,n).
 
         """
-        dim_pol = 2 * M + 1
-        dim_tor = 2 * N + 1
-        m = np.arange(dim_pol) - M
-        n = np.arange(dim_tor) - N
-        mm, nn = np.meshgrid(m, n)
-        mm = mm.reshape((-1, 1), order="F")
-        nn = nn.reshape((-1, 1), order="F")
-        z = np.zeros_like(mm)
-        y = np.hstack([z, mm, nn])
-        return y
+        m = np.arange(-M, M + 1)
+        n = np.arange(-N, N + 1)
+        m, n = np.meshgrid(m, n, indexing="ij")
+        m = m.ravel()
+        n = n.ravel()
+        z = np.zeros_like(m)
+        return np.array([z, m, n]).T
+
+    @staticmethod
+    def _get_complex_vander_modes(M, N, NFP):
+        M = 2 * M + 1
+        N = 2 * N + 1
+        m = jnp.fft.fftfreq(M, d=1 / M).astype(int)
+        n = jnp.fft.rfftfreq(N, d=1 / (N * NFP)).astype(int)
+        return m, n
 
     def evaluate(
         self, nodes, derivatives=np.array([0, 0, 0]), modes=None, unique=False
@@ -531,6 +555,12 @@ class DoubleFourierSeries(_Basis):
         -------
         y : ndarray, shape(num_nodes,num_modes)
             Basis functions evaluated at nodes.
+
+            The Vandermonde matrix when ``modes is None`` is
+            given by ``y.reshape(-1,2*M+1,2*N+1)`` and
+            is an outer product of Fourier matrices with order
+              [sin(Mx), ..., sin(x), 1, cos(x), ..., cos(Mx)]
+            ⊗ [sin(Ny), ..., sin(y), 1, cos(y), ..., cos(Ny)]
 
         """
         if modes is None:
@@ -568,6 +598,16 @@ class DoubleFourierSeries(_Basis):
             toroidal = toroidal[zoutidx][:, noutidx]
 
         return poloidal * toroidal
+
+    def _evaluate_complex_vander(self, nodes):
+        """Can dot this against rfft output."""
+        r, t, z = nodes.T
+        n, m = self._modes
+        t_basis = jnp.exp(1j * n * t[..., jnp.newaxis])
+        z_basis = jnp.exp(1j * m * z[..., jnp.newaxis]).at[..., 0].divide(2) * 2
+        # Much more efficient to take outer product of 1D Vandermonde matrices!
+        basis = t_basis[..., jnp.newaxis] * z_basis[..., jnp.newaxis, :]
+        return basis.reshape(nodes.shape[0], -1)
 
     def change_resolution(self, M, N, NFP=None, sym=None):
         """Change resolution of the basis to the given resolutions.
@@ -858,17 +898,14 @@ class ChebyshevDoubleFourierBasis(_Basis):
             Each row is one basis function with modes (l,m,n).
 
         """
-        dim_pol = 2 * M + 1
-        dim_tor = 2 * N + 1
         l = np.arange(L + 1)
-        m = np.arange(dim_pol) - M
-        n = np.arange(dim_tor) - N
-        ll, mm, nn = np.meshgrid(l, m, n)
-        ll = ll.reshape((-1, 1), order="F")
-        mm = mm.reshape((-1, 1), order="F")
-        nn = nn.reshape((-1, 1), order="F")
-        y = np.hstack([ll, mm, nn])
-        return y
+        m = np.arange(-M, M + 1)
+        n = np.arange(-N, N + 1)
+        l, m, n = np.meshgrid(l, m, n, indexing="ij")
+        l = l.ravel()
+        m = m.ravel()
+        n = n.ravel()
+        return np.array([l, m, n]).T
 
     def evaluate(
         self, nodes, derivatives=np.array([0, 0, 0]), modes=None, unique=False
@@ -891,6 +928,13 @@ class ChebyshevDoubleFourierBasis(_Basis):
         -------
         y : ndarray, shape(num_nodes,num_modes)
             Basis functions evaluated at nodes.
+
+            The Vandermonde matrix when ``modes is None`` is given by
+            ``y.reshape(-1,L+1,2*M+1,2*N+1,3)`` and is
+            an outer product of Chebyshev and Fourier matrices with order
+              [T₀(y), T₁(y), ..., T_L(y)]
+            ⊗ [sin(Mx), ..., sin(x), 1, cos(x), ..., cos(Mx)]
+            ⊗ [sin(Ny), ..., sin(y), 1, cos(y), ..., cos(Ny)]
 
         """
         if modes is None:
@@ -1212,9 +1256,9 @@ class ChebyshevPolynomial(_Basis):
             Each row is one basis function with modes (l,m,n).
 
         """
-        l = np.arange(L + 1).reshape((-1, 1))
-        z = np.zeros((L + 1, 2))
-        return np.hstack([l, z])
+        l = np.arange(L + 1)
+        z = np.zeros_like(l)  # zeros_like makes z integer 0
+        return np.array([l, z, z]).T
 
     def evaluate(
         self, nodes, derivatives=np.array([0, 0, 0]), modes=None, unique=False
@@ -1627,7 +1671,7 @@ def chebyshev(r, l, dr=0):
 
     Parameters
     ----------
-    rho : ndarray, shape(N,)
+    r : ndarray, shape(N,)
         radial coordinates to evaluate basis
     l : ndarray of int, shape(K,)
         radial mode number(s)

@@ -641,7 +641,7 @@ class TestSingularities:
             data = eq.compute(
                 _kernel_nr_over_r3.keys + ["|e_theta x e_zeta|"], grid=grid
             )
-            err = singular_integral(data, data, "nr_over_r3", interpolator, loop=True)
+            err = singular_integral(data, data, "nr_over_r3", interpolator, loop=i != 0)
             np.testing.assert_array_less(np.abs(2 * np.pi + err), es[i])
 
         eq = get("W7-X")
@@ -656,7 +656,8 @@ class TestSingularities:
         np.testing.assert_array_less(np.abs(2 * np.pi + err), es)
 
     @pytest.mark.unit
-    def test_singular_integral_vac_estell(self):
+    @pytest.mark.parametrize("interpolator", [FFTInterpolator, DFTInterpolator])
+    def test_singular_integral_vac_estell(self, interpolator):
         """Test calculating Bplasma for vacuum estell, which should be near 0."""
         eq = get("ESTELL")
         grid = LinearGrid(M=25, N=25, NFP=eq.NFP)
@@ -673,8 +674,8 @@ class TestSingularities:
         ]
         data = eq.compute(keys, grid=grid)
         s, q = _get_default_sq(grid)
-        interpolator = FFTInterpolator(grid, grid, s, q)
-        Bplasma = virtual_casing_biot_savart(data, data, interpolator, loop=True)
+        interp = interpolator(grid, grid, s, q)
+        Bplasma = virtual_casing_biot_savart(data, data, interp, loop=True)
         # need extra factor of B/2 bc we're evaluating on plasma surface
         Bplasma += data["B"] / 2
         Bplasma = np.linalg.norm(Bplasma, axis=-1)

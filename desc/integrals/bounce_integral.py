@@ -166,15 +166,11 @@ class Bounce2D(Bounce):
     Bounce1D
         ``Bounce1D`` uses one-dimensional splines for the same task.
         ``Bounce2D`` solves the dominant cost of optimization objectives in DESC
-        relying on ``Bounce1D``: interpolating FourierZernike transforms to an
-        optimization-step dependent grid that is dense enough for function
-        approximation with local splines.
-        The function approximation done here requires FourierZernike transforms on a
-        fixed grid with typical resolution, using FFTs to compute the map between
-        coordinate systems.
-        The faster convergence of spectral methods requires a less dense
-        grid to interpolate onto from FourierZernike transforms.
-        2D interpolation enables tracing the field line for many toroidal transits.
+        relying on ``Bounce1D``: Computing a dense optimization-step dependent
+        grid along field lines and interpolating 3D FourierZernike series to this grid.
+        The function approximation done here requires FourierZernike series on a
+        smaller fixed grid and uses FFTs to compute the map between coordinate systems.
+        2D interpolation enables tracing the field line for more toroidal transits.
         The drawback is that evaluating a Fourier series with resolution F at Q
         non-uniform quadrature points takes 𝒪(-(F+Q) log(F) log(ε)) time
         whereas cubic splines take 𝒪(C Q) time. However, as NFP increases,
@@ -265,10 +261,10 @@ class Bounce2D(Bounce):
     # polynomials are preferred to other orthogonal polynomial series is
     # fast discrete polynomial transforms (DPT) are implemented via fast transform
     # to Chebyshev then DCT. Therefore, a Fourier-Chebyshev series is chosen
-    # to interpolate θ(α,ζ). An alternative to Chebyshev series is a
-    # [filtered Fourier series](doi.org/10.1016/j.aml.2006.10.001)
-    # or the more recent Fourier continuation methods.
-    # We did not benchmark that.
+    # to interpolate θ(α,ζ). Using Chebyshev series with the Kosloff and Tal-Ezer
+    # almost-equispaced grid does not really show much improvement.
+    # Alternative approaches include using filtered Fourier series, Fourier
+    # continuation methods, or (preferably) prolate spheroidal wave functions.
     #
     # Function approximation in (α, ζ) coordinates demands particular interpolation
     # points in that coordinate system because there is no transformation that converts
@@ -825,7 +821,8 @@ class Bounce2D(Bounce):
         # Integrating an analytic oscillatory map so a high order quadrature is ideal.
         # Difficult to pick the right frequency for Filon quadrature in general, which
         # would work best, especially at high NFP. Gauss-Legendre is superior to
-        # Clenshaw-Curtis for smooth oscillatory maps.
+        # Clenshaw-Curtis for smooth oscillatory maps. Any prolate spheroidal wave
+        # function quadrature would be an improvement.
         deg = (
             self._c["B(z)"].Y
             if isinstance(self._c["B(z)"], PiecewiseChebyshevSeries)

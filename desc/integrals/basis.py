@@ -227,6 +227,14 @@ class FourierChebyshevSeries(IOAble):
         Transform Fourier interpolant harmonics to Nyquist trigonometric
         interpolant harmonics so that the coefficients are all real.
 
+        The order of the returned coefficient array
+        matches the Vandermonde matrix formed by an outer
+        product of Fourier and Chebyshev matrices with order
+          [1, cos(x), ..., cos(kx), sin(kx), ..., sin(x)]
+        ⊗ [T₀(y), T₁(y), ..., Tₙ(y)]
+
+        When ``self.X`` is even the sin(kx) coefficient is zero and is excluded.
+
         Returns
         -------
         a_mn : jnp.ndarray

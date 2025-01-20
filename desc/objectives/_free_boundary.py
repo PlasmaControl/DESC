@@ -10,9 +10,20 @@ from desc.grid import LinearGrid
 from desc.integrals import DFTInterpolator, FFTInterpolator, virtual_casing_biot_savart
 from desc.nestor import Nestor
 from desc.objectives.objective_funs import _Objective, collect_docs
-from desc.utils import PRINT_WIDTH, Timer, errorif, parse_argname_change, warnif
+from desc.utils import (
+    PRINT_WIDTH,
+    Timer,
+    errorif,
+    parse_argname_change,
+    setdefault,
+    warnif,
+)
 
+from ..integrals.singularities import _get_default_sq
 from .normalization import compute_scaling_factors
+
+# TODO: Often eval grid and source grid are the same, so don't recompute
+#       everything twice. Just check if eval grid == source grid first.
 
 
 class VacuumBoundaryError(_Objective):
@@ -119,8 +130,9 @@ class VacuumBoundaryError(_Objective):
         else:
             grid = self._eval_grid
 
-        pres = np.max(np.abs(eq.compute("p")["p"]))
-        curr = np.max(np.abs(eq.compute("current")["current"]))
+        data = eq.compute(["p", "current"])
+        pres = np.max(np.abs(data["p"]))
+        curr = np.max(np.abs(data["current"]))
         errorif(
             not np.all(grid.nodes[:, 0] == 1.0),
             ValueError,
@@ -490,16 +502,9 @@ class BoundaryError(_Objective):
             ValueError,
             "Source grids for singular integrals must be non-symmetric",
         )
-        if self._s is None:
-            k = max(
-                min(source_grid.num_theta, source_grid.num_zeta * source_grid.NFP), 2
-            )
-            self._s = k - 1
-        if self._q is None:
-            k = max(
-                min(source_grid.num_theta, source_grid.num_zeta * source_grid.NFP), 2
-            )
-            self._q = k // 2 + int(np.sqrt(k))
+        s, q = _get_default_sq(source_grid)
+        self._s = setdefault(self._s, s)
+        self._q = setdefault(self._q, q)
 
         try:
             interpolator = FFTInterpolator(eval_grid, source_grid, self._s, self._q)
@@ -949,7 +954,7 @@ class BoundaryErrorNESTOR(_Objective):
         ctor = jnp.mean(data["current"])
         out = constants["nestor"].compute(params["R_lmn"], params["Z_lmn"], ctor)
         grid = constants["nestor"]._Rb_transform.grid
-        bsq = out[1]["|B|^2"].reshape((grid.num_zeta, grid.num_theta)).T.flatten()
+        bsq = out[1]["|B|^2"].reshape(grid.num_zeta, grid.num_theta).T.flatten()
         bv = bsq
 
         bp = data["|B|^2"]

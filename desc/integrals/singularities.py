@@ -175,7 +175,11 @@ class FFTInterpolator(_BIESTInterpolator):
         self._st = s / 2 * self._h_t * r * jnp.sin(w)
         self._sz = s / 2 * self._h_z * r * jnp.cos(w)
 
-    def __call__(self, f, i, is_fourier=False):
+    def polar_vandermonde(self, i):
+        """Return Vandermonde matrix for ith polar node."""
+        pass
+
+    def __call__(self, f, i, is_fourier=False, polar_vandermonde=None):
         """Interpolate data to polar grid points.
 
         Parameters
@@ -239,8 +243,8 @@ class DFTInterpolator(_BIESTInterpolator):
         # For s < M, the partition of unity c.o.v. ensures
         # the portion of the integral that is lost is negligible.
         r, w, _, _ = _get_quadrature_nodes(q)
-        self._theta_q = eval_theta[:, None] + s / 2 * h_t * r * jnp.sin(w)
-        self._zeta_q = eval_zeta[:, None] + s / 2 * h_z * r * jnp.cos(w)
+        self._theta_q = eval_theta[:, jnp.newaxis] + s / 2 * h_t * r * jnp.sin(w)
+        self._zeta_q = eval_zeta[:, jnp.newaxis] + s / 2 * h_z * r * jnp.cos(w)
         self._basis = DoubleFourierSeries(
             M=source_grid.M, N=source_grid.N, NFP=source_grid.NFP, complex_vander=True
         )
@@ -253,13 +257,14 @@ class DFTInterpolator(_BIESTInterpolator):
             norm="forward",
         ).reshape(-1, *f.shape[1:])
 
-    def _evaluate_polar_vandermonde(self, i):
+    def polar_vandermonde(self, i):
+        """Return Vandermonde matrix for ith polar node."""
         theta = self._theta_q[:, i]
         zeta = self._zeta_q[:, i]
         x = jnp.array([jnp.zeros_like(theta), theta, zeta]).T
         return self._basis._evaluate_complex_vander(jnp.atleast_2d(x))
 
-    def __call__(self, f, i, is_fourier=False):
+    def __call__(self, f, i, is_fourier=False, vandermonde=None):
         """Interpolate data to polar grid points.
 
         Parameters
@@ -271,6 +276,8 @@ class DFTInterpolator(_BIESTInterpolator):
         is_fourier : bool
             Whether ``f`` holds Fourier coefficients as returned by
             ``self.fourier``. Default is false.
+        vandermonde : jnp.ndarray
+            Cached value for ``self.polar_vandermonde(i)``.
 
         Returns
         -------
@@ -280,7 +287,9 @@ class DFTInterpolator(_BIESTInterpolator):
         """
         if not is_fourier:
             f = self.fourier(f)
-        return jnp.real(self._evaluate_polar_vandermonde(i) @ f)
+        if vandermonde is None:
+            vandermonde = self.polar_vandermonde(i)
+        return jnp.real(vandermonde @ f)
 
 
 def _chi(rho):
@@ -428,8 +437,10 @@ def _singular_part(
         # be different at these points. For functions with no toroidal variation
         # there will be no difference, and that is the only time the
         # source grid and eval grid may have different NFP.
+        vandermonde = interpolator.polar_vandermonde(i)
         source_data_polar = {
-            key: interpolator(val, i, is_fourier) for key, val in zip(keys, fsource)
+            key: interpolator(val, i, is_fourier, vandermonde)
+            for key, val in zip(keys, fsource)
         }
         # The (θ, ζ) coordinates at which the maps above were evaluated.
         source_data_polar["theta"] = eval_theta + dt[i]
@@ -446,7 +457,7 @@ def _singular_part(
         k = kernel(eval_data, source_data_polar, diag=True).reshape(
             eval_grid.num_nodes, kernel.ndim
         )
-        dS = (v[i] * source_data_polar["|e_theta x e_zeta|"])[:, None]
+        dS = (v[i] * source_data_polar["|e_theta x e_zeta|"])[:, jnp.newaxis]
         fi = k * dS
         return fi
 

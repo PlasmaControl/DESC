@@ -31,7 +31,6 @@ __all__ = [
 #  matrices of size N M L as opposed to evaluating N^3 M^3 L^3 basis
 #  functions.
 #  This works even if the evaluation grid is not a meshgrid.
-#  After implementing this, the unique_idx modes are irrelevant.
 
 
 class _Basis(IOAble, ABC):
@@ -411,7 +410,6 @@ class FourierSeries(_Basis):
         -------
         y : ndarray, shape(num_nodes,num_modes)
             Basis functions evaluated at nodes.
-
             The Vandermonde matrix when ``modes is None`` is
             given by ``y.reshape(-1,2*N+1)`` and is ordered
             [sin(Nx), ..., sin(x), 1, cos(x), ..., cos(Nx)].
@@ -555,12 +553,11 @@ class DoubleFourierSeries(_Basis):
         -------
         y : ndarray, shape(num_nodes,num_modes)
             Basis functions evaluated at nodes.
-
             The Vandermonde matrix when ``modes is None`` is
             given by ``y.reshape(-1,2*M+1,2*N+1)`` and
             is an outer product of Fourier matrices with order
-              [sin(Mx), ..., sin(x), 1, cos(x), ..., cos(Mx)]
-            ⊗ [sin(Ny), ..., sin(y), 1, cos(y), ..., cos(Ny)]
+            [sin(Mx), ..., sin(x), 1, cos(x), ..., cos(Mx)]
+            ⊗ [sin(Ny), ..., sin(y), 1, cos(y), ..., cos(Ny)].
 
         """
         if modes is None:
@@ -602,10 +599,12 @@ class DoubleFourierSeries(_Basis):
     def _evaluate_complex_vander(self, nodes):
         """Can dot this against rfft output."""
         r, t, z = nodes.T
-        n, m = self._modes
-        t_basis = jnp.exp(1j * n * t[..., jnp.newaxis])
-        z_basis = jnp.exp(1j * m * z[..., jnp.newaxis]).at[..., 0].divide(2) * 2
-        # Much more efficient to take outer product of 1D Vandermonde matrices!
+        m, n = self._modes
+        t_basis = jnp.exp(1j * m * t[..., jnp.newaxis])
+        z_basis = jnp.exp(1j * n * z[..., jnp.newaxis]).at[..., 0].divide(2) * 2
+        if (n.size % 2) == 0:
+            z_basis = z_basis.at[..., -1].divide(2)
+        # Much more efficient to take outer product of 1D Vandermonde matrices.
         basis = t_basis[..., jnp.newaxis] * z_basis[..., jnp.newaxis, :]
         return basis.reshape(nodes.shape[0], -1)
 
@@ -928,13 +927,12 @@ class ChebyshevDoubleFourierBasis(_Basis):
         -------
         y : ndarray, shape(num_nodes,num_modes)
             Basis functions evaluated at nodes.
-
             The Vandermonde matrix when ``modes is None`` is given by
             ``y.reshape(-1,L+1,2*M+1,2*N+1,3)`` and is
             an outer product of Chebyshev and Fourier matrices with order
-              [T₀(y), T₁(y), ..., T_L(y)]
+            [T₀(y), T₁(y), ..., T_L(y)]
             ⊗ [sin(Mx), ..., sin(x), 1, cos(x), ..., cos(Mx)]
-            ⊗ [sin(Ny), ..., sin(y), 1, cos(y), ..., cos(Ny)]
+            ⊗ [sin(Ny), ..., sin(y), 1, cos(y), ..., cos(Ny)].
 
         """
         if modes is None:
@@ -1257,7 +1255,7 @@ class ChebyshevPolynomial(_Basis):
 
         """
         l = np.arange(L + 1)
-        z = np.zeros_like(l)  # zeros_like makes z integer 0
+        z = np.zeros_like(l)
         return np.array([l, z, z]).T
 
     def evaluate(

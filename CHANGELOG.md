@@ -15,6 +15,7 @@ New Features
 - Adds a new objective ``desc.objectives.MirrorRatio`` for targeting a particular mirror ratio on each flux surface, for either an ``Equilibrium`` or ``OmnigenousField``.
 - Adds the output quantities ``wb`` and ``wp`` to ``VMECIO.save``.
 - Changes hessian computation to use chunked ``jacfwd`` and ``jacrev``, allowing ``jac_chunk_size`` to now reduce hessian memory usage as well.
+- Adds second-order NAE constraints, accessible by passing ``order=2`` to ``get_NAE_constraints``.
 
 Bug Fixes
 

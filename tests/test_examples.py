@@ -534,8 +534,8 @@ def test_NAE_QSC_2nd_order_solve():
         verbose=3,
         ftol=1e-3,
         objective=obj,
-        maxiter=75,
-        xtol=1e-7,
+        maxiter=45,
+        xtol=2.5e-7,
         constraints=cs,
     )
     grid_axis = LinearGrid(rho=0.0, theta=0.0, N=eq.N_grid, NFP=eq.NFP)

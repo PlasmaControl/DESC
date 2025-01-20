@@ -60,6 +60,7 @@ def _drift2(data, B, pitch):
     name="gamma_c_integrand",
     label="Gamma_c Integrand",
     units="~",
+    units_long="None",
     description="Integrand for the fast ion confinement proxy (Gamma_c)",
     dim=1,
     params=[],
@@ -89,17 +90,15 @@ def _drift2(data, B, pitch):
 @partial(
     jit,
     static_argnames=[
+        "num_pitch",
+        "spline",
         "Y_B",
         "num_transit",
-        "num_well",
-        "num_quad",
-        "num_pitch",
-        "pitch_batch_size",
-        "surf_batch_size",
-        "spline",
     ],
 )
-def gamma_c_integrand(data, bounce, pitch_inv, num_well):
+def gamma_c_integrand(
+    data, bounce, pitch_inv, num_well, num_pitch, spline, num_transit, Y_B
+):
     """Integrand to be used in gamma proxies calculations (drift ratio)."""
     points = bounce.points(pitch_inv, num_well)
     v_tau, drift1, drift2 = bounce.integrate(
@@ -228,7 +227,13 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
         )
 
         integrand_values = batch_map(
-            gamma_c_integrand, data["pitch_inv"], pitch_batch_size
+            gamma_c_integrand,
+            data["pitch_inv"],
+            pitch_batch_size,
+            num_pitch=num_pitch,
+            spline=spline,
+            num_transit=num_transit,
+            Y_B=Y_B,
         )
 
         return jnp.sum(
@@ -371,7 +376,13 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
         )
 
         integrand_values = batch_map(
-            gamma_c_integrand, data["pitch_inv"], pitch_batch_size
+            gamma_c_integrand,
+            data["pitch_inv"],
+            pitch_batch_size,
+            num_pitch=num_pitch,
+            spline=spline,
+            num_transit=num_transit,
+            Y_B=Y_B,
         )
 
         return jnp.sum(

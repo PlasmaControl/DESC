@@ -270,6 +270,7 @@ def _get_NAE_constraints(
         Whether to constrain lambda to match that of the NAE near-axis
         if an `int`, fixes lambda up to that order in rho {0,1}
         if `True`, fixes lambda up to the specified order given by `order`
+        (maximum of `order=1`)
     normalize : bool
         Whether to apply constraints in normalized units.
 
@@ -312,7 +313,6 @@ def _get_NAE_constraints(
             qsc=qsc_eq,
             desc_eq=desc_eq,
             N=N,
-            fix_lambda=fix_lambda and fix_lambda > 1,
         )
     if order > 2:
         raise NotImplementedError("NAE constraints only implemented up to O(rho^2) ")

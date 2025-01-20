@@ -817,16 +817,13 @@ def _calc_2nd_order_constraints(  # noqa: C901 - FIXME - simplify
     return Rconstraints, Zconstraints
 
 
-def make_RZ_cons_2nd_order(qsc, desc_eq, N=None, fix_lambda=False):
+def make_RZ_cons_2nd_order(qsc, desc_eq, N=None):
     """Make the second order NAE constraints for a DESC equilibrium.
 
     Parameters
     ----------
         qsc (Qsc): pyQsc Qsc object to use as the NAE constraints on the DESC eq
         desc_eq (Equilibrium): desc equilibrium to constrain
-        fix_lambda : bool, default False
-            whether to include first order constraints to fix the O(rho) behavior
-            of lambda. Defaults to False.
 
     Returns
     -------

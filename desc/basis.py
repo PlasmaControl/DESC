@@ -22,17 +22,6 @@ __all__ = [
 ]
 
 
-# TODO: Should instead compute
-#  1D mode matrices of radial, poloidal, toroidal basis functions
-#  and take their outer product to form the 3D Vandermonde matrix.
-#  This significantly reduces computational cost of calling ``evaluate``
-#  from O(N^3 M^3 L^3) to O(N M L) since just need to evaluate 3 N M L
-#  basis functions and take outer product of three
-#  matrices of size N M L as opposed to evaluating N^3 M^3 L^3 basis
-#  functions.
-#  This works even if the evaluation grid is not a meshgrid.
-
-
 class _Basis(IOAble, ABC):
     """Basis is an abstract base class for spectral basis sets."""
 

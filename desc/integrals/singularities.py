@@ -227,7 +227,7 @@ class DFTInterpolator(_BIESTInterpolator):
 
     """
 
-    _io_attrs_ = _BIESTInterpolator._io_attrs_ + ["_basis", "_theta_q", "_zeta_q"]
+    _io_attrs_ = _BIESTInterpolator._io_attrs_ + ["_basis", "_st", "_sz"]
 
     def __init__(self, eval_grid, source_grid, s, q):
         assert source_grid.can_fft2, "Got False for source_grid.can_fft2."
@@ -235,14 +235,12 @@ class DFTInterpolator(_BIESTInterpolator):
 
         h_t = 2 * jnp.pi / source_grid.num_theta
         h_z = 2 * jnp.pi / source_grid.num_zeta / source_grid.NFP
-        eval_theta = eval_grid.nodes[:, 1]
-        eval_zeta = eval_grid.nodes[:, 2]
         # Change of variable requires s = M for the mapping to be bijective.
         # For s < M, the partition of unity c.o.v. ensures
         # the portion of the integral that is lost is negligible.
         r, w, _, _ = _get_quadrature_nodes(q)
-        self._theta_q = eval_theta[:, jnp.newaxis] + s / 2 * h_t * r * jnp.sin(w)
-        self._zeta_q = eval_zeta[:, jnp.newaxis] + s / 2 * h_z * r * jnp.cos(w)
+        self._st = s / 2 * h_t * r * jnp.sin(w)
+        self._sz = s / 2 * h_z * r * jnp.cos(w)
         self._basis = DoubleFourierSeries(
             M=source_grid.M, N=source_grid.N, NFP=source_grid.NFP, complex_vander=True
         )
@@ -257,10 +255,10 @@ class DFTInterpolator(_BIESTInterpolator):
 
     def polar_vandermonde(self, i):
         """Return Vandermonde matrix for ith polar node."""
-        theta = self._theta_q[:, i]
-        zeta = self._zeta_q[:, i]
-        x = jnp.array([jnp.zeros_like(theta), theta, zeta]).T
-        return self._basis._evaluate_complex_vander(jnp.atleast_2d(x))
+        theta = self._eval_grid.nodes[:, 1] + self._st[i]
+        zeta = self._eval_grid.nodes[:, 2] + self._sz[i]
+        x = jnp.column_stack([jnp.zeros(self._eval_grid.num_nodes), theta, zeta])
+        return self._basis._evaluate_complex_vander(x)
 
     def __call__(self, f, i, is_fourier=False, vandermonde=None):
         """Interpolate data to polar grid points.

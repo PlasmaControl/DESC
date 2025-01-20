@@ -5,6 +5,7 @@ import warnings
 import numpy as np
 import pytest
 from numpy.random import default_rng
+from scipy.constants import mu_0
 from scipy.optimize import (
     BFGS,
     NonlinearConstraint,
@@ -34,6 +35,7 @@ from desc.objectives import (
     FixPsi,
     ForceBalance,
     GenericObjective,
+    LinkingCurrentConsistency,
     MagneticWell,
     MeanCurvature,
     ObjectiveFunction,
@@ -323,6 +325,44 @@ def test_no_iterations():
 
 
 @pytest.mark.regression
+@pytest.mark.optimize
+def test_proximal_scalar():
+    """Test that proximal scalar optimization works."""
+    # test fix for GH issue #1403
+
+    # optimize to reduce DSHAPE volume from 100 m^3 to 90 m^3
+    eq = desc.examples.get("DSHAPE")
+    optimizer = Optimizer("proximal-fmintr")  # proximal scalar optimizer
+    R_modes = np.vstack(
+        (
+            [0, 0, 0],
+            eq.surface.R_basis.modes[
+                np.max(np.abs(eq.surface.R_basis.modes), 1) > 1, :
+            ],
+        )
+    )
+    Z_modes = eq.surface.Z_basis.modes[
+        np.max(np.abs(eq.surface.Z_basis.modes), 1) > 1, :
+    ]
+    objective = ObjectiveFunction(Volume(eq=eq, target=90))  # scalar objective function
+    constraints = (
+        FixBoundaryR(eq=eq, modes=R_modes),
+        FixBoundaryZ(eq=eq, modes=Z_modes),
+        FixIota(eq=eq),
+        FixPressure(eq=eq),
+        FixPsi(eq=eq),
+        ForceBalance(eq=eq),  # force balance constraint for proximal projection
+    )
+    [eq], _ = optimizer.optimize(
+        things=eq,
+        objective=objective,
+        constraints=constraints,
+        verbose=3,
+    )
+    np.testing.assert_allclose(eq.compute("V")["V"], 90)
+
+
+@pytest.mark.regression
 @pytest.mark.slow
 @pytest.mark.optimize
 def test_overstepping():
@@ -337,7 +377,7 @@ def test_overstepping():
 
     class DummyObjective(_Objective):
         name = "Dummy"
-        _print_value_fmt = "Dummy: {:.3e}"
+        _print_value_fmt = "Dummy: "
         _units = "(Foo)"
 
         def build(self, *args, **kwargs):
@@ -835,9 +875,9 @@ def test_auglag():
         args=(),
         x_scale="auto",
         ftol=0,
-        xtol=1e-6,
-        gtol=1e-6,
-        ctol=1e-6,
+        xtol=1e-8,
+        gtol=1e-8,
+        ctol=1e-8,
         verbose=3,
         maxiter=None,
         options={"initial_multipliers": "least_squares"},
@@ -852,9 +892,9 @@ def test_auglag():
         args=(),
         x_scale="auto",
         ftol=0,
-        xtol=1e-6,
-        gtol=1e-6,
-        ctol=1e-6,
+        xtol=1e-8,
+        gtol=1e-8,
+        ctol=1e-8,
         verbose=3,
         maxiter=None,
         options={"initial_multipliers": "least_squares", "tr_method": "cho"},
@@ -879,9 +919,9 @@ def test_auglag():
         args=(),
         x_scale="auto",
         ftol=0,
-        xtol=1e-6,
-        gtol=1e-6,
-        ctol=1e-6,
+        xtol=1e-8,
+        gtol=1e-8,
+        ctol=1e-8,
         verbose=3,
         maxiter=None,
         options={"initial_multipliers": "least_squares"},
@@ -1134,15 +1174,16 @@ def test_proximal_jacobian():
         deriv_mode="batched",
         use_jit=False,
     )
-    obj2 = ObjectiveFunction(
-        (
-            QuasisymmetryTripleProduct(eq2, deriv_mode="fwd"),
-            AspectRatio(eq2, deriv_mode="fwd"),
-            Volume(eq2, deriv_mode="fwd"),
-        ),
-        deriv_mode="looped",
-        use_jit=False,
-    )
+    with pytest.warns(DeprecationWarning, match="looped"):
+        obj2 = ObjectiveFunction(
+            (
+                QuasisymmetryTripleProduct(eq2, deriv_mode="fwd"),
+                AspectRatio(eq2, deriv_mode="fwd"),
+                Volume(eq2, deriv_mode="fwd"),
+            ),
+            deriv_mode="looped",
+            use_jit=False,
+        )
     obj3 = ObjectiveFunction(
         (
             QuasisymmetryTripleProduct(eq3, deriv_mode="fwd"),
@@ -1243,9 +1284,10 @@ def test_LinearConstraint_jacobian():
     obj1 = ObjectiveFunction(
         ForceBalance(eq1, deriv_mode="auto"), deriv_mode="batched", use_jit=False
     )
-    obj2 = ObjectiveFunction(
-        ForceBalance(eq2, deriv_mode="fwd"), deriv_mode="looped", use_jit=False
-    )
+    with pytest.warns(DeprecationWarning, match="looped"):
+        obj2 = ObjectiveFunction(
+            ForceBalance(eq2, deriv_mode="fwd"), deriv_mode="looped", use_jit=False
+        )
     obj3 = ObjectiveFunction(
         ForceBalance(eq3, deriv_mode="rev"), deriv_mode="blocked", use_jit=False
     )
@@ -1349,4 +1391,34 @@ def test_quad_flux_with_surface_current_field():
     # this should run without an error
     (field_modular_opt,), result = opt.optimize(
         field, objective=obj, constraints=constraints, maxiter=1, copy=True
+    )
+
+
+@pytest.mark.unit
+def test_optimize_coil_currents(DummyCoilSet):
+    """Tests optimization takes step sizes proportional to variable scales."""
+    eq = desc.examples.get("precise_QH")
+    coils = load(load_from=str(DummyCoilSet["output_path_sym"]), file_format="hdf5")
+    grid = LinearGrid(rho=1.0, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
+    current = 2 * np.pi * eq.compute("G", grid=grid)["G"][0] / mu_0
+    for coil in coils:
+        coil.current = current / coils.num_coils
+
+    objective = ObjectiveFunction(QuadraticFlux(eq=eq, field=coils, vacuum=True))
+    constraints = LinkingCurrentConsistency(eq, coils, eq_fixed=True)
+    optimizer = Optimizer("lsq-exact")
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", message=".*\n.*\nIncompatible")
+        [coils_opt], _ = optimizer.optimize(
+            things=coils,
+            objective=objective,
+            constraints=constraints,
+            verbose=2,
+            copy=True,
+        )
+    # check that on average optimized coil currents changed by more than
+    # 15% from initial values
+    np.testing.assert_array_less(
+        np.asarray(coils.current).mean() * 0.15,
+        np.abs(np.asarray(coils_opt.current) - np.asarray(coils.current)).mean(),
     )

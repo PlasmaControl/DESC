@@ -86,7 +86,7 @@ class TestBootstrapCompute:
             modB = np.where(
                 mask, 9.0 + 3.7 * np.sin(theta - NFP * zeta), 13.0 + 2.6 * np.cos(theta)
             )
-            # todo: find value for sqrt_g_r value to test axis limit
+            # TODO (#671): find value for sqrt_g_r to test axis limit
             f_t_data = trapped_fraction(grid, modB, sqrt_g, sqrt_g_r=np.nan)
             # The average of (b0 + b1 cos(theta))^2 is b0^2 + (1/2) * b1^2
             np.testing.assert_allclose(
@@ -1196,7 +1196,7 @@ class TestBootstrapObjectives:
         )
 
         # Results are not perfectly identical because ln(Lambda) is not quite invariant.
-        np.testing.assert_allclose(results, expected, rtol=2e-3)
+        np.testing.assert_allclose(results, expected, rtol=3e-3)
 
     @pytest.mark.regression
     def test_bootstrap_consistency_iota(self, TmpDir):
@@ -1589,13 +1589,12 @@ def test_bootstrap_optimization_comparison_qa():
         objective=objective,
         constraints=constraints,
         optimizer="proximal-lsq-exact",
-        maxiter=4,
-        gtol=1e-16,
+        maxiter=10,
         verbose=3,
     )
 
     # method 2
-    niters = 3
+    niters = 4
     for k in range(niters):
         eq2 = eq2.copy()
         data = eq2.compute("current Redl", grid)
@@ -1616,11 +1615,11 @@ def test_bootstrap_optimization_comparison_qa():
     data2 = eq2.compute(["<J*B> Redl", "<J*B>"], grid)
 
     np.testing.assert_allclose(
-        grid.compress(data1["<J*B>"]), grid.compress(data1["<J*B> Redl"]), rtol=2.1e-2
+        grid.compress(data1["<J*B>"]), grid.compress(data1["<J*B> Redl"]), rtol=2e-2
     )
     np.testing.assert_allclose(
-        grid.compress(data2["<J*B>"]), grid.compress(data2["<J*B> Redl"]), rtol=1.8e-2
+        grid.compress(data2["<J*B>"]), grid.compress(data2["<J*B> Redl"]), rtol=2e-2
     )
     np.testing.assert_allclose(
-        grid.compress(data1["<J*B>"]), grid.compress(data2["<J*B>"]), rtol=1.8e-2
+        grid.compress(data1["<J*B>"]), grid.compress(data2["<J*B>"]), rtol=2e-2
     )

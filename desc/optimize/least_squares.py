@@ -2,8 +2,8 @@
 
 from scipy.optimize import OptimizeResult
 
-from desc.backend import jnp
-from desc.utils import errorif, setdefault
+from desc.backend import jnp, qr
+from desc.utils import errorif, safediv, setdefault
 
 from .bound_utils import (
     cl_scaling_vector,
@@ -24,10 +24,11 @@ from .utils import (
     compute_jac_scale,
     print_header_nonlinear,
     print_iteration_nonlinear,
+    solve_triangular_regularized,
 )
 
 
-def lsqtr(  # noqa: C901 - FIXME: simplify this
+def lsqtr(  # noqa: C901
     fun,
     x0,
     jac,
@@ -138,6 +139,8 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
           value decomposition. ``"cho"`` is generally the fastest for large systems,
           especially on GPU, but may be less accurate for badly scaled systems.
           ``"svd"`` is the most accurate but significantly slower. Default ``"qr"``.
+        - ``"scaled_termination"`` : Whether to evaluate termination criteria for
+          ``xtol`` and ``gtol`` in scaled / normalized units (default) or base units.
 
     Returns
     -------
@@ -182,6 +185,7 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
     maxiter = setdefault(maxiter, n * 100)
     max_nfev = options.pop("max_nfev", 5 * maxiter + 1)
     max_dx = options.pop("max_dx", jnp.inf)
+    scaled_termination = options.pop("scaled_termination", True)
 
     jac_scale = isinstance(x_scale, str) and x_scale in ["jac", "auto"]
     if jac_scale:
@@ -197,19 +201,19 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
 
     g_h = g * d
     J_h = J * d
-    g_norm = jnp.linalg.norm(g * v, ord=jnp.inf)
+    g_norm = jnp.linalg.norm(
+        (g * v * scale if scaled_termination else g * v), ord=jnp.inf
+    )
 
     # conngould : norm of the cauchy point, as recommended in ch17 of Conn & Gould
     # scipy : norm of the scaled x, as used in scipy
     # mix : geometric mean of conngould and scipy
+    tr_scipy = jnp.linalg.norm(x * scale_inv / v**0.5)
+    conngould = safediv(jnp.sum(g_h**2), jnp.sum((J_h @ g_h) ** 2))
     init_tr = {
-        "scipy": jnp.linalg.norm(x * scale_inv / v**0.5),
-        "conngould": jnp.sum(g_h**2) / jnp.sum((J_h @ g_h) ** 2),
-        "mix": jnp.sqrt(
-            jnp.sum(g_h**2)
-            / jnp.sum((J_h @ g_h) ** 2)
-            * jnp.linalg.norm(x * scale_inv / v**0.5)
-        ),
+        "scipy": tr_scipy,
+        "conngould": conngould,
+        "mix": jnp.sqrt(conngould * tr_scipy),
     }
     trust_radius = options.pop("initial_trust_radius", "scipy")
     tr_ratio = options.pop("initial_trust_ratio", 1.0)
@@ -238,7 +242,7 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
 
     callback = setdefault(callback, lambda *args: False)
 
-    x_norm = jnp.linalg.norm(x, ord=2)
+    x_norm = jnp.linalg.norm(((x * scale_inv) if scaled_termination else x), ord=2)
     success = None
     message = None
     step_norm = jnp.inf
@@ -268,6 +272,15 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
             U, s, Vt = jnp.linalg.svd(J_a, full_matrices=False)
         elif tr_method == "cho":
             B_h = jnp.dot(J_a.T, J_a)
+        elif tr_method == "qr":
+            # try full newton step
+            tall = J_a.shape[0] >= J_a.shape[1]
+            if tall:
+                Q, R = qr(J_a, mode="economic")
+                p_newton = solve_triangular_regularized(R, -Q.T @ f_a)
+            else:
+                Q, R = qr(J_a.T, mode="economic")
+                p_newton = Q @ solve_triangular_regularized(R.T, -f_a, lower=True)
 
         actual_reduction = -1
 
@@ -289,7 +302,7 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
                 )
             elif tr_method == "qr":
                 step_h, hits_boundary, alpha = trust_region_step_exact_qr(
-                    f_a, J_a, trust_radius, alpha
+                    p_newton, f_a, J_a, trust_radius, alpha
                 )
             step = d * step_h  # Trust-region solution in the original space.
 
@@ -334,11 +347,11 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
             )
             alltr.append(trust_radius)
             alpha *= tr_old / trust_radius
-            # TODO: does this need to move to the outer loop?
+
             success, message = check_termination(
                 actual_reduction,
                 cost,
-                step_norm,
+                (step_h_norm if scaled_termination else step_norm),
                 x_norm,
                 g_norm,
                 reduction_ratio,
@@ -376,8 +389,12 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
 
             g_h = g * d
             J_h = J * d
-            x_norm = jnp.linalg.norm(x, ord=2)
-            g_norm = jnp.linalg.norm(g * v, ord=jnp.inf)
+            x_norm = jnp.linalg.norm(
+                ((x * scale_inv) if scaled_termination else x), ord=2
+            )
+            g_norm = jnp.linalg.norm(
+                (g * v * scale if scaled_termination else g * v), ord=jnp.inf
+            )
 
             if g_norm < gtol:
                 success, message = True, STATUS_MESSAGES["gtol"]
@@ -386,7 +403,7 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
                 success, message = False, STATUS_MESSAGES["callback"]
 
         else:
-            step_norm = actual_reduction = 0
+            step_norm = step_h_norm = actual_reduction = 0
 
         iteration += 1
         if verbose > 1:

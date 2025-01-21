@@ -589,13 +589,13 @@ class DoubleFourierSeries(_Basis):
         """Can dot this against rfft output."""
         r, t, z = nodes.T
         m, n = self._modes
-        t_basis = jnp.exp(1j * m * t[..., jnp.newaxis])
-        z_basis = jnp.exp(1j * n * z[..., jnp.newaxis]).at[..., 0].divide(2) * 2
+        idx = [0]
         if (n.size % 2) == 0:
-            z_basis = z_basis.at[..., -1].divide(2)
-        # Much more efficient to take outer product of 1D Vandermonde matrices.
-        basis = t_basis[..., jnp.newaxis] * z_basis[..., jnp.newaxis, :]
-        return basis.reshape(nodes.shape[0], -1)
+            idx.append(-1)
+        vander_t = jnp.exp(1j * m * t[..., jnp.newaxis])
+        vander_z = jnp.exp(1j * n * z[..., jnp.newaxis]).at[..., idx].divide(2) * 2
+        vander = vander_t[..., jnp.newaxis] * vander_z[..., jnp.newaxis, :]
+        return vander.reshape(nodes.shape[0], -1)
 
     def change_resolution(self, M, N, NFP=None, sym=None):
         """Change resolution of the basis to the given resolutions.

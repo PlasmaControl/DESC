@@ -173,11 +173,11 @@ class FFTInterpolator(_BIESTInterpolator):
         self._st = s / 2 * self._h_t * r * jnp.sin(w)
         self._sz = s / 2 * self._h_z * r * jnp.cos(w)
 
-    def polar_vandermonde(self, i):
+    def vander_polar(self, i):
         """Return Vandermonde matrix for ith polar node."""
         pass
 
-    def __call__(self, f, i, is_fourier=False, polar_vandermonde=None):
+    def __call__(self, f, i, is_fourier=False, vander=None):
         """Interpolate data to polar grid points.
 
         Parameters
@@ -253,14 +253,14 @@ class DFTInterpolator(_BIESTInterpolator):
             norm="forward",
         ).reshape(-1, *f.shape[1:])
 
-    def polar_vandermonde(self, i):
+    def vander_polar(self, i):
         """Return Vandermonde matrix for ith polar node."""
         theta = self._eval_grid.nodes[:, 1] + self._st[i]
         zeta = self._eval_grid.nodes[:, 2] + self._sz[i]
         x = jnp.column_stack([jnp.zeros(self._eval_grid.num_nodes), theta, zeta])
         return self._basis._evaluate_complex_vander(x)
 
-    def __call__(self, f, i, is_fourier=False, vandermonde=None):
+    def __call__(self, f, i, is_fourier=False, vander=None):
         """Interpolate data to polar grid points.
 
         Parameters
@@ -272,8 +272,8 @@ class DFTInterpolator(_BIESTInterpolator):
         is_fourier : bool
             Whether ``f`` holds Fourier coefficients as returned by
             ``self.fourier``. Default is false.
-        vandermonde : jnp.ndarray
-            Cached value for ``self.polar_vandermonde(i)``.
+        vander : jnp.ndarray
+            Cached value for ``self.vander_polar(i)``.
 
         Returns
         -------
@@ -283,9 +283,9 @@ class DFTInterpolator(_BIESTInterpolator):
         """
         if not is_fourier:
             f = self.fourier(f)
-        if vandermonde is None:
-            vandermonde = self.polar_vandermonde(i)
-        return jnp.real(vandermonde @ f)
+        if vander is None:
+            vander = self.vander_polar(i)
+        return jnp.real(vander @ f)
 
 
 def _chi(rho):
@@ -433,9 +433,9 @@ def _singular_part(
         # be different at these points. For functions with no toroidal variation
         # there will be no difference, and that is the only time the
         # source grid and eval grid may have different NFP.
-        vandermonde = interpolator.polar_vandermonde(i)
+        vander = interpolator.vander_polar(i)
         source_data_polar = {
-            key: interpolator(val, i, is_fourier, vandermonde)
+            key: interpolator(val, i, is_fourier, vander)
             for key, val in zip(keys, fsource)
         }
         # The (θ, ζ) coordinates at which the maps above were evaluated.

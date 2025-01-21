@@ -5,7 +5,6 @@ import os
 import warnings
 
 import numpy as np
-import sympy as sp  # noqa: F401
 from termcolor import colored
 
 import desc

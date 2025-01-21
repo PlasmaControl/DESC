@@ -435,19 +435,26 @@ def test_solve_fixed_iter(benchmark):
 @pytest.mark.benchmark
 def test_LinearConstraintProjection_build(benchmark):
     """Benchmark LinearConstraintProjection build."""
-    eq = desc.examples.get("W7-X")
 
-    def run():
+    def setup():
         jax.clear_caches()
+        eq = desc.examples.get("W7-X")
+
         obj = ObjectiveFunction(ForceBalance(eq))
         con = get_fixed_boundary_constraints(eq)
         con = maybe_add_self_consistency(eq, con)
         con = ObjectiveFunction(con)
+        obj.build()
+        con.build()
+        return (obj, con), {}
+
+    def run(obj, con):
         lc = LinearConstraintProjection(obj, con)
         lc.build()
 
     benchmark.pedantic(
         run,
+        setup=setup,
         rounds=10,
         iterations=1,
     )

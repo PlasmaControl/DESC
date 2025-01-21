@@ -1,15 +1,27 @@
 Changelog
 =========
 
-New Feature
+New Features
 
+- Enable tracking multiple fieldlines in ``Bounce2D``.
+- Bounce integral methods with ``desc.integrals.Bounce2D``.
+- Effective ripple ``desc.objectives.EffectiveRipple`` and Gamma_c ``desc.objectives.Gamma_c`` optimization objectives.
+- See GitHub pull requests [#1003](https://github.com/PlasmaControl/DESC/pull/1003), [#1042](https://github.com/PlasmaControl/DESC/pull/1042), [#1119](https://github.com/PlasmaControl/DESC/pull/1119), and [#1290](https://github.com/PlasmaControl/DESC/pull/1290) for more details.
+- Many new compute quantities for partial derivatives in different coordinate systems.
 - Adds a new profile class ``PowerProfile`` for raising profiles to a power.
-- Adds an option ``scaled_termination`` (defaults to True) to all of the desc optimizers to measure the norms for ``xtol`` and ``gtol`` in the scaled norm provided by ``x_scale`` (which defaults to using an adaptive scaling based on the Jacobian or Hessian). This should make things more robust when optimizing parameters with widely different magnitudes. The old behavior can be recovered by passing ``options={"scaled_termination": False}``.
+- Add ``desc.objectives.LinkingCurrentConsistency`` for ensuring that coils in a stage 2 or single stage optimization provide the required linking current for a given equilibrium.
+- Adds an option ``scaled_termination`` (defaults to True) to all the desc optimizers to measure the norms for ``xtol`` and ``gtol`` in the scaled norm provided by ``x_scale`` (which defaults to using an adaptive scaling based on the Jacobian or Hessian). This should make things more robust when optimizing parameters with widely different magnitudes. The old behavior can be recovered by passing ``options={"scaled_termination": False}``.
 - ``desc.objectives.Omnigenity`` is now vectorized and able to optimize multiple surfaces at the same time. Previously it was required to use a different objective for each surface.
+- Adds a new objective ``desc.objectives.MirrorRatio`` for targeting a particular mirror ratio on each flux surface, for either an ``Equilibrium`` or ``OmnigenousField``.
+- Adds the output quantities ``wb`` and ``wp`` to ``VMECIO.save``.
+- Changes hessian computation to use chunked ``jacfwd`` and ``jacrev``, allowing ``jac_chunk_size`` to now reduce hessian memory usage as well.
 
 Bug Fixes
 
-- Small bug fix to use the correct normalization length ``a`` in the BallooningStability objective
+- Small bug fix to use the correct normalization length ``a`` in the BallooningStability objective.
+- Fixed I/O bug when saving/loading ``_Profile`` classes that do not have a ``_params`` attribute.
+- Minor bugs described in [#1323](https://github.com/PlasmaControl/DESC/pull/1323).
+- Corrects basis vectors computations made on surface objects [#1175](https://github.com/PlasmaControl/DESC/pull/1175).
 
 v0.13.0
 -------
@@ -32,6 +44,7 @@ New Features
 - Allows ``ToroidalFlux`` objective to accept ``FourierRZToroidalSurface`` so it can be used to specify the toroidal flux through a QFM surface.
 - Adds ``eq_fixed`` flag to ``ToroidalFlux`` to allow for the equilibrium/QFM surface to vary during optimization, useful for single-stage optimizations.
 - Adds tutorial notebook showcasing QFM surface capability.
+- Add ``desc.coils.initialize_modular_coils`` and ``desc.coils.initialize_saddle_coils`` for creating an initial guess for stage 2 optimization.
 - Adds ``rotate_zeta`` function to ``desc.compat`` to rotate an ``Equilibrium`` around Z axis.
 
 
@@ -298,7 +311,7 @@ optimization. Set to False by default.
 non-singular, non-degenerate) coordinate mappings for initial guesses. This is applied
 automatically when creating a new `Equilibrium` if the default initial guess of scaling
 the boundary surface produces self-intersecting surfaces. This can be disabled by
-passing `ensure_nested=False` when constructing the `Equilibrum`.
+passing `ensure_nested=False` when constructing the `Equilibrium`.
 - Adds `loss_function` argument to all `Objective`s for applying one of min/max/mean
 to objective function values (for targeting the average value of a profile, etc).
 - `Equilibrium.get_profile` now allows user to choose a profile type (power series, spline, etc)
@@ -450,7 +463,7 @@ Breaking changes
 - Renames ``theta_sfl`` to ``theta_PEST`` in compute functions to avoid confusion with
 other straight field line coordinate systems.
 - Makes plotting kwargs a bit more uniform. ``zeta``, ``nzeta``, ``nphi`` have all been
-superceded by ``phi`` which can be an integer for equally spaced angles or a float or
+superseded by ``phi`` which can be an integer for equally spaced angles or a float or
 array of float to specify angles manually.
 
 Bug fixes
@@ -520,7 +533,7 @@ the future all quantities should evaluate correctly at the magnetic axis. Note t
 evaluating quantities at the axis generally requires higher order derivatives and so
 can be much more expensive than evaluating at nonsingular points, so during optimization
 it is not recommended to include a grid point at the axis. Generally a small finite value
-such as ``rho = 1e-6`` will avoid the singuarlity with a negligible loss in accuracy for
+such as ``rho = 1e-6`` will avoid the singularity with a negligible loss in accuracy for
 analytic quantities.
 - Adds new optimizers ``fmin-auglag`` and ``lsq-auglag`` for performing constrained
 optimization using the augmented Lagrangian method. These generally perform much better
@@ -536,7 +549,7 @@ the existing methods ``compute_theta_coordinates`` and ``compute_flux_coordinate
 but allows mapping between arbitrary coordinates.
 - Adds calculation of $\nabla \mathbf{B}$ tensor and corresponding $L_{\nabla B}$ metric
 - Adds objective ``BScaleLength`` for penalizing strong magnetic field curvature.
-- Adds objective ``ObjectiveFromUser`` for wrapping an arbitary user defined function.
+- Adds objective ``ObjectiveFromUser`` for wrapping an arbitrary user defined function.
 - Adds utilities ``desc.grid.find_least_rational_surfaces`` and
 ``desc.grid.find_most_rational_surfaces`` for finding the least/most rational surfaces
 for a given rotational transform profile.
@@ -1072,7 +1085,7 @@ New Features:
 -   Updates `Equilibrium` to make creating them more straightforward.
     -   Instead of a dictionary of arrays and values, init method now
         takes individual arguments. These can either be objects of the
-        correct type (ie `Surface` objects for boundary condiitons,
+        correct type (ie `Surface` objects for boundary conditions,
         `Profile` for pressure and iota etc,) or ndarrays which will get
         parsed into objects of the correct type (for backwards
         compatibility)
@@ -1356,7 +1369,7 @@ Major changes:
     indexing, where only M+1 points were used instead of the correct
     2\*M+1
 -   Rotated concentric grids by 2pi/3M to avoid symmetry plane at
-    theta=0,pi. Previously, for stellarator symmetic cases, the nodes at
+    theta=0,pi. Previously, for stellarator symmetric cases, the nodes at
     theta=0 did not contribute to helical force balance.
 -   Added [L\_grid]{.title-ref} parameter to specify radial resolution
     of grid nodes directly and making the API more consistent.
@@ -1522,7 +1535,7 @@ saved, and objectives getting compiled more often than necessary
 
 Major Changes:
 
--   Changes to Equilibium/EquilibriaFamily:
+-   Changes to Equilibrium/EquilibriaFamily:
     -   general switching to using properties rather than direct
         attributes when referencing things (ie, `eq.foo`, not
         `eq._foo`). This allows getter methods to have safeguards if

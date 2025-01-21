@@ -37,8 +37,21 @@ from desc.utils import cross, dot, equals, errorif, flatten_list, safenorm, warn
 
 @jit
 def stochastic_perturbation(stochastic):
-    """Apply a stochastic perturbation."""
-    # TODO: make actually random, rn is sampling from 0*pertsize to scale_length
+    """Take stochastic dictionary with `key`, `zeros`, `cov`, and `scale_length` keys
+    and return an array of perturbations with `stochastic["zeros"]` mean and
+    `stochastic["cov"]` covariance matrix, scaled by `stochastic["scale_length"]`.
+
+    Parameters
+    ----------
+    stochastic : dict
+        Dictionary with keys `key`, `zeros`, `cov`, and `scale_length`.
+
+    Returns
+    -------
+    perturbation : ndarray, shape(n,)
+        Array of perturbations with mean `stochastic["zeros"]` and covariance
+        `stochastic["cov"]`, scaled by `stochastic["scale_length"]`.
+    """
     _, key = jax_random_split(stochastic["key"])
     return (
         multivariate_normal(key=key, mean=stochastic["zeros"], cov=stochastic["cov"])

@@ -318,7 +318,7 @@ class _Coil(_MagneticField, Optimizable, ABC):
         source_grid=None,
         transforms=None,
         compute_A_or_B="B",
-        stochastic=False,
+        stochastic=None,
     ):
         """Compute magnetic field or vector potential at a set of points.
 
@@ -416,7 +416,7 @@ class _Coil(_MagneticField, Optimizable, ABC):
         basis="rpz",
         source_grid=None,
         transforms=None,
-        stochastic=False,
+        stochastic=None,
     ):
         """Compute magnetic field at a set of points.
 
@@ -1543,7 +1543,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         source_grid=None,
         transforms=None,
         compute_A_or_B="B",
-        stochastic=False,
+        stochastic=None,
     ):
         """Compute magnetic field at a set of points.
 
@@ -1648,7 +1648,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         basis="rpz",
         source_grid=None,
         transforms=None,
-        stochastic=False,
+        stochastic=None,
     ):
         """Compute magnetic field at a set of points.
 

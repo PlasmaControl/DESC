@@ -57,71 +57,6 @@ def _drift2(data, B, pitch):
 
 
 @register_compute_fun(
-    name="gamma_c_integrand",
-    label="Gamma_c Integrand",
-    units="~",
-    units_long="None",
-    description="Integrand for the fast ion confinement proxy (Gamma_c)",
-    dim=1,
-    params=[],
-    transforms={"grid": []},
-    profiles=[],
-    coordinates="r",
-    data=[
-        "min_tz |B|",
-        "max_tz |B|",
-        "B^phi",
-        "B^phi_r|v,p",
-        "|B|_r|v,p",
-        "b",
-        "grad(phi)",
-        "grad(psi)",
-        "|grad(psi)|",
-        "|grad(rho)|",
-        "|e_alpha|r,p|",
-        "kappa_g",
-        "iota_r",
-    ]
-    + Bounce2D.required_names,
-    resolution_requirement="tz",
-    grid_requirement={"can_fft2": True},
-    **_bounce_doc,
-)
-@partial(
-    jit,
-    static_argnames=[
-        "num_pitch",
-        "spline",
-        "Y_B",
-        "num_transit",
-    ],
-)
-def gamma_c_integrand(
-    data, bounce, pitch_inv, num_well, num_pitch, spline, num_transit, Y_B
-):
-    """Integrand to be used in gamma proxies calculations (drift ratio)."""
-    points = bounce.points(pitch_inv, num_well)
-    v_tau, drift1, drift2 = bounce.integrate(
-        [_v_tau, _drift1, _drift2],
-        pitch_inv,
-        data,
-        ["|grad(psi)|*kappa_g", "|B|_r|v,p", "K"],
-        points,
-        is_fourier=True,
-    )
-    gamma_c = jnp.arctan(
-        safediv(
-            drift1,
-            drift2
-            * bounce.interp_to_argmin(
-                data["|grad(rho)|*|e_alpha|r,p|"], points, is_fourier=True
-            ),
-        )
-    )
-    return jnp.sum(v_tau * gamma_c**2, axis=-1).mean(axis=-2)
-
-
-@register_compute_fun(
     name="Gamma_c",
     label=(
         # Γ_c = π/(8√2) ∫ dλ 〈 ∑ⱼ [v τ γ_c²]ⱼ 〉
@@ -195,6 +130,7 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
     alpha = kwargs.get("alpha", jnp.array([0.0]))
     num_transit = kwargs.get("num_transit", 20)
     num_pitch = kwargs.get("num_pitch", 64)
+    num_well = kwargs.get("num_well", Y_B * num_transit)
     pitch_batch_size = kwargs.get("pitch_batch_size", None)
     surf_batch_size = kwargs.get("surf_batch_size", 1)
     assert (
@@ -226,26 +162,34 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
             spline=spline,
         )
 
-        integrand_values = batch_map(
-            gamma_c_integrand,
-            data["pitch_inv"],
-            pitch_batch_size,
-            num_pitch=num_pitch,
-            spline=spline,
-            num_transit=num_transit,
-            Y_B=Y_B,
-        )
+        def fun(pitch_inv):
+            points = bounce.points(pitch_inv, num_well)
+            v_tau, drift1, drift2 = bounce.integrate(
+                [_v_tau, _drift1, _drift2],
+                pitch_inv,
+                data,
+                ["|grad(psi)|*kappa_g", "|B|_r|v,p", "K"],
+                points,
+                is_fourier=True,
+            )
+            # This is γ_c π/2.
+            gamma_c = jnp.arctan(
+                safediv(
+                    drift1,
+                    drift2
+                    * bounce.interp_to_argmin(
+                        data["|grad(rho)|*|e_alpha|r,p|"], points, is_fourier=True
+                    ),
+                )
+            )
+            return jnp.sum(v_tau * gamma_c**2, axis=-1).mean(axis=-2)
 
         return jnp.sum(
-            integrand_values * data["pitch_inv weight"] / data["pitch_inv"] ** 2,
+            batch_map(fun, data["pitch_inv"], pitch_batch_size)
+            * data["pitch_inv weight"]
+            / data["pitch_inv"] ** 2,
             axis=-1,
         ) / (bounce.compute_fieldline_length(fl_quad) * 2**1.5 * jnp.pi)
-
-    grid = transforms["grid"]
-    data["Gamma_c"] = _compute(
-        Gamma_c, data, kwargs["theta"], grid, num_pitch, surf_batch_size
-    )
-    return data
 
     # It is assumed the grid is sufficiently dense to reconstruct |B|,
     # so anything smoother than |B| may be captured accurately as a single
@@ -344,6 +288,7 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
     alpha = kwargs.get("alpha", jnp.array([0.0]))
     num_transit = kwargs.get("num_transit", 20)
     num_pitch = kwargs.get("num_pitch", 64)
+    num_well = kwargs.get("num_well", Y_B * num_transit)
     pitch_batch_size = kwargs.get("pitch_batch_size", None)
     surf_batch_size = kwargs.get("surf_batch_size", 1)
     assert (
@@ -362,7 +307,7 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
         )
     )
 
-    def Gamma_c_Velasco(data):
+    def Gamma_c(data):
         bounce = Bounce2D(
             grid,
             data,
@@ -375,23 +320,38 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
             spline=spline,
         )
 
-        integrand_values = batch_map(
-            gamma_c_integrand,
-            data["pitch_inv"],
-            pitch_batch_size,
-            num_pitch=num_pitch,
-            spline=spline,
-            num_transit=num_transit,
-            Y_B=Y_B,
-        )
+        def fun(pitch_inv):
+            v_tau, radial_drift, poloidal_drift = bounce.integrate(
+                [_v_tau, _radial_drift, _poloidal_drift],
+                pitch_inv,
+                data,
+                ["cvdrift0", "gbdrift (periodic)", "gbdrift (secular)/phi"],
+                bounce.points(pitch_inv, num_well),
+                is_fourier=True,
+            )
+            # This is γ_c π/2.
+            gamma_c = jnp.arctan(safediv(radial_drift, poloidal_drift))
+            return jnp.sum(v_tau * gamma_c**2, axis=-1).mean(axis=-2)
 
         return jnp.sum(
-            integrand_values * data["pitch_inv weight"] / data["pitch_inv"] ** 2,
+            batch_map(fun, data["pitch_inv"], pitch_batch_size)
+            * data["pitch_inv weight"]
+            / data["pitch_inv"] ** 2,
             axis=-1,
         ) / (bounce.compute_fieldline_length(fl_quad) * 2**1.5 * jnp.pi)
 
     grid = transforms["grid"]
-    data["Gamma_c_Velasco"] = _compute(
-        Gamma_c_Velasco, data, kwargs["theta"], grid, num_pitch, surf_batch_size
+    data["Gamma_c Velasco"] = _compute(
+        Gamma_c,
+        {
+            "cvdrift0": data["cvdrift0"],
+            "gbdrift (periodic)": data["gbdrift (periodic)"],
+            "gbdrift (secular)/phi": data["gbdrift (secular)/phi"],
+        },
+        data,
+        theta,
+        grid,
+        num_pitch,
+        surf_batch_size,
     )
     return data

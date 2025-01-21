@@ -1114,10 +1114,13 @@ class QuadraticFlux(_Objective):
         Grid used to discretize field (e.g. grid for the magnetic field source from
         coils). Default grid is determined by the specific MagneticField object, see
         the docs of that object's ``compute_magnetic_field`` method for more detail.
-    vacuum : bool
+    vacuum : bool, optional
         If true, B_plasma (the contribution to the normal field on the boundary from the
         plasma currents) is set to zero.
-
+    name : str, optional
+        Name of the objective.
+    jac_chunk_size : int, optional
+    stochastic : dict, optional
     """
 
     __doc__ = __doc__.rstrip() + collect_docs(
@@ -1146,7 +1149,7 @@ class QuadraticFlux(_Objective):
         vacuum=False,
         name="Quadratic flux",
         jac_chunk_size=None,
-        stochastic=False,
+        stochastic=None,
     ):
         from desc.geometry import FourierRZToroidalSurface
 
@@ -1304,6 +1307,7 @@ class QuadraticFlux(_Objective):
             # perform some amt of stochastic perturbations on the coil,
             # and return the approximated expected value of the objective
             aggregate_f = jnp.zeros(self._dim_f)
+            # use vmap?
             for n in constants["stochastic_ns"]:
                 constants["stochastic"]["n"] = n
                 # ideally, this would be a method of the coilset?

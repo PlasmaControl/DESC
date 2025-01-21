@@ -37,7 +37,9 @@ from desc.utils import cross, dot, equals, errorif, flatten_list, safenorm, warn
 
 @jit
 def stochastic_perturbation(stochastic):
-    """Take stochastic dictionary with `key`, `zeros`, `cov`, and `scale_length` keys
+    """Create an array of perturbations.
+    
+    Take stochastic dictionary with `key`, `zeros`, `cov`, and `scale_length` keys
     and return an array of perturbations with `stochastic["zeros"]` mean and
     `stochastic["cov"]` covariance matrix, scaled by `stochastic["scale_length"]`.
 

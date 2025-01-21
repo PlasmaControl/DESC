@@ -1121,6 +1121,12 @@ class QuadraticFlux(_Objective):
         Name of the objective.
     jac_chunk_size : int, optional
     stochastic : dict, optional
+        If given, the objective will be the average of the objective evaluated at
+        multiple perturbed coil configurations. The dictionary should contain the
+        following keys:
+        - "cov" : float, covariance of the perturbation
+        - "nsamples" : int, number of perturbed samples to average over
+        - "scale_length" : float, characteristic length scale of the perturbation
     """
 
     __doc__ = __doc__.rstrip() + collect_docs(
@@ -1240,7 +1246,7 @@ class QuadraticFlux(_Objective):
             self._stochastic["key"] = jax_random_key(seed)
             self._stochastic["zeros"] = jnp.zeros(self._field_grid.num_zeta)
             self._stochastic["cov"] = (
-                jnp.eye(self._field_grid.num_zeta) * self._stochastic["sigma"]
+                jnp.eye(self._field_grid.num_zeta) * self._stochastic["cov"]
             )
 
         self._constants = {

@@ -2,13 +2,13 @@
 
 Notes
 -----
-Bounce integrals with bounce points where the derivative of |B| does not vanish
+Bounce integrals with bounce points where the derivative of B does not vanish
 have 1/2 power law singularities. However, strongly singular integrals where the
-domain of the integral ends at the local extrema of |B| are not integrable.
+domain of the integral ends at the local extrema of B are not integrable.
 
-Hence, everywhere except for the extrema, an implicit Chebyshev (``chebgauss1``
-or ``chebgauss2`` or modified Legendre quadrature (with ``automorphism_sin``)
-captures the integral because √(1−ζ²) / √ (1−λ|B|) ∼ k(λ, ζ) is smooth in ζ.
+Everywhere except for the extrema, an implicit Chebyshev (``chebgauss1`` or
+``chebgauss2`` or modified Legendre quadrature (with ``automorphism_sin``)
+captures the integral because √(1−(ζ/ζᵢ)²) / √ (1−λB) ∼ k(λ, ζ) is smooth in ζ.
 The clustering of the nodes near the singularities is sufficient to estimate
 k(ζ, λ).
 """
@@ -22,12 +22,12 @@ from desc.utils import errorif
 
 def bijection_to_disc(x, a, b):
     """[a, b] ∋ x ↦ y ∈ [−1, 1]."""
-    return 2.0 * (x - a) / (b - a) - 1.0
+    return 2 * (x - a) / (b - a) - 1
 
 
 def bijection_from_disc(x, a, b):
     """[−1, 1] ∋ x ↦ y ∈ [a, b]."""
-    return 0.5 * (b - a) * (x + 1.0) + a
+    return 0.5 * (b - a) * (x + 1) + a
 
 
 def grad_bijection_from_disc(a, b):
@@ -298,7 +298,7 @@ def chebgauss2(deg):
     # github.com/scipy/scipy/blob/v1.14.1/scipy/special/_orthogonal.py#L1803-L1851.
     t = jnp.arange(deg, 0, -1) * jnp.pi / (deg + 1)
     x = jnp.cos(t)
-    w = jnp.pi * jnp.abs(jnp.sin(t)) / (deg + 1)
+    w = jnp.pi * jnp.sin(t) / (deg + 1)
     return x, w
 
 

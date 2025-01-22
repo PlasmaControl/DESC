@@ -31,6 +31,8 @@ Coils
     desc.coils.FourierPlanarCoil
     desc.coils.MixedCoilSet
     desc.coils.SplineXYZCoil
+    desc.coils.initialize_modular_coils
+    desc.coils.initialize_saddle_coils
 
 Compatibility
 *************
@@ -117,6 +119,17 @@ Grid
     desc.grid.find_least_rational_surfaces
     desc.grid.find_most_rational_surfaces
 
+Integrals
+*********
+
+.. autosummary::
+    :toctree: _api/integrals
+    :recursive:
+    :template: class.rst
+
+    desc.integrals.Bounce2D
+    desc.integrals.Bounce1D
+
 IO
 ***
 
@@ -170,6 +183,7 @@ Objective Functions
     desc.objectives.CoilSetMinDistance
     desc.objectives.CoilTorsion
     desc.objectives.CurrentDensity
+    desc.objectives.EffectiveRipple
     desc.objectives.Elongation
     desc.objectives.Energy
     desc.objectives.FixAnisotropy
@@ -199,6 +213,7 @@ Objective Functions
     desc.objectives.FixThetaSFL
     desc.objectives.ForceBalance
     desc.objectives.ForceBalanceAnisotropic
+    desc.objectives.GammaC
     desc.objectives.GenericObjective
     desc.objectives.get_equilibrium_objective
     desc.objectives.get_fixed_axis_constraints

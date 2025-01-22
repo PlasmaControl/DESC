@@ -1,5 +1,6 @@
 """Class to transform from spectral basis to real space."""
 
+import pdb
 import warnings
 
 import numpy as np
@@ -269,6 +270,7 @@ class Transform(IOAble):
             self.method = "direct2"
             return
 
+        pdb.set_trace()
         self._method = "fft"
         self.lm_modes = np.unique(basis.modes[:, :2], axis=0)
         self.num_lm_modes = self.lm_modes.shape[0]  # number of radial/poloidal modes
@@ -286,6 +288,168 @@ class Transform(IOAble):
         self.fft_nodes = np.hstack(
             [
                 grid.nodes[:, :2][: grid.num_nodes // self.num_z_nodes],
+                np.zeros((grid.num_nodes // self.num_z_nodes, 1)),
+            ]
+        )
+
+    def _check_inputs_fft2(self, grid, basis):
+        """Check that inputs are formatted correctly for fft2 method."""
+        if grid.num_nodes == 0 or basis.num_modes == 0:
+            # trivial case where we just return all zeros, so it doesn't matter
+            self._method = "direct1"
+            return
+
+        zeta_vals, zeta_cts = np.unique(grid.nodes[:, 2], return_counts=True)
+        theta_vals, theta_cts = np.unique(grid.nodes[:, 1], return_counts=True)
+
+        if not isalmostequal(zeta_cts):
+            warnings.warn(
+                colored(
+                    "fft method requires the same number of nodes on each zeta plane, "
+                    + "falling back to direct1 method",
+                    "yellow",
+                )
+            )
+            self.method = "direct1"
+            return
+
+        if not isalmostequal(
+            grid.nodes[:, :2].T.reshape((2, zeta_cts[0], -1), order="F")
+        ):
+            warnings.warn(
+                colored(
+                    "fft method requires that node pattern is the same on each zeta "
+                    + "plane, falling back to direct1 method",
+                    "yellow",
+                )
+            )
+            self.method = "direct1"
+            return
+
+        id2 = np.lexsort((basis.modes[:, 1], basis.modes[:, 0], basis.modes[:, 2]))
+        if not issorted(id2):
+            warnings.warn(
+                colored(
+                    "fft method requires zernike indices to be sorted by toroidal mode "
+                    + "number, falling back to direct1 method",
+                    "yellow",
+                )
+            )
+            self.method = "direct1"
+            return
+
+        if (
+            len(zeta_vals) > 1
+            and not abs((zeta_vals[-1] + zeta_vals[1]) * basis.NFP - 2 * np.pi) < 1e-14
+        ):
+            warnings.warn(
+                colored(
+                    "fft method requires that nodes complete 1 full field period, "
+                    + "falling back to direct2 method",
+                    "yellow",
+                )
+            )
+            self.method = "direct2"
+            return
+
+        m_vals, m_cts = np.unique(basis.modes[:, 1], return_counts=True)
+        n_vals, n_cts = np.unique(basis.modes[:, 2], return_counts=True)
+        if len(n_vals) > 1 and not islinspaced(n_vals):
+            warnings.warn(
+                colored(
+                    "fft method requires the toroidal modes are equally spaced in n, "
+                    + "falling back to direct1 method",
+                    "yellow",
+                )
+            )
+            self.method = "direct1"
+            return
+
+        if len(zeta_vals) < len(n_vals):
+            warnings.warn(
+                colored(
+                    "fft method can not undersample in zeta, "
+                    + "num_toroidal_modes={}, num_toroidal_angles={}, ".format(
+                        len(n_vals), len(zeta_vals)
+                    )
+                    + "falling back to direct2 method",
+                    "yellow",
+                )
+            )
+            self.method = "direct2"
+            return
+
+        if len(zeta_vals) % 2 == 0:
+            warnings.warn(
+                colored(
+                    "fft method requires an odd number of toroidal nodes, "
+                    + "falling back to direct2 method",
+                    "yellow",
+                )
+            )
+            self.method = "direct2"
+            return
+
+        if not issorted(grid.nodes[:, 2]):
+            warnings.warn(
+                colored(
+                    "fft method requires nodes to be sorted by toroidal angle in "
+                    + "ascending order, falling back to direct1 method",
+                    "yellow",
+                )
+            )
+            self.method = "direct1"
+            return
+
+        if len(zeta_vals) > 1 and not islinspaced(zeta_vals):
+            warnings.warn(
+                colored(
+                    "fft method requires nodes to be equally spaced in zeta, "
+                    + "falling back to direct2 method",
+                    "yellow",
+                )
+            )
+            self.method = "direct2"
+            return
+
+        # ADD THE CONDITION THAT CHECKS IF WE SHOULD FALL BACK TO FFT OR DIRECT
+
+        pdb.set_trace()
+        self._method = "fft2"
+        self.lm_modes = np.unique(basis.modes[:, :2], axis=0)
+        self.num_lm_modes = self.lm_modes.shape[0]  # number of radial/poloidal modes
+        self.num_m_modes = 2 * basis.M + 1  # number of poloidal modes
+        self.num_t_nodes = len(theta_vals)  # number of theta nodes
+        self.num_n_modes = 2 * basis.N + 1  # number of toroidal modes
+        self.num_z_nodes = len(zeta_vals)  # number of zeta nodes
+        self.M = basis.M  # poloidal resolution of basis
+        self.N = basis.N  # toroidal resolution of basis
+        self.pad_dimt = (self.num_t_nodes - 1) // 2 - self.M
+        self.pad_dimz = (self.num_z_nodes - 1) // 2 - self.N
+        self.dkt = np.arange(-self.M, self.M + 1).reshape((1, -1))
+        self.dkz = basis.NFP * np.arange(-self.N, self.N + 1).reshape((1, -1))
+        self.fft_index = np.zeros((basis.num_modes,), dtype=int)
+
+        offsetM = np.min(basis.modes[:, 1]) + basis.M  # M for sym="cos", 0 otherwise
+        offsetN = np.min(basis.modes[:, 2]) + basis.N  # N for sym="cos", 0 otherwise
+
+        for k in range(basis.num_modes):
+            row = np.where((basis.modes[k, :2] == self.lm_modes).all(axis=1))[0]
+            colM = np.where(basis.modes[k, 1] == m_vals)[0]
+            colN = np.where(basis.modes[k, 2] == n_vals)[0]
+            self.fft_index[k] = np.squeeze(
+                self.num_n_modes * self.num_m_modes * row
+                + colM
+                + colN
+                + offsetM
+                + offsetN
+            )
+
+        self.fft_nodes = np.hstack(
+            [
+                grid.nodes[:, : grid.num_nodes // self.num_t_nodes],
+                np.zeros((grid.num_nodes // self.num_t_nodes, 1)),
+                grid.nodes[:, :][: grid.num_nodes // self.num_z_nodes],
                 np.zeros((grid.num_nodes // self.num_z_nodes, 1)),
             ]
         )
@@ -402,6 +566,20 @@ class Transform(IOAble):
                 self.matrices["fft"][d[0]][d[1]] = self.basis.evaluate(
                     self.fft_nodes, d, modes=temp_modes, unique=True
                 )
+
+        if self.method in "fft2":
+            temp_d = np.hstack(
+                [np.zeros((len(self.derivatives), 1)), self.derivative[:, 1:]]
+            ).astype(int)
+
+            temp_modes = np.hstack([self.lm_modes, np.zeros((self.num_lm_modes, 1))])
+
+            temp_modes = np.hstack(
+                [
+                    self.l_modes,
+                ]
+            )
+
         if self.method == "direct2":
             temp_d = np.hstack(
                 [np.zeros((len(self.derivatives), 2)), self.derivatives[:, 2:]]
@@ -451,6 +629,15 @@ class Transform(IOAble):
             self.matrices["pinvA"] = (
                 jnp.linalg.pinv(A, rtol=rcond) if A.size else np.zeros_like(A.T)
             )
+        else:  # self.method is fft2 copy of the above elif needs to be changed
+            temp_modes = np.hstack([self.lm_modes, np.zeros((self.num_lm_modes, 1))])
+            A = self.basis.evaluate(
+                self.fft_nodes, np.array([0, 0, 0]), modes=temp_modes, unique=True
+            )
+            self.matrices["pinvA"] = (
+                scipy.linalg.pinv(A, rtol=rcond) if A.size else np.zeros_like(A.T)
+            )
+
         self._built_pinv = True
 
     def transform(self, c, dr=0, dt=0, dz=0):
@@ -536,6 +723,33 @@ class Transform(IOAble):
             )
             # transform coefficients
             c_fft = jnp.real(jnp.fft.ifft(c_cplx))
+        else:  # self.method is fft2
+            A = self.matrices["fft2"].get(dr, {})
+            if isinstance(A, dict):
+                raise ValueError(
+                    colored("Derivative orders are out of initialized bounds", "red")
+                )
+            # reshape coefficients
+            c_mtrx = jnp.zeros((self.num_lm_modes * self.num_n_modes,))
+            c_mtrx = put(c_mtrx, self.fft_index, c).reshape(
+                (-1, self.num_m_modes, self.num_n_modes)
+            )
+            # differentiate
+            c_diff = (
+                c_mtrx[:, :: (-1) ** dt, :: (-1) ** dz]
+                * self.dkz**dz
+                * (-1) ** (dz > 1)
+                * self.dkt**dt
+                * (-1) ** (dt > 1)
+            )
+            # re-format in complex notation
+            c_real = jnp.pad(
+                (self.num_z_nodes / 2)
+                * (c_diff[:, self.N + 1 :] - 1j * c_diff[:, self.N - 1 :: -1]),
+                ((0, 0), (0, self.pad_dim)),
+                mode="constant",
+            )
+
             return (A @ c_fft).flatten(order="F")
 
     def fit(self, x):

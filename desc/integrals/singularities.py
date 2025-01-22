@@ -2,6 +2,7 @@
 
 from abc import ABC, abstractmethod
 
+import numpy as np
 import scipy
 from interpax import fft_interp2d
 from scipy.constants import mu_0
@@ -34,7 +35,7 @@ def _chi(r):
     return jnp.exp(-36 * jnp.abs(r) ** 8)
 
 
-def _eta(theta, zeta, theta0, zeta0, h_t, h_z, s_t, s_z):
+def _eta(theta, zeta, theta0, zeta0, ht, hz, st, sz):
     """Partition of unity function in rectangular coordinates.
 
     Consider the mapping from
@@ -85,10 +86,10 @@ def _eta(theta, zeta, theta0, zeta0, h_t, h_z, s_t, s_z):
     theta, zeta : jnp.ndarray
         Coordinates of points to evaluate partition function η₀(θ,ζ).
     theta0, zeta0 : jnp.ndarray
-        Origin (θ₀,ζ₀) where partition η₀ unity.
-    h_t, h_z : float
+        Origin (θ₀,ζ₀) where the partition η₀ is unity.
+    ht, hz : float
         Grid step size in θ and ζ.
-    s_t, s_z : int
+    st, sz : int
         Extent of support is an ``st`` × ``sz`` subset
         of the full domain (θ,ζ) ∈ [0, 2π)² of ``source_grid``.
         Subset of ``source_grid.num_theta`` × ``source_grid.num_zeta*source_grid.NFP``.
@@ -99,7 +100,7 @@ def _eta(theta, zeta, theta0, zeta0, h_t, h_z, s_t, s_z):
     # The distance spans (dθ,dζ) ∈ [0, π]², independent of NFP.
     dt = jnp.minimum(dt, 2 * jnp.pi - dt)
     dz = jnp.minimum(dz, 2 * jnp.pi - dz)
-    r = 2 * jnp.hypot(dt / (h_t * s_t), dz / (h_z * s_z))
+    r = 2 * jnp.hypot(dt / (ht * st), dz / (hz * sz))
     return _chi(r)
 
 
@@ -467,13 +468,14 @@ def _nonsingular_part(
     # adding keys to dict during iteration
     source_zeta = source_data.setdefault("zeta", source_grid.nodes[:, 2])
     source_phi = source_data["phi"]
-    eval_theta = jnp.asarray(eval_grid.nodes[:, 1])
-    eval_zeta = jnp.asarray(eval_grid.nodes[:, 2])
+
+    eval_data = {key: eval_data[key] for key in kernel.keys}
+    eval_data["theta"] = jnp.asarray(eval_grid.nodes[:, 1])
+    eval_data["zeta"] = jnp.asarray(eval_grid.nodes[:, 2])
+
     ht = 2 * jnp.pi / source_grid.num_theta
     hz = 2 * jnp.pi / source_grid.num_zeta / source_grid.NFP
     w = source_data["|e_theta x e_zeta|"][jnp.newaxis] * ht * hz
-
-    keys = kernel.keys
 
     def nfp_loop(j, f_data):
         # calculate effects at all eval pts from all source pts on a single field
@@ -488,17 +490,17 @@ def _nonsingular_part(
 
         # nest this def to avoid having to pass the modified source_data around the loop
         # easier to just close over it and let JAX figure it out
-        def eval_pt(i):
+        def eval_pt(eval_data_i):
             # this calculates the effect at a single evaluation point, from all others
             # in a single field period. vmap this to get all pts
-            k = kernel({key: eval_data[key][i] for key in keys}, source_data).reshape(
+            k = kernel(eval_data_i, source_data).reshape(
                 -1, source_grid.num_nodes, kernel.ndim
             )
             eta = _eta(
                 source_theta,
                 source_data["zeta"],  # to account for different field periods
-                eval_theta[i][:, jnp.newaxis],
-                eval_zeta[i][:, jnp.newaxis],
+                eval_data_i["theta"][:, jnp.newaxis],
+                eval_data_i["zeta"][:, jnp.newaxis],
                 ht,
                 hz,
                 st,
@@ -508,11 +510,9 @@ def _nonsingular_part(
 
         # vmap for inner part found more efficient than loop, especially on gpu,
         # but for jacobian looped seems to be better and less memory
-        f += batch_map(
-            eval_pt,
-            jnp.arange(eval_grid.num_nodes),
-            1 if loop else None,
-        ).reshape(eval_grid.num_nodes, kernel.ndim)
+        f += batch_map(eval_pt, eval_data, 1 if loop else None).reshape(
+            eval_grid.num_nodes, kernel.ndim
+        )
         return f, source_data
 
     f = jnp.zeros((eval_grid.num_nodes, kernel.ndim))
@@ -637,7 +637,7 @@ def singular_integral(
     Where K(θ, ζ, θ', ζ') is the (singular) kernel and g(θ', ζ') is the metric on the
     surface. See eq. 3.7 in [1]_, but we have absorbed the density σ into K
 
-    Uses method by Malhotra et. al. [1]_ [2]_
+    Uses method by Malhotra et al. [1]_ [2]_
 
     Parameters
     ----------
@@ -916,7 +916,7 @@ def compute_B_plasma(eq, eval_grid, source_grid=None, normal_only=False):
     """
     if source_grid is None:
         source_grid = LinearGrid(
-            rho=jnp.array([1.0]),
+            rho=np.array([1.0]),
             M=eq.M_grid,
             N=eq.N_grid,
             NFP=eq.NFP if eq.N > 0 else 64,

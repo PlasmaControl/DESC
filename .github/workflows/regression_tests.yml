@@ -81,13 +81,20 @@ jobs:
         with:
           swap-size-gb: 10
 
+      - name: Action Details
+        if: env.has_changes == 'true'
+        run: |
+          source .venv-${{ env.version }}/bin/activate
+          which python
+          python --version
+          pwd
+          lscpu
+          pip list
+
       - name: Test with pytest
         if: env.has_changes == 'true'
         run: |
           source .venv-${{ env.version }}/bin/activate
-          pwd
-          lscpu
-          pip list
           python -m pytest -v -m regression\
             --durations=0 \
             --cov-report xml:cov.xml \

@@ -5,14 +5,13 @@ https://doi.org/10.1016/0010-4655(86)90109-8
 
 """
 
-import time
-
 import sympy as sp
 from sympy.abc import x
 from sympy.vector import CoordSys3D
 
 from desc.backend import jit, jnp
 from desc.derivatives import Derivative
+from desc.utils import Timer
 
 from ._core import ScalarPotentialField, _MagneticField
 
@@ -230,9 +229,6 @@ class DommaschkPotentialField(ScalarPotentialField):
         # and max_l and max_m should probably be both nonzero anyways,
         # this is not an issue right now
 
-        # TODO: Add REGCOIL-like option to perform a least squares minimization
-        # of Bn, potentially also with some sort of regularization.
-
         # mode numbers
         ms = []
         ls = []
@@ -251,7 +247,6 @@ class DommaschkPotentialField(ScalarPotentialField):
         ]  # indices that should be 0 due to symmetry
         # if sym is True, when l is even then we need a=d=0
         # and if l is odd then b=c=0
-        # TODO: does the sym hold if the eq is not "centered" about R=1?
 
         for l in range(1, max_l + 1):
             for m in range(0, max_m * NFP + 1, NFP):
@@ -293,10 +288,12 @@ class DommaschkPotentialField(ScalarPotentialField):
             round(num_modes - 1) / 4
         )  # how many l-m mode pairs there are, also is len(a_s)
         n = int(n)
-        t0 = time.time()
+        timer = Timer()
+        timer.start("Construct DommaschkPotentialField Object")
         domm_field = DommaschkPotentialField(**params)
+        timer.stop("Construct DommaschkPotentialField Object")
         if verbose > 1:
-            print(f"Time to make domm field: {time.time() - t0}")
+            timer.disp("Construct DommaschkPotentialField Object")
 
         def get_B_dom(coords, X):
             """Fxn wrapper to find jacobian of dommaschk B wrt coefs a,b,c,d."""
@@ -325,10 +322,11 @@ class DommaschkPotentialField(ScalarPotentialField):
             else:
                 X += [obj]
         X = jnp.asarray(X)
-        t0 = time.time()
+        timer.start("Compute Jacobian")
         jac = jit(Derivative(get_B_dom, argnum=1))(coords, X)
+        timer.stop("Compute Jacobian")
         if verbose > 1:
-            print(f"Time to compute jacobian: {time.time() - t0}")
+            timer.disp("Compute Jacobian")
 
         A = jac.reshape((rhs.size, len(X)), order="F")
 
@@ -341,9 +339,9 @@ class DommaschkPotentialField(ScalarPotentialField):
             # res is a list of len(1) so index into it
             print(f"Sum of Squares Residual of fit: {res[0]:1.4e} T^2")
             res_at_pts = A @ c - rhs
-            print(f"Max Residual: {jnp.max(abs(res_at_pts)):1.4e} T")
-            print(f"Min Residual: {jnp.min(abs(res_at_pts)):1.4e} T")
-            print(f"Mean Residual: {jnp.mean(abs(res_at_pts)):1.4e} T")
+            print(f"Max Absolute Residual: {jnp.max(abs(res_at_pts)):1.4e} T")
+            print(f"Min Absolute Residual: {jnp.min(abs(res_at_pts)):1.4e} T")
+            print(f"Mean Absolute Residual: {jnp.mean(abs(res_at_pts)):1.4e} T")
 
         # recover the params from the c coefficient vector
         B0 = c[0]
@@ -519,30 +517,30 @@ def dommaschk_potential(R, phi, Z, ms, ls, a_arr, b_arr, c_arr, d_arr, B0=1):
 
     Parameters
     ----------
-    R,phi,Z : array-like
-        Cylindrical coordinates (1-D arrays of each of size num_eval_pts)
-        to evaluate the Dommaschk potential term at.
+    R,phi,Z : sympy.vector.scalar.BaseScalar
+        Cylindrical coordinate sympy symbols.
+        Obtained from sympy.vector.CoordSys3D using the ``"cyl"`` basis.
     ms : 1D array-like of int
         first indices of V_m_l terms
     ls : 1D array-like of int
         second indices of V_m_l terms
-    a_arr : 1D array-like of float
+    a_arr : list of sympy variables
         a_m_l coefficients of V_m_l terms, which multiplies cos(m*phi)*D_m_l
-    b_arr : 1D array-like of float
+    b_arr : list of sympy variables
         b_m_l coefficients of V_m_l terms, which multiplies sin(m*phi)*D_m_l
-    c_arr : 1D array-like of float
+    c_arr : list of sympy variables
         c_m_l coefficients of V_m_l terms, which multiplies cos(m*phi)*N_m_l-1
-    d_arr : 1D array-like of float
+    d_arr : list of sympy variables
         d_m_l coefficients of V_m_l terms, which multiplies sin(m*phi)*N_m_l-1
-    B0: float, toroidal magnetic field strength scale, this is the strength of the
+    B0: float
+        toroidal magnetic field strength scale, this is the strength of the
         1/R part of the magnetic field and is the Bphi at R=1.
 
     Returns
     -------
-    value : array-like
-        Value of the total dommaschk potential evaluated
-        at the given R,phi,Z points
-        (same size as the size of the given R,phi, Z arrays).
+    value : sympy expression
+        Sympy expression for the total dommaschk potential as a function
+        of R, phi and Z.
 
     """
     value = B0 * phi  # phi term

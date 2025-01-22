@@ -783,16 +783,18 @@ class FourierRZToroidalSurface(Surface):
 
 
 class ZernikeRZToroidalSection(Surface):
-    """A toroidal cross section represented by a Zernike polynomial in R,Z.
+    """A toroidal cross section represented by a Zernike polynomial in R,Z and Lambda.
 
     Parameters
     ----------
-    R_lmn, Z_lmn : array-like, shape(k,)
+    R_lmn, Z_lmn, L_lmn : array-like, shape(k,)
         zernike coefficients
     modes_R : array-like, shape(k,2)
         radial and poloidal mode numbers [l,m] for R_lmn
     modes_Z : array-like, shape(k,2)
         radial and poloidal mode numbers [l,m] for Z_lmn. If None defaults to modes_R.
+    modes_L : array-like, shape(k,2)
+        radial and poloidal mode numbers [l,m] for L_lmn. If None defaults to modes_R.
     sym : bool
         whether to enforce stellarator symmetry. Default is "auto" which enforces if
         modes are symmetric. If True, non-symmetric modes will be truncated.
@@ -830,8 +832,10 @@ class ZernikeRZToroidalSection(Surface):
     _io_attrs_ = Surface._io_attrs_ + [
         "_R_lmn",
         "_Z_lmn",
+        "_L_lmn",
         "_R_basis",
         "_Z_basis",
+        "_L_basis",
         "_spectral_indexing",
         "_zeta",
     ]
@@ -850,6 +854,8 @@ class ZernikeRZToroidalSection(Surface):
         zeta=0.0,
         name="",
         check_orientation=True,
+        L_lmn=None,
+        modes_L=None,
     ):
         if R_lmn is None:
             R_lmn = np.array([10, 1])
@@ -857,10 +863,15 @@ class ZernikeRZToroidalSection(Surface):
         if Z_lmn is None:
             Z_lmn = np.array([0, -1])
             modes_Z = np.array([[0, 0], [1, -1]])
+        if L_lmn is None:
+            L_lmn = np.array([0, 0])
+            modes_L = np.array([[0, 0], [1, -1]])
         if modes_Z is None:
             modes_Z = modes_R
-        R_lmn, Z_lmn, modes_R, modes_Z = map(
-            np.asarray, (R_lmn, Z_lmn, modes_R, modes_Z)
+        if modes_L is None:
+            modes_L = modes_R
+        R_lmn, Z_lmn, L_lmn, modes_R, modes_Z, modes_L = map(
+            np.asarray, (R_lmn, Z_lmn, L_lmn, modes_R, modes_Z, modes_L)
         )
 
         assert (
@@ -869,18 +880,24 @@ class ZernikeRZToroidalSection(Surface):
         assert (
             Z_lmn.size == modes_Z.shape[0]
         ), "Z_lmn size and modes_Z.shape[0] must be the same size!"
+        assert (
+            L_lmn.size == modes_L.shape[0]
+        ), "L_lmn size and modes_L.shape[0] must be the same size!"
 
         assert issubclass(modes_R.dtype.type, np.integer)
         assert issubclass(modes_Z.dtype.type, np.integer)
+        assert issubclass(modes_L.dtype.type, np.integer)
 
         LR = np.max(abs(modes_R[:, 0]))
         MR = np.max(abs(modes_R[:, 1]))
         LZ = np.max(abs(modes_Z[:, 0]))
         MZ = np.max(abs(modes_Z[:, 1]))
+        LL = np.max(abs(modes_L[:, 0]))
+        ML = np.max(abs(modes_L[:, 1]))
         L = check_nonnegint(L, "L")
         M = check_nonnegint(M, "M")
-        self._L = setdefault(L, max(LR, LZ))
-        self._M = setdefault(M, max(MR, MZ))
+        self._L = setdefault(L, max(LR, LZ, LL))
+        self._M = setdefault(M, max(MR, MZ, ML))
         self._N = 0
 
         if sym == "auto":
@@ -905,9 +922,16 @@ class ZernikeRZToroidalSection(Surface):
             spectral_indexing=spectral_indexing,
             sym="sin" if sym else False,
         )
+        self._L_basis = ZernikePolynomial(
+            L=self._L,
+            M=self._M,
+            spectral_indexing=spectral_indexing,
+            sym="sin" if sym else False,
+        )
 
         self._R_lmn = copy_coeffs(R_lmn, modes_R, self.R_basis.modes[:, :2])
         self._Z_lmn = copy_coeffs(Z_lmn, modes_Z, self.Z_basis.modes[:, :2])
+        self._L_lmn = copy_coeffs(L_lmn, modes_L, self.L_basis.modes[:, :2])
         self._sym = bool(sym)
         self._spectral_indexing = str(spectral_indexing)
 
@@ -940,6 +964,15 @@ class ZernikeRZToroidalSection(Surface):
         return self._Z_basis
 
     @property
+    def L_basis(self):
+        """ZernikePolynomial: Spectral basis for Lambda."""
+        return self._L_basis
+
+    @L_basis.setter
+    def L_basis(self, L_basis):
+        self._L_basis = L_basis
+
+    @property
     def zeta(self):
         """float: Toroidal angle."""
         return self._zeta
@@ -956,40 +989,46 @@ class ZernikeRZToroidalSection(Surface):
             or ((len(args) in [2, 3]) and len(kwargs) in [1, 2])
             or (len(args) == 0)
         ), (
-            "change_resolution should be called with 2 (M,N) or 3 (L,M,N) "
+            "change_resolution should be called with 2 (L,M) or 3 (L,M,N) "
             + "positional arguments or only keyword arguments."
         )
         L = kwargs.pop("L", None)
         M = kwargs.pop("M", None)
         N = kwargs.pop("N", None)
+        _ = kwargs.pop(
+            "NFP", None
+        )  # NFP is not used but need to pop to avoid unexpected kwarg
         sym = kwargs.pop("sym", None)
         assert len(kwargs) == 0, "change_resolution got unexpected kwarg: {kwargs}"
+        self._sym = sym if sym is not None else self.sym
         if N is not None:
             warnings.warn(
-                "ZernikeRZToroidalSection does not have toroidal resolution, ignoring N"
+                "ZernikeRZToroidalSection does not have toroidal "
+                "resolution, ignoring N"
             )
         if len(args) == 2:
             L, M = args
         elif len(args) == 3:
-            L, M, _ = args
-
-        L = check_nonnegint(L, "L")
-        M = check_nonnegint(M, "M")
-        self._sym = sym if sym is not None else self.sym
+            L, M, N = args
 
         if ((L is not None) and (L != self.L)) or ((M is not None) and (M != self.M)):
             L = int(L if L is not None else self.L)
             M = int(M if M is not None else self.M)
             R_modes_old = self.R_basis.modes
             Z_modes_old = self.Z_basis.modes
+            L_modes_old = self.L_basis.modes
             self.R_basis.change_resolution(
                 L=L, M=M, sym="cos" if self.sym else self.sym
             )
             self.Z_basis.change_resolution(
                 L=L, M=M, sym="sin" if self.sym else self.sym
             )
+            self.L_basis.change_resolution(
+                L=L, M=M, sym="sin" if self.sym else self.sym
+            )
             self.R_lmn = copy_coeffs(self.R_lmn, R_modes_old, self.R_basis.modes)
             self.Z_lmn = copy_coeffs(self.Z_lmn, Z_modes_old, self.Z_basis.modes)
+            self.L_lmn = copy_coeffs(self.L_lmn, L_modes_old, self.L_basis.modes)
             self._L = L
             self._M = M
 
@@ -1022,7 +1061,23 @@ class ZernikeRZToroidalSection(Surface):
         else:
             raise ValueError(
                 f"Z_lmn should have the same size as the basis, got {len(new)} for "
-                + f"basis with {self.R_basis.num_modes} modes."
+                + f"basis with {self.Z_basis.num_modes} modes."
+            )
+
+    @optimizable_parameter
+    @property
+    def L_lmn(self):
+        """ndarray: Spectral coefficients for Lambda."""
+        return self._L_lmn
+
+    @L_lmn.setter
+    def L_lmn(self, new):
+        if len(new) == self.L_basis.num_modes:
+            self._L_lmn = jnp.asarray(new)
+        else:
+            raise ValueError(
+                f"L_lmn should have the same size as the basis, got {len(new)} for "
+                + f"basis with {self.L_basis.num_modes} modes."
             )
 
     def get_coeffs(self, l, m=0):
@@ -1033,6 +1088,7 @@ class ZernikeRZToroidalSection(Surface):
         l, m = np.broadcast_arrays(l, m)
         R = np.zeros_like(m).astype(float)
         Z = np.zeros_like(m).astype(float)
+        L = np.zeros_like(m).astype(float)
 
         lm = np.array([l, m]).T
         idxR = np.where(
@@ -1041,24 +1097,32 @@ class ZernikeRZToroidalSection(Surface):
         idxZ = np.where(
             (lm[:, np.newaxis, :] == self.Z_basis.modes[np.newaxis, :, :2]).all(axis=-1)
         )
+        idxL = np.where(
+            (lm[:, np.newaxis, :] == self.L_basis.modes[np.newaxis, :, :2]).all(axis=-1)
+        )
 
         R[idxR[0]] = self.R_lmn[idxR[1]]
         Z[idxZ[0]] = self.Z_lmn[idxZ[1]]
-        return R, Z
+        L[idxZ[0]] = self.L_lmn[idxL[1]]
+        return R, Z, L
 
-    def set_coeffs(self, l, m=0, R=None, Z=None):
+    def set_coeffs(self, l, m=0, R=None, Z=None, L=None):
         """Set specific Zernike coefficients."""
-        l, m, R, Z = (
+        l, m, R, Z, L = (
             np.atleast_1d(l),
             np.atleast_1d(m),
             np.atleast_1d(R),
             np.atleast_1d(Z),
+            np.atleast_1d(L),
         )
-        l, m, R, Z = np.broadcast_arrays(l, m, R, Z)
-        for ll, mm, RR, ZZ in zip(l, m, R, Z):
+        l, m, R, Z, L = np.broadcast_arrays(l, m, R, Z, L)
+        for ll, mm, RR, ZZ, LL in zip(l, m, R, Z, L):
             if RR is not None:
                 idxR = self.R_basis.get_idx(ll, mm, 0)
                 self.R_lmn = put(self.R_lmn, idxR, RR)
             if ZZ is not None:
                 idxZ = self.Z_basis.get_idx(ll, mm, 0)
                 self.Z_lmn = put(self.Z_lmn, idxZ, ZZ)
+            if LL is not None:
+                idxL = self.L_basis.get_idx(ll, mm, 0)
+                self.L_lmn = put(self.L_lmn, idxL, LL)

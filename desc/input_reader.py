@@ -178,12 +178,12 @@ class InputReader:
             "objective": "force",
             "optimizer": "lsq-exact",
             "spectral_indexing": "ansi",
-            "bdry_mode": "lcfs",
             "pressure": np.atleast_2d((0, 0.0)),
             "iota": np.atleast_2d((0, 0.0)),
             "current": np.atleast_2d((0, 0.0)),
             "surface": np.atleast_2d((0, 0, 0, 0.0, 0.0)),
             "axis": np.atleast_2d((0, 0.0, 0.0)),
+            "xsection": None,
         }
 
         iota_flag = False
@@ -381,10 +381,6 @@ class InputReader:
                     + "pattern, pass in the desired grid when creating the objective "
                     + "in a python script."
                 )
-                flag = True
-            match = re.search(r"bdry_mode", argument, re.IGNORECASE)
-            if match:
-                inputs["bdry_mode"] = words[0].lower()
                 flag = True
 
             # coefficient indices
@@ -744,7 +740,6 @@ class InputReader:
         f.write("\n# solver methods\n")
         f.write("optimizer = {}\n".format(inputs[0]["optimizer"]))
         f.write("objective = {}\n".format(inputs[0]["objective"]))
-        f.write("bdry_mode = {}\n".format(inputs[0]["bdry_mode"]))
         f.write("spectral_indexing = {}\n".format(inputs[0]["spectral_indexing"]))
 
         f.write("\n# pressure and rotational transform/current profiles\n")
@@ -1015,7 +1010,6 @@ class InputReader:
             "objective": "force",
             "optimizer": "lsq-exact",
             "spectral_indexing": "ansi",
-            "bdry_mode": "lcfs",
             "pressure": np.atleast_2d((0, 0.0)),
             "iota": np.atleast_2d((0, 0.0)),
             "current": np.atleast_2d((0, 0.0)),

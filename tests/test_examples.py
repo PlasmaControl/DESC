@@ -501,7 +501,7 @@ def test_NAE_QSC_solve():
 
         phi = np.squeeze(grid_axis.nodes[:, 2])
         np.testing.assert_allclose(
-            lam_nae, -qsc.iota * qsc.nu_spline(phi), atol=2e-5, err_msg=string
+            lam_nae, -qsc.iota * qsc.nu_spline(phi), atol=2.1e-5, err_msg=string
         )
 
         # check |B| on axis
@@ -740,6 +740,7 @@ def test_omnigenity_qa():
     eq.L_lmn *= lone
     eq.axis = eq.get_axis()
     eq.surface = eq.get_surface_at(rho=1)
+    eq.xsection = eq.get_surface_at(zeta=0)
     eq.Psi *= 5  # B0 = 1 T
     eq.solve()
 

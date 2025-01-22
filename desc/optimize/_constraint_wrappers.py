@@ -529,7 +529,18 @@ class ProximalProjection(ObjectiveFunction):
     def _set_eq_state_vector(self):
         full_args = self._eq.optimizable_params.copy()
         self._args = self._eq.optimizable_params.copy()
-        for arg in ["R_lmn", "Z_lmn", "L_lmn", "Ra_n", "Za_n"]:
+        # Proximal projection cannot use these parameters
+        # Remove them from the list of parameters to optimize
+        for arg in [
+            "R_lmn",
+            "Z_lmn",
+            "L_lmn",
+            "Ra_n",
+            "Za_n",
+            "Rp_lmn",
+            "Zp_lmn",
+            "Lp_lmn",
+        ]:
             self._args.remove(arg)
         linear_constraint = ObjectiveFunction(self._linear_constraints)
         linear_constraint.build()

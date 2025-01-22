@@ -14,6 +14,11 @@ def compute_scaling_factors(thing):
 
     scales = {}
 
+    # change this to also work with Poincare XS where bdry is  ZernikePolynomial
+    # equivalent modes? might need to be a sum since the radial extent
+    # is determined by the modes evaluated at rho=1 which is not
+    # one single coefficient...
+
     def get_lowest_mode(basis, coeffs):
         """Return lowest order coefficient (excluding m=0 modes)."""
         # lowest order modes: [0, +1, -1, +2, -2, ...]

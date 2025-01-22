@@ -400,7 +400,7 @@ class TestInputReader:
     @pytest.mark.unit
     def test_node_pattern_warning(self):
         """Test that a warning is thrown when trying to use a custom node pattern."""
-        input_path = ".//tests//inputs//SOLOVEV_poincare"
+        input_path = ".//tests//inputs//node_pattern_warning"
         # load an input file with vacuum obj but also an iota profile specified
         with pytest.warns(UserWarning):
             ir = InputReader(input_path)

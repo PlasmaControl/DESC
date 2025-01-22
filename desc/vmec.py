@@ -168,6 +168,9 @@ class VMECIO:
         nax = np.arange(-nax, nax + 1)
         inputs["axis"] = np.vstack([nax, rax, zax]).T
 
+        # Cross-section
+        inputs["xsection"] = None
+
         file.close()
 
         # initialize Equilibrium
@@ -184,6 +187,9 @@ class VMECIO:
         # lambda
         m, n, L_mn = ptolemy_identity_fwd(xm, xn, s=lmns, c=lmnc)
         eq.L_lmn = fourier_to_zernike(m, n, L_mn, eq.L_basis)
+
+        # Cross-section
+        eq.xsection = eq.get_surface_at(zeta=0)
 
         # apply boundary conditions
         constraints = get_fixed_axis_constraints(

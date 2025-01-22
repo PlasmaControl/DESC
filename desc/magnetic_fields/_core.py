@@ -5,7 +5,7 @@ from abc import ABC, abstractmethod
 from collections.abc import MutableSequence
 
 import numpy as np
-import scipy.linalg
+import scipy
 from diffrax import (
     DiscreteTerminatingEvent,
     ODETerm,
@@ -68,7 +68,7 @@ def biot_savart_general(re, rs, J, dV):
         B = B + jnp.where(den[:, None] == 0, 0, num / den[:, None])
         return B
 
-    return 1e-7 * fori_loop(0, J.shape[0], body, B)
+    return scipy.constants.mu_0 / 4 / jnp.pi * fori_loop(0, J.shape[0], body, B)
 
 
 def biot_savart_general_vector_potential(re, rs, J, dV):
@@ -102,7 +102,7 @@ def biot_savart_general_vector_potential(re, rs, J, dV):
         A = A + jnp.where(den[:, None] == 0, 0, num / den[:, None])
         return A
 
-    return 1e-7 * fori_loop(0, J.shape[0], body, A)
+    return scipy.constants.mu_0 / 4 / jnp.pi * fori_loop(0, J.shape[0], body, A)
 
 
 def read_BNORM_file(fname, surface, eval_grid=None, scale_by_curpol=True):

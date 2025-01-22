@@ -472,7 +472,7 @@ class DoubleFourierSeries(_Basis):
 
     """
 
-    def __init__(self, M, N, NFP=1, sym=False, **kwargs):
+    def __init__(self, M, N, NFP=1, sym=False):
         self._L = 0
         self._M = check_nonnegint(M, "M", False)
         self._N = check_nonnegint(N, "N", False)

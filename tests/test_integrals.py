@@ -629,7 +629,7 @@ class TestSingularities:
 
         for i in range(len(Nu)):
             grid = LinearGrid(M=Nu[i] // 2, N=Nv[i] // 2, NFP=eq.NFP)
-            interpolator = FFTInterpolator(grid, grid, ss[i], qs[i])
+            interpolator = FFTInterpolator(grid, grid, ss[i], ss[i], qs[i])
             data = eq.compute(
                 _kernel_nr_over_r3.keys + ["|e_theta x e_zeta|"], grid=grid
             )
@@ -642,7 +642,7 @@ class TestSingularities:
         es = 6e-7
         grid = LinearGrid(M=Nu // 2, N=Nv // 2, NFP=eq.NFP)
         s, q = _get_default_sq(grid)
-        interpolator = FFTInterpolator(grid, grid, s, q)
+        interpolator = FFTInterpolator(grid, grid, s, s, q)
         data = eq.compute(_kernel_nr_over_r3.keys + ["|e_theta x e_zeta|"], grid=grid)
         err = singular_integral(data, data, "nr_over_r3", interpolator, loop=True)
         np.testing.assert_array_less(np.abs(2 * np.pi + err), es)
@@ -666,7 +666,7 @@ class TestSingularities:
         ]
         data = eq.compute(keys, grid=grid)
         s, q = _get_default_sq(grid)
-        interp = interpolator(grid, grid, s, q)
+        interp = interpolator(grid, grid, s, s, q)
         Bplasma = virtual_casing_biot_savart(data, data, interp, loop=True)
         # need extra factor of B/2 bc we're evaluating on plasma surface
         Bplasma += data["B"] / 2
@@ -689,7 +689,7 @@ class TestSingularities:
         dt = s / 2 * h_t * r * np.sin(w)
         dz = s / 2 * h_z * r * np.cos(w)
 
-        interp = interpolator(grid, grid, s, q)
+        interp = interpolator(grid, grid, s, s, q)
         theta = grid.nodes[:, 1]
         zeta = grid.nodes[:, 2]
         f = _f_2d(theta, zeta)

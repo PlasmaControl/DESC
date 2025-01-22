@@ -507,14 +507,18 @@ class BoundaryError(_Objective):
         self._q = setdefault(self._q, q)
 
         try:
-            interpolator = FFTInterpolator(eval_grid, source_grid, self._s, self._q)
+            interpolator = FFTInterpolator(
+                eval_grid, source_grid, self._s, self._s, self._q
+            )
         except AssertionError as e:
             warnif(
                 True,
                 msg="Could not build fft interpolator, switching to dft which is slow."
                 "\nReason: " + str(e),
             )
-            interpolator = DFTInterpolator(eval_grid, source_grid, self._s, self._q)
+            interpolator = DFTInterpolator(
+                eval_grid, source_grid, self._s, self._s, self._q
+            )
 
         edge_pres = np.max(np.abs(eq.compute("p", grid=eval_grid)["p"]))
         warnif(

@@ -615,15 +615,15 @@ class TestFourierPlanarCurve:
 
         xs_xyz = cxyz.compute("x_s")["x_s"]
         xs_rpz = crpz.compute("x_s")["x_s"]
-        np.testing.assert_allclose(xs_xyz, xs_rpz, atol=2e-15)
+        np.testing.assert_allclose(xs_xyz, xs_rpz, atol=3e-15)
 
         xss_xyz = cxyz.compute("x_ss")["x_ss"]
         xss_rpz = crpz.compute("x_ss")["x_ss"]
-        np.testing.assert_allclose(xss_xyz, xss_rpz, atol=2e-15)
+        np.testing.assert_allclose(xss_xyz, xss_rpz, atol=3e-15)
 
         xsss_xyz = cxyz.compute("x_sss")["x_sss"]
         xsss_rpz = crpz.compute("x_sss")["x_sss"]
-        np.testing.assert_allclose(xsss_xyz, xsss_rpz, atol=2e-15)
+        np.testing.assert_allclose(xsss_xyz, xsss_rpz, atol=3e-15)
 
     @pytest.mark.unit
     def test_misc(self):

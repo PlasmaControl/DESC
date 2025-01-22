@@ -5,6 +5,7 @@ import pytest
 
 from desc.compute.geom_utils import (
     rotation_matrix,
+    rotation_matrix_vector_vector,
     rpz2xyz,
     rpz2xyz_vec,
     xyz2rpz,
@@ -17,6 +18,9 @@ def test_rotation_matrix():
     """Test calculation of rotation matrices."""
     A = rotation_matrix([0, 0, np.pi / 2])
     At = np.array([[0, -1, 0], [1, 0, 0], [0, 0, 1]])
+    np.testing.assert_allclose(A, At, atol=1e-10)
+
+    A = rotation_matrix_vector_vector([1, 0, 0], [0, 1, 0])
     np.testing.assert_allclose(A, At, atol=1e-10)
 
 

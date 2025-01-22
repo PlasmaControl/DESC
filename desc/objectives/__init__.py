@@ -3,6 +3,7 @@
 from ._bootstrap import BootstrapRedlConsistency
 from ._coils import (
     CoilArclengthVariance,
+    CoilConvexity,
     CoilCurrentLength,
     CoilCurvature,
     CoilLength,

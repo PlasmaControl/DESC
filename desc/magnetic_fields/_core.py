@@ -5,7 +5,7 @@ from abc import ABC, abstractmethod
 from collections.abc import MutableSequence
 
 import numpy as np
-import scipy.linalg
+import scipy
 from diffrax import (
     DiscreteTerminatingEvent,
     ODETerm,
@@ -68,7 +68,7 @@ def biot_savart_general(re, rs, J, dV):
         B = B + jnp.where(den[:, None] == 0, 0, num / den[:, None])
         return B
 
-    return 1e-7 * fori_loop(0, J.shape[0], body, B)
+    return scipy.constants.mu_0 / 4 / jnp.pi * fori_loop(0, J.shape[0], body, B)
 
 
 def biot_savart_general_vector_potential(re, rs, J, dV):
@@ -102,7 +102,7 @@ def biot_savart_general_vector_potential(re, rs, J, dV):
         A = A + jnp.where(den[:, None] == 0, 0, num / den[:, None])
         return A
 
-    return 1e-7 * fori_loop(0, J.shape[0], body, A)
+    return scipy.constants.mu_0 / 4 / jnp.pi * fori_loop(0, J.shape[0], body, A)
 
 
 def read_BNORM_file(fname, surface, eval_grid=None, scale_by_curpol=True):
@@ -2482,7 +2482,7 @@ class OmnigenousField(Optimizable, IOAble):
         nodes = np.array([rho, np.zeros_like(rho), np.zeros_like(rho)]).T
 
         transform_fwd = self.B_basis.evaluate(nodes)
-        transform_rev = scipy.linalg.pinv(transform_fwd)
+        transform_rev = jnp.linalg.pinv(transform_fwd)
         B_old = transform_fwd @ self.B_lm.reshape((old_L_B + 1, -1))
 
         eta_old = np.linspace(0, jnp.pi / 2, num=B_old.shape[-1])

@@ -658,6 +658,49 @@ class TestFourierPlanarCurve:
         with pytest.raises(AssertionError):
             _ = FourierPlanarCurve(r_n=[1], modes=[1, 2])
 
+    @pytest.mark.unit
+    def test_to_FourierPlanarCurve(self):
+        """Test converting SplineXYZCurve to FourierPlanarCurve object."""
+        npts = 1000
+        N = 5
+
+        # Create a SplineXYZCurve of a planar circle
+        s = np.linspace(0, 2 * np.pi, npts)
+        X = 2 * np.cos(s)
+        Y = np.ones(npts)
+        Z = 2 * np.sin(s)
+        c = SplineXYZCurve(X=X, Y=Y, Z=Z)
+
+        # Create a backwards SplineXYZCurve by flipping the coordinates
+        c_backwards = SplineXYZCurve(
+            X=np.flip(X),
+            Y=np.flip(Y),
+            Z=np.flip(Z),
+        )
+
+        # Convert to FourierPlanarCurve
+        c_planar = c.to_FourierPlanar(N=N, grid=npts, basis="xyz")
+        c_backwards_planar = c_backwards.to_FourierPlanar(N=N, grid=npts, basis="xyz")
+
+        grid = LinearGrid(N=20, endpoint=True)
+
+        coords_spline = c.compute("x", grid=grid)["x"]
+        coords_planar = c_planar.compute("x", grid=grid)["x"]
+        coords_backwards_spline = c_backwards.compute("x", grid=grid)["x"]
+        coords_backwards_planar = c_backwards_planar.compute("x", grid=grid)["x"]
+
+        # Assertions for point positions
+        np.testing.assert_allclose(coords_spline, coords_planar, atol=1e-10)
+        np.testing.assert_allclose(
+            coords_backwards_spline,
+            coords_backwards_planar,
+            atol=1e-10,
+        )
+        # backwards coordinate order is important for Biot-Savart current
+        np.testing.assert_allclose(
+            coords_planar, np.flip(coords_backwards_planar, axis=0), atol=1e-10
+        )
+
 
 class TestSplineXYZCurve:
     """Tests for SplineXYZCurve class."""

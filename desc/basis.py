@@ -547,7 +547,7 @@ class DoubleFourierSeries(_Basis):
         vander : jnp.ndarray
             Shape (..., m.size, n.size).
             Vandermonde matrix to evaluate Fourier coefficients
-            ``coef=jnp.fft.rfft2(f)`` via ``(vander*f).real.sum(axis=(-2,-1))``.
+            ``coef=jnp.fft.rfft2(f)`` via ``(vander*coef).real.sum(axis=(-2,-1))``.
 
         """
         idx = [0]

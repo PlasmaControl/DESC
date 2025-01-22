@@ -54,14 +54,16 @@ def _eta(theta, zeta, theta0, zeta0, h_t, h_z, s_t, s_z):
     The functions we integrate are proportional to η₀(θ,ζ) = χ₀(r) far from the
     singularity at (θ₀,ζ₀). Therefore, the support matches χ₀(r)'s, assuming
     this region is sufficiently large compared to the singular region.
-    Here χ₀(r) has support where the argument r lies in [0, 1]. The constant
-    parameter β is chosen to define χ(r) such that the integration region
-    (ρ,ω) ∈ [−1, 1] × [0, 2π) contains this support.
+    Here χ₀(r) has support where the argument r lies in [0, 1]. The map r
+    defines a coordinate mapping between the toroidal domain and a polar domain
+    such that the integration region in the polar domain (ρ,ω) ∈ [−1, 1] × [0, 2π)
+    equals the compact support, and furthermore is a circular region around the
+    singular point in (θ,ζ) geometry when s₁ × s₂ denote the number of grid points
+    on a uniformly discretized toroidal domain (θ,ζ) ∈ [0, 2π)².
       χ₀ : r ↦ exp(−36r⁸)
 
       r : ρ, ω ↦ |ρ|
 
-    In the rectangular coordinates, the map r is
       r : θ, ζ ↦ 2 [ (θ−θ₀)²/(h₁s₁)² + (ζ−ζ₀)²/(h₂s₂)² ]⁰ᐧ⁵
 
     Hence, r ≥ 1 (r ≤ 1) outside (inside) the integration domain.
@@ -87,9 +89,9 @@ def _eta(theta, zeta, theta0, zeta0, h_t, h_z, s_t, s_z):
     h_t, h_z : float
         Grid step size in θ and ζ.
     s_t, s_z : int
-        Extent of support is an ``s_t`` × ``s_z`` subset
-        (subset of ``source_grid.num_theta`` × ``source_grid.num_zeta*grid.NFP``)
-        of the full domain (θ,ζ) ∈ [-π, π)² of ``source_grid``.
+        Extent of support is an ``st`` × ``sz`` subset
+        of the full domain (θ,ζ) ∈ [0, 2π)² of ``source_grid``.
+        Subset of ``source_grid.num_theta`` × ``source_grid.num_zeta*source_grid.NFP``.
 
     """
     dt = jnp.abs(theta - theta0)
@@ -101,7 +103,7 @@ def _eta(theta, zeta, theta0, zeta0, h_t, h_z, s_t, s_z):
     return _chi(r)
 
 
-# TODO: Remove this function pending check with author?
+# TODO: Remove this function.
 def _get_default_sq(grid):
     k = max(min(grid.num_theta, grid.num_zeta * grid.NFP), 2)
     s = k - 1
@@ -124,8 +126,8 @@ def heuristic_st_sz_q(grid):
     -------
     st, sz : int
         Extent of support is an ``st`` × ``sz`` subset
-        (subset of ``grid.num_theta`` × ``grid.num_zeta*grid.NFP``)
         of the full domain (θ,ζ) ∈ [0, 2π)² of ``grid``.
+        Subset of ``grid.num_theta`` × ``grid.num_zeta*grid.NFP``.
     q : int
         Order of quadrature in radial and azimuthal directions.
 
@@ -150,9 +152,9 @@ def _get_quadrature_nodes(q):
     Returns
     -------
     r, w : ndarray
-        Radial and azimuthal coordinates
+        Radial and azimuthal coordinates.
     dr, dw : ndarray
-        Radial and azimuthal spacing and quadrature weights
+        Radial and azimuthal spacing and quadrature weights.
 
     """
     Nr = Nw = q
@@ -184,8 +186,8 @@ class _BIESTInterpolator(IOAble, ABC):
         Evaluation and source points for the integral transform.
     st, sz : int
         Extent of support is an ``st`` × ``sz`` subset
-        (subset of ``source_grid.num_theta`` × ``source_grid.num_zeta*grid.NFP``)
         of the full domain (θ,ζ) ∈ [0, 2π)² of ``source_grid``.
+        Subset of ``source_grid.num_theta`` × ``source_grid.num_zeta*source_grid.NFP``.
     q : int
         Order of quadrature in polar domain.
 
@@ -243,8 +245,8 @@ class _BIESTInterpolator(IOAble, ABC):
         """Extent of polar grid support.
 
         Extent of support is an ``st`` × ``sz`` subset
-        (subset of ``num_theta`` × ``num_zeta*grid.NFP``)
-        of the full domain (θ,ζ) ∈ [0, 2π)² of the source grid.
+        of the full domain (θ,ζ) ∈ [0, 2π)² of ``source_grid``.
+        Subset of ``source_grid.num_theta`` × ``source_grid.num_zeta*source_grid.NFP``.
         """
         return self._st
 
@@ -253,8 +255,8 @@ class _BIESTInterpolator(IOAble, ABC):
         """Extent of polar grid support.
 
         Extent of support is an ``st`` × ``sz`` subset
-        (subset of ``num_theta`` × ``num_zeta*grid.NFP``)
-        of the full domain (θ,ζ) ∈ [0, 2π)² of the source grid.
+        of the full domain (θ,ζ) ∈ [0, 2π)² of ``source_grid``.
+        Subset of ``source_grid.num_theta`` × ``source_grid.num_zeta*source_grid.NFP``.
         """
         return self._sz
 
@@ -321,8 +323,8 @@ class FFTInterpolator(_BIESTInterpolator):
         ``eval_grid`` resolution should at least match ``source_grid``.
     st, sz : int
         Extent of support is an ``st`` × ``sz`` subset
-        (subset of ``source_grid.num_theta`` × ``source_grid.num_zeta*grid.NFP``)
         of the full domain (θ,ζ) ∈ [0, 2π)² of ``source_grid``.
+        Subset of ``source_grid.num_theta`` × ``source_grid.num_zeta*source_grid.NFP``.
     q : int
         Order of quadrature in polar domain.
 
@@ -385,8 +387,8 @@ class DFTInterpolator(_BIESTInterpolator):
         uniformly spaced nodes (θ, ζ) ∈ [0, 2π) × [0, 2π/NFP).
     st, sz : int
         Extent of support is an ``st`` × ``sz`` subset
-        (subset of ``source_grid.num_theta`` × ``source_grid.num_zeta*grid.NFP``)
         of the full domain (θ,ζ) ∈ [0, 2π)² of ``source_grid``.
+        Subset of ``source_grid.num_theta`` × ``source_grid.num_zeta*source_grid.NFP``.
     q : int
         Order of quadrature in polar domain
 
@@ -527,14 +529,7 @@ def _nonsingular_part(
     return f
 
 
-def _singular_part(
-    eval_data,
-    eval_grid,
-    source_data,
-    kernel,
-    interpolator,
-    loop=False,
-):
+def _singular_part(eval_data, source_data, kernel, interpolator, loop=False):
     """Integrate singular point by interpolating to polar grid.
 
     Generally follows sec 3.2.2 of [2], with the following differences:
@@ -542,6 +537,7 @@ def _singular_part(
     - hyperparameter M replaced by s
     - density sigma / function f is absorbed into kernel.
     """
+    eval_grid = interpolator._eval_grid
     eval_theta = jnp.asarray(eval_grid.nodes[:, 1])
     eval_zeta = jnp.asarray(eval_grid.nodes[:, 2])
 
@@ -700,21 +696,12 @@ def singular_integral(
     if isinstance(kernel, str):
         kernel = kernels[kernel]
 
-    eval_grid = interpolator._eval_grid
-    source_grid = interpolator._source_grid
-    out1 = _singular_part(
-        eval_data,
-        eval_grid,
-        source_data,
-        kernel,
-        interpolator,
-        loop,
-    )
+    out1 = _singular_part(eval_data, source_data, kernel, interpolator, loop)
     out2 = _nonsingular_part(
         eval_data,
-        eval_grid,
+        interpolator._eval_grid,
         source_data,
-        source_grid,
+        interpolator._source_grid,
         interpolator.st,
         interpolator.sz,
         kernel,

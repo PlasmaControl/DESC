@@ -392,16 +392,13 @@ class DFTInterpolator(_BIESTInterpolator):
 
     """
 
-    _io_attrs_ = _BIESTInterpolator._io_attrs_ + ["_basis"]
+    _io_attrs_ = _BIESTInterpolator._io_attrs_ + ["_modes"]
 
     def __init__(self, eval_grid, source_grid, st, sz, q, **kwargs):
         st = parse_argname_change(st, kwargs, "s", "st")
         super().__init__(eval_grid, source_grid, st, sz, q)
-        self._basis = DoubleFourierSeries(
-            M=source_grid.M,
-            N=source_grid.N,
-            NFP=source_grid.NFP,
-            complex_vander=True,
+        self._modes = DoubleFourierSeries.complex_modes(
+            m=source_grid.num_theta, n=source_grid.num_zeta, NFP=source_grid.NFP
         )
 
     def fourier(self, f):
@@ -414,10 +411,12 @@ class DFTInterpolator(_BIESTInterpolator):
 
     def vander_polar(self, i):
         """Return Vandermonde matrix for ith polar node."""
+        m, n = self._modes
         theta = self._eval_grid.nodes[:, 1] + self._shift_t[i]
         zeta = self._eval_grid.nodes[:, 2] + self._shift_z[i]
-        x = jnp.column_stack([jnp.zeros(self._eval_grid.num_nodes), theta, zeta])
-        return self._basis._evaluate_complex_vander(x)
+        return DoubleFourierSeries.complex_vander(theta, zeta, m, n).reshape(
+            self._eval_grid.num_nodes, -1
+        )
 
     def __call__(self, f, i, is_fourier=False, *, vander=None):
         """Interpolate data to polar grid points.

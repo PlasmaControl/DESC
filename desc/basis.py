@@ -479,14 +479,8 @@ class DoubleFourierSeries(_Basis):
         self._NFP = check_posint(NFP, "NFP", False)
         self._sym = bool(sym) if not sym else str(sym)
         self._spectral_indexing = "linear"
-
-        if kwargs.get("complex_vander", False):
-            self._modes = DoubleFourierSeries._get_complex_vander_modes(
-                self.M, self.N, self.NFP
-            )
-        else:
-            self._modes = self._get_modes(M=self.M, N=self.N)
-            super().__init__()
+        self._modes = self._get_modes(M=self.M, N=self.N)
+        super().__init__()
 
     def _get_modes(self, M, N):
         """Get mode numbers for double Fourier series.
@@ -514,12 +508,55 @@ class DoubleFourierSeries(_Basis):
         return np.array([z, m, n]).T
 
     @staticmethod
-    def _get_complex_vander_modes(M, N, NFP):
-        M = 2 * M + 1
-        N = 2 * N + 1
-        m = jnp.fft.fftfreq(M, d=1 / M).astype(int)
-        n = jnp.fft.rfftfreq(N, d=1 / (N * NFP)).astype(int)
+    def complex_modes(m, n, NFP):
+        """Modes for complex exponential basis for real Fourier transform.
+
+        Parameters
+        ----------
+        m : int
+            Maximum poloidal resolution. Note this is ``2*M+1``.
+        n : int
+            Maximum toroidal resolution. Note this is ``2*N+1``.
+        NFP : int
+            Number of field periods.
+
+        Returns
+        -------
+        m, n : jnp.ndarray
+            Poloidal and toroidal Fourier modes.
+
+        """
+        m = jnp.fft.fftfreq(m, d=1 / m).astype(int)
+        n = jnp.fft.rfftfreq(n, d=1 / (n * NFP)).astype(int)
         return m, n
+
+    @staticmethod
+    def complex_vander(theta, zeta, m, n):
+        """Return Vandermonde matrix for complex Fourier modes.
+
+        Parameters
+        ----------
+        theta, zeta : jnp.ndarray
+            Poloidal and toroidal coordinates to evaluate Vandermonde matrix.
+        m, n : jnp.ndarray
+            Poloidal and toroidal Fourier modes.
+            See ``DoubleFourierSeries.complex_modes``.
+
+        Returns
+        -------
+        vander : jnp.ndarray
+            Shape (..., m.size, n.size).
+            Vandermonde matrix to evaluate Fourier coefficients
+            ``coef=jnp.fft.rfft2(f)`` via ``(vander*f).real.sum(axis=(-2,-1))``.
+
+        """
+        idx = [0]
+        if (n.size % 2) == 0:
+            idx.append(-1)
+        vander_t = jnp.exp(1j * m * theta[..., jnp.newaxis])
+        vander_z = jnp.exp(1j * n * zeta[..., jnp.newaxis]).at[..., idx].divide(2) * 2
+        vander = vander_t[..., jnp.newaxis] * vander_z[..., jnp.newaxis, :]
+        return vander
 
     def evaluate(
         self, nodes, derivatives=np.array([0, 0, 0]), modes=None, unique=False
@@ -584,18 +621,6 @@ class DoubleFourierSeries(_Basis):
             toroidal = toroidal[zoutidx][:, noutidx]
 
         return poloidal * toroidal
-
-    def _evaluate_complex_vander(self, nodes):
-        """Can dot this against rfft output."""
-        r, t, z = nodes.T
-        m, n = self._modes
-        idx = [0]
-        if (n.size % 2) == 0:
-            idx.append(-1)
-        vander_t = jnp.exp(1j * m * t[..., jnp.newaxis])
-        vander_z = jnp.exp(1j * n * z[..., jnp.newaxis]).at[..., idx].divide(2) * 2
-        vander = vander_t[..., jnp.newaxis] * vander_z[..., jnp.newaxis, :]
-        return vander.reshape(nodes.shape[0], -1)
 
     def change_resolution(self, M, N, NFP=None, sym=None):
         """Change resolution of the basis to the given resolutions.

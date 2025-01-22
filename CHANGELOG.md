@@ -3,6 +3,7 @@ Changelog
 
 New Features
 
+- Enable tracking multiple fieldlines in ``Bounce2D``.
 - Bounce integral methods with ``desc.integrals.Bounce2D``.
 - Effective ripple ``desc.objectives.EffectiveRipple`` and Gamma_c ``desc.objectives.Gamma_c`` optimization objectives.
 - See GitHub pull requests [#1003](https://github.com/PlasmaControl/DESC/pull/1003), [#1042](https://github.com/PlasmaControl/DESC/pull/1042), [#1119](https://github.com/PlasmaControl/DESC/pull/1119), and [#1290](https://github.com/PlasmaControl/DESC/pull/1290) for more details.
@@ -13,10 +14,10 @@ New Features
 - ``desc.objectives.Omnigenity`` is now vectorized and able to optimize multiple surfaces at the same time. Previously it was required to use a different objective for each surface.
 - Adds a new objective ``desc.objectives.MirrorRatio`` for targeting a particular mirror ratio on each flux surface, for either an ``Equilibrium`` or ``OmnigenousField``.
 - Adds the output quantities ``wb`` and ``wp`` to ``VMECIO.save``.
-- Adds ``Rp_lmn``, ``Zp_lmn`` and ``Lp_lmn`` atributes to the ``Equilibrium`` class. They are optimizable parameters will be used if users tries to solve equilibrium problem with fixed Poincare section boundary condition.
+- Changes hessian computation to use chunked ``jacfwd`` and ``jacrev``, allowing ``jac_chunk_size`` to now reduce hessian memory usage as well.
+- - Adds ``Rp_lmn``, ``Zp_lmn`` and ``Lp_lmn`` atributes to the ``Equilibrium`` class. They are optimizable parameters will be used if users tries to solve equilibrium problem with fixed Poincare section boundary condition.
 - Adds option to solve equilibrium problem using fixed Poincare cross-section boundary condition. Adds a new helper function to ``desc.objectives.getters`` called ``get_fixed_xsection_constraints`` which will automatically adds the required ``FixSectionR``, ``FixSectionZ`` adn optionally ``FixSectionLambda`` (if the argument ``fix_lambda=True`` default, it doesn't add it if set to ``fix_lambda=False``).
 - Adds ``L_lmn`` and ``L_basis`` atributes to the ``ZernikeRZToroidalSection`` class.
-
 
 Bug Fixes
 
@@ -46,6 +47,7 @@ New Features
 - Allows ``ToroidalFlux`` objective to accept ``FourierRZToroidalSurface`` so it can be used to specify the toroidal flux through a QFM surface.
 - Adds ``eq_fixed`` flag to ``ToroidalFlux`` to allow for the equilibrium/QFM surface to vary during optimization, useful for single-stage optimizations.
 - Adds tutorial notebook showcasing QFM surface capability.
+- Add ``desc.coils.initialize_modular_coils`` and ``desc.coils.initialize_saddle_coils`` for creating an initial guess for stage 2 optimization.
 - Adds ``rotate_zeta`` function to ``desc.compat`` to rotate an ``Equilibrium`` around Z axis.
 
 

@@ -174,7 +174,7 @@ class VMECIO:
         file.close()
 
         # initialize Equilibrium
-        eq = Equilibrium(**inputs, check_orientation=False)
+        eq = Equilibrium(**inputs, check_orientation=False, ensure_nested=False)
 
         # R
         m, n, R_mn = ptolemy_identity_fwd(xm, xn, s=rmns, c=rmnc)

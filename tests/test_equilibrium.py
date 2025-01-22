@@ -465,3 +465,15 @@ def test_backward_compatible_load_and_resolve():
     f_obj = ForceBalance(eq=eq)
     obj = ObjectiveFunction(f_obj, use_jit=False)
     eq.solve(maxiter=1, objective=obj)
+
+
+@pytest.mark.unit
+def test_assigning_profile_iota_current():
+    """Test assigning current to iota-constrained eq and vice-versa."""
+    eq = get("HELIOTRON")  # iota-constrained
+    with pytest.warns(UserWarning, match="existing rotational"):
+        eq.current = PowerSeriesProfile()
+    assert eq.iota is None
+    with pytest.warns(UserWarning, match="existing toroidal"):
+        eq.iota = PowerSeriesProfile()
+    assert eq.current is None

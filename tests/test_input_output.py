@@ -570,9 +570,10 @@ def test_ascii_io(tmpdir_factory):
     tmpdir = tmpdir_factory.mktemp("desc_inputs")
     tmp_path = tmpdir.join("solovev_test.txt")
     eq1 = desc.examples.get("DSHAPE_CURRENT")
-    eq1.iota = eq1.get_profile("iota", grid=LinearGrid(30, 16, 0)).to_powerseries(
-        sym=True
-    )
+    with pytest.warns(UserWarning, match="existing toroidal current"):
+        eq1.iota = eq1.get_profile("iota", grid=LinearGrid(30, 16, 0)).to_powerseries(
+            sym=True
+        )
     write_ascii(tmp_path, eq1)
     with pytest.warns(UserWarning, match="not an even power series"):
         eq2 = read_ascii(tmp_path)

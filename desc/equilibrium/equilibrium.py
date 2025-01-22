@@ -1786,7 +1786,15 @@ class Equilibrium(IOAble, Optimizable):
 
     @iota.setter
     def iota(self, new):
+        warnif(
+            self.current is not None,
+            UserWarning,
+            "Setting rotational transform profile on an equilibrium "
+            + "with fixed toroidal current, removing existing toroidal"
+            " current profile.",
+        )
         self._iota = parse_profile(new, "iota")
+        self._current = None
 
     @optimizable_parameter
     @property
@@ -1799,7 +1807,7 @@ class Equilibrium(IOAble, Optimizable):
         errorif(
             self.iota is None,
             ValueError,
-            "Attempt to set rotational transform on an equilibrium"
+            "Attempt to set parameters of rotational transform on an equilibrium"
             + "with fixed toroidal current",
         )
         self.iota.params = i_l
@@ -1811,7 +1819,15 @@ class Equilibrium(IOAble, Optimizable):
 
     @current.setter
     def current(self, new):
+        warnif(
+            self.iota is not None,
+            UserWarning,
+            "Setting toroidal current profile on an equilibrium "
+            + "with fixed rotational transform, removing existing rotational"
+            " transform profile.",
+        )
         self._current = parse_profile(new, "current")
+        self._iota = None
 
     @optimizable_parameter
     @property
@@ -1824,7 +1840,7 @@ class Equilibrium(IOAble, Optimizable):
         errorif(
             self.current is None,
             ValueError,
-            "Attempt to set toroidal current on an equilibrium with "
+            "Attempt to set parameters of toroidal current on an equilibrium with "
             + "fixed rotational transform",
         )
         self.current.params = c_l

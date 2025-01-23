@@ -2482,7 +2482,7 @@ class OmnigenousField(Optimizable, IOAble):
         nodes = np.array([rho, np.zeros_like(rho), np.zeros_like(rho)]).T
 
         transform_fwd = self.B_basis.evaluate(nodes)
-        transform_rev = scipy.linalg.pinv(transform_fwd)
+        transform_rev = jnp.linalg.pinv(transform_fwd)
         B_old = transform_fwd @ self.B_lm.reshape((old_L_B + 1, -1))
 
         eta_old = np.linspace(0, jnp.pi / 2, num=B_old.shape[-1])

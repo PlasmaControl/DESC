@@ -4,13 +4,12 @@ import numpy as np
 from interpax import CubicSpline, PPoly
 from matplotlib import pyplot as plt
 
-from desc.backend import dct, jnp
+from desc.backend import dct, jnp, rfft2
 from desc.integrals._interp_utils import (
     cheb_from_dct,
     cheb_pts,
     idct_non_uniform,
     interp1d_vec,
-    interp_rfft2,
     irfft2_non_uniform,
     polyroot_vec,
     polyval_vec,
@@ -575,24 +574,11 @@ def interp_fft_to_argmin(
     argmin = jnp.argmin(where, axis=-1, keepdims=True)
 
     theta = T.eval1d(ext)
-    if is_fourier:
-        h = irfft2_non_uniform(
-            theta,
-            ext,
-            h[..., jnp.newaxis, :, :],
-            M,
-            N,
-            domain1=(0, 2 * jnp.pi / NFP),
-            axes=(-1, -2),
-        )
-    else:
-        h = interp_rfft2(
-            theta,
-            ext,
-            h[..., jnp.newaxis, :, :],
-            domain1=(0, 2 * jnp.pi / NFP),
-            axes=(-1, -2),
-        )
+    if not is_fourier:
+        h = rfft2(h, norm="forward")
+    h = irfft2_non_uniform(
+        theta, ext, h[..., jnp.newaxis, :, :], M, N, domain1=(0, 2 * jnp.pi / NFP)
+    )
     if z1.ndim == h.ndim + 1:
         h = h[jnp.newaxis]  # to broadcast with num pitch axis
     # add axis to broadcast with num well axis
@@ -750,7 +736,6 @@ def chebyshev(n0, n1, NFP, T, f, Y):
         n0=n0,
         n1=n1,
         domain1=(0, 2 * jnp.pi / NFP),
-        axes=(-1, -2),
     ).reshape(*T.cheb.shape[:-1], Y)
     f = PiecewiseChebyshevSeries(cheb_from_dct(dct(f, type=2, axis=-1)) / Y, T.domain)
     return f
@@ -809,7 +794,6 @@ def cubic_spline(n0, n1, NFP, T, f, Y, check=False):
             n0=n0,
             n1=n1,
             domain1=(0, 2 * jnp.pi / NFP),
-            axes=(-1, -2),
         ),
         axis=-1,
         check=check,

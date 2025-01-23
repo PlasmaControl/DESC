@@ -22,9 +22,10 @@ from desc.integrals._interp_utils import (
     idct_non_uniform,
     interp1d_Hermite_vec,
     interp1d_vec,
-    interp_rfft2,
     irfft2_non_uniform,
     polyder_vec,
+    rfft2_modes,
+    rfft2_vander,
 )
 from desc.integrals.basis import FourierChebyshevSeries, PiecewiseChebyshevSeries
 from desc.integrals.quad_utils import (
@@ -113,6 +114,10 @@ def _swap_shape(f):
     """
     assert f.ndim <= 4
     return jnp.swapaxes(f, 0, -2)
+
+
+def _transform(vander, c):
+    return (vander * c[..., jnp.newaxis, :, :]).real.sum(axis=(-2, -1))
 
 
 default_quad = get_quadrature(
@@ -228,7 +233,8 @@ class Bounce2D(Bounce):
         Default is false.
     is_fourier : bool
         If true, then it is assumed that ``data`` holds Fourier transforms
-        as returned by ``Bounce2D.fourier``. Default is false.
+        as returned by ``Bounce2D.fourier`` and ``data["iota"]`` has shape
+        ``(grid.num_rho,)`` or is a scalar. Default is false.
     check : bool
         Flag for debugging. Must be false for JAX transformations.
     spline : bool
@@ -308,9 +314,11 @@ class Bounce2D(Bounce):
         """Returns an object to compute bounce integrals."""
         assert grid.can_fft2
         is_reshaped = is_reshaped or is_fourier
-        self._M = grid.num_theta
-        self._N = grid.num_zeta
         self._NFP = grid.NFP
+        self._n_rfft = grid.num_zeta
+        self._modes_fft, self._modes_rfft = rfft2_modes(
+            grid.num_theta, grid.num_zeta, domain_rfft=(0, 2 * jnp.pi / grid.NFP)
+        )
         self._x, self._w = get_quadrature(quad, automorphism)
 
         self._c = {
@@ -333,8 +341,8 @@ class Bounce2D(Bounce):
         Y_B = setdefault(Y_B, theta.shape[-1] * 2)
         if spline:
             self._c["B(z)"], self._c["knots"] = cubic_spline(
-                self._M,
-                self._N,
+                self._modes_fft.size,
+                self._n_rfft,
                 self._NFP,
                 self._c["T(z)"],
                 self._c["|B|"],
@@ -343,8 +351,8 @@ class Bounce2D(Bounce):
             )
         else:
             self._c["B(z)"] = chebyshev(
-                self._M,
-                self._N,
+                self._modes_fft.size,
+                self._n_rfft,
                 self._NFP,
                 self._c["T(z)"],
                 self._c["|B|"],
@@ -384,12 +392,12 @@ class Bounce2D(Bounce):
         Returns
         -------
         a : jnp.ndarray
-            Shape (..., M // 2 + 1, N)
+            Shape (..., M, N // 2 + 1)
             Complex coefficients of 2D real FFT of ``f``.
 
         """
-        # real fft over poloidal since usually M > N
-        return rfft2(f, axes=(-1, -2), norm="forward")
+        # real fft done in toroidal direction since usually M > N
+        return rfft2(f, norm="forward")
 
     # TODO (#1034): Pass in the previous
     #  θ(α, ζ) coordinates as an initial guess for the next coordinate mapping.
@@ -645,6 +653,9 @@ class Bounce2D(Bounce):
         elif isinstance(names, str):
             names = [names]
 
+        if not is_fourier:
+            data = {name: Bounce2D.fourier(data[name]) for name in names}
+
         if points is None:
             points = self.points(pitch_inv)
 
@@ -659,15 +670,12 @@ class Bounce2D(Bounce):
             names,
             _swap_shape(points[0]),
             _swap_shape(points[1]),
-            is_fourier,
             check,
             plot,
         )
         return result[0] if len(result) == 1 else result
 
-    def _integrate(
-        self, x, w, integrand, pitch, data, names, z1, z2, is_fourier, check, plot
-    ):
+    def _integrate(self, x, w, integrand, pitch, data, names, z1, z2, check, plot):
         # num pitch, num alpha, num rho, num well, num quad
         shape = [*z1.shape, x.size]
         # ζ ∈ ℝ and θ ∈ ℝ coordinates of quadrature points
@@ -675,60 +683,26 @@ class Bounce2D(Bounce):
             bijection_from_disc(x, z1[..., jnp.newaxis], z2[..., jnp.newaxis])
         )
         theta = self._c["T(z)"].eval1d(zeta)
-
+        vander = rfft2_vander(
+            theta,
+            zeta,
+            self._modes_fft,
+            self._modes_rfft,
+            self._n_rfft,
+            domain_rfft=(0, 2 * jnp.pi / self._NFP),
+        )
         # Compute |B| from Fourier series instead of spline approximation
         # because integrals are sensitive to |B|. Using the ``polish_points``
         # method should resolve any issues. For now, we integrate with √|1−λB|
         # as justified in doi.org/10.1063/5.0160282.
-        B = irfft2_non_uniform(
-            theta,
-            zeta,
-            self._c["|B|"][..., jnp.newaxis, :, :],
-            self._M,
-            self._N,
-            domain1=(0, 2 * jnp.pi / self._NFP),
-            axes=(-1, -2),
-        )
+        B = _transform(vander, self._c["|B|"])
+
         # Strictly increasing zeta knots enforces dζ > 0.
         # To retain dℓ = |B|/(B⋅∇ζ) dζ > 0 after fixing dζ > 0, we require
         # B⋅∇ζ > 0. This is equivalent to changing the sign of ∇ζ
         # or (∂ℓ/∂ζ)|ρ,a. Recall dζ = ∇ζ⋅dR ⇔ 1 = ∇ζ⋅(e_ζ|ρ,a).
-        dl_dz = B / jnp.abs(
-            irfft2_non_uniform(
-                theta,
-                zeta,
-                self._c["B^zeta"][..., jnp.newaxis, :, :],
-                self._M,
-                self._N,
-                domain1=(0, 2 * jnp.pi / self._NFP),
-                axes=(-1, -2),
-            )
-        )
-
-        if is_fourier:
-            data = {
-                name: irfft2_non_uniform(
-                    theta,
-                    zeta,
-                    data[name][..., jnp.newaxis, :, :],
-                    self._M,
-                    self._N,
-                    domain1=(0, 2 * jnp.pi / self._NFP),
-                    axes=(-1, -2),
-                )
-                for name in names
-            }
-        else:
-            data = {
-                name: interp_rfft2(
-                    theta,
-                    zeta,
-                    data[name][..., jnp.newaxis, :, :],
-                    domain1=(0, 2 * jnp.pi / self._NFP),
-                    axes=(-1, -2),
-                )
-                for name in names
-            }
+        dl_dz = B / jnp.abs(_transform(vander, self._c["B^zeta"]))
+        data = {name: _transform(vander, data[name]) for name in names}
         data["theta"] = theta
         data["zeta"] = zeta
         cov = grad_bijection_from_disc(z1, z2)
@@ -792,8 +766,8 @@ class Bounce2D(Bounce):
                 self._c["B(z)"],
                 polyder_vec(self._c["B(z)"]),
                 is_fourier,
-                self._M,
-                self._N,
+                self._modes_fft.size,
+                self._n_rfft,
             )
         )
 
@@ -844,10 +818,9 @@ class Bounce2D(Bounce):
                 theta,
                 zeta,
                 self._c["B^zeta"][..., jnp.newaxis, :, :],
-                self._M,
-                self._N,
+                self._modes_fft.size,
+                self._n_rfft,
                 domain1=(0, 2 * jnp.pi / self._NFP),
-                axes=(-1, -2),
             )
         ).reshape(*shape[:-1], self._c["T(z)"].X, w.size)
         # Simple mean over α because when the toroidal angle extends

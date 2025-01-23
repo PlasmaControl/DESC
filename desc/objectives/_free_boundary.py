@@ -379,7 +379,7 @@ class BoundaryError(_Objective):
     loop : bool
         If True, evaluate integral using loops, as opposed to vmap. Slower, but uses
         less memory.
-    st : int
+    sz : int
         Hyperparameter for the singular integration scheme.
         ``sz`` is roughly equal to the size of the local singular grid with
         respect to the global grid. More precisely the local singular grid

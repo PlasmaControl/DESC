@@ -683,13 +683,14 @@ class TestSingularities:
         h_t = 2 * np.pi / grid.num_theta
         h_z = 2 * np.pi / grid.num_zeta / grid.NFP
 
-        s = 3
+        st = 3
+        sz = 5
         q = 4
         r, w, _, _ = _get_quadrature_nodes(q)
-        dt = s / 2 * h_t * r * np.sin(w)
-        dz = s / 2 * h_z * r * np.cos(w)
+        dt = st / 2 * h_t * r * np.sin(w)
+        dz = sz / 2 * h_z * r * np.cos(w)
 
-        interp = interpolator(grid, grid, s, s, q)
+        interp = interpolator(grid, grid, st, sz, q)
         theta = grid.nodes[:, 1]
         zeta = grid.nodes[:, 2]
         f = _f_2d(theta, zeta)

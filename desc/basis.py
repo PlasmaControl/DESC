@@ -507,57 +507,6 @@ class DoubleFourierSeries(_Basis):
         z = np.zeros_like(m)
         return np.array([z, m, n]).T
 
-    @staticmethod
-    def complex_modes(m, n, NFP):
-        """Modes for complex exponential basis for real Fourier transform.
-
-        Parameters
-        ----------
-        m : int
-            Maximum poloidal resolution. Note this is ``2*M+1``.
-        n : int
-            Maximum toroidal resolution. Note this is ``2*N+1``.
-        NFP : int
-            Number of field periods.
-
-        Returns
-        -------
-        m, n : jnp.ndarray
-            Poloidal and toroidal Fourier modes.
-
-        """
-        m = jnp.fft.fftfreq(m, d=1 / m).astype(int)
-        n = jnp.fft.rfftfreq(n, d=1 / (n * NFP)).astype(int)
-        return m, n
-
-    @staticmethod
-    def complex_vander(theta, zeta, m, n):
-        """Return Vandermonde matrix for complex Fourier modes.
-
-        Parameters
-        ----------
-        theta, zeta : jnp.ndarray
-            Poloidal and toroidal coordinates to evaluate Vandermonde matrix.
-        m, n : jnp.ndarray
-            Poloidal and toroidal Fourier modes.
-            See ``DoubleFourierSeries.complex_modes``.
-
-        Returns
-        -------
-        vander : jnp.ndarray
-            Shape (..., m.size, n.size).
-            Vandermonde matrix to evaluate Fourier coefficients
-            ``coef=jnp.fft.rfft2(f)`` via ``(vander*coef).real.sum(axis=(-2,-1))``.
-
-        """
-        idx = [0]
-        if (n.size % 2) == 0:
-            idx.append(-1)
-        vander_t = jnp.exp(1j * m * theta[..., jnp.newaxis])
-        vander_z = jnp.exp(1j * n * zeta[..., jnp.newaxis]).at[..., idx].divide(2) * 2
-        vander = vander_t[..., jnp.newaxis] * vander_z[..., jnp.newaxis, :]
-        return vander
-
     def evaluate(
         self, nodes, derivatives=np.array([0, 0, 0]), modes=None, unique=False
     ):

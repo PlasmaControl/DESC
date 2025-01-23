@@ -8,10 +8,10 @@ from interpax import fft_interp2d
 from scipy.constants import mu_0
 
 from desc.backend import fori_loop, jnp, rfft2, vmap
-from desc.basis import DoubleFourierSeries
 from desc.batching import batch_map
 from desc.compute.geom_utils import rpz2xyz, rpz2xyz_vec, xyz2rpz_vec
 from desc.grid import LinearGrid
+from desc.integrals._interp_utils import rfft2_modes, rfft2_vander
 from desc.io import IOAble
 from desc.utils import (
     check_posint,
@@ -104,16 +104,44 @@ def _eta(theta, zeta, theta0, zeta0, ht, hz, st, sz):
     return _chi(r)
 
 
-# TODO: Remove this function.
-def _get_default_sq(grid):
+def _get_default_params(grid):
     k = max(min(grid.num_theta, grid.num_zeta * grid.NFP), 2)
     s = k - 1
     q = k // 2 + int(jnp.sqrt(k))
-    return s, q
+    return s, s, q
 
 
-def heuristic_st_sz_q(grid):
-    """Return parameters that define extent of support and quadrature resolution.
+def full_support_params(grid):
+    """Parameters for full support size and quadrature resolution.
+
+    Return parameters such that compact support of singular region is full domain.
+
+    Parameters
+    ----------
+    grid : LinearGrid
+        Grid that can fft2.
+
+    Returns
+    -------
+    st, sz : int
+        Extent of support is an ``st`` × ``sz`` subset
+        of the full domain (θ,ζ) ∈ [0, 2π)² of ``grid``.
+        Subset of ``grid.num_theta`` × ``grid.num_zeta*grid.NFP``.
+    q : int
+        Order of quadrature in radial and azimuthal directions.
+
+    """
+    assert grid.can_fft2
+    Nt = grid.num_theta
+    Nz = grid.num_zeta * grid.NFP
+    st = Nt
+    sz = Nz
+    q = int(1 + (Nt + Nz) / 4 + (Nt * Nz) ** 0.25)
+    return st, sz, q
+
+
+def heuristic_support_params(grid):
+    """Parameters for heuristic support size and heuristic quadrature resolution.
 
     Return parameters following the asymptotic rule of thumb
     in Mahlotora [2], generalized for not square grids.
@@ -138,7 +166,7 @@ def heuristic_st_sz_q(grid):
     Nz = grid.num_zeta * grid.NFP
     st = int(min(1 + jnp.sqrt(Nt), Nt))
     sz = int(min(1 + jnp.sqrt(Nz), Nz))
-    q = int(1 + (Nt + Nz) / 4 + (Nt * Nz) ** 0.25)
+    q = int(1 + (Nt * Nz) ** 0.25)
     return st, sz, q
 
 
@@ -309,9 +337,6 @@ class _BIESTInterpolator(IOAble, ABC):
         """
 
 
-# TODO: Do we want to add new parameter sz after q with default value of st?
-
-
 class FFTInterpolator(_BIESTInterpolator):
     """FFT interpolation operator required for high order singular integration.
 
@@ -395,13 +420,15 @@ class DFTInterpolator(_BIESTInterpolator):
 
     """
 
-    _io_attrs_ = _BIESTInterpolator._io_attrs_ + ["_modes"]
+    _io_attrs_ = _BIESTInterpolator._io_attrs_ + ["_modes_fft", "_modes_rfft"]
 
     def __init__(self, eval_grid, source_grid, st, sz, q, **kwargs):
         st = parse_argname_change(st, kwargs, "s", "st")
         super().__init__(eval_grid, source_grid, st, sz, q)
-        self._modes = DoubleFourierSeries.complex_modes(
-            m=source_grid.num_theta, n=source_grid.num_zeta, NFP=source_grid.NFP
+        self._modes_fft, self._modes_rfft = rfft2_modes(
+            source_grid.num_theta,
+            source_grid.num_zeta,
+            domain_rfft=(0, 2 * jnp.pi / source_grid.NFP),
         )
 
     def fourier(self, f):
@@ -414,12 +441,16 @@ class DFTInterpolator(_BIESTInterpolator):
 
     def vander_polar(self, i):
         """Return Vandermonde matrix for ith polar node."""
-        m, n = self._modes
         theta = self._eval_grid.nodes[:, 1] + self._shift_t[i]
         zeta = self._eval_grid.nodes[:, 2] + self._shift_z[i]
-        return DoubleFourierSeries.complex_vander(theta, zeta, m, n).reshape(
-            self._eval_grid.num_nodes, -1
-        )
+        return rfft2_vander(
+            theta,
+            zeta,
+            self._modes_fft,
+            self._modes_rfft,
+            self._source_grid.num_zeta,
+            domain_rfft=(0, 2 * jnp.pi / self._source_grid.NFP),
+        ).reshape(self._eval_grid.num_nodes, -1)
 
     def __call__(self, f, i, is_fourier=False, *, vander=None):
         """Interpolate data to polar grid points.
@@ -926,16 +957,16 @@ def compute_B_plasma(eq, eval_grid, source_grid=None, normal_only=False):
     data_keys = ["K_vc", "B", "R", "phi", "Z", "e^rho", "n_rho", "|e_theta x e_zeta|"]
     eval_data = eq.compute(data_keys, grid=eval_grid)
     source_data = eq.compute(data_keys, grid=source_grid)
-    s, q = _get_default_sq(source_grid)
+    st, sz, q = _get_default_params(source_grid)
     try:
-        interpolator = FFTInterpolator(eval_grid, source_grid, s, s, q)
+        interpolator = FFTInterpolator(eval_grid, source_grid, st, sz, q)
     except AssertionError as e:
         warnif(
             True,
             msg="Could not build fft interpolator, switching to dft which is slow."
             "\nReason: " + str(e),
         )
-        interpolator = DFTInterpolator(eval_grid, source_grid, s, s, q)
+        interpolator = DFTInterpolator(eval_grid, source_grid, st, sz, q)
     if hasattr(eq.surface, "Phi_mn"):
         source_data["K_vc"] += eq.surface.compute("K", grid=source_grid)["K"]
     Bplasma = virtual_casing_biot_savart(eval_data, source_data, interpolator)

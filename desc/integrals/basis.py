@@ -15,7 +15,6 @@ from desc.integrals._interp_utils import (
     chebroots_vec,
     dct_from_cheb,
     fourier_pts,
-    harmonic,
     idct_non_uniform,
     irfft_non_uniform,
 )
@@ -31,6 +30,7 @@ from desc.utils import (
     setdefault,
     take_mask,
 )
+from desc.vmec_utils import rfft_to_trig
 
 
 @partial(jnp.vectorize, signature="(m),(m)->(m)")
@@ -230,7 +230,7 @@ class FourierChebyshevSeries(IOAble):
         The order of the returned coefficient array
         matches the Vandermonde matrix formed by an outer
         product of Fourier and Chebyshev matrices with order
-        [1, cos(x), ..., cos(kx), sin(kx), ..., sin(x)]
+        [sin(kx), ..., sin(x), 1, cos(x), ..., cos(kx)]
         ⊗ [T₀(y), T₁(y), ..., Tₙ(y)]
 
         When ``self.X`` is even the sin(kx) coefficient is zero and is excluded.
@@ -242,7 +242,7 @@ class FourierChebyshevSeries(IOAble):
             Real valued spectral coefficients for Fourier-Chebyshev series.
 
         """
-        a_mn = harmonic(cheb_from_dct(self._c), self.X, axis=-2)
+        a_mn = rfft_to_trig(cheb_from_dct(self._c), self.X, axis=-2)
         assert a_mn.shape[-2:] == (self.X, self.Y)
         return a_mn
 

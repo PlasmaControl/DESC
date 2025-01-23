@@ -19,7 +19,7 @@ from desc.utils import (
     warnif,
 )
 
-from ..integrals.singularities import _get_default_sq
+from ..integrals.singularities import _get_default_params
 from .normalization import compute_scaling_factors
 
 # TODO: Often eval grid and source grid are the same, so don't recompute
@@ -357,10 +357,15 @@ class BoundaryError(_Objective):
         Equilibrium that will be optimized to satisfy the Objective.
     field : MagneticField
         External field produced by coils.
-    s, q : integer
-        Hyperparameters for singular integration scheme, s is roughly equal to the size
-        of the local singular grid with respect to the global grid, q is the order of
-        integration on the local grid
+    st : int
+        Hyperparameter for the singular integration scheme.
+        ``st`` is roughly equal to the size of the local singular grid with
+        respect to the global grid. More precisely the local singular grid
+        is an ``st`` × ``sz`` subset of the full domain (θ,ζ) ∈ [0, 2π)² of
+        ``source_grid``. That is a subset of
+        ``source_grid.num_theta`` × ``source_grid.num_zeta*source_grid.NFP``.
+    q : int
+        Order of integration on the local singular grid.
     source_grid, eval_grid : Grid, optional
         Collocation grid containing the nodes to evaluate at for source terms for Biot-
         Savart integral and where to evaluate errors. source_grid should not be
@@ -374,6 +379,13 @@ class BoundaryError(_Objective):
     loop : bool
         If True, evaluate integral using loops, as opposed to vmap. Slower, but uses
         less memory.
+    st : int
+        Hyperparameter for the singular integration scheme.
+        ``sz`` is roughly equal to the size of the local singular grid with
+        respect to the global grid. More precisely the local singular grid
+        is an ``st`` × ``sz`` subset of the full domain (θ,ζ) ∈ [0, 2π)² of
+        ``source_grid``. That is a subset of
+        ``source_grid.num_theta`` × ``source_grid.num_zeta*source_grid.NFP``.
 
     """
 
@@ -416,7 +428,7 @@ class BoundaryError(_Objective):
         normalize_target=True,
         loss_function=None,
         deriv_mode="auto",
-        s=None,
+        st=None,
         q=None,
         source_grid=None,
         eval_grid=None,
@@ -425,12 +437,15 @@ class BoundaryError(_Objective):
         loop=True,
         name="Boundary error",
         jac_chunk_size=None,
+        sz=None,
+        **kwargs,
     ):
         if target is None and bounds is None:
             target = 0
         self._source_grid = source_grid
         self._eval_grid = eval_grid
-        self._s = s
+        self._st = parse_argname_change(st, kwargs, "s", "st")
+        self._sz = sz
         self._q = q
         self._field = field
         self._field_grid = field_grid
@@ -502,13 +517,14 @@ class BoundaryError(_Objective):
             ValueError,
             "Source grids for singular integrals must be non-symmetric",
         )
-        s, q = _get_default_sq(source_grid)
-        self._s = setdefault(self._s, s)
+        st, sz, q = _get_default_params(source_grid)
+        self._st = setdefault(self._st, st)
+        self._sz = setdefault(self._sz, sz)
         self._q = setdefault(self._q, q)
 
         try:
             interpolator = FFTInterpolator(
-                eval_grid, source_grid, self._s, self._s, self._q
+                eval_grid, source_grid, self._st, self._sz, self._q
             )
         except AssertionError as e:
             warnif(
@@ -517,7 +533,7 @@ class BoundaryError(_Objective):
                 "\nReason: " + str(e),
             )
             interpolator = DFTInterpolator(
-                eval_grid, source_grid, self._s, self._s, self._q
+                eval_grid, source_grid, self._st, self._sz, self._q
             )
 
         edge_pres = np.max(np.abs(eq.compute("p", grid=eval_grid)["p"]))

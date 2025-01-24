@@ -52,7 +52,7 @@ from .utils import (
     hessian=[False, False, True, True, True, True, True],
     GPU=False,
 )
-def _optimize_scipy_minimize(  # noqa: C901 - FIXME: simplify this
+def _optimize_scipy_minimize(  # noqa: C901
     objective, constraint, x0, method, x_scale, verbose, stoptol, options=None
 ):
     """Wrapper for scipy.optimize.minimize.
@@ -306,7 +306,7 @@ def _optimize_scipy_minimize(  # noqa: C901 - FIXME: simplify this
     hessian=False,
     GPU=False,
 )
-def _optimize_scipy_least_squares(  # noqa: C901 - FIXME: simplify this
+def _optimize_scipy_least_squares(  # noqa: C901
     objective, constraint, x0, method, x_scale, verbose, stoptol, options=None
 ):
     """Wrapper for scipy.optimize.least_squares.
@@ -506,7 +506,7 @@ def _optimize_scipy_least_squares(  # noqa: C901 - FIXME: simplify this
     hessian=[True, False],
     GPU=False,
 )
-def _optimize_scipy_constrained(  # noqa: C901 - FIXME: simplify this
+def _optimize_scipy_constrained(  # noqa: C901
     objective, constraint, x0, method, x_scale, verbose, stoptol, options=None
 ):
     """Wrapper for scipy.optimize.minimize.

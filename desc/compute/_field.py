@@ -13,14 +13,14 @@ from scipy.constants import mu_0
 
 from desc.backend import jnp
 
-from ..integrals import (
+from ..integrals.surface_integral import (
     surface_averages,
     surface_integrals_map,
     surface_max,
     surface_min,
 )
+from ..utils import cross, dot, safediv, safenorm
 from .data_index import register_compute_fun
-from .utils import cross, dot, safediv, safenorm
 
 
 @register_compute_fun(
@@ -74,11 +74,12 @@ def _B_sup_rho(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["psi_r/sqrt(g)", "iota", "lambda_z", "omega_z"],
+    data=["psi_r/sqrt(g)", "iota", "phi_z", "lambda_z"],
 )
 def _B_sup_theta(params, transforms, profiles, data, **kwargs):
+    # Assumes θ = ϑ − λ.
     data["B^theta"] = data["psi_r/sqrt(g)"] * (
-        data["iota"] * data["omega_z"] + data["iota"] - data["lambda_z"]
+        data["iota"] * data["phi_z"] - data["lambda_z"]
     )
     return data
 
@@ -94,12 +95,228 @@ def _B_sup_theta(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["psi_r/sqrt(g)", "iota", "lambda_t", "omega_t"],
+    data=["psi_r/sqrt(g)", "iota", "theta_PEST_t", "omega_t"],
 )
 def _B_sup_zeta(params, transforms, profiles, data, **kwargs):
+    # Assumes ζ = ϕ − ω.
     data["B^zeta"] = data["psi_r/sqrt(g)"] * (
-        -data["iota"] * data["omega_t"] + data["lambda_t"] + 1
+        -data["iota"] * data["omega_t"] + data["theta_PEST_t"]
     )
+    return data
+
+
+@register_compute_fun(
+    name="B^phi",
+    label="B^{\\phi}",
+    units="T \\cdot m^{-1}",
+    units_long="Tesla / meter",
+    description="Contravariant cylindrical toroidal angle component of magnetic field",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["psi_r/sqrt(g)", "phi_z", "theta_PEST_t", "phi_t", "theta_PEST_z"],
+)
+def _B_sup_phi(params, transforms, profiles, data, **kwargs):
+    # Written like this, independent of iota, to enable computing without integration.
+    data["B^phi"] = data["psi_r/sqrt(g)"] * (
+        data["phi_z"] * data["theta_PEST_t"] - data["phi_t"] * data["theta_PEST_z"]
+    )
+    return data
+
+
+@register_compute_fun(
+    name="B^phi_r",
+    label="\\partial_{\\rho} B^{\\phi} |_{\\theta, \\zeta}",
+    units="T \\cdot m^{-1}",
+    units_long="Tesla / meter",
+    description="Contravariant cylindrical toroidal angle component of magnetic field,"
+    " partial derivative wrt ρ in (ρ, θ, ζ) coordinates.",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=[
+        "psi_r/sqrt(g)",
+        "phi_z",
+        "theta_PEST_t",
+        "phi_t",
+        "theta_PEST_z",
+        "(psi_r/sqrt(g))_r",
+        "phi_rz",
+        "theta_PEST_rt",
+        "phi_rt",
+        "theta_PEST_rz",
+    ],
+)
+def _B_sup_phi_r(params, transforms, profiles, data, **kwargs):
+    data["B^phi_r"] = data["(psi_r/sqrt(g))_r"] * (
+        data["phi_z"] * data["theta_PEST_t"] - data["phi_t"] * data["theta_PEST_z"]
+    ) + data["psi_r/sqrt(g)"] * (
+        data["phi_rz"] * data["theta_PEST_t"]
+        + data["phi_z"] * data["theta_PEST_rt"]
+        - data["phi_rt"] * data["theta_PEST_z"]
+        - data["phi_t"] * data["theta_PEST_rz"]
+    )
+    return data
+
+
+@register_compute_fun(
+    name="B^phi_t",
+    label="\\partial_{\\theta} B^{\\phi} |_{\\rho, \\zeta}",
+    units="T \\cdot m^{-1}",
+    units_long="Tesla / meter",
+    description="Contravariant cylindrical toroidal angle component of magnetic field,"
+    " partial derivative wrt θ in (ρ, θ, ζ) coordinates.",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=[
+        "psi_r/sqrt(g)",
+        "phi_z",
+        "theta_PEST_t",
+        "phi_t",
+        "theta_PEST_z",
+        "(psi_r/sqrt(g))_t",
+        "phi_tz",
+        "theta_PEST_tt",
+        "phi_tt",
+        "theta_PEST_tz",
+    ],
+)
+def _B_sup_phi_t(params, transforms, profiles, data, **kwargs):
+    data["B^phi_t"] = data["(psi_r/sqrt(g))_t"] * (
+        data["phi_z"] * data["theta_PEST_t"] - data["phi_t"] * data["theta_PEST_z"]
+    ) + data["psi_r/sqrt(g)"] * (
+        data["phi_tz"] * data["theta_PEST_t"]
+        + data["phi_z"] * data["theta_PEST_tt"]
+        - data["phi_tt"] * data["theta_PEST_z"]
+        - data["phi_t"] * data["theta_PEST_tz"]
+    )
+    return data
+
+
+@register_compute_fun(
+    name="B^phi_z",
+    label="\\partial_{\\zeta} B^{\\phi} |_{\\rho, \\theta}",
+    units="T \\cdot m^{-1}",
+    units_long="Tesla / meter",
+    description="Contravariant cylindrical toroidal angle component of magnetic field,"
+    " partial derivative wrt ζ in (ρ, θ, ζ) coordinates.",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=[
+        "psi_r/sqrt(g)",
+        "phi_z",
+        "theta_PEST_t",
+        "phi_t",
+        "theta_PEST_z",
+        "(psi_r/sqrt(g))_z",
+        "phi_zz",
+        "theta_PEST_tz",
+        "phi_tz",
+        "theta_PEST_zz",
+    ],
+)
+def _B_sup_phi_z(params, transforms, profiles, data, **kwargs):
+    data["B^phi_z"] = data["(psi_r/sqrt(g))_z"] * (
+        data["phi_z"] * data["theta_PEST_t"] - data["phi_t"] * data["theta_PEST_z"]
+    ) + data["psi_r/sqrt(g)"] * (
+        data["phi_zz"] * data["theta_PEST_t"]
+        + data["phi_z"] * data["theta_PEST_tz"]
+        - data["phi_tz"] * data["theta_PEST_z"]
+        - data["phi_t"] * data["theta_PEST_zz"]
+    )
+    return data
+
+
+@register_compute_fun(
+    name="B^phi_v|r,p",
+    label="\\partial_{\\vartheta} B^{\\phi} |_{\\rho, \\phi}",
+    units="T \\cdot m^{-1}",
+    units_long="Tesla / meter",
+    description="Contravariant cylindrical toroidal angle component of magnetic field,"
+    " partial derivative wrt ϑ in (ρ, ϑ, ϕ) coordinates.",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["B^phi_t", "B^phi_z", "theta_PEST_t", "theta_PEST_z", "phi_t", "phi_z"],
+)
+def _B_sup_phi_v_rp(params, transforms, profiles, data, **kwargs):
+    data["B^phi_v|r,p"] = (
+        data["B^phi_t"] * data["phi_z"] - data["B^phi_z"] * data["phi_t"]
+    ) / (data["theta_PEST_t"] * data["phi_z"] - data["theta_PEST_z"] * data["phi_t"])
+    return data
+
+
+@register_compute_fun(
+    name="B^phi_p|r,v",
+    label="\\partial_{\\phi} B^{\\phi} |_{\\rho, \\vartheta}",
+    units="T \\cdot m^{-1}",
+    units_long="Tesla / meter",
+    description="Contravariant cylindrical toroidal angle component of magnetic field,"
+    " partial derivative wrt ϕ in (ρ, ϑ, ϕ) coordinates.",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["B^phi_t", "B^phi_z", "theta_PEST_t", "theta_PEST_z", "phi_t", "phi_z"],
+)
+def _B_sup_phi_p_rv(params, transforms, profiles, data, **kwargs):
+    data["B^phi_p|r,v"] = (
+        data["B^phi_z"] * data["theta_PEST_t"] - data["B^phi_t"] * data["theta_PEST_z"]
+    ) / (data["theta_PEST_t"] * data["phi_z"] - data["theta_PEST_z"] * data["phi_t"])
+    return data
+
+
+@register_compute_fun(
+    name="B^phi_r|v,p",
+    label="\\partial_{\\rho} B^{\\phi} |_{\\vartheta, \\phi}",
+    units="T \\cdot m^{-1}",
+    units_long="Tesla / meter",
+    description="Contravariant cylindrical toroidal angle component of magnetic field,"
+    " partial derivative wrt ρ in (ρ, ϑ, ϕ) coordinates.",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["B^phi_r", "B^phi_v|r,p", "B^phi_p|r,v", "theta_PEST_r", "phi_r"],
+)
+def _B_sup_phi_r_vp(params, transforms, profiles, data, **kwargs):
+    data["B^phi_r|v,p"] = (
+        data["B^phi_r"]
+        - data["B^phi_v|r,p"] * data["theta_PEST_r"]
+        - data["B^phi_p|r,v"] * data["phi_r"]
+    )
+    return data
+
+
+@register_compute_fun(
+    name="|B|_r|v,p",
+    label="\\partial_{\\rho} |\\mathbf{B}| |_{\\vartheta, \\phi}",
+    units="T",
+    units_long="Tesla",
+    description="Magnetic field norm, derivative wrt ρ in (ρ, ϑ, ϕ) coordinates.",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["grad(|B|)", "e_rho|v,p"],
+)
+def _B_norm_r_vp(params, transforms, profiles, data, **kwargs):
+    data["|B|_r|v,p"] = dot(data["grad(|B|)"], data["e_rho|v,p"])
     return data
 
 
@@ -125,7 +342,7 @@ def _B(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="B_R",
-    label="B_{R}",
+    label="B_{R} = \\mathbf{B} \\cdot \\hat{R}",
     units="T",
     units_long="Tesla",
     description="Radial component of magnetic field in lab frame",
@@ -143,7 +360,8 @@ def _B_R(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="B_phi",
-    label="B_{\\phi}",
+    label="B_{\\phi} = \\mathbf{B} \\cdot \\hat{\\phi} "
+    "= \\mathbf{B} \\cdot R^{-1} \\mathbf{e}_{\\phi} |_{R, Z}",
     units="T",
     units_long="Tesla",
     description="Toroidal component of magnetic field in lab frame",
@@ -152,16 +370,16 @@ def _B_R(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["B"],
+    data=["B^phi", "R"],
 )
 def _B_phi(params, transforms, profiles, data, **kwargs):
-    data["B_phi"] = data["B"][:, 1]
+    data["B_phi"] = data["R"] * data["B^phi"]
     return data
 
 
 @register_compute_fun(
     name="B_Z",
-    label="B_{Z}",
+    label="B_{Z} = \\mathbf{B} \\cdot \\hat{Z}",
     units="T",
     units_long="Tesla",
     description="Vertical component of magnetic field in lab frame",
@@ -224,21 +442,18 @@ def _psi_r_over_sqrtg_r(params, transforms, profiles, data, **kwargs):
         "(psi_r/sqrt(g))_r",
         "iota",
         "iota_r",
+        "phi_rz",
+        "phi_z",
         "lambda_rz",
         "lambda_z",
-        "omega_rz",
-        "omega_z",
     ],
 )
 def _B_sup_theta_r(params, transforms, profiles, data, **kwargs):
     data["B^theta_r"] = data["psi_r/sqrt(g)"] * (
-        data["iota"] * data["omega_rz"]
-        + data["iota_r"] * data["omega_z"]
-        + data["iota_r"]
+        data["iota"] * data["phi_rz"]
+        + data["iota_r"] * data["phi_z"]
         - data["lambda_rz"]
-    ) + data["(psi_r/sqrt(g))_r"] * (
-        data["iota"] * data["omega_z"] + data["iota"] - data["lambda_z"]
-    )
+    ) + data["(psi_r/sqrt(g))_r"] * (data["iota"] * data["phi_z"] - data["lambda_z"])
     return data
 
 
@@ -261,8 +476,8 @@ def _B_sup_theta_r(params, transforms, profiles, data, **kwargs):
         "(psi_r/sqrt(g))_r",
         "iota",
         "iota_r",
-        "lambda_rt",
-        "lambda_t",
+        "theta_PEST_rt",
+        "theta_PEST_t",
         "omega_rt",
         "omega_t",
     ],
@@ -271,9 +486,9 @@ def _B_sup_zeta_r(params, transforms, profiles, data, **kwargs):
     data["B^zeta_r"] = data["psi_r/sqrt(g)"] * (
         -data["iota"] * data["omega_rt"]
         - data["iota_r"] * data["omega_t"]
-        + data["lambda_rt"]
+        + data["theta_PEST_rt"]
     ) + data["(psi_r/sqrt(g))_r"] * (
-        -data["iota"] * data["omega_t"] + data["lambda_t"] + 1
+        -data["iota"] * data["omega_t"] + data["theta_PEST_t"]
     )
     return data
 
@@ -352,16 +567,14 @@ def _psi_r_over_sqrtg_t(params, transforms, profiles, data, **kwargs):
         "iota",
         "lambda_tz",
         "lambda_z",
-        "omega_tz",
-        "omega_z",
+        "phi_tz",
+        "phi_z",
     ],
 )
 def _B_sup_theta_t(params, transforms, profiles, data, **kwargs):
     data["B^theta_t"] = data["psi_r/sqrt(g)"] * (
-        data["iota"] * data["omega_tz"] - data["lambda_tz"]
-    ) + data["(psi_r/sqrt(g))_t"] * (
-        data["iota"] * data["omega_z"] + data["iota"] - data["lambda_z"]
-    )
+        data["iota"] * data["phi_tz"] - data["lambda_tz"]
+    ) + data["(psi_r/sqrt(g))_t"] * (data["iota"] * data["phi_z"] - data["lambda_z"])
     return data
 
 
@@ -383,17 +596,17 @@ def _B_sup_theta_t(params, transforms, profiles, data, **kwargs):
         "psi_r/sqrt(g)",
         "(psi_r/sqrt(g))_t",
         "iota",
-        "lambda_t",
-        "lambda_tt",
+        "theta_PEST_t",
+        "theta_PEST_tt",
         "omega_t",
         "omega_tt",
     ],
 )
 def _B_sup_zeta_t(params, transforms, profiles, data, **kwargs):
     data["B^zeta_t"] = data["psi_r/sqrt(g)"] * (
-        -data["iota"] * data["omega_tt"] + data["lambda_tt"]
+        -data["iota"] * data["omega_tt"] + data["theta_PEST_tt"]
     ) + data["(psi_r/sqrt(g))_t"] * (
-        -data["iota"] * data["omega_t"] + data["lambda_t"] + 1
+        -data["iota"] * data["omega_t"] + data["theta_PEST_t"]
     )
     return data
 
@@ -472,16 +685,14 @@ def _psi_r_over_sqrtg_z(params, transforms, profiles, data, **kwargs):
         "iota",
         "lambda_z",
         "lambda_zz",
-        "omega_z",
-        "omega_zz",
+        "phi_z",
+        "phi_zz",
     ],
 )
 def _B_sup_theta_z(params, transforms, profiles, data, **kwargs):
     data["B^theta_z"] = data["psi_r/sqrt(g)"] * (
-        data["iota"] * data["omega_zz"] - data["lambda_zz"]
-    ) + data["(psi_r/sqrt(g))_z"] * (
-        data["iota"] * data["omega_z"] + data["iota"] - data["lambda_z"]
-    )
+        data["iota"] * data["phi_zz"] - data["lambda_zz"]
+    ) + data["(psi_r/sqrt(g))_z"] * (data["iota"] * data["phi_z"] - data["lambda_z"])
     return data
 
 
@@ -503,17 +714,17 @@ def _B_sup_theta_z(params, transforms, profiles, data, **kwargs):
         "psi_r/sqrt(g)",
         "(psi_r/sqrt(g))_z",
         "iota",
-        "lambda_t",
-        "lambda_tz",
+        "theta_PEST_t",
+        "theta_PEST_tz",
         "omega_t",
         "omega_tz",
     ],
 )
 def _B_sup_zeta_z(params, transforms, profiles, data, **kwargs):
     data["B^zeta_z"] = data["psi_r/sqrt(g)"] * (
-        -data["iota"] * data["omega_tz"] + data["lambda_tz"]
+        -data["iota"] * data["omega_tz"] + data["theta_PEST_tz"]
     ) + data["(psi_r/sqrt(g))_z"] * (
-        -data["iota"] * data["omega_t"] + data["lambda_t"] + 1
+        -data["iota"] * data["omega_t"] + data["theta_PEST_t"]
     )
     return data
 
@@ -650,31 +861,28 @@ def _psi_r_over_sqrtg_rr(params, transforms, profiles, data, **kwargs):
         "lambda_rrz",
         "lambda_rz",
         "lambda_z",
-        "omega_rrz",
-        "omega_rz",
-        "omega_z",
+        "phi_rrz",
+        "phi_rz",
+        "phi_z",
     ],
 )
 def _B_sup_theta_rr(params, transforms, profiles, data, **kwargs):
     data["B^theta_rr"] = (
         data["psi_r/sqrt(g)"]
         * (
-            data["iota"] * data["omega_rrz"]
-            + 2 * data["iota_r"] * data["omega_rz"]
-            + data["iota_rr"] * data["omega_z"]
-            + data["iota_rr"]
+            data["iota"] * data["phi_rrz"]
+            + 2 * data["iota_r"] * data["phi_rz"]
+            + data["iota_rr"] * data["phi_z"]
             - data["lambda_rrz"]
         )
         + 2
         * data["(psi_r/sqrt(g))_r"]
         * (
-            data["iota"] * data["omega_rz"]
-            + data["iota_r"] * data["omega_z"]
-            + data["iota_r"]
+            data["iota"] * data["phi_rz"]
+            + data["iota_r"] * data["phi_z"]
             - data["lambda_rz"]
         )
-        + data["(psi_r/sqrt(g))_rr"]
-        * (data["iota"] * data["omega_z"] + data["iota"] - data["lambda_z"])
+        + data["(psi_r/sqrt(g))_rr"] * (data["iota"] * data["phi_z"] - data["lambda_z"])
     )
     return data
 
@@ -700,9 +908,9 @@ def _B_sup_theta_rr(params, transforms, profiles, data, **kwargs):
         "iota",
         "iota_r",
         "iota_rr",
-        "lambda_rrt",
-        "lambda_rt",
-        "lambda_t",
+        "theta_PEST_rrt",
+        "theta_PEST_rt",
+        "theta_PEST_t",
         "omega_rrt",
         "omega_rt",
         "omega_t",
@@ -715,17 +923,17 @@ def _B_sup_zeta_rr(params, transforms, profiles, data, **kwargs):
             data["iota"] * data["omega_rrt"]
             + 2 * data["iota_r"] * data["omega_rt"]
             + data["iota_rr"] * data["omega_t"]
-            - data["lambda_rrt"]
+            - data["theta_PEST_rrt"]
         )
         - 2
         * data["(psi_r/sqrt(g))_r"]
         * (
             data["iota"] * data["omega_rt"]
             + data["iota_r"] * data["omega_t"]
-            - data["lambda_rt"]
+            - data["theta_PEST_rt"]
         )
         + data["(psi_r/sqrt(g))_rr"]
-        * (-data["iota"] * data["omega_t"] + data["lambda_t"] + 1)
+        * (-data["iota"] * data["omega_t"] + data["theta_PEST_t"])
     )
     return data
 
@@ -820,19 +1028,18 @@ def _psi_r_over_sqrtg_tt(params, transforms, profiles, data, **kwargs):
         "lambda_ttz",
         "lambda_tz",
         "lambda_z",
-        "omega_ttz",
-        "omega_tz",
-        "omega_z",
+        "phi_ttz",
+        "phi_tz",
+        "phi_z",
     ],
 )
 def _B_sup_theta_tt(params, transforms, profiles, data, **kwargs):
     data["B^theta_tt"] = (
-        data["psi_r/sqrt(g)"] * (data["iota"] * data["omega_ttz"] - data["lambda_ttz"])
+        data["psi_r/sqrt(g)"] * (data["iota"] * data["phi_ttz"] - data["lambda_ttz"])
         + 2
         * data["(psi_r/sqrt(g))_t"]
-        * (data["iota"] * data["omega_tz"] - data["lambda_tz"])
-        + data["(psi_r/sqrt(g))_tt"]
-        * (data["iota"] * data["omega_z"] + data["iota"] - data["lambda_z"])
+        * (data["iota"] * data["phi_tz"] - data["lambda_tz"])
+        + data["(psi_r/sqrt(g))_tt"] * (data["iota"] * data["phi_z"] - data["lambda_z"])
     )
     return data
 
@@ -856,9 +1063,9 @@ def _B_sup_theta_tt(params, transforms, profiles, data, **kwargs):
         "(psi_r/sqrt(g))_t",
         "(psi_r/sqrt(g))_tt",
         "iota",
-        "lambda_t",
-        "lambda_tt",
-        "lambda_ttt",
+        "theta_PEST_t",
+        "theta_PEST_tt",
+        "theta_PEST_ttt",
         "omega_t",
         "omega_tt",
         "omega_ttt",
@@ -866,12 +1073,13 @@ def _B_sup_theta_tt(params, transforms, profiles, data, **kwargs):
 )
 def _B_sup_zeta_tt(params, transforms, profiles, data, **kwargs):
     data["B^zeta_tt"] = (
-        -data["psi_r/sqrt(g)"] * (data["iota"] * data["omega_ttt"] - data["lambda_ttt"])
+        -data["psi_r/sqrt(g)"]
+        * (data["iota"] * data["omega_ttt"] - data["theta_PEST_ttt"])
         - 2
         * data["(psi_r/sqrt(g))_t"]
-        * (data["iota"] * data["omega_tt"] - data["lambda_tt"])
+        * (data["iota"] * data["omega_tt"] - data["theta_PEST_tt"])
         + data["(psi_r/sqrt(g))_tt"]
-        * (-data["iota"] * data["omega_t"] + data["lambda_t"] + 1)
+        * (-data["iota"] * data["omega_t"] + data["theta_PEST_t"])
     )
     return data
 
@@ -966,19 +1174,18 @@ def _psi_r_over_sqrtg_zz(params, transforms, profiles, data, **kwargs):
         "lambda_z",
         "lambda_zz",
         "lambda_zzz",
-        "omega_z",
-        "omega_zz",
-        "omega_zzz",
+        "phi_z",
+        "phi_zz",
+        "phi_zzz",
     ],
 )
 def _B_sup_theta_zz(params, transforms, profiles, data, **kwargs):
     data["B^theta_zz"] = (
-        data["psi_r/sqrt(g)"] * (data["iota"] * data["omega_zzz"] - data["lambda_zzz"])
+        data["psi_r/sqrt(g)"] * (data["iota"] * data["phi_zzz"] - data["lambda_zzz"])
         + 2
         * data["(psi_r/sqrt(g))_z"]
-        * (data["iota"] * data["omega_zz"] - data["lambda_zz"])
-        + data["(psi_r/sqrt(g))_zz"]
-        * (data["iota"] * data["omega_z"] + data["iota"] - data["lambda_z"])
+        * (data["iota"] * data["phi_zz"] - data["lambda_zz"])
+        + data["(psi_r/sqrt(g))_zz"] * (data["iota"] * data["phi_z"] - data["lambda_z"])
     )
     return data
 
@@ -1002,9 +1209,9 @@ def _B_sup_theta_zz(params, transforms, profiles, data, **kwargs):
         "(psi_r/sqrt(g))_z",
         "(psi_r/sqrt(g))_zz",
         "iota",
-        "lambda_t",
-        "lambda_tz",
-        "lambda_tzz",
+        "theta_PEST_t",
+        "theta_PEST_tz",
+        "theta_PEST_tzz",
         "omega_t",
         "omega_tz",
         "omega_tzz",
@@ -1012,12 +1219,13 @@ def _B_sup_theta_zz(params, transforms, profiles, data, **kwargs):
 )
 def _B_sup_zeta_zz(params, transforms, profiles, data, **kwargs):
     data["B^zeta_zz"] = (
-        -data["psi_r/sqrt(g)"] * (data["iota"] * data["omega_tzz"] - data["lambda_tzz"])
+        -data["psi_r/sqrt(g)"]
+        * (data["iota"] * data["omega_tzz"] - data["theta_PEST_tzz"])
         - 2
         * data["(psi_r/sqrt(g))_z"]
-        * (data["iota"] * data["omega_tz"] - data["lambda_tz"])
+        * (data["iota"] * data["omega_tz"] - data["theta_PEST_tz"])
         + data["(psi_r/sqrt(g))_zz"]
-        * (-data["iota"] * data["omega_t"] + data["lambda_t"] + 1)
+        * (-data["iota"] * data["omega_t"] + data["theta_PEST_t"])
     )
     return data
 
@@ -1120,31 +1328,29 @@ def _psi_r_over_sqrtg_rt(params, transforms, profiles, data, **kwargs):
         "lambda_rz",
         "lambda_tz",
         "lambda_z",
-        "omega_rtz",
-        "omega_rz",
-        "omega_tz",
-        "omega_z",
+        "phi_rtz",
+        "phi_rz",
+        "phi_tz",
+        "phi_z",
     ],
 )
 def _B_sup_theta_rt(params, transforms, profiles, data, **kwargs):
     data["B^theta_rt"] = (
         data["psi_r/sqrt(g)"]
         * (
-            data["iota"] * data["omega_rtz"]
-            + data["iota_r"] * data["omega_tz"]
+            data["iota"] * data["phi_rtz"]
+            + data["iota_r"] * data["phi_tz"]
             - data["lambda_rtz"]
         )
         + data["(psi_r/sqrt(g))_r"]
-        * (data["iota"] * data["omega_tz"] - data["lambda_tz"])
+        * (data["iota"] * data["phi_tz"] - data["lambda_tz"])
         + data["(psi_r/sqrt(g))_t"]
         * (
-            data["iota"] * data["omega_rz"]
-            + data["iota_r"] * data["omega_z"]
-            + data["iota_r"]
+            data["iota"] * data["phi_rz"]
+            + data["iota_r"] * data["phi_z"]
             - data["lambda_rz"]
         )
-        + data["(psi_r/sqrt(g))_rt"]
-        * (data["iota"] * data["omega_z"] + data["iota"] - data["lambda_z"])
+        + data["(psi_r/sqrt(g))_rt"] * (data["iota"] * data["phi_z"] - data["lambda_z"])
     )
     return data
 
@@ -1170,10 +1376,10 @@ def _B_sup_theta_rt(params, transforms, profiles, data, **kwargs):
         "(psi_r/sqrt(g))_t",
         "iota",
         "iota_r",
-        "lambda_rt",
-        "lambda_rtt",
-        "lambda_t",
-        "lambda_tt",
+        "theta_PEST_rt",
+        "theta_PEST_rtt",
+        "theta_PEST_t",
+        "theta_PEST_tt",
         "omega_rt",
         "omega_rtt",
         "omega_t",
@@ -1186,18 +1392,18 @@ def _B_sup_zeta_rt(params, transforms, profiles, data, **kwargs):
         * (
             data["iota"] * data["omega_rtt"]
             + data["iota_r"] * data["omega_tt"]
-            - data["lambda_rtt"]
+            - data["theta_PEST_rtt"]
         )
         - data["(psi_r/sqrt(g))_r"]
-        * (data["iota"] * data["omega_tt"] - data["lambda_tt"])
+        * (data["iota"] * data["omega_tt"] - data["theta_PEST_tt"])
         - data["(psi_r/sqrt(g))_t"]
         * (
             data["iota"] * data["omega_rt"]
             + data["iota_r"] * data["omega_t"]
-            - data["lambda_rt"]
+            - data["theta_PEST_rt"]
         )
         + data["(psi_r/sqrt(g))_rt"]
-        * (-data["iota"] * data["omega_t"] + data["lambda_t"] + 1)
+        * (-data["iota"] * data["omega_t"] + data["theta_PEST_t"])
     )
     return data
 
@@ -1307,21 +1513,20 @@ def _psi_r_over_sqrtg_tz(params, transforms, profiles, data, **kwargs):
         "lambda_tzz",
         "lambda_z",
         "lambda_zz",
-        "omega_tz",
-        "omega_tzz",
-        "omega_z",
-        "omega_zz",
+        "phi_tz",
+        "phi_tzz",
+        "phi_z",
+        "phi_zz",
     ],
 )
 def _B_sup_theta_tz(params, transforms, profiles, data, **kwargs):
     data["B^theta_tz"] = (
-        data["psi_r/sqrt(g)"] * (data["iota"] * data["omega_tzz"] - data["lambda_tzz"])
+        data["psi_r/sqrt(g)"] * (data["iota"] * data["phi_tzz"] - data["lambda_tzz"])
         + data["(psi_r/sqrt(g))_t"]
-        * (data["iota"] * data["omega_zz"] - data["lambda_zz"])
+        * (data["iota"] * data["phi_zz"] - data["lambda_zz"])
         + data["(psi_r/sqrt(g))_z"]
-        * (data["iota"] * data["omega_tz"] - data["lambda_tz"])
-        + data["(psi_r/sqrt(g))_tz"]
-        * (data["iota"] * data["omega_z"] + data["iota"] - data["lambda_z"])
+        * (data["iota"] * data["phi_tz"] - data["lambda_tz"])
+        + data["(psi_r/sqrt(g))_tz"] * (data["iota"] * data["phi_z"] - data["lambda_z"])
     )
     return data
 
@@ -1346,10 +1551,10 @@ def _B_sup_theta_tz(params, transforms, profiles, data, **kwargs):
         "(psi_r/sqrt(g))_tz",
         "(psi_r/sqrt(g))_z",
         "iota",
-        "lambda_t",
-        "lambda_tt",
-        "lambda_ttz",
-        "lambda_tz",
+        "theta_PEST_t",
+        "theta_PEST_tt",
+        "theta_PEST_ttz",
+        "theta_PEST_tz",
         "omega_t",
         "omega_tt",
         "omega_ttz",
@@ -1358,13 +1563,14 @@ def _B_sup_theta_tz(params, transforms, profiles, data, **kwargs):
 )
 def _B_sup_zeta_tz(params, transforms, profiles, data, **kwargs):
     data["B^zeta_tz"] = (
-        -data["psi_r/sqrt(g)"] * (data["iota"] * data["omega_ttz"] - data["lambda_ttz"])
+        -data["psi_r/sqrt(g)"]
+        * (data["iota"] * data["omega_ttz"] - data["theta_PEST_ttz"])
         - data["(psi_r/sqrt(g))_t"]
-        * (data["iota"] * data["omega_tz"] - data["lambda_tz"])
+        * (data["iota"] * data["omega_tz"] - data["theta_PEST_tz"])
         - data["(psi_r/sqrt(g))_z"]
-        * (data["iota"] * data["omega_tt"] - data["lambda_tt"])
+        * (data["iota"] * data["omega_tt"] - data["theta_PEST_tt"])
         + data["(psi_r/sqrt(g))_tz"]
-        * (-data["iota"] * data["omega_t"] + data["lambda_t"] + 1)
+        * (-data["iota"] * data["omega_t"] + data["theta_PEST_t"])
     )
     return data
 
@@ -1473,31 +1679,29 @@ def _psi_r_over_sqrtg_rz(params, transforms, profiles, data, **kwargs):
         "lambda_rzz",
         "lambda_z",
         "lambda_zz",
-        "omega_rz",
-        "omega_rzz",
-        "omega_z",
-        "omega_zz",
+        "phi_rz",
+        "phi_rzz",
+        "phi_z",
+        "phi_zz",
     ],
 )
 def _B_sup_theta_rz(params, transforms, profiles, data, **kwargs):
     data["B^theta_rz"] = (
         data["psi_r/sqrt(g)"]
         * (
-            data["iota"] * data["omega_rzz"]
-            + data["iota_r"] * data["omega_zz"]
+            data["iota"] * data["phi_rzz"]
+            + data["iota_r"] * data["phi_zz"]
             - data["lambda_rzz"]
         )
         + data["(psi_r/sqrt(g))_r"]
-        * (data["iota"] * data["omega_zz"] - data["lambda_zz"])
+        * (data["iota"] * data["phi_zz"] - data["lambda_zz"])
         + data["(psi_r/sqrt(g))_z"]
         * (
-            data["iota"] * data["omega_rz"]
-            + data["iota_r"] * data["omega_z"]
-            + data["iota_r"]
+            data["iota"] * data["phi_rz"]
+            + data["iota_r"] * data["phi_z"]
             - data["lambda_rz"]
         )
-        + data["(psi_r/sqrt(g))_rz"]
-        * (data["iota"] * data["omega_z"] + data["iota"] - data["lambda_z"])
+        + data["(psi_r/sqrt(g))_rz"] * (data["iota"] * data["phi_z"] - data["lambda_z"])
     )
     return data
 
@@ -1523,10 +1727,10 @@ def _B_sup_theta_rz(params, transforms, profiles, data, **kwargs):
         "(psi_r/sqrt(g))_z",
         "iota",
         "iota_r",
-        "lambda_rt",
-        "lambda_rtz",
-        "lambda_t",
-        "lambda_tz",
+        "theta_PEST_rt",
+        "theta_PEST_rtz",
+        "theta_PEST_t",
+        "theta_PEST_tz",
         "omega_rt",
         "omega_rtz",
         "omega_t",
@@ -1539,18 +1743,18 @@ def _B_sup_zeta_rz(params, transforms, profiles, data, **kwargs):
         * (
             data["iota"] * data["omega_rtz"]
             + data["iota_r"] * data["omega_tz"]
-            - data["lambda_rtz"]
+            - data["theta_PEST_rtz"]
         )
         - data["(psi_r/sqrt(g))_r"]
-        * (data["iota"] * data["omega_tz"] - data["lambda_tz"])
+        * (data["iota"] * data["omega_tz"] - data["theta_PEST_tz"])
         - data["(psi_r/sqrt(g))_z"]
         * (
             data["iota"] * data["omega_rt"]
             + data["iota_r"] * data["omega_t"]
-            - data["lambda_rt"]
+            - data["theta_PEST_rt"]
         )
         + data["(psi_r/sqrt(g))_rz"]
-        * (-data["iota"] * data["omega_t"] + data["lambda_t"] + 1)
+        * (-data["iota"] * data["omega_t"] + data["theta_PEST_t"])
     )
     return data
 
@@ -1651,6 +1855,25 @@ def _B_sub_theta(params, transforms, profiles, data, **kwargs):
 )
 def _B_sub_zeta(params, transforms, profiles, data, **kwargs):
     data["B_zeta"] = dot(data["B"], data["e_zeta"])
+    return data
+
+
+@register_compute_fun(
+    name="B_phi|r,t",
+    label="B_{\\phi} = B \\cdot \\mathbf{e}_{\\phi} |_{\\rho, \\theta}",
+    units="T \\cdot m",
+    units_long="Tesla * meters",
+    description="Covariant toroidal component of magnetic field in (ρ,θ,ϕ) "
+    "coordinates.",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["B", "e_phi|r,t"],
+)
+def _B_sub_phi_rt(params, transforms, profiles, data, **kwargs):
+    data["B_phi|r,t"] = dot(data["B"], data["e_phi|r,t"])
     return data
 
 
@@ -2262,7 +2485,7 @@ def _B_sub_zeta_rz(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="<|B|>_axis",
-    label="\\lange |\\mathbf{B}| \\rangle_{axis}",
+    label="\\langle |\\mathbf{B}| \\rangle_{axis}",
     units="T",
     units_long="Tesla",
     description="Average magnitude of magnetic field on the magnetic axis",
@@ -2455,6 +2678,7 @@ def _B_mag_alpha(params, transforms, profiles, data, **kwargs):
     data=["|B|_z", "|B|_a", "alpha_z"],
 )
 def _B_mag_z_constant_rho_alpha(params, transforms, profiles, data, **kwargs):
+    # Same as grad(|B|) dot e_zeta|r,a but avoids radial derivatives.
     data["|B|_z|r,a"] = data["|B|_z"] - data["|B|_a"] * data["alpha_z"]
     return data
 
@@ -3387,6 +3611,10 @@ def _B_dot_gradB_z(params, transforms, profiles, data, **kwargs):
     coordinates="r",
     data=["|B|"],
     resolution_requirement="tz",
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.magnetic_fields._core.OmnigenousField",
+    ],
 )
 def _min_tz_modB(params, transforms, profiles, data, **kwargs):
     data["min_tz |B|"] = surface_min(transforms["grid"], data["|B|"])
@@ -3406,6 +3634,10 @@ def _min_tz_modB(params, transforms, profiles, data, **kwargs):
     coordinates="r",
     data=["|B|"],
     resolution_requirement="tz",
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.magnetic_fields._core.OmnigenousField",
+    ],
 )
 def _max_tz_modB(params, transforms, profiles, data, **kwargs):
     data["max_tz |B|"] = surface_max(transforms["grid"], data["|B|"])
@@ -3424,6 +3656,10 @@ def _max_tz_modB(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="r",
     data=["min_tz |B|", "max_tz |B|"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.magnetic_fields._core.OmnigenousField",
+    ],
 )
 def _mirror_ratio(params, transforms, profiles, data, **kwargs):
     data["mirror ratio"] = (data["max_tz |B|"] - data["min_tz |B|"]) / (

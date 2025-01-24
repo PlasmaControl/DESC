@@ -63,6 +63,7 @@ def register_compute_fun(  # noqa: C901
     aliases=None,
     parameterization="desc.equilibrium.equilibrium.Equilibrium",
     resolution_requirement="",
+    grid_requirement=None,
     source_grid_requirement=None,
     **kwargs,
 ):
@@ -110,6 +111,11 @@ def register_compute_fun(  # noqa: C901
         If the computation simply performs pointwise operations, instead of a
         reduction (such as integration) over a coordinate, then an empty string may
         be used to indicate no requirements.
+    grid_requirement : dict
+        Attributes of the grid that the compute function requires.
+        Also assumes dependencies were computed on such a grid.
+        As an example, quantities that require tensor product grids over 2 or more
+        coordinates may specify ``grid_requirement={"is_meshgrid": True}``.
     source_grid_requirement : dict
         Attributes of the source grid that the compute function requires.
         Also assumes dependencies were computed on such a grid.
@@ -130,6 +136,8 @@ def register_compute_fun(  # noqa: C901
         aliases = []
     if source_grid_requirement is None:
         source_grid_requirement = {}
+    if grid_requirement is None:
+        grid_requirement = {}
     if not isinstance(parameterization, (tuple, list)):
         parameterization = [parameterization]
     if not isinstance(aliases, (tuple, list)):
@@ -168,6 +176,7 @@ def register_compute_fun(  # noqa: C901
             "dependencies": deps,
             "aliases": aliases,
             "resolution_requirement": resolution_requirement,
+            "grid_requirement": grid_requirement,
             "source_grid_requirement": source_grid_requirement,
         }
         for p in parameterization:

@@ -85,6 +85,7 @@
    dev_guide/adding_optimizers.rst
    dev_guide/notebooks/backend.ipynb
    dev_guide/notebooks/transform.ipynb
+   dev_guide/notebooks/derivatives.ipynb
 
 
 

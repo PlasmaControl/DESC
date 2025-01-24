@@ -318,24 +318,24 @@ def rfft2_vander(
     # (See GitHub issue 1530).
     # On the ``master`` branch, commit ``532215825933e4e256ee551f644110180ba7bf8b``
     # 2025 January 22, running ``pytest --mpl -k test_effective_ripple_2D`` will
-    # consume a peak memory of 4 GB. Switching to this faster approach (that bein
-    # the only change), peak memory was observed to increase to 4.3 GB.
-    # Now in pull request #1440, the bounce integration method was rewritten
-    # with the goal of constructing the Vandermonde array only once while retaining
-    # fusion of the operations. It was observed that JAX can fuse this new method
-    # at peak memory 4.3 GB, while the old method cannot be fused (peak memory 9.7 GB)
-    # unless the Vandermonde array is reconstructed for each transform.
-    return jnp.exp(  # noqa: E800
-        1j  # noqa: E800
-        * (  # noqa: E800
-            (modes_fft * (x_fft - x_fft0)[..., jnp.newaxis])[  # noqa: E800
-                ..., jnp.newaxis  # noqa: E800
-            ]  # noqa: E800
-            + (modes_rfft * (x_rfft - x_rfft0)[..., jnp.newaxis])[  # noqa: E800
-                ..., jnp.newaxis, :  # noqa: E800
-            ]  # noqa: E800
-        )  # noqa: E800
-    )  # noqa: E800
+    # consume a peak memory of 4 GB. Switching to above approach (that being the
+    # only change), peak memory was observed to increase to 4.3 GB. Now in pull
+    # request #1440, the bounce integration method was rewritten with the goal of
+    # reusing the Vandermonde array to interpolate while retaining fusion. It was
+    # observed that JIT can fuse the above logic at peak memory 4.3 GB, while the
+    # old logic could not be fused (peak memory 9.7 GB) unless the array is
+    # remade each time.
+    # return jnp.exp(  # noqa: E800
+    #     1j  # noqa: E800
+    #     * (  # noqa: E800
+    #         (modes_fft * (x_fft - x_fft0)[..., jnp.newaxis])[  # noqa: E800
+    #             ..., jnp.newaxis  # noqa: E800
+    #         ]  # noqa: E800
+    #         + (modes_rfft * (x_rfft - x_rfft0)[..., jnp.newaxis])[  # noqa: E800
+    #             ..., jnp.newaxis, :  # noqa: E800
+    #         ]  # noqa: E800
+    #     )  # noqa: E800
+    # )  # noqa: E800
 
 
 def rfft2_modes(n_fft, n_rfft, domain_fft=(0, 2 * jnp.pi), domain_rfft=(0, 2 * jnp.pi)):

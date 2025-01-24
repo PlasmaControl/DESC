@@ -462,7 +462,7 @@ def solve_continuation_automatic(  # noqa: C901
     checkpoint_path=None,
     jac_chunk_size="auto",
     **kwargs,
-):
+) -> EquilibriaFamily:
     """Solve for an equilibrium using an automatic continuation method.
 
     By default, the method first solves for a no pressure tokamak, then a finite beta

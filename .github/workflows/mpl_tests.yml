@@ -44,7 +44,7 @@ jobs:
         with:
           python-version: '3.10'
           cache: pip
-      - name: Install dependencies with given JAX version
+      - name: Install dependencies with given Matplotlib version
         run: |
           sed -i '/matplotlib/d' ./requirements.txt
           sed -i '1i\matplotlib == ${{ matrix.mpl-version }}' ./requirements.txt

@@ -2702,17 +2702,19 @@ class PiecewiseOmnigenousField(Optimizable, IOAble):
         "_t_1",
         "_t_2",
         "_w_2",
+        "_w_1",
     ]
 
     def __init__(
         self,
-        B_min,
-        B_max,
-        c_1,
-        c_2,
-        t_1,
-        t_2,
-        w_2,
+        B_min=0.8,
+        B_max=1.2,
+        c_1=1.2 * jnp.pi,
+        c_2=2 * jnp.pi,
+        t_1=0.2,
+        t_2=1.0,
+        w_1=0.5,
+        w_2=0.7,
         NFP=1,
         helicity=(1, 0),
     ):
@@ -2726,6 +2728,7 @@ class PiecewiseOmnigenousField(Optimizable, IOAble):
         self._t_1 = t_1
         self._t_2 = t_2
         self._w_2 = w_2
+        self._w_1 = w_1
 
         helicity_sign = sign(helicity[0]) * sign(helicity[1])
         warnif(
@@ -2785,9 +2788,7 @@ class PiecewiseOmnigenousField(Optimizable, IOAble):
         if isinstance(names, str):
             names = [names]
         if grid is None:
-            grid = LinearGrid(
-                theta=2 * self.M_B, N=2 * self.N_x, NFP=self.NFP, sym=False
-            )
+            grid = LinearGrid(theta=2 * 10, N=2 * 10, NFP=self.NFP, sym=False)
         elif not isinstance(grid, _Grid):
             raise TypeError(
                 "must pass in a Grid object for argument grid!"
@@ -2888,6 +2889,16 @@ class PiecewiseOmnigenousField(Optimizable, IOAble):
     @w_2.setter
     def w_2(self, w_2):
         self._w_2 = w_2
+
+    @optimizable_parameter
+    @property
+    def w_1(self):
+        """ndarray: Piecewise Omnigenity magnetic well shape parameters."""
+        return self._w_1
+
+    @w_2.setter
+    def w_2(self, w_1):
+        self._w_1 = w_1
 
     @property
     def helicity(self):

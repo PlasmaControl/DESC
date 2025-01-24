@@ -634,6 +634,9 @@ def _B_omni(params, transforms, profiles, data, **kwargs):
     )
     B = jnp.moveaxis(B, 0, 1)
     data["|B|"] = B.flatten(order="F")
+    import pdb
+
+    pdb.set_trace()
     return data
 
 
@@ -644,35 +647,40 @@ def _B_omni(params, transforms, profiles, data, **kwargs):
     units_long="Tesla",
     description="Magnitude of omnigenous magnetic field",
     dim=1,
-    # --no-verify params=["B_min", "B_max", "c_1", "c_2", "t_1", "t_2", "w_2"],
-    params=[],
-    transforms={"B": [[0, 0, 0]]},
+    params=["B_min", "B_max", "c_1", "c_2", "t_1", "t_2", "w_2", "w_1"],
+    # --no-verify params=[],
+    transforms={"grid": []},
     profiles=[],
     coordinates="rtz",
-    data=["theta_B", "zeta_B", "|B|"],  # Potential error, we want eq |B|
-    parameterization="desc.magnetic_fields._core.OmnigenousField",
+    data=[],  # Potential error, we want eq |B|
+    parameterization="desc.magnetic_fields._core.PiecewiseOmnigenousField",
     parametrization=[],
 )
 def _B_piecewise_omni(params, transforms, profiles, data, **kwargs):
-    zeta_B = data["zeta_B"]
-    theta_B = data["theta_B"]
+    theta_B = transforms["grid"].nodes[:, 1]
+    zeta_B = transforms["grid"].nodes[:, 2]
     c_1 = params["c_1"]
     c_2 = params["c_2"]
     t_1 = params["t_1"]
     t_2 = params["t_2"]
-    # --no-verify w_1 = params["w_1"]
+    w_1 = params["w_1"]
     w_2 = params["w_2"]
     B_min = params["B_min"]
     B_max = params["B_max"]
-    iota = data["iota"]
-    w_1 = jnp.pi / data["NFP"] * (1 - t_1 * t_2) / (1 + t_2 / iota)
-    p = int(10)
+    p = int(3)
     exponent = -1 * (
         ((zeta_B + t_1 * theta_B - c_1) / w_1) ** (2 * p)
         + ((zeta_B + t_2 * theta_B - c_2) / w_2) ** (2 * p)
     )
 
-    data["|B|_pwO"] = B_min + (B_max - B_min) * jnp.exp(exponent)
+    B_pwO = B_min + (B_max - B_min) * jnp.exp(exponent)
+    data["|B|_pwO"] = B_pwO.reshape(
+        (
+            transforms["grid"].num_rho,
+            transforms["grid"].num_poloidal,
+            transforms["grid"].num_zeta,
+        )
+    )
     return data
 
 

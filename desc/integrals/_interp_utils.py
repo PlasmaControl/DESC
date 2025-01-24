@@ -421,7 +421,6 @@ def idct_non_uniform(xq, a, n, axis=-1):
 
     """
     n = jnp.arange(n)
-    # |a| << |xq|, so move a instead
     a = jnp.moveaxis(a, axis, -1)
     return jnp.linalg.vecdot(jnp.cos(n * jnp.arccos(xq)[..., jnp.newaxis]), a)
 

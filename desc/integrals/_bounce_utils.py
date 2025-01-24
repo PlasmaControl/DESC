@@ -505,7 +505,7 @@ def interp_to_argmin(h, points, knots, g, dg_dz, method="cubic"):
 
 
 def interp_fft_to_argmin(
-    NFP, T, h, points, knots, g, dg_dz, is_fourier=False, M=None, N=None
+    T, h, points, knots, g, dg_dz, n0, n1, NFP=1, is_fourier=False
 ):
     """Interpolate ``h`` to the deepest point of ``g`` between ``z1`` and ``z2``.
 
@@ -513,15 +513,13 @@ def interp_fft_to_argmin(
 
     Parameters
     ----------
-    NFP : int
-        Number of field periods.
     T : PiecewiseChebyshevSeries
         Set of 1D Chebyshev spectral coefficients of θ along field line.
         {θ_α : ζ ↦ θ(α, ζ) | α ∈ A} where A = (α₀, α₁, …, αₘ₋₁) is the same
         field line as ``alpha``. Each Chebyshev series approximates θ over
         one toroidal transit.
     h : jnp.ndarray
-        Shape (..., grid.num_theta, grid.num_zeta)
+        Shape (..., num theta, num zeta)
         Periodic function evaluated on tensor-product grid in (ρ, θ, ζ) with
         uniformly spaced nodes (θ, ζ) ∈ [0, 2π) × [0, 2π/NFP).
         Preferably power of 2 for ``grid.num_theta`` and ``grid.num_zeta``.
@@ -542,11 +540,15 @@ def interp_fft_to_argmin(
         Polynomial coefficients of the spline of ∂g/∂z in local power basis.
         Last axis enumerates the coefficients of power series. Second to
         last axis enumerates the polynomials that compose a particular spline.
+    n0 : int
+        Fourier resolution in poloidal direction; num theta.
+    n1 : int
+        Fourier resolution in toroidal direction; num zeta.
+    NFP : int
+        Number of field periods.
     is_fourier : bool
         If true, then it is assumed that ``h`` is the Fourier
         transform as returned by ``Bounce2D.fourier``.
-    M, N : int
-        Fourier resolution.
 
     Returns
     -------
@@ -573,11 +575,15 @@ def interp_fft_to_argmin(
     # shape is (..., num well, 1)
     argmin = jnp.argmin(where, axis=-1, keepdims=True)
 
-    theta = T.eval1d(ext)
     if not is_fourier:
         h = rfft2(h, norm="forward")
     h = irfft2_non_uniform(
-        theta, ext, h[..., jnp.newaxis, :, :], M, N, domain1=(0, 2 * jnp.pi / NFP)
+        T.eval1d(ext),
+        ext,
+        h[..., jnp.newaxis, :, :],
+        n0,
+        n1,
+        domain1=(0, 2 * jnp.pi / NFP),
     )
     if z1.ndim == h.ndim + 1:
         h = h[jnp.newaxis]  # to broadcast with num pitch axis
@@ -694,13 +700,11 @@ def fourier_chebyshev(theta, iota, alpha, num_transit):
     return T
 
 
-def chebyshev(n0, n1, NFP, T, f, Y):
+def chebyshev(T, f, Y, n0, n1, NFP=1):
     """Chebyshev along field lines.
 
     Parameters
     ----------
-    NFP : int
-        Number of field periods.
     T : PiecewiseChebyshevSeries
         Set of 1D Chebyshev spectral coefficients of θ along field line.
         {θ_α : ζ ↦ θ(α, ζ) | α ∈ A} where A = (α₀, α₁, …, αₘ₋₁) is the same
@@ -711,6 +715,12 @@ def chebyshev(n0, n1, NFP, T, f, Y):
         ``n0=grid.num_theta``, ``n1=grid.num_zeta``, ``NFP=grid.NFP``.
     Y : int
         Chebyshev spectral resolution for ``f``. Preferably power of 2.
+    n0 : int
+        Fourier resolution in poloidal direction; num theta.
+    n1 : int
+        Fourier resolution in toroidal direction; num zeta.
+    NFP : int
+        Number of field periods.
 
     Returns
     -------
@@ -733,21 +743,19 @@ def chebyshev(n0, n1, NFP, T, f, Y):
         theta,
         zeta,
         f[..., jnp.newaxis, :, :],
-        n0=n0,
-        n1=n1,
+        n0,
+        n1,
         domain1=(0, 2 * jnp.pi / NFP),
     ).reshape(*T.cheb.shape[:-1], Y)
     f = PiecewiseChebyshevSeries(cheb_from_dct(dct(f, type=2, axis=-1)) / Y, T.domain)
     return f
 
 
-def cubic_spline(n0, n1, NFP, T, f, Y, check=False):
+def cubic_spline(T, f, Y, n0, n1, NFP=1, check=False):
     """Cubic spline along field lines.
 
     Parameters
     ----------
-    NFP : int
-        Number of field periods.
     T : PiecewiseChebyshevSeries
         Set of 1D Chebyshev spectral coefficients of θ along field line.
         {θ_α : ζ ↦ θ(α, ζ) | α ∈ A} where A = (α₀, α₁, …, αₘ₋₁) is the same
@@ -758,6 +766,12 @@ def cubic_spline(n0, n1, NFP, T, f, Y, check=False):
         ``n0=grid.num_theta``, ``n1=grid.num_zeta``, ``NFP=grid.NFP``.
     Y : int
         Number of knots per transit to interpolate ``f``.
+    n0 : int
+        Fourier resolution in poloidal direction; num theta.
+    n1 : int
+        Fourier resolution in toroidal direction; num zeta.
+    NFP : int
+        Number of field periods.
     check : bool
         Flag for debugging. Must be false for JAX transformations.
 
@@ -791,8 +805,8 @@ def cubic_spline(n0, n1, NFP, T, f, Y, check=False):
             theta,
             knots,
             f[..., jnp.newaxis, :, :],
-            n0=n0,
-            n1=n1,
+            n0,
+            n1,
             domain1=(0, 2 * jnp.pi / NFP),
         ),
         axis=-1,

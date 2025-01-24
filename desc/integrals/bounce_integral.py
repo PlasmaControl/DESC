@@ -185,10 +185,11 @@ class Bounce2D(Bounce):
     ----------
     grid : Grid
         Tensor-product grid in (ρ, θ, ζ) with uniformly spaced nodes
-        (θ, ζ) ∈ [0, 2π) × [0, 2π/NFP). The ζ coordinates (the unique values prior
-        to taking the tensor-product) must be strictly increasing.
-        Below shape notation defines ``M=grid.num_theta`` and ``N=grid.num_zeta``.
-        ``M`` and ``N`` are preferably rounded down to powers of two.
+        (θ, ζ) ∈ [0, 2π) × [0, 2π/NFP).
+        Number of poloidal and toroidal nodes preferably rounded down to powers of two.
+        Determines the flux surfaces to compute on and resolution of FFTs.
+        The ζ coordinates (the unique values prior to taking the tensor-product)
+        must be strictly increasing.
     data : dict[str, jnp.ndarray]
         Data evaluated on ``grid``.
         Must include names in ``Bounce2D.required_names``.
@@ -227,9 +228,10 @@ class Bounce2D(Bounce):
         Optional. Reference length scale for normalization.
     is_reshaped : bool
         Whether the arrays in ``data`` are already reshaped to the expected form of
-        shape (..., M, N) or (num rho, M, N). This option can be used to iteratively
-        compute bounce integrals one flux surface at a time, reducing memory usage
-        To do so, set to true and provide only those axes of the reshaped data.
+        shape (..., num theta, num zeta) or (num rho, num theta, num zeta).
+        This option can be used to iteratively compute bounce integrals one flux
+        surface at a time, reducing memory usage. To do so, set to true and provide
+        only those chunks of the reshaped data.
         Default is false.
     is_fourier : bool
         If true, then it is assumed that ``data`` holds Fourier transforms
@@ -315,6 +317,7 @@ class Bounce2D(Bounce):
         assert grid.can_fft2
         is_reshaped = is_reshaped or is_fourier
         self._NFP = grid.NFP
+        self._n_fft = grid.num_theta
         self._n_rfft = grid.num_zeta
         self._modes_fft, self._modes_rfft = rfft2_modes(
             grid.num_theta, grid.num_zeta, domain_rfft=(0, 2 * jnp.pi / grid.NFP)
@@ -341,22 +344,22 @@ class Bounce2D(Bounce):
         Y_B = setdefault(Y_B, theta.shape[-1] * 2)
         if spline:
             self._c["B(z)"], self._c["knots"] = cubic_spline(
-                self._modes_fft.size,
-                self._n_rfft,
-                self._NFP,
                 self._c["T(z)"],
                 self._c["|B|"],
                 Y_B,
+                self._n_fft,
+                self._n_rfft,
+                self._NFP,
                 check=check,
             )
         else:
             self._c["B(z)"] = chebyshev(
-                self._modes_fft.size,
-                self._n_rfft,
-                self._NFP,
                 self._c["T(z)"],
                 self._c["|B|"],
                 Y_B,
+                self._n_fft,
+                self._n_rfft,
+                self._NFP,
             )
 
     @staticmethod
@@ -373,7 +376,7 @@ class Bounce2D(Bounce):
         Returns
         -------
         f : jnp.ndarray
-            Shape (num rho, M, N).
+            Shape (num rho, num theta, num zeta).
             Reshaped data which may be given to ``integrate``.
 
         """
@@ -386,17 +389,17 @@ class Bounce2D(Bounce):
         Parameters
         ----------
         f : jnp.ndarray
-            Shape (..., M, N).
+            Shape (..., num theta, num zeta).
             Real scalar-valued periodic functions in (θ, ζ) ∈ [0, 2π) × [0, 2π/NFP).
 
         Returns
         -------
         a : jnp.ndarray
-            Shape (..., M, N // 2 + 1)
+            Shape (..., num theta, num zeta // 2 + 1)
             Complex coefficients of 2D real FFT of ``f``.
 
         """
-        # real fft done in toroidal direction since usually M > N
+        # real fft done in toroidal direction since usually num theta > num zeta
         return rfft2(f, norm="forward")
 
     # TODO (#1034): Pass in the previous
@@ -612,7 +615,7 @@ class Bounce2D(Bounce):
             ``pitch_inv[ρ]`` where in the latter the labels are interpreted
             as the indices that correspond to that field line.
         data : dict[str, jnp.ndarray]
-            Shape (num rho, M, N).
+            Shape (num rho, num theta, num zeta).
             Real scalar-valued periodic functions in (θ, ζ) ∈ [0, 2π) × [0, 2π/NFP)
             evaluated on the ``grid`` supplied to construct this object.
             Use the method ``Bounce2D.reshape`` to reshape the data into the
@@ -683,6 +686,7 @@ class Bounce2D(Bounce):
             bijection_from_disc(x, z1[..., jnp.newaxis], z2[..., jnp.newaxis])
         )
         theta = self._c["T(z)"].eval1d(zeta)
+
         vander = rfft2_vander(
             theta,
             zeta,
@@ -691,6 +695,7 @@ class Bounce2D(Bounce):
             self._n_rfft,
             domain_rfft=(0, 2 * jnp.pi / self._NFP),
         )
+
         # Compute |B| from Fourier series instead of spline approximation
         # because integrals are sensitive to |B|. Using the ``polish_points``
         # method should resolve any issues. For now, we integrate with √|1−λB|
@@ -729,7 +734,7 @@ class Bounce2D(Bounce):
         Parameters
         ----------
         f : jnp.ndarray
-            Shape (num rho, M, N).
+            Shape (num rho, num theta, num zeta).
             Real scalar-valued periodic function in (θ, ζ) ∈ [0, 2π) × [0, 2π/NFP)
             evaluated on the ``grid`` supplied to construct this object.
             Use the method ``Bounce2D.reshape`` to reshape the data into the
@@ -758,16 +763,16 @@ class Bounce2D(Bounce):
         )
         return _swap_shape(
             interp_fft_to_argmin(
-                self._NFP,
                 self._c["T(z)"],
                 f,
                 map(_swap_shape, points),
                 self._c["knots"],
                 self._c["B(z)"],
                 polyder_vec(self._c["B(z)"]),
-                is_fourier,
-                self._modes_fft.size,
+                self._n_fft,
                 self._n_rfft,
+                self._NFP,
+                is_fourier,
             )
         )
 
@@ -818,7 +823,7 @@ class Bounce2D(Bounce):
                 theta,
                 zeta,
                 self._c["B^zeta"][..., jnp.newaxis, :, :],
-                self._modes_fft.size,
+                self._n_fft,
                 self._n_rfft,
                 domain1=(0, 2 * jnp.pi / self._NFP),
             )

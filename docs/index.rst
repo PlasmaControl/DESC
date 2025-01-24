@@ -54,6 +54,20 @@
 
 .. toctree::
    :maxdepth: 1
+   :caption: Developer Guides
+
+   dev_guide/notebooks/getting-started-eq-solve.ipynb
+   dev_guide/notebooks/grid.ipynb
+   dev_guide/adding_compute_funs.rst
+   dev_guide/adding_objectives.rst
+   dev_guide/adding_optimizers.rst
+   dev_guide/notebooks/backend.ipynb
+   dev_guide/notebooks/transform.ipynb
+   dev_guide/notebooks/derivatives.ipynb
+
+
+.. toctree::
+   :maxdepth: 1
    :caption: Public API
 
    api_equilibrium
@@ -72,21 +86,6 @@
    command_line
    input
    output
-
-
-.. toctree::
-   :maxdepth: 1
-   :caption: Developer Guides
-
-   dev_guide/notebooks/getting-started-eq-solve.ipynb
-   dev_guide/notebooks/grid.ipynb
-   dev_guide/adding_compute_funs.rst
-   dev_guide/adding_objectives.rst
-   dev_guide/adding_optimizers.rst
-   dev_guide/notebooks/backend.ipynb
-   dev_guide/notebooks/transform.ipynb
-   dev_guide/notebooks/derivatives.ipynb
-
 
 
 Indices and tables

@@ -144,11 +144,12 @@ def irfft_non_uniform(xq, a, n, domain=(0, 2 * jnp.pi), axis=-1):
         Real function value at query points.
 
     """
+    modes = jnp.fft.rfftfreq(n, (domain[1] - domain[0]) / (2 * jnp.pi * n))
     if (n % 2) == 0:
         i = (0, -1)
     else:
         i = 0
-    modes = jnp.fft.rfftfreq(n, (domain[1] - domain[0]) / (2 * jnp.pi * n))
+    # |a| << |xq|, so move axis of a instead
     a = jnp.moveaxis(a, axis, -1).at[..., i].divide(2) * 2
     vander = jnp.exp(1j * modes * (xq - domain[0])[..., jnp.newaxis])
     return (vander * a).real.sum(axis=-1)
@@ -189,11 +190,17 @@ def interp_rfft2(
         Real function value at query points.
 
     """
+    if (f.shape[axes[1]] % 2) == 0:
+        i = (0, -1)
+    else:
+        i = 0
+    a = rfft2(f, axes=axes, norm="forward")
+    a = jnp.moveaxis(a, axes, (-2, -1)).at[..., i].divide(2) * 2
     n0, n1 = sorted(axes)
-    return irfft2_non_uniform(
+    return _irfft2_non_uniform(
         xq0,
         xq1,
-        rfft2(f, axes=axes, norm="forward"),
+        a,
         f.shape[n0],
         f.shape[n1],
         domain0,
@@ -202,7 +209,7 @@ def interp_rfft2(
     )
 
 
-def irfft2_non_uniform(
+def _irfft2_non_uniform(
     xq0, xq1, a, n0, n1, domain0=(0, 2 * jnp.pi), domain1=(0, 2 * jnp.pi), axes=(-2, -1)
 ):
     """Evaluate Fourier coefficients ``a`` at coordinates ``(xq0,xq1)``.
@@ -221,7 +228,7 @@ def irfft2_non_uniform(
         across axis ``max(axes)`` of the Fourier coefficients ``a``.
     a : jnp.ndarray
         Shape (..., a.shape[-2], a.shape[-1]).
-        Fourier coefficients ``a=rfft2(f,axes=axes,norm="forward")``.
+        Fourier coefficients.
     n0 : int
         Spectral resolution of ``a`` for ``domain0``.
     n1 : int
@@ -244,8 +251,7 @@ def irfft2_non_uniform(
     d = (domain0, domain1)
     f, r = np.argsort(axes)
     modes_f, modes_r = rfft2_modes(n[f], n[r], d[f], d[r])
-    a = jnp.moveaxis(a, source=axes, destination=(-2, -1))
-    vander = rfft2_vander(xq[f], xq[r], modes_f, modes_r, n[r], d[f], d[r])
+    vander = rfft2_vander(xq[f], xq[r], modes_f, modes_r, d[f][0], d[r][0])
     return (vander * a).real.sum(axis=(-2, -1))
 
 
@@ -254,11 +260,30 @@ def rfft2_vander(
     x_rfft,
     modes_fft,
     modes_rfft,
-    n_rfft,
-    domain_fft=(0, 2 * jnp.pi),
-    domain_rfft=(0, 2 * jnp.pi),
+    x_fft0=0,
+    x_rfft0=0,
 ):
     """Return Vandermonde matrix for complex Fourier modes.
+
+    Warnings
+    --------
+    It is vital to not perform any operations on Vandermonde array and immediately
+    reduce it. For example, to transform from spectral to real space do
+      ``a=jnp.fft.rfft2(f).at[...,i].divide(2)*2``
+
+      ``(vander*a).real.sum(axis=(-2,-1))``
+
+    Performing the scaling on the Vandermonde array would triple the memory consumption.
+    Perhaps this is required for the compiler to fuse operations.
+
+    Notes
+    -----
+    When the Vandermonde matrix is large, care needs to be taken to ensure the compiler
+    fuses the operation to transform from spectral to real space. For JAX, this is up
+    to the JIT compiler's whim, and it helps to make the code as suggestive as possible
+    for that. Basically do not do anything besides the relevant matmuls after making
+    the Vandermonde; even things like adding a new axis to the coefficient array or
+    creating local variables after the Vandermonde array is made can prevent this.
 
     Parameters
     ----------
@@ -272,30 +297,45 @@ def rfft2_vander(
         FFT Fourier modes.
     modes_rfft : jnp.ndarray
         Real FFT Fourier modes.
-    n_rfft : int
-        Spectral resolution for ``domain_rfft``.
-    domain_fft : tuple[float]
-        Domain of coordinate specified by ``x_fft`` over which samples were taken.
-    domain_rfft : tuple[float]
-        Domain of coordinate specified by ``x_rfft`` over which samples were taken.
+    x_fft0 : float
+        Left boundary of domain of coordinate specified by ``x_fft`` over which
+        samples were taken.
+    x_rfft0 : float
+        Left boundary of domain of coordinate specified by ``x_rfft`` over which
+        samples were taken.
 
     Returns
     -------
     vander : jnp.ndarray
         Shape (..., modes_fft.size, modes_rfft.size).
-        Vandermonde matrix to evaluate Fourier series
-        ``c=jnp.fft.rfft2(f)`` via ``(vander*c).real.sum(axis=(-2,-1))``.
+        Vandermonde matrix to evaluate complex Fourier series.
 
     """
-    if (n_rfft % 2) == 0:
-        i = (0, -1)
-    else:
-        i = 0
-    x_fft = x_fft - domain_fft[0]
-    x_rfft = x_rfft - domain_rfft[0]
-    van_f = jnp.exp(1j * modes_fft * x_fft[..., jnp.newaxis])
-    van_r = jnp.exp(1j * modes_rfft * x_rfft[..., jnp.newaxis]).at[..., i].divide(2) * 2
-    return van_f[..., jnp.newaxis] * van_r[..., jnp.newaxis, :]
+    vander_f = jnp.exp(1j * modes_fft * (x_fft - x_fft0)[..., jnp.newaxis])
+    vander_r = jnp.exp(1j * modes_rfft * (x_rfft - x_rfft0)[..., jnp.newaxis])
+    return vander_f[..., jnp.newaxis] * vander_r[..., jnp.newaxis, :]
+    # Above logic makes the Vandermonde array faster than the commented logic.
+    # (See GitHub issue 1530).
+    # On the ``master`` branch, commit ``532215825933e4e256ee551f644110180ba7bf8b``
+    # 2025 January 22, running ``pytest --mpl -k test_effective_ripple_2D`` will
+    # consume a peak memory of 4 GB. Switching to this faster approach (that bein
+    # the only change), peak memory was observed to increase to 4.3 GB.
+    # Now in pull request #1440, the bounce integration method was rewritten
+    # with the goal of constructing the Vandermonde array only once while retaining
+    # fusion of the operations. It was observed that JAX can fuse this new method
+    # at peak memory 4.3 GB, while the old method cannot be fused (peak memory 9.7 GB)
+    # unless the Vandermonde array is reconstructed for each transform.
+    return jnp.exp(  # noqa: E800
+        1j  # noqa: E800
+        * (  # noqa: E800
+            (modes_fft * (x_fft - x_fft0)[..., jnp.newaxis])[  # noqa: E800
+                ..., jnp.newaxis  # noqa: E800
+            ]  # noqa: E800
+            + (modes_rfft * (x_rfft - x_rfft0)[..., jnp.newaxis])[  # noqa: E800
+                ..., jnp.newaxis, :  # noqa: E800
+            ]  # noqa: E800
+        )  # noqa: E800
+    )  # noqa: E800
 
 
 def rfft2_modes(n_fft, n_rfft, domain_fft=(0, 2 * jnp.pi), domain_rfft=(0, 2 * jnp.pi)):
@@ -393,10 +433,13 @@ def interp_dct(xq, f, lobatto=False, axis=-1):
 
     """
     errorif(lobatto, NotImplementedError, "JAX hasn't implemented type 1 DCT.")
-    a = cheb_from_dct(dct(f, type=2 - lobatto, axis=axis), axis) / (
-        f.shape[axis] - lobatto
+    return idct_non_uniform(
+        xq,
+        cheb_from_dct(dct(f, type=2 - lobatto, axis=axis), axis)
+        / (f.shape[axis] - lobatto),
+        f.shape[axis],
+        axis,
     )
-    return idct_non_uniform(xq, a, f.shape[axis], axis)
 
 
 def idct_non_uniform(xq, a, n, axis=-1):
@@ -421,6 +464,7 @@ def idct_non_uniform(xq, a, n, axis=-1):
 
     """
     n = jnp.arange(n)
+    # |a| << |xq|, so move axis of a instead
     a = jnp.moveaxis(a, axis, -1)
     return jnp.linalg.vecdot(jnp.cos(n * jnp.arccos(xq)[..., jnp.newaxis]), a)
 

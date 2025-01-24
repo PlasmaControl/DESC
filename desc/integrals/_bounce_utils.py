@@ -6,11 +6,11 @@ from matplotlib import pyplot as plt
 
 from desc.backend import dct, jnp, rfft2
 from desc.integrals._interp_utils import (
+    _irfft2_non_uniform,
     cheb_from_dct,
     cheb_pts,
     idct_non_uniform,
     interp1d_vec,
-    irfft2_non_uniform,
     polyroot_vec,
     polyval_vec,
 )
@@ -208,7 +208,7 @@ def _check_bounce_points(z1, z2, pitch_inv, knots, B, plot=True, **kwargs):
     return plots
 
 
-def _check_interp(shape, zeta, b_sup_z, B, result, f=None, plot=True):
+def _check_interp(shape, zeta, b_sup_z, B, f, result, plot=True):
     """Check for interpolation failures and floating point issues.
 
     Parameters
@@ -221,10 +221,10 @@ def _check_interp(shape, zeta, b_sup_z, B, result, f=None, plot=True):
         Contravariant toroidal component of magnetic field, interpolated to ``zeta``.
     B : jnp.ndarray
         Norm of magnetic field, interpolated to ``zeta``.
-    result : list[jnp.ndarray]
-        Output of ``_integrate``.
     f : list[jnp.ndarray]
         Arguments to the integrand, interpolated to ``zeta``.
+    result : list[jnp.ndarray]
+        Output of ``_integrate``.
     plot : bool
         Whether to plot stuff.
 
@@ -241,7 +241,6 @@ def _check_interp(shape, zeta, b_sup_z, B, result, f=None, plot=True):
 
     assert goal == jnp.sum(marked & jnp.isfinite(b_sup_z).reshape(shape).all(axis=-1))
     assert goal == jnp.sum(marked & jnp.isfinite(B).reshape(shape).all(axis=-1))
-    f = setdefault(f, [])
     for f_i in f:
         assert goal == jnp.sum(marked & jnp.isfinite(f_i).reshape(shape).all(axis=-1))
 
@@ -576,14 +575,14 @@ def interp_fft_to_argmin(
     argmin = jnp.argmin(where, axis=-1, keepdims=True)
 
     if not is_fourier:
-        h = rfft2(h, norm="forward")
-    h = irfft2_non_uniform(
-        T.eval1d(ext),
-        ext,
-        h[..., jnp.newaxis, :, :],
-        n0,
-        n1,
-        domain1=(0, 2 * jnp.pi / NFP),
+        if (n1 % 2) == 0:
+            i = (0, -1)
+        else:
+            i = 0
+        h = rfft2(h, norm="forward").at[..., i].divide(2) * 2
+        h = h[..., jnp.newaxis, :, :]
+    h = _irfft2_non_uniform(
+        T.eval1d(ext), ext, h, n0, n1, domain1=(0, 2 * jnp.pi / NFP)
     )
     if z1.ndim == h.ndim + 1:
         h = h[jnp.newaxis]  # to broadcast with num pitch axis
@@ -711,7 +710,7 @@ def chebyshev(T, f, Y, n0, n1, NFP=1):
         field line as ``alpha``. Each Chebyshev series approximates θ over
         one toroidal transit.
     f : jnp.ndarray
-        Fourier transform of f(θ, ζ) as returned by ``_fourier``.
+        Fourier transform of f(θ, ζ) as returned by ``Bounce2D.fourier``.
         ``n0=grid.num_theta``, ``n1=grid.num_zeta``, ``NFP=grid.NFP``.
     Y : int
         Chebyshev spectral resolution for ``f``. Preferably power of 2.
@@ -739,13 +738,8 @@ def chebyshev(T, f, Y, n0, n1, NFP=1):
     zeta = jnp.broadcast_to(cheb_pts(Y, domain=T.domain), (T.X, Y)).ravel()
 
     # f at Chebyshev points
-    f = irfft2_non_uniform(
-        theta,
-        zeta,
-        f[..., jnp.newaxis, :, :],
-        n0,
-        n1,
-        domain1=(0, 2 * jnp.pi / NFP),
+    f = _irfft2_non_uniform(
+        theta, zeta, f, n0, n1, domain1=(0, 2 * jnp.pi / NFP)
     ).reshape(*T.cheb.shape[:-1], Y)
     f = PiecewiseChebyshevSeries(cheb_from_dct(dct(f, type=2, axis=-1)) / Y, T.domain)
     return f
@@ -762,7 +756,7 @@ def cubic_spline(T, f, Y, n0, n1, NFP=1, check=False):
         field line as ``alpha``. Each Chebyshev series approximates θ over
         one toroidal transit.
     f : jnp.ndarray
-        Fourier transform of f(θ, ζ) as returned by ``_fourier``.
+        Fourier transform of f(θ, ζ) as returned by ``Bounce2D.fourier``.
         ``n0=grid.num_theta``, ``n1=grid.num_zeta``, ``NFP=grid.NFP``.
     Y : int
         Number of knots per transit to interpolate ``f``.
@@ -801,14 +795,7 @@ def cubic_spline(T, f, Y, n0, n1, NFP=1, check=False):
 
     f = CubicSpline(
         x=knots,
-        y=irfft2_non_uniform(
-            theta,
-            knots,
-            f[..., jnp.newaxis, :, :],
-            n0,
-            n1,
-            domain1=(0, 2 * jnp.pi / NFP),
-        ),
+        y=_irfft2_non_uniform(theta, knots, f, n0, n1, domain1=(0, 2 * jnp.pi / NFP)),
         axis=-1,
         check=check,
     ).c

@@ -370,7 +370,7 @@ class FFTInterpolator(_BIESTInterpolator):
         )
         super().__init__(eval_grid, source_grid, st, sz, q)
 
-    def __call__(self, f, i, is_fourier=False, *, vander=None):
+    def __call__(self, f, i, *, is_fourier=False, vander=None):
         """Interpolate data to polar grid points.
 
         Parameters
@@ -433,26 +433,25 @@ class DFTInterpolator(_BIESTInterpolator):
 
     def fourier(self, f):
         """Return real FFT of ``f``."""
-        return rfft2(
+        if (self._source_grid.num_zeta % 2) == 0:
+            i = (0, -1)
+        else:
+            i = 0
+        return 2 * rfft2(
             self._source_grid.meshgrid_reshape(f, "rtz")[0],
             axes=(0, 1),
             norm="forward",
-        ).reshape(-1, *f.shape[1:])
+        ).at[:, i].divide(2).reshape(-1, *f.shape[1:])
 
     def vander_polar(self, i):
         """Return Vandermonde matrix for ith polar node."""
         theta = self._eval_grid.nodes[:, 1] + self._shift_t[i]
         zeta = self._eval_grid.nodes[:, 2] + self._shift_z[i]
-        return rfft2_vander(
-            theta,
-            zeta,
-            self._modes_fft,
-            self._modes_rfft,
-            self._source_grid.num_zeta,
-            domain_rfft=(0, 2 * jnp.pi / self._source_grid.NFP),
-        ).reshape(self._eval_grid.num_nodes, -1)
+        return rfft2_vander(theta, zeta, self._modes_fft, self._modes_rfft).reshape(
+            self._eval_grid.num_nodes, -1
+        )
 
-    def __call__(self, f, i, is_fourier=False, *, vander=None):
+    def __call__(self, f, i, *, is_fourier=False, vander=None):
         """Interpolate data to polar grid points.
 
         Parameters
@@ -613,7 +612,7 @@ def _singular_part(eval_data, source_data, kernel, interpolator, loop=False):
         # source grid and eval grid may have different NFP.
         vander = interpolator.vander_polar(i)
         source_data_polar = {
-            key: interpolator(val, i, is_fourier, vander=vander)
+            key: interpolator(val, i, is_fourier=is_fourier, vander=vander)
             for key, val in zip(keys, fsource)
         }
         # The (θ, ζ) coordinates at which the maps above were evaluated.

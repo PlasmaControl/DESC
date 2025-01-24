@@ -19,10 +19,10 @@ from desc.integrals._bounce_utils import (
     plot_ppoly,
 )
 from desc.integrals._interp_utils import (
+    _irfft2_non_uniform,
     idct_non_uniform,
     interp1d_Hermite_vec,
     interp1d_vec,
-    irfft2_non_uniform,
     polyder_vec,
     rfft2_modes,
     rfft2_vander,
@@ -114,10 +114,6 @@ def _swap_shape(f):
     """
     assert f.ndim <= 4
     return jnp.swapaxes(f, 0, -2)
-
-
-def _transform(vander, c):
-    return (vander * c[..., jnp.newaxis, :, :]).real.sum(axis=(-2, -1))
 
 
 default_quad = get_quadrature(
@@ -399,8 +395,13 @@ class Bounce2D(Bounce):
             Complex coefficients of 2D real FFT of ``f``.
 
         """
+        if (f.shape[-1] % 2) == 0:
+            i = (0, -1)
+        else:
+            i = 0
         # real fft done in toroidal direction since usually num theta > num zeta
-        return rfft2(f, norm="forward")
+        a = rfft2(f, norm="forward").at[..., i].divide(2) * 2
+        return a[..., jnp.newaxis, :, :]
 
     # TODO (#1034): Pass in the previous
     #  θ(α, ζ) coordinates as an initial guess for the next coordinate mapping.
@@ -526,6 +527,7 @@ class Bounce2D(Bounce):
         #  Need Fourier coefficients of lambda, but that is already known.
         #  Then can use less resolution for the global root finding algorithm
         #  and rely on the local one once good neighbourhood is found.
+        #  For now, we integrate with √|1−λB| as justified in doi.org/10.1063/5.0160282.
         raise NotImplementedError
 
     def check_points(self, points, pitch_inv, *, plot=True, **kwargs):
@@ -622,6 +624,7 @@ class Bounce2D(Bounce):
             expected shape.
         names : str or list[str]
             Names in ``data`` to interpolate. Default is all keys in ``data``.
+            Do not include ``|B|``.
         points : tuple[jnp.ndarray]
             Shape (num rho, num alpha, num pitch, num well).
             Optional, output of method ``self.points``.
@@ -687,29 +690,22 @@ class Bounce2D(Bounce):
         )
         theta = self._c["T(z)"].eval1d(zeta)
 
-        vander = rfft2_vander(
-            theta,
-            zeta,
-            self._modes_fft,
-            self._modes_rfft,
-            self._n_rfft,
-            domain_rfft=(0, 2 * jnp.pi / self._NFP),
-        )
-
-        # Compute |B| from Fourier series instead of spline approximation
-        # because integrals are sensitive to |B|. Using the ``polish_points``
-        # method should resolve any issues. For now, we integrate with √|1−λB|
-        # as justified in doi.org/10.1063/5.0160282.
-        B = _transform(vander, self._c["|B|"])
+        # Goal is to reuse the same Vandermonde array to interpolate. This took
+        # some care to appease JIT to fuse the operations. Be careful if editing
+        # as what usually qualifies as a cosmetic change may cause memory leaks.
+        vander = rfft2_vander(theta, zeta, self._modes_fft, self._modes_rfft)
+        data = {name: (vander * data[name]).real.sum((-2, -1)) for name in names}
+        data["B^zeta"] = (vander * self._c["B^zeta"]).real.sum((-2, -1))
+        B = (vander * self._c["|B|"]).real.sum((-2, -1))
+        # del vander
+        data["theta"] = theta
+        data["zeta"] = zeta
 
         # Strictly increasing zeta knots enforces dζ > 0.
         # To retain dℓ = |B|/(B⋅∇ζ) dζ > 0 after fixing dζ > 0, we require
         # B⋅∇ζ > 0. This is equivalent to changing the sign of ∇ζ
         # or (∂ℓ/∂ζ)|ρ,a. Recall dζ = ∇ζ⋅dR ⇔ 1 = ∇ζ⋅(e_ζ|ρ,a).
-        dl_dz = B / jnp.abs(_transform(vander, self._c["B^zeta"]))
-        data = {name: _transform(vander, data[name]) for name in names}
-        data["theta"] = theta
-        data["zeta"] = zeta
+        dl_dz = B / jnp.abs(data["B^zeta"])
         cov = grad_bijection_from_disc(z1, z2)
         result = [
             _swap_shape((f(data, B, pitch) * dl_dz).reshape(shape).dot(w) * cov)
@@ -721,8 +717,8 @@ class Bounce2D(Bounce):
             _check_interp(
                 shape,
                 *map(_swap_shape, (zeta, 1 / dl_dz, B)),
-                result,
                 [_swap_shape(data[name]) for name in names],
+                result,
                 plot=plot,
             )
 
@@ -819,10 +815,10 @@ class Bounce2D(Bounce):
         ).ravel()
 
         B_sup_z = jnp.abs(
-            irfft2_non_uniform(
+            _irfft2_non_uniform(
                 theta,
                 zeta,
-                self._c["B^zeta"][..., jnp.newaxis, :, :],
+                self._c["B^zeta"],
                 self._n_fft,
                 self._n_rfft,
                 domain1=(0, 2 * jnp.pi / self._NFP),
@@ -1192,6 +1188,7 @@ class Bounce1D(Bounce):
             expected shape.
         names : str or list[str]
             Names in ``data`` to interpolate. Default is all keys in ``data``.
+            Do not include ``|B|``.
         points : tuple[jnp.ndarray]
             Shape (num rho, num alpha, num pitch, num well).
             Optional, output of method ``self.points``.
@@ -1317,8 +1314,8 @@ class Bounce1D(Bounce):
                 zeta,
                 b_sup_z,
                 B,
-                result,
                 [data[name] for name in names],
+                result,
                 plot=plot,
             )
 

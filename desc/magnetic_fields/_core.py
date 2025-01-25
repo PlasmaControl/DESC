@@ -2697,8 +2697,8 @@ class PiecewiseOmnigenousField(Optimizable, IOAble):
         "_helicity",
         "_B_min",
         "_B_max",
-        "_c_1",
-        "_c_2",
+        "_zeta_C",
+        "_theta_C",
         "_t_1",
         "_t_2",
         "_w_2",
@@ -2709,8 +2709,8 @@ class PiecewiseOmnigenousField(Optimizable, IOAble):
         self,
         B_min=0.8,
         B_max=1.2,
-        c_1=1.2 * jnp.pi,
-        c_2=2 * jnp.pi,
+        zeta_C=1.2 * jnp.pi,
+        theta_C=2 * jnp.pi,
         t_1=0.2,
         t_2=1.0,
         iota0=0.66,
@@ -2723,8 +2723,8 @@ class PiecewiseOmnigenousField(Optimizable, IOAble):
 
         self._B_min = B_min
         self._B_max = B_max
-        self._c_1 = c_1
-        self._c_2 = c_2
+        self._zeta_C = zeta_C
+        self._theta_C = theta_C
         self._t_1 = t_1
         self._t_2 = t_2
         self._w_2 = w_2
@@ -2842,23 +2842,23 @@ class PiecewiseOmnigenousField(Optimizable, IOAble):
 
     @optimizable_parameter
     @property
-    def c_1(self):
+    def theta_C(self):
         """ndarray: Piecewise Omnigenity magnetic well shape parameters."""
-        return self._c_1
+        return self._theta_C
 
-    @c_1.setter
-    def c_1(self, c_1):
-        self._c_1 = c_1
+    @theta_C.setter
+    def theta_C(self, theta_C):
+        self._theta_C = theta_C
 
     @optimizable_parameter
     @property
-    def c_2(self):
+    def zeta_C(self):
         """ndarray: Piecewise Omnigenity magnetic well shape parameters."""
-        return self._c_2
+        return self._zeta_C
 
-    @c_2.setter
-    def c_2(self, c_2):
-        self._c_2 = c_2
+    @zeta_C.setter
+    def zeta_C(self, zeta_C):
+        self._zeta_C = zeta_C
 
     @optimizable_parameter
     @property

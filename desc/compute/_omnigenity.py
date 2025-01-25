@@ -647,7 +647,7 @@ def _B_omni(params, transforms, profiles, data, **kwargs):
     units_long="Tesla",
     description="Magnitude of omnigenous magnetic field",
     dim=1,
-    params=["B_min", "B_max", "c_1", "c_2", "t_1", "t_2", "w_2", "iota0", "NFP"],
+    params=["B_min", "B_max", "zeta_C", "theta_C", "t_1", "t_2", "w_2", "iota0", "NFP"],
     transforms={"grid": []},
     profiles=[],
     coordinates="rtz",
@@ -658,8 +658,9 @@ def _B_omni(params, transforms, profiles, data, **kwargs):
 def _B_piecewise_omni(params, transforms, profiles, data, **kwargs):
     theta_B = transforms["grid"].nodes[:, 1]
     zeta_B = transforms["grid"].nodes[:, 2]
-    c_1 = params["c_1"]
-    c_2 = params["c_2"]
+
+    zeta_C = params["zeta_C"]
+    theta_C = params["theta_C"]
     t_1 = params["t_1"]
     t_2 = params["t_2"]
     w_2 = params["w_2"]
@@ -669,15 +670,15 @@ def _B_piecewise_omni(params, transforms, profiles, data, **kwargs):
     B_max = params["B_max"]
     p = int(3)
     exponent = -1 * (
-        ((zeta_B + t_1 * theta_B - c_1) / w_1) ** (2 * p)
-        + ((zeta_B + t_2 * theta_B - c_2) / w_2) ** (2 * p)
+        ((zeta_B + t_1 * theta_B - zeta_C) / w_1) ** (2 * p)
+        + ((zeta_B + t_2 * theta_B - theta_C) / w_2) ** (2 * p)
     )
 
     B_pwO = B_min + (B_max - B_min) * jnp.exp(exponent)
     data["|B|_pwO"] = B_pwO.reshape(
         (
             transforms["grid"].num_rho,
-            transforms["grid"].num_poloidal,
+            transforms["grid"].num_theta,
             transforms["grid"].num_zeta,
         )
     )

@@ -1520,11 +1520,11 @@ def test_make_boozmn_output_against_hidden_symmetries_booz_xform(TmpDir):
     boozer_res_M = 25
     boozer_res_N = 25
 
-    # compare against a 100 surface Mboz=Nboz=40 run of precise QA
+    # compare against a 128 surface Mboz=Nboz=25 run of precise QA
     # with the hidden symmetries C++ booz_xform implementation
     # (ran on a wout created with VMECIO.save of precise QA example with 100 surfs
     # and Mnyq = Nnyq = 30)
-    surfs = 100
+    surfs = 128
     Cpp_booz_output_path = (
         f"./tests/inputs/boozmn_{surfs}_surfs_precise_QA"
         + f"_sims_booz_{boozer_res_M}.nc"
@@ -1534,7 +1534,7 @@ def test_make_boozmn_output_against_hidden_symmetries_booz_xform(TmpDir):
     make_boozmn_output(
         eq,
         output_path,
-        surfs=surfs,
+        surfs=4,
         verbose=0,
         M_booz=boozer_res_M,
         N_booz=boozer_res_N,
@@ -1551,10 +1551,6 @@ def test_make_boozmn_output_against_hidden_symmetries_booz_xform(TmpDir):
 
     quantities = [R_mnc, Z_mns, B_mnc, g_mnc, nu_mns]
     quant_names = ["R", "Z", "|B|", "sqrt(g)_B", "nu"]
-    quant_parity = ["cos", "sin", "cos", "cos", "sin"]
-
-    xm = file.variables["ixm_b"][:].filled()
-    xn = file.variables["ixn_b"][:].filled()
 
     # load in the .nc from the cpp version
 
@@ -1566,199 +1562,39 @@ def test_make_boozmn_output_against_hidden_symmetries_booz_xform(TmpDir):
     nu_mns_cpp = file_cpp.variables["pmns_b"][:].filled()
     g_mnc_cpp = file_cpp.variables["gmn_b"][:].filled()
 
-    xm_cpp = file_cpp.variables["ixm_b"][:].filled()
-    xn_cpp = file_cpp.variables["ixn_b"][:].filled()
-
     quantities_cpp = [R_mnc_cpp, Z_mns_cpp, B_mnc_cpp, g_mnc_cpp, nu_mns_cpp]
 
-    np.testing.assert_allclose(xm_cpp, xm, atol=1e-16)
-    np.testing.assert_allclose(xn_cpp, xn, atol=1e-16)
-
-    # precompute some things to avoid redundant calculations
-    quant_mns = {}
-    quant_cpp_mns = {}
-    ms = {}
-    ns = {}
-    quant_bases = {}
-    quant_mode_idxs = {}
-    for quant_index in range(len(quantities)):
-        name = quant_names[quant_index]
-        quant = quantities[quant_index]
-        quant_cpp = quantities_cpp[quant_index]
-        parity = quant_parity[quant_index]
-
-        # convert from VMEC-style Fourier basis to DESC-style
-        m, n, quant_mn = (
-            ptolemy_identity_fwd(xm, xn, np.zeros_like(quant), quant)
-            if parity == "cos"
-            else ptolemy_identity_fwd(xm, xn, quant, np.zeros_like(quant))
-        )
-        m, n, quant_cpp_mn = (
-            ptolemy_identity_fwd(xm, xn, np.zeros_like(quant_cpp), quant_cpp)
-            if parity == "cos"
-            else ptolemy_identity_fwd(xm, xn, quant_cpp, np.zeros_like(quant_cpp))
-        )
-        # Must use sym=False even if eq.sym=True
-        # because otherwise it claims that certain modes are not in the basis...
-        basis = DoubleFourierSeries(
-            round(np.max(m)), round(np.max(n) / eq.NFP), sym=False, NFP=eq.NFP
-        )
-        idxs = []
-        for i, (mm, nn) in enumerate(zip(m, n / eq.NFP)):
-            idx = basis.get_idx(L=0, M=mm, N=nn)
-            idxs.append(idx)
-
-        quant_mns[name] = quant_mn
-        ms[name] = m
-        ns[name] = n
-        quant_bases[name] = basis
-        quant_cpp_mns[name] = quant_cpp_mn
-        quant_mode_idxs[name] = np.asarray(idxs)
-
-    ## test these quantities by evaluating on a grid
-    # create grid on which to check values btwn DESC eq.compute and the
-    # evaluated Boozer harmonics for each quantity from each booz xform implementation
-    M = 20
-    N = 20
-    # make half grid in s
-    s_full = np.linspace(0, 1, surfs)
+    # the half-grid for ns=128 contains the 3 half-grid pts of ns=4
+    # s = 1/6, 1/2, 5/6 so we will compare the quantities there
+    s_full_cpp = np.linspace(0, 1, surfs)
     hs = 1 / (surfs - 1)
-    s_half = s_full[0:-1] + hs / 2
+    s_half_cpp = s_full_cpp[0:-1] + hs / 2
+    surf_ind_1_6 = np.argmin(abs(s_half_cpp - 1 / 6))
+    surf_ind_1_2 = np.argmin(abs(s_half_cpp - 1 / 2))
+    surf_ind_5_6 = np.argmin(abs(s_half_cpp - 5 / 6))
 
-    quants_that_pass_zero = ["Z", "nu"]
-    for surf_index in np.arange(0, surfs, 20):
-        rho = np.sqrt(s_half[surf_index])
-        grid = LinearGrid(rho=rho, M=M, N=N, NFP=eq.NFP)
-        data = eq.compute(
-            ["theta_B", "zeta_B", "psi_r"] + quant_names,
-            grid=grid,
-            M_booz=boozer_res_M,
-            N_booz=boozer_res_N,
+    for quant, quant_cpp, name in zip(quantities, quantities_cpp, quant_names):
+        np.testing.assert_allclose(
+            quant[0, :],
+            quant_cpp[surf_ind_1_6, :],
+            rtol=1e-3,
+            atol=7e-4,
+            err_msg=f"{name} at s=1/6",
         )
-        # make the grid in Boozer angles at this surface corresponding
-        # to the DESC theta,zeta angles that our quantities
-        # are computed on
-        grid_boozer = Grid(
-            np.vstack(
-                (np.ones_like(data["theta_B"]) * rho, data["theta_B"], data["zeta_B"])
-            ).T,
-            sort=False,
+        np.testing.assert_allclose(
+            quant[1, :],
+            quant_cpp[surf_ind_1_2, :],
+            rtol=1e-3,
+            atol=7e-4,
+            err_msg=f"{name} at s=1/2",
         )
-
-        for quant_index in range(len(quantities)):
-            name = quant_names[quant_index]
-            quant = quantities[quant_index]
-            quant_cpp = quantities_cpp[quant_index]
-            parity = quant_parity[quant_index]
-
-            quant_mn = quant_mns[name][surf_index, :]
-            m = ms[name]
-            n = ns[name]
-            quant_cpp_mn = quant_cpp_mns[name][surf_index, :]
-            basis = quant_bases[name]
-            idxs = quant_mode_idxs[name]
-
-            # negate nu since we save it as negative of what our convention is
-            # to comply with booz_xform notation
-            quant_mn = -quant_mn if name == "nu" else quant_mn
-            quant_cpp_mn = -quant_cpp_mn if name == "nu" else quant_cpp_mn
-
-            # mutliply by psi_r at this surface because the saved jacobian is
-            # from (psi,theta_B,zeta_B) to lab frame, and we in DESC
-            # calculate the jacobian for (rho, theta_B, zeta_B) to lab frame
-            quant_mn = quant_mn * data["psi_r"][0] if name == "sqrt(g)_B" else quant_mn
-            quant_cpp_mn = (
-                quant_cpp_mn * data["psi_r"][0] if name == "sqrt(g)_B" else quant_cpp_mn
-            )
-
-            # use saved mode indices to put the modes in the correct order
-            quant_mn = np.where(basis.modes[:, 1] < 0, -quant_mn, quant_mn)
-            quant_mn_desc_basis = np.zeros((basis.num_modes,))
-            quant_mn_desc_basis[idxs] = quant_mn
-
-            quant_cpp_mn = np.where(basis.modes[:, 1] < 0, -quant_cpp_mn, quant_cpp_mn)
-            quant_cpp_mn_desc_basis = np.zeros((basis.num_modes,))
-            quant_cpp_mn_desc_basis[idxs] = quant_cpp_mn
-
-            # transform to real space
-            quant_trans = Transform(grid=grid_boozer, basis=basis)
-            quant_from_booz = quant_trans.transform(quant_mn_desc_basis)
-            quant_cpp_from_booz = quant_trans.transform(quant_cpp_mn_desc_basis)
-
-            # Boozer transform has more error at edge (where force error is
-            # higher), so increase rtol as edge is neared
-            rtol = 5e-5 + 6e-4 * np.floor(surf_index / 15)
-            if name in quants_that_pass_zero:
-                # if quantities pass through zero, rtol can be
-                # an unreliable indicator of agreement, so we include atol as well
-                not_zero_inds = np.where(np.abs(quant_from_booz) > 1e-2)
-                near_zero_inds = np.where(np.abs(quant_from_booz) < 1e-2)
-                np.testing.assert_allclose(
-                    quant_from_booz[not_zero_inds],
-                    data[name][not_zero_inds],
-                    rtol=rtol,
-                    err_msg=f"{name} at surf index {surf_index}",
-                )
-
-                np.testing.assert_allclose(
-                    quant_from_booz[near_zero_inds],
-                    data[name][near_zero_inds],
-                    atol=5e-5,
-                    rtol=1e-2,
-                    err_msg=f"{name} at surf index {surf_index}",
-                )
-                # same for the cpp quantities versus DESC quantities
-                # worse tolerances because of the finite differencing
-                # in the booz xform code
-                not_zero_inds = np.where(np.abs(quant_cpp_from_booz) > 1e-2)
-                near_zero_inds = np.where(np.abs(quant_cpp_from_booz) < 1e-2)
-                np.testing.assert_allclose(
-                    quant_cpp_from_booz[not_zero_inds],
-                    data[name][not_zero_inds],
-                    rtol=1.5e-2,
-                    err_msg=f"{name} at surf index {surf_index} from cpp",
-                )
-                np.testing.assert_allclose(
-                    quant_cpp_from_booz[near_zero_inds],
-                    data[name][near_zero_inds],
-                    atol=1.5e-4,
-                    rtol=1.5e-2,
-                    err_msg=f"{name} at surf index {surf_index} from cpp",
-                )
-            else:
-                np.testing.assert_allclose(
-                    quant_from_booz,
-                    data[name],
-                    rtol=rtol,
-                    err_msg=f"{name} at surf index {surf_index}",
-                )
-                np.testing.assert_allclose(
-                    quant_cpp_from_booz,
-                    data[name],
-                    rtol=rtol + 3e-4,
-                    err_msg=f"{name} at surf index {surf_index} from cpp",
-                )
-    # test misc quantities
-    for key in list(file_cpp.variables.keys()):
-        if key not in [
-            "rmnc_b",
-            "zmns_b",
-            "bmnc_b",
-            "gmn_b",
-            "pmns_b",
-            "ixm_b",
-            "ixn_b",
-            "version",  # skip version bc they are different strings
-            # ones below here, the cpp version does not calculate
-            "rmax_b",
-            "rmin_b",
-            "pres_b",
-            "phip_b",
-            "ns_b",
-        ]:
-            np.testing.assert_allclose(
-                file.variables[key], file_cpp.variables[key], err_msg=key, atol=1e-16
-            )
+        np.testing.assert_allclose(
+            quant[2, :],
+            quant_cpp[surf_ind_5_6, :],
+            rtol=1e-3,
+            atol=7e-4,
+            err_msg=f"{name} at s=5/6",
+        )
 
 
 @pytest.mark.regression

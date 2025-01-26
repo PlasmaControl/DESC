@@ -484,7 +484,7 @@ def vmec_boundary_subspace(eq, RBC=None, ZBS=None, RBS=None, ZBC=None):  # noqa:
     return opt_subspace
 
 
-def make_boozmn_output(  # noqa: 16 fxn too complex
+def make_boozmn_output(  # noqa: C901
     eq, path, surfs=128, M_booz=None, N_booz=None, verbose=0
 ):
     """Create and save a booz_xform-style .nc output file.

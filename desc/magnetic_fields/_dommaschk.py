@@ -6,7 +6,7 @@ https://doi.org/10.1016/0010-4655(86)90109-8
 """
 
 import sympy as sp
-from sympy.abc import x_sym
+from sympy.abc import x as x_sym
 from sympy.vector import CoordSys3D
 
 from desc.backend import jit, jnp

@@ -401,7 +401,7 @@ class FourierSeries(_Basis):
             Basis functions evaluated at nodes.
             The Vandermonde matrix when ``modes is None`` is
             given by ``y.reshape(-1,2*N+1)`` and is ordered
-            [sin(Nx), ..., sin(x), 1, cos(x), ..., cos(Nx)].
+            [sin(N𝛇), ..., sin(𝛇), 1, cos(𝛇), ..., cos(N𝛇)].
 
         """
         if modes is None:
@@ -531,8 +531,8 @@ class DoubleFourierSeries(_Basis):
             The Vandermonde matrix when ``modes is None`` is
             given by ``y.reshape(-1,2*M+1,2*N+1)`` and
             is an outer product of Fourier matrices with order
-            [sin(Mx), ..., sin(x), 1, cos(x), ..., cos(Mx)]
-            ⊗ [sin(Ny), ..., sin(y), 1, cos(y), ..., cos(Ny)].
+            [sin(M𝛉), ..., sin(𝛉), 1, cos(𝛉), ..., cos(M𝛉)]
+            ⊗ [sin(N𝛇), ..., sin(𝛇), 1, cos(𝛇), ..., cos(N𝛇)].
 
         """
         if modes is None:
@@ -893,9 +893,9 @@ class ChebyshevDoubleFourierBasis(_Basis):
             The Vandermonde matrix when ``modes is None`` is given by
             ``y.reshape(-1,L+1,2*M+1,2*N+1,3)`` and is
             an outer product of Chebyshev and Fourier matrices with order
-            [T₀(y), T₁(y), ..., T_L(y)]
-            ⊗ [sin(Mx), ..., sin(x), 1, cos(x), ..., cos(Mx)]
-            ⊗ [sin(Ny), ..., sin(y), 1, cos(y), ..., cos(Ny)].
+            [T₀(𝛒), T₁(𝛒), ..., T_L(𝛒)]
+            ⊗ [sin(M𝛉), ..., sin(𝛉), 1, cos(𝛉), ..., cos(M𝛉)]
+            ⊗ [sin(N𝛇), ..., sin(𝛇), 1, cos(𝛇), ..., cos(N𝛇)].
 
         """
         if modes is None:

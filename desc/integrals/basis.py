@@ -230,10 +230,10 @@ class FourierChebyshevSeries(IOAble):
         The order of the returned coefficient array
         matches the Vandermonde matrix formed by an outer
         product of Fourier and Chebyshev matrices with order
-        [sin(kx), ..., sin(x), 1, cos(x), ..., cos(kx)]
-        ⊗ [T₀(y), T₁(y), ..., Tₙ(y)]
+        [sin(k𝐱), ..., sin(𝐱), 1, cos(𝐱), ..., cos(k𝐱)]
+        ⊗ [T₀(𝐲), T₁(𝐲), ..., Tₙ(𝐲)]
 
-        When ``self.X`` is even the sin(kx) coefficient is zero and is excluded.
+        When ``self.X`` is even the sin(k𝐱) coefficient is zero and is excluded.
 
         Returns
         -------

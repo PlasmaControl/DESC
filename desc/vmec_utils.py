@@ -12,10 +12,10 @@ def ptolemy_identity_fwd(m_0, n_0, s, c):
     """Convert from double-angle to double-Fourier form using Ptolemy's identity.
 
     Converts from the double-angle form:
-        s*sin(m*theta-n*phi) + c*cos(m*theta-n*phi)
+        s * sin(m𝛉-n𝛟) + c * cos(m𝛉-n𝛟)
     to a double Fourier series of the form:
-        ss*sin(m*theta)*sin(n*phi) + sc*sin(m*theta)*cos(n*phi) +
-        cs*cos(m*theta)*sin(n*phi) + cc*cos(m*theta)*cos(n*phi)
+        ss * sin(m𝛉) * sin(n𝛟) + sc * sin(m𝛉) * cos(n𝛟) +
+        cs * cos(m𝛉) * sin(n𝛟) + cc * cos(m𝛉) * cos(n𝛟)
     using Ptolemy's sum and difference formulas.
 
     Parameters
@@ -25,10 +25,10 @@ def ptolemy_identity_fwd(m_0, n_0, s, c):
     n_0 : ndarray
         Toroidal mode numbers of the double-angle Fourier basis.
     s : ndarray, shape(surfs,num_modes), optional
-        Coefficients of sin(m*theta-n*phi) terms.
+        Coefficients of sin(m𝛉-n𝛟) terms.
         Each row is a separate flux surface.
     c : ndarray, shape(surfs,num_modes), optional
-        Coefficients of cos(m*theta-n*phi) terms.
+        Coefficients of cos(m𝛉-n𝛟) terms.
         Each row is a separate flux surface.
 
     Returns
@@ -54,10 +54,10 @@ def ptolemy_identity_rev(m_1, n_1, x):
     """Convert from double-Fourier to double-angle form using Ptolemy's identity.
 
     Converts from a double Fourier series of the form:
-        ss*sin(m*theta)*sin(n*phi) + sc*sin(m*theta)*cos(n*phi) +
-        cs*cos(m*theta)*sin(n*phi) + cc*cos(m*theta)*cos(n*phi)
+        ss * sin(m𝛉) * sin(n𝛟) + sc * sin(m𝛉) * cos(n𝛟) +
+        cs * cos(m𝛉) * sin(n𝛟) + cc * cos(m𝛉) * cos(n𝛟)
     to the double-angle form:
-        s*sin(m*theta-n*phi) + c*cos(m*theta-n*phi)
+        s * sin(m𝛉-n𝛟) + c * cos(m𝛉-n𝛟)
     using Ptolemy's sum and difference formulas.
 
     Parameters
@@ -76,10 +76,10 @@ def ptolemy_identity_rev(m_1, n_1, x):
     n_0 : ndarray
         Toroidal mode numbers of the double-angle Fourier basis.
     s : ndarray, shape(surfs,num_modes)
-        Coefficients of sin(m*theta-n*phi) terms.
+        Coefficients of sin(m𝛉-n𝛟) terms.
         Each row is a separate flux surface.
     c : ndarray, shape(surfs,num_modes)
-        Coefficients of cos(m*theta-n*phi) terms.
+        Coefficients of cos(m𝛉-n𝛟) terms.
         Each row is a separate flux surface.
 
     """
@@ -293,8 +293,8 @@ def rfft_to_trig(a, n, axis=-1):
 
         Coefficients are ordered along ``axis`` of size ``n`` to match
         Vandermonde matrix with order
-        [sin(kx), ..., sin(x), 1, cos(x), ..., cos(kx)].
-        When ``n`` is even the sin(kx) coefficient is zero and is excluded.
+        [sin(k𝐱), ..., sin(𝐱), 1, cos(𝐱), ..., cos(k𝐱)].
+        When ``n`` is even the sin(k𝐱) coefficient is zero and is excluded.
 
     """
     is_even = (n % 2) == 0
@@ -338,8 +338,8 @@ def trig_vander(x, n, domain=(0, 2 * jnp.pi)):
     vander : jnp.ndarray
         Shape (*x.shape, n).
         Vandermonde matrix of degree ``n-1`` and sample points ``x``.
-        Last axis ordered as [sin(kx), ..., sin(x), 1, cos(x), ..., cos(kx)].
-        When ``n`` is even the sin(kx) basis function is excluded.
+        Last axis ordered as [sin(k𝐱), ..., sin(𝐱), 1, cos(𝐱), ..., cos(k𝐱)].
+        When ``n`` is even the sin(k𝐱) basis function is excluded.
 
     """
     is_even = (n % 2) == 0

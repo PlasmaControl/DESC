@@ -144,7 +144,8 @@ def heuristic_support_params(grid):
     """Parameters for heuristic support size and heuristic quadrature resolution.
 
     Return parameters following the asymptotic rule of thumb
-    in Mahlotora [2], generalized for not square grids.
+    in Mahlotora [2], generalized for the partition to have the correct shape
+    for rectangular (e.g. perhaps not square) grids.
 
     Parameters
     ----------
@@ -538,8 +539,6 @@ def _nonsingular_part(
             )
             return jnp.sum(k * (w * (1 - eta))[..., jnp.newaxis], axis=1)
 
-        # vmap for inner part found more efficient than loop, especially on gpu,
-        # but for jacobian looped seems to be better and less memory
         f += batch_map(eval_pt, eval_data, 1 if loop else None).reshape(
             eval_grid.num_nodes, kernel.ndim
         )
@@ -590,6 +589,9 @@ def _singular_part(eval_data, source_data, kernel, interpolator, loop=False):
         keys.add("omega")
     keys = list(keys)
     fsource = [source_data[key] for key in keys]
+    # Note that it is necessary to take the Fourier transforms of the
+    # vector coordinates of the orthonormal polar basis vectors R̂, ϕ̂, Ẑ.
+    # Vector coordinates in the Cartesian basis are not NFP periodic.
     if isinstance(interpolator, DFTInterpolator):
         fsource = [interpolator.fourier(val) for val in fsource]
         is_fourier = True
@@ -616,17 +618,29 @@ def _singular_part(eval_data, source_data, kernel, interpolator, loop=False):
             for key, val in zip(keys, fsource)
         }
         # The (θ, ζ) coordinates at which the maps above were evaluated.
+        # For FFT interpolator on functions with toroidal variation used on
+        # grids of different NFP, we still use eval grid to compute coordinates.
+        # These are the points the above maps were evaluated, but the values
+        # of the vector coordinates of the orthonormal polar basis are the same.
+        # However, the polar basis vectors between the evaluation point
+        # and the point that was interpolated to do point in different directions,
+        # so it is important to use eval grid to compute the coordinates.
         source_data_polar["theta"] = eval_theta + interpolator.shift_t[i]
         source_data_polar["zeta"] = eval_zeta + interpolator.shift_z[i]
         # ϕ is not periodic map of θ, ζ.
         if "omega" in keys:
+            # TODO: For nonzero ω, the quadrature will not be symmetric about the
+            #  singular point for hypersingular kernels such as the Biot-Savart
+            #  kernel. (Recall the singularity is in real in real space). Hence
+            #  the quadrature will not converge to the desired Hadamard finite
+            #  part integral.
             source_data_polar["phi"] = (
                 source_data_polar["zeta"] + source_data_polar["omega"]
             )
 
         # eval pts x source pts for 1 polar grid offset
         # only need diagonal term because polar grid points
-        # don't contribute to other eval pts due to the c.o.v.
+        # don't contribute to other eval pts.
         k = kernel(eval_data, source_data_polar, diag=True).reshape(
             eval_grid.num_nodes, kernel.ndim
         )

@@ -466,6 +466,7 @@ def idct_non_uniform(xq, a, n, axis=-1):
     n = jnp.arange(n)
     # |a| << |xq|, so move axis of a instead
     a = jnp.moveaxis(a, axis, -1)
+    # Same as Clenshaw recursion ``chebval(xq,a,tensor=False)`` but better on GPU.
     return jnp.linalg.vecdot(jnp.cos(n * jnp.arccos(xq)[..., jnp.newaxis]), a)
 
 

@@ -1566,7 +1566,7 @@ def test_domm_field_is_nonzero_and_continuous_across_Z_0():
 @pytest.mark.mpl_image_compare(remove_text=True, tolerance=10)
 @pytest.mark.unit
 def test_domm_W7AS():
-    """Test can get flux surfaces from W7-AS Dommashk coefficients."""
+    """Test getting flux surfaces from W7-AS Dommaschk coefficients."""
     # W7-AS
     # The coefficients are taken from IPP-Report IPP_0_48 by Dommaschk et al.
     B0 = 1.00

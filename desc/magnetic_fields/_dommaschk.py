@@ -6,7 +6,7 @@ https://doi.org/10.1016/0010-4655(86)90109-8
 """
 
 import sympy as sp
-from sympy.abc import x
+from sympy.abc import x_sym
 from sympy.vector import CoordSys3D
 
 from desc.backend import jit, jnp
@@ -395,8 +395,8 @@ def CD_m_k(R, m, k):
         # call itself recursively
         # Eq 6
         return sp.integrate(
-            CD_m_k(x, 0, k - 1) * (sp.log(x) - sp.log(R)) * x,
-            (x, 1, R),
+            CD_m_k(x_sym, 0, k - 1) * (sp.log(x_sym) - sp.log(R)) * x_sym,
+            (x_sym, 1, R),
             **sp_integrate_kwargs,
         )
     elif k == 0:
@@ -405,8 +405,8 @@ def CD_m_k(R, m, k):
         # Eq 7
         return (
             sp.integrate(
-                CD_m_k(x, m, k - 1) * ((x / R) ** m - (R / x) ** m) * x,
-                (x, 1, R),
+                CD_m_k(x_sym, m, k - 1) * ((x_sym / R) ** m - (R / x_sym) ** m) * x_sym,
+                (x_sym, 1, R),
                 **sp_integrate_kwargs,
             )
             / 2
@@ -432,8 +432,8 @@ def CN_m_k(R, m, k):
         # call itself recursively
         # Eq 6
         return sp.integrate(
-            CN_m_k(x, 0, k - 1) * (sp.log(x) - sp.log(R)) * x,
-            (x, 1, R),
+            CN_m_k(x_sym, 0, k - 1) * (sp.log(x_sym) - sp.log(R)) * x_sym,
+            (x_sym, 1, R),
             **sp_integrate_kwargs,
         )
     elif k == 0:
@@ -442,8 +442,8 @@ def CN_m_k(R, m, k):
         # Eq 7
         return (
             sp.integrate(
-                CN_m_k(x, m, k - 1) * ((x / R) ** m - (R / x) ** m) * x,
-                (x, 1, R),
+                CN_m_k(x_sym, m, k - 1) * ((x_sym / R) ** m - (R / x_sym) ** m) * x_sym,
+                (x_sym, 1, R),
                 **sp_integrate_kwargs,
             )
             / 2
@@ -452,26 +452,24 @@ def CN_m_k(R, m, k):
 
 
 def D_m_n(R, Z, m, n):
-    """D_m_n term in eqn 8 of Dommaschk paper."""
+    """D_m_n term in eqn 3 and 8 of Dommaschk paper."""
     result = 0.0
-    for k in range(n + 1):
-        if 2 * k <= n:
-            # sp.expand here found to make later AD of potential faster
-            coef = sp.expand(CD_m_k(R, m, k)) / gamma(n - 2 * k + 1)
-            exp = n - 2 * k
-            result += coef * Z**exp
+    for k in range(n // 2 + 1):
+        # sp.expand here found to make later AD of potential faster
+        coef = sp.expand(CD_m_k(R, m, k)) / gamma(n - 2 * k + 1)
+        exp = n - 2 * k
+        result += coef * Z**exp
     return result
 
 
 def N_m_n(R, Z, m, n):
-    """N_m_n term in eqn 9 of Dommaschk paper."""
+    """N_m_n term in eqn 3 and 9 of Dommaschk paper."""
     result = 0.0
-    for k in range(n + 1):
-        if 2 * k <= n:
-            # sp.expand here found to make later AD of potential faster
-            coef = sp.expand(CN_m_k(R, m, k)) / gamma(n - 2 * k + 1)
-            exp = n - 2 * k
-            result += coef * Z**exp
+    for k in range(n // 2 + 1):
+        # sp.expand here found to make later AD of potential faster
+        coef = sp.expand(CN_m_k(R, m, k)) / gamma(n - 2 * k + 1)
+        exp = n - 2 * k
+        result += coef * Z**exp
     return result
 
 

@@ -1637,6 +1637,12 @@ def test_make_boozmn_output_against_hidden_symmetries_booz_xform(TmpDir):
                 atol=7e-4,
                 err_msg=f"{name} at s=5/6",
             )
+    # test some misc quantities
+    misc = ["mboz_b", "nboz_b", "ixm_b", "ixn_b"]
+    for name in misc:
+        np.testing.assert_allclose(
+            file.variables[name][:].filled(), file_cpp.variables[name][:].filled()
+        )
 
 
 @pytest.mark.regression

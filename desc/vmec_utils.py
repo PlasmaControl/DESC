@@ -579,8 +579,11 @@ def make_boozmn_output(  # noqa: C901
     timer.start("Boozer Transform")
 
     # precompute the needed data for the boozer surface computations
+    # and for saving the boozmn.nc file
     keys = [
         "|B|",
+        "<|B|^2>",
+        "p",
         "R",
         "Z",
         "sqrt(g)",
@@ -808,25 +811,39 @@ def make_boozmn_output(  # noqa: C901
     bvco_b[0] = 0
     bvco_b[1:] = grid.compress(data["G"])
 
-    # TODO: assuming this is on full mesh
     presf = file.createVariable("pres_b", np.float64, ("radius",))
     presf.long_name = "pressure on full mesh"
     presf.units = "Pa"
     presf[:] = eq.compute("p", grid=LinearGrid(rho=r_full, theta=0, zeta=0))["p"]
 
     beta = file.createVariable("beta_b", np.float64, ("radius",))
-    beta.long_name = "Blank, only included for compatibility reasons"
+    beta.long_name = "2 * mu_0 * pressure / <|B|^2>, on half mesh"
     beta.units = "None"
-    beta[:] = np.zeros_like(r_full)
+    beta[1:] = 2 * mu_0 * grid.compress(data["p"]) / grid.compress(data["<|B|^2>"])
+    beta[0] = 0.0
 
     phipf = file.createVariable("phip_b", np.float64, ("radius",))
     phipf.long_name = "d(phi)/ds: toroidal flux derivative, not normalized by 2pi"
     phipf[:] = Psi * np.ones((surfs,))
 
     phi = file.createVariable("phi_b", np.float64, ("radius",))
-    phi.long_name = "toroidal flux"
+    phi.long_name = "toroidal flux, on full grid"
     phi.units = "Wb"
     phi[:] = np.linspace(0, Psi, surfs)
+
+    chi = file.createVariable("chi_b", np.float64, ("radius",))
+    chi.long_name = "Uniformly spaced grid going from 0 to"
+    "the boundary poloidal flux (not divided by (2*pi))."
+    chi.units = "Wb"
+    chi[:] = np.linspace(
+        0,
+        eq.compute(
+            "chi", grid=LinearGrid(L=eq.L_grid, M=M_booz, N=N_booz, rho=1.0, NFP=eq.NFP)
+        )["chi"][-1]
+        * 2
+        * np.pi,
+        surfs,
+    )
 
     # multi-dim arrays
 

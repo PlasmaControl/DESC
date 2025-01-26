@@ -22,9 +22,6 @@ from desc.utils import (
 from ..integrals.singularities import _get_default_params
 from .normalization import compute_scaling_factors
 
-# TODO: Often eval grid and source grid are the same, so don't recompute
-#       everything twice. Just check if eval grid == source grid first.
-
 
 class VacuumBoundaryError(_Objective):
     """Target for free boundary conditions on LCFS for vacuum equilibrium.
@@ -444,6 +441,7 @@ class BoundaryError(_Objective):
             target = 0
         self._source_grid = source_grid
         self._eval_grid = eval_grid
+        self._eval_grid_is_source_grid = source_grid == eval_grid
         self._st = parse_argname_change(st, kwargs, "s", "st")
         self._sz = sz
         self._q = q
@@ -496,11 +494,17 @@ class BoundaryError(_Objective):
             source_grid = self._source_grid
 
         if self._eval_grid is None:
-            eval_grid = LinearGrid(
-                rho=np.array([1.0]), M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False
+            eval_grid = (
+                LinearGrid(
+                    rho=np.array([1.0]), M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False
+                )
+                if eq.N == 0
+                else source_grid
             )
         else:
             eval_grid = self._eval_grid
+
+        self._eval_grid_is_source_grid = eval_grid == source_grid
 
         errorif(
             not np.all(source_grid.nodes[:, 0] == 1.0),
@@ -564,8 +568,12 @@ class BoundaryError(_Objective):
 
         source_profiles = get_profiles(self._eq_data_keys, obj=eq, grid=source_grid)
         source_transforms = get_transforms(self._eq_data_keys, obj=eq, grid=source_grid)
-        eval_profiles = get_profiles(self._eq_data_keys, obj=eq, grid=eval_grid)
-        eval_transforms = get_transforms(self._eq_data_keys, obj=eq, grid=eval_grid)
+        if self._eval_grid_is_source_grid:
+            eval_profiles = source_profiles
+            eval_transforms = source_transforms
+        else:
+            eval_profiles = get_profiles(self._eq_data_keys, obj=eq, grid=eval_grid)
+            eval_transforms = get_transforms(self._eq_data_keys, obj=eq, grid=eval_grid)
 
         neq = 3 if self._sheet_current else 2  # number of equations we're using
 
@@ -581,14 +589,16 @@ class BoundaryError(_Objective):
 
         if self._sheet_current:
             self._sheet_data_keys = ["K"]
-            sheet_eval_transforms = get_transforms(
-                self._sheet_data_keys, obj=eq.surface, grid=eval_grid
-            )
-            sheet_source_transforms = get_transforms(
+            self._constants["sheet_source_transforms"] = get_transforms(
                 self._sheet_data_keys, obj=eq.surface, grid=source_grid
             )
-            self._constants["sheet_eval_transforms"] = sheet_eval_transforms
-            self._constants["sheet_source_transforms"] = sheet_source_transforms
+            self._constants["sheet_eval_transforms"] = (
+                self._constants["sheet_source_transforms"]
+                if self._eval_grid_is_source_grid
+                else get_transforms(
+                    self._sheet_data_keys, obj=eq.surface, grid=eval_grid
+                )
+            )
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -643,14 +653,19 @@ class BoundaryError(_Objective):
             transforms=constants["source_transforms"],
             profiles=constants["source_profiles"],
         )
-        eval_data = compute_fun(
-            "desc.equilibrium.equilibrium.Equilibrium",
-            self._eq_data_keys,
-            params=eq_params,
-            transforms=constants["eval_transforms"],
-            profiles=constants["eval_profiles"],
+        eval_data = (
+            source_data
+            if self._eval_grid_is_source_grid
+            else compute_fun(
+                "desc.equilibrium.equilibrium.Equilibrium",
+                self._eq_data_keys,
+                params=eq_params,
+                transforms=constants["eval_transforms"],
+                profiles=constants["eval_profiles"],
+            )
         )
         if self._sheet_current:
+            p = "desc.magnetic_fields._current_potential.FourierCurrentPotentialField"
             sheet_params = {
                 "R_lmn": eq_params["Rb_lmn"],
                 "Z_lmn": eq_params["Zb_lmn"],
@@ -659,18 +674,22 @@ class BoundaryError(_Objective):
                 "Phi_mn": eq_params["Phi_mn"],
             }
             sheet_source_data = compute_fun(
-                "desc.magnetic_fields._current_potential.FourierCurrentPotentialField",
+                p,
                 self._sheet_data_keys,
                 params=sheet_params,
                 transforms=constants["sheet_source_transforms"],
                 profiles={},
             )
-            sheet_eval_data = compute_fun(
-                "desc.magnetic_fields._current_potential.FourierCurrentPotentialField",
-                self._sheet_data_keys,
-                params=sheet_params,
-                transforms=constants["sheet_eval_transforms"],
-                profiles={},
+            sheet_eval_data = (
+                sheet_source_data
+                if self._eval_grid_is_source_grid
+                else compute_fun(
+                    p,
+                    self._sheet_data_keys,
+                    params=sheet_params,
+                    transforms=constants["sheet_eval_transforms"],
+                    profiles={},
+                )
             )
             source_data["K_vc"] += sheet_source_data["K"]
 

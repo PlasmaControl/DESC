@@ -385,8 +385,8 @@ def _sqrt_g_Boozer_DESC(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
-    name="sqrt(g)_B",
-    label="\\sqrt{g}_B",
+    name="sqrt(g)_Boozer",
+    label="\\sqrt{g}_Boozer",
     units="m^{3}",
     units_long="cubic meters",
     description="Jacobian determinant from (rho, theta_B, zeta_B)"
@@ -399,12 +399,12 @@ def _sqrt_g_Boozer_DESC(params, transforms, profiles, data, **kwargs):
     data=["sqrt(g)_Boozer_DESC", "sqrt(g)"],
 )
 def _sqrtg_B(params, transforms, profiles, data, **kwargs):
-    data["sqrt(g)_B"] = data["sqrt(g)"] / data["sqrt(g)_Boozer_DESC"]
+    data["sqrt(g)_Boozer"] = data["sqrt(g)"] / data["sqrt(g)_Boozer_DESC"]
     return data
 
 
 @register_compute_fun(
-    name="sqrt(g)_B_mn",
+    name="sqrt(g)_Boozer_mn",
     label="\\sqrt{g}_{B,mn}",
     units="m^{3}",
     units_long="cubic meters",
@@ -418,7 +418,7 @@ def _sqrtg_B(params, transforms, profiles, data, **kwargs):
     resolution_requirement="tz",
     grid_requirement={"is_meshgrid": True},
     data=[
-        "sqrt(g)_B",
+        "sqrt(g)_Boozer",
         "sqrt(g)_Boozer_DESC",
         "rho",
         "theta_B",
@@ -428,7 +428,7 @@ def _sqrtg_B(params, transforms, profiles, data, **kwargs):
     M_booz="int: Maximum poloidal mode number for Boozer harmonics. Default 2*eq.M",
     N_booz="int: Maximum toroidal mode number for Boozer harmonics. Default 2*eq.N",
 )
-def _sqrtg_B_mn(params, transforms, profiles, data, **kwargs):
+def _sqrtg_Boozer_mn(params, transforms, profiles, data, **kwargs):
     norm = data["Boozer transform modes norm"]
     grid = transforms["grid"]
 
@@ -452,11 +452,11 @@ def _sqrtg_B_mn(params, transforms, profiles, data, **kwargs):
             data["theta_B"],
             data["zeta_B"],
             data["sqrt(g)_Boozer_DESC"],
-            data["sqrt(g)_B"],
+            data["sqrt(g)_Boozer"],
         ),
     )
     sqrtg_B_mn = vmap(fun)(rho, theta_B, zeta_B, sqrtg_B_desc, sqrtg_B)
-    data["sqrt(g)_B_mn"] = sqrtg_B_mn.flatten()
+    data["sqrt(g)_Boozer_mn"] = sqrtg_B_mn.flatten()
     return data
 
 

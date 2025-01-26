@@ -601,7 +601,7 @@ def make_boozmn_output(  # noqa: 16 fxn too complex
     ]
     data_vol = eq.compute(keys, grid=grid)
 
-    data_keys = ["|B|_mn_B", "R_mn_B", "sqrt(g)_B_mn", "psi_r"]
+    data_keys = ["|B|_mn_B", "R_mn_B", "sqrt(g)_Boozer_mn", "psi_r"]
     data_keys = data_keys + ["Z_mn_B", "nu_mn"] if not eq.sym else data_keys
     data_keys_sin = ["Z_mn_B", "nu_mn"]
 
@@ -629,7 +629,7 @@ def make_boozmn_output(  # noqa: 16 fxn too complex
     # for (psi,theta_B, zeta_B) -> (R,phi,Z)
     # instead of (rho,theta_B, zeta_B)
     sqrt_g_B_mn = (
-        data["sqrt(g)_B_mn"].reshape((grid.num_rho, -1))
+        data["sqrt(g)_Boozer_mn"].reshape((grid.num_rho, -1))
         / grid.compress(data["psi_r"])[:, None]
     )
     sqrt_g_B_mn = np.where(mask, -sqrt_g_B_mn, sqrt_g_B_mn)

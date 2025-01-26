@@ -1309,7 +1309,7 @@ def test_make_boozmn_output_DESC(TmpDir):
     g_mnc = file.variables["gmn_b"][:].filled()
 
     quantities = [R_mnc, Z_mns, B_mnc, g_mnc, nu_mns]
-    quant_names = ["R", "Z", "|B|", "sqrt(g)_B", "nu"]
+    quant_names = ["R", "Z", "|B|", "sqrt(g)_Boozer", "nu"]
     quant_parity = ["cos", "sin", "cos", "cos", "sin"]
 
     xm = file.variables["ixm_b"][:].filled()
@@ -1356,7 +1356,9 @@ def test_make_boozmn_output_DESC(TmpDir):
             # mutliply by psi_r because the saved jacobian is
             # from (psi,theta_B,zeta_B) to lab frame, and we in DESC
             # calculate the jacobian for (rho, theta_B, zeta_B) to lab frame
-            quant_mn = quant_mn * data["psi_r"][0] if name == "sqrt(g)_B" else quant_mn
+            quant_mn = (
+                quant_mn * data["psi_r"][0] if name == "sqrt(g)_Boozer" else quant_mn
+            )
 
             # Must use sym=False even if eq.sym=True
             # because otherwise it claims that certain modes are not in the basis...
@@ -1425,7 +1427,7 @@ def test_make_boozmn_output_DESC_asym(TmpDir):
         [g_mnc, g_mns],
         [nu_mnc, nu_mns],
     ]
-    quant_names = ["R", "Z", "|B|", "sqrt(g)_B", "nu"]
+    quant_names = ["R", "Z", "|B|", "sqrt(g)_Boozer", "nu"]
     quant_parity = [
         ["cos", "sin"],
         ["cos", "sin"],
@@ -1480,7 +1482,9 @@ def test_make_boozmn_output_DESC_asym(TmpDir):
                 # to comply with booz_xform notation
                 quant_mn = -quant_mn if name == "nu" else quant_mn
                 quant_mn = (
-                    quant_mn * data["psi_r"][0] if name == "sqrt(g)_B" else quant_mn
+                    quant_mn * data["psi_r"][0]
+                    if name == "sqrt(g)_Boozer"
+                    else quant_mn
                 )
 
                 basis = DoubleFourierSeries(
@@ -1550,7 +1554,7 @@ def test_make_boozmn_output_against_hidden_symmetries_booz_xform(TmpDir):
     g_mnc = file.variables["gmn_b"][:].filled()
 
     quantities = [R_mnc, Z_mns, B_mnc, g_mnc, nu_mns]
-    quant_names = ["R", "Z", "|B|", "sqrt(g)_B", "nu"]
+    quant_names = ["R", "Z", "|B|", "sqrt(g)_Boozer", "nu"]
 
     # load in the .nc from the cpp version
 

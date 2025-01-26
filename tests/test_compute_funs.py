@@ -1644,3 +1644,12 @@ def test_parallel_grad_fd(DummyStellarator):
         rtol=1e-2,
         atol=1e-2 * np.mean(np.abs(data["B^zeta_z|r,a"])),
     )
+
+
+@pytest.mark.unit
+def test_compute_deprecation_warning():
+    """Test DeprecationWarning for deprecated compute names."""
+    eq = Equilibrium()
+    grid = LinearGrid(L=1, M=2, N=2, NFP=eq.NFP)
+    with pytest.warns(DeprecationWarning, match="deprecated"):
+        eq.compute("sqrt(g)_B", grid=grid)

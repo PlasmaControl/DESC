@@ -374,6 +374,7 @@ def _zeta_B(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["theta_PEST_t", "theta_PEST_z", "phi_t", "phi_z", "nu_t", "nu_z", "iota"],
+    aliases=["sqrt(g)_B"],
 )
 def _sqrt_g_Boozer_DESC(params, transforms, profiles, data, **kwargs):
     data["sqrt(g)_Boozer_DESC"] = (

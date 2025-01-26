@@ -895,12 +895,12 @@ class ObjectiveFunction(IOAble):
                 timer.disp("Hessian compilation time")
         if mode in ["lsq", "all"]:
             timer.start("Objective compilation time")
-            _ = self.compute_scaled(x, self.constants).block_until_ready()
+            _ = self.compute_scaled_error(x, self.constants).block_until_ready()
             timer.stop("Objective compilation time")
             if verbose > 1:
                 timer.disp("Objective compilation time")
             timer.start("Jacobian compilation time")
-            _ = self.jac_scaled(x, self.constants).block_until_ready()
+            _ = self.jac_scaled_error(x, self.constants).block_until_ready()
             timer.stop("Jacobian compilation time")
             if verbose > 1:
                 timer.disp("Jacobian compilation time")

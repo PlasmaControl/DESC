@@ -1552,9 +1552,12 @@ def test_make_boozmn_output_against_hidden_symmetries_booz_xform(TmpDir):
     B_mnc = file.variables["bmnc_b"][:].filled()
     nu_mns = file.variables["pmns_b"][:].filled()
     g_mnc = file.variables["gmn_b"][:].filled()
+    I = file.variables["buco_b"][:].filled()
+    G = file.variables["bvco_b"][:].filled()
+    iota = file.variables["iota_b"][:].filled()
 
-    quantities = [R_mnc, Z_mns, B_mnc, g_mnc, nu_mns]
-    quant_names = ["R", "Z", "|B|", "sqrt(g)_Boozer", "nu"]
+    quantities = [R_mnc, Z_mns, B_mnc, g_mnc, nu_mns, I, G, iota]
+    quant_names = ["R", "Z", "|B|", "sqrt(g)_Boozer", "nu", "I", "G", "iota"]
 
     # load in the .nc from the cpp version
 
@@ -1565,8 +1568,20 @@ def test_make_boozmn_output_against_hidden_symmetries_booz_xform(TmpDir):
     B_mnc_cpp = file_cpp.variables["bmnc_b"][:].filled()
     nu_mns_cpp = file_cpp.variables["pmns_b"][:].filled()
     g_mnc_cpp = file_cpp.variables["gmn_b"][:].filled()
+    I_cpp = file_cpp.variables["buco_b"][:].filled()
+    G_cpp = file_cpp.variables["bvco_b"][:].filled()
+    iota_cpp = file_cpp.variables["iota_b"][:].filled()
 
-    quantities_cpp = [R_mnc_cpp, Z_mns_cpp, B_mnc_cpp, g_mnc_cpp, nu_mns_cpp]
+    quantities_cpp = [
+        R_mnc_cpp,
+        Z_mns_cpp,
+        B_mnc_cpp,
+        g_mnc_cpp,
+        nu_mns_cpp,
+        I_cpp,
+        G_cpp,
+        iota_cpp,
+    ]
 
     # the half-grid for ns=128 contains the 3 half-grid pts of ns=4
     # s = 1/6, 1/2, 5/6 so we will compare the quantities there
@@ -1578,27 +1593,50 @@ def test_make_boozmn_output_against_hidden_symmetries_booz_xform(TmpDir):
     surf_ind_5_6 = np.argmin(abs(s_half_cpp - 5 / 6))
 
     for quant, quant_cpp, name in zip(quantities, quantities_cpp, quant_names):
-        np.testing.assert_allclose(
-            quant[0, :],
-            quant_cpp[surf_ind_1_6, :],
-            rtol=1e-3,
-            atol=7e-4,
-            err_msg=f"{name} at s=1/6",
-        )
-        np.testing.assert_allclose(
-            quant[1, :],
-            quant_cpp[surf_ind_1_2, :],
-            rtol=1e-3,
-            atol=7e-4,
-            err_msg=f"{name} at s=1/2",
-        )
-        np.testing.assert_allclose(
-            quant[2, :],
-            quant_cpp[surf_ind_5_6, :],
-            rtol=1e-3,
-            atol=7e-4,
-            err_msg=f"{name} at s=5/6",
-        )
+        if quant.ndim == 1:  # test the 1D arrays I, G and iota
+            np.testing.assert_allclose(
+                quant[1],
+                quant_cpp[surf_ind_1_6],
+                rtol=1e-3,
+                atol=7e-4,
+                err_msg=f"{name} at s=1/6",
+            )
+            np.testing.assert_allclose(
+                quant[2],
+                quant_cpp[surf_ind_1_2],
+                rtol=1e-3,
+                atol=7e-4,
+                err_msg=f"{name} at s=1/2",
+            )
+            np.testing.assert_allclose(
+                quant[3],
+                quant_cpp[surf_ind_5_6],
+                rtol=1e-3,
+                atol=7e-4,
+                err_msg=f"{name} at s=5/6",
+            )
+        else:
+            np.testing.assert_allclose(
+                quant[0, :],
+                quant_cpp[surf_ind_1_6, :],
+                rtol=1e-3,
+                atol=7e-4,
+                err_msg=f"{name} at s=1/6",
+            )
+            np.testing.assert_allclose(
+                quant[1, :],
+                quant_cpp[surf_ind_1_2, :],
+                rtol=1e-3,
+                atol=7e-4,
+                err_msg=f"{name} at s=1/2",
+            )
+            np.testing.assert_allclose(
+                quant[2, :],
+                quant_cpp[surf_ind_5_6, :],
+                rtol=1e-3,
+                atol=7e-4,
+                err_msg=f"{name} at s=5/6",
+            )
 
 
 @pytest.mark.regression

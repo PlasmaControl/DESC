@@ -2,6 +2,7 @@
 
 import numpy as np
 from netCDF4 import Dataset, stringtochar
+from scipy.constants import mu_0
 from scipy.linalg import null_space
 
 from desc.backend import block_diag, jnp, sign
@@ -505,9 +506,9 @@ def make_boozmn_output(  # noqa: C901
         the surface at s = 0.5 / surfs
         where s = rho**2 is the normalized toroidal flux coordinate
     M_booz : int, optional
-        poloidal resolution to use for Boozer transform.
+        poloidal resolution to use for Boozer transform. Default is `2 * eq.M`.
     N_booz : int, optional
-        toroidal resolution to use for Boozer transform.
+        toroidal resolution to use for Boozer transform.Default is `2 * eq.N`.
     verbose: int
         Level of output (Default = 1).
         * 0: no output
@@ -592,6 +593,8 @@ def make_boozmn_output(  # noqa: C901
         "I",
         "lambda_t",
         "lambda_z",
+        "psi_r",
+        "R0/a",
         # need to precompute these so that when eq.sym==True,
         # the sin-symmetric coefficients have the correct values,
         # since these quantities below rely on cos-symmetric transforms
@@ -599,19 +602,20 @@ def make_boozmn_output(  # noqa: C901
         "nu",
         "sqrt(g)_Boozer_DESC",
     ]
-    data_vol = eq.compute(keys, grid=grid)
 
-    data_keys = ["|B|_mn_B", "R_mn_B", "sqrt(g)_Boozer_mn", "psi_r"]
+    data_keys = ["|B|_mn_B", "R_mn_B", "sqrt(g)_Boozer_mn"] + keys
     data_keys = data_keys + ["Z_mn_B", "nu_mn"] if not eq.sym else data_keys
     data_keys_sin = ["Z_mn_B", "nu_mn"]
 
-    data = eq.compute(data_keys, grid=grid, data=data_vol.copy(), transforms=transforms)
+    data = eq.compute(data_keys, grid=grid, transforms=transforms)
+    # sin-symmetric data needs different transform symmetry than cos-symmetric, so
+    # separate out the computation
     if eq.sym:
+        # remove the modes norm from the cos-symmetric transforms
+        # so the sin-symmetric term can be correctly calculated
+        data.pop("Boozer transform modes norm")
         data_sin = eq.compute(
-            data_keys_sin,
-            grid=grid,
-            transforms=transforms_sin,
-            data=data_vol.copy(),
+            data_keys_sin, grid=grid, transforms=transforms_sin, data=data
         )
     m_neg_inds = jnp.where(transforms["B"].basis.modes[:, 1] < 0)
 
@@ -663,9 +667,7 @@ def make_boozmn_output(  # noqa: C901
     # a few of these are redundant, but are included for sake
     # of matching the convention of the original booz_xform outputs
     # and the hidden symmetries implementation:
-    # (below two lines are a single link)
-    # https://github.com/hiddenSymmetries/booz_xform/blob/main/src/...
-    # _booz_xform/write_boozmn.cpp
+    # https://github.com/hiddenSymmetries/booz_xform/blob/main/src/_booz_xform/write_boozmn.cpp # noqa:E501
     file.createDimension("radius", s_full.size)  # number of flux surfaces plus 1
     file.createDimension("comput_surfs", surfs - 1)  # number of flux surfaces
     file.createDimension("pack_rad", surfs)  # number of flux surfaces
@@ -704,8 +706,7 @@ def make_boozmn_output(  # noqa: C901
     aspect.long_name = "Aspect Ratio"
     aspect[:] = eq.compute("R0/a")["R0/a"]
 
-    grid_lcfs = LinearGrid(M=eq.M_grid, N=eq.N_grid, rho=1, NFP=NFP)
-    Rs = eq.compute("R", grid=grid_lcfs)["R"]
+    Rs = data["R"]
     Rmax = file.createVariable("rmax_b", np.int32)
     Rmax.long_name = "Maximum Radius"
     Rmax[:] = np.max(Rs)
@@ -715,9 +716,12 @@ def make_boozmn_output(  # noqa: C901
     Rmin[:] = np.min(Rs)
 
     # betaxis = beta_vol at the axis?
+    grid_axis = LinearGrid(M=M_booz, N=N_booz, rho=np.array([0.0]), NFP=NFP)
+    data_axis = eq.compute(["p", "<|B|^2>"], grid=grid_axis)
     betaxis = file.createVariable("betaxis_b", np.float64)
-    betaxis[:] = 0
-    betaxis.long_name = "Not Implemented: This output is hard-coded to 0!"
+    betaxis.long_name = "2 * mu_0 * pressure / <|B|^2> on the magnetic axis"
+    betaxis.units = "None"
+    betaxis[:] = 2 * mu_0 * data_axis["p"][0] / data_axis["<|B|^2>"][0]
 
     mboz = file.createVariable("mboz_b", np.int32)
     mboz.long_name = (
@@ -751,13 +755,7 @@ def make_boozmn_output(  # noqa: C901
         modes_sin = np.insert(modes_sin, 0, [-1, 0, 0], axis=0)
 
     ## 1D Arrays
-    keys_1d = [
-        "I",
-        "G",
-    ]
-    # this should be compressed then to just the radial profiles
-    grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, rho=r_half, NFP=NFP, sym=eq.sym)
-    data_1d = eq.compute(keys_1d, grid=grid)
+    # these should be compressed to just the radial profiles
     jlist = file.createVariable("jlist", np.int32, ("comput_surfs",))
     jlist.long_name = (
         "1-based radial indices of the surfaces for which the "
@@ -790,9 +788,7 @@ def make_boozmn_output(  # noqa: C901
     )
     iotas.units = "None"
 
-    iotas[0:] = np.insert(
-        -grid.compress(eq.compute("iota", grid=grid, data=data_1d)["iota"]), 0, 0
-    )
+    iotas[0:] = np.insert(-grid.compress(data["iota"]), 0, 0)
 
     buco_b = file.createVariable("buco_b", np.float64, ("radius",))
     buco_b.long_name = (
@@ -801,8 +797,7 @@ def make_boozmn_output(  # noqa: C901
     )
     buco_b.units = "None"
     buco_b[0] = 0
-
-    buco_b[1:] = -grid.compress(data_1d["I"])
+    buco_b[1:] = -grid.compress(data["I"])
 
     bvco_b = file.createVariable("bvco_b", np.float64, ("radius",))
     bvco_b.long_name = (
@@ -811,8 +806,7 @@ def make_boozmn_output(  # noqa: C901
     )
     bvco_b.units = "None"
     bvco_b[0] = 0
-
-    bvco_b[1:] = grid.compress(data_1d["G"])
+    bvco_b[1:] = grid.compress(data["G"])
 
     # TODO: assuming this is on full mesh
     presf = file.createVariable("pres_b", np.float64, ("radius",))

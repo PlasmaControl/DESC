@@ -707,7 +707,7 @@ class TERPSICHORE(ExternalObjective):
         plasma. If TERPSICHORE fails to run, try decreasing this parameter. Default = 2.
     deltaJp : float, optional
         Resonance detuning parameter to resolve parallel current density singularities.
-        Default = 0.5.
+        Default = 0.01.
     modelk : int, optional
         0 = Noninteracting anisotropic fast particle stability model with reduced
         kintetic energy. 1 = Kruskal-Oberman anisotropic energy principle model with
@@ -765,7 +765,7 @@ class TERPSICHORE(ExternalObjective):
         M_booz_max=19,
         N_booz_max=18,
         awall=2.0,
-        deltaJp=5e-1,
+        deltaJp=1e-2,
         modelk=0,
         nev=1,
         al0=-5e-1,

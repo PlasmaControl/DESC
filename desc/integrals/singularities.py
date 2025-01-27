@@ -509,8 +509,20 @@ def _nonsingular_part(
     w = source_data["|e_theta x e_zeta|"][jnp.newaxis] * ht * hz
 
     def nfp_loop(j, f_data):
-        # calculate effects at all eval pts from all source pts on a single field
-        # period, summing over field periods
+        """Calculate effects from source points on a single field period.
+
+        The surface integral is computed on the full domain because the kernels of
+        interest have toroidal variation and are not NFP periodic. To that end, the
+        integral is computed on every field period and summed. The ``source_grid`` is
+        the first field period because DESC truncates the computational domain to
+        ζ ∈ [0, 2π/grid.NFP) and changes variables to the spectrally condensed
+        ζ* = basis.NFP ζ. Therefore, we shift the domain to the next field period by
+        incrementing the toroidal coordinate of the grid by NFP. For an axisymmetric
+        configuration, it is most efficient for ``source_grid`` to be a single toroidal
+        cross-section. To capture toroidal effects of the kernels on those grids for
+        axisymmetric configurations, we set a dummy value for NFP to an integer larger
+        than 1 so that the toroidal increment can move to a new spot.
+        """
         f, source_data = f_data
         source_data["zeta"] = (source_zeta + j * 2 * jnp.pi / source_grid.NFP) % (
             2 * jnp.pi
@@ -522,14 +534,13 @@ def _nonsingular_part(
         # nest this def to avoid having to pass the modified source_data around the loop
         # easier to just close over it and let JAX figure it out
         def eval_pt(eval_data_i):
-            # this calculates the effect at a single evaluation point, from all others
-            # in a single field period. vmap this to get all pts
+            # This calculates the effect at a single evaluation point.
             k = kernel(eval_data_i, source_data).reshape(
                 -1, source_grid.num_nodes, kernel.ndim
             )
             eta = _eta(
                 source_theta,
-                source_data["zeta"],  # to account for different field periods
+                source_data["zeta"],
                 eval_data_i["theta"][:, jnp.newaxis],
                 eval_data_i["zeta"][:, jnp.newaxis],
                 ht,
@@ -544,6 +555,15 @@ def _nonsingular_part(
         )
         return f, source_data
 
+    # This error should be raised earlier since this is not the only place
+    # we need the higher dummy NFP value, but the error message is more
+    # helpful with the nfp loop docstring.
+    errorif(
+        source_grid.num_zeta == 1 and source_grid.NFP == 1,
+        msg="Source grid cannot compute toroidal effects.\n"
+        "Increase NFP of source grid to e.g. 64.\n"
+        "This is required to " + nfp_loop.__doc__,
+    )
     f = jnp.zeros((eval_grid.num_nodes, kernel.ndim))
     f, _ = fori_loop(0, source_grid.NFP, nfp_loop, (f, source_data))
 
@@ -563,7 +583,7 @@ def _singular_part(eval_data, source_data, kernel, interpolator, loop=False):
 
     Generally follows sec 3.2.2 of [2], with the following differences:
 
-    - hyperparameter M replaced by s
+    - hyperparameter M replaced by ``st`` and ``sz``.
     - density sigma / function f is absorbed into kernel.
     """
     eval_grid = interpolator._eval_grid
@@ -590,8 +610,8 @@ def _singular_part(eval_data, source_data, kernel, interpolator, loop=False):
     keys = list(keys)
     fsource = [source_data[key] for key in keys]
     # Note that it is necessary to take the Fourier transforms of the
-    # vector coordinates of the orthonormal polar basis vectors R̂, ϕ̂, Ẑ.
-    # Vector coordinates in the Cartesian basis are not NFP periodic.
+    # vector components of the orthonormal polar basis vectors R̂, ϕ̂, Ẑ.
+    # Vector components of the Cartesian basis are not NFP periodic.
     if isinstance(interpolator, DFTInterpolator):
         fsource = [interpolator.fourier(val) for val in fsource]
         is_fourier = True
@@ -618,10 +638,10 @@ def _singular_part(eval_data, source_data, kernel, interpolator, loop=False):
             for key, val in zip(keys, fsource)
         }
         # The (θ, ζ) coordinates at which the maps above were evaluated.
-        # For FFT interpolator on functions with toroidal variation used on
+        # For FFT interpolator on functions with no toroidal variation used on
         # grids of different NFP, we still use eval grid to compute coordinates.
-        # These are the points the above maps were evaluated, but the values
-        # of the vector coordinates of the orthonormal polar basis are the same.
+        # In that case, the eval grid points are not where the maps were interpolated,
+        # but the components of maps in coordinates of the orthonormal polar basis are the same.
         # However, the polar basis vectors between the evaluation point
         # and the point that was interpolated to do point in different directions,
         # so it is important to use eval grid to compute the coordinates.

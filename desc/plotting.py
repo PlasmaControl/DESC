@@ -23,7 +23,7 @@ from desc.equilibrium.coords import map_coordinates
 from desc.grid import Grid, LinearGrid
 from desc.integrals import surface_averages_map
 from desc.magnetic_fields import field_line_integrate
-from desc.utils import errorif, only1, parse_argname_change, setdefault
+from desc.utils import errorif, islinspaced, only1, parse_argname_change, setdefault
 from desc.vmec_utils import ptolemy_linear_transform
 
 __all__ = [
@@ -314,6 +314,73 @@ def _compute(eq, name, grid, component=None, reshape=True):
     if reshape:
         data = data.reshape((grid.num_theta, grid.num_rho, grid.num_zeta), order="F")
 
+    return data, label
+
+
+def _compute_Bn(eq, field, plot_grid, field_grid):
+    """Compute normal field from virtual casing + coils, using correct grids."""
+    errorif(
+        field is None,
+        ValueError,
+        "If B*n is entered as the variable to plot, a magnetic field"
+        " must be provided.",
+    )
+    errorif(
+        not np.all(np.isclose(plot_grid.nodes[:, 0], 1)),
+        ValueError,
+        "If B*n is entered as the variable to plot, "
+        "the grid nodes must be at rho=1.",
+    )
+
+    theta_endpoint = zeta_endpoint = False
+
+    if plot_grid.fft_poloidal and plot_grid.fft_toroidal:
+        source_grid = eval_grid = plot_grid
+    # often plot_grid is still linearly spaced but includes endpoints. In that case
+    # make a temp grid that just leaves out the endpoint so we can FFT
+    elif (
+        isinstance(plot_grid, LinearGrid)
+        and not plot_grid.sym
+        and islinspaced(plot_grid.nodes[plot_grid.unique_theta_idx, 1])
+        and islinspaced(plot_grid.nodes[plot_grid.unique_zeta_idx, 2])
+    ):
+        if plot_grid._poloidal_endpoint:
+            theta_endpoint = True
+            theta = plot_grid.nodes[plot_grid.unique_theta_idx[0:-1], 1]
+        if plot_grid._toroidal_endpoint:
+            zeta_endpoint = True
+            zeta = plot_grid.nodes[plot_grid.unique_zeta_idx[0:-1], 2]
+        vc_grid = LinearGrid(
+            theta=theta,
+            zeta=zeta,
+            NFP=plot_grid.NFP,
+            endpoint=False,
+        )
+        # override attr since we know fft is ok even with custom nodes
+        vc_grid._fft_poloidal = vc_grid._fft_toroidal = True
+        source_grid = eval_grid = vc_grid
+    else:
+        eval_grid = plot_grid
+        source_grid = LinearGrid(
+            M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False, endpoint=False
+        )
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+
+        data, _ = field.compute_Bnormal(
+            eq, eval_grid=eval_grid, source_grid=field_grid, vc_source_grid=source_grid
+        )
+    data = data.reshape((eval_grid.num_theta, eval_grid.num_zeta), order="F")
+    if theta_endpoint:
+        data = np.vstack((data, data[0, :]))
+    if zeta_endpoint:
+        data = np.hstack((data, np.atleast_2d(data[:, 0]).T))
+    data = data.reshape(
+        (plot_grid.num_theta, plot_grid.num_rho, plot_grid.num_zeta), order="F"
+    )
+
+    label = r"$\mathbf{B} \cdot \hat{n} ~(\mathrm{T})$"
     return data, label
 
 
@@ -651,44 +718,9 @@ def plot_2d(
             component=component,
         )
     else:
-        field = kwargs.pop("field", None)
-        errorif(
-            field is None,
-            ValueError,
-            "If B*n is entered as the variable to plot, a magnetic field"
-            " must be provided.",
+        data, label = _compute_Bn(
+            eq, kwargs.pop("field", None), grid, kwargs.pop("field_grid", None)
         )
-        errorif(
-            not np.all(np.isclose(grid.nodes[:, 0], 1)),
-            ValueError,
-            "If B*n is entered as the variable to plot, "
-            "the grid nodes must be at rho=1.",
-        )
-
-        field_grid = kwargs.pop("field_grid", None)
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-
-            if grid.endpoint:
-                # cannot use a grid with endpoint=True for FFT interpolator
-                vc_grid = LinearGrid(
-                    theta=grid.nodes[grid.unique_theta_idx[0:-1], 1],
-                    zeta=grid.nodes[grid.unique_zeta_idx[0:-1], 2],
-                    NFP=grid.NFP,
-                    endpoint=False,
-                )
-            else:
-                vc_grid = grid
-            data, _ = field.compute_Bnormal(
-                eq, eval_grid=vc_grid, source_grid=field_grid, vc_source_grid=vc_grid
-            )
-        data = data.reshape((vc_grid.num_theta, vc_grid.num_zeta), order="F")
-        if grid.endpoint:
-            data = np.hstack((data, np.atleast_2d(data[:, 0]).T))
-            data = np.vstack((data, data[0, :]))
-        data = data.reshape((grid.num_theta, grid.num_rho, grid.num_zeta), order="F")
-
-        label = r"$\mathbf{B} \cdot \hat{n} ~(\mathrm{T})$"
 
     fig, ax = _format_ax(ax, figsize=kwargs.pop("figsize", None))
     divider = make_axes_locatable(ax)
@@ -943,44 +975,9 @@ def plot_3d(
             component=component,
         )
     else:
-        field = kwargs.pop("field", None)
-        errorif(
-            field is None,
-            ValueError,
-            "If B*n is entered as the variable to plot, a magnetic field"
-            " must be provided.",
+        data, label = _compute_Bn(
+            eq, kwargs.pop("field", None), grid, kwargs.pop("field_grid", None)
         )
-        errorif(
-            not np.all(np.isclose(grid.nodes[:, 0], 1)),
-            ValueError,
-            "If B*n is entered as the variable to plot, "
-            "the grid nodes must be at rho=1.",
-        )
-
-        field_grid = kwargs.pop("field_grid", None)
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-
-            if grid.endpoint:
-                # cannot use a grid with endpoint=True for FFT interpolator
-                vc_grid = LinearGrid(
-                    theta=grid.nodes[grid.unique_theta_idx[0:-1], 1],
-                    zeta=grid.nodes[grid.unique_zeta_idx[0:-1], 2],
-                    NFP=grid.NFP,
-                    endpoint=False,
-                )
-            else:
-                vc_grid = grid
-            data, _ = field.compute_Bnormal(
-                eq, eval_grid=vc_grid, source_grid=field_grid, vc_source_grid=vc_grid
-            )
-        data = data.reshape((vc_grid.num_theta, vc_grid.num_zeta), order="F")
-        if grid.endpoint:
-            data = np.hstack((data, np.atleast_2d(data[:, 0]).T))
-            data = np.vstack((data, data[0, :]))
-        data = data.reshape((grid.num_theta, grid.num_rho, grid.num_zeta), order="F")
-
-        label = r"$\mathbf{B} \cdot \hat{n} ~(\mathrm{T})$"
 
     errorif(
         len(kwargs) != 0,

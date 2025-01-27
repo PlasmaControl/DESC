@@ -1195,7 +1195,7 @@ class LinearGrid(_Grid):
             else:
                 dt = np.array([theta_period])
         else:
-            t = jnp.array(0.0, ndmin=1)
+            t = np.array(0.0, ndmin=1)
             dt = theta_period * np.ones_like(t)
             self._fft_poloidal = True  # trivially true
 

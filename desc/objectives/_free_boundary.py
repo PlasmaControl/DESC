@@ -365,9 +365,10 @@ class BoundaryError(_Objective):
         Order of integration on the local singular grid.
     source_grid, eval_grid : Grid, optional
         Collocation grid containing the nodes to evaluate at for source terms for Biot-
-        Savart integral and where to evaluate errors. source_grid should not be
+        Savart integral and where to evaluate errors. ``source_grid`` should not be
         stellarator symmetric, and both should be at rho=1.
         Defaults to ``LinearGrid(M=eq.M_grid, N=eq.N_grid)`` for both.
+        If both grids are the same, then some computation can be skipped.
     field_grid : Grid, optional
         Grid used to discretize field. Defaults to default grid for given field.
     field_fixed : bool

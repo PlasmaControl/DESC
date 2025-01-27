@@ -56,7 +56,7 @@ from desc.integrals.quad_utils import (
     tanh_sinh,
 )
 from desc.integrals.singularities import (
-    _get_default_sq,
+    _get_default_params,
     _get_quadrature_nodes,
     _kernel_nr_over_r3,
     compute_B_dot_n_from_K,
@@ -637,7 +637,7 @@ class TestSingularities:
 
         for i in range(len(Nu)):
             grid = LinearGrid(M=Nu[i] // 2, N=Nv[i] // 2, NFP=eq.NFP)
-            interpolator = FFTInterpolator(grid, grid, ss[i], qs[i])
+            interpolator = FFTInterpolator(grid, grid, ss[i], ss[i], qs[i])
             data = eq.compute(
                 _kernel_nr_over_r3.keys + ["|e_theta x e_zeta|"], grid=grid
             )
@@ -649,8 +649,8 @@ class TestSingularities:
         Nv = 100
         es = 6e-7
         grid = LinearGrid(M=Nu // 2, N=Nv // 2, NFP=eq.NFP)
-        s, q = _get_default_sq(grid)
-        interpolator = FFTInterpolator(grid, grid, s, q)
+        st, sz, q = _get_default_params(grid)
+        interpolator = FFTInterpolator(grid, grid, st, sz, q)
         data = eq.compute(_kernel_nr_over_r3.keys + ["|e_theta x e_zeta|"], grid=grid)
         err = singular_integral(data, data, "nr_over_r3", interpolator, loop=True)
         np.testing.assert_array_less(np.abs(2 * np.pi + err), es)
@@ -673,8 +673,8 @@ class TestSingularities:
             "|e_theta x e_zeta|",
         ]
         data = eq.compute(keys, grid=grid)
-        s, q = _get_default_sq(grid)
-        interp = interpolator(grid, grid, s, q)
+        st, sz, q = _get_default_params(grid)
+        interp = interpolator(grid, grid, st, sz, q)
         Bplasma = virtual_casing_biot_savart(data, data, interp, loop=True)
         # need extra factor of B/2 bc we're evaluating on plasma surface
         Bplasma += data["B"] / 2
@@ -691,13 +691,14 @@ class TestSingularities:
         h_t = 2 * np.pi / grid.num_theta
         h_z = 2 * np.pi / grid.num_zeta / grid.NFP
 
-        s = 3
+        st = 3
+        sz = 5
         q = 4
         r, w, _, _ = _get_quadrature_nodes(q)
-        dt = s / 2 * h_t * r * np.sin(w)
-        dz = s / 2 * h_z * r * np.cos(w)
+        dt = st / 2 * h_t * r * np.sin(w)
+        dz = sz / 2 * h_z * r * np.cos(w)
 
-        interp = interpolator(grid, grid, s, q)
+        interp = interpolator(grid, grid, st, sz, q)
         theta = grid.nodes[:, 1]
         zeta = grid.nodes[:, 2]
         f = _f_2d(theta, zeta)

@@ -22,17 +22,6 @@ __all__ = [
 ]
 
 
-# TODO: Should instead compute
-#  1D mode matrices of radial, poloidal, toroidal basis functions
-#  and take their outer product to form the 3D Vandermonde matrix.
-#  This significantly reduces computational cost of calling ``evaluate``
-#  from O(N^3 M^3 L^3) to O(N M L) since just need to evaluate 3 N M L
-#  basis functions and take outer product of three
-#  matrices of size N M L as opposed to evaluating N^3 M^3 L^3 basis
-#  functions.
-#  This works even if the evaluation grid is not a meshgrid.
-
-
 class _Basis(IOAble, ABC):
     """Basis is an abstract base class for spectral basis sets."""
 
@@ -412,7 +401,7 @@ class FourierSeries(_Basis):
             Basis functions evaluated at nodes.
             The Vandermonde matrix when ``modes is None`` is
             given by ``y.reshape(-1,2*N+1)`` and is ordered
-            [sin(Nx), ..., sin(x), 1, cos(x), ..., cos(Nx)].
+            [sin(N𝛇), ..., sin(𝛇), 1, cos(𝛇), ..., cos(N𝛇)].
 
         """
         if modes is None:
@@ -483,21 +472,15 @@ class DoubleFourierSeries(_Basis):
 
     """
 
-    def __init__(self, M, N, NFP=1, sym=False, **kwargs):
+    def __init__(self, M, N, NFP=1, sym=False):
         self._L = 0
         self._M = check_nonnegint(M, "M", False)
         self._N = check_nonnegint(N, "N", False)
         self._NFP = check_posint(NFP, "NFP", False)
         self._sym = bool(sym) if not sym else str(sym)
         self._spectral_indexing = "linear"
-
-        if kwargs.get("complex_vander", False):
-            self._modes = DoubleFourierSeries._get_complex_vander_modes(
-                self.M, self.N, self.NFP
-            )
-        else:
-            self._modes = self._get_modes(M=self.M, N=self.N)
-            super().__init__()
+        self._modes = self._get_modes(M=self.M, N=self.N)
+        super().__init__()
 
     def _get_modes(self, M, N):
         """Get mode numbers for double Fourier series.
@@ -524,14 +507,6 @@ class DoubleFourierSeries(_Basis):
         z = np.zeros_like(m)
         return np.array([z, m, n]).T
 
-    @staticmethod
-    def _get_complex_vander_modes(M, N, NFP):
-        M = 2 * M + 1
-        N = 2 * N + 1
-        m = jnp.fft.fftfreq(M, d=1 / M).astype(int)
-        n = jnp.fft.rfftfreq(N, d=1 / (N * NFP)).astype(int)
-        return m, n
-
     def evaluate(
         self, nodes, derivatives=np.array([0, 0, 0]), modes=None, unique=False
     ):
@@ -556,8 +531,8 @@ class DoubleFourierSeries(_Basis):
             The Vandermonde matrix when ``modes is None`` is
             given by ``y.reshape(-1,2*M+1,2*N+1)`` and
             is an outer product of Fourier matrices with order
-            [sin(Mx), ..., sin(x), 1, cos(x), ..., cos(Mx)]
-            ⊗ [sin(Ny), ..., sin(y), 1, cos(y), ..., cos(Ny)].
+            [sin(M𝛉), ..., sin(𝛉), 1, cos(𝛉), ..., cos(M𝛉)]
+            ⊗ [sin(N𝛇), ..., sin(𝛇), 1, cos(𝛇), ..., cos(N𝛇)].
 
         """
         if modes is None:
@@ -595,18 +570,6 @@ class DoubleFourierSeries(_Basis):
             toroidal = toroidal[zoutidx][:, noutidx]
 
         return poloidal * toroidal
-
-    def _evaluate_complex_vander(self, nodes):
-        """Can dot this against rfft output."""
-        r, t, z = nodes.T
-        m, n = self._modes
-        t_basis = jnp.exp(1j * m * t[..., jnp.newaxis])
-        z_basis = jnp.exp(1j * n * z[..., jnp.newaxis]).at[..., 0].divide(2) * 2
-        if (n.size % 2) == 0:
-            z_basis = z_basis.at[..., -1].divide(2)
-        # Much more efficient to take outer product of 1D Vandermonde matrices.
-        basis = t_basis[..., jnp.newaxis] * z_basis[..., jnp.newaxis, :]
-        return basis.reshape(nodes.shape[0], -1)
 
     def change_resolution(self, M, N, NFP=None, sym=None):
         """Change resolution of the basis to the given resolutions.
@@ -930,9 +893,9 @@ class ChebyshevDoubleFourierBasis(_Basis):
             The Vandermonde matrix when ``modes is None`` is given by
             ``y.reshape(-1,L+1,2*M+1,2*N+1,3)`` and is
             an outer product of Chebyshev and Fourier matrices with order
-            [T₀(y), T₁(y), ..., T_L(y)]
-            ⊗ [sin(Mx), ..., sin(x), 1, cos(x), ..., cos(Mx)]
-            ⊗ [sin(Ny), ..., sin(y), 1, cos(y), ..., cos(Ny)].
+            [T₀(𝛒), T₁(𝛒), ..., T_L(𝛒)]
+            ⊗ [sin(M𝛉), ..., sin(𝛉), 1, cos(𝛉), ..., cos(M𝛉)]
+            ⊗ [sin(N𝛇), ..., sin(𝛇), 1, cos(𝛇), ..., cos(N𝛇)].
 
         """
         if modes is None:

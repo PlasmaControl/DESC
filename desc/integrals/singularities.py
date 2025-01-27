@@ -638,10 +638,10 @@ def _singular_part(eval_data, source_data, kernel, interpolator, loop=False):
             for key, val in zip(keys, fsource)
         }
         # The (θ, ζ) coordinates at which the maps above were evaluated.
-        # For FFT interpolator on functions with toroidal variation used on
+        # For FFT interpolator on functions with no toroidal variation used on
         # grids of different NFP, we still use eval grid to compute coordinates.
-        # These are the points the above maps were evaluated, but the values
-        # of the vector coordinates of the orthonormal polar basis are the same.
+        # In that case, the eval grid points are not where the maps were interpolated,
+        # but the components of maps in coordinates of the orthonormal polar basis are the same.
         # However, the polar basis vectors between the evaluation point
         # and the point that was interpolated to do point in different directions,
         # so it is important to use eval grid to compute the coordinates.

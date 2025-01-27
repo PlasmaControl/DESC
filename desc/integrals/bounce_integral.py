@@ -228,7 +228,8 @@ class Bounce2D(Bounce):
         This option can be used to iteratively compute bounce integrals one flux
         surface at a time, reducing memory usage. To do so, set to true and provide
         only those chunks of the reshaped data.
-        Default is false.
+        If true, then it is assumed that ``data["iota"]`` has shape
+        ``(grid.num_rho,)`` or is a scalar. Default is false.
     is_fourier : bool
         If true, then it is assumed that ``data`` holds Fourier transforms
         as returned by ``Bounce2D.fourier`` and ``data["iota"]`` has shape
@@ -386,12 +387,13 @@ class Bounce2D(Bounce):
         ----------
         f : jnp.ndarray
             Shape (..., num theta, num zeta).
-            Real scalar-valued periodic functions in (θ, ζ) ∈ [0, 2π) × [0, 2π/NFP).
+            Real scalar-valued periodic function evaluated on tensor-product grid
+            with uniformly spaced nodes (θ, ζ) ∈ [0, 2π) × [0, 2π/NFP).
 
         Returns
         -------
         a : jnp.ndarray
-            Shape (..., num theta, num zeta // 2 + 1)
+            Shape (..., 1, num theta, num zeta // 2 + 1)
             Complex coefficients of 2D real FFT of ``f``.
 
         """
@@ -760,7 +762,7 @@ class Bounce2D(Bounce):
         return _swap_shape(
             interp_fft_to_argmin(
                 self._c["T(z)"],
-                f,
+                f if is_fourier else Bounce2D.fourier(f),
                 map(_swap_shape, points),
                 self._c["knots"],
                 self._c["B(z)"],
@@ -768,7 +770,6 @@ class Bounce2D(Bounce):
                 self._n_fft,
                 self._n_rfft,
                 self._NFP,
-                is_fourier,
             )
         )
 
@@ -792,7 +793,6 @@ class Bounce2D(Bounce):
             Shape (num rho, ).
 
         """
-        num_transit = self._c["T(z)"].X
         # Integrating an analytic oscillatory map so a high order quadrature is ideal.
         # Difficult to pick the right frequency for Filon quadrature in general, which
         # would work best, especially at high NFP. Gauss-Legendre is superior to
@@ -801,34 +801,37 @@ class Bounce2D(Bounce):
         deg = (
             self._c["B(z)"].Y
             if isinstance(self._c["B(z)"], PiecewiseChebyshevSeries)
-            else self._c["knots"].size // num_transit
+            else self._c["knots"].size // self._c["T(z)"].X
         ) // 2
         x, w = leggauss(deg) if quad is None else quad
+        dz_dx = jnp.pi
 
-        shape = (*self._c["T(z)"].cheb.shape[:-2], num_transit * w.size)
-        # θ at quadrature points
+        # θ at roots of Legendre polynomial in ζ
         theta = idct_non_uniform(
             x, self._c["T(z)"].cheb[..., jnp.newaxis, :], self._c["T(z)"].Y
-        ).reshape(shape)
-        zeta = jnp.broadcast_to(
-            bijection_from_disc(x, 0, 2 * jnp.pi), (self._c["T(z)"].X, w.size)
-        ).ravel()
+        )
+        zeta = bijection_from_disc(x, 0, 2 * jnp.pi)
 
-        B_sup_z = jnp.abs(
-            _irfft2_non_uniform(
-                theta,
-                zeta,
-                self._c["B^zeta"],
-                self._n_fft,
-                self._n_rfft,
-                domain1=(0, 2 * jnp.pi / self._NFP),
+        # B⋅∇ζ never vanishes, and hence has the same sign on a flux surface,
+        # so we may take absolute value after the reduction.
+        return dz_dx * jnp.abs(
+            jnp.reciprocal(
+                _irfft2_non_uniform(
+                    theta,
+                    zeta,
+                    self._c["B^zeta"][..., jnp.newaxis, :, :, :],
+                    self._n_fft,
+                    self._n_rfft,
+                    domain1=(0, 2 * jnp.pi / self._NFP),
+                )
             )
-        ).reshape(*shape[:-1], self._c["T(z)"].X, w.size)
+            .dot(w)
+            .sum(-1)
+            .mean(0)
+        )
         # Simple mean over α because when the toroidal angle extends
         # beyond one transit we need to weight all field lines uniformly,
         # regardless of their area wrt α.
-        return (1 / B_sup_z).dot(w).sum(axis=-1).mean(axis=0) * jnp.pi
-        # Gradient of change of variable from [−1, 1] → [0, 2π] is π.
 
     def plot(self, l, m, pitch_inv=None, **kwargs):
         """Plot B and bounce points on the specified field line.
@@ -987,7 +990,7 @@ class Bounce1D(Bounce):
         (num rho, num alpha, num zeta). This option can be used to iteratively
         compute bounce integrals one flux surface or one field line at a time,
         respectively, reducing memory usage. To do so, set to true and provide
-        only those axes of the reshaped data. Default is false.
+        only those chunks of the reshaped data. Default is false.
     check : bool
         Flag for debugging. Must be false for JAX transformations.
 

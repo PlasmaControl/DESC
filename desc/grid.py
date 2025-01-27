@@ -44,6 +44,8 @@ class _Grid(IOAble, ABC):
         "_inverse_zeta_idx",
         "_is_meshgrid",
         "_can_fft2",
+        "_fft_poloidal",
+        "_fft_toroidal",
     ]
 
     @abstractmethod
@@ -984,6 +986,11 @@ class LinearGrid(_Grid):
         Alternatively, the number of toroidal coordinates (if an integer).
         Note that if supplied the values may be reordered in the resulting grid.
     """
+
+    _io_attrs_ = _Grid._io_attrs_ + [
+        "_toroidal_endpoint",
+        "_poloidal_endpoint",
+    ]
 
     def __init__(
         self,

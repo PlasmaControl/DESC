@@ -109,16 +109,22 @@ _AXIS_LABELS_XYZ = [r"$X ~(\mathrm{m})$", r"$Y ~(\mathrm{m})$", r"$Z ~(\mathrm{m
 
 
 def _set_tight_layout(fig):
+    version = matplotlib.__version__.split(".")
+    major = int(version[0])
+    minor = int(version[1])
     # compat layer to deal with API changes in mpl 3.6.0
-    if int(matplotlib.__version__[0]) == 3 and int(matplotlib.__version__[2]) < 6:
+    if major == 3 and minor < 6:
         fig.set_tight_layout(True)
     else:
         fig.set_layout_engine("tight")
 
 
 def _get_cmap(name, n=None):
+    version = matplotlib.__version__.split(".")
+    major = int(version[0])
+    minor = int(version[1])
     # compat layer to deal with API changes in mpl 3.6.0
-    if int(matplotlib.__version__[0]) == 3 and int(matplotlib.__version__[2]) < 6:
+    if major == 3 and minor < 6:
         return matplotlib.cm.get_cmap(name, n)
     else:
         c = matplotlib.colormaps[name]

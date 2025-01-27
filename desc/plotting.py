@@ -213,20 +213,19 @@ def _get_grid(**kwargs):
 
     """
     grid_args = {
-        "L": None,
-        "M": None,
-        "N": None,
         "NFP": 1,
         "sym": False,
         "axis": True,
         "endpoint": True,
-        "rho": np.array([1.0]),
-        "theta": np.array([0.0]),
-        "zeta": np.array([0.0]),
     }
-    for key in kwargs.keys():
-        if key in grid_args.keys():
-            grid_args[key] = kwargs[key]
+    grid_args.update(kwargs)
+    if ("L" not in grid_args) and ("rho" not in grid_args):
+        grid_args["rho"] = np.array([1.0])
+    if ("M" not in grid_args) and ("theta" not in grid_args):
+        grid_args["theta"] = np.array([0.0])
+    if ("N" not in grid_args) and ("zeta" not in grid_args):
+        grid_args["zeta"] = np.array([0.0])
+
     grid = LinearGrid(**grid_args)
 
     return grid

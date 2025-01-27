@@ -16,7 +16,7 @@ New Features
 - Adds the output quantities ``wb`` and ``wp`` to ``VMECIO.save``.
 - Change implementation of Dommaschk potentials to use recursive algorithm and symbolic integration.
 - Changes hessian computation to use chunked ``jacfwd`` and ``jacrev``, allowing ``jac_chunk_size`` to now reduce hessian memory usage as well.
-- Adds second-order NAE constraints, accessible by passing ``order=2`` to ``get_NAE_constraints``.
+- Adds second-order NAE constraints, accessible by passing ``order=2`` to ``desc.objectives.get_NAE_constraints``.
 
 Bug Fixes
 

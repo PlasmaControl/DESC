@@ -193,6 +193,7 @@ def assert_is_continuous(
         }
 
     """
+    p = "desc.equilibrium.equilibrium.Equilibrium"
     if kwargs is None:
         kwargs = {}
     # TODO ( #671, #1206):currently skip Boozer quants because it need sym=False
@@ -205,6 +206,8 @@ def assert_is_continuous(
             or "_mn" in name
             or name == "B modes"
             or _skip_this(eq, name)
+            # skip if require full grid (sym false)
+            or not data_index[p][name]["grid_requirement"].get("sym", True)
         )
     ]
 
@@ -216,7 +219,6 @@ def assert_is_continuous(
     integrate = surface_integrals_map(grid, expand_out=False)
     data = eq.compute(names=names, grid=grid)
 
-    p = "desc.equilibrium.equilibrium.Equilibrium"
     for name in names:
         if name in not_continuous_limits:
             continue

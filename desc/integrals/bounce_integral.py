@@ -281,7 +281,7 @@ class Bounce2D(Bounce):
     # However, the basis for the latter are trigonometric functions with
     # irrational frequencies, courtesy of the irrational rotational transform.
     # Globally convergent root-finding schemes for that basis (at fixed α) are
-    # not known. The denominator of a close rational could be absorbed into the
+    # not efficient. The denominator of a close rational could be absorbed into the
     # coordinate ϕ, but this balloons the frequency, and hence degree of the series.
     #
     # Quadrature is chosen over Runge-Kutta methods of the form
@@ -1211,10 +1211,9 @@ class Bounce1D(Bounce):
             as the indices that correspond to that field line.
         data : dict[str, jnp.ndarray]
             Shape (num rho, num alpha, num zeta).
-            Real scalar-valued periodic functions in (θ, ζ) ∈ [0, 2π) × [0, 2π/NFP)
-            evaluated on the ``grid`` supplied to construct this object.
-            Use the method ``Bounce1D.reshape`` to reshape the data into the
-            expected shape.
+            Real scalar-valued functions evaluated on the ``grid`` supplied to
+            construct this object. Use the method ``Bounce1D.reshape`` to
+            reshape the data into the expected shape.
         names : str or list[str]
             Names in ``data`` to interpolate. Default is all keys in ``data``.
         points : tuple[jnp.ndarray]

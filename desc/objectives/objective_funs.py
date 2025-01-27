@@ -8,6 +8,7 @@ import numpy as np
 from desc.backend import (
     desc_config,
     execute_on_cpu,
+    jax,
     jit,
     jnp,
     tree_flatten,
@@ -354,10 +355,13 @@ class ObjectiveFunction(IOAble):
             # Heuristic estimates of fwd mode Jacobian memory usage,
             # slightly conservative, based on using ForceBalance as the objective
             estimated_memory_usage = 2.4e-7 * self.dim_f * self.dim_x + 1  # in GB
+            mem_avail = (
+                desc_config.get("avail_mem")
+                if desc_config.get("avail_mem") is not None
+                else sum(desc_config["avail_mems"])
+            )
             max_chunk_size = round(
-                (desc_config.get("avail_mem") / estimated_memory_usage - 0.22)
-                / 0.85
-                * self.dim_x
+                (mem_avail / estimated_memory_usage - 0.22) / 0.85 * self.dim_x
             )
             self._jac_chunk_size = max([1, max_chunk_size])
             if self._deriv_mode == "blocked":
@@ -1143,6 +1147,32 @@ class _Objective(IOAble, ABC):
         """Build constant arrays."""
         self._check_dimensions()
         self._set_derivatives()
+
+        if desc_config["num_device"] != 1:
+            if hasattr(self, "_constants"):
+                grid = self._constants["transforms"]["grid"]
+                # shard nodes, spacing, and weights across devices
+                grid._nodes = jax.device_put(
+                    jnp.asarray(grid.nodes),
+                    desc_config["sharding"],
+                )
+                grid._spacing = jax.device_put(
+                    jnp.asarray(grid.spacing),
+                    desc_config["sharding"],
+                )
+                grid._weights = jax.device_put(
+                    jnp.asarray(grid.weights),
+                    desc_config["sharding"],
+                )
+
+                # replicate profiles across devices
+                # TODO: profiles are dict of arrays, need to shard each array
+                if False:
+                    profiles = self._constants["profiles"]
+                    profiles = jax.device_put(
+                        profiles,
+                        desc_config["sharding"],
+                    )
 
         # set quadrature weights if they haven't been
         if hasattr(self, "_constants") and ("quad_weights" not in self._constants):

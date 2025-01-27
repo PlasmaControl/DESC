@@ -914,6 +914,54 @@ def _B_omni(params, transforms, profiles, data, **kwargs):
     )
     B = jnp.moveaxis(B, 0, 1)
     data["|B|"] = B.flatten(order="F")
+    import pdb
+
+    pdb.set_trace()
+    return data
+
+
+@register_compute_fun(
+    name="|B|_pwO",
+    label="|\\mathbf{B}|",
+    units="T",
+    units_long="Tesla",
+    description="Magnitude of omnigenous magnetic field",
+    dim=1,
+    params=["B_min", "B_max", "zeta_C", "theta_C", "t_1", "t_2", "w_2", "iota0", "NFP"],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="rtz",
+    data=[],  # Potential error, we want eq |B|
+    parameterization="desc.magnetic_fields._core.PiecewiseOmnigenousField",
+    parametrization=[],
+)
+def _B_piecewise_omni(params, transforms, profiles, data, **kwargs):
+    theta_B = transforms["grid"].nodes[:, 1]
+    zeta_B = transforms["grid"].nodes[:, 2]
+
+    zeta_C = params["zeta_C"]
+    theta_C = params["theta_C"]
+    t_1 = params["t_1"]
+    t_2 = params["t_2"]
+    w_2 = params["w_2"]
+    iota0 = params["iota0"]
+    w_1 = jnp.pi / params["NFP"] * (1 - t_1 * t_2) / (1 + t_2 / iota0)
+    B_min = params["B_min"]
+    B_max = params["B_max"]
+    p = int(3)
+    exponent = -1 * (
+        ((zeta_B + t_1 * theta_B - zeta_C) / w_1) ** (2 * p)
+        + ((zeta_B + t_2 * theta_B - theta_C) / w_2) ** (2 * p)
+    )
+
+    B_pwO = B_min + (B_max - B_min) * jnp.exp(exponent)
+    data["|B|_pwO"] = B_pwO.reshape(
+        (
+            transforms["grid"].num_rho,
+            transforms["grid"].num_theta,
+            transforms["grid"].num_zeta,
+        )
+    )
     return data
 
 

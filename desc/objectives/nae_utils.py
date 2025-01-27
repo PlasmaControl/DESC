@@ -258,7 +258,7 @@ def _calc_1st_order_NAE_coeffs(qsc, desc_eq, N=None):
     return coeffs, bases
 
 
-def _make_RZ_cons_order_rho(  # noqa: C901 - FIXME - simplify
+def _make_RZ_cons_order_rho(  # noqa: C901
     qsc, desc_eq, coeffs, bases, fix_lambda=False
 ):
     """Create the linear constraints for constraining an eq with O(rho) NAE behavior.
@@ -458,31 +458,33 @@ def make_RZ_cons_1st_order(qsc, desc_eq, fix_lambda=False, N=None):
 def _calc_2nd_order_NAE_coeffs(qsc, desc_eq, N=None):
     """Calculate 2nd order NAE coefficients' Fourier representations.
 
-    Description
-    -----------
-        uses the passed-in qsc object, and the desc_eq's stellarator symmetry is used.
+    uses the passed-in qsc object, and the desc_eq's stellarator symmetry is used.
 
     Parameters
     ----------
-        qsc (Qsc): Qsc object to use as the NAE constraints on the DESC equilibrium
-        desc_eq (Equilibrium): desc equilibrium to constrain
-        N : int,
+    qsc :  Qsc
+        Qsc object to use as the NAE constraints on the DESC equilibrium
+    desc_eq : Equilibrium
+        DESC equilibrium to constrain
+    N : int
         max toroidal resolution to constrain.
         If None, defaults to equilibrium's toroidal resolution
 
     Returns
     -------
-        coeffs: dict, dictionary of arrays with keys like 'X_L_M_n', where
-                X is R or Z, L is 1 or 2, and M is 0,1, or 2, are the
-                NAE Fourier (in tor. phi) coeffs of radial order L and poloidal order M
-        bases: dict, dictionary of Rbasis_cos, Rbasis_sin, Zbasis_cos, Zbasis_sin,
-            the FourierSeries basis objects used to obtain the coefficients, where
-            _cos or _sin denotes the symmetry of the Fourier series.
-            symmetry is such that the R or Z coefficients is stellarator symmetric
-            i.e. R_1_1_n uses the Rbasis_cos, since cos(theta)*cos(phi) is
-             stellarator symmetric for R i.e. R(-theta,-phi) = R(theta,phi)
-            and Z_1_1_n uses the Zbasis_sin as the term is cos(theta)*sin(phi)
-            since Z(-theta,-phi) = - Z(theta,phi) for Z stellarator symmetry
+    coeffs: dict
+        dictionary of arrays with keys like 'X_L_M_n', where
+        X is R or Z, L is 1 or 2, and M is 0,1, or 2, are the
+        NAE Fourier (in tor. phi) coeffs of radial order L and poloidal order M
+    bases: dict
+        dictionary of Rbasis_cos, Rbasis_sin, Zbasis_cos, Zbasis_sin,
+        the FourierSeries basis objects used to obtain the coefficients, where
+        _cos or _sin denotes the symmetry of the Fourier series.
+        symmetry is such that the R or Z coefficients is stellarator symmetric
+        i.e. R_1_1_n uses the Rbasis_cos, since cos(theta)*cos(phi) is
+        stellarator symmetric for R i.e. R(-theta,-phi) = R(theta,phi)
+        and Z_1_1_n uses the Zbasis_sin as the term is cos(theta)*sin(phi)
+        since Z(-theta,-phi) = - Z(theta,phi) for Z stellarator symmetry
     """
     # get variables from qsc
 
@@ -686,35 +688,39 @@ def _calc_2nd_order_NAE_coeffs(qsc, desc_eq, N=None):
     return coeffs, bases
 
 
-def _calc_2nd_order_constraints(  # noqa: C901 - FIXME - simplify
-    qsc, desc_eq, coeffs, bases
-):
+def _calc_2nd_order_constraints(qsc, desc_eq, coeffs, bases):  # noqa: C901
     """Creates 2nd order NAE constraints for a DESC eq based off given qsc eq.
 
     Parameters
     ----------
-        qsc (Qsc): pyQsc Qsc object to use as the NAE constraints on the DESC eq
-        desc_eq (Equilibrium): desc equilibrium to constrain
-        coeffs: dict, dictionary of arrays with keys like 'X_L_M_n', where
-                X is R or Z, L is 1 or 2, and M is 0,1, or 2, are the
-                NAE Fourier (in tor. phi) coeffs of radial order L and poloidal order M
-        bases: dict, dictionary of Rbasis_cos, Rbasis_sin, Zbasis_cos, Zbasis_sin,
-            the FourierSeries basis objects used to obtain the coefficients, where
-            _cos or _sin denotes the symmetry of the Fourier series.
-            symmetry is such that the R or Z coefficients is stellarator symmetric
-            i.e. R_1_1_n uses the Rbasis_cos, since cos(theta)*cos(phi) is
-             stellarator symmetric for R i.e. R(-theta,-phi) = R(theta,phi)
-            and Z_1_1_n uses the Zbasis_sin as the term is cos(theta)*sin(phi)
-            since Z(-theta,-phi) = - Z(theta,phi) for Z stellarator symmetry
+    qsc : Qsc
+        pyQsc Qsc object to use as the NAE constraints on the DESC eq
+    desc_eq : Equilibrium
+        DESC equilibrium to constrain
+    coeffs : dict
+        dictionary of arrays with keys like 'X_L_M_n', where
+        X is R or Z, L is 1 or 2, and M is 0,1, or 2, are the
+        NAE Fourier (in tor. phi) coeffs of radial order L and poloidal order M
+    bases : dict
+        dictionary of Rbasis_cos, Rbasis_sin, Zbasis_cos, Zbasis_sin,
+        the FourierSeries basis objects used to obtain the coefficients, where
+        _cos or _sin denotes the symmetry of the Fourier series.
+        symmetry is such that the R or Z coefficients is stellarator symmetric
+        i.e. R_1_1_n uses the Rbasis_cos, since cos(theta)*cos(phi) is
+            stellarator symmetric for R i.e. R(-theta,-phi) = R(theta,phi)
+        and Z_1_1_n uses the Zbasis_sin as the term is cos(theta)*sin(phi)
+        since Z(-theta,-phi) = - Z(theta,phi) for Z stellarator symmetry
 
     Returns
     -------
-        Rconstraints (tuple): tuple of FixSumModesR constraints corresponding
-         to constraining the O(rho) DESC coefficients, to be used in
-         constraining a DESC equilibrium solve
-        Zconstraints (tuple): tuple of FixSumModesZ constraints corresponding
-         to constraining the O(rho) DESC coefficients, to be used in
-         constraining a DESC equilibrium solve
+    Rconstraints : tuple
+        tuple of FixSumModesR constraints corresponding
+        to constraining the O(rho) DESC coefficients, to be used in
+        constraining a DESC equilibrium solve
+    Zconstraints : tuple
+        tuple of FixSumModesZ constraints corresponding
+        to constraining the O(rho) DESC coefficients, to be used in
+        constraining a DESC equilibrium solve
     Notes
     ----
         follows eqns 30a and 30b in NAE2DESC document

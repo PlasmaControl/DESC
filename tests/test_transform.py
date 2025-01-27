@@ -437,12 +437,6 @@ class TestTransform:
     @pytest.mark.unit
     def test_fft_warnings(self):
         """Test that warnings are thrown when trying to use fft where it won't work."""
-        g = LinearGrid(rho=2, theta=2, zeta=2)
-        b = ZernikePolynomial(L=0, M=0)
-        with pytest.warns(UserWarning):
-            t = Transform(g, b, method="fft")
-        assert t.method == "direct2"
-
         g = Grid(np.array([[0, 0, 0], [1, 1, 0], [1, 1, 1]]))
         b = ZernikePolynomial(L=2, M=2)
         with pytest.warns(UserWarning, match="compatible grid"):

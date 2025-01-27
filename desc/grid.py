@@ -784,7 +784,7 @@ class Grid(_Grid):
             # Don't do anything with symmetry since that changes # of nodes
             # avoid point at the axis, for now.
             r, t, z = self._nodes.T
-            r = jnp.where(r == 0, 1e-12, r)
+            r = jnp.where(r == 0, kwargs.pop("axis_shift", 1e-12), r)
             self._nodes = jnp.column_stack([r, t, z])
             self._axis = np.array([], dtype=int)
             # allow for user supplied indices/inverse indices for special cases

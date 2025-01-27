@@ -6,6 +6,7 @@ import numpy as np
 from termcolor import colored
 
 from desc.backend import jnp, put
+from desc.grid import Grid
 from desc.io import IOAble
 from desc.utils import combination_permutation, warnif
 
@@ -214,12 +215,14 @@ class Transform(IOAble):
             basis.modes[None, :, 2] == basis.modes[basis.unique_N_idx, None, 2]
         )[0]
         self.fft_index = np.squeeze(self.num_n_modes * row + col + offset)
-        self.fft_nodes = np.hstack(
+        fft_nodes = np.hstack(
             [
                 grid.nodes[:, :2][: grid.num_nodes // self.grid.num_zeta],
                 np.zeros((grid.num_nodes // self.grid.num_zeta, 1)),
             ]
         )
+        # temp grid only used for building transforms, don't need any indexing etc
+        self.fft_grid = Grid(fft_nodes, sort=False, jitable=True, axis_shift=0)
 
     def _check_inputs_direct2(self, grid, basis):
         """Check that inputs are formatted correctly for direct2 method."""
@@ -265,15 +268,17 @@ class Transform(IOAble):
             basis.modes[None, :, 2] == basis.modes[basis.unique_N_idx, None, 2]
         )[0]
         self.fft_index = np.squeeze(self.num_n_modes * row + col)
-        self.fft_nodes = np.hstack(
+        fft_nodes = np.hstack(
             [
                 grid.nodes[:, :2][: grid.num_nodes // grid.num_zeta],
                 np.zeros((grid.num_nodes // grid.num_zeta, 1)),
             ]
         )
-        self.dft_nodes = np.hstack(
+        self.fft_grid = Grid(fft_nodes, sort=False, jitable=True, axis_shift=0)
+        dft_nodes = np.hstack(
             [np.zeros((self.zeta_nodes.size, 2)), self.zeta_nodes[:, np.newaxis]]
         )
+        self.dft_grid = Grid(dft_nodes, sort=False, jitable=True, axis_shift=0)
 
     def build(self):
         """Build the transform matrices for each derivative order."""
@@ -297,7 +302,7 @@ class Transform(IOAble):
             temp_modes = np.hstack([self.lm_modes, np.zeros((self.num_lm_modes, 1))])
             for d in temp_d:
                 self.matrices["fft"][d[0]][d[1]] = self.basis.evaluate(
-                    self.fft_nodes, d, modes=temp_modes
+                    self.fft_grid, d, modes=temp_modes
                 )
         if self.method == "direct2":
             temp_d = np.hstack(
@@ -308,7 +313,7 @@ class Transform(IOAble):
             )
             for d in temp_d:
                 self.matrices["direct2"][d[2]] = self.basis.evaluate(
-                    self.dft_nodes, d, modes=temp_modes
+                    self.dft_grid, d, modes=temp_modes
                 )
 
         self._built = True
@@ -326,13 +331,13 @@ class Transform(IOAble):
         elif self.method == "direct2":
             temp_modes = np.hstack([self.lm_modes, np.zeros((self.num_lm_modes, 1))])
             A = self.basis.evaluate(
-                self.fft_nodes, np.array([0, 0, 0]), modes=temp_modes
+                self.fft_grid, np.array([0, 0, 0]), modes=temp_modes
             )
             temp_modes = np.hstack(
                 [np.zeros((self.num_n_modes, 2)), self.n_modes[:, np.newaxis]]
             )
             B = self.basis.evaluate(
-                self.dft_nodes, np.array([0, 0, 0]), modes=temp_modes
+                self.dft_grid, np.array([0, 0, 0]), modes=temp_modes
             )
             self.matrices["pinvA"] = (
                 jnp.linalg.pinv(A, rtol=rcond) if A.size else np.zeros_like(A.T)
@@ -343,7 +348,7 @@ class Transform(IOAble):
         elif self.method == "fft":
             temp_modes = np.hstack([self.lm_modes, np.zeros((self.num_lm_modes, 1))])
             A = self.basis.evaluate(
-                self.fft_nodes, np.array([0, 0, 0]), modes=temp_modes
+                self.fft_grid, np.array([0, 0, 0]), modes=temp_modes
             )
             self.matrices["pinvA"] = (
                 jnp.linalg.pinv(A, rtol=rcond) if A.size else np.zeros_like(A.T)

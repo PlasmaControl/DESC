@@ -563,6 +563,32 @@ class TestTransform:
         )
         _ = tr["Z"].project(f)
 
+    @pytest.mark.unit
+    def test_fft_even_grid(self):
+        """Test fft method with even number of grid points."""
+        for sym in ["cos", "sin", False]:
+            basis = FourierZernikeBasis(2, 2, 4, sym=sym)
+            c = np.random.random(basis.num_modes)
+            for N in range(9, 16):
+                grid = LinearGrid(L=2, M=2, zeta=N)
+                t1 = Transform(grid, basis, method="direct1", build_pinv=True)
+                t2 = Transform(grid, basis, method="fft", build_pinv=True)
+                x1 = t1.transform(c)
+                x2 = t2.transform(c)
+                np.testing.assert_allclose(
+                    x1, x2, atol=1e-10, err_msg=f"N={N} sym={sym}"
+                )
+                c1 = t1.fit(x1)
+                c2 = t2.fit(x2)
+                np.testing.assert_allclose(
+                    c1, c2, atol=1e-10, err_msg=f"N={N} sym={sym}"
+                )
+                y1 = t1.project(x1)
+                y2 = t2.project(x2)
+                np.testing.assert_allclose(
+                    y1, y2, atol=1e-10, err_msg=f"N={N} sym={sym}"
+                )
+
 
 @pytest.mark.unit
 def test_transform_pytree():

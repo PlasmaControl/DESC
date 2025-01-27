@@ -201,7 +201,10 @@ class Transform(IOAble):
         self.lm_modes = basis.modes[basis.unique_LM_idx, :2]
         self.num_lm_modes = self.lm_modes.shape[0]  # number of radial/poloidal modes
         self.num_n_modes = 2 * basis.N + 1  # number of toroidal modes
-        self.pad_dim = (self.grid.num_zeta - 1) // 2 - basis.N
+        pad_dim = ((self.grid.num_zeta - 1) // 2 - basis.N) * 2
+        if self.grid.num_zeta % 2 == 0:
+            pad_dim += 1
+        self.pad_dim = pad_dim
         self.dk = basis.NFP * np.arange(-basis.N, basis.N + 1).reshape((1, -1))
         offset = np.min(basis.modes[:, 2]) + basis.N  # N for sym="cos", 0 otherwise
         row = np.where(
@@ -415,24 +418,19 @@ class Transform(IOAble):
             # differentiate
             c_diff = c_mtrx[:, :: (-1) ** dz] * self.dk**dz * (-1) ** (dz > 1)
             # re-format in complex notation
-            c_real = jnp.pad(
-                (self.grid.num_zeta / 2)
-                * (
-                    c_diff[:, self.basis.N + 1 :]
-                    - 1j * c_diff[:, self.basis.N - 1 :: -1]
-                ),
-                ((0, 0), (0, self.pad_dim)),
-                mode="constant",
+            c_cplx = (self.grid.num_zeta / 2) * (
+                c_diff[:, self.basis.N + 1 :] - 1j * c_diff[:, self.basis.N - 1 :: -1]
             )
-            c_cplx = jnp.hstack(
+            c_pad = jnp.hstack(
                 (
                     self.grid.num_zeta * c_diff[:, self.basis.N, jnp.newaxis],
-                    c_real,
-                    jnp.fliplr(jnp.conj(c_real)),
+                    c_cplx,
+                    jnp.zeros((c_cplx.shape[0], self.pad_dim)),
+                    jnp.fliplr(jnp.conj(c_cplx)),
                 )
             )
             # transform coefficients
-            c_fft = jnp.real(jnp.fft.ifft(c_cplx))
+            c_fft = jnp.real(jnp.fft.ifft(c_pad))
             return (A @ c_fft).flatten(order="F")
 
     def fit(self, x):
@@ -466,8 +464,7 @@ class Transform(IOAble):
             Ainv = self.matrices["pinvA"]
             c_fft = jnp.matmul(Ainv, x.reshape((Ainv.shape[1], -1), order="F"))
             c_cplx = jnp.fft.fft(c_fft)
-            c_real = c_cplx[:, 1 : c_cplx.shape[1] // 2 + 1]
-            c_unpad = c_real[:, : c_real.shape[1] - self.pad_dim]
+            c_unpad = c_cplx[:, 1 : (c_cplx.shape[1] - self.pad_dim - 1) // 2 + 1]
             c0 = c_cplx[:, :1].real / self.grid.num_zeta
             c2 = c_unpad.real / (self.grid.num_zeta / 2)
             c1 = -c_unpad.imag[:, ::-1] / (self.grid.num_zeta / 2)

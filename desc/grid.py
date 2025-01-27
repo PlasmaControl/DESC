@@ -242,7 +242,9 @@ class _Grid(IOAble, ABC):
         (θ, ζ) ∈ [0, 2π) × [0, 2π/NFP).
         """
         # TODO: GitHub issue 1243?
-        return self.__dict__.setdefault("_can_fft2", self.is_meshgrid and not self.sym)
+        return self.__dict__.setdefault(
+            "_can_fft2", self.is_meshgrid and self.fft_poloidal and self.fft_toroidal
+        )
 
     @property
     def coordinates(self):
@@ -1149,7 +1151,7 @@ class LinearGrid(_Grid):
                 # scale_weights() will reduce endpoint (dt[0] and dt[-1])
                 # duplicate node weight
             # if custom theta used usually safe to assume its non-uniform so no fft
-            self._fft_poloidal = (theta % 2 == 1) and not endpoint
+            self._fft_poloidal = (not endpoint) and (not self.sym)
         elif theta is not None:
             t = np.atleast_1d(theta).astype(float)
             # enforce periodicity
@@ -1204,7 +1206,7 @@ class LinearGrid(_Grid):
         else:
             t = np.array(0.0, ndmin=1)
             dt = theta_period * np.ones_like(t)
-            self._fft_poloidal = True  # trivially true
+            self._fft_poloidal = not self.sym
 
         # zeta
         # note: dz spacing should not depend on NFP
@@ -1223,7 +1225,7 @@ class LinearGrid(_Grid):
                 # scale_weights() will reduce endpoint (dz[0] and dz[-1])
                 # duplicate node weight
             # if custom zeta used usually safe to assume its non-uniform so no fft
-            self._fft_toroidal = (zeta % 2 == 1) and not endpoint
+            self._fft_toroidal = not endpoint
         elif zeta is not None:
             z, dz = _periodic_spacing(zeta, zeta_period, sort=True, jnp=np)
             dz = dz * NFP

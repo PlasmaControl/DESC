@@ -4,7 +4,7 @@ import numpy as np
 from interpax import CubicSpline, PPoly
 from matplotlib import pyplot as plt
 
-from desc.backend import dct, jnp, rfft2
+from desc.backend import dct, jnp
 from desc.integrals._interp_utils import (
     _irfft2_non_uniform,
     cheb_from_dct,
@@ -503,9 +503,7 @@ def interp_to_argmin(h, points, knots, g, dg_dz, method="cubic"):
     ).squeeze(axis=-1)
 
 
-def interp_fft_to_argmin(
-    T, h, points, knots, g, dg_dz, n0, n1, NFP=1, is_fourier=False
-):
+def interp_fft_to_argmin(T, h, points, knots, g, dg_dz, n0, n1, NFP=1):
     """Interpolate ``h`` to the deepest point of ``g`` between ``z1`` and ``z2``.
 
     Let E = {ζ ∣ ζ₁ < ζ < ζ₂} and A ∈ argmin_E g(ζ). Returns h(A).
@@ -518,10 +516,8 @@ def interp_fft_to_argmin(
         field line as ``alpha``. Each Chebyshev series approximates θ over
         one toroidal transit.
     h : jnp.ndarray
-        Shape (..., num theta, num zeta)
-        Periodic function evaluated on tensor-product grid in (ρ, θ, ζ) with
-        uniformly spaced nodes (θ, ζ) ∈ [0, 2π) × [0, 2π/NFP).
-        Preferably power of 2 for ``grid.num_theta`` and ``grid.num_zeta``.
+        Shape (..., 1, num theta, num zeta // 2 + 1)
+        Fourier coefficients as returned by ``Bounce2D.fourier``.
     points : jnp.ndarray
         Shape (..., num well).
         Boundaries to detect argmin between.
@@ -545,9 +541,6 @@ def interp_fft_to_argmin(
         Fourier resolution in toroidal direction; num zeta.
     NFP : int
         Number of field periods.
-    is_fourier : bool
-        If true, then it is assumed that ``h`` is the Fourier
-        transform as returned by ``Bounce2D.fourier``.
 
     Returns
     -------
@@ -574,13 +567,6 @@ def interp_fft_to_argmin(
     # shape is (..., num well, 1)
     argmin = jnp.argmin(where, axis=-1, keepdims=True)
 
-    if not is_fourier:
-        if (n1 % 2) == 0:
-            i = (0, -1)
-        else:
-            i = 0
-        h = rfft2(h, norm="forward").at[..., i].divide(2) * 2
-        h = h[..., jnp.newaxis, :, :]
     h = _irfft2_non_uniform(
         T.eval1d(ext), ext, h, n0, n1, domain1=(0, 2 * jnp.pi / NFP)
     )
@@ -733,15 +719,16 @@ def chebyshev(T, f, Y, n0, n1, NFP=1):
     # is then up-sampling the Chebyshev resolution, which is good since the
     # spectrum of |B| is wider than θ.
 
-    # θ at Chebyshev points, reshaped to (..., num transit * num points)
-    theta = T.evaluate(Y).reshape(*T.cheb.shape[:-2], T.X * Y)
-    zeta = jnp.broadcast_to(cheb_pts(Y, domain=T.domain), (T.X, Y)).ravel()
-
-    # f at Chebyshev points
+    # f at Chebyshev points in ζ along field line
     f = _irfft2_non_uniform(
-        theta, zeta, f, n0, n1, domain1=(0, 2 * jnp.pi / NFP)
-    ).reshape(*T.cheb.shape[:-1], Y)
-    f = PiecewiseChebyshevSeries(cheb_from_dct(dct(f, type=2, axis=-1)) / Y, T.domain)
+        T.evaluate(Y),
+        cheb_pts(Y, domain=T.domain),
+        f[..., jnp.newaxis, :, :, :],
+        n0,
+        n1,
+        domain1=(0, 2 * jnp.pi / NFP),
+    )
+    f = PiecewiseChebyshevSeries(cheb_from_dct(dct(f, type=2, axis=-1) / Y), T.domain)
     return f
 
 
@@ -779,26 +766,31 @@ def cubic_spline(T, f, Y, n0, n1, NFP=1, check=False):
         Second to last axis enumerates the polynomials that compose a particular
         spline.
     knots : jnp.ndarray
-        Shape (num transit * (Y - 1)).
+        Shape (num transit * Y).
         Knots of spline ``f``.
 
     """
-    knots = jnp.linspace(-1, 1, Y, endpoint=False)
-    # θ at uniformly spaced points along field line
-    theta = idct_non_uniform(knots, T.cheb[..., jnp.newaxis, :], T.Y).reshape(
-        *T.cheb.shape[:-2], T.X * Y  # num transit * num points
-    )
-    knots = jnp.ravel(
-        bijection_from_disc(knots, T.domain[0], T.domain[-1])
-        + (T.domain[-1] - T.domain[0]) * jnp.arange(T.X)[:, jnp.newaxis]
+    num_transit = T.X
+    zeta = jnp.linspace(-1, 1, Y, endpoint=False)
+    # θ at uniformly spaced points in ζ along field line
+    theta = idct_non_uniform(zeta, T.cheb[..., jnp.newaxis, :], T.Y)
+    zeta = bijection_from_disc(zeta, T.domain[0], T.domain[1])
+
+    # f at uniformly spaced points in ζ along field line
+    f = _irfft2_non_uniform(
+        theta,
+        zeta,
+        f[..., jnp.newaxis, :, :, :],
+        n0,
+        n1,
+        domain1=(0, 2 * jnp.pi / NFP),
+    ).reshape(*T.cheb.shape[:-2], num_transit * Y)
+
+    zeta = jnp.ravel(
+        zeta + (T.domain[1] - T.domain[0]) * jnp.arange(num_transit)[:, jnp.newaxis]
     )
 
-    f = CubicSpline(
-        x=knots,
-        y=_irfft2_non_uniform(theta, knots, f, n0, n1, domain1=(0, 2 * jnp.pi / NFP)),
-        axis=-1,
-        check=check,
-    ).c
+    f = CubicSpline(x=zeta, y=f, axis=-1, check=check).c
     f = jnp.moveaxis(f, source=(0, 1), destination=(-1, -2))
-    assert f.shape[-2:] == (T.X * Y - 1, 4)
-    return f, knots
+    assert f.shape[-2:] == (num_transit * Y - 1, 4)
+    return f, zeta

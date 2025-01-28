@@ -211,8 +211,8 @@ class VMECIO:
     def save(  # noqa: C901
         cls,
         eq,
-        path,
         *,
+        path,
         surfs=128,
         M_nyq=None,
         N_nyq=None,
@@ -235,7 +235,8 @@ class VMECIO:
             that the derived quantities are Fourier fit with. Defaults to M+4 and N+2.
         M_grid, N_grid: int
             The max poloidal and toroidal resolution of the grid to evaluate quantities
-            in real space. Defaults to eq.M_grid and eq.N_grid.
+            in real space. Related to the VMEC inputs NTHETA and NZETA.
+            Defaults to eq.M_grid and eq.N_grid.
         verbose: int
             Level of output (Default = 1).
             * 0: no output

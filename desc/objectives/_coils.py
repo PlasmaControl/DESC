@@ -684,7 +684,7 @@ class CoilIntegratedCurvature(_CoilObjective):
         params : dict
             Dictionary of the coil's degrees of freedom.
         constants : dict
-            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            Dictionary of constant data, e.g. transforms, profiles etc. Defaults to
             self._constants.
 
         Returns

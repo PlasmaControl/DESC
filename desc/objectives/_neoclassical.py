@@ -22,9 +22,9 @@ _bounce_overwrite = {
         output of the objective. Has no effect on ``self.grad`` or ``self.hess`` which
         always use reverse mode and forward over reverse mode respectively.
 
-        Default is ``fwd``. If ``rev`` is chosen, then ``jac_chunk_size=1`` is chosen
-        by default. In ``rev`` mode, reducing the pitch angle parameter ``batch_size``
-        does not reduce memory, so it is recommended to retain the default for that.
+        Unless ``fwd`` is specified, then ``jac_chunk_size=1`` is chosen by default. In
+        ``rev`` mode, reducing the pitch angle parameter ``pitch_batch_size`` does not
+        reduce memory consumption, so it is recommended to retain the default for that.
         """
 }
 
@@ -61,7 +61,8 @@ class EffectiveRipple(_Objective):
         ``Equilibrium`` to be optimized.
     grid : Grid
         Optional, tensor-product grid in (ρ, θ, ζ) with uniformly spaced nodes
-        (θ, ζ) ∈ [0, 2π) × [0, 2π/NFP). Powers of two are preferable.
+        (θ, ζ) ∈ [0, 2π) × [0, 2π/NFP). Number of poloidal and toroidal nodes
+        preferably rounded down to powers of two.
         Determines the flux surfaces to compute on and resolution of FFTs.
         Default grid samples the boundary surface at ρ=1.
     X : int
@@ -75,11 +76,18 @@ class EffectiveRipple(_Objective):
         Default is double ``Y``. Something like 100 is usually sufficient.
         Currently, this is the number of knots per toroidal transit over
         to approximate B with cubic splines.
+    alpha : np.ndarray
+        Shape (num alpha, ).
+        Starting field line poloidal labels.
+        Default is single field line. To compute a surface average
+        on a rational surface, it is necessary to average over multiple
+        field lines until the surface is covered sufficiently.
     num_transit : int
         Number of toroidal transits to follow field line.
-        For axisymmetric devices, one poloidal transit is sufficient. Otherwise,
-        assuming the surface is not near rational, more transits will
-        approximate surface averages better, with diminishing returns.
+        In an axisymmetric device, field line integration over a single poloidal
+        transit is sufficient to capture a surface average. For a 3D
+        configuration, more transits will approximate surface averages on an
+        irrational magnetic surface better, with diminishing returns.
     num_well : int
         Maximum number of wells to detect for each pitch and field line.
         Giving ``None`` will detect all wells but due to current limitations in
@@ -129,7 +137,7 @@ class EffectiveRipple(_Objective):
         normalize=True,
         normalize_target=True,
         loss_function=None,
-        deriv_mode="fwd",
+        deriv_mode="auto",
         jac_chunk_size=None,
         name="Effective ripple",
         grid=None,
@@ -137,6 +145,7 @@ class EffectiveRipple(_Objective):
         Y=32,
         # Y_B is expensive to increase if one does not fix num well per transit.
         Y_B=None,
+        alpha=np.array([0.0]),
         num_transit=20,
         num_well=None,
         num_quad=32,
@@ -148,7 +157,7 @@ class EffectiveRipple(_Objective):
             target = 0.0
 
         self._grid = grid
-        self._constants = {"quad_weights": 1.0}
+        self._constants = {"quad_weights": 1.0, "alpha": alpha}
         self._X = X
         self._Y = Y
         Y_B = setdefault(Y_B, 2 * Y)
@@ -161,7 +170,7 @@ class EffectiveRipple(_Objective):
             "pitch_batch_size": pitch_batch_size,
             "surf_batch_size": surf_batch_size,
         }
-        if deriv_mode == "rev" and jac_chunk_size is None:
+        if deriv_mode != "fwd" and jac_chunk_size is None:
             # Reverse mode is bottlenecked by coordinate mapping.
             # Compute Jacobian one flux surface at a time.
             jac_chunk_size = 1
@@ -268,6 +277,7 @@ class EffectiveRipple(_Objective):
             constants["profiles"],
             data,
             theta=theta,
+            alpha=constants["alpha"],
             fieldline_quad=constants["fieldline quad"],
             quad=constants["quad"],
             **self._hyperparam,

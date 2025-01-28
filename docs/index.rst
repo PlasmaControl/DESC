@@ -23,7 +23,7 @@
 
    installation
    notebooks/tutorials/use_outputs.ipynb
-   memory_usage
+   performance_tips
 
 
 .. toctree::

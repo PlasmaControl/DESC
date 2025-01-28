@@ -17,6 +17,10 @@ New Features
 - Change implementation of Dommaschk potentials to use recursive algorithm and symbolic integration.
 - Changes hessian computation to use chunked ``jacfwd`` and ``jacrev``, allowing ``jac_chunk_size`` to now reduce hessian memory usage as well.
 
+Speed Improvements
+
+- A number of minor improvements to basis function evaluation and spectral transforms to improve speed. These will also enable future improvements for larger gains.
+
 Bug Fixes
 
 - Small bug fix to use the correct normalization length ``a`` in the BallooningStability objective.

@@ -111,7 +111,9 @@ def _get_default_params(grid):
     return s, s, q
 
 
-def full_support_params(grid):
+# Should not want to use this unless one can afford high quadrature resolution.
+# Kept for benchmarking.
+def _full_support_params(grid):
     """Parameters for full support size and quadrature resolution.
 
     Return parameters such that compact support of singular region is full domain.
@@ -163,6 +165,13 @@ def heuristic_support_params(grid):
 
     """
     assert grid.can_fft2
+    # TODO: Account for real space grid anisotropy by choosing
+    #   ratio = |e_zeta|/|e_theta|
+    #   ratio_avg = surface_average(ratio, jacobian=|e_theta x e_zeta|)
+    #   st/(sz*NFP) (at evaluation point i) = mean (ratio(i), ratio_avg).
+    #   Then we have ~circle in real space around each singular point.
+    #   The grid resolution can then still be chosen independently according
+    #   to the frequency content of R, Z, λ to net the best function approximation.
     Nt = grid.num_theta
     Nz = grid.num_zeta * grid.NFP
     st = int(min(1 + jnp.sqrt(Nt), Nt))
@@ -534,7 +543,6 @@ def _nonsingular_part(
         # nest this def to avoid having to pass the modified source_data around the loop
         # easier to just close over it and let JAX figure it out
         def eval_pt(eval_data_i):
-            # This calculates the effect at a single evaluation point.
             k = kernel(eval_data_i, source_data).reshape(
                 -1, source_grid.num_nodes, kernel.ndim
             )
@@ -637,23 +645,24 @@ def _singular_part(eval_data, source_data, kernel, interpolator, loop=False):
             key: interpolator(val, i, is_fourier=is_fourier, vander=vander)
             for key, val in zip(keys, fsource)
         }
-        # The (θ, ζ) coordinates at which the maps above were evaluated.
         # For FFT interpolator on functions with no toroidal variation used on
-        # grids of different NFP, we still use eval grid to compute coordinates.
+        # grids of different NFP, we still use eval grid to compute below coordinates.
         # In that case, the eval grid points are not where the maps were interpolated,
-        # but the components of maps in coordinates of the orthonormal polar basis are the same.
-        # However, the polar basis vectors between the evaluation point
-        # and the point that was interpolated to do point in different directions,
-        # so it is important to use eval grid to compute the coordinates.
+        # but the components of maps in coordinates of the orthonormal polar basis are
+        # the same. Since the polar basis vectors between the evaluation point
+        # and the point that was interpolated to point in different directions,
+        # it is important to use eval grid to compute the coordinates below.
         source_data_polar["theta"] = eval_theta + interpolator.shift_t[i]
         source_data_polar["zeta"] = eval_zeta + interpolator.shift_z[i]
+        # Above are the (θ, ζ) coordinates at which the maps above were evaluated.
         # ϕ is not periodic map of θ, ζ.
         if "omega" in keys:
-            # TODO: For nonzero ω, the quadrature will not be symmetric about the
+            # TODO (#465): For nonzero ω, the quadrature may not be symmetric about the
             #  singular point for hypersingular kernels such as the Biot-Savart
-            #  kernel. (Recall the singularity is in real in real space). Hence
-            #  the quadrature will not converge to the desired Hadamard finite
-            #  part integral.
+            #  kernel. (Recall the singularity is in real space). Hence the quadrature
+            #  may not converge to the desired Hadamard finite part. Prove otherwise or
+            #  use uniform grid in θ, ϕ and map coordinates before starting the singular
+            #  integral routine.
             source_data_polar["phi"] = (
                 source_data_polar["zeta"] + source_data_polar["omega"]
             )

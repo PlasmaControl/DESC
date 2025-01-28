@@ -16,6 +16,7 @@ New Features
 - Adds the output quantities ``wb`` and ``wp`` to ``VMECIO.save``.
 - Change implementation of Dommaschk potentials to use recursive algorithm and symbolic integration.
 - Changes hessian computation to use chunked ``jacfwd`` and ``jacrev``, allowing ``jac_chunk_size`` to now reduce hessian memory usage as well.
+- Adds an option to ``VMECIO.save`` to specify the grid resolution in real space.
 - Adds the classes ``FourierXYCurve`` and ``FourierXYCoil`` to represent planar curves/coils with Fourier series for X and Y instead of the radius.
 
 Bug Fixes

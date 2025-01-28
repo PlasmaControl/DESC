@@ -16,7 +16,7 @@ New Features
 - Adds the output quantities ``wb`` and ``wp`` to ``VMECIO.save``.
 - Change implementation of Dommaschk potentials to use recursive algorithm and symbolic integration.
 - Changes hessian computation to use chunked ``jacfwd`` and ``jacrev``, allowing ``jac_chunk_size`` to now reduce hessian memory usage as well.
-- Adds a new objective ``desc.objectives.IntegratedCurvature`` for targeting convex coils.
+- Adds a new objective ``desc.objectives.CoilIntegratedCurvature`` for targeting convex coils.
 
 Bug Fixes
 

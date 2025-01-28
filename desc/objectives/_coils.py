@@ -7,7 +7,6 @@ from scipy.constants import mu_0
 from desc.backend import (
     fori_loop,
     jnp,
-    trapezoid,
     tree_flatten,
     tree_leaves,
     tree_map,
@@ -39,7 +38,6 @@ class _CoilObjective(_Objective):
     """
 
     __doc__ = __doc__.rstrip() + collect_docs(coil=True)
-    _endpoint = False  # whether the compute grid should contain the endpoint or not
 
     def __init__(
         self,
@@ -117,9 +115,7 @@ class _CoilObjective(_Objective):
             grid = []
             for c in coils:
                 grid.append(
-                    LinearGrid(
-                        N=2 * c.N * getattr(c, "NFP", 1) + 5, endpoint=self._endpoint
-                    )
+                    LinearGrid(N=2 * c.N * getattr(c, "NFP", 1) + 5, endpoint=False)
                 )
         if isinstance(grid, numbers.Integral):
             grid = LinearGrid(N=self._grid)
@@ -137,11 +133,6 @@ class _CoilObjective(_Objective):
             np.any([g.num_rho > 1 or g.num_theta > 1 for g in grid]),
             ValueError,
             "Only use toroidal resolution for coil grids.",
-        )
-        errorif(
-            np.any([self._endpoint != g.endpoint for g in grid]),
-            ValueError,
-            "grid input has the wrong `endpoint`.",
         )
 
         self._dim_f = np.sum([g.num_nodes for g in grid])
@@ -611,10 +602,12 @@ class CoilCurrentLength(CoilLength):
         return out
 
 
-class IntegratedCurvature(_CoilObjective):
-    """Curvature integrated along a coil.
+class CoilIntegratedCurvature(_CoilObjective):
+    """Coil integrated curvature.
 
-    If a curve is convex, then the following condition must be true: ∫ κ |∂ₛx| ds = 2π.
+    If a curve is convex, then the following condition must be true: ∫ κ |∂ₛx| ds = 2π
+    where κ is the scalar (unsigned) curvature, ∂ₛx is the first derivative of the
+    position vector along curve, and s is the curve parameter.
 
     Parameters
     ----------
@@ -635,7 +628,6 @@ class IntegratedCurvature(_CoilObjective):
     _scalar = False  # not always a scalar, if a coilset is passed in
     _units = "(dimensionless)"
     _print_value_fmt = "Integrated curvature: "
-    _endpoint = True  # whether the compute grid should contain the endpoint or not
 
     def __init__(
         self,
@@ -648,14 +640,14 @@ class IntegratedCurvature(_CoilObjective):
         loss_function=None,
         deriv_mode="auto",
         grid=None,
-        name="coil convexity",
+        name="coil integrated curvature",
         jac_chunk_size=None,
     ):
         if target is None and bounds is None:
             target = 2 * np.pi
         super().__init__(
             coil,
-            ["s", "x_s", "curvature"],
+            ["ds", "x_s", "curvature"],
             target=target,
             bounds=bounds,
             weight=weight,
@@ -707,8 +699,8 @@ class IntegratedCurvature(_CoilObjective):
         data = tree_leaves(data, is_leaf=lambda x: isinstance(x, dict))
         out = jnp.array(
             [
-                trapezoid(
-                    jnp.abs(dat["curvature"]) * safenorm(dat["x_s"], axis=1), dat["s"]
+                jnp.sum(
+                    jnp.abs(dat["curvature"]) * safenorm(dat["x_s"], axis=1) * dat["ds"]
                 )
                 for dat in data
             ]

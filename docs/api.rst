@@ -178,6 +178,7 @@ Objective Functions
     desc.objectives.CoilArclengthVariance
     desc.objectives.CoilCurrentLength
     desc.objectives.CoilCurvature
+    desc.objectives.CoilIntegratedCurvature
     desc.objectives.CoilLength
     desc.objectives.CoilSetLinkingNumber
     desc.objectives.CoilSetMinDistance
@@ -221,7 +222,6 @@ Objective Functions
     desc.objectives.get_NAE_constraints
     desc.objectives.GoodCoordinates
     desc.objectives.HelicalForceBalance
-    desc.objectives.IntegratedCurvature
     desc.objectives.Isodynamicity
     desc.objectives.LinearObjectiveFromUser
     desc.objectives.LinkingCurrentConsistency

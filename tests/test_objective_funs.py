@@ -46,6 +46,7 @@ from desc.objectives import (
     CoilArclengthVariance,
     CoilCurrentLength,
     CoilCurvature,
+    CoilIntegratedCurvature,
     CoilLength,
     CoilSetLinkingNumber,
     CoilSetMinDistance,
@@ -59,7 +60,6 @@ from desc.objectives import (
     GammaC,
     GenericObjective,
     HeatingPowerISS04,
-    IntegratedCurvature,
     Isodynamicity,
     LinearObjectiveFromUser,
     LinkingCurrentConsistency,
@@ -944,10 +944,10 @@ class TestObjectiveFunction:
         """Tests integrated_curvature."""
 
         def test(coil, grid=None, ans=2 * np.pi):
-            obj = IntegratedCurvature(coil, grid=grid)
+            obj = CoilIntegratedCurvature(coil, grid=grid)
             obj.build()
             f = obj.compute(params=coil.params_dict)
-            np.testing.assert_allclose(f, ans, atol=1e-6)
+            np.testing.assert_allclose(f, ans, atol=2e-5)
             assert f.shape == (obj.dim_f,)
 
         # convex coils
@@ -973,7 +973,7 @@ class TestObjectiveFunction:
             coil, n=2, displacement=[0, 7, 0], check_intersection=False
         )
         nested_coils = MixedCoilSet(coils, mixed_coils, check_intersection=False)
-        ans = 1.036488 + 2 * np.pi
+        ans = 1.104044 + 2 * np.pi
         test(coil, ans=ans)
         test(coils, ans=ans)
         test(mixed_coils, ans=ans)
@@ -2703,9 +2703,9 @@ class TestComputeScalarResolution:
         BootstrapRedlConsistency,
         BoundaryError,
         CoilArclengthVariance,
-        IntegratedCurvature,
         CoilCurrentLength,
         CoilCurvature,
+        CoilIntegratedCurvature,
         CoilLength,
         CoilSetLinkingNumber,
         CoilSetMinDistance,
@@ -3126,9 +3126,9 @@ class TestComputeScalarResolution:
         "objective",
         [
             CoilArclengthVariance,
-            IntegratedCurvature,
             CoilCurrentLength,
             CoilCurvature,
+            CoilIntegratedCurvature,
             CoilLength,
             CoilTorsion,
             CoilSetLinkingNumber,
@@ -3191,9 +3191,9 @@ class TestObjectiveNaNGrad:
         BootstrapRedlConsistency,
         BoundaryError,
         CoilArclengthVariance,
-        IntegratedCurvature,
         CoilCurrentLength,
         CoilCurvature,
+        CoilIntegratedCurvature,
         CoilLength,
         CoilSetLinkingNumber,
         CoilSetMinDistance,
@@ -3422,9 +3422,9 @@ class TestObjectiveNaNGrad:
         "objective",
         [
             CoilArclengthVariance,
-            IntegratedCurvature,
             CoilCurrentLength,
             CoilCurvature,
+            CoilIntegratedCurvature,
             CoilLength,
             CoilTorsion,
             CoilSetLinkingNumber,

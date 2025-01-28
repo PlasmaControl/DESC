@@ -114,9 +114,7 @@ class _CoilObjective(_Objective):
         if grid is None:
             grid = []
             for c in coils:
-                grid.append(
-                    LinearGrid(N=2 * c.N * getattr(c, "NFP", 1) + 5, endpoint=False)
-                )
+                grid.append(LinearGrid(N=2 * c.N * getattr(c, "NFP", 1) + 5))
         if isinstance(grid, numbers.Integral):
             grid = LinearGrid(N=self._grid)
         if isinstance(grid, _Grid):

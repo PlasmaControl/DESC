@@ -3142,10 +3142,7 @@ class TestComputeScalarResolution:
         f = np.zeros_like(self.res_array, dtype=float)
         for i, res in enumerate(self.res_array):
             obj = ObjectiveFunction(
-                objective(
-                    coilset,
-                    grid=LinearGrid(N=int(5 + 3 * res), endpoint=objective._endpoint),
-                ),
+                objective(coilset, grid=LinearGrid(N=int(5 + 3 * res))),
                 use_jit=False,
             )
             obj.build(verbose=0)

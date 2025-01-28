@@ -482,86 +482,66 @@ def _Newcomb_ball_metric(params, transforms, profiles, data, **kwargs):
     [Gaur _et al._](https://doi.org/10.1017/S0022377823000107)
     """
     source_grid = transforms["grid"].source_grid
-    # Vectorize in rho later
-    rho = source_grid.meshgrid_reshape(data["rho"], "arz")
+    rho = data["rho"]
+    a_N = data["a"]
+    iota = data["iota"]
+    shear = data["shear"]
+    psi = data["psi"]
+    B = data["|B|"]
+    B_sup_zeta = data["B^zeta"]
+    cvdrift = data["cvdrift"]
+    cvdrift0 = data["cvdrift0"]
+    g_sup_aa = data["g^aa"]
+    p_r = data["p_r"]
+    psi_r = data["psi_r"]
+    g_sup_ra = data["g^ra"]
+    g_sup_rr = data["g^rr"]
 
     psi_b = params["Psi"] / (2 * jnp.pi)
-    a_N = data["a"]
     B_N = 2 * psi_b / a_N**2
 
     zeta0 = kwargs.get("zeta0", jnp.linspace(-0.5 * jnp.pi, 0.5 * jnp.pi, 15))
     N_zeta0 = len(zeta0)
-
-    # This would fail with rho vectorization
-    iota = jnp.mean(data["iota"])
-    shear = jnp.mean(data["shear"])
-    psi = jnp.mean(data["psi"])
     sign_psi = jnp.sign(psi)
     sign_iota = jnp.sign(iota)
 
     N_rho = int(source_grid.num_rho)
     N_alpha = int(source_grid.num_alpha)
+    N_zeta = int(source_grid.num_zeta)
 
     # phi is the same for each alpha
     phi = source_grid.nodes[:: N_rho * N_alpha, 2]
-    N_zeta = len(phi)
-
-    B = source_grid.meshgrid_reshape(data["|B|"], "arz")
-    B_sup_zeta = source_grid.meshgrid_reshape(data["B^zeta"], "arz")
     gradpar = B_sup_zeta / B
-
-    dpdpsi = source_grid.meshgrid_reshape(mu_0 * data["p_r"] / data["psi_r"], "arz")
-
-    g_sup_aa = source_grid.meshgrid_reshape(data["g^aa"], "arz")[None, :]
-    g_sup_ra = source_grid.meshgrid_reshape(data["g^ra"], "arz")[None, :]
-    g_sup_rr = source_grid.meshgrid_reshape(data["g^rr"], "arz")[None, :]
-
-    gds2 = jnp.reshape(
-        rho**2
-        * (
-            g_sup_aa
-            - 2 * sign_iota * shear / rho * zeta0[:, None] * g_sup_ra
-            + zeta0[:, None] ** 2 * (shear / rho) ** 2 * g_sup_rr
-        ),
-        (N_alpha, N_zeta0, N_zeta),
+    dpdpsi = mu_0 * p_r / psi_r
+    gds2 = rho**2 * (
+        g_sup_aa
+        - 2 * sign_iota * shear / rho * zeta0[:, None] * g_sup_ra
+        + zeta0[:, None] ** 2 * g_sup_rr * (shear / rho) ** 2
     )
-
     g = a_N**3 * B_N * gds2 / B * gradpar
-    g_half = (g[:, :, 1:] + g[:, :, :-1]) / 2
-
-    cvdrift = source_grid.meshgrid_reshape(data["cvdrift"], "arz")[None, :]
-    cvdrift0 = source_grid.meshgrid_reshape(data["cvdrift0"], "arz")[None, :]
 
     c = (
         a_N**3
         * B_N
-        * jnp.reshape(
-            2
-            / B_sup_zeta[None, :]
-            * sign_psi
-            * rho**2
-            * dpdpsi
-            * (cvdrift - shear / (2 * rho**2) * zeta0[:, None] * cvdrift0),
-            (N_alpha, N_zeta0, N_zeta),
-        )
+        * 2
+        / B_sup_zeta
+        * sign_psi
+        * rho**2
+        * dpdpsi
+        * (cvdrift - shear / (2 * rho**2) * zeta0[:, None] * cvdrift0)
     )
 
     h = phi[1] - phi[0]
+    g = jnp.reshape(g, (N_zeta0, N_alpha, N_rho, N_zeta), order="F")
 
     # g_half on half grid points, c_full on full grid points
-    g_half = (g[:, :, 1:] + g[:, :, :-1]) / 2
-    c_full = c[:, :, :-1]
+    g_half = (g[:, :, :, 1:] + g[:, :, :, :-1]) / 2
+    c = jnp.reshape(c, (N_zeta0, N_alpha, N_rho, N_zeta), order="F")
 
-    i = jnp.arange(N_alpha)[:, None, None]
-    j = jnp.arange(N_zeta0)[None, :, None]
-    k = jnp.arange(N_zeta - 1)[None, None, :]
-
-    X = jnp.zeros((N_alpha, N_zeta0, N_zeta - 1))
-    X = X.at[i, j, k].set(phi[k])
-
-    Y = jnp.zeros((N_alpha, N_zeta0))
-    eps = 5e-3  # slope of the test functio
-    Yp = eps * jnp.ones((N_alpha, N_zeta0))
+    X = jnp.broadcast_to(phi, (N_zeta0, N_alpha, N_rho, N_zeta))
+    Y = jnp.zeros((N_zeta0, N_alpha, N_rho))
+    eps = 5e-3
+    Yp = eps * jnp.ones((N_zeta0, N_alpha, N_rho))
 
     @jit
     def integrator(carry, x):
@@ -599,18 +579,19 @@ def _Newcomb_ball_metric(params, transforms, profiles, data, **kwargs):
 
         return Y, first_negative_index, lin_interp_factor
 
-    # Vectorize over the first two dimensions
-    vectorized_cumulative_update = jit(vmap(vmap(cumulative_update_jit)))
+    # Vectorize over the first three dimensions
+    vectorized_cumulative_update = jit(vmap(vmap(vmap(cumulative_update_jit))))
     Y, first_negative_indices, lin_interp_factors = vectorized_cumulative_update(
-        Y, Yp, g_half, c_full
+        Y, Yp, g_half, c[:, :, :, :-1]
     )
 
-    # x at crossing pts, or last value of x if there were no crossings
-    X0 = jnp.zeros((N_alpha, N_zeta0))
-    i0 = jnp.arange(N_alpha)[:, None]
-    j0 = jnp.arange(N_zeta0)[None, :]
-    X0 = X0.at[i0, j0].set(
-        X[i0, j0, first_negative_indices[i0, j0]] + lin_interp_factors[i0, j0] * h
+    X0 = jnp.zeros((N_zeta0, N_alpha, N_rho))
+    i0 = jnp.arange(N_zeta0)[:, None, None]
+    j0 = jnp.arange(N_alpha)[None, :, None]
+    k0 = jnp.arange(N_rho)[None, None, :]
+    X0 = X0.at[i0, j0, k0].set(
+        X[i0, j0, k0, first_negative_indices[i0, j0, k0]]
+        + lin_interp_factors[i0, j0, k0] * h
     )
     # where X0 < phimax, it means there was a zero crossing so its unstable. We take
     # the distance from X0 to phimax as the distance to stability. If there was no
@@ -622,9 +603,9 @@ def _Newcomb_ball_metric(params, transforms, profiles, data, **kwargs):
         # if it crossed, then X0 < phimax, so this < 0
         (X0 - jnp.max(phi)) / jnp.ptp(phi),
         # if it reached the end without crossing, this is >=0
-        Y[:, :, -1],
+        Y[:, :, :, -1],
     )
 
-    data["Newcomb ballooning metric"] = jnp.min(metric)
+    data["Newcomb ballooning metric"] = jnp.min(metric, axis=(0,1))
 
     return data

@@ -9,6 +9,7 @@ from ._coils import (
     CoilSetLinkingNumber,
     CoilSetMinDistance,
     CoilTorsion,
+    LinkingCurrentConsistency,
     PlasmaCoilSetMinDistance,
     QuadraticFlux,
     SurfaceCurrentRegularization,
@@ -23,6 +24,7 @@ from ._equilibrium import (
     HelicalForceBalance,
     RadialForceBalance,
 )
+from ._fast_ion import GammaC
 from ._free_boundary import BoundaryError, VacuumBoundaryError
 from ._generic import GenericObjective, LinearObjectiveFromUser, ObjectiveFromUser
 from ._geometry import (
@@ -31,6 +33,7 @@ from ._geometry import (
     Elongation,
     GoodCoordinates,
     MeanCurvature,
+    MirrorRatio,
     PlasmaVesselDistance,
     PrincipalCurvature,
     Volume,

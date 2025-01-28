@@ -31,6 +31,7 @@ from . import (
     _bootstrap,
     _core,
     _curve,
+    _deprecated,
     _equil,
     _field,
     _geometry,

@@ -5,6 +5,7 @@ import shutil
 import numpy as np
 import pytest
 import scipy
+import scipy.constants
 
 from desc.backend import jnp
 from desc.coils import (
@@ -14,8 +15,11 @@ from desc.coils import (
     FourierXYZCoil,
     MixedCoilSet,
     SplineXYZCoil,
+    initialize_modular_coils,
+    initialize_saddle_coils,
 )
 from desc.compute import get_params, get_transforms, rpz2xyz, xyz2rpz, xyz2rpz_vec
+from desc.equilibrium import Equilibrium
 from desc.examples import get
 from desc.geometry import FourierRZCurve, FourierRZToroidalSurface
 from desc.grid import Grid, LinearGrid
@@ -37,8 +41,8 @@ class TestCoil:
         y = 1
         I = 1e7
 
-        By_true = 1e-7 * 2 * np.pi * R**2 * I / (y**2 + R**2) ** (3 / 2)
-        Bz_true = 1e-7 * 2 * np.pi * R**2 * I / (y**2 + R**2) ** (3 / 2)
+        By_true = scipy.constants.mu_0 / 2 * R**2 * I / (y**2 + R**2) ** (3 / 2)
+        Bz_true = scipy.constants.mu_0 / 2 * R**2 * I / (y**2 + R**2) ** (3 / 2)
 
         B_true_xyz = np.atleast_2d([0, By_true, 0])
         grid_xyz = np.atleast_2d([10, y, 0])
@@ -228,7 +232,7 @@ class TestCoil:
             # error in original paper and apparently in Jackson EM book too.
             theta = np.pi / 2
             arg = R**2 + r**2 + 2 * r * R * np.sin(theta)
-            term_1_num = 4.0e-7 * I * R
+            term_1_num = I * R * scipy.constants.mu_0 / np.pi
             term_1_den = np.sqrt(arg)
             k_sqd = 4 * r * R * np.sin(theta) / arg
             term_2_num = (2 - k_sqd) * scipy.special.ellipk(
@@ -387,7 +391,7 @@ class TestCoil:
         y = 1
         I = 1e7
         B_Z = 2  # add constant vertical field of 2T
-        By_true = 1e-7 * 2 * np.pi * R**2 * I / (y**2 + R**2) ** (3 / 2)
+        By_true = scipy.constants.mu_0 / 2 * R**2 * I / (y**2 + R**2) ** (3 / 2)
         B_true = np.array([0, By_true, 2])
         coil = FourierXYZCoil(I)
 
@@ -404,7 +408,7 @@ class TestCoil:
         y = 1
         I = 1e7
         B_Z = 2  # add constant vertical field of 2T
-        By_true = 1e-7 * 2 * np.pi * R**2 * I / (y**2 + R**2) ** (3 / 2)
+        By_true = scipy.constants.mu_0 / 2 * R**2 * I / (y**2 + R**2) ** (3 / 2)
         B_true = np.array([0, By_true, 2])
         coil = FourierXYZCoil(I)
         coilset = CoilSet(coil)
@@ -484,7 +488,7 @@ class TestCoilSet:
         z = np.linspace(0, 10, 10)
         I = 1e7
         n = 10
-        Bz_true = np.sum(1e-7 * 2 * np.pi * R**2 * I / (z**2 + R**2) ** (3 / 2))
+        Bz_true = np.sum(scipy.constants.mu_0 / 2 * R**2 * I / (z**2 + R**2) ** (3 / 2))
         B_true = np.array([0, 0, Bz_true])
         coil = FourierRZCoil(0.1)
         coils = CoilSet.linspaced_linear(
@@ -503,7 +507,7 @@ class TestCoilSet:
         R = 10
         N = 50
         I = 1e7
-        Bp_true = np.sum(1e-7 * 4 * np.pi * N * I / 2 / np.pi / R)
+        Bp_true = np.sum(scipy.constants.mu_0 * N * I / 2 / np.pi / R)
         B_true = np.array([0, Bp_true, 0])
         coil = FourierPlanarCoil()
         coil.current = I
@@ -531,7 +535,7 @@ class TestCoilSet:
         R = 10
         N = 48
         I = 1e7
-        Bp_true = np.sum(1e-7 * 4 * np.pi * N * I / 2 / np.pi / R)
+        Bp_true = np.sum(scipy.constants.mu_0 * N * I / 2 / np.pi / R)
         B_true = np.array([0, Bp_true, 0])
         coil = FourierPlanarCoil(I)
         coils = CoilSet.linspaced_angular(coil, angle=np.pi / 2, n=N // 4)
@@ -1331,3 +1335,80 @@ def test_linking_number():
     # due to alternating orientation of the coils due to symmetry.
     expected = [1, -1] * 5
     np.testing.assert_allclose(link[-1, :-1], expected, rtol=1e-3)
+
+
+@pytest.mark.unit
+def test_initialize_modular():
+    """Test initializing a modular coilset."""
+    eq = Equilibrium(NFP=2, sym=True)
+    coilset = initialize_modular_coils(eq, 3, 2.0)
+    assert len(coilset) == 3
+    np.testing.assert_allclose(coilset[0].r_n, 2.0)  # a=1, so r/a of 2 gives r=2
+    x = coilset[1]._compute_position(basis="rpz")[0]
+    # eq is axisymmetric so coils should each be at const zeta
+    # with symmetry and 2 field periods, each half period goes from 0 to pi/2
+    # with 3 coils, one coil should be right in the middle at pi/4
+    np.testing.assert_allclose(x[:, 1], np.pi / 4)
+    np.testing.assert_allclose(x[:, 0].min(), 8, rtol=1e-2)  # Rmin ~ 10-2
+    np.testing.assert_allclose(x[:, 0].max(), 12, rtol=1e-2)  # Rmax ~ 10+2
+    y = coilset._compute_position()
+    assert len(y) == 12  # 3 coils/fp * 2 fp * 2 sym
+
+
+@pytest.mark.unit
+def test_initialize_saddle():
+    """Test initializing a saddle coilset."""
+    eq = Equilibrium(NFP=2, sym=False)
+    coilset = initialize_saddle_coils(eq, 3, offset=2.0, r_over_a=1.0, position="inner")
+    assert len(coilset) == 3
+    y = coilset._compute_position()
+    assert len(y) == 6  # 3 coils/fp * 2 fp
+    np.testing.assert_allclose(coilset[0].r_n, 1.0)  # a=1, so r/a of 1 gives r=1
+    x = coilset[1]._compute_position(grid=LinearGrid(N=50), basis="xyz")[0]
+    # 2 field periods, each half period goes from 0 to pi
+    # with 3 coils, one coil should be right in the middle at pi/2, eg parallel to
+    # x axis
+    np.testing.assert_allclose(x[:, 1], 8)  # R ~ 10-2
+    np.testing.assert_allclose(x[:, 0].min(), -1, rtol=1e-2)  # xmin
+    np.testing.assert_allclose(x[:, 0].max(), 1, rtol=1e-2)  # xmax
+
+    coilset = initialize_saddle_coils(eq, 1, offset=2.0, r_over_a=1.0, position="outer")
+    assert len(coilset) == 1
+    y = coilset._compute_position()
+    assert len(y) == 2  # 3 coils/fp * 2 fp
+    np.testing.assert_allclose(coilset[0].r_n, 1.0)  # a=1, so r/a of 1 gives r=1
+    x = coilset[0]._compute_position(grid=LinearGrid(N=50), basis="xyz")[0]
+    # 2 field periods, each half period goes from 0 to pi
+    # with 1 coils, it should be at pi/2
+    np.testing.assert_allclose(x[:, 1], 12)  # R ~ 10+2
+    np.testing.assert_allclose(x[:, 0].min(), -1, rtol=1e-2)  # xmin
+    np.testing.assert_allclose(x[:, 0].max(), 1, rtol=1e-2)  # xmax
+
+    offset = 3.0
+    coilset = initialize_saddle_coils(
+        eq, 1, offset=offset, r_over_a=1.0, position="top"
+    )
+    assert len(coilset) == 1
+    y = coilset._compute_position()
+    assert len(y) == 2  # 3 coils/fp * 2 fp
+    np.testing.assert_allclose(coilset[0].r_n, 1.0)  # a=1, so r/a of 1 gives r=1
+    x = coilset[0]._compute_position(grid=LinearGrid(N=50), basis="xyz")[0]
+    # 2 field periods, each half period goes from 0 to pi
+    # with 1 coils, it should be at pi/2
+    np.testing.assert_allclose(x[:, 2], offset)  # Z ~ 3
+    np.testing.assert_allclose(x[:, 0].min(), -1, rtol=1e-2)  # xmin
+    np.testing.assert_allclose(x[:, 0].max(), 1, rtol=1e-2)  # xmax
+
+    coilset = initialize_saddle_coils(
+        eq, 1, offset=offset, r_over_a=1.0, position="bottom"
+    )
+    assert len(coilset) == 1
+    y = coilset._compute_position()
+    assert len(y) == 2  # 3 coils/fp * 2 fp
+    np.testing.assert_allclose(coilset[0].r_n, 1.0)  # a=1, so r/a of 1 gives r=1
+    x = coilset[0]._compute_position(grid=LinearGrid(N=50), basis="xyz")[0]
+    # 2 field periods, each half period goes from 0 to pi
+    # with 1 coils, it should be at pi/2
+    np.testing.assert_allclose(x[:, 2], -offset)  # Z ~ -3
+    np.testing.assert_allclose(x[:, 0].min(), -1, rtol=1e-2)  # xmin
+    np.testing.assert_allclose(x[:, 0].max(), 1, rtol=1e-2)  # xmax

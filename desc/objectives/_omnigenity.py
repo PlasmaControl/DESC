@@ -1000,7 +1000,6 @@ class PiecewiseOmnigenity(_Objective):
         eq_transforms = get_transforms(
             "desc.equilibrium.equilibrium.Equilibrium",
             self._eq_data_keys,
-            obj=eq,
             grid=eq_grid,
             M_booz=M_booz,
             N_booz=N_booz,
@@ -1068,7 +1067,6 @@ class PiecewiseOmnigenity(_Objective):
         field_transforms = get_transforms(
             "desc.magnetic_fields._core.OmnigenousField",
             self._field_data_keys,
-            obj=self._field,
             grid=field_grid,
         )
 

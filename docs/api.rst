@@ -176,7 +176,6 @@ Objective Functions
     desc.objectives.BoundaryError
     desc.objectives.BScaleLength
     desc.objectives.CoilArclengthVariance
-    desc.objectives.IntegratedCurvature
     desc.objectives.CoilCurrentLength
     desc.objectives.CoilCurvature
     desc.objectives.CoilLength
@@ -222,6 +221,7 @@ Objective Functions
     desc.objectives.get_NAE_constraints
     desc.objectives.GoodCoordinates
     desc.objectives.HelicalForceBalance
+    desc.objectives.IntegratedCurvature
     desc.objectives.Isodynamicity
     desc.objectives.LinearObjectiveFromUser
     desc.objectives.LinkingCurrentConsistency

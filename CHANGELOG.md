@@ -16,6 +16,7 @@ New Features
 - Adds the output quantities ``wb`` and ``wp`` to ``VMECIO.save``.
 - Change implementation of Dommaschk potentials to use recursive algorithm and symbolic integration.
 - Changes hessian computation to use chunked ``jacfwd`` and ``jacrev``, allowing ``jac_chunk_size`` to now reduce hessian memory usage as well.
+- Adds an option to ``VMECIO.save`` to specify the grid resolution in real space.
 - Adds the example "reactor_QA", which is similar to "precise_QA" but with self-consistent bootstrap current at finite beta.
 
 Bug Fixes

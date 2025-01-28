@@ -13,7 +13,7 @@ plotly >= 5.16, <= 5.24.1
 psutil <= 6.1.1
 pylatexenc >= 2.0, <= 2.10
 quadax >= 0.2.2, <= 0.2.4
-scikit-image <= 0.25.0
+scikit-image <= 0.25.1
 scipy >= 1.7.0, <= 1.15.1
 termcolor <= 2.5.0
 sympy

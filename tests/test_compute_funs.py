@@ -1108,7 +1108,7 @@ def test_boozer_transform():
     # TODO (#680): add test with stellarator example
     eq = get("DSHAPE_CURRENT")
     grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
-    data = eq.compute("|B|_mn", grid=grid, M_booz=eq.M, N_booz=eq.N)
+    data = eq.compute("|B|_mn_B", grid=grid, M_booz=eq.M, N_booz=eq.N)
     booz_xform = np.array(
         [
             2.49792355e-01,
@@ -1128,7 +1128,7 @@ def test_boozer_transform():
         ]
     )
     np.testing.assert_allclose(
-        np.flipud(np.sort(np.abs(data["|B|_mn"]))),
+        np.flipud(np.sort(np.abs(data["|B|_mn_B"]))),
         booz_xform,
         rtol=1e-3,
         atol=1e-4,
@@ -1644,3 +1644,12 @@ def test_parallel_grad_fd(DummyStellarator):
         rtol=1e-2,
         atol=1e-2 * np.mean(np.abs(data["B^zeta_z|r,a"])),
     )
+
+
+@pytest.mark.unit
+def test_compute_deprecation_warning():
+    """Test DeprecationWarning for deprecated compute names."""
+    eq = Equilibrium()
+    grid = LinearGrid(L=1, M=2, N=2, NFP=eq.NFP)
+    with pytest.warns(DeprecationWarning, match="deprecated"):
+        eq.compute("sqrt(g)_B", grid=grid)

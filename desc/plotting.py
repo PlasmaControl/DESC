@@ -2706,7 +2706,7 @@ def plot_boozer_modes(  # noqa: C901
     ylabel_fontsize = kwargs.pop("ylabel_fontsize", None)
 
     basis = get_transforms(
-        "|B|_mn", obj=eq, grid=Grid(np.array([])), M_booz=M_booz, N_booz=N_booz
+        "|B|_mn_B", obj=eq, grid=Grid(np.array([])), M_booz=M_booz, N_booz=N_booz
     )["B"].basis
     if helicity:
         matrix, modes, symidx = ptolemy_linear_transform(
@@ -2773,7 +2773,7 @@ def plot_boozer_modes(  # noqa: C901
             )
 
     plot_data = {
-        "|B|_mn": B_mn,
+        "|B|_mn_B": B_mn,
         "B modes": modes,
         "rho": rho,
     }
@@ -2910,12 +2910,12 @@ def plot_boozer_surface(
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             data = thing.compute(
-                "|B|_mn", grid=grid_compute, M_booz=M_booz, N_booz=N_booz
+                "|B|_mn_B", grid=grid_compute, M_booz=M_booz, N_booz=N_booz
             )
         B_transform = get_transforms(
-            "|B|_mn", obj=thing, grid=grid_plot, M_booz=M_booz, N_booz=N_booz
+            "|B|_mn_B", obj=thing, grid=grid_plot, M_booz=M_booz, N_booz=N_booz
         )["B"]
-        B = B_transform.transform(data["|B|_mn"]).reshape(
+        B = B_transform.transform(data["|B|_mn_B"]).reshape(
             (grid_plot.num_theta, grid_plot.num_zeta), order="F"
         )
         theta_B = (

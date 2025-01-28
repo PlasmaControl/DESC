@@ -115,7 +115,7 @@ class QuasisymmetryBoozer(_Objective):
             "resolution for surface averages",
         )
 
-        self._data_keys = ["|B|_mn"]
+        self._data_keys = ["|B|_mn_B"]
 
         timer = Timer()
         if verbose > 0:
@@ -181,7 +181,7 @@ class QuasisymmetryBoozer(_Objective):
             transforms=constants["transforms"],
             profiles=constants["profiles"],
         )
-        B_mn = data["|B|_mn"].reshape((constants["transforms"]["grid"].num_rho, -1))
+        B_mn = data["|B|_mn_B"].reshape((constants["transforms"]["grid"].num_rho, -1))
         B_mn = constants["matrix"] @ B_mn.T
         # output order = (rho, mn).flatten(), ie all the surfaces concatenated
         # one after the other
@@ -652,7 +652,7 @@ class Omnigenity(_Objective):
             field_grid = self._field_grid
 
         self._dim_f = field_grid.num_nodes
-        self._eq_data_keys = ["|B|_mn"]
+        self._eq_data_keys = ["|B|_mn_B"]
         self._field_data_keys = ["|B|", "theta_B", "zeta_B"]
 
         errorif(
@@ -836,7 +836,7 @@ class Omnigenity(_Objective):
         zeta_B = field_grid.meshgrid_reshape(zeta_B, "rtz").reshape(
             (field_grid.num_rho, -1)
         )
-        B_mn = eq_data["|B|_mn"].reshape((eq_grid.num_rho, -1))
+        B_mn = eq_data["|B|_mn_B"].reshape((eq_grid.num_rho, -1))
         B_eta_alpha = vmap(_compute_B_eta_alpha)(theta_B, zeta_B, B_mn)
         B_eta_alpha = B_eta_alpha.reshape(
             (field_grid.num_rho, field_grid.num_theta, field_grid.num_zeta)

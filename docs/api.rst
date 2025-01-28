@@ -32,6 +32,8 @@ Coils
     desc.coils.FourierXYZCoil
     desc.coils.MixedCoilSet
     desc.coils.SplineXYZCoil
+    desc.coils.initialize_modular_coils
+    desc.coils.initialize_saddle_coils
 
 Compatibility
 *************

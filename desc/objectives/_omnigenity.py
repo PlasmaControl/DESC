@@ -816,7 +816,6 @@ class Omnigenity(_Objective):
             zeta_B = field_data["zeta_B"]
 
         # additional computations that cannot be part of the regular compute API
-
         def _compute_B_eta_alpha(theta_B, zeta_B, B_mn):
             nodes = jnp.vstack(
                 (
@@ -892,20 +891,10 @@ class PiecewiseOmnigenity(_Objective):
         Collocation grid containing the nodes to evaluate at for equilibrium data.
         Defaults to a linearly space grid on the rho=1 surface.
         Must be a single flux surface without stellarator symmetry.
-    field_grid : Grid, optional
-        Collocation grid containing the nodes to evaluate at for omnigenous field data.
-        The grid nodes are given in the usual (ρ,θ,ζ) coordinates (with θ ∈ [0, 2π),
-        ζ ∈ [0, 2π/NFP)), but θ is mapped to η and ζ is mapped to α. Defaults to a
-        linearly space grid on the rho=1 surface. Must be a single flux surface without
-        stellarator symmetry.
     M_booz : int, optional
         Poloidal resolution of Boozer transformation. Default = 2 * eq.M.
     N_booz : int, optional
         Toroidal resolution of Boozer transformation. Default = 2 * eq.N.
-    eta_weight : float, optional
-        Magnitude of relative weight as a function of η:
-        w(η) = (`eta_weight` + 1) / 2 + (`eta_weight` - 1) / 2 * cos(η)
-        Default value of 1 weights all nodes equally.
     eq_fixed: bool, optional
         Whether the Equilibrium `eq` is fixed or not.
         If True, the equilibrium is fixed and its values are precomputed, which saves on
@@ -925,7 +914,7 @@ class PiecewiseOmnigenity(_Objective):
 
     _coordinates = "rtz"
     _units = "(T)"
-    _print_value_fmt = "Omnigenity error: {:10.3e} "
+    _print_value_fmt = "Piecewise omnigenity error: {:10.3e} "
 
     def __init__(
         self,
@@ -942,9 +931,6 @@ class PiecewiseOmnigenity(_Objective):
         field_grid=None,
         M_booz=None,
         N_booz=None,
-        eta_weight=1,
-        eq_fixed=False,
-        field_fixed=False,
         name="omnigenity",
     ):
         if target is None and bounds is None:
@@ -956,17 +942,8 @@ class PiecewiseOmnigenity(_Objective):
         self.helicity = field.helicity
         self.M_booz = M_booz
         self.N_booz = N_booz
-        self.eta_weight = eta_weight
-        self._eq_fixed = eq_fixed
-        self._field_fixed = field_fixed
-        if not eq_fixed and not field_fixed:
-            things = [eq, field]
-        elif eq_fixed and not field_fixed:
-            things = [field]
-        elif field_fixed and not eq_fixed:
-            things = [eq]
-        else:
-            raise ValueError("Cannot fix both the eq and field.")
+        things = [eq, field]
+
         super().__init__(
             things=things,
             target=target,
@@ -990,56 +967,29 @@ class PiecewiseOmnigenity(_Objective):
             Level of output.
 
         """
-        if self._eq_fixed:
-            eq = self._eq
-            field = self.things[0]
-        elif self._field_fixed:
-            eq = self.things[0]
-            field = self._field
-        else:
-            eq = self.things[0]
-            field = self.things[1]
+        eq = self.things[0]
+        field = self.things[1]
 
         M_booz = self.M_booz or 2 * eq.M
         N_booz = self.N_booz or 2 * eq.N
 
         # default grids
-        if self._eq_grid is None and self._field_grid is not None:
+        if self._eq_grid is None:
             rho = self._field_grid.nodes[0, 0]
-        elif self._eq_grid is not None and self._field_grid is None:
-            rho = self._eq_grid.nodes[0, 0]
-        elif self._eq_grid is None and self._field_grid is None:
-            rho = 1.0
+
         if self._eq_grid is None:
             eq_grid = LinearGrid(
                 rho=rho, M=2 * M_booz, N=2 * N_booz, NFP=eq.NFP, sym=False
             )
         else:
             eq_grid = self._eq_grid
-        if self._field_grid is None:
-            field_grid = LinearGrid(
-                rho=rho, M=2 * M_booz, N=2 * N_booz, NFP=eq.NFP, sym=False
-            )
-        else:
-            field_grid = self._field_grid
 
-        self._dim_f = field_grid.num_nodes
-        self._eq_data_keys = ["|B|_mn"]
-        self._field_data_keys = ["|B|_pwO", "theta_B", "zeta_B"]
+        self._dim_f = eq_grid.num_nodes
+        self._eq_data_keys = ["|B|", "theta_B", "zeta_B"]
+        self._field_data_keys = ["|B|_pwO"]
 
-        errorif(
-            eq_grid.NFP != field_grid.NFP,
-            msg="eq_grid and field_grid must have the same number of field periods",
-        )
         errorif(eq_grid.sym, msg="eq_grid must not be symmetric")
-        errorif(field_grid.sym, msg="field_grid must not be symmetric")
         errorif(eq_grid.num_rho != 1, msg="eq_grid must be a single surface")
-        errorif(field_grid.num_rho != 1, msg="field_grid must be a single surface")
-        errorif(
-            eq_grid.nodes[eq_grid.unique_rho_idx, 0]
-            != field_grid.nodes[field_grid.unique_rho_idx, 0],
-            msg="eq_grid and field_grid must be the same surface",
-        )
 
         timer = Timer()
         if verbose > 0:
@@ -1048,57 +998,19 @@ class PiecewiseOmnigenity(_Objective):
 
         profiles = get_profiles(self._eq_data_keys, obj=eq, grid=eq_grid)
         eq_transforms = get_transforms(
-            # "desc.magnetic_fields._core.PiecewiseOmnigenousField",
-            # "desc.equilibrium.equilibrium.Equilibrium",
+            "desc.equilibrium.equilibrium.Equilibrium",
             self._eq_data_keys,
             obj=eq,
             grid=eq_grid,
             M_booz=M_booz,
             N_booz=N_booz,
         )
-        field_transforms = get_transforms(
-            self._field_data_keys,
-            obj=field,
-            grid=field_grid,
-            M_booz=M_booz,
-            N_booz=N_booz,
-        )
-
-        # compute returns points on the grid of the field (dim_f = field_grid.num_nodes)
-        # so set quad_weights to the field grid
-        # to avoid it being incorrectly set in the super build
-        w = field_grid.weights
-        w *= jnp.sqrt(field_grid.num_nodes)
 
         self._constants = {
             "eq_profiles": profiles,
             "eq_transforms": eq_transforms,
-            "field_transforms": field_transforms,
-            "quad_weights": w,
             "helicity": self.helicity,
         }
-
-        if self._eq_fixed:
-            # precompute the eq data since it is fixed during the optimization
-            eq_data = compute_fun(
-                "desc.equilibrium.equilibrium.Equilibrium",
-                self._eq_data_keys,
-                params=self._eq.params_dict,
-                transforms=self._constants["eq_transforms"],
-                profiles=self._constants["eq_profiles"],
-            )
-            self._constants["eq_data"] = eq_data
-        if self._field_fixed:
-            # precompute the field data since it is fixed during the optimization
-            field_data = compute_fun(
-                "desc.magnetic_fields._core.PiecewiseOmnigenousField",
-                self._field_data_keys,
-                params=self._field.params_dict,
-                transforms=self._constants["field_transforms"],
-                profiles={},
-                helicity=self._constants["helicity"],
-            )
-            self._constants["field_data"] = field_data
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -1136,53 +1048,41 @@ class PiecewiseOmnigenity(_Objective):
             constants = self.constants
 
         # sort parameters
-        if self._eq_fixed:
-            field_params = params_1
-        elif self._field_fixed:
-            eq_params = params_1
-        else:
-            eq_params = params_1
-            field_params = params_2
+        eq_params = params_1
+        field_params = params_2
 
-        # compute eq data
-        if self._eq_fixed:
-            eq_data = constants["eq_data"]
-        else:
-            eq_data = compute_fun(
-                "desc.equilibrium.equilibrium.Equilibrium",
-                self._eq_data_keys,
-                params=eq_params,
-                transforms=constants["eq_transforms"],
-                profiles=constants["eq_profiles"],
-            )
-
-        # compute field data
-        if self._field_fixed:
-            field_data = constants["field_data"]
-        else:
-            field_data = compute_fun(
-                "desc.magnetic_fields._core.OmnigenousField",
-                self._field_data_keys,
-                params=field_params,
-                transforms=constants["field_transforms"],
-                profiles={},
-                helicity=constants["helicity"],
-                iota=jnp.mean(eq_data["iota"]),
-            )
-
-        # additional computations that cannot be part of the regular compute API
-        nodes = jnp.vstack(
-            (
-                jnp.zeros_like(field_data["theta_B"]),
-                field_data["theta_B"],
-                field_data["zeta_B"],
-            )
-        ).T
-        modB = jnp.matmul(
-            constants["eq_transforms"]["B"].basis.evaluate(nodes), eq_data["|B|_mn"]
+        eq_data = compute_fun(
+            "desc.equilibrium.equilibrium.Equilibrium",
+            self._eq_data_keys,
+            params=eq_params,
+            transforms=constants["eq_transforms"],
+            profiles=constants["eq_profiles"],
         )
 
-        omnigenity_error = modB - field_data["|B|_pwO"]
+        ## Passing Boozer coordinate values as regular coordinate
+        ## TODO: Have to account for NFP
+        field_grid = LinearGrid(
+            rho=self._rho, theta=eq_data["theta_B"], zeta=eq_data["zeta_B"]
+        )
+
+        field_transforms = get_transforms(
+            "desc.magnetic_fields._core.OmnigenousField",
+            self._field_data_keys,
+            obj=self._field,
+            grid=field_grid,
+        )
+
+        field_data = compute_fun(
+            "desc.magnetic_fields._core.OmnigenousField",
+            self._field_data_keys,
+            params=field_params,
+            transforms=field_transforms,
+            profiles={},
+            helicity=constants["helicity"],
+            iota=jnp.mean(eq_data["iota"]),
+        )
+
+        omnigenity_error = eq_data["|B|"] - field_data["|B|_pwO"]
 
         return omnigenity_error
 

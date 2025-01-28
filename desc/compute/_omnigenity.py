@@ -668,7 +668,7 @@ def _B_piecewise_omni(params, transforms, profiles, data, **kwargs):
     w_1 = jnp.pi / params["NFP"] * (1 - t_1 * t_2) / (1 + t_2 / iota0)
     B_min = params["B_min"]
     B_max = params["B_max"]
-    p = int(3)
+    p = int(10)
     exponent = -1 * (
         ((zeta_B + t_1 * theta_B - zeta_C) / w_1) ** (2 * p)
         + ((zeta_B + t_2 * theta_B - theta_C) / w_2) ** (2 * p)

@@ -1,4 +1,4 @@
-"""Deprecated compute functions.
+"""Old compute functions.
 
 These are kept for verification purposes. They do not
 appear in the public documentation under the list of variables.

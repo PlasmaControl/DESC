@@ -342,8 +342,6 @@ def cheb_from_dct(a, axis=-1):
     a : jnp.ndarray
         Discrete cosine transform coefficients, e.g.
         ``a=dct(f,type=2,axis=axis,norm="forward")``.
-        The discrete cosine transformation used by scipy is defined here:
-        https://docs.scipy.org/doc/scipy/reference/generated/scipy.fft.dct.html.
     axis : int
         Axis along which to transform.
 

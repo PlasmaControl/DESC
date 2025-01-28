@@ -2,7 +2,6 @@
 
 import inspect
 import re
-from abc import ABC
 
 import numpy as np
 
@@ -18,7 +17,7 @@ from .linear_objectives import _FixedObjective
 from .objective_funs import _Objective, collect_docs
 
 
-class ExternalObjective(_Objective, ABC):
+class ExternalObjective(_Objective):
     """Wrap an external code.
 
     Similar to ``ObjectiveFromUser``, except derivatives of the objective function are

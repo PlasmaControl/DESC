@@ -127,6 +127,7 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
     # noqa: unused dependency
     theta = kwargs["theta"]
     Y_B = kwargs.get("Y_B", theta.shape[-1] * 2)
+    alpha = kwargs.get("alpha", jnp.array([0.0]))
     num_transit = kwargs.get("num_transit", 20)
     num_pitch = kwargs.get("num_pitch", 64)
     num_well = kwargs.get("num_well", Y_B * num_transit)
@@ -136,7 +137,7 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
         surf_batch_size == 1 or pitch_batch_size is None
     ), f"Expected pitch_batch_size to be None, got {pitch_batch_size}."
     spline = kwargs.get("spline", True)
-    fieldline_quad = (
+    fl_quad = (
         kwargs["fieldline_quad"] if "fieldline_quad" in kwargs else leggauss(Y_B // 2)
     )
     quad = (
@@ -154,14 +155,15 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
             data,
             data["theta"],
             Y_B,
+            alpha,
             num_transit,
-            quad=quad,
+            quad,
             is_fourier=True,
             spline=spline,
         )
 
         def fun(pitch_inv):
-            points = bounce.points(pitch_inv, num_well=num_well)
+            points = bounce.points(pitch_inv, num_well)
             v_tau, drift1, drift2 = bounce.integrate(
                 [_v_tau, _drift1, _drift2],
                 pitch_inv,
@@ -180,52 +182,43 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
                     ),
                 )
             )
-            return jnp.sum(v_tau * gamma_c**2, axis=-1)
+            return jnp.sum(v_tau * gamma_c**2, axis=-1).mean(axis=-2)
 
         return jnp.sum(
             batch_map(fun, data["pitch_inv"], pitch_batch_size)
             * data["pitch_inv weight"]
             / data["pitch_inv"] ** 2,
             axis=-1,
-        ) / (bounce.compute_fieldline_length(fieldline_quad) * 2**1.5 * jnp.pi)
+        ) / (bounce.compute_fieldline_length(fl_quad) * 2**1.5 * jnp.pi)
 
-    grid = transforms["grid"]
     # It is assumed the grid is sufficiently dense to reconstruct |B|,
     # so anything smoother than |B| may be captured accurately as a single
     # Fourier series rather than transforming each component.
     # Last term in K behaves as ∂log(|B|²/B^ϕ)/∂ρ |B| if one ignores the issue
     # of a log argument with units. Smoothness determined by positive lower bound
     # of log argument, and hence behaves as ∂log(|B|)/∂ρ |B| = ∂|B|/∂ρ.
+    fun_data = {
+        "|grad(psi)|*kappa_g": data["|grad(psi)|"] * data["kappa_g"],
+        "|grad(rho)|*|e_alpha|r,p|": data["|grad(rho)|"] * data["|e_alpha|r,p|"],
+        "|B|_r|v,p": data["|B|_r|v,p"],
+        "K": data["iota_r"]
+        * dot(cross(data["grad(psi)"], data["b"]), data["grad(phi)"])
+        - (2 * data["|B|_r|v,p"] - data["|B|"] * data["B^phi_r|v,p"] / data["B^phi"]),
+    }
+    grid = transforms["grid"]
     data["Gamma_c"] = _compute(
-        Gamma_c,
-        fun_data={
-            "|grad(psi)|*kappa_g": data["|grad(psi)|"] * data["kappa_g"],
-            "|grad(rho)|*|e_alpha|r,p|": data["|grad(rho)|"] * data["|e_alpha|r,p|"],
-            "|B|_r|v,p": data["|B|_r|v,p"],
-            "K": data["iota_r"]
-            * dot(cross(data["grad(psi)"], data["b"]), data["grad(phi)"])
-            - (
-                2 * data["|B|_r|v,p"]
-                - data["|B|"] * data["B^phi_r|v,p"] / data["B^phi"]
-            ),
-        },
-        data=data,
-        theta=theta,
-        grid=grid,
-        num_pitch=num_pitch,
-        simp=False,
-        surf_batch_size=surf_batch_size,
+        Gamma_c, fun_data, data, theta, grid, num_pitch, surf_batch_size
     )
     return data
 
 
-def _cvdrift0(data, B, pitch):
+def _radial_drift(data, B, pitch):
     return safediv(
         data["cvdrift0"] * (1 - 0.5 * pitch * B), jnp.sqrt(jnp.abs(1 - pitch * B))
     )
 
 
-def _gbdrift(data, B, pitch):
+def _poloidal_drift(data, B, pitch):
     return safediv(
         (data["gbdrift (periodic)"] + data["gbdrift (secular)/phi"] * data["zeta"])
         * (1 - 0.5 * pitch * B),
@@ -281,10 +274,18 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
     J.L. Velasco et al. 2021 Nucl. Fusion 61 116059.
     https://doi.org/10.1088/1741-4326/ac2994.
     Equation 16.
+
+    This expression has a secular term that drives the result to zero as the number
+    of toroidal transits increases if the secular term is not averaged out from the
+    singular integrals. It is observed that this implementation does not average
+    out the secular term. Currently, an optimization using this metric may need
+    to be evaluated by measuring decrease in Γ_c at a fixed number of toroidal
+    transits.
     """
     # noqa: unused dependency
     theta = kwargs["theta"]
     Y_B = kwargs.get("Y_B", theta.shape[-1] * 2)
+    alpha = kwargs.get("alpha", jnp.array([0.0]))
     num_transit = kwargs.get("num_transit", 20)
     num_pitch = kwargs.get("num_pitch", 64)
     num_well = kwargs.get("num_well", Y_B * num_transit)
@@ -294,7 +295,7 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
         surf_batch_size == 1 or pitch_batch_size is None
     ), f"Expected pitch_batch_size to be None, got {pitch_batch_size}."
     spline = kwargs.get("spline", True)
-    fieldline_quad = (
+    fl_quad = (
         kwargs["fieldline_quad"] if "fieldline_quad" in kwargs else leggauss(Y_B // 2)
     )
     quad = (
@@ -312,44 +313,45 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
             data,
             data["theta"],
             Y_B,
+            alpha,
             num_transit,
-            quad=quad,
+            quad,
             is_fourier=True,
             spline=spline,
         )
 
         def fun(pitch_inv):
-            v_tau, cvdrift0, gbdrift = bounce.integrate(
-                [_v_tau, _cvdrift0, _gbdrift],
+            v_tau, radial_drift, poloidal_drift = bounce.integrate(
+                [_v_tau, _radial_drift, _poloidal_drift],
                 pitch_inv,
                 data,
                 ["cvdrift0", "gbdrift (periodic)", "gbdrift (secular)/phi"],
-                bounce.points(pitch_inv, num_well=num_well),
+                bounce.points(pitch_inv, num_well),
                 is_fourier=True,
             )
-            gamma_c = jnp.arctan(safediv(cvdrift0, gbdrift))  # This is γ_c π/2.
-            return jnp.sum(v_tau * gamma_c**2, axis=-1)
+            # This is γ_c π/2.
+            gamma_c = jnp.arctan(safediv(radial_drift, poloidal_drift))
+            return jnp.sum(v_tau * gamma_c**2, axis=-1).mean(axis=-2)
 
         return jnp.sum(
             batch_map(fun, data["pitch_inv"], pitch_batch_size)
             * data["pitch_inv weight"]
             / data["pitch_inv"] ** 2,
             axis=-1,
-        ) / (bounce.compute_fieldline_length(fieldline_quad) * 2**1.5 * jnp.pi)
+        ) / (bounce.compute_fieldline_length(fl_quad) * 2**1.5 * jnp.pi)
 
     grid = transforms["grid"]
     data["Gamma_c Velasco"] = _compute(
         Gamma_c,
-        fun_data={
+        {
             "cvdrift0": data["cvdrift0"],
             "gbdrift (periodic)": data["gbdrift (periodic)"],
             "gbdrift (secular)/phi": data["gbdrift (secular)/phi"],
         },
-        data=data,
-        theta=theta,
-        grid=grid,
-        num_pitch=num_pitch,
-        simp=False,
-        surf_batch_size=surf_batch_size,
+        data,
+        theta,
+        grid,
+        num_pitch,
+        surf_batch_size,
     )
     return data

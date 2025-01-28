@@ -211,9 +211,9 @@ class VMECIO:
     def save(  # noqa: C901
         cls,
         eq,
-        *,
         path,
         surfs=128,
+        *,
         M_nyq=None,
         N_nyq=None,
         M_grid=None,

@@ -38,9 +38,8 @@ class _CoilObjective(_Objective):
 
     """
 
-    __doc__ = __doc__.rstrip() + collect_docs(
-        coil=True,
-    )
+    __doc__ = __doc__.rstrip() + collect_docs(coil=True)
+    _endpoint = False  # whether the compute grid should contain the endpoint or not
 
     def __init__(
         self,
@@ -113,14 +112,14 @@ class _CoilObjective(_Objective):
             )
         self._num_coils = len(coils)
 
-        endpoint = isinstance(self, CoilConvexity)
-
         # map grid to list of length coils
         if grid is None:
             grid = []
             for c in coils:
                 grid.append(
-                    LinearGrid(N=2 * c.N * getattr(c, "NFP", 1) + 5, endpoint=endpoint)
+                    LinearGrid(
+                        N=2 * c.N * getattr(c, "NFP", 1) + 5, endpoint=self._endpoint
+                    )
                 )
         if isinstance(grid, numbers.Integral):
             grid = LinearGrid(N=self._grid)
@@ -140,9 +139,9 @@ class _CoilObjective(_Objective):
             "Only use toroidal resolution for coil grids.",
         )
         errorif(
-            endpoint and np.any([not g.endpoint for g in grid]),
+            np.any([self._endpoint != g.endpoint for g in grid]),
             ValueError,
-            "CoilConvexity requires a grid with endpoint=True.",
+            "grid input has the wrong `endpoint`.",
         )
 
         self._dim_f = np.sum([g.num_nodes for g in grid])
@@ -612,8 +611,8 @@ class CoilCurrentLength(CoilLength):
         return out
 
 
-class CoilConvexity(_CoilObjective):
-    """Coil convexity.
+class IntegratedCurvature(_CoilObjective):
+    """Curvature integrated along a coil.
 
     If a curve is convex, then the following condition must be true: ∫ κ |∂ₛx| ds = 2π.
 
@@ -628,12 +627,15 @@ class CoilConvexity(_CoilObjective):
     """
 
     __doc__ = __doc__.rstrip() + collect_docs(
-        target_default="``target=0``.", bounds_default="``target=0``.", coil=True
+        target_default="``target=2*np.pi``.",
+        bounds_default="``target=2*np.pi``.",
+        coil=True,
     )
 
-    _scalar = False  # Not always a scalar, if a coilset is passed in
+    _scalar = False  # not always a scalar, if a coilset is passed in
     _units = "(dimensionless)"
-    _print_value_fmt = "Coil convexity: "
+    _print_value_fmt = "Integrated curvature: "
+    _endpoint = True  # whether the compute grid should contain the endpoint or not
 
     def __init__(
         self,
@@ -649,10 +651,12 @@ class CoilConvexity(_CoilObjective):
         name="coil convexity",
         jac_chunk_size=None,
     ):
+        if target is None and bounds is None:
+            target = 2 * np.pi
         super().__init__(
             coil,
             ["s", "x_s", "curvature"],
-            target=0,
+            target=target,
             bounds=bounds,
             weight=weight,
             normalize=normalize,
@@ -683,7 +687,7 @@ class CoilConvexity(_CoilObjective):
         _Objective.build(self, use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
-        """Compute coil convexity error.
+        """Compute integrated curvature.
 
         Parameters
         ----------
@@ -696,7 +700,7 @@ class CoilConvexity(_CoilObjective):
         Returns
         -------
         f : array of floats
-            Coil convexity error.
+            Integrated curvature.
 
         """
         data = super().compute(params, constants=constants)
@@ -706,7 +710,6 @@ class CoilConvexity(_CoilObjective):
                 trapezoid(
                     jnp.abs(dat["curvature"]) * safenorm(dat["x_s"], axis=1), dat["s"]
                 )
-                - 2 * jnp.pi
                 for dat in data
             ]
         )

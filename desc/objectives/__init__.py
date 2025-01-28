@@ -3,13 +3,13 @@
 from ._bootstrap import BootstrapRedlConsistency
 from ._coils import (
     CoilArclengthVariance,
-    CoilConvexity,
     CoilCurrentLength,
     CoilCurvature,
     CoilLength,
     CoilSetLinkingNumber,
     CoilSetMinDistance,
     CoilTorsion,
+    IntegratedCurvature,
     LinkingCurrentConsistency,
     PlasmaCoilSetMinDistance,
     QuadraticFlux,

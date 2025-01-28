@@ -16,6 +16,7 @@ New Features
 - Adds the output quantities ``wb`` and ``wp`` to ``VMECIO.save``.
 - Change implementation of Dommaschk potentials to use recursive algorithm and symbolic integration.
 - Changes hessian computation to use chunked ``jacfwd`` and ``jacrev``, allowing ``jac_chunk_size`` to now reduce hessian memory usage as well.
+- Adds the example "reactor_QA", which is similar to "precise_QA" but with self-consistent bootstrap current at finite beta.
 
 Bug Fixes
 
@@ -23,6 +24,7 @@ Bug Fixes
 - Fixed I/O bug when saving/loading ``_Profile`` classes that do not have a ``_params`` attribute.
 - Minor bugs described in [#1323](https://github.com/PlasmaControl/DESC/pull/1323).
 - Corrects basis vectors computations made on surface objects [#1175](https://github.com/PlasmaControl/DESC/pull/1175).
+- Allows keyword arguments to be passed to ``GenericObjective`` and ``ObjectiveFromUser``.
 
 v0.13.0
 -------

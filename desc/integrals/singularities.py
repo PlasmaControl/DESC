@@ -11,6 +11,7 @@ from desc.backend import fori_loop, jnp, rfft2, vmap
 from desc.batching import batch_map
 from desc.compute.geom_utils import rpz2xyz, rpz2xyz_vec, xyz2rpz_vec
 from desc.grid import LinearGrid
+from desc.integrals import surface_averages
 from desc.integrals._interp_utils import rfft2_modes, rfft2_vander
 from desc.io import IOAble
 from desc.utils import (
@@ -142,7 +143,7 @@ def _full_support_params(grid):
     return st, sz, q
 
 
-def heuristic_support_params(grid):
+def heuristic_support_params(grid, data):
     """Parameters for heuristic support size and heuristic quadrature resolution.
 
     Return parameters following the asymptotic rule of thumb
@@ -153,6 +154,9 @@ def heuristic_support_params(grid):
     ----------
     grid : LinearGrid
         Grid that can fft2.
+    data : dict[str, jnp.ndarray]
+        Dictionary of data evaluated on ``grid`` with keys
+        ``|e_theta x e_zeta|``, ``g_tt``, and ``g_zz``.
 
     Returns
     -------
@@ -166,12 +170,15 @@ def heuristic_support_params(grid):
     """
     assert grid.can_fft2
     # TODO: Account for real space grid anisotropy by choosing
-    #   ratio = |e_zeta|/|e_theta|
-    #   ratio_avg = surface_average(ratio, jacobian=|e_theta x e_zeta|)
     #   st/(sz*NFP) (at evaluation point i) = mean (ratio(i), ratio_avg).
     #   Then we have ~circle in real space around each singular point.
     #   The grid resolution can then still be chosen independently according
     #   to the frequency content of R, Z, λ to net the best function approximation.
+    ratio = jnp.sqrt(data["g_zz"] / data["g_tt"])
+    ratio_avg = surface_averages(
+        grid, ratio, data["|e_theta x e_zeta|"], expand_out=False
+    )
+    scale = (ratio + ratio_avg) / 2  # noqa: F841
     Nt = grid.num_theta
     Nz = grid.num_zeta * grid.NFP
     st = int(min(1 + jnp.sqrt(Nt), Nt))
@@ -270,6 +277,7 @@ class _BIESTInterpolator(IOAble, ABC):
         )
         self._eval_grid = eval_grid
         self._source_grid = source_grid
+        # TODO: Make these functions of evaluation point.
         self._st = st
         self._sz = sz
         self._q = q

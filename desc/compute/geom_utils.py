@@ -68,7 +68,7 @@ def xyz2rpz(pts):
 
     """
     x, y, z = pts.T
-    r = jnp.sqrt(x**2 + y**2)
+    r = jnp.hypot(x, y)
     p = jnp.arctan2(y, x)
     return jnp.array([r, p, z]).T
 

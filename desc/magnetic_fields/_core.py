@@ -1379,7 +1379,7 @@ class PoloidalMagneticField(_MagneticField, Optimizable):
             coords = xyz2rpz(coords)
 
         R, phi, Z = coords.T
-        r = jnp.sqrt((R - R0) ** 2 + Z**2)
+        r = jnp.hypot(R - R0, Z)
         theta = jnp.arctan2(Z, R - R0)
         br = -r * jnp.sin(theta)
         bp = jnp.zeros_like(br)

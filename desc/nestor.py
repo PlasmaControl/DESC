@@ -142,7 +142,7 @@ def eval_axis_geometry(R_lmn, Z_lmn, Ra_transform, Za_transform, nzeta, NFP):
 
     axis = jnp.moveaxis(copy_vector_periods(axis, zeta_fp), -1, 1).reshape((3, -1))
     coords = {}
-    coords["R"] = jnp.sqrt(axis[0] ** 2 + axis[1] ** 2)
+    coords["R"] = jnp.hypot(axis[0], axis[1])
     coords["phi"] = jnp.arctan2(axis[1], axis[0])
     coords["Z"] = axis[2]
     return coords

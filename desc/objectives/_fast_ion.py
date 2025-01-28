@@ -61,9 +61,9 @@ class GammaC(_Objective):
     eq : Equilibrium
         ``Equilibrium`` to be optimized.
     grid : Grid
-        Optional, tensor-product grid in (ρ, θ, ζ) with uniformly spaced nodes
-        (θ, ζ) ∈ [0, 2π) × [0, 2π/NFP). Number of poloidal and toroidal nodes
-        preferably rounded down to powers of two.
+        Tensor-product grid in (ρ, θ, ζ) with uniformly spaced nodes
+        (θ, ζ) ∈ [0, 2π) × [0, 2π/NFP).
+        Number of poloidal and toroidal nodes preferably rounded down to powers of two.
         Determines the flux surfaces to compute on and resolution of FFTs.
         Default grid samples the boundary surface at ρ=1.
     X : int

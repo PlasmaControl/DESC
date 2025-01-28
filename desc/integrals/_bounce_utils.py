@@ -4,14 +4,13 @@ import numpy as np
 from interpax import CubicSpline, PPoly
 from matplotlib import pyplot as plt
 
-from desc.backend import dct, jnp
+from desc.backend import dct, jnp, rfft2
 from desc.integrals._interp_utils import (
+    _irfft2_non_uniform,
     cheb_from_dct,
     cheb_pts,
     idct_non_uniform,
     interp1d_vec,
-    interp_rfft2,
-    irfft2_non_uniform,
     polyroot_vec,
     polyval_vec,
 )
@@ -209,7 +208,7 @@ def _check_bounce_points(z1, z2, pitch_inv, knots, B, plot=True, **kwargs):
     return plots
 
 
-def _check_interp(shape, zeta, b_sup_z, B, result, f=None, plot=True):
+def _check_interp(shape, zeta, b_sup_z, B, f, result, plot=True):
     """Check for interpolation failures and floating point issues.
 
     Parameters
@@ -222,10 +221,10 @@ def _check_interp(shape, zeta, b_sup_z, B, result, f=None, plot=True):
         Contravariant toroidal component of magnetic field, interpolated to ``zeta``.
     B : jnp.ndarray
         Norm of magnetic field, interpolated to ``zeta``.
-    result : list[jnp.ndarray]
-        Output of ``_integrate``.
     f : list[jnp.ndarray]
         Arguments to the integrand, interpolated to ``zeta``.
+    result : list[jnp.ndarray]
+        Output of ``_integrate``.
     plot : bool
         Whether to plot stuff.
 
@@ -242,7 +241,6 @@ def _check_interp(shape, zeta, b_sup_z, B, result, f=None, plot=True):
 
     assert goal == jnp.sum(marked & jnp.isfinite(b_sup_z).reshape(shape).all(axis=-1))
     assert goal == jnp.sum(marked & jnp.isfinite(B).reshape(shape).all(axis=-1))
-    f = setdefault(f, [])
     for f_i in f:
         assert goal == jnp.sum(marked & jnp.isfinite(f_i).reshape(shape).all(axis=-1))
 
@@ -506,7 +504,7 @@ def interp_to_argmin(h, points, knots, g, dg_dz, method="cubic"):
 
 
 def interp_fft_to_argmin(
-    NFP, T, h, points, knots, g, dg_dz, is_fourier=False, M=None, N=None
+    T, h, points, knots, g, dg_dz, n0, n1, NFP=1, is_fourier=False
 ):
     """Interpolate ``h`` to the deepest point of ``g`` between ``z1`` and ``z2``.
 
@@ -514,15 +512,13 @@ def interp_fft_to_argmin(
 
     Parameters
     ----------
-    NFP : int
-        Number of field periods.
     T : PiecewiseChebyshevSeries
         Set of 1D Chebyshev spectral coefficients of θ along field line.
         {θ_α : ζ ↦ θ(α, ζ) | α ∈ A} where A = (α₀, α₁, …, αₘ₋₁) is the same
         field line as ``alpha``. Each Chebyshev series approximates θ over
         one toroidal transit.
     h : jnp.ndarray
-        Shape (..., grid.num_theta, grid.num_zeta)
+        Shape (..., num theta, num zeta)
         Periodic function evaluated on tensor-product grid in (ρ, θ, ζ) with
         uniformly spaced nodes (θ, ζ) ∈ [0, 2π) × [0, 2π/NFP).
         Preferably power of 2 for ``grid.num_theta`` and ``grid.num_zeta``.
@@ -543,11 +539,15 @@ def interp_fft_to_argmin(
         Polynomial coefficients of the spline of ∂g/∂z in local power basis.
         Last axis enumerates the coefficients of power series. Second to
         last axis enumerates the polynomials that compose a particular spline.
+    n0 : int
+        Fourier resolution in poloidal direction; num theta.
+    n1 : int
+        Fourier resolution in toroidal direction; num zeta.
+    NFP : int
+        Number of field periods.
     is_fourier : bool
         If true, then it is assumed that ``h`` is the Fourier
         transform as returned by ``Bounce2D.fourier``.
-    M, N : int
-        Fourier resolution.
 
     Returns
     -------
@@ -574,25 +574,16 @@ def interp_fft_to_argmin(
     # shape is (..., num well, 1)
     argmin = jnp.argmin(where, axis=-1, keepdims=True)
 
-    theta = T.eval1d(ext)
-    if is_fourier:
-        h = irfft2_non_uniform(
-            theta,
-            ext,
-            h[..., jnp.newaxis, :, :],
-            M,
-            N,
-            domain1=(0, 2 * jnp.pi / NFP),
-            axes=(-1, -2),
-        )
-    else:
-        h = interp_rfft2(
-            theta,
-            ext,
-            h[..., jnp.newaxis, :, :],
-            domain1=(0, 2 * jnp.pi / NFP),
-            axes=(-1, -2),
-        )
+    if not is_fourier:
+        if (n1 % 2) == 0:
+            i = (0, -1)
+        else:
+            i = 0
+        h = rfft2(h, norm="forward").at[..., i].divide(2) * 2
+        h = h[..., jnp.newaxis, :, :]
+    h = _irfft2_non_uniform(
+        T.eval1d(ext), ext, h, n0, n1, domain1=(0, 2 * jnp.pi / NFP)
+    )
     if z1.ndim == h.ndim + 1:
         h = h[jnp.newaxis]  # to broadcast with num pitch axis
     # add axis to broadcast with num well axis
@@ -708,23 +699,27 @@ def fourier_chebyshev(theta, iota, alpha, num_transit):
     return T
 
 
-def chebyshev(n0, n1, NFP, T, f, Y):
+def chebyshev(T, f, Y, n0, n1, NFP=1):
     """Chebyshev along field lines.
 
     Parameters
     ----------
-    NFP : int
-        Number of field periods.
     T : PiecewiseChebyshevSeries
         Set of 1D Chebyshev spectral coefficients of θ along field line.
         {θ_α : ζ ↦ θ(α, ζ) | α ∈ A} where A = (α₀, α₁, …, αₘ₋₁) is the same
         field line as ``alpha``. Each Chebyshev series approximates θ over
         one toroidal transit.
     f : jnp.ndarray
-        Fourier transform of f(θ, ζ) as returned by ``_fourier``.
+        Fourier transform of f(θ, ζ) as returned by ``Bounce2D.fourier``.
         ``n0=grid.num_theta``, ``n1=grid.num_zeta``, ``NFP=grid.NFP``.
     Y : int
         Chebyshev spectral resolution for ``f``. Preferably power of 2.
+    n0 : int
+        Fourier resolution in poloidal direction; num theta.
+    n1 : int
+        Fourier resolution in toroidal direction; num zeta.
+    NFP : int
+        Number of field periods.
 
     Returns
     -------
@@ -743,36 +738,34 @@ def chebyshev(n0, n1, NFP, T, f, Y):
     zeta = jnp.broadcast_to(cheb_pts(Y, domain=T.domain), (T.X, Y)).ravel()
 
     # f at Chebyshev points
-    f = irfft2_non_uniform(
-        theta,
-        zeta,
-        f[..., jnp.newaxis, :, :],
-        n0=n0,
-        n1=n1,
-        domain1=(0, 2 * jnp.pi / NFP),
-        axes=(-1, -2),
+    f = _irfft2_non_uniform(
+        theta, zeta, f, n0, n1, domain1=(0, 2 * jnp.pi / NFP)
     ).reshape(*T.cheb.shape[:-1], Y)
     f = PiecewiseChebyshevSeries(cheb_from_dct(dct(f, type=2, axis=-1)) / Y, T.domain)
     return f
 
 
-def cubic_spline(n0, n1, NFP, T, f, Y, check=False):
+def cubic_spline(T, f, Y, n0, n1, NFP=1, check=False):
     """Cubic spline along field lines.
 
     Parameters
     ----------
-    NFP : int
-        Number of field periods.
     T : PiecewiseChebyshevSeries
         Set of 1D Chebyshev spectral coefficients of θ along field line.
         {θ_α : ζ ↦ θ(α, ζ) | α ∈ A} where A = (α₀, α₁, …, αₘ₋₁) is the same
         field line as ``alpha``. Each Chebyshev series approximates θ over
         one toroidal transit.
     f : jnp.ndarray
-        Fourier transform of f(θ, ζ) as returned by ``_fourier``.
+        Fourier transform of f(θ, ζ) as returned by ``Bounce2D.fourier``.
         ``n0=grid.num_theta``, ``n1=grid.num_zeta``, ``NFP=grid.NFP``.
     Y : int
         Number of knots per transit to interpolate ``f``.
+    n0 : int
+        Fourier resolution in poloidal direction; num theta.
+    n1 : int
+        Fourier resolution in toroidal direction; num zeta.
+    NFP : int
+        Number of field periods.
     check : bool
         Flag for debugging. Must be false for JAX transformations.
 
@@ -802,15 +795,7 @@ def cubic_spline(n0, n1, NFP, T, f, Y, check=False):
 
     f = CubicSpline(
         x=knots,
-        y=irfft2_non_uniform(
-            theta,
-            knots,
-            f[..., jnp.newaxis, :, :],
-            n0=n0,
-            n1=n1,
-            domain1=(0, 2 * jnp.pi / NFP),
-            axes=(-1, -2),
-        ),
+        y=_irfft2_non_uniform(theta, knots, f, n0, n1, domain1=(0, 2 * jnp.pi / NFP)),
         axis=-1,
         check=check,
     ).c

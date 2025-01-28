@@ -35,6 +35,16 @@ Equilibrium
     desc.objectives.HelicalForceBalance
 
 
+Fast ion confinement
+--------------------
+.. autosummary::
+    :toctree: _api/objectives
+    :recursive:
+    :template: class.rst
+
+    desc.objectives.GammaC
+
+
 Geometry
 --------
 .. autosummary::
@@ -49,7 +59,18 @@ Geometry
     desc.objectives.PrincipalCurvature
     desc.objectives.PlasmaVesselDistance
     desc.objectives.BScaleLength
+    desc.objectives.MirrorRatio
     desc.objectives.GoodCoordinates
+
+
+Neoclassical
+------------
+.. autosummary::
+    :toctree: _api/objectives
+    :recursive:
+    :template: class.rst
+
+    desc.objectives.EffectiveRipple
 
 
 Omnigenity
@@ -97,6 +118,7 @@ Coil Optimization
 
 
     desc.objectives.QuadraticFlux
+    desc.objectives.SurfaceQuadraticFlux
     desc.objectives.CoilLength
     desc.objectives.CoilCurvature
     desc.objectives.CoilTorsion
@@ -107,6 +129,7 @@ Coil Optimization
     desc.objectives.CoilArclengthVariance
     desc.objectives.ToroidalFlux
     desc.objectives.SurfaceCurrentRegularization
+    desc.objectives.LinkingCurrentConsistency
 
 
 Profiles

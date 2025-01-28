@@ -16,25 +16,41 @@
    variables
    optimizers
 
+
 .. toctree::
    :maxdepth: 1
-   :caption: Tutorials
+   :caption: Guides
 
    installation
+   notebooks/tutorials/use_outputs.ipynb
+   performance_tips
+
+
+.. toctree::
+   :maxdepth: 1
+   :caption: Equilibrium Solve Tutorials
+
    notebooks/tutorials/basic_equilibrium.ipynb
    notebooks/tutorials/advanced_equilibrium_continuation.ipynb
    notebooks/tutorials/continuation_step_by_step.ipynb
+   notebooks/tutorials/nae_constraint.ipynb
    notebooks/tutorials/free_boundary_equilibrium.ipynb
-   notebooks/tutorials/use_outputs.ipynb
+
+
+.. toctree::
+   :maxdepth: 1
+   :caption: Optimization Tutorials
+
    notebooks/tutorials/basic_optimization.ipynb
    notebooks/tutorials/advanced_optimization.ipynb
    notebooks/tutorials/coil_optimization_REGCOIL.ipynb
    notebooks/tutorials/omnigenity.ipynb
-   notebooks/tutorials/nae_constraint.ipynb
    notebooks/tutorials/bootstrap_current.ipynb
    notebooks/tutorials/coil_stage_two_optimization.ipynb
+   notebooks/tutorials/QFM_surface.ipynb
    notebooks/tutorials/ideal_ballooning_stability.ipynb
-   memory_usage
+   notebooks/tutorials/EffectiveRipple.ipynb
+
 
 .. toctree::
    :maxdepth: 1
@@ -60,7 +76,7 @@
 
 .. toctree::
    :maxdepth: 1
-   :caption: Developer guides
+   :caption: Developer Guides
 
    notebooks/dev_guide/getting-started-eq-solve.ipynb
    notebooks/dev_guide/grid.ipynb

@@ -232,7 +232,7 @@ def _nu(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
-    name="nu_mn",
+    name="nu_B_mn",
     label="\\nu_{mn} = (\\zeta_{B} - \\zeta)_{mn}",
     units="rad",
     units_long="radians",
@@ -255,7 +255,7 @@ def _nu(params, transforms, profiles, data, **kwargs):
     M_booz="int: Maximum poloidal mode number for Boozer harmonics. Default 2*eq.M",
     N_booz="int: Maximum toroidal mode number for Boozer harmonics. Default 2*eq.N",
 )
-def _nu_mn(params, transforms, profiles, data, **kwargs):
+def _nu_B_mn(params, transforms, profiles, data, **kwargs):
     norm = data["Boozer transform modes norm"]
     grid = transforms["grid"]
 
@@ -282,8 +282,8 @@ def _nu_mn(params, transforms, profiles, data, **kwargs):
             data["nu"],
         ),
     )
-    nu_mn = vmap(fun)(rho, theta_B, zeta_B, sqrtg_B_desc, nu)
-    data["nu_mn"] = nu_mn.flatten()
+    nu_B_mn = vmap(fun)(rho, theta_B, zeta_B, sqrtg_B_desc, nu)
+    data["nu_B_mn"] = nu_B_mn.flatten()
     return data
 
 

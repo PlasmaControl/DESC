@@ -607,8 +607,8 @@ def make_boozmn_output(  # noqa: C901
     ]
 
     data_keys = ["|B|_mn_B", "R_mn_B", "sqrt(g)_Boozer_mn"] + keys
-    data_keys = data_keys + ["Z_mn_B", "nu_mn"] if not eq.sym else data_keys
-    data_keys_sin = ["Z_mn_B", "nu_mn"]
+    data_keys = data_keys + ["Z_mn_B", "nu_B_mn"] if not eq.sym else data_keys
+    data_keys_sin = ["Z_mn_B", "nu_B_mn"]
 
     data = eq.compute(data_keys, grid=grid, transforms=transforms)
     # sin-symmetric data needs different transform symmetry than cos-symmetric, so
@@ -646,9 +646,9 @@ def make_boozmn_output(  # noqa: C901
         z_mn = jnp.where(mask, -z_mn, z_mn)
         Z_mn = np.atleast_2d(matrix @ z_mn.T).T
 
-        nu_mn = data["nu_mn"].reshape((grid.num_rho, -1))
-        nu_mn = jnp.where(mask, -nu_mn, nu_mn)
-        Nu_mn = np.atleast_2d(matrix @ nu_mn.T).T
+        nu_B_mn = data["nu_B_mn"].reshape((grid.num_rho, -1))
+        nu_B_mn = jnp.where(mask, -nu_B_mn, nu_B_mn)
+        nu_B_mn = np.atleast_2d(matrix @ nu_B_mn.T).T
     else:
         z_mn = data_sin["Z_mn_B"].reshape((grid.num_rho, -1))
         mask = jnp.zeros_like(z_mn)
@@ -657,9 +657,9 @@ def make_boozmn_output(  # noqa: C901
         z_mn = jnp.where(mask, -z_mn, z_mn)
         Z_mn = np.atleast_2d(matrix_sin @ z_mn.T).T
 
-        nu_mn = data_sin["nu_mn"].reshape((grid.num_rho, -1))
-        nu_mn = jnp.where(mask, -nu_mn, nu_mn)
-        Nu_mn = np.atleast_2d(matrix_sin @ nu_mn.T).T
+        nu_B_mn = data_sin["nu_B_mn"].reshape((grid.num_rho, -1))
+        nu_B_mn = jnp.where(mask, -nu_B_mn, nu_B_mn)
+        nu_B_mn = np.atleast_2d(matrix_sin @ nu_B_mn.T).T
 
     timer.stop("Boozer Transform")
     if verbose > 1:
@@ -908,7 +908,7 @@ def make_boozmn_output(  # noqa: C901
     # we negate here because although nu is defined as zeta_B - zeta_DESC,
     # in the original fortran there is a negative sign so it is
     # actually zeta_DESC - zeta_B
-    nums[0:, :] = -np.insert(Nu_mn[:, inds_sin].squeeze(), 0, 0, axis=1)
+    nums[0:, :] = -np.insert(nu_B_mn[:, inds_sin].squeeze(), 0, 0, axis=1)
     if not eq.sym:
         numc = file.createVariable("pmnc_b", np.float64, ("comput_surfs", "mn_mode"))
         numc.long_name = (
@@ -916,7 +916,7 @@ def make_boozmn_output(  # noqa: C901
             "of the angle difference zeta_DESC - zeta_Boozer"
         )
         numc.units = "None"
-        numc[0:, :] = -Nu_mn[:, inds_cos].squeeze()
+        numc[0:, :] = -nu_B_mn[:, inds_cos].squeeze()
 
     # calculate sqrt(g)
     gmn = file.createVariable("gmn_b", np.float64, ("comput_surfs", "mn_mode"))

@@ -1305,10 +1305,10 @@ def test_make_boozmn_output_DESC(TmpDir):
     R_mnc = file.variables["rmnc_b"][:].filled()
     Z_mns = file.variables["zmns_b"][:].filled()
     B_mnc = file.variables["bmnc_b"][:].filled()
-    nu_mns = file.variables["pmns_b"][:].filled()
+    nu_B_mns = file.variables["pmns_b"][:].filled()
     g_mnc = file.variables["gmn_b"][:].filled()
 
-    quantities = [R_mnc, Z_mns, B_mnc, g_mnc, nu_mns]
+    quantities = [R_mnc, Z_mns, B_mnc, g_mnc, nu_B_mns]
     quant_names = ["R", "Z", "|B|", "sqrt(g)_Boozer", "nu"]
     quant_parity = ["cos", "sin", "cos", "cos", "sin"]
 
@@ -1414,8 +1414,8 @@ def test_make_boozmn_output_DESC_asym(TmpDir):
     B_mnc = file.variables["bmnc_b"][:].filled()
     B_mns = file.variables["bmns_b"][:].filled()
 
-    nu_mns = file.variables["pmns_b"][:].filled()
-    nu_mnc = file.variables["pmnc_b"][:].filled()
+    nu_B_mns = file.variables["pmns_b"][:].filled()
+    nu_B_mnc = file.variables["pmnc_b"][:].filled()
 
     g_mnc = file.variables["gmn_b"][:].filled()
     g_mns = file.variables["gmns_b"][:].filled()
@@ -1425,7 +1425,7 @@ def test_make_boozmn_output_DESC_asym(TmpDir):
         [Z_mnc, Z_mns],
         [B_mnc, B_mns],
         [g_mnc, g_mns],
-        [nu_mnc, nu_mns],
+        [nu_B_mnc, nu_B_mns],
     ]
     quant_names = ["R", "Z", "|B|", "sqrt(g)_Boozer", "nu"]
     quant_parity = [
@@ -1550,13 +1550,13 @@ def test_make_boozmn_output_against_hidden_symmetries_booz_xform(TmpDir):
     R_mnc = file.variables["rmnc_b"][:].filled()
     Z_mns = file.variables["zmns_b"][:].filled()
     B_mnc = file.variables["bmnc_b"][:].filled()
-    nu_mns = file.variables["pmns_b"][:].filled()
+    nu_B_mns = file.variables["pmns_b"][:].filled()
     g_mnc = file.variables["gmn_b"][:].filled()
     I = file.variables["buco_b"][:].filled()
     G = file.variables["bvco_b"][:].filled()
     iota = file.variables["iota_b"][:].filled()
 
-    quantities = [R_mnc, Z_mns, B_mnc, g_mnc, nu_mns, I, G, iota]
+    quantities = [R_mnc, Z_mns, B_mnc, g_mnc, nu_B_mns, I, G, iota]
     quant_names = ["R", "Z", "|B|", "sqrt(g)_Boozer", "nu", "I", "G", "iota"]
 
     # load in the .nc from the cpp version
@@ -1566,7 +1566,7 @@ def test_make_boozmn_output_against_hidden_symmetries_booz_xform(TmpDir):
     R_mnc_cpp = file_cpp.variables["rmnc_b"][:].filled()
     Z_mns_cpp = file_cpp.variables["zmns_b"][:].filled()
     B_mnc_cpp = file_cpp.variables["bmnc_b"][:].filled()
-    nu_mns_cpp = file_cpp.variables["pmns_b"][:].filled()
+    nu_B_mns_cpp = file_cpp.variables["pmns_b"][:].filled()
     g_mnc_cpp = file_cpp.variables["gmn_b"][:].filled()
     I_cpp = file_cpp.variables["buco_b"][:].filled()
     G_cpp = file_cpp.variables["bvco_b"][:].filled()
@@ -1577,7 +1577,7 @@ def test_make_boozmn_output_against_hidden_symmetries_booz_xform(TmpDir):
         Z_mns_cpp,
         B_mnc_cpp,
         g_mnc_cpp,
-        nu_mns_cpp,
+        nu_B_mns_cpp,
         I_cpp,
         G_cpp,
         iota_cpp,

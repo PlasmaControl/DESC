@@ -1148,7 +1148,7 @@ class _Objective(IOAble, ABC):
         self._check_dimensions()
         self._set_derivatives()
 
-        if desc_config["num_device"] != 1:
+        if desc_config["num_device"] != 1 and False:  # temporarly disable sharding
             if hasattr(self, "_constants"):
                 grid = self._constants["transforms"]["grid"]
                 # shard nodes, spacing, and weights across devices

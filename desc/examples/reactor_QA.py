@@ -1,5 +1,9 @@
 """Example script for recreating the QA configuration of Landreman, Buller & Drevlak."""
 
+from desc import set_device
+
+set_device("gpu")
+
 import numpy as np
 
 from desc.compat import rescale

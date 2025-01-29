@@ -634,6 +634,7 @@ class RogowskiLoop(_Objective):
 
             # get plasma contribution
             if not self._vacuum:
+                # FIXME: Is this missing |e_theta x e_zeta| inside of data?
                 Bplasma = self._compute_A_or_B_from_CurrentPotentialField(
                     self._coils,
                     flux_loop_data[i]["x"],

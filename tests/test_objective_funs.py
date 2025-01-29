@@ -51,12 +51,14 @@ from desc.objectives import (
     CoilSetMinDistance,
     CoilTorsion,
     EffectiveRipple,
+    EffectiveRipple_Spline,
     Elongation,
     Energy,
     ForceBalance,
     ForceBalanceAnisotropic,
     FusionPower,
     GammaC,
+    GammaC_Spline,
     GenericObjective,
     HeatingPowerISS04,
     Isodynamicity,
@@ -68,8 +70,6 @@ from desc.objectives import (
     MirrorRatio,
     ObjectiveFromUser,
     ObjectiveFunction,
-    OldEffectiveRipple,
-    OldGammaC,
     Omnigenity,
     PlasmaCoilSetMinDistance,
     PlasmaVesselDistance,
@@ -2637,7 +2637,7 @@ def test_loss_function_asserts():
 def _reduced_resolution_objective(eq, objective):
     """Speed up testing suite by defining rules to reduce objective resolution."""
     kwargs = {}
-    if objective in {EffectiveRipple, OldEffectiveRipple, GammaC, OldGammaC}:
+    if objective in {EffectiveRipple, EffectiveRipple_Spline, GammaC, GammaC_Spline}:
         kwargs["X"] = 8
         kwargs["Y"] = 16
         kwargs["num_transit"] = 4
@@ -3158,8 +3158,8 @@ class TestObjectiveNaNGrad:
         GammaC,
         HeatingPowerISS04,
         LinkingCurrentConsistency,
-        OldEffectiveRipple,
-        OldGammaC,
+        EffectiveRipple_Spline,
+        GammaC_Spline,
         Omnigenity,
         PlasmaCoilSetMinDistance,
         PlasmaVesselDistance,
@@ -3434,7 +3434,9 @@ class TestObjectiveNaNGrad:
         obj.build(verbose=0)
         g = obj.grad(obj.x())
         assert not np.any(np.isnan(g))
-        obj = ObjectiveFunction(_reduced_resolution_objective(eq, OldEffectiveRipple))
+        obj = ObjectiveFunction(
+            _reduced_resolution_objective(eq, EffectiveRipple_Spline)
+        )
         obj.build(verbose=0)
         g = obj.grad(obj.x())
         assert not np.any(np.isnan(g))
@@ -3449,7 +3451,7 @@ class TestObjectiveNaNGrad:
         obj.build(verbose=0)
         g = obj.grad(obj.x())
         assert not np.any(np.isnan(g))
-        obj = ObjectiveFunction(_reduced_resolution_objective(eq, OldGammaC))
+        obj = ObjectiveFunction(_reduced_resolution_objective(eq, GammaC_Spline))
         obj.build(verbose=0)
         g = obj.grad(obj.x())
         assert not np.any(np.isnan(g))

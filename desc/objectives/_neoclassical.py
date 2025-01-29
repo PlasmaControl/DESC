@@ -55,6 +55,14 @@ class EffectiveRipple(_Objective):
       * ``1206`` Upsample data above midplane to full grid assuming stellarator symmetry
       * ``1034`` Optimizers/objectives with auxiliary output
 
+    See Also
+    --------
+    EffectiveRipple_Spline
+        ``EffectiveRipple`` uses pseudo-spectral methods more liberally than the spline
+        version of the objective. The spline version is efficient if ``num_transit``
+        and ``alpha.size`` are small. These statements may depend on hardware and
+        the features of that hardware used by the JIT compiler.
+
     Parameters
     ----------
     eq : Equilibrium
@@ -285,8 +293,7 @@ class EffectiveRipple(_Objective):
         return constants["transforms"]["grid"].compress(data["effective ripple"])
 
 
-class OldEffectiveRipple(EffectiveRipple):  # noqa: D101
-    # Objective is efficient only if ``num_transit`` and ``alpha.size`` are small.
+class EffectiveRipple_Spline(EffectiveRipple):  # noqa: D101
 
     def build(self, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -326,19 +333,12 @@ class OldEffectiveRipple(EffectiveRipple):  # noqa: D101
             self._target, self._bounds, self._constants["rho"]
         )
 
-        timer = Timer()
-        if verbose > 0:
-            print("Precomputing transforms")
-        timer.start("Precomputing transforms")
         self._constants["transforms_1dr"] = get_transforms(
             self._keys_1dr, eq, self._grid
         )
         self._constants["profiles"] = get_profiles(
             self._keys_1dr + ["old effective ripple"], eq, self._grid
         )
-        timer.stop("Precomputing transforms")
-        if verbose > 1:
-            timer.disp("Precomputing transforms")
 
         _Objective.build(self, use_jit=use_jit, verbose=verbose)
 
@@ -399,4 +399,6 @@ class OldEffectiveRipple(EffectiveRipple):  # noqa: D101
         return grid.compress(data["old effective ripple"])
 
 
-OldEffectiveRipple.__doc__ = EffectiveRipple.__doc__
+EffectiveRipple_Spline.__doc__ = EffectiveRipple.__doc__.replace(
+    "EffectiveRipple_Spline", "EffectiveRipple"
+)

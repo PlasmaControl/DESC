@@ -354,13 +354,10 @@ class BoundaryError(_Objective):
         Equilibrium that will be optimized to satisfy the Objective.
     field : MagneticField
         External field produced by coils.
-    st : int
+    s : int
         Hyperparameter for the singular integration scheme.
-        ``st`` is roughly equal to the size of the local singular grid with
-        respect to the global grid. More precisely the local singular grid
-        is an ``st`` × ``sz`` subset of the full domain (θ,ζ) ∈ [0, 2π)² of
-        ``source_grid``. That is a subset of
-        ``source_grid.num_theta`` × ``source_grid.num_zeta*source_grid.NFP``.
+        ``s`` is roughly equal to the size of the local singular grid with
+        respect to the global grid.
     q : int
         Order of integration on the local singular grid.
     source_grid, eval_grid : Grid, optional
@@ -381,7 +378,7 @@ class BoundaryError(_Objective):
         Hyperparameter for the singular integration scheme.
         ``sz`` is roughly equal to the size of the local singular grid with
         respect to the global grid. More precisely the local singular grid
-        is an ``st`` × ``sz`` subset of the full domain (θ,ζ) ∈ [0, 2π)² of
+        is an ``s`` × ``sz`` subset of the full domain (θ,ζ) ∈ [0, 2π)² of
         ``source_grid``. That is a subset of
         ``source_grid.num_theta`` × ``source_grid.num_zeta*source_grid.NFP``.
 
@@ -426,7 +423,7 @@ class BoundaryError(_Objective):
         normalize_target=True,
         loss_function=None,
         deriv_mode="auto",
-        st=None,
+        s=None,
         q=None,
         source_grid=None,
         eval_grid=None,
@@ -443,7 +440,7 @@ class BoundaryError(_Objective):
         self._source_grid = source_grid
         self._eval_grid = eval_grid
         self._eval_grid_is_source_grid = source_grid == eval_grid
-        self._st = parse_argname_change(st, kwargs, "s", "st")
+        self._st = s
         self._sz = sz
         self._q = q
         self._field = field

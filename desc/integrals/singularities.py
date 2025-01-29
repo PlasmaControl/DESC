@@ -142,7 +142,7 @@ def _full_support_params(grid):
     return st, sz, q
 
 
-def heuristic_support_params(grid):
+def _heuristic_support_params(grid):
     """Parameters for heuristic support size and heuristic quadrature resolution.
 
     Return parameters following the asymptotic rule of thumb

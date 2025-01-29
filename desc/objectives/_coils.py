@@ -1,3 +1,4 @@
+import dataclasses
 import numbers
 import warnings
 
@@ -1145,8 +1146,53 @@ class QuadraticFlux(_Objective):
         vacuum=False,
         name="Quadratic flux",
         jac_chunk_size=None,
+        stochastic_optimization_settings=None,
     ):
+        @dataclasses.dataclass
+        class StochasticOptimizationSettings:
+            """See https://doi.org/10.1088/1741-4326/ac45f3 for implementation details
+            of the stochastic coil optimization.
+
+            For the covariance function, a squared exponential function is used:
+
+            k(theta - theta') = sigma^2 * exp(-(theta - theta')^2 / (2 * l^2))
+
+            where sigma is the standard deviation and l is the length_scale.
+
+            It's later used to construct the covariance matrix K, which is then used to
+            sample a multivariate normal distribution with mean 0 and covariance K,
+            which will be position perturbations of the sampled points of the coil.
+
+            Parameters
+            ----------
+            number_of_samples : int
+                Number of "perturbed" coils to include in the objective.
+            standard_deviation : float
+                The standart deviation (sigma) and the characteristic length (l) used in
+                the covariance function.
+            length_scale : float
+                The standart deviation (sigma) and the characteristic length (l) used in
+                the covariance function.
+            number_of_derivatives : int, optional
+                Number of derivatives to compute. Defaults to 1.
+            seed : int, optional
+                Seed for the pseudo-random number generator. Defaults to 0.
+            """
+
+            number_of_samples: int
+            standard_deviation: float
+            length_scale: float
+            number_of_derivatives: int = 1
+            seed: int = 0
+
         from desc.geometry import FourierRZToroidalSurface
+
+        if stochastic_optimization_settings:
+            self._stochastic_settings = StochasticOptimizationSettings(
+                **stochastic_optimization_settings
+            )
+        else:
+            self._stochastic_settings = None
 
         if target is None and bounds is None:
             target = 0

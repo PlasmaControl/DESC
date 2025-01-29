@@ -354,7 +354,7 @@ def get_parallel_forcebalance(eq, num_device, check_device=True):
     objs : tuple of ForceBalance
         A list of the linear constraints used in fixed-boundary problems.
     """
-    from desc.backend import desc_config, jnp
+    from desc.backend import desc_config, jax, jnp
     from desc.grid import LinearGrid
 
     if desc_config["num_device"] != num_device and check_device:
@@ -372,17 +372,19 @@ def get_parallel_forcebalance(eq, num_device, check_device=True):
     rhos = jnp.linspace(0.01, 1.0, L)
     objs = ()
     for i in range(num_device):
-        obj = ForceBalance(
-            eq,
-            grid=LinearGrid(
-                rho=rhos[i * k : (i + 1) * k],
-                # kind of experimental way of set giving
-                # less grid points to inner part, but seems
-                # to make transforms way slower
-                M=int(eq.M_grid * i / num_device),
-                N=eq.N_grid,
-                NFP=eq.NFP,
-            ),
+        grid = LinearGrid(
+            rho=rhos[i * k : (i + 1) * k],
+            # kind of experimental way of set giving
+            # less grid points to inner part, but seems
+            # to make transforms way slower
+            M=int(eq.M_grid * i / num_device),
+            N=eq.N_grid,
+            NFP=eq.NFP,
         )
+        grid._nodes = jax.device_put(grid._nodes, jax.devices("gpu")[i])
+        grid._spacing = jax.device_put(grid.spacing, jax.devices("gpu")[i])
+        grid._weights = jax.device_put(grid.weights, jax.devices("gpu")[i])
+        obj = ForceBalance(eq, grid=grid)
+        obj.build()
         objs += (obj,)
     return objs

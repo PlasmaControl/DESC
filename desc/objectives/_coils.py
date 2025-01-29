@@ -603,7 +603,7 @@ class CoilCurrentLength(CoilLength):
 class CoilIntegratedCurvature(_CoilObjective):
     """Coil integrated curvature.
 
-    If a curve is convex, then the following condition must be true: ∫ κ |∂ₛx| ds = 2π
+    If a curve is convex, then the following condition must be true: ∫ κ ||∂ₛx|| ds = 2π
     where κ is the scalar (unsigned) curvature, ∂ₛx is the first derivative of the
     position vector along curve, and s is the curve parameter.
 

@@ -147,7 +147,7 @@ check the link to install JAX with the most up-to-date recommendations from the 
 
     conda create --name desc-env python=3.12 -y
     conda activate desc-env
-    pip install -U "jax[cuda12]"
+    pip install -U "jax[cuda12]==0.4.38"
 
 Then, install DESC,
 
@@ -159,7 +159,7 @@ Then, install DESC,
     # optionally install developer requirements (if you want to run tests)
     pip install -r devtools/dev-requirements.txt
 
-Tested and confirmed to work on the Della and Stellar clusters at Princeton as of October 23, 2024.
+Tested and confirmed to work on the Della and Stellar clusters at Princeton as of January 29, 2025.
 
 
 RAVEN (IPP, Germany)

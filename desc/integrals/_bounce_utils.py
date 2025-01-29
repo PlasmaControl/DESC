@@ -511,10 +511,10 @@ def interp_fft_to_argmin(T, h, points, knots, g, dg_dz, n0, n1, NFP=1):
     Parameters
     ----------
     T : PiecewiseChebyshevSeries
-        Set of 1D Chebyshev spectral coefficients of θ along field line.
-        {θ_α : ζ ↦ θ(α, ζ) | α ∈ A} where A = (α₀, α₁, …, αₘ₋₁) is the same
-        field line as ``alpha``. Each Chebyshev series approximates θ over
-        one toroidal transit.
+        Set of 1D Chebyshev spectral coefficients of θ on field lines.
+        {θ_αᵢⱼ : ζ ↦ θ(αᵢⱼ, ζ) | αᵢⱼ ∈ Aᵢ} where Aᵢ = (αᵢ₀, αᵢ₁, ..., αᵢ₍ₘ₋₁₎)
+        enumerates field line ``alpha[i]``. Each Chebyshev series approximates
+        θ over one toroidal transit.
     h : jnp.ndarray
         Shape (..., 1, num theta, num zeta // 2 + 1)
         Fourier coefficients as returned by ``Bounce2D.fourier``.
@@ -568,7 +568,7 @@ def interp_fft_to_argmin(T, h, points, knots, g, dg_dz, n0, n1, NFP=1):
     argmin = jnp.argmin(where, axis=-1, keepdims=True)
 
     h = _irfft2_non_uniform(
-        T.eval1d(ext), ext, h, n0, n1, domain1=(0, 2 * jnp.pi / NFP)
+        T.eval1d(ext), ext, h, n0, n1, domain1=(0, 2 * jnp.pi / NFP), axes=(-1, -2)
     )
     if z1.ndim == h.ndim + 1:
         h = h[jnp.newaxis]  # to broadcast with num pitch axis
@@ -578,13 +578,13 @@ def interp_fft_to_argmin(T, h, points, knots, g, dg_dz, n0, n1, NFP=1):
 
 # TODO (#568): Generalize this beyond ζ = ϕ or just map to Clebsch with ϕ.
 def get_fieldline(alpha, iota, num_transit):
-    """Get sequence of poloidal coordinates A = (α₀, α₁, …, αₘ₋₁) of field line.
+    """Get set of field line poloidal coordinates {Aᵢ | Aᵢ = (αᵢ₀, αᵢ₁, ..., αᵢ₍ₘ₋₁₎)}.
 
     Parameters
     ----------
     alpha : jnp.ndarray
         Shape (num alpha, ).
-        Starting field line poloidal labels.
+        Starting field line poloidal labels {αᵢ₀}.
     iota : jnp.ndarray
         Shape (num rho, ).
         Rotational transform normalized by 2π.
@@ -595,7 +595,7 @@ def get_fieldline(alpha, iota, num_transit):
     -------
     fieldline : jnp.ndarray
         Shape (num alpha, num rho, num transit).
-        Sequence of poloidal coordinates A = (α₀, α₁, …, αₘ₋₁) that specify field line.
+        Set of field line poloidal coordinates {Aᵢ | Aᵢ = (αᵢ₀, αᵢ₁, ..., αᵢ₍ₘ₋₁₎)}.
 
     """
     iota = jnp.atleast_1d(iota)[:, jnp.newaxis]
@@ -605,7 +605,7 @@ def get_fieldline(alpha, iota, num_transit):
 
 
 def fourier_chebyshev(theta, iota, alpha, num_transit):
-    """Parameterize θ along field lines ``alpha``.
+    """Parameterize θ on field lines ``alpha``.
 
     Parameters
     ----------
@@ -619,17 +619,17 @@ def fourier_chebyshev(theta, iota, alpha, num_transit):
         Shape (num rho, ).
         Rotational transform normalized by 2π.
     alpha : jnp.ndarray
-        Starting field line poloidal label.
+        Starting field line poloidal labels {αᵢ₀}.
     num_transit : int
         Number of toroidal transits to follow field line.
 
     Returns
     -------
     T : PiecewiseChebyshevSeries
-        Set of 1D Chebyshev spectral coefficients of θ along field line.
-        {θ_α : ζ ↦ θ(α, ζ) | α ∈ A} where A = (α₀, α₁, …, αₘ₋₁) is the same
-        field line as ``alpha``. Each Chebyshev series approximates θ over
-        one toroidal transit.
+        Set of 1D Chebyshev spectral coefficients of θ on field lines.
+        {θ_αᵢⱼ : ζ ↦ θ(αᵢⱼ, ζ) | αᵢⱼ ∈ Aᵢ} where Aᵢ = (αᵢ₀, αᵢ₁, ..., αᵢ₍ₘ₋₁₎)
+        enumerates field line ``alpha[i]``. Each Chebyshev series approximates
+        θ over one toroidal transit.
 
     Notes
     -----
@@ -677,7 +677,8 @@ def fourier_chebyshev(theta, iota, alpha, num_transit):
         # Then squeeze out the rho axis.
         fieldline = fieldline.squeeze(axis=1)
     # Evaluating set of single variable maps is more efficient than evaluating
-    # multivariable map, so we project θ to a set of Chebyshev series.
+    # multivariable map, so we project θ to a set of Chebyshev series. This is
+    # a partial summation technique.
     T = FourierChebyshevSeries(f=theta, domain=(0, 2 * jnp.pi)).compute_cheb(fieldline)
     T.stitch()
     assert T.X == num_transit
@@ -686,18 +687,17 @@ def fourier_chebyshev(theta, iota, alpha, num_transit):
 
 
 def chebyshev(T, f, Y, n0, n1, NFP=1):
-    """Chebyshev along field lines.
+    """Compute Chebyshev approximation of ``f`` on field lines using fast transforms.
 
     Parameters
     ----------
     T : PiecewiseChebyshevSeries
-        Set of 1D Chebyshev spectral coefficients of θ along field line.
-        {θ_α : ζ ↦ θ(α, ζ) | α ∈ A} where A = (α₀, α₁, …, αₘ₋₁) is the same
-        field line as ``alpha``. Each Chebyshev series approximates θ over
-        one toroidal transit.
+        Set of 1D Chebyshev spectral coefficients of θ on field lines.
+        {θ_αᵢⱼ : ζ ↦ θ(αᵢⱼ, ζ) | αᵢⱼ ∈ Aᵢ} where Aᵢ = (αᵢ₀, αᵢ₁, ..., αᵢ₍ₘ₋₁₎)
+        enumerates field line ``alpha[i]``. Each Chebyshev series approximates
+        θ over one toroidal transit.
     f : jnp.ndarray
         Fourier transform of f(θ, ζ) as returned by ``Bounce2D.fourier``.
-        ``n0=grid.num_theta``, ``n1=grid.num_zeta``, ``NFP=grid.NFP``.
     Y : int
         Chebyshev spectral resolution for ``f``. Preferably power of 2.
     n0 : int
@@ -710,41 +710,48 @@ def chebyshev(T, f, Y, n0, n1, NFP=1):
     Returns
     -------
     f : PiecewiseChebyshevSeries
-        Set of 1D Chebyshev spectral coefficients of θ along field line.
-        {f_α : ζ ↦ f(α, ζ) | α ∈ A} where A = (α₀, α₁, …, αₘ₋₁) is the same
-        field line. Each Chebyshev series approximates f over one toroidal transit.
+        Set of 1D Chebyshev spectral coefficients of ``f`` on field lines.
+        {f_αᵢⱼ : ζ ↦ f(αᵢⱼ, ζ) | αᵢⱼ ∈ Aᵢ} where Aᵢ = (αᵢ₀, αᵢ₁, ..., αᵢ₍ₘ₋₁₎)
+        enumerates field line ``alpha[i]``. Each Chebyshev series approximates
+        ``f`` over one toroidal transit.
 
     """
-    # When f = |B|, it is expected that Y > T.Y so the code immediately below
+    # For most maps f, it is expected that Y > T.Y so the code immediately below
     # is then up-sampling the Chebyshev resolution, which is good since the
-    # spectrum of |B| is wider than θ.
+    # spectrum of f is wider than θ.
 
-    # f at Chebyshev points in ζ along field line
+    # f at Chebyshev points in ζ on field lines
+    # Let m, n denote the poloidal and toroidal Fourier resolution. We need to
+    # compute a set of 2D Fourier series each on non-uniform tensor product grids
+    # of size |𝛉|×|𝛇| where |𝛉| = num alpha × num transit and |𝛇| = Y.
+    # Partial summation is more efficient than direct evaluation when
+    # mn|𝛉||𝛇| > mn|𝛇| + m|𝛉||𝛇| or equivalently n|𝛉| > n + |𝛉|.
+    # TODO: Partial summation.
     f = _irfft2_non_uniform(
         T.evaluate(Y),
         cheb_pts(Y, domain=T.domain),
-        f[..., jnp.newaxis, :, :, :],
+        f[..., jnp.newaxis, :, :],
         n0,
         n1,
         domain1=(0, 2 * jnp.pi / NFP),
+        axes=(-1, -2),
     )
     f = PiecewiseChebyshevSeries(cheb_from_dct(dct(f, type=2, axis=-1) / Y), T.domain)
     return f
 
 
 def cubic_spline(T, f, Y, n0, n1, NFP=1, check=False):
-    """Cubic spline along field lines.
+    """Compute cubic spline of ``f`` on field lines using fast transforms.
 
     Parameters
     ----------
     T : PiecewiseChebyshevSeries
-        Set of 1D Chebyshev spectral coefficients of θ along field line.
-        {θ_α : ζ ↦ θ(α, ζ) | α ∈ A} where A = (α₀, α₁, …, αₘ₋₁) is the same
-        field line as ``alpha``. Each Chebyshev series approximates θ over
-        one toroidal transit.
+        Set of 1D Chebyshev spectral coefficients of θ on field lines.
+        {θ_αᵢⱼ : ζ ↦ θ(αᵢⱼ, ζ) | αᵢⱼ ∈ Aᵢ} where Aᵢ = (αᵢ₀, αᵢ₁, ..., αᵢ₍ₘ₋₁₎)
+        enumerates field line ``alpha[i]``. Each Chebyshev series approximates
+        θ over one toroidal transit.
     f : jnp.ndarray
         Fourier transform of f(θ, ζ) as returned by ``Bounce2D.fourier``.
-        ``n0=grid.num_theta``, ``n1=grid.num_zeta``, ``NFP=grid.NFP``.
     Y : int
         Number of knots per transit to interpolate ``f``.
     n0 : int
@@ -770,27 +777,39 @@ def cubic_spline(T, f, Y, n0, n1, NFP=1, check=False):
         Knots of spline ``f``.
 
     """
-    num_transit = T.X
+    # TODO: Round Y down to multiple of NFP.
     zeta = jnp.linspace(-1, 1, Y, endpoint=False)
-    # θ at uniformly spaced points in ζ along field line
+    # θ at uniform ζ on field lines.
+    # TODO: add axis for NFP
     theta = idct_non_uniform(zeta, T.cheb[..., jnp.newaxis, :], T.Y)
     zeta = bijection_from_disc(zeta, T.domain[0], T.domain[1])
 
-    # f at uniformly spaced points in ζ along field line
-    f = _irfft2_non_uniform(
-        theta,
-        zeta,
-        f[..., jnp.newaxis, :, :, :],
-        n0,
-        n1,
-        domain1=(0, 2 * jnp.pi / NFP),
-    ).reshape(*T.cheb.shape[:-2], num_transit * Y)
-
+    # f at uniform ζ on field lines.
+    # Let m, n denote the poloidal and toroidal Fourier resolution. We need to
+    # compute a set of 2D Fourier series each on uniform (non-uniform) in ζ (θ)
+    # tensor product grids of size
+    #   |𝛉|×|𝛇| where |𝛉| = num alpha × num transit × NFP and |𝛇| = Y/NFP.
+    # Partial summation via FFT is more efficient than direct evaluation when
+    # mn|𝛉||𝛇| > m log(|𝛇|) |𝛇| + m|𝛉||𝛇| or equivalently n|𝛉| > log|𝛇| + |𝛉|.
+    # TODO: Partial summation.
+    # TODO: ifft zeta (upsample to resolution Y//NFP) zeta points,
+    #  then call irfft non uniform and ravel
+    f = flatten_matrix(
+        _irfft2_non_uniform(
+            theta,
+            zeta,
+            f[..., jnp.newaxis, :, :],
+            n0,
+            n1,
+            domain1=(0, 2 * jnp.pi / NFP),
+            axes=(-1, -2),
+        )
+    )
     zeta = jnp.ravel(
-        zeta + (T.domain[1] - T.domain[0]) * jnp.arange(num_transit)[:, jnp.newaxis]
+        zeta + (T.domain[1] - T.domain[0]) * jnp.arange(T.X)[:, jnp.newaxis]
     )
 
     f = CubicSpline(x=zeta, y=f, axis=-1, check=check).c
     f = jnp.moveaxis(f, source=(0, 1), destination=(-1, -2))
-    assert f.shape[-2:] == (num_transit * Y - 1, 4)
+    assert f.shape[-2:] == (T.X * Y - 1, 4)
     return f, zeta

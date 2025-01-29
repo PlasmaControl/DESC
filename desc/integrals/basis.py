@@ -117,7 +117,7 @@ class FourierChebyshevSeries(IOAble):
     This is useful to interpolate f ≝ θ and use the map x, ζ ↦ θ(x, ζ) to
     compute quantities along field lines via evaluating Fourier series
     parameterized in DESC computational coordinates θ, ζ, where the Fourier
-    transform is more condensed when NFP > 1.
+    transform is more condensed, especially when NFP > 1.
 
     Notes
     -----
@@ -243,7 +243,6 @@ class FourierChebyshevSeries(IOAble):
 
         """
         a_mn = rfft_to_trig(cheb_from_dct(self._c), self.X, axis=-2)
-        assert a_mn.shape[-2:] == (self.X, self.Y)
         return a_mn
 
     def compute_cheb(self, x):
@@ -509,9 +508,9 @@ class PiecewiseChebyshevSeries(IOAble):
             jnp.atleast_1d(k)[..., jnp.newaxis]
         )
         # Flatten so that last axis enumerates intersects along the piecewise spline.
-        y, is_intersect, df_dy_sign = map(
-            flatten_matrix, (self._isomorphism_to_C1(y), is_intersect, df_dy_sign)
-        )
+        y = flatten_matrix(self._isomorphism_to_C1(y))
+        is_intersect = flatten_matrix(is_intersect)
+        df_dy_sign = flatten_matrix(df_dy_sign)
 
         # Note for bounce point applications:
         # We ignore the degenerate edge case where the boundary shared by adjacent

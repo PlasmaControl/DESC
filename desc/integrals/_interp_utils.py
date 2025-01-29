@@ -130,7 +130,8 @@ def irfft_non_uniform(xq, a, n, domain=(0, 2 * jnp.pi), axis=-1):
         Real query points where interpolation is desired.
         Shape of ``xq`` must broadcast with arrays of shape ``np.delete(a.shape,axis)``.
     a : jnp.ndarray
-        Fourier coefficients ``a=rfft(f,axis=axis,norm="forward")``.
+        Fourier coefficients.
+        ``a=rfft(f,axis=axis,norm="forward")``.
     n : int
         Spectral resolution of ``a``.
     domain : tuple[float]
@@ -229,6 +230,8 @@ def _irfft2_non_uniform(
     a : jnp.ndarray
         Shape (..., a.shape[-2], a.shape[-1]).
         Fourier coefficients.
+        ``f=rfft2(f,axes=axes,norm="forward")``
+        ``a=jnp.moveaxis(f,axes,(-2,-1)).at[...,i].divide(2)*2``.
     n0 : int
         Spectral resolution of ``a`` for ``domain0``.
     n1 : int
@@ -478,7 +481,7 @@ interp1d_vec = jnp.vectorize(
 
 @partial(jnp.vectorize, signature="(m),(n),(n),(n)->(m)")
 def interp1d_Hermite_vec(xq, x, f, fx, /):
-    """Vectorized cubic Hermite spline."""
+    """Vectorized cubic Hermite interpolation."""
     return interp1d(xq, x, f, method="cubic", fx=fx)
 
 

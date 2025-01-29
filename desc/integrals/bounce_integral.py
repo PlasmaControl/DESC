@@ -271,6 +271,9 @@ class Bounce2D(Bounce):
     # Alternative approaches include using filtered Fourier series, Fourier
     # continuation methods, or (preferably) prolate spheroidal wave functions.
     #
+    # Dimension reduction techniques and partial summation are used whenever
+    # possible to evaluate maps.
+    #
     # Function approximation in (α, ζ) coordinates demands particular interpolation
     # points in that coordinate system because there is no transformation that converts
     # series coefficients in periodic coordinates, e.g. (ϑ, ϕ), to a low order
@@ -282,7 +285,7 @@ class Bounce2D(Bounce):
     # However, the basis for the latter are trigonometric functions with
     # irrational frequencies, courtesy of the irrational rotational transform.
     # Globally convergent root-finding schemes for that basis (at fixed α) are
-    # not known. The denominator of a close rational could be absorbed into the
+    # not efficient. The denominator of a close rational could be absorbed into the
     # coordinate ϕ, but this balloons the frequency, and hence degree of the series.
     #
     # Quadrature is chosen over Runge-Kutta methods of the form
@@ -314,10 +317,10 @@ class Bounce2D(Bounce):
         assert grid.can_fft2
         is_reshaped = is_reshaped or is_fourier
         self._NFP = grid.NFP
-        self._n_fft = grid.num_theta
-        self._n_rfft = grid.num_zeta
+        self._m = grid.num_theta
+        self._n = grid.num_zeta
         self._modes_fft, self._modes_rfft = rfft2_modes(
-            grid.num_theta, grid.num_zeta, domain_rfft=(0, 2 * jnp.pi / grid.NFP)
+            self._n, self._m, domain_fft=(0, 2 * jnp.pi / grid.NFP)
         )
         self._x, self._w = get_quadrature(quad, automorphism)
 
@@ -344,8 +347,8 @@ class Bounce2D(Bounce):
                 self._c["T(z)"],
                 self._c["|B|"],
                 Y_B,
-                self._n_fft,
-                self._n_rfft,
+                self._m,
+                self._n,
                 self._NFP,
                 check=check,
             )
@@ -354,8 +357,8 @@ class Bounce2D(Bounce):
                 self._c["T(z)"],
                 self._c["|B|"],
                 Y_B,
-                self._n_fft,
-                self._n_rfft,
+                self._m,
+                self._n,
                 self._NFP,
             )
 
@@ -393,16 +396,22 @@ class Bounce2D(Bounce):
         Returns
         -------
         a : jnp.ndarray
-            Shape (..., 1, num theta, num zeta // 2 + 1)
             Complex coefficients of 2D real FFT of ``f``.
 
         """
-        if (f.shape[-1] % 2) == 0:
+        if (f.shape[-2] % 2) == 0:
             i = (0, -1)
         else:
             i = 0
-        # real fft done in toroidal direction since usually num theta > num zeta
-        a = rfft2(f, norm="forward").at[..., i].divide(2) * 2
+        # Due to the structure of the problem, often when evaluating the series the
+        # number of ζ coordinates at which to compute the toroidal basis functions is
+        # less than the number of θ coordinates at which to compute the poloidal basis.
+        # Hence, it more efficient to compute the real transform in the poloidal angle.
+        # Likewise to perform partial summation in this application, the real transform
+        # must be done in the poloidal angle and the complex transform in the toroidal.
+        a = rfft2(f, norm="forward", axes=(-1, -2)).at[..., i, :].divide(2) * 2
+        a = jnp.swapaxes(a, -1, -2)
+        # Shape is (..., 1, num zeta, num theta // 2 + 1)
         return a[..., jnp.newaxis, :, :]
 
     # TODO (#1034): Pass in the previous
@@ -626,7 +635,7 @@ class Bounce2D(Bounce):
             expected shape.
         names : str or list[str]
             Names in ``data`` to interpolate. Default is all keys in ``data``.
-            Do not include ``|B|``.
+            Do not include ``|B|`` or ``B^zeta``.
         points : tuple[jnp.ndarray]
             Shape (num rho, num alpha, num pitch, num well).
             Optional, output of method ``self.points``.
@@ -660,6 +669,7 @@ class Bounce2D(Bounce):
             names = data.keys()
         elif isinstance(names, str):
             names = [names]
+        x, w = self._x, self._w if quad is None else quad
 
         if not is_fourier:
             data = {name: Bounce2D.fourier(data[name]) for name in names}
@@ -667,7 +677,6 @@ class Bounce2D(Bounce):
         if points is None:
             points = self.points(pitch_inv)
 
-        x, w = self._x, self._w if quad is None else quad
         result = self._integrate(
             x,
             w,
@@ -695,11 +704,10 @@ class Bounce2D(Bounce):
         # Goal is to reuse the same Vandermonde array to interpolate. This took
         # some care to appease JIT to fuse the operations. Be careful if editing
         # as what usually qualifies as a cosmetic change may cause memory leaks.
-        vander = rfft2_vander(theta, zeta, self._modes_fft, self._modes_rfft)
+        vander = rfft2_vander(zeta, theta, self._modes_fft, self._modes_rfft)
         data = {name: (vander * data[name]).real.sum((-2, -1)) for name in names}
         data["B^zeta"] = (vander * self._c["B^zeta"]).real.sum((-2, -1))
         B = (vander * self._c["|B|"]).real.sum((-2, -1))
-        # del vander
         data["theta"] = theta
         data["zeta"] = zeta
 
@@ -767,8 +775,8 @@ class Bounce2D(Bounce):
                 self._c["knots"],
                 self._c["B(z)"],
                 polyder_vec(self._c["B(z)"]),
-                self._n_fft,
-                self._n_rfft,
+                self._m,
+                self._n,
                 self._NFP,
             )
         )
@@ -804,25 +812,30 @@ class Bounce2D(Bounce):
             else self._c["knots"].size // self._c["T(z)"].X
         ) // 2
         x, w = leggauss(deg) if quad is None else quad
-        dz_dx = jnp.pi
-
+        zeta = bijection_from_disc(x, 0, 2 * jnp.pi)
         # θ at roots of Legendre polynomial in ζ
         theta = idct_non_uniform(
             x, self._c["T(z)"].cheb[..., jnp.newaxis, :], self._c["T(z)"].Y
         )
-        zeta = bijection_from_disc(x, 0, 2 * jnp.pi)
-
+        # Let m, n denote the poloidal and toroidal Fourier resolution. We need to
+        # compute a set of 2D Fourier series each on non-uniform tensor product grids
+        # of size |𝛉|×|𝛇| where |𝛉| = num alpha × num transit and |𝛇| is quadrature
+        # resolution. Partial summation is more efficient than direct evaluation when
+        # mn|𝛉||𝛇| > mn|𝛇| + m|𝛉||𝛇| or equivalently n|𝛉| > n + |𝛉|.
+        # TODO: Partial summation.
         # B⋅∇ζ never vanishes, and hence has the same sign on a flux surface,
         # so we may take absolute value after the reduction.
+        dz_dx = jnp.pi
         return dz_dx * jnp.abs(
             jnp.reciprocal(
                 _irfft2_non_uniform(
                     theta,
                     zeta,
-                    self._c["B^zeta"][..., jnp.newaxis, :, :, :],
-                    self._n_fft,
-                    self._n_rfft,
+                    self._c["B^zeta"][..., jnp.newaxis, :, :],
+                    self._m,
+                    self._n,
                     domain1=(0, 2 * jnp.pi / self._NFP),
+                    axes=(-1, -2),
                 )
             )
             .dot(w)
@@ -1185,10 +1198,9 @@ class Bounce1D(Bounce):
             as the indices that correspond to that field line.
         data : dict[str, jnp.ndarray]
             Shape (num rho, num alpha, num zeta).
-            Real scalar-valued periodic functions in (θ, ζ) ∈ [0, 2π) × [0, 2π/NFP)
-            evaluated on the ``grid`` supplied to construct this object.
-            Use the method ``Bounce1D.reshape`` to reshape the data into the
-            expected shape.
+            Real scalar-valued functions evaluated on the ``grid`` supplied to
+            construct this object. Use the method ``Bounce1D.reshape`` to reshape
+            the data into the expected shape.
         names : str or list[str]
             Names in ``data`` to interpolate. Default is all keys in ``data``.
             Do not include ``|B|``.
@@ -1226,16 +1238,16 @@ class Bounce1D(Bounce):
             names = data.keys()
         elif isinstance(names, str):
             names = [names]
+        x, w = self._x, self._w if quad is None else quad
 
         # if rho axis exists, then add alpha axis
         if jnp.ndim(pitch_inv) == 2:
             pitch_inv = pitch_inv[:, jnp.newaxis]
-        if points is None:
-            points = bounce_points(pitch_inv, self._zeta, self._B, self._dB_dz)
-
-        x, w = self._x, self._w if quad is None else quad
         # add axis to broadcast against quadrature points
         pitch = jnp.atleast_1d(1 / pitch_inv)[..., jnp.newaxis]
+
+        if points is None:
+            points = bounce_points(pitch_inv, self._zeta, self._B, self._dB_dz)
 
         if kwargs.get("batch", True):
             result = self._integrate(

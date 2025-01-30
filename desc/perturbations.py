@@ -164,7 +164,8 @@ def perturb(  # noqa: C901
     if is_linear_proj and constraints is not None:
         raise ValueError(
             "If a LinearConstraintProjection is passed, "
-            "no constraints should be passed."
+            "no constraints should be passed. Passed constraints:"
+            f"{constraints}."
         )
     # remove deltas that are zero
     deltas = {key: val for key, val in deltas.items() if jnp.any(val)}
@@ -222,20 +223,20 @@ def perturb(  # noqa: C901
 
     # state vector
     if is_linear_proj:
-        x_reduced = objective.x(eq)
-        x = recover(x_reduced)
-        x_norm = jnp.linalg.norm(x_reduced)
+        obj = objective._objective
     else:
-        x = objective.x(eq)
-        x_reduced = project(x)
-        x_norm = jnp.linalg.norm(x_reduced)
+        obj = objective
+    x = obj.x(eq)
+    x_reduced = project(x)
+
+    x_norm = jnp.linalg.norm(x_reduced)
+    xz = obj.unpack_state(jnp.zeros_like(x), False)[0]
 
     # perturbation vectors
     dx1_reduced = jnp.zeros_like(x_reduced)
     dx2_reduced = jnp.zeros_like(x_reduced)
     dx3_reduced = jnp.zeros_like(x_reduced)
 
-    xz = objective.unpack_state(jnp.zeros_like(x), False)[0]
     # tangent vectors
     tangents = jnp.zeros((eq.dim_x,))
     if "Rb_lmn" in deltas.keys():
@@ -308,8 +309,8 @@ def perturb(  # noqa: C901
             weight = w
         weight = jnp.atleast_1d(jnp.asarray(weight))
         assert (
-            len(weight) == objective.dim_x
-        ), "Size of weight supplied to perturbation does not match objective.dim_x."
+            len(weight) == obj.dim_x
+        ), "Size of weight supplied to perturbation does not match obj.dim_x."
         if weight.ndim == 1:
             weight = weight[unfixed_idx]
             weight = jnp.diag(weight)
@@ -323,11 +324,11 @@ def perturb(  # noqa: C901
         if verbose > 0:
             print("Computing df")
         timer.start("df computation")
-        Jx = objective.jac_scaled_error(x)
+        Jx = obj.jac_scaled_error(x)
         Jx_reduced = Jx @ jnp.diag(D)[:, unfixed_idx] @ Z @ scale
-        RHS1 = objective.jvp_scaled(tangents, x)
+        RHS1 = obj.jvp_scaled(tangents, x)
         if include_f:
-            f = objective.compute_scaled_error(x)
+            f = obj.compute_scaled_error(x)
             RHS1 += f
         timer.stop("df computation")
         if verbose > 1:
@@ -361,7 +362,7 @@ def perturb(  # noqa: C901
             print("Computing d^2f")
         timer.start("d^2f computation")
         tangents += dx1
-        RHS2 = 0.5 * objective.jvp_scaled((tangents, tangents), x)
+        RHS2 = 0.5 * obj.jvp_scaled((tangents, tangents), x)
         timer.stop("d^2f computation")
         if verbose > 1:
             timer.disp("d^2f computation")
@@ -385,8 +386,8 @@ def perturb(  # noqa: C901
         if verbose > 0:
             print("Computing d^3f")
         timer.start("d^3f computation")
-        RHS3 = (1 / 6) * objective.jvp_scaled((tangents, tangents, tangents), x)
-        RHS3 += objective.jvp_scaled((dx2, tangents), x)
+        RHS3 = (1 / 6) * obj.jvp_scaled((tangents, tangents, tangents), x)
+        RHS3 += obj.jvp_scaled((dx2, tangents), x)
         timer.stop("d^3f computation")
         if verbose > 1:
             timer.disp("d^3f computation")
@@ -433,7 +434,7 @@ def perturb(  # noqa: C901
     # update other attributes
     dx_reduced = dx1_reduced + dx2_reduced + dx3_reduced
     x_new = recover(x_reduced + dx_reduced)
-    params = objective.unpack_state(x_new, False)[0]
+    params = obj.unpack_state(x_new, False)[0]
     for key, value in params.items():
         if key not in deltas:
             value = put(  # parameter values below threshold are set to 0

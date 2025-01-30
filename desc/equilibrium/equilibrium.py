@@ -2346,7 +2346,8 @@ class Equilibrium(IOAble, Optimizable):
         if is_linear_proj and constraints is not None:
             raise ValueError(
                 "If a LinearConstraintProjection is passed, "
-                "no constraints should be passed."
+                "no constraints should be passed. Passed constraints:"
+                f"{constraints}."
             )
         if objective is None:
             objective = get_equilibrium_objective(eq=self)
@@ -2358,9 +2359,9 @@ class Equilibrium(IOAble, Optimizable):
 
         eq = perturb(
             self,
-            objective,
-            constraints,
-            deltas,
+            objective=objective,
+            constraints=constraints,
+            deltas=deltas,
             order=order,
             tr_ratio=tr_ratio,
             weight=weight,

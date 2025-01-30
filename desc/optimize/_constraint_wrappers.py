@@ -609,8 +609,10 @@ class ProximalProjection(ObjectiveFunction):
             self._args.remove(arg)
         linear_constraint = ObjectiveFunction(self._linear_constraints)
         linear_constraint.build()
-        (_, _, _, self._Z, self._D, self._unfixed_idx, *_) = (
-            factorize_linear_constraints(self._constraint, linear_constraint)
+        (self._Z, self._D, self._unfixed_idx) = (
+            self._eq_solve_objective._Z,
+            self._eq_solve_objective._D,
+            self._eq_solve_objective._unfixed_idx,
         )
 
         # dx/dc - goes from the full state to optimization variables for eq

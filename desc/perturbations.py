@@ -143,6 +143,7 @@ def perturb(  # noqa: C901
         Perturbed equilibrium.
 
     """
+    is_linear_prox = isinstance(objective, LinearConstraintProjection)
     if not use_jax:
         warnings.warn(
             colored(
@@ -160,7 +161,7 @@ def perturb(  # noqa: C901
             )
         )
 
-    if isinstance(objective, LinearConstraintProjection) and constraints is not None:
+    if is_linear_prox and constraints is not None:
         raise ValueError(
             "If a LinearConstraintProjection is passed, "
             "no constraints should be passed."
@@ -175,18 +176,23 @@ def perturb(  # noqa: C901
 
     if not objective.built:
         objective.build(eq, verbose=verbose)
-    if isinstance(objective, LinearConstraintProjection):
-        constraints = objective._constraint
+    if is_linear_prox:
+        constraints = objective._constraint.objectives
+        constraint = objective._constraint
+        warnif(
+            objective.dim_f < (objective._objective.dim_x - constraint.dim_f),
+            UserWarning,
+            "Perturbing an underdetermined system may give bad results",
+        )
     else:
         constraints = maybe_add_self_consistency(eq, constraints)
         constraint = ObjectiveFunction(constraints)
         constraint.build(verbose=verbose)
-
-    warnif(
-        objective.dim_f < (objective.dim_x - constraint.dim_f),
-        UserWarning,
-        "Perturbing an underdetermined system may give bad results",
-    )
+        warnif(
+            objective.dim_f < (objective.dim_x - constraint.dim_f),
+            UserWarning,
+            "Perturbing an underdetermined system may give bad results",
+        )
 
     if verbose > 0:
         print("Perturbing {}".format(", ".join(deltas.keys())))
@@ -197,7 +203,7 @@ def perturb(  # noqa: C901
     if verbose > 0:
         print("Factorizing linear constraints")
     timer.start("linear constraint factorize")
-    if isinstance(objective, LinearConstraintProjection):
+    if is_linear_prox:
         xp, Z, D, unfixed_idx, project, recover = (
             objective._xp,
             objective._Z,
@@ -215,7 +221,7 @@ def perturb(  # noqa: C901
         timer.disp("linear constraint factorize")
 
     # state vector
-    if isinstance(objective, LinearConstraintProjection):
+    if is_linear_prox:
         x_reduced = objective.x(eq)
         x = recover(x_reduced)
         x_norm = jnp.linalg.norm(x_reduced)
@@ -229,7 +235,7 @@ def perturb(  # noqa: C901
     dx2_reduced = jnp.zeros_like(x_reduced)
     dx3_reduced = jnp.zeros_like(x_reduced)
 
-    xz = objective.unpack_state(jnp.zeros(objective.dim_x), False)[0]
+    xz = objective.unpack_state(jnp.zeros_like(x), False)[0]
     # tangent vectors
     tangents = jnp.zeros((eq.dim_x,))
     if "Rb_lmn" in deltas.keys():
@@ -411,7 +417,7 @@ def perturb(  # noqa: C901
     for key, value in deltas.items():
         setattr(eq_new, key, getattr(eq_new, key) + value)
 
-    if isinstance(objective, LinearConstraintProjection):
+    if is_linear_prox:
         objective.update_constraint_target(eq_new)
         recover = objective._recover
     else:

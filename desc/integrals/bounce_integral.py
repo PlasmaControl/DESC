@@ -19,10 +19,11 @@ from desc.integrals._bounce_utils import (
     plot_ppoly,
 )
 from desc.integrals._interp_utils import (
-    _irfft2_non_uniform,
     idct_non_uniform,
+    ifft_non_uniform,
     interp1d_Hermite_vec,
     interp1d_vec,
+    irfft_non_uniform,
     polyder_vec,
     rfft2_modes,
     rfft2_vander,
@@ -319,7 +320,7 @@ class Bounce2D(Bounce):
         self._NFP = grid.NFP
         self._m = grid.num_theta
         self._n = grid.num_zeta
-        self._modes_fft, self._modes_rfft = rfft2_modes(
+        self._n_modes, self._m_modes = rfft2_modes(
             self._n, self._m, domain_fft=(0, 2 * jnp.pi / grid.NFP)
         )
         self._x, self._w = get_quadrature(quad, automorphism)
@@ -358,7 +359,8 @@ class Bounce2D(Bounce):
                 self._c["|B|"],
                 Y_B,
                 self._m,
-                self._n,
+                self._m_modes,
+                self._n_modes,
                 self._NFP,
             )
 
@@ -396,6 +398,7 @@ class Bounce2D(Bounce):
         Returns
         -------
         a : jnp.ndarray
+            Shape is (..., 1, num zeta, num theta // 2 + 1).
             Complex coefficients of 2D real FFT of ``f``.
 
         """
@@ -411,7 +414,6 @@ class Bounce2D(Bounce):
         # must be done in the poloidal angle and the complex transform in the toroidal.
         a = rfft2(f, norm="forward", axes=(-1, -2)).at[..., i, :].divide(2) * 2
         a = jnp.swapaxes(a, -1, -2)
-        # Shape is (..., 1, num zeta, num theta // 2 + 1)
         return a[..., jnp.newaxis, :, :]
 
     # TODO (#1034): Pass in the previous
@@ -704,7 +706,7 @@ class Bounce2D(Bounce):
         # Goal is to reuse the same Vandermonde array to interpolate. This took
         # some care to appease JIT to fuse the operations. Be careful if editing
         # as what usually qualifies as a cosmetic change may cause memory leaks.
-        vander = rfft2_vander(zeta, theta, self._modes_fft, self._modes_rfft)
+        vander = rfft2_vander(zeta, theta, self._n_modes, self._m_modes)
         data = {name: (vander * data[name]).real.sum((-2, -1)) for name in names}
         data["B^zeta"] = (vander * self._c["B^zeta"]).real.sum((-2, -1))
         B = (vander * self._c["|B|"]).real.sum((-2, -1))
@@ -812,36 +814,33 @@ class Bounce2D(Bounce):
             else self._c["knots"].size // self._c["T(z)"].X
         ) // 2
         x, w = leggauss(deg) if quad is None else quad
-        zeta = bijection_from_disc(x, 0, 2 * jnp.pi)
-        # θ at roots of Legendre polynomial in ζ
-        theta = idct_non_uniform(
-            x, self._c["T(z)"].cheb[..., jnp.newaxis, :], self._c["T(z)"].Y
-        )
+        dz_dx = jnp.pi
+
         # Let m, n denote the poloidal and toroidal Fourier resolution. We need to
         # compute a set of 2D Fourier series each on non-uniform tensor product grids
         # of size |𝛉|×|𝛇| where |𝛉| = num alpha × num transit and |𝛇| is quadrature
         # resolution. Partial summation is more efficient than direct evaluation when
         # mn|𝛉||𝛇| > mn|𝛇| + m|𝛉||𝛇| or equivalently n|𝛉| > n + |𝛉|.
-        # TODO: Partial summation.
+
+        # Shape broadcasts with (num rho, num zeta, m)
+        par_sum = ifft_non_uniform(
+            bijection_from_disc(x, 0, 2 * jnp.pi)[:, jnp.newaxis],
+            # Shape broadcasts with (num rho, 1, n, m).
+            self._c["B^zeta"],
+            _modes=self._n_modes,
+            domain=(0, 2 * jnp.pi / self._NFP),
+            axis=-2,
+        )
+        # θ at roots of Legendre polynomial in ζ
+        theta = idct_non_uniform(
+            x, self._c["T(z)"].cheb[..., jnp.newaxis, :], self._c["T(z)"].Y
+        )
+        par_sum = irfft_non_uniform(
+            theta, par_sum[..., jnp.newaxis, :, :], self._m, _modes=self._m_modes
+        )
         # B⋅∇ζ never vanishes, and hence has the same sign on a flux surface,
         # so we may take absolute value after the reduction.
-        dz_dx = jnp.pi
-        return dz_dx * jnp.abs(
-            jnp.reciprocal(
-                _irfft2_non_uniform(
-                    theta,
-                    zeta,
-                    self._c["B^zeta"][..., jnp.newaxis, :, :],
-                    self._m,
-                    self._n,
-                    domain1=(0, 2 * jnp.pi / self._NFP),
-                    axes=(-1, -2),
-                )
-            )
-            .dot(w)
-            .sum(-1)
-            .mean(0)
-        )
+        return jnp.abs(jnp.reciprocal(par_sum).dot(w).sum(-1).mean(0)) * dz_dx
         # Simple mean over α because when the toroidal angle extends
         # beyond one transit we need to weight all field lines uniformly,
         # regardless of their area wrt α.

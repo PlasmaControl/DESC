@@ -10,7 +10,9 @@ from desc.integrals._interp_utils import (
     cheb_from_dct,
     cheb_pts,
     idct_non_uniform,
+    ifft_non_uniform,
     interp1d_vec,
+    irfft_non_uniform,
     polyroot_vec,
     polyval_vec,
 )
@@ -686,7 +688,7 @@ def fourier_chebyshev(theta, iota, alpha, num_transit):
     return T
 
 
-def chebyshev(T, f, Y, n0, n1, NFP=1):
+def chebyshev(T, f, Y, m, m_modes, n_modes, NFP=1):
     """Compute Chebyshev approximation of ``f`` on field lines using fast transforms.
 
     Parameters
@@ -700,10 +702,14 @@ def chebyshev(T, f, Y, n0, n1, NFP=1):
         Fourier transform of f(θ, ζ) as returned by ``Bounce2D.fourier``.
     Y : int
         Chebyshev spectral resolution for ``f``. Preferably power of 2.
-    n0 : int
+        Usually the spectrum of ``f`` is wider than θ, so one can upsample
+        to about double the resolution of θ. (This is function dependent).
+    m : int
         Fourier resolution in poloidal direction; num theta.
-    n1 : int
-        Fourier resolution in toroidal direction; num zeta.
+    m_modes : jnp.ndarray
+        Real FFT Fourier modes in poloidal direction.
+    n_modes : jnp.ndarray
+        FFT Fourier modes in toroidal direction.
     NFP : int
         Number of field periods.
 
@@ -716,26 +722,23 @@ def chebyshev(T, f, Y, n0, n1, NFP=1):
         ``f`` over one toroidal transit.
 
     """
-    # For most maps f, it is expected that Y > T.Y so the code immediately below
-    # is then up-sampling the Chebyshev resolution, which is good since the
-    # spectrum of f is wider than θ.
-
-    # f at Chebyshev points in ζ on field lines
     # Let m, n denote the poloidal and toroidal Fourier resolution. We need to
     # compute a set of 2D Fourier series each on non-uniform tensor product grids
     # of size |𝛉|×|𝛇| where |𝛉| = num alpha × num transit and |𝛇| = Y.
     # Partial summation is more efficient than direct evaluation when
     # mn|𝛉||𝛇| > mn|𝛇| + m|𝛉||𝛇| or equivalently n|𝛉| > n + |𝛉|.
-    # TODO: Partial summation.
-    f = _irfft2_non_uniform(
-        T.evaluate(Y),
-        cheb_pts(Y, domain=T.domain),
-        f[..., jnp.newaxis, :, :],
-        n0,
-        n1,
-        domain1=(0, 2 * jnp.pi / NFP),
-        axes=(-1, -2),
+
+    # Shape broadcasts with (num rho, Y, m).
+    f = ifft_non_uniform(
+        cheb_pts(Y, domain=T.domain)[:, jnp.newaxis],
+        # Shape broadcasts with (num rho, 1, n, m).
+        f,
+        _modes=n_modes,
+        domain=(0, 2 * jnp.pi / NFP),
+        axis=-2,
     )
+    # f at Chebyshev points in ζ on field lines
+    f = irfft_non_uniform(T.evaluate(Y), f[..., jnp.newaxis, :, :], m, _modes=m_modes)
     f = PiecewiseChebyshevSeries(cheb_from_dct(dct(f, type=2, axis=-1) / Y), T.domain)
     return f
 

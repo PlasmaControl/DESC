@@ -16,6 +16,7 @@ from desc.objectives import (
     maybe_add_self_consistency,
 )
 from desc.objectives.utils import factorize_linear_constraints
+from desc.optimize import LinearConstraintProjection
 from desc.optimize.tr_subproblems import trust_region_step_exact_svd
 from desc.optimize.utils import compute_jac_scale, evaluate_quadratic_form_jac
 from desc.utils import Timer, get_instance, warnif
@@ -94,8 +95,8 @@ def get_deltas(things1, things2):  # noqa: C901
 def perturb(  # noqa: C901
     eq,
     objective,
-    constraints,
     deltas,
+    constraints=None,
     order=2,
     tr_ratio=0.1,
     weight="auto",
@@ -109,8 +110,9 @@ def perturb(  # noqa: C901
     ----------
     eq : Equilibrium
         Equilibrium to perturb.
-    objective : ObjectiveFunction
-        Objective function to satisfy.
+    objective : ObjectiveFunction or LinearConstraintProjection
+        Objective function to satisfy. If a LinearConstraintProjection is passed,
+        no constraints is necessary. This will be more efficient for proximal optimizers
     constraints : tuple of Objective, optional
         List of objectives to be used as constraints during perturbation.
     deltas : dict of ndarray
@@ -157,6 +159,12 @@ def perturb(  # noqa: C901
                 len(tr_ratio), order
             )
         )
+
+    if isinstance(objective, LinearConstraintProjection) and constraints is not None:
+        raise ValueError(
+            "If a LinearConstraintProjection is passed, "
+            "no constraints should be passed."
+        )
     # remove deltas that are zero
     deltas = {key: val for key, val in deltas.items() if jnp.any(val)}
 
@@ -167,9 +175,12 @@ def perturb(  # noqa: C901
 
     if not objective.built:
         objective.build(eq, verbose=verbose)
-    constraints = maybe_add_self_consistency(eq, constraints)
-    constraint = ObjectiveFunction(constraints)
-    constraint.build(verbose=verbose)
+    if isinstance(objective, LinearConstraintProjection):
+        constraints = objective._constraint
+    else:
+        constraints = maybe_add_self_consistency(eq, constraints)
+        constraint = ObjectiveFunction(constraints)
+        constraint.build(verbose=verbose)
 
     warnif(
         objective.dim_f < (objective.dim_x - constraint.dim_f),
@@ -186,24 +197,39 @@ def perturb(  # noqa: C901
     if verbose > 0:
         print("Factorizing linear constraints")
     timer.start("linear constraint factorize")
-    xp, _, _, Z, D, unfixed_idx, project, recover, *_ = factorize_linear_constraints(
-        objective, constraint
-    )
+    if isinstance(objective, LinearConstraintProjection):
+        xp, Z, D, unfixed_idx, project, recover = (
+            objective._xp,
+            objective._Z,
+            objective._D,
+            objective._unfixed_idx,
+            objective._project,
+            objective._recover,
+        )
+    else:
+        xp, _, _, Z, D, unfixed_idx, project, recover, *_ = (
+            factorize_linear_constraints(objective, constraint)
+        )
     timer.stop("linear constraint factorize")
     if verbose > 1:
         timer.disp("linear constraint factorize")
 
     # state vector
-    x = objective.x(eq)
-    x_reduced = project(x)
-    x_norm = jnp.linalg.norm(x_reduced)
+    if isinstance(objective, LinearConstraintProjection):
+        x_reduced = objective.x(eq)
+        x = recover(x_reduced)
+        x_norm = jnp.linalg.norm(x_reduced)
+    else:
+        x = objective.x(eq)
+        x_reduced = project(x)
+        x_norm = jnp.linalg.norm(x_reduced)
 
     # perturbation vectors
     dx1_reduced = jnp.zeros_like(x_reduced)
     dx2_reduced = jnp.zeros_like(x_reduced)
     dx3_reduced = jnp.zeros_like(x_reduced)
 
-    xz = objective.unpack_state(jnp.zeros_like(x), False)[0]
+    xz = objective.unpack_state(jnp.zeros(objective.dim_x), False)[0]
     # tangent vectors
     tangents = jnp.zeros((eq.dim_x,))
     if "Rb_lmn" in deltas.keys():
@@ -384,12 +410,19 @@ def perturb(  # noqa: C901
     # update perturbation attributes
     for key, value in deltas.items():
         setattr(eq_new, key, getattr(eq_new, key) + value)
-    for con in constraints:
-        if hasattr(con, "update_target"):
-            con.update_target(eq_new)
-    constraint = ObjectiveFunction(constraints)
-    constraint.build(verbose=verbose)
-    _, _, _, _, _, _, _, recover = factorize_linear_constraints(objective, constraint)
+
+    if isinstance(objective, LinearConstraintProjection):
+        objective.update_constraint_target(eq_new)
+        recover = objective._recover
+    else:
+        for con in constraints:
+            if hasattr(con, "update_target"):
+                con.update_target(eq_new)
+        constraint = ObjectiveFunction(constraints)
+        constraint.build(verbose=verbose)
+        _, _, _, _, _, _, _, recover = factorize_linear_constraints(
+            objective, constraint
+        )
 
     # update other attributes
     dx_reduced = dx1_reduced + dx2_reduced + dx3_reduced

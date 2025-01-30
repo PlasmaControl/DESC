@@ -37,7 +37,7 @@ from desc.objectives import (
     get_fixed_boundary_constraints,
 )
 from desc.optimizable import Optimizable, optimizable_parameter
-from desc.optimize import Optimizer
+from desc.optimize import LinearConstraintProjection, Optimizer
 from desc.perturbations import perturb
 from desc.profiles import HermiteSplineProfile, PowerSeriesProfile, SplineProfile
 from desc.transform import Transform
@@ -2140,13 +2140,17 @@ class Equilibrium(IOAble, Optimizable):
             `OptimizeResult` for a description of other attributes.
 
         """
-        if constraints is None:
+        if constraints is None and not isinstance(
+            objective, LinearConstraintProjection
+        ):
             constraints = get_fixed_boundary_constraints(eq=self)
         if not isinstance(objective, ObjectiveFunction):
             objective = get_equilibrium_objective(eq=self, mode=objective)
         if not isinstance(optimizer, Optimizer):
             optimizer = Optimizer(optimizer)
-        if not isinstance(constraints, (list, tuple)):
+        if not isinstance(constraints, (list, tuple)) and not isinstance(
+            objective, LinearConstraintProjection
+        ):
             constraints = tuple([constraints])
 
         warnif(

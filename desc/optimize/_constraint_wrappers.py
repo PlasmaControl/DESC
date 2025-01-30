@@ -4,7 +4,7 @@ import functools
 
 import numpy as np
 
-from desc.backend import jit, jnp
+from desc.backend import jit, jnp, put
 from desc.batching import batched_vectorize
 from desc.objectives import (
     BoundaryRSelfConsistency,
@@ -13,8 +13,8 @@ from desc.objectives import (
     get_fixed_boundary_constraints,
     maybe_add_self_consistency,
 )
-from desc.objectives.utils import factorize_linear_constraints
-from desc.utils import Timer, errorif, get_instance, setdefault
+from desc.objectives.utils import _Project, _Recover, factorize_linear_constraints
+from desc.utils import Index, Timer, errorif, get_instance, setdefault
 
 from .utils import f_where_x
 
@@ -109,7 +109,7 @@ class LinearConstraintProjection(ObjectiveFunction):
             self._project,
             self._recover,
             self._Ainv,
-            self._A_full_nondegenerate,
+            self._A_nondegenerate,
             self._degenerate_idx,  # maybe we need those for b_new
         ) = factorize_linear_constraints(
             self._objective,
@@ -173,21 +173,72 @@ class LinearConstraintProjection(ObjectiveFunction):
             if hasattr(con, "update_target"):
                 con.update_target(eq_new)
 
-        x0 = jnp.zeros(self._constraint.dim_x)
-        b_new = -self._constraint.compute_scaled_error(x0)
-        b_new = np.delete(b_new, self._degenerate_idx)
-        xp_new = jnp.zeros_like(self._xp)
-        fixed_idx = np.setdiff1d(np.arange(self._xp.size), self._unfixed_idx)
-        xp_new[fixed_idx] = b_new[fixed_idx]
-        xp_new[self._unfixed_idx] = self._Ainv @ (
-            b_new - self._A_full_nondegenerate[:, fixed_idx] @ xp_new[fixed_idx]
-        )
-        from desc.objectives.utils import _Project, _Recover
+        dim_x = self._objective.dim_x
+        # particular solution to Ax=b
+        xp = jnp.zeros(dim_x)
+        x0 = jnp.zeros(dim_x)
+        A = self._A_nondegenerate
+        b = -self._constraint.compute_scaled_error(x0)
+        b = np.delete(b, self._degenerate_idx)
 
-        self._project = _Project(self._Z, self._D, xp_new, self._unfixed_idx)
-        self._recover = _Recover(
-            self._Z, self._D, xp_new, self._unfixed_idx, self._objective.dim_x
-        )
+        # There is probably a more clever way of doing this, but for now we just
+        # recompute the while loop in factorize_linear_constraints
+        # will store the global index of the unfixed rows, idx
+        indices_row = np.arange(A.shape[0])
+        indices_idx = np.arange(A.shape[1])
+
+        # while loop has problems updating JAX arrays, convert them to numpy arrays
+        A = np.array(A)
+        b = np.array(b)
+        while len(np.where(np.count_nonzero(A, axis=1) == 1)[0]):
+            # fixed just means there is a single element in A, so A_ij*x_j = b_i
+            fixed_rows = np.where(np.count_nonzero(A, axis=1) == 1)[0]
+            # indices of x that are fixed = cols of A where rows have 1 nonzero val.
+            _, fixed_idx = np.where(A[fixed_rows])
+            unfixed_rows = np.setdiff1d(np.arange(A.shape[0]), fixed_rows)
+            unfixed_idx = np.setdiff1d(np.arange(A.shape[1]), fixed_idx)
+
+            # find the global index of the fixed variables of this iteration
+            global_fixed_idx = indices_idx[fixed_idx]
+            # find the global index of the unfixed variables by removing the fixed
+            # variables from the indices arrays.
+            indices_idx = np.delete(indices_idx, fixed_idx)  # fixed indices are removed
+            indices_row = np.delete(indices_row, fixed_rows)  # fixed rows are removed
+
+            if len(fixed_rows):
+                # something like 0.5 x1 = 2 is the same as x1 = 4
+                b = put(b, fixed_rows, b[fixed_rows] / np.sum(A[fixed_rows], axis=1))
+                A = put(
+                    A,
+                    Index[fixed_rows, :],
+                    A[fixed_rows] / np.sum(A[fixed_rows], axis=1)[:, None],
+                )
+                xp = put(xp, global_fixed_idx, b[fixed_rows])
+                # Some values might be fixed, but they still show up in other
+                # constraints this is where the fixed cols have >1 nonzero val.
+                # For fixed variables, we delete that row and col of A, but that means
+                # we need to subtract the fixed value from b so that the equation is
+                # balanced.
+                # e.g., 2 x1 + 3 x2 + 1 x3 = 4 ; 4 x1 = 2
+                # combining gives 3 x2 + 1 x3 = 3, with x1 now removed
+                b = put(
+                    b,
+                    unfixed_rows,
+                    b[unfixed_rows] - A[unfixed_rows][:, fixed_idx] @ b[fixed_rows],
+                )
+            A = A[unfixed_rows][:, unfixed_idx]
+            b = b[unfixed_rows]
+
+        unfixed_idx = indices_idx
+        fixed_idx = np.delete(np.arange(xp.size), unfixed_idx)
+
+        xp = put(xp, unfixed_idx, self._Ainv @ b)
+        xp = put(xp, fixed_idx, ((1 / self._D) * xp)[fixed_idx])
+        # cast to jnp arrays
+        self._xp = jnp.asarray(xp)
+
+        self._project = _Project(self._Z, self._D, self._xp, self._unfixed_idx)
+        self._recover = _Recover(self._Z, self._D, self._xp, self._unfixed_idx, dim_x)
 
     def compute_unscaled(self, x_reduced, constants=None):
         """Compute the unscaled form of the objective function.
@@ -790,18 +841,15 @@ class ProximalProjection(ObjectiveFunction):
             x_dict = x_list[self._eq_idx]
             x_dict_old = x_list_old[self._eq_idx]
             deltas = {str(key): x_dict[key] - x_dict_old[key] for key in x_dict}
-            # Add some logic to perturb and solve to take single
-            # LinearConstraintProjection!
-            self._eq_solve_objective.update_constraint_target(self._eq)
+            # We pass in the LinearConstraintProjection object to skip some redundant
+            # computations in the perturb and solve methods
             self._eq = self._eq.perturb(
-                objective=self._constraint,
-                constraints=self._linear_constraints,
+                objective=self._eq_solve_objective,
                 deltas=deltas,
                 **self._perturb_options,
             )
             self._eq.solve(
-                objective=self._constraint,
-                constraints=self._linear_constraints,
+                objective=self._eq_solve_objective,
                 **self._solve_options,
             )
             xeq = self._eq.pack_params(self._eq.params_dict)
@@ -824,9 +872,7 @@ class ProximalProjection(ObjectiveFunction):
             # reset to last good params
             self._eq.params_dict = self.history[-1][self._eq_idx]
 
-        for con in self._linear_constraints:
-            if hasattr(con, "update_target"):
-                con.update_target(self._eq)
+        self._eq_solve_objective.update_constraint_target(self._eq)
 
         return xopt, xeq
 

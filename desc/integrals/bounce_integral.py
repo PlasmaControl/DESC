@@ -198,7 +198,8 @@ class Bounce2D(Bounce):
         ``X`` and ``Y`` are preferably rounded down to powers of two.
     Y_B : int
         Desired resolution for algorithm to compute bounce points.
-        Default is double ``Y``.
+        Default is double ``Y``. This number will be rounded to an integer
+        multiple of NFP.
     alpha : jnp.ndarray
         Shape (num alpha, ).
         Starting field line poloidal labels.
@@ -350,7 +351,6 @@ class Bounce2D(Bounce):
                 Y_B,
                 self._m,
                 self._m_modes,
-                self._n_modes,
                 self._NFP,
                 check=check,
             )

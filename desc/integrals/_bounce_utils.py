@@ -4,7 +4,7 @@ import numpy as np
 from interpax import CubicSpline, PPoly
 from matplotlib import pyplot as plt
 
-from desc.backend import dct, jnp
+from desc.backend import dct, ifft, jnp
 from desc.integrals._interp_utils import (
     _irfft2_non_uniform,
     cheb_from_dct,
@@ -699,6 +699,7 @@ def chebyshev(T, f, Y, m, m_modes, n_modes, NFP=1):
         enumerates field line ``alpha[i]``. Each Chebyshev series approximates
         θ over one toroidal transit.
     f : jnp.ndarray
+        Shape broadcasts with (num rho, 1, n_modes.size, m_modes.size).
         Fourier transform of f(θ, ζ) as returned by ``Bounce2D.fourier``.
     Y : int
         Chebyshev spectral resolution for ``f``. Preferably power of 2.
@@ -729,10 +730,10 @@ def chebyshev(T, f, Y, m, m_modes, n_modes, NFP=1):
     # mn|𝛉||𝛇| > mn|𝛇| + m|𝛉||𝛇| or equivalently n|𝛉| > n + |𝛉|.
 
     zeta = cheb_pts(Y, domain=T.domain)
-    # Shape broadcasts with (num rho, Y, m).
+    # Shape broadcasts with (num rho, Y, m_modes.size).
     f = ifft_non_uniform(
         zeta[:, jnp.newaxis],
-        f,  # Shape broadcasts with (num rho, 1, n, m).
+        f,
         _modes=n_modes,
         domain=(0, 2 * jnp.pi / NFP),
         axis=-2,
@@ -743,7 +744,7 @@ def chebyshev(T, f, Y, m, m_modes, n_modes, NFP=1):
     return f
 
 
-def cubic_spline(T, f, Y, m, m_modes, n_modes, NFP=1, check=False):
+def cubic_spline(T, f, Y, m, m_modes, NFP=1, check=False):
     """Compute cubic spline of ``f`` on field lines using fast transforms.
 
     Parameters
@@ -754,15 +755,15 @@ def cubic_spline(T, f, Y, m, m_modes, n_modes, NFP=1, check=False):
         enumerates field line ``alpha[i]``. Each Chebyshev series approximates
         θ over one toroidal transit.
     f : jnp.ndarray
+        Shape broadcasts with (num rho, 1, n_modes.size, m_modes.size).
         Fourier transform of f(θ, ζ) as returned by ``Bounce2D.fourier``.
     Y : int
-        Number of knots per transit to interpolate ``f``.
+        Number of knots per toroidal transit to interpolate ``f``.
+        This number will be rounded to an integer multiple of NFP.
     m : int
         Fourier resolution in poloidal direction; num theta.
     m_modes : jnp.ndarray
         Real FFT Fourier modes in poloidal direction.
-    n_modes : jnp.ndarray
-        FFT Fourier modes in toroidal direction.
     NFP : int
         Number of field periods.
     check : bool
@@ -782,38 +783,29 @@ def cubic_spline(T, f, Y, m, m_modes, n_modes, NFP=1, check=False):
         Knots of spline ``f``.
 
     """
-    # TODO: Round Y down to multiple of NFP.
-    zeta = jnp.linspace(-1, 1, Y, endpoint=False)
-    # θ at uniform ζ on field lines.
-    # TODO: add axis for NFP
-    theta = idct_non_uniform(zeta, T.cheb[..., jnp.newaxis, :], T.Y)
-    zeta = bijection_from_disc(zeta, T.domain[0], T.domain[1])
+    num_zeta = max(1, Y // NFP)
+    Y = num_zeta * NFP
+    x = jnp.linspace(-1, 1, Y, endpoint=False)
+    zeta = jnp.ravel(
+        bijection_from_disc(x, T.domain[0], T.domain[1])
+        + (T.domain[1] - T.domain[0]) * jnp.arange(T.X)[:, jnp.newaxis]
+    )
 
-    # f at uniform ζ on field lines.
     # Let m, n denote the poloidal and toroidal Fourier resolution. We need to
     # compute a set of 2D Fourier series each on uniform (non-uniform) in ζ (θ)
     # tensor product grids of size
     #   |𝛉|×|𝛇| where |𝛉| = num alpha × num transit × NFP and |𝛇| = Y/NFP.
     # Partial summation via FFT is more efficient than direct evaluation when
     # mn|𝛉||𝛇| > m log(|𝛇|) |𝛇| + m|𝛉||𝛇| or equivalently n|𝛉| > log|𝛇| + |𝛉|.
-    # TODO: Partial summation.
-    # TODO: ifft zeta (upsample to resolution Y//NFP) zeta points,
-    #  then call irfft non uniform and ravel
-    f = flatten_matrix(
-        _irfft2_non_uniform(
-            zeta,
-            theta,
-            f[..., jnp.newaxis, :, :],
-            n0=n_modes.size,
-            n1=m,
-            domain0=(0, 2 * jnp.pi / NFP),
-        )
-    )
-    zeta = jnp.ravel(
-        zeta + (T.domain[1] - T.domain[0]) * jnp.arange(T.X)[:, jnp.newaxis]
-    )
 
-    f = CubicSpline(x=zeta, y=f, axis=-1, check=check).c
+    f = ifft(f, num_zeta, axis=-2, norm="forward")
+    # θ at uniform ζ on field lines
+    theta = idct_non_uniform(x, T.cheb[..., jnp.newaxis, :], T.Y)
+    theta = theta.reshape(*theta.shape[:-1], NFP, num_zeta)
+    # Shape broadcasts with (num alpha, num rho, num transit, NFP, num_zeta).
+    f = irfft_non_uniform(theta, f[..., jnp.newaxis, :, :], m, _modes=m_modes)
+
+    f = CubicSpline(x=zeta, y=f.reshape(*f.shape[:-3], -1), axis=-1, check=check).c
     f = jnp.moveaxis(f, source=(0, 1), destination=(-1, -2))
     assert f.shape[-2:] == (T.X * Y - 1, 4)
     return f, zeta

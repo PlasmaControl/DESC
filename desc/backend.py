@@ -82,6 +82,29 @@ if use_jax:  # noqa: C901
         treedef_is_leaf,
     )
 
+    # TODO: update this when min JAX version >= 0.4.35
+    jax_vs = jaxlib.__version__.strip().split(".")
+    jax_version = float(jax_vs[1]) + float(jax_vs[2]) / 1e2
+    if jax_version >= 4.35:
+
+        def pure_callback(func, result_shape_dtype, *args, vectorized=False, **kwargs):
+            """Wrapper for jax.pure_callback for versions >=0.4.35."""
+            return jax.pure_callback(
+                func,
+                result_shape_dtype,
+                *args,
+                vmap_method="expand_dims" if vectorized else "sequential",
+                **kwargs,
+            )
+
+    else:
+
+        def pure_callback(func, result_shape_dtype, *args, vectorized=False, **kwargs):
+            """Wrapper for jax.pure_callback for versions <0.4.35."""
+            return jax.pure_callback(
+                func, result_shape_dtype, *args, vectorized=vectorized, **kwargs
+            )
+
     if hasattr(jnp, "trapezoid"):
         trapezoid = jnp.trapezoid  # for JAX 0.4.26 and later
     elif hasattr(jax.scipy, "integrate"):

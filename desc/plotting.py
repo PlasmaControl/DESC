@@ -2717,12 +2717,12 @@ def plot_boozer_modes(  # noqa: C901
 
     grid = LinearGrid(M=2 * eq.M_grid, N=2 * eq.N_grid, NFP=eq.NFP, rho=rho)
     transforms = get_transforms(
-        "|B|_mn", obj=eq, grid=grid, M_booz=M_booz, N_booz=N_booz
+        "|B|_mn_B", obj=eq, grid=grid, M_booz=M_booz, N_booz=N_booz
     )
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        data = eq.compute("|B|_mn", grid=grid, transforms=transforms)
-    B_mn = data["|B|_mn"].reshape((len(rho), -1))
+        data = eq.compute("|B|_mn_B", grid=grid, transforms=transforms)
+    B_mn = data["|B|_mn_B"].reshape((len(rho), -1))
     B_mn = np.atleast_2d(matrix @ B_mn.T).T
 
     zidx = np.where((modes[:, 1:] == np.array([[0, 0]])).all(axis=1))[0]
@@ -3115,9 +3115,9 @@ def plot_qs_error(  # noqa: 16 fxn too complex
     grid = LinearGrid(M=2 * eq.M_grid, N=2 * eq.N_grid, NFP=eq.NFP, rho=rho)
     names = []
     if fB:
-        names += ["|B|_mn"]
+        names += ["|B|_mn_B"]
         transforms = get_transforms(
-            "|B|_mn", obj=eq, grid=grid, M_booz=M_booz, N_booz=N_booz
+            "|B|_mn_B", obj=eq, grid=grid, M_booz=M_booz, N_booz=N_booz
         )
         matrix, modes, idx = ptolemy_linear_transform(
             transforms["B"].basis.modes,
@@ -3138,7 +3138,7 @@ def plot_qs_error(  # noqa: 16 fxn too complex
         )
 
     if fB:
-        B_mn = data["|B|_mn"].reshape((len(rho), -1))
+        B_mn = data["|B|_mn_B"].reshape((len(rho), -1))
         B_mn = (matrix @ B_mn.T).T
         f_B = np.sqrt(np.sum(B_mn[:, idx] ** 2, axis=-1)) / np.sqrt(
             np.sum(B_mn**2, axis=-1)

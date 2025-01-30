@@ -1142,14 +1142,15 @@ def test_boozer_transform_multiple_surfaces():
     grid1 = LinearGrid(rho=0.6, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
     grid2 = LinearGrid(rho=0.8, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
     grid3 = LinearGrid(rho=np.array([0.6, 0.8]), M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
-    data1 = eq.compute("|B|_mn", grid=grid1, M_booz=eq.M, N_booz=eq.N)
-    data2 = eq.compute("|B|_mn", grid=grid2, M_booz=eq.M, N_booz=eq.N)
-    data3 = eq.compute("|B|_mn", grid=grid3, M_booz=eq.M, N_booz=eq.N)
+    with pytest.warns(DeprecationWarning):  # |B|_mn is a deprecated name
+        data1 = eq.compute("|B|_mn", grid=grid1, M_booz=eq.M, N_booz=eq.N)
+    data2 = eq.compute("|B|_mn_B", grid=grid2, M_booz=eq.M, N_booz=eq.N)
+    data3 = eq.compute("|B|_mn_B", grid=grid3, M_booz=eq.M, N_booz=eq.N)
     np.testing.assert_allclose(
-        data1["|B|_mn"], data3["|B|_mn"].reshape((grid3.num_rho, -1))[0]
+        data1["|B|_mn_B"], data3["|B|_mn_B"].reshape((grid3.num_rho, -1))[0]
     )
     np.testing.assert_allclose(
-        data2["|B|_mn"], data3["|B|_mn"].reshape((grid3.num_rho, -1))[1]
+        data2["|B|_mn_B"], data3["|B|_mn_B"].reshape((grid3.num_rho, -1))[1]
     )
 
 

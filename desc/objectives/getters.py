@@ -377,7 +377,8 @@ def get_parallel_forcebalance(eq, num_device, check_device=True):
             # kind of experimental way of set giving
             # less grid points to inner part, but seems
             # to make transforms way slower
-            M=int(eq.M_grid * i / num_device),
+            # M=int(eq.M_grid * i / num_device), # noqa: E800
+            M=eq.M_grid,
             N=eq.N_grid,
             NFP=eq.NFP,
         )

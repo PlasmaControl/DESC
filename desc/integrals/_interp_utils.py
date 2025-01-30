@@ -139,9 +139,9 @@ def irfft_non_uniform(xq, a, n, domain=(0, 2 * jnp.pi), axis=-1, _modes=None):
     axis : int
         Axis along which to transform.
     _modes : jnp.ndarray
-        If supplied, just builds the Vandermonde array and computes the
-        dot product. Assumes the Fourier coefficients have the correct
-        factors for the DC and Nyquist frequency. Assumes ``axis=-1``.
+        If supplied, just builds the Vandermonde array and computes the dot product.
+        Assumes the Fourier coefficients have the correct factors for the DC and
+        Nyquist frequency. Assumes ``axis=-1``.
 
     Returns
     -------
@@ -175,6 +175,8 @@ def ifft_non_uniform(xq, a, domain=(0, 2 * jnp.pi), axis=-1, _modes=None):
         Domain over which samples were taken.
     axis : int
         Axis along which to transform.
+    _modes : jnp.ndarray
+        Supply to avoid computing the modes.
 
     Returns
     -------

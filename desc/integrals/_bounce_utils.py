@@ -505,7 +505,7 @@ def interp_to_argmin(h, points, knots, g, dg_dz, method="cubic"):
     ).squeeze(axis=-1)
 
 
-def interp_fft_to_argmin(T, h, points, knots, g, dg_dz, n0, n1, NFP=1):
+def interp_fft_to_argmin(T, h, points, knots, g, dg_dz, m, n, NFP=1):
     """Interpolate ``h`` to the deepest point of ``g`` between ``z1`` and ``z2``.
 
     Let E = {ζ ∣ ζ₁ < ζ < ζ₂} and A ∈ argmin_E g(ζ). Returns h(A).
@@ -518,7 +518,7 @@ def interp_fft_to_argmin(T, h, points, knots, g, dg_dz, n0, n1, NFP=1):
         enumerates field line ``alpha[i]``. Each Chebyshev series approximates
         θ over one toroidal transit.
     h : jnp.ndarray
-        Shape (..., 1, num theta, num zeta // 2 + 1)
+        Shape (..., 1, num zeta, num theta // 2 + 1)
         Fourier coefficients as returned by ``Bounce2D.fourier``.
     points : jnp.ndarray
         Shape (..., num well).
@@ -537,9 +537,9 @@ def interp_fft_to_argmin(T, h, points, knots, g, dg_dz, n0, n1, NFP=1):
         Polynomial coefficients of the spline of ∂g/∂z in local power basis.
         Last axis enumerates the coefficients of power series. Second to
         last axis enumerates the polynomials that compose a particular spline.
-    n0 : int
+    m : int
         Fourier resolution in poloidal direction; num theta.
-    n1 : int
+    n : int
         Fourier resolution in toroidal direction; num zeta.
     NFP : int
         Number of field periods.
@@ -570,7 +570,7 @@ def interp_fft_to_argmin(T, h, points, knots, g, dg_dz, n0, n1, NFP=1):
     argmin = jnp.argmin(where, axis=-1, keepdims=True)
 
     h = _irfft2_non_uniform(
-        T.eval1d(ext), ext, h, n0, n1, domain1=(0, 2 * jnp.pi / NFP), axes=(-1, -2)
+        ext, T.eval1d(ext), h, n0=n, n1=m, domain0=(0, 2 * jnp.pi / NFP)
     )
     if z1.ndim == h.ndim + 1:
         h = h[jnp.newaxis]  # to broadcast with num pitch axis
@@ -728,11 +728,11 @@ def chebyshev(T, f, Y, m, m_modes, n_modes, NFP=1):
     # Partial summation is more efficient than direct evaluation when
     # mn|𝛉||𝛇| > mn|𝛇| + m|𝛉||𝛇| or equivalently n|𝛉| > n + |𝛉|.
 
+    zeta = cheb_pts(Y, domain=T.domain)
     # Shape broadcasts with (num rho, Y, m).
     f = ifft_non_uniform(
-        cheb_pts(Y, domain=T.domain)[:, jnp.newaxis],
-        # Shape broadcasts with (num rho, 1, n, m).
-        f,
+        zeta[:, jnp.newaxis],
+        f,  # Shape broadcasts with (num rho, 1, n, m).
         _modes=n_modes,
         domain=(0, 2 * jnp.pi / NFP),
         axis=-2,
@@ -743,7 +743,7 @@ def chebyshev(T, f, Y, m, m_modes, n_modes, NFP=1):
     return f
 
 
-def cubic_spline(T, f, Y, n0, n1, NFP=1, check=False):
+def cubic_spline(T, f, Y, m, m_modes, n_modes, NFP=1, check=False):
     """Compute cubic spline of ``f`` on field lines using fast transforms.
 
     Parameters
@@ -757,10 +757,12 @@ def cubic_spline(T, f, Y, n0, n1, NFP=1, check=False):
         Fourier transform of f(θ, ζ) as returned by ``Bounce2D.fourier``.
     Y : int
         Number of knots per transit to interpolate ``f``.
-    n0 : int
+    m : int
         Fourier resolution in poloidal direction; num theta.
-    n1 : int
-        Fourier resolution in toroidal direction; num zeta.
+    m_modes : jnp.ndarray
+        Real FFT Fourier modes in poloidal direction.
+    n_modes : jnp.ndarray
+        FFT Fourier modes in toroidal direction.
     NFP : int
         Number of field periods.
     check : bool
@@ -799,13 +801,12 @@ def cubic_spline(T, f, Y, n0, n1, NFP=1, check=False):
     #  then call irfft non uniform and ravel
     f = flatten_matrix(
         _irfft2_non_uniform(
-            theta,
             zeta,
+            theta,
             f[..., jnp.newaxis, :, :],
-            n0,
-            n1,
-            domain1=(0, 2 * jnp.pi / NFP),
-            axes=(-1, -2),
+            n0=n_modes.size,
+            n1=m,
+            domain0=(0, 2 * jnp.pi / NFP),
         )
     )
     zeta = jnp.ravel(

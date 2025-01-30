@@ -225,7 +225,7 @@ class Bounce2D(Bounce):
         Optional. Reference length scale for normalization.
     is_reshaped : bool
         Whether the arrays in ``data`` are already reshaped to the expected form of
-        shape (..., num theta, num zeta) or (num rho, num theta, num zeta).
+        shape (..., num zeta, num theta) or (num rho, num zeta, num theta).
         This option can be used to iteratively compute bounce integrals one flux
         surface at a time, reducing memory usage. To do so, set to true and provide
         only those chunks of the reshaped data.
@@ -349,7 +349,8 @@ class Bounce2D(Bounce):
                 self._c["|B|"],
                 Y_B,
                 self._m,
-                self._n,
+                self._m_modes,
+                self._n_modes,
                 self._NFP,
                 check=check,
             )
@@ -378,11 +379,11 @@ class Bounce2D(Bounce):
         Returns
         -------
         f : jnp.ndarray
-            Shape (num rho, num theta, num zeta).
+            Shape (num rho, num zeta, num theta).
             Reshaped data which may be given to ``integrate``.
 
         """
-        return grid.meshgrid_reshape(f, "rtz")
+        return grid.meshgrid_reshape(f, "rzt")
 
     @staticmethod
     def fourier(f):
@@ -391,7 +392,7 @@ class Bounce2D(Bounce):
         Parameters
         ----------
         f : jnp.ndarray
-            Shape (..., num theta, num zeta).
+            Shape (..., num zeta, num theta).
             Real scalar-valued periodic function evaluated on tensor-product grid
             with uniformly spaced nodes (θ, ζ) ∈ [0, 2π) × [0, 2π/NFP).
 
@@ -402,7 +403,7 @@ class Bounce2D(Bounce):
             Complex coefficients of 2D real FFT of ``f``.
 
         """
-        if (f.shape[-2] % 2) == 0:
+        if (f.shape[-1] % 2) == 0:
             i = (0, -1)
         else:
             i = 0
@@ -412,8 +413,7 @@ class Bounce2D(Bounce):
         # Hence, it more efficient to compute the real transform in the poloidal angle.
         # Likewise to perform partial summation in this application, the real transform
         # must be done in the poloidal angle and the complex transform in the toroidal.
-        a = rfft2(f, norm="forward", axes=(-1, -2)).at[..., i, :].divide(2) * 2
-        a = jnp.swapaxes(a, -1, -2)
+        a = rfft2(f, norm="forward").at[..., i].divide(2) * 2
         return a[..., jnp.newaxis, :, :]
 
     # TODO (#1034): Pass in the previous
@@ -630,7 +630,7 @@ class Bounce2D(Bounce):
             ``pitch_inv[ρ]`` where in the latter the labels are interpreted
             as the indices that correspond to that field line.
         data : dict[str, jnp.ndarray]
-            Shape (num rho, num theta, num zeta).
+            Shape (num rho, num zeta, num theta).
             Real scalar-valued periodic functions in (θ, ζ) ∈ [0, 2π) × [0, 2π/NFP)
             evaluated on the ``grid`` supplied to construct this object.
             Use the method ``Bounce2D.reshape`` to reshape the data into the
@@ -742,7 +742,7 @@ class Bounce2D(Bounce):
         Parameters
         ----------
         f : jnp.ndarray
-            Shape (num rho, num theta, num zeta).
+            Shape (num rho, num zeta, num theta).
             Real scalar-valued periodic function in (θ, ζ) ∈ [0, 2π) × [0, 2π/NFP)
             evaluated on the ``grid`` supplied to construct this object.
             Use the method ``Bounce2D.reshape`` to reshape the data into the
@@ -777,9 +777,9 @@ class Bounce2D(Bounce):
                 self._c["knots"],
                 self._c["B(z)"],
                 polyder_vec(self._c["B(z)"]),
-                self._m,
-                self._n,
-                self._NFP,
+                m=self._m,
+                n=self._n,
+                NFP=self._NFP,
             )
         )
 
@@ -822,11 +822,11 @@ class Bounce2D(Bounce):
         # resolution. Partial summation is more efficient than direct evaluation when
         # mn|𝛉||𝛇| > mn|𝛇| + m|𝛉||𝛇| or equivalently n|𝛉| > n + |𝛉|.
 
+        zeta = bijection_from_disc(x, 0, 2 * jnp.pi)
         # Shape broadcasts with (num rho, num zeta, m)
         par_sum = ifft_non_uniform(
-            bijection_from_disc(x, 0, 2 * jnp.pi)[:, jnp.newaxis],
-            # Shape broadcasts with (num rho, 1, n, m).
-            self._c["B^zeta"],
+            zeta[:, jnp.newaxis],
+            self._c["B^zeta"],  # Shape broadcasts with (num rho, 1, n, m).
             _modes=self._n_modes,
             domain=(0, 2 * jnp.pi / self._NFP),
             axis=-2,

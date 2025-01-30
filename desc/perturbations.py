@@ -420,7 +420,7 @@ def perturb(  # noqa: C901
                 con.update_target(eq_new)
         constraint = ObjectiveFunction(constraints)
         constraint.build(verbose=verbose)
-        _, _, _, _, _, _, _, recover = factorize_linear_constraints(
+        _, _, _, _, _, _, _, recover, *_ = factorize_linear_constraints(
             objective, constraint
         )
 

@@ -374,13 +374,6 @@ class BoundaryError(_Objective):
     loop : bool
         If True, evaluate integral using loops, as opposed to vmap. Slower, but uses
         less memory.
-    sz : int
-        Hyperparameter for the singular integration scheme.
-        ``sz`` is roughly equal to the size of the local singular grid with
-        respect to the global grid. More precisely the local singular grid
-        is an ``s`` × ``sz`` subset of the full domain (θ,ζ) ∈ [0, 2π)² of
-        ``source_grid``. That is a subset of
-        ``source_grid.num_theta`` × ``source_grid.num_zeta*source_grid.NFP``.
 
     """
 
@@ -441,7 +434,7 @@ class BoundaryError(_Objective):
         self._eval_grid = eval_grid
         self._eval_grid_is_source_grid = source_grid == eval_grid
         self._st = s
-        self._sz = sz
+        self._sz = kwargs.get("sz", s)
         self._q = q
         self._field = field
         self._field_grid = field_grid

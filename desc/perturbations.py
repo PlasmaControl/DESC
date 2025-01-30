@@ -585,7 +585,7 @@ def optimal_perturb(  # noqa: C901
     constraint = ObjectiveFunction(constraints)
     constraint.build(verbose=verbose)
 
-    _, _, _, Z, D, unfixed_idx, project, recover = factorize_linear_constraints(
+    _, _, _, Z, D, unfixed_idx, project, recover, *_ = factorize_linear_constraints(
         objective_f, constraint
     )
 

@@ -351,6 +351,7 @@ class Bounce2D(Bounce):
                 Y_B,
                 self._m,
                 self._m_modes,
+                self._n_modes,
                 self._NFP,
                 check=check,
             )

@@ -340,7 +340,7 @@ def maybe_add_self_consistency(thing, constraints):
 
 
 def get_parallel_forcebalance(eq, num_device, use_jit=True, check_device=True):
-    """Get a list of ForceBalance objectives for parallel computing.
+    """Get an ObjectiveFunction for parallel computing ForceBalance.
 
     Parameters
     ----------
@@ -351,8 +351,11 @@ def get_parallel_forcebalance(eq, num_device, use_jit=True, check_device=True):
 
     Returns
     -------
-    objs : tuple of ForceBalance
-        A list of the linear constraints used in fixed-boundary problems.
+    obj : ObjectiveFunction
+        An objective function with force balance objectives. Each objective is
+        computed on a separate device. The objective function is built with
+        `use_jit_wrapper=False` to make it compatible with JAX parallel computing.
+        Each objective will have a grid with same number of flux surfaces.
     """
     from desc.backend import desc_config, jax, jnp
     from desc.grid import LinearGrid
@@ -388,4 +391,6 @@ def get_parallel_forcebalance(eq, num_device, use_jit=True, check_device=True):
         obj = ForceBalance(eq, grid=grid)
         obj.build(use_jit=use_jit)
         objs += (obj,)
-    return objs
+    obj = ObjectiveFunction(objs)
+    obj.build(use_jit_wrapper=False)
+    return obj

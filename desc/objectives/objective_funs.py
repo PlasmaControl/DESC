@@ -293,7 +293,7 @@ class ObjectiveFunction(IOAble):
                 pass
 
     @execute_on_cpu
-    def build(self, use_jit=None, verbose=1):
+    def build(self, use_jit=None, use_jit_wrapper=True, verbose=1):
         """Build the objective.
 
         Parameters
@@ -306,6 +306,8 @@ class ObjectiveFunction(IOAble):
         """
         if use_jit is not None:
             self._use_jit = use_jit
+            if use_jit is False:
+                use_jit_wrapper = False
         timer = Timer()
         timer.start("Objective build")
 
@@ -369,7 +371,7 @@ class ObjectiveFunction(IOAble):
                     if obj._jac_chunk_size is None:
                         obj._jac_chunk_size = self._jac_chunk_size
 
-        if not self.use_jit:
+        if not use_jit_wrapper:
             self._unjit()
 
         self._built = True

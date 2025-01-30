@@ -79,12 +79,14 @@
    :maxdepth: 1
    :caption: Developer Guides
 
-   notebooks/dev_guide/getting-started-eq-solve.ipynb
-   notebooks/dev_guide/grid.ipynb
-   adding_compute_funs
-   adding_objectives
-   adding_optimizers
-
+   dev_guide/notebooks/getting-started-eq-solve.ipynb
+   dev_guide/notebooks/grid.ipynb
+   dev_guide/adding_compute_funs.rst
+   dev_guide/adding_objectives.rst
+   dev_guide/adding_optimizers.rst
+   dev_guide/notebooks/backend.ipynb
+   dev_guide/notebooks/transform.ipynb
+   dev_guide/notebooks/derivatives.ipynb
 
 
 Indices and tables

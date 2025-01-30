@@ -14,8 +14,11 @@ New Features
 - ``desc.objectives.Omnigenity`` is now vectorized and able to optimize multiple surfaces at the same time. Previously it was required to use a different objective for each surface.
 - Adds a new objective ``desc.objectives.MirrorRatio`` for targeting a particular mirror ratio on each flux surface, for either an ``Equilibrium`` or ``OmnigenousField``.
 - Adds the output quantities ``wb`` and ``wp`` to ``VMECIO.save``.
+- Change implementation of Dommaschk potentials to use recursive algorithm and symbolic integration.
 - Changes hessian computation to use chunked ``jacfwd`` and ``jacrev``, allowing ``jac_chunk_size`` to now reduce hessian memory usage as well.
-- - Adds ``Rp_lmn``, ``Zp_lmn`` and ``Lp_lmn`` atributes to the ``Equilibrium`` class. They are optimizable parameters will be used if users tries to solve equilibrium problem with fixed Poincare section boundary condition.
+- Adds an option to ``VMECIO.save`` to specify the grid resolution in real space.
+- Adds a new objective ``desc.objectives.CoilIntegratedCurvature`` for targeting convex coils.
+- Adds ``Rp_lmn``, ``Zp_lmn`` and ``Lp_lmn`` atributes to the ``Equilibrium`` class. They are optimizable parameters will be used if users tries to solve equilibrium problem with fixed Poincare section boundary condition.
 - Adds option to solve equilibrium problem using fixed Poincare cross-section boundary condition. Adds a new helper function to ``desc.objectives.getters`` called ``get_fixed_xsection_constraints`` which will automatically adds the required ``FixSectionR``, ``FixSectionZ`` adn optionally ``FixSectionLambda`` (if the argument ``fix_lambda=True`` default, it doesn't add it if set to ``fix_lambda=False``).
 - Adds ``L_lmn`` and ``L_basis`` atributes to the ``ZernikeRZToroidalSection`` class.
 

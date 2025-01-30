@@ -670,8 +670,8 @@ def _B_piecewise_omni(params, transforms, profiles, data, **kwargs):
     B_max = params["B_max"]
     p = int(10)
     exponent = -1 * (
-        ((zeta_B + t_1 * theta_B - zeta_C) / w_1) ** (2 * p)
-        + ((zeta_B + t_2 * theta_B - theta_C) / w_2) ** (2 * p)
+        ((zeta_B - zeta_C + t_1 * (theta_B - theta_C)) / w_1) ** (2 * p)
+        + ((theta_B - theta_C + t_2 * (zeta_B - zeta_C)) / w_2) ** (2 * p)
     )
 
     B_pwO = B_min + (B_max - B_min) * jnp.exp(exponent)

@@ -339,7 +339,7 @@ def maybe_add_self_consistency(thing, constraints):
     return constraints
 
 
-def get_parallel_forcebalance(eq, num_device, check_device=True):
+def get_parallel_forcebalance(eq, num_device, use_jit=True, check_device=True):
     """Get a list of ForceBalance objectives for parallel computing.
 
     Parameters
@@ -386,6 +386,6 @@ def get_parallel_forcebalance(eq, num_device, check_device=True):
         grid._spacing = jax.device_put(grid.spacing, jax.devices("gpu")[i])
         grid._weights = jax.device_put(grid.weights, jax.devices("gpu")[i])
         obj = ForceBalance(eq, grid=grid)
-        obj.build()
+        obj.build(use_jit=use_jit)
         objs += (obj,)
     return objs

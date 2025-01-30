@@ -18,6 +18,11 @@ New Features
 - Changes hessian computation to use chunked ``jacfwd`` and ``jacrev``, allowing ``jac_chunk_size`` to now reduce hessian memory usage as well.
 - Adds an option to ``VMECIO.save`` to specify the grid resolution in real space.
 - Adds a new objective ``desc.objectives.CoilIntegratedCurvature`` for targeting convex coils.
+- `eq.solve` and `eq.perturb` now accept `LinearConstraintProjection` as objective. This option must be used without any constraints.
+
+Possible Breaking Change
+
+- `perturb` function takes `constraints` as keyword-only argument. With this change, codes like `perturb(eq, objective, constraints, deltas)` will not work properly, you need to change it to `perturb(eq, objective, deltas, constraints=constraints)`.
 
 Bug Fixes
 
@@ -25,6 +30,10 @@ Bug Fixes
 - Fixed I/O bug when saving/loading ``_Profile`` classes that do not have a ``_params`` attribute.
 - Minor bugs described in [#1323](https://github.com/PlasmaControl/DESC/pull/1323).
 - Corrects basis vectors computations made on surface objects [#1175](https://github.com/PlasmaControl/DESC/pull/1175).
+
+Performance Improvements
+
+- `proximal-` optimizers use a single `LinearConstraintProjection` and this makes the optimization faster for high resolution cases where taking the SVD (for null-space and inverse) of constraint matrix takes significant time.
 
 v0.13.0
 -------

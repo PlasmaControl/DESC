@@ -34,8 +34,8 @@ def test_perturbation_orders():
     eq0 = perturb(
         eq,
         objective,
-        constraints,
-        deltas,
+        constraints=constraints,
+        deltas=deltas,
         tr_ratio=tr_ratio,
         order=0,
         verbose=2,
@@ -44,8 +44,8 @@ def test_perturbation_orders():
     eq1 = perturb(
         eq,
         objective,
-        constraints,
-        deltas,
+        constraints=constraints,
+        deltas=deltas,
         tr_ratio=tr_ratio,
         order=1,
         verbose=2,
@@ -54,8 +54,8 @@ def test_perturbation_orders():
     eq2 = perturb(
         eq,
         objective,
-        constraints,
-        deltas,
+        constraints=constraints,
+        deltas=deltas,
         tr_ratio=tr_ratio,
         order=2,
         verbose=2,
@@ -64,8 +64,8 @@ def test_perturbation_orders():
     eq3 = perturb(
         eq,
         objective,
-        constraints,
-        deltas,
+        constraints=constraints,
+        deltas=deltas,
         tr_ratio=tr_ratio,
         order=3,
         verbose=2,
@@ -112,8 +112,8 @@ def test_perturb_with_float_without_error():
     eq = perturb(
         eq,
         objective,
-        constraints,
-        deltas,
+        constraints=constraints,
+        deltas=deltas,
         order=0,
         verbose=2,
         copy=True,
@@ -196,7 +196,7 @@ def test_perturb_axis():
 
     deltas = get_deltas({"axis": eq.axis}, {"axis": ax2})
 
-    eq_new = eq.perturb(deltas, copy=True)
+    eq_new = eq.perturb(deltas=deltas, copy=True)
 
     assert eq_new.is_nested()
 

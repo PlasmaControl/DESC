@@ -1430,22 +1430,42 @@ class QuadraticFlux(_Objective):
         if constants is None:
             constants = self.constants
 
-        # B_plasma from equilibrium precomputed
-        eval_data = constants["eval_data"]
-        B_plasma = constants["B_plasma"]
+        def compute_f(position_perturbations=None, tangent_perturbations=None):
+            # B_plasma from equilibrium precomputed
+            eval_data = constants["eval_data"]
+            B_plasma = constants["B_plasma"]
 
-        x = jnp.array([eval_data["R"], eval_data["phi"], eval_data["Z"]]).T
+            x = jnp.array([eval_data["R"], eval_data["phi"], eval_data["Z"]]).T
 
-        # B_ext is not pre-computed because field is not fixed
-        B_ext = constants["field"].compute_magnetic_field(
-            x,
-            source_grid=constants["field_grid"],
-            basis="rpz",
-            params=field_params,
-        )
-        B_ext = jnp.sum(B_ext * eval_data["n_rho"], axis=-1)
-        f = (B_ext + B_plasma) * jnp.sqrt(eval_data["|e_theta x e_zeta|"])
-        return f
+            # B_ext is not pre-computed because field is not fixed
+            B_ext = constants["field"].compute_magnetic_field(
+                x,
+                source_grid=constants["field_grid"],
+                basis="rpz",
+                params=field_params,
+                position_perturbations=position_perturbations,
+                tangent_perturbations=tangent_perturbations,
+            )
+            B_ext = jnp.sum(B_ext * eval_data["n_rho"], axis=-1)
+            f = (B_ext + B_plasma) * jnp.sqrt(eval_data["|e_theta x e_zeta|"])
+            return f
+
+        if self._stochastic_settings:
+            position_perturbations, tangent_perturbations = (
+                self._stochastic_settings.perturbations
+            )
+            f = jnp.mean(
+                jax.vmap(
+                    lambda x: compute_f(
+                        position_perturbations=x[0],
+                        tangent_perturbations=x[1],
+                    ),
+                    in_axes=(0, 0),
+                )(
+                    position_perturbations,
+                    tangent_perturbations,
+                )
+            )
 
 
 class SurfaceQuadraticFlux(_Objective):

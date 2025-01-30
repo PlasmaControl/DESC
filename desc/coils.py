@@ -291,6 +291,8 @@ class _Coil(_MagneticField, Optimizable, ABC):
         source_grid=None,
         transforms=None,
         compute_A_or_B="B",
+        position_perturbations=None,
+        tangent_perturbations=None,
     ):
         """Compute magnetic field or vector potential at a set of points.
 
@@ -313,7 +315,10 @@ class _Coil(_MagneticField, Optimizable, ABC):
         compute_A_or_B: {"A", "B"}, optional
             whether to compute the magnetic vector potential "A" or the magnetic field
             "B". Defaults to "B"
-
+        position_perturbations : ndarray, shape(n,3), optional
+            Perturbations to the coil position at each point, in xyz coordinates.
+        tangent_perturbations : ndarray, shape(n,3), optional
+            Perturbations to the coil tangent at each point, in xyz coordinates.
 
         Returns
         -------
@@ -369,6 +374,24 @@ class _Coil(_MagneticField, Optimizable, ABC):
             data["x_s"] = rpz2xyz_vec(data["x_s"], phi=data["x"][:, 1])
             data["x"] = rpz2xyz(data["x"])
 
+        # Perturb coil position and tangent if requested
+        if position_perturbations is not None:
+            # Check if position_perturbations shape is (n,3)
+            errorif(
+                position_perturbations.shape != data["x"].shape,
+                ValueError,
+                "position_perturbations must have shape (n,3)",
+            )
+            data["x"] += position_perturbations
+        if tangent_perturbations is not None:
+            # Check if tangent_perturbations shape is (n,3)
+            errorif(
+                tangent_perturbations.shape != data["x_s"].shape,
+                ValueError,
+                "tangent_perturbations must have shape (n,3)",
+            )
+            data["x_s"] += tangent_perturbations
+
         AB = op(coords, data["x"], data["x_s"] * data["ds"][:, None], current)
 
         if basis.lower() == "rpz":
@@ -376,7 +399,14 @@ class _Coil(_MagneticField, Optimizable, ABC):
         return AB
 
     def compute_magnetic_field(
-        self, coords, params=None, basis="rpz", source_grid=None, transforms=None
+        self,
+        coords,
+        params=None,
+        basis="rpz",
+        source_grid=None,
+        transforms=None,
+        position_perturbations=None,
+        tangent_perturbations=None,
     ):
         """Compute magnetic field at a set of points.
 
@@ -396,7 +426,10 @@ class _Coil(_MagneticField, Optimizable, ABC):
             points. Should NOT include endpoint at 2pi.
         transforms : dict of Transform or array-like
             Transforms for R, Z, lambda, etc. Default is to build from grid.
-
+        position_perturbations : ndarray, shape(n,3), optional
+            Perturbations to the coil position at each point, in xyz coordinates.
+        tangent_perturbations : ndarray, shape(n,3), optional
+            Perturbations to the coil tangent at each point, in xyz coordinates.
 
         Returns
         -------
@@ -411,7 +444,16 @@ class _Coil(_MagneticField, Optimizable, ABC):
         may not be zero if not fully converged.
 
         """
-        return self._compute_A_or_B(coords, params, basis, source_grid, transforms, "B")
+        return self._compute_A_or_B(
+            coords,
+            params,
+            basis,
+            source_grid,
+            transforms,
+            "B",
+            position_perturbations,
+            tangent_perturbations,
+        )
 
     def compute_magnetic_vector_potential(
         self, coords, params=None, basis="rpz", source_grid=None, transforms=None
@@ -1495,6 +1537,8 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         source_grid=None,
         transforms=None,
         compute_A_or_B="B",
+        position_perturbations=None,
+        tangent_perturbations=None,
     ):
         """Compute magnetic field at a set of points.
 
@@ -1514,6 +1558,10 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         compute_A_or_B: {"A", "B"}, optional
             whether to compute the magnetic vector potential "A" or the magnetic field
             "B". Defaults to "B"
+        position_perturbations : ndarray, shape(n,3), optional
+            Perturbations to the coil position at each point, in xyz coordinates.
+        tangent_perturbations : ndarray, shape(n,3), optional
+            Perturbations to the coil tangent at each point, in xyz coordinates.
 
         Returns
         -------
@@ -1566,7 +1614,14 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             coords_nfp = coords_rpz + jnp.array([0, 2 * jnp.pi * k / self.NFP, 0])
 
             def body(AB, x):
-                AB += op(coords_nfp, params=x, basis="rpz", source_grid=source_grid)
+                AB += op(
+                    coords_nfp,
+                    params=x,
+                    basis="rpz",
+                    source_grid=source_grid,
+                    position_perturbations=position_perturbations,
+                    tangent_perturbations=tangent_perturbations,
+                )
                 return AB, None
 
             AB += scan(body, jnp.zeros(coords_nfp.shape), tree_stack(params))[0]
@@ -1586,7 +1641,14 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         return AB
 
     def compute_magnetic_field(
-        self, coords, params=None, basis="rpz", source_grid=None, transforms=None
+        self,
+        coords,
+        params=None,
+        basis="rpz",
+        source_grid=None,
+        transforms=None,
+        position_perturbations=None,
+        tangent_perturbations=None,
     ):
         """Compute magnetic field at a set of points.
 
@@ -1603,6 +1665,10 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             points. Should NOT include endpoint at 2pi.
         transforms : dict of Transform or array-like
             Transforms for R, Z, lambda, etc. Default is to build from grid.
+        position_perturbations : ndarray, shape(n,3), optional
+            Perturbations to the coil position at each point, in xyz coordinates.
+        tangent_perturbations : ndarray, shape(n,3), optional
+            Perturbations to the coil tangent at each point, in xyz coordinates.
 
         Returns
         -------
@@ -1610,7 +1676,16 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             Magnetic field at specified nodes, in [R,phi,Z] or [X,Y,Z] coordinates.
 
         """
-        return self._compute_A_or_B(coords, params, basis, source_grid, transforms, "B")
+        return self._compute_A_or_B(
+            coords,
+            params,
+            basis,
+            source_grid,
+            transforms,
+            "B",
+            position_perturbations,
+            tangent_perturbations,
+        )
 
     def compute_magnetic_vector_potential(
         self, coords, params=None, basis="rpz", source_grid=None, transforms=None

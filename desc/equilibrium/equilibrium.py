@@ -2160,17 +2160,19 @@ class Equilibrium(IOAble, Optimizable):
             `OptimizeResult` for a description of other attributes.
 
         """
-        if constraints is None and not isinstance(
-            objective, LinearConstraintProjection
-        ):
+        is_linear_proj = isinstance(objective, LinearConstraintProjection)
+        if is_linear_proj and constraints is not None:
+            raise ValueError(
+                "If a LinearConstraintProjection is passed, "
+                "no constraints should be passed."
+            )
+        if constraints is None and not is_linear_proj:
             constraints = get_fixed_boundary_constraints(eq=self)
         if not isinstance(objective, ObjectiveFunction):
             objective = get_equilibrium_objective(eq=self, mode=objective)
         if not isinstance(optimizer, Optimizer):
             optimizer = Optimizer(optimizer)
-        if not isinstance(constraints, (list, tuple)) and not isinstance(
-            objective, LinearConstraintProjection
-        ):
+        if not isinstance(constraints, (list, tuple)) and not is_linear_proj:
             constraints = tuple([constraints])
 
         warnif(
@@ -2303,8 +2305,10 @@ class Equilibrium(IOAble, Optimizable):
 
         Parameters
         ----------
-        objective : ObjectiveFunction
-            Objective function to satisfy. Default = force balance.
+        objective : ObjectiveFunction or LinearConstraintProjection
+            Objective function to satisfy. Default = force balance. If
+            LinearConstraintProjection is used, no constraints are needed. This is
+            useful for eq update in ProximalProjection.
         constraints : Objective or tuple of Objective
             Constraint function to satisfy. Default = fixed-boundary.
         deltas : dict of ndarray
@@ -2338,9 +2342,15 @@ class Equilibrium(IOAble, Optimizable):
             Perturbed equilibrium.
 
         """
+        is_linear_proj = isinstance(objective, LinearConstraintProjection)
+        if is_linear_proj and constraints is not None:
+            raise ValueError(
+                "If a LinearConstraintProjection is passed, "
+                "no constraints should be passed."
+            )
         if objective is None:
             objective = get_equilibrium_objective(eq=self)
-        if constraints is None:
+        if constraints is None and not is_linear_proj:
             if "Ra_n" in deltas or "Za_n" in deltas:
                 constraints = get_fixed_axis_constraints(eq=self)
             else:

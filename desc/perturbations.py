@@ -143,7 +143,7 @@ def perturb(  # noqa: C901
         Perturbed equilibrium.
 
     """
-    is_linear_prox = isinstance(objective, LinearConstraintProjection)
+    is_linear_proj = isinstance(objective, LinearConstraintProjection)
     if not use_jax:
         warnings.warn(
             colored(
@@ -161,7 +161,7 @@ def perturb(  # noqa: C901
             )
         )
 
-    if is_linear_prox and constraints is not None:
+    if is_linear_proj and constraints is not None:
         raise ValueError(
             "If a LinearConstraintProjection is passed, "
             "no constraints should be passed."
@@ -176,7 +176,7 @@ def perturb(  # noqa: C901
 
     if not objective.built:
         objective.build(eq, verbose=verbose)
-    if is_linear_prox:
+    if is_linear_proj:
         constraints = objective._constraint.objectives
         constraint = objective._constraint
         warnif(
@@ -203,7 +203,7 @@ def perturb(  # noqa: C901
     if verbose > 0:
         print("Factorizing linear constraints")
     timer.start("linear constraint factorize")
-    if is_linear_prox:
+    if is_linear_proj:
         xp, Z, D, unfixed_idx, project, recover = (
             objective._xp,
             objective._Z,
@@ -221,7 +221,7 @@ def perturb(  # noqa: C901
         timer.disp("linear constraint factorize")
 
     # state vector
-    if is_linear_prox:
+    if is_linear_proj:
         x_reduced = objective.x(eq)
         x = recover(x_reduced)
         x_norm = jnp.linalg.norm(x_reduced)
@@ -417,7 +417,7 @@ def perturb(  # noqa: C901
     for key, value in deltas.items():
         setattr(eq_new, key, getattr(eq_new, key) + value)
 
-    if is_linear_prox:
+    if is_linear_proj:
         objective.update_constraint_target(eq_new)
         recover = objective._recover
     else:

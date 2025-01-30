@@ -158,10 +158,10 @@ class Optimizer(IOAble):
             `OptimizeResult` for a description of other attributes.
 
         """
-        is_linear_prox = isinstance(objective, LinearConstraintProjection)
-        if not isinstance(constraints, (tuple, list)) and not is_linear_prox:
+        is_linear_proj = isinstance(objective, LinearConstraintProjection)
+        if not isinstance(constraints, (tuple, list)) and not is_linear_proj:
             constraints = (constraints,)
-        else:
+        elif is_linear_proj:
             constraints = objective._constraint.objectives
         errorif(
             not isinstance(objective, ObjectiveFunction),
@@ -187,7 +187,7 @@ class Optimizer(IOAble):
         # eq may be None
         eq = get_instance(things, Equilibrium)
         if eq is not None:
-            if not is_linear_prox:
+            if not is_linear_proj:
                 # check if stage 2 objectives are here:
                 all_objs = list(constraints) + list(objective.objectives)
                 errorif(
@@ -205,7 +205,7 @@ class Optimizer(IOAble):
         _, method = _parse_method(self.method)
 
         timer.start("Initializing the optimization")
-        if not is_linear_prox:
+        if not is_linear_proj:
             # parse and combine constraints into linear & nonlinear objective functions
             linear_constraints, nonlinear_constraints = _parse_constraints(constraints)
             objective, nonlinear_constraints = _maybe_wrap_nonlinear_constraints(

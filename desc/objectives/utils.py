@@ -100,10 +100,12 @@ def factorize_linear_constraints(objective, constraint, x_scale="auto"):  # noqa
     A_augmented = np.hstack([A, np.reshape(b, (A.shape[0], 1))])
 
     # Find unique rows of A_augmented
-    unique_rows, unique_indices = np.unique(A_augmented, axis=0, return_index=True)
+    _, unique_indices = np.unique(A_augmented, axis=0, return_index=True)
 
     # Sort the indices to preserve the order of appearance
     unique_indices = np.sort(unique_indices)
+    # Find the indices of the degenerate rows
+    degenerate_idx = np.setdiff1d(np.arange(A_augmented.shape[0]), unique_indices)
 
     # Extract the unique rows
     A_augmented = A_augmented[unique_indices]
@@ -242,7 +244,7 @@ def factorize_linear_constraints(objective, constraint, x_scale="auto"):  # noqa
         recover,
         A_inv,
         A_nondegenerate,
-        row_idx_to_delete,
+        degenerate_idx,
     )
 
 

@@ -675,15 +675,13 @@ def _B_piecewise_omni(params, transforms, profiles, data, **kwargs):
     )
 
     B_pwO = B_min + (B_max - B_min) * jnp.exp(exponent)
-    data["|B|_pwO"] = jnp.transpose(
-        B_pwO.reshape(
-            (
-                transforms["grid"].num_rho,
-                transforms["grid"].num_theta,
-                transforms["grid"].num_zeta,
-            )
-        ),
-        axes=(0, 2, 1),
+
+    data["|B|_pwO"] = B_pwO.reshape(
+        (
+            transforms["grid"].num_rho,
+            transforms["grid"].num_zeta,
+            transforms["grid"].num_theta,
+        )
     )
 
     return data

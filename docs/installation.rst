@@ -141,25 +141,24 @@ Della and Stellar Clusters (Princeton)
 First, install JAX for the latest version of `jaxlib` available on the Princeton clusters.
 
 We base our instructions below off of `this tutorial <https://github.com/PrincetonUniversity/intro_ml_libs/tree/master/jax>`__, if the below instructions do not work please
-check the link to install JAX with the most up-to-date recommendations from the Princeton computing services:
+check the link to install JAX with the most up-to-date recommendations from the Princeton computing services. We first will install DESC as usual, then we will install the
+version of the gpu-compatible JAX that DESC requires based off of what pip installs from DESC's requirements file.
 
 .. code-block:: sh
 
     conda create --name desc-env python=3.12 -y
     conda activate desc-env
-    pip install -U "jax[cuda12]==0.4.38"
-
-Then, install DESC,
-
-.. code-block:: sh
-
     git clone https://github.com/PlasmaControl/DESC.git
     cd DESC
     pip install --editable .
     # optionally install developer requirements (if you want to run tests)
     pip install -r devtools/dev-requirements.txt
+    # then, store the version of JAX that you installed (this bash command assumes `jax` is the first jax package in the list)
+    jax_temp_var="$(pip freeze | grep -i jax | head -1 | sed "s/jax==//")"
+    # finally, install the gpu-compatible JAX that matches the version needed by the DESC requirements
+    pip install -U "jax[cuda12]==$jax_temp_var"
 
-Tested and confirmed to work on the Della and Stellar clusters at Princeton as of January 29, 2025.
+Tested and confirmed to work on the Della and Stellar clusters at Princeton as of January 30, 2025.
 
 
 RAVEN (IPP, Germany)

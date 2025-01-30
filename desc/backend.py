@@ -1,7 +1,6 @@
 """Backend functions for DESC, with options for JAX or regular numpy."""
 
 import functools
-import multiprocessing as mp
 import os
 import warnings
 
@@ -12,19 +11,10 @@ import desc
 from desc import config as desc_config
 from desc import set_device
 
-# only print details in the main process, not child processes spawned by multiprocessing
-verbose = bool(mp.current_process().name == "MainProcess")
-
 if os.environ.get("DESC_BACKEND") == "numpy":
     jnp = np
     use_jax = False
     set_device(kind="cpu")
-    if verbose:
-        print(
-            "DESC version {}, using numpy backend, version={}, dtype={}".format(
-                desc.__version__, np.__version__, np.linspace(0, 1).dtype
-            )
-        )
 else:
     if desc_config.get("device") is None:
         set_device("cpu")
@@ -43,35 +33,32 @@ else:
                     + "installed JAX with GPU support?"
                 )
                 set_device("cpu")
-            x = jnp.linspace(0, 5)
-            y = jnp.exp(x)
         use_jax = True
-        if verbose:
-            print(
-                f"DESC version {desc.__version__}, "
-                + f"using JAX backend, jax version={jax.__version__}, "
-                + f"jaxlib version={jaxlib.__version__}, dtype={y.dtype}"
-            )
-        del x, y
     except ModuleNotFoundError:
         jnp = np
-        x = jnp.linspace(0, 5)
-        y = jnp.exp(x)
         use_jax = False
         set_device(kind="cpu")
         warnings.warn(colored("Failed to load JAX", "red"))
-        print(
-            "DESC version {}, using NumPy backend, version={}, dtype={}".format(
-                desc.__version__, np.__version__, y.dtype
-            )
-        )
 
-if verbose:
+
+def print_info():
+    """Prints DESC version, backend type & version, device type & memory."""
+    x = jnp.linspace(0, 5)
+    y = jnp.exp(x)
+    print(f"DESC version={desc.__version__}.")
+    if use_jax:
+        print(
+            f"Using JAX backend: jax version={jax.__version__}, "
+            + f"jaxlib version={jaxlib.__version__}, dtype={y.dtype}."
+        )
+    else:
+        print(f"Using NumPy backend: version={np.__version__}, dtype={y.dtype}.")
     print(
-        "Using device: {}, with {:.2f} GB available memory".format(
+        "Using device: {}, with {:.2f} GB available memory.".format(
             desc_config.get("device"), desc_config.get("avail_mem")
         )
     )
+
 
 if use_jax:  # noqa: C901
     from jax import custom_jvp, jit, vmap

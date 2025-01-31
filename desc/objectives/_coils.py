@@ -1126,12 +1126,20 @@ class StochasticOptimizationSettings:
     standard_deviation: float
     length_scale: float
     seed: int = 0
-    # This field is not supposed to be set by the user, it will be derived
-    # from `field_grid`. It will be set in the `build` method.
+    # The fields below are not supposed to be set by the user, they will be derived
+    # in the `build` method.
     number_of_discretization_points: int = 0
+    zero_mean_array: jnp.ndarray = dataclasses.field(
+        default_factory=lambda: jnp.zeros(10)
+    )
+    index_array_for_samples: jnp.ndarray = dataclasses.field(
+        default_factory=lambda: jnp.zeros(10)
+    )
+    covariance_matrix: jnp.ndarray = dataclasses.field(
+        default_factory=lambda: jnp.zeros((10, 10))
+    )
 
-    @functools.cached_property
-    def covariance_matrix(self) -> jnp.ndarray:
+    def compute_covariance_matrix(self) -> jnp.ndarray:
         # Sympy is used here because we need a derivative. This is a one time
         # computation and then it's cached with `functools.cached_property`. So
         # I don't think it's worth to optimize this part.
@@ -1186,50 +1194,34 @@ class StochasticOptimizationSettings:
         )
 
     @functools.cached_property
-    def samples_of_perturbations(self) -> list[tuple[jnp.ndarray, jnp.ndarray]]:
-        samples = []
-        for _ in jnp.arange(self.number_of_samples):
-            # Draw a random matrix shaped (2n, 3) from a multivariate normal
-            # distribution, where the top half is for the position perturbations and
-            # the bottom half is for the tangent perturbations, using the covariance
-            # matrix and zero mean.
+    def perturbations(self) -> list[tuple[jnp.ndarray, jnp.ndarray]]:
+        # Draw a random matrix shaped (2n, 3) from a multivariate normal
+        # distribution, where the top half is for the position perturbations and
+        # the bottom half is for the tangent perturbations, using the covariance
+        # matrix and zero mean.
 
-            mean_1d = jnp.zeros(2 * self.number_of_discretization_points)
+        mean_1d = self.zero_mean_array
 
-            keyx, keyy, keyz = jax.random.split(jax.random.PRNGKey(self.seed), 3)
+        keyx, keyy, keyz = jax.random.split(jax.random.PRNGKey(self.seed), 3)
 
-            # Each draw is shape (2n,)
-            xdraw = jax.random.multivariate_normal(
-                keyx, mean_1d, self.covariance_matrix
-            )
-            ydraw = jax.random.multivariate_normal(
-                keyy, mean_1d, self.covariance_matrix
-            )
-            zdraw = jax.random.multivariate_normal(
-                keyz, mean_1d, self.covariance_matrix
-            )
+        # Each draw is shape (2n,)
+        xdraw = jax.random.multivariate_normal(keyx, mean_1d, self.covariance_matrix)
+        ydraw = jax.random.multivariate_normal(keyy, mean_1d, self.covariance_matrix)
+        zdraw = jax.random.multivariate_normal(keyz, mean_1d, self.covariance_matrix)
 
-            # Create two (n,3) arrays for the position and tangent perturbations
-            position_perturbations = jnp.stack(
-                [
-                    xdraw[: self.number_of_discretization_points],
-                    ydraw[: self.number_of_discretization_points],
-                    zdraw[: self.number_of_discretization_points],
-                ],
-                axis=1,
-            )
-            tangent_perturbations = jnp.stack(
-                [
-                    xdraw[self.number_of_discretization_points :],
-                    ydraw[self.number_of_discretization_points :],
-                    zdraw[self.number_of_discretization_points :],
-                ],
-                axis=1,
-            )
+        # Create a (2n,3) array for the position and tangent perturbations. The first
+        # n rows are for the position perturbations and the second n rows are for the
+        # tangent perturbations.
+        perturbations = jnp.stack(
+            [
+                xdraw,
+                ydraw,
+                zdraw,
+            ],
+            axis=1,
+        )
 
-            samples.append((position_perturbations, tangent_perturbations))
-
-        return samples
+        return perturbations
 
 
 class QuadraticFlux(_Objective):
@@ -1392,6 +1384,16 @@ class QuadraticFlux(_Objective):
             self._stochastic_settings["number_of_discretization_points"] = int(
                 self._field_grid.num_zeta
             )
+            self._stochastic_settings["index_array_for_samples"] = jnp.arange(
+                self._stochastic_settings["number_of_samples"]
+            )
+            self._stochastic_settings["zero_mean_array"] = jnp.zeros(
+                2 * self._stochastic_settings["number_of_discretization_points"]
+            )
+            stochastic = StochasticOptimizationSettings(**self._stochastic_settings)
+            self._stochastic_settings["covariance_matrix"] = (
+                stochastic.compute_covariance_matrix()
+            )
 
         self._constants = {
             "field": self._field,
@@ -1440,15 +1442,14 @@ class QuadraticFlux(_Objective):
 
         x = jnp.array([eval_data["R"], eval_data["phi"], eval_data["Z"]]).T
 
-        def compute_f(position_perturbations=None, tangent_perturbations=None):
+        def compute_f(perturbations=None):
             # B_ext is not pre-computed because field is not fixed
             B_ext = constants["field"].compute_magnetic_field(
                 x,
                 source_grid=constants["field_grid"],
                 basis="rpz",
                 params=field_params,
-                position_perturbations=position_perturbations,
-                tangent_perturbations=tangent_perturbations,
+                perturbations=perturbations,
             )
             B_ext = jnp.sum(B_ext * eval_data["n_rho"], axis=-1)
             f = (B_ext + B_plasma) * jnp.sqrt(eval_data["|e_theta x e_zeta|"])
@@ -1456,20 +1457,17 @@ class QuadraticFlux(_Objective):
 
         if self._stochastic_settings:
             stochastic_settings = StochasticOptimizationSettings(
-                **self.constants["stochastic_settings"]
+                **constants["stochastic_settings"]
             )
             # samples_of_perturbations is a list of tuples, where each tuple contains
             # two arrays: the first array is the position perturbations and the second
             # array is the tangent perturbations. We will loop over the list, compute
             # f for each tuple and then average the results.
             fs = []
-            for (
-                position_perturbations,
-                tangent_perturbations,
-            ) in stochastic_settings.samples_of_perturbations:
-                fs.append(compute_f(position_perturbations, tangent_perturbations))
+            for _ in constants["stochastic_settings"]["index_array_for_samples"]:
+                fs.append(compute_f(stochastic_settings.perturbations))
 
-            return jnp.mean(fs, axis=0)
+            return jnp.mean(jnp.array(fs), axis=0)
 
         return compute_f()
 

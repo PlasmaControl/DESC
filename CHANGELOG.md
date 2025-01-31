@@ -20,10 +20,6 @@ New Features
 - Adds a new objective ``desc.objectives.CoilIntegratedCurvature`` for targeting convex coils.
 - `eq.solve` and `eq.perturb` now accept `LinearConstraintProjection` as objective. This option must be used without any constraints.
 
-Possible Breaking Change
-
-- `perturb` function takes `constraints` as keyword-only argument. With this change, codes like `perturb(eq, objective, constraints, deltas)` will not work properly, you need to change it to `perturb(eq, objective, deltas, constraints=constraints)`.
-
 Bug Fixes
 
 - Small bug fix to use the correct normalization length ``a`` in the BallooningStability objective.

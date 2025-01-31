@@ -847,11 +847,13 @@ class ProximalProjection(ObjectiveFunction):
             # computations in the perturb and solve methods
             self._eq = self._eq.perturb(
                 objective=self._eq_solve_objective,
+                constraints=None,
                 deltas=deltas,
                 **self._perturb_options,
             )
             self._eq.solve(
                 objective=self._eq_solve_objective,
+                constraints=None,
                 **self._solve_options,
             )
             xeq = self._eq.pack_params(self._eq.params_dict)

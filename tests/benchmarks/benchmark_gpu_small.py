@@ -277,10 +277,10 @@ def test_perturb_1(benchmark):
         args = (
             eq,
             objective,
+            constraints,
         )
         kwargs = {
             "deltas": deltas,
-            "constraints": constraints,
             "tr_ratio": tr_ratio,
             "order": 1,
             "verbose": 2,
@@ -310,10 +310,10 @@ def test_perturb_2(benchmark):
         args = (
             eq,
             objective,
+            constraints,
         )
         kwargs = {
             "deltas": deltas,
-            "constraints": constraints,
             "tr_ratio": tr_ratio,
             "order": 2,
             "verbose": 2,

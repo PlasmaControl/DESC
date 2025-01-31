@@ -95,8 +95,8 @@ def get_deltas(things1, things2):  # noqa: C901
 def perturb(  # noqa: C901
     eq,
     objective,
+    constraints,
     deltas,
-    constraints=None,
     order=2,
     tr_ratio=0.1,
     weight="auto",

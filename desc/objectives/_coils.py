@@ -1086,6 +1086,152 @@ class CoilArclengthVariance(_CoilObjective):
         return out * constants["mask"]
 
 
+@dataclasses.dataclass
+class StochasticOptimizationSettings:
+    """See https://doi.org/10.1088/1741-4326/ac45f3 for implementation details
+    of the stochastic coil optimization.
+
+    For the covariance function, a squared exponential function is used:
+
+    k(d) = sigma^2 * exp(-(d)^2 / (2 * l^2))
+    cov_function(d) = SUM(i=-inf to inf) k(d + 2*pi*i)
+
+    where d is (theta_1-theta_2), sigma is the standard deviation and l is the
+    length_scale. Note that k isn't used directly as the covarince function
+    (kernel), but an infinite sum is used to make it peroiodic on [0, 2*pi).
+
+    It's later used to construct the covariance matrix K. It will allow us to
+    draw random samples from a multivariate normal distribution with mean 0 and
+    covariance K. It's a (n*2) x (n*2) matrix, where n is the number of points
+    to perturb. For each point, we will draw 2 random numbers, one for the
+    position perturbation and one for the tangent perturbation. For each point,
+    we will do this drawing 3 times, so we have the perturnations for 3 spatial
+    dimensions.
+
+    Parameters
+    ----------
+    number_of_samples : int
+        Number of "perturbed" coils to include in the objective.
+    standard_deviation : float
+        The standart deviation (sigma) and the characteristic length (l) used in
+        the covariance function.
+    length_scale : float
+        The standart deviation (sigma) and the characteristic length (l) used in
+        the covariance function.
+    seed : int, optional
+        Seed for the pseudo-random number generator. Defaults to 0.
+    """
+
+    number_of_samples: int
+    standard_deviation: float
+    length_scale: float
+    seed: int = 0
+    # This field is not supposed to be set by the user, it will be derived
+    # from `field_grid`. It will be set in the `build` method.
+    number_of_discretization_points: int = 0
+
+    @functools.cached_property
+    def covariance_matrix(self) -> jnp.ndarray:
+        # Sympy is used here because we need a derivative. This is a one time
+        # computation and then it's cached with `functools.cached_property`. So
+        # I don't think it's worth to optimize this part.
+        theta_1, theta_2, d, i = sp.symbols("theta_1 theta_2 d i")
+        covariance_function = sp.Sum(
+            (
+                self.standard_deviation**2
+                * sp.exp(-((d + i * 2 * sp.pi) ** 2) / (2 * self.length_scale**2))
+            ),
+            (i, -6, 6),
+        )
+
+        # Covariance between two different position perturbations:
+        cov_f_pp = sp.lambdify(
+            (theta_1, theta_2),
+            covariance_function.subs(d, theta_1 - theta_2),
+            "numpy",
+        )
+        # Covariance between a position perturbation derivartive and a position
+        # perturbation:
+        cov_f_dp = sp.lambdify(
+            (theta_1, theta_2),
+            -sp.diff(covariance_function, d).subs(d, theta_1 - theta_2),
+            "numpy",
+        )
+        # Covariance between a position perturbation and a position perturbation
+        # derivartive:
+        cov_f_pd = sp.lambdify(
+            (theta_1, theta_2),
+            -sp.diff(covariance_function, d).subs(d, theta_1 - theta_2),
+            "numpy",
+        )
+        # Covariance between a position perturbation derivartive and a position
+        # perturbation derivartive:
+        cov_f_dd = sp.lambdify(
+            (theta_1, theta_2),
+            -sp.diff(covariance_function, d, 2).subs(d, theta_1 - theta_2),
+            "numpy",
+        )
+
+        # Construct 2n x 2n covariance matrix:
+        # K = [[cov_f_pp, cov_f_pd], [cov_f_dp, cov_f_dd]]
+        thetas = jnp.linspace(
+            0, 2 * jnp.pi, self.number_of_discretization_points, endpoint=False
+        )
+        XX, YY = jnp.meshgrid(thetas, thetas)
+        return jnp.block(
+            [
+                [cov_f_pp(XX, YY), cov_f_pd(XX, YY)],
+                [cov_f_dp(XX, YY), cov_f_dd(XX, YY)],
+            ]
+        )
+
+    @functools.cached_property
+    def samples_of_perturbations(self) -> list[tuple[jnp.ndarray, jnp.ndarray]]:
+        samples = []
+        for _ in jnp.arange(self.number_of_samples):
+            # Draw a random matrix shaped (2n, 3) from a multivariate normal
+            # distribution, where the top half is for the position perturbations and
+            # the bottom half is for the tangent perturbations, using the covariance
+            # matrix and zero mean.
+
+            mean_1d = jnp.zeros(2 * self.number_of_discretization_points)
+
+            keyx, keyy, keyz = jax.random.split(jax.random.PRNGKey(self.seed), 3)
+
+            # Each draw is shape (2n,)
+            xdraw = jax.random.multivariate_normal(
+                keyx, mean_1d, self.covariance_matrix
+            )
+            ydraw = jax.random.multivariate_normal(
+                keyy, mean_1d, self.covariance_matrix
+            )
+            zdraw = jax.random.multivariate_normal(
+                keyz, mean_1d, self.covariance_matrix
+            )
+
+            # Create two (n,3) arrays for the position and tangent perturbations
+            position_perturbations = jnp.stack(
+                [
+                    xdraw[: self.number_of_discretization_points],
+                    ydraw[: self.number_of_discretization_points],
+                    zdraw[: self.number_of_discretization_points],
+                ],
+                axis=1,
+            )
+            tangent_perturbations = jnp.stack(
+                [
+                    xdraw[self.number_of_discretization_points :],
+                    ydraw[self.number_of_discretization_points :],
+                    zdraw[self.number_of_discretization_points :],
+                ],
+                axis=1,
+            )
+
+            samples.append((position_perturbations, tangent_perturbations))
+
+        return samples
+
+
 class QuadraticFlux(_Objective):
     """Target B*n = 0 on LCFS.
 
@@ -1151,7 +1297,6 @@ class QuadraticFlux(_Objective):
         jac_chunk_size=None,
         stochastic_optimization_settings=None,
     ):
-
         from desc.geometry import FourierRZToroidalSurface
 
         if target is None and bounds is None:
@@ -1181,159 +1326,10 @@ class QuadraticFlux(_Objective):
             jac_chunk_size=jac_chunk_size,
         )
 
-        @dataclasses.dataclass
-        class StochasticOptimizationSettings:
-            """See https://doi.org/10.1088/1741-4326/ac45f3 for implementation details
-            of the stochastic coil optimization.
-
-            For the covariance function, a squared exponential function is used:
-
-            k(d) = sigma^2 * exp(-(d)^2 / (2 * l^2))
-            cov_function(d) = SUM(i=-inf to inf) k(d + 2*pi*i)
-
-            where d is (theta_1-theta_2), sigma is the standard deviation and l is the
-            length_scale. Note that k isn't used directly as the covarince function
-            (kernel), but an infinite sum is used to make it peroiodic on [0, 2*pi).
-
-            It's later used to construct the covariance matrix K. It will allow us to
-            draw random samples from a multivariate normal distribution with mean 0 and
-            covariance K. It's a (n*2) x (n*2) matrix, where n is the number of points
-            to perturb. For each point, we will draw 2 random numbers, one for the
-            position perturbation and one for the tangent perturbation. For each point,
-            we will do this drawing 3 times, so we have the perturnations for 3 spatial
-            dimensions.
-
-            Parameters
-            ----------
-            number_of_samples : int
-                Number of "perturbed" coils to include in the objective.
-            standard_deviation : float
-                The standart deviation (sigma) and the characteristic length (l) used in
-                the covariance function.
-            length_scale : float
-                The standart deviation (sigma) and the characteristic length (l) used in
-                the covariance function.
-            seed : int, optional
-                Seed for the pseudo-random number generator. Defaults to 0.
-            """
-
-            number_of_samples: int
-            standard_deviation: float
-            length_scale: float
-            seed: int = 0
-            # This field is not supposed to be set by the user, it will be derived
-            # from `field_grid`. It will be set in the `build` method.
-            number_of_discretization_points: int = 0
-
-            @functools.cached_property
-            def covariance_matrix(self) -> jnp.ndarray:
-                # Sympy is used here because we need a derivative. This is a one time
-                # computation and then it's cached with `functools.cached_property`. So
-                # I don't think it's worth to optimize this part.
-                theta_1, theta_2, d, i = sp.symbols("theta_1 theta_2 d i")
-                covariance_function = sp.Sum(
-                    (
-                        self.standard_deviation**2
-                        * sp.exp(
-                            -((d + i * 2 * sp.pi) ** 2) / (2 * self.length_scale**2)
-                        )
-                    ),
-                    (i, -6, 6),
-                )
-
-                # Covariance between two different position perturbations:
-                cov_f_pp = sp.lambdify(
-                    (theta_1, theta_2),
-                    covariance_function.subs(d, theta_1 - theta_2),
-                    "numpy",
-                )
-                # Covariance between a position perturbation derivartive and a position
-                # perturbation:
-                cov_f_dp = sp.lambdify(
-                    (theta_1, theta_2),
-                    -sp.diff(covariance_function, d).subs(d, theta_1 - theta_2),
-                    "numpy",
-                )
-                # Covariance between a position perturbation and a position perturbation
-                # derivartive:
-                cov_f_pd = sp.lambdify(
-                    (theta_1, theta_2),
-                    -sp.diff(covariance_function, d).subs(d, theta_1 - theta_2),
-                    "numpy",
-                )
-                # Covariance between a position perturbation derivartive and a position
-                # perturbation derivartive:
-                cov_f_dd = sp.lambdify(
-                    (theta_1, theta_2),
-                    -sp.diff(covariance_function, d, 2).subs(d, theta_1 - theta_2),
-                    "numpy",
-                )
-
-                # Construct 2n x 2n covariance matrix:
-                # K = [[cov_f_pp, cov_f_pd], [cov_f_dp, cov_f_dd]]
-                thetas = jnp.linspace(
-                    0, 2 * jnp.pi, self.number_of_discretization_points, endpoint=False
-                )
-                XX, YY = jnp.meshgrid(thetas, thetas)
-                return jnp.block(
-                    [
-                        [cov_f_pp(XX, YY), cov_f_pd(XX, YY)],
-                        [cov_f_dp(XX, YY), cov_f_dd(XX, YY)],
-                    ]
-                )
-
-            @functools.cached_property
-            def samples_of_perturbations(self) -> list[tuple[jnp.ndarray, jnp.ndarray]]:
-                samples = []
-                for _ in range(self.number_of_samples):
-                    # Draw a random matrix shaped (2n, 3) from a multivariate normal
-                    # distribution, where the top half is for the position perturbations and
-                    # the bottom half is for the tangent perturbations, using the covariance
-                    # matrix and zero mean.
-
-                    mean_1d = jnp.zeros(2 * self.number_of_discretization_points)
-
-                    keyx, keyy, keyz = jax.random.split(
-                        jax.random.PRNGKey(self.seed), 3
-                    )
-
-                    # Each draw is shape (2n,)
-                    xdraw = jax.random.multivariate_normal(
-                        keyx, mean_1d, self.covariance_matrix
-                    )
-                    ydraw = jax.random.multivariate_normal(
-                        keyy, mean_1d, self.covariance_matrix
-                    )
-                    zdraw = jax.random.multivariate_normal(
-                        keyz, mean_1d, self.covariance_matrix
-                    )
-
-                    # Create two (n,3) arrays for the position and tangent perturbations
-                    position_perturbations = jnp.stack(
-                        [
-                            xdraw[: self.number_of_discretization_points],
-                            ydraw[: self.number_of_discretization_points],
-                            zdraw[: self.number_of_discretization_points],
-                        ],
-                        axis=1,
-                    )
-                    tangent_perturbations = jnp.stack(
-                        [
-                            xdraw[self.number_of_discretization_points :],
-                            ydraw[self.number_of_discretization_points :],
-                            zdraw[self.number_of_discretization_points :],
-                        ],
-                        axis=1,
-                    )
-
-                    samples.append((position_perturbations, tangent_perturbations))
-
-                return samples
-
         if stochastic_optimization_settings:
-            self._stochastic_settings = StochasticOptimizationSettings(
-                **stochastic_optimization_settings
-            )
+            # Validate the settings
+            StochasticOptimizationSettings(**stochastic_optimization_settings)
+            self._stochastic_settings = stochastic_optimization_settings
         else:
             self._stochastic_settings = None
 
@@ -1393,7 +1389,7 @@ class QuadraticFlux(_Objective):
             )
 
         if self._stochastic_settings:
-            self._stochastic_settings.number_of_discretization_points = (
+            self._stochastic_settings["number_of_discretization_points"] = int(
                 self._field_grid.num_zeta
             )
 
@@ -1405,6 +1401,7 @@ class QuadraticFlux(_Objective):
             "eval_transforms": eval_transforms,
             "eval_profiles": eval_profiles,
             "B_plasma": Bplasma,
+            "stochastic_settings": self._stochastic_settings,
         }
 
         timer.stop("Precomputing transforms")
@@ -1437,13 +1434,13 @@ class QuadraticFlux(_Objective):
         if constants is None:
             constants = self.constants
 
+        # B_plasma from equilibrium precomputed
+        eval_data = constants["eval_data"]
+        B_plasma = constants["B_plasma"]
+
+        x = jnp.array([eval_data["R"], eval_data["phi"], eval_data["Z"]]).T
+
         def compute_f(position_perturbations=None, tangent_perturbations=None):
-            # B_plasma from equilibrium precomputed
-            eval_data = constants["eval_data"]
-            B_plasma = constants["B_plasma"]
-
-            x = jnp.array([eval_data["R"], eval_data["phi"], eval_data["Z"]]).T
-
             # B_ext is not pre-computed because field is not fixed
             B_ext = constants["field"].compute_magnetic_field(
                 x,
@@ -1458,6 +1455,9 @@ class QuadraticFlux(_Objective):
             return f
 
         if self._stochastic_settings:
+            stochastic_settings = StochasticOptimizationSettings(
+                **self.constants["stochastic_settings"]
+            )
             # samples_of_perturbations is a list of tuples, where each tuple contains
             # two arrays: the first array is the position perturbations and the second
             # array is the tangent perturbations. We will loop over the list, compute
@@ -1466,7 +1466,7 @@ class QuadraticFlux(_Objective):
             for (
                 position_perturbations,
                 tangent_perturbations,
-            ) in self._stochastic_settings.samples_of_perturbations:
+            ) in stochastic_settings.samples_of_perturbations:
                 fs.append(compute_f(position_perturbations, tangent_perturbations))
 
             return jnp.mean(fs, axis=0)

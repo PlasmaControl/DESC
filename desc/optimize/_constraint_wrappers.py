@@ -113,13 +113,14 @@ class LinearConstraintProjection(ObjectiveFunction):
             self._unfixed_idx,
             self._project,
             self._recover,
-            self._Ainv,
+            self._ADinv,
             self._A_nondegenerate,
             self._degenerate_idx,  # maybe we need those for b_new
         ) = factorize_linear_constraints(
             self._objective,
             self._constraint,
         )
+        self._Ainv = self._D[self._unfixed_idx, None] * self._ADinv
         self._dim_x = self._objective.dim_x
         self._dim_x_reduced = self._Z.shape[1]
 
@@ -190,8 +191,16 @@ class LinearConstraintProjection(ObjectiveFunction):
         # remove fixed parameters from A and b again by the same loop as in factorize
         A, b, xp, unfixed_idx, fixed_idx = remove_fixed_parameters(A, b, xp)
 
-        xp = put(xp, unfixed_idx, self._Ainv @ b)
-        xp = put(xp, fixed_idx, ((1 / self._D) * xp)[fixed_idx])
+        # compute x_scale
+        x_scale = self._objective.x(*self._objective.things)
+        Dnew = jnp.where(jnp.abs(x_scale) < 1e2, 1, jnp.abs(x_scale))
+
+        # since D has changed, we need to update the ADinv
+        self._ADinv = (1 / Dnew)[unfixed_idx, None] * self._Ainv
+        self._D = Dnew
+
+        xp = put(xp, unfixed_idx, self._ADinv @ b)
+        xp = put(xp, fixed_idx, ((1 / Dnew) * xp)[fixed_idx])
         # cast to jnp arrays
         self._xp = jnp.asarray(xp)
 

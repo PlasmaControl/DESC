@@ -1061,8 +1061,10 @@ class Equilibrium(IOAble, Optimizable):
                 sym=self.sym
                 and all(
                     data_index[p][dep]["grid_requirement"].get("sym", True)
-                    # TODO: GitHub issue #1206.
-                    and not data_index[p][dep]["grid_requirement"].get("can_fft", False)
+                    # TODO (#1206)
+                    and not data_index[p][dep]["grid_requirement"].get(
+                        "can_fft2", False
+                    )
                     for dep in dep1dr
                 ),
             )
@@ -1109,8 +1111,10 @@ class Equilibrium(IOAble, Optimizable):
                 sym=self.sym
                 and all(
                     data_index[p][dep]["grid_requirement"].get("sym", True)
-                    # TODO: GitHub issue #1206.
-                    and not data_index[p][dep]["grid_requirement"].get("can_fft", False)
+                    # TODO (#1206)
+                    and not data_index[p][dep]["grid_requirement"].get(
+                        "can_fft2", False
+                    )
                     for dep in dep1dz
                 ),
             )
@@ -1236,7 +1240,7 @@ class Equilibrium(IOAble, Optimizable):
             **kwargs,
         )
 
-    def get_rtz_grid(
+    def _get_rtz_grid(
         self,
         radial,
         poloidal,
@@ -1782,7 +1786,15 @@ class Equilibrium(IOAble, Optimizable):
 
     @iota.setter
     def iota(self, new):
+        warnif(
+            self.current is not None,
+            UserWarning,
+            "Setting rotational transform profile on an equilibrium "
+            + "with fixed toroidal current, removing existing toroidal"
+            " current profile.",
+        )
         self._iota = parse_profile(new, "iota")
+        self._current = None
 
     @optimizable_parameter
     @property
@@ -1795,7 +1807,7 @@ class Equilibrium(IOAble, Optimizable):
         errorif(
             self.iota is None,
             ValueError,
-            "Attempt to set rotational transform on an equilibrium"
+            "Attempt to set parameters of rotational transform on an equilibrium"
             + "with fixed toroidal current",
         )
         self.iota.params = i_l
@@ -1807,7 +1819,15 @@ class Equilibrium(IOAble, Optimizable):
 
     @current.setter
     def current(self, new):
+        warnif(
+            self.iota is not None,
+            UserWarning,
+            "Setting toroidal current profile on an equilibrium "
+            + "with fixed rotational transform, removing existing rotational"
+            " transform profile.",
+        )
         self._current = parse_profile(new, "current")
+        self._iota = None
 
     @optimizable_parameter
     @property
@@ -1820,7 +1840,7 @@ class Equilibrium(IOAble, Optimizable):
         errorif(
             self.current is None,
             ValueError,
-            "Attempt to set toroidal current on an equilibrium with "
+            "Attempt to set parameters of toroidal current on an equilibrium with "
             + "fixed rotational transform",
         )
         self.current.params = c_l

@@ -5,6 +5,7 @@ from ._coils import (
     CoilArclengthVariance,
     CoilCurrentLength,
     CoilCurvature,
+    CoilIntegratedCurvature,
     CoilLength,
     CoilSetLinkingNumber,
     CoilSetMinDistance,

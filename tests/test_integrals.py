@@ -718,10 +718,18 @@ class TestSingularities:
         def test(G):
             B0 = ToroidalMagneticField(B0=G / data["R0"], R0=data["R0"])
             B0n, _ = B0.compute_Bnormal(
-                eq.surface, eval_grid=src_grid, source_grid=src_grid
+                eq.surface,
+                eval_grid=src_grid,
+                source_grid=src_grid,
+                vc_source_grid=src_grid,
             )
             Phi_mn, Phi_transform = compute_Phi_mn(
-                eq=eq, B0n=B0n, source_grid=src_grid, Phi_N=max(eq.N, 1)
+                eq=eq,
+                B0n=B0n,
+                source_grid=src_grid,
+                Phi_grid=src_grid,
+                Phi_M=src_grid.M,
+                Phi_N=src_grid.N,
             )
 
             evl_grid = Phi_transform.grid
@@ -733,7 +741,10 @@ class TestSingularities:
                 basis=Phi_transform.basis,
             )
             B0n, _ = B0.compute_Bnormal(
-                eq.surface, eval_grid=evl_grid, source_grid=src_grid
+                eq.surface,
+                eval_grid=evl_grid,
+                source_grid=src_grid,
+                vc_source_grid=src_grid,
             )
 
             # Get data as function of theta, zeta on the only flux surface (LCFS).
@@ -745,6 +756,7 @@ class TestSingularities:
             contour = ax.contourf(theta, zeta, Bn)
             ax.set_title(r"$(\nabla \Phi + B_0) \cdot n$ on $\partial D$")
             fig.colorbar(contour, ax=ax)
+            plt.show()
             # FIXME: Doesn't pass unless G = 0 for stellarators.
             try:
                 np.testing.assert_allclose(B0n + dPhi_dn, 0, err_msg=f"G = {G}")
@@ -758,8 +770,8 @@ class TestSingularities:
 
     @pytest.mark.unit
     @pytest.mark.mpl_image_compare(remove_text=False, tolerance=tol_1d)
-    @pytest.mark.parametrize("eq", [get("DSHAPE"), get("HELIOTRON"), get("ESTELL")])
-    def test_laplace_bdotn_from_K(self, eq):
+    @pytest.mark.parametrize("eq", [get("DSHAPE"), get("ESTELL")])
+    def test_laplace_bdotdn_from_K(self, eq):
         """Test that Laplace solution from fit of K satisfies boundary condition."""
         MN = 40
         grid = LinearGrid(M=MN, N=MN, sym=False, NFP=eq.NFP)

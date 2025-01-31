@@ -514,7 +514,7 @@ def _nonsingular_part(
     source_zeta = source_data.setdefault("zeta", source_grid.nodes[:, 2])
     source_phi = source_data["phi"]
 
-    eval_data = {key: eval_data[key] for key in kernel.keys}
+    eval_data = {key: eval_data[key] for key in kernel.keys if key in eval_data}
     eval_data["theta"] = jnp.asarray(eval_grid.nodes[:, 1])
     eval_data["zeta"] = jnp.asarray(eval_grid.nodes[:, 2])
 
@@ -1251,13 +1251,13 @@ def compute_Phi_mn(
         # After Fourier transform, the LHS is linear in the spectral coefficients Φₘₙ.
         # We approximate this as finite-dimensional, which enables writing the left
         # hand side as A @ Φₘₙ. Then Φₘₙ is found by solving LHS(Φₘₙ) = A @ Φₘₙ = RHS.
-        src_data["Phi"] = src_transform.transform(Phi_mn)
+        src_data_2 = src_data.copy()
+        src_data_2["Phi"] = src_transform.transform(Phi_mn)
         I = singular_integral(
             Phi_data,
-            src_data,
+            src_data_2,
             _kernel_Phi_dG_dn,
             interpolator,
-            loop=True,
         ).squeeze()
         Phi = Phi_transform.transform(Phi_mn)
         return Phi + I / (2 * jnp.pi)
@@ -1270,7 +1270,6 @@ def compute_Phi_mn(
         src_data,
         _kernel_Bn_over_r,
         interpolator,
-        loop=True,
     ).squeeze() / (2 * jnp.pi)
     # Fourier coefficients of Φ on boundary
     Phi_mn, _, _, _ = jnp.linalg.lstsq(A, RHS)
@@ -1346,9 +1345,7 @@ def compute_dPhi_dn(eq, eval_grid, source_grid, Phi_mn, basis):
     # (Same instructions but divide by 2 for x ∈ D).
     # Biot-Savart kernel assumes Φ in amperes, so we account for that.
     dPhi_dn = (2 / mu_0) * dot(
-        singular_integral(
-            evl_data, src_data, _kernel_biot_savart, interpolator, loop=True
-        ),
+        singular_integral(evl_data, src_data, _kernel_biot_savart, interpolator),
         evl_data["n_rho"],
     )
     return dPhi_dn

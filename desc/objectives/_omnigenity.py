@@ -1080,9 +1080,9 @@ class PiecewiseOmnigenity(_Objective):
             iota=jnp.mean(eq_data["iota"]),
         )
 
-        omnigenity_error = eq_data["|B|"] - field_data["|B|_pwO"]
+        pwO_error = eq_data["|B|"] - field_data["|B|_pwO"]
 
-        return omnigenity_error
+        return pwO_error
 
 
 class Isodynamicity(_Objective):

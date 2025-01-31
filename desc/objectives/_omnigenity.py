@@ -975,7 +975,7 @@ class PiecewiseOmnigenity(_Objective):
 
         # default grids
         if self._eq_grid is None:
-            rho = self._field_grid.nodes[0, 0]
+            rho = 0.5
 
         if self._eq_grid is None:
             eq_grid = LinearGrid(
@@ -998,17 +998,16 @@ class PiecewiseOmnigenity(_Objective):
 
         profiles = get_profiles(self._eq_data_keys, obj=eq, grid=eq_grid)
         eq_transforms = get_transforms(
-            "desc.equilibrium.equilibrium.Equilibrium",
             self._eq_data_keys,
+            obj=eq,
             grid=eq_grid,
-            M_booz=M_booz,
-            N_booz=N_booz,
         )
 
         self._constants = {
             "eq_profiles": profiles,
             "eq_transforms": eq_transforms,
             "helicity": self.helicity,
+            "quad_weights": 1.0,
         }
 
         timer.stop("Precomputing transforms")
@@ -1017,9 +1016,9 @@ class PiecewiseOmnigenity(_Objective):
 
         if self._normalize:
             # normalized with max |B|_pwO
-            self._normalization = jnp.max(field.B_max)
+            self._normalization = (field.B_min + field.B_max) / 2
 
-        super().build(use_jit=use_jit, verbose=verbose)
+        super().build(use_jit=use_jit, verbose=0)
 
     def compute(self, params_1=None, params_2=None, constants=None):
         """Compute omnigenity errors.
@@ -1043,6 +1042,8 @@ class PiecewiseOmnigenity(_Objective):
             Omnigenity error at each node (T).
 
         """
+        field = self.things[1]
+
         if constants is None:
             constants = self.constants
 
@@ -1061,17 +1062,18 @@ class PiecewiseOmnigenity(_Objective):
         ## Passing Boozer coordinate values as regular coordinate
         ## TODO: Have to account for NFP
         field_grid = LinearGrid(
-            rho=self._rho, theta=eq_data["theta_B"], zeta=eq_data["zeta_B"]
+            rho=0.5, theta=eq_data["theta_B"], zeta=eq_data["zeta_B"]
         )
 
         field_transforms = get_transforms(
-            "desc.magnetic_fields._core.OmnigenousField",
             self._field_data_keys,
+            obj=field,
             grid=field_grid,
+            jitable=True,
         )
 
         field_data = compute_fun(
-            "desc.magnetic_fields._core.OmnigenousField",
+            "desc.magnetic_fields._core.PiecewiseOmnigenousField",
             self._field_data_keys,
             params=field_params,
             transforms=field_transforms,
@@ -1082,7 +1084,7 @@ class PiecewiseOmnigenity(_Objective):
 
         pwO_error = eq_data["|B|"] - field_data["|B|_pwO"]
 
-        return pwO_error
+        return pwO_error.ravel()
 
 
 class Isodynamicity(_Objective):

@@ -332,15 +332,17 @@ def test_proximal_jac_atf(benchmark):
     grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, rho=np.linspace(0.1, 1, 10))
     objective = ObjectiveFunction(QuasisymmetryTwoTerm(eq, grid=grid))
     constraint = ObjectiveFunction(ForceBalance(eq))
-    prox = ProximalProjection(objective, constraint, eq)
+    prox = ProximalProjection(objective, constraint, eq, solve_options={"maxiter": 1})
     prox.build()
     prox.compile()
-    x = prox.x(eq)
 
-    def run(x, prox):
+    def run():
+        x = prox.x(eq)
+        # we change x slightly to profile solve/perturb equilibrium too
+        x = x.at[0].add(np.random.rand() * 0.001)
         prox.jac_scaled_error(x, prox.constants).block_until_ready()
 
-    benchmark.pedantic(run, args=(x, prox), rounds=10, iterations=1)
+    benchmark.pedantic(run, rounds=10, iterations=1)
 
 
 @pytest.mark.slow
@@ -359,14 +361,14 @@ def test_proximal_freeb_compute(benchmark):
     )
     obj.build()
     obj.compile()
-    x = obj.x(eq)
-    # we change x slightly to profile solve/perturb equilibrium too
-    x = x.at[0].add(0.001)
 
-    def run(x, obj):
+    def run():
+        x = obj.x(eq)
+        # we change x slightly to profile solve/perturb equilibrium too
+        x = x.at[0].add(np.random.rand() * 0.001)
         obj.compute_scaled_error(x, obj.constants).block_until_ready()
 
-    benchmark.pedantic(run, args=(x, obj), rounds=50, iterations=1)
+    benchmark.pedantic(run, rounds=50, iterations=1)
 
 
 @pytest.mark.slow
@@ -385,14 +387,14 @@ def test_proximal_freeb_jac(benchmark):
     )
     obj.build()
     obj.compile()
-    x = obj.x(eq)
-    # we change x slightly to profile solve/perturb equilibrium too
-    x = x.at[0].add(0.001)
 
-    def run(x, obj, prox):
+    def run():
+        x = obj.x(eq)
+        # we change x slightly to profile solve/perturb equilibrium too
+        x = x.at[0].add(np.random.rand() * 0.001)
         obj.jac_scaled_error(x, prox.constants).block_until_ready()
 
-    benchmark.pedantic(run, args=(x, obj, prox), rounds=10, iterations=1)
+    benchmark.pedantic(run, rounds=10, iterations=1)
 
 
 @pytest.mark.slow

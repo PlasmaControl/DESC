@@ -231,8 +231,6 @@ class _Coil(_MagneticField, Optimizable, ABC):
     ----------
     current : float
         Current through the coil, in Amperes.
-
-
     """
 
     _io_attrs_ = _MagneticField._io_attrs_ + ["_current"]
@@ -362,7 +360,6 @@ class _Coil(_MagneticField, Optimizable, ABC):
             current = self.current
         else:
             current = params.pop("current", self.current)
-
         if source_grid is None:
             # NFP=1 to ensure points span the entire length of the coil
             # multiply resolution by NFP to ensure Biot-Savart integration is accurate
@@ -508,12 +505,7 @@ class _Coil(_MagneticField, Optimizable, ABC):
             grid = LinearGrid(N=2 * N + 1)
         coords = self.compute("x", grid=grid, basis="xyz")["x"]
         return FourierXYZCoil.from_values(
-            self.current,
-            coords,
-            N=N,
-            s=s,
-            basis="xyz",
-            name=name,
+            self.current, coords, N=N, s=s, basis="xyz", name=name
         )
 
     def to_SplineXYZ(self, knots=None, grid=None, method="cubic", name="", **kwargs):
@@ -553,12 +545,7 @@ class _Coil(_MagneticField, Optimizable, ABC):
             grid = LinearGrid(zeta=knots)
         coords = self.compute("x", grid=grid, basis="xyz")["x"]
         return SplineXYZCoil.from_values(
-            self.current,
-            coords,
-            knots=knots,
-            method=method,
-            name=name,
-            basis="xyz",
+            self.current, coords, knots=knots, method=method, name=name, basis="xyz"
         )
 
     def to_FourierRZ(self, N=10, grid=None, NFP=None, sym=False, name="", **kwargs):
@@ -592,13 +579,7 @@ class _Coil(_MagneticField, Optimizable, ABC):
             grid = LinearGrid(N=2 * N + 1)
         coords = self.compute("x", grid=grid, basis="xyz")["x"]
         return FourierRZCoil.from_values(
-            self.current,
-            coords,
-            N=N,
-            NFP=NFP,
-            basis="xyz",
-            sym=sym,
-            name=name,
+            self.current, coords, N=N, NFP=NFP, basis="xyz", sym=sym, name=name
         )
 
     def to_FourierPlanar(self, N=10, grid=None, basis="xyz", name="", **kwargs):
@@ -631,11 +612,7 @@ class _Coil(_MagneticField, Optimizable, ABC):
             grid = LinearGrid(N=2 * N + 1)
         coords = self.compute("x", grid=grid, basis=basis)["x"]
         return FourierPlanarCoil.from_values(
-            self.current,
-            coords,
-            N=N,
-            basis=basis,
-            name=name,
+            self.current, coords, N=N, basis=basis, name=name
         )
 
 
@@ -658,7 +635,6 @@ class FourierRZCoil(_Coil, FourierRZCurve):
         whether to enforce stellarator symmetry
     name : str
         name for this coil
-
 
     Examples
     --------
@@ -705,28 +681,10 @@ class FourierRZCoil(_Coil, FourierRZCurve):
         sym="auto",
         name="",
     ):
-        super().__init__(
-            current,
-            R_n,
-            Z_n,
-            modes_R,
-            modes_Z,
-            NFP,
-            sym,
-            name,
-        )
+        super().__init__(current, R_n, Z_n, modes_R, modes_Z, NFP, sym, name)
 
     @classmethod
-    def from_values(
-        cls,
-        current,
-        coords,
-        N=10,
-        NFP=1,
-        basis="rpz",
-        sym=False,
-        name="",
-    ):
+    def from_values(cls, current, coords, N=10, NFP=1, basis="rpz", sym=False, name=""):
         """Fit coordinates to FourierRZCoil representation.
 
         Parameters
@@ -782,7 +740,6 @@ class FourierXYZCoil(_Coil, FourierXYZCurve):
     name : str
         name for this coil
 
-
     Examples
     --------
     .. code-block:: python
@@ -815,7 +772,6 @@ class FourierXYZCoil(_Coil, FourierXYZCurve):
             atol=1e-8,
         )
 
-
     """
 
     _io_attrs_ = _Coil._io_attrs_ + FourierXYZCurve._io_attrs_
@@ -829,25 +785,10 @@ class FourierXYZCoil(_Coil, FourierXYZCurve):
         modes=None,
         name="",
     ):
-        super().__init__(
-            current,
-            X_n,
-            Y_n,
-            Z_n,
-            modes,
-            name,
-        )
+        super().__init__(current, X_n, Y_n, Z_n, modes, name)
 
     @classmethod
-    def from_values(
-        cls,
-        current,
-        coords,
-        N=10,
-        s=None,
-        basis="xyz",
-        name="",
-    ):
+    def from_values(cls, current, coords, N=10, s=None, basis="xyz", name=""):
         """Fit coordinates to FourierXYZCoil representation.
 
         Parameters
@@ -867,7 +808,7 @@ class FourierXYZCoil(_Coil, FourierXYZCurve):
         basis : {"rpz", "xyz"}
             basis for input coordinates. Defaults to "xyz"
         name : str
-
+            Name for this coil.
 
         Returns
         -------
@@ -957,25 +898,10 @@ class FourierPlanarCoil(_Coil, FourierPlanarCurve):
         basis="xyz",
         name="",
     ):
-        super().__init__(
-            current,
-            center,
-            normal,
-            r_n,
-            modes,
-            basis,
-            name,
-        )
+        super().__init__(current, center, normal, r_n, modes, basis, name)
 
     @classmethod
-    def from_values(
-        cls,
-        current,
-        coords,
-        N=10,
-        basis="xyz",
-        name="",
-    ):
+    def from_values(cls, current, coords, N=10, basis="xyz", name=""):
         """Fit coordinates to FourierPlanarCoil representation.
 
         Parameters
@@ -1046,25 +972,8 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
 
     _io_attrs_ = _Coil._io_attrs_ + SplineXYZCurve._io_attrs_
 
-    def __init__(
-        self,
-        current,
-        X,
-        Y,
-        Z,
-        knots=None,
-        method="cubic",
-        name="",
-    ):
-        super().__init__(
-            current,
-            X,
-            Y,
-            Z,
-            knots,
-            method,
-            name,
-        )
+    def __init__(self, current, X, Y, Z, knots=None, method="cubic", name=""):
+        super().__init__(current, X, Y, Z, knots, method, name)
 
     def _compute_A_or_B(
         self,
@@ -1219,13 +1128,7 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
 
     @classmethod
     def from_values(
-        cls,
-        current,
-        coords,
-        knots=None,
-        method="cubic",
-        name="",
-        basis="xyz",
+        cls, current, coords, knots=None, method="cubic", name="", basis="xyz"
     ):
         """Create SplineXYZCoil from coordinate values.
 
@@ -1343,14 +1246,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
     _io_attrs_ = _Coil._io_attrs_ + ["_coils", "_NFP", "_sym"]
     _io_attrs_.remove("_current")
 
-    def __init__(
-        self,
-        *coils,
-        NFP=1,
-        sym=False,
-        name="",
-        check_intersection=True,
-    ):
+    def __init__(self, *coils, NFP=1, sym=False, name="", check_intersection=True):
         coils = flatten_list(coils, flatten_tuple=True)
         assert all([isinstance(coil, (_Coil)) for coil in coils])
         [_check_type(coil, coils[0]) for coil in coils]
@@ -1423,13 +1319,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         return x
 
     def compute(
-        self,
-        names,
-        grid=None,
-        params=None,
-        transforms=None,
-        data=None,
-        **kwargs,
+        self, names, grid=None, params=None, transforms=None, data=None, **kwargs
     ):
         """Compute the quantity given by name on grid, for each coil in the coilset.
 
@@ -2128,12 +2018,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             f.writelines(lines)
 
     def to_FourierPlanar(
-        self,
-        N=10,
-        grid=None,
-        basis="xyz",
-        name="",
-        check_intersection=True,
+        self, N=10, grid=None, basis="xyz", name="", check_intersection=True
     ):
         """Convert all coils to FourierPlanarCoil.
 
@@ -2172,13 +2057,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         )
 
     def to_FourierRZ(
-        self,
-        N=10,
-        grid=None,
-        NFP=None,
-        sym=False,
-        name="",
-        check_intersection=True,
+        self, N=10, grid=None, NFP=None, sym=False, name="", check_intersection=True
     ):
         """Convert all coils to FourierRZCoil representation.
 
@@ -2251,12 +2130,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         )
 
     def to_SplineXYZ(
-        self,
-        knots=None,
-        grid=None,
-        method="cubic",
-        name="",
-        check_intersection=True,
+        self, knots=None, grid=None, method="cubic", name="", check_intersection=True
     ):
         """Convert all coils to SplineXYZCoil representation.
 
@@ -2691,12 +2565,7 @@ class MixedCoilSet(CoilSet):
         return self._compute_A_or_B(coords, params, basis, source_grid, transforms, "A")
 
     def to_FourierPlanar(
-        self,
-        N=10,
-        grid=None,
-        basis="xyz",
-        name="",
-        check_intersection=True,
+        self, N=10, grid=None, basis="xyz", name="", check_intersection=True
     ):
         """Convert all coils to FourierPlanarCoil representation.
 
@@ -2734,13 +2603,7 @@ class MixedCoilSet(CoilSet):
         return self.__class__(*coils, name=name, check_intersection=check_intersection)
 
     def to_FourierRZ(
-        self,
-        N=10,
-        grid=None,
-        NFP=None,
-        sym=False,
-        name="",
-        check_intersection=True,
+        self, N=10, grid=None, NFP=None, sym=False, name="", check_intersection=True
     ):
         """Convert all coils to FourierRZCoil representation.
 
@@ -2809,12 +2672,7 @@ class MixedCoilSet(CoilSet):
         return self.__class__(*coils, name=name, check_intersection=check_intersection)
 
     def to_SplineXYZ(
-        self,
-        knots=None,
-        grid=None,
-        method="cubic",
-        name="",
-        check_intersection=True,
+        self, knots=None, grid=None, method="cubic", name="", check_intersection=True
     ):
         """Convert all coils to SplineXYZCoil representation.
 

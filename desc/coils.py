@@ -505,12 +505,7 @@ class _Coil(_MagneticField, Optimizable, ABC):
             grid = LinearGrid(N=2 * N + 1)
         coords = self.compute("x", grid=grid, basis="xyz")["x"]
         return FourierXYZCoil.from_values(
-            self.current,
-            coords,
-            N=N,
-            s=s,
-            basis="xyz",
-            name=name,
+            self.current, coords, N=N, s=s, basis="xyz", name=name
         )
 
     def to_SplineXYZ(self, knots=None, grid=None, method="cubic", name="", **kwargs):
@@ -584,13 +579,7 @@ class _Coil(_MagneticField, Optimizable, ABC):
             grid = LinearGrid(N=2 * N + 1)
         coords = self.compute("x", grid=grid, basis="xyz")["x"]
         return FourierRZCoil.from_values(
-            self.current,
-            coords,
-            N=N,
-            NFP=NFP,
-            basis="xyz",
-            sym=sym,
-            name=name,
+            self.current, coords, N=N, NFP=NFP, basis="xyz", sym=sym, name=name
         )
 
     def to_FourierPlanar(self, N=10, grid=None, basis="xyz", name="", **kwargs):
@@ -623,11 +612,7 @@ class _Coil(_MagneticField, Optimizable, ABC):
             grid = LinearGrid(N=2 * N + 1)
         coords = self.compute("x", grid=grid, basis=basis)["x"]
         return FourierPlanarCoil.from_values(
-            self.current,
-            coords,
-            N=N,
-            basis=basis,
-            name=name,
+            self.current, coords, N=N, basis=basis, name=name
         )
 
 
@@ -697,28 +682,10 @@ class FourierRZCoil(_Coil, FourierRZCurve):
         sym="auto",
         name="",
     ):
-        super().__init__(
-            current,
-            R_n,
-            Z_n,
-            modes_R,
-            modes_Z,
-            NFP,
-            sym,
-            name,
-        )
+        super().__init__(current, R_n, Z_n, modes_R, modes_Z, NFP, sym, name)
 
     @classmethod
-    def from_values(
-        cls,
-        current,
-        coords,
-        N=10,
-        NFP=1,
-        basis="rpz",
-        sym=False,
-        name="",
-    ):
+    def from_values(cls, current, coords, N=10, NFP=1, basis="rpz", sym=False, name=""):
         """Fit coordinates to FourierRZCoil representation.
 
         Parameters
@@ -821,25 +788,10 @@ class FourierXYZCoil(_Coil, FourierXYZCurve):
         modes=None,
         name="",
     ):
-        super().__init__(
-            current,
-            X_n,
-            Y_n,
-            Z_n,
-            modes,
-            name,
-        )
+        super().__init__(current, X_n, Y_n, Z_n, modes, name)
 
     @classmethod
-    def from_values(
-        cls,
-        current,
-        coords,
-        N=10,
-        s=None,
-        basis="xyz",
-        name="",
-    ):
+    def from_values(cls, current, coords, N=10, s=None, basis="xyz", name=""):
         """Fit coordinates to FourierXYZCoil representation.
 
         Parameters
@@ -949,25 +901,10 @@ class FourierPlanarCoil(_Coil, FourierPlanarCurve):
         basis="xyz",
         name="",
     ):
-        super().__init__(
-            current,
-            center,
-            normal,
-            r_n,
-            modes,
-            basis,
-            name,
-        )
+        super().__init__(current, center, normal, r_n, modes, basis, name)
 
     @classmethod
-    def from_values(
-        cls,
-        current,
-        coords,
-        N=10,
-        basis="xyz",
-        name="",
-    ):
+    def from_values(cls, current, coords, N=10, basis="xyz", name=""):
         """Fit coordinates to FourierPlanarCoil representation.
 
         Parameters
@@ -1038,25 +975,8 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
 
     _io_attrs_ = _Coil._io_attrs_ + SplineXYZCurve._io_attrs_
 
-    def __init__(
-        self,
-        current,
-        X,
-        Y,
-        Z,
-        knots=None,
-        method="cubic",
-        name="",
-    ):
-        super().__init__(
-            current,
-            X,
-            Y,
-            Z,
-            knots,
-            method,
-            name,
-        )
+    def __init__(self, current, X, Y, Z, knots=None, method="cubic", name=""):
+        super().__init__(current, X, Y, Z, knots, method, name)
 
     def _compute_A_or_B(
         self,
@@ -1211,13 +1131,7 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
 
     @classmethod
     def from_values(
-        cls,
-        current,
-        coords,
-        knots=None,
-        method="cubic",
-        name="",
-        basis="xyz",
+        cls, current, coords, knots=None, method="cubic", name="", basis="xyz"
     ):
         """Create SplineXYZCoil from coordinate values.
 
@@ -1335,14 +1249,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
     _io_attrs_ = _Coil._io_attrs_ + ["_coils", "_NFP", "_sym"]
     _io_attrs_.remove("_current")
 
-    def __init__(
-        self,
-        *coils,
-        NFP=1,
-        sym=False,
-        name="",
-        check_intersection=True,
-    ):
+    def __init__(self, *coils, NFP=1, sym=False, name="", check_intersection=True):
         coils = flatten_list(coils, flatten_tuple=True)
         assert all([isinstance(coil, (_Coil)) for coil in coils])
         [_check_type(coil, coils[0]) for coil in coils]
@@ -1415,13 +1322,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         return x
 
     def compute(
-        self,
-        names,
-        grid=None,
-        params=None,
-        transforms=None,
-        data=None,
-        **kwargs,
+        self, names, grid=None, params=None, transforms=None, data=None, **kwargs
     ):
         """Compute the quantity given by name on grid, for each coil in the coilset.
 

@@ -334,7 +334,8 @@ def test_proximal_jac_atf(benchmark):
     constraint = ObjectiveFunction(ForceBalance(eq))
     prox = ProximalProjection(objective, constraint, eq, solve_options={"maxiter": 1})
     prox.build()
-    prox.compile()
+    x = prox.x(eq)
+    prox.jac_scaled_error(x, prox.constants)
 
     def run():
         x = prox.x(eq)
@@ -342,7 +343,7 @@ def test_proximal_jac_atf(benchmark):
         x = x.at[0].add(np.random.rand() * 0.001)
         prox.jac_scaled_error(x, prox.constants).block_until_ready()
 
-    benchmark.pedantic(run, rounds=10, iterations=1)
+    benchmark.pedantic(run, rounds=5, iterations=1)
 
 
 @pytest.mark.slow
@@ -360,7 +361,8 @@ def test_proximal_freeb_compute(benchmark):
         prox, ObjectiveFunction((FixCurrent(eq), FixPressure(eq), FixPsi(eq)))
     )
     obj.build()
-    obj.compile()
+    x = obj.x(eq)
+    obj.compute_scaled_error(x, obj.constants)
 
     def run():
         x = obj.x(eq)
@@ -368,7 +370,7 @@ def test_proximal_freeb_compute(benchmark):
         x = x.at[0].add(np.random.rand() * 0.001)
         obj.compute_scaled_error(x, obj.constants).block_until_ready()
 
-    benchmark.pedantic(run, rounds=50, iterations=1)
+    benchmark.pedantic(run, rounds=20, iterations=1)
 
 
 @pytest.mark.slow
@@ -386,7 +388,8 @@ def test_proximal_freeb_jac(benchmark):
         prox, ObjectiveFunction((FixCurrent(eq), FixPressure(eq), FixPsi(eq)))
     )
     obj.build()
-    obj.compile()
+    x = obj.x(eq)
+    obj.jac_scaled_error(x, prox.constants)
 
     def run():
         x = obj.x(eq)

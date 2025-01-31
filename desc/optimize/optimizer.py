@@ -381,6 +381,158 @@ class Optimizer(IOAble):
 
         return things, result
 
+    def optimize_stage1_multigrid(
+        self,
+        things,
+        objective,
+        constraints=(),
+        kseq=None,
+        ftol=None,
+        xtol=None,
+        gtol=None,
+        ctol=None,
+        x_scale="auto",
+        verbose=1,
+        maxiter=None,
+        options=None,
+        copy=False,
+    ):
+        """Optimize an objective function for a stage 1 (equilibrium only) problem.
+
+        In the stage 1 problem, the degrees of freedom are generally taken to be the
+        Fourier harmonics describing the plasma boundary, eg eq.Rb_lmn, eq.Zb_lmn
+        with poloidal and toroidal mode numbers m,n.
+
+        This uses a multigrid method, where the optimization space is increased at
+        regular intervals. The size of the optimization space at each step is controlled
+        by ``kseq``.
+
+        Parameters
+        ----------
+        things : Optimizable or tuple/list of Optimizable
+            Things to optimize. Currently only supports a single Equilibrium.
+        objective : ObjectiveFunction
+            Objective function to optimize.
+        constraints : tuple of Objective, optional
+            List of objectives to be used as constraints during optimization.
+        kseq : array-like of int
+            Maximum mode number allowed to vary at each step. At each step i, modes with
+            ||m||>kseq[i] or ||n||>kseq[i] will be fixed. Default is
+            ``np.arange(1, max(eq.M, eq.N))``
+        ftol : float or None, optional
+            Tolerance for termination by the change of the cost function.
+            The optimization process is stopped when ``dF < ftol * F``,
+            and there was an adequate agreement between a local quadratic model and the
+            true model in the last step.
+            If None, defaults to 1e-2 (or 1e-6 for stochastic).
+        xtol : float or None, optional
+            Tolerance for termination by the change of the independent variables.
+            Optimization is stopped when ``norm(dx) < xtol * (xtol + norm(x))``.
+            If None, defaults to 1e-6.
+        gtol : float or None, optional
+            Absolute tolerance for termination by the norm of the gradient.
+            Optimizer terminates when ``norm(g) < gtol``, where
+            If None, defaults to 1e-8.
+        ctol : float or None, optional
+            Stopping tolerance on infinity norm of the constraint violation.
+            Optimization will stop when ctol and one of the other tolerances
+            are satisfied. If None, defaults to 1e-4.
+        x_scale : array_like or ``'auto'``, optional
+            Characteristic scale of each variable. Setting ``x_scale`` is equivalent
+            to reformulating the problem in scaled variables ``xs = x / x_scale``.
+            An alternative view is that the size of a trust region along jth
+            dimension is proportional to ``x_scale[j]``. Improved convergence may
+            be achieved by setting ``x_scale`` such that a step of a given size
+            along any of the scaled variables has a similar effect on the cost
+            function. If set to ``'auto'``, the scale is iteratively updated using the
+            inverse norms of the columns of the Jacobian or Hessian matrix.
+        verbose : integer, optional
+            * 0  : work silently.
+            * 1 : display a termination report.
+            * 2 : display progress during iterations
+        maxiter : int, optional
+            Maximum number of iterations. Defaults to 100.
+        options : dict, optional
+            Dictionary of optional keyword arguments to override default solver
+            settings. See the documentation page ``Optimizers Supported`` for
+            more details (https://desc-docs.readthedocs.io/en/stable/optimizers.html)
+            to check the options for each specific available optimizer.
+        copy : bool
+            Whether to optimize the current things or a copy (leaving the original
+            unchanged).
+
+        Returns
+        -------
+        things : list,
+            list of optimized things
+        res : list of OptimizeResult
+            The optimization result from each step represented as a ``OptimizeResult``
+            object. Important attributes are: ``x`` the solution array, ``success`` a
+            Boolean flag indicating if the optimizer exited successfully and
+            ``message`` which describes the cause of the termination. See
+            `OptimizeResult` for a description of other attributes.
+
+        """
+        from desc.equilibrium import Equilibrium
+        from desc.objectives import FixBoundaryR, FixBoundaryZ
+
+        if not isinstance(things, (tuple, list)):
+            things = [things]
+        eq = things[0]
+        assert (
+            isinstance(eq, Equilibrium) and len(things) == 1
+        ), "optimize_multigrid currently only supports optimizing a single Equilibrium"
+
+        if kseq is None:
+            kseq = np.arange(1, max(eq.M, eq.N) + 1)
+
+        all_things = []
+        all_results = []
+
+        for k in kseq:
+            if verbose:
+                print("\n==================================")
+                print("Optimizing boundary modes M,N <= {}".format(int(k)))
+                print("====================================")
+
+            R_modes = np.vstack(
+                (
+                    [0, 0, 0],
+                    eq.surface.R_basis.modes[
+                        np.max(np.abs(eq.surface.R_basis.modes), 1) > k, :
+                    ],
+                )
+            )
+            Z_modes = eq.surface.Z_basis.modes[
+                np.max(np.abs(eq.surface.Z_basis.modes), 1) > k, :
+            ]
+            if not eq.sym:
+                Z_modes = np.vstack(([0, 0, 0], Z_modes))
+            boundary_constraints = (
+                FixBoundaryR(eq=eq, modes=R_modes),
+                FixBoundaryZ(eq=eq, modes=Z_modes),
+            )
+            consk = constraints + boundary_constraints
+            thingsk, resultsk = self.optimize(
+                eq,
+                objective,
+                consk,
+                ftol=ftol,
+                xtol=xtol,
+                gtol=gtol,
+                ctol=ctol,
+                x_scale=x_scale,
+                verbose=verbose,
+                maxiter=maxiter,
+                options=options,
+                copy=copy,
+            )
+            all_things.append(thingsk[0])
+            all_results.append(resultsk)
+            eq = thingsk[0]
+
+        return all_things, all_results
+
 
 def _parse_method(method):
     """Split string into wrapper and method parts."""

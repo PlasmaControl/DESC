@@ -636,7 +636,6 @@ class FourierRZCoil(_Coil, FourierRZCurve):
     name : str
         name for this coil
 
-
     Examples
     --------
     .. code-block:: python
@@ -741,7 +740,6 @@ class FourierXYZCoil(_Coil, FourierXYZCurve):
     name : str
         name for this coil
 
-
     Examples
     --------
     .. code-block:: python
@@ -773,7 +771,6 @@ class FourierXYZCoil(_Coil, FourierXYZCurve):
             np.array([0, 0, mu0 * I / 2 * R_coil**2 / (R_coil**2 + z0**2) ** (3 / 2)]),
             atol=1e-8,
         )
-
 
     """
 
@@ -811,7 +808,7 @@ class FourierXYZCoil(_Coil, FourierXYZCurve):
         basis : {"rpz", "xyz"}
             basis for input coordinates. Defaults to "xyz"
         name : str
-
+            Name for this coil.
 
         Returns
         -------
@@ -2021,12 +2018,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             f.writelines(lines)
 
     def to_FourierPlanar(
-        self,
-        N=10,
-        grid=None,
-        basis="xyz",
-        name="",
-        check_intersection=True,
+        self, N=10, grid=None, basis="xyz", name="", check_intersection=True
     ):
         """Convert all coils to FourierPlanarCoil.
 
@@ -2065,13 +2057,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         )
 
     def to_FourierRZ(
-        self,
-        N=10,
-        grid=None,
-        NFP=None,
-        sym=False,
-        name="",
-        check_intersection=True,
+        self, N=10, grid=None, NFP=None, sym=False, name="", check_intersection=True
     ):
         """Convert all coils to FourierRZCoil representation.
 
@@ -2144,12 +2130,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         )
 
     def to_SplineXYZ(
-        self,
-        knots=None,
-        grid=None,
-        method="cubic",
-        name="",
-        check_intersection=True,
+        self, knots=None, grid=None, method="cubic", name="", check_intersection=True
     ):
         """Convert all coils to SplineXYZCoil representation.
 
@@ -2584,12 +2565,7 @@ class MixedCoilSet(CoilSet):
         return self._compute_A_or_B(coords, params, basis, source_grid, transforms, "A")
 
     def to_FourierPlanar(
-        self,
-        N=10,
-        grid=None,
-        basis="xyz",
-        name="",
-        check_intersection=True,
+        self, N=10, grid=None, basis="xyz", name="", check_intersection=True
     ):
         """Convert all coils to FourierPlanarCoil representation.
 
@@ -2627,13 +2603,7 @@ class MixedCoilSet(CoilSet):
         return self.__class__(*coils, name=name, check_intersection=check_intersection)
 
     def to_FourierRZ(
-        self,
-        N=10,
-        grid=None,
-        NFP=None,
-        sym=False,
-        name="",
-        check_intersection=True,
+        self, N=10, grid=None, NFP=None, sym=False, name="", check_intersection=True
     ):
         """Convert all coils to FourierRZCoil representation.
 
@@ -2702,12 +2672,7 @@ class MixedCoilSet(CoilSet):
         return self.__class__(*coils, name=name, check_intersection=check_intersection)
 
     def to_SplineXYZ(
-        self,
-        knots=None,
-        grid=None,
-        method="cubic",
-        name="",
-        check_intersection=True,
+        self, knots=None, grid=None, method="cubic", name="", check_intersection=True
     ):
         """Convert all coils to SplineXYZCoil representation.
 

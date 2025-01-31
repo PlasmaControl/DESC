@@ -19,6 +19,7 @@ New Features
 - Adds an option to ``VMECIO.save`` to specify the grid resolution in real space.
 - Adds a new objective ``desc.objectives.CoilIntegratedCurvature`` for targeting convex coils.
 - Adds a new objective ``desc.objectives.ExternalObjective`` for wrapping external codes with finite differences.
+- DESC/JAX version and device info is no longer printed by default, but can be accessed with the function `print_backend_info()`.
 
 Bug Fixes
 

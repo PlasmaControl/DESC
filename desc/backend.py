@@ -41,7 +41,7 @@ else:
         warnings.warn(colored("Failed to load JAX", "red"))
 
 
-def print_info():
+def print_backend_info():
     """Prints DESC version, backend type & version, device type & memory."""
     x = jnp.linspace(0, 5)
     y = jnp.exp(x)

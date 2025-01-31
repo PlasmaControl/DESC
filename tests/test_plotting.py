@@ -19,11 +19,7 @@ from desc.geometry import FourierRZToroidalSurface, FourierXYZCurve
 from desc.grid import ConcentricGrid, Grid, LinearGrid, QuadratureGrid
 from desc.integrals import surface_averages
 from desc.io import load
-from desc.magnetic_fields import (
-    OmnigenousField,
-    SplineMagneticField,
-    ToroidalMagneticField,
-)
+from desc.magnetic_fields import OmnigenousField, ToroidalMagneticField
 from desc.plotting import (
     plot_1d,
     plot_2d,
@@ -45,7 +41,6 @@ from desc.plotting import (
     poincare_plot,
 )
 from desc.utils import isalmostequal
-from desc.vmec import VMECIO
 
 tol_1d = 4.5
 tol_2d = 10
@@ -427,6 +422,14 @@ class TestPlotSection:
         assert "normalization" in data.keys()
         assert data["normalization"] == 1
 
+        return fig
+
+    @pytest.mark.unit
+    @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
+    def test_section_chi_contour(self):
+        """Test plotting poincare section of poloidal flux, with fill=False."""
+        eq = get("DSHAPE_CURRENT")
+        fig, ax = plot_section(eq, "chi", fill=False, levels=20)
         return fig
 
     @pytest.mark.unit
@@ -937,8 +940,8 @@ def test_plot_coefficients():
     return fig
 
 
-@pytest.mark.unit
 @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
+@pytest.mark.unit
 def test_plot_logo():
     """Test plotting the DESC logo."""
     fig, ax = plot_logo()
@@ -949,14 +952,8 @@ def test_plot_logo():
 @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
 def test_plot_poincare():
     """Test making a poincare plot."""
-    # TODO: tracing from spline field seems a lot slower than from a coilset, we
-    # can probably make this test a lot faster if we make some example coilsets
-    extcur = [4700.0, 1000.0]
-    ext_field = SplineMagneticField.from_mgrid(
-        "tests/inputs/mgrid_test.nc", extcur=extcur
-    )
-    with pytest.warns(UserWarning, match="VMEC output"):
-        eq = VMECIO.load("tests/inputs/wout_test_freeb.nc")
+    ext_field = load("tests/inputs/precise_QA_helical_coils.h5")
+    eq = get("precise_QA")
     grid_trace = LinearGrid(rho=np.linspace(0, 1, 9))
     r0 = eq.compute("R", grid=grid_trace)["R"]
     z0 = eq.compute("Z", grid=grid_trace)["Z"]

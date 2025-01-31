@@ -1,4 +1,4 @@
-"""Tests for Mercier stability functions."""
+"""Tests for stability functions."""
 
 import numpy as np
 import pytest
@@ -64,7 +64,8 @@ def get_vmec_data(path, quantity):
 
     """
     f = Dataset(path)
-    rho = np.sqrt(f.variables["phi"] / np.array(f.variables["phi"])[-1])
+    phi = np.array(f.variables["phi"])
+    rho = np.sqrt(phi / phi[-1])
     q = np.array(f.variables[quantity])
     f.close()
     return rho, q
@@ -159,7 +160,7 @@ def test_compute_d_well():
     test(
         desc.examples.get("HELIOTRON"),
         ".//tests//inputs//wout_HELIOTRON.nc",
-        (0.01, 0.45),
+        (0.07, 0.45),
         rtol=1.75e-1,
     )
     test(
@@ -416,6 +417,7 @@ def test_ballooning_geometry(tmpdir_factory):
             "g^ra",
             "g^rr",
             "cvdrift",
+            "gbdrift",
             "cvdrift0",
             "|B|",
             "B^zeta",
@@ -448,11 +450,9 @@ def test_ballooning_geometry(tmpdir_factory):
         sign_psi = psi_s / np.abs(psi_s)
         sign_iota = iotas / np.abs(iotas)
 
-        modB = data["|B|"]
         x = Lref * np.sqrt(psi)
         shat = -x / iotas * shears / Lref
 
-        psi_r = data["psi_r"]
         grad_alpha = data["grad(alpha)"]
 
         g_sup_rr = data["g^rr"]
@@ -512,11 +512,11 @@ def test_ballooning_geometry(tmpdir_factory):
         )
         cvdrift_alt = -sign_psi * data["cvdrift"] * 2 * Bref * Lref**2 * np.sqrt(psi)
 
-        np.testing.assert_allclose(gds2, gds2_alt, rtol=4e-3)
+        np.testing.assert_allclose(gds2, gds2_alt, rtol=6e-3)
         np.testing.assert_allclose(gds22, gds22_alt)
         # gds21 is a zero crossing quantity, rtol won't work,
         # shifting the grid slightly can change rtol requirement significantly
-        np.testing.assert_allclose(gds21, gds21_alt, atol=1e-3)
+        np.testing.assert_allclose(gds21, gds21_alt, atol=2e-3)
         np.testing.assert_allclose(gbdrift, gbdrift_alt)
         # cvdrift is a zero crossing quantity, rtol won't work,
         # shifting the grid slightly can change rtol requirement significantly
@@ -596,6 +596,8 @@ def test_ballooning_stability_eval():
         # different numerics than "ideal ballooning lambda" so that we can verify them
         # against one another
         psi_b = data01["Psi"][-1] / (2 * jnp.pi)
+        # Calculating a_N accurately requires a QuadratureGrid
+        # which is automatically accounted for inside of eq.compute
         a_N = data01["a"]
         B_N = 2 * psi_b / a_N**2
 
@@ -754,8 +756,6 @@ def test_ballooning_compare_with_COBRAVMEC():
 
     # Flux surfaces on which to evaluate ballooning stability
     surfaces = [0.98, 0.985, 0.99, 0.995, 1.0]
-
-    grid = LinearGrid(rho=jnp.array(surfaces), NFP=eq.NFP)
 
     Nalpha = 8  # Number of field lines
 

@@ -5,7 +5,7 @@ from abc import ABC, abstractmethod
 from collections.abc import MutableSequence
 
 import numpy as np
-import scipy.linalg
+import scipy
 from diffrax import (
     DiscreteTerminatingEvent,
     ODETerm,
@@ -68,7 +68,7 @@ def biot_savart_general(re, rs, J, dV):
         B = B + jnp.where(den[:, None] == 0, 0, num / den[:, None])
         return B
 
-    return 1e-7 * fori_loop(0, J.shape[0], body, B)
+    return scipy.constants.mu_0 / 4 / jnp.pi * fori_loop(0, J.shape[0], body, B)
 
 
 def biot_savart_general_vector_potential(re, rs, J, dV):
@@ -102,7 +102,7 @@ def biot_savart_general_vector_potential(re, rs, J, dV):
         A = A + jnp.where(den[:, None] == 0, 0, num / den[:, None])
         return A
 
-    return 1e-7 * fori_loop(0, J.shape[0], body, A)
+    return scipy.constants.mu_0 / 4 / jnp.pi * fori_loop(0, J.shape[0], body, A)
 
 
 def read_BNORM_file(fname, surface, eval_grid=None, scale_by_curpol=True):
@@ -319,9 +319,11 @@ class _MagneticField(IOAble, ABC):
         Returns
         -------
         Bnorm : ndarray
-            The normal magnetic field to the surface given, of size grid.num_nodes.
+            The normal magnetic field to the surface given, as an array of
+            size ``grid.num_nodes``.
         coords: ndarray
-            the locations (in specified basis) at which the Bnormal was calculated
+            the locations (in specified basis) at which the Bnormal was calculated,
+            given as a ``(grid.num_nodes , 3)`` shaped array.
 
         """
         calc_Bplasma = False
@@ -1816,10 +1818,10 @@ class SplineMagneticField(_MagneticField, Optimizable):
         ir = int(mgrid["ir"][()])  # number of grid points in the R coordinate
         jz = int(mgrid["jz"][()])  # number of grid points in the Z coordinate
         kp = int(mgrid["kp"][()])  # number of grid points in the phi coordinate
-        Rmin = mgrid["rmin"][()]  # Minimum R coordinate (m)
-        Rmax = mgrid["rmax"][()]  # Maximum R coordinate (m)
-        Zmin = mgrid["zmin"][()]  # Minimum Z coordinate (m)
-        Zmax = mgrid["zmax"][()]  # Maximum Z coordinate (m)
+        Rmin = mgrid["rmin"][()].filled()  # Minimum R coordinate (m)
+        Rmax = mgrid["rmax"][()].filled()  # Maximum R coordinate (m)
+        Zmin = mgrid["zmin"][()].filled()  # Minimum Z coordinate (m)
+        Zmax = mgrid["zmax"][()].filled()  # Maximum Z coordinate (m)
         nfp = int(mgrid["nfp"][()])  # Number of field periods
         Rgrid = np.linspace(Rmin, Rmax, ir)
         Zgrid = np.linspace(Zmin, Zmax, jz)
@@ -1831,9 +1833,15 @@ class SplineMagneticField(_MagneticField, Optimizable):
         bz = np.zeros([kp, jz, ir, nextcur])
         for i in range(nextcur):
             coil_id = "%03d" % (i + 1,)
-            br[:, :, :, i] += mgrid["br_" + coil_id][()]  # B_R radial magnetic field
-            bp[:, :, :, i] += mgrid["bp_" + coil_id][()]  # B_phi toroidal field (T)
-            bz[:, :, :, i] += mgrid["bz_" + coil_id][()]  # B_Z vertical magnetic field
+            br[:, :, :, i] += mgrid["br_" + coil_id][
+                ()
+            ].filled()  # B_R radial magnetic field
+            bp[:, :, :, i] += mgrid["bp_" + coil_id][
+                ()
+            ].filled()  # B_phi toroidal field (T)
+            bz[:, :, :, i] += mgrid["bz_" + coil_id][
+                ()
+            ].filled()  # B_Z vertical magnetic field
 
         # shift axes to correct order
         br = np.moveaxis(br, (0, 1, 2), (1, 2, 0))
@@ -1849,13 +1857,13 @@ class SplineMagneticField(_MagneticField, Optimizable):
                 coil_id = "%03d" % (i + 1,)
                 ar[:, :, :, i] += mgrid["ar_" + coil_id][
                     ()
-                ]  # A_R radial mag. vec. potential
+                ].filled()  # A_R radial mag. vec. potential
                 ap[:, :, :, i] += mgrid["ap_" + coil_id][
                     ()
-                ]  # A_phi toroidal mag. vec. potential
+                ].filled()  # A_phi toroidal mag. vec. potential
                 az[:, :, :, i] += mgrid["az_" + coil_id][
                     ()
-                ]  # A_Z vertical mag. vec. potential
+                ].filled()  # A_Z vertical mag. vec. potential
 
             # shift axes to correct order
             ar = np.moveaxis(ar, (0, 1, 2), (1, 2, 0))
@@ -1877,7 +1885,7 @@ class SplineMagneticField(_MagneticField, Optimizable):
 
     @classmethod
     def from_field(
-        cls, field, R, phi, Z, params=None, method="cubic", extrap=False, NFP=1
+        cls, field, R, phi, Z, params=None, method="cubic", extrap=False, NFP=None
     ):
         """Create a splined magnetic field from another field for faster evaluation.
 
@@ -1895,7 +1903,8 @@ class SplineMagneticField(_MagneticField, Optimizable):
         extrap : bool
             whether to extrapolate splines beyond specified R,phi,Z
         NFP : int, optional
-            Number of toroidal field periods.
+            Number of toroidal field periods.  If not provided, will default to 1 or
+        the provided field's NFP, if it has that attribute.
 
         """
         R, phi, Z = map(np.asarray, (R, phi, Z))
@@ -1903,6 +1912,7 @@ class SplineMagneticField(_MagneticField, Optimizable):
         shp = rr.shape
         coords = np.array([rr.flatten(), pp.flatten(), zz.flatten()]).T
         BR, BP, BZ = field.compute_magnetic_field(coords, params, basis="rpz").T
+        NFP = getattr(field, "_NFP", 1)
         try:
             AR, AP, AZ = field.compute_magnetic_vector_potential(
                 coords, params, basis="rpz"
@@ -1940,12 +1950,22 @@ class ScalarPotentialField(_MagneticField):
         R,phi,Z are arrays of cylindrical coordinates.
     params : dict, optional
         default parameters to pass to potential function
+    NFP : int, optional
+        Whether the field has a discrete periodicity. This is only used when making
+        a ``SplineMagneticField`` from this field using its ``from_field`` method,
+        or when saving this field as an mgrid file using the ``save_mgrid`` method.
 
     """
 
-    def __init__(self, potential, params=None):
+    def __init__(self, potential, params=None, NFP=1):
         self._potential = potential
         self._params = params
+        self._NFP = NFP
+
+    @property
+    def NFP(self):
+        """int: Number of (toroidal) field periods."""
+        return self._NFP
 
     def compute_magnetic_field(
         self, coords, params=None, basis="rpz", source_grid=None, transforms=None
@@ -2034,12 +2054,22 @@ class VectorPotentialField(_MagneticField):
         R,phi,Z are arrays of cylindrical coordinates.
     params : dict, optional
         default parameters to pass to potential function
+    NFP : int, optional
+        Whether the field has a discrete periodicity. This is only used when making
+        a ``SplineMagneticField`` from this field using its ``from_field`` method,
+        or when saving this field as an mgrid file using the ``save_mgrid`` method.
 
     """
 
-    def __init__(self, potential, params=None):
+    def __init__(self, potential, params=None, NFP=1):
         self._potential = potential
         self._params = params
+        self._NFP = NFP
+
+    @property
+    def NFP(self):
+        """int: Number of (toroidal) field periods."""
+        return self._NFP
 
     def _compute_A_or_B(
         self,
@@ -2395,7 +2425,7 @@ class OmnigenousField(Optimizable, IOAble):
             assert len(x_lmn) == self.x_basis.num_modes
             self._x_lmn = x_lmn
 
-        # TODO: should we not allow some types of helicity?
+        # TODO (#1390): should we not allow some types of helicity?
         helicity_sign = sign(helicity[0]) * sign(helicity[1])
         warnif(
             self.helicity != (0, self.NFP * helicity_sign)
@@ -2452,7 +2482,7 @@ class OmnigenousField(Optimizable, IOAble):
         nodes = np.array([rho, np.zeros_like(rho), np.zeros_like(rho)]).T
 
         transform_fwd = self.B_basis.evaluate(nodes)
-        transform_rev = scipy.linalg.pinv(transform_fwd)
+        transform_rev = jnp.linalg.pinv(transform_fwd)
         B_old = transform_fwd @ self.B_lm.reshape((old_L_B + 1, -1))
 
         eta_old = np.linspace(0, jnp.pi / 2, num=B_old.shape[-1])

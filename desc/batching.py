@@ -102,7 +102,6 @@ def scan_append(f, x):
     return res_append
 
 
-# TODO in_axes a la vmap?
 def _scanmap(fun, scan_fun, argnums=0):
     """A helper function to wrap f with a scan_fun."""
 
@@ -173,6 +172,15 @@ def _chunk_vmapped_function(
     if isinstance(argnums, int):
         argnums = (argnums,)
     return functools.partial(_eval_fun_in_chunks, vmapped_fun, chunk_size, argnums)
+
+
+def batch_map(fun, fun_input, batch_size):
+    """Compute vectorized ``fun`` in batches."""
+    return (
+        fun(fun_input)
+        if batch_size is None
+        else _eval_fun_in_chunks(fun, batch_size, (0,), fun_input)
+    )
 
 
 def _parse_in_axes(in_axes):

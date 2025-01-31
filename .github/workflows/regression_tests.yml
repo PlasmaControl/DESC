@@ -50,23 +50,30 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
+      - name: Check full Python version
+        run: |
+          python --version
+          python_version=$(python --version 2>&1 | cut -d' ' -f2)
+          echo "Python version: $python_version"
+          echo "version=$python_version" >> $GITHUB_ENV
+
       - name: Restore Python environment cache
         if: env.has_changes == 'true'
         id: restore-env
         uses: actions/cache/restore@v4
         with:
-          path: .venv-${{ matrix.python-version }}
-          key: ${{ runner.os }}-venv-${{ matrix.python-version }}-${{ hashFiles('devtools/dev-requirements.txt', 'requirements.txt') }}
+          path: .venv-${{ env.version }}
+          key: ${{ runner.os }}-venv-${{ env.version }}-${{ hashFiles('devtools/dev-requirements.txt', 'requirements.txt') }}
 
       - name: Set up virtual environment if not restored from cache
         if: steps.restore-env.outputs.cache-hit != 'true' && env.has_changes == 'true'
         run: |
           gh cache list
-          python -m venv .venv-${{ matrix.python-version }}
-          source .venv-${{ matrix.python-version }}/bin/activate
+          python -m venv .venv-${{ env.version }}
+          source .venv-${{ env.version }}/bin/activate
           python -m pip install --upgrade pip
           pip install -r devtools/dev-requirements.txt
-          pip install matplotlib==3.7.2
+          pip install matplotlib==3.9.2
 
       - name: Set Swap Space
         if: env.has_changes == 'true'
@@ -74,12 +81,20 @@ jobs:
         with:
           swap-size-gb: 10
 
+      - name: Action Details
+        if: env.has_changes == 'true'
+        run: |
+          source .venv-${{ env.version }}/bin/activate
+          which python
+          python --version
+          pwd
+          lscpu
+          pip list
+
       - name: Test with pytest
         if: env.has_changes == 'true'
         run: |
-          source .venv-${{ matrix.python-version }}/bin/activate
-          pwd
-          lscpu
+          source .venv-${{ env.version }}/bin/activate
           python -m pytest -v -m regression\
             --durations=0 \
             --cov-report xml:cov.xml \
@@ -106,14 +121,9 @@ jobs:
       - name: Upload coverage
         if: env.has_changes == 'true'
         id : codecov
-        uses: Wandalen/wretry.action@v3.5.0
+        uses: codecov/codecov-action@v5
         with:
-          action: codecov/codecov-action@v4
-          with: |
-            token: ${{ secrets.CODECOV_TOKEN }}
-            name: codecov-umbrella
-            files: ./cov.xml
-            fail_ci_if_error: true
-            verbose: true
-          attempt_limit: 10
-          attempt_delay: 60000 # ms, 1 min
+          name: codecov-umbrella
+          files: ./cov.xml
+          fail_ci_if_error: true
+          verbose: true

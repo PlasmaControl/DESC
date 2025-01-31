@@ -2,6 +2,7 @@
 
 import copy
 import numbers
+import warnings
 from collections.abc import MutableSequence
 
 import numpy as np
@@ -26,6 +27,7 @@ from desc.geometry import (
     ZernikeRZToroidalSection,
 )
 from desc.grid import Grid, LinearGrid, QuadratureGrid, _Grid
+from desc.input_reader import InputReader
 from desc.io import IOAble
 from desc.objectives import (
     ForceBalance,
@@ -1059,8 +1061,10 @@ class Equilibrium(IOAble, Optimizable):
                 sym=self.sym
                 and all(
                     data_index[p][dep]["grid_requirement"].get("sym", True)
-                    # TODO: GitHub issue #1206.
-                    and not data_index[p][dep]["grid_requirement"].get("can_fft", False)
+                    # TODO (#1206)
+                    and not data_index[p][dep]["grid_requirement"].get(
+                        "can_fft2", False
+                    )
                     for dep in dep1dr
                 ),
             )
@@ -1107,8 +1111,10 @@ class Equilibrium(IOAble, Optimizable):
                 sym=self.sym
                 and all(
                     data_index[p][dep]["grid_requirement"].get("sym", True)
-                    # TODO: GitHub issue #1206.
-                    and not data_index[p][dep]["grid_requirement"].get("can_fft", False)
+                    # TODO (#1206)
+                    and not data_index[p][dep]["grid_requirement"].get(
+                        "can_fft2", False
+                    )
                     for dep in dep1dz
                 ),
             )
@@ -1234,7 +1240,7 @@ class Equilibrium(IOAble, Optimizable):
             **kwargs,
         )
 
-    def get_rtz_grid(
+    def _get_rtz_grid(
         self,
         radial,
         poloidal,
@@ -1441,7 +1447,6 @@ class Equilibrium(IOAble, Optimizable):
     @property
     def spectral_indexing(self):
         """str: Type of indexing used for the spectral basis."""
-        # TODO: allow this to change?
         return self._spectral_indexing
 
     @property
@@ -1781,7 +1786,15 @@ class Equilibrium(IOAble, Optimizable):
 
     @iota.setter
     def iota(self, new):
+        warnif(
+            self.current is not None,
+            UserWarning,
+            "Setting rotational transform profile on an equilibrium "
+            + "with fixed toroidal current, removing existing toroidal"
+            " current profile.",
+        )
         self._iota = parse_profile(new, "iota")
+        self._current = None
 
     @optimizable_parameter
     @property
@@ -1794,7 +1807,7 @@ class Equilibrium(IOAble, Optimizable):
         errorif(
             self.iota is None,
             ValueError,
-            "Attempt to set rotational transform on an equilibrium"
+            "Attempt to set parameters of rotational transform on an equilibrium"
             + "with fixed toroidal current",
         )
         self.iota.params = i_l
@@ -1806,7 +1819,15 @@ class Equilibrium(IOAble, Optimizable):
 
     @current.setter
     def current(self, new):
+        warnif(
+            self.iota is not None,
+            UserWarning,
+            "Setting toroidal current profile on an equilibrium "
+            + "with fixed rotational transform, removing existing rotational"
+            " transform profile.",
+        )
         self._current = parse_profile(new, "current")
+        self._iota = None
 
     @optimizable_parameter
     @property
@@ -1819,7 +1840,7 @@ class Equilibrium(IOAble, Optimizable):
         errorif(
             self.current is None,
             ValueError,
-            "Attempt to set toroidal current on an equilibrium with "
+            "Attempt to set parameters of toroidal current on an equilibrium with "
             + "fixed rotational transform",
         )
         self.current.params = c_l
@@ -1970,8 +1991,6 @@ class Equilibrium(IOAble, Optimizable):
             raise ValueError("Input must be a pyQSC or pyQIC solution.") from e
 
         rho, _ = special.js_roots(L, 2, 2)
-        # TODO: could make this an OCS grid to improve fitting, need to figure out
-        # how concentric grids work with QSC
         grid = LinearGrid(rho=rho, theta=ntheta, zeta=na_eq.phi, NFP=na_eq.nfp)
         basis_R = FourierZernikeBasis(
             L=L,
@@ -2034,6 +2053,55 @@ class Equilibrium(IOAble, Optimizable):
         eq.surface = eq.get_surface_at(rho=1)
 
         return eq
+
+    @classmethod
+    def from_input_file(cls, path, **kwargs):
+        """Create an Equilibrium from information in a DESC or VMEC input file.
+
+        Parameters
+        ----------
+        path : Path-like or str
+            Path to DESC or VMEC input file.
+        **kwargs : dict, optional
+            keyword arguments to pass to the constructor of the
+            Equilibrium being created.
+
+        Returns
+        -------
+        Equilibrium : Equilibrium
+            Equilibrium generated from the given input file.
+
+        """
+        inputs = InputReader().parse_inputs(path)[-1]
+        if (inputs["bdry_ratio"] is not None) and (inputs["bdry_ratio"] != 1):
+            warnings.warn(
+                "`bdry_ratio` is intended as an input for the continuation method."
+                "`bdry_ratio`=1 uses the given surface modes as is, any other scalar "
+                "value will scale the non-axisymmetric  modes by that value. The "
+                "final value of `bdry_ratio` in the input file is "
+                f"{inputs['bdry_ratio']}, this means the created Equilibrium won't "
+                "have the given surface but a scaled version instead."
+            )
+        inputs["surface"][:, 1:3] = inputs["surface"][:, 1:3].astype(int)
+        # remove the keys (pertaining to continuation and solver tols)
+        # that an Equilibrium does not need
+        unused_keys = [
+            "pres_ratio",
+            "bdry_ratio",
+            "pert_order",
+            "ftol",
+            "xtol",
+            "gtol",
+            "maxiter",
+            "objective",
+            "optimizer",
+            "bdry_mode",
+            "output_path",
+            "verbose",
+        ]
+        [inputs.pop(key) for key in unused_keys]
+        inputs.update(kwargs)
+        return cls(**inputs)
 
     def solve(
         self,

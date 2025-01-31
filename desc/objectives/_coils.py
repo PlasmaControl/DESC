@@ -1283,46 +1283,52 @@ class QuadraticFlux(_Objective):
                 )
 
             @functools.cached_property
-            def perturbations(self) -> tuple[jnp.ndarray, jnp.ndarray]:
-                # Draw a random matrix shaped (2n, 3) from a multivariate normal
-                # distribution, where the top half is for the position perturbations and
-                # the bottom half is for the tangent perturbations, using the covariance
-                # matrix and zero mean.
+            def samples_of_perturbations(self) -> list[tuple[jnp.ndarray, jnp.ndarray]]:
+                samples = []
+                for _ in range(self.number_of_samples):
+                    # Draw a random matrix shaped (2n, 3) from a multivariate normal
+                    # distribution, where the top half is for the position perturbations and
+                    # the bottom half is for the tangent perturbations, using the covariance
+                    # matrix and zero mean.
 
-                mean_1d = jnp.zeros(2 * self.number_of_discretization_points)
+                    mean_1d = jnp.zeros(2 * self.number_of_discretization_points)
 
-                keyx, keyy, keyz = jax.random.split(jax.random.PRNGKey(self.seed), 3)
+                    keyx, keyy, keyz = jax.random.split(
+                        jax.random.PRNGKey(self.seed), 3
+                    )
 
-                # Each draw is shape (2n,)
-                xdraw = jax.random.multivariate_normal(
-                    keyx, mean_1d, self.covariance_matrix
-                )
-                ydraw = jax.random.multivariate_normal(
-                    keyy, mean_1d, self.covariance_matrix
-                )
-                zdraw = jax.random.multivariate_normal(
-                    keyz, mean_1d, self.covariance_matrix
-                )
+                    # Each draw is shape (2n,)
+                    xdraw = jax.random.multivariate_normal(
+                        keyx, mean_1d, self.covariance_matrix
+                    )
+                    ydraw = jax.random.multivariate_normal(
+                        keyy, mean_1d, self.covariance_matrix
+                    )
+                    zdraw = jax.random.multivariate_normal(
+                        keyz, mean_1d, self.covariance_matrix
+                    )
 
-                # Create two (n,3) arrays for the position and tangent perturbations
-                position_perturbations = jnp.stack(
-                    [
-                        xdraw[: self.number_of_discretization_points],
-                        ydraw[: self.number_of_discretization_points],
-                        zdraw[: self.number_of_discretization_points],
-                    ],
-                    axis=1,
-                )
-                tangent_perturbations = jnp.stack(
-                    [
-                        xdraw[self.number_of_discretization_points :],
-                        ydraw[self.number_of_discretization_points :],
-                        zdraw[self.number_of_discretization_points :],
-                    ],
-                    axis=1,
-                )
+                    # Create two (n,3) arrays for the position and tangent perturbations
+                    position_perturbations = jnp.stack(
+                        [
+                            xdraw[: self.number_of_discretization_points],
+                            ydraw[: self.number_of_discretization_points],
+                            zdraw[: self.number_of_discretization_points],
+                        ],
+                        axis=1,
+                    )
+                    tangent_perturbations = jnp.stack(
+                        [
+                            xdraw[self.number_of_discretization_points :],
+                            ydraw[self.number_of_discretization_points :],
+                            zdraw[self.number_of_discretization_points :],
+                        ],
+                        axis=1,
+                    )
 
-                return position_perturbations, tangent_perturbations
+                    samples.append((position_perturbations, tangent_perturbations))
+
+                return samples
 
         if stochastic_optimization_settings:
             self._stochastic_settings = StochasticOptimizationSettings(
@@ -1387,7 +1393,9 @@ class QuadraticFlux(_Objective):
             )
 
         if self._stochastic_settings:
-            self._stochastic_settings = self._field_grid.num_zeta
+            self._stochastic_settings.number_of_discretization_points = (
+                self._field_grid.num_zeta
+            )
 
         self._constants = {
             "field": self._field,
@@ -1397,7 +1405,6 @@ class QuadraticFlux(_Objective):
             "eval_transforms": eval_transforms,
             "eval_profiles": eval_profiles,
             "B_plasma": Bplasma,
-            "stochastic_settings": self._stochastic_settings,
         }
 
         timer.stop("Precomputing transforms")
@@ -1451,21 +1458,20 @@ class QuadraticFlux(_Objective):
             return f
 
         if self._stochastic_settings:
-            position_perturbations, tangent_perturbations = (
-                self._stochastic_settings.perturbations
-            )
-            f = jnp.mean(
-                jax.vmap(
-                    lambda x: compute_f(
-                        position_perturbations=x[0],
-                        tangent_perturbations=x[1],
-                    ),
-                    in_axes=(0, 0),
-                )(
-                    position_perturbations,
-                    tangent_perturbations,
-                )
-            )
+            # samples_of_perturbations is a list of tuples, where each tuple contains
+            # two arrays: the first array is the position perturbations and the second
+            # array is the tangent perturbations. We will loop over the list, compute
+            # f for each tuple and then average the results.
+            fs = []
+            for (
+                position_perturbations,
+                tangent_perturbations,
+            ) in self._stochastic_settings.samples_of_perturbations:
+                fs.append(compute_f(position_perturbations, tangent_perturbations))
+
+            return jnp.mean(fs, axis=0)
+
+        return compute_f()
 
 
 class SurfaceQuadraticFlux(_Objective):

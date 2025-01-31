@@ -231,8 +231,6 @@ class _Coil(_MagneticField, Optimizable, ABC):
     ----------
     current : float
         Current through the coil, in Amperes.
-
-
     """
 
     _io_attrs_ = _MagneticField._io_attrs_ + ["_current"]
@@ -362,7 +360,6 @@ class _Coil(_MagneticField, Optimizable, ABC):
             current = self.current
         else:
             current = params.pop("current", self.current)
-
         if source_grid is None:
             # NFP=1 to ensure points span the entire length of the coil
             # multiply resolution by NFP to ensure Biot-Savart integration is accurate
@@ -553,12 +550,7 @@ class _Coil(_MagneticField, Optimizable, ABC):
             grid = LinearGrid(zeta=knots)
         coords = self.compute("x", grid=grid, basis="xyz")["x"]
         return SplineXYZCoil.from_values(
-            self.current,
-            coords,
-            knots=knots,
-            method=method,
-            name=name,
-            basis="xyz",
+            self.current, coords, knots=knots, method=method, name=name, basis="xyz"
         )
 
     def to_FourierRZ(self, N=10, grid=None, NFP=None, sym=False, name="", **kwargs):

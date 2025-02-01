@@ -723,7 +723,7 @@ def _calc_2nd_order_constraints(qsc, desc_eq, coeffs, bases):  # noqa: C901
         constraining a DESC equilibrium solve
     Notes
     ----
-        follows eqns 30a and 30b in NAE2DESC document
+        Uses 2nd order coefficients eqns in NAE document in docs/dev_notes folder.
     """
     r = 2 * abs(desc_eq.Psi / qsc.Bbar) / 2 / np.pi  # this is the r over rho factor,
     # squared (bc is rho^2 and r^2 terms considering here)

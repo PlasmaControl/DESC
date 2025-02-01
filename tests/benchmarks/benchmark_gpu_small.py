@@ -340,7 +340,7 @@ def test_proximal_jac_atf(benchmark):
     def run(x, prox):
         prox.jac_scaled_error(x, prox.constants).block_until_ready()
 
-    benchmark.pedantic(run, args=(x, prox), rounds=1, iterations=20)
+    benchmark.pedantic(run, args=(x, prox), rounds=20, iterations=1)
 
 
 @pytest.mark.slow

@@ -21,6 +21,7 @@ from desc.utils import Timer, broadcast_tree, errorif, safenorm, warnif
 
 from .normalization import compute_scaling_factors
 from .objective_funs import _Objective, collect_docs
+from .utils import softmin
 
 
 class _CoilObjective(_Objective):
@@ -721,6 +722,14 @@ class CoilSetMinDistance(_Objective):
         Collocation grid used to discretize each coil. Defaults to the default grid
         for the given coil-type, see ``coils.py`` and ``curve.py`` for more details.
         If a list, must have the same structure as coils.
+    use_softmin: bool, optional
+        Use softmin or hard min. Softmin is a smooth approximation to the actual minimum
+        distance that may give smoother gradients, at the expense of being slightly more
+        expensive and only an approximate minimum.
+    softmin_alpha: float, optional
+        Parameter used for softmin. The larger ``softmin_alpha``, the closer the
+        softmin approximates the hardmin. softmin -> hardmin as
+        ``softmin_alpha`` -> infinity.
 
     """
 
@@ -747,12 +756,16 @@ class CoilSetMinDistance(_Objective):
         grid=None,
         name="coil-coil minimum distance",
         jac_chunk_size=None,
+        use_softmin=False,
+        softmin_alpha=1.0,
     ):
         from desc.coils import CoilSet
 
         if target is None and bounds is None:
             bounds = (1, np.inf)
         self._grid = grid
+        self._use_softmin = use_softmin
+        self._softmin_alpha = softmin_alpha
         errorif(
             not isinstance(coil, CoilSet),
             ValueError,
@@ -819,13 +832,16 @@ class CoilSetMinDistance(_Objective):
         )
 
         def body(k):
+            # pts shape (ncoils, num_nodes, 3)
             # dist btwn all pts; shape(ncoils,num_nodes,num_nodes)
             # dist[i,j,n] is the distance from the jth point on the kth coil
             # to the nth point on the ith coil
-            dist = safenorm(pts[k][None, :, None] - pts[:, None, :], axis=-1)
-            # exclude distances between points on the same coil
-            mask = jnp.ones(self.dim_f).at[k].set(0)[:, None, None]
-            return jnp.min(dist, where=mask, initial=jnp.inf)
+            coil_pts = pts[k]
+            other_pts = jnp.delete(pts, k, axis=0, assume_unique_indices=True)
+            dist = safenorm(coil_pts[None, :, None] - other_pts[:, None], axis=-1)
+            if self._use_softmin:
+                return softmin(dist, self._softmin_alpha)
+            return jnp.min(dist)
 
         min_dist_per_coil = fori_loop(
             0,

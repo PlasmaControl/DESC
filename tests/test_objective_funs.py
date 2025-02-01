@@ -998,6 +998,13 @@ class TestObjectiveFunction:
             assert f.size == coils.num_coils
             np.testing.assert_allclose(f, mindist)
             assert coils.is_self_intersecting(grid=grid, tol=tol) == expect_intersect
+            obj2 = CoilSetMinDistance(
+                coils, grid=grid, use_softmin=True, softmin_alpha=10
+            )
+            obj2.build()
+            f = obj2.compute(params=coils.params_dict)
+            assert f.size == coils.num_coils
+            np.testing.assert_allclose(f, mindist, rtol=5e-2, atol=1e-3)
 
         # linearly spaced planar coils, all coils are min distance from their neighbors
         n = 3

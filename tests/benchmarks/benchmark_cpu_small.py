@@ -363,7 +363,7 @@ def test_proximal_jac_atf_with_eq_update(benchmark):
         x = x.at[0].add(np.random.rand() * 0.001)
         prox.jac_scaled_error(x, prox.constants).block_until_ready()
 
-    benchmark.pedantic(run, args=(x, prox), rounds=1, iterations=10)
+    benchmark.pedantic(run, args=(x, prox), rounds=10, iterations=1)
 
 
 @pytest.mark.slow

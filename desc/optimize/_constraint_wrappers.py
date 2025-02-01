@@ -843,7 +843,8 @@ class ProximalProjection(ObjectiveFunction):
             # reset to last good params
             self._eq.params_dict = self.history[-1][self._eq_idx]
 
-        self._eq_solve_objective.update_constraint_target(self._eq)
+        if x != self._allx[-1]:
+            self._eq_solve_objective.update_constraint_target(self._eq)
 
         return xopt, xeq
 

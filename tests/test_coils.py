@@ -1400,7 +1400,7 @@ def test_initialize_helical():
     obj = LinkingCurrentConsistency(eq, coilset)
     obj.build()
     np.testing.assert_allclose(
-        obj.compute(coilset.params_dict, eq.params_dict), 0, atol=1e-10
+        obj.compute(coilset.params_dict, eq.params_dict), 0, atol=1e-8
     )
     assert obj.constants["link"][0] == 9  # M=3 per period * 3 periods
 

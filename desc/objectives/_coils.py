@@ -891,6 +891,14 @@ class PlasmaCoilSetMinDistance(_Objective):
         during optimization, and self.things = [eq] only.
         If False, the coil coordinates are computed at every iteration.
         False by default, so that self.things = [coil, eq].
+    use_softmin: bool, optional
+        Use softmin or hard min. Softmin is a smooth approximation to the actual minimum
+        distance that may give smoother gradients, at the expense of being slightly more
+        expensive and only an approximate minimum.
+    softmin_alpha: float, optional
+        Parameter used for softmin. The larger ``softmin_alpha``, the closer the
+        softmin approximates the hardmin. softmin -> hardmin as
+        ``softmin_alpha`` -> infinity.
 
     """
 
@@ -921,6 +929,8 @@ class PlasmaCoilSetMinDistance(_Objective):
         coils_fixed=False,
         name="plasma-coil minimum distance",
         jac_chunk_size=None,
+        use_softmin=False,
+        softmin_alpha=1.0,
     ):
         if target is None and bounds is None:
             bounds = (1, np.inf)
@@ -930,6 +940,8 @@ class PlasmaCoilSetMinDistance(_Objective):
         self._coil_grid = coil_grid
         self._eq_fixed = eq_fixed
         self._coils_fixed = coils_fixed
+        self._use_softmin = use_softmin
+        self._softmin_alpha = softmin_alpha
         errorif(eq_fixed and coils_fixed, ValueError, "Cannot fix both eq and coil")
         things = []
         if not eq_fixed:
@@ -1076,7 +1088,9 @@ class PlasmaCoilSetMinDistance(_Objective):
         def body(k):
             # dist btwn all pts; shape(ncoils,plasma_grid.num_nodes,coil_grid.num_nodes)
             dist = safenorm(coils_pts[k][None, :, :] - plasma_pts[:, None, :], axis=-1)
-            return jnp.min(dist, initial=jnp.inf)
+            if self._use_softmin:
+                return softmin(dist, self._softmin_alpha)
+            return jnp.min(dist)
 
         min_dist_per_coil = fori_loop(
             0,

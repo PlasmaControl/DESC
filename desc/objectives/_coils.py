@@ -13,6 +13,7 @@ from desc.backend import (
     tree_unflatten,
 )
 from desc.compute import get_profiles, get_transforms, rpz2xyz
+from desc.compute.geom_utils import copy_rpz_periods
 from desc.compute.utils import _compute as compute_fun
 from desc.grid import LinearGrid, _Grid
 from desc.integrals import compute_B_plasma
@@ -835,15 +836,6 @@ class CoilSetMinDistance(_Objective):
         return min_dist_per_coil
 
 
-def _copy_rpz_periods(rpz, NFP):
-    """Copy a rpz position vector into multiple field periods."""
-    r, p, z = rpz.T
-    r = jnp.tile(r, NFP)
-    z = jnp.tile(z, NFP)
-    p = p[None, :] + jnp.linspace(0, 2 * np.pi, NFP, endpoint=False)[:, None]
-    return jnp.array([r, p.flatten(), z]).T
-
-
 class PlasmaCoilSetMinDistance(_Objective):
     """Target the minimum distance between the plasma and coilset.
 
@@ -996,7 +988,7 @@ class PlasmaCoilSetMinDistance(_Objective):
                 profiles=eq_profiles,
             )
             rpz = jnp.array([data["R"], data["phi"], data["Z"]]).T
-            rpz = _copy_rpz_periods(rpz, plasma_grid.NFP)
+            rpz = copy_rpz_periods(rpz, plasma_grid.NFP)
             plasma_pts = rpz2xyz(rpz)
             self._constants["plasma_coords"] = plasma_pts
         if self._coils_fixed:
@@ -1062,7 +1054,7 @@ class PlasmaCoilSetMinDistance(_Objective):
                 profiles=constants["eq_profiles"],
             )
             rpz = jnp.array([data["R"], data["phi"], data["Z"]]).T
-            rpz = _copy_rpz_periods(rpz, constants["eq_transforms"]["grid"].NFP)
+            rpz = copy_rpz_periods(rpz, constants["eq_transforms"]["grid"].NFP)
             plasma_pts = rpz2xyz(rpz)
 
         def body(k):

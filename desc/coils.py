@@ -27,7 +27,7 @@ from desc.geometry import (
     FourierXYZCurve,
     SplineXYZCurve,
 )
-from desc.grid import LinearGrid
+from desc.grid import Grid, LinearGrid
 from desc.magnetic_fields import _MagneticField
 from desc.optimizable import Optimizable, OptimizableCollection, optimizable_parameter
 from desc.utils import cross, dot, equals, errorif, flatten_list, safenorm, warnif
@@ -2965,7 +2965,7 @@ def initialize_modular_coils(eq, num_coils, r_over_a=2.0):
     unique_coils = []
     for k in range(num_coils):
         coil = FourierPlanarCoil(
-            current=G / (mu_0 * eq.NFP * num_coils * (eq.sym + 1)),
+            current=2 * np.pi * G / (mu_0 * eq.NFP * num_coils * (eq.sym + 1)),
             center=centers[k, :],
             normal=normals[k, :],
             r_n=minor_radius * r_over_a,
@@ -3050,3 +3050,64 @@ def initialize_saddle_coils(eq, num_coils, r_over_a=0.5, offset=2.0, position="o
 
     windowpane_coilset = CoilSet(windowpane_coils, NFP=int(eq.NFP), sym=eq.sym)
     return windowpane_coilset
+
+
+def initialize_helical_coils(eq, num_coils, r_over_a=2.0, helicity=(1, 1), npts=100):
+    """Initialize a CoilSet of helical coils for stage 2 optimization.
+
+    The coils will be roughly a constant distance from the plasma surface as they wind
+    around. The currents will be set to match the equilibrium required poloidal
+    linking current.
+
+    The coils will be ``SplineXYZCoil``, if another type is desired use
+    ``coilset.to_FourierXYZ(N=...)``, etc.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Stage 1 equilibrium the coils are being optimized for.
+    num_coils : int
+        Number of coils to create.
+    r_over_a : float
+        Approximate minor radius of the coils, in units of equilibrium minor radius. The
+        actual coils will be contoured to keep a roughly constant offset from the plasma
+        surface.
+    helicity : tuple of int
+        (M,N) - How many times each coil should link the plasma poloidally and
+        toroidally. Note that M is the poloidal linking number per field period, so the
+        total linking number will be M*NFP.
+    npts : int
+        How many points to use when creating the coils. Equilibria with very high NFP
+        may need more points.
+
+    Returns
+    -------
+    coilset : CoilSet of FourierPlanarCoil
+        Planar coils centered on magnetic axis, with appropriate symmetry.
+    """
+    a = eq.compute("a")["a"]
+    G = eq.compute("G", grid=LinearGrid(rho=1.0))["G"]
+    M = helicity[0] * eq.NFP
+    N = helicity[1]
+
+    s = np.linspace(0, 2 * np.pi, npts, endpoint=False)
+
+    theta = M * s
+    zeta = N * s
+
+    theta %= 2 * np.pi
+    zeta %= 2 * np.pi
+
+    theta_offset = np.linspace(0, 2 * np.pi, num_coils, endpoint=False)
+
+    coils = []
+    for t in theta_offset:
+        grid = Grid(np.array([np.ones_like(s), (theta + t) % (2 * np.pi), zeta]).T)
+        data = eq.surface.compute(["x", "n_rho"], grid=grid, basis="xyz")
+        offset = r_over_a * a - a
+        x = data["x"] + offset * data["n_rho"]
+        coil = SplineXYZCoil(
+            2 * np.pi * G / mu_0 / num_coils / M, x[:, 0], x[:, 1], x[:, 2]
+        )
+        coils.append(coil)
+    return CoilSet(*coils)

@@ -18,6 +18,8 @@ New Features
 - Changes hessian computation to use chunked ``jacfwd`` and ``jacrev``, allowing ``jac_chunk_size`` to now reduce hessian memory usage as well.
 - Adds an option to ``VMECIO.save`` to specify the grid resolution in real space.
 - Adds a new objective ``desc.objectives.CoilIntegratedCurvature`` for targeting convex coils.
+- Adds a new function ``desc.coils.initialize_helical_coils`` for creating an initial guess for stage 2 helical coil optimization.
+
 
 Bug Fixes
 
@@ -25,6 +27,7 @@ Bug Fixes
 - Fixed I/O bug when saving/loading ``_Profile`` classes that do not have a ``_params`` attribute.
 - Minor bugs described in [#1323](https://github.com/PlasmaControl/DESC/pull/1323).
 - Corrects basis vectors computations made on surface objects [#1175](https://github.com/PlasmaControl/DESC/pull/1175).
+- Fixes the coil currents in ``desc.coils.initialize_modular_coils`` to now give the correct expected linking current.
 
 v0.13.0
 -------

@@ -15,6 +15,7 @@ from desc.coils import (
     FourierXYZCoil,
     MixedCoilSet,
     SplineXYZCoil,
+    initialize_helical_coils,
     initialize_modular_coils,
     initialize_saddle_coils,
 )
@@ -25,6 +26,8 @@ from desc.geometry import FourierRZCurve, FourierRZToroidalSurface, FourierXYZCu
 from desc.grid import Grid, LinearGrid
 from desc.io import load
 from desc.magnetic_fields import SumMagneticField, VerticalMagneticField
+from desc.objectives import LinkingCurrentConsistency
+from desc.objectives._coils import _copy_rpz_periods
 from desc.utils import dot
 
 
@@ -1386,3 +1389,32 @@ def test_initialize_saddle():
     np.testing.assert_allclose(x[:, 2], -offset)  # Z ~ -3
     np.testing.assert_allclose(x[:, 0].min(), -1, rtol=1e-2)  # xmin
     np.testing.assert_allclose(x[:, 0].max(), 1, rtol=1e-2)  # xmax
+
+
+@pytest.mark.unit
+def test_initialize_helical():
+    """Test initializing a modular coilset."""
+    eq = get("NCSX")
+    coilset = initialize_helical_coils(eq, 2, r_over_a=2.0, helicity=(3, 1), npts=100)
+    assert len(coilset) == 2
+    obj = LinkingCurrentConsistency(eq, coilset)
+    obj.build()
+    np.testing.assert_allclose(
+        obj.compute(coilset.params_dict, eq.params_dict), 0, atol=1e-10
+    )
+    assert obj.constants["link"][0] == 9  # M=3 per period * 3 periods
+
+    coils_pts = coilset._compute_position()
+    a = eq.compute("a")["a"]
+    data = eq.compute(
+        ["R", "phi", "Z"],
+        grid=LinearGrid(rho=1.0, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP),
+    )
+    rpz = jnp.array([data["R"], data["phi"], data["Z"]]).T
+    rpz = _copy_rpz_periods(rpz, eq.NFP)
+    plasma_pts = rpz2xyz(rpz)
+    dist = np.linalg.norm(coils_pts[:, None, :, :] - plasma_pts[:, None, :], axis=-1)
+    # dist is distance from every point on the plasma to every point on the coil
+    # first take a min over plasma pts to get distance from each coil pt to plasma
+    # then we expect the avg of that to be ~a since r/a=2 so offset is 1*a
+    np.testing.assert_allclose(dist.min(axis=1).mean(axis=-1), a, rtol=3e-2)

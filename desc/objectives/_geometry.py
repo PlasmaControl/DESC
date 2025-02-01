@@ -462,13 +462,6 @@ class PlasmaVesselDistance(_Objective):
     points on surface corresponding to the grid that the plasma-vessel distance
     is evaluated at, which can cause cusps or regions of very large curvature.
 
-    NOTE: When use_softmin=True, ensures that softmin_alpha*values passed in is
-    at least >1, otherwise the softmin will return inaccurate approximations
-    of the minimum. Will automatically multiply array values by 2 / min_val if the min
-    of softmin_alpha*array is <1. This is to avoid inaccuracies when values <1
-    are present in the softmin, which can cause inaccurate mins or even incorrect
-    signs of the softmin versus the actual min.
-
     Parameters
     ----------
     eq : Equilibrium

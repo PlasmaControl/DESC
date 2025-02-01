@@ -3,7 +3,8 @@
 import numpy as np
 
 from desc.backend import jnp, vmap
-from desc.compute import get_profiles, get_transforms, rpz2xyz, xyz2rpz
+from desc.compute import get_profiles, get_transforms, rpz2xyz
+from desc.compute.geom_utils import copy_rpz_periods
 from desc.compute.utils import _compute as compute_fun
 from desc.grid import LinearGrid, QuadratureGrid
 from desc.utils import Timer, errorif, parse_argname_change, safenorm, warnif
@@ -688,7 +689,6 @@ class PlasmaVesselDistance(_Objective):
                 transforms=surface_transforms,
                 profiles={},
             )["x"]
-            surface_coords = rpz2xyz(surface_coords)
             self._constants["surface_coords"] = surface_coords
         elif self._eq_fixed:
             data_eq = compute_fun(
@@ -750,26 +750,30 @@ class PlasmaVesselDistance(_Objective):
         else:
             data = constants["data_equil"]
         plasma_coords_rpz = jnp.array([data["R"], data["phi"], data["Z"]]).T
-        plasma_coords = rpz2xyz(plasma_coords_rpz)
+        # we only copy the plasma data to the full torus, so that we still only
+        # consider a single period of the surface.
+        plasma_coords_nfp = copy_rpz_periods(
+            plasma_coords_rpz, constants["equil_transforms"]["grid"].NFP
+        )
+        plasma_coords = rpz2xyz(plasma_coords_nfp)
         if self._surface_fixed:
-            surface_coords = constants["surface_coords"]
+            surface_coords_rpz = constants["surface_coords"]
         else:
-            surface_coords = compute_fun(
+            surface_coords_rpz = compute_fun(
                 self._surface,
                 self._surface_data_keys,
                 params=surface_params,
                 transforms=constants["surface_transforms"],
                 profiles={},
             )["x"]
-            surface_coords = rpz2xyz(surface_coords)
+        surface_coords = rpz2xyz(surface_coords_rpz)
 
         diff_vec = plasma_coords[:, None, :] - surface_coords[None, :, :]
         d = safenorm(diff_vec, axis=-1)
 
         point_signs = jnp.ones(surface_coords.shape[0])
         if self._use_signed_distance:
-            surface_coords_rpz = xyz2rpz(surface_coords)
-
+            # for sign, we ignore other periods since the sign will be the same in each
             plasma_coords_rpz = plasma_coords_rpz.reshape(
                 constants["equil_transforms"]["grid"].num_zeta,
                 constants["equil_transforms"]["grid"].num_theta,

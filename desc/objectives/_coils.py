@@ -835,6 +835,15 @@ class CoilSetMinDistance(_Objective):
         return min_dist_per_coil
 
 
+def _copy_rpz_periods(rpz, NFP):
+    """Copy a rpz position vector into multiple field periods."""
+    r, p, z = rpz.T
+    r = jnp.tile(r, NFP)
+    z = jnp.tile(z, NFP)
+    p = p[None, :] + jnp.linspace(0, 2 * np.pi, NFP, endpoint=False)[:, None]
+    return jnp.array([r, p.flatten(), z]).T
+
+
 class PlasmaCoilSetMinDistance(_Objective):
     """Target the minimum distance between the plasma and coilset.
 
@@ -952,7 +961,9 @@ class PlasmaCoilSetMinDistance(_Objective):
         else:
             eq = self.things[0]
             coil = self.things[1]
-        plasma_grid = self._plasma_grid or LinearGrid(M=eq.M_grid, N=eq.N_grid)
+        plasma_grid = self._plasma_grid or LinearGrid(
+            M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP
+        )
         coil_grid = self._coil_grid or None
         warnif(
             not np.allclose(plasma_grid.nodes[:, 0], 1),
@@ -984,7 +995,9 @@ class PlasmaCoilSetMinDistance(_Objective):
                 transforms=eq_transforms,
                 profiles=eq_profiles,
             )
-            plasma_pts = rpz2xyz(jnp.array([data["R"], data["phi"], data["Z"]]).T)
+            rpz = jnp.array([data["R"], data["phi"], data["Z"]]).T
+            rpz = _copy_rpz_periods(rpz, plasma_grid.NFP)
+            plasma_pts = rpz2xyz(rpz)
             self._constants["plasma_coords"] = plasma_pts
         if self._coils_fixed:
             coils_pts = coil._compute_position(params=coil.params_dict, grid=coil_grid)
@@ -1048,7 +1061,9 @@ class PlasmaCoilSetMinDistance(_Objective):
                 transforms=constants["eq_transforms"],
                 profiles=constants["eq_profiles"],
             )
-            plasma_pts = rpz2xyz(jnp.array([data["R"], data["phi"], data["Z"]]).T)
+            rpz = jnp.array([data["R"], data["phi"], data["Z"]]).T
+            rpz = _copy_rpz_periods(rpz, constants["eq_transforms"]["grid"].NFP)
+            plasma_pts = rpz2xyz(rpz)
 
         def body(k):
             # dist btwn all pts; shape(ncoils,plasma_grid.num_nodes,coil_grid.num_nodes)

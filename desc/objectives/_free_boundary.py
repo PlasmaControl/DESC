@@ -425,7 +425,6 @@ class BoundaryError(_Objective):
         loop=True,
         name="Boundary error",
         jac_chunk_size=None,
-        sz=None,
         **kwargs,
     ):
         if target is None and bounds is None:
@@ -485,13 +484,7 @@ class BoundaryError(_Objective):
             source_grid = self._source_grid
 
         if self._eval_grid is None:
-            eval_grid = (
-                LinearGrid(
-                    rho=np.array([1.0]), M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False
-                )
-                if eq.N == 0
-                else source_grid
-            )
+            eval_grid = source_grid
         else:
             eval_grid = self._eval_grid
 

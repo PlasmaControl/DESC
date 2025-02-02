@@ -1083,7 +1083,9 @@ class PiecewiseOmnigenity(_Objective):
             iota=jnp.mean(eq_data["iota"]),
         )
 
-        pwO_error = eq_data["|B|"] - field_data["|B|_pwO"]
+        B_pwO = jnp.roll(field_data["|B|_pwO"], len(eq_data["theta_B"]))
+
+        pwO_error = eq_data["|B|"] - B_pwO
 
         return pwO_error.ravel()
 

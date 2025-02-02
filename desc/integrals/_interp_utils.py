@@ -130,8 +130,7 @@ def irfft_non_uniform(xq, a, n, domain=(0, 2 * jnp.pi), axis=-1, _modes=None):
         Real query points where interpolation is desired.
         Shape of ``xq`` must broadcast with arrays of shape ``np.delete(a.shape,axis)``.
     a : jnp.ndarray
-        Fourier coefficients.
-        ``a=rfft(f,axis=axis,norm="forward")``.
+        Fourier coefficients ``a=rfft(f,axis=axis,norm="forward")``.
     n : int
         Spectral resolution of ``a``.
     domain : tuple[float]
@@ -169,8 +168,7 @@ def ifft_non_uniform(xq, a, domain=(0, 2 * jnp.pi), axis=-1, _modes=None):
         Real query points where interpolation is desired.
         Shape of ``xq`` must broadcast with arrays of shape ``np.delete(a.shape,axis)``.
     a : jnp.ndarray
-        Fourier coefficients.
-        ``a=fft(f,axis=axis,norm="forward")``.
+        Fourier coefficients ``a=fft(f,axis=axis,norm="forward")``.
     domain : tuple[float]
         Domain over which samples were taken.
     axis : int

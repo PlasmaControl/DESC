@@ -759,7 +759,7 @@ def cubic_spline(T, f, Y, m, m_modes, n_modes, NFP=1, check=False):
         Fourier transform of f(θ, ζ) as returned by ``Bounce2D.fourier``.
     Y : int
         Number of knots per toroidal transit to interpolate ``f``.
-        This number will be rounded to an integer multiple of NFP.
+        This number will be rounded down to an integer multiple of NFP.
     m : int
         Fourier resolution in poloidal direction; num theta.
     m_modes : jnp.ndarray
@@ -797,12 +797,11 @@ def cubic_spline(T, f, Y, m, m_modes, n_modes, NFP=1, check=False):
     # Partial summation via FFT is more efficient than direct evaluation when
     # mn|𝛉||𝛇| > m log(|𝛇|) |𝛇| + m|𝛉||𝛇| or equivalently n|𝛉| > log|𝛇| + |𝛉|.
 
-    if False and num_zeta >= n_modes.size:
-        # FIXME: This doesn't pass pytest -k test_interp_to_argmin.
+    if num_zeta >= f.shape[-2] and num_zeta == f.shape[-2]:
+        # FIXME: This does not work unless num_zeta == f.shape[-2],
+        #  but it should as long as num_zeta >= f.shape[-2].
         f = ifft(f, num_zeta, axis=-2, norm="forward")
     else:
-        # Use partial summation without FFT to avoid frequency truncation.
-        # Maybe in future pretend NFP is smaller multiple to still use FFT.
         f = ifft_non_uniform(
             zeta[:num_zeta, jnp.newaxis],
             f,

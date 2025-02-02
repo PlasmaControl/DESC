@@ -259,6 +259,14 @@ class TestFastInterp:
             interp_rfft2(theta, zeta, f, domain0, domain1, axes=(-1, -2)),
             truth,
         )
+        np.testing.assert_allclose(
+            interp_rfft2(zeta, theta, f.T, domain1, domain0, axes=(-2, -1)),
+            truth,
+        )
+        np.testing.assert_allclose(
+            interp_rfft2(zeta, theta, f.T, domain1, domain0, axes=(-1, -2)),
+            truth,
+        )
 
     @pytest.mark.unit
     @pytest.mark.parametrize(

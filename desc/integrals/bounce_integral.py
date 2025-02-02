@@ -198,8 +198,7 @@ class Bounce2D(Bounce):
         ``X`` and ``Y`` are preferably rounded down to powers of two.
     Y_B : int
         Desired resolution for algorithm to compute bounce points.
-        Default is double ``Y``. This number will be rounded to an integer
-        multiple of NFP.
+        Default is double ``Y``.
     alpha : jnp.ndarray
         Shape (num alpha, ).
         Starting field line poloidal labels.
@@ -272,9 +271,6 @@ class Bounce2D(Bounce):
     # almost-equispaced grid does not really show much improvement.
     # Alternative approaches include using filtered Fourier series, Fourier
     # continuation methods, or (preferably) prolate spheroidal wave functions.
-    #
-    # Dimension reduction techniques and partial summation are used whenever
-    # possible to evaluate maps.
     #
     # Function approximation in (α, ζ) coordinates demands particular interpolation
     # points in that coordinate system because there is no transformation that converts

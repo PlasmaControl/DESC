@@ -653,14 +653,11 @@ def _B_omni(params, transforms, profiles, data, **kwargs):
     coordinates="rtz",
     data=[],  # Potential error, we want eq |B|
     parameterization="desc.magnetic_fields._core.PiecewiseOmnigenousField",
-    parametrization=[],
 )
 def _B_piecewise_omni(params, transforms, profiles, data, **kwargs):
     theta_B = transforms["grid"].nodes[:, 1]
     zeta_B = transforms["grid"].nodes[:, 2]
-
-    # Ensure NFP domain splitting is correct
-    # NFP can't be a parameters. Must come from equilibrium
+    # NFP can't be a parameter. Must come from equilibrium
     NFP = transforms["grid"].NFP
 
     zeta_C = params["zeta_C"]
@@ -680,13 +677,8 @@ def _B_piecewise_omni(params, transforms, profiles, data, **kwargs):
 
     B_pwO = B_min + (B_max - B_min) * jnp.exp(exponent)
 
-    data["|B|_pwO"] = B_pwO.reshape(
-        (
-            transforms["grid"].num_rho,
-            transforms["grid"].num_zeta,
-            transforms["grid"].num_theta,
-        )
-    )
+    # Flattened array. Reshaping may cause jit-related issues
+    data["|B|_pwO"] = B_pwO
 
     return data
 

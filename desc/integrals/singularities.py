@@ -11,7 +11,6 @@ from desc.backend import fori_loop, jnp, rfft2, vmap
 from desc.batching import batch_map
 from desc.compute.geom_utils import rpz2xyz, rpz2xyz_vec, xyz2rpz_vec
 from desc.grid import LinearGrid
-from desc.integrals import surface_averages
 from desc.integrals._interp_utils import rfft2_modes, rfft2_vander
 from desc.io import IOAble
 from desc.utils import (
@@ -20,6 +19,7 @@ from desc.utils import (
     parse_argname_change,
     safediv,
     safenorm,
+    setdefault,
     warnif,
 )
 
@@ -112,38 +112,38 @@ def _get_default_params(grid):
     return s, s, q
 
 
-# Should not want to use this unless one can afford high quadrature resolution.
-# Kept for benchmarking.
-def _full_support_params(grid):
-    """Parameters for full support size and quadrature resolution.
-
-    Return parameters such that compact support of singular region is full domain.
+def _mean_ratio(data):
+    """Ratio to make singular integration partition ~circle in real space.
 
     Parameters
     ----------
-    grid : LinearGrid
-        Grid that can fft2.
+    data : dict[str, jnp.ndarray]
+        Dictionary of data evaluated on grid that ``can_fft2`` with keys
+        ``|e_theta x e_zeta|``, ``g_tt``, and ``g_zz``.
 
     Returns
     -------
-    st, sz : int
-        Extent of support is an ``st`` × ``sz`` subset
-        of the full domain (θ,ζ) ∈ [0, 2π)² of ``grid``.
-        Subset of ``grid.num_theta`` × ``grid.num_zeta*grid.NFP``.
-    q : int
-        Order of quadrature in radial and azimuthal directions.
+    mean : float
+        Mean ratio.
+    local : jnp.ndarray
+        Local ratio.
 
     """
-    assert grid.can_fft2
-    Nt = grid.num_theta
-    Nz = grid.num_zeta * grid.NFP
-    st = Nt
-    sz = Nz
-    q = int(1 + (Nt + Nz) / 4 + (Nt * Nz) ** 0.25)
-    return st, sz, q
+    local = jnp.sqrt(data["g_zz"] / data["g_tt"])
+    mean = jnp.mean(local * data["|e_theta x e_zeta|"]) / jnp.mean(
+        data["|e_theta x e_zeta|"]
+    )
+    return mean, local
 
 
-def heuristic_support_params(grid, data):
+# TODO: Account for real space grid anisotropy by choosing
+#   st/(sz*NFP) (at evaluation point i) = mean (ratio(i), ratio_avg).
+#   Then we have ~circle in real space around each singular point.
+#   The grid resolution can then still be chosen independently according
+#   to the frequency content of R, Z, λ to net the best function approximation.
+
+
+def heuristic_support_params(grid, mean_ratio, local_ratio=None):
     """Parameters for heuristic support size and heuristic quadrature resolution.
 
     Return parameters following the asymptotic rule of thumb
@@ -154,9 +154,10 @@ def heuristic_support_params(grid, data):
     ----------
     grid : LinearGrid
         Grid that can fft2.
-    data : dict[str, jnp.ndarray]
-        Dictionary of data evaluated on ``grid`` with keys
-        ``|e_theta x e_zeta|``, ``g_tt``, and ``g_zz``.
+    mean_ratio : float
+        Mean ratio.
+    local_ratio : jnp.ndarray
+        Local ratio.
 
     Returns
     -------
@@ -169,21 +170,25 @@ def heuristic_support_params(grid, data):
 
     """
     assert grid.can_fft2
-    # TODO: Account for real space grid anisotropy by choosing
-    #   st/(sz*NFP) (at evaluation point i) = mean (ratio(i), ratio_avg).
-    #   Then we have ~circle in real space around each singular point.
-    #   The grid resolution can then still be chosen independently according
-    #   to the frequency content of R, Z, λ to net the best function approximation.
-    ratio = jnp.sqrt(data["g_zz"] / data["g_tt"])
-    ratio_avg = surface_averages(
-        grid, ratio, data["|e_theta x e_zeta|"], expand_out=False
-    )
-    scale = (ratio + ratio_avg) / 2  # noqa: F841
     Nt = grid.num_theta
     Nz = grid.num_zeta * grid.NFP
-    st = int(min(1 + jnp.sqrt(Nt), Nt))
-    sz = int(min(1 + jnp.sqrt(Nz), Nz))
-    q = int(1 + (Nt * Nz) ** 0.25)
+    q = int(jnp.sqrt(grid.num_nodes) / 2)
+    s = min(q, Nt, Nz)
+
+    local_ratio = setdefault(local_ratio, mean_ratio)
+    ratio = (mean_ratio + local_ratio) / 2
+
+    #   size of singular region in real space = s * h * <|e_...|>
+    #   for it to be a circle, choose radius ~ equal
+    #   s_t * h_t * <|e_theta|> = s_z * h_z * <|e_zeta|>
+    #   s_z / s_t = h_t / h_z  <|e_theta|> / <|e_zeta|>
+    #             = Nz*NFP/Nt |e_theta| / |e_zeta|
+    #   denote ratio = <|e_zeta| / |e_theta|>
+    #   s_z / s_t = Nz*NFP/Nt / ratio = s_ratio
+    #   also want np.sqrt(s_z*s_t) ~ s = q
+    scale = jnp.sqrt(Nz / Nt / ratio)
+    st = min(Nt, int(s / scale))
+    sz = min(Nz, int(s * scale))
     return st, sz, q
 
 
@@ -377,14 +382,19 @@ class FFTInterpolator(_BIESTInterpolator):
     def __init__(self, eval_grid, source_grid, st, sz, q, **kwargs):
         st = parse_argname_change(st, kwargs, "s", "st")
         assert eval_grid.can_fft2, "Got False for eval_grid.can_fft2."
-        # Otherwise frequency spectrum is truncated.
-        assert eval_grid.num_theta >= source_grid.num_theta, (
+        warnif(
+            eval_grid.num_theta < source_grid.num_theta,
+            msg="Frequency spectrum of FFT interpolation will be truncated because "
+            "the evaluation grid has less resolution than the source grid."
             f"Got eval_grid.num_theta = {eval_grid.num_theta} < "
-            f"{source_grid.num_theta} = source_grid.num_theta."
+            f"{source_grid.num_theta} = source_grid.num_theta.",
         )
-        assert eval_grid.num_zeta >= source_grid.num_zeta, (
+        warnif(
+            eval_grid.num_zeta < source_grid.num_zeta,
+            msg="Frequency spectrum of FFT interpolation will be truncated because "
+            "the evaluation grid has less resolution than the source grid."
             f"Got eval_grid.num_zeta = {eval_grid.num_zeta} < "
-            f"{source_grid.num_zeta} = source_grid.num_zeta."
+            f"{source_grid.num_zeta} = source_grid.num_zeta.",
         )
         super().__init__(eval_grid, source_grid, st, sz, q)
 
@@ -407,6 +417,8 @@ class FFTInterpolator(_BIESTInterpolator):
             Source data interpolated to ith polar node.
 
         """
+        # Would need to add interpax code to DESC
+        # https://github.com/f0uriest/interpax/issues/53.
         errorif(is_fourier, NotImplementedError)
         shape = f.shape[1:]
         return fft_interp2d(
@@ -517,7 +529,7 @@ def _nonsingular_part(
     source_zeta = source_data.setdefault("zeta", source_grid.nodes[:, 2])
     source_phi = source_data["phi"]
 
-    eval_data = {key: eval_data[key] for key in kernel.keys}
+    eval_data = {key: eval_data[key] for key in kernel.keys if key in eval_data}
     eval_data["theta"] = jnp.asarray(eval_grid.nodes[:, 1])
     eval_data["zeta"] = jnp.asarray(eval_grid.nodes[:, 2])
 
@@ -606,7 +618,6 @@ def _singular_part(eval_data, source_data, kernel, interpolator, loop=False):
     eval_theta = jnp.asarray(eval_grid.nodes[:, 1])
     eval_zeta = jnp.asarray(eval_grid.nodes[:, 2])
 
-    # could maybe cache these in interpolator to avoid GL root finding
     r, w, dr, dw = _get_quadrature_nodes(interpolator.q)
     r = jnp.abs(r)
     # integrand of eq 38 in [2] except stuff that needs to be interpolated
@@ -632,7 +643,6 @@ def _singular_part(eval_data, source_data, kernel, interpolator, loop=False):
         fsource = [interpolator.fourier(val) for val in fsource]
         is_fourier = True
     else:
-        # TODO: https://github.com/f0uriest/interpax/issues/53.
         is_fourier = False
 
     def polar_pt(i):
@@ -653,16 +663,16 @@ def _singular_part(eval_data, source_data, kernel, interpolator, loop=False):
             key: interpolator(val, i, is_fourier=is_fourier, vander=vander)
             for key, val in zip(keys, fsource)
         }
-        # For FFT interpolator on functions with no toroidal variation used on
-        # grids of different NFP, we still use eval grid to compute below coordinates.
-        # In that case, the eval grid points are not where the maps were interpolated,
-        # but the components of maps in coordinates of the orthonormal polar basis are
-        # the same. Since the polar basis vectors between the evaluation point
-        # and the point that was interpolated to point in different directions,
-        # it is important to use eval grid to compute the coordinates below.
+        # The polar node coordinates should be shifts around the evaluation point.
+        # That is where the polar basis vectors need to be computed.
+        # These coordinates should also be the (θ, ζ) coordinates at which the maps
+        # above were interpolated. For FFT interpolator however, the maps were
+        # interpolated to shifts around the source point. When NFP is different
+        # these are not the same points. Since the components of maps in coordinates
+        # of the orthonormal polar basis are the same, we can pretend they were
+        # interpolated to polar nodes around the evaluation point.
         source_data_polar["theta"] = eval_theta + interpolator.shift_t[i]
         source_data_polar["zeta"] = eval_zeta + interpolator.shift_z[i]
-        # Above are the (θ, ζ) coordinates at which the maps above were evaluated.
         # ϕ is not periodic map of θ, ζ.
         if "omega" in keys:
             # TODO (#465): For nonzero ω, the quadrature may not be symmetric about the

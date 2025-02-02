@@ -4,14 +4,8 @@ import warnings
 import numpy as np
 from scipy.constants import mu_0
 
-from desc.backend import (
-    fori_loop,
-    jnp,
-    tree_flatten,
-    tree_leaves,
-    tree_map,
-    tree_unflatten,
-)
+from desc.backend import jnp, tree_flatten, tree_leaves, tree_map, tree_unflatten
+from desc.batching import vmap_chunked
 from desc.compute import get_profiles, get_transforms, rpz2xyz
 from desc.compute.geom_utils import copy_rpz_periods
 from desc.compute.utils import _compute as compute_fun
@@ -730,6 +724,12 @@ class CoilSetMinDistance(_Objective):
         Parameter used for softmin. The larger ``softmin_alpha``, the closer the
         softmin approximates the hardmin. softmin -> hardmin as
         ``softmin_alpha`` -> infinity.
+    dist_chunk_size : int > 0, optional
+        When computing distances, how many coils to consider at once. Default is all
+        coils, which is generally the fastest but requires the most memory. If there are
+        a large number of coils, or if the resolution is very high, setting this to a
+        small value will reduce peak memory usage at the cost of slightly increased
+        runtime.
 
     """
 
@@ -758,6 +758,7 @@ class CoilSetMinDistance(_Objective):
         jac_chunk_size=None,
         use_softmin=False,
         softmin_alpha=1.0,
+        dist_chunk_size=None,
     ):
         from desc.coils import CoilSet
 
@@ -766,6 +767,7 @@ class CoilSetMinDistance(_Objective):
         self._grid = grid
         self._use_softmin = use_softmin
         self._softmin_alpha = softmin_alpha
+        self._dist_chunk_size = dist_chunk_size
         errorif(
             not isinstance(coil, CoilSet),
             ValueError,
@@ -843,12 +845,8 @@ class CoilSetMinDistance(_Objective):
                 return softmin(dist, self._softmin_alpha)
             return jnp.min(dist)
 
-        min_dist_per_coil = fori_loop(
-            0,
-            self.dim_f,
-            lambda k, min_dist: min_dist.at[k].set(body(k)),
-            jnp.zeros(self.dim_f),
-        )
+        k = jnp.arange(self.dim_f)
+        min_dist_per_coil = vmap_chunked(body, chunk_size=self._dist_chunk_size)(k)
         return min_dist_per_coil
 
 
@@ -899,6 +897,12 @@ class PlasmaCoilSetMinDistance(_Objective):
         Parameter used for softmin. The larger ``softmin_alpha``, the closer the
         softmin approximates the hardmin. softmin -> hardmin as
         ``softmin_alpha`` -> infinity.
+    dist_chunk_size : int > 0, optional
+        When computing distances, how many coils to consider at once. Default is all
+        coils, which is generally the fastest but requires the most memory. If there are
+        a large number of coils, or if the resolution is very high, setting this to a
+        small value will reduce peak memory usage at the cost of slightly increased
+        runtime.
 
     """
 
@@ -931,6 +935,7 @@ class PlasmaCoilSetMinDistance(_Objective):
         jac_chunk_size=None,
         use_softmin=False,
         softmin_alpha=1.0,
+        dist_chunk_size=None,
     ):
         if target is None and bounds is None:
             bounds = (1, np.inf)
@@ -942,6 +947,7 @@ class PlasmaCoilSetMinDistance(_Objective):
         self._coils_fixed = coils_fixed
         self._use_softmin = use_softmin
         self._softmin_alpha = softmin_alpha
+        self._dist_chunk_size = dist_chunk_size
         errorif(eq_fixed and coils_fixed, ValueError, "Cannot fix both eq and coil")
         things = []
         if not eq_fixed:
@@ -1092,12 +1098,8 @@ class PlasmaCoilSetMinDistance(_Objective):
                 return softmin(dist, self._softmin_alpha)
             return jnp.min(dist)
 
-        min_dist_per_coil = fori_loop(
-            0,
-            self.dim_f,
-            lambda k, min_dist: min_dist.at[k].set(body(k)),
-            jnp.zeros(self.dim_f),
-        )
+        k = jnp.arange(self.dim_f)
+        min_dist_per_coil = vmap_chunked(body, chunk_size=self._dist_chunk_size)(k)
         return min_dist_per_coil
 
 

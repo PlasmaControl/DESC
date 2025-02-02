@@ -112,7 +112,7 @@ def perturb(  # noqa: C901
         Equilibrium to perturb.
     objective : ObjectiveFunction or LinearConstraintProjection
         Objective function to satisfy. If a LinearConstraintProjection is passed,
-        no constraints is necessary. This will be more efficient for proximal optimizers
+        no constraints is necessary.
     constraints : tuple of Objective, optional
         List of objectives to be used as constraints during perturbation.
     deltas : dict of ndarray
@@ -177,23 +177,23 @@ def perturb(  # noqa: C901
 
     if not objective.built:
         objective.build(eq, verbose=verbose)
+
     if is_linear_proj:
-        constraints = objective._constraint.objectives
-        constraint = objective._constraint
-        warnif(
-            objective.dim_f < (objective._objective.dim_x - constraint.dim_f),
-            UserWarning,
-            "Perturbing an underdetermined system may give bad results",
-        )
+        obj = objective
+        objective = obj._objective
+        constraints = obj._constraint.objectives
+        constraint = obj._constraint
+        dim_f = obj.dim_f
     else:
         constraints = maybe_add_self_consistency(eq, constraints)
         constraint = ObjectiveFunction(constraints)
         constraint.build(verbose=verbose)
-        warnif(
-            objective.dim_f < (objective.dim_x - constraint.dim_f),
-            UserWarning,
-            "Perturbing an underdetermined system may give bad results",
-        )
+        dim_f = objective.dim_f
+    warnif(
+        dim_f < (objective.dim_x - constraint.dim_f),
+        UserWarning,
+        "Perturbing an underdetermined system may give bad results",
+    )
 
     if verbose > 0:
         print("Perturbing {}".format(", ".join(deltas.keys())))
@@ -206,12 +206,12 @@ def perturb(  # noqa: C901
     timer.start("linear constraint factorize")
     if is_linear_proj:
         xp, Z, D, unfixed_idx, project, recover = (
-            objective._xp,
-            objective._Z,
-            objective._D,
-            objective._unfixed_idx,
-            objective._project,
-            objective._recover,
+            obj._xp,
+            obj._Z,
+            obj._D,
+            obj._unfixed_idx,
+            obj._project,
+            obj._recover,
         )
     else:
         xp, _, _, Z, D, unfixed_idx, project, recover, *_ = (
@@ -222,15 +222,11 @@ def perturb(  # noqa: C901
         timer.disp("linear constraint factorize")
 
     # state vector
-    if is_linear_proj:
-        obj = objective._objective
-    else:
-        obj = objective
-    x = obj.x(eq)
+    x = objective.x(eq)
     x_reduced = project(x)
 
     x_norm = jnp.linalg.norm(x_reduced)
-    xz = obj.unpack_state(jnp.zeros_like(x), False)[0]
+    xz = objective.unpack_state(jnp.zeros_like(x), False)[0]
 
     # perturbation vectors
     dx1_reduced = jnp.zeros_like(x_reduced)
@@ -309,8 +305,8 @@ def perturb(  # noqa: C901
             weight = w
         weight = jnp.atleast_1d(jnp.asarray(weight))
         assert (
-            len(weight) == obj.dim_x
-        ), "Size of weight supplied to perturbation does not match obj.dim_x."
+            len(weight) == objective.dim_x
+        ), "Size of weight supplied to perturbation does not match objective.dim_x."
         if weight.ndim == 1:
             weight = weight[unfixed_idx]
             weight = jnp.diag(weight)
@@ -324,11 +320,11 @@ def perturb(  # noqa: C901
         if verbose > 0:
             print("Computing df")
         timer.start("df computation")
-        Jx = obj.jac_scaled_error(x)
+        Jx = objective.jac_scaled_error(x)
         Jx_reduced = Jx @ jnp.diag(D)[:, unfixed_idx] @ Z @ scale
-        RHS1 = obj.jvp_scaled(tangents, x)
+        RHS1 = objective.jvp_scaled(tangents, x)
         if include_f:
-            f = obj.compute_scaled_error(x)
+            f = objective.compute_scaled_error(x)
             RHS1 += f
         timer.stop("df computation")
         if verbose > 1:
@@ -362,7 +358,7 @@ def perturb(  # noqa: C901
             print("Computing d^2f")
         timer.start("d^2f computation")
         tangents += dx1
-        RHS2 = 0.5 * obj.jvp_scaled((tangents, tangents), x)
+        RHS2 = 0.5 * objective.jvp_scaled((tangents, tangents), x)
         timer.stop("d^2f computation")
         if verbose > 1:
             timer.disp("d^2f computation")
@@ -386,8 +382,8 @@ def perturb(  # noqa: C901
         if verbose > 0:
             print("Computing d^3f")
         timer.start("d^3f computation")
-        RHS3 = (1 / 6) * obj.jvp_scaled((tangents, tangents, tangents), x)
-        RHS3 += obj.jvp_scaled((dx2, tangents), x)
+        RHS3 = (1 / 6) * objective.jvp_scaled((tangents, tangents, tangents), x)
+        RHS3 += objective.jvp_scaled((dx2, tangents), x)
         timer.stop("d^3f computation")
         if verbose > 1:
             timer.disp("d^3f computation")
@@ -419,8 +415,8 @@ def perturb(  # noqa: C901
         setattr(eq_new, key, getattr(eq_new, key) + value)
 
     if is_linear_proj:
-        objective.update_constraint_target(eq_new)
-        recover = objective._recover
+        obj.update_constraint_target(eq_new)
+        recover = obj._recover
     else:
         for con in constraints:
             if hasattr(con, "update_target"):
@@ -434,7 +430,7 @@ def perturb(  # noqa: C901
     # update other attributes
     dx_reduced = dx1_reduced + dx2_reduced + dx3_reduced
     x_new = recover(x_reduced + dx_reduced)
-    params = obj.unpack_state(x_new, False)[0]
+    params = objective.unpack_state(x_new, False)[0]
     for key, value in params.items():
         if key not in deltas:
             value = put(  # parameter values below threshold are set to 0

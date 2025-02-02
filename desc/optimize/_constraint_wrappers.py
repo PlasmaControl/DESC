@@ -174,7 +174,19 @@ class LinearConstraintProjection(ObjectiveFunction):
         return self._objective.unpack_state(x, per_objective)
 
     def update_constraint_target(self, eq_new):
-        """Update the target of the constraint."""
+        """Update the target of the constraint.
+
+        Updates the particular solution (xp), nullspace (Z), scaling (D) and
+        the inverse of the scaled linear constraint matrix (ADinv) to reflect the new
+        equilibrium a.k.a. the new target of the constraint of system Ax=b. This
+        also updates the project and recover methods. Updating quantities in this way
+        is faster than calling factorize_linear_constraints again.
+
+        Parameters
+        ----------
+        eq_new : Equilibrium
+            New equilibrium to target for the constraints.
+        """
         for con in self._constraint.objectives:
             if hasattr(con, "update_target"):
                 con.update_target(eq_new)
@@ -189,6 +201,7 @@ class LinearConstraintProjection(ObjectiveFunction):
 
         # There is probably a more clever way of doing this, but for now we just
         # remove fixed parameters from A and b again by the same loop as in factorize
+        # Actually A does not change here, but still recompute it while updating others
         A, b, xp, unfixed_idx, fixed_idx = remove_fixed_parameters(A, b, xp)
 
         # compute x_scale
@@ -196,6 +209,7 @@ class LinearConstraintProjection(ObjectiveFunction):
         Dnew = jnp.where(jnp.abs(x_scale) < 1e2, 1, jnp.abs(x_scale))
 
         # since D has changed, we need to update the ADinv
+        # as mentioned above A does not change, so we can use the same Ainv
         self._ADinv = (1 / Dnew)[unfixed_idx, None] * self._Ainv
         self._D = Dnew
 

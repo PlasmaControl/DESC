@@ -6,7 +6,7 @@ from desc.backend import jnp, vmap
 from desc.compute import get_profiles, get_transforms
 from desc.compute._omnigenity import _omnigenity_mapping
 from desc.compute.utils import _compute as compute_fun
-from desc.grid import LinearGrid
+from desc.grid import Grid, LinearGrid
 from desc.utils import Timer, errorif, warnif
 from desc.vmec_utils import ptolemy_linear_transform
 
@@ -1059,10 +1059,11 @@ class PiecewiseOmnigenity(_Objective):
             profiles=constants["eq_profiles"],
         )
 
-        ## Passing Boozer coordinate values as regular coordinate
-        ## TODO: Have to account for NFP
-        field_grid = LinearGrid(
-            rho=0.5, theta=eq_data["theta_B"], zeta=eq_data["zeta_B"]
+        ### Passing Boozer coordinate values as regular coordinate
+        #### TODO: Have to account for NFP
+        field_grid = Grid(
+            jnp.array([eq_data["rho"], eq_data["theta_B"], eq_data["zeta_B"]]).T,
+            jitable=True,
         )
 
         field_transforms = get_transforms(

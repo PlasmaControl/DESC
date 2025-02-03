@@ -115,7 +115,7 @@ class LinearConstraintProjection(ObjectiveFunction):
             self._recover,
             self._ADinv,
             self._A_nondegenerate,
-            self._degenerate_idx,  # maybe we need those for b_new
+            self._degenerate_idx,
         ) = factorize_linear_constraints(
             self._objective,
             self._constraint,

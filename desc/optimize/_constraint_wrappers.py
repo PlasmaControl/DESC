@@ -215,7 +215,7 @@ class LinearConstraintProjection(ObjectiveFunction):
 
         # compute x_scale
         if x_scale == "auto":
-            self._objective.x(*self._objective.things)
+            x_scale = self._objective.x(*self._objective.things)
         errorif(
             x_scale.shape != xp.shape,
             ValueError,

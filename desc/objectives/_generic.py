@@ -26,6 +26,7 @@ class ExternalObjective(_Objective):
 
     The user supplied function must take an Equilibrium or a list of Equilibria as its
     only positional argument, but can take additional keyword arguments.
+    It must return a single 1D array of floats.
 
     Parameters
     ----------
@@ -46,7 +47,7 @@ class ExternalObjective(_Objective):
     rel_step : float, optional
         Relative finite difference step size. Default = 0.
         Total step size is ``abs_step + rel_step * mean(abs(x))``.
-    kwargs : any, optional
+    fun_kwargs : any, optional
         Keyword arguments that are passed as inputs to ``fun``.
 
     """
@@ -54,16 +55,38 @@ class ExternalObjective(_Objective):
     __doc__ = __doc__.rstrip() + collect_docs(
         target_default="``target=0``.", bounds_default="``target=0``."
     )
+    __doc__ += """
+    Examples
+    --------
+    .. code-block:: python
+
+        from desc.io import load
+
+        def myfun(eq, path=""):
+            # This will return the compute quantity '<beta>_vol',
+            # but uses I/O operations that are not JAX transformable.
+            eq.save(path)
+            eq = load(path)
+            data = eq.compute("<beta>_vol")
+            return data["<beta>_vol"]
+
+        myobj = ExternalObjective(
+            eq=eq, fun=myfun, fun_kwargs={"path": "temp.h5"}, dim_f=1, vectorized=False,
+        )
+    )
+
+    """
 
     _units = "(Unknown)"
     _print_value_fmt = "External objective value: "
-    _static_attrs = ["_fun_wrapped", "_kwargs"]
+    _static_attrs = ["_fun_wrapped", "_fun_kwargs"]
 
     def __init__(
         self,
         eq,
         *,
         fun,
+        fun_kwargs,
         dim_f,
         vectorized,
         abs_step=1e-4,
@@ -75,17 +98,16 @@ class ExternalObjective(_Objective):
         normalize_target=False,
         loss_function=None,
         name="external",
-        **kwargs,
     ):
         if target is None and bounds is None:
             target = 0
         self._eq = eq.copy()
         self._fun = fun
+        self._fun_kwargs = fun_kwargs
         self._dim_f = dim_f
         self._vectorized = vectorized
         self._abs_step = abs_step
         self._rel_step = rel_step
-        self._kwargs = kwargs
         super().__init__(
             things=eq,
             target=target,
@@ -130,7 +152,7 @@ class ExternalObjective(_Objective):
             # call external function on equilibrium or list of equilibria
             if not self._vectorized:
                 eqs = eqs[0]
-            return self._fun(eqs, **self._kwargs)
+            return self._fun(eqs, **self._fun_kwargs)
 
         # wrap external function to work with JAX
         abstract_eval = lambda *args, **kwargs: jnp.empty(self._dim_f)

@@ -1975,11 +1975,10 @@ def test_external_vs_generic_objectives(tmpdir_factory):
         ExternalObjective(
             eq=eq0,
             fun=data_from_vmec,
+            fun_kwargs={"path": path, "surfs": 8},
             dim_f=4,
             vectorized=False,
             target=target,
-            path=path,
-            surfs=8,
         )
     )
     constraints = FixParameters(

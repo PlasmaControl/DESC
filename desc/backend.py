@@ -41,7 +41,7 @@ else:
         warnings.warn(colored("Failed to load JAX", "red"))
 
 
-def print_info():
+def print_backend_info():
     """Prints DESC version, backend type & version, device type & memory."""
     x = jnp.linspace(0, 5)
     y = jnp.exp(x)
@@ -64,6 +64,7 @@ if use_jax:  # noqa: C901
     from jax import custom_jvp, jit, vmap
 
     imap = jax.lax.map
+    from jax.experimental import io_callback
     from jax.experimental.ode import odeint
     from jax.lax import cond, fori_loop, scan, switch, while_loop
     from jax.nn import softmax as softargmax
@@ -81,29 +82,6 @@ if use_jax:  # noqa: C901
         tree_unflatten,
         treedef_is_leaf,
     )
-
-    # TODO: update this when min JAX version >= 0.4.35
-    jax_vs = jaxlib.__version__.strip().split(".")
-    jax_version = float(jax_vs[1]) + float(jax_vs[2]) / 1e2
-    if jax_version >= 4.35:
-
-        def pure_callback(func, result_shape_dtype, *args, vectorized=False, **kwargs):
-            """Wrapper for jax.pure_callback for versions >=0.4.35."""
-            return jax.pure_callback(
-                func,
-                result_shape_dtype,
-                *args,
-                vmap_method="expand_dims" if vectorized else "sequential",
-                **kwargs,
-            )
-
-    else:
-
-        def pure_callback(func, result_shape_dtype, *args, vectorized=False, **kwargs):
-            """Wrapper for jax.pure_callback for versions <0.4.35."""
-            return jax.pure_callback(
-                func, result_shape_dtype, *args, vectorized=vectorized, **kwargs
-            )
 
     if hasattr(jnp, "trapezoid"):
         trapezoid = jnp.trapezoid  # for JAX 0.4.26 and later
@@ -500,6 +478,10 @@ else:  # pragma: no cover
 
         """
         return lambda xs: imap(fun, xs, in_axes=in_axes, out_axes=out_axes)
+
+    def io_callback(*args, **kwargs):
+        """IO callback for numpy backend."""
+        raise NotImplementedError
 
     def tree_stack(*args, **kwargs):
         """Stack pytree for numpy backend."""

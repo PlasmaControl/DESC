@@ -9,7 +9,7 @@ import numpy as np
 from scipy.special import factorial
 from termcolor import colored
 
-from desc.backend import flatnonzero, fori_loop, jax, jit, jnp, pure_callback, take
+from desc.backend import flatnonzero, fori_loop, io_callback, jax, jit, jnp, take
 
 PRINT_WIDTH = 60  # current longest name is BootstrapRedlConsistency with pre-text
 
@@ -794,8 +794,8 @@ def jaxify(func, abstract_eval, vectorized=False, abs_step=1e-4, rel_step=0):
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
             result_shape_dtype = abstract_eval(*args, **kwargs)
-            return pure_callback(
-                func, result_shape_dtype, *args, vectorized=vectorized, **kwargs
+            return io_callback(
+                func, result_shape_dtype, *args, sharding=None, ordered=False, **kwargs
             )
 
         return wrapper

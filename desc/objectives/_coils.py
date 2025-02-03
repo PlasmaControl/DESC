@@ -1187,7 +1187,7 @@ class StochasticOptimizationSettings:
         ])
 
     @functools.cached_property
-    def perturbations(self) -> list[tuple[jnp.ndarray, jnp.ndarray]]:
+    def perturbations(self) -> jnp.ndarray:
         # Draw a random matrix shaped (2n, 3) from a multivariate normal
         # distribution, where the top half is for the position perturbations and
         # the bottom half is for the tangent perturbations, using the covariance

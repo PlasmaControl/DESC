@@ -1088,7 +1088,8 @@ class PiecewiseOmnigenity(_Objective):
         Ntheta = constants["Ntheta_B"]
         Nzeta = constants["Nzeta_B"]
 
-        B_pwO = jnp.roll(field_data["|B|_pwO"], Ntheta / 2 * (Nzeta + 1))
+        # Rolling ensures max(B) occurs in the corners
+        B_pwO = jnp.roll(field_data["|B|_pwO"], Ntheta / 2 * (Nzeta - 1))
 
         pwO_error = eq_data["|B|"] - B_pwO
 

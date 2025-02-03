@@ -1007,6 +1007,8 @@ class PiecewiseOmnigenity(_Objective):
             "eq_profiles": profiles,
             "eq_transforms": eq_transforms,
             "helicity": self.helicity,
+            "Ntheta_B": eq_grid.num_theta,
+            "Nzeta_B": eq_grid.num_zeta,
             "quad_weights": 1.0,
         }
 
@@ -1083,7 +1085,10 @@ class PiecewiseOmnigenity(_Objective):
             iota=jnp.mean(eq_data["iota"]),
         )
 
-        B_pwO = jnp.roll(field_data["|B|_pwO"], len(eq_data["theta_B"]))
+        Ntheta = constants["Ntheta_B"]
+        Nzeta = constants["Nzeta_B"]
+
+        B_pwO = jnp.roll(field_data["|B|_pwO"], Ntheta / 2 * (Nzeta + 1))
 
         pwO_error = eq_data["|B|"] - B_pwO
 

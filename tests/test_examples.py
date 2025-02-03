@@ -384,7 +384,7 @@ def test_simsopt_QH_comparison():
     eq.solve(
         verbose=3,
         ftol=1e-8,
-        constraints=get_fixed_boundary_constraints(eq=eq, profiles=False),
+        constraints=get_fixed_boundary_constraints(eq=eq, profiles=True),
         objective=ObjectiveFunction(objectives=CurrentDensity(eq=eq)),
     )
     ##################################

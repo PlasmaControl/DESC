@@ -64,7 +64,6 @@ if use_jax:  # noqa: C901
     from jax import custom_jvp, jit, vmap
 
     imap = jax.lax.map
-    from jax.experimental import io_callback
     from jax.experimental.ode import odeint
     from jax.lax import cond, fori_loop, scan, switch, while_loop
     from jax.nn import softmax as softargmax
@@ -89,6 +88,29 @@ if use_jax:  # noqa: C901
         trapezoid = jax.scipy.integrate.trapezoid
     else:
         trapezoid = jnp.trapz  # for older versions of JAX, deprecated by jax 0.4.16
+
+    # TODO: update this when min JAX version >= 0.4.35
+    jax_vs = jaxlib.__version__.strip().split(".")
+    jax_version = float(jax_vs[1]) + float(jax_vs[2]) / 1e2
+    if jax_version >= 4.35:
+
+        def pure_callback(func, result_shape_dtype, *args, vectorized=False, **kwargs):
+            """Wrapper for jax.pure_callback for versions >=0.4.35."""
+            return jax.pure_callback(
+                func,
+                result_shape_dtype,
+                *args,
+                vmap_method="expand_dims" if vectorized else "sequential",
+                **kwargs,
+            )
+
+    else:
+
+        def pure_callback(func, result_shape_dtype, *args, vectorized=False, **kwargs):
+            """Wrapper for jax.pure_callback for versions <0.4.35."""
+            return jax.pure_callback(
+                func, result_shape_dtype, *args, vectorized=vectorized, **kwargs
+            )
 
     def execute_on_cpu(func):
         """Decorator to set default device to CPU for a function.
@@ -479,7 +501,7 @@ else:  # pragma: no cover
         """
         return lambda xs: imap(fun, xs, in_axes=in_axes, out_axes=out_axes)
 
-    def io_callback(*args, **kwargs):
+    def pure_callback(*args, **kwargs):
         """IO callback for numpy backend."""
         raise NotImplementedError
 

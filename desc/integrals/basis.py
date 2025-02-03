@@ -29,6 +29,7 @@ from desc.utils import (
     isposint,
     setdefault,
     take_mask,
+    warnif,
 )
 from desc.vmec_utils import rfft_to_trig
 
@@ -214,6 +215,18 @@ class FourierChebyshevSeries(IOAble):
             ``FourierChebyshevSeries.nodes(X,Y,L,self.domain,self.lobatto)``.
 
         """
+        warnif(
+            X < self.X,
+            msg="Frequency spectrum of FFT interpolation will be truncated because "
+            "the grid resolution is less than the Fourier resolution.\n"
+            f"Got X = {X} < {self.X} = self.X.",
+        )
+        warnif(
+            Y < self.Y,
+            msg="Frequency spectrum of DCT interpolation will be truncated because "
+            "the grid resolution is less than the Chebyshev resolution.\n"
+            f"Got Y = {Y} < {self.Y} = self.Y.",
+        )
         return idct(
             irfft(self._c, n=X, axis=-2, norm="forward"),
             type=2 - self.lobatto,
@@ -329,6 +342,12 @@ class PiecewiseChebyshevSeries(IOAble):
             Chebyshev series evaluated at Y Chebyshev points.
 
         """
+        warnif(
+            Y < self.Y,
+            msg="Frequency spectrum of DCT interpolation will be truncated because "
+            "the grid resolution is less than the Chebyshev resolution.\n"
+            f"Got Y = {Y} < {self.Y} = self.Y.",
+        )
         return idct(dct_from_cheb(self.cheb), type=2, n=Y, axis=-1) * Y
 
     def _isomorphism_to_C1(self, y):

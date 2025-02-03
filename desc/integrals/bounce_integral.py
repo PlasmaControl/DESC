@@ -691,7 +691,11 @@ class Bounce2D(Bounce):
         )
         return result[0] if len(result) == 1 else result
 
+    # TODO (#1303).
     def _integrate(self, x, w, integrand, pitch, data, names, z1, z2, check, plot):
+        # TODO (#1294): Use non-uniform fast transforms here.
+        #  Compare to (3x up-sampled with FFT) 2D spline over single field period done
+        #  once in ``desc/_compute/_neoclassical.py::_compute``.
         # num pitch, num alpha, num rho, num well, num quad
         shape = [*z1.shape, x.size]
         # ζ ∈ ℝ and θ ∈ ℝ coordinates of quadrature points
@@ -1282,6 +1286,7 @@ class Bounce1D(Bounce):
 
         return result[0] if len(result) == 1 else result
 
+    # TODO (#1303).
     def _integrate(
         self, x, w, integrand, pitch, data, names, points, method, check, plot, batch
     ):

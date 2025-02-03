@@ -341,14 +341,14 @@ class FFTInterpolator(_BIESTInterpolator):
         warnif(
             eval_grid.num_theta < source_grid.num_theta,
             msg="Frequency spectrum of FFT interpolation will be truncated because "
-            "the evaluation grid has less resolution than the source grid."
+            "the evaluation grid has less resolution than the source grid.\n"
             f"Got eval_grid.num_theta = {eval_grid.num_theta} < "
             f"{source_grid.num_theta} = source_grid.num_theta.",
         )
         warnif(
             eval_grid.num_zeta < source_grid.num_zeta,
             msg="Frequency spectrum of FFT interpolation will be truncated because "
-            "the evaluation grid has less resolution than the source grid."
+            "the evaluation grid has less resolution than the source grid.\n"
             f"Got eval_grid.num_zeta = {eval_grid.num_zeta} < "
             f"{source_grid.num_zeta} = source_grid.num_zeta.",
         )

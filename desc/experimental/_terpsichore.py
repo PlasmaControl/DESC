@@ -778,36 +778,38 @@ class TERPSICHORE(ExternalObjective):
         super().__init__(
             eq=eq,
             fun=terpsichore,
+            fun_kwargs={
+                "processes": processes,
+                "path": path,
+                "exec": exec,
+                "scalar": scalar,
+                "mode_family": mode_family,
+                "surfs": surfs,
+                "lssl": lssl,
+                "lssd": lssd,
+                "M_max": M_max,
+                "N_min": N_min,
+                "N_max": N_max,
+                "M_booz_max": M_booz_max,
+                "N_booz_max": N_booz_max,
+                "awall": awall,
+                "deltaJp": deltaJp,
+                "modelk": modelk,
+                "nev": nev,
+                "al0": al0,
+                "sleep_time": sleep_time,
+                "stop_time": stop_time,
+            },
             dim_f=1 if scalar else surfs - 1,
             vectorized=True,
+            abs_step=abs_step,
+            rel_step=rel_step,
             target=target,
             bounds=bounds,
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
             loss_function=loss_function,
-            abs_step=abs_step,
-            rel_step=rel_step,
-            processes=processes,
-            path=path,
-            exec=exec,
-            scalar=scalar,
-            mode_family=mode_family,
-            surfs=surfs,
-            lssl=lssl,
-            lssd=lssd,
-            M_max=M_max,
-            N_min=N_min,
-            N_max=N_max,
-            M_booz_max=M_booz_max,
-            N_booz_max=N_booz_max,
-            awall=awall,
-            deltaJp=deltaJp,
-            modelk=modelk,
-            nev=nev,
-            al0=al0,
-            sleep_time=sleep_time,
-            stop_time=stop_time,
             name=name,
         )
         self._scalar = scalar
@@ -829,10 +831,10 @@ class TERPSICHORE(ExternalObjective):
         grid1 = LinearGrid(rho=1.0, M=0, N=0)
         R0 = self._eq.compute("R", grid0)["R"][0]  # R(rho=0)
         R1 = self._eq.compute("R", grid1)["R"][0]  # R(rho=1,theta=0,phi=0)
-        self._kwargs["theta0_outboard"] = bool(R1 > R0)
+        self._fun_kwargs["theta0_outboard"] = bool(R1 > R0)
 
         # transforms for writing the wout file
-        surfs = self._kwargs.get("surfs")
+        surfs = self._fun_kwargs.get("surfs")
         NFP = self._eq.NFP
         M = self._eq.M
         N = self._eq.N
@@ -843,7 +845,7 @@ class TERPSICHORE(ExternalObjective):
         r_half = np.sqrt(s_half)
         grid_lcfs = LinearGrid(M=M_nyq, N=N_nyq, rho=np.array([1.0]), NFP=NFP)
         grid_half = LinearGrid(M=M_nyq, N=N_nyq, NFP=NFP, rho=r_half)
-        self._kwargs["data_transforms"] = get_transforms(
+        self._fun_kwargs["data_transforms"] = get_transforms(
             keys=[
                 "B_rho",
                 "B_theta",
@@ -865,7 +867,7 @@ class TERPSICHORE(ExternalObjective):
             fit_basis = DoubleFourierSeries(M=M_nyq, N=N_nyq, NFP=NFP, sym="cos")
         else:
             fit_basis = DoubleFourierSeries(M=M_nyq, N=N_nyq, NFP=NFP, sym=None)
-        self._kwargs["fit_transform"] = Transform(
+        self._fun_kwargs["fit_transform"] = Transform(
             grid=grid_lcfs, basis=fit_basis, build=False, build_pinv=True
         )
 

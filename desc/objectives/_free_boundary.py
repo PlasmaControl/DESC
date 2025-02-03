@@ -19,7 +19,7 @@ from desc.utils import (
     warnif,
 )
 
-from ..integrals.singularities import _get_default_params
+from ..integrals.singularities import best_ratio, heuristic_support_params
 from .normalization import compute_scaling_factors
 
 
@@ -517,7 +517,11 @@ class BoundaryError(_Objective):
             ValueError,
             "Source grids for singular integrals must be non-symmetric",
         )
-        st, sz, q = _get_default_params(source_grid)
+
+        ratio_data = eq.compute(
+            ["|e_theta x e_zeta|", "g_tt", "g_zz"], grid=source_grid
+        )
+        st, sz, q = heuristic_support_params(source_grid, best_ratio(ratio_data)[0])
         self._st = setdefault(self._st, st)
         self._sz = setdefault(self._sz, sz)
         self._q = setdefault(self._q, q)

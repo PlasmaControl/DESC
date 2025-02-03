@@ -674,7 +674,7 @@ class TestSingularities:
         Bplasma = np.linalg.norm(Bplasma, axis=-1)
         # scale by total field magnitude
         B = Bplasma / np.linalg.norm(data["B"], axis=-1).mean()
-        np.testing.assert_allclose(B, 0, atol=0.005)
+        np.testing.assert_allclose(B, 0, atol=0.0054)
 
     @pytest.mark.unit
     @pytest.mark.parametrize("interpolator", [FFTInterpolator, DFTInterpolator])

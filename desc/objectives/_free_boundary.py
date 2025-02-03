@@ -519,7 +519,7 @@ class BoundaryError(_Objective):
         )
 
         ratio_data = eq.compute(
-            ["|e_theta x e_zeta|", "g_tt", "g_zz"], grid=source_grid
+            ["|e_theta x e_zeta|", "e_theta", "e_zeta"], grid=source_grid
         )
         st, sz, q = heuristic_support_params(source_grid, best_ratio(ratio_data)[0])
         self._st = setdefault(self._st, st)

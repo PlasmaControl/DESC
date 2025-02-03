@@ -168,7 +168,7 @@ def best_ratio(data):
     ----------
     data : dict[str, jnp.ndarray]
         Dictionary of data evaluated on grid that ``can_fft2`` with keys
-        ``|e_theta x e_zeta|``, ``g_tt``, and ``g_zz``.
+        ``|e_theta x e_zeta|``, ``e_theta``, and ``e_zeta``.
 
     Returns
     -------
@@ -178,7 +178,9 @@ def best_ratio(data):
         Local ratio.
 
     """
-    local = jnp.sqrt(data["g_zz"] / data["g_tt"])
+    local = jnp.linalg.norm(data["e_zeta"], axis=-1) / jnp.linalg.norm(
+        data["e_theta"], axis=-1
+    )
     mean = jnp.mean(local * data["|e_theta x e_zeta|"]) / jnp.mean(
         data["|e_theta x e_zeta|"]
     )

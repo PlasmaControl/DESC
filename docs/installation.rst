@@ -261,7 +261,6 @@ To check that you have properly installed DESC and its dependencies, try the fol
     >>> set_device('gpu')  # only needed if running on a GPU
     >>> from desc.backend import print_backend_info
     >>> print_backend_info()
-    >>> import desc.equilibrium
 
 You should see an output stating the DESC version, the JAX version, and your device (CPU or GPU).
 

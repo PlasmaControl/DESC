@@ -912,9 +912,13 @@ class PiecewiseOmnigenity(_Objective):
 
     """
 
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``target=0``.", bounds_default="``target=0``."
+    )
+
     _coordinates = "rtz"
     _units = "(T)"
-    _print_value_fmt = "Piecewise omnigenity error: {:10.3e} "
+    _print_value_fmt = "Piecewise omnigenity error: "
 
     def __init__(
         self,

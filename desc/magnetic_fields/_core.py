@@ -2896,8 +2896,8 @@ class PiecewiseOmnigenousField(Optimizable, IOAble):
         """ndarray: Piecewise Omnigenity magnetic well shape parameters."""
         return self._iota0
 
-    @w_2.setter
-    def w_2(self, iota0):
+    @iota0.setter
+    def iota0(self, iota0):
         self._iota0 = iota0
 
     @property

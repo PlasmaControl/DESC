@@ -177,7 +177,7 @@ class LinearConstraintProjection(ObjectiveFunction):
         x = self.recover(x)
         return self._objective.unpack_state(x, per_objective)
 
-    def update_constraint_target(self, eq_new):
+    def update_constraint_target(self, eq_new, x_scale="auto"):
         """Update the target of the constraint.
 
         Updates the particular solution (xp), nullspace (Z), scaling (D) and
@@ -190,6 +190,10 @@ class LinearConstraintProjection(ObjectiveFunction):
         ----------
         eq_new : Equilibrium
             New equilibrium to target for the constraints.
+        x_scale : ndarray or str, optional
+            Scaling of the state vector. If "auto", the scaling is set to 1 for
+            components with magnitude smaller than 1e2, and to the magnitude of the
+            component otherwise. Default is "auto".
         """
         for con in self._constraint.objectives:
             if hasattr(con, "update_target"):
@@ -210,7 +214,14 @@ class LinearConstraintProjection(ObjectiveFunction):
         A, b, xp, unfixed_idx, fixed_idx = remove_fixed_parameters(A, b, xp)
 
         # compute x_scale
-        x_scale = self._objective.x(*self._objective.things)
+        if x_scale == "auto":
+            self._objective.x(*self._objective.things)
+        errorif(
+            x_scale.shape != xp.shape,
+            ValueError,
+            "x_scale must be the same size as the full state vector. "
+            + f"Got size {x_scale.size} for state vector of size {xp.size}.",
+        )
         self._D = jnp.where(jnp.abs(x_scale) < 1e2, 1, jnp.abs(x_scale))
 
         # since D has changed, we need to update the ADinv
@@ -665,8 +676,9 @@ class ProximalProjection(ObjectiveFunction):
         self._eq_solve_objective = LinearConstraintProjection(
             self._constraint,
             ObjectiveFunction(self._linear_constraints),
+            name="Equilibrium Update LinearConstraintProjection",
         )
-        self._eq_solve_objective.build()
+        self._eq_solve_objective.build(use_jit=use_jit, verbose=verbose)
 
         errorif(
             self._constraint.things != [eq],
@@ -869,7 +881,12 @@ class ProximalProjection(ObjectiveFunction):
             self._eq.params_dict = self.history[-1][self._eq_idx]
 
         if (x != self._allx[-1]).all():
-            self._eq_solve_objective.update_constraint_target(self._eq)
+            x_scale = (
+                self._solve_options["x_scale"]
+                if self._solve_options["x_scale"] is not None
+                else "auto"
+            )
+            self._eq_solve_objective.update_constraint_target(self._eq, x_scale=x_scale)
 
         return xopt, xeq
 

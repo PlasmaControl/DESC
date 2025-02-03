@@ -36,6 +36,8 @@ class ExternalObjective(_Objective):
         External objective function. It must take an Equilibrium or list of Equilibria
         as its only positional argument, but can take additional kewyord arguments.
         It does not need to be JAX transformable.
+    fun_kwargs : any, optional
+        Keyword arguments that are passed as inputs to ``fun``.
     dim_f : int
         Dimension of the output of ``fun``.
     vectorized : bool
@@ -47,8 +49,6 @@ class ExternalObjective(_Objective):
     rel_step : float, optional
         Relative finite difference step size. Default = 0.
         Total step size is ``abs_step + rel_step * mean(abs(x))``.
-    fun_kwargs : any, optional
-        Keyword arguments that are passed as inputs to ``fun``.
 
     """
 

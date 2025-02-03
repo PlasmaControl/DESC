@@ -330,16 +330,17 @@ class Equilibrium(IOAble, Optimizable):
         if not use_kinetic and pressure is None:
             pressure = 0
 
-        self._electron_temperature = parse_profile(
+        self.electron_temperature = parse_profile(
             electron_temperature, "electron temperature"
         )
-        self._electron_density = parse_profile(electron_density, "electron density")
-        self._ion_temperature = parse_profile(ion_temperature, "ion temperature")
-        self._atomic_number = parse_profile(atomic_number, "atomic number")
-        self._pressure = parse_profile(pressure, "pressure")
-        self._anisotropy = parse_profile(anisotropy, "anisotropy")
-        self._iota = parse_profile(iota, "iota")
-        self._current = parse_profile(current, "current")
+        self.electron_density = parse_profile(electron_density, "electron density")
+        self.ion_temperature = parse_profile(ion_temperature, "ion temperature")
+        self.atomic_number = parse_profile(atomic_number, "atomic number")
+        self.pressure = parse_profile(pressure, "pressure")
+        self.anisotropy = parse_profile(anisotropy, "anisotropy")
+        self._iota = self._current = None
+        self.iota = parse_profile(iota, "iota")
+        self.current = parse_profile(current, "current")
 
         # ensure profiles have the right resolution
         for profile in [
@@ -1786,6 +1787,9 @@ class Equilibrium(IOAble, Optimizable):
 
     @iota.setter
     def iota(self, new):
+        self._iota = parse_profile(new, "iota")
+        if self.iota is None:
+            return
         warnif(
             self.current is not None,
             UserWarning,
@@ -1793,7 +1797,6 @@ class Equilibrium(IOAble, Optimizable):
             + "with fixed toroidal current, removing existing toroidal"
             " current profile.",
         )
-        self._iota = parse_profile(new, "iota")
         self._current = None
 
     @optimizable_parameter
@@ -1819,6 +1822,9 @@ class Equilibrium(IOAble, Optimizable):
 
     @current.setter
     def current(self, new):
+        self._current = parse_profile(new, "current")
+        if self.current is None:
+            return
         warnif(
             self.iota is not None,
             UserWarning,
@@ -1826,8 +1832,13 @@ class Equilibrium(IOAble, Optimizable):
             + "with fixed rotational transform, removing existing rotational"
             " transform profile.",
         )
-        self._current = parse_profile(new, "current")
         self._iota = None
+        axis_current = np.squeeze(self.current(0.0))
+        warnif(
+            np.abs(axis_current) > 1e-8,
+            UserWarning,
+            f"Current on axis is nonzero, got {axis_current:.3e} Amps",
+        )
 
     @optimizable_parameter
     @property
@@ -1844,6 +1855,12 @@ class Equilibrium(IOAble, Optimizable):
             + "fixed rotational transform",
         )
         self.current.params = c_l
+        axis_current = np.squeeze(self.current(0.0))
+        warnif(
+            np.abs(axis_current) > 1e-8,
+            UserWarning,
+            f"Current on axis is nonzero, got {axis_current:.3e} Amps",
+        )
 
     @property
     def R_basis(self):

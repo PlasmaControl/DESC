@@ -1114,10 +1114,12 @@ class StochasticOptimizationSettings:
         Number of "perturbed" coils to include in the objective.
     standard_deviation : float
         The standart deviation (sigma) and the characteristic length (l) used in
-        the covariance function.
+        the covariance function. It controls the overall amplitude of the random coil
+        perturbations.
     length_scale : float
         The standart deviation (sigma) and the characteristic length (l) used in
-        the covariance function.
+        the covariance function. It controls how quickly the random displacements vary
+        as you move along the coil.
     seed : int, optional
         Seed for the pseudo-random number generator. Defaults to 0.
     """
@@ -1127,16 +1129,16 @@ class StochasticOptimizationSettings:
     length_scale: float
     seed: int = 0
     # The fields below are not supposed to be set by the user, they will be derived
-    # in the `build` method.
+    # in the `build` method. They need to be static for the JIT.
     number_of_discretization_points: int = 0
     zero_mean_array: jnp.ndarray = dataclasses.field(
-        default_factory=lambda: jnp.zeros(10)
+        default_factory=lambda: jnp.array([])
     )
     index_array_for_samples: jnp.ndarray = dataclasses.field(
-        default_factory=lambda: jnp.zeros(10)
+        default_factory=lambda: jnp.array([])
     )
     covariance_matrix: jnp.ndarray = dataclasses.field(
-        default_factory=lambda: jnp.zeros((10, 10))
+        default_factory=lambda: jnp.array([])
     )
 
     def compute_covariance_matrix(self) -> jnp.ndarray:
@@ -1152,31 +1154,24 @@ class StochasticOptimizationSettings:
             (i, -6, 6),
         )
 
-        # Covariance between two different position perturbations:
-        cov_f_pp = sp.lambdify(
+        # Covariance function between two different position perturbations:
+        cof_f_pp = sp.lambdify(
             (theta_1, theta_2),
             covariance_function.subs(d, theta_1 - theta_2),
             "numpy",
         )
-        # Covariance between a position perturbation derivartive and a position
+        # Covariance function between a position perturbation derivartive and a position
         # perturbation:
         cov_f_dp = sp.lambdify(
             (theta_1, theta_2),
-            -sp.diff(covariance_function, d).subs(d, theta_1 - theta_2),
+            sp.diff(covariance_function, d).subs(d, theta_1 - theta_2),
             "numpy",
         )
-        # Covariance between a position perturbation and a position perturbation
-        # derivartive:
-        cov_f_pd = sp.lambdify(
-            (theta_1, theta_2),
-            -sp.diff(covariance_function, d).subs(d, theta_1 - theta_2),
-            "numpy",
-        )
-        # Covariance between a position perturbation derivartive and a position
+        # Covariance function between a position perturbation derivartive and a position
         # perturbation derivartive:
         cov_f_dd = sp.lambdify(
             (theta_1, theta_2),
-            -sp.diff(covariance_function, d, 2).subs(d, theta_1 - theta_2),
+            sp.diff(covariance_function, d, 2).subs(d, theta_1 - theta_2),
             "numpy",
         )
 
@@ -1185,13 +1180,11 @@ class StochasticOptimizationSettings:
         thetas = jnp.linspace(
             0, 2 * jnp.pi, self.number_of_discretization_points, endpoint=False
         )
-        XX, YY = jnp.meshgrid(thetas, thetas)
-        return jnp.block(
-            [
-                [cov_f_pp(XX, YY), cov_f_pd(XX, YY)],
-                [cov_f_dp(XX, YY), cov_f_dd(XX, YY)],
-            ]
-        )
+        XX, YY = jnp.meshgrid(thetas, thetas, indexing="ij")
+        return jnp.block([
+            [cof_f_pp(XX, YY), -cov_f_dp(XX, YY)],
+            [cov_f_dp(XX, YY), -cov_f_dd(XX, YY)],
+        ])
 
     @functools.cached_property
     def perturbations(self) -> list[tuple[jnp.ndarray, jnp.ndarray]]:
@@ -1208,6 +1201,18 @@ class StochasticOptimizationSettings:
         xdraw = jax.random.multivariate_normal(keyx, mean_1d, self.covariance_matrix)
         ydraw = jax.random.multivariate_normal(keyy, mean_1d, self.covariance_matrix)
         zdraw = jax.random.multivariate_normal(keyz, mean_1d, self.covariance_matrix)
+
+        # If there are any NaNs, raise an error:
+        if (
+            jnp.any(jnp.isnan(xdraw))
+            or jnp.any(jnp.isnan(ydraw))
+            or jnp.any(jnp.isnan(zdraw))
+        ):
+            message = (
+                "NaNs in the perturbations. Try to use different length_scale or"
+                " standard_deviation in the stochastic optimization settings."
+            )
+            raise ValueError(message)
 
         # Create a (2n,3) array for the position and tangent perturbations. The first
         # n rows are for the position perturbations and the second n rows are for the
@@ -2132,12 +2137,10 @@ class LinkingCurrentConsistency(_Objective):
             )
             eq_linking_current = 2 * jnp.pi * data["G"][0] / mu_0
 
-        coil_currents = jnp.concatenate(
-            [
-                jnp.atleast_1d(param[idx])
-                for param, idx in zip(tree_leaves(coil_params), self._indices)
-            ]
-        )
+        coil_currents = jnp.concatenate([
+            jnp.atleast_1d(param[idx])
+            for param, idx in zip(tree_leaves(coil_params), self._indices)
+        ])
         coil_currents = self.things[0]._all_currents(coil_currents)
         coil_linking_current = jnp.sum(constants["link"] * coil_currents)
         return eq_linking_current - coil_linking_current
@@ -2414,12 +2417,10 @@ class SurfaceCurrentRegularization(_Objective):
                 )
             else:  # it does not have I,G bc is CurrentPotentialField
                 Phi = surface_current_field.compute("Phi", grid=source_grid)["Phi"]
-                self._normalization = np.max(
-                    [
-                        np.mean(np.abs(Phi)),
-                        1,
-                    ]
-                )
+                self._normalization = np.max([
+                    np.mean(np.abs(Phi)),
+                    1,
+                ])
 
         self._constants = {
             "surface_transforms": surface_transforms,

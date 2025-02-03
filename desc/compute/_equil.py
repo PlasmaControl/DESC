@@ -838,7 +838,7 @@ def _P_ISS04(params, transforms, profiles, data, **kwargs):
             * data["R0"] ** 0.64  # m
             * (data["<ne>_vol"] / 1e19) ** 0.54  # 1/m^3 -> 1e19/m^3
             * data["<|B|>_axis"] ** 0.84  # T
-            * iota_23**0.41
+            * jnp.abs(iota_23) ** 0.41
             * kwargs.get("H_ISS04", 1)
         )
     ) ** (1 / 0.39)

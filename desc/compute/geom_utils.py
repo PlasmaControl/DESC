@@ -74,7 +74,6 @@ def rotation_matrix_vector_vector(a, b):
         Vectors, in cartesian (X,Y,Z) coordinates
         Matrix will correspond to rotating a onto b
 
-
     Returns
     -------
     rotmat : ndarray, shape(3,3)
@@ -83,17 +82,21 @@ def rotation_matrix_vector_vector(a, b):
     """
     a = jnp.asarray(a)
     b = jnp.asarray(b)
+    a_plus_b = a + b
     a = safenormalize(a)
     b = safenormalize(b)
     axis = cross(a, b)
     norm = safenorm(axis)
-    axis = safenormalize(axis)
     eps = 1e2 * jnp.finfo(axis.dtype).eps
     skew = _skew_matrix(axis)
     R1 = jnp.eye(3)
     R2 = skew
-    R3 = (skew @ skew) * safediv(1, 1 + dot(a, b))
-    return jnp.where(norm < eps, jnp.eye(3), R1 + R2 + R3)  # if axis=0, no rotation
+    c = dot(a, b)
+    R3 = (skew @ skew) * safediv(1, 1 + c)
+    R = R1 + R2 + R3
+    R = jnp.where(norm < eps, jnp.eye(3), R1 + R2 + R3)  # if axis=0, no rotation
+    # if vectors were antiparallel, negate so has correct sign (reflection)
+    return jnp.where(jnp.allclose(a_plus_b, 0.0), -R, R)
 
 
 def xyz2rpz(pts):

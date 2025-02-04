@@ -1241,6 +1241,28 @@ def test_save_and_load_makegrid_coils_rotated_int_grid(tmpdir_factory):
 
 
 @pytest.mark.unit
+def test_save_and_load_makegrid_coils_nested(tmpdir_factory):
+    """Test saving and reloading a nested CoilSet from MAKEGRID file."""
+    tmpdir = tmpdir_factory.mktemp("coil_files")
+    path = tmpdir.join("coils.MAKEGRID_format_nested")
+
+    # make a coilset with angular coilset
+    N = 22
+    coil = FourierPlanarCoil()
+    coil.current = 1
+    coilset_NFP = CoilSet(coil, NFP=N, sym=False)
+    coilset_sym = CoilSet(FourierPlanarCoil(r_n=3), NFP=1, sym=True)
+    coilset = MixedCoilSet(coilset_NFP, coilset_sym)
+
+    grid = LinearGrid(N=200, endpoint=False)
+    coilset.save_in_makegrid_format(str(path), grid=grid, NFP=2)
+
+    coilset2 = CoilSet.from_makegrid_coilfile(str(path))
+
+    assert coilset2.num_coils == coilset.num_coils
+
+
+@pytest.mark.unit
 def test_save_makegrid_coils_assert_NFP(tmpdir_factory):
     """Test saving CoilSet that with incompatible NFP throws an error."""
     Ncoils = 22

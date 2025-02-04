@@ -35,7 +35,7 @@ pytest-mpl == 0.16.1
 pytest-split >= 0.8.2, <= 0.10.0
 qicna @ git+https://github.com/rogeriojorge/pyQIC/
 qsc <= 0.1.3
-shapely >= 1.8.2, <= 2.0.6
+shapely >= 1.8.2, <= 2.0.7
 
 # building
 build

@@ -365,15 +365,15 @@ class BoundaryError(_Objective):
         Savart integral and where to evaluate errors. ``source_grid`` should not be
         stellarator symmetric, and both should be at rho=1.
         Defaults to ``LinearGrid(M=eq.M_grid, N=eq.N_grid)`` for both.
-        If both grids are the same, then some computation can be skipped.
     field_grid : Grid, optional
         Grid used to discretize field. Defaults to default grid for given field.
     field_fixed : bool
         Whether to assume the field is fixed. For free boundary solve, should
         be fixed. For single stage optimization, should be False (default).
-    loop : bool
-        If True, evaluate integral using loops, as opposed to vmap. Slower, but uses
-        less memory.
+    chunk_size : int or None
+        Size to split computation into chunks.
+        If no chunking should be done or the chunk size is the full input
+        then supply ``None``. Default is ``1``.
 
     """
 
@@ -422,7 +422,7 @@ class BoundaryError(_Objective):
         eval_grid=None,
         field_grid=None,
         field_fixed=False,
-        loop=True,
+        chunk_size=1,
         name="Boundary error",
         jac_chunk_size=None,
         **kwargs,
@@ -437,7 +437,11 @@ class BoundaryError(_Objective):
         self._q = q
         self._field = field
         self._field_grid = field_grid
-        self._loop = loop
+        self._chunk_size = parse_argname_change(
+            chunk_size, kwargs, "loop", "chunk_size"
+        )
+        if self._chunk_size == 0:
+            self._chunk_size = None
         self._sheet_current = hasattr(eq.surface, "Phi_mn")
         if field_fixed:
             things = [eq]
@@ -488,7 +492,7 @@ class BoundaryError(_Objective):
         else:
             eval_grid = self._eval_grid
 
-        self._eval_grid_is_source_grid = eval_grid == source_grid
+        self._eval_grid_is_source_grid = eval_grid.equiv(source_grid)
 
         errorif(
             not np.all(source_grid.nodes[:, 0] == 1.0),
@@ -681,7 +685,7 @@ class BoundaryError(_Objective):
             eval_data,
             source_data,
             constants["interpolator"],
-            loop=self._loop,
+            chunk_size=self._chunk_size,
         )
         # need extra factor of B/2 bc we're evaluating on plasma surface
         Bplasma = Bplasma + eval_data["B"] / 2

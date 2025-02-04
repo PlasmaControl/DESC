@@ -6,7 +6,7 @@ from orthax.legendre import leggauss
 from desc.compute import get_profiles, get_transforms
 from desc.compute.utils import _compute as compute_fun
 from desc.grid import LinearGrid
-from desc.utils import Timer, setdefault
+from desc.utils import setdefault
 
 from ..integrals import Bounce2D
 from ..integrals.basis import FourierChebyshevSeries
@@ -121,6 +121,11 @@ class GammaC(_Objective):
         Number of flux surfaces with which to compute simultaneously.
         If given ``None``, then ``surf_batch_size`` is ``grid.num_rho``.
         Default is ``1``. Only consider increasing if ``pitch_batch_size`` is ``None``.
+    spline : bool
+        Set to ``True`` to replace pseudo-spectral methods with local splines.
+        This can be efficient if ``num_transit`` and ``alpha.size`` are small,
+        depending on hardware and hardware features used by the JIT compiler.
+        If ``True``, then parameters ``X`` and ``Y`` are ignored.
     Nemov : bool
         Whether to use the Γ_c as defined by Nemov et al. or Velasco et al.
         Default is Nemov. Set to ``False`` to use Velascos's.
@@ -172,11 +177,13 @@ class GammaC(_Objective):
         num_pitch=64,
         pitch_batch_size=None,
         surf_batch_size=1,
+        spline=False,
         Nemov=True,
     ):
         if target is None and bounds is None:
             target = 0.0
 
+        self._spline = spline
         self._grid = grid
         self._constants = {"quad_weights": 1.0, "alpha": alpha}
         self._X = X
@@ -221,6 +228,9 @@ class GammaC(_Objective):
             Level of output.
 
         """
+        if self._spline:
+            return self._build_spline(use_jit, verbose)
+
         eq = self.things[0]
         if self._grid is None:
             self._grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False)
@@ -236,22 +246,12 @@ class GammaC(_Objective):
             leggauss(self._hyperparam.pop("num_quad")),
             (automorphism_sin, grad_automorphism_sin),
         )
-
         self._dim_f = self._grid.num_rho
         self._target, self._bounds = _parse_callable_target_bounds(
             self._target, self._bounds, self._grid.compress(self._grid.nodes[:, 0])
         )
-
-        timer = Timer()
-        if verbose > 0:
-            print("Precomputing transforms")
-        timer.start("Precomputing transforms")
         self._constants["transforms"] = get_transforms(self._key, eq, grid=self._grid)
         self._constants["profiles"] = get_profiles(self._key, eq, grid=self._grid)
-        timer.stop("Precomputing transforms")
-        if verbose > 1:
-            timer.disp("Precomputing transforms")
-
         super().build(use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
@@ -272,6 +272,9 @@ class GammaC(_Objective):
             Γ_c as a function of the flux surface label.
 
         """
+        if self._spline:
+            return self._compute_spline(params, constants)
+
         if constants is None:
             constants = self.constants
         eq = self.things[0]
@@ -304,25 +307,11 @@ class GammaC(_Objective):
         )
         return constants["transforms"]["grid"].compress(data[self._key])
 
-
-class GammaC_Spline(GammaC):  # noqa: D101
-
-    def build(self, use_jit=True, verbose=1):
-        """Build constant arrays.
-
-        Parameters
-        ----------
-        use_jit : bool, optional
-            Whether to just-in-time compile the objective and derivatives.
-        verbose : int, optional
-            Level of output.
-
-        """
+    def _build_spline(self, use_jit=True, verbose=1):
         self._keys_1dr = ["iota", "iota_r", "min_tz |B|", "max_tz |B|"]
         self._key = "old " + self._key
         num_transit = self._hyperparam.pop("num_transit")
         Y_B = self._hyperparam.pop("Y_B")
-        self._hyperparam.pop("pitch_batch_size")
 
         eq = self.things[0]
         if self._grid is None:
@@ -336,39 +325,19 @@ class GammaC_Spline(GammaC):  # noqa: D101
             leggauss(self._hyperparam.pop("num_quad")),
             (automorphism_sin, grad_automorphism_sin),
         )
-
         self._dim_f = self._grid.num_rho
         self._target, self._bounds = _parse_callable_target_bounds(
             self._target, self._bounds, self._constants["rho"]
         )
-
         self._constants["transforms_1dr"] = get_transforms(
             self._keys_1dr, eq, self._grid
         )
         self._constants["profiles"] = get_profiles(
             self._keys_1dr + [self._key], eq, self._grid
         )
+        super().build(use_jit=use_jit, verbose=verbose)
 
-        _Objective.build(self, use_jit=use_jit, verbose=verbose)
-
-    def compute(self, params, constants=None):
-        """Compute Γ_c.
-
-        Parameters
-        ----------
-        params : dict
-            Dictionary of equilibrium degrees of freedom, e.g.
-            ``Equilibrium.params_dict``.
-        constants : dict
-            Dictionary of constant data, e.g. transforms, profiles etc.
-            Defaults to ``self.constants``.
-
-        Returns
-        -------
-        Gamma_c : ndarray
-            Γ_c as a function of the flux surface label.
-
-        """
+    def _compute_spline(self, params, constants=None):
         if constants is None:
             constants = self.constants
         eq = self.things[0]
@@ -402,6 +371,3 @@ class GammaC_Spline(GammaC):  # noqa: D101
             **self._hyperparam,
         )
         return grid.compress(data[self._key])
-
-
-GammaC_Spline.__doc__ = GammaC.__doc__.replace("GammaC_Spline", "GammaC")

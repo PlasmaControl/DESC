@@ -6,7 +6,7 @@ from orthax.legendre import leggauss
 from desc.compute import get_profiles, get_transforms
 from desc.compute.utils import _compute as compute_fun
 from desc.grid import LinearGrid
-from desc.utils import Timer, setdefault
+from desc.utils import setdefault
 
 from ..integrals import Bounce2D
 from ..integrals.basis import FourierChebyshevSeries
@@ -54,14 +54,6 @@ class EffectiveRipple(_Objective):
       * ``1303`` Patch for differentiable code with dynamic shapes
       * ``1206`` Upsample data above midplane to full grid assuming stellarator symmetry
       * ``1034`` Optimizers/objectives with auxiliary output
-
-    See Also
-    --------
-    EffectiveRipple_Spline
-        ``EffectiveRipple`` uses pseudo-spectral methods more liberally than the spline
-        version of the objective. The spline version is efficient if ``num_transit``
-        and ``alpha.size`` are small. These statements may depend on hardware and
-        the features of that hardware used by the JIT compiler.
 
     Parameters
     ----------
@@ -120,6 +112,11 @@ class EffectiveRipple(_Objective):
         Number of flux surfaces with which to compute simultaneously.
         If given ``None``, then ``surf_batch_size`` is ``grid.num_rho``.
         Default is ``1``. Only consider increasing if ``pitch_batch_size`` is ``None``.
+    spline : bool
+        Set to ``True`` to replace pseudo-spectral methods with local splines.
+        This can be efficient if ``num_transit`` and ``alpha.size`` are small,
+        depending on hardware and hardware features used by the JIT compiler.
+        If ``True``, then parameters ``X`` and ``Y`` are ignored.
 
     """
 
@@ -160,10 +157,12 @@ class EffectiveRipple(_Objective):
         num_pitch=51,
         pitch_batch_size=None,
         surf_batch_size=1,
+        spline=False,
     ):
         if target is None and bounds is None:
             target = 0.0
 
+        self._spline = spline
         self._grid = grid
         self._constants = {"quad_weights": 1.0, "alpha": alpha}
         self._X = X
@@ -207,6 +206,9 @@ class EffectiveRipple(_Objective):
             Level of output.
 
         """
+        if self._spline:
+            return self._build_spline(use_jit, verbose)
+
         eq = self.things[0]
         if self._grid is None:
             self._grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False)
@@ -219,26 +221,16 @@ class EffectiveRipple(_Objective):
         )
         self._constants["fieldline quad"] = leggauss(self._hyperparam["Y_B"] // 2)
         self._constants["quad"] = chebgauss2(self._hyperparam.pop("num_quad"))
-
         self._dim_f = self._grid.num_rho
         self._target, self._bounds = _parse_callable_target_bounds(
             self._target, self._bounds, self._grid.compress(self._grid.nodes[:, 0])
         )
-
-        timer = Timer()
-        if verbose > 0:
-            print("Precomputing transforms")
-        timer.start("Precomputing transforms")
         self._constants["transforms"] = get_transforms(
             "effective ripple", eq, grid=self._grid
         )
         self._constants["profiles"] = get_profiles(
             "effective ripple", eq, grid=self._grid
         )
-        timer.stop("Precomputing transforms")
-        if verbose > 1:
-            timer.disp("Precomputing transforms")
-
         super().build(use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
@@ -259,7 +251,9 @@ class EffectiveRipple(_Objective):
             Effective ripple as a function of the flux surface label.
 
         """
-        # TODO (#1094)
+        if self._spline:
+            return self._compute_spline(params, constants)
+
         if constants is None:
             constants = self.constants
         eq = self.things[0]
@@ -292,31 +286,17 @@ class EffectiveRipple(_Objective):
         )
         return constants["transforms"]["grid"].compress(data["effective ripple"])
 
-
-class EffectiveRipple_Spline(EffectiveRipple):  # noqa: D101
-
-    def build(self, use_jit=True, verbose=1):
-        """Build constant arrays.
-
-        Parameters
-        ----------
-        use_jit : bool, optional
-            Whether to just-in-time compile the objective and derivatives.
-        verbose : int, optional
-            Level of output.
-
-        """
+    def _build_spline(self, use_jit=True, verbose=1):
         self._keys_1dr = [
             "iota",
             "iota_r",
             "<|grad(rho)|>",
             "min_tz |B|",
             "max_tz |B|",
-            "R0",  # TODO: GitHub PR #1094
+            "R0",  # TODO (#1094)
         ]
         num_transit = self._hyperparam.pop("num_transit")
         Y_B = self._hyperparam.pop("Y_B")
-        self._hyperparam.pop("pitch_batch_size")
 
         eq = self.things[0]
         if self._grid is None:
@@ -327,39 +307,19 @@ class EffectiveRipple_Spline(EffectiveRipple):  # noqa: D101
             0, 2 * np.pi * num_transit, Y_B * num_transit
         )
         self._constants["quad"] = chebgauss2(self._hyperparam.pop("num_quad"))
-
         self._dim_f = self._grid.num_rho
         self._target, self._bounds = _parse_callable_target_bounds(
             self._target, self._bounds, self._constants["rho"]
         )
-
         self._constants["transforms_1dr"] = get_transforms(
             self._keys_1dr, eq, self._grid
         )
         self._constants["profiles"] = get_profiles(
             self._keys_1dr + ["old effective ripple"], eq, self._grid
         )
+        super().build(use_jit=use_jit, verbose=verbose)
 
-        _Objective.build(self, use_jit=use_jit, verbose=verbose)
-
-    def compute(self, params, constants=None):
-        """Compute the effective ripple.
-
-        Parameters
-        ----------
-        params : dict
-            Dictionary of equilibrium degrees of freedom, e.g.
-            ``Equilibrium.params_dict``.
-        constants : dict
-            Dictionary of constant data, e.g. transforms, profiles etc.
-            Defaults to ``self.constants``.
-
-        Returns
-        -------
-        epsilon : ndarray
-            Effective ripple as a function of the flux surface label.
-
-        """
+    def _compute_spline(self, params, constants=None):
         if constants is None:
             constants = self.constants
         eq = self.things[0]
@@ -397,8 +357,3 @@ class EffectiveRipple_Spline(EffectiveRipple):  # noqa: D101
             **self._hyperparam,
         )
         return grid.compress(data["old effective ripple"])
-
-
-EffectiveRipple_Spline.__doc__ = EffectiveRipple.__doc__.replace(
-    "EffectiveRipple_Spline", "EffectiveRipple"
-)

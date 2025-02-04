@@ -25,7 +25,7 @@ from ._equilibrium import (
     HelicalForceBalance,
     RadialForceBalance,
 )
-from ._fast_ion import GammaC, GammaC_Spline
+from ._fast_ion import GammaC
 from ._free_boundary import BoundaryError, VacuumBoundaryError
 from ._generic import GenericObjective, LinearObjectiveFromUser, ObjectiveFromUser
 from ._geometry import (
@@ -39,7 +39,7 @@ from ._geometry import (
     PrincipalCurvature,
     Volume,
 )
-from ._neoclassical import EffectiveRipple, EffectiveRipple_Spline
+from ._neoclassical import EffectiveRipple
 from ._omnigenity import (
     Isodynamicity,
     Omnigenity,

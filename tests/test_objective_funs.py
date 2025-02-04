@@ -52,14 +52,12 @@ from desc.objectives import (
     CoilSetMinDistance,
     CoilTorsion,
     EffectiveRipple,
-    EffectiveRipple_Spline,
     Elongation,
     Energy,
     ForceBalance,
     ForceBalanceAnisotropic,
     FusionPower,
     GammaC,
-    GammaC_Spline,
     GenericObjective,
     HeatingPowerISS04,
     Isodynamicity,
@@ -2675,10 +2673,9 @@ def test_loss_function_asserts():
         RotationalTransform(eq=eq, loss_function=fun)
 
 
-def _reduced_resolution_objective(eq, objective):
+def _reduced_resolution_objective(eq, objective, **kwargs):
     """Speed up testing suite by defining rules to reduce objective resolution."""
-    kwargs = {}
-    if objective in {EffectiveRipple, EffectiveRipple_Spline, GammaC, GammaC_Spline}:
+    if objective in {EffectiveRipple, GammaC}:
         kwargs["X"] = 8
         kwargs["Y"] = 16
         kwargs["num_transit"] = 4
@@ -3203,8 +3200,6 @@ class TestObjectiveNaNGrad:
         GammaC,
         HeatingPowerISS04,
         LinkingCurrentConsistency,
-        EffectiveRipple_Spline,
-        GammaC_Spline,
         Omnigenity,
         PlasmaCoilSetMinDistance,
         PlasmaVesselDistance,
@@ -3481,7 +3476,7 @@ class TestObjectiveNaNGrad:
         g = obj.grad(obj.x())
         assert not np.any(np.isnan(g))
         obj = ObjectiveFunction(
-            _reduced_resolution_objective(eq, EffectiveRipple_Spline)
+            _reduced_resolution_objective(eq, EffectiveRipple, spline=True)
         )
         obj.build(verbose=0)
         g = obj.grad(obj.x())
@@ -3497,7 +3492,7 @@ class TestObjectiveNaNGrad:
         obj.build(verbose=0)
         g = obj.grad(obj.x())
         assert not np.any(np.isnan(g))
-        obj = ObjectiveFunction(_reduced_resolution_objective(eq, GammaC_Spline))
+        obj = ObjectiveFunction(_reduced_resolution_objective(eq, GammaC, spline=True))
         obj.build(verbose=0)
         g = obj.grad(obj.x())
         assert not np.any(np.isnan(g))

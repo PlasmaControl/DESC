@@ -442,7 +442,13 @@ class _Grid(IOAble, ABC):
         errorif(
             self._spacing is None,
             AttributeError,
-            "Custom grids must have spacing specified by user.",
+            "Custom grids must have spacing specified by user.\n"
+            "Recall that the accurate computation of surface integral quantities "
+            "requires a specific set of quadrature nodes.\n"
+            "In particular, flux surface integrals are best performed on grids with "
+            "uniform spacing in (θ,ζ).\n"
+            "It is recommended to compute such quantities on the proper grid and use "
+            "the ``copy_data_from_other`` method to transfer values to custom grids.",
         )
         return self._spacing
 
@@ -452,7 +458,11 @@ class _Grid(IOAble, ABC):
         errorif(
             self._weights is None,
             AttributeError,
-            "Custom grids must have weights specified by user.",
+            "Custom grids must have weights specified by user.\n"
+            "Recall that the accurate computation of volume integral quantities "
+            "requires a specific set of quadrature nodes.\n"
+            "It is recommended to compute such quantities on a QuadratureGrid and use "
+            "the ``copy_data_from_other`` method to transfer values to custom grids.",
         )
         return self._weights
 

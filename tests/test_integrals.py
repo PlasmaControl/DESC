@@ -634,7 +634,9 @@ class TestSingularities:
             data = eq.compute(
                 _kernel_nr_over_r3.keys + ["|e_theta x e_zeta|"], grid=grid
             )
-            err = singular_integral(data, data, "nr_over_r3", interpolator, loop=i != 0)
+            err = singular_integral(
+                data, data, "nr_over_r3", interpolator, chunk_size=50
+            )
             np.testing.assert_array_less(np.abs(2 * np.pi + err), es[i])
 
         eq = get("W7-X")
@@ -645,7 +647,7 @@ class TestSingularities:
         st, sz, q = heuristic_support_params(grid, best_ratio(data)[0])
         interpolator = FFTInterpolator(grid, grid, st, sz, q)
         data = eq.compute(_kernel_nr_over_r3.keys + ["|e_theta x e_zeta|"], grid=grid)
-        err = singular_integral(data, data, "nr_over_r3", interpolator, loop=True)
+        err = singular_integral(data, data, "nr_over_r3", interpolator, chunk_size=50)
         np.testing.assert_array_less(np.abs(2 * np.pi + err), es)
 
     @pytest.mark.unit
@@ -668,7 +670,7 @@ class TestSingularities:
         data = eq.compute(keys, grid=grid)
         st, sz, q = heuristic_support_params(grid, best_ratio(data)[0])
         interp = interpolator(grid, grid, st, sz, q)
-        Bplasma = virtual_casing_biot_savart(data, data, interp, loop=True)
+        Bplasma = virtual_casing_biot_savart(data, data, interp, chunk_size=50)
         # need extra factor of B/2 bc we're evaluating on plasma surface
         Bplasma += data["B"] / 2
         Bplasma = np.linalg.norm(Bplasma, axis=-1)

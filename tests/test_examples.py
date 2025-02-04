@@ -238,6 +238,7 @@ def run_qh_step(n, eq):
         constraints=constraints,
         optimizer=optimizer,
         maxiter=50,
+        ftol=1e-3,
         verbose=3,
         copy=True,
         options={},

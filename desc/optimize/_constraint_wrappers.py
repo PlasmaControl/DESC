@@ -21,7 +21,7 @@ from desc.objectives.utils import (
 )
 from desc.utils import Timer, errorif, get_instance, setdefault
 
-from .utils import f_where_x, solve_triangular_regularized
+from .utils import f_where_x, solve_triangular
 
 
 class LinearConstraintProjection(ObjectiveFunction):
@@ -676,7 +676,7 @@ class ProximalProjection(ObjectiveFunction):
         self._eq_solve_objective = LinearConstraintProjection(
             self._constraint,
             ObjectiveFunction(self._linear_constraints),
-            name="Equilibrium Update LinearConstraintProjection",
+            name="Eq Update LinearConstraintProjection",
         )
         self._eq_solve_objective.build(use_jit=use_jit, verbose=verbose)
 
@@ -1207,7 +1207,7 @@ def _proximal_jvp_f_pure(constraint, xf, constants, dc, unfixed_idx, Z, D, dxdc,
     Fx_reduced = Fx @ jnp.diag(D)[:, unfixed_idx] @ Z
     Fc = Fx @ (dxdc @ dc)
     Q, R = qr(Fx_reduced, mode="economic")
-    return solve_triangular_regularized(R, Q.T @ Fc)
+    return solve_triangular(R, Q.T @ Fc)
 
 
 @functools.partial(jit, static_argnames=["op"])

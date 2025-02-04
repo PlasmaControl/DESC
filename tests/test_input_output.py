@@ -19,6 +19,14 @@ from desc.magnetic_fields import (
     SplineMagneticField,
     ToroidalMagneticField,
 )
+from desc.profiles import (
+    PowerProfile,
+    PowerSeriesProfile,
+    ProductProfile,
+    ScaledProfile,
+    SumProfile,
+    TwoPowerProfile,
+)
 from desc.transform import Transform
 from desc.utils import equals
 
@@ -562,9 +570,10 @@ def test_ascii_io(tmpdir_factory):
     tmpdir = tmpdir_factory.mktemp("desc_inputs")
     tmp_path = tmpdir.join("solovev_test.txt")
     eq1 = desc.examples.get("DSHAPE_CURRENT")
-    eq1.iota = eq1.get_profile("iota", grid=LinearGrid(30, 16, 0)).to_powerseries(
-        sym=True
-    )
+    with pytest.warns(UserWarning, match="existing toroidal current"):
+        eq1.iota = eq1.get_profile("iota", grid=LinearGrid(30, 16, 0)).to_powerseries(
+            sym=True
+        )
     write_ascii(tmp_path, eq1)
     with pytest.warns(UserWarning, match="not an even power series"):
         eq2 = read_ascii(tmp_path)
@@ -664,6 +673,26 @@ def test_save_after_load(tmpdir_factory):
     # to the .h5 file not being closed
     eq2.save(tmp_path)
     assert eq2.equiv(eq)
+
+
+@pytest.mark.unit
+def test_io_profiles(tmpdir_factory):
+    """Test saving/loading profiles. Test for GH issue #1448."""
+    p0 = SumProfile(
+        TwoPowerProfile(params=[0.6, 2, 1.5]), PowerSeriesProfile(params=[0.4, 0, -0.4])
+    )
+    n = ScaledProfile(2, PowerProfile(1 / 3, p0))
+    T = ScaledProfile(0.5, PowerProfile(2 / 3, p0))
+    p1 = ProductProfile(n, T)
+
+    tmpdir = tmpdir_factory.mktemp("profiles")
+    tmp_path = tmpdir.join("p0.h5")
+    p1.save(tmp_path)
+    p2 = load(tmp_path)
+
+    x = np.linspace(0.1, 0.9, 9)
+    np.testing.assert_allclose(p0(x), p1(x))
+    np.testing.assert_allclose(p1(x), p2(x))
 
 
 @pytest.mark.unit

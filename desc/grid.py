@@ -442,7 +442,13 @@ class _Grid(IOAble, ABC):
         errorif(
             self._spacing is None,
             AttributeError,
-            "Custom grids must have spacing specified by user.",
+            "Custom grids must have spacing specified by user.\n"
+            "Recall that the accurate computation of surface integral quantities "
+            "requires a specific set of quadrature nodes.\n"
+            "In particular, flux surface integrals are best performed on grids with "
+            "uniform spacing in (θ,ζ).\n"
+            "It is recommended to compute such quantities on the proper grid and use "
+            "the ``copy_data_from_other`` method to transfer values to custom grids.",
         )
         return self._spacing
 
@@ -452,7 +458,11 @@ class _Grid(IOAble, ABC):
         errorif(
             self._weights is None,
             AttributeError,
-            "Custom grids must have weights specified by user.",
+            "Custom grids must have weights specified by user.\n"
+            "Recall that the accurate computation of volume integral quantities "
+            "requires a specific set of quadrature nodes.\n"
+            "It is recommended to compute such quantities on a QuadratureGrid and use "
+            "the ``copy_data_from_other`` method to transfer values to custom grids.",
         )
         return self._weights
 
@@ -706,8 +716,8 @@ class Grid(_Grid):
         nodes.reshape((num_poloidal, num_radial, num_toroidal, 3), order="F").
     jitable : bool
         Whether to skip certain checks and conditionals that don't work under jit.
-        Allows grid to be created on the fly with custom nodes, but weights, symmetry
-        etc. may be wrong if grid contains duplicate nodes.
+        Allows grid to be created on the fly with custom nodes, but weights,
+        symmetry etc. may be wrong if grid contains duplicate nodes.
     """
 
     def __init__(
@@ -793,6 +803,7 @@ class Grid(_Grid):
         coordinates="rtz",
         period=(np.inf, 2 * np.pi, 2 * np.pi),
         NFP=1,
+        jitable=True,
         **kwargs,
     ):
         """Create a tensor-product grid from the given coordinates in a jitable manner.
@@ -819,6 +830,10 @@ class Grid(_Grid):
             Only makes sense to change from 1 if last coordinate is periodic
             with some constant divided by ``NFP`` and the nodes are placed
             within one field period.
+        jitable : bool
+            Whether to skip certain checks and conditionals that don't work under jit.
+            Allows grid to be created on the fly with custom nodes, but weights,
+            symmetry etc. may be wrong if grid contains duplicate nodes.
 
         Returns
         -------
@@ -861,10 +876,7 @@ class Grid(_Grid):
             repeat(unique_a_idx // b.size, b.size, total_repeat_length=a.size * b.size),
             c.size,
         )
-        inverse_b_idx = jnp.tile(
-            unique_b_idx,
-            a.size * c.size,
-        )
+        inverse_b_idx = jnp.tile(unique_b_idx, a.size * c.size)
         inverse_c_idx = repeat(unique_c_idx // (a.size * b.size), (a.size * b.size))
         return Grid(
             nodes=nodes,
@@ -875,7 +887,7 @@ class Grid(_Grid):
             NFP=NFP,
             sort=False,
             is_meshgrid=True,
-            jitable=True,
+            jitable=jitable,
             _unique_rho_idx=unique_a_idx,
             _unique_poloidal_idx=unique_b_idx,
             _unique_zeta_idx=unique_c_idx,

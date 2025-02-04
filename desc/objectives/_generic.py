@@ -21,7 +21,7 @@ class ExternalObjective(_Objective):
     """Wrap an external code.
 
     Similar to ``ObjectiveFromUser``, except derivatives of the objective function are
-    computed with finite differences instead of AD. The function does not need not be
+    computed with finite differences instead of AD. The function does not need to be
     JAX transformable.
 
     The user supplied function must take an Equilibrium or a list of Equilibria as its

@@ -2140,7 +2140,7 @@ class Equilibrium(IOAble, Optimizable):
         ----------
         objective : {"force", "forces", "energy"}
             Objective function to solve. Default = force balance on unified grid.
-            ObjectiveFunction or LinearConstraintProjection can also be passed.
+            ObjectiveFunction can also be passed.
         constraints : Tuple
             set of constraints to enforce. Default = fixed boundary/profiles
         optimizer : str or Optimizer (optional)
@@ -2323,9 +2323,8 @@ class Equilibrium(IOAble, Optimizable):
 
         Parameters
         ----------
-        objective : ObjectiveFunction or LinearConstraintProjection
-            Objective function to satisfy. Default = force balance. If
-            LinearConstraintProjection is used, no constraints are needed.
+        objective : ObjectiveFunction
+            Objective function to satisfy. Default = force balance.
         constraints : Objective or tuple of Objective
             Constraint function to satisfy. Default = fixed-boundary.
         deltas : dict of ndarray

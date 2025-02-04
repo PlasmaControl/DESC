@@ -98,9 +98,8 @@ class Optimizer(IOAble):
         ----------
         things : Optimizable or tuple/list of Optimizable
             Things to optimize, eg Equilibrium.
-        objective : ObjectiveFunction or LinearConstraintProjection
-            Objective function to optimize. If a LinearConstraintProjection is passed,
-            no constraints is necessary.
+        objective : ObjectiveFunction
+            Objective function to optimize.
         constraints : tuple of Objective, optional
             List of objectives to be used as constraints during optimization.
         ftol : float or None, optional

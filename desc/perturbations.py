@@ -110,9 +110,8 @@ def perturb(  # noqa: C901
     ----------
     eq : Equilibrium
         Equilibrium to perturb.
-    objective : ObjectiveFunction or LinearConstraintProjection
-        Objective function to satisfy. If a LinearConstraintProjection is passed,
-        no constraints is necessary.
+    objective : ObjectiveFunction
+        Objective function to satisfy.
     constraints : tuple of Objective, optional
         List of objectives to be used as constraints during perturbation.
     deltas : dict of ndarray

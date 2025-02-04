@@ -34,7 +34,7 @@ class ExternalObjective(_Objective):
         Equilibrium that will be optimized to satisfy the Objective.
     fun : callable
         External objective function. It must take an Equilibrium or list of Equilibria
-        as its only positional argument, but can take additional kewyord arguments.
+        as its only positional argument, but can take additional keyword arguments.
         It does not need to be JAX transformable.
     fun_kwargs : any, optional
         Keyword arguments that are passed as inputs to ``fun``.

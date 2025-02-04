@@ -7,8 +7,8 @@ import scipy
 from interpax import fft_interp2d
 from scipy.constants import mu_0
 
-from desc.backend import fori_loop, jnp, rfft2, vmap
-from desc.batching import batch_map
+from desc.backend import fori_loop, jnp, rfft2
+from desc.batching import batch_map, vmap_chunked
 from desc.compute.geom_utils import rpz2xyz, rpz2xyz_vec, xyz2rpz_vec
 from desc.grid import LinearGrid
 from desc.integrals._interp_utils import rfft2_modes, rfft2_vander
@@ -218,7 +218,7 @@ class _BIESTInterpolator(IOAble, ABC):
         check_posint(source_grid.NFP)
         assert source_grid.can_fft2, "Got False for source_grid.can_fft2."
         # NFP may be different only if there is no toroidal variation.
-        assert (eval_grid.NFP == source_grid.NFP) or eval_grid.num_zeta == 1, (
+        assert (eval_grid.NFP == source_grid.NFP) or source_grid.num_zeta == 1, (
             "NFP does not match. "
             f"Got eval_grid.NFP={eval_grid.NFP} and source_grid.NFP={source_grid.NFP}."
         )
@@ -297,9 +297,13 @@ class _BIESTInterpolator(IOAble, ABC):
         """Return Vandermonde matrix for ith polar node."""
         pass
 
+    def fourier(self, f):
+        """Return Fourier transform of ``f`` as expected by this interpolator."""
+        return f
+
     @abstractmethod
     def __call__(self, f, i, *, vander=None):
-        """Interpolate data to polar grid points.
+        """Interpolate ``f`` to polar node ``i`` around evaluation grid.
 
         Parameters
         ----------
@@ -355,7 +359,17 @@ class FFTInterpolator(_BIESTInterpolator):
         super().__init__(eval_grid, source_grid, st, sz, q)
 
     def __call__(self, f, i, *, is_fourier=False, vander=None):
-        """Interpolate data to polar grid points.
+        """Interpolate ``f`` to polar node ``i`` around evaluation grid.
+
+        Notes
+        -----
+        This actually interpolates ``f`` to polar node ``i`` around the source grid.
+        This is different from the expected point when the grids differ in the
+        number of field periods. Functions without toroidal variation take the
+        same value at these different points. Hence, the only case where the
+        source grid and the evaluation grid may differ in the number of field
+        periods is when the source grid can only capture functions without
+        toroidal variation.
 
         Parameters
         ----------
@@ -374,8 +388,8 @@ class FFTInterpolator(_BIESTInterpolator):
 
         """
         # Would need to add interpax code to DESC
-        # https://github.com/f0uriest/interpax/issues/53.
-        errorif(is_fourier, NotImplementedError)
+        # https://github.com/f0uriest/interpax/issues/53
+        # for is_fourier to do anything.
         shape = f.shape[1:]
         return fft_interp2d(
             self._source_grid.meshgrid_reshape(f, "rtz")[0],
@@ -418,7 +432,7 @@ class DFTInterpolator(_BIESTInterpolator):
         )
 
     def fourier(self, f):
-        """Return real FFT of ``f``."""
+        """Return Fourier transform of ``f`` as expected by this interpolator."""
         if (self._source_grid.num_zeta % 2) == 0:
             i = (0, -1)
         else:
@@ -438,7 +452,7 @@ class DFTInterpolator(_BIESTInterpolator):
         )
 
     def __call__(self, f, i, *, is_fourier=False, vander=None):
-        """Interpolate data to polar grid points.
+        """Interpolate ``f`` to polar node ``i`` around evaluation grid.
 
         Parameters
         ----------
@@ -473,7 +487,7 @@ def _nonsingular_part(
     st,
     sz,
     kernel,
-    loop=False,
+    chunk_size=None,
 ):
     """Integrate kernel over non-singular points.
 
@@ -502,7 +516,7 @@ def _nonsingular_part(
         the first field period because DESC truncates the computational domain to
         ζ ∈ [0, 2π/grid.NFP) and changes variables to the spectrally condensed
         ζ* = basis.NFP ζ. Therefore, we shift the domain to the next field period by
-        incrementing the toroidal coordinate of the grid by NFP. For an axisymmetric
+        incrementing the toroidal coordinate of the grid by 2π/NFP. For an axisymmetric
         configuration, it is most efficient for ``source_grid`` to be a single toroidal
         cross-section. To capture toroidal effects of the kernels on those grids for
         axisymmetric configurations, we set a dummy value for NFP to an integer larger
@@ -534,7 +548,7 @@ def _nonsingular_part(
             )
             return jnp.sum(k * (w * (1 - eta))[..., jnp.newaxis], axis=1)
 
-        f += batch_map(eval_pt, eval_data, 1 if loop else None).reshape(
+        f += batch_map(eval_pt, eval_data, chunk_size).reshape(
             eval_grid.num_nodes, kernel.ndim
         )
         return f, source_data
@@ -554,7 +568,7 @@ def _nonsingular_part(
     # undo rotation of source_zeta
     source_data["zeta"] = source_zeta
     source_data["phi"] = source_phi
-    # we sum distance vectors, so they need to be in xyz for that to work
+    # we sum vectors at different points, so they need to be in xyz for that to work
     # but then need to convert vectors back to rpz
     if kernel.ndim == 3:
         f = xyz2rpz_vec(f, phi=eval_data["phi"])
@@ -562,7 +576,7 @@ def _nonsingular_part(
     return f
 
 
-def _singular_part(eval_data, source_data, kernel, interpolator, loop=False):
+def _singular_part(eval_data, source_data, kernel, interpolator, chunk_size=None):
     """Integrate singular point by interpolating to polar grid.
 
     Generally follows sec 3.2.2 of [2], with the following differences:
@@ -588,62 +602,41 @@ def _singular_part(eval_data, source_data, kernel, interpolator, loop=False):
 
     keys = set(["|e_theta x e_zeta|"] + kernel.keys)
     if "phi" in keys:
-        keys.remove("phi")
+        keys.remove("phi")  # ϕ is not a periodic map of θ, ζ.
         keys.add("omega")
     keys = list(keys)
-    fsource = [source_data[key] for key in keys]
     # Note that it is necessary to take the Fourier transforms of the
     # vector components of the orthonormal polar basis vectors R̂, ϕ̂, Ẑ.
     # Vector components of the Cartesian basis are not NFP periodic.
-    if isinstance(interpolator, DFTInterpolator):
-        fsource = [interpolator.fourier(val) for val in fsource]
-        is_fourier = True
-    else:
-        is_fourier = False
+    fsource = [interpolator.fourier(source_data[key]) for key in keys]
 
     def polar_pt(i):
         """See sec 3.2.2 of [2].
 
         Evaluate the effect from a single polar node around each eval point
-        on that eval point. Polar grids from other singularities have no effect.
+        on that eval point. Polar grids from other singularities have no effect,
+        so only the diagonal term of the kernel is needed.
         """
-        # The ``FFTInterpolator`` interpolates to polar node i of the source grid, while
-        # the ``DFTInterpolator`` interpolates to polar node i of the eval   grid.
-        # When the source grid and eval grid have different NFP, the values taken
-        # by a function that is periodic with source grid NFP will in general
-        # be different at these points. For functions with no toroidal variation
-        # there will be no difference, and that is the only time the
-        # source grid and eval grid may have different NFP.
         vander = interpolator.vander_polar(i)
         source_data_polar = {
-            key: interpolator(val, i, is_fourier=is_fourier, vander=vander)
+            key: interpolator(val, i, is_fourier=True, vander=vander)
             for key, val in zip(keys, fsource)
         }
-        # The polar node coordinates should be shifts around the evaluation point.
-        # That is where the polar basis vectors need to be computed.
-        # These coordinates should also be the (θ, ζ) coordinates at which the maps
-        # above were interpolated. For FFT interpolator however, the maps were
-        # interpolated to shifts around the source point. When NFP is different
-        # these are not the same points. Since the components of maps in coordinates
-        # of the orthonormal polar basis are the same, we can pretend they were
-        # interpolated to polar nodes around the evaluation point.
+        # Coordinates of the polar nodes around the evaluation point.
         source_data_polar["theta"] = eval_theta + interpolator.shift_t[i]
         source_data_polar["zeta"] = eval_zeta + interpolator.shift_z[i]
-        # ϕ is not periodic map of θ, ζ.
         if "omega" in keys:
+            source_data_polar["phi"] = (
+                source_data_polar["zeta"] + source_data_polar["omega"]
+            )
             # TODO (#465): For nonzero ω, the quadrature may not be symmetric about the
             #  singular point for hypersingular kernels such as the Biot-Savart
             #  kernel. (Recall the singularity is in real space). Hence the quadrature
             #  may not converge to the desired Hadamard finite part. Prove otherwise or
             #  use uniform grid in θ, ϕ and map coordinates before starting the singular
             #  integral routine.
-            source_data_polar["phi"] = (
-                source_data_polar["zeta"] + source_data_polar["omega"]
-            )
 
         # eval pts x source pts for 1 polar grid offset
-        # only need diagonal term because polar grid points
-        # don't contribute to other eval pts.
         k = kernel(eval_data, source_data_polar, diag=True).reshape(
             eval_grid.num_nodes, kernel.ndim
         )
@@ -654,15 +647,16 @@ def _singular_part(eval_data, source_data, kernel, interpolator, loop=False):
     def polar_pt_loop(i, f):
         return f + polar_pt(i)
 
-    # vmap found more efficient than fori_loop, esp on gpu, but uses more memory
-    if loop:
+    if chunk_size == 1:
         f = fori_loop(
             0, v.size, polar_pt_loop, jnp.zeros((eval_grid.num_nodes, kernel.ndim))
         )
     else:
-        f = vmap(polar_pt)(jnp.arange(v.size)).sum(axis=0)
+        f = vmap_chunked(polar_pt, chunk_size=chunk_size)(jnp.arange(v.size)).sum(
+            axis=0
+        )
 
-    # we sum distance vectors, so they need to be in xyz for that to work
+    # we sum vectors at different points, so they need to be in xyz for that to work
     # but then need to convert vectors back to rpz
     if kernel.ndim == 3:
         f = xyz2rpz_vec(f, phi=eval_data["phi"])
@@ -675,7 +669,8 @@ def singular_integral(
     source_data,
     kernel,
     interpolator,
-    loop=False,
+    chunk_size=None,
+    **kwargs,
 ):
     """Evaluate a singular integral transform on a surface.
 
@@ -718,9 +713,10 @@ def singular_integral(
         Function to interpolate from rectangular source grid to polar
         source grid around each singular point. See ``FFTInterpolator`` or
         ``DFTInterpolator``
-    loop : bool
-        If True, evaluate integral using loops, as opposed to vmap. Slower, but uses
-        less memory.
+    chunk_size : int or None
+        Size to split computation into chunks.
+        If no chunking should be done or the chunk size is the full input
+        then supply ``None``. Default is ``None``.
 
     Returns
     -------
@@ -735,6 +731,9 @@ def singular_integral(
        boundary integral solver." Journal of Computational Physics 397 (2019): 108791.
 
     """
+    chunk_size = parse_argname_change(chunk_size, kwargs, "loop", "chunk_size")
+    if chunk_size == 0:
+        chunk_size = None
     # sanitize inputs, we need everything as jax arrays so they can be indexed
     # properly in the loops
     source_data = {key: jnp.asarray(val) for key, val in source_data.items()}
@@ -743,7 +742,7 @@ def singular_integral(
     if isinstance(kernel, str):
         kernel = kernels[kernel]
 
-    out1 = _singular_part(eval_data, source_data, kernel, interpolator, loop)
+    out1 = _singular_part(eval_data, source_data, kernel, interpolator, chunk_size)
     out2 = _nonsingular_part(
         eval_data,
         interpolator._eval_grid,
@@ -752,7 +751,7 @@ def singular_integral(
         interpolator.st,
         interpolator.sz,
         kernel,
-        loop,
+        chunk_size,
     )
     return out1 + out2
 
@@ -850,7 +849,9 @@ kernels = {
 }
 
 
-def virtual_casing_biot_savart(eval_data, source_data, interpolator, loop=True):
+def virtual_casing_biot_savart(
+    eval_data, source_data, interpolator, chunk_size=1, **kwargs
+):
     """Evaluate magnetic field on surface due to sheet current on surface.
 
     The magnetic field due to the plasma current can be written as a Biot-Savart
@@ -889,9 +890,10 @@ def virtual_casing_biot_savart(eval_data, source_data, interpolator, loop=True):
         Function to interpolate from rectangular source grid to polar
         source grid around each singular point. See ``FFTInterpolator`` or
         ``DFTInterpolator``
-    loop : bool
-        If True, evaluate integral using loops, as opposed to vmap. Slower, but uses
-        less memory.
+    chunk_size : int or None
+        Size to split computation into chunks.
+        If no chunking should be done or the chunk size is the full input
+        then supply ``None``. Default is ``1``.
 
     Returns
     -------
@@ -909,7 +911,8 @@ def virtual_casing_biot_savart(eval_data, source_data, interpolator, loop=True):
         source_data,
         _kernel_biot_savart,
         interpolator,
-        loop,
+        chunk_size,
+        **kwargs,
     )
 
 

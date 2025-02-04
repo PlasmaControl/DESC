@@ -80,7 +80,7 @@ def _chunk(x, chunk_size=None):
 # netket/jax/_scanmap.py
 
 
-def scan_append(f, x):
+def _scan_append(f, x):
     """Evaluate f element by element in x while appending the results.
 
     Parameters
@@ -147,7 +147,7 @@ def _eval_fun_in_chunks(vmapped_fun, chunk_size, argnums, *args, **kwargs):
         args_rest = [_get_rest(a) if i in argnums else a for i, a in enumerate(args)]
 
         y_chunks = _unchunk(
-            _scanmap(vmapped_fun, scan_append, argnums)(*args_chunks, **kwargs)
+            _scanmap(vmapped_fun, _scan_append, argnums)(*args_chunks, **kwargs)
         )
 
         if n_rest == 0:
@@ -220,25 +220,25 @@ def _parse_in_axes(in_axes):
     return in_axes, argnums
 
 
-def vmap_chunked(
-    f: Callable,
-    in_axes=0,
-    *,
-    chunk_size: Optional[int],
-) -> Callable:
+def vmap_chunked(f: Callable, in_axes=0, *, chunk_size=None) -> Callable:
     """Behaves like jax.vmap but uses scan to chunk the computations in smaller chunks.
 
     Parameters
     ----------
-    f: The function to be vectorised.
-    in_axes: The axes that should be scanned along. Only supports `0` or `None`
-    chunk_size: The maximum size of the chunks to be used. If it is `None`,
-        chunking is disabled
-
+    f : callable
+        The function to be vectorised.
+    in_axes : int or None
+        The axes that should be scanned along. Only supports ``0`` or ``None``.
+    chunk_size : int or None
+        Size to split computation into chunks.
+        If no chunking should be done or the chunk size is the full input
+        then supply ``None``.
 
     Returns
     -------
-    f: A vectorised and chunked function
+    f : callable
+        A vectorised and chunked function.
+
     """
     in_axes, argnums = _parse_in_axes(in_axes)
     vmapped_fun = jax.vmap(f, in_axes=in_axes)

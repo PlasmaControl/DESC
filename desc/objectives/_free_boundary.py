@@ -373,9 +373,10 @@ class BoundaryError(_Objective):
     field_fixed : bool
         Whether to assume the field is fixed. For free boundary solve, should
         be fixed. For single stage optimization, should be False (default).
-    loop : bool
-        If True, evaluate integral using loops, as opposed to vmap. Slower, but uses
-        less memory.
+    chunk_size : int or None
+        Size to split computation into chunks.
+        If no chunking should be done or the chunk size is the full input
+        then supply ``None``. Default is ``1``.
     sz : int
         Hyperparameter for the singular integration scheme.
         ``sz`` is roughly equal to the size of the local singular grid with

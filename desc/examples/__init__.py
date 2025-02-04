@@ -4,6 +4,7 @@ import os
 
 import desc.io
 from desc.backend import execute_on_cpu
+from desc.equilibrium import EquilibriaFamily
 
 
 def listall():
@@ -54,6 +55,8 @@ def get(name, data=None):
     assert os.path.exists(path)
 
     eqf = desc.io.load(path)
+    if not isinstance(eqf, EquilibriaFamily):
+        eqf = EquilibriaFamily(eqf)
 
     if data is None:
         return eqf[-1]

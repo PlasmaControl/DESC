@@ -4,7 +4,7 @@ import functools
 
 import numpy as np
 
-from desc.backend import jit, jnp, put
+from desc.backend import jit, jnp, put, qr
 from desc.batching import batched_vectorize
 from desc.objectives import (
     BoundaryRSelfConsistency,
@@ -21,7 +21,7 @@ from desc.objectives.utils import (
 )
 from desc.utils import Timer, errorif, get_instance, setdefault
 
-from .utils import f_where_x
+from .utils import f_where_x, solve_triangular_regularized
 
 
 class LinearConstraintProjection(ObjectiveFunction):
@@ -92,7 +92,7 @@ class LinearConstraintProjection(ObjectiveFunction):
 
         """
         timer = Timer()
-        timer.start("Linear constraint projection build")
+        timer.start(f"{self.name} build")
 
         # we don't always build here because in ~all cases the user doesn't interact
         # with this directly, so if the user wants to manually rebuild they should
@@ -132,9 +132,9 @@ class LinearConstraintProjection(ObjectiveFunction):
         self._unfixed_idx_mat = jnp.diag(self._D)[:, self._unfixed_idx] @ self._Z
 
         self._built = True
-        timer.stop("Linear constraint projection build")
+        timer.stop(f"{self.name} build")
         if verbose > 1:
-            timer.disp("Linear constraint projection build")
+            timer.disp(f"{self.name} build")
 
     def project(self, x):
         """Project full vector x into x_reduced that satisfies constraints."""
@@ -1206,13 +1206,8 @@ def _proximal_jvp_f_pure(constraint, xf, constants, dc, unfixed_idx, Z, D, dxdc,
     Fx = getattr(constraint, "jac_" + op)(xf, constants)
     Fx_reduced = Fx @ jnp.diag(D)[:, unfixed_idx] @ Z
     Fc = Fx @ (dxdc @ dc)
-    Fxh = Fx_reduced
-    cutoff = jnp.finfo(Fxh.dtype).eps * max(Fxh.shape)
-    uf, sf, vtf = jnp.linalg.svd(Fxh, full_matrices=False)
-    sf += sf[-1]  # add a tiny bit of regularization
-    sfi = jnp.where(sf < cutoff * sf[0], 0, 1 / sf)
-    Fxh_inv = vtf.T @ (sfi[..., None] * uf.T)
-    return Fxh_inv @ Fc
+    Q, R = qr(Fx_reduced, mode="economic")
+    return solve_triangular_regularized(R, Q.T @ Fc)
 
 
 @functools.partial(jit, static_argnames=["op"])

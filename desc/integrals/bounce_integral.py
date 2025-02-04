@@ -694,8 +694,8 @@ class Bounce2D(Bounce):
     # TODO (#1303).
     def _integrate(self, x, w, integrand, pitch, data, names, z1, z2, check, plot):
         # TODO (#1294): Use non-uniform fast transforms here.
-        #  Compare to (3x up-sampled with FFT) 2D spline over single field period done
-        #  once in ``desc/_compute/_neoclassical.py::_compute``.
+        #  Compare to Cubic-Fourier spline (3x up-sampled with poloidal FFT)
+        #  done once in ``desc/_compute/_neoclassical.py::_compute``.
         # num pitch, num alpha, num rho, num well, num quad
         shape = [*z1.shape, x.size]
         # ζ ∈ ℝ and θ ∈ ℝ coordinates of quadrature points

@@ -56,14 +56,6 @@ class GammaC(_Objective):
       * ``1206`` Upsample data above midplane to full grid assuming stellarator symmetry
       * ``1034`` Optimizers/objectives with auxiliary output
 
-    See Also
-    --------
-    GammaC_Spline
-        ``GammaC`` uses pseudo-spectral methods more liberally than the spline
-        version of the objective. The spline version is efficient if ``num_transit``
-        and ``alpha.size`` are small. These statements may depend on hardware and
-        the features of that hardware used by the JIT compiler.
-
     Parameters
     ----------
     eq : Equilibrium

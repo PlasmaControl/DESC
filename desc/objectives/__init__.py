@@ -10,6 +10,7 @@ from ._coils import (
     CoilSetLinkingNumber,
     CoilSetMinDistance,
     CoilTorsion,
+    CurrentPotentialPuddle,
     LinkingCurrentConsistency,
     PlasmaCoilSetMinDistance,
     QuadraticFlux,

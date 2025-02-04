@@ -9,7 +9,7 @@ netcdf4 >= 1.5.4, <= 1.7.2
 numpy >= 1.20.0, <= 2.2.2
 nvgpu <= 0.10.0
 orthax <= 0.2.1
-plotly >= 5.16, <= 5.24.1
+plotly >= 5.16, <= 6.0.0
 psutil <= 6.1.1
 pylatexenc >= 2.0, <= 2.10
 quadax >= 0.2.2, <= 0.2.4

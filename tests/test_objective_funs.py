@@ -1901,7 +1901,7 @@ def test_target_profiles():
     """Tests for using Profile objects as targets for profile objectives."""
     iota = PowerSeriesProfile([1, 0, -0.3])
     shear = PowerSeriesProfile([0, -0.6])
-    current = PowerSeriesProfile([4, 0, 1, 0, -1])
+    current = PowerSeriesProfile([0, 0, 1, 0, -1])
     merc = PowerSeriesProfile([1, 0, -1])
     well = PowerSeriesProfile([2, 0, -2])
     pres = PowerSeriesProfile([3, 0, -3])
@@ -3244,7 +3244,7 @@ class TestObjectiveNaNGrad:
             N=2,
             electron_density=PowerSeriesProfile([1e19, 0, -1e19]),
             electron_temperature=PowerSeriesProfile([1e3, 0, -1e3]),
-            current=PowerSeriesProfile([1, 0, -1]),
+            current=PowerSeriesProfile([0, 0, -1]),
         )
         obj = ObjectiveFunction(BootstrapRedlConsistency(eq), use_jit=False)
         obj.build()
@@ -3260,7 +3260,7 @@ class TestObjectiveNaNGrad:
             N=2,
             electron_density=PowerSeriesProfile([1e19, 0, -1e19]),
             electron_temperature=PowerSeriesProfile([1e3, 0, -1e3]),
-            current=PowerSeriesProfile([1, 0, -1]),
+            current=PowerSeriesProfile([0, 0, -1]),
         )
         obj = ObjectiveFunction(FusionPower(eq))
         obj.build()
@@ -3276,7 +3276,7 @@ class TestObjectiveNaNGrad:
             N=2,
             electron_density=PowerSeriesProfile([1e19, 0, -1e19]),
             electron_temperature=PowerSeriesProfile([1e3, 0, -1e3]),
-            current=PowerSeriesProfile([1, 0, -1]),
+            current=PowerSeriesProfile([0, 0, -1]),
         )
         obj = ObjectiveFunction(HeatingPowerISS04(eq))
         obj.build()

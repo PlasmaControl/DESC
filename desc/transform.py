@@ -186,7 +186,7 @@ class Transform(IOAble):
             )
             self.method = "direct2"
             return
-        if grid.NFP != basis.NFP:
+        if (basis.N > 0) and (grid.NFP != basis.NFP):
             warnings.warn(
                 colored(
                     "fft method requires grid and basis to have the same NFP, got "

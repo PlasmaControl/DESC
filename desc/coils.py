@@ -291,6 +291,7 @@ class _Coil(_MagneticField, Optimizable, ABC):
         source_grid=None,
         transforms=None,
         compute_A_or_B="B",
+        perturbations=None,
     ):
         """Compute magnetic field or vector potential at a set of points.
 
@@ -313,7 +314,10 @@ class _Coil(_MagneticField, Optimizable, ABC):
         compute_A_or_B: {"A", "B"}, optional
             whether to compute the magnetic vector potential "A" or the magnetic field
             "B". Defaults to "B"
-
+        perturbations : ndarray, shape(2n,3), optional
+            Perturbations to the coil position and coil tangent at each point, in xyz
+            coordinates. The first n rows are perturbations to the coil position, the
+            second n rows are perturbations to the coil tangent.
 
         Returns
         -------
@@ -369,6 +373,11 @@ class _Coil(_MagneticField, Optimizable, ABC):
             data["x_s"] = rpz2xyz_vec(data["x_s"], phi=data["x"][:, 1])
             data["x"] = rpz2xyz(data["x"])
 
+        # Perturb coil position and tangent if requested
+        if perturbations is not None:
+            data["x"] += perturbations[: len(data["x"])]
+            data["x_s"] += perturbations[len(data["x"]) :]
+
         AB = op(coords, data["x"], data["x_s"] * data["ds"][:, None], current)
 
         if basis.lower() == "rpz":
@@ -376,7 +385,13 @@ class _Coil(_MagneticField, Optimizable, ABC):
         return AB
 
     def compute_magnetic_field(
-        self, coords, params=None, basis="rpz", source_grid=None, transforms=None
+        self,
+        coords,
+        params=None,
+        basis="rpz",
+        source_grid=None,
+        transforms=None,
+        perturbations=None,
     ):
         """Compute magnetic field at a set of points.
 
@@ -396,7 +411,10 @@ class _Coil(_MagneticField, Optimizable, ABC):
             points. Should NOT include endpoint at 2pi.
         transforms : dict of Transform or array-like
             Transforms for R, Z, lambda, etc. Default is to build from grid.
-
+        perturbations : ndarray, shape(2n,3), optional
+            Perturbations to the coil position and coil tangent at each point, in xyz
+            coordinates. The first n rows are perturbations to the coil position, the
+            second n rows are perturbations to the coil tangent.
 
         Returns
         -------
@@ -411,7 +429,15 @@ class _Coil(_MagneticField, Optimizable, ABC):
         may not be zero if not fully converged.
 
         """
-        return self._compute_A_or_B(coords, params, basis, source_grid, transforms, "B")
+        return self._compute_A_or_B(
+            coords,
+            params,
+            basis,
+            source_grid,
+            transforms,
+            "B",
+            perturbations,
+        )
 
     def compute_magnetic_vector_potential(
         self, coords, params=None, basis="rpz", source_grid=None, transforms=None
@@ -978,6 +1004,7 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
         source_grid=None,
         transforms=None,
         compute_A_or_B="B",
+        perturbations=None,
     ):
         """Compute magnetic field or vector potential at a set of points.
 
@@ -1000,6 +1027,10 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
         compute_A_or_B: {"A", "B"}, optional
             whether to compute the magnetic vector potential "A" or the magnetic field
             "B". Defaults to "B"
+        perturbations : ndarray, shape(2n,3), optional
+            Perturbations to the coil position and coil tangent at each point, in xyz
+            coordinates. The first n rows are perturbations to the coil position, the
+            second n rows are perturbations to the coil tangent.
 
         Returns
         -------
@@ -1031,6 +1062,8 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
         data = self.compute(
             ["x"], grid=source_grid, params=params, basis="xyz", transforms=transforms
         )
+        if perturbations is not None:
+            data["x"] += perturbations[: len(data["x"])]
         # need to make sure the curve is closed. If it's already closed, this doesn't
         # do anything (effectively just adds a segment of zero length which has no
         # effect on the overall result)
@@ -1048,7 +1081,7 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
         return AB
 
     def compute_magnetic_field(
-        self, coords, params=None, basis="rpz", source_grid=None, transforms=None
+        self, coords, params=None, basis="rpz", source_grid=None, transforms=None, perturbations=None
     ):
         """Compute magnetic field at a set of points.
 
@@ -1081,7 +1114,7 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
         is approximately quadratic in the number of coil points.
 
         """
-        return self._compute_A_or_B(coords, params, basis, source_grid, transforms, "B")
+        return self._compute_A_or_B(coords, params, basis, source_grid, transforms, "B", perturbations)
 
     def compute_magnetic_vector_potential(
         self, coords, params=None, basis="rpz", source_grid=None, transforms=None
@@ -1495,6 +1528,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         source_grid=None,
         transforms=None,
         compute_A_or_B="B",
+        perturbations=None,
     ):
         """Compute magnetic field at a set of points.
 
@@ -1514,6 +1548,10 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         compute_A_or_B: {"A", "B"}, optional
             whether to compute the magnetic vector potential "A" or the magnetic field
             "B". Defaults to "B"
+        perturbations : ndarray, shape(2n,3), optional
+            Perturbations to the coil position and coil tangent at each point, in xyz
+            coordinates. The first n rows are perturbations to the coil position, the
+            second n rows are perturbations to the coil tangent.
 
         Returns
         -------
@@ -1566,7 +1604,13 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             coords_nfp = coords_rpz + jnp.array([0, 2 * jnp.pi * k / self.NFP, 0])
 
             def body(AB, x):
-                AB += op(coords_nfp, params=x, basis="rpz", source_grid=source_grid)
+                AB += op(
+                    coords_nfp,
+                    params=x,
+                    basis="rpz",
+                    source_grid=source_grid,
+                    perturbations=perturbations,
+                )
                 return AB, None
 
             AB += scan(body, jnp.zeros(coords_nfp.shape), tree_stack(params))[0]
@@ -1586,7 +1630,13 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         return AB
 
     def compute_magnetic_field(
-        self, coords, params=None, basis="rpz", source_grid=None, transforms=None
+        self,
+        coords,
+        params=None,
+        basis="rpz",
+        source_grid=None,
+        transforms=None,
+        perturbations=None,
     ):
         """Compute magnetic field at a set of points.
 
@@ -1603,6 +1653,10 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             points. Should NOT include endpoint at 2pi.
         transforms : dict of Transform or array-like
             Transforms for R, Z, lambda, etc. Default is to build from grid.
+        perturbations : ndarray, shape(2n,3), optional
+            Perturbations to the coil position and coil tangent at each point, in xyz
+            coordinates. The first n rows are perturbations to the coil position, the
+            second n rows are perturbations to the coil tangent.
 
         Returns
         -------
@@ -1610,7 +1664,15 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             Magnetic field at specified nodes, in [R,phi,Z] or [X,Y,Z] coordinates.
 
         """
-        return self._compute_A_or_B(coords, params, basis, source_grid, transforms, "B")
+        return self._compute_A_or_B(
+            coords,
+            params,
+            basis,
+            source_grid,
+            transforms,
+            "B",
+            perturbations,
+        )
 
     def compute_magnetic_vector_potential(
         self, coords, params=None, basis="rpz", source_grid=None, transforms=None

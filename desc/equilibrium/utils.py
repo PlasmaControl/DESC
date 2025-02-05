@@ -12,12 +12,7 @@ from desc.geometry import (
     ZernikeRZToroidalSection,
 )
 from desc.grid import LinearGrid
-from desc.profiles import (
-    FourierZernikeProfile,
-    PowerSeriesProfile,
-    SplineProfile,
-    _Profile,
-)
+from desc.profiles import PowerSeriesProfile, _Profile
 from desc.utils import errorif
 
 
@@ -191,84 +186,17 @@ def parse_axis(axis, NFP=1, sym=True, surface=None):
     return axis
 
 
-def scale_profile(profile, inner_rho, eq):
-    """Return a new profile whose rho=1 val is value of the old profile at inner_rho.
-
-    Parameters
-    ----------
-        profile : Profile
-            Profile to scale
-        inner_rho: float
-            rho to take as the new LCFS rho for the new profile
-    Returns
-    -------
-        new_profile : Profile
-            new profile whose last value is the inner_rho value of
-        the original profile
-    """
-    if isinstance(profile, PowerSeriesProfile):
-        params_list = []
-        modes_list = []
-        for coeff, mode in zip(profile.params, profile.basis.modes):
-            l = mode[0]
-            params_list.append(coeff * inner_rho**l)
-            modes_list.append(l)
-        new_profile = PowerSeriesProfile(params=params_list, modes=modes_list)
-    elif isinstance(profile, SplineProfile):
-        n_knots = profile.params.size
-        new_knots = np.linspace(0, 1, n_knots, endpoint=True)
-        new_vals = profile(np.linspace(0, inner_rho, n_knots, endpoint=True))
-        new_profile = SplineProfile(
-            values=new_vals, knots=new_knots, method=profile._method
-        )
-    elif isinstance(profile, FourierZernikeProfile):
-        grid = LinearGrid(
-            rho=np.linspace(0, 1, 2 * profile.basis.L, endpoint=True),
-            M=2 * profile.basis.M,
-            N=2 * profile.basis.N,
-            NFP=profile.basis.NFP,
-            sym=profile.basis.sym,
-            axis=True,
-        )
-        inner_grid = LinearGrid(
-            rho=np.linspace(0, inner_rho, 2 * profile.basis.L, endpoint=True),
-            M=2 * profile.basis.M,
-            N=2 * profile.basis.N,
-            NFP=profile.basis.NFP,
-            sym=profile.basis.sym,
-            axis=True,
-        )
-        f = profile.compute(inner_grid)
-
-        new_profile = profile.from_values(
-            grid.nodes[:, 0],
-            grid.nodes[:, 1],
-            grid.nodes[:, 2],
-            f,
-            L=profile.basis.L,
-            M=profile.basis.M,
-            N=profile.basis.N,
-            NFP=profile.basis.NFP,
-        )
-    else:  # catch other profile types
-        grid = LinearGrid(rho=np.linspace(0, 1, 2 * eq.L, endpoint=True))
-        inner_grid = LinearGrid(rho=np.linspace(0, inner_rho, 2 * eq.L, endpoint=True))
-        y = profile.compute(inner_grid)
-        new_profile = profile.from_values(x=grid.nodes[:, 0], y=y)
-    return new_profile
-
-
 def contract_equilibrium(eq, inner_rho, copy=True):
-    """Create a new equilibrium by using an inner surface of the passed-in equilibrium.
+    """Contract an equilibrium so that an inner flux surface is the new boundary.
 
     Parameters
     ----------
     eq : Equilibrium
         Equilibrium to contract.
     inner_rho: float
-        rho value (<1) to contract the Equilibrium to
+        rho value (<1) to contract the Equilibrium to.
     copy : bool
-        whether or not to return a copy or to modify the original equilibrium.
+        Whether or not to return a copy or to modify the original equilibrium.
 
     Returns
     -------
@@ -276,37 +204,37 @@ def contract_equilibrium(eq, inner_rho, copy=True):
         eq.pressure(rho=inner_rho) = eq_inner.pressure(rho=1), and
         eq_inner LCFS = eq's rho=inner_rho surface.
         Note that this will not be in force balance, and so must be re-solved.
+
     """
     errorif(
         not (inner_rho < 1 and inner_rho > 0),
         ValueError,
-        f"inner_rho should positive and <1, instead got {inner_rho}",
+        f"Surface must be in the range 0 < inner_rho < 1, instead got {inner_rho}.",
     )
 
-    # create new profiles for contracted equilibrium
-    # pressure
-    if eq.pressure is not None:
-        pressure = scale_profile(eq.pressure, inner_rho, eq)
-        edensity = None
-        etemperature = None
-        itemperature = None
-        Zeff = None
-    else:
-        edensity = scale_profile(eq.electron_density, inner_rho, eq)
-        etemperature = scale_profile(eq.electron_temperature, inner_rho, eq)
-        itemperature = scale_profile(eq.iontemperature, inner_rho, eq)
-        Zeff = scale_profile(eq.atomic_number, inner_rho, eq)
-    if eq.anisotropy is not None:
-        anisotropy = scale_profile(eq.anisotropy, inner_rho, eq)
-    else:
-        anisotropy = None
+    def scale_profile(profile, rho):
+        x = np.linspace(0, 1, eq.L_grid)
+        grid = LinearGrid(rho=x / rho)
+        y = profile.compute(grid)
+        return profile.from_values(x=x, y=y)
 
-    current = None
-    iota = None
+    # create new profiles for contracted equilibrium
+    if eq.pressure is not None:
+        pressure = scale_profile(eq.pressure, inner_rho)
     if eq.iota is not None:
-        iota = scale_profile(eq.iota, inner_rho, eq)
-    else:
-        current = scale_profile(eq.current, inner_rho, eq)
+        iota = scale_profile(eq.iota, inner_rho)
+    if eq.current is not None:
+        current = scale_profile(eq.current, inner_rho)
+    if eq.electron_density is not None:
+        electron_density = scale_profile(eq.electron_density, inner_rho)
+    if eq.electron_temperature is not None:
+        electron_temperature = scale_profile(eq.electron_temperature, inner_rho)
+    if eq.ion_temperature is not None:
+        ion_temperature = scale_profile(eq.ion_temperature, inner_rho)
+    if eq.atomic_number is not None:
+        atomic_number = scale_profile(eq.atomic_number, inner_rho)
+    if eq.anisotropy is not None:
+        anisotropy = scale_profile(eq.anisotropy, inner_rho)
 
     surf_inner = eq.get_surface_at(rho=inner_rho)
     surf_inner.rho = 1.0
@@ -317,10 +245,10 @@ def contract_equilibrium(eq, inner_rho, copy=True):
         pressure=pressure,
         iota=iota,
         current=current,
-        electron_density=edensity,
-        electron_temperature=etemperature,
-        ion_temperature=itemperature,
-        atomic_number=Zeff,
+        electron_density=electron_density,
+        electron_temperature=electron_temperature,
+        ion_temperature=ion_temperature,
+        atomic_number=atomic_number,
         anisotropy=anisotropy,
         Psi=float(
             eq.compute("Psi", grid=LinearGrid(rho=inner_rho, NFP=eq.NFP))["Psi"][0]

@@ -1248,7 +1248,7 @@ class LinearGrid(_Grid):
                 dz[-1] = dz[0]
         else:
             z = np.array(0.0, ndmin=1)
-            dz = zeta_period * np.ones_like(z)
+            dz = zeta_period * np.ones_like(z) * NFP
             self._fft_toroidal = True  # trivially true
 
         self._poloidal_endpoint = (

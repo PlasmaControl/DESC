@@ -1,4 +1,9 @@
-"""Example script for recreating the QA configuration of Landreman, Buller & Drevlak."""
+"""Example script for creating a QA configuration at the scale of the ARIES-CS reactor.
+
+It has the boundary of the "precise QA" configuration, but is solved at finite-beta
+and optimized for a self-consistent bootstratp current using the temperature and density
+profiles of Landreman, Buller, and Drevlak.
+"""
 
 from desc import set_device
 

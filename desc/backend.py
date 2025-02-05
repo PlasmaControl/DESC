@@ -93,7 +93,7 @@ if use_jax:  # noqa: C901
     version = jax.__version__.split(".")
     major = int(version[1])
     minor = int(version[2])
-    if major <= 4 and minor <= 35:
+    if major >= 4 and minor >= 35:
 
         def pure_callback(func, result_shape_dtype, *args, vectorized=False, **kwargs):
             """Wrapper for jax.pure_callback for versions >=0.4.35."""

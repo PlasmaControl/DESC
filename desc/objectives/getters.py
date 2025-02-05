@@ -314,69 +314,57 @@ def _get_NAE_constraints(
 
 def maybe_add_self_consistency(thing, constraints):  # noqa: C901
     """Add self consistency constraints if needed."""
+
+    def add_if_multiple(constraints, cls):
+        cons = get_all_instances(constraints, cls)
+        cons_on_this_thing = [con for con in cons if con.things[0] == thing]
+        if not len(cons_on_this_thing):
+            constraints += (cls(eq=thing),)
+        return constraints
+
     params = set(unique_list(flatten_list(thing.optimizable_params))[0])
 
     # Equilibrium
-    if {"R_lmn", "Rb_lmn"} <= params and not is_any_instance(
-        constraints, BoundaryRSelfConsistency
-    ):
-        constraints += (BoundaryRSelfConsistency(eq=thing),)
-    elif is_any_instance(constraints, BoundaryRSelfConsistency):
-        cons = get_all_instances(constraints, BoundaryRSelfConsistency)
-        cons_on_this_thing = [con for con in cons if con.things[0] == thing]
-        if not len(cons_on_this_thing):
+    if {"R_lmn", "Rb_lmn"} <= params:
+        if not is_any_instance(constraints, BoundaryRSelfConsistency):
             constraints += (BoundaryRSelfConsistency(eq=thing),)
+        else:
+            constraints = add_if_multiple(constraints, BoundaryRSelfConsistency)
 
-    if {"Z_lmn", "Zb_lmn"} <= params and not is_any_instance(
-        constraints, BoundaryZSelfConsistency
-    ):
-        constraints += (BoundaryZSelfConsistency(eq=thing),)
-    elif is_any_instance(constraints, BoundaryZSelfConsistency):
-        cons = get_all_instances(constraints, BoundaryZSelfConsistency)
-        cons_on_this_thing = [con for con in cons if con.things[0] == thing]
-        if not len(cons_on_this_thing):
+    if {"Z_lmn", "Zb_lmn"} <= params:
+        if not is_any_instance(constraints, BoundaryZSelfConsistency):
             constraints += (BoundaryZSelfConsistency(eq=thing),)
+        else:
+            constraints = add_if_multiple(constraints, BoundaryZSelfConsistency)
 
-    if {"L_lmn"} <= params and not is_any_instance(constraints, FixLambdaGauge):
-        constraints += (FixLambdaGauge(eq=thing),)
-    elif is_any_instance(constraints, FixLambdaGauge):
-        cons = get_all_instances(constraints, FixLambdaGauge)
-        cons_on_this_thing = [con for con in cons if con.things[0] == thing]
-        if not len(cons_on_this_thing):
+    if {"L_lmn"} <= params:
+        if not is_any_instance(constraints, FixLambdaGauge):
             constraints += (FixLambdaGauge(eq=thing),)
-    if {"R_lmn", "Ra_n"} <= params and not is_any_instance(
-        constraints, AxisRSelfConsistency
-    ):
-        constraints += (AxisRSelfConsistency(eq=thing),)
-    elif is_any_instance(constraints, AxisRSelfConsistency):
-        cons = get_all_instances(constraints, AxisRSelfConsistency)
-        cons_on_this_thing = [con for con in cons if con.things[0] == thing]
-        if not len(cons_on_this_thing):
+        else:
+            constraints = add_if_multiple(constraints, FixLambdaGauge)
+
+    if {"R_lmn", "Ra_n"} <= params:
+        if not is_any_instance(constraints, AxisRSelfConsistency):
             constraints += (AxisRSelfConsistency(eq=thing),)
-    if {"Z_lmn", "Za_n"} <= params and not is_any_instance(
-        constraints, AxisZSelfConsistency
-    ):
-        constraints += (AxisZSelfConsistency(eq=thing),)
-    elif is_any_instance(constraints, AxisZSelfConsistency):
-        cons = get_all_instances(constraints, AxisZSelfConsistency)
-        cons_on_this_thing = [con for con in cons if con.things[0] == thing]
-        if not len(cons_on_this_thing):
+        else:
+            constraints = add_if_multiple(constraints, AxisRSelfConsistency)
+
+    if {"Z_lmn", "Za_n"} <= params:
+        if not is_any_instance(constraints, AxisZSelfConsistency):
             constraints += (AxisZSelfConsistency(eq=thing),)
+        else:
+            constraints = add_if_multiple(constraints, AxisZSelfConsistency)
 
     # Curve
-    if {"shift"} <= params and not is_any_instance(constraints, FixCurveShift):
-        constraints += (FixCurveShift(curve=thing),)
-    elif is_any_instance(constraints, FixCurveShift):
-        cons = get_all_instances(constraints, FixCurveShift)
-        cons_on_this_thing = [con for con in cons if con.things[0] == thing]
-        if not len(cons_on_this_thing):
+    if {"shift"} <= params:
+        if not is_any_instance(constraints, FixCurveShift):
             constraints += (FixCurveShift(curve=thing),)
-    if {"rotmat"} <= params and not is_any_instance(constraints, FixCurveRotation):
-        constraints += (FixCurveRotation(curve=thing),)
-    elif is_any_instance(constraints, FixCurveRotation):
-        cons = get_all_instances(constraints, FixCurveRotation)
-        cons_on_this_thing = [con for con in cons if con.things[0] == thing]
-        if not len(cons_on_this_thing):
+        else:
+            constraints = add_if_multiple(constraints, FixCurveShift)
+    if {"rotmat"} <= params:
+        if not is_any_instance(constraints, FixCurveRotation):
             constraints += (FixCurveRotation(curve=thing),)
+        else:
+            constraints = add_if_multiple(constraints, FixCurveRotation)
 
     return constraints

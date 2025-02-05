@@ -25,6 +25,8 @@ from desc.io import load
 from desc.magnetic_fields import FourierCurrentPotentialField
 from desc.objectives import (
     AspectRatio,
+    BoundaryRSelfConsistency,
+    BoundaryZSelfConsistency,
     Energy,
     FixBoundaryR,
     FixBoundaryZ,
@@ -44,6 +46,7 @@ from desc.objectives import (
     QuasisymmetryTripleProduct,
     Volume,
     get_fixed_boundary_constraints,
+    maybe_add_self_consistency,
 )
 from desc.objectives.objective_funs import _Objective
 from desc.optimize import (
@@ -57,6 +60,7 @@ from desc.optimize import (
     optimizers,
     sgd,
 )
+from desc.utils import get_all_instances
 
 
 @jit
@@ -1428,6 +1432,7 @@ def test_optimize_coil_currents(DummyCoilSet):
 @pytest.mark.unit
 def test_optimize_three_eq_at_once():
     """Test optimizing 3 equilibria at the same time."""
+    # default equilibrium is axisymmetric with R0=10
     eq1 = Equilibrium()
     eq2 = eq1.copy()
     eq3 = Equilibrium(
@@ -1440,13 +1445,21 @@ def test_optimize_three_eq_at_once():
         + get_fixed_boundary_constraints(eq2)
         + get_fixed_boundary_constraints(eq3)
     )
+    for eq in [eq1, eq2, eq3]:
+        cons = maybe_add_self_consistency(eq, cons)
+    bdryR_cons = get_all_instances(cons, BoundaryRSelfConsistency)
+    bdryZ_cons = get_all_instances(cons, BoundaryZSelfConsistency)
+    assert len(bdryR_cons) == 3
+    assert len(bdryZ_cons) == 3
+
     obj = ObjectiveFunction((ForceBalance(eq1), ForceBalance(eq2), ForceBalance(eq3)))
     opt = Optimizer("lsq-exact")
+    # only check if it works
     [
         eq1,
         eq2,
         eq3,
-    ], _ = opt.optimize([eq1, eq2, eq3], objective=obj, constraints=cons, maxiter=2)
+    ], _ = opt.optimize([eq1, eq2, eq3], objective=obj, constraints=cons, maxiter=1)
 
     assert eq1.equiv(eq2)
     assert eq3.compute(["R0"])["R0"] < eq1.compute(["R0"])["R0"]

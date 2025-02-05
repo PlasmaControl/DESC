@@ -385,14 +385,9 @@ def get_parallel_forcebalance(eq, num_device, use_jit=True, check_device=True):
             N=eq.N_grid,
             NFP=eq.NFP,
         )
-        grid._nodes = jax.device_put(grid._nodes, jax.devices("gpu")[i])
-        grid._spacing = jax.device_put(grid.spacing, jax.devices("gpu")[i])
-        grid._weights = jax.device_put(grid.weights, jax.devices("gpu")[i])
         obj = ForceBalance(eq, grid=grid)
         obj.build(use_jit=use_jit)
-        obj._constants["quad_weights"] = jax.device_put(
-            obj._constants["quad_weights"], jax.devices("gpu")[i]
-        )
+        obj = jax.device_put(obj, jax.devices("gpu")[i])
         objs += (obj,)
     obj = ObjectiveFunction(objs)
     obj.build(use_jit_wrapper=False)

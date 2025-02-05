@@ -460,14 +460,16 @@ class ObjectiveFromUser(_Objective):
     --------
     .. code-block:: python
 
-        from desc.compute.utils import surface_averages
+        from desc.integrals.surface_integral import surface_averages
 
         def myfun(grid, data):
             # This will compute the flux surface average of the function
             # R*B_T from the Grad-Shafranov equation
             f = data['R'] * data['B_phi']
-            f_fsa = surface_averages(grid, f, sqrt_g=data['sqrt_g'])
-            # this is the FSA on the full grid, but we only want the unique values:
+            # q here is the kwarg for "quantity" as in, quantity to be averaged
+            f_fsa = surface_averages(grid, q=f, sqrt_g=data['sqrt(g)'])
+            # this has the FSA values on the full grid,
+            # but we just want the unique values:
             return grid.compress(f_fsa)
 
         myobj = ObjectiveFromUser(fun=myfun, thing=eq)

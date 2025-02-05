@@ -9,7 +9,7 @@ from desc.backend import block_diag, jnp, sign
 from desc.basis import DoubleFourierSeries, zernike_radial
 from desc.compute import get_transforms
 from desc.grid import LinearGrid
-from desc.utils import Timer
+from desc.utils import Timer, warnif
 
 
 def ptolemy_identity_fwd(m_0, n_0, s, c):
@@ -522,7 +522,14 @@ def make_boozmn_output(  # noqa: C901
     """
     timer = Timer()
     timer.start("Total time")
-
+    warnif(
+        not eq.sym,
+        UserWarning,
+        "Equilibrium is asymmetric, note that the `numnc` saved with this DESC "
+        "function is opposite sign of the `numnc` saved from hidden symmetries"
+        " booz_xform and thus not verified, though every other quantity "
+        "is tested and agrees with the hidden symmetries booz_xform.",
+    )
     Psi = eq.Psi
     NFP = eq.NFP
     if M_booz is None:

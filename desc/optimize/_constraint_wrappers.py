@@ -177,7 +177,7 @@ class LinearConstraintProjection(ObjectiveFunction):
         x = self.recover(x)
         return self._objective.unpack_state(x, per_objective)
 
-    def update_constraint_target(self, eq_new, x_scale="auto"):
+    def update_constraint_target(self, eq_new):
         """Update the target of the constraint.
 
         Updates the particular solution (xp), nullspace (Z), scaling (D) and
@@ -190,10 +190,6 @@ class LinearConstraintProjection(ObjectiveFunction):
         ----------
         eq_new : Equilibrium
             New equilibrium to target for the constraints.
-        x_scale : ndarray or str, optional
-            Scaling of the state vector. If "auto", the scaling is set to 1 for
-            components with magnitude smaller than 1e2, and to the magnitude of the
-            component otherwise. Default is "auto".
         """
         for con in self._constraint.objectives:
             if hasattr(con, "update_target"):
@@ -213,15 +209,7 @@ class LinearConstraintProjection(ObjectiveFunction):
         # does not change here, but still recompute it while updating others
         A, b, xp, unfixed_idx, fixed_idx = remove_fixed_parameters(A, b, xp)
 
-        # compute x_scale
-        if x_scale == "auto":
-            x_scale = self._objective.x(*self._objective.things)
-        errorif(
-            x_scale.shape != xp.shape,
-            ValueError,
-            "x_scale must be the same size as the full state vector. "
-            + f"Got size {x_scale.size} for state vector of size {xp.size}.",
-        )
+        x_scale = self._objective.x(*self._objective.things)
         self._D = jnp.where(jnp.abs(x_scale) < 1e2, 1, jnp.abs(x_scale))
 
         # since D has changed, we need to update the ADinv
@@ -884,12 +872,7 @@ class ProximalProjection(ObjectiveFunction):
             self._eq.params_dict = self.history[-1][self._eq_idx]
         # if the optimization variables have changed, we need to update the constraints
         if not (x == last_x).all():
-            x_scale = (
-                self._solve_options["x_scale"]
-                if "x_scale" in self._solve_options
-                else "auto"
-            )
-            self._eq_solve_objective.update_constraint_target(self._eq, x_scale=x_scale)
+            self._eq_solve_objective.update_constraint_target(self._eq)
 
         return xopt, xeq
 

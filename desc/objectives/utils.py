@@ -118,6 +118,7 @@ def factorize_linear_constraints(objective, constraint, x_scale="auto"):  # noqa
     A, b, xp, unfixed_idx, fixed_idx = remove_fixed_parameters(A, b, xp)
 
     # compute x_scale if not provided
+    # Note: this x_scale is not the same as the x_scale as in solve_options["x_scale"]
     if x_scale == "auto":
         x_scale = objective.x(*objective.things)
     errorif(

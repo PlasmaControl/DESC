@@ -18,6 +18,7 @@ New Features
 - Changes hessian computation to use chunked ``jacfwd`` and ``jacrev``, allowing ``jac_chunk_size`` to now reduce hessian memory usage as well.
 - Adds an option to ``VMECIO.save`` to specify the grid resolution in real space.
 - Adds a new objective ``desc.objectives.CoilIntegratedCurvature`` for targeting convex coils.
+- `eq.solve` and `eq.perturb` now accept `LinearConstraintProjection` as objective. This option must be used without any constraints.
 - ``desc.objectives.CoilSetMinDistance`` and ``desc.objectives.PlasmaCoilSetMinDistance`` now include the option to use a softmin which can give smoother gradients. They also both now have a ``dist_chunk_size`` option to break up the distance calculation into smaller pieces to save memory
 
 
@@ -29,6 +30,10 @@ Bug Fixes
 - Corrects basis vectors computations made on surface objects [#1175](https://github.com/PlasmaControl/DESC/pull/1175).
 - ``desc.objectives.PlasmaVesselDistance`` now correctly accounts for multiple field periods on both the equilibrium and the vessel surface. Previously it only considered distances within a single field period.
 
+
+Performance Improvements
+
+- `proximal-` optimizers use a single `LinearConstraintProjection` and this makes the optimization faster for high resolution cases where taking the SVD (for null-space and inverse) of constraint matrix takes significant time.
 
 v0.13.0
 -------

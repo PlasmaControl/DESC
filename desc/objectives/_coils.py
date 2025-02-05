@@ -1285,10 +1285,23 @@ class StochasticOptimizationSettings:
             0, 2 * jnp.pi, self.number_of_discretization_points, endpoint=False
         )
         XX, YY = jnp.meshgrid(thetas, thetas, indexing="ij")
-        return jnp.block([
+
+        original_covariance_matrix = jnp.block([
             [cof_f_pp(XX, YY), -cov_f_dp(XX, YY)],
             [cov_f_dp(XX, YY), -cov_f_dd(XX, YY)],
         ])
+
+        # To guarantee that the covariance matrix is positive definite, we add a small
+        # diagonal matrix to the original covariance matrix. This small diagonal matrix
+        # is called "jitter" or "nugget" in the literature.
+        # See https://doi.org/10.1016/j.csda.2012.04.020
+
+        # If not, the Cholesky decomposition may fail, and NaNs may appear in the
+        # perturbations.
+        small_diagonal_matrix = (
+            jnp.eye(self.number_of_discretization_points * 2) * 1e-10
+        )
+        return original_covariance_matrix + small_diagonal_matrix
 
     @functools.cached_property
     def perturbations(self) -> jnp.ndarray:
@@ -1305,18 +1318,6 @@ class StochasticOptimizationSettings:
         xdraw = jax.random.multivariate_normal(keyx, mean_1d, self.covariance_matrix)
         ydraw = jax.random.multivariate_normal(keyy, mean_1d, self.covariance_matrix)
         zdraw = jax.random.multivariate_normal(keyz, mean_1d, self.covariance_matrix)
-
-        # If there are any NaNs, raise an error:
-        if (
-            jnp.any(jnp.isnan(xdraw))
-            or jnp.any(jnp.isnan(ydraw))
-            or jnp.any(jnp.isnan(zdraw))
-        ):
-            message = (
-                "NaNs in the perturbations. Try to use different length_scale or"
-                " standard_deviation in the stochastic optimization settings."
-            )
-            raise ValueError(message)
 
         # Create a (2n,3) array for the position and tangent perturbations. The first
         # n rows are for the position perturbations and the second n rows are for the

@@ -499,6 +499,8 @@ def VMEC_save_asym(tmpdir_factory):
         verbose=0,
         M_nyq=round(np.max(vmec.variables["xm_nyq"][:])),
         N_nyq=round(np.max(vmec.variables["xn_nyq"][:]) / eq.NFP),
+        M_grid=round(np.max(vmec.variables["xm_nyq"][:])),
+        N_grid=round(np.max(vmec.variables["xn_nyq"][:]) / eq.NFP),
     )
     desc = Dataset(filename, mode="r")
     return vmec, desc, eq

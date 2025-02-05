@@ -148,6 +148,7 @@ def parse_axis(axis, NFP=1, sym=True, surface=None):
             axis[:, 1],
             axis[:, 2],
             axis[:, 0].astype(int),
+            axis[:, 0].astype(int),
             NFP=NFP,
             sym=sym,
             name="axis",

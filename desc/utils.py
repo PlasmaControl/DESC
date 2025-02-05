@@ -759,7 +759,7 @@ def jaxify(func, abstract_eval, vectorized=False, abs_step=1e-4, rel_step=0):
         Function to wrap. Should be a "pure" function, in that it has no side
         effects and doesn't maintain state. Does not need to be JAX transformable.
     abstract_eval : callable
-        Auxilliary function that computes the output shape and dtype of func.
+        Auxiliary function that computes the output shape and dtype of func.
         **Must be JAX transformable**. Should be of the form
 
             abstract_eval(*args, **kwargs) -> Pytree with same shape and dtype as

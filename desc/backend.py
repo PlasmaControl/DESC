@@ -90,9 +90,10 @@ if use_jax:  # noqa: C901
         trapezoid = jnp.trapz  # for older versions of JAX, deprecated by jax 0.4.16
 
     # TODO: update this when min JAX version >= 0.4.35
-    jax_vs = jaxlib.__version__.strip().split(".")
-    jax_version = float(jax_vs[1]) + float(jax_vs[2]) / 1e2
-    if jax_version >= 4.35:
+    version = jax.__version__.split(".")
+    major = int(version[1])
+    minor = int(version[2])
+    if major <= 4 and minor <= 35:
 
         def pure_callback(func, result_shape_dtype, *args, vectorized=False, **kwargs):
             """Wrapper for jax.pure_callback for versions >=0.4.35."""

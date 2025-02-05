@@ -20,6 +20,7 @@ from desc.coils import (
     initialize_saddle_coils,
 )
 from desc.compute import get_params, get_transforms, rpz2xyz, xyz2rpz, xyz2rpz_vec
+from desc.compute.geom_utils import copy_rpz_periods
 from desc.equilibrium import Equilibrium
 from desc.examples import get
 from desc.geometry import FourierRZCurve, FourierRZToroidalSurface, FourierXYZCurve
@@ -27,7 +28,6 @@ from desc.grid import Grid, LinearGrid
 from desc.io import load
 from desc.magnetic_fields import SumMagneticField, VerticalMagneticField
 from desc.objectives import LinkingCurrentConsistency
-from desc.objectives._coils import _copy_rpz_periods
 from desc.utils import dot
 
 
@@ -1411,7 +1411,7 @@ def test_initialize_helical():
         grid=LinearGrid(rho=1.0, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP),
     )
     rpz = jnp.array([data["R"], data["phi"], data["Z"]]).T
-    rpz = _copy_rpz_periods(rpz, eq.NFP)
+    rpz = copy_rpz_periods(rpz, eq.NFP)
     plasma_pts = rpz2xyz(rpz)
     dist = np.linalg.norm(coils_pts[:, None, :, :] - plasma_pts[:, None, :], axis=-1)
     # dist is distance from every point on the plasma to every point on the coil

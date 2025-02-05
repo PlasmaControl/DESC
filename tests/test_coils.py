@@ -325,7 +325,7 @@ class TestCoil:
             )
 
             # FourierPlanarCoil
-            coil = FourierPlanarCoil(I, center=[0, 0, 0], normal=[0, 0, -1], r_n=R)
+            coil = FourierPlanarCoil(I, center=[0, 0, 0], normal=[0, 0, 1], r_n=R)
             test(
                 coil,
                 grid_xyz,

@@ -162,6 +162,12 @@ def test_surface_areas_2():
 @pytest.mark.unit
 def test_elongation():
     """Test that elongation approximation is correct."""
+    surf1 = FourierRZToroidalSurface(
+        R_lmn=[10, 1, 0.2],
+        Z_lmn=[-1, -0.2],
+        modes_R=[[0, 0], [1, 0], [0, 1]],
+        modes_Z=[[-1, 0], [0, -1]],
+    )
     surf2 = FourierRZToroidalSurface(
         R_lmn=[10, 1, 0.2],
         Z_lmn=[-2, -0.2],
@@ -174,17 +180,15 @@ def test_elongation():
         modes_R=[[0, 0], [1, 0], [0, 1]],
         modes_Z=[[-1, 0], [0, -1]],
     )
-    eq1 = Equilibrium()  # elongation = 1
-    eq2 = Equilibrium(surface=surf2)  # elongation = 2
-    eq3 = Equilibrium(surface=surf3)  # elongation = 3
-    grid = LinearGrid(L=5, M=2 * eq3.M_grid, N=eq3.N_grid, NFP=eq3.NFP, sym=eq3.sym)
-    data1 = eq1.compute(["a_major/a_minor"], grid=grid)
-    data2 = eq2.compute(["a_major/a_minor"], grid=grid)
-    data3 = eq3.compute(["a_major/a_minor"], grid=grid)
+    assert surf3.sym
+    grid = LinearGrid(rho=1, M=3 * surf3.M, N=surf3.N, NFP=surf3.NFP, sym=False)
+    data1 = surf1.compute(["a_major/a_minor LCFS"], grid=grid)
+    data2 = surf2.compute(["a_major/a_minor LCFS"], grid=grid)
+    data3 = surf3.compute(["a_major/a_minor LCFS"], grid=grid)
     # elongation approximation is less accurate as elongation increases
-    np.testing.assert_allclose(1.0, data1["a_major/a_minor"])
-    np.testing.assert_allclose(2.0, data2["a_major/a_minor"], rtol=1e-3)
-    np.testing.assert_allclose(3.0, data3["a_major/a_minor"], rtol=1e-2)
+    np.testing.assert_allclose(1.0, data1["a_major/a_minor LCFS"])
+    np.testing.assert_allclose(2.0, data2["a_major/a_minor LCFS"], rtol=1e-4)
+    np.testing.assert_allclose(3.0, data3["a_major/a_minor LCFS"], rtol=1e-3)
 
 
 @pytest.mark.slow
@@ -1477,9 +1481,8 @@ def test_iota_components():
 def test_surface_equilibrium_geometry():
     """Test that computing stuff from surface gives same result as equilibrium."""
     names = ["HELIOTRON"]
-    data = ["A", "V", "a", "R0", "R0/a", "a_major/a_minor"]
     # TODO (#1397): expand this to include all angular derivatives
-    # once they are implemented for surfaces
+    #  once they are implemented for surfaces
     data_basis_vecs_fourierRZ = [
         "e_theta",
         "e_zeta",
@@ -1500,14 +1503,6 @@ def test_surface_equilibrium_geometry():
     ]
     for name in names:
         eq = get(name)
-        for key in data:
-            x = eq.compute(key)[key].max()  # max needed for elongation broadcasting
-            y = eq.surface.compute(key)[key].max()
-            if key == "a_major/a_minor":
-                rtol, atol = 1e-2, 0  # need looser tol here bc of different grids
-            else:
-                rtol, atol = 1e-8, 0
-            np.testing.assert_allclose(x, y, rtol=rtol, atol=atol, err_msg=name + key)
         # compare at rho=1, where we expect the eq.compute and the
         # surface.compute to agree for these surface basis vectors
         grid = LinearGrid(rho=np.array(1.0), M=10, N=10, NFP=eq.NFP)

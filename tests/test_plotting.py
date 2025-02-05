@@ -84,7 +84,7 @@ class TestPlot1D:
     def test_1d_elongation(self):
         """Test plotting 1d elongation as a function of toroidal angle."""
         eq = get("precise_QA")
-        grid = LinearGrid(N=20, NFP=eq.NFP)
+        grid = LinearGrid(M=eq.M_grid, N=20, NFP=eq.NFP)
         fig, ax, data = plot_1d(
             eq, "a_major/a_minor", grid=grid, figsize=(4, 4), return_data=True
         )

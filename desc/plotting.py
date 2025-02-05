@@ -12,7 +12,6 @@ import plotly.graph_objects as go
 from matplotlib import cycler, rcParams
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 from pylatexenc.latex2text import LatexNodes2Text
-from termcolor import colored
 
 from desc.backend import sign
 from desc.basis import fourier, zernike_radial_poly
@@ -193,15 +192,12 @@ def _format_ax(ax, is3d=False, rows=1, cols=1, figsize=None, equal=False):
         return plt.gcf(), ax
     else:
         ax = np.atleast_1d(ax)
-        if isinstance(ax.flatten()[0], matplotlib.axes.Axes):
-            return plt.gcf(), ax
-        else:
-            raise TypeError(
-                colored(
-                    "ax argument must be None or an axis instance or array of axes",
-                    "red",
-                )
-            )
+        errorif(
+            not isinstance(ax.flatten()[0], matplotlib.axes.Axes),
+            TypeError,
+            "ax argument must be None or an axis instance or array of axes",
+        )
+        return plt.gcf(), ax
 
 
 def _get_grid(**kwargs):
@@ -284,11 +280,10 @@ def _compute(eq, name, grid, component=None, reshape=True):
 
     """
     parameterization = _parse_parameterization(eq)
-    if name not in data_index[parameterization]:
-        raise ValueError(
-            f"Unrecognized value '{name}' for "
-            + f"parameterization {parameterization}."
-        )
+    errorif(
+        name not in data_index[parameterization],
+        msg=f"Unrecognized value '{name}' for parameterization {parameterization}.",
+    )
     assert component in [
         None,
         "R",
@@ -300,9 +295,7 @@ def _compute(eq, name, grid, component=None, reshape=True):
 
     label = data_index[parameterization][name]["label"]
 
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        data = eq.compute(name, grid=grid)[name]
+    data = eq.compute(name, grid=grid)[name]
 
     if data_index[parameterization][name]["dim"] > 1:
         if component is None:
@@ -526,47 +519,50 @@ def plot_1d(eq, name, grid=None, log=False, ax=None, return_data=False, **kwargs
         grid_kwargs = {"L": default_L, "N": default_N, "NFP": NFP}
         grid = _get_grid(**grid_kwargs)
     plot_axes = _get_plot_axes(grid)
-    if len(plot_axes) != 1:
-        return ValueError(colored("Grid must be 1D", "red"))
 
-    data, ylabel = _compute(eq, name, grid, kwargs.pop("component", None))
-    label = kwargs.pop("label", None)
-
-    fig, ax = _format_ax(ax, figsize=kwargs.pop("figsize", None))
+    data, ylabel = _compute(
+        eq, name, grid, kwargs.pop("component", None), reshape=False
+    )
 
     # reshape data to 1D
-    data = data.flatten()
+    if len(plot_axes) != 1:
+        surface_label = {"r": "rho", "t": "theta", "z": "zeta"}.get(
+            data_index[parameterization][name]["coordinates"], None
+        )
+        axis = {"r": 0, "t": 1, "z": 2}.get(
+            data_index[parameterization][name]["coordinates"], None
+        )
+        errorif(
+            surface_label is None or axis is None,
+            NotImplementedError,
+            msg="Grid must be 1D",
+        )
+        data = grid.compress(data, surface_label=surface_label)
+        nodes = grid.compress(grid.nodes[:, axis], surface_label=surface_label)
+    else:
+        axis = plot_axes[0]
+        data = data.ravel()
+        nodes = grid.nodes[:, axis]
+
+    label = kwargs.pop("label", None)
+    fig, ax = _format_ax(ax, figsize=kwargs.pop("figsize", None))
     linecolor = kwargs.pop("linecolor", colorblind_colors[0])
     ls = kwargs.pop("ls", "-")
     lw = kwargs.pop("lw", 1)
     if log:
         data = np.abs(data)  # ensure data is positive for log plot
-        ax.semilogy(
-            grid.nodes[:, plot_axes[0]],
-            data,
-            label=label,
-            color=linecolor,
-            ls=ls,
-            lw=lw,
-        )
+        ax.semilogy(nodes, data, label=label, color=linecolor, ls=ls, lw=lw)
     else:
-        ax.plot(
-            grid.nodes[:, plot_axes[0]],
-            data,
-            label=label,
-            color=linecolor,
-            ls=ls,
-            lw=lw,
-        )
+        ax.plot(nodes, data, label=label, color=linecolor, ls=ls, lw=lw)
     xlabel_fontsize = kwargs.pop("xlabel_fontsize", None)
     ylabel_fontsize = kwargs.pop("ylabel_fontsize", None)
 
     assert len(kwargs) == 0, f"plot_1d got unexpected keyword argument: {kwargs.keys()}"
-    xlabel = _AXIS_LABELS_RTZ[plot_axes[0]]
+    xlabel = _AXIS_LABELS_RTZ[axis]
     ax.set_xlabel(xlabel, fontsize=xlabel_fontsize)
     ax.set_ylabel(ylabel, fontsize=ylabel_fontsize)
     _set_tight_layout(fig)
-    plot_data = {xlabel.strip("$").strip("\\"): grid.nodes[:, plot_axes[0]], name: data}
+    plot_data = {xlabel.strip("$").strip("\\"): nodes, name: data}
 
     if label is not None:
         ax.legend()
@@ -647,8 +643,7 @@ def plot_2d(
         grid_kwargs = {"M": 33, "N": 33, "NFP": eq.NFP, "axis": False}
         grid = _get_grid(**grid_kwargs)
     plot_axes = _get_plot_axes(grid)
-    if len(plot_axes) != 2:
-        return ValueError(colored("Grid must be 2D", "red"))
+    errorif(len(plot_axes) != 2, msg="Grid must be 2D")
     component = kwargs.pop("component", None)
     if name != "B*n":
         data, label = _compute(
@@ -661,14 +656,12 @@ def plot_2d(
         field = kwargs.pop("field", None)
         errorif(
             field is None,
-            ValueError,
-            "If B*n is entered as the variable to plot, a magnetic field"
+            msg="If B*n is entered as the variable to plot, a magnetic field"
             " must be provided.",
         )
         errorif(
             not np.all(np.isclose(grid.nodes[:, 0], 1)),
-            ValueError,
-            "If B*n is entered as the variable to plot, "
+            msg="If B*n is entered as the variable to plot, "
             "the grid nodes must be at rho=1.",
         )
 
@@ -953,14 +946,12 @@ def plot_3d(
         field = kwargs.pop("field", None)
         errorif(
             field is None,
-            ValueError,
-            "If B*n is entered as the variable to plot, a magnetic field"
+            msg="If B*n is entered as the variable to plot, a magnetic field"
             " must be provided.",
         )
         errorif(
             not np.all(np.isclose(grid.nodes[:, 0], 1)),
-            ValueError,
-            "If B*n is entered as the variable to plot, "
+            msg="If B*n is entered as the variable to plot, "
             "the grid nodes must be at rho=1.",
         )
 
@@ -991,8 +982,7 @@ def plot_3d(
 
     errorif(
         len(kwargs) != 0,
-        ValueError,
-        f"plot_3d got unexpected keyword argument: {kwargs.keys()}",
+        msg=f"plot_3d got unexpected keyword argument: {kwargs.keys()}",
     )
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
@@ -2503,8 +2493,7 @@ def plot_coils(coils, grid=None, fig=None, return_data=False, **kwargs):
     showaxislabels = kwargs.pop("showaxislabels", True)
     errorif(
         len(kwargs) != 0,
-        ValueError,
-        f"plot_coils got unexpected keyword argument: {kwargs.keys()}",
+        msg=f"plot_coils got unexpected keyword argument: {kwargs.keys()}",
     )
     errorif(
         not isinstance(coils, _Coil),
@@ -2931,7 +2920,7 @@ def plot_boozer_surface(
         iota = grid_compute.compress(data["iota"])
     else:  # OmnigenousField
         iota = kwargs.pop("iota", None)
-        errorif(iota is None, ValueError, "iota must be supplied for OmnigenousField")
+        errorif(iota is None, msg="iota must be supplied for OmnigenousField")
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             data = thing.compute(

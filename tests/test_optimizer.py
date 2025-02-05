@@ -1422,3 +1422,31 @@ def test_optimize_coil_currents(DummyCoilSet):
         np.asarray(coils.current).mean() * 0.15,
         np.abs(np.asarray(coils_opt.current) - np.asarray(coils.current)).mean(),
     )
+
+
+@pytest.mark.optimize
+@pytest.mark.unit
+def test_optimize_three_eq_at_once():
+    """Test optimizing 3 equilibria at the same time."""
+    eq1 = Equilibrium()
+    eq2 = eq1.copy()
+    eq3 = Equilibrium(
+        surface=FourierRZToroidalSurface(
+            R_lmn=[5, 1], Z_lmn=[-1], modes_R=[[0, 0], [1, 0]], modes_Z=[[-1, 0]]
+        )
+    )
+    cons = (
+        get_fixed_boundary_constraints(eq1)
+        + get_fixed_boundary_constraints(eq2)
+        + get_fixed_boundary_constraints(eq3)
+    )
+    obj = ObjectiveFunction((ForceBalance(eq1), ForceBalance(eq2), ForceBalance(eq3)))
+    opt = Optimizer("lsq-exact")
+    [
+        eq1,
+        eq2,
+        eq3,
+    ], _ = opt.optimize([eq1, eq2, eq3], objective=obj, constraints=cons, maxiter=2)
+
+    assert eq1.equiv(eq2)
+    assert eq3.compute(["R0"])["R0"] < eq1.compute(["R0"])["R0"]

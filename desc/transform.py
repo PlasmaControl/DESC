@@ -202,10 +202,7 @@ class Transform(IOAble):
         self.lm_modes = basis.modes[basis.unique_LM_idx, :2]
         self.num_lm_modes = self.lm_modes.shape[0]  # number of radial/poloidal modes
         self.num_n_modes = 2 * basis.N + 1  # number of toroidal modes
-        pad_dim = ((self.grid.num_zeta - 1) // 2 - basis.N) * 2
-        if self.grid.num_zeta % 2 == 0:
-            pad_dim += 1
-        self.pad_dim = pad_dim
+        self.pad_dim = self.grid.num_zeta - self.num_n_modes
         self.dk = basis.NFP * np.arange(-basis.N, basis.N + 1).reshape((1, -1))
         offset = np.min(basis.modes[:, 2]) + basis.N  # N for sym="cos", 0 otherwise
         row = np.where(

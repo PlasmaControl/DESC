@@ -3069,7 +3069,8 @@ def initialize_helical_coils(eq, num_coils, r_over_a=2.0, helicity=(1, 1), npts=
     num_coils : int
         Number of coils to create.
     r_over_a : float
-        Approximate minor radius of the coils, in units of equilibrium minor radius. The
+        Approximate minor radius of the coils, in units of equilibrium minor radius.
+        The approximate minor radius will be r_over_a * equilibrium minor radius. The
         actual coils will be contoured to keep a roughly constant offset from the plasma
         surface.
     helicity : tuple of int
@@ -3085,11 +3086,31 @@ def initialize_helical_coils(eq, num_coils, r_over_a=2.0, helicity=(1, 1), npts=
     coilset : CoilSet of FourierPlanarCoil
         Planar coils centered on magnetic axis, with appropriate symmetry.
     """
-    a = eq.compute("a")["a"]
-    G = eq.compute("G", grid=LinearGrid(rho=1.0))["G"]
     M = helicity[0] * eq.NFP
     N = helicity[1]
 
+    errorif(
+        int(M) != M or int(N) != N,
+        TypeError,
+        f"helicity should be a tuple of two integers, got {helicity}",
+    )
+    warnif(
+        N == 0 and M != 0,
+        UserWarning,
+        "Toroidal helicity is zero, meaning these are modular coils. Consider using "
+        "desc.coils.initialize_modular_coils",
+    )
+    warnif(
+        N == 0 and M == 0,
+        UserWarning,
+        "Toroidal and poloidal helicity are zero, meaning these are windowpane/saddle "
+        "coils. Consider using desc.coils.initialize_saddle_coils",
+    )
+    # for M=0 these are technically PF coils not helical, but we don't have a specific
+    # function for PF coils so don't bother warning.
+
+    a = eq.compute("a")["a"]
+    G = eq.compute("G", grid=LinearGrid(rho=1.0))["G"]
     s = np.linspace(0, 2 * np.pi, npts, endpoint=False)
 
     theta = M * s

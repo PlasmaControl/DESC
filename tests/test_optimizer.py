@@ -17,6 +17,7 @@ from scipy.optimize import (
 
 import desc.examples
 from desc.backend import jit, jnp
+from desc.coils import initialize_modular_coils
 from desc.derivatives import Derivative
 from desc.equilibrium import Equilibrium
 from desc.geometry import FourierRZToroidalSurface
@@ -25,10 +26,15 @@ from desc.io import load
 from desc.magnetic_fields import FourierCurrentPotentialField
 from desc.objectives import (
     AspectRatio,
+    BoundaryRSelfConsistency,
+    BoundaryZSelfConsistency,
     Energy,
     FixBoundaryR,
     FixBoundaryZ,
+    FixCoilCurrent,
     FixCurrent,
+    FixCurveRotation,
+    FixCurveShift,
     FixIota,
     FixParameters,
     FixPressure,
@@ -44,6 +50,7 @@ from desc.objectives import (
     QuasisymmetryTripleProduct,
     Volume,
     get_fixed_boundary_constraints,
+    maybe_add_self_consistency,
 )
 from desc.objectives.objective_funs import _Objective
 from desc.optimize import (
@@ -57,6 +64,7 @@ from desc.optimize import (
     optimizers,
     sgd,
 )
+from desc.utils import get_all_instances
 
 
 @jit
@@ -1422,3 +1430,60 @@ def test_optimize_coil_currents(DummyCoilSet):
         np.asarray(coils.current).mean() * 0.15,
         np.abs(np.asarray(coils_opt.current) - np.asarray(coils.current)).mean(),
     )
+
+
+@pytest.mark.optimize
+@pytest.mark.unit
+def test_optimize_three_eq_at_once():
+    """Test optimizing 3 equilibria at the same time."""
+    # default equilibrium is axisymmetric with R0=10
+    eq1 = Equilibrium()
+    eq2 = eq1.copy()
+    eq3 = Equilibrium(
+        surface=FourierRZToroidalSurface(
+            R_lmn=[5, 1], Z_lmn=[-1], modes_R=[[0, 0], [1, 0]], modes_Z=[[-1, 0]]
+        )
+    )
+    cons = (
+        get_fixed_boundary_constraints(eq1)
+        + get_fixed_boundary_constraints(eq2)
+        + get_fixed_boundary_constraints(eq3)
+    )
+    for eq in [eq1, eq2, eq3]:
+        cons = maybe_add_self_consistency(eq, cons)
+    bdryR_cons = get_all_instances(cons, BoundaryRSelfConsistency)
+    bdryZ_cons = get_all_instances(cons, BoundaryZSelfConsistency)
+    assert len(bdryR_cons) == 3
+    assert len(bdryZ_cons) == 3
+
+    obj = ObjectiveFunction((ForceBalance(eq1), ForceBalance(eq2), ForceBalance(eq3)))
+    opt = Optimizer("lsq-exact")
+    # only check if it works
+    [
+        eq1,
+        eq2,
+        eq3,
+    ], _ = opt.optimize([eq1, eq2, eq3], objective=obj, constraints=cons, maxiter=1)
+
+    assert eq1.equiv(eq2)
+    assert eq3.compute(["R0"])["R0"] < eq1.compute(["R0"])["R0"]
+
+
+@pytest.mark.optimize
+@pytest.mark.unit
+def test_optimize_three_coil_at_once():
+    """Test optimizing 3 coils at the same time."""
+    eq = Equilibrium()
+    coilset = initialize_modular_coils(eq, num_coils=3, r_over_a=3.0).to_FourierXYZ()
+
+    coil1 = coilset.coils[0]
+    coil2 = coil1.copy()
+    coil3 = coilset.coils[2]
+
+    cons = (FixCoilCurrent(coil1),)
+    for coil in [coil1, coil2, coil3]:
+        cons = maybe_add_self_consistency(coil, cons)
+    shift_cons = get_all_instances(cons, FixCurveShift)
+    rotation_cons = get_all_instances(cons, FixCurveRotation)
+    assert len(shift_cons) == 3
+    assert len(rotation_cons) == 3

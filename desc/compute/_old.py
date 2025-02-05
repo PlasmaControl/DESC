@@ -350,13 +350,12 @@ def _Gamma_c_Velasco_1D(params, transforms, profiles, data, **kwargs):
 
     def Gamma_c(data):
         bounce = Bounce1D(grid, data, quad, is_reshaped=True)
-        points = bounce.points(data["pitch_inv"], num_well)
         v_tau, radial_drift, poloidal_drift = bounce.integrate(
             [_v_tau, _radial_drift, _poloidal_drift],
             data["pitch_inv"],
             data,
             ["cvdrift0", "gbdrift"],
-            points,
+            bounce.points(data["pitch_inv"], num_well),
         )
         # This is γ_c π/2.
         gamma_c = jnp.arctan(safediv(radial_drift, poloidal_drift))

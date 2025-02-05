@@ -306,7 +306,7 @@ def _get_NAE_constraints(
     return constraints
 
 
-def maybe_add_self_consistency(thing, constraints):  # noqa: C901
+def maybe_add_self_consistency(thing, constraints):
     """Add self consistency constraints if needed."""
 
     def add_if_multiple(constraints, cls):

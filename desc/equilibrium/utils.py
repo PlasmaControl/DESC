@@ -219,6 +219,8 @@ def contract_equilibrium(eq, inner_rho, copy=True):
         return profile.from_values(x=x, y=y)
 
     # create new profiles for contracted equilibrium
+    pressure = iota = current = anisotropy = None
+    electron_density = electron_temperature = ion_temperature = atomic_number = None
     if eq.pressure is not None:
         pressure = scale_profile(eq.pressure, inner_rho)
     if eq.iota is not None:

@@ -1393,7 +1393,7 @@ def test_initialize_saddle():
 
 @pytest.mark.unit
 def test_initialize_helical():
-    """Test initializing a modular coilset."""
+    """Test initializing a helical coilset."""
     eq = get("NCSX")
     coilset = initialize_helical_coils(eq, 2, r_over_a=2.0, helicity=(3, 1), npts=100)
     assert len(coilset) == 2

@@ -17,6 +17,7 @@ from scipy.optimize import (
 
 import desc.examples
 from desc.backend import jit, jnp
+from desc.coils import initialize_modular_coils
 from desc.derivatives import Derivative
 from desc.equilibrium import Equilibrium
 from desc.geometry import FourierRZToroidalSurface
@@ -30,7 +31,10 @@ from desc.objectives import (
     Energy,
     FixBoundaryR,
     FixBoundaryZ,
+    FixCoilCurrent,
     FixCurrent,
+    FixCurveRotation,
+    FixCurveShift,
     FixIota,
     FixParameters,
     FixPressure,
@@ -1463,3 +1467,23 @@ def test_optimize_three_eq_at_once():
 
     assert eq1.equiv(eq2)
     assert eq3.compute(["R0"])["R0"] < eq1.compute(["R0"])["R0"]
+
+
+@pytest.mark.optimize
+@pytest.mark.unit
+def test_optimize_three_coil_at_once():
+    """Test optimizing 3 coils at the same time."""
+    eq = Equilibrium()
+    coilset = initialize_modular_coils(eq, num_coils=3, r_over_a=3.0).to_FourierXYZ()
+
+    coil1 = coilset.coils[0]
+    coil2 = coil1.copy()
+    coil3 = coilset.coils[2]
+
+    cons = (FixCoilCurrent(coil1),)
+    for coil in [coil1, coil2, coil3]:
+        cons = maybe_add_self_consistency(coil, cons)
+    shift_cons = get_all_instances(cons, FixCurveShift)
+    rotation_cons = get_all_instances(cons, FixCurveRotation)
+    assert len(shift_cons) == 3
+    assert len(rotation_cons) == 3

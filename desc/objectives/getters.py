@@ -311,8 +311,11 @@ def maybe_add_self_consistency(thing, constraints):  # noqa: C901
 
     def add_if_multiple(constraints, cls):
         cons = get_all_instances(constraints, cls)
-        cons_on_this_thing = [con for con in cons if con.things[0] == thing]
-        if not len(cons_on_this_thing):
+        if cons is not None:
+            cons_on_this_thing = [con for con in cons if con.things[0] == thing]
+            if not len(cons_on_this_thing):
+                constraints += (cls(thing),)
+        else:
             constraints += (cls(thing),)
         return constraints
 

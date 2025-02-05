@@ -25,6 +25,7 @@ Bug Fixes
 - Fixed I/O bug when saving/loading ``_Profile`` classes that do not have a ``_params`` attribute.
 - Minor bugs described in [#1323](https://github.com/PlasmaControl/DESC/pull/1323).
 - Corrects basis vectors computations made on surface objects [#1175](https://github.com/PlasmaControl/DESC/pull/1175).
+- Fixes bug where ``save_in_makegrid_format`` function did not correctly account for ``CoilSet`` objects with NFP>1 or sym=True attributes, and so would not save all the coils.
 
 v0.13.0
 -------

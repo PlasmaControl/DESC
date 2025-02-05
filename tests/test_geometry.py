@@ -28,10 +28,10 @@ def test_rotation_matrix():
         if expected is not None:
             np.testing.assert_allclose(A, expected, atol=1e-10)
 
-    def test2(a, b, expected=None, sign_det=1):
+    def test2(a, b, expected=None):
         A = rotation_matrix_vector_vector(a, b)
         # ensure is an orthonormal matrix
-        np.testing.assert_allclose(np.linalg.det(A), sign_det * 1.0, atol=1e-12)
+        np.testing.assert_allclose(np.linalg.det(A), 1.0, atol=1e-12)
         np.testing.assert_allclose(A.T @ A, np.eye(3), atol=1e-12)
         if expected is not None:
             np.testing.assert_allclose(A, expected, atol=1e-12)
@@ -43,8 +43,8 @@ def test_rotation_matrix():
 
     # for parallel vectors, should return identity
     test2([1, 0, 0], [1, 0, 0], np.eye(3))
-    # for antiparallel vectors, should return -identity
-    A = test2([1, 0, 0], [-1, 0, 0], -np.eye(3), sign_det=-1)
+    # for antiparallel vectors, should return np.diag([1,-1,-1])
+    A = test2([1, 0, 0], [-1, 0, 0], np.diag(np.array([1, -1, -1])))
     np.testing.assert_allclose(A @ np.array([0, 1, 0]), np.array([0, -1, 0]), atol=1e-8)
 
     # check for nearly-parallel vectors

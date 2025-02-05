@@ -95,8 +95,11 @@ def rotation_matrix_vector_vector(a, b):
     R3 = (skew @ skew) * safediv(1, 1 + c)
     R = R1 + R2 + R3
     R = jnp.where(norm < eps, jnp.eye(3), R1 + R2 + R3)  # if axis=0, no rotation
-    # if vectors were antiparallel, negate so has correct sign (reflection)
-    return jnp.where(jnp.allclose(a_plus_b, 0.0), -R, R)
+    # if vectors were antiparallel, negate last two columns so has correct signs
+    # (reflection about plane perpendicular to the first axis, a)
+    return jnp.where(
+        jnp.allclose(a_plus_b, 0.0), jnp.diag(jnp.array([1.0, -1.0, -1.0])), R
+    )
 
 
 def xyz2rpz(pts):

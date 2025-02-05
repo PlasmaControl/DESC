@@ -4,7 +4,7 @@ import functools
 
 import numpy as np
 
-from desc.backend import jit, jnp, put, qr
+from desc.backend import jit, jnp, put
 from desc.batching import batched_vectorize
 from desc.objectives import (
     BoundaryRSelfConsistency,
@@ -21,7 +21,7 @@ from desc.objectives.utils import (
 )
 from desc.utils import Timer, errorif, get_instance, setdefault
 
-from .utils import f_where_x, solve_triangular
+from .utils import f_where_x
 
 
 class LinearConstraintProjection(ObjectiveFunction):
@@ -1206,8 +1206,13 @@ def _proximal_jvp_f_pure(constraint, xf, constants, dc, unfixed_idx, Z, D, dxdc,
     Fx = getattr(constraint, "jac_" + op)(xf, constants)
     Fx_reduced = Fx @ jnp.diag(D)[:, unfixed_idx] @ Z
     Fc = Fx @ (dxdc @ dc)
-    Q, R = qr(Fx_reduced, mode="economic")
-    return solve_triangular(R, Q.T @ Fc)
+    Fxh = Fx_reduced
+    cutoff = jnp.finfo(Fxh.dtype).eps * max(Fxh.shape)
+    uf, sf, vtf = jnp.linalg.svd(Fxh, full_matrices=False)
+    sf += sf[-1]  # add a tiny bit of regularization
+    sfi = jnp.where(sf < cutoff * sf[0], 0, 1 / sf)
+    Fxh_inv = vtf.T @ (sfi[..., None] * uf.T)
+    return Fxh_inv @ Fc
 
 
 @functools.partial(jit, static_argnames=["op"])

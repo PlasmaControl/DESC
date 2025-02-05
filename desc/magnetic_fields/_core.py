@@ -5,7 +5,6 @@ from abc import ABC, abstractmethod
 from collections.abc import MutableSequence
 
 import numpy as np
-import scipy
 from diffrax import (
     DiscreteTerminatingEvent,
     ODETerm,
@@ -16,13 +15,15 @@ from diffrax import (
 )
 from interpax import approx_df, interp1d, interp2d, interp3d
 from netCDF4 import Dataset, chartostring, stringtochar
+from scipy.constants import mu_0
 
-from desc.backend import fori_loop, jit, jnp, sign
+from desc.backend import jit, jnp, sign
 from desc.basis import (
     ChebyshevDoubleFourierBasis,
     ChebyshevPolynomial,
     DoubleFourierSeries,
 )
+from desc.batching import batch_map
 from desc.compute import compute as compute_fun
 from desc.compute import rpz2xyz, rpz2xyz_vec, xyz2rpz, xyz2rpz_vec
 from desc.compute.utils import get_params, get_transforms
@@ -33,11 +34,11 @@ from desc.integrals import compute_B_plasma
 from desc.io import IOAble
 from desc.optimizable import Optimizable, OptimizableCollection, optimizable_parameter
 from desc.transform import Transform
-from desc.utils import copy_coeffs, errorif, flatten_list, setdefault, warnif
+from desc.utils import copy_coeffs, errorif, flatten_list, safediv, setdefault, warnif
 from desc.vmec_utils import ptolemy_identity_fwd, ptolemy_identity_rev
 
 
-def biot_savart_general(re, rs, J, dV):
+def biot_savart_general(re, rs, J, dV, chunk_size=30):
     """Biot-Savart law for arbitrary sources.
 
     Parameters
@@ -50,28 +51,32 @@ def biot_savart_general(re, rs, J, dV):
         current density vector at source points, in cartesian.
     dV : ndarray, shape(n_src_pts)
         volume element at source points
+    chunk_size : int or None
+        Size to split computation into chunks.
+        If no chunking should be done or the chunk size is the full input
+        then supply ``None``.
 
     Returns
     -------
-    B : ndarray, shape(n,3)
+    B : ndarray, shape(n_eval_pts, 3)
         magnetic field in cartesian components at specified points
+
     """
     re, rs, J, dV = map(jnp.asarray, (re, rs, J, dV))
     assert J.shape == rs.shape
-    JdV = J * dV[:, None]
-    B = jnp.zeros_like(re)
+    JdV = J * dV[:, jnp.newaxis]
 
-    def body(i, B):
-        r = re - rs[i, :]
-        num = jnp.cross(JdV[i, :], r, axis=-1)
-        den = jnp.linalg.norm(r, axis=-1) ** 3
-        B = B + jnp.where(den[:, None] == 0, 0, num / den[:, None])
-        return B
+    def biot(re):
+        dr = rs - re[..., jnp.newaxis, :]
+        num = jnp.cross(dr, JdV, axis=-1)
+        den = jnp.linalg.norm(dr, axis=-1, keepdims=True) ** 3
+        return safediv(num, den).sum(axis=-2) * mu_0 / (4 * jnp.pi)
 
-    return scipy.constants.mu_0 / 4 / jnp.pi * fori_loop(0, J.shape[0], body, B)
+    # It is more efficient to sum over the sources in batches of evaluation points.
+    return batch_map(biot, re, chunk_size)
 
 
-def biot_savart_general_vector_potential(re, rs, J, dV):
+def biot_savart_general_vector_potential(re, rs, J, dV, chunk_size=30):
     """Biot-Savart law for arbitrary sources for vector potential.
 
     Parameters
@@ -84,25 +89,27 @@ def biot_savart_general_vector_potential(re, rs, J, dV):
         current density vector at source points, in cartesian.
     dV : ndarray, shape(n_src_pts)
         volume element at source points
+    chunk_size : int or None
+        Size to split computation into chunks.
+        If no chunking should be done or the chunk size is the full input
+        then supply ``None``.
 
     Returns
     -------
-    A : ndarray, shape(n,3)
+    A : ndarray, shape(n_eval_pts,3)
         magnetic vector potential in cartesian components at specified points
     """
     re, rs, J, dV = map(jnp.asarray, (re, rs, J, dV))
     assert J.shape == rs.shape
-    JdV = J * dV[:, None]
-    A = jnp.zeros_like(re)
+    JdV = J * dV[:, jnp.newaxis]
 
-    def body(i, A):
-        r = re - rs[i, :]
-        num = JdV[i, :]
-        den = jnp.linalg.norm(r, axis=-1)
-        A = A + jnp.where(den[:, None] == 0, 0, num / den[:, None])
-        return A
+    def biot(re):
+        dr = rs - re[..., jnp.newaxis, :]
+        den = jnp.linalg.norm(dr, axis=-1, keepdims=True)
+        return safediv(JdV, den).sum(axis=-2) * mu_0 / (4 * jnp.pi)
 
-    return scipy.constants.mu_0 / 4 / jnp.pi * fori_loop(0, J.shape[0], body, A)
+    # It is more efficient to sum over the sources in batches of evaluation points.
+    return batch_map(biot, re, chunk_size)
 
 
 def read_BNORM_file(fname, surface, eval_grid=None, scale_by_curpol=True):

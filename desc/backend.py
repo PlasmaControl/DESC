@@ -33,9 +33,13 @@ else:
                     + "installed JAX with GPU support?"
                 )
                 set_device("cpu")
+            x = jnp.linspace(0, 5)
+            y = jnp.exp(x)
         use_jax = True
     except ModuleNotFoundError:
         jnp = np
+        x = jnp.linspace(0, 5)
+        y = jnp.exp(x)
         use_jax = False
         set_device(kind="cpu")
         warnings.warn(colored("Failed to load JAX", "red"))
@@ -43,8 +47,6 @@ else:
 
 def print_backend_info():
     """Prints DESC version, backend type & version, device type & memory."""
-    x = jnp.linspace(0, 5)
-    y = jnp.exp(x)
     print(f"DESC version={desc.__version__}.")
     if use_jax:
         print(

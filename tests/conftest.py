@@ -367,7 +367,7 @@ def regcoil_helical_coils_scan():
         current_helicity=(1 * eq.NFP, -1),
         vacuum=True,
         regularization_type="regcoil",
-        chunk_size=40,
+        chunk_size=20,
     )
     surface_current_field = fields[0]
     return (data, surface_current_field, eq)
@@ -402,7 +402,7 @@ def regcoil_modular_coils():
         lambda_regularization=lambda_regularization,
         regularization_type="regcoil",
         vacuum=True,
-        chunk_size=40,
+        chunk_size=20,
     )
     surface_current_field = surface_current_field[0]
 
@@ -442,7 +442,7 @@ def regcoil_windowpane_coils():
         vacuum=True,
         current_helicity=(0, 0),
         external_field=ToroidalMagneticField(B0=G, R0=1),
-        chunk_size=40,
+        chunk_size=20,
     )
     surface_current_field = surface_current_field[0]
 
@@ -482,7 +482,7 @@ def regcoil_PF_coils():
         vacuum=True,
         current_helicity=(0, 1),
         external_field=ToroidalMagneticField(B0=G, R0=1),
-        chunk_size=40,
+        chunk_size=20,
     )
     surface_current_field = surface_current_field[0]
 

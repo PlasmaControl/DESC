@@ -1236,6 +1236,7 @@ def test_regcoil_axisymmetric():
         vacuum=True,
         verbose=2,
         regularization_type="regcoil",
+        chunk_size=20,
     )
     # is a list of length one, index into it
     surface_current_field = surface_current_field[0]
@@ -1267,6 +1268,7 @@ def test_regcoil_axisymmetric():
         lambda_regularization=1e4,
         vacuum=True,
         regularization_type="simple",
+        chunk_size=20,
     )
     surface_current_field = surface_current_field[0]
     phi_mn_opt = surface_current_field.Phi_mn
@@ -1292,6 +1294,7 @@ def test_regcoil_axisymmetric():
         # G is providing, in the same direction
         external_field=ToroidalMagneticField(B0=-mu_0 * (G / 2) / 2 / np.pi, R0=1),
         vacuum=True,
+        chunk_size=20,
     )
     surface_current_field = surface_current_field[0]
     phi_mn_opt = surface_current_field.Phi_mn

@@ -393,7 +393,7 @@ def get_parallel_forcebalance(
         # if the eq is also distrubuted across GPUs, then some internal logic that
         # checks if the things are different will fail, so we need to set the eq
         # to be the same manually
-        obj._things[0] = eq
+        # obj._things[0] = eq # noqa: E800
         objs += (obj,)
     objective = ObjectiveFunction(objs)
     objective.build(use_jit_wrapper=use_jit_wrapper)

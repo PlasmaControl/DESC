@@ -77,7 +77,8 @@ class Transform(IOAble):
             and self.grid.NFP != self.basis.NFP
             and self.basis.N != 0
             and grid.node_pattern != "custom"
-            and np.any(self.grid.nodes[:, 2] != 0),
+            and np.any(self.grid.nodes[:, 2] != 0)
+            or self.grid.NFP_umbilic_factor != self.basis.NFP_umbilic_factor,
             msg=f"Unequal number of field periods for grid {self.grid.NFP} and "
             f"basis {self.basis.NFP}.",
         )
@@ -198,7 +199,11 @@ class Transform(IOAble):
 
         if (
             len(zeta_vals) > 1
-            and not abs((zeta_vals[-1] + zeta_vals[1]) * basis.NFP - 2 * np.pi) < 1e-14
+            and not abs(
+                (zeta_vals[-1] + zeta_vals[1]) * basis.NFP / basis.NFP_umbilic_factor
+                - 2 * np.pi
+            )
+            < 1e-14
         ):
             warnings.warn(
                 colored(
@@ -276,7 +281,11 @@ class Transform(IOAble):
         self.num_z_nodes = len(zeta_vals)  # number of zeta nodes
         self.N = basis.N  # toroidal resolution of basis
         self.pad_dim = (self.num_z_nodes - 1) // 2 - self.N
-        self.dk = basis.NFP * np.arange(-self.N, self.N + 1).reshape((1, -1))
+        self.dk = (
+            basis.NFP
+            / basis.NFP_umbilic_factor
+            * np.arange(-self.N, self.N + 1).reshape((1, -1))
+        )
         self.fft_index = np.zeros((basis.num_modes,), dtype=int)
         offset = np.min(basis.modes[:, 2]) + basis.N  # N for sym="cos", 0 otherwise
         for k in range(basis.num_modes):

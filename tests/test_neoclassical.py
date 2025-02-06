@@ -117,6 +117,7 @@ def test_fieldline_average():
     assert np.all(data["fieldline length/volume"] > 0)
 
 
+
 class NeoIO:
     """Class to interface with NEO."""
 

@@ -579,7 +579,7 @@ class BallooningStability(_Objective):
             "a": len_data["a"],
         }
 
-        grid = eq._get_rtz_grid(
+        grid = eq.get_rtz_grid(
             rho,
             alpha,
             zeta,

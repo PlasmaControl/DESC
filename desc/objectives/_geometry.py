@@ -6,7 +6,7 @@ from desc.backend import jnp, vmap
 from desc.compute import get_profiles, get_transforms, rpz2xyz
 from desc.compute.geom_utils import copy_rpz_periods
 from desc.compute.utils import _compute as compute_fun
-from desc.grid import LinearGrid, QuadratureGrid
+from desc.grid import Grid, LinearGrid, QuadratureGrid
 from desc.utils import Timer, errorif, parse_argname_change, safenorm, warnif
 
 from .normalization import compute_scaling_factors
@@ -1352,6 +1352,477 @@ class GoodCoordinates(_Objective):
         f = data["g_rr"]
 
         return jnp.concatenate([g, constants["sigma"] * f])
+
+
+class UmbilicHighCurvature(_Objective):
+    """Takes in an equilibrium object and an umbilic curve object.
+
+    Umbilic curve object corresponds to the sharp edge
+    plasma boundary surface.
+
+    Using the grid defined by the umbilic curve object,
+    this class returns the minimum gaussian curvature k2 along that curve
+    which is used by us to ensure a large negative curvature and umbilic-ness.
+
+    Parameters
+    ----------
+    eq : Equilibrium or FourierRZToroidalSurface
+        Equilibrium or FourierRZToroidalSurface that
+        will be optimized to satisfy the Objective.
+    curve: FourierRZCurve
+        Umbilic curve that defines the position of the sharp umbilic boundary
+    target : {float, ndarray}, optional
+        Target value(s) of the objective. Only used if bounds is None.
+        Must be broadcastable to Objective.dim_f. Defaults to ``target=1``.
+    bounds : tuple of {float, ndarray}, optional
+        Lower and upper bounds on the objective. Overrides target.
+        Both bounds must be broadcastable to to Objective.dim_f.
+        Defaults to ``target=1``.
+    weight : {float, ndarray}, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        Must be broadcastable to to Objective.dim_f
+    normalize : bool, optional
+        Whether to compute the error in physical units or non-dimensionalize.
+    normalize_target : bool
+        Whether target should be normalized before comparing to computed values.
+        if `normalize` is `True` and the target is in physical units, this should also
+        be set to True.
+    loss_function : {None, 'mean', 'min', 'max'}, optional
+        Loss function to apply to the objective values once computed. This loss function
+        is called on the raw compute value, before any shifting, scaling, or
+        normalization.
+    deriv_mode : {"auto", "fwd", "rev"}
+        Specify how to compute jacobian matrix, either forward mode or reverse mode AD.
+        "auto" selects forward or reverse mode based on the size of the input and output
+        of the objective. Has no effect on self.grad or self.hess which always use
+        reverse mode and forward over reverse mode respectively.
+    grid : Grid, optional
+        Collocation grid containing the nodes to evaluate at. Defaults to
+        ``LinearGrid(M=eq.M_grid, N=eq.N_grid)`` for ``Equilibrium``
+        or ``LinearGrid(M=2*eq.M, N=2*eq.N)`` for ``FourierRZToroidalSurface``.
+    name : str, optional
+        Name of the objective function.
+
+    """
+
+    _coordinates = "rtz"
+    _units = "(m^-1)"
+    _print_value_fmt = "Umbilic high curvature: "
+
+    def __init__(
+        self,
+        eq,
+        curve,
+        target=None,
+        bounds=None,
+        weight=1,
+        curve_grid=None,
+        eq_fixed=False,
+        normalize=True,
+        normalize_target=True,
+        loss_function=None,
+        deriv_mode="auto",
+        grid=None,
+        name="Umbilic high curvature",
+    ):
+
+        if target is None and bounds is None:
+            target = -10
+
+        self._eq = eq
+        self._curve = curve
+
+        self._eq_fixed = eq_fixed
+        self._curve_grid = curve_grid
+
+        things = [eq, curve]
+        super().__init__(
+            things=things,  # if not curve_fixed else [eq],
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            loss_function=loss_function,
+            deriv_mode=deriv_mode,
+            name=name,
+        )
+
+    def build(self, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        curve = self.things[1]
+
+        if self._curve_grid is None:
+            phi_arr = jnp.linspace(0, 2 * jnp.pi, 3 * curve.N)
+            phi_arr = jnp.tile(phi_arr, curve.NFP_umbilic_factor) + jnp.repeat(
+                2 * np.pi * np.arange(curve.NFP_umbilic_factor), len(phi_arr)
+            )
+            phi_arr = phi_arr.ravel()
+
+            curve_grid = LinearGrid(
+                zeta=phi_arr, NFP_umbilic_factor=curve.NFP_umbilic_factor
+            )
+        else:
+            curve_grid = self._curve_grid
+
+        self._dim_f = int(curve_grid.num_nodes)
+
+        self._curve_data_keys = ["UC"]
+        self._equil_data_keys = ["curvature_k2_rho"]
+
+        timer = Timer()
+        if verbose > 0:
+            print("Precomputing transforms")
+        timer.start("Precomputing transforms")
+
+        curve_transforms = get_transforms(
+            self._curve_data_keys,
+            obj=curve,
+            grid=curve_grid,
+            has_axis=curve_grid.axis.size,
+        )
+
+        self._constants = {
+            "curve_transforms": curve_transforms,
+            "curve_grid": curve_grid,
+            "quad_weights": 1,
+        }
+
+        timer.stop("Precomputing transforms")
+        if verbose > 1:
+            timer.disp("Precomputing transforms")
+
+        if self._normalize:
+            self._normalization = 1.0
+
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, params_1, params_2=None, constants=None):
+        """Compute max absolute principal curvature.
+
+        Parameters
+        ----------
+        params_1 : dict
+            Dictionary of equilibrium or surface degrees of freedom,
+            eg Equilibrium.params_dict
+        params_2 : dict
+            Dictionary of curve degrees of freedom,
+            eg curve.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
+
+        Returns
+        -------
+        k : ndarray
+            Max absolute principal curvature at each point (m^-1).
+
+        """
+        if constants is None:
+            constants = self.constants
+
+        if self._eq_fixed:
+            curve_params = params_1
+        else:
+            equil_params = params_1
+            curve_params = params_2
+
+        curve_data = compute_fun(
+            self._curve,
+            self._curve_data_keys,
+            params=curve_params,
+            transforms=constants["curve_transforms"],
+            profiles={},
+        )
+        curve_grid = constants["curve_grid"]
+
+        curve_UC = curve_data["UC"]
+        curve_phi = curve_grid.nodes[:, 2]
+
+        theta_points = (
+            -self._curve.NFP * curve_phi + curve_UC
+        ) / self._curve.NFP_umbilic_factor
+
+        umbilic_edge_grid = Grid(
+            jnp.array([jnp.ones_like(theta_points), theta_points, curve_phi]).T,
+            jitable=True,
+        )
+
+        equil_profiles = get_profiles(
+            self._equil_data_keys,
+            obj=self._eq,
+            grid=umbilic_edge_grid,
+            has_axis=umbilic_edge_grid.axis.size,
+        )
+        equil_transforms = get_transforms(
+            self._equil_data_keys,
+            obj=self._eq,
+            grid=umbilic_edge_grid,
+            has_axis=umbilic_edge_grid.axis.size,
+            jitable=True,
+        )
+
+        # now compute the curvature
+        if not self._eq_fixed:
+            data = compute_fun(
+                "desc.equilibrium.equilibrium.Equilibrium",
+                self._equil_data_keys,
+                params=equil_params,
+                profiles=equil_profiles,
+                transforms=equil_transforms,
+            )
+        else:
+            data = compute_fun(
+                self._eq,
+                self._equil_data_keys,
+                params=equil_params,
+                profiles=equil_profiles,
+                transforms=equil_transforms,
+            )
+
+        return data["curvature_k2_rho"]
+
+
+class UmbilicFieldAligned(_Objective):
+    """Takes in an equilibrium object and an umbilic curve object.
+
+    Umbilic curve object corresponds to the sharp edge
+    plasma boundary surface.
+
+    Using the grid defined by the umbilic curve object,
+    this class returns the penalty between the position of field line
+    labelled alpha = 0 and the umbilic curve
+
+    Parameters
+    ----------
+    eq : Equilibrium or FourierRZToroidalSurface
+        Equilibrium or FourierRZToroidalSurface that
+        will be optimized to satisfy the Objective.
+    curve: FourierRZCurve
+        Umbilic curve that defines the position of the sharp umbilic boundary
+    target : {float, ndarray}, optional
+        Target value(s) of the objective. Only used if bounds is None.
+        Must be broadcastable to Objective.dim_f. Defaults to ``target=1``.
+    bounds : tuple of {float, ndarray}, optional
+        Lower and upper bounds on the objective. Overrides target.
+        Both bounds must be broadcastable to to Objective.dim_f.
+        Defaults to ``target=1``.
+    weight : {float, ndarray}, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        Must be broadcastable to to Objective.dim_f
+    normalize : bool, optional
+        Whether to compute the error in physical units or non-dimensionalize.
+    normalize_target : bool
+        Whether target should be normalized before comparing to computed values.
+        if `normalize` is `True` and the target is in physical units, this should also
+        be set to True.
+    loss_function : {None, 'mean', 'min', 'max'}, optional
+        Loss function to apply to the objective values once computed. This loss function
+        is called on the raw compute value, before any shifting, scaling, or
+        normalization.
+    deriv_mode : {"auto", "fwd", "rev"}
+        Specify how to compute jacobian matrix, either forward mode or reverse mode AD.
+        "auto" selects forward or reverse mode based on the size of the input and output
+        of the objective. Has no effect on self.grad or self.hess which always use
+        reverse mode and forward over reverse mode respectively.
+    grid : Grid, optional
+        Collocation grid containing the nodes to evaluate at. Defaults to
+        ``LinearGrid(M=eq.M_grid, N=eq.N_grid)`` for ``Equilibrium``
+        or ``LinearGrid(M=2*eq.M, N=2*eq.N)`` for ``FourierRZToroidalSurface``.
+    name : str, optional
+        Name of the objective function.
+
+    """
+
+    _coordinates = "rtz"
+    _units = "(m^-1)"
+    _print_value_fmt = "Umbilic field-aligned-ness: "
+
+    def __init__(
+        self,
+        eq,
+        curve,
+        target=None,
+        bounds=None,
+        weight=1,
+        curve_grid=None,
+        eq_fixed=False,
+        normalize=True,
+        normalize_target=True,
+        loss_function=None,
+        deriv_mode="auto",
+        grid=None,
+        name="Umbilic field-aligned-ness",
+    ):
+
+        if target is None and bounds is None:
+            target = -10
+
+        self._eq = eq
+        self._curve = curve
+
+        self._eq_fixed = eq_fixed
+        self._curve_grid = curve_grid
+
+        things = [eq, curve]
+        super().__init__(
+            things=things,  # if not curve_fixed else [eq],
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            loss_function=loss_function,
+            deriv_mode=deriv_mode,
+            name=name,
+        )
+
+    def build(self, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        eq = self.things[0]
+        curve = self.things[1]
+
+        if self._curve_grid is None:
+            phi_arr = jnp.linspace(0, 2 * jnp.pi, 3 * curve.N)
+            phi_arr = jnp.tile(phi_arr, curve.NFP_umbilic_factor) + jnp.repeat(
+                2 * np.pi * np.arange(curve.NFP_umbilic_factor), len(phi_arr)
+            )
+            phi_arr = phi_arr.ravel()
+
+            curve_grid = LinearGrid(
+                zeta=phi_arr, NFP_umbilic_factor=curve.NFP_umbilic_factor
+            )
+        else:
+            curve_grid = self._curve_grid
+
+        iota_grid = LinearGrid(
+            rho=jnp.array([1.0]), M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP
+        )
+
+        self._dim_f = int(curve_grid.num_nodes)
+
+        self._curve_data_keys = ["UC"]
+        self._eq_iota_keys = ["iota", "iota_r", "shear"]
+
+        timer = Timer()
+        if verbose > 0:
+            print("Precomputing transforms")
+        timer.start("Precomputing transforms")
+
+        iota_profiles = get_profiles(self._eq_iota_keys, obj=eq, grid=iota_grid)
+        iota_transforms = get_transforms(self._eq_iota_keys, obj=eq, grid=iota_grid)
+
+        curve_transforms = get_transforms(
+            self._curve_data_keys,
+            obj=curve,
+            grid=curve_grid,
+            has_axis=curve_grid.axis.size,
+        )
+
+        self._constants = {
+            "iota_profiles": iota_profiles,
+            "iota_transforms": iota_transforms,
+            "curve_transforms": curve_transforms,
+            "curve_grid": curve_grid,
+            "quad_weights": 1,
+        }
+
+        timer.stop("Precomputing transforms")
+        if verbose > 1:
+            timer.disp("Precomputing transforms")
+
+        if self._normalize:
+            self._normalization = 1.0
+
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, params_1, params_2=None, constants=None):
+        """Compute max absolute principal curvature.
+
+        Parameters
+        ----------
+        params_1 : dict
+            Dictionary of equilibrium or surface degrees of freedom,
+            eg Equilibrium.params_dict
+        params_2 : dict
+            Dictionary of curve degrees of freedom,
+            eg curve.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
+
+        Returns
+        -------
+        k : ndarray
+            Max absolute principal curvature at each point (m^-1).
+
+        """
+        if constants is None:
+            constants = self.constants
+
+        if self._eq_fixed:
+            curve_params = params_1
+        else:
+            equil_params = params_1
+            curve_params = params_2
+
+        curve_data = compute_fun(
+            self._curve,
+            self._curve_data_keys,
+            params=curve_params,
+            transforms=constants["curve_transforms"],
+            profiles={},
+        )
+        curve_grid = constants["curve_grid"]
+
+        curve_UC = curve_data["UC"]
+        curve_phi = curve_grid.nodes[:, 2]
+
+        theta_points = (
+            -self._curve.NFP * curve_phi + curve_UC
+        ) / self._curve.NFP_umbilic_factor
+
+        eq = self._eq
+        data = compute_fun(
+            eq,
+            self._eq_iota_keys,
+            equil_params,
+            transforms=constants["iota_transforms"],
+            profiles=constants["iota_profiles"],
+        )
+
+        grid_fieldline = eq.get_rtz_grid(
+            np.array([1.0]),
+            np.array([0.0]),
+            curve_phi,
+            coordinates="raz",
+            period=(np.inf, 2 * np.pi, np.inf),
+            iota=data["iota"][0],
+            params=params_1,
+        )
+
+        # deviacion pf the fieldline from the umbilic curve
+        data = jnp.abs(grid_fieldline.nodes[:, 1] - theta_points)
+
+        return data
 
 
 class MirrorRatio(_Objective):

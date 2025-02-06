@@ -14,6 +14,7 @@ from desc.geometry import (
     FourierPlanarCurve,
     FourierRZCurve,
     FourierRZToroidalSurface,
+    FourierUmbilicCurve,
     FourierXYZCurve,
     ZernikeRZToroidalSection,
 )
@@ -123,6 +124,13 @@ def test_compute_everything():
         "desc.geometry.curve.SplineXYZCurve": FourierXYZCurve(
             X_n=[5, 10, 2], Y_n=[1, 2, 3], Z_n=[-4, -5, -6]
         ).to_SplineXYZ(grid=LinearGrid(N=50)),
+        # umbilic curve
+        "desc.geometry.umbiliccurve.FourierUmbilicCurve": FourierUmbilicCurve(
+            UC_n=[10, 1, 0.2],
+            modes_UC=[0, 1, 2],
+            NFP=1,
+            NFP_umbilic_factor=3,
+        ),
         # surfaces
         "desc.geometry.surface.FourierRZToroidalSurface": FourierRZToroidalSurface(
             **elliptic_cross_section_with_torsion
@@ -156,7 +164,11 @@ def test_compute_everything():
         ),
         # coils
         "desc.coils.FourierRZCoil": FourierRZCoil(
-            R_n=[10, 1, 0.2], Z_n=[-2, -0.2], modes_R=[0, 1, 2], modes_Z=[-1, -2], NFP=2
+            R_n=[10, 1, 0.2],
+            Z_n=[-2, -0.2],
+            modes_R=[0, 1, 2],
+            modes_Z=[-1, -2],
+            NFP=2,
         ),
         "desc.coils.FourierXYZCoil": FourierXYZCoil(
             X_n=[5, 10, 2], Y_n=[1, 2, 3], Z_n=[-4, -5, -6]
@@ -172,6 +184,7 @@ def test_compute_everything():
             current=5, X=[5, 10, 2, 5], Y=[1, 2, 3, 1], Z=[-4, -5, -6, -4]
         ),
     }
+
     assert things.keys() == data_index.keys(), (
         f"Missing the parameterization {data_index.keys() - things.keys()}"
         f" to test against master."
@@ -218,7 +231,6 @@ def test_compute_everything():
         # size cap at 100 mb, so can't hit suggested resolution for some things.
         warnings.filterwarnings("ignore", category=ResolutionWarning)
         for p in things:
-
             names = set(data_index[p].keys())
 
             def need_special(name):
@@ -256,9 +268,11 @@ def test_compute_everything():
                 if "grad(B)" in names
                 else names
             )
+
             this_branch_data_xyz = things[p].compute(
                 list(names_xyz), **grid.get(p, {}), basis="xyz"
             )
+
             assert this_branch_data_xyz.keys() == names_xyz, (
                 f"Parameterization: {p}. Can't compute "
                 + f"{names_xyz - this_branch_data_xyz.keys()}."
@@ -267,6 +281,7 @@ def test_compute_everything():
                 p, this_branch_data_xyz, this_branch_data_rpz[p], _xyz_to_rpz
             )
 
+    # --no-verify if True or (not error_rpz and update_master_data_rpz):
     if not error_rpz and update_master_data_rpz:
         # then update the master compute data
         with open("tests/inputs/master_compute_data_rpz.pkl", "wb") as file:

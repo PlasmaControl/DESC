@@ -1466,6 +1466,7 @@ def test_iota_components():
     np.testing.assert_allclose(data_c["iota vacuum"], 0)
 
     # vacuum stellarator, so all rotational transform should be from the external field
+    # with pytest.warns(RuntimeWarning):  # because eq.NFP_umbilic_factor is undefined
     eq = get("ESTELL")
     grid = LinearGrid(L=100, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, axis=True)
     data = eq.compute(["iota", "iota current", "iota vacuum"], grid)

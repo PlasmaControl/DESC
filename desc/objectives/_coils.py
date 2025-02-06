@@ -850,15 +850,6 @@ class CoilSetMinDistance(_Objective):
         return min_dist_per_coil
 
 
-def _copy_rpz_periods(rpz, NFP):
-    """Copy a rpz position vector into multiple field periods."""
-    r, p, z = rpz.T
-    r = jnp.tile(r, NFP)
-    z = jnp.tile(z, NFP)
-    p = p[None, :] + jnp.linspace(0, 2 * np.pi, NFP, endpoint=False)[:, None]
-    return jnp.array([r, p.flatten(), z]).T
-
-
 class PlasmaCoilSetMinDistance(_Objective):
     """Target the minimum distance between the plasma and coilset.
 

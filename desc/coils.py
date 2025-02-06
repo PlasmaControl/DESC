@@ -1937,11 +1937,28 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
 
         def flatten_coils(coilset):
             if hasattr(coilset, "__len__"):
+                if isinstance(coilset, CoilSet):
+                    if coilset.NFP > 1 or coilset.sym:
+                        # hit a CoilSet with symmetries, this coilset only contains
+                        # its unique coils. However, for this function we
+                        # need to get the entire coilset, not just the unique coils,
+                        # so make a MixedCoilSet using this CoilSet's coils and NFP/sym
+                        coilset_full = MixedCoilSet.from_symmetry(
+                            coilset,
+                            NFP=coilset.NFP,
+                            sym=coilset.sym,
+                            check_intersection=False,
+                        )
+                        return [c for c in coilset_full]
                 return [a for i in coilset for a in flatten_coils(i)]
             else:
                 return [coilset]
 
         coils = flatten_coils(self.coils)
+        # after flatten, should have as many elements in list as self.num_coils, if
+        # flatten worked correctly.
+        assert len(coils) == self.num_coils
+
         assert (
             int(len(coils) / NFP) == len(coils) / NFP
         ), "Number of coils in coilset must be evenly divisible by NFP!"

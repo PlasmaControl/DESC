@@ -18,9 +18,8 @@ from ._neoclassical import _bounce_doc, _compute
 from .data_index import register_compute_fun
 
 # We rewrite equivalents of Nemov et al.'s expressions (21, 22) to resolve
-# the indeterminate form of the limit and using single-valued maps of a
-# physical coordinates. This avoids the computational issues of multivalued
-# maps.
+# the indeterminate form of the limit and use single-valued maps of physical
+# coordinates. This avoids the computational issues of multivalued maps.
 # The derivative (∂/∂ψ)|ϑ,ϕ belongs to flux coordinates which satisfy
 # α = ϑ − χ(ψ) ϕ where α is the poloidal label of ψ,α Clebsch coordinates.
 # Choosing χ = ι implies ϑ, ϕ are PEST angles.
@@ -36,7 +35,7 @@ from .data_index import register_compute_fun
 
 def _v_tau(data, B, pitch):
     # Note v τ = 4λ⁻²B₀⁻¹ ∂I/∂((λB₀)⁻¹) where v is the particle velocity,
-    # τ is the bounce time, and I is defined in Nemov eq. 36.
+    # τ is the bounce time, and I is defined in Nemov et al. eq. 36.
     return safediv(2.0, jnp.sqrt(jnp.abs(1 - pitch * B)))
 
 

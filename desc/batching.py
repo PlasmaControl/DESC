@@ -175,7 +175,31 @@ def _chunk_vmapped_function(
 
 
 def batch_map(fun, fun_input, batch_size):
-    """Compute vectorized ``fun`` in batches."""
+    """Compute ``fun(fun_input)`` in batches.
+
+    This utility is like ``desc.backend.imap(fun,fun_input,batch_size)`` except that
+    ``fun`` is assumed to be vectorized natively. No JAX vectorization such as ``vmap``
+    is applied to the supplied function. This makes compilation faster and avoids the
+    weaknesses of applying JAX vectorization, such as executing all branches of code
+    conditioned on dynamic values. For example, this function would be useful for
+    GitHub issue #1303.
+
+    Parameters
+    ----------
+    fun : callable
+        Natively vectorized function.
+    fun_input : pytree
+        Data to split into batches to feed to ``fun``.
+    batch_size : int or None
+        Size of batches. If no batching should be done or the batch size is the
+        full input then supply ``None``.
+
+    Returns
+    -------
+    fun_output
+        Returns ``fun(fun_input)``.
+
+    """
     return (
         fun(fun_input)
         if batch_size is None

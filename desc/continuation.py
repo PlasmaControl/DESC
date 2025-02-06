@@ -36,18 +36,22 @@ def _solve_axisym(
 
     surface = eq.surface
     pressure = eq.pressure
-    L, M, N, L_grid, M_grid, N_grid = eq.L, eq.M, eq.N, eq.L_grid, eq.M_grid, eq.N_grid
+    L, M, L_grid, M_grid = eq.L, eq.M, eq.L_grid, eq.M_grid
     spectral_indexing = eq.spectral_indexing
 
     Mi = min(M, mres_step) if mres_step > 0 else M
-    Li = int(np.ceil(L / M) * Mi)
+    Li = min(M, int(np.ceil(L / M * Mi))) if mres_step > 0 else L
     Ni = 0
     L_gridi = np.ceil(L_grid / L * Li).astype(int)
     M_gridi = np.ceil(M_grid / M * Mi).astype(int)
-    N_gridi = np.ceil(N_grid / max(N, 1) * Ni).astype(int)
+    N_gridi = 0
 
     # first we solve vacuum until we reach full L,M
-    mres_steps = int(max(np.ceil(M / mres_step), 1)) if mres_step > 0 else 0
+    mres_steps = (
+        int(max(np.ceil(M / mres_step), np.ceil(L / mres_step), 1))
+        if mres_step > 0
+        else 0
+    )
     deltas = {}
 
     surf_axisym = surface.copy()
@@ -87,10 +91,9 @@ def _solve_axisym(
             eqi = eqfam[-1].copy()
             # increase resolution of vacuum solution
             Mi = min(Mi + mres_step, M)
-            Li = int(np.ceil(L / M) * Mi)
+            Li = int(np.ceil(L / M * Mi))
             L_gridi = np.ceil(L_grid / L * Li).astype(int)
             M_gridi = np.ceil(M_grid / M * Mi).astype(int)
-            N_gridi = np.ceil(N_grid / max(N, 1) * Ni).astype(int)
             eqi.change_resolution(Li, Mi, Ni, L_gridi, M_gridi, N_gridi)
 
             surf_i = eqi.surface

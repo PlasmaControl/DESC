@@ -18,8 +18,6 @@ from desc.integrals._interp_utils import (
     cheb_from_dct,
     cheb_pts,
     fourier_pts,
-    harmonic,
-    harmonic_vander,
     interp_dct,
     interp_rfft,
     interp_rfft2,
@@ -29,6 +27,7 @@ from desc.integrals._interp_utils import (
 )
 from desc.integrals.basis import FourierChebyshevSeries
 from desc.integrals.quad_utils import bijection_to_disc
+from desc.vmec_utils import rfft_to_trig, trig_vander
 
 
 class TestPolyUtils:
@@ -211,9 +210,9 @@ class TestFastInterp:
         fq = func(xq)
         np.testing.assert_allclose(interp_rfft(xq, f, domain), fq)
         M = f.shape[-1]
-        basis = harmonic_vander(xq, M, domain)
-        coef = harmonic(rfft(f, norm="forward"), M)
-        np.testing.assert_allclose((basis * coef).sum(axis=-1), fq)
+        coef = rfft_to_trig(rfft(f, norm="forward"), M)
+        vander = trig_vander(xq, M, domain)
+        np.testing.assert_allclose((vander * coef).sum(axis=-1), fq)
 
     @pytest.mark.unit
     @pytest.mark.parametrize(

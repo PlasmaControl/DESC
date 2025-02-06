@@ -30,16 +30,7 @@ from desc.geometry import (
 from desc.grid import LinearGrid
 from desc.magnetic_fields import _MagneticField
 from desc.optimizable import Optimizable, OptimizableCollection, optimizable_parameter
-from desc.utils import (
-    cross,
-    dot,
-    equals,
-    errorif,
-    flatten_list,
-    safenorm,
-    setdefault,
-    warnif,
-)
+from desc.utils import cross, dot, equals, errorif, flatten_list, safenorm, warnif
 
 
 @jit
@@ -252,7 +243,6 @@ class _Coil(_MagneticField, Optimizable, ABC):
 
     @current.setter
     def current(self, new):
-        new = setdefault(new, 1, new)
         assert jnp.isscalar(new) or new.size == 1
         self._current = float(np.squeeze(new))
 
@@ -491,7 +481,7 @@ class _Coil(_MagneticField, Optimizable, ABC):
             coords. if None, defaults linearly spaced in [0,2pi)
             Alternative, can pass "arclength" to use normalized distance between points.
         name : str
-            name for this coil
+            Name for this coil
 
         Returns
         -------
@@ -533,7 +523,7 @@ class _Coil(_MagneticField, Optimizable, ABC):
             - `'cubic2'`: C2 cubic splines (aka natural splines)
             - `'catmull-rom'`: C1 cubic centripetal "tension" splines
         name : str
-            name for this coil
+            Name for this coil
 
         Returns
         -------
@@ -634,7 +624,7 @@ class FourierRZCoil(_Coil, FourierRZCurve):
     sym : bool
         whether to enforce stellarator symmetry
     name : str
-        name for this coil
+        Name for this coil
 
     Examples
     --------
@@ -704,6 +694,7 @@ class FourierRZCoil(_Coil, FourierRZCurve):
         sym : bool
             Whether to enforce stellarator symmetry.
         name : str
+            Name for this coil.
 
         Returns
         -------
@@ -738,7 +729,7 @@ class FourierXYZCoil(_Coil, FourierXYZCurve):
     modes : array-like
         mode numbers associated with X_n etc.
     name : str
-        name for this coil
+        Name for this coil
 
     Examples
     --------
@@ -849,7 +840,7 @@ class FourierPlanarCoil(_Coil, FourierPlanarCurve):
     basis : {'xyz', 'rpz'}
         Coordinate system for center and normal vectors. Default = 'xyz'.
     name : str
-        name for this coil
+        Name for this coil
 
     Examples
     --------
@@ -966,7 +957,7 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
         - ``'monotonic-0'``: same as `'monotonic'` but with 0 first derivatives at both
           endpoints
     name : str
-        name for this coil
+        Name for this coil
 
     """
 
@@ -1157,7 +1148,7 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
             - `'catmull-rom'`: C1 cubic centripetal "tension" splines
 
         name : str
-            name for this curve
+            Name for this curve
 
         basis : {"rpz", "xyz"}
             basis for input coordinates. Defaults to "xyz"

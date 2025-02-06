@@ -254,7 +254,7 @@ def surface_integrals_map(grid, surface_label="rho", expand_out=True, tol=1e-14)
             has_endpoint_dupe,
             lambda _: put(mask, jnp.array([0, -1]), mask[0] | mask[-1]),
             lambda _: mask,
-            operand=None,
+            None,
         )
     else:
         # If we don't have the idx attributes, we are forced to expand out.

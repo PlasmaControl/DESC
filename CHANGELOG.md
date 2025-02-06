@@ -20,6 +20,8 @@ New Features
 - Adds a new objective ``desc.objectives.CoilIntegratedCurvature`` for targeting convex coils.
 - Adds batching feature to singular integrals.
 - ``desc.objectives.CoilSetMinDistance`` and ``desc.objectives.PlasmaCoilSetMinDistance`` now include the option to use a softmin which can give smoother gradients. They also both now have a ``dist_chunk_size`` option to break up the distance calculation into smaller pieces to save memory
+- Adds a new objective ``desc.objectives.ExternalObjective`` for wrapping external codes with finite differences.
+- DESC/JAX version and device info is no longer printed by default, but can be accessed with the function `desc.backend.print_backend_info()`.
 
 Bug Fixes
 

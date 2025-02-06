@@ -291,6 +291,7 @@ class _Coil(_MagneticField, Optimizable, ABC):
         source_grid=None,
         transforms=None,
         compute_A_or_B="B",
+        chunk_size=None,
     ):
         """Compute magnetic field or vector potential at a set of points.
 
@@ -313,7 +314,10 @@ class _Coil(_MagneticField, Optimizable, ABC):
         compute_A_or_B: {"A", "B"}, optional
             whether to compute the magnetic vector potential "A" or the magnetic field
             "B". Defaults to "B"
-
+        chunk_size : int or None
+            Size to split computation into chunks of evaluation points.
+            If no chunking should be done or the chunk size is the full input
+            then supply ``None``. Default is ``None``.
 
         Returns
         -------
@@ -369,14 +373,25 @@ class _Coil(_MagneticField, Optimizable, ABC):
             data["x_s"] = rpz2xyz_vec(data["x_s"], phi=data["x"][:, 1])
             data["x"] = rpz2xyz(data["x"])
 
-        AB = op(coords, data["x"], data["x_s"] * data["ds"][:, None], current)
+        AB = op(
+            coords,
+            data["x"],
+            data["x_s"] * data["ds"][:, None],
+            current,
+        )
 
         if basis.lower() == "rpz":
             AB = xyz2rpz_vec(AB, phi=phi)
         return AB
 
     def compute_magnetic_field(
-        self, coords, params=None, basis="rpz", source_grid=None, transforms=None
+        self,
+        coords,
+        params=None,
+        basis="rpz",
+        source_grid=None,
+        transforms=None,
+        chunk_size=None,
     ):
         """Compute magnetic field at a set of points.
 
@@ -396,6 +411,10 @@ class _Coil(_MagneticField, Optimizable, ABC):
             points. Should NOT include endpoint at 2pi.
         transforms : dict of Transform or array-like
             Transforms for R, Z, lambda, etc. Default is to build from grid.
+        chunk_size : int or None
+            Size to split computation into chunks of evaluation points.
+            If no chunking should be done or the chunk size is the full input
+            then supply ``None``. Default is ``None``.
 
 
         Returns
@@ -411,10 +430,18 @@ class _Coil(_MagneticField, Optimizable, ABC):
         may not be zero if not fully converged.
 
         """
-        return self._compute_A_or_B(coords, params, basis, source_grid, transforms, "B")
+        return self._compute_A_or_B(
+            coords, params, basis, source_grid, transforms, "B", chunk_size=chunk_size
+        )
 
     def compute_magnetic_vector_potential(
-        self, coords, params=None, basis="rpz", source_grid=None, transforms=None
+        self,
+        coords,
+        params=None,
+        basis="rpz",
+        source_grid=None,
+        transforms=None,
+        chunk_size=None,
     ):
         """Compute magnetic vector potential at a set of points.
 
@@ -434,6 +461,10 @@ class _Coil(_MagneticField, Optimizable, ABC):
             points. Should NOT include endpoint at 2pi.
         transforms : dict of Transform or array-like
             Transforms for R, Z, lambda, etc. Default is to build from grid.
+        chunk_size : int or None
+            Size to split computation into chunks of evaluation points.
+            If no chunking should be done or the chunk size is the full input
+            then supply ``None``. Default is ``None``.
 
         Returns
         -------
@@ -449,7 +480,9 @@ class _Coil(_MagneticField, Optimizable, ABC):
         may not be zero if not fully converged.
 
         """
-        return self._compute_A_or_B(coords, params, basis, source_grid, transforms, "A")
+        return self._compute_A_or_B(
+            coords, params, basis, source_grid, transforms, "A", chunk_size=chunk_size
+        )
 
     def __repr__(self):
         """Get the string form of the object."""
@@ -978,6 +1011,7 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
         source_grid=None,
         transforms=None,
         compute_A_or_B="B",
+        chunk_size=None,
     ):
         """Compute magnetic field or vector potential at a set of points.
 
@@ -1000,6 +1034,10 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
         compute_A_or_B: {"A", "B"}, optional
             whether to compute the magnetic vector potential "A" or the magnetic field
             "B". Defaults to "B"
+        chunk_size : int or None
+            Size to split computation into chunks of evaluation points.
+            If no chunking should be done or the chunk size is the full input
+            then supply ``None``. Default is ``None``.
 
         Returns
         -------
@@ -1048,7 +1086,13 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
         return AB
 
     def compute_magnetic_field(
-        self, coords, params=None, basis="rpz", source_grid=None, transforms=None
+        self,
+        coords,
+        params=None,
+        basis="rpz",
+        source_grid=None,
+        transforms=None,
+        chunk_size=None,
     ):
         """Compute magnetic field at a set of points.
 
@@ -1068,6 +1112,10 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
             points. Should NOT include endpoint at 2pi.
         transforms : dict of Transform or array-like
             Transforms for R, Z, lambda, etc. Default is to build from grid.
+        chunk_size : int or None
+            Size to split computation into chunks of evaluation points.
+            If no chunking should be done or the chunk size is the full input
+            then supply ``None``. Default is ``None``.
 
         Returns
         -------
@@ -1081,10 +1129,18 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
         is approximately quadratic in the number of coil points.
 
         """
-        return self._compute_A_or_B(coords, params, basis, source_grid, transforms, "B")
+        return self._compute_A_or_B(
+            coords, params, basis, source_grid, transforms, "B", chunk_size=chunk_size
+        )
 
     def compute_magnetic_vector_potential(
-        self, coords, params=None, basis="rpz", source_grid=None, transforms=None
+        self,
+        coords,
+        params=None,
+        basis="rpz",
+        source_grid=None,
+        transforms=None,
+        chunk_size=None,
     ):
         """Compute magnetic vector potential at a set of points.
 
@@ -1105,6 +1161,10 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
             points. Should NOT include endpoint at 2pi.
         transforms : dict of Transform or array-like
             Transforms for R, Z, lambda, etc. Default is to build from grid.
+        chunk_size : int or None
+            Size to split computation into chunks of evaluation points.
+            If no chunking should be done or the chunk size is the full input
+            then supply ``None``. Default is ``None``.
 
         Returns
         -------
@@ -1119,7 +1179,9 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
         Convergence is approximately quadratic in the number of coil points.
 
         """
-        return self._compute_A_or_B(coords, params, basis, source_grid, transforms, "A")
+        return self._compute_A_or_B(
+            coords, params, basis, source_grid, transforms, "A", chunk_size=chunk_size
+        )
 
     @classmethod
     def from_values(
@@ -1495,6 +1557,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         source_grid=None,
         transforms=None,
         compute_A_or_B="B",
+        chunk_size=None,
     ):
         """Compute magnetic field at a set of points.
 
@@ -1514,6 +1577,10 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         compute_A_or_B: {"A", "B"}, optional
             whether to compute the magnetic vector potential "A" or the magnetic field
             "B". Defaults to "B"
+        chunk_size : int or None
+            Size to split computation into chunks of evaluation points.
+            If no chunking should be done or the chunk size is the full input
+            then supply ``None``. Default is ``None``.
 
         Returns
         -------
@@ -1566,7 +1633,13 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             coords_nfp = coords_rpz + jnp.array([0, 2 * jnp.pi * k / self.NFP, 0])
 
             def body(AB, x):
-                AB += op(coords_nfp, params=x, basis="rpz", source_grid=source_grid)
+                AB += op(
+                    coords_nfp,
+                    params=x,
+                    basis="rpz",
+                    source_grid=source_grid,
+                    chunk_size=chunk_size,
+                )
                 return AB, None
 
             AB += scan(body, jnp.zeros(coords_nfp.shape), tree_stack(params))[0]
@@ -1586,7 +1659,13 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         return AB
 
     def compute_magnetic_field(
-        self, coords, params=None, basis="rpz", source_grid=None, transforms=None
+        self,
+        coords,
+        params=None,
+        basis="rpz",
+        source_grid=None,
+        transforms=None,
+        chunk_size=None,
     ):
         """Compute magnetic field at a set of points.
 
@@ -1603,6 +1682,10 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             points. Should NOT include endpoint at 2pi.
         transforms : dict of Transform or array-like
             Transforms for R, Z, lambda, etc. Default is to build from grid.
+        chunk_size : int or None
+            Size to split computation into chunks of evaluation points.
+            If no chunking should be done or the chunk size is the full input
+            then supply ``None``. Default is ``None``.
 
         Returns
         -------
@@ -1610,10 +1693,18 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             Magnetic field at specified nodes, in [R,phi,Z] or [X,Y,Z] coordinates.
 
         """
-        return self._compute_A_or_B(coords, params, basis, source_grid, transforms, "B")
+        return self._compute_A_or_B(
+            coords, params, basis, source_grid, transforms, "B", chunk_size=chunk_size
+        )
 
     def compute_magnetic_vector_potential(
-        self, coords, params=None, basis="rpz", source_grid=None, transforms=None
+        self,
+        coords,
+        params=None,
+        basis="rpz",
+        source_grid=None,
+        transforms=None,
+        chunk_size=None,
     ):
         """Compute magnetic vector potential at a set of points.
 
@@ -1630,6 +1721,10 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             points. Should NOT include endpoint at 2pi.
         transforms : dict of Transform or array-like
             Transforms for R, Z, lambda, etc. Default is to build from grid.
+        chunk_size : int or None
+            Size to split computation into chunks of evaluation points.
+            If no chunking should be done or the chunk size is the full input
+            then supply ``None``. Default is ``None``.
 
         Returns
         -------
@@ -1638,7 +1733,9 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             or xyz coordinates
 
         """
-        return self._compute_A_or_B(coords, params, basis, source_grid, transforms, "A")
+        return self._compute_A_or_B(
+            coords, params, basis, source_grid, transforms, "A", chunk_size=chunk_size
+        )
 
     @classmethod
     def linspaced_angular(
@@ -2478,6 +2575,7 @@ class MixedCoilSet(CoilSet):
         source_grid=None,
         transforms=None,
         compute_A_or_B="B",
+        chunk_size=None,
     ):
         """Compute magnetic field or vector potential at a set of points.
 
@@ -2499,6 +2597,10 @@ class MixedCoilSet(CoilSet):
         compute_A_or_B: {"A", "B"}, optional
             whether to compute the magnetic vector potential "A" or the magnetic field
             "B". Defaults to "B"
+        chunk_size : int or None
+            Size to split computation into chunks of evaluation points.
+            If no chunking should be done or the chunk size is the full input
+            then supply ``None``. Default is ``None``.
 
         Returns
         -------
@@ -2520,17 +2622,23 @@ class MixedCoilSet(CoilSet):
         if compute_A_or_B == "B":
             for coil, par, grd, tr in zip(self.coils, params, source_grid, transforms):
                 AB += coil.compute_magnetic_field(
-                    coords, par, basis, grd, transforms=tr
+                    coords, par, basis, grd, transforms=tr, chunk_size=chunk_size
                 )
         elif compute_A_or_B == "A":
             for coil, par, grd, tr in zip(self.coils, params, source_grid, transforms):
                 AB += coil.compute_magnetic_vector_potential(
-                    coords, par, basis, grd, transforms=tr
+                    coords, par, basis, grd, transforms=tr, chunk_size=chunk_size
                 )
         return AB
 
     def compute_magnetic_field(
-        self, coords, params=None, basis="rpz", source_grid=None, transforms=None
+        self,
+        coords,
+        params=None,
+        basis="rpz",
+        source_grid=None,
+        transforms=None,
+        chunk_size=None,
     ):
         """Compute magnetic field at a set of points.
 
@@ -2549,6 +2657,10 @@ class MixedCoilSet(CoilSet):
             If array-like, should be 1 value per coil.
         transforms : dict of Transform or array-like
             Transforms for R, Z, lambda, etc. Default is to build from grid.
+        chunk_size : int or None
+            Size to split computation into chunks of evaluation points.
+            If no chunking should be done or the chunk size is the full input
+            then supply ``None``. Default is ``None``.
 
         Returns
         -------
@@ -2556,10 +2668,18 @@ class MixedCoilSet(CoilSet):
             magnetic field at specified points, in either rpz or xyz coordinates
 
         """
-        return self._compute_A_or_B(coords, params, basis, source_grid, transforms, "B")
+        return self._compute_A_or_B(
+            coords, params, basis, source_grid, transforms, "B", chunk_size=chunk_size
+        )
 
     def compute_magnetic_vector_potential(
-        self, coords, params=None, basis="rpz", source_grid=None, transforms=None
+        self,
+        coords,
+        params=None,
+        basis="rpz",
+        source_grid=None,
+        transforms=None,
+        chunk_size=None,
     ):
         """Compute magnetic vector potential at a set of points.
 
@@ -2578,6 +2698,10 @@ class MixedCoilSet(CoilSet):
             If array-like, should be 1 value per coil.
         transforms : dict of Transform or array-like
             Transforms for R, Z, lambda, etc. Default is to build from grid.
+        chunk_size : int or None
+            Size to split computation into chunks of evaluation points.
+            If no chunking should be done or the chunk size is the full input
+            then supply ``None``. Default is ``None``.
 
         Returns
         -------
@@ -2586,7 +2710,9 @@ class MixedCoilSet(CoilSet):
             or xyz coordinates
 
         """
-        return self._compute_A_or_B(coords, params, basis, source_grid, transforms, "A")
+        return self._compute_A_or_B(
+            coords, params, basis, source_grid, transforms, "A", chunk_size=chunk_size
+        )
 
     def to_FourierPlanar(
         self, N=10, grid=None, basis="xyz", name="", check_intersection=True

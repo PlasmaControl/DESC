@@ -490,7 +490,6 @@ class Equilibrium(IOAble, Optimizable):
             "G",
             "Phi_mn",
         )
-        assert sorted(args) == sorted(arg_order)
         return [arg for arg in arg_order if arg in args]
 
     def __repr__(self):

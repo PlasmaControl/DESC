@@ -353,6 +353,8 @@ def get_parallel_forcebalance(
 
     Returns
     -------
+    eq : Equilibrium
+        Equilibrium to constrain replicated to devices.
     obj : ObjectiveFunction
         An objective function with force balance objectives. Each objective is
         computed on a separate device. The objective function is built with
@@ -398,4 +400,4 @@ def get_parallel_forcebalance(
         objs += (obj,)
     objective = ObjectiveFunction(objs)
     objective.build(use_jit_wrapper=use_jit_wrapper)
-    return objective
+    return eq, objective

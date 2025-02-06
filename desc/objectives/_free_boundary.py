@@ -354,13 +354,14 @@ class BoundaryError(_Objective):
         Equilibrium that will be optimized to satisfy the Objective.
     field : MagneticField
         External field produced by coils.
-    st : int
+    s : int or tuple[int]
         Hyperparameter for the singular integration scheme.
-        ``st`` is roughly equal to the size of the local singular grid with
+        ``s`` is roughly equal to the size of the local singular grid with
         respect to the global grid. More precisely the local singular grid
         is an ``st`` × ``sz`` subset of the full domain (θ,ζ) ∈ [0, 2π)² of
         ``source_grid``. That is a subset of
         ``source_grid.num_theta`` × ``source_grid.num_zeta*source_grid.NFP``.
+        If given an integer then ``st=s``, ``sz=s``, otherwise ``st=s[0]``, ``sz=s[1]``.
     q : int
         Order of integration on the local singular grid.
     source_grid, eval_grid : Grid, optional
@@ -377,13 +378,6 @@ class BoundaryError(_Objective):
         Size to split computation into chunks.
         If no chunking should be done or the chunk size is the full input
         then supply ``None``. Default is ``1``.
-    sz : int
-        Hyperparameter for the singular integration scheme.
-        ``sz`` is roughly equal to the size of the local singular grid with
-        respect to the global grid. More precisely the local singular grid
-        is an ``st`` × ``sz`` subset of the full domain (θ,ζ) ∈ [0, 2π)² of
-        ``source_grid``. That is a subset of
-        ``source_grid.num_theta`` × ``source_grid.num_zeta*source_grid.NFP``.
 
     """
 
@@ -426,7 +420,7 @@ class BoundaryError(_Objective):
         normalize_target=True,
         loss_function=None,
         deriv_mode="auto",
-        st=None,
+        s=None,
         q=None,
         source_grid=None,
         eval_grid=None,
@@ -435,17 +429,18 @@ class BoundaryError(_Objective):
         chunk_size=1,
         name="Boundary error",
         jac_chunk_size=None,
-        *,
-        sz=None,
         **kwargs,
     ):
         if target is None and bounds is None:
             target = 0
         self._source_grid = source_grid
         self._eval_grid = eval_grid
-        self._eval_grid_is_source_grid = source_grid == eval_grid
-        self._st = parse_argname_change(st, kwargs, "s", "st")
-        self._sz = sz
+        if isinstance(s, (tuple, list)):
+            self._st = s[0]
+            self._sz = s[1]
+        else:
+            self._st = s
+            self._sz = s
         self._q = q
         self._field = field
         self._field_grid = field_grid
@@ -504,7 +499,7 @@ class BoundaryError(_Objective):
         else:
             eval_grid = self._eval_grid
 
-        self._eval_grid_is_source_grid = eval_grid.equiv(source_grid)
+        self._use_same_grid = eval_grid.equiv(source_grid)
 
         errorif(
             not np.all(source_grid.nodes[:, 0] == 1.0),
@@ -522,13 +517,14 @@ class BoundaryError(_Objective):
             "Source grids for singular integrals must be non-symmetric",
         )
 
-        ratio_data = eq.compute(
-            ["|e_theta x e_zeta|", "e_theta", "e_zeta"], grid=source_grid
-        )
-        st, sz, q = heuristic_support_params(source_grid, best_ratio(ratio_data)[0])
-        self._st = setdefault(self._st, st)
-        self._sz = setdefault(self._sz, sz)
-        self._q = setdefault(self._q, q)
+        if self._st is None or self._sz is None or self._q is None:
+            ratio_data = eq.compute(
+                ["|e_theta x e_zeta|", "e_theta", "e_zeta"], grid=source_grid
+            )
+            st, sz, q = heuristic_support_params(source_grid, best_ratio(ratio_data)[0])
+            self._st = setdefault(self._st, st)
+            self._sz = setdefault(self._sz, sz)
+            self._q = setdefault(self._q, q)
 
         try:
             interpolator = FFTInterpolator(
@@ -572,7 +568,7 @@ class BoundaryError(_Objective):
 
         source_profiles = get_profiles(self._eq_data_keys, obj=eq, grid=source_grid)
         source_transforms = get_transforms(self._eq_data_keys, obj=eq, grid=source_grid)
-        if self._eval_grid_is_source_grid:
+        if self._use_same_grid:
             eval_profiles = source_profiles
             eval_transforms = source_transforms
         else:
@@ -598,7 +594,7 @@ class BoundaryError(_Objective):
             )
             self._constants["sheet_eval_transforms"] = (
                 self._constants["sheet_source_transforms"]
-                if self._eval_grid_is_source_grid
+                if self._use_same_grid
                 else get_transforms(
                     self._sheet_data_keys, obj=eq.surface, grid=eval_grid
                 )
@@ -659,7 +655,7 @@ class BoundaryError(_Objective):
         )
         eval_data = (
             source_data
-            if self._eval_grid_is_source_grid
+            if self._use_same_grid
             else compute_fun(
                 "desc.equilibrium.equilibrium.Equilibrium",
                 self._eq_data_keys,
@@ -686,7 +682,7 @@ class BoundaryError(_Objective):
             )
             sheet_eval_data = (
                 sheet_source_data
-                if self._eval_grid_is_source_grid
+                if self._use_same_grid
                 else compute_fun(
                     p,
                     self._sheet_data_keys,

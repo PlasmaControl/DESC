@@ -4,15 +4,10 @@ import warnings
 import numpy as np
 from scipy.constants import mu_0
 
-from desc.backend import (
-    fori_loop,
-    jnp,
-    tree_flatten,
-    tree_leaves,
-    tree_map,
-    tree_unflatten,
-)
+from desc.backend import jnp, tree_flatten, tree_leaves, tree_map, tree_unflatten
+from desc.batching import vmap_chunked
 from desc.compute import get_profiles, get_transforms, rpz2xyz
+from desc.compute.geom_utils import copy_rpz_periods
 from desc.compute.utils import _compute as compute_fun
 from desc.grid import LinearGrid, _Grid
 from desc.integrals import compute_B_plasma
@@ -20,6 +15,7 @@ from desc.utils import Timer, broadcast_tree, errorif, safenorm, warnif
 
 from .normalization import compute_scaling_factors
 from .objective_funs import _Objective, collect_docs
+from .utils import softmin
 
 
 class _CoilObjective(_Objective):
@@ -37,9 +33,7 @@ class _CoilObjective(_Objective):
 
     """
 
-    __doc__ = __doc__.rstrip() + collect_docs(
-        coil=True,
-    )
+    __doc__ = __doc__.rstrip() + collect_docs(coil=True)
 
     def __init__(
         self,
@@ -602,6 +596,112 @@ class CoilCurrentLength(CoilLength):
         return out
 
 
+class CoilIntegratedCurvature(_CoilObjective):
+    """Coil integrated curvature.
+
+    If a curve is convex, then the following condition must be true: ∫ κ ||∂ₛx|| ds = 2π
+    where κ is the scalar (unsigned) curvature, ∂ₛx is the first derivative of the
+    position vector along curve, and s is the curve parameter.
+
+    Parameters
+    ----------
+    coil : CoilSet or Coil
+        Coil(s) that are to be optimized
+    grid : Grid, optional
+        Collocation grid containing the nodes to evaluate at.
+        Defaults to ``LinearGrid(N=2 * coil.N + 5, endpoint=True)``
+
+    """
+
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``target=2*np.pi``.",
+        bounds_default="``target=2*np.pi``.",
+        coil=True,
+    )
+
+    _scalar = False  # not always a scalar, if a coilset is passed in
+    _units = "(dimensionless)"
+    _print_value_fmt = "Integrated curvature: "
+
+    def __init__(
+        self,
+        coil,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        loss_function=None,
+        deriv_mode="auto",
+        grid=None,
+        name="coil integrated curvature",
+        jac_chunk_size=None,
+    ):
+        if target is None and bounds is None:
+            target = 2 * np.pi
+        super().__init__(
+            coil,
+            ["ds", "x_s", "curvature"],
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            loss_function=loss_function,
+            deriv_mode=deriv_mode,
+            grid=grid,
+            name=name,
+            jac_chunk_size=jac_chunk_size,
+        )
+
+    def build(self, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        super().build(use_jit=use_jit, verbose=verbose)
+
+        self._dim_f = self._num_coils
+        self._constants["quad_weights"] = 1
+
+        _Objective.build(self, use_jit=use_jit, verbose=verbose)
+
+    def compute(self, params, constants=None):
+        """Compute integrated curvature.
+
+        Parameters
+        ----------
+        params : dict
+            Dictionary of the coil's degrees of freedom.
+        constants : dict
+            Dictionary of constant data, e.g. transforms, profiles etc. Defaults to
+            self._constants.
+
+        Returns
+        -------
+        f : array of floats
+            Integrated curvature.
+
+        """
+        data = super().compute(params, constants=constants)
+        data = tree_leaves(data, is_leaf=lambda x: isinstance(x, dict))
+        out = jnp.array(
+            [
+                jnp.sum(
+                    jnp.abs(dat["curvature"]) * safenorm(dat["x_s"], axis=1) * dat["ds"]
+                )
+                for dat in data
+            ]
+        )
+        return out
+
+
 class CoilSetMinDistance(_Objective):
     """Target the minimum distance between coils in a coilset.
 
@@ -616,6 +716,20 @@ class CoilSetMinDistance(_Objective):
         Collocation grid used to discretize each coil. Defaults to the default grid
         for the given coil-type, see ``coils.py`` and ``curve.py`` for more details.
         If a list, must have the same structure as coils.
+    use_softmin: bool, optional
+        Use softmin or hard min. Softmin is a smooth approximation to the actual minimum
+        distance that may give smoother gradients, at the expense of being slightly more
+        expensive and only an approximate minimum.
+    softmin_alpha: float, optional
+        Parameter used for softmin. The larger ``softmin_alpha``, the closer the
+        softmin approximates the hardmin. softmin -> hardmin as
+        ``softmin_alpha`` -> infinity.
+    dist_chunk_size : int > 0, optional
+        When computing distances, how many coils to consider at once. Default is all
+        coils, which is generally the fastest but requires the most memory. If there are
+        a large number of coils, or if the resolution is very high, setting this to a
+        small value will reduce peak memory usage at the cost of slightly increased
+        runtime.
 
     """
 
@@ -642,12 +756,18 @@ class CoilSetMinDistance(_Objective):
         grid=None,
         name="coil-coil minimum distance",
         jac_chunk_size=None,
+        use_softmin=False,
+        softmin_alpha=1.0,
+        dist_chunk_size=None,
     ):
         from desc.coils import CoilSet
 
         if target is None and bounds is None:
             bounds = (1, np.inf)
         self._grid = grid
+        self._use_softmin = use_softmin
+        self._softmin_alpha = softmin_alpha
+        self._dist_chunk_size = dist_chunk_size
         errorif(
             not isinstance(coil, CoilSet),
             ValueError,
@@ -714,20 +834,19 @@ class CoilSetMinDistance(_Objective):
         )
 
         def body(k):
+            # pts shape (ncoils, num_nodes, 3)
             # dist btwn all pts; shape(ncoils,num_nodes,num_nodes)
             # dist[i,j,n] is the distance from the jth point on the kth coil
             # to the nth point on the ith coil
-            dist = safenorm(pts[k][None, :, None] - pts[:, None, :], axis=-1)
-            # exclude distances between points on the same coil
-            mask = jnp.ones(self.dim_f).at[k].set(0)[:, None, None]
-            return jnp.min(dist, where=mask, initial=jnp.inf)
+            coil_pts = pts[k]
+            other_pts = jnp.delete(pts, k, axis=0, assume_unique_indices=True)
+            dist = safenorm(coil_pts[None, :, None] - other_pts[:, None], axis=-1)
+            if self._use_softmin:
+                return softmin(dist, self._softmin_alpha)
+            return jnp.min(dist)
 
-        min_dist_per_coil = fori_loop(
-            0,
-            self.dim_f,
-            lambda k, min_dist: min_dist.at[k].set(body(k)),
-            jnp.zeros(self.dim_f),
-        )
+        k = jnp.arange(self.dim_f)
+        min_dist_per_coil = vmap_chunked(body, chunk_size=self._dist_chunk_size)(k)
         return min_dist_per_coil
 
 
@@ -770,6 +889,20 @@ class PlasmaCoilSetMinDistance(_Objective):
         during optimization, and self.things = [eq] only.
         If False, the coil coordinates are computed at every iteration.
         False by default, so that self.things = [coil, eq].
+    use_softmin: bool, optional
+        Use softmin or hard min. Softmin is a smooth approximation to the actual minimum
+        distance that may give smoother gradients, at the expense of being slightly more
+        expensive and only an approximate minimum.
+    softmin_alpha: float, optional
+        Parameter used for softmin. The larger ``softmin_alpha``, the closer the
+        softmin approximates the hardmin. softmin -> hardmin as
+        ``softmin_alpha`` -> infinity.
+    dist_chunk_size : int > 0, optional
+        When computing distances, how many coils to consider at once. Default is all
+        coils, which is generally the fastest but requires the most memory. If there are
+        a large number of coils, or if the resolution is very high, setting this to a
+        small value will reduce peak memory usage at the cost of slightly increased
+        runtime.
 
     """
 
@@ -800,6 +933,9 @@ class PlasmaCoilSetMinDistance(_Objective):
         coils_fixed=False,
         name="plasma-coil minimum distance",
         jac_chunk_size=None,
+        use_softmin=False,
+        softmin_alpha=1.0,
+        dist_chunk_size=None,
     ):
         if target is None and bounds is None:
             bounds = (1, np.inf)
@@ -809,6 +945,9 @@ class PlasmaCoilSetMinDistance(_Objective):
         self._coil_grid = coil_grid
         self._eq_fixed = eq_fixed
         self._coils_fixed = coils_fixed
+        self._use_softmin = use_softmin
+        self._softmin_alpha = softmin_alpha
+        self._dist_chunk_size = dist_chunk_size
         errorif(eq_fixed and coils_fixed, ValueError, "Cannot fix both eq and coil")
         things = []
         if not eq_fixed:
@@ -848,7 +987,9 @@ class PlasmaCoilSetMinDistance(_Objective):
         else:
             eq = self.things[0]
             coil = self.things[1]
-        plasma_grid = self._plasma_grid or LinearGrid(M=eq.M_grid, N=eq.N_grid)
+        plasma_grid = self._plasma_grid or LinearGrid(
+            M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP
+        )
         coil_grid = self._coil_grid or None
         warnif(
             not np.allclose(plasma_grid.nodes[:, 0], 1),
@@ -880,7 +1021,9 @@ class PlasmaCoilSetMinDistance(_Objective):
                 transforms=eq_transforms,
                 profiles=eq_profiles,
             )
-            plasma_pts = rpz2xyz(jnp.array([data["R"], data["phi"], data["Z"]]).T)
+            rpz = jnp.array([data["R"], data["phi"], data["Z"]]).T
+            rpz = copy_rpz_periods(rpz, plasma_grid.NFP)
+            plasma_pts = rpz2xyz(rpz)
             self._constants["plasma_coords"] = plasma_pts
         if self._coils_fixed:
             coils_pts = coil._compute_position(params=coil.params_dict, grid=coil_grid)
@@ -944,19 +1087,19 @@ class PlasmaCoilSetMinDistance(_Objective):
                 transforms=constants["eq_transforms"],
                 profiles=constants["eq_profiles"],
             )
-            plasma_pts = rpz2xyz(jnp.array([data["R"], data["phi"], data["Z"]]).T)
+            rpz = jnp.array([data["R"], data["phi"], data["Z"]]).T
+            rpz = copy_rpz_periods(rpz, constants["eq_transforms"]["grid"].NFP)
+            plasma_pts = rpz2xyz(rpz)
 
         def body(k):
             # dist btwn all pts; shape(ncoils,plasma_grid.num_nodes,coil_grid.num_nodes)
             dist = safenorm(coils_pts[k][None, :, :] - plasma_pts[:, None, :], axis=-1)
-            return jnp.min(dist, initial=jnp.inf)
+            if self._use_softmin:
+                return softmin(dist, self._softmin_alpha)
+            return jnp.min(dist)
 
-        min_dist_per_coil = fori_loop(
-            0,
-            self.dim_f,
-            lambda k, min_dist: min_dist.at[k].set(body(k)),
-            jnp.zeros(self.dim_f),
-        )
+        k = jnp.arange(self.dim_f)
+        min_dist_per_coil = vmap_chunked(body, chunk_size=self._dist_chunk_size)(k)
         return min_dist_per_coil
 
 
@@ -1480,7 +1623,7 @@ class SurfaceQuadraticFlux(_Objective):
             params=field_params,
         )
         B_ext = jnp.sum(B_ext * eval_data["n_rho"], axis=-1)
-        f = (B_ext) * jnp.sqrt(eval_data["|e_theta x e_zeta|"])
+        f = B_ext * jnp.sqrt(eval_data["|e_theta x e_zeta|"])
         return f
 
 

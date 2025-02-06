@@ -31,6 +31,8 @@ Coils
     desc.coils.FourierPlanarCoil
     desc.coils.MixedCoilSet
     desc.coils.SplineXYZCoil
+    desc.coils.initialize_modular_coils
+    desc.coils.initialize_saddle_coils
 
 Compatibility
 *************
@@ -176,6 +178,7 @@ Objective Functions
     desc.objectives.CoilArclengthVariance
     desc.objectives.CoilCurrentLength
     desc.objectives.CoilCurvature
+    desc.objectives.CoilIntegratedCurvature
     desc.objectives.CoilLength
     desc.objectives.CoilSetLinkingNumber
     desc.objectives.CoilSetMinDistance

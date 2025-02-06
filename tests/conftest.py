@@ -479,6 +479,7 @@ def regcoil_PF_coils():
         vacuum=True,
         current_helicity=(0, 1),
         external_field=ToroidalMagneticField(B0=G, R0=1),
+        chunk_size=40,
     )
     surface_current_field = surface_current_field[0]
 

@@ -21,6 +21,7 @@ New Features
 - Adds batching feature to singular integrals.
 - ``desc.objectives.CoilSetMinDistance`` and ``desc.objectives.PlasmaCoilSetMinDistance`` now include the option to use a softmin which can give smoother gradients. They also both now have a ``dist_chunk_size`` option to break up the distance calculation into smaller pieces to save memory
 - Adds a new function ``desc.coils.initialize_helical_coils`` for creating an initial guess for stage 2 helical coil optimization.
+- Adds ``chunk_size`` option to compute magnetic field methods to increase performance.
 
 Bug Fixes
 

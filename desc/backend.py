@@ -445,7 +445,7 @@ if use_jax:  # noqa: C901
             return x
 
     def pconcat(arrays):
-        """Concatenate arrays that live on different devices.
+        """Concatenate arrays that live on same/different devices.
 
         Parameters
         ----------
@@ -457,9 +457,12 @@ if use_jax:  # noqa: C901
         out : jnp.ndarray
             Concatenated array that lives in the first device.
         """
-        return jnp.concatenate(
-            [jax.device_put(x, device=jax.devices("gpu")[0]) for x in arrays]
-        )
+        if desc_config["num_device"] == 1:
+            return jnp.concatenate(arrays)
+        else:
+            return jnp.concatenate(
+                [jax.device_put(x, device=jax.devices("gpu")[0]) for x in arrays]
+            )
 
 
 # we can't really test the numpy backend stuff in automated testing, so we ignore it

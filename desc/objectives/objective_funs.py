@@ -11,6 +11,7 @@ from desc.backend import (
     jax,
     jit,
     jnp,
+    pconcat,
     tree_flatten,
     tree_map,
     tree_unflatten,
@@ -442,7 +443,7 @@ class ObjectiveFunction(IOAble):
         if constants is None:
             constants = self.constants
         assert len(params) == len(constants) == len(self.objectives)
-        f = jnp.concatenate(
+        f = pconcat(
             [
                 obj.compute_unscaled(*par, constants=const)
                 for par, obj, const in zip(params, self.objectives, constants)
@@ -471,7 +472,7 @@ class ObjectiveFunction(IOAble):
         if constants is None:
             constants = self.constants
         assert len(params) == len(constants) == len(self.objectives)
-        f = jnp.concatenate(
+        f = pconcat(
             [
                 obj.compute_scaled(*par, constants=const)
                 for par, obj, const in zip(params, self.objectives, constants)
@@ -500,21 +501,12 @@ class ObjectiveFunction(IOAble):
         if constants is None:
             constants = self.constants
         assert len(params) == len(constants) == len(self.objectives)
-        if desc_config["num_devices"] == 1:
-            f = jnp.concatenate(
-                [
-                    obj.compute_scaled_error(*par, constants=const)
-                    for par, obj, const in zip(params, self.objectives, constants)
-                ]
-            )
-        else:
-            fs = [
+        f = pconcat(
+            [
                 obj.compute_scaled_error(*par, constants=const)
                 for par, obj, const in zip(params, self.objectives, constants)
             ]
-            from desc.backend import pconcat
-
-            f = pconcat(fs)
+        )
         return f
 
     @jit

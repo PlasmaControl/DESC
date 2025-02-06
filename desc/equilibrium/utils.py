@@ -11,7 +11,9 @@ from desc.geometry import (
     Surface,
     ZernikeRZToroidalSection,
 )
+from desc.grid import LinearGrid
 from desc.profiles import PowerSeriesProfile, _Profile
+from desc.utils import errorif
 
 
 def parse_profile(prof, name="", **kwargs):
@@ -182,3 +184,100 @@ def parse_axis(axis, NFP=1, sym=True, surface=None):
     else:
         raise TypeError("Got unknown axis type {}".format(axis))
     return axis
+
+
+def contract_equilibrium(eq, inner_rho, copy=True):
+    """Contract an equilibrium so that an inner flux surface is the new boundary.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Equilibrium to contract.
+    inner_rho: float
+        rho value (<1) to contract the Equilibrium to.
+    copy : bool
+        Whether or not to return a copy or to modify the original equilibrium.
+
+    Returns
+    -------
+    eq_inner: New Equilibrium object, contracted from the old one such that
+        eq.pressure(rho=inner_rho) = eq_inner.pressure(rho=1), and
+        eq_inner LCFS = eq's rho=inner_rho surface.
+        Note that this will not be in force balance, and so must be re-solved.
+
+    """
+    errorif(
+        not (inner_rho < 1 and inner_rho > 0),
+        ValueError,
+        f"Surface must be in the range 0 < inner_rho < 1, instead got {inner_rho}.",
+    )
+
+    def scale_profile(profile, rho):
+        x = np.linspace(0, 1, eq.L_grid)
+        grid = LinearGrid(rho=x / rho)
+        y = profile.compute(grid)
+        return profile.from_values(x=x, y=y)
+
+    # create new profiles for contracted equilibrium
+    pressure = iota = current = anisotropy = None
+    electron_density = electron_temperature = ion_temperature = atomic_number = None
+    if eq.pressure is not None:
+        pressure = scale_profile(eq.pressure, inner_rho)
+    if eq.iota is not None:
+        iota = scale_profile(eq.iota, inner_rho)
+    if eq.current is not None:
+        current = scale_profile(eq.current, inner_rho)
+    if eq.electron_density is not None:
+        electron_density = scale_profile(eq.electron_density, inner_rho)
+    if eq.electron_temperature is not None:
+        electron_temperature = scale_profile(eq.electron_temperature, inner_rho)
+    if eq.ion_temperature is not None:
+        ion_temperature = scale_profile(eq.ion_temperature, inner_rho)
+    if eq.atomic_number is not None:
+        atomic_number = scale_profile(eq.atomic_number, inner_rho)
+    if eq.anisotropy is not None:
+        anisotropy = scale_profile(eq.anisotropy, inner_rho)
+
+    surf_inner = eq.get_surface_at(rho=inner_rho)
+    surf_inner.rho = 1.0
+    from .equilibrium import Equilibrium
+
+    eq_inner = Equilibrium(
+        surface=surf_inner,
+        pressure=pressure,
+        iota=iota,
+        current=current,
+        electron_density=electron_density,
+        electron_temperature=electron_temperature,
+        ion_temperature=ion_temperature,
+        atomic_number=atomic_number,
+        anisotropy=anisotropy,
+        Psi=float(
+            eq.compute("Psi", grid=LinearGrid(rho=inner_rho, NFP=eq.NFP))["Psi"][0]
+        ),  # flux (in Webers) within the new last closed flux surface
+        NFP=eq.NFP,
+        L=eq.L,
+        M=eq.M,
+        N=eq.N,
+        L_grid=eq.L_grid,
+        M_grid=eq.M_grid,
+        N_grid=eq.N_grid,
+        sym=eq.sym,
+    )
+    inner_grid = LinearGrid(
+        rho=np.linspace(0, inner_rho, eq.L_grid * 2),
+        M=eq.M_grid,
+        N=eq.N_grid,
+        NFP=eq.NFP,
+        axis=True,
+    )
+    inner_data = eq.compute(["R", "Z", "lambda"], grid=inner_grid)
+    nodes = inner_grid.nodes
+    nodes[:, 0] = nodes[:, 0] / inner_rho
+    eq_inner.set_initial_guess(
+        nodes, inner_data["R"], inner_data["Z"], inner_data["lambda"]
+    )
+    if not copy:  # overwrite the original eq
+        eq = eq_inner
+        return eq
+    return eq_inner

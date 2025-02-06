@@ -10,6 +10,7 @@ from desc.backend import (
     execute_on_cpu,
     jit,
     jnp,
+    pconcat,
     tree_flatten,
     tree_map,
     tree_unflatten,
@@ -292,7 +293,7 @@ class ObjectiveFunction(IOAble):
                 pass
 
     @execute_on_cpu
-    def build(self, use_jit=None, verbose=1):
+    def build(self, use_jit=None, use_jit_wrapper=True, verbose=1):
         """Build the objective.
 
         Parameters
@@ -305,6 +306,8 @@ class ObjectiveFunction(IOAble):
         """
         if use_jit is not None:
             self._use_jit = use_jit
+            if use_jit is False:
+                use_jit_wrapper = False
         timer = Timer()
         timer.start("Objective build")
 
@@ -354,10 +357,13 @@ class ObjectiveFunction(IOAble):
             # Heuristic estimates of fwd mode Jacobian memory usage,
             # slightly conservative, based on using ForceBalance as the objective
             estimated_memory_usage = 2.4e-7 * self.dim_f * self.dim_x + 1  # in GB
+            mem_avail = (
+                desc_config.get("avail_mem")
+                if desc_config.get("avail_mem") is not None
+                else sum(desc_config["avail_mems"])
+            )
             max_chunk_size = round(
-                (desc_config.get("avail_mem") / estimated_memory_usage - 0.22)
-                / 0.85
-                * self.dim_x
+                (mem_avail / estimated_memory_usage - 0.22) / 0.85 * self.dim_x
             )
             self._jac_chunk_size = max([1, max_chunk_size])
             if self._deriv_mode == "blocked":
@@ -365,7 +371,7 @@ class ObjectiveFunction(IOAble):
                     if obj._jac_chunk_size is None:
                         obj._jac_chunk_size = self._jac_chunk_size
 
-        if not self.use_jit:
+        if not use_jit_wrapper:
             self._unjit()
 
         self._built = True
@@ -436,7 +442,7 @@ class ObjectiveFunction(IOAble):
         if constants is None:
             constants = self.constants
         assert len(params) == len(constants) == len(self.objectives)
-        f = jnp.concatenate(
+        f = pconcat(
             [
                 obj.compute_unscaled(*par, constants=const)
                 for par, obj, const in zip(params, self.objectives, constants)
@@ -465,7 +471,7 @@ class ObjectiveFunction(IOAble):
         if constants is None:
             constants = self.constants
         assert len(params) == len(constants) == len(self.objectives)
-        f = jnp.concatenate(
+        f = pconcat(
             [
                 obj.compute_scaled(*par, constants=const)
                 for par, obj, const in zip(params, self.objectives, constants)
@@ -491,13 +497,10 @@ class ObjectiveFunction(IOAble):
 
         """
         params = self.unpack_state(x)
-        if constants is None:
-            constants = self.constants
-        assert len(params) == len(constants) == len(self.objectives)
-        f = jnp.concatenate(
+        f = pconcat(
             [
-                obj.compute_scaled_error(*par, constants=const)
-                for par, obj, const in zip(params, self.objectives, constants)
+                obj.compute_scaled_error(*par)
+                for par, obj in zip(params, self.objectives)
             ]
         )
         return f

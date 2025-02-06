@@ -32,6 +32,14 @@ else:
             from jax import config as jax_config
 
             jax_config.update("jax_enable_x64", True)
+            if desc_config["num_device"] != 1:
+                mesh = jax.make_mesh((desc_config["num_device"],), ("grid"))
+                desc_config["sharding"] = jax.sharding.NamedSharding(
+                    mesh, jax.sharding.PartitionSpec("grid")
+                )
+                desc_config["sharding_replicated"] = jax.sharding.NamedSharding(
+                    mesh, jax.sharding.PartitionSpec()
+                )
             if desc_config.get("kind") == "gpu" and len(jax.devices("gpu")) == 0:
                 warnings.warn(
                     "JAX failed to detect GPU, are you sure you "
@@ -59,11 +67,20 @@ else:
                 desc.__version__, np.__version__, y.dtype
             )
         )
-print(
-    "Using device: {}, with {:.2f} GB available memory".format(
-        desc_config.get("device"), desc_config.get("avail_mem")
+
+if desc_config["num_device"] == 1:
+    print(
+        "Using device: {}, with {:.2f} GB available memory".format(
+            desc_config.get("device"), desc_config.get("avail_mem")
+        )
     )
-)
+else:
+    print(f"Using {desc_config['num_device']} devices:")
+    for i, dev in enumerate(desc_config["devices"]):
+        print(
+            f"\t Device {i}: {dev} with {desc_config['avail_mems'][i]:.2f} "
+            "GB available memory"
+        )
 
 if use_jax:  # noqa: C901
     from jax import custom_jvp, jit, vmap
@@ -426,6 +443,26 @@ if use_jax:  # noqa: C901
         else:
             x = jax.lax.custom_root(res, x0, solve, tangent_solve, has_aux=False)
             return x
+
+    def pconcat(arrays):
+        """Concatenate arrays that live on same/different devices.
+
+        Parameters
+        ----------
+        arrays : list of jnp.ndarray
+            Arrays to concatenate.
+
+        Returns
+        -------
+        out : jnp.ndarray
+            Concatenated array that lives in the first device.
+        """
+        if desc_config["num_device"] == 1:
+            return jnp.concatenate(arrays)
+        else:
+            return jnp.concatenate(
+                [jax.device_put(x, device=jax.devices("gpu")[0]) for x in arrays]
+            )
 
 
 # we can't really test the numpy backend stuff in automated testing, so we ignore it

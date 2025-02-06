@@ -999,6 +999,13 @@ class TestObjectiveFunction:
             assert f.size == coils.num_coils
             np.testing.assert_allclose(f, mindist)
             assert coils.is_self_intersecting(grid=grid, tol=tol) == expect_intersect
+            obj2 = CoilSetMinDistance(
+                coils, grid=grid, use_softmin=True, softmin_alpha=10
+            )
+            obj2.build()
+            f = obj2.compute(params=coils.params_dict)
+            assert f.size == coils.num_coils
+            np.testing.assert_allclose(f, mindist, rtol=5e-2, atol=1e-3)
 
         # linearly spaced planar coils, all coils are min distance from their neighbors
         n = 3
@@ -1088,6 +1095,25 @@ class TestObjectiveFunction:
                 f = obj.compute(params_1=eq.params_dict, params_2=coils.params_dict)
             assert f.size == coils.num_coils
             np.testing.assert_allclose(f, mindist)
+            obj2 = PlasmaCoilSetMinDistance(
+                eq=eq,
+                coil=coils,
+                plasma_grid=plasma_grid,
+                coil_grid=coil_grid,
+                eq_fixed=eq_fixed,
+                coils_fixed=coils_fixed,
+                use_softmin=True,
+                softmin_alpha=40,
+            )
+            obj2.build()
+            if eq_fixed:
+                f = obj2.compute(params_1=coils.params_dict)
+            elif coils_fixed:
+                f = obj2.compute(params_1=eq.params_dict)
+            else:
+                f = obj2.compute(params_1=eq.params_dict, params_2=coils.params_dict)
+            assert f.size == coils.num_coils
+            np.testing.assert_allclose(f, mindist, rtol=5e-2, atol=1e-3)
 
         plasma_grid = LinearGrid(M=4, zeta=16)
         coil_grid = LinearGrid(N=8)

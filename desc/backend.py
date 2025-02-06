@@ -444,6 +444,23 @@ if use_jax:  # noqa: C901
             x = jax.lax.custom_root(res, x0, solve, tangent_solve, has_aux=False)
             return x
 
+    def pconcat(arrays):
+        """Concatenate arrays that live on different devices.
+
+        Parameters
+        ----------
+        arrays : list of jnp.ndarray
+            Arrays to concatenate.
+
+        Returns
+        -------
+        out : jnp.ndarray
+            Concatenated array that lives in the first device.
+        """
+        return jnp.concatenate(
+            [jax.device_put(x, device=jax.devices("gpu")[0]) for x in arrays]
+        )
+
 
 # we can't really test the numpy backend stuff in automated testing, so we ignore it
 # for coverage purposes

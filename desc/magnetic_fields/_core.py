@@ -2665,3 +2665,251 @@ class OmnigenousField(Optimizable, IOAble):
             and (int(helicity[1]) == helicity[1])
         )
         self._helicity = helicity
+
+
+class PiecewiseOmnigenousField(Optimizable, IOAble):
+    """A magnetic field with piecewise omnigenity.
+
+    Uses parameterization from Velasco et al.[2]
+
+    Parameters
+    ----------
+    NFP : int
+        Number of field periods.
+    helicity : tuple, optional
+        Type of pseudo-symmetry (M, N). Default = toroidal contours (1, 0).
+    params0 : ndarray, optional
+        Omnigenity parameters describing h(ρ,η,α). The coefficients correspond to the
+        modes in `x_basis`. If not supplied, `x_lmn` defaults to zero for all modes.
+
+    Notes
+    -----
+    Doesn't conform to MagneticField API, as it only knows about :math:`|B|` in
+    computational coordinates, not vector B in lab coordinates.
+
+    References
+    ----------
+    .. [1] Velasco, Jose L., et al. "Piecewise Omnigenity"
+    """
+
+    _io_attrs_ = [
+        "_NFP",
+        "_helicity",
+        "_B_min",
+        "_B_max",
+        "_zeta_C",
+        "_theta_C",
+        "_t_1",
+        "_t_2",
+        "_w_2",
+        "_iota0",
+    ]
+
+    def __init__(
+        self,
+        B_min=0.8,
+        B_max=1.2,
+        zeta_C=1.2 * jnp.pi,
+        theta_C=2 * jnp.pi,
+        t_1=0.2,
+        t_2=1.0,
+        iota0=0.66,
+        w_2=0.7,
+        NFP=1,
+        helicity=(1, 0),
+    ):
+        self._NFP = int(NFP)
+        self.helicity = helicity
+
+        self._B_min = B_min
+        self._B_max = B_max
+        self._zeta_C = zeta_C
+        self._theta_C = theta_C
+        self._t_1 = t_1
+        self._t_2 = t_2
+        self._w_2 = w_2
+        self._iota0 = iota0
+
+        helicity_sign = sign(helicity[0]) * sign(helicity[1])
+        warnif(
+            self.helicity != (0, self.NFP * helicity_sign)
+            and abs(self.helicity[0]) != 1,
+            UserWarning,
+            "Typical helicity (M,N) has M=1.",
+        )
+        warnif(
+            self.helicity != (helicity_sign, 0) and abs(self.helicity[1]) != self.NFP,
+            UserWarning,
+            "Typical helicity (M,N) has N=NFP.",
+        )
+
+    def compute(
+        self,
+        names,
+        grid=None,
+        params=None,
+        transforms=None,
+        profiles=None,
+        data=None,
+        **kwargs,
+    ):
+        """Compute the quantity given by name on grid.
+
+        Parameters
+        ----------
+        names : str or array-like of str
+            Name(s) of the quantity(s) to compute.
+        grid : Grid, optional
+            Grid of coordinates to evaluate at. The grid nodes are given in the usual
+            (ρ,θ,ζ) coordinates, but θ is mapped to η and ζ is mapped to α.
+            Defaults to a linearly space grid on the rho=1 surface.
+        params : dict of ndarray
+            Parameters from the equilibrium, such as R_lmn, Z_lmn, i_l, p_l, etc
+            Defaults to attributes of self.
+        transforms : dict of Transform
+            Transforms for R, Z, lambda, etc. Default is to build from grid
+        profiles : dict of Profile
+            Profile objects for pressure, iota, current, etc. Defaults to attributes
+            of self
+        data : dict of ndarray
+            Data computed so far, generally output from other compute functions
+        **kwargs : dict, optional
+            Valid keyword arguments are:
+
+            * ``iota``: rotational transform
+            * ``helicity``: helicity (defaults to self.helicity)
+
+        Returns
+        -------
+        data : dict of ndarray
+            Computed quantity and intermediate variables.
+
+        """
+        if isinstance(names, str):
+            names = [names]
+        if grid is None:
+            grid = LinearGrid(theta=2 * 10, N=2 * 10, NFP=self.NFP, sym=False)
+        elif not isinstance(grid, _Grid):
+            raise TypeError(
+                "must pass in a Grid object for argument grid!"
+                f" instead got type {type(grid)}"
+            )
+
+        if params is None:
+            params = get_params(names, obj=self)
+        if transforms is None:
+            transforms = get_transforms(names, obj=self, grid=grid, **kwargs)
+        if data is None:
+            data = {}
+        profiles = {}
+
+        data = compute_fun(
+            self,
+            names,
+            params=params,
+            transforms=transforms,
+            profiles=profiles,
+            data=data,
+            helicity=kwargs.pop("helicity", self.helicity),
+            **kwargs,
+        )
+        return data
+
+    @property
+    def NFP(self):
+        """int: Number of (toroidal) field periods."""
+        return self._NFP
+
+    @optimizable_parameter
+    @property
+    def B_min(self):
+        """ndarray: Piecewise Omnigenity magnetic well shape parameters."""
+        return self._B_min
+
+    @B_min.setter
+    def B_min(self, B_min):
+        self._B_min = B_min
+
+    @optimizable_parameter
+    @property
+    def B_max(self):
+        """ndarray: Piecewise Omnigenity magnetic well shape parameters."""
+        return self._B_max
+
+    @B_max.setter
+    def B_max(self, B_max):
+        self._B_max = B_max
+
+    @optimizable_parameter
+    @property
+    def theta_C(self):
+        """ndarray: Piecewise Omnigenity magnetic well shape parameters."""
+        return self._theta_C
+
+    @theta_C.setter
+    def theta_C(self, theta_C):
+        self._theta_C = theta_C
+
+    @optimizable_parameter
+    @property
+    def zeta_C(self):
+        """ndarray: Piecewise Omnigenity magnetic well shape parameters."""
+        return self._zeta_C
+
+    @zeta_C.setter
+    def zeta_C(self, zeta_C):
+        self._zeta_C = zeta_C
+
+    @optimizable_parameter
+    @property
+    def t_1(self):
+        """ndarray: Piecewise Omnigenity magnetic well shape parameters."""
+        return self._t_1
+
+    @t_1.setter
+    def t_1(self, t_1):
+        self._t_1 = t_1
+
+    @optimizable_parameter
+    @property
+    def t_2(self):
+        """ndarray: Piecewise Omnigenity magnetic well shape parameters."""
+        return self._t_2
+
+    @t_2.setter
+    def t_2(self, t_2):
+        self._t_2 = t_2
+
+    @optimizable_parameter
+    @property
+    def w_2(self):
+        """ndarray: Piecewise Omnigenity magnetic well shape parameters."""
+        return self._w_2
+
+    @w_2.setter
+    def w_2(self, w_2):
+        self._w_2 = w_2
+
+    @optimizable_parameter
+    @property
+    def iota0(self):
+        """ndarray: Piecewise Omnigenity magnetic well shape parameters."""
+        return self._iota0
+
+    @iota0.setter
+    def iota0(self, iota0):
+        self._iota0 = iota0
+
+    @property
+    def helicity(self):
+        """tuple: Type of omnigenity (M, N)."""
+        return self._helicity
+
+    @helicity.setter
+    def helicity(self, helicity):
+        assert (
+            (len(helicity) == 2)
+            and (int(helicity[0]) == helicity[0])
+            and (int(helicity[1]) == helicity[1])
+        )
+        self._helicity = helicity

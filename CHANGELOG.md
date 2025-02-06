@@ -22,6 +22,10 @@ New Features
 - ``desc.objectives.CoilSetMinDistance`` and ``desc.objectives.PlasmaCoilSetMinDistance`` now include the option to use a softmin which can give smoother gradients. They also both now have a ``dist_chunk_size`` option to break up the distance calculation into smaller pieces to save memory
 - Adds a new function ``desc.coils.initialize_helical_coils`` for creating an initial guess for stage 2 helical coil optimization.
 
+Speed Improvements
+
+- A number of minor improvements to basis function evaluation and spectral transforms to improve speed. These will also enable future improvements for larger gains.
+
 Bug Fixes
 
 - Small bug fix to use the correct normalization length ``a`` in the BallooningStability objective.

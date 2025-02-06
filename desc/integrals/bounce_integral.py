@@ -691,6 +691,31 @@ class Bounce2D(Bounce):
         )
         return result[0] if len(result) == 1 else result
 
+    # TODO: Singularity subtraction quadrature enables more efficient algorithms.
+    #  To compute
+    #    ∫ fh dζ where e.g. h = (1−λ|B|)⁰ᐧ⁵
+    #  Taylor expand the singular part. For example, to first order
+    #    g₁ = f(ζ₁) [−λ [∂|B|/∂ζ|ρ,α](ζ₁)]⁰ᐧ⁵ (ζ − ζ₁)⁰ᐧ⁵
+    #    g₂ = f(ζ₂) [+λ [∂|B|/∂ζ|ρ,α](ζ₂)]⁰ᐧ⁵ (ζ₂ − ζ)⁰ᐧ⁵
+    #  Then compute with uniform quadrature (analytically) the first (second) integral.
+    #    ∫ fh dζ = ∫ fh-(g₁+g₂) dζ + ∫ g₁+g₂ dζ
+    #  1. The quadrature points to interpolate to are now θ(α, ζ) and ζ for uniform
+    #     ζ ∈ [0, 2π/NFP]. For weakly singular integrals the integrand is still
+    #     periodic after the singularity subtraction so this will converge fast.
+    #  2. The interpolated values are reused for each integral, so the number of
+    #     points to interpolate to is reduced by a factor of ``num_pitch*NFP``.
+    #  3. Longer bounce orbits merit more quadrature points than short ones.
+    #     This is now possible.
+    #  4. Uiform FFT can be used in toroidal direction. Combined with partial
+    #     summation the interpolation becomes cheap.
+    #     (Same code as ``desc/integrals/_bounce_utils.py::cubic_spline``).
+    #  5. The quadrature points are no longer functions of the solutions
+    #     to the nonlinear equation λB = 1. In particular, all the ζ values
+    #     are constants throughout optimization. This makes AD cheaper.
+    #  6. Because the interpolation is now purely a function of ``num_transit``
+    #     and θ, rather than the apriori unknown number of bounce points, the
+    #     expensive JAX limitation in GitHub issue #1303 is avoided.
+
     # TODO (#1303).
     def _integrate(self, x, w, integrand, pitch, data, names, z1, z2, check, plot):
         # TODO (#1294): Use non-uniform fast transforms here.

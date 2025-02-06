@@ -27,7 +27,13 @@ from .linear_objectives import (
     FixNearAxisZ,
     FixPressure,
     FixPsi,
+    FixSectionLambda,
+    FixSectionR,
+    FixSectionZ,
     FixSheetCurrent,
+    SectionLambdaSelfConsistency,
+    SectionRSelfConsistency,
+    SectionZSelfConsistency,
 )
 from .nae_utils import calc_zeroth_order_lambda, make_RZ_cons_1st_order
 from .objective_funs import ObjectiveFunction
@@ -121,7 +127,11 @@ def get_fixed_axis_constraints(eq, profiles=True, normalize=True):
     return constraints
 
 
-def get_fixed_boundary_constraints(eq, profiles=True, normalize=True):
+def get_fixed_boundary_constraints(
+    eq,
+    profiles=True,
+    normalize=True,
+):
     """Get the constraints necessary for a typical fixed-boundary equilibrium problem.
 
     Parameters
@@ -141,6 +151,48 @@ def get_fixed_boundary_constraints(eq, profiles=True, normalize=True):
     """
     kwargs = {"eq": eq, "normalize": normalize, "normalize_target": normalize}
     constraints = (FixBoundaryR(**kwargs), FixBoundaryZ(**kwargs), FixPsi(**kwargs))
+    if profiles:
+        for name, con in _PROFILE_CONSTRAINTS.items():
+            if getattr(eq, name) is not None:
+                constraints += (con(**kwargs),)
+    constraints += (FixSheetCurrent(**kwargs),)
+
+    return constraints
+
+
+def get_fixed_xsection_constraints(
+    eq,
+    profiles=True,
+    normalize=True,
+    fix_lambda=True,
+):
+    """Get the constraints necessary for a fixed cross-section equilibrium problem.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Equilibrium to constrain.
+    profiles : bool
+        If True, also include constraints to fix all profiles assigned to equilibrium.
+    normalize : bool
+        Whether to apply constraints in normalized units.
+    fix_lambda : bool
+        Whether to fix the λ coefficients to match the cross-section.
+
+    Returns
+    -------
+    constraints, tuple of _Objectives
+        A list of the linear constraints used in fixed-boundary problems.
+
+    """
+    kwargs = {"eq": eq, "normalize": normalize, "normalize_target": normalize}
+    constraints = (
+        FixSectionR(**kwargs),
+        FixSectionZ(**kwargs),
+    )
+    if fix_lambda:
+        constraints += (FixSectionLambda(**kwargs),)
+    constraints += (FixPsi(**kwargs),)
     if profiles:
         for name, con in _PROFILE_CONSTRAINTS.items():
             if getattr(eq, name) is not None:
@@ -310,7 +362,6 @@ def maybe_add_self_consistency(thing, constraints):
     """Add self consistency constraints if needed."""
     params = set(unique_list(flatten_list(thing.optimizable_params))[0])
 
-    # Equilibrium
     if {"R_lmn", "Rb_lmn"} <= params and not is_any_instance(
         constraints, BoundaryRSelfConsistency
     ):
@@ -319,6 +370,7 @@ def maybe_add_self_consistency(thing, constraints):
         constraints, BoundaryZSelfConsistency
     ):
         constraints += (BoundaryZSelfConsistency(eq=thing),)
+
     if {"L_lmn"} <= params and not is_any_instance(constraints, FixLambdaGauge):
         constraints += (FixLambdaGauge(eq=thing),)
     if {"R_lmn", "Ra_n"} <= params and not is_any_instance(
@@ -329,6 +381,19 @@ def maybe_add_self_consistency(thing, constraints):
         constraints, AxisZSelfConsistency
     ):
         constraints += (AxisZSelfConsistency(eq=thing),)
+
+    if {"R_lmn", "Rp_lmn"} <= params and not is_any_instance(
+        constraints, SectionRSelfConsistency
+    ):
+        constraints += (SectionRSelfConsistency(eq=thing),)
+    if {"Z_lmn", "Zp_lmn"} <= params and not is_any_instance(
+        constraints, SectionZSelfConsistency
+    ):
+        constraints += (SectionZSelfConsistency(eq=thing),)
+    if {"L_lmn", "Lp_lmn"} <= params and not is_any_instance(
+        constraints, SectionLambdaSelfConsistency
+    ):
+        constraints += (SectionLambdaSelfConsistency(eq=thing),)
 
     # Curve
     if {"shift"} <= params and not is_any_instance(constraints, FixCurveShift):

@@ -360,6 +360,8 @@ def _add_shaping(
             deltas["Rb_lmn"] *= bdry_step
         if "Zb_lmn" in deltas:
             deltas["Zb_lmn"] *= bdry_step
+        if "Rp_lmn" in deltas or "Zp_lmn" in deltas or "Lp_lmn" in deltas:
+            warnings.warn("Poincare BC is not yet supported for continuation")
         bdry_ratio += bdry_step
 
         constraints_i = get_fixed_boundary_constraints(eq=eqi)
@@ -693,6 +695,8 @@ def solve_continuation(  # noqa: C901
         NotImplementedError,
         "Continuation method with anisotropic pressure is not currently supported",
     )
+    # TODO: add warning for cases with Poincare BC. This needs a better
+    # inputreader for xsection
 
     timer = Timer()
     timer.start("Total time")

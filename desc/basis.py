@@ -9,7 +9,7 @@ import numpy as np
 
 from desc.backend import custom_jvp, fori_loop, jit, jnp, sign
 from desc.io import IOAble
-from desc.utils import check_nonnegint, check_posint, flatten_list
+from desc.utils import check_nonnegint, check_posint, copy_coeffs, flatten_list
 
 __all__ = [
     "PowerSeries",
@@ -1820,3 +1820,71 @@ def _jacobi_jvp(dx, x, xdot):
     # probably a more elegant fix, but just setting those derivatives to zero seems
     # to work fine.
     return f, df * xdot
+
+
+def get_basis_poincare(X_lmn_3D, basis_3D):
+    """Convert 3D FourierZernikeBasis to 2D ZernikePolynomial at zeta=0.
+
+    Takes a 3D FourierZernike basis and its coefficients X_lmn_3D and evaluates
+    the coefficients at the zeta=0 or Pi cross-section, returning a 2D ZernikePolynomial
+    basis and its coefficients X_lmn_2D. The output dimension will not be the same,
+    only toroidal mode will be N=0.
+
+    Parameters
+    ----------
+    X_lmn_3D : array, size [basis_3D.num_modes,1]
+        The Fourier-Zernike basis coefficients of the quantity X, that you wish to find
+        the 2D ZernikePolynomial basis corresponding to the quantity's value at the
+        zeta=0 cross-section
+    basis_3D : FourierZernikeBasis
+        The Fourier-Zernike basis corresponding to the coefficients passed.
+
+    Returns
+    -------
+    X_lmn_2D : array, size [basis_2D.num_modes,1]
+        The ZernikePolynomial basis coefficients of the quantity X, such that their
+        evaluation is the same as the input 3D basis when evaluated at zeta=0.
+    basis_2D : FourierZernikeBasis
+        The ZernikePolynomial basis corresponding to the coefficients output. The
+        radial resolution L and poloidal resolution M are equal to the max radial
+        and poloidal resolutions of the 3D basis passed as an input.
+    """
+    # Add up all the X_lm(n>=0) modes
+    # so that the quantity at the zeta=0 surface is described with just lm modes
+    # and get rid of the toroidal modes
+    modes_2D = []
+    X_lmn_2D = (
+        []
+    )  # these are corresponding to the 2D modes of the ZernikePolynomial Basis
+    modes_3D = basis_3D.modes
+    for i, mode in enumerate(modes_3D):
+        if mode[-1] < 0:
+            pass  # we do not need the sin(zeta) modes as they = 0 at zeta=0
+        else:
+            if (mode[0], mode[1], 0) not in modes_2D:
+                modes_2D.append((mode[0], mode[1], 0))
+                l = mode[0]
+                m = mode[1]
+
+                inds = np.where(
+                    np.logical_and(
+                        (modes_3D[:, :2] == [l, m]).all(axis=1),
+                        modes_3D[:, 2] >= 0,
+                    )
+                )[0]
+
+                SUM = np.sum(X_lmn_3D[inds])
+                X_lmn_2D.append(SUM)
+
+    X_lmn_2D = np.asarray(X_lmn_2D)
+    modes_2D = np.asarray(modes_2D)
+
+    basis_2D = ZernikePolynomial(
+        L=basis_3D.L,
+        M=basis_3D.M,
+        spectral_indexing=basis_3D._spectral_indexing,
+        sym=basis_3D.sym,
+    )
+
+    X_lmn_2D = copy_coeffs(X_lmn_2D, modes_2D, basis_2D.modes)
+    return X_lmn_2D, basis_2D

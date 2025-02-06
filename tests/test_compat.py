@@ -293,7 +293,8 @@ def test_rotate_zeta():
         eq1 = rotate_zeta(eq, dzeta1, copy=True)
 
     # check arbitrary rotation works
-    surf1 = eq_no_sym.get_surface_at(zeta=dzeta1)
+    with pytest.warns(UserWarning, match="The lambda value"):
+        surf1 = eq_no_sym.get_surface_at(zeta=dzeta1)
     surf2 = eq1.get_surface_at(zeta=0)
     assert np.allclose(surf1.R_lmn, surf2.R_lmn)
     assert np.allclose(surf1.Z_lmn, surf2.Z_lmn)

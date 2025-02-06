@@ -20,6 +20,7 @@ New Features
 - Adds a new objective ``desc.objectives.CoilIntegratedCurvature`` for targeting convex coils.
 - Adds batching feature to singular integrals.
 - ``desc.objectives.CoilSetMinDistance`` and ``desc.objectives.PlasmaCoilSetMinDistance`` now include the option to use a softmin which can give smoother gradients. They also both now have a ``dist_chunk_size`` option to break up the distance calculation into smaller pieces to save memory
+- Adds a new function ``desc.coils.initialize_helical_coils`` for creating an initial guess for stage 2 helical coil optimization.
 
 Speed Improvements
 
@@ -31,8 +32,11 @@ Bug Fixes
 - Fixed I/O bug when saving/loading ``_Profile`` classes that do not have a ``_params`` attribute.
 - Minor bugs described in [#1323](https://github.com/PlasmaControl/DESC/pull/1323).
 - Corrects basis vectors computations made on surface objects [#1175](https://github.com/PlasmaControl/DESC/pull/1175).
+- Fixes bug where ``save_in_makegrid_format`` function did not correctly account for ``CoilSet`` objects with NFP>1 or sym=True attributes, and so would not save all the coils.
 - Fix issue with interpolator for singular integrals [#1522](https://github.com/PlasmaControl/DESC/issues/1522) and additional checks [1519](https://github.com/PlasmaControl/DESC/issues/1519).
+- Fixes the coil currents in ``desc.coils.initialize_modular_coils`` to now give the correct expected linking current.
 - ``desc.objectives.PlasmaVesselDistance`` now correctly accounts for multiple field periods on both the equilibrium and the vessel surface. Previously it only considered distances within a single field period.
+
 
 v0.13.0
 -------

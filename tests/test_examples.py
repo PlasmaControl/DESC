@@ -21,6 +21,7 @@ from desc.coils import (
 )
 from desc.continuation import solve_continuation_automatic
 from desc.equilibrium import EquilibriaFamily, Equilibrium
+from desc.equilibrium.coords import get_rtz_grid
 from desc.examples import get
 from desc.geometry import FourierRZToroidalSurface
 from desc.grid import LinearGrid
@@ -383,7 +384,7 @@ def test_simsopt_QH_comparison():
     eq.solve(
         verbose=3,
         ftol=1e-8,
-        constraints=get_fixed_boundary_constraints(eq=eq, profiles=False),
+        constraints=get_fixed_boundary_constraints(eq=eq, profiles=True),
         objective=ObjectiveFunction(objectives=CurrentDensity(eq=eq)),
     )
     ##################################
@@ -1965,7 +1966,8 @@ def test_ballooning_stability_opt():
     for i in range(len(surfaces)):
         rho = surfaces[i]
 
-        grid = eq.get_rtz_grid(
+        grid = get_rtz_grid(
+            eq,
             rho,
             alpha,
             zeta,
@@ -2045,7 +2047,8 @@ def test_ballooning_stability_opt():
     for i in range(len(surfaces)):
         rho = surfaces[i]
 
-        grid = eq.get_rtz_grid(
+        grid = get_rtz_grid(
+            eq,
             rho,
             alpha,
             zeta,
@@ -2158,3 +2161,16 @@ def test_signed_PlasmaVesselDistance():
         atol=1e-2,
         err_msg="allowing eq to change",
     )
+
+
+@pytest.mark.unit
+def test_continuation_L_res():
+    """Test for fix to gh issue 1346."""
+    # previously this would throw a warning then an error
+    eq = Equilibrium(L=8, M=6, N=0)
+    eqf = solve_continuation_automatic(eq)
+    assert len(eqf) == 2
+    assert eqf[0].L == 6
+    assert eqf[0].M == 6
+    assert eqf[-1].L == 8
+    assert eqf[-1].M == 6

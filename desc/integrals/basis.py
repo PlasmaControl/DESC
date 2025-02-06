@@ -5,7 +5,7 @@ from functools import partial
 import numpy as np
 from matplotlib import pyplot as plt
 
-from desc.backend import dct, flatnonzero, idct, irfft, jnp, put, rfft
+from desc.backend import dct, flatnonzero, idct, irfft, jnp, rfft
 from desc.integrals._interp_utils import (
     _eps,
     _filter_distinct,
@@ -15,7 +15,6 @@ from desc.integrals._interp_utils import (
     chebroots_vec,
     dct_from_cheb,
     fourier_pts,
-    harmonic,
     idct_non_uniform,
     irfft_non_uniform,
 )
@@ -31,6 +30,7 @@ from desc.utils import (
     setdefault,
     take_mask,
 )
+from desc.vmec_utils import rfft_to_trig
 
 
 @partial(jnp.vectorize, signature="(m),(m)->(m)")
@@ -82,7 +82,7 @@ def _in_epigraph_and(is_intersect, df_dy_sign, /):
         # due to floating point errors grows, so the real solution is to pick a less
         # degenerate pitch value - one that does not ride the global extrema of f.
     )
-    return put(is_intersect, idx[0], edge_case)
+    return is_intersect.at[idx[0]].set(edge_case)
 
 
 def _chebcast(cheb, arr):
@@ -227,6 +227,14 @@ class FourierChebyshevSeries(IOAble):
         Transform Fourier interpolant harmonics to Nyquist trigonometric
         interpolant harmonics so that the coefficients are all real.
 
+        The order of the returned coefficient array
+        matches the Vandermonde matrix formed by an outer
+        product of Fourier and Chebyshev matrices with order
+        [sin(k𝐱), ..., sin(𝐱), 1, cos(𝐱), ..., cos(k𝐱)]
+        ⊗ [T₀(𝐲), T₁(𝐲), ..., Tₙ(𝐲)]
+
+        When ``self.X`` is even the sin(k𝐱) coefficient is zero and is excluded.
+
         Returns
         -------
         a_mn : jnp.ndarray
@@ -234,7 +242,7 @@ class FourierChebyshevSeries(IOAble):
             Real valued spectral coefficients for Fourier-Chebyshev series.
 
         """
-        a_mn = harmonic(cheb_from_dct(self._c), self.X, axis=-2)
+        a_mn = rfft_to_trig(cheb_from_dct(self._c), self.X, axis=-2)
         assert a_mn.shape[-2:] == (self.X, self.Y)
         return a_mn
 
@@ -453,7 +461,7 @@ class PiecewiseChebyshevSeries(IOAble):
         y = bijection_from_disc(y, self.domain[0], self.domain[-1])
         return y, is_intersect, df_dy_sign
 
-    def intersect1d(self, k=0.0, *, num_intersect=None, pad_value=0.0):
+    def intersect1d(self, k=0.0, num_intersect=None, pad_value=0.0):
         """Coordinates z(x, yᵢ) such that fₓ(yᵢ) = k for every x.
 
         Examples
@@ -539,7 +547,7 @@ class PiecewiseChebyshevSeries(IOAble):
         z2 = atleast_nd(self.cheb.ndim, z2)
         # Cheb has shape    (..., X, Y) and others
         #     have shape (K, ..., W)
-        errorif(not (z1.ndim == z2.ndim == k.ndim == self.cheb.ndim))
+        assert z1.ndim == z2.ndim == k.ndim == self.cheb.ndim
         return z1, z2, k
 
     def check_intersect1d(self, z1, z2, k, plot=True, **kwargs):
@@ -566,7 +574,10 @@ class PiecewiseChebyshevSeries(IOAble):
             Matplotlib (fig, ax) tuples for the 1D plot of each field line.
 
         """
+        kwargs.setdefault("title", r"Intersects $z$ in epigraph$(f)$ s.t. $f(z) = k$")
+        title = kwargs.pop("title")
         plots = []
+
         z1, z2, k = self._check_shape(z1, z2, k)
         mask = (z1 - z2) != 0.0
         z1 = jnp.where(mask, z1, jnp.nan)
@@ -598,10 +609,8 @@ class PiecewiseChebyshevSeries(IOAble):
                         z1=_z1,
                         z2=_z2,
                         k=k[idx],
-                        title=kwargs.pop(
-                            "title", r"Intersects $z$ in epigraph($f$) s.t. $f(z) = k$"
-                        )
-                        + f", (p,l)={idx}",
+                        title=title
+                        + rf" on field line $\alpha(m)$, $\rho(l)$, $(m,l)=${l}",
                         **kwargs,
                     )
                 print("      z1    |    z2")
@@ -621,6 +630,8 @@ class PiecewiseChebyshevSeries(IOAble):
                         z1=z1[idx],
                         z2=z2[idx],
                         k=k[idx],
+                        title=title
+                        + rf" on field line $\alpha(m)$, $\rho(l)$, $(m,l)=${l}",
                         **kwargs,
                     )
                 )
@@ -635,7 +646,7 @@ class PiecewiseChebyshevSeries(IOAble):
         k=None,
         k_transparency=0.5,
         klabel=r"$k$",
-        title=r"Intersects $z$ in epigraph($f$) s.t. $f(z) = k$",
+        title=r"Intersects $z$ in epigraph$(f)$ s.t. $f(z) = k$",
         hlabel=r"$z$",
         vlabel=r"$f$",
         show=True,

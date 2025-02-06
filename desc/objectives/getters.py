@@ -362,6 +362,7 @@ def get_parallel_forcebalance(
     from desc.backend import desc_config, jax, jnp
     from desc.grid import LinearGrid
 
+    eq = jax.device_put(eq, desc_config["sharding_replicated"])
     if desc_config["num_device"] != num_device and check_device:
         raise ValueError(
             f"Number of devices in desc_config ({desc_config['num_device']}) "
@@ -393,7 +394,7 @@ def get_parallel_forcebalance(
         # if the eq is also distrubuted across GPUs, then some internal logic that
         # checks if the things are different will fail, so we need to set the eq
         # to be the same manually
-        # obj._things[0] = eq # noqa: E800
+        obj._things[0] = eq
         objs += (obj,)
     objective = ObjectiveFunction(objs)
     objective.build(use_jit_wrapper=use_jit_wrapper)

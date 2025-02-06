@@ -227,7 +227,7 @@ class CurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
             whether to compute the magnetic vector potential "A" or the magnetic field
             "B". Defaults to "B"
         chunk_size : int or None
-            Size to split computation into chunks.
+            Size to split computation into chunks of evaluation points.
             If no chunking should be done or the chunk size is the full input
             then supply ``None``. Default is ``None``.
 
@@ -639,7 +639,7 @@ class FourierCurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
             whether to compute the magnetic vector potential "A" or the magnetic field
             "B". Defaults to "B"
         chunk_size : int or None
-            Size to split computation into chunks.
+            Size to split computation into chunks of evaluation points.
             If no chunking should be done or the chunk size is the full input
             then supply ``None``. Default is ``None``.
 
@@ -1029,7 +1029,7 @@ def _compute_A_or_B_from_CurrentPotentialField(
         whether to compute the magnetic vector potential "A" or the magnetic field
         "B". Defaults to "B"
     chunk_size : int or None
-        Size to split computation into chunks.
+        Size to split computation into chunks of evaluation points.
         If no chunking should be done or the chunk size is the full input
         then supply ``None``. Default is ``None``.
 

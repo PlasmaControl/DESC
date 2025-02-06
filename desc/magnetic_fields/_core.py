@@ -90,7 +90,7 @@ def biot_savart_general_vector_potential(re, rs, J, dV, chunk_size=None):
     dV : ndarray, shape(n_src_pts)
         volume element at source points
     chunk_size : int or None
-        Size to split computation into chunks.
+        Size to split computation into chunks of evaluation points.
         If no chunking should be done or the chunk size is the full input
         then supply ``None``. Default is ``None``.
 
@@ -293,7 +293,7 @@ class _MagneticField(IOAble, ABC):
         transforms : dict of Transform
             Transforms for R, Z, lambda, etc. Default is to build from source_grid
         chunk_size : int or None
-            Size to split computation into chunks.
+            Size to split computation into chunks of evaluation points.
             If no chunking should be done or the chunk size is the full input
             then supply ``None``. Default is ``None``.
 
@@ -547,7 +547,7 @@ class _MagneticField(IOAble, ABC):
             Whether or not to save the magnetic vector potential to the mgrid
             file, in addition to the magnetic field. Defaults to True.
         chunk_size : int or None
-            Size to split computation into chunks.
+            Size to split computation into chunks of evaluation points.
             If no chunking should be done or the chunk size is the full input
             then supply ``None``. Default is ``None``.
 
@@ -1000,7 +1000,7 @@ class SumMagneticField(_MagneticField, MutableSequence, OptimizableCollection):
             whether to compute the magnetic vector potential "A" or the magnetic field
             "B". Defaults to "B"
         chunk_size : int or None
-            Size to split computation into chunks.
+            Size to split computation into chunks of evaluation points.
             If no chunking should be done or the chunk size is the full input
             then supply ``None``. Default is ``None``.
 
@@ -1794,7 +1794,7 @@ class SplineMagneticField(_MagneticField, Optimizable):
             whether to compute the magnetic vector potential "A" or the magnetic field
             "B". Defaults to "B"
         chunk_size : int or None
-            Size to split computation into chunks.
+            Size to split computation into chunks of evaluation points.
             If no chunking should be done or the chunk size is the full input
             then supply ``None``. Default is ``None``.
 
@@ -2127,7 +2127,7 @@ class SplineMagneticField(_MagneticField, Optimizable):
             Number of toroidal field periods.  If not provided, will default to 1 or
             the provided field's NFP, if it has that attribute.
         chunk_size : int or None
-            Size to split computation into chunks.
+            Size to split computation into chunks of evaluation points.
             If no chunking should be done or the chunk size is the full input
             then supply ``None``. Default is ``None``.
 
@@ -2347,7 +2347,7 @@ class VectorPotentialField(_MagneticField):
             whether to compute the magnetic vector potential "A" or the magnetic field
             "B". Defaults to "B"
         chunk_size : int or None
-            Size to split computation into chunks.
+            Size to split computation into chunks of evaluation points.
             If no chunking should be done or the chunk size is the full input
             then supply ``None``. Default is ``None``.
 
@@ -2531,7 +2531,7 @@ def field_line_integrate(
         box will be stopped, and NaN returned for points outside the box.
         Defaults to (-np.inf,np.inf)
     chunk_size : int or None
-        Size to split computation into chunks.
+        Size to split computation into chunks of evaluation points.
         If no chunking should be done or the chunk size is the full input
         then supply ``None``. Default is ``None``.
     kwargs: dict

@@ -1241,6 +1241,42 @@ def test_save_and_load_makegrid_coils_rotated_int_grid(tmpdir_factory):
 
 
 @pytest.mark.unit
+def test_save_and_load_makegrid_coils_nested(tmpdir_factory):
+    """Test saving and reloading a nested CoilSet from MAKEGRID file."""
+    tmpdir = tmpdir_factory.mktemp("coil_files")
+    path = tmpdir.join("coils.MAKEGRID_format_nested")
+
+    # make a coilset with angular coilset
+    N = 22
+    coil = FourierPlanarCoil()
+    coil.current = 1
+    coilset_NFP = CoilSet(coil, NFP=N, sym=False)
+    coilset_sym = CoilSet(
+        FourierPlanarCoil(r_n=3, center=[10, 2 * np.pi / 7, 0], basis="rpz"),
+        NFP=1,
+        sym=True,
+    )
+    coilset = MixedCoilSet(coilset_NFP, coilset_sym)
+
+    grid = LinearGrid(N=25, endpoint=False)
+    coilset.save_in_makegrid_format(str(path), grid=grid, NFP=2)
+
+    coilset2 = CoilSet.from_makegrid_coilfile(str(path))
+
+    assert coilset2.num_coils == coilset.num_coils
+
+    # check length of each coil
+    # first 22 are the coilset_NFP coils
+    correct_length = coilset_NFP.compute("length")[0]["length"]
+    loaded_coil_lengths = [c.compute("length")["length"] for c in coilset2[:22]]
+    np.testing.assert_allclose(correct_length, loaded_coil_lengths, rtol=1e-2)
+    # last 2 are the coilset_sym coils
+    correct_length = coilset_sym.compute("length")[0]["length"]
+    loaded_coil_lengths = [c.compute("length")["length"] for c in coilset2[22:]]
+    np.testing.assert_allclose(correct_length, loaded_coil_lengths, rtol=1e-2)
+
+
+@pytest.mark.unit
 def test_save_makegrid_coils_assert_NFP(tmpdir_factory):
     """Test saving CoilSet that with incompatible NFP throws an error."""
     Ncoils = 22

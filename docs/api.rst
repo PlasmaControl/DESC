@@ -331,8 +331,8 @@ Transform
 
    desc.transform.Transform
 
-VMEC
-****
+VMEC and Other Codes
+********************
 
 .. autosummary::
     :toctree: _api/vmec/
@@ -340,3 +340,4 @@ VMEC
     :template: class.rst
 
     desc.vmec.VMECIO
+    desc.vmec_utils.make_boozmn_output

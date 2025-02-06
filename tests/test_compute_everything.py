@@ -214,7 +214,7 @@ def test_compute_everything():
     no_xyz_things = ["desc.magnetic_fields._core.OmnigenousField"]
 
     with warnings.catch_warnings():
-        # Max resolution of master_compute_data.pkl limited by GitHub file
+        # Max resolution of master_compute_data_rpz.pkl limited by GitHub file
         # size cap at 100 mb, so can't hit suggested resolution for some things.
         warnings.filterwarnings("ignore", category=ResolutionWarning)
         for p in things:

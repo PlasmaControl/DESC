@@ -24,10 +24,11 @@ from desc.integrals._interp_utils import (
     polyder_vec,
     polyroot_vec,
     polyval_vec,
+    rfft_to_trig,
+    trig_vander,
 )
 from desc.integrals.basis import FourierChebyshevSeries
 from desc.integrals.quad_utils import bijection_to_disc
-from desc.vmec_utils import rfft_to_trig, trig_vander
 
 
 class TestPolyUtils:

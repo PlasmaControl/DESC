@@ -13,7 +13,7 @@ import numpy as np
 from interpax import interp1d
 from orthax.chebyshev import chebroots
 
-from desc.backend import dct, jnp, rfft, rfft2
+from desc.backend import dct, jnp, rfft, rfft2, take
 from desc.integrals.quad_utils import bijection_from_disc
 from desc.utils import Index, errorif, safediv
 
@@ -764,3 +764,80 @@ def _concat_sentinel(r, sentinel, num=1):
     """Concatenate ``sentinel`` ``num`` times to ``r`` on last axis."""
     sent = jnp.broadcast_to(sentinel, (*r.shape[:-1], num))
     return jnp.append(r, sent, axis=-1)
+
+
+def rfft_to_trig(a, n, axis=-1):
+    """Spectral coefficients of the Nyquist trigonometric interpolant.
+
+    Parameters
+    ----------
+    a : jnp.ndarray
+        Fourier coefficients ``a=rfft(f,norm="forward",axis=axis)``.
+    n : int
+        Spectral resolution of ``a``.
+    axis : int
+        Axis along which coefficients are stored.
+
+    Returns
+    -------
+    h : jnp.ndarray
+        Nyquist trigonometric interpolant coefficients.
+
+        Coefficients are ordered along ``axis`` of size ``n`` to match
+        Vandermonde matrix with order
+        [sin(k𝐱), ..., sin(𝐱), 1, cos(𝐱), ..., cos(k𝐱)].
+        When ``n`` is even the sin(k𝐱) coefficient is zero and is excluded.
+
+    """
+    is_even = (n % 2) == 0
+    # sin(nx) coefficients
+    an = -2 * jnp.flip(
+        take(
+            a.imag,
+            jnp.arange(1, a.shape[axis] - is_even),
+            axis,
+            unique_indices=True,
+            indices_are_sorted=True,
+        ),
+        axis=axis,
+    )
+    if is_even:
+        i = (0, -1)
+    else:
+        i = 0
+    # cos(nx) coefficients
+    bn = a.real.at[Index.get(i, axis, a.ndim)].divide(2) * 2
+    h = jnp.concatenate([an, bn], axis=axis)
+    assert h.shape[axis] == n
+    return h
+
+
+def trig_vander(x, n, domain=(0, 2 * jnp.pi)):
+    """Nyquist trigonometric interpolant basis evaluated at ``x``.
+
+    Parameters
+    ----------
+    x : jnp.ndarray
+        Points at which to evaluate Vandermonde matrix.
+    n : int
+        Spectral resolution.
+    domain : tuple[float]
+        Domain over which samples will be taken.
+        This domain should span an open period of the function to interpolate.
+
+    Returns
+    -------
+    vander : jnp.ndarray
+        Shape (*x.shape, n).
+        Vandermonde matrix of degree ``n-1`` and sample points ``x``.
+        Last axis ordered as [sin(k𝐱), ..., sin(𝐱), 1, cos(𝐱), ..., cos(k𝐱)].
+        When ``n`` is even the sin(k𝐱) basis function is excluded.
+
+    """
+    is_even = (n % 2) == 0
+    n_rfft = jnp.fft.rfftfreq(n, d=(domain[-1] - domain[0]) / (2 * jnp.pi * n))
+    nx = n_rfft * (x - domain[0])[..., jnp.newaxis]
+    vander = jnp.concatenate(
+        [jnp.sin(nx[..., n_rfft.size - is_even - 1 : 0 : -1]), jnp.cos(nx)], axis=-1
+    )
+    return vander

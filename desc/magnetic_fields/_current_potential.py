@@ -277,7 +277,7 @@ class CurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
         transforms : dict of Transform
             Transforms for R, Z, lambda, etc. Default is to build from source_grid
         chunk_size : int or None
-            Size to split computation into chunks.
+            Size to split computation into chunks of evaluation points.
             If no chunking should be done or the chunk size is the full input
             then supply ``None``. Default is ``None``.
 
@@ -317,7 +317,7 @@ class CurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
         transforms : dict of Transform
             Transforms for R, Z, lambda, etc. Default is to build from source_grid
         chunk_size : int or None
-            Size to split computation into chunks.
+            Size to split computation into chunks of evaluation points.
             If no chunking should be done or the chunk size is the full input
             then supply ``None``. Default is ``None``.
 
@@ -689,7 +689,7 @@ class FourierCurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
         transforms : dict of Transform
             Transforms for R, Z, lambda, etc. Default is to build from source_grid
         chunk_size : int or None
-            Size to split computation into chunks.
+            Size to split computation into chunks of evaluation points.
             If no chunking should be done or the chunk size is the full input
             then supply ``None``. Default is ``None``.
 
@@ -729,7 +729,7 @@ class FourierCurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
         transforms : dict of Transform
             Transforms for R, Z, lambda, etc. Default is to build from source_grid
         chunk_size : int or None
-            Size to split computation into chunks.
+            Size to split computation into chunks of evaluation points.
             If no chunking should be done or the chunk size is the full input
             then supply ``None``. Default is ``None``.
 
@@ -1220,7 +1220,7 @@ def solve_regularized_surface_current(  # noqa: C901 fxn too complex
         lambda_regularization.
         2 will display jacobian timing info
     chunk_size : int or None
-        Size to split computation into chunks.
+        Size to split computation into chunks of evaluation points.
         If no chunking should be done or the chunk size is the full input
         then supply ``None``. Default is ``None``.
 
@@ -1359,7 +1359,9 @@ def solve_regularized_surface_current(  # noqa: C901 fxn too complex
     G_tot = -(eq.compute("G", grid=source_grid)["G"][0] / mu_0 * 2 * jnp.pi)
 
     if external_field:
-        G_ext = _G_from_external_field(external_field, eq, external_field_grid)
+        G_ext = _G_from_external_field(
+            external_field, eq, external_field_grid, chunk_size=chunk_size
+        )
     else:
         G_ext = 0
 

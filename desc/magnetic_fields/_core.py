@@ -52,7 +52,7 @@ def biot_savart_general(re, rs, J, dV, chunk_size=None):
     dV : ndarray, shape(n_src_pts)
         volume element at source points
     chunk_size : int or None
-        Size to split computation into chunks.
+        Size to split computation into chunks of evaluation points.
         If no chunking should be done or the chunk size is the full input
         then supply ``None``. Default is ``None``.
 
@@ -67,13 +67,13 @@ def biot_savart_general(re, rs, J, dV, chunk_size=None):
     JdV = J * dV[:, jnp.newaxis]
 
     def biot(re):
-        dr = rs - re[..., jnp.newaxis, :]
+        dr = rs - re
         num = jnp.cross(dr, JdV, axis=-1)
         den = jnp.linalg.norm(dr, axis=-1, keepdims=True) ** 3
         return safediv(num, den).sum(axis=-2) * mu_0 / (4 * jnp.pi)
 
     # It is more efficient to sum over the sources in batches of evaluation points.
-    return batch_map(biot, re, chunk_size)
+    return batch_map(biot, re[..., jnp.newaxis, :], chunk_size)
 
 
 def biot_savart_general_vector_potential(re, rs, J, dV, chunk_size=None):
@@ -104,12 +104,12 @@ def biot_savart_general_vector_potential(re, rs, J, dV, chunk_size=None):
     JdV = J * dV[:, jnp.newaxis]
 
     def biot(re):
-        dr = rs - re[..., jnp.newaxis, :]
+        dr = rs - re
         den = jnp.linalg.norm(dr, axis=-1, keepdims=True)
         return safediv(JdV, den).sum(axis=-2) * mu_0 / (4 * jnp.pi)
 
     # It is more efficient to sum over the sources in batches of evaluation points.
-    return batch_map(biot, re, chunk_size)
+    return batch_map(biot, re[..., jnp.newaxis, :], chunk_size)
 
 
 def read_BNORM_file(fname, surface, eval_grid=None, scale_by_curpol=True):
@@ -252,7 +252,7 @@ class _MagneticField(IOAble, ABC):
         transforms : dict of Transform
             Transforms for R, Z, lambda, etc. Default is to build from source_grid
         chunk_size : int or None
-            Size to split computation into chunks.
+            Size to split computation into chunks of evaluation points.
             If no chunking should be done or the chunk size is the full input
             then supply ``None``. Default is ``None``.
 
@@ -344,7 +344,7 @@ class _MagneticField(IOAble, ABC):
             basis for returned coordinates on the surface
             cylindrical "rpz" by default
         chunk_size : int or None
-            Size to split computation into chunks.
+            Size to split computation into chunks of evaluation points.
             If no chunking should be done or the chunk size is the full input
             then supply ``None``. Default is ``None``.
 
@@ -758,7 +758,7 @@ class MagneticFieldFromUser(_MagneticField, Optimizable):
         source_grid : Grid, int or None or array-like, optional
             Unused by this class, only kept for API compatibility
         chunk_size : int or None
-            Size to split computation into chunks.
+            Size to split computation into chunks of evaluation points.
             If no chunking should be done or the chunk size is the full input
             then supply ``None``. Default is ``None``.
 
@@ -801,7 +801,7 @@ class MagneticFieldFromUser(_MagneticField, Optimizable):
         source_grid : Grid, int or None or array-like, optional
             Unused by this MagneticField class.
         chunk_size : int or None
-            Size to split computation into chunks.
+            Size to split computation into chunks of evaluation points.
             If no chunking should be done or the chunk size is the full input
             then supply ``None``. Default is ``None``.
 
@@ -896,7 +896,7 @@ class ScaledMagneticField(_MagneticField, Optimizable):
         transforms : dict of Transform
             Transforms for R, Z, lambda, etc. Default is to build from source_grid
         chunk_size : int or None
-            Size to split computation into chunks.
+            Size to split computation into chunks of evaluation points.
             If no chunking should be done or the chunk size is the full input
             then supply ``None``. Default is ``None``.
 
@@ -936,7 +936,7 @@ class ScaledMagneticField(_MagneticField, Optimizable):
             Transforms for R, Z, lambda, etc. Default is to build from source_grid
             chunk_size : int or None
         chunk_size : int or None
-            Size to split computation into chunks.
+            Size to split computation into chunks of evaluation points.
             If no chunking should be done or the chunk size is the full input
             then supply ``None``. Default is ``None``.
 
@@ -1077,7 +1077,7 @@ class SumMagneticField(_MagneticField, MutableSequence, OptimizableCollection):
         transforms : dict of Transform
             Transforms for R, Z, lambda, etc. Default is to build from source_grid
         chunk_size : int or None
-            Size to split computation into chunks.
+            Size to split computation into chunks of evaluation points.
             If no chunking should be done or the chunk size is the full input
             then supply ``None``. Default is ``None``.
 
@@ -1122,7 +1122,7 @@ class SumMagneticField(_MagneticField, MutableSequence, OptimizableCollection):
         transforms : dict of Transform
             Transforms for R, Z, lambda, etc. Default is to build from source_grid
         chunk_size : int or None
-            Size to split computation into chunks.
+            Size to split computation into chunks of evaluation points.
             If no chunking should be done or the chunk size is the full input
             then supply ``None``. Default is ``None``.
 
@@ -1234,7 +1234,7 @@ class ToroidalMagneticField(_MagneticField, Optimizable):
             Transforms for R, Z, lambda, etc. Default is to build from source_grid
             Unused by this MagneticField class.
         chunk_size : int or None
-            Size to split computation into chunks.
+            Size to split computation into chunks of evaluation points.
             If no chunking should be done or the chunk size is the full input
             then supply ``None``. Default is ``None``.
 
@@ -1287,7 +1287,7 @@ class ToroidalMagneticField(_MagneticField, Optimizable):
             Transforms for R, Z, lambda, etc. Default is to build from source_grid
             Unused by this MagneticField class.
         chunk_size : int or None
-            Size to split computation into chunks.
+            Size to split computation into chunks of evaluation points.
             If no chunking should be done or the chunk size is the full input
             then supply ``None``. Default is ``None``.
 
@@ -1365,7 +1365,7 @@ class VerticalMagneticField(_MagneticField, Optimizable):
             Transforms for R, Z, lambda, etc. Default is to build from source_grid
             Unused by this MagneticField class.
         chunk_size : int or None
-            Size to split computation into chunks.
+            Size to split computation into chunks of evaluation points.
             If no chunking should be done or the chunk size is the full input
             then supply ``None``. Default is ``None``.
 
@@ -1413,7 +1413,7 @@ class VerticalMagneticField(_MagneticField, Optimizable):
             Transforms for R, Z, lambda, etc. Default is to build from source_grid
             Unused by this MagneticField class.
         chunk_size : int or None
-            Size to split computation into chunks.
+            Size to split computation into chunks of evaluation points.
             If no chunking should be done or the chunk size is the full input
             then supply ``None``. Default is ``None``.
 
@@ -1531,7 +1531,7 @@ class PoloidalMagneticField(_MagneticField, Optimizable):
             Transforms for R, Z, lambda, etc. Default is to build from source_grid
             Unused by this MagneticField class.
         chunk_size : int or None
-            Size to split computation into chunks.
+            Size to split computation into chunks of evaluation points.
             If no chunking should be done or the chunk size is the full input
             then supply ``None``. Default is ``None``.
 
@@ -1589,7 +1589,7 @@ class PoloidalMagneticField(_MagneticField, Optimizable):
             Transforms for R, Z, lambda, etc. Default is to build from source_grid
             Unused by this MagneticField class.
         chunk_size : int or None
-            Size to split computation into chunks.
+            Size to split computation into chunks of evaluation points.
             If no chunking should be done or the chunk size is the full input
             then supply ``None``. Default is ``None``.
 
@@ -1945,7 +1945,7 @@ class SplineMagneticField(_MagneticField, Optimizable):
             Transforms for R, Z, lambda, etc. Default is to build from source_grid
             Unused by this MagneticField class.
         chunk_size : int or None
-            Size to split computation into chunks.
+            Size to split computation into chunks of evaluation points.
             If no chunking should be done or the chunk size is the full input
             then supply ``None``. Default is ``None``.
 
@@ -1984,7 +1984,7 @@ class SplineMagneticField(_MagneticField, Optimizable):
             Transforms for R, Z, lambda, etc. Default is to build from source_grid
             Unused by this MagneticField class.
         chunk_size : int or None
-            Size to split computation into chunks.
+            Size to split computation into chunks of evaluation points.
             If no chunking should be done or the chunk size is the full input
             then supply ``None``. Default is ``None``.
 
@@ -2219,7 +2219,7 @@ class ScalarPotentialField(_MagneticField):
             Transforms for R, Z, lambda, etc. Default is to build from source_grid
             Unused by this MagneticField class.
         chunk_size : int or None
-            Size to split computation into chunks.
+            Size to split computation into chunks of evaluation points.
             If no chunking should be done or the chunk size is the full input
             then supply ``None``. Default is ``None``.
 
@@ -2274,7 +2274,7 @@ class ScalarPotentialField(_MagneticField):
             Transforms for R, Z, lambda, etc. Default is to build from source_grid
             Unused by this MagneticField class.
         chunk_size : int or None
-            Size to split computation into chunks.
+            Size to split computation into chunks of evaluation points.
             If no chunking should be done or the chunk size is the full input
             then supply ``None``. Default is ``None``.
 
@@ -2426,7 +2426,7 @@ class VectorPotentialField(_MagneticField):
             Transforms for R, Z, lambda, etc. Default is to build from source_grid
             Unused by this MagneticField class.
         chunk_size : int or None
-            Size to split computation into chunks.
+            Size to split computation into chunks of evaluation points.
             If no chunking should be done or the chunk size is the full input
             then supply ``None``. Default is ``None``.
 
@@ -2465,7 +2465,7 @@ class VectorPotentialField(_MagneticField):
             Transforms for R, Z, lambda, etc. Default is to build from source_grid
             Unused by this MagneticField class.
         chunk_size : int or None
-            Size to split computation into chunks.
+            Size to split computation into chunks of evaluation points.
             If no chunking should be done or the chunk size is the full input
             then supply ``None``. Default is ``None``.
 

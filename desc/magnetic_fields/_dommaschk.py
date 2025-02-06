@@ -194,9 +194,10 @@ class DommaschkPotentialField(ScalarPotentialField):
         verbose (int): verbosity level of fitting routine, > 0 prints residuals,
              >1 prints timing info
         chunk_size : int or None
-            Size to split computation into chunks.
+            Size to split computation into chunks of evaluation points.
             If no chunking should be done or the chunk size is the full input
             then supply ``None``. Default is ``None``.
+
         """
         # We seek c in  Ac = b
         # A will be the BR, Bphi and BZ from each individual

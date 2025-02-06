@@ -541,7 +541,8 @@ class ProximalProjection(ObjectiveFunction):
             "Zp_lmn",
             "Lp_lmn",
         ]:
-            self._args.remove(arg)
+            if arg in self._args:
+                self._args.remove(arg)
         linear_constraint = ObjectiveFunction(self._linear_constraints)
         linear_constraint.build()
         _, _, _, self._Z, self._D, self._unfixed_idx, _, _ = (

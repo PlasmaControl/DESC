@@ -38,6 +38,10 @@ class Optimizable(ABC):
                 )
         return self._optimizable_params
 
+    @optimizable_params.setter
+    def optimizable_params(self, new):
+        self._optimizable_params = new
+
     @property
     def params_dict(self):
         """dict: dictionary of arrays of optimizable parameters."""
@@ -238,3 +242,21 @@ def optimizable_parameter(f):
     else:
         f.optimizable = True
     return f
+
+
+def make_nonoptimizable(f, obj):
+    """Decorator to declare an attribute or property as non- optimizable.
+
+    Parameters
+    ----------
+    f : str
+        Name of the attribute to be declared as non-optimizable.
+    obj : Optimizable
+        Object to which the attribute belongs.
+    """
+    opt_params = (obj.optimizable_params).copy()
+    if f in opt_params:
+        opt_params.remove(f)
+    else:
+        print(f"'{f}' is not an optimizable parameter!")
+    obj.optimizable_params = opt_params

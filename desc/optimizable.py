@@ -245,7 +245,7 @@ def optimizable_parameter(f):
 
 
 def make_nonoptimizable(f, obj):
-    """Decorator to declare an attribute or property as non- optimizable.
+    """Decorator to declare an attribute or property as non-optimizable.
 
     Parameters
     ----------
@@ -260,3 +260,25 @@ def make_nonoptimizable(f, obj):
     else:
         print(f"'{f}' is not an optimizable parameter!")
     obj.optimizable_params = opt_params
+
+
+def make_optimizable(f, obj):
+    """Decorator to declare an attribute or property as optimizable.
+
+    The idea behind this function is to declare an attribute that doesn't have the
+    optimizable_parameter decorator as optimizable. This is useful for attributes
+    like `Rp_lmn`, `Zp_lmn` and `Lp_lmn` in `Equilibrium` class.
+
+    Parameters
+    ----------
+    f : str
+        Name of the attribute to be declared as optimizable.
+    obj : Optimizable
+        Object to which the attribute belongs.
+    """
+    opt_params = (obj.optimizable_params).copy()
+    if f not in opt_params:
+        opt_params.append(f)
+    else:
+        print(f"'{f}' is already an optimizable parameter!")
+    obj.optimizable_params = obj._sort_args(opt_params)

@@ -14,7 +14,7 @@ from termcolor import colored
 from desc.backend import execute_on_cpu, jnp, tree_leaves, tree_map, tree_structure
 from desc.basis import zernike_radial
 from desc.geometry import FourierRZCurve
-from desc.optimizable import make_nonoptimizable
+from desc.optimizable import make_nonoptimizable, make_optimizable
 from desc.utils import broadcast_tree, errorif, setdefault
 
 from .normalization import compute_scaling_factors
@@ -923,9 +923,7 @@ class FixBoundaryR(FixParameters):
         name="fixed LCFS R",
     ):
         if "Rb_lmn" not in eq.params_dict:
-            params = (eq.optimizable_params).copy()
-            eq.optimizable_params = params.append("Rb_lmn")
-            eq.optimizable_params = eq._sort_args(eq.optimizable_params)
+            make_optimizable("Rb_lmn", eq)
         if "Rp_lmn" in eq.params_dict:
             make_nonoptimizable("Rp_lmn", eq)
         if "Zp_lmn" in eq.params_dict:
@@ -1015,9 +1013,7 @@ class FixBoundaryZ(FixParameters):
         name="fixed LCFS Z",
     ):
         if "Zb_lmn" not in eq.params_dict:
-            params = (eq.optimizable_params).copy()
-            eq.optimizable_params = params.append("Zb_lmn")
-            eq.optimizable_params = eq._sort_args(eq.optimizable_params)
+            make_optimizable("Zb_lmn", eq)
         if "Rp_lmn" in eq.params_dict:
             make_nonoptimizable("Rp_lmn", eq)
         if "Zp_lmn" in eq.params_dict:
@@ -1107,9 +1103,7 @@ class FixSectionR(FixParameters):
         name="fixed cross-section R",
     ):
         if "Rp_lmn" not in eq.params_dict:
-            params = (eq.optimizable_params).copy()
-            eq.optimizable_params = params.append("Rp_lmn")
-            eq.optimizable_params = eq._sort_args(eq.optimizable_params)
+            make_optimizable("Rp_lmn", eq)
         if "Rb_lmn" in eq.params_dict:
             make_nonoptimizable("Rb_lmn", eq)
         if "Zb_lmn" in eq.params_dict:
@@ -1197,9 +1191,7 @@ class FixSectionZ(FixParameters):
         name="fixed cross-section Z",
     ):
         if "Zp_lmn" not in eq.params_dict:
-            params = (eq.optimizable_params).copy()
-            eq.optimizable_params = params.append("Zp_lmn")
-            eq.optimizable_params = eq._sort_args(eq.optimizable_params)
+            make_optimizable("Zp_lmn", eq)
         if "Rb_lmn" in eq.params_dict:
             make_nonoptimizable("Rb_lmn", eq)
         if "Zb_lmn" in eq.params_dict:
@@ -1287,9 +1279,7 @@ class FixSectionLambda(FixParameters):
         name="fixed cross-section λ",
     ):
         if "Lp_lmn" not in eq.params_dict:
-            params = (eq.optimizable_params).copy()
-            eq.optimizable_params = params.append("Lp_lmn")
-            eq.optimizable_params = eq._sort_args(eq.optimizable_params)
+            make_optimizable("Lp_lmn", eq)
         if "Rb_lmn" in eq.params_dict:
             make_nonoptimizable("Rb_lmn", eq)
         if "Zb_lmn" in eq.params_dict:

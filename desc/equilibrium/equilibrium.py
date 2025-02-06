@@ -47,7 +47,6 @@ from desc.utils import (
     check_posint,
     copy_coeffs,
     errorif,
-    is_any_instance,
     only1,
     setdefault,
     warnif,
@@ -1629,7 +1628,6 @@ class Equilibrium(IOAble, Optimizable):
     def Zb_lmn(self, Zb_lmn):
         self.surface.Z_lmn = Zb_lmn
 
-    @optimizable_parameter
     @property
     def Rp_lmn(self):
         """ndarray: Spectral coefficients of R at the cross-section."""
@@ -1639,7 +1637,6 @@ class Equilibrium(IOAble, Optimizable):
     def Rp_lmn(self, Rp_lmn):
         self.xsection.R_lmn = Rp_lmn
 
-    @optimizable_parameter
     @property
     def Zp_lmn(self):
         """ndarray: Spectral coefficients of Z at the cross-section."""
@@ -1649,7 +1646,6 @@ class Equilibrium(IOAble, Optimizable):
     def Zp_lmn(self, Zp_lmn):
         self.xsection.Z_lmn = Zp_lmn
 
-    @optimizable_parameter
     @property
     def Lp_lmn(self):
         """ndarray: Spectral coefficients of Lambda at the cross-section."""
@@ -2307,13 +2303,6 @@ class Equilibrium(IOAble, Optimizable):
             options=options,
             copy=copy,
         )
-        from desc.objectives import SectionRSelfConsistency
-        from desc.objectives.getters import maybe_add_self_consistency
-
-        constraints = maybe_add_self_consistency(self, constraints)
-        # TODO: make this more general and probably put it somewhere else
-        if not is_any_instance(constraints, SectionRSelfConsistency):
-            things[0].xsection = things[0].get_surface_at(zeta=0)
 
         return things[0], result
 
@@ -2397,13 +2386,6 @@ class Equilibrium(IOAble, Optimizable):
             options=options,
             copy=copy,
         )
-        from desc.objectives import SectionRSelfConsistency
-        from desc.objectives.getters import maybe_add_self_consistency
-
-        constraints = maybe_add_self_consistency(self, constraints)
-        # TODO: make this more general and probably put it somewhere else
-        if not is_any_instance(constraints, SectionRSelfConsistency):
-            things[0].xsection = things[0].get_surface_at(zeta=0)
 
         return things[0], result
 

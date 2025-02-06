@@ -69,7 +69,7 @@ class Transform(IOAble):
             self.grid.coordinates != "rtz",
             msg=f"Expected coordinates rtz got {self.grid.coordinates}.",
         )
-        # DESC truncates the computational domain to ζ ∈ [0, 2π/grid.NFP]
+        # DESC truncates the computational domain to ζ ∈ [0, 2π/grid.NFP)
         # and changes variables to the spectrally condensed ζ* = basis.NFP ζ,
         # so basis.NFP must equal grid.NFP.
         warnif(

@@ -8,7 +8,6 @@ import numpy as np
 from desc.backend import (
     desc_config,
     execute_on_cpu,
-    jax,
     jit,
     jnp,
     pconcat,
@@ -498,13 +497,10 @@ class ObjectiveFunction(IOAble):
 
         """
         params = self.unpack_state(x)
-        if constants is None:
-            constants = self.constants
-        assert len(params) == len(constants) == len(self.objectives)
         f = pconcat(
             [
-                obj.compute_scaled_error(*par, constants=const)
-                for par, obj, const in zip(params, self.objectives, constants)
+                obj.compute_scaled_error(*par)
+                for par, obj in zip(params, self.objectives)
             ]
         )
         return f
@@ -1150,32 +1146,6 @@ class _Objective(IOAble, ABC):
         """Build constant arrays."""
         self._check_dimensions()
         self._set_derivatives()
-
-        if desc_config["num_device"] != 1 and False:  # temporarly disable sharding
-            if hasattr(self, "_constants"):
-                grid = self._constants["transforms"]["grid"]
-                # shard nodes, spacing, and weights across devices
-                grid._nodes = jax.device_put(
-                    jnp.asarray(grid.nodes),
-                    desc_config["sharding"],
-                )
-                grid._spacing = jax.device_put(
-                    jnp.asarray(grid.spacing),
-                    desc_config["sharding"],
-                )
-                grid._weights = jax.device_put(
-                    jnp.asarray(grid.weights),
-                    desc_config["sharding"],
-                )
-
-                # replicate profiles across devices
-                # TODO: profiles are dict of arrays, need to shard each array
-                if False:
-                    profiles = self._constants["profiles"]
-                    profiles = jax.device_put(
-                        profiles,
-                        desc_config["sharding"],
-                    )
 
         # set quadrature weights if they haven't been
         if hasattr(self, "_constants") and ("quad_weights" not in self._constants):

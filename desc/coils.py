@@ -30,16 +30,7 @@ from desc.geometry import (
 from desc.grid import LinearGrid
 from desc.magnetic_fields import _MagneticField
 from desc.optimizable import Optimizable, OptimizableCollection, optimizable_parameter
-from desc.utils import (
-    cross,
-    dot,
-    equals,
-    errorif,
-    flatten_list,
-    safenorm,
-    setdefault,
-    warnif,
-)
+from desc.utils import cross, dot, equals, errorif, flatten_list, safenorm, warnif
 
 
 @jit
@@ -252,7 +243,6 @@ class _Coil(_MagneticField, Optimizable, ABC):
 
     @current.setter
     def current(self, new):
-        new = setdefault(new, 1, new)
         assert jnp.isscalar(new) or new.size == 1
         self._current = float(np.squeeze(new))
 

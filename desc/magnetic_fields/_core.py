@@ -774,7 +774,6 @@ class MagneticFieldFromUser(_MagneticField, Optimizable):
         if basis == "xyz":
             coords = xyz2rpz(coords)
 
-        # Not passing chunk size to not break things.
         B = self._fun(coords, params)
         if basis == "xyz":
             B = rpz2xyz_vec(B, phi=coords[:, 1])

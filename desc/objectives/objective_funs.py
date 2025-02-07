@@ -846,11 +846,12 @@ class ObjectiveFunction(IOAble):
 
         Parameters
         ----------
-        mode : {"auto", "lsq", "scalar", "bfgs", "all"}
+        mode : {"auto", "lsq", "scalar", "bfgs", "all", "obj"}
             Whether to compile for least squares optimization or scalar optimization.
             "auto" compiles based on the type of objective, either scalar or lsq
             "bfgs" compiles only scalar objective and gradient,
             "all" compiles all derivatives.
+            "obj" compiles only the objective and no derivatives.
         verbose : int, optional
             Level of output.
 
@@ -870,18 +871,19 @@ class ObjectiveFunction(IOAble):
         x = self.x()
 
         if verbose > 0:
-            print(
-                "Compiling objective function and derivatives: "
-                + f"{[obj.name for obj in self.objectives]}"
-            )
+            msg = "Compiling objective function: "
+            if mode != "obj":
+                msg = msg[:-2] + " and derivatives: "
+            print(msg + f"{[obj.name for obj in self.objectives]}")
         timer.start("Total compilation time")
 
+        timer.start("Objective compilation time")
+        _ = self.compute_scalar(x, self.constants).block_until_ready()
+        timer.stop("Objective compilation time")
+        if verbose > 1:
+            timer.disp("Objective compilation time")
+
         if mode in ["scalar", "bfgs", "all"]:
-            timer.start("Objective compilation time")
-            _ = self.compute_scalar(x, self.constants).block_until_ready()
-            timer.stop("Objective compilation time")
-            if verbose > 1:
-                timer.disp("Objective compilation time")
             timer.start("Gradient compilation time")
             _ = self.grad(x, self.constants).block_until_ready()
             timer.stop("Gradient compilation time")
@@ -894,11 +896,6 @@ class ObjectiveFunction(IOAble):
             if verbose > 1:
                 timer.disp("Hessian compilation time")
         if mode in ["lsq", "all"]:
-            timer.start("Objective compilation time")
-            _ = self.compute_scaled_error(x, self.constants).block_until_ready()
-            timer.stop("Objective compilation time")
-            if verbose > 1:
-                timer.disp("Objective compilation time")
             timer.start("Jacobian compilation time")
             _ = self.jac_scaled_error(x, self.constants).block_until_ready()
             timer.stop("Jacobian compilation time")
@@ -908,7 +905,7 @@ class ObjectiveFunction(IOAble):
         timer.stop("Total compilation time")
         if verbose > 1:
             timer.disp("Total compilation time")
-        self._compiled = True
+        self._compiled = mode != "obj"
 
     @property
     def constants(self):

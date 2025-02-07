@@ -190,7 +190,7 @@ def test_objective_compute_dshape_current(benchmark):
         ),
     )
     objective.build(eq)
-    objective.compile()
+    objective.compile(mode="obj")
     x = objective.x(eq)
 
     def run(x, objective):
@@ -211,7 +211,7 @@ def test_objective_compute_atf(benchmark):
         ),
     )
     objective.build(eq)
-    objective.compile()
+    objective.compile(mode="obj")
     x = objective.x(eq)
 
     def run(x, objective):
@@ -471,7 +471,7 @@ def test_ripple_objective_2D(benchmark):
     eq = desc.examples.get("W7-X")
     with pytest.warns(UserWarning, match="Reducing radial"):
         eq.change_resolution(L=eq.L // 2, M=eq.M // 2, N=eq.N // 2)
-    num_transit = 5
+    num_transit = 20
     objective = ObjectiveFunction(
         [
             EffectiveRipple(
@@ -483,7 +483,7 @@ def test_ripple_objective_2D(benchmark):
         ]
     )
     objective.build(eq)
-    objective.compile(mode="bfgs")
+    objective.compile(mode="obj")
     x = objective.x(eq)
 
     def run(x, objective):
@@ -494,12 +494,13 @@ def test_ripple_objective_2D(benchmark):
 
 @pytest.mark.slow
 @pytest.mark.benchmark
-def test_ripple_objective_1D(benchmark):
+@pytest.mark.parametrize("spline", [False, True])
+def test_objective_compute_ripple(benchmark, spline):
     """Benchmark computing objective for effective ripple."""
     eq = desc.examples.get("W7-X")
     with pytest.warns(UserWarning, match="Reducing radial"):
         eq.change_resolution(L=eq.L // 2, M=eq.M // 2, N=eq.N // 2)
-    num_transit = 5
+    num_transit = 20
     objective = ObjectiveFunction(
         [
             EffectiveRipple(
@@ -507,7 +508,37 @@ def test_ripple_objective_1D(benchmark):
                 num_transit=num_transit,
                 num_well=10 * num_transit,
                 num_quad=16,
-                spline=True,
+                spline=spline,
+            )
+        ]
+    )
+    objective.build(eq)
+    objective.compile(mode="obj")
+    x = objective.x(eq)
+
+    def run(x, objective):
+        objective.compute_scaled_error(x, objective.constants).block_until_ready()
+
+    benchmark.pedantic(run, args=(x, objective), rounds=10, iterations=1)
+
+
+@pytest.mark.slow
+@pytest.mark.benchmark
+@pytest.mark.parametrize("spline", [False, True])
+def test_objective_grad_ripple(benchmark, spline):
+    """Benchmark computing objective gradient for effective ripple."""
+    eq = desc.examples.get("W7-X")
+    with pytest.warns(UserWarning, match="Reducing radial"):
+        eq.change_resolution(L=eq.L // 2, M=eq.M // 2, N=eq.N // 2)
+    num_transit = 20
+    objective = ObjectiveFunction(
+        [
+            EffectiveRipple(
+                eq,
+                num_transit=num_transit,
+                num_well=10 * num_transit,
+                num_quad=16,
+                spline=spline,
             )
         ]
     )
@@ -516,6 +547,6 @@ def test_ripple_objective_1D(benchmark):
     x = objective.x(eq)
 
     def run(x, objective):
-        objective.compute_scaled_error(x, objective.constants).block_until_ready()
+        objective.grad(x, objective.constants).block_until_ready()
 
     benchmark.pedantic(run, args=(x, objective), rounds=10, iterations=1)

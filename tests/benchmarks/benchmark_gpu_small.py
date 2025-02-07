@@ -9,7 +9,6 @@ import pytest
 import desc
 
 desc.set_device("gpu")
-from tests.benchmarks.benchmark_cpu_small import _test_objective_ripple
 
 import desc.examples
 from desc.backend import jax
@@ -19,6 +18,7 @@ from desc.grid import ConcentricGrid, LinearGrid
 from desc.magnetic_fields import ToroidalMagneticField
 from desc.objectives import (
     BoundaryError,
+    EffectiveRipple,
     FixCurrent,
     FixPressure,
     FixPsi,
@@ -483,11 +483,39 @@ def test_objective_compute_ripple_spline(benchmark):
 @pytest.mark.benchmark
 def test_objective_grad_ripple(benchmark):
     """Benchmark computing objective gradient for effective ripple."""
-    _test_objective_ripple(benchmark, False, "grad")
+    _test_objective_ripple(benchmark, False, "jac_scaled_error")
 
 
 @pytest.mark.slow
 @pytest.mark.benchmark
 def test_objective_grad_ripple_spline(benchmark):
     """Benchmark computing objective gradient for effective ripple."""
-    _test_objective_ripple(benchmark, True, "grad")
+    _test_objective_ripple(benchmark, True, "jac_scaled_error")
+
+
+def _test_objective_ripple(benchmark, spline, method):
+    eq = desc.examples.get("W7-X")
+    with pytest.warns(UserWarning, match="Reducing radial"):
+        eq.change_resolution(L=eq.L // 2, M=eq.M // 2, N=eq.N // 2)
+    num_transit = 20
+    objective = ObjectiveFunction(
+        [
+            EffectiveRipple(
+                eq,
+                num_transit=num_transit,
+                num_well=10 * num_transit,
+                num_quad=16,
+                spline=spline,
+            )
+        ]
+    )
+    constraint = ObjectiveFunction([ForceBalance(eq)])
+    prox = ProximalProjection(objective, constraint, eq)
+    prox.build(eq)
+    prox.compile(mode="lsq" if method == "jac_scaled_error" else "obj")
+    x = objective.x(eq)
+
+    def run(x, prox):
+        getattr(prox, method)(x, prox.constants).block_until_ready()
+
+    benchmark.pedantic(run, args=(x, prox), rounds=10, iterations=1)

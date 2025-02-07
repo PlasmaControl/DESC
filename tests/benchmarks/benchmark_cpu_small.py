@@ -479,14 +479,14 @@ def test_objective_compute_ripple_spline(benchmark):
 @pytest.mark.benchmark
 def test_objective_grad_ripple(benchmark):
     """Benchmark computing objective gradient for effective ripple."""
-    _test_objective_ripple(benchmark, False, "grad")
+    _test_objective_ripple(benchmark, False, "jac_scaled_error")
 
 
 @pytest.mark.slow
 @pytest.mark.benchmark
 def test_objective_grad_ripple_spline(benchmark):
     """Benchmark computing objective gradient for effective ripple."""
-    _test_objective_ripple(benchmark, True, "grad")
+    _test_objective_ripple(benchmark, True, "jac_scaled_error")
 
 
 def _test_objective_ripple(benchmark, spline, method):
@@ -505,11 +505,13 @@ def _test_objective_ripple(benchmark, spline, method):
             )
         ]
     )
-    objective.build(eq)
-    objective.compile(mode="bfg" if method == "grad" else "obj")
+    constraint = ObjectiveFunction([ForceBalance(eq)])
+    prox = ProximalProjection(objective, constraint, eq)
+    prox.build(eq)
+    prox.compile(mode="lsq" if method == "jac_scaled_error" else "obj")
     x = objective.x(eq)
 
-    def run(x, objective):
-        getattr(objective, method)(x, objective.constants).block_until_ready()
+    def run(x, prox):
+        getattr(prox, method)(x, prox.constants).block_until_ready()
 
-    benchmark.pedantic(run, args=(x, objective), rounds=10, iterations=1)
+    benchmark.pedantic(run, args=(x, prox), rounds=10, iterations=1)

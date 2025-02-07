@@ -463,39 +463,33 @@ def test_LinearConstraintProjection_build(benchmark):
 
 @pytest.mark.slow
 @pytest.mark.benchmark
-@pytest.mark.parametrize("spline", [False, True])
-def test_objective_compute_ripple(benchmark, spline):
+def test_objective_compute_ripple(benchmark):
     """Benchmark computing objective for effective ripple."""
-    eq = desc.examples.get("W7-X")
-    with pytest.warns(UserWarning, match="Reducing radial"):
-        eq.change_resolution(L=eq.L // 2, M=eq.M // 2, N=eq.N // 2)
-    num_transit = 20
-    objective = ObjectiveFunction(
-        [
-            EffectiveRipple(
-                eq,
-                num_transit=num_transit,
-                num_well=10 * num_transit,
-                num_quad=16,
-                spline=spline,
-            )
-        ]
-    )
-    objective.build(eq)
-    objective.compile(mode="obj")
-    x = objective.x(eq)
-
-    def run(x, objective):
-        objective.compute_scaled_error(x, objective.constants).block_until_ready()
-
-    benchmark.pedantic(run, args=(x, objective), rounds=10, iterations=1)
+    _test_objective_ripple(benchmark, False, "compute_scaled_error")
 
 
 @pytest.mark.slow
 @pytest.mark.benchmark
-@pytest.mark.parametrize("spline", [False, True])
-def test_objective_grad_ripple(benchmark, spline):
+def test_objective_compute_ripple_spline(benchmark):
+    """Benchmark computing objective for effective ripple."""
+    _test_objective_ripple(benchmark, True, "compute_scaled_error")
+
+
+@pytest.mark.slow
+@pytest.mark.benchmark
+def test_objective_grad_ripple(benchmark):
     """Benchmark computing objective gradient for effective ripple."""
+    _test_objective_ripple(benchmark, False, "grad")
+
+
+@pytest.mark.slow
+@pytest.mark.benchmark
+def test_objective_grad_ripple_spline(benchmark):
+    """Benchmark computing objective gradient for effective ripple."""
+    _test_objective_ripple(benchmark, True, "grad")
+
+
+def _test_objective_ripple(benchmark, spline, method):
     eq = desc.examples.get("W7-X")
     with pytest.warns(UserWarning, match="Reducing radial"):
         eq.change_resolution(L=eq.L // 2, M=eq.M // 2, N=eq.N // 2)
@@ -512,10 +506,10 @@ def test_objective_grad_ripple(benchmark, spline):
         ]
     )
     objective.build(eq)
-    objective.compile(mode="bfgs")
+    objective.compile(mode="bfg" if method == "grad" else "obj")
     x = objective.x(eq)
 
     def run(x, objective):
-        objective.grad(x, objective.constants).block_until_ready()
+        getattr(objective, method)(x, objective.constants).block_until_ready()
 
     benchmark.pedantic(run, args=(x, objective), rounds=10, iterations=1)

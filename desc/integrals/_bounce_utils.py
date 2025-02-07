@@ -798,7 +798,7 @@ def cubic_spline(T, f, Y, m, m_modes, n_modes, NFP=1, check=False):
     # mn|𝛉||𝛇| > m log(|𝛇|) |𝛇| + m|𝛉||𝛇| or equivalently n|𝛉| > log|𝛇| + |𝛉|.
 
     if num_zeta >= f.shape[-2] and num_zeta == f.shape[-2]:
-        # FIXME: This does not work unless num_zeta == f.shape[-2],
+        # TODO (1574): This does not work unless num_zeta == f.shape[-2],
         #  but it should as long as num_zeta >= f.shape[-2].
         f = ifft(f, num_zeta, axis=-2, norm="forward")
     else:

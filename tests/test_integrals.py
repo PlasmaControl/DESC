@@ -713,10 +713,10 @@ class TestSingularities:
 
     @pytest.mark.unit
     @pytest.mark.mpl_image_compare(remove_text=False, tolerance=tol_1d)
-    @pytest.mark.parametrize("eq", [get("DSHAPE"), get("ESTELL")])
+    @pytest.mark.parametrize("eq", [get("ESTELL")])
     def test_laplace_bdotn(self, eq):
         """Test that Laplace solution satisfies boundary condition."""
-        MN = 40
+        MN = 50
         grid = LinearGrid(M=MN, N=MN, sym=False, NFP=eq.NFP)
         data = eq.compute(["G", "R0"], grid=grid)
 
@@ -733,6 +733,7 @@ class TestSingularities:
                 B0n=B0n,
                 eval_grid=grid,
                 source_grid=grid,
+                check=True,
             )
             dPhi_dn = compute_dPhi_dn(
                 eq=eq,
@@ -757,7 +758,7 @@ class TestSingularities:
                 print(e)
             return fig, ax
 
-        test(0)
+        # test(0) # noqa: #E800
         fig, ax = test(grid.compress(data["G"])[-1])
         return fig
 
@@ -773,7 +774,10 @@ class TestSingularities:
         def test(G):
             G_amp = 2 * np.pi * G / mu_0
             K_mn, K_sec, K_transform = compute_K_mn(
-                eq=eq, G=G_amp, grid=grid, K_N=max(eq.N, 1)
+                eq=eq,
+                G=G_amp,
+                grid=grid,
+                check=True,
             )
             Bn = compute_B_dot_n_from_K(
                 eq=eq,

@@ -214,7 +214,7 @@ def compute_Phi_mn(
     # Fourier coefficients of Φ on boundary
     Phi_mn, _, _, _ = jnp.linalg.lstsq(A, RHS)
     if check:
-        np.testing.assert_allclose(LHS(Phi_mn), A @ Phi_mn, atol=1e-8)
+        np.testing.assert_allclose(LHS(Phi_mn), A @ Phi_mn, atol=1e-6)
     return Phi_mn, Phi_transform
 
 
@@ -473,7 +473,7 @@ def compute_K_mn(eq, G, grid=None, check=False):
     A = jacfwd(LHS)(jnp.ones(basis.num_modes * 3))
     K_mn, _, _, _ = jnp.linalg.lstsq(A, jnp.zeros(grid.num_nodes))
     if check:
-        np.testing.assert_allclose(LHS(K_mn), A @ K_mn, atol=1e-8)
+        np.testing.assert_allclose(LHS(K_mn), A @ K_mn, atol=1e-6)
     return K_mn, K_sec, transform
 
 

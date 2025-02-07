@@ -1,5 +1,6 @@
 """High order accurate Laplace solver."""
 
+import numpy as np
 from jax import jacfwd
 from scipy.constants import mu_0
 
@@ -17,8 +18,9 @@ from desc.integrals.singularities import (
     heuristic_support_params,
     singular_integral,
 )
+from desc.magnetic_fields import FourierCurrentPotentialField
 from desc.transform import Transform
-from desc.utils import dot, safediv, safenorm, setdefault, warnif
+from desc.utils import dot, safediv, safenorm, warnif
 
 
 def compute_B_laplace(
@@ -27,10 +29,8 @@ def compute_B_laplace(
     eval_grid,
     source_grid=None,
     Phi_grid=None,
-    Phi_M=None,
-    Phi_N=None,
-    sym=False,
     chunk_size=None,
+    check=False,
 ):
     """Compute magnetic field in interior of plasma due to vacuum potential.
 
@@ -58,7 +58,7 @@ def compute_B_laplace(
     ----------
     eq : Equilibrium
         Configuration with surface geometry defining ∂D.
-    B0 : MagneticField
+    B0 : _MagneticField
         Magnetic field such that ∇ × 𝐁₀ = μ₀ 𝐉
         where 𝐉 is the current in amperes everywhere.
     eval_grid : Grid
@@ -70,15 +70,6 @@ def compute_B_laplace(
     Phi_grid : Grid
         Source points on ∂D.
         Resolution determines accuracy of the spectral coefficients.
-        Should have resolution at least ``M=Phi_M`` and ``N=Phi_N``.
-    Phi_M : int
-        Number of poloidal Fourier modes.
-        Default is ``eq.M``.
-    Phi_N : int
-        Number of toroidal Fourier modes.
-        Default is ``eq.N``.
-    sym : str
-        ``DoubleFourierSeries`` basis symmetry.
         Default is no symmetry.
     chunk_size : int or None
         Size to split computation into chunks.
@@ -91,21 +82,21 @@ def compute_B_laplace(
         Magnetic field evaluated on ``eval_grid``.
 
     """
-    from desc.magnetic_fields import FourierCurrentPotentialField
-
     if source_grid is None:
         source_grid = LinearGrid(
             rho=jnp.array([1.0]),
             M=eq.M_grid,
             N=eq.N_grid,
             NFP=eq.NFP if eq.N > 0 else 64,
-            sym=False,
         )
     Bn, _ = B0.compute_Bnormal(
-        eq.surface, eval_grid=source_grid, source_grid=source_grid
+        eq.surface,
+        eval_grid=source_grid,
+        source_grid=source_grid,
+        vc_source_grid=source_grid,
     )
     Phi_mn, Phi_transform = compute_Phi_mn(
-        eq, Bn, source_grid, Phi_grid, Phi_M, Phi_N, sym, chunk_size
+        eq, Bn, Phi_grid, source_grid=source_grid, chunk_size=chunk_size, check=check
     )
     # 𝐁 - 𝐁₀ = ∇Φ = 𝐁_vacuum in the interior.
     # Merkel eq. 1.4 is the Green's function solution to ∇²Φ = 0 in the interior.
@@ -115,6 +106,7 @@ def compute_B_laplace(
     )
     data = eq.compute(["R", "phi", "Z"], grid=eval_grid)
     coords = jnp.column_stack([data["R"], data["phi"], data["Z"]])
+    # TODO: Pass in chunk size.
     B = (B0 + grad_Phi).compute_magnetic_field(coords, source_grid=source_grid)
     return B
 
@@ -122,12 +114,10 @@ def compute_B_laplace(
 def compute_Phi_mn(
     eq,
     B0n,
-    source_grid,
-    Phi_grid=None,
-    Phi_M=None,
-    Phi_N=None,
-    sym=False,
+    eval_grid=None,
+    source_grid=None,
     chunk_size=None,
+    check=False,
 ):
     """Compute Fourier coefficients of vacuum potential Φ on ∂D.
 
@@ -147,22 +137,12 @@ def compute_Phi_mn(
     B0n : MagneticField
         𝐁₀ * ∇ρ / |∇ρ| evaluated on ``source_grid`` of magnetic field
         such that ∇ × 𝐁₀ = μ₀ 𝐉 where 𝐉 is the current in amperes everywhere.
+    eval_grid : Grid
+        Evaluation points on ∂D.
+        Resolution determines accuracy of the spectral coefficients of Φ.
     source_grid : Grid
         Source points on ∂D for quadrature of kernels.
         Resolution determines the accuracy of the boundary condition.
-    Phi_grid : Grid
-        Source points on ∂D.
-        Resolution determines accuracy of the spectral coefficients.
-        Should have resolution at least ``M=Phi_M`` and ``N=Phi_N``.
-    Phi_M : int
-        Number of poloidal Fourier modes.
-        Default is ``eq.M``.
-    Phi_N : int
-        Number of toroidal Fourier modes.
-        Default is ``eq.N``.
-    sym : str
-        ``DoubleFourierSeries`` basis symmetry.
-        Default is no symmetry.
     chunk_size : int or None
         Size to split computation into chunks.
         If no chunking should be done or the chunk size is the full input
@@ -174,42 +154,36 @@ def compute_Phi_mn(
         Fourier coefficients of Φ on ∂D.
 
     """
-    basis = DoubleFourierSeries(
-        M=setdefault(Phi_M, eq.M),
-        N=setdefault(Phi_N, eq.N),
-        NFP=eq.NFP,
-        sym=sym,
-    )
-    if Phi_grid is None:
-        Phi_grid = LinearGrid(
+    if eval_grid is None:
+        eval_grid = LinearGrid(
             rho=jnp.array([1.0]),
-            M=2 * basis.M,
-            N=2 * basis.N,
-            NFP=basis.NFP if basis.N > 0 else 64,
-            sym=False,
+            M=2 * eq.M,
+            N=2 * eq.N,
+            NFP=eq.NFP if eq.N > 0 else 64,
         )
-    assert source_grid.is_meshgrid
-    assert Phi_grid.is_meshgrid
+    if source_grid is None:
+        source_grid = eval_grid
+    basis = DoubleFourierSeries(M=eval_grid.M, N=eval_grid.N, NFP=eq.NFP)
 
     names = ["R", "phi", "Z"]
-    Phi_data = eq.compute(names, grid=Phi_grid)
+    Phi_data = eq.compute(names, grid=eval_grid)
     src_data = eq.compute(
         names + ["n_rho", "|e_theta x e_zeta|", "e_theta", "e_zeta"], grid=source_grid
     )
     src_data["Bn"] = B0n
     src_transform = Transform(source_grid, basis)
-    Phi_transform = Transform(Phi_grid, basis)
+    Phi_transform = Transform(eval_grid, basis)
 
     st, sz, q = heuristic_support_params(source_grid, best_ratio(src_data)[0])
     try:
-        interpolator = FFTInterpolator(Phi_grid, source_grid, st, sz, q)
+        interpolator = FFTInterpolator(eval_grid, source_grid, st, sz, q)
     except AssertionError as e:
         warnif(
             True,
             msg="Could not build fft interpolator, switching to dft which is slow."
             "\nReason: " + str(e),
         )
-        interpolator = DFTInterpolator(Phi_grid, source_grid, st, sz, q)
+        interpolator = DFTInterpolator(eval_grid, source_grid, st, sz, q)
 
     def LHS(Phi_mn):
         # After Fourier transform, the LHS is linear in the spectral coefficients Φₘₙ.
@@ -239,7 +213,8 @@ def compute_Phi_mn(
     ).squeeze() / (2 * jnp.pi)
     # Fourier coefficients of Φ on boundary
     Phi_mn, _, _, _ = jnp.linalg.lstsq(A, RHS)
-    # np.testing.assert_allclose(LHS(Phi_mn), A @ Phi_mn, atol=1e-12)  # noqa: E801
+    if check:
+        np.testing.assert_allclose(LHS(Phi_mn), A @ Phi_mn, atol=1e-8)
     return Phi_mn, Phi_transform
 
 
@@ -322,6 +297,9 @@ def compute_dPhi_dn(eq, eval_grid, source_grid, Phi_mn, basis, chunk_size=None):
         evl_data["n_rho"],
     )
     return dPhi_dn
+
+
+# alternative methods just to try checking for agreement
 
 
 # TODO: surface integral correctness validation: should match output of compute_dPhi_dn.
@@ -447,14 +425,7 @@ def _kernel_Bn_grad_G_dot_n(eval_data, source_data, diag=False):
     )
 
 
-def compute_K_mn(
-    eq,
-    G,
-    grid=None,
-    K_M=None,
-    K_N=None,
-    sym=False,
-):
+def compute_K_mn(eq, G, grid=None, check=False):
     """Compute Fourier coefficients of surface current on ∂D.
 
     Parameters
@@ -466,15 +437,6 @@ def compute_K_mn(
         Should be ``2*np.pi/mu_0*data["G"]``.
     grid : Grid
         Points on ∂D.
-    K_M : int
-        Number of poloidal Fourier modes.
-        Default is ``eq.M``.
-    K_N : int
-        Number of toroidal Fourier modes.
-        Default is ``eq.N``.
-    sym : str
-        ``DoubleFourierSeries`` basis symmetry.
-        Default is no symmetry.
 
     Returns
     -------
@@ -482,33 +444,25 @@ def compute_K_mn(
         Fourier coefficients of surface current on ∂D.
 
     """
-    from desc.magnetic_fields import FourierCurrentPotentialField
-
-    K_sec = FourierCurrentPotentialField.from_surface(eq.surface, G=G)
-    basis = DoubleFourierSeries(
-        M=setdefault(K_M, eq.M),
-        N=setdefault(K_N, eq.N),
-        NFP=eq.NFP,
-        sym=sym,
-    )
     if grid is None:
         grid = LinearGrid(
             rho=jnp.array([1.0]),
             # 3x higher than typical since we need to fit a vector
-            M=6 * basis.M,
-            N=6 * basis.N,
-            NFP=basis.NFP if basis.N > 0 else 64,
+            M=6 * eq.M,
+            N=6 * eq.N,
+            NFP=eq.NFP if eq.N > 0 else 64,
             sym=False,
         )
-    assert grid.is_meshgrid
+    basis = DoubleFourierSeries(M=2 * eq.M, N=2 * eq.N, NFP=eq.NFP)
     transform = Transform(grid, basis)
+    K_sec = FourierCurrentPotentialField.from_surface(eq.surface, G=G)
     K_secular = K_sec.compute("K", grid=grid)["K"]
     n = eq.compute("n_rho", grid=grid)["n_rho"]
 
     def LHS(K_mn):
-        # After Fourier transform, the LHS is linear in the spectral coefficients Φₘₙ.
+        # After Fourier transform, the LHS is linear in the spectral coefficients Kₘₙ.
         # We approximate this as finite-dimensional, which enables writing the left
-        # hand side as A @ Φₘₙ. Then Φₘₙ is found by solving LHS(Φₘₙ) = A @ Φₘₙ = RHS.
+        # hand side as A @ Kₘₙ. Then Kₘₙ is found by solving LHS(Kₘₙ) = A @ Kₘₙ = RHS.
         num_coef = K_mn.size // 3
         K_R = transform.transform(K_mn[:num_coef])
         K_phi = transform.transform(K_mn[num_coef : 2 * num_coef])
@@ -518,7 +472,8 @@ def compute_K_mn(
 
     A = jacfwd(LHS)(jnp.ones(basis.num_modes * 3))
     K_mn, _, _, _ = jnp.linalg.lstsq(A, jnp.zeros(grid.num_nodes))
-    # np.testing.assert_allclose(LHS(K_mn), A @ K_mn, atol=1e-8)  # noqa: E801
+    if check:
+        np.testing.assert_allclose(LHS(K_mn), A @ K_mn, atol=1e-8)
     return K_mn, K_sec, transform
 
 

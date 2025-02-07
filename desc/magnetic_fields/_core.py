@@ -300,7 +300,7 @@ class _MagneticField(IOAble, ABC):
             if None defaults to a LinearGrid with twice
             the surface poloidal and toroidal resolutions
             points are in surface angular coordinates i.e theta and zeta
-        source_grid : Grid, int or None
+        source_grid : Grid or int or None
             Grid used to discretize MagneticField object if calculating B from
             Biot-Savart. Should NOT include endpoint at 2pi.
         vc_source_grid : LinearGrid

@@ -43,6 +43,12 @@ from desc.integrals._bounce_utils import (
     bounce_points,
 )
 from desc.integrals._interp_utils import fourier_pts
+from desc.integrals._laplace import (
+    compute_B_dot_n_from_K,
+    compute_dPhi_dn,
+    compute_K_mn,
+    compute_Phi_mn,
+)
 from desc.integrals.basis import FourierChebyshevSeries
 from desc.integrals.quad_utils import (
     automorphism_sin,
@@ -59,10 +65,6 @@ from desc.integrals.singularities import (
     _get_quadrature_nodes,
     _kernel_nr_over_r3,
     best_ratio,
-    compute_B_dot_n_from_K,
-    compute_dPhi_dn,
-    compute_K_mn,
-    compute_Phi_mn,
     heuristic_support_params,
 )
 from desc.integrals.surface_integral import _get_grid_surface
@@ -715,51 +717,39 @@ class TestSingularities:
     def test_laplace_bdotn(self, eq):
         """Test that Laplace solution satisfies boundary condition."""
         MN = 40
-        src_grid = LinearGrid(M=MN, N=MN, sym=False, NFP=eq.NFP)
-        data = eq.compute(["G", "R0"], grid=src_grid)
+        grid = LinearGrid(M=MN, N=MN, sym=False, NFP=eq.NFP)
+        data = eq.compute(["G", "R0"], grid=grid)
 
         def test(G):
             B0 = ToroidalMagneticField(B0=G / data["R0"], R0=data["R0"])
             B0n, _ = B0.compute_Bnormal(
                 eq.surface,
-                eval_grid=src_grid,
-                source_grid=src_grid,
-                vc_source_grid=src_grid,
+                eval_grid=grid,
+                source_grid=grid,
+                vc_source_grid=grid,
             )
             Phi_mn, Phi_transform = compute_Phi_mn(
                 eq=eq,
                 B0n=B0n,
-                source_grid=src_grid,
-                Phi_grid=src_grid,
-                Phi_M=src_grid.M,
-                Phi_N=src_grid.N,
+                eval_grid=grid,
+                source_grid=grid,
             )
-
-            evl_grid = Phi_transform.grid
             dPhi_dn = compute_dPhi_dn(
                 eq=eq,
-                eval_grid=evl_grid,
-                source_grid=src_grid,
+                eval_grid=grid,
+                source_grid=grid,
                 Phi_mn=Phi_mn,
                 basis=Phi_transform.basis,
             )
-            B0n, _ = B0.compute_Bnormal(
-                eq.surface,
-                eval_grid=evl_grid,
-                source_grid=src_grid,
-                vc_source_grid=src_grid,
-            )
-
             # Get data as function of theta, zeta on the only flux surface (LCFS).
-            Bn = evl_grid.meshgrid_reshape(B0n + dPhi_dn, "rtz")[0]
-            theta = evl_grid.meshgrid_reshape(evl_grid.nodes[:, 1], "rtz")[0]
-            zeta = evl_grid.meshgrid_reshape(evl_grid.nodes[:, 2], "rtz")[0]
+            Bn = grid.meshgrid_reshape(B0n + dPhi_dn, "rtz")[0]
+            theta = grid.meshgrid_reshape(grid.nodes[:, 1], "rtz")[0]
+            zeta = grid.meshgrid_reshape(grid.nodes[:, 2], "rtz")[0]
 
             fig, ax = plt.subplots()
             contour = ax.contourf(theta, zeta, Bn)
             ax.set_title(r"$(\nabla \Phi + B_0) \cdot n$ on $\partial D$")
             fig.colorbar(contour, ax=ax)
-            plt.show()
             # FIXME: Doesn't pass unless G = 0 for stellarators.
             try:
                 np.testing.assert_allclose(B0n + dPhi_dn, 0, err_msg=f"G = {G}")
@@ -768,7 +758,7 @@ class TestSingularities:
             return fig, ax
 
         test(0)
-        fig, ax = test(src_grid.compress(data["G"])[-1])
+        fig, ax = test(grid.compress(data["G"])[-1])
         return fig
 
     @pytest.mark.unit

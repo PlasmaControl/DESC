@@ -465,14 +465,14 @@ def test_LinearConstraintProjection_build(benchmark):
 @pytest.mark.benchmark
 def test_objective_compute_ripple(benchmark):
     """Benchmark computing objective for effective ripple."""
-    _test_objective_ripple(benchmark, False, "compute_scaled_error")
+    _test_objective_ripple(benchmark, False, "compute_scalar")
 
 
 @pytest.mark.slow
 @pytest.mark.benchmark
 def test_objective_compute_ripple_spline(benchmark):
     """Benchmark computing objective for effective ripple."""
-    _test_objective_ripple(benchmark, True, "compute_scaled_error")
+    _test_objective_ripple(benchmark, True, "compute_scalar")
 
 
 @pytest.mark.slow

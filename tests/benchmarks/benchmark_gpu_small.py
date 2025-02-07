@@ -9,6 +9,8 @@ import pytest
 import desc
 
 desc.set_device("gpu")
+from tests.benchmarks.benchmark_cpu_small import _test_objective_ripple
+
 import desc.examples
 from desc.backend import jax
 from desc.basis import FourierZernikeBasis
@@ -30,7 +32,6 @@ from desc.objectives import (
 from desc.optimize import LinearConstraintProjection, ProximalProjection
 from desc.perturbations import perturb
 from desc.transform import Transform
-from tests.benchmarks.benchmark_cpu_small import _test_objective_ripple
 
 
 @pytest.mark.benchmark()
@@ -468,14 +469,14 @@ def test_LinearConstraintProjection_build(benchmark):
 @pytest.mark.benchmark
 def test_objective_compute_ripple(benchmark):
     """Benchmark computing objective for effective ripple."""
-    _test_objective_ripple(benchmark, False, "compute_scaled_error")
+    _test_objective_ripple(benchmark, False, "compute_scalar")
 
 
 @pytest.mark.slow
 @pytest.mark.benchmark
 def test_objective_compute_ripple_spline(benchmark):
     """Benchmark computing objective for effective ripple."""
-    _test_objective_ripple(benchmark, True, "compute_scaled_error")
+    _test_objective_ripple(benchmark, True, "compute_scalar")
 
 
 @pytest.mark.slow

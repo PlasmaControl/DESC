@@ -1142,8 +1142,7 @@ def test_boozer_transform_multiple_surfaces():
     grid1 = LinearGrid(rho=0.6, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
     grid2 = LinearGrid(rho=0.8, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
     grid3 = LinearGrid(rho=np.array([0.6, 0.8]), M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
-    with pytest.warns(DeprecationWarning):  # |B|_mn is a deprecated name
-        data1 = eq.compute("|B|_mn", grid=grid1, M_booz=eq.M, N_booz=eq.N)
+    data1 = eq.compute("|B|_mn_B", grid=grid1, M_booz=eq.M, N_booz=eq.N)
     data2 = eq.compute("|B|_mn_B", grid=grid2, M_booz=eq.M, N_booz=eq.N)
     data3 = eq.compute("|B|_mn_B", grid=grid3, M_booz=eq.M, N_booz=eq.N)
     np.testing.assert_allclose(
@@ -1654,3 +1653,5 @@ def test_compute_deprecation_warning():
     grid = LinearGrid(L=1, M=2, N=2, NFP=eq.NFP)
     with pytest.warns(DeprecationWarning, match="deprecated"):
         eq.compute("sqrt(g)_B", grid=grid)
+    with pytest.warns(DeprecationWarning, match="deprecated"):
+        eq.compute("|B|_mn", grid=grid, M_booz=eq.M, N_booz=eq.N)

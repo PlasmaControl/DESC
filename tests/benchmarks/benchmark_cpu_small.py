@@ -466,7 +466,8 @@ def test_LinearConstraintProjection_build(benchmark):
 def test_ripple_objective_2D(benchmark):
     """Benchmark computing objective for effective ripple."""
     eq = desc.examples.get("W7-X")
-    eq.change_resolution(M=eq.M // 2, N=eq.N // 2)
+    with pytest.warns(UserWarning, match="Reducing radial"):
+        eq.change_resolution(L=eq.L // 2, M=eq.M // 2, N=eq.N // 2)
     num_transit = 5
     objective = ObjectiveFunction(
         [
@@ -479,13 +480,13 @@ def test_ripple_objective_2D(benchmark):
         ]
     )
     objective.build(eq)
-    objective.compile()
+    objective.compile(mode="bfgs")
     x = objective.x(eq)
 
     def run(x, objective):
         objective.compute_scaled_error(x, objective.constants).block_until_ready()
 
-    benchmark.pedantic(run, args=(x, objective), rounds=3, iterations=1)
+    benchmark.pedantic(run, args=(x, objective), rounds=10, iterations=1)
 
 
 @pytest.mark.slow
@@ -493,7 +494,8 @@ def test_ripple_objective_2D(benchmark):
 def test_ripple_objective_1D(benchmark):
     """Benchmark computing objective for effective ripple."""
     eq = desc.examples.get("W7-X")
-    eq.change_resolution(M=eq.M // 2, N=eq.N // 2)
+    with pytest.warns(UserWarning, match="Reducing radial"):
+        eq.change_resolution(L=eq.L // 2, M=eq.M // 2, N=eq.N // 2)
     num_transit = 5
     objective = ObjectiveFunction(
         [
@@ -507,10 +509,10 @@ def test_ripple_objective_1D(benchmark):
         ]
     )
     objective.build(eq)
-    objective.compile()
+    objective.compile(mode="bfgs")
     x = objective.x(eq)
 
     def run(x, objective):
         objective.compute_scaled_error(x, objective.constants).block_until_ready()
 
-    benchmark.pedantic(run, args=(x, objective), rounds=3, iterations=1)
+    benchmark.pedantic(run, args=(x, objective), rounds=10, iterations=1)

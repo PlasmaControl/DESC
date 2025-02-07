@@ -17,7 +17,7 @@ from scipy.optimize import (
 
 import desc.examples
 from desc.backend import jit, jnp
-from desc.coils import initialize_modular_coils
+from desc.coils import FourierPlanarCoil, FourierRZCoil, FourierXYZCoil, MixedCoilSet
 from desc.derivatives import Derivative
 from desc.equilibrium import Equilibrium
 from desc.geometry import FourierRZToroidalSurface
@@ -28,6 +28,7 @@ from desc.objectives import (
     AspectRatio,
     BoundaryRSelfConsistency,
     BoundaryZSelfConsistency,
+    CoilLength,
     Energy,
     FixBoundaryR,
     FixBoundaryZ,
@@ -1437,12 +1438,14 @@ def test_optimize_coil_currents(DummyCoilSet):
 def test_optimize_three_eq_at_once():
     """Test optimizing 3 equilibria at the same time."""
     # default equilibrium is axisymmetric with R0=10
-    eq1 = Equilibrium()
+    eq1 = Equilibrium(M=2, sym=True)
     eq2 = eq1.copy()
     eq3 = Equilibrium(
+        M=2,
+        sym=True,
         surface=FourierRZToroidalSurface(
             R_lmn=[5, 1], Z_lmn=[-1], modes_R=[[0, 0], [1, 0]], modes_Z=[[-1, 0]]
-        )
+        ),
     )
     cons = (
         get_fixed_boundary_constraints(eq1)
@@ -1463,7 +1466,7 @@ def test_optimize_three_eq_at_once():
         eq1,
         eq2,
         eq3,
-    ], _ = opt.optimize([eq1, eq2, eq3], objective=obj, constraints=cons, maxiter=1)
+    ], _ = opt.optimize([eq1, eq2, eq3], objective=obj, constraints=cons, maxiter=2)
 
     assert eq1.equiv(eq2)
     assert eq3.compute(["R0"])["R0"] < eq1.compute(["R0"])["R0"]
@@ -1473,17 +1476,57 @@ def test_optimize_three_eq_at_once():
 @pytest.mark.unit
 def test_optimize_three_coil_at_once():
     """Test optimizing 3 coils at the same time."""
-    eq = Equilibrium()
-    coilset = initialize_modular_coils(eq, num_coils=3, r_over_a=3.0).to_FourierXYZ()
-
-    coil1 = coilset.coils[0]
-    coil2 = coil1.copy()
-    coil3 = coilset.coils[2]
-
-    cons = (FixCoilCurrent(coil1),)
+    coilset = MixedCoilSet(
+        FourierXYZCoil(), FourierRZCoil(), FourierPlanarCoil(), check_intersection=False
+    )
+    for c in coilset:
+        c.change_resolution(N=1)
+    coil1 = coilset
+    coil2 = coil1.coils[0].copy()
+    coil3 = coilset.coils[2].copy()
+    shift0 = coil2.shift
+    rotmat0 = coil2.rotmat
+    obj = ObjectiveFunction(
+        (
+            CoilLength(coil1, target=13),
+            CoilLength(coil2, target=10),
+            CoilLength(coil3, target=10),
+        )
+    )
+    cons = (FixCoilCurrent(coil1), FixCoilCurrent(coil2), FixCoilCurrent(coil3))
     for coil in [coil1, coil2, coil3]:
         cons = maybe_add_self_consistency(coil, cons)
     shift_cons = get_all_instances(cons, FixCurveShift)
     rotation_cons = get_all_instances(cons, FixCurveRotation)
     assert len(shift_cons) == 3
     assert len(rotation_cons) == 3
+    # now undo the above and try an optimization to ensure
+    # it gets automatically handled correctly
+    cons = (FixCoilCurrent(coil1), FixCoilCurrent(coil2), FixCoilCurrent(coil3))
+    opt = Optimizer("lsq-exact")
+    # only check if it works
+    [
+        coil1,
+        coil2,
+        coil3,
+    ], _ = opt.optimize(
+        [coil1, coil2, coil3],
+        objective=obj,
+        constraints=cons,
+        maxiter=20,
+        ftol=0,
+        gtol=1e-10,
+        xtol=0,
+    )
+
+    np.testing.assert_allclose(coil2.shift, shift0)
+    np.testing.assert_allclose(coil2.rotmat, rotmat0)
+    np.testing.assert_allclose(coil2.compute("length")["length"], 10)
+
+    np.testing.assert_allclose(coil3.shift, shift0)
+    np.testing.assert_allclose(coil3.rotmat, rotmat0)
+    np.testing.assert_allclose(coil3.compute("length")["length"], 10)
+    for c in coil1:
+        np.testing.assert_allclose(c.shift, shift0)
+        np.testing.assert_allclose(c.rotmat, rotmat0)
+        np.testing.assert_allclose(c.compute("length")["length"], 13)

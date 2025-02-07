@@ -5,6 +5,7 @@ import os
 import pytest
 
 import desc
+from desc.objectives import EffectiveRipple, ObjectiveFunction
 
 desc.set_device("cpu")
 from desc.__main__ import main
@@ -147,3 +148,58 @@ def test_W7X_run(tmpdir_factory, benchmark):
     args = ["-o", str(desc_h5_path), input_filename, "-vv"]
     benchmark(main, args)
     return None
+
+
+@pytest.mark.slow
+@pytest.mark.benchmark
+def test_ripple_objective_2D(benchmark):
+    """Benchmark computing objective for effective ripple."""
+    eq = desc.examples.get("W7-X")
+    eq.change_resolution(M=eq.M // 2, N=eq.N // 2)
+    num_transit = 5
+    objective = ObjectiveFunction(
+        [
+            EffectiveRipple(
+                eq,
+                num_transit=num_transit,
+                num_well=10 * num_transit,
+                num_quad=16,
+            )
+        ]
+    )
+    objective.build(eq)
+    objective.compile()
+    x = objective.x(eq)
+
+    def run(x, objective):
+        objective.compute_scaled_error(x, objective.constants).block_until_ready()
+
+    benchmark.pedantic(run, args=(x, objective), rounds=3, iterations=1)
+
+
+@pytest.mark.slow
+@pytest.mark.benchmark
+def test_ripple_objective_1D(benchmark):
+    """Benchmark computing objective for effective ripple."""
+    eq = desc.examples.get("W7-X")
+    eq.change_resolution(M=eq.M // 2, N=eq.N // 2)
+    num_transit = 5
+    objective = ObjectiveFunction(
+        [
+            EffectiveRipple(
+                eq,
+                num_transit=num_transit,
+                num_well=10 * num_transit,
+                num_quad=16,
+                spline=True,
+            )
+        ]
+    )
+    objective.build(eq)
+    objective.compile()
+    x = objective.x(eq)
+
+    def run(x, objective):
+        objective.compute_scaled_error(x, objective.constants).block_until_ready()
+
+    benchmark.pedantic(run, args=(x, objective), rounds=3, iterations=1)

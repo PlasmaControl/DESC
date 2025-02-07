@@ -933,7 +933,6 @@ class ScaledMagneticField(_MagneticField, Optimizable):
             Biot-Savart. Should NOT include endpoint at 2pi.
         transforms : dict of Transform
             Transforms for R, Z, lambda, etc. Default is to build from source_grid
-            chunk_size : int or None
         chunk_size : int or None
             Size to split computation into chunks of evaluation points.
             If no chunking should be done or the chunk size is the full input

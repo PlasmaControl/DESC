@@ -187,7 +187,7 @@ def test_objective_compute_dshape_current(benchmark):
         ),
     )
     objective.build(eq)
-    objective.compile(mode="obj")
+    objective.compile()
     x = objective.x(eq)
 
     def run(x, objective):
@@ -208,7 +208,7 @@ def test_objective_compute_atf(benchmark):
         ),
     )
     objective.build(eq)
-    objective.compile(mode="obj")
+    objective.compile()
     x = objective.x(eq)
 
     def run(x, objective):
@@ -465,14 +465,14 @@ def test_LinearConstraintProjection_build(benchmark):
 @pytest.mark.benchmark
 def test_objective_compute_ripple(benchmark):
     """Benchmark computing objective for effective ripple."""
-    _test_objective_ripple(benchmark, False, "compute_scalar")
+    _test_objective_ripple(benchmark, False, "compute_scaled_error")
 
 
 @pytest.mark.slow
 @pytest.mark.benchmark
 def test_objective_compute_ripple_spline(benchmark):
     """Benchmark computing objective for effective ripple."""
-    _test_objective_ripple(benchmark, True, "compute_scalar")
+    _test_objective_ripple(benchmark, True, "compute_scaled_error")
 
 
 @pytest.mark.slow
@@ -508,8 +508,8 @@ def _test_objective_ripple(benchmark, spline, method):
     constraint = ObjectiveFunction([ForceBalance(eq)])
     prox = ProximalProjection(objective, constraint, eq)
     prox.build(eq)
-    prox.compile(mode="lsq" if method == "jac_scaled_error" else "obj")
-    x = objective.x(eq)
+    x = prox.x(eq)
+    _ = getattr(prox, method)(x, prox.constants).block_until_ready()
 
     def run(x, prox):
         getattr(prox, method)(x, prox.constants).block_until_ready()

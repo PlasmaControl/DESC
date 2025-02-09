@@ -6,7 +6,7 @@ from orthax.legendre import leggauss
 from desc.compute import get_profiles, get_transforms
 from desc.compute.utils import _compute as compute_fun
 from desc.grid import LinearGrid
-from desc.utils import Timer, setdefault
+from desc.utils import setdefault
 
 from ..integrals import Bounce2D
 from ..integrals.basis import FourierChebyshevSeries
@@ -112,6 +112,11 @@ class EffectiveRipple(_Objective):
         Number of flux surfaces with which to compute simultaneously.
         If given ``None``, then ``surf_batch_size`` is ``grid.num_rho``.
         Default is ``1``. Only consider increasing if ``pitch_batch_size`` is ``None``.
+    spline : bool
+        Set to ``True`` to replace pseudo-spectral methods with local splines.
+        This can be efficient if ``num_transit`` and ``alpha.size`` are small,
+        depending on hardware and hardware features used by the JIT compiler.
+        If ``True``, then parameters ``X`` and ``Y`` are ignored.
 
     """
 
@@ -152,10 +157,12 @@ class EffectiveRipple(_Objective):
         num_pitch=51,
         pitch_batch_size=None,
         surf_batch_size=1,
+        spline=False,
     ):
         if target is None and bounds is None:
             target = 0.0
 
+        self._spline = spline
         self._grid = grid
         self._constants = {"quad_weights": 1.0, "alpha": alpha}
         self._X = X
@@ -199,6 +206,9 @@ class EffectiveRipple(_Objective):
             Level of output.
 
         """
+        if self._spline:
+            return self._build_spline(use_jit, verbose)
+
         eq = self.things[0]
         if self._grid is None:
             self._grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False)
@@ -211,26 +221,16 @@ class EffectiveRipple(_Objective):
         )
         self._constants["fieldline quad"] = leggauss(self._hyperparam["Y_B"] // 2)
         self._constants["quad"] = chebgauss2(self._hyperparam.pop("num_quad"))
-
         self._dim_f = self._grid.num_rho
         self._target, self._bounds = _parse_callable_target_bounds(
             self._target, self._bounds, self._grid.compress(self._grid.nodes[:, 0])
         )
-
-        timer = Timer()
-        if verbose > 0:
-            print("Precomputing transforms")
-        timer.start("Precomputing transforms")
         self._constants["transforms"] = get_transforms(
             "effective ripple", eq, grid=self._grid
         )
         self._constants["profiles"] = get_profiles(
             "effective ripple", eq, grid=self._grid
         )
-        timer.stop("Precomputing transforms")
-        if verbose > 1:
-            timer.disp("Precomputing transforms")
-
         super().build(use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
@@ -251,7 +251,9 @@ class EffectiveRipple(_Objective):
             Effective ripple as a function of the flux surface label.
 
         """
-        # TODO (#1094)
+        if self._spline:
+            return self._compute_spline(params, constants)
+
         if constants is None:
             constants = self.constants
         eq = self.things[0]
@@ -283,3 +285,75 @@ class EffectiveRipple(_Objective):
             **self._hyperparam,
         )
         return constants["transforms"]["grid"].compress(data["effective ripple"])
+
+    def _build_spline(self, use_jit=True, verbose=1):
+        self._keys_1dr = [
+            "iota",
+            "iota_r",
+            "<|grad(rho)|>",
+            "min_tz |B|",
+            "max_tz |B|",
+            "R0",  # TODO (#1094)
+        ]
+        num_transit = self._hyperparam.pop("num_transit")
+        Y_B = self._hyperparam.pop("Y_B")
+
+        eq = self.things[0]
+        if self._grid is None:
+            self._grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
+        assert self._grid.is_meshgrid and eq.sym == self._grid.sym
+        self._constants["rho"] = self._grid.compress(self._grid.nodes[:, 0])
+        self._constants["zeta"] = np.linspace(
+            0, 2 * np.pi * num_transit, Y_B * num_transit
+        )
+        self._constants["quad"] = chebgauss2(self._hyperparam.pop("num_quad"))
+        self._dim_f = self._grid.num_rho
+        self._target, self._bounds = _parse_callable_target_bounds(
+            self._target, self._bounds, self._constants["rho"]
+        )
+        self._constants["transforms_1dr"] = get_transforms(
+            self._keys_1dr, eq, self._grid
+        )
+        self._constants["profiles"] = get_profiles(
+            self._keys_1dr + ["old effective ripple"], eq, self._grid
+        )
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def _compute_spline(self, params, constants=None):
+        if constants is None:
+            constants = self.constants
+        eq = self.things[0]
+        data = compute_fun(
+            eq,
+            self._keys_1dr,
+            params,
+            constants["transforms_1dr"],
+            constants["profiles"],
+        )
+        grid = eq._get_rtz_grid(
+            constants["rho"],
+            constants["alpha"],
+            constants["zeta"],
+            coordinates="raz",
+            iota=self._grid.compress(data["iota"]),
+            params=params,
+        )
+        data = {
+            key: (
+                grid.copy_data_from_other(data[key], self._grid)
+                if key != "R0"
+                else data[key]
+            )
+            for key in self._keys_1dr
+        }
+        data = compute_fun(
+            eq,
+            "old effective ripple",
+            params,
+            transforms=get_transforms("old effective ripple", eq, grid, jitable=True),
+            profiles=constants["profiles"],
+            data=data,
+            quad=constants["quad"],
+            **self._hyperparam,
+        )
+        return grid.compress(data["old effective ripple"])

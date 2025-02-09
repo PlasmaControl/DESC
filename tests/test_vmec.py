@@ -381,7 +381,7 @@ def test_vmec_save_kinetic(TmpDir):
         electron_temperature=np.array([[0, 1], [2, -1]]),
         sym=True,
     )
-    VMECIO.save(eq, output_path)
+    VMECIO.save(eq, output_path, M_grid=8, N_grid=8)
 
 
 @pytest.mark.regression

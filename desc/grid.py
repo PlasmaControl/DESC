@@ -448,7 +448,13 @@ class _Grid(IOAble, ABC):
         errorif(
             self._spacing is None,
             AttributeError,
-            "Custom grids must have spacing specified by user.",
+            "Custom grids must have spacing specified by user.\n"
+            "Recall that the accurate computation of surface integral quantities "
+            "requires a specific set of quadrature nodes.\n"
+            "In particular, flux surface integrals are best performed on grids with "
+            "uniform spacing in (θ,ζ).\n"
+            "It is recommended to compute such quantities on the proper grid and use "
+            "the ``copy_data_from_other`` method to transfer values to custom grids.",
         )
         return self._spacing
 
@@ -458,7 +464,11 @@ class _Grid(IOAble, ABC):
         errorif(
             self._weights is None,
             AttributeError,
-            "Custom grids must have weights specified by user.",
+            "Custom grids must have weights specified by user.\n"
+            "Recall that the accurate computation of volume integral quantities "
+            "requires a specific set of quadrature nodes.\n"
+            "It is recommended to compute such quantities on a QuadratureGrid and use "
+            "the ``copy_data_from_other`` method to transfer values to custom grids.",
         )
         return self._weights
 
@@ -1000,6 +1010,7 @@ class LinearGrid(_Grid):
         self._node_pattern = "linear"
         self._coordinates = "rtz"
         self._is_meshgrid = True
+        self._can_fft2 = not sym and not endpoint
         self._period = (np.inf, 2 * np.pi, 2 * np.pi / self._NFP)
         self._nodes, self._spacing = self._create_nodes(
             L=L,
@@ -1214,6 +1225,11 @@ class LinearGrid(_Grid):
         # if the other one is a full array
         self._endpoint = (self._poloidal_endpoint or (t.size == 1 and z.size > 1)) and (
             self._toroidal_endpoint or (z.size == 1 and t.size > 1)
+        )
+        self._can_fft2 = (
+            self._can_fft2
+            and not self._poloidal_endpoint
+            and not self._toroidal_endpoint
         )
 
         r, t, z = map(np.ravel, np.meshgrid(r, t, z, indexing="ij"))

@@ -8,7 +8,7 @@ from interpax import fft_interp2d
 from scipy.constants import mu_0
 
 from desc.backend import fori_loop, jnp, rfft2
-from desc.batching import batch_map, tree_add, vmap_chunked
+from desc.batching import batch_map, vmap_chunked
 from desc.compute.geom_utils import rpz2xyz, rpz2xyz_vec, xyz2rpz_vec
 from desc.grid import LinearGrid
 from desc.integrals._interp_utils import rfft2_modes, rfft2_vander
@@ -644,9 +644,9 @@ def _singular_part(eval_data, source_data, kernel, interpolator, chunk_size=None
         fi = k * dS[:, jnp.newaxis]
         return fi
 
-    f = vmap_chunked(polar_pt, chunk_size=chunk_size, reduction=tree_add)(
-        jnp.arange(v.size)
-    )
+    f = vmap_chunked(
+        polar_pt, chunk_size=chunk_size, reduction=lambda f: jnp.sum(f, axis=0)
+    )(jnp.arange(v.size))
 
     # we sum vectors at different points, so they need to be in xyz for that to work
     # but then need to convert vectors back to rpz

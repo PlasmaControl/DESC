@@ -82,7 +82,7 @@ def _chunk(x, chunk_size=None):
     return x.reshape((n_chunks, chunk_size) + x.shape[1:])
 
 
-tree_add = partial(jax.tree_util.tree_map, jax.lax.add)
+_tree_add = partial(jax.tree_util.tree_map, jax.lax.add)
 _tree_zeros_like = partial(
     jax.tree_util.tree_map, lambda x: jnp.zeros(x.shape, dtype=x.dtype)
 )
@@ -95,7 +95,7 @@ def _multimap(f, *args):
         return f(*args)
 
 
-def _scan_append_reduce(f, x, append_cond, op=tree_add, zero_fun=_tree_zeros_like):
+def _scan_append_reduce(f, x, append_cond, op=_tree_add, zero_fun=_tree_zeros_like):
     """Evaluate f element-wise in x while appending and/or reducing the results."""
     x0 = jax.tree_util.tree_map(lambda x: x[0], x)
 
@@ -243,9 +243,7 @@ def batch_map(fun, fun_input, batch_size, *, reduction=None):
         Size of batches. If no batching should be done or the batch size is the
         full input then supply ``None``.
     reduction : callable or None
-        Reduction operation, e.g. ``desc.batching.tree_add``.
-        Standard ``jax.numpy`` functions may need to be wrapped by
-        ``jax.tree_util.tree_map``.
+        Reduction operation.
 
     Returns
     -------
@@ -274,9 +272,7 @@ def vmap_chunked(f, in_axes=0, *, chunk_size=None, reduction=None):
         If no chunking should be done or the chunk size is the full input
         then supply ``None``.
     reduction : callable or None
-        Reduction operation, e.g. ``desc.batching.tree_add``.
-        Standard ``jax.numpy`` functions may need to be wrapped by
-        ``jax.tree_util.tree_map``.
+        Reduction operation.
 
     Returns
     -------

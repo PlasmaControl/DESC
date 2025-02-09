@@ -89,14 +89,14 @@ def compute_B_laplace(
             N=eq.N_grid,
             NFP=eq.NFP if eq.N > 0 else 64,
         )
-    Bn, _ = B0.compute_Bnormal(
+    B0n, _ = B0.compute_Bnormal(
         eq.surface,
         eval_grid=source_grid,
         source_grid=source_grid,
         vc_source_grid=source_grid,
     )
     Phi_mn, Phi_transform = compute_Phi_mn(
-        eq, Bn, Phi_grid, source_grid=source_grid, chunk_size=chunk_size, check=check
+        eq, B0n, Phi_grid, source_grid=source_grid, chunk_size=chunk_size, check=check
     )
     # 𝐁 - 𝐁₀ = ∇Φ = 𝐁_vacuum in the interior.
     # Merkel eq. 1.4 is the Green's function solution to ∇²Φ = 0 in the interior.

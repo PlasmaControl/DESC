@@ -716,8 +716,9 @@ class TestSingularities:
     @pytest.mark.parametrize("eq", [get("ESTELL")])
     def test_laplace_bdotn(self, eq):
         """Test that Laplace solution satisfies boundary condition."""
-        MN = 50
-        grid = LinearGrid(M=MN, N=MN, sym=False, NFP=eq.NFP)
+        resolution = 40
+        chunk_size = 1
+        grid = LinearGrid(M=resolution, N=resolution, NFP=eq.NFP)
         data = eq.compute(["G", "R0"], grid=grid)
 
         def test(G):
@@ -734,6 +735,7 @@ class TestSingularities:
                 eval_grid=grid,
                 source_grid=grid,
                 check=True,
+                chunk_size=chunk_size,
             )
             dPhi_dn = compute_dPhi_dn(
                 eq=eq,
@@ -741,6 +743,7 @@ class TestSingularities:
                 source_grid=grid,
                 Phi_mn=Phi_mn,
                 basis=Phi_transform.basis,
+                chunk_size=chunk_size,
             )
             # Get data as function of theta, zeta on the only flux surface (LCFS).
             Bn = grid.meshgrid_reshape(B0n + dPhi_dn, "rtz")[0]
@@ -767,8 +770,9 @@ class TestSingularities:
     @pytest.mark.parametrize("eq", [get("DSHAPE"), get("ESTELL")])
     def test_laplace_bdotdn_from_K(self, eq):
         """Test that Laplace solution from fit of K satisfies boundary condition."""
-        MN = 40
-        grid = LinearGrid(M=MN, N=MN, sym=False, NFP=eq.NFP)
+        resolution = 30
+        chunk_size = 1
+        grid = LinearGrid(M=resolution, N=resolution, NFP=eq.NFP)
         data = eq.compute(["G"], grid=grid)
 
         def test(G):
@@ -786,6 +790,7 @@ class TestSingularities:
                 K_mn=K_mn,
                 K_sec=K_sec,
                 basis=K_transform.basis,
+                chunk_size=chunk_size,
             )
             # Get data as function of theta, zeta on the only flux surface (LCFS).
             Bn = grid.meshgrid_reshape(Bn, "rtz")[0]
@@ -967,14 +972,18 @@ class TestSingularities:
         eq = Equilibrium(surface=surf)
         plot_boundary(eq, phi=[0, 1, 2])
         plt.show()
-        MN = 40
-        grid = LinearGrid(M=MN, N=MN, sym=False, NFP=eq.NFP)
+        resolution = 30
+        chunk_size = 1
+        grid = LinearGrid(M=resolution, N=resolution, NFP=eq.NFP)
 
         # About half the error of the below test.
         def test(G):
             G_amp = 2 * np.pi * G / mu_0
             K_mn, K_sec, K_transform = compute_K_mn(
-                eq=eq, G=G_amp, grid=grid, K_N=max(eq.N, 1)
+                eq=eq,
+                G=G_amp,
+                grid=grid,
+                check=True,
             )
             Bn = compute_B_dot_n_from_K(
                 eq=eq,
@@ -983,6 +992,7 @@ class TestSingularities:
                 K_mn=K_mn,
                 K_sec=K_sec,
                 basis=K_transform.basis,
+                chunk_size=chunk_size,
             )
             # Get data as function of theta, zeta on the only flux surface (LCFS).
             Bn = grid.meshgrid_reshape(Bn, "rtz")[0]

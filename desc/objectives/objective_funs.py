@@ -8,6 +8,7 @@ import numpy as np
 from desc.backend import (
     desc_config,
     execute_on_cpu,
+    jax,
     jit,
     jnp,
     pconcat,
@@ -293,13 +294,16 @@ class ObjectiveFunction(IOAble):
                 pass
 
     @execute_on_cpu
-    def build(self, use_jit=None, use_jit_wrapper=True, verbose=1):
+    def build(self, use_jit=None, use_jit_wrapper=True, verbose=1):  # noqa:  C901
         """Build the objective.
 
         Parameters
         ----------
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
+        use_jit_wrapper : bool, optional
+            Whether to use the jit wrapper for the objective. If multiple GPUs are
+            used, this will be set to False.
         verbose : int, optional
             Level of output.
 
@@ -308,6 +312,10 @@ class ObjectiveFunction(IOAble):
             self._use_jit = use_jit
             if use_jit is False:
                 use_jit_wrapper = False
+
+        if use_jit_wrapper and desc_config["num_device"] > 1:
+            use_jit_wrapper = False
+
         timer = Timer()
         timer.start("Objective build")
 
@@ -442,12 +450,24 @@ class ObjectiveFunction(IOAble):
         if constants is None:
             constants = self.constants
         assert len(params) == len(constants) == len(self.objectives)
-        f = pconcat(
-            [
-                obj.compute_unscaled(*par, constants=const)
-                for par, obj, const in zip(params, self.objectives, constants)
-            ]
-        )
+        if desc_config["num_device"] == 1:
+            f = jnp.concatenate(
+                [
+                    obj.compute_unscaled(*par, constants=const)
+                    for par, obj, const in zip(params, self.objectives, constants)
+                ]
+            )
+        else:
+            f = pconcat(
+                [
+                    obj.compute_unscaled(
+                        *jax.device_put(par, jax.devices("gpu")[i]), constants=const
+                    )
+                    for i, (par, obj, const) in enumerate(
+                        zip(params, self.objectives, constants)
+                    )
+                ]
+            )
         return f
 
     @jit
@@ -471,12 +491,24 @@ class ObjectiveFunction(IOAble):
         if constants is None:
             constants = self.constants
         assert len(params) == len(constants) == len(self.objectives)
-        f = pconcat(
-            [
-                obj.compute_scaled(*par, constants=const)
-                for par, obj, const in zip(params, self.objectives, constants)
-            ]
-        )
+        if desc_config["num_device"] == 1:
+            f = jnp.concatenate(
+                [
+                    obj.compute_scaled(*par, constants=const)
+                    for par, obj, const in zip(params, self.objectives, constants)
+                ]
+            )
+        else:
+            f = pconcat(
+                [
+                    obj.compute_scaled(
+                        *jax.device_put(par, jax.devices("gpu")[i]), constants=const
+                    )
+                    for i, (par, obj, const) in enumerate(
+                        zip(params, self.objectives, constants)
+                    )
+                ]
+            )
         return f
 
     @jit
@@ -497,12 +529,27 @@ class ObjectiveFunction(IOAble):
 
         """
         params = self.unpack_state(x)
-        f = pconcat(
-            [
-                obj.compute_scaled_error(*par)
-                for par, obj in zip(params, self.objectives)
-            ]
-        )
+        if constants is None:
+            constants = self.constants
+        assert len(params) == len(constants) == len(self.objectives)
+        if desc_config["num_device"] == 1:
+            f = jnp.concatenate(
+                [
+                    obj.compute_scaled_error(*par, constants=const)
+                    for par, obj, const in zip(params, self.objectives, constants)
+                ]
+            )
+        else:
+            f = pconcat(
+                [
+                    obj.compute_scaled_error(
+                        *jax.device_put(par, jax.devices("gpu")[i]), constants=const
+                    )
+                    for i, (par, obj, const) in enumerate(
+                        zip(params, self.objectives, constants)
+                    )
+                ]
+            )
         return f
 
     @jit

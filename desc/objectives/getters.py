@@ -339,9 +339,7 @@ def maybe_add_self_consistency(thing, constraints):
     return constraints
 
 
-def get_parallel_forcebalance(
-    eq, num_device, use_jit=True, use_jit_wrapper=False, check_device=True
-):
+def get_parallel_forcebalance(eq, num_device, use_jit=True, check_device=True):
     """Get an ObjectiveFunction for parallel computing ForceBalance.
 
     Parameters
@@ -353,8 +351,6 @@ def get_parallel_forcebalance(
 
     Returns
     -------
-    eq : Equilibrium
-        Equilibrium to constrain replicated to devices.
     obj : ObjectiveFunction
         An objective function with force balance objectives. Each objective is
         computed on a separate device. The objective function is built with
@@ -364,7 +360,6 @@ def get_parallel_forcebalance(
     from desc.backend import desc_config, jax, jnp
     from desc.grid import LinearGrid
 
-    eq = jax.device_put(eq, desc_config["sharding_replicated"])
     if desc_config["num_device"] != num_device and check_device:
         raise ValueError(
             f"Number of devices in desc_config ({desc_config['num_device']}) "
@@ -391,13 +386,13 @@ def get_parallel_forcebalance(
             NFP=eq.NFP,
         )
         obj = ForceBalance(eq, grid=grid)
+        obj.build(use_jit=use_jit)
         obj = jax.device_put(obj, jax.devices("gpu")[i])
         # if the eq is also distrubuted across GPUs, then some internal logic that
         # checks if the things are different will fail, so we need to set the eq
         # to be the same manually
         obj._things[0] = eq
-        obj.build(use_jit=use_jit)
         objs += (obj,)
     objective = ObjectiveFunction(objs)
-    objective.build(use_jit_wrapper=use_jit_wrapper)
-    return eq, objective
+    objective.build(use_jit=use_jit)
+    return objective

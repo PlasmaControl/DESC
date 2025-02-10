@@ -36,7 +36,7 @@ from jax._src.api_util import _ensure_index, argnums_partial, check_callable
 from jax._src.tree_util import tree_map, tree_structure, tree_transpose
 from jax._src.util import wraps
 
-from desc.backend import jax, jnp
+from desc.backend import jax, jnp, scan
 from desc.utils import errorif, setdefault
 
 if jax.__version_info__ >= (0, 4, 16):
@@ -91,59 +91,29 @@ def _identity(y):
     return y
 
 
-def _multimap(f, *args):
-    try:
-        return tuple(f(*a) for a in zip(*args))
-    except TypeError:
-        return f(*args)
+def _scan_append(f, x, reduction=None, carry_init_fun=None):
+    """Evaluate f element-wise in x while appending the results."""
+
+    def body(carry, x):
+        return False, f(x)
+
+    _, res_append = scan(body, False, x, unroll=1)
+    return res_append
 
 
-def _scan_append_reduce(
-    f,
-    x,
-    reduction=None,
-    zero_fun=_tree_zeros_like,
-):
-    """Evaluate f element-wise in x while appending and/or reducing the results."""
+def _scan_reduce(f, x, reduction=None, carry_init_fun=_tree_zeros_like):
+    """Evaluate f element-wise in x while reducing the results."""
     x0 = jax.tree_util.tree_map(lambda x: x[0], x)
-
     # special code path if there is only one element
     # to avoid having to rely on xla/llvm to optimize the overhead away
     if jax.tree_util.tree_leaves(x)[0].shape[0] == 1:
-        return _multimap(
-            lambda c, x: jnp.expand_dims(x, 0) if c else x,
-            reduction is None,
-            f(x0),
-        )
+        return f(x0)
 
-    # the original idea was to use pytrees, however for now just operate on the
-    # return value tuple
-    _get_append_part = partial(
-        _multimap,
-        lambda c, x: x if c else None,
-        reduction is None,
-    )
-    _get_reduce_part = partial(
-        _multimap,
-        lambda c, x: x if not c else None,
-        reduction is None,
-    )
-    _tree_select = partial(
-        _multimap,
-        lambda c, t1, t2: t1 if c else t2,
-        reduction is None,
-    )
-    carry_init = _get_reduce_part(zero_fun(jax.eval_shape(f, x0)))
+    def body(carry, x):
+        return reduction(carry, f(x)), None
 
-    def f_(carry, x):
-        y = f(x)
-        y_reduce = carry if reduction is None else reduction(carry, _get_reduce_part(y))
-        y_append = _get_append_part(y)
-        return y_reduce, y_append
-
-    res_op, res_append = jax.lax.scan(f_, carry_init, x, unroll=1)
-    # reconstruct the result from the reduced and appended parts in the two trees
-    return _tree_select(res_append, res_op)
+    res_reduce, _ = scan(body, carry_init_fun(jax.eval_shape(f, x0)), x, unroll=1)
+    return res_reduce
 
 
 def _scanmap(fun, scan_fun, argnums=0, reduction=None, chunk_reduction=_identity):
@@ -198,7 +168,7 @@ def _eval_fun_in_chunks(
 
         y = _scanmap(
             vmapped_fun,
-            _scan_append_reduce,
+            _scan_append if reduction is None else _scan_reduce,
             argnums,
             reduction,
             chunk_reduction,

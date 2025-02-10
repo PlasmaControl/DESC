@@ -3,20 +3,21 @@
 References
 ----------
 The chunking utility functions are adapted from the NetKet project.
- - https://github.com/netket/netket/blob/master/netket/jax/_chunk_utils.py
- - https://github.com/netket/netket/blob/master/netket/jax/_scanmap.py
- - https://github.com/netket/netket/blob/master/netket/jax/_vmap_chunked.py
-
 The original copyright notice is as follows
 Copyright 2021 The NetKet Authors - All rights reserved.
 Licensed under the Apache License, Version 2.0 (the "License");
+https://github.com/netket/netket/blob/master/netket/jax/_chunk_utils.py
+https://github.com/netket/netket/blob/master/netket/jax/_scanmap.py
+https://github.com/netket/netket/blob/master/netket/jax/_vmap_chunked.py
+
+The code can be simplified, but the benefit of keeping close to the original
+is that improvements can be ported over easily.
 
 The ``jacrev_chunked`` and ``jacfwd_chunked`` functions are adapted from JAX.
- - https://github.com/jax-ml/jax/blob/main/jax/_src/api.py.
-
 The original copyright notice is as follows
 Copyright 2018 The JAX Authors.
 Licensed under the Apache License, Version 2.0 (the "License");
+https://github.com/jax-ml/jax/blob/main/jax/_src/api.py.
 """
 
 from functools import partial
@@ -82,20 +83,29 @@ def _chunk(x, chunk_size=None):
     return x.reshape((n_chunks, chunk_size) + x.shape[1:])
 
 
-_tree_add = partial(jax.tree_util.tree_map, jax.lax.add)
 _tree_zeros_like = partial(
     jax.tree_util.tree_map, lambda x: jnp.zeros(x.shape, dtype=x.dtype)
 )
 
 
+def _identity(y):
+    """Returns the input."""
+    return y
+
+
 def _multimap(f, *args):
     try:
-        return tuple(map(lambda a: f(*a), zip(*args)))
+        return tuple(f(*a) for a in zip(*args))
     except TypeError:
         return f(*args)
 
 
-def _scan_append_reduce(f, x, append_cond, op=_tree_add, zero_fun=_tree_zeros_like):
+def _scan_append_reduce(
+    f,
+    x,
+    reduction=None,
+    zero_fun=_tree_zeros_like,
+):
     """Evaluate f element-wise in x while appending and/or reducing the results."""
     x0 = jax.tree_util.tree_map(lambda x: x[0], x)
 
@@ -103,111 +113,144 @@ def _scan_append_reduce(f, x, append_cond, op=_tree_add, zero_fun=_tree_zeros_li
     # to avoid having to rely on xla/llvm to optimize the overhead away
     if jax.tree_util.tree_leaves(x)[0].shape[0] == 1:
         return _multimap(
-            lambda c, x: jnp.expand_dims(x, 0) if c else x, append_cond, f(x0)
+            lambda c, x: jnp.expand_dims(x, 0) if c else x,
+            reduction is None,
+            f(x0),
         )
 
     # the original idea was to use pytrees, however for now just operate on the
     # return value tuple
-    _get_append_part = partial(_multimap, lambda c, x: x if c else None, append_cond)
-    _get_op_part = partial(_multimap, lambda c, x: x if not c else None, append_cond)
-    _tree_select = partial(_multimap, lambda c, t1, t2: t1 if c else t2, append_cond)
-
-    carry_init = True, _get_op_part(zero_fun(jax.eval_shape(f, x0)))
+    _get_append_part = partial(
+        _multimap,
+        lambda c, x: x if c else None,
+        reduction is None,
+    )
+    _get_reduce_part = partial(
+        _multimap,
+        lambda c, x: x if not c else None,
+        reduction is None,
+    )
+    _tree_select = partial(
+        _multimap,
+        lambda c, t1, t2: t1 if c else t2,
+        reduction is None,
+    )
+    carry_init = _get_reduce_part(zero_fun(jax.eval_shape(f, x0)))
 
     def f_(carry, x):
-        is_first, y_carry = carry
         y = f(x)
-        y_op = _get_op_part(y)
+        y_reduce = carry if reduction is None else reduction(carry, _get_reduce_part(y))
         y_append = _get_append_part(y)
-        y_reduce = op(y_carry, y_op)
-        return (False, y_reduce), y_append
+        return y_reduce, y_append
 
-    (_, res_op), res_append = jax.lax.scan(f_, carry_init, x, unroll=1)
+    res_op, res_append = jax.lax.scan(f_, carry_init, x, unroll=1)
     # reconstruct the result from the reduced and appended parts in the two trees
     return _tree_select(res_append, res_op)
 
 
-_scan_append = partial(_scan_append_reduce, append_cond=True)
-
-
-def _scanmap(fun, scan_fun, argnums=0):
+def _scanmap(fun, scan_fun, argnums=0, reduction=None, chunk_reduction=_identity):
     """A helper function to wrap f with a scan_fun."""
 
     def f_(*args, **kwargs):
-        f = lu.wrap_init(fun, kwargs)
         f_partial, dyn_args = argnums_partial(
-            f, argnums, args, require_static_args_hashable=False
+            lu.wrap_init(fun, kwargs),
+            argnums,
+            args,
+            require_static_args_hashable=False,
         )
-        return scan_fun(lambda x: f_partial.call_wrapped(*x), dyn_args)
+        return scan_fun(
+            lambda x: chunk_reduction(f_partial.call_wrapped(*x)),
+            dyn_args,
+            reduction,
+        )
 
     return f_
 
 
 def _eval_fun_in_chunks(
-    vmapped_fun, chunk_size, argnums, reduction=None, *args, **kwargs
+    vmapped_fun,
+    chunk_size,
+    argnums,
+    reduction=None,
+    chunk_reduction=_identity,
+    *args,
+    **kwargs,
 ):
     n_elements = jax.tree_util.tree_leaves(args[argnums[0]])[0].shape[0]
     n_chunks, n_rest = divmod(n_elements, chunk_size)
 
     if n_chunks == 0 or chunk_size >= n_elements:
-        y = vmapped_fun(*args, **kwargs)
+        y = chunk_reduction(vmapped_fun(*args, **kwargs))
     else:
         # split inputs
         def _get_chunks(x):
-            x_chunks = jax.tree_util.tree_map(
-                lambda x_: x_[: n_elements - n_rest, ...], x
+            return _chunk(
+                jax.tree_util.tree_map(
+                    lambda x_: x_[: n_elements - n_rest, ...],
+                    x,
+                ),
+                chunk_size,
             )
-            x_chunks = _chunk(x_chunks, chunk_size)
-            return x_chunks
 
         def _get_rest(x):
-            x_rest = jax.tree_util.tree_map(
-                lambda x_: x_[n_elements - n_rest :, ...], x
+            return jax.tree_util.tree_map(
+                lambda x_: x_[n_elements - n_rest :, ...],
+                x,
             )
-            return x_rest
 
-        args_chunks = [
-            _get_chunks(a) if i in argnums else a for i, a in enumerate(args)
-        ]
-        args_rest = [_get_rest(a) if i in argnums else a for i, a in enumerate(args)]
-
-        y_chunks = _unchunk(
-            _scanmap(
-                vmapped_fun,
-                (
-                    _scan_append
-                    if reduction is None
-                    else partial(_scan_append_reduce, append_cond=False, op=reduction)
-                ),
-                argnums,
-            )(*args_chunks, **kwargs)
+        y = _scanmap(
+            vmapped_fun,
+            _scan_append_reduce,
+            argnums,
+            reduction,
+            chunk_reduction,
+        )(
+            *[_get_chunks(a) if i in argnums else a for i, a in enumerate(args)],
+            **kwargs,
         )
+        if reduction is None:
+            y = _unchunk(y)
 
-        if n_rest == 0:
-            y = y_chunks
-        else:
-            y_rest = vmapped_fun(*args_rest, **kwargs)
+        if n_rest != 0:
+            y_rest = chunk_reduction(
+                vmapped_fun(
+                    *[_get_rest(a) if i in argnums else a for i, a in enumerate(args)],
+                    **kwargs,
+                )
+            )
             if reduction is None:
                 y = jax.tree_util.tree_map(
-                    lambda y1, y2: jnp.concatenate((y1, y2)), y_chunks, y_rest
+                    lambda y1, y2: jnp.concatenate((y1, y2)),
+                    y,
+                    y_rest,
                 )
             else:
-                y = reduction(y_chunks, y_rest)
+                y = reduction(y, y_rest)
     return y
 
 
-def _chunk_vmapped_function(vmapped_fun, chunk_size=None, argnums=0, reduction=None):
+def _chunk_vmapped_function(
+    vmapped_fun,
+    chunk_size=None,
+    argnums=0,
+    reduction=None,
+    chunk_reduction=_identity,
+):
     """Takes a vmapped function and computes it in chunks."""
     if chunk_size is None:
-        return (
-            vmapped_fun
-            if reduction is None
-            else lambda *args, **kwargs: reduction(vmapped_fun(*args, **kwargs))
-        )
+        return lambda *args, **kwargs: chunk_reduction(vmapped_fun(*args, **kwargs))
 
     if isinstance(argnums, int):
         argnums = (argnums,)
-    return partial(_eval_fun_in_chunks, vmapped_fun, chunk_size, argnums, reduction)
+
+    return partial(
+        _eval_fun_in_chunks,
+        vmapped_fun,
+        chunk_size,
+        argnums,
+        reduction,
+        chunk_reduction,
+    )
 
 
 def _parse_in_axes(in_axes):
@@ -223,7 +266,58 @@ def _parse_in_axes(in_axes):
     return in_axes, argnums
 
 
-def batch_map(fun, fun_input, batch_size, *, reduction=None):
+def vmap_chunked(
+    f,
+    /,
+    in_axes=0,
+    *,
+    chunk_size=None,
+    reduction=None,
+    chunk_reduction=_identity,
+):
+    """Behaves like jax.vmap but uses scan to chunk the computations in smaller chunks.
+
+    Parameters
+    ----------
+    f : callable
+        The function to be vectorised.
+    in_axes : int or None
+        The axes that should be scanned along. Only supports ``0`` or ``None``.
+    chunk_size : int or None
+        Size to split computation into chunks.
+        If no chunking should be done or the chunk size is the full input
+        then supply ``None``.
+    reduction : callable or None
+        Binary reduction operation.
+        Should take two arguments and return one output, e.g. ``jnp.add``.
+        If the input to ``f`` is a pytree, then this function must accept pytrees.
+    chunk_reduction : callable
+        Chunk-wise reduction operation.
+        Should apply ``reduction`` along the mapped axis, e.g. ``jnp.add.reduce``.
+        If the input to ``f`` is a pytree, then this function must accept pytrees.
+
+    Returns
+    -------
+    f : callable
+        A vectorised and chunked function.
+
+    """
+    in_axes, argnums = _parse_in_axes(in_axes)
+    vmapped_fun = jax.vmap(f, in_axes=in_axes)
+    return _chunk_vmapped_function(
+        vmapped_fun, chunk_size, argnums, reduction, chunk_reduction
+    )
+
+
+def batch_map(
+    fun,
+    fun_input,
+    /,
+    batch_size,
+    *,
+    reduction=None,
+    chunk_reduction=_identity,
+):
     """Compute ``fun(fun_input)`` in batches.
 
     This utility is like ``desc.backend.imap(fun,fun_input,batch_size)`` except that
@@ -243,46 +337,27 @@ def batch_map(fun, fun_input, batch_size, *, reduction=None):
         Size of batches. If no batching should be done or the batch size is the
         full input then supply ``None``.
     reduction : callable or None
-        Reduction operation.
+        Binary reduction operation.
+        Should take two arguments and return one output, e.g. ``jnp.add``.
+        If the input to ``f`` is a pytree, then this function must accept pytrees.
+    chunk_reduction : callable
+        Chunk-wise reduction operation.
+        Should apply ``reduction`` along the mapped axis, e.g. ``jnp.add.reduce``.
+        If the input to ``f`` is a pytree, then this function must accept pytrees.
 
     Returns
     -------
     fun_output
-        Returns ``fun(fun_input)``.
+        Returns ``chunk_reduction(fun(fun_input))``.
 
     """
     return (
-        fun(fun_input)
+        chunk_reduction(fun(fun_input))
         if batch_size is None
-        else _eval_fun_in_chunks(fun, batch_size, (0,), reduction, fun_input)
+        else _eval_fun_in_chunks(
+            fun, batch_size, (0,), reduction, chunk_reduction, fun_input
+        )
     )
-
-
-def vmap_chunked(f, in_axes=0, *, chunk_size=None, reduction=None):
-    """Behaves like jax.vmap but uses scan to chunk the computations in smaller chunks.
-
-    Parameters
-    ----------
-    f : callable
-        The function to be vectorised.
-    in_axes : int or None
-        The axes that should be scanned along. Only supports ``0`` or ``None``.
-    chunk_size : int or None
-        Size to split computation into chunks.
-        If no chunking should be done or the chunk size is the full input
-        then supply ``None``.
-    reduction : callable or None
-        Reduction operation.
-
-    Returns
-    -------
-    f : callable
-        A vectorised and chunked function.
-
-    """
-    in_axes, argnums = _parse_in_axes(in_axes)
-    vmapped_fun = jax.vmap(f, in_axes=in_axes)
-    return _chunk_vmapped_function(vmapped_fun, chunk_size, argnums, reduction)
 
 
 def batched_vectorize(pyfunc, *, excluded=frozenset(), signature=None, chunk_size=None):

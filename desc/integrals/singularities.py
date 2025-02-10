@@ -645,7 +645,10 @@ def _singular_part(eval_data, source_data, kernel, interpolator, chunk_size=None
         return fi
 
     f = vmap_chunked(
-        polar_pt, chunk_size=chunk_size, reduction=lambda f: jnp.sum(f, axis=0)
+        polar_pt,
+        chunk_size=chunk_size,
+        reduction=jnp.add,
+        chunk_reduction=jnp.add.reduce,
     )(jnp.arange(v.size))
 
     # we sum vectors at different points, so they need to be in xyz for that to work

@@ -140,7 +140,7 @@ def _evaluate_in_chunks(
 
     scan_x, remain_x = zip(
         *[
-            _batch_and_remainder(a, chunk_size) if i in argnums else a
+            _batch_and_remainder(a, chunk_size) if i in argnums else (a, a)
             for i, a in enumerate(args)
         ]
     )

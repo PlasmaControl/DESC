@@ -34,7 +34,13 @@ from jax._src.numpy.vectorize import (
     _parse_input_dimensions,
 )
 from jax._src.util import wraps
-from jax.tree_util import tree_flatten, tree_map, tree_structure, tree_transpose
+from jax.tree_util import (
+    tree_flatten,
+    tree_leaves,
+    tree_map,
+    tree_structure,
+    tree_transpose,
+)
 
 from desc.backend import jax, jnp, scan
 from desc.utils import errorif
@@ -69,33 +75,35 @@ def _identity(y):
     return y
 
 
+_unchunk = partial(tree_map, lambda y: y.reshape(-1, *y.shape[2:]))
+_concat = partial(tree_map, lambda y1, y2: jnp.concatenate((y1, y2)))
+_get_first_chunk = partial(tree_map, lambda x: x[0])
+
+
 def _scan_append(f, x, reduction=None, carry_init_fun=None):
     """Evaluate f element-wise in x while appending the results."""
 
     def body(carry, x):
         return (), f(x)
 
-    _, res_append = scan(body, (), x, unroll=1)
-    return res_append
+    _, result = scan(body, (), x, unroll=1)
+    return result
 
 
 def _scan_reduce(
     f,
     x,
     reduction=None,
-    carry_init_fun=partial(
-        jax.tree_util.tree_map,
-        lambda x: jnp.zeros(x.shape, dtype=x.dtype),
-    ),
+    carry_init_fun=partial(tree_map, lambda x: jnp.zeros_like(x)),
 ):
     """Evaluate f element-wise in x while reducing the results."""
 
     def body(carry, x):
         return reduction(carry, f(x)), None
 
-    x0 = jax.tree_util.tree_map(lambda x: x[0], x)
-    res_reduce, _ = scan(body, carry_init_fun(jax.eval_shape(f, x0)), x, unroll=1)
-    return res_reduce
+    carry_init = carry_init_fun(jax.eval_shape(f, _get_first_chunk(x)))
+    result, _ = scan(body, carry_init, x, unroll=1)
+    return result
 
 
 def _scanmap(fun, scan_fun, argnums=0, reduction=None, chunk_reduction=_identity):
@@ -134,7 +142,7 @@ def _evaluate_in_chunks(
     *args,
     **kwargs,
 ):
-    n_elements = jax.tree_util.tree_leaves(args[argnums[0]])[0].shape[0]
+    n_elements = tree_leaves(args[argnums[0]])[0].shape[0]
     if n_elements <= chunk_size:
         return chunk_reduction(vmapped_fun(*args, **kwargs))
 
@@ -144,25 +152,21 @@ def _evaluate_in_chunks(
             for i, a in enumerate(args)
         ]
     )
-    scan_y = _scanmap(
-        vmapped_fun,
-        _scan_append if reduction is None else _scan_reduce,
-        argnums,
-        reduction,
-        chunk_reduction,
-    )(*scan_x, **kwargs)
-
-    remain_y = chunk_reduction(vmapped_fun(*remain_x, **kwargs))
-
-    return (
-        tree_map(
-            lambda y1, y2: jnp.concatenate([y1.reshape(-1, *y1.shape[2:]), y2]),
-            scan_y,
-            remain_y,
-        )
-        if reduction is None
-        else reduction(scan_y, remain_y)
+    scan_y = _unchunk(
+        _scanmap(
+            vmapped_fun,
+            _scan_append if reduction is None else _scan_reduce,
+            argnums,
+            reduction,
+            chunk_reduction,
+        )(*scan_x, **kwargs)
     )
+    if n_elements % chunk_size == 0:
+        return scan_y
+    remain_y = chunk_reduction(vmapped_fun(*remain_x, **kwargs))
+    if reduction is None:
+        return _concat(scan_y, remain_y)
+    return reduction(scan_y, remain_y)
 
 
 def _parse_in_axes(in_axes):
@@ -202,11 +206,9 @@ def vmap_chunked(
     reduction : callable or None
         Binary reduction operation.
         Should take two arguments and return one output, e.g. ``jnp.add``.
-        If the input to ``f`` is a pytree, then this function must accept pytrees.
     chunk_reduction : callable
         Chunk-wise reduction operation.
         Should apply ``reduction`` along the mapped axis, e.g. ``jnp.add.reduce``.
-        If the input to ``f`` is a pytree, then this function must accept pytrees.
 
     Returns
     -------
@@ -261,11 +263,9 @@ def batch_map(
     reduction : callable or None
         Binary reduction operation.
         Should take two arguments and return one output, e.g. ``jnp.add``.
-        If the input to ``f`` is a pytree, then this function must accept pytrees.
     chunk_reduction : callable
         Chunk-wise reduction operation.
         Should apply ``reduction`` along the mapped axis, e.g. ``jnp.add.reduce``.
-        If the input to ``f`` is a pytree, then this function must accept pytrees.
 
     Returns
     -------

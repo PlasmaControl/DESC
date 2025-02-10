@@ -103,15 +103,11 @@ def _scan_append(f, x, reduction=None, carry_init_fun=None):
 
 def _scan_reduce(f, x, reduction=None, carry_init_fun=_tree_zeros_like):
     """Evaluate f element-wise in x while reducing the results."""
-    x0 = jax.tree_util.tree_map(lambda x: x[0], x)
-    # special code path if there is only one element
-    # to avoid having to rely on xla/llvm to optimize the overhead away
-    if jax.tree_util.tree_leaves(x)[0].shape[0] == 1:
-        return f(x0)
 
     def body(carry, x):
         return reduction(carry, f(x)), None
 
+    x0 = jax.tree_util.tree_map(lambda x: x[0], x)
     res_reduce, _ = scan(body, carry_init_fun(jax.eval_shape(f, x0)), x, unroll=1)
     return res_reduce
 

@@ -38,6 +38,7 @@ from jax._src.tree_util import tree_map, tree_structure, tree_transpose
 from jax._src.util import wraps
 
 from desc.backend import jax, jnp
+from desc.utils import errorif, setdefault
 
 if jax.__version_info__ >= (0, 4, 16):
     from jax.extend import linear_util as lu
@@ -68,18 +69,16 @@ def _unchunk(x):
 def _chunk(x, chunk_size=None):
     # chunk_size=None -> add just a dummy chunk dimension,
     #  same as np.expand_dims(x, 0)
-    if x.ndim == 0:
-        raise ValueError("x cannot be chunked as it has 0 dimensions.")
+    errorif(x.ndim == 0, msg="x cannot be chunked as it has 0 dimensions.")
     n = x.shape[0]
-    if chunk_size is None:
-        chunk_size = n
+    chunk_size = setdefault(chunk_size, n)
 
     n_chunks, residual = divmod(n, chunk_size)
-    if residual != 0:
-        raise ValueError(
-            "The first dimension of x must be divisible by chunk_size."
-            + f"\n        Got x.shape={x.shape} but chunk_size={chunk_size}."
-        )
+    errorif(
+        residual != 0,
+        msg="The first dimension of x must be divisible by chunk_size.\n"
+        + f"Got x.shape={x.shape} but chunk_size={chunk_size}.",
+    )
     return x.reshape((n_chunks, chunk_size) + x.shape[1:])
 
 
@@ -257,9 +256,11 @@ def _parse_in_axes(in_axes):
     if isinstance(in_axes, int):
         in_axes = (in_axes,)
 
-    if not set(in_axes).issubset((0, None)):
-        raise NotImplementedError("Only in_axes 0/None are currently supported")
-
+    errorif(
+        not set(in_axes).issubset((0, None)),
+        NotImplementedError,
+        f"Only in_axes 0/None are currently supported, but got {in_axes}.",
+    )
     argnums = tuple(
         map(lambda ix: ix[0], filter(lambda ix: ix[1] is not None, enumerate(in_axes)))
     )
@@ -305,7 +306,11 @@ def vmap_chunked(
     in_axes, argnums = _parse_in_axes(in_axes)
     vmapped_fun = jax.vmap(f, in_axes=in_axes)
     return _chunk_vmapped_function(
-        vmapped_fun, chunk_size, argnums, reduction, chunk_reduction
+        vmapped_fun,
+        chunk_size,
+        argnums,
+        reduction,
+        chunk_reduction,
     )
 
 
@@ -318,7 +323,7 @@ def batch_map(
     reduction=None,
     chunk_reduction=_identity,
 ):
-    """Compute ``fun(fun_input)`` in batches.
+    """Compute ``chunk_reduction(fun(fun_input))`` in batches.
 
     This utility is like ``desc.backend.imap(fun,fun_input,batch_size)`` except that
     ``fun`` is assumed to be vectorized natively. No JAX vectorization such as ``vmap``
@@ -355,7 +360,12 @@ def batch_map(
         chunk_reduction(fun(fun_input))
         if batch_size is None
         else _eval_fun_in_chunks(
-            fun, batch_size, (0,), reduction, chunk_reduction, fun_input
+            fun,
+            batch_size,
+            (0,),
+            reduction,
+            chunk_reduction,
+            fun_input,
         )
     )
 
@@ -396,13 +406,16 @@ def batched_vectorize(pyfunc, *, excluded=frozenset(), signature=None, chunk_siz
     Batch-vectorized version of the given function.
 
     """
-    if any(not isinstance(exclude, (str, int)) for exclude in excluded):
-        raise TypeError(
-            "jax.numpy.vectorize can only exclude integer or string arguments, "
-            "but excluded={!r}".format(excluded)
-        )
-    if any(isinstance(e, int) and e < 0 for e in excluded):
-        raise ValueError(f"excluded={excluded!r} contains negative numbers")
+    errorif(
+        any(not isinstance(exclude, (str, int)) for exclude in excluded),
+        TypeError,
+        "jax.numpy.vectorize can only exclude integer or string arguments, "
+        "but excluded={!r}".format(excluded),
+    )
+    errorif(
+        any(isinstance(e, int) and e < 0 for e in excluded),
+        msg=f"excluded={excluded!r} contains negative numbers",
+    )
 
     @wraps(pyfunc)
     def wrapped(*args, **kwargs):
@@ -420,10 +433,10 @@ def batched_vectorize(pyfunc, *, excluded=frozenset(), signature=None, chunk_siz
 
         none_args = {i for i, arg in enumerate(args) if arg is None}
         if any(none_args):
-            if any(input_core_dims[i] != () for i in none_args):
-                raise ValueError(
-                    f"Cannot pass None at locations {none_args} with {signature=}"
-                )
+            errorif(
+                any(input_core_dims[i] != () for i in none_args),
+                msg=f"Cannot pass None at locations {none_args} with {signature=}",
+            )
             excluded_func, args, _ = _apply_excluded(excluded_func, none_args, args, {})
             input_core_dims = [
                 dim for i, dim in enumerate(input_core_dims) if i not in none_args
@@ -469,7 +482,6 @@ def batched_vectorize(pyfunc, *, excluded=frozenset(), signature=None, chunk_siz
             if all(axis is None for axis in in_axes):
                 dims_to_expand.append(len(broadcast_shape) - 1 - negdim)
             else:
-                # change the vmap here to chunked_vmap
                 vectorized_func = vmap_chunked(
                     vectorized_func, in_axes, chunk_size=chunk_size
                 )

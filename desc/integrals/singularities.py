@@ -648,7 +648,9 @@ def _singular_part(eval_data, source_data, kernel, interpolator, chunk_size=None
         polar_pt,
         chunk_size=chunk_size,
         reduction=jnp.add,
-        chunk_reduction=jnp.add.reduce,
+        # TODO (#1386): Infer jnp.add.reduce from reduction.
+        #  https://github.com/jax-ml/jax/issues/23493.
+        chunk_reduction=lambda x: x.sum(axis=0),
     )(jnp.arange(v.size))
 
     # we sum vectors at different points, so they need to be in xyz for that to work

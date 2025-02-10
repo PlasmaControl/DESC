@@ -1088,7 +1088,7 @@ def _compute_A_or_B_from_CurrentPotentialField(
         rs = jnp.vstack((_rs[:, 0], phi, _rs[:, 2])).T
         rs = rpz2xyz(rs)
         K = rpz2xyz_vec(_K, phi=phi)
-        fj = op(coords, rs, K, _dV, chunk_size)
+        fj = op(coords, rs, K, _dV, chunk_size=chunk_size)
         f += fj
         return f
 

@@ -38,19 +38,23 @@ from desc.utils import copy_coeffs, errorif, flatten_list, safediv, setdefault, 
 from desc.vmec_utils import ptolemy_identity_fwd, ptolemy_identity_rev
 
 
-def biot_savart_general(re, rs, J, dV, chunk_size=None):
+def biot_savart_general(re, rs, J, dV=jnp.array([1.0]), chunk_size=None):
     """Biot-Savart law for arbitrary sources.
 
     Parameters
     ----------
-    re : ndarray, shape(n_eval_pts, 3)
-        evaluation points to evaluate B at, in cartesian.
-    rs : ndarray, shape(n_src_pts, 3)
-        source points for current density J, in cartesian.
-    J : ndarray, shape(n_src_pts, 3)
-        current density vector at source points, in cartesian.
-    dV : ndarray, shape(n_src_pts)
-        volume element at source points
+    re : ndarray
+        Shape (n_eval_pts, 3).
+        Evaluation points to evaluate B at, in cartesian.
+    rs : ndarray
+        Shape (n_src_pts, 3).
+        Source points for current density J, in cartesian.
+    J : ndarray
+        Shape (n_src_pts, 3).
+        Current density vector at source points, in cartesian.
+    dV : ndarray
+        Shape (n_src_pts, ).
+        Volume element at source points
     chunk_size : int or None
         Size to split computation into chunks of evaluation points.
         If no chunking should be done or the chunk size is the full input
@@ -58,13 +62,14 @@ def biot_savart_general(re, rs, J, dV, chunk_size=None):
 
     Returns
     -------
-    B : ndarray, shape(n_eval_pts, 3)
-        magnetic field in cartesian components at specified points
+    B : ndarray
+        Shape(n_eval_pts, 3).
+        Magnetic field in cartesian components at specified points.
 
     """
     re, rs, J, dV = map(jnp.asarray, (re, rs, J, dV))
-    assert J.shape == rs.shape
     JdV = J * dV[:, jnp.newaxis]
+    assert JdV.shape == rs.shape
 
     def biot(re):
         dr = rs - re
@@ -76,19 +81,25 @@ def biot_savart_general(re, rs, J, dV, chunk_size=None):
     return batch_map(biot, re[..., jnp.newaxis, :], chunk_size)
 
 
-def biot_savart_general_vector_potential(re, rs, J, dV, chunk_size=None):
+def biot_savart_general_vector_potential(
+    re, rs, J, dV=jnp.array([1.0]), chunk_size=None
+):
     """Biot-Savart law for arbitrary sources for vector potential.
 
     Parameters
     ----------
-    re : ndarray, shape(n_eval_pts, 3)
-        evaluation points to evaluate B at, in cartesian.
-    rs : ndarray, shape(n_src_pts, 3)
-        source points for current density J, in cartesian.
-    J : ndarray, shape(n_src_pts, 3)
-        current density vector at source points, in cartesian.
-    dV : ndarray, shape(n_src_pts)
-        volume element at source points
+    re : ndarray
+        Shape (n_eval_pts, 3).
+        Evaluation points to evaluate B at, in cartesian.
+    rs : ndarray
+        Shape (n_src_pts, 3).
+        Source points for current density J, in cartesian.
+    J : ndarray
+        Shape (n_src_pts, 3).
+        Current density vector at source points, in cartesian.
+    dV : ndarray
+        Shape (n_src_pts, ).
+        Volume element at source points
     chunk_size : int or None
         Size to split computation into chunks of evaluation points.
         If no chunking should be done or the chunk size is the full input
@@ -96,12 +107,14 @@ def biot_savart_general_vector_potential(re, rs, J, dV, chunk_size=None):
 
     Returns
     -------
-    A : ndarray, shape(n_eval_pts,3)
-        magnetic vector potential in cartesian components at specified points
+    A : ndarray
+        Shape(n_eval_pts, 3).
+        Magnetic vector potential in cartesian components at specified points.
+
     """
     re, rs, J, dV = map(jnp.asarray, (re, rs, J, dV))
-    assert J.shape == rs.shape
     JdV = J * dV[:, jnp.newaxis]
+    assert JdV.shape == rs.shape
 
     def biot(re):
         dr = rs - re
@@ -544,7 +557,7 @@ class _MagneticField(IOAble, ABC):
         nphi : int, optional
             Number of grid points in the toroidal angle (default = 90).
         save_vector_potential : bool, optional
-            Whether or not to save the magnetic vector potential to the mgrid
+            Whether to save the magnetic vector potential to the mgrid
             file, in addition to the magnetic field. Defaults to True.
         chunk_size : int or None
             Size to split computation into chunks of evaluation points.
@@ -756,8 +769,9 @@ class MagneticFieldFromUser(_MagneticField, Optimizable):
         basis : {"rpz", "xyz"}
             Basis for input coordinates and returned magnetic field.
         source_grid : Grid, int or None or array-like, optional
-            Unused by this class, only kept for API compatibility
+            Unused by this class, only kept for API compatibility.
         chunk_size : int or None
+            Unused by this class, only kept for API compatibility.
             Size to split computation into chunks of evaluation points.
             If no chunking should be done or the chunk size is the full input
             then supply ``None``. Default is ``None``.
@@ -798,7 +812,7 @@ class MagneticFieldFromUser(_MagneticField, Optimizable):
         basis : {"rpz", "xyz"}
             Basis for input coordinates and returned magnetic vector potential.
         source_grid : Grid, int or None or array-like, optional
-            Unused by this MagneticField class.
+            Unused by this MagneticField class, only kept for API compatibility.
         chunk_size : int or None
             Size to split computation into chunks of evaluation points.
             If no chunking should be done or the chunk size is the full input
@@ -1230,8 +1244,9 @@ class ToroidalMagneticField(_MagneticField, Optimizable):
             Unused by this MagneticField class.
         transforms : dict of Transform
             Transforms for R, Z, lambda, etc. Default is to build from source_grid
-            Unused by this MagneticField class.
+            Unused by this MagneticField class, only kept for API compatibility.
         chunk_size : int or None
+            Unused by this class, only kept for API compatibility.
             Size to split computation into chunks of evaluation points.
             If no chunking should be done or the chunk size is the full input
             then supply ``None``. Default is ``None``.
@@ -1283,8 +1298,9 @@ class ToroidalMagneticField(_MagneticField, Optimizable):
             Unused by this MagneticField class.
         transforms : dict of Transform
             Transforms for R, Z, lambda, etc. Default is to build from source_grid
-            Unused by this MagneticField class.
+            Unused by this MagneticField class, only kept for API compatibility.
         chunk_size : int or None
+            Unused by this class, only kept for API compatibility.
             Size to split computation into chunks of evaluation points.
             If no chunking should be done or the chunk size is the full input
             then supply ``None``. Default is ``None``.
@@ -1361,8 +1377,9 @@ class VerticalMagneticField(_MagneticField, Optimizable):
             Unused by this MagneticField class.
         transforms : dict of Transform
             Transforms for R, Z, lambda, etc. Default is to build from source_grid
-            Unused by this MagneticField class.
+            Unused by this MagneticField class, only kept for API compatibility.
         chunk_size : int or None
+            Unused by this class, only kept for API compatibility.
             Size to split computation into chunks of evaluation points.
             If no chunking should be done or the chunk size is the full input
             then supply ``None``. Default is ``None``.
@@ -1409,8 +1426,9 @@ class VerticalMagneticField(_MagneticField, Optimizable):
             Unused by this MagneticField class.
         transforms : dict of Transform
             Transforms for R, Z, lambda, etc. Default is to build from source_grid
-            Unused by this MagneticField class.
+            Unused by this MagneticField class, only kept for API compatibility.
         chunk_size : int or None
+            Unused by this class, only kept for API compatibility.
             Size to split computation into chunks of evaluation points.
             If no chunking should be done or the chunk size is the full input
             then supply ``None``. Default is ``None``.
@@ -1529,6 +1547,7 @@ class PoloidalMagneticField(_MagneticField, Optimizable):
             Transforms for R, Z, lambda, etc. Default is to build from source_grid
             Unused by this MagneticField class.
         chunk_size : int or None
+            Unused by this class, only kept for API compatibility.
             Size to split computation into chunks of evaluation points.
             If no chunking should be done or the chunk size is the full input
             then supply ``None``. Default is ``None``.
@@ -1792,6 +1811,7 @@ class SplineMagneticField(_MagneticField, Optimizable):
             whether to compute the magnetic vector potential "A" or the magnetic field
             "B". Defaults to "B"
         chunk_size : int or None
+            Unused by this class, only kept for API compatibility.
             Size to split computation into chunks of evaluation points.
             If no chunking should be done or the chunk size is the full input
             then supply ``None``. Default is ``None``.
@@ -2217,6 +2237,7 @@ class ScalarPotentialField(_MagneticField):
             Transforms for R, Z, lambda, etc. Default is to build from source_grid
             Unused by this MagneticField class.
         chunk_size : int or None
+            Unused by this class, only kept for API compatibility.
             Size to split computation into chunks of evaluation points.
             If no chunking should be done or the chunk size is the full input
             then supply ``None``. Default is ``None``.
@@ -2345,6 +2366,7 @@ class VectorPotentialField(_MagneticField):
             whether to compute the magnetic vector potential "A" or the magnetic field
             "B". Defaults to "B"
         chunk_size : int or None
+            Unused by this class, only kept for API compatibility.
             Size to split computation into chunks of evaluation points.
             If no chunking should be done or the chunk size is the full input
             then supply ``None``. Default is ``None``.

@@ -106,7 +106,7 @@ def _scan_reduce(
     return result
 
 
-def _scanmap(fun, scan_fun, argnums=0, reduction=None, chunk_reduction=_identity):
+def _scanmap(fun, argnums=0, reduction=None, chunk_reduction=_identity):
     """A helper function to wrap f with a scan_fun.
 
     Adapted from the NetKet project.
@@ -116,6 +116,7 @@ def _scanmap(fun, scan_fun, argnums=0, reduction=None, chunk_reduction=_identity
     Copyright 2021 The NetKet Authors - All rights reserved.
     Licensed under the Apache License, Version 2.0 (the "License");
     """
+    scan_fun = _scan_append if reduction is None else _scan_reduce
 
     def f_(*args, **kwargs):
         f_partial, dyn_args = argnums_partial(
@@ -152,20 +153,19 @@ def _evaluate_in_chunks(
             for i, a in enumerate(args)
         ]
     )
-    scan_y = _unchunk(
-        _scanmap(
-            vmapped_fun,
-            _scan_append if reduction is None else _scan_reduce,
-            argnums,
-            reduction,
-            chunk_reduction,
-        )(*scan_x, **kwargs)
+    scan_y = _scanmap(vmapped_fun, argnums, reduction, chunk_reduction)(
+        *scan_x, **kwargs
     )
+    if reduction is None:
+        scan_y = _unchunk(scan_y)
+
     if n_elements % chunk_size == 0:
         return scan_y
+
     remain_y = chunk_reduction(vmapped_fun(*remain_x, **kwargs))
     if reduction is None:
         return _concat(scan_y, remain_y)
+
     return reduction(scan_y, remain_y)
 
 

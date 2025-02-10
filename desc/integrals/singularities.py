@@ -652,6 +652,7 @@ def _singular_part(eval_data, source_data, kernel, interpolator, chunk_size=None
         #  https://github.com/jax-ml/jax/issues/23493.
         chunk_reduction=lambda x: x.sum(axis=0),
     )(jnp.arange(v.size))
+    assert f.shape == (eval_grid.num_nodes, kernel.ndim)
 
     # we sum vectors at different points, so they need to be in xyz for that to work
     # but then need to convert vectors back to rpz

@@ -2,21 +2,15 @@
 
 References
 ----------
-The chunking utility functions are adapted from the NetKet project.
-The original copyright notice is as follows
-Copyright 2021 The NetKet Authors - All rights reserved.
-Licensed under the Apache License, Version 2.0 (the "License");
-https://github.com/netket/netket/blob/master/netket/jax/_chunk_utils.py
-https://github.com/netket/netket/blob/master/netket/jax/_scanmap.py
-https://github.com/netket/netket/blob/master/netket/jax/_vmap_chunked.py
+The ``_batch_and_remainder``, ``_evaluate_in_chunks``, ``jacrev_chunked``,
+and ``jacfwd_chunked`` functions are adapted from JAX.
+https://github.com/jax-ml/jax/blob/main/jax/_src/lax/control_flow/loops.py#L2139.
+https://github.com/jax-ml/jax/blob/main/jax/_src/lax/control_flow/loops.py#L2209.
+https://github.com/jax-ml/jax/blob/main/jax/_src/api.py.
 
-A benefit of keeping close to the original is that improvements can be ported easily.
-
-The ``jacrev_chunked`` and ``jacfwd_chunked`` functions are adapted from JAX.
 The original copyright notice is as follows
 Copyright 2018 The JAX Authors.
 Licensed under the Apache License, Version 2.0 (the "License");
-https://github.com/jax-ml/jax/blob/main/jax/_src/api.py.
 """
 
 from functools import partial
@@ -33,57 +27,41 @@ from jax._src.api import (
     _vjp,
 )
 from jax._src.api_util import _ensure_index, argnums_partial, check_callable
-from jax._src.tree_util import tree_map, tree_structure, tree_transpose
-from jax._src.util import wraps
-
-from desc.backend import jax, jnp, scan
-from desc.utils import errorif, setdefault
-
-if jax.__version_info__ >= (0, 4, 16):
-    from jax.extend import linear_util as lu
-else:
-    from jax import linear_util as lu
-
 from jax._src.numpy.vectorize import (
     _apply_excluded,
     _check_output_dims,
     _parse_gufunc_signature,
     _parse_input_dimensions,
 )
+from jax._src.util import wraps
+from jax.tree_util import tree_flatten, tree_map, tree_structure, tree_transpose
+
+from desc.backend import jax, jnp, scan
+from desc.utils import errorif
+
+if jax.__version_info__ >= (0, 4, 16):
+    from jax.extend import linear_util as lu
+else:
+    from jax import linear_util as lu
 
 
-def _treeify(f):
-    def _f(x, *args, **kwargs):
-        return jax.tree_util.tree_map(lambda y: f(y, *args, **kwargs), x)
+def _batch_and_remainder(x, batch_size: int):
+    leaves, treedef = tree_flatten(x)
 
-    return _f
+    scan_leaves = []
+    remainder_leaves = []
 
+    for leaf in leaves:
+        num_batches = leaf.shape[0] // batch_size
+        total_batch_elems = num_batches * batch_size
+        scan_leaves.append(
+            leaf[:total_batch_elems].reshape(num_batches, batch_size, *leaf.shape[1:])
+        )
+        remainder_leaves.append(leaf[total_batch_elems:])
 
-@_treeify
-def _unchunk(x):
-    return x.reshape((-1,) + x.shape[2:])
-
-
-@_treeify
-def _chunk(x, chunk_size=None):
-    # chunk_size=None -> add just a dummy chunk dimension,
-    #  same as np.expand_dims(x, 0)
-    errorif(x.ndim == 0, msg="x cannot be chunked as it has 0 dimensions.")
-    n = x.shape[0]
-    chunk_size = setdefault(chunk_size, n)
-
-    n_chunks, residual = divmod(n, chunk_size)
-    errorif(
-        residual != 0,
-        msg="The first dimension of x must be divisible by chunk_size.\n"
-        + f"Got x.shape={x.shape} but chunk_size={chunk_size}.",
-    )
-    return x.reshape((n_chunks, chunk_size) + x.shape[1:])
-
-
-_tree_zeros_like = partial(
-    jax.tree_util.tree_map, lambda x: jnp.zeros(x.shape, dtype=x.dtype)
-)
+    scan_tree = treedef.unflatten(scan_leaves)
+    remainder_tree = treedef.unflatten(remainder_leaves)
+    return scan_tree, remainder_tree
 
 
 def _identity(y):
@@ -95,13 +73,21 @@ def _scan_append(f, x, reduction=None, carry_init_fun=None):
     """Evaluate f element-wise in x while appending the results."""
 
     def body(carry, x):
-        return False, f(x)
+        return (), f(x)
 
-    _, res_append = scan(body, False, x, unroll=1)
+    _, res_append = scan(body, (), x, unroll=1)
     return res_append
 
 
-def _scan_reduce(f, x, reduction=None, carry_init_fun=_tree_zeros_like):
+def _scan_reduce(
+    f,
+    x,
+    reduction=None,
+    carry_init_fun=partial(
+        jax.tree_util.tree_map,
+        lambda x: jnp.zeros(x.shape, dtype=x.dtype),
+    ),
+):
     """Evaluate f element-wise in x while reducing the results."""
 
     def body(carry, x):
@@ -113,7 +99,15 @@ def _scan_reduce(f, x, reduction=None, carry_init_fun=_tree_zeros_like):
 
 
 def _scanmap(fun, scan_fun, argnums=0, reduction=None, chunk_reduction=_identity):
-    """A helper function to wrap f with a scan_fun."""
+    """A helper function to wrap f with a scan_fun.
+
+    Adapted from the NetKet project.
+    https://github.com/netket/netket/blob/master/netket/jax/_scanmap.py.
+
+    The original copyright notice is as follows
+    Copyright 2021 The NetKet Authors - All rights reserved.
+    Licensed under the Apache License, Version 2.0 (the "License");
+    """
 
     def f_(*args, **kwargs):
         f_partial, dyn_args = argnums_partial(
@@ -131,7 +125,7 @@ def _scanmap(fun, scan_fun, argnums=0, reduction=None, chunk_reduction=_identity
     return f_
 
 
-def _eval_fun_in_chunks(
+def _evaluate_in_chunks(
     vmapped_fun,
     chunk_size,
     argnums,
@@ -141,79 +135,33 @@ def _eval_fun_in_chunks(
     **kwargs,
 ):
     n_elements = jax.tree_util.tree_leaves(args[argnums[0]])[0].shape[0]
-    n_chunks, n_rest = divmod(n_elements, chunk_size)
+    if n_elements <= chunk_size:
+        return chunk_reduction(vmapped_fun(*args, **kwargs))
 
-    if n_chunks == 0 or chunk_size >= n_elements:
-        y = chunk_reduction(vmapped_fun(*args, **kwargs))
-    else:
-        # split inputs
-        def _get_chunks(x):
-            return _chunk(
-                jax.tree_util.tree_map(
-                    lambda x_: x_[: n_elements - n_rest, ...],
-                    x,
-                ),
-                chunk_size,
-            )
-
-        def _get_rest(x):
-            return jax.tree_util.tree_map(
-                lambda x_: x_[n_elements - n_rest :, ...],
-                x,
-            )
-
-        y = _scanmap(
-            vmapped_fun,
-            _scan_append if reduction is None else _scan_reduce,
-            argnums,
-            reduction,
-            chunk_reduction,
-        )(
-            *[_get_chunks(a) if i in argnums else a for i, a in enumerate(args)],
-            **kwargs,
-        )
-        if reduction is None:
-            y = _unchunk(y)
-
-        if n_rest != 0:
-            y_rest = chunk_reduction(
-                vmapped_fun(
-                    *[_get_rest(a) if i in argnums else a for i, a in enumerate(args)],
-                    **kwargs,
-                )
-            )
-            if reduction is None:
-                y = jax.tree_util.tree_map(
-                    lambda y1, y2: jnp.concatenate((y1, y2)),
-                    y,
-                    y_rest,
-                )
-            else:
-                y = reduction(y, y_rest)
-    return y
-
-
-def _chunk_vmapped_function(
-    vmapped_fun,
-    chunk_size=None,
-    argnums=0,
-    reduction=None,
-    chunk_reduction=_identity,
-):
-    """Takes a vmapped function and computes it in chunks."""
-    if chunk_size is None:
-        return lambda *args, **kwargs: chunk_reduction(vmapped_fun(*args, **kwargs))
-
-    if isinstance(argnums, int):
-        argnums = (argnums,)
-
-    return partial(
-        _eval_fun_in_chunks,
+    scan_x, remain_x = zip(
+        *[
+            _batch_and_remainder(a, chunk_size) if i in argnums else a
+            for i, a in enumerate(args)
+        ]
+    )
+    scan_y = _scanmap(
         vmapped_fun,
-        chunk_size,
+        _scan_append if reduction is None else _scan_reduce,
         argnums,
         reduction,
         chunk_reduction,
+    )(*scan_x, **kwargs)
+
+    remain_y = chunk_reduction(vmapped_fun(*remain_x, **kwargs))
+
+    return (
+        tree_map(
+            lambda y1, y2: jnp.concatenate([y1.reshape(-1, *y1.shape[2:]), y2]),
+            scan_y,
+            remain_y,
+        )
+        if reduction is None
+        else reduction(scan_y, remain_y)
     )
 
 
@@ -267,9 +215,15 @@ def vmap_chunked(
 
     """
     in_axes, argnums = _parse_in_axes(in_axes)
-    vmapped_fun = jax.vmap(f, in_axes=in_axes)
-    return _chunk_vmapped_function(
-        vmapped_fun,
+    if isinstance(argnums, int):
+        argnums = (argnums,)
+
+    f = jax.vmap(f, in_axes=in_axes)
+    if chunk_size is None:
+        return lambda *args, **kwargs: chunk_reduction(f(*args, **kwargs))
+    return partial(
+        _evaluate_in_chunks,
+        f,
         chunk_size,
         argnums,
         reduction,
@@ -281,7 +235,7 @@ def batch_map(
     fun,
     fun_input,
     /,
-    batch_size,
+    batch_size=None,
     *,
     reduction=None,
     chunk_reduction=_identity,
@@ -322,7 +276,7 @@ def batch_map(
     return (
         chunk_reduction(fun(fun_input))
         if batch_size is None
-        else _eval_fun_in_chunks(
+        else _evaluate_in_chunks(
             fun,
             batch_size,
             (0,),

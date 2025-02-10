@@ -10,8 +10,7 @@ https://github.com/netket/netket/blob/master/netket/jax/_chunk_utils.py
 https://github.com/netket/netket/blob/master/netket/jax/_scanmap.py
 https://github.com/netket/netket/blob/master/netket/jax/_vmap_chunked.py
 
-The code can be simplified, but the benefit of keeping close to the original
-is that improvements can be ported over easily.
+A benefit of keeping close to the original is that improvements can be ported easily.
 
 The ``jacrev_chunked`` and ``jacfwd_chunked`` functions are adapted from JAX.
 The original copyright notice is as follows
@@ -261,9 +260,7 @@ def _parse_in_axes(in_axes):
         NotImplementedError,
         f"Only in_axes 0/None are currently supported, but got {in_axes}.",
     )
-    argnums = tuple(
-        map(lambda ix: ix[0], filter(lambda ix: ix[1] is not None, enumerate(in_axes)))
-    )
+    argnums = tuple(i for i, axis in enumerate(in_axes) if axis is not None)
     return in_axes, argnums
 
 

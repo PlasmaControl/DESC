@@ -827,9 +827,6 @@ class ProximalProjection(ObjectiveFunction):
         # cached value, no need to perturb + resolve
         xopt = f_where_x(x, self._allx, self._allxopt)
         xeq = f_where_x(x, self._allx, self._allxeq)
-        # previous values of the optimization variables, if these are the same as the
-        # new values, we don't need to update the constraints
-        last_x = self._allx[-1].copy()
         if xopt.size > 0 and xeq.size > 0:
             pass
         else:
@@ -870,8 +867,6 @@ class ProximalProjection(ObjectiveFunction):
         else:
             # reset to last good params
             self._eq.params_dict = self.history[-1][self._eq_idx]
-        # if the optimization variables have changed, we need to update the constraints
-        if not (x == last_x).all():
             self._eq_solve_objective.update_constraint_target(self._eq)
 
         return xopt, xeq

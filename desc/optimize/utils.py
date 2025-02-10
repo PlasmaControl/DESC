@@ -450,11 +450,11 @@ def check_termination(
         message = STATUS_MESSAGES["success"]
         success = True
         if ftol_satisfied:
-            message += "\n" + STATUS_MESSAGES["ftol"] + f" {ftol:.2e}"
+            message += "\n" + STATUS_MESSAGES["ftol"] + f" ({ftol=:.2e})"
         if xtol_satisfied:
-            message += "\n" + STATUS_MESSAGES["xtol"] + f" {xtol:.2e}"
+            message += "\n" + STATUS_MESSAGES["xtol"] + f" ({xtol=:.2e})"
         if gtol_satisfied:
-            message += "\n" + STATUS_MESSAGES["gtol"] + f" {gtol:.2e}"
+            message += "\n" + STATUS_MESSAGES["gtol"] + f" ({gtol=:.2e})"
     elif iteration >= maxiter:
         success = False
         message = STATUS_MESSAGES["maxiter"]

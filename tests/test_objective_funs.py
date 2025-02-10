@@ -2740,9 +2740,8 @@ def test_loss_function_asserts():
         RotationalTransform(eq=eq, loss_function=fun)
 
 
-def _reduced_resolution_objective(eq, objective):
+def _reduced_resolution_objective(eq, objective, **kwargs):
     """Speed up testing suite by defining rules to reduce objective resolution."""
-    kwargs = {}
     if objective in {EffectiveRipple, GammaC}:
         kwargs["X"] = 8
         kwargs["Y"] = 16
@@ -3543,6 +3542,12 @@ class TestObjectiveNaNGrad:
         obj.build(verbose=0)
         g = obj.grad(obj.x())
         assert not np.any(np.isnan(g))
+        obj = ObjectiveFunction(
+            _reduced_resolution_objective(eq, EffectiveRipple, spline=True)
+        )
+        obj.build(verbose=0)
+        g = obj.grad(obj.x())
+        assert not np.any(np.isnan(g))
 
     @pytest.mark.unit
     def test_objective_no_nangrad_Gamma_c(self):
@@ -3551,6 +3556,10 @@ class TestObjectiveNaNGrad:
         with pytest.warns(UserWarning, match="Reducing radial"):
             eq.change_resolution(2, 2, 2, 4, 4, 4)
         obj = ObjectiveFunction(_reduced_resolution_objective(eq, GammaC))
+        obj.build(verbose=0)
+        g = obj.grad(obj.x())
+        assert not np.any(np.isnan(g))
+        obj = ObjectiveFunction(_reduced_resolution_objective(eq, GammaC, spline=True))
         obj.build(verbose=0)
         g = obj.grad(obj.x())
         assert not np.any(np.isnan(g))

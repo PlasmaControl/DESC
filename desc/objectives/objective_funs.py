@@ -613,13 +613,26 @@ class ObjectiveFunction(IOAble):
         if x0 is not None:
             params0 = self.unpack_state(x0)
             assert len(params0) == len(constants) == len(self.objectives)
-            for par, par0, obj, const in zip(
-                params, params0, self.objectives, constants
-            ):
-                obj.print_value(par, par0, constants=const)
+            if self._is_multi_device:
+                for par, par0, obj, const in zip(
+                    params, params0, self.objectives, constants
+                ):
+                    par = jax.device_put(par, jax.devices("gpu")[obj._device_id])
+                    par0 = jax.device_put(par0, jax.devices("gpu")[obj._device_id])
+                    obj.print_value(par, par0, constants=const)
+            else:
+                for par, par0, obj, const in zip(
+                    params, params0, self.objectives, constants
+                ):
+                    obj.print_value(par, par0, constants=const)
         else:
-            for par, obj, const in zip(params, self.objectives, constants):
-                obj.print_value(par, constants=const)
+            if self._is_multi_device:
+                for par, obj, const in zip(params, self.objectives, constants):
+                    par = jax.device_put(par, jax.devices("gpu")[obj._device_id])
+                    obj.print_value(par, constants=const)
+            else:
+                for par, obj, const in zip(params, self.objectives, constants):
+                    obj.print_value(par, constants=const)
         return None
 
     def unpack_state(self, x, per_objective=True):

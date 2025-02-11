@@ -964,6 +964,46 @@ def _B_piecewise_omni(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="Q_pwO",
+    label="|\\mathbf{B}|",
+    units="~",
+    units_long="None",
+    description="Self-overlap of the target field",
+    dim=1,
+    params=["t_1", "t_2", "w_2", "iota0"],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="rtz",
+    data=[],  # Potential error, we want eq |B|
+    parameterization="desc.magnetic_fields._core.PiecewiseOmnigenousField",
+)
+def _Q_piecewise_omni(params, transforms, profiles, data, **kwargs):
+    # NFP can't be a parameter. Must come from equilibrium
+    NFP = transforms["grid"].NFP
+
+    t_1 = params["t_1"]
+    t_2 = params["t_2"]
+    w_2 = params["w_2"]
+    iota0 = params["iota0"]
+    w_1 = jnp.pi / NFP * (1 - t_1 * t_2) / (1 + t_2 / iota0)
+
+    zeta_pp = (w_1 - t_1 * w_2) / (1 - t_1 * t_2)
+    zeta_pm = (w_1 + t_1 * w_2) / (1 - t_1 * t_2)
+    theta_pp = (w_2 - t_2 * w_1) / (1 - t_1 * t_2)
+    theta_pm = (-w_2 - t_2 * w_1) / (1 - t_1 * t_2)
+
+    list_Q = jnp.array(
+        [zeta_pp - jnp.pi, zeta_pm - jnp.pi, theta_pp - jnp.pi, theta_pm - jnp.pi]
+    )
+
+    Q = (1 / jnp.pi) * jnp.max(list_Q)
+
+    data["Q_pwO"] = Q
+
+    return data
+
+
+@register_compute_fun(
     name="isodynamicity",
     label="1/|B|^2 (\\mathbf{b} \\times \\nabla B) \\cdot \\nabla \\psi",
     units="~",

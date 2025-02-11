@@ -61,6 +61,7 @@ class ForceBalance(_Objective):
         grid=None,
         name="force",
         jac_chunk_size=None,
+        device_id=0,
     ):
         if target is None and bounds is None:
             target = 0
@@ -76,6 +77,7 @@ class ForceBalance(_Objective):
             deriv_mode=deriv_mode,
             name=name,
             jac_chunk_size=jac_chunk_size,
+            device_id=device_id,
         )
 
     def build(self, use_jit=True, verbose=1):

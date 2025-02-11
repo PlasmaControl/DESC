@@ -265,6 +265,8 @@ class ObjectiveFunction(IOAble):
         self._built = False
         self._compiled = False
         self._name = name
+        device_ids = [obj._device_id for obj in objectives]
+        self._is_multi_device = len(set(device_ids)) > 1
 
     def _unjit(self):
         """Remove jit compiled methods."""
@@ -313,7 +315,7 @@ class ObjectiveFunction(IOAble):
             if use_jit is False:
                 use_jit_wrapper = False
 
-        if use_jit_wrapper and desc_config["num_device"] > 1:
+        if self._is_multi_device:
             use_jit_wrapper = False
 
         timer = Timer()
@@ -450,7 +452,7 @@ class ObjectiveFunction(IOAble):
         if constants is None:
             constants = self.constants
         assert len(params) == len(constants) == len(self.objectives)
-        if desc_config["num_device"] == 1:
+        if not self._is_multi_device:
             f = jnp.concatenate(
                 [
                     obj.compute_unscaled(*par, constants=const)
@@ -491,7 +493,7 @@ class ObjectiveFunction(IOAble):
         if constants is None:
             constants = self.constants
         assert len(params) == len(constants) == len(self.objectives)
-        if desc_config["num_device"] == 1:
+        if not self._is_multi_device:
             f = jnp.concatenate(
                 [
                     obj.compute_scaled(*par, constants=const)
@@ -532,7 +534,7 @@ class ObjectiveFunction(IOAble):
         if constants is None:
             constants = self.constants
         assert len(params) == len(constants) == len(self.objectives)
-        if desc_config["num_device"] == 1:
+        if not self._is_multi_device:
             f = jnp.concatenate(
                 [
                     obj.compute_scaled_error(*par, constants=const)
@@ -1094,6 +1096,7 @@ class _Objective(IOAble, ABC):
         deriv_mode="auto",
         name=None,
         jac_chunk_size=None,
+        device_id=0,
     ):
         if self._scalar:
             assert self._coordinates == ""
@@ -1107,6 +1110,7 @@ class _Objective(IOAble, ABC):
         assert jac_chunk_size is None or isposint(jac_chunk_size)
 
         self._jac_chunk_size = jac_chunk_size
+        self._device_id = device_id
 
         self._target = target
         self._bounds = bounds

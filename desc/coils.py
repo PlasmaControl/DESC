@@ -230,6 +230,11 @@ class _Coil(_MagneticField, Optimizable, ABC):
         self._current = float(np.squeeze(current))
         super().__init__(*args, **kwargs)
 
+    def _set_up(self):
+        for attribute in self._io_attrs_:
+            if not hasattr(self, attribute):
+                setattr(self, attribute, None)
+
     @optimizable_parameter
     @property
     def current(self):
@@ -476,7 +481,7 @@ class _Coil(_MagneticField, Optimizable, ABC):
             coords. if None, defaults linearly spaced in [0,2pi)
             Alternative, can pass "arclength" to use normalized distance between points.
         name : str
-            name for this coil
+            Name for this coil
 
         Returns
         -------
@@ -518,7 +523,7 @@ class _Coil(_MagneticField, Optimizable, ABC):
             - `'cubic2'`: C2 cubic splines (aka natural splines)
             - `'catmull-rom'`: C1 cubic centripetal "tension" splines
         name : str
-            name for this coil
+            Name for this coil
 
         Returns
         -------
@@ -619,7 +624,7 @@ class FourierRZCoil(_Coil, FourierRZCurve):
     sym : bool
         whether to enforce stellarator symmetry
     name : str
-        name for this coil
+        Name for this coil
 
     Examples
     --------
@@ -689,8 +694,7 @@ class FourierRZCoil(_Coil, FourierRZCurve):
         sym : bool
             Whether to enforce stellarator symmetry.
         name : str
-            name for this coil
-
+            Name for this coil.
 
         Returns
         -------
@@ -725,7 +729,7 @@ class FourierXYZCoil(_Coil, FourierXYZCurve):
     modes : array-like
         mode numbers associated with X_n etc.
     name : str
-        name for this coil
+        Name for this coil
 
     Examples
     --------
@@ -758,7 +762,6 @@ class FourierXYZCoil(_Coil, FourierXYZCurve):
             np.array([0, 0, mu0 * I / 2 * R_coil**2 / (R_coil**2 + z0**2) ** (3 / 2)]),
             atol=1e-8,
         )
-
 
     """
 
@@ -795,6 +798,9 @@ class FourierXYZCoil(_Coil, FourierXYZCurve):
             if None, defaults to normalized arclength
         basis : {"rpz", "xyz"}
             basis for input coordinates. Defaults to "xyz"
+        name : str
+            Name for this coil.
+
         Returns
         -------
         coil : FourierXYZCoil
@@ -813,7 +819,7 @@ class FourierXYZCoil(_Coil, FourierXYZCurve):
 
 
 class FourierPlanarCoil(_Coil, FourierPlanarCurve):
-    """Coil that lines in a plane.
+    """Coil that lies in a plane.
 
     Parameterized by a point (the center of the coil), a vector (normal to the plane),
     and a fourier series defining the radius from the center as a function of a polar
@@ -834,7 +840,7 @@ class FourierPlanarCoil(_Coil, FourierPlanarCurve):
     basis : {'xyz', 'rpz'}
         Coordinate system for center and normal vectors. Default = 'xyz'.
     name : str
-        Name for this coil.
+        Name for this coil
 
     Examples
     --------
@@ -950,24 +956,14 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
           data, and will not introduce new extrema in the interpolated points
         - ``'monotonic-0'``: same as `'monotonic'` but with 0 first derivatives at both
           endpoints
-
     name : str
-        name for this curve
+        Name for this coil
 
     """
 
     _io_attrs_ = _Coil._io_attrs_ + SplineXYZCurve._io_attrs_
 
-    def __init__(
-        self,
-        current,
-        X,
-        Y,
-        Z,
-        knots=None,
-        method="cubic",
-        name="",
-    ):
+    def __init__(self, current, X, Y, Z, knots=None, method="cubic", name=""):
         super().__init__(current, X, Y, Z, knots, method, name)
 
     def _compute_A_or_B(
@@ -1152,7 +1148,8 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
             - `'catmull-rom'`: C1 cubic centripetal "tension" splines
 
         name : str
-            name for this curve
+            Name for this curve
+
         basis : {"rpz", "xyz"}
             basis for input coordinates. Defaults to "xyz"
 
@@ -1240,14 +1237,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
     _io_attrs_ = _Coil._io_attrs_ + ["_coils", "_NFP", "_sym"]
     _io_attrs_.remove("_current")
 
-    def __init__(
-        self,
-        *coils,
-        NFP=1,
-        sym=False,
-        name="",
-        check_intersection=True,
-    ):
+    def __init__(self, *coils, NFP=1, sym=False, name="", check_intersection=True):
         coils = flatten_list(coils, flatten_tuple=True)
         assert all([isinstance(coil, (_Coil)) for coil in coils])
         [_check_type(coil, coils[0]) for coil in coils]
@@ -1320,13 +1310,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         return x
 
     def compute(
-        self,
-        names,
-        grid=None,
-        params=None,
-        transforms=None,
-        data=None,
-        **kwargs,
+        self, names, grid=None, params=None, transforms=None, data=None, **kwargs
     ):
         """Compute the quantity given by name on grid, for each coil in the coilset.
 

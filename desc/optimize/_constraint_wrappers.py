@@ -4,7 +4,7 @@ import functools
 
 import numpy as np
 
-from desc.backend import desc_config, jax, jit, jnp
+from desc.backend import jit, jnp
 from desc.batching import batched_vectorize
 from desc.objectives import (
     BoundaryRSelfConsistency,
@@ -290,8 +290,6 @@ class LinearConstraintProjection(ObjectiveFunction):
     def _jac(self, x_reduced, constants=None, op="scaled"):
         x = self.recover(x_reduced)
         v = self._unfixed_idx_mat
-        if desc_config["num_device"] != 1:
-            v = jax.device_put(v, desc_config["sharding"])
         df = getattr(self._objective, "jvp_" + op)(v.T, x, constants)
         return df.T
 

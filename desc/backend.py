@@ -33,6 +33,7 @@ else:
 
             jax_config.update("jax_enable_x64", True)
             if desc_config["num_device"] != 1:
+                # for now, these are not used. Delete them if they are not needed.
                 mesh = jax.make_mesh((desc_config["num_device"],), ("grid"))
                 desc_config["sharding"] = jax.sharding.NamedSharding(
                     mesh, jax.sharding.PartitionSpec("grid")

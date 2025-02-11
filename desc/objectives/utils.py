@@ -5,7 +5,7 @@ Functions in this module should not depend on any other submodules in desc.objec
 
 import numpy as np
 
-from desc.backend import desc_config, jax, jit, jnp, put, softargmax
+from desc.backend import jit, jnp, put, softargmax
 from desc.io import IOAble
 from desc.utils import Index, errorif, flatten_list, svd_inv_null, unique_list, warnif
 
@@ -265,8 +265,6 @@ class _Recover(IOAble):
         """Recover the full state vector from the reduced optimization vector."""
         dx = put(jnp.zeros(self.dim_x), self.unfixed_idx, self.Z @ x_reduced)
         x_full = self.D * (self.xp + dx)
-        if desc_config["num_device"] != 1:
-            x_full = jax.device_put(x_full, desc_config["sharding_replicated"])
         return jnp.atleast_1d(jnp.squeeze(x_full))
 
 

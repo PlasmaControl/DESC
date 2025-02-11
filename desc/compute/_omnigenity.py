@@ -262,12 +262,12 @@ def _nu_B_mn(params, transforms, profiles, data, **kwargs):
     def fun(rho, theta_B, zeta_B, sqrtg_B_desc, quant):
         # this fits Boozer modes on a single surface
         nodes = jnp.array([rho, theta_B, zeta_B]).T
-        B_mn = (
+        quant_mn = (
             norm  # 1 if m=n=0, 2 if m=0 or n=0, 4 if m!=0 and n!=0
             * (transforms["B"].basis.evaluate(nodes).T @ (sqrtg_B_desc * quant))
             / transforms["B"].grid.num_nodes
         )
-        return B_mn
+        return quant_mn
 
     def reshape(x):
         return grid.meshgrid_reshape(x, "rtz").reshape((grid.num_rho, -1))
@@ -436,12 +436,12 @@ def _sqrtg_Boozer_mn(params, transforms, profiles, data, **kwargs):
     def fun(rho, theta_B, zeta_B, sqrtg_B_desc, quant):
         # this fits Boozer modes on a single surface
         nodes = jnp.array([rho, theta_B, zeta_B]).T
-        B_mn = (
+        quant_mn = (
             norm  # 1 if m=n=0, 2 if m=0 or n=0, 4 if m!=0 and n!=0
             * (transforms["B"].basis.evaluate(nodes).T @ (sqrtg_B_desc * quant))
             / transforms["B"].grid.num_nodes
         )
-        return B_mn
+        return quant_mn
 
     def reshape(x):
         return grid.meshgrid_reshape(x, "rtz").reshape((grid.num_rho, -1))
@@ -549,12 +549,12 @@ def _R_mn(params, transforms, profiles, data, **kwargs):
     def fun(rho, theta_B, zeta_B, sqrtg_B_desc, quant):
         # this fits Boozer modes on a single surface
         nodes = jnp.array([rho, theta_B, zeta_B]).T
-        B_mn = (
+        quant_mn = (
             norm  # 1 if m=n=0, 2 if m=0 or n=0, 4 if m!=0 and n!=0
             * (transforms["B"].basis.evaluate(nodes).T @ (sqrtg_B_desc * quant))
             / transforms["B"].grid.num_nodes
         )
-        return B_mn
+        return quant_mn
 
     def reshape(x):
         return grid.meshgrid_reshape(x, "rtz").reshape((grid.num_rho, -1))
@@ -605,12 +605,12 @@ def _Z_mn(params, transforms, profiles, data, **kwargs):
     def fun(rho, theta_B, zeta_B, sqrtg_B_desc, quant):
         # this fits Boozer modes on a single surface
         nodes = jnp.array([rho, theta_B, zeta_B]).T
-        B_mn = (
+        quant_mn = (
             norm  # 1 if m=n=0, 2 if m=0 or n=0, 4 if m!=0 and n!=0
             * (transforms["B"].basis.evaluate(nodes).T @ (sqrtg_B_desc * quant))
             / transforms["B"].grid.num_nodes
         )
-        return B_mn
+        return quant_mn
 
     def reshape(x):
         return grid.meshgrid_reshape(x, "rtz").reshape((grid.num_rho, -1))
@@ -655,7 +655,9 @@ def _B_modes(params, transforms, profiles, data, **kwargs):
     label="",
     units="~",
     units_long="None",
-    description="Inner product norm for boozer modes basis.",
+    description="Inner product norm for boozer modes basis. This norm is used as a"
+    "weight when performing the integral of the Boozer transform to get the "
+    "correct Boozer Fourier amplitudes.",
     dim=1,
     params=[],
     transforms={"B": [[0, 0, 0]]},

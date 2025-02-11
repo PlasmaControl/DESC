@@ -178,6 +178,7 @@ Objective Functions
     desc.objectives.CoilArclengthVariance
     desc.objectives.CoilCurrentLength
     desc.objectives.CoilCurvature
+    desc.objectives.CoilIntegratedCurvature
     desc.objectives.CoilLength
     desc.objectives.CoilSetLinkingNumber
     desc.objectives.CoilSetMinDistance

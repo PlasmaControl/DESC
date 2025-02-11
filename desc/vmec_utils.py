@@ -9,17 +9,17 @@ from desc.backend import block_diag, jnp, sign
 from desc.basis import DoubleFourierSeries, zernike_radial
 from desc.compute import get_transforms
 from desc.grid import LinearGrid
-from desc.utils import Timer
+from desc.utils import Timer, warnif
 
 
 def ptolemy_identity_fwd(m_0, n_0, s, c):
     """Convert from double-angle to double-Fourier form using Ptolemy's identity.
 
     Converts from the double-angle form:
-        s*sin(m*theta-n*phi) + c*cos(m*theta-n*phi)
+        s * sin(m𝛉-n𝛟) + c * cos(m𝛉-n𝛟)
     to a double Fourier series of the form:
-        ss*sin(m*theta)*sin(n*phi) + sc*sin(m*theta)*cos(n*phi) +
-        cs*cos(m*theta)*sin(n*phi) + cc*cos(m*theta)*cos(n*phi)
+        ss * sin(m𝛉) * sin(n𝛟) + sc * sin(m𝛉) * cos(n𝛟) +
+        cs * cos(m𝛉) * sin(n𝛟) + cc * cos(m𝛉) * cos(n𝛟)
     using Ptolemy's sum and difference formulas.
 
     Parameters
@@ -29,10 +29,10 @@ def ptolemy_identity_fwd(m_0, n_0, s, c):
     n_0 : ndarray
         Toroidal mode numbers of the double-angle Fourier basis.
     s : ndarray, shape(surfs,num_modes), optional
-        Coefficients of sin(m*theta-n*phi) terms.
+        Coefficients of sin(m𝛉-n𝛟) terms.
         Each row is a separate flux surface.
     c : ndarray, shape(surfs,num_modes), optional
-        Coefficients of cos(m*theta-n*phi) terms.
+        Coefficients of cos(m𝛉-n𝛟) terms.
         Each row is a separate flux surface.
 
     Returns
@@ -58,10 +58,10 @@ def ptolemy_identity_rev(m_1, n_1, x):
     """Convert from double-Fourier to double-angle form using Ptolemy's identity.
 
     Converts from a double Fourier series of the form:
-        ss*sin(m*theta)*sin(n*phi) + sc*sin(m*theta)*cos(n*phi) +
-        cs*cos(m*theta)*sin(n*phi) + cc*cos(m*theta)*cos(n*phi)
+        ss * sin(m𝛉) * sin(n𝛟) + sc * sin(m𝛉) * cos(n𝛟) +
+        cs * cos(m𝛉) * sin(n𝛟) + cc * cos(m𝛉) * cos(n𝛟)
     to the double-angle form:
-        s*sin(m*theta-n*phi) + c*cos(m*theta-n*phi)
+        s * sin(m𝛉-n𝛟) + c * cos(m𝛉-n𝛟)
     using Ptolemy's sum and difference formulas.
 
     Parameters
@@ -80,10 +80,10 @@ def ptolemy_identity_rev(m_1, n_1, x):
     n_0 : ndarray
         Toroidal mode numbers of the double-angle Fourier basis.
     s : ndarray, shape(surfs,num_modes)
-        Coefficients of sin(m*theta-n*phi) terms.
+        Coefficients of sin(m𝛉-n𝛟) terms.
         Each row is a separate flux surface.
     c : ndarray, shape(surfs,num_modes)
-        Coefficients of cos(m*theta-n*phi) terms.
+        Coefficients of cos(m𝛉-n𝛟) terms.
         Each row is a separate flux surface.
 
     """
@@ -522,7 +522,14 @@ def make_boozmn_output(  # noqa: C901
     """
     timer = Timer()
     timer.start("Total time")
-
+    warnif(
+        not eq.sym,
+        UserWarning,
+        "Equilibrium is asymmetric, note that the `numnc` saved with this DESC "
+        "function is opposite sign of the `numnc` saved from hidden symmetries"
+        " booz_xform and thus not verified, though every other quantity "
+        "is tested and agrees with the hidden symmetries booz_xform.",
+    )
     Psi = eq.Psi
     NFP = eq.NFP
     if M_booz is None:

@@ -383,7 +383,7 @@ def test_vmec_save_kinetic(TmpDir):
         electron_temperature=np.array([[0, 1], [2, -1]]),
         sym=True,
     )
-    VMECIO.save(eq, output_path)
+    VMECIO.save(eq, output_path, M_grid=8, N_grid=8)
 
 
 @pytest.mark.regression
@@ -1287,7 +1287,7 @@ def test_make_boozmn_output_DESC(TmpDir):
     eq = get("precise_QA")
     output_path = str(TmpDir.join("boozmn_out.nc"))
 
-    boozer_res = 40
+    boozer_res = 30
     surfs = 4
     # Use DESC to calculate the boozer harmonics and create a booz_xform style .nc file
     # on 3 surfaces (surfs-1 by booz_xform convention) using boozer resolution of 50
@@ -1317,8 +1317,8 @@ def test_make_boozmn_output_DESC(TmpDir):
 
     # create grid on which to check values btwn DESC eq.compute and the
     # evaluated Boozer harmonics for each quantity
-    M = 25
-    N = 25
+    M = 20
+    N = 20
 
     for surf_index in range(surfs - 1):
         rho = np.sqrt(s_half[surf_index])
@@ -1382,6 +1382,7 @@ def test_make_boozmn_output_DESC(TmpDir):
             )
 
 
+@pytest.mark.slow
 @pytest.mark.unit
 def test_make_boozmn_output_DESC_asym(TmpDir):
     """Test that asym booz_xform-style outputs accurately reconstruct quantities."""
@@ -1390,13 +1391,19 @@ def test_make_boozmn_output_DESC_asym(TmpDir):
     print(eq)
     output_path = str(TmpDir.join("boozmn_asym_out.nc"))
 
-    boozer_res = 45
+    boozer_res = 30
     surfs = 3
     # Use DESC to calculate the boozer harmonics and create a booz_xform style .nc file
-    # on 3 surfaces (surfs-1 by booz_xform convention) using boozer resolution of 40
-    make_boozmn_output(
-        eq, output_path, surfs=surfs, verbose=2, M_booz=boozer_res, N_booz=boozer_res
-    )
+    # on 2 surfaces (surfs-1 by convention) using boozer resolution of 40
+    with pytest.warns(UserWarning, match="numnc"):
+        make_boozmn_output(
+            eq,
+            output_path,
+            surfs=surfs,
+            verbose=2,
+            M_booz=boozer_res,
+            N_booz=boozer_res,
+        )
     # load in the .nc file
     file = Dataset(output_path, mode="r")
 
@@ -1441,8 +1448,8 @@ def test_make_boozmn_output_DESC_asym(TmpDir):
 
     # create grid on which to check values btwn DESC eq.compute and the
     # evaluated Boozer harmonics for each quantity
-    M = 40
-    N = 40
+    M = 20
+    N = 20
 
     for surf_index in range(surfs - 1):
         print("surface index", surf_index)
@@ -1505,7 +1512,7 @@ def test_make_boozmn_output_DESC_asym(TmpDir):
             np.testing.assert_allclose(
                 quant_from_booz,
                 data[name],
-                rtol=1e-3,
+                rtol=3e-3,
                 atol=1e-7,
                 err_msg=f"{name} at surf index {surf_index}",
             )

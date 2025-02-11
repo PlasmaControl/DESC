@@ -5,6 +5,7 @@ import os
 import warnings
 
 import numpy as np
+from packaging.version import Version
 from termcolor import colored
 
 import desc
@@ -82,6 +83,7 @@ if use_jax:  # noqa: C901
         treedef_is_leaf,
     )
 
+    # TODO: update this when JAX min version >= 0.4.26
     if hasattr(jnp, "trapezoid"):
         trapezoid = jnp.trapezoid  # for JAX 0.4.26 and later
     elif hasattr(jax.scipy, "integrate"):
@@ -89,11 +91,8 @@ if use_jax:  # noqa: C901
     else:
         trapezoid = jnp.trapz  # for older versions of JAX, deprecated by jax 0.4.16
 
-    # TODO: update this when min JAX version >= 0.4.35
-    version = jax.__version__.split(".")
-    major = int(version[1])
-    minor = int(version[2])
-    if major >= 4 and minor >= 35:
+    # TODO: update this when JAX min version >= 0.4.35
+    if Version(jax.__version__) >= Version("0.4.35"):
 
         def pure_callback(func, result_shape_dtype, *args, vectorized=False, **kwargs):
             """Wrapper for jax.pure_callback for versions >=0.4.35."""

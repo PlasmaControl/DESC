@@ -263,6 +263,7 @@ def contract_equilibrium(eq, inner_rho, copy=True):
         M_grid=eq.M_grid,
         N_grid=eq.N_grid,
         sym=eq.sym,
+        ensure_nested=False,  # we fit the surfaces later so don't check now
     )
     inner_grid = LinearGrid(
         rho=np.linspace(0, inner_rho, eq.L_grid * 2),

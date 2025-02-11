@@ -992,11 +992,20 @@ def _Q_piecewise_omni(params, transforms, profiles, data, **kwargs):
     theta_pp = (w_2 - t_2 * w_1) / (1 - t_1 * t_2)
     theta_pm = (-w_2 - t_2 * w_1) / (1 - t_1 * t_2)
 
-    list_Q = jnp.array(
-        [zeta_pp - jnp.pi, zeta_pm - jnp.pi, theta_pp - jnp.pi, theta_pm - jnp.pi]
+    Q = (
+        jnp.max(
+            jnp.stack(
+                [
+                    zeta_pp - jnp.pi,
+                    zeta_pm - jnp.pi,
+                    theta_pp - jnp.pi,
+                    theta_pm - jnp.pi,
+                ],
+                axis=0,
+            )
+        )
+        / jnp.pi
     )
-
-    Q = (1 / jnp.pi) * jnp.max(list_Q)
 
     data["Q_pwO"] = Q
 

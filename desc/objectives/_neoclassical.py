@@ -6,7 +6,7 @@ from orthax.legendre import leggauss
 from desc.compute import get_profiles, get_transforms
 from desc.compute.utils import _compute as compute_fun
 from desc.grid import LinearGrid
-from desc.utils import Timer, setdefault
+from desc.utils import setdefault
 
 from ..integrals import Bounce2D
 from ..integrals.basis import FourierChebyshevSeries
@@ -112,6 +112,11 @@ class EffectiveRipple(_Objective):
         Number of flux surfaces with which to compute simultaneously.
         If given ``None``, then ``surf_batch_size`` is ``grid.num_rho``.
         Default is ``1``. Only consider increasing if ``pitch_batch_size`` is ``None``.
+    spline : bool
+        Set to ``True`` to replace pseudo-spectral methods with local splines.
+        This can be efficient if ``num_transit`` and ``alpha.size`` are small,
+        depending on hardware and hardware features used by the JIT compiler.
+        If ``True``, then parameters ``X`` and ``Y`` are ignored.
 
     """
 
@@ -152,10 +157,12 @@ class EffectiveRipple(_Objective):
         num_pitch=51,
         pitch_batch_size=None,
         surf_batch_size=1,
+        spline=False,
     ):
         if target is None and bounds is None:
             target = 0.0
 
+        self._spline = spline
         self._grid = grid
         self._constants = {"quad_weights": 1.0, "alpha": alpha}
         self._X = X
@@ -199,6 +206,9 @@ class EffectiveRipple(_Objective):
             Level of output.
 
         """
+        if self._spline:
+            return self._build_spline(use_jit, verbose)
+
         eq = self.things[0]
         if self._grid is None:
             self._grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False)
@@ -211,26 +221,16 @@ class EffectiveRipple(_Objective):
         )
         self._constants["fieldline quad"] = leggauss(self._hyperparam["Y_B"] // 2)
         self._constants["quad"] = chebgauss2(self._hyperparam.pop("num_quad"))
-
         self._dim_f = self._grid.num_rho
         self._target, self._bounds = _parse_callable_target_bounds(
             self._target, self._bounds, self._grid.compress(self._grid.nodes[:, 0])
         )
-
-        timer = Timer()
-        if verbose > 0:
-            print("Precomputing transforms")
-        timer.start("Precomputing transforms")
         self._constants["transforms"] = get_transforms(
             "effective ripple", eq, grid=self._grid
         )
         self._constants["profiles"] = get_profiles(
             "effective ripple", eq, grid=self._grid
         )
-        timer.stop("Precomputing transforms")
-        if verbose > 1:
-            timer.disp("Precomputing transforms")
-
         super().build(use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
@@ -251,7 +251,9 @@ class EffectiveRipple(_Objective):
             Effective ripple as a function of the flux surface label.
 
         """
-        # TODO (#1094)
+        if self._spline:
+            return self._compute_spline(params, constants)
+
         if constants is None:
             constants = self.constants
         eq = self.things[0]
@@ -286,203 +288,40 @@ class EffectiveRipple(_Objective):
 
         return constants["transforms"]["grid"].compress(data["effective ripple"])
 
+    def _build_spline(self, use_jit=True, verbose=1):
+        self._keys_1dr = [
+            "iota",
+            "iota_r",
+            "<|grad(rho)|>",
+            "min_tz |B|",
+            "max_tz |B|",
+            "R0",  # TODO (#1094)
+        ]
+        num_transit = self._hyperparam.pop("num_transit")
+        Y_B = self._hyperparam.pop("Y_B")
 
-class GammaC(_Objective):
-    """Γ_c is a proxy for measuring energetic ion confinement.
-
-    References
-    ----------
-    Poloidal motion of trapped particle orbits in real-space coordinates.
-    V. V. Nemov, S. V. Kasilov, W. Kernbichler, G. O. Leitold.
-    Phys. Plasmas 1 May 2008; 15 (5): 052501.
-    https://doi.org/10.1063/1.2912456.
-    Equation 61.
-
-    A model for the fast evaluation of prompt losses of energetic ions in stellarators.
-    J.L. Velasco et al. 2021 Nucl. Fusion 61 116059.
-    https://doi.org/10.1088/1741-4326/ac2994.
-    Equation 16.
-
-    Parameters
-    ----------
-    eq : Equilibrium
-        ``Equilibrium`` to be optimized.
-    rho : ndarray
-        Unique coordinate values specifying flux surfaces to compute on.
-    alpha : ndarray
-        Unique coordinate values specifying field line labels to compute on.
-    batch : bool
-        Whether to vectorize part of the computation. Default is true.
-    Y_B : int
-        Desired resolution for algorithm to compute bounce points.
-        Default is double ``Y``. Something like 100 is usually sufficient.
-        Currently, this is the number of knots per toroidal transit over
-        to approximate |B| with cubic splines.
-    num_transit : int
-        Number of toroidal transits to follow field line.
-        For axisymmetric devices, one poloidal transit is sufficient. Otherwise,
-        assuming the surface is not near rational, more transits will
-        approximate surface averages better, with diminishing returns.
-    num_well : int
-        Maximum number of wells to detect for each pitch and field line.
-        Giving ``None`` will detect all wells but due to current limitations in
-        JAX this will have worse performance.
-        Specifying a number that tightly upper bounds the number of wells will
-        increase performance. In general, an upper bound on the number of wells
-        per toroidal transit is ``Aι+B`` where ``A``,``B`` are the poloidal and
-        toroidal Fourier resolution of |B|, respectively, in straight-field line
-        PEST coordinates, and ι is the rotational transform normalized by 2π.
-        A tighter upper bound than ``num_well=(Aι+B)*num_transit`` is preferable.
-        The ``check_points`` or ``plot`` methods in ``desc.integrals.Bounce2D``
-        are useful to select a reasonable value.
-    num_quad : int
-        Resolution for quadrature of bounce integrals. Default is 32.
-    num_pitch : int
-        Resolution for quadrature over velocity coordinate. Default is 64.
-    Nemov : bool
-        Whether to use the Γ_c as defined by Nemov et al. or Velasco et al.
-        Default is Nemov. Set to ``False`` to use Velascos's.
-
-        Nemov's Γ_c converges to a finite nonzero value in the infinity limit
-        of the number of toroidal transits. Velasco's expression has a secular
-        term that drives the result to zero as the number of toroidal transits
-        increases if the secular term is not averaged out from the singular
-        integrals. Currently, an optimization using Velasco's metric may need
-        to be evaluated by measuring decrease in Γ_c at a fixed number of toroidal
-        transits.
-
-    """
-
-    __doc__ = __doc__.rstrip() + collect_docs(
-        target_default="``target=0``.",
-        bounds_default="``target=0``.",
-        normalize_detail=" Note: Has no effect for this objective.",
-        normalize_target_detail=" Note: Has no effect for this objective.",
-        overwrite=_bounce_overwrite,
-    )
-
-    _coordinates = "r"
-    _units = "~"
-    _print_value_fmt = "Γ_c: "
-
-    def __init__(
-        self,
-        eq,
-        *,
-        target=None,
-        bounds=None,
-        weight=1,
-        normalize=True,
-        normalize_target=True,
-        loss_function=None,
-        deriv_mode="auto",
-        rho=np.linspace(0.5, 1, 3),
-        alpha=np.array([0]),
-        batch=True,
-        num_transit=10,
-        Y_B=100,
-        num_quad=32,
-        num_pitch=64,
-        num_well=None,
-        Nemov=True,
-        name="Gamma_c",
-        jac_chunk_size=None,
-    ):
-        if target is None and bounds is None:
-            target = 0.0
-
-        rho, alpha = np.atleast_1d(rho, alpha)
-        self._dim_f = rho.size
-        self._constants = {
-            "quad_weights": 1.0,
-            "rho": rho,
-            "alpha": alpha,
-            "zeta": np.linspace(0, 2 * np.pi * num_transit, Y_B * num_transit),
-        }
-        self._hyperparameters = {
-            "num_quad": num_quad,
-            "num_pitch": num_pitch,
-            "batch": batch,
-            "num_well": num_well,
-        }
-        self._keys_1dr = ["iota", "iota_r", "min_tz |B|", "max_tz |B|"]
-        self._key = "Gamma_c" if Nemov else "Gamma_c Velasco"
-
-        super().__init__(
-            things=eq,
-            target=target,
-            bounds=bounds,
-            weight=weight,
-            normalize=normalize,
-            normalize_target=normalize_target,
-            loss_function=loss_function,
-            deriv_mode=deriv_mode,
-            name=name,
-            jac_chunk_size=jac_chunk_size,
-        )
-
-    def build(self, use_jit=True, verbose=1):
-        """Build constant arrays.
-
-        Parameters
-        ----------
-        use_jit : bool, optional
-            Whether to just-in-time compile the objective and derivatives.
-        verbose : int, optional
-            Level of output.
-
-        """
         eq = self.things[0]
-        self._grid_1dr = LinearGrid(
-            rho=self._constants["rho"], M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym
+        if self._grid is None:
+            self._grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
+        assert self._grid.is_meshgrid and eq.sym == self._grid.sym
+        self._constants["rho"] = self._grid.compress(self._grid.nodes[:, 0])
+        self._constants["zeta"] = np.linspace(
+            0, 2 * np.pi * num_transit, Y_B * num_transit
         )
-        num_quad = self._hyperparameters.pop("num_quad")
-        self._constants["quad"] = get_quadrature(
-            leggauss(num_quad),
-            (automorphism_sin, grad_automorphism_sin),
-        )
-        if self._key == "Gamma_c":
-            self._constants["quad2"] = chebgauss2(num_quad)
+        self._constants["quad"] = chebgauss2(self._hyperparam.pop("num_quad"))
+        self._dim_f = self._grid.num_rho
         self._target, self._bounds = _parse_callable_target_bounds(
             self._target, self._bounds, self._constants["rho"]
         )
-
-        timer = Timer()
-        if verbose > 0:
-            print("Precomputing transforms")
-        timer.start("Precomputing transforms")
-
         self._constants["transforms_1dr"] = get_transforms(
-            self._keys_1dr, eq, self._grid_1dr
+            self._keys_1dr, eq, self._grid
         )
         self._constants["profiles"] = get_profiles(
-            self._keys_1dr + [self._key], eq, self._grid_1dr
+            self._keys_1dr + ["old effective ripple"], eq, self._grid
         )
-
-        timer.stop("Precomputing transforms")
-        if verbose > 1:
-            timer.disp("Precomputing transforms")
-
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, params, constants=None):
-        """Compute Γ_c.
-
-        Parameters
-        ----------
-        params : dict
-            Dictionary of equilibrium degrees of freedom, e.g.
-            ``Equilibrium.params_dict``
-        constants : dict
-            Dictionary of constant data, e.g. transforms, profiles etc.
-            Defaults to ``self.constants``.
-
-        Returns
-        -------
-        result : ndarray
-            Γ_c as a function of the flux surface label.
-
-        """
+    def _compute_spline(self, params, constants=None):
         if constants is None:
             constants = self.constants
         eq = self.things[0]
@@ -493,30 +332,31 @@ class GammaC(_Objective):
             constants["transforms_1dr"],
             constants["profiles"],
         )
-        grid = eq.get_rtz_grid(
+
+        grid = eq._get_rtz_grid(
             constants["rho"],
             constants["alpha"],
             constants["zeta"],
             coordinates="raz",
-            iota=self._grid_1dr.compress(data["iota"]),
+            iota=self._grid.compress(data["iota"]),
             params=params,
         )
         data = {
-            key: grid.copy_data_from_other(data[key], self._grid_1dr)
+            key: (
+                grid.copy_data_from_other(data[key], self._grid)
+                if key != "R0"
+                else data[key]
+            )
             for key in self._keys_1dr
         }
-        quad2 = {}
-        if self._key == "Gamma_c":
-            quad2["quad2"] = constants["quad2"]
         data = compute_fun(
             eq,
-            self._key,
+            "old effective ripple",
             params,
-            get_transforms(self._key, eq, grid, jitable=True),
-            constants["profiles"],
+            transforms=get_transforms("old effective ripple", eq, grid, jitable=True),
+            profiles=constants["profiles"],
             data=data,
             quad=constants["quad"],
-            **quad2,
-            **self._hyperparameters,
+            **self._hyperparam,
         )
-        return grid.compress(data[self._key])
+        return grid.compress(data["old effective ripple"])

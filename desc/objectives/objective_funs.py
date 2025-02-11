@@ -935,10 +935,8 @@ class ObjectiveFunction(IOAble):
         x = self.x()
 
         if verbose > 0:
-            print(
-                "Compiling objective function and derivatives: "
-                + f"{[obj.name for obj in self.objectives]}"
-            )
+            msg = "Compiling objective function and derivatives: "
+            print(msg + f"{[obj.name for obj in self.objectives]}")
         timer.start("Total compilation time")
 
         if mode in ["scalar", "bfgs", "all"]:
@@ -947,6 +945,7 @@ class ObjectiveFunction(IOAble):
             timer.stop("Objective compilation time")
             if verbose > 1:
                 timer.disp("Objective compilation time")
+
             timer.start("Gradient compilation time")
             _ = self.grad(x, self.constants).block_until_ready()
             timer.stop("Gradient compilation time")
@@ -964,6 +963,7 @@ class ObjectiveFunction(IOAble):
             timer.stop("Objective compilation time")
             if verbose > 1:
                 timer.disp("Objective compilation time")
+
             timer.start("Jacobian compilation time")
             _ = self.jac_scaled_error(x, self.constants).block_until_ready()
             timer.stop("Jacobian compilation time")

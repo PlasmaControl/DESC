@@ -715,7 +715,7 @@ class TestPlotBoozerModes:
             rho=5,
         )
         ax.set_ylim([1e-6, 5e0])
-        for string in ["|B|_mn", "B modes", "rho"]:
+        for string in ["|B|_mn_B", "B modes", "rho"]:
             assert string in data.keys()
         return fig
 
@@ -743,7 +743,7 @@ class TestPlotBoozerModes:
     def test_plot_boozer_modes_max(self):
         """Test plotting symmetry breaking boozer spectrum."""
         eq = get("WISTELL-A")
-        fig, ax = plot_boozer_modes(
+        fig, ax, data = plot_boozer_modes(
             eq,
             M_booz=eq.M,
             N_booz=eq.N,
@@ -753,8 +753,11 @@ class TestPlotBoozerModes:
             color="r",
             norm=True,
             rho=5,
+            return_data=True,
         )
         ax.set_ylim([1e-6, 5e0])
+        for string in ["|B|_mn_B", "B modes", "rho"]:
+            assert string in data.keys()
         return fig
 
     @pytest.mark.unit
@@ -787,7 +790,11 @@ class TestPlotBoozerSurface:
         fig, ax, data = plot_boozer_surface(
             eq, M_booz=eq.M, N_booz=eq.N, return_data=True, rho=0.5, fieldlines=4
         )
-        for string in ["|B|", "theta_B", "zeta_B"]:
+        for string in [
+            "|B|",
+            "theta_B",
+            "zeta_B",
+        ]:
             assert string in data.keys()
         return fig
 

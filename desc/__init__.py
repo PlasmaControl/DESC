@@ -80,7 +80,7 @@ def set_device(kind="cpu", gpuid=None, num_device=1):
     """
     config["kind"] = kind
     if kind == "cpu":
-        os.environ["JAX_PLATFORM_NAME"] = "cpu"
+        os.environ["JAX_PLATFORMS"] = "cpu"
         os.environ["CUDA_VISIBLE_DEVICES"] = ""
         import psutil
 

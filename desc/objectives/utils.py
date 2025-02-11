@@ -286,6 +286,7 @@ def softmax(arr, alpha):
         The soft-maximum of the array.
 
     """
+    arr = arr.flatten()
     arr_times_alpha = alpha * arr
     return softargmax(arr_times_alpha).dot(arr)
 

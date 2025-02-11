@@ -937,6 +937,7 @@ class PiecewiseOmnigenity(_Objective):
         N_booz=None,
         eq_fixed=False,
         field_fixed=False,
+        overlap_penalty=1.0,
         name="Piecewise omnigenity",
     ):
         if target is None and bounds is None:
@@ -950,6 +951,7 @@ class PiecewiseOmnigenity(_Objective):
         self.N_booz = N_booz
         self._eq_fixed = eq_fixed
         self._field_fixed = field_fixed
+        self._overlap_penalty = overlap_penalty
 
         if not eq_fixed and not field_fixed:
             things = [eq, field]
@@ -1007,7 +1009,7 @@ class PiecewiseOmnigenity(_Objective):
 
         self._dim_f = eq_grid.num_nodes
         self._eq_data_keys = ["|B|", "theta_B", "zeta_B"]
-        self._field_data_keys = ["|B|_pwO"]
+        self._field_data_keys = ["|B|_pwO", "Q_pwO"]
 
         errorif(eq_grid.sym, msg="eq_grid must not be symmetric")
         errorif(eq_grid.num_rho != 1, msg="eq_grid must be a single surface")
@@ -1030,6 +1032,7 @@ class PiecewiseOmnigenity(_Objective):
             "helicity": self.helicity,
             "Ntheta_B": eq_grid.num_theta,
             "Nzeta_B": eq_grid.num_zeta,
+            "overlap_penalty": self._overlap_penalty,
             "quad_weights": 1.0,
         }
 
@@ -1144,8 +1147,12 @@ class PiecewiseOmnigenity(_Objective):
 
         # Rolling ensures max(B) occurs in the corners
         B_pwO = jnp.roll(field_data["|B|_pwO"], Ntheta / 2 * (Nzeta - 1))
+        Q_pwO = field_data["Q_pwO"]
 
-        pwO_error = eq_data["|B|"] - B_pwO
+        # ReLU operation
+        Q_pwO = (Q_pwO - 0.05) * (Q_pwO >= 0.05)
+
+        pwO_error = (eq_data["|B|"] - B_pwO) + constants["overlap_penalty"] * Q_pwO
 
         return pwO_error.ravel()
 

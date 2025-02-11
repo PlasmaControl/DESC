@@ -778,6 +778,7 @@ class TERPSICHORE(ExternalObjective):
         super().__init__(
             eq=eq,
             fun=terpsichore,
+            dim_f=1 if scalar else surfs - 1,
             fun_kwargs={
                 "processes": processes,
                 "path": path,
@@ -800,7 +801,6 @@ class TERPSICHORE(ExternalObjective):
                 "sleep_time": sleep_time,
                 "stop_time": stop_time,
             },
-            dim_f=1 if scalar else surfs - 1,
             vectorized=True,
             abs_step=abs_step,
             rel_step=rel_step,

@@ -232,6 +232,62 @@ def _nu(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="nu_B_mn",
+    label="\\nu_{mn} = (\\zeta_{B} - \\zeta)_{mn}",
+    units="rad",
+    units_long="radians",
+    description="Boozer harmonics of Boozer toroidal stream function",
+    dim=1,
+    params=[],
+    transforms={"B": [[0, 0, 0]], "grid": []},
+    profiles=[],
+    coordinates="rtz",
+    data=[
+        "sqrt(g)_Boozer_DESC",
+        "nu",
+        "rho",
+        "theta_B",
+        "zeta_B",
+        "Boozer transform modes norm",
+    ],
+    resolution_requirement="tz",
+    grid_requirement={"is_meshgrid": True},
+    M_booz="int: Maximum poloidal mode number for Boozer harmonics. Default 2*eq.M",
+    N_booz="int: Maximum toroidal mode number for Boozer harmonics. Default 2*eq.N",
+)
+def _nu_B_mn(params, transforms, profiles, data, **kwargs):
+    norm = data["Boozer transform modes norm"]
+    grid = transforms["grid"]
+
+    def fun(rho, theta_B, zeta_B, sqrtg_B_desc, quant):
+        # this fits Boozer modes on a single surface
+        nodes = jnp.array([rho, theta_B, zeta_B]).T
+        quant_mn = (
+            norm  # 1 if m=n=0, 2 if m=0 or n=0, 4 if m!=0 and n!=0
+            * (transforms["B"].basis.evaluate(nodes).T @ (sqrtg_B_desc * quant))
+            / transforms["B"].grid.num_nodes
+        )
+        return quant_mn
+
+    def reshape(x):
+        return grid.meshgrid_reshape(x, "rtz").reshape((grid.num_rho, -1))
+
+    rho, theta_B, zeta_B, sqrtg_B_desc, nu = map(
+        reshape,
+        (
+            data["rho"],
+            data["theta_B"],
+            data["zeta_B"],
+            data["sqrt(g)_Boozer_DESC"],
+            data["nu"],
+        ),
+    )
+    nu_B_mn = vmap(fun)(rho, theta_B, zeta_B, sqrtg_B_desc, nu)
+    data["nu_B_mn"] = nu_B_mn.flatten()
+    return data
+
+
+@register_compute_fun(
     name="nu_t",
     label="\\partial_{\\theta} \\nu",
     units="rad",
@@ -306,20 +362,22 @@ def _zeta_B(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
-    name="sqrt(g)_B",
-    label="\\sqrt{g}_{B}",
+    name="sqrt(g)_Boozer_DESC",
+    label="\\frac{\\partial(\\theta_B,\\zeta_B)}{\\theta_{DESC},\\zeta_{DESC}}",
     units="~",
     units_long="None",
-    description="Jacobian determinant from Boozer to DESC coordinates",
+    description="Jacobian determinant from Boozer coordinates (rho, theta_B, zeta_B)"
+    " to DESC coordinates (rho,theta,zeta).",
     dim=1,
     params=[],
     transforms={},
     profiles=[],
     coordinates="rtz",
     data=["theta_PEST_t", "theta_PEST_z", "phi_t", "phi_z", "nu_t", "nu_z", "iota"],
+    aliases=["sqrt(g)_B"],
 )
-def _sqrtg_B(params, transforms, profiles, data, **kwargs):
-    data["sqrt(g)_B"] = (
+def _sqrt_g_Boozer_DESC(params, transforms, profiles, data, **kwargs):
+    data["sqrt(g)_Boozer_DESC"] = (
         data["theta_PEST_t"] * (data["phi_z"] + data["nu_z"])
         - data["theta_PEST_z"] * (data["phi_t"] + data["nu_t"])
         + data["iota"] * (data["nu_t"] * data["phi_z"] - data["nu_z"] * data["phi_t"])
@@ -328,7 +386,83 @@ def _sqrtg_B(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
-    name="|B|_mn",
+    name="sqrt(g)_Boozer",
+    label="\\sqrt{g}_Boozer",
+    units="m^{3}",
+    units_long="cubic meters",
+    description="Jacobian determinant from (rho, theta_B, zeta_B)"
+    " Boozer coordinates to (R,phi,Z) lab frame.",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["sqrt(g)_Boozer_DESC", "sqrt(g)"],
+)
+def _sqrtg_B(params, transforms, profiles, data, **kwargs):
+    data["sqrt(g)_Boozer"] = data["sqrt(g)"] / data["sqrt(g)_Boozer_DESC"]
+    return data
+
+
+@register_compute_fun(
+    name="sqrt(g)_Boozer_mn",
+    label="\\sqrt{g}_{B,mn}",
+    units="m^{3}",
+    units_long="cubic meters",
+    description="Boozer harmonics of Jacobian determinant from (rho, theta_B, zeta_B)"
+    " Boozer coordinates to (R,phi,Z) lab frame.",
+    dim=1,
+    params=[],
+    transforms={"B": [[0, 0, 0]], "grid": []},
+    profiles=[],
+    coordinates="rtz",
+    resolution_requirement="tz",
+    grid_requirement={"is_meshgrid": True},
+    data=[
+        "sqrt(g)_Boozer",
+        "sqrt(g)_Boozer_DESC",
+        "rho",
+        "theta_B",
+        "zeta_B",
+        "Boozer transform modes norm",
+    ],
+    M_booz="int: Maximum poloidal mode number for Boozer harmonics. Default 2*eq.M",
+    N_booz="int: Maximum toroidal mode number for Boozer harmonics. Default 2*eq.N",
+)
+def _sqrtg_Boozer_mn(params, transforms, profiles, data, **kwargs):
+    norm = data["Boozer transform modes norm"]
+    grid = transforms["grid"]
+
+    def fun(rho, theta_B, zeta_B, sqrtg_B_desc, quant):
+        # this fits Boozer modes on a single surface
+        nodes = jnp.array([rho, theta_B, zeta_B]).T
+        quant_mn = (
+            norm  # 1 if m=n=0, 2 if m=0 or n=0, 4 if m!=0 and n!=0
+            * (transforms["B"].basis.evaluate(nodes).T @ (sqrtg_B_desc * quant))
+            / transforms["B"].grid.num_nodes
+        )
+        return quant_mn
+
+    def reshape(x):
+        return grid.meshgrid_reshape(x, "rtz").reshape((grid.num_rho, -1))
+
+    rho, theta_B, zeta_B, sqrtg_B_desc, sqrtg_B = map(
+        reshape,
+        (
+            data["rho"],
+            data["theta_B"],
+            data["zeta_B"],
+            data["sqrt(g)_Boozer_DESC"],
+            data["sqrt(g)_Boozer"],
+        ),
+    )
+    sqrtg_B_mn = vmap(fun)(rho, theta_B, zeta_B, sqrtg_B_desc, sqrtg_B)
+    data["sqrt(g)_Boozer_mn"] = sqrtg_B_mn.flatten()
+    return data
+
+
+@register_compute_fun(
+    name="|B|_mn_B",
     label="B_{mn}^{\\mathrm{Boozer}}",
     units="T",
     units_long="Tesla",
@@ -338,22 +472,30 @@ def _sqrtg_B(params, transforms, profiles, data, **kwargs):
     transforms={"B": [[0, 0, 0]], "grid": []},
     profiles=[],
     coordinates="rtz",
-    data=["sqrt(g)_B", "|B|", "rho", "theta_B", "zeta_B"],
+    data=[
+        "sqrt(g)_Boozer_DESC",
+        "|B|",
+        "rho",
+        "theta_B",
+        "zeta_B",
+        "Boozer transform modes norm",
+    ],
     resolution_requirement="tz",
     grid_requirement={"is_meshgrid": True},
     M_booz="int: Maximum poloidal mode number for Boozer harmonics. Default 2*eq.M",
     N_booz="int: Maximum toroidal mode number for Boozer harmonics. Default 2*eq.N",
+    aliases=["|B|_mn"],
 )
 def _B_mn(params, transforms, profiles, data, **kwargs):
-    norm = 2 ** (3 - jnp.sum(transforms["B"].basis.modes == 0, axis=1))
+    norm = data["Boozer transform modes norm"]
     grid = transforms["grid"]
 
-    def fun(rho, theta_B, zeta_B, sqrtg_B, B):
+    def fun(rho, theta_B, zeta_B, sqrtg_B_desc, quant):
         # this fits Boozer modes on a single surface
         nodes = jnp.array([rho, theta_B, zeta_B]).T
         B_mn = (
             norm  # 1 if m=n=0, 2 if m=0 or n=0, 4 if m!=0 and n!=0
-            * (transforms["B"].basis.evaluate(nodes).T @ (sqrtg_B * B))
+            * (transforms["B"].basis.evaluate(nodes).T @ (sqrtg_B_desc * quant))
             / transforms["B"].grid.num_nodes
         )
         return B_mn
@@ -361,12 +503,130 @@ def _B_mn(params, transforms, profiles, data, **kwargs):
     def reshape(x):
         return grid.meshgrid_reshape(x, "rtz").reshape((grid.num_rho, -1))
 
-    rho, theta_B, zeta_B, sqrtg_B, B = map(
+    rho, theta_B, zeta_B, sqrtg_B_desc, B = map(
         reshape,
-        (data["rho"], data["theta_B"], data["zeta_B"], data["sqrt(g)_B"], data["|B|"]),
+        (
+            data["rho"],
+            data["theta_B"],
+            data["zeta_B"],
+            data["sqrt(g)_Boozer_DESC"],
+            data["|B|"],
+        ),
     )
-    B_mn = vmap(fun)(rho, theta_B, zeta_B, sqrtg_B, B)
-    data["|B|_mn"] = B_mn.flatten()
+    B_mn = vmap(fun)(rho, theta_B, zeta_B, sqrtg_B_desc, B)
+    data["|B|_mn_B"] = B_mn.flatten()
+    return data
+
+
+@register_compute_fun(
+    name="R_mn_B",
+    label="R_{mn}^{\\mathrm{Boozer}}",
+    units="m",
+    units_long="meters",
+    description="Boozer harmonics of radial toroidal coordinate of a flux surface",
+    dim=1,
+    params=[],
+    transforms={"B": [[0, 0, 0]], "grid": []},
+    profiles=[],
+    coordinates="rtz",
+    resolution_requirement="tz",
+    grid_requirement={"is_meshgrid": True},
+    data=[
+        "R",
+        "sqrt(g)_Boozer_DESC",
+        "rho",
+        "theta_B",
+        "zeta_B",
+        "Boozer transform modes norm",
+    ],
+    M_booz="int: Maximum poloidal mode number for Boozer harmonics. Default 2*eq.M",
+    N_booz="int: Maximum toroidal mode number for Boozer harmonics. Default 2*eq.N",
+)
+def _R_mn(params, transforms, profiles, data, **kwargs):
+    norm = data["Boozer transform modes norm"]
+    grid = transforms["grid"]
+
+    def fun(rho, theta_B, zeta_B, sqrtg_B_desc, quant):
+        # this fits Boozer modes on a single surface
+        nodes = jnp.array([rho, theta_B, zeta_B]).T
+        quant_mn = (
+            norm  # 1 if m=n=0, 2 if m=0 or n=0, 4 if m!=0 and n!=0
+            * (transforms["B"].basis.evaluate(nodes).T @ (sqrtg_B_desc * quant))
+            / transforms["B"].grid.num_nodes
+        )
+        return quant_mn
+
+    def reshape(x):
+        return grid.meshgrid_reshape(x, "rtz").reshape((grid.num_rho, -1))
+
+    rho, theta_B, zeta_B, sqrtg_B_desc, R = map(
+        reshape,
+        (
+            data["rho"],
+            data["theta_B"],
+            data["zeta_B"],
+            data["sqrt(g)_Boozer_DESC"],
+            data["R"],
+        ),
+    )
+    R_mn = vmap(fun)(rho, theta_B, zeta_B, sqrtg_B_desc, R)
+    data["R_mn_B"] = R_mn.flatten()
+    return data
+
+
+@register_compute_fun(
+    name="Z_mn_B",
+    label="Z_{mn}^{\\mathrm{Boozer}}",
+    units="m",
+    units_long="meters",
+    description="Boozer harmonics of vertical coordinate of a flux surface",
+    dim=1,
+    params=[],
+    transforms={"B": [[0, 0, 0]], "grid": []},
+    profiles=[],
+    coordinates="rtz",
+    resolution_requirement="tz",
+    grid_requirement={"is_meshgrid": True},
+    data=[
+        "Z",
+        "sqrt(g)_Boozer_DESC",
+        "rho",
+        "theta_B",
+        "zeta_B",
+        "Boozer transform modes norm",
+    ],
+    M_booz="int: Maximum poloidal mode number for Boozer harmonics. Default 2*eq.M",
+    N_booz="int: Maximum toroidal mode number for Boozer harmonics. Default 2*eq.N",
+)
+def _Z_mn(params, transforms, profiles, data, **kwargs):
+    norm = data["Boozer transform modes norm"]
+    grid = transforms["grid"]
+
+    def fun(rho, theta_B, zeta_B, sqrtg_B_desc, quant):
+        # this fits Boozer modes on a single surface
+        nodes = jnp.array([rho, theta_B, zeta_B]).T
+        quant_mn = (
+            norm  # 1 if m=n=0, 2 if m=0 or n=0, 4 if m!=0 and n!=0
+            * (transforms["B"].basis.evaluate(nodes).T @ (sqrtg_B_desc * quant))
+            / transforms["B"].grid.num_nodes
+        )
+        return quant_mn
+
+    def reshape(x):
+        return grid.meshgrid_reshape(x, "rtz").reshape((grid.num_rho, -1))
+
+    rho, theta_B, zeta_B, sqrtg_B_desc, Z = map(
+        reshape,
+        (
+            data["rho"],
+            data["theta_B"],
+            data["zeta_B"],
+            data["sqrt(g)_Boozer_DESC"],
+            data["Z"],
+        ),
+    )
+    Z_mn = vmap(fun)(rho, theta_B, zeta_B, sqrtg_B_desc, Z)
+    data["Z_mn_B"] = Z_mn.flatten()
     return data
 
 
@@ -387,6 +647,28 @@ def _B_mn(params, transforms, profiles, data, **kwargs):
 )
 def _B_modes(params, transforms, profiles, data, **kwargs):
     data["B modes"] = transforms["B"].basis.modes
+    return data
+
+
+@register_compute_fun(
+    name="Boozer transform modes norm",
+    label="",
+    units="~",
+    units_long="None",
+    description="Inner product norm for boozer modes basis. This norm is used as a"
+    "weight when performing the integral of the Boozer transform to get the "
+    "correct Boozer Fourier amplitudes.",
+    dim=1,
+    params=[],
+    transforms={"B": [[0, 0, 0]]},
+    profiles=[],
+    coordinates="rtz",
+    data=[],
+)
+def _boozer_modes_norm(params, transforms, profiles, data, **kwargs):
+    # norm is 1 if m=n=0, 2 if m=0 or n=0, 4 if m!=0 and n!=0
+    norm = 2 ** (3 - jnp.sum((transforms["B"].basis.modes == 0), axis=1))
+    data["Boozer transform modes norm"] = norm
     return data
 
 

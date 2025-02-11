@@ -498,6 +498,12 @@ def get_instance(things, cls):
     return foo[0] if len(foo) else None
 
 
+def get_all_instances(things, cls):
+    """Get every thing from an iterable of things that is instance of cls."""
+    foo = [t for t in things if isinstance(t, cls)]
+    return foo if len(foo) else None
+
+
 def parse_argname_change(arg, kwargs, oldname, newname):
     """Warn and parse arguments whose names have changed."""
     if oldname in kwargs:

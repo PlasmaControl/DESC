@@ -64,8 +64,6 @@ def print_backend_info():
 
 if use_jax:  # noqa: C901
     from jax import custom_jvp, jit, vmap
-
-    imap = jax.lax.map
     from jax.experimental.ode import odeint
     from jax.lax import cond, fori_loop, scan, switch, while_loop
     from jax.nn import softmax as softargmax
@@ -471,7 +469,7 @@ else:  # pragma: no cover
 
     trapezoid = np.trapezoid if hasattr(np, "trapezoid") else np.trapz
 
-    def imap(f, xs, *, batch_size=None, in_axes=0, out_axes=0):
+    def _map(f, xs, *, batch_size=None, in_axes=0, out_axes=0):
         """Generalizes jax.lax.map; uses numpy."""
         if not isinstance(xs, np.ndarray):
             raise NotImplementedError(
@@ -502,7 +500,7 @@ else:  # pragma: no cover
             Vectorized version of fun.
 
         """
-        return lambda xs: imap(fun, xs, in_axes=in_axes, out_axes=out_axes)
+        return lambda xs: _map(fun, xs, in_axes=in_axes, out_axes=out_axes)
 
     def pure_callback(*args, **kwargs):
         """IO callback for numpy backend."""

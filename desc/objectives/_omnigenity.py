@@ -1143,10 +1143,9 @@ class PiecewiseOmnigenity(_Objective):
             )
 
         Ntheta = constants["Ntheta_B"]
-        Nzeta = constants["Nzeta_B"]
 
         # Rolling ensures max(B) occurs in the corners
-        B_pwO = jnp.roll(field_data["|B|_pwO"], Ntheta / 2 * (Nzeta - 1))
+        B_pwO = jnp.roll(field_data["|B|_pwO"], Ntheta / 2)
         Q_pwO = field_data["Q_pwO"]
 
         # ReLU operation

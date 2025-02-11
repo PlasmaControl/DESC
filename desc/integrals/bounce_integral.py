@@ -5,7 +5,8 @@ from abc import ABC, abstractmethod
 from interpax import CubicHermiteSpline, PPoly
 from orthax.legendre import leggauss
 
-from desc.backend import imap, jnp, rfft2
+from desc.backend import jnp, rfft2
+from desc.batching import batch_map
 from desc.integrals._bounce_utils import (
     _check_bounce_points,
     _check_interp,
@@ -1264,8 +1265,7 @@ class Bounce1D(Bounce):
                     batch=False,
                 )
 
-            z1, z2 = points
-            result = imap(loop, (jnp.moveaxis(z1, -1, 0), jnp.moveaxis(z2, -1, 0)))
+            result = batch_map(loop, [jnp.moveaxis(z, -1, 0) for z in points], 1)
             result = [jnp.moveaxis(r, 0, -1) for r in result]
 
         return result[0] if len(result) == 1 else result

@@ -17,6 +17,7 @@ from desc.integrals._interp_utils import (
     fourier_pts,
     idct_non_uniform,
     irfft_non_uniform,
+    rfft_to_trig,
 )
 from desc.integrals.quad_utils import bijection_from_disc, bijection_to_disc
 from desc.io import IOAble
@@ -30,7 +31,6 @@ from desc.utils import (
     setdefault,
     take_mask,
 )
-from desc.vmec_utils import rfft_to_trig
 
 
 @partial(jnp.vectorize, signature="(m),(m)->(m)")

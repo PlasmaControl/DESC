@@ -998,10 +998,10 @@ def _Q_piecewise_omni(params, transforms, profiles, data, **kwargs):
         jnp.max(
             jnp.stack(
                 [
-                    zeta_pp - jnp.pi,
-                    zeta_pm - jnp.pi,
+                    NFP * zeta_pp - jnp.pi,
+                    NFP * zeta_pm - jnp.pi,
                     theta_pp - jnp.pi,
-                    theta_pm - jnp.pi,
+                    theta_pm + jnp.pi,
                 ],
                 axis=0,
             )

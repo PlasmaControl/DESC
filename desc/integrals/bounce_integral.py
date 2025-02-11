@@ -5,7 +5,8 @@ from abc import ABC, abstractmethod
 from interpax import CubicHermiteSpline, PPoly
 from orthax.legendre import leggauss
 
-from desc.backend import imap, jnp, rfft2
+from desc.backend import jnp, rfft2
+from desc.batching import batch_map
 from desc.integrals._bounce_utils import (
     _check_bounce_points,
     _check_interp,
@@ -281,7 +282,7 @@ class Bounce2D(Bounce):
     # However, the basis for the latter are trigonometric functions with
     # irrational frequencies, courtesy of the irrational rotational transform.
     # Globally convergent root-finding schemes for that basis (at fixed α) are
-    # not known. The denominator of a close rational could be absorbed into the
+    # not efficient. The denominator of a close rational could be absorbed into the
     # coordinate ϕ, but this balloons the frequency, and hence degree of the series.
     #
     # Quadrature is chosen over Runge-Kutta methods of the form
@@ -1182,10 +1183,9 @@ class Bounce1D(Bounce):
             as the indices that correspond to that field line.
         data : dict[str, jnp.ndarray]
             Shape (num rho, num alpha, num zeta).
-            Real scalar-valued periodic functions in (θ, ζ) ∈ [0, 2π) × [0, 2π/NFP)
-            evaluated on the ``grid`` supplied to construct this object.
-            Use the method ``Bounce1D.reshape`` to reshape the data into the
-            expected shape.
+            Real scalar-valued functions evaluated on the ``grid`` supplied to
+            construct this object. Use the method ``Bounce1D.reshape`` to reshape
+            the data into the expected shape.
         names : str or list[str]
             Names in ``data`` to interpolate. Default is all keys in ``data``.
             Do not include ``|B|``.
@@ -1265,8 +1265,7 @@ class Bounce1D(Bounce):
                     batch=False,
                 )
 
-            z1, z2 = points
-            result = imap(loop, (jnp.moveaxis(z1, -1, 0), jnp.moveaxis(z2, -1, 0)))
+            result = batch_map(loop, [jnp.moveaxis(z, -1, 0) for z in points], 1)
             result = [jnp.moveaxis(r, 0, -1) for r in result]
 
         return result[0] if len(result) == 1 else result

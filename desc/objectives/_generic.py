@@ -36,10 +36,10 @@ class ExternalObjective(_Objective):
         External objective function. It must take an Equilibrium or list of Equilibria
         as its only positional argument, but can take additional keyword arguments.
         It does not need to be JAX transformable.
-    fun_kwargs : any, optional
-        Keyword arguments that are passed as inputs to ``fun``.
     dim_f : int
         Dimension of the output of ``fun``.
+    fun_kwargs : any, optional
+        Keyword arguments that are passed as inputs to ``fun``.
     vectorized : bool
         Set to False if ``fun`` takes a single Equilibrium as its positional argument.
         Set to True if ``fun`` instead takes a list of Equilibria.
@@ -71,7 +71,7 @@ class ExternalObjective(_Objective):
             return data["<beta>_vol"]
 
         myobj = ExternalObjective(
-            eq=eq, fun=myfun, fun_kwargs={"path": "temp.h5"}, dim_f=1, vectorized=False,
+            eq=eq, fun=myfun, dim_f=1, fun_kwargs={"path": "temp.h5"}, vectorized=False,
         )
     )
 
@@ -86,9 +86,9 @@ class ExternalObjective(_Objective):
         eq,
         *,
         fun,
-        fun_kwargs,
         dim_f,
-        vectorized,
+        fun_kwargs={},
+        vectorized=False,
         abs_step=1e-4,
         rel_step=0,
         target=None,
@@ -174,8 +174,7 @@ class ExternalObjective(_Objective):
         params : list of dict
             List of dictionaries of degrees of freedom, eg CoilSet.params_dict
         constants : dict
-            Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
+            Unused by this Objective.
 
         Returns
         -------

@@ -4,14 +4,23 @@ import warnings
 
 import numpy as np
 
-from desc.backend import block_diag, jit, jnp, put, root_scalar, sign, vmap
+from desc.backend import (
+    block_diag,
+    execute_on_cpu,
+    jit,
+    jnp,
+    put,
+    root_scalar,
+    sign,
+    vmap,
+)
 from desc.basis import DoubleFourierSeries, ZernikePolynomial
 from desc.compute import rpz2xyz_vec, xyz2rpz, xyz2rpz_vec
 from desc.grid import Grid, LinearGrid
 from desc.io import InputReader
 from desc.optimizable import optimizable_parameter
 from desc.transform import Transform
-from desc.utils import check_nonnegint, check_posint, copy_coeffs, setdefault
+from desc.utils import check_nonnegint, check_posint, copy_coeffs, errorif, setdefault
 
 from .core import Surface
 
@@ -57,6 +66,7 @@ class FourierRZToroidalSurface(Surface):
         "_rho",
     ]
 
+    @execute_on_cpu
     def __init__(
         self,
         R_lmn=None,
@@ -124,7 +134,7 @@ class FourierRZToroidalSurface(Surface):
 
         self._R_lmn = copy_coeffs(R_lmn, modes_R, self.R_basis.modes[:, 1:])
         self._Z_lmn = copy_coeffs(Z_lmn, modes_Z, self.Z_basis.modes[:, 1:])
-        self._sym = sym
+        self._sym = bool(sym)
         self._rho = rho
 
         if check_orientation and self._compute_orientation() == -1:
@@ -165,6 +175,7 @@ class FourierRZToroidalSurface(Surface):
     def rho(self, rho):
         self._rho = rho
 
+    @execute_on_cpu
     def change_resolution(self, *args, **kwargs):
         """Change the maximum poloidal and toroidal resolution."""
         assert (
@@ -245,7 +256,7 @@ class FourierRZToroidalSurface(Surface):
         else:
             raise ValueError(
                 f"Z_lmn should have the same size as the basis, got {len(new)} for "
-                + f"basis with {self.R_basis.num_modes} modes."
+                + f"basis with {self.Z_basis.num_modes} modes."
             )
 
     def get_coeffs(self, m, n=0):
@@ -287,13 +298,16 @@ class FourierRZToroidalSurface(Surface):
                 self.Z_lmn = put(self.Z_lmn, idxZ, ZZ)
 
     @classmethod
-    def from_input_file(cls, path):
+    def from_input_file(cls, path, **kwargs):
         """Create a surface from Fourier coefficients in a DESC or VMEC input file.
 
         Parameters
         ----------
         path : Path-like or str
             Path to DESC or VMEC input file.
+        **kwargs : dict, optional
+            keyword arguments to pass to the constructor of the
+            FourierRZToroidalSurface being created.
 
         Returns
         -------
@@ -301,12 +315,18 @@ class FourierRZToroidalSurface(Surface):
             Surface with given Fourier coefficients.
 
         """
-        inputs = InputReader().parse_inputs(path)[-1]
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            inputs = InputReader().parse_inputs(path)[-1]
         if (inputs["bdry_ratio"] is not None) and (inputs["bdry_ratio"] != 1):
             warnings.warn(
-                "boundary_ratio = {} != 1, surface may not be as expected".format(
-                    inputs["bdry_ratio"]
-                )
+                "`bdry_ratio` is intended as an input for the continuation method."
+                "`bdry_ratio`=1 uses the given surface modes as is, any other  "
+                "scalar value will scale the non-axisymmetric  modes by that "
+                "value. The final value of `bdry_ratio` in the input file is "
+                f"{inputs['bdry_ratio']}, this means the created "
+                "FourierRZToroidalSurface will be a scaled version of the "
+                "input file boundary."
             )
         surf = cls(
             inputs["surface"][:, 3],
@@ -315,10 +335,11 @@ class FourierRZToroidalSurface(Surface):
             inputs["surface"][:, 1:3].astype(int),
             inputs["NFP"],
             inputs["sym"],
+            **kwargs,
         )
         return surf
 
-    # TODO: add k value for number of rotations per field period
+    # TODO (#1385): add k value for number of rotations per field period
     @classmethod
     def from_qp_model(
         cls,
@@ -332,6 +353,8 @@ class FourierRZToroidalSurface(Surface):
         positive_iota=True,
     ):
         """Create a surface from a near-axis model for quasi-poloidal symmetry.
+
+        Model is based off of section III of Goodman et. al. [1]_
 
         Parameters
         ----------
@@ -358,6 +381,11 @@ class FourierRZToroidalSurface(Surface):
         -------
         surface : FourierRZToroidalSurface
             Surface with given geometric properties.
+
+        References
+        ----------
+        .. [1] Goodman, Alan, et al. "Constructing Precisely Quasi-Isodynamic
+          Magnetic Fields." Journal of Plasma Physics 89.5 (2023): 905890504.
 
         """
         assert mirror_ratio <= 1
@@ -519,6 +547,109 @@ class FourierRZToroidalSurface(Surface):
         )
         return surf
 
+    @classmethod
+    def from_shape_parameters(
+        cls,
+        major_radius=10.0,
+        aspect_ratio=10.0,
+        elongation=1.0,
+        triangularity=0.0,
+        squareness=0.0,
+        eccentricity=0.0,
+        torsion=0.0,
+        twist=0.0,
+        NFP=1,
+        sym=True,
+    ):
+        """Create a surface using a generalized Miller parameterization.
+
+        Parameters
+        ----------
+        major_radius : float > 0
+            Average major radius.
+        aspect_ratio : float > 0
+            Ratio of major radius / minor radius.
+        elongation : float > 0
+            Elongation of the cross section = major axis / minor axis. Value of 1 gives
+            a circular cross section. Value > 1 gives vertical elongated cross section,
+            value < 1 gives horizontally elongated section.
+        triangularity : float
+            Positive triangularity makes a "▷" like cross section, negative
+            triangularity makes a "◁" like cross section. Surface may self-intersect
+            if abs(triangularity) > 1
+        squareness : float
+            Positive squareness makes a "□" type cross section. Negative squareness
+            makes a "+" like cross section. Surface may self-intersect if
+            abs(squareness) > 0.5
+        eccentricity : float in [0, 1)
+            Eccentricity of the magnetic axis. Value of 0 gives circular axis, value of
+            1 gives infinitely elongated axis.
+        torsion : float
+            How non-planar the magnetic axis is.
+        twist : float
+            How many times the cross section rotates per field period. For integer
+            values it is a rigid rotation in phi, for non-integer values it also deforms
+            as it goes around toroidally. Values > 0 give a CCW rotation,
+            values < 0 give CW rotation. Cross section has zero volume if
+            abs(twist)%1 == 1/2.
+        NFP : int
+            Number of field periods.
+        sym : bool (optional)
+            Whether to enforce stellarator symmetry.
+
+        Returns
+        -------
+        surface : FourierRZToroidalSurface
+            Surface with given geometric properties.
+
+        """
+        errorif(major_radius <= 0, ValueError, "major_radius must be positive")
+        errorif(aspect_ratio <= 0, ValueError, "aspect_ratio must be positive")
+        errorif(elongation <= 0, ValueError, "elongation should be positive")
+        errorif(eccentricity < 0, ValueError, "eccentricity must be in [0,1)")
+        errorif(eccentricity >= 1, ValueError, "eccentricity must be in [0,1)")
+        errorif(
+            abs(twist) % 1 == 0.5,
+            ValueError,
+            "surface has no volume for abs(twist)%1 == 0.5",
+        )
+        grid = LinearGrid(L=0, M=30, N=30, NFP=NFP, endpoint=True)
+        theta = grid.nodes[:, 1]
+        zeta = grid.nodes[:, 2]
+
+        # area = pi*a*b = pi*r^2
+        # r ~ sqrt(a*b) -> a = r^2/b
+        # elongation = a/b = r^2/b^2 -> b = r/sqrt(elongation)
+        r = major_radius / aspect_ratio
+        b = r / np.sqrt(elongation)
+        a = r * np.sqrt(elongation)
+
+        # create cross section shape using miller parameterization
+        Rp = b * np.cos(
+            theta + triangularity * np.sin(theta) - squareness * np.sin(2 * theta)
+        )
+        Zp = -a * np.sin(theta + squareness * np.sin(2 * theta))
+
+        # create axis shape using ellipse + torsion
+        a = 2 * major_radius / (1 + np.sqrt(1 - eccentricity**2))
+        b = a * np.sqrt(1 - eccentricity**2)
+        Ra = (a * b) / np.sqrt(
+            b**2 * np.cos(NFP * zeta) ** 2 + a**2 * np.sin(NFP * zeta) ** 2
+        )
+        # max(2, NFP) ensures that nonzero torsion gives nonplanar axis even for NFP=1
+        # otherwise it just tilts the whole axis.
+        Za = torsion * np.sin(max(2, NFP) * zeta)
+        # combine axis + cross section with twist
+        R = Ra + Rp * np.cos(twist * NFP * zeta) - Zp * np.sin(twist * NFP * zeta)
+        Z = Za + Zp * np.cos(twist * NFP * zeta) + Rp * np.sin(twist * NFP * zeta)
+
+        # self._compute_orientation falsely returns -1 when twist = 1 since there is
+        # no m=1, n=0 mode, but by construction this should be right handed
+        # so we can skip that check.
+        return cls.from_values(
+            np.array([R, zeta, Z]).T, theta, NFP=NFP, sym=sym, check_orientation=False
+        )
+
     def constant_offset_surface(
         self, offset, grid=None, M=None, N=None, full_output=False
     ):
@@ -614,10 +745,19 @@ class FourierRZToroidalSurface(Surface):
             n, r, r_offset = n_and_r_jax(nodes)
             return jnp.arctan(r_offset[0, 1] / r_offset[0, 0]) - zeta
 
-        vecroot = jit(vmap(lambda x0, *p: root_scalar(fun_jax, x0, jac=None, args=p)))
-        zetas, (res, niter) = vecroot(
-            grid.nodes[:, 2], grid.nodes[:, 1], grid.nodes[:, 2]
+        vecroot = jit(
+            vmap(
+                lambda x0, *p: root_scalar(
+                    fun_jax, x0, jac=None, args=p, full_output=full_output
+                )
+            )
         )
+        if full_output:
+            zetas, (res, niter) = vecroot(
+                grid.nodes[:, 2], grid.nodes[:, 1], grid.nodes[:, 2]
+            )
+        else:
+            zetas = vecroot(grid.nodes[:, 2], grid.nodes[:, 1], grid.nodes[:, 2])
 
         zetas = np.asarray(zetas)
         nodes = np.vstack((np.ones_like(grid.nodes[:, 1]), grid.nodes[:, 1], zetas)).T
@@ -696,6 +836,7 @@ class ZernikeRZToroidalSection(Surface):
         "_zeta",
     ]
 
+    @execute_on_cpu
     def __init__(
         self,
         R_lmn=None,
@@ -767,8 +908,8 @@ class ZernikeRZToroidalSection(Surface):
 
         self._R_lmn = copy_coeffs(R_lmn, modes_R, self.R_basis.modes[:, :2])
         self._Z_lmn = copy_coeffs(Z_lmn, modes_Z, self.Z_basis.modes[:, :2])
-        self._sym = sym
-        self._spectral_indexing = spectral_indexing
+        self._sym = bool(sym)
+        self._spectral_indexing = str(spectral_indexing)
 
         self._zeta = zeta
 
@@ -807,6 +948,7 @@ class ZernikeRZToroidalSection(Surface):
     def zeta(self, zeta):
         self._zeta = zeta
 
+    @execute_on_cpu
     def change_resolution(self, *args, **kwargs):
         """Change the maximum radial and poloidal resolution."""
         assert (

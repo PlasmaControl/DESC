@@ -13,8 +13,8 @@ from scipy.constants import elementary_charge, mu_0
 from scipy.special import roots_legendre
 
 from ..backend import fori_loop, jnp
+from ..integrals.surface_integral import surface_averages_map
 from .data_index import register_compute_fun
-from .utils import surface_averages_map
 
 
 @register_compute_fun(
@@ -31,6 +31,7 @@ from .utils import surface_averages_map
     coordinates="r",
     data=["sqrt(g)", "V_r(r)", "|B|", "<|B|^2>", "max_tz |B|"],
     axis_limit_data=["sqrt(g)_r", "V_rr(r)"],
+    resolution_requirement="tz",
     n_gauss="int: Number of quadrature points to use for estimating trapped fraction. "
     + "Default 20.",
 )

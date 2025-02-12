@@ -5,6 +5,7 @@ import warnings
 import numpy as np
 import pytest
 from numpy.random import default_rng
+from scipy.constants import mu_0
 from scipy.optimize import (
     BFGS,
     NonlinearConstraint,
@@ -16,29 +17,41 @@ from scipy.optimize import (
 
 import desc.examples
 from desc.backend import jit, jnp
+from desc.coils import FourierPlanarCoil, FourierRZCoil, FourierXYZCoil, MixedCoilSet
 from desc.derivatives import Derivative
 from desc.equilibrium import Equilibrium
 from desc.geometry import FourierRZToroidalSurface
 from desc.grid import LinearGrid
+from desc.io import load
+from desc.magnetic_fields import FourierCurrentPotentialField
 from desc.objectives import (
     AspectRatio,
+    BoundaryRSelfConsistency,
+    BoundaryZSelfConsistency,
+    CoilLength,
     Energy,
     FixBoundaryR,
     FixBoundaryZ,
+    FixCoilCurrent,
     FixCurrent,
+    FixCurveRotation,
+    FixCurveShift,
     FixIota,
-    FixParameter,
+    FixParameters,
     FixPressure,
     FixPsi,
     ForceBalance,
     GenericObjective,
+    LinkingCurrentConsistency,
     MagneticWell,
     MeanCurvature,
     ObjectiveFunction,
     PlasmaVesselDistance,
+    QuadraticFlux,
     QuasisymmetryTripleProduct,
     Volume,
     get_fixed_boundary_constraints,
+    maybe_add_self_consistency,
 )
 from desc.objectives.objective_funs import _Objective
 from desc.optimize import (
@@ -52,6 +65,7 @@ from desc.optimize import (
     optimizers,
     sgd,
 )
+from desc.utils import get_all_instances
 
 
 @jit
@@ -320,6 +334,44 @@ def test_no_iterations():
 
 
 @pytest.mark.regression
+@pytest.mark.optimize
+def test_proximal_scalar():
+    """Test that proximal scalar optimization works."""
+    # test fix for GH issue #1403
+
+    # optimize to reduce DSHAPE volume from 100 m^3 to 90 m^3
+    eq = desc.examples.get("DSHAPE")
+    optimizer = Optimizer("proximal-fmintr")  # proximal scalar optimizer
+    R_modes = np.vstack(
+        (
+            [0, 0, 0],
+            eq.surface.R_basis.modes[
+                np.max(np.abs(eq.surface.R_basis.modes), 1) > 1, :
+            ],
+        )
+    )
+    Z_modes = eq.surface.Z_basis.modes[
+        np.max(np.abs(eq.surface.Z_basis.modes), 1) > 1, :
+    ]
+    objective = ObjectiveFunction(Volume(eq=eq, target=90))  # scalar objective function
+    constraints = (
+        FixBoundaryR(eq=eq, modes=R_modes),
+        FixBoundaryZ(eq=eq, modes=Z_modes),
+        FixIota(eq=eq),
+        FixPressure(eq=eq),
+        FixPsi(eq=eq),
+        ForceBalance(eq=eq),  # force balance constraint for proximal projection
+    )
+    [eq], _ = optimizer.optimize(
+        things=eq,
+        objective=objective,
+        constraints=constraints,
+        verbose=3,
+    )
+    np.testing.assert_allclose(eq.compute("V")["V"], 90)
+
+
+@pytest.mark.regression
 @pytest.mark.slow
 @pytest.mark.optimize
 def test_overstepping():
@@ -334,7 +386,7 @@ def test_overstepping():
 
     class DummyObjective(_Objective):
         name = "Dummy"
-        _print_value_fmt = "Dummy: {:.3e}"
+        _print_value_fmt = "Dummy: "
         _units = "(Foo)"
 
         def build(self, *args, **kwargs):
@@ -351,7 +403,8 @@ def test_overstepping():
             return x
 
     eq = desc.examples.get("DSHAPE")
-    eq.change_resolution(2, 2, 0, 4, 4, 0)
+    with pytest.warns(UserWarning, match="Reducing radial"):
+        eq.change_resolution(2, 2, 0, 4, 4, 0)
 
     np.random.seed(0)
     objective = ObjectiveFunction(DummyObjective(things=eq), use_jit=False)
@@ -413,7 +466,8 @@ def test_maxiter_1_and_0_solve():
     """Test that solves with maxiter 1 and 0 terminate correctly."""
     # correctly meaning they terminate, instead of looping infinitely
     eq = desc.examples.get("SOLOVEV")
-    eq.change_resolution(2, 2, 0, 4, 4, 0)
+    with pytest.warns(UserWarning, match="Reducing radial"):
+        eq.change_resolution(2, 2, 0, 4, 4, 0)
     constraints = (
         FixBoundaryR(eq=eq),
         FixBoundaryZ(eq=eq),
@@ -492,7 +546,8 @@ def test_not_implemented_error():
 def test_wrappers():
     """Tests for using wrapped objectives."""
     eq = desc.examples.get("SOLOVEV")
-    eq.change_resolution(2, 2, 0, 4, 4, 0)
+    with pytest.warns(UserWarning, match="Reducing radial"):
+        eq.change_resolution(2, 2, 0, 4, 4, 0)
     con = (
         FixBoundaryR(eq=eq),
         FixBoundaryZ(eq=eq),
@@ -566,7 +621,8 @@ class TestAllOptimizers:
     """Tests all optimizers run without error, eg tests for wrappers."""
 
     eqf = desc.examples.get("SOLOVEV")
-    eqf.change_resolution(3, 3, 0, 6, 6, 0)
+    with pytest.warns(UserWarning, match="Reducing radial"):
+        eqf.change_resolution(3, 3, 0, 6, 6, 0)
     eqe = eqf.copy()
     fobj = ObjectiveFunction(ForceBalance(eq=eqf))
     eobj = ObjectiveFunction(Energy(eq=eqe))
@@ -828,9 +884,9 @@ def test_auglag():
         args=(),
         x_scale="auto",
         ftol=0,
-        xtol=1e-6,
-        gtol=1e-6,
-        ctol=1e-6,
+        xtol=1e-8,
+        gtol=1e-8,
+        ctol=1e-8,
         verbose=3,
         maxiter=None,
         options={"initial_multipliers": "least_squares"},
@@ -845,9 +901,9 @@ def test_auglag():
         args=(),
         x_scale="auto",
         ftol=0,
-        xtol=1e-6,
-        gtol=1e-6,
-        ctol=1e-6,
+        xtol=1e-8,
+        gtol=1e-8,
+        ctol=1e-8,
         verbose=3,
         maxiter=None,
         options={"initial_multipliers": "least_squares", "tr_method": "cho"},
@@ -872,9 +928,9 @@ def test_auglag():
         args=(),
         x_scale="auto",
         ftol=0,
-        xtol=1e-6,
-        gtol=1e-6,
-        ctol=1e-6,
+        xtol=1e-8,
+        gtol=1e-8,
+        ctol=1e-8,
         verbose=3,
         maxiter=None,
         options={"initial_multipliers": "least_squares"},
@@ -895,9 +951,7 @@ def test_constrained_AL_lsq():
     constraints = (
         FixBoundaryR(eq=eq, modes=[0, 0, 0]),  # fix specified major axis position
         FixPressure(eq=eq),  # fix pressure profile
-        FixParameter(
-            eq, "i_l", bounds=(eq.i_l * 0.9, eq.i_l * 1.1)
-        ),  # linear inequality
+        FixIota(eq, bounds=(eq.i_l * 0.9, eq.i_l * 1.1)),  # linear inequality
         FixPsi(eq=eq, bounds=(eq.Psi * 0.99, eq.Psi * 1.01)),  # linear inequality
     )
     # some random constraints to keep the shape from getting wacky
@@ -963,7 +1017,7 @@ def test_constrained_AL_scalar():
         ForceBalance(eq=eq, bounds=(-1e-3, 1e-3), normalize_target=False),
     )
     # Dummy objective to return 0, we just want a feasible solution.
-    obj = ObjectiveFunction(GenericObjective("0", eq=eq))
+    obj = ObjectiveFunction(GenericObjective("0", thing=eq))
     ctol = 1e-4
     eq2, result = eq.optimize(
         objective=obj,
@@ -1007,10 +1061,10 @@ def test_optimize_multiple_things_different_order():
         NFP=eq.NFP,
     )
     constraints = (
-        # don't let eq vary
-        FixParameter(eq),
-        # only let the minor radius of the surface vary
-        FixParameter(surf, params=["R_lmn"], indices=surf.R_basis.get_idx(M=0, N=0)),
+        FixParameters(eq),  # don't let eq vary
+        FixParameters(  # only let the minor radius of the surface vary
+            surf, params={"R_lmn": np.array(surf.R_basis.get_idx(M=0, N=0))}
+        ),
     )
 
     target_dist = 1
@@ -1029,7 +1083,7 @@ def test_optimize_multiple_things_different_order():
     optimizer = Optimizer("lsq-exact")
 
     # ensure it runs when (eq,surf) are passed
-    (eq1, surf1), result = optimizer.optimize(
+    (eq1, surf1), _ = optimizer.optimize(
         (eq, surf), objective, constraints, verbose=3, maxiter=15, copy=True
     )
     # ensure surface changed correctly
@@ -1047,10 +1101,10 @@ def test_optimize_multiple_things_different_order():
 
     # fresh start
     constraints = (
-        # don't let eq vary
-        FixParameter(eq),
-        # only let the minor radius of the surface vary
-        FixParameter(surf, params=["R_lmn"], indices=surf.R_basis.get_idx(M=0, N=0)),
+        FixParameters(eq),  # don't let eq vary
+        FixParameters(  # only let the minor radius of the surface vary
+            surf, params={"R_lmn": np.array(surf.R_basis.get_idx(M=0, N=0))}
+        ),
     )
     obj = PlasmaVesselDistance(
         surface=surf,
@@ -1063,7 +1117,7 @@ def test_optimize_multiple_things_different_order():
     objective = ObjectiveFunction((obj,))
     # ensure it runs when (surf,eq) are passed which is opposite
     # the order of objective.things
-    (surf2, eq2), result = optimizer.optimize(
+    (surf2, eq2), _ = optimizer.optimize(
         (surf, eq), objective, constraints, verbose=3, maxiter=15, copy=True
     )
 
@@ -1087,8 +1141,18 @@ def test_optimize_with_single_constraint():
     eq = Equilibrium()
     optimizer = Optimizer("lsq-exact")
     objectective = ObjectiveFunction(GenericObjective("|B|", eq), use_jit=False)
-    constraints = FixParameter(  # Psi is not constrained
-        eq, ["R_lmn", "Z_lmn", "L_lmn", "Rb_lmn", "Zb_lmn", "p_l", "c_l"]
+    constraints = FixParameters(
+        eq,
+        {
+            "R_lmn": True,
+            "Z_lmn": True,
+            "L_lmn": True,
+            "Rb_lmn": True,
+            "Zb_lmn": True,
+            "p_l": True,
+            "c_l": True,
+            "Psi": False,  # Psi is not constrained
+        },
     )
 
     # test depends on verbose > 0
@@ -1102,7 +1166,8 @@ def test_optimize_with_single_constraint():
 def test_proximal_jacobian():
     """Test that JVPs and manual concatenation give the same result as full jac."""
     eq = desc.examples.get("HELIOTRON")
-    eq.change_resolution(1, 1, 1, 2, 2, 2)
+    with pytest.warns(UserWarning, match="Reducing radial"):
+        eq.change_resolution(1, 1, 1, 2, 2, 2)
     eq1 = eq.copy()
     eq2 = eq.copy()
     eq3 = eq.copy()
@@ -1118,15 +1183,16 @@ def test_proximal_jacobian():
         deriv_mode="batched",
         use_jit=False,
     )
-    obj2 = ObjectiveFunction(
-        (
-            QuasisymmetryTripleProduct(eq2, deriv_mode="fwd"),
-            AspectRatio(eq2, deriv_mode="fwd"),
-            Volume(eq2, deriv_mode="fwd"),
-        ),
-        deriv_mode="looped",
-        use_jit=False,
-    )
+    with pytest.warns(DeprecationWarning, match="looped"):
+        obj2 = ObjectiveFunction(
+            (
+                QuasisymmetryTripleProduct(eq2, deriv_mode="fwd"),
+                AspectRatio(eq2, deriv_mode="fwd"),
+                Volume(eq2, deriv_mode="fwd"),
+            ),
+            deriv_mode="looped",
+            use_jit=False,
+        )
     obj3 = ObjectiveFunction(
         (
             QuasisymmetryTripleProduct(eq3, deriv_mode="fwd"),
@@ -1218,7 +1284,8 @@ def test_proximal_jacobian():
 def test_LinearConstraint_jacobian():
     """Test that JVPs and manual concatenation give the same result as full jac."""
     eq = desc.examples.get("HELIOTRON")
-    eq.change_resolution(1, 1, 1, 2, 2, 2)
+    with pytest.warns(UserWarning, match="Reducing radial"):
+        eq.change_resolution(1, 1, 1, 2, 2, 2)
     eq1 = eq.copy()
     eq2 = eq.copy()
     eq3 = eq.copy()
@@ -1226,9 +1293,10 @@ def test_LinearConstraint_jacobian():
     obj1 = ObjectiveFunction(
         ForceBalance(eq1, deriv_mode="auto"), deriv_mode="batched", use_jit=False
     )
-    obj2 = ObjectiveFunction(
-        ForceBalance(eq2, deriv_mode="fwd"), deriv_mode="looped", use_jit=False
-    )
+    with pytest.warns(DeprecationWarning, match="looped"):
+        obj2 = ObjectiveFunction(
+            ForceBalance(eq2, deriv_mode="fwd"), deriv_mode="looped", use_jit=False
+        )
     obj3 = ObjectiveFunction(
         ForceBalance(eq3, deriv_mode="rev"), deriv_mode="blocked", use_jit=False
     )
@@ -1304,3 +1372,161 @@ def test_LinearConstraint_jacobian():
     np.testing.assert_allclose(vjp_unscaled, vjp1, rtol=1e-12, atol=1e-12)
     np.testing.assert_allclose(vjp_unscaled, vjp2, rtol=1e-12, atol=1e-12)
     np.testing.assert_allclose(vjp_unscaled, vjp3, rtol=1e-12, atol=1e-12)
+
+
+@pytest.mark.unit
+def test_quad_flux_with_surface_current_field():
+    """Test that QuadraticFlux does not throw an error when field has transforms."""
+    # this happens because in QuadraticFlux.compute, field.compute_magnetic_field
+    # is called. If the field needs transforms to evaluate, then these transforms
+    # will be created on the fly if they are not provided, resulting in an error
+    # unless jitable=True is passed
+    # related to GH issue #1079
+    eq = load("./tests/inputs/vacuum_circular_tokamak.h5")
+    field = FourierCurrentPotentialField.from_surface(
+        eq.surface, Phi_mn=[1, 0], modes_Phi=[[0, 0], [1, 1]], M_Phi=1, N_Phi=1
+    )
+    obj = ObjectiveFunction(
+        QuadraticFlux(
+            eq=eq,
+            field=field,
+            vacuum=True,
+            eval_grid=LinearGrid(M=2, N=2, sym=True),
+            field_grid=LinearGrid(M=2, N=2),
+        ),
+    )
+    constraints = FixParameters(field, {"I": True, "G": True})
+    opt = Optimizer("lsq-exact")
+    # this should run without an error
+    (field_modular_opt,), result = opt.optimize(
+        field, objective=obj, constraints=constraints, maxiter=1, copy=True
+    )
+
+
+@pytest.mark.unit
+def test_optimize_coil_currents(DummyCoilSet):
+    """Tests optimization takes step sizes proportional to variable scales."""
+    eq = desc.examples.get("precise_QH")
+    coils = load(load_from=str(DummyCoilSet["output_path_sym"]), file_format="hdf5")
+    grid = LinearGrid(rho=1.0, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
+    current = 2 * np.pi * eq.compute("G", grid=grid)["G"][0] / mu_0
+    for coil in coils:
+        coil.current = current / coils.num_coils
+
+    objective = ObjectiveFunction(QuadraticFlux(eq=eq, field=coils, vacuum=True))
+    constraints = LinkingCurrentConsistency(eq, coils, eq_fixed=True)
+    optimizer = Optimizer("lsq-exact")
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", message=".*\n.*\nIncompatible")
+        [coils_opt], _ = optimizer.optimize(
+            things=coils,
+            objective=objective,
+            constraints=constraints,
+            verbose=2,
+            copy=True,
+        )
+    # check that on average optimized coil currents changed by more than
+    # 15% from initial values
+    np.testing.assert_array_less(
+        np.asarray(coils.current).mean() * 0.15,
+        np.abs(np.asarray(coils_opt.current) - np.asarray(coils.current)).mean(),
+    )
+
+
+@pytest.mark.optimize
+@pytest.mark.unit
+def test_optimize_three_eq_at_once():
+    """Test optimizing 3 equilibria at the same time."""
+    # default equilibrium is axisymmetric with R0=10
+    eq1 = Equilibrium(M=2, sym=True)
+    eq2 = eq1.copy()
+    eq3 = Equilibrium(
+        M=2,
+        sym=True,
+        surface=FourierRZToroidalSurface(
+            R_lmn=[5, 1], Z_lmn=[-1], modes_R=[[0, 0], [1, 0]], modes_Z=[[-1, 0]]
+        ),
+    )
+    cons = (
+        get_fixed_boundary_constraints(eq1)
+        + get_fixed_boundary_constraints(eq2)
+        + get_fixed_boundary_constraints(eq3)
+    )
+    for eq in [eq1, eq2, eq3]:
+        cons = maybe_add_self_consistency(eq, cons)
+    bdryR_cons = get_all_instances(cons, BoundaryRSelfConsistency)
+    bdryZ_cons = get_all_instances(cons, BoundaryZSelfConsistency)
+    assert len(bdryR_cons) == 3
+    assert len(bdryZ_cons) == 3
+
+    obj = ObjectiveFunction((ForceBalance(eq1), ForceBalance(eq2), ForceBalance(eq3)))
+    opt = Optimizer("lsq-exact")
+    # only check if it works
+    [
+        eq1,
+        eq2,
+        eq3,
+    ], _ = opt.optimize([eq1, eq2, eq3], objective=obj, constraints=cons, maxiter=2)
+
+    assert eq1.equiv(eq2)
+    assert eq3.compute(["R0"])["R0"] < eq1.compute(["R0"])["R0"]
+
+
+@pytest.mark.optimize
+@pytest.mark.unit
+def test_optimize_three_coil_at_once():
+    """Test optimizing 3 coils at the same time."""
+    coilset = MixedCoilSet(
+        FourierXYZCoil(), FourierRZCoil(), FourierPlanarCoil(), check_intersection=False
+    )
+    for c in coilset:
+        c.change_resolution(N=1)
+    coil1 = coilset
+    coil2 = coil1.coils[0].copy()
+    coil3 = coilset.coils[2].copy()
+    shift0 = coil2.shift
+    rotmat0 = coil2.rotmat
+    obj = ObjectiveFunction(
+        (
+            CoilLength(coil1, target=13),
+            CoilLength(coil2, target=10),
+            CoilLength(coil3, target=10),
+        )
+    )
+    cons = (FixCoilCurrent(coil1), FixCoilCurrent(coil2), FixCoilCurrent(coil3))
+    for coil in [coil1, coil2, coil3]:
+        cons = maybe_add_self_consistency(coil, cons)
+    shift_cons = get_all_instances(cons, FixCurveShift)
+    rotation_cons = get_all_instances(cons, FixCurveRotation)
+    assert len(shift_cons) == 3
+    assert len(rotation_cons) == 3
+    # now undo the above and try an optimization to ensure
+    # it gets automatically handled correctly
+    cons = (FixCoilCurrent(coil1), FixCoilCurrent(coil2), FixCoilCurrent(coil3))
+    opt = Optimizer("lsq-exact")
+    # only check if it works
+    [
+        coil1,
+        coil2,
+        coil3,
+    ], _ = opt.optimize(
+        [coil1, coil2, coil3],
+        objective=obj,
+        constraints=cons,
+        maxiter=20,
+        ftol=0,
+        gtol=1e-10,
+        xtol=0,
+    )
+
+    np.testing.assert_allclose(coil2.shift, shift0)
+    np.testing.assert_allclose(coil2.rotmat, rotmat0)
+    np.testing.assert_allclose(coil2.compute("length")["length"], 10)
+
+    np.testing.assert_allclose(coil3.shift, shift0)
+    np.testing.assert_allclose(coil3.rotmat, rotmat0)
+    np.testing.assert_allclose(coil3.compute("length")["length"], 10)
+    for c in coil1:
+        np.testing.assert_allclose(c.shift, shift0)
+        np.testing.assert_allclose(c.rotmat, rotmat0)
+        np.testing.assert_allclose(c.compute("length")["length"], 13)

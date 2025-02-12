@@ -28,6 +28,10 @@ for compatibility with other codes which expect such files from the Booz_Xform c
 - Renames compute quantity ``sqrt(g)_B`` to ``sqrt(g)_Boozer_DESC`` to more accurately reflect what the quantiy is (the jacobian from (rho,theta_B,zeta_B) to (rho,theta,zeta)), and adds a new function to compute ``sqrt(g)_Boozer`` which is the jacobian from (rho,theta_B,zeta_B) to (R,phi,Z).
 - Allows specification of Nyquist spectrum maximum modenumbers when using ``VMECIO.save`` to save a DESC .h5 file as a VMEC-format wout file
 
+Speed Improvements
+
+- A number of minor improvements to basis function evaluation and spectral transforms to improve speed. These will also enable future improvements for larger gains.
+
 Bug Fixes
 
 - Small bug fix to use the correct normalization length ``a`` in the BallooningStability objective.

@@ -1754,6 +1754,47 @@ class TestObjectiveFunction:
             obj.compute(eq.params_dict), grid.compress(data["Gamma_c"])
         )
 
+    @pytest.mark.unit
+    def test_generic_with_kwargs(self):
+        """Test GenericObjective with keyword arguments. Related to issue #1224."""
+        eq = desc.examples.get("reactor_QA")
+
+        def fusion_gain(grid, data):
+            p_out = data["P_fusion"]
+            p_in = data["P_ISS04"]
+            Q = p_out / p_in
+            return Q
+
+        obj_p0_out = FusionPower(eq, fuel="DT")
+        obj_p0_out.build()
+        p0_out = obj_p0_out.compute(*obj_p0_out.xs(eq))
+
+        obj_p0_in = HeatingPowerISS04(eq, H_ISS04=1.2, gamma=0)
+        obj_p0_in.build()
+        p0_in = obj_p0_in.compute(*obj_p0_in.xs(eq))
+
+        q0 = p0_out / p0_in
+
+        obj_p1_out = GenericObjective("P_fusion", eq, compute_kwargs={"fuel": "DT"})
+        obj_p1_out.build()
+        p1_out = obj_p1_out.compute(*obj_p1_out.xs(eq))
+
+        obj_p1_in = GenericObjective(
+            "P_ISS04", eq, compute_kwargs={"H_ISS04": 1.2, "gamma": 0}
+        )
+        obj_p1_in.build()
+        p1_in = obj_p1_in.compute(*obj_p1_in.xs(eq))
+
+        obj_q1 = ObjectiveFromUser(
+            fusion_gain, eq, compute_kwargs={"fuel": "DT", "H_ISS04": 1.2, "gamma": 0}
+        )
+        obj_q1.build()
+        q1 = obj_q1.compute(*obj_q1.xs(eq))
+
+        np.testing.assert_allclose(p0_out, p1_out)
+        np.testing.assert_allclose(p0_in, p1_in)
+        np.testing.assert_allclose(q0, q1)
+
 
 @pytest.mark.regression
 def test_derivative_modes():

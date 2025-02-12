@@ -1032,8 +1032,6 @@ class _Objective(IOAble, ABC):
         "_deriv_mode",
     ]
 
-    _static_attrs = ["_constants"]
-
     def __init__(
         self,
         things=None,

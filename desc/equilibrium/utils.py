@@ -12,8 +12,8 @@ from desc.geometry import (
     ZernikeRZToroidalSection,
 )
 from desc.grid import LinearGrid
-from desc.profiles import PowerSeriesProfile, _Profile
-from desc.utils import errorif
+from desc.profiles import PowerSeriesProfile, SplineProfile, _Profile
+from desc.utils import errorif, warnif
 
 
 def parse_profile(prof, name="", **kwargs):
@@ -186,7 +186,7 @@ def parse_axis(axis, NFP=1, sym=True, surface=None):
     return axis
 
 
-def contract_equilibrium(eq, inner_rho, copy=True):
+def contract_equilibrium(eq, inner_rho, contract_profiles=True, copy=True):
     """Contract an equilibrium so that an inner flux surface is the new boundary.
 
     Parameters
@@ -195,6 +195,17 @@ def contract_equilibrium(eq, inner_rho, copy=True):
         Equilibrium to contract.
     inner_rho: float
         rho value (<1) to contract the Equilibrium to.
+    contract_profiles :  bool
+        Whether or not to contract the profiles.
+        If True, the new profile's value at ``rho=1.0`` will be the same as the old
+        profile's value at ``rho=inner_rho``, i.e. in physical space, the new
+        profile is the same as the old profile. If the profile is a
+        ``PowerSeriesProfile`` or ``SplineProfile``, the same profile type will be
+        returned. If not one of these two classes, a ``SplineProfile`` will be returned
+        as other profile classes cannot be safely contracted.
+        If False, the new profile will have the same functional form
+        as the old profile, with no rescaling performed. This means the new equilibrium
+        has a physically different profile than the original equilibrium.
     copy : bool
         Whether or not to return a copy or to modify the original equilibrium.
 
@@ -213,10 +224,30 @@ def contract_equilibrium(eq, inner_rho, copy=True):
     )
 
     def scale_profile(profile, rho):
-        x = np.linspace(0, 1, eq.L_grid)
-        grid = LinearGrid(rho=x / rho)
-        y = profile.compute(grid)
-        return profile.from_values(x=x, y=y)
+        is_power_series = isinstance(profile, PowerSeriesProfile)
+        if contract_profiles and is_power_series:
+            # only PowerSeriesProfile both
+            # a) has a from_values
+            # b) can safely use that from_values to represent a
+            #    subset of itself.
+            x = np.linspace(0, 1, eq.L_grid)
+            grid = LinearGrid(rho=x / rho)
+            y = profile.compute(grid)
+            return profile.from_values(x=x, y=y)
+        elif contract_profiles:
+            warnif(
+                not isinstance(profile, SplineProfile),
+                UserWarning,
+                f"{profile} is not a PowerSeriesProfile or SplineProfile,"
+                " so cannot safely contract using the same profile type."
+                "falling back to fitting the values with a SplineProfile",
+            )
+            x = np.linspace(0, 1, eq.L_grid)
+            grid = LinearGrid(rho=x / rho)
+            y = profile.compute(grid)
+            return SplineProfile(knots=x, values=y)
+        else:  # don't do any scaling of the profile
+            return profile
 
     # create new profiles for contracted equilibrium
     pressure = iota = current = anisotropy = None

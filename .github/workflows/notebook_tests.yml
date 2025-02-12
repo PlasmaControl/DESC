@@ -93,7 +93,7 @@ jobs:
           export PYTHONPATH=$(pwd)
           pytest -v --nbmake "./docs/notebooks" \
             --nbmake-timeout=2000 \
-            --ignore=./docs/notebooks/zernike_eval.ipynb \
+            --ignore=./docs/notebooks/zernike_eval.ipynb ./docs/notebooks/tutorials/multi_device.ipynb \
             --splits 3 \
             --group ${{ matrix.group }} \
             --splitting-algorithm least_duration

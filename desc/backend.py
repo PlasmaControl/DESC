@@ -475,6 +475,35 @@ if use_jax:  # noqa: C901
             out = jnp.vstack([jax.device_put(x, device=device) for x in arrays])
         return out
 
+    def jit_with_device(method):
+        """Decorator to Just-in-time compile a class method with a dynamic device.
+
+        Decorates a method of a class with a dynamic device, allowing the method to be
+        compiled with jax.jit for the specific device. This is needed since
+        @functools.partial(jax.jit, device=jax.devices("gpu")[self._device_id]) is not
+        allowed in a class definition.
+
+        Parameters
+        ----------
+        method : callable
+            Class method to decorate. If DESC is running on GPU, the class should have
+            a device_id attribute.
+        """
+
+        @functools.wraps(method)
+        def wrapper(self, *args, **kwargs):
+            # Get the device using self.id or default to CPU
+            if desc_config["device"] == "gpu" and hasattr(self, "_device_id"):
+                device = jax.devices("gpu")[self._device_id]
+            else:
+                device = None
+
+            # Compile the method with jax.jit for the specific device
+            wrapped = jax.jit(method, device=device)
+            return wrapped(self, *args, **kwargs)
+
+        return wrapper
+
 
 # we can't really test the numpy backend stuff in automated testing, so we ignore it
 # for coverage purposes

@@ -10,6 +10,7 @@ from desc.backend import (
     execute_on_cpu,
     jax,
     jit,
+    jit_with_device,
     jnp,
     pconcat,
     tree_flatten,
@@ -186,32 +187,6 @@ def collect_docs(
                 doc_params += docs[key].rstrip()
 
     return doc_params
-
-
-def jit_with_dynamic_device(method):
-    """Just-in-time compile a decorator with a dynamic device.
-
-    Decorates a method of a class with a dynamic device, allowing the method to be
-    compiled with jax.jit for the specific device. This is needed since
-    @functools.partial(jax.jit, device=jax.devices("gpu")[self._device_id]) is not
-    allowed in a class definition.
-    """
-
-    @functools.wraps(method)
-    def wrapper(self, *args, **kwargs):
-        # Get the device using self.id or default to CPU
-        if desc_config["device"] == "gpu":
-            device = jax.devices("gpu")[self._device_id]
-        else:
-            device = None
-
-        # Compile the method with jax.jit for the specific device
-        jitted_method = jax.jit(method, device=device)
-
-        # Call the jitted function
-        return jitted_method(self, *args, **kwargs)
-
-    return wrapper
 
 
 class ObjectiveFunction(IOAble):
@@ -492,9 +467,7 @@ class ObjectiveFunction(IOAble):
                         *jax.device_put(par, jax.devices("gpu")[obj._device_id]),
                         constants=const,
                     )
-                    for i, (par, obj, const) in enumerate(
-                        zip(params, self.objectives, constants)
-                    )
+                    for par, obj, const in zip(params, self.objectives, constants)
                 ]
             )
         return f
@@ -534,9 +507,7 @@ class ObjectiveFunction(IOAble):
                         *jax.device_put(par, jax.devices("gpu")[obj._device_id]),
                         constants=const,
                     )
-                    for i, (par, obj, const) in enumerate(
-                        zip(params, self.objectives, constants)
-                    )
+                    for par, obj, const in zip(params, self.objectives, constants)
                 ]
             )
         return f
@@ -576,9 +547,7 @@ class ObjectiveFunction(IOAble):
                         *jax.device_put(par, jax.devices("gpu")[obj._device_id]),
                         constants=const,
                     )
-                    for i, (par, obj, const) in enumerate(
-                        zip(params, self.objectives, constants)
-                    )
+                    for par, obj, const in zip(params, self.objectives, constants)
                 ]
             )
         return f
@@ -642,26 +611,18 @@ class ObjectiveFunction(IOAble):
         if x0 is not None:
             params0 = self.unpack_state(x0)
             assert len(params0) == len(constants) == len(self.objectives)
-            if self._is_multi_device:
-                for par, par0, obj, const in zip(
-                    params, params0, self.objectives, constants
-                ):
+            for par, par0, obj, const in zip(
+                params, params0, self.objectives, constants
+            ):
+                if self._is_multi_device:
                     par = jax.device_put(par, jax.devices("gpu")[obj._device_id])
                     par0 = jax.device_put(par0, jax.devices("gpu")[obj._device_id])
-                    obj.print_value(par, par0, constants=const)
-            else:
-                for par, par0, obj, const in zip(
-                    params, params0, self.objectives, constants
-                ):
-                    obj.print_value(par, par0, constants=const)
+                obj.print_value(par, par0, constants=const)
         else:
-            if self._is_multi_device:
-                for par, obj, const in zip(params, self.objectives, constants):
+            for par, obj, const in zip(params, self.objectives, constants):
+                if self._is_multi_device:
                     par = jax.device_put(par, jax.devices("gpu")[obj._device_id])
-                    obj.print_value(par, constants=const)
-            else:
-                for par, obj, const in zip(params, self.objectives, constants):
-                    obj.print_value(par, constants=const)
+                obj.print_value(par, constants=const)
         return None
 
     def unpack_state(self, x, per_objective=True):
@@ -1289,7 +1250,7 @@ class _Objective(IOAble, ABC):
                 argsout += (arg,)
         return argsout
 
-    @jit_with_dynamic_device
+    @jit_with_device
     def compute_unscaled(self, *args, **kwargs):
         """Compute the raw value of the objective."""
         args = self._maybe_array_to_params(*args)
@@ -1298,7 +1259,7 @@ class _Objective(IOAble, ABC):
             f = self._loss_function(f)
         return jnp.atleast_1d(f)
 
-    @jit_with_dynamic_device
+    @jit_with_device
     def compute_scaled(self, *args, **kwargs):
         """Compute and apply weighting and normalization."""
         args = self._maybe_array_to_params(*args)
@@ -1307,7 +1268,7 @@ class _Objective(IOAble, ABC):
             f = self._loss_function(f)
         return jnp.atleast_1d(self._scale(f, **kwargs))
 
-    @jit_with_dynamic_device
+    @jit_with_device
     def compute_scaled_error(self, *args, **kwargs):
         """Compute and apply the target/bounds, weighting, and normalization."""
         args = self._maybe_array_to_params(*args)
@@ -1350,7 +1311,7 @@ class _Objective(IOAble, ABC):
         f_norm = jnp.atleast_1d(f) / self.normalization  # normalization
         return f_norm * w * self.weight
 
-    @jit_with_dynamic_device
+    @jit_with_device
     def compute_scalar(self, *args, **kwargs):
         """Compute the scalar form of the objective."""
         if self.scalar:
@@ -1359,19 +1320,19 @@ class _Objective(IOAble, ABC):
             f = jnp.sum(self.compute_scaled_error(*args, **kwargs) ** 2) / 2
         return f.squeeze()
 
-    @jit_with_dynamic_device
+    @jit_with_device
     def grad(self, *args, **kwargs):
         """Compute gradient vector of self.compute_scalar wrt x."""
         argnums = tuple(range(len(self.things)))
         return Derivative(self.compute_scalar, argnums, mode="grad")(*args, **kwargs)
 
-    @jit_with_dynamic_device
+    @jit_with_device
     def hess(self, *args, **kwargs):
         """Compute Hessian matrix of self.compute_scalar wrt x."""
         argnums = tuple(range(len(self.things)))
         return Derivative(self.compute_scalar, argnums, mode="hess")(*args, **kwargs)
 
-    @jit_with_dynamic_device
+    @jit_with_device
     def jac_scaled(self, *args, **kwargs):
         """Compute Jacobian matrix of self.compute_scaled wrt x."""
         argnums = tuple(range(len(self.things)))
@@ -1382,7 +1343,7 @@ class _Objective(IOAble, ABC):
             chunk_size=self._jac_chunk_size,
         )(*args, **kwargs)
 
-    @jit_with_dynamic_device
+    @jit_with_device
     def jac_scaled_error(self, *args, **kwargs):
         """Compute Jacobian matrix of self.compute_scaled_error wrt x."""
         argnums = tuple(range(len(self.things)))
@@ -1393,7 +1354,7 @@ class _Objective(IOAble, ABC):
             chunk_size=self._jac_chunk_size,
         )(*args, **kwargs)
 
-    @jit_with_dynamic_device
+    @jit_with_device
     def jac_unscaled(self, *args, **kwargs):
         """Compute Jacobian matrix of self.compute_unscaled wrt x."""
         argnums = tuple(range(len(self.things)))
@@ -1427,7 +1388,7 @@ class _Objective(IOAble, ABC):
             # sum over different things.
             return jnp.sum(jnp.asarray(Jv), axis=0).T
 
-    @jit_with_dynamic_device
+    @jit_with_device
     def jvp_scaled(self, v, x, constants=None):
         """Compute Jacobian-vector product of self.compute_scaled.
 
@@ -1443,7 +1404,7 @@ class _Objective(IOAble, ABC):
         """
         return self._jvp(v, x, constants, "scaled")
 
-    @jit_with_dynamic_device
+    @jit_with_device
     def jvp_scaled_error(self, v, x, constants=None):
         """Compute Jacobian-vector product of self.compute_scaled_error.
 
@@ -1459,7 +1420,7 @@ class _Objective(IOAble, ABC):
         """
         return self._jvp(v, x, constants, "scaled_error")
 
-    @jit_with_dynamic_device
+    @jit_with_device
     def jvp_unscaled(self, v, x, constants=None):
         """Compute Jacobian-vector product of self.compute_unscaled.
 

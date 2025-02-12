@@ -369,6 +369,11 @@ def get_parallel_forcebalance(
     from desc.backend import desc_config, jax, jnp
     from desc.grid import LinearGrid
 
+    if desc_config["device"] != "gpu":
+        raise ValueError(
+            "Parallel computing is only supported on GPU. "
+            "Please use DESC with GPU device."
+        )
     if desc_config["num_device"] != num_device and check_device:
         raise ValueError(
             f"Number of devices in desc_config ({desc_config['num_device']}) "

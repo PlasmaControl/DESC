@@ -359,16 +359,22 @@ class Optimizer(IOAble):
             print("{:=<{}}".format("", PRINT_WIDTH + w_divider))
 
             print(f"{'Start  -->   End':>{PRINT_WIDTH+21}}")
-            objective.print_value(objective.x(*state), objective.x(*state_0))
+            values = objective.print_value(objective.x(*state), objective.x(*state_0))
             for con in constraints:
                 arg_inds_for_this_con = [
                     things.index(t) for t in things if t in con.things
                 ]
                 args_for_this_con = [things[ind] for ind in arg_inds_for_this_con]
                 args0_for_this_con = [things0[ind] for ind in arg_inds_for_this_con]
-                con.print_value(con.xs(*args_for_this_con), con.xs(*args0_for_this_con))
-
+                _val = con.print_value(
+                    con.xs(*args_for_this_con), con.xs(*args0_for_this_con)
+                )
+                if con._print_value_fmt in values:
+                    values[con._print_value_fmt].append(_val)
+                else:
+                    values[con._print_value_fmt] = [_val]
             print("{:=<{}}".format("", PRINT_WIDTH + w_divider))
+            result["Objective values"] = values
 
         if copy:
             # need to swap things and things0, since things should be unchanged

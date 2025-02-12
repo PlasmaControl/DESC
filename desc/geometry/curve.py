@@ -810,10 +810,10 @@ class FourierPlanarCurve(Curve):
 
         # center
         center = np.mean(coords, axis=0)
-        coords = coords - center  # shift to origin
+        coords_centered = coords - center  # shift to origin
 
         # normal
-        U, _, _ = np.linalg.svd(coords.T)
+        U, _, _ = np.linalg.svd(coords_centered.T)
         normal = U[:, -1].T  # left singular vector of the least singular value
 
         # axis and angle of rotation
@@ -821,17 +821,43 @@ class FourierPlanarCurve(Curve):
         axis = np.cross(Z_axis, normal)
         angle = np.arccos(np.dot(Z_axis, normal))
         rotmat = rotation_matrix(axis, angle)
-        coords = coords @ rotmat  # rotate to X-Y plane
+        coords_rotated = coords_centered @ rotmat  # rotate to X-Y plane
 
         warnif(
-            np.max(np.abs(coords[:, 2])) > 1e-14,  # check that Z=0 for all points
+            np.max(np.abs(coords_rotated[:, 2]))
+            > 1e-14,  # check that Z=0 for all points
             UserWarning,
             "Curve values are not planar! Using the projection onto a plane.",
         )
 
+        # polar angle
+        s = np.arctan2(coords_rotated[:, 1], coords_rotated[:, 0])
+        unwrapped_s = np.unwrap(s)
+        # Determine if the sequence is monotonically increasing or decreasing
+        if np.all(np.diff(unwrapped_s) > 0):
+            curve_sign = 1
+        elif np.all(np.diff(unwrapped_s) < 0):
+            curve_sign = -1
+        else:
+            warnings.warn(
+                "The curve parameter s is not strictly increasing or decreasing. "
+                "Assuming default direction.",
+                UserWarning,
+            )
+            curve_sign = 1
+
+        if curve_sign == -1:
+            # original curve was parameterized "backwards" (clockwise),
+            # compared to FourierPlanarCurve assumption
+            normal = -normal  # flip normal vector direction
+            rotmat = rotation_matrix(axis, np.pi)
+            coords_rotated = (
+                coords_rotated @ rotmat
+            )  # flip on X-Y plane to match normal vector
+
         # polar radius and angle
-        r = np.sqrt(coords[:, 0] ** 2 + coords[:, 1] ** 2)
-        s = np.arctan2(coords[:, 1], coords[:, 0])
+        r = np.sqrt(coords_rotated[:, 0] ** 2 + coords_rotated[:, 1] ** 2)
+        s = np.arctan2(coords_rotated[:, 1], coords_rotated[:, 0])
         s = np.mod(s + 2 * np.pi, 2 * np.pi)  # mod angle to range [0, 2*pi)
         idx = np.argsort(s)  # sort angle to be monotonically increasing
         r = r[idx]

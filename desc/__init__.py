@@ -61,7 +61,7 @@ BANNER = colored(_BANNER, "magenta")
 config = {"device": None, "avail_mem": None, "kind": None, "num_device": None}
 
 
-def set_device(kind="cpu", gpuid=None, num_device=1):
+def set_device(kind="cpu", gpuid=None, num_device=1):  # noqa : C901
     """Sets the device to use for computation.
 
     If kind==``'gpu'`` and a gpuid is specified, uses the specified GPU. If

@@ -189,17 +189,25 @@ def collect_docs(
 
 
 def jit_with_dynamic_device(method):
+    """Just-in-time compile a decorator with a dynamic device.
+
+    Decorates a method of a class with a dynamic device, allowing the method to be
+    compiled with jax.jit for the specific device. This is needed since
+    @functools.partial(jax.jit, device=jax.devices("gpu")[self._device_id]) is not
+    allowed in a class definition.
+    """
+
     @functools.wraps(method)
     def wrapper(self, *args, **kwargs):
         # Get the device using self.id
         device = jax.devices("gpu")[self._device_id]
-        
+
         # Compile the method with jax.jit for the specific device
         jitted_method = jax.jit(method, device=device)
-        
+
         # Call the jitted function
         return jitted_method(self, *args, **kwargs)
-    
+
     return wrapper
 
 
@@ -478,7 +486,8 @@ class ObjectiveFunction(IOAble):
             f = pconcat(
                 [
                     obj.compute_unscaled(
-                        *jax.device_put(par, jax.devices("gpu")[obj._device_id]), constants=const
+                        *jax.device_put(par, jax.devices("gpu")[obj._device_id]),
+                        constants=const,
                     )
                     for i, (par, obj, const) in enumerate(
                         zip(params, self.objectives, constants)
@@ -519,7 +528,8 @@ class ObjectiveFunction(IOAble):
             f = pconcat(
                 [
                     obj.compute_scaled(
-                        *jax.device_put(par, jax.devices("gpu")[obj._device_id]), constants=const
+                        *jax.device_put(par, jax.devices("gpu")[obj._device_id]),
+                        constants=const,
                     )
                     for i, (par, obj, const) in enumerate(
                         zip(params, self.objectives, constants)
@@ -560,7 +570,8 @@ class ObjectiveFunction(IOAble):
             f = pconcat(
                 [
                     obj.compute_scaled_error(
-                        *jax.device_put(par, jax.devices("gpu")[obj._device_id]), constants=const
+                        *jax.device_put(par, jax.devices("gpu")[obj._device_id]),
+                        constants=const,
                     )
                     for i, (par, obj, const) in enumerate(
                         zip(params, self.objectives, constants)
@@ -785,7 +796,7 @@ class ObjectiveFunction(IOAble):
             J = jnp.hstack(J)
         else:
             J = pconcat(J, mode="hstack")
-        
+
         return J
 
     def _jvp_batched(self, v, x, constants=None, op="scaled"):
@@ -1726,5 +1737,3 @@ class _ThingFlattener(IOAble):
         assert len(flat) == self.length
         unique, _ = unique_list(flat)
         return unique
-
-

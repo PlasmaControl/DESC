@@ -460,27 +460,21 @@ if use_jax:  # noqa: C901
         out : jnp.ndarray
             Concatenated array that lives on CPU.
         """
-        # we will use either CPU or GPU[0] for the matrix decompositions, so the array
-        # of float64 should fit into single device
+        # we will use either CPU or GPU[0] for the matrix decompositions, so the
+        # array of float64 should fit into single device
         size = jnp.array([x.size for x in arrays])
         size = jnp.sum(size)
-        if size*8/(1024**3) > desc_config["avail_mems"][0]:
+        if size * 8 / (1024**3) > desc_config["avail_mems"][0]:
             device = jax.devices("cpu")[0]
         else:
             device = jax.devices("gpu")[0]
 
         if mode == "concat":
-            out =  jnp.concatenate(
-                [jax.device_put(x, device=device) for x in arrays]
-            )
+            out = jnp.concatenate([jax.device_put(x, device=device) for x in arrays])
         elif mode == "hstack":
-            out = jnp.hstack(
-                [jax.device_put(x, device=device) for x in arrays]
-            )
+            out = jnp.hstack([jax.device_put(x, device=device) for x in arrays])
         elif mode == "vstack":
-            out = jnp.vstack(
-                [jax.device_put(x, device=device) for x in arrays]
-            )
+            out = jnp.vstack([jax.device_put(x, device=device) for x in arrays])
         return out
 
 

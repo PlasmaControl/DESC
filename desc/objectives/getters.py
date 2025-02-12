@@ -339,7 +339,9 @@ def maybe_add_self_consistency(thing, constraints):
     return constraints
 
 
-def get_parallel_forcebalance(eq, num_device, grid=None, use_jit=True, check_device=True):
+def get_parallel_forcebalance(
+    eq, num_device, grid=None, use_jit=True, check_device=True
+):
     """Get an ObjectiveFunction for parallel computing ForceBalance.
 
     Parameters
@@ -397,9 +399,9 @@ def get_parallel_forcebalance(eq, num_device, grid=None, use_jit=True, check_dev
         obj = ForceBalance(eq, grid=gridi, device_id=i)
         obj.build(use_jit=use_jit)
         obj = jax.device_put(obj, jax.devices("gpu")[i])
-        # if the eq is also distrubuted across GPUs, then some internal logic that
-        # checks if the things are different will fail, so we need to set the eq
-        # to be the same manually
+        # if the eq is also distrubuted across GPUs, then some internal logic
+        # that checks if the things are different will fail, so we need to
+        # set the eq to be the same manually
         obj._things[0] = eq
         objs += (obj,)
     objective = ObjectiveFunction(objs, deriv_mode="blocked")

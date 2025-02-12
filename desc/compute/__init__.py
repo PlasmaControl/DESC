@@ -26,8 +26,6 @@ data : dict of ndarray
 # just need to import all the submodules here to register everything in the
 # data_index
 
-from desc.utils import flatten_list
-
 from . import (
     _basis_vectors,
     _bootstrap,
@@ -37,6 +35,8 @@ from . import (
     _field,
     _geometry,
     _metric,
+    _neoclassical,
+    _old,
     _omnigenity,
     _profiles,
     _stability,

@@ -61,11 +61,12 @@ BANNER = colored(_BANNER, "magenta")
 config = {"device": None, "avail_mem": None, "kind": None}
 
 
-def set_device(kind="cpu"):
+def set_device(kind="cpu", gpuid=None):
     """Sets the device to use for computation.
 
-    If kind==``'gpu'``, checks available GPUs and selects the one with the most
-    available memory.
+    If kind==``'gpu'`` and a gpuid is specified, uses the specified GPU. If
+    gpuid==``None`` or a wrong GPU id is given, checks available GPUs and selects the
+    one with the most available memory.
     Respects environment variable CUDA_VISIBLE_DEVICES for selecting from multiple
     available GPUs
 
@@ -77,7 +78,7 @@ def set_device(kind="cpu"):
     """
     config["kind"] = kind
     if kind == "cpu":
-        os.environ["JAX_PLATFORM_NAME"] = "cpu"
+        os.environ["JAX_PLATFORMS"] = "cpu"
         os.environ["CUDA_VISIBLE_DEVICES"] = ""
         import psutil
 
@@ -127,14 +128,26 @@ def set_device(kind="cpu"):
             set_device(kind="cpu")
             return
         devices = [dev for dev in devices if dev["index"] in gpu_ids]
-        for dev in devices:
-            mem = dev["mem_total"] - dev["mem_used"]
-            if mem > maxmem:
-                maxmem = mem
-                selected_gpu = dev
+
+        if gpuid is not None and (str(gpuid) in gpu_ids):
+            selected_gpu = [dev for dev in devices if dev["index"] == str(gpuid)][0]
+        else:
+            for dev in devices:
+                mem = dev["mem_total"] - dev["mem_used"]
+                if mem > maxmem:
+                    maxmem = mem
+                    selected_gpu = dev
         config["device"] = selected_gpu["type"] + " (id={})".format(
             selected_gpu["index"]
         )
+        if gpuid is not None and not (str(gpuid) in gpu_ids):
+            warnings.warn(
+                colored(
+                    "Specified gpuid {} not found, falling back to ".format(str(gpuid))
+                    + config["device"],
+                    "yellow",
+                )
+            )
         config["avail_mem"] = (
             selected_gpu["mem_total"] - selected_gpu["mem_used"]
         ) / 1024  # in GB

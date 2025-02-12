@@ -13,8 +13,9 @@ from scipy.constants import mu_0
 
 from desc.backend import jnp
 
+from ..integrals.surface_integral import surface_averages
+from ..utils import cross, dot, safediv, safenorm
 from .data_index import register_compute_fun
-from .utils import cross, dot, safediv, safenorm, surface_averages
 
 
 @register_compute_fun(
@@ -82,7 +83,7 @@ def _sqrtg_clebsch(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="|e_theta x e_zeta|",
-    label="|\\mathbf{e}_{\\theta} \\times \\mathbf{e}_{\\zeta}|",
+    label="| \\mathbf{e}_{\\theta} \\times \\mathbf{e}_{\\zeta} |",
     units="m^{2}",
     units_long="square meters",
     description="2D Jacobian determinant for constant rho surface",
@@ -140,7 +141,7 @@ def _e_theta_x_e_zeta_r(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="|e_theta x e_zeta|_rr",
-    label="\\partial_{\\rho\\rho} |\\mathbf{e}_{\\theta} \\times \\mathbf{e}_{\\zeta}|",
+    label="\\partial_{\\rho\\rho}|\\mathbf{e}_{\\theta}\\times\\mathbf{e}_{\\zeta}|",
     units="m^{2}",
     units_long="square meters",
     description="2D Jacobian determinant for constant rho surface"
@@ -179,7 +180,7 @@ def _e_theta_x_e_zeta_rr(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="|e_theta x e_zeta|_z",
-    label="\\partial_{\\zeta}|e_{\\theta} \\times e_{\\zeta}|",
+    label="\\partial_{\\zeta}|\\mathbf{e}_{\\theta} \\times \\mathbf{e}_{\\zeta}|",
     units="m^{2}",
     units_long="square meters",
     description="2D Jacobian determinant for constant rho surface,"
@@ -1443,6 +1444,44 @@ def _g_sup_rr_r(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="g^rr_t",
+    label="\\partial_{\\theta} g^{\\rho \\rho}",
+    units="m^-2",
+    units_long="inverse square meters",
+    description="Radial/Radial element of contravariant metric tensor, "
+    + "first poloidal derivative",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["e^rho", "e^rho_t"],
+)
+def _g_sup_rr_t(params, transforms, profiles, data, **kwargs):
+    data["g^rr_t"] = 2 * dot(data["e^rho_t"], data["e^rho"])
+    return data
+
+
+@register_compute_fun(
+    name="g^rr_z",
+    label="\\partial_{\\zeta} g^{\\rho \\rho}",
+    units="m^-2",
+    units_long="inverse square meters",
+    description="Radial/Radial element of contravariant metric tensor, "
+    + "first toroidal derivative",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["e^rho", "e^rho_z"],
+)
+def _g_sup_rr_z(params, transforms, profiles, data, **kwargs):
+    data["g^rr_z"] = 2 * dot(data["e^rho_z"], data["e^rho"])
+    return data
+
+
+@register_compute_fun(
     name="g^rt_r",
     label="\\partial_{\\rho} g^{\\rho \\theta}",
     units="m^-2",
@@ -1544,25 +1583,6 @@ def _g_sup_zz_r(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
-    name="g^rr_t",
-    label="\\partial_{\\theta} g^{\\rho \\rho}",
-    units="m^-2",
-    units_long="inverse square meters",
-    description="Radial/Radial element of contravariant metric tensor, "
-    + "first poloidal derivative",
-    dim=1,
-    params=[],
-    transforms={},
-    profiles=[],
-    coordinates="rtz",
-    data=["e^rho", "e^rho_t"],
-)
-def _g_sup_rr_t(params, transforms, profiles, data, **kwargs):
-    data["g^rr_t"] = 2 * dot(data["e^rho_t"], data["e^rho"])
-    return data
-
-
-@register_compute_fun(
     name="g^rt_t",
     label="\\partial_{\\theta} g^{\\rho \\theta}",
     units="m^-2",
@@ -1660,25 +1680,6 @@ def _g_sup_tz_t(params, transforms, profiles, data, **kwargs):
 )
 def _g_sup_zz_t(params, transforms, profiles, data, **kwargs):
     data["g^zz_t"] = 2 * dot(data["e^zeta_t"], data["e^zeta"])
-    return data
-
-
-@register_compute_fun(
-    name="g^rr_z",
-    label="\\partial_{\\zeta} g^{\\rho \\rho}",
-    units="m^-2",
-    units_long="inverse square meters",
-    description="Radial/Radial element of contravariant metric tensor, "
-    + "first toroidal derivative",
-    dim=1,
-    params=[],
-    transforms={},
-    profiles=[],
-    coordinates="rtz",
-    data=["e^rho", "e^rho_z"],
-)
-def _g_sup_rr_z(params, transforms, profiles, data, **kwargs):
-    data["g^rr_z"] = 2 * dot(data["e^rho_z"], data["e^rho"])
     return data
 
 
@@ -1900,28 +1901,125 @@ def _gradzeta(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
-    name="gbdrift",
-    # Exact definition of the magnetic drifts taken from
-    # eqn. 48 of Introduction to Quasisymmetry by Landreman
-    # https://tinyurl.com/54udvaa4
-    label="\\mathrm{gbdrift} = 1/B^{2} (\\mathbf{b}\\times\\nabla B) \\cdot"
-    + "\\nabla \\alpha",
-    units="1/(T-m^{2})",
-    units_long="inverse Tesla meters^2",
-    description="Binormal component of the geometric part of the gradB drift"
-    + " used for local stability analyses, Gamma_c, epsilon_eff etc.",
+    name="g^aa",
+    label="g^{\\alpha \\alpha}",
+    units="m^{-2}",
+    units_long="inverse square meters",
+    description="Contravariant metric tensor grad alpha dot grad alpha",
     dim=1,
     params=[],
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["|B|^2", "b", "grad(alpha)", "grad(|B|)"],
+    data=["grad(alpha)"],
+)
+def _g_sup_aa(params, transforms, profiles, data, **kwargs):
+    data["g^aa"] = dot(data["grad(alpha)"], data["grad(alpha)"])
+    return data
+
+
+@register_compute_fun(
+    name="g^ra",
+    label="g^{\\rho \\alpha}",
+    units="m^{-2}",
+    units_long="inverse square meters",
+    description="Contravariant metric tensor grad rho dot grad alpha",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["grad(alpha)", "e^rho"],
+)
+def _g_sup_ra(params, transforms, profiles, data, **kwargs):
+    data["g^ra"] = dot(data["grad(alpha)"], data["e^rho"])
+    return data
+
+
+@register_compute_fun(
+    name="gbdrift",
+    # Exact definition of the magnetic drifts taken from
+    # eqn. 48 of Introduction to Quasisymmetry by Landreman
+    # https://tinyurl.com/54udvaa4
+    label="(\\nabla \\vert B \\vert)_{\\mathrm{drift}} = "
+    "(\\mathbf{b} \\times \\nabla B) \\cdot \\nabla \\alpha / \\vert B \\vert^{2}",
+    units="1 / Wb",
+    units_long="Inverse webers",
+    description="Binormal, geometric part of the gradB drift. "
+    "Used for local stability analyses, gyrokinetics, and Gamma_c.",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["gbdrift (periodic)", "gbdrift (secular)"],
 )
 def _gbdrift(params, transforms, profiles, data, **kwargs):
-    data["gbdrift"] = (
-        1
+    data["gbdrift"] = data["gbdrift (periodic)"] + data["gbdrift (secular)"]
+    return data
+
+
+@register_compute_fun(
+    name="gbdrift (periodic)",
+    label="\\mathrm{periodic}(\\nabla \\vert B \\vert)_{\\mathrm{drift}}",
+    units="1 / Wb",
+    units_long="Inverse webers",
+    description="Periodic, binormal, geometric part of the gradB drift.",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["|B|^2", "b", "grad(alpha) (periodic)", "grad(|B|)"],
+)
+def _periodic_gbdrift(params, transforms, profiles, data, **kwargs):
+    data["gbdrift (periodic)"] = (
+        dot(data["b"], cross(data["grad(|B|)"], data["grad(alpha) (periodic)"]))
         / data["|B|^2"]
-        * dot(data["b"], cross(data["grad(|B|)"], data["grad(alpha)"]))
+    )
+    return data
+
+
+@register_compute_fun(
+    name="gbdrift (secular)",
+    label="\\mathrm{secular}(\\nabla \\vert B \\vert)_{\\mathrm{drift}}",
+    units="1 / Wb",
+    units_long="Inverse webers",
+    description="Secular, binormal, geometric part of the gradB drift.",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["|B|^2", "b", "grad(alpha) (secular)", "grad(|B|)"],
+)
+def _secular_gbdrift(params, transforms, profiles, data, **kwargs):
+    data["gbdrift (secular)"] = (
+        dot(data["b"], cross(data["grad(|B|)"], data["grad(alpha) (secular)"]))
+        / data["|B|^2"]
+    )
+    return data
+
+
+@register_compute_fun(
+    name="gbdrift (secular)/phi",
+    label="\\mathrm{secular}(\\nabla \\vert B \\vert)_{\\mathrm{drift}} / \\phi",
+    units="1 / Wb",
+    units_long="Inverse webers",
+    description="Secular, binormal, geometric part of the gradB drift divided "
+    "by the toroidal angle. This quantity is periodic.",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["|B|^2", "b", "e^rho", "grad(|B|)", "iota_r"],
+)
+def _secular_gbdrift_over_phi(params, transforms, profiles, data, **kwargs):
+    data["gbdrift (secular)/phi"] = (
+        dot(data["b"], cross(data["e^rho"], data["grad(|B|)"]))
+        * data["iota_r"]
+        / data["|B|^2"]
     )
     return data
 
@@ -1933,20 +2031,39 @@ def _gbdrift(params, transforms, profiles, data, **kwargs):
     # https://tinyurl.com/54udvaa4
     label="\\mathrm{cvdrift} = 1/B^{3} (\\mathbf{b}\\times\\nabla(p + B^2/2))"
     + "\\cdot \\nabla \\alpha",
-    units="1/(T-m^{2})",
-    units_long="inverse Tesla meters^2",
-    description="Binormal component of the geometric part of the curvature drift"
-    + " used for local stability analyses, Gamma_c, epsilon_eff etc.",
+    units="1 / Wb",
+    units_long="Inverse webers",
+    description="Binormal, geometric part of the curvature drift. "
+    "Used for local stability analyses and gyrokinetics.",
     dim=1,
     params=[],
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["p_r", "psi_r", "|B|^2", "gbdrift"],
+    data=["cvdrift (periodic)", "gbdrift (secular)"],
 )
 def _cvdrift(params, transforms, profiles, data, **kwargs):
-    dp_dpsi = mu_0 * data["p_r"] / data["psi_r"]
-    data["cvdrift"] = 1 / data["|B|^2"] * dp_dpsi + data["gbdrift"]
+    data["cvdrift"] = data["cvdrift (periodic)"] + data["gbdrift (secular)"]
+    return data
+
+
+@register_compute_fun(
+    name="cvdrift (periodic)",
+    label="\\mathrm{cvdrift (periodic)}",
+    units="1 / Wb",
+    units_long="Inverse webers",
+    description="Periodic, binormal, geometric part of the curvature drift.",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["p_r", "psi_r", "|B|^2", "gbdrift (periodic)"],
+)
+def _periodic_cvdrift(params, transforms, profiles, data, **kwargs):
+    data["cvdrift (periodic)"] = (
+        mu_0 * data["p_r"] / data["psi_r"] / data["|B|^2"] + data["gbdrift (periodic)"]
+    )
     return data
 
 
@@ -1954,22 +2071,25 @@ def _cvdrift(params, transforms, profiles, data, **kwargs):
     name="cvdrift0",
     # Exact definition of the magnetic drifts taken from
     # eqn. 48 of Introduction to Quasisymmetry by Landreman
-    # https://tinyurl.com/54udvaa4
+    # https://tinyurl.com/54udvaa4 up to dimensionless factors.
     label="\\mathrm{cvdrift0} = 1/B^{2} (\\mathbf{b}\\times\\nabla B)"
-    + "\\cdot \\nabla \\rho",
-    units="1/(T-m^{2})",
-    units_long="inverse Tesla meters^2",
-    description="Radial component of the geometric part of the curvature drift"
-    + " used for local stability analyses, gyrokinetics, Gamma_c.",
+    + "\\cdot (2 \\rho \\nabla \\rho)",
+    units="1 / Wb",
+    units_long="Inverse webers",
+    description="Radial, geometric part of the curvature drift."
+    + " Used for local stability analyses, gyrokinetics, and Gamma_c.",
     dim=1,
     params=[],
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["|B|^2", "b", "e^rho", "grad(|B|)"],
+    data=["rho", "|B|^2", "b", "e^rho", "grad(|B|)"],
 )
 def _cvdrift0(params, transforms, profiles, data, **kwargs):
     data["cvdrift0"] = (
-        1 / data["|B|^2"] * (dot(data["b"], cross(data["grad(|B|)"], data["e^rho"])))
+        2
+        * data["rho"]
+        / data["|B|^2"]
+        * dot(data["b"], cross(data["grad(|B|)"], data["e^rho"]))
     )
     return data

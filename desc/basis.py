@@ -261,9 +261,9 @@ class PowerSeries(_Basis):
             Each row is one basis function with modes (l,m,n).
 
         """
-        l = np.arange(L + 1).reshape((-1, 1))
-        z = np.zeros((L + 1, 2))
-        return np.hstack([l, z])
+        l = np.arange(L + 1)
+        z = np.zeros_like(l)
+        return np.array([l, z, z]).T
 
     def evaluate(
         self, nodes, derivatives=np.array([0, 0, 0]), modes=None, unique=False
@@ -374,10 +374,9 @@ class FourierSeries(_Basis):
             Each row is one basis function with modes (l,m,n).
 
         """
-        dim_tor = 2 * N + 1
-        n = np.arange(dim_tor).reshape((-1, 1)) - N
-        z = np.zeros((dim_tor, 2))
-        return np.hstack([z, n])
+        n = np.arange(-N, N + 1)
+        z = np.zeros_like(n)
+        return np.array([z, z, n]).T
 
     def evaluate(
         self, nodes, derivatives=np.array([0, 0, 0]), modes=None, unique=False
@@ -400,6 +399,9 @@ class FourierSeries(_Basis):
         -------
         y : ndarray, shape(num_nodes,num_modes)
             Basis functions evaluated at nodes.
+            The Vandermonde matrix when ``modes is None`` is
+            given by ``y.reshape(-1,2*N+1)`` and is ordered
+            [sin(N𝛇), ..., sin(𝛇), 1, cos(𝛇), ..., cos(N𝛇)].
 
         """
         if modes is None:
@@ -477,9 +479,7 @@ class DoubleFourierSeries(_Basis):
         self._NFP = check_posint(NFP, "NFP", False)
         self._sym = bool(sym) if not sym else str(sym)
         self._spectral_indexing = "linear"
-
         self._modes = self._get_modes(M=self.M, N=self.N)
-
         super().__init__()
 
     def _get_modes(self, M, N):
@@ -499,16 +499,13 @@ class DoubleFourierSeries(_Basis):
             Each row is one basis function with modes (l,m,n).
 
         """
-        dim_pol = 2 * M + 1
-        dim_tor = 2 * N + 1
-        m = np.arange(dim_pol) - M
-        n = np.arange(dim_tor) - N
-        mm, nn = np.meshgrid(m, n)
-        mm = mm.reshape((-1, 1), order="F")
-        nn = nn.reshape((-1, 1), order="F")
-        z = np.zeros_like(mm)
-        y = np.hstack([z, mm, nn])
-        return y
+        m = np.arange(-M, M + 1)
+        n = np.arange(-N, N + 1)
+        m, n = np.meshgrid(m, n, indexing="ij")
+        m = m.ravel()
+        n = n.ravel()
+        z = np.zeros_like(m)
+        return np.array([z, m, n]).T
 
     def evaluate(
         self, nodes, derivatives=np.array([0, 0, 0]), modes=None, unique=False
@@ -531,6 +528,11 @@ class DoubleFourierSeries(_Basis):
         -------
         y : ndarray, shape(num_nodes,num_modes)
             Basis functions evaluated at nodes.
+            The Vandermonde matrix when ``modes is None`` is
+            given by ``y.reshape(-1,2*M+1,2*N+1)`` and
+            is an outer product of Fourier matrices with order
+            [sin(M𝛉), ..., sin(𝛉), 1, cos(𝛉), ..., cos(M𝛉)]
+            ⊗ [sin(N𝛇), ..., sin(𝛇), 1, cos(𝛇), ..., cos(N𝛇)].
 
         """
         if modes is None:
@@ -858,17 +860,14 @@ class ChebyshevDoubleFourierBasis(_Basis):
             Each row is one basis function with modes (l,m,n).
 
         """
-        dim_pol = 2 * M + 1
-        dim_tor = 2 * N + 1
         l = np.arange(L + 1)
-        m = np.arange(dim_pol) - M
-        n = np.arange(dim_tor) - N
-        ll, mm, nn = np.meshgrid(l, m, n)
-        ll = ll.reshape((-1, 1), order="F")
-        mm = mm.reshape((-1, 1), order="F")
-        nn = nn.reshape((-1, 1), order="F")
-        y = np.hstack([ll, mm, nn])
-        return y
+        m = np.arange(-M, M + 1)
+        n = np.arange(-N, N + 1)
+        l, m, n = np.meshgrid(l, m, n, indexing="ij")
+        l = l.ravel()
+        m = m.ravel()
+        n = n.ravel()
+        return np.array([l, m, n]).T
 
     def evaluate(
         self, nodes, derivatives=np.array([0, 0, 0]), modes=None, unique=False
@@ -891,6 +890,12 @@ class ChebyshevDoubleFourierBasis(_Basis):
         -------
         y : ndarray, shape(num_nodes,num_modes)
             Basis functions evaluated at nodes.
+            The Vandermonde matrix when ``modes is None`` is given by
+            ``y.reshape(-1,L+1,2*M+1,2*N+1,3)`` and is
+            an outer product of Chebyshev and Fourier matrices with order
+            [T₀(𝛒), T₁(𝛒), ..., T_L(𝛒)]
+            ⊗ [sin(M𝛉), ..., sin(𝛉), 1, cos(𝛉), ..., cos(M𝛉)]
+            ⊗ [sin(N𝛇), ..., sin(𝛇), 1, cos(𝛇), ..., cos(N𝛇)].
 
         """
         if modes is None:
@@ -1098,13 +1103,13 @@ class FourierZernikeBasis(_Basis):
         if not len(modes):
             return np.array([]).reshape((len(nodes), 0))
 
-        # TODO: avoid duplicate calculations when mixing derivatives
+        # TODO(#1243): avoid duplicate calculations when mixing derivatives
         r, t, z = nodes.T
         l, m, n = modes.T
         lm = modes[:, :2]
 
         if unique:
-            # TODO: can avoid this here by using grid.unique_idx etc
+            # TODO(#1243): can avoid this here by using grid.unique_idx etc
             # and adding unique_modes attributes to basis
             _, ridx, routidx = np.unique(
                 r, return_index=True, return_inverse=True, axis=0
@@ -1212,9 +1217,9 @@ class ChebyshevPolynomial(_Basis):
             Each row is one basis function with modes (l,m,n).
 
         """
-        l = np.arange(L + 1).reshape((-1, 1))
-        z = np.zeros((L + 1, 2))
-        return np.hstack([l, z])
+        l = np.arange(L + 1)
+        z = np.zeros_like(l)
+        return np.array([l, z, z]).T
 
     def evaluate(
         self, nodes, derivatives=np.array([0, 0, 0]), modes=None, unique=False
@@ -1364,7 +1369,6 @@ def polyval_vec(p, x, prec=None):
 def _polyval_exact(p, x, prec):
     p = np.atleast_2d(p)
     x = np.atleast_1d(x).flatten()
-    # TODO: possibly multithread this bit
     mpmath.mp.dps = prec
     y = np.array([np.asarray(mpmath.polyval(list(pi), x)) for pi in p])
     return y.astype(float)
@@ -1440,7 +1444,9 @@ def zernike_radial_coeffs(l, m, exact=True):
             # hence they are all integers. So, we can use exact arithmetic with integer
             # division instead of floating point division.
             # [1]https://en.wikipedia.org/wiki/Zernike_polynomials#Other_representations
-            coeffs[ii, s] = ((-1) ** ((ll - s) // 2) * factorial((ll + s) // 2)) // (
+            coeffs[ii, s] = (
+                int((-1) ** ((ll - s) // 2)) * factorial((ll + s) // 2)
+            ) // (
                 factorial((ll - s) // 2)
                 * factorial((s + mm) // 2)
                 * factorial((s - mm) // 2)
@@ -1573,7 +1579,7 @@ def zernike_radial(r, l, m, dr=0):
             "Analytic radial derivatives of Zernike polynomials for order>4 "
             + "have not been implemented."
         )
-    return s * jnp.where((l - m) % 2 == 0, out, 0)
+    return s * jnp.where((l - m) % 2 == 0, out, 0.0)
 
 
 def power_coeffs(l):
@@ -1626,7 +1632,7 @@ def chebyshev(r, l, dr=0):
 
     Parameters
     ----------
-    rho : ndarray, shape(N,)
+    r : ndarray, shape(N,)
         radial coordinates to evaluate basis
     l : ndarray of int, shape(K,)
         radial mode number(s)
@@ -1732,7 +1738,7 @@ def _binom(n, k):
     return b
 
 
-@custom_jvp
+@functools.partial(custom_jvp, nondiff_argnums=(4,))
 @jit
 @jnp.vectorize
 def _jacobi(n, alpha, beta, x, dx=0):
@@ -1804,13 +1810,13 @@ def _jacobi(n, alpha, beta, x, dx=0):
 
 
 @_jacobi.defjvp
-def _jacobi_jvp(x, xdot):
-    (n, alpha, beta, x, dx) = x
-    (ndot, alphadot, betadot, xdot, dxdot) = xdot
+def _jacobi_jvp(dx, x, xdot):
+    (n, alpha, beta, x) = x
+    (*_, xdot) = xdot
     f = _jacobi(n, alpha, beta, x, dx)
     df = _jacobi(n, alpha, beta, x, dx + 1)
     # in theory n, alpha, beta, dx aren't differentiable (they're integers)
     # but marking them as non-diff argnums seems to cause escaped tracer values.
     # probably a more elegant fix, but just setting those derivatives to zero seems
     # to work fine.
-    return f, df * xdot + 0 * ndot + 0 * alphadot + 0 * betadot + 0 * dxdot
+    return f, df * xdot

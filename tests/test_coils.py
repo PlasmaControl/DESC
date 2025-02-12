@@ -4,7 +4,10 @@ import shutil
 
 import numpy as np
 import pytest
+import scipy
+import scipy.constants
 
+from desc.backend import jnp
 from desc.coils import (
     CoilSet,
     FourierPlanarCoil,
@@ -12,13 +15,20 @@ from desc.coils import (
     FourierXYZCoil,
     MixedCoilSet,
     SplineXYZCoil,
+    initialize_helical_coils,
+    initialize_modular_coils,
+    initialize_saddle_coils,
 )
-from desc.compute import get_params, get_transforms, xyz2rpz, xyz2rpz_vec
+from desc.compute import get_params, get_transforms, rpz2xyz, xyz2rpz, xyz2rpz_vec
+from desc.compute.geom_utils import copy_rpz_periods
+from desc.equilibrium import Equilibrium
 from desc.examples import get
-from desc.geometry import FourierRZCurve, FourierRZToroidalSurface
+from desc.geometry import FourierRZCurve, FourierRZToroidalSurface, FourierXYZCurve
 from desc.grid import Grid, LinearGrid
 from desc.io import load
 from desc.magnetic_fields import SumMagneticField, VerticalMagneticField
+from desc.objectives import LinkingCurrentConsistency
+from desc.utils import dot
 
 
 class TestCoil:
@@ -33,8 +43,8 @@ class TestCoil:
         y = 1
         I = 1e7
 
-        By_true = 1e-7 * 2 * np.pi * R**2 * I / (y**2 + R**2) ** (3 / 2)
-        Bz_true = 1e-7 * 2 * np.pi * R**2 * I / (y**2 + R**2) ** (3 / 2)
+        By_true = scipy.constants.mu_0 / 2 * R**2 * I / (y**2 + R**2) ** (3 / 2)
+        Bz_true = scipy.constants.mu_0 / 2 * R**2 * I / (y**2 + R**2) ** (3 / 2)
 
         B_true_xyz = np.atleast_2d([0, By_true, 0])
         grid_xyz = np.atleast_2d([10, y, 0])
@@ -150,6 +160,198 @@ class TestCoil:
         )
 
     @pytest.mark.unit
+    def test_biot_savart_vector_potential_all_coils(self):
+        """Test biot-savart vec potential implementation against analytic formula."""
+        coil_grid = LinearGrid(zeta=100, endpoint=False)
+
+        R = 2
+        y = 1
+        I = 1e7
+
+        A_true = np.atleast_2d([0, 0, 0])
+        grid_xyz = np.atleast_2d([10, y, 0])
+        grid_rpz = xyz2rpz(grid_xyz)
+
+        def test(coil, grid_xyz, grid_rpz):
+            A_xyz = coil.compute_magnetic_vector_potential(
+                grid_xyz, basis="xyz", source_grid=coil_grid
+            )
+            A_rpz = coil.compute_magnetic_vector_potential(
+                grid_rpz, basis="rpz", source_grid=coil_grid
+            )
+            np.testing.assert_allclose(
+                A_true, A_xyz, rtol=1e-3, atol=1e-10, err_msg=f"Using {coil}"
+            )
+            np.testing.assert_allclose(
+                A_true, A_rpz, rtol=1e-3, atol=1e-10, err_msg=f"Using {coil}"
+            )
+            np.testing.assert_allclose(
+                A_true, A_rpz, rtol=1e-3, atol=1e-10, err_msg=f"Using {coil}"
+            )
+
+        # FourierXYZCoil
+        coil = FourierXYZCoil(I)
+        test(coil, grid_xyz, grid_rpz)
+
+        # SplineXYZCoil
+        x = coil.compute("x", grid=coil_grid, basis="xyz")["x"]
+        coil = SplineXYZCoil(I, X=x[:, 0], Y=x[:, 1], Z=x[:, 2])
+        test(coil, grid_xyz, grid_rpz)
+
+        # FourierPlanarCoil
+        coil = FourierPlanarCoil(I)
+        test(coil, grid_xyz, grid_rpz)
+
+        grid_xyz = np.atleast_2d([0, 0, y])
+        grid_rpz = xyz2rpz(grid_xyz)
+
+        # FourierRZCoil
+        coil = FourierRZCoil(I, R_n=np.array([R]), modes_R=np.array([0]))
+        test(coil, grid_xyz, grid_rpz)
+        # test in a CoilSet
+        coil2 = CoilSet(coil)
+        test(coil2, grid_xyz, grid_rpz)
+        # test in a MixedCoilSet
+        coil3 = MixedCoilSet(coil2, coil, check_intersection=False)
+        coil3[1].current = 0
+        test(coil3, grid_xyz, grid_rpz)
+
+    @pytest.mark.unit
+    def test_biot_savart_vector_potential_integral_all_coils(self):
+        """Test analytic expression of flux integral for all coils."""
+        # taken from analytic benchmark in
+        # "A Magnetic Diagnostic Code for 3D Fusion Equilibria", Lazerson 2013
+        # find flux for concentric loops of varying radii to a circular coil
+
+        coil_grid = LinearGrid(zeta=1000, endpoint=False)
+
+        R = 1
+        I = 1e7
+
+        # analytic eqn for "A_phi" (phi is in dl direction for loop)
+        def _A_analytic(r):
+            # elliptic integral arguments must be k^2, not k,
+            # error in original paper and apparently in Jackson EM book too.
+            theta = np.pi / 2
+            arg = R**2 + r**2 + 2 * r * R * np.sin(theta)
+            term_1_num = I * R * scipy.constants.mu_0 / np.pi
+            term_1_den = np.sqrt(arg)
+            k_sqd = 4 * r * R * np.sin(theta) / arg
+            term_2_num = (2 - k_sqd) * scipy.special.ellipk(
+                k_sqd
+            ) - 2 * scipy.special.ellipe(k_sqd)
+            term_2_den = k_sqd
+            return term_1_num * term_2_num / term_1_den / term_2_den
+
+        # we only evaluate it at theta=np.pi/2 (b/c it is in spherical coords)
+        rs = np.linspace(0.1, 3, 10, endpoint=True)
+        N = 200
+        curve_grid = LinearGrid(zeta=N)
+
+        def test(
+            coil, grid_xyz, grid_rpz, A_true_rpz, correct_flux, rtol=1e-10, atol=1e-12
+        ):
+            """Test that we compute the correct flux for the given coil."""
+            A_xyz = coil.compute_magnetic_vector_potential(
+                grid_xyz, basis="xyz", source_grid=coil_grid
+            )
+            A_rpz = coil.compute_magnetic_vector_potential(
+                grid_rpz, basis="rpz", source_grid=coil_grid
+            )
+            flux_xyz = jnp.sum(
+                dot(A_xyz, curve_data["x_s"], axis=-1) * curve_grid.spacing[:, 2]
+            )
+            flux_rpz = jnp.sum(
+                dot(A_rpz, curve_data_rpz["x_s"], axis=-1) * curve_grid.spacing[:, 2]
+            )
+
+            np.testing.assert_allclose(
+                correct_flux, flux_xyz, rtol=rtol, err_msg=f"Using {coil}"
+            )
+            np.testing.assert_allclose(
+                correct_flux, flux_rpz, rtol=rtol, err_msg=f"Using {coil}"
+            )
+            np.testing.assert_allclose(
+                A_true_rpz,
+                A_rpz,
+                rtol=rtol,
+                atol=atol,
+                err_msg=f"Using {coil}",
+            )
+
+        for r in rs:
+            # A_phi is constant around the loop (no phi dependence)
+            A_true_phi = _A_analytic(r) * np.ones(N)
+            A_true_rpz = np.vstack(
+                (np.zeros_like(A_true_phi), A_true_phi, np.zeros_like(A_true_phi))
+            ).T
+            correct_flux = np.sum(r * A_true_phi * 2 * np.pi / N)
+
+            curve = FourierXYZCurve(
+                X_n=[-r, 0, 0], Y_n=[0, 0, r], Z_n=[0, 0, 0]
+            )  # flux loop to integrate A over
+
+            curve_data = curve.compute(["x", "x_s"], grid=curve_grid, basis="xyz")
+            curve_data_rpz = curve.compute(["x", "x_s"], grid=curve_grid, basis="rpz")
+
+            grid_rpz = np.vstack(
+                [
+                    curve_data_rpz["x"][:, 0],
+                    curve_data_rpz["x"][:, 1],
+                    curve_data_rpz["x"][:, 2],
+                ]
+            ).T
+            grid_xyz = rpz2xyz(grid_rpz)
+            # FourierXYZCoil
+            coil = FourierXYZCoil(I, X_n=[-R, 0, 0], Y_n=[0, 0, R], Z_n=[0, 0, 0])
+            test(
+                coil,
+                grid_xyz,
+                grid_rpz,
+                A_true_rpz,
+                correct_flux,
+                rtol=1e-8,
+                atol=1e-12,
+            )
+
+            # SplineXYZCoil
+            x = coil.compute("x", grid=coil_grid, basis="xyz")["x"]
+            coil = SplineXYZCoil(I, X=x[:, 0], Y=x[:, 1], Z=x[:, 2])
+            test(
+                coil,
+                grid_xyz,
+                grid_rpz,
+                A_true_rpz,
+                correct_flux,
+                rtol=1e-4,
+                atol=1e-12,
+            )
+
+            # FourierPlanarCoil
+            coil = FourierPlanarCoil(I, center=[0, 0, 0], normal=[0, 0, -1], r_n=R)
+            test(
+                coil,
+                grid_xyz,
+                grid_rpz,
+                A_true_rpz,
+                correct_flux,
+                rtol=1e-8,
+                atol=1e-12,
+            )
+
+            # FourierRZCoil
+            coil = FourierRZCoil(I, R_n=np.array([R]), modes_R=np.array([0]))
+            test(
+                coil,
+                grid_xyz,
+                grid_rpz,
+                A_true_rpz,
+                correct_flux,
+                rtol=1e-8,
+                atol=1e-12,
+            )
+
+    @pytest.mark.unit
     def test_properties(self):
         """Test getting/setting attributes for Coil class."""
         current = 4.34
@@ -166,7 +368,7 @@ class TestCoil:
         y = 1
         I = 1e7
         B_Z = 2  # add constant vertical field of 2T
-        By_true = 1e-7 * 2 * np.pi * R**2 * I / (y**2 + R**2) ** (3 / 2)
+        By_true = scipy.constants.mu_0 / 2 * R**2 * I / (y**2 + R**2) ** (3 / 2)
         B_true = np.array([0, By_true, 2])
         coil = FourierXYZCoil(I)
 
@@ -183,7 +385,7 @@ class TestCoil:
         y = 1
         I = 1e7
         B_Z = 2  # add constant vertical field of 2T
-        By_true = 1e-7 * 2 * np.pi * R**2 * I / (y**2 + R**2) ** (3 / 2)
+        By_true = scipy.constants.mu_0 / 2 * R**2 * I / (y**2 + R**2) ** (3 / 2)
         B_true = np.array([0, By_true, 2])
         coil = FourierXYZCoil(I)
         coilset = CoilSet(coil)
@@ -263,7 +465,7 @@ class TestCoilSet:
         z = np.linspace(0, 10, 10)
         I = 1e7
         n = 10
-        Bz_true = np.sum(1e-7 * 2 * np.pi * R**2 * I / (z**2 + R**2) ** (3 / 2))
+        Bz_true = np.sum(scipy.constants.mu_0 / 2 * R**2 * I / (z**2 + R**2) ** (3 / 2))
         B_true = np.array([0, 0, Bz_true])
         coil = FourierRZCoil(0.1)
         coils = CoilSet.linspaced_linear(
@@ -282,7 +484,7 @@ class TestCoilSet:
         R = 10
         N = 50
         I = 1e7
-        Bp_true = np.sum(1e-7 * 4 * np.pi * N * I / 2 / np.pi / R)
+        Bp_true = np.sum(scipy.constants.mu_0 * N * I / 2 / np.pi / R)
         B_true = np.array([0, Bp_true, 0])
         coil = FourierPlanarCoil()
         coil.current = I
@@ -310,7 +512,7 @@ class TestCoilSet:
         R = 10
         N = 48
         I = 1e7
-        Bp_true = np.sum(1e-7 * 4 * np.pi * N * I / 2 / np.pi / R)
+        Bp_true = np.sum(scipy.constants.mu_0 * N * I / 2 / np.pi / R)
         B_true = np.array([0, Bp_true, 0])
         coil = FourierPlanarCoil(I)
         coils = CoilSet.linspaced_angular(coil, angle=np.pi / 2, n=N // 4)
@@ -1042,6 +1244,42 @@ def test_save_and_load_makegrid_coils_rotated_int_grid(tmpdir_factory):
 
 
 @pytest.mark.unit
+def test_save_and_load_makegrid_coils_nested(tmpdir_factory):
+    """Test saving and reloading a nested CoilSet from MAKEGRID file."""
+    tmpdir = tmpdir_factory.mktemp("coil_files")
+    path = tmpdir.join("coils.MAKEGRID_format_nested")
+
+    # make a coilset with angular coilset
+    N = 22
+    coil = FourierPlanarCoil()
+    coil.current = 1
+    coilset_NFP = CoilSet(coil, NFP=N, sym=False)
+    coilset_sym = CoilSet(
+        FourierPlanarCoil(r_n=3, center=[10, 2 * np.pi / 7, 0], basis="rpz"),
+        NFP=1,
+        sym=True,
+    )
+    coilset = MixedCoilSet(coilset_NFP, coilset_sym)
+
+    grid = LinearGrid(N=25, endpoint=False)
+    coilset.save_in_makegrid_format(str(path), grid=grid, NFP=2)
+
+    coilset2 = CoilSet.from_makegrid_coilfile(str(path))
+
+    assert coilset2.num_coils == coilset.num_coils
+
+    # check length of each coil
+    # first 22 are the coilset_NFP coils
+    correct_length = coilset_NFP.compute("length")[0]["length"]
+    loaded_coil_lengths = [c.compute("length")["length"] for c in coilset2[:22]]
+    np.testing.assert_allclose(correct_length, loaded_coil_lengths, rtol=1e-2)
+    # last 2 are the coilset_sym coils
+    correct_length = coilset_sym.compute("length")[0]["length"]
+    loaded_coil_lengths = [c.compute("length")["length"] for c in coilset2[22:]]
+    np.testing.assert_allclose(correct_length, loaded_coil_lengths, rtol=1e-2)
+
+
+@pytest.mark.unit
 def test_save_makegrid_coils_assert_NFP(tmpdir_factory):
     """Test saving CoilSet that with incompatible NFP throws an error."""
     Ncoils = 22
@@ -1087,3 +1325,132 @@ def test_repr():
 
     coils.name = "MyCoils"
     assert "MyCoils" in str(coils)
+
+
+@pytest.mark.unit
+def test_linking_number():
+    """Test calculation of linking number."""
+    coil = FourierPlanarCoil(center=[10, 1, 0])
+    grid = LinearGrid(N=25)
+    # regular modular coilset from symmetry, so that there are 10 coils, half going
+    # one way and half going the other way
+    coilset = CoilSet(coil, NFP=5, sym=True)
+    coil2 = FourierRZCoil()
+    # add a coil along the axis that links all the other coils
+    coilset2 = MixedCoilSet(coilset, coil2)
+    link = coilset2._compute_linking_number(grid=grid)
+
+    # modular coils don't link each other
+    np.testing.assert_allclose(link[:-1, :-1], 0, atol=1e-14)
+    # axis coil doesn't link itself
+    np.testing.assert_allclose(link[-1, -1], 0, atol=1e-14)
+    # we expect the axis coil to link all the modular coils, with alternating sign
+    # due to alternating orientation of the coils due to symmetry.
+    expected = [1, -1] * 5
+    np.testing.assert_allclose(link[-1, :-1], expected, rtol=1e-3)
+
+
+@pytest.mark.unit
+def test_initialize_modular():
+    """Test initializing a modular coilset."""
+    eq = Equilibrium(NFP=2, sym=True)
+    coilset = initialize_modular_coils(eq, 3, 2.0)
+    assert len(coilset) == 3
+    np.testing.assert_allclose(coilset[0].r_n, 2.0)  # a=1, so r/a of 2 gives r=2
+    x = coilset[1]._compute_position(basis="rpz")[0]
+    # eq is axisymmetric so coils should each be at const zeta
+    # with symmetry and 2 field periods, each half period goes from 0 to pi/2
+    # with 3 coils, one coil should be right in the middle at pi/4
+    np.testing.assert_allclose(x[:, 1], np.pi / 4)
+    np.testing.assert_allclose(x[:, 0].min(), 8, rtol=1e-2)  # Rmin ~ 10-2
+    np.testing.assert_allclose(x[:, 0].max(), 12, rtol=1e-2)  # Rmax ~ 10+2
+    y = coilset._compute_position()
+    assert len(y) == 12  # 3 coils/fp * 2 fp * 2 sym
+
+
+@pytest.mark.unit
+def test_initialize_saddle():
+    """Test initializing a saddle coilset."""
+    eq = Equilibrium(NFP=2, sym=False)
+    coilset = initialize_saddle_coils(eq, 3, offset=2.0, r_over_a=1.0, position="inner")
+    assert len(coilset) == 3
+    y = coilset._compute_position()
+    assert len(y) == 6  # 3 coils/fp * 2 fp
+    np.testing.assert_allclose(coilset[0].r_n, 1.0)  # a=1, so r/a of 1 gives r=1
+    x = coilset[1]._compute_position(grid=LinearGrid(N=50), basis="xyz")[0]
+    # 2 field periods, each half period goes from 0 to pi
+    # with 3 coils, one coil should be right in the middle at pi/2, eg parallel to
+    # x axis
+    np.testing.assert_allclose(x[:, 1], 8)  # R ~ 10-2
+    np.testing.assert_allclose(x[:, 0].min(), -1, rtol=1e-2)  # xmin
+    np.testing.assert_allclose(x[:, 0].max(), 1, rtol=1e-2)  # xmax
+
+    coilset = initialize_saddle_coils(eq, 1, offset=2.0, r_over_a=1.0, position="outer")
+    assert len(coilset) == 1
+    y = coilset._compute_position()
+    assert len(y) == 2  # 3 coils/fp * 2 fp
+    np.testing.assert_allclose(coilset[0].r_n, 1.0)  # a=1, so r/a of 1 gives r=1
+    x = coilset[0]._compute_position(grid=LinearGrid(N=50), basis="xyz")[0]
+    # 2 field periods, each half period goes from 0 to pi
+    # with 1 coils, it should be at pi/2
+    np.testing.assert_allclose(x[:, 1], 12)  # R ~ 10+2
+    np.testing.assert_allclose(x[:, 0].min(), -1, rtol=1e-2)  # xmin
+    np.testing.assert_allclose(x[:, 0].max(), 1, rtol=1e-2)  # xmax
+
+    offset = 3.0
+    coilset = initialize_saddle_coils(
+        eq, 1, offset=offset, r_over_a=1.0, position="top"
+    )
+    assert len(coilset) == 1
+    y = coilset._compute_position()
+    assert len(y) == 2  # 3 coils/fp * 2 fp
+    np.testing.assert_allclose(coilset[0].r_n, 1.0)  # a=1, so r/a of 1 gives r=1
+    x = coilset[0]._compute_position(grid=LinearGrid(N=50), basis="xyz")[0]
+    # 2 field periods, each half period goes from 0 to pi
+    # with 1 coils, it should be at pi/2
+    np.testing.assert_allclose(x[:, 2], offset)  # Z ~ 3
+    np.testing.assert_allclose(x[:, 0].min(), -1, rtol=1e-2)  # xmin
+    np.testing.assert_allclose(x[:, 0].max(), 1, rtol=1e-2)  # xmax
+
+    coilset = initialize_saddle_coils(
+        eq, 1, offset=offset, r_over_a=1.0, position="bottom"
+    )
+    assert len(coilset) == 1
+    y = coilset._compute_position()
+    assert len(y) == 2  # 3 coils/fp * 2 fp
+    np.testing.assert_allclose(coilset[0].r_n, 1.0)  # a=1, so r/a of 1 gives r=1
+    x = coilset[0]._compute_position(grid=LinearGrid(N=50), basis="xyz")[0]
+    # 2 field periods, each half period goes from 0 to pi
+    # with 1 coils, it should be at pi/2
+    np.testing.assert_allclose(x[:, 2], -offset)  # Z ~ -3
+    np.testing.assert_allclose(x[:, 0].min(), -1, rtol=1e-2)  # xmin
+    np.testing.assert_allclose(x[:, 0].max(), 1, rtol=1e-2)  # xmax
+
+
+@pytest.mark.unit
+def test_initialize_helical():
+    """Test initializing a helical coilset."""
+    eq = get("NCSX")
+    coilset = initialize_helical_coils(eq, 2, r_over_a=2.0, helicity=(3, 1), npts=100)
+    assert len(coilset) == 2
+    obj = LinkingCurrentConsistency(eq, coilset)
+    obj.build()
+    np.testing.assert_allclose(
+        obj.compute(coilset.params_dict, eq.params_dict), 0, atol=1e-8
+    )
+    assert obj.constants["link"][0] == 9  # M=3 per period * 3 periods
+
+    coils_pts = coilset._compute_position()
+    a = eq.compute("a")["a"]
+    data = eq.compute(
+        ["R", "phi", "Z"],
+        grid=LinearGrid(rho=1.0, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP),
+    )
+    rpz = jnp.array([data["R"], data["phi"], data["Z"]]).T
+    rpz = copy_rpz_periods(rpz, eq.NFP)
+    plasma_pts = rpz2xyz(rpz)
+    dist = np.linalg.norm(coils_pts[:, None, :, :] - plasma_pts[:, None, :], axis=-1)
+    # dist is distance from every point on the plasma to every point on the coil
+    # first take a min over plasma pts to get distance from each coil pt to plasma
+    # then we expect the avg of that to be ~a since r/a=2 so offset is 1*a
+    np.testing.assert_allclose(dist.min(axis=1).mean(axis=-1), a, rtol=3e-2)

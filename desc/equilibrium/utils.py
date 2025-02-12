@@ -141,12 +141,13 @@ def parse_axis(axis, NFP=1, sym=True, surface=None):
             axis[:, 1],
             axis[:, 2],
             axis[:, 0].astype(int),
+            axis[:, 0].astype(int),
             NFP=NFP,
             sym=sym,
             name="axis",
         )
     elif axis is None:  # use the center of surface
-        # TODO: make this method of surface, surface.get_axis()?
+        # TODO (#1384): make this method of surface, surface.get_axis()?
         if isinstance(surface, FourierRZToroidalSurface):
             axis = FourierRZCurve(
                 R_n=surface.R_lmn[np.where(surface.R_basis.modes[:, 1] == 0)],
@@ -160,7 +161,7 @@ def parse_axis(axis, NFP=1, sym=True, surface=None):
                 NFP=NFP,
             )
         elif isinstance(surface, ZernikeRZToroidalSection):
-            # FIXME: include m=0 l!=0 modes
+            # TODO (#782): include m=0 l!=0 modes
             axis = FourierRZCurve(
                 R_n=surface.R_lmn[
                     np.where(

@@ -5,12 +5,13 @@ Functions in this module should not depend on any other submodules in desc.objec
 
 import numpy as np
 
-from desc.backend import cond, jit, jnp, logsumexp, put
+from desc.backend import jit, jnp, put, softargmax
+from desc.io import IOAble
 from desc.utils import Index, errorif, flatten_list, svd_inv_null, unique_list, warnif
 
 
 def factorize_linear_constraints(objective, constraint, x_scale="auto"):  # noqa: C901
-    """Compute and factorize A to get pseudoinverse and nullspace.
+    """Compute and factorize A to get particular solution and nullspace.
 
     Given constraints of the form Ax=b, factorize A to find a particular solution xp
     and the null space Z st. Axp=b and AZ=0, so that the full space of solutions to
@@ -91,13 +92,28 @@ def factorize_linear_constraints(objective, constraint, x_scale="auto"):  # noqa
         A = A[:, cols]
     assert A.shape[1] == xp.size
 
+    # check for degenerate rows and delete if necessary
+    # augment A with b so that it only deletes actual degenerate constraints
+    # which are duplicate rows of A that also have duplicate entries of b,
+    # if the entries of b aren't the same then the constraints are actually
+    # incompatible and so we will leave those to be caught later.
+    A_augmented = np.hstack([A, np.reshape(b, (A.shape[0], 1))])
+
+    # Find unique rows of A_augmented
+    unique_rows, unique_indices = np.unique(A_augmented, axis=0, return_index=True)
+
+    # Sort the indices to preserve the order of appearance
+    unique_indices = np.sort(unique_indices)
+
+    # Extract the unique rows
+    A_augmented = A_augmented[unique_indices]
+    A = A_augmented[:, :-1]
+    b = np.atleast_1d(A_augmented[:, -1].squeeze())
+
     # will store the global index of the unfixed rows, idx
     indices_row = np.arange(A.shape[0])
     indices_idx = np.arange(A.shape[1])
 
-    # while loop has problems updating JAX arrays, convert them to numpy arrays
-    A = np.array(A)
-    b = np.array(b)
     while len(np.where(np.count_nonzero(A, axis=1) == 1)[0]):
         # fixed just means there is a single element in A, so A_ij*x_j = b_i
         fixed_rows = np.where(np.count_nonzero(A, axis=1) == 1)[0]
@@ -160,7 +176,6 @@ def factorize_linear_constraints(objective, constraint, x_scale="auto"):  # noqa
         Z = np.eye(A.shape[1])
     xp = put(xp, unfixed_idx, A_inv @ b)
     xp = put(xp, fixed_idx, ((1 / D) * xp)[fixed_idx])
-
     # cast to jnp arrays
     xp = jnp.asarray(xp)
     A = jnp.asarray(A)
@@ -168,18 +183,8 @@ def factorize_linear_constraints(objective, constraint, x_scale="auto"):  # noqa
     Z = jnp.asarray(Z)
     D = jnp.asarray(D)
 
-    @jit
-    def project(x_full):
-        """Project a full state vector into the reduced optimization vector."""
-        x_reduced = Z.T @ ((1 / D) * x_full - xp)[unfixed_idx]
-        return jnp.atleast_1d(jnp.squeeze(x_reduced))
-
-    @jit
-    def recover(x_reduced):
-        """Recover the full state vector from the reduced optimization vector."""
-        dx = put(jnp.zeros(objective.dim_x), unfixed_idx, Z @ x_reduced)
-        x_full = D * (xp + dx)
-        return jnp.atleast_1d(jnp.squeeze(x_full))
+    project = _Project(Z, D, xp, unfixed_idx)
+    recover = _Recover(Z, D, xp, unfixed_idx, objective.dim_x)
 
     # check that all constraints are actually satisfiable
     params = objective.unpack_state(D * xp, False)
@@ -191,7 +196,7 @@ def factorize_linear_constraints(objective, constraint, x_scale="auto"):  # noqa
 
         # If the error is very large, likely want to error out as
         # it probably is due to a real mistake instead of just numerical
-        # roundoff errors.
+        # round-off errors.
         np.testing.assert_allclose(
             y1,
             y2,
@@ -202,7 +207,7 @@ def factorize_linear_constraints(objective, constraint, x_scale="auto"):  # noqa
         )
 
         # else check with tighter tols and throw an error, these tolerances
-        # could be tripped due to just numerical roundoff or poor scaling between
+        # could be tripped due to just numerical round-off or poor scaling between
         # constraints, so don't want to error out but we do want to warn the user.
         atol = 3e-14
         rtol = 3e-14
@@ -227,16 +232,43 @@ def factorize_linear_constraints(objective, constraint, x_scale="auto"):  # noqa
     return xp, A, b, Z, D, unfixed_idx, project, recover
 
 
+class _Project(IOAble):
+    _io_attrs_ = ["Z", "D", "xp", "unfixed_idx"]
+
+    def __init__(self, Z, D, xp, unfixed_idx):
+        self.Z = Z
+        self.D = D
+        self.xp = xp
+        self.unfixed_idx = unfixed_idx
+
+    @jit
+    def __call__(self, x_full):
+        """Project a full state vector into the reduced optimization vector."""
+        x_reduced = self.Z.T @ ((1 / self.D) * x_full - self.xp)[self.unfixed_idx]
+        return jnp.atleast_1d(jnp.squeeze(x_reduced))
+
+
+class _Recover(IOAble):
+    _io_attrs_ = ["Z", "D", "xp", "unfixed_idx", "dim_x"]
+    _static_attrs = ["dim_x"]
+
+    def __init__(self, Z, D, xp, unfixed_idx, dim_x):
+        self.Z = Z
+        self.D = D
+        self.xp = xp
+        self.unfixed_idx = unfixed_idx
+        self.dim_x = dim_x
+
+    @jit
+    def __call__(self, x_reduced):
+        """Recover the full state vector from the reduced optimization vector."""
+        dx = put(jnp.zeros(self.dim_x), self.unfixed_idx, self.Z @ x_reduced)
+        x_full = self.D * (self.xp + dx)
+        return jnp.atleast_1d(jnp.squeeze(x_full))
+
+
 def softmax(arr, alpha):
     """JAX softmax implementation.
-
-    Inspired by https://www.johndcook.com/blog/2010/01/13/soft-maximum/
-    and https://www.johndcook.com/blog/2010/01/20/how-to-compute-the-soft-maximum/
-
-    Will automatically multiply array values by 2 / min_val if the min_val of
-    the array is <1. This is to avoid inaccuracies that arise when values <1
-    are present in the softmax, which can cause inaccurate maxes or even incorrect
-    signs of the softmax versus the actual max.
 
     Parameters
     ----------
@@ -253,19 +285,9 @@ def softmax(arr, alpha):
         The soft-maximum of the array.
 
     """
+    arr = arr.flatten()
     arr_times_alpha = alpha * arr
-    min_val = jnp.min(jnp.abs(arr_times_alpha)) + 1e-4  # buffer value in case min is 0
-    return cond(
-        jnp.any(min_val < 1),
-        lambda arr_times_alpha: logsumexp(
-            arr_times_alpha / min_val * 2
-        )  # adjust to make vals>1
-        / alpha
-        * min_val
-        / 2,
-        lambda arr_times_alpha: logsumexp(arr_times_alpha) / alpha,
-        arr_times_alpha,
-    )
+    return softargmax(arr_times_alpha).dot(arr)
 
 
 def softmin(arr, alpha):

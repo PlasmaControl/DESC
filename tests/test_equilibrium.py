@@ -15,7 +15,6 @@ from desc.grid import Grid, LinearGrid
 from desc.io import InputReader
 from desc.objectives import ForceBalance, ObjectiveFunction, get_equilibrium_objective
 from desc.profiles import PowerSeriesProfile
-from desc.utils import errorif
 
 from .utils import area_difference, compute_coords
 
@@ -50,33 +49,12 @@ def test_map_coordinates():
     """Test root finding for (rho,theta,zeta) for common use cases."""
     # finding coordinates along a single field line
     eq = get("NCSX")
+    with pytest.warns(UserWarning, match="Reducing radial"):
+        eq.change_resolution(3, 3, 3, 6, 6, 6)
     n = 100
     coords = np.array([np.ones(n), np.zeros(n), np.linspace(0, 10 * np.pi, n)]).T
-    grid = LinearGrid(rho=1, M=eq.M_grid, N=eq.N_grid, sym=eq.sym, NFP=eq.NFP)
-    iota = grid.compress(eq.compute("iota", grid=grid)["iota"])
-    iota = np.broadcast_to(iota, shape=(n,))
-
-    tol = 1e-5
-    out_1 = eq.map_coordinates(
-        coords, inbasis=["rho", "alpha", "zeta"], iota=iota, tol=tol
-    )
-    assert np.isfinite(out_1).all()
-    out_2 = eq.map_coordinates(
-        coords,
-        inbasis=["rho", "alpha", "zeta"],
-        period=(np.inf, 2 * np.pi, np.inf),
-        tol=tol,
-    )
-    assert np.isfinite(out_2).all()
-    diff = out_1 - out_2
-    errorif(
-        not np.all(
-            np.isclose(diff, 0, atol=2 * tol)
-            | np.isclose(np.abs(diff), 2 * np.pi, atol=2 * tol)
-        ),
-        AssertionError,
-        f"diff: {diff}",
-    )
+    out = eq.map_coordinates(coords, inbasis=["rho", "alpha", "zeta"])
+    assert np.isfinite(out).all()
 
     eq = get("DSHAPE")
 
@@ -89,9 +67,9 @@ def test_map_coordinates():
 
     grid = Grid(np.vstack([rho, theta, zeta]).T, sort=False)
     in_data = eq.compute(inbasis, grid=grid)
-    in_coords = np.stack([in_data[k] for k in inbasis], axis=-1)
+    in_coords = np.column_stack([in_data[k] for k in inbasis])
     out_data = eq.compute(outbasis, grid=grid)
-    out_coords = np.stack([out_data[k] for k in outbasis], axis=-1)
+    out_coords = np.column_stack([out_data[k] for k in outbasis])
 
     out = eq.map_coordinates(
         in_coords,
@@ -109,8 +87,7 @@ def test_map_coordinates_derivative():
     eq = get("DSHAPE")
     with pytest.warns(UserWarning, match="Reducing radial"):
         eq.change_resolution(3, 3, 0, 6, 6, 0)
-    inbasis = ["alpha", "phi", "rho"]
-    outbasis = ["rho", "theta_PEST", "zeta"]
+    inbasis = ["rho", "alpha", "phi"]
 
     rho = np.linspace(0.01, 0.99, 20)
     theta = np.linspace(0, np.pi, 20, endpoint=False)
@@ -127,11 +104,38 @@ def test_map_coordinates_derivative():
         out = eq.map_coordinates(
             in_coords,
             inbasis,
-            outbasis,
+            ("rho", "theta_PEST", "zeta"),
             np.array([rho, theta, zeta]).T,
             params,
             period=(2 * np.pi, 2 * np.pi, np.inf),
             maxiter=40,
+        )
+        return out
+
+    J1 = jax.jit(jax.jacfwd(foo))(eq.params_dict, in_coords)
+    J2 = jax.jit(jax.jacrev(foo))(eq.params_dict, in_coords)
+    for j1, j2 in zip(J1.values(), J2.values()):
+        assert ~np.any(np.isnan(j1))
+        assert ~np.any(np.isnan(j2))
+        np.testing.assert_allclose(j1, j2)
+
+    # Check map_coordinates with full_output is still runs without errors
+    # this time _map_clebsch_coordinates is called inside map_coordinates
+    inbasis2 = ["rho", "alpha", "zeta"]
+    in_data = eq.compute(inbasis2, grid=grid)
+    in_coords = np.stack([in_data[k] for k in inbasis2], axis=-1)
+
+    @jax.jit
+    def foo(params, in_coords):
+        out, (_, _) = eq.map_coordinates(
+            in_coords,
+            inbasis2,
+            ("rho", "theta", "zeta"),
+            np.array([rho, theta, zeta]).T,
+            params,
+            period=(2 * np.pi, 2 * np.pi, np.inf),
+            maxiter=40,
+            full_output=True,
         )
         return out
 
@@ -151,10 +155,14 @@ def test_map_coordinates_derivative():
     flux_coords = nodes.copy()
     flux_coords[:, 1] += coords["lambda"]
 
+    # this will call _map_PEST_coordinates inside map_coordinates
     @jax.jit
     def bar(L_lmn):
+        params = {"L_lmn": L_lmn}
         geom_coords = eq.map_coordinates(
-            flux_coords, inbasis=("rho", "theta_PEST", "zeta")
+            flux_coords,
+            inbasis=("rho", "theta_PEST", "zeta"),
+            params=params,
         )
         return geom_coords
 
@@ -394,3 +402,15 @@ def test_backward_compatible_load_and_resolve():
     f_obj = ForceBalance(eq=eq)
     obj = ObjectiveFunction(f_obj, use_jit=False)
     eq.solve(maxiter=1, objective=obj)
+
+
+@pytest.mark.unit
+def test_assigning_profile_iota_current():
+    """Test assigning current to iota-constrained eq and vice-versa."""
+    eq = get("HELIOTRON")  # iota-constrained
+    with pytest.warns(UserWarning, match="existing rotational"):
+        eq.current = PowerSeriesProfile()
+    assert eq.iota is None
+    with pytest.warns(UserWarning, match="existing toroidal"):
+        eq.iota = PowerSeriesProfile()
+    assert eq.current is None

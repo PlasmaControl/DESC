@@ -463,6 +463,11 @@ if use_jax:  # noqa: C901
         size = jnp.array([x.size for x in arrays])
         size = jnp.sum(size)
         if size * 8 / (1024**3) > desc_config["avail_mems"][0]:
+            warnings.warn(
+                "The total size of the arrays exceeds the available memory of the "
+                "GPU[id=0]. Moving the array to CPU. This may cause performance "
+                "degredation."
+            )
             device = jax.devices("cpu")[0]
         else:
             device = jax.devices("gpu")[0]

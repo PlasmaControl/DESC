@@ -364,6 +364,12 @@ class ObjectiveFunction(IOAble):
             else:
                 self._deriv_mode = "blocked"
 
+        if self._is_multi_device and self._deriv_mode != "blocked":
+            raise ValueError(
+                "When using multiple GPUs, the deriv_mode must be set to 'blocked'. "
+                "When you are creating the ObjectiveFunction, set deriv_mode='blocked'."
+            )
+
         if self._jac_chunk_size == "auto":
             # Heuristic estimates of fwd mode Jacobian memory usage,
             # slightly conservative, based on using ForceBalance as the objective
@@ -744,12 +750,16 @@ class ObjectiveFunction(IOAble):
         # one by one, and assemble into big block matrix
         # if objective doesn't depend on a given thing, that part is set to 0.
         for k, (obj, const) in enumerate(zip(self.objectives, constants)):
-            print(f"This should run on GPU id:{obj._device_id}")
+            # TODO: this is for debugging purposes, must be deleted before merging!
+            if self._is_multi_device:
+                print(f"This should run on GPU id:{obj._device_id}")
             # get the xs that go to that objective
             thing_idx = self._things_per_objective_idx[k]
             xi = [xs[i] for i in thing_idx]
             vi = [vs[i] for i in thing_idx]
             if self._is_multi_device:
+                # inputs to jitted functions must live on the same device. Need to
+                # put xi and vi on the same device as the objective
                 xi = jax.device_put(xi, jax.devices("gpu")[obj._device_id])
                 vi = jax.device_put(vi, jax.devices("gpu")[obj._device_id])
             Ji_ = getattr(obj, "jvp_" + op)(vi, xi, constants=const)

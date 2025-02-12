@@ -211,7 +211,9 @@ class Transform(IOAble):
         col = np.where(
             basis.modes[None, :, 2] == basis.modes[basis.unique_N_idx, None, 2]
         )[0]
-        self.fft_index = np.squeeze(self.num_n_modes * row + col + offset)
+        self.fft_index = np.atleast_1d(
+            np.squeeze(self.num_n_modes * row + col + offset)
+        )
         fft_nodes = np.hstack(
             [
                 grid.nodes[:, :2][: grid.num_nodes // self.grid.num_zeta],

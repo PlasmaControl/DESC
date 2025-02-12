@@ -69,19 +69,12 @@ else:
             )
         )
 
-if desc_config["num_device"] == 1:
+print(f"Using {desc_config['num_device']} device:")
+for i, dev in enumerate(desc_config["devices"]):
     print(
-        "Using device: {}, with {:.2f} GB available memory".format(
-            desc_config.get("device"), desc_config.get("avail_mem")
-        )
+        f"\t Device {i}: {dev} with {desc_config['avail_mems'][i]:.2f} "
+        "GB available memory"
     )
-else:
-    print(f"Using {desc_config['num_device']} devices:")
-    for i, dev in enumerate(desc_config["devices"]):
-        print(
-            f"\t Device {i}: {dev} with {desc_config['avail_mems'][i]:.2f} "
-            "GB available memory"
-        )
 
 if use_jax:  # noqa: C901
     from jax import custom_jvp, jit, vmap
@@ -443,7 +436,7 @@ if use_jax:  # noqa: C901
             x = jax.lax.custom_root(res, x0, solve, tangent_solve, has_aux=False)
             return x
 
-    def pconcat(arrays, mode="concat"):
+    def pconcat(arrays, mode="concat"):  # pragma: no cover
         """Concatenate arrays that live on different devices.
 
         Parameters
@@ -502,7 +495,7 @@ if use_jax:  # noqa: C901
         @functools.wraps(method)
         def wrapper(self, *args, **kwargs):
             # Get the device using self.id or default to CPU
-            if desc_config["device"] == "gpu" and hasattr(self, "_device_id"):
+            if desc_config["kind"] == "gpu" and hasattr(self, "_device_id"):
                 device = jax.devices("gpu")[self._device_id]
             else:
                 device = None
@@ -518,6 +511,7 @@ if use_jax:  # noqa: C901
 # for coverage purposes
 else:  # pragma: no cover
     jit = lambda func, *args, **kwargs: func
+    jit_with_device = jit
     execute_on_cpu = lambda func: func
     import scipy.optimize
     from numpy.fft import ifft, irfft, irfft2, rfft, rfft2  # noqa: F401
@@ -969,4 +963,14 @@ else:  # pragma: no cover
             )
         else:
             out = np.take(a, indices, axis, out, mode)
+        return out
+
+    def pconcat(arrays, mode="concat"):
+        """Numpy implementation of desc.backend.pconcat."""
+        if mode == "concat":
+            out = np.concatenate(arrays)
+        elif mode == "hstack":
+            out = np.hstack(arrays)
+        elif mode == "vstack":
+            out = np.vstack(arrays)
         return out

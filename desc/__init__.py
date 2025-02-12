@@ -86,15 +86,15 @@ def set_device(kind="cpu", gpuid=None, num_device=1):
 
     """
     config["kind"] = kind
+    config["num_device"] = num_device
     if kind == "cpu":
         os.environ["JAX_PLATFORMS"] = "cpu"
         os.environ["CUDA_VISIBLE_DEVICES"] = ""
         import psutil
 
         cpu_mem = psutil.virtual_memory().available / 1024**3  # RAM in GB
-        config["device"] = "CPU"
-        config["avail_mem"] = cpu_mem
-        config["num_device"] = 1
+        config["devices"] = ["CPU"]
+        config["avail_mems"] = [cpu_mem]
 
     elif kind == "gpu":
         os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
@@ -157,7 +157,7 @@ def set_device(kind="cpu", gpuid=None, num_device=1):
                 )
             if gpuid is not None:
                 # TODO: implement multiple GPU selection
-                raise ValueError("Cannot specify 'gpuid' when requesting multiple GPUs")
+                raise ValueError("Cannot specify `gpuid` when requesting multiple GPUs")
 
         config["avail_mems"] = [
             memories[dev["index"]] / 1024 for dev in devices[:num_device]
@@ -168,5 +168,3 @@ def set_device(kind="cpu", gpuid=None, num_device=1):
         os.environ["CUDA_VISIBLE_DEVICES"] = ",".join(
             str(dev["index"]) for dev in devices[:num_device]
         )
-        config["device_type"] = "gpu"
-        config["num_device"] = num_device

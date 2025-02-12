@@ -297,24 +297,24 @@ class ObjectiveFunction(IOAble):
                 pass
 
     @execute_on_cpu
-    def build(self, use_jit=None, use_jit_wrapper=True, verbose=1):  # noqa:  C901
+    def build(self, use_jit=None, verbose=1):  # noqa:  C901
         """Build the objective.
 
         Parameters
         ----------
         use_jit : bool, optional
-            Whether to just-in-time compile the objective and derivatives.
-        use_jit_wrapper : bool, optional
-            Whether to use the jit wrapper for the objective. If multiple GPUs are
-            used, this will be set to False.
+            Whether to just-in-time compile the objective and derivatives. If using
+            multiple GPUs, instead of jitting the ObjectiveFunction, the sub-objectives
+            will be jitted individually, independent of the value of `use_jit`.
         verbose : int, optional
             Level of output.
 
         """
         if use_jit is not None:
             self._use_jit = use_jit
-            if use_jit is False:
-                use_jit_wrapper = False
+            # use_jit_wrapper is used to determine if we jit the ObjectiveFunction
+            # methods. If we are using multiple GPUs, we don't want to jit them.
+            use_jit_wrapper = use_jit
 
         if self._is_multi_device:
             use_jit_wrapper = False
@@ -472,7 +472,7 @@ class ObjectiveFunction(IOAble):
                     for par, obj, const in zip(params, self.objectives, constants)
                 ]
             )
-        else:
+        else:  # pragma: no cover
             f = pconcat(
                 [
                     obj.compute_unscaled(
@@ -512,7 +512,7 @@ class ObjectiveFunction(IOAble):
                     for par, obj, const in zip(params, self.objectives, constants)
                 ]
             )
-        else:
+        else:  # pragma: no cover
             f = pconcat(
                 [
                     obj.compute_scaled(
@@ -552,7 +552,7 @@ class ObjectiveFunction(IOAble):
                     for par, obj, const in zip(params, self.objectives, constants)
                 ]
             )
-        else:
+        else:  # pragma: no cover
             f = pconcat(
                 [
                     obj.compute_scaled_error(
@@ -626,11 +626,11 @@ class ObjectiveFunction(IOAble):
             for par, par0, obj, const in zip(
                 params, params0, self.objectives, constants
             ):
-                if self._is_multi_device:
+                if self._is_multi_device:  # pragma: no cover
                     par = jax.device_put(par, jax.devices("gpu")[obj._device_id])
                     par0 = jax.device_put(par0, jax.devices("gpu")[obj._device_id])
                 obj.print_value(par, par0, constants=const)
-        else:
+        else:  # pragma: no cover
             for par, obj, const in zip(params, self.objectives, constants):
                 if self._is_multi_device:
                     par = jax.device_put(par, jax.devices("gpu")[obj._device_id])
@@ -763,7 +763,7 @@ class ObjectiveFunction(IOAble):
             thing_idx = self._things_per_objective_idx[k]
             xi = [xs[i] for i in thing_idx]
             vi = [vs[i] for i in thing_idx]
-            if self._is_multi_device:
+            if self._is_multi_device:  # pragma: no cover
                 # inputs to jitted functions must live on the same device. Need to
                 # put xi and vi on the same device as the objective
                 xi = jax.device_put(xi, jax.devices("gpu")[obj._device_id])

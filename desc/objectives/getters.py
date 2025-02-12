@@ -348,7 +348,7 @@ def maybe_add_self_consistency(thing, constraints):
 
 def get_parallel_forcebalance(
     eq, num_device, grid=None, use_jit=True, check_device=True
-):
+):  # pragma: no cover
     """Get an ObjectiveFunction for parallel computing ForceBalance.
 
     Parameters
@@ -361,15 +361,13 @@ def get_parallel_forcebalance(
     Returns
     -------
     obj : ObjectiveFunction
-        An objective function with force balance objectives. Each objective is
-        computed on a separate device. The objective function is built with
-        `use_jit_wrapper=False` to make it compatible with JAX parallel computing.
-        Each objective will have a grid with same number of flux surfaces.
+        A built objective function with force balance objectives. Each objective is
+        computed on a separate device.
     """
     from desc.backend import desc_config, jax, jnp
     from desc.grid import LinearGrid
 
-    if desc_config["device"] != "gpu":
+    if desc_config["kind"] != "gpu":
         raise ValueError(
             "Parallel computing is only supported on GPU. "
             "Please use DESC with GPU device."

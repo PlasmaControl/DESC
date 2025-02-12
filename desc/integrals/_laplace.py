@@ -108,7 +108,7 @@ def compute_B_laplace(
     data = eq.compute(["R", "phi", "Z"], grid=eval_grid)
     coords = jnp.column_stack([data["R"], data["phi"], data["Z"]])
     B = (B0 + grad_Phi).compute_magnetic_field(
-        coords, source_grid=source_grid, chunk_size=chunk_size
+        coords, source_grid=source_grid, chunk_size=2 * chunk_size
     )
     return B
 

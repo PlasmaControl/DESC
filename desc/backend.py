@@ -456,7 +456,8 @@ if use_jax:  # noqa: C901
         Returns
         -------
         out : jnp.ndarray
-            Concatenated array that lives on CPU.
+            Concatenated array that lives on GPU[id=0]. If thre is not enough memory
+            the array will be stored on CPU.
         """
         # we will use either CPU or GPU[0] for the matrix decompositions, so the
         # array of float64 should fit into single device

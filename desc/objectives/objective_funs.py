@@ -373,20 +373,26 @@ class ObjectiveFunction(IOAble):
         if self._jac_chunk_size == "auto":
             # Heuristic estimates of fwd mode Jacobian memory usage,
             # slightly conservative, based on using ForceBalance as the objective
-            estimated_memory_usage = 2.4e-7 * self.dim_f * self.dim_x + 1  # in GB
-            mem_avail = (
-                desc_config.get("avail_mem")
-                if desc_config.get("avail_mem") is not None
-                else sum(desc_config["avail_mems"])
-            )
-            max_chunk_size = round(
-                (mem_avail / estimated_memory_usage - 0.22) / 0.85 * self.dim_x
-            )
+            if self._deriv_mode == "batched":
+                estimated_memory_usage = 2.4e-7 * self.dim_f * self.dim_x + 1  # in GB
+                mem_avail = desc_config["avail_mems"][0]  # in GB
+                max_chunk_size = round(
+                    (mem_avail / estimated_memory_usage - 0.22) / 0.85 * self.dim_x
+                )
             self._jac_chunk_size = max([1, max_chunk_size])
             if self._deriv_mode == "blocked":
                 for obj in self.objectives:
                     if obj._jac_chunk_size is None:
-                        obj._jac_chunk_size = self._jac_chunk_size
+                        estimated_memory_usage = (
+                            2.4e-7 * obj.dim_f * obj.dim_x + 1
+                        )  # in GB
+                        mem_avail = desc_config["avail_mems"][obj._device_id]  # in GB
+                        max_chunk_size = round(
+                            (mem_avail / estimated_memory_usage - 0.22)
+                            / 0.85
+                            * obj.dim_x
+                        )
+                        obj._jac_chunk_size = max([1, max_chunk_size])
 
         if not use_jit_wrapper:
             self._unjit()

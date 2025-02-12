@@ -61,21 +61,28 @@ BANNER = colored(_BANNER, "magenta")
 config = {"device": None, "avail_mem": None, "kind": None, "num_device": None}
 
 
-def set_device(kind="cpu", gpuid=None, num_device=1):  # noqa : C901
+def set_device(kind="cpu", gpuid=None, num_device=1):
     """Sets the device to use for computation.
 
     If kind==``'gpu'`` and a gpuid is specified, uses the specified GPU. If
     gpuid==``None`` or a wrong GPU id is given, checks available GPUs and selects the
     one with the most available memory.
     Respects environment variable CUDA_VISIBLE_DEVICES for selecting from multiple
-    available GPUs
+    available GPUs.
+
+    Notes
+    -----
+    This function must be called before importing anything else from DESC or JAX,
+    otherwise it will have no effect.
 
     Parameters
     ----------
     kind : {``'cpu'``, ``'gpu'``}
         whether to use CPU or GPU.
+    gpuid : int, optional
+        GPU id to use. Default is None. Supported only when num_device is 1.
     num_device : int
-        number of devices to use. If None, uses only one device.
+        number of devices to use. Default is 1.
 
     """
     config["kind"] = kind
@@ -89,8 +96,7 @@ def set_device(kind="cpu", gpuid=None, num_device=1):  # noqa : C901
         config["avail_mem"] = cpu_mem
         config["num_device"] = 1
 
-    if kind == "gpu" and num_device == 1:
-        # Set CUDA_DEVICE_ORDER so the IDs assigned by CUDA match those from nvidia-smi
+    elif kind == "gpu":
         os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
         import nvgpu
 
@@ -103,137 +109,64 @@ def set_device(kind="cpu", gpuid=None, num_device=1):  # noqa : C901
             set_device(kind="cpu")
             return
 
-        maxmem = 0
-        selected_gpu = None
         gpu_ids = [dev["index"] for dev in devices]
         if "CUDA_VISIBLE_DEVICES" in os.environ:
             cuda_ids = [
                 s for s in re.findall(r"\b\d+\b", os.environ["CUDA_VISIBLE_DEVICES"])
             ]
-            # check that the visible devices actually exist and are gpus
             gpu_ids = [i for i in cuda_ids if i in gpu_ids]
         if len(gpu_ids) == 0:
-            # cuda visible devices = '' -> don't use any gpu
             warnings.warn(
                 colored(
-                    (
-                        "CUDA_VISIBLE_DEVICES={} ".format(
-                            os.environ["CUDA_VISIBLE_DEVICES"]
-                        )
-                        + "did not match any physical GPU "
-                        + "(id={}), falling back to CPU".format(
-                            [dev["index"] for dev in devices]
-                        )
-                    ),
+                    f"CUDA_VISIBLE_DEVICES={os.environ['CUDA_VISIBLE_DEVICES']} did "
+                    "not match any physical GPU "
+                    f"(id={[dev['index'] for dev in devices]}), falling back to CPU",
                     "yellow",
                 )
             )
             set_device(kind="cpu")
             return
-        devices = [dev for dev in devices if dev["index"] in gpu_ids]
 
-        if gpuid is not None and (str(gpuid) in gpu_ids):
-            selected_gpu = [dev for dev in devices if dev["index"] == str(gpuid)][0]
+        devices = [dev for dev in devices if dev["index"] in gpu_ids]
+        memories = {dev["index"]: dev["mem_total"] - dev["mem_used"] for dev in devices}
+
+        if num_device == 1:
+            if gpuid is not None:
+                if str(gpuid) in gpu_ids:
+                    selected_gpu = next(
+                        dev for dev in devices if dev["index"] == str(gpuid)
+                    )
+                else:
+                    warnings.warn(
+                        colored(
+                            f"Specified gpuid {gpuid} not found, selecting GPU with "
+                            "most memory",
+                            "yellow",
+                        )
+                    )
+            else:
+                selected_gpu = max(
+                    devices, key=lambda dev: dev["mem_total"] - dev["mem_used"]
+                )
+            devices = [selected_gpu]
+
         else:
-            for dev in devices:
-                mem = dev["mem_total"] - dev["mem_used"]
-                if mem > maxmem:
-                    maxmem = mem
-                    selected_gpu = dev
-        config["device"] = selected_gpu["type"] + " (id={})".format(
-            selected_gpu["index"]
+            if num_device > len(devices):
+                raise ValueError(
+                    f"Requested {num_device} GPUs, but only {len(devices)} available"
+                )
+            if gpuid is not None:
+                # TODO: implement multiple GPU selection
+                raise ValueError("Cannot specify 'gpuid' when requesting multiple GPUs")
+
+        config["avail_mems"] = [
+            memories[dev["index"]] / 1024 for dev in devices[:num_device]
+        ]  # in GB
+        config["devices"] = [
+            f"{dev['type']} (id={dev['index']})" for dev in devices[:num_device]
+        ]
+        os.environ["CUDA_VISIBLE_DEVICES"] = ",".join(
+            str(dev["index"]) for dev in devices[:num_device]
         )
-        if gpuid is not None and not (str(gpuid) in gpu_ids):
-            warnings.warn(
-                colored(
-                    "Specified gpuid {} not found, falling back to ".format(str(gpuid))
-                    + config["device"],
-                    "yellow",
-                )
-            )
-        config["avail_mem"] = (
-            selected_gpu["mem_total"] - selected_gpu["mem_used"]
-        ) / 1024  # in GB
-        config["num_device"] = 1
-        os.environ["CUDA_VISIBLE_DEVICES"] = str(selected_gpu["index"])
-
-    # TODO: merge the "gpu" and "num_device" cases in single if block
-    if kind == "gpu" and num_device > 1:
-        import nvgpu
-
-        try:
-            devices = nvgpu.gpu_info()
-        except FileNotFoundError:
-            devices = []
-        if len(devices) == 0:
-            warnings.warn(colored("No GPU found, falling back to CPU", "yellow"))
-            set_device(kind="cpu")
-            return
-
-        gpu_ids = [dev["index"] for dev in devices]
-        if "CUDA_VISIBLE_DEVICES" in os.environ:
-            cuda_ids = [
-                s for s in re.findall(r"\b\d+\b", os.environ["CUDA_VISIBLE_DEVICES"])
-            ]
-            # check that the visible devices actually exist and are gpus
-            gpu_ids = [i for i in cuda_ids if i in gpu_ids]
-        if len(gpu_ids) == 0:
-            # cuda visible devices = '' -> don't use any gpu
-            warnings.warn(
-                colored(
-                    (
-                        "CUDA_VISIBLE_DEVICES={} ".format(
-                            os.environ["CUDA_VISIBLE_DEVICES"]
-                        )
-                        + "did not match any physical GPU "
-                        + "(id={}), falling back to CPU".format(
-                            [dev["index"] for dev in devices]
-                        )
-                    ),
-                    "yellow",
-                )
-            )
-            set_device(kind="cpu")
-            return
-
-        devices = [dev for dev in devices if dev["index"] in gpu_ids]
-        memories = {}
-        for dev in devices:
-            mem = dev["mem_total"] - dev["mem_used"]
-            memories[dev["index"]] = mem
-
-        if num_device > len(devices):
-            warnings.warn(
-                colored(
-                    "Requested {} GPUs, but only {} available".format(
-                        num_device, len(devices)
-                    ),
-                    "yellow",
-                )
-            )
-            return
-        elif num_device < len(devices):
-            config["device"] = "gpu"
-            config["devices"] = [
-                dev["type"] + " (id={})".format(dev["index"])
-                for dev in devices[:num_device]
-            ]
-            config["avail_mems"] = [
-                memories[dev["index"]] / 1024 for dev in devices[:num_device]
-            ]  # in GB
-            config["num_device"] = num_device
-            # make the other gpu's invisible
-            visible_devices = "0"
-            for i in range(1, num_device):
-                visible_devices += f",{i}"
-            os.environ["CUDA_VISIBLE_DEVICES"] = visible_devices
-        else:
-            config["device"] = "gpu"
-            config["devices"] = [
-                dev["type"] + " (id={})".format(dev["index"]) for dev in devices
-            ]
-            config["avail_mems"] = [
-                memories[dev["index"]] / 1024 for dev in devices
-            ]  # in GB
-            config["num_device"] = num_device
-            # by default all gpus are already visible
+        config["device_type"] = "gpu"
+        config["num_device"] = num_device

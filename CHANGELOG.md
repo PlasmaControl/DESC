@@ -29,6 +29,10 @@ for compatibility with other codes which expect such files from the Booz_Xform c
 - Allows specification of Nyquist spectrum maximum mode-numbers when using ``VMECIO.save`` to save a DESC .h5 file as a VMEC-format wout file
 - Adds initial support for multiple GPU optimization. This allows to compute derivatives on multiple GPU, and allows more memory intense objectives. Note that: at this phase, the multi-device support is for memory, not speed.
 
+Speed Improvements
+
+- A number of minor improvements to basis function evaluation and spectral transforms to improve speed. These will also enable future improvements for larger gains.
+
 Bug Fixes
 
 - Small bug fix to use the correct normalization length ``a`` in the BallooningStability objective.

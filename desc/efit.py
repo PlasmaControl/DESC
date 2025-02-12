@@ -206,10 +206,14 @@ class EFITIO:
         psi = psi_spline(chiN)
         Psi_b = psi[-1]  # boundary flux
 
-        pressure_psi = SplineProfile(g["pres"], psi)
-        iota_psi = SplineProfile(
-            1 / g["q"], psi
-        )  # tokmaks only right nowle(1 / g["q"], psi)
+        if np.diff(psi)[0] > 0:
+            pressure_psi = CubicSpline(psi, g["pres"])
+            iota_psi = CubicSpline(psi, 1 / g["q"])
+        else:  # monotonic deacreasing
+            pressure_psi = CubicSpline(psi[::-1], g["pres"][::-1])
+            iota_psi = CubicSpline(
+                psi[::-1], 1 / g["q"][::-1]
+            )  # tokmaks only right nowle(1 / g["q"], psi)
 
         # Defining splines and recalculating important quantities if
         # bdry_dist less than 1. Also works for bdry_dist equal to 1.

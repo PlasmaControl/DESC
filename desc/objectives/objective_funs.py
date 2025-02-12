@@ -199,8 +199,11 @@ def jit_with_dynamic_device(method):
 
     @functools.wraps(method)
     def wrapper(self, *args, **kwargs):
-        # Get the device using self.id
-        device = jax.devices("gpu")[self._device_id]
+        # Get the device using self.id or default to CPU
+        if desc_config["device"] == "gpu":
+            device = jax.devices("gpu")[self._device_id]
+        else:
+            device = None
 
         # Compile the method with jax.jit for the specific device
         jitted_method = jax.jit(method, device=device)

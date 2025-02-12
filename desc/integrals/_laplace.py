@@ -94,6 +94,7 @@ def compute_B_laplace(
         eval_grid=source_grid,
         source_grid=source_grid,
         vc_source_grid=source_grid,
+        chunk_size=chunk_size,
     )
     Phi_mn, Phi_transform = compute_Phi_mn(
         eq, B0n, Phi_grid, source_grid=source_grid, chunk_size=chunk_size, check=check
@@ -106,8 +107,9 @@ def compute_B_laplace(
     )
     data = eq.compute(["R", "phi", "Z"], grid=eval_grid)
     coords = jnp.column_stack([data["R"], data["phi"], data["Z"]])
-    # TODO: Pass in chunk size.
-    B = (B0 + grad_Phi).compute_magnetic_field(coords, source_grid=source_grid)
+    B = (B0 + grad_Phi).compute_magnetic_field(
+        coords, source_grid=source_grid, chunk_size=chunk_size
+    )
     return B
 
 

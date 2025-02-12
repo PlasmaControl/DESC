@@ -716,8 +716,8 @@ class TestSingularities:
     @pytest.mark.parametrize("eq", [get("ESTELL")])
     def test_laplace_bdotn(self, eq):
         """Test that Laplace solution satisfies boundary condition."""
-        resolution = 40
-        chunk_size = 1
+        resolution = 30
+        chunk_size = 40
         grid = LinearGrid(M=resolution, N=resolution, NFP=eq.NFP)
         data = eq.compute(["G", "R0"], grid=grid)
 
@@ -728,6 +728,7 @@ class TestSingularities:
                 eval_grid=grid,
                 source_grid=grid,
                 vc_source_grid=grid,
+                chunk_size=chunk_size,
             )
             Phi_mn, Phi_transform = compute_Phi_mn(
                 eq=eq,
@@ -754,6 +755,7 @@ class TestSingularities:
             contour = ax.contourf(theta, zeta, Bn)
             ax.set_title(r"$(\nabla \Phi + B_0) \cdot n$ on $\partial D$")
             fig.colorbar(contour, ax=ax)
+            plt.show()
             # FIXME: Doesn't pass unless G = 0 for stellarators.
             try:
                 np.testing.assert_allclose(B0n + dPhi_dn, 0, err_msg=f"G = {G}")

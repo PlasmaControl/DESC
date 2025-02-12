@@ -339,7 +339,7 @@ def maybe_add_self_consistency(thing, constraints):
     return constraints
 
 
-def get_parallel_forcebalance(eq, num_device, use_jit=True, check_device=True):
+def get_parallel_forcebalance(eq, num_device, grid=None, use_jit=True, check_device=True):
     """Get an ObjectiveFunction for parallel computing ForceBalance.
 
     Parameters
@@ -365,6 +365,12 @@ def get_parallel_forcebalance(eq, num_device, use_jit=True, check_device=True):
             f"Number of devices in desc_config ({desc_config['num_device']}) "
             f"does not match the number of devices in input ({num_device})."
         )
+    if grid is not None:
+        if len(grid) != num_device:
+            raise ValueError(
+                f"Number of grids and num_device must be the same! Got "
+                f"{len(grid)=} and {num_device=}."
+            )
     if eq.L_grid % num_device == 0:
         k = eq.L_grid // num_device
         L = eq.L_grid
@@ -375,17 +381,20 @@ def get_parallel_forcebalance(eq, num_device, use_jit=True, check_device=True):
     rhos = jnp.linspace(0.01, 1.0, L)
     objs = ()
     for i in range(num_device):
-        grid = LinearGrid(
-            rho=rhos[i * k : (i + 1) * k],
-            # kind of experimental way of set giving
-            # less grid points to inner part, but seems
-            # to make transforms way slower
-            # M=int(eq.M_grid * i / num_device), # noqa: E800
-            M=eq.M_grid,
-            N=eq.N_grid,
-            NFP=eq.NFP,
-        )
-        obj = ForceBalance(eq, grid=grid, device_id=i)
+        if grid is None:
+            gridi = LinearGrid(
+                rho=rhos[i * k : (i + 1) * k],
+                # kind of experimental way of set giving
+                # less grid points to inner part, but seems
+                # to make transforms way slower
+                # M=int(eq.M_grid * i / num_device), # noqa: E800
+                M=eq.M_grid,
+                N=eq.N_grid,
+                NFP=eq.NFP,
+            )
+        else:
+            gridi = grid[i]
+        obj = ForceBalance(eq, grid=gridi, device_id=i)
         obj.build(use_jit=use_jit)
         obj = jax.device_put(obj, jax.devices("gpu")[i])
         # if the eq is also distrubuted across GPUs, then some internal logic that
@@ -393,6 +402,6 @@ def get_parallel_forcebalance(eq, num_device, use_jit=True, check_device=True):
         # to be the same manually
         obj._things[0] = eq
         objs += (obj,)
-    objective = ObjectiveFunction(objs)
+    objective = ObjectiveFunction(objs, deriv_mode="blocked")
     objective.build(use_jit=use_jit)
     return objective

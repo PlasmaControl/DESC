@@ -110,16 +110,22 @@ _AXIS_LABELS_XYZ = [r"$X ~(\mathrm{m})$", r"$Y ~(\mathrm{m})$", r"$Z ~(\mathrm{m
 
 
 def _set_tight_layout(fig):
+    version = matplotlib.__version__.split(".")
+    major = int(version[0])
+    minor = int(version[1])
     # compat layer to deal with API changes in mpl 3.6.0
-    if int(matplotlib.__version__[0]) == 3 and int(matplotlib.__version__[2]) < 6:
+    if major == 3 and minor < 6:
         fig.set_tight_layout(True)
     else:
         fig.set_layout_engine("tight")
 
 
 def _get_cmap(name, n=None):
+    version = matplotlib.__version__.split(".")
+    major = int(version[0])
+    minor = int(version[1])
     # compat layer to deal with API changes in mpl 3.6.0
-    if int(matplotlib.__version__[0]) == 3 and int(matplotlib.__version__[2]) < 6:
+    if major == 3 and minor < 6:
         return matplotlib.cm.get_cmap(name, n)
     else:
         c = matplotlib.colormaps[name]
@@ -2700,7 +2706,7 @@ def plot_boozer_modes(  # noqa: C901
     ylabel_fontsize = kwargs.pop("ylabel_fontsize", None)
 
     basis = get_transforms(
-        "|B|_mn", obj=eq, grid=Grid(np.array([])), M_booz=M_booz, N_booz=N_booz
+        "|B|_mn_B", obj=eq, grid=Grid(np.array([])), M_booz=M_booz, N_booz=N_booz
     )["B"].basis
     if helicity:
         matrix, modes, symidx = ptolemy_linear_transform(
@@ -2711,12 +2717,12 @@ def plot_boozer_modes(  # noqa: C901
 
     grid = LinearGrid(M=2 * eq.M_grid, N=2 * eq.N_grid, NFP=eq.NFP, rho=rho)
     transforms = get_transforms(
-        "|B|_mn", obj=eq, grid=grid, M_booz=M_booz, N_booz=N_booz
+        "|B|_mn_B", obj=eq, grid=grid, M_booz=M_booz, N_booz=N_booz
     )
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        data = eq.compute("|B|_mn", grid=grid, transforms=transforms)
-    B_mn = data["|B|_mn"].reshape((len(rho), -1))
+        data = eq.compute("|B|_mn_B", grid=grid, transforms=transforms)
+    B_mn = data["|B|_mn_B"].reshape((len(rho), -1))
     B_mn = np.atleast_2d(matrix @ B_mn.T).T
 
     zidx = np.where((modes[:, 1:] == np.array([[0, 0]])).all(axis=1))[0]
@@ -2767,7 +2773,7 @@ def plot_boozer_modes(  # noqa: C901
             )
 
     plot_data = {
-        "|B|_mn": B_mn,
+        "|B|_mn_B": B_mn,
         "B modes": modes,
         "rho": rho,
     }
@@ -2904,12 +2910,12 @@ def plot_boozer_surface(
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             data = thing.compute(
-                "|B|_mn", grid=grid_compute, M_booz=M_booz, N_booz=N_booz
+                "|B|_mn_B", grid=grid_compute, M_booz=M_booz, N_booz=N_booz
             )
         B_transform = get_transforms(
-            "|B|_mn", obj=thing, grid=grid_plot, M_booz=M_booz, N_booz=N_booz
+            "|B|_mn_B", obj=thing, grid=grid_plot, M_booz=M_booz, N_booz=N_booz
         )["B"]
-        B = B_transform.transform(data["|B|_mn"]).reshape(
+        B = B_transform.transform(data["|B|_mn_B"]).reshape(
             (grid_plot.num_theta, grid_plot.num_zeta), order="F"
         )
         theta_B = (
@@ -3109,9 +3115,9 @@ def plot_qs_error(  # noqa: 16 fxn too complex
     grid = LinearGrid(M=2 * eq.M_grid, N=2 * eq.N_grid, NFP=eq.NFP, rho=rho)
     names = []
     if fB:
-        names += ["|B|_mn"]
+        names += ["|B|_mn_B"]
         transforms = get_transforms(
-            "|B|_mn", obj=eq, grid=grid, M_booz=M_booz, N_booz=N_booz
+            "|B|_mn_B", obj=eq, grid=grid, M_booz=M_booz, N_booz=N_booz
         )
         matrix, modes, idx = ptolemy_linear_transform(
             transforms["B"].basis.modes,
@@ -3132,7 +3138,7 @@ def plot_qs_error(  # noqa: 16 fxn too complex
         )
 
     if fB:
-        B_mn = data["|B|_mn"].reshape((len(rho), -1))
+        B_mn = data["|B|_mn_B"].reshape((len(rho), -1))
         B_mn = (matrix @ B_mn.T).T
         f_B = np.sqrt(np.sum(B_mn[:, idx] ** 2, axis=-1)) / np.sqrt(
             np.sum(B_mn**2, axis=-1)

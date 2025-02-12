@@ -445,22 +445,43 @@ if use_jax:  # noqa: C901
             x = jax.lax.custom_root(res, x0, solve, tangent_solve, has_aux=False)
             return x
 
-    def pconcat(arrays):
+    def pconcat(arrays, mode="concat"):
         """Concatenate arrays that live on different devices.
 
         Parameters
         ----------
         arrays : list of jnp.ndarray
             Arrays to concatenate.
+        mode : str
+            "concat:, "hstack" or "vstack. Default is "concat"
 
         Returns
         -------
         out : jnp.ndarray
-            Concatenated array that lives in the first device.
+            Concatenated array that lives on CPU.
         """
-        return jnp.concatenate(
-            [jax.device_put(x, device=jax.devices("gpu")[0]) for x in arrays]
-        )
+        # we will use either CPU or GPU[0] for the matrix decompositions, so the array
+        # of float64 should fit into single device
+        size = jnp.array([x.size for x in arrays])
+        size = jnp.sum(size)
+        if size*8/(1024**3) > desc_config["avail_mems"][0]:
+            device = jax.devices("cpu")[0]
+        else:
+            device = jax.devices("gpu")[0]
+
+        if mode == "concat":
+            out =  jnp.concatenate(
+                [jax.device_put(x, device=device) for x in arrays]
+            )
+        elif mode == "hstack":
+            out = jnp.hstack(
+                [jax.device_put(x, device=device) for x in arrays]
+            )
+        elif mode == "vstack":
+            out = jnp.vstack(
+                [jax.device_put(x, device=device) for x in arrays]
+            )
+        return out
 
 
 # we can't really test the numpy backend stuff in automated testing, so we ignore it

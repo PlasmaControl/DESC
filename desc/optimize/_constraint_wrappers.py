@@ -1110,7 +1110,7 @@ def jit_if_not_parallel(func):
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
         obj = args[0]
-        if getattr(obj, "_is_multi_device", False):
+        if not getattr(obj, "_is_multi_device", False):
             # Apply jit if jittable
             jitted_func = functools.partial(jit, static_argnames=["op"])(func)
             return jitted_func(*args, **kwargs)
@@ -1144,6 +1144,9 @@ def _proximal_jvp_f_pure(constraint, xf, constants, dc, unfixed_idx, Z, D, dxdc,
 def _proximal_jvp_blocked_pure(objective, vgs, xgs, op):
     out = []
     for k, (obj, const) in enumerate(zip(objective.objectives, objective.constants)):
+        # TODO: this is for debugging purposes, must be deleted before merging!
+        if objective._is_multi_device:
+            print(f"This should run on GPU id:{obj._device_id}")
         thing_idx = objective._things_per_objective_idx[k]
         xi = [xgs[i] for i in thing_idx]
         vi = [vgs[i] for i in thing_idx]

@@ -331,6 +331,7 @@ class SpectralCondensation(_Objective):
         eq,
         target=None,
         bounds=None,
+        basis=None,
         weight=1,
         normalize=True,
         normalize_target=True,
@@ -343,6 +344,7 @@ class SpectralCondensation(_Objective):
         if target is None and bounds is None:
             target = 0
         self._grid = grid
+        self._basis = basis
         super().__init__(
             things=eq,
             target=target,
@@ -367,12 +369,13 @@ class SpectralCondensation(_Objective):
             Level of output.
 
         """
+        from desc.transform import Transform
+
         eq = self.things[0]
         if self._grid is None:
             grid = QuadratureGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
         else:
             grid = self._grid
-
         self._dim_f = eq.L_basis.num_modes
         self._data_keys = ["R_t", "R_tt", "Z_t", "Z_tt", "lambda"]
 
@@ -383,9 +386,16 @@ class SpectralCondensation(_Objective):
 
         profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
         transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
+        if self._basis is None:
+            transform_nyq = transforms["L"]
+        else:
+            transform_nyq = Transform(grid, self._basis)
+            self._dim_f = transform_nyq.basis.num_modes
         self._constants = {
             "transforms": transforms,
             "profiles": profiles,
+            "quad_weights": jnp.ones(self._dim_f),
+            "nyq_trans": transform_nyq,
         }
 
         timer.stop("Precomputing transforms")
@@ -426,7 +436,7 @@ class SpectralCondensation(_Objective):
         )
 
         W = -(data["R_t"] * data["R_tt"] + data["Z_t"] * data["Z_tt"])
-        W_proj = constants["transforms"]["L"].project(W)
+        W_proj = constants["nyq_trans"].project(W)
         return jnp.atleast_1d(W_proj)
 
 

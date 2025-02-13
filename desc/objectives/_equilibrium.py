@@ -630,6 +630,7 @@ class ForceBalanceGalerkin(_Objective):
         eq,
         target=None,
         bounds=None,
+        basis=None,
         weight=1,
         normalize=True,
         normalize_target=True,
@@ -642,6 +643,7 @@ class ForceBalanceGalerkin(_Objective):
         if target is None and bounds is None:
             target = 0
         self._grid = grid
+        self._basis = basis
         super().__init__(
             things=eq,
             target=target,
@@ -666,6 +668,9 @@ class ForceBalanceGalerkin(_Objective):
             Level of output.
 
         """
+        from desc.basis import FourierZernikeBasis
+        from desc.transform import Transform
+
         eq = self.things[0]
         if self._grid is None:
             grid = ConcentricGrid(
@@ -693,12 +698,32 @@ class ForceBalanceGalerkin(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        profiles = get_profiles(self._data_keys, eq=eq, grid=grid)
-        transforms = get_transforms(self._data_keys, eq=eq, grid=grid)
-
+        profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
+        transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
+        if self._basis is None:
+            transform_nyq_R = transforms["R"]
+            transform_nyq_Z = transforms["Z"]
+        else:
+            L = self._basis.L
+            M = self._basis.M
+            N = self._basis.N
+            Rsym = "cos" if eq.sym else False
+            Zsym = "sin" if eq.sym else False
+            transform_nyq_R = Transform(
+                grid, FourierZernikeBasis(L, M, N, eq.NFP, Rsym)
+            )
+            transform_nyq_Z = Transform(
+                grid, FourierZernikeBasis(L, M, N, eq.NFP, Zsym)
+            )
+            self._dim_f = (
+                transform_nyq_R.basis.num_modes + transform_nyq_Z.basis.num_modes
+            )
         self._constants = {
             "transforms": transforms,
             "profiles": profiles,
+            "quad_weights": jnp.ones(self._dim_f),
+            "nyq_trans_R": transform_nyq_R,
+            "nyq_trans_Z": transform_nyq_Z,
         }
 
         timer.stop("Precomputing transforms")
@@ -745,8 +770,8 @@ class ForceBalanceGalerkin(_Objective):
         fb = data["F_helical"] * data["|e^helical|"]
         fb = fb * data["sqrt(g)"] * constants["transforms"]["grid"].weights
 
-        fr_proj = constants["transforms"]["R"].project(fr)
-        fb_proj = constants["transforms"]["Z"].project(fb)
+        fr_proj = constants["nyq_trans_R"].project(fr)
+        fb_proj = constants["nyq_trans_Z"].project(fb)
 
         return jnp.concatenate([fr_proj, fb_proj])
 

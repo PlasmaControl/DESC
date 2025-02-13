@@ -80,6 +80,7 @@ class GenericObjective(_Objective):
             deriv_mode=deriv_mode,
             name=name,
             jac_chunk_size=jac_chunk_size,
+            device_id=device_id,
         )
         self._p = _parse_parameterization(thing)
         self._scalar = not bool(data_index[self._p][self.f]["dim"])
@@ -197,6 +198,7 @@ class LinearObjectiveFromUser(_FixedObjective):
         normalize_target=False,
         name="custom linear",
         jac_chunk_size=None,
+        device_id=0,
     ):
         if target is None and bounds is None:
             target = 0

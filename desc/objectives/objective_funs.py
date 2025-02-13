@@ -96,6 +96,12 @@ doc_jac_chunk_size = """
         option will yield a larger chunk size than may be needed. It is recommended
         to manually choose a chunk_size if an OOM error is experienced in this case.
 """
+doc_device_id = """
+    device_id : int, optional
+        Device ID to run the objective on. Defaults to 0. If different objectives
+        are on different devices, the ObjectiveFunction will run each sub-objective
+        on the device specified in the sub-objective.
+"""
 docs = {
     "target": doc_target,
     "bounds": doc_bounds,
@@ -106,6 +112,7 @@ docs = {
     "deriv_mode": doc_deriv_mode,
     "name": doc_name,
     "jac_chunk_size": doc_jac_chunk_size,
+    "device_id": doc_device_id,
 }
 
 

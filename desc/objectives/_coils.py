@@ -49,6 +49,7 @@ class _CoilObjective(_Objective):
         grid=None,
         name=None,
         jac_chunk_size=None,
+        device_id=0,
     ):
         self._grid = grid
         self._data_keys = data_keys
@@ -64,6 +65,7 @@ class _CoilObjective(_Objective):
             deriv_mode=deriv_mode,
             name=name,
             jac_chunk_size=jac_chunk_size,
+            device_id=device_id,
         )
 
     def build(self, use_jit=True, verbose=1):  # noqa:C901
@@ -226,6 +228,7 @@ class CoilLength(_CoilObjective):
         grid=None,
         name="coil length",
         jac_chunk_size=None,
+        device_id=0,
     ):
         if target is None and bounds is None:
             target = 2 * np.pi
@@ -330,6 +333,7 @@ class CoilCurvature(_CoilObjective):
         grid=None,
         name="coil curvature",
         jac_chunk_size=None,
+        device_id=0,
     ):
         if target is None and bounds is None:
             bounds = (0, 1)
@@ -429,6 +433,7 @@ class CoilTorsion(_CoilObjective):
         grid=None,
         name="coil torsion",
         jac_chunk_size=None,
+        device_id=0,
     ):
         if target is None and bounds is None:
             target = 0
@@ -528,6 +533,7 @@ class CoilCurrentLength(CoilLength):
         grid=None,
         name="coil current length",
         jac_chunk_size=None,
+        device_id=0,
     ):
         if target is None and bounds is None:
             target = 0
@@ -636,6 +642,7 @@ class CoilIntegratedCurvature(_CoilObjective):
         grid=None,
         name="coil integrated curvature",
         jac_chunk_size=None,
+        device_id=0,
     ):
         if target is None and bounds is None:
             target = 2 * np.pi
@@ -784,6 +791,7 @@ class CoilSetMinDistance(_Objective):
             deriv_mode=deriv_mode,
             name=name,
             jac_chunk_size=jac_chunk_size,
+            device_id=device_id,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -965,6 +973,7 @@ class PlasmaCoilSetMinDistance(_Objective):
             deriv_mode=deriv_mode,
             name=name,
             jac_chunk_size=jac_chunk_size,
+            device_id=device_id,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -1288,6 +1297,7 @@ class QuadraticFlux(_Objective):
         vacuum=False,
         name="Quadratic flux",
         jac_chunk_size=None,
+        device_id=0,
     ):
         from desc.geometry import FourierRZToroidalSurface
 
@@ -1491,6 +1501,7 @@ class SurfaceQuadraticFlux(_Objective):
         name="Surface Quadratic Flux",
         field_fixed=False,
         jac_chunk_size=None,
+        device_id=0,
     ):
         if target is None and bounds is None:
             target = 0
@@ -1700,6 +1711,7 @@ class ToroidalFlux(_Objective):
         field_fixed=False,
         eq_fixed=False,
         jac_chunk_size=None,
+        device_id=0,
     ):
         if target is None and bounds is None:
             target = 1.0 if not hasattr(eq, "Psi") else eq.Psi
@@ -1730,6 +1742,7 @@ class ToroidalFlux(_Objective):
             deriv_mode=deriv_mode,
             name=name,
             jac_chunk_size=jac_chunk_size,
+            device_id=device_id,
         )
 
     def build(self, use_jit=True, verbose=1):

@@ -21,7 +21,7 @@ if os.environ.get("DESC_BACKEND") == "numpy":
         )
     )
 else:
-    if desc_config.get("device") is None:
+    if desc_config.get("devices") is None:
         set_device("cpu")
     try:
         with warnings.catch_warnings():

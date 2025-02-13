@@ -61,7 +61,7 @@ _BANNER = r"""
 BANNER = colored(_BANNER, "magenta")
 
 
-config = {"device": None, "avail_mem": None, "kind": None, "num_device": None}
+config = {"devices": None, "avail_mem": None, "kind": None, "num_device": None}
 
 
 def _get_processor_name():
@@ -116,6 +116,7 @@ def set_device(kind="cpu", gpuid=None, num_device=1):
     cpu_info = _get_processor_name()
     config["cpu_info"] = f"{cpu_info} CPU"
     config["cpu_mem"] = cpu_mem
+
     if kind == "cpu":
         os.environ["JAX_PLATFORMS"] = "cpu"
         os.environ["CUDA_VISIBLE_DEVICES"] = ""

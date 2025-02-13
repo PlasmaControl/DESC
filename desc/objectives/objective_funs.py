@@ -483,8 +483,7 @@ class ObjectiveFunction(IOAble):
             f = pconcat(
                 [
                     obj.compute_unscaled(
-                        *jax.device_put(par, jax.devices("gpu")[obj._device_id]),
-                        constants=const,
+                        *jax.device_put(par, obj._device), constants=const
                     )
                     for par, obj, const in zip(params, self.objectives, constants)
                 ]
@@ -523,8 +522,7 @@ class ObjectiveFunction(IOAble):
             f = pconcat(
                 [
                     obj.compute_scaled(
-                        *jax.device_put(par, jax.devices("gpu")[obj._device_id]),
-                        constants=const,
+                        *jax.device_put(par, obj._device), constants=const
                     )
                     for par, obj, const in zip(params, self.objectives, constants)
                 ]
@@ -563,8 +561,7 @@ class ObjectiveFunction(IOAble):
             f = pconcat(
                 [
                     obj.compute_scaled_error(
-                        *jax.device_put(par, jax.devices("gpu")[obj._device_id]),
-                        constants=const,
+                        *jax.device_put(par, obj._device), constants=const
                     )
                     for par, obj, const in zip(params, self.objectives, constants)
                 ]
@@ -634,13 +631,13 @@ class ObjectiveFunction(IOAble):
                 params, params0, self.objectives, constants
             ):
                 if self._is_multi_device:  # pragma: no cover
-                    par = jax.device_put(par, jax.devices("gpu")[obj._device_id])
-                    par0 = jax.device_put(par0, jax.devices("gpu")[obj._device_id])
+                    par = jax.device_put(par, obj._device)
+                    par0 = jax.device_put(par0, obj._device)
                 obj.print_value(par, par0, constants=const)
         else:  # pragma: no cover
             for par, obj, const in zip(params, self.objectives, constants):
                 if self._is_multi_device:
-                    par = jax.device_put(par, jax.devices("gpu")[obj._device_id])
+                    par = jax.device_put(par, obj._device)
                 obj.print_value(par, constants=const)
         return None
 
@@ -773,8 +770,8 @@ class ObjectiveFunction(IOAble):
             if self._is_multi_device:  # pragma: no cover
                 # inputs to jitted functions must live on the same device. Need to
                 # put xi and vi on the same device as the objective
-                xi = jax.device_put(xi, jax.devices("gpu")[obj._device_id])
-                vi = jax.device_put(vi, jax.devices("gpu")[obj._device_id])
+                xi = jax.device_put(xi, obj._device)
+                vi = jax.device_put(vi, obj._device)
             Ji_ = getattr(obj, "jvp_" + op)(vi, xi, constants=const)
             J += [Ji_]
         # this is the transpose of the jvp when v is a matrix, for consistency with
@@ -1145,6 +1142,7 @@ class _Objective(IOAble, ABC):
 
         self._jac_chunk_size = jac_chunk_size
         self._device_id = device_id
+        self._device = jax.devices(desc_config["kind"])[device_id]
 
         self._target = target
         self._bounds = bounds

@@ -408,7 +408,7 @@ def get_parallel_forcebalance(
             gridi = grid[i]
         obj = ForceBalance(eq, grid=gridi, device_id=i)
         obj.build(use_jit=use_jit)
-        obj = jax.device_put(obj, jax.devices("gpu")[i])
+        obj = jax.device_put(obj, obj._device)
         # if the eq is also distrubuted across GPUs, then some internal logic
         # that checks if the things are different will fail, so we need to
         # set the eq to be the same manually

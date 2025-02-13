@@ -461,8 +461,14 @@ if use_jax:  # noqa: C901
         # array of float64 should fit into single device
         size = jnp.array([x.size for x in arrays])
         size = jnp.sum(size)
-        if size * 8 / (1024**3) > desc_config["avail_mems"][0]:
-            if getattr(desc_config, "SUPPRESS_CPU_WARNING", False):
+        if (
+            size * 8 / (1024**3) > desc_config["avail_mems"][0]
+            or desc_config["kind"] == "cpu"
+        ):
+            if (
+                getattr(desc_config, "SUPPRESS_CPU_WARNING", False)
+                and desc_config["kind"] == "gpu"
+            ):
                 warnings.warn(
                     "The total size of the arrays exceeds the available memory of the "
                     "GPU[id=0]. Moving the array to CPU. This may cause performance "
@@ -487,7 +493,7 @@ if use_jax:  # noqa: C901
 
         Decorates a method of a class with a dynamic device, allowing the method to be
         compiled with jax.jit for the specific device. This is needed since
-        @functools.partial(jax.jit, device=jax.devices("gpu")[self._device_id]) is not
+        @functools.partial(jax.jit, device=obj._device) is not
         allowed in a class definition.
 
         Parameters
@@ -499,14 +505,8 @@ if use_jax:  # noqa: C901
 
         @functools.wraps(method)
         def wrapper(self, *args, **kwargs):
-            # Get the device using self.id or default to CPU
-            if desc_config["kind"] == "gpu" and hasattr(self, "_device_id"):
-                device = jax.devices("gpu")[self._device_id]
-            else:
-                device = None
-
             # Compile the method with jax.jit for the specific device
-            wrapped = jax.jit(method, device=device)
+            wrapped = jax.jit(method, device=self._device)
             return wrapped(self, *args, **kwargs)
 
         return wrapper

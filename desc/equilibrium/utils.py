@@ -224,6 +224,8 @@ def contract_equilibrium(eq, inner_rho, contract_profiles=True, copy=True):
     )
 
     def scale_profile(profile, rho):
+        if profile is None:
+            return profile
         is_power_series = isinstance(profile, PowerSeriesProfile)
         if contract_profiles and is_power_series:
             # only PowerSeriesProfile both
@@ -250,24 +252,14 @@ def contract_equilibrium(eq, inner_rho, contract_profiles=True, copy=True):
             return profile
 
     # create new profiles for contracted equilibrium
-    pressure = iota = current = anisotropy = None
-    electron_density = electron_temperature = ion_temperature = atomic_number = None
-    if eq.pressure is not None:
-        pressure = scale_profile(eq.pressure, inner_rho)
-    if eq.iota is not None:
-        iota = scale_profile(eq.iota, inner_rho)
-    if eq.current is not None:
-        current = scale_profile(eq.current, inner_rho)
-    if eq.electron_density is not None:
-        electron_density = scale_profile(eq.electron_density, inner_rho)
-    if eq.electron_temperature is not None:
-        electron_temperature = scale_profile(eq.electron_temperature, inner_rho)
-    if eq.ion_temperature is not None:
-        ion_temperature = scale_profile(eq.ion_temperature, inner_rho)
-    if eq.atomic_number is not None:
-        atomic_number = scale_profile(eq.atomic_number, inner_rho)
-    if eq.anisotropy is not None:
-        anisotropy = scale_profile(eq.anisotropy, inner_rho)
+    pressure = scale_profile(eq.pressure, inner_rho)
+    iota = scale_profile(eq.iota, inner_rho)
+    current = scale_profile(eq.current, inner_rho)
+    electron_density = scale_profile(eq.electron_density, inner_rho)
+    electron_temperature = scale_profile(eq.electron_temperature, inner_rho)
+    ion_temperature = scale_profile(eq.ion_temperature, inner_rho)
+    atomic_number = scale_profile(eq.atomic_number, inner_rho)
+    anisotropy = scale_profile(eq.anisotropy, inner_rho)
 
     surf_inner = eq.get_surface_at(rho=inner_rho)
     surf_inner.rho = 1.0

@@ -171,6 +171,7 @@ class GammaC(_Objective):
         surf_batch_size=1,
         spline=False,
         Nemov=True,
+        device_id=0,
     ):
         if target is None and bounds is None:
             target = 0.0

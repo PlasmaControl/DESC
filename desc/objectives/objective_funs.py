@@ -1114,6 +1114,8 @@ class _Objective(IOAble, ABC):
         "_normalization",
         "_deriv_mode",
     ]
+    # _device is of type jax.Device() which cannot be an argument to a jitted function.
+    _static_attrs = ["_device"]
 
     def __init__(
         self,

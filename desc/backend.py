@@ -69,12 +69,17 @@ else:
             )
         )
 
-print(f"Using {desc_config['num_device']} device:")
-for i, dev in enumerate(desc_config["devices"]):
-    print(
-        f"\t Device {i}: {dev} with {desc_config['avail_mems'][i]:.2f} "
-        "GB available memory"
-    )
+print(
+    f"CPU Info: {desc_config['cpu_info']} with {desc_config['cpu_mem']:.2f} "
+    "GB available memory"
+)
+if desc_config["kind"] == "gpu":
+    print(f"Using {desc_config['num_device']} device:")
+    for i, dev in enumerate(desc_config["devices"]):
+        print(
+            f"\t Device {i}: {dev} with {desc_config['avail_mems'][i]:.2f} "
+            "GB available memory"
+        )
 
 if use_jax:  # noqa: C901
     from jax import custom_jvp, jit, vmap

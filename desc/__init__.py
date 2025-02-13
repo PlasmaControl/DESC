@@ -2,10 +2,13 @@
 
 import importlib
 import os
+import platform
 import re
+import subprocess
 import warnings
 
 import colorama
+import psutil
 from termcolor import colored
 
 from ._version import get_versions
@@ -61,6 +64,23 @@ BANNER = colored(_BANNER, "magenta")
 config = {"device": None, "avail_mem": None, "kind": None, "num_device": None}
 
 
+def _get_processor_name():
+    """Get the processor name of the current system."""
+    if platform.system() == "Windows":
+        return platform.processor()
+    elif platform.system() == "Darwin":
+        os.environ["PATH"] = os.environ["PATH"] + os.pathsep + "/usr/sbin"
+        command = "sysctl -n machdep.cpu.brand_string"
+        return subprocess.check_output(command).strip()
+    elif platform.system() == "Linux":
+        command = "cat /proc/cpuinfo"
+        all_info = subprocess.check_output(command, shell=True).decode().strip()
+        for line in all_info.split("\n"):
+            if "model name" in line:
+                return re.sub(".*model name.*:", "", line, 1)
+    return ""
+
+
 def set_device(kind="cpu", gpuid=None, num_device=1):
     """Sets the device to use for computation.
 
@@ -85,15 +105,21 @@ def set_device(kind="cpu", gpuid=None, num_device=1):
         number of devices to use. Default is 1.
 
     """
+    if kind == "cpu" and num_device > 1:
+        # TODO: implement multi-CPU support
+        raise ValueError("Cannot request multiple CPUs")
+
     config["kind"] = kind
     config["num_device"] = num_device
+
+    cpu_mem = psutil.virtual_memory().available / 1024**3  # RAM in GB
+    cpu_info = _get_processor_name()
+    config["cpu_info"] = f"{cpu_info} CPU"
+    config["cpu_mem"] = cpu_mem
     if kind == "cpu":
         os.environ["JAX_PLATFORMS"] = "cpu"
         os.environ["CUDA_VISIBLE_DEVICES"] = ""
-        import psutil
-
-        cpu_mem = psutil.virtual_memory().available / 1024**3  # RAM in GB
-        config["devices"] = ["CPU"]
+        config["devices"] = [f"{cpu_info} CPU"]
         config["avail_mems"] = [cpu_mem]
 
     elif kind == "gpu":

@@ -1114,7 +1114,8 @@ class _Objective(IOAble, ABC):
         "_normalization",
         "_deriv_mode",
     ]
-    # _device is of type jax.Device() which cannot be an argument to a jitted function.
+    # _device is of type 'jaxlib.xla_extension.Device' which cannot be an argument
+    # to a jitted function.
     _static_attrs = ["_device"]
 
     def __init__(
@@ -1144,7 +1145,15 @@ class _Objective(IOAble, ABC):
 
         self._jac_chunk_size = jac_chunk_size
         self._device_id = device_id
-        self._device = jax.devices(desc_config["kind"])[device_id]
+        # if device_id is not 0, this typically means we are using multiple devices and
+        # we won't jit the ObjectiveFunction methods. For single device, if we set
+        # _device to a jaxlib.xla_extension.Device type, jit will throw error expecting
+        # it to be static. So we set _device to None in that case which is simpler then
+        # making it static.
+        if device_id != 0:
+            self._device = jax.devices(desc_config["kind"])[device_id]
+        else:
+            self._device = None
 
         self._target = target
         self._bounds = bounds

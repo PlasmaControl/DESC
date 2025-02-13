@@ -4,7 +4,7 @@ import functools
 
 import numpy as np
 
-from desc.backend import jax, jit, jnp
+from desc.backend import jax, jit, jnp, pconcat
 from desc.batching import batched_vectorize
 from desc.objectives import (
     BoundaryRSelfConsistency,
@@ -1124,15 +1124,20 @@ def jit_if_not_parallel(func):
 @jit_if_not_parallel
 def _proximal_jvp_f_pure(constraint, xf, constants, dc, unfixed_idx, Z, D, dxdc, op):
     Fx = getattr(constraint, "jac_" + op)(xf, constants)
-    Fx_reduced = Fx @ jnp.diag(D)[:, unfixed_idx] @ Z
-    Fc = Fx @ (dxdc @ dc)
-    Fxh = Fx_reduced
-    cutoff = jnp.finfo(Fxh.dtype).eps * max(Fxh.shape)
-    uf, sf, vtf = jnp.linalg.svd(Fxh, full_matrices=False)
-    sf += sf[-1]  # add a tiny bit of regularization
-    sfi = jnp.where(sf < cutoff * sf[0], 0, 1 / sf)
-    Fxh_inv = vtf.T @ (sfi[..., None] * uf.T)
-    return Fxh_inv @ Fc
+
+    @jit
+    def fun(Fx, dxdc, dc, unfixed_idx, Z, D):
+        # F_reduced
+        Fxh = Fx @ jnp.diag(D)[:, unfixed_idx] @ Z
+        Fc = Fx @ (dxdc @ dc)
+        cutoff = jnp.finfo(Fxh.dtype).eps * max(Fxh.shape)
+        uf, sf, vtf = jnp.linalg.svd(Fxh, full_matrices=False)
+        sf += sf[-1]  # add a tiny bit of regularization
+        sfi = jnp.where(sf < cutoff * sf[0], 0, 1 / sf)
+        Fxh_inv = vtf.T @ (sfi[..., None] * uf.T)
+        return Fxh_inv @ Fc
+
+    return fun(Fx, dxdc, dc, unfixed_idx, Z, D)
 
 
 @jit_if_not_parallel
@@ -1160,5 +1165,8 @@ def _proximal_jvp_blocked_pure(objective, vgs, xgs, op):
         else:
             outi = getattr(obj, "jvp_" + op)([_vi for _vi in vi], xi, constants=const).T
             out.append(outi)
-    out = jnp.concatenate(out)
+    if objective._is_multi_device:  # pragma: no cover
+        out = pconcat(out)
+    else:
+        out = jnp.concatenate(out)
     return out

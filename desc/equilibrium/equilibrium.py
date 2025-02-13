@@ -330,16 +330,17 @@ class Equilibrium(IOAble, Optimizable):
         if not use_kinetic and pressure is None:
             pressure = 0
 
-        self._electron_temperature = parse_profile(
+        self.electron_temperature = parse_profile(
             electron_temperature, "electron temperature"
         )
-        self._electron_density = parse_profile(electron_density, "electron density")
-        self._ion_temperature = parse_profile(ion_temperature, "ion temperature")
-        self._atomic_number = parse_profile(atomic_number, "atomic number")
-        self._pressure = parse_profile(pressure, "pressure")
-        self._anisotropy = parse_profile(anisotropy, "anisotropy")
-        self._iota = parse_profile(iota, "iota")
-        self._current = parse_profile(current, "current")
+        self.electron_density = parse_profile(electron_density, "electron density")
+        self.ion_temperature = parse_profile(ion_temperature, "ion temperature")
+        self.atomic_number = parse_profile(atomic_number, "atomic number")
+        self.pressure = parse_profile(pressure, "pressure")
+        self.anisotropy = parse_profile(anisotropy, "anisotropy")
+        self._iota = self._current = None
+        self.iota = parse_profile(iota, "iota")
+        self.current = parse_profile(current, "current")
 
         # ensure profiles have the right resolution
         for profile in [
@@ -1061,8 +1062,10 @@ class Equilibrium(IOAble, Optimizable):
                 sym=self.sym
                 and all(
                     data_index[p][dep]["grid_requirement"].get("sym", True)
-                    # TODO: GitHub issue #1206.
-                    and not data_index[p][dep]["grid_requirement"].get("can_fft", False)
+                    # TODO (#1206)
+                    and not data_index[p][dep]["grid_requirement"].get(
+                        "can_fft2", False
+                    )
                     for dep in dep1dr
                 ),
             )
@@ -1109,8 +1112,10 @@ class Equilibrium(IOAble, Optimizable):
                 sym=self.sym
                 and all(
                     data_index[p][dep]["grid_requirement"].get("sym", True)
-                    # TODO: GitHub issue #1206.
-                    and not data_index[p][dep]["grid_requirement"].get("can_fft", False)
+                    # TODO (#1206)
+                    and not data_index[p][dep]["grid_requirement"].get(
+                        "can_fft2", False
+                    )
                     for dep in dep1dz
                 ),
             )
@@ -1236,7 +1241,7 @@ class Equilibrium(IOAble, Optimizable):
             **kwargs,
         )
 
-    def get_rtz_grid(
+    def _get_rtz_grid(
         self,
         radial,
         poloidal,
@@ -1783,6 +1788,16 @@ class Equilibrium(IOAble, Optimizable):
     @iota.setter
     def iota(self, new):
         self._iota = parse_profile(new, "iota")
+        if self.iota is None:
+            return
+        warnif(
+            self.current is not None,
+            UserWarning,
+            "Setting rotational transform profile on an equilibrium "
+            + "with fixed toroidal current, removing existing toroidal"
+            " current profile.",
+        )
+        self._current = None
 
     @optimizable_parameter
     @property
@@ -1795,7 +1810,7 @@ class Equilibrium(IOAble, Optimizable):
         errorif(
             self.iota is None,
             ValueError,
-            "Attempt to set rotational transform on an equilibrium"
+            "Attempt to set parameters of rotational transform on an equilibrium"
             + "with fixed toroidal current",
         )
         self.iota.params = i_l
@@ -1808,6 +1823,22 @@ class Equilibrium(IOAble, Optimizable):
     @current.setter
     def current(self, new):
         self._current = parse_profile(new, "current")
+        if self.current is None:
+            return
+        warnif(
+            self.iota is not None,
+            UserWarning,
+            "Setting toroidal current profile on an equilibrium "
+            + "with fixed rotational transform, removing existing rotational"
+            " transform profile.",
+        )
+        self._iota = None
+        axis_current = np.squeeze(self.current(0.0))
+        warnif(
+            np.abs(axis_current) > 1e-8,
+            UserWarning,
+            f"Current on axis is nonzero, got {axis_current:.3e} Amps",
+        )
 
     @optimizable_parameter
     @property
@@ -1820,10 +1851,16 @@ class Equilibrium(IOAble, Optimizable):
         errorif(
             self.current is None,
             ValueError,
-            "Attempt to set toroidal current on an equilibrium with "
+            "Attempt to set parameters of toroidal current on an equilibrium with "
             + "fixed rotational transform",
         )
         self.current.params = c_l
+        axis_current = np.squeeze(self.current(0.0))
+        warnif(
+            np.abs(axis_current) > 1e-8,
+            UserWarning,
+            f"Current on axis is nonzero, got {axis_current:.3e} Amps",
+        )
 
     @property
     def R_basis(self):

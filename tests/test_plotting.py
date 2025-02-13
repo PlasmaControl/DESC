@@ -257,29 +257,26 @@ class TestPlot3D:
         assert "Z" in data.keys()
 
         assert "|F|" in data.keys()
-        return fig
 
     @pytest.mark.unit
     def test_3d_rz(self):
         """Test 3d plotting of pressure on toroidal cross section."""
         eq = get("DSHAPE_CURRENT")
         grid = LinearGrid(rho=100, theta=0.0, zeta=100)
-        fig = plot_3d(eq, "p", grid=grid)
-        return fig
+        _ = plot_3d(eq, "p", grid=grid)
 
     @pytest.mark.unit
     def test_3d_rt(self):
         """Test 3d plotting of flux on poloidal ribbon."""
         eq = get("DSHAPE_CURRENT")
         grid = LinearGrid(rho=100, theta=100, zeta=0.0)
-        fig = plot_3d(eq, "psi", grid=grid)
-        return fig
+        _ = plot_3d(eq, "psi", grid=grid)
 
     @pytest.mark.unit
     def test_plot_3d_surface(self):
         """Test 3d plotting of surface object."""
         surf = FourierRZToroidalSurface()
-        fig = plot_3d(
+        _ = plot_3d(
             surf,
             "curvature_H_rho",
             showgrid=False,
@@ -288,7 +285,6 @@ class TestPlot3D:
             showticklabels=False,
             showaxislabels=False,
         )
-        return fig
 
     @pytest.mark.unit
     def test_3d_plot_Bn(self):
@@ -296,13 +292,12 @@ class TestPlot3D:
         eq = get("precise_QA")
         with pytest.warns(UserWarning, match="Reducing radial"):
             eq.change_resolution(M=4, N=4, L=4, M_grid=8, N_grid=8, L_grid=8)
-        fig = plot_3d(
+        _ = plot_3d(
             eq,
             "B*n",
             field=ToroidalMagneticField(1, 1),
             grid=LinearGrid(M=30, N=30, NFP=1, endpoint=True),
         )
-        return fig
 
 
 class TestPlotFSA:
@@ -715,7 +710,7 @@ class TestPlotBoozerModes:
             rho=5,
         )
         ax.set_ylim([1e-6, 5e0])
-        for string in ["|B|_mn", "B modes", "rho"]:
+        for string in ["|B|_mn_B", "B modes", "rho"]:
             assert string in data.keys()
         return fig
 
@@ -743,7 +738,7 @@ class TestPlotBoozerModes:
     def test_plot_boozer_modes_max(self):
         """Test plotting symmetry breaking boozer spectrum."""
         eq = get("WISTELL-A")
-        fig, ax = plot_boozer_modes(
+        fig, ax, data = plot_boozer_modes(
             eq,
             M_booz=eq.M,
             N_booz=eq.N,
@@ -753,8 +748,11 @@ class TestPlotBoozerModes:
             color="r",
             norm=True,
             rho=5,
+            return_data=True,
         )
         ax.set_ylim([1e-6, 5e0])
+        for string in ["|B|_mn_B", "B modes", "rho"]:
+            assert string in data.keys()
         return fig
 
     @pytest.mark.unit
@@ -787,7 +785,11 @@ class TestPlotBoozerSurface:
         fig, ax, data = plot_boozer_surface(
             eq, M_booz=eq.M, N_booz=eq.N, return_data=True, rho=0.5, fieldlines=4
         )
-        for string in ["|B|", "theta_B", "zeta_B"]:
+        for string in [
+            "|B|",
+            "theta_B",
+            "zeta_B",
+        ]:
             assert string in data.keys()
         return fig
 
@@ -859,7 +861,6 @@ def test_plot_coils():
     for string in ["X", "Y", "Z"]:
         assert string in data.keys()
         assert len(data[string]) == len(coil_list)
-    return fig
 
 
 @pytest.mark.unit
@@ -893,7 +894,6 @@ def test_plot_coils_no_grid():
     for string in ["X", "Y", "Z"]:
         assert string in data.keys()
         assert len(data[string]) == len(coil_list)
-    return fig
 
 
 @pytest.mark.unit
@@ -940,8 +940,8 @@ def test_plot_coefficients():
     return fig
 
 
-@pytest.mark.unit
 @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
+@pytest.mark.unit
 def test_plot_logo():
     """Test plotting the DESC logo."""
     fig, ax = plot_logo()

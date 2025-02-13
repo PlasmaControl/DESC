@@ -1,6 +1,6 @@
 """Utilities for getting standard groups of objectives and constraints."""
 
-from desc.utils import flatten_list, is_any_instance, isposint, unique_list
+from desc.utils import flatten_list, get_all_instances, isposint, unique_list
 
 from ._equilibrium import Energy, ForceBalance, HelicalForceBalance, RadialForceBalance
 from .linear_objectives import (
@@ -57,14 +57,14 @@ def get_equilibrium_objective(eq, mode="force", normalize=True, jac_chunk_size="
         for minimizing MHD energy.
     normalize : bool
         Whether to normalize units of objective.
-    jac_chunk_size : int or "auto", optional
+    jac_chunk_size : int or ``auto``, optional
         If `"batched"` deriv_mode is used, will calculate the Jacobian
         ``jac_chunk_size`` columns at a time, instead of all at once.
         The memory usage of the Jacobian calculation is roughly
         ``memory usage = m0 + m1*jac_chunk_size``: the smaller the chunk size,
         the less memory the Jacobian calculation will require (with some baseline
         memory usage). The time it takes to compute the Jacobian is roughly
-        ``t= t0 + t1/jac_chunk_size` so the larger the ``jac_chunk_size``, the faster
+        ``t = t0 + t1/jac_chunk_size`` so the larger the ``jac_chunk_size``, the faster
         the calculation takes, at the cost of requiring more memory.
         If None, it will use the largest size i.e ``obj.dim_x``.
         Defaults to ``chunk_size="auto"`` which will use a conservative
@@ -308,32 +308,39 @@ def _get_NAE_constraints(
 
 def maybe_add_self_consistency(thing, constraints):
     """Add self consistency constraints if needed."""
+
+    def add_if_multiple(constraints, cls):
+        cons = get_all_instances(constraints, cls)
+        if cons is not None:
+            cons_on_this_thing = [con for con in cons if con.things[0] == thing]
+            if not len(cons_on_this_thing):
+                constraints += (cls(thing),)
+        else:
+            constraints += (cls(thing),)
+        return constraints
+
     params = set(unique_list(flatten_list(thing.optimizable_params))[0])
 
     # Equilibrium
-    if {"R_lmn", "Rb_lmn"} <= params and not is_any_instance(
-        constraints, BoundaryRSelfConsistency
-    ):
-        constraints += (BoundaryRSelfConsistency(eq=thing),)
-    if {"Z_lmn", "Zb_lmn"} <= params and not is_any_instance(
-        constraints, BoundaryZSelfConsistency
-    ):
-        constraints += (BoundaryZSelfConsistency(eq=thing),)
-    if {"L_lmn"} <= params and not is_any_instance(constraints, FixLambdaGauge):
-        constraints += (FixLambdaGauge(eq=thing),)
-    if {"R_lmn", "Ra_n"} <= params and not is_any_instance(
-        constraints, AxisRSelfConsistency
-    ):
-        constraints += (AxisRSelfConsistency(eq=thing),)
-    if {"Z_lmn", "Za_n"} <= params and not is_any_instance(
-        constraints, AxisZSelfConsistency
-    ):
-        constraints += (AxisZSelfConsistency(eq=thing),)
+    if {"R_lmn", "Rb_lmn"} <= params:
+        constraints = add_if_multiple(constraints, BoundaryRSelfConsistency)
+
+    if {"Z_lmn", "Zb_lmn"} <= params:
+        constraints = add_if_multiple(constraints, BoundaryZSelfConsistency)
+
+    if {"L_lmn"} <= params:
+        constraints = add_if_multiple(constraints, FixLambdaGauge)
+
+    if {"R_lmn", "Ra_n"} <= params:
+        constraints = add_if_multiple(constraints, AxisRSelfConsistency)
+
+    if {"Z_lmn", "Za_n"} <= params:
+        constraints = add_if_multiple(constraints, AxisZSelfConsistency)
 
     # Curve
-    if {"shift"} <= params and not is_any_instance(constraints, FixCurveShift):
-        constraints += (FixCurveShift(curve=thing),)
-    if {"rotmat"} <= params and not is_any_instance(constraints, FixCurveRotation):
-        constraints += (FixCurveRotation(curve=thing),)
+    if {"shift"} <= params:
+        constraints = add_if_multiple(constraints, FixCurveShift)
+    if {"rotmat"} <= params:
+        constraints = add_if_multiple(constraints, FixCurveRotation)
 
     return constraints

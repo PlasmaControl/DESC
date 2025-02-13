@@ -6,6 +6,7 @@ from abc import ABC
 from collections.abc import MutableSequence
 
 import numpy as np
+from scipy.constants import mu_0
 
 from desc.backend import (
     fori_loop,
@@ -26,7 +27,7 @@ from desc.geometry import (
     FourierXYZCurve,
     SplineXYZCurve,
 )
-from desc.grid import LinearGrid
+from desc.grid import Grid, LinearGrid
 from desc.magnetic_fields import _MagneticField
 from desc.optimizable import Optimizable, OptimizableCollection, optimizable_parameter
 from desc.utils import cross, dot, equals, errorif, flatten_list, safenorm, warnif
@@ -70,7 +71,8 @@ def biot_savart_hh(eval_pts, coil_pts_start, coil_pts_end, current):
     Ri_p_Rf = Ri + Rf
 
     B_mag = (
-        2.0e-7  #  == 2 * mu_0/(4 pi)
+        mu_0
+        / (2 * jnp.pi)
         * current
         * Ri_p_Rf
         / (Ri * Rf * (Ri_p_Rf * Ri_p_Rf - (L * L)[:, jnp.newaxis]))
@@ -122,7 +124,7 @@ def biot_savart_vector_potential_hh(eval_pts, coil_pts_start, coil_pts_end, curr
 
     eps = L[:, jnp.newaxis] / (Ri_p_Rf)
 
-    A_mag = 1.0e-7 * current * jnp.log((1 + eps) / (1 - eps))  # 1.0e-7 ==  mu_0/(4 pi)
+    A_mag = mu_0 / (4 * jnp.pi) * current * jnp.log((1 + eps) / (1 - eps))
 
     # Now just need  to multiply by e^ = d_vec/L = (x_f - x_i)/L
     A = jnp.sum(A_mag[:, :, jnp.newaxis] * d_vec_over_L[:, jnp.newaxis, :], axis=0)
@@ -165,8 +167,7 @@ def biot_savart_quad(eval_pts, coil_pts, tangents, current):
     vec = jnp.cross(dl[:, jnp.newaxis, :], R_vec, axis=-1)
     denom = R_mag**3
 
-    # 1e-7 == mu_0/(4 pi)
-    B = jnp.sum(1.0e-7 * current * vec / denom[:, :, None], axis=0)
+    B = jnp.sum(mu_0 / (4 * jnp.pi) * current * vec / denom[:, :, None], axis=0)
     return B
 
 
@@ -201,8 +202,7 @@ def biot_savart_vector_potential_quad(eval_pts, coil_pts, tangents, current):
     vec = dl[:, jnp.newaxis, :]
     denom = R_mag
 
-    # 1e-7 == mu_0/(4 pi)
-    A = jnp.sum(1.0e-7 * current * vec / denom[:, :, None], axis=0)
+    A = jnp.sum(mu_0 / (4 * jnp.pi) * current * vec / denom[:, :, None], axis=0)
     return A
 
 
@@ -229,6 +229,11 @@ class _Coil(_MagneticField, Optimizable, ABC):
     def __init__(self, current, *args, **kwargs):
         self._current = float(np.squeeze(current))
         super().__init__(*args, **kwargs)
+
+    def _set_up(self):
+        for attribute in self._io_attrs_:
+            if not hasattr(self, attribute):
+                setattr(self, attribute, None)
 
     @optimizable_parameter
     @property
@@ -476,7 +481,7 @@ class _Coil(_MagneticField, Optimizable, ABC):
             coords. if None, defaults linearly spaced in [0,2pi)
             Alternative, can pass "arclength" to use normalized distance between points.
         name : str
-            name for this coil
+            Name for this coil
 
         Returns
         -------
@@ -518,7 +523,7 @@ class _Coil(_MagneticField, Optimizable, ABC):
             - `'cubic2'`: C2 cubic splines (aka natural splines)
             - `'catmull-rom'`: C1 cubic centripetal "tension" splines
         name : str
-            name for this coil
+            Name for this coil
 
         Returns
         -------
@@ -619,7 +624,7 @@ class FourierRZCoil(_Coil, FourierRZCurve):
     sym : bool
         whether to enforce stellarator symmetry
     name : str
-        name for this coil
+        Name for this coil
 
     Examples
     --------
@@ -689,8 +694,7 @@ class FourierRZCoil(_Coil, FourierRZCurve):
         sym : bool
             Whether to enforce stellarator symmetry.
         name : str
-            name for this coil
-
+            Name for this coil.
 
         Returns
         -------
@@ -725,7 +729,7 @@ class FourierXYZCoil(_Coil, FourierXYZCurve):
     modes : array-like
         mode numbers associated with X_n etc.
     name : str
-        name for this coil
+        Name for this coil
 
     Examples
     --------
@@ -758,7 +762,6 @@ class FourierXYZCoil(_Coil, FourierXYZCurve):
             np.array([0, 0, mu0 * I / 2 * R_coil**2 / (R_coil**2 + z0**2) ** (3 / 2)]),
             atol=1e-8,
         )
-
 
     """
 
@@ -795,6 +798,9 @@ class FourierXYZCoil(_Coil, FourierXYZCurve):
             if None, defaults to normalized arclength
         basis : {"rpz", "xyz"}
             basis for input coordinates. Defaults to "xyz"
+        name : str
+            Name for this coil.
+
         Returns
         -------
         coil : FourierXYZCoil
@@ -813,7 +819,7 @@ class FourierXYZCoil(_Coil, FourierXYZCurve):
 
 
 class FourierPlanarCoil(_Coil, FourierPlanarCurve):
-    """Coil that lines in a plane.
+    """Coil that lies in a plane.
 
     Parameterized by a point (the center of the coil), a vector (normal to the plane),
     and a fourier series defining the radius from the center as a function of a polar
@@ -834,7 +840,7 @@ class FourierPlanarCoil(_Coil, FourierPlanarCurve):
     basis : {'xyz', 'rpz'}
         Coordinate system for center and normal vectors. Default = 'xyz'.
     name : str
-        Name for this coil.
+        Name for this coil
 
     Examples
     --------
@@ -950,24 +956,14 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
           data, and will not introduce new extrema in the interpolated points
         - ``'monotonic-0'``: same as `'monotonic'` but with 0 first derivatives at both
           endpoints
-
     name : str
-        name for this curve
+        Name for this coil
 
     """
 
     _io_attrs_ = _Coil._io_attrs_ + SplineXYZCurve._io_attrs_
 
-    def __init__(
-        self,
-        current,
-        X,
-        Y,
-        Z,
-        knots=None,
-        method="cubic",
-        name="",
-    ):
+    def __init__(self, current, X, Y, Z, knots=None, method="cubic", name=""):
         super().__init__(current, X, Y, Z, knots, method, name)
 
     def _compute_A_or_B(
@@ -1152,7 +1148,8 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
             - `'catmull-rom'`: C1 cubic centripetal "tension" splines
 
         name : str
-            name for this curve
+            Name for this curve
+
         basis : {"rpz", "xyz"}
             basis for input coordinates. Defaults to "xyz"
 
@@ -1240,14 +1237,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
     _io_attrs_ = _Coil._io_attrs_ + ["_coils", "_NFP", "_sym"]
     _io_attrs_.remove("_current")
 
-    def __init__(
-        self,
-        *coils,
-        NFP=1,
-        sym=False,
-        name="",
-        check_intersection=True,
-    ):
+    def __init__(self, *coils, NFP=1, sym=False, name="", check_intersection=True):
         coils = flatten_list(coils, flatten_tuple=True)
         assert all([isinstance(coil, (_Coil)) for coil in coils])
         [_check_type(coil, coils[0]) for coil in coils]
@@ -1300,6 +1290,15 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         for coil, cur in zip(self.coils, new):
             coil.current = cur
 
+    def _all_currents(self, currents=None):
+        """Return an array of all the currents (including those in virtual coils)."""
+        if currents is None:
+            currents = self.current
+        currents = jnp.asarray(currents)
+        if self.sym:
+            currents = jnp.concatenate([currents, -1 * currents[::-1]])
+        return jnp.tile(currents, self.NFP)
+
     def _make_arraylike(self, x):
         if isinstance(x, dict):
             x = [x] * len(self)
@@ -1311,13 +1310,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         return x
 
     def compute(
-        self,
-        names,
-        grid=None,
-        params=None,
-        transforms=None,
-        data=None,
-        **kwargs,
+        self, names, grid=None, params=None, transforms=None, data=None, **kwargs
     ):
         """Compute the quantity given by name on grid, for each coil in the coilset.
 
@@ -1928,11 +1921,28 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
 
         def flatten_coils(coilset):
             if hasattr(coilset, "__len__"):
+                if isinstance(coilset, CoilSet):
+                    if coilset.NFP > 1 or coilset.sym:
+                        # hit a CoilSet with symmetries, this coilset only contains
+                        # its unique coils. However, for this function we
+                        # need to get the entire coilset, not just the unique coils,
+                        # so make a MixedCoilSet using this CoilSet's coils and NFP/sym
+                        coilset_full = MixedCoilSet.from_symmetry(
+                            coilset,
+                            NFP=coilset.NFP,
+                            sym=coilset.sym,
+                            check_intersection=False,
+                        )
+                        return [c for c in coilset_full]
                 return [a for i in coilset for a in flatten_coils(i)]
             else:
                 return [coilset]
 
         coils = flatten_coils(self.coils)
+        # after flatten, should have as many elements in list as self.num_coils, if
+        # flatten worked correctly.
+        assert len(coils) == self.num_coils
+
         assert (
             int(len(coils) / NFP) == len(coils) / NFP
         ), "Number of coils in coilset must be evenly divisible by NFP!"
@@ -2057,7 +2067,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
     def to_FourierRZ(
         self, N=10, grid=None, NFP=None, sym=False, name="", check_intersection=True
     ):
-        """Convert all coils to FourierRZCoil representaion.
+        """Convert all coils to FourierRZCoil representation.
 
         Note that some types of coils may not be representable in this basis.
 
@@ -2076,7 +2086,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         name : str
             Name for this coilset.
         check_intersection: bool
-            Whether or not to check the coils in the new coiilset for intersections.
+            Whether or not to check the coils in the new coilset for intersections.
 
         Returns
         -------
@@ -2109,7 +2119,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         name : str
             Name for the new CoilSet.
         check_intersection: bool
-            Whether or not to check the coils in the new coiilset for intersections.
+            Whether or not to check the coils in the new coilset for intersections.
 
         Returns
         -------
@@ -2154,7 +2164,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         name : str
             Name for the new CoilSet.
         check_intersection: bool
-            Whether or not to check the coils in the new coiilset for intersections.
+            Whether or not to check the coils in the new coilset for intersections.
 
         Returns
         -------
@@ -2336,6 +2346,22 @@ class MixedCoilSet(CoilSet):
     def num_coils(self):
         """int: Number of coils."""
         return sum([c.num_coils for c in self])
+
+    def _all_currents(self, currents=None):
+        """Return an array of all the currents (including those in virtual coils)."""
+        if currents is None:
+            currents = jnp.array(flatten_list(self.current))
+        all_currents = []
+        i = 0
+        for coil in self.coils:
+            if isinstance(coil, CoilSet):
+                curr = currents[i : i + len(coil)]
+                all_currents += [coil._all_currents(curr)]
+                i += len(coil)
+            else:
+                all_currents += [jnp.atleast_1d(currents[i])]
+                i += 1
+        return jnp.concatenate(all_currents)
 
     def compute(
         self,
@@ -2567,7 +2593,7 @@ class MixedCoilSet(CoilSet):
         name : str
             Name for the new MixedCoilSet.
         check_intersection: bool
-            Whether or not to check the coils in the new coiilset for intersections.
+            Whether or not to check the coils in the new coilset for intersections.
 
         Returns
         -------
@@ -2606,7 +2632,7 @@ class MixedCoilSet(CoilSet):
         name : str
             Name for the new MixedCoilSet.
         check_intersection: bool
-            Whether or not to check the coils in the new coiilset for intersections.
+            Whether or not to check the coils in the new coilset for intersections.
 
         Returns
         -------
@@ -2638,7 +2664,7 @@ class MixedCoilSet(CoilSet):
         name : str
             Name for the new MixedCoilSet.
         check_intersection: bool
-            Whether or not to check the coils in the new coiilset for intersections.
+            Whether or not to check the coils in the new coilset for intersections.
 
         Returns
         -------
@@ -2680,7 +2706,7 @@ class MixedCoilSet(CoilSet):
         name : str
             Name for the new MixedCoilSet.
         check_intersection: bool
-            Whether or not to check the coils in the new coiilset for intersections.
+            Whether or not to check the coils in the new coilset for intersections.
 
         Returns
         -------
@@ -2897,3 +2923,213 @@ def _linking_number(x1, x2, x1_s, x2_s, dx1, dx2):
     small = dx_norm < jnp.finfo(x1.dtype).eps
     ratio = jnp.where(small, 0.0, num / jnp.where(small, 1.0, den))
     return ratio.sum()
+
+
+def initialize_modular_coils(eq, num_coils, r_over_a=2.0):
+    """Initialize a CoilSet of modular coils for stage 2 optimization.
+
+    The coils will be planar, circular coils centered on the equilibrium magnetic axis,
+    and aligned such that the normal to the coil points along the axis. The currents
+    will be set to match the equilibrium required poloidal linking current.
+
+    The coils will be ``FourierPlanarCoil`` with N=0, if another type is desired use
+    ``coilset.to_FourierXYZ(N=10)``, ``coilset.to_SplineXYZ()`` etc.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Stage 1 equilibrium the coils are being optimized for.
+    num_coils : int
+        Number of coils to create per field period. For stellarator symmetric
+        equilibria, this will be the number of coils per half-period.
+    r_over_a : float
+        Minor radius of the coils, in units of equilibrium minor radius. Note that for
+        strongly shaped equilibria this may need to be large to avoid having the coils
+        intersect the plasma.
+
+    Returns
+    -------
+    coilset : CoilSet of FourierPlanarCoil
+        Planar coils centered on magnetic axis, with appropriate symmetry.
+    """
+    extent = 2 * np.pi / (eq.NFP * (eq.sym + 1))
+    zeta = np.linspace(0, extent, num_coils, endpoint=False) + extent / (2 * num_coils)
+    grid = LinearGrid(rho=[0.0], M=0, zeta=zeta, NFP=eq.NFP)
+
+    minor_radius = eq.compute("a")["a"]
+    G = eq.compute("G", grid=LinearGrid(rho=1.0))["G"]
+    data = eq.axis.compute(["x", "x_s"], grid=grid, basis="rpz")
+
+    centers = data["x"]  # center coils on axis position
+    normals = data["x_s"]  # make normal to coil align with tangent along axis
+
+    unique_coils = []
+    for k in range(num_coils):
+        coil = FourierPlanarCoil(
+            current=2 * np.pi * G / (mu_0 * eq.NFP * num_coils * (eq.sym + 1)),
+            center=centers[k, :],
+            normal=normals[k, :],
+            r_n=minor_radius * r_over_a,
+            basis="rpz",
+        )
+        unique_coils.append(coil)
+    coilset = CoilSet(unique_coils, NFP=eq.NFP, sym=eq.sym)
+    return coilset
+
+
+def initialize_saddle_coils(eq, num_coils, r_over_a=0.5, offset=2.0, position="outer"):
+    """Initialize a CoilSet of saddle coils for stage 2 optimization.
+
+    The coils will be planar, circular coils positioned around the plasma without
+    linking it, and aligned such that the normal to the coil points towards the
+    magnetic axis. The currents will be initialized to zero.
+
+    The coils will be ``FourierPlanarCoil`` with N=0, if another type is desired use
+    ``coilset.to_FourierXYZ(N=10)``, ``coilset.to_SplineXYZ()`` etc.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Stage 1 equilibrium the coils are being optimized for.
+    num_coils : int
+        Number of coils to create per field period. For stellarator symmetric
+        equilibria, this will be the number of coils per half-period.
+    r_over_a : float
+        Minor radius of the coils, in units of equilibrium minor radius.
+    offset : float
+        Distance from coil to magnetic axis, in units of equilibrium minor radius.
+        Note that for strongly shaped equilibria this may need to be large to avoid
+        having the coils intersect the plasma.
+    position : {"outer", "inner", "top", "bottom"}
+        Placement of coils relative to plasma. "outer" will place coils on the outboard
+        side, "inner" on the inboard side, "top" will place coils above the plasma,
+        "bottom" will place them below.
+
+    Returns
+    -------
+    coilset : CoilSet of FourierPlanarCoil
+        Planar coils centered on magnetic axis, with appropriate symmetry.
+    """
+    errorif(
+        position not in {"outer", "inner", "top", "bottom"},
+        ValueError,
+        f"position must be one of 'outer', 'inner'', 'top', 'bottom', got {position}",
+    )
+    extent = 2 * np.pi / (eq.NFP * (eq.sym + 1))
+    zeta = np.linspace(0, extent, num_coils, endpoint=False) + extent / (2 * num_coils)
+    grid = LinearGrid(rho=[0.0], M=0, zeta=zeta, NFP=eq.NFP)
+
+    minor_radius = eq.compute("a")["a"]
+    data = eq.axis.compute(["x", "x_s"], grid=grid, basis="rpz")
+
+    centers = data["x"]  # center coils on axis position
+    normals = data["x_s"]  # make normal to coil align with tangent along axis
+
+    offset_vecs = {
+        "outer": np.array([1, 0, 0]),
+        "inner": np.array([-1, 0, 0]),
+        "top": np.array([0, 0, 1]),
+        "bottom": np.array([0, 0, -1]),
+    }
+    normal_vecs = {
+        "outer": np.array([0, 0, -1]),
+        "inner": np.array([0, 0, 1]),
+        "top": np.array([1, 0, 0]),
+        "bottom": np.array([-1, 0, 0]),
+    }
+
+    windowpane_coils = []
+    for k in range(num_coils):
+        coil = FourierPlanarCoil(
+            current=0.0,
+            center=centers[k, :] + offset_vecs[position] * offset * minor_radius,
+            normal=np.cross(normals[k, :], normal_vecs[position]),
+            r_n=minor_radius * r_over_a,
+            basis="rpz",
+        )
+        windowpane_coils.append(coil)
+
+    windowpane_coilset = CoilSet(windowpane_coils, NFP=int(eq.NFP), sym=eq.sym)
+    return windowpane_coilset
+
+
+def initialize_helical_coils(eq, num_coils, r_over_a=2.0, helicity=(1, 1), npts=100):
+    """Initialize a CoilSet of helical coils for stage 2 optimization.
+
+    The coils will be roughly a constant distance from the plasma surface as they wind
+    around. The currents will be set to match the equilibrium required poloidal
+    linking current.
+
+    The coils will be ``SplineXYZCoil``, if another type is desired use
+    ``coilset.to_FourierXYZ(N=...)``, etc.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Stage 1 equilibrium the coils are being optimized for.
+    num_coils : int
+        Number of coils to create.
+    r_over_a : float
+        Approximate minor radius of the coils, in units of equilibrium minor radius.
+        The approximate minor radius will be r_over_a * equilibrium minor radius. The
+        actual coils will be contoured to keep a roughly constant offset from the plasma
+        surface.
+    helicity : tuple of int
+        (M,N) - How many times each coil should link the plasma poloidally and
+        toroidally. Note that M is the poloidal linking number per field period, so the
+        total linking number will be M*NFP.
+    npts : int
+        How many points to use when creating the coils. Equilibria with very high NFP
+        may need more points.
+
+    Returns
+    -------
+    coilset : CoilSet of FourierPlanarCoil
+        Planar coils centered on magnetic axis, with appropriate symmetry.
+    """
+    M = helicity[0] * eq.NFP
+    N = helicity[1]
+
+    errorif(
+        int(M) != M or int(N) != N,
+        TypeError,
+        f"helicity should be a tuple of two integers, got {helicity}",
+    )
+    warnif(
+        N == 0 and M != 0,
+        UserWarning,
+        "Toroidal helicity is zero, meaning these are modular coils. Consider using "
+        "desc.coils.initialize_modular_coils",
+    )
+    warnif(
+        N == 0 and M == 0,
+        UserWarning,
+        "Toroidal and poloidal helicity are zero, meaning these are windowpane/saddle "
+        "coils. Consider using desc.coils.initialize_saddle_coils",
+    )
+    # for M=0 these are technically PF coils not helical, but we don't have a specific
+    # function for PF coils so don't bother warning.
+
+    a = eq.compute("a")["a"]
+    G = eq.compute("G", grid=LinearGrid(rho=1.0))["G"]
+    s = np.linspace(0, 2 * np.pi, npts, endpoint=False)
+
+    theta = M * s
+    zeta = N * s
+
+    theta %= 2 * np.pi
+    zeta %= 2 * np.pi
+
+    theta_offset = np.linspace(0, 2 * np.pi, num_coils, endpoint=False)
+
+    coils = []
+    for t in theta_offset:
+        grid = Grid(np.array([np.ones_like(s), (theta + t) % (2 * np.pi), zeta]).T)
+        data = eq.surface.compute(["x", "n_rho"], grid=grid, basis="xyz")
+        offset = r_over_a * a - a
+        x = data["x"] + offset * data["n_rho"]
+        coil = SplineXYZCoil(
+            2 * np.pi * G / mu_0 / num_coils / M, x[:, 0], x[:, 1], x[:, 2]
+        )
+        coils.append(coil)
+    return CoilSet(*coils)

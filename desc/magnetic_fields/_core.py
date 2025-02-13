@@ -5,7 +5,7 @@ from abc import ABC, abstractmethod
 from collections.abc import MutableSequence
 
 import numpy as np
-import scipy.linalg
+import scipy
 from diffrax import (
     DiscreteTerminatingEvent,
     ODETerm,
@@ -68,7 +68,7 @@ def biot_savart_general(re, rs, J, dV):
         B = B + jnp.where(den[:, None] == 0, 0, num / den[:, None])
         return B
 
-    return 1e-7 * fori_loop(0, J.shape[0], body, B)
+    return scipy.constants.mu_0 / 4 / jnp.pi * fori_loop(0, J.shape[0], body, B)
 
 
 def biot_savart_general_vector_potential(re, rs, J, dV):
@@ -102,7 +102,7 @@ def biot_savart_general_vector_potential(re, rs, J, dV):
         A = A + jnp.where(den[:, None] == 0, 0, num / den[:, None])
         return A
 
-    return 1e-7 * fori_loop(0, J.shape[0], body, A)
+    return scipy.constants.mu_0 / 4 / jnp.pi * fori_loop(0, J.shape[0], body, A)
 
 
 def read_BNORM_file(fname, surface, eval_grid=None, scale_by_curpol=True):
@@ -319,9 +319,11 @@ class _MagneticField(IOAble, ABC):
         Returns
         -------
         Bnorm : ndarray
-            The normal magnetic field to the surface given, of size grid.num_nodes.
+            The normal magnetic field to the surface given, as an array of
+            size ``grid.num_nodes``.
         coords: ndarray
-            the locations (in specified basis) at which the Bnormal was calculated
+            the locations (in specified basis) at which the Bnormal was calculated,
+            given as a ``(grid.num_nodes , 3)`` shaped array.
 
         """
         calc_Bplasma = False
@@ -1377,7 +1379,7 @@ class PoloidalMagneticField(_MagneticField, Optimizable):
             coords = xyz2rpz(coords)
 
         R, phi, Z = coords.T
-        r = jnp.sqrt((R - R0) ** 2 + Z**2)
+        r = jnp.hypot(R - R0, Z)
         theta = jnp.arctan2(Z, R - R0)
         br = -r * jnp.sin(theta)
         bp = jnp.zeros_like(br)
@@ -1883,7 +1885,7 @@ class SplineMagneticField(_MagneticField, Optimizable):
 
     @classmethod
     def from_field(
-        cls, field, R, phi, Z, params=None, method="cubic", extrap=False, NFP=1
+        cls, field, R, phi, Z, params=None, method="cubic", extrap=False, NFP=None
     ):
         """Create a splined magnetic field from another field for faster evaluation.
 
@@ -1901,7 +1903,8 @@ class SplineMagneticField(_MagneticField, Optimizable):
         extrap : bool
             whether to extrapolate splines beyond specified R,phi,Z
         NFP : int, optional
-            Number of toroidal field periods.
+            Number of toroidal field periods.  If not provided, will default to 1 or
+        the provided field's NFP, if it has that attribute.
 
         """
         R, phi, Z = map(np.asarray, (R, phi, Z))
@@ -1909,6 +1912,7 @@ class SplineMagneticField(_MagneticField, Optimizable):
         shp = rr.shape
         coords = np.array([rr.flatten(), pp.flatten(), zz.flatten()]).T
         BR, BP, BZ = field.compute_magnetic_field(coords, params, basis="rpz").T
+        NFP = getattr(field, "_NFP", 1)
         try:
             AR, AP, AZ = field.compute_magnetic_vector_potential(
                 coords, params, basis="rpz"
@@ -1946,12 +1950,22 @@ class ScalarPotentialField(_MagneticField):
         R,phi,Z are arrays of cylindrical coordinates.
     params : dict, optional
         default parameters to pass to potential function
+    NFP : int, optional
+        Whether the field has a discrete periodicity. This is only used when making
+        a ``SplineMagneticField`` from this field using its ``from_field`` method,
+        or when saving this field as an mgrid file using the ``save_mgrid`` method.
 
     """
 
-    def __init__(self, potential, params=None):
+    def __init__(self, potential, params=None, NFP=1):
         self._potential = potential
         self._params = params
+        self._NFP = NFP
+
+    @property
+    def NFP(self):
+        """int: Number of (toroidal) field periods."""
+        return self._NFP
 
     def compute_magnetic_field(
         self, coords, params=None, basis="rpz", source_grid=None, transforms=None
@@ -2040,12 +2054,22 @@ class VectorPotentialField(_MagneticField):
         R,phi,Z are arrays of cylindrical coordinates.
     params : dict, optional
         default parameters to pass to potential function
+    NFP : int, optional
+        Whether the field has a discrete periodicity. This is only used when making
+        a ``SplineMagneticField`` from this field using its ``from_field`` method,
+        or when saving this field as an mgrid file using the ``save_mgrid`` method.
 
     """
 
-    def __init__(self, potential, params=None):
+    def __init__(self, potential, params=None, NFP=1):
         self._potential = potential
         self._params = params
+        self._NFP = NFP
+
+    @property
+    def NFP(self):
+        """int: Number of (toroidal) field periods."""
+        return self._NFP
 
     def _compute_A_or_B(
         self,
@@ -2458,7 +2482,7 @@ class OmnigenousField(Optimizable, IOAble):
         nodes = np.array([rho, np.zeros_like(rho), np.zeros_like(rho)]).T
 
         transform_fwd = self.B_basis.evaluate(nodes)
-        transform_rev = scipy.linalg.pinv(transform_fwd)
+        transform_rev = jnp.linalg.pinv(transform_fwd)
         B_old = transform_fwd @ self.B_lm.reshape((old_L_B + 1, -1))
 
         eta_old = np.linspace(0, jnp.pi / 2, num=B_old.shape[-1])

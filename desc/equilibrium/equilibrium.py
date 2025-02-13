@@ -163,6 +163,7 @@ class Equilibrium(IOAble, Optimizable):
         "_M_grid",
         "_N_grid",
     ]
+    _static_attrs = ["_R_basis", "_Z_basis", "_L_basis"]
 
     @execute_on_cpu
     def __init__(

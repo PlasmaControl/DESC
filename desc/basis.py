@@ -35,6 +35,7 @@ class _Basis(IOAble, ABC):
         "_sym",
         "_spectral_indexing",
     ]
+    _static_attrs = ["_modes"]
 
     def __init__(self):
         self._enforce_symmetry()

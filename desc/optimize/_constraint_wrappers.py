@@ -1104,7 +1104,24 @@ class ProximalProjection(ObjectiveFunction):
 # define these helper functions that are stateless so we can safely jit them
 
 
-@functools.partial(jit, static_argnames=["op"])
+def jit_if_not_parallel(func):
+    """Jit a function if not in parallel mode."""
+
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        obj = args[0]
+        if getattr(obj, "_is_multi_device", False):
+            # Apply jit if jittable
+            jitted_func = functools.partial(jit, static_argnames=["op"])(func)
+            return jitted_func(*args, **kwargs)
+        else:
+            # Run normally if not jittable
+            return func(*args, **kwargs)
+
+    return wrapper
+
+
+@jit_if_not_parallel
 def _proximal_jvp_f_pure(constraint, xf, constants, dc, unfixed_idx, Z, D, dxdc, op):
     Fx = getattr(constraint, "jac_" + op)(xf, constants)
     Fx_reduced = Fx @ jnp.diag(D)[:, unfixed_idx] @ Z
@@ -1118,7 +1135,7 @@ def _proximal_jvp_f_pure(constraint, xf, constants, dc, unfixed_idx, Z, D, dxdc,
     return Fxh_inv @ Fc
 
 
-@functools.partial(jit, static_argnames=["op"])
+@jit_if_not_parallel
 def _proximal_jvp_blocked_pure(objective, vgs, xgs, op):
     out = []
     for k, (obj, const) in enumerate(zip(objective.objectives, objective.constants)):

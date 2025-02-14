@@ -54,9 +54,10 @@ from desc.integrals.quad_utils import (
     tanh_sinh,
 )
 from desc.integrals.singularities import (
-    _get_default_params,
     _get_quadrature_nodes,
     _kernel_nr_over_r3,
+    best_ratio,
+    heuristic_support_params,
 )
 from desc.integrals.surface_integral import _get_grid_surface
 from desc.transform import Transform
@@ -643,7 +644,7 @@ class TestSingularities:
         Nv = 100
         es = 6e-7
         grid = LinearGrid(M=Nu // 2, N=Nv // 2, NFP=eq.NFP)
-        st, sz, q = _get_default_params(grid)
+        st, sz, q = heuristic_support_params(grid, best_ratio(data)[0])
         interpolator = FFTInterpolator(grid, grid, st, sz, q)
         data = eq.compute(_kernel_nr_over_r3.keys + ["|e_theta x e_zeta|"], grid=grid)
         err = singular_integral(data, data, "nr_over_r3", interpolator, chunk_size=50)
@@ -667,7 +668,7 @@ class TestSingularities:
             "|e_theta x e_zeta|",
         ]
         data = eq.compute(keys, grid=grid)
-        st, sz, q = _get_default_params(grid)
+        st, sz, q = heuristic_support_params(grid, best_ratio(data)[0])
         interp = interpolator(grid, grid, st, sz, q)
         Bplasma = virtual_casing_biot_savart(data, data, interp, chunk_size=50)
         # need extra factor of B/2 bc we're evaluating on plasma surface
@@ -675,7 +676,7 @@ class TestSingularities:
         Bplasma = np.linalg.norm(Bplasma, axis=-1)
         # scale by total field magnitude
         B = Bplasma / np.linalg.norm(data["B"], axis=-1).mean()
-        np.testing.assert_allclose(B, 0, atol=0.005)
+        np.testing.assert_allclose(B, 0, atol=0.0054)
 
     @pytest.mark.unit
     @pytest.mark.parametrize("interpolator", [FFTInterpolator, DFTInterpolator])

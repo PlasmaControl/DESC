@@ -349,7 +349,7 @@ class ObjectiveFunction(IOAble):
         errorif(
             isposint(self._jac_chunk_size) and self._deriv_mode in ["auto", "blocked"],
             ValueError,
-            "'jac_chunk_size' was passed into ObjectiveFunction, but the "
+            "\n'jac_chunk_size' was passed into ObjectiveFunction, but the \n"
             "ObjectiveFunction is not using 'batched' deriv_mode",
         )
         sub_obj_jac_chunk_sizes_are_ints = [
@@ -358,11 +358,11 @@ class ObjectiveFunction(IOAble):
         errorif(
             any(sub_obj_jac_chunk_sizes_are_ints) and self._deriv_mode == "batched",
             ValueError,
-            "'jac_chunk_size' was passed into one or more sub-objectives, but the"
-            " ObjectiveFunction is using 'batched' deriv_mode, so sub-objective "
-            "'jac_chunk_size' will be ignored in favor of the ObjectiveFunction's "
-            f"'jac_chunk_size' of {self._jac_chunk_size}."
-            " Specify 'blocked' deriv_mode if each sub-objective is desired to have a "
+            "\n'jac_chunk_size' was passed into one or more sub-objectives, but the\n"
+            " ObjectiveFunction is using 'batched' deriv_mode, so sub-objective \n"
+            "'jac_chunk_size' will be ignored in favor of the ObjectiveFunction's \n"
+            f"'jac_chunk_size' of {self._jac_chunk_size}.\n"
+            " Specify 'blocked' deriv_mode if each sub-objective is desired to have a\n"
             "different 'jac_chunk_size' for its Jacobian computation.",
         )
 
@@ -372,11 +372,15 @@ class ObjectiveFunction(IOAble):
             else:
                 self._deriv_mode = "blocked"
 
-        if self._is_multi_device and self._deriv_mode != "blocked":
-            raise ValueError(
-                "When using multiple GPUs, the deriv_mode must be set to 'blocked'. "
-                "When you are creating the ObjectiveFunction, set deriv_mode='blocked'."
-            )
+        warnif(
+            self._is_multi_device and self._deriv_mode != "blocked",
+            UserWarning,
+            "\nWhen using multiple devices, the ObjectiveFunction will run each \n"
+            "sub-objective on the device specified in the sub-objective. \n"
+            "Setting the deriv_mode to 'blocked' to ensure that each sub-objective\n"
+            "runs on the correct device.",
+        )
+        self._deriv_mode != "blocked"
 
         if self._jac_chunk_size == "auto":
             # Heuristic estimates of fwd mode Jacobian memory usage,
@@ -762,7 +766,7 @@ class ObjectiveFunction(IOAble):
         for k, (obj, const) in enumerate(zip(self.objectives, constants)):
             # TODO: this is for debugging purposes, must be deleted before merging!
             if self._is_multi_device:
-                print(f"This should run on GPU id:{obj._device_id}")
+                print(f"This should run on device id:{obj._device_id}")
             # get the xs that go to that objective
             thing_idx = self._things_per_objective_idx[k]
             xi = [xs[i] for i in thing_idx]

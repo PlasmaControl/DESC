@@ -69,10 +69,19 @@ else:
             )
         )
 
-print(
-    f"CPU Info: {desc_config['cpu_info']} with {desc_config['cpu_mem']:.2f} "
-    "GB available memory"
-)
+if desc_config["num_device"] == 1:
+    print(
+        f"CPU Info: {desc_config['cpu_info']} with {desc_config['cpu_mem']:.2f} "
+        "GB available memory"
+    )
+elif desc_config["kind"] == "cpu":
+    print(f"Using {desc_config['num_device']} CPUs:")
+    for i, dev in enumerate(desc_config["devices"]):
+        print(
+            f"\t CPU {i}: {dev} with {desc_config['avail_mems'][i]:.2f} "
+            "GB available memory"
+        )
+
 if desc_config["kind"] == "gpu":
     print(f"Using {desc_config['num_device']} device:")
     for i, dev in enumerate(desc_config["devices"]):

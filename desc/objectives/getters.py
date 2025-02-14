@@ -346,9 +346,7 @@ def maybe_add_self_consistency(thing, constraints):
     return constraints
 
 
-def get_parallel_forcebalance(
-    eq, num_device, grid=None, use_jit=True, check_device=True
-):  # pragma: no cover
+def get_parallel_forcebalance(eq, num_device, grid=None, use_jit=True):
     """Get an ObjectiveFunction for parallel computing ForceBalance.
 
     Parameters
@@ -367,15 +365,10 @@ def get_parallel_forcebalance(
     from desc.backend import desc_config, jax, jnp
     from desc.grid import LinearGrid
 
-    if desc_config["kind"] != "gpu":
-        raise ValueError(
-            "Parallel computing is only supported on GPU. "
-            "Please use DESC with GPU device."
-        )
-    if desc_config["num_device"] != num_device and check_device:
+    if desc_config["num_device"] < num_device:
         raise ValueError(
             f"Number of devices in desc_config ({desc_config['num_device']}) "
-            f"does not match the number of devices in input ({num_device})."
+            f"is less than the number of devices in input ({num_device})."
         )
     if grid is not None:
         if len(grid) != num_device:
@@ -414,6 +407,6 @@ def get_parallel_forcebalance(
         # set the eq to be the same manually
         obj._things[0] = eq
         objs += (obj,)
-    objective = ObjectiveFunction(objs, deriv_mode="blocked")
+    objective = ObjectiveFunction(objs)
     objective.build(use_jit=use_jit)
     return objective

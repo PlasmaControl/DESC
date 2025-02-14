@@ -81,7 +81,39 @@ def _get_processor_name():
     return ""
 
 
-def set_device(kind="cpu", gpuid=None, num_device=1):
+def _set_cpu_count(n):
+    """Set the number of CPUs visible to JAX.
+
+    By default, JAX sees the whole CPU as a single device, regardless of the number of
+    cores or threads. It then uses multiple cores and threads for lower level
+    parallelism within individual operations.
+
+    Alternatively, you can force JAX to expose a given number of "virtual" CPUs that
+    can then be used manually for higher level parallelism (as in at the level of
+    multiple objective functions.)
+
+    This function is mainly for testing on CI purposes of the parallelism in DESC.
+
+    Parameters
+    ----------
+    n : int
+        Number of virtual CPUs for high level parallelism.
+
+    Notes
+    -----
+    This function must be called before importing anything else from DESC or JAX,
+    and before calling ``desc.set_device``, otherwise it will have no effect.
+    """
+    xla_flags = os.getenv("XLA_FLAGS", "")
+    xla_flags = re.sub(
+        r"--xla_force_host_platform_device_count=\S+", "", xla_flags
+    ).split()
+    os.environ["XLA_FLAGS"] = " ".join(
+        [f"--xla_force_host_platform_device_count={n}"] + xla_flags
+    )
+
+
+def set_device(kind="cpu", gpuid=None, num_device=1):  # noqa: C901
     """Sets the device to use for computation.
 
     If kind==``'gpu'`` and a gpuid is specified, uses the specified GPU. If
@@ -105,10 +137,6 @@ def set_device(kind="cpu", gpuid=None, num_device=1):
         number of devices to use. Default is 1.
 
     """
-    if kind == "cpu" and num_device > 1:
-        # TODO: implement multi-CPU support
-        raise ValueError("Cannot request multiple CPUs")
-
     config["kind"] = kind
     config["num_device"] = num_device
 
@@ -120,8 +148,22 @@ def set_device(kind="cpu", gpuid=None, num_device=1):
     if kind == "cpu":
         os.environ["JAX_PLATFORMS"] = "cpu"
         os.environ["CUDA_VISIBLE_DEVICES"] = ""
-        config["devices"] = [f"{cpu_info} CPU"]
-        config["avail_mems"] = [cpu_mem]
+        if num_device == 1:
+            config["devices"] = [f"{cpu_info} CPU"]
+            config["avail_mems"] = [cpu_mem]
+        else:
+            try:
+                import jax
+
+                jax_cpu = jax.devices("cpu")
+                assert len(jax_cpu) == num_device
+                config["devices"] = [f"{dev}" for dev in jax_cpu]
+                config["avail_mems"] = [cpu_mem for _ in range(num_device)]
+            except ModuleNotFoundError:
+                raise ValueError(
+                    "JAX not installed. Please install JAX to use multiple CPUs."
+                    "Alternatively, set num_device=1 to use a single CPU."
+                )
 
     elif kind == "gpu":
         os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"

@@ -1001,7 +1001,7 @@ def _Q_piecewise_omni(params, transforms, profiles, data, **kwargs):
                     NFP * zeta_pp - jnp.pi,
                     NFP * zeta_pm - jnp.pi,
                     theta_pp - jnp.pi,
-                    theta_pm + jnp.pi,
+                    -theta_pm - jnp.pi,
                 ],
                 axis=0,
             )
@@ -1010,6 +1010,42 @@ def _Q_piecewise_omni(params, transforms, profiles, data, **kwargs):
     )
 
     data["Q_pwO"] = Q
+
+    return data
+
+
+@register_compute_fun(
+    name="Delta_BS",
+    label="|\\mathbf{B}|",
+    units="~",
+    units_long="None",
+    description="Delta proxi for zero pwO Bootstrap current",
+    dim=1,
+    params=["t_1", "t_2", "w_2", "iota0"],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="rtz",
+    data=[],  # Potential error, we want eq |B|
+    parameterization="desc.magnetic_fields._core.PiecewiseOmnigenousField",
+)
+def _Delta_bs_piecewiseomni(params, transforms, profiles, data, **kwargs):
+    # NFP can't be a parameter. Must come from equilibrium
+    NFP = transforms["grid"].NFP
+
+    t_1 = params["t_1"]
+    t_2 = params["t_2"]
+    w_2 = params["w_2"]
+    iota0 = params["iota0"]
+
+    w_1 = ((jnp.pi / NFP) * (1 - t_1 * t_2)) / (1 + t_2 / iota0)
+
+    A1 = jnp.abs((4 * w_2 * (w_1 - jnp.pi / NFP)) / (1 - t_1 * t_2))
+
+    A2 = jnp.abs((4 * jnp.pi**2 / NFP) - (4 * w_2 * jnp.pi) / (NFP * (1 - t_1 * t_2)))
+
+    Delta = (1 / (4 * jnp.pi**2)) * ((A1 / (iota0 + 1 / t_1)) + (A2 / (iota0 + t_2)))
+
+    data["Delta_BS"] = Delta
 
     return data
 

@@ -380,7 +380,8 @@ class ObjectiveFunction(IOAble):
             "Setting the deriv_mode to 'blocked' to ensure that each sub-objective\n"
             "runs on the correct device.",
         )
-        self._deriv_mode != "blocked"
+        if self._is_multi_device:
+            self._deriv_mode = "blocked"
 
         if self._jac_chunk_size == "auto":
             # Heuristic estimates of fwd mode Jacobian memory usage,

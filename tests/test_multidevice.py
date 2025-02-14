@@ -10,54 +10,76 @@ set_device(kind="cpu", num_device=num_device)
 import numpy as np
 import pytest
 
-from desc.backend import jax, jnp
+from desc.backend import jax
 from desc.examples import get
-from desc.grid import Grid, LinearGrid
+from desc.grid import LinearGrid
 from desc.objectives import ForceBalance, ObjectiveFunction
 
 
-@pytest.mark.xfail(reason="This test is not working right now")
+@pytest.mark.xfail(reason="We need to make a new action for these tests.")
 @pytest.mark.unit
 def test_multidevice_jac():
     """Test that the Jacobian is the same for a single and multi device."""
     eq = get("HELIOTRON")
-    eq.change_resolution(3, 3, 3, 6, 6, 6)
+    eq.change_resolution(6, 6, 3, 12, 12, 6)
+    eq1 = eq.copy()
+    eq2 = eq.copy()
 
-    # TODO: This doesn't work right now because grid order is not the same
     grid1 = LinearGrid(
-        M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, rho=np.array([0.2, 0.4]), sym=True
+        M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, rho=np.array([0.2]), sym=True
     )
     grid2 = LinearGrid(
         M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, rho=np.array([0.6, 0.8]), sym=True
     )
-    grid1 = Grid(grid1.nodes, weights=grid1.weights, spacing=grid1.spacing)
-    grid2 = Grid(grid2.nodes, weights=grid2.weights, spacing=grid2.spacing)
-    grid3 = Grid(
-        jnp.vstack([grid1.nodes, grid2.nodes]),
-        weights=jnp.hstack([grid1.weights, grid2.weights]),
-        spacing=jnp.hstack([grid1.spacing, grid2.spacing]),
+    grid3 = LinearGrid(
+        M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, rho=np.array([0.2, 0.6]), sym=True
+    )
+    grid4 = LinearGrid(
+        M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, rho=np.array([0.4, 0.8, 0.9]), sym=True
     )
 
-    objective1 = ForceBalance(eq, grid=grid1, device_id=0)
-    objective2 = ForceBalance(eq, grid=grid2, device_id=0)
-    objective3 = ForceBalance(eq, grid=grid3, device_id=0)
+    objective1 = ForceBalance(eq1, grid=grid1, device_id=0)
+    objective2 = ForceBalance(eq1, grid=grid2, device_id=1)
+    objective3 = ForceBalance(eq2, grid=grid3, device_id=0)
+    objective4 = ForceBalance(eq2, grid=grid4, device_id=0)
 
-    for obj in [objective1, objective2, objective3]:
+    for obj in [objective1, objective2, objective3, objective4]:
         obj.build()
         obj = jax.device_put(obj, device=obj._device)
-        obj.things[0] = eq
+    objective1.things[0] = eq1
+    objective2.things[0] = eq1
+    objective3.things[0] = eq2
+    objective4.things[0] = eq2
 
+    # this one is multi-device, and grids have different sizes
     obj1 = ObjectiveFunction([objective1, objective2])
-    obj2 = ObjectiveFunction(objective3)
-    obj1.build(use_jit=False)
-    obj2.build(use_jit=False)
+    # this one is single device, and grids have different sizes
+    obj2 = ObjectiveFunction([objective3, objective4])
+    obj1.build()
+    obj2.build()
 
-    np.testing.assert_allclose(obj1.x(eq), obj2.x(eq))
+    assert obj1._is_multi_device
+    assert not obj2._is_multi_device
 
-    np.testing.assert_allclose(
-        grid3.nodes, jnp.vstack([grid1.nodes, grid2.nodes]), atol=1e-12, rtol=1e-12
-    )
-    err1 = objective1.jac_scaled_error(obj1.x(eq))
-    err2 = objective2.jac_scaled_error(obj2.x(eq))
+    np.testing.assert_allclose(obj1.x(eq1), obj2.x(eq2))
 
-    np.testing.assert_allclose(err1, err2)
+    # multi-device objective must be blocked
+    assert obj1._deriv_mode == "blocked"
+    assert obj2._deriv_mode == "batched"
+
+    # creating grids like grid3 = [grid1, grid2] doesn't give the same
+    # node, spacing and weight ordering, so we can't compare the Jacobians
+    # or the objective values directly. Instead, we compare the objective
+    # values before and after a single iteration of the solver. This should
+    # always decrease the objective value.
+    error_init1 = obj1.compute_scalar(obj1.x(eq1))
+    error_init2 = obj2.compute_scalar(obj2.x(eq2))
+
+    eq1.solve(objective=obj1, maxiter=1)
+    eq2.solve(objective=obj2, maxiter=1)
+
+    error_final1 = obj1.compute_scalar(obj1.x(eq1))
+    error_final2 = obj2.compute_scalar(obj2.x(eq2))
+
+    assert error_final1 < error_init1
+    assert error_final2 < error_init2

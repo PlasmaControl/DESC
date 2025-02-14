@@ -1294,6 +1294,7 @@ class QuadraticFlux(_Objective):
         jac_chunk_size=None,
         *,
         bs_chunk_size=10,
+        **kwargs,
     ):
         from desc.geometry import FourierRZToroidalSurface
 
@@ -1505,6 +1506,7 @@ class SurfaceQuadraticFlux(_Objective):
         jac_chunk_size=None,
         *,
         bs_chunk_size=10,
+        **kwargs,
     ):
         if target is None and bounds is None:
             target = 0
@@ -1722,6 +1724,7 @@ class ToroidalFlux(_Objective):
         jac_chunk_size=None,
         *,
         bs_chunk_size=10,
+        **kwargs,
     ):
         if target is None and bounds is None:
             target = 1.0 if not hasattr(eq, "Psi") else eq.Psi

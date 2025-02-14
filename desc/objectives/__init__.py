@@ -43,6 +43,7 @@ from ._neoclassical import EffectiveRipple
 from ._omnigenity import (
     Isodynamicity,
     Omnigenity,
+    PiecewiseOmnigenity,
     QuasisymmetryBoozer,
     QuasisymmetryTripleProduct,
     QuasisymmetryTwoTerm,

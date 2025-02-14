@@ -4,7 +4,7 @@ import functools
 
 import numpy as np
 
-from desc.backend import jit, jnp
+from desc.backend import jax, jit, jnp, pconcat
 from desc.batching import batched_vectorize
 from desc.objectives import (
     BoundaryRSelfConsistency,
@@ -1104,27 +1104,57 @@ class ProximalProjection(ObjectiveFunction):
 # define these helper functions that are stateless so we can safely jit them
 
 
-@functools.partial(jit, static_argnames=["op"])
+def jit_if_not_parallel(func):
+    """Jit a function if not in parallel mode."""
+
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        obj = args[0]
+        if not getattr(obj, "_is_multi_device", False):
+            # Apply jit if jittable
+            jitted_func = functools.partial(jit, static_argnames=["op"])(func)
+            return jitted_func(*args, **kwargs)
+        else:
+            # Run normally if not jittable
+            return func(*args, **kwargs)
+
+    return wrapper
+
+
+@jit_if_not_parallel
 def _proximal_jvp_f_pure(constraint, xf, constants, dc, unfixed_idx, Z, D, dxdc, op):
     Fx = getattr(constraint, "jac_" + op)(xf, constants)
-    Fx_reduced = Fx @ jnp.diag(D)[:, unfixed_idx] @ Z
-    Fc = Fx @ (dxdc @ dc)
-    Fxh = Fx_reduced
-    cutoff = jnp.finfo(Fxh.dtype).eps * max(Fxh.shape)
-    uf, sf, vtf = jnp.linalg.svd(Fxh, full_matrices=False)
-    sf += sf[-1]  # add a tiny bit of regularization
-    sfi = jnp.where(sf < cutoff * sf[0], 0, 1 / sf)
-    Fxh_inv = vtf.T @ (sfi[..., None] * uf.T)
-    return Fxh_inv @ Fc
+
+    @jit
+    def fun(Fx, dxdc, dc, unfixed_idx, Z, D):
+        # F_reduced
+        Fxh = Fx @ jnp.diag(D)[:, unfixed_idx] @ Z
+        Fc = Fx @ (dxdc @ dc)
+        cutoff = jnp.finfo(Fxh.dtype).eps * max(Fxh.shape)
+        uf, sf, vtf = jnp.linalg.svd(Fxh, full_matrices=False)
+        sf += sf[-1]  # add a tiny bit of regularization
+        sfi = jnp.where(sf < cutoff * sf[0], 0, 1 / sf)
+        Fxh_inv = vtf.T @ (sfi[..., None] * uf.T)
+        return Fxh_inv @ Fc
+
+    return fun(Fx, dxdc, dc, unfixed_idx, Z, D)
 
 
-@functools.partial(jit, static_argnames=["op"])
+@jit_if_not_parallel
 def _proximal_jvp_blocked_pure(objective, vgs, xgs, op):
     out = []
     for k, (obj, const) in enumerate(zip(objective.objectives, objective.constants)):
+        # TODO: this is for debugging purposes, must be deleted before merging!
+        if objective._is_multi_device:
+            print(f"This should run on GPU id:{obj._device_id}")
         thing_idx = objective._things_per_objective_idx[k]
         xi = [xgs[i] for i in thing_idx]
         vi = [vgs[i] for i in thing_idx]
+        if objective._is_multi_device:  # pragma: no cover
+            # inputs to jitted functions must live on the same device. Need to
+            # put xi and vi on the same device as the objective
+            xi = jax.device_put(xi, obj._device)
+            vi = jax.device_put(vi, obj._device)
         assert len(xi) > 0
         assert len(vi) > 0
         assert len(xi) == len(vi)
@@ -1138,5 +1168,8 @@ def _proximal_jvp_blocked_pure(objective, vgs, xgs, op):
         else:
             outi = getattr(obj, "jvp_" + op)([_vi for _vi in vi], xi, constants=const).T
             out.append(outi)
-    out = jnp.concatenate(out)
+    if objective._is_multi_device:  # pragma: no cover
+        out = pconcat(out)
+    else:
+        out = jnp.concatenate(out)
     return out

@@ -8,8 +8,11 @@ import numpy as np
 from desc.backend import (
     desc_config,
     execute_on_cpu,
+    jax,
     jit,
+    jit_with_device,
     jnp,
+    pconcat,
     tree_flatten,
     tree_map,
     tree_unflatten,
@@ -93,6 +96,12 @@ doc_jac_chunk_size = """
         option will yield a larger chunk size than may be needed. It is recommended
         to manually choose a chunk_size if an OOM error is experienced in this case.
 """
+doc_device_id = """
+    device_id : int, optional
+        Device ID to run the objective on. Defaults to 0. If different objectives
+        are on different devices, the ObjectiveFunction will run each sub-objective
+        on the device specified in the sub-objective.
+"""
 docs = {
     "target": doc_target,
     "bounds": doc_bounds,
@@ -103,6 +112,7 @@ docs = {
     "deriv_mode": doc_deriv_mode,
     "name": doc_name,
     "jac_chunk_size": doc_jac_chunk_size,
+    "device_id": doc_device_id,
 }
 
 
@@ -263,6 +273,8 @@ class ObjectiveFunction(IOAble):
         self._built = False
         self._compiled = False
         self._name = name
+        device_ids = [obj._device_id for obj in objectives]
+        self._is_multi_device = len(set(device_ids)) > 1
 
     def _unjit(self):
         """Remove jit compiled methods."""
@@ -292,19 +304,29 @@ class ObjectiveFunction(IOAble):
                 pass
 
     @execute_on_cpu
-    def build(self, use_jit=None, verbose=1):
+    def build(self, use_jit=None, verbose=1):  # noqa:  C901
         """Build the objective.
 
         Parameters
         ----------
         use_jit : bool, optional
-            Whether to just-in-time compile the objective and derivatives.
+            Whether to just-in-time compile the objective and derivatives. If using
+            multiple GPUs, instead of jitting the ObjectiveFunction, the sub-objectives
+            will be jitted individually, independent of the value of `use_jit`.
         verbose : int, optional
             Level of output.
 
         """
+        use_jit_wrapper = True
         if use_jit is not None:
             self._use_jit = use_jit
+            # use_jit_wrapper is used to determine if we jit the ObjectiveFunction
+            # methods. If we are using multiple GPUs, we don't want to jit them.
+            use_jit_wrapper = use_jit
+
+        if self._is_multi_device:
+            use_jit_wrapper = False
+
         timer = Timer()
         timer.start("Objective build")
 
@@ -327,7 +349,7 @@ class ObjectiveFunction(IOAble):
         errorif(
             isposint(self._jac_chunk_size) and self._deriv_mode in ["auto", "blocked"],
             ValueError,
-            "'jac_chunk_size' was passed into ObjectiveFunction, but the "
+            "\n'jac_chunk_size' was passed into ObjectiveFunction, but the \n"
             "ObjectiveFunction is not using 'batched' deriv_mode",
         )
         sub_obj_jac_chunk_sizes_are_ints = [
@@ -336,11 +358,11 @@ class ObjectiveFunction(IOAble):
         errorif(
             any(sub_obj_jac_chunk_sizes_are_ints) and self._deriv_mode == "batched",
             ValueError,
-            "'jac_chunk_size' was passed into one or more sub-objectives, but the"
-            " ObjectiveFunction is using 'batched' deriv_mode, so sub-objective "
-            "'jac_chunk_size' will be ignored in favor of the ObjectiveFunction's "
-            f"'jac_chunk_size' of {self._jac_chunk_size}."
-            " Specify 'blocked' deriv_mode if each sub-objective is desired to have a "
+            "\n'jac_chunk_size' was passed into one or more sub-objectives, but the\n"
+            " ObjectiveFunction is using 'batched' deriv_mode, so sub-objective \n"
+            "'jac_chunk_size' will be ignored in favor of the ObjectiveFunction's \n"
+            f"'jac_chunk_size' of {self._jac_chunk_size}.\n"
+            " Specify 'blocked' deriv_mode if each sub-objective is desired to have a\n"
             "different 'jac_chunk_size' for its Jacobian computation.",
         )
 
@@ -350,22 +372,41 @@ class ObjectiveFunction(IOAble):
             else:
                 self._deriv_mode = "blocked"
 
+        warnif(
+            self._is_multi_device and self._deriv_mode != "blocked",
+            UserWarning,
+            "\nWhen using multiple devices, the ObjectiveFunction will run each \n"
+            "sub-objective on the device specified in the sub-objective. \n"
+            "Setting the deriv_mode to 'blocked' to ensure that each sub-objective\n"
+            "runs on the correct device.",
+        )
+        if self._is_multi_device:
+            self._deriv_mode = "blocked"
+
         if self._jac_chunk_size == "auto":
             # Heuristic estimates of fwd mode Jacobian memory usage,
             # slightly conservative, based on using ForceBalance as the objective
             estimated_memory_usage = 2.4e-7 * self.dim_f * self.dim_x + 1  # in GB
+            mem_avail = desc_config["avail_mems"][0]  # in GB
             max_chunk_size = round(
-                (desc_config.get("avail_mem") / estimated_memory_usage - 0.22)
-                / 0.85
-                * self.dim_x
+                (mem_avail / estimated_memory_usage - 0.22) / 0.85 * self.dim_x
             )
             self._jac_chunk_size = max([1, max_chunk_size])
             if self._deriv_mode == "blocked":
                 for obj in self.objectives:
                     if obj._jac_chunk_size is None:
-                        obj._jac_chunk_size = self._jac_chunk_size
+                        estimated_memory_usage = (
+                            2.4e-7 * obj.dim_f * obj.things[0].dim_x + 1
+                        )  # in GB
+                        mem_avail = desc_config["avail_mems"][obj._device_id]  # in GB
+                        max_chunk_size = round(
+                            (mem_avail / estimated_memory_usage - 0.22)
+                            / 0.85
+                            * obj.things[0].dim_x
+                        )
+                        obj._jac_chunk_size = max([1, max_chunk_size])
 
-        if not self.use_jit:
+        if not use_jit_wrapper:
             self._unjit()
 
         self._built = True
@@ -436,12 +477,22 @@ class ObjectiveFunction(IOAble):
         if constants is None:
             constants = self.constants
         assert len(params) == len(constants) == len(self.objectives)
-        f = jnp.concatenate(
-            [
-                obj.compute_unscaled(*par, constants=const)
-                for par, obj, const in zip(params, self.objectives, constants)
-            ]
-        )
+        if not self._is_multi_device:
+            f = jnp.concatenate(
+                [
+                    obj.compute_unscaled(*par, constants=const)
+                    for par, obj, const in zip(params, self.objectives, constants)
+                ]
+            )
+        else:  # pragma: no cover
+            f = pconcat(
+                [
+                    obj.compute_unscaled(
+                        *jax.device_put(par, obj._device), constants=const
+                    )
+                    for par, obj, const in zip(params, self.objectives, constants)
+                ]
+            )
         return f
 
     @jit
@@ -465,12 +516,22 @@ class ObjectiveFunction(IOAble):
         if constants is None:
             constants = self.constants
         assert len(params) == len(constants) == len(self.objectives)
-        f = jnp.concatenate(
-            [
-                obj.compute_scaled(*par, constants=const)
-                for par, obj, const in zip(params, self.objectives, constants)
-            ]
-        )
+        if not self._is_multi_device:
+            f = jnp.concatenate(
+                [
+                    obj.compute_scaled(*par, constants=const)
+                    for par, obj, const in zip(params, self.objectives, constants)
+                ]
+            )
+        else:  # pragma: no cover
+            f = pconcat(
+                [
+                    obj.compute_scaled(
+                        *jax.device_put(par, obj._device), constants=const
+                    )
+                    for par, obj, const in zip(params, self.objectives, constants)
+                ]
+            )
         return f
 
     @jit
@@ -494,12 +555,22 @@ class ObjectiveFunction(IOAble):
         if constants is None:
             constants = self.constants
         assert len(params) == len(constants) == len(self.objectives)
-        f = jnp.concatenate(
-            [
-                obj.compute_scaled_error(*par, constants=const)
-                for par, obj, const in zip(params, self.objectives, constants)
-            ]
-        )
+        if not self._is_multi_device:
+            f = jnp.concatenate(
+                [
+                    obj.compute_scaled_error(*par, constants=const)
+                    for par, obj, const in zip(params, self.objectives, constants)
+                ]
+            )
+        else:  # pragma: no cover
+            f = pconcat(
+                [
+                    obj.compute_scaled_error(
+                        *jax.device_put(par, obj._device), constants=const
+                    )
+                    for par, obj, const in zip(params, self.objectives, constants)
+                ]
+            )
         return f
 
     @jit
@@ -564,9 +635,14 @@ class ObjectiveFunction(IOAble):
             for par, par0, obj, const in zip(
                 params, params0, self.objectives, constants
             ):
+                if self._is_multi_device:  # pragma: no cover
+                    par = jax.device_put(par, obj._device)
+                    par0 = jax.device_put(par0, obj._device)
                 obj.print_value(par, par0, constants=const)
-        else:
+        else:  # pragma: no cover
             for par, obj, const in zip(params, self.objectives, constants):
+                if self._is_multi_device:
+                    par = jax.device_put(par, obj._device)
                 obj.print_value(par, constants=const)
         return None
 
@@ -689,15 +765,27 @@ class ObjectiveFunction(IOAble):
         # one by one, and assemble into big block matrix
         # if objective doesn't depend on a given thing, that part is set to 0.
         for k, (obj, const) in enumerate(zip(self.objectives, constants)):
+            # TODO: this is for debugging purposes, must be deleted before merging!
+            if self._is_multi_device:
+                print(f"This should run on device id:{obj._device_id}")
             # get the xs that go to that objective
             thing_idx = self._things_per_objective_idx[k]
             xi = [xs[i] for i in thing_idx]
             vi = [vs[i] for i in thing_idx]
+            if self._is_multi_device:  # pragma: no cover
+                # inputs to jitted functions must live on the same device. Need to
+                # put xi and vi on the same device as the objective
+                xi = jax.device_put(xi, obj._device)
+                vi = jax.device_put(vi, obj._device)
             Ji_ = getattr(obj, "jvp_" + op)(vi, xi, constants=const)
             J += [Ji_]
         # this is the transpose of the jvp when v is a matrix, for consistency with
         # jvp_batched
-        J = jnp.hstack(J)
+        if not self._is_multi_device:
+            J = jnp.hstack(J)
+        else:
+            J = pconcat(J, mode="hstack")
+
         return J
 
     def _jvp_batched(self, v, x, constants=None, op="scaled"):
@@ -1031,6 +1119,9 @@ class _Objective(IOAble, ABC):
         "_normalization",
         "_deriv_mode",
     ]
+    # _device is of type 'jaxlib.xla_extension.Device' which cannot be an argument
+    # to a jitted function.
+    _static_attrs = ["_device"]
 
     def __init__(
         self,
@@ -1044,6 +1135,7 @@ class _Objective(IOAble, ABC):
         deriv_mode="auto",
         name=None,
         jac_chunk_size=None,
+        device_id=0,
     ):
         if self._scalar:
             assert self._coordinates == ""
@@ -1057,6 +1149,16 @@ class _Objective(IOAble, ABC):
         assert jac_chunk_size is None or isposint(jac_chunk_size)
 
         self._jac_chunk_size = jac_chunk_size
+        self._device_id = device_id
+        # if device_id is not 0, this typically means we are using multiple devices and
+        # we won't jit the ObjectiveFunction methods. For single device, if we set
+        # _device to a jaxlib.xla_extension.Device type, jit will throw error expecting
+        # it to be static. So we set _device to None in that case which is simpler then
+        # making it static.
+        if device_id != 0:
+            self._device = jax.devices(desc_config["kind"])[device_id]
+        else:
+            self._device = None
 
         self._target = target
         self._bounds = bounds
@@ -1185,7 +1287,7 @@ class _Objective(IOAble, ABC):
                 argsout += (arg,)
         return argsout
 
-    @jit
+    @jit_with_device
     def compute_unscaled(self, *args, **kwargs):
         """Compute the raw value of the objective."""
         args = self._maybe_array_to_params(*args)
@@ -1194,7 +1296,7 @@ class _Objective(IOAble, ABC):
             f = self._loss_function(f)
         return jnp.atleast_1d(f)
 
-    @jit
+    @jit_with_device
     def compute_scaled(self, *args, **kwargs):
         """Compute and apply weighting and normalization."""
         args = self._maybe_array_to_params(*args)
@@ -1203,7 +1305,7 @@ class _Objective(IOAble, ABC):
             f = self._loss_function(f)
         return jnp.atleast_1d(self._scale(f, **kwargs))
 
-    @jit
+    @jit_with_device
     def compute_scaled_error(self, *args, **kwargs):
         """Compute and apply the target/bounds, weighting, and normalization."""
         args = self._maybe_array_to_params(*args)
@@ -1246,7 +1348,7 @@ class _Objective(IOAble, ABC):
         f_norm = jnp.atleast_1d(f) / self.normalization  # normalization
         return f_norm * w * self.weight
 
-    @jit
+    @jit_with_device
     def compute_scalar(self, *args, **kwargs):
         """Compute the scalar form of the objective."""
         if self.scalar:
@@ -1255,19 +1357,19 @@ class _Objective(IOAble, ABC):
             f = jnp.sum(self.compute_scaled_error(*args, **kwargs) ** 2) / 2
         return f.squeeze()
 
-    @jit
+    @jit_with_device
     def grad(self, *args, **kwargs):
         """Compute gradient vector of self.compute_scalar wrt x."""
         argnums = tuple(range(len(self.things)))
         return Derivative(self.compute_scalar, argnums, mode="grad")(*args, **kwargs)
 
-    @jit
+    @jit_with_device
     def hess(self, *args, **kwargs):
         """Compute Hessian matrix of self.compute_scalar wrt x."""
         argnums = tuple(range(len(self.things)))
         return Derivative(self.compute_scalar, argnums, mode="hess")(*args, **kwargs)
 
-    @jit
+    @jit_with_device
     def jac_scaled(self, *args, **kwargs):
         """Compute Jacobian matrix of self.compute_scaled wrt x."""
         argnums = tuple(range(len(self.things)))
@@ -1278,7 +1380,7 @@ class _Objective(IOAble, ABC):
             chunk_size=self._jac_chunk_size,
         )(*args, **kwargs)
 
-    @jit
+    @jit_with_device
     def jac_scaled_error(self, *args, **kwargs):
         """Compute Jacobian matrix of self.compute_scaled_error wrt x."""
         argnums = tuple(range(len(self.things)))
@@ -1289,7 +1391,7 @@ class _Objective(IOAble, ABC):
             chunk_size=self._jac_chunk_size,
         )(*args, **kwargs)
 
-    @jit
+    @jit_with_device
     def jac_unscaled(self, *args, **kwargs):
         """Compute Jacobian matrix of self.compute_unscaled wrt x."""
         argnums = tuple(range(len(self.things)))
@@ -1323,7 +1425,7 @@ class _Objective(IOAble, ABC):
             # sum over different things.
             return jnp.sum(jnp.asarray(Jv), axis=0).T
 
-    @jit
+    @jit_with_device
     def jvp_scaled(self, v, x, constants=None):
         """Compute Jacobian-vector product of self.compute_scaled.
 
@@ -1339,7 +1441,7 @@ class _Objective(IOAble, ABC):
         """
         return self._jvp(v, x, constants, "scaled")
 
-    @jit
+    @jit_with_device
     def jvp_scaled_error(self, v, x, constants=None):
         """Compute Jacobian-vector product of self.compute_scaled_error.
 
@@ -1355,7 +1457,7 @@ class _Objective(IOAble, ABC):
         """
         return self._jvp(v, x, constants, "scaled_error")
 
-    @jit
+    @jit_with_device
     def jvp_unscaled(self, v, x, constants=None):
         """Compute Jacobian-vector product of self.compute_unscaled.
 

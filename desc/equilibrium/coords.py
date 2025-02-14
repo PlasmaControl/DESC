@@ -628,14 +628,14 @@ def to_sfl(
     toroidal_coords = eq.compute(["R", "Z", "lambda"], grid=grid)
     theta = grid.nodes[:, 1]
     vartheta = theta + toroidal_coords["lambda"]
-    sfl_grid = grid
-    sfl_grid.nodes[:, 1] = vartheta
+    sfl_grid = Grid(np.array([grid.nodes[:, 0], vartheta, grid.nodes[:, 2]]).T)
 
     bdry_coords = eq.compute(["R", "Z", "lambda"], grid=bdry_grid)
     bdry_theta = bdry_grid.nodes[:, 1]
     bdry_vartheta = bdry_theta + bdry_coords["lambda"]
-    bdry_sfl_grid = bdry_grid
-    bdry_sfl_grid.nodes[:, 1] = bdry_vartheta
+    bdry_sfl_grid = Grid(
+        np.array([bdry_grid.nodes[:, 0], bdry_vartheta, bdry_grid.nodes[:, 2]]).T
+    )
 
     if copy:
         eq_sfl = eq.copy()

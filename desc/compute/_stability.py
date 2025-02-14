@@ -9,9 +9,11 @@ computational grid has a node on the magnetic axis to avoid potentially
 expensive computations.
 """
 
+from functools import partial
+
 from scipy.constants import mu_0
 
-from desc.backend import jit, jnp, partial, scan, vmap
+from desc.backend import jit, jnp, scan, vmap
 
 from ..integrals.surface_integral import surface_integrals_map
 from ..utils import dot
@@ -269,7 +271,7 @@ def _magnetic_well(params, transforms, profiles, data, **kwargs):
 @partial(
     jit,
     static_argnames=[
-        "Neigvalues",
+        "Neigvals",
     ],
 )
 def _ideal_ballooning_gamma2(params, transforms, profiles, data, **kwargs):

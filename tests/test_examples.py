@@ -6,6 +6,7 @@ difference in areas between constant theta and rho contours.
 
 import numpy as np
 import pytest
+from netCDF4 import Dataset
 from qic import Qic
 from qsc import Qsc
 from scipy.constants import mu_0
@@ -44,6 +45,7 @@ from desc.objectives import (
     CoilSetMinDistance,
     CoilTorsion,
     CurrentDensity,
+    ExternalObjective,
     FixBoundaryR,
     FixBoundaryZ,
     FixCoilCurrent,
@@ -1892,6 +1894,116 @@ def test_coilset_geometry_optimization():
         abs(surf_opt.Z_lmn[surf_opt.Z_basis.get_idx(M=-1, N=0)]) + offset,
         rtol=2e-2,
     )
+
+
+@pytest.mark.unit
+@pytest.mark.slow
+def test_external_vs_generic_objectives(tmpdir_factory):
+    """Test ExternalObjective compared to GenericObjective."""
+    target = np.array([6.2e-3, 1.1e-1, 6.5e-3, 0])  # values at p_l = [2e2, -2e2]
+
+    def data_from_vmec(eq, path="", surfs=8):
+        # write data
+        file = Dataset(path, mode="w", format="NETCDF3_64BIT_OFFSET")
+        NFP = eq.NFP
+        M = eq.M
+        N = eq.N
+        M_nyq = M + 4
+        N_nyq = N + 2 if N > 0 else 0
+        s_full = np.linspace(0, 1, surfs)
+        r_full = np.sqrt(s_full)
+        file.createDimension("radius", surfs)
+        grid_full = LinearGrid(M=M_nyq, N=N_nyq, NFP=NFP, rho=r_full)
+        data_full = eq.compute(["p"], grid=grid_full)
+        data_quad = eq.compute(["<beta>_vol", "<beta_pol>_vol", "<beta_tor>_vol"])
+        betatotal = file.createVariable("betatotal", np.float64)
+        betatotal[:] = data_quad["<beta>_vol"]
+        betapol = file.createVariable("betapol", np.float64)
+        betapol[:] = data_quad["<beta_pol>_vol"]
+        betator = file.createVariable("betator", np.float64)
+        betator[:] = data_quad["<beta_tor>_vol"]
+        presf = file.createVariable("presf", np.float64, ("radius",))
+        presf[:] = grid_full.compress(data_full["p"])
+        file.close()
+        # read data
+        file = Dataset(path, mode="r")
+        betatot = float(file.variables["betatotal"][0])
+        betapol = float(file.variables["betapol"][0])
+        betator = float(file.variables["betator"][0])
+        presf1 = float(file.variables["presf"][-1])
+        file.close()
+        return np.atleast_1d([betatot, betapol, betator, presf1])
+
+    eq0 = get("SOLOVEV")
+    optimizer = Optimizer("lsq-exact")
+
+    # generic
+    objective = ObjectiveFunction(
+        (
+            GenericObjective("<beta>_vol", thing=eq0, target=target[0]),
+            GenericObjective("<beta_pol>_vol", thing=eq0, target=target[1]),
+            GenericObjective("<beta_tor>_vol", thing=eq0, target=target[2]),
+            GenericObjective(
+                "p", thing=eq0, target=0, grid=LinearGrid(rho=[1], M=0, N=0)
+            ),
+        )
+    )
+    constraints = FixParameters(
+        eq0,
+        {
+            "R_lmn": True,
+            "Z_lmn": True,
+            "L_lmn": True,
+            "p_l": np.arange(2, len(eq0.p_l)),
+            "i_l": True,
+            "Psi": True,
+        },
+    )
+    [eq_generic], _ = optimizer.optimize(
+        things=eq0,
+        objective=objective,
+        constraints=constraints,
+        copy=True,
+        ftol=0,
+        verbose=2,
+    )
+
+    # external
+    dir = tmpdir_factory.mktemp("results")
+    path = dir.join("wout_result.nc")
+    objective = ObjectiveFunction(
+        ExternalObjective(
+            eq=eq0,
+            fun=data_from_vmec,
+            dim_f=4,
+            fun_kwargs={"path": path, "surfs": 8},
+            vectorized=False,
+            target=target,
+        )
+    )
+    constraints = FixParameters(
+        eq0,
+        {
+            "R_lmn": True,
+            "Z_lmn": True,
+            "L_lmn": True,
+            "p_l": np.arange(2, len(eq0.p_l)),
+            "i_l": True,
+            "Psi": True,
+        },
+    )
+    [eq_external], _ = optimizer.optimize(
+        things=eq0,
+        objective=objective,
+        constraints=constraints,
+        copy=True,
+        ftol=0,
+        verbose=2,
+    )
+
+    np.testing.assert_allclose(eq_generic.p_l, eq_external.p_l)
+    np.testing.assert_allclose(eq_generic.p_l[:2], [2e2, -2e2], rtol=4e-2)
+    np.testing.assert_allclose(eq_external.p_l[:2], [2e2, -2e2], rtol=4e-2)
 
 
 @pytest.mark.unit

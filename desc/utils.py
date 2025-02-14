@@ -9,7 +9,9 @@ import numpy as np
 from scipy.special import factorial
 from termcolor import colored
 
-from desc.backend import flatnonzero, fori_loop, jit, jnp, take
+from desc.backend import flatnonzero, fori_loop, jax, jit, jnp, pure_callback, take
+
+PRINT_WIDTH = 60  # current longest name is BootstrapRedlConsistency with pre-text
 
 
 class Timer:
@@ -749,6 +751,93 @@ def atleast_nd(ndmin, ary):
     return jnp.array(ary, ndmin=ndmin) if jnp.ndim(ary) < ndmin else ary
 
 
+def jaxify(func, abstract_eval, vectorized=False, abs_step=1e-4, rel_step=0):
+    """Make an external (python) function work with JAX.
+
+    Positional arguments to func can be differentiated,
+    use keyword args for static values and non-differentiable stuff.
+
+    Note: Only forward mode differentiation is supported currently.
+
+    Parameters
+    ----------
+    func : callable
+        Function to wrap. Should be a "pure" function, in that it has no side
+        effects and doesn't maintain state. Does not need to be JAX transformable.
+    abstract_eval : callable
+        Auxiliary function that computes the output shape and dtype of func.
+        **Must be JAX transformable**. Should be of the form
+
+            abstract_eval(*args, **kwargs) -> Pytree with same shape and dtype as
+            func(*args, **kwargs)
+
+        For example, if func always returns a scalar:
+
+            abstract_eval = lambda *args, **kwargs: jnp.array(1.)
+
+        Or if func takes an array of shape(n) and returns a dict of arrays of
+        shape(n-2):
+
+            abstract_eval = lambda arr, **kwargs:
+            {"out1": jnp.empty(arr.size-2), "out2": jnp.empty(arr.size-2)}
+    vectorized : bool, optional
+        Whether or not the wrapped function is vectorized. Default = False.
+    abs_step : float, optional
+        Absolute finite difference step size. Default = 1e-4.
+        Total step size is ``abs_step + rel_step * mean(abs(x))``.
+    rel_step : float, optional
+        Relative finite difference step size. Default = 0.
+        Total step size is ``abs_step + rel_step * mean(abs(x))``.
+
+    Returns
+    -------
+    func : callable
+        New function that behaves as func but works with jit/vmap/jacfwd etc.
+
+    """
+
+    def wrap_pure_callback(func):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            result_shape_dtype = abstract_eval(*args, **kwargs)
+            return pure_callback(
+                func, result_shape_dtype, *args, vectorized=vectorized, **kwargs
+            )
+
+        return wrapper
+
+    def define_fd_jvp(func):
+        func = jax.custom_jvp(func)
+
+        @func.defjvp
+        def func_jvp(primals, tangents):
+            primal_out = func(*primals)
+
+            # flatten everything into 1D vectors for easier finite differences
+            y, unflaty = jax.flatten_util.ravel_pytree(primal_out)
+            x, unflatx = jax.flatten_util.ravel_pytree(primals)
+            v, _______ = jax.flatten_util.ravel_pytree(tangents)
+
+            # finite difference step size
+            fd_step = abs_step + rel_step * jnp.mean(jnp.abs(x))
+
+            # scale tangents to unit norm if nonzero
+            normv = jnp.linalg.norm(v)
+            vh = jnp.where(normv == 0, v, v / normv)
+
+            def f(x):
+                return jax.flatten_util.ravel_pytree(func(*unflatx(x)))[0]
+
+            tangent_out = (f(x + fd_step * vh) - y) / fd_step * normv
+            tangent_out = unflaty(tangent_out)
+
+            return primal_out, tangent_out
+
+        return func
+
+    return define_fd_jvp(wrap_pure_callback(func))
+
+
 def atleast_3d_mid(ary):
     """Like np.atleast_3d but if adds dim at axis 1 for 2d arrays."""
     ary = jnp.atleast_2d(ary)
@@ -759,9 +848,6 @@ def atleast_2d_end(ary):
     """Like np.atleast_2d but if adds dim at axis 1 for 1d arrays."""
     ary = jnp.atleast_1d(ary)
     return ary[:, jnp.newaxis] if ary.ndim == 1 else ary
-
-
-PRINT_WIDTH = 60  # current longest name is BootstrapRedlConsistency with pre-text
 
 
 def dot(a, b, axis=-1):

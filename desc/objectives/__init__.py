@@ -27,7 +27,12 @@ from ._equilibrium import (
 )
 from ._fast_ion import GammaC
 from ._free_boundary import BoundaryError, VacuumBoundaryError
-from ._generic import GenericObjective, LinearObjectiveFromUser, ObjectiveFromUser
+from ._generic import (
+    ExternalObjective,
+    GenericObjective,
+    LinearObjectiveFromUser,
+    ObjectiveFromUser,
+)
 from ._geometry import (
     AspectRatio,
     BScaleLength,

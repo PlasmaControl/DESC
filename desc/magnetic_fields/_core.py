@@ -34,7 +34,15 @@ from desc.integrals import compute_B_plasma
 from desc.io import IOAble
 from desc.optimizable import Optimizable, OptimizableCollection, optimizable_parameter
 from desc.transform import Transform
-from desc.utils import copy_coeffs, errorif, flatten_list, safediv, setdefault, warnif
+from desc.utils import (
+    copy_coeffs,
+    dot,
+    errorif,
+    flatten_list,
+    safediv,
+    setdefault,
+    warnif,
+)
 from desc.vmec_utils import ptolemy_identity_fwd, ptolemy_identity_rev
 
 
@@ -341,7 +349,7 @@ class _MagneticField(IOAble, ABC):
             if None defaults to a LinearGrid with twice
             the surface poloidal and toroidal resolutions
             points are in surface angular coordinates i.e theta and zeta
-        source_grid : Grid, int or None
+        source_grid : Grid or int or None
             Grid used to discretize MagneticField object if calculating B from
             Biot-Savart. Should NOT include endpoint at 2pi.
         vc_source_grid : LinearGrid
@@ -393,7 +401,7 @@ class _MagneticField(IOAble, ABC):
             params=params,
             chunk_size=chunk_size,
         )
-        Bnorm = jnp.sum(B * surf_normal, axis=-1)
+        Bnorm = dot(B, surf_normal)
 
         if calc_Bplasma:
             Bplasma = compute_B_plasma(eq, eval_grid, vc_source_grid, normal_only=True)

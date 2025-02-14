@@ -15,10 +15,12 @@ from desc.integrals._interp_utils import rfft2_modes, rfft2_vander
 from desc.io import IOAble
 from desc.utils import (
     check_posint,
+    dot,
     errorif,
     parse_argname_change,
     safediv,
     safenorm,
+    setdefault,
     warnif,
 )
 
@@ -105,13 +107,14 @@ def _eta(theta, zeta, theta0, zeta0, ht, hz, st, sz):
 
 
 def _get_default_params(grid):
-    k = max(min(grid.num_theta, grid.num_zeta * grid.NFP), 2)
-    s = k - 1
-    q = k // 2 + int(jnp.sqrt(k))
+    Nt = grid.num_theta
+    Nz = grid.num_zeta * grid.NFP
+    q = int(jnp.sqrt(grid.num_nodes) / 2)
+    s = min(q, Nt, Nz)
     return s, s, q
 
 
-def _heuristic_support_params(grid):
+def heuristic_support_params(grid, mean_ratio, local_ratio=None):
     """Parameters for heuristic support size and heuristic quadrature resolution.
 
     Return parameters following the asymptotic rule of thumb
@@ -122,6 +125,10 @@ def _heuristic_support_params(grid):
     ----------
     grid : LinearGrid
         Grid that can fft2.
+    mean_ratio : float
+        Mean ratio.
+    local_ratio : jnp.ndarray
+        Local ratio.
 
     Returns
     -------
@@ -134,19 +141,51 @@ def _heuristic_support_params(grid):
 
     """
     assert grid.can_fft2
-    # TODO: Account for real space grid anisotropy by choosing
-    #   ratio = |e_zeta|/|e_theta|
-    #   ratio_avg = surface_average(ratio, jacobian=|e_theta x e_zeta|)
-    #   st/(sz*NFP) (at evaluation point i) = mean (ratio(i), ratio_avg).
-    #   Then we have ~circle in real space around each singular point.
-    #   The grid resolution can then still be chosen independently according
-    #   to the frequency content of R, Z, λ to net the best function approximation.
+    # This is simple and should improve convergence, but do later.
+    errorif(local_ratio is not None, NotImplementedError)
     Nt = grid.num_theta
     Nz = grid.num_zeta * grid.NFP
-    st = int(min(1 + jnp.sqrt(Nt), Nt))
-    sz = int(min(1 + jnp.sqrt(Nz), Nz))
-    q = int(1 + (Nt * Nz) ** 0.25)
+    q = int(jnp.sqrt(grid.num_nodes) / 2)
+    s = min(q, Nt, Nz)
+    local_ratio = setdefault(local_ratio, mean_ratio)
+    ratio = (mean_ratio + local_ratio) / 2
+    # Size of singular region in real space = s * h * |e_.|
+    # For it to be a circle, choose radius ~ equal
+    # s_t * h_t * |e_t| = s_z * h_z * |e_z|
+    # s_z / s_t = h_t / h_z  |e_t| / |e_z| = Nz*NFP/Nt |e_t| / |e_z|
+    # Denote ratio = < |e_z| / |e_t| > and
+    #      s_ratio = s_z / s_t = Nz*NFP/Nt / ratio
+    # Also want sqrt(s_z*s_t) ~ s = q.
+    s_ratio = jnp.sqrt(Nz / Nt / ratio)
+    st = min(Nt, int(s / s_ratio))
+    sz = min(Nz, int(s * s_ratio))
     return st, sz, q
+
+
+def best_ratio(data):
+    """Ratio to make singular integration partition ~circle in real space.
+
+    Parameters
+    ----------
+    data : dict[str, jnp.ndarray]
+        Dictionary of data evaluated on grid that ``can_fft2`` with keys
+        ``|e_theta x e_zeta|``, ``e_theta``, and ``e_zeta``.
+
+    Returns
+    -------
+    mean : float
+        Mean ratio.
+    local : jnp.ndarray
+        Local ratio.
+
+    """
+    local = jnp.linalg.norm(data["e_zeta"], axis=-1) / jnp.linalg.norm(
+        data["e_theta"], axis=-1
+    )
+    mean = jnp.mean(local * data["|e_theta x e_zeta|"]) / jnp.mean(
+        data["|e_theta x e_zeta|"]
+    )
+    return mean, local
 
 
 def _get_quadrature_nodes(q):
@@ -839,11 +878,55 @@ _kernel_biot_savart_A.ndim = 3
 _kernel_biot_savart_A.keys = ["R", "phi", "Z", "K_vc"]
 
 
+def _kernel_Bn_over_r(eval_data, source_data, diag=False):
+    # B dot n' / |dx|
+    source_x = jnp.atleast_2d(
+        rpz2xyz(jnp.array([source_data["R"], source_data["phi"], source_data["Z"]]).T)
+    )
+    eval_x = jnp.atleast_2d(
+        rpz2xyz(jnp.array([eval_data["R"], eval_data["phi"], eval_data["Z"]]).T)
+    )
+    if diag:
+        dx = eval_x - source_x
+    else:
+        dx = eval_x[:, None] - source_x[None]
+    return safediv(source_data["Bn"], safenorm(dx, axis=-1))
+
+
+_kernel_Bn_over_r.ndim = 1
+_kernel_Bn_over_r.keys = ["R", "phi", "Z", "Bn"]
+
+
+def _kernel_Phi_dG_dn(eval_data, source_data, diag=False):
+    # Phi(x') * dG(x,x')/dn' = Phi' * n' dot dx / |dx|^3
+    # where Phi has units tesla-meters.
+    source_x = jnp.atleast_2d(
+        rpz2xyz(jnp.array([source_data["R"], source_data["phi"], source_data["Z"]]).T)
+    )
+    eval_x = jnp.atleast_2d(
+        rpz2xyz(jnp.array([eval_data["R"], eval_data["phi"], eval_data["Z"]]).T)
+    )
+    if diag:
+        dx = eval_x - source_x
+    else:
+        dx = eval_x[:, None] - source_x[None]
+    n = rpz2xyz_vec(source_data["n_rho"], phi=source_data["phi"])
+    return safediv(
+        source_data["Phi"] * dot(n, dx),
+        safenorm(dx, axis=-1) ** 3,
+    )
+
+
+_kernel_Phi_dG_dn.ndim = 1
+_kernel_Phi_dG_dn.keys = ["R", "phi", "Z", "Phi", "n_rho"]
+
 kernels = {
     "1_over_r": _kernel_1_over_r,
     "nr_over_r3": _kernel_nr_over_r3,
     "biot_savart": _kernel_biot_savart,
     "biot_savart_A": _kernel_biot_savart_A,
+    "kernel_Bn_over_r": _kernel_Bn_over_r,
+    "kernel_Phi_dG_dn": _kernel_Phi_dG_dn,
 }
 
 
@@ -974,7 +1057,7 @@ def compute_B_plasma(eq, eval_grid, source_grid=None, normal_only=False):
     data_keys = ["K_vc", "B", "R", "phi", "Z", "e^rho", "n_rho", "|e_theta x e_zeta|"]
     eval_data = eq.compute(data_keys, grid=eval_grid)
     source_data = eq.compute(data_keys, grid=source_grid)
-    st, sz, q = _get_default_params(source_grid)
+    st, sz, q = heuristic_support_params(source_grid, best_ratio(source_data)[0])
     try:
         interpolator = FFTInterpolator(eval_grid, source_grid, st, sz, q)
     except AssertionError as e:

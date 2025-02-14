@@ -11,7 +11,7 @@ expensive computations.
 
 from scipy.constants import mu_0
 
-from desc.backend import jit, jnp, scan, vmap
+from desc.backend import jit, jnp, partial, scan, vmap
 
 from ..integrals.surface_integral import surface_integrals_map
 from ..utils import dot
@@ -266,6 +266,12 @@ def _magnetic_well(params, transforms, profiles, data, **kwargs):
     zeta0="array: points of vanishing integrated local shear to scan over. "
     "Default 15 points linearly spaced in [-π/2,π/2]",
 )
+@partial(
+    jit,
+    static_argnames=[
+        "Neigvalues",
+    ],
+)
 def _ideal_ballooning_gamma2(params, transforms, profiles, data, **kwargs):
     """
     Ideal-ballooning growth rate finder.
@@ -310,6 +316,7 @@ def _ideal_ballooning_gamma2(params, transforms, profiles, data, **kwargs):
     - phi: coordinate describing the position in the toroidal angle
     along a field line
     """
+    Neigvals = kwargs.get("Neigvals", 1)
     source_grid = transforms["grid"].source_grid
     # Vectorize in rho later
     rho = source_grid.meshgrid_reshape(data["rho"], "arz")
@@ -399,8 +406,8 @@ def _ideal_ballooning_gamma2(params, transforms, profiles, data, **kwargs):
     A_redo = B_inv @ A @ jnp.transpose(B_inv, axes=(0, 1, 3, 2))
 
     w, _ = jnp.linalg.eigh(A_redo)
-    # max over "zeta" axis, still a function of rho, alpha, zeta0
-    gamma = jnp.real(jnp.max(w, axis=(2,)))
+    # sorting over "zeta" axis, still a function of rho, alpha, zeta0
+    gamma = jnp.real(jnp.max(w, axis=(2,))[:, :, :Neigvals])
 
     data["ideal ballooning lambda"] = gamma.flatten()
 

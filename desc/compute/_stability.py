@@ -408,8 +408,9 @@ def _ideal_ballooning_gamma2(params, transforms, profiles, data, **kwargs):
     A_redo = B_inv @ A @ jnp.transpose(B_inv, axes=(0, 1, 3, 2))
 
     w, _ = jnp.linalg.eigh(A_redo)
+
     # sorting over "zeta" axis, still a function of rho, alpha, zeta0
-    gamma = jnp.real(jnp.max(w, axis=(2,))[:, :, :Neigvals])
+    gamma = jnp.real(jnp.sort(w, axis=2)[:, :, :Neigvals])
 
     data["ideal ballooning lambda"] = gamma.flatten()
 

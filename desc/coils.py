@@ -27,7 +27,7 @@ from desc.geometry import (
     FourierXYZCurve,
     SplineXYZCurve,
 )
-from desc.grid import LinearGrid
+from desc.grid import Grid, LinearGrid
 from desc.magnetic_fields import _MagneticField
 from desc.optimizable import Optimizable, OptimizableCollection, optimizable_parameter
 from desc.utils import cross, dot, equals, errorif, flatten_list, safenorm, warnif
@@ -229,6 +229,11 @@ class _Coil(_MagneticField, Optimizable, ABC):
     def __init__(self, current, *args, **kwargs):
         self._current = float(np.squeeze(current))
         super().__init__(*args, **kwargs)
+
+    def _set_up(self):
+        for attribute in self._io_attrs_:
+            if not hasattr(self, attribute):
+                setattr(self, attribute, None)
 
     @optimizable_parameter
     @property
@@ -476,7 +481,7 @@ class _Coil(_MagneticField, Optimizable, ABC):
             coords. if None, defaults linearly spaced in [0,2pi)
             Alternative, can pass "arclength" to use normalized distance between points.
         name : str
-            name for this coil
+            Name for this coil
 
         Returns
         -------
@@ -518,7 +523,7 @@ class _Coil(_MagneticField, Optimizable, ABC):
             - `'cubic2'`: C2 cubic splines (aka natural splines)
             - `'catmull-rom'`: C1 cubic centripetal "tension" splines
         name : str
-            name for this coil
+            Name for this coil
 
         Returns
         -------
@@ -619,7 +624,7 @@ class FourierRZCoil(_Coil, FourierRZCurve):
     sym : bool
         whether to enforce stellarator symmetry
     name : str
-        name for this coil
+        Name for this coil
 
     Examples
     --------
@@ -689,8 +694,7 @@ class FourierRZCoil(_Coil, FourierRZCurve):
         sym : bool
             Whether to enforce stellarator symmetry.
         name : str
-            name for this coil
-
+            Name for this coil.
 
         Returns
         -------
@@ -725,7 +729,7 @@ class FourierXYZCoil(_Coil, FourierXYZCurve):
     modes : array-like
         mode numbers associated with X_n etc.
     name : str
-        name for this coil
+        Name for this coil
 
     Examples
     --------
@@ -758,7 +762,6 @@ class FourierXYZCoil(_Coil, FourierXYZCurve):
             np.array([0, 0, mu0 * I / 2 * R_coil**2 / (R_coil**2 + z0**2) ** (3 / 2)]),
             atol=1e-8,
         )
-
 
     """
 
@@ -795,6 +798,9 @@ class FourierXYZCoil(_Coil, FourierXYZCurve):
             if None, defaults to normalized arclength
         basis : {"rpz", "xyz"}
             basis for input coordinates. Defaults to "xyz"
+        name : str
+            Name for this coil.
+
         Returns
         -------
         coil : FourierXYZCoil
@@ -813,7 +819,7 @@ class FourierXYZCoil(_Coil, FourierXYZCurve):
 
 
 class FourierPlanarCoil(_Coil, FourierPlanarCurve):
-    """Coil that lines in a plane.
+    """Coil that lies in a plane.
 
     Parameterized by a point (the center of the coil), a vector (normal to the plane),
     and a fourier series defining the radius from the center as a function of a polar
@@ -834,7 +840,7 @@ class FourierPlanarCoil(_Coil, FourierPlanarCurve):
     basis : {'xyz', 'rpz'}
         Coordinate system for center and normal vectors. Default = 'xyz'.
     name : str
-        Name for this coil.
+        Name for this coil
 
     Examples
     --------
@@ -950,24 +956,14 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
           data, and will not introduce new extrema in the interpolated points
         - ``'monotonic-0'``: same as `'monotonic'` but with 0 first derivatives at both
           endpoints
-
     name : str
-        name for this curve
+        Name for this coil
 
     """
 
     _io_attrs_ = _Coil._io_attrs_ + SplineXYZCurve._io_attrs_
 
-    def __init__(
-        self,
-        current,
-        X,
-        Y,
-        Z,
-        knots=None,
-        method="cubic",
-        name="",
-    ):
+    def __init__(self, current, X, Y, Z, knots=None, method="cubic", name=""):
         super().__init__(current, X, Y, Z, knots, method, name)
 
     def _compute_A_or_B(
@@ -1152,7 +1148,8 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
             - `'catmull-rom'`: C1 cubic centripetal "tension" splines
 
         name : str
-            name for this curve
+            Name for this curve
+
         basis : {"rpz", "xyz"}
             basis for input coordinates. Defaults to "xyz"
 
@@ -1240,14 +1237,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
     _io_attrs_ = _Coil._io_attrs_ + ["_coils", "_NFP", "_sym"]
     _io_attrs_.remove("_current")
 
-    def __init__(
-        self,
-        *coils,
-        NFP=1,
-        sym=False,
-        name="",
-        check_intersection=True,
-    ):
+    def __init__(self, *coils, NFP=1, sym=False, name="", check_intersection=True):
         coils = flatten_list(coils, flatten_tuple=True)
         assert all([isinstance(coil, (_Coil)) for coil in coils])
         [_check_type(coil, coils[0]) for coil in coils]
@@ -1320,13 +1310,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         return x
 
     def compute(
-        self,
-        names,
-        grid=None,
-        params=None,
-        transforms=None,
-        data=None,
-        **kwargs,
+        self, names, grid=None, params=None, transforms=None, data=None, **kwargs
     ):
         """Compute the quantity given by name on grid, for each coil in the coilset.
 
@@ -1937,11 +1921,28 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
 
         def flatten_coils(coilset):
             if hasattr(coilset, "__len__"):
+                if isinstance(coilset, CoilSet):
+                    if coilset.NFP > 1 or coilset.sym:
+                        # hit a CoilSet with symmetries, this coilset only contains
+                        # its unique coils. However, for this function we
+                        # need to get the entire coilset, not just the unique coils,
+                        # so make a MixedCoilSet using this CoilSet's coils and NFP/sym
+                        coilset_full = MixedCoilSet.from_symmetry(
+                            coilset,
+                            NFP=coilset.NFP,
+                            sym=coilset.sym,
+                            check_intersection=False,
+                        )
+                        return [c for c in coilset_full]
                 return [a for i in coilset for a in flatten_coils(i)]
             else:
                 return [coilset]
 
         coils = flatten_coils(self.coils)
+        # after flatten, should have as many elements in list as self.num_coils, if
+        # flatten worked correctly.
+        assert len(coils) == self.num_coils
+
         assert (
             int(len(coils) / NFP) == len(coils) / NFP
         ), "Number of coils in coilset must be evenly divisible by NFP!"
@@ -2965,7 +2966,7 @@ def initialize_modular_coils(eq, num_coils, r_over_a=2.0):
     unique_coils = []
     for k in range(num_coils):
         coil = FourierPlanarCoil(
-            current=G / (mu_0 * eq.NFP * num_coils * (eq.sym + 1)),
+            current=2 * np.pi * G / (mu_0 * eq.NFP * num_coils * (eq.sym + 1)),
             center=centers[k, :],
             normal=normals[k, :],
             r_n=minor_radius * r_over_a,
@@ -3050,3 +3051,85 @@ def initialize_saddle_coils(eq, num_coils, r_over_a=0.5, offset=2.0, position="o
 
     windowpane_coilset = CoilSet(windowpane_coils, NFP=int(eq.NFP), sym=eq.sym)
     return windowpane_coilset
+
+
+def initialize_helical_coils(eq, num_coils, r_over_a=2.0, helicity=(1, 1), npts=100):
+    """Initialize a CoilSet of helical coils for stage 2 optimization.
+
+    The coils will be roughly a constant distance from the plasma surface as they wind
+    around. The currents will be set to match the equilibrium required poloidal
+    linking current.
+
+    The coils will be ``SplineXYZCoil``, if another type is desired use
+    ``coilset.to_FourierXYZ(N=...)``, etc.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Stage 1 equilibrium the coils are being optimized for.
+    num_coils : int
+        Number of coils to create.
+    r_over_a : float
+        Approximate minor radius of the coils, in units of equilibrium minor radius.
+        The approximate minor radius will be r_over_a * equilibrium minor radius. The
+        actual coils will be contoured to keep a roughly constant offset from the plasma
+        surface.
+    helicity : tuple of int
+        (M,N) - How many times each coil should link the plasma poloidally and
+        toroidally. Note that M is the poloidal linking number per field period, so the
+        total linking number will be M*NFP.
+    npts : int
+        How many points to use when creating the coils. Equilibria with very high NFP
+        may need more points.
+
+    Returns
+    -------
+    coilset : CoilSet of FourierPlanarCoil
+        Planar coils centered on magnetic axis, with appropriate symmetry.
+    """
+    M = helicity[0] * eq.NFP
+    N = helicity[1]
+
+    errorif(
+        int(M) != M or int(N) != N,
+        TypeError,
+        f"helicity should be a tuple of two integers, got {helicity}",
+    )
+    warnif(
+        N == 0 and M != 0,
+        UserWarning,
+        "Toroidal helicity is zero, meaning these are modular coils. Consider using "
+        "desc.coils.initialize_modular_coils",
+    )
+    warnif(
+        N == 0 and M == 0,
+        UserWarning,
+        "Toroidal and poloidal helicity are zero, meaning these are windowpane/saddle "
+        "coils. Consider using desc.coils.initialize_saddle_coils",
+    )
+    # for M=0 these are technically PF coils not helical, but we don't have a specific
+    # function for PF coils so don't bother warning.
+
+    a = eq.compute("a")["a"]
+    G = eq.compute("G", grid=LinearGrid(rho=1.0))["G"]
+    s = np.linspace(0, 2 * np.pi, npts, endpoint=False)
+
+    theta = M * s
+    zeta = N * s
+
+    theta %= 2 * np.pi
+    zeta %= 2 * np.pi
+
+    theta_offset = np.linspace(0, 2 * np.pi, num_coils, endpoint=False)
+
+    coils = []
+    for t in theta_offset:
+        grid = Grid(np.array([np.ones_like(s), (theta + t) % (2 * np.pi), zeta]).T)
+        data = eq.surface.compute(["x", "n_rho"], grid=grid, basis="xyz")
+        offset = r_over_a * a - a
+        x = data["x"] + offset * data["n_rho"]
+        coil = SplineXYZCoil(
+            2 * np.pi * G / mu_0 / num_coils / M, x[:, 0], x[:, 1], x[:, 2]
+        )
+        coils.append(coil)
+    return CoilSet(*coils)

@@ -90,6 +90,10 @@ from desc.objectives import (
     get_NAE_constraints,
 )
 from desc.objectives._free_boundary import BoundaryErrorNESTOR
+from desc.objectives.nae_utils import (
+    _calc_1st_order_NAE_coeffs,
+    _calc_2nd_order_NAE_coeffs,
+)
 from desc.objectives.normalization import compute_scaling_factors
 from desc.objectives.objective_funs import _Objective, collect_docs
 from desc.objectives.utils import softmax, softmin
@@ -3664,3 +3668,39 @@ def test_get_nae_constraint_asym_warning():
     qsc = Qsc.from_paper("precise QA", rs=[1e-6, 1e-6])
     with pytest.warns(UserWarning, match="asymmetric"):
         get_NAE_constraints(get("precise_QA"), qsc)
+
+
+@pytest.mark.unit
+def test_nae_coefficients_asym():
+    """Test that the asymmetric coefs of a symmetric NAE solution are 0."""
+    eq = Equilibrium(NFP=2, sym=False, L=6, M=6, N=6)
+    qsc_eq = Qsc.from_paper("precise QA")
+    qsc_eq.lasym = True
+    coefs, bases = _calc_1st_order_NAE_coeffs(qsc_eq, eq)
+    for key in coefs.keys():
+        if "L" in key:
+            continue
+        s1 = 1
+        s1 *= -1 if "R" in key else 1
+        s1 *= -1 if "neg1" in key else 1
+
+        inds_asym = (
+            np.where(bases["Rbasis_cos"].modes[:, 2] < 0)
+            if s1 < 0
+            else np.where(bases["Rbasis_cos"].modes[:, 2] >= 0)
+        )
+        np.testing.assert_allclose(coefs[key][inds_asym], 0, err_msg=key, atol=1e-15)
+    coefs, bases = _calc_2nd_order_NAE_coeffs(qsc_eq, eq)
+    for key in coefs.keys():
+        if "L" in key:
+            continue
+        s1 = 1
+        s1 *= -1 if "R" in key else 1
+        s1 *= -1 if "neg2" in key else 1
+
+        inds_asym = (
+            np.where(bases["Rbasis_cos"].modes[:, 2] < 0)
+            if s1 < 0
+            else np.where(bases["Rbasis_cos"].modes[:, 2] >= 0)
+        )
+        np.testing.assert_allclose(coefs[key][inds_asym], 0, err_msg=key, atol=1e-14)

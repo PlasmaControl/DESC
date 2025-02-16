@@ -10,6 +10,7 @@ import warnings
 
 import numpy as np
 import pytest
+from qsc import Qsc
 from scipy.constants import elementary_charge, mu_0
 
 import desc.examples
@@ -86,6 +87,7 @@ from desc.objectives import (
     ToroidalFlux,
     VacuumBoundaryError,
     Volume,
+    get_NAE_constraints,
 )
 from desc.objectives._free_boundary import BoundaryErrorNESTOR
 from desc.objectives.normalization import compute_scaling_factors
@@ -3654,3 +3656,11 @@ def test_objective_docstring():
     collected_docs = doc_header + "    " + collected_docs
 
     assert objective_docs == collected_docs
+
+
+@pytest.mark.unit
+def test_get_nae_constraint_asym_warning():
+    """Test warning when using an asymmetric eq for NAE constraints."""
+    qsc = Qsc.from_paper("precise QA", rs=[1e-6, 1e-6])
+    with pytest.warns(UserWarning, match="asymmetric"):
+        get_NAE_constraints(get("precise_QA"), qsc)

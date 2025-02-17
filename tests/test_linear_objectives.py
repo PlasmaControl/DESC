@@ -1114,7 +1114,7 @@ def test_linearconstraintprojection_update_target():
     # update the target without creating a new constraints as above
     lc.update_constraint_target(eqp)
 
-    # perturb method was using this equivalently
+    # perturb method is using this equivalently
     obj0 = ObjectiveFunction(ForceBalance(eq))
     cons0 = get_fixed_boundary_constraints(eq)
     cons0 = maybe_add_self_consistency(eq, cons0)

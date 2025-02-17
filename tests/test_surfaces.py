@@ -529,3 +529,18 @@ def test_surface_change_only_symmetry():
     assert surf.sym is False
     assert surf.R_basis.sym is False
     assert surf.Z_basis.sym is False
+
+
+@pytest.mark.unit
+def test_section_change_only_symmetry():
+    """Test that sym correctly changes when only sym is passed to change_resolution."""
+    surf = ZernikeRZToroidalSection(sym=False)
+    surf.change_resolution(sym=True)
+    assert surf.sym
+    assert surf.R_basis.sym == "cos"
+    assert surf.Z_basis.sym == "sin"
+
+    surf.change_resolution(sym=False)
+    assert surf.sym is False
+    assert surf.R_basis.sym is False
+    assert surf.Z_basis.sym is False

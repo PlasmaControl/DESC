@@ -18,6 +18,8 @@ from desc.backend import jnp, sign, vmap
 from ..utils import cross, dot, safediv
 from .data_index import register_compute_fun
 
+from desc.integrals import surface_averages
+
 
 @register_compute_fun(
     name="B_theta_mn",
@@ -1021,29 +1023,33 @@ def _Q_piecewise_omni(params, transforms, profiles, data, **kwargs):
     units_long="None",
     description="Delta proxi for zero pwO Bootstrap current",
     dim=1,
-    params=["t_1", "t_2", "w_2", "iota0"],
+    params=["B_max", "t_1", "t_2", "w_2", "iota0"],
     transforms={"grid": []},
     profiles=[],
     coordinates="rtz",
-    data=[],  # Potential error, we want eq |B|
+    data=["|B|_pwO"],  # Potential error, we want eq |B|
     parameterization="desc.magnetic_fields._core.PiecewiseOmnigenousField",
 )
 def _Delta_bs_piecewiseomni(params, transforms, profiles, data, **kwargs):
     # NFP can't be a parameter. Must come from equilibrium
+
     NFP = transforms["grid"].NFP
 
     t_1 = params["t_1"]
     t_2 = params["t_2"]
     w_2 = params["w_2"]
     iota0 = params["iota0"]
-
+    B_max = params["B_max"]
+    
     w_1 = ((jnp.pi / NFP) * (1 - t_1 * t_2)) / (1 + t_2 / iota0)
 
     A1 = jnp.abs((4 * w_2 * (w_1 - jnp.pi / NFP)) / (1 - t_1 * t_2))
 
     A2 = jnp.abs((4 * jnp.pi**2 / NFP) - (4 * w_2 * jnp.pi) / (NFP * (1 - t_1 * t_2)))
 
-    Delta = (1 / (4 * jnp.pi**2)) * ((A1 / (iota0 + 1 / t_1)) + (A2 / (iota0 + t_2)))
+    B_pwO_squared_averaged = surface_averages(transforms["grid"], data["|B|_pwO"]**2, )
+
+    Delta = (B_pwO_squared_averaged / (4 * jnp.pi**2 * B_max**2)) * ((A1 / (iota0 + 1 / t_1)) + (A2 / (iota0 + t_2)))
 
     data["Delta_BS"] = Delta
 

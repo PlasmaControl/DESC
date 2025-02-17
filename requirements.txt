@@ -14,6 +14,6 @@ psutil <= 6.1.1
 pylatexenc >= 2.0, <= 2.10
 quadax >= 0.2.2, <= 0.2.5
 scikit-image <= 0.25.1
-scipy >= 1.7.0, <= 1.15.1
+scipy >= 1.7.0, <= 1.15.2
 termcolor <= 2.5.0
 sympy

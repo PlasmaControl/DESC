@@ -263,6 +263,9 @@ def test_eq_change_symmetry():
     assert eq.surface.sym
     assert eq.surface.R_basis.sym == "cos"
     assert eq.surface.Z_basis.sym == "sin"
+    assert eq.axis.sym
+    assert eq.axis.R_basis.sym == "cos"
+    assert eq.axis.Z_basis.sym == "sin"
 
     # undo symmetry
     eq.change_resolution(sym=False)
@@ -276,6 +279,9 @@ def test_eq_change_symmetry():
     assert not eq.surface.sym
     assert not eq.surface.R_basis.sym
     assert not eq.surface.Z_basis.sym
+    assert eq.axis.sym is False
+    assert eq.axis.R_basis.sym is False
+    assert eq.axis.Z_basis.sym is False
 
 
 @pytest.mark.unit

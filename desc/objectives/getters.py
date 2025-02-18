@@ -193,12 +193,14 @@ def get_NAE_constraints(
         A list of the linear constraints used in fixed-axis problems.
 
     """
-    warnif(
-        qsc_eq.lasym,
-        UserWarning,
-        "NAE Constraints do not yet work correctly with asymmetric equilibria, "
-        "use at your own risk.",
-    )
+    if qsc_eq is not None:
+        warnif(
+            qsc_eq.lasym,
+            UserWarning,
+            "NAE Constrained equilibria do not yet work correctly with "
+            "asymmetric equilibria, and may give unexpected results like "
+            " the on-axis iota not matching that of the NAE, use at your own risk.",
+        )
     kwargs = {"eq": desc_eq, "normalize": normalize, "normalize_target": normalize}
     if not isinstance(fix_lambda, bool):
         fix_lambda = int(fix_lambda)

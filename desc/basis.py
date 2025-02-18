@@ -690,7 +690,7 @@ class DoubleFourierSeries(_Basis):
         """
         NFP = check_posint(NFP, "NFP")
         self._NFP = NFP if NFP is not None else self.NFP
-        if M != self.M or N != self.N or sym != self.sym:
+        if M != self.M or N != self.N or (sym is not None and sym != self.sym):
             self._M = check_nonnegint(M, "M", False)
             self._N = check_nonnegint(N, "N", False)
             self._sym = sym if sym is not None else self.sym
@@ -898,7 +898,7 @@ class ZernikePolynomial(_Basis):
         None
 
         """
-        if L != self.L or M != self.M or sym != self.sym:
+        if L != self.L or M != self.M or (sym is not None and sym != self.sym):
             self._L = check_nonnegint(L, "L", False)
             self._M = check_nonnegint(M, "M", False)
             self._sym = sym if sym is not None else self.sym
@@ -1073,7 +1073,12 @@ class ChebyshevDoubleFourierBasis(_Basis):
         """
         NFP = check_posint(NFP, "NFP")
         self._NFP = NFP if NFP is not None else self.NFP
-        if L != self.L or M != self.M or N != self.N or sym != self.sym:
+        if (
+            L != self.L
+            or M != self.M
+            or N != self.N
+            or (sym is not None and sym != self.sym)
+        ):
             self._L = check_nonnegint(L, "L", False)
             self._M = check_nonnegint(M, "M", False)
             self._N = check_nonnegint(N, "N", False)
@@ -1311,7 +1316,12 @@ class FourierZernikeBasis(_Basis):
         """
         NFP = check_posint(NFP, "NFP")
         self._NFP = NFP if NFP is not None else self.NFP
-        if L != self.L or M != self.M or N != self.N or sym != self.sym:
+        if (
+            L != self.L
+            or M != self.M
+            or N != self.N
+            or (sym is not None and sym != self.sym)
+        ):
             self._L = check_nonnegint(L, "L", False)
             self._M = check_nonnegint(M, "M", False)
             self._N = check_nonnegint(N, "N", False)

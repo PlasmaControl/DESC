@@ -14,11 +14,10 @@ import functools
 from interpax import interp1d
 
 from desc.backend import jnp, sign, vmap
+from desc.integrals import surface_averages
 
 from ..utils import cross, dot, safediv
 from .data_index import register_compute_fun
-
-from desc.integrals import surface_averages
 
 
 @register_compute_fun(
@@ -1040,16 +1039,21 @@ def _Delta_bs_piecewiseomni(params, transforms, profiles, data, **kwargs):
     w_2 = params["w_2"]
     iota0 = params["iota0"]
     B_max = params["B_max"]
-    
+
     w_1 = ((jnp.pi / NFP) * (1 - t_1 * t_2)) / (1 + t_2 / iota0)
 
     A1 = jnp.abs((4 * w_2 * (w_1 - jnp.pi / NFP)) / (1 - t_1 * t_2))
 
     A2 = jnp.abs((4 * jnp.pi**2 / NFP) - (4 * w_2 * jnp.pi) / (NFP * (1 - t_1 * t_2)))
 
-    B_pwO_squared_averaged = surface_averages(transforms["grid"], data["|B|_pwO"]**2, )
+    B_pwO_squared_averaged = surface_averages(
+        transforms["grid"],
+        data["|B|_pwO"] ** 2,
+    )[0]
 
-    Delta = (B_pwO_squared_averaged / (4 * jnp.pi**2 * B_max**2)) * ((A1 / (iota0 + 1 / t_1)) + (A2 / (iota0 + t_2)))
+    Delta = (B_pwO_squared_averaged / (4 * jnp.pi**2 * B_max**2)) * (
+        (A1 / (iota0 + 1 / t_1)) + (A2 / (iota0 + t_2))
+    )
 
     data["Delta_BS"] = Delta
 

@@ -68,3 +68,4 @@ for fname in names:
 if not args.noprecise:
     spr.run(["python3", "-u", "precise_QA.py"])
     spr.run(["python3", "-u", "precise_QH.py"])
+    spr.run(["python3", "-u", "reactor_QA.py"])

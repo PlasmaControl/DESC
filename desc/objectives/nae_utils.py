@@ -486,6 +486,36 @@ def _calc_2nd_order_NAE_coeffs(qsc, desc_eq, N=None):
         and Z_1_1_n uses the Zbasis_sin as the term is cos(theta)*sin(phi)
         since Z(-theta,-phi) = - Z(theta,phi) for Z stellarator symmetry
     """
+    if qsc is None:
+        nfp = desc_eq.NFP
+        # we will set behavior to the eq's current near axis behavior
+        # we dont need to calculate any NAE coeffs, we only need the
+        # bases and arrays of appropriate sizes for the coefficients
+        if desc_eq.sym:
+            Rbasis = FourierSeries(N=N, NFP=nfp, sym="cos")
+            Zbasis = FourierSeries(N=N, NFP=nfp, sym="cos")
+            Rbasis_sin = FourierSeries(N=N, NFP=nfp, sym="sin")
+            Zbasis_sin = FourierSeries(N=N, NFP=nfp, sym="sin")
+        else:
+            Rbasis = FourierSeries(N=N, NFP=nfp, sym=False)
+            Zbasis = FourierSeries(N=N, NFP=nfp, sym=False)
+            Rbasis_sin = FourierSeries(N=N, NFP=nfp, sym=False)
+            Zbasis_sin = FourierSeries(N=N, NFP=nfp, sym=False)
+        bases = {}
+        bases["Rbasis_cos"] = Rbasis
+        bases["Rbasis_sin"] = Rbasis_sin
+        bases["Zbasis_cos"] = Zbasis
+        bases["Zbasis_sin"] = Zbasis_sin
+
+        coeffs = {}
+        coeffs["R_2_0_n"] = np.zeros(Rbasis.num_modes)
+        coeffs["R_2_2_n"] = np.zeros(Rbasis.num_modes)
+        coeffs["R_2_neg2_n"] = np.zeros(Rbasis_sin.num_modes)
+
+        coeffs["Z_2_0_n"] = np.zeros(Zbasis_sin.num_modes)
+        coeffs["Z_2_2_n"] = np.zeros(Zbasis_sin.num_modes)
+        coeffs["Z_2_neg2_n"] = np.zeros(Zbasis.num_modes)
+        return coeffs, bases
     # get variables from qsc
 
     if N is None:
@@ -725,8 +755,12 @@ def _calc_2nd_order_constraints(qsc, desc_eq, coeffs, bases):  # noqa: C901
     ----
         Uses 2nd order coefficients eqns in NAE document in docs/dev_notes folder.
     """
-    r = 2 * abs(desc_eq.Psi / qsc.Bbar) / 2 / np.pi  # this is the r over rho factor,
-    # squared (bc is rho^2 and r^2 terms considering here)
+    if qsc is not None:
+        # r is the ratio  r_NAE / rho_DESC
+        # squared (bc is rho^2 and r^2 terms considering here)
+        r = 2 * abs(desc_eq.Psi / qsc.Bbar) / 2 / np.pi
+    else:
+        r = 1  # using DESC equilibrium's behavior, no conversion is needed
     Rconstraints = ()
     Zconstraints = ()
 

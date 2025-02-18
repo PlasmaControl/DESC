@@ -7,7 +7,7 @@ from scipy import optimize, special
 
 from desc.backend import fori_loop, jnp, put, repeat, take
 from desc.io import IOAble
-from desc.utils import Index, check_nonnegint, check_posint, errorif
+from desc.utils import Index, check_nonnegint, check_posint, errorif, setdefault
 
 __all__ = [
     "Grid",
@@ -479,8 +479,7 @@ class _Grid(IOAble, ABC):
             "Custom grids must have weights specified by user.\n"
             "Recall that the accurate computation of volume integral quantities "
             "requires a specific set of quadrature nodes.\n"
-            "It is recommended to compute such quantities on a QuadratureGrid and use "
-            "the ``copy_data_from_other`` method to transfer values to custom grids.",
+            "It is recommended to compute such quantities on a QuadratureGrid.",
         )
         return self._weights
 
@@ -749,7 +748,7 @@ class Grid(_Grid):
         spacing=None,
         weights=None,
         coordinates="rtz",
-        period=(np.inf, 2 * np.pi, 2 * np.pi),
+        period=None,
         NFP=1,
         source_grid=None,
         sort=False,
@@ -764,7 +763,14 @@ class Grid(_Grid):
         self._sym = False
         self._node_pattern = "custom"
         self._coordinates = coordinates
-        self._period = period
+        self._period = setdefault(
+            period,
+            (
+                (np.inf, 2 * np.pi, 2 * np.pi / NFP)
+                if coordinates == "rtz"
+                else (np.inf, np.inf, np.inf)
+            ),
+        )
         self._source_grid = source_grid
         self._is_meshgrid = bool(is_meshgrid)
         self._nodes = self._create_nodes(nodes)
@@ -824,7 +830,7 @@ class Grid(_Grid):
         nodes,
         spacing=None,
         coordinates="rtz",
-        period=(np.inf, 2 * np.pi, 2 * np.pi),
+        period=None,
         NFP=1,
         jitable=True,
         **kwargs,
@@ -865,6 +871,14 @@ class Grid(_Grid):
 
         """
         NFP = check_posint(NFP, "NFP", False)
+        period = setdefault(
+            period,
+            (
+                (np.inf, 2 * np.pi, 2 * np.pi / NFP)
+                if coordinates == "rtz"
+                else (np.inf, np.inf, np.inf)
+            ),
+        )
         a, b, c = jnp.atleast_1d(*nodes)
         if spacing is None:
             errorif(coordinates[0] != "r", NotImplementedError)

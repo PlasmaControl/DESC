@@ -4,6 +4,7 @@ import os
 
 import h5py
 import jax
+import matplotlib.pyplot as plt
 import numpy as np
 import pytest
 from netCDF4 import Dataset
@@ -21,7 +22,14 @@ from desc.compute import rpz2xyz_vec
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.examples import get
 from desc.grid import LinearGrid
+from desc.magnetic_fields import (
+    FourierCurrentPotentialField,
+    ToroidalMagneticField,
+    solve_regularized_surface_current,
+)
 from desc.vmec import VMECIO
+
+plt.rcParams.update({"figure.max_open_warning": 0})
 
 
 @pytest.fixture(scope="class", autouse=True)
@@ -284,13 +292,13 @@ def DummyMixedCoilSet(tmpdir_factory):
         vf_coil, displacement=[0, 0, 2], n=3, endpoint=True
     )
     xyz_coil = FourierXYZCoil(current=2)
-    phi = 2 * np.pi * np.linspace(0, 1, 20, endpoint=True) ** 2
+    phi = 2 * np.pi * np.linspace(0, 1, 20, endpoint=True)
     spline_coil = SplineXYZCoil(
         current=1,
         X=np.cos(phi),
         Y=np.sin(phi),
         Z=np.zeros_like(phi),
-        knots=np.linspace(0, 2 * np.pi, len(phi)),
+        knots=phi,
     )
     full_coilset = MixedCoilSet(
         (tf_coilset, vf_coilset, xyz_coil, spline_coil), check_intersection=False
@@ -338,6 +346,146 @@ def VMEC_save(SOLOVEV, tmpdir_factory):
 
 
 @pytest.fixture(scope="session")
+def regcoil_helical_coils_scan():
+    """Run regcoil for precise eq and surface, scan over lambda_regularization."""
+    eq = get("precise_QA")
+    surf_winding = eq.surface.constant_offset_surface(
+        offset=0.2,  # desired offset
+        M=16,  # Poloidal resolution of desired offset surface
+        N=12,  # Toroidal resolution of desired offset surface
+        grid=LinearGrid(M=32, N=16, NFP=eq.NFP),
+    )
+    surface_current_field = FourierCurrentPotentialField.from_surface(
+        surf_winding, M_Phi=8, N_Phi=8
+    )
+    fields, data = solve_regularized_surface_current(
+        surface_current_field,
+        eq,
+        eval_grid=LinearGrid(M=20, N=20, NFP=eq.NFP, sym=True),
+        source_grid=LinearGrid(M=40, N=40, NFP=eq.NFP),
+        lambda_regularization=np.append(np.array([0.0]), np.logspace(-30, -1, 5)),
+        current_helicity=(1 * eq.NFP, -1),
+        vacuum=True,
+        regularization_type="regcoil",
+    )
+    surface_current_field = fields[0]
+    return (data, surface_current_field, eq)
+
+
+@pytest.fixture(scope="session")
+def regcoil_modular_coils():
+    """Run regcoil for precise QA eq and surface with modular coils."""
+    eq = get("precise_QA")
+    surf_winding = eq.surface.constant_offset_surface(
+        offset=0.2,  # desired offset
+        M=16,  # Poloidal resolution of desired offset surface
+        N=12,  # Toroidal resolution of desired offset surface
+        grid=LinearGrid(M=32, N=16, NFP=eq.NFP),
+    )
+    M_Phi = 10
+    N_Phi = 10
+    M_egrid = 20
+    N_egrid = 20
+    M_sgrid = 40
+    N_sgrid = 40
+    lambda_regularization = 1e-18
+
+    surface_current_field = FourierCurrentPotentialField.from_surface(
+        surf_winding, M_Phi=M_Phi, N_Phi=N_Phi
+    )
+    surface_current_field, data = solve_regularized_surface_current(
+        surface_current_field,
+        eq,
+        eval_grid=LinearGrid(M=M_egrid, N=N_egrid, NFP=eq.NFP, sym=True),
+        source_grid=LinearGrid(M=M_sgrid, N=N_sgrid, NFP=eq.NFP),
+        lambda_regularization=lambda_regularization,
+        regularization_type="regcoil",
+        vacuum=True,
+    )
+    surface_current_field = surface_current_field[0]
+
+    return (data, surface_current_field, eq)
+
+
+@pytest.fixture(scope="session")
+def regcoil_windowpane_coils():
+    """Run regcoil for precise QA eq and surface with windowpane coils."""
+    eq = get("precise_QA")
+    surf_winding = eq.surface.constant_offset_surface(
+        offset=0.2,  # desired offset
+        M=16,  # Poloidal resolution of desired offset surface
+        N=12,  # Toroidal resolution of desired offset surface
+        grid=LinearGrid(M=32, N=16, NFP=eq.NFP),
+    )
+    M_Phi = 10
+    N_Phi = 10
+    M_egrid = 20
+    N_egrid = 20
+    M_sgrid = 20
+    N_sgrid = 20
+    lambda_regularization = 1e-18
+
+    surface_current_field = FourierCurrentPotentialField.from_surface(
+        surf_winding, M_Phi=M_Phi, N_Phi=N_Phi, sym_Phi="sin"
+    )
+    # provide necessary toroidal flux with a TF field
+    G = eq.compute("G")["G"][-1]
+    surface_current_field, data = solve_regularized_surface_current(
+        surface_current_field,
+        eq,
+        eval_grid=LinearGrid(M=M_egrid, N=N_egrid, NFP=eq.NFP, sym=True),
+        source_grid=LinearGrid(M=M_sgrid, N=N_sgrid, NFP=eq.NFP),
+        lambda_regularization=lambda_regularization,
+        regularization_type="regcoil",
+        vacuum=True,
+        current_helicity=(0, 0),
+        external_field=ToroidalMagneticField(B0=G, R0=1),
+    )
+    surface_current_field = surface_current_field[0]
+
+    return (data, surface_current_field, eq)
+
+
+@pytest.fixture(scope="session")
+def regcoil_PF_coils():
+    """Run regcoil for precise QA eq and surface with PF coils."""
+    eq = get("precise_QA")
+    surf_winding = eq.surface.constant_offset_surface(
+        offset=0.2,  # desired offset
+        M=16,  # Poloidal resolution of desired offset surface
+        N=12,  # Toroidal resolution of desired offset surface
+        grid=LinearGrid(M=32, N=16, NFP=eq.NFP),
+    )
+    M_Phi = 10
+    N_Phi = 10
+    M_egrid = 20
+    N_egrid = 20
+    M_sgrid = 30
+    N_sgrid = 30
+    lambda_regularization = 1e-24
+
+    surface_current_field = FourierCurrentPotentialField.from_surface(
+        surf_winding, M_Phi=M_Phi, N_Phi=N_Phi, sym_Phi="sin"
+    )
+    # provide necessary toroidal flux with a TF field
+    G = eq.compute("G")["G"][-1]
+    surface_current_field, data = solve_regularized_surface_current(
+        surface_current_field,
+        eq,
+        eval_grid=LinearGrid(M=M_egrid, N=N_egrid, NFP=eq.NFP, sym=True),
+        source_grid=LinearGrid(M=M_sgrid, N=N_sgrid, NFP=eq.NFP),
+        lambda_regularization=lambda_regularization,
+        regularization_type="regcoil",
+        vacuum=True,
+        current_helicity=(0, 1),
+        external_field=ToroidalMagneticField(B0=G, R0=1),
+    )
+    surface_current_field = surface_current_field[0]
+
+    return (data, surface_current_field, eq)
+
+
+@pytest.fixture(scope="session")
 def VMEC_save_asym(tmpdir_factory):
     """Save an asymmetric equilibrium in VMEC netcdf format for comparison."""
     tmpdir = tmpdir_factory.mktemp("asym_wout")
@@ -351,6 +499,8 @@ def VMEC_save_asym(tmpdir_factory):
         verbose=0,
         M_nyq=round(np.max(vmec.variables["xm_nyq"][:])),
         N_nyq=round(np.max(vmec.variables["xn_nyq"][:]) / eq.NFP),
+        M_grid=round(np.max(vmec.variables["xm_nyq"][:])),
+        N_grid=round(np.max(vmec.variables["xn_nyq"][:]) / eq.NFP),
     )
     desc = Dataset(filename, mode="r")
     return vmec, desc, eq

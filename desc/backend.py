@@ -5,6 +5,7 @@ import os
 import warnings
 
 import numpy as np
+from packaging.version import Version
 from termcolor import colored
 
 import desc
@@ -15,11 +16,6 @@ if os.environ.get("DESC_BACKEND") == "numpy":
     jnp = np
     use_jax = False
     set_device(kind="cpu")
-    print(
-        "DESC version {}, using numpy backend, version={}, dtype={}".format(
-            desc.__version__, np.__version__, np.linspace(0, 1).dtype
-        )
-    )
 else:
     if desc_config.get("device") is None:
         set_device("cpu")
@@ -41,12 +37,6 @@ else:
             x = jnp.linspace(0, 5)
             y = jnp.exp(x)
         use_jax = True
-        print(
-            f"DESC version {desc.__version__},"
-            + f"using JAX backend, jax version={jax.__version__}, "
-            + f"jaxlib version={jaxlib.__version__}, dtype={y.dtype}"
-        )
-        del x, y
     except ModuleNotFoundError:
         jnp = np
         x = jnp.linspace(0, 5)
@@ -54,36 +44,35 @@ else:
         use_jax = False
         set_device(kind="cpu")
         warnings.warn(colored("Failed to load JAX", "red"))
+
+
+def print_backend_info():
+    """Prints DESC version, backend type & version, device type & memory."""
+    print(f"DESC version={desc.__version__}.")
+    if use_jax:
         print(
-            "DESC version {}, using NumPy backend, version={}, dtype={}".format(
-                desc.__version__, np.__version__, y.dtype
-            )
+            f"Using JAX backend: jax version={jax.__version__}, "
+            + f"jaxlib version={jaxlib.__version__}, dtype={y.dtype}."
         )
-print(
-    "Using device: {}, with {:.2f} GB available memory".format(
-        desc_config.get("device"), desc_config.get("avail_mem")
+    else:
+        print(f"Using NumPy backend: version={np.__version__}, dtype={y.dtype}.")
+    print(
+        "Using device: {}, with {:.2f} GB available memory.".format(
+            desc_config.get("device"), desc_config.get("avail_mem")
+        )
     )
-)
 
-if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assign?
+
+if use_jax:  # noqa: C901
     from jax import custom_jvp, jit, vmap
-
-    imap = jax.lax.map
     from jax.experimental.ode import odeint
     from jax.lax import cond, fori_loop, scan, switch, while_loop
     from jax.nn import softmax as softargmax
     from jax.numpy import bincount, flatnonzero, repeat, take
-    from jax.numpy.fft import irfft, rfft, rfft2
+    from jax.numpy.fft import ifft, irfft, irfft2, rfft, rfft2
     from jax.scipy.fft import dct, idct
-    from jax.scipy.linalg import (
-        block_diag,
-        cho_factor,
-        cho_solve,
-        eigh_tridiagonal,
-        qr,
-        solve_triangular,
-    )
-    from jax.scipy.special import gammaln, logsumexp
+    from jax.scipy.linalg import block_diag, cho_factor, cho_solve, qr, solve_triangular
+    from jax.scipy.special import gammaln
     from jax.tree_util import (
         register_pytree_node,
         tree_flatten,
@@ -94,9 +83,59 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
         treedef_is_leaf,
     )
 
-    trapezoid = (
-        jnp.trapezoid if hasattr(jnp, "trapezoid") else jax.scipy.integrate.trapezoid
-    )
+    # TODO: update this when JAX min version >= 0.4.26
+    if hasattr(jnp, "trapezoid"):
+        trapezoid = jnp.trapezoid  # for JAX 0.4.26 and later
+    elif hasattr(jax.scipy, "integrate"):
+        trapezoid = jax.scipy.integrate.trapezoid
+    else:
+        trapezoid = jnp.trapz  # for older versions of JAX, deprecated by jax 0.4.16
+
+    # TODO: update this when JAX min version >= 0.4.35
+    if Version(jax.__version__) >= Version("0.4.35"):
+
+        def pure_callback(func, result_shape_dtype, *args, vectorized=False, **kwargs):
+            """Wrapper for jax.pure_callback for versions >=0.4.35."""
+            return jax.pure_callback(
+                func,
+                result_shape_dtype,
+                *args,
+                vmap_method="expand_dims" if vectorized else "sequential",
+                **kwargs,
+            )
+
+    else:
+
+        def pure_callback(func, result_shape_dtype, *args, vectorized=False, **kwargs):
+            """Wrapper for jax.pure_callback for versions <0.4.35."""
+            return jax.pure_callback(
+                func, result_shape_dtype, *args, vectorized=vectorized, **kwargs
+            )
+
+    def execute_on_cpu(func):
+        """Decorator to set default device to CPU for a function.
+
+        Parameters
+        ----------
+        func : callable
+            Function to decorate
+
+        Returns
+        -------
+        wrapper : callable
+            Decorated function that will always run on CPU even if
+            there are available GPUs.
+        """
+
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            with jax.default_device(jax.devices("cpu")[0]):
+                return func(*args, **kwargs)
+
+        return wrapper
+
+    # JAX implementation is not differentiable on gpu.
+    eigh_tridiagonal = execute_on_cpu(jax.scipy.linalg.eigh_tridiagonal)
 
     def put(arr, inds, vals):
         """Functional interface for array "fancy indexing".
@@ -115,35 +154,15 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
         Returns
         -------
         arr : array-like
-            Input array with vals inserted at inds.
+            Copy of input array with vals inserted at inds.
+            In some cases JAX may decide a copy is not necessary.
 
         """
         if isinstance(arr, np.ndarray):
+            arr = arr.copy()
             arr[inds] = vals
             return arr
         return jnp.asarray(arr).at[inds].set(vals)
-
-    def execute_on_cpu(func):
-        """Decorator to set default device to CPU for a function.
-
-        Parameters
-        ----------
-        func : callable
-            Function to decorate
-
-        Returns
-        -------
-        wrapper : callable
-            Decorated function that will run always on CPU even if
-            there are available GPUs.
-        """
-
-        @functools.wraps(func)
-        def wrapper(*args, **kwargs):
-            with jax.default_device(jax.devices("cpu")[0]):
-                return func(*args, **kwargs)
-
-        return wrapper
 
     def sign(x):
         """Sign function, but returns 1 for x==0.
@@ -202,6 +221,7 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
         maxiter_ls=5,
         alpha=0.1,
         fixup=None,
+        full_output=False,
     ):
         """Find x where fun(x, *args) == 0.
 
@@ -229,6 +249,9 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
         fixup : callable, optional
             Function to modify x after each update, ie to enforce periodicity. Should
             have a signature of the form fixup(x, *args) -> x'.
+        full_output : bool, optional
+            If True, also return a tuple where the first element is the residual from
+            the root finding and the second is the number of iterations.
 
         Returns
         -------
@@ -273,18 +296,25 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
                 xk1, fk1 = backtrack(xk1, fk1, d)
                 return xk1, fk1, k1 + 1
 
-            state = guess, res(guess), 0
+            state = guess, res(guess), 0.0
             state = jax.lax.while_loop(condfun, bodyfun, state)
-            return state[0], state[1:]
+            if full_output:
+                return state[0], state[1:]
+            else:
+                return state[0]
 
         def tangent_solve(g, y):
             A = jax.jacfwd(g)(y)
             return y / A
 
-        x, (res, niter) = jax.lax.custom_root(
-            res, x0, solve, tangent_solve, has_aux=True
-        )
-        return x, (abs(res), niter)
+        if full_output:
+            x, (res, niter) = jax.lax.custom_root(
+                res, x0, solve, tangent_solve, has_aux=True
+            )
+            return x, (abs(res), niter)
+        else:
+            x = jax.lax.custom_root(res, x0, solve, tangent_solve, has_aux=False)
+            return x
 
     def root(
         fun,
@@ -296,6 +326,7 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
         maxiter_ls=0,
         alpha=0.1,
         fixup=None,
+        full_output=False,
     ):
         """Find x where fun(x, *args) == 0.
 
@@ -323,6 +354,9 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
         fixup : callable, optional
             Function to modify x after each update, ie to enforce periodicity. Should
             have a signature of the form fixup(x, *args) -> 1d array.
+        full_output : bool, optional
+            If True, also return a tuple where the first element is the residual from
+            the root finding and the second is the number of iterations.
 
         Returns
         -------
@@ -390,19 +424,26 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
             state = (
                 jnp.atleast_1d(jnp.asarray(guess)),
                 jnp.atleast_1d(resfun(guess)),
-                0,
+                0.0,
             )
             state = jax.lax.while_loop(condfun, bodyfun, state)
-            return state[0], state[1:]
+            if full_output:
+                return state[0], state[1:]
+            else:
+                return state[0]
 
         def tangent_solve(g, y):
             A = jnp.atleast_2d(jax.jacfwd(g)(y))
             return _lstsq(A, jnp.atleast_1d(y))
 
-        x, (res, niter) = jax.lax.custom_root(
-            res, x0, solve, tangent_solve, has_aux=True
-        )
-        return x, (safenorm(res), niter)
+        if full_output:
+            x, (res, niter) = jax.lax.custom_root(
+                res, x0, solve, tangent_solve, has_aux=True
+            )
+            return x, (safenorm(res), niter)
+        else:
+            x = jax.lax.custom_root(res, x0, solve, tangent_solve, has_aux=False)
+            return x
 
 
 # we can't really test the numpy backend stuff in automated testing, so we ignore it
@@ -411,7 +452,7 @@ else:  # pragma: no cover
     jit = lambda func, *args, **kwargs: func
     execute_on_cpu = lambda func: func
     import scipy.optimize
-    from numpy.fft import irfft, rfft, rfft2  # noqa: F401
+    from numpy.fft import ifft, irfft, irfft2, rfft, rfft2  # noqa: F401
     from scipy.fft import dct, idct  # noqa: F401
     from scipy.integrate import odeint  # noqa: F401
     from scipy.linalg import (  # noqa: F401
@@ -422,12 +463,12 @@ else:  # pragma: no cover
         qr,
         solve_triangular,
     )
-    from scipy.special import gammaln, logsumexp  # noqa: F401
+    from scipy.special import gammaln  # noqa: F401
     from scipy.special import softmax as softargmax  # noqa: F401
 
     trapezoid = np.trapezoid if hasattr(np, "trapezoid") else np.trapz
 
-    def imap(f, xs, batch_size=None, in_axes=0, out_axes=0):
+    def _map(f, xs, *, batch_size=None, in_axes=0, out_axes=0):
         """Generalizes jax.lax.map; uses numpy."""
         if not isinstance(xs, np.ndarray):
             raise NotImplementedError(
@@ -458,7 +499,11 @@ else:  # pragma: no cover
             Vectorized version of fun.
 
         """
-        return lambda xs: imap(fun, xs, in_axes=in_axes, out_axes=out_axes)
+        return lambda xs: _map(fun, xs, in_axes=in_axes, out_axes=out_axes)
+
+    def pure_callback(*args, **kwargs):
+        """IO callback for numpy backend."""
+        raise NotImplementedError
 
     def tree_stack(*args, **kwargs):
         """Stack pytree for numpy backend."""
@@ -513,9 +558,10 @@ else:  # pragma: no cover
         Returns
         -------
         arr : array-like
-            Input array with vals inserted at inds.
+            Copy of input array with vals inserted at inds.
 
         """
+        arr = arr.copy()
         arr[inds] = vals
         return arr
 
@@ -564,7 +610,7 @@ else:  # pragma: no cover
             val = body_fun(i, val)
         return val
 
-    def cond(pred, true_fun, false_fun, *operand):
+    def cond(pred, true_fun, false_fun, *operands):
         """Conditionally apply true_fun or false_fun.
 
         This version is for the numpy backend, for jax backend see jax.lax.cond
@@ -577,7 +623,7 @@ else:  # pragma: no cover
             Function (A -> B), to be applied if pred is True.
         false_fun: callable
             Function (A -> B), to be applied if pred is False.
-        operand: any
+        operands: any
             input to either branch depending on pred. The type can be a scalar, array,
             or any pytree (nested Python tuple/list/dict) thereof.
 
@@ -590,9 +636,9 @@ else:  # pragma: no cover
 
         """
         if pred:
-            return true_fun(*operand)
+            return true_fun(*operands)
         else:
-            return false_fun(*operand)
+            return false_fun(*operands)
 
     def switch(index, branches, operand):
         """Apply exactly one of branches given by index.
@@ -712,6 +758,7 @@ else:  # pragma: no cover
         maxiter_ls=5,
         alpha=0.1,
         fixup=None,
+        full_output=False,
     ):
         """Find x where fun(x, *args) == 0.
 
@@ -739,6 +786,9 @@ else:  # pragma: no cover
         fixup : callable, optional
             Function to modify x after each update, ie to enforce periodicity. Should
             have a signature of the form fixup(x) -> x'.
+        full_output : bool, optional
+            If True, also return a tuple where the first element is the residual from
+            the root finding and the second is the number of iterations.
 
         Returns
         -------
@@ -751,7 +801,10 @@ else:  # pragma: no cover
         out = scipy.optimize.root_scalar(
             fun, args, x0=x0, fprime=jac, xtol=tol, rtol=tol
         )
-        return out.root, out
+        if full_output:
+            return out.root, out
+        else:
+            return out.root
 
     def root(
         fun,
@@ -763,6 +816,7 @@ else:  # pragma: no cover
         maxiter_ls=0,
         alpha=0.1,
         fixup=None,
+        full_output=False,
     ):
         """Find x where fun(x, *args) == 0.
 
@@ -790,6 +844,9 @@ else:  # pragma: no cover
         fixup : callable, optional
             Function to modify x after each update, ie to enforce periodicity. Should
             have a signature of the form fixup(x, *args) -> 1d array.
+        full_output : bool, optional
+            If True, also return a tuple where the first element is the residual from
+            the root finding and the second is the number of iterations.
 
         Returns
         -------
@@ -804,7 +861,10 @@ else:  # pragma: no cover
         will solve it in a least squares sense.
         """
         out = scipy.optimize.root(fun, x0, args, jac=jac, tol=tol)
-        return out.x, out
+        if full_output:
+            return out.x, out
+        else:
+            return out.x
 
     def flatnonzero(a, size=None, fill_value=0):
         """A numpy implementation of jnp.flatnonzero."""

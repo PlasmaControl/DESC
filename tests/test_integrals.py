@@ -611,6 +611,29 @@ class TestSingularities:
     """
 
     @pytest.mark.unit
+    @pytest.mark.parametrize("interpolator", [FFTInterpolator, DFTInterpolator])
+    def test_biest_interpolators(self, interpolator):
+        """Test that FFT and DFT interpolation gives same result for standard grids."""
+        grid = LinearGrid(0, *_f_2d_nyquist_freq())
+        h_t = 2 * np.pi / grid.num_theta
+        h_z = 2 * np.pi / grid.num_zeta / grid.NFP
+
+        st = 3
+        sz = 5
+        q = 4
+        r, w, _, _ = _get_quadrature_nodes(q)
+        dt = st / 2 * h_t * r * np.sin(w)
+        dz = sz / 2 * h_z * r * np.cos(w)
+
+        interp = interpolator(grid, grid, st, sz, q)
+        theta = grid.nodes[:, 1]
+        zeta = grid.nodes[:, 2]
+        f = _f_2d(theta, zeta)
+        for i in range(dt.size):
+            truth = _f_2d(theta + dt[i], zeta + dz[i])
+            np.testing.assert_allclose(interp(f, i), truth)
+
+    @pytest.mark.unit
     def test_singular_integral_greens_id(self):
         """Test high order singular integration using greens identity.
 
@@ -684,29 +707,6 @@ class TestSingularities:
         np.testing.assert_allclose(B, 0, atol=0.0054)
 
     @pytest.mark.unit
-    @pytest.mark.parametrize("interpolator", [FFTInterpolator, DFTInterpolator])
-    def test_biest_interpolators(self, interpolator):
-        """Test that FFT and DFT interpolation gives same result for standard grids."""
-        grid = LinearGrid(0, *_f_2d_nyquist_freq())
-        h_t = 2 * np.pi / grid.num_theta
-        h_z = 2 * np.pi / grid.num_zeta / grid.NFP
-
-        st = 3
-        sz = 5
-        q = 4
-        r, w, _, _ = _get_quadrature_nodes(q)
-        dt = st / 2 * h_t * r * np.sin(w)
-        dz = sz / 2 * h_z * r * np.cos(w)
-
-        interp = interpolator(grid, grid, st, sz, q)
-        theta = grid.nodes[:, 1]
-        zeta = grid.nodes[:, 2]
-        f = _f_2d(theta, zeta)
-        for i in range(dt.size):
-            truth = _f_2d(theta + dt[i], zeta + dz[i])
-            np.testing.assert_allclose(interp(f, i), truth)
-
-    @pytest.mark.unit
     def test_laplace_harmonic(self, plot=False):
         """Test that Laplace solution recovers expected analytic result.
 
@@ -722,12 +722,13 @@ class TestSingularities:
         a = 1
         eq = Equilibrium()  # Choosing a = 1.
         grid = LinearGrid(M=resolution, N=resolution, NFP=eq.NFP)
+        data = eq.compute(["Z", "n_rho"], grid=grid)
+
         theta = grid.nodes[:, 1]
-
-        Z = eq.compute("Z", grid=grid)["Z"]
-        np.testing.assert_allclose(Z, -a * np.sin(theta))
-
+        np.testing.assert_allclose(data["Z"], -a * np.sin(theta))
         B0n = np.sin(theta)
+        np.testing.assert_allclose(-data["n_rho"][:, 2], B0n)
+
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             Phi_mn, Phi_transform = compute_Phi_mn(
@@ -739,7 +740,7 @@ class TestSingularities:
                 chunk_size=chunk_size,
             )
         Phi = Transform(grid, Phi_transform.basis).transform(Phi_mn)
-        np.testing.assert_allclose(np.diff(Phi - Z), 0, atol=1e-4)
+        np.testing.assert_allclose(np.diff(Phi - data["Z"]), 0, atol=1e-4)
 
         dPhi_dn = compute_dPhi_dn(
             eq=eq,
@@ -761,6 +762,52 @@ class TestSingularities:
             ax.set_title(r"$(\nabla \Phi + B_0) \cdot n$ on $\partial D$")
             fig.colorbar(contour, ax=ax)
             plt.show()
+
+    @pytest.mark.unit
+    def test_laplace_harmonic_general(self):
+        """Test that Laplace solution recovers expected analytic result.
+
+        Define boundary R_b(θ,ζ) and Z_b(θ,ζ).
+        Define harmonic map Φ: ρ,θ,ζ ↦ Z(ρ,θ,ζ).
+        Choose b.c. B₀⋅n = -∇ϕ⋅n and test that Φ - Z = constant is recovered.
+        """
+        resolution = 40
+        chunk_size = 40
+        eq = Equilibrium(
+            # elliptic cross-section with torsion
+            surface=FourierRZToroidalSurface(
+                R_lmn=[10, 1, 0.2],
+                Z_lmn=[-2, -0.2],
+                modes_R=[[0, 0], [1, 0], [0, 1]],
+                modes_Z=[[-1, 0], [0, -1]],
+            )
+        )
+        grid = LinearGrid(M=resolution, N=resolution, NFP=eq.NFP)
+        data = eq.compute(["Z", "n_rho"], grid=grid)
+        B0n = -data["n_rho"][:, 2]
+
+        Phi_mn, Phi_transform = compute_Phi_mn(
+            eq=eq,
+            B0n=B0n,
+            eval_grid=grid,
+            source_grid=grid,
+            check=True,
+            chunk_size=chunk_size,
+        )
+        assert np.isfinite(Phi_mn).all()
+        Phi = Transform(grid, Phi_transform.basis).transform(Phi_mn)
+        np.testing.assert_allclose(np.diff(Phi - data["Z"]), 0, atol=1e-4)
+
+        dPhi_dn = compute_dPhi_dn(
+            eq=eq,
+            eval_grid=grid,
+            source_grid=grid,
+            Phi_mn=Phi_mn,
+            basis=Phi_transform.basis,
+            chunk_size=chunk_size,
+        )
+        Bn = B0n + dPhi_dn
+        np.testing.assert_allclose(Bn, 0, atol=3e-2)
 
     @pytest.mark.unit
     @pytest.mark.mpl_image_compare(remove_text=False, tolerance=tol_1d)

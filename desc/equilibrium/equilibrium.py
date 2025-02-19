@@ -843,7 +843,7 @@ class Equilibrium(IOAble, Optimizable):
 
         Returns
         -------
-        data : dict of ndarray
+        data : dict[str, ndarray]
             Computed quantity and intermediate variables.
 
         """

@@ -11,6 +11,7 @@ import numpy as np
 import plotly.graph_objects as go
 from matplotlib import cycler, rcParams
 from mpl_toolkits.axes_grid1 import make_axes_locatable
+from packaging.version import Version
 from pylatexenc.latex2text import LatexNodes2Text
 from termcolor import colored
 
@@ -23,7 +24,7 @@ from desc.equilibrium.coords import map_coordinates
 from desc.grid import Grid, LinearGrid
 from desc.integrals import surface_averages_map
 from desc.magnetic_fields import field_line_integrate
-from desc.utils import errorif, only1, parse_argname_change, setdefault
+from desc.utils import errorif, islinspaced, only1, parse_argname_change, setdefault
 from desc.vmec_utils import ptolemy_linear_transform
 
 __all__ = [
@@ -110,28 +111,24 @@ _AXIS_LABELS_XYZ = [r"$X ~(\mathrm{m})$", r"$Y ~(\mathrm{m})$", r"$Z ~(\mathrm{m
 
 
 def _set_tight_layout(fig):
-    version = matplotlib.__version__.split(".")
-    major = int(version[0])
-    minor = int(version[1])
+    # TODO: update this when matplotlib min version >= 3.6.0
     # compat layer to deal with API changes in mpl 3.6.0
-    if major == 3 and minor < 6:
-        fig.set_tight_layout(True)
-    else:
+    if Version(matplotlib.__version__) >= Version("3.6.0"):
         fig.set_layout_engine("tight")
+    else:
+        fig.set_tight_layout(True)
 
 
 def _get_cmap(name, n=None):
-    version = matplotlib.__version__.split(".")
-    major = int(version[0])
-    minor = int(version[1])
+    # TODO: update this when matplotlib min version >= 3.6.0
     # compat layer to deal with API changes in mpl 3.6.0
-    if major == 3 and minor < 6:
-        return matplotlib.cm.get_cmap(name, n)
-    else:
+    if Version(matplotlib.__version__) >= Version("3.6.0"):
         c = matplotlib.colormaps[name]
         if n is not None:
             c = c.resampled(n)
         return c
+    else:
+        return matplotlib.cm.get_cmap(name, n)
 
 
 def _format_ax(ax, is3d=False, rows=1, cols=1, figsize=None, equal=False):
@@ -219,20 +216,19 @@ def _get_grid(**kwargs):
 
     """
     grid_args = {
-        "L": None,
-        "M": None,
-        "N": None,
         "NFP": 1,
         "sym": False,
         "axis": True,
         "endpoint": True,
-        "rho": np.array([1.0]),
-        "theta": np.array([0.0]),
-        "zeta": np.array([0.0]),
     }
-    for key in kwargs.keys():
-        if key in grid_args.keys():
-            grid_args[key] = kwargs[key]
+    grid_args.update(kwargs)
+    if ("L" not in grid_args) and ("rho" not in grid_args):
+        grid_args["rho"] = np.array([1.0])
+    if ("M" not in grid_args) and ("theta" not in grid_args):
+        grid_args["theta"] = np.array([0.0])
+    if ("N" not in grid_args) and ("zeta" not in grid_args):
+        grid_args["zeta"] = np.array([0.0])
+
     grid = LinearGrid(**grid_args)
 
     return grid
@@ -321,6 +317,73 @@ def _compute(eq, name, grid, component=None, reshape=True):
     if reshape:
         data = data.reshape((grid.num_theta, grid.num_rho, grid.num_zeta), order="F")
 
+    return data, label
+
+
+def _compute_Bn(eq, field, plot_grid, field_grid):
+    """Compute normal field from virtual casing + coils, using correct grids."""
+    errorif(
+        field is None,
+        ValueError,
+        "If B*n is entered as the variable to plot, a magnetic field"
+        " must be provided.",
+    )
+    errorif(
+        not np.all(np.isclose(plot_grid.nodes[:, 0], 1)),
+        ValueError,
+        "If B*n is entered as the variable to plot, "
+        "the grid nodes must be at rho=1.",
+    )
+
+    theta_endpoint = zeta_endpoint = False
+
+    if plot_grid.fft_poloidal and plot_grid.fft_toroidal:
+        source_grid = eval_grid = plot_grid
+    # often plot_grid is still linearly spaced but includes endpoints. In that case
+    # make a temp grid that just leaves out the endpoint so we can FFT
+    elif (
+        isinstance(plot_grid, LinearGrid)
+        and not plot_grid.sym
+        and islinspaced(plot_grid.nodes[plot_grid.unique_theta_idx, 1])
+        and islinspaced(plot_grid.nodes[plot_grid.unique_zeta_idx, 2])
+    ):
+        if plot_grid._poloidal_endpoint:
+            theta_endpoint = True
+            theta = plot_grid.nodes[plot_grid.unique_theta_idx[0:-1], 1]
+        if plot_grid._toroidal_endpoint:
+            zeta_endpoint = True
+            zeta = plot_grid.nodes[plot_grid.unique_zeta_idx[0:-1], 2]
+        vc_grid = LinearGrid(
+            theta=theta,
+            zeta=zeta,
+            NFP=plot_grid.NFP,
+            endpoint=False,
+        )
+        # override attr since we know fft is ok even with custom nodes
+        vc_grid._fft_poloidal = vc_grid._fft_toroidal = True
+        source_grid = eval_grid = vc_grid
+    else:
+        eval_grid = plot_grid
+        source_grid = LinearGrid(
+            M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False, endpoint=False
+        )
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+
+        data, _ = field.compute_Bnormal(
+            eq, eval_grid=eval_grid, source_grid=field_grid, vc_source_grid=source_grid
+        )
+    data = data.reshape((eval_grid.num_theta, eval_grid.num_zeta), order="F")
+    if theta_endpoint:
+        data = np.vstack((data, data[0, :]))
+    if zeta_endpoint:
+        data = np.hstack((data, np.atleast_2d(data[:, 0]).T))
+    data = data.reshape(
+        (plot_grid.num_theta, plot_grid.num_rho, plot_grid.num_zeta), order="F"
+    )
+
+    label = r"$\mathbf{B} \cdot \hat{n} ~(\mathrm{T})$"
     return data, label
 
 
@@ -658,44 +721,9 @@ def plot_2d(
             component=component,
         )
     else:
-        field = kwargs.pop("field", None)
-        errorif(
-            field is None,
-            ValueError,
-            "If B*n is entered as the variable to plot, a magnetic field"
-            " must be provided.",
+        data, label = _compute_Bn(
+            eq, kwargs.pop("field", None), grid, kwargs.pop("field_grid", None)
         )
-        errorif(
-            not np.all(np.isclose(grid.nodes[:, 0], 1)),
-            ValueError,
-            "If B*n is entered as the variable to plot, "
-            "the grid nodes must be at rho=1.",
-        )
-
-        field_grid = kwargs.pop("field_grid", None)
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-
-            if grid.endpoint:
-                # cannot use a grid with endpoint=True for FFT interpolator
-                vc_grid = LinearGrid(
-                    theta=grid.nodes[grid.unique_theta_idx[0:-1], 1],
-                    zeta=grid.nodes[grid.unique_zeta_idx[0:-1], 2],
-                    NFP=grid.NFP,
-                    endpoint=False,
-                )
-            else:
-                vc_grid = grid
-            data, _ = field.compute_Bnormal(
-                eq, eval_grid=vc_grid, source_grid=field_grid, vc_source_grid=vc_grid
-            )
-        data = data.reshape((vc_grid.num_theta, vc_grid.num_zeta), order="F")
-        if grid.endpoint:
-            data = np.hstack((data, np.atleast_2d(data[:, 0]).T))
-            data = np.vstack((data, data[0, :]))
-        data = data.reshape((grid.num_theta, grid.num_rho, grid.num_zeta), order="F")
-
-        label = r"$\mathbf{B} \cdot \hat{n} ~(\mathrm{T})$"
 
     fig, ax = _format_ax(ax, figsize=kwargs.pop("figsize", None))
     divider = make_axes_locatable(ax)
@@ -950,44 +978,9 @@ def plot_3d(
             component=component,
         )
     else:
-        field = kwargs.pop("field", None)
-        errorif(
-            field is None,
-            ValueError,
-            "If B*n is entered as the variable to plot, a magnetic field"
-            " must be provided.",
+        data, label = _compute_Bn(
+            eq, kwargs.pop("field", None), grid, kwargs.pop("field_grid", None)
         )
-        errorif(
-            not np.all(np.isclose(grid.nodes[:, 0], 1)),
-            ValueError,
-            "If B*n is entered as the variable to plot, "
-            "the grid nodes must be at rho=1.",
-        )
-
-        field_grid = kwargs.pop("field_grid", None)
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-
-            if grid.endpoint:
-                # cannot use a grid with endpoint=True for FFT interpolator
-                vc_grid = LinearGrid(
-                    theta=grid.nodes[grid.unique_theta_idx[0:-1], 1],
-                    zeta=grid.nodes[grid.unique_zeta_idx[0:-1], 2],
-                    NFP=grid.NFP,
-                    endpoint=False,
-                )
-            else:
-                vc_grid = grid
-            data, _ = field.compute_Bnormal(
-                eq, eval_grid=vc_grid, source_grid=field_grid, vc_source_grid=vc_grid
-            )
-        data = data.reshape((vc_grid.num_theta, vc_grid.num_zeta), order="F")
-        if grid.endpoint:
-            data = np.hstack((data, np.atleast_2d(data[:, 0]).T))
-            data = np.vstack((data, data[0, :]))
-        data = data.reshape((grid.num_theta, grid.num_rho, grid.num_zeta), order="F")
-
-        label = r"$\mathbf{B} \cdot \hat{n} ~(\mathrm{T})$"
 
     errorif(
         len(kwargs) != 0,
@@ -2706,7 +2699,7 @@ def plot_boozer_modes(  # noqa: C901
     ylabel_fontsize = kwargs.pop("ylabel_fontsize", None)
 
     basis = get_transforms(
-        "|B|_mn", obj=eq, grid=Grid(np.array([])), M_booz=M_booz, N_booz=N_booz
+        "|B|_mn_B", obj=eq, grid=Grid(np.array([])), M_booz=M_booz, N_booz=N_booz
     )["B"].basis
     if helicity:
         matrix, modes, symidx = ptolemy_linear_transform(
@@ -2717,12 +2710,12 @@ def plot_boozer_modes(  # noqa: C901
 
     grid = LinearGrid(M=2 * eq.M_grid, N=2 * eq.N_grid, NFP=eq.NFP, rho=rho)
     transforms = get_transforms(
-        "|B|_mn", obj=eq, grid=grid, M_booz=M_booz, N_booz=N_booz
+        "|B|_mn_B", obj=eq, grid=grid, M_booz=M_booz, N_booz=N_booz
     )
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        data = eq.compute("|B|_mn", grid=grid, transforms=transforms)
-    B_mn = data["|B|_mn"].reshape((len(rho), -1))
+        data = eq.compute("|B|_mn_B", grid=grid, transforms=transforms)
+    B_mn = data["|B|_mn_B"].reshape((len(rho), -1))
     B_mn = np.atleast_2d(matrix @ B_mn.T).T
 
     zidx = np.where((modes[:, 1:] == np.array([[0, 0]])).all(axis=1))[0]
@@ -2773,7 +2766,7 @@ def plot_boozer_modes(  # noqa: C901
             )
 
     plot_data = {
-        "|B|_mn": B_mn,
+        "|B|_mn_B": B_mn,
         "B modes": modes,
         "rho": rho,
     }
@@ -2910,12 +2903,12 @@ def plot_boozer_surface(
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             data = thing.compute(
-                "|B|_mn", grid=grid_compute, M_booz=M_booz, N_booz=N_booz
+                "|B|_mn_B", grid=grid_compute, M_booz=M_booz, N_booz=N_booz
             )
         B_transform = get_transforms(
-            "|B|_mn", obj=thing, grid=grid_plot, M_booz=M_booz, N_booz=N_booz
+            "|B|_mn_B", obj=thing, grid=grid_plot, M_booz=M_booz, N_booz=N_booz
         )["B"]
-        B = B_transform.transform(data["|B|_mn"]).reshape(
+        B = B_transform.transform(data["|B|_mn_B"]).reshape(
             (grid_plot.num_theta, grid_plot.num_zeta), order="F"
         )
         theta_B = (
@@ -3115,9 +3108,9 @@ def plot_qs_error(  # noqa: 16 fxn too complex
     grid = LinearGrid(M=2 * eq.M_grid, N=2 * eq.N_grid, NFP=eq.NFP, rho=rho)
     names = []
     if fB:
-        names += ["|B|_mn"]
+        names += ["|B|_mn_B"]
         transforms = get_transforms(
-            "|B|_mn", obj=eq, grid=grid, M_booz=M_booz, N_booz=N_booz
+            "|B|_mn_B", obj=eq, grid=grid, M_booz=M_booz, N_booz=N_booz
         )
         matrix, modes, idx = ptolemy_linear_transform(
             transforms["B"].basis.modes,
@@ -3138,7 +3131,7 @@ def plot_qs_error(  # noqa: 16 fxn too complex
         )
 
     if fB:
-        B_mn = data["|B|_mn"].reshape((len(rho), -1))
+        B_mn = data["|B|_mn_B"].reshape((len(rho), -1))
         B_mn = (matrix @ B_mn.T).T
         f_B = np.sqrt(np.sum(B_mn[:, idx] ** 2, axis=-1)) / np.sqrt(
             np.sum(B_mn**2, axis=-1)

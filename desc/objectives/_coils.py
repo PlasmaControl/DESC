@@ -16,7 +16,9 @@ from desc.backend import (
     tree_map,
     tree_unflatten,
 )
+from desc.batching import vmap_chunked
 from desc.compute import get_profiles, get_transforms, rpz2xyz
+from desc.compute.geom_utils import copy_rpz_periods
 from desc.compute.utils import _compute as compute_fun
 from desc.grid import LinearGrid, _Grid
 from desc.integrals import compute_B_plasma
@@ -24,6 +26,7 @@ from desc.utils import Timer, broadcast_tree, errorif, safenorm, warnif
 
 from .normalization import compute_scaling_factors
 from .objective_funs import _Objective, collect_docs
+from .utils import softmin
 
 
 class _CoilObjective(_Objective):
@@ -724,6 +727,20 @@ class CoilSetMinDistance(_Objective):
         Collocation grid used to discretize each coil. Defaults to the default grid
         for the given coil-type, see ``coils.py`` and ``curve.py`` for more details.
         If a list, must have the same structure as coils.
+    use_softmin: bool, optional
+        Use softmin or hard min. Softmin is a smooth approximation to the actual minimum
+        distance that may give smoother gradients, at the expense of being slightly more
+        expensive and only an approximate minimum.
+    softmin_alpha: float, optional
+        Parameter used for softmin. The larger ``softmin_alpha``, the closer the
+        softmin approximates the hardmin. softmin -> hardmin as
+        ``softmin_alpha`` -> infinity.
+    dist_chunk_size : int > 0, optional
+        When computing distances, how many coils to consider at once. Default is all
+        coils, which is generally the fastest but requires the most memory. If there are
+        a large number of coils, or if the resolution is very high, setting this to a
+        small value will reduce peak memory usage at the cost of slightly increased
+        runtime.
 
     """
 
@@ -750,12 +767,18 @@ class CoilSetMinDistance(_Objective):
         grid=None,
         name="coil-coil minimum distance",
         jac_chunk_size=None,
+        use_softmin=False,
+        softmin_alpha=1.0,
+        dist_chunk_size=None,
     ):
         from desc.coils import CoilSet
 
         if target is None and bounds is None:
             bounds = (1, np.inf)
         self._grid = grid
+        self._use_softmin = use_softmin
+        self._softmin_alpha = softmin_alpha
+        self._dist_chunk_size = dist_chunk_size
         errorif(
             not isinstance(coil, CoilSet),
             ValueError,
@@ -822,20 +845,19 @@ class CoilSetMinDistance(_Objective):
         )
 
         def body(k):
+            # pts shape (ncoils, num_nodes, 3)
             # dist btwn all pts; shape(ncoils,num_nodes,num_nodes)
             # dist[i,j,n] is the distance from the jth point on the kth coil
             # to the nth point on the ith coil
-            dist = safenorm(pts[k][None, :, None] - pts[:, None, :], axis=-1)
-            # exclude distances between points on the same coil
-            mask = jnp.ones(self.dim_f).at[k].set(0)[:, None, None]
-            return jnp.min(dist, where=mask, initial=jnp.inf)
+            coil_pts = pts[k]
+            other_pts = jnp.delete(pts, k, axis=0, assume_unique_indices=True)
+            dist = safenorm(coil_pts[None, :, None] - other_pts[:, None], axis=-1)
+            if self._use_softmin:
+                return softmin(dist, self._softmin_alpha)
+            return jnp.min(dist)
 
-        min_dist_per_coil = fori_loop(
-            0,
-            self.dim_f,
-            lambda k, min_dist: min_dist.at[k].set(body(k)),
-            jnp.zeros(self.dim_f),
-        )
+        k = jnp.arange(self.dim_f)
+        min_dist_per_coil = vmap_chunked(body, chunk_size=self._dist_chunk_size)(k)
         return min_dist_per_coil
 
 
@@ -878,6 +900,20 @@ class PlasmaCoilSetMinDistance(_Objective):
         during optimization, and self.things = [eq] only.
         If False, the coil coordinates are computed at every iteration.
         False by default, so that self.things = [coil, eq].
+    use_softmin: bool, optional
+        Use softmin or hard min. Softmin is a smooth approximation to the actual minimum
+        distance that may give smoother gradients, at the expense of being slightly more
+        expensive and only an approximate minimum.
+    softmin_alpha: float, optional
+        Parameter used for softmin. The larger ``softmin_alpha``, the closer the
+        softmin approximates the hardmin. softmin -> hardmin as
+        ``softmin_alpha`` -> infinity.
+    dist_chunk_size : int > 0, optional
+        When computing distances, how many coils to consider at once. Default is all
+        coils, which is generally the fastest but requires the most memory. If there are
+        a large number of coils, or if the resolution is very high, setting this to a
+        small value will reduce peak memory usage at the cost of slightly increased
+        runtime.
 
     """
 
@@ -908,6 +944,9 @@ class PlasmaCoilSetMinDistance(_Objective):
         coils_fixed=False,
         name="plasma-coil minimum distance",
         jac_chunk_size=None,
+        use_softmin=False,
+        softmin_alpha=1.0,
+        dist_chunk_size=None,
     ):
         if target is None and bounds is None:
             bounds = (1, np.inf)
@@ -917,6 +956,9 @@ class PlasmaCoilSetMinDistance(_Objective):
         self._coil_grid = coil_grid
         self._eq_fixed = eq_fixed
         self._coils_fixed = coils_fixed
+        self._use_softmin = use_softmin
+        self._softmin_alpha = softmin_alpha
+        self._dist_chunk_size = dist_chunk_size
         errorif(eq_fixed and coils_fixed, ValueError, "Cannot fix both eq and coil")
         things = []
         if not eq_fixed:
@@ -956,7 +998,9 @@ class PlasmaCoilSetMinDistance(_Objective):
         else:
             eq = self.things[0]
             coil = self.things[1]
-        plasma_grid = self._plasma_grid or LinearGrid(M=eq.M_grid, N=eq.N_grid)
+        plasma_grid = self._plasma_grid or LinearGrid(
+            M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP
+        )
         coil_grid = self._coil_grid or None
         warnif(
             not np.allclose(plasma_grid.nodes[:, 0], 1),
@@ -988,7 +1032,9 @@ class PlasmaCoilSetMinDistance(_Objective):
                 transforms=eq_transforms,
                 profiles=eq_profiles,
             )
-            plasma_pts = rpz2xyz(jnp.array([data["R"], data["phi"], data["Z"]]).T)
+            rpz = jnp.array([data["R"], data["phi"], data["Z"]]).T
+            rpz = copy_rpz_periods(rpz, plasma_grid.NFP)
+            plasma_pts = rpz2xyz(rpz)
             self._constants["plasma_coords"] = plasma_pts
         if self._coils_fixed:
             coils_pts = coil._compute_position(params=coil.params_dict, grid=coil_grid)
@@ -1052,19 +1098,19 @@ class PlasmaCoilSetMinDistance(_Objective):
                 transforms=constants["eq_transforms"],
                 profiles=constants["eq_profiles"],
             )
-            plasma_pts = rpz2xyz(jnp.array([data["R"], data["phi"], data["Z"]]).T)
+            rpz = jnp.array([data["R"], data["phi"], data["Z"]]).T
+            rpz = copy_rpz_periods(rpz, constants["eq_transforms"]["grid"].NFP)
+            plasma_pts = rpz2xyz(rpz)
 
         def body(k):
             # dist btwn all pts; shape(ncoils,plasma_grid.num_nodes,coil_grid.num_nodes)
             dist = safenorm(coils_pts[k][None, :, :] - plasma_pts[:, None, :], axis=-1)
-            return jnp.min(dist, initial=jnp.inf)
+            if self._use_softmin:
+                return softmin(dist, self._softmin_alpha)
+            return jnp.min(dist)
 
-        min_dist_per_coil = fori_loop(
-            0,
-            self.dim_f,
-            lambda k, min_dist: min_dist.at[k].set(body(k)),
-            jnp.zeros(self.dim_f),
-        )
+        k = jnp.arange(self.dim_f)
+        min_dist_per_coil = vmap_chunked(body, chunk_size=self._dist_chunk_size)(k)
         return min_dist_per_coil
 
 
@@ -1774,7 +1820,7 @@ class SurfaceQuadraticFlux(_Objective):
             params=field_params,
         )
         B_ext = jnp.sum(B_ext * eval_data["n_rho"], axis=-1)
-        f = (B_ext) * jnp.sqrt(eval_data["|e_theta x e_zeta|"])
+        f = B_ext * jnp.sqrt(eval_data["|e_theta x e_zeta|"])
         return f
 
 

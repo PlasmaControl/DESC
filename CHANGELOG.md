@@ -46,7 +46,7 @@ Bug Fixes
 - Fixes the coil currents in ``desc.coils.initialize_modular_coils`` to now give the correct expected linking current.
 - ``desc.objectives.PlasmaVesselDistance`` now correctly accounts for multiple field periods on both the equilibrium and the vessel surface. Previously it only considered distances within a single field period.
 - Sets ``os.environ["JAX_PLATFORMS"] = "cpu"`` instead of ``os.environ["JAX_PLATFORM_NAME"] = "cpu"`` when doing ``set_device("cpu")``.
-
+- Fixes bug in ``desc.input_reader.desc_output_to_input`` utility function for asymmetric equilibria profiles, where the full profile resolution as not being saved.
 
 v0.13.0
 -------

@@ -915,8 +915,32 @@ class ProximalProjection(ObjectiveFunction):
             Hessian matrix.
 
         """
-        J = self.jac_scaled_error(x, constants)
-        return J.T @ J
+        if constants is None:
+            constants = self.constants
+        xg, xf = self._update_equilibrium(x, store=True)
+
+        # Jacobian matrix wrt combined state vectors (x, c)
+        Fx = self._constraint.jac_scaled(xf, constants[1])
+        # Hessian wrt combined state vectors
+        hess_G = self._objective.hess(xg, constants[0])
+
+        # projections onto optimization space, ie split into x, c parts
+        Fx_reduced = Fx[:, self._unfixed_idx] @ self._Z
+        Fc = Fx @ self._dxdc
+        Gxx = self._Z.T @ hess_G[self._unfixed_idx][:, self._unfixed_idx] @ self._Z
+        Gcx = self._dxdc.T @ hess_G[:, self._unfixed_idx] @ self._Z
+        Gcc = self._dxdc.T @ hess_G @ self._dxdc
+
+        cutoff = np.finfo(Fx_reduced.dtype).eps * np.max(Fx_reduced.shape)
+        uf, sf, vtf = np.linalg.svd(Fx_reduced, full_matrices=False)
+        sf += sf[-1]  # add a tiny bit of regularization
+        sfi = np.where(sf < cutoff * sf[0], 0, 1 / sf)
+        Fxh_inv = vtf.T @ (sfi[..., np.newaxis] * uf.T)
+
+        dx = Fxh_inv @ Fc
+        Gcxdx = Gcx @ dx
+        out = dx.T @ Gxx @ dx + Gcxdx.T + Gcxdx + Gcc
+        return out
 
     def jac_scaled(self, x, constants=None):
         """Compute Jacobian of self.compute_scaled.

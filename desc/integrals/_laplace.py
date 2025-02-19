@@ -4,7 +4,7 @@ import numpy as np
 from jax import jacfwd
 from scipy.constants import mu_0
 
-from desc.backend import jnp
+from desc.backend import jit, jnp
 from desc.basis import DoubleFourierSeries
 from desc.compute.geom_utils import rpz2xyz, rpz2xyz_vec
 from desc.grid import LinearGrid
@@ -21,6 +21,8 @@ from desc.integrals.singularities import (
 from desc.magnetic_fields import FourierCurrentPotentialField
 from desc.transform import Transform
 from desc.utils import dot, safediv, safenorm, warnif
+
+jit_solve = jit(jnp.linalg.solve)
 
 
 def compute_B_laplace(
@@ -101,13 +103,13 @@ def compute_B_laplace(
     )
     # 𝐁 - 𝐁₀ = ∇Φ = 𝐁_vacuum in the interior.
     # Merkel eq. 1.4 is the Green's function solution to ∇²Φ = 0 in the interior.
-    # Note that 𝐁₀′ in eq. 3.5 has the wrong sign.
-    grad_Phi = FourierCurrentPotentialField.from_surface(
-        eq.surface, Phi_mn / mu_0, Phi_transform.basis.modes[:, 1:]
+    # Note that 𝐁₀′ in eq. 3.5 has the wrong sign and 3.7 has wrong sign.
+    BK = FourierCurrentPotentialField.from_surface(
+        eq.surface, -Phi_mn / mu_0, Phi_transform.basis.modes[:, 1:]
     )
     data = eq.compute(["R", "phi", "Z"], grid=eval_grid)
     coords = jnp.column_stack([data["R"], data["phi"], data["Z"]])
-    B = (B0 + grad_Phi).compute_magnetic_field(
+    B = (B0 + BK).compute_magnetic_field(
         coords, source_grid=source_grid, chunk_size=2 * chunk_size
     )
     return B
@@ -120,6 +122,7 @@ def compute_Phi_mn(
     source_grid=None,
     chunk_size=None,
     check=False,
+    **kwargs,
 ):
     """Compute Fourier coefficients of vacuum potential Φ on ∂D.
 
@@ -141,10 +144,9 @@ def compute_Phi_mn(
         such that ∇ × 𝐁₀ = μ₀ 𝐉 where 𝐉 is the current in amperes everywhere.
     eval_grid : Grid
         Evaluation points on ∂D.
-        Resolution determines accuracy of the spectral coefficients of Φ.
+        Resolution determines accuracy of Φ interpolation.
     source_grid : Grid
         Source points on ∂D for quadrature of kernels.
-        Resolution determines the accuracy of the boundary condition.
     chunk_size : int or None
         Size to split computation into chunks.
         If no chunking should be done or the chunk size is the full input
@@ -166,15 +168,21 @@ def compute_Phi_mn(
     if source_grid is None:
         source_grid = eval_grid
     basis = DoubleFourierSeries(M=eval_grid.M, N=eval_grid.N, NFP=eq.NFP)
-
-    names = ["R", "phi", "Z"]
-    Phi_data = eq.compute(names, grid=eval_grid)
-    src_data = eq.compute(
-        names + ["n_rho", "|e_theta x e_zeta|", "e_theta", "e_zeta"], grid=source_grid
-    )
-    src_data["Bn"] = B0n
     src_transform = Transform(source_grid, basis)
     Phi_transform = Transform(eval_grid, basis)
+
+    names = ["R", "phi", "Z"]
+    Phi_data = eq.compute(
+        names,
+        grid=eval_grid,
+        # transforms=Phi_transform,  # noqa: E800
+    )
+    src_data = eq.compute(
+        names + ["n_rho", "|e_theta x e_zeta|", "e_theta", "e_zeta"],
+        grid=source_grid,
+        # transforms=src_transform,  # noqa: E800
+    )
+    src_data["Bn"] = B0n
 
     st, sz, q = heuristic_support_params(source_grid, best_ratio(src_data)[0])
     try:
@@ -193,7 +201,7 @@ def compute_Phi_mn(
         # hand side as A @ Φₘₙ. Then Φₘₙ is found by solving LHS(Φₘₙ) = A @ Φₘₙ = RHS.
         src_data_2 = src_data.copy()
         src_data_2["Phi"] = src_transform.transform(Phi_mn)
-        I = singular_integral(
+        bs = singular_integral(
             Phi_data,
             src_data_2,
             _kernel_Phi_dG_dn,
@@ -201,11 +209,8 @@ def compute_Phi_mn(
             chunk_size,
         ).squeeze()
         Phi = Phi_transform.transform(Phi_mn)
-        return Phi + I / (2 * jnp.pi)
+        return Phi + bs / (2 * jnp.pi)
 
-    # LHS is expensive, so it is better to construct full Jacobian once
-    # rather than iterative solves like jax.scipy.sparse.linalg.cg.
-    A = jacfwd(LHS)(jnp.ones(basis.num_modes))
     RHS = -singular_integral(
         Phi_data,
         src_data,
@@ -213,10 +218,16 @@ def compute_Phi_mn(
         interpolator,
         chunk_size,
     ).squeeze() / (2 * jnp.pi)
-    # Fourier coefficients of Φ on boundary
-    Phi_mn, _, _, _ = jnp.linalg.lstsq(A, RHS)
+    # LHS is expensive, so it is better to construct full Jacobian once
+    # rather than iterative solves like jax.scipy.sparse.linalg.cg.
+    A = jacfwd(LHS)(jnp.ones(basis.num_modes))
+    Phi_mn = jit_solve(A, RHS)
+
     if check:
-        np.testing.assert_allclose(LHS(Phi_mn), A @ Phi_mn, atol=1e-6)
+        np.testing.assert_allclose(
+            LHS(Phi_mn), A @ Phi_mn, atol=kwargs.get("atol", 1e-7)
+        )
+
     return Phi_mn, Phi_transform
 
 
@@ -267,6 +278,7 @@ def compute_dPhi_dn(eq, eval_grid, source_grid, Phi_mn, basis, chunk_size=None):
         names + ["|e_theta x e_zeta|", "e_theta", "e_zeta"],
         grid=source_grid,
         data=src_data,
+        # transforms=transform,  # noqa: E800
     )
     src_data["K^theta"] = -src_data["Phi_z"] / src_data["|e_theta x e_zeta|"]
     src_data["K^zeta"] = src_data["Phi_t"] / src_data["|e_theta x e_zeta|"]
@@ -288,23 +300,18 @@ def compute_dPhi_dn(eq, eval_grid, source_grid, Phi_mn, basis, chunk_size=None):
 
     # ∇Φ = ∂Φ/∂ρ ∇ρ + ∂Φ/∂θ ∇θ + ∂Φ/∂ζ ∇ζ
     # but we can not obtain ∂Φ/∂ρ from Φₘₙ. Biot-Savart gives
-    # K_vc = n × ∇Φ where Φ has units Tesla-meters
+    # K_vc = -n × ∇Φ where Φ has units Tesla-meters
     # ∇Φ(x ∈ ∂D) dot n = [1/2π ∫_∂D df' K_vc × ∇G(x,x')] dot n
     # (Same instructions but divide by 2 for x ∈ D).
-    # Biot-Savart kernel assumes Φ in amperes, so we account for that.
-    dPhi_dn = (2 / mu_0) * dot(
-        singular_integral(
-            evl_data, src_data, _kernel_biot_savart, interpolator, chunk_size
-        ),
-        evl_data["n_rho"],
+    bs = singular_integral(
+        evl_data, src_data, _kernel_biot_savart, interpolator, chunk_size
     )
-    return dPhi_dn
+    # Biot-Savart kernel assumes Φ in amperes, so we account for that.
+    return -dot(bs, evl_data["n_rho"]) * 2 / mu_0
 
 
-# alternative methods just to try checking for agreement
-
-
-# TODO: surface integral correctness validation: should match output of compute_dPhi_dn.
+# TODO: remove below stuff before merge.
+# alternative methods to check for agreement
 def _dPhi_dn_triple_layer(
     eq,
     B0n,
@@ -427,7 +434,7 @@ def _kernel_Bn_grad_G_dot_n(eval_data, source_data, diag=False):
     )
 
 
-def compute_K_mn(eq, G, grid=None, check=False):
+def _compute_K_mn(eq, G, grid=None, check=False):
     """Compute Fourier coefficients of surface current on ∂D.
 
     Parameters
@@ -475,11 +482,11 @@ def compute_K_mn(eq, G, grid=None, check=False):
     A = jacfwd(LHS)(jnp.ones(basis.num_modes * 3))
     K_mn, _, _, _ = jnp.linalg.lstsq(A, jnp.zeros(grid.num_nodes))
     if check:
-        np.testing.assert_allclose(LHS(K_mn), A @ K_mn, atol=1e-6)
+        np.testing.assert_allclose(LHS(K_mn), A @ K_mn, atol=1e-7)
     return K_mn, K_sec, transform
 
 
-def compute_B_dot_n_from_K(
+def _compute_B_dot_n_from_K(
     eq, eval_grid, source_grid, K_mn, K_sec, basis, chunk_size=None
 ):
     """Computes B ⋅ n on ∂D from surface current.
@@ -537,10 +544,7 @@ def compute_B_dot_n_from_K(
     # Biot-Savart gives K_vc = n × B
     # B(x ∈ ∂D) dot n = [μ₀/2π ∫_∂D df' K_vc × ∇G(x,x')] dot n
     # (Same instructions but divide by 2 for x ∈ D).
-    Bn = 2 * dot(
-        singular_integral(
-            evl_data, src_data, _kernel_biot_savart, interpolator, chunk_size
-        ),
-        evl_data["n_rho"],
+    bs = singular_integral(
+        evl_data, src_data, _kernel_biot_savart, interpolator, chunk_size
     )
-    return Bn
+    return 2 * dot(bs, evl_data["n_rho"])

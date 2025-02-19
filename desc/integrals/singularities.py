@@ -1,13 +1,14 @@
 """High order method for singular surface integrals, from Malhotra 2019."""
 
 from abc import ABC, abstractmethod
+from functools import partial
 
 import numpy as np
 import scipy
 from interpax import fft_interp2d
 from scipy.constants import mu_0
 
-from desc.backend import fori_loop, jnp, rfft2
+from desc.backend import fori_loop, jit, jnp, rfft2
 from desc.batching import batch_map, vmap_chunked
 from desc.compute.geom_utils import rpz2xyz, rpz2xyz_vec, xyz2rpz_vec
 from desc.grid import LinearGrid
@@ -701,6 +702,7 @@ def _singular_part(eval_data, source_data, kernel, interpolator, chunk_size=None
     return f
 
 
+@partial(jit, static_argnums=[2, 4])
 def singular_integral(
     eval_data,
     source_data,

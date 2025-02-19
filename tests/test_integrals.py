@@ -1,5 +1,6 @@
 """Test integration algorithms."""
 
+import warnings
 from functools import partial
 
 import numpy as np
@@ -9,7 +10,6 @@ from matplotlib import pyplot as plt
 from numpy.polynomial.chebyshev import chebinterpolate, chebroots
 from numpy.polynomial.legendre import leggauss
 from scipy import integrate
-from scipy.constants import mu_0
 from scipy.interpolate import CubicHermiteSpline
 from scipy.special import ellipe, ellipkm1
 from tests.test_interp_utils import _f_1d, _f_1d_nyquist_freq, _f_2d, _f_2d_nyquist_freq
@@ -43,12 +43,7 @@ from desc.integrals._bounce_utils import (
     bounce_points,
 )
 from desc.integrals._interp_utils import fourier_pts
-from desc.integrals._laplace import (
-    compute_B_dot_n_from_K,
-    compute_dPhi_dn,
-    compute_K_mn,
-    compute_Phi_mn,
-)
+from desc.integrals._laplace import compute_dPhi_dn, compute_Phi_mn
 from desc.integrals.basis import FourierChebyshevSeries
 from desc.integrals.quad_utils import (
     automorphism_sin,
@@ -712,106 +707,116 @@ class TestSingularities:
             np.testing.assert_allclose(interp(f, i), truth)
 
     @pytest.mark.unit
-    @pytest.mark.mpl_image_compare(remove_text=False, tolerance=tol_1d)
-    @pytest.mark.parametrize("eq", [get("ESTELL")])
-    def test_laplace_bdotn(self, eq):
-        """Test that Laplace solution satisfies boundary condition."""
-        resolution = 30
-        chunk_size = 40
-        grid = LinearGrid(M=resolution, N=resolution, NFP=eq.NFP)
-        data = eq.compute(["G", "R0"], grid=grid)
+    def test_laplace_harmonic(self, plot=False):
+        """Test that Laplace solution recovers expected analytic result.
 
-        def test(G):
-            B0 = ToroidalMagneticField(B0=G / data["R0"], R0=data["R0"])
-            B0n, _ = B0.compute_Bnormal(
-                eq.surface,
-                eval_grid=grid,
-                source_grid=grid,
-                vc_source_grid=grid,
-                chunk_size=chunk_size,
-            )
+        Define boundary R_b(θ,ζ) = R₀ + a cos θ and Z_b(θ,ζ) = a sin θ.
+        Define harmonic map Φ: ρ,θ,ζ ↦ Z(ρ,θ,ζ).
+        Then ∇ϕ⋅n = −sin θ.
+        Choose b.c. B₀⋅n = sin θ and test that Φ = Z is recovered.
+        """
+        resolution = 40
+        chunk_size = 40
+        # Choosing a = 1.
+        eq = Equilibrium()
+        grid = LinearGrid(M=resolution, N=resolution, NFP=eq.NFP)
+
+        B0n = np.sin(eq.compute("theta", grid=grid)["theta"])
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
             Phi_mn, Phi_transform = compute_Phi_mn(
                 eq=eq,
                 B0n=B0n,
-                eval_grid=grid,
+                eval_grid=LinearGrid(M=1, N=0, NFP=eq.NFP),
                 source_grid=grid,
-                check=True,
+                check=False,
                 chunk_size=chunk_size,
             )
-            dPhi_dn = compute_dPhi_dn(
-                eq=eq,
-                eval_grid=grid,
-                source_grid=grid,
-                Phi_mn=Phi_mn,
-                basis=Phi_transform.basis,
-                chunk_size=chunk_size,
-            )
-            # Get data as function of theta, zeta on the only flux surface (LCFS).
-            Bn = grid.meshgrid_reshape(B0n + dPhi_dn, "rtz")[0]
+        dPhi_dn = compute_dPhi_dn(
+            eq=eq,
+            eval_grid=grid,
+            source_grid=grid,
+            Phi_mn=Phi_mn,
+            basis=Phi_transform.basis,
+            chunk_size=chunk_size,
+        )
+        Bn = B0n + dPhi_dn
+        np.testing.assert_allclose(Bn, 0, atol=3e-2)
+
+        if plot:
+            Bn = grid.meshgrid_reshape(Bn, "rtz")[0]
             theta = grid.meshgrid_reshape(grid.nodes[:, 1], "rtz")[0]
             zeta = grid.meshgrid_reshape(grid.nodes[:, 2], "rtz")[0]
-
             fig, ax = plt.subplots()
             contour = ax.contourf(theta, zeta, Bn)
             ax.set_title(r"$(\nabla \Phi + B_0) \cdot n$ on $\partial D$")
             fig.colorbar(contour, ax=ax)
             plt.show()
-            # FIXME: Doesn't pass unless G = 0 for stellarators.
-            try:
-                np.testing.assert_allclose(B0n + dPhi_dn, 0, err_msg=f"G = {G}")
-            except AssertionError as e:
-                print(e)
-            return fig, ax
-
-        # test(0) # noqa: #E800
-        fig, ax = test(grid.compress(data["G"])[-1])
-        return fig
 
     @pytest.mark.unit
     @pytest.mark.mpl_image_compare(remove_text=False, tolerance=tol_1d)
-    @pytest.mark.parametrize("eq", [get("DSHAPE"), get("ESTELL")])
-    def test_laplace_bdotdn_from_K(self, eq):
-        """Test that Laplace solution from fit of K satisfies boundary condition."""
-        resolution = 30
-        chunk_size = 1
-        grid = LinearGrid(M=resolution, N=resolution, NFP=eq.NFP)
-        data = eq.compute(["G"], grid=grid)
+    @pytest.mark.parametrize("eq", [get("ESTELL")])
+    def test_laplace_bdotn_toroidal(
+        self, eq, resolution=40, chunk_size=40, show_plot=False
+    ):
+        """Test that Laplace solution satisfies toroidal field boundary condition."""
+        source_grid = LinearGrid(M=resolution, N=resolution, NFP=eq.NFP)
+        eval_grid = LinearGrid(
+            M=min(2 * eq.M, resolution), N=min(2 * eq.N, resolution), NFP=eq.NFP
+        )
 
-        def test(G):
-            G_amp = 2 * np.pi * G / mu_0
-            K_mn, K_sec, K_transform = compute_K_mn(
+        # Could pick anything for this test.
+        data = eq.compute(["G", "R0"], grid=source_grid)
+        B0 = ToroidalMagneticField(
+            B0=source_grid.compress(data["G"])[-1] / data["R0"], R0=data["R0"]
+        )
+
+        B0n, _ = B0.compute_Bnormal(
+            eq.surface,
+            eval_grid=source_grid,
+            source_grid=source_grid,
+            vc_source_grid=source_grid,
+            chunk_size=chunk_size,
+        )
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            Phi_mn, Phi_transform = compute_Phi_mn(
                 eq=eq,
-                G=G_amp,
-                grid=grid,
-                check=True,
-            )
-            Bn = compute_B_dot_n_from_K(
-                eq=eq,
-                eval_grid=grid,
-                source_grid=grid,
-                K_mn=K_mn,
-                K_sec=K_sec,
-                basis=K_transform.basis,
+                B0n=B0n,
+                eval_grid=eval_grid,
+                source_grid=source_grid,
+                check=False,
                 chunk_size=chunk_size,
             )
-            # Get data as function of theta, zeta on the only flux surface (LCFS).
-            Bn = grid.meshgrid_reshape(Bn, "rtz")[0]
-            theta = grid.meshgrid_reshape(grid.nodes[:, 1], "rtz")[0]
-            zeta = grid.meshgrid_reshape(grid.nodes[:, 2], "rtz")[0]
+            dPhi_dn = compute_dPhi_dn(
+                eq=eq,
+                eval_grid=eval_grid,
+                source_grid=source_grid,
+                Phi_mn=Phi_mn,
+                basis=Phi_transform.basis,
+                chunk_size=chunk_size,
+            )
+        B0n, _ = B0.compute_Bnormal(
+            eq.surface,
+            eval_grid=eval_grid,
+            source_grid=source_grid,
+            vc_source_grid=source_grid,
+            chunk_size=chunk_size,
+        )
+        Bn = B0n + dPhi_dn
 
-            fig, ax = plt.subplots()
-            contour = ax.contourf(theta, zeta, Bn)
-            ax.set_title(r"$B \cdot n$ on $\partial D$")
-            fig.colorbar(contour, ax=ax)
-            # FIXME: Doesn't pass unless G = 0 for stellarators.
-            try:
-                np.testing.assert_allclose(Bn, 0, err_msg=f"G = {G}")
-            except AssertionError as e:
-                print(e)
-            return fig, ax
+        Bn = eval_grid.meshgrid_reshape(Bn, "rtz")[0]
+        theta = eval_grid.meshgrid_reshape(eval_grid.nodes[:, 1], "rtz")[0]
+        zeta = eval_grid.meshgrid_reshape(eval_grid.nodes[:, 2], "rtz")[0]
+        fig, ax = plt.subplots()
+        contour = ax.contourf(theta, zeta, Bn)
+        fig.colorbar(contour, ax=ax)
+        ax.set_title(r"$(\nabla \Phi + B_0) \cdot n$ on $\partial D$")
 
-        test(0)
-        fig, ax = test(grid.compress(data["G"])[-1])
+        if show_plot:
+            plt.show()
+
+        np.testing.assert_allclose(Bn, 0, atol=5e-2)
         return fig
 
     @staticmethod
@@ -974,46 +979,7 @@ class TestSingularities:
         eq = Equilibrium(surface=surf)
         plot_boundary(eq, phi=[0, 1, 2])
         plt.show()
-        resolution = 30
-        chunk_size = 1
-        grid = LinearGrid(M=resolution, N=resolution, NFP=eq.NFP)
-
-        # About half the error of the below test.
-        def test(G):
-            G_amp = 2 * np.pi * G / mu_0
-            K_mn, K_sec, K_transform = compute_K_mn(
-                eq=eq,
-                G=G_amp,
-                grid=grid,
-                check=True,
-            )
-            Bn = compute_B_dot_n_from_K(
-                eq=eq,
-                eval_grid=grid,
-                source_grid=grid,
-                K_mn=K_mn,
-                K_sec=K_sec,
-                basis=K_transform.basis,
-                chunk_size=chunk_size,
-            )
-            # Get data as function of theta, zeta on the only flux surface (LCFS).
-            Bn = grid.meshgrid_reshape(Bn, "rtz")[0]
-            theta = grid.meshgrid_reshape(grid.nodes[:, 1], "rtz")[0]
-            zeta = grid.meshgrid_reshape(grid.nodes[:, 2], "rtz")[0]
-
-            fig, ax = plt.subplots()
-            contour = ax.contourf(theta, zeta, Bn)
-            ax.set_title(r"$B \cdot n$ on $\partial D$")
-            fig.colorbar(contour, ax=ax)
-            # FIXME: Doesn't pass unless G = 0 for stellarators.
-            try:
-                np.testing.assert_allclose(Bn, 0, err_msg=f"G = {G}")
-            except AssertionError as e:
-                print(e)
-            return fig, ax
-
-        fig, ax = test(1)
-        return fig
+        return self.test_laplace_bdotn_toroidal(eq)
 
 
 class TestBouncePoints:

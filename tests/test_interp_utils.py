@@ -24,10 +24,11 @@ from desc.integrals._interp_utils import (
     polyder_vec,
     polyroot_vec,
     polyval_vec,
+    rfft_to_trig,
+    trig_vander,
 )
 from desc.integrals.basis import FourierChebyshevSeries
 from desc.integrals.quad_utils import bijection_to_disc
-from desc.vmec_utils import rfft_to_trig, trig_vander
 
 
 class TestPolyUtils:
@@ -257,6 +258,14 @@ class TestFastInterp:
         )
         np.testing.assert_allclose(
             interp_rfft2(theta, zeta, f, domain0, domain1, axes=(-1, -2)),
+            truth,
+        )
+        np.testing.assert_allclose(
+            interp_rfft2(zeta, theta, f.T, domain1, domain0, axes=(-2, -1)),
+            truth,
+        )
+        np.testing.assert_allclose(
+            interp_rfft2(zeta, theta, f.T, domain1, domain0, axes=(-1, -2)),
             truth,
         )
 

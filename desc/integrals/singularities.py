@@ -345,14 +345,14 @@ class FFTInterpolator(_BIESTInterpolator):
         warnif(
             eval_grid.num_theta < source_grid.num_theta,
             msg="Frequency spectrum of FFT interpolation will be truncated because "
-            "the evaluation grid has less resolution than the source grid."
+            "the evaluation grid has less resolution than the source grid.\n"
             f"Got eval_grid.num_theta = {eval_grid.num_theta} < "
             f"{source_grid.num_theta} = source_grid.num_theta.",
         )
         warnif(
             eval_grid.num_zeta < source_grid.num_zeta,
             msg="Frequency spectrum of FFT interpolation will be truncated because "
-            "the evaluation grid has less resolution than the source grid."
+            "the evaluation grid has less resolution than the source grid.\n"
             f"Got eval_grid.num_zeta = {eval_grid.num_zeta} < "
             f"{source_grid.num_zeta} = source_grid.num_zeta.",
         )
@@ -644,17 +644,15 @@ def _singular_part(eval_data, source_data, kernel, interpolator, chunk_size=None
         fi = k * dS[:, jnp.newaxis]
         return fi
 
-    def polar_pt_loop(i, f):
-        return f + polar_pt(i)
-
-    if chunk_size == 1:
-        f = fori_loop(
-            0, v.size, polar_pt_loop, jnp.zeros((eval_grid.num_nodes, kernel.ndim))
-        )
-    else:
-        f = vmap_chunked(polar_pt, chunk_size=chunk_size)(jnp.arange(v.size)).sum(
-            axis=0
-        )
+    f = vmap_chunked(
+        polar_pt,
+        chunk_size=chunk_size,
+        reduction=jnp.add,
+        # TODO (#1386): Infer jnp.add.reduce from reduction.
+        #  https://github.com/jax-ml/jax/issues/23493.
+        chunk_reduction=lambda x: x.sum(axis=0),
+    )(jnp.arange(v.size))
+    assert f.shape == (eval_grid.num_nodes, kernel.ndim)
 
     # we sum vectors at different points, so they need to be in xyz for that to work
     # but then need to convert vectors back to rpz

@@ -5,9 +5,9 @@ from functools import partial
 import numpy as np
 import pytest
 
-from desc.backend import flatnonzero, jnp, tree_leaves, tree_structure
+from desc.backend import flatnonzero, jax, jnp, tree_leaves, tree_structure
 from desc.grid import LinearGrid
-from desc.utils import broadcast_tree, isalmostequal, islinspaced, take_mask
+from desc.utils import broadcast_tree, isalmostequal, islinspaced, jaxify, take_mask
 
 
 @pytest.mark.unit
@@ -199,6 +199,43 @@ def test_broadcast_tree():
     ]
     for leaf, leaf_correct in zip(tree_leaves(tree), tree_leaves(tree_correct)):
         np.testing.assert_allclose(leaf, leaf_correct)
+
+
+@pytest.mark.unit
+def test_jaxify():
+    """Test that jaxify gives accurate finite difference derivatives."""
+
+    def fun(x):
+        """Function that is not JAX transformable."""
+        return np.sin(x) + 2 * np.cos(x) + 3 * x**2 - 4 * x - 5
+
+    x = np.linspace(0, 2 * np.pi, 45)
+    f = fun(x)
+    df_true = np.cos(x) - 2 * np.sin(x) + 6 * x - 4
+
+    # finite differences with a range of abs and rel step sizes
+    abstract_eval = lambda *args, **kwargs: jnp.empty(f.size)
+    fun_jax_abs1 = jaxify(fun, abstract_eval, abs_step=1e-2)
+    fun_jax_abs2 = jaxify(fun, abstract_eval, abs_step=1e-3)
+    fun_jax_abs3 = jaxify(fun, abstract_eval, abs_step=1e-4)
+    fun_jax_rel1 = jaxify(fun, abstract_eval, rel_step=1e-3)
+    fun_jax_rel2 = jaxify(fun, abstract_eval, rel_step=1e-4)
+    fun_jax_rel3 = jaxify(fun, abstract_eval, rel_step=1e-5)
+
+    df_abs1 = np.diagonal(jax.jacfwd(fun_jax_abs1)(x))
+    df_abs2 = np.diagonal(jax.jacfwd(fun_jax_abs2)(x))
+    df_abs3 = np.diagonal(jax.jacfwd(fun_jax_abs3)(x))
+    df_rel1 = np.diagonal(jax.jacfwd(fun_jax_rel1)(x))
+    df_rel2 = np.diagonal(jax.jacfwd(fun_jax_rel2)(x))
+    df_rel3 = np.diagonal(jax.jacfwd(fun_jax_rel3)(x))
+
+    # convergence test: smaller step sizes should be more accurate
+    np.testing.assert_allclose(df_abs1, df_true, atol=5e-2)
+    np.testing.assert_allclose(df_abs2, df_true, atol=5e-3)
+    np.testing.assert_allclose(df_abs3, df_true, atol=5e-4)
+    np.testing.assert_allclose(df_rel1, df_true, rtol=2e-1)
+    np.testing.assert_allclose(df_rel2, df_true, rtol=2e-2)
+    np.testing.assert_allclose(df_rel3, df_true, rtol=3e-3)
 
 
 @partial(jnp.vectorize, signature="(m)->()")

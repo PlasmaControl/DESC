@@ -12,7 +12,7 @@ from .objective_funs import _Objective
 class GradRho(_Objective):
     """Grad Rho is a proxy for turbulent transport.
 
-    TODO Finish descirption
+    https://arxiv.org/html/2405.19860v1.
 
     Parameters
     ----------
@@ -137,7 +137,7 @@ class GradRho(_Objective):
         Returns
         -------
         integral : float/ndarray
-            TODO finish
+            Value of integral from https://arxiv.org/html/2405.19860v1
         """
         eq = self.things[0]
 

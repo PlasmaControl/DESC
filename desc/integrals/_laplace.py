@@ -1,10 +1,9 @@
 """High order accurate Laplace solver."""
 
 import numpy as np
-from jax import jacfwd
 from scipy.constants import mu_0
 
-from desc.backend import jit, jnp
+from desc.backend import jit, jnp, vmap
 from desc.basis import DoubleFourierSeries
 from desc.compute.geom_utils import rpz2xyz, rpz2xyz_vec
 from desc.grid import LinearGrid
@@ -226,7 +225,7 @@ def compute_Phi_mn(
     ).squeeze() / (2 * jnp.pi)
     # LHS is expensive, so it is better to construct full Jacobian once
     # rather than iterative solves like jax.scipy.sparse.linalg.cg.
-    A = jacfwd(LHS)(jnp.ones(basis.num_modes))
+    A = vmap(LHS)(jnp.eye(basis.num_modes)).T
     Phi_mn = jit_solve(A, RHS)
 
     if check:
@@ -488,7 +487,7 @@ def _compute_K_mn(eq, G, grid=None, check=False):
         K_fourier = jnp.column_stack([K_R, K_phi, K_Z])
         return dot(K_fourier + K_secular, n)
 
-    A = jacfwd(LHS)(jnp.ones(basis.num_modes * 3))
+    A = vmap(LHS)(jnp.eye(basis.num_modes * 3)).T
     K_mn, _, _, _ = jnp.linalg.lstsq(A, jnp.zeros(grid.num_nodes))
     if check:
         np.testing.assert_allclose(LHS(K_mn), A @ K_mn, atol=1e-7)

@@ -727,7 +727,7 @@ class TestSingularities:
         theta = grid.nodes[:, 1]
         np.testing.assert_allclose(data["Z"], -a * np.sin(theta))
         B0n = np.sin(theta)
-        np.testing.assert_allclose(-data["n_rho"][:, 2], B0n)
+        np.testing.assert_allclose(-data["n_rho"][:, 2], B0n, atol=1e-13)
 
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")

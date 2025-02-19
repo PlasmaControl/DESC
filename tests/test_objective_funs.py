@@ -3666,11 +3666,11 @@ def test_objective_docstring():
 
 
 @pytest.mark.unit
-def test_get_nae_constraint_asym_warning():
+def test_get_nae_constraint_asym_error():
     """Test warning when using an asymmetric eq for NAE constraints."""
     qsc = Qsc.from_paper("precise QA", rs=[1e-6, 1e-6])
-    with pytest.warns(UserWarning, match="asymmetric"):
-        get_NAE_constraints(get("precise_QA"), qsc)
+    with pytest.raises(NotImplementedError, match="asymmetric"):
+        get_NAE_constraints(get("precise_QA"), qsc, fix_lambda=0)
 
 
 @pytest.mark.unit

@@ -5,6 +5,7 @@ from scipy.constants import mu_0
 
 from desc.backend import jit, jnp, vmap
 from desc.basis import DoubleFourierSeries
+from desc.batching import vmap_chunked
 from desc.compute.geom_utils import rpz2xyz, rpz2xyz_vec
 from desc.grid import LinearGrid
 from desc.integrals.singularities import (
@@ -225,7 +226,7 @@ def compute_Phi_mn(
     ).squeeze() / (2 * jnp.pi)
     # LHS is expensive, so it is better to construct full Jacobian once
     # rather than iterative solves like jax.scipy.sparse.linalg.cg.
-    A = vmap(LHS)(jnp.eye(basis.num_modes)).T
+    A = vmap_chunked(LHS, chunk_size=1)(jnp.eye(basis.num_modes)).T
     Phi_mn = jit_solve(A, RHS)
 
     if check:

@@ -710,18 +710,24 @@ class TestSingularities:
     def test_laplace_harmonic(self, plot=False):
         """Test that Laplace solution recovers expected analytic result.
 
-        Define boundary R_b(θ,ζ) = R₀ + a cos θ and Z_b(θ,ζ) = a sin θ.
+        Define boundary R_b(θ,ζ) = R₀ + a cos θ and Z_b(θ,ζ) = -a sin θ.
+        θ = 0 is outboard side and θ increases clockwise.
         Define harmonic map Φ: ρ,θ,ζ ↦ Z(ρ,θ,ζ).
-        Then ∇ϕ⋅n = −sin θ.
-        Choose b.c. B₀⋅n = sin θ and test that Φ = Z is recovered.
+        Choose b.c. B₀⋅n = -∇ϕ⋅n
+                         = -[0, 0, 1]⋅[cos(θ)cos(ζ), cos(θ)sin(ζ), -sin(θ)] = sin(θ)
+        and test that Φ - Z = constant is recovered.
         """
         resolution = 40
         chunk_size = 40
-        # Choosing a = 1.
-        eq = Equilibrium()
+        a = 1
+        eq = Equilibrium()  # Choosing a = 1.
         grid = LinearGrid(M=resolution, N=resolution, NFP=eq.NFP)
+        theta = grid.nodes[:, 1]
 
-        B0n = np.sin(eq.compute("theta", grid=grid)["theta"])
+        Z = eq.compute("Z", grid=grid)["Z"]
+        np.testing.assert_allclose(Z, -a * np.sin(theta))
+
+        B0n = np.sin(theta)
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             Phi_mn, Phi_transform = compute_Phi_mn(
@@ -732,6 +738,9 @@ class TestSingularities:
                 check=False,
                 chunk_size=chunk_size,
             )
+        Phi = Transform(grid, Phi_transform.basis).transform(Phi_mn)
+        np.testing.assert_allclose(np.diff(Phi - Z), 0, atol=1e-4)
+
         dPhi_dn = compute_dPhi_dn(
             eq=eq,
             eval_grid=grid,
@@ -757,7 +766,7 @@ class TestSingularities:
     @pytest.mark.mpl_image_compare(remove_text=False, tolerance=tol_1d)
     @pytest.mark.parametrize("eq", [get("ESTELL")])
     def test_laplace_bdotn_toroidal(
-        self, eq, resolution=40, chunk_size=40, show_plot=False
+        self, eq, resolution=60, chunk_size=40, show_plot=False
     ):
         """Test that Laplace solution satisfies toroidal field boundary condition."""
         source_grid = LinearGrid(M=resolution, N=resolution, NFP=eq.NFP)

@@ -1,7 +1,6 @@
 """Tests for Equilibrium class."""
 
 import os
-import pickle
 import warnings
 
 import numpy as np
@@ -298,25 +297,28 @@ def test_resolution():
 @pytest.mark.unit
 def test_equilibrium_from_near_axis():
     """Test loading a solution from pyQSC/pyQIC."""
-    qsc_path = "./tests/inputs/qsc_r2section5.5.pkl"
-    file = open(qsc_path, "rb")
-    na = pickle.load(file)
-    file.close()
+    from qic import Qic
+
+    na = Qic.from_paper("r2 section 5.2")
 
     r = 1e-2
     eq = Equilibrium.from_near_axis(na, r=r, M=8, N=8)
     grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
     data = eq.compute("|B|", grid=grid)
 
+    # get the sin/cos modes (we now the eq is symmetric)
+    eq_rc = eq.Ra_n[: na.nfourier]
+    eq_zc = np.zeros(na.nfourier)
+    eq_rs = np.zeros(na.nfourier)
+    eq_zs = np.flipud(eq.Za_n[-na.nfourier + 1 :])
+
     assert eq.is_nested()
     assert eq.NFP == na.nfp
-
-    np.testing.assert_allclose(
-        eq.Ra_n[len(eq.Ra_n) // 2 : len(eq.Ra_n) // 2 + 2], na.rc, atol=1e-10
-    )
-    np.testing.assert_allclose(
-        eq.Za_n[len(eq.Za_n) // 2 - 2 : len(eq.Za_n) // 2], na.zs, atol=1e-10
-    )
+    np.testing.assert_allclose(eq_rc, na.rc, atol=1e-10)
+    # na.zs[0] is always 0, which DESC doesn't include
+    np.testing.assert_allclose(eq_zs, na.zs[1:], atol=1e-10)
+    np.testing.assert_allclose(eq_rs, na.rs, atol=1e-10)
+    np.testing.assert_allclose(eq_zc, na.zc, atol=1e-10)
     np.testing.assert_allclose(data["|B|"][0], na.B_mag(r, 0, 0), rtol=2e-2)
 
 

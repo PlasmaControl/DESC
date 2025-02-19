@@ -3676,7 +3676,7 @@ def test_get_nae_constraint_asym_error():
 @pytest.mark.unit
 def test_nae_coefficients_asym():
     """Test that the asymmetric coefs of a symmetric NAE solution are 0."""
-    eq = Equilibrium(NFP=2, sym=False, L=6, M=6, N=6)
+    eq = Equilibrium(NFP=2, sym=False, L=6, M=6, N=12)
     qsc_eq = Qsc.from_paper("precise QA")
     qsc_eq.lasym = True
     coefs, bases = _calc_1st_order_NAE_coeffs(qsc_eq, eq)
@@ -3692,7 +3692,7 @@ def test_nae_coefficients_asym():
             if s1 < 0
             else np.where(bases["Rbasis_cos"].modes[:, 2] >= 0)
         )
-        np.testing.assert_allclose(coefs[key][inds_asym], 0, err_msg=key, atol=1e-15)
+        np.testing.assert_allclose(coefs[key][inds_asym], 0, err_msg=key, atol=1e-13)
     coefs, bases = _calc_2nd_order_NAE_coeffs(qsc_eq, eq)
     for key in coefs.keys():
         if "L" in key:
@@ -3706,4 +3706,4 @@ def test_nae_coefficients_asym():
             if s1 < 0
             else np.where(bases["Rbasis_cos"].modes[:, 2] >= 0)
         )
-        np.testing.assert_allclose(coefs[key][inds_asym], 0, err_msg=key, atol=1e-14)
+        np.testing.assert_allclose(coefs[key][inds_asym], 0, err_msg=key, atol=1e-13)

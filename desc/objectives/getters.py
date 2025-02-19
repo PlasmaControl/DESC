@@ -1,6 +1,6 @@
 """Utilities for getting standard groups of objectives and constraints."""
 
-from desc.utils import flatten_list, get_all_instances, isposint, unique_list, warnif
+from desc.utils import errorif, flatten_list, get_all_instances, isposint, unique_list
 
 from ._equilibrium import Energy, ForceBalance, HelicalForceBalance, RadialForceBalance
 from .linear_objectives import (
@@ -194,12 +194,13 @@ def get_NAE_constraints(
 
     """
     if qsc_eq is not None:
-        warnif(
-            qsc_eq.lasym,
-            UserWarning,
-            "NAE Constrained equilibria do not yet work correctly with "
-            "asymmetric equilibria, and may give unexpected results like "
-            " the on-axis iota not matching that of the NAE, use at your own risk.",
+        errorif(
+            qsc_eq.lasym and fix_lambda is not False,
+            NotImplementedError,
+            "NAE Constrained equilibria with lambda constrained "
+            " do not yet work correctly with asymmetric equilibria, "
+            " as the NAE-prescribed lambda may not have the correct "
+            " gauge that DESC enforces (zero flux-surface average).",
         )
     kwargs = {"eq": desc_eq, "normalize": normalize, "normalize_target": normalize}
     if not isinstance(fix_lambda, bool):

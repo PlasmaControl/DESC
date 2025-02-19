@@ -77,6 +77,9 @@ def compute_B_laplace(
         Size to split computation into chunks.
         If no chunking should be done or the chunk size is the full input
         then supply ``None``. Default is ``None``.
+    check : bool
+        Flag for debugging. Must be false for JAX transformations.
+        Significantly reduces performance.
 
     Returns
     -------
@@ -151,6 +154,9 @@ def compute_Phi_mn(
         Size to split computation into chunks.
         If no chunking should be done or the chunk size is the full input
         then supply ``None``. Default is ``None``.
+    check : bool
+        Flag for debugging. Must be false for JAX transformations.
+        Significantly reduces performance.
 
     Returns
     -------
@@ -446,6 +452,9 @@ def _compute_K_mn(eq, G, grid=None, check=False):
         Should be ``2*np.pi/mu_0*data["G"]``.
     grid : Grid
         Points on ∂D.
+    check : bool
+        Flag for debugging. Must be false for JAX transformations.
+        Significantly reduces performance.
 
     Returns
     -------

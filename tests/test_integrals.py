@@ -791,7 +791,7 @@ class TestSingularities:
             B0n=B0n,
             eval_grid=grid,
             source_grid=grid,
-            check=True,
+            check=False,
             chunk_size=chunk_size,
         )
         assert np.isfinite(Phi_mn).all()

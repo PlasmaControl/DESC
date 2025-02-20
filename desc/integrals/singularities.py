@@ -382,15 +382,16 @@ class FFTInterpolator(_BIESTInterpolator):
     def __init__(self, eval_grid, source_grid, st, sz, q, **kwargs):
         st = parse_argname_change(st, kwargs, "s", "st")
         assert eval_grid.can_fft2, "Got False for eval_grid.can_fft2."
+        warn = kwargs.get("warn_fft", True)
         warnif(
-            eval_grid.num_theta < source_grid.num_theta,
+            warn and eval_grid.num_theta < source_grid.num_theta,
             msg="Frequency spectrum of FFT interpolation will be truncated because "
             "the evaluation grid has less resolution than the source grid.\n"
             f"Got eval_grid.num_theta = {eval_grid.num_theta} < "
             f"{source_grid.num_theta} = source_grid.num_theta.",
         )
         warnif(
-            eval_grid.num_zeta < source_grid.num_zeta,
+            warn and eval_grid.num_zeta < source_grid.num_zeta,
             msg="Frequency spectrum of FFT interpolation will be truncated because "
             "the evaluation grid has less resolution than the source grid.\n"
             f"Got eval_grid.num_zeta = {eval_grid.num_zeta} < "

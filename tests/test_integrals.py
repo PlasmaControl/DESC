@@ -1,6 +1,5 @@
 """Test integration algorithms."""
 
-import warnings
 from functools import partial
 
 import numpy as np
@@ -707,7 +706,7 @@ class TestSingularities:
         np.testing.assert_allclose(B, 0, atol=0.0054)
 
     @pytest.mark.unit
-    def test_laplace_harmonic(self, plot=False):
+    def test_laplace_harmonic_simple(self, chunk_size=1000, resolution=50, atol=1e-4):
         """Test that Laplace solution recovers expected analytic result.
 
         Define boundary R_b(θ,ζ) = R₀ + a cos θ and Z_b(θ,ζ) = -a sin θ.
@@ -715,64 +714,54 @@ class TestSingularities:
         Define harmonic map Φ: ρ,θ,ζ ↦ Z(ρ,θ,ζ).
         Choose b.c. B₀⋅n = -∇ϕ⋅n
                          = -[0, 0, 1]⋅[cos(θ)cos(ζ), cos(θ)sin(ζ), -sin(θ)] = sin(θ)
-        and test that Φ - Z = constant is recovered.
+        and test that ‖ Φ − Z ‖_∞ → 0.
         """
-        resolution = 40
-        chunk_size = 40
         a = 1
         eq = Equilibrium()  # Choosing a = 1.
-        grid = LinearGrid(M=resolution, N=resolution, NFP=eq.NFP)
-        data = eq.compute(["Z", "n_rho"], grid=grid)
+        source_grid = LinearGrid(M=resolution, N=resolution, NFP=eq.NFP)
 
-        theta = grid.nodes[:, 1]
-        np.testing.assert_allclose(data["Z"], -a * np.sin(theta))
-        B0n = np.sin(theta)
-        np.testing.assert_allclose(-data["n_rho"][:, 2], B0n, atol=1e-13)
+        source_data = eq.compute(["Z", "n_rho", "theta"], grid=source_grid)
+        np.testing.assert_allclose(source_data["Z"], -a * np.sin(source_data["theta"]))
+        B0n = np.sin(source_data["theta"])
+        np.testing.assert_allclose(-source_data["n_rho"][:, 2], B0n, atol=1e-12)
 
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            Phi_mn, Phi_transform = compute_Phi_mn(
-                eq=eq,
-                B0n=B0n,
-                eval_grid=LinearGrid(M=1, N=0, NFP=eq.NFP),
-                source_grid=grid,
-                check=False,
-                chunk_size=chunk_size,
-            )
-        Phi = Transform(grid, Phi_transform.basis).transform(Phi_mn)
-        np.testing.assert_allclose(np.diff(Phi - data["Z"]), 0, atol=1e-4)
+        Phi_mn, Phi_transform = compute_Phi_mn(
+            eq=eq,
+            B0n=B0n,
+            Phi_grid=LinearGrid(M=1, N=0, NFP=eq.NFP),
+            source_grid=source_grid,
+            chunk_size=chunk_size,
+            warn_fft=False,
+        )
+        eval_grid = LinearGrid(M=5, N=5, NFP=eq.NFP)
+        eval_data = eq.compute(["Z", "n_rho", "theta"], grid=eval_grid)
+        eval_data["Phi"] = Transform(eval_grid, Phi_transform.basis).transform(Phi_mn)
+        err = eval_data["Phi"] - eval_data["Z"]
+        # ``atol`` may tend to 0 as ``resolution`` grows
+        np.testing.assert_allclose(np.max(err) - np.min(err), 0, atol=atol)
 
+        B0n = np.sin(eval_data["theta"])
         dPhi_dn = compute_dPhi_dn(
             eq=eq,
-            eval_grid=grid,
-            source_grid=grid,
+            eval_grid=eval_grid,
+            source_grid=source_grid,
             Phi_mn=Phi_mn,
             basis=Phi_transform.basis,
             chunk_size=chunk_size,
+            warn_fft=False,
         )
         Bn = B0n + dPhi_dn
-        np.testing.assert_allclose(Bn, 0, atol=3e-2)
-
-        if plot:
-            Bn = grid.meshgrid_reshape(Bn, "rtz")[0]
-            theta = grid.meshgrid_reshape(grid.nodes[:, 1], "rtz")[0]
-            zeta = grid.meshgrid_reshape(grid.nodes[:, 2], "rtz")[0]
-            fig, ax = plt.subplots()
-            contour = ax.contourf(theta, zeta, Bn)
-            ax.set_title(r"$(\nabla \Phi + B_0) \cdot n$ on $\partial D$")
-            fig.colorbar(contour, ax=ax)
-            plt.show()
+        # FIXME: This fails to converge to zero, only converges to 0.03.
+        np.testing.assert_allclose(Bn, 0, atol=0.03)
 
     @pytest.mark.unit
-    def test_laplace_harmonic_general(self):
+    def test_laplace_harmonic_general(self, chunk_size=1000, resolution=70, atol=1e-4):
         """Test that Laplace solution recovers expected analytic result.
 
         Define boundary R_b(θ,ζ) and Z_b(θ,ζ).
         Define harmonic map Φ: ρ,θ,ζ ↦ Z(ρ,θ,ζ).
-        Choose b.c. B₀⋅n = -∇ϕ⋅n and test that Φ - Z = constant is recovered.
+        Choose b.c. B₀⋅n = -∇ϕ⋅n and test that ‖ Φ − Z ‖_∞ → 0.
         """
-        resolution = 40
-        chunk_size = 40
         eq = Equilibrium(
             # elliptic cross-section with torsion
             surface=FourierRZToroidalSurface(
@@ -782,51 +771,50 @@ class TestSingularities:
                 modes_Z=[[-1, 0], [0, -1]],
             )
         )
-        grid = LinearGrid(M=resolution, N=resolution, NFP=eq.NFP)
-        data = eq.compute(["Z", "n_rho"], grid=grid)
-        B0n = -data["n_rho"][:, 2]
+        source_grid = LinearGrid(M=resolution, N=resolution, NFP=eq.NFP)
 
         Phi_mn, Phi_transform = compute_Phi_mn(
             eq=eq,
-            B0n=B0n,
-            eval_grid=grid,
-            source_grid=grid,
-            check=False,
+            B0n=-eq.compute("n_rho", grid=source_grid)["n_rho"][:, 2],
+            Phi_grid=LinearGrid(
+                M=min(10 * eq.M, resolution), N=min(10 * eq.N, resolution), NFP=eq.NFP
+            ),
+            source_grid=source_grid,
             chunk_size=chunk_size,
+            warn_fft=False,
         )
-        assert np.isfinite(Phi_mn).all()
-        Phi = Transform(grid, Phi_transform.basis).transform(Phi_mn)
-        np.testing.assert_allclose(np.diff(Phi - data["Z"]), 0, atol=1e-4)
+        eval_grid = LinearGrid(M=5, N=5, NFP=eq.NFP)
+        eval_data = eq.compute(["Z", "n_rho"], grid=eval_grid)
+        eval_data["Phi"] = Transform(eval_grid, Phi_transform.basis).transform(Phi_mn)
+        err = eval_data["Phi"] - eval_data["Z"]
+        np.testing.assert_allclose(np.max(err) - np.min(err), 0, atol=atol)
 
+        B0n = -eval_data["n_rho"][:, 2]
         dPhi_dn = compute_dPhi_dn(
             eq=eq,
-            eval_grid=grid,
-            source_grid=grid,
+            eval_grid=eval_grid,
+            source_grid=source_grid,
             Phi_mn=Phi_mn,
             basis=Phi_transform.basis,
             chunk_size=chunk_size,
+            warn_fft=False,
         )
         Bn = B0n + dPhi_dn
-        np.testing.assert_allclose(Bn, 0, atol=3e-2)
+        np.testing.assert_allclose(Bn, 0, atol=0.03)
 
     @pytest.mark.unit
-    @pytest.mark.mpl_image_compare(remove_text=False, tolerance=tol_1d)
     @pytest.mark.parametrize("eq", [get("ESTELL")])
     def test_laplace_bdotn_toroidal(
-        self, eq, resolution=60, chunk_size=40, show_plot=False
+        self, eq, chunk_size=1000, resolution=60, atol=1e-4, plot=True
     ):
         """Test that Laplace solution satisfies toroidal field boundary condition."""
         source_grid = LinearGrid(M=resolution, N=resolution, NFP=eq.NFP)
-        eval_grid = LinearGrid(
-            M=min(2 * eq.M, resolution), N=min(2 * eq.N, resolution), NFP=eq.NFP
-        )
+        source_data = eq.compute(["G", "R0"], grid=source_grid)
 
-        # Could pick anything for this test.
-        data = eq.compute(["G", "R0"], grid=source_grid)
         B0 = ToroidalMagneticField(
-            B0=source_grid.compress(data["G"])[-1] / data["R0"], R0=data["R0"]
+            B0=source_grid.compress(source_data["G"])[-1] / source_data["R0"],
+            R0=source_data["R0"],
         )
-
         B0n, _ = B0.compute_Bnormal(
             eq.surface,
             eval_grid=source_grid,
@@ -834,24 +822,28 @@ class TestSingularities:
             vc_source_grid=source_grid,
             chunk_size=chunk_size,
         )
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            Phi_mn, Phi_transform = compute_Phi_mn(
-                eq=eq,
-                B0n=B0n,
-                eval_grid=eval_grid,
-                source_grid=source_grid,
-                check=False,
-                chunk_size=chunk_size,
-            )
-            dPhi_dn = compute_dPhi_dn(
-                eq=eq,
-                eval_grid=eval_grid,
-                source_grid=source_grid,
-                Phi_mn=Phi_mn,
-                basis=Phi_transform.basis,
-                chunk_size=chunk_size,
-            )
+
+        Phi_grid = LinearGrid(
+            M=min(10 * eq.M, resolution), N=min(10 * eq.N, resolution), NFP=eq.NFP
+        )
+        Phi_mn, Phi_transform = compute_Phi_mn(
+            eq=eq,
+            B0n=B0n,
+            Phi_grid=Phi_grid,
+            source_grid=source_grid,
+            chunk_size=chunk_size,
+            warn_fft=False,
+        )
+        eval_grid = Phi_grid
+        dPhi_dn = compute_dPhi_dn(
+            eq=eq,
+            eval_grid=eval_grid,
+            source_grid=source_grid,
+            Phi_mn=Phi_mn,
+            basis=Phi_transform.basis,
+            chunk_size=chunk_size,
+            warn_fft=False,
+        )
         B0n, _ = B0.compute_Bnormal(
             eq.surface,
             eval_grid=eval_grid,
@@ -861,19 +853,17 @@ class TestSingularities:
         )
         Bn = B0n + dPhi_dn
 
-        Bn = eval_grid.meshgrid_reshape(Bn, "rtz")[0]
-        theta = eval_grid.meshgrid_reshape(eval_grid.nodes[:, 1], "rtz")[0]
-        zeta = eval_grid.meshgrid_reshape(eval_grid.nodes[:, 2], "rtz")[0]
-        fig, ax = plt.subplots()
-        contour = ax.contourf(theta, zeta, Bn)
-        fig.colorbar(contour, ax=ax)
-        ax.set_title(r"$(\nabla \Phi + B_0) \cdot n$ on $\partial D$")
-
-        if show_plot:
+        if plot:
+            Bn = eval_grid.meshgrid_reshape(Bn, "rtz")[0]
+            theta = eval_grid.meshgrid_reshape(eval_grid.nodes[:, 1], "rtz")[0]
+            zeta = eval_grid.meshgrid_reshape(eval_grid.nodes[:, 2], "rtz")[0]
+            fig, ax = plt.subplots()
+            contour = ax.contourf(theta, zeta, Bn)
+            fig.colorbar(contour, ax=ax)
+            ax.set_title(r"$(\nabla \Phi + B_0) \cdot n$ on $\partial D$")
             plt.show()
 
-        np.testing.assert_allclose(Bn, 0, atol=5e-2)
-        return fig
+        np.testing.assert_allclose(Bn, 0, atol=atol)
 
     @staticmethod
     def manual_transform(coef, m, n, theta, zeta):

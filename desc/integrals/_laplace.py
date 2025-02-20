@@ -1,4 +1,11 @@
-"""High order accurate Laplace solver."""
+"""High order accurate Laplace solver.
+
+This is used to solve vacuum equilibria without assuming nested flux surfaces.
+Once pushed into an optimization loop, we can just do constrained optimization
+under linear constraint B₀⋅n = -∇ϕ⋅n so that we avoid inverting the large system
+for the Fourier harmonics of ϕ. The methods here perform the inversion as this
+is necessary to write correctness tests.
+"""
 
 import numpy as np
 from scipy.constants import mu_0
@@ -33,6 +40,7 @@ def compute_B_laplace(
     Phi_grid=None,
     chunk_size=None,
     check=False,
+    **kwargs,
 ):
     """Compute magnetic field in interior of plasma due to vacuum potential.
 
@@ -102,7 +110,13 @@ def compute_B_laplace(
         chunk_size=chunk_size,
     )
     Phi_mn, Phi_transform = compute_Phi_mn(
-        eq, B0n, Phi_grid, source_grid=source_grid, chunk_size=chunk_size, check=check
+        eq,
+        B0n,
+        Phi_grid,
+        source_grid=source_grid,
+        chunk_size=chunk_size,
+        check=check,
+        **kwargs,
     )
     # 𝐁 - 𝐁₀ = ∇Φ = 𝐁_vacuum in the interior.
     # Merkel eq. 1.4 is the Green's function solution to ∇²Φ = 0 in the interior.
@@ -113,7 +127,7 @@ def compute_B_laplace(
     data = eq.compute(["R", "phi", "Z"], grid=eval_grid)
     coords = jnp.column_stack([data["R"], data["phi"], data["Z"]])
     B = (B0 + BK).compute_magnetic_field(
-        coords, source_grid=source_grid, chunk_size=2 * chunk_size
+        coords, source_grid=source_grid, chunk_size=5 * chunk_size
     )
     return B
 
@@ -121,7 +135,7 @@ def compute_B_laplace(
 def compute_Phi_mn(
     eq,
     B0n,
-    eval_grid=None,
+    Phi_grid=None,
     source_grid=None,
     chunk_size=None,
     check=False,
@@ -145,7 +159,7 @@ def compute_Phi_mn(
     B0n : MagneticField
         𝐁₀ * ∇ρ / |∇ρ| evaluated on ``source_grid`` of magnetic field
         such that ∇ × 𝐁₀ = μ₀ 𝐉 where 𝐉 is the current in amperes everywhere.
-    eval_grid : Grid
+    Phi_grid : Grid
         Evaluation points on ∂D.
         Resolution determines accuracy of Φ interpolation.
     source_grid : Grid
@@ -164,42 +178,36 @@ def compute_Phi_mn(
         Fourier coefficients of Φ on ∂D.
 
     """
-    if eval_grid is None:
-        eval_grid = LinearGrid(
+    if Phi_grid is None:
+        Phi_grid = LinearGrid(
             rho=jnp.array([1.0]),
             M=2 * eq.M,
             N=2 * eq.N,
             NFP=eq.NFP if eq.N > 0 else 64,
         )
     if source_grid is None:
-        source_grid = eval_grid
-    basis = DoubleFourierSeries(M=eval_grid.M, N=eval_grid.N, NFP=eq.NFP)
+        source_grid = Phi_grid
+    basis = DoubleFourierSeries(M=Phi_grid.M, N=Phi_grid.N, NFP=eq.NFP)
     src_transform = Transform(source_grid, basis)
-    Phi_transform = Transform(eval_grid, basis)
+    Phi_transform = Transform(Phi_grid, basis)
 
     names = ["R", "phi", "Z"]
-    Phi_data = eq.compute(
-        names,
-        grid=eval_grid,
-        # transforms=Phi_transform,  # noqa: E800
-    )
+    Phi_data = eq.compute(names, grid=Phi_grid)
     src_data = eq.compute(
-        names + ["n_rho", "|e_theta x e_zeta|", "e_theta", "e_zeta"],
-        grid=source_grid,
-        # transforms=src_transform,  # noqa: E800
+        names + ["n_rho", "|e_theta x e_zeta|", "e_theta", "e_zeta"], grid=source_grid
     )
     src_data["Bn"] = B0n
 
     st, sz, q = heuristic_support_params(source_grid, best_ratio(src_data)[0])
     try:
-        interpolator = FFTInterpolator(eval_grid, source_grid, st, sz, q)
+        interpolator = FFTInterpolator(Phi_grid, source_grid, st, sz, q, **kwargs)
     except AssertionError as e:
         warnif(
             True,
             msg="Could not build fft interpolator, switching to dft which is slow."
             "\nReason: " + str(e),
         )
-        interpolator = DFTInterpolator(eval_grid, source_grid, st, sz, q)
+        interpolator = DFTInterpolator(Phi_grid, source_grid, st, sz, q)
 
     def LHS(Phi_mn):
         # After Fourier transform, the LHS is linear in the spectral coefficients Φₘₙ.
@@ -237,7 +245,9 @@ def compute_Phi_mn(
     return Phi_mn, Phi_transform
 
 
-def compute_dPhi_dn(eq, eval_grid, source_grid, Phi_mn, basis, chunk_size=None):
+def compute_dPhi_dn(
+    eq, eval_grid, source_grid, Phi_mn, basis, chunk_size=None, **kwargs
+):
     """Computes vacuum field ∇Φ ⋅ n on ∂D.
 
     Let D, D^∁ denote the interior, exterior of a toroidal region with
@@ -284,7 +294,6 @@ def compute_dPhi_dn(eq, eval_grid, source_grid, Phi_mn, basis, chunk_size=None):
         names + ["|e_theta x e_zeta|", "e_theta", "e_zeta"],
         grid=source_grid,
         data=src_data,
-        # transforms=transform,  # noqa: E800
     )
     src_data["K^theta"] = -src_data["Phi_z"] / src_data["|e_theta x e_zeta|"]
     src_data["K^zeta"] = src_data["Phi_t"] / src_data["|e_theta x e_zeta|"]
@@ -295,7 +304,7 @@ def compute_dPhi_dn(eq, eval_grid, source_grid, Phi_mn, basis, chunk_size=None):
 
     st, sz, q = heuristic_support_params(source_grid, best_ratio(src_data)[0])
     try:
-        interpolator = FFTInterpolator(eval_grid, source_grid, st, sz, q)
+        interpolator = FFTInterpolator(eval_grid, source_grid, st, sz, q, **kwargs)
     except AssertionError as e:
         warnif(
             True,
@@ -310,7 +319,11 @@ def compute_dPhi_dn(eq, eval_grid, source_grid, Phi_mn, basis, chunk_size=None):
     # ∇Φ(x ∈ ∂D) dot n = [1/2π ∫_∂D df' K_vc × ∇G(x,x')] dot n
     # (Same instructions but divide by 2 for x ∈ D).
     bs = singular_integral(
-        evl_data, src_data, _kernel_biot_savart, interpolator, chunk_size
+        evl_data,
+        src_data,
+        _kernel_biot_savart,
+        interpolator,
+        chunk_size,
     )
     # Biot-Savart kernel assumes Φ in amperes, so we account for that.
     return -dot(bs, evl_data["n_rho"]) * 2 / mu_0

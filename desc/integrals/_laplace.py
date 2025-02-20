@@ -295,8 +295,9 @@ def compute_dPhi_dn(
         grid=source_grid,
         data=src_data,
     )
-    src_data["K^theta"] = -src_data["Phi_z"] / src_data["|e_theta x e_zeta|"]
-    src_data["K^zeta"] = src_data["Phi_t"] / src_data["|e_theta x e_zeta|"]
+    # K_vc = -n × ∇Φ
+    src_data["K^theta"] = src_data["Phi_z"] / src_data["|e_theta x e_zeta|"]
+    src_data["K^zeta"] = -src_data["Phi_t"] / src_data["|e_theta x e_zeta|"]
     src_data["K_vc"] = (
         src_data["K^theta"][:, jnp.newaxis] * src_data["e_theta"]
         + src_data["K^zeta"][:, jnp.newaxis] * src_data["e_zeta"]
@@ -326,7 +327,7 @@ def compute_dPhi_dn(
         chunk_size,
     )
     # Biot-Savart kernel assumes Φ in amperes, so we account for that.
-    return -dot(bs, evl_data["n_rho"]) * 2 / mu_0
+    return dot(bs, evl_data["n_rho"]) * 2 / mu_0
 
 
 # TODO: remove below stuff before merge.

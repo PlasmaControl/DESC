@@ -146,7 +146,10 @@ def heuristic_support_params(grid, mean_ratio, local_ratio=None):
     errorif(local_ratio is not None, NotImplementedError)
     Nt = grid.num_theta
     Nz = grid.num_zeta * grid.NFP
-    q = int(jnp.sqrt(grid.num_nodes) / 2)
+    if grid.num_zeta > 1:  # actually has toroidal resolution
+        q = int(jnp.sqrt(grid.num_nodes) / 2)
+    else:  # axisymmetry
+        q = int(jnp.sqrt(Nt * Nz) / 2)
     s = min(q, Nt, Nz)
     local_ratio = setdefault(local_ratio, mean_ratio)
     ratio = (mean_ratio + local_ratio) / 2
@@ -158,8 +161,8 @@ def heuristic_support_params(grid, mean_ratio, local_ratio=None):
     #      s_ratio = s_z / s_t = Nz*NFP/Nt / ratio
     # Also want sqrt(s_z*s_t) ~ s = q.
     s_ratio = jnp.sqrt(Nz / Nt / ratio)
-    st = min(Nt, int(s / s_ratio))
-    sz = min(Nz, int(s * s_ratio))
+    st = min(Nt, int(jnp.ceil(s / s_ratio)))
+    sz = min(Nz, int(jnp.ceil(s * s_ratio)))
     return st, sz, q
 
 

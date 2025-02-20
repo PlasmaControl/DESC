@@ -9,12 +9,12 @@ import pytest
 
 from desc.__main__ import main
 from desc.backend import sign
-from desc.equilibrium import EquilibriaFamily, Equilibrium, contract_equilibrium
+from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.examples import get
 from desc.grid import Grid, LinearGrid
 from desc.io import InputReader
 from desc.objectives import ForceBalance, ObjectiveFunction, get_equilibrium_objective
-from desc.profiles import FourierZernikeProfile, PowerSeriesProfile, SplineProfile
+from desc.profiles import PowerSeriesProfile
 
 from .utils import area_difference, compute_coords
 
@@ -402,121 +402,6 @@ def test_backward_compatible_load_and_resolve():
     f_obj = ForceBalance(eq=eq)
     obj = ObjectiveFunction(f_obj, use_jit=False)
     eq.solve(maxiter=1, objective=obj)
-
-
-@pytest.mark.unit
-def test_contract_equilibrium():
-    """Test contract_equilibrium utility function."""
-    eq = get("ESTELL")
-    rho = 0.5
-    eq_half_rho = contract_equilibrium(eq, rho)
-    eq_half_rho_same_profiles = contract_equilibrium(eq, rho, contract_profiles=False)
-
-    ## test quantities for the eq with contracted profiles
-    # ensure the new surface is the same as the desired inner surface
-    surf_inner = eq.get_surface_at(rho)
-    np.testing.assert_allclose(surf_inner.R_lmn, eq_half_rho.surface.R_lmn, err_msg="R")
-    np.testing.assert_allclose(surf_inner.Z_lmn, eq_half_rho.surface.Z_lmn, err_msg="Z")
-    np.testing.assert_allclose(surf_inner.NFP, eq_half_rho.surface.NFP, err_msg="NFP")
-
-    # test geometry, profiles, |B| and |F| match btwn orig eq and new contracted eq
-    data_keys = ["|B|", "|F|", "R", "Z", "lambda", "p", "iota", "sqrt(g)"]
-    contract_grid = LinearGrid(
-        rho=np.linspace(0, 1.0, eq.L),
-        M=eq.M_grid,
-        N=eq.N_grid,
-        NFP=eq.NFP,
-    )
-    grid = LinearGrid(
-        rho=np.linspace(0, rho, eq.L),
-        M=eq.M_grid,
-        N=eq.N_grid,
-        NFP=eq.NFP,
-    )
-    contract_data = eq_half_rho.compute(data_keys, grid=contract_grid)
-    data = eq.compute(data_keys, grid=grid)
-    for key in data_keys:
-        if key != "|F|" and key != "sqrt(g)":
-            np.testing.assert_allclose(contract_data[key], data[key], err_msg=key)
-    np.testing.assert_allclose(
-        contract_data["|F|"], data["|F|"], rtol=2e-4, err_msg="|F|"
-    )
-    np.testing.assert_allclose(
-        contract_data["sqrt(g)"] * 2, data["sqrt(g)"], rtol=1e-8, err_msg="sqrt(g)"
-    )
-
-    ## test only the profiles and geometry for the eq without contracted profiles,
-    ## as the other quantities will be different since the profiles
-    ## now differ in real space
-    np.testing.assert_allclose(
-        surf_inner.R_lmn, eq_half_rho_same_profiles.surface.R_lmn, err_msg="R"
-    )
-    np.testing.assert_allclose(
-        surf_inner.Z_lmn, eq_half_rho_same_profiles.surface.Z_lmn, err_msg="Z"
-    )
-    np.testing.assert_allclose(
-        surf_inner.NFP, eq_half_rho_same_profiles.surface.NFP, err_msg="NFP"
-    )
-
-    # test geometry match btwn orig eq and new contracted eq
-    data_keys = ["R", "Z", "lambda"]
-    contract_grid = LinearGrid(
-        rho=np.linspace(0, 1.0, eq.L),
-        M=eq.M_grid,
-        N=eq.N_grid,
-        NFP=eq.NFP,
-    )
-    grid = LinearGrid(
-        rho=np.linspace(0, rho, eq.L),
-        M=eq.M_grid,
-        N=eq.N_grid,
-        NFP=eq.NFP,
-    )
-    contract_data = eq_half_rho_same_profiles.compute(data_keys, grid=contract_grid)
-    data = eq.compute(data_keys, grid=grid)
-    for key in data_keys:
-        np.testing.assert_allclose(contract_data[key], data[key], err_msg=key)
-    # test profiles
-    assert eq_half_rho_same_profiles.pressure.equiv(eq.pressure)
-    assert eq_half_rho_same_profiles.current.equiv(eq.current)
-
-
-@pytest.mark.unit
-def test_contract_equilibrium_warns_errors():
-    """Test contract_equilibrium utility function warning for profiles."""
-    eq = get("ESTELL")
-    rho = 0.5
-    eq.pressure += eq.pressure
-    with pytest.warns(UserWarning, match="SplineProfile"):
-        eq_half_rho = contract_equilibrium(eq, rho, profile_num_points=50)
-    eq.anisotropy = FourierZernikeProfile()
-    with pytest.raises(ValueError, match="FourierZernike"):
-        contract_equilibrium(eq, rho)
-    assert isinstance(eq_half_rho.pressure, SplineProfile)
-    data_keys = ["|B|", "|F|", "R", "Z", "lambda", "p", "iota", "sqrt(g)"]
-    contract_grid = LinearGrid(
-        rho=np.linspace(0, 1.0, eq.L),
-        M=eq.M_grid,
-        N=eq.N_grid,
-        NFP=eq.NFP,
-    )
-    grid = LinearGrid(
-        rho=np.linspace(0, rho, eq.L),
-        M=eq.M_grid,
-        N=eq.N_grid,
-        NFP=eq.NFP,
-    )
-    contract_data = eq_half_rho.compute(data_keys, grid=contract_grid)
-    data = eq.compute(data_keys, grid=grid)
-    for key in data_keys:
-        if key != "|F|" and key != "sqrt(g)":
-            np.testing.assert_allclose(contract_data[key], data[key], err_msg=key)
-    np.testing.assert_allclose(
-        contract_data["|F|"], data["|F|"], rtol=2e-4, err_msg="|F|"
-    )
-    np.testing.assert_allclose(
-        contract_data["sqrt(g)"] * 2, data["sqrt(g)"], rtol=1e-8, err_msg="sqrt(g)"
-    )
 
 
 @pytest.mark.unit

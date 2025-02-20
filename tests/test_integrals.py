@@ -588,26 +588,7 @@ class TestSurfaceIntegral:
 
 
 class TestSingularities:
-    """Tests for high order singular integration.
-
-    Hyperparams from Dhairya for greens ID test:
-
-     M  q  Nu Nv   N=Nu*Nv    error
-    13 10  15 13       195 0.246547
-    13 10  30 13       390 0.0313301
-    13 12  45 13       585 0.0022925
-    13 12  60 13       780 0.00024359
-    13 12  75 13       975 1.97686e-05
-    19 16  90 19      1710 1.2541e-05
-    19 16 105 19      1995 2.91152e-06
-    19 18 120 19      2280 7.03463e-07
-    19 18 135 19      2565 1.60672e-07
-    25 20 150 25      3750 7.59613e-09
-    31 22 210 31      6510 1.04357e-09
-    37 24 240 37      8880 1.80728e-11
-    43 28 300 43     12900 2.14129e-12
-
-    """
+    """Tests for high order singular integration."""
 
     @pytest.mark.unit
     @pytest.mark.parametrize("interpolator", [FFTInterpolator, DFTInterpolator])
@@ -647,6 +628,22 @@ class TestSingularities:
 
         So we integrate the kernel n⋅(r-r')/|r-r'|³ and can benchmark the residual.
 
+        Hyperparams from Dhairya for greens ID test:
+
+         M  q  Nu Nv   N=Nu*Nv    error
+        13 10  15 13       195 0.246547
+        13 10  30 13       390 0.0313301
+        13 12  45 13       585 0.0022925
+        13 12  60 13       780 0.00024359
+        13 12  75 13       975 1.97686e-05
+        19 16  90 19      1710 1.2541e-05
+        19 16 105 19      1995 2.91152e-06
+        19 18 120 19      2280 7.03463e-07
+        19 18 135 19      2565 1.60672e-07
+        25 20 150 25      3750 7.59613e-09
+        31 22 210 31      6510 1.04357e-09
+        37 24 240 37      8880 1.80728e-11
+        43 28 300 43     12900 2.14129e-12
         """
         eq = Equilibrium()
         Nu = [13, 13, 13, 19, 19, 25, 37]

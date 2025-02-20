@@ -2,14 +2,12 @@
 
 import numpy as np
 import pytest
-import scipy.linalg
 from qsc import Qsc
 
 import desc.examples
 from desc.backend import jnp
 from desc.equilibrium import Equilibrium
 from desc.geometry import FourierRZToroidalSurface
-from desc.grid import LinearGrid
 from desc.io import load
 from desc.magnetic_fields import OmnigenousField
 from desc.objectives import (
@@ -36,6 +34,7 @@ from desc.objectives import (
     FixNearAxisLambda,
     FixNearAxisR,
     FixNearAxisZ,
+    FixOmniBmax,
     FixOmniMap,
     FixOmniWell,
     FixParameters,
@@ -57,7 +56,7 @@ from desc.objectives import (
 from desc.objectives.utils import factorize_linear_constraints
 from desc.profiles import PowerSeriesProfile
 
-# TODO: check for all bdryR things if work when False is passed in
+# TODO (#1348): check for all bdryR things if work when False is passed in
 # bc empty array indexed will lead to an error
 
 
@@ -68,10 +67,10 @@ def test_LambdaGauge_sym(DummyStellarator):
     eq = load(load_from=str(DummyStellarator["output_path"]), file_format="hdf5")
     with pytest.warns(UserWarning, match="Reducing radial"):
         eq.change_resolution(L=2, M=1, N=1)
-    correct_constraint_matrix = np.zeros((0, 5))
     lam_con = FixLambdaGauge(eq)
     lam_con.build()
-    np.testing.assert_array_equal(lam_con._A, correct_constraint_matrix)
+    # should have no indices to fix
+    assert lam_con._params["L_lmn"].size == 0
 
 
 @pytest.mark.unit
@@ -104,13 +103,10 @@ def test_LambdaGauge_asym():
     lam_con = FixLambdaGauge(eq)
     lam_con.build()
 
-    # make sure that any lambda in the null space gives lambda==0 at theta=zeta=0
-    Z = scipy.linalg.null_space(lam_con._A)
-    grid = LinearGrid(L=10, theta=[0], zeta=[0])
-    for z in Z.T:
-        eq.L_lmn = z
-        lam = eq.compute("lambda", grid=grid)["lambda"]
-        np.testing.assert_allclose(lam, 0, atol=1e-15)
+    indices = np.where(
+        np.logical_and(eq.L_basis.modes[:, 1] == 0, eq.L_basis.modes[:, 2] == 0)
+    )[0]
+    np.testing.assert_allclose(indices, lam_con._params["L_lmn"])
 
 
 @pytest.mark.regression
@@ -145,7 +141,7 @@ def test_constrain_bdry_with_only_one_mode():
 def test_constrain_asserts():
     """Test error checking for incompatible constraints."""
     eqi = Equilibrium(iota=PowerSeriesProfile(0, 0), pressure=PowerSeriesProfile(0, 0))
-    eqc = Equilibrium(current=PowerSeriesProfile(1))
+    eqc = Equilibrium(current=PowerSeriesProfile([0, 0, 1]))
     obj_i = get_equilibrium_objective(eqi, "force")
     obj_c = get_equilibrium_objective(eqc, "force")
     obj_i.build()
@@ -204,6 +200,9 @@ def test_fixed_mode_solve():
         FixIota(eq=eq),
         FixPsi(eq=eq),
         FixBoundaryR(eq=eq),
+        FixBoundaryR(
+            eq=eq, modes=[0, 0, 0]
+        ),  # add a degenerate constraint to test fix of GH #1297 for lsq-exact
         FixBoundaryZ(eq=eq),
         fixR,
         fixZ,
@@ -782,7 +781,7 @@ def test_FixMode_passed_target_no_passed_modes_error():
 @pytest.mark.unit
 def test_FixSumModes_passed_target_too_long():
     """Test Fixing Modes with more than a size-1 target."""
-    # TODO: remove this test if FixSumModes is generalized
+    # TODO (#1399): remove this test if FixSumModes is generalized
     # to accept multiple targets and sets of modes at a time
     eq = Equilibrium(L=3, M=4)
     with pytest.raises(ValueError):
@@ -913,6 +912,26 @@ def test_fix_omni_indices():
     constraint = FixOmniMap(field=field, indices=indices)
     constraint.build()
     assert constraint.dim_f == indices.size
+
+
+@pytest.mark.unit
+def test_fix_omni_Bmax():
+    """Test that omnigenity parameters are constrained for B_max to be a straight line.
+
+    Test for GH issue #1266.
+    """
+
+    def _test(M_x, N_x, NFP, sum):
+        field = OmnigenousField(L_x=2, M_x=M_x, N_x=N_x, NFP=NFP, helicity=(1, NFP))
+        constraint = FixOmniBmax(field=field)
+        constraint.build()
+        assert constraint.dim_f == (2 * field.N_x + 1) * (field.L_x + 1)
+        # 0 - 2 + 4 - 6 + 8 ...
+        np.testing.assert_allclose(constraint._A @ field.x_basis.modes[:, 1], sum)
+
+    _test(M_x=6, N_x=3, NFP=1, sum=-4)
+    _test(M_x=9, N_x=4, NFP=2, sum=4)
+    _test(M_x=12, N_x=5, NFP=3, sum=6)
 
 
 @pytest.mark.unit

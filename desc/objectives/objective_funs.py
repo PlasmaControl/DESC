@@ -1,11 +1,9 @@
 """Base classes for objectives."""
 
 import functools
-import warnings
 from abc import ABC, abstractmethod
 
 import numpy as np
-from termcolor import colored
 
 from desc.backend import (
     desc_config,
@@ -13,6 +11,7 @@ from desc.backend import (
     jit,
     jnp,
     tree_flatten,
+    tree_map,
     tree_unflatten,
     use_jax,
 )
@@ -23,13 +22,168 @@ from desc.optimizable import Optimizable
 from desc.utils import (
     PRINT_WIDTH,
     Timer,
+    ensure_tuple,
     errorif,
     flatten_list,
     is_broadcastable,
     isposint,
     setdefault,
     unique_list,
+    warnif,
 )
+
+doc_target = """
+    target : {float, ndarray}, optional
+        Target value(s) of the objective. Only used if ``bounds`` is ``None``.
+        Must be broadcastable to ``Objective.dim_f``.
+"""
+doc_bounds = """
+    bounds : tuple of {float, ndarray}, optional
+        Lower and upper bounds on the objective. Overrides ``target``.
+        Both bounds must be broadcastable to ``Objective.dim_f``.
+"""
+doc_weight = """
+    weight : {float, ndarray}, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        Must be broadcastable to ``Objective.dim_f``.
+"""
+doc_normalize = """
+    normalize : bool, optional
+        Whether to compute the error in physical units or non-dimensionalize.
+"""
+doc_normalize_target = """
+    normalize_target : bool, optional
+        Whether target and bounds should be normalized before comparing to computed
+        values. If ``normalize`` is ``True`` and the target is in physical units,
+        this should also be set to ``True``.
+"""
+doc_loss_function = """
+    loss_function : {None, 'mean', 'min', 'max'}, optional
+        Loss function to apply to the objective values once computed. This loss function
+        is called on the raw compute value, before any shifting, scaling, or
+        normalization.
+"""
+doc_deriv_mode = """
+    deriv_mode : {"auto", "fwd", "rev"}
+        Specify how to compute Jacobian matrix, either forward mode or reverse mode AD.
+        ``auto`` selects forward or reverse mode based on the size of the input and
+        output of the objective. Has no effect on ``self.grad`` or ``self.hess`` which
+        always use reverse mode and forward over reverse mode respectively.
+"""
+doc_name = """
+    name : str, optional
+        Name of the objective.
+"""
+doc_jac_chunk_size = """
+    jac_chunk_size : int or ``auto``, optional
+        Will calculate the Jacobian
+        ``jac_chunk_size`` columns at a time, instead of all at once.
+        The memory usage of the Jacobian calculation is roughly
+        ``memory usage = m0+m1*jac_chunk_size``: the smaller the chunk size,
+        the less memory the Jacobian calculation will require (with some baseline
+        memory usage). The time it takes to compute the Jacobian is roughly
+        ``t = t0+t1/jac_chunk_size`` so the larger the ``jac_chunk_size``, the faster
+        the calculation takes, at the cost of requiring more memory.
+        If ``None``, it will use the largest size i.e ``obj.dim_x``.
+        Can also help with Hessian computation memory, as Hessian is essentially
+        ``jacfwd(jacrev(f))``, and each of these operations may be chunked.
+        Defaults to ``chunk_size=None``.
+        Note: When running on a CPU (not a GPU) on a HPC cluster, DESC is unable to
+        accurately estimate the available device memory, so the ``auto`` chunk_size
+        option will yield a larger chunk size than may be needed. It is recommended
+        to manually choose a chunk_size if an OOM error is experienced in this case.
+"""
+docs = {
+    "target": doc_target,
+    "bounds": doc_bounds,
+    "weight": doc_weight,
+    "normalize": doc_normalize,
+    "normalize_target": doc_normalize_target,
+    "loss_function": doc_loss_function,
+    "deriv_mode": doc_deriv_mode,
+    "name": doc_name,
+    "jac_chunk_size": doc_jac_chunk_size,
+}
+
+
+def collect_docs(
+    overwrite=None,
+    target_default="",
+    bounds_default="",
+    normalize_detail=None,
+    normalize_target_detail=None,
+    loss_detail=None,
+    coil=False,
+):
+    """Collect default parameters for the docstring of Objective.
+
+    Parameters
+    ----------
+    overwrite : dict, optional
+        Dict of strings to overwrite from the ``_Objective``'s docstring. If None,
+        all default parameters are included as they are. Use this argument if
+        you want to specify a special docstring for a specific parameter in
+        your objective definition.
+    target_default : str, optional
+        Default value for the ``target`` parameter.
+    bounds_default : str, optional
+        Default value for the ``bounds`` parameter.
+    normalize_detail : str, optional
+        Additional information about the ``normalize`` parameter.
+    normalize_target_detail : str, optional
+        Additional information about the ``normalize_target`` parameter.
+    loss_detail : str, optional
+        Additional information about the ``loss`` function.
+    coil : bool, optional
+        Whether the objective is a coil objective. If ``True``, adds extra docs
+        to ``target`` and ``loss_function``.
+
+    Returns
+    -------
+    doc_params : str
+        String of default parameters for the docstring.
+
+    """
+    doc_params = ""
+    for key in docs.keys():
+        if overwrite is not None and key in overwrite.keys():
+            doc_params += overwrite[key].rstrip()
+        else:
+            if key == "target":
+                target = ""
+                if coil:
+                    target += (
+                        "If array, it has to be flattened according to the "
+                        + "number of inputs."
+                    )
+                if target_default != "":
+                    target = target + " Defaults to " + target_default
+                doc_params += docs[key].rstrip() + target
+            elif key == "bounds" and bounds_default != "":
+                doc_params = (
+                    doc_params + docs[key].rstrip() + " Defaults to " + bounds_default
+                )
+            elif key == "loss_function":
+                loss = ""
+                if coil:
+                    loss = " Operates over all coils, not each individual coil."
+                if loss_detail is not None:
+                    loss += loss_detail
+                doc_params += docs[key].rstrip() + loss
+            elif key == "normalize":
+                norm = ""
+                if normalize_detail is not None:
+                    norm += normalize_detail
+                doc_params += docs[key].rstrip() + norm
+            elif key == "normalize_target":
+                norm_target = ""
+                if normalize_target_detail is not None:
+                    norm_target = normalize_target_detail
+                doc_params += docs[key].rstrip() + norm_target
+            else:
+                doc_params += docs[key].rstrip()
+
+    return doc_params
 
 
 class ObjectiveFunction(IOAble):
@@ -42,30 +196,31 @@ class ObjectiveFunction(IOAble):
     use_jit : bool, optional
         Whether to just-in-time compile the objectives and derivatives.
     deriv_mode : {"auto", "batched", "blocked"}
-        Method for computing Jacobian matrices. "batched" uses forward mode, applied to
-        the entire objective at once, and is generally the fastest for vector valued
-        objectives. Its memory intensity vs. speed may be traded off through the
-        ``jac_chunk_size`` keyword argument. "blocked" builds the Jacobian for
+        Method for computing Jacobian matrices. ``batched`` uses forward mode, applied
+        to the entire objective at once, and is generally the fastest for vector
+        valued objectives. Its memory intensity vs. speed may be traded off through
+        the ``jac_chunk_size`` keyword argument. "blocked" builds the Jacobian for
         each objective separately, using each objective's preferred AD mode (and
         each objective's `jac_chunk_size`). Generally the most efficient option when
         mixing scalar and vector valued objectives.
-        "auto" defaults to "batched" if all sub-objectives are set to "fwd",
-        otherwise "blocked".
+        ``auto`` defaults to ``batched`` if all sub-objectives are set to ``fwd``,
+        otherwise ``blocked``.
     name : str
         Name of the objective function.
-    jac_chunk_size : int or "auto", optional
-        If `"batched"` deriv_mode is used, will calculate the Jacobian
+    jac_chunk_size : int or ``auto``, optional
+         If ``batched`` deriv_mode is used, will calculate the Jacobian
         ``jac_chunk_size`` columns at a time, instead of all at once.
         The memory usage of the Jacobian calculation is roughly
-        ``memory usage = m0 + m1*jac_chunk_size``: the smaller the chunk size,
+        ``memory usage = m0+m1*jac_chunk_size``: the smaller the chunk size,
         the less memory the Jacobian calculation will require (with some baseline
         memory usage). The time it takes to compute the Jacobian is roughly
-        ``t= t0 + t1/jac_chunk_size` so the larger the ``jac_chunk_size``, the faster
+        ``t = t0+t1/jac_chunk_size`` so the larger the ``jac_chunk_size``, the faster
         the calculation takes, at the cost of requiring more memory.
-        If None, it will use the largest size i.e ``obj.dim_x``.
-        Defaults to ``chunk_size="auto"`` which will use a conservative
-        chunk size based off of a heuristic estimate of the memory usage.
-        NOTE: When running on a CPU (not a GPU) on a HPC cluster, DESC is unable to
+        If ``None``, it will use the largest size i.e ``obj.dim_x``.
+        Can also help with Hessian computation memory, as Hessian is essentially
+        ``jacfwd(jacrev(f))``, and each of these operations may be chunked.
+        Defaults to ``chunk_size=None``.
+        Note: When running on a CPU (not a GPU) on a HPC cluster, DESC is unable to
         accurately estimate the available device memory, so the "auto" chunk_size
         option will yield a larger chunk size than may be needed. It is recommended
         to manually choose a chunk_size if an OOM error is experienced in this case.
@@ -90,16 +245,14 @@ class ObjectiveFunction(IOAble):
         assert use_jit in {True, False}
         if deriv_mode == "looped":
             # overwrite the user inputs if deprecated "looped" was given
+            warnif(
+                True,
+                DeprecationWarning,
+                '``deriv_mode="looped"`` is deprecated in favor of'
+                ' ``deriv_mode="batched"`` with ``jac_chunk_size=1``.',
+            )
             deriv_mode = "batched"
             jac_chunk_size = 1
-            warnings.warn(
-                colored(
-                    '``deriv_mode="looped"`` is deprecated in favor of'
-                    ' ``deriv_mode="batched"`` with ``jac_chunk_size=1``.',
-                    "yellow",
-                ),
-                DeprecationWarning,
-            )
         assert deriv_mode in {"auto", "batched", "blocked"}
         assert jac_chunk_size in ["auto", None] or isposint(jac_chunk_size)
 
@@ -110,14 +263,6 @@ class ObjectiveFunction(IOAble):
         self._built = False
         self._compiled = False
         self._name = name
-
-    def _set_derivatives(self):
-        """Choose derivative mode based on mode of sub-objectives."""
-        if self._deriv_mode == "auto":
-            if all((obj._deriv_mode == "fwd") for obj in self.objectives):
-                self._deriv_mode = "batched"
-            else:
-                self._deriv_mode = "blocked"
 
     def _unjit(self):
         """Remove jit compiled methods."""
@@ -176,35 +321,34 @@ class ObjectiveFunction(IOAble):
         else:
             self._scalar = False
 
-        self._set_derivatives()
+        self._set_things()
+
+        # setting derivative mode and chunking.
+        errorif(
+            isposint(self._jac_chunk_size) and self._deriv_mode in ["auto", "blocked"],
+            ValueError,
+            "'jac_chunk_size' was passed into ObjectiveFunction, but the "
+            "ObjectiveFunction is not using 'batched' deriv_mode",
+        )
         sub_obj_jac_chunk_sizes_are_ints = [
             isposint(obj._jac_chunk_size) for obj in self.objectives
         ]
         errorif(
-            any(sub_obj_jac_chunk_sizes_are_ints) and self._deriv_mode != "blocked",
+            any(sub_obj_jac_chunk_sizes_are_ints) and self._deriv_mode == "batched",
             ValueError,
             "'jac_chunk_size' was passed into one or more sub-objectives, but the"
-            " ObjectiveFunction is  using 'batched' deriv_mode, so sub-objective "
+            " ObjectiveFunction is using 'batched' deriv_mode, so sub-objective "
             "'jac_chunk_size' will be ignored in favor of the ObjectiveFunction's "
             f"'jac_chunk_size' of {self._jac_chunk_size}."
             " Specify 'blocked' deriv_mode if each sub-objective is desired to have a "
             "different 'jac_chunk_size' for its Jacobian computation.",
         )
-        errorif(
-            self._jac_chunk_size not in ["auto", None]
-            and self._deriv_mode == "blocked",
-            ValueError,
-            "'jac_chunk_size' was passed into ObjectiveFunction, but the "
-            "ObjectiveFunction is using 'blocked' deriv_mode, so sub-objective "
-            "'jac_chunk_size' are used to compute each sub-objective's Jacobian, "
-            "`ignoring the ObjectiveFunction's 'jac_chunk_size'.",
-        )
 
-        if not self.use_jit:
-            self._unjit()
-
-        self._set_things()
-        self._built = True
+        if self._deriv_mode == "auto":
+            if all((obj._deriv_mode == "fwd") for obj in self.objectives):
+                self._deriv_mode = "batched"
+            else:
+                self._deriv_mode = "blocked"
 
         if self._jac_chunk_size == "auto":
             # Heuristic estimates of fwd mode Jacobian memory usage,
@@ -216,6 +360,15 @@ class ObjectiveFunction(IOAble):
                 * self.dim_x
             )
             self._jac_chunk_size = max([1, max_chunk_size])
+            if self._deriv_mode == "blocked":
+                for obj in self.objectives:
+                    if obj._jac_chunk_size is None:
+                        obj._jac_chunk_size = self._jac_chunk_size
+
+        if not self.use_jit:
+            self._unjit()
+
+        self._built = True
 
         timer.stop("Objective build")
         if verbose > 1:
@@ -464,7 +617,7 @@ class ObjectiveFunction(IOAble):
 
     def x(self, *things):
         """Return the full state vector from the Optimizable objects things."""
-        # TODO: also check resolution etc?
+        # TODO (#1392): also check resolution of the things etc?
         things = things or self.things
         errorif(
             len(things) != len(self.things),
@@ -500,15 +653,36 @@ class ObjectiveFunction(IOAble):
             Derivative(self.compute_scalar, mode="hess")(x, constants).squeeze()
         )
 
-    def _jac_blocked(self, op, x, constants=None):
-        # could also do something similar for grad and hess, but probably not
-        # worth it. grad is already super cheap to eval all at once, and blocked
-        # hess would only be block diag which may miss important interactions.
+    @jit
+    def jac_scaled(self, x, constants=None):
+        """Compute Jacobian matrix of self.compute_scaled wrt x."""
+        v = jnp.eye(x.shape[0])
+        return self.jvp_scaled(v, x, constants).T
+
+    @jit
+    def jac_scaled_error(self, x, constants=None):
+        """Compute Jacobian matrix of self.compute_scaled_error wrt x."""
+        v = jnp.eye(x.shape[0])
+        return self.jvp_scaled_error(v, x, constants).T
+
+    @jit
+    def jac_unscaled(self, x, constants=None):
+        """Compute Jacobian matrix of self.compute_unscaled wrt x."""
+        v = jnp.eye(x.shape[0])
+        return self.jvp_unscaled(v, x, constants).T
+
+    def _jvp_blocked(self, v, x, constants=None, op="scaled"):
+        v = ensure_tuple(v)
+        if len(v) > 1:
+            # using blocked for higher order derivatives is a pain, and only really
+            # is needed for perturbations. Just pass that to jvp_batched for now
+            return self._jvp_batched(v, x, constants, op)
 
         if constants is None:
             constants = self.constants
         xs_splits = np.cumsum([t.dim_x for t in self.things])
         xs = jnp.split(x, xs_splits)
+        vs = jnp.split(v[0], xs_splits, axis=-1)
         J = []
         assert len(self.objectives) == len(self.constants)
         # basic idea is we compute the jacobian of each objective wrt each thing
@@ -518,63 +692,18 @@ class ObjectiveFunction(IOAble):
             # get the xs that go to that objective
             thing_idx = self._things_per_objective_idx[k]
             xi = [xs[i] for i in thing_idx]
-            Ji_ = getattr(obj, op)(*xi, constants=const)  # jac wrt to just those things
-            Ji = []  # jac wrt all things
-            for i, thing in enumerate(self.things):
-                if i in thing_idx:  # dfi/dxj != 0
-                    Ji += [Ji_[thing_idx.index(i)]]
-                else:  # dfi/dxj == 0
-                    Ji += [jnp.zeros((obj.dim_f, thing.dim_x))]
-            Ji = jnp.hstack(Ji)  # something like [df1/dx1, df1/dx2, 0]
-            J += [Ji]
-        # something like [df1/dx1, df1/dx2, 0]
-        #                [df2/dx1, 0, df2/dx3]   # noqa:E800
-        J = jnp.vstack(J)
+            vi = [vs[i] for i in thing_idx]
+            Ji_ = getattr(obj, "jvp_" + op)(vi, xi, constants=const)
+            J += [Ji_]
+        # this is the transpose of the jvp when v is a matrix, for consistency with
+        # jvp_batched
+        J = jnp.hstack(J)
         return J
 
-    @jit
-    def jac_scaled(self, x, constants=None):
-        """Compute Jacobian matrix of self.compute_scaled wrt x."""
-        if constants is None:
-            constants = self.constants
+    def _jvp_batched(self, v, x, constants=None, op="scaled"):
+        v = ensure_tuple(v)
 
-        if self._deriv_mode == "batched":
-            J = Derivative(self.compute_scaled, mode="fwd")(x, constants)
-        if self._deriv_mode == "blocked":
-            J = self._jac_blocked("jac_scaled", x, constants)
-
-        return jnp.atleast_2d(J.squeeze())
-
-    @jit
-    def jac_scaled_error(self, x, constants=None):
-        """Compute Jacobian matrix of self.compute_scaled_error wrt x."""
-        if constants is None:
-            constants = self.constants
-
-        if self._deriv_mode == "batched":
-            J = Derivative(self.compute_scaled_error, mode="fwd")(x, constants)
-        if self._deriv_mode == "blocked":
-            J = self._jac_blocked("jac_scaled_error", x, constants)
-
-        return jnp.atleast_2d(J.squeeze())
-
-    @jit
-    def jac_unscaled(self, x, constants=None):
-        """Compute Jacobian matrix of self.compute_unscaled wrt x."""
-        if constants is None:
-            constants = self.constants
-
-        if self._deriv_mode == "batched":
-            J = Derivative(self.compute_unscaled, mode="fwd")(x, constants)
-        if self._deriv_mode == "blocked":
-            J = self._jac_blocked("jac_unscaled", x, constants)
-
-        return jnp.atleast_2d(J.squeeze())
-
-    def _jvp(self, v, x, constants=None, op="compute_scaled"):
-        v = v if isinstance(v, (tuple, list)) else (v,)
-
-        fun = lambda x: getattr(self, op)(x, constants)
+        fun = lambda x: getattr(self, "compute_" + op)(x, constants)
         if len(v) == 1:
             jvpfun = lambda dx: Derivative.compute_jvp(fun, 0, dx, x)
             return batched_vectorize(
@@ -612,7 +741,11 @@ class ObjectiveFunction(IOAble):
             Constant parameters passed to sub-objectives.
 
         """
-        return self._jvp(v, x, constants, "compute_scaled")
+        if self._deriv_mode == "batched":
+            J = self._jvp_batched(v, x, constants, "scaled")
+        if self._deriv_mode == "blocked":
+            J = self._jvp_blocked(v, x, constants, "scaled")
+        return J
 
     @jit
     def jvp_scaled_error(self, v, x, constants=None):
@@ -629,7 +762,11 @@ class ObjectiveFunction(IOAble):
             Constant parameters passed to sub-objectives.
 
         """
-        return self._jvp(v, x, constants, "compute_scaled_error")
+        if self._deriv_mode == "batched":
+            J = self._jvp_batched(v, x, constants, "scaled_error")
+        if self._deriv_mode == "blocked":
+            J = self._jvp_blocked(v, x, constants, "scaled_error")
+        return J
 
     @jit
     def jvp_unscaled(self, v, x, constants=None):
@@ -646,10 +783,14 @@ class ObjectiveFunction(IOAble):
             Constant parameters passed to sub-objectives.
 
         """
-        return self._jvp(v, x, constants, "compute_unscaled")
+        if self._deriv_mode == "batched":
+            J = self._jvp_batched(v, x, constants, "unscaled")
+        if self._deriv_mode == "blocked":
+            J = self._jvp_blocked(v, x, constants, "unscaled")
+        return J
 
-    def _vjp(self, v, x, constants=None, op="compute_scaled"):
-        fun = lambda x: getattr(self, op)(x, constants)
+    def _vjp(self, v, x, constants=None, op="scaled"):
+        fun = lambda x: getattr(self, "compute_" + op)(x, constants)
         return Derivative.compute_vjp(fun, 0, v, x)
 
     @jit
@@ -666,7 +807,7 @@ class ObjectiveFunction(IOAble):
             Constant parameters passed to sub-objectives.
 
         """
-        return self._vjp(v, x, constants, "compute_scaled")
+        return self._vjp(v, x, constants, "scaled")
 
     @jit
     def vjp_scaled_error(self, v, x, constants=None):
@@ -682,7 +823,7 @@ class ObjectiveFunction(IOAble):
             Constant parameters passed to sub-objectives.
 
         """
-        return self._vjp(v, x, constants, "compute_scaled_error")
+        return self._vjp(v, x, constants, "scaled_error")
 
     @jit
     def vjp_unscaled(self, v, x, constants=None):
@@ -698,7 +839,7 @@ class ObjectiveFunction(IOAble):
             Constant parameters passed to sub-objectives.
 
         """
-        return self._vjp(v, x, constants, "compute_unscaled")
+        return self._vjp(v, x, constants, "unscaled")
 
     def compile(self, mode="auto", verbose=1):
         """Call the necessary functions to ensure the function is compiled.
@@ -729,10 +870,8 @@ class ObjectiveFunction(IOAble):
         x = self.x()
 
         if verbose > 0:
-            print(
-                "Compiling objective function and derivatives: "
-                + f"{[obj.name for obj in self.objectives]}"
-            )
+            msg = "Compiling objective function and derivatives: "
+            print(msg + f"{[obj.name for obj in self.objectives]}")
         timer.start("Total compilation time")
 
         if mode in ["scalar", "bfgs", "all"]:
@@ -741,6 +880,7 @@ class ObjectiveFunction(IOAble):
             timer.stop("Objective compilation time")
             if verbose > 1:
                 timer.disp("Objective compilation time")
+
             timer.start("Gradient compilation time")
             _ = self.grad(x, self.constants).block_until_ready()
             timer.stop("Gradient compilation time")
@@ -754,12 +894,13 @@ class ObjectiveFunction(IOAble):
                 timer.disp("Hessian compilation time")
         if mode in ["lsq", "all"]:
             timer.start("Objective compilation time")
-            _ = self.compute_scaled(x, self.constants).block_until_ready()
+            _ = self.compute_scaled_error(x, self.constants).block_until_ready()
             timer.stop("Objective compilation time")
             if verbose > 1:
                 timer.disp("Objective compilation time")
+
             timer.start("Jacobian compilation time")
-            _ = self.jac_scaled(x, self.constants).block_until_ready()
+            _ = self.jac_scaled_error(x, self.constants).block_until_ready()
             timer.stop("Jacobian compilation time")
             if verbose > 1:
                 timer.disp("Jacobian compilation time")
@@ -809,7 +950,7 @@ class ObjectiveFunction(IOAble):
     @property
     def dim_f(self):
         """int: Number of objective equations."""
-        if not self.built:
+        if not hasattr(self, "_dim_f"):
             raise RuntimeError("ObjectiveFunction must be built first.")
         return self._dim_f
 
@@ -873,46 +1014,7 @@ class _Objective(IOAble, ABC):
     Parameters
     ----------
     things : Optimizable or tuple/list of Optimizable
-        Objects that will be optimized to satisfy the Objective.
-    target : {float, ndarray}, optional
-        Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f.
-    bounds : tuple of {float, ndarray}, optional
-        Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f
-    weight : {float, ndarray}, optional
-        Weighting to apply to the Objective, relative to other Objectives.
-        Must be broadcastable to to Objective.dim_f
-    normalize : bool, optional
-        Whether to compute the error in physical units or non-dimensionalize.
-    normalize_target : bool, optional
-        Whether target and bounds should be normalized before comparing to computed
-        values. If `normalize` is `True` and the target is in physical units,
-        this should also be set to True.
-    loss_function : {None, 'mean', 'min', 'max'}, optional
-        Loss function to apply to the objective values once computed. This loss function
-        is called on the raw compute value, before any shifting, scaling, or
-        normalization.
-    deriv_mode : {"auto", "fwd", "rev"}
-        Specify how to compute jacobian matrix, either forward mode or reverse mode AD.
-        "auto" selects forward or reverse mode based on the size of the input and output
-        of the objective. Has no effect on self.grad or self.hess which always use
-        reverse mode and forward over reverse mode respectively.
-    name : str, optional
-        Name of the objective.
-    jac_chunk_size : int or "auto", optional
-        Will calculate the Jacobian
-        ``jac_chunk_size`` columns at a time, instead of all at once.
-        The memory usage of the Jacobian calculation is roughly
-        ``memory usage = m0 + m1*jac_chunk_size``: the smaller the chunk size,
-        the less memory the Jacobian calculation will require (with some baseline
-        memory usage). The time it takes to compute the Jacobian is roughly
-        ``t= t0 + t1/jac_chunk_size` so the larger the ``jac_chunk_size``, the faster
-        the calculation takes, at the cost of requiring more memory.
-        If None, it will use the largest size i.e ``obj.dim_x``.
-        Defaults to ``chunk_size=None``.
-
-    """
+        Objects that will be optimized to satisfy the Objective."""  # noqa: D208, D209
 
     _scalar = False
     _linear = False
@@ -978,11 +1080,13 @@ class _Objective(IOAble, ABC):
     def _set_derivatives(self):
         """Choose derivative mode based on size of inputs/outputs."""
         if self._deriv_mode == "auto":
-            # choose based on shape of jacobian. fwd mode is more memory efficient
-            # so we prefer that unless the jacobian is really wide
+            # choose based on shape of jacobian. dim_x is usually an overestimate of
+            # the true number of DOFs because linear constraints remove some. Also
+            # fwd mode is more memory efficient so we prefer that unless the jacobian
+            # is really wide
             self._deriv_mode = (
                 "fwd"
-                if self.dim_f >= 0.5 * sum(t.dim_x for t in self.things)
+                if self.dim_f >= 0.2 * sum(t.dim_x for t in self.things)
                 else "rev"
             )
 
@@ -1167,37 +1271,57 @@ class _Objective(IOAble, ABC):
     def jac_scaled(self, *args, **kwargs):
         """Compute Jacobian matrix of self.compute_scaled wrt x."""
         argnums = tuple(range(len(self.things)))
-        return Derivative(self.compute_scaled, argnums, mode=self._deriv_mode)(
-            *args, **kwargs
-        )
+        return Derivative(
+            self.compute_scaled,
+            argnums,
+            mode=self._deriv_mode,
+            chunk_size=self._jac_chunk_size,
+        )(*args, **kwargs)
 
     @jit
     def jac_scaled_error(self, *args, **kwargs):
         """Compute Jacobian matrix of self.compute_scaled_error wrt x."""
         argnums = tuple(range(len(self.things)))
-        return Derivative(self.compute_scaled_error, argnums, mode=self._deriv_mode)(
-            *args, **kwargs
-        )
+        return Derivative(
+            self.compute_scaled_error,
+            argnums,
+            mode=self._deriv_mode,
+            chunk_size=self._jac_chunk_size,
+        )(*args, **kwargs)
 
     @jit
     def jac_unscaled(self, *args, **kwargs):
         """Compute Jacobian matrix of self.compute_unscaled wrt x."""
         argnums = tuple(range(len(self.things)))
-        return Derivative(self.compute_unscaled, argnums, mode=self._deriv_mode)(
-            *args, **kwargs
-        )
+        return Derivative(
+            self.compute_unscaled,
+            argnums,
+            mode=self._deriv_mode,
+            chunk_size=self._jac_chunk_size,
+        )(*args, **kwargs)
 
-    def _jvp(self, v, x, constants=None, op="compute_scaled"):
-        v = v if isinstance(v, (tuple, list)) else (v,)
-        x = x if isinstance(x, (tuple, list)) else (x,)
+    def _jvp(self, v, x, constants=None, op="scaled"):
+        v = ensure_tuple(v)
+        x = ensure_tuple(x)
         assert len(x) == len(v)
 
-        fun = lambda *x: getattr(self, op)(*x, constants=constants)
-        jvpfun = lambda *dx: Derivative.compute_jvp(fun, tuple(range(len(x))), dx, *x)
-        sig = ",".join(f"(n{i})" for i in range(len(x))) + "->(k)"
-        return batched_vectorize(
-            jvpfun, signature=sig, chunk_size=self._jac_chunk_size
-        )(*v)
+        if self._deriv_mode == "fwd":
+            fun = lambda *x: getattr(self, "compute_" + op)(*x, constants=constants)
+            jvpfun = lambda *dx: Derivative.compute_jvp(
+                fun, tuple(range(len(x))), dx, *x
+            )
+            sig = ",".join(f"(n{i})" for i in range(len(x))) + "->(k)"
+            return batched_vectorize(
+                jvpfun, signature=sig, chunk_size=self._jac_chunk_size
+            )(*v)
+        else:  # rev mode. We compute full jacobian and manually do mv. In this case
+            # the jacobian should be wide so this isn't very expensive.
+            jac = getattr(self, "jac_" + op)(*x, constants=constants)
+            # jac is a tuple, 1 array for each thing. Transposes here and below make it
+            # equivalent to fwd mode above, which batches over the first axis
+            Jv = tree_map(lambda a, b: jnp.dot(a, b.T), jac, v)
+            # sum over different things.
+            return jnp.sum(jnp.asarray(Jv), axis=0).T
 
     @jit
     def jvp_scaled(self, v, x, constants=None):
@@ -1213,7 +1337,7 @@ class _Objective(IOAble, ABC):
             Constant parameters passed to sub-objectives.
 
         """
-        return self._jvp(v, x, constants, "compute_scaled")
+        return self._jvp(v, x, constants, "scaled")
 
     @jit
     def jvp_scaled_error(self, v, x, constants=None):
@@ -1229,7 +1353,7 @@ class _Objective(IOAble, ABC):
             Constant parameters passed to sub-objectives.
 
         """
-        return self._jvp(v, x, constants, "compute_scaled_error")
+        return self._jvp(v, x, constants, "scaled_error")
 
     @jit
     def jvp_unscaled(self, v, x, constants=None):
@@ -1245,7 +1369,7 @@ class _Objective(IOAble, ABC):
             Constant parameters passed to sub-objectives.
 
         """
-        return self._jvp(v, x, constants, "compute_unscaled")
+        return self._jvp(v, x, constants, "unscaled")
 
     def print_value(self, args, args0=None, **kwargs):
         """Print the value of the objective."""
@@ -1474,6 +1598,8 @@ class _Objective(IOAble, ABC):
         # can maybe improve this later to not rebuild if resolution is the same
         self._built = False
 
+
+_Objective.__doc__ += "".join(value.rstrip("\n") for value in docs.values())
 
 # local functions assigned as attributes aren't hashable so they cause stuff to
 # recompile, so instead we define a hashable class to do the same thing.

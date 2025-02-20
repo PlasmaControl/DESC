@@ -11,10 +11,179 @@ from desc.compute.utils import _compute as compute_fun
 from desc.compute.utils import _parse_parameterization, get_profiles, get_transforms
 from desc.grid import QuadratureGrid
 from desc.optimizable import OptimizableCollection
-from desc.utils import errorif, parse_argname_change
+from desc.utils import errorif, jaxify, parse_argname_change, setdefault
 
 from .linear_objectives import _FixedObjective
-from .objective_funs import _Objective
+from .objective_funs import _Objective, collect_docs
+
+
+class ExternalObjective(_Objective):
+    """Wrap an external code.
+
+    Similar to ``ObjectiveFromUser``, except derivatives of the objective function are
+    computed with finite differences instead of AD. The function does not need to be
+    JAX transformable.
+
+    The user supplied function must take an Equilibrium or a list of Equilibria as its
+    only positional argument, but can take additional keyword arguments.
+    It must return a single 1D array of floats.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Equilibrium that will be optimized to satisfy the Objective.
+    fun : callable
+        External objective function. It must take an Equilibrium or list of Equilibria
+        as its only positional argument, but can take additional keyword arguments.
+        It does not need to be JAX transformable.
+    dim_f : int
+        Dimension of the output of ``fun``.
+    fun_kwargs : any, optional
+        Keyword arguments that are passed as inputs to ``fun``.
+    vectorized : bool
+        Set to False if ``fun`` takes a single Equilibrium as its positional argument.
+        Set to True if ``fun`` instead takes a list of Equilibria.
+    abs_step : float, optional
+        Absolute finite difference step size. Default = 1e-4.
+        Total step size is ``abs_step + rel_step * mean(abs(x))``.
+    rel_step : float, optional
+        Relative finite difference step size. Default = 0.
+        Total step size is ``abs_step + rel_step * mean(abs(x))``.
+
+    """
+
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``target=0``.", bounds_default="``target=0``."
+    )
+    __doc__ += """
+    Examples
+    --------
+    .. code-block:: python
+
+        from desc.io import load
+
+        def myfun(eq, path=""):
+            # This will return the compute quantity '<beta>_vol',
+            # but uses I/O operations that are not JAX transformable.
+            eq.save(path)
+            eq = load(path)
+            data = eq.compute("<beta>_vol")
+            return data["<beta>_vol"]
+
+        myobj = ExternalObjective(
+            eq=eq, fun=myfun, dim_f=1, fun_kwargs={"path": "temp.h5"}, vectorized=False,
+        )
+    )
+
+    """
+
+    _units = "(Unknown)"
+    _print_value_fmt = "External objective value: "
+    _static_attrs = ["_fun_wrapped", "_fun_kwargs"]
+
+    def __init__(
+        self,
+        eq,
+        *,
+        fun,
+        dim_f,
+        fun_kwargs={},
+        vectorized=False,
+        abs_step=1e-4,
+        rel_step=0,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=False,
+        normalize_target=False,
+        loss_function=None,
+        name="external",
+    ):
+        if target is None and bounds is None:
+            target = 0
+        self._eq = eq.copy()
+        self._fun = fun
+        self._fun_kwargs = fun_kwargs
+        self._dim_f = dim_f
+        self._vectorized = vectorized
+        self._abs_step = abs_step
+        self._rel_step = rel_step
+        super().__init__(
+            things=eq,
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            loss_function=loss_function,
+            deriv_mode="fwd",
+            name=name,
+        )
+
+    def build(self, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        self._scalar = self._dim_f == 1
+        self._constants = {"quad_weights": 1.0}
+
+        def fun_wrapped(params):
+            """Wrap external function with possibly vectorized params."""
+            # number of equilibria for vectorized computations
+            param_shape = params["Psi"].shape
+            num_eq = param_shape[0] if len(param_shape) > 1 else 1
+
+            # convert params to list of equilibria
+            eqs = [self._eq.copy() for _ in range(num_eq)]
+            for k, eq in enumerate(eqs):
+                # update equilibria with new params
+                for param_key in self._eq.optimizable_params:
+                    param_value = np.atleast_2d(params[param_key])[k, :]
+                    if len(param_value):
+                        setattr(eq, param_key, param_value)
+
+            # call external function on equilibrium or list of equilibria
+            if not self._vectorized:
+                eqs = eqs[0]
+            return self._fun(eqs, **self._fun_kwargs)
+
+        # wrap external function to work with JAX
+        abstract_eval = lambda *args, **kwargs: jnp.empty(self._dim_f)
+        self._fun_wrapped = jaxify(
+            fun_wrapped,
+            abstract_eval,
+            vectorized=self._vectorized,
+            abs_step=self._abs_step,
+            rel_step=self._rel_step,
+        )
+
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, params, constants=None):
+        """Compute the quantity.
+
+        Parameters
+        ----------
+        params : list of dict
+            List of dictionaries of degrees of freedom, eg CoilSet.params_dict
+        constants : dict
+            Unused by this Objective.
+
+        Returns
+        -------
+        f : ndarray
+            Computed quantity.
+
+        """
+        f = self._fun_wrapped(params)
+        return f
 
 
 class GenericObjective(_Objective):
@@ -26,52 +195,20 @@ class GenericObjective(_Objective):
         Name of the quantity to compute.
     thing : Optimizable
         Object that will be optimized to satisfy the Objective.
-    target : {float, ndarray}, optional
-        Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f. Defaults to ``target=0``.
-    bounds : tuple of {float, ndarray}, optional
-        Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f.
-        Defaults to ``target=0``.
-    weight : {float, ndarray}, optional
-        Weighting to apply to the Objective, relative to other Objectives.
-        Must be broadcastable to to Objective.dim_f.
-    normalize : bool, optional
-        Whether to compute the error in physical units or non-dimensionalize.
-        Has no effect for this objective
-    normalize_target : bool, optional
-        Whether target and bounds should be normalized before comparing to computed
-        values. If `normalize` is `True` and the target is in physical units,
-        this should also be set to True. Note: Has no effect on this objective.
-    loss_function : {None, 'mean', 'min', 'max'}, optional
-        Loss function to apply to the objective values once computed. This loss function
-        is called on the raw compute value, before any shifting, scaling, or
-        normalization.
-    deriv_mode : {"auto", "fwd", "rev"}
-        Specify how to compute jacobian matrix, either forward mode or reverse mode AD.
-        "auto" selects forward or reverse mode based on the size of the input and output
-        of the objective. Has no effect on self.grad or self.hess which always use
-        reverse mode and forward over reverse mode respectively.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at. Defaults to
         ``QuadratureGrid(eq.L_grid, eq.M_grid, eq.N_grid)`` if thing is an Equilibrium.
-    name : str, optional
-        Name of the objective function.
-    jac_chunk_size : int , optional
-        Will calculate the Jacobian for this objective ``jac_chunk_size``
-        columns at a time, instead of all at once. The memory usage of the
-        Jacobian calculation is roughly ``memory usage = m0 + m1*jac_chunk_size``:
-        the smaller the chunk size, the less memory the Jacobian calculation
-        will require (with some baseline memory usage). The time to compute the
-        Jacobian is roughly ``t=t0 +t1/jac_chunk_size``, so the larger the
-        ``jac_chunk_size``, the faster the calculation takes, at the cost of
-        requiring more memory. A ``jac_chunk_size`` of 1 corresponds to the least
-        memory intensive, but slowest method of calculating the Jacobian.
-        If None, it will use the largest size i.e ``obj.dim_x``.
+    compute_kwargs : dict
+        Optional keyword arguments passed to core compute function, eg ``helicity``.
 
     """
 
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``target=0``.", bounds_default="``target=0``."
+    )
+
     _print_value_fmt = "Generic objective value: "
+    _static_attrs = ["_compute_kwargs"]
 
     def __init__(
         self,
@@ -87,6 +224,7 @@ class GenericObjective(_Objective):
         grid=None,
         name="generic",
         jac_chunk_size=None,
+        compute_kwargs=None,
         **kwargs,
     ):
         errorif(
@@ -99,6 +237,7 @@ class GenericObjective(_Objective):
             target = 0
         self.f = f
         self._grid = grid
+        self._compute_kwargs = setdefault(compute_kwargs, {})
         super().__init__(
             things=thing,
             target=target,
@@ -145,7 +284,9 @@ class GenericObjective(_Objective):
         else:
             self._dim_f = grid.num_nodes * np.prod(data_index[self._p][self.f]["dim"])
         profiles = get_profiles(self.f, obj=thing, grid=grid)
-        transforms = get_transforms(self.f, obj=thing, grid=grid)
+        transforms = get_transforms(
+            self.f, obj=thing, grid=grid, **self._compute_kwargs
+        )
         self._constants = {
             "transforms": transforms,
             "profiles": profiles,
@@ -177,6 +318,7 @@ class GenericObjective(_Objective):
             params=params,
             transforms=constants["transforms"],
             profiles=constants["profiles"],
+            **self._compute_kwargs,
         )
         f = data[self.f]
         if self._coordinates == "r":
@@ -200,27 +342,12 @@ class LinearObjectiveFromUser(_FixedObjective):
         Custom objective function.
     thing : Optimizable
         Object whose degrees of freedom are being constrained.
-    target : dict of {float, ndarray}, optional
-        Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f. Defaults to ``target=0``.
-    bounds : tuple of dict {float, ndarray}, optional
-        Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f.
-        Defaults to ``target=0``.
-    weight : dict of {float, ndarray}, optional
-        Weighting to apply to the Objective, relative to other Objectives.
-        Should be a scalar or have the same tree structure as thing.params.
-    normalize : bool, optional
-        Whether to compute the error in physical units or non-dimensionalize.
-        Has no effect for this objective.
-    normalize_target : bool, optional
-        Whether target and bounds should be normalized before comparing to computed
-        values. If `normalize` is `True` and the target is in physical units,
-        this should also be set to True. Has no effect for this objective.
-    name : str, optional
-        Name of the objective function.
 
     """
+
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``target=0``.", bounds_default="``target=0``."
+    )
 
     _scalar = False
     _linear = True
@@ -326,62 +453,32 @@ class ObjectiveFromUser(_Objective):
         Custom objective function.
     thing : Optimizable
         Object that will be optimized to satisfy the Objective.
-    target : {float, ndarray}, optional
-        Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f. Defaults to ``target=0``.
-    bounds : tuple of {float, ndarray}, optional
-        Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f.
-        Defaults to ``target=0``.
-    weight : {float, ndarray}, optional
-        Weighting to apply to the Objective, relative to other Objectives.
-        Must be broadcastable to to Objective.dim_f
-    normalize : bool, optional
-        Whether to compute the error in physical units or non-dimensionalize.
-        Has no effect for this objective.
-    normalize_target : bool, optional
-        Whether target and bounds should be normalized before comparing to computed
-        values. If `normalize` is `True` and the target is in physical units,
-        this should also be set to True.
-    loss_function : {None, 'mean', 'min', 'max'}, optional
-        Loss function to apply to the objective values once computed. This loss function
-        is called on the raw compute value, before any shifting, scaling, or
-        normalization.
-    deriv_mode : {"auto", "fwd", "rev"}
-        Specify how to compute jacobian matrix, either forward mode or reverse mode AD.
-        "auto" selects forward or reverse mode based on the size of the input and output
-        of the objective. Has no effect on self.grad or self.hess which always use
-        reverse mode and forward over reverse mode respectively.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at. Defaults to
         ``QuadratureGrid(eq.L_grid, eq.M_grid, eq.N_grid)`` if thing is an Equilibrium.
-    name : str, optional
-        Name of the objective function.
-    jac_chunk_size : int , optional
-        Will calculate the Jacobian for this objective ``jac_chunk_size``
-        columns at a time, instead of all at once. The memory usage of the
-        Jacobian calculation is roughly ``memory usage = m0 + m1*jac_chunk_size``:
-        the smaller the chunk size, the less memory the Jacobian calculation
-        will require (with some baseline memory usage). The time to compute the
-        Jacobian is roughly ``t=t0 +t1/jac_chunk_size``, so the larger the
-        ``jac_chunk_size``, the faster the calculation takes, at the cost of
-        requiring more memory. A ``jac_chunk_size`` of 1 corresponds to the least
-        memory intensive, but slowest method of calculating the Jacobian.
-        If None, it will use the largest size i.e ``obj.dim_x``.
+    compute_kwargs : dict
+        Optional keyword arguments passed to core compute function, eg ``helicity``.
 
+    """
+
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``target=0``.", bounds_default="``target=0``."
+    )
+    __doc__ += """
     Examples
     --------
     .. code-block:: python
 
-        from desc.compute.utils import surface_averages
+        from desc.integrals.surface_integral import surface_averages
 
         def myfun(grid, data):
             # This will compute the flux surface average of the function
             # R*B_T from the Grad-Shafranov equation
-            f = data['R']*data['B_phi']
-            f_fsa = surface_averages(grid, f, sqrt_g=data['sqrt_g'])
-            # this has the FSA values on the full grid, but we just want
-            # the unique values:
+            f = data['R'] * data['B_phi']
+            # q here is the kwarg for "quantity" as in, quantity to be averaged
+            f_fsa = surface_averages(grid, q=f, sqrt_g=data['sqrt(g)'])
+            # this has the FSA values on the full grid,
+            # but we just want the unique values:
             return grid.compress(f_fsa)
 
         myobj = ObjectiveFromUser(fun=myfun, thing=eq)
@@ -390,6 +487,7 @@ class ObjectiveFromUser(_Objective):
 
     _units = "(Unknown)"
     _print_value_fmt = "Custom objective value: "
+    _static_attrs = ["_compute_kwargs"]
 
     def __init__(
         self,
@@ -405,6 +503,7 @@ class ObjectiveFromUser(_Objective):
         grid=None,
         name="custom",
         jac_chunk_size=None,
+        compute_kwargs=None,
         **kwargs,
     ):
         errorif(
@@ -417,6 +516,7 @@ class ObjectiveFromUser(_Objective):
             target = 0
         self._fun = fun
         self._grid = grid
+        self._compute_kwargs = setdefault(compute_kwargs, {})
         super().__init__(
             things=thing,
             target=target,
@@ -442,6 +542,8 @@ class ObjectiveFromUser(_Objective):
             Level of output.
 
         """
+        import jax
+
         thing = self.things[0]
         if self._grid is None:
             errorif(
@@ -472,12 +574,13 @@ class ObjectiveFromUser(_Objective):
                 ).squeeze()
 
         self._fun_wrapped = lambda data: self._fun(grid, data)
-        import jax
 
         self._dim_f = jax.eval_shape(self._fun_wrapped, dummy_data).size
         self._scalar = self._dim_f == 1
         profiles = get_profiles(self._data_keys, obj=thing, grid=grid)
-        transforms = get_transforms(self._data_keys, obj=thing, grid=grid)
+        transforms = get_transforms(
+            self._data_keys, obj=thing, grid=grid, **self._compute_kwargs
+        )
         self._constants = {
             "transforms": transforms,
             "profiles": profiles,
@@ -511,6 +614,7 @@ class ObjectiveFromUser(_Objective):
             params=params,
             transforms=constants["transforms"],
             profiles=constants["profiles"],
+            **self._compute_kwargs,
         )
         f = self._fun_wrapped(data)
         return f

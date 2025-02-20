@@ -31,6 +31,8 @@ Coils
     desc.coils.FourierPlanarCoil
     desc.coils.MixedCoilSet
     desc.coils.SplineXYZCoil
+    desc.coils.initialize_modular_coils
+    desc.coils.initialize_saddle_coils
 
 Compatibility
 *************
@@ -43,6 +45,7 @@ Compatibility
     desc.compat.flip_helicity
     desc.compat.flip_theta
     desc.compat.rescale
+    desc.compat.rotate_zeta
 
 Continuation
 ************
@@ -116,6 +119,17 @@ Grid
     desc.grid.find_least_rational_surfaces
     desc.grid.find_most_rational_surfaces
 
+Integrals
+*********
+
+.. autosummary::
+    :toctree: _api/integrals
+    :recursive:
+    :template: class.rst
+
+    desc.integrals.Bounce2D
+    desc.integrals.Bounce1D
+
 IO
 ***
 
@@ -147,7 +161,7 @@ Magnetic Fields
     desc.magnetic_fields.VerticalMagneticField
     desc.magnetic_fields.field_line_integrate
     desc.magnetic_fields.read_BNORM_file
-    desc.magnetic_fields.run_regcoil
+    desc.magnetic_fields.solve_regularized_surface_current
 
 Objective Functions
 *******************
@@ -161,12 +175,16 @@ Objective Functions
     desc.objectives.BootstrapRedlConsistency
     desc.objectives.BoundaryError
     desc.objectives.BScaleLength
+    desc.objectives.CoilArclengthVariance
     desc.objectives.CoilCurrentLength
     desc.objectives.CoilCurvature
+    desc.objectives.CoilIntegratedCurvature
     desc.objectives.CoilLength
+    desc.objectives.CoilSetLinkingNumber
     desc.objectives.CoilSetMinDistance
     desc.objectives.CoilTorsion
     desc.objectives.CurrentDensity
+    desc.objectives.EffectiveRipple
     desc.objectives.Elongation
     desc.objectives.Energy
     desc.objectives.FixAnisotropy
@@ -196,6 +214,7 @@ Objective Functions
     desc.objectives.FixThetaSFL
     desc.objectives.ForceBalance
     desc.objectives.ForceBalanceAnisotropic
+    desc.objectives.GammaC
     desc.objectives.GenericObjective
     desc.objectives.get_equilibrium_objective
     desc.objectives.get_fixed_axis_constraints
@@ -205,9 +224,11 @@ Objective Functions
     desc.objectives.HelicalForceBalance
     desc.objectives.Isodynamicity
     desc.objectives.LinearObjectiveFromUser
+    desc.objectives.LinkingCurrentConsistency
     desc.objectives.MagneticWell
     desc.objectives.MeanCurvature
     desc.objectives.MercierStability
+    desc.objectives.MirrorRatio
     desc.objectives.ObjectiveFromUser
     desc.objectives.ObjectiveFunction
     desc.objectives.Omnigenity
@@ -222,6 +243,7 @@ Objective Functions
     desc.objectives.RadialForceBalance
     desc.objectives.RotationalTransform
     desc.objectives.Shear
+    desc.objectives.SurfaceQuadraticFlux
     desc.objectives.ToroidalCurrent
     desc.objectives.ToroidalFlux
     desc.objectives.VacuumBoundaryError
@@ -288,14 +310,16 @@ Profiles
     :recursive:
     :template: class.rst
 
-    desc.profiles.PowerSeriesProfile
-    desc.profiles.TwoPowerProfile
-    desc.profiles.SplineProfile
+    desc.profiles.FourierZernikeProfile
     desc.profiles.HermiteSplineProfile
     desc.profiles.MTanhProfile
-    desc.profiles.ScaledProfile
-    desc.profiles.SumProfile
+    desc.profiles.PowerProfile
+    desc.profiles.PowerSeriesProfile
     desc.profiles.ProductProfile
+    desc.profiles.ScaledProfile
+    desc.profiles.SplineProfile
+    desc.profiles.SumProfile
+    desc.profiles.TwoPowerProfile
 
 Transform
 *********
@@ -307,8 +331,8 @@ Transform
 
    desc.transform.Transform
 
-VMEC
-****
+VMEC and Other Codes
+********************
 
 .. autosummary::
     :toctree: _api/vmec/
@@ -316,3 +340,4 @@ VMEC
     :template: class.rst
 
     desc.vmec.VMECIO
+    desc.vmec_utils.make_boozmn_output

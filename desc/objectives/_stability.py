@@ -5,12 +5,30 @@ import numpy as np
 from desc.backend import jnp
 from desc.compute import get_params, get_profiles, get_transforms
 from desc.compute.utils import _compute as compute_fun
-from desc.grid import LinearGrid
+from desc.grid import LinearGrid, QuadratureGrid
 from desc.utils import Timer, errorif, setdefault, warnif
 
 from .normalization import compute_scaling_factors
-from .objective_funs import _Objective
+from .objective_funs import _Objective, collect_docs
 from .utils import _parse_callable_target_bounds
+
+overwrite_stability = {
+    "target": """
+    target : {float, ndarray, callable}, optional
+        Target value(s) of the objective. Only used if bounds is None.
+        Must be broadcastable to ``Objective.dim_f``. If a callable, should take a
+        single argument ``rho`` and return the desired value of the profile at those
+        locations. Defaults to ``bounds=(0, np.inf)``
+    """,
+    "bounds": """
+    bounds : tuple of {float, ndarray, callable}, optional
+        Lower and upper bounds on the objective. Overrides target.
+        Both bounds must be broadcastable to ``Objective.dim_f``
+        If a callable, each should take a single argument ``rho`` and return the
+        desired bound (lower or upper) of the profile at those locations.
+        Defaults to ``bounds=(0, np.inf)``
+    """,
+}
 
 
 class MercierStability(_Objective):
@@ -28,55 +46,15 @@ class MercierStability(_Objective):
     ----------
     eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
-    target : {float, ndarray, callable}, optional
-        Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f. If a callable, should take a
-        single argument `rho` and return the desired value of the profile at those
-        locations. Defaults to ``bounds=(0, np.inf)``
-    bounds : tuple of {float, ndarray, callable}, optional
-        Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f
-        If a callable, each should take a single argument `rho` and return the
-        desired bound (lower or upper) of the profile at those locations.
-        Defaults to ``bounds=(0, np.inf)``
-    weight : {float, ndarray}, optional
-        Weighting to apply to the Objective, relative to other Objectives.
-        Must be broadcastable to to Objective.dim_f
-    normalize : bool, optional
-        Whether to compute the error in physical units or non-dimensionalize.
-    normalize_target : bool, optional
-        Whether target and bounds should be normalized before comparing to computed
-        values. If `normalize` is `True` and the target is in physical units,
-        this should also be set to True.
-    loss_function : {None, 'mean', 'min', 'max'}, optional
-        Loss function to apply to the objective values once computed. This loss function
-        is called on the raw compute value, before any shifting, scaling, or
-        normalization.
-    deriv_mode : {"auto", "fwd", "rev"}
-        Specify how to compute jacobian matrix, either forward mode or reverse mode AD.
-        "auto" selects forward or reverse mode based on the size of the input and output
-        of the objective. Has no effect on self.grad or self.hess which always use
-        reverse mode and forward over reverse mode respectively.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
         Defaults to ``LinearGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid)``. Note that
         it should have poloidal and toroidal resolution, as flux surface averages
         are required.
-    name : str, optional
-        Name of the objective function.
-    jac_chunk_size : int , optional
-        Will calculate the Jacobian for this objective ``jac_chunk_size``
-        columns at a time, instead of all at once. The memory usage of the
-        Jacobian calculation is roughly ``memory usage = m0 + m1*jac_chunk_size``:
-        the smaller the chunk size, the less memory the Jacobian calculation
-        will require (with some baseline memory usage). The time to compute the
-        Jacobian is roughly ``t=t0 +t1/jac_chunk_size``, so the larger the
-        ``jac_chunk_size``, the faster the calculation takes, at the cost of
-        requiring more memory. A ``jac_chunk_size`` of 1 corresponds to the least
-        memory intensive, but slowest method of calculating the Jacobian.
-        If None, it will use the largest size i.e ``obj.dim_x``.
 
     """
+
+    __doc__ = __doc__.rstrip() + collect_docs(overwrite=overwrite_stability)
 
     _coordinates = "r"
     _units = "(Wb^-2)"
@@ -222,55 +200,19 @@ class MagneticWell(_Objective):
     ----------
     eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
-    target : {float, ndarray, callable}, optional
-        Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f. If a callable, should take a
-        single argument `rho` and return the desired value of the profile at those
-        locations. Defaults to ``bounds=(0, np.inf)``
-    bounds : tuple of {float, ndarray, callable}, optional
-        Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f
-        If a callable, each should take a single argument `rho` and return the
-        desired bound (lower or upper) of the profile at those locations.
-        Defaults to ``bounds=(0, np.inf)``
-    weight : {float, ndarray}, optional
-        Weighting to apply to the Objective, relative to other Objectives.
-        Must be broadcastable to to Objective.dim_f
-    normalize : bool, optional
-        Whether to compute the error in physical units or non-dimensionalize.
-    normalize_target : bool, optional
-        Whether target and bounds should be normalized before comparing to computed
-        values. If `normalize` is `True` and the target is in physical units,
-        this should also be set to True. Note: Has no effect for this objective.
-    loss_function : {None, 'mean', 'min', 'max'}, optional
-        Loss function to apply to the objective values once computed. This loss function
-        is called on the raw compute value, before any shifting, scaling, or
-        normalization.
-    deriv_mode : {"auto", "fwd", "rev"}
-        Specify how to compute jacobian matrix, either forward mode or reverse mode AD.
-        "auto" selects forward or reverse mode based on the size of the input and output
-        of the objective. Has no effect on self.grad or self.hess which always use
-        reverse mode and forward over reverse mode respectively.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
         Defaults to ``LinearGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid)``. Note that
         it should have poloidal and toroidal resolution, as flux surface averages
         are required.
-    name : str, optional
-        Name of the objective function.
-    jac_chunk_size : int , optional
-        Will calculate the Jacobian for this objective ``jac_chunk_size``
-        columns at a time, instead of all at once. The memory usage of the
-        Jacobian calculation is roughly ``memory usage = m0 + m1*jac_chunk_size``:
-        the smaller the chunk size, the less memory the Jacobian calculation
-        will require (with some baseline memory usage). The time to compute the
-        Jacobian is roughly ``t=t0 +t1/jac_chunk_size``, so the larger the
-        ``jac_chunk_size``, the faster the calculation takes, at the cost of
-        requiring more memory. A ``jac_chunk_size`` of 1 corresponds to the least
-        memory intensive, but slowest method of calculating the Jacobian.
-        If None, it will use the largest size i.e ``obj.dim_x``.
 
     """
+
+    __doc__ = __doc__.rstrip() + collect_docs(
+        overwrite=overwrite_stability,
+        normalize_detail=" Note: Has no effect for this objective.",
+        normalize_target_detail=" Note: Has no effect for this objective.",
+    )
 
     _coordinates = "r"
     _units = "(dimensionless)"
@@ -414,43 +356,17 @@ class BallooningStability(_Objective):
     Parameters
     ----------
     eq : Equilibrium
-        Equilibrium that will be optimized to satisfy the Objective.
-    target : {float, ndarray}, optional
-        Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f. Default is ``target=0``
-    bounds : tuple of {float, ndarray}, optional
-        Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f. Default is ``target=0``
-    weight : {float, ndarray}, optional
-        Weighting to apply to the Objective, relative to other Objectives.
-        Must be broadcastable to to Objective.dim_f
-    normalize : bool, optional
-        Whether to compute the error in physical units or non-dimensionalize.
-        Not used since the growth rate is always normalized.
-    normalize_target : bool, optional
-        Whether target and bounds should be normalized before comparing to computed
-        values. If `normalize` is `True` and the target is in physical units,
-        this should also be set to True. Not used since the growth rate is always
-        normalized.
-    loss_function : {None, 'mean', 'min', 'max'}, optional
-        Loss function to apply to the objective values once computed. This loss function
-        is called on the raw compute value, before any shifting, scaling, or
-        normalization. Has no effect for this objective.
-    deriv_mode : {"auto", "fwd", "rev"}
-        Specify how to compute jacobian matrix, either forward mode or reverse mode AD.
-        "auto" selects forward or reverse mode based on the size of the input and output
-        of the objective. Has no effect on self.grad or self.hess which always use
-        reverse mode and forward over reverse mode respectively.
+        ``Equilibrium`` to be optimized.
     rho : float
         Flux surface to optimize on. To optimize over multiple surfaces, use multiple
         objectives each with a single rho value.
     alpha : float, ndarray
-        Field line labels to optimize. Values should be in [0, 2pi). Default is alpha=0
-        for axisymmetric equilibria, or 8 field lines linearly spaced in [0, pi] for
-        non-axisymmetric cases.
+        Field line labels to optimize. Values should be in [0, 2π). Default is
+        ``alpha=0`` for axisymmetric equilibria, or 8 field lines linearly spaced
+        in [0, π] for non-axisymmetric cases.
     nturns : int
         Number of toroidal transits of a field line to consider. Field line
-        will run from -π*nturns to π*nturns. Default 3.
+        will run from -π*``nturns`` to π*``nturns``. Default 3.
     nzetaperturn : int
         Number of points along the field line per toroidal transit. Total number of
         points is ``nturns*nzetaperturn``. Default 100.
@@ -465,6 +381,13 @@ class BallooningStability(_Objective):
         Name of the objective function.
 
     """
+
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``target=0``.",
+        bounds_default="``target=0``.",
+        normalize_detail=" Note: Has no effect for this objective.",
+        normalize_target_detail=" Note: Has no effect for this objective.",
+    )
 
     _coordinates = ""  # not vectorized over rho, always a scalar
     _scalar = True
@@ -549,7 +472,8 @@ class BallooningStability(_Objective):
         iota_transforms = get_transforms(self._iota_keys, obj=eq, grid=iota_grid)
 
         # Separate grid to calculate the right length scale for normalization
-        len_grid = LinearGrid(rho=1.0, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
+        len_grid = QuadratureGrid(L=eq.L, M=eq.M, N=eq.N, NFP=eq.NFP)
+
         self._len_keys = ["a"]
         len_profiles = get_profiles(self._len_keys, obj=eq, grid=len_grid)
         len_transforms = get_transforms(self._len_keys, obj=eq, grid=len_grid)
@@ -647,6 +571,7 @@ class BallooningStability(_Objective):
 
         # we prime the data dict with the correct iota values so we don't recompute them
         # using the wrong grid
+        # RG: This would have to be modified for multiple rho values
         data = {
             "iota": iota_data["iota"][0],
             "iota_r": iota_data["iota_r"][0],
@@ -654,13 +579,14 @@ class BallooningStability(_Objective):
             "a": len_data["a"],
         }
 
-        grid = eq.get_rtz_grid(
+        grid = eq._get_rtz_grid(
             rho,
             alpha,
             zeta,
             coordinates="raz",
             period=(np.inf, 2 * np.pi, np.inf),
             params=params,
+            iota=data["iota"],
         )
 
         lam = compute_fun(

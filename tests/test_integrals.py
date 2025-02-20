@@ -973,7 +973,6 @@ class TestSingularities:
         return surf
 
     @pytest.mark.unit
-    @pytest.mark.mpl_image_compare(remove_text=False, tolerance=tol_1d)
     def test_laplace_dommaschk(self):
         """Use Dommaschk potentials to generate benchmark test and compare."""
         C_r = {

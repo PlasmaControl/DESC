@@ -733,9 +733,11 @@ class TestSingularities:
         eval_grid = LinearGrid(M=5, N=5, NFP=eq.NFP)
         eval_data = eq.compute(["Z", "n_rho", "theta"], grid=eval_grid)
         eval_data["Phi"] = Transform(eval_grid, Phi_transform.basis).transform(Phi_mn)
-        err = eval_data["Phi"] - eval_data["Z"]
-        # ``atol`` may tend to 0 as ``resolution`` grows
-        np.testing.assert_allclose(np.max(err) - np.min(err), 0, atol=atol)
+        np.testing.assert_allclose(
+            np.ptp(eval_data["Phi"] - eval_data["Z"]),
+            0,
+            atol=atol,  # converges to 0 as ``resolution`` grows
+        )
 
         B0n = np.sin(eval_data["theta"])
         dPhi_dn = compute_dPhi_dn(
@@ -783,8 +785,11 @@ class TestSingularities:
         eval_grid = Phi_grid
         eval_data = eq.compute(["Z", "n_rho"], grid=eval_grid)
         eval_data["Phi"] = Transform(eval_grid, Phi_transform.basis).transform(Phi_mn)
-        err = eval_data["Phi"] - eval_data["Z"]
-        np.testing.assert_allclose(np.max(err) - np.min(err), 0, atol=atol)
+        np.testing.assert_allclose(
+            np.ptp(eval_data["Phi"] - eval_data["Z"]),
+            0,
+            atol=atol,  # converges very slow
+        )
 
         B0n = -eval_data["n_rho"][:, 2]
         dPhi_dn = compute_dPhi_dn(

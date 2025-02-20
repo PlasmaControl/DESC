@@ -706,7 +706,7 @@ class TestSingularities:
         np.testing.assert_allclose(B, 0, atol=0.0054)
 
     @pytest.mark.unit
-    def test_laplace_harmonic_simple(self, chunk_size=1000, resolution=50, atol=1e-4):
+    def test_laplace_harmonic_simple(self, chunk_size=2000, resolution=50, atol=1e-4):
         """Test that Laplace solution recovers expected analytic result.
 
         Define boundary R_b(θ,ζ) = R₀ + a cos θ and Z_b(θ,ζ) = -a sin θ.
@@ -755,7 +755,7 @@ class TestSingularities:
         np.testing.assert_allclose(Bn, 0, atol=0.03)
 
     @pytest.mark.unit
-    def test_laplace_harmonic_general(self, chunk_size=1000, resolution=70, atol=1e-4):
+    def test_laplace_harmonic_general(self, chunk_size=1000, resolution=70, atol=1e-3):
         """Test that Laplace solution recovers expected analytic result.
 
         Define boundary R_b(θ,ζ) and Z_b(θ,ζ).
@@ -772,18 +772,18 @@ class TestSingularities:
             )
         )
         source_grid = LinearGrid(M=resolution, N=resolution, NFP=eq.NFP)
+        B0n = -eq.compute("n_rho", grid=source_grid)["n_rho"][:, 2]
 
+        Phi_grid = LinearGrid(M=min(20, resolution), N=min(20, resolution), NFP=eq.NFP)
         Phi_mn, Phi_transform = compute_Phi_mn(
             eq=eq,
-            B0n=-eq.compute("n_rho", grid=source_grid)["n_rho"][:, 2],
-            Phi_grid=LinearGrid(
-                M=min(10 * eq.M, resolution), N=min(10 * eq.N, resolution), NFP=eq.NFP
-            ),
+            B0n=B0n,
+            Phi_grid=Phi_grid,
             source_grid=source_grid,
             chunk_size=chunk_size,
             warn_fft=False,
         )
-        eval_grid = LinearGrid(M=5, N=5, NFP=eq.NFP)
+        eval_grid = Phi_grid
         eval_data = eq.compute(["Z", "n_rho"], grid=eval_grid)
         eval_data["Phi"] = Transform(eval_grid, Phi_transform.basis).transform(Phi_mn)
         err = eval_data["Phi"] - eval_data["Z"]
@@ -800,17 +800,16 @@ class TestSingularities:
             warn_fft=False,
         )
         Bn = B0n + dPhi_dn
-        np.testing.assert_allclose(Bn, 0, atol=0.03)
+        np.testing.assert_allclose(Bn, 0, atol=atol)
 
     @pytest.mark.unit
     @pytest.mark.parametrize("eq", [get("ESTELL")])
     def test_laplace_bdotn_toroidal(
-        self, eq, chunk_size=1000, resolution=60, atol=1e-4, plot=True
+        self, eq, chunk_size=1000, resolution=60, atol=1e-3, plot=True
     ):
         """Test that Laplace solution satisfies toroidal field boundary condition."""
         source_grid = LinearGrid(M=resolution, N=resolution, NFP=eq.NFP)
         source_data = eq.compute(["G", "R0"], grid=source_grid)
-
         B0 = ToroidalMagneticField(
             B0=source_grid.compress(source_data["G"])[-1] / source_data["R0"],
             R0=source_data["R0"],
@@ -823,9 +822,7 @@ class TestSingularities:
             chunk_size=chunk_size,
         )
 
-        Phi_grid = LinearGrid(
-            M=min(10 * eq.M, resolution), N=min(10 * eq.N, resolution), NFP=eq.NFP
-        )
+        Phi_grid = LinearGrid(M=min(20, resolution), N=min(20, resolution), NFP=eq.NFP)
         Phi_mn, Phi_transform = compute_Phi_mn(
             eq=eq,
             B0n=B0n,

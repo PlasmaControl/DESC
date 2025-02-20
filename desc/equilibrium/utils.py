@@ -12,8 +12,13 @@ from desc.geometry import (
     ZernikeRZToroidalSection,
 )
 from desc.grid import LinearGrid
-from desc.profiles import PowerSeriesProfile, SplineProfile, _Profile
-from desc.utils import errorif, warnif
+from desc.profiles import (
+    FourierZernikeProfile,
+    PowerSeriesProfile,
+    SplineProfile,
+    _Profile,
+)
+from desc.utils import errorif, setdefault, warnif
 
 
 def parse_profile(prof, name="", **kwargs):
@@ -186,7 +191,9 @@ def parse_axis(axis, NFP=1, sym=True, surface=None):
     return axis
 
 
-def contract_equilibrium(eq, inner_rho, contract_profiles=True, copy=True):
+def contract_equilibrium(
+    eq, inner_rho, contract_profiles=True, profile_num_points=None, copy=True
+):
     """Contract an equilibrium so that an inner flux surface is the new boundary.
 
     Parameters
@@ -206,6 +213,9 @@ def contract_equilibrium(eq, inner_rho, contract_profiles=True, copy=True):
         If False, the new profile will have the same functional form
         as the old profile, with no rescaling performed. This means the new equilibrium
         has a physically different profile than the original equilibrium.
+    profile_num_points : int
+        Number of points to use when fitting or re-scaling the profiles. Defaults to
+        ``eq.L_grid``
     copy : bool
         Whether or not to return a copy or to modify the original equilibrium.
 
@@ -222,8 +232,14 @@ def contract_equilibrium(eq, inner_rho, contract_profiles=True, copy=True):
         ValueError,
         f"Surface must be in the range 0 < inner_rho < 1, instead got {inner_rho}.",
     )
+    profile_num_points = setdefault(profile_num_points, eq.L_grid)
 
     def scale_profile(profile, rho):
+        errorif(
+            isinstance(profile, FourierZernikeProfile),
+            ValueError,
+            "contract_equilibrium does not support FourierZernikeProfile",
+        )
         if profile is None:
             return profile
         is_power_series = isinstance(profile, PowerSeriesProfile)
@@ -232,7 +248,7 @@ def contract_equilibrium(eq, inner_rho, contract_profiles=True, copy=True):
             # a) has a from_values
             # b) can safely use that from_values to represent a
             #    subset of itself.
-            x = np.linspace(0, 1, eq.L_grid)
+            x = np.linspace(0, 1, profile_num_points)
             grid = LinearGrid(rho=x / rho)
             y = profile.compute(grid)
             return profile.from_values(x=x, y=y)
@@ -244,7 +260,7 @@ def contract_equilibrium(eq, inner_rho, contract_profiles=True, copy=True):
                 " so cannot safely contract using the same profile type."
                 "falling back to fitting the values with a SplineProfile",
             )
-            x = np.linspace(0, 1, eq.L_grid)
+            x = np.linspace(0, 1, profile_num_points)
             grid = LinearGrid(rho=x / rho)
             y = profile.compute(grid)
             return SplineProfile(knots=x, values=y)
@@ -276,7 +292,7 @@ def contract_equilibrium(eq, inner_rho, contract_profiles=True, copy=True):
         atomic_number=atomic_number,
         anisotropy=anisotropy,
         Psi=float(
-            eq.compute("Psi", grid=LinearGrid(rho=inner_rho, NFP=eq.NFP))["Psi"][0]
+            eq.compute("Psi", grid=LinearGrid(rho=inner_rho))["Psi"][0]
         ),  # flux (in Webers) within the new last closed flux surface
         NFP=eq.NFP,
         L=eq.L,

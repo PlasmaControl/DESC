@@ -14,7 +14,7 @@ from desc.examples import get
 from desc.grid import Grid, LinearGrid
 from desc.io import InputReader
 from desc.objectives import ForceBalance, ObjectiveFunction, get_equilibrium_objective
-from desc.profiles import PowerSeriesProfile, SplineProfile
+from desc.profiles import FourierZernikeProfile, PowerSeriesProfile, SplineProfile
 
 from .utils import area_difference, compute_coords
 
@@ -482,13 +482,16 @@ def test_contract_equilibrium():
 
 
 @pytest.mark.unit
-def test_contract_equilibrium_warns():
+def test_contract_equilibrium_warns_errors():
     """Test contract_equilibrium utility function warning for profiles."""
     eq = get("ESTELL")
     rho = 0.5
     eq.pressure += eq.pressure
     with pytest.warns(UserWarning, match="SplineProfile"):
-        eq_half_rho = contract_equilibrium(eq, rho)
+        eq_half_rho = contract_equilibrium(eq, rho, profile_num_points=50)
+    eq.anisotropy = FourierZernikeProfile()
+    with pytest.raises(ValueError, match="FourierZernike"):
+        contract_equilibrium(eq, rho)
     assert isinstance(eq_half_rho.pressure, SplineProfile)
     data_keys = ["|B|", "|F|", "R", "Z", "lambda", "p", "iota", "sqrt(g)"]
     contract_grid = LinearGrid(

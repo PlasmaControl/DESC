@@ -2,7 +2,7 @@ Using external codes
 --------------------
 
 The ``ExternalObjective`` class allows external codes to be used within a DESC
-optimization. This takes a user-supplied function that does not need not be JAX
+optimization. This takes a user-supplied function that does not need to be JAX
 transformable, and wraps it with forward finite differences. This is most useful for
 cases when the function needs to call external codes that are written in another
 language besides Python, or cannot be rewritten with JAX for some other reason. If the

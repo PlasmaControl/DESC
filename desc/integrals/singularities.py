@@ -3,7 +3,6 @@
 from abc import ABC, abstractmethod
 from functools import partial
 
-import numpy as np
 import scipy
 from interpax import fft_interp2d
 from scipy.constants import mu_0
@@ -190,6 +189,20 @@ def best_ratio(data):
         data["|e_theta x e_zeta|"]
     )
     return mean, local
+
+
+def _get_interpolator(eval_grid, source_grid, src_data, **kwargs):
+    st, sz, q = heuristic_support_params(source_grid, best_ratio(src_data)[0])
+    try:
+        interpolator = FFTInterpolator(eval_grid, source_grid, st, sz, q, **kwargs)
+    except AssertionError as e:
+        warnif(
+            True,
+            msg="Could not build fft interpolator, switching to dft which is slow."
+            "\nReason: " + str(e),
+        )
+        interpolator = DFTInterpolator(eval_grid, source_grid, st, sz, q)
+    return interpolator
 
 
 def _get_quadrature_nodes(q):
@@ -1053,28 +1066,19 @@ def compute_B_plasma(eq, eval_grid, source_grid=None, normal_only=False):
     """
     if source_grid is None:
         source_grid = LinearGrid(
-            rho=np.array([1.0]),
             M=eq.M_grid,
             N=eq.N_grid,
             NFP=eq.NFP if eq.N > 0 else 64,
             sym=False,
         )
 
-    data_keys = ["K_vc", "B", "R", "phi", "Z", "e^rho", "n_rho", "|e_theta x e_zeta|"]
-    eval_data = eq.compute(data_keys, grid=eval_grid)
-    source_data = eq.compute(data_keys, grid=source_grid)
-    st, sz, q = heuristic_support_params(source_grid, best_ratio(source_data)[0])
-    try:
-        interpolator = FFTInterpolator(eval_grid, source_grid, st, sz, q)
-    except AssertionError as e:
-        warnif(
-            True,
-            msg="Could not build fft interpolator, switching to dft which is slow."
-            "\nReason: " + str(e),
-        )
-        interpolator = DFTInterpolator(eval_grid, source_grid, st, sz, q)
+    names = ["K_vc", "B", "R", "phi", "Z", "e^rho", "n_rho", "|e_theta x e_zeta|"]
+    eval_data = eq.compute(names, grid=eval_grid)
+    source_data = eq.compute(names, grid=source_grid)
     if hasattr(eq.surface, "Phi_mn"):
         source_data["K_vc"] += eq.surface.compute("K", grid=source_grid)["K"]
+
+    interpolator = _get_interpolator(eval_grid, source_grid, source_data)
     Bplasma = virtual_casing_biot_savart(eval_data, source_data, interpolator)
     # need extra factor of B/2 bc we're evaluating on plasma surface
     Bplasma = Bplasma + eval_data["B"] / 2

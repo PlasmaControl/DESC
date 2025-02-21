@@ -46,6 +46,47 @@ from desc.utils import (
 from desc.vmec_utils import ptolemy_identity_fwd, ptolemy_identity_rev
 
 
+def coulomb_general(re, rs, Bn, dS, chunk_size=None):
+    """1/4π ∫_∂D ∇G(x,x') Bn dS'.
+
+    Parameters
+    ----------
+    re : ndarray
+        Shape (n_eval_pts, 3).
+        Evaluation points to evaluate B at, in cartesian.
+    rs : ndarray
+        Shape (n_src_pts, 3).
+        Source points for current density J, in cartesian.
+    Bn : ndarray
+        Shape (n_src_pts, ).
+        Vector field dotted against surface normal.
+    dS : ndarray
+        Shape (n_src_pts, ).
+        Surface element at source points
+    chunk_size : int or None
+        Size to split computation into chunks of evaluation points.
+        If no chunking should be done or the chunk size is the full input
+        then supply ``None``. Default is ``None``.
+
+    Returns
+    -------
+    B : ndarray
+        Shape(n_eval_pts, 3).
+        Vector field in cartesian components at specified points.
+
+    """
+    BndS = (Bn * dS)[:, jnp.newaxis]
+    assert BndS.size == rs.shape[0]
+
+    def coulomb(re):
+        dr = re - rs
+        den = jnp.linalg.norm(dr, axis=-1, keepdims=True) ** 3
+        return safediv(BndS * dr, den).sum(axis=-2) / (4 * jnp.pi)
+
+    # It is more efficient to sum over the sources in batches of evaluation points.
+    return batch_map(coulomb, re[..., jnp.newaxis, :], chunk_size)
+
+
 def biot_savart_general(re, rs, J, dV=jnp.array([1.0]), chunk_size=None):
     """Biot-Savart law for arbitrary sources.
 
@@ -125,7 +166,7 @@ def biot_savart_general_vector_potential(
     assert JdV.shape == rs.shape
 
     def biot(re):
-        dr = rs - re
+        dr = rs - re  # -a
         den = jnp.linalg.norm(dr, axis=-1, keepdims=True)
         return safediv(JdV, den).sum(axis=-2) * mu_0 / (4 * jnp.pi)
 

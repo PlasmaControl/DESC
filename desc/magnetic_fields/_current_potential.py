@@ -41,7 +41,8 @@ class CurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
     where:
 
         - n is the winding surface unit normal.
-        - Phi is the current potential function, which is a function of theta and zeta.
+        - Φ is the current potential function, which is a function of theta and zeta.
+        - ∇Φ dot n is assumed to be zero.
 
     This function then uses biot-savart to find the B field from this current
     density K on the surface.
@@ -402,9 +403,10 @@ class FourierCurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
     where:
 
         - n is the winding surface unit normal.
-        - Phi is the current potential function, which is a function of theta and zeta,
+        - Φ is the current potential function, which is a function of theta and zeta,
           and is given as a secular linear term in theta/zeta and a double Fourier
           series in theta/zeta.
+        - ∇Φ dot n is assumed to be zero.
 
     This class then uses biot-savart to find the B field from this current
     density K on the surface.
@@ -839,10 +841,13 @@ class FourierCurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
 
         Φ(θ,ζ) = Φₛᵥ(θ,ζ) + Gζ/2π + Iθ/2π
 
-        where n is the winding surface unit normal, Φ is the current potential
-        function, which is a function of theta and zeta, and is given as a
-        secular linear term in theta (I)  and zeta (G) and a double Fourier
-        series in theta/zeta.
+        where:
+
+        - n is the winding surface unit normal.
+        - Φ is the current potential function, which is a function of theta and zeta,
+          and is given as a secular linear term in theta (I)  and zeta (G) and a double
+          Fourier series in theta/zeta.
+        - ∇Φ dot n is assumed to be zero.
 
         NOTE: The function is not jit/AD compatible
 
@@ -1635,6 +1640,7 @@ def _find_current_potential_contours(
         - Φ is the current potential function, which is a function of theta and zeta,
           and is given as a secular linear term in theta (I)  and zeta (G) and a double
           Fourier series in theta/zeta.
+        - ∇Φ dot n is assumed to be zero.
 
     Parameters
     ----------

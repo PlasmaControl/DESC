@@ -42,7 +42,7 @@ from desc.integrals._bounce_utils import (
     bounce_points,
 )
 from desc.integrals._interp_utils import fourier_pts
-from desc.integrals._laplace import compute_dPhi_dn, compute_Phi_mn
+from desc.integrals._laplace import _compute_dPhi_dn, _compute_Phi_mn, compute_laplace
 from desc.integrals.basis import FourierChebyshevSeries
 from desc.integrals.quad_utils import (
     automorphism_sin,
@@ -715,42 +715,23 @@ class TestSingularities:
         """
         a = 1
         eq = Equilibrium()  # Choosing a = 1.
-        source_grid = LinearGrid(M=resolution, N=resolution, NFP=eq.NFP)
+        evl_grid = LinearGrid(M=5, N=5, NFP=eq.NFP)
+        phi_grid = LinearGrid(M=1, N=0, NFP=eq.NFP)
+        src_grid = LinearGrid(M=resolution, N=resolution, NFP=eq.NFP)
 
-        source_data = eq.compute(["Z", "n_rho", "theta"], grid=source_grid)
-        np.testing.assert_allclose(source_data["Z"], -a * np.sin(source_data["theta"]))
-        B0n = np.sin(source_data["theta"])
-        np.testing.assert_allclose(-source_data["n_rho"][:, 2], B0n, atol=1e-12)
+        src_theta = src_grid.nodes[:, 1]
+        B0n = np.sin(src_theta)
+        laplace = compute_laplace(eq, B0n, evl_grid, phi_grid, src_grid)
+        np.testing.assert_allclose(laplace["src_data"]["Z"], -a * np.sin(src_theta))
+        np.testing.assert_allclose(-laplace["src_data"]["n_rho"][:, 2], B0n, atol=1e-12)
 
-        Phi_mn, Phi_transform = compute_Phi_mn(
-            eq=eq,
-            B0n=B0n,
-            Phi_grid=LinearGrid(M=1, N=0, NFP=eq.NFP),
-            source_grid=source_grid,
-            chunk_size=chunk_size,
-            warn_fft=False,
-        )
-        eval_grid = LinearGrid(M=5, N=5, NFP=eq.NFP)
-        eval_data = eq.compute(["Z", "n_rho", "theta"], grid=eval_grid)
-        eval_data["Phi"] = Transform(eval_grid, Phi_transform.basis).transform(Phi_mn)
-        np.testing.assert_allclose(
-            np.ptp(eval_data["Phi"] - eval_data["Z"]),
-            0,
-            atol=atol,  # converges to 0 as ``resolution`` grows
-        )
+        Phi_mn = _compute_Phi_mn(laplace, chunk_size, warn_fft=False)
+        Phi = Transform(evl_grid, laplace["phi_transform"].basis).transform(Phi_mn)
+        np.testing.assert_allclose(np.ptp(Phi - laplace["evl_data"]["Z"]), 0, atol=atol)
 
-        B0n = np.sin(eval_data["theta"])
-        dPhi_dn = compute_dPhi_dn(
-            eq=eq,
-            eval_grid=eval_grid,
-            source_grid=source_grid,
-            Phi_mn=Phi_mn,
-            basis=Phi_transform.basis,
-            chunk_size=chunk_size,
-            warn_fft=False,
-        )
+        B0n = np.sin(evl_grid.nodes[:, 1])
+        dPhi_dn = _compute_dPhi_dn(laplace, Phi_mn, chunk_size, warn_fft=False)
         Bn = B0n + dPhi_dn
-        # FIXME: This fails to converge to zero, only converges to 0.03.
         np.testing.assert_allclose(Bn, 0, atol=0.03)
 
     @pytest.mark.unit
@@ -770,39 +751,20 @@ class TestSingularities:
                 modes_Z=[[-1, 0], [0, -1]],
             )
         )
-        source_grid = LinearGrid(M=resolution, N=resolution, NFP=eq.NFP)
-        B0n = -eq.compute("n_rho", grid=source_grid)["n_rho"][:, 2]
+        evl_grid = LinearGrid(M=min(20, resolution), N=min(20, resolution), NFP=eq.NFP)
+        phi_grid = evl_grid
+        src_grid = LinearGrid(M=resolution, N=resolution, NFP=eq.NFP)
+        B0n = -eq.compute("n_rho", grid=src_grid)["n_rho"][:, 2]
+        laplace = compute_laplace(eq, B0n, evl_grid, phi_grid, src_grid)
 
-        Phi_grid = LinearGrid(M=min(20, resolution), N=min(20, resolution), NFP=eq.NFP)
-        Phi_mn, Phi_transform = compute_Phi_mn(
-            eq=eq,
-            B0n=B0n,
-            Phi_grid=Phi_grid,
-            source_grid=source_grid,
-            chunk_size=chunk_size,
-            warn_fft=False,
-        )
-        eval_grid = Phi_grid
-        eval_data = eq.compute(["Z", "n_rho"], grid=eval_grid)
-        eval_data["Phi"] = Transform(eval_grid, Phi_transform.basis).transform(Phi_mn)
-        np.testing.assert_allclose(
-            np.ptp(eval_data["Phi"] - eval_data["Z"]),
-            0,
-            atol=atol,  # converges very slow
-        )
+        Phi_mn = _compute_Phi_mn(laplace, chunk_size, warn_fft=False)
+        Phi = Transform(evl_grid, laplace["phi_transform"].basis).transform(Phi_mn)
+        np.testing.assert_allclose(np.ptp(Phi - laplace["evl_data"]["Z"]), 0, atol=atol)
 
-        B0n = -eval_data["n_rho"][:, 2]
-        dPhi_dn = compute_dPhi_dn(
-            eq=eq,
-            eval_grid=eval_grid,
-            source_grid=source_grid,
-            Phi_mn=Phi_mn,
-            basis=Phi_transform.basis,
-            chunk_size=chunk_size,
-            warn_fft=False,
-        )
+        B0n = -laplace["evl_data"]["n_rho"][:, 2]
+        dPhi_dn = _compute_dPhi_dn(laplace, Phi_mn, chunk_size, warn_fft=False)
         Bn = B0n + dPhi_dn
-        np.testing.assert_allclose(Bn, 0, atol=atol)
+        np.testing.assert_allclose(Bn, 0, atol=0.03)
 
     @pytest.mark.unit
     @pytest.mark.parametrize("eq", [get("ESTELL")])
@@ -825,7 +787,7 @@ class TestSingularities:
         )
 
         Phi_grid = LinearGrid(M=min(20, resolution), N=min(20, resolution), NFP=eq.NFP)
-        Phi_mn, Phi_transform = compute_Phi_mn(
+        Phi_mn, Phi_transform = _compute_Phi_mn(
             eq=eq,
             B0n=B0n,
             Phi_grid=Phi_grid,
@@ -834,7 +796,7 @@ class TestSingularities:
             warn_fft=False,
         )
         eval_grid = Phi_grid
-        dPhi_dn = compute_dPhi_dn(
+        dPhi_dn = _compute_dPhi_dn(
             eq=eq,
             eval_grid=eval_grid,
             source_grid=source_grid,

@@ -7,62 +7,30 @@ for the Fourier harmonics of ϕ. The methods here perform the inversion as this
 is necessary to write correctness tests.
 """
 
-import numpy as np
 from scipy.constants import mu_0
 
-from desc.backend import jit, jnp, vmap
+from desc.backend import jnp
 from desc.basis import DoubleFourierSeries
 from desc.batching import vmap_chunked
-from desc.compute.geom_utils import rpz2xyz, rpz2xyz_vec
+from desc.compute.geom_utils import rpz2xyz, xyz2rpz_vec
 from desc.grid import LinearGrid
 from desc.integrals.singularities import (
-    DFTInterpolator,
-    FFTInterpolator,
+    _get_interpolator,
     _kernel_biot_savart,
     _kernel_Bn_over_r,
     _kernel_Phi_dG_dn,
-    best_ratio,
-    heuristic_support_params,
     singular_integral,
 )
 from desc.magnetic_fields import FourierCurrentPotentialField
+from desc.magnetic_fields._core import coulomb_general
 from desc.transform import Transform
-from desc.utils import dot, safediv, safenorm, warnif
+from desc.utils import dot
 
-jit_solve = jit(jnp.linalg.solve)
+# TODO(KAYA) Finish fix this on Feb 21 morning.
 
 
-def compute_B_laplace(
-    eq,
-    B0,
-    eval_grid,
-    source_grid=None,
-    Phi_grid=None,
-    chunk_size=None,
-    check=False,
-    **kwargs,
-):
-    """Compute magnetic field in interior of plasma due to vacuum potential.
-
-    Let D, D^∁ denote the interior, exterior of a toroidal region with
-    boundary ∂D. Computes the magnetic field 𝐁 in units of Tesla such that
-
-    - 𝐁 = 𝐁₀ + ∇Φ     on D
-    - ∇ × 𝐁 = ∇ × 𝐁₀  on D ∪ D^∁ (i.e. ∇Φ is single-valued or periodic)
-    - ∇ × 𝐁₀ = μ₀ 𝐉    on D ∪ D^∁
-    - 𝐁 * ∇ρ = 0      on ∂D
-    - ∇²Φ = 0         on D
-
-    Examples
-    --------
-    In a vacuum, the magnetic field may be written 𝐁 = ∇𝛷.
-    The solution to ∇²𝛷 = 0, under a homogenous boundary
-    condition 𝐁 * ∇ρ = 0, is 𝛷 = 0. To obtain a non-trivial solution,
-    the boundary condition may be modified.
-    Let 𝐁 = 𝐁₀ + ∇Φ.
-    If 𝐁₀ ≠ 0 and satisfies ∇ × 𝐁₀ = 0, then ∇²Φ = 0 solved
-    under an inhomogeneous boundary condition yields a non-trivial solution.
-    If 𝐁₀ ≠ -∇Φ, then 𝐁 ≠ 0.
+def compute_laplace(eq, B0, evl_grid, phi_grid=None, src_grid=None, bs_chunk_size=None):
+    """Compute quantities needed for Laplace solver.
 
     Parameters
     ----------
@@ -71,230 +39,209 @@ def compute_B_laplace(
     B0 : _MagneticField
         Magnetic field such that ∇ × 𝐁₀ = μ₀ 𝐉
         where 𝐉 is the current in amperes everywhere.
-    eval_grid : Grid
+    evl_grid : Grid
         Evaluation points on D for the magnetic field.
-    source_grid : Grid
+    phi_grid : Grid
+        Interpolation points on ∂D.
+        Resolution determines accuracy of Φ interpolation.
+    src_grid : Grid
         Source points on ∂D for quadrature of kernels.
-        Resolution determines the accuracy of the boundary condition,
-        and evaluation of the magnetic field.
-    Phi_grid : Grid
-        Source points on ∂D.
-        Resolution determines accuracy of the spectral coefficients.
-        Default is no symmetry.
-    chunk_size : int or None
-        Size to split computation into chunks.
+    bs_chunk_size : int
+        Size to split Biot-Savart computation into chunks of evaluation points.
         If no chunking should be done or the chunk size is the full input
-        then supply ``None``. Default is ``None``.
-    check : bool
-        Flag for debugging. Must be false for JAX transformations.
-        Significantly reduces performance.
+        then supply ``None``.
 
     Returns
     -------
-    B : jnp.ndarray
-        Magnetic field evaluated on ``eval_grid``.
+    laplace : dict
+        Dictionary with needed stuff for Laplace solver.
 
     """
-    if source_grid is None:
-        source_grid = LinearGrid(
-            rho=jnp.array([1.0]),
-            M=eq.M_grid,
-            N=eq.N_grid,
-            NFP=eq.NFP if eq.N > 0 else 64,
+    phi_names = ["R", "phi", "Z"]
+    evl_names = phi_names + ["n_rho"]
+    src_names = phi_names + ["n_rho", "|e_theta x e_zeta|", "e_theta", "e_zeta"]
+
+    phi_grid = phi_grid or LinearGrid(
+        M=eq.M_grid,
+        N=eq.N_grid,
+        NFP=eq.NFP if eq.N > 0 else 64,
+    )
+    src_grid = src_grid or phi_grid
+    basis = DoubleFourierSeries(M=phi_grid.M, N=phi_grid.N, NFP=eq.NFP)
+
+    # TODO: Can't pass [0, 1, 1]?
+    src_transform = Transform(src_grid, basis, derivs=1)
+    src_data = eq.compute(src_names, grid=src_grid)
+
+    evl_data = (
+        src_data if src_grid.equiv(evl_grid) else eq.compute(evl_names, grid=evl_grid)
+    )
+    if src_grid.equiv(phi_grid):
+        phi_transform = src_transform
+        phi_data = src_data
+    else:
+        phi_transform = Transform(phi_grid, basis)
+        phi_data = (
+            evl_data
+            if evl_grid.equiv(phi_grid)
+            else eq.compute(phi_names, grid=phi_grid)
         )
-    B0n, _ = B0.compute_Bnormal(
-        eq.surface,
-        eval_grid=source_grid,
-        source_grid=source_grid,
-        vc_source_grid=source_grid,
-        chunk_size=chunk_size,
-    )
-    Phi_mn, Phi_transform = compute_Phi_mn(
-        eq,
-        B0n,
-        Phi_grid,
-        source_grid=source_grid,
-        chunk_size=chunk_size,
-        check=check,
-        **kwargs,
-    )
-    # 𝐁 - 𝐁₀ = ∇Φ = 𝐁_vacuum in the interior.
-    # Merkel eq. 1.4 is the Green's function solution to ∇²Φ = 0 in the interior.
-    # Note that 𝐁₀′ in eq. 3.5 has the wrong sign and 3.7 has wrong sign.
-    BK = FourierCurrentPotentialField.from_surface(
-        eq.surface, -Phi_mn / mu_0, Phi_transform.basis.modes[:, 1:]
-    )
-    data = eq.compute(["R", "phi", "Z"], grid=eval_grid)
-    coords = jnp.column_stack([data["R"], data["phi"], data["Z"]])
-    B = (B0 + BK).compute_magnetic_field(
-        coords, source_grid=source_grid, chunk_size=5 * chunk_size
-    )
-    return B
+
+    if hasattr(B0, "compute_Bnormal"):
+        src_data["Bn"], _ = B0.compute_Bnormal(
+            eq.surface,
+            eval_grid=src_grid,
+            source_grid=src_grid,
+            vc_source_grid=src_grid,
+            chunk_size=bs_chunk_size,
+        )
+    else:
+        # Then assume Bn was given.
+        src_data["Bn"] = B0
+
+    laplace = {
+        "evl_grid": evl_grid,
+        "phi_transform": phi_transform,
+        "src_transform": src_transform,
+        "evl_data": evl_data,
+        "phi_data": phi_data,
+        "src_data": src_data,
+    }
+    return laplace
 
 
-def compute_Phi_mn(
-    eq,
-    B0n,
-    Phi_grid=None,
-    source_grid=None,
-    chunk_size=None,
-    check=False,
-    **kwargs,
-):
+def _compute_coulomb_field(evl_data, src_data, bs_chunk_size=None):
+    coulomb = coulomb_general(
+        re=rpz2xyz(jnp.column_stack([evl_data["R"], evl_data["phi"], evl_data["Z"]])),
+        rs=rpz2xyz(jnp.column_stack([src_data["R"], src_data["phi"], src_data["Z"]])),
+        Bn=src_data["Bn"],
+        dS=src_data["|e_theta x e_zeta|"],
+        chunk_size=bs_chunk_size,
+    )
+    coulomb = xyz2rpz_vec(coulomb, phi=evl_data["phi"])
+    return coulomb
+
+
+def _compute_Phi_mn(laplace, chunk_size=None, **kwargs):
     """Compute Fourier coefficients of vacuum potential Φ on ∂D.
 
     Let D, D^∁ denote the interior, exterior of a toroidal region with
     boundary ∂D. Computes the magnetic field 𝐁 in units of Tesla such that
 
     - 𝐁 = 𝐁₀ + ∇Φ     on D
-    - ∇ × 𝐁 = ∇ × 𝐁₀  on D ∪ D^∁ (i.e. ∇Φ is single-valued or periodic)
-    - ∇ × 𝐁₀ = μ₀ 𝐉    on D ∪ D^∁
-    - 𝐁 * ∇ρ = 0      on ∂D
+    - ∇ × 𝐁₀ = μ₀ 𝐉   on D ∪ D^∁
+    - ∇ ⋅ 𝐁₀ = 0      on D ∪ D^∁
+    - 𝐁 ⋅ ∇ρ = 0      on ∂D
     - ∇²Φ = 0         on D
 
     Parameters
     ----------
-    eq : Equilibrium
-        Configuration with surface geometry defining ∂D.
-    B0n : MagneticField
-        𝐁₀ * ∇ρ / |∇ρ| evaluated on ``source_grid`` of magnetic field
-        such that ∇ × 𝐁₀ = μ₀ 𝐉 where 𝐉 is the current in amperes everywhere.
-    Phi_grid : Grid
-        Evaluation points on ∂D.
-        Resolution determines accuracy of Φ interpolation.
-    source_grid : Grid
-        Source points on ∂D for quadrature of kernels.
+    laplace : dict
+        Dictionary with needed stuff for Laplace solver.
     chunk_size : int or None
-        Size to split computation into chunks.
+        Size to split singular integration computation into chunks.
         If no chunking should be done or the chunk size is the full input
         then supply ``None``. Default is ``None``.
-    check : bool
-        Flag for debugging. Must be false for JAX transformations.
-        Significantly reduces performance.
 
     Returns
     -------
-    Phi_mn, Phi_transform : jnp.ndarray, Transform
+    Phi_mn : jnp.ndarray
         Fourier coefficients of Φ on ∂D.
 
     """
-    if Phi_grid is None:
-        Phi_grid = LinearGrid(
-            rho=jnp.array([1.0]),
-            M=2 * eq.M,
-            N=2 * eq.N,
-            NFP=eq.NFP if eq.N > 0 else 64,
-        )
-    if source_grid is None:
-        source_grid = Phi_grid
-    basis = DoubleFourierSeries(M=Phi_grid.M, N=Phi_grid.N, NFP=eq.NFP)
-    src_transform = Transform(source_grid, basis)
-    Phi_transform = Transform(Phi_grid, basis)
-
-    names = ["R", "phi", "Z"]
-    Phi_data = eq.compute(names, grid=Phi_grid)
-    src_data = eq.compute(
-        names + ["n_rho", "|e_theta x e_zeta|", "e_theta", "e_zeta"], grid=source_grid
+    phi_is_src = laplace["phi_transform"] == laplace["src_transform"]
+    num_modes = laplace["phi_transform"].num_modes
+    interpolator = _get_interpolator(
+        laplace["phi_transform"].grid,
+        laplace["src_transform"].grid,
+        laplace["src_data"],
+        **kwargs,
     )
-    src_data["Bn"] = B0n
-
-    st, sz, q = heuristic_support_params(source_grid, best_ratio(src_data)[0])
-    try:
-        interpolator = FFTInterpolator(Phi_grid, source_grid, st, sz, q, **kwargs)
-    except AssertionError as e:
-        warnif(
-            True,
-            msg="Could not build fft interpolator, switching to dft which is slow."
-            "\nReason: " + str(e),
-        )
-        interpolator = DFTInterpolator(Phi_grid, source_grid, st, sz, q)
 
     def LHS(Phi_mn):
-        # After Fourier transform, the LHS is linear in the spectral coefficients Φₘₙ.
-        # We approximate this as finite-dimensional, which enables writing the left
-        # hand side as A @ Φₘₙ. Then Φₘₙ is found by solving LHS(Φₘₙ) = A @ Φₘₙ = RHS.
-        src_data_2 = src_data.copy()
-        src_data_2["Phi"] = src_transform.transform(Phi_mn)
+        """Compute left hand side of Green's function solution.
+
+        After Fourier transform, the LHS is linear in the spectral coefficients Φₘₙ.
+        We approximate this as finite-dimensional, which enables writing the left
+        hand side as A @ Φₘₙ. Then Φₘₙ is found by solving LHS(Φₘₙ) = A @ Φₘₙ = RHS.
+        """
+        src_data = laplace["src_data"].copy()
+        src_data["Phi"] = laplace["src_transform"].transform(Phi_mn)
+
         bs = singular_integral(
-            Phi_data,
-            src_data_2,
+            laplace["phi_data"],
+            src_data,
             _kernel_Phi_dG_dn,
             interpolator,
             chunk_size,
-        ).squeeze()
-        Phi = Phi_transform.transform(Phi_mn)
-        return Phi + bs / (2 * jnp.pi)
+        ).squeeze() / (2 * jnp.pi)
+
+        Phi = (
+            src_data["Phi"]
+            if phi_is_src
+            else laplace["phi_transform"].transform(Phi_mn)
+        )
+        return Phi + bs
 
     RHS = -singular_integral(
-        Phi_data,
-        src_data,
+        laplace["phi_data"],
+        laplace["src_data"],
         _kernel_Bn_over_r,
         interpolator,
         chunk_size,
     ).squeeze() / (2 * jnp.pi)
+
     # LHS is expensive, so it is better to construct full Jacobian once
     # rather than iterative solves like jax.scipy.sparse.linalg.cg.
-    A = vmap_chunked(LHS, chunk_size=1)(jnp.eye(basis.num_modes)).T
-    Phi_mn = jit_solve(A, RHS)
-
-    if check:
-        np.testing.assert_allclose(
-            LHS(Phi_mn), A @ Phi_mn, atol=kwargs.get("atol", 1e-7)
-        )
-
-    return Phi_mn, Phi_transform
+    A = vmap_chunked(LHS, chunk_size=1)(jnp.eye(num_modes)).T
+    return jnp.linalg.solve(A, RHS)
 
 
-def compute_dPhi_dn(
-    eq, eval_grid, source_grid, Phi_mn, basis, chunk_size=None, **kwargs
-):
+def _compute_dPhi_dn(laplace, Phi_mn, chunk_size=None, bs_chunk_size=None, **kwargs):
     """Computes vacuum field ∇Φ ⋅ n on ∂D.
 
     Let D, D^∁ denote the interior, exterior of a toroidal region with
     boundary ∂D. Computes the magnetic field 𝐁 in units of Tesla such that
 
     - 𝐁 = 𝐁₀ + ∇Φ     on D
-    - ∇ × 𝐁 = ∇ × 𝐁₀  on D ∪ D^∁ (i.e. ∇Φ is single-valued or periodic)
-    - ∇ × 𝐁₀ = μ₀ 𝐉    on D ∪ D^∁
-    - 𝐁 * ∇ρ = 0      on ∂D
+    - ∇ × 𝐁₀ = μ₀ 𝐉   on D ∪ D^∁
+    - ∇ ⋅ 𝐁₀ = 0      on D ∪ D^∁
+    - 𝐁 ⋅ ∇ρ = 0      on ∂D
     - ∇²Φ = 0         on D
 
     Parameters
     ----------
-    eq : Equilibrium
-        Configuration with surface geometry defining ∂D.
-    eval_grid : Grid
-        Evaluation points on ∂D.
-    source_grid : Grid
-        Source points on ∂D for quadrature of kernels.
+    laplace : dict
+        Dictionary with needed stuff for Laplace solver.
     Phi_mn : jnp.ndarray
         Fourier coefficients of Φ on the boundary.
-    basis : DoubleFourierSeries
-        Basis for Φₘₙ.
     chunk_size : int or None
-        Size to split computation into chunks.
+        Size to split singular integration computation into chunks.
         If no chunking should be done or the chunk size is the full input
         then supply ``None``. Default is ``None``.
+    bs_chunk_size : int or None
+        Size to split Biot-Savart computation into chunks of evaluation points.
+        If no chunking should be done or the chunk size is the full input
+        then supply ``None``.
 
     Returns
     -------
     dPhi_dn : jnp.ndarray
-        Shape (``eval_grid.grid.num_nodes``, 3).
+        Shape (``eval_grid.grid.num_nodes``, ).
         Vacuum field ∇Φ ⋅ n on ∂D.
 
     """
-    names = ["R", "phi", "Z"]
-    evl_data = eq.compute(names + ["n_rho"], grid=eval_grid)
-    transform = Transform(source_grid, basis, derivs=1)
-    src_data = {
-        "Phi_t": transform.transform(Phi_mn, dt=1),
-        "Phi_z": transform.transform(Phi_mn, dz=1),
-    }
-    src_data = eq.compute(
-        names + ["|e_theta x e_zeta|", "e_theta", "e_zeta"],
-        grid=source_grid,
-        data=src_data,
+    interpolator = _get_interpolator(
+        laplace["evl_grid"],
+        laplace["src_transform"].grid,
+        laplace["src_data"],
+        **kwargs,
     )
+
+    evl_data = laplace["evl_data"]
+    src_data = laplace["src_data"].copy()
+    src_data["Phi_t"] = laplace["src_transform"].transform(Phi_mn, dt=1)
+    src_data["Phi_z"] = laplace["src_transform"].transform(Phi_mn, dz=1)
     # K_vc = -n × ∇Φ
     src_data["K^theta"] = src_data["Phi_z"] / src_data["|e_theta x e_zeta|"]
     src_data["K^zeta"] = -src_data["Phi_t"] / src_data["|e_theta x e_zeta|"]
@@ -303,271 +250,93 @@ def compute_dPhi_dn(
         + src_data["K^zeta"][:, jnp.newaxis] * src_data["e_zeta"]
     )
 
-    st, sz, q = heuristic_support_params(source_grid, best_ratio(src_data)[0])
-    try:
-        interpolator = FFTInterpolator(eval_grid, source_grid, st, sz, q, **kwargs)
-    except AssertionError as e:
-        warnif(
-            True,
-            msg="Could not build fft interpolator, switching to dft which is slow."
-            "\nReason: " + str(e),
-        )
-        interpolator = DFTInterpolator(eval_grid, source_grid, st, sz, q)
-
     # ∇Φ = ∂Φ/∂ρ ∇ρ + ∂Φ/∂θ ∇θ + ∂Φ/∂ζ ∇ζ
     # but we can not obtain ∂Φ/∂ρ from Φₘₙ. Biot-Savart gives
     # K_vc = -n × ∇Φ where Φ has units Tesla-meters
-    # ∇Φ(x ∈ ∂D) dot n = [1/2π ∫_∂D df' K_vc × ∇G(x,x')] dot n
-    # (Same instructions but divide by 2 for x ∈ D).
-    bs = singular_integral(
+    # ∇Φ(x ∈ ∂D) = 1/2π ∫_∂D df' K_vc × ∇G(x,x') - coulomb
+    # Biot-Savart kernel assumes Φ in amperes, so we account for that.
+    fcp = (2 / mu_0) * singular_integral(
         evl_data,
         src_data,
         _kernel_biot_savart,
         interpolator,
         chunk_size,
     )
-    # Biot-Savart kernel assumes Φ in amperes, so we account for that.
-    return dot(bs, evl_data["n_rho"]) * 2 / mu_0
+    coulomb = _compute_coulomb_field(evl_data, src_data, bs_chunk_size)
+    return dot(fcp - coulomb, evl_data["n_rho"])
 
 
-# TODO: remove below stuff before merge.
-# alternative methods to check for agreement
-def _dPhi_dn_triple_layer(
-    eq,
-    B0n,
-    eval_grid,
-    source_grid,
-    Phi_mn,
-    basis,
-    chunk_size=None,
+def compute_B_from_B0(
+    surface, B0, laplace, chunk_size=None, bs_chunk_size=None, **kwargs
 ):
-    """Compute ∇Φ ⋅ n on ∂D.
+    """Compute vacuum field that satisfies LCFS boundary condition in plasma interior.
+
+    Let D, D^∁ denote the interior, exterior of a toroidal region with
+    boundary ∂D. Computes the magnetic field 𝐁 in units of Tesla such that
+
+    - 𝐁 = 𝐁₀ + ∇Φ     on D
+    - ∇ × 𝐁₀ = μ₀ 𝐉   on D ∪ D^∁
+    - ∇ ⋅ 𝐁₀ = 0      on D ∪ D^∁
+    - 𝐁 ⋅ ∇ρ = 0      on ∂D
+    - ∇²Φ = 0         on D
+
+    Examples
+    --------
+    In a vacuum, the magnetic field may be written 𝐁 = ∇𝛷.
+    The solution to ∇²𝛷 = 0, under a homogenous boundary
+    condition 𝐁 ⋅ ∇ρ = 0, is 𝛷 = 0. To obtain a non-trivial solution,
+    the boundary condition may be modified.
+    Let 𝐁 = 𝐁₀ + ∇Φ.
+    If 𝐁₀ ≠ 0 and satisfies ∇ × 𝐁₀ = 0, then ∇²Φ = 0 solved
+    under an inhomogeneous boundary condition yields a non-trivial solution.
+    If 𝐁₀ ≠ -∇Φ, then 𝐁 ≠ 0.
 
     Parameters
     ----------
-    eq : Equilibrium
-        Configuration with surface geometry defining ∂D.
-    B0n : MagneticField
-        𝐁₀ * ∇ρ / |∇ρ| evaluated on ``source_grid`` of magnetic field
-        such that ∇ × 𝐁₀ = μ₀ 𝐉 where 𝐉 is the current in amperes everywhere.
-    eval_grid : Grid
-        Evaluation points on ∂D.
-    source_grid : Grid
-        Source points on ∂D for quadrature of kernels.
-    Phi_mn : jnp.ndarray
-        Fourier coefficients of Φ on the boundary.
-    basis : DoubleFourierSeries
-        Basis for Φₘₙ.
+    surface : Surface
+        Surface geometry defining ∂D.
+    B0 : _MagneticField
+        Magnetic field such that ∇ × 𝐁₀ = μ₀ 𝐉
+        where 𝐉 is the current in amperes everywhere.
+    laplace : dict
+        Dictionary with needed stuff for Laplace solver.
     chunk_size : int or None
-        Size to split computation into chunks.
+        Size to split singular integration computation into chunks.
         If no chunking should be done or the chunk size is the full input
         then supply ``None``. Default is ``None``.
-
-    Returns
-    -------
-    dPhi_dn : jnp.ndarray
-        Shape (``Phi_trans.grid.num_nodes``, ).
-        ∇Φ ⋅ n on ∂D.
-
-    """
-    names = ["R", "phi", "Z", "n_rho"]
-    evl_data = eq.compute(names, grid=eval_grid)
-    src_data = eq.compute(
-        names + ["|e_theta x e_zeta|", "e_theta", "e_zeta"], grid=source_grid
-    )
-    src_data["Bn"] = B0n
-
-    st, sz, q = heuristic_support_params(source_grid, best_ratio(src_data)[0])
-    try:
-        interpolator = FFTInterpolator(eval_grid, source_grid, st, sz, q)
-    except AssertionError as e:
-        warnif(
-            True,
-            msg="Could not build fft interpolator, switching to dft which is slow."
-            "\nReason: " + str(e),
-        )
-        interpolator = DFTInterpolator(eval_grid, source_grid, st, sz, q)
-
-    I2 = -singular_integral(
-        evl_data,
-        src_data,
-        _kernel_Bn_grad_G_dot_n,
-        interpolator,
-        chunk_size,
-    )
-    src_data["Phi"] = Transform(source_grid, basis).transform(Phi_mn)
-    I1 = singular_integral(
-        evl_data,
-        src_data,
-        # triple layer kernel may need more resolution
-        _kernel_Phi_grad_dG_dn_dot_m,
-        interpolator,
-        chunk_size,
-    )
-    dPhi_dn = -I1 + I2
-    return dPhi_dn
-
-
-def _kernel_Phi_grad_dG_dn_dot_m(eval_data, source_data, diag=False):
-    #   Phi(x') * grad dG(x,x')/dn' dot n
-    # = Phi' * n' dot (grad(dx) / |dx|^3 - 3 dx transpose(dx) / |dx|^5) dot n
-    # = Phi' * n' dot (n / |dx|^3 - 3 dx (dx dot n) / |dx|^5)
-    # = Phi' * n' dot [n |dx|^2 - 3 dx (dx dot n)] / |dx|^5
-    # where Phi has units tesla-meters.
-    source_x = jnp.atleast_2d(
-        rpz2xyz(jnp.array([source_data["R"], source_data["phi"], source_data["Z"]]).T)
-    )
-    eval_x = jnp.atleast_2d(
-        rpz2xyz(jnp.array([eval_data["R"], eval_data["phi"], eval_data["Z"]]).T)
-    )
-    if diag:
-        dx = eval_x - source_x
-    else:
-        dx = eval_x[:, None] - source_x[None]
-    # this is n'
-    nn = rpz2xyz_vec(source_data["n_rho"], phi=source_data["phi"])
-    # this is n
-    n = rpz2xyz_vec(eval_data["n_rho"], phi=eval_data["phi"])
-    dx_norm = safenorm(dx, axis=-1)
-    return safediv(
-        source_data["Phi"] * (dot(nn, n) * dx_norm**2 - 3 * dot(nn, dx) * dot(dx, n)),
-        dx_norm**5,
-    )
-
-
-def _kernel_Bn_grad_G_dot_n(eval_data, source_data, diag=False):
-    # Bn(x') * dG(x,x')/dn = - Bn * n dot dx / |dx|^3
-    source_x = jnp.atleast_2d(
-        rpz2xyz(jnp.array([source_data["R"], source_data["phi"], source_data["Z"]]).T)
-    )
-    eval_x = jnp.atleast_2d(
-        rpz2xyz(jnp.array([eval_data["R"], eval_data["phi"], eval_data["Z"]]).T)
-    )
-    if diag:
-        dx = eval_x - source_x
-    else:
-        dx = eval_x[:, None] - source_x[None]
-    n = rpz2xyz_vec(eval_data["n_rho"], phi=eval_data["phi"])
-    return safediv(
-        -source_data["Bn"] * dot(n, dx),
-        safenorm(dx, axis=-1) ** 3,
-    )
-
-
-def _compute_K_mn(eq, G, grid=None, check=False):
-    """Compute Fourier coefficients of surface current on ∂D.
-
-    Parameters
-    ----------
-    eq : Equilibrium
-        Configuration with surface geometry defining ∂D.
-    G : float
-        Secular term of poloidal current in amperes.
-        Should be ``2*np.pi/mu_0*data["G"]``.
-    grid : Grid
-        Points on ∂D.
-    check : bool
-        Flag for debugging. Must be false for JAX transformations.
-        Significantly reduces performance.
-
-    Returns
-    -------
-    K_mn, K_sec, K_transform : jnp.ndarray, Transform
-        Fourier coefficients of surface current on ∂D.
-
-    """
-    if grid is None:
-        grid = LinearGrid(
-            rho=jnp.array([1.0]),
-            # 3x higher than typical since we need to fit a vector
-            M=6 * eq.M,
-            N=6 * eq.N,
-            NFP=eq.NFP if eq.N > 0 else 64,
-            sym=False,
-        )
-    basis = DoubleFourierSeries(M=2 * eq.M, N=2 * eq.N, NFP=eq.NFP)
-    transform = Transform(grid, basis)
-    K_sec = FourierCurrentPotentialField.from_surface(eq.surface, G=G)
-    K_secular = K_sec.compute("K", grid=grid)["K"]
-    n = eq.compute("n_rho", grid=grid)["n_rho"]
-
-    def LHS(K_mn):
-        # After Fourier transform, the LHS is linear in the spectral coefficients Kₘₙ.
-        # We approximate this as finite-dimensional, which enables writing the left
-        # hand side as A @ Kₘₙ. Then Kₘₙ is found by solving LHS(Kₘₙ) = A @ Kₘₙ = RHS.
-        num_coef = K_mn.size // 3
-        K_R = transform.transform(K_mn[:num_coef])
-        K_phi = transform.transform(K_mn[num_coef : 2 * num_coef])
-        K_Z = transform.transform(K_mn[2 * num_coef :])
-        K_fourier = jnp.column_stack([K_R, K_phi, K_Z])
-        return dot(K_fourier + K_secular, n)
-
-    A = vmap(LHS)(jnp.eye(basis.num_modes * 3)).T
-    K_mn, _, _, _ = jnp.linalg.lstsq(A, jnp.zeros(grid.num_nodes))
-    if check:
-        np.testing.assert_allclose(LHS(K_mn), A @ K_mn, atol=1e-7)
-    return K_mn, K_sec, transform
-
-
-def _compute_B_dot_n_from_K(
-    eq, eval_grid, source_grid, K_mn, K_sec, basis, chunk_size=None
-):
-    """Computes B ⋅ n on ∂D from surface current.
-
-    Parameters
-    ----------
-    eq : Equilibrium
-        Configuration with surface geometry defining ∂D.
-    eval_grid : Grid
-        Evaluation points on ∂D.
-    source_grid : Grid
-        Source points on ∂D for quadrature of kernels.
-    K_mn : jnp.ndarray
-        Fourier coefficients of surface current on ∂D.
-    K_sec : FourierCurrentPotentialField
-        Secular part of Fourier current potential field.
-    basis : DoubleFourierSeries
-        Basis for Kₘₙ.
-    chunk_size : int or None
-        Size to split computation into chunks.
+    bs_chunk_size : int or None
+        Size to split Biot-Savart computation into chunks of evaluation points.
         If no chunking should be done or the chunk size is the full input
-        then supply ``None``. Default is ``None``.
+        then supply ``None``.
 
     Returns
     -------
-    B_dot_n : jnp.ndarray
-        Shape (``eval_grid.grid.num_nodes``, 3).
+    B : jnp.ndarray
+        Magnetic field evaluated on ``eval_grid``.
 
     """
-    names = ["R", "phi", "Z"]
-    evl_data = eq.compute(names + ["n_rho"], grid=eval_grid)
-    transform = Transform(source_grid, basis)
-    src_data = eq.compute(
-        names + ["|e_theta x e_zeta|", "e_theta", "e_zeta"], grid=source_grid
+    re = jnp.column_stack(
+        [laplace["evl_data"]["R"], laplace["evl_data"]["phi"], laplace["evl_data"]["Z"]]
     )
-    num_coef = K_mn.size // 3
-    K_R = transform.transform(K_mn[:num_coef])
-    K_phi = transform.transform(K_mn[num_coef : 2 * num_coef])
-    K_Z = transform.transform(K_mn[2 * num_coef :])
-    K_fourier = jnp.column_stack([K_R, K_phi, K_Z])
-    K_secular = K_sec.compute("K", grid=source_grid)["K"]
-    src_data["K_vc"] = K_fourier + K_secular
-
-    st, sz, q = heuristic_support_params(source_grid, best_ratio(src_data)[0])
-    try:
-        interpolator = FFTInterpolator(eval_grid, source_grid, st, sz, q)
-    except AssertionError as e:
-        warnif(
-            True,
-            msg="Could not build fft interpolator, switching to dft which is slow."
-            "\nReason: " + str(e),
-        )
-        interpolator = DFTInterpolator(eval_grid, source_grid, st, sz, q)
-
-    # Biot-Savart gives K_vc = n × B
-    # B(x ∈ ∂D) dot n = [μ₀/2π ∫_∂D df' K_vc × ∇G(x,x')] dot n
-    # (Same instructions but divide by 2 for x ∈ D).
-    bs = singular_integral(
-        evl_data, src_data, _kernel_biot_savart, interpolator, chunk_size
+    Phi_mn = _compute_Phi_mn(laplace, chunk_size, **kwargs)
+    fcp = FourierCurrentPotentialField.from_surface(
+        surface,
+        -Phi_mn / mu_0,
+        laplace["phi_transform"].basis.modes[:, 1:],
     )
-    return 2 * dot(bs, evl_data["n_rho"])
+    fcp = fcp.compute_magnetic_field(
+        coords=re,
+        source_grid=laplace["src_transform"].grid,
+        chunk_size=bs_chunk_size,
+    )
+    grad_Phi = fcp - _compute_coulomb_field(
+        laplace["evl_data"],
+        laplace["src_data"],
+        bs_chunk_size,
+    )
+    B0 = B0.compute_magnetic_field(
+        coords=re,
+        source_grid=laplace["src_transform"].grid,
+        chunk_size=bs_chunk_size,
+    )
+    return B0 + grad_Phi

@@ -668,7 +668,7 @@ class TERPSICHORE(ExternalObjective):
         File name of the TERPSICHORE executable. Must be located in the directory
         specified by ``path``.
     scalar : bool, optional
-        If Ture, returns the growth rate of the fastest growing instability (default).
+        If True, returns the growth rate of the fastest growing instability (default).
         If False, returns the ΔW values at each flux surface.
     mode_family : int, optional
         The mode family of the instabilities to consider. Only implemented for NFP =

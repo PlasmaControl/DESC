@@ -12,7 +12,9 @@ user function can be made JAX transformable, it is recommended to use the
 This guide begins with a simple example of how to use a custom function with the
 ``ExternalObjective``. It then uses the ``TERPSICHORE`` objective as a more realistic
 example, which can be used as a template for wrapping other codes. Finally, an example
-script is shown for how to run the TERPSICHORE optimization with multiprocessing.
+script is shown for how to run the TERPSICHORE optimization with multiprocessing. (You
+must obtain access to the TERPSICHORE source code to run this example, it is not
+included with DESC.)
 
 Simple example
 --------------
@@ -27,7 +29,7 @@ arguments. In this example, the function returns the three scalar quatities
 :math:`\langle\beta\rangle_{vol}`, :math:`\langle\beta\rangle_{pol}`, and
 :math:`\langle\beta\rangle_{tor}`. It writes these quantities to a NetCDF file and then
 reads them back from the file. This mimics I/O from the common VMEC "wout" format, and
-also demonstrates an operation that is not automatically differentiable.
+also demonstrates an operation that is not automatic-differentiable.
 
 ::
 
@@ -105,7 +107,7 @@ This section walks through the implementation of wrapping the ideal MHD linear s
 code TERPSICHORE, which is written in FORTRAN. It summarizes how the external function
 was written to call TERPSICHORE from DESC, and can be used as a template for wrapping
 other codes. The code shown here is abbreviated and slightly modified for brevity, but
-the full source code can be found in ``desc/experimental/_terpsichore.py``.
+the full code can be found in ``desc/experimental/_terpsichore.py``.
 
 The external function in this case is named ``terpsichore``, and takes the following
 arguments:
@@ -235,7 +237,7 @@ Finally, the ``TERPSICHORE`` objective function simply inherits from
 ``ExternalObjective`` and passes ``fun=terpsichore`` as the external function.
 ``dim_f=1`` because TERPSICHORE is returning a scalar growth rate in this example, and
 ``vectorized=True`` because the function ``terpsichore`` expects a list of Equilibria
-as its only positional argument. (Parts of the full class definition have been ommitted
+as its only positional argument. (Parts of the full class definition have been omitted
 here for simplicity.)
 
 ::

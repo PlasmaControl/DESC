@@ -16,7 +16,7 @@ k(ζ, λ).
 from orthax.chebyshev import chebgauss, chebweight
 from orthax.legendre import legder, legval
 
-from desc.backend import eigh_tridiagonal, jnp, put
+from desc.backend import eigh_tridiagonal, fori_loop, jnp, put
 from desc.utils import errorif
 
 
@@ -330,3 +330,48 @@ def get_quadrature(quad, automorphism):
         # Recall bijection_from_disc(auto(x), ζ₁, ζ₂) = ζ.
         x = auto(x)
     return x, w
+
+
+def nfp_loop(source_grid, func, init_val):
+    """Calculate effects from source points on a single field period.
+
+    The integral is computed on the full domain because the kernels of interest
+    have toroidal variation and are not NFP periodic. To that end, the integral
+    is computed on every field period and summed. The ``source_grid`` is the
+    first field period because DESC truncates the computational domain to
+    ζ ∈ [0, 2π/grid.NFP) and changes variables to the spectrally condensed
+    ζ* = basis.NFP ζ. The domain is shifted to the next field period by
+    incrementing the toroidal coordinate of the grid by 2π/NFP.
+
+    For an axisymmetric configuration, it is most efficient for ``source_grid`` to
+    be a single toroidal cross-section. To capture toroidal effects of the kernels
+    on those grids for axisymmetric configurations, we set a dummy value for NFP to
+    an integer larger than 1 so that the toroidal increment can move to a new spot.
+
+    Parameters
+    ----------
+    source_grid : _Grid
+        Grid with points ζ ∈ [0, 2π/grid.NFP).
+    func : callable
+        Should accept argument ``zeta_j`` denoting toroidal coordinates of
+        field period ``j``.
+    init_val : jnp.ndarray
+        Initial loop carry value.
+
+    Returns
+    -------
+    result : jnp.ndarray
+        Shape is ``init_val.shape``.
+
+    """
+    errorif(
+        source_grid.num_zeta == 1 and source_grid.NFP == 1,
+        msg="Source grid cannot compute toroidal effects.\n"
+        "Increase NFP of source grid to e.g. 64.",
+    )
+
+    def body(j, f):
+        zeta_j = source_grid.nodes[:, 2] + j * 2 * jnp.pi / source_grid.NFP
+        return f + func(zeta_j)
+
+    return fori_loop(0, source_grid.NFP, body, init_val)

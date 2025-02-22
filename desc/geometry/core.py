@@ -111,7 +111,7 @@ class Curve(IOAble, Optimizable, ABC):
 
         Returns
         -------
-        data : dict of ndarray
+        data : dict[str, jnp.ndarray]
             Computed quantity and intermediate variables.
 
         """
@@ -467,7 +467,7 @@ class Surface(IOAble, Optimizable, ABC):
 
         Returns
         -------
-        data : dict of ndarray
+        data : dict[str, jnp.ndarray]
             Computed quantity and intermediate variables.
 
         """

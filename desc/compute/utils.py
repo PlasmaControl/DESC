@@ -61,7 +61,7 @@ def compute(  # noqa: C901
 
     Returns
     -------
-    data : dict of ndarray
+    data : dict[str, jnp.ndarray]
         Computed quantity and intermediate variables.
 
     """
@@ -177,6 +177,12 @@ def _compute(
     using recursion to compute dependencies. If you want to call this function, you
     cannot give the argument basis='xyz' since that will break the recursion. In that
     case, either call above function or manually convert the output to xyz basis.
+
+    Returns
+    -------
+    data : dict[str, jnp.ndarray]
+        Computed quantity and intermediate variables.
+
     """
     assert kwargs.get("basis", "rpz") == "rpz", "_compute only works in rpz coordinates"
     parameterization = _parse_parameterization(parameterization)

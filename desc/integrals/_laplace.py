@@ -16,7 +16,7 @@ from desc.compute.geom_utils import rpz2xyz, xyz2rpz_vec
 from desc.grid import LinearGrid
 from desc.integrals.singularities import (
     _get_interpolator,
-    _kernel_biot_savart,
+    _kernel_biot_savart_coulomb,
     _kernel_Bn_over_r,
     _kernel_Phi_dG_dn,
     singular_integral,
@@ -67,9 +67,9 @@ def compute_laplace(eq, B0, evl_grid, phi_grid=None, src_grid=None, bs_chunk_siz
         NFP=eq.NFP if eq.N > 0 else 64,
     )
     src_grid = src_grid or phi_grid
+    # TODO: add basis symmetry
     basis = DoubleFourierSeries(M=phi_grid.M, N=phi_grid.N, NFP=eq.NFP)
 
-    # TODO: Can't pass [0, 1, 1]?
     src_transform = Transform(src_grid, basis, derivs=1)
     src_data = eq.compute(src_names, grid=src_grid)
 
@@ -110,7 +110,9 @@ def compute_laplace(eq, B0, evl_grid, phi_grid=None, src_grid=None, bs_chunk_siz
     return laplace
 
 
-def _compute_coulomb_field(evl_data, src_data, bs_chunk_size=None):
+def _compute_coulomb_field(laplace, bs_chunk_size=None):
+    evl_data = laplace["evl_data"]
+    src_data = laplace["src_data"]
     coulomb = coulomb_general(
         re=rpz2xyz(jnp.column_stack([evl_data["R"], evl_data["phi"], evl_data["Z"]])),
         rs=rpz2xyz(jnp.column_stack([src_data["R"], src_data["phi"], src_data["Z"]])),
@@ -238,7 +240,6 @@ def _compute_dPhi_dn(laplace, Phi_mn, chunk_size=None, bs_chunk_size=None, **kwa
         **kwargs,
     )
 
-    evl_data = laplace["evl_data"]
     src_data = laplace["src_data"].copy()
     src_data["Phi_t"] = laplace["src_transform"].transform(Phi_mn, dt=1)
     src_data["Phi_z"] = laplace["src_transform"].transform(Phi_mn, dz=1)
@@ -254,16 +255,14 @@ def _compute_dPhi_dn(laplace, Phi_mn, chunk_size=None, bs_chunk_size=None, **kwa
     # but we can not obtain ∂Φ/∂ρ from Φₘₙ. Biot-Savart gives
     # K_vc = -n × ∇Φ where Φ has units Tesla-meters
     # ∇Φ(x ∈ ∂D) = 1/2π ∫_∂D df' K_vc × ∇G(x,x') - coulomb
-    # Biot-Savart kernel assumes Φ in amperes, so we account for that.
-    fcp = (2 / mu_0) * singular_integral(
-        evl_data,
+    grad_Phi = 2 * singular_integral(
+        laplace["evl_data"],
         src_data,
-        _kernel_biot_savart,
+        _kernel_biot_savart_coulomb,
         interpolator,
         chunk_size,
     )
-    coulomb = _compute_coulomb_field(evl_data, src_data, bs_chunk_size)
-    return dot(fcp - coulomb, evl_data["n_rho"])
+    return dot(grad_Phi, laplace["evl_data"]["n_rho"])
 
 
 def compute_B_from_B0(
@@ -329,11 +328,7 @@ def compute_B_from_B0(
         source_grid=laplace["src_transform"].grid,
         chunk_size=bs_chunk_size,
     )
-    grad_Phi = fcp - _compute_coulomb_field(
-        laplace["evl_data"],
-        laplace["src_data"],
-        bs_chunk_size,
-    )
+    grad_Phi = fcp - _compute_coulomb_field(laplace, bs_chunk_size)
     B0 = B0.compute_magnetic_field(
         coords=re,
         source_grid=laplace["src_transform"].grid,

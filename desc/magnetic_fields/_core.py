@@ -166,7 +166,7 @@ def biot_savart_general_vector_potential(
     assert JdV.shape == rs.shape
 
     def biot(re):
-        dr = rs - re  # -a
+        dr = rs - re
         den = jnp.linalg.norm(dr, axis=-1, keepdims=True)
         return safediv(JdV, den).sum(axis=-2) * mu_0 / (4 * jnp.pi)
 
@@ -2898,7 +2898,7 @@ class OmnigenousField(Optimizable, IOAble):
 
         Returns
         -------
-        data : dict of ndarray
+        data : dict[str, jnp.ndarray]
             Computed quantity and intermediate variables.
 
         """

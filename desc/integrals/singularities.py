@@ -7,11 +7,12 @@ import scipy
 from interpax import fft_interp2d
 from scipy.constants import mu_0
 
-from desc.backend import fori_loop, jit, jnp, rfft2
+from desc.backend import jit, jnp, rfft2
 from desc.batching import batch_map, vmap_chunked
 from desc.compute.geom_utils import rpz2xyz, rpz2xyz_vec, xyz2rpz_vec
 from desc.grid import LinearGrid
 from desc.integrals._interp_utils import rfft2_modes, rfft2_vander
+from desc.integrals.quad_utils import nfp_loop
 from desc.io import IOAble
 from desc.utils import (
     check_posint,
@@ -550,7 +551,7 @@ def _nonsingular_part(
 
     Generally follows sec 3.2.1 of [2].
     """
-    source_theta = source_grid.nodes[:, 1]
+    source_data.setdefault("theta", source_grid.nodes[:, 1])
     # make sure source dict has zeta and phi to avoid
     # adding keys to dict during iteration
     source_zeta = source_data.setdefault("zeta", source_grid.nodes[:, 2])
@@ -564,37 +565,17 @@ def _nonsingular_part(
     hz = 2 * jnp.pi / source_grid.num_zeta / source_grid.NFP
     w = source_data["|e_theta x e_zeta|"][jnp.newaxis] * ht * hz
 
-    def nfp_loop(j, f_data):
-        """Calculate effects from source points on a single field period.
+    def func(zeta_j):
+        source_data["zeta"] = zeta_j
+        source_data["phi"] = zeta_j  # TODO (#465)
 
-        The surface integral is computed on the full domain because the kernels of
-        interest have toroidal variation and are not NFP periodic. To that end, the
-        integral is computed on every field period and summed. The ``source_grid`` is
-        the first field period because DESC truncates the computational domain to
-        ζ ∈ [0, 2π/grid.NFP) and changes variables to the spectrally condensed
-        ζ* = basis.NFP ζ. Therefore, we shift the domain to the next field period by
-        incrementing the toroidal coordinate of the grid by 2π/NFP. For an axisymmetric
-        configuration, it is most efficient for ``source_grid`` to be a single toroidal
-        cross-section. To capture toroidal effects of the kernels on those grids for
-        axisymmetric configurations, we set a dummy value for NFP to an integer larger
-        than 1 so that the toroidal increment can move to a new spot.
-        """
-        f, source_data = f_data
-        source_data["zeta"] = (source_zeta + j * 2 * jnp.pi / source_grid.NFP) % (
-            2 * jnp.pi
-        )
-        source_data["phi"] = (source_phi + j * 2 * jnp.pi / source_grid.NFP) % (
-            2 * jnp.pi
-        )
-
-        # nest this def to avoid having to pass the modified source_data around the loop
-        # easier to just close over it and let JAX figure it out
+        # nest this def and let JAX figure it out
         def eval_pt(eval_data_i):
             k = kernel(eval_data_i, source_data).reshape(
                 -1, source_grid.num_nodes, kernel.ndim
             )
             eta = _eta(
-                source_theta,
+                source_data["theta"],
                 source_data["zeta"],
                 eval_data_i["theta"][:, jnp.newaxis],
                 eval_data_i["zeta"][:, jnp.newaxis],
@@ -605,22 +586,11 @@ def _nonsingular_part(
             )
             return jnp.sum(k * (w * (1 - eta))[..., jnp.newaxis], axis=1)
 
-        f += batch_map(eval_pt, eval_data, chunk_size).reshape(
+        return batch_map(eval_pt, eval_data, chunk_size).reshape(
             eval_grid.num_nodes, kernel.ndim
         )
-        return f, source_data
 
-    # This error should be raised earlier since this is not the only place
-    # we need the higher dummy NFP value, but the error message is more
-    # helpful with the nfp loop docstring.
-    errorif(
-        source_grid.num_zeta == 1 and source_grid.NFP == 1,
-        msg="Source grid cannot compute toroidal effects.\n"
-        "Increase NFP of source grid to e.g. 64.\n"
-        "This is required to " + nfp_loop.__doc__,
-    )
-    f = jnp.zeros((eval_grid.num_nodes, kernel.ndim))
-    f, _ = fori_loop(0, source_grid.NFP, nfp_loop, (f, source_data))
+    f = nfp_loop(source_grid, func, jnp.zeros((eval_grid.num_nodes, kernel.ndim)))
 
     # undo rotation of source_zeta
     source_data["zeta"] = source_zeta
@@ -938,6 +908,29 @@ def _kernel_Phi_dG_dn(eval_data, source_data, diag=False):
 
 _kernel_Phi_dG_dn.ndim = 1
 _kernel_Phi_dG_dn.keys = ["R", "phi", "Z", "Phi", "n_rho"]
+
+
+def _kernel_biot_savart_coulomb(eval_data, source_data, diag=False):
+    # Assumes K_vc in Tesla.
+    source_x = jnp.atleast_2d(
+        rpz2xyz(jnp.array([source_data["R"], source_data["phi"], source_data["Z"]]).T)
+    )
+    eval_x = jnp.atleast_2d(
+        rpz2xyz(jnp.array([eval_data["R"], eval_data["phi"], eval_data["Z"]]).T)
+    )
+    if diag:
+        dx = eval_x - source_x
+    else:
+        dx = eval_x[:, None] - source_x[None]
+    r = safenorm(dx, axis=-1)[..., None]
+    K = rpz2xyz_vec(source_data["K_vc"], phi=source_data["phi"])
+    coulomb = source_data["Bn"][:, jnp.newaxis] * dx
+    return safediv(jnp.cross(K, dx, axis=-1) - coulomb, r**3) / (4 * jnp.pi)
+
+
+_kernel_biot_savart_coulomb.ndim = 3
+_kernel_biot_savart_coulomb.keys = ["R", "phi", "Z", "K_vc", "Bn"]
+
 
 kernels = {
     "1_over_r": _kernel_1_over_r,

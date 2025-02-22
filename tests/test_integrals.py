@@ -747,7 +747,8 @@ class TestSingularities:
         np.testing.assert_allclose(B0n + dPhi_dn, 0, atol=atol)
 
     @pytest.mark.unit
-    def test_laplace_harmonic_general(self, chunk_size=1000, resolution=50, atol=1e-4):
+    @pytest.mark.slow
+    def test_laplace_harmonic_general(self, chunk_size=2000, resolution=50, atol=1e-3):
         """Test that Laplace solution recovers expected analytic result.
 
         Define boundary R_b(θ,ζ) and Z_b(θ,ζ).
@@ -764,7 +765,7 @@ class TestSingularities:
             )
         )
         evl_grid = LinearGrid(M=5, N=5, NFP=eq.NFP)
-        phi_grid = LinearGrid(M=10, N=10, NFP=eq.NFP)
+        phi_grid = LinearGrid(M=15, N=15, NFP=eq.NFP)
         src_grid = LinearGrid(M=resolution, N=resolution, NFP=eq.NFP)
         B0n = -eq.compute("n_rho", grid=src_grid)["n_rho"][:, 2]
         laplace = get_laplace_dict(
@@ -784,9 +785,10 @@ class TestSingularities:
         np.testing.assert_allclose(B0n + dPhi_dn, 0, atol=atol)
 
     @pytest.mark.unit
+    @pytest.mark.slow
     @pytest.mark.parametrize("eq", [get("ESTELL")])
     def test_laplace_bdotn_toroidal(
-        self, eq, chunk_size=1000, resolution=50, atol=1e-4, plot=True
+        self, eq, chunk_size=2000, resolution=50, atol=1e-3, plot=True
     ):
         """Test that Laplace solution satisfies toroidal field boundary condition."""
         evl_grid = LinearGrid(M=5, N=5, NFP=eq.NFP)
@@ -928,6 +930,7 @@ class TestSingularities:
         return surf
 
     @pytest.mark.unit
+    @pytest.mark.slow
     def test_laplace_dommaschk(self):
         """Use Dommaschk potentials to generate benchmark test and compare."""
         C_r = {

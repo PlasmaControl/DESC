@@ -12,7 +12,6 @@ from desc.integrals import Bounce2D
 
 
 @pytest.mark.unit
-@pytest.mark.slow
 @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
 def test_Gamma_c_Nemov_2D():
     """Test Γ_c Nemov with W7-X."""
@@ -36,7 +35,6 @@ def test_Gamma_c_Nemov_2D():
 
 
 @pytest.mark.unit
-@pytest.mark.slow
 @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
 def test_Gamma_c_Velasco_2D():
     """Test Γ_c Velasco with W7-X."""

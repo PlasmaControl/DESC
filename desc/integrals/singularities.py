@@ -718,7 +718,7 @@ def _dx(eval_data, source_data, diag=False):
 
 
 def _kernel_1_over_r(eval_data, source_data, diag=False):
-    """G(x,x') = |x−x'|⁻¹."""
+    """Returns G(x,x') = |x−x'|⁻¹."""
     dx = _dx(eval_data, source_data, diag)
     return safediv(1, safenorm(dx, axis=-1))
 

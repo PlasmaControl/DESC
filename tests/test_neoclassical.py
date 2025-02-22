@@ -16,7 +16,6 @@ from desc.vmec import VMECIO
 
 
 @pytest.mark.unit
-@pytest.mark.slow
 @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
 def test_effective_ripple_2D():
     """Test effective ripple with W7-X against NEO."""

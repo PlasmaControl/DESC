@@ -18,6 +18,7 @@ New Features
 - Changes hessian computation to use chunked ``jacfwd`` and ``jacrev``, allowing ``jac_chunk_size`` to now reduce hessian memory usage as well.
 - Adds an option to ``VMECIO.save`` to specify the grid resolution in real space.
 - Adds a new objective ``desc.objectives.CoilIntegratedCurvature`` for targeting convex coils.
+- `eq.solve` and `eq.perturb` now accept `LinearConstraintProjection` as objective. This option must be used without any constraints.
 - Adds the example "reactor_QA", which is similar to "precise_QA" but with self-consistent bootstrap current at finite beta.
 - Allows non-proximal optimizers to  handle optimizing more than one ``Equilibrium`` object simultaneously.
 - Adds batching feature to singular integrals.
@@ -47,7 +48,11 @@ Bug Fixes
 - Fixes the coil currents in ``desc.coils.initialize_modular_coils`` to now give the correct expected linking current.
 - ``desc.objectives.PlasmaVesselDistance`` now correctly accounts for multiple field periods on both the equilibrium and the vessel surface. Previously it only considered distances within a single field period.
 - Sets ``os.environ["JAX_PLATFORMS"] = "cpu"`` instead of ``os.environ["JAX_PLATFORM_NAME"] = "cpu"`` when doing ``set_device("cpu")``.
+- Fixes bug when passing only `sym` into `.change_resolution` for ``FourierRZToroidalSurface``, ``ZernikeRZToroidalSection`` and ``FourierRZCurve``.
 
+Performance Improvements
+
+- `proximal-` optimizers use a single `LinearConstraintProjection` and this makes the optimization faster for high resolution cases where taking the SVD (for null-space and inverse) of constraint matrix takes significant time.
 
 v0.13.0
 -------

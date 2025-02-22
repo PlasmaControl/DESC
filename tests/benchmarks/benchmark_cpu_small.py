@@ -268,7 +268,7 @@ def test_perturb_1(benchmark):
         jax.clear_caches()
         eq = desc.examples.get("SOLOVEV")
         objective = get_equilibrium_objective(eq)
-        objective.build(eq)
+        objective.build()
         constraints = get_fixed_boundary_constraints(eq)
         tr_ratio = [0.01, 0.25, 0.25]
         dp = np.zeros_like(eq.p_l)
@@ -301,7 +301,7 @@ def test_perturb_2(benchmark):
         jax.clear_caches()
         eq = desc.examples.get("SOLOVEV")
         objective = get_equilibrium_objective(eq)
-        objective.build(eq)
+        objective.build()
         constraints = get_fixed_boundary_constraints(eq)
         tr_ratio = [0.01, 0.25, 0.25]
         dp = np.zeros_like(eq.p_l)
@@ -335,10 +335,44 @@ def test_proximal_jac_atf(benchmark):
     constraint = ObjectiveFunction(ForceBalance(eq))
     prox = ProximalProjection(objective, constraint, eq)
     prox.build()
-    prox.compile()
     x = prox.x(eq)
+    prox.jac_scaled_error(x, prox.constants).block_until_ready()
 
     def run(x, prox):
+        prox.jac_scaled_error(x, prox.constants).block_until_ready()
+
+    benchmark.pedantic(run, args=(x, prox), rounds=20, iterations=1)
+
+
+@pytest.mark.slow
+@pytest.mark.benchmark
+def test_proximal_jac_atf_with_eq_update(benchmark):
+    """Benchmark computing jacobian of constrained proximal projection."""
+    # Compare with test_proximal_jac_atf, this test additionally benchmarks the
+    # case where the equilibrium is updated before computing the jacobian.
+    eq = desc.examples.get("ATF")
+    with pytest.warns(UserWarning, match="Reducing radial"):
+        eq.change_resolution(12, 12, 4, 24, 24, 8)
+    grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, rho=np.linspace(0.1, 1, 10))
+    objective = ObjectiveFunction(QuasisymmetryTwoTerm(eq, grid=grid))
+    constraint = ObjectiveFunction(ForceBalance(eq))
+    prox = ProximalProjection(
+        objective,
+        constraint,
+        eq,
+        perturb_options={"verbose": 3},
+        solve_options={"verbose": 3, "maxiter": 0},
+    )
+    prox.build(verbose=3)
+    x = prox.x(eq)
+    # we change x slightly to profile solve/perturb equilibrium too
+    # this one will compile everything inside the function
+    x = x.at[0].add(np.random.rand() * 0.001)
+    _ = prox.jac_scaled_error(x, prox.constants).block_until_ready()
+
+    def run(x, prox):
+        # we change x slightly to profile solve/perturb equilibrium too
+        x = x.at[0].add(np.random.rand() * 0.001)
         prox.jac_scaled_error(x, prox.constants).block_until_ready()
 
     benchmark.pedantic(run, args=(x, prox), rounds=10, iterations=1)
@@ -359,8 +393,8 @@ def test_proximal_freeb_compute(benchmark):
         prox, ObjectiveFunction((FixCurrent(eq), FixPressure(eq), FixPsi(eq)))
     )
     obj.build()
-    obj.compile()
     x = obj.x(eq)
+    obj.compute_scaled_error(x, obj.constants).block_until_ready()
 
     def run(x, obj):
         obj.compute_scaled_error(x, obj.constants).block_until_ready()
@@ -383,8 +417,8 @@ def test_proximal_freeb_jac(benchmark):
         prox, ObjectiveFunction((FixCurrent(eq), FixPressure(eq), FixPsi(eq)))
     )
     obj.build()
-    obj.compile()
     x = obj.x(eq)
+    obj.jac_scaled_error(x, prox.constants).block_until_ready()
 
     def run(x, obj, prox):
         obj.jac_scaled_error(x, prox.constants).block_until_ready()
@@ -436,29 +470,20 @@ def test_solve_fixed_iter(benchmark):
 @pytest.mark.benchmark
 def test_LinearConstraintProjection_build(benchmark):
     """Benchmark LinearConstraintProjection build."""
-
-    def setup():
-        jax.clear_caches()
-        eq = desc.examples.get("W7-X")
-
-        obj = ObjectiveFunction(ForceBalance(eq))
-        con = get_fixed_boundary_constraints(eq)
-        con = maybe_add_self_consistency(eq, con)
-        con = ObjectiveFunction(con)
-        obj.build()
-        con.build()
-        return (obj, con), {}
+    eq = desc.examples.get("W7-X")
+    obj = ObjectiveFunction(ForceBalance(eq))
+    con = get_fixed_boundary_constraints(eq)
+    con = maybe_add_self_consistency(eq, con)
+    con = ObjectiveFunction(con)
+    obj.build()
+    con.build()
 
     def run(obj, con):
+        jax.clear_caches()
         lc = LinearConstraintProjection(obj, con)
         lc.build()
 
-    benchmark.pedantic(
-        run,
-        setup=setup,
-        rounds=10,
-        iterations=1,
-    )
+    benchmark.pedantic(run, args=(obj, con), rounds=10, iterations=1)
 
 
 @pytest.mark.slow

@@ -12,7 +12,7 @@ from desc.batching import batch_map, vmap_chunked
 from desc.compute.geom_utils import rpz2xyz, rpz2xyz_vec, xyz2rpz_vec
 from desc.grid import LinearGrid
 from desc.integrals._interp_utils import rfft2_modes, rfft2_vander
-from desc.integrals.quad_utils import nfp_loop
+from desc.integrals.quad_utils import _chi, _eta, nfp_loop
 from desc.io import IOAble
 from desc.utils import (
     check_posint,
@@ -24,87 +24,6 @@ from desc.utils import (
     setdefault,
     warnif,
 )
-
-
-def _chi(r):
-    """Partition of unity function in polar coordinates. Eq 39 in [2].
-
-    Parameters
-    ----------
-    r : jnp.ndarray
-        Absolute value of radial coordinate in polar domain.
-
-    """
-    return jnp.exp(-36 * jnp.abs(r) ** 8)
-
-
-def _eta(theta, zeta, theta0, zeta0, ht, hz, st, sz):
-    """Partition of unity function in rectangular coordinates.
-
-    Consider the mapping from
-    (θ,ζ) ∈ [-π, π) × [-π/NFP, π/NFP) to (ρ,ω) ∈ [−1, 1] × [0, 2π)
-    defined by
-    θ − θ₀ = h₁ s₁/2 ρ sin ω
-    ζ − ζ₀ = h₂ s₂/2 ρ cos ω
-    with Jacobian determinant norm h₁h₂ s₁s₂/4 |ρ|.
-
-    In general in dimensions higher than one, the mapping that determines a
-    change of variable for integration must be bijective. This is satisfied
-    only if s₁ = 2π/h₁ and s₂ = (2π/NFP)/h₂. In the particular case the
-    integrand is nonzero in a subset of the domain, then the change of variable
-    need only be a bijective map where the function does not vanish, more
-    precisely, its set of compact support.
-
-    The functions we integrate are proportional to η₀(θ,ζ) = χ₀(r) far from the
-    singularity at (θ₀,ζ₀). Therefore, the support matches χ₀(r)'s, assuming
-    this region is sufficiently large compared to the singular region.
-    Here χ₀(r) has support where the argument r lies in [0, 1]. The map r
-    defines a coordinate mapping between the toroidal domain and a polar domain
-    such that the integration region in the polar domain (ρ,ω) ∈ [−1, 1] × [0, 2π)
-    equals the compact support, and furthermore is a circular region around the
-    singular point in (θ,ζ) geometry when s₁ × s₂ denote the number of grid points
-    on a uniformly discretized toroidal domain (θ,ζ) ∈ [0, 2π)².
-      χ₀ : r ↦ exp(−36r⁸)
-
-      r : ρ, ω ↦ |ρ|
-
-      r : θ, ζ ↦ 2 [ (θ−θ₀)²/(h₁s₁)² + (ζ−ζ₀)²/(h₂s₂)² ]⁰ᐧ⁵
-
-    Hence, r ≥ 1 (r ≤ 1) outside (inside) the integration domain.
-
-    The choice for the size of the support is determined by s₁ and s₂.
-    The optimal choice is dependent on the nature of the singularity e.g. if the
-    integrand decays quickly then the elliptical grid determined by s₁ and s₂
-    can be made smaller and the integration will have higher resolution for the
-    same number of quadrature points.
-
-    With the above definitions the support lies on an s₁ × s₂ subset
-    of a field period which has ``num_theta`` × ``num_zeta`` nodes total.
-    Since kernels are 2π periodic, the choice for s₂ should be multiplied by NFP.
-    Then the support lies on an s₁ × s₂ subset of the full domain. For large NFP
-    devices such as Heliotron or tokamaks it is typical that s₁ ≪ s₂.
-
-    Parameters
-    ----------
-    theta, zeta : jnp.ndarray
-        Coordinates of points to evaluate partition function η₀(θ,ζ).
-    theta0, zeta0 : jnp.ndarray
-        Origin (θ₀,ζ₀) where the partition η₀ is unity.
-    ht, hz : float
-        Grid step size in θ and ζ.
-    st, sz : int
-        Extent of support is an ``st`` × ``sz`` subset
-        of the full domain (θ,ζ) ∈ [0, 2π)² of ``source_grid``.
-        Subset of ``source_grid.num_theta`` × ``source_grid.num_zeta*source_grid.NFP``.
-
-    """
-    dt = jnp.abs(theta - theta0)
-    dz = jnp.abs(zeta - zeta0)
-    # The distance spans (dθ,dζ) ∈ [0, π]², independent of NFP.
-    dt = jnp.minimum(dt, 2 * jnp.pi - dt)
-    dz = jnp.minimum(dz, 2 * jnp.pi - dz)
-    r = 2 * jnp.hypot(dt / (ht * st), dz / (hz * sz))
-    return _chi(r)
 
 
 def _get_default_params(grid):
@@ -546,17 +465,20 @@ def _nonsingular_part(
     sz,
     kernel,
     chunk_size=None,
+    _eta=_eta,
 ):
     """Integrate kernel over non-singular points.
 
     Generally follows sec 3.2.1 of [2].
     """
+    assert source_grid.can_fft2
     source_data.setdefault("theta", source_grid.nodes[:, 1])
     # make sure source dict has zeta and phi to avoid
     # adding keys to dict during iteration
     source_zeta = source_data.setdefault("zeta", source_grid.nodes[:, 2])
     source_phi = source_data["phi"]
 
+    # slim down to skip batching quantities that aren't used
     eval_data = {key: eval_data[key] for key in kernel.keys if key in eval_data}
     eval_data["theta"] = jnp.asarray(eval_grid.nodes[:, 1])
     eval_data["zeta"] = jnp.asarray(eval_grid.nodes[:, 2])
@@ -782,64 +704,48 @@ def singular_integral(
     return out1 + out2
 
 
-def _kernel_nr_over_r3(eval_data, source_data, diag=False):
-    # n * r / |r|^3
-    source_x = jnp.atleast_2d(
-        rpz2xyz(jnp.array([source_data["R"], source_data["phi"], source_data["Z"]]).T)
+def _dx(eval_data, source_data, diag=False):
+    """Returns dx = x−x'."""
+    source_x = rpz2xyz(
+        jnp.column_stack([source_data["R"], source_data["phi"], source_data["Z"]])
     )
-    eval_x = jnp.atleast_2d(
-        rpz2xyz(jnp.array([eval_data["R"], eval_data["phi"], eval_data["Z"]]).T)
+    eval_x = rpz2xyz(
+        jnp.column_stack([eval_data["R"], eval_data["phi"], eval_data["Z"]])
     )
-    if diag:
-        dx = eval_x - source_x
-    else:
-        dx = eval_x[:, None] - source_x[None]
-    n = rpz2xyz_vec(source_data["e^rho"], phi=source_data["phi"])
-    n = n / jnp.linalg.norm(n, axis=-1, keepdims=True)
-    r = safenorm(dx, axis=-1)
-    return safediv(jnp.sum(n * dx, axis=-1), r**3)
-
-
-_kernel_nr_over_r3.ndim = 1
-_kernel_nr_over_r3.keys = ["R", "phi", "Z", "e^rho"]
+    if not diag:
+        eval_x = eval_x[:, jnp.newaxis]
+    return eval_x - source_x
 
 
 def _kernel_1_over_r(eval_data, source_data, diag=False):
-    # 1/|r|
-    source_x = jnp.atleast_2d(
-        rpz2xyz(jnp.array([source_data["R"], source_data["phi"], source_data["Z"]]).T)
-    )
-    eval_x = jnp.atleast_2d(
-        rpz2xyz(jnp.array([eval_data["R"], eval_data["phi"], eval_data["Z"]]).T)
-    )
-    if diag:
-        dx = eval_x - source_x
-    else:
-        dx = eval_x[:, None] - source_x[None]
-    r = safenorm(dx, axis=-1)
-    return safediv(1, r)
+    """G(x,x') = |x−x'|⁻¹."""
+    dx = _dx(eval_data, source_data, diag)
+    return safediv(1, safenorm(dx, axis=-1))
 
 
 _kernel_1_over_r.ndim = 1
 _kernel_1_over_r.keys = ["R", "phi", "Z"]
 
 
+def _kernel_nr_over_r3(eval_data, source_data, diag=False):
+    """Returns n ⋅ −∇G(x,x') = n ⋅ (x−x')|x−x'|⁻³."""
+    dx = _dx(eval_data, source_data, diag)
+    n = rpz2xyz_vec(source_data["n_rho"], phi=source_data["phi"])
+    return safediv(dot(n, dx), safenorm(dx, axis=-1) ** 3)
+
+
+_kernel_nr_over_r3.ndim = 1
+_kernel_nr_over_r3.keys = ["R", "phi", "Z", "n_rho"]
+
+
 def _kernel_biot_savart(eval_data, source_data, diag=False):
-    # K x r / |r|^3
-    source_x = jnp.atleast_2d(
-        rpz2xyz(jnp.array([source_data["R"], source_data["phi"], source_data["Z"]]).T)
-    )
-    eval_x = jnp.atleast_2d(
-        rpz2xyz(jnp.array([eval_data["R"], eval_data["phi"], eval_data["Z"]]).T)
-    )
-    if diag:
-        dx = eval_x - source_x
-    else:
-        dx = eval_x[:, None] - source_x[None]
+    """Returns (μ₀/4π) K × −∇G(x,x') = (μ₀/4π) K × (x−x')|x−x'|⁻³."""
+    dx = _dx(eval_data, source_data, diag)
     K = rpz2xyz_vec(source_data["K_vc"], phi=source_data["phi"])
-    num = jnp.cross(K, dx, axis=-1)
-    r = safenorm(dx, axis=-1)[..., None]
-    return mu_0 / 4 / jnp.pi * safediv(num, r**3)
+    return safediv(
+        mu_0 / (4 * jnp.pi) * jnp.cross(K, dx, axis=-1),
+        safenorm(dx, axis=-1, keepdims=True) ** 3,
+    )
 
 
 _kernel_biot_savart.ndim = 3
@@ -847,20 +753,13 @@ _kernel_biot_savart.keys = ["R", "phi", "Z", "K_vc"]
 
 
 def _kernel_biot_savart_A(eval_data, source_data, diag=False):
-    # K  / |r|
-    source_x = jnp.atleast_2d(
-        rpz2xyz(jnp.array([source_data["R"], source_data["phi"], source_data["Z"]]).T)
-    )
-    eval_x = jnp.atleast_2d(
-        rpz2xyz(jnp.array([eval_data["R"], eval_data["phi"], eval_data["Z"]]).T)
-    )
-    if diag:
-        dx = eval_x - source_x
-    else:
-        dx = eval_x[:, None] - source_x[None]
-    r = safenorm(dx, axis=-1)[..., None]
+    """Returns (μ₀/4π) K G(x,x') = (μ₀/4π) K |x−x'|⁻¹."""
+    dx = _dx(eval_data, source_data, diag)
     K = rpz2xyz_vec(source_data["K_vc"], phi=source_data["phi"])
-    return mu_0 / 4 / jnp.pi * safediv(K, r)
+    return safediv(
+        mu_0 / (4 * jnp.pi) * K,
+        safenorm(dx, axis=-1, keepdims=True),
+    )
 
 
 _kernel_biot_savart_A.ndim = 3
@@ -868,17 +767,8 @@ _kernel_biot_savart_A.keys = ["R", "phi", "Z", "K_vc"]
 
 
 def _kernel_Bn_over_r(eval_data, source_data, diag=False):
-    # B dot n' / |dx|
-    source_x = jnp.atleast_2d(
-        rpz2xyz(jnp.array([source_data["R"], source_data["phi"], source_data["Z"]]).T)
-    )
-    eval_x = jnp.atleast_2d(
-        rpz2xyz(jnp.array([eval_data["R"], eval_data["phi"], eval_data["Z"]]).T)
-    )
-    if diag:
-        dx = eval_x - source_x
-    else:
-        dx = eval_x[:, None] - source_x[None]
+    """Returns Bₙ G(x,x') = Bₙ |x−x'|⁻¹."""
+    dx = _dx(eval_data, source_data, diag)
     return safediv(source_data["Bn"], safenorm(dx, axis=-1))
 
 
@@ -886,46 +776,27 @@ _kernel_Bn_over_r.ndim = 1
 _kernel_Bn_over_r.keys = ["R", "phi", "Z", "Bn"]
 
 
-def _kernel_Phi_dG_dn(eval_data, source_data, diag=False):
-    # Phi(x') * dG(x,x')/dn' = Phi' * n' dot dx / |dx|^3
-    # where Phi has units tesla-meters.
-    source_x = jnp.atleast_2d(
-        rpz2xyz(jnp.array([source_data["R"], source_data["phi"], source_data["Z"]]).T)
-    )
-    eval_x = jnp.atleast_2d(
-        rpz2xyz(jnp.array([eval_data["R"], eval_data["phi"], eval_data["Z"]]).T)
-    )
-    if diag:
-        dx = eval_x - source_x
-    else:
-        dx = eval_x[:, None] - source_x[None]
+def _kernel_Phi_dGp_dn(eval_data, source_data, diag=False):
+    """Returns Φ n ⋅ −∇G(x,x') = Φ n ⋅ (x−x')|x−x'|⁻³."""
+    dx = _dx(eval_data, source_data, diag)
     n = rpz2xyz_vec(source_data["n_rho"], phi=source_data["phi"])
-    return safediv(
-        source_data["Phi"] * dot(n, dx),
-        safenorm(dx, axis=-1) ** 3,
-    )
+    # Phi has units Tesla-meters.
+    return safediv(source_data["Phi"] * dot(n, dx), safenorm(dx, axis=-1) ** 3)
 
 
-_kernel_Phi_dG_dn.ndim = 1
-_kernel_Phi_dG_dn.keys = ["R", "phi", "Z", "Phi", "n_rho"]
+_kernel_Phi_dGp_dn.ndim = 1
+_kernel_Phi_dGp_dn.keys = ["R", "phi", "Z", "n_rho", "Phi"]
 
 
 def _kernel_biot_savart_coulomb(eval_data, source_data, diag=False):
-    # Assumes K_vc in Tesla.
-    source_x = jnp.atleast_2d(
-        rpz2xyz(jnp.array([source_data["R"], source_data["phi"], source_data["Z"]]).T)
-    )
-    eval_x = jnp.atleast_2d(
-        rpz2xyz(jnp.array([eval_data["R"], eval_data["phi"], eval_data["Z"]]).T)
-    )
-    if diag:
-        dx = eval_x - source_x
-    else:
-        dx = eval_x[:, None] - source_x[None]
-    r = safenorm(dx, axis=-1)[..., None]
+    """Returns [ K (Tesla) × −∇G(x,x') - Bₙ ∇G(x,x') ] / 4π."""
+    dx = _dx(eval_data, source_data, diag)
     K = rpz2xyz_vec(source_data["K_vc"], phi=source_data["phi"])
-    coulomb = source_data["Bn"][:, jnp.newaxis] * dx
-    return safediv(jnp.cross(K, dx, axis=-1) - coulomb, r**3) / (4 * jnp.pi)
+    numerator = jnp.cross(K, dx, axis=-1) + source_data["Bn"][:, jnp.newaxis] * dx
+    return safediv(
+        numerator / (4 * jnp.pi),
+        safenorm(dx, axis=-1, keepdims=True) ** 3,
+    )
 
 
 _kernel_biot_savart_coulomb.ndim = 3
@@ -937,8 +808,9 @@ kernels = {
     "nr_over_r3": _kernel_nr_over_r3,
     "biot_savart": _kernel_biot_savart,
     "biot_savart_A": _kernel_biot_savart_A,
-    "kernel_Bn_over_r": _kernel_Bn_over_r,
-    "kernel_Phi_dG_dn": _kernel_Phi_dG_dn,
+    "Bn_over_r": _kernel_Bn_over_r,
+    "Phi_dGp_dn": _kernel_Phi_dGp_dn,
+    "biot_savart_coulomb": _kernel_biot_savart_coulomb,
 }
 
 

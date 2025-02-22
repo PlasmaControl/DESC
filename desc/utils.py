@@ -892,7 +892,7 @@ def cross(a, b, axis=-1):
     return jnp.cross(a, b, axis=axis)
 
 
-def safenorm(x, ord=None, axis=None, fill=0, threshold=0):
+def safenorm(x, ord=None, axis=None, fill=0, threshold=0, keepdims=False):
     """Like jnp.linalg.norm, but without nan gradient at x=0.
 
     Parameters
@@ -911,12 +911,14 @@ def safenorm(x, ord=None, axis=None, fill=0, threshold=0):
     """
     is_zero = (jnp.abs(x) <= threshold).all(axis=axis, keepdims=True)
     y = jnp.where(is_zero, jnp.ones_like(x), x)  # replace x with ones if is_zero
-    n = jnp.linalg.norm(y, ord=ord, axis=axis)
-    n = jnp.where(is_zero.squeeze(), fill, n)  # replace norm with zero if is_zero
+    if not keepdims:
+        is_zero = is_zero.squeeze(axis=axis)
+    n = jnp.linalg.norm(y, ord=ord, axis=axis, keepdims=keepdims)
+    n = jnp.where(is_zero, fill, n)  # replace norm with zero if is_zero
     return n
 
 
-def safenormalize(x, ord=None, axis=None, fill=0, threshold=0):
+def safenormalize(x, ord=None, axis=None, fill=0, threshold=0, keepdims=False):
     """Normalize a vector to unit length, but without nan gradient at x=0.
 
     Parameters
@@ -935,7 +937,7 @@ def safenormalize(x, ord=None, axis=None, fill=0, threshold=0):
     """
     is_zero = (jnp.abs(x) <= threshold).all(axis=axis, keepdims=True)
     y = jnp.where(is_zero, jnp.ones_like(x), x)  # replace x with ones if is_zero
-    n = safenorm(x, ord, axis, fill, threshold) * jnp.ones_like(x)
+    n = safenorm(x, ord, axis, fill, threshold, keepdims) * jnp.ones_like(x)
     # return unit vector with equal components if norm <= threshold
     return jnp.where(n <= threshold, jnp.ones_like(y) / jnp.sqrt(y.size), y / n)
 

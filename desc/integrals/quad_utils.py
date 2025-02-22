@@ -375,3 +375,89 @@ def nfp_loop(source_grid, func, init_val):
         return f + func(zeta_j)
 
     return fori_loop(0, source_grid.NFP, body, init_val)
+
+
+def _chi(r):
+    """Partition of unity function in polar coordinates. Eq 39 in [2].
+
+    Parameters
+    ----------
+    r : jnp.ndarray
+        Absolute value of radial coordinate in polar domain.
+
+    """
+    return jnp.exp(-36 * jnp.abs(r) ** 8)
+
+
+def _eta(theta, zeta, theta0, zeta0, ht, hz, st, sz):
+    """Partition of unity function in rectangular coordinates.
+
+    Consider the mapping from
+    (θ,ζ) ∈ [-π, π) × [-π/NFP, π/NFP) to (ρ,ω) ∈ [−1, 1] × [0, 2π)
+    defined by
+    θ − θ₀ = h₁ s₁/2 ρ sin ω
+    ζ − ζ₀ = h₂ s₂/2 ρ cos ω
+    with Jacobian determinant norm h₁h₂ s₁s₂/4 |ρ|.
+
+    In general in dimensions higher than one, the mapping that determines a
+    change of variable for integration must be bijective. This is satisfied
+    only if s₁ = 2π/h₁ and s₂ = (2π/NFP)/h₂. In the particular case the
+    integrand is nonzero in a subset of the domain, then the change of variable
+    need only be a bijective map where the function does not vanish, more
+    precisely, its set of compact support.
+
+    The functions we integrate are proportional to η₀(θ,ζ) = χ₀(r) far from the
+    singularity at (θ₀,ζ₀). Therefore, the support matches χ₀(r)'s, assuming
+    this region is sufficiently large compared to the singular region.
+    Here χ₀(r) has support where the argument r lies in [0, 1]. The map r
+    defines a coordinate mapping between the toroidal domain and a polar domain
+    such that the integration region in the polar domain (ρ,ω) ∈ [−1, 1] × [0, 2π)
+    equals the compact support, and furthermore is a circular region around the
+    singular point in (θ,ζ) geometry when s₁ × s₂ denote the number of grid points
+    on a uniformly discretized toroidal domain (θ,ζ) ∈ [0, 2π)².
+      χ₀ : r ↦ exp(−36r⁸)
+
+      r : ρ, ω ↦ |ρ|
+
+      r : θ, ζ ↦ 2 [ (θ−θ₀)²/(h₁s₁)² + (ζ−ζ₀)²/(h₂s₂)² ]⁰ᐧ⁵
+
+    Hence, r ≥ 1 (r ≤ 1) outside (inside) the integration domain.
+
+    The choice for the size of the support is determined by s₁ and s₂.
+    The optimal choice is dependent on the nature of the singularity e.g. if the
+    integrand decays quickly then the elliptical grid determined by s₁ and s₂
+    can be made smaller and the integration will have higher resolution for the
+    same number of quadrature points.
+
+    With the above definitions the support lies on an s₁ × s₂ subset
+    of a field period which has ``num_theta`` × ``num_zeta`` nodes total.
+    Since kernels are 2π periodic, the choice for s₂ should be multiplied by NFP.
+    Then the support lies on an s₁ × s₂ subset of the full domain. For large NFP
+    devices such as Heliotron or tokamaks it is typical that s₁ ≪ s₂.
+
+    Parameters
+    ----------
+    theta, zeta : jnp.ndarray
+        Coordinates of points to evaluate partition function η₀(θ,ζ).
+    theta0, zeta0 : jnp.ndarray
+        Origin (θ₀,ζ₀) where the partition η₀ is unity.
+    ht, hz : float
+        Grid step size in θ and ζ.
+    st, sz : int
+        Extent of support is an ``st`` × ``sz`` subset
+        of the full domain (θ,ζ) ∈ [0, 2π)² of ``source_grid``.
+        Subset of ``source_grid.num_theta`` × ``source_grid.num_zeta*source_grid.NFP``.
+
+    """
+    dt = jnp.abs(theta - theta0)
+    dz = jnp.abs(zeta - zeta0)
+    # The distance spans (dθ,dζ) ∈ [0, π]², independent of NFP.
+    dt = jnp.minimum(dt, 2 * jnp.pi - dt)
+    dz = jnp.minimum(dz, 2 * jnp.pi - dz)
+    r = 2 * jnp.hypot(dt / (ht * st), dz / (hz * sz))
+    return _chi(r)
+
+
+def _zero(theta, zeta, theta0, zeta0, ht, hz, st, sz):
+    """Returns η = 0 to integrate smooth functions with ``_nonsingular_part``."""
+    return 0

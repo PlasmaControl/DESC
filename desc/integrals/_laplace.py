@@ -107,13 +107,13 @@ class VacuumSolver(IOAble):
         where 𝐉 is the current in amperes everywhere.
     evl_grid : Grid
         Evaluation points on D for the magnetic field.
+    src_grid : Grid
+        Source points on ∂D for quadrature of kernels.
+        Default resolution is ``src_grid.M=surface.M*4`` and ``src_grid.N=surface.N*4``.
     Phi_grid : Grid
         Interpolation points on ∂D.
         Resolution determines accuracy of Φ interpolation.
         Default resolution is ``Phi_grid.M=surface.M*2`` and ``Phi_grid.N=surface.N*2``.
-    src_grid : Grid
-        Source points on ∂D for quadrature of kernels.
-        Default resolution is ``src_grid.M=surface.M*4`` and ``src_grid.N=surface.N*4``.
     Phi_M : int
         Poloidal Fourier resolution to interpolate Φ on ∂D.
         Should be at most ``Phi_grid.M``.
@@ -144,8 +144,8 @@ class VacuumSolver(IOAble):
         surface,
         B0,
         evl_grid,
-        Phi_grid=None,
         src_grid=None,
+        Phi_grid=None,
         Phi_M=None,
         Phi_N=None,
         sym=None,
@@ -165,16 +165,16 @@ class VacuumSolver(IOAble):
             "with an interpolator that uses matrix multiplication transforms.",
         )
         # TODO (#1206)
+        if src_grid is None:
+            src_grid = LinearGrid(
+                M=surface.M * 4,
+                N=surface.N * 4,
+                NFP=surface.NFP if surface.N > 0 else 64,
+            )
         if Phi_grid is None:
             Phi_grid = LinearGrid(
                 M=surface.M * 2,
                 N=surface.N * 2,
-                NFP=surface.NFP if surface.N > 0 else 64,
-            )
-        if src_grid is None:
-            src_grid = Phi_grid = LinearGrid(
-                M=surface.M * 4,
-                N=surface.N * 4,
                 NFP=surface.NFP if surface.N > 0 else 64,
             )
         self._same_grid_phi_src = src_grid.equiv(Phi_grid)

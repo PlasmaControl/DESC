@@ -133,9 +133,7 @@ class VacuumSolver(IOAble):
         Optional, 𝐁₀⋅𝐧 on ``src_grid``.
     use_dft : bool
         Whether to use matrix multiplication transform from spectral to physical domain
-        instead of inverse fast Fourier transform. This is useful when the real domain
-        grid is much sparser than the spectral domain grid because the MMT is exact
-        while the FFT will truncate higher frequencies.
+        instead of inverse fast Fourier transform.
 
     """
 
@@ -156,14 +154,6 @@ class VacuumSolver(IOAble):
         use_dft=False,
         **kwargs,
     ):
-        # TODO (#1599).
-        errorif(
-            use_dft,
-            RuntimeError,
-            msg="JAX performs matrix multiplication incorrectly for large matrices. "
-            "Until this is fixed, the inversion to obtain Phi cannot be done "
-            "with an interpolator that uses matrix multiplication transforms.",
-        )
         # TODO (#1206)
         if src_grid is None:
             src_grid = LinearGrid(

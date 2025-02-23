@@ -706,13 +706,13 @@ class TestVacuumSolver:
     """Test vacuum field solver."""
 
     @pytest.mark.unit
-    def test_harmonic_simple(self, chunk_size=1000, atol=1e-4):
+    def test_harmonic_simple(self, chunk_size=1000, resolution=50, atol=1e-4):
         """Test that Laplace solution recovers expected analytic result.
 
         Define boundary R_b(θ,ζ) = R₀ + a cos θ and Z_b(θ,ζ) = -a sin θ.
         θ = 0 is outboard side and θ increases clockwise.
         Define harmonic map Φ: ρ,θ,ζ ↦ Z(ρ,θ,ζ).
-        Choose b.c. B₀⋅n = -∇ϕ⋅n
+        Choose b.c. 𝐁₀⋅𝐧 = -∇ϕ⋅𝐧
                          = -[0, 0, 1]⋅[cos(θ)cos(ζ), cos(θ)sin(ζ), -sin(θ)]
                          = sin(θ)
         and test that ‖ Φ − Z ‖_∞ → 0.
@@ -721,7 +721,7 @@ class TestVacuumSolver:
         surf = FourierRZToroidalSurface()  # Choosing a = 1.
         Phi_grid = LinearGrid(M=1, N=0, NFP=surf.NFP)
         evl_grid = LinearGrid(M=5, N=5, NFP=surf.NFP)
-        src_grid = LinearGrid(M=50, N=50, NFP=surf.NFP)
+        src_grid = LinearGrid(M=resolution, N=resolution, NFP=surf.NFP)
 
         theta = src_grid.nodes[:, 1]
         B0n = np.sin(theta)
@@ -752,13 +752,28 @@ class TestVacuumSolver:
         np.testing.assert_allclose(B0n + dPhi_dn, 0, atol=atol)
 
     @pytest.mark.unit
-    def test_harmonic_general(self, chunk_size=1000, atol=1e-4):
+    @pytest.mark.parametrize(
+        ("use_dft", "chunk_size"),
+        [
+            (False, 1000),
+            pytest.param(
+                True,
+                1000,
+                marks=pytest.mark.xfail(
+                    strict=True,
+                    reason="See #1599. Decreasing chunk size to pass test.",
+                ),
+            ),
+        ],
+    )
+    def test_harmonic_general(self, use_dft, chunk_size):
         """Test that Laplace solution recovers expected analytic result.
 
         Define boundary R_b(θ,ζ) and Z_b(θ,ζ).
         Define harmonic map Φ: ρ,θ,ζ ↦ Z(ρ,θ,ζ).
-        Choose b.c. B₀⋅n = -∇ϕ⋅n and test that ‖ Φ − Z ‖_∞ → 0.
+        Choose b.c. 𝐁₀⋅𝐧 = -∇ϕ⋅𝐧 and test that ‖ Φ − Z ‖_∞ → 0.
         """
+        atol = 1e-4
         # elliptic cross-section with torsion
         surf = FourierRZToroidalSurface(
             R_lmn=[10, 1, 0.2],
@@ -782,6 +797,8 @@ class TestVacuumSolver:
             interior=False,
             chunk_size=chunk_size,
             B0n=-surf.compute("n_rho", grid=src_grid)["n_rho"][:, 2],
+            use_dft=use_dft,
+            warn_dft=False,
             warn_fft=False,
         )
 
@@ -799,8 +816,12 @@ class TestVacuumSolver:
 
     @pytest.mark.unit
     @pytest.mark.slow
-    def test_dommaschk_vacuum(self, chunk_size=50, atol=4e-4):
-        """Test computed vacuum field matches Dommaschk potential."""
+    def test_dommaschk_vacuum(self, chunk_size=50):
+        """Test computed vacuum field matches Dommaschk potential.
+
+        The chosen boundary condition has a unique solution 𝐁 = ∇ϕ for the
+        Dommaschk potential ϕ. Hence, it suffices to check that 𝐁⋅𝐧 is satisfied.
+        """
         C_r = {
             (0, -2): 0.000056,
             (0, -1): -0.000921,
@@ -870,7 +891,7 @@ class TestVacuumSolver:
         data = vac.compute_magnetic_field(chunk_size)["evl"].copy()
         data = eq.compute("n_rho", grid=evl_grid, data=data)
         Bn = dot(data["B0+grad(Phi)"], data["n_rho"])
-        np.testing.assert_allclose(Bn, 0, atol=atol)
+        np.testing.assert_allclose(Bn, 0, atol=4e-4)
 
     @staticmethod
     def _merkel_surf(C_r, C_z):

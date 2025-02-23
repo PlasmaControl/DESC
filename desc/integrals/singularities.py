@@ -111,7 +111,14 @@ def best_ratio(data):
 
 
 def get_interpolator(
-    eval_grid, source_grid, src_data, use_dft=False, warn_fft=True, **kwargs
+    eval_grid,
+    source_grid,
+    src_data,
+    use_dft=False,
+    *,
+    warn_dft=True,
+    warn_fft=True,
+    **kwargs,
 ):
     """Get interpolator from Cartesian to polar domain.
 
@@ -124,9 +131,9 @@ def get_interpolator(
         ``|e_theta x e_zeta|``, ``e_theta``, and ``e_zeta``.
     use_dft : bool
         Whether to use matrix multiplication transform from spectral to physical domain
-        instead of inverse fast Fourier transform. This is useful when the real domain
-        grid is much sparser than the spectral domain grid because the MMT is exact
-        while the FFT will truncate higher frequencies.
+        instead of inverse fast Fourier transform.
+    warn_dft : bool
+        Set to ``False`` to turn off warnings about using DFT.
     warn_fft : bool
         Set to ``False`` to turn off warnings about FFT frequency truncation.
 
@@ -144,19 +151,23 @@ def get_interpolator(
             f = FFTInterpolator(eval_grid, source_grid, st, sz, q, warn_fft=warn_fft)
         except AssertionError as e:
             warnif(
-                True,
-                msg="Could not build fft interpolator, switching to dft which is slow."
-                "\nReason: " + str(e),
+                warn_dft,
+                msg="Could not build fft interpolator because:\n"
+                + str(e)
+                + "\nThe DFT interpolator is much less performant."
+                "\nIn some cases when the real domain grid is sparser than the "
+                "spectral domain grid because the DFT interpolator may be useful "
+                "as it is exact while FFT truncates higher frequencies.",
             )
             f = DFTInterpolator(eval_grid, source_grid, st, sz, q)
             use_dft = True
     # TODO (#1599).
     warnif(
-        use_dft,
+        use_dft and warn_dft,
         RuntimeWarning,
-        msg="JAX performs matrix multiplication incorrectly for large matrices. "
-        "Until this is fixed, it is recommended to choose a small chunk size "
-        "when using an interpolator that uses matrix multiplication transforms.",
+        msg="Upstream libraries perform matrix multiplication incorrectly for "
+        "large matrices. Until this is fixed, it is recommended to choose a "
+        "smaller chunk size when using the DFT interpolator.",
     )
     return f
 
@@ -603,8 +614,6 @@ def _singular_part(eval_data, source_data, kernel, interpolator, chunk_size=None
         so only the diagonal term of the kernel is needed.
         """
         vander = interpolator.vander_polar(i)
-        # TODO: Don't FFT and interpolate Phi; it's known analytically as just
-        #   a single harmonic
         source_data_polar = {
             key: interpolator(val, i, is_fourier=True, vander=vander)
             for key, val in fsource
@@ -754,6 +763,9 @@ def _dx(eval_data, source_data, diag=False):
     return eval_x - source_x
 
 
+_dx.keys = ["R", "phi", "Z"]
+
+
 def _kernel_1_over_r(eval_data, source_data, diag=False):
     """Returns G(x,x') = |x−x'|⁻¹."""
     dx = _dx(eval_data, source_data, diag)
@@ -761,7 +773,7 @@ def _kernel_1_over_r(eval_data, source_data, diag=False):
 
 
 _kernel_1_over_r.ndim = 1
-_kernel_1_over_r.keys = ["R", "phi", "Z"]
+_kernel_1_over_r.keys = _dx.keys
 
 
 def _kernel_nr_over_r3(eval_data, source_data, diag=False):
@@ -772,7 +784,7 @@ def _kernel_nr_over_r3(eval_data, source_data, diag=False):
 
 
 _kernel_nr_over_r3.ndim = 1
-_kernel_nr_over_r3.keys = ["R", "phi", "Z", "n_rho"]
+_kernel_nr_over_r3.keys = _dx.keys + ["n_rho"]
 
 
 def _kernel_biot_savart(eval_data, source_data, diag=False):
@@ -780,13 +792,13 @@ def _kernel_biot_savart(eval_data, source_data, diag=False):
     dx = _dx(eval_data, source_data, diag)
     K = rpz2xyz_vec(source_data["K_vc"], phi=source_data["phi"])
     return safediv(
-        mu_0 / (4 * jnp.pi) * jnp.cross(K, dx, axis=-1),
+        mu_0 / (4 * jnp.pi) * jnp.cross(K, dx),
         safenorm(dx, axis=-1, keepdims=True) ** 3,
     )
 
 
 _kernel_biot_savart.ndim = 3
-_kernel_biot_savart.keys = ["R", "phi", "Z", "K_vc"]
+_kernel_biot_savart.keys = _dx.keys + ["K_vc"]
 
 
 def _kernel_biot_savart_A(eval_data, source_data, diag=False):
@@ -800,7 +812,7 @@ def _kernel_biot_savart_A(eval_data, source_data, diag=False):
 
 
 _kernel_biot_savart_A.ndim = 3
-_kernel_biot_savart_A.keys = ["R", "phi", "Z", "K_vc"]
+_kernel_biot_savart_A.keys = _dx.keys + ["K_vc"]
 
 
 def _kernel_Bn_over_r(eval_data, source_data, diag=False):
@@ -810,7 +822,7 @@ def _kernel_Bn_over_r(eval_data, source_data, diag=False):
 
 
 _kernel_Bn_over_r.ndim = 1
-_kernel_Bn_over_r.keys = ["R", "phi", "Z", "Bn"]
+_kernel_Bn_over_r.keys = _dx.keys + ["Bn"]
 
 
 def _kernel_Phi_dGp_dn(eval_data, source_data, diag=False):
@@ -822,14 +834,14 @@ def _kernel_Phi_dGp_dn(eval_data, source_data, diag=False):
 
 
 _kernel_Phi_dGp_dn.ndim = 1
-_kernel_Phi_dGp_dn.keys = ["R", "phi", "Z", "n_rho", "Phi"]
+_kernel_Phi_dGp_dn.keys = _dx.keys + ["n_rho", "Phi"]
 
 
 def _kernel_biot_savart_coulomb(eval_data, source_data, diag=False):
     """Returns [ K (Tesla) × −∇G(x,x') - Bₙ ∇G(x,x') ] / 4π."""
     dx = _dx(eval_data, source_data, diag)
     K = rpz2xyz_vec(source_data["K_vc"], phi=source_data["phi"])
-    numerator = jnp.cross(K, dx, axis=-1) + source_data["Bn"][:, jnp.newaxis] * dx
+    numerator = jnp.cross(K, dx) + source_data["Bn"][:, jnp.newaxis] * dx
     return safediv(
         numerator / (4 * jnp.pi),
         safenorm(dx, axis=-1, keepdims=True) ** 3,
@@ -837,7 +849,7 @@ def _kernel_biot_savart_coulomb(eval_data, source_data, diag=False):
 
 
 _kernel_biot_savart_coulomb.ndim = 3
-_kernel_biot_savart_coulomb.keys = ["R", "phi", "Z", "K_vc", "Bn"]
+_kernel_biot_savart_coulomb.keys = _dx.keys + ["K_vc", "Bn"]
 
 
 kernels = {
@@ -974,16 +986,18 @@ def compute_B_plasma(eq, eval_grid, source_grid=None, normal_only=False):
             sym=False,
         )
 
-    names = ["K_vc", "B", "R", "phi", "Z", "e^rho", "n_rho", "|e_theta x e_zeta|"]
-    eval_data = eq.compute(names, grid=eval_grid)
-    source_data = eq.compute(names, grid=source_grid)
+    eval_data = eq.compute(_dx.keys + ["B", "n_rho"], grid=eval_grid)
+    source_data = eq.compute(
+        _kernel_biot_savart_A.keys + ["|e_theta x e_zeta|"], grid=source_grid
+    )
     if hasattr(eq.surface, "Phi_mn"):
-        source_data["K_vc"] += eq.surface.compute("K", grid=source_grid)["K"]
+        source_data = eq.surface.compute("K", grid=source_grid, data=source_data)
+        source_data["K_vc"] += source_data["K"]
 
     interpolator = get_interpolator(eval_grid, source_grid, source_data)
     Bplasma = virtual_casing_biot_savart(eval_data, source_data, interpolator)
     # need extra factor of B/2 bc we're evaluating on plasma surface
-    Bplasma = Bplasma + eval_data["B"] / 2
+    Bplasma += eval_data["B"] / 2
     if normal_only:
-        Bplasma = jnp.sum(Bplasma * eval_data["n_rho"], axis=1)
+        Bplasma = dot(Bplasma, eval_data["n_rho"])
     return Bplasma

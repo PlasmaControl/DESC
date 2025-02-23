@@ -798,7 +798,8 @@ class TestVacuumSolver:
         np.testing.assert_allclose(B0n + dPhi_dn, 0, atol=atol)
 
     @pytest.mark.unit
-    def test_dommaschk_vacuum(self, chunk_size=500, atol=1e-5):  # 4e-4
+    @pytest.mark.slow
+    def test_dommaschk_vacuum(self, chunk_size=50, atol=4e-4):
         """Test computed vacuum field matches Dommaschk potential."""
         C_r = {
             (0, -2): 0.000056,

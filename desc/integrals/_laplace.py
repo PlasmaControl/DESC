@@ -154,6 +154,14 @@ class VacuumSolver(IOAble):
         use_dft=False,
         **kwargs,
     ):
+        # TODO (#1599).
+        errorif(
+            use_dft,
+            RuntimeError,
+            msg="JAX performs matrix multiplication incorrectly for large matrices. "
+            "Until this is fixed, the inversion to obtain Phi cannot be done "
+            "with an interpolator that uses matrix multiplication transforms.",
+        )
         # TODO (#1206)
         if Phi_grid is None:
             Phi_grid = LinearGrid(

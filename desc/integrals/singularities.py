@@ -149,6 +149,15 @@ def get_interpolator(
                 "\nReason: " + str(e),
             )
             f = DFTInterpolator(eval_grid, source_grid, st, sz, q)
+            use_dft = True
+    # TODO (#1599).
+    warnif(
+        use_dft,
+        RuntimeWarning,
+        msg="JAX performs matrix multiplication incorrectly for large matrices. "
+        "Until this is fixed, it is recommended to choose a small chunk size "
+        "when using an interpolator that uses matrix multiplication transforms.",
+    )
     return f
 
 

@@ -36,7 +36,9 @@ def _green(self, Phi_mn, chunk_size):
         if self._same_grid_phi_src
         else self._transform["Phi"].transform(Phi_mn)
     )
-    # TODO: Can generalize this to be one singular integral without interpolation.
+    # TODO: Change _kernel_Phi_dGp_dn.ndim = Phi_mn.size and don't FFT
+    #       and interpolate Phi. Just evaluate it since it is a single
+    #       trigonometric function.
     return Phi + singular_integral(
         self._data["Phi"],
         src_data,
@@ -72,13 +74,13 @@ def _compute_Phi_mn(self, *, chunk_size=None):
 
 
 class VacuumSolver(IOAble):
-    """Compute vacuum field that satisfies LCFS boundary condition in plasma interior.
+    """Compute vacuum field that satisfies LCFS boundary condition.
 
     Let D, D^∁ denote the interior, exterior of a toroidal region with
     boundary ∂D. Computes the magnetic field 𝐁 in units of Tesla such that
 
     - 𝐁 = 𝐁₀ + ∇Φ     on D
-    - 𝐁 ⋅ 𝐧 = 0      on ∂D
+    - 𝐁 ⋅ 𝐧 = 0       on ∂D
     - ∇ × 𝐁₀ = μ₀ 𝐉   on D ∪ D^∁
     - ∇ ⋅ 𝐁₀ = 0      on D ∪ D^∁
     - ∇²Φ = 0         on D
@@ -292,7 +294,7 @@ class VacuumSolver(IOAble):
              Vacuum field ∇Φ stored in ``data["evl"]["grad(Phi)"]``.
 
         """
-        if "grad(phi)" in self._data["evl"]:
+        if "grad(Phi)" in self._data["evl"]:
             return self._data
 
         self._data = self.compute_Phi_mn(chunk_size)

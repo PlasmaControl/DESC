@@ -264,8 +264,8 @@ class Equilibrium(IOAble, Optimizable):
         self._M_grid = setdefault(M_grid, 2 * self.M)
         self._N_grid = setdefault(N_grid, 2 * self.N)
 
-        self._surface.change_resolution(self.L, self.M, self.N)
-        self._axis.change_resolution(self.N)
+        self._surface.change_resolution(self.L, self.M, self.N, sym=self.sym)
+        self._axis.change_resolution(self.N, sym=self.sym)
 
         # bases
         self._R_basis = FourierZernikeBasis(

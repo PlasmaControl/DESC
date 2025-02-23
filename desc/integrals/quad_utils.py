@@ -377,7 +377,7 @@ def nfp_loop(source_grid, func, init_val):
     return fori_loop(0, source_grid.NFP, body, init_val)
 
 
-def _chi(r):
+def chi(r):
     """Partition of unity function in polar coordinates. Eq 39 in [2].
 
     Parameters
@@ -389,7 +389,7 @@ def _chi(r):
     return jnp.exp(-36 * jnp.abs(r) ** 8)
 
 
-def _eta(theta, zeta, theta0, zeta0, ht, hz, st, sz):
+def eta(theta, zeta, theta0, zeta0, ht, hz, st, sz):
     """Partition of unity function in rectangular coordinates.
 
     Consider the mapping from
@@ -455,9 +455,9 @@ def _eta(theta, zeta, theta0, zeta0, ht, hz, st, sz):
     dt = jnp.minimum(dt, 2 * jnp.pi - dt)
     dz = jnp.minimum(dz, 2 * jnp.pi - dz)
     r = 2 * jnp.hypot(dt / (ht * st), dz / (hz * sz))
-    return _chi(r)
+    return chi(r)
 
 
-def _zero(theta, zeta, theta0, zeta0, ht, hz, st, sz):
+def eta_zero(theta, zeta, theta0, zeta0, ht, hz, st, sz):
     """Returns η = 0 to integrate smooth functions with ``_nonsingular_part``."""
     return 0

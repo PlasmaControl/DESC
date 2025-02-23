@@ -1,18 +1,17 @@
 """High order method for singular surface integrals, from Malhotra 2019."""
 
 from abc import ABC, abstractmethod
-from functools import partial
 
 import scipy
 from interpax import fft_interp2d
 from scipy.constants import mu_0
 
-from desc.backend import jit, jnp, rfft2
+from desc.backend import jnp, rfft2
 from desc.batching import batch_map, vmap_chunked
 from desc.compute.geom_utils import rpz2xyz, rpz2xyz_vec, xyz2rpz_vec
 from desc.grid import LinearGrid
 from desc.integrals._interp_utils import rfft2_modes, rfft2_vander
-from desc.integrals.quad_utils import _chi, _eta, nfp_loop
+from desc.integrals.quad_utils import chi, eta, nfp_loop
 from desc.io import IOAble
 from desc.utils import (
     check_posint,
@@ -465,7 +464,7 @@ def _nonsingular_part(
     sz,
     kernel,
     chunk_size=None,
-    _eta=_eta,
+    _eta=eta,
 ):
     """Integrate kernel over non-singular points.
 
@@ -496,7 +495,7 @@ def _nonsingular_part(
             k = kernel(eval_data_i, source_data).reshape(
                 -1, source_grid.num_nodes, kernel.ndim
             )
-            eta = _eta(
+            e = 1 - _eta(
                 source_data["theta"],
                 source_data["zeta"],
                 eval_data_i["theta"][:, jnp.newaxis],
@@ -506,7 +505,7 @@ def _nonsingular_part(
                 st,
                 sz,
             )
-            return jnp.sum(k * (w * (1 - eta))[..., jnp.newaxis], axis=1)
+            return jnp.sum(k * (w * e)[..., jnp.newaxis], axis=1)
 
         return batch_map(eval_pt, eval_data, chunk_size).reshape(
             eval_grid.num_nodes, kernel.ndim
@@ -541,7 +540,7 @@ def _singular_part(eval_data, source_data, kernel, interpolator, chunk_size=None
     r = jnp.abs(r)
     # integrand of eq 38 in [2] except stuff that needs to be interpolated
     v = (
-        _chi(r)
+        chi(r)
         * (interpolator.ht * interpolator.hz)
         * (interpolator.st * interpolator.sz / 4)
         * r
@@ -553,11 +552,10 @@ def _singular_part(eval_data, source_data, kernel, interpolator, chunk_size=None
     if "phi" in keys:
         keys.remove("phi")  # ϕ is not a periodic map of θ, ζ.
         keys.add("omega")
-    keys = list(keys)
     # Note that it is necessary to take the Fourier transforms of the
     # vector components of the orthonormal polar basis vectors R̂, ϕ̂, Ẑ.
     # Vector components of the Cartesian basis are not NFP periodic.
-    fsource = [interpolator.fourier(source_data[key]) for key in keys]
+    fsource = [(key, interpolator.fourier(source_data[key])) for key in keys]
 
     def polar_pt(i):
         """See sec 3.2.2 of [2].
@@ -569,7 +567,7 @@ def _singular_part(eval_data, source_data, kernel, interpolator, chunk_size=None
         vander = interpolator.vander_polar(i)
         source_data_polar = {
             key: interpolator(val, i, is_fourier=True, vander=vander)
-            for key, val in zip(keys, fsource)
+            for key, val in fsource
         }
         # Coordinates of the polar nodes around the evaluation point.
         source_data_polar["theta"] = eval_theta + interpolator.shift_t[i]
@@ -611,7 +609,6 @@ def _singular_part(eval_data, source_data, kernel, interpolator, chunk_size=None
     return f
 
 
-@partial(jit, static_argnums=[2, 4])
 def singular_integral(
     eval_data,
     source_data,

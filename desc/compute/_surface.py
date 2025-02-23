@@ -21,14 +21,14 @@ from .geom_utils import rpz2xyz
     },
     profiles=[],
     coordinates="tz",
-    data=[],
+    data=["zeta", "omega"],
     parameterization="desc.geometry.surface.FourierRZToroidalSurface",
 )
 def _x_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs):
     R = transforms["R"].transform(params["R_lmn"])
     Z = transforms["Z"].transform(params["Z_lmn"])
     # TODO(#568): change when zeta no longer equals phi
-    phi = transforms["grid"].nodes[:, 2]
+    phi = data["zeta"] + data["omega"]
     coords = jnp.stack([R, phi, Z], axis=1)
     # default basis for "x" is rpz, the conversion will be done
     # in the main _compute function

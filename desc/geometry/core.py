@@ -394,7 +394,7 @@ class Surface(IOAble, Optimizable, ABC):
 
     @property
     def sym(self):
-        """bool: Whether or not the surface is stellarator symmetric."""
+        """bool: Whether the surface is stellarator symmetric."""
         return self._sym
 
     def _compute_orientation(self):

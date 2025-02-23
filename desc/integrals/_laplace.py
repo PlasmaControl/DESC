@@ -1,17 +1,12 @@
-"""High order accurate Laplace solver.
+"""High order accurate vacuum field solver."""
 
-This is used to solve vacuum equilibria without assuming nested flux surfaces.
-Once pushed into an optimization loop, we can just do constrained optimization
-under linear constraint B₀⋅n = -∇ϕ⋅n so that we avoid inverting the large system
-for the Fourier harmonics of ϕ. The methods here perform the inversion as this
-is necessary to write correctness tests.
-"""
+from functools import partial
 
 from desc.backend import jnp
 from desc.basis import DoubleFourierSeries
 from desc.batching import vmap_chunked
 from desc.grid import LinearGrid
-from desc.integrals.quad_utils import _zero
+from desc.integrals.quad_utils import eta_zero
 from desc.integrals.singularities import (
     _get_interpolator,
     _kernel_biot_savart_coulomb,
@@ -20,31 +15,68 @@ from desc.integrals.singularities import (
     _nonsingular_part,
     singular_integral,
 )
+from desc.io import IOAble
 from desc.transform import Transform
 
 
-def get_laplace_dict(
-    eq,
-    B0,
-    evl_grid,
-    phi_grid=None,
-    src_grid=None,
-    chunk_size=None,
-    evl_names=None,
-    B0n=None,
-):
-    """Compute quantities needed for Laplace solver.
+@partial(vmap_chunked, in_axes=(None, 0, None), chunk_size=1)
+def _green(self, Phi_mn, chunk_size):
+    """Compute green(Φₘₙ).
+
+    After Fourier transform, ``green`` is linear in the spectral coefficients
+    Φₘₙ. Finite-dimensional approximation enables writing green(Φₘₙ) = A @ Φₘₙ.
+    """
+    src_data = self._data["src"].copy()
+    src_data["Phi"] = self._transform["src"].transform(Phi_mn)
+    Phi = (
+        src_data["Phi"]
+        if self._same_transform
+        else self._transform["Phi"].transform(Phi_mn)
+    )
+    return Phi + singular_integral(
+        self._data["Phi"],
+        src_data,
+        _kernel_Phi_dGp_dn,
+        self._interpolator["Phi"],
+        chunk_size,
+    ).squeeze() / (2 * jnp.pi)
+
+
+class VacuumSolver(IOAble):
+    """Compute vacuum field that satisfies LCFS boundary condition in plasma interior.
+
+    Let D, D^∁ denote the interior, exterior of a toroidal region with
+    boundary ∂D. Computes the magnetic field 𝐁 in units of Tesla such that
+
+    - 𝐁 = 𝐁₀ + ∇Φ     on D
+    - 𝐁 ⋅ 𝐧 = 0      on ∂D
+    - ∇ × 𝐁₀ = μ₀ 𝐉   on D ∪ D^∁
+    - ∇ ⋅ 𝐁₀ = 0      on D ∪ D^∁
+    - ∇²Φ = 0         on D
+
+    That is, given a magnetic field 𝐁₀ due to volume current sources,
+    finds the unique vacuum field ∇Φ such that 𝐁 ⋅ 𝐧 = 0 without assuming
+    nested flux surfaces.
+
+    Examples
+    --------
+    In a vacuum, the magnetic field may be written 𝐁 = ∇𝛷. The solution to
+    ∇²𝛷 = 0, under a homogenous boundary condition 𝐁 ⋅ 𝐧 = 0, is 𝛷 = 0. To
+    obtain a non-trivial solution, the boundary condition may be modified.
+    Let 𝐁 = 𝐁₀ + ∇Φ. If 𝐁₀ ≠ 0 and satisfies ∇ × 𝐁₀ = 0, then ∇²Φ = 0 solved
+    under an inhomogeneous boundary condition yields a non-trivial solution.
+    If 𝐁₀ ≠ -∇Φ, then 𝐁 ≠ 0.
 
     Parameters
     ----------
-    eq : Equilibrium
-        Configuration with surface geometry defining ∂D.
+    surface : Surface
+        Geometry defining ∂D.
     B0 : _MagneticField
         Magnetic field such that ∇ × 𝐁₀ = μ₀ 𝐉
         where 𝐉 is the current in amperes everywhere.
     evl_grid : Grid
         Evaluation points on D for the magnetic field.
-    phi_grid : Grid
+    Phi_grid : Grid
         Interpolation points on ∂D.
         Resolution determines accuracy of Φ interpolation.
     src_grid : Grid
@@ -53,259 +85,219 @@ def get_laplace_dict(
         Size to split computation into chunks.
         If no chunking should be done or the chunk size is the full input
         then supply ``None``. Default is ``None``.
-    evl_names : list[str]
-        Additional names of quantities to compute on ``evl_grid``.
+    interior : bool
+        If true, it is assumed the evaluation grid is subset of D.
+        If false, it is assumed the evaluation grid is subset of ∂D.
     B0n : jnp.ndarray
-        Optional, B₀⋅n on ∂D.
-
-    Returns
-    -------
-    laplace : dict
-        Dictionary with needed stuff for Laplace solver.
+        Optional, 𝐁₀⋅𝐧 on ``src_grid``.
 
     """
-    position = ["R", "phi", "Z"]
-    if evl_names is not None:
-        evl_names = position + evl_names
-    phi_names = position
-    src_names = position + ["n_rho", "|e_theta x e_zeta|", "e_theta", "e_zeta"]
 
-    phi_grid = phi_grid or LinearGrid(
-        M=eq.M_grid,
-        N=eq.N_grid,
-        NFP=eq.NFP if eq.N > 0 else 64,
-    )
-    src_grid = src_grid or phi_grid
-    # TODO: add basis symmetry
-    basis = DoubleFourierSeries(M=phi_grid.M, N=phi_grid.N, NFP=eq.NFP)
-
-    # Compute source grid data.
-    src_transform = Transform(src_grid, basis, derivs=1)
-    src_data = eq.compute(src_names, grid=src_grid)
-    # Compute Phi grid data.
-    src_grid_is_phi_grid = src_grid.equiv(phi_grid)
-    if src_grid_is_phi_grid:
-        phi_transform = src_transform
-        phi_data = src_data
-    else:
-        phi_transform = Transform(phi_grid, basis)
-        phi_data = eq.compute(phi_names, grid=phi_grid)
-    # Compute eval grid data.
-    if evl_grid.equiv(phi_grid):
-        evl_data = phi_data
-    elif not src_grid_is_phi_grid and evl_grid.equiv(src_grid):
-        evl_data = src_data
-    else:
-        evl_data = eq.compute(evl_names, grid=evl_grid)
-
-    if B0n is not None:
-        src_data["Bn"] = B0n
-    elif B0 is not None:
-        src_data["Bn"], _ = B0.compute_Bnormal(
-            eq.surface,
-            eval_grid=src_grid,
-            source_grid=src_grid,
-            vc_source_grid=src_grid,
-            chunk_size=chunk_size,
-        )
-
-    return {
-        "evl_grid": evl_grid,
-        "phi_transform": phi_transform,
-        "src_transform": src_transform,
-        "evl_data": evl_data,
-        "phi_data": phi_data,
-        "src_data": src_data,
-    }
-
-
-def _compute_Phi_mn(laplace, chunk_size=None, **kwargs):
-    """Compute Fourier coefficients of vacuum potential Φ on ∂D.
-
-    Parameters
-    ----------
-    laplace : dict
-        Dictionary with needed stuff for Laplace solver.
-    chunk_size : int or None
-        Size to split computation into chunks.
-        If no chunking should be done or the chunk size is the full input
-        then supply ``None``. Default is ``None``.
-
-    Returns
-    -------
-    laplace : dict
-        ``laplace["phi_data"]["Phi_mn"]`` stores Fourier coefficients of Φ on ∂D.
-
-    """
-    same_transform = laplace["phi_transform"] == laplace["src_transform"]
-    num_modes = laplace["phi_transform"].num_modes
-    interpolator = _get_interpolator(
-        laplace["phi_transform"].grid,
-        laplace["src_transform"].grid,
-        laplace["src_data"],
+    def __init__(
+        self,
+        surface,
+        B0,
+        evl_grid,
+        Phi_grid=None,
+        src_grid=None,
+        chunk_size=None,
+        interior=True,
+        B0n=None,
         **kwargs,
-    )
+    ):
+        position = ["R", "phi", "Z"]
+        evl_names = position + kwargs.get("evl_names", [])
+        phi_names = position
+        src_names = position + ["n_rho", "|e_theta x e_zeta|", "e_theta", "e_zeta"]
 
-    def func(Phi_mn):
-        """Compute left hand side of Green's function solution.
+        Phi_grid = Phi_grid or LinearGrid(
+            M=surface.M_grid,
+            N=surface.N_grid,
+            NFP=surface.NFP if surface.N > 0 else 64,
+        )
+        src_grid = src_grid or Phi_grid
+        basis = DoubleFourierSeries(
+            M=Phi_grid.M, N=Phi_grid.N, NFP=surface.NFP, sym=False and surface.sym
+        )
 
-        After Fourier transform, ``func`` is linear in the spectral coefficients Φₘₙ.
-        We approximate this as finite-dimensional, which enables writing the left
-        hand side as A @ Φₘₙ. Then Φₘₙ is found by solving func(Φₘₙ) = A @ Φₘₙ = b.
+        # Compute source grid data.
+        src_transform = Transform(src_grid, basis, derivs=1)
+        src_data = surface.compute(src_names, grid=src_grid)
+        # Compute Phi grid data.
+        self._same_transform = src_grid.equiv(Phi_grid)
+        if self._same_transform:
+            Phi_transform = src_transform
+            Phi_data = src_data
+        else:
+            Phi_transform = Transform(Phi_grid, basis)
+            Phi_data = surface.compute(phi_names, grid=Phi_grid)
+        # Compute eval grid data.
+        if evl_grid.equiv(Phi_grid):
+            evl_data = Phi_data
+        elif not self._same_transform and evl_grid.equiv(src_grid):
+            evl_data = src_data
+        else:
+            evl_data = surface.compute(evl_names, grid=evl_grid)
+
+        if B0n is not None:
+            src_data["Bn"] = B0n
+        elif B0 is not None:
+            src_data["Bn"], _ = B0.compute_Bnormal(
+                surface,
+                eval_grid=src_grid,
+                source_grid=src_grid,
+                vc_source_grid=src_grid,
+                chunk_size=chunk_size,
+            )
+
+        self._B0 = B0
+        self._evl_grid = evl_grid
+        self._interior = interior
+        self._data = {"evl": evl_data, "Phi": Phi_data, "src": src_data}
+        self._transform = {"Phi": Phi_transform, "src": src_transform}
+        self._interpolator = {
+            "evl": _get_interpolator(evl_grid, src_grid, src_data, **kwargs),
+            "Phi": _get_interpolator(Phi_grid, src_grid, src_data, **kwargs),
+        }
+
+    def compute_Phi_mn(self, chunk_size=None):
+        """Compute Fourier coefficients of vacuum potential Φ on ∂D.
+
+        Parameters
+        ----------
+        chunk_size : int or None
+            Size to split computation into chunks.
+            If no chunking should be done or the chunk size is the full input
+            then supply ``None``. Default is ``None``.
+
+        Returns
+        -------
+        data : dict
+             Fourier coefficients of Φ on ∂D stored in ``data["Phi"]["Phi_mn"]``.
+
         """
-        src_data = laplace["src_data"].copy()
-        src_data["Phi"] = laplace["src_transform"].transform(Phi_mn)
-        Phi = (
-            src_data["Phi"]
-            if same_transform
-            else laplace["phi_transform"].transform(Phi_mn)
-        )
-        return Phi + singular_integral(
-            laplace["phi_data"],
-            src_data,
-            _kernel_Phi_dGp_dn,
-            interpolator,
-            chunk_size,
-        ).squeeze() / (2 * jnp.pi)
+        if "Phi_mn" not in self._data["Phi"]:
+            b = -singular_integral(
+                self._data["Phi"],
+                self._data["src"],
+                _kernel_Bn_over_r,
+                self._interpolator["Phi"],
+                chunk_size,
+            ).squeeze() / (2 * jnp.pi)
 
-    b = -singular_integral(
-        laplace["phi_data"],
-        laplace["src_data"],
-        _kernel_Bn_over_r,
-        interpolator,
-        chunk_size,
-    ).squeeze() / (2 * jnp.pi)
+            # green is expensive, so better to construct Jacobian then solve
+            # rather than iterative methods like ``jax.scipy.sparse.linalg.cg``
+            A = _green(self, jnp.eye(self._transform["Phi"].num_modes), chunk_size).T
+            self._data["Phi"]["Phi_mn"] = jnp.linalg.solve(A, b)
 
-    # func is expensive, so it is better to construct full Jacobian once
-    # rather than iterative solves like jax.scipy.sparse.linalg.cg.
-    A = vmap_chunked(func, chunk_size=1)(jnp.eye(num_modes)).T
-    laplace["phi_data"]["Phi_mn"] = jnp.linalg.solve(A, b)
-    return laplace
+        return self._data
 
+    def _compute_virtual_current(self):
+        """𝐊_vc = -𝐧 × ∇Φ."""
+        # Note this is not a virtual casing current.
+        data = self._data["src"]
+        if "K_vc" not in data:
+            Phi_mn = self._data["Phi"]["Phi_mn"]
+            data["Phi_t"] = self._transform["src"].transform(Phi_mn, dt=1)
+            data["Phi_z"] = self._transform["src"].transform(Phi_mn, dz=1)
+            data["K^theta"] = data["Phi_z"] / data["|e_theta x e_zeta|"]
+            data["K^zeta"] = -data["Phi_t"] / data["|e_theta x e_zeta|"]
+            data["K_vc"] = (
+                data["K^theta"][:, jnp.newaxis] * data["e_theta"]
+                + data["K^zeta"][:, jnp.newaxis] * data["e_zeta"]
+            )
+        return self._data
 
-def _compute_shielding_current(laplace):
-    """K_vc = -n × ∇Φ."""
-    Phi_mn = laplace["phi_data"]["Phi_mn"]
-    src_data = laplace["src_data"]
-    src_data["Phi_t"] = laplace["src_transform"].transform(Phi_mn, dt=1)
-    src_data["Phi_z"] = laplace["src_transform"].transform(Phi_mn, dz=1)
-    src_data["K^theta"] = src_data["Phi_z"] / src_data["|e_theta x e_zeta|"]
-    src_data["K^zeta"] = -src_data["Phi_t"] / src_data["|e_theta x e_zeta|"]
-    src_data["K_vc"] = (
-        src_data["K^theta"][:, jnp.newaxis] * src_data["e_theta"]
-        + src_data["K^zeta"][:, jnp.newaxis] * src_data["e_zeta"]
-    )
-    return laplace
+    def compute_vacuum_field(self, chunk_size=None):
+        """Compute magnetic field due to vacuum potential Φ.
 
+        Parameters
+        ----------
+        chunk_size : int or None
+            Size to split computation into chunks.
+            If no chunking should be done or the chunk size is the full input
+            then supply ``None``. Default is ``None``.
 
-def _compute_grad_Phi(laplace, chunk_size=None, interior=True, **kwargs):
-    """Computes vacuum field ∇Φ.
+        Returns
+        -------
+        data : dict
+             Vacuum field ∇Φ stored in ``data["evl"]["grad(Phi)"]``.
 
-    Parameters
-    ----------
-    laplace : dict
-        Dictionary with needed stuff for Laplace solver.
-    chunk_size : int or None
-        Size to split computation into chunks.
-        If no chunking should be done or the chunk size is the full input
-        then supply ``None``. Default is ``None``.
-    interior : bool
-        If true, it is assumed the evaluation grid is subset of D.
-        If false, it is assumed the evaluation grid is subset of ∂D.
+        """
+        self._data = self.compute_Phi_mn(chunk_size)
+        self._data = self._compute_virtual_current()
 
-    Returns
-    -------
-    laplace : dict
-        Vacuum field ∇Φ stored in ``laplace["evl_data"]["grad(Phi)"]``.
-        Shape (``eval_grid.grid.num_nodes``, 3).
+        if "grad(Phi)" not in self._data["evl"]:
+            self._data["evl"]["grad(Phi)"] = (
+                _nonsingular_part(
+                    self._data["evl"],
+                    self._evl_grid,
+                    self._data["src"],
+                    self._transform["src"].grid,
+                    st=jnp.nan,
+                    sz=jnp.nan,
+                    kernel=_kernel_biot_savart_coulomb,
+                    chunk_size=chunk_size,
+                    _eta=eta_zero,
+                )
+                if self._interior
+                else 2
+                * singular_integral(
+                    self._data["evl"],
+                    self._data["src"],
+                    kernel=_kernel_biot_savart_coulomb,
+                    interpolator=self._interpolator["evl"],
+                    chunk_size=chunk_size,
+                )
+            )
+        return self._data
 
-    """
-    laplace["evl_data"]["grad(Phi)"] = (
-        _nonsingular_part(
-            laplace["evl_data"],
-            laplace["evl_grid"],
-            laplace["src_data"],
-            laplace["src_transform"].grid,
-            st=jnp.nan,
-            sz=jnp.nan,
-            kernel=_kernel_biot_savart_coulomb,
-            chunk_size=chunk_size,
-            _eta=_zero,
-        )
-        if interior
-        else 2
-        * singular_integral(
-            laplace["evl_data"],
-            laplace["src_data"],
-            kernel=_kernel_biot_savart_coulomb,
-            interpolator=_get_interpolator(
-                laplace["evl_grid"],
-                laplace["src_transform"].grid,
-                laplace["src_data"],
-                **kwargs,
-            ),
-            chunk_size=chunk_size,
-        )
-    )
-    return laplace
+    def compute_current_field(self, chunk_size=None):
+        """Compute magnetic field 𝐁₀ due to volume current sources.
 
+        Parameters
+        ----------
+        chunk_size : int or None
+            Size to split computation into chunks.
+            If no chunking should be done or the chunk size is the full input
+            then supply ``None``. Default is ``None``.
 
-def compute_B_from_B0(B0, laplace, chunk_size=None, interior=True, **kwargs):
-    """Compute vacuum field that satisfies LCFS boundary condition in plasma interior.
+        Returns
+        -------
+        data : dict
+            𝐁₀ stored in ``data["evl"]["B0"]``.
 
-    Let D, D^∁ denote the interior, exterior of a toroidal region with
-    boundary ∂D. Computes the magnetic field 𝐁 in units of Tesla such that
+        """
+        data = self._data["evl"]
+        if "B0" not in data:
+            coords = jnp.column_stack([data["R"], data["phi"], data["Z"]])
+            data["B0"] = self._B0.compute_magnetic_field(
+                coords=coords,
+                source_grid=self._transform["src"].grid,
+                chunk_size=chunk_size,
+            )
+        return self._data
 
-    - 𝐁 = 𝐁₀ + ∇Φ     on D
-    - ∇ × 𝐁₀ = μ₀ 𝐉   on D ∪ D^∁
-    - ∇ ⋅ 𝐁₀ = 0      on D ∪ D^∁
-    - 𝐁 ⋅ ∇ρ = 0      on ∂D
-    - ∇²Φ = 0         on D
+    def compute_magnetic_field(self, chunk_size=None):
+        """Compute magnetic field 𝐁 = 𝐁₀ + ∇Φ.
 
-    Examples
-    --------
-    In a vacuum, the magnetic field may be written 𝐁 = ∇𝛷.
-    The solution to ∇²𝛷 = 0, under a homogenous boundary
-    condition 𝐁 ⋅ ∇ρ = 0, is 𝛷 = 0. To obtain a non-trivial solution,
-    the boundary condition may be modified.
-    Let 𝐁 = 𝐁₀ + ∇Φ.
-    If 𝐁₀ ≠ 0 and satisfies ∇ × 𝐁₀ = 0, then ∇²Φ = 0 solved
-    under an inhomogeneous boundary condition yields a non-trivial solution.
-    If 𝐁₀ ≠ -∇Φ, then 𝐁 ≠ 0.
+        Parameters
+        ----------
+        chunk_size : int or None
+            Size to split computation into chunks.
+            If no chunking should be done or the chunk size is the full input
+            then supply ``None``. Default is ``None``.
 
-    Parameters
-    ----------
-    B0 : _MagneticField
-        Magnetic field such that ∇ × 𝐁₀ = μ₀ 𝐉
-        where 𝐉 is the current in amperes everywhere.
-    laplace : dict
-        Dictionary with needed stuff for Laplace solver.
-    chunk_size : int or None
-        Size to split computation into chunks.
-        If no chunking should be done or the chunk size is the full input
-        then supply ``None``. Default is ``None``.
-    interior : bool
-        If true, it is assumed the evaluation grid is subset of D.
-        If false, it is assumed the evaluation grid is subset of ∂D.
+        Returns
+        -------
+        data : dict
+            𝐁 stored in ``data["evl"]["B"]``.
 
-    Returns
-    -------
-    B : jnp.ndarray
-        Magnetic field evaluated on ``eval_grid``.
-
-    """
-    laplace = _compute_Phi_mn(laplace, chunk_size, **kwargs)
-    laplace = _compute_shielding_current(laplace)
-    laplace = _compute_grad_Phi(laplace, chunk_size, interior, **kwargs)
-    B0 = B0.compute_magnetic_field(
-        coords=jnp.column_stack(
-            [
-                laplace["evl_data"]["R"],
-                laplace["evl_data"]["phi"],
-                laplace["evl_data"]["Z"],
-            ]
-        ),
-        source_grid=laplace["src_transform"].grid,
-        chunk_size=chunk_size,
-    )
-    return B0 + laplace["evl_data"]["grad(Phi)"]
+        """
+        if "B" not in self._data["evl"]:
+            self._data = self.compute_current_field(chunk_size)
+            self._data = self.compute_vacuum_field(chunk_size)
+            self._data["evl"]["B"] = (
+                self._data["evl"]["B0"] + self._data["evl"]["grad(Phi)"]
+            )
+        return self._data

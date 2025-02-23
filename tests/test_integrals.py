@@ -26,6 +26,7 @@ from desc.integrals import (
     Bounce2D,
     DFTInterpolator,
     FFTInterpolator,
+    VacuumSolver,
     line_integrals,
     singular_integral,
     surface_averages,
@@ -42,13 +43,6 @@ from desc.integrals._bounce_utils import (
     bounce_points,
 )
 from desc.integrals._interp_utils import fourier_pts
-from desc.integrals._laplace import (
-    _compute_grad_Phi,
-    _compute_Phi_mn,
-    _compute_shielding_current,
-    compute_B_from_B0,
-    get_laplace_dict,
-)
 from desc.integrals.basis import FourierChebyshevSeries
 from desc.integrals.quad_utils import (
     automorphism_sin,
@@ -721,67 +715,83 @@ class TestSingularities:
         and test that ‖ Φ − Z ‖_∞ → 0.
         """
         a = 1
-        eq = Equilibrium()  # Choosing a = 1.
-        evl_grid = LinearGrid(M=5, N=5, NFP=eq.NFP)
-        phi_grid = LinearGrid(M=1, N=0, NFP=eq.NFP)
-        src_grid = LinearGrid(M=resolution, N=resolution, NFP=eq.NFP)
+        surf = FourierRZToroidalSurface()  # Choosing a = 1.
+        evl_grid = LinearGrid(M=5, N=5, NFP=surf.NFP)
+        phi_grid = LinearGrid(M=1, N=0, NFP=surf.NFP)
+        src_grid = LinearGrid(M=resolution, N=resolution, NFP=surf.NFP)
 
         theta = src_grid.nodes[:, 1]
         B0n = np.sin(theta)
-        laplace = get_laplace_dict(
-            eq, None, evl_grid, phi_grid, src_grid, chunk_size, ["n_rho"], B0n=B0n
+        vac = VacuumSolver(
+            surf,
+            None,
+            evl_grid,
+            phi_grid,
+            src_grid,
+            chunk_size,
+            interior=False,
+            B0n=B0n,
+            evl_names=["n_rho"],
+            warn_fft=False,
         )
-        np.testing.assert_allclose(laplace["src_data"]["Z"], -a * np.sin(theta))
-        np.testing.assert_allclose(laplace["src_data"]["n_rho"][:, 2], -B0n, atol=1e-12)
+        np.testing.assert_allclose(vac._data["src"]["Z"], -a * np.sin(theta))
+        np.testing.assert_allclose(vac._data["src"]["n_rho"][:, 2], -B0n, atol=1e-12)
 
-        laplace = _compute_Phi_mn(laplace, chunk_size, warn_fft=False)
-        Phi_mn = laplace["phi_data"]["Phi_mn"]
-        Phi = Transform(evl_grid, laplace["phi_transform"].basis).transform(Phi_mn)
-        Z = laplace["evl_data"]["Z"]
-        np.testing.assert_allclose(np.ptp(Phi - Z), 0, atol=atol)
+        data = vac.compute_Phi_mn(chunk_size)
+        Z = data["evl"]["Z"]
+        Phi_mn = data["Phi"]["Phi_mn"]
+        Phi = Transform(evl_grid, vac._transform["Phi"].basis).transform(Phi_mn)
+        np.testing.assert_allclose(np.ptp(Z - Phi), 0, atol=atol)
 
-        laplace = _compute_shielding_current(laplace)
-        laplace = _compute_grad_Phi(laplace, chunk_size, interior=False, warn_fft=False)
-        dPhi_dn = dot(laplace["evl_data"]["grad(Phi)"], laplace["evl_data"]["n_rho"])
-        B0n = np.sin(evl_grid.nodes[:, 1])
+        theta = evl_grid.nodes[:, 1]
+        B0n = np.sin(theta)
+        data = vac.compute_vacuum_field(chunk_size)
+        dPhi_dn = dot(data["evl"]["grad(Phi)"], data["evl"]["n_rho"])
         np.testing.assert_allclose(B0n + dPhi_dn, 0, atol=atol)
 
     @pytest.mark.unit
     @pytest.mark.slow
-    def test_laplace_harmonic_general(self, chunk_size=2000, resolution=50, atol=1e-3):
+    def test_laplace_harmonic_general(self, chunk_size=None, resolution=30, atol=1e-3):
         """Test that Laplace solution recovers expected analytic result.
 
         Define boundary R_b(θ,ζ) and Z_b(θ,ζ).
         Define harmonic map Φ: ρ,θ,ζ ↦ Z(ρ,θ,ζ).
         Choose b.c. B₀⋅n = -∇ϕ⋅n and test that ‖ Φ − Z ‖_∞ → 0.
         """
-        eq = Equilibrium(
-            # elliptic cross-section with torsion
-            surface=FourierRZToroidalSurface(
-                R_lmn=[10, 1, 0.2],
-                Z_lmn=[-2, -0.2],
-                modes_R=[[0, 0], [1, 0], [0, 1]],
-                modes_Z=[[-1, 0], [0, -1]],
-            )
+        # elliptic cross-section with torsion
+        surf = FourierRZToroidalSurface(
+            R_lmn=[10, 1, 0.2],
+            Z_lmn=[-2, -0.2],
+            modes_R=[[0, 0], [1, 0], [0, 1]],
+            modes_Z=[[-1, 0], [0, -1]],
         )
-        evl_grid = LinearGrid(M=5, N=5, NFP=eq.NFP)
-        phi_grid = LinearGrid(M=15, N=15, NFP=eq.NFP)
-        src_grid = LinearGrid(M=resolution, N=resolution, NFP=eq.NFP)
-        B0n = -eq.compute("n_rho", grid=src_grid)["n_rho"][:, 2]
-        laplace = get_laplace_dict(
-            eq, None, evl_grid, phi_grid, src_grid, chunk_size, ["n_rho"], B0n=B0n
+        evl_grid = LinearGrid(M=5, N=5, NFP=surf.NFP)
+        phi_grid = LinearGrid(M=15, N=15, NFP=surf.NFP)
+        src_grid = LinearGrid(M=resolution, N=resolution, NFP=surf.NFP)
+
+        B0n = -surf.compute("n_rho", grid=src_grid)["n_rho"][:, 2]
+        vac = VacuumSolver(
+            surf,
+            None,
+            evl_grid,
+            phi_grid,
+            src_grid,
+            chunk_size,
+            interior=False,
+            B0n=B0n,
+            evl_names=["n_rho"],
+            warn_fft=False,
         )
 
-        laplace = _compute_Phi_mn(laplace, chunk_size, warn_fft=False)
-        Phi_mn = laplace["phi_data"]["Phi_mn"]
-        Phi = Transform(evl_grid, laplace["phi_transform"].basis).transform(Phi_mn)
-        Z = laplace["evl_data"]["Z"]
-        np.testing.assert_allclose(np.ptp(Phi - Z), 0, atol=atol)
+        data = vac.compute_Phi_mn(chunk_size)
+        Z = data["evl"]["Z"]
+        Phi_mn = data["Phi"]["Phi_mn"]
+        Phi = Transform(evl_grid, vac._transform["Phi"].basis).transform(Phi_mn)
+        np.testing.assert_allclose(np.ptp(Z - Phi), 0, atol=atol)
 
-        laplace = _compute_shielding_current(laplace)
-        laplace = _compute_grad_Phi(laplace, chunk_size, interior=False, warn_fft=False)
-        dPhi_dn = dot(laplace["evl_data"]["grad(Phi)"], laplace["evl_data"]["n_rho"])
-        B0n = -laplace["evl_data"]["n_rho"][:, 2]
+        B0n = -data["evl"]["n_rho"][:, 2]
+        data = vac.compute_vacuum_field(chunk_size)
+        dPhi_dn = dot(data["evl"]["grad(Phi)"], data["evl"]["n_rho"])
         np.testing.assert_allclose(B0n + dPhi_dn, 0, atol=atol)
 
     @pytest.mark.unit
@@ -798,16 +808,18 @@ class TestSingularities:
             B0=src_grid.compress(src_data["G"])[-1] / src_data["R0"],
             R0=src_data["R0"],
         )
-        laplace = get_laplace_dict(
-            eq,
+        vac = VacuumSolver(
+            eq.surface,
             B0,
             evl_grid,
             src_grid=src_grid,
             chunk_size=chunk_size,
+            interior=False,
             evl_names=["n_rho"],
+            warn_fft=False,
         )
-        B = compute_B_from_B0(B0, laplace, chunk_size, interior=False, warn_fft=False)
-        Bn = dot(B, laplace["evl_data"]["n_rho"])
+        data = vac.compute_magnetic_field(chunk_size)
+        Bn = dot(data["evl"]["B"], data["evl"]["n_rho"])
 
         if plot:
             Bn = evl_grid.meshgrid_reshape(Bn, "rtz")[0]

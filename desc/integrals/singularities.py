@@ -110,18 +110,46 @@ def best_ratio(data):
     return mean, local
 
 
-def _get_interpolator(eval_grid, source_grid, src_data, **kwargs):
+def get_interpolator(
+    eval_grid, source_grid, src_data, use_dft=False, warn_fft=True, **kwargs
+):
+    """Get interpolator from Cartesian to polar domain.
+
+    Parameters
+    ----------
+    eval_grid, source_grid : Grid
+        Evaluation and source points for the integral transform.
+    src_data : dict[str, jnp.ndarray]
+        Dictionary of data evaluated on grid that ``can_fft2`` with keys
+        ``|e_theta x e_zeta|``, ``e_theta``, and ``e_zeta``.
+    use_dft : bool
+        Whether to use matrix multiplication transform from spectral to physical domain
+        instead of inverse fast Fourier transform. This is useful when the real domain
+        grid is much sparser than the spectral domain grid because the MMT is exact
+        while the FFT will truncate higher frequencies.
+    warn_fft : bool
+        Set to ``False`` to turn off warnings about FFT frequency truncation.
+
+    Returns
+    -------
+    f : _BIESTInterpolator
+        Interpolator that uses the specified method.
+
+    """
     st, sz, q = heuristic_support_params(source_grid, best_ratio(src_data)[0])
-    try:
-        interpolator = FFTInterpolator(eval_grid, source_grid, st, sz, q, **kwargs)
-    except AssertionError as e:
-        warnif(
-            True,
-            msg="Could not build fft interpolator, switching to dft which is slow."
-            "\nReason: " + str(e),
-        )
-        interpolator = DFTInterpolator(eval_grid, source_grid, st, sz, q)
-    return interpolator
+    if use_dft:
+        f = DFTInterpolator(eval_grid, source_grid, st, sz, q)
+    else:
+        try:
+            f = FFTInterpolator(eval_grid, source_grid, st, sz, q, warn_fft=warn_fft)
+        except AssertionError as e:
+            warnif(
+                True,
+                msg="Could not build fft interpolator, switching to dft which is slow."
+                "\nReason: " + str(e),
+            )
+            f = DFTInterpolator(eval_grid, source_grid, st, sz, q)
+    return f
 
 
 def _get_quadrature_nodes(q):
@@ -365,7 +393,8 @@ class FFTInterpolator(_BIESTInterpolator):
         """
         # Would need to add interpax code to DESC
         # https://github.com/f0uriest/interpax/issues/53
-        # for is_fourier to do anything.
+        # for is_fourier to do anything. Should also use rfft2 and irfft2.
+        # TODO (#1206)
         shape = f.shape[1:]
         return fft_interp2d(
             self._source_grid.meshgrid_reshape(f, "rtz")[0],
@@ -565,6 +594,8 @@ def _singular_part(eval_data, source_data, kernel, interpolator, chunk_size=None
         so only the diagonal term of the kernel is needed.
         """
         vander = interpolator.vander_polar(i)
+        # TODO: Don't FFT and interpolate Phi; it's known analytically as just
+        #   a single harmonic
         source_data_polar = {
             key: interpolator(val, i, is_fourier=True, vander=vander)
             for key, val in fsource
@@ -940,7 +971,7 @@ def compute_B_plasma(eq, eval_grid, source_grid=None, normal_only=False):
     if hasattr(eq.surface, "Phi_mn"):
         source_data["K_vc"] += eq.surface.compute("K", grid=source_grid)["K"]
 
-    interpolator = _get_interpolator(eval_grid, source_grid, source_data)
+    interpolator = get_interpolator(eval_grid, source_grid, source_data)
     Bplasma = virtual_casing_biot_savart(eval_data, source_data, interpolator)
     # need extra factor of B/2 bc we're evaluating on plasma surface
     Bplasma = Bplasma + eval_data["B"] / 2

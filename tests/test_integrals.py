@@ -63,7 +63,6 @@ from desc.integrals.singularities import (
 )
 from desc.integrals.surface_integral import _get_grid_surface
 from desc.magnetic_fields import ToroidalMagneticField
-from desc.plotting import plot_boundary
 from desc.transform import Transform
 from desc.utils import dot, errorif, safediv
 
@@ -702,8 +701,12 @@ class TestSingularities:
         B = Bplasma / np.linalg.norm(data["B"], axis=-1).mean()
         np.testing.assert_allclose(B, 0, atol=0.0054)
 
+
+class TestVacuumSolver:
+    """Test vacuum field solver."""
+
     @pytest.mark.unit
-    def test_laplace_harmonic_simple(self, chunk_size=1000, resolution=50, atol=1e-4):
+    def test_harmonic_simple(self, chunk_size=1000, atol=1e-4):
         """Test that Laplace solution recovers expected analytic result.
 
         Define boundary R_b(θ,ζ) = R₀ + a cos θ and Z_b(θ,ζ) = -a sin θ.
@@ -716,9 +719,9 @@ class TestSingularities:
         """
         a = 1
         surf = FourierRZToroidalSurface()  # Choosing a = 1.
+        Phi_grid = LinearGrid(M=1, N=0, NFP=surf.NFP)
         evl_grid = LinearGrid(M=5, N=5, NFP=surf.NFP)
-        phi_grid = LinearGrid(M=1, N=0, NFP=surf.NFP)
-        src_grid = LinearGrid(M=resolution, N=resolution, NFP=surf.NFP)
+        src_grid = LinearGrid(M=50, N=50, NFP=surf.NFP)
 
         theta = src_grid.nodes[:, 1]
         B0n = np.sin(theta)
@@ -726,12 +729,11 @@ class TestSingularities:
             surf,
             None,
             evl_grid,
-            phi_grid,
+            Phi_grid,
             src_grid,
-            chunk_size,
             interior=False,
+            chunk_size=chunk_size,
             B0n=B0n,
-            evl_names=["n_rho"],
             warn_fft=False,
         )
         np.testing.assert_allclose(vac._data["src"]["Z"], -a * np.sin(theta))
@@ -743,15 +745,14 @@ class TestSingularities:
         Phi = Transform(evl_grid, vac._transform["Phi"].basis).transform(Phi_mn)
         np.testing.assert_allclose(np.ptp(Z - Phi), 0, atol=atol)
 
-        theta = evl_grid.nodes[:, 1]
-        B0n = np.sin(theta)
-        data = vac.compute_vacuum_field(chunk_size)
-        dPhi_dn = dot(data["evl"]["grad(Phi)"], data["evl"]["n_rho"])
+        data = vac.compute_vacuum_field(chunk_size)["evl"].copy()
+        data = surf.compute(["n_rho", "theta"], grid=evl_grid, data=data)
+        dPhi_dn = dot(data["grad(Phi)"], data["n_rho"])
+        B0n = np.sin(data["theta"])
         np.testing.assert_allclose(B0n + dPhi_dn, 0, atol=atol)
 
     @pytest.mark.unit
-    @pytest.mark.slow
-    def test_laplace_harmonic_general(self, chunk_size=None, resolution=30, atol=1e-3):
+    def test_harmonic_general(self, chunk_size=1000, atol=1e-4):
         """Test that Laplace solution recovers expected analytic result.
 
         Define boundary R_b(θ,ζ) and Z_b(θ,ζ).
@@ -765,186 +766,40 @@ class TestSingularities:
             modes_R=[[0, 0], [1, 0], [0, 1]],
             modes_Z=[[-1, 0], [0, -1]],
         )
-        evl_grid = LinearGrid(M=5, N=5, NFP=surf.NFP)
-        phi_grid = LinearGrid(M=15, N=15, NFP=surf.NFP)
-        src_grid = LinearGrid(M=resolution, N=resolution, NFP=surf.NFP)
+        Phi_grid = LinearGrid(M=15, N=15, NFP=surf.NFP)
+        evl_grid = Phi_grid
+        src_grid = LinearGrid(M=50, N=50, NFP=surf.NFP)
 
-        B0n = -surf.compute("n_rho", grid=src_grid)["n_rho"][:, 2]
         vac = VacuumSolver(
             surf,
             None,
             evl_grid,
-            phi_grid,
+            Phi_grid,
             src_grid,
-            chunk_size,
+            # Φ = Z, so this should be exact.
+            Phi_M=surf.M,
+            Phi_N=surf.N,
             interior=False,
-            B0n=B0n,
-            evl_names=["n_rho"],
+            chunk_size=chunk_size,
+            B0n=-surf.compute("n_rho", grid=src_grid)["n_rho"][:, 2],
             warn_fft=False,
         )
 
         data = vac.compute_Phi_mn(chunk_size)
         Z = data["evl"]["Z"]
         Phi_mn = data["Phi"]["Phi_mn"]
-        Phi = Transform(evl_grid, vac._transform["Phi"].basis).transform(Phi_mn)
+        Phi = vac._transform["Phi"].transform(Phi_mn)
         np.testing.assert_allclose(np.ptp(Z - Phi), 0, atol=atol)
 
-        B0n = -data["evl"]["n_rho"][:, 2]
-        data = vac.compute_vacuum_field(chunk_size)
-        dPhi_dn = dot(data["evl"]["grad(Phi)"], data["evl"]["n_rho"])
+        data = vac.compute_vacuum_field(chunk_size)["evl"].copy()
+        data = surf.compute("n_rho", grid=evl_grid, data=data)
+        B0n = -data["n_rho"][:, 2]
+        dPhi_dn = dot(data["grad(Phi)"], data["n_rho"])
         np.testing.assert_allclose(B0n + dPhi_dn, 0, atol=atol)
 
     @pytest.mark.unit
-    @pytest.mark.slow
-    @pytest.mark.parametrize("eq", [get("ESTELL")])
-    def test_laplace_bdotn_toroidal(
-        self, eq, chunk_size=2000, resolution=50, atol=1e-3, plot=True
-    ):
-        """Test that Laplace solution satisfies toroidal field boundary condition."""
-        evl_grid = LinearGrid(M=5, N=5, NFP=eq.NFP)
-        src_grid = LinearGrid(M=resolution, N=resolution, NFP=eq.NFP)
-        src_data = eq.compute(["G", "R0"], grid=src_grid)
-        B0 = ToroidalMagneticField(
-            B0=src_grid.compress(src_data["G"])[-1] / src_data["R0"],
-            R0=src_data["R0"],
-        )
-        vac = VacuumSolver(
-            eq.surface,
-            B0,
-            evl_grid,
-            src_grid=src_grid,
-            chunk_size=chunk_size,
-            interior=False,
-            evl_names=["n_rho"],
-            warn_fft=False,
-        )
-        data = vac.compute_magnetic_field(chunk_size)
-        Bn = dot(data["evl"]["B"], data["evl"]["n_rho"])
-
-        if plot:
-            Bn = evl_grid.meshgrid_reshape(Bn, "rtz")[0]
-            theta = evl_grid.meshgrid_reshape(evl_grid.nodes[:, 1], "rtz")[0]
-            zeta = evl_grid.meshgrid_reshape(evl_grid.nodes[:, 2], "rtz")[0]
-            fig, ax = plt.subplots()
-            contour = ax.contourf(theta, zeta, Bn)
-            fig.colorbar(contour, ax=ax)
-            ax.set_title(r"$(\nabla \Phi + B_0) \cdot n$ on $\partial D$")
-            plt.show()
-
-        np.testing.assert_allclose(Bn, 0, atol=atol)
-
-    @staticmethod
-    def manual_transform(coef, m, n, theta, zeta):
-        """Evaluates Double Fourier Series of form G_n^m at theta and zeta pts."""
-        op_four = np.where(
-            ((m < 0) & (n < 0))[:, np.newaxis],
-            np.sin(np.abs(m)[:, np.newaxis] * theta)
-            * np.sin(np.abs(n)[:, np.newaxis] * zeta),
-            n[:, np.newaxis] * zeta * np.nan,
-        )
-        op_three = np.where(
-            ((m < 0) & (n >= 0))[:, np.newaxis],
-            np.sin(np.abs(m)[:, np.newaxis] * theta) * np.cos(n[:, np.newaxis] * zeta),
-            op_four,
-        )
-        op_two = np.where(
-            ((m >= 0) & (n < 0))[:, np.newaxis],
-            np.cos(m[:, np.newaxis] * theta) * np.sin(np.abs(n)[:, np.newaxis] * zeta),
-            op_three,
-        )
-        op_one = np.where(
-            ((m >= 0) & (n >= 0))[:, np.newaxis],
-            np.cos(m[:, np.newaxis] * theta) * np.cos(n[:, np.newaxis] * zeta),
-            op_two,
-        )
-        return np.sum(coef[:, np.newaxis] * op_one, axis=0)
-
-    @staticmethod
-    def merkel_transform(coef, m, n, theta, zeta, fun=np.cos):
-        """Evaluates double Fourier series of form cos(m theta + n zeta)."""
-        return np.sum(
-            coef[:, np.newaxis]
-            * fun(m[:, np.newaxis] * theta + n[:, np.newaxis] * zeta),
-            axis=0,
-        )
-
-    @staticmethod
-    def _merkel_surf(C_r, C_z):
-        """Convert merkel coefficients to DESC coefficients and check."""
-        m_b = max(
-            max(abs(mn[0]) for mn in C_r.keys()), max(abs(mn[0]) for mn in C_z.keys())
-        )
-        n_b = max(
-            max(abs(mn[1]) for mn in C_r.keys()), max(abs(mn[1]) for mn in C_z.keys())
-        )
-        R_lmn = {
-            (m, n): 0.0 for m in range(-m_b, m_b + 1) for n in range(-n_b, n_b + 1)
-        }
-        Z_lmn = {
-            (m, n): 0.0 for m in range(-m_b, m_b + 1) for n in range(-n_b, n_b + 1)
-        }
-        for m in range(0, m_b + 1):
-            for n in range(-n_b, n_b + 1):
-                if (m, n) in C_r:
-                    R_lmn[(m, abs(n))] += C_r[(m, n)]
-                    if n < 0:
-                        R_lmn[(-m, n)] += C_r[(m, n)]
-                    elif n > 0:
-                        R_lmn[(-m, -n)] -= C_r[(m, n)]
-                if (m, n) in C_z:
-                    Z_lmn[(-m, abs(n))] += C_z[(m, n)]
-                    if n < 0:
-                        Z_lmn[(m, n)] -= C_z[(m, n)]
-                    elif n > 0:
-                        Z_lmn[(m, -n)] += C_z[(m, n)]
-
-        grid = LinearGrid(rho=1, M=5, N=5)
-        R_bench = TestSingularities.manual_transform(
-            np.array(list(R_lmn.values())),
-            np.array([mn[0] for mn in R_lmn.keys()]),
-            np.array([mn[1] for mn in R_lmn.keys()]),
-            -grid.nodes[:, 1],  # theta is flipped
-            grid.nodes[:, 2],
-        )
-        R_merk = TestSingularities.merkel_transform(
-            np.array(list(C_r.values())),
-            np.array([mn[0] for mn in C_r.keys()]),
-            np.array([mn[1] for mn in C_r.keys()]),
-            -grid.nodes[:, 1],  # theta is flipped
-            grid.nodes[:, 2],
-        )
-        Z_bench = TestSingularities.manual_transform(
-            np.array(list(Z_lmn.values())),
-            np.array([mn[0] for mn in Z_lmn.keys()]),
-            np.array([mn[1] for mn in Z_lmn.keys()]),
-            -grid.nodes[:, 1],  # theta is flipped
-            grid.nodes[:, 2],
-        )
-        Z_merk = TestSingularities.merkel_transform(
-            np.array(list(C_z.values())),
-            np.array([mn[0] for mn in C_z.keys()]),
-            np.array([mn[1] for mn in C_z.keys()]),
-            -grid.nodes[:, 1],  # theta is flipped
-            grid.nodes[:, 2],
-            fun=np.sin,
-        )
-        np.testing.assert_allclose(R_bench, R_merk)
-        np.testing.assert_allclose(Z_bench, Z_merk)
-        surf = FourierRZToroidalSurface(
-            R_lmn=list(R_lmn.values()),
-            Z_lmn=list(Z_lmn.values()),
-            modes_R=list(R_lmn.keys()),
-            modes_Z=list(Z_lmn.keys()),
-        )
-        surf_data = surf.compute(["R", "Z"], grid=grid)
-        np.testing.assert_allclose(surf_data["R"], R_merk)
-        np.testing.assert_allclose(surf_data["Z"], Z_merk)
-        return surf
-
-    @pytest.mark.unit
-    @pytest.mark.slow
-    def test_laplace_dommaschk(self):
-        """Use Dommaschk potentials to generate benchmark test and compare."""
+    def test_dommaschk_vacuum(self, chunk_size=500, atol=1e-5):  # 4e-4
+        """Test computed vacuum field matches Dommaschk potential."""
         C_r = {
             (0, -2): 0.000056,
             (0, -1): -0.000921,
@@ -989,11 +844,141 @@ class TestSingularities:
             (3, 1): 0.000257,
             (3, 2): 0.000035,
         }
-        surf = self._merkel_surf(C_r, C_z)
-        eq = Equilibrium(surface=surf)
-        plot_boundary(eq, phi=[0, 1, 2])
-        plt.show()
-        return self.test_laplace_bdotn_toroidal(eq)
+        eq = Equilibrium(surface=self._merkel_surf(C_r, C_z))
+
+        Phi_grid = LinearGrid(M=20, N=20, NFP=eq.NFP if eq.N > 0 else 64)
+        evl_grid = Phi_grid
+        src_grid = LinearGrid(M=50, N=50, NFP=eq.NFP)
+        src_data = eq.compute(["G", "R0"], grid=src_grid)
+        B0 = ToroidalMagneticField(
+            B0=src_grid.compress(src_data["G"])[-1] / src_data["R0"],
+            R0=src_data["R0"],
+        )
+        vac = VacuumSolver(
+            eq.surface,
+            B0,
+            evl_grid,
+            Phi_grid,
+            src_grid,
+            Phi_M=8,
+            Phi_N=8,
+            interior=False,
+            chunk_size=chunk_size,
+            warn_fft=False,
+        )
+        data = vac.compute_magnetic_field(chunk_size)["evl"].copy()
+        data = eq.compute("n_rho", grid=evl_grid, data=data)
+        Bn = dot(data["B0+grad(Phi)"], data["n_rho"])
+        np.testing.assert_allclose(Bn, 0, atol=atol)
+
+    @staticmethod
+    def _merkel_surf(C_r, C_z):
+        """Convert merkel coefficients to DESC coefficients."""
+        m_b = max(
+            max(abs(mn[0]) for mn in C_r.keys()), max(abs(mn[0]) for mn in C_z.keys())
+        )
+        n_b = max(
+            max(abs(mn[1]) for mn in C_r.keys()), max(abs(mn[1]) for mn in C_z.keys())
+        )
+        R_lmn = {
+            (m, n): 0.0 for m in range(-m_b, m_b + 1) for n in range(-n_b, n_b + 1)
+        }
+        Z_lmn = {
+            (m, n): 0.0 for m in range(-m_b, m_b + 1) for n in range(-n_b, n_b + 1)
+        }
+        for m in range(0, m_b + 1):
+            for n in range(-n_b, n_b + 1):
+                if (m, n) in C_r:
+                    R_lmn[(m, abs(n))] += C_r[(m, n)]
+                    if n < 0:
+                        R_lmn[(-m, n)] += C_r[(m, n)]
+                    elif n > 0:
+                        R_lmn[(-m, -n)] -= C_r[(m, n)]
+                if (m, n) in C_z:
+                    Z_lmn[(-m, abs(n))] += C_z[(m, n)]
+                    if n < 0:
+                        Z_lmn[(m, n)] -= C_z[(m, n)]
+                    elif n > 0:
+                        Z_lmn[(m, -n)] += C_z[(m, n)]
+
+        grid = LinearGrid(rho=1, M=5, N=5)
+        R_bench = TestVacuumSolver._manual_transform(
+            np.array(list(R_lmn.values())),
+            np.array([mn[0] for mn in R_lmn.keys()]),
+            np.array([mn[1] for mn in R_lmn.keys()]),
+            -grid.nodes[:, 1],  # theta is flipped
+            grid.nodes[:, 2],
+        )
+        R_merk = TestVacuumSolver._merkel_transform(
+            np.array(list(C_r.values())),
+            np.array([mn[0] for mn in C_r.keys()]),
+            np.array([mn[1] for mn in C_r.keys()]),
+            -grid.nodes[:, 1],  # theta is flipped
+            grid.nodes[:, 2],
+        )
+        Z_bench = TestVacuumSolver._manual_transform(
+            np.array(list(Z_lmn.values())),
+            np.array([mn[0] for mn in Z_lmn.keys()]),
+            np.array([mn[1] for mn in Z_lmn.keys()]),
+            -grid.nodes[:, 1],  # theta is flipped
+            grid.nodes[:, 2],
+        )
+        Z_merk = TestVacuumSolver._merkel_transform(
+            np.array(list(C_z.values())),
+            np.array([mn[0] for mn in C_z.keys()]),
+            np.array([mn[1] for mn in C_z.keys()]),
+            -grid.nodes[:, 1],  # theta is flipped
+            grid.nodes[:, 2],
+            fun=np.sin,
+        )
+        np.testing.assert_allclose(R_bench, R_merk)
+        np.testing.assert_allclose(Z_bench, Z_merk)
+        with pytest.warns(UserWarning, match="Left handed"):
+            surf = FourierRZToroidalSurface(
+                R_lmn=list(R_lmn.values()),
+                Z_lmn=list(Z_lmn.values()),
+                modes_R=list(R_lmn.keys()),
+                modes_Z=list(Z_lmn.keys()),
+            )
+        surf_data = surf.compute(["R", "Z"], grid=grid)
+        np.testing.assert_allclose(surf_data["R"], R_merk)
+        np.testing.assert_allclose(surf_data["Z"], Z_merk)
+        return surf
+
+    @staticmethod
+    def _manual_transform(coef, m, n, theta, zeta):
+        """Evaluates Double Fourier Series of form G_n^m at theta and zeta pts."""
+        op_four = np.where(
+            ((m < 0) & (n < 0))[:, np.newaxis],
+            np.sin(np.abs(m)[:, np.newaxis] * theta)
+            * np.sin(np.abs(n)[:, np.newaxis] * zeta),
+            n[:, np.newaxis] * zeta * np.nan,
+        )
+        op_three = np.where(
+            ((m < 0) & (n >= 0))[:, np.newaxis],
+            np.sin(np.abs(m)[:, np.newaxis] * theta) * np.cos(n[:, np.newaxis] * zeta),
+            op_four,
+        )
+        op_two = np.where(
+            ((m >= 0) & (n < 0))[:, np.newaxis],
+            np.cos(m[:, np.newaxis] * theta) * np.sin(np.abs(n)[:, np.newaxis] * zeta),
+            op_three,
+        )
+        op_one = np.where(
+            ((m >= 0) & (n >= 0))[:, np.newaxis],
+            np.cos(m[:, np.newaxis] * theta) * np.cos(n[:, np.newaxis] * zeta),
+            op_two,
+        )
+        return np.sum(coef[:, np.newaxis] * op_one, axis=0)
+
+    @staticmethod
+    def _merkel_transform(coef, m, n, theta, zeta, fun=np.cos):
+        """Evaluates double Fourier series of form cos(m theta + n zeta)."""
+        return np.sum(
+            coef[:, np.newaxis]
+            * fun(m[:, np.newaxis] * theta + n[:, np.newaxis] * zeta),
+            axis=0,
+        )
 
 
 class TestBouncePoints:

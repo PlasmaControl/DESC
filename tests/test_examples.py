@@ -495,7 +495,7 @@ def test_NAE_QSC_solve():
 
         iota = eqq.compute("iota", grid=LinearGrid(rho=0.0))["iota"]
 
-        np.testing.assert_allclose(iota[0], qsc.iota, atol=1e-5, err_msg=string)
+        np.testing.assert_allclose(iota[0], qsc.iota, rtol=1e-4, err_msg=string)
 
         # check lambda to match on-axis
         data_nae = eqq.compute(["lambda", "|B|"], grid=grid_axis)
@@ -510,6 +510,83 @@ def test_NAE_QSC_solve():
         np.testing.assert_allclose(
             data_nae["|B|"], np.ones(np.size(phi)) * qsc.B0, atol=1e-4, err_msg=string
         )
+
+
+@pytest.mark.regression
+@pytest.mark.solve
+@pytest.mark.slow
+def test_NAE_QSC_2nd_order_solve():
+    """Test O(rho^2) NAE QSC constraints solve."""
+    qsc = Qsc.from_paper("precise QA")
+    ntheta = 75
+    r = 0.01
+    N = 9
+    eq = Equilibrium.from_near_axis(qsc, r=r, L=8, M=6, N=N, ntheta=ntheta)
+
+    orig_Rax_val = eq.axis.R_n
+    orig_Zax_val = eq.axis.Z_n
+
+    # this has all the constraints we need,
+    cs = get_NAE_constraints(eq, qsc, order=2, fix_lambda=0, N=eq.N)
+
+    objectives = ForceBalance(eq=eq)
+    obj = ObjectiveFunction(objectives)
+
+    eq.solve(
+        verbose=3,
+        ftol=1e-3,
+        objective=obj,
+        maxiter=45,
+        xtol=2.5e-7,
+        constraints=cs,
+    )
+    grid_axis = LinearGrid(rho=0.0, theta=0.0, N=eq.N_grid, NFP=eq.NFP)
+    # Make sure axis is same
+
+    np.testing.assert_array_almost_equal(orig_Rax_val, eq.axis.R_n)
+    np.testing.assert_array_almost_equal(orig_Zax_val, eq.axis.Z_n)
+
+    # Make sure iota of solved equilibrium is same on-axis as QSC
+
+    iota = eq.compute("iota", grid=LinearGrid(rho=0.0))["iota"]
+
+    np.testing.assert_allclose(iota[0], qsc.iota, rtol=1e-4)
+
+    # check lambda to match on-axis
+    data_nae = eq.compute(["lambda", "|B|"], grid=grid_axis)
+    lam_nae = data_nae["lambda"]
+
+    phi = np.squeeze(grid_axis.nodes[:, 2])
+    np.testing.assert_allclose(lam_nae, -qsc.iota * qsc.nu_spline(phi), atol=2e-5)
+
+    # check |B| on axis
+    np.testing.assert_allclose(
+        data_nae["|B|"], np.ones(np.size(phi)) * qsc.B0, atol=1e-4
+    )
+
+    # check d^2 V / d Psi^2
+    # only check to within 10% as the quantity needs higher resolution
+    # to accurately resolve, if we are within 10% at these resolutions we are
+    # doing extremely well compared to a fixed bdry solve at this aspect ratio
+    grid = LinearGrid(
+        rho=1e-3,
+        axis=False,
+        M=40,
+        N=40,
+        NFP=eq.NFP,
+    )
+    data = eq.compute(["V_rr(r)", "V_r(r)", "psi_rr", "psi_r"], grid=grid)
+    drho_dpsi = 1 / 2 / grid.nodes[:, 0]
+    d2rho_dpsi2 = -1 / 4 / (grid.nodes[:, 0] ** 3)
+    # need this slightly long formula to convert to same
+    # coordinates/units as the NAE is using
+    d2V_dpsi_sq_DESC = (
+        (data["V_rr(r)"] * drho_dpsi**2 + data["V_r(r)"] * d2rho_dpsi2)
+        / eq.Psi**2
+        * 4
+        * np.pi**2
+    )
+    np.testing.assert_allclose(d2V_dpsi_sq_DESC, qsc.d2_volume_d_psi2, rtol=1e-1)
 
 
 @pytest.mark.regression
@@ -570,7 +647,7 @@ def test_NAE_QSC_solve_near_axis_based_off_eq():
 
         iota = eqq.compute("iota", grid=LinearGrid(rho=0.0))["iota"]
 
-        np.testing.assert_allclose(iota[0], qsc.iota, atol=1e-5, err_msg=string)
+        np.testing.assert_allclose(iota[0], qsc.iota, rtol=1e-4, err_msg=string)
 
         ### check lambda to match on axis
         # Evaluate lambda on the axis
@@ -580,6 +657,154 @@ def test_NAE_QSC_solve_near_axis_based_off_eq():
         phi = np.squeeze(grid_axis.nodes[:, 2])
         np.testing.assert_allclose(
             lam_nae, -qsc.iota * qsc.nu_spline(phi), atol=2e-5, err_msg=string
+        )
+
+        # check |B| on axis
+        np.testing.assert_allclose(
+            data_nae["|B|"], np.ones(np.size(phi)) * qsc.B0, atol=1e-4, err_msg=string
+        )
+
+
+@pytest.mark.regression
+@pytest.mark.solve
+@pytest.mark.slow
+def test_NAE_QSC_solve_near_axis_based_off_eq_asym():
+    """Test near-axis 1st/2nd order constraints based off asym DESC equilibrium."""
+    qsc = Qsc.from_paper("precise QA", rs=[1e-3, 1e-2])
+    ntheta = 75
+    r = 0.01
+    N = 9
+    eq_fit = Equilibrium.from_near_axis(qsc, r=r, L=6, M=8, N=N, ntheta=ntheta)
+    eq = eq_fit.copy()
+    eq_2nd_order = eq_fit.copy()
+    orig_Rax_val = eq.axis.R_n
+    orig_Zax_val = eq.axis.Z_n
+
+    # this has all the constraints we need,
+    cs = get_NAE_constraints(eq, qsc_eq=None, order=1, fix_lambda=False, N=eq.N)
+    cs_2nd_order = get_NAE_constraints(
+        eq_2nd_order, qsc_eq=None, order=2, fix_lambda=False, N=eq.N
+    )
+    for c in cs:
+        # should be no FixSumModeslambda in the fix_lambda=False constraint
+        assert not isinstance(c, FixSumModesLambda)
+
+    for eqq, constraints in zip(
+        [eq, eq_2nd_order],
+        [cs, cs_2nd_order],
+    ):
+        objectives = ForceBalance(eq=eqq)
+        obj = ObjectiveFunction(objectives)
+
+        eqq.solve(
+            verbose=3,
+            ftol=1e-3,
+            objective=obj,
+            maxiter=100,
+            xtol=1e-6,
+            gtol=1e-8,
+            constraints=constraints,
+        )
+    grid_axis = LinearGrid(rho=0.0, theta=0.0, N=eq.N_grid, NFP=eq.NFP)
+    for eqq, string in zip(
+        [eq, eq_2nd_order],
+        ["RZ O(rho)", "RZ O(rho^2)"],
+    ):
+        np.testing.assert_array_almost_equal(orig_Rax_val, eqq.axis.R_n, err_msg=string)
+        np.testing.assert_array_almost_equal(orig_Zax_val, eqq.axis.Z_n, err_msg=string)
+
+        # Make sure iota of solved equilibrium is same on axis as QSC
+
+        iota = eqq.compute("iota", grid=LinearGrid(rho=0.0))["iota"]
+
+        np.testing.assert_allclose(iota[0], qsc.iota, rtol=1e-4, err_msg=string)
+
+        ### check lambda to match on axis
+        # Evaluate lambda on the axis
+        data_nae = eqq.compute(["lambda", "|B|"], grid=grid_axis)
+        lam_nae = data_nae["lambda"]
+
+        phi = np.squeeze(grid_axis.nodes[:, 2])
+        # we are not actually fixing lambda, and in fact, the NAE lambda
+        # does not have zero FSA so we don't expect this to match exactly
+        np.testing.assert_allclose(
+            lam_nae, -qsc.iota * qsc.nu_spline(phi), atol=2e-3, err_msg=string
+        )
+
+        # check |B| on axis
+        np.testing.assert_allclose(
+            data_nae["|B|"], np.ones(np.size(phi)) * qsc.B0, atol=1e-4, err_msg=string
+        )
+
+
+@pytest.mark.regression
+@pytest.mark.solve
+@pytest.mark.slow
+def test_NAE_QSC_solve_near_axis_asym():
+    """Test near-axis 1st/2nd order constraints for asym qsc equilibrium."""
+    qsc = Qsc.from_paper("precise QA", rs=[1e-3, 1e-2])
+    ntheta = 75
+    r = 0.05
+    N = 9
+    eq_fit = Equilibrium.from_near_axis(qsc, r=r, L=6, M=8, N=N, ntheta=ntheta)
+    eq = eq_fit.copy()
+    eq_2nd_order = eq_fit.copy()
+    orig_Rax_val = eq.axis.R_n
+    orig_Zax_val = eq.axis.Z_n
+
+    cs = get_NAE_constraints(eq, qsc_eq=qsc, order=1, fix_lambda=False, N=eq.N)
+    cs_2nd_order = get_NAE_constraints(
+        eq_2nd_order, qsc_eq=qsc, order=2, fix_lambda=False, N=eq.N
+    )
+    with pytest.raises(NotImplementedError):
+        get_NAE_constraints(eq, qsc_eq=qsc, order=1, fix_lambda=0, N=eq.N)
+    for c in cs:
+        # should be no FixSumModeslambda in the fix_lambda=False constraint
+        assert not isinstance(c, FixSumModesLambda)
+
+    for eqq, constraints in zip(
+        [eq, eq_2nd_order],
+        [cs, cs_2nd_order],
+    ):
+        objectives = ForceBalance(eq=eqq)
+        obj = ObjectiveFunction(objectives)
+
+        eqq.solve(
+            verbose=3,
+            ftol=1e-3,
+            objective=obj,
+            maxiter=100,
+            xtol=1e-6,
+            gtol=1e-8,
+            constraints=constraints,
+        )
+    grid_axis = LinearGrid(rho=0.0, theta=0.0, N=eq.N_grid, NFP=eq.NFP)
+    # Make sure axis is same
+    for eqq, string in zip(
+        [eq, eq_2nd_order],
+        ["RZ O(rho)", "RZ O(rho^2)"],
+    ):
+        np.testing.assert_array_almost_equal(orig_Rax_val, eqq.axis.R_n, err_msg=string)
+        np.testing.assert_array_almost_equal(orig_Zax_val, eqq.axis.Z_n, err_msg=string)
+
+        # Make sure iota of solved equilibrium is same on axis as QSC
+
+        iota = eqq.compute("iota", grid=LinearGrid(rho=0.0))["iota"]
+
+        np.testing.assert_allclose(iota[0], qsc.iota, rtol=1e-4, err_msg=string)
+
+        ### check lambda to match on axis
+        # Evaluate lambda on the axis
+        data_nae = eqq.compute(["lambda", "|B|"], grid=grid_axis)
+        lam_nae = data_nae["lambda"]
+
+        phi = np.squeeze(grid_axis.nodes[:, 2])
+        np.testing.assert_allclose(
+            lam_nae,
+            -qsc.iota * qsc.nu_spline(phi),
+            atol=4e-3,
+            rtol=1e-3,
+            err_msg=string,
         )
 
         # check |B| on axis

@@ -8,16 +8,7 @@ from functools import partial
 import numpy as np
 from scipy.constants import mu_0
 
-from desc.backend import (
-    fori_loop,
-    jit,
-    jnp,
-    scan,
-    tree_leaves,
-    tree_stack,
-    tree_unstack,
-    vmap,
-)
+from desc.backend import jit, jnp, scan, tree_leaves, tree_stack, tree_unstack, vmap
 from desc.compute import get_params, rpz2xyz, rpz2xyz_vec, xyz2rpz, xyz2rpz_vec
 from desc.compute.geom_utils import reflection_matrix
 from desc.compute.utils import _compute as compute_fun
@@ -28,6 +19,7 @@ from desc.geometry import (
     SplineXYZCurve,
 )
 from desc.grid import Grid, LinearGrid
+from desc.integrals.quad_utils import nfp_loop
 from desc.magnetic_fields import _MagneticField
 from desc.magnetic_fields._core import (
     biot_savart_general,
@@ -1423,7 +1415,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
 
         Returns
         -------
-        data : list of dict of ndarray
+        data : list[dict[str, jnp.ndarray]]
             Computed quantity and intermediate variables, for each coil in the set.
             List entries map to coils in coilset, each dict contains data for an
             individual coil.
@@ -1642,8 +1634,8 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         }[compute_A_or_B]
 
         # sum the magnetic fields from each field period
-        def nfp_loop(k, AB):
-            coords_nfp = coords_rpz + jnp.array([0, 2 * jnp.pi * k / self.NFP, 0])
+        def func(zeta_j):
+            coords_nfp = jnp.column_stack([coords_rpz[:, 0], zeta_j, coords_rpz[:, 2]])
 
             def body(AB, x):
                 AB += op(
@@ -1655,10 +1647,10 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
                 )
                 return AB, None
 
-            AB += scan(body, jnp.zeros(coords_nfp.shape), tree_stack(params))[0]
-            return AB
+            return scan(body, jnp.zeros(coords_nfp.shape), tree_stack(params))[0]
 
-        AB = fori_loop(0, self.NFP, nfp_loop, jnp.zeros_like(coords_rpz))
+        assert self.NFP == source_grid.NFP
+        AB = nfp_loop(source_grid, func, jnp.zeros_like(coords_rpz))
 
         # sum the magnetic field/potential from both halves of
         # the symmetric field period
@@ -2520,7 +2512,7 @@ class MixedCoilSet(CoilSet):
 
         Returns
         -------
-        data : list of dict of ndarray
+        data : list[dict[str, jnp.ndarray]]
             Computed quantity and intermediate variables, for each coil in the set.
             List entries map to coils in coilset, each dict contains data for an
             individual coil.

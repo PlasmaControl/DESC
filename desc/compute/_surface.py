@@ -21,14 +21,14 @@ from .geom_utils import rpz2xyz
     },
     profiles=[],
     coordinates="tz",
-    data=[],
+    data=["zeta", "omega"],
     parameterization="desc.geometry.surface.FourierRZToroidalSurface",
 )
 def _x_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs):
     R = transforms["R"].transform(params["R_lmn"])
     Z = transforms["Z"].transform(params["Z_lmn"])
     # TODO(#568): change when zeta no longer equals phi
-    phi = transforms["grid"].nodes[:, 2]
+    phi = data["zeta"] + data["omega"]
     coords = jnp.stack([R, phi, Z], axis=1)
     # default basis for "x" is rpz, the conversion will be done
     # in the main _compute function
@@ -462,7 +462,7 @@ def _Phi_z_CurrentPotentialField(params, transforms, profiles, data, **kwargs):
     ],
 )
 def _K_sup_theta_CurrentPotentialField(params, transforms, profiles, data, **kwargs):
-    data["K^theta"] = -data["Phi_z"] * (1 / data["|e_theta x e_zeta|"])
+    data["K^theta"] = -data["Phi_z"] / data["|e_theta x e_zeta|"]
     return data
 
 
@@ -484,7 +484,7 @@ def _K_sup_theta_CurrentPotentialField(params, transforms, profiles, data, **kwa
     ],
 )
 def _K_sup_zeta_CurrentPotentialField(params, transforms, profiles, data, **kwargs):
-    data["K^zeta"] = data["Phi_t"] * (1 / data["|e_theta x e_zeta|"])
+    data["K^zeta"] = data["Phi_t"] / data["|e_theta x e_zeta|"]
     return data
 
 
@@ -507,9 +507,10 @@ def _K_sup_zeta_CurrentPotentialField(params, transforms, profiles, data, **kwar
     ],
 )
 def _K_CurrentPotentialField(params, transforms, profiles, data, **kwargs):
-    data["K"] = (data["K^zeta"] * data["e_zeta"].T).T + (
-        data["K^theta"] * data["e_theta"].T
-    ).T
+    data["K"] = (
+        data["K^zeta"][:, jnp.newaxis] * data["e_zeta"]
+        + data["K^theta"][:, jnp.newaxis] * data["e_theta"]
+    )
     return data
 
 

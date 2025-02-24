@@ -4,7 +4,8 @@ import functools
 
 import numpy as np
 
-from desc.backend import fori_loop, jit, jnp, put, root, root_scalar, vmap
+from desc.backend import jit, jnp, root, root_scalar, vmap
+from desc.batching import batch_map
 from desc.compute import compute as compute_fun
 from desc.compute import data_index, get_data_deps, get_profiles, get_transforms
 from desc.grid import ConcentricGrid, Grid, LinearGrid, QuadratureGrid
@@ -278,17 +279,13 @@ def _initial_guess_nn_search(coords, inbasis, eq, period, compute):
     # nearest neighbor search on dense grid
     yg = ConcentricGrid(eq.L_grid, eq.M_grid, max(eq.N_grid, eq.M_grid)).nodes
     xg = compute(yg, inbasis)
-    idx = jnp.zeros(len(coords)).astype(int)
     coords = jnp.asarray(coords)
 
-    def _distance_body(i, idx):
-        d = _fixup_residual(coords[i] - xg, period)
-        distance = safenorm(d, axis=-1)
-        k = jnp.argmin(distance)
-        idx = put(idx, i, k)
-        return idx
+    def _distance_body(coords):
+        distance = safenorm(_fixup_residual(coords - xg, period), axis=-1)
+        return jnp.argmin(distance, axis=-1)
 
-    idx = fori_loop(0, len(coords), _distance_body, idx)
+    idx = batch_map(_distance_body, coords[..., jnp.newaxis, :], 20)
     return yg[idx]
 
 

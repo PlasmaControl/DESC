@@ -66,7 +66,6 @@ def print_backend_info():
     else:
         print(f"Using NumPy backend: version={np.__version__}, dtype={y.dtype}.")
 
-
     if desc_config["num_device"] == 1:
         print(
             f"CPU Info: {desc_config['cpu_info']} with {desc_config['cpu_mem']:.2f} "

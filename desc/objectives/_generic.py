@@ -11,10 +11,179 @@ from desc.compute.utils import _compute as compute_fun
 from desc.compute.utils import _parse_parameterization, get_profiles, get_transforms
 from desc.grid import QuadratureGrid
 from desc.optimizable import OptimizableCollection
-from desc.utils import errorif, parse_argname_change, setdefault
+from desc.utils import errorif, jaxify, parse_argname_change, setdefault
 
 from .linear_objectives import _FixedObjective
 from .objective_funs import _Objective, collect_docs
+
+
+class ExternalObjective(_Objective):
+    """Wrap an external code.
+
+    Similar to ``ObjectiveFromUser``, except derivatives of the objective function are
+    computed with finite differences instead of AD. The function does not need to be
+    JAX transformable.
+
+    The user supplied function must take an Equilibrium or a list of Equilibria as its
+    only positional argument, but can take additional keyword arguments.
+    It must return a single 1D array of floats.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Equilibrium that will be optimized to satisfy the Objective.
+    fun : callable
+        External objective function. It must take an Equilibrium or list of Equilibria
+        as its only positional argument, but can take additional keyword arguments.
+        It does not need to be JAX transformable.
+    dim_f : int
+        Dimension of the output of ``fun``.
+    fun_kwargs : any, optional
+        Keyword arguments that are passed as inputs to ``fun``.
+    vectorized : bool
+        Set to False if ``fun`` takes a single Equilibrium as its positional argument.
+        Set to True if ``fun`` instead takes a list of Equilibria.
+    abs_step : float, optional
+        Absolute finite difference step size. Default = 1e-4.
+        Total step size is ``abs_step + rel_step * mean(abs(x))``.
+    rel_step : float, optional
+        Relative finite difference step size. Default = 0.
+        Total step size is ``abs_step + rel_step * mean(abs(x))``.
+
+    """
+
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``target=0``.", bounds_default="``target=0``."
+    )
+    __doc__ += """
+    Examples
+    --------
+    .. code-block:: python
+
+        from desc.io import load
+
+        def myfun(eq, path=""):
+            # This will return the compute quantity '<beta>_vol',
+            # but uses I/O operations that are not JAX transformable.
+            eq.save(path)
+            eq = load(path)
+            data = eq.compute("<beta>_vol")
+            return data["<beta>_vol"]
+
+        myobj = ExternalObjective(
+            eq=eq, fun=myfun, dim_f=1, fun_kwargs={"path": "temp.h5"}, vectorized=False,
+        )
+    )
+
+    """
+
+    _units = "(Unknown)"
+    _print_value_fmt = "External objective value: "
+    _static_attrs = ["_fun_wrapped", "_fun_kwargs"]
+
+    def __init__(
+        self,
+        eq,
+        *,
+        fun,
+        dim_f,
+        fun_kwargs={},
+        vectorized=False,
+        abs_step=1e-4,
+        rel_step=0,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=False,
+        normalize_target=False,
+        loss_function=None,
+        name="external",
+    ):
+        if target is None and bounds is None:
+            target = 0
+        self._eq = eq.copy()
+        self._fun = fun
+        self._fun_kwargs = fun_kwargs
+        self._dim_f = dim_f
+        self._vectorized = vectorized
+        self._abs_step = abs_step
+        self._rel_step = rel_step
+        super().__init__(
+            things=eq,
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            loss_function=loss_function,
+            deriv_mode="fwd",
+            name=name,
+        )
+
+    def build(self, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        self._scalar = self._dim_f == 1
+        self._constants = {"quad_weights": 1.0}
+
+        def fun_wrapped(params):
+            """Wrap external function with possibly vectorized params."""
+            # number of equilibria for vectorized computations
+            param_shape = params["Psi"].shape
+            num_eq = param_shape[0] if len(param_shape) > 1 else 1
+
+            # convert params to list of equilibria
+            eqs = [self._eq.copy() for _ in range(num_eq)]
+            for k, eq in enumerate(eqs):
+                # update equilibria with new params
+                for param_key in self._eq.optimizable_params:
+                    param_value = np.atleast_2d(params[param_key])[k, :]
+                    if len(param_value):
+                        setattr(eq, param_key, param_value)
+
+            # call external function on equilibrium or list of equilibria
+            if not self._vectorized:
+                eqs = eqs[0]
+            return self._fun(eqs, **self._fun_kwargs)
+
+        # wrap external function to work with JAX
+        abstract_eval = lambda *args, **kwargs: jnp.empty(self._dim_f)
+        self._fun_wrapped = jaxify(
+            fun_wrapped,
+            abstract_eval,
+            vectorized=self._vectorized,
+            abs_step=self._abs_step,
+            rel_step=self._rel_step,
+        )
+
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, params, constants=None):
+        """Compute the quantity.
+
+        Parameters
+        ----------
+        params : list of dict
+            List of dictionaries of degrees of freedom, eg CoilSet.params_dict
+        constants : dict
+            Unused by this Objective.
+
+        Returns
+        -------
+        f : ndarray
+            Computed quantity.
+
+        """
+        f = self._fun_wrapped(params)
+        return f
 
 
 class GenericObjective(_Objective):
@@ -309,11 +478,11 @@ class ObjectiveFromUser(_Objective):
         def myfun(grid, data):
             # This will compute the flux surface average of the function
             # R*B_T from the Grad-Shafranov equation
-            f = data['R']*data['B_phi']
+            f = data['R'] * data['B_phi']
             # q here is the kwarg for "quantity" as in, quantity to be averaged
             f_fsa = surface_averages(grid, q=f, sqrt_g=data['sqrt(g)'])
-            # this has the FSA values on the full grid, but we just want
-            # the unique values:
+            # this has the FSA values on the full grid,
+            # but we just want the unique values:
             return grid.compress(f_fsa)
 
         myobj = ObjectiveFromUser(fun=myfun, thing=eq)
@@ -379,6 +548,8 @@ class ObjectiveFromUser(_Objective):
             Level of output.
 
         """
+        import jax
+
         thing = self.things[0]
         if self._grid is None:
             errorif(
@@ -409,7 +580,6 @@ class ObjectiveFromUser(_Objective):
                 ).squeeze()
 
         self._fun_wrapped = lambda data: self._fun(grid, data)
-        import jax
 
         self._dim_f = jax.eval_shape(self._fun_wrapped, dummy_data).size
         self._scalar = self._dim_f == 1

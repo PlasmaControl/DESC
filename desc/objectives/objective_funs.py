@@ -234,6 +234,8 @@ class ObjectiveFunction(IOAble):
         accurately estimate the available device memory, so the "auto" chunk_size
         option will yield a larger chunk size than may be needed. It is recommended
         to manually choose a chunk_size if an OOM error is experienced in this case.
+    mpi : MPI object, optional
+        MPI communicator.
 
     """
 
@@ -246,6 +248,7 @@ class ObjectiveFunction(IOAble):
         deriv_mode="auto",
         name="ObjectiveFunction",
         jac_chunk_size="auto",
+        mpi=None,
     ):
         if not isinstance(objectives, (tuple, list)):
             objectives = (objectives,)
@@ -275,6 +278,85 @@ class ObjectiveFunction(IOAble):
         self._name = name
         device_ids = [obj._device_id for obj in objectives]
         self._is_multi_device = len(set(device_ids)) > 1
+        if mpi is not None:
+            self.mpi = mpi
+            self.comm = self.mpi.COMM_WORLD
+            self.rank = self.comm.Get_rank()
+            self.size = self.comm.Get_size()
+            self.running = True
+            assert all(device_ids == np.arange(self.size))
+
+        if self._is_multi_device and mpi is None:
+            raise ValueError(
+                "When using multiple devices, MPI communicator must be passed."
+            )
+
+    def __enter__(self):
+        # when entering the context manager, we start the worker loop
+        # this will allow the root rank to send messages to the workers
+        # to compute and to stop
+        self.worker_loop()
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        # this will be called when the context manager exits
+        # we send a stop message to the workers
+        if self.rank == 0:
+            message = ("STOP", None, None)
+            self.comm.bcast(message, root=0)
+        self.running = False
+
+    def worker_loop(self):
+        """Worker loop for MPI parallelization.
+
+        This function is called when the ObjectiveFunction is used as a context manager.
+
+            with ObjectiveFunction(...) as obj:
+                if rank == 0:
+                    eq.optimize(objective=obj)
+
+        Worker processes will be in a loop waiting for messages from the root rank
+        during the context manager. The root rank will send messages to the workers
+        to compute the objective function and its derivatives, and to stop. The workers
+        will then broadcast the results back to the root rank. Once the context manager
+        exits, the loop will be terminated by the root rank.
+
+        This way, we can still use MPI parallelization with the ObjectiveFunction, but
+        prevent execution of redundant calculations multiple times on different ranks.
+
+        """
+        if self.rank == 0:
+            return  # Root rank won't enter worker loop
+        while self.running:
+            print(f"Rank {self.rank} waiting for message")
+            message = (None, None, None)
+            message = self.comm.bcast(message, root=0)
+            if message[0] == "STOP":
+                print(f"Rank {self.rank} STOPPING")
+                break
+            elif "jvp" in message[0]:
+                print(f"Rank {self.rank} computing {message[0]}")
+                # inputs to jitted functions must live on the same device. Need to
+                # put xi and vi on the same device as the objective
+                obj = self.objectives[self.rank]
+                const = self.constants[self.rank]
+                thing_idx = self._things_per_objective_idx[self.rank]
+                xi = [message[1][i] for i in thing_idx]
+                vi = [message[2][i] for i in thing_idx]
+                xi = jax.device_put(xi, obj._device)
+                vi = jax.device_put(vi, obj._device)
+                J_rank = getattr(obj, message[0])(vi, xi, constants=const)
+                J_rank = np.asarray(J_rank)
+                self.comm.gather(J_rank, root=0)
+            elif "compute" in message[0]:
+                print(f"Rank {self.rank} computing {message[0]}")
+                obj = self.objectives[self.rank]
+                const = self.constants[self.rank]
+                par = message[1][self.rank]
+                par = jax.device_put(par, obj._device)
+                f_rank = getattr(obj, message[0])(*par, constants=const)
+                f_rank = np.asarray(f_rank)
+                self.comm.gather(f_rank, root=0)
 
     def _unjit(self):
         """Remove jit compiled methods."""
@@ -485,14 +567,18 @@ class ObjectiveFunction(IOAble):
                 ]
             )
         else:  # pragma: no cover
-            f = pconcat(
-                [
-                    obj.compute_unscaled(
-                        *jax.device_put(par, obj._device), constants=const
-                    )
-                    for par, obj, const in zip(params, self.objectives, constants)
-                ]
-            )
+            if self.rank == 0:
+                message = ("compute_unscaled", params, None)
+                self.comm.bcast(message, root=0)
+
+                par = params[0]
+                obj = self.objectives[0]
+                const = self.constants[0]
+                f_rank = obj.compute_unscaled(*par, constants=const)
+                f_rank = np.asarray(f_rank)
+                print(f"Rank {self.rank} waiting to gather")
+                fs = self.comm.gather(f_rank, root=0)
+                f = pconcat(fs)
         return f
 
     @jit
@@ -524,14 +610,18 @@ class ObjectiveFunction(IOAble):
                 ]
             )
         else:  # pragma: no cover
-            f = pconcat(
-                [
-                    obj.compute_scaled(
-                        *jax.device_put(par, obj._device), constants=const
-                    )
-                    for par, obj, const in zip(params, self.objectives, constants)
-                ]
-            )
+            if self.rank == 0:
+                message = ("compute_scaled", params, None)
+                self.comm.bcast(message, root=0)
+
+                par = params[0]
+                obj = self.objectives[0]
+                const = self.constants[0]
+                f_rank = obj.compute_scaled(*par, constants=const)
+                f_rank = np.asarray(f_rank)
+                print(f"Rank {self.rank} waiting to gather")
+                fs = self.comm.gather(f_rank, root=0)
+                f = pconcat(fs)
         return f
 
     @jit
@@ -563,14 +653,18 @@ class ObjectiveFunction(IOAble):
                 ]
             )
         else:  # pragma: no cover
-            f = pconcat(
-                [
-                    obj.compute_scaled_error(
-                        *jax.device_put(par, obj._device), constants=const
-                    )
-                    for par, obj, const in zip(params, self.objectives, constants)
-                ]
-            )
+            if self.rank == 0:
+                message = ("compute_scaled_error", params, None)
+                self.comm.bcast(message, root=0)
+
+                par = params[0]
+                obj = self.objectives[0]
+                const = self.constants[0]
+                f_rank = obj.compute_scaled_error(*par, constants=const)
+                f_rank = np.asarray(f_rank)
+                print(f"Rank {self.rank} waiting to gather")
+                fs = self.comm.gather(f_rank, root=0)
+                f = pconcat(fs)
         return f
 
     @jit
@@ -748,42 +842,63 @@ class ObjectiveFunction(IOAble):
         return self.jvp_unscaled(v, x, constants).T
 
     def _jvp_blocked(self, v, x, constants=None, op="scaled"):
-        v = ensure_tuple(v)
-        if len(v) > 1:
-            # using blocked for higher order derivatives is a pain, and only really
-            # is needed for perturbations. Just pass that to jvp_batched for now
-            return self._jvp_batched(v, x, constants, op)
+        if not self._is_multi_device:
+            v = ensure_tuple(v)
+            if len(v) > 1:
+                # using blocked for higher order derivatives is a pain, and only really
+                # is needed for perturbations. Just pass that to jvp_batched for now
+                return self._jvp_batched(v, x, constants, op)
 
-        if constants is None:
-            constants = self.constants
-        xs_splits = np.cumsum([t.dim_x for t in self.things])
-        xs = jnp.split(x, xs_splits)
-        vs = jnp.split(v[0], xs_splits, axis=-1)
-        J = []
-        assert len(self.objectives) == len(self.constants)
-        # basic idea is we compute the jacobian of each objective wrt each thing
-        # one by one, and assemble into big block matrix
-        # if objective doesn't depend on a given thing, that part is set to 0.
-        for k, (obj, const) in enumerate(zip(self.objectives, constants)):
-            # TODO: this is for debugging purposes, must be deleted before merging!
-            if self._is_multi_device:
-                print(f"This should run on device id:{obj._device_id}")
-            # get the xs that go to that objective
-            thing_idx = self._things_per_objective_idx[k]
-            xi = [xs[i] for i in thing_idx]
-            vi = [vs[i] for i in thing_idx]
-            if self._is_multi_device:  # pragma: no cover
-                # inputs to jitted functions must live on the same device. Need to
-                # put xi and vi on the same device as the objective
-                xi = jax.device_put(xi, obj._device)
-                vi = jax.device_put(vi, obj._device)
-            Ji_ = getattr(obj, "jvp_" + op)(vi, xi, constants=const)
-            J += [Ji_]
+            if constants is None:
+                constants = self.constants
+            xs_splits = np.cumsum([t.dim_x for t in self.things])
+            xs = jnp.split(x, xs_splits)
+            vs = jnp.split(v[0], xs_splits, axis=-1)
+            J = []
+            assert len(self.objectives) == len(self.constants)
+            # basic idea is we compute the jacobian of each objective wrt each thing
+            # one by one, and assemble into big block matrix
+            # if objective doesn't depend on a given thing, that part is set to 0.
+            for k, (obj, const) in enumerate(zip(self.objectives, constants)):
+                # get the xs that go to that objective
+                thing_idx = self._things_per_objective_idx[k]
+                xi = [xs[i] for i in thing_idx]
+                vi = [vs[i] for i in thing_idx]
+                Ji_ = getattr(obj, "jvp_" + op)(vi, xi, constants=const)
+                J += [Ji_]
+        else:
+            if self.rank == 0:
+                v = ensure_tuple(v)
+                if len(v) > 1:
+                    # using blocked for higher order derivatives is a pain, and only
+                    # really is needed for perturbations. Just pass that to
+                    # jvp_batched for now
+                    return self._jvp_batched(v, x, constants, op)
+
+                if constants is None:
+                    constants = self.constants
+                xs_splits = np.cumsum([t.dim_x for t in self.things])
+                xs = jnp.split(x, xs_splits)
+                vs = jnp.split(v[0], xs_splits, axis=-1)
+                message = ("jvp_" + op, xs, vs)
+                self.comm.bcast(message, root=0)
+
+                obj = self.objectives[0]
+                const = self.constants[0]
+                thing_idx = self._things_per_objective_idx[0]
+                xi = [xs[i] for i in thing_idx]
+                vi = [vs[i] for i in thing_idx]
+                J_rank = getattr(obj, "jvp_" + op)(vi, xi, constants=const)
+                J_rank = np.asarray(J_rank)
+                print(f"Rank {self.rank} waiting to gather")
+                J = self.comm.gather(J_rank, root=0)
+
         # this is the transpose of the jvp when v is a matrix, for consistency with
         # jvp_batched
         if not self._is_multi_device:
             J = jnp.hstack(J)
         else:
+            # this will handle the device placement of the J matrix
             J = pconcat(J, mode="hstack")
 
         return J

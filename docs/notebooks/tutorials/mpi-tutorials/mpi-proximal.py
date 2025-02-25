@@ -60,7 +60,7 @@ if __name__ == "__main__":
         obji.things[0] = eq
 
     # Parallel objective function needs the MPI communicator
-    objective = ObjectiveFunction(objs, mpi=MPI)
+    objective = ObjectiveFunction(objs, deriv_mode="blocked", mpi=MPI)
     objective.build(verbose=3)
 
     # we will fix some modes as usual

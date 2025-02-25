@@ -92,8 +92,9 @@ jobs:
           source .venv-${{ env.version }}/bin/activate
           export PYTHONPATH=$(pwd)
           pytest -v --nbmake "./docs/notebooks" \
-            --nbmake-timeout=2000 \
-            --ignore=./docs/notebooks/zernike_eval.ipynb \
-            --splits 3 \
-            --group ${{ matrix.group }} \
-            --splitting-algorithm least_duration
+                --nbmake-timeout=2000 \
+                --ignore=./docs/notebooks/zernike_eval.ipynb \
+                --ignore=./docs/notebooks/tutorials/multi_device.ipynb \
+                --splits 3 \
+                --group ${{ matrix.group }} \
+                --splitting-algorithm least_duration

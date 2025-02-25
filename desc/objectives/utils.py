@@ -139,6 +139,7 @@ def factorize_linear_constraints(objective, constraint, x_scale="auto"):  # noqa
     xp = put(xp, unfixed_idx, A_inv @ b)
     xp = put(xp, fixed_idx, ((1 / D) * xp)[fixed_idx])
     # cast to jnp arrays
+    # TODO: might consider sharding these too
     xp = jnp.asarray(xp)
     A = jnp.asarray(A)
     b = jnp.asarray(b)

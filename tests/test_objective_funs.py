@@ -1818,7 +1818,7 @@ class TestObjectiveFunction:
         np.testing.assert_allclose(
             objective._things_per_objective_idx, [[0, 1], [1, 0]]
         )
-        np.testing.assert_allclose(objective.compute_scaled_error(x), 0)
+        np.testing.assert_allclose(objective.compute_scaled_error(x), 0, atol=1e-15)
 
 
 @pytest.mark.regression

@@ -235,7 +235,7 @@ class ObjectiveFunction(IOAble):
         option will yield a larger chunk size than may be needed. It is recommended
         to manually choose a chunk_size if an OOM error is experienced in this case.
     mpi : MPI object, optional
-        MPI communicator.
+        MPI communicator. Required when using multiple devices.
 
     """
 
@@ -284,7 +284,12 @@ class ObjectiveFunction(IOAble):
             self.rank = self.comm.Get_rank()
             self.size = self.comm.Get_size()
             self.running = True
-            assert all(device_ids == np.arange(self.size))
+            if not all(device_ids == np.arange(self.size)):
+                raise ValueError(
+                    "When using multiple devices, device_id of the objectives "
+                    "must be consecutive and must be the same as ranks. Got "
+                    f"device_ids: {device_ids}, ranks: {np.arange(self.size)}"
+                )
 
         if self._is_multi_device and mpi is None:
             raise ValueError(
@@ -295,18 +300,21 @@ class ObjectiveFunction(IOAble):
         # when entering the context manager, we start the worker loop
         # this will allow the root rank to send messages to the workers
         # to compute and to stop
-        self.worker_loop()
+        self._worker_loop()
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         # this will be called when the context manager exits
         # we send a stop message to the workers
         if self.rank == 0:
+            # only the root rank can send the stop message
+            # in general, the message contains 3 parts, but for the stop message
+            # we only need the first part
             message = ("STOP", None, None)
             self.comm.bcast(message, root=0)
         self.running = False
 
-    def worker_loop(self):
+    def _worker_loop(self):
         """Worker loop for MPI parallelization.
 
         This function is called when the ObjectiveFunction is used as a context manager.
@@ -323,19 +331,24 @@ class ObjectiveFunction(IOAble):
 
         This way, we can still use MPI parallelization with the ObjectiveFunction, but
         prevent execution of redundant calculations multiple times on different ranks.
+        This is very similar to the strategy used in Simsopt.
 
         """
         if self.rank == 0:
-            return  # Root rank won't enter worker loop
+            # Root rank won't enter worker loop
+            return
         while self.running:
-            print(f"Rank {self.rank} waiting for message")
+            # The message contains 3 parts,
+            # message[0] is the operation to be performed
+            # message[1] is the state vector (for compute and jvp's)
+            # message[2] is the output (for only jvp's)
             message = (None, None, None)
             message = self.comm.bcast(message, root=0)
             if message[0] == "STOP":
                 print(f"Rank {self.rank} STOPPING")
                 break
             elif "jvp" in message[0]:
-                print(f"Rank {self.rank} computing {message[0]}")
+                print(f"Rank {self.rank} : {message[0]}")
                 # inputs to jitted functions must live on the same device. Need to
                 # put xi and vi on the same device as the objective
                 obj = self.objectives[self.rank]
@@ -349,7 +362,7 @@ class ObjectiveFunction(IOAble):
                 J_rank = np.asarray(J_rank)
                 self.comm.gather(J_rank, root=0)
             elif "compute" in message[0]:
-                print(f"Rank {self.rank} computing {message[0]}")
+                print(f"Rank {self.rank} : {message[0]}")
                 obj = self.objectives[self.rank]
                 const = self.constants[self.rank]
                 par = message[1][self.rank]

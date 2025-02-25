@@ -362,7 +362,7 @@ def get_parallel_forcebalance(eq, num_device, mpi, grid=None, use_jit=True, verb
         A built objective function with force balance objectives. Each objective is
         computed on a separate device.
     """
-    from desc.backend import desc_config, jax, jnp
+    from desc.backend import desc_config, jnp
     from desc.grid import LinearGrid
 
     if desc_config["num_device"] < num_device:
@@ -400,12 +400,6 @@ def get_parallel_forcebalance(eq, num_device, mpi, grid=None, use_jit=True, verb
         else:
             gridi = grid[i]
         obj = ForceBalance(eq, grid=gridi, device_id=i)
-        obj.build(use_jit=use_jit, verbose=verbose)
-        obj = jax.device_put(obj, obj._device)
-        # if the eq is also distrubuted across GPUs, then some internal logic
-        # that checks if the things are different will fail, so we need to
-        # set the eq to be the same manually
-        obj._things[0] = eq
         objs += (obj,)
     objective = ObjectiveFunction(objs, mpi=mpi, deriv_mode="blocked")
     objective.build(use_jit=use_jit, verbose=verbose)

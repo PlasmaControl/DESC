@@ -51,13 +51,7 @@ if __name__ == "__main__":
     obj1 = QuasisymmetryTwoTerm(eq=eq, helicity=(1, eq.NFP), grid=grid1, device_id=0)
     obj2 = QuasisymmetryTwoTerm(eq=eq, helicity=(1, eq.NFP), grid=grid2, device_id=1)
     obj3 = AspectRatio(eq=eq, target=8, weight=100, device_id=2)
-
     objs = [obj1, obj2, obj3]
-    # this part will probably be automatized in the future
-    for obji in objs:
-        obji.build(verbose=3)
-        obji = jax.device_put(obji, obji._device)
-        obji.things[0] = eq
 
     # Parallel objective function needs the MPI communicator
     objective = ObjectiveFunction(objs, deriv_mode="blocked", mpi=MPI)

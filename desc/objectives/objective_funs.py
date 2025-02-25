@@ -553,7 +553,7 @@ class ObjectiveFunction(IOAble):
         self._things_per_objective_idx = []
         for obj in self.objectives:
             self._things_per_objective_idx.append(
-                [i for i, t in enumerate(unique_) if t in obj.things]
+                [unique_.index(t) for t in obj.things]
             )
 
         self._unflatten = _ThingUnflattener(len(unique_), inds_, treedef_)

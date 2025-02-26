@@ -53,6 +53,7 @@ def biot_savart_hh(eval_pts, coil_pts_start, coil_pts_end, current, *, chunk_siz
     current : float
         Current through the coil (in Amps).
     chunk_size : int or None
+        Unused by this function, only kept for API compatibility.
         Size to split computation into chunks of evaluation points.
         If no chunking should be done or the chunk size is the full input
         then supply ``None``. Default is ``None``.
@@ -113,6 +114,7 @@ def biot_savart_vector_potential_hh(
     current : float
         Current through the coil (in Amps).
     chunk_size : int or None
+        Unused by this function, only kept for API compatibility.
         Size to split computation into chunks of evaluation points.
         If no chunking should be done or the chunk size is the full input
         then supply ``None``. Default is ``None``.

@@ -219,7 +219,7 @@ class ObjectiveFunction(IOAble):
         If ``None``, it will use the largest size i.e ``obj.dim_x``.
         Can also help with Hessian computation memory, as Hessian is essentially
         ``jacfwd(jacrev(f))``, and each of these operations may be chunked.
-        Defaults to ``chunk_size=None``.
+        Defaults to ``chunk_size="auto"``.
         Note: When running on a CPU (not a GPU) on a HPC cluster, DESC is unable to
         accurately estimate the available device memory, so the "auto" chunk_size
         option will yield a larger chunk size than may be needed. It is recommended

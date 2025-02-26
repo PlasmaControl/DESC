@@ -178,7 +178,7 @@ def lsqtr(  # noqa: C901
     f = fun(x, *args)
     nfev += 1
     cost = 0.5 * jnp.dot(f, f)
-    J = jac(x, *args)
+    J = jac(x, *args).block_until_ready()  # FIXME: block is needed for jaxify util
     njev += 1
     g = jnp.dot(J.T, f)
 
@@ -397,7 +397,7 @@ def lsqtr(  # noqa: C901
             )
 
             if g_norm < gtol:
-                success, message = True, STATUS_MESSAGES["gtol"]
+                success, message = True, STATUS_MESSAGES["gtol"] + f" ({gtol=:.2e})"
 
             if callback(jnp.copy(x), *args):
                 success, message = False, STATUS_MESSAGES["callback"]
@@ -412,7 +412,7 @@ def lsqtr(  # noqa: C901
             )
 
     if g_norm < gtol:
-        success, message = True, STATUS_MESSAGES["gtol"]
+        success, message = True, STATUS_MESSAGES["gtol"] + f" ({gtol=:.2e})"
     if (iteration == maxiter) and success is None:
         success, message = False, STATUS_MESSAGES["maxiter"]
     active_mask = find_active_constraints(x, lb, ub, rtol=xtol)

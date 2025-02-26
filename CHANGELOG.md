@@ -18,6 +18,7 @@ New Features
 - Changes hessian computation to use chunked ``jacfwd`` and ``jacrev``, allowing ``jac_chunk_size`` to now reduce hessian memory usage as well.
 - Adds an option to ``VMECIO.save`` to specify the grid resolution in real space.
 - Adds a new objective ``desc.objectives.CoilIntegratedCurvature`` for targeting convex coils.
+- `eq.solve` and `eq.perturb` now accept `LinearConstraintProjection` as objective. This option must be used without any constraints.
 - Adds the example "reactor_QA", which is similar to "precise_QA" but with self-consistent bootstrap current at finite beta.
 - Allows non-proximal optimizers to  handle optimizing more than one ``Equilibrium`` object simultaneously.
 - Adds batching feature to singular integrals.
@@ -27,6 +28,8 @@ New Features
 for compatibility with other codes which expect such files from the Booz_Xform code.
 - Renames compute quantity ``sqrt(g)_B`` to ``sqrt(g)_Boozer_DESC`` to more accurately reflect what the quantiy is (the jacobian from (rho,theta_B,zeta_B) to (rho,theta,zeta)), and adds a new function to compute ``sqrt(g)_Boozer`` which is the jacobian from (rho,theta_B,zeta_B) to (R,phi,Z).
 - Allows specification of Nyquist spectrum maximum modenumbers when using ``VMECIO.save`` to save a DESC .h5 file as a VMEC-format wout file
+- Adds a new objective ``desc.objectives.ExternalObjective`` for wrapping external codes with finite differences.
+- DESC/JAX version and device info is no longer printed by default, but can be accessed with the function `desc.backend.print_backend_info()`.
 - Adds a new utility function ``desc.equilibrium.contract_equilibrium`` which takes in an ``Equilibrium`` object and an argument ``inner_rho``, and returns a new ``Equilibrium`` with original ``Equilibrium``'s ``inner_rho`` flux surface as its boundary.
 Optionally can also contract the profiles of the original ``Equilibrium`` so that the new ``Equilibrium``'s profiles match the original's in real space.
 
@@ -46,7 +49,13 @@ Bug Fixes
 - Fixes the coil currents in ``desc.coils.initialize_modular_coils`` to now give the correct expected linking current.
 - ``desc.objectives.PlasmaVesselDistance`` now correctly accounts for multiple field periods on both the equilibrium and the vessel surface. Previously it only considered distances within a single field period.
 - Sets ``os.environ["JAX_PLATFORMS"] = "cpu"`` instead of ``os.environ["JAX_PLATFORM_NAME"] = "cpu"`` when doing ``set_device("cpu")``.
+- Fixes bug in ``desc.input_reader.desc_output_to_input`` utility function for asymmetric equilibria profiles, where the full profile resolution was not being saved.
+- Fixes bug when passing only `sym` into `.change_resolution` for ``FourierRZToroidalSurface``, ``ZernikeRZToroidalSection`` and ``FourierRZCurve``.
+- Fixes bug that was setting ``ObjectiveFunction._things_per_objective_idx`` incorrectly. Now each ``_Objective`` can define a unique order that it expects to use parameters for multiple "things".
 
+Performance Improvements
+
+- `proximal-` optimizers use a single `LinearConstraintProjection` and this makes the optimization faster for high resolution cases where taking the SVD (for null-space and inverse) of constraint matrix takes significant time.
 
 v0.13.0
 -------

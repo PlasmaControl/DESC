@@ -20,6 +20,7 @@ from desc.coils import (
     FourierRZCoil,
     FourierXYZCoil,
     MixedCoilSet,
+    initialize_modular_coils,
 )
 from desc.compute import get_transforms
 from desc.equilibrium import Equilibrium
@@ -54,6 +55,7 @@ from desc.objectives import (
     EffectiveRipple,
     Elongation,
     Energy,
+    ExternalObjective,
     ForceBalance,
     ForceBalanceAnisotropic,
     FusionPower,
@@ -1795,6 +1797,29 @@ class TestObjectiveFunction:
         np.testing.assert_allclose(p0_in, p1_in)
         np.testing.assert_allclose(q0, q1)
 
+    @pytest.mark.unit
+    def test_things_per_objective_idx(self):
+        """Test things_per_objective_idx. Related to GH Issue #1602."""
+        eq = desc.examples.get("reactor_QA")
+        coils = initialize_modular_coils(eq, num_coils=3, r_over_a=3.0)
+        grid = LinearGrid(rho=1.0, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
+        linking_current = 2 * np.pi * eq.compute("G", grid=grid)["G"][0] / mu_0
+        coils.current = linking_current / coils.num_coils
+
+        objective = ObjectiveFunction(
+            (
+                PlasmaCoilSetMinDistance(eq=eq, coil=coils, eq_fixed=False),
+                LinkingCurrentConsistency(eq=eq, coil=coils, eq_fixed=False),
+            )
+        )
+        objective.build()
+        x = objective.x(eq, coils)
+
+        np.testing.assert_allclose(
+            objective._things_per_objective_idx, [[0, 1], [1, 0]]
+        )
+        np.testing.assert_allclose(objective.compute_scaled_error(x), 0, atol=1e-15)
+
 
 @pytest.mark.regression
 def test_derivative_modes():
@@ -2792,7 +2817,8 @@ class TestComputeScalarResolution:
         VacuumBoundaryError,
         # need to avoid blowup near the axis
         MercierStability,
-        # don't test these since they depend on what user wants
+        # we do not test these since they depend too much on what the user wants
+        ExternalObjective,
         LinearObjectiveFromUser,
         ObjectiveFromUser,
     ]
@@ -3277,7 +3303,8 @@ class TestObjectiveNaNGrad:
         SurfaceQuadraticFlux,
         ToroidalFlux,
         VacuumBoundaryError,
-        # we don't test these since they depend too much on what exactly the user wants
+        # we do not test these since they depend too much on what the user wants
+        ExternalObjective,
         GenericObjective,
         LinearObjectiveFromUser,
         ObjectiveFromUser,

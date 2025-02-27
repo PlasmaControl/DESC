@@ -94,7 +94,7 @@ if __name__ == "__main__":
                 objective=objective,
                 constraints=constraints,
                 optimizer=optimizer,
-                maxiter=1,
+                maxiter=3,
                 verbose=3,
                 options={
                     "initial_trust_ratio": 1.0,

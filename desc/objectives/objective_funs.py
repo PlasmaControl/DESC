@@ -358,7 +358,7 @@ class ObjectiveFunction(IOAble):
             if message[0] == "STOP":
                 print(f"Rank {self.rank} STOPPING")
                 break
-            elif "jvp" in message[0]:
+            elif "jvp" in message[0] and "proximal" not in message[0]:
                 print(f"Rank {self.rank} : {message[0]}")
                 # inputs to jitted functions must live on the same device. Need to
                 # put xi and vi on the same device as the objective
@@ -381,6 +381,32 @@ class ObjectiveFunction(IOAble):
                 f_rank = getattr(obj, message[0])(*par, constants=const)
                 f_rank = np.asarray(f_rank)
                 self.comm.gather(f_rank, root=0)
+            elif "proximal_jvp" in message[0]:
+                print(f"Rank {self.rank} : {message[0]}")
+                obj = self.objectives[self.rank]
+                const = self.constants[self.rank]
+                op = message[0].replace("proximal_jvp_", "")
+
+                thing_idx = self._things_per_objective_idx[self.rank]
+                xi = [message[1][i] for i in thing_idx]
+                vi = [message[2][i] for i in thing_idx]
+                assert len(xi) > 0
+                assert len(vi) > 0
+                assert len(xi) == len(vi)
+                if obj._deriv_mode == "rev":
+                    # obj might not allow fwd mode, so compute full rev mode jacobian
+                    # and do matmul manually. This is slightly inefficient, but usually
+                    # when rev mode is used, dim_f <<< dim_x, so its not too bad.
+                    Ji = getattr(obj, "jac_" + op)(*xi, constants=const)
+                    J_rank = jnp.array([Jii @ vii.T for Jii, vii in zip(Ji, vi)]).sum(
+                        axis=0
+                    )
+                else:
+                    J_rank = getattr(obj, "jvp_" + op)(
+                        [_vi for _vi in vi], xi, constants=const
+                    ).T
+                J_rank = np.asarray(J_rank)
+                self.comm.gather(J_rank, root=0)
 
     def _unjit(self):
         """Remove jit compiled methods."""

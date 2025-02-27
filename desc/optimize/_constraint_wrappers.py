@@ -4,7 +4,7 @@ import functools
 
 import numpy as np
 
-from desc.backend import jax, jit, jnp, pconcat, put
+from desc.backend import jit, jnp, pconcat, put
 from desc.batching import batched_vectorize
 from desc.objectives import (
     BoundaryRSelfConsistency,
@@ -1063,13 +1063,8 @@ class ProximalProjection(ObjectiveFunction):
             Constant parameters passed to sub-objectives.
 
         """
-        v = v[0] if isinstance(v, (tuple, list)) else v
-        constants = setdefault(constants, self.constants)
-        xg, xf = self._update_equilibrium(x, store=True)
-        jvpfun = lambda u: self._jvp(u, xf, xg, constants, op="scaled")
-        return batched_vectorize(
-            jvpfun, signature="(n)->(k)", chunk_size=self._objective._jac_chunk_size
-        )(v)
+        op = "scaled"
+        return self._jvp(v, x, constants, op)
 
     def jvp_scaled_error(self, v, x, constants=None):
         """Compute Jacobian-vector product of self.compute_scaled_error.
@@ -1085,13 +1080,8 @@ class ProximalProjection(ObjectiveFunction):
             Constant parameters passed to sub-objectives.
 
         """
-        v = v[0] if isinstance(v, (tuple, list)) else v
-        constants = setdefault(constants, self.constants)
-        xg, xf = self._update_equilibrium(x, store=True)
-        jvpfun = lambda u: self._jvp(u, xf, xg, constants, op="scaled_error")
-        return batched_vectorize(
-            jvpfun, signature="(n)->(k)", chunk_size=self._objective._jac_chunk_size
-        )(v)
+        op = "scaled_error"
+        return self._jvp(v, x, constants, op)
 
     def jvp_unscaled(self, v, x, constants=None):
         """Compute Jacobian-vector product of self.compute_unscaled.
@@ -1107,15 +1097,55 @@ class ProximalProjection(ObjectiveFunction):
             Constant parameters passed to sub-objectives.
 
         """
+        op = "unscaled"
+        return self._jvp(v, x, constants, op)
+
+    def _jvp(self, v, x, constants=None, op="jvp_scaled_error"):
         v = v[0] if isinstance(v, (tuple, list)) else v
         constants = setdefault(constants, self.constants)
         xg, xf = self._update_equilibrium(x, store=True)
-        jvpfun = lambda u: self._jvp(u, xf, xg, constants, op="unscaled")
-        return batched_vectorize(
-            jvpfun, signature="(n)->(k)", chunk_size=self._objective._jac_chunk_size
-        )(v)
+        if not self._constraint._is_multi_device:
+            jvpfun = lambda u: self._get_tangent(u, xf, xg, constants, op=op)
+            tangents = batched_vectorize(
+                jvpfun,
+                signature="(n)->(k)",
+                chunk_size=self._constraint._jac_chunk_size,
+            )(v)
+        else:
+            # TODO: implement parallel constraint for ProximalProjection
+            raise NotImplementedError(
+                "Parallel constraint for ProximalProjection not implemented yet. Note: "
+                "This would require putting workers into a second infinite loop which "
+                "break things. One way to do this could be to give pre-build objective "
+                "and constraint to the optimizer and use 2 context managers. Also, "
+                "divide workers for force balance constraint loop and objective loop. "
+                "This is probably a rare use case, so not a priority for now."
+            )
 
-    def _jvp(self, v, xf, xg, constants, op):
+        if self._objective._deriv_mode in ["batched"]:
+            # objective's method already know about its jac_chunk_size
+            return -getattr(self._objective, "jvp_" + op)(tangents, xg, constants[0])
+        elif not self._objective._is_multi_device:
+            xgs = jnp.split(xg, np.cumsum(self._dimx_per_thing))
+            jvpfun = lambda u: _proximal_jvp_blocked_pure(
+                self._objective, jnp.split(u, np.cumsum(self._dimx_per_thing)), xgs, op
+            )
+            return batched_vectorize(
+                jvpfun,
+                signature="(n)->(k)",
+                chunk_size=self._objective._jac_chunk_size,
+            )(tangents)
+        else:
+            xgs = jnp.split(xg, np.cumsum(self._dimx_per_thing))
+            vgs = jnp.split(tangents, np.cumsum(self._dimx_per_thing), axis=-1)
+            return _proximal_jvp_blocked_parallel(
+                self._objective,
+                vgs,
+                xgs,
+                op,
+            )
+
+    def _get_tangent(self, v, xf, xg, constants, op):
         # we're replacing stuff like this with jvps
         # Fx_reduced = Fx[:, unfixed_idx] @ Z               # noqa: E800
         # Gx_reduced = Gx[:, unfixed_idx] @ Z               # noqa: E800
@@ -1154,13 +1184,7 @@ class ProximalProjection(ObjectiveFunction):
             ]
         )
         tangent = self._unfixed_idx_mat @ dfdc - dxdcv
-        if self._objective._deriv_mode in ["batched"]:
-            out = getattr(self._objective, "jvp_" + op)(tangent, xg, constants[0])
-        else:  # deriv_mode == "blocked"
-            vgs = jnp.split(tangent, np.cumsum(self._dimx_per_thing))
-            xgs = jnp.split(xg, np.cumsum(self._dimx_per_thing))
-            out = _proximal_jvp_blocked_pure(self._objective, vgs, xgs, op)
-        return -out
+        return tangent
 
     @property
     def constants(self):
@@ -1198,8 +1222,10 @@ def jit_if_not_parallel(func):
 
 @jit_if_not_parallel
 def _proximal_jvp_f_pure(constraint, xf, constants, dc, unfixed_idx, Z, D, dxdc, op):
+    # if the constraint has multiple devices, we can't jit this part
     Fx = getattr(constraint, "jac_" + op)(xf, constants)
 
+    # this part is still jittable even with MPI
     @jit
     def fun(Fx, dxdc, dc, unfixed_idx, Z, D):
         # F_reduced
@@ -1215,21 +1241,13 @@ def _proximal_jvp_f_pure(constraint, xf, constants, dc, unfixed_idx, Z, D, dxdc,
     return fun(Fx, dxdc, dc, unfixed_idx, Z, D)
 
 
-@jit_if_not_parallel
+@functools.partial(jit, static_argnames=["op"])
 def _proximal_jvp_blocked_pure(objective, vgs, xgs, op):
     out = []
     for k, (obj, const) in enumerate(zip(objective.objectives, objective.constants)):
-        # TODO: this is for debugging purposes, must be deleted before merging!
-        if objective._is_multi_device:
-            print(f"This should run on GPU id:{obj._device_id}")
         thing_idx = objective._things_per_objective_idx[k]
         xi = [xgs[i] for i in thing_idx]
         vi = [vgs[i] for i in thing_idx]
-        if objective._is_multi_device:  # pragma: no cover
-            # inputs to jitted functions must live on the same device. Need to
-            # put xi and vi on the same device as the objective
-            xi = jax.device_put(xi, obj._device)
-            vi = jax.device_put(vi, obj._device)
         assert len(xi) > 0
         assert len(vi) > 0
         assert len(xi) == len(vi)
@@ -1243,8 +1261,34 @@ def _proximal_jvp_blocked_pure(objective, vgs, xgs, op):
         else:
             outi = getattr(obj, "jvp_" + op)([_vi for _vi in vi], xi, constants=const).T
             out.append(outi)
-    if objective._is_multi_device:  # pragma: no cover
-        out = pconcat(out)
-    else:
-        out = jnp.concatenate(out)
-    return out
+    return -jnp.concatenate(out)
+
+
+@jit_if_not_parallel
+def _proximal_jvp_blocked_parallel(objective, vgs, xgs, op):
+    if objective.rank == 0:
+        message = ("proximal_jvp_" + op, xgs, vgs)
+        objective.comm.bcast(message, root=0)
+
+        obj = objective.objectives[0]
+        const = objective.constants[0]
+
+        thing_idx = objective._things_per_objective_idx[0]
+        xi = [xgs[i] for i in thing_idx]
+        vi = [vgs[i] for i in thing_idx]
+        assert len(xi) > 0
+        assert len(vi) > 0
+        assert len(xi) == len(vi)
+        if obj._deriv_mode == "rev":
+            # obj might not allow fwd mode, so compute full rev mode jacobian
+            # and do matmul manually. This is slightly inefficient, but usually
+            # when rev mode is used, dim_f <<< dim_x, so its not too bad.
+            Ji = getattr(obj, "jac_" + op)(*xi, constants=const)
+            J_rank = jnp.array([Jii @ vii.T for Jii, vii in zip(Ji, vi)]).sum(axis=0)
+        else:
+            J_rank = getattr(obj, "jvp_" + op)(
+                [_vi for _vi in vi], xi, constants=const
+            ).T
+        print(f"Rank {objective.rank} waiting to gather")
+        J = objective.comm.gather(J_rank, root=0)
+        return -pconcat(J).T

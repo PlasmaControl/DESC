@@ -45,7 +45,7 @@ if __name__ == "__main__":
             eq.solve(
                 objective=obj,
                 constraints=cons,
-                maxiter=1,
+                maxiter=3,
                 ftol=0,
                 gtol=0,
                 xtol=0,

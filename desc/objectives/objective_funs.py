@@ -297,6 +297,17 @@ class ObjectiveFunction(IOAble):
             )
 
     def __enter__(self):
+        errorif(
+            not self._built,
+            RuntimeError,
+            "In parallel mode, ObjectiveFunction must be built before entering "
+            "context manager.",
+        )
+        errorif(
+            not self._is_multi_device,
+            RuntimeError,
+            "ObjectiveFunction must be parallel to be used as a context manager.",
+        )
         # when entering the context manager, we start the worker loop
         # this will allow the root rank to send messages to the workers
         # to compute and to stop

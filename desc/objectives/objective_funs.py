@@ -279,6 +279,11 @@ class ObjectiveFunction(IOAble):
         device_ids = [obj._device_id for obj in objectives]
         self._is_multi_device = len(set(device_ids)) > 1
         if mpi is not None:
+            # for multiple node cases, each process sees 1 CPU, for those cases,
+            # we cannot put objectives to different devices. Instead, we will
+            # run each objective on a different rank. That is also why we will
+            # run 1 objective per process.
+            self._is_multi_device = True
             self.mpi = mpi
             self.comm = self.mpi.COMM_WORLD
             self.rank = self.comm.Get_rank()

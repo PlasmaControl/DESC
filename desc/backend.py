@@ -71,6 +71,10 @@ def print_backend_info():
             )
 
     if desc_config["kind"] == "gpu":
+        print(
+            f"CPU Info: {desc_config['cpu_info']} with {desc_config['cpu_mem']:.2f} "
+            "GB available memory"
+        )
         print(f"Using {desc_config['num_device']} device:")
         for i, dev in enumerate(desc_config["devices"]):
             print(

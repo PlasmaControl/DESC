@@ -482,10 +482,11 @@ class ObjectiveFunction(IOAble):
                 objective.build(use_jit=self.use_jit, verbose=verbose)
             self._dim_f += objective.dim_f
             if objective._device_id != 0:
-                print(
-                    f"Putting objective {objective.name} on device "
-                    f"{objective._device_id}"
-                )
+                if verbose > 0 and self.rank == 0:
+                    print(
+                        f"Putting objective {objective.name} on device "
+                        f"{objective._device_id}"
+                    )
                 objective = jax.device_put(objective, objective._device)
                 objective._things = obj_things
         if self._dim_f == 1:

@@ -5,18 +5,33 @@ import sys
 sys.path.insert(0, os.path.abspath("."))
 sys.path.append(os.path.abspath("../../../"))
 
-# These will be used for diving the single CPU into multiple virtual CPUs
-# such that JAX and XLA thinks there are multiple devices
 from desc import _set_cpu_count, set_device
 
+# ====== Using CPUs ======
 num_device = 3
+# These will be used for diving the single CPU into multiple virtual CPUs
+# such that JAX and XLA thinks there are multiple devices
+# If you have multiple CPUs, you don't need to call `_set_cpu_count`
 _set_cpu_count(num_device)
 set_device("cpu", num_device=num_device)
+
+# ====== Using GPUs ======
+# When we have multiple processing using the same devices (for example, 3 processes
+# using 3 GPUs), each process will try to pre-allocate 75% of the GPU memory which will
+# cause the memory allocation to fail. To avoid this, we can set the memory fraction
+# to 1/(num_device + 2) which will allow each process to allocate 1/(num_device + 2) of
+# the GPU memory. This is a bit conservative, but if a process needs more memory, it can
+# allocate more memory on the fly.
+#
+# os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = str(1 / (num_device + 2))
+# set_device("gpu", num_device=num_device)
+
 
 import numpy as np
 from mpi4py import MPI
 
-from desc.backend import jax, jnp
+from desc import config as desc_config
+from desc.backend import jax, jnp, print_backend_info
 from desc.examples import get
 from desc.grid import LinearGrid
 from desc.objectives import (
@@ -34,6 +49,24 @@ from desc.optimize import Optimizer
 
 if __name__ == "__main__":
     rank = MPI.COMM_WORLD.Get_rank()
+    size = MPI.COMM_WORLD.Get_size()
+    if rank == 0:
+        print(f"====== TOTAL OF {size} RANKS ======")
+
+    # see which rank is running on which device
+    # Note: JAX has 2 functions for this: `jax.devices()` and `jax.local_devices()`
+    # `jax.devices()` will return all devices available to JAX, while `jax.local_devices()`
+    # will return only the devices that are available to the current process. This is
+    # useful when you have multiple processes running on multiple nodes and you want
+    # to see which devices are available to each process.
+    if desc_config["kind"] == "gpu":
+        print(
+            f"Rank {rank} is running on {jax.local_devices(backend="gpu")} "
+            f"and {jax.local_devices(backend="cpu")}"
+        )
+    else:
+        print(f"Rank {rank} is running on {jax.local_devices(backend='cpu')}")
+    print_backend_info()
 
     eq = get("precise_QA")
     eq.change_resolution(3, 3, 3, 6, 6, 6)
@@ -54,8 +87,13 @@ if __name__ == "__main__":
     objs = [obj1, obj2, obj3]
 
     # Parallel objective function needs the MPI communicator
+    # If you don't specify `deriv_mode=blocked`, you will get a warning and DESC will
+    # automatically switch to `blocked`.
     objective = ObjectiveFunction(objs, deriv_mode="blocked", mpi=MPI)
-    objective.build(verbose=3)
+    if rank == 0:
+        objective.build(verbose=3)
+    else:
+        objective.build(verbose=0)
 
     # we will fix some modes as usual
     k = 1

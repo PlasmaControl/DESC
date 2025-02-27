@@ -283,17 +283,22 @@ class ObjectiveFunction(IOAble):
             # we cannot put objectives to different devices. Instead, we will
             # run each objective on a different rank. That is also why we will
             # run 1 objective per process.
+            # TODO: add an argument for node of the objective. FOr example, let's say
+            # we have 3 nodes and 4 GPUs per node. First of all there should be 12
+            # objectives in total. We should create 4 processes per node and each
+            # process should run 1 objective. This way we can utilize all the GPUs.
+            # Alternatively, we can specify the rank for the objective. This way, we
+            # can have multiple objectives on the same rank.
             self._is_multi_device = True
             self.mpi = mpi
             self.comm = self.mpi.COMM_WORLD
             self.rank = self.comm.Get_rank()
             self.size = self.comm.Get_size()
             self.running = True
-            if not all(device_ids == np.arange(self.size)):
-                raise ValueError(
-                    "When using multiple devices, device_id of the objectives "
-                    "must be consecutive and must be the same as ranks. Got "
-                    f"device_ids: {device_ids}, ranks: {np.arange(self.size)}"
+            if self.size != len(self._objectives):
+                raise NotImplementedError(
+                    "Number of objectives should be equal to the number of ranks. "
+                    "Running multiple objectives per rank is not supported yet."
                 )
 
         if self._is_multi_device and mpi is None:

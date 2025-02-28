@@ -19,7 +19,6 @@ from desc.utils import (
     parse_argname_change,
     safediv,
     safenorm,
-    setdefault,
     warnif,
 )
 
@@ -105,7 +104,30 @@ def _eta(theta, zeta, theta0, zeta0, ht, hz, st, sz):
     return _chi(r)
 
 
-def _get_default_params(grid):
+def _vanilla_params(grid):
+    """Parameters for support size and quadrature resolution.
+
+    These parameters do not account for grid anisotropy.
+
+    Parameters
+    ----------
+    grid : LinearGrid
+        Grid that can fft2.
+
+    Returns
+    -------
+    st : int
+        Extent of support is an ``st`` × ``sz`` subset
+        of the full domain (θ,ζ) ∈ [0, 2π)² of ``grid``.
+        Subset of ``grid.num_theta`` × ``grid.num_zeta*grid.NFP``.
+    sz : int
+        Extent of support is an ``st`` × ``sz`` subset
+        of the full domain (θ,ζ) ∈ [0, 2π)² of ``grid``.
+        Subset of ``grid.num_theta`` × ``grid.num_zeta*grid.NFP``.
+    q : int
+        Order of quadrature in radial and azimuthal directions.
+
+    """
     Nt = grid.num_theta
     Nz = grid.num_zeta * grid.NFP
     q = int(jnp.sqrt(grid.num_nodes) / 2)
@@ -113,25 +135,26 @@ def _get_default_params(grid):
     return s, s, q
 
 
-def heuristic_support_params(grid, mean_ratio, local_ratio=None):
-    """Parameters for heuristic support size and heuristic quadrature resolution.
+def best_params(grid, ratio):
+    """Parameters for heuristic support size and quadrature resolution.
 
-    Return parameters following the asymptotic rule of thumb
-    in Mahlotora [2], generalized for the partition to have the correct shape
-    for rectangular (e.g. perhaps not square) grids.
+    These parameters account for global grid anisotropy which ensures
+    more robust convergence across a wider aspect ratio range.
 
     Parameters
     ----------
     grid : LinearGrid
         Grid that can fft2.
-    mean_ratio : float
-        Mean ratio.
-    local_ratio : jnp.ndarray
-        Local ratio.
+    ratio : float
+        Mean best ratio.
 
     Returns
     -------
-    st, sz : int
+    st : int
+        Extent of support is an ``st`` × ``sz`` subset
+        of the full domain (θ,ζ) ∈ [0, 2π)² of ``grid``.
+        Subset of ``grid.num_theta`` × ``grid.num_zeta*grid.NFP``.
+    sz : int
         Extent of support is an ``st`` × ``sz`` subset
         of the full domain (θ,ζ) ∈ [0, 2π)² of ``grid``.
         Subset of ``grid.num_theta`` × ``grid.num_zeta*grid.NFP``.
@@ -140,8 +163,6 @@ def heuristic_support_params(grid, mean_ratio, local_ratio=None):
 
     """
     assert grid.can_fft2
-    # This is simple and should improve convergence, but do later.
-    errorif(local_ratio is not None, NotImplementedError)
     Nt = grid.num_theta
     Nz = grid.num_zeta * grid.NFP
     if grid.num_zeta > 1:  # actually has toroidal resolution
@@ -149,8 +170,6 @@ def heuristic_support_params(grid, mean_ratio, local_ratio=None):
     else:  # axisymmetry
         q = int(jnp.sqrt(Nt * Nz) / 2)
     s = min(q, Nt, Nz)
-    local_ratio = setdefault(local_ratio, mean_ratio)
-    ratio = (mean_ratio + local_ratio) / 2
     # Size of singular region in real space = s * h * |e_.|
     # For it to be a circle, choose radius ~ equal
     # s_t * h_t * |e_t| = s_z * h_z * |e_z|
@@ -164,7 +183,50 @@ def heuristic_support_params(grid, mean_ratio, local_ratio=None):
     return st, sz, q
 
 
-def best_ratio(data):
+def _local_params(grid, ratio):
+    """Parameters for heuristic support size and quadrature resolution.
+
+    These parameters account for local grid anisotropy to ensure
+    more robust convergence across stronger geometric shaping.
+
+    Parameters
+    ----------
+    grid : LinearGrid
+        Grid that can fft2.
+    ratio : tuple
+        Mean best ratio and local ratio
+
+    Returns
+    -------
+    st : int
+        Extent of support is an ``st`` × ``sz`` subset
+        of the full domain (θ,ζ) ∈ [0, 2π)² of ``grid``.
+        Subset of ``grid.num_theta`` × ``grid.num_zeta*grid.NFP``.
+    sz : int
+        Extent of support is an ``st`` × ``sz`` subset
+        of the full domain (θ,ζ) ∈ [0, 2π)² of ``grid``.
+        Subset of ``grid.num_theta`` × ``grid.num_zeta*grid.NFP``.
+    q : int
+        Order of quadrature in radial and azimuthal directions.
+
+    """
+    assert grid.can_fft2
+    Nt = grid.num_theta
+    Nz = grid.num_zeta * grid.NFP
+    if grid.num_zeta > 1:  # actually has toroidal resolution
+        q = int(jnp.sqrt(grid.num_nodes) / 2)
+    else:  # axisymmetry
+        q = int(jnp.sqrt(Nt * Nz) / 2)
+    s = min(q, Nt, Nz)
+    ratio = (ratio[0] + ratio[1]) / 2
+    # same logic as heuristic params
+    s_ratio = jnp.sqrt(Nz / Nt / ratio)
+    st = min(Nt, int(jnp.ceil(s / s_ratio)))
+    sz = min(Nz, int(jnp.ceil(s * s_ratio)))
+    return st, sz, q
+
+
+def best_ratio(data, return_local=False):
     """Ratio to make singular integration partition ~circle in real space.
 
     Parameters
@@ -172,13 +234,13 @@ def best_ratio(data):
     data : dict[str, jnp.ndarray]
         Dictionary of data evaluated on grid that ``can_fft2`` with keys
         ``|e_theta x e_zeta|``, ``e_theta``, and ``e_zeta``.
+    return_local : bool
+        Whether to return the local ratio as well as the mean global ratio.
 
     Returns
     -------
     mean : float
-        Mean ratio.
-    local : jnp.ndarray
-        Local ratio.
+        Mean best ratio.
 
     """
     local = jnp.linalg.norm(data["e_zeta"], axis=-1) / jnp.linalg.norm(
@@ -187,7 +249,7 @@ def best_ratio(data):
     mean = jnp.mean(local * data["|e_theta x e_zeta|"]) / jnp.mean(
         data["|e_theta x e_zeta|"]
     )
-    return mean, local
+    return mean, local if return_local else mean
 
 
 def _get_quadrature_nodes(q):
@@ -1015,7 +1077,7 @@ def compute_B_plasma(eq, eval_grid, source_grid=None, normal_only=False):
     data_keys = ["K_vc", "B", "R", "phi", "Z", "e^rho", "n_rho", "|e_theta x e_zeta|"]
     eval_data = eq.compute(data_keys, grid=eval_grid)
     source_data = eq.compute(data_keys, grid=source_grid)
-    st, sz, q = heuristic_support_params(source_grid, best_ratio(source_data)[0])
+    st, sz, q = best_params(source_grid, best_ratio(source_data))
     try:
         interpolator = FFTInterpolator(eval_grid, source_grid, st, sz, q)
     except AssertionError as e:

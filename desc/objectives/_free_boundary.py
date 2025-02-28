@@ -19,7 +19,7 @@ from desc.utils import (
     warnif,
 )
 
-from ..integrals.singularities import best_ratio, heuristic_support_params
+from ..integrals.singularities import best_params, best_ratio
 from .normalization import compute_scaling_factors
 
 
@@ -435,12 +435,7 @@ class BoundaryError(_Objective):
             target = 0
         self._source_grid = source_grid
         self._eval_grid = eval_grid
-        if isinstance(s, (tuple, list)):
-            self._st = s[0]
-            self._sz = s[1]
-        else:
-            self._st = s
-            self._sz = s
+        self._st, self._sz = s if len(s) > 1 else (s, s)
         self._q = q
         self._field = field
         self._field_grid = field_grid
@@ -521,7 +516,7 @@ class BoundaryError(_Objective):
             ratio_data = eq.compute(
                 ["|e_theta x e_zeta|", "e_theta", "e_zeta"], grid=source_grid
             )
-            st, sz, q = heuristic_support_params(source_grid, best_ratio(ratio_data)[0])
+            st, sz, q = best_params(source_grid, best_ratio(ratio_data))
             self._st = setdefault(self._st, st)
             self._sz = setdefault(self._sz, sz)
             self._q = setdefault(self._q, q)

@@ -56,6 +56,7 @@ from desc.integrals.quad_utils import (
 from desc.integrals.singularities import (
     _get_quadrature_nodes,
     _kernel_nr_over_r3,
+    _local_params,
     best_params,
     best_ratio,
 )
@@ -668,7 +669,8 @@ class TestSingularities:
             "|e_theta x e_zeta|",
         ]
         data = eq.compute(keys, grid=grid)
-        st, sz, q = best_params(grid, best_ratio(data))
+        mean, local = best_ratio(data, return_local=True)
+        st, sz, q = _local_params(grid, (mean, local.mean()))
         interp = interpolator(grid, grid, st, sz, q)
         Bplasma = virtual_casing_biot_savart(data, data, interp, chunk_size=50)
         # need extra factor of B/2 bc we're evaluating on plasma surface

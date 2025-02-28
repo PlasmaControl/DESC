@@ -435,7 +435,7 @@ class BoundaryError(_Objective):
             target = 0
         self._source_grid = source_grid
         self._eval_grid = eval_grid
-        self._st, self._sz = s if len(s) > 1 else (s, s)
+        self._st, self._sz = s if isinstance(s, (tuple, list)) else (s, s)
         self._q = q
         self._field = field
         self._field_grid = field_grid

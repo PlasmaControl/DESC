@@ -1426,6 +1426,7 @@ def test_regcoil_helical_coils_check_objective_method(
         eval_grid=eval_grid,
         field_grid=sgrid,
         vacuum=True,
+        bs_chunk_size=10,
     )
 
     objective = ObjectiveFunction(
@@ -1497,6 +1498,7 @@ def test_quadratic_flux_optimization_with_analytic_field():
         field=field,
         eval_grid=eval_grid,
         vacuum=True,
+        bs_chunk_size=10,
     )
     objective = ObjectiveFunction(quadflux_obj)
     things, __ = optimizer.optimize(
@@ -1540,6 +1542,7 @@ def test_qfm_optimization_with_analytic_field():
         field=field,
         eval_grid=eval_grid,
         field_fixed=True,
+        bs_chunk_size=10,
     )
     torflux = ToroidalFlux(
         eq=surface,
@@ -1581,7 +1584,9 @@ def test_second_stage_optimization():
     """Test optimizing magnetic field for a fixed axisymmetric equilibrium."""
     eq = get("DSHAPE")
     field = ToroidalMagneticField(B0=1, R0=3.5) + VerticalMagneticField(B0=1)
-    objective = ObjectiveFunction(QuadraticFlux(eq=eq, field=field, vacuum=True))
+    objective = ObjectiveFunction(
+        QuadraticFlux(eq=eq, field=field, vacuum=True, bs_chunk_size=10)
+    )
     constraints = FixParameters(field, [{"R0": True}, {}])
     optimizer = Optimizer("scipy-trf")
     (field,), _ = optimizer.optimize(
@@ -1626,7 +1631,12 @@ def test_second_stage_optimization_CoilSet():
     grid = LinearGrid(M=5)
     objective = ObjectiveFunction(
         QuadraticFlux(
-            eq=eq, field=field, vacuum=True, eval_grid=grid, field_grid=LinearGrid(N=15)
+            eq=eq,
+            field=field,
+            vacuum=True,
+            eval_grid=grid,
+            field_grid=LinearGrid(N=15),
+            bs_chunk_size=10,
         )
     )
     constraints = FixParameters(
@@ -1709,6 +1719,7 @@ def test_optimize_with_all_coil_types(DummyCoilSet, DummyMixedCoilSet, coil_type
             weight=1e-4,
             eval_grid=quad_eval_grid,
             field_grid=quad_field_grid,
+            bs_chunk_size=10,
         )
     )
     optimizer = Optimizer(method)

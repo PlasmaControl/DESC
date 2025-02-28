@@ -1505,7 +1505,7 @@ class SurfaceQuadraticFlux(_Objective):
         field_fixed=False,
         jac_chunk_size=None,
         *,
-        bs_chunk_size=10,
+        bs_chunk_size=None,
         **kwargs,
     ):
         if target is None and bounds is None:
@@ -1723,7 +1723,7 @@ class ToroidalFlux(_Objective):
         eq_fixed=False,
         jac_chunk_size=None,
         *,
-        bs_chunk_size=10,
+        bs_chunk_size=None,
         **kwargs,
     ):
         if target is None and bounds is None:

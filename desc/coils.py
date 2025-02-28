@@ -1378,9 +1378,10 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
 
     @current.setter
     def current(self, new):
-        if jnp.isscalar(new):
-            new = [new] * len(self)
-        for coil, cur in zip(self.coils, new):
+        new = jnp.atleast_1d(new)
+        if new.size == 1:
+            new = jnp.broadcast_to(new, (len(self),))
+        for coil, cur in zip(self.coils, jnp.atleast_1d(new), strict=True):
             coil.current = cur
 
     def _all_currents(self, currents=None):

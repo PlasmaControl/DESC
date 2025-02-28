@@ -52,6 +52,10 @@ class VacuumBoundaryError(_Objective):
     field_fixed : bool
         Whether to assume the field is fixed. For free boundary solve, should
         be fixed. For single stage optimization, should be False (default).
+    bs_chunk_size : int or None
+        Size to split Biot-Savart computation into chunks of evaluation points.
+        If no chunking should be done or the chunk size is the full input
+        then supply ``None``.
 
     """
 
@@ -81,6 +85,8 @@ class VacuumBoundaryError(_Objective):
         field_fixed=False,
         name="Vacuum boundary error",
         jac_chunk_size=None,
+        *,
+        bs_chunk_size=None,
         **kwargs,
     ):
         eval_grid = parse_argname_change(eval_grid, kwargs, "grid", "eval_grid")
@@ -91,12 +97,9 @@ class VacuumBoundaryError(_Objective):
         self._field = field
         self._field_grid = field_grid
         self._field_fixed = field_fixed
-        if field_fixed:
-            things = [eq]
-        else:
-            things = [eq, field]
+        self._bs_chunk_size = bs_chunk_size
         super().__init__(
-            things=things,
+            things=[eq] if field_fixed else [eq, field],
             target=target,
             bounds=bounds,
             weight=weight,
@@ -221,7 +224,11 @@ class VacuumBoundaryError(_Objective):
         # can always pass in field params. If they're None, it just uses the
         # defaults for the given field.
         Bext = constants["field"].compute_magnetic_field(
-            x, source_grid=self._field_grid, basis="rpz", params=field_params
+            x,
+            source_grid=self._field_grid,
+            basis="rpz",
+            params=field_params,
+            chunk_size=self._bs_chunk_size,
         )
         Bex_total = Bext
         Bin_total = data["B"]
@@ -371,9 +378,13 @@ class BoundaryError(_Objective):
         Whether to assume the field is fixed. For free boundary solve, should
         be fixed. For single stage optimization, should be False (default).
     chunk_size : int or None
-        Size to split computation into chunks.
+        Size to split singular integral computation into chunks.
         If no chunking should be done or the chunk size is the full input
         then supply ``None``. Default is ``1``.
+    bs_chunk_size : int or None
+        Size to split Biot-Savart computation into chunks of evaluation points.
+        If no chunking should be done or the chunk size is the full input
+        then supply ``None``.
 
     """
 
@@ -425,6 +436,8 @@ class BoundaryError(_Objective):
         chunk_size=1,
         name="Boundary error",
         jac_chunk_size=None,
+        *,
+        bs_chunk_size=None,
         **kwargs,
     ):
         if target is None and bounds is None:
@@ -442,6 +455,7 @@ class BoundaryError(_Objective):
         )
         if self._chunk_size == 0:
             self._chunk_size = None
+        self._bs_chunk_size = bs_chunk_size
         self._sheet_current = hasattr(eq.surface, "Phi_mn")
         if field_fixed:
             things = [eq]
@@ -693,7 +707,11 @@ class BoundaryError(_Objective):
         # can always pass in field params. If they're None, it just uses the
         # defaults for the given field.
         Bext = constants["field"].compute_magnetic_field(
-            x, source_grid=self._field_grid, basis="rpz", params=field_params
+            x,
+            source_grid=self._field_grid,
+            basis="rpz",
+            params=field_params,
+            chunk_size=self._bs_chunk_size,
         )
         Bex_total = Bext + Bplasma
         Bin_total = eval_data["B"]

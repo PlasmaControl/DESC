@@ -50,6 +50,7 @@ Bug Fixes
 - Sets ``os.environ["JAX_PLATFORMS"] = "cpu"`` instead of ``os.environ["JAX_PLATFORM_NAME"] = "cpu"`` when doing ``set_device("cpu")``.
 - Fixes bug in ``desc.input_reader.desc_output_to_input`` utility function for asymmetric equilibria profiles, where the full profile resolution was not being saved.
 - Fixes bug when passing only `sym` into `.change_resolution` for ``FourierRZToroidalSurface``, ``ZernikeRZToroidalSection`` and ``FourierRZCurve``.
+- Fixes bug that was setting ``ObjectiveFunction._things_per_objective_idx`` incorrectly. Now each ``_Objective`` can define a unique order that it expects to use parameters for multiple "things".
 
 Performance Improvements
 

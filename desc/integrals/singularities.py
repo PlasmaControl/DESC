@@ -249,7 +249,7 @@ def best_ratio(data, return_local=False):
     mean = jnp.mean(local * data["|e_theta x e_zeta|"]) / jnp.mean(
         data["|e_theta x e_zeta|"]
     )
-    return mean, local if return_local else mean
+    return (mean, local) if return_local else mean
 
 
 def _get_quadrature_nodes(q):

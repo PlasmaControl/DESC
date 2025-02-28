@@ -1293,7 +1293,7 @@ class QuadraticFlux(_Objective):
         name="Quadratic flux",
         jac_chunk_size=None,
         *,
-        bs_chunk_size=10,
+        bs_chunk_size=None,
         **kwargs,
     ):
         from desc.geometry import FourierRZToroidalSurface

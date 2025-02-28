@@ -472,6 +472,9 @@ class TestCoilSet:
             coil, displacement=[0, 0, 10], n=n, endpoint=True
         )
         coils.current = I
+        with pytest.raises(ValueError):
+            # we pass in a list less than len(coils), so throws a ValueError
+            coils.current = [I, I]
         np.testing.assert_allclose(coils.current, I)
         B_approx = coils.compute_magnetic_field(
             [0, 0, z[-1]], basis="xyz", source_grid=32

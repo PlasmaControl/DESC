@@ -124,6 +124,12 @@ def _calc_1st_order_NAE_coeffs(qsc, desc_eq, N=None):
         and Z_1_1_n uses the Zbasis_sin as the term is cos(theta)*sin(phi)
         since Z(-theta,-phi) = - Z(theta,phi) for Z stellarator symmetry.
     """
+    if N is None:
+        N = desc_eq.N
+    else:
+        N = np.min([desc_eq.N, N])
+    assert N == int(N), "Toroidal Resolution must be an integer!"
+    N = int(N)
     if qsc is None:
         nfp = desc_eq.NFP
         # we will set behavior to the eq's current near axis behavior
@@ -162,12 +168,7 @@ def _calc_1st_order_NAE_coeffs(qsc, desc_eq, N=None):
     R0 = qsc.R0_func(phi)
     dR0_dphi = qsc.R0p
     dZ0_dphi = qsc.Z0p
-    if N is None:
-        N = desc_eq.N
-    else:
-        N = np.min([desc_eq.N, N])
-    assert N == int(N), "Toroidal Resolution must be an integer!"
-    N = int(N)
+
     # normal and binormal vector components
     # Spline interpolants for the cylindrical components of the Frenet-Serret frame:
     # these are functions of phi (toroidal cylindrical angle)
@@ -486,6 +487,12 @@ def _calc_2nd_order_NAE_coeffs(qsc, desc_eq, N=None):
         and Z_1_1_n uses the Zbasis_sin as the term is cos(theta)*sin(phi)
         since Z(-theta,-phi) = - Z(theta,phi) for Z stellarator symmetry
     """
+    if N is None:
+        N = desc_eq.N
+    else:
+        N = np.max([desc_eq.N, N])
+    assert N == int(N), "Toroidal Resolution must be an integer!"
+    N = int(N)
     if qsc is None:
         nfp = desc_eq.NFP
         # we will set behavior to the eq's current near axis behavior
@@ -517,13 +524,6 @@ def _calc_2nd_order_NAE_coeffs(qsc, desc_eq, N=None):
         coeffs["Z_2_neg2_n"] = np.zeros(Zbasis.num_modes)
         return coeffs, bases
     # get variables from qsc
-
-    if N is None:
-        N = desc_eq.N
-    else:
-        N = np.max([desc_eq.N, N])
-    assert N == int(N), "Toroidal Resolution must be an integer!"
-    N = int(N)
 
     phi = qsc.phi
     R0 = qsc.R0_func(phi)

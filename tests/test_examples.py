@@ -607,12 +607,12 @@ def test_NAE_QSC_solve_near_axis_based_off_eq():
     eq_lambda_fixed_1st_order = eq.copy()
 
     # this has all the constraints we need,
-    cs = get_NAE_constraints(eq, qsc_eq=None, order=1, fix_lambda=False, N=eq.N)
+    cs = get_NAE_constraints(eq, qsc_eq=None, order=1, fix_lambda=False)
     cs_lambda_fixed_0th_order = get_NAE_constraints(
-        eq_lambda_fixed_0th_order, qsc_eq=None, order=1, fix_lambda=0, N=eq.N
+        eq_lambda_fixed_0th_order, qsc_eq=None, order=1, fix_lambda=0
     )
     cs_lambda_fixed_1st_order = get_NAE_constraints(
-        eq_lambda_fixed_1st_order, qsc_eq=None, order=1, fix_lambda=True, N=eq.N
+        eq_lambda_fixed_1st_order, qsc_eq=None, order=1, fix_lambda=True
     )
 
     for c in cs:

@@ -19,7 +19,7 @@ from desc.utils import (
     warnif,
 )
 
-from ..integrals.singularities import best_ratio, heuristic_support_params
+from ..integrals.singularities import best_params, best_ratio
 from .normalization import compute_scaling_factors
 
 
@@ -52,6 +52,10 @@ class VacuumBoundaryError(_Objective):
     field_fixed : bool
         Whether to assume the field is fixed. For free boundary solve, should
         be fixed. For single stage optimization, should be False (default).
+    bs_chunk_size : int or None
+        Size to split Biot-Savart computation into chunks of evaluation points.
+        If no chunking should be done or the chunk size is the full input
+        then supply ``None``.
 
     """
 
@@ -81,6 +85,8 @@ class VacuumBoundaryError(_Objective):
         field_fixed=False,
         name="Vacuum boundary error",
         jac_chunk_size=None,
+        *,
+        bs_chunk_size=None,
         **kwargs,
     ):
         eval_grid = parse_argname_change(eval_grid, kwargs, "grid", "eval_grid")
@@ -91,12 +97,9 @@ class VacuumBoundaryError(_Objective):
         self._field = field
         self._field_grid = field_grid
         self._field_fixed = field_fixed
-        if field_fixed:
-            things = [eq]
-        else:
-            things = [eq, field]
+        self._bs_chunk_size = bs_chunk_size
         super().__init__(
-            things=things,
+            things=[eq] if field_fixed else [eq, field],
             target=target,
             bounds=bounds,
             weight=weight,
@@ -221,7 +224,11 @@ class VacuumBoundaryError(_Objective):
         # can always pass in field params. If they're None, it just uses the
         # defaults for the given field.
         Bext = constants["field"].compute_magnetic_field(
-            x, source_grid=self._field_grid, basis="rpz", params=field_params
+            x,
+            source_grid=self._field_grid,
+            basis="rpz",
+            params=field_params,
+            chunk_size=self._bs_chunk_size,
         )
         Bex_total = Bext
         Bin_total = data["B"]
@@ -375,9 +382,13 @@ class BoundaryError(_Objective):
         Whether to assume the field is fixed. For free boundary solve, should
         be fixed. For single stage optimization, should be False (default).
     chunk_size : int or None
-        Size to split computation into chunks.
+        Size to split singular integral computation into chunks.
         If no chunking should be done or the chunk size is the full input
         then supply ``None``. Default is ``1``.
+    bs_chunk_size : int or None
+        Size to split Biot-Savart computation into chunks of evaluation points.
+        If no chunking should be done or the chunk size is the full input
+        then supply ``None``.
 
     """
 
@@ -429,18 +440,15 @@ class BoundaryError(_Objective):
         chunk_size=1,
         name="Boundary error",
         jac_chunk_size=None,
+        *,
+        bs_chunk_size=None,
         **kwargs,
     ):
         if target is None and bounds is None:
             target = 0
         self._source_grid = source_grid
         self._eval_grid = eval_grid
-        if isinstance(s, (tuple, list)):
-            self._st = s[0]
-            self._sz = s[1]
-        else:
-            self._st = s
-            self._sz = s
+        self._st, self._sz = s if isinstance(s, (tuple, list)) else (s, s)
         self._q = q
         self._field = field
         self._field_grid = field_grid
@@ -449,6 +457,7 @@ class BoundaryError(_Objective):
         )
         if self._chunk_size == 0:
             self._chunk_size = None
+        self._bs_chunk_size = bs_chunk_size
         self._sheet_current = hasattr(eq.surface, "Phi_mn")
         if field_fixed:
             things = [eq]
@@ -521,7 +530,7 @@ class BoundaryError(_Objective):
             ratio_data = eq.compute(
                 ["|e_theta x e_zeta|", "e_theta", "e_zeta"], grid=source_grid
             )
-            st, sz, q = heuristic_support_params(source_grid, best_ratio(ratio_data)[0])
+            st, sz, q = best_params(source_grid, best_ratio(ratio_data))
             self._st = setdefault(self._st, st)
             self._sz = setdefault(self._sz, sz)
             self._q = setdefault(self._q, q)
@@ -705,7 +714,11 @@ class BoundaryError(_Objective):
         # can always pass in field params. If they're None, it just uses the
         # defaults for the given field.
         Bext = constants["field"].compute_magnetic_field(
-            x, source_grid=self._field_grid, basis="rpz", params=field_params
+            x,
+            source_grid=self._field_grid,
+            basis="rpz",
+            params=field_params,
+            chunk_size=self._bs_chunk_size,
         )
         Bex_total = Bext + Bplasma
         Bin_total = eval_data["B"]

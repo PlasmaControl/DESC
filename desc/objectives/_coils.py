@@ -1293,7 +1293,7 @@ class QuadraticFlux(_Objective):
         name="Quadratic flux",
         jac_chunk_size=None,
         *,
-        bs_chunk_size=10,
+        bs_chunk_size=None,
         **kwargs,
     ):
         from desc.geometry import FourierRZToroidalSurface
@@ -1471,7 +1471,7 @@ class SurfaceQuadraticFlux(_Objective):
         coils). Default grid is determined by the specific MagneticField object, see
         the docs of that object's ``compute_magnetic_field`` method for more detail.
     field_fixed : bool
-        Whether or not to fix the magnetic field's DOFs during the optimization.
+        Whether to fix the magnetic field's DOFs during the optimization.
     bs_chunk_size : int or None
         Size to split Biot-Savart computation into chunks of evaluation points.
         If no chunking should be done or the chunk size is the full input
@@ -1505,7 +1505,7 @@ class SurfaceQuadraticFlux(_Objective):
         field_fixed=False,
         jac_chunk_size=None,
         *,
-        bs_chunk_size=10,
+        bs_chunk_size=None,
         **kwargs,
     ):
         if target is None and bounds is None:
@@ -1723,7 +1723,7 @@ class ToroidalFlux(_Objective):
         eq_fixed=False,
         jac_chunk_size=None,
         *,
-        bs_chunk_size=10,
+        bs_chunk_size=None,
         **kwargs,
     ):
         if target is None and bounds is None:

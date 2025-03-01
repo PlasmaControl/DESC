@@ -18,7 +18,6 @@ from desc.utils import (
     parse_argname_change,
     safediv,
     safenorm,
-    safenormalize,
     warnif,
 )
 
@@ -808,13 +807,14 @@ def _kernel_nr_over_r3(eval_data, source_data, diag=False):
     dx = _dx(eval_data, source_data, diag)
     # Need to use e^rho*sqrt(g) to pass Green's ID test.
     # Fourier spectrum is much more concentrated than n_rho for some reason.
-    n = safenormalize(source_data["e^rho*sqrt(g)"], axis=-1)
+    # Don't
+    n = source_data["e^rho*sqrt(g)"] / source_data["|e_theta x e_zeta|"][:, jnp.newaxis]
     n = rpz2xyz_vec(n, phi=source_data["phi"])
     return safediv(dot(n, dx), safenorm(dx, axis=-1) ** 3)
 
 
 _kernel_nr_over_r3.ndim = 1
-_kernel_nr_over_r3.keys = _dx.keys + ["e^rho*sqrt(g)"]
+_kernel_nr_over_r3.keys = _dx.keys + ["e^rho*sqrt(g)", "|e_theta x e_zeta|"]
 
 
 def _kernel_biot_savart(eval_data, source_data, diag=False):

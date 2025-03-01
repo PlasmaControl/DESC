@@ -11,7 +11,7 @@ expensive computations.
 
 from desc.backend import jnp
 
-from ..utils import cross, dot, safediv, safenormalize
+from ..utils import cross, dot, safediv
 from .data_index import register_compute_fun
 
 
@@ -3352,7 +3352,7 @@ def _gradpsi(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["e^rho*sqrt(g)"],
+    data=["e^rho*sqrt(g)", "|e_theta x e_zeta|"],
     axis_limit_data=["e_theta_r", "e_zeta", "|e_theta x e_zeta|_r"],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
@@ -3363,7 +3363,7 @@ def _n_rho(params, transforms, profiles, data, **kwargs):
     # Equal to 𝐞^ρ / ‖𝐞^ρ‖ but works correctly for surfaces as well that don't
     # have contravariant basis defined.
     data["n_rho"] = transforms["grid"].replace_at_axis(
-        safenormalize(data["e^rho*sqrt(g)"], axis=-1),
+        safediv(data["e^rho*sqrt(g)"], data["|e_theta x e_zeta|"][:, jnp.newaxis]),
         # At the magnetic axis, this function returns the multivalued map whose
         # image is the set { 𝐞^ρ / ‖𝐞^ρ‖ | ρ=0 }.
         lambda: safediv(

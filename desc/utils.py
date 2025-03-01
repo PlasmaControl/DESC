@@ -921,6 +921,8 @@ def safenorm(x, ord=None, axis=None, fill=0, threshold=0, keepdims=False):
 def safenormalize(x, ord=None, axis=None, fill=0, threshold=0):
     """Normalize a vector to unit length, but without nan gradient at x=0.
 
+    If x is zero returns a constant array of unit length.
+
     Parameters
     ----------
     x : ndarray

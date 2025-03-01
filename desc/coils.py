@@ -1609,7 +1609,6 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             ValueError,
             f'Expected "A" or "B" for compute_A_or_B, instead got {compute_A_or_B}',
         )
-        assert source_grid is None or self.NFP == source_grid.NFP
         assert basis.lower() in ["rpz", "xyz"]
         coords = jnp.atleast_2d(jnp.asarray(coords))
         if params is None:

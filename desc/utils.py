@@ -935,9 +935,11 @@ def safenormalize(x, ord=None, axis=None, fill=0, threshold=0):
         How small is x allowed to be.
 
     """
+    is_zero = (jnp.abs(x) <= threshold).all(axis=axis, keepdims=True)
+    y = jnp.where(is_zero, jnp.ones_like(x), x)  # replace x with ones if is_zero
     n = safenorm(x, ord, axis, fill, threshold, keepdims=True)
     # return unit vector with equal components if norm <= threshold
-    return jnp.where(n <= threshold, jnp.reciprocal(jnp.sqrt(x.size)), x / n)
+    return jnp.where(n <= threshold, jnp.reciprocal(jnp.sqrt(x.size)), y / n)
 
 
 def safediv(a, b, fill=0, threshold=0):

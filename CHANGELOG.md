@@ -3,6 +3,7 @@ Changelog
 
 New Features
 
+- Adds Vacuum field solver that does not assume nested flux surfaces.
 - Updates default parameters for partition support size in the singular surface integrals.
 - Enables tracking multiple fieldlines in ``Bounce2D``.
 - Bounce integral methods with ``desc.integrals.Bounce2D``.

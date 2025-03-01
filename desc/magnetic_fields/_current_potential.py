@@ -596,7 +596,7 @@ class FourierCurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
 
         """
         M = M or self._M_Phi
-        N = N or self._M_Phi
+        N = N or self._N_Phi
         NFP = NFP or self.NFP
         sym_Phi = sym_Phi or self.sym_Phi
 

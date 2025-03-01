@@ -161,7 +161,15 @@ class DommaschkPotentialField(ScalarPotentialField):
 
     @classmethod
     def fit_magnetic_field(  # noqa: C901
-        cls, field, coords, max_m, max_l, sym=False, verbose=1, NFP=1
+        cls,
+        field,
+        coords,
+        max_m,
+        max_l,
+        sym=False,
+        verbose=1,
+        NFP=1,
+        chunk_size=None,
     ):
         """Fit a vacuum magnetic field with a Dommaschk Potential field.
 
@@ -185,6 +193,11 @@ class DommaschkPotentialField(ScalarPotentialField):
             that are integer multiples of NFP.
         verbose (int): verbosity level of fitting routine, > 0 prints residuals,
              >1 prints timing info
+        chunk_size : int or None
+            Size to split computation into chunks of evaluation points.
+            If no chunking should be done or the chunk size is the full input
+            then supply ``None``. Default is ``None``.
+
         """
         # We seek c in  Ac = b
         # A will be the BR, Bphi and BZ from each individual
@@ -193,7 +206,7 @@ class DommaschkPotentialField(ScalarPotentialField):
         # c will be [B0, a_00, a_10, a_01, a_11... etc]
         # b is the magnetic field at each node which we are fitting
         if isinstance(field, _MagneticField):
-            B = field.compute_magnetic_field(coords)
+            B = field.compute_magnetic_field(coords, chunk_size=chunk_size)
         elif callable(field):
             B = field(coords)
         else:  # it must be the field evaluated at the passed-in coords
@@ -312,6 +325,7 @@ class DommaschkPotentialField(ScalarPotentialField):
                     * abcd_zero_due_to_sym_inds[3],
                     "B0": X[0],
                 },
+                chunk_size=chunk_size,
             )
 
         X = []

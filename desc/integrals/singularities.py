@@ -2,7 +2,6 @@
 
 from abc import ABC, abstractmethod
 
-import scipy
 from interpax import fft_interp2d
 from scipy.constants import mu_0
 
@@ -11,7 +10,7 @@ from desc.batching import batch_map, vmap_chunked
 from desc.compute.geom_utils import rpz2xyz, rpz2xyz_vec, xyz2rpz_vec
 from desc.grid import LinearGrid
 from desc.integrals._interp_utils import rfft2_modes, rfft2_vander
-from desc.integrals.quad_utils import chi, eta, nfp_loop
+from desc.integrals.quad_utils import _get_polar_quadrature, chi, eta, nfp_loop
 from desc.io import IOAble
 from desc.utils import (
     check_posint,
@@ -233,40 +232,6 @@ def get_interpolator(
     return f
 
 
-def _get_quadrature_nodes(q):
-    """Polar nodes for quadrature around singular point.
-
-    Parameters
-    ----------
-    q : int
-        Order of quadrature in radial and azimuthal directions.
-
-    Returns
-    -------
-    r, w : ndarray
-        Radial and azimuthal coordinates.
-    dr, dw : ndarray
-        Radial and azimuthal spacing and quadrature weights.
-
-    """
-    Nr = Nw = q
-    r, dr = scipy.special.roots_legendre(Nr)
-    # integrate separately over [-1,0] and [0,1]
-    r1 = 1 / 2 * r - 1 / 2
-    r2 = 1 / 2 * r + 1 / 2
-    r = jnp.concatenate([r1, r2])
-    dr = jnp.concatenate([dr, dr]) / 2
-    w = jnp.linspace(0, jnp.pi, Nw, endpoint=False)
-    dw = jnp.ones_like(w) * jnp.pi / Nw
-    r, w = jnp.meshgrid(r, w)
-    r = r.flatten()
-    w = w.flatten()
-    dr, dw = jnp.meshgrid(dr, dw)
-    dr = dr.flatten()
-    dw = dw.flatten()
-    return r, w, dr, dw
-
-
 class _BIESTInterpolator(IOAble, ABC):
     """Base class for interpolators from cartesian to polar domain.
 
@@ -328,7 +293,7 @@ class _BIESTInterpolator(IOAble, ABC):
         self._q = q
         self._ht = 2 * jnp.pi / source_grid.num_theta
         self._hz = 2 * jnp.pi / source_grid.num_zeta / source_grid.NFP
-        r, w, _, _ = _get_quadrature_nodes(q)
+        r, w, _, _ = _get_polar_quadrature(q)
         self._shift_t = self._ht * st / 2 * r * jnp.sin(w)
         self._shift_z = self._hz * sz / 2 * r * jnp.cos(w)
 
@@ -646,7 +611,7 @@ def _singular_part(eval_data, source_data, kernel, interpolator, chunk_size=None
     eval_theta = jnp.asarray(eval_grid.nodes[:, 1])
     eval_zeta = jnp.asarray(eval_grid.nodes[:, 2])
 
-    r, w, dr, dw = _get_quadrature_nodes(interpolator.q)
+    r, w, dr, dw = _get_polar_quadrature(interpolator.q)
     r = jnp.abs(r)
     # integrand of eq 38 in [2] except stuff that needs to be interpolated
     v = (

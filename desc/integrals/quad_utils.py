@@ -13,6 +13,7 @@ The clustering of the nodes near the singularities is sufficient to estimate
 k(ζ, λ).
 """
 
+import scipy
 from orthax.chebyshev import chebgauss, chebweight
 from orthax.legendre import legder, legval
 
@@ -461,3 +462,37 @@ def eta(theta, zeta, theta0, zeta0, ht, hz, st, sz):
 def eta_zero(theta, zeta, theta0, zeta0, ht, hz, st, sz):
     """Returns η = 0 to integrate smooth functions with ``_nonsingular_part``."""
     return 0
+
+
+def _get_polar_quadrature(q):
+    """Polar nodes for quadrature around singular point.
+
+    Parameters
+    ----------
+    q : int
+        Order of quadrature in radial and azimuthal directions.
+
+    Returns
+    -------
+    r, w : ndarray
+        Radial and azimuthal coordinates.
+    dr, dw : ndarray
+        Radial and azimuthal spacing and quadrature weights.
+
+    """
+    Nr = Nw = q
+    r, dr = scipy.special.roots_legendre(Nr)
+    # integrate separately over [-1,0] and [0,1]
+    r1 = 1 / 2 * r - 1 / 2
+    r2 = 1 / 2 * r + 1 / 2
+    r = jnp.concatenate([r1, r2])
+    dr = jnp.concatenate([dr, dr]) / 2
+    w = jnp.linspace(0, jnp.pi, Nw, endpoint=False)
+    dw = jnp.ones_like(w) * jnp.pi / Nw
+    r, w = jnp.meshgrid(r, w)
+    r = r.flatten()
+    w = w.flatten()
+    dr, dw = jnp.meshgrid(dr, dw)
+    dr = dr.flatten()
+    dw = dw.flatten()
+    return r, w, dr, dw

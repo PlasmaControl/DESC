@@ -45,6 +45,7 @@ from desc.integrals._bounce_utils import (
 from desc.integrals._interp_utils import fourier_pts
 from desc.integrals.basis import FourierChebyshevSeries
 from desc.integrals.quad_utils import (
+    _get_polar_quadrature,
     automorphism_sin,
     bijection_from_disc,
     chebgauss1,
@@ -56,7 +57,6 @@ from desc.integrals.quad_utils import (
     tanh_sinh,
 )
 from desc.integrals.singularities import (
-    _get_quadrature_nodes,
     _kernel_nr_over_r3,
     _local_params,
     _vanilla_params,
@@ -602,7 +602,7 @@ class TestSingularities:
         st = 3
         sz = 5
         q = 4
-        r, w, _, _ = _get_quadrature_nodes(q)
+        r, w, _, _ = _get_polar_quadrature(q)
         dt = st / 2 * h_t * r * np.sin(w)
         dz = sz / 2 * h_z * r * np.cos(w)
 

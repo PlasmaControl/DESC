@@ -410,6 +410,7 @@ class Transform(IOAble):
             cc = A @ c_mtrx
             return (cc @ B.T).flatten(order="F")
 
+        # TODO: Use real fft (jnp.irfft and jnp.fft)
         elif self.method == "fft":
             A = self.matrices["fft"].get(dr, {}).get(dt, {})
             if isinstance(A, dict):

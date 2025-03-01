@@ -787,7 +787,7 @@ class TestVacuumSolver:
         Define harmonic map Φ: ρ,θ,ζ ↦ Z(ρ,θ,ζ).
         Choose b.c. 𝐁₀⋅𝐧 = -∇ϕ⋅𝐧 and test that ‖ Φ − Z ‖_∞ → 0.
         """
-        atol = 1e-4
+        atol = 4e-5
         # elliptic cross-section with torsion
         surf = FourierRZToroidalSurface(
             R_lmn=[10, 1, 0.2],

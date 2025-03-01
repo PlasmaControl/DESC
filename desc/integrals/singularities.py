@@ -18,6 +18,7 @@ from desc.utils import (
     parse_argname_change,
     safediv,
     safenorm,
+    safenormalize,
     warnif,
 )
 
@@ -805,12 +806,15 @@ _kernel_1_over_r.keys = _dx.keys
 def _kernel_nr_over_r3(eval_data, source_data, diag=False):
     """Returns n ⋅ −∇G(x,x') = n ⋅ (x−x')|x−x'|⁻³."""
     dx = _dx(eval_data, source_data, diag)
-    n = rpz2xyz_vec(source_data["n_rho"], phi=source_data["phi"])
+    # Need to use e^rho*sqrt(g) to pass Green's ID test.
+    # Fourier spectrum is much more concentrated than n_rho for some reason.
+    n = safenormalize(source_data["e^rho*sqrt(g)"], axis=-1)
+    n = rpz2xyz_vec(n, phi=source_data["phi"])
     return safediv(dot(n, dx), safenorm(dx, axis=-1) ** 3)
 
 
 _kernel_nr_over_r3.ndim = 1
-_kernel_nr_over_r3.keys = _dx.keys + ["n_rho"]
+_kernel_nr_over_r3.keys = _dx.keys + ["e^rho*sqrt(g)"]
 
 
 def _kernel_biot_savart(eval_data, source_data, diag=False):
@@ -852,10 +856,10 @@ _kernel_Bn_over_r.keys = _dx.keys + ["Bn"]
 
 
 def _kernel_Phi_dGp_dn(eval_data, source_data, diag=False):
-    """Returns Φ n ⋅ −∇G(x,x') = Φ n ⋅ (x−x')|x−x'|⁻³."""
+    """Returns Φ n ⋅ −∇G(x,x') = Φ n ⋅ (x−x')|x−x'|⁻³. Phi has units Tesla-meters."""
     dx = _dx(eval_data, source_data, diag)
+    # Using n_rho works better than normalized e^rho*sqrt(g) here.
     n = rpz2xyz_vec(source_data["n_rho"], phi=source_data["phi"])
-    # Phi has units Tesla-meters.
     return safediv(source_data["Phi"] * dot(n, dx), safenorm(dx, axis=-1) ** 3)
 
 

@@ -92,16 +92,14 @@ def _sqrtg_clebsch(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["e_theta", "e_zeta"],
+    data=["e^rho*sqrt(g)"],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.core.Surface",
     ],
 )
 def _e_theta_x_e_zeta(params, transforms, profiles, data, **kwargs):
-    data["|e_theta x e_zeta|"] = safenorm(
-        cross(data["e_theta"], data["e_zeta"]), axis=-1
-    )
+    data["|e_theta x e_zeta|"] = safenorm(data["e^rho*sqrt(g)"], axis=-1)
     return data
 
 

@@ -11,7 +11,7 @@ expensive computations.
 
 from desc.backend import jnp
 
-from ..utils import cross, dot, safediv
+from ..utils import cross, dot, safediv, safenormalize
 from .data_index import register_compute_fun
 
 
@@ -50,6 +50,28 @@ def _e_sup_rho(params, transforms, profiles, data, **kwargs):
     # At the magnetic axis, this function returns the multivalued map whose
     # image is the set { 𝐞^ρ | ρ=0 }.
     data["e^rho"] = cross(data["e_theta/sqrt(g)"], data["e_zeta"])
+    return data
+
+
+@register_compute_fun(
+    name="e^rho*sqrt(g)",
+    label="\\mathbf{e}^{\\rho} \\sqrt{g}",
+    units="m^{2}",
+    units_long="square meters",
+    description="Contravariant radial basis vector weighted by 3-D volume Jacobian",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["e_theta", "e_zeta"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.core.Surface",
+    ],
+)
+def _e_sup_rho_sqrtg(params, transforms, profiles, data, **kwargs):
+    data["e^rho*sqrt(g)"] = cross(data["e_theta"], data["e_zeta"])
     return data
 
 
@@ -3330,8 +3352,8 @@ def _gradpsi(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["e_theta", "e_zeta", "|e_theta x e_zeta|"],
-    axis_limit_data=["e_theta_r", "|e_theta x e_zeta|_r"],
+    data=["e^rho*sqrt(g)"],
+    axis_limit_data=["e_theta_r", "e_zeta", "|e_theta x e_zeta|_r"],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.core.Surface",
@@ -3341,12 +3363,13 @@ def _n_rho(params, transforms, profiles, data, **kwargs):
     # Equal to 𝐞^ρ / ‖𝐞^ρ‖ but works correctly for surfaces as well that don't
     # have contravariant basis defined.
     data["n_rho"] = transforms["grid"].replace_at_axis(
-        safediv(cross(data["e_theta"], data["e_zeta"]).T, data["|e_theta x e_zeta|"]).T,
+        safenormalize(data["e^rho*sqrt(g)"], axis=-1),
         # At the magnetic axis, this function returns the multivalued map whose
         # image is the set { 𝐞^ρ / ‖𝐞^ρ‖ | ρ=0 }.
         lambda: safediv(
-            cross(data["e_theta_r"], data["e_zeta"]).T, data["|e_theta x e_zeta|_r"]
-        ).T,
+            cross(data["e_theta_r"], data["e_zeta"]),
+            data["|e_theta x e_zeta|_r"][:, jnp.newaxis],
+        ),
     )
     return data
 
@@ -3400,7 +3423,7 @@ def _n_rho_z(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["e_rho", "e_zeta", "|e_zeta x e_rho|"],
+    data=["e^theta*sqrt(g)", "|e_zeta x e_rho|"],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.core.Surface",
@@ -3409,9 +3432,7 @@ def _n_rho_z(params, transforms, profiles, data, **kwargs):
 def _n_theta(params, transforms, profiles, data, **kwargs):
     # Equal to 𝐞^θ / ‖𝐞^θ‖ but works correctly for surfaces as well that don't
     # have contravariant basis defined.
-    data["n_theta"] = (
-        cross(data["e_zeta"], data["e_rho"]).T / data["|e_zeta x e_rho|"]
-    ).T
+    data["n_theta"] = data["e^theta*sqrt(g)"] / data["|e_zeta x e_rho|"][:, jnp.newaxis]
     return data
 
 
@@ -3437,12 +3458,16 @@ def _n_zeta(params, transforms, profiles, data, **kwargs):
     # Equal to 𝐞^ζ / ‖𝐞^ζ‖ but works correctly for surfaces as well that don't
     # have contravariant basis defined.
     data["n_zeta"] = transforms["grid"].replace_at_axis(
-        safediv(cross(data["e_rho"], data["e_theta"]).T, data["|e_rho x e_theta|"]).T,
+        safediv(
+            cross(data["e_rho"], data["e_theta"]),
+            data["|e_rho x e_theta|"][:, jnp.newaxis],
+        ),
         # At the magnetic axis, this function returns the multivalued map whose
         # image is the set { 𝐞^ζ / ‖𝐞^ζ‖ | ρ=0 }.
         lambda: safediv(
-            cross(data["e_rho"], data["e_theta_r"]).T, data["|e_rho x e_theta|_r"]
-        ).T,
+            cross(data["e_rho"], data["e_theta_r"]),
+            data["|e_rho x e_theta|_r"][:, jnp.newaxis],
+        ),
     )
     return data
 

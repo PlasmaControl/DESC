@@ -918,7 +918,7 @@ def safenorm(x, ord=None, axis=None, fill=0, threshold=0, keepdims=False):
     return n
 
 
-def safenormalize(x, ord=None, axis=None, fill=0, threshold=0, keepdims=False):
+def safenormalize(x, ord=None, axis=None, fill=0, threshold=0):
     """Normalize a vector to unit length, but without nan gradient at x=0.
 
     Parameters
@@ -935,11 +935,9 @@ def safenormalize(x, ord=None, axis=None, fill=0, threshold=0, keepdims=False):
         How small is x allowed to be.
 
     """
-    is_zero = (jnp.abs(x) <= threshold).all(axis=axis, keepdims=True)
-    y = jnp.where(is_zero, jnp.ones_like(x), x)  # replace x with ones if is_zero
-    n = safenorm(x, ord, axis, fill, threshold, keepdims) * jnp.ones_like(x)
+    n = safenorm(x, ord, axis, fill, threshold, keepdims=True)
     # return unit vector with equal components if norm <= threshold
-    return jnp.where(n <= threshold, jnp.ones_like(y) / jnp.sqrt(y.size), y / n)
+    return jnp.where(n <= threshold, jnp.reciprocal(jnp.sqrt(x.size)), x / n)
 
 
 def safediv(a, b, fill=0, threshold=0):

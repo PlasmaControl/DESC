@@ -86,6 +86,14 @@ otherwise specified or implied by the variable name, these partial derivatives a
 those of the DESC :math:`\rho, \theta, \zeta` coordinate system. For example, ``|B|_z``
 is :math:`(\partial \vert B \vert / \partial\zeta)|_{\rho, \theta}`.
 
+Many quantities require special grids to compute accurately.
+To not burden users with such bookkeeping,
+especially when users are focused on other analysis,
+when an object method such as ``eq.compute`` is called,
+DESC will automatically use a set of best grids for the computation.
+On the other hand, when writing objectives developers must perform the bookkeeping
+and ensure everything can be computed accurately on the chosen grid.
+
 """
 
 block = """

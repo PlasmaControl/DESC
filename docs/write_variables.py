@@ -88,7 +88,7 @@ is :math:`(\partial \vert B \vert / \partial\zeta)|_{\rho, \theta}`.
 
 Many quantities require special grids to compute accurately.
 To not burden users with such bookkeeping,
-when an object method such as ``eq.compute`` is called,
+when an object method such as ``eq.compute(...,override_grid=True)`` is called,
 DESC will automatically use a set of best grids for the computation.
 However, when writing objectives developers must perform the bookkeeping
 and ensure everything can be computed accurately on the chosen grid.

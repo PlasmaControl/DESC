@@ -1425,7 +1425,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
 
         Returns
         -------
-        data : list of dict of ndarray
+        data : list[dict[str, jnp.ndarray]]
             Computed quantity and intermediate variables, for each coil in the set.
             List entries map to coils in coilset, each dict contains data for an
             individual coil.
@@ -1658,6 +1658,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
                 return AB, None
 
             AB += scan(body, jnp.zeros(coords_nfp.shape), tree_stack(params))[0]
+
             return AB
 
         AB = fori_loop(0, self.NFP, nfp_loop, jnp.zeros_like(coords_rpz))
@@ -2522,7 +2523,7 @@ class MixedCoilSet(CoilSet):
 
         Returns
         -------
-        data : list of dict of ndarray
+        data : list[dict[str, jnp.ndarray]]
             Computed quantity and intermediate variables, for each coil in the set.
             List entries map to coils in coilset, each dict contains data for an
             individual coil.

@@ -2,106 +2,25 @@
 
 from abc import ABC, abstractmethod
 
-import numpy as np
-import scipy
 from interpax import fft_interp2d
 from scipy.constants import mu_0
 
-from desc.backend import fori_loop, jnp, rfft2
+from desc.backend import jnp, rfft2
 from desc.batching import batch_map, vmap_chunked
 from desc.compute.geom_utils import rpz2xyz, rpz2xyz_vec, xyz2rpz_vec
 from desc.grid import LinearGrid
 from desc.integrals._interp_utils import rfft2_modes, rfft2_vander
+from desc.integrals.quad_utils import _get_polar_quadrature, chi, eta, nfp_loop
 from desc.io import IOAble
 from desc.utils import (
     check_posint,
-    errorif,
+    dot,
     parse_argname_change,
     safediv,
     safenorm,
+    setdefault,
     warnif,
 )
-
-
-def _chi(r):
-    """Partition of unity function in polar coordinates. Eq 39 in [2].
-
-    Parameters
-    ----------
-    r : jnp.ndarray
-        Absolute value of radial coordinate in polar domain.
-
-    """
-    return jnp.exp(-36 * jnp.abs(r) ** 8)
-
-
-def _eta(theta, zeta, theta0, zeta0, ht, hz, st, sz):
-    """Partition of unity function in rectangular coordinates.
-
-    Consider the mapping from
-    (θ,ζ) ∈ [-π, π) × [-π/NFP, π/NFP) to (ρ,ω) ∈ [−1, 1] × [0, 2π)
-    defined by
-    θ − θ₀ = h₁ s₁/2 ρ sin ω
-    ζ − ζ₀ = h₂ s₂/2 ρ cos ω
-    with Jacobian determinant norm h₁h₂ s₁s₂/4 |ρ|.
-
-    In general in dimensions higher than one, the mapping that determines a
-    change of variable for integration must be bijective. This is satisfied
-    only if s₁ = 2π/h₁ and s₂ = (2π/NFP)/h₂. In the particular case the
-    integrand is nonzero in a subset of the domain, then the change of variable
-    need only be a bijective map where the function does not vanish, more
-    precisely, its set of compact support.
-
-    The functions we integrate are proportional to η₀(θ,ζ) = χ₀(r) far from the
-    singularity at (θ₀,ζ₀). Therefore, the support matches χ₀(r)'s, assuming
-    this region is sufficiently large compared to the singular region.
-    Here χ₀(r) has support where the argument r lies in [0, 1]. The map r
-    defines a coordinate mapping between the toroidal domain and a polar domain
-    such that the integration region in the polar domain (ρ,ω) ∈ [−1, 1] × [0, 2π)
-    equals the compact support, and furthermore is a circular region around the
-    singular point in (θ,ζ) geometry when s₁ × s₂ denote the number of grid points
-    on a uniformly discretized toroidal domain (θ,ζ) ∈ [0, 2π)².
-      χ₀ : r ↦ exp(−36r⁸)
-
-      r : ρ, ω ↦ |ρ|
-
-      r : θ, ζ ↦ 2 [ (θ−θ₀)²/(h₁s₁)² + (ζ−ζ₀)²/(h₂s₂)² ]⁰ᐧ⁵
-
-    Hence, r ≥ 1 (r ≤ 1) outside (inside) the integration domain.
-
-    The choice for the size of the support is determined by s₁ and s₂.
-    The optimal choice is dependent on the nature of the singularity e.g. if the
-    integrand decays quickly then the elliptical grid determined by s₁ and s₂
-    can be made smaller and the integration will have higher resolution for the
-    same number of quadrature points.
-
-    With the above definitions the support lies on an s₁ × s₂ subset
-    of a field period which has ``num_theta`` × ``num_zeta`` nodes total.
-    Since kernels are 2π periodic, the choice for s₂ should be multiplied by NFP.
-    Then the support lies on an s₁ × s₂ subset of the full domain. For large NFP
-    devices such as Heliotron or tokamaks it is typical that s₁ ≪ s₂.
-
-    Parameters
-    ----------
-    theta, zeta : jnp.ndarray
-        Coordinates of points to evaluate partition function η₀(θ,ζ).
-    theta0, zeta0 : jnp.ndarray
-        Origin (θ₀,ζ₀) where the partition η₀ is unity.
-    ht, hz : float
-        Grid step size in θ and ζ.
-    st, sz : int
-        Extent of support is an ``st`` × ``sz`` subset
-        of the full domain (θ,ζ) ∈ [0, 2π)² of ``source_grid``.
-        Subset of ``source_grid.num_theta`` × ``source_grid.num_zeta*source_grid.NFP``.
-
-    """
-    dt = jnp.abs(theta - theta0)
-    dz = jnp.abs(zeta - zeta0)
-    # The distance spans (dθ,dζ) ∈ [0, π]², independent of NFP.
-    dt = jnp.minimum(dt, 2 * jnp.pi - dt)
-    dz = jnp.minimum(dz, 2 * jnp.pi - dz)
-    r = 2 * jnp.hypot(dt / (ht * st), dz / (hz * sz))
-    return _chi(r)
 
 
 def _vanilla_params(grid):
@@ -145,8 +64,8 @@ def best_params(grid, ratio):
     ----------
     grid : LinearGrid
         Grid that can fft2.
-    ratio : float
-        Mean best ratio.
+    ratio : float or jnp.ndarray
+        Best ratio.
 
     Returns
     -------
@@ -178,112 +97,102 @@ def best_params(grid, ratio):
     #      s_ratio = s_z / s_t = Nz*NFP/Nt / ratio
     # Also want sqrt(s_z*s_t) ~ s = q.
     s_ratio = jnp.sqrt(Nz / Nt / ratio)
-    st = min(Nt, int(jnp.ceil(s / s_ratio)))
-    sz = min(Nz, int(jnp.ceil(s * s_ratio)))
+    st = jnp.clip(jnp.ceil(s / s_ratio).astype(int), None, Nt)
+    sz = jnp.clip(jnp.ceil(s * s_ratio).astype(int), None, Nz)
+    if s_ratio.size == 1:
+        st = int(st)
+        sz = int(sz)
     return st, sz, q
 
 
-def _local_params(grid, ratio):
-    """Parameters for heuristic support size and quadrature resolution.
-
-    These parameters account for local grid anisotropy to ensure
-    more robust convergence across stronger geometric shaping.
-
-    Parameters
-    ----------
-    grid : LinearGrid
-        Grid that can fft2.
-    ratio : tuple
-        Mean best ratio and local ratio
-
-    Returns
-    -------
-    st : int
-        Extent of support is an ``st`` × ``sz`` subset
-        of the full domain (θ,ζ) ∈ [0, 2π)² of ``grid``.
-        Subset of ``grid.num_theta`` × ``grid.num_zeta*grid.NFP``.
-    sz : int
-        Extent of support is an ``st`` × ``sz`` subset
-        of the full domain (θ,ζ) ∈ [0, 2π)² of ``grid``.
-        Subset of ``grid.num_theta`` × ``grid.num_zeta*grid.NFP``.
-    q : int
-        Order of quadrature in radial and azimuthal directions.
-
-    """
-    assert grid.can_fft2
-    Nt = grid.num_theta
-    Nz = grid.num_zeta * grid.NFP
-    if grid.num_zeta > 1:  # actually has toroidal resolution
-        q = int(jnp.sqrt(grid.num_nodes) / 2)
-    else:  # axisymmetry
-        q = int(jnp.sqrt(Nt * Nz) / 2)
-    s = min(q, Nt, Nz)
-    ratio = (ratio[0] + ratio[1]) / 2
-    # same logic as heuristic params
-    s_ratio = jnp.sqrt(Nz / Nt / ratio)
-    st = min(Nt, int(jnp.ceil(s / s_ratio)))
-    sz = min(Nz, int(jnp.ceil(s * s_ratio)))
-    return st, sz, q
-
-
-def best_ratio(data, return_local=False):
+def best_ratio(data, local=False):
     """Ratio to make singular integration partition ~circle in real space.
 
     Parameters
     ----------
     data : dict[str, jnp.ndarray]
-        Dictionary of data evaluated on grid that ``can_fft2`` with keys
-        ``|e_theta x e_zeta|``, ``e_theta``, and ``e_zeta``.
-    return_local : bool
-        Whether to return the local ratio as well as the mean global ratio.
-
-    Returns
-    -------
-    mean : float
-        Mean best ratio.
+        Dictionary of data evaluated on single flux surface grid that ``can_fft2``
+        with keys ``|e_theta x e_zeta|``, ``e_theta``, and ``e_zeta``.
+    local : bool
+        Whether to average with local aspect ratio.
 
     """
-    local = jnp.linalg.norm(data["e_zeta"], axis=-1) / jnp.linalg.norm(
+    scale = jnp.linalg.norm(data["e_zeta"], axis=-1) / jnp.linalg.norm(
         data["e_theta"], axis=-1
     )
-    mean = jnp.mean(local * data["|e_theta x e_zeta|"]) / jnp.mean(
+    mean = jnp.mean(scale * data["|e_theta x e_zeta|"]) / jnp.mean(
         data["|e_theta x e_zeta|"]
     )
-    return (mean, local) if return_local else mean
+    return (0.5 * (mean + scale)) if local else mean
 
 
-def _get_quadrature_nodes(q):
-    """Polar nodes for quadrature around singular point.
+def get_interpolator(
+    eval_grid,
+    source_grid,
+    src_data,
+    use_dft=False,
+    *,
+    st=None,
+    sz=None,
+    q=None,
+    warn_dft=True,
+    warn_fft=True,
+    **kwargs,
+):
+    """Get interpolator from Cartesian to polar domain.
 
     Parameters
     ----------
-    q : int
-        Order of quadrature in radial and azimuthal directions.
+    eval_grid, source_grid : Grid
+        Evaluation and source points for the integral transform.
+    src_data : dict[str, jnp.ndarray]
+        Dictionary of data evaluated on single flux surface grid that ``can_fft2``
+        with keys ``|e_theta x e_zeta|``, ``e_theta``, and ``e_zeta``.
+    use_dft : bool
+        Whether to use matrix multiplication transform from spectral to physical domain
+        instead of inverse fast Fourier transform.
+    warn_dft : bool
+        Set to ``False`` to turn off warnings about using DFT.
+    warn_fft : bool
+        Set to ``False`` to turn off warnings about FFT frequency truncation.
 
     Returns
     -------
-    r, w : ndarray
-        Radial and azimuthal coordinates.
-    dr, dw : ndarray
-        Radial and azimuthal spacing and quadrature weights.
+    f : _BIESTInterpolator
+        Interpolator that uses the specified method.
 
     """
-    Nr = Nw = q
-    r, dr = scipy.special.roots_legendre(Nr)
-    # integrate separately over [-1,0] and [0,1]
-    r1 = 1 / 2 * r - 1 / 2
-    r2 = 1 / 2 * r + 1 / 2
-    r = jnp.concatenate([r1, r2])
-    dr = jnp.concatenate([dr, dr]) / 2
-    w = jnp.linspace(0, jnp.pi, Nw, endpoint=False)
-    dw = jnp.ones_like(w) * jnp.pi / Nw
-    r, w = jnp.meshgrid(r, w)
-    r = r.flatten()
-    w = w.flatten()
-    dr, dw = jnp.meshgrid(dr, dw)
-    dr = dr.flatten()
-    dw = dw.flatten()
-    return r, w, dr, dw
+    if st is None or sz is None or q is None:
+        _st, _sz, _q = best_params(source_grid, best_ratio(src_data))
+        st = setdefault(st, _st)
+        sz = setdefault(sz, _sz)
+        q = setdefault(q, _q)
+    if use_dft:
+        f = DFTInterpolator(eval_grid, source_grid, st, sz, q)
+    else:
+        try:
+            f = FFTInterpolator(eval_grid, source_grid, st, sz, q, warn_fft=warn_fft)
+        except AssertionError as e:
+            warnif(
+                warn_dft,
+                msg="Could not build fft interpolator because:\n"
+                + str(e)
+                + "\nThe DFT interpolator is much less performant."
+                "\nIn some cases when the real domain grid is sparser than the "
+                "spectral domain grid because the DFT interpolator may be useful "
+                "as it is exact while FFT truncates higher frequencies.",
+            )
+            f = DFTInterpolator(eval_grid, source_grid, st, sz, q)
+            use_dft = True
+    # TODO (#1599).
+    warnif(
+        use_dft and warn_dft,
+        RuntimeWarning,
+        msg="Upstream libraries perform matrix multiplication incorrectly for "
+        "large matrices. Until this is fixed, it is recommended to validate results "
+        "with small chunk size when using the DFT interpolator.",
+    )
+    return f
 
 
 class _BIESTInterpolator(IOAble, ABC):
@@ -347,7 +256,7 @@ class _BIESTInterpolator(IOAble, ABC):
         self._q = q
         self._ht = 2 * jnp.pi / source_grid.num_theta
         self._hz = 2 * jnp.pi / source_grid.num_zeta / source_grid.NFP
-        r, w, _, _ = _get_quadrature_nodes(q)
+        r, w, _, _ = _get_polar_quadrature(q)
         self._shift_t = self._ht * st / 2 * r * jnp.sin(w)
         self._shift_z = self._hz * sz / 2 * r * jnp.cos(w)
 
@@ -445,15 +354,16 @@ class FFTInterpolator(_BIESTInterpolator):
     def __init__(self, eval_grid, source_grid, st, sz, q, **kwargs):
         st = parse_argname_change(st, kwargs, "s", "st")
         assert eval_grid.can_fft2, "Got False for eval_grid.can_fft2."
+        warn = kwargs.get("warn_fft", True)
         warnif(
-            eval_grid.num_theta < source_grid.num_theta,
+            warn and eval_grid.num_theta < source_grid.num_theta,
             msg="Frequency spectrum of FFT interpolation will be truncated because "
             "the evaluation grid has less resolution than the source grid.\n"
             f"Got eval_grid.num_theta = {eval_grid.num_theta} < "
             f"{source_grid.num_theta} = source_grid.num_theta.",
         )
         warnif(
-            eval_grid.num_zeta < source_grid.num_zeta,
+            warn and eval_grid.num_zeta < source_grid.num_zeta,
             msg="Frequency spectrum of FFT interpolation will be truncated because "
             "the evaluation grid has less resolution than the source grid.\n"
             f"Got eval_grid.num_zeta = {eval_grid.num_zeta} < "
@@ -492,7 +402,8 @@ class FFTInterpolator(_BIESTInterpolator):
         """
         # Would need to add interpax code to DESC
         # https://github.com/f0uriest/interpax/issues/53
-        # for is_fourier to do anything.
+        # for is_fourier to do anything. Should also use rfft2 and irfft2.
+        # TODO (#1206)
         shape = f.shape[1:]
         return fft_interp2d(
             self._source_grid.meshgrid_reshape(f, "rtz")[0],
@@ -591,17 +502,20 @@ def _nonsingular_part(
     sz,
     kernel,
     chunk_size=None,
+    _eta=eta,
 ):
     """Integrate kernel over non-singular points.
 
     Generally follows sec 3.2.1 of [2].
     """
-    source_theta = source_grid.nodes[:, 1]
+    assert source_grid.can_fft2
+    source_data.setdefault("theta", source_grid.nodes[:, 1])
     # make sure source dict has zeta and phi to avoid
     # adding keys to dict during iteration
     source_zeta = source_data.setdefault("zeta", source_grid.nodes[:, 2])
     source_phi = source_data["phi"]
 
+    # slim down to skip batching quantities that aren't used
     eval_data = {key: eval_data[key] for key in kernel.keys if key in eval_data}
     eval_data["theta"] = jnp.asarray(eval_grid.nodes[:, 1])
     eval_data["zeta"] = jnp.asarray(eval_grid.nodes[:, 2])
@@ -610,37 +524,17 @@ def _nonsingular_part(
     hz = 2 * jnp.pi / source_grid.num_zeta / source_grid.NFP
     w = source_data["|e_theta x e_zeta|"][jnp.newaxis] * ht * hz
 
-    def nfp_loop(j, f_data):
-        """Calculate effects from source points on a single field period.
+    def func(zeta_j):
+        source_data["zeta"] = zeta_j
+        source_data["phi"] = zeta_j  # TODO (#465)
 
-        The surface integral is computed on the full domain because the kernels of
-        interest have toroidal variation and are not NFP periodic. To that end, the
-        integral is computed on every field period and summed. The ``source_grid`` is
-        the first field period because DESC truncates the computational domain to
-        ζ ∈ [0, 2π/grid.NFP) and changes variables to the spectrally condensed
-        ζ* = basis.NFP ζ. Therefore, we shift the domain to the next field period by
-        incrementing the toroidal coordinate of the grid by 2π/NFP. For an axisymmetric
-        configuration, it is most efficient for ``source_grid`` to be a single toroidal
-        cross-section. To capture toroidal effects of the kernels on those grids for
-        axisymmetric configurations, we set a dummy value for NFP to an integer larger
-        than 1 so that the toroidal increment can move to a new spot.
-        """
-        f, source_data = f_data
-        source_data["zeta"] = (source_zeta + j * 2 * jnp.pi / source_grid.NFP) % (
-            2 * jnp.pi
-        )
-        source_data["phi"] = (source_phi + j * 2 * jnp.pi / source_grid.NFP) % (
-            2 * jnp.pi
-        )
-
-        # nest this def to avoid having to pass the modified source_data around the loop
-        # easier to just close over it and let JAX figure it out
+        # nest this def and let JAX figure it out
         def eval_pt(eval_data_i):
             k = kernel(eval_data_i, source_data).reshape(
                 -1, source_grid.num_nodes, kernel.ndim
             )
-            eta = _eta(
-                source_theta,
+            e = 1 - _eta(
+                source_data["theta"],
                 source_data["zeta"],
                 eval_data_i["theta"][:, jnp.newaxis],
                 eval_data_i["zeta"][:, jnp.newaxis],
@@ -649,24 +543,13 @@ def _nonsingular_part(
                 st,
                 sz,
             )
-            return jnp.sum(k * (w * (1 - eta))[..., jnp.newaxis], axis=1)
+            return jnp.sum(k * (w * e)[..., jnp.newaxis], axis=1)
 
-        f += batch_map(eval_pt, eval_data, chunk_size).reshape(
+        return batch_map(eval_pt, eval_data, chunk_size).reshape(
             eval_grid.num_nodes, kernel.ndim
         )
-        return f, source_data
 
-    # This error should be raised earlier since this is not the only place
-    # we need the higher dummy NFP value, but the error message is more
-    # helpful with the nfp loop docstring.
-    errorif(
-        source_grid.num_zeta == 1 and source_grid.NFP == 1,
-        msg="Source grid cannot compute toroidal effects.\n"
-        "Increase NFP of source grid to e.g. 64.\n"
-        "This is required to " + nfp_loop.__doc__,
-    )
-    f = jnp.zeros((eval_grid.num_nodes, kernel.ndim))
-    f, _ = fori_loop(0, source_grid.NFP, nfp_loop, (f, source_data))
+    f = nfp_loop(source_grid, func, jnp.zeros((eval_grid.num_nodes, kernel.ndim)))
 
     # undo rotation of source_zeta
     source_data["zeta"] = source_zeta
@@ -691,11 +574,11 @@ def _singular_part(eval_data, source_data, kernel, interpolator, chunk_size=None
     eval_theta = jnp.asarray(eval_grid.nodes[:, 1])
     eval_zeta = jnp.asarray(eval_grid.nodes[:, 2])
 
-    r, w, dr, dw = _get_quadrature_nodes(interpolator.q)
+    r, w, dr, dw = _get_polar_quadrature(interpolator.q)
     r = jnp.abs(r)
     # integrand of eq 38 in [2] except stuff that needs to be interpolated
     v = (
-        _chi(r)
+        chi(r)
         * (interpolator.ht * interpolator.hz)
         * (interpolator.st * interpolator.sz / 4)
         * r
@@ -707,11 +590,10 @@ def _singular_part(eval_data, source_data, kernel, interpolator, chunk_size=None
     if "phi" in keys:
         keys.remove("phi")  # ϕ is not a periodic map of θ, ζ.
         keys.add("omega")
-    keys = list(keys)
     # Note that it is necessary to take the Fourier transforms of the
     # vector components of the orthonormal polar basis vectors R̂, ϕ̂, Ẑ.
     # Vector components of the Cartesian basis are not NFP periodic.
-    fsource = [interpolator.fourier(source_data[key]) for key in keys]
+    fsource = [(key, interpolator.fourier(source_data[key])) for key in keys]
 
     def polar_pt(i):
         """See sec 3.2.2 of [2].
@@ -723,7 +605,7 @@ def _singular_part(eval_data, source_data, kernel, interpolator, chunk_size=None
         vander = interpolator.vander_polar(i)
         source_data_polar = {
             key: interpolator(val, i, is_fourier=True, vander=vander)
-            for key, val in zip(keys, fsource)
+            for key, val in fsource
         }
         # Coordinates of the polar nodes around the evaluation point.
         source_data_polar["theta"] = eval_theta + interpolator.shift_t[i]
@@ -751,9 +633,7 @@ def _singular_part(eval_data, source_data, kernel, interpolator, chunk_size=None
         polar_pt,
         chunk_size=chunk_size,
         reduction=jnp.add,
-        # TODO (#1386): Infer jnp.add.reduce from reduction.
-        #  https://github.com/jax-ml/jax/issues/23493.
-        chunk_reduction=lambda x: x.sum(axis=0),
+        chunk_reduction=_add_reduce,
     )(jnp.arange(v.size))
     assert f.shape == (eval_grid.num_nodes, kernel.ndim)
 
@@ -763,6 +643,11 @@ def _singular_part(eval_data, source_data, kernel, interpolator, chunk_size=None
         f = xyz2rpz_vec(f, phi=eval_data["phi"])
 
     return f
+
+
+def _add_reduce(x):
+    # https://github.com/jax-ml/jax/issues/23493
+    return x.sum(axis=0)
 
 
 def singular_integral(
@@ -857,89 +742,110 @@ def singular_integral(
     return out1 + out2
 
 
-def _kernel_nr_over_r3(eval_data, source_data, diag=False):
-    # n * r / |r|^3
-    source_x = jnp.atleast_2d(
-        rpz2xyz(jnp.array([source_data["R"], source_data["phi"], source_data["Z"]]).T)
+def _dx(eval_data, source_data, diag=False):
+    """Returns dx = x−x'."""
+    source_x = rpz2xyz(
+        jnp.column_stack([source_data["R"], source_data["phi"], source_data["Z"]])
     )
-    eval_x = jnp.atleast_2d(
-        rpz2xyz(jnp.array([eval_data["R"], eval_data["phi"], eval_data["Z"]]).T)
+    eval_x = rpz2xyz(
+        jnp.column_stack([eval_data["R"], eval_data["phi"], eval_data["Z"]])
     )
-    if diag:
-        dx = eval_x - source_x
-    else:
-        dx = eval_x[:, None] - source_x[None]
-    n = rpz2xyz_vec(source_data["e^rho"], phi=source_data["phi"])
-    n = n / jnp.linalg.norm(n, axis=-1, keepdims=True)
-    r = safenorm(dx, axis=-1)
-    return safediv(jnp.sum(n * dx, axis=-1), r**3)
+    if not diag:
+        eval_x = eval_x[:, jnp.newaxis]
+    return eval_x - source_x
 
 
-_kernel_nr_over_r3.ndim = 1
-_kernel_nr_over_r3.keys = ["R", "phi", "Z", "e^rho"]
+_dx.keys = ["R", "phi", "Z"]
 
 
 def _kernel_1_over_r(eval_data, source_data, diag=False):
-    # 1/|r|
-    source_x = jnp.atleast_2d(
-        rpz2xyz(jnp.array([source_data["R"], source_data["phi"], source_data["Z"]]).T)
-    )
-    eval_x = jnp.atleast_2d(
-        rpz2xyz(jnp.array([eval_data["R"], eval_data["phi"], eval_data["Z"]]).T)
-    )
-    if diag:
-        dx = eval_x - source_x
-    else:
-        dx = eval_x[:, None] - source_x[None]
-    r = safenorm(dx, axis=-1)
-    return safediv(1, r)
+    """Returns G(x,x') = |x−x'|⁻¹."""
+    dx = _dx(eval_data, source_data, diag)
+    return safediv(1, safenorm(dx, axis=-1))
 
 
 _kernel_1_over_r.ndim = 1
-_kernel_1_over_r.keys = ["R", "phi", "Z"]
+_kernel_1_over_r.keys = _dx.keys
+
+
+def _kernel_nr_over_r3(eval_data, source_data, diag=False):
+    """Returns n ⋅ −∇G(x,x') = n ⋅ (x−x')|x−x'|⁻³."""
+    dx = _dx(eval_data, source_data, diag)
+    # Need to use e^rho*sqrt(g) to pass Green's ID test.
+    # Fourier spectrum is much more concentrated than n_rho for some reason.
+    # Don't
+    n = source_data["e^rho*sqrt(g)"] / source_data["|e_theta x e_zeta|"][:, jnp.newaxis]
+    n = rpz2xyz_vec(n, phi=source_data["phi"])
+    return safediv(dot(n, dx), safenorm(dx, axis=-1) ** 3)
+
+
+_kernel_nr_over_r3.ndim = 1
+_kernel_nr_over_r3.keys = _dx.keys + ["e^rho*sqrt(g)", "|e_theta x e_zeta|"]
 
 
 def _kernel_biot_savart(eval_data, source_data, diag=False):
-    # K x r / |r|^3
-    source_x = jnp.atleast_2d(
-        rpz2xyz(jnp.array([source_data["R"], source_data["phi"], source_data["Z"]]).T)
-    )
-    eval_x = jnp.atleast_2d(
-        rpz2xyz(jnp.array([eval_data["R"], eval_data["phi"], eval_data["Z"]]).T)
-    )
-    if diag:
-        dx = eval_x - source_x
-    else:
-        dx = eval_x[:, None] - source_x[None]
+    """Returns (μ₀/4π) K × −∇G(x,x') = (μ₀/4π) K × (x−x')|x−x'|⁻³."""
+    dx = _dx(eval_data, source_data, diag)
     K = rpz2xyz_vec(source_data["K_vc"], phi=source_data["phi"])
-    num = jnp.cross(K, dx, axis=-1)
-    r = safenorm(dx, axis=-1)[..., None]
-    return mu_0 / 4 / jnp.pi * safediv(num, r**3)
+    return safediv(
+        mu_0 / (4 * jnp.pi) * jnp.cross(K, dx),
+        safenorm(dx, axis=-1, keepdims=True) ** 3,
+    )
 
 
 _kernel_biot_savart.ndim = 3
-_kernel_biot_savart.keys = ["R", "phi", "Z", "K_vc"]
+_kernel_biot_savart.keys = _dx.keys + ["K_vc"]
 
 
 def _kernel_biot_savart_A(eval_data, source_data, diag=False):
-    # K  / |r|
-    source_x = jnp.atleast_2d(
-        rpz2xyz(jnp.array([source_data["R"], source_data["phi"], source_data["Z"]]).T)
-    )
-    eval_x = jnp.atleast_2d(
-        rpz2xyz(jnp.array([eval_data["R"], eval_data["phi"], eval_data["Z"]]).T)
-    )
-    if diag:
-        dx = eval_x - source_x
-    else:
-        dx = eval_x[:, None] - source_x[None]
-    r = safenorm(dx, axis=-1)[..., None]
+    """Returns (μ₀/4π) K G(x,x') = (μ₀/4π) K |x−x'|⁻¹."""
+    dx = _dx(eval_data, source_data, diag)
     K = rpz2xyz_vec(source_data["K_vc"], phi=source_data["phi"])
-    return mu_0 / 4 / jnp.pi * safediv(K, r)
+    return safediv(
+        mu_0 / (4 * jnp.pi) * K,
+        safenorm(dx, axis=-1, keepdims=True),
+    )
 
 
 _kernel_biot_savart_A.ndim = 3
-_kernel_biot_savart_A.keys = ["R", "phi", "Z", "K_vc"]
+_kernel_biot_savart_A.keys = _dx.keys + ["K_vc"]
+
+
+def _kernel_Bn_over_r(eval_data, source_data, diag=False):
+    """Returns Bₙ G(x,x') = Bₙ |x−x'|⁻¹."""
+    dx = _dx(eval_data, source_data, diag)
+    return safediv(source_data["Bn"], safenorm(dx, axis=-1))
+
+
+_kernel_Bn_over_r.ndim = 1
+_kernel_Bn_over_r.keys = _dx.keys + ["Bn"]
+
+
+def _kernel_Phi_dGp_dn(eval_data, source_data, diag=False):
+    """Returns Φ n ⋅ −∇G(x,x') = Φ n ⋅ (x−x')|x−x'|⁻³. Phi has units Tesla-meters."""
+    dx = _dx(eval_data, source_data, diag)
+    # Using n_rho works better than normalized e^rho*sqrt(g) here.
+    n = rpz2xyz_vec(source_data["n_rho"], phi=source_data["phi"])
+    return safediv(source_data["Phi"] * dot(n, dx), safenorm(dx, axis=-1) ** 3)
+
+
+_kernel_Phi_dGp_dn.ndim = 1
+_kernel_Phi_dGp_dn.keys = _dx.keys + ["n_rho", "Phi"]
+
+
+def _kernel_biot_savart_coulomb(eval_data, source_data, diag=False):
+    """Returns [ K (Tesla) × −∇G(x,x') - Bₙ ∇G(x,x') ] / 4π."""
+    dx = _dx(eval_data, source_data, diag)
+    K = rpz2xyz_vec(source_data["K_vc"], phi=source_data["phi"])
+    numerator = jnp.cross(K, dx) + source_data["Bn"][:, jnp.newaxis] * dx
+    return safediv(
+        numerator / (4 * jnp.pi),
+        safenorm(dx, axis=-1, keepdims=True) ** 3,
+    )
+
+
+_kernel_biot_savart_coulomb.ndim = 3
+_kernel_biot_savart_coulomb.keys = _dx.keys + ["K_vc", "Bn"]
 
 
 kernels = {
@@ -947,6 +853,9 @@ kernels = {
     "nr_over_r3": _kernel_nr_over_r3,
     "biot_savart": _kernel_biot_savart,
     "biot_savart_A": _kernel_biot_savart_A,
+    "Bn_over_r": _kernel_Bn_over_r,
+    "Phi_dGp_dn": _kernel_Phi_dGp_dn,
+    "biot_savart_coulomb": _kernel_biot_savart_coulomb,
 }
 
 
@@ -1067,31 +976,24 @@ def compute_B_plasma(eq, eval_grid, source_grid=None, normal_only=False):
     """
     if source_grid is None:
         source_grid = LinearGrid(
-            rho=np.array([1.0]),
             M=eq.M_grid,
             N=eq.N_grid,
             NFP=eq.NFP if eq.N > 0 else 64,
             sym=False,
         )
 
-    data_keys = ["K_vc", "B", "R", "phi", "Z", "e^rho", "n_rho", "|e_theta x e_zeta|"]
-    eval_data = eq.compute(data_keys, grid=eval_grid)
-    source_data = eq.compute(data_keys, grid=source_grid)
-    st, sz, q = best_params(source_grid, best_ratio(source_data))
-    try:
-        interpolator = FFTInterpolator(eval_grid, source_grid, st, sz, q)
-    except AssertionError as e:
-        warnif(
-            True,
-            msg="Could not build fft interpolator, switching to dft which is slow."
-            "\nReason: " + str(e),
-        )
-        interpolator = DFTInterpolator(eval_grid, source_grid, st, sz, q)
+    eval_data = eq.compute(_dx.keys + ["B", "n_rho"], grid=eval_grid)
+    source_data = eq.compute(
+        _kernel_biot_savart_A.keys + ["|e_theta x e_zeta|"], grid=source_grid
+    )
     if hasattr(eq.surface, "Phi_mn"):
-        source_data["K_vc"] += eq.surface.compute("K", grid=source_grid)["K"]
+        source_data = eq.surface.compute("K", grid=source_grid, data=source_data)
+        source_data["K_vc"] += source_data["K"]
+
+    interpolator = get_interpolator(eval_grid, source_grid, source_data)
     Bplasma = virtual_casing_biot_savart(eval_data, source_data, interpolator)
     # need extra factor of B/2 bc we're evaluating on plasma surface
-    Bplasma = Bplasma + eval_data["B"] / 2
+    Bplasma += eval_data["B"] / 2
     if normal_only:
-        Bplasma = jnp.sum(Bplasma * eval_data["n_rho"], axis=1)
+        Bplasma = dot(Bplasma, eval_data["n_rho"])
     return Bplasma

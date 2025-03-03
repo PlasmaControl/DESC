@@ -771,16 +771,18 @@ _kernel_1_over_r.keys = _dx.keys
 def _kernel_nr_over_r3(eval_data, source_data, diag=False):
     """Returns n ⋅ −∇G(x,x') = n ⋅ (x−x')|x−x'|⁻³."""
     dx = _dx(eval_data, source_data, diag)
-    # Need to use e^rho*sqrt(g) to pass Green's ID test.
-    # Fourier spectrum is much more concentrated than n_rho for some reason.
-    # Don't
-    n = source_data["e^rho*sqrt(g)"] / source_data["|e_theta x e_zeta|"][:, jnp.newaxis]
+    # Need to use instead of n_rho to pass Green's ID test;
+    # Fourier spectrum is much more concentrated for some reason.
+    n = (
+        source_data["e_theta x e_zeta"]
+        / source_data["|e_theta x e_zeta|"][:, jnp.newaxis]
+    )
     n = rpz2xyz_vec(n, phi=source_data["phi"])
     return safediv(dot(n, dx), safenorm(dx, axis=-1) ** 3)
 
 
 _kernel_nr_over_r3.ndim = 1
-_kernel_nr_over_r3.keys = _dx.keys + ["e^rho*sqrt(g)", "|e_theta x e_zeta|"]
+_kernel_nr_over_r3.keys = _dx.keys + ["e_theta x e_zeta", "|e_theta x e_zeta|"]
 
 
 def _kernel_biot_savart(eval_data, source_data, diag=False):

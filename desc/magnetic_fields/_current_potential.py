@@ -1219,9 +1219,9 @@ def solve_regularized_surface_current(  # noqa: C901 fxn too complex
         level of verbosity, if 0 will print nothing.
         1 will display Bn max,min,average and chi^2 values for each
         lambda_regularization.
-        2 will display jacobian timing info
+        2 will display Jacobian timing info
     chunk_size : int or None
-        Size to split computation into chunks of evaluation points.
+        Size to split Biot-Savart computation into chunks of evaluation points.
         If no chunking should be done or the chunk size is the full input
         then supply ``None``.
     B_plasma_chunk_size : int or None
@@ -1627,7 +1627,7 @@ def solve_regularized_surface_current(  # noqa: C901 fxn too complex
 
 
 # TODO: replace contour finding with optimizing Winding surface curves
-# once that is implemented
+#  once that is implemented
 def _find_current_potential_contours(
     surface_current_field,
     num_coils,

@@ -34,7 +34,15 @@ from desc.integrals import compute_B_plasma
 from desc.io import IOAble
 from desc.optimizable import Optimizable, OptimizableCollection, optimizable_parameter
 from desc.transform import Transform
-from desc.utils import copy_coeffs, errorif, flatten_list, safediv, setdefault, warnif
+from desc.utils import (
+    copy_coeffs,
+    dot,
+    errorif,
+    flatten_list,
+    safediv,
+    setdefault,
+    warnif,
+)
 from desc.vmec_utils import ptolemy_identity_fwd, ptolemy_identity_rev
 
 
@@ -358,7 +366,7 @@ class _MagneticField(IOAble, ABC):
             basis for returned coordinates on the surface
             cylindrical "rpz" by default
         chunk_size : int or None
-            Size to split computation into chunks of evaluation points.
+            Size to split Biot-Savart computation into chunks of evaluation points.
             If no chunking should be done or the chunk size is the full input
             then supply ``None``.
         B_plasma_chunk_size : int or None
@@ -368,7 +376,7 @@ class _MagneticField(IOAble, ABC):
 
         Returns
         -------
-        Bnorm : ndarray
+        Bnormal : ndarray
             The normal magnetic field to the surface given, as an array of
             size ``grid.num_nodes``.
         coords: ndarray
@@ -376,7 +384,6 @@ class _MagneticField(IOAble, ABC):
             given as a ``(grid.num_nodes , 3)`` shaped array.
 
         """
-        B_plasma_chunk_size = setdefault(B_plasma_chunk_size, chunk_size)
         calc_Bplasma = False
         if isinstance(surface, EquilibriaFamily):
             surface = surface[-1]
@@ -385,13 +392,10 @@ class _MagneticField(IOAble, ABC):
             eq = surface
             surface = eq.surface
         if eval_grid is None:
-            eval_grid = LinearGrid(
-                rho=jnp.array(1.0), M=2 * surface.M, N=2 * surface.N, NFP=surface.NFP
-            )
+            eval_grid = LinearGrid(M=2 * surface.M, N=2 * surface.N, NFP=surface.NFP)
 
         data = surface.compute(["x", "n_rho"], grid=eval_grid, basis="rpz")
         coords = data["x"]
-        surf_normal = data["n_rho"]
         B = self.compute_magnetic_field(
             coords,
             basis="rpz",
@@ -399,22 +403,21 @@ class _MagneticField(IOAble, ABC):
             params=params,
             chunk_size=chunk_size,
         )
-        Bnorm = jnp.sum(B * surf_normal, axis=-1)
+        Bnormal = dot(B, data["n_rho"])
 
         if calc_Bplasma:
-            Bplasma = compute_B_plasma(
+            Bnormal += compute_B_plasma(
                 eq,
                 eval_grid,
                 vc_source_grid,
                 normal_only=True,
-                chunk_size=B_plasma_chunk_size,
+                chunk_size=setdefault(B_plasma_chunk_size, chunk_size),
             )
-            Bnorm += Bplasma
 
         if basis.lower() == "xyz":
             coords = rpz2xyz(coords)
 
-        return Bnorm, coords
+        return Bnormal, coords
 
     def save_BNORM_file(
         self,
@@ -468,7 +471,7 @@ class _MagneticField(IOAble, ABC):
             which is expected by most other codes that accept BNORM files,
             by default True
         chunk_size : int or None
-            Size to split computation into chunks of evaluation points.
+            Size to split Biot-Savart computation into chunks of evaluation points.
             If no chunking should be done or the chunk size is the full input
             then supply ``None``.
         B_plasma_chunk_size : int or None
@@ -480,7 +483,6 @@ class _MagneticField(IOAble, ABC):
         -------
         None
         """
-        B_plasma_chunk_size = setdefault(B_plasma_chunk_size, chunk_size)
         if sym != "sin":
             raise UserWarning(
                 "BNORM code assumes that |B| has sin symmetry,"
@@ -500,9 +502,7 @@ class _MagneticField(IOAble, ABC):
                 "an Equilibrium must be supplied when scale_by_curpol is True!"
             )
         if eval_grid is None:
-            eval_grid = LinearGrid(
-                rho=jnp.array(1.0), M=2 * basis_M, N=2 * basis_N, NFP=surface.NFP
-            )
+            eval_grid = LinearGrid(M=2 * basis_M, N=2 * basis_N, NFP=surface.NFP)
 
         basis = DoubleFourierSeries(M=basis_M, N=basis_N, NFP=surface.NFP, sym=sym)
         trans = Transform(basis=basis, grid=eval_grid, build_pinv=True)

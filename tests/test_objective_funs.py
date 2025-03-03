@@ -3672,10 +3672,10 @@ def test_objective_docstring():
     objective_docs = _Objective.__doc__.rstrip()
     doc_header = (
         "Objective (or constraint) used in the optimization of an Equilibrium.\n\n"
-        + "    Parameters\n"
-        + "    ----------\n"
-        + "    things : Optimizable or tuple/list of Optimizable\n"
-        + "        Objects that will be optimized to satisfy the Objective.\n"
+        + "Parameters\n"
+        + "----------\n"
+        + "things : Optimizable or tuple/list of Optimizable\n"
+        + "    Objects that will be optimized to satisfy the Objective.\n"
     )
     collected_docs = collect_docs().strip()
     collected_docs = doc_header + "    " + collected_docs

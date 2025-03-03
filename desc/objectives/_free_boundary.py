@@ -7,7 +7,7 @@ from desc.backend import jnp
 from desc.compute import get_params, get_profiles, get_transforms
 from desc.compute.utils import _compute as compute_fun
 from desc.grid import LinearGrid
-from desc.integrals import DFTInterpolator, FFTInterpolator, virtual_casing_biot_savart
+from desc.integrals import virtual_casing_biot_savart
 from desc.nestor import Nestor
 from desc.objectives.objective_funs import _Objective, collect_docs
 from desc.utils import (
@@ -19,7 +19,7 @@ from desc.utils import (
     warnif,
 )
 
-from ..integrals.singularities import best_params, best_ratio
+from ..integrals.singularities import get_interpolator
 from .normalization import compute_scaling_factors
 
 
@@ -503,51 +503,20 @@ class BoundaryError(_Objective):
         else:
             source_grid = self._source_grid
 
-        if self._eval_grid is None:
-            eval_grid = source_grid
-        else:
-            eval_grid = self._eval_grid
-
+        eval_grid = setdefault(self._eval_grid, source_grid)
         self._use_same_grid = eval_grid.equiv(source_grid)
 
-        errorif(
-            not np.all(source_grid.nodes[:, 0] == 1.0),
-            ValueError,
-            "source_grid contains nodes not on rho=1",
+        ratio_data = (
+            eq.compute(["|e_theta x e_zeta|", "e_theta", "e_zeta"], grid=source_grid)
+            if (self._st is None or self._sz is None or self._q is None)
+            else {}
         )
-        errorif(
-            not np.all(eval_grid.nodes[:, 0] == 1.0),
-            ValueError,
-            "eval_grid contains nodes not on rho=1",
+        interpolator = get_interpolator(
+            eval_grid, source_grid, ratio_data, st=self._st, sz=self._sz, q=self._q
         )
-        errorif(
-            source_grid.sym,
-            ValueError,
-            "Source grids for singular integrals must be non-symmetric",
-        )
-
-        if self._st is None or self._sz is None or self._q is None:
-            ratio_data = eq.compute(
-                ["|e_theta x e_zeta|", "e_theta", "e_zeta"], grid=source_grid
-            )
-            st, sz, q = best_params(source_grid, best_ratio(ratio_data))
-            self._st = setdefault(self._st, st)
-            self._sz = setdefault(self._sz, sz)
-            self._q = setdefault(self._q, q)
-
-        try:
-            interpolator = FFTInterpolator(
-                eval_grid, source_grid, self._st, self._sz, self._q
-            )
-        except AssertionError as e:
-            warnif(
-                True,
-                msg="Could not build fft interpolator, switching to dft which is slow."
-                "\nReason: " + str(e),
-            )
-            interpolator = DFTInterpolator(
-                eval_grid, source_grid, self._st, self._sz, self._q
-            )
+        del self._st
+        del self._sz
+        del self._q
 
         edge_pres = np.max(np.abs(eq.compute("p", grid=eval_grid)["p"]))
         warnif(

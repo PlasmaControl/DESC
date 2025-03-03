@@ -18,6 +18,7 @@ from desc.utils import (
     parse_argname_change,
     safediv,
     safenorm,
+    setdefault,
     warnif,
 )
 
@@ -110,8 +111,8 @@ def best_ratio(data, local=False):
     Parameters
     ----------
     data : dict[str, jnp.ndarray]
-        Dictionary of data evaluated on grid that ``can_fft2`` with keys
-        ``|e_theta x e_zeta|``, ``e_theta``, and ``e_zeta``.
+        Dictionary of data evaluated on single flux surface grid that ``can_fft2``
+        with keys ``|e_theta x e_zeta|``, ``e_theta``, and ``e_zeta``.
     local : bool
         Whether to average with local aspect ratio.
 
@@ -131,6 +132,9 @@ def get_interpolator(
     src_data,
     use_dft=False,
     *,
+    st=None,
+    sz=None,
+    q=None,
     warn_dft=True,
     warn_fft=True,
     **kwargs,
@@ -142,8 +146,8 @@ def get_interpolator(
     eval_grid, source_grid : Grid
         Evaluation and source points for the integral transform.
     src_data : dict[str, jnp.ndarray]
-        Dictionary of data evaluated on grid that ``can_fft2`` with keys
-        ``|e_theta x e_zeta|``, ``e_theta``, and ``e_zeta``.
+        Dictionary of data evaluated on single flux surface grid that ``can_fft2``
+        with keys ``|e_theta x e_zeta|``, ``e_theta``, and ``e_zeta``.
     use_dft : bool
         Whether to use matrix multiplication transform from spectral to physical domain
         instead of inverse fast Fourier transform.
@@ -158,7 +162,11 @@ def get_interpolator(
         Interpolator that uses the specified method.
 
     """
-    st, sz, q = best_params(source_grid, best_ratio(src_data))
+    if st is None or sz is None or q is None:
+        _st, _sz, _q = best_params(source_grid, best_ratio(src_data))
+        st = setdefault(st, _st)
+        sz = setdefault(sz, _sz)
+        q = setdefault(q, _q)
     if use_dft:
         f = DFTInterpolator(eval_grid, source_grid, st, sz, q)
     else:
@@ -181,8 +189,8 @@ def get_interpolator(
         use_dft and warn_dft,
         RuntimeWarning,
         msg="Upstream libraries perform matrix multiplication incorrectly for "
-        "large matrices. Until this is fixed, it is recommended to choose a "
-        "smaller chunk size when using the DFT interpolator.",
+        "large matrices. Until this is fixed, it is recommended to validate results "
+        "with small chunk size when using the DFT interpolator.",
     )
     return f
 

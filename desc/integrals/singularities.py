@@ -98,6 +98,9 @@ def best_params(grid, ratio):
     s_ratio = jnp.sqrt(Nz / Nt / ratio)
     st = jnp.clip(jnp.ceil(s / s_ratio).astype(int), None, Nt)
     sz = jnp.clip(jnp.ceil(s * s_ratio).astype(int), None, Nz)
+    if s_ratio.size == 1:
+        st = int(st)
+        sz = int(sz)
     return st, sz, q
 
 

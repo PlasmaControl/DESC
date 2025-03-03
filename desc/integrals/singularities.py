@@ -951,7 +951,7 @@ kernels = {
 
 
 def virtual_casing_biot_savart(
-    eval_data, source_data, interpolator, chunk_size=1, **kwargs
+    eval_data, source_data, interpolator, chunk_size=None, **kwargs
 ):
     """Evaluate magnetic field on surface due to sheet current on surface.
 
@@ -992,9 +992,9 @@ def virtual_casing_biot_savart(
         source grid around each singular point. See ``FFTInterpolator`` or
         ``DFTInterpolator``
     chunk_size : int or None
-        Size to split computation into chunks.
+        Size to split singular integral computation into chunks.
         If no chunking should be done or the chunk size is the full input
-        then supply ``None``. Default is ``1``.
+        then supply ``None``.
 
     Returns
     -------

@@ -384,7 +384,7 @@ class BoundaryError(_Objective):
     chunk_size : int or None
         Size to split singular integral computation into chunks.
         If no chunking should be done or the chunk size is the full input
-        then supply ``None``. Default is ``1``.
+        then supply ``None``.
     bs_chunk_size : int or None
         Size to split Biot-Savart computation into chunks of evaluation points.
         If no chunking should be done or the chunk size is the full input
@@ -437,10 +437,10 @@ class BoundaryError(_Objective):
         eval_grid=None,
         field_grid=None,
         field_fixed=False,
-        chunk_size=1,
         name="Boundary error",
         jac_chunk_size=None,
         *,
+        chunk_size=None,
         bs_chunk_size=None,
         **kwargs,
     ):

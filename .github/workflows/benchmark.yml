@@ -23,6 +23,8 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
     strategy:
+      # make sure that when you change the Python version here, you also change it in
+      # the compare_bench_results.py script
       matrix:
         python-version: ['3.12']
         group: [1, 2]

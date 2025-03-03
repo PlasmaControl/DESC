@@ -6,10 +6,12 @@ that is done in test_compute_functions or regression tests.
 This module primarily tests the constructing/building/calling methods.
 """
 
+import platform
 import warnings
 
 import numpy as np
 import pytest
+from packaging.version import Version
 from scipy.constants import elementary_charge, mu_0
 
 import desc.examples
@@ -3670,13 +3672,22 @@ def test_objective_print_widths():
 def test_objective_docstring():
     """Test that the objective docstring and collect_docs are consistent."""
     objective_docs = _Objective.__doc__.rstrip()
-    doc_header = (
-        "Objective (or constraint) used in the optimization of an Equilibrium.\n\n"
-        + "Parameters\n"
-        + "----------\n"
-        + "things : Optimizable or tuple/list of Optimizable\n"
-        + "    Objects that will be optimized to satisfy the Objective.\n"
-    )
+    if Version(platform.python_version()) >= Version("3.13"):
+        doc_header = (
+            "Objective (or constraint) used in the optimization of an Equilibrium.\n\n"
+            + "Parameters\n"
+            + "----------\n"
+            + "things : Optimizable or tuple/list of Optimizable\n"
+            + "    Objects that will be optimized to satisfy the Objective.\n"
+        )
+    else:
+        doc_header = (
+            "Objective (or constraint) used in the optimization of an Equilibrium.\n\n"
+            + "    Parameters\n"
+            + "    ----------\n"
+            + "    things : Optimizable or tuple/list of Optimizable\n"
+            + "        Objects that will be optimized to satisfy the Objective.\n"
+        )
     collected_docs = collect_docs().strip()
     collected_docs = doc_header + "    " + collected_docs
 

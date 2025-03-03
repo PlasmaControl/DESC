@@ -1388,7 +1388,7 @@ class QuadraticFlux(_Objective):
                 eval_grid,
                 self._source_grid,
                 normal_only=True,
-                chunk_size=self._chunk_size,
+                chunk_size=self._B_plasma_chunk_size,
             )
         )
 

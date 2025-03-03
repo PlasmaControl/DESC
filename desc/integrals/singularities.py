@@ -110,7 +110,7 @@ def best_ratio(data, local=False):
         Dictionary of data evaluated on grid that ``can_fft2`` with keys
         ``|e_theta x e_zeta|``, ``e_theta``, and ``e_zeta``.
     local : bool
-        Whether to return the local ratio as well as the mean global ratio.
+        Whether to average with local aspect ratio.
 
     """
     scale = jnp.linalg.norm(data["e_zeta"], axis=-1) / jnp.linalg.norm(

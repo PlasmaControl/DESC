@@ -697,8 +697,7 @@ class TestSingularities:
             # need to use lower tolerance since convergence is worse
             atol = 0.015
         else:
-            ratio = best_ratio(data, local=True)
-            st, sz, q = best_params(grid, jnp.mean(ratio))  # TODO (#1609)
+            st, sz, q = best_params(grid, best_ratio(data))
             atol = 0.0054
         interp = interpolator(grid, grid, st, sz, q)
         Bplasma = virtual_casing_biot_savart(data, data, interp, chunk_size=50)

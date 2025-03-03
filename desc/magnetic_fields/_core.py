@@ -357,7 +357,7 @@ class _MagneticField(IOAble, ABC):
             basis for returned coordinates on the surface
             cylindrical "rpz" by default
         chunk_size : int or None
-            Size to split computation into chunks of evaluation points.
+            Size to split computation into chunks.
             If no chunking should be done or the chunk size is the full input
             then supply ``None``. Default is ``None``.
 
@@ -396,7 +396,9 @@ class _MagneticField(IOAble, ABC):
         Bnorm = jnp.sum(B * surf_normal, axis=-1)
 
         if calc_Bplasma:
-            Bplasma = compute_B_plasma(eq, eval_grid, vc_source_grid, normal_only=True)
+            Bplasma = compute_B_plasma(
+                eq, eval_grid, vc_source_grid, normal_only=True, chunk_size=chunk_size
+            )
             Bnorm += Bplasma
 
         if basis.lower() == "xyz":

@@ -1220,7 +1220,7 @@ def solve_regularized_surface_current(  # noqa: C901 fxn too complex
         lambda_regularization.
         2 will display jacobian timing info
     chunk_size : int or None
-        Size to split computation into chunks of evaluation points.
+        Size to split computation into chunks.
         If no chunking should be done or the chunk size is the full input
         then supply ``None``. Default is ``None``.
 
@@ -1472,12 +1472,18 @@ def solve_regularized_surface_current(  # noqa: C901 fxn too complex
         * ne_mag
         * eval_grid.weights
     )
-    if not vacuum:  # get Bn from plasma contribution
-        Bn_plasma = compute_B_plasma(eq, eval_grid, vc_source_grid, normal_only=True)
-        Bn_plasma = Bn_plasma * ne_mag * eval_grid.weights
-
-    else:
-        Bn_plasma = jnp.zeros_like(Bn_GI)  # from plasma current, currently assume is 0
+    # get Bn from plasma current contribution
+    Bn_plasma = (
+        jnp.zeros_like(Bn_GI)
+        if vacuum
+        else (
+            compute_B_plasma(
+                eq, eval_grid, vc_source_grid, normal_only=True, chunk_size=chunk_size
+            )
+            * ne_mag
+            * eval_grid.weights
+        )
+    )
     # find external field's Bnormal contribution
     if external_field:
         Bn_ext, _ = external_field.compute_Bnormal(

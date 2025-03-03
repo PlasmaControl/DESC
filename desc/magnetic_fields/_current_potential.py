@@ -1112,6 +1112,7 @@ def solve_regularized_surface_current(  # noqa: C901 fxn too complex
     external_field_grid=None,
     verbose=1,
     chunk_size=None,
+    B_plasma_chunk_size=None,
 ):
     """Runs REGCOIL-like algorithm to find the current potential for the surface.
 
@@ -1220,9 +1221,13 @@ def solve_regularized_surface_current(  # noqa: C901 fxn too complex
         lambda_regularization.
         2 will display jacobian timing info
     chunk_size : int or None
-        Size to split computation into chunks.
+        Size to split computation into chunks of evaluation points.
         If no chunking should be done or the chunk size is the full input
-        then supply ``None``. Default is ``None``.
+        then supply ``None``.
+    B_plasma_chunk_size : int or None
+        Size to split singular integral computation for B_plasma into chunks.
+        If no chunking should be done or the chunk size is the full input
+        then supply ``None``. Default is ``chunk_size``.
 
     Returns
     -------
@@ -1270,6 +1275,7 @@ def solve_regularized_surface_current(  # noqa: C901 fxn too complex
       of stellarator coil shapes." Nuclear Fusion 57 (2017): 046003.
 
     """
+    B_plasma_chunk_size = setdefault(B_plasma_chunk_size, chunk_size)
     errorif(
         len(current_helicity) != 2,
         ValueError,
@@ -1391,6 +1397,7 @@ def solve_regularized_surface_current(  # noqa: C901 fxn too complex
             source_grid=source_grid,
             params=params,
             chunk_size=chunk_size,
+            B_plasma_chunk_size=B_plasma_chunk_size,
         )
         return Bn
 
@@ -1478,7 +1485,11 @@ def solve_regularized_surface_current(  # noqa: C901 fxn too complex
         if vacuum
         else (
             compute_B_plasma(
-                eq, eval_grid, vc_source_grid, normal_only=True, chunk_size=chunk_size
+                eq,
+                eval_grid,
+                vc_source_grid,
+                normal_only=True,
+                chunk_size=B_plasma_chunk_size,
             )
             * ne_mag
             * eval_grid.weights
@@ -1491,6 +1502,7 @@ def solve_regularized_surface_current(  # noqa: C901 fxn too complex
             eval_grid=eval_grid,
             source_grid=external_field_grid,
             chunk_size=chunk_size,
+            B_plasma_chunk_size=B_plasma_chunk_size,
         )
         Bn_ext = Bn_ext * ne_mag * eval_grid.weights
 

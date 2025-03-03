@@ -11,7 +11,7 @@ from desc.compute.geom_utils import copy_rpz_periods
 from desc.compute.utils import _compute as compute_fun
 from desc.grid import LinearGrid, _Grid
 from desc.integrals import compute_B_plasma
-from desc.utils import Timer, broadcast_tree, errorif, safenorm, warnif
+from desc.utils import Timer, broadcast_tree, errorif, safenorm, setdefault, warnif
 
 from .normalization import compute_scaling_factors
 from .objective_funs import _Objective, collect_docs
@@ -1266,7 +1266,7 @@ class QuadraticFlux(_Objective):
     B_plasma_chunk_size : int or None
         Size to split singular integral computation for B_plasma into chunks.
         If no chunking should be done or the chunk size is the full input
-        then supply ``None``.
+        then supply ``None``. Default is ``bs_chunk_size``.
 
     """
 
@@ -1311,8 +1311,8 @@ class QuadraticFlux(_Objective):
         self._field = field
         self._field_grid = field_grid
         self._vacuum = vacuum
-        self._B_plasma_chunk_size = B_plasma_chunk_size
         self._bs_chunk_size = bs_chunk_size
+        self._B_plasma_chunk_size = setdefault(B_plasma_chunk_size, bs_chunk_size)
         errorif(
             isinstance(eq, FourierRZToroidalSurface),
             TypeError,

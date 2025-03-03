@@ -326,6 +326,7 @@ class _MagneticField(IOAble, ABC):
         params=None,
         basis="rpz",
         chunk_size=None,
+        B_plasma_chunk_size=None,
     ):
         """Compute Bnormal from self on the given surface.
 
@@ -357,9 +358,13 @@ class _MagneticField(IOAble, ABC):
             basis for returned coordinates on the surface
             cylindrical "rpz" by default
         chunk_size : int or None
-            Size to split computation into chunks.
+            Size to split computation into chunks of evaluation points.
             If no chunking should be done or the chunk size is the full input
-            then supply ``None``. Default is ``None``.
+            then supply ``None``.
+        B_plasma_chunk_size : int or None
+            Size to split singular integral computation for B_plasma into chunks.
+            If no chunking should be done or the chunk size is the full input
+            then supply ``None``. Default is ``chunk_size``.
 
         Returns
         -------
@@ -371,6 +376,7 @@ class _MagneticField(IOAble, ABC):
             given as a ``(grid.num_nodes , 3)`` shaped array.
 
         """
+        B_plasma_chunk_size = setdefault(B_plasma_chunk_size, chunk_size)
         calc_Bplasma = False
         if isinstance(surface, EquilibriaFamily):
             surface = surface[-1]
@@ -397,7 +403,11 @@ class _MagneticField(IOAble, ABC):
 
         if calc_Bplasma:
             Bplasma = compute_B_plasma(
-                eq, eval_grid, vc_source_grid, normal_only=True, chunk_size=chunk_size
+                eq,
+                eval_grid,
+                vc_source_grid,
+                normal_only=True,
+                chunk_size=B_plasma_chunk_size,
             )
             Bnorm += Bplasma
 
@@ -417,6 +427,8 @@ class _MagneticField(IOAble, ABC):
         params=None,
         sym="sin",
         scale_by_curpol=True,
+        chunk_size=None,
+        B_plasma_chunk_size=None,
     ):
         """Create BNORM-style .txt file containing Bnormal Fourier coefficients.
 
@@ -452,14 +464,23 @@ class _MagneticField(IOAble, ABC):
             non-symmetric Bnormal distribution, as only the sin-symmetric modes
             will be saved.
         scale_by_curpol : bool, optional
-            Whether or not to scale the Bnormal coefficients by curpol
+            Whether to scale the Bnormal coefficients by curpol
             which is expected by most other codes that accept BNORM files,
             by default True
+        chunk_size : int or None
+            Size to split computation into chunks of evaluation points.
+            If no chunking should be done or the chunk size is the full input
+            then supply ``None``.
+        B_plasma_chunk_size : int or None
+            Size to split singular integral computation for B_plasma into chunks.
+            If no chunking should be done or the chunk size is the full input
+            then supply ``None``. Default is ``chunk_size``.
 
         Returns
         -------
         None
         """
+        B_plasma_chunk_size = setdefault(B_plasma_chunk_size, chunk_size)
         if sym != "sin":
             raise UserWarning(
                 "BNORM code assumes that |B| has sin symmetry,"
@@ -488,7 +509,12 @@ class _MagneticField(IOAble, ABC):
 
         # compute Bnormal on the grid
         Bnorm, _ = self.compute_Bnormal(
-            surface, eval_grid=eval_grid, source_grid=source_grid, params=params
+            surface,
+            eval_grid=eval_grid,
+            source_grid=source_grid,
+            params=params,
+            chunk_size=chunk_size,
+            B_plasma_chunk_size=B_plasma_chunk_size,
         )
 
         # fit Bnorm with Fourier Series

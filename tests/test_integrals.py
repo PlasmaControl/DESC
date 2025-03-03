@@ -58,7 +58,6 @@ from desc.integrals.quad_utils import (
 )
 from desc.integrals.singularities import (
     _kernel_nr_over_r3,
-    _local_params,
     _vanilla_params,
     best_params,
     best_ratio,
@@ -698,8 +697,8 @@ class TestSingularities:
             # need to use lower tolerance since convergence is worse
             atol = 0.015
         else:
-            mean, local = best_ratio(data, return_local=True)
-            st, sz, q = _local_params(grid, (mean, local.mean()))  # TODO (#1609)
+            ratio = best_ratio(data, local=True)
+            st, sz, q = best_params(grid, jnp.mean(ratio))  # TODO (#1609)
             atol = 0.0054
         interp = interpolator(grid, grid, st, sz, q)
         Bplasma = virtual_casing_biot_savart(data, data, interp, chunk_size=50)

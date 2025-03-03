@@ -63,8 +63,8 @@ def best_params(grid, ratio):
     ----------
     grid : LinearGrid
         Grid that can fft2.
-    ratio : float
-        Mean best ratio.
+    ratio : float or jnp.ndarray
+        Best ratio.
 
     Returns
     -------
@@ -96,55 +96,12 @@ def best_params(grid, ratio):
     #      s_ratio = s_z / s_t = Nz*NFP/Nt / ratio
     # Also want sqrt(s_z*s_t) ~ s = q.
     s_ratio = jnp.sqrt(Nz / Nt / ratio)
-    st = min(Nt, int(jnp.ceil(s / s_ratio)))
-    sz = min(Nz, int(jnp.ceil(s * s_ratio)))
+    st = jnp.clip(jnp.ceil(s / s_ratio).astype(int), None, Nt)
+    sz = jnp.clip(jnp.ceil(s * s_ratio).astype(int), None, Nz)
     return st, sz, q
 
 
-def _local_params(grid, ratio):
-    """Parameters for heuristic support size and quadrature resolution.
-
-    These parameters account for local grid anisotropy to ensure
-    more robust convergence across stronger geometric shaping.
-
-    Parameters
-    ----------
-    grid : LinearGrid
-        Grid that can fft2.
-    ratio : tuple
-        Mean best ratio and local ratio
-
-    Returns
-    -------
-    st : int
-        Extent of support is an ``st`` × ``sz`` subset
-        of the full domain (θ,ζ) ∈ [0, 2π)² of ``grid``.
-        Subset of ``grid.num_theta`` × ``grid.num_zeta*grid.NFP``.
-    sz : int
-        Extent of support is an ``st`` × ``sz`` subset
-        of the full domain (θ,ζ) ∈ [0, 2π)² of ``grid``.
-        Subset of ``grid.num_theta`` × ``grid.num_zeta*grid.NFP``.
-    q : int
-        Order of quadrature in radial and azimuthal directions.
-
-    """
-    assert grid.can_fft2
-    Nt = grid.num_theta
-    Nz = grid.num_zeta * grid.NFP
-    if grid.num_zeta > 1:  # actually has toroidal resolution
-        q = int(jnp.sqrt(grid.num_nodes) / 2)
-    else:  # axisymmetry
-        q = int(jnp.sqrt(Nt * Nz) / 2)
-    s = min(q, Nt, Nz)
-    ratio = (ratio[0] + ratio[1]) / 2
-    # same logic as heuristic params
-    s_ratio = jnp.sqrt(Nz / Nt / ratio)
-    st = min(Nt, int(jnp.ceil(s / s_ratio)))
-    sz = min(Nz, int(jnp.ceil(s * s_ratio)))
-    return st, sz, q
-
-
-def best_ratio(data, return_local=False):
+def best_ratio(data, local=False):
     """Ratio to make singular integration partition ~circle in real space.
 
     Parameters
@@ -152,22 +109,17 @@ def best_ratio(data, return_local=False):
     data : dict[str, jnp.ndarray]
         Dictionary of data evaluated on grid that ``can_fft2`` with keys
         ``|e_theta x e_zeta|``, ``e_theta``, and ``e_zeta``.
-    return_local : bool
+    local : bool
         Whether to return the local ratio as well as the mean global ratio.
 
-    Returns
-    -------
-    mean : float
-        Mean best ratio.
-
     """
-    local = jnp.linalg.norm(data["e_zeta"], axis=-1) / jnp.linalg.norm(
+    scale = jnp.linalg.norm(data["e_zeta"], axis=-1) / jnp.linalg.norm(
         data["e_theta"], axis=-1
     )
-    mean = jnp.mean(local * data["|e_theta x e_zeta|"]) / jnp.mean(
+    mean = jnp.mean(scale * data["|e_theta x e_zeta|"]) / jnp.mean(
         data["|e_theta x e_zeta|"]
     )
-    return (mean, local) if return_local else mean
+    return (0.5 * (mean + scale)) if local else mean
 
 
 def get_interpolator(
@@ -670,9 +622,7 @@ def _singular_part(eval_data, source_data, kernel, interpolator, chunk_size=None
         polar_pt,
         chunk_size=chunk_size,
         reduction=jnp.add,
-        # TODO (#1386): Infer jnp.add.reduce from reduction.
-        #  https://github.com/jax-ml/jax/issues/23493.
-        chunk_reduction=lambda x: x.sum(axis=0),
+        chunk_reduction=_add_reduce,
     )(jnp.arange(v.size))
     assert f.shape == (eval_grid.num_nodes, kernel.ndim)
 
@@ -682,6 +632,11 @@ def _singular_part(eval_data, source_data, kernel, interpolator, chunk_size=None
         f = xyz2rpz_vec(f, phi=eval_data["phi"])
 
     return f
+
+
+def _add_reduce(x):
+    # https://github.com/jax-ml/jax/issues/23493
+    return x.sum(axis=0)
 
 
 def singular_integral(

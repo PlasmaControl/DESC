@@ -5,6 +5,7 @@ import os
 import warnings
 
 import numpy as np
+from packaging.version import Version
 from termcolor import colored
 
 import desc
@@ -15,11 +16,6 @@ if os.environ.get("DESC_BACKEND") == "numpy":
     jnp = np
     use_jax = False
     set_device(kind="cpu")
-    print(
-        "DESC version {}, using numpy backend, version={}, dtype={}".format(
-            desc.__version__, np.__version__, np.linspace(0, 1).dtype
-        )
-    )
 else:
     if desc_config.get("device") is None:
         set_device("cpu")
@@ -41,12 +37,6 @@ else:
             x = jnp.linspace(0, 5)
             y = jnp.exp(x)
         use_jax = True
-        print(
-            f"DESC version {desc.__version__},"
-            + f"using JAX backend, jax version={jax.__version__}, "
-            + f"jaxlib version={jaxlib.__version__}, dtype={y.dtype}"
-        )
-        del x, y
     except ModuleNotFoundError:
         jnp = np
         x = jnp.linspace(0, 5)
@@ -54,21 +44,27 @@ else:
         use_jax = False
         set_device(kind="cpu")
         warnings.warn(colored("Failed to load JAX", "red"))
+
+
+def print_backend_info():
+    """Prints DESC version, backend type & version, device type & memory."""
+    print(f"DESC version={desc.__version__}.")
+    if use_jax:
         print(
-            "DESC version {}, using NumPy backend, version={}, dtype={}".format(
-                desc.__version__, np.__version__, y.dtype
-            )
+            f"Using JAX backend: jax version={jax.__version__}, "
+            + f"jaxlib version={jaxlib.__version__}, dtype={y.dtype}."
         )
-print(
-    "Using device: {}, with {:.2f} GB available memory".format(
-        desc_config.get("device"), desc_config.get("avail_mem")
+    else:
+        print(f"Using NumPy backend: version={np.__version__}, dtype={y.dtype}.")
+    print(
+        "Using device: {}, with {:.2f} GB available memory.".format(
+            desc_config.get("device"), desc_config.get("avail_mem")
+        )
     )
-)
+
 
 if use_jax:  # noqa: C901
     from jax import custom_jvp, jit, vmap
-
-    imap = jax.lax.map
     from jax.experimental.ode import odeint
     from jax.lax import cond, fori_loop, scan, switch, while_loop
     from jax.nn import softmax as softargmax
@@ -87,12 +83,34 @@ if use_jax:  # noqa: C901
         treedef_is_leaf,
     )
 
+    # TODO: update this when JAX min version >= 0.4.26
     if hasattr(jnp, "trapezoid"):
         trapezoid = jnp.trapezoid  # for JAX 0.4.26 and later
     elif hasattr(jax.scipy, "integrate"):
         trapezoid = jax.scipy.integrate.trapezoid
     else:
         trapezoid = jnp.trapz  # for older versions of JAX, deprecated by jax 0.4.16
+
+    # TODO: update this when JAX min version >= 0.4.35
+    if Version(jax.__version__) >= Version("0.4.35"):
+
+        def pure_callback(func, result_shape_dtype, *args, vectorized=False, **kwargs):
+            """Wrapper for jax.pure_callback for versions >=0.4.35."""
+            return jax.pure_callback(
+                func,
+                result_shape_dtype,
+                *args,
+                vmap_method="expand_dims" if vectorized else "sequential",
+                **kwargs,
+            )
+
+    else:
+
+        def pure_callback(func, result_shape_dtype, *args, vectorized=False, **kwargs):
+            """Wrapper for jax.pure_callback for versions <0.4.35."""
+            return jax.pure_callback(
+                func, result_shape_dtype, *args, vectorized=vectorized, **kwargs
+            )
 
     def execute_on_cpu(func):
         """Decorator to set default device to CPU for a function.
@@ -450,7 +468,7 @@ else:  # pragma: no cover
 
     trapezoid = np.trapezoid if hasattr(np, "trapezoid") else np.trapz
 
-    def imap(f, xs, *, batch_size=None, in_axes=0, out_axes=0):
+    def _map(f, xs, *, batch_size=None, in_axes=0, out_axes=0):
         """Generalizes jax.lax.map; uses numpy."""
         if not isinstance(xs, np.ndarray):
             raise NotImplementedError(
@@ -481,7 +499,11 @@ else:  # pragma: no cover
             Vectorized version of fun.
 
         """
-        return lambda xs: imap(fun, xs, in_axes=in_axes, out_axes=out_axes)
+        return lambda xs: _map(fun, xs, in_axes=in_axes, out_axes=out_axes)
+
+    def pure_callback(*args, **kwargs):
+        """IO callback for numpy backend."""
+        raise NotImplementedError
 
     def tree_stack(*args, **kwargs):
         """Stack pytree for numpy backend."""
@@ -588,7 +610,7 @@ else:  # pragma: no cover
             val = body_fun(i, val)
         return val
 
-    def cond(pred, true_fun, false_fun, *operand):
+    def cond(pred, true_fun, false_fun, *operands):
         """Conditionally apply true_fun or false_fun.
 
         This version is for the numpy backend, for jax backend see jax.lax.cond
@@ -601,7 +623,7 @@ else:  # pragma: no cover
             Function (A -> B), to be applied if pred is True.
         false_fun: callable
             Function (A -> B), to be applied if pred is False.
-        operand: any
+        operands: any
             input to either branch depending on pred. The type can be a scalar, array,
             or any pytree (nested Python tuple/list/dict) thereof.
 
@@ -614,9 +636,9 @@ else:  # pragma: no cover
 
         """
         if pred:
-            return true_fun(*operand)
+            return true_fun(*operands)
         else:
-            return false_fun(*operand)
+            return false_fun(*operands)
 
     def switch(index, branches, operand):
         """Apply exactly one of branches given by index.

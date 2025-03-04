@@ -133,8 +133,7 @@ class FourierRZCurve(Curve):
         if (
             ((N is not None) and (N != self.N))
             or ((NFP is not None) and (NFP != self.NFP))
-            or (sym is not None)
-            and (sym != self.sym)
+            or ((sym is not None) and (sym != self.sym))
         ):
             self._NFP = int(NFP if NFP is not None else self.NFP)
             self._sym = bool(sym) if sym is not None else self.sym

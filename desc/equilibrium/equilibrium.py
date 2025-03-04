@@ -37,7 +37,7 @@ from desc.objectives import (
     get_fixed_boundary_constraints,
 )
 from desc.optimizable import Optimizable, optimizable_parameter
-from desc.optimize import Optimizer
+from desc.optimize import LinearConstraintProjection, Optimizer
 from desc.perturbations import perturb
 from desc.profiles import HermiteSplineProfile, PowerSeriesProfile, SplineProfile
 from desc.transform import Transform
@@ -264,8 +264,8 @@ class Equilibrium(IOAble, Optimizable):
         self._M_grid = setdefault(M_grid, 2 * self.M)
         self._N_grid = setdefault(N_grid, 2 * self.N)
 
-        self._surface.change_resolution(self.L, self.M, self.N)
-        self._axis.change_resolution(self.N)
+        self._surface.change_resolution(self.L, self.M, self.N, sym=self.sym)
+        self._axis.change_resolution(self.N, sym=self.sym)
 
         # bases
         self._R_basis = FourierZernikeBasis(
@@ -330,16 +330,17 @@ class Equilibrium(IOAble, Optimizable):
         if not use_kinetic and pressure is None:
             pressure = 0
 
-        self._electron_temperature = parse_profile(
+        self.electron_temperature = parse_profile(
             electron_temperature, "electron temperature"
         )
-        self._electron_density = parse_profile(electron_density, "electron density")
-        self._ion_temperature = parse_profile(ion_temperature, "ion temperature")
-        self._atomic_number = parse_profile(atomic_number, "atomic number")
-        self._pressure = parse_profile(pressure, "pressure")
-        self._anisotropy = parse_profile(anisotropy, "anisotropy")
-        self._iota = parse_profile(iota, "iota")
-        self._current = parse_profile(current, "current")
+        self.electron_density = parse_profile(electron_density, "electron density")
+        self.ion_temperature = parse_profile(ion_temperature, "ion temperature")
+        self.atomic_number = parse_profile(atomic_number, "atomic number")
+        self.pressure = parse_profile(pressure, "pressure")
+        self.anisotropy = parse_profile(anisotropy, "anisotropy")
+        self._iota = self._current = None
+        self.iota = parse_profile(iota, "iota")
+        self.current = parse_profile(current, "current")
 
         # ensure profiles have the right resolution
         for profile in [
@@ -1786,6 +1787,9 @@ class Equilibrium(IOAble, Optimizable):
 
     @iota.setter
     def iota(self, new):
+        self._iota = parse_profile(new, "iota")
+        if self.iota is None:
+            return
         warnif(
             self.current is not None,
             UserWarning,
@@ -1793,7 +1797,6 @@ class Equilibrium(IOAble, Optimizable):
             + "with fixed toroidal current, removing existing toroidal"
             " current profile.",
         )
-        self._iota = parse_profile(new, "iota")
         self._current = None
 
     @optimizable_parameter
@@ -1819,6 +1822,9 @@ class Equilibrium(IOAble, Optimizable):
 
     @current.setter
     def current(self, new):
+        self._current = parse_profile(new, "current")
+        if self.current is None:
+            return
         warnif(
             self.iota is not None,
             UserWarning,
@@ -1826,8 +1832,13 @@ class Equilibrium(IOAble, Optimizable):
             + "with fixed rotational transform, removing existing rotational"
             " transform profile.",
         )
-        self._current = parse_profile(new, "current")
         self._iota = None
+        axis_current = np.squeeze(self.current(0.0))
+        warnif(
+            np.abs(axis_current) > 1e-8,
+            UserWarning,
+            f"Current on axis is nonzero, got {axis_current:.3e} Amps",
+        )
 
     @optimizable_parameter
     @property
@@ -1844,6 +1855,12 @@ class Equilibrium(IOAble, Optimizable):
             + "fixed rotational transform",
         )
         self.current.params = c_l
+        axis_current = np.squeeze(self.current(0.0))
+        warnif(
+            np.abs(axis_current) > 1e-8,
+            UserWarning,
+            f"Current on axis is nonzero, got {axis_current:.3e} Amps",
+        )
 
     @property
     def R_basis(self):
@@ -2123,6 +2140,7 @@ class Equilibrium(IOAble, Optimizable):
         ----------
         objective : {"force", "forces", "energy"}
             Objective function to solve. Default = force balance on unified grid.
+            ObjectiveFunction can also be passed.
         constraints : Tuple
             set of constraints to enforce. Default = fixed boundary/profiles
         optimizer : str or Optimizer (optional)
@@ -2160,13 +2178,19 @@ class Equilibrium(IOAble, Optimizable):
             `OptimizeResult` for a description of other attributes.
 
         """
-        if constraints is None:
+        is_linear_proj = isinstance(objective, LinearConstraintProjection)
+        if is_linear_proj and constraints is not None:
+            raise ValueError(
+                "If a LinearConstraintProjection is passed, "
+                "no constraints should be passed."
+            )
+        if constraints is None and not is_linear_proj:
             constraints = get_fixed_boundary_constraints(eq=self)
         if not isinstance(objective, ObjectiveFunction):
             objective = get_equilibrium_objective(eq=self, mode=objective)
         if not isinstance(optimizer, Optimizer):
             optimizer = Optimizer(optimizer)
-        if not isinstance(constraints, (list, tuple)):
+        if not isinstance(constraints, (list, tuple)) and not is_linear_proj:
             constraints = tuple([constraints])
 
         warnif(
@@ -2334,9 +2358,16 @@ class Equilibrium(IOAble, Optimizable):
             Perturbed equilibrium.
 
         """
+        is_linear_proj = isinstance(objective, LinearConstraintProjection)
+        if is_linear_proj and constraints is not None:
+            raise ValueError(
+                "If a LinearConstraintProjection is passed, "
+                "no constraints should be passed. Passed constraints:"
+                f"{constraints}."
+            )
         if objective is None:
             objective = get_equilibrium_objective(eq=self)
-        if constraints is None:
+        if constraints is None and not is_linear_proj:
             if "Ra_n" in deltas or "Za_n" in deltas:
                 constraints = get_fixed_axis_constraints(eq=self)
             else:
@@ -2344,9 +2375,9 @@ class Equilibrium(IOAble, Optimizable):
 
         eq = perturb(
             self,
-            objective,
-            constraints,
-            deltas,
+            objective=objective,
+            constraints=constraints,
+            deltas=deltas,
             order=order,
             tr_ratio=tr_ratio,
             weight=weight,

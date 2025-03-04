@@ -20,6 +20,7 @@ from desc.coils import (
     FourierRZCoil,
     FourierXYZCoil,
     MixedCoilSet,
+    initialize_modular_coils,
 )
 from desc.compute import get_transforms
 from desc.equilibrium import Equilibrium
@@ -46,6 +47,7 @@ from desc.objectives import (
     CoilArclengthVariance,
     CoilCurrentLength,
     CoilCurvature,
+    CoilIntegratedCurvature,
     CoilLength,
     CoilSetLinkingNumber,
     CoilSetMinDistance,
@@ -53,6 +55,7 @@ from desc.objectives import (
     EffectiveRipple,
     Elongation,
     Energy,
+    ExternalObjective,
     ForceBalance,
     ForceBalanceAnisotropic,
     FusionPower,
@@ -361,13 +364,15 @@ class TestObjectiveFunction:
 
         # compute all amplitudes in the Boozer spectrum
         transforms = get_transforms(
-            "|B|_mn", obj=eq, grid=grid, M_booz=M_booz, N_booz=N_booz
+            "|B|_mn_B", obj=eq, grid=grid, M_booz=M_booz, N_booz=N_booz
         )
         matrix, modes, idx = ptolemy_linear_transform(
             transforms["B"].basis.modes, helicity=helicity, NFP=eq.NFP
         )
-        data = eq.compute("|B|_mn", helicity=helicity, grid=grid, transforms=transforms)
-        B_mn = matrix @ data["|B|_mn"]
+        data = eq.compute(
+            "|B|_mn_B", helicity=helicity, grid=grid, transforms=transforms
+        )
+        B_mn = matrix @ data["|B|_mn_B"]
         idx_B = np.argsort(np.abs(B_mn))
 
         # check that largest amplitudes are the QH modes
@@ -939,6 +944,46 @@ class TestObjectiveFunction:
         test(nested_coils, grid=grid)
 
     @pytest.mark.unit
+    def test_integrated_curvature(self):
+        """Tests integrated_curvature."""
+
+        def test(coil, grid=None, ans=2 * np.pi):
+            obj = CoilIntegratedCurvature(coil, grid=grid)
+            obj.build()
+            f = obj.compute(params=coil.params_dict)
+            np.testing.assert_allclose(f, ans, atol=2e-5)
+            assert f.shape == (obj.dim_f,)
+
+        # convex coils
+        coil = FourierPlanarCoil(r_n=[0.3, 1, 0.3], basis="rpz")
+        coils = CoilSet.linspaced_linear(
+            coil, n=3, displacement=[0, 3, 0], check_intersection=False
+        )
+        mixed_coils = MixedCoilSet.linspaced_linear(
+            coil, n=2, displacement=[0, 7, 0], check_intersection=False
+        )
+        nested_coils = MixedCoilSet(coils, mixed_coils, check_intersection=False)
+        test(coil)
+        test(coils)
+        test(mixed_coils)
+        test(nested_coils)
+
+        # not convex coils
+        coil = FourierPlanarCoil(r_n=[0.5, 1, 0.5], basis="rpz")
+        coils = CoilSet.linspaced_linear(
+            coil, n=3, displacement=[0, 3, 0], check_intersection=False
+        )
+        mixed_coils = MixedCoilSet.linspaced_linear(
+            coil, n=2, displacement=[0, 7, 0], check_intersection=False
+        )
+        nested_coils = MixedCoilSet(coils, mixed_coils, check_intersection=False)
+        ans = 1.104044 + 2 * np.pi
+        test(coil, ans=ans)
+        test(coils, ans=ans)
+        test(mixed_coils, ans=ans)
+        test(nested_coils, ans=ans)
+
+    @pytest.mark.unit
     def test_coil_type_error(self):
         """Tests error when objective is not passed a coil."""
         curve = FourierPlanarCurve(r_n=2, basis="rpz")
@@ -957,6 +1002,13 @@ class TestObjectiveFunction:
             assert f.size == coils.num_coils
             np.testing.assert_allclose(f, mindist)
             assert coils.is_self_intersecting(grid=grid, tol=tol) == expect_intersect
+            obj2 = CoilSetMinDistance(
+                coils, grid=grid, use_softmin=True, softmin_alpha=10
+            )
+            obj2.build()
+            f = obj2.compute(params=coils.params_dict)
+            assert f.size == coils.num_coils
+            np.testing.assert_allclose(f, mindist, rtol=5e-2, atol=1e-3)
 
         # linearly spaced planar coils, all coils are min distance from their neighbors
         n = 3
@@ -1046,6 +1098,25 @@ class TestObjectiveFunction:
                 f = obj.compute(params_1=eq.params_dict, params_2=coils.params_dict)
             assert f.size == coils.num_coils
             np.testing.assert_allclose(f, mindist)
+            obj2 = PlasmaCoilSetMinDistance(
+                eq=eq,
+                coil=coils,
+                plasma_grid=plasma_grid,
+                coil_grid=coil_grid,
+                eq_fixed=eq_fixed,
+                coils_fixed=coils_fixed,
+                use_softmin=True,
+                softmin_alpha=40,
+            )
+            obj2.build()
+            if eq_fixed:
+                f = obj2.compute(params_1=coils.params_dict)
+            elif coils_fixed:
+                f = obj2.compute(params_1=eq.params_dict)
+            else:
+                f = obj2.compute(params_1=eq.params_dict, params_2=coils.params_dict)
+            assert f.size == coils.num_coils
+            np.testing.assert_allclose(f, mindist, rtol=5e-2, atol=1e-3)
 
         plasma_grid = LinearGrid(M=4, zeta=16)
         coil_grid = LinearGrid(N=8)
@@ -1685,6 +1756,70 @@ class TestObjectiveFunction:
             obj.compute(eq.params_dict), grid.compress(data["Gamma_c"])
         )
 
+    @pytest.mark.unit
+    def test_generic_with_kwargs(self):
+        """Test GenericObjective with keyword arguments. Related to issue #1224."""
+        eq = desc.examples.get("reactor_QA")
+
+        def fusion_gain(grid, data):
+            p_out = data["P_fusion"]
+            p_in = data["P_ISS04"]
+            Q = p_out / p_in
+            return Q
+
+        obj_p0_out = FusionPower(eq, fuel="DT")
+        obj_p0_out.build()
+        p0_out = obj_p0_out.compute(*obj_p0_out.xs(eq))
+
+        obj_p0_in = HeatingPowerISS04(eq, H_ISS04=1.2, gamma=0)
+        obj_p0_in.build()
+        p0_in = obj_p0_in.compute(*obj_p0_in.xs(eq))
+
+        q0 = p0_out / p0_in
+
+        obj_p1_out = GenericObjective("P_fusion", eq, compute_kwargs={"fuel": "DT"})
+        obj_p1_out.build()
+        p1_out = obj_p1_out.compute(*obj_p1_out.xs(eq))
+
+        obj_p1_in = GenericObjective(
+            "P_ISS04", eq, compute_kwargs={"H_ISS04": 1.2, "gamma": 0}
+        )
+        obj_p1_in.build()
+        p1_in = obj_p1_in.compute(*obj_p1_in.xs(eq))
+
+        obj_q1 = ObjectiveFromUser(
+            fusion_gain, eq, compute_kwargs={"fuel": "DT", "H_ISS04": 1.2, "gamma": 0}
+        )
+        obj_q1.build()
+        q1 = obj_q1.compute(*obj_q1.xs(eq))
+
+        np.testing.assert_allclose(p0_out, p1_out)
+        np.testing.assert_allclose(p0_in, p1_in)
+        np.testing.assert_allclose(q0, q1)
+
+    @pytest.mark.unit
+    def test_things_per_objective_idx(self):
+        """Test things_per_objective_idx. Related to GH Issue #1602."""
+        eq = desc.examples.get("reactor_QA")
+        coils = initialize_modular_coils(eq, num_coils=3, r_over_a=3.0)
+        grid = LinearGrid(rho=1.0, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
+        linking_current = 2 * np.pi * eq.compute("G", grid=grid)["G"][0] / mu_0
+        coils.current = linking_current / coils.num_coils
+
+        objective = ObjectiveFunction(
+            (
+                PlasmaCoilSetMinDistance(eq=eq, coil=coils, eq_fixed=False),
+                LinkingCurrentConsistency(eq=eq, coil=coils, eq_fixed=False),
+            )
+        )
+        objective.build()
+        x = objective.x(eq, coils)
+
+        np.testing.assert_allclose(
+            objective._things_per_objective_idx, [[0, 1], [1, 0]]
+        )
+        np.testing.assert_allclose(objective.compute_scaled_error(x), 0, atol=1e-15)
+
 
 @pytest.mark.regression
 def test_derivative_modes():
@@ -1860,7 +1995,7 @@ def test_target_profiles():
     """Tests for using Profile objects as targets for profile objectives."""
     iota = PowerSeriesProfile([1, 0, -0.3])
     shear = PowerSeriesProfile([0, -0.6])
-    current = PowerSeriesProfile([4, 0, 1, 0, -1])
+    current = PowerSeriesProfile([0, 0, 1, 0, -1])
     merc = PowerSeriesProfile([1, 0, -1])
     well = PowerSeriesProfile([2, 0, -2])
     pres = PowerSeriesProfile([3, 0, -3])
@@ -2632,9 +2767,8 @@ def test_loss_function_asserts():
         RotationalTransform(eq=eq, loss_function=fun)
 
 
-def _reduced_resolution_objective(eq, objective):
+def _reduced_resolution_objective(eq, objective, **kwargs):
     """Speed up testing suite by defining rules to reduce objective resolution."""
-    kwargs = {}
     if objective in {EffectiveRipple, GammaC}:
         kwargs["X"] = 8
         kwargs["Y"] = 16
@@ -2664,6 +2798,7 @@ class TestComputeScalarResolution:
         CoilArclengthVariance,
         CoilCurrentLength,
         CoilCurvature,
+        CoilIntegratedCurvature,
         CoilLength,
         CoilSetLinkingNumber,
         CoilSetMinDistance,
@@ -2682,7 +2817,8 @@ class TestComputeScalarResolution:
         VacuumBoundaryError,
         # need to avoid blowup near the axis
         MercierStability,
-        # don't test these since they depend on what user wants
+        # we do not test these since they depend too much on what the user wants
+        ExternalObjective,
         LinearObjectiveFromUser,
         ObjectiveFromUser,
     ]
@@ -3086,6 +3222,7 @@ class TestComputeScalarResolution:
             CoilArclengthVariance,
             CoilCurrentLength,
             CoilCurvature,
+            CoilIntegratedCurvature,
             CoilLength,
             CoilTorsion,
             CoilSetLinkingNumber,
@@ -3099,7 +3236,8 @@ class TestComputeScalarResolution:
         f = np.zeros_like(self.res_array, dtype=float)
         for i, res in enumerate(self.res_array):
             obj = ObjectiveFunction(
-                objective(coilset, grid=LinearGrid(N=int(5 + 3 * res))), use_jit=False
+                objective(coilset, grid=LinearGrid(N=int(5 + 3 * res))),
+                use_jit=False,
             )
             obj.build(verbose=0)
             f[i] = obj.compute_scalar(obj.x())
@@ -3144,9 +3282,10 @@ class TestObjectiveNaNGrad:
         BootstrapRedlConsistency,
         BoundaryError,
         CoilArclengthVariance,
-        CoilLength,
         CoilCurrentLength,
         CoilCurvature,
+        CoilIntegratedCurvature,
+        CoilLength,
         CoilSetLinkingNumber,
         CoilSetMinDistance,
         CoilTorsion,
@@ -3164,7 +3303,8 @@ class TestObjectiveNaNGrad:
         SurfaceQuadraticFlux,
         ToroidalFlux,
         VacuumBoundaryError,
-        # we don't test these since they depend too much on what exactly the user wants
+        # we do not test these since they depend too much on what the user wants
+        ExternalObjective,
         GenericObjective,
         LinearObjectiveFromUser,
         ObjectiveFromUser,
@@ -3199,7 +3339,7 @@ class TestObjectiveNaNGrad:
             N=2,
             electron_density=PowerSeriesProfile([1e19, 0, -1e19]),
             electron_temperature=PowerSeriesProfile([1e3, 0, -1e3]),
-            current=PowerSeriesProfile([1, 0, -1]),
+            current=PowerSeriesProfile([0, 0, -1]),
         )
         obj = ObjectiveFunction(BootstrapRedlConsistency(eq), use_jit=False)
         obj.build()
@@ -3215,7 +3355,7 @@ class TestObjectiveNaNGrad:
             N=2,
             electron_density=PowerSeriesProfile([1e19, 0, -1e19]),
             electron_temperature=PowerSeriesProfile([1e3, 0, -1e3]),
-            current=PowerSeriesProfile([1, 0, -1]),
+            current=PowerSeriesProfile([0, 0, -1]),
         )
         obj = ObjectiveFunction(FusionPower(eq))
         obj.build()
@@ -3231,7 +3371,7 @@ class TestObjectiveNaNGrad:
             N=2,
             electron_density=PowerSeriesProfile([1e19, 0, -1e19]),
             electron_temperature=PowerSeriesProfile([1e3, 0, -1e3]),
-            current=PowerSeriesProfile([1, 0, -1]),
+            current=PowerSeriesProfile([0, 0, -1]),
         )
         obj = ObjectiveFunction(HeatingPowerISS04(eq))
         obj.build()
@@ -3376,6 +3516,7 @@ class TestObjectiveNaNGrad:
             CoilArclengthVariance,
             CoilCurrentLength,
             CoilCurvature,
+            CoilIntegratedCurvature,
             CoilLength,
             CoilTorsion,
             CoilSetLinkingNumber,
@@ -3430,6 +3571,12 @@ class TestObjectiveNaNGrad:
         obj.build(verbose=0)
         g = obj.grad(obj.x())
         assert not np.any(np.isnan(g))
+        obj = ObjectiveFunction(
+            _reduced_resolution_objective(eq, EffectiveRipple, spline=True)
+        )
+        obj.build(verbose=0)
+        g = obj.grad(obj.x())
+        assert not np.any(np.isnan(g))
 
     @pytest.mark.unit
     def test_objective_no_nangrad_Gamma_c(self):
@@ -3438,6 +3585,10 @@ class TestObjectiveNaNGrad:
         with pytest.warns(UserWarning, match="Reducing radial"):
             eq.change_resolution(2, 2, 2, 4, 4, 4)
         obj = ObjectiveFunction(_reduced_resolution_objective(eq, GammaC))
+        obj.build(verbose=0)
+        g = obj.grad(obj.x())
+        assert not np.any(np.isnan(g))
+        obj = ObjectiveFunction(_reduced_resolution_objective(eq, GammaC, spline=True))
         obj.build(verbose=0)
         g = obj.grad(obj.x())
         assert not np.any(np.isnan(g))

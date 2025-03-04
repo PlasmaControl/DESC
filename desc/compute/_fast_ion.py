@@ -761,9 +761,16 @@ def _Gamma_d_Velasco(params, transforms, profiles, data, **kwargs):
             gamma_c = jnp.arctan(safediv(radial_drift, poloidal_drift))
             gamma_c = jnp.sum(gamma_c, axis=-1)  # summing over all the wells
 
-            mask = jnp.max(gamma_c) > 0.2
+            # First, find the maximum along the alpha axis
+            # Then determine if greater than threshold using heaviside function
+            # Then divide by 1/sqrt(1 - lambda B) factor
+            idxmax = jnp.argmax(gamma_c, axis=-2)
+            out = (
+                jnp.heaviside(gamma_c[idxmax] - 0.2, 0)
+                / jnp.sum(v_tau, axis=-1)[idxmax]
+            )
 
-            return mask
+            return out
 
         return jnp.sum(
             batch_map(fun, data["pitch_inv"], pitch_batch_size)

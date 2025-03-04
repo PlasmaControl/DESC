@@ -194,8 +194,6 @@ def test_compute_everything():
             current=5, X=[5, 10, 2, 5], Y=[1, 2, 3, 1], Z=[-4, -5, -6, -4]
         ),
     }
-    print(things.keys())
-    print(data_index.keys())
     assert things.keys() == data_index.keys(), (
         f"Missing the parameterization {data_index.keys() - things.keys()}"
         f" to test against master."

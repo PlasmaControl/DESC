@@ -232,8 +232,8 @@ def best_ratio(data, return_local=False):
     Parameters
     ----------
     data : dict[str, jnp.ndarray]
-        Dictionary of data evaluated on grid that ``can_fft2`` with keys
-        ``|e_theta x e_zeta|``, ``e_theta``, and ``e_zeta``.
+        Dictionary of data evaluated on single flux surface grid that
+        ``can_fft2`` with keys ``|e_theta x e_zeta|``, ``e_theta``, and ``e_zeta``.
     return_local : bool
         Whether to return the local ratio as well as the mean global ratio.
 

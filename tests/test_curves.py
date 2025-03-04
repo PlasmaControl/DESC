@@ -327,6 +327,20 @@ class TestFourierRZCurve:
         with pytest.raises(ValueError):
             xyz.to_FourierRZ(N=1, grid=grid)
 
+    @pytest.mark.unit
+    def test_change_symmetry(self):
+        """Test correct sym changes when only sym is passed to change_resolution."""
+        c = FourierRZCurve(sym=False)
+        c.change_resolution(sym=True)
+        assert c.sym
+        assert c.R_basis.sym == "cos"
+        assert c.Z_basis.sym == "sin"
+
+        c.change_resolution(sym=False)
+        assert c.sym is False
+        assert c.R_basis.sym is False
+        assert c.Z_basis.sym is False
+
 
 class TestFourierXYZCurve:
     """Tests for FourierXYZCurve class."""

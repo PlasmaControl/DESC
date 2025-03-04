@@ -707,6 +707,18 @@ def _splinexyz_helper(f, transforms, s_query_pts, method, derivative):
         # replace values outside of interval with 0 so they don't contribute to the sum
         f_interp = jnp.where(s_query_pts > full_knots[istop], 0, f_interp)
         f_interp = jnp.where(s_query_pts < full_knots[istart], 0, f_interp)
+        # covers edge case where the knot is exactly equal to a query point
+        # and halves that point to sum to one later.
+        f_interp = jnp.where(
+            (s_query_pts == full_knots[istop]) & (s_query_pts != full_knots[-1]),
+            f_interp / 2,
+            f_interp,
+        )
+        f_interp = jnp.where(
+            (s_query_pts == full_knots[istart]) & (s_query_pts != full_knots[0]),
+            f_interp / 2,
+            f_interp,
+        )
 
         return f_interp
 

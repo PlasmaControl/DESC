@@ -370,7 +370,7 @@ def _x_sss_FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
     transforms={"X": [[0, 0, 0]], "Y": [[0, 0, 0]]},
     profiles=[],
     coordinates="s",
-    data=["s"],
+    data=[],
     parameterization="desc.geometry.curve.FourierXYCurve",
     basis_in="{'rpz', 'xyz'}: Basis for input params vectors, Default 'xyz'",
 )
@@ -411,7 +411,7 @@ def _x_FourierXYCurve(params, transforms, profiles, data, **kwargs):
     transforms={"X": [[0, 0, 1]], "Y": [[0, 0, 1]]},
     profiles=[],
     coordinates="s",
-    data=["s", "phi"],
+    data=["phi"],
     parameterization="desc.geometry.curve.FourierXYCurve",
     basis_in="{'rpz', 'xyz'}: Basis for input params vectors, Default 'xyz'",
 )
@@ -449,7 +449,7 @@ def _x_s_FourierXYCurve(params, transforms, profiles, data, **kwargs):
     transforms={"X": [[0, 0, 2]], "Y": [[0, 0, 2]]},
     profiles=[],
     coordinates="s",
-    data=["s", "phi"],
+    data=["phi"],
     parameterization="desc.geometry.curve.FourierXYCurve",
     basis_in="{'rpz', 'xyz'}: Basis for input params vectors, Default 'xyz'",
 )
@@ -487,7 +487,7 @@ def _x_ss_FourierXYCurve(params, transforms, profiles, data, **kwargs):
     transforms={"X": [[0, 0, 3]], "Y": [[0, 0, 3]]},
     profiles=[],
     coordinates="s",
-    data=["s", "phi"],
+    data=["phi"],
     parameterization="desc.geometry.curve.FourierXYCurve",
     basis_in="{'rpz', 'xyz'}: Basis for input params vectors, Default 'xyz'",
 )

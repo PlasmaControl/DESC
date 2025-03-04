@@ -43,7 +43,7 @@ jobs:
 
       - name: Check for relevant changes
         id: check_changes
-        run: echo "has_changes=${{ !contains(github.event.pull_request.labels.*.name, 'only-docs-comments') && env.has_changes == 'true'}}" >> $GITHUB_ENV
+        run: echo "has_changes=${{ !contains(github.event.pull_request.labels.*.name, 'only-docs-comments') && steps.changes.outputs.has_changes }}" >> $GITHUB_ENV
 
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5

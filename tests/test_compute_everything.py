@@ -6,7 +6,13 @@ import warnings
 import numpy as np
 import pytest
 
-from desc.coils import FourierPlanarCoil, FourierRZCoil, FourierXYZCoil, SplineXYZCoil
+from desc.coils import (
+    FourierPlanarCoil,
+    FourierRZCoil,
+    FourierXYCoil,
+    FourierXYZCoil,
+    SplineXYZCoil,
+)
 from desc.compute import data_index, xyz2rpz, xyz2rpz_vec
 from desc.compute.utils import _grow_seeds
 from desc.examples import get
@@ -14,6 +20,7 @@ from desc.geometry import (
     FourierPlanarCurve,
     FourierRZCurve,
     FourierRZToroidalSurface,
+    FourierXYCurve,
     FourierXYZCurve,
     ZernikeRZToroidalSection,
 )
@@ -120,6 +127,13 @@ def test_compute_everything():
         "desc.geometry.curve.FourierPlanarCurve": FourierPlanarCurve(
             center=[10, 1, 3], normal=[1, 2, 3], r_n=[1, 2, 3], modes=[0, 1, 2]
         ),
+        "desc.geometry.curve.FourierXYCurve": FourierXYCurve(
+            center=[10, 1, 3],
+            normal=[1, 2, 3],
+            X_n=[0, 1, 0.8],
+            Y_n=[-1, 2, 0.0],
+            modes=[-1, 0, 1],
+        ),
         "desc.geometry.curve.SplineXYZCurve": FourierXYZCurve(
             X_n=[5, 10, 2], Y_n=[1, 2, 3], Z_n=[-4, -5, -6]
         ).to_SplineXYZ(grid=LinearGrid(N=50)),
@@ -168,10 +182,20 @@ def test_compute_everything():
             r_n=[1, 2, 3],
             modes=[0, 1, 2],
         ),
+        "desc.coils.FourierXYCoil": FourierXYCoil(
+            current=5,
+            center=[10, 1, 3],
+            normal=[1, 2, 3],
+            X_n=[0, 1, 0.8],
+            Y_n=[-1, 2, 0.0],
+            modes=[-1, 0, 1],
+        ),
         "desc.coils.SplineXYZCoil": SplineXYZCoil(
             current=5, X=[5, 10, 2, 5], Y=[1, 2, 3, 1], Z=[-4, -5, -6, -4]
         ),
     }
+    print(things.keys())
+    print(data_index.keys())
     assert things.keys() == data_index.keys(), (
         f"Missing the parameterization {data_index.keys() - things.keys()}"
         f" to test against master."
@@ -200,6 +224,7 @@ def test_compute_everything():
         "desc.geometry.curve.FourierXYZCurve": {"grid": curvegrid1},
         "desc.geometry.curve.FourierRZCurve": {"grid": curvegrid2},
         "desc.geometry.curve.FourierPlanarCurve": {"grid": curvegrid1},
+        "desc.geometry.curve.FourierXYCurve": {"grid": curvegrid1},
         "desc.geometry.curve.SplineXYZCurve": {"grid": curvegrid1},
         "desc.magnetic_fields._core.OmnigenousField": {"grid": fieldgrid},
     }

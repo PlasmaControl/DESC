@@ -486,8 +486,10 @@ def _old_Gamma_d_Velasco(params, transforms, profiles, data, **kwargs):
             ["cvdrift0", "gbdrift"],
             points,
         )
-        # This is γ_c π/2.
-        gamma_c = jnp.arctan(safediv(radial_drift, poloidal_drift)).sum(axis=-1)
+        # This is γ_c.
+        gamma_c = (
+            2 / jnp.pi * jnp.arctan(safediv(radial_drift, poloidal_drift)).sum(axis=-1)
+        )
         v_tau = v_tau.sum(axis=-1)
 
         # Shape of gamma_d (alpha, rho, lambda, wells)
@@ -499,8 +501,8 @@ def _old_Gamma_d_Velasco(params, transforms, profiles, data, **kwargs):
         broadcast_indices = jnp.expand_dims(max_indices, axis=-2)
         gamma_c_max = jnp.take_along_axis(gamma_c, broadcast_indices, axis=-2)
         gamma_c_1 = jnp.heaviside(gamma_c_max - gammac_thresh, axis=-1)
-        v_tau_max = jnp.take_along_axis(v_tau, broadcast_indices, axis=-2)
-        gamma_c_1 = gamma_c_1 / v_tau_max
+        v_tau = v_tau.mean(axis=-2)
+        gamma_c_1 = gamma_c_1 / v_tau
 
         return jnp.sum(
             gamma_c_1 * data["pitch_inv weight"] / data["pitch_inv"] ** 2,

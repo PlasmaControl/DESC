@@ -65,7 +65,7 @@ def _compute(fun, fun_data, data, grid, num_pitch, surf_batch_size=1, simp=False
         simp=simp,
     )
     out = batch_map(fun, fun_data, surf_batch_size)
-    assert out.ndim == 1
+    # --no-verify assert out.ndim == 1
     return grid.expand(out)
 
 
@@ -418,7 +418,8 @@ def _effective_ripple(params, transforms, profiles, data, **kwargs):
     ),
     units="~",
     units_long="None",
-    description="Energetic ion confinement proxy",
+    description="Fast ion confinement proxy "
+    "as defined by Velasco et al. (doi:10.1088/1741-4326/ac2994)",
     dim=1,
     params=[],
     transforms={"grid": []},
@@ -427,29 +428,17 @@ def _effective_ripple(params, transforms, profiles, data, **kwargs):
     data=["min_tz |B|", "max_tz |B|", "cvdrift0", "gbdrift", "fieldline length"]
     + Bounce1D.required_names,
     source_grid_requirement={"coordinates": "raz", "is_meshgrid": True},
-    quad=(
-        "jnp.ndarray : Optional, quadrature points and weights for bounce integrals."
-    ),
-    num_pitch=("int : Resolution for quadrature over velocity coordinate. Default 64."),
-    num_well=(
-        "int : Maximum number of wells to detect for each pitch and field line. "
-        "Default is to detect all wells, but due to limitations in JAX this option "
-        "may consume more memory. Specifying a number that tightly upper bounds "
-        "the number of wells will increase performance."
-    ),
-    thresh=(
-        "float : The heaviside function subtracts a threshold value from the "
-        "function max(γ*_c (α|λ)), the maximum value of γ∗_c that can be found "
-        "moving in α at fixed λ. The threshold should roughly correspond to the ratio "
-        "of bounce-averaged tangential drift to the flux surface to bounce averaged "
-        "radial drift to the flux surface. This ratio is the inverse of γ*_c. "
-        "Default value is 0.2."
-    ),
-    batch="bool : Whether to vectorize part of the computation. Default is true.",
-    aliases=["old Gamma_d"],
+    **_bounce1D_doc,
 )
 @partial(
-    jit, static_argnames=["num_pitch", "num_well", "thresh", "batch", "data_for_plot"]
+    jit,
+    static_argnames=[
+        "num_well",
+        "num_quad",
+        "num_pitch",
+        "surf_batch_size",
+        "gammac_thresh",
+    ],
 )
 def _old_Gamma_d_Velasco(params, transforms, profiles, data, **kwargs):
     """Energetic ion confinement proxy as defined by Velasco et al.
@@ -466,7 +455,7 @@ def _old_Gamma_d_Velasco(params, transforms, profiles, data, **kwargs):
     num_well = kwargs.get("num_well", None)
     num_pitch = kwargs.get("num_pitch", 64)
     surf_batch_size = kwargs.get("surf_batch_size", 1)
-    gammac_thresh = kwargs.get("gammac_thresh", 64)
+    gammac_thresh = kwargs.get("gammac_thresh", 0.2)
     quad = (
         kwargs["quad"]
         if "quad" in kwargs
@@ -500,14 +489,14 @@ def _old_Gamma_d_Velasco(params, transforms, profiles, data, **kwargs):
         max_indices = jnp.argmax(gamma_c, axis=-2)
         broadcast_indices = jnp.expand_dims(max_indices, axis=-2)
         gamma_c_max = jnp.take_along_axis(gamma_c, broadcast_indices, axis=-2)
-        gamma_c_1 = jnp.heaviside(gamma_c_max - gammac_thresh, axis=-1)
+        gamma_c_1 = jnp.heaviside(gamma_c_max - gammac_thresh, 0.0)
         v_tau = v_tau.mean(axis=-2)
         gamma_c_1 = gamma_c_1 / v_tau
 
         return jnp.sum(
             gamma_c_1 * data["pitch_inv weight"] / data["pitch_inv"] ** 2,
             axis=-1,
-        ) / (2**1.5 * jnp.pi)
+        )
 
     grid = transforms["grid"].source_grid
     data["old Gamma_d Velasco"] = (

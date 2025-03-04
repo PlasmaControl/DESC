@@ -1277,6 +1277,10 @@ class QuadraticFlux(_Objective):
     vacuum : bool
         If true, B_plasma (the contribution to the normal field on the boundary from the
         plasma currents) is set to zero.
+    bs_chunk_size : int or None
+        Size to split Biot-Savart computation into chunks of evaluation points.
+        If no chunking should be done or the chunk size is the full input
+        then supply ``None``.
 
     """
 
@@ -1307,6 +1311,9 @@ class QuadraticFlux(_Objective):
         name="Quadratic flux",
         jac_chunk_size=None,
         device_id=0,
+        *,
+        bs_chunk_size=None,
+        **kwargs,
     ):
         from desc.geometry import FourierRZToroidalSurface
 
@@ -1318,6 +1325,7 @@ class QuadraticFlux(_Objective):
         self._field = field
         self._field_grid = field_grid
         self._vacuum = vacuum
+        self._bs_chunk_size = bs_chunk_size
         errorif(
             isinstance(eq, FourierRZToroidalSurface),
             TypeError,
@@ -1445,6 +1453,7 @@ class QuadraticFlux(_Objective):
             source_grid=constants["field_grid"],
             basis="rpz",
             params=field_params,
+            chunk_size=self._bs_chunk_size,
         )
         B_ext = jnp.sum(B_ext * eval_data["n_rho"], axis=-1)
         f = (B_ext + B_plasma) * jnp.sqrt(eval_data["|e_theta x e_zeta|"])
@@ -1483,6 +1492,10 @@ class SurfaceQuadraticFlux(_Objective):
         the docs of that object's ``compute_magnetic_field`` method for more detail.
     field_fixed : bool
         Whether or not to fix the magnetic field's DOFs during the optimization.
+    bs_chunk_size : int or None
+        Size to split Biot-Savart computation into chunks of evaluation points.
+        If no chunking should be done or the chunk size is the full input
+        then supply ``None``.
 
     """
 
@@ -1512,6 +1525,9 @@ class SurfaceQuadraticFlux(_Objective):
         field_fixed=False,
         jac_chunk_size=None,
         device_id=0,
+        *,
+        bs_chunk_size=None,
+        **kwargs,
     ):
         if target is None and bounds is None:
             target = 0
@@ -1520,6 +1536,7 @@ class SurfaceQuadraticFlux(_Objective):
         self._field = field
         self._field_grid = field_grid
         self._field_fixed = field_fixed
+        self._bs_chunk_size = bs_chunk_size
 
         things = [surface]
         if not field_fixed:
@@ -1643,6 +1660,7 @@ class SurfaceQuadraticFlux(_Objective):
             source_grid=constants["field_grid"],
             basis="rpz",
             params=field_params,
+            chunk_size=self._bs_chunk_size,
         )
         B_ext = jnp.sum(B_ext * eval_data["n_rho"], axis=-1)
         f = B_ext * jnp.sqrt(eval_data["|e_theta x e_zeta|"])
@@ -1682,10 +1700,14 @@ class ToroidalFlux(_Objective):
         plasma geometry at. Defaults to a LinearGrid(L=eq.L_grid, M=eq.M_grid,
         zeta=jnp.array(0.0), NFP=eq.NFP).
     field_fixed : bool
-        Whether or not to fix the field's DOFs during the optimization.
+        Whether to fix the field's DOFs during the optimization.
     eq_fixed : bool
-        Whether or not to fix the equilibrium (or QFM surface) DOFs
+        Whether to fix the equilibrium (or QFM surface) DOFs
         during the optimization.
+    bs_chunk_size : int or None
+        Size to split Biot-Savart computation into chunks of evaluation points.
+        If no chunking should be done or the chunk size is the full input
+        then supply ``None``.
 
     """
 
@@ -1723,6 +1745,9 @@ class ToroidalFlux(_Objective):
         eq_fixed=False,
         jac_chunk_size=None,
         device_id=0,
+        *,
+        bs_chunk_size=None,
+        **kwargs,
     ):
         if target is None and bounds is None:
             target = 1.0 if not hasattr(eq, "Psi") else eq.Psi
@@ -1732,6 +1757,7 @@ class ToroidalFlux(_Objective):
         self._eq = eq
         self._field_fixed = field_fixed
         self._eq_fixed = eq_fixed
+        self._bs_chunk_size = bs_chunk_size
         errorif(
             eq_fixed and field_fixed,
             ValueError,
@@ -1772,7 +1798,9 @@ class ToroidalFlux(_Objective):
         eq = self._eq
         self._use_vector_potential = True
         try:
-            self._field.compute_magnetic_vector_potential([0, 0, 0])
+            self._field.compute_magnetic_vector_potential(
+                [0, 0, 0], chunk_size=self._bs_chunk_size
+            )
         except (NotImplementedError, ValueError) as e:
             self._use_vector_potential = False
             errorif(
@@ -1907,6 +1935,7 @@ class ToroidalFlux(_Objective):
                 basis="rpz",
                 source_grid=constants["field_grid"],
                 params=field_params,
+                chunk_size=self._bs_chunk_size,
             )
 
             A_dot_e_theta = jnp.sum(A * data["e_theta"], axis=1)
@@ -1917,6 +1946,7 @@ class ToroidalFlux(_Objective):
                 basis="rpz",
                 source_grid=constants["field_grid"],
                 params=field_params,
+                chunk_size=self._bs_chunk_size,
             )
 
             B_dot_n_zeta = jnp.sum(B * data["n_zeta"], axis=1)
@@ -2403,12 +2433,7 @@ class SurfaceCurrentRegularization(_Objective):
                 )
             else:  # it does not have I,G bc is CurrentPotentialField
                 Phi = surface_current_field.compute("Phi", grid=source_grid)["Phi"]
-                self._normalization = np.max(
-                    [
-                        np.mean(np.abs(Phi)),
-                        1,
-                    ]
-                )
+                self._normalization = np.max([np.mean(np.abs(Phi)), 1])
 
         self._constants = {
             "surface_transforms": surface_transforms,

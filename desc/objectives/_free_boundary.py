@@ -19,7 +19,7 @@ from desc.utils import (
     warnif,
 )
 
-from ..integrals.singularities import _get_default_params
+from ..integrals.singularities import best_params, best_ratio
 from .normalization import compute_scaling_factors
 
 
@@ -52,6 +52,10 @@ class VacuumBoundaryError(_Objective):
     field_fixed : bool
         Whether to assume the field is fixed. For free boundary solve, should
         be fixed. For single stage optimization, should be False (default).
+    bs_chunk_size : int or None
+        Size to split Biot-Savart computation into chunks of evaluation points.
+        If no chunking should be done or the chunk size is the full input
+        then supply ``None``.
 
     """
 
@@ -82,6 +86,8 @@ class VacuumBoundaryError(_Objective):
         name="Vacuum boundary error",
         jac_chunk_size=None,
         device_id=0,
+        *,
+        bs_chunk_size=None,
         **kwargs,
     ):
         eval_grid = parse_argname_change(eval_grid, kwargs, "grid", "eval_grid")
@@ -92,12 +98,9 @@ class VacuumBoundaryError(_Objective):
         self._field = field
         self._field_grid = field_grid
         self._field_fixed = field_fixed
-        if field_fixed:
-            things = [eq]
-        else:
-            things = [eq, field]
+        self._bs_chunk_size = bs_chunk_size
         super().__init__(
-            things=things,
+            things=[eq] if field_fixed else [eq, field],
             target=target,
             bounds=bounds,
             weight=weight,
@@ -223,7 +226,11 @@ class VacuumBoundaryError(_Objective):
         # can always pass in field params. If they're None, it just uses the
         # defaults for the given field.
         Bext = constants["field"].compute_magnetic_field(
-            x, source_grid=self._field_grid, basis="rpz", params=field_params
+            x,
+            source_grid=self._field_grid,
+            basis="rpz",
+            params=field_params,
+            chunk_size=self._bs_chunk_size,
         )
         Bex_total = Bext
         Bin_total = data["B"]
@@ -356,10 +363,14 @@ class BoundaryError(_Objective):
         Equilibrium that will be optimized to satisfy the Objective.
     field : MagneticField
         External field produced by coils.
-    s : int
+    s : int or tuple[int]
         Hyperparameter for the singular integration scheme.
         ``s`` is roughly equal to the size of the local singular grid with
-        respect to the global grid.
+        respect to the global grid. More precisely the local singular grid
+        is an ``st`` × ``sz`` subset of the full domain (θ,ζ) ∈ [0, 2π)² of
+        ``source_grid``. That is a subset of
+        ``source_grid.num_theta`` × ``source_grid.num_zeta*source_grid.NFP``.
+        If given an integer then ``st=s``, ``sz=s``, otherwise ``st=s[0]``, ``sz=s[1]``.
     q : int
         Order of integration on the local singular grid.
     source_grid, eval_grid : Grid, optional
@@ -373,9 +384,13 @@ class BoundaryError(_Objective):
         Whether to assume the field is fixed. For free boundary solve, should
         be fixed. For single stage optimization, should be False (default).
     chunk_size : int or None
-        Size to split computation into chunks.
+        Size to split singular integral computation into chunks.
         If no chunking should be done or the chunk size is the full input
         then supply ``None``. Default is ``1``.
+    bs_chunk_size : int or None
+        Size to split Biot-Savart computation into chunks of evaluation points.
+        If no chunking should be done or the chunk size is the full input
+        then supply ``None``.
 
     """
 
@@ -428,15 +443,15 @@ class BoundaryError(_Objective):
         name="Boundary error",
         jac_chunk_size=None,
         device_id=0,
+        *,
+        bs_chunk_size=None,
         **kwargs,
     ):
         if target is None and bounds is None:
             target = 0
         self._source_grid = source_grid
         self._eval_grid = eval_grid
-        self._eval_grid_is_source_grid = source_grid == eval_grid
-        self._st = s
-        self._sz = kwargs.get("sz", s)
+        self._st, self._sz = s if isinstance(s, (tuple, list)) else (s, s)
         self._q = q
         self._field = field
         self._field_grid = field_grid
@@ -445,6 +460,7 @@ class BoundaryError(_Objective):
         )
         if self._chunk_size == 0:
             self._chunk_size = None
+        self._bs_chunk_size = bs_chunk_size
         self._sheet_current = hasattr(eq.surface, "Phi_mn")
         if field_fixed:
             things = [eq]
@@ -496,7 +512,7 @@ class BoundaryError(_Objective):
         else:
             eval_grid = self._eval_grid
 
-        self._eval_grid_is_source_grid = eval_grid.equiv(source_grid)
+        self._use_same_grid = eval_grid.equiv(source_grid)
 
         errorif(
             not np.all(source_grid.nodes[:, 0] == 1.0),
@@ -513,10 +529,15 @@ class BoundaryError(_Objective):
             ValueError,
             "Source grids for singular integrals must be non-symmetric",
         )
-        st, sz, q = _get_default_params(source_grid)
-        self._st = setdefault(self._st, st)
-        self._sz = setdefault(self._sz, sz)
-        self._q = setdefault(self._q, q)
+
+        if self._st is None or self._sz is None or self._q is None:
+            ratio_data = eq.compute(
+                ["|e_theta x e_zeta|", "e_theta", "e_zeta"], grid=source_grid
+            )
+            st, sz, q = best_params(source_grid, best_ratio(ratio_data))
+            self._st = setdefault(self._st, st)
+            self._sz = setdefault(self._sz, sz)
+            self._q = setdefault(self._q, q)
 
         try:
             interpolator = FFTInterpolator(
@@ -560,7 +581,7 @@ class BoundaryError(_Objective):
 
         source_profiles = get_profiles(self._eq_data_keys, obj=eq, grid=source_grid)
         source_transforms = get_transforms(self._eq_data_keys, obj=eq, grid=source_grid)
-        if self._eval_grid_is_source_grid:
+        if self._use_same_grid:
             eval_profiles = source_profiles
             eval_transforms = source_transforms
         else:
@@ -586,7 +607,7 @@ class BoundaryError(_Objective):
             )
             self._constants["sheet_eval_transforms"] = (
                 self._constants["sheet_source_transforms"]
-                if self._eval_grid_is_source_grid
+                if self._use_same_grid
                 else get_transforms(
                     self._sheet_data_keys, obj=eq.surface, grid=eval_grid
                 )
@@ -647,7 +668,7 @@ class BoundaryError(_Objective):
         )
         eval_data = (
             source_data
-            if self._eval_grid_is_source_grid
+            if self._use_same_grid
             else compute_fun(
                 "desc.equilibrium.equilibrium.Equilibrium",
                 self._eq_data_keys,
@@ -674,7 +695,7 @@ class BoundaryError(_Objective):
             )
             sheet_eval_data = (
                 sheet_source_data
-                if self._eval_grid_is_source_grid
+                if self._use_same_grid
                 else compute_fun(
                     p,
                     self._sheet_data_keys,
@@ -697,7 +718,11 @@ class BoundaryError(_Objective):
         # can always pass in field params. If they're None, it just uses the
         # defaults for the given field.
         Bext = constants["field"].compute_magnetic_field(
-            x, source_grid=self._field_grid, basis="rpz", params=field_params
+            x,
+            source_grid=self._field_grid,
+            basis="rpz",
+            params=field_params,
+            chunk_size=self._bs_chunk_size,
         )
         Bex_total = Bext + Bplasma
         Bin_total = eval_data["B"]

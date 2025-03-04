@@ -46,8 +46,6 @@ jobs:
             has_changes:
               - 'desc/**'
               - 'tests/benchmarks/**'
-              - 'requirements.txt'
-              - 'devtools/dev-requirements.txt'
               - 'setup.cfg'
               - '.github/workflows/benchmark.yml'
 

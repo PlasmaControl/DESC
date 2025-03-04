@@ -22,9 +22,10 @@ _bounce_overwrite = {
         output of the objective. Has no effect on ``self.grad`` or ``self.hess`` which
         always use reverse mode and forward over reverse mode respectively.
 
-        Unless ``fwd`` is specified, then ``jac_chunk_size=1`` is chosen by default. In
-        ``rev`` mode, reducing the pitch angle parameter ``pitch_batch_size`` does not
-        reduce memory consumption, so it is recommended to retain the default for that.
+        Unless ``fwd`` is specified, ``jac_chunk_size=1`` is recommended to reduce
+        memory consumption. In ``rev`` mode, reducing the pitch angle parameter
+        ``pitch_batch_size`` does not reduce memory consumption, so it is recommended
+        to retain the default for that.
         """
 }
 
@@ -177,10 +178,6 @@ class EffectiveRipple(_Objective):
             "pitch_batch_size": pitch_batch_size,
             "surf_batch_size": surf_batch_size,
         }
-        if deriv_mode != "fwd" and jac_chunk_size is None:
-            # Reverse mode is bottlenecked by coordinate mapping.
-            # Compute Jacobian one flux surface at a time.
-            jac_chunk_size = 1
 
         super().__init__(
             things=eq,

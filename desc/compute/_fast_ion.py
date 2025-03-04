@@ -693,7 +693,6 @@ def _Gamma_a_Velasco(params, transforms, profiles, data, **kwargs):
         "pitch_batch_size",
         "surf_batch_size",
         "spline",
-        "gammac_thresh",
     ],
 )
 def _Gamma_d_Velasco(params, transforms, profiles, data, **kwargs):
@@ -715,7 +714,6 @@ def _Gamma_d_Velasco(params, transforms, profiles, data, **kwargs):
     theta = kwargs["theta"]
     Y_B = kwargs.get("Y_B", theta.shape[-1] * 2)
     alpha = kwargs.get("alpha", jnp.array([0.0]))
-    gammac_thresh = kwargs.get("gammac_thresh", 0.2)
     num_transit = kwargs.get("num_transit", 20)
     num_pitch = kwargs.get("num_pitch", 64)
     num_well = kwargs.get("num_well", Y_B * num_transit)
@@ -761,31 +759,30 @@ def _Gamma_d_Velasco(params, transforms, profiles, data, **kwargs):
             )
 
             gamma_c = jnp.arctan(safediv(radial_drift, poloidal_drift))
-            gamma_c = jnp.sum(gamma_c, axis=-1)  # summing over all the wells
+            gamma_c = (
+                2 / jnp.pi * jnp.sum(gamma_c, axis=-1)
+            )  # summing over all the wells
 
             # First, find the maximum along the alpha axis
             # Then determine if greater than threshold using heaviside function
-            # Then divide by 1/sqrt(1 - lambda B) factor
+            # Then divide by sqrt(1 - lambda B) factor
             max_indices = jnp.argmax(gamma_c, axis=-2)
             broadcast_indices = jnp.expand_dims(max_indices, axis=-2)
             gamma_c_max = jnp.take_along_axis(gamma_c, broadcast_indices, axis=-2)
-            v_tau_max = jnp.take_along_axis(
-                v_tau.sum(axis=-1), broadcast_indices, axis=-2
-            )
-            out = jnp.heaviside(gamma_c_max - gammac_thresh, 0) / v_tau_max
+
+            # v_tau shouldn't change too much across field lines
+            v_tau = jnp.sum(v_tau, axis=-1).mean(axis=-2)
+
+            out = jnp.heaviside(gamma_c_max - 0.2, 0) / v_tau
 
             return out
 
-        return (
-            (4 / jnp.pi**2)
-            * jnp.sum(
-                batch_map(fun, data["pitch_inv"], pitch_batch_size)
-                * data["pitch_inv weight"]
-                / data["pitch_inv"] ** 2,
-                axis=-1,
-            )
-            / bounce.compute_fieldline_length(fl_quad)
-        )
+        return jnp.sum(
+            batch_map(fun, data["pitch_inv"], pitch_batch_size)
+            * data["pitch_inv weight"]
+            / data["pitch_inv"] ** 2,
+            axis=-1,
+        ) / bounce.compute_fieldline_length(fl_quad)
 
     grid = transforms["grid"]
     data["Gamma_d Velasco"] = _compute(

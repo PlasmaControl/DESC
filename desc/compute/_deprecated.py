@@ -381,3 +381,29 @@ def _Gamma_c_Velasco_1D(params, transforms, profiles, data, **kwargs):
         / data["fieldline length"]
     )
     return data
+
+
+@register_compute_fun(
+    name="effective ripple",
+    label="\\epsilon_{\\mathrm{eff}}",
+    units="~",
+    units_long="None",
+    description="Neoclassical transport in the banana regime",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="r",
+    data=["effective ripple 3/2"],
+)
+def _effective_ripple(params, transforms, profiles, data, **kwargs):
+    """Proxy for neoclassical transport in the banana regime.
+
+    A 3D stellarator magnetic field admits ripple wells that lead to enhanced
+    radial drift of trapped particles. In the banana regime, neoclassical (thermal)
+    transport from ripple wells can become the dominant transport channel.
+    The effective ripple (ε) proxy estimates the neoclassical transport
+    coefficients in the banana regime.
+    """
+    data["effective ripple"] = data["effective ripple 3/2"] ** (2 / 3)
+    return data

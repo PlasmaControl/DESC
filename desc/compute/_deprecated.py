@@ -407,3 +407,116 @@ def _effective_ripple(params, transforms, profiles, data, **kwargs):
     """
     data["effective ripple"] = data["effective ripple 3/2"] ** (2 / 3)
     return data
+
+
+@register_compute_fun(
+    name="old Gamma_d Velasco",
+    label=(
+        # Γ_c = π/(8√2) ∫dλ 〈 ∑ⱼ [v τ γ_c²]ⱼ 〉
+        "\\Gamma_d = \\frac{\\pi}{8 \\sqrt{2}} "
+        "\\int d\\lambda \\langle \\sum_j (v \\tau \\gamma_c^2)_j \\rangle"
+    ),
+    units="~",
+    units_long="None",
+    description="Energetic ion confinement proxy",
+    dim=1,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="r",
+    data=["min_tz |B|", "max_tz |B|", "cvdrift0", "gbdrift", "fieldline length"]
+    + Bounce1D.required_names,
+    source_grid_requirement={"coordinates": "raz", "is_meshgrid": True},
+    quad=(
+        "jnp.ndarray : Optional, quadrature points and weights for bounce integrals."
+    ),
+    num_pitch=("int : Resolution for quadrature over velocity coordinate. Default 64."),
+    num_well=(
+        "int : Maximum number of wells to detect for each pitch and field line. "
+        "Default is to detect all wells, but due to limitations in JAX this option "
+        "may consume more memory. Specifying a number that tightly upper bounds "
+        "the number of wells will increase performance."
+    ),
+    thresh=(
+        "float : The heaviside function subtracts a threshold value from the "
+        "function max(γ*_c (α|λ)), the maximum value of γ∗_c that can be found "
+        "moving in α at fixed λ. The threshold should roughly correspond to the ratio "
+        "of bounce-averaged tangential drift to the flux surface to bounce averaged "
+        "radial drift to the flux surface. This ratio is the inverse of γ*_c. "
+        "Default value is 0.2."
+    ),
+    batch="bool : Whether to vectorize part of the computation. Default is true.",
+    aliases=["old Gamma_d"],
+)
+@partial(
+    jit, static_argnames=["num_pitch", "num_well", "thresh", "batch", "data_for_plot"]
+)
+def _old_Gamma_d_Velasco(params, transforms, profiles, data, **kwargs):
+    """Energetic ion confinement proxy as defined by Velasco et al.
+
+    A model for the fast evaluation of prompt losses of energetic ions in stellarators.
+    J.L. Velasco et al. 2021 Nucl. Fusion 61 116059.
+    https://doi.org/10.1088/1741-4326/ac2994.
+    Equation 22.
+
+    Gamma_d incorporates a step function on the Gamma_c proxy to detect whether
+    a superbanana exists or not for that value of λ.
+    """
+    # noqa: unused dependency
+    num_well = kwargs.get("num_well", None)
+    num_pitch = kwargs.get("num_pitch", 64)
+    surf_batch_size = kwargs.get("surf_batch_size", 1)
+    gammac_thresh = kwargs.get("gammac_thresh", 64)
+    quad = (
+        kwargs["quad"]
+        if "quad" in kwargs
+        else get_quadrature(
+            leggauss(kwargs.get("num_quad", 32)),
+            (automorphism_sin, grad_automorphism_sin),
+        )
+    )
+
+    def Gamma_d(data):
+        bounce = Bounce1D(grid, data, quad, is_reshaped=True)
+        points = bounce.points(data["pitch_inv"], num_well)
+        v_tau, radial_drift, poloidal_drift = bounce.integrate(
+            [_v_tau, _radial_drift, _poloidal_drift],
+            data["pitch_inv"],
+            data,
+            ["cvdrift0", "gbdrift"],
+            points,
+        )
+        # This is γ_c π/2.
+        gamma_c = jnp.arctan(safediv(radial_drift, poloidal_drift)).sum(axis=-1)
+        v_tau = v_tau.sum(axis=-1)
+
+        # Shape of gamma_d (alpha, rho, lambda, wells)
+        # Summing over all the wells (the inner most sum),
+        # finding the maximum over all alphas.
+        # filtering out values above threshold in lambda.
+        # After these operations, array should be of the type (rho, 1, lambda)
+        max_indices = jnp.argmax(gamma_c, axis=-2)
+        broadcast_indices = jnp.expand_dims(max_indices, axis=-2)
+        gamma_c_max = jnp.take_along_axis(gamma_c, broadcast_indices, axis=-2)
+        gamma_c_1 = jnp.heaviside(gamma_c_max - gammac_thresh, axis=-1)
+        v_tau_max = jnp.take_along_axis(v_tau, broadcast_indices, axis=-2)
+        gamma_c_1 = gamma_c_1 / v_tau_max
+
+        return jnp.sum(
+            gamma_c_1 * data["pitch_inv weight"] / data["pitch_inv"] ** 2,
+            axis=-1,
+        ) / (2**1.5 * jnp.pi)
+
+    grid = transforms["grid"].source_grid
+    data["old Gamma_d Velasco"] = (
+        _compute(
+            Gamma_d,
+            {"cvdrift0": data["cvdrift0"], "gbdrift": data["gbdrift"]},
+            data,
+            grid,
+            num_pitch,
+            surf_batch_size,
+        )
+        / data["fieldline length"]
+    )
+    return data

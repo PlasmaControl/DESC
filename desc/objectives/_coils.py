@@ -11,7 +11,7 @@ from desc.compute.geom_utils import copy_rpz_periods
 from desc.compute.utils import _compute as compute_fun
 from desc.grid import LinearGrid, _Grid
 from desc.integrals import compute_B_plasma
-from desc.utils import Timer, broadcast_tree, errorif, safenorm, warnif
+from desc.utils import Timer, broadcast_tree, errorif, safenorm, setdefault, warnif
 
 from .normalization import compute_scaling_factors
 from .objective_funs import _Objective, collect_docs
@@ -1263,6 +1263,10 @@ class QuadraticFlux(_Objective):
         Size to split Biot-Savart computation into chunks of evaluation points.
         If no chunking should be done or the chunk size is the full input
         then supply ``None``.
+    B_plasma_chunk_size : int or None
+        Size to split singular integral computation for B_plasma into chunks.
+        If no chunking should be done or the chunk size is the full input
+        then supply ``None``. Default is ``bs_chunk_size``.
 
     """
 
@@ -1294,6 +1298,7 @@ class QuadraticFlux(_Objective):
         jac_chunk_size=None,
         *,
         bs_chunk_size=None,
+        B_plasma_chunk_size=None,
         **kwargs,
     ):
         from desc.geometry import FourierRZToroidalSurface
@@ -1307,6 +1312,7 @@ class QuadraticFlux(_Objective):
         self._field_grid = field_grid
         self._vacuum = vacuum
         self._bs_chunk_size = bs_chunk_size
+        self._B_plasma_chunk_size = setdefault(B_plasma_chunk_size, bs_chunk_size)
         errorif(
             isinstance(eq, FourierRZToroidalSurface),
             TypeError,
@@ -1374,12 +1380,17 @@ class QuadraticFlux(_Objective):
         )
 
         # pre-compute B_plasma because we are assuming eq is fixed
-        if self._vacuum:
-            Bplasma = jnp.zeros(eval_grid.num_nodes)
-        else:
-            Bplasma = compute_B_plasma(
-                eq, eval_grid, self._source_grid, normal_only=True
+        Bplasma = (
+            jnp.zeros(eval_grid.num_nodes)
+            if self._vacuum
+            else compute_B_plasma(
+                eq,
+                eval_grid,
+                self._source_grid,
+                normal_only=True,
+                chunk_size=self._B_plasma_chunk_size,
             )
+        )
 
         self._constants = {
             "field": self._field,

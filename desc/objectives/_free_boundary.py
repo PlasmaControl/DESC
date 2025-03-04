@@ -381,14 +381,14 @@ class BoundaryError(_Objective):
     field_fixed : bool
         Whether to assume the field is fixed. For free boundary solve, should
         be fixed. For single stage optimization, should be False (default).
-    chunk_size : int or None
-        Size to split singular integral computation into chunks.
-        If no chunking should be done or the chunk size is the full input
-        then supply ``None``. Default is ``1``.
     bs_chunk_size : int or None
         Size to split Biot-Savart computation into chunks of evaluation points.
         If no chunking should be done or the chunk size is the full input
         then supply ``None``.
+    B_plasma_chunk_size : int or None
+        Size to split singular integral computation into chunks.
+        If no chunking should be done or the chunk size is the full input
+        then supply ``None``. Default is ``bs_chunk_size``.
 
     """
 
@@ -437,11 +437,11 @@ class BoundaryError(_Objective):
         eval_grid=None,
         field_grid=None,
         field_fixed=False,
-        chunk_size=1,
         name="Boundary error",
         jac_chunk_size=None,
         *,
         bs_chunk_size=None,
+        B_plasma_chunk_size=None,
         **kwargs,
     ):
         if target is None and bounds is None:
@@ -452,12 +452,13 @@ class BoundaryError(_Objective):
         self._q = q
         self._field = field
         self._field_grid = field_grid
-        self._chunk_size = parse_argname_change(
-            chunk_size, kwargs, "loop", "chunk_size"
-        )
-        if self._chunk_size == 0:
-            self._chunk_size = None
         self._bs_chunk_size = bs_chunk_size
+        B_plasma_chunk_size = parse_argname_change(
+            B_plasma_chunk_size, kwargs, "loop", "B_plasma_chunk_size"
+        )
+        if B_plasma_chunk_size == 0:
+            B_plasma_chunk_size = None
+        self._B_plasma_chunk_size = B_plasma_chunk_size
         self._sheet_current = hasattr(eq.surface, "Phi_mn")
         if field_fixed:
             things = [eq]
@@ -706,7 +707,7 @@ class BoundaryError(_Objective):
             eval_data,
             source_data,
             constants["interpolator"],
-            chunk_size=self._chunk_size,
+            chunk_size=self._B_plasma_chunk_size,
         )
         # need extra factor of B/2 bc we're evaluating on plasma surface
         Bplasma = Bplasma + eval_data["B"] / 2

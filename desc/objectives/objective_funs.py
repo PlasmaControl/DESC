@@ -106,6 +106,10 @@ docs = {
 }
 
 
+# Note: If we ever switch to Python 3.13 for building the docs, there will probably
+# be some errors since 3.13 changed how tabs are handled in docstrings. This can be
+# resolved by deleting the tabs in the collected docstring above and the ones
+# that are defined in objectives. Check `test_objective_docstring`.
 def collect_docs(
     overwrite=None,
     target_default="",

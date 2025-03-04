@@ -25,7 +25,7 @@ for root1, dirs1, files1 in os.walk(cwd):
             files2walk = (
                 os.walk(cwd + "/" + dir_name)
                 if dir_name == "compare_results"
-                else os.walk(cwd + "/" + dir_name + "/Linux-CPython-3.9-64bit")
+                else os.walk(cwd + "/" + dir_name + "/Linux-CPython-3.12-64bit")
             )
             for root, dirs, files in files2walk:
                 for filename in files:

@@ -1,6 +1,6 @@
 """Utilities for getting standard groups of objectives and constraints."""
 
-from desc.utils import flatten_list, get_all_instances, isposint, unique_list
+from desc.utils import errorif, flatten_list, get_all_instances, isposint, unique_list
 
 from ._equilibrium import Energy, ForceBalance, HelicalForceBalance, RadialForceBalance
 from .linear_objectives import (
@@ -29,7 +29,11 @@ from .linear_objectives import (
     FixPsi,
     FixSheetCurrent,
 )
-from .nae_utils import calc_zeroth_order_lambda, make_RZ_cons_1st_order
+from .nae_utils import (
+    calc_zeroth_order_lambda,
+    make_RZ_cons_1st_order,
+    make_RZ_cons_2nd_order,
+)
 from .objective_funs import ObjectiveFunction
 
 _PROFILE_CONSTRAINTS = {
@@ -189,6 +193,15 @@ def get_NAE_constraints(
         A list of the linear constraints used in fixed-axis problems.
 
     """
+    if qsc_eq is not None:
+        errorif(
+            qsc_eq.lasym and fix_lambda is not False,
+            NotImplementedError,
+            "NAE Constrained equilibria with lambda constrained "
+            " do not yet work correctly with asymmetric equilibria, "
+            " as the NAE-prescribed lambda may not have the correct "
+            " gauge that DESC enforces (zero flux-surface average).",
+        )
     kwargs = {"eq": desc_eq, "normalize": normalize, "normalize_target": normalize}
     if not isinstance(fix_lambda, bool):
         fix_lambda = int(fix_lambda)
@@ -266,6 +279,7 @@ def _get_NAE_constraints(
         Whether to constrain lambda to match that of the NAE near-axis
         if an `int`, fixes lambda up to that order in rho {0,1}
         if `True`, fixes lambda up to the specified order given by `order`
+        (maximum of `order=1`)
     normalize : bool
         Whether to apply constraints in normalized units.
 
@@ -298,10 +312,19 @@ def _get_NAE_constraints(
 
     if order >= 1:  # first order constraints
         constraints += make_RZ_cons_1st_order(
-            qsc=qsc_eq, desc_eq=desc_eq, N=N, fix_lambda=fix_lambda and fix_lambda > 0
+            qsc=qsc_eq,
+            desc_eq=desc_eq,
+            N=N,
+            fix_lambda=fix_lambda and fix_lambda > 0,
         )
-    if order >= 2:  # 2nd order constraints
-        raise NotImplementedError("NAE constraints only implemented up to O(rho) ")
+    if order == 2:  # 2nd order constraints
+        constraints += make_RZ_cons_2nd_order(
+            qsc=qsc_eq,
+            desc_eq=desc_eq,
+            N=N,
+        )
+    if order > 2:
+        raise NotImplementedError("NAE constraints only implemented up to O(rho^2) ")
 
     return constraints
 

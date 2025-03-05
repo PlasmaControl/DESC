@@ -708,8 +708,29 @@ class VMECIO:
         jdotb = file.createVariable("jdotb", np.float64, ("radius",))
         jdotb.long_name = "flux surface average of J*B, on full mesh"
         jdotb.units = "N/m^3"
-        jdotb[:] = grid_full.compress(data_full["<J*B>"])
-        jdotb[0] = 0
+        # in VMEC, they use the form of parallel current from
+        # assuming Boozer coordinates, which is what we will also use here.
+        # this can differ a lot from our <J*B> quantity
+        JB = (
+            (
+                data_full["G"] * data_full["I_r"] / data_full["psi_r"]
+                - data_full["G_r"] * data_full["I"] / data_full["psi_r"]
+            )
+            / data_full["sqrt(g)_Boozer"]
+            * data_full["psi_r"]
+        )
+        JB = (
+            surface_averages(
+                grid_full, JB, sqrt_g=data_full["sqrt(g)"], expand_out=False
+            )
+            / mu_0
+        )
+
+        jdotb[:] = JB
+        jdotb[0] = (
+            0  # NOTE: This does not actually match VMEC wouts,
+            # they have it instead extrapolated to axis
+        )
 
         jcuru = file.createVariable("jcuru", np.float64, ("radius",))
         jcuru.long_name = "flux surface average of sqrt(g)*J^theta, on full mesh"

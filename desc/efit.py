@@ -204,7 +204,7 @@ class EFITIO:
         psi_spline = q_spline.antiderivative()
 
         psi = psi_spline(chiN)
-        Psi_b = psi[-1]  # boundary flux
+        psi_b = psi[-1]  # boundary flux
 
         if np.diff(psi)[0] > 0:
             pressure_psi = CubicSpline(psi, g["pres"])
@@ -224,8 +224,8 @@ class EFITIO:
 
         psi_spline_truncated = q_spline_truncated.antiderivative()
         psi_truncated = psi_spline_truncated(chiN_truncated)
-        Psi_b_truncated = psi_truncated[-1]  # boundary flux
-        psiN_truncated = psi_truncated / Psi_b_truncated
+        psi_b_truncated = psi_truncated[-1]  # boundary flux
+        psiN_truncated = psi_truncated / psi_b_truncated
         rho_truncated = np.sqrt(psiN_truncated)
 
         pressure = SplineProfile(pressure_psi(psi_truncated), rho_truncated)
@@ -256,7 +256,7 @@ class EFITIO:
         inputs["sym"] = False
         inputs["surface"] = surf
         inputs["NFP"] = int(1)
-        inputs["Psi"] = Psi_b
+        inputs["Psi"] = 2 * np.pi * psi_b
         inputs["L"] = L
         inputs["M"] = M
         inputs["N"] = N

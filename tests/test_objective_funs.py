@@ -1736,6 +1736,7 @@ class TestObjectiveFunction:
             num_transit=num_transit,
             num_quad=num_quad,
             num_pitch=num_pitch,
+            jac_chunk_size=1,
         )
         obj.build()
         # TODO(#1094)
@@ -1752,6 +1753,7 @@ class TestObjectiveFunction:
             num_transit=num_transit,
             num_quad=num_quad,
             num_pitch=num_pitch,
+            jac_chunk_size=1,
         )
         obj.build()
         np.testing.assert_allclose(
@@ -2778,6 +2780,7 @@ def _reduced_resolution_objective(eq, objective, **kwargs):
         kwargs["num_well"] = 15 * kwargs["num_transit"]
         kwargs["num_pitch"] = 16
         kwargs["num_quad"] = 16
+        kwargs["jac_chunk_size"] = 1
     return objective(eq=eq, **kwargs)
 
 

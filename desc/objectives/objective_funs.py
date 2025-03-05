@@ -223,7 +223,7 @@ class ObjectiveFunction(IOAble):
         If ``None``, it will use the largest size i.e ``obj.dim_x``.
         Can also help with Hessian computation memory, as Hessian is essentially
         ``jacfwd(jacrev(f))``, and each of these operations may be chunked.
-        Defaults to ``chunk_size=None``.
+        Defaults to ``chunk_size="auto"``.
         Note: When running on a CPU (not a GPU) on a HPC cluster, DESC is unable to
         accurately estimate the available device memory, so the "auto" chunk_size
         option will yield a larger chunk size than may be needed. It is recommended
@@ -337,15 +337,24 @@ class ObjectiveFunction(IOAble):
         sub_obj_jac_chunk_sizes_are_ints = [
             isposint(obj._jac_chunk_size) for obj in self.objectives
         ]
+        sub_obj_chunk_sizes = [
+            (obj.__class__.__name__, obj._jac_chunk_size) for obj in self.objectives
+        ]
         errorif(
             any(sub_obj_jac_chunk_sizes_are_ints) and self._deriv_mode == "batched",
             ValueError,
-            "'jac_chunk_size' was passed into one or more sub-objectives, but the"
-            " ObjectiveFunction is using 'batched' deriv_mode, so sub-objective "
-            "'jac_chunk_size' will be ignored in favor of the ObjectiveFunction's "
-            f"'jac_chunk_size' of {self._jac_chunk_size}."
-            " Specify 'blocked' deriv_mode if each sub-objective is desired to have a "
-            "different 'jac_chunk_size' for its Jacobian computation.",
+            "'jac_chunk_size' was passed into one or more sub-objectives, but the\n"
+            "ObjectiveFunction is using 'batched' deriv_mode, so sub-objective \n"
+            "'jac_chunk_size' will be ignored in favor of the ObjectiveFunction's \n"
+            f"'jac_chunk_size' of {self._jac_chunk_size}.\n"
+            "Specify 'blocked' deriv_mode and don't pass `jac_chunk_size` for \n"
+            "ObjectiveFunction if each sub-objective is desired to have a \n"
+            "different 'jac_chunk_size' for its Jacobian computation. \n"
+            "`jac_chunk_size` of sub-objective(s): \n"
+            f"{sub_obj_chunk_sizes}\n"
+            f"Note: If you didn't specify 'jac_chunk_size' for the sub-objectives, \n"
+            "it might be that sub-objective has an internal logic to determine the \n"
+            "chunk size based on the available memory.",
         )
 
         if self._deriv_mode == "auto":

@@ -1398,9 +1398,10 @@ def _check_type(coil0, coil):
         ),
     )
     attrs = {
-        FourierRZCoil: ["R_basis", "Z_basis", "NFP", "sym"],
-        FourierXYZCoil: ["X_basis", "Y_basis", "Z_basis"],
         FourierPlanarCoil: ["r_basis"],
+        FourierRZCoil: ["R_basis", "Z_basis", "NFP", "sym"],
+        FourierXYCoil: ["X_basis", "Y_basis"],
+        FourierXYZCoil: ["X_basis", "Y_basis", "Z_basis"],
         SplineXYZCoil: ["method", "N", "knots"],
     }
 

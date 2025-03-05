@@ -3,6 +3,7 @@ Changelog
 
 New Features
 
+- Updates default parameters for partition support size in the singular surface integrals.
 - Enables tracking multiple fieldlines in ``Bounce2D``.
 - Bounce integral methods with ``desc.integrals.Bounce2D``.
 - Effective ripple ``desc.objectives.EffectiveRipple`` and Gamma_c ``desc.objectives.Gamma_c`` optimization objectives.

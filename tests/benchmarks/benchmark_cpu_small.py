@@ -527,6 +527,7 @@ def _test_objective_ripple(benchmark, spline, method):
                 num_well=10 * num_transit,
                 num_quad=16,
                 spline=spline,
+                jac_chunk_size=1,
             )
         ]
     )

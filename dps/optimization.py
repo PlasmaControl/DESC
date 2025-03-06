@@ -11,6 +11,20 @@ import numpy as np
 import scipy
 from time import time as timet
 
+####################################################### Set if single or multi particle #################################################################
+"""
+Set to True to simulate a single particle, False to simulate multiple particles
+
+IF TRUE: Single Particle
+IF FALSE: Multiple Particles
+
+Differences:
+Multi particle - 5 particles with the same theta and zeta, but different psi (and consequently different vpar); this will make the mu different for each particle since it depends on psi and vpar
+Single particle - 1 particle with a single set of psi, theta, zeta, and vpar;
+"""
+SINGLE_PARTICLE = True
+##########################################################################################################################################################
+
 initial_time = timet()
 
 filename = "eq_0108_M1_N1.h5"
@@ -29,40 +43,42 @@ eq._current = None
 
 # Energy and Mass info
 Energy_eV = 100
-Proton_Mass = scipy.constants.proton_mass
-Proton_Charge = scipy.constants.elementary_charge
-Energy_SI = Energy_eV*Proton_Charge
+Energy_SI = Energy_eV*scipy.constants.elementary_charge
+Mass = 4*scipy.constants.proton_mass
+Charge = 2*scipy.constants.elementary_charge
 
-# Particle Info
-Mass = 4*Proton_Mass
-Charge = 2*Proton_Charge
-
-# Initial State
-psi_i = jnp.linspace(0.1, 0.9, 1000)
+# Initial State - (psi, theta, zeta, vpar)
 zeta_i = 0.5
 theta_i = jnp.pi/2
-vpar_i = 0.6*jnp.sqrt(2*Energy_SI/Mass)
+vpar_i = 0.7*jnp.sqrt(2*Energy_SI/Mass)
 
-# Initial Conditions
-ini_cond = jnp.array([[float(psi_i), theta_i, zeta_i, float(vpar_i)] for psi_i in psi_i])
-gridnodes = jnp.array([[float(psi_i), theta_i, zeta_i] for psi_i in psi_i])
+if SINGLE_PARTICLE:
+    psi_i = 0.9
+    ini_cond = jnp.array([psi_i, theta_i, zeta_i, vpar_i])
+    gridnodes = jnp.array([psi_i, theta_i, zeta_i])
+else:
+    psi_i = jnp.linspace(0.1, 0.9, 5) 
+    ini_cond = jnp.array([[float(psi_i), theta_i, zeta_i, float(vpar_i)] for psi_i in psi_i])
+    gridnodes = jnp.array([[float(psi_i), theta_i, zeta_i] for psi_i in psi_i])
+
+grid = Grid(nodes=gridnodes.T, jitable=False, sort=False)
 
 # Time
 tmin = 0
 tmax = 1e-3
-nt = 1500
+nt = 150
 time = jnp.linspace(tmin, tmax, nt)
 
-initial_conditions = ini_cond
 Mass_Charge_Ratio = Mass/Charge
 
-# grid = Grid(nodes=jnp.array([jnp.sqrt(psi_i), theta_i, zeta_i]).T, jitable=False, sort=False)
-grid = Grid(nodes=gridnodes.T, jitable=False, sort=False)
 data = eq.compute(["|B|", "R"], grid=grid)
 
 mu = Energy_SI/(Mass*data["|B|"]) - (vpar_i**2)/(2*data["|B|"])
 
-ini_param = jnp.array([[mu, Mass_Charge_Ratio] for mu in mu])
+if SINGLE_PARTICLE:
+    ini_param = jnp.array([mu[0], Mass_Charge_Ratio])
+else:
+    ini_param = jnp.array([[mu, Mass_Charge_Ratio] for mu in mu])
 
 intermediate_time = timet()
 

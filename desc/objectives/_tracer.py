@@ -71,7 +71,7 @@ class ParticleTracer(_Objective):
         initial_parameters=None,
         compute_option=None,
         tolerance = 1.4e-8,
-        deriv_mode = "rev",
+        deriv_mode = "fwd", # changed from "rev" CHECK if it works for optimization
         name="Particle Tracer"
     ):
         self.output_time = output_time
@@ -113,7 +113,7 @@ class ParticleTracer(_Objective):
         eq = eq or self._things[0]
 
         if self.compute_option == "optimization":
-            self._dim_f = 1
+            self._dim_f = 1 # FIX THIS
         elif self.compute_option == "tracer":
             self._dim_f = [len(self.output_time), 4]
         elif self.compute_option.startswith("average "):
@@ -136,19 +136,23 @@ class ParticleTracer(_Objective):
 
             return jnp.array([data[f"{key}dot"] for key in ['psi', 'theta', 'zeta', 'vpar']])
 
-        initial_conditions_jax = jnp.array(self.initial_conditions, dtype=jnp.float64)
         initial_parameters_jax = jnp.array(self.initial_parameters, dtype=jnp.float64)
+        initial_conditions_jax = jnp.array(self.initial_conditions, dtype=jnp.float64)
         
-        
-        #solution = jax_odeint(partial(system_jit, initial_parameters=self.initial_parameters), initial_conditions_jax, self.output_time, rtol=self.tolerance)
-        intfun = lambda initial_conditions_jax, initial_parameters_jax: jax_odeint(partial(system, initial_parameters=initial_parameters_jax), 
-                                                           initial_conditions_jax, self.output_time, rtol=self.tolerance)
-
-        solution = vmap(intfun)(initial_conditions_jax, initial_parameters_jax)
+        if initial_conditions_jax.shape == (4,):
+            solution = jax_odeint(partial(system, initial_parameters=self.initial_parameters), initial_conditions_jax, self.output_time, rtol=self.tolerance)
+        else:
+            intfun = lambda initial_conditions_jax, initial_parameters_jax: jax_odeint(partial(system, initial_parameters=initial_parameters_jax), 
+                                                                                       initial_conditions_jax, self.output_time, rtol=self.tolerance)
+            solution = vmap(intfun)(initial_conditions_jax, initial_parameters_jax)
 
         if self.compute_option == "optimization":
-            new = jnp.repeat(solution[:, :, 0][:, 0:1], solution[:, :, 0].shape[1], axis=1)
-            return jnp.sum(jnp.mean((solution[:, :, 0] - new)**2, axis=-1), axis=-1)
+            if initial_conditions_jax.shape == (4,):
+                return jnp.sum((solution[:, 0] - solution[0, 0]) ** 2, axis=-1)
+            else:
+                new = jnp.repeat(solution[:, :, 0][:, 0:1], solution[:, :, 0].shape[1], axis=1)
+                return jnp.mean((solution[:, :, 0] - new)**2, axis=-1) # CHECK THIS 
+         
         elif self.compute_option == "tracer":
             return solution
         elif self.compute_option.startswith("average "):

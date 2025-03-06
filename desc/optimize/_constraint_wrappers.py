@@ -1063,13 +1063,8 @@ class ProximalProjection(ObjectiveFunction):
             Constant parameters passed to sub-objectives.
 
         """
-        v = v[0] if isinstance(v, (tuple, list)) else v
-        constants = setdefault(constants, self.constants)
-        xg, xf = self._update_equilibrium(x, store=True)
-        jvpfun = lambda u: self._jvp(u, xf, xg, constants, op="scaled")
-        return batched_vectorize(
-            jvpfun, signature="(n)->(k)", chunk_size=self._objective._jac_chunk_size
-        )(v)
+        op = "scaled"
+        return self._jvp(v, x, constants, op)
 
     def jvp_scaled_error(self, v, x, constants=None):
         """Compute Jacobian-vector product of self.compute_scaled_error.
@@ -1085,13 +1080,8 @@ class ProximalProjection(ObjectiveFunction):
             Constant parameters passed to sub-objectives.
 
         """
-        v = v[0] if isinstance(v, (tuple, list)) else v
-        constants = setdefault(constants, self.constants)
-        xg, xf = self._update_equilibrium(x, store=True)
-        jvpfun = lambda u: self._jvp(u, xf, xg, constants, op="scaled_error")
-        return batched_vectorize(
-            jvpfun, signature="(n)->(k)", chunk_size=self._objective._jac_chunk_size
-        )(v)
+        op = "scaled_error"
+        return self._jvp(v, x, constants, op)
 
     def jvp_unscaled(self, v, x, constants=None):
         """Compute Jacobian-vector product of self.compute_unscaled.
@@ -1107,15 +1097,38 @@ class ProximalProjection(ObjectiveFunction):
             Constant parameters passed to sub-objectives.
 
         """
+        op = "unscaled"
+        return self._jvp(v, x, constants, op)
+
+    def _jvp(self, v, x, constants=None, op="scaled_error"):
         v = v[0] if isinstance(v, (tuple, list)) else v
         constants = setdefault(constants, self.constants)
         xg, xf = self._update_equilibrium(x, store=True)
-        jvpfun = lambda u: self._jvp(u, xf, xg, constants, op="unscaled")
-        return batched_vectorize(
-            jvpfun, signature="(n)->(k)", chunk_size=self._objective._jac_chunk_size
+
+        # we don't need to divide this part into blocked and batched because
+        # self._constraint._deriv_mode will handle it
+        jvpfun = lambda u: self._get_tangent(u, xf, constants, op=op)
+        tangents = batched_vectorize(
+            jvpfun,
+            signature="(n)->(k)",
+            chunk_size=self._constraint._jac_chunk_size,
         )(v)
 
-    def _jvp(self, v, xf, xg, constants, op):
+        if self._objective._deriv_mode == "batched":
+            # objective's method already know about its jac_chunk_size
+            return -getattr(self._objective, "jvp_" + op)(tangents, xg, constants[0])
+        else:
+            xgs = jnp.split(xg, np.cumsum(self._dimx_per_thing))
+            jvpfun = lambda u: _proximal_jvp_blocked_pure(
+                self._objective, jnp.split(u, np.cumsum(self._dimx_per_thing)), xgs, op
+            )
+            return batched_vectorize(
+                jvpfun,
+                signature="(n)->(k)",
+                chunk_size=self._objective._jac_chunk_size,
+            )(tangents)
+
+    def _get_tangent(self, v, xf, constants, op):
         # we're replacing stuff like this with jvps
         # Fx_reduced = Fx[:, unfixed_idx] @ Z               # noqa: E800
         # Gx_reduced = Gx[:, unfixed_idx] @ Z               # noqa: E800
@@ -1154,13 +1167,7 @@ class ProximalProjection(ObjectiveFunction):
             ]
         )
         tangent = self._unfixed_idx_mat @ dfdc - dxdcv
-        if self._objective._deriv_mode in ["batched"]:
-            out = getattr(self._objective, "jvp_" + op)(tangent, xg, constants[0])
-        else:  # deriv_mode == "blocked"
-            vgs = jnp.split(tangent, np.cumsum(self._dimx_per_thing))
-            xgs = jnp.split(xg, np.cumsum(self._dimx_per_thing))
-            out = _proximal_jvp_blocked_pure(self._objective, vgs, xgs, op)
-        return -out
+        return tangent
 
     @property
     def constants(self):
@@ -1181,10 +1188,11 @@ class ProximalProjection(ObjectiveFunction):
 
 @functools.partial(jit, static_argnames=["op"])
 def _proximal_jvp_f_pure(constraint, xf, constants, dc, unfixed_idx, Z, D, dxdc, op):
-    Fx = getattr(constraint, "jac_" + op)(xf, constants)
-    Fx_reduced = Fx @ jnp.diag(D)[:, unfixed_idx] @ Z
-    Fc = Fx @ (dxdc @ dc)
-    Fxh = Fx_reduced
+    # here we are forming (dF/dx)^-1 @ dF/dc
+    Fxh = getattr(constraint, "jvp_" + op)(
+        (jnp.diag(D)[:, unfixed_idx] @ Z).T, xf, constants
+    ).T
+    Fc = getattr(constraint, "jvp_" + op)(dxdc @ dc, xf, constants)
     cutoff = jnp.finfo(Fxh.dtype).eps * max(Fxh.shape)
     uf, sf, vtf = jnp.linalg.svd(Fxh, full_matrices=False)
     sf += sf[-1]  # add a tiny bit of regularization
@@ -1213,5 +1221,4 @@ def _proximal_jvp_blocked_pure(objective, vgs, xgs, op):
         else:
             outi = getattr(obj, "jvp_" + op)([_vi for _vi in vi], xi, constants=const).T
             out.append(outi)
-    out = jnp.concatenate(out)
-    return out
+    return -jnp.concatenate(out)

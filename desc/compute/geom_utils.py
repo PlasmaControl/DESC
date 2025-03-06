@@ -68,7 +68,7 @@ def xyz2rpz(pts):
 
     """
     x, y, z = pts.T
-    r = jnp.sqrt(x**2 + y**2)
+    r = jnp.hypot(x, y)
     p = jnp.arctan2(y, x)
     return jnp.array([r, p, z]).T
 
@@ -161,3 +161,12 @@ def rpz2xyz_vec(vec, x=None, y=None, phi=None):
         return cart
 
     return inner(vec, phi)
+
+
+def copy_rpz_periods(rpz, NFP):
+    """Copy a rpz position vector into multiple field periods."""
+    r, p, z = rpz.T
+    r = jnp.tile(r, NFP)
+    z = jnp.tile(z, NFP)
+    p = p[None, :] + jnp.linspace(0, 2 * jnp.pi, NFP, endpoint=False)[:, None]
+    return jnp.array([r, p.flatten(), z]).T

@@ -4,7 +4,8 @@ import functools
 
 import numpy as np
 
-from desc.backend import fori_loop, jit, jnp, put, root, root_scalar, vmap
+from desc.backend import jit, jnp, root, root_scalar, vmap
+from desc.batching import batch_map
 from desc.compute import compute as compute_fun
 from desc.compute import data_index, get_data_deps, get_profiles, get_transforms
 from desc.grid import ConcentricGrid, Grid, LinearGrid, QuadratureGrid
@@ -18,7 +19,7 @@ def _periodic(x, period):
 
 def _fixup_residual(r, period):
     r = _periodic(r, period)
-    # r should be between -period and period
+    # r should be between -period/2 and period/2
     return jnp.where((r > period / 2) & jnp.isfinite(period), -period + r, r)
 
 
@@ -105,7 +106,11 @@ def map_coordinates(  # noqa: C901
             f"don't have recipe to compute partial derivative {key}",
         )
 
-    profiles = get_profiles(inbasis + basis_derivs, eq)
+    profiles = (
+        kwargs["profiles"]
+        if "profiles" in kwargs
+        else get_profiles(inbasis + basis_derivs, eq)
+    )
 
     # TODO (#1382): make this work for permutations of in/out basis
     if outbasis == ("rho", "theta", "zeta"):
@@ -114,7 +119,9 @@ def map_coordinates(  # noqa: C901
                 iota = kwargs.pop("iota")
             else:
                 if profiles["iota"] is None:
-                    profiles["iota"] = eq.get_profile(["iota", "iota_r"], params=params)
+                    profiles["iota"] = eq.get_profile(
+                        ["iota", "iota_r"], params=params, **kwargs
+                    )
                 iota = profiles["iota"].compute(Grid(coords, sort=False, jitable=True))
             return _map_clebsch_coordinates(
                 coords=coords,
@@ -143,7 +150,7 @@ def map_coordinates(  # noqa: C901
 
     # do surface average to get iota once
     if "iota" in profiles and profiles["iota"] is None:
-        profiles["iota"] = eq.get_profile(["iota", "iota_r"], params=params)
+        profiles["iota"] = eq.get_profile(["iota", "iota_r"], params=params, **kwargs)
         params["i_l"] = profiles["iota"].params
 
     rhomin = kwargs.pop("rhomin", tol / 10)
@@ -272,17 +279,13 @@ def _initial_guess_nn_search(coords, inbasis, eq, period, compute):
     # nearest neighbor search on dense grid
     yg = ConcentricGrid(eq.L_grid, eq.M_grid, max(eq.N_grid, eq.M_grid)).nodes
     xg = compute(yg, inbasis)
-    idx = jnp.zeros(len(coords)).astype(int)
     coords = jnp.asarray(coords)
 
-    def _distance_body(i, idx):
-        d = _fixup_residual(coords[i] - xg, period)
-        distance = safenorm(d, axis=-1)
-        k = jnp.argmin(distance)
-        idx = put(idx, i, k)
-        return idx
+    def _distance_body(coords):
+        distance = safenorm(_fixup_residual(coords - xg, period), axis=-1)
+        return jnp.argmin(distance, axis=-1)
 
-    idx = fori_loop(0, len(coords), _distance_body, idx)
+    idx = batch_map(_distance_body, coords[..., jnp.newaxis, :], 20)
     return yg[idx]
 
 
@@ -625,14 +628,14 @@ def to_sfl(
     toroidal_coords = eq.compute(["R", "Z", "lambda"], grid=grid)
     theta = grid.nodes[:, 1]
     vartheta = theta + toroidal_coords["lambda"]
-    sfl_grid = grid
-    sfl_grid.nodes[:, 1] = vartheta
+    sfl_grid = Grid(np.array([grid.nodes[:, 0], vartheta, grid.nodes[:, 2]]).T)
 
     bdry_coords = eq.compute(["R", "Z", "lambda"], grid=bdry_grid)
     bdry_theta = bdry_grid.nodes[:, 1]
     bdry_vartheta = bdry_theta + bdry_coords["lambda"]
-    bdry_sfl_grid = bdry_grid
-    bdry_sfl_grid.nodes[:, 1] = bdry_vartheta
+    bdry_sfl_grid = Grid(
+        np.array([bdry_grid.nodes[:, 0], bdry_vartheta, bdry_grid.nodes[:, 2]]).T
+    )
 
     if copy:
         eq_sfl = eq.copy()
@@ -729,7 +732,10 @@ def get_rtz_grid(
 
     """
     grid = Grid.create_meshgrid(
-        [radial, poloidal, toroidal], coordinates=coordinates, period=period
+        [radial, poloidal, toroidal],
+        coordinates=coordinates,
+        period=period,
+        jitable=jitable,
     )
     if "iota" in kwargs:
         kwargs["iota"] = grid.expand(jnp.atleast_1d(kwargs["iota"]))

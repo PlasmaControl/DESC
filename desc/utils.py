@@ -9,7 +9,9 @@ import numpy as np
 from scipy.special import factorial
 from termcolor import colored
 
-from desc.backend import flatnonzero, fori_loop, jit, jnp, take
+from desc.backend import flatnonzero, fori_loop, jax, jit, jnp, pure_callback, take
+
+PRINT_WIDTH = 60  # current longest name is BootstrapRedlConsistency with pre-text
 
 
 class Timer:
@@ -415,18 +417,17 @@ def svd_inv_null(A):
         Null space of A.
 
     """
-    u, s, vh = np.linalg.svd(A, full_matrices=True)
+    u, s, vh = jnp.linalg.svd(A, full_matrices=True)
     M, N = u.shape[0], vh.shape[1]
     K = min(M, N)
     rcond = np.finfo(A.dtype).eps * max(M, N)
-    tol = np.amax(s) * rcond
+    tol = jnp.amax(s) * rcond
     large = s > tol
-    num = np.sum(large, dtype=int)
+    num = jnp.sum(large, dtype=int)
     uk = u[:, :K]
     vhk = vh[:K, :]
-    s = np.divide(1, s, where=large, out=s)
-    s[(~large,)] = 0
-    Ainv = np.matmul(vhk.T, np.multiply(s[..., np.newaxis], uk.T))
+    s = jnp.where(large, 1 / s, 0)
+    Ainv = vhk.T @ jnp.diag(s) @ uk.T
     Z = vh[num:, :].T.conj()
     return Ainv, Z
 
@@ -495,6 +496,12 @@ def get_instance(things, cls):
     """Get first thing from an iterable of things that is instance of cls."""
     foo = [t for t in things if isinstance(t, cls)]
     return foo[0] if len(foo) else None
+
+
+def get_all_instances(things, cls):
+    """Get every thing from an iterable of things that is instance of cls."""
+    foo = [t for t in things if isinstance(t, cls)]
+    return foo if len(foo) else None
 
 
 def parse_argname_change(arg, kwargs, oldname, newname):
@@ -744,7 +751,103 @@ def atleast_nd(ndmin, ary):
     return jnp.array(ary, ndmin=ndmin) if jnp.ndim(ary) < ndmin else ary
 
 
-PRINT_WIDTH = 60  # current longest name is BootstrapRedlConsistency with pre-text
+def jaxify(func, abstract_eval, vectorized=False, abs_step=1e-4, rel_step=0):
+    """Make an external (python) function work with JAX.
+
+    Positional arguments to func can be differentiated,
+    use keyword args for static values and non-differentiable stuff.
+
+    Note: Only forward mode differentiation is supported currently.
+
+    Parameters
+    ----------
+    func : callable
+        Function to wrap. Should be a "pure" function, in that it has no side
+        effects and doesn't maintain state. Does not need to be JAX transformable.
+    abstract_eval : callable
+        Auxiliary function that computes the output shape and dtype of func.
+        **Must be JAX transformable**. Should be of the form
+
+            abstract_eval(*args, **kwargs) -> Pytree with same shape and dtype as
+            func(*args, **kwargs)
+
+        For example, if func always returns a scalar:
+
+            abstract_eval = lambda *args, **kwargs: jnp.array(1.)
+
+        Or if func takes an array of shape(n) and returns a dict of arrays of
+        shape(n-2):
+
+            abstract_eval = lambda arr, **kwargs:
+            {"out1": jnp.empty(arr.size-2), "out2": jnp.empty(arr.size-2)}
+    vectorized : bool, optional
+        Whether or not the wrapped function is vectorized. Default = False.
+    abs_step : float, optional
+        Absolute finite difference step size. Default = 1e-4.
+        Total step size is ``abs_step + rel_step * mean(abs(x))``.
+    rel_step : float, optional
+        Relative finite difference step size. Default = 0.
+        Total step size is ``abs_step + rel_step * mean(abs(x))``.
+
+    Returns
+    -------
+    func : callable
+        New function that behaves as func but works with jit/vmap/jacfwd etc.
+
+    """
+
+    def wrap_pure_callback(func):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            result_shape_dtype = abstract_eval(*args, **kwargs)
+            return pure_callback(
+                func, result_shape_dtype, *args, vectorized=vectorized, **kwargs
+            )
+
+        return wrapper
+
+    def define_fd_jvp(func):
+        func = jax.custom_jvp(func)
+
+        @func.defjvp
+        def func_jvp(primals, tangents):
+            primal_out = func(*primals)
+
+            # flatten everything into 1D vectors for easier finite differences
+            y, unflaty = jax.flatten_util.ravel_pytree(primal_out)
+            x, unflatx = jax.flatten_util.ravel_pytree(primals)
+            v, _______ = jax.flatten_util.ravel_pytree(tangents)
+
+            # finite difference step size
+            fd_step = abs_step + rel_step * jnp.mean(jnp.abs(x))
+
+            # scale tangents to unit norm if nonzero
+            normv = jnp.linalg.norm(v)
+            vh = jnp.where(normv == 0, v, v / normv)
+
+            def f(x):
+                return jax.flatten_util.ravel_pytree(func(*unflatx(x)))[0]
+
+            tangent_out = (f(x + fd_step * vh) - y) / fd_step * normv
+            tangent_out = unflaty(tangent_out)
+
+            return primal_out, tangent_out
+
+        return func
+
+    return define_fd_jvp(wrap_pure_callback(func))
+
+
+def atleast_3d_mid(ary):
+    """Like np.atleast_3d but if adds dim at axis 1 for 2d arrays."""
+    ary = jnp.atleast_2d(ary)
+    return ary[:, jnp.newaxis] if ary.ndim == 2 else ary
+
+
+def atleast_2d_end(ary):
+    """Like np.atleast_2d but if adds dim at axis 1 for 1d arrays."""
+    ary = jnp.atleast_1d(ary)
+    return ary[:, jnp.newaxis] if ary.ndim == 1 else ary
 
 
 def dot(a, b, axis=-1):
@@ -853,82 +956,6 @@ def safediv(a, b, fill=0, threshold=0):
     num = jnp.where(mask, fill, a)
     den = jnp.where(mask, 1, b)
     return num / den
-
-
-def cumtrapz(y, x=None, dx=1.0, axis=-1, initial=None):
-    """Cumulatively integrate y(x) using the composite trapezoidal rule.
-
-    Taken from SciPy, but changed NumPy references to JAX.NumPy:
-        https://github.com/scipy/scipy/blob/v1.10.1/scipy/integrate/_quadrature.py
-
-    Parameters
-    ----------
-    y : array_like
-        Values to integrate.
-    x : array_like, optional
-        The coordinate to integrate along. If None (default), use spacing `dx`
-        between consecutive elements in `y`.
-    dx : float, optional
-        Spacing between elements of `y`. Only used if `x` is None.
-    axis : int, optional
-        Specifies the axis to cumulate. Default is -1 (last axis).
-    initial : scalar, optional
-        If given, insert this value at the beginning of the returned result.
-        Typically, this value should be 0. Default is None, which means no
-        value at ``x[0]`` is returned and `res` has one element less than `y`
-        along the axis of integration.
-
-    Returns
-    -------
-    res : ndarray
-        The result of cumulative integration of `y` along `axis`.
-        If `initial` is None, the shape is such that the axis of integration
-        has one less value than `y`. If `initial` is given, the shape is equal
-        to that of `y`.
-
-    """
-    y = jnp.asarray(y)
-    if x is None:
-        d = dx
-    else:
-        x = jnp.asarray(x)
-        if x.ndim == 1:
-            d = jnp.diff(x)
-            # reshape to correct shape
-            shape = [1] * y.ndim
-            shape[axis] = -1
-            d = d.reshape(shape)
-        elif len(x.shape) != len(y.shape):
-            raise ValueError("If given, shape of x must be 1-D or the " "same as y.")
-        else:
-            d = jnp.diff(x, axis=axis)
-
-        if d.shape[axis] != y.shape[axis] - 1:
-            raise ValueError(
-                "If given, length of x along axis must be the " "same as y."
-            )
-
-    def tupleset(t, i, value):
-        l = list(t)
-        l[i] = value
-        return tuple(l)
-
-    nd = len(y.shape)
-    slice1 = tupleset((slice(None),) * nd, axis, slice(1, None))
-    slice2 = tupleset((slice(None),) * nd, axis, slice(None, -1))
-    res = jnp.cumsum(d * (y[slice1] + y[slice2]) / 2.0, axis=axis)
-
-    if initial is not None:
-        if not jnp.isscalar(initial):
-            raise ValueError("`initial` parameter should be a scalar.")
-
-        shape = list(res.shape)
-        shape[axis] = 1
-        res = jnp.concatenate(
-            [jnp.full(shape, initial, dtype=res.dtype), res], axis=axis
-        )
-
-    return res
 
 
 def ensure_tuple(x):

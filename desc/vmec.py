@@ -362,6 +362,12 @@ class VMECIO:
                 "sqrt(g)",
                 "<|B|^2>",
                 "<J*B>",
+                "G_r",
+                "G",
+                "I_r",
+                "I",
+                "psi_r",
+                "sqrt(g)_Boozer",
             ],
             grid=grid_full,
         )
@@ -605,6 +611,7 @@ class VMECIO:
         buco = file.createVariable("buco", np.float64, ("radius",))
         buco.long_name = "Boozer toroidal current I, on half mesh"
         buco.units = "T*m"
+
         buco[1:] = -grid_half.compress(data_half["I"])  # - for negative Jacobian
         buco[0] = 0
 

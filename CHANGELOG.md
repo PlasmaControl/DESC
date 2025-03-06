@@ -32,11 +32,12 @@ for compatibility with other codes which expect such files from the Booz_Xform c
 - Allows specification of Nyquist spectrum maximum modenumbers when using ``VMECIO.save`` to save a DESC .h5 file as a VMEC-format wout file
 - Adds a new objective ``desc.objectives.ExternalObjective`` for wrapping external codes with finite differences.
 - DESC/JAX version and device info is no longer printed by default, but can be accessed with the function `desc.backend.print_backend_info()`.
+- `ProximalProjection` now has distinct `blocked` and `batched` parts.
 
 Speed Improvements
 
 - A number of minor improvements to basis function evaluation and spectral transforms to improve speed. These will also enable future improvements for larger gains.
-- `ProximalProjection` uses jvp's for the derivative of the `ForceBalance` part instead of manually taking the product
+- `ProximalProjection` uses jvp's for the derivative of the `ForceBalance` part instead of manually taking the matrix products. This reduces the jacobian time and peak memory usage.
 
 Bug Fixes
 

@@ -1101,6 +1101,17 @@ class ProximalProjection(ObjectiveFunction):
         return self._jvp(v, x, constants, op)
 
     def _jvp(self, v, x, constants=None, op="scaled_error"):
+        # The goal is to compute the Jacobian of the objective function with respect to
+        # the optimization variables (c). Before taking the jacobian, we update the
+        # equilibrium such that
+        # F(x+dx, c+dc) = 0 = F(x, c) + dF/dx * dx + dF/dc * dc
+        # where we already have F(x, c) = 0, so we can solve for dx and get
+        # dx = - (dF/dx)^-1 * dF/dc * dc     # noqa : E800
+        # We can then compute the Jacobian of the objective function with respect to c
+        # G(x+dx, c+dc) = G(x, c) + dG/dx * dx + dG/dc * dc
+        # substituting in dx we get
+        # G(x+dx, c+dc) = G(x, c) + [ dG/dc - dG/dx * (dF/dx)^-1 * dF/dc ]* dc
+        # and the Jacobian we want is dG/dc - dG/dx * (dF/dx)^-1 * dF/dc
         v = v[0] if isinstance(v, (tuple, list)) else v
         constants = setdefault(constants, self.constants)
         xg, xf = self._update_equilibrium(x, store=True)
@@ -1129,13 +1140,6 @@ class ProximalProjection(ObjectiveFunction):
             )(tangents)
 
     def _get_tangent(self, v, xf, constants, op):
-        # we're replacing stuff like this with jvps
-        # Fx_reduced = Fx[:, unfixed_idx] @ Z               # noqa: E800
-        # Gx_reduced = Gx[:, unfixed_idx] @ Z               # noqa: E800
-        # Fc = Fx @ dxdc @ v                                # noqa: E800
-        # Gc = Gx @ dxdc @ v                                # noqa: E800
-        # LHS = Gx_reduced @ (Fx_reduced_inv @ Fc) - Gc     # noqa: E800
-
         # v contains "boundary" dofs from eq and other objects
         # want jvp_f to only get parts from equilibrium, not other things
         vs = jnp.split(v, np.cumsum(self._dimc_per_thing))
@@ -1189,6 +1193,7 @@ class ProximalProjection(ObjectiveFunction):
 @functools.partial(jit, static_argnames=["op"])
 def _proximal_jvp_f_pure(constraint, xf, constants, dc, unfixed_idx, Z, D, dxdc, op):
     # here we are forming (dF/dx)^-1 @ dF/dc
+    # where Fxh is dF/dx and Fc is dF/dc
     Fxh = getattr(constraint, "jvp_" + op)(
         (jnp.diag(D)[:, unfixed_idx] @ Z).T, xf, constants
     ).T
@@ -1197,8 +1202,7 @@ def _proximal_jvp_f_pure(constraint, xf, constants, dc, unfixed_idx, Z, D, dxdc,
     uf, sf, vtf = jnp.linalg.svd(Fxh, full_matrices=False)
     sf += sf[-1]  # add a tiny bit of regularization
     sfi = jnp.where(sf < cutoff * sf[0], 0, 1 / sf)
-    Fxh_inv = vtf.T @ (sfi[..., None] * uf.T)
-    return Fxh_inv @ Fc
+    return vtf.T @ (sfi * (uf.T @ Fc))
 
 
 @functools.partial(jit, static_argnames=["op"])

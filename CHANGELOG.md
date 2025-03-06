@@ -36,6 +36,7 @@ for compatibility with other codes which expect such files from the Booz_Xform c
 Speed Improvements
 
 - A number of minor improvements to basis function evaluation and spectral transforms to improve speed. These will also enable future improvements for larger gains.
+- `ProximalProjection` uses jvp's for the derivative of the `ForceBalance` part instead of manually taking the product
 
 Bug Fixes
 

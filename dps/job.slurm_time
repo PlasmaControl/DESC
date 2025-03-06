@@ -1,0 +1,16 @@
+#!/bin/bash
+#SBATCH --job-name=DPS
+#SBATCH --nodes=1
+#SBATCH -n 1
+#SBATCH --mem=16G
+#SBATCH --time=00:15:00
+#SBATCH --gres=gpu:1
+#SBATCH --constraint=a100
+#SBATCH --mail-type=ALL
+#SBATCH --mail-user=joaopedrofbiu@tecnico.ulisboa.pt
+
+module purge
+module load anaconda3/2023.6
+conda activate desc-env
+
+python3 time_comparison.py

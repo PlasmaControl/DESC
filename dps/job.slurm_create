@@ -1,0 +1,14 @@
+#!/bin/bash                                                                                                             
+#SBATCH --job-name=DESC_gpu_jac_test
+#SBATCH --nodes=1
+#SBATCH -n 1
+#SBATCH --mem=16G
+#SBATCH --time=1:00:00
+#SBATCH --gres=gpu:1
+#SBATCH --constraint=a100
+#SBATCH --mail-type=ALL
+#SBATCH --mail-user=joaopedrofbiu@tecnico.ulisboa.pt
+module purge
+module load anaconda3/2024.6
+conda activate desc-env
+python3 create_equilibrium.py

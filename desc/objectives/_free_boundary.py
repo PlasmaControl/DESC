@@ -85,6 +85,7 @@ class VacuumBoundaryError(_Objective):
         field_fixed=False,
         name="Vacuum boundary error",
         jac_chunk_size=None,
+        device_id=0,
         *,
         bs_chunk_size=None,
         **kwargs,
@@ -109,6 +110,7 @@ class VacuumBoundaryError(_Objective):
             deriv_mode=deriv_mode,
             name=name,
             jac_chunk_size=jac_chunk_size,
+            device_id=device_id,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -440,6 +442,7 @@ class BoundaryError(_Objective):
         chunk_size=1,
         name="Boundary error",
         jac_chunk_size=None,
+        device_id=0,
         *,
         bs_chunk_size=None,
         **kwargs,
@@ -475,6 +478,7 @@ class BoundaryError(_Objective):
             deriv_mode=deriv_mode,
             name=name,
             jac_chunk_size=jac_chunk_size,
+            device_id=device_id,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -892,6 +896,7 @@ class BoundaryErrorNESTOR(_Objective):
         deriv_mode="auto",
         name="NESTOR Boundary",
         jac_chunk_size=None,
+        device_id=0,
     ):
         if target is None and bounds is None:
             target = 0
@@ -912,6 +917,7 @@ class BoundaryErrorNESTOR(_Objective):
             deriv_mode=deriv_mode,
             name=name,
             jac_chunk_size=jac_chunk_size,
+            device_id=device_id,
         )
 
     def build(self, use_jit=True, verbose=1):

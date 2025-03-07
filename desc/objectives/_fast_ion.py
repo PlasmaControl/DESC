@@ -192,10 +192,6 @@ class GammaC(_Objective):
             "surf_batch_size": surf_batch_size,
         }
         self._key = "Gamma_c" if Nemov else "Gamma_c Velasco"
-        if deriv_mode != "fwd" and jac_chunk_size is None:
-            # Reverse mode is bottlenecked by coordinate mapping.
-            # Compute Jacobian one flux surface at a time.
-            jac_chunk_size = 1
 
         super().__init__(
             things=eq,

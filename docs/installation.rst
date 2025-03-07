@@ -10,7 +10,7 @@ In general, to install JAX with GPU support, please refer to the `JAX installati
 For information on using conda, see `here <https://conda.io/projects/conda/en/latest/user-guide/getting-started.html#starting-conda>`__.
 Other package managers like venv could be used instead of conda, we have just chosen conda as our package manager of choice, and only test with conda environments, so your mileage may vary with other managers.
 
-**NOTE: DESC requires python>=3.9.**
+**NOTE: DESC requires python>=3.10.**
 **If you have python2 also locally installed, replace all `pip` commands with `pip3` and all `python` commands with `python3` to ensure the correct python version is used.**
 
 **NOTE: If you are on Windows, consider using the Windows Subsystem for Linux (WSL) to install DESC.**
@@ -42,7 +42,7 @@ Now use pip to install packages (this will only install DESC + JAX with CPU capa
 
 .. code-block:: sh
 
-    conda create --name desc-env 'python>=3.9, <=3.12'
+    conda create --name desc-env 'python>=3.10, <=3.13'
     conda activate desc-env
     pip install --editable .
     # optionally install developer requirements (if you want to run tests)
@@ -80,7 +80,7 @@ Now use pip to install packages (this will only install DESC + JAX with CPU capa
 
 .. code-block:: sh
 
-    conda create --name desc-env 'python>=3.9, <=3.12'
+    conda create --name desc-env 'python>=3.10, <=3.13'
     conda activate desc-env
     pip install --editable .
     # optionally install developer requirements (if you want to run tests)

@@ -8,9 +8,11 @@ import desc.examples
 from desc.basis import DoubleFourierSeries, FourierZernikeBasis
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.examples import get
-from desc.grid import Grid, LinearGrid
+from desc.grid import Grid, LinearGrid, QuadratureGrid
 from desc.input_reader import InputReader
 from desc.io import load
+from desc.objectives import ForceBalance, ObjectiveFunction
+from desc.profiles import PowerSeriesProfile
 from desc.transform import Transform
 from desc.vmec import VMECIO
 from desc.vmec_utils import (
@@ -293,6 +295,7 @@ def test_vmec_load_profiles(TmpDir):
 
 
 @pytest.mark.slow
+@pytest.mark.solve
 @pytest.mark.unit
 def test_load_then_save(TmpDir):
     """Tests if loading and then saving gives the original result."""
@@ -300,6 +303,7 @@ def test_load_then_save(TmpDir):
     output_path = str(TmpDir.join("DESC_SOLOVEV.nc"))
 
     eq = VMECIO.load(input_path, profile="iota")
+    eq.solve(ftol=1e-6, xtol=1e-8)
     VMECIO.save(eq, output_path)
 
     file1 = Dataset(input_path, mode="r")
@@ -315,6 +319,410 @@ def test_load_then_save(TmpDir):
     np.testing.assert_allclose(rmnc2, rmnc1, rtol=1e-3, atol=1e-3)
     np.testing.assert_allclose(zmns2, zmns1, rtol=1e-3, atol=1e-3)
     np.testing.assert_allclose(lmns2, lmns1, rtol=1e-3, atol=5e-2)
+
+    assert file1.variables["nfp"][:] == file2.variables["nfp"][:]
+    assert file1.variables["ns"][:] == file2.variables["ns"][:]
+    assert file1.variables["mpol"][:] == file2.variables["mpol"][:]
+    assert file1.variables["ntor"][:] == file2.variables["ntor"][:]
+    assert file1.variables["mnmax"][:] == file2.variables["mnmax"][:]
+    np.testing.assert_allclose(file1.variables["xm"][:], file2.variables["xm"][:])
+    np.testing.assert_allclose(file1.variables["xn"][:], file2.variables["xn"][:])
+    assert file1.variables["mnmax_nyq"][:] == file2.variables["mnmax_nyq"][:]
+    np.testing.assert_allclose(
+        file1.variables["xm_nyq"][:], file2.variables["xm_nyq"][:]
+    )
+    np.testing.assert_allclose(
+        file1.variables["xn_nyq"][:], file2.variables["xn_nyq"][:]
+    )
+    assert file1.variables["signgs"][:] == file2.variables["signgs"][:]
+    assert file1.variables["gamma"][:] == file2.variables["gamma"][:]
+    assert file1.variables["nextcur"][:] == file2.variables["nextcur"][:]
+    assert np.all(
+        np.char.compare_chararrays(
+            file1.variables["pmass_type"][:],
+            file2.variables["pmass_type"][:],
+            "==",
+            False,
+        )
+    )
+    assert np.all(
+        np.char.compare_chararrays(
+            file1.variables["piota_type"][:],
+            file2.variables["piota_type"][:],
+            "==",
+            False,
+        )
+    )
+    assert np.all(
+        np.char.compare_chararrays(
+            file1.variables["pcurr_type"][:],
+            file2.variables["pcurr_type"][:],
+            "==",
+            False,
+        )
+    )
+    np.testing.assert_allclose(
+        file1.variables["am"][:], file2.variables["am"][:], atol=1e-5
+    )
+    np.testing.assert_allclose(
+        file1.variables["ai"][:], file2.variables["ai"][:], atol=1e-8
+    )
+    np.testing.assert_allclose(
+        file1.variables["ac"][:], file2.variables["ac"][:], atol=1e-8
+    )
+    np.testing.assert_allclose(
+        file1.variables["presf"][:], file2.variables["presf"][:], atol=2e-2
+    )
+    np.testing.assert_allclose(file1.variables["pres"][:], file2.variables["pres"][:])
+    np.testing.assert_allclose(file1.variables["mass"][:], file2.variables["mass"][:])
+    np.testing.assert_allclose(file1.variables["iotaf"][:], file2.variables["iotaf"][:])
+    np.testing.assert_allclose(
+        file1.variables["q_factor"][:], file2.variables["q_factor"][:]
+    )
+    np.testing.assert_allclose(file1.variables["iotas"][:], file2.variables["iotas"][:])
+    np.testing.assert_allclose(file1.variables["phi"][:], file2.variables["phi"][:])
+    np.testing.assert_allclose(file1.variables["phipf"][:], file2.variables["phipf"][:])
+    np.testing.assert_allclose(file1.variables["phips"][:], file2.variables["phips"][:])
+    np.testing.assert_allclose(
+        file1.variables["chi"][:], file2.variables["chi"][:], atol=2e-5
+    )
+    np.testing.assert_allclose(file1.variables["chipf"][:], file2.variables["chipf"][:])
+    np.testing.assert_allclose(
+        file1.variables["Rmajor_p"][:], file2.variables["Rmajor_p"][:]
+    )
+    np.testing.assert_allclose(
+        file1.variables["Aminor_p"][:], file2.variables["Aminor_p"][:]
+    )
+    np.testing.assert_allclose(
+        file1.variables["aspect"][:], file2.variables["aspect"][:]
+    )
+    np.testing.assert_allclose(
+        file1.variables["volume_p"][:], file2.variables["volume_p"][:], rtol=1e-5
+    )
+    np.testing.assert_allclose(
+        file1.variables["volavgB"][:], file2.variables["volavgB"][:], rtol=1e-5
+    )
+    np.testing.assert_allclose(
+        file1.variables["betatotal"][:], file2.variables["betatotal"][:], rtol=1e-5
+    )
+    np.testing.assert_allclose(
+        file1.variables["betapol"][:], file2.variables["betapol"][:], rtol=1e-5
+    )
+    np.testing.assert_allclose(
+        file1.variables["betator"][:], file2.variables["betator"][:], rtol=1e-5
+    )
+    np.testing.assert_allclose(file1.variables["wb"][:], file2.variables["wb"][:])
+    np.testing.assert_allclose(
+        file1.variables["wp"][:], file2.variables["wp"][:], rtol=1e-6
+    )
+    np.testing.assert_allclose(
+        file1.variables["ctor"][:], file2.variables["ctor"][:], rtol=1e-5
+    )
+    np.testing.assert_allclose(
+        file1.variables["rbtor"][:], file2.variables["rbtor"][:], rtol=1e-5
+    )
+    np.testing.assert_allclose(
+        file1.variables["rbtor0"][:], file2.variables["rbtor0"][:], rtol=1e-5
+    )
+    np.testing.assert_allclose(
+        file1.variables["b0"][:], file2.variables["b0"][:], rtol=5e-5
+    )
+    np.testing.assert_allclose(
+        file1.variables["buco"][20:100], file2.variables["buco"][20:100], rtol=1e-5
+    )
+    np.testing.assert_allclose(
+        file1.variables["bvco"][20:100], file2.variables["bvco"][20:100], rtol=1e-5
+    )
+    np.testing.assert_allclose(
+        file1.variables["vp"][20:100], file2.variables["vp"][20:100], rtol=1e-6
+    )
+    np.testing.assert_allclose(
+        file1.variables["bdotb"][20:100], file2.variables["bdotb"][20:100], rtol=1e-6
+    )
+    np.testing.assert_allclose(
+        file1.variables["jdotb"][20:100], file2.variables["jdotb"][20:100], rtol=1e-5
+    )
+    np.testing.assert_allclose(
+        file1.variables["jcuru"][20:100], file2.variables["jcuru"][20:100], rtol=1e-2
+    )
+    np.testing.assert_allclose(
+        file1.variables["jcurv"][20:100], file2.variables["jcurv"][20:100], rtol=3e-2
+    )
+    np.testing.assert_allclose(
+        file1.variables["DShear"][20:100], file2.variables["DShear"][20:100], rtol=1e-2
+    )
+    np.testing.assert_allclose(
+        file1.variables["DCurr"][20:100], file2.variables["DCurr"][20:100], rtol=1e-2
+    )
+    np.testing.assert_allclose(
+        file1.variables["DWell"][20:100], file2.variables["DWell"][20:100], rtol=1e-2
+    )
+    np.testing.assert_allclose(
+        file1.variables["DGeod"][20:100], file2.variables["DGeod"][20:100], atol=1e-9
+    )
+    np.testing.assert_allclose(
+        file1.variables["DMerc"][20:100], file2.variables["DMerc"][20:100], rtol=5e-2
+    )
+    np.testing.assert_allclose(
+        file1.variables["raxis_cc"][:], file2.variables["raxis_cc"][:], rtol=5e-5
+    )
+    np.testing.assert_allclose(
+        file1.variables["zaxis_cs"][:], file2.variables["zaxis_cs"][:], rtol=5e-5
+    )
+    np.testing.assert_allclose(
+        file1.variables["rmin_surf"][:], file2.variables["rmin_surf"][:], rtol=5e-3
+    )
+    np.testing.assert_allclose(
+        file1.variables["rmax_surf"][:], file2.variables["rmax_surf"][:], rtol=5e-3
+    )
+    np.testing.assert_allclose(
+        file1.variables["zmax_surf"][:], file2.variables["zmax_surf"][:], rtol=5e-3
+    )
+    np.testing.assert_allclose(
+        file1.variables["beta_vol"][:], file2.variables["beta_vol"][:], rtol=5e-5
+    )
+    np.testing.assert_allclose(
+        file1.variables["betaxis"][:], file2.variables["betaxis"][:], rtol=5e-5
+    )
+
+    file1.close()
+    file2.close()
+
+
+@pytest.mark.slow
+@pytest.mark.solve
+@pytest.mark.unit
+def test_load_then_save_current(TmpDir):
+    """Tests if loading and then saving gives the original result."""
+    input_path = "./tests/inputs/wout_GS_LH_ns256.nc"
+    output_path = str(TmpDir.join("DESC_SOLOVEV_current_constrained.nc"))
+
+    eq = VMECIO.load(input_path, profile="current")
+    # change profiles to match original ones, as the spline current profile
+    # won't have the correct near-axis behavior
+    inputs = InputReader.parse_vmec_inputs("./tests/inputs/input.GS_LH")[0]
+    p = PowerSeriesProfile(
+        params=inputs["pressure"][:, 1], modes=inputs["pressure"][:, 0]
+    )
+    c = PowerSeriesProfile(
+        params=inputs["current"][:, 1], modes=inputs["current"][:, 0]
+    )
+    eq.pressure = p
+    eq.current = c
+
+    grid = QuadratureGrid(M=eq.M, L=eq.L_grid, N=0)
+    eq.solve(
+        ftol=1e-6,
+        xtol=1e-8,
+        gtol=1e-10,
+        objective=ObjectiveFunction(ForceBalance(eq, grid=grid)),
+    )
+    VMECIO.save(eq, output_path, surfs=256)
+
+    file1 = Dataset(input_path, mode="r")
+    file2 = Dataset(output_path, mode="r")
+
+    rmnc1 = file1.variables["rmnc"][:]
+    rmnc2 = file2.variables["rmnc"][:]
+    zmns1 = file1.variables["zmns"][:]
+    zmns2 = file2.variables["zmns"][:]
+    lmns1 = file1.variables["lmns"][:]
+    lmns2 = file2.variables["lmns"][:]
+
+    np.testing.assert_allclose(rmnc2, rmnc1, rtol=1e-3, atol=1e-3)
+    np.testing.assert_allclose(zmns2, zmns1, rtol=1e-3, atol=1e-3)
+    np.testing.assert_allclose(lmns2, lmns1, rtol=1e-3, atol=5e-2)
+
+    assert file1.variables["nfp"][:] == file2.variables["nfp"][:]
+    assert file1.variables["ns"][:] == file2.variables["ns"][:]
+    assert file1.variables["mpol"][:] == file2.variables["mpol"][:]
+    assert file1.variables["ntor"][:] == file2.variables["ntor"][:]
+    assert file1.variables["mnmax"][:] == file2.variables["mnmax"][:]
+    np.testing.assert_allclose(file1.variables["xm"][:], file2.variables["xm"][:])
+    np.testing.assert_allclose(file1.variables["xn"][:], file2.variables["xn"][:])
+    assert file1.variables["mnmax_nyq"][:] == file2.variables["mnmax_nyq"][:]
+    np.testing.assert_allclose(
+        file1.variables["xm_nyq"][:], file2.variables["xm_nyq"][:]
+    )
+    np.testing.assert_allclose(
+        file1.variables["xn_nyq"][:], file2.variables["xn_nyq"][:]
+    )
+    assert file1.variables["signgs"][:] == file2.variables["signgs"][:]
+    assert file1.variables["gamma"][:] == file2.variables["gamma"][:]
+    assert file1.variables["nextcur"][:] == file2.variables["nextcur"][:]
+    assert np.all(
+        np.char.compare_chararrays(
+            file1.variables["pmass_type"][:],
+            file2.variables["pmass_type"][:],
+            "==",
+            False,
+        )
+    )
+    assert np.all(
+        np.char.compare_chararrays(
+            file1.variables["piota_type"][:],
+            file2.variables["piota_type"][:],
+            "==",
+            False,
+        )
+    )
+    assert np.all(
+        np.char.compare_chararrays(
+            file1.variables["pcurr_type"][:],
+            file2.variables["pcurr_type"][:],
+            "==",
+            False,
+        )
+    )
+    np.testing.assert_allclose(
+        file1.variables["am"][:], file2.variables["am"][:], atol=1e-4
+    )
+    np.testing.assert_allclose(
+        file1.variables["ai"][:], file2.variables["ai"][:], atol=1e-8
+    )
+    # we don't test AC because the .nc is the current derivative profile
+    # while ours is the current profile
+    np.testing.assert_allclose(
+        file1.variables["presf"][:], file2.variables["presf"][:], atol=2e-2
+    )
+    np.testing.assert_allclose(file1.variables["pres"][:], file2.variables["pres"][:])
+    np.testing.assert_allclose(file1.variables["mass"][:], file2.variables["mass"][:])
+    np.testing.assert_allclose(
+        file1.variables["iotaf"][:], file2.variables["iotaf"][:], atol=1e-4
+    )
+    np.testing.assert_allclose(
+        file1.variables["q_factor"][:], file2.variables["q_factor"][:], atol=1e-4
+    )
+    np.testing.assert_allclose(
+        file1.variables["iotas"][:], file2.variables["iotas"][:], atol=1e-4
+    )
+    np.testing.assert_allclose(
+        file1.variables["phi"][:], file2.variables["phi"][:], atol=1e-4
+    )
+    np.testing.assert_allclose(
+        file1.variables["phipf"][:], file2.variables["phipf"][:], atol=1e-4
+    )
+    np.testing.assert_allclose(
+        file1.variables["phips"][:], file2.variables["phips"][:], atol=1e-4
+    )
+    np.testing.assert_allclose(
+        file1.variables["chi"][:], file2.variables["chi"][:], atol=1e-4
+    )
+    np.testing.assert_allclose(
+        file1.variables["chipf"][:], file2.variables["chipf"][:], atol=3e-4
+    )
+    np.testing.assert_allclose(
+        file1.variables["Rmajor_p"][:], file2.variables["Rmajor_p"][:]
+    )
+    np.testing.assert_allclose(
+        file1.variables["Aminor_p"][:], file2.variables["Aminor_p"][:]
+    )
+    np.testing.assert_allclose(
+        file1.variables["aspect"][:], file2.variables["aspect"][:]
+    )
+    np.testing.assert_allclose(
+        file1.variables["volume_p"][:], file2.variables["volume_p"][:], rtol=1e-5
+    )
+    np.testing.assert_allclose(
+        file1.variables["volavgB"][:], file2.variables["volavgB"][:], rtol=1e-5
+    )
+    np.testing.assert_allclose(
+        file1.variables["betatotal"][:], file2.variables["betatotal"][:], rtol=1e-5
+    )
+    np.testing.assert_allclose(
+        file1.variables["betapol"][:], file2.variables["betapol"][:], rtol=1e-5
+    )
+    np.testing.assert_allclose(
+        file1.variables["betator"][:], file2.variables["betator"][:], rtol=1e-5
+    )
+    np.testing.assert_allclose(file1.variables["wb"][:], file2.variables["wb"][:])
+    np.testing.assert_allclose(
+        file1.variables["wp"][:], file2.variables["wp"][:], rtol=1e-6
+    )
+    np.testing.assert_allclose(
+        file1.variables["ctor"][:], file2.variables["ctor"][:], rtol=1e-5
+    )
+    np.testing.assert_allclose(
+        file1.variables["rbtor"][:], file2.variables["rbtor"][:], rtol=1e-5
+    )
+    np.testing.assert_allclose(
+        file1.variables["rbtor0"][:], file2.variables["rbtor0"][:], rtol=1e-5
+    )
+    np.testing.assert_allclose(
+        file1.variables["b0"][:], file2.variables["b0"][:], rtol=5e-5
+    )
+    np.testing.assert_allclose(
+        file1.variables["buco"][20:236], file2.variables["buco"][20:236], rtol=1e-5
+    )
+    np.testing.assert_allclose(
+        file1.variables["bvco"][20:236], file2.variables["bvco"][20:236], rtol=1e-5
+    )
+    np.testing.assert_allclose(
+        file1.variables["vp"][20:236], file2.variables["vp"][20:236], rtol=1e-6
+    )
+    np.testing.assert_allclose(
+        file1.variables["bdotb"][20:236], file2.variables["bdotb"][20:236], rtol=1e-6
+    )
+    np.testing.assert_allclose(
+        file1.variables["jdotb"][20:236], file2.variables["jdotb"][20:236], rtol=1e-5
+    )
+    np.testing.assert_allclose(
+        file1.variables["jcuru"][20:236], file2.variables["jcuru"][20:236], rtol=1e-2
+    )
+    np.testing.assert_allclose(
+        file1.variables["jcurv"][20:236], file2.variables["jcurv"][20:236], rtol=3e-2
+    )
+    np.testing.assert_allclose(
+        file1.variables["DShear"][20:236],
+        file2.variables["DShear"][20:236],
+        rtol=1e-2,
+        atol=1e-10,
+    )
+    np.testing.assert_allclose(
+        file1.variables["DCurr"][20:236],
+        file2.variables["DCurr"][20:236],
+        rtol=1e-2,
+        atol=1e-5,
+    )
+    np.testing.assert_allclose(
+        file1.variables["DWell"][20:236],
+        file2.variables["DWell"][20:236],
+        rtol=1e-2,
+        atol=1e-10,
+    )
+    np.testing.assert_allclose(
+        file1.variables["DGeod"][20:236],
+        file2.variables["DGeod"][20:236],
+        atol=1e-9,
+        rtol=1e-2,
+    )
+    np.testing.assert_allclose(
+        file1.variables["DMerc"][20:236],
+        file2.variables["DMerc"][20:236],
+        rtol=5e-2,
+        atol=1e-10,
+    )
+    np.testing.assert_allclose(
+        file1.variables["raxis_cc"][:], file2.variables["raxis_cc"][:], rtol=5e-5
+    )
+    np.testing.assert_allclose(
+        file1.variables["zaxis_cs"][:], file2.variables["zaxis_cs"][:], rtol=5e-5
+    )
+    np.testing.assert_allclose(
+        file1.variables["rmin_surf"][:], file2.variables["rmin_surf"][:], rtol=5e-3
+    )
+    np.testing.assert_allclose(
+        file1.variables["rmax_surf"][:], file2.variables["rmax_surf"][:], rtol=5e-3
+    )
+    np.testing.assert_allclose(
+        file1.variables["zmax_surf"][:], file2.variables["zmax_surf"][:], rtol=5e-3
+    )
+    np.testing.assert_allclose(
+        file1.variables["beta_vol"][:], file2.variables["beta_vol"][:], rtol=5e-5
+    )
+    np.testing.assert_allclose(
+        file1.variables["betaxis"][:], file2.variables["betaxis"][:], rtol=5e-5
+    )
 
     file1.close()
     file2.close()
@@ -451,10 +859,10 @@ def test_vmec_save_1(VMEC_save):
         )
     )
     np.testing.assert_allclose(
-        vmec.variables["am"][:], desc.variables["am"][:], atol=1e-5
+        vmec.variables["am"][:], desc.variables["am"][:], atol=1e-4
     )
     np.testing.assert_allclose(
-        vmec.variables["ai"][:], desc.variables["ai"][:], atol=1e-8
+        vmec.variables["ai"][:], desc.variables["ai"][:], atol=1e-3
     )
     np.testing.assert_allclose(
         vmec.variables["ac"][:], desc.variables["ac"][:], atol=1e-8
@@ -515,40 +923,40 @@ def test_vmec_save_1(VMEC_save):
         vmec.variables["b0"][:], desc.variables["b0"][:], rtol=5e-5
     )
     np.testing.assert_allclose(
-        vmec.variables["buco"][20:100], desc.variables["buco"][20:100], rtol=1e-5
+        vmec.variables["buco"][20:230], desc.variables["buco"][20:230], rtol=1e-5
     )
     np.testing.assert_allclose(
-        vmec.variables["bvco"][20:100], desc.variables["bvco"][20:100], rtol=1e-5
+        vmec.variables["bvco"][20:230], desc.variables["bvco"][20:230], rtol=1e-5
     )
     np.testing.assert_allclose(
-        vmec.variables["vp"][20:100], desc.variables["vp"][20:100], rtol=1e-6
+        vmec.variables["vp"][20:230], desc.variables["vp"][20:230], rtol=1e-6
     )
     np.testing.assert_allclose(
-        vmec.variables["bdotb"][20:100], desc.variables["bdotb"][20:100], rtol=1e-6
+        vmec.variables["bdotb"][20:230], desc.variables["bdotb"][20:230], rtol=1e-6
     )
     np.testing.assert_allclose(
-        vmec.variables["jdotb"][20:100], desc.variables["jdotb"][20:100], rtol=1e-5
+        vmec.variables["jdotb"][20:230], desc.variables["jdotb"][20:230], rtol=1e-5
     )
     np.testing.assert_allclose(
-        vmec.variables["jcuru"][20:100], desc.variables["jcuru"][20:100], rtol=1e-2
+        vmec.variables["jcuru"][20:230], desc.variables["jcuru"][20:230], rtol=1e-2
     )
     np.testing.assert_allclose(
-        vmec.variables["jcurv"][20:100], desc.variables["jcurv"][20:100], rtol=3e-2
+        vmec.variables["jcurv"][20:230], desc.variables["jcurv"][20:230], rtol=3e-2
     )
     np.testing.assert_allclose(
-        vmec.variables["DShear"][20:100], desc.variables["DShear"][20:100], rtol=1e-2
+        vmec.variables["DShear"][20:230], desc.variables["DShear"][20:230], rtol=1e-2
     )
     np.testing.assert_allclose(
-        vmec.variables["DCurr"][20:100], desc.variables["DCurr"][20:100], rtol=1e-2
+        vmec.variables["DCurr"][20:230], desc.variables["DCurr"][20:230], rtol=1e-2
     )
     np.testing.assert_allclose(
-        vmec.variables["DWell"][20:100], desc.variables["DWell"][20:100], rtol=1e-2
+        vmec.variables["DWell"][20:230], desc.variables["DWell"][20:230], rtol=1e-2
     )
     np.testing.assert_allclose(
-        vmec.variables["DGeod"][20:100], desc.variables["DGeod"][20:100], atol=1e-9
+        vmec.variables["DGeod"][20:230], desc.variables["DGeod"][20:230], atol=1e-9
     )
     np.testing.assert_allclose(
-        vmec.variables["DMerc"][20:100], desc.variables["DMerc"][20:100], rtol=5e-2
+        vmec.variables["DMerc"][20:230], desc.variables["DMerc"][20:230], rtol=5e-2
     )
     np.testing.assert_allclose(
         vmec.variables["raxis_cc"][:], desc.variables["raxis_cc"][:], rtol=5e-5

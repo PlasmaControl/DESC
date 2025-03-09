@@ -710,7 +710,7 @@ class ProximalProjection(ObjectiveFunction):
         self._unfixed_idx_mat[self._eq_idx] = self._unfixed_idx_mat[self._eq_idx][
             :, self._eq_unfixed_idx
         ] @ (self._eq_Z * self._eq_D[self._eq_unfixed_idx, None])
-        self._unfixed_idx_mat = jnp.concatenate(
+        self._unfixed_idx_mat = np.concatenate(
             [np.atleast_2d(foo) for foo in self._unfixed_idx_mat], axis=-1
         )
 

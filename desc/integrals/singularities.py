@@ -860,7 +860,7 @@ kernels = {
 
 
 def virtual_casing_biot_savart(
-    eval_data, source_data, interpolator, chunk_size=1, **kwargs
+    eval_data, source_data, interpolator, chunk_size=None, **kwargs
 ):
     """Evaluate magnetic field on surface due to sheet current on surface.
 
@@ -901,9 +901,9 @@ def virtual_casing_biot_savart(
         source grid around each singular point. See ``FFTInterpolator`` or
         ``DFTInterpolator``
     chunk_size : int or None
-        Size to split computation into chunks.
+        Size to split singular integral computation into chunks.
         If no chunking should be done or the chunk size is the full input
-        then supply ``None``. Default is ``1``.
+        then supply ``None``.
 
     Returns
     -------
@@ -926,7 +926,9 @@ def virtual_casing_biot_savart(
     )
 
 
-def compute_B_plasma(eq, eval_grid, source_grid=None, normal_only=False):
+def compute_B_plasma(
+    eq, eval_grid, source_grid=None, normal_only=False, chunk_size=None
+):
     """Evaluate magnetic field on surface due to enclosed plasma currents.
 
     The magnetic field due to the plasma current can be written as a Biot-Savart
@@ -961,6 +963,10 @@ def compute_B_plasma(eq, eval_grid, source_grid=None, normal_only=False):
         Source points for integral.
     normal_only : bool
         If True, only compute and return the normal component of the plasma field 𝐁ᵥ⋅𝐧
+    chunk_size : int or None
+        Size to split singular integral computation into chunks.
+        If no chunking should be done or the chunk size is the full input
+        then supply ``None``.
 
     Returns
     -------
@@ -991,7 +997,9 @@ def compute_B_plasma(eq, eval_grid, source_grid=None, normal_only=False):
         source_data["K_vc"] += source_data["K"]
 
     interpolator = get_interpolator(eval_grid, source_grid, source_data)
-    Bplasma = virtual_casing_biot_savart(eval_data, source_data, interpolator)
+    Bplasma = virtual_casing_biot_savart(
+        eval_data, source_data, interpolator, chunk_size
+    )
     # need extra factor of B/2 bc we're evaluating on plasma surface
     Bplasma += eval_data["B"] / 2
     if normal_only:

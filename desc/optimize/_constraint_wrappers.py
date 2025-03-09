@@ -129,6 +129,14 @@ class LinearConstraintProjection(ObjectiveFunction):
         self._dim_x_reduced = self._Z.shape[1]
 
         # equivalent matrix for A[unfixed_idx] @ D @ Z == A @ unfixed_idx_mat
+        # Represents the tangent directions of the reduced parameters in full space
+        # During optimization, we have the reduced parameters x_reduced, and we need
+        # to compute the derivatives for that, but since compute functions are written
+        # for the full state vector, we have to compute the derivatives with
+        # these tangents.
+        # For example, let's say the full state vector X has constraints X1=X2 and
+        # X = [X1 X2 X3]. The reduced state vector of this is Y = [Y1 Y2]. We can take
+        # Y1=X1=X2 and Y2=X3. Then df/dY1 = df/dX1 + df/dX2 and df/dY2 = df/dX3.
         self._unfixed_idx_mat = jnp.diag(self._D)[:, self._unfixed_idx] @ self._Z
 
         self._built = True
@@ -600,7 +608,7 @@ class ProximalProjection(ObjectiveFunction):
             self._args.remove(arg)
         linear_constraint = ObjectiveFunction(self._linear_constraints)
         linear_constraint.build()
-        (self._Z, self._D, self._unfixed_idx) = (
+        (self._eq_Z, self._eq_D, self._eq_unfixed_idx) = (
             self._eq_solve_objective._Z,
             self._eq_solve_objective._D,
             self._eq_solve_objective._unfixed_idx,
@@ -700,8 +708,8 @@ class ProximalProjection(ObjectiveFunction):
             self._unfixed_idx_mat, np.cumsum([t.dim_x for t in self.things]), axis=-1
         )
         self._unfixed_idx_mat[self._eq_idx] = self._unfixed_idx_mat[self._eq_idx][
-            :, self._unfixed_idx
-        ] @ (self._Z * self._D[self._unfixed_idx, None])
+            :, self._eq_unfixed_idx
+        ] @ (self._eq_Z * self._eq_D[self._eq_unfixed_idx, None])
         self._unfixed_idx_mat = np.concatenate(
             [np.atleast_2d(foo) for foo in self._unfixed_idx_mat], axis=-1
         )
@@ -1063,13 +1071,8 @@ class ProximalProjection(ObjectiveFunction):
             Constant parameters passed to sub-objectives.
 
         """
-        v = v[0] if isinstance(v, (tuple, list)) else v
-        constants = setdefault(constants, self.constants)
-        xg, xf = self._update_equilibrium(x, store=True)
-        jvpfun = lambda u: self._jvp(u, xf, xg, constants, op="scaled")
-        return batched_vectorize(
-            jvpfun, signature="(n)->(k)", chunk_size=self._objective._jac_chunk_size
-        )(v)
+        op = "scaled"
+        return self._jvp(v, x, constants, op)
 
     def jvp_scaled_error(self, v, x, constants=None):
         """Compute Jacobian-vector product of self.compute_scaled_error.
@@ -1085,13 +1088,8 @@ class ProximalProjection(ObjectiveFunction):
             Constant parameters passed to sub-objectives.
 
         """
-        v = v[0] if isinstance(v, (tuple, list)) else v
-        constants = setdefault(constants, self.constants)
-        xg, xf = self._update_equilibrium(x, store=True)
-        jvpfun = lambda u: self._jvp(u, xf, xg, constants, op="scaled_error")
-        return batched_vectorize(
-            jvpfun, signature="(n)->(k)", chunk_size=self._objective._jac_chunk_size
-        )(v)
+        op = "scaled_error"
+        return self._jvp(v, x, constants, op)
 
     def jvp_unscaled(self, v, x, constants=None):
         """Compute Jacobian-vector product of self.compute_unscaled.
@@ -1107,34 +1105,61 @@ class ProximalProjection(ObjectiveFunction):
             Constant parameters passed to sub-objectives.
 
         """
+        op = "unscaled"
+        return self._jvp(v, x, constants, op)
+
+    def _jvp(self, v, x, constants=None, op="scaled_error"):
+        # The goal is to compute the Jacobian of the objective function with respect to
+        # the optimization variables (c). Before taking the jacobian, we update the
+        # equilibrium such that
+        # F(x+dx, c+dc) = 0 = F(x, c) + dF/dx * dx + dF/dc * dc
+        # where we already have F(x, c) = 0, so we can solve for dx and get
+        # dx = - (dF/dx)^-1 * dF/dc * dc     # noqa : E800
+        # We can then compute the Jacobian of the objective function with respect to c
+        # G(x+dx, c+dc) = G(x, c) + dG/dx * dx + dG/dc * dc
+        # substituting in dx we get
+        # G(x+dx, c+dc) = G(x, c) + [ dG/dc - dG/dx * (dF/dx)^-1 * dF/dc ]* dc
+        # and the Jacobian we want is dG/dc - dG/dx * (dF/dx)^-1 * dF/dc
         v = v[0] if isinstance(v, (tuple, list)) else v
         constants = setdefault(constants, self.constants)
         xg, xf = self._update_equilibrium(x, store=True)
-        jvpfun = lambda u: self._jvp(u, xf, xg, constants, op="unscaled")
-        return batched_vectorize(
-            jvpfun, signature="(n)->(k)", chunk_size=self._objective._jac_chunk_size
+
+        # we don't need to divide this part into blocked and batched because
+        # self._constraint._deriv_mode will handle it
+        jvpfun = lambda u: self._get_tangent(u, xf, constants, op=op)
+        tangents = batched_vectorize(
+            jvpfun,
+            signature="(n)->(k)",
+            chunk_size=self._constraint._jac_chunk_size,
         )(v)
 
-    def _jvp(self, v, xf, xg, constants, op):
-        # we're replacing stuff like this with jvps
-        # Fx_reduced = Fx[:, unfixed_idx] @ Z               # noqa: E800
-        # Gx_reduced = Gx[:, unfixed_idx] @ Z               # noqa: E800
-        # Fc = Fx @ dxdc @ v                                # noqa: E800
-        # Gc = Gx @ dxdc @ v                                # noqa: E800
-        # LHS = Gx_reduced @ (Fx_reduced_inv @ Fc) - Gc     # noqa: E800
+        if self._objective._deriv_mode == "batched":
+            # objective's method already know about its jac_chunk_size
+            return getattr(self._objective, "jvp_" + op)(tangents, xg, constants[0])
+        else:
+            xgs = jnp.split(xg, np.cumsum(self._dimx_per_thing))
+            jvpfun = lambda u: _proximal_jvp_blocked_pure(
+                self._objective, jnp.split(u, np.cumsum(self._dimx_per_thing)), xgs, op
+            )
+            return batched_vectorize(
+                jvpfun,
+                signature="(n)->(k)",
+                chunk_size=self._objective._jac_chunk_size,
+            )(tangents)
 
-        # v contains "boundary" dofs from eq and other objects
-        # want jvp_f to only get parts from equilibrium, not other things
+    def _get_tangent(self, v, xf, constants, op):
+        # v contains "boundary" dofs from eq and other objects (like coils, surfaces
+        # etc) want jvp_f to only get parts from equilibrium, not other things
         vs = jnp.split(v, np.cumsum(self._dimc_per_thing))
-        # this is Fx_reduced_inv @ Fc
+        # This is (dF/dx)^-1 * dF/dc  # noqa : E800
         dfdc = _proximal_jvp_f_pure(
             self._constraint,
             xf,
             constants[1],
             vs[self._eq_idx],
-            self._unfixed_idx,
-            self._Z,
-            self._D,
+            self._eq_unfixed_idx,
+            self._eq_Z,
+            self._eq_D,
             self._dxdc,
             op,
         )
@@ -1143,9 +1168,18 @@ class ProximalProjection(ObjectiveFunction):
         dfdcs[self._eq_idx] = dfdc
         dfdc = jnp.concatenate(dfdcs)
 
-        # dG/dc = Gx_reduced @ (Fx_reduced_inv @ Fc) - Gc
-        # = Gx @ (unfixed_idx @ Z @ dfdc - dxdc @ v)
-        # unfixed_idx_mat includes Z already
+        # We try to find dG/dc - dG/dx * (dF/dx)^-1 * dF/dc
+        # where G is the objective function. Since DESC stores x and c in the same
+        # vector, instead of multiple jvp calls, we will just find a tangent direction
+        # that will give us the same result.
+        # For making the explanation clear, assume J is the Jacobian of the objective
+        # function with respect to the full state vector (both x and c). Then,
+        # dG/dc = J @ (tangent vectors in c direction)
+        # dG/dx = J @ (tangent vectors in x direction)
+        # So, dG/dc - dG/dx * (dF/dx)^-1 * dF/dc can be written as
+        # J @ [(tangent vectors in c direction) - (tangent vectors in x direction)@dfdc]
+        # Note: We will never form full Jacobian J, we will just compute the above
+        # expression by JVPs.
         dxdcv = jnp.concatenate(
             [
                 *vs[: self._eq_idx],
@@ -1153,14 +1187,8 @@ class ProximalProjection(ObjectiveFunction):
                 *vs[self._eq_idx + 1 :],
             ]
         )
-        tangent = self._unfixed_idx_mat @ dfdc - dxdcv
-        if self._objective._deriv_mode in ["batched"]:
-            out = getattr(self._objective, "jvp_" + op)(tangent, xg, constants[0])
-        else:  # deriv_mode == "blocked"
-            vgs = jnp.split(tangent, np.cumsum(self._dimx_per_thing))
-            xgs = jnp.split(xg, np.cumsum(self._dimx_per_thing))
-            out = _proximal_jvp_blocked_pure(self._objective, vgs, xgs, op)
-        return -out
+        tangent = dxdcv - self._unfixed_idx_mat @ dfdc
+        return tangent
 
     @property
     def constants(self):
@@ -1181,16 +1209,17 @@ class ProximalProjection(ObjectiveFunction):
 
 @functools.partial(jit, static_argnames=["op"])
 def _proximal_jvp_f_pure(constraint, xf, constants, dc, unfixed_idx, Z, D, dxdc, op):
-    Fx = getattr(constraint, "jac_" + op)(xf, constants)
-    Fx_reduced = Fx @ jnp.diag(D)[:, unfixed_idx] @ Z
-    Fc = Fx @ (dxdc @ dc)
-    Fxh = Fx_reduced
+    # here we are forming (dF/dx)^-1 @ dF/dc
+    # where Fxh is dF/dx and Fc is dF/dc
+    Fxh = getattr(constraint, "jvp_" + op)(
+        (jnp.diag(D)[:, unfixed_idx] @ Z).T, xf, constants
+    ).T
+    Fc = getattr(constraint, "jvp_" + op)(dxdc @ dc, xf, constants)
     cutoff = jnp.finfo(Fxh.dtype).eps * max(Fxh.shape)
     uf, sf, vtf = jnp.linalg.svd(Fxh, full_matrices=False)
     sf += sf[-1]  # add a tiny bit of regularization
     sfi = jnp.where(sf < cutoff * sf[0], 0, 1 / sf)
-    Fxh_inv = vtf.T @ (sfi[..., None] * uf.T)
-    return Fxh_inv @ Fc
+    return vtf.T @ (sfi * (uf.T @ Fc))
 
 
 @functools.partial(jit, static_argnames=["op"])
@@ -1213,5 +1242,4 @@ def _proximal_jvp_blocked_pure(objective, vgs, xgs, op):
         else:
             outi = getattr(obj, "jvp_" + op)([_vi for _vi in vi], xi, constants=const).T
             out.append(outi)
-    out = jnp.concatenate(out)
-    return out
+    return jnp.concatenate(out)

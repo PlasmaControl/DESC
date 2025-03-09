@@ -111,7 +111,7 @@ class Curve(IOAble, Optimizable, ABC):
 
         Returns
         -------
-        data : dict of ndarray
+        data : dict[str, jnp.ndarray]
             Computed quantity and intermediate variables.
 
         """
@@ -394,7 +394,7 @@ class Surface(IOAble, Optimizable, ABC):
 
     @property
     def sym(self):
-        """bool: Whether or not the surface is stellarator symmetric."""
+        """bool: Whether the surface is stellarator symmetric."""
         return self._sym
 
     def _compute_orientation(self):
@@ -467,7 +467,7 @@ class Surface(IOAble, Optimizable, ABC):
 
         Returns
         -------
-        data : dict of ndarray
+        data : dict[str, jnp.ndarray]
             Computed quantity and intermediate variables.
 
         """

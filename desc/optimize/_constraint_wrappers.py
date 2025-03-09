@@ -129,6 +129,14 @@ class LinearConstraintProjection(ObjectiveFunction):
         self._dim_x_reduced = self._Z.shape[1]
 
         # equivalent matrix for A[unfixed_idx] @ D @ Z == A @ unfixed_idx_mat
+        # Represents the tangent directions of the reduced parameters in full space
+        # During optimization, we have the reduced parameters x_reduced, and we need
+        # to compute the derivatives for that, but since compute functions are written
+        # for the full state vector, we have to compute the derivatives with
+        # these tangents.
+        # For example, let's say the full state vector X has constraints X1=X2 and
+        # X = [X1 X2 X3]. The reduced state vector of this is Y = [Y1 Y2]. We can take
+        # Y1=X1=X2 and Y2=X3. Then df/dY1 = df/dX1 + df/dX2 and df/dY2 = df/dX3.
         self._unfixed_idx_mat = jnp.diag(self._D)[:, self._unfixed_idx] @ self._Z
 
         self._built = True
@@ -600,7 +608,7 @@ class ProximalProjection(ObjectiveFunction):
             self._args.remove(arg)
         linear_constraint = ObjectiveFunction(self._linear_constraints)
         linear_constraint.build()
-        (self._Z, self._D, self._unfixed_idx) = (
+        (self._eq_Z, self._eq_D, self._eq_unfixed_idx) = (
             self._eq_solve_objective._Z,
             self._eq_solve_objective._D,
             self._eq_solve_objective._unfixed_idx,
@@ -700,9 +708,9 @@ class ProximalProjection(ObjectiveFunction):
             self._unfixed_idx_mat, np.cumsum([t.dim_x for t in self.things]), axis=-1
         )
         self._unfixed_idx_mat[self._eq_idx] = self._unfixed_idx_mat[self._eq_idx][
-            :, self._unfixed_idx
-        ] @ (self._Z * self._D[self._unfixed_idx, None])
-        self._unfixed_idx_mat = np.concatenate(
+            :, self._eq_unfixed_idx
+        ] @ (self._eq_Z * self._eq_D[self._eq_unfixed_idx, None])
+        self._unfixed_idx_mat = jnp.concatenate(
             [np.atleast_2d(foo) for foo in self._unfixed_idx_mat], axis=-1
         )
 
@@ -1127,7 +1135,7 @@ class ProximalProjection(ObjectiveFunction):
 
         if self._objective._deriv_mode == "batched":
             # objective's method already know about its jac_chunk_size
-            return -getattr(self._objective, "jvp_" + op)(tangents, xg, constants[0])
+            return getattr(self._objective, "jvp_" + op)(tangents, xg, constants[0])
         else:
             xgs = jnp.split(xg, np.cumsum(self._dimx_per_thing))
             jvpfun = lambda u: _proximal_jvp_blocked_pure(
@@ -1140,18 +1148,18 @@ class ProximalProjection(ObjectiveFunction):
             )(tangents)
 
     def _get_tangent(self, v, xf, constants, op):
-        # v contains "boundary" dofs from eq and other objects
-        # want jvp_f to only get parts from equilibrium, not other things
+        # v contains "boundary" dofs from eq and other objects (like coils, surfaces
+        # etc) want jvp_f to only get parts from equilibrium, not other things
         vs = jnp.split(v, np.cumsum(self._dimc_per_thing))
-        # this is Fx_reduced_inv @ Fc
+        # This is (dF/dx)^-1 * dF/dc  # noqa : E800
         dfdc = _proximal_jvp_f_pure(
             self._constraint,
             xf,
             constants[1],
             vs[self._eq_idx],
-            self._unfixed_idx,
-            self._Z,
-            self._D,
+            self._eq_unfixed_idx,
+            self._eq_Z,
+            self._eq_D,
             self._dxdc,
             op,
         )
@@ -1160,9 +1168,18 @@ class ProximalProjection(ObjectiveFunction):
         dfdcs[self._eq_idx] = dfdc
         dfdc = jnp.concatenate(dfdcs)
 
-        # dG/dc = Gx_reduced @ (Fx_reduced_inv @ Fc) - Gc
-        # = Gx @ (unfixed_idx @ Z @ dfdc - dxdc @ v)
-        # unfixed_idx_mat includes Z already
+        # We try to find dG/dc - dG/dx * (dF/dx)^-1 * dF/dc
+        # where G is the objective function. Since DESC stores x and c in the same
+        # vector, instead of multiple jvp calls, we will just find a tangent direction
+        # that will give us the same result.
+        # For making the explanation clear, assume J is the Jacobian of the objective
+        # function with respect to the full state vector (both x and c). Then,
+        # dG/dc = J @ (tangent vectors in c direction)
+        # dG/dx = J @ (tangent vectors in x direction)
+        # So, dG/dc - dG/dx * (dF/dx)^-1 * dF/dc can be written as
+        # J @ [(tangent vectors in c direction) - (tangent vectors in x direction)@dfdc]
+        # Note: We will never form full Jacobian J, we will just compute the above
+        # expression by JVPs.
         dxdcv = jnp.concatenate(
             [
                 *vs[: self._eq_idx],
@@ -1170,7 +1187,7 @@ class ProximalProjection(ObjectiveFunction):
                 *vs[self._eq_idx + 1 :],
             ]
         )
-        tangent = self._unfixed_idx_mat @ dfdc - dxdcv
+        tangent = dxdcv - self._unfixed_idx_mat @ dfdc
         return tangent
 
     @property
@@ -1225,4 +1242,4 @@ def _proximal_jvp_blocked_pure(objective, vgs, xgs, op):
         else:
             outi = getattr(obj, "jvp_" + op)([_vi for _vi in vi], xi, constants=const).T
             out.append(outi)
-    return -jnp.concatenate(out)
+    return jnp.concatenate(out)

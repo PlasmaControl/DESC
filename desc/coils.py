@@ -13,8 +13,10 @@ from desc.backend import (
     jit,
     jnp,
     scan,
+    tree_flatten,
     tree_leaves,
     tree_stack,
+    tree_unflatten,
     tree_unstack,
     vmap,
 )
@@ -1378,8 +1380,11 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
 
     @current.setter
     def current(self, new):
-        new = jnp.atleast_1d(new)
-        new = jnp.broadcast_to(new, (len(self),))
+        # new must be a 1D iterable regardless of the tree structure of the CoilSet
+        old, tree = tree_flatten(self.current)
+        new = jnp.atleast_1d(new).flatten()
+        new = jnp.broadcast_to(new, (len(old),))
+        new = tree_unflatten(tree, new)
         for coil, cur in zip(self.coils, new):
             coil.current = cur
 

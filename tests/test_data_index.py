@@ -13,7 +13,12 @@ from desc.utils import errorif
 
 def _get_matches(fun, pattern, ignore_comments=True):
     """Return all matches of ``pattern`` in source code of function ``fun``."""
-    src = inspect.getsource(fun)
+    try:
+        src = inspect.getsource(fun)
+    except OSError:
+        # Python 3.13 raises OSError for functools.partial
+        print(f"Skipping function: {fun} ({type(fun)}) - No source available")
+        src = ""
     if ignore_comments:
         # remove any decorator functions
         src = src.partition("def ")[2]
@@ -47,6 +52,10 @@ def test_data_index_deps():
     To avoid failing this test unnecessarily in this case, try to refactor
     code by wrapping the query to the key in the data dictionary inside a
     parenthesis.
+
+    JITed and functools wrapped functions may not be detected proparly by inspect.
+    Since those type of compute functions are really rare, the developper should
+    check if the dependencies are correctly set, in addition to this test.
 
     Examples
     --------

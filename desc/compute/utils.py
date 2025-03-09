@@ -185,39 +185,20 @@ def _compute(
     if data is None:
         data = {}
 
-    for name in names:
+    names += get_data_deps(
+        names, parameterization, has_axis=transforms["grid"].axis.size
+    )
+    names_tiers = [(data_index[parameterization][name]["tier"], name) for name in names]
+    names_tiers = sorted(list(set(names_tiers)))
+
+    for _, name in names_tiers:
         if name in data:
             # don't compute something that's already been computed
             continue
-        if not has_data_dependencies(
-            parameterization, name, data, transforms["grid"].axis.size
-        ):
-            # then compute the missing dependencies
-            data = _compute(
-                parameterization,
-                data_index[parameterization][name]["dependencies"]["data"],
-                params=params,
-                transforms=transforms,
-                profiles=profiles,
-                data=data,
-                **kwargs,
-            )
-            if transforms["grid"].axis.size:
-                data = _compute(
-                    parameterization,
-                    data_index[parameterization][name]["dependencies"][
-                        "axis_limit_data"
-                    ],
-                    params=params,
-                    transforms=transforms,
-                    profiles=profiles,
-                    data=data,
-                    **kwargs,
-                )
-        # now compute the quantity
         data = data_index[parameterization][name]["fun"](
             params=params, transforms=transforms, profiles=profiles, data=data, **kwargs
         )
+
     return data
 
 

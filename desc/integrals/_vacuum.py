@@ -33,17 +33,16 @@ def _green(self, mode_idx, chunk_size):
     Phi_mn = np.ones(1)
     mode_idx = jnp.atleast_1d(mode_idx)
     src_data = self._data["src"].copy()
-    Phi = self._transform["Phi"].transform(Phi_mn, mode_idx=mode_idx)
-    src_data["Phi"] = (
-        Phi
-        if self._same_grid_phi_src
-        else self._transform["src"].transform(
-            jnp.zeros(self._transform["src"].num_modes).at[mode_idx].set(1)
-        )
+    src_data["Phi"] = self._transform["src"].transform(
+        jnp.zeros(self._transform["src"].num_modes).at[mode_idx].set(1)
     )
-    # TODO: Change _kernel_Phi_dGp_dn.ndim = Phi_mn.size and don't FFT
-    #       and interpolate Phi. Just evaluate it since it is a single
-    #       trigonometric function.
+    Phi = (
+        src_data["Phi"]
+        if self._same_grid_phi_src
+        else self._transform["Phi"].transform(Phi_mn, mode_idx=mode_idx)
+    )
+    # TODO: Don't FFT and interpolate Phi since we know it analytically;
+    #       Just evaluate it as it is a single trigonometric function.
     return Phi + singular_integral(
         self._data["Phi"],
         src_data,

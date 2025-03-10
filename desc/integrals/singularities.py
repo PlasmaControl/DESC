@@ -543,7 +543,7 @@ def _nonsingular_part(
                 st,
                 sz,
             )
-            return jnp.sum(k * (w * e)[..., jnp.newaxis], axis=1)
+            return jnp.sum(k * (e * w)[..., jnp.newaxis], axis=-2)
 
         return batch_map(eval_pt, eval_data, chunk_size).reshape(
             eval_grid.num_nodes, kernel.ndim
@@ -825,7 +825,10 @@ def _kernel_Phi_dGp_dn(eval_data, source_data, diag=False):
     dx = _dx(eval_data, source_data, diag)
     # Using n_rho works better than normalized e^rho*sqrt(g) here.
     n = rpz2xyz_vec(source_data["n_rho"], phi=source_data["phi"])
-    return safediv(source_data["Phi"] * dot(n, dx), safenorm(dx, axis=-1) ** 3)
+    return safediv(
+        dot(source_data["Phi"][..., jnp.newaxis, :, jnp.newaxis] * n, dx),
+        safenorm(dx, axis=-1) ** 3,
+    )
 
 
 _kernel_Phi_dGp_dn.ndim = 1

@@ -707,7 +707,7 @@ class Bounce2D(Bounce):
     #     points to interpolate to is reduced by a factor of ``num_pitch*NFP``.
     #  3. Longer bounce orbits merit more quadrature points than short ones.
     #     This is now possible.
-    #  4. Uiform FFT can be used in toroidal direction. Combined with partial
+    #  4. Uniform FFT can be used in toroidal direction. Combined with partial
     #     summation the interpolation becomes cheap.
     #     (Same code as ``desc/integrals/_bounce_utils.py::cubic_spline``).
     #  5. The quadrature points are no longer functions of the solutions

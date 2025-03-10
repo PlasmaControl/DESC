@@ -33,6 +33,9 @@ for compatibility with other codes which expect such files from the Booz_Xform c
 - Adds a new objective ``desc.objectives.ExternalObjective`` for wrapping external codes with finite differences.
 - DESC/JAX version and device info is no longer printed by default, but can be accessed with the function `desc.backend.print_backend_info()`.
 - Adds support for Python 3.13 and removes support for 3.9 since min JAX requirement is now Python 3.10.
+- No longer negates the current profile in ``desc.compat.ensure_nested_jacobian`` when flipping from a left-handed to a right-handed coordinate system
+  -Does, however, negate current in ``desc.vmec.VMECIO.load`` if the boundary is left-handed, since we get it from the ``buco`` ``wout`` variable, and the sign of that quantity is opposite the toroidal current profile's sign if the boundary is left-handed.
+- Changes the formula for the ``jdotb`` variable to better match VMEC outputted ``jdotb`` when using ``desc.vmec.VMECIO.save``
 
 Speed Improvements
 

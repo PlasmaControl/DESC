@@ -7,7 +7,7 @@ import numpy as np
 from desc.backend import jnp, put
 from desc.grid import Grid
 from desc.io import IOAble
-from desc.utils import combination_permutation, errorif, warnif
+from desc.utils import combination_permutation, errorif, setdefault, warnif
 
 
 class Transform(IOAble):
@@ -247,9 +247,7 @@ class Transform(IOAble):
         row = np.where(
             (basis.modes[:, None, :2] == self.lm_modes[None, :, :]).all(axis=-1)
         )[1]
-        col = np.where(
-            basis.modes[None, :, 2] == basis.modes[basis.unique_N_idx, None, 2]
-        )[0]
+        col = np.where(basis.modes[None, :, 2] == self.n_modes[:, None])[0]
         self.fft_index = np.atleast_1d(np.squeeze(self.num_n_modes * row + col))
         fft_nodes = np.hstack(
             [
@@ -338,7 +336,7 @@ class Transform(IOAble):
             )
         self._built_pinv = True
 
-    def transform(self, c, dr=0, dt=0, dz=0):
+    def transform(self, c, dr=0, dt=0, dz=0, mode_idx=None):
         """Transform from spectral domain to physical.
 
         Parameters
@@ -351,6 +349,11 @@ class Transform(IOAble):
             order of poloidal derivative
         dz : int
             order of toroidal derivative
+        mode_idx : ndarray
+            Optional.
+            Mode numbers used in matrix multiply.
+            If supplied, ``c`` should have shape (``mode_idx.size``, ).
+
 
         Returns
         -------
@@ -362,22 +365,23 @@ class Transform(IOAble):
             RuntimeError,
             "Transform must be precomputed with transform.build() before being used.",
         )
-        errorif(
-            self.basis.num_modes != c.size,
-            msg=f"Coefficients dimension ({c.size}) is incompatible with the number"
-            f" of basis modes ({self.basis.num_modes}).",
-        )
-
+        errorif(self.method != "direct1" and mode_idx is not None, NotImplementedError)
         if len(c) == 0:
             return np.zeros(self.grid.num_nodes)
 
+        errorif(
+            (self.basis.num_modes if (mode_idx is None) else mode_idx.size) != c.size,
+            msg=f"Coefficients dimension ({c.size}) is incompatible with the number"
+            f" of basis modes ({self.basis.num_modes}).",
+        )
+        mode_idx = setdefault(mode_idx, slice(None))
         if self.method in ["direct1", "jitable"]:
             A = self.matrices["direct1"].get(dr, {}).get(dt, {}).get(dz, {})
             errorif(
                 isinstance(A, dict),
                 msg="Derivative orders are out of initialized bounds",
             )
-            return A @ c
+            return A[:, mode_idx] @ c
 
         elif self.method == "direct2":
             A = self.matrices["fft"].get(dr, {}).get(dt, {})
@@ -386,7 +390,7 @@ class Transform(IOAble):
                 isinstance(A, dict) or isinstance(B, dict),
                 msg="Derivative orders are out of initialized bounds",
             )
-            c_mtrx = jnp.zeros((self.num_lm_modes * self.num_n_modes,))
+            c_mtrx = jnp.zeros(self.num_lm_modes * self.num_n_modes)
             c_mtrx = put(c_mtrx, self.fft_index, c).reshape(-1, self.num_n_modes)
             cc = A @ c_mtrx
             return (cc @ B.T).flatten(order="F")
@@ -399,7 +403,7 @@ class Transform(IOAble):
                 msg="Derivative orders are out of initialized bounds",
             )
             # reshape coefficients
-            c_mtrx = jnp.zeros((self.num_lm_modes * self.num_n_modes,))
+            c_mtrx = jnp.zeros(self.num_lm_modes * self.num_n_modes)
             c_mtrx = put(c_mtrx, self.fft_index, c).reshape(-1, self.num_n_modes)
             # differentiate
             c_diff = c_mtrx[:, :: (-1) ** dz] * self.dk**dz * (-1) ** (dz > 1)

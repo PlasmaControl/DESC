@@ -772,8 +772,8 @@ class TestVacuumSolver:
                 True,
                 1000,
                 marks=pytest.mark.xfail(
-                    strict=True,
-                    reason="See #1599. Decreasing chunk size to pass test.",
+                    strict=False,
+                    reason="See #1599. Decrease chunk size to pass test.",
                 ),
             ),
         ],

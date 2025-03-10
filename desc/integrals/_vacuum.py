@@ -2,6 +2,7 @@
 
 from functools import partial
 
+import numpy as np
 from matplotlib import pyplot as plt
 
 from desc.backend import jit, jnp
@@ -23,18 +24,22 @@ from desc.utils import errorif, setdefault
 
 
 @partial(vmap_chunked, in_axes=(None, 0, None), chunk_size=None)
-def _green(self, Phi_mn, chunk_size):
+def _green(self, mode_idx, chunk_size):
     """Compute green(Φₘₙ).
 
     green is linear map of Φₘₙ.
     Finite-dimensional approximation gives green(Φₘₙ) = A @ Φₘₙ.
     """
+    Phi_mn = np.ones(1)
+    mode_idx = jnp.atleast_1d(mode_idx)
     src_data = self._data["src"].copy()
-    src_data["Phi"] = self._transform["src"].transform(Phi_mn)
-    Phi = (
-        src_data["Phi"]
+    Phi = self._transform["Phi"].transform(Phi_mn, mode_idx=mode_idx)
+    src_data["Phi"] = (
+        Phi
         if self._same_grid_phi_src
-        else self._transform["Phi"].transform(Phi_mn)
+        else self._transform["src"].transform(
+            jnp.zeros(self._transform["src"].num_modes).at[mode_idx].set(1)
+        )
     )
     # TODO: Change _kernel_Phi_dGp_dn.ndim = Phi_mn.size and don't FFT
     #       and interpolate Phi. Just evaluate it since it is a single
@@ -55,18 +60,23 @@ def _compute_Phi_mn(self, *, chunk_size=None):
         num_nodes = self._transform["Phi"].grid.num_nodes
         full_rank = num_modes == num_nodes
 
-        b = -singular_integral(
-            self._data["Phi"],
-            self._data["src"],
-            _kernel_Bn_over_r,
-            self._interpolator["Phi"],
-            chunk_size,
-        ).squeeze() / (2 * jnp.pi)
+        b = jnp.atleast_1d(
+            jnp.squeeze(
+                -singular_integral(
+                    self._data["Phi"],
+                    self._data["src"],
+                    _kernel_Bn_over_r,
+                    self._interpolator["Phi"],
+                    chunk_size,
+                )
+                / (2 * jnp.pi)
+            )
+        )
         # Least squares method can significantly reduce size of A while
         # retaining FFT interpolation accuracy in the singular integrals.
         # Green is expensive, so constructing Jacobian A then solving
         # better than iterative methods like ``jax.scipy.sparse.linalg.cg``.
-        A = _green(self, jnp.eye(num_modes), chunk_size).T
+        A = _green(self, jnp.arange(num_modes), chunk_size).T
         self._data["Phi"]["Phi_mn"] = (
             jnp.linalg.solve(A, b) if full_rank else jnp.linalg.lstsq(A, b)[0]
         )
@@ -197,7 +207,7 @@ class VacuumSolver(IOAble):
             Phi_transform = src_transform
             Phi_data = src_data
         else:
-            Phi_transform = Transform(Phi_grid, basis)
+            Phi_transform = Transform(Phi_grid, basis, method="direct1")
             Phi_data = surface.compute(position, grid=Phi_grid)
         # Compute data on evaluation grid.
         if evl_grid.equiv(Phi_grid):

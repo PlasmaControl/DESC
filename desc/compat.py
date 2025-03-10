@@ -40,11 +40,10 @@ def ensure_positive_jacobian(eq):
             + " To avoid this warning in the future, switch the sign of all"
             + " modes with m<0 and iota/current profile."
         )
-
         if eq.iota is not None:
+            # reverse sign of iota to maintain physical  B direction, since
+            # we have reversed the poloidal angle direction.
             eq.i_l *= -1
-        else:
-            eq.c_l *= -1
 
         rone = np.ones_like(eq.R_lmn)
         rone[eq.R_basis.modes[:, 1] < 0] *= -1

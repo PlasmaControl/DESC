@@ -773,7 +773,6 @@ def _kernel_nr_over_r3(eval_data, source_data, diag=False):
     dx = _dx(eval_data, source_data, diag)
     # Need to use e^rho*sqrt(g) to pass Green's ID test.
     # Fourier spectrum is much more concentrated than n_rho for some reason.
-    # Don't
     n = source_data["e^rho*sqrt(g)"] / source_data["|e_theta x e_zeta|"][:, jnp.newaxis]
     n = rpz2xyz_vec(n, phi=source_data["phi"])
     return safediv(dot(n, dx), safenorm(dx, axis=-1) ** 3)

@@ -613,7 +613,7 @@ class DoubleFourierSeries(_Basis):
             Node coordinates, in (rho,theta,zeta).
         derivatives : ndarray of int, shape(num_derivatives,3)
             Order of derivatives to compute in (rho,theta,zeta).
-        modes : ndarray of in, shape(num_modes,3), optional
+        modes : ndarray of int, shape(num_modes,3), optional
             Basis modes to evaluate (if None, full basis is used).
 
         Returns

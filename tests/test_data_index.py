@@ -75,8 +75,9 @@ def test_data_index_deps():
     for module_name, module in inspect.getmembers(desc.compute, inspect.ismodule):
         if module_name[0] == "_":
             # JITed functions are not functions according to inspect,
-            # so just check if callable.
-            for _, fun in inspect.getmembers(module, callable):
+            # so just check if callable and in the right module
+            filt = lambda x: callable(x) and x.__module__ == module.__name__
+            for _, fun in inspect.getmembers(module, filt):
                 register_name = _get_matches(fun, pattern_name, ignore_comments=False)
                 if not register_name:
                     continue

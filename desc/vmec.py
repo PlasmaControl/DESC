@@ -203,6 +203,17 @@ class VMECIO:
             warnings.filterwarnings(
                 "ignore", message="Left handed coordinates detected"
             )
+            sign = np.sign(
+                eq.compute("sqrt(g)", grid=Grid(np.array([[1, 0, 0]])))["sqrt(g)"]
+            )
+            if sign == -1 and profile == "current":
+                # because we get current from buco, which itself is the integral
+                # of B_theta dtheta, if the boundary is left-handed, then the actual
+                # toroidal current profile is negative of what the buco integral
+                # says it is (due to ampere's law and the integral being in the CCW
+                # direction if the boundary is left-handed)
+                eq.c_l *= -1
+
             eq = ensure_positive_jacobian(eq)
 
         return eq

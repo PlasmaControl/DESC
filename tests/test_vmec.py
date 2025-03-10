@@ -268,7 +268,7 @@ class TestVMECIO:
 @pytest.mark.unit
 def test_vmec_load_profiles(TmpDir):
     """Tests that loading with iota or current profiles give same result."""
-    input_path = "./tests/inputs/wout_SOLOVEV.nc"
+    input_path = "./tests/inputs/wout_GS_LH_ns256.nc"
 
     eq_iota = VMECIO.load(input_path, profile="iota")
     eq_current = VMECIO.load(input_path, profile="current")

@@ -6,10 +6,12 @@ that is done in test_compute_functions or regression tests.
 This module primarily tests the constructing/building/calling methods.
 """
 
+import platform
 import warnings
 
 import numpy as np
 import pytest
+from packaging.version import Version
 from scipy.constants import elementary_charge, mu_0
 
 import desc.examples
@@ -20,6 +22,7 @@ from desc.coils import (
     FourierRZCoil,
     FourierXYZCoil,
     MixedCoilSet,
+    initialize_modular_coils,
 )
 from desc.compute import get_transforms
 from desc.equilibrium import Equilibrium
@@ -54,6 +57,7 @@ from desc.objectives import (
     EffectiveRipple,
     Elongation,
     Energy,
+    ExternalObjective,
     ForceBalance,
     ForceBalanceAnisotropic,
     FusionPower,
@@ -362,13 +366,15 @@ class TestObjectiveFunction:
 
         # compute all amplitudes in the Boozer spectrum
         transforms = get_transforms(
-            "|B|_mn", obj=eq, grid=grid, M_booz=M_booz, N_booz=N_booz
+            "|B|_mn_B", obj=eq, grid=grid, M_booz=M_booz, N_booz=N_booz
         )
         matrix, modes, idx = ptolemy_linear_transform(
             transforms["B"].basis.modes, helicity=helicity, NFP=eq.NFP
         )
-        data = eq.compute("|B|_mn", helicity=helicity, grid=grid, transforms=transforms)
-        B_mn = matrix @ data["|B|_mn"]
+        data = eq.compute(
+            "|B|_mn_B", helicity=helicity, grid=grid, transforms=transforms
+        )
+        B_mn = matrix @ data["|B|_mn_B"]
         idx_B = np.argsort(np.abs(B_mn))
 
         # check that largest amplitudes are the QH modes
@@ -1730,6 +1736,7 @@ class TestObjectiveFunction:
             num_transit=num_transit,
             num_quad=num_quad,
             num_pitch=num_pitch,
+            jac_chunk_size=1,
         )
         obj.build()
         # TODO(#1094)
@@ -1746,11 +1753,76 @@ class TestObjectiveFunction:
             num_transit=num_transit,
             num_quad=num_quad,
             num_pitch=num_pitch,
+            jac_chunk_size=1,
         )
         obj.build()
         np.testing.assert_allclose(
             obj.compute(eq.params_dict), grid.compress(data["Gamma_c"])
         )
+
+    @pytest.mark.unit
+    def test_generic_with_kwargs(self):
+        """Test GenericObjective with keyword arguments. Related to issue #1224."""
+        eq = desc.examples.get("reactor_QA")
+
+        def fusion_gain(grid, data):
+            p_out = data["P_fusion"]
+            p_in = data["P_ISS04"]
+            Q = p_out / p_in
+            return Q
+
+        obj_p0_out = FusionPower(eq, fuel="DT")
+        obj_p0_out.build()
+        p0_out = obj_p0_out.compute(*obj_p0_out.xs(eq))
+
+        obj_p0_in = HeatingPowerISS04(eq, H_ISS04=1.2, gamma=0)
+        obj_p0_in.build()
+        p0_in = obj_p0_in.compute(*obj_p0_in.xs(eq))
+
+        q0 = p0_out / p0_in
+
+        obj_p1_out = GenericObjective("P_fusion", eq, compute_kwargs={"fuel": "DT"})
+        obj_p1_out.build()
+        p1_out = obj_p1_out.compute(*obj_p1_out.xs(eq))
+
+        obj_p1_in = GenericObjective(
+            "P_ISS04", eq, compute_kwargs={"H_ISS04": 1.2, "gamma": 0}
+        )
+        obj_p1_in.build()
+        p1_in = obj_p1_in.compute(*obj_p1_in.xs(eq))
+
+        obj_q1 = ObjectiveFromUser(
+            fusion_gain, eq, compute_kwargs={"fuel": "DT", "H_ISS04": 1.2, "gamma": 0}
+        )
+        obj_q1.build()
+        q1 = obj_q1.compute(*obj_q1.xs(eq))
+
+        np.testing.assert_allclose(p0_out, p1_out)
+        np.testing.assert_allclose(p0_in, p1_in)
+        np.testing.assert_allclose(q0, q1)
+
+    @pytest.mark.unit
+    def test_things_per_objective_idx(self):
+        """Test things_per_objective_idx. Related to GH Issue #1602."""
+        eq = desc.examples.get("reactor_QA")
+        coils = initialize_modular_coils(eq, num_coils=3, r_over_a=3.0)
+        grid = LinearGrid(rho=1.0, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
+        linking_current = 2 * np.pi * eq.compute("G", grid=grid)["G"][0] / mu_0
+        coils.current = linking_current / coils.num_coils
+
+        objective = ObjectiveFunction(
+            (
+                PlasmaCoilSetMinDistance(eq=eq, coil=coils, eq_fixed=False),
+                LinkingCurrentConsistency(eq=eq, coil=coils, eq_fixed=False),
+            )
+        )
+        objective.build()
+        x = objective.x(eq, coils)
+
+        np.testing.assert_allclose(
+            objective._things_per_objective_idx, [[0, 1], [1, 0]]
+        )
+        np.testing.assert_allclose(objective.compute_scaled_error(x), 0, atol=1e-15)
 
 
 @pytest.mark.regression
@@ -2708,6 +2780,7 @@ def _reduced_resolution_objective(eq, objective, **kwargs):
         kwargs["num_well"] = 15 * kwargs["num_transit"]
         kwargs["num_pitch"] = 16
         kwargs["num_quad"] = 16
+        kwargs["jac_chunk_size"] = 1
     return objective(eq=eq, **kwargs)
 
 
@@ -2749,7 +2822,8 @@ class TestComputeScalarResolution:
         VacuumBoundaryError,
         # need to avoid blowup near the axis
         MercierStability,
-        # don't test these since they depend on what user wants
+        # we do not test these since they depend too much on what the user wants
+        ExternalObjective,
         LinearObjectiveFromUser,
         ObjectiveFromUser,
     ]
@@ -3234,7 +3308,8 @@ class TestObjectiveNaNGrad:
         SurfaceQuadraticFlux,
         ToroidalFlux,
         VacuumBoundaryError,
-        # we don't test these since they depend too much on what exactly the user wants
+        # we do not test these since they depend too much on what the user wants
+        ExternalObjective,
         GenericObjective,
         LinearObjectiveFromUser,
         ObjectiveFromUser,
@@ -3600,13 +3675,22 @@ def test_objective_print_widths():
 def test_objective_docstring():
     """Test that the objective docstring and collect_docs are consistent."""
     objective_docs = _Objective.__doc__.rstrip()
-    doc_header = (
-        "Objective (or constraint) used in the optimization of an Equilibrium.\n\n"
-        + "    Parameters\n"
-        + "    ----------\n"
-        + "    things : Optimizable or tuple/list of Optimizable\n"
-        + "        Objects that will be optimized to satisfy the Objective.\n"
-    )
+    if Version(platform.python_version()) >= Version("3.13"):
+        doc_header = (
+            "Objective (or constraint) used in the optimization of an Equilibrium.\n\n"
+            + "Parameters\n"
+            + "----------\n"
+            + "things : Optimizable or tuple/list of Optimizable\n"
+            + "    Objects that will be optimized to satisfy the Objective.\n"
+        )
+    else:
+        doc_header = (
+            "Objective (or constraint) used in the optimization of an Equilibrium.\n\n"
+            + "    Parameters\n"
+            + "    ----------\n"
+            + "    things : Optimizable or tuple/list of Optimizable\n"
+            + "        Objects that will be optimized to satisfy the Objective.\n"
+        )
     collected_docs = collect_docs().strip()
     collected_docs = doc_header + "    " + collected_docs
 

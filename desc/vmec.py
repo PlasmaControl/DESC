@@ -222,6 +222,12 @@ class VMECIO:
     ):
         """Save an Equilibrium as a netCDF file in the VMEC format.
 
+        NOTE: If the equilibrium is current-constrained, DESC will save for AC the
+        toroidal current (I) profile, not the current derivative (I') profile.
+        DESC will also save quantities in the VMEC left-handed convention, so
+        quantities like iota or the poloidal B field (bsupumns) will be opposite of
+        their sign in DESC.
+
         Parameters
         ----------
         eq : Equilibrium

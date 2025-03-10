@@ -4,7 +4,7 @@ import functools
 
 import numpy as np
 
-from desc.backend import jit, jnp
+from desc.backend import jit, jnp, put
 from desc.batching import batched_vectorize
 from desc.objectives import (
     BoundaryRSelfConsistency,
@@ -13,7 +13,12 @@ from desc.objectives import (
     get_fixed_boundary_constraints,
     maybe_add_self_consistency,
 )
-from desc.objectives.utils import factorize_linear_constraints
+from desc.objectives.utils import (
+    _Project,
+    _Recover,
+    factorize_linear_constraints,
+    remove_fixed_parameters,
+)
 from desc.utils import Timer, errorif, get_instance, setdefault
 
 from .utils import f_where_x
@@ -87,7 +92,7 @@ class LinearConstraintProjection(ObjectiveFunction):
 
         """
         timer = Timer()
-        timer.start("Linear constraint projection build")
+        timer.start(f"{self.name} build")
 
         # we don't always build here because in ~all cases the user doesn't interact
         # with this directly, so if the user wants to manually rebuild they should
@@ -108,10 +113,18 @@ class LinearConstraintProjection(ObjectiveFunction):
             self._unfixed_idx,
             self._project,
             self._recover,
+            self._ADinv,
+            self._A_nondegenerate,
+            self._degenerate_idx,
         ) = factorize_linear_constraints(
             self._objective,
             self._constraint,
         )
+        # inverse of the linear constraint matrix A without any scaling
+        self._Ainv = self._D[self._unfixed_idx, None] * self._ADinv
+        # nullspace of the linear constraint matrix A without any scaling
+        self._ZA = self._D[self._unfixed_idx, None] * self._Z
+        self._ZA = self._ZA / jnp.linalg.norm(self._ZA, axis=0)
         self._dim_x = self._objective.dim_x
         self._dim_x_reduced = self._Z.shape[1]
 
@@ -119,9 +132,9 @@ class LinearConstraintProjection(ObjectiveFunction):
         self._unfixed_idx_mat = jnp.diag(self._D)[:, self._unfixed_idx] @ self._Z
 
         self._built = True
-        timer.stop("Linear constraint projection build")
+        timer.stop(f"{self.name} build")
         if verbose > 1:
-            timer.disp("Linear constraint projection build")
+            timer.disp(f"{self.name} build")
 
     def project(self, x):
         """Project full vector x into x_reduced that satisfies constraints."""
@@ -163,6 +176,60 @@ class LinearConstraintProjection(ObjectiveFunction):
             )
         x = self.recover(x)
         return self._objective.unpack_state(x, per_objective)
+
+    def update_constraint_target(self, eq_new):
+        """Update the target of the constraint.
+
+        Updates the particular solution (xp), nullspace (Z), scaling (D) and
+        the inverse of the scaled linear constraint matrix (ADinv) to reflect the new
+        equilibrium a.k.a. the new target of the constraint of system Ax=b. This
+        also updates the project and recover methods. Updating quantities in this way
+        is faster than calling factorize_linear_constraints again.
+
+        Parameters
+        ----------
+        eq_new : Equilibrium
+            New equilibrium to target for the constraints.
+        """
+        for con in self._constraint.objectives:
+            if hasattr(con, "update_target"):
+                con.update_target(eq_new)
+
+        dim_x = self._objective.dim_x
+        # particular solution to Ax=b
+        xp = jnp.zeros(dim_x)
+        x0 = jnp.zeros(dim_x)
+        A = self._A_nondegenerate
+        b = -self._constraint.compute_scaled_error(x0)
+        b = np.delete(b, self._degenerate_idx)
+
+        # There is probably a more clever way of doing this, but for now we just
+        # remove fixed parameters from A and b again by the same loop as in factorize
+        # Actually A (unscaled linear constraint matrix without any degenerate rows)
+        # does not change here, but still recompute it while updating others
+        A, b, xp, unfixed_idx, fixed_idx = remove_fixed_parameters(A, b, xp)
+
+        x_scale = self._objective.x(*self._objective.things)
+        self._D = jnp.where(jnp.abs(x_scale) < 1e2, 1, jnp.abs(x_scale))
+
+        # since D has changed, we need to update the ADinv
+        # as mentioned above A does not change, so we can use the same Ainv
+        # pinv(A) = Ainv, ADinv = pinv(A @ D) = Dinv @ Ainv, Dinv = 1 / D
+        self._ADinv = (1 / self._D)[unfixed_idx, None] * self._Ainv
+        # we also need to update the nullspace Z of AD in a similar way
+        # A @ ZA = 0 -> (A @ D) @ ((1 / D) @ ZA) = 0 -> Z = (1 / D) @ ZA
+        # where ZA is the nullspace of A, and Z is the nullspace of AD
+        self._Z = (1 / self._D)[self._unfixed_idx, None] * self._ZA
+        # we also normalize Z to make each column have unit norm
+        self._Z = self._Z / jnp.linalg.norm(self._Z, axis=0)
+
+        xp = put(xp, unfixed_idx, self._ADinv @ b)
+        xp = put(xp, fixed_idx, ((1 / self._D) * xp)[fixed_idx])
+        # cast to jnp arrays
+        self._xp = jnp.asarray(xp)
+
+        self._project = _Project(self._Z, self._D, self._xp, self._unfixed_idx)
+        self._recover = _Recover(self._Z, self._D, self._xp, self._unfixed_idx, dim_x)
 
     def compute_unscaled(self, x_reduced, constants=None):
         """Compute the unscaled form of the objective function.
@@ -533,8 +600,10 @@ class ProximalProjection(ObjectiveFunction):
             self._args.remove(arg)
         linear_constraint = ObjectiveFunction(self._linear_constraints)
         linear_constraint.build()
-        _, _, _, self._Z, self._D, self._unfixed_idx, _, _ = (
-            factorize_linear_constraints(self._constraint, linear_constraint)
+        (self._Z, self._D, self._unfixed_idx) = (
+            self._eq_solve_objective._Z,
+            self._eq_solve_objective._D,
+            self._eq_solve_objective._unfixed_idx,
         )
 
         # dx/dc - goes from the full state to optimization variables for eq
@@ -591,6 +660,13 @@ class ProximalProjection(ObjectiveFunction):
 
         for constraint in self._linear_constraints:
             constraint.build(use_jit=use_jit, verbose=verbose)
+
+        self._eq_solve_objective = LinearConstraintProjection(
+            self._constraint,
+            ObjectiveFunction(self._linear_constraints),
+            name="Eq Update LinearConstraintProjection",
+        )
+        self._eq_solve_objective.build(use_jit=use_jit, verbose=verbose)
 
         errorif(
             self._constraint.things != [eq],
@@ -759,15 +835,17 @@ class ProximalProjection(ObjectiveFunction):
             x_dict = x_list[self._eq_idx]
             x_dict_old = x_list_old[self._eq_idx]
             deltas = {str(key): x_dict[key] - x_dict_old[key] for key in x_dict}
+            # We pass in the LinearConstraintProjection object to skip some redundant
+            # computations in the perturb and solve methods
             self._eq = self._eq.perturb(
-                objective=self._constraint,
-                constraints=self._linear_constraints,
+                objective=self._eq_solve_objective,
+                constraints=None,
                 deltas=deltas,
                 **self._perturb_options,
             )
             self._eq.solve(
-                objective=self._constraint,
-                constraints=self._linear_constraints,
+                objective=self._eq_solve_objective,
+                constraints=None,
                 **self._solve_options,
             )
             xeq = self._eq.pack_params(self._eq.params_dict)
@@ -789,10 +867,7 @@ class ProximalProjection(ObjectiveFunction):
         else:
             # reset to last good params
             self._eq.params_dict = self.history[-1][self._eq_idx]
-
-        for con in self._linear_constraints:
-            if hasattr(con, "update_target"):
-                con.update_target(self._eq)
+            self._eq_solve_objective.update_constraint_target(self._eq)
 
         return xopt, xeq
 

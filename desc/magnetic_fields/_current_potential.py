@@ -207,6 +207,7 @@ class CurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
         source_grid=None,
         transforms=None,
         compute_A_or_B="B",
+        chunk_size=None,
     ):
         """Compute magnetic field or vector potential at a set of points.
 
@@ -225,6 +226,10 @@ class CurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
         compute_A_or_B: {"A", "B"}, optional
             whether to compute the magnetic vector potential "A" or the magnetic field
             "B". Defaults to "B"
+        chunk_size : int or None
+            Size to split computation into chunks of evaluation points.
+            If no chunking should be done or the chunk size is the full input
+            then supply ``None``. Default is ``None``.
 
         Returns
         -------
@@ -245,10 +250,17 @@ class CurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
             source_grid=source_grid,
             transforms=transforms,
             compute_A_or_B=compute_A_or_B,
+            chunk_size=chunk_size,
         )
 
     def compute_magnetic_field(
-        self, coords, params=None, basis="rpz", source_grid=None, transforms=None
+        self,
+        coords,
+        params=None,
+        basis="rpz",
+        source_grid=None,
+        transforms=None,
+        chunk_size=None,
     ):
         """Compute magnetic field at a set of points.
 
@@ -264,6 +276,10 @@ class CurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
             Source grid upon which to evaluate the surface current density K.
         transforms : dict of Transform
             Transforms for R, Z, lambda, etc. Default is to build from source_grid
+        chunk_size : int or None
+            Size to split computation into chunks of evaluation points.
+            If no chunking should be done or the chunk size is the full input
+            then supply ``None``. Default is ``None``.
 
         Returns
         -------
@@ -271,10 +287,18 @@ class CurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
             magnetic field at specified points
 
         """
-        return self._compute_A_or_B(coords, params, basis, source_grid, transforms, "B")
+        return self._compute_A_or_B(
+            coords, params, basis, source_grid, transforms, "B", chunk_size=chunk_size
+        )
 
     def compute_magnetic_vector_potential(
-        self, coords, params=None, basis="rpz", source_grid=None, transforms=None
+        self,
+        coords,
+        params=None,
+        basis="rpz",
+        source_grid=None,
+        transforms=None,
+        chunk_size=None,
     ):
         """Compute magnetic vector potential at a set of points.
 
@@ -292,6 +316,10 @@ class CurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
             Source grid upon which to evaluate the surface current density K.
         transforms : dict of Transform
             Transforms for R, Z, lambda, etc. Default is to build from source_grid
+        chunk_size : int or None
+            Size to split computation into chunks of evaluation points.
+            If no chunking should be done or the chunk size is the full input
+            then supply ``None``. Default is ``None``.
 
         Returns
         -------
@@ -299,7 +327,9 @@ class CurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
             Magnetic vector potential at specified points.
 
         """
-        return self._compute_A_or_B(coords, params, basis, source_grid, transforms, "A")
+        return self._compute_A_or_B(
+            coords, params, basis, source_grid, transforms, "A", chunk_size=chunk_size
+        )
 
     @classmethod
     def from_surface(
@@ -566,7 +596,7 @@ class FourierCurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
 
         """
         M = M or self._M_Phi
-        N = N or self._M_Phi
+        N = N or self._N_Phi
         NFP = NFP or self.NFP
         sym_Phi = sym_Phi or self.sym_Phi
 
@@ -589,6 +619,7 @@ class FourierCurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
         source_grid=None,
         transforms=None,
         compute_A_or_B="B",
+        chunk_size=None,
     ):
         """Compute magnetic field or vector potential at a set of points.
 
@@ -607,6 +638,10 @@ class FourierCurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
         compute_A_or_B: {"A", "B"}, optional
             whether to compute the magnetic vector potential "A" or the magnetic field
             "B". Defaults to "B"
+        chunk_size : int or None
+            Size to split computation into chunks of evaluation points.
+            If no chunking should be done or the chunk size is the full input
+            then supply ``None``. Default is ``None``.
 
         Returns
         -------
@@ -627,10 +662,17 @@ class FourierCurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
             source_grid=source_grid,
             transforms=transforms,
             compute_A_or_B=compute_A_or_B,
+            chunk_size=chunk_size,
         )
 
     def compute_magnetic_field(
-        self, coords, params=None, basis="rpz", source_grid=None, transforms=None
+        self,
+        coords,
+        params=None,
+        basis="rpz",
+        source_grid=None,
+        transforms=None,
+        chunk_size=None,
     ):
         """Compute magnetic field at a set of points.
 
@@ -646,6 +688,10 @@ class FourierCurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
             Source grid upon which to evaluate the surface current density K.
         transforms : dict of Transform
             Transforms for R, Z, lambda, etc. Default is to build from source_grid
+        chunk_size : int or None
+            Size to split computation into chunks of evaluation points.
+            If no chunking should be done or the chunk size is the full input
+            then supply ``None``. Default is ``None``.
 
         Returns
         -------
@@ -653,10 +699,18 @@ class FourierCurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
             magnetic field at specified points
 
         """
-        return self._compute_A_or_B(coords, params, basis, source_grid, transforms, "B")
+        return self._compute_A_or_B(
+            coords, params, basis, source_grid, transforms, "B", chunk_size=chunk_size
+        )
 
     def compute_magnetic_vector_potential(
-        self, coords, params=None, basis="rpz", source_grid=None, transforms=None
+        self,
+        coords,
+        params=None,
+        basis="rpz",
+        source_grid=None,
+        transforms=None,
+        chunk_size=None,
     ):
         """Compute magnetic vector potential at a set of points.
 
@@ -674,6 +728,10 @@ class FourierCurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
             Source grid upon which to evaluate the surface current density K.
         transforms : dict of Transform
             Transforms for R, Z, lambda, etc. Default is to build from source_grid
+        chunk_size : int or None
+            Size to split computation into chunks of evaluation points.
+            If no chunking should be done or the chunk size is the full input
+            then supply ``None``. Default is ``None``.
 
         Returns
         -------
@@ -681,7 +739,9 @@ class FourierCurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
             Magnetic vector potential at specified points.
 
         """
-        return self._compute_A_or_B(coords, params, basis, source_grid, transforms, "A")
+        return self._compute_A_or_B(
+            coords, params, basis, source_grid, transforms, "A", chunk_size=chunk_size
+        )
 
     @classmethod
     def from_surface(
@@ -949,6 +1009,7 @@ def _compute_A_or_B_from_CurrentPotentialField(
     transforms=None,
     compute_A_or_B="B",
     data=None,
+    chunk_size=None,
 ):
     """Compute magnetic field or vector potential at a set of points.
 
@@ -972,7 +1033,11 @@ def _compute_A_or_B_from_CurrentPotentialField(
         if provided, do not compute here but instead use provided
         dictionary corresponding to the source_grid.
         dict needs "K", "| e_theta x e_zeta |" and "x" as keys,
-        with "x" in rpz basis
+        with "x" and "K" in rpz basis
+    chunk_size : int or None
+        Size to split computation into chunks of evaluation points.
+        If no chunking should be done or the chunk size is the full input
+        then supply ``None``. Default is ``None``.
 
     Returns
     -------
@@ -1030,12 +1095,7 @@ def _compute_A_or_B_from_CurrentPotentialField(
         rs = jnp.vstack((_rs[:, 0], phi, _rs[:, 2])).T
         rs = rpz2xyz(rs)
         K = rpz2xyz_vec(_K, phi=phi)
-        fj = op(
-            coords,
-            rs,
-            K,
-            _dV,
-        )
+        fj = op(coords, rs, K, _dV, chunk_size=chunk_size)
         f += fj
         return f
 
@@ -1058,6 +1118,8 @@ def solve_regularized_surface_current(  # noqa: C901 fxn too complex
     external_field=None,
     external_field_grid=None,
     verbose=1,
+    chunk_size=None,
+    B_plasma_chunk_size=None,
 ):
     """Runs REGCOIL-like algorithm to find the current potential for the surface.
 
@@ -1164,7 +1226,15 @@ def solve_regularized_surface_current(  # noqa: C901 fxn too complex
         level of verbosity, if 0 will print nothing.
         1 will display Bn max,min,average and chi^2 values for each
         lambda_regularization.
-        2 will display jacobian timing info
+        2 will display Jacobian timing info
+    chunk_size : int or None
+        Size to split Biot-Savart computation into chunks of evaluation points.
+        If no chunking should be done or the chunk size is the full input
+        then supply ``None``.
+    B_plasma_chunk_size : int or None
+        Size to split singular integral computation for B_plasma into chunks.
+        If no chunking should be done or the chunk size is the full input
+        then supply ``None``. Default is ``chunk_size``.
 
     Returns
     -------
@@ -1212,6 +1282,7 @@ def solve_regularized_surface_current(  # noqa: C901 fxn too complex
       of stellarator coil shapes." Nuclear Fusion 57 (2017): 046003.
 
     """
+    B_plasma_chunk_size = setdefault(B_plasma_chunk_size, chunk_size)
     errorif(
         len(current_helicity) != 2,
         ValueError,
@@ -1301,7 +1372,9 @@ def solve_regularized_surface_current(  # noqa: C901 fxn too complex
     G_tot = -(eq.compute("G", grid=source_grid)["G"][0] / mu_0 * 2 * jnp.pi)
 
     if external_field:
-        G_ext = _G_from_external_field(external_field, eq, external_field_grid)
+        G_ext = _G_from_external_field(
+            external_field, eq, external_field_grid, chunk_size=chunk_size
+        )
     else:
         G_ext = 0
 
@@ -1326,7 +1399,12 @@ def solve_regularized_surface_current(  # noqa: C901 fxn too complex
         params["I"] = I
         params["G"] = G
         Bn, _ = current_potential_field.compute_Bnormal(
-            eq.surface, eval_grid=eval_grid, source_grid=source_grid, params=params
+            eq.surface,
+            eval_grid=eval_grid,
+            source_grid=source_grid,
+            params=params,
+            chunk_size=chunk_size,
+            B_plasma_chunk_size=B_plasma_chunk_size,
         )
         return Bn
 
@@ -1408,16 +1486,30 @@ def solve_regularized_surface_current(  # noqa: C901 fxn too complex
         * ne_mag
         * eval_grid.weights
     )
-    if not vacuum:  # get Bn from plasma contribution
-        Bn_plasma = compute_B_plasma(eq, eval_grid, vc_source_grid, normal_only=True)
-        Bn_plasma = Bn_plasma * ne_mag * eval_grid.weights
-
-    else:
-        Bn_plasma = jnp.zeros_like(Bn_GI)  # from plasma current, currently assume is 0
+    # get Bn from plasma current contribution
+    Bn_plasma = (
+        jnp.zeros_like(Bn_GI)
+        if vacuum
+        else (
+            compute_B_plasma(
+                eq,
+                eval_grid,
+                vc_source_grid,
+                normal_only=True,
+                chunk_size=B_plasma_chunk_size,
+            )
+            * ne_mag
+            * eval_grid.weights
+        )
+    )
     # find external field's Bnormal contribution
     if external_field:
         Bn_ext, _ = external_field.compute_Bnormal(
-            eq.surface, eval_grid=eval_grid, source_grid=external_field_grid
+            eq.surface,
+            eval_grid=eval_grid,
+            source_grid=external_field_grid,
+            chunk_size=chunk_size,
+            B_plasma_chunk_size=B_plasma_chunk_size,
         )
         Bn_ext = Bn_ext * ne_mag * eval_grid.weights
 
@@ -1542,7 +1634,7 @@ def solve_regularized_surface_current(  # noqa: C901 fxn too complex
 
 
 # TODO: replace contour finding with optimizing Winding surface curves
-# once that is implemented
+#  once that is implemented
 def _find_current_potential_contours(
     surface_current_field,
     num_coils,
@@ -1552,7 +1644,7 @@ def _find_current_potential_contours(
     net_poloidal_current=None,
     net_toroidal_current=None,
     helicity=None,
-    plot_kwargs={},
+    plot_kwargs=None,
 ):
     """Find contours of constant current potential (i.e. coils).
 
@@ -1611,6 +1703,8 @@ def _find_current_potential_contours(
     # we know that I = -(G - G_ext) / (helicity * NFP)
     # if net_toroidal_current is zero, then we have modular coils,
     # and just make helicity zero
+    if plot_kwargs is None:
+        plot_kwargs = {}
     net_poloidal_current = setdefault(
         net_poloidal_current, surface_current_field.G, net_poloidal_current
     )
@@ -1896,7 +1990,7 @@ def _find_XYZ_points(
     return contour_X, contour_Y, contour_Z
 
 
-def _G_from_external_field(external_field, eq, external_field_grid):
+def _G_from_external_field(external_field, eq, external_field_grid, chunk_size=None):
     # calculate the portion of G provided by external field
     # by integrating external toroidal field along a curve of constant theta
     try:
@@ -1922,7 +2016,10 @@ def _G_from_external_field(external_field, eq, external_field_grid):
                 (curve_data["R"], curve_data["phi"], curve_data["Z"])
             ).T
             ext_field_along_curve = external_field.compute_magnetic_field(
-                curve_coords, basis="rpz", source_grid=external_field_grid
+                curve_coords,
+                basis="rpz",
+                source_grid=external_field_grid,
+                chunk_size=chunk_size,
             )
         # calculate covariant B_zeta = B dot e_zeta from external field
         ext_field_B_zeta = dot(ext_field_along_curve, curve_data["e_zeta"], axis=-1)

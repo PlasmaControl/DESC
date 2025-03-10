@@ -906,12 +906,12 @@ class InputReader:
         pres_profile.change_resolution(L=L_profile)
         profile.change_resolution(L=L_profile)
 
-        prof_modes = np.zeros((L_profile, 3))
-        prof_modes[:, 0] = np.arange(L_profile)
+        prof_modes = np.zeros((L_profile + 1, 3))
+        prof_modes[:, 0] = np.arange(L_profile + 1)
         p1 = copy_coeffs(pres_profile.params, pres_profile.basis.modes, prof_modes)
         p2 = copy_coeffs(profile.params, profile.basis.modes, prof_modes)
         f.write("\n# pressure and rotational transform/current profiles\n")
-        for l in range(L_profile):
+        for l in range(L_profile + 1):
             f.write(
                 "l: {:3d}  p = {:15.8E}  {} = {:15.8E}\n".format(
                     int(l), p1[l], char, p2[l]

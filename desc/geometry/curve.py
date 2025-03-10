@@ -526,7 +526,7 @@ class FourierXYZCurve(Curve):
         if basis == "xyz":
             coords_xyz = coords
         else:
-            coords_xyz = rpz2xyz(coords, phi=coords[:, 1])
+            coords_xyz = rpz2xyz(coords)
         X = coords_xyz[:, 0]
         Y = coords_xyz[:, 1]
         Z = coords_xyz[:, 2]

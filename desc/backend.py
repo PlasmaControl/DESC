@@ -316,6 +316,27 @@ if use_jax:  # noqa: C901
             x = jax.lax.custom_root(res, x0, solve, tangent_solve, has_aux=False)
             return x
 
+    # Want to use least-squares, but jnp.linalg.lstsq doesn't have JVP
+    # defined and is slower than needed, so we use regularized cholesky.
+    def _lstsq(A, b):
+        A = jnp.atleast_2d(A)
+        b = jnp.atleast_1d(b)
+        eps = jnp.sqrt(jnp.finfo(A.dtype).eps)
+
+        if A.shape[-2] >= A.shape[-1]:
+            P = A.T @ A + eps * jnp.eye(A.shape[-1])
+            return cho_solve(cho_factor(P), A.T @ b)
+        P = A @ A.T + eps * jnp.eye(A.shape[-2])
+        y = cho_solve(cho_factor(P), b)
+        return A.T @ y
+
+    def _tangent_solve(g, y):
+        # For the singular integrals, the Jacobian will be inaccurate,
+        # since differentiating the quadrature is a poor approximation
+        # for differentiating a singular integral.
+        A = jnp.atleast_2d(jax.jacfwd(g)(y))
+        return _lstsq(A, jnp.atleast_1d(y))
+
     def root(
         fun,
         x0,
@@ -381,18 +402,6 @@ if use_jax:  # noqa: C901
 
         res = lambda x: jnp.atleast_1d(fun(x, *args)).flatten()
 
-        # want to use least squares for rank-defficient systems, but
-        # jnp.linalg.lstsq doesn't have JVP defined and is slower than needed
-        # so we use the normal equations with regularized cholesky
-        def _lstsq(a, b):
-            a = jnp.atleast_2d(a)
-            b = jnp.atleast_1d(b)
-            tall = a.shape[-2] >= a.shape[-1]
-            A = a.T @ a if tall else a @ a.T
-            B = a.T @ b if tall else b @ a
-            A += jnp.sqrt(jnp.finfo(A.dtype).eps) * jnp.eye(A.shape[0])
-            return cho_solve(cho_factor(A), B)
-
         def solve(resfun, guess):
             def condfun_ls(state_ls):
                 xk2, xk1, fk2, fk1, d, alphak2, k2 = state_ls
@@ -432,17 +441,13 @@ if use_jax:  # noqa: C901
             else:
                 return state[0]
 
-        def tangent_solve(g, y):
-            A = jnp.atleast_2d(jax.jacfwd(g)(y))
-            return _lstsq(A, jnp.atleast_1d(y))
-
         if full_output:
             x, (res, niter) = jax.lax.custom_root(
-                res, x0, solve, tangent_solve, has_aux=True
+                res, x0, solve, _tangent_solve, has_aux=True
             )
             return x, (safenorm(res), niter)
         else:
-            x = jax.lax.custom_root(res, x0, solve, tangent_solve, has_aux=False)
+            x = jax.lax.custom_root(res, x0, solve, _tangent_solve, has_aux=False)
             return x
 
 

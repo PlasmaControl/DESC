@@ -93,7 +93,14 @@ class FluxLoop(_Objective):
     vacuum : bool
         whether eq is vacuum, in which case plasma contribution to B won't be
         calculated.
-
+    bs_chunk_size : int or None
+        Size to split Biot-Savart computation into chunks of evaluation points.
+        If no chunking should be done or the chunk size is the full input
+        then supply ``None``.
+    B_plasma_chunk_size : int or None
+        Size to split singular integral computation into chunks.
+        If no chunking should be done or the chunk size is the full input
+        then supply ``None``. Default is ``bs_chunk_size``.
 
     """
 
@@ -121,6 +128,9 @@ class FluxLoop(_Objective):
         jac_chunk_size=None,
         coils_fixed=False,
         vacuum=False,
+        *,
+        bs_chunk_size=None,
+        B_plasma_chunk_size=None,
     ):
         if target is None and bounds is None:
             target = eq.Psi
@@ -135,6 +145,10 @@ class FluxLoop(_Objective):
         self._sheet_current = hasattr(self._eq.surface, "Phi_mn")
         things = [eq]
         self._coils_fixed = coils_fixed
+        self._bs_chunk_size = bs_chunk_size
+        if B_plasma_chunk_size == 0:
+            B_plasma_chunk_size = None
+        self._B_plasma_chunk_size = B_plasma_chunk_size
         if not coils_fixed:
             things.append(coilset)
         super().__init__(
@@ -219,6 +233,7 @@ class FluxLoop(_Objective):
                     flux_loop_data[i]["x"],
                     basis="rpz",
                     source_grid=self._field_grid,
+                    chunk_size=self._bs_chunk_size,
                 )
                 A_dot_dxds = jnp.sum(A * flux_loop_data[i]["x_s"], axis=1)
                 Psi = jnp.sum(self._flux_loop_grid.spacing[:, 2] * A_dot_dxds)
@@ -310,6 +325,7 @@ class FluxLoop(_Objective):
                     basis="rpz",
                     source_grid=constants["field_grid"],
                     params=field_params,
+                    chunk_size=self._bs_chunk_size,
                 )
             else:
                 Acoil = jnp.zeros_like(self._flux_loop_grid.nodes)
@@ -322,6 +338,7 @@ class FluxLoop(_Objective):
                     source_grid=constants["vc_source_grid"],
                     compute_A_or_B="A",
                     data=plasma_surf_data,
+                    chunk_size=self._B_plasma_chunk_size,
                 )
             else:
                 Aplasma = jnp.zeros_like(self._flux_loop_grid.nodes)
@@ -414,6 +431,14 @@ class RogowskiLoop(_Objective):
     vacuum : bool
         whether eq is vacuum, in which case plasma contribution to B won't be
         calculated.
+    bs_chunk_size : int or None
+        Size to split Biot-Savart computation into chunks of evaluation points.
+        If no chunking should be done or the chunk size is the full input
+        then supply ``None``.
+    B_plasma_chunk_size : int or None
+        Size to split singular integral computation into chunks.
+        If no chunking should be done or the chunk size is the full input
+        then supply ``None``. Default is ``bs_chunk_size``.
 
     """
 
@@ -441,6 +466,9 @@ class RogowskiLoop(_Objective):
         jac_chunk_size=None,
         coils_fixed=False,
         vacuum=False,
+        *,
+        bs_chunk_size=None,
+        B_plasma_chunk_size=None,
     ):
         if target is None and bounds is None:
             target = eq.Psi
@@ -455,6 +483,10 @@ class RogowskiLoop(_Objective):
         self._sheet_current = hasattr(self._eq.surface, "Phi_mn")
         things = [eq]
         self._coils_fixed = coils_fixed
+        self._bs_chunk_size = bs_chunk_size
+        if B_plasma_chunk_size == 0:
+            B_plasma_chunk_size = None
+        self._B_plasma_chunk_size = B_plasma_chunk_size
         if not coils_fixed:
             things.append(coilset)
         super().__init__(
@@ -624,6 +656,7 @@ class RogowskiLoop(_Objective):
                     basis="rpz",
                     source_grid=constants["field_grid"],
                     params=field_params,
+                    chunk_size=self._bs_chunk_size,
                 )
             else:
                 Bcoil = jnp.zeros_like(self._flux_loop_grid.nodes)
@@ -637,6 +670,7 @@ class RogowskiLoop(_Objective):
                     source_grid=constants["vc_source_grid"],
                     compute_A_or_B="B",
                     data=plasma_surf_data,
+                    chunk_size=self._B_plasma_chunk_size,
                 )
             else:
                 Bplasma = jnp.zeros_like(self._flux_loop_grid.nodes)
@@ -734,6 +768,14 @@ class PointBMeasurement(_Objective):
         sensor is measuring the poloidal field and is located at (R,phi,Z) = (1,0,0),
         its ``direction`` might be [0,0,+/- 1]. If not passed, will default to instead
         comparing the entire magnetic field vector at the points passed in.
+    bs_chunk_size : int or None
+        Size to split Biot-Savart computation into chunks of evaluation points.
+        If no chunking should be done or the chunk size is the full input
+        then supply ``None``.
+    B_plasma_chunk_size : int or None
+        Size to split singular integral computation into chunks.
+        If no chunking should be done or the chunk size is the full input
+        then supply ``None``. Default is ``bs_chunk_size``.
 
     """
 
@@ -761,6 +803,9 @@ class PointBMeasurement(_Objective):
         coils_fixed=False,
         vacuum=False,
         directions=None,
+        *,
+        bs_chunk_size=None,
+        B_plasma_chunk_size=None,
     ):
         if target is None and bounds is None:
             target = 0
@@ -779,6 +824,10 @@ class PointBMeasurement(_Objective):
         self._sheet_current = hasattr(self._eq.surface, "Phi_mn")
         things = [eq]
         self._coils_fixed = coils_fixed
+        self._bs_chunk_size = bs_chunk_size
+        if B_plasma_chunk_size == 0:
+            B_plasma_chunk_size = None
+        self._B_plasma_chunk_size = B_plasma_chunk_size
         if not coils_fixed:
             things.append(coilset)
         super().__init__(
@@ -845,8 +894,10 @@ class PointBMeasurement(_Objective):
         # dim_f is number of B components we  have,
         # which is 3 * num_coords we have or equiv,
         # coords.size
-        self._dim_f = self._measurement_coords.size
-
+        if self._directions is None:
+            self._dim_f = self._measurement_coords.size
+        else:
+            self._dim_f = self._measurement_coords.shape[0]
         # pre-calc coil contrib to B if coils are fixed
         if self._coils_fixed:
             B_from_coils = self._coils.compute_magnetic_field(
@@ -942,6 +993,7 @@ class PointBMeasurement(_Objective):
                 basis="rpz",
                 source_grid=constants["field_grid"],
                 params=field_params,
+                chunk_size=self._bs_chunk_size,
             )
         else:
             Bcoil = jnp.zeros_like(self._measurement_coords)
@@ -954,6 +1006,7 @@ class PointBMeasurement(_Objective):
                 source_grid=constants["vc_source_grid"],
                 compute_A_or_B="B",
                 data=plasma_surf_data,
+                chunk_size=self._B_plasma_chunk_size,
             )
         else:
             Bplasma = jnp.zeros_like(self._measurement_coords)

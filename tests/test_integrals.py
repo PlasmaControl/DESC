@@ -731,18 +731,16 @@ class TestVacuumSolver:
         """
         a = 1
         surf = FourierRZToroidalSurface()  # Choosing a = 1.
-        Phi_grid = LinearGrid(M=1, N=0, NFP=surf.NFP)
-        evl_grid = LinearGrid(M=5, N=5, NFP=surf.NFP)
         src_grid = LinearGrid(M=resolution, N=resolution, NFP=surf.NFP)
 
         theta = src_grid.nodes[:, 1]
         B0n = np.sin(theta)
         vac = VacuumSolver(
-            surf,
-            None,
-            evl_grid,
-            src_grid,
-            Phi_grid,
+            surface=surf,
+            B0=None,
+            evl_grid=LinearGrid(M=5, N=5, NFP=surf.NFP),
+            src_grid=src_grid,
+            Phi_grid=LinearGrid(M=1, N=0, NFP=surf.NFP),
             interior=False,
             chunk_size=chunk_size,
             B0n=B0n,
@@ -753,12 +751,11 @@ class TestVacuumSolver:
 
         data = vac.compute_Phi_mn(chunk_size)
         Z = data["evl"]["Z"]
-        Phi_mn = data["Phi"]["Phi_mn"]
-        Phi = Transform(evl_grid, vac._transform["Phi"].basis).transform(Phi_mn)
+        Phi = Transform(vac.evl_grid, vac.basis).transform(data["Phi"]["Phi_mn"])
         np.testing.assert_allclose(np.ptp(Z - Phi), 0, atol=atol)
 
         data = vac.compute_vacuum_field(chunk_size)["evl"].copy()
-        data = surf.compute(["n_rho", "theta"], grid=evl_grid, data=data)
+        data = surf.compute(["n_rho", "theta"], grid=vac.evl_grid, data=data)
         dPhi_dn = dot(data["grad(Phi)"], data["n_rho"])
         B0n = np.sin(data["theta"])
         np.testing.assert_allclose(B0n + dPhi_dn, 0, atol=atol)
@@ -793,16 +790,15 @@ class TestVacuumSolver:
             modes_R=[[0, 0], [1, 0], [0, 1]],
             modes_Z=[[-1, 0], [0, -1]],
         )
-        Phi_grid = LinearGrid(M=15, N=15, NFP=surf.NFP)
-        evl_grid = Phi_grid
         src_grid = LinearGrid(M=50, N=50, NFP=surf.NFP)
+        Phi_grid = LinearGrid(M=15, N=15, NFP=surf.NFP)
 
         vac = VacuumSolver(
-            surf,
-            None,
-            evl_grid,
-            src_grid,
-            Phi_grid,
+            surface=surf,
+            B0=None,
+            evl_grid=Phi_grid,
+            src_grid=src_grid,
+            Phi_grid=Phi_grid,
             # Φ = Z, so this should be exact.
             Phi_M=surf.M,
             Phi_N=surf.N,
@@ -816,12 +812,11 @@ class TestVacuumSolver:
 
         data = vac.compute_Phi_mn(chunk_size)
         Z = data["evl"]["Z"]
-        Phi_mn = data["Phi"]["Phi_mn"]
-        Phi = vac._transform["Phi"].transform(Phi_mn)
+        Phi = Transform(vac.evl_grid, vac.basis).transform(data["Phi"]["Phi_mn"])
         np.testing.assert_allclose(np.ptp(Z - Phi), 0, atol=atol)
 
         data = vac.compute_vacuum_field(chunk_size)["evl"].copy()
-        data = surf.compute("n_rho", grid=evl_grid, data=data)
+        data = surf.compute("n_rho", grid=vac.evl_grid, data=data)
         B0n = -data["n_rho"][:, 2]
         dPhi_dn = dot(data["grad(Phi)"], data["n_rho"])
         np.testing.assert_allclose(B0n + dPhi_dn, 0, atol=atol)
@@ -881,7 +876,6 @@ class TestVacuumSolver:
         eq = Equilibrium(surface=self._merkel_surf(C_r, C_z))
 
         Phi_grid = LinearGrid(M=20, N=20, NFP=eq.NFP if eq.N > 0 else 64)
-        evl_grid = Phi_grid
         src_grid = LinearGrid(M=50, N=50, NFP=eq.NFP)
         src_data = eq.compute(["G", "R0"], grid=src_grid)
         B0 = ToroidalMagneticField(
@@ -889,11 +883,11 @@ class TestVacuumSolver:
             R0=src_data["R0"],
         )
         vac = VacuumSolver(
-            eq.surface,
-            B0,
-            evl_grid,
-            src_grid,
-            Phi_grid,
+            surface=eq.surface,
+            B0=B0,
+            evl_grid=Phi_grid,
+            src_grid=src_grid,
+            Phi_grid=Phi_grid,
             Phi_M=8,
             Phi_N=8,
             interior=False,
@@ -901,7 +895,7 @@ class TestVacuumSolver:
             warn_fft=False,
         )
         data = vac.compute_magnetic_field(chunk_size)["evl"].copy()
-        data = eq.compute("n_rho", grid=evl_grid, data=data)
+        data = eq.compute("n_rho", grid=vac.evl_grid, data=data)
         Bn = dot(data["B0+grad(Phi)"], data["n_rho"])
         np.testing.assert_allclose(Bn, 0, atol=4e-4)
 

@@ -7,7 +7,7 @@ import numpy as np
 from desc.backend import jnp, put
 from desc.grid import Grid
 from desc.io import IOAble
-from desc.utils import combination_permutation, errorif, setdefault, warnif
+from desc.utils import combination_permutation, errorif, warnif
 
 
 class Transform(IOAble):
@@ -336,7 +336,7 @@ class Transform(IOAble):
             )
         self._built_pinv = True
 
-    def transform(self, c, dr=0, dt=0, dz=0, mode_idx=None):
+    def transform(self, c, dr=0, dt=0, dz=0, **kwargs):
         """Transform from spectral domain to physical.
 
         Parameters
@@ -349,10 +349,6 @@ class Transform(IOAble):
             order of poloidal derivative
         dz : int
             order of toroidal derivative
-        mode_idx : ndarray
-            Optional.
-            Mode numbers used in matrix multiply.
-            If supplied, ``c`` should have shape (``mode_idx.size``, ).
 
 
         Returns
@@ -365,23 +361,25 @@ class Transform(IOAble):
             RuntimeError,
             "Transform must be precomputed with transform.build() before being used.",
         )
-        errorif(self.method != "direct1" and mode_idx is not None, NotImplementedError)
+        errorif(self.method != "direct1" and "mode_idx" in kwargs, NotImplementedError)
         if len(c) == 0:
             return np.zeros(self.grid.num_nodes)
 
-        errorif(
-            (self.basis.num_modes if (mode_idx is None) else mode_idx.size) != c.size,
-            msg=f"Coefficients dimension ({c.size}) is incompatible with the number"
-            f" of basis modes ({self.basis.num_modes}).",
+        num_modes = (
+            kwargs["mode_idx"].size if ("mode_idx" in kwargs) else self.basis.num_modes
         )
-        mode_idx = setdefault(mode_idx, slice(None))
+        errorif(
+            num_modes != c.size,
+            msg=f"Coefficients dimension ({c.size}) is incompatible with the number"
+            f" of basis modes ({num_modes}).",
+        )
         if self.method in ["direct1", "jitable"]:
             A = self.matrices["direct1"].get(dr, {}).get(dt, {}).get(dz, {})
             errorif(
                 isinstance(A, dict),
                 msg="Derivative orders are out of initialized bounds",
             )
-            return A[:, mode_idx] @ c
+            return A[:, kwargs.get("mode_idx", slice(None))] @ c
 
         elif self.method == "direct2":
             A = self.matrices["fft"].get(dr, {}).get(dt, {})

@@ -253,7 +253,7 @@ class VacuumSolver(IOAble):
         Parameters
         ----------
         chunk_size : int or None
-            Size to split Fourier factorization into chunks.
+            Size to split computation into chunks.
             If no chunking should be done or the chunk size is the full input
             then supply ``None``.
 

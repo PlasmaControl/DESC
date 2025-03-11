@@ -2,7 +2,6 @@
 
 from functools import partial
 
-import numpy as np
 from matplotlib import pyplot as plt
 
 from desc.backend import jit, jnp
@@ -23,62 +22,54 @@ from desc.transform import Transform
 from desc.utils import errorif, setdefault
 
 
-@partial(vmap_chunked, in_axes=(None, 0, None), chunk_size=None)
-def _green(self, mode_idx, chunk_size):
-    """Compute green(Φₘₙ).
+def _nonhomogenous_part(self, chunk_size):
+    return jnp.atleast_1d(
+        -singular_integral(
+            self._data["Phi"],
+            self._data["src"],
+            _kernel_Bn_over_r,
+            self._interpolator["Phi"],
+            chunk_size,
+        ).squeeze()
+        / (2 * jnp.pi)
+    )
 
-    green is linear map of Φₘₙ.
-    Finite-dimensional approximation gives green(Φₘₙ) = A @ Φₘₙ.
-    """
-    Phi_mn = np.ones(1)
-    mode_idx = jnp.atleast_1d(mode_idx)
+
+@partial(vmap_chunked, in_axes=(None, 0, 0, None), chunk_size=None)
+def _fourier_operator(self, m, n, chunk_size):
+    # Finite-dimensional approximation of linear operator is
+    # _fourier_operator(Φₘₙ) = F @ Φₘₙ.
+    Phi = self.basis._get_fun_mode(m, n)
+    evl_Phi = Phi(self.Phi_grid)
     src_data = self._data["src"].copy()
-    src_data["Phi"] = self._transform["src"].transform(
-        jnp.zeros(self._transform["src"].num_modes).at[mode_idx].set(1)
-    )
-    Phi = (
-        src_data["Phi"]
-        if self._same_grid_phi_src
-        else self._transform["Phi"].transform(Phi_mn, mode_idx=mode_idx)
-    )
-    # TODO: Don't FFT and interpolate Phi since we know it analytically;
-    #       Just evaluate it as it is a single trigonometric function.
-    return Phi + singular_integral(
-        self._data["Phi"],
-        src_data,
-        _kernel_Phi_dGp_dn,
-        self._interpolator["Phi"],
-        chunk_size,
+    src_data["Phi"] = evl_Phi if self._same_grid_phi_src else Phi(self.src_grid)
+
+    return evl_Phi + singular_integral(
+        eval_data=self._data["Phi"],
+        source_data=src_data,
+        kernel=_kernel_Phi_dGp_dn,
+        interpolator=self._interpolator["Phi"],
+        chunk_size=chunk_size,
+        known_map=("Phi", Phi),
     ).squeeze() / (2 * jnp.pi)
 
 
 @partial(jit, static_argnames=["chunk_size"])
 def _compute_Phi_mn(self, *, chunk_size=None):
     if "Phi_mn" not in self._data["Phi"]:
-        num_modes = self._transform["Phi"].num_modes
-        num_nodes = self._transform["Phi"].grid.num_nodes
-        full_rank = num_modes == num_nodes
-
-        b = jnp.atleast_1d(
-            jnp.squeeze(
-                -singular_integral(
-                    self._data["Phi"],
-                    self._data["src"],
-                    _kernel_Bn_over_r,
-                    self._interpolator["Phi"],
-                    chunk_size,
-                )
-                / (2 * jnp.pi)
-            )
-        )
-        # Least squares method can significantly reduce size of A while
-        # retaining FFT interpolation accuracy in the singular integrals.
-        # Green is expensive, so constructing Jacobian A then solving
-        # better than iterative methods like ``jax.scipy.sparse.linalg.cg``.
-        A = _green(self, jnp.arange(num_modes), chunk_size).T
+        g = _nonhomogenous_part(self, chunk_size)
+        _, m, n = self.basis.modes.T
+        F = _fourier_operator(self, m, n, chunk_size).T
+        assert F.shape == (self.Phi_grid.num_nodes, self.basis.num_modes)
         self._data["Phi"]["Phi_mn"] = (
-            jnp.linalg.solve(A, b) if full_rank else jnp.linalg.lstsq(A, b)[0]
+            jnp.linalg.solve(F, g)
+            if (self.Phi_grid.num_nodes == self.basis.num_modes)
+            else jnp.linalg.lstsq(F, g)[0]
         )
+        # Least squares method can significantly reduce size of F while
+        # retaining FFT interpolation accuracy in the singular integrals.
+        # Green is expensive, so inverting directly may be better than
+        # iterative methods such as ``jax.scipy.sparse.linalg.cg``.
     return self._data
 
 
@@ -196,18 +187,17 @@ class VacuumSolver(IOAble):
 
         # Compute data on source grid.
         position = ["R", "phi", "Z"]
-        src_transform = Transform(src_grid, basis, derivs=1)
+        self._src_transform = Transform(src_grid, basis, derivs=1)
         src_data = surface.compute(
             position + ["n_rho", "|e_theta x e_zeta|", "e_theta", "e_zeta"],
             grid=src_grid,
         )
         # Compute data on Phi grid.
-        if self._same_grid_phi_src:
-            Phi_transform = src_transform
-            Phi_data = src_data
-        else:
-            Phi_transform = Transform(Phi_grid, basis, method="direct1")
-            Phi_data = surface.compute(position, grid=Phi_grid)
+        Phi_data = (
+            src_data
+            if self._same_grid_phi_src
+            else surface.compute(position, grid=Phi_grid)
+        )
         # Compute data on evaluation grid.
         if evl_grid.equiv(Phi_grid):
             evl_data = Phi_data
@@ -230,14 +220,32 @@ class VacuumSolver(IOAble):
         )
 
         self._B0 = B0
-        self._evl_grid = evl_grid
         self._interior = interior
         self._data = {"evl": evl_data, "Phi": Phi_data, "src": src_data}
-        self._transform = {"Phi": Phi_transform, "src": src_transform}
         self._interpolator = {
             "evl": get_interpolator(evl_grid, src_grid, src_data, use_dft, **kwargs),
             "Phi": get_interpolator(Phi_grid, src_grid, src_data, use_dft, **kwargs),
         }
+
+    @property
+    def evl_grid(self):
+        """Return the evaluation grid used by this solver."""
+        return self._interpolator["evl"]._eval_grid
+
+    @property
+    def src_grid(self):
+        """Return the source grid used by this solver."""
+        return self._interpolator["evl"]._source_grid
+
+    @property
+    def Phi_grid(self):
+        """Return the source grid used by this solver."""
+        return self._interpolator["Phi"]._eval_grid
+
+    @property
+    def basis(self):
+        """Return the DoubleFourierBasis used by this solver."""
+        return self._src_transform.basis
 
     def compute_Phi_mn(self, chunk_size=None):
         """Compute Fourier coefficients of vacuum potential Φ on ∂D.
@@ -247,7 +255,7 @@ class VacuumSolver(IOAble):
         chunk_size : int or None
             Size to split computation into chunks.
             If no chunking should be done or the chunk size is the full input
-            then supply ``None``. Default is ``None``.
+            then supply ``None``.
 
         Returns
         -------
@@ -267,8 +275,8 @@ class VacuumSolver(IOAble):
 
         Phi_mn = self._data["Phi"]["Phi_mn"]
         data = self._data["src"]
-        data["Phi_t"] = self._transform["src"].transform(Phi_mn, dt=1)
-        data["Phi_z"] = self._transform["src"].transform(Phi_mn, dz=1)
+        data["Phi_t"] = self._src_transform.transform(Phi_mn, dt=1)
+        data["Phi_z"] = self._src_transform.transform(Phi_mn, dz=1)
         data["K^theta"] = data["Phi_z"] / data["|e_theta x e_zeta|"]
         data["K^zeta"] = -data["Phi_t"] / data["|e_theta x e_zeta|"]
         data["K_vc"] = (
@@ -301,9 +309,9 @@ class VacuumSolver(IOAble):
         self._data["evl"]["grad(Phi)"] = (
             _nonsingular_part(
                 self._data["evl"],
-                self._evl_grid,
+                self.evl_grid,
                 self._data["src"],
-                self._transform["src"].grid,
+                self.src_grid,
                 st=jnp.nan,
                 sz=jnp.nan,
                 kernel=_kernel_biot_savart_coulomb,
@@ -344,7 +352,7 @@ class VacuumSolver(IOAble):
         data = self._data["evl"]
         data["B0"] = self._B0.compute_magnetic_field(
             coords=jnp.column_stack([data["R"], data["phi"], data["Z"]]),
-            source_grid=self._transform["src"].grid,
+            source_grid=self.src_grid,
             chunk_size=chunk_size,
         )
         return self._data
@@ -390,7 +398,7 @@ class VacuumSolver(IOAble):
 
         """
         errorif(self._interior)
-        grid = self._evl_grid
+        grid = self.evl_grid
         theta = grid.meshgrid_reshape(grid.nodes[:, 1], "rtz")[0]
         zeta = grid.meshgrid_reshape(grid.nodes[:, 2], "rtz")[0]
         Bn = grid.meshgrid_reshape(Bn, "rtz")[0]

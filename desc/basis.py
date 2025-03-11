@@ -669,6 +669,46 @@ class DoubleFourierSeries(_Basis):
 
         return poloidal * toroidal
 
+    def _get_fun_mode(self, m, n):
+        """Returns a function to compute basis function of mode ``index``.
+
+        Parameters
+        ----------
+        m : int
+            Mode to compute.
+        n : int
+            Mode to compute.
+
+        Returns
+        -------
+        f : callable
+            Function to compute specified basis function.
+            Has signature of the form (θ, ζ).
+
+        """
+
+        def f(grid, derivatives=np.array([0, 0, 0])):
+            if isinstance(grid, _Grid):
+                t = grid.unique_poloidal
+                z = grid.unique_zeta
+            elif len(grid) == 2:
+                # Assume given unique coordinates
+                # and can use outer product to expand to full grid.
+                t, z = grid
+            else:
+                # Assume given unique coordinates.
+                t, z, grid = grid
+
+            poloidal = fourier(t, m, 1, derivatives[1])
+            toroidal = fourier(z, n, self.NFP, derivatives[2])
+            if isinstance(grid, _Grid):
+                poloidal = poloidal[grid.inverse_poloidal_idx]
+                toroidal = toroidal[grid.inverse_zeta_idx]
+                return poloidal * toroidal
+            return (poloidal[:, np.newaxis] * toroidal).ravel(order="F")
+
+        return f
+
     def change_resolution(self, M, N, NFP=None, sym=None):
         """Change resolution of the basis to the given resolutions.
 

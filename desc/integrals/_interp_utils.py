@@ -299,6 +299,8 @@ def rfft2_vander(
     modes_rfft,
     x_fft0=0,
     x_rfft0=0,
+    inverse_idx_fft=None,
+    inverse_idx_rfft=None,
 ):
     """Return Vandermonde matrix for complex Fourier modes.
 
@@ -340,6 +342,10 @@ def rfft2_vander(
     x_rfft0 : float
         Left boundary of domain of coordinate specified by ``x_rfft`` over which
         samples were taken.
+    inverse_idx_fft : jnp.ndarray
+        Optional. Inverse idx along axis 0 to ensure query points broadcast.
+    inverse_idx_rfft : jnp.ndarray
+        Optional. Inverse idx along axis 0 to ensure query points broadcast.
 
     Returns
     -------
@@ -348,31 +354,13 @@ def rfft2_vander(
         Vandermonde matrix to evaluate complex Fourier series.
 
     """
-    vander_f = jnp.exp(1j * modes_fft * (x_fft - x_fft0)[..., jnp.newaxis])
-    vander_r = jnp.exp(1j * modes_rfft * (x_rfft - x_rfft0)[..., jnp.newaxis])
-    return vander_f[..., jnp.newaxis] * vander_r[..., jnp.newaxis, :]
-    # Above logic makes the Vandermonde array faster than the commented logic.
-    # (See GitHub issue 1530).
-    # On the ``master`` branch, commit ``532215825933e4e256ee551f644110180ba7bf8b``
-    # 2025 January 22, running ``pytest --mpl -k test_effective_ripple_2D`` will
-    # consume a peak memory of 4 GB. Switching to above approach (that being the
-    # only change), peak memory was observed to increase to 4.3 GB. Now in pull
-    # request #1440, the bounce integration method was rewritten with the goal of
-    # reusing the Vandermonde array to interpolate while retaining fusion. It was
-    # observed that JIT can fuse the above logic at peak memory 4.3 GB, while the
-    # old logic could not be fused (peak memory 9.7 GB) unless the array is
-    # remade each time.
-    # return jnp.exp(  # noqa: E800
-    #     1j  # noqa: E800
-    #     * (  # noqa: E800
-    #         (modes_fft * (x_fft - x_fft0)[..., jnp.newaxis])[  # noqa: E800
-    #             ..., jnp.newaxis  # noqa: E800
-    #         ]  # noqa: E800
-    #         + (modes_rfft * (x_rfft - x_rfft0)[..., jnp.newaxis])[  # noqa: E800
-    #             ..., jnp.newaxis, :  # noqa: E800
-    #         ]  # noqa: E800
-    #     )  # noqa: E800
-    # )  # noqa: E800
+    vf = jnp.exp(1j * modes_fft * (x_fft - x_fft0)[..., jnp.newaxis])
+    vr = jnp.exp(1j * modes_rfft * (x_rfft - x_rfft0)[..., jnp.newaxis])
+    if inverse_idx_fft is not None:
+        vf = vf[inverse_idx_fft]
+    if inverse_idx_rfft is not None:
+        vr = vr[inverse_idx_rfft]
+    return vf[..., jnp.newaxis] * vr[..., jnp.newaxis, :]
 
 
 def rfft2_modes(n_fft, n_rfft, domain_fft=(0, 2 * jnp.pi), domain_rfft=(0, 2 * jnp.pi)):

@@ -188,9 +188,9 @@ def get_interpolator(
     warnif(
         use_dft and warn_dft,
         RuntimeWarning,
-        msg="Upstream libraries perform matrix multiplication incorrectly for "
-        "large matrices. Until this is fixed, it is recommended to validate results "
-        "with small chunk size when using the DFT interpolator.",
+        msg="Matrix multiplication may be performed incorrectly for large matrices. "
+        "Until this is fixed, it is recommended to validate results small chunk size "
+        "when using the DFT interpolator.",
     )
     return f
 
@@ -430,7 +430,7 @@ class DFTInterpolator(_BIESTInterpolator):
         of the full domain (θ,ζ) ∈ [0, 2π)² of ``source_grid``.
         Subset of ``source_grid.num_theta`` × ``source_grid.num_zeta*source_grid.NFP``.
     q : int
-        Order of quadrature in polar domain
+        Order of quadrature in polar domain.
 
     """
 
@@ -459,11 +459,14 @@ class DFTInterpolator(_BIESTInterpolator):
 
     def vander_polar(self, i):
         """Return Vandermonde matrix for ith polar node."""
-        theta = self._eval_grid.nodes[:, 1] + self._shift_t[i]
-        zeta = self._eval_grid.nodes[:, 2] + self._shift_z[i]
-        return rfft2_vander(theta, zeta, self._modes_fft, self._modes_rfft).reshape(
-            self._eval_grid.num_nodes, -1
-        )
+        return rfft2_vander(
+            self._eval_grid.unique_theta + self._shift_t[i],
+            self._eval_grid.unique_zeta + self._shift_z[i],
+            self._modes_fft,
+            self._modes_rfft,
+            inverse_idx_fft=self._eval_grid.inverse_theta_idx,
+            inverse_idx_rfft=self._eval_grid.inverse_zeta_idx,
+        ).reshape(self._eval_grid.num_nodes, -1)
 
     def __call__(self, f, i, *, is_fourier=False, vander=None):
         """Interpolate ``f`` to polar node ``i`` around evaluation grid.
@@ -543,7 +546,7 @@ def _nonsingular_part(
                 st,
                 sz,
             )
-            return jnp.sum(k * (w * e)[..., jnp.newaxis], axis=1)
+            return jnp.sum(k * (e * w)[..., jnp.newaxis], axis=-2)
 
         return batch_map(eval_pt, eval_data, chunk_size).reshape(
             eval_grid.num_nodes, kernel.ndim
@@ -562,7 +565,9 @@ def _nonsingular_part(
     return f
 
 
-def _singular_part(eval_data, source_data, kernel, interpolator, chunk_size=None):
+def _singular_part(
+    eval_data, source_data, kernel, interpolator, chunk_size=None, known_map=None
+):
     """Integrate singular point by interpolating to polar grid.
 
     Generally follows sec 3.2.2 of [2], with the following differences:
@@ -571,8 +576,8 @@ def _singular_part(eval_data, source_data, kernel, interpolator, chunk_size=None
     - density sigma / function f is absorbed into kernel.
     """
     eval_grid = interpolator._eval_grid
-    eval_theta = jnp.asarray(eval_grid.nodes[:, 1])
-    eval_zeta = jnp.asarray(eval_grid.nodes[:, 2])
+    eval_theta = eval_grid.unique_theta
+    eval_zeta = eval_grid.unique_zeta
 
     r, w, dr, dw = _get_polar_quadrature(interpolator.q)
     r = jnp.abs(r)
@@ -590,6 +595,9 @@ def _singular_part(eval_data, source_data, kernel, interpolator, chunk_size=None
     if "phi" in keys:
         keys.remove("phi")  # ϕ is not a periodic map of θ, ζ.
         keys.add("omega")
+    if known_map is not None:
+        map_name, map_fun = known_map
+        keys.remove(map_name)
     # Note that it is necessary to take the Fourier transforms of the
     # vector components of the orthonormal polar basis vectors R̂, ϕ̂, Ẑ.
     # Vector components of the Cartesian basis are not NFP periodic.
@@ -608,20 +616,21 @@ def _singular_part(eval_data, source_data, kernel, interpolator, chunk_size=None
             for key, val in fsource
         }
         # Coordinates of the polar nodes around the evaluation point.
-        source_data_polar["theta"] = eval_theta + interpolator.shift_t[i]
-        source_data_polar["zeta"] = eval_zeta + interpolator.shift_z[i]
+        t = eval_theta + interpolator.shift_t[i]
+        z = eval_zeta + interpolator.shift_z[i]
+        if known_map is not None:
+            source_data_polar[map_name] = map_fun((t, z, eval_grid))
+        source_data_polar["theta"] = t[eval_grid.inverse_theta_idx]
+        source_data_polar["zeta"] = z[eval_grid.inverse_zeta_idx]
         if "omega" in keys:
             source_data_polar["phi"] = (
                 source_data_polar["zeta"] + source_data_polar["omega"]
             )
             # TODO (#465): For nonzero ω, the quadrature may not be symmetric about the
-            #  singular point for hypersingular kernels such as the Biot-Savart
-            #  kernel. (Recall the singularity is in real space). Hence the quadrature
-            #  may not converge to the desired Hadamard finite part. Prove otherwise or
-            #  use uniform grid in θ, ϕ and map coordinates before starting the singular
-            #  integral routine.
+            #  singular point for hypersingular kernels such as the Biot-Savart kernel.
+            #  Hence the quadrature may not converge to the Hadamard finite part.
+            #  Prove otherwise or use uniform grid in θ, ϕ and map coordinates.
 
-        # eval pts x source pts for 1 polar grid offset
         k = kernel(eval_data, source_data_polar, diag=True).reshape(
             eval_grid.num_nodes, kernel.ndim
         )
@@ -656,6 +665,7 @@ def singular_integral(
     kernel,
     interpolator,
     chunk_size=None,
+    known_map=None,
     **kwargs,
 ):
     """Evaluate a singular integral transform on a surface.
@@ -703,6 +713,13 @@ def singular_integral(
         Size to split computation into chunks.
         If no chunking should be done or the chunk size is the full input
         then supply ``None``. Default is ``None``.
+    known_map : (str, callable)
+        Optional. If map used in kernel of singular integral is known,
+        then may provide a callable to compute to avoid inefficient
+        interpolation and function approximation.
+        First index should store the name of the map used in the kernel
+        e.g. "Phi", and the second index should store the Python callable
+        that accepts a grid argument.
 
     Returns
     -------
@@ -728,8 +745,7 @@ def singular_integral(
     if isinstance(kernel, str):
         kernel = kernels[kernel]
 
-    out1 = _singular_part(eval_data, source_data, kernel, interpolator, chunk_size)
-    out2 = _nonsingular_part(
+    return _nonsingular_part(
         eval_data,
         interpolator._eval_grid,
         source_data,
@@ -738,8 +754,14 @@ def singular_integral(
         interpolator.sz,
         kernel,
         chunk_size,
+    ) + _singular_part(
+        eval_data,
+        source_data,
+        kernel,
+        interpolator,
+        chunk_size,
+        known_map=known_map,
     )
-    return out1 + out2
 
 
 def _dx(eval_data, source_data, diag=False):
@@ -828,7 +850,11 @@ def _kernel_Phi_dGp_dn(eval_data, source_data, diag=False):
     dx = _dx(eval_data, source_data, diag)
     # Using n_rho works better than normalized e^rho*sqrt(g) here.
     n = rpz2xyz_vec(source_data["n_rho"], phi=source_data["phi"])
-    return safediv(source_data["Phi"] * dot(n, dx), safenorm(dx, axis=-1) ** 3)
+    if diag:
+        numerator = source_data["Phi"] * dot(n, dx)
+    else:
+        numerator = dot(source_data["Phi"][..., jnp.newaxis] * n, dx)
+    return safediv(numerator, safenorm(dx, axis=-1) ** 3)
 
 
 _kernel_Phi_dGp_dn.ndim = 1

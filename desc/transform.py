@@ -3,11 +3,12 @@
 import warnings
 
 import numpy as np
+from termcolor import colored
 
 from desc.backend import jnp, put
 from desc.grid import Grid
 from desc.io import IOAble
-from desc.utils import combination_permutation, errorif, warnif
+from desc.utils import combination_permutation, warnif
 
 
 class Transform(IOAble):
@@ -114,10 +115,11 @@ class Transform(IOAble):
         elif np.ndim(derivs) == 2 and np.atleast_2d(derivs).shape[1] == 3:
             derivatives = np.atleast_2d(derivs)
         else:
-            errorif(
-                True,
-                NotImplementedError,
-                "derivs should be array-like with 3 columns, or a non-negative int",
+            raise NotImplementedError(
+                colored(
+                    "derivs should be array-like with 3 columns, or a non-negative int",
+                    "red",
+                )
             )
         # always include the 0,0,0 derivative
         if not (np.array([0, 0, 0]) == derivatives).all(axis=-1).any():
@@ -152,36 +154,46 @@ class Transform(IOAble):
             return
 
         if not grid.fft_toroidal:
-            warnif(
-                True,
-                msg=f"fft method requires compatible grid, got {grid}"
-                + " falling back to direct2 method",
+            warnings.warn(
+                colored(
+                    "fft method requires compatible grid, got {}".format(grid)
+                    + "falling back to direct2 method",
+                    "yellow",
+                )
             )
             self.method = "direct2"
             return
         if not basis.fft_toroidal:
-            warnif(
-                True,
-                msg=f"fft method requires compatible basis, got {basis}"
-                + " falling back to direct2 method",
+            warnings.warn(
+                colored(
+                    "fft method requires compatible basis, got {}".format(basis)
+                    + "falling back to direct2 method",
+                    "yellow",
+                )
             )
             self.method = "direct2"
             return
         if grid.num_zeta < 2 * basis.N + 1:
-            warnif(
-                True,
-                msg="fft method can not undersample in zeta, "
-                + f"num_toroidal_modes={basis.N}, num_toroidal_angles={grid.num_zeta} "
-                + "falling back to direct2 method",
+            warnings.warn(
+                colored(
+                    "fft method can not undersample in zeta, "
+                    + "num_toroidal_modes={}, num_toroidal_angles={}, ".format(
+                        basis.N, grid.num_zeta
+                    )
+                    + "falling back to direct2 method",
+                    "yellow",
+                )
             )
             self.method = "direct2"
             return
         if (basis.N > 0) and (grid.NFP != basis.NFP):
-            warnif(
-                True,
-                msg="fft method requires grid and basis to have the same NFP, got "
-                + f"grid.NFP={grid.NFP}, basis.NFP={basis.NFP}, "
-                + "falling back to direct2 method",
+            warnings.warn(
+                colored(
+                    "fft method requires grid and basis to have the same NFP, got "
+                    + f"grid.NFP={grid.NFP}, basis.NFP={basis.NFP}, "
+                    + "falling back to direct2 method",
+                    "yellow",
+                )
             )
             self.method = "direct2"
             return
@@ -221,18 +233,22 @@ class Transform(IOAble):
         from desc.grid import LinearGrid
 
         if not (grid.fft_toroidal or isinstance(grid, LinearGrid)):
-            warnif(
-                True,
-                msg=f"direct2 method requires compatible grid, got {grid}"
-                + " falling back to direct1 method",
+            warnings.warn(
+                colored(
+                    "direct2 method requires compatible grid, got {}".format(grid)
+                    + "falling back to direct1 method",
+                    "yellow",
+                )
             )
             self.method = "direct1"
             return
         if not basis.fft_toroidal:  # direct2 and fft have same basis requirements
-            warnif(
-                True,
-                msg=f"direct2 method requires compatible basis, got {basis}"
-                + " falling back to direct1 method",
+            warnings.warn(
+                colored(
+                    "direct2 method requires compatible basis, got {}".format(basis)
+                    + "falling back to direct1 method",
+                    "yellow",
+                )
             )
             self.method = "direct1"
             return
@@ -247,7 +263,9 @@ class Transform(IOAble):
         row = np.where(
             (basis.modes[:, None, :2] == self.lm_modes[None, :, :]).all(axis=-1)
         )[1]
-        col = np.where(basis.modes[None, :, 2] == self.n_modes[:, None])[0]
+        col = np.where(
+            basis.modes[None, :, 2] == basis.modes[basis.unique_N_idx, None, 2]
+        )[0]
         self.fft_index = np.atleast_1d(np.squeeze(self.num_n_modes * row + col))
         fft_nodes = np.hstack(
             [
@@ -336,7 +354,7 @@ class Transform(IOAble):
             )
         self._built_pinv = True
 
-    def transform(self, c, dr=0, dt=0, dz=0, **kwargs):
+    def transform(self, c, dr=0, dt=0, dz=0):
         """Transform from spectral domain to physical.
 
         Parameters
@@ -350,59 +368,57 @@ class Transform(IOAble):
         dz : int
             order of toroidal derivative
 
-
         Returns
         -------
         x : ndarray, shape(num_nodes,)
             array of values of function at node locations
         """
-        errorif(
-            not self.built,
-            RuntimeError,
-            "Transform must be precomputed with transform.build() before being used.",
-        )
-        errorif(self.method != "direct1" and "mode_idx" in kwargs, NotImplementedError)
+        if not self.built:
+            raise RuntimeError(
+                "Transform must be precomputed with transform.build() before being used"
+            )
+
+        if self.basis.num_modes != c.size:
+            raise ValueError(
+                colored(
+                    "Coefficients dimension ({}) is incompatible with ".format(c.size)
+                    + "the number of basis modes({})".format(self.basis.num_modes),
+                    "red",
+                )
+            )
+
         if len(c) == 0:
             return np.zeros(self.grid.num_nodes)
 
-        num_modes = (
-            kwargs["mode_idx"].size if ("mode_idx" in kwargs) else self.basis.num_modes
-        )
-        errorif(
-            num_modes != c.size,
-            msg=f"Coefficients dimension ({c.size}) is incompatible with the number"
-            f" of basis modes ({num_modes}).",
-        )
         if self.method in ["direct1", "jitable"]:
             A = self.matrices["direct1"].get(dr, {}).get(dt, {}).get(dz, {})
-            errorif(
-                isinstance(A, dict),
-                msg="Derivative orders are out of initialized bounds",
-            )
-            return A[:, kwargs.get("mode_idx", slice(None))] @ c
+            if isinstance(A, dict):
+                raise ValueError(
+                    colored("Derivative orders are out of initialized bounds", "red")
+                )
+            return A @ c
 
         elif self.method == "direct2":
             A = self.matrices["fft"].get(dr, {}).get(dt, {})
             B = self.matrices["direct2"].get(dz, {})
-            errorif(
-                isinstance(A, dict) or isinstance(B, dict),
-                msg="Derivative orders are out of initialized bounds",
-            )
-            c_mtrx = jnp.zeros(self.num_lm_modes * self.num_n_modes)
-            c_mtrx = put(c_mtrx, self.fft_index, c).reshape(-1, self.num_n_modes)
+            if isinstance(A, dict) or isinstance(B, dict):
+                raise ValueError(
+                    colored("Derivative orders are out of initialized bounds", "red")
+                )
+            c_mtrx = jnp.zeros((self.num_lm_modes * self.num_n_modes,))
+            c_mtrx = put(c_mtrx, self.fft_index, c).reshape((-1, self.num_n_modes))
             cc = A @ c_mtrx
             return (cc @ B.T).flatten(order="F")
 
-        # TODO: Use real fft (jnp.irfft and jnp.fft)
         elif self.method == "fft":
             A = self.matrices["fft"].get(dr, {}).get(dt, {})
-            errorif(
-                isinstance(A, dict),
-                msg="Derivative orders are out of initialized bounds",
-            )
+            if isinstance(A, dict):
+                raise ValueError(
+                    colored("Derivative orders are out of initialized bounds", "red")
+                )
             # reshape coefficients
-            c_mtrx = jnp.zeros(self.num_lm_modes * self.num_n_modes)
-            c_mtrx = put(c_mtrx, self.fft_index, c).reshape(-1, self.num_n_modes)
+            c_mtrx = jnp.zeros((self.num_lm_modes * self.num_n_modes,))
+            c_mtrx = put(c_mtrx, self.fft_index, c).reshape((-1, self.num_n_modes))
             # differentiate
             c_diff = c_mtrx[:, :: (-1) ** dz] * self.dk**dz * (-1) ** (dz > 1)
             # re-format in complex notation
@@ -418,7 +434,7 @@ class Transform(IOAble):
                 )
             )
             # transform coefficients
-            c_fft = jnp.fft.ifft(c_pad).real
+            c_fft = jnp.real(jnp.fft.ifft(c_pad))
             return (A @ c_fft).flatten(order="F")
 
     def fit(self, x):
@@ -435,12 +451,10 @@ class Transform(IOAble):
             spectral coefficients in basis
 
         """
-        errorif(
-            not self.built,
-            RuntimeError,
-            "Transform must be precomputed with transform.build_pinv() "
-            "before being used.",
-        )
+        if not self.built_pinv:
+            raise RuntimeError(
+                "Transform must be built with transform.build_pinv() before being used"
+            )
 
         if self.method == "direct1":
             Ainv = self.matrices["pinv"]
@@ -478,16 +492,19 @@ class Transform(IOAble):
         b : ndarray
             vector y projected onto basis, shape (self.basis.num_modes)
         """
-        errorif(
-            not self.built,
-            RuntimeError,
-            "Transform must be precomputed with transform.build() before being used.",
-        )
-        errorif(
-            self.grid.num_nodes != y.size,
-            msg=f"y dimension ({y.size}) is incompatible with the number"
-            f" of grid nodes ({self.grid.num_nodes}).",
-        )
+        if not self.built:
+            raise RuntimeError(
+                "Transform must be precomputed with transform.build() before being used"
+            )
+
+        if self.grid.num_nodes != y.size:
+            raise ValueError(
+                colored(
+                    "y dimension ({}) is incompatible with ".format(y.size)
+                    + "the number of grid nodes({})".format(self.grid.num_nodes),
+                    "red",
+                )
+            )
 
         if self.method == "direct1":
             A = self.matrices["direct1"][0][0][0]

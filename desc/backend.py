@@ -316,21 +316,24 @@ if use_jax:  # noqa: C901
             x = jax.lax.custom_root(res, x0, solve, tangent_solve, has_aux=False)
             return x
 
-    # Want to use least-squares, but jnp.linalg.lstsq doesn't have JVP
-    # defined and is slower than needed, so we use regularized cholesky.
-    def _lstsq(A, b):
-        A = jnp.atleast_2d(A)
-        b = jnp.atleast_1d(b)
-        eps = jnp.sqrt(jnp.finfo(A.dtype).eps)
+    def _lstsq(A, y):
+        """Cholesky factorized least-squares.
 
+        jnp.linalg.lstsq doesn't have JVP defined and is slower than needed,
+        so we use regularized cholesky.
+        """
+        A = jnp.atleast_2d(A)
+        y = jnp.atleast_1d(y)
         if A.shape[-2] == A.shape[-1]:
-            return jnp.linalg.solve(A, b)
+            return jnp.linalg.solve(A, y) if y.size > 1 else jnp.squeeze(y / A)
+
+        eps = jnp.sqrt(jnp.finfo(A.dtype).eps)
         if A.shape[-2] > A.shape[-1]:
             P = A.T @ A + eps * jnp.eye(A.shape[-1])
-            return cho_solve(cho_factor(P), A.T @ b)
+            return cho_solve(cho_factor(P), A.T @ y)
+
         P = A @ A.T + eps * jnp.eye(A.shape[-2])
-        y = cho_solve(cho_factor(P), b)
-        return A.T @ y
+        return A.T @ cho_solve(cho_factor(P), y)
 
     def _tangent_solve(g, y):
         return _lstsq(jax.jacfwd(g)(y), y)

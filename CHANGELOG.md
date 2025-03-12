@@ -56,6 +56,7 @@ Bug Fixes
 - Fixes bug that occurs when an NAE solution used with NAE constraints is asymmetric, but has a symmetric axis.
 - Fixes bug in ``FourierCurrentPotentialField.change_Phi_resolution`` where ``N_Phi`` would be changed to ``M_Phi`` if ``N`` is not explicitly passed into the method.
 - Fixes bug when setting current for a ``MixedCoilSet`` with an arbitrary tree structure.
+- Fixes bug in the formula for computing ``"P_fusion"``.
 
 Performance Improvements
 

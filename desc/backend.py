@@ -323,7 +323,9 @@ if use_jax:  # noqa: C901
         b = jnp.atleast_1d(b)
         eps = jnp.sqrt(jnp.finfo(A.dtype).eps)
 
-        if A.shape[-2] >= A.shape[-1]:
+        if A.shape[-2] == A.shape[-1]:
+            return jnp.linalg.solve(A, b)
+        if A.shape[-2] > A.shape[-1]:
             P = A.T @ A + eps * jnp.eye(A.shape[-1])
             return cho_solve(cho_factor(P), A.T @ b)
         P = A @ A.T + eps * jnp.eye(A.shape[-2])
@@ -331,11 +333,7 @@ if use_jax:  # noqa: C901
         return A.T @ y
 
     def _tangent_solve(g, y):
-        # For the singular integrals, the Jacobian will be inaccurate,
-        # since differentiating the quadrature is a poor approximation
-        # for differentiating a singular integral.
-        A = jnp.atleast_2d(jax.jacfwd(g)(y))
-        return _lstsq(A, jnp.atleast_1d(y))
+        return _lstsq(jax.jacfwd(g)(y), y)
 
     def root(
         fun,

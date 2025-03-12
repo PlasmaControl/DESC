@@ -417,10 +417,12 @@ def test_contract_equilibrium_warns_errors():
     eq.pressure += eq.pressure
     with pytest.warns(UserWarning, match="SplineProfile"):
         eq_half_rho = contract_equilibrium(eq, rho, profile_num_points=50)
-    eq.anisotropy = FourierZernikeProfile()
+    p_orig = eq.pressure.copy()
+    eq.pressure = FourierZernikeProfile()
     with pytest.raises(ValueError, match="FourierZernike"):
         contract_equilibrium(eq, rho)
     assert isinstance(eq_half_rho.pressure, SplineProfile)
+    eq.pressure = p_orig
     data_keys = ["|B|", "|F|", "R", "Z", "lambda", "p", "iota", "sqrt(g)"]
     contract_grid = LinearGrid(
         rho=np.linspace(0, 1.0, eq.L),

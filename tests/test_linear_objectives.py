@@ -775,10 +775,10 @@ def test_FixMode_passed_target_no_passed_modes_error():
         FixZ.build()
     FixR = FixModeR(eq=eq, modes=True, target=np.array([0, 0]))
     with pytest.raises(ValueError):
-        FixR.build(eq)
+        FixR.build()
     FixL = FixModeLambda(eq=eq, modes=True, target=np.array([0, 0]))
     with pytest.raises(ValueError):
-        FixL.build(eq)
+        FixL.build()
 
 
 @pytest.mark.unit

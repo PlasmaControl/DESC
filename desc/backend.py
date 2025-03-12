@@ -63,12 +63,12 @@ def print_backend_info():
     )
 
 
-def _is_converged(residual, xtol):
-    return jnp.dot(residual, residual) <= xtol**2
+def _is_converged(residual, tol):
+    return jnp.dot(residual, residual) <= tol**2
 
 
-def _is_converged_pointwise(residual, xtol):
-    return jnp.all(jnp.abs(residual) <= xtol)
+def _is_converged_pointwise(residual, tol):
+    return jnp.all(jnp.abs(residual) <= tol)
 
 
 def _to_fp(f):
@@ -78,7 +78,7 @@ def _to_fp(f):
     return g
 
 
-def _fixed_point(func, x0, xtol, maxiter, method, is_converged):
+def _fixed_point(func, x0, tol, maxiter, method, is_converged):
     from desc.utils import safediv
 
     def cond_fun(state):
@@ -91,7 +91,7 @@ def _fixed_point(func, x0, xtol, maxiter, method, is_converged):
         if method == "del2":
             p2 = func(p)
             p = p0 - safediv((p - p0) ** 2, p2 - 2 * p + p0, p0 + p2)
-        return p, is_converged(safediv(p - p0, p0, p), xtol), i + 1
+        return p, is_converged(p - p0, tol), i + 1
 
     return jax.lax.while_loop(cond_fun, body_fun, (x0, False, 0))
 
@@ -499,7 +499,7 @@ if use_jax:  # noqa: C901
         func,
         x0,
         args=(),
-        xtol=1e-6,
+        tol=1e-6,
         maxiter=20,
         method="del2",
         scalar=False,
@@ -515,7 +515,7 @@ if use_jax:  # noqa: C901
             Initial guesses for fixed points.
         args : tuple
             Extra arguments to ``func``.
-        xtol : float
+        tol : float
             Pointwise convergence tolerance, defaults to 1e-6.
         maxiter : int
             Maximum number of iterations, defaults to 20.
@@ -542,7 +542,7 @@ if use_jax:  # noqa: C901
             p, converged, i = _fixed_point(
                 _to_fp(f),
                 x0,
-                xtol,
+                tol,
                 maxiter,
                 method,
                 _is_converged_pointwise if scalar else _is_converged,
@@ -976,7 +976,7 @@ else:  # pragma: no cover
         func,
         x0,
         args=(),
-        xtol=1e-6,
+        tol=1e-6,
         maxiter=20,
         method="del2",
         scalar=False,
@@ -992,8 +992,8 @@ else:  # pragma: no cover
             Initial guess for fixed point.
         args : tuple
             Extra arguments to ``func``.
-        xtol : float
-            Pointwise convergence tolerance, defaults to 1e-6.
+        tol : float
+            Convergence tolerance, defaults to 1e-6.
         maxiter : int
             Maximum number of iterations, defaults to 20.
         method : {"del2", "simple"}
@@ -1019,7 +1019,13 @@ else:  # pragma: no cover
         if method == "simple":
             method = "iteration"
         return scipy.optimize.fixed_point(
-            func, x0, args=args, xtol=xtol, maxiter=maxiter, method=method
+            # Scipy interprets tol as relative tolerance..
+            func,
+            x0,
+            args=args,
+            xtol=tol,
+            maxiter=maxiter,
+            method=method,
         )
 
     def flatnonzero(a, size=None, fill_value=0):

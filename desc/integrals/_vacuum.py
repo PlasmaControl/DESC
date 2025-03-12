@@ -75,7 +75,7 @@ def _fourier_compute_Phi_mn(self, *, chunk_size=None):
 
 
 def _fredholm_operator(Phi_k, g, self, chunk_size=None):
-    """Compute Fredholm integral fixed point operator Tf such that Tf = f.
+    """Compute Fredholm integral operator Tf such that Tf = f.
 
     Parameters
     ----------
@@ -87,16 +87,26 @@ def _fredholm_operator(Phi_k, g, self, chunk_size=None):
     Returns
     -------
     Tf : jnp.ndarray
-        Fredholm integral equation linear operator output.
+        Fredholm integral operator computed on ``self._Phi_grid``.
 
     """
-    s = (self.src_grid.num_theta, self.src_grid.num_zeta)
     src_data = self._data["src"].copy()
-    src_data["Phi"] = irfft2(
-        rfft2(self.evl_grid.meshgrid_reshape(Phi_k, "rtz")[0], norm="forward"),
-        s=s,
-        norm="forward",
-    ).ravel(order="F")
+    if self._same_grid_phi_src:
+        src_data["Phi"] = Phi_k
+    else:
+        src_data["Phi"] = irfft2(
+            rfft2(
+                Phi_k.reshape(
+                    self.evl_grid.num_theta,
+                    self.evl_grid.num_zeta,
+                    order="F",
+                ),
+                norm="forward",
+            ),
+            s=(self.src_grid.num_theta, self.src_grid.num_zeta),
+            norm="forward",
+        ).ravel(order="F")
+
     return g - singular_integral(
         eval_data=self._data["Phi"],
         source_data=src_data,
@@ -106,12 +116,12 @@ def _fredholm_operator(Phi_k, g, self, chunk_size=None):
     ).squeeze() / (2 * jnp.pi)
 
 
-@partial(jit, static_argnames=["xtol", "maxiter", "method", "chunk_size"])
+@partial(jit, static_argnames=["tol", "maxiter", "method", "chunk_size"])
 def _fixed_point_compute_Phi(
     self,
     Phi_0=None,
     *,
-    xtol=1e-6,
+    tol=1e-6,
     maxiter=20,
     method="del2",
     chunk_size=None,
@@ -121,8 +131,6 @@ def _fixed_point_compute_Phi(
 
     g = _nonhomogenous_part(self, chunk_size)
     if Phi_0 is None:
-        # Initial guess is nonvanishing first Fourier harmonic
-        # Should be low frequency compared to grid resolution.
         # TODO: Add option to set initial guess to first k
         #  terms of Fourier fit (output of ``_compute_Phi_mn``).
         #  Useful if k is small.
@@ -132,7 +140,7 @@ def _fixed_point_compute_Phi(
         _fredholm_operator,
         Phi_0,
         (g, self, chunk_size),
-        xtol,
+        tol,
         maxiter,
         method,
         scalar=True,
@@ -260,11 +268,10 @@ class VacuumSolver(IOAble):
             grid=src_grid,
         )
         # Compute data on Phi grid.
-        Phi_data = (
-            src_data
-            if self._same_grid_phi_src
-            else surface.compute(position, grid=Phi_grid)
-        )
+        if self._same_grid_phi_src:
+            Phi_data = src_data
+        else:
+            Phi_data = surface.compute(position, grid=Phi_grid)
         # Compute data on evaluation grid.
         if evl_grid.equiv(Phi_grid):
             evl_data = Phi_data
@@ -333,8 +340,8 @@ class VacuumSolver(IOAble):
         self._data = _fourier_compute_Phi_mn(self, chunk_size=chunk_size)
         return self._data
 
-    def compute_Phi(
-        self, Phi_0=None, xtol=1e-6, maxiter=20, method="del2", chunk_size=None
+    def compute_fixed_point_Phi(
+        self, Phi_0=None, tol=1e-6, maxiter=20, method="del2", chunk_size=None
     ):
         """Compute vacuum potential Φ on ∂D via fixed point iteration.
 
@@ -342,7 +349,10 @@ class VacuumSolver(IOAble):
         ----------
         Phi_0 : jnp.ndarray
             Initial guess for Φ on ``self.Phi_grid``.
-        xtol : float
+            In general, it is best to select the initial guess as truncated
+            Fourier series. Default is Fourier series with unit coefficients
+            for two modes (that have frequency zero and one).
+        tol : float
             Stopping tolerance.
         maxiter : int
             Maximum number of fixed point iterations.
@@ -362,10 +372,11 @@ class VacuumSolver(IOAble):
              Vacuum potential Φ on ∂D stored in ``data["Phi"]["Phi"]``.
 
         """
+        assert self.Phi_grid.can_fft2
         self._data = _fixed_point_compute_Phi(
             self,
             Phi_0,
-            xtol=xtol,
+            tol=tol,
             maxiter=maxiter,
             method=method,
             chunk_size=chunk_size,

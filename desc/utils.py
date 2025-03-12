@@ -1,6 +1,7 @@
 """Utility functions, independent of the rest of DESC."""
 
 import functools
+import inspect
 import operator
 import warnings
 from itertools import combinations_with_replacement, permutations
@@ -969,3 +970,10 @@ def ensure_tuple(x):
     if isinstance(x, list):
         return tuple(x)
     return (x,)
+
+
+def getsource(obj):
+    """Get source code for an object, allowing for partials etc."""
+    if isinstance(obj, functools.partial):
+        return getsource(obj.func)
+    return inspect.getsource(obj)

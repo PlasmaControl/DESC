@@ -63,6 +63,76 @@ def print_backend_info():
     )
 
 
+def _is_converged(residual, xtol):
+    return jnp.dot(residual, residual) <= xtol**2
+
+
+def _is_converged_pointwise(residual, xtol):
+    return jnp.all(jnp.abs(residual) <= xtol)
+
+
+def _to_fp(f):
+    def g(x):
+        return f(x) + x
+
+    return g
+
+
+def _fixed_point(func, x0, xtol, maxiter, method, is_converged):
+    from desc.utils import safediv
+
+    def cond_fun(state):
+        _, converged, i = state
+        return (i < maxiter) & (~converged)
+
+    def body_fun(state):
+        p0, _, i = state
+        p = func(p0)
+        if method == "del2":
+            p2 = func(p)
+            p = p0 - safediv((p - p0) ** 2, p2 - 2 * p + p0, p0 + p2)
+        return p, is_converged(safediv(p - p0, p0, p), xtol), i + 1
+
+    return jax.lax.while_loop(cond_fun, body_fun, (x0, False, 0))
+
+
+def _lstsq(A, y):
+    """Cholesky factorized least-squares.
+
+    jnp.linalg.lstsq doesn't have JVP defined and is slower than needed,
+    so we use regularized cholesky.
+    """
+    A = jnp.atleast_2d(A)
+    y = jnp.atleast_1d(y)
+    if A.shape[-2] == A.shape[-1]:
+        return jnp.linalg.solve(A, y) if y.size > 1 else jnp.squeeze(y / A)
+
+    eps = jnp.sqrt(jnp.finfo(A.dtype).eps)
+    if A.shape[-2] > A.shape[-1]:
+        P = A.T @ A + eps * jnp.eye(A.shape[-1])
+        return cho_solve(cho_factor(P), A.T @ y)
+
+    P = A @ A.T + eps * jnp.eye(A.shape[-2])
+    return A.T @ cho_solve(cho_factor(P), y)
+
+
+def _tangent_solve(g, y):
+    # For the singular integrals, the Jacobian will be inaccurate,
+    # since differentiating the quadrature is a poor approximation
+    # for differentiating a singular integral.
+    return _lstsq(jax.jacfwd(g)(y), y)
+
+
+def _map(f, xs, *, batch_size=None, in_axes=0, out_axes=0):
+    """Generalizes jax.lax.map; uses numpy."""
+    if not isinstance(xs, np.ndarray):
+        raise NotImplementedError(
+            "Require numpy array input, or install jax to support pytrees."
+        )
+    xs = np.moveaxis(xs, source=in_axes, destination=0)
+    return np.stack([f(x) for x in xs], axis=out_axes)
+
+
 if use_jax:  # noqa: C901
     from jax import custom_jvp, jit, vmap
     from jax.experimental.ode import odeint
@@ -287,7 +357,7 @@ if use_jax:  # noqa: C901
 
             def condfun(state):
                 xk1, fk1, k1 = state
-                return (k1 < maxiter) & (jnp.dot(fk1, fk1) > tol**2)
+                return (k1 < maxiter) & (~_is_converged(fk1, tol))
 
             def bodyfun(state):
                 xk1, fk1, k1 = state
@@ -303,17 +373,13 @@ if use_jax:  # noqa: C901
             else:
                 return state[0]
 
-        def tangent_solve(g, y):
-            A = jax.jacfwd(g)(y)
-            return y / A
-
         if full_output:
             x, (res, niter) = jax.lax.custom_root(
-                res, x0, solve, tangent_solve, has_aux=True
+                res, x0, solve, _tangent_solve, has_aux=True
             )
             return x, (abs(res), niter)
         else:
-            x = jax.lax.custom_root(res, x0, solve, tangent_solve, has_aux=False)
+            x = jax.lax.custom_root(res, x0, solve, _tangent_solve, has_aux=False)
             return x
 
     def root(
@@ -381,18 +447,6 @@ if use_jax:  # noqa: C901
 
         res = lambda x: jnp.atleast_1d(fun(x, *args)).flatten()
 
-        # want to use least squares for rank-defficient systems, but
-        # jnp.linalg.lstsq doesn't have JVP defined and is slower than needed
-        # so we use the normal equations with regularized cholesky
-        def _lstsq(a, b):
-            a = jnp.atleast_2d(a)
-            b = jnp.atleast_1d(b)
-            tall = a.shape[-2] >= a.shape[-1]
-            A = a.T @ a if tall else a @ a.T
-            B = a.T @ b if tall else b @ a
-            A += jnp.sqrt(jnp.finfo(A.dtype).eps) * jnp.eye(A.shape[0])
-            return cho_solve(cho_factor(A), B)
-
         def solve(resfun, guess):
             def condfun_ls(state_ls):
                 xk2, xk1, fk2, fk1, d, alphak2, k2 = state_ls
@@ -412,7 +466,7 @@ if use_jax:  # noqa: C901
 
             def condfun(state):
                 xk1, fk1, k1 = state
-                return (k1 < maxiter) & (jnp.dot(fk1, fk1) > tol**2)
+                return (k1 < maxiter) & (~_is_converged(fk1, tol))
 
             def bodyfun(state):
                 xk1, fk1, k1 = state
@@ -432,18 +486,79 @@ if use_jax:  # noqa: C901
             else:
                 return state[0]
 
-        def tangent_solve(g, y):
-            A = jnp.atleast_2d(jax.jacfwd(g)(y))
-            return _lstsq(A, jnp.atleast_1d(y))
-
         if full_output:
             x, (res, niter) = jax.lax.custom_root(
-                res, x0, solve, tangent_solve, has_aux=True
+                res, x0, solve, _tangent_solve, has_aux=True
             )
             return x, (safenorm(res), niter)
         else:
-            x = jax.lax.custom_root(res, x0, solve, tangent_solve, has_aux=False)
+            x = jax.lax.custom_root(res, x0, solve, _tangent_solve, has_aux=False)
             return x
+
+    def fixed_point(
+        func,
+        x0,
+        args=(),
+        xtol=1e-6,
+        maxiter=20,
+        method="del2",
+        scalar=False,
+        full_output=False,
+    ):
+        """Find a fixed point of the function.
+
+        Parameters
+        ----------
+        func : callable
+            Function to evaluate.
+        x0 : Array
+            Initial guesses for fixed points.
+        args : tuple
+            Extra arguments to ``func``.
+        xtol : float
+            Pointwise convergence tolerance, defaults to 1e-6.
+        maxiter : int
+            Maximum number of iterations, defaults to 20.
+        method : {"del2", "simple"}
+            Method of finding the fixed-point, defaults to ``del2``,
+            which uses Steffensen's acceleration method.
+            The former typically converges quadratically and the latter converges
+            linearly. Both statements assume the conditions for the contraction
+            mapping theorem are satisfied.
+        scalar : bool
+            Whether ``func`` is a single-variable map.
+        full_output : bool
+            Whether to return the iteration count and whether the result converged.
+
+        Returns
+        -------
+        p : jnp.ndarray
+            The fixed points, if convergence is achieved.
+            If full output is true, returns the tuple (p, (is_converged, iterations)).
+
+        """
+
+        def solve(f, x0):
+            p, converged, i = _fixed_point(
+                _to_fp(f),
+                x0,
+                xtol,
+                maxiter,
+                method,
+                _is_converged_pointwise if scalar else _is_converged,
+            )
+            return (p, (converged, i)) if full_output else p
+
+        def f(x):
+            return func(x, *args) - x
+
+        return jax.lax.custom_root(
+            f,
+            initial_guess=x0,
+            solve=solve,
+            tangent_solve=_tangent_solve,
+            has_aux=full_output,
+        )
 
 
 # we can't really test the numpy backend stuff in automated testing, so we ignore it
@@ -467,15 +582,6 @@ else:  # pragma: no cover
     from scipy.special import softmax as softargmax  # noqa: F401
 
     trapezoid = np.trapezoid if hasattr(np, "trapezoid") else np.trapz
-
-    def _map(f, xs, *, batch_size=None, in_axes=0, out_axes=0):
-        """Generalizes jax.lax.map; uses numpy."""
-        if not isinstance(xs, np.ndarray):
-            raise NotImplementedError(
-                "Require numpy array input, or install jax to support pytrees."
-            )
-        xs = np.moveaxis(xs, source=in_axes, destination=0)
-        return np.stack([f(x) for x in xs], axis=out_axes)
 
     def vmap(fun, in_axes=0, out_axes=0):
         """A numpy implementation of jax.lax.map whose API is a subset of jax.vmap.
@@ -865,6 +971,56 @@ else:  # pragma: no cover
             return out.x, out
         else:
             return out.x
+
+    def fixed_point(
+        func,
+        x0,
+        args=(),
+        xtol=1e-6,
+        maxiter=20,
+        method="del2",
+        scalar=False,
+        full_output=False,
+    ):
+        """Find a fixed point of the function.
+
+        Parameters
+        ----------
+        func : callable
+            Function to evaluate.
+        x0 : Array
+            Initial guess for fixed point.
+        args : tuple
+            Extra arguments to ``func``.
+        xtol : float
+            Pointwise convergence tolerance, defaults to 1e-6.
+        maxiter : int
+            Maximum number of iterations, defaults to 20.
+        method : {"del2", "simple"}
+            Method of finding the fixed-point, defaults to ``del2``,
+            which uses Steffensen's acceleration method.
+            The former typically converges quadratically and the latter converges
+            linearly. Both statements assume the conditions for the contraction
+            mapping theorem are satisfied.
+        scalar : bool
+            Whether ``func`` is a single-variable map.
+        full_output : bool
+            Whether to return the iteration count and whether the result converged.
+
+        Returns
+        -------
+        p : jnp.ndarray
+            The fixed point, if convergence is achieved.
+            If full output is true, returns the tuple (p, (converged, iterations)).
+
+        """
+        if scalar or full_output:
+            raise NotImplementedError
+        if method == "simple":
+            method = "iteration"
+        return scipy.optimize.fixed_point(
+            func, x0, args=args, xtol=xtol, maxiter=maxiter, method=method
+        )
 
     def flatnonzero(a, size=None, fill_value=0):
         """A numpy implementation of jnp.flatnonzero."""

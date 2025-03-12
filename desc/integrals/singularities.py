@@ -403,7 +403,7 @@ class FFTInterpolator(_BIESTInterpolator):
         # Would need to add interpax code to DESC
         # https://github.com/f0uriest/interpax/issues/53
         # for is_fourier to do anything. Should also use rfft2 and irfft2.
-        # TODO (#1206)
+        # TODO (#1206) and check if doing interpax(#53) here makes VacuumSolver faster.
         shape = f.shape[1:]
         return fft_interp2d(
             self._source_grid.meshgrid_reshape(f, "rtz")[0],

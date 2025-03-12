@@ -3577,7 +3577,8 @@ def _q_frame(params, transforms, profiles, data, **kwargs):
     label="\\kappa_{1}}_{\\mathrm{Frame}",
     units="~",
     units_long="None",
-    description="Curvature component in the p-vector direction for a rectangular cross section coil",
+    description="Curvature component in the p-vector direction for a "
+    "rectangular cross section coil",
     dim=1,
     params=[],
     transforms={},
@@ -3599,7 +3600,8 @@ def _curv1_frame(params, transforms, profiles, data, **kwargs):
     label="\\kappa_{2}}_{\\mathrm{Frame}",
     units="~",
     units_long="None",
-    description="Curvature component in the q-vector direction for a rectangular cross section coil",
+    description="Curvature component in the q-vector direction for a "
+    "rectangular cross section coil",
     dim=1,
     params=[],
     transforms={},
@@ -3651,7 +3653,7 @@ def _u_fb(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rt",
     data=[],
-    parameterization="desc.coils._FiniteBuildCoil", 
+    parameterization="desc.coils._FiniteBuildCoil",
 )
 def _v_fb(params, transforms, profiles, data, **kwargs):
     grid = transforms["grid"]
@@ -3697,10 +3699,31 @@ def _B_0_fb(params, transforms, profiles, data, **kwargs):
     def G(x, y):
         return y * jnp.arctan(x / y) + x / 2 * jnp.log(1 + (y / x) ** 2)
 
-    data["B_0_fb"] = mu_0 * current/(4*jnp.pi*a*b) * ( (q_frame * G(b*(v+1), a*(u+1)) - p_frame * G(a*(u+1), b*(v+1))) + 
-                                (-1) * (q_frame * G(b*(v+1), a*(u-1)) - p_frame * G(a*(u-1), b*(v+1))) + 
-                                (-1) * (q_frame * G(b*(v-1), a*(u+1)) - p_frame * G(a*(u+1), b*(v-1))) + 
-                                (q_frame * G(b*(v-1), a*(u-1)) - p_frame * G(a*(u-1), b*(v-1))))
+    data["B_0_fb"] = (
+        mu_0
+        * current
+        / (4 * jnp.pi * a * b)
+        * (
+            (
+                q_frame * G(b * (v + 1), a * (u + 1))
+                - p_frame * G(a * (u + 1), b * (v + 1))
+            )
+            + (-1)
+            * (
+                q_frame * G(b * (v + 1), a * (u - 1))
+                - p_frame * G(a * (u - 1), b * (v + 1))
+            )
+            + (-1)
+            * (
+                q_frame * G(b * (v - 1), a * (u + 1))
+                - p_frame * G(a * (u + 1), b * (v - 1))
+            )
+            + (
+                q_frame * G(b * (v - 1), a * (u - 1))
+                - p_frame * G(a * (u - 1), b * (v - 1))
+            )
+        )
+    )
 
     return data
 
@@ -3724,7 +3747,7 @@ def _B_0_fb(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["u_fb", "v_fb"],
-    parameterization="desc.coils._FiniteBuildCoil", 
+    parameterization="desc.coils._FiniteBuildCoil",
 )
 def _B_kappa_fb(params, transforms, profiles, data, **kwargs):
     # fed in externally
@@ -3748,14 +3771,31 @@ def _B_kappa_fb(params, transforms, profiles, data, **kwargs):
     curv1_frame = curv1_frame[:, jnp.newaxis]
     curv2_frame = curv2_frame[:, jnp.newaxis]
 
-    def K(U,V):
-        return ((-2*U*V * (curv1_frame*q_frame-curv2_frame*p_frame) * jnp.log(a/b*U**2 + b/a*V**2) + 
-                (curv2_frame*q_frame-curv1_frame*p_frame) * (a/b*U**2 + b/a*V**2) * jnp.log(a/b*U**2 + b/a*V**2) + 
-                4*a/b*curv2_frame*p_frame*U**2 * jnp.arctan(b*V/(a*U)) -
-                4*b/a*curv1_frame*q_frame*V**2 * jnp.arctan(a*U/(b*V))) )
+    def K(U, V):
+        return (
+            -2
+            * U
+            * V
+            * (curv1_frame * q_frame - curv2_frame * p_frame)
+            * jnp.log(a / b * U**2 + b / a * V**2)
+            + (curv2_frame * q_frame - curv1_frame * p_frame)
+            * (a / b * U**2 + b / a * V**2)
+            * jnp.log(a / b * U**2 + b / a * V**2)
+            + 4 * a / b * curv2_frame * p_frame * U**2 * jnp.arctan(b * V / (a * U))
+            - 4 * b / a * curv1_frame * q_frame * V**2 * jnp.arctan(a * U / (b * V))
+        )
 
-    data["B_kappa_fb"] = mu_0 * current/(64*jnp.pi) * ( K(u+1, v+1) + K(u-1, v-1) +
-                                  (-1) * K(u-1, v+1) + (-1) * K(u+1, v-1))
+    data["B_kappa_fb"] = (
+        mu_0
+        * current
+        / (64 * jnp.pi)
+        * (
+            K(u + 1, v + 1)
+            + K(u - 1, v - 1)
+            + (-1) * K(u - 1, v + 1)
+            + (-1) * K(u + 1, v - 1)
+        )
+    )
 
     return data
 
@@ -3772,7 +3812,7 @@ def _B_kappa_fb(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="r",
     data=["curvature", "frenet_binormal"],
-    parameterization="desc.coils._FiniteBuildCoil",  
+    parameterization="desc.coils._FiniteBuildCoil",
 )
 def _B_b_fb(params, transforms, profiles, data, **kwargs):
     # scalars, external
@@ -3792,9 +3832,17 @@ def _B_b_fb(params, transforms, profiles, data, **kwargs):
 
     delta = jnp.exp(-(25.0 / 6) + k)
 
-    data["B_b_fb"] = mu_0 * current/(8*jnp.pi) * curvature * binormal * (4 + 2*jnp.log(2) + jnp.log(delta))
+    data["B_b_fb"] = (
+        mu_0
+        * current
+        / (8 * jnp.pi)
+        * curvature
+        * binormal
+        * (4 + 2 * jnp.log(2) + jnp.log(delta))
+    )
 
     return data
+
 
 @register_compute_fun(
     name="x_fb",
@@ -3803,17 +3851,12 @@ def _B_b_fb(params, transforms, profiles, data, **kwargs):
     units_long="meters",
     description="Position vector in lab frame for finite build coil cross section",
     dim=3,
-    params=[
-        "p_frame",
-        "q_frame",
-        "cross_section_dims",
-        "x_centerline"
-    ],
+    params=["p_frame", "q_frame", "cross_section_dims", "x_centerline"],
     transforms={},
     profiles=[],
     coordinates="rtz",
     data=["u_fb", "v_fb"],
-    parameterization="desc.coils._FiniteBuildCoil", 
+    parameterization="desc.coils._FiniteBuildCoil",
 )
 def _x_fb(params, transforms, profiles, data, **kwargs):
     # fed in externally
@@ -3833,6 +3876,6 @@ def _x_fb(params, transforms, profiles, data, **kwargs):
     u = u[:, jnp.newaxis]
     v = v[:, jnp.newaxis]
 
-    data["x_fb"] = x_centerline + a * u * p_frame + b * v * q_frame
+    data["x_fb"] = x_centerline + a / 2 * u * p_frame + b / 2 * v * q_frame
 
     return data

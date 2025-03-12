@@ -5,12 +5,12 @@ import numpy as np
 from desc.backend import (
     fori_loop,
     jnp,
+    scan,
     tree_flatten,
     tree_leaves,
     tree_map,
-    tree_unflatten,
-    scan,
     tree_stack,
+    tree_unflatten,
 )
 from desc.compute import get_profiles, get_transforms, rpz2xyz
 from desc.compute.utils import _compute as compute_fun
@@ -853,11 +853,12 @@ class CoilSetMinDistance(_Objective):
 
 class CoilSetMaxNormB(_Objective):
     """Target the maximum magnetic field magnetic field on coil for a given coilset.
-    Self field on the coil is computed with the finite build method, and field from other
-    coils on the coil is computed with the filamentary method.
 
-    Will yield one value for each unique coil in the coilset, which is the maximum magnitude
-    of magnetic field on that coil. All coils in the coilset must inherit from _FiniteBuildCoil.
+    Self field on the coil is computed with the finite build method, and field from
+    other coils on the coil is computed with the filamentary method.
+    Will yield one value for each unique coil in the coilset, which is the maximum
+    magnitude of magnetic field on that coil. All coils in the coilset must inherit
+    from _FiniteBuildCoil.
 
     Parameters
     ----------
@@ -890,13 +891,13 @@ class CoilSetMaxNormB(_Objective):
         of the objective. Has no effect on self.grad or self.hess which always use
         reverse mode and forward over reverse mode respectively.
     xsection_grid : Grid, list, optional
-        Collocation grid used to discretize each coil cross section. Defaults to the default grid
-        for the given coil-type, see ``coils.py`` for more details. If a list, must have the
-        same structure as coils.
-    centerline_grid : Grid, list, optional
-        Collocation grid used to discretize each coil centerline. Defaults to the default grid
-        for the given coil-type, see ``coils.py`` and ``curve.py`` for more details.
+        Collocation grid used to discretize each coil cross section. Defaults to the
+        default grid for the given coil-type, see ``coils.py`` for more details.
         If a list, must have the same structure as coils.
+    centerline_grid : Grid, list, optional
+        Collocation grid used to discretize each coil centerline. Defaults to the
+        default grid for the given coil-type, see ``coils.py`` and ``curve.py``
+        for more details. If a list, must have the same structure as coils.
     name : str, optional
         Name of the objective function.
 
@@ -931,7 +932,8 @@ class CoilSetMaxNormB(_Objective):
         errorif(
             not type(coil) is CoilSet,
             ValueError,
-            "coil must be of type CoilSet, not an individual Coil. Mixed coil sets are not supported.",
+            "coil must be of type CoilSet, not an individual Coil. Mixed coil sets "
+            "are not supported.",
         )
         errorif(
             not all([isinstance(c, _FiniteBuildCoil) for c in coil.coils]),
@@ -1003,7 +1005,8 @@ class CoilSetMaxNormB(_Objective):
             constants = self.constants
 
         def body(dummy, x):
-            # compute self field and other coil field to find maximum field magnitude on the coil k
+            # compute self field and other coil field to find maximum field magnitude
+            # on the coil k
             coil = constants["coilset"][0]
             self_field, quad_points, centerline_mask = coil.compute_self_field(
                 xsection_grid=constants["xsection_grid"],
@@ -1015,7 +1018,8 @@ class CoilSetMaxNormB(_Objective):
                 centerline_mask[:, None], 100, quad_points
             )  # TODO: better way to do this
 
-            # compute field from other coils and subtract the coil computation to prevent double counting
+            # compute field from other coils and subtract the coil computation to
+            # prevent double counting
             other_field = constants["coilset"].compute_magnetic_field(
                 quad_points,
                 params=params,  # all coils' parameters
@@ -1030,12 +1034,14 @@ class CoilSetMaxNormB(_Objective):
             )
 
             total_field = self_field + other_field
+
+            # the coil centerline points are not used in the field computation,
+            # which is ok since the field is not maximal on the coil axis
             total_field = jnp.where(centerline_mask[:, None], 0, total_field)
 
             field_mag = safenorm(total_field, axis=-1)
 
-            # return maximum field magnitude on the coil. NaNs could be generated on the coil axis where the filament has a singularity
-            # in effect, the coil centerline points are not used in the field computation, which is ok since the field is not maximal on the coil axis
+            # return maximum field magnitude on the coil
             max_mag = jnp.max(field_mag, initial=0)
 
             return 0, max_mag

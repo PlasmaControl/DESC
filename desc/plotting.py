@@ -320,7 +320,9 @@ def _compute(eq, name, grid, component=None, reshape=True):
     return data, label
 
 
-def _compute_Bn(eq, field, plot_grid, field_grid):
+def _compute_Bn(
+    eq, field, plot_grid, field_grid, chunk_size=None, B_plasma_chunk_size=None
+):
     """Compute normal field from virtual casing + coils, using correct grids."""
     errorif(
         field is None,
@@ -372,7 +374,12 @@ def _compute_Bn(eq, field, plot_grid, field_grid):
         warnings.simplefilter("ignore")
 
         data, _ = field.compute_Bnormal(
-            eq, eval_grid=eval_grid, source_grid=field_grid, vc_source_grid=source_grid
+            eq,
+            eval_grid=eval_grid,
+            source_grid=field_grid,
+            vc_source_grid=source_grid,
+            chunk_size=chunk_size,
+            B_plasma_chunk_size=B_plasma_chunk_size,
         )
     data = data.reshape((eval_grid.num_theta, eval_grid.num_zeta), order="F")
     if theta_endpoint:
@@ -722,7 +729,12 @@ def plot_2d(
         )
     else:
         data, label = _compute_Bn(
-            eq, kwargs.pop("field", None), grid, kwargs.pop("field_grid", None)
+            eq=eq,
+            field=kwargs.pop("field", None),
+            plot_grid=grid,
+            field_grid=kwargs.pop("field_grid", None),
+            chunk_size=kwargs.pop("chunk_size", None),
+            B_plasma_chunk_size=kwargs.pop("B_plasma_chunk_size", None),
         )
 
     fig, ax = _format_ax(ax, figsize=kwargs.pop("figsize", None))
@@ -979,7 +991,12 @@ def plot_3d(
         )
     else:
         data, label = _compute_Bn(
-            eq, kwargs.pop("field", None), grid, kwargs.pop("field_grid", None)
+            eq=eq,
+            field=kwargs.pop("field", None),
+            plot_grid=grid,
+            field_grid=kwargs.pop("field_grid", None),
+            chunk_size=kwargs.pop("chunk_size", None),
+            B_plasma_chunk_size=kwargs.pop("B_plasma_chunk_size", None),
         )
 
     errorif(

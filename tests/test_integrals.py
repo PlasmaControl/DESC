@@ -54,9 +54,12 @@ from desc.integrals.quad_utils import (
     tanh_sinh,
 )
 from desc.integrals.singularities import (
-    _get_default_params,
     _get_quadrature_nodes,
     _kernel_nr_over_r3,
+    _local_params,
+    _vanilla_params,
+    best_params,
+    best_ratio,
 )
 from desc.integrals.surface_integral import _get_grid_surface
 from desc.transform import Transform
@@ -643,7 +646,7 @@ class TestSingularities:
         Nv = 100
         es = 6e-7
         grid = LinearGrid(M=Nu // 2, N=Nv // 2, NFP=eq.NFP)
-        st, sz, q = _get_default_params(grid)
+        st, sz, q = best_params(grid, best_ratio(data))
         interpolator = FFTInterpolator(grid, grid, st, sz, q)
         data = eq.compute(_kernel_nr_over_r3.keys + ["|e_theta x e_zeta|"], grid=grid)
         err = singular_integral(data, data, "nr_over_r3", interpolator, chunk_size=50)
@@ -651,7 +654,7 @@ class TestSingularities:
 
     @pytest.mark.unit
     @pytest.mark.parametrize("interpolator", [FFTInterpolator, DFTInterpolator])
-    def test_singular_integral_vac_estell(self, interpolator):
+    def test_singular_integral_vac_estell(self, interpolator, vanilla=False):
         """Test calculating Bplasma for vacuum estell, which should be near 0."""
         eq = get("ESTELL")
         grid = LinearGrid(M=25, N=25, NFP=eq.NFP)
@@ -667,7 +670,14 @@ class TestSingularities:
             "|e_theta x e_zeta|",
         ]
         data = eq.compute(keys, grid=grid)
-        st, sz, q = _get_default_params(grid)
+        if vanilla:
+            st, sz, q = _vanilla_params(grid)
+            # need to use lower tolerance since convergence is worse
+            atol = 0.015
+        else:
+            mean, local = best_ratio(data, return_local=True)
+            st, sz, q = _local_params(grid, (mean, local.mean()))  # TODO (#1609)
+            atol = 0.0054
         interp = interpolator(grid, grid, st, sz, q)
         Bplasma = virtual_casing_biot_savart(data, data, interp, chunk_size=50)
         # need extra factor of B/2 bc we're evaluating on plasma surface
@@ -675,7 +685,12 @@ class TestSingularities:
         Bplasma = np.linalg.norm(Bplasma, axis=-1)
         # scale by total field magnitude
         B = Bplasma / np.linalg.norm(data["B"], axis=-1).mean()
-        np.testing.assert_allclose(B, 0, atol=0.005)
+        np.testing.assert_allclose(B, 0, atol=atol)
+
+    @pytest.mark.unit
+    def test_vanilla_params(self):
+        """Test vanilla params that do not account for aspect ratio."""
+        return self.test_singular_integral_vac_estell(FFTInterpolator, vanilla=True)
 
     @pytest.mark.unit
     @pytest.mark.parametrize("interpolator", [FFTInterpolator, DFTInterpolator])

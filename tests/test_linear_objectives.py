@@ -1152,3 +1152,17 @@ def test_linearconstraintprojection_update_target():
     np.testing.assert_allclose(lc._ZA, lcp._ZA)
     np.testing.assert_allclose(lc._Ainv, lcp._Ainv)
     np.testing.assert_allclose(lc._unfixed_idx_mat, lcp._unfixed_idx_mat)
+
+
+@pytest.mark.unit
+def test_NAE_asym_with_sym_axis():
+    """Test that asym NAE constraints are correct when axis is sym."""
+    qsc_eq = Qsc.from_paper("r2 section 5.5")
+    # this NAE solution has a symmetric axis but an asymmetric B variation
+    eq = Equilibrium(NFP=qsc_eq.nfp, N=4, sym=False)
+    conR = FixNearAxisR(eq, target=qsc_eq)
+    conZ = FixNearAxisZ(eq, target=qsc_eq)
+    conR.build()
+    conZ.build()
+    assert conR._A.shape[0] == conR.dim_f
+    assert conZ._A.shape[0] == conZ.dim_f

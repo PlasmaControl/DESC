@@ -3,6 +3,7 @@ Changelog
 
 New Features
 
+- Updates default parameters for partition support size in the singular surface integrals.
 - Enables tracking multiple fieldlines in ``Bounce2D``.
 - Bounce integral methods with ``desc.integrals.Bounce2D``.
 - Effective ripple ``desc.objectives.EffectiveRipple`` and Gamma_c ``desc.objectives.Gamma_c`` optimization objectives.
@@ -24,12 +25,14 @@ New Features
 - Adds batching feature to singular integrals.
 - ``desc.objectives.CoilSetMinDistance`` and ``desc.objectives.PlasmaCoilSetMinDistance`` now include the option to use a softmin which can give smoother gradients. They also both now have a ``dist_chunk_size`` option to break up the distance calculation into smaller pieces to save memory
 - Adds a new function ``desc.coils.initialize_helical_coils`` for creating an initial guess for stage 2 helical coil optimization.
+- Adds ``chunk_size`` option to compute magnetic field methods to increase performance. Users may need to update their scripts to pass in ``bs_chunk_size=20`` or some other reasonable number if out of memory occurs as the default attempts to perform the entire computation at once.
 - Adds ``desc.vmec_utils.make_boozmn_output `` for writing boozmn.nc style output files
 for compatibility with other codes which expect such files from the Booz_Xform code.
 - Renames compute quantity ``sqrt(g)_B`` to ``sqrt(g)_Boozer_DESC`` to more accurately reflect what the quantiy is (the jacobian from (rho,theta_B,zeta_B) to (rho,theta,zeta)), and adds a new function to compute ``sqrt(g)_Boozer`` which is the jacobian from (rho,theta_B,zeta_B) to (R,phi,Z).
 - Allows specification of Nyquist spectrum maximum modenumbers when using ``VMECIO.save`` to save a DESC .h5 file as a VMEC-format wout file
 - Adds a new objective ``desc.objectives.ExternalObjective`` for wrapping external codes with finite differences.
 - DESC/JAX version and device info is no longer printed by default, but can be accessed with the function `desc.backend.print_backend_info()`.
+- Adds support for Python 3.13 and removes support for 3.9 since min JAX requirement is now Python 3.10.
 - Adds a new utility function ``desc.compat.contract_equilibrium`` which takes in an ``Equilibrium`` object and an argument ``inner_rho``, and returns a new ``Equilibrium`` with original ``Equilibrium``'s ``inner_rho`` flux surface as its boundary.
 Optionally can also contract the profiles of the original ``Equilibrium`` so that the new ``Equilibrium``'s profiles match the original's in real space.
 
@@ -52,6 +55,10 @@ Bug Fixes
 - Fixes bug in ``desc.input_reader.desc_output_to_input`` utility function for asymmetric equilibria profiles, where the full profile resolution was not being saved.
 - Fixes bug when passing only `sym` into `.change_resolution` for ``FourierRZToroidalSurface``, ``ZernikeRZToroidalSection`` and ``FourierRZCurve``.
 - Fixes bug that was setting ``ObjectiveFunction._things_per_objective_idx`` incorrectly. Now each ``_Objective`` can define a unique order that it expects to use parameters for multiple "things".
+- Fixes bug that occurs when an NAE solution used with NAE constraints is asymmetric, but has a symmetric axis.
+- Fixes bug in ``FourierCurrentPotentialField.change_Phi_resolution`` where ``N_Phi`` would be changed to ``M_Phi`` if ``N`` is not explicitly passed into the method.
+- Fixes bug when setting current for a ``MixedCoilSet`` with an arbitrary tree structure.
+- Fixes bug in the formula for computing ``"P_fusion"``.
 
 Performance Improvements
 

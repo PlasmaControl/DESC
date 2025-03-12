@@ -59,6 +59,7 @@ Bug Fixes
 - Fixes bug in ``FourierCurrentPotentialField.change_Phi_resolution`` where ``N_Phi`` would be changed to ``M_Phi`` if ``N`` is not explicitly passed into the method.
 - Fixes bug when setting current for a ``MixedCoilSet`` with an arbitrary tree structure.
 - Corrects Cholesky factorized least-squares solve for wide matrices used in root finding.
+- Fixes bug in the formula for computing ``"P_fusion"``.
 
 
 v0.13.0

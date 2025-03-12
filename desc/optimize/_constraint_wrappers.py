@@ -634,7 +634,7 @@ class ProximalProjection(ObjectiveFunction):
                 Ainv = np.linalg.pinv(A)
                 dxdZb = np.eye(self._eq.dim_x)[:, self._eq.x_idx["Z_lmn"]] @ Ainv
                 dxdc.append(dxdZb)
-        self._dxdc = np.hstack(dxdc)
+        self._dxdc = jnp.hstack(dxdc)
 
     def build(self, use_jit=None, verbose=1):  # noqa: C901
         """Build the objective.
@@ -710,7 +710,7 @@ class ProximalProjection(ObjectiveFunction):
         self._unfixed_idx_mat[self._eq_idx] = self._unfixed_idx_mat[self._eq_idx][
             :, self._eq_unfixed_idx
         ] @ (self._eq_Z * self._eq_D[self._eq_unfixed_idx, None])
-        self._unfixed_idx_mat = np.concatenate(
+        self._unfixed_idx_mat = jnp.concatenate(
             [np.atleast_2d(foo) for foo in self._unfixed_idx_mat], axis=-1
         )
 

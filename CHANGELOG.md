@@ -4,10 +4,10 @@ Changelog
 New Features
 
 - Updates default parameters for partition support size in the singular surface integrals.
-- Enables tracking multiple fieldlines in ``Bounce2D``.
-- Bounce integral methods with ``desc.integrals.Bounce2D``.
-- Effective ripple ``desc.objectives.EffectiveRipple`` and Gamma_c ``desc.objectives.Gamma_c`` optimization objectives.
-- Many new compute quantities for partial derivatives in different coordinate systems.
+- Enables tracking multiple field lines in ``Bounce2D``.
+- Adds Bounce integral methods with ``desc.integrals.Bounce2D``.
+- Adds Effective ripple ``desc.objectives.EffectiveRipple`` and Gamma_c ``desc.objectives.Gamma_c`` optimization objectives.
+- Adds new compute quantities for partial derivatives in different coordinate systems.
 - Adds a new profile class ``PowerProfile`` for raising profiles to a power.
 - Adds ``desc.objectives.LinkingCurrentConsistency`` for ensuring that coils in a stage 2 or single stage optimization provide the required linking current for a given equilibrium.
 - Adds an option ``scaled_termination`` (defaults to True) to all the desc optimizers to measure the norms for ``xtol`` and ``gtol`` in the scaled norm provided by ``x_scale`` (which defaults to using an adaptive scaling based on the Jacobian or Hessian). This should make things more robust when optimizing parameters with widely different magnitudes. The old behavior can be recovered by passing ``options={"scaled_termination": False}``.
@@ -28,15 +28,17 @@ for compatibility with other codes which expect such files from the Booz_Xform c
 - Allows specification of Nyquist spectrum maximum modenumbers when using ``VMECIO.save`` to save a DESC .h5 file as a VMEC-format wout file
 - Adds a new objective ``desc.objectives.ExternalObjective`` for wrapping external codes with finite differences.
 - DESC/JAX version and device info is no longer printed by default, but can be accessed with the function `desc.backend.print_backend_info()`.
-- Adds support for Python 3.13 and removes support for 3.9 since minimum JAX requirement is now Python 3.10.
+- Adds support for Python 3.13 and removes support for 3.9 since new JAX versions require minimum Python 3.10.
 
 Performance Improvements
 
 - A number of minor improvements to basis function evaluation and spectral transforms to improve speed. These will also enable future improvements for larger gains.
-- Adds batching feature to parallelize singular integrals used in free boundary solves.
-- Adds ``chunk_size`` option to compute magnetic field methods to increase performance. Users may need to update their scripts to pass in ``bs_chunk_size=20`` or some other reasonable number if out of memory occurs as the default attempts to perform the entire computation at once.
-- ``desc.objectives.CoilSetMinDistance`` and ``desc.objectives.PlasmaCoilSetMinDistance`` now have a ``dist_chunk_size`` option to break up the distance calculation into smaller pieces to save memory.
-- Changes hessian computation to use chunked ``jacfwd`` and ``jacrev``, allowing ``jac_chunk_size`` to now reduce hessian memory usage as well.
+- `proximal-` optimizers use a single `LinearConstraintProjection` and this makes the optimization faster for high resolution cases where taking the SVD (for null-space and inverse) of constraint matrix takes significant time.
+- Chunking/batching can now be used in more places. Note that this might change the default behavior and you might get OOM (out of memory) errors.
+    - Adds batching feature to parallelize singular integrals used in free boundary solves.
+    - Adds ``chunk_size`` option to compute magnetic field methods to increase performance. Users may need to update their scripts to pass in ``bs_chunk_size=20`` or some other reasonable number if out of memory occurs as the default attempts to perform the entire computation at once.
+    - ``desc.objectives.CoilSetMinDistance`` and ``desc.objectives.PlasmaCoilSetMinDistance`` now have a ``dist_chunk_size`` option to break up the distance calculation into smaller pieces to save memory.
+    - Changes hessian computation to use chunked ``jacfwd`` and ``jacrev``, allowing ``jac_chunk_size`` to now reduce hessian memory usage as well.
 
 Bug Fixes
 
@@ -58,9 +60,6 @@ Bug Fixes
 - Fixes bug when setting current for a ``MixedCoilSet`` with an arbitrary tree structure.
 - Corrects Cholesky factorized least-squares solve for wide matrices used in root finding.
 
-Performance Improvements
-
-- `proximal-` optimizers use a single `LinearConstraintProjection` and this makes the optimization faster for high resolution cases where taking the SVD (for null-space and inverse) of constraint matrix takes significant time.
 
 v0.13.0
 -------

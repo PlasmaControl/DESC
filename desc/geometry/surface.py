@@ -299,6 +299,51 @@ class FourierRZToroidalSurface(Surface):
                 idxZ = self.Z_basis.get_idx(0, mm, nn)
                 self.Z_lmn = put(self.Z_lmn, idxZ, ZZ)
 
+
+    def zero_coeffs_above_nm(self, m_retain, n_retain=None):
+        """Zero-out Fourier coefficients with m,n above the specified m_retain and n_retain.
+        Specifically, zeros out (m,n)-modes that satisfy |m|>m_retain or |n| > n_retain.
+        The above inequalities are strict, so m_retain is the highest m value retained (i.e., kept non-zero).
+        This is useful for redoing a multigrid optimization step without retaining values in the higher Fourier modes.
+
+        Parameters
+        ----------
+        m_retain : Coefficient that satisfy |m| > m_retain are set to zero.
+        n_retain : Coefficient that satisfy |m| > m_retain are set to zero. If not specified, n_retain=m_retain is assumed.
+
+        WARNING: Like other set_coeffs function, this does not recompute the actual surface. 
+        This needs to be done manually. TODO: SUGGEST HOW?
+
+        """
+
+        if n_retain is None:
+            n_retain = m_retain
+
+        errorif(
+            m_retain <= 0,
+            ValueError,
+            f"zero_coeffs_above_nm(m_retains, n_retains) expects a positive m_retain, but got {m_retain=}",
+        )
+            
+        errorif(
+            n_retain <= 0,
+            ValueError,
+            f"zero_coeffs_above_nm(m_retains, n_retains) expects a positive n_retain, but got {n_retain=}",
+        )
+        
+        limits = np.array([n_retain,m_retain])
+        
+        nm = self.Z_basis.modes[:,1:]
+        absnm = np.abs(nm)
+        inds = np.any(np.greater(absnm,limits),axis=1)
+        self.Z_lmn = self.Z_lmn.at[inds].set(np.zeros_like(self.Z_lmn[inds]))
+
+        nm = self.R_basis.modes[:,1:]
+        absnm = np.abs(nm)
+        inds = np.any(np.greater(absnm,limits),axis=1)
+        self.R_lmn = self.R_lmn.at[inds].set(np.zeros_like(self.R_lmn[inds]))
+
+                
     @classmethod
     def from_input_file(cls, path, **kwargs):
         """Create a surface from Fourier coefficients in a DESC or VMEC input file.

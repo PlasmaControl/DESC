@@ -65,6 +65,7 @@ class FourierRZToroidalSurface(Surface):
         "_NFP",
         "_rho",
     ]
+    _static_attrs = ["_R_basis", "_Z_basis"]
 
     @execute_on_cpu
     def __init__(
@@ -836,6 +837,8 @@ class ZernikeRZToroidalSection(Surface):
         "_spectral_indexing",
         "_zeta",
     ]
+
+    _static_attrs = ["_R_basis", "_Z_basis"]
 
     @execute_on_cpu
     def __init__(

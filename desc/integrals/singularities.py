@@ -1,11 +1,11 @@
 """High order method for singular surface integrals, from Malhotra 2019."""
 
 from abc import ABC, abstractmethod
+from functools import partial
 
-from interpax import fft_interp2d
 from scipy.constants import mu_0
 
-from desc.backend import jnp, rfft2
+from desc.backend import jit, jnp, rfft2
 from desc.batching import batch_map, vmap_chunked
 from desc.compute.geom_utils import rpz2xyz, rpz2xyz_vec, xyz2rpz_vec
 from desc.grid import LinearGrid
@@ -21,6 +21,8 @@ from desc.utils import (
     setdefault,
     warnif,
 )
+
+from ._interpax_mod import fft_interp2d
 
 
 def _vanilla_params(grid):
@@ -371,6 +373,13 @@ class FFTInterpolator(_BIESTInterpolator):
         )
         super().__init__(eval_grid, source_grid, st, sz, q)
 
+    def fourier(self, f):
+        """Return Fourier transform of ``f`` as expected by this interpolator."""
+        # TODO (#1206)
+        return jnp.fft.ifft2(
+            self._source_grid.meshgrid_reshape(f, "rtz")[0], axes=(0, 1)
+        )
+
     def __call__(self, f, i, *, is_fourier=False, vander=None):
         """Interpolate ``f`` to polar node ``i`` around evaluation grid.
 
@@ -400,20 +409,18 @@ class FFTInterpolator(_BIESTInterpolator):
             Source data interpolated to ith polar node.
 
         """
-        # Would need to add interpax code to DESC
-        # https://github.com/f0uriest/interpax/issues/53
-        # for is_fourier to do anything. Should also use rfft2 and irfft2.
-        # TODO (#1206) and check if doing interpax(#53) here makes VacuumSolver faster.
-        shape = f.shape[1:]
+        if not is_fourier:
+            f = self.fourier(f)
         return fft_interp2d(
-            self._source_grid.meshgrid_reshape(f, "rtz")[0],
+            f,
             n1=self._eval_grid.num_theta,
             n2=self._eval_grid.num_zeta,
             sx=self._shift_t[i],
             sy=self._shift_z[i],
             dx=self._ht,
             dy=self._hz,
-        ).reshape(self._eval_grid.num_nodes, *shape, order="F")
+            is_fourier=True,
+        ).reshape(self._eval_grid.num_nodes, *f.shape[2:], order="F")
 
 
 class DFTInterpolator(_BIESTInterpolator):
@@ -566,7 +573,7 @@ def _nonsingular_part(
 
 
 def _singular_part(
-    eval_data, source_data, kernel, interpolator, chunk_size=None, known_map=None
+    eval_data, source_data, interpolator, *, kernel, known_map=None, chunk_size=None
 ):
     """Integrate singular point by interpolating to polar grid.
 
@@ -659,13 +666,15 @@ def _add_reduce(x):
     return x.sum(axis=0)
 
 
+@partial(jit, static_argnames=["kernel", "known_map", "chunk_size", "loop"])
 def singular_integral(
     eval_data,
     source_data,
-    kernel,
     interpolator,
-    chunk_size=None,
+    *,
+    kernel,
     known_map=None,
+    chunk_size=None,
     **kwargs,
 ):
     """Evaluate a singular integral transform on a surface.
@@ -687,6 +696,10 @@ def singular_integral(
         Dictionary of data at source points (source_grid passed to interpolator). Keys
         should be those required by kernel as kernel.keys. Vector data should be in
         rpz basis.
+    interpolator : _BIESTInterpolator
+        Function to interpolate from rectangular source grid to polar
+        source grid around each singular point. See ``FFTInterpolator`` or
+        ``DFTInterpolator``
     kernel : str or callable
         Kernel function to evaluate. If str, one of the following:
             '1_over_r' : 1 / |𝐫 − 𝐫'|
@@ -705,14 +718,6 @@ def singular_integral(
         evaluation points.
         If vector valued, the input to the kernel function will be in rpz and output
         should be in xyz.
-    interpolator : _BIESTInterpolator
-        Function to interpolate from rectangular source grid to polar
-        source grid around each singular point. See ``FFTInterpolator`` or
-        ``DFTInterpolator``
-    chunk_size : int or None
-        Size to split computation into chunks.
-        If no chunking should be done or the chunk size is the full input
-        then supply ``None``. Default is ``None``.
     known_map : (str, callable)
         Optional. If map used in kernel of singular integral is known,
         then may provide a callable to compute to avoid inefficient
@@ -720,6 +725,10 @@ def singular_integral(
         First index should store the name of the map used in the kernel
         e.g. "Phi", and the second index should store the Python callable
         that accepts a grid argument.
+    chunk_size : int or None
+        Size to split computation into chunks.
+        If no chunking should be done or the chunk size is the full input
+        then supply ``None``. Default is ``None``.
 
     Returns
     -------
@@ -757,10 +766,10 @@ def singular_integral(
     ) + _singular_part(
         eval_data,
         source_data,
-        kernel,
         interpolator,
-        chunk_size,
+        kernel=kernel,
         known_map=known_map,
+        chunk_size=chunk_size,
     )
 
 
@@ -944,9 +953,9 @@ def virtual_casing_biot_savart(
     return singular_integral(
         eval_data,
         source_data,
-        _kernel_biot_savart,
-        interpolator,
-        chunk_size,
+        interpolator=interpolator,
+        kernel=_kernel_biot_savart,
+        chunk_size=chunk_size,
         **kwargs,
     )
 

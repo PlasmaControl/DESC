@@ -27,9 +27,9 @@ def _nonhomogenous_part(self, chunk_size):
         -singular_integral(
             self._data["Phi"],
             self._data["src"],
-            _kernel_Bn_over_r,
-            self._interpolator["Phi"],
-            chunk_size,
+            interpolator=self._interpolator["Phi"],
+            kernel=_kernel_Bn_over_r,
+            chunk_size=chunk_size,
         ).squeeze()
         / (2 * jnp.pi)
     )
@@ -47,10 +47,10 @@ def _fourier_operator(self, m, n, chunk_size):
     return evl_Phi + singular_integral(
         eval_data=self._data["Phi"],
         source_data=src_data,
-        kernel=_kernel_Phi_dGp_dn,
         interpolator=self._interpolator["Phi"],
-        chunk_size=chunk_size,
+        kernel=_kernel_Phi_dGp_dn,
         known_map=("Phi", Phi),
+        chunk_size=chunk_size,
     ).squeeze() / (2 * jnp.pi)
 
 
@@ -110,8 +110,8 @@ def _fredholm_operator(Phi_k, g, self, chunk_size=None):
     return g - singular_integral(
         eval_data=self._data["Phi"],
         source_data=src_data,
-        kernel=_kernel_Phi_dGp_dn,
         interpolator=self._interpolator["Phi"],
+        kernel=_kernel_Phi_dGp_dn,
         chunk_size=chunk_size,
     ).squeeze() / (2 * jnp.pi)
 
@@ -441,8 +441,8 @@ class VacuumSolver(IOAble):
             * singular_integral(
                 self._data["evl"],
                 self._data["src"],
-                kernel=_kernel_biot_savart_coulomb,
                 interpolator=self._interpolator["evl"],
+                kernel=_kernel_biot_savart_coulomb,
                 chunk_size=chunk_size,
             )
         )

@@ -659,7 +659,7 @@ class TestSingularities:
                 _kernel_nr_over_r3.keys + ["|e_theta x e_zeta|"], grid=grid
             )
             err = singular_integral(
-                data, data, "nr_over_r3", interpolator, chunk_size=50
+                data, data, interpolator, kernel="nr_over_r3", chunk_size=50
             )
             np.testing.assert_array_less(np.abs(2 * np.pi + err), es[i])
 
@@ -671,7 +671,9 @@ class TestSingularities:
         st, sz, q = best_params(grid, best_ratio(data))
         interpolator = FFTInterpolator(grid, grid, st, sz, q)
         data = eq.compute(_kernel_nr_over_r3.keys + ["|e_theta x e_zeta|"], grid=grid)
-        err = singular_integral(data, data, "nr_over_r3", interpolator, chunk_size=50)
+        err = singular_integral(
+            data, data, interpolator, kernel="nr_over_r3", chunk_size=50
+        )
         np.testing.assert_array_less(np.abs(2 * np.pi + err), es)
 
     @pytest.mark.unit

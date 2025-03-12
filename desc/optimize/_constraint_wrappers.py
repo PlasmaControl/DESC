@@ -11,6 +11,7 @@ from desc.objectives import (
     BoundaryZSelfConsistency,
     ObjectiveFunction,
     get_fixed_boundary_constraints,
+    get_free_boundary_constraints,
     maybe_add_self_consistency,
 )
 from desc.objectives.utils import (
@@ -1215,3 +1216,664 @@ def _proximal_jvp_blocked_pure(objective, vgs, xgs, op):
             out.append(outi)
     out = jnp.concatenate(out)
     return out
+
+
+class ProximalProjectionFreeBoundary(ObjectiveFunction):
+    """Remove free boundary constraint by projecting onto constraint at each step.
+
+    Combines objective and free boundary equilibrium constraint
+    into a single objective to then pass to an unconstrained optimizer.
+
+    At each iteration, after a step is taken to reduce the objective, the equilibrium
+    is re-solved to bring it back into free boundary force balance. This is analogous
+    to a proximal method where each iterate is projected back onto the feasible set.
+
+    Parameters
+    ----------
+    objective : ObjectiveFunction
+        Objective function to optimize.
+    constraint : ObjectiveFunction
+        Free boundary constraint to enforce. Should be an ObjectiveFunction with one or
+        more of the following objectives: {BoundaryError, VacuumBoundaryError}
+    eq : Equilibrium
+        Equilibrium that will be optimized to satisfy the objectives.
+    perturb_options, solve_options : dict
+        dictionary of arguments passed to Equilibrium.perturb and Equilibrium.solve
+        during the projection step.
+    name : str
+        Name of the objective function.
+    """
+
+    def __init__(
+        self,
+        objective,
+        constraint,
+        eq,
+        free_boundary_options=None,  # controls freeb tols
+        solve_options=None,  # controls solve tol under freeb
+        perturb_options=None,
+        name="ProximalProjectionFreeBoundary",
+    ):
+        assert isinstance(objective, ObjectiveFunction), (
+            "objective should be instance of ObjectiveFunction." ""
+        )
+        assert isinstance(constraint, ObjectiveFunction), (
+            "constraint should be instance of ObjectiveFunction." ""
+        )
+        for con in constraint.objectives:
+            errorif(
+                not con._free_boundary,
+                ValueError,
+                "ProximalProjectionFreeBoundary method cannot handle general "
+                + f"nonlinear constraint {con}.",
+            )
+            # can't have bounds on constraint bc if constraint is satisfied then
+            # Fx == 0, and that messes with Gx @ Fx^-1 Fc etc.
+            errorif(
+                con.bounds is not None,
+                ValueError,
+                "ProximalProjection can only handle equality constraints, "
+                + f"got bounds for constraint {con}",
+            )
+        self._objective = objective
+        self._constraint = constraint
+        free_boundary_options = (
+            {} if free_boundary_options is None else free_boundary_options
+        )
+        solve_options = {} if solve_options is None else solve_options
+        perturb_options = {} if perturb_options is None else perturb_options
+        perturb_options.setdefault("verbose", 0)
+        perturb_options.setdefault("include_f", False)
+        solve_options.setdefault("verbose", 0)
+        free_boundary_options.setdefault("verbose", 0)
+        self._perturb_options = perturb_options
+        self._solve_options = solve_options
+        self._free_boundary_options = free_boundary_options
+
+        self._built = False
+        # don't want to compile this, just use the compiled objective and constraint
+        self._use_jit = False
+        self._compiled = False
+        self._eq = eq
+        self._name = name
+
+    def _set_eq_state_vector(self):
+        full_args = self._eq.optimizable_params.copy()
+        self._args = self._eq.optimizable_params.copy()
+        for arg in ["R_lmn", "Z_lmn", "L_lmn", "Ra_n", "Za_n", "Rb_lmn", "Zb_lmn"]:
+            self._args.remove(arg)
+        linear_constraint = ObjectiveFunction(self._linear_constraints)
+        linear_constraint.build()
+        (self._Z, self._D, self._unfixed_idx) = (
+            self._eq_solve_objective._Z,
+            self._eq_solve_objective._D,
+            self._eq_solve_objective._unfixed_idx,
+        )
+
+        # dx/dc - goes from the full state to optimization variables for eq
+        dxdc = []
+        xz = {arg: np.zeros(self._eq.dimensions[arg]) for arg in full_args}
+
+        for arg in self._args:
+            if arg not in ["Rb_lmn", "Zb_lmn"]:
+                x_idx = self._eq.x_idx[arg]
+                dxdc.append(np.eye(self._eq.dim_x)[:, x_idx])
+            if arg == "Rb_lmn":
+                c = get_instance(self._linear_constraints, BoundaryRSelfConsistency)
+                A = c.jac_unscaled(xz)[0]["R_lmn"]
+                Ainv = np.linalg.pinv(A)
+                dxdRb = np.eye(self._eq.dim_x)[:, self._eq.x_idx["R_lmn"]] @ Ainv
+                dxdc.append(dxdRb)
+            if arg == "Zb_lmn":
+                c = get_instance(self._linear_constraints, BoundaryZSelfConsistency)
+                A = c.jac_unscaled(xz)[0]["Z_lmn"]
+                Ainv = np.linalg.pinv(A)
+                dxdZb = np.eye(self._eq.dim_x)[:, self._eq.x_idx["Z_lmn"]] @ Ainv
+                dxdc.append(dxdZb)
+        self._dxdc = np.hstack(dxdc)
+
+    def build(self, use_jit=None, verbose=1):  # noqa: C901
+        """Build the objective.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+            Note: unused by this class, should pass to sub-objectives directly.
+        verbose : int, optional
+            Level of output.
+
+        """
+        eq = self._eq
+        timer = Timer()
+        timer.start("Proximal Free Boundary projection build")
+
+        self._eq = eq
+        # unsure if I need these, though we do want to
+        # make sure FixPsi FixPressure FixCurrent or FixIota are
+        # respected in this subproblem
+        self._linear_constraints = get_free_boundary_constraints(eq)
+
+        # we don't always build here because in ~all cases the user doesn't interact
+        # with this directly, so if the user wants to manually rebuild they should
+        # do it before this wrapper is created for them.
+        if not self._objective.built:
+            self._objective.build(use_jit=use_jit, verbose=verbose)
+        if not self._constraint.built:
+            self._constraint.build(use_jit=use_jit, verbose=verbose)
+
+        for constraint in self._linear_constraints:
+            constraint.build(use_jit=use_jit, verbose=verbose)
+
+        self._eq_solve_objective = LinearConstraintProjection(
+            self._constraint,
+            ObjectiveFunction(self._linear_constraints),
+            name="Free Bdry Eq Update LinearConstraintProjection",
+        )
+        self._eq_solve_objective.build(use_jit=use_jit, verbose=verbose)
+
+        # TODO: what if we are letting coils change in outer loop?
+        errorif(
+            self._constraint.things != [eq],
+            ValueError,
+            "ProximalProjectionFreeBoundary can only"
+            " handle constraints on the equilibrium.",
+        )
+
+        self._objectives = [self._objective, self._constraint]
+        self._set_things()
+
+        self._eq_idx = self.things.index(self._eq)
+
+        self._dim_f = self._objective.dim_f
+        if self._dim_f == 1:
+            self._scalar = True
+        else:
+            self._scalar = False
+
+        self._set_eq_state_vector()
+
+        # map from eq c to full c
+        self._dimc_per_thing = [t.dim_x for t in self.things]
+        self._dimc_per_thing[self._eq_idx] = np.sum(
+            [self._eq.dimensions[arg] for arg in self._args]
+        )
+        self._dimx_per_thing = [t.dim_x for t in self.things]
+
+        # equivalent matrix for A[unfixed_idx] @ D @ Z == A @ unfixed_idx_mat
+        self._unfixed_idx_mat = jnp.eye(self._objective.dim_x)
+        self._unfixed_idx_mat = jnp.split(
+            self._unfixed_idx_mat, np.cumsum([t.dim_x for t in self.things]), axis=-1
+        )
+        self._unfixed_idx_mat[self._eq_idx] = self._unfixed_idx_mat[self._eq_idx][
+            :, self._unfixed_idx
+        ] @ (self._Z * self._D[self._unfixed_idx, None])
+        self._unfixed_idx_mat = np.concatenate(
+            [np.atleast_2d(foo) for foo in self._unfixed_idx_mat], axis=-1
+        )
+
+        # history and caching
+        self._x_old = self.x(self.things)
+        self._allx = [self._x_old]
+        self._allxopt = [self._objective.x(*self.things)]
+        self._allxeq = [self._eq.pack_params(self._eq.params_dict)]
+        self.history = [[t.params_dict.copy() for t in self.things]]
+
+        self._built = True
+        timer.stop("Proximal Free Boundary projection build")
+        if verbose > 1:
+            timer.disp("Proximal Free Boundary projection build")
+
+    def unpack_state(self, x, per_objective=True):
+        """Unpack the state vector into its components.
+
+        Parameters
+        ----------
+        x : ndarray
+            State vector.
+        per_objective : bool
+            Whether to return param dicts for each objective (default) or for each
+            unique optimizable thing.
+
+        Returns
+        -------
+        params : dict
+            Parameter dictionary for equilibrium, with just external degrees of freedom
+            visible to the optimizer.
+
+        """
+        if not self.built:
+            raise RuntimeError("ObjectiveFunction must be built first.")
+
+        x = jnp.atleast_1d(jnp.asarray(x))
+        if x.size != self.dim_x:
+            raise ValueError(
+                "Input vector dimension is invalid, expected "
+                + f"{self.dim_x} got {x.size}."
+            )
+
+        xs_splits = [t.dim_x for t in self.things]
+        xs_splits[self._eq_idx] = np.sum(
+            [self._eq.dimensions[arg] for arg in self._args]
+        )
+        xs_splits = np.cumsum(xs_splits)
+        xs = jnp.split(x, xs_splits)
+        params = []
+        for t, xi in zip(self.things, xs):
+            if t is self._eq:
+                xi_splits = np.cumsum([self._eq.dimensions[arg] for arg in self._args])
+                p = {arg: xis for arg, xis in zip(self._args, jnp.split(xi, xi_splits))}
+                p.update(  # add in dummy values for missing parameters
+                    {
+                        arg: jnp.zeros_like(xis)
+                        for arg, xis in t.params_dict.items()
+                        if arg not in self._args  # R_lmn, Z_lmn, L_lmn, Ra_n, Za_n
+                    }
+                )
+                params += [p]
+            else:
+                params += [t.unpack_params(xi)]
+
+        if per_objective:
+            # params is a list of lists of dicts, for each thing and for each objective
+            params = self._unflatten(params)
+            # this filters out the params of things that are unused by each objective
+            params = [
+                [par for par, thing in zip(param, self.things) if thing in obj.things]
+                for param, obj in zip(params, self.objectives)
+            ]
+        return params
+
+    def x(self, *things):
+        """Return the full state vector from the Optimizable objects things."""
+        # TODO (#1392): also check resolution etc?
+        things = things or self.things
+        assert [type(t1) is type(t2) for t1, t2 in zip(things, self.things)]
+        xs = []
+        for t in self.things:
+            if t is self._eq:
+                xs += [
+                    jnp.concatenate(
+                        [jnp.atleast_1d(t.params_dict[arg]) for arg in self._args]
+                    )
+                ]
+            else:
+                xs += [t.pack_params(t.params_dict)]
+
+        return jnp.concatenate(xs)
+
+    @property
+    def dim_x(self):
+        """int: Dimension of the state vector."""
+        s = 0
+        for t in self.things:
+            if t is self._eq:
+                s += sum(self._eq.dimensions[arg] for arg in self._args)
+            else:
+                s += t.dim_x
+        return s
+
+    def _update_equilibrium(self, x, store=False):
+        """Update the internal equilibrium with new profile/Psi.
+
+        Parameters
+        ----------
+        x : ndarray
+            New values of optimization variables.
+        store : bool
+            Whether the new x should be stored in self.history
+
+        Notes
+        -----
+        After updating, if store=False, self._eq will revert back to the previous
+        solution when store was True
+
+        """
+        # first check if its something we've seen before, if it is just return
+        # cached value, no need to  resolve
+        xopt = f_where_x(x, self._allx, self._allxopt)
+        xeq = f_where_x(x, self._allx, self._allxeq)
+        if xopt.size > 0 and xeq.size > 0:
+            pass
+        else:
+            x_list = self.unpack_state(x, False)
+            x_list_old = self.unpack_state(self._x_old, False)
+            x_dict = x_list[self._eq_idx]
+            x_dict_old = x_list_old[self._eq_idx]
+            deltas = {str(key): x_dict[key] - x_dict_old[key] for key in x_dict}
+            # We pass in the LinearConstraintProjection object to skip some redundant
+            # computations in the perturb and solve methods
+            # TODO: is this perturb necessary?
+            self._eq = self._eq.perturb(
+                objective=self._eq_solve_objective,
+                constraints=None,
+                deltas=deltas,
+                **self._perturb_options,
+            )
+            self._eq.optimize(
+                objective=self._eq_solve_objective,
+                constraints=None,
+                **self._free_boundary_options,
+            )
+            xeq = self._eq.pack_params(self._eq.params_dict)
+            x_list[self._eq_idx] = self._eq.params_dict.copy()
+            xopt = jnp.concatenate(
+                [t.pack_params(xi) for t, xi in zip(self.things, x_list)]
+            )
+            self._allx.append(x)
+            self._allxopt.append(xopt)
+            self._allxeq.append(xeq)
+
+        if store:
+            self._x_old = x
+            x_list = self.unpack_state(x, False)
+            xeq_dict = self._eq.unpack_params(xeq)
+            self._eq.params_dict = xeq_dict
+            x_list[self._eq_idx] = xeq_dict
+            self.history.append(x_list)
+        else:
+            # reset to last good params
+            self._eq.params_dict = self.history[-1][self._eq_idx]
+            self._eq_solve_objective.update_constraint_target(self._eq)
+
+        return xopt, xeq
+
+    def compute_scaled(self, x, constants=None):
+        """Compute the objective function and apply weights/normalization.
+
+        Parameters
+        ----------
+        x : ndarray
+            State vector.
+        constants : list
+            Constant parameters passed to sub-objectives.
+
+        Returns
+        -------
+        f : ndarray
+            Objective function value(s).
+
+        """
+        constants = setdefault(constants, self.constants)
+        xopt, _ = self._update_equilibrium(x, store=False)
+        return self._objective.compute_scaled(xopt, constants[0])
+
+    def compute_scaled_error(self, x, constants=None):
+        """Compute the error between target and objective and apply weights etc.
+
+        Parameters
+        ----------
+        x : ndarray
+            State vector.
+        constants : list
+            Constant parameters passed to sub-objectives.
+
+        Returns
+        -------
+        f : ndarray
+            Objective function value(s).
+
+        """
+        constants = setdefault(constants, self.constants)
+        xopt, _ = self._update_equilibrium(x, store=False)
+        return self._objective.compute_scaled_error(xopt, constants[0])
+
+    def compute_scalar(self, x, constants=None):
+        """Compute the sum of squares error.
+
+        Parameters
+        ----------
+        x : ndarray
+            State vector.
+        constants : list
+            Constant parameters passed to sub-objectives.
+
+        Returns
+        -------
+        f : float
+            Objective function scalar value.
+
+        """
+        f = jnp.sum(self.compute_scaled_error(x, constants=constants) ** 2) / 2
+        return f
+
+    def compute_unscaled(self, x, constants=None):
+        """Compute the raw value of the objective function.
+
+        Parameters
+        ----------
+        x : ndarray
+            State vector.
+        constants : list
+            Constant parameters passed to sub-objectives.
+
+        Returns
+        -------
+        f : ndarray
+            Objective function value(s).
+
+        """
+        constants = setdefault(constants, self.constants)
+        xopt, _ = self._update_equilibrium(x, store=False)
+        return self._objective.compute_unscaled(xopt, constants[0])
+
+    def grad(self, x, constants=None):
+        """Compute gradient of self.compute_scalar.
+
+        Parameters
+        ----------
+        x : ndarray
+            State vector.
+        constants : list
+            Constant parameters passed to sub-objectives.
+
+        Returns
+        -------
+        g : ndarray
+            gradient vector.
+
+        """
+        # TODO (#1393): figure out projected vjp to make this better
+        f = jnp.atleast_1d(self.compute_scaled_error(x, constants))
+        J = self.jac_scaled_error(x, constants)
+        return f.T @ J
+
+    def hess(self, x, constants=None):
+        """Compute Hessian of self.compute_scalar.
+
+        Uses the "small residual approximation" where the Hessian is replaced by
+        the square of the Jacobian: H = J.T @ J
+
+        Parameters
+        ----------
+        x : ndarray
+            State vector.
+        constants : list
+            Constant parameters passed to sub-objectives.
+
+        Returns
+        -------
+        H : ndarray
+            Hessian matrix.
+
+        """
+        J = self.jac_scaled_error(x, constants)
+        return J.T @ J
+
+    def jac_scaled(self, x, constants=None):
+        """Compute Jacobian of self.compute_scaled.
+
+        Parameters
+        ----------
+        x : ndarray
+            State vector.
+        constants : list
+            Constant parameters passed to sub-objectives.
+
+        Returns
+        -------
+        J : ndarray
+            Jacobian matrix.
+
+        """
+        v = jnp.eye(x.shape[0])
+        return self.jvp_scaled(v, x, constants).T
+
+    def jac_scaled_error(self, x, constants=None):
+        """Compute Jacobian of self.compute_scaled_error.
+
+        Parameters
+        ----------
+        x : ndarray
+            State vector.
+        constants : list
+            Constant parameters passed to sub-objectives.
+
+        Returns
+        -------
+        J : ndarray
+            Jacobian matrix.
+
+        """
+        v = jnp.eye(x.shape[0])
+        return self.jvp_scaled_error(v, x, constants).T
+
+    def jac_unscaled(self, x, constants=None):
+        """Compute Jacobian of self.compute_unscaled.
+
+        Parameters
+        ----------
+        x : ndarray
+            State vector.
+        constants : list
+            Constant parameters passed to sub-objectives.
+
+        Returns
+        -------
+        J : ndarray
+            Jacobian matrix.
+        """
+        v = jnp.eye(x.shape[0])
+        return self.jvp_unscaled(v, x, constants).T
+
+    def jvp_scaled(self, v, x, constants=None):
+        """Compute Jacobian-vector product of self.compute_scaled.
+
+        Parameters
+        ----------
+        v : ndarray or tuple of ndarray
+            Vectors to right-multiply the Jacobian by.
+            This method only works for first order jvps.
+        x : ndarray
+            Optimization variables.
+        constants : list
+            Constant parameters passed to sub-objectives.
+
+        """
+        v = v[0] if isinstance(v, (tuple, list)) else v
+        constants = setdefault(constants, self.constants)
+        xg, xf = self._update_equilibrium(x, store=True)
+        jvpfun = lambda u: self._jvp(u, xf, xg, constants, op="scaled")
+        return batched_vectorize(
+            jvpfun, signature="(n)->(k)", chunk_size=self._objective._jac_chunk_size
+        )(v)
+
+    def jvp_scaled_error(self, v, x, constants=None):
+        """Compute Jacobian-vector product of self.compute_scaled_error.
+
+        Parameters
+        ----------
+        v : ndarray or tuple of ndarray
+            Vectors to right-multiply the Jacobian by.
+            This method only works for first order jvps.
+        x : ndarray
+            Optimization variables.
+        constants : list
+            Constant parameters passed to sub-objectives.
+
+        """
+        v = v[0] if isinstance(v, (tuple, list)) else v
+        constants = setdefault(constants, self.constants)
+        xg, xf = self._update_equilibrium(x, store=True)
+        jvpfun = lambda u: self._jvp(u, xf, xg, constants, op="scaled_error")
+        return batched_vectorize(
+            jvpfun, signature="(n)->(k)", chunk_size=self._objective._jac_chunk_size
+        )(v)
+
+    def jvp_unscaled(self, v, x, constants=None):
+        """Compute Jacobian-vector product of self.compute_unscaled.
+
+        Parameters
+        ----------
+        v : ndarray or tuple of ndarray
+            Vectors to right-multiply the Jacobian by.
+            This method only works for first order jvps.
+        x : ndarray
+            Optimization variables.
+        constants : list
+            Constant parameters passed to sub-objectives.
+
+        """
+        v = v[0] if isinstance(v, (tuple, list)) else v
+        constants = setdefault(constants, self.constants)
+        xg, xf = self._update_equilibrium(x, store=True)
+        jvpfun = lambda u: self._jvp(u, xf, xg, constants, op="unscaled")
+        return batched_vectorize(
+            jvpfun, signature="(n)->(k)", chunk_size=self._objective._jac_chunk_size
+        )(v)
+
+    def _jvp(self, v, xf, xg, constants, op):
+        # we're replacing stuff like this with jvps
+        # Fx_reduced = Fx[:, unfixed_idx] @ Z               # noqa: E800
+        # Gx_reduced = Gx[:, unfixed_idx] @ Z               # noqa: E800
+        # Fc = Fx @ dxdc @ v                                # noqa: E800
+        # Gc = Gx @ dxdc @ v                                # noqa: E800
+        # LHS = Gx_reduced @ (Fx_reduced_inv @ Fc) - Gc     # noqa: E800
+
+        # v contains "boundary" dofs from eq and other objects
+        # want jvp_f to only get parts from equilibrium, not other things
+        vs = jnp.split(v, np.cumsum(self._dimc_per_thing))
+        # this is Fx_reduced_inv @ Fc
+        dfdc = _proximal_jvp_f_pure(
+            self._constraint,
+            xf,
+            constants[1],
+            vs[self._eq_idx],
+            self._unfixed_idx,
+            self._Z,
+            self._D,
+            self._dxdc,
+            op,
+        )
+        # broadcasting against multiple things
+        dfdcs = [jnp.zeros(dim) for dim in self._dimc_per_thing]
+        dfdcs[self._eq_idx] = dfdc
+        dfdc = jnp.concatenate(dfdcs)
+
+        # dG/dc = Gx_reduced @ (Fx_reduced_inv @ Fc) - Gc
+        # = Gx @ (unfixed_idx @ Z @ dfdc - dxdc @ v)
+        # unfixed_idx_mat includes Z already
+        dxdcv = jnp.concatenate(
+            [
+                *vs[: self._eq_idx],
+                self._dxdc @ vs[self._eq_idx],
+                *vs[self._eq_idx + 1 :],
+            ]
+        )
+        tangent = self._unfixed_idx_mat @ dfdc - dxdcv
+        if self._objective._deriv_mode in ["batched"]:
+            out = getattr(self._objective, "jvp_" + op)(tangent, xg, constants[0])
+        else:  # deriv_mode == "blocked"
+            vgs = jnp.split(tangent, np.cumsum(self._dimx_per_thing))
+            xgs = jnp.split(xg, np.cumsum(self._dimx_per_thing))
+            out = _proximal_jvp_blocked_pure(self._objective, vgs, xgs, op)
+        return -out
+
+    @property
+    def constants(self):
+        """list: constant parameters for each sub-objective."""
+        return [self._objective.constants, self._constraint.constants]
+
+    def __getattr__(self, name):
+        """For other attributes we defer to the base objective."""
+        return getattr(self._objective, name)

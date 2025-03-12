@@ -13,8 +13,10 @@ from desc.backend import (
     jit,
     jnp,
     scan,
+    tree_flatten,
     tree_leaves,
     tree_stack,
+    tree_unflatten,
     tree_unstack,
     vmap,
 )
@@ -385,10 +387,19 @@ class _Coil(_MagneticField, Optimizable, ABC):
             current = self.current
         else:
             current = params.pop("current", self.current)
+        NFP = getattr(self, "NFP", 1)
         if source_grid is None:
             # NFP=1 to ensure points span the entire length of the coil
             # multiply resolution by NFP to ensure Biot-Savart integration is accurate
-            source_grid = LinearGrid(N=2 * self.N * getattr(self, "NFP", 1) + 5)
+            source_grid = LinearGrid(N=2 * self.N * NFP + 5)
+        else:
+            # coil grids should have NFP=1. The only possible exception is FourierRZCoil
+            # which in theory can be different as long as it matches the coils NFP.
+            errorif(
+                getattr(source_grid, "NFP", 1) not in [1, NFP],
+                ValueError,
+                f"source_grid for coils must have NFP=1 or NFP={NFP}",
+            )
 
         if not params or not transforms:
             data = self.compute(
@@ -1207,6 +1218,19 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
         else:
             current = params.pop("current", self.current)
 
+        if source_grid is None:
+            # NFP=1 to ensure points span the entire length of the coil
+            # multiply resolution by NFP to ensure Biot-Savart integration is accurate
+            source_grid = LinearGrid(zeta=self.knots)
+        else:
+            # coil grids should have NFP=1. The only possible exception is FourierRZCoil
+            # which in theory can be different as long as it matches the coils NFP.
+            errorif(
+                getattr(source_grid, "NFP", 1) != 1,
+                ValueError,
+                "source_grid for coils must have NFP=1",
+            )
+
         data = self.compute(
             ["x"], grid=source_grid, params=params, basis="xyz", transforms=transforms
         )
@@ -1493,8 +1517,11 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
 
     @current.setter
     def current(self, new):
-        new = jnp.atleast_1d(new)
-        new = jnp.broadcast_to(new, (len(self),))
+        # new must be a 1D iterable regardless of the tree structure of the CoilSet
+        old, tree = tree_flatten(self.current)
+        new = jnp.atleast_1d(new).flatten()
+        new = jnp.broadcast_to(new, (len(old),))
+        new = tree_unflatten(tree, new)
         for coil, cur in zip(self.coils, new):
             coil.current = cur
 
@@ -1723,6 +1750,13 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             compute_A_or_B not in ["A", "B"],
             ValueError,
             f'Expected "A" or "B" for compute_A_or_B, instead got {compute_A_or_B}',
+        )
+        # NFP symmetry applies to coilset as a whole, not individual coils, so the grid
+        # should have NFP=1.
+        errorif(
+            getattr(source_grid, "NFP", 1) != 1,
+            ValueError,
+            "source_grid for CoilSet must have NFP=1",
         )
         assert basis.lower() in ["rpz", "xyz"]
         coords = jnp.atleast_2d(jnp.asarray(coords))

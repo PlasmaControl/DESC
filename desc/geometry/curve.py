@@ -54,6 +54,8 @@ class FourierRZCurve(Curve):
         "_NFP",
     ]
 
+    _static_attrs = ["_R_basis", "_Z_basis"]
+
     def __init__(
         self,
         R_n=10,
@@ -350,6 +352,8 @@ class FourierXYZCurve(Curve):
         "_Z_basis",
     ]
 
+    _static_attrs = ["_X_basis", "_Y_basis", "_Z_basis"]
+
     def __init__(
         self,
         X_n=[0, 10, 2],
@@ -532,7 +536,7 @@ class FourierXYZCurve(Curve):
         if basis == "xyz":
             coords_xyz = coords
         else:
-            coords_xyz = rpz2xyz(coords, phi=coords[:, 1])
+            coords_xyz = rpz2xyz(coords)
         X = coords_xyz[:, 0]
         Y = coords_xyz[:, 1]
         Z = coords_xyz[:, 2]
@@ -600,6 +604,8 @@ class FourierPlanarCurve(Curve):
     """
 
     _io_attrs_ = Curve._io_attrs_ + ["_r_n", "_center", "_normal", "_r_basis", "_basis"]
+
+    _static_attrs = ["_r_basis", "_basis"]
 
     # Reference frame is centered at the origin with normal in the +Z direction.
     # Curve is computed in reference frame, then displaced/rotated to the desired frame.

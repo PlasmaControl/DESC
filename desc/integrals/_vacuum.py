@@ -4,7 +4,7 @@ from functools import partial
 
 from matplotlib import pyplot as plt
 
-from desc.backend import jit, jnp
+from desc.backend import fixed_point, irfft2, jit, jnp, rfft2
 from desc.basis import DoubleFourierSeries
 from desc.batching import vmap_chunked
 from desc.grid import LinearGrid
@@ -55,21 +55,88 @@ def _fourier_operator(self, m, n, chunk_size):
 
 
 @partial(jit, static_argnames=["chunk_size"])
-def _compute_Phi_mn(self, *, chunk_size=None):
-    if "Phi_mn" not in self._data["Phi"]:
-        g = _nonhomogenous_part(self, chunk_size)
+def _fourier_compute_Phi_mn(self, *, chunk_size=None):
+    if "Phi_mn" in self._data["Phi"]:
+        return self._data
+
+    g = _nonhomogenous_part(self, chunk_size)
+    _, m, n = self.basis.modes.T
+    F = _fourier_operator(self, m, n, chunk_size).T
+    assert F.shape == (self.Phi_grid.num_nodes, self.basis.num_modes)
+    # Solving overdetermined system useful to reduce size of F while
+    # retaining FFT interpolation accuracy in the singular integrals.
+    # TODO: use jax custom linear solve and ``jax.scipy.sparse.linalg.cg``.
+    self._data["Phi"]["Phi_mn"] = (
+        jnp.linalg.solve(F, g)
+        if (self.Phi_grid.num_nodes == self.basis.num_modes)
+        else jnp.linalg.lstsq(F, g)[0]
+    )
+    return self._data
+
+
+def _fredholm_operator(Phi_k, g, self, chunk_size=None):
+    """Compute Fredholm integral fixed point operator Tf such that Tf = f.
+
+    Parameters
+    ----------
+    Phi_k : jnp.ndarray
+        Φ values on ``self._Phi_grid``.
+    g : jnp.ndarray
+        Non-homogenous term on ``self._Phi_grid``.
+
+    Returns
+    -------
+    Tf : jnp.ndarray
+        Fredholm integral equation linear operator output.
+
+    """
+    s = (self.src_grid.num_theta, self.src_grid.num_zeta)
+    src_data = self._data["src"].copy()
+    src_data["Phi"] = irfft2(
+        rfft2(self.evl_grid.meshgrid_reshape(Phi_k, "rtz")[0], norm="forward"),
+        s=s,
+        norm="forward",
+    ).ravel(order="F")
+    return g - singular_integral(
+        eval_data=self._data["Phi"],
+        source_data=src_data,
+        kernel=_kernel_Phi_dGp_dn,
+        interpolator=self._interpolator["Phi"],
+        chunk_size=chunk_size,
+    ).squeeze() / (2 * jnp.pi)
+
+
+@partial(jit, static_argnames=["xtol", "maxiter", "method", "chunk_size"])
+def _fixed_point_compute_Phi(
+    self,
+    Phi_0=None,
+    *,
+    xtol=1e-6,
+    maxiter=20,
+    method="del2",
+    chunk_size=None,
+):
+    if "Phi" in self._data["Phi"]:
+        return self._data
+
+    g = _nonhomogenous_part(self, chunk_size)
+    if Phi_0 is None:
+        # Initial guess is nonvanishing first Fourier harmonic
+        # Should be low frequency compared to grid resolution.
+        # TODO: Add option to set initial guess to first k
+        #  terms of Fourier fit (output of ``_compute_Phi_mn``).
+        #  Useful if k is small.
         _, m, n = self.basis.modes.T
-        F = _fourier_operator(self, m, n, chunk_size).T
-        assert F.shape == (self.Phi_grid.num_nodes, self.basis.num_modes)
-        self._data["Phi"]["Phi_mn"] = (
-            jnp.linalg.solve(F, g)
-            if (self.Phi_grid.num_nodes == self.basis.num_modes)
-            else jnp.linalg.lstsq(F, g)[0]
-        )
-        # Least squares method can significantly reduce size of F while
-        # retaining FFT interpolation accuracy in the singular integrals.
-        # Green is expensive, so inverting directly may be better than
-        # iterative methods such as ``jax.scipy.sparse.linalg.cg``.
+        Phi_0 = self.basis._get_fun_mode(m[1], n[1])(self.Phi_grid)
+    self._data["Phi"]["Phi"] = fixed_point(
+        _fredholm_operator,
+        Phi_0,
+        (g, self, chunk_size),
+        xtol,
+        maxiter,
+        method,
+        scalar=True,
+    )
     return self._data
 
 
@@ -263,7 +330,47 @@ class VacuumSolver(IOAble):
              Fourier coefficients of Φ on ∂D stored in ``data["Phi"]["Phi_mn"]``.
 
         """
-        return _compute_Phi_mn(self, chunk_size=chunk_size)
+        self._data = _fourier_compute_Phi_mn(self, chunk_size=chunk_size)
+        return self._data
+
+    def compute_Phi(
+        self, Phi_0=None, xtol=1e-6, maxiter=20, method="del2", chunk_size=None
+    ):
+        """Compute vacuum potential Φ on ∂D via fixed point iteration.
+
+        Parameters
+        ----------
+        Phi_0 : jnp.ndarray
+            Initial guess for Φ on ``self.Phi_grid``.
+        xtol : float
+            Stopping tolerance.
+        maxiter : int
+            Maximum number of fixed point iterations.
+        method : {"del2", "simple"}
+            Method of finding the fixed-point, defaults to ``del2``,
+            which uses Steffensen's acceleration method.
+            The former typically converges quadratically and the latter converges
+            linearly.
+        chunk_size : int or None
+            Size to split singular integral computation into chunks.
+            If no chunking should be done or the chunk size is the full input
+            then supply ``None``.
+
+        Returns
+        -------
+        data : dict
+             Vacuum potential Φ on ∂D stored in ``data["Phi"]["Phi"]``.
+
+        """
+        self._data = _fixed_point_compute_Phi(
+            self,
+            Phi_0,
+            xtol=xtol,
+            maxiter=maxiter,
+            method=method,
+            chunk_size=chunk_size,
+        )
+        return self._data
 
     def _compute_virtual_current(self):
         """𝐊_vc = -𝐧 × ∇Φ.

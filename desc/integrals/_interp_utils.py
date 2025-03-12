@@ -33,6 +33,10 @@ from desc.utils import Index, errorif, safediv
 #  extrema. This is cheaper and non-iterative, so jax and gpu will like it.
 #  Implementing 1 and 2 will remove all eigenvalue solves from computation.
 #  2 is a larger improvement than 1. Implement this in later PR.
+#  3. Differentiate through adjoint with custom_linear_solve.
+#  Well-conditioned everywhere except at double real roots, where there is
+#  degenerate eigenvalue, but those correspond to bifurcation points where
+#  the bounce integrals are not integrable and those are neglected anyway.
 chebroots_vec = jnp.vectorize(chebroots, signature="(m)->(n)")
 
 
@@ -659,6 +663,10 @@ def polyroot_vec(
         The roots of the polynomial, iterated over the last axis.
 
     """
+    # TODO: Differentiate through adjoint with custom_linear_solve.
+    #  Well-conditioned everywhere except at double real roots, where there is
+    #  degenerate eigenvalue, but those correspond to bifurcation points where
+    #  the bounce integrals are not integrable and those are neglected anyway.
     get_only_real_roots = not (a_min is None and a_max is None)
     num_coef = c.shape[-1]
     c = _subtract_last(c, k)

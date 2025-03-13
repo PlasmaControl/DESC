@@ -33,6 +33,7 @@ for compatibility with other codes which expect such files from the Booz_Xform c
 - Adds a new objective ``desc.objectives.ExternalObjective`` for wrapping external codes with finite differences.
 - DESC/JAX version and device info is no longer printed by default, but can be accessed with the function `desc.backend.print_backend_info()`.
 - Adds support for Python 3.13 and removes support for 3.9 since min JAX requirement is now Python 3.10.
+- Adds the classes ``FourierXYCurve`` and ``FourierXYCoil`` to represent planar curves/coils with Fourier series for X and Y instead of the radius.
 
 Speed Improvements
 

@@ -354,6 +354,40 @@ class Curve(IOAble, Optimizable, ABC):
         coords = self.compute("x", grid=grid, basis=basis)["x"]
         return FourierPlanarCurve.from_values(coords, N=N, basis=basis, name=name)
 
+    def to_FourierXY(self, N=10, grid=None, basis="xyz", name=""):
+        """Convert Curve to FourierXYCurve representation.
+
+        Note that some types of curves may not be representable in this basis.
+        In this case, a least-squares fit will be done to find the
+        planar curve that best represents the curve.
+
+        Parameters
+        ----------
+        N : int
+            Fourier resolution of the new FourierXYCurve representation.
+        grid : Grid, int or None
+            Grid used to evaluate curve coordinates on to fit with FourierXYCurve.
+            If an integer, uses that many equally spaced points.
+        basis : {'xyz', 'rpz'}
+            Coordinate system for center and normal vectors. Default = 'xyz'.
+        name : str
+            name for this curve
+
+        Returns
+        -------
+        curve : FourierXYCurve
+            New representation of the curve parameterized by Fourier series for the
+            X and Y coordinates in a plane specified by a center position and normal
+            vector.
+
+        """
+        from .curve import FourierXYCurve
+
+        if grid is None:
+            grid = LinearGrid(N=2 * N + 1)
+        coords = self.compute("x", grid=grid, basis=basis)["x"]
+        return FourierXYCurve.from_values(coords, N=N, basis=basis, name=name)
+
 
 class Surface(IOAble, Optimizable, ABC):
     """Abstract base class for 2d surfaces in 3d space."""

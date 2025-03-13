@@ -751,7 +751,7 @@ class TestVacuumSolver:
         np.testing.assert_allclose(vac._data["src"]["Z"], -a * np.sin(theta))
         np.testing.assert_allclose(vac._data["src"]["n_rho"][:, 2], -B0n, atol=1e-12)
 
-        data = vac.compute_Phi_mn(chunk_size)
+        data = vac.compute_Phi(chunk_size)
         Z = data["evl"]["Z"]
         Phi = Transform(vac.evl_grid, vac.basis).transform(data["Phi"]["Phi_mn"])
         np.testing.assert_allclose(np.ptp(Z - Phi), 0, atol=atol)
@@ -812,7 +812,7 @@ class TestVacuumSolver:
             warn_fft=False,
         )
 
-        data = vac.compute_Phi_mn(chunk_size)
+        data = vac.compute_Phi(chunk_size)
         Z = data["evl"]["Z"]
         Phi = Transform(vac.evl_grid, vac.basis).transform(data["Phi"]["Phi_mn"])
         np.testing.assert_allclose(np.ptp(Z - Phi), 0, atol=atol)

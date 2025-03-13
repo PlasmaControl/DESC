@@ -666,7 +666,6 @@ def _add_reduce(x):
     return x.sum(axis=0)
 
 
-@partial(jit, static_argnames=["kernel", "known_map", "chunk_size", "loop"])
 def singular_integral(
     eval_data,
     source_data,
@@ -893,6 +892,7 @@ kernels = {
 }
 
 
+@partial(jit, static_argnames=["chunk_size", "loop"])
 def virtual_casing_biot_savart(
     eval_data, source_data, interpolator, chunk_size=None, **kwargs
 ):

@@ -309,7 +309,10 @@ class FourierRZCurve(Curve):
 
 
 def _unclose_curve(X, Y, Z):
-    if np.allclose([X[0], Y[0], Z[0]], [X[-1], Y[-1], Z[-1]], atol=1e-14):
+    if (
+        np.allclose([X[0], Y[0], Z[0]], [X[-1], Y[-1], Z[-1]], atol=1e-14)
+        and X.size != 1
+    ):
         closedX, closedY, closedZ = X.copy(), Y.copy(), Z.copy()
         X, Y, Z = X[:-1], Y[:-1], Z[:-1]
         flag = True

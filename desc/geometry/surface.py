@@ -810,10 +810,17 @@ class FourierRZToroidalSurface(Surface):
         # TODO: depending on the beta value, shift the mid point to the outside
         Rmid = (Rout + Rin) / 2
         Zmid = (Zout + Zin) / 2
-        phis = jnp.linspace(0, 2 * np.pi / self.NFP, self.N * 2, endpoint=False)
-        axis = FourierRZCurve.from_values(
-            jnp.vstack([Rmid, phis, Zmid]).T, N=self.N, NFP=self.NFP
+        phis = (
+            jnp.linspace(0, 2 * np.pi / self.NFP, self.N * 2, endpoint=False)
+            if self.N > 0
+            else jnp.zeros_like(Rmid)
         )
+        # FourierRZCurve constructor will usually throw this warning, so ignore it
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", UserWarning)
+            axis = FourierRZCurve.from_values(
+                jnp.vstack([Rmid, phis, Zmid]).T, N=self.N, NFP=self.NFP
+            )
         return axis
 
 

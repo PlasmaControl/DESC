@@ -55,6 +55,7 @@ Bug Fixes
 - Fixes bug that was setting ``ObjectiveFunction._things_per_objective_idx`` incorrectly. Now each ``_Objective`` can define a unique order that it expects to use parameters for multiple "things".
 - Fixes bug that occurs when an NAE solution used with NAE constraints is asymmetric, but has a symmetric axis.
 - Fixes bug in ``FourierCurrentPotentialField.change_Phi_resolution`` where ``N_Phi`` would be changed to ``M_Phi`` if ``N`` is not explicitly passed into the method.
+- Fixes bug when setting current for a ``MixedCoilSet`` with an arbitrary tree structure.
 
 Performance Improvements
 

@@ -24,7 +24,12 @@ from desc.utils import (
     warnif,
 )
 
-from ._constraint_wrappers import LinearConstraintProjection, ProximalProjection
+from ._constraint_wrappers import (
+    LinearConstraintProjection,
+    ProximalProjection,
+    ProximalProjectionFB2,
+    ProximalProjectionFreeBoundary,
+)
 
 
 class Optimizer(IOAble):
@@ -277,7 +282,7 @@ class Optimizer(IOAble):
             result["allx"] = [objective.recover(x) for x in result["allx"]]
             objective = objective._objective
 
-        if isinstance(objective, ProximalProjection):
+        if isinstance(objective, (ProximalProjection, ProximalProjectionFB2)):
             # reset eq params to initial
             if eq is not None:
                 eq.params_dict = eq_params_init
@@ -439,13 +444,35 @@ def _maybe_wrap_nonlinear_constraints(
     if wrapper is not None and wrapper.lower() in ["prox", "proximal"]:
         perturb_options = options.pop("perturb_options", {})
         solve_options = options.pop("solve_options", {})
-        objective = ProximalProjection(
-            objective,
-            constraint=_combine_constraints(nonlinear_constraints),
-            perturb_options=perturb_options,
-            solve_options=solve_options,
-            eq=eq,
-        )
+        free_boundary_options = options.pop("free_boundary_options", {})
+        if np.any([hasattr(c, "_free_boundary") for c in nonlinear_constraints]):
+            # then we are doing a free boundary ProximalProjection
+            # make the prox projection for the free bdry suboproblem
+            for i in range(len(nonlinear_constraints)):
+                if hasattr(nonlinear_constraints[i], "_equilibrium"):
+                    if nonlinear_constraints[i]._equilibrium:
+                        eq_obj = nonlinear_constraints[i]
+                if hasattr(nonlinear_constraints[i], "_free_boundary"):
+                    if nonlinear_constraints[i]._free_boundary:
+                        eq_free_bdry_obj = nonlinear_constraints[i]
+
+            objective = objective = ProximalProjectionFB2(
+                objective,
+                constraint=_combine_constraints((eq_obj,)),
+                constraint_fb=_combine_constraints((eq_free_bdry_obj,)),
+                perturb_options=perturb_options,
+                solve_options=solve_options,
+                fb_options=free_boundary_options,
+                eq=eq,
+            )
+        else:  # usual proximal projection
+            objective = ProximalProjection(
+                objective,
+                constraint=_combine_constraints(nonlinear_constraints),
+                perturb_options=perturb_options,
+                solve_options=solve_options,
+                eq=eq,
+            )
         nonlinear_constraints = ()
     return objective, nonlinear_constraints
 
@@ -473,7 +500,10 @@ def get_combined_constraint_objectives(
     objective, nonlinear_constraints = _maybe_wrap_nonlinear_constraints(
         eq, objective, nonlinear_constraints, opt_method, options
     )
-    is_prox = isinstance(objective, ProximalProjection)
+    is_prox = isinstance(
+        objective,
+        (ProximalProjection, ProximalProjectionFreeBoundary, ProximalProjectionFB2),
+    )
     for t in things:
         if isinstance(t, Equilibrium) and is_prox:
             # don't add Equilibrium self-consistency if proximal is used

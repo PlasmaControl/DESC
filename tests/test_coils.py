@@ -485,6 +485,20 @@ class TestCoilSet:
     """Tests for sets of multiple coils."""
 
     @pytest.mark.unit
+    def test_current_setter(self):
+        """Test setting current for a MixedCoilSet."""
+        coil0 = FourierRZCoil()
+        coils0 = CoilSet.linspaced_linear(
+            coil0, displacement=[0, 0, 10], n=2, endpoint=True
+        )
+        coil1 = FourierPlanarCoil()
+        coils1 = CoilSet.linspaced_angular(coil1, n=3)
+        coilset = MixedCoilSet([coils0, coils1])
+        new_currents = [[1, 2], [3, 4, 5]]
+        coilset.current = [c for cs in new_currents for c in cs]  # must be 1D iterable
+        assert coilset.current == new_currents
+
+    @pytest.mark.unit
     def test_linspaced_linear(self):
         """Field from straight solenoid."""
         R = 10

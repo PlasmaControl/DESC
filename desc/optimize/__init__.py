@@ -4,6 +4,7 @@ from . import _desc_wrappers, _scipy_wrappers
 from ._constraint_wrappers import (
     LinearConstraintProjection,
     ProximalProjection,
+    ProximalProjectionFB2,
     ProximalProjectionFreeBoundary,
 )
 from .aug_lagrangian import fmin_auglag

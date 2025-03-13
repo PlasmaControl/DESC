@@ -174,7 +174,7 @@ def get_free_boundary_constraints(eq, profiles=True, normalize=True):
         for name, con in _PROFILE_CONSTRAINTS.items():
             if getattr(eq, name) is not None:
                 constraints += (con(**kwargs),)
-
+    constraints += (ForceBalance(eq),)
     return constraints
 
 

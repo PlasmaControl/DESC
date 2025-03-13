@@ -27,6 +27,7 @@ from desc.utils import (
 from ._constraint_wrappers import (
     LinearConstraintProjection,
     ProximalProjection,
+    ProximalProjectionFB2,
     ProximalProjectionFreeBoundary,
 )
 
@@ -455,17 +456,26 @@ def _maybe_wrap_nonlinear_constraints(
                     if nonlinear_constraints[i]._free_boundary:
                         eq_free_bdry_obj = nonlinear_constraints[i]
 
-            freebdry_constraint = ProximalProjection(
-                ObjectiveFunction(eq_free_bdry_obj),
+            # freebdry_constraint = ProximalProjection(
+            #     ObjectiveFunction(eq_free_bdry_obj),
+            #     constraint=_combine_constraints((eq_obj,)),
+            #     perturb_options=perturb_options,
+            #     solve_options=solve_options,
+            #     eq=eq,
+            # )
+            # objective = ProximalProjectionFreeBoundary(
+            #     objective=objective,
+            #     constraint=freebdry_constraint,
+            #     free_boundary_options=free_boundary_options,
+            #     eq=eq,
+            # )
+            objective = objective = ProximalProjectionFB2(
+                objective,
                 constraint=_combine_constraints((eq_obj,)),
+                constraint_fb=_combine_constraints((eq_free_bdry_obj,)),
                 perturb_options=perturb_options,
                 solve_options=solve_options,
-                eq=eq,
-            )
-            objective = ProximalProjectionFreeBoundary(
-                objective=objective,
-                constraint=freebdry_constraint,
-                free_boundary_options=free_boundary_options,
+                fb_options=free_boundary_options,
                 eq=eq,
             )
         else:  # usual proximal projection

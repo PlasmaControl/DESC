@@ -66,7 +66,11 @@ def factorize_linear_constraints(objective, constraint, x_scale="auto"):  # noqa
                 + " but not included in objective.",
             )
 
-    from desc.optimize import ProximalProjection, ProximalProjectionFreeBoundary
+    from desc.optimize import (
+        ProximalProjection,
+        ProximalProjectionFB2,
+        ProximalProjectionFreeBoundary,
+    )
 
     # particular solution to Ax=b
     xp = jnp.zeros(objective.dim_x)
@@ -90,7 +94,7 @@ def factorize_linear_constraints(objective, constraint, x_scale="auto"):  # noqa
                 cols = np.append(cols, np.arange(c, c + t.dim_x))
                 c += t.dim_x
         A = A[:, cols]
-    elif isinstance(objective, ProximalProjectionFreeBoundary):
+    elif isinstance(objective, (ProximalProjectionFreeBoundary, ProximalProjectionFB2)):
         # remove cols of A corresponding to ["R_lmn", "Z_lmn", "L_lmn", "Ra_n", "Za_n"
         # ,"Zb_lmn","Rb_lmn"]
         c = 0

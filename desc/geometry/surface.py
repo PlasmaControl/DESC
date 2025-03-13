@@ -783,6 +783,39 @@ class FourierRZToroidalSurface(Surface):
         else:
             return offset_surface
 
+    def get_axis(self, beta=None):
+        """Get the axis of the surface.
+
+        Parameters
+        ----------
+        beta : float
+            Beta value of the equilibrium to get some idea on the Shafranov shift.
+
+        Returns
+        -------
+        axis : FourierRZCurve
+            Axis of the surface.
+
+        """
+        from desc.geometry import FourierRZCurve
+
+        grid = LinearGrid(rho=1, theta=2, zeta=self.N * 2, NFP=self.NFP)
+        data = self.compute(["R", "Z"], grid=grid)
+        R = data["R"]
+        Z = data["Z"]
+        Rout = R[::2]
+        Rin = R[1::2]
+        Zout = Z[::2]
+        Zin = Z[1::2]
+        # TODO: depending on the beta value, shift the mid point to the outside
+        Rmid = (Rout + Rin) / 2
+        Zmid = (Zout + Zin) / 2
+        phis = jnp.linspace(0, 2 * np.pi / self.NFP, self.N * 2, endpoint=False)
+        axis = FourierRZCurve.from_values(
+            jnp.vstack([Rmid, phis, Zmid]).T, N=self.N, NFP=self.NFP
+        )
+        return axis
+
 
 class ZernikeRZToroidalSection(Surface):
     """A toroidal cross section represented by a Zernike polynomial in R,Z.
@@ -1070,3 +1103,34 @@ class ZernikeRZToroidalSection(Surface):
             if ZZ is not None:
                 idxZ = self.Z_basis.get_idx(ll, mm, 0)
                 self.Z_lmn = put(self.Z_lmn, idxZ, ZZ)
+
+    def get_axis(self, beta=None):
+        """Get the axis of the surface.
+
+        Parameters
+        ----------
+        beta : float
+            Beta value of the equilibrium to get some idea on the Shafranov shift.
+
+        Returns
+        -------
+        axis : FourierRZCurve
+            Axis of the surface.
+
+        """
+        from desc.geometry import FourierRZCurve
+
+        grid = LinearGrid(rho=1, theta=2, zeta=self.N * 2)
+        data = self.compute(["R", "Z"], grid=grid)
+        R = data["R"]
+        Z = data["Z"]
+        Rout = R[::2]
+        Rin = R[1::2]
+        Zout = Z[::2]
+        Zin = Z[1::2]
+        # TODO: depending on the beta value, shift the mid point to the outside
+        Rmid = (Rout + Rin) / 2
+        Zmid = (Zout + Zin) / 2
+        phis = jnp.zeros_like(Rmid)
+        axis = FourierRZCurve.from_values(jnp.vstack([Rmid, phis, Zmid]).T, N=0, NFP=1)
+        return axis

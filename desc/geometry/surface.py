@@ -314,53 +314,45 @@ class FourierRZToroidalSurface(Surface):
         n_retain : int 
             Coefficient that satisfy |n| > n_retain are set to zero. If not specified, n_retain=m_retain is assumed.
         """
-        """Zero-out Fourier coefficients with m,n above the specified m_retain and n_retain.
-        Specifically, zeros out (m,n)-modes that satisfy |m|>m_retain or |n| > n_retain.
-        The above inequalities are strict, so m_retain is the highest m value retained (i.e., kept non-zero).
-        This is useful for redoing a multigrid optimization step without retaining values in the higher Fourier modes.
-
-        Parameters
-        ----------
-        m_retain : Coefficient that satisfy |m| > m_retain are set to zero.
-        n_retain : Coefficient that satisfy |m| > m_retain are set to zero. If not specified, n_retain=m_retain is assumed.
-
-        WARNING: Like other set_coeffs function, this does not recompute the actual surface. 
-        This needs to be done manually. TODO: SUGGEST HOW?
-
-        """
-
+  
         if n_retain is None:
             n_retain = m_retain
 
         errorif(
             m_retain <= 0,
             ValueError,
-            f"zero_coeffs_above_nm(m_retains, n_retains) expects a positive m_retain, but got {m_retain=}",
+            f"zero_coeffs_above_nm(m_retains, n_retains) expects a positive integer m_retain, but got {m_retain=}",
         )
             
         errorif(
             n_retain <= 0,
             ValueError,
-            f"zero_coeffs_above_nm(m_retains, n_retains) expects a positive n_retain, but got {n_retain=}",
+            f"zero_coeffs_above_nm(m_retains, n_retains) expects a positive integer n_retain, but got {n_retain=}",
+        )
+
+        errorif(
+            m_retain != int(m_retain),
+            ValueError,
+            f"m_retain must be a positive integer, got {m_retain}",
+        )
+
+        errorif(
+            n_retain != int(n_retain),
+            ValueError,
+            f"n_retain must be a positive integer, got {n_retain}",
         )
         
-        limits = np.array([n_retain,m_retain])
+        limits = np.array([m_retain,n_retain])
         
         nm = self.Z_basis.modes[:,1:]
         absnm = np.abs(nm)
         inds = np.any(np.greater(absnm,limits),axis=1)
-        if isinstance(self.Z_lmn, jnp.ndarray):
-            self.Z_lmn = self.Z_lmn.at[inds].set(np.zeros_like(self.Z_lmn[inds]))
-        elif isinstance(self.Z_lmn, np.ndarray):
-            self.Z_lmn[inds] = np.zeros_like(self.Z_lmn[inds])
-        
+        self.Z_lmn = put(self.Z_lmn, inds, np.zeros_like(self.Z_lmn[inds]))
+
         nm = self.R_basis.modes[:,1:]
         absnm = np.abs(nm)
         inds = np.any(np.greater(absnm,limits),axis=1)
-        if isinstance(self.R_lmn, jnp.ndarray):
-            self.R_lmn = self.R_lmn.at[inds].set(np.zeros_like(self.R_lmn[inds]))
-        elif isinstance(self.R_lmn, np.ndarray):
-            self.R_lmn[inds] = np.zeros_like(self.R_lmn[inds])
+        self.R_lmn = put(self.R_lmn, inds, np.zeros_like(self.R_lmn[inds]))
         
                 
     @classmethod

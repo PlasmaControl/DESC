@@ -11,6 +11,7 @@ from desc.geometry import (
     Surface,
     ZernikeRZToroidalSection,
 )
+from desc.grid import LinearGrid
 from desc.profiles import PowerSeriesProfile, _Profile
 
 
@@ -149,35 +150,38 @@ def parse_axis(axis, NFP=1, sym=True, surface=None):
     elif axis is None:  # use the center of surface
         # TODO (#1384): make this method of surface, surface.get_axis()?
         if isinstance(surface, FourierRZToroidalSurface):
-            axis = FourierRZCurve(
-                R_n=surface.R_lmn[np.where(surface.R_basis.modes[:, 1] == 0)],
-                Z_n=surface.Z_lmn[np.where(surface.Z_basis.modes[:, 1] == 0)],
-                modes_R=surface.R_basis.modes[
-                    np.where(surface.R_basis.modes[:, 1] == 0)[0], -1
-                ],
-                modes_Z=surface.Z_basis.modes[
-                    np.where(surface.Z_basis.modes[:, 1] == 0)[0], -1
-                ],
-                NFP=NFP,
+            grid = LinearGrid(rho=1, theta=2, zeta=surface.N * 2, NFP=surface.NFP)
+            data = surface.compute(["R", "Z"], grid=grid)
+            R = data["R"]
+            Z = data["Z"]
+            Rout = R[::2]
+            Rin = R[1::2]
+            Zout = Z[::2]
+            Zin = Z[1::2]
+            # TODO: depending on the beta value, shift the mid point to the outside
+            Rmid = (Rout + Rin) / 2
+            Zmid = (Zout + Zin) / 2
+            phis = jnp.linspace(
+                0, 2 * np.pi / surface.NFP, surface.N * 2, endpoint=False
+            )
+            axis = FourierRZCurve.from_values(
+                jnp.vstack([Rmid, phis, Zmid]).T, N=surface.N, NFP=surface.NFP
             )
         elif isinstance(surface, ZernikeRZToroidalSection):
             # TODO (#782): include m=0 l!=0 modes
-            axis = FourierRZCurve(
-                R_n=surface.R_lmn[
-                    np.where(
-                        (surface.R_basis.modes[:, 0] == 0)
-                        & (surface.R_basis.modes[:, 1] == 0)
-                    )
-                ].sum(),
-                Z_n=surface.Z_lmn[
-                    np.where(
-                        (surface.Z_basis.modes[:, 0] == 0)
-                        & (surface.Z_basis.modes[:, 1] == 0)
-                    )
-                ].sum(),
-                modes_R=[0],
-                modes_Z=[0],
-                NFP=NFP,
+            grid = LinearGrid(rho=1, theta=2, zeta=surface.N * 2)
+            data = surface.compute(["R", "Z"], grid=grid)
+            R = data["R"]
+            Z = data["Z"]
+            Rout = R[::2]
+            Rin = R[1::2]
+            Zout = Z[::2]
+            Zin = Z[1::2]
+            Rmid = (Rout + Rin) / 2
+            Zmid = (Zout + Zin) / 2
+            phis = jnp.zeros_like(Rmid)
+            axis = FourierRZCurve.from_values(
+                jnp.vstack([Rmid, phis, Zmid]).T, N=0, NFP=surface.NFP
             )
     else:
         raise TypeError("Got unknown axis type {}".format(axis))

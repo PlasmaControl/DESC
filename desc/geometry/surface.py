@@ -799,7 +799,8 @@ class FourierRZToroidalSurface(Surface):
         """
         from desc.geometry import FourierRZCurve
 
-        grid = LinearGrid(rho=1, theta=2, zeta=self.N * 2, NFP=self.NFP)
+        # over-sample to get a good axis fit
+        grid = LinearGrid(rho=1, theta=2, zeta=self.N * 4, NFP=self.NFP)
         data = self.compute(["R", "Z"], grid=grid)
         R = data["R"]
         Z = data["Z"]
@@ -811,7 +812,7 @@ class FourierRZToroidalSurface(Surface):
         Rmid = (Rout + Rin) / 2
         Zmid = (Zout + Zin) / 2
         phis = (
-            jnp.linspace(0, 2 * np.pi / self.NFP, self.N * 2, endpoint=False)
+            jnp.linspace(0, 2 * np.pi / self.NFP, len(Rmid), endpoint=False)
             if self.N > 0
             else jnp.zeros_like(Rmid)
         )

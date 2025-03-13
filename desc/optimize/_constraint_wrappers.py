@@ -1973,6 +1973,9 @@ class ProximalProjectionFB2(ObjectiveFunction):
         self._objective = objective
         self._constraint = constraint
         self._constraint_fb = constraint_fb
+        self._constraint_combined = ObjectiveFunction(
+            (constraint.objectives[0], constraint_fb.objectives[0])
+        )
 
         solve_options = {} if solve_options is None else solve_options
         perturb_options = {} if perturb_options is None else perturb_options
@@ -2063,6 +2066,8 @@ class ProximalProjectionFB2(ObjectiveFunction):
             self._objective.build(use_jit=use_jit, verbose=verbose)
         if not self._constraint.built:
             self._constraint.build(use_jit=use_jit, verbose=verbose)
+        if not self._constraint_combined.built:
+            self._constraint_combined.build(use_jit=use_jit, verbose=verbose)
 
         for constraint in self._linear_constraints:
             constraint.build(use_jit=use_jit, verbose=verbose)
@@ -2082,7 +2087,11 @@ class ProximalProjectionFB2(ObjectiveFunction):
             "ProximalProjection can only handle constraints on the equilibrium.",
         )
 
-        self._objectives = [self._objective, self._constraint]
+        self._objectives = [
+            self._objective,
+            self._constraint,
+            self._constraint_combined,
+        ]
         self._set_things()
 
         self._eq_idx = self.things.index(self._eq)
@@ -2551,9 +2560,9 @@ class ProximalProjectionFB2(ObjectiveFunction):
         vs = jnp.split(v, np.cumsum(self._dimc_per_thing))
         # this is Fx_reduced_inv @ Fc
         dfdc = _proximal_jvp_f_pure(
-            self._constraint,
+            self._constraint_combined,
             xf,
-            constants[1],
+            constants[2],
             vs[self._eq_idx],
             self._unfixed_idx,
             self._Z,
@@ -2588,7 +2597,11 @@ class ProximalProjectionFB2(ObjectiveFunction):
     @property
     def constants(self):
         """list: constant parameters for each sub-objective."""
-        return [self._objective.constants, self._constraint.constants]
+        return [
+            self._objective.constants,
+            self._constraint.constants,
+            self._constraint_combined.constants,
+        ]
 
     def __getattr__(self, name):
         """For other attributes we defer to the base objective."""

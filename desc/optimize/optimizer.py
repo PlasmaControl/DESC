@@ -514,7 +514,8 @@ def get_combined_constraint_objectives(
         eq, objective, nonlinear_constraints, opt_method, options
     )
     is_prox = isinstance(
-        objective, (ProximalProjection, ProximalProjectionFreeBoundary)
+        objective,
+        (ProximalProjection, ProximalProjectionFreeBoundary, ProximalProjectionFB2),
     )
     for t in things:
         if isinstance(t, Equilibrium) and is_prox:

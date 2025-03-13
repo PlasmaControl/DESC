@@ -299,15 +299,17 @@ class FourierRZCurve(Curve):
         )
 
         grid = LinearGrid(zeta=phi, NFP=1, sym=sym)
-        basis = FourierSeries(N=N, NFP=NFP, sym=sym)
-        transform = Transform(grid, basis, build_pinv=True)
-        R_n = transform.fit(R)
-        Z_n = transform.fit(Z)
+        R_basis = FourierSeries(N=N, NFP=NFP, sym="cos" if sym else False)
+        Z_basis = FourierSeries(N=N, NFP=NFP, sym="sin" if sym else False)
+        R_transform = Transform(grid, R_basis, build_pinv=True)
+        Z_transform = Transform(grid, Z_basis, build_pinv=True)
+        R_n = R_transform.fit(R)
+        Z_n = Z_transform.fit(Z)
         return FourierRZCurve(
             R_n=R_n,
             Z_n=Z_n,
-            modes_R=basis.modes[:, 2],
-            modes_Z=basis.modes[:, 2],
+            modes_R=R_basis.modes[:, 2],
+            modes_Z=Z_basis.modes[:, 2],
             NFP=NFP,
             sym=sym,
             name=name,
@@ -905,8 +907,8 @@ class FourierXYCurve(Curve):
         self,
         center=[10, 0, 0],
         normal=[0, 1, 0],
-        X_n=[0, 2, 1],
-        Y_n=[1, 2, 0],
+        X_n=[0, 1],
+        Y_n=[1, 0],
         modes=None,
         basis="xyz",
         name="",
@@ -915,6 +917,7 @@ class FourierXYCurve(Curve):
         X_n, Y_n = np.atleast_1d(X_n), np.atleast_1d(Y_n)
         if modes is None:
             modes = np.arange(-(X_n.size // 2), X_n.size // 2 + 1)
+            modes = modes[modes != 0]
         else:
             modes = np.asarray(modes)
 
@@ -924,8 +927,8 @@ class FourierXYCurve(Curve):
         assert basis.lower() in ["xyz", "rpz"]
 
         N = np.max(abs(modes))
-        self._X_basis = FourierSeries(N, NFP=1, sym=False)
-        self._Y_basis = FourierSeries(N, NFP=1, sym=False)
+        self._X_basis = FourierSeries(N, NFP=1, sym="n0")
+        self._Y_basis = FourierSeries(N, NFP=1, sym="n0")
         self._X_n = copy_coeffs(X_n, modes, self.X_basis.modes[:, 2])
         self._Y_n = copy_coeffs(Y_n, modes, self.Y_basis.modes[:, 2])
 
@@ -1180,7 +1183,7 @@ class FourierXYCurve(Curve):
         s = s[idx]
 
         # Fourier transform
-        basis = FourierSeries(N, NFP=1, sym=False)
+        basis = FourierSeries(N, NFP=1, sym="n0")
         grid = LinearGrid(zeta=s, NFP=1)
         transform = Transform(grid, basis, build_pinv=True)
         X_n = transform.fit(X)

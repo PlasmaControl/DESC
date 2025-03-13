@@ -302,6 +302,19 @@ class FourierRZToroidalSurface(Surface):
 
     def zero_coeffs_above_mn(self, m_retain, n_retain=None):
         """Zero-out Fourier coefficients with m,n above the specified m_retain and n_retain.
+
+        Specifically, zeros out (m,n)-modes that satisfy |m|>m_retain or |n| > n_retain.
+        The above inequalities are strict, so m_retain is the highest m value retained (i.e., kept non-zero).
+        This is useful for redoing a multigrid optimization step without retaining values in the higher Fourier modes.
+
+        Parameters
+        ----------
+        m_retain : int
+            Coefficient that satisfy |m| > m_retain are set to zero.
+        n_retain : int 
+            Coefficient that satisfy |n| > n_retain are set to zero. If not specified, n_retain=m_retain is assumed.
+        """
+        """Zero-out Fourier coefficients with m,n above the specified m_retain and n_retain.
         Specifically, zeros out (m,n)-modes that satisfy |m|>m_retain or |n| > n_retain.
         The above inequalities are strict, so m_retain is the highest m value retained (i.e., kept non-zero).
         This is useful for redoing a multigrid optimization step without retaining values in the higher Fourier modes.

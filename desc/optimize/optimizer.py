@@ -455,8 +455,8 @@ def _maybe_wrap_nonlinear_constraints(
                     if nonlinear_constraints[i]._free_boundary:
                         eq_free_bdry_obj = nonlinear_constraints[i]
             nonlinear_constraints = list(nonlinear_constraints)
-            nonlinear_constraints.pop(eq_free_bdry_obj)
-            nonlinear_constraints.pop(eq_obj)
+            nonlinear_constraints.remove(eq_free_bdry_obj)
+            nonlinear_constraints.remove(eq_obj)
             nonlinear_constraints = tuple(nonlinear_constraints)
 
             errorif(

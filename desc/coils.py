@@ -17,7 +17,14 @@ from desc.backend import (
     vmap,
 )
 from desc.basis import FourierSeries
-from desc.compute import get_params, rpz2xyz, rpz2xyz_vec, xyz2rpz, xyz2rpz_vec
+from desc.compute import (
+    get_params,
+    get_transforms,
+    rpz2xyz,
+    rpz2xyz_vec,
+    xyz2rpz,
+    xyz2rpz_vec,
+)
 from desc.compute.geom_utils import reflection_matrix
 from desc.compute.utils import _compute as compute_fun
 from desc.compute.utils import dot, safenorm
@@ -1364,55 +1371,31 @@ class _FiniteBuildCoil(_FramedCoil, Optimizable, ABC):
         N = centerline_grid.N
         xsection_grid.change_resolution(L, M, N)
 
-        data = self.compute(
-            ["x", "x_s", "ds"],
-            grid=centerline_grid,
-            params=params,
-            basis="xyz",
-        )
-
-        # get vector series along the coil centerlines
-        p_frame = self.compute("p_frame", grid=centerline_grid, params=params)[
-            "p_frame"
-        ]
-        q_frame = self.compute("q_frame", grid=centerline_grid, params=params)[
-            "q_frame"
-        ]
-
-        # also need curvature parameters
-        curv1_frame = self.compute("curv1_frame", grid=centerline_grid, params=params)[
-            "curv1_frame"
-        ]
-        curv2_frame = self.compute("curv2_frame", grid=centerline_grid, params=params)[
-            "curv2_frame"
-        ]
-
-        # expand the vector series to include the cross section dimensions
-        p_frame = xsection_grid.expand(p_frame, "zeta")
-        q_frame = xsection_grid.expand(q_frame, "zeta")
-        curv1_frame = xsection_grid.expand(curv1_frame, "zeta")
-        curv2_frame = xsection_grid.expand(curv2_frame, "zeta")
-        x_centerline = xsection_grid.expand(
-            data["x"], "zeta"
-        )  # needed to get lab frame coordinates of the coil points
-
         # pack the parameters for the self field computation
         B_fb_params = {
-            "p_frame": p_frame,
-            "q_frame": q_frame,
             "current": current,
             "cross_section_dims": cross_section_dims,
-            "curv1_frame": curv1_frame,
-            "curv2_frame": curv2_frame,
-            "x_centerline": x_centerline,
         }
-        B_fb_params = params | B_fb_params if params is not None else B_fb_params
+
+        names = ["p_frame", "q_frame", "curv1_frame", "curv2_frame", "x"]
+
+        if params is not None:
+            B_fb_params = params | B_fb_params
+        else:
+            B_fb_params = get_params(names, obj=self, basis="rpz") | B_fb_params
+
+        transforms = get_transforms(
+            names,
+            obj=self,
+            grid=xsection_grid,
+            jitable=True,
+        )
 
         # get position of field measurement points in lab frame
         x_fb = compute_fun(
             self,
             "x_fb",
-            transforms={"grid": xsection_grid},
+            transforms=transforms,
             params=B_fb_params,
             profiles={},
         )["x_fb"]
@@ -1574,59 +1557,41 @@ class _FiniteBuildCoil(_FramedCoil, Optimizable, ABC):
             abdelta,
         )
 
-        # get vector series along the coil centerlines
-        p_frame = self.compute("p_frame", grid=centerline_grid, params=params)[
-            "p_frame"
-        ]
-        q_frame = self.compute("q_frame", grid=centerline_grid, params=params)[
-            "q_frame"
-        ]
-
-        # also need curvature parameters
-        curv1_frame = self.compute("curv1_frame", grid=centerline_grid, params=params)[
-            "curv1_frame"
-        ]
-        curv2_frame = self.compute("curv2_frame", grid=centerline_grid, params=params)[
-            "curv2_frame"
-        ]
-
-        # expand the vector series to include the cross section dimensions
-        p_frame = xsection_grid.expand(p_frame, "zeta")
-        q_frame = xsection_grid.expand(q_frame, "zeta")
-        curv1_frame = xsection_grid.expand(curv1_frame, "zeta")
-        curv2_frame = xsection_grid.expand(curv2_frame, "zeta")
-        x_centerline = xsection_grid.expand(
-            data["x"], "zeta"
-        )  # needed to get lab frame coordinates of the coil points
-        B_b_fb = xsection_grid.expand(B_b_fb, "zeta")
-        B_reg_fb = xsection_grid.expand(B_reg_fb, "zeta")
-
         # pack the parameters for the self field computation
-        B_fb_params = {
-            "p_frame": p_frame,
-            "q_frame": q_frame,
-            "current": current,
-            "cross_section_dims": cross_section_dims,
-            "curv1_frame": curv1_frame,
-            "curv2_frame": curv2_frame,
-            "x_centerline": x_centerline,
-        }
-        B_fb_params = params | B_fb_params if params is not None else B_fb_params
+        B_fb_params = {"current": current, "cross_section_dims": cross_section_dims}
+
+        names = ["p_frame", "q_frame", "curv1_frame", "curv2_frame", "x"]
+
+        if params is not None:
+            B_fb_params = params | B_fb_params
+        else:
+            B_fb_params = get_params(names, obj=self, basis="rpz") | B_fb_params
+
+        transforms = get_transforms(
+            names,
+            obj=self,
+            grid=xsection_grid,
+            jitable=True,
+        )
 
         B_0_fb = compute_fun(
             self,
             "B_0_fb",
-            transforms={"grid": xsection_grid},
+            transforms=transforms,
             params=B_fb_params,
             profiles={},
         )["B_0_fb"]
         B_kappa_fb = compute_fun(
             self,
             "B_kappa_fb",
-            transforms={"grid": xsection_grid},
+            transforms=transforms,
             params=B_fb_params,
             profiles={},
         )["B_kappa_fb"]
+
+        # expand the vector series to include the cross section dimensions
+        B_b_fb = xsection_grid.expand(B_b_fb, "zeta")
+        B_reg_fb = xsection_grid.expand(B_reg_fb, "zeta")
 
         B_self = B_0_fb + B_kappa_fb + B_b_fb + B_reg_fb
 
@@ -1634,7 +1599,7 @@ class _FiniteBuildCoil(_FramedCoil, Optimizable, ABC):
         x_fb = compute_fun(
             self,
             "x_fb",
-            transforms={"grid": xsection_grid},
+            transforms=transforms,
             params=B_fb_params,
             profiles={},
         )["x_fb"]
@@ -1643,7 +1608,16 @@ class _FiniteBuildCoil(_FramedCoil, Optimizable, ABC):
             t_frame = self.compute(
                 "centroid_tangent", grid=centerline_grid, params=params
             )["centroid_tangent"]
+            p_frame = self.compute("p_frame", grid=centerline_grid, params=params)[
+                "p_frame"
+            ]
+            q_frame = self.compute("q_frame", grid=centerline_grid, params=params)[
+                "q_frame"
+            ]
+
             t_frame = xsection_grid.expand(t_frame, "zeta")
+            p_frame = xsection_grid.expand(p_frame, "zeta")
+            q_frame = xsection_grid.expand(q_frame, "zeta")
 
             B_t = dot(B_self, t_frame)
             B_p = dot(B_self, p_frame)

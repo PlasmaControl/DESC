@@ -3671,24 +3671,23 @@ def _v_fb(params, transforms, profiles, data, **kwargs):
     units_long="Tesla",
     description="B_0 term in finite build expansion",
     dim=3,
-    params=["p_frame", "q_frame", "current", "cross_section_dims"],
+    params=["current", "cross_section_dims"],
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["u_fb", "v_fb"],
+    data=["u_fb", "v_fb", "p_frame", "q_frame"],
     parameterization="desc.coils._FiniteBuildCoil",
 )
 def _B_0_fb(params, transforms, profiles, data, **kwargs):
-    # fed in externally
-    p_frame = params["p_frame"]
-    q_frame = params["q_frame"]
-
     # scalars
     current = params["current"]
     a = params["cross_section_dims"][0]
     b = params["cross_section_dims"][1]
 
-    # u and v are computed
+    # kind of a trick, the p and q frame computations are only done on the centerline
+    # dimension
+    p_frame = data["p_frame"]
+    q_frame = data["q_frame"]
     u = data["u_fb"]
     v = data["v_fb"]
 
@@ -3736,32 +3735,32 @@ def _B_0_fb(params, transforms, profiles, data, **kwargs):
     description="B_kappa term in finite build expansion",
     dim=3,
     params=[
-        "p_frame",
-        "q_frame",
         "current",
         "cross_section_dims",
-        "curv1_frame",
-        "curv2_frame",
     ],
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["u_fb", "v_fb"],
+    data=[
+        "u_fb",
+        "v_fb",
+        "p_frame",
+        "q_frame",
+        "curv1_frame",
+        "curv2_frame",
+    ],
     parameterization="desc.coils._FiniteBuildCoil",
 )
 def _B_kappa_fb(params, transforms, profiles, data, **kwargs):
-    # fed in externally
-    p_frame = params["p_frame"]
-    q_frame = params["q_frame"]
-    curv1_frame = params["curv1_frame"]
-    curv2_frame = params["curv2_frame"]
-
     # scalars
     current = params["current"]
     a = params["cross_section_dims"][0]
     b = params["cross_section_dims"][1]
 
-    # u and v are computed
+    p_frame = data["p_frame"]
+    q_frame = data["q_frame"]
+    curv1_frame = data["curv1_frame"]
+    curv2_frame = data["curv2_frame"]
     u = data["u_fb"]
     v = data["v_fb"]
 
@@ -3851,24 +3850,21 @@ def _B_b_fb(params, transforms, profiles, data, **kwargs):
     units_long="meters",
     description="Position vector in lab frame for finite build coil cross section",
     dim=3,
-    params=["p_frame", "q_frame", "cross_section_dims", "x_centerline"],
+    params=["cross_section_dims"],
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["u_fb", "v_fb"],
+    data=["p_frame", "q_frame", "u_fb", "v_fb"],
     parameterization="desc.coils._FiniteBuildCoil",
 )
 def _x_fb(params, transforms, profiles, data, **kwargs):
-    # fed in externally
-    p_frame = params["p_frame"]
-    q_frame = params["q_frame"]
-    x_centerline = params["x_centerline"]
-
     # scalars
     a = params["cross_section_dims"][0]
     b = params["cross_section_dims"][1]
 
-    # u and v are computed
+    p_frame = data["p_frame"]
+    q_frame = data["q_frame"]
+    x_centerline = data["x"]
     u = data["u_fb"]
     v = data["v_fb"]
 

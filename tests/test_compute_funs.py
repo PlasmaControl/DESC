@@ -8,7 +8,13 @@ import numpy as np
 import pytest
 from scipy.signal import convolve2d
 
-from desc.coils import FourierPlanarCoil, FourierRZCoil, FourierXYZCoil, SplineXYZCoil
+from desc.coils import (
+    FourierPlanarCoil,
+    FourierPlanarFiniteBuildCoil,
+    FourierRZCoil,
+    FourierXYZCoil,
+    SplineXYZCoil,
+)
 from desc.compute import data_index, rpz2xyz_vec
 from desc.compute.utils import dot
 from desc.equilibrium import Equilibrium
@@ -1227,6 +1233,15 @@ def test_compute_everything():
         ),
         "desc.coils.SplineXYZCoil": SplineXYZCoil(
             current=5, X=[5, 10, 2, 5], Y=[1, 2, 3, 1], Z=[-4, -5, -6, -4]
+        ),
+        "desc.coils.FourierPlanarFiniteBuildCoil": FourierPlanarFiniteBuildCoil(
+            cross_section_dims=[0.1, 0.2],
+            cross_section_shape="rectangular",
+            current=5,
+            center=[10, 1, 3],
+            normal=[1, 2, 3],
+            r_n=[1, 2, 3],
+            modes=[0, 1, 2],
         ),
     }
     assert things.keys() == data_index.keys(), (

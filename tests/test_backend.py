@@ -124,13 +124,25 @@ def test_root_scalar():
 @pytest.mark.unit
 def test_lstsq():
     """Test cholesky factorization of least squares solution."""
+    # tall
     A = np.random.randn(10, 5)
     b = np.random.randn(10)
     np.testing.assert_allclose(
         _lstsq(A, b), np.linalg.lstsq(A, b, rcond=None)[0], rtol=1e-6
     )
+    # wide
     A = np.random.randn(5, 10)
     b = np.random.randn(5)
+    np.testing.assert_allclose(
+        _lstsq(A, b), np.linalg.lstsq(A, b, rcond=None)[0], rtol=1e-6
+    )
+    # square
+    A = np.random.randn(5, 5)
+    b = np.random.randn(5)
+    np.testing.assert_allclose(_lstsq(A, b), np.linalg.solve(A, b), rtol=1e-6)
+    # scalar
+    A = np.random.randn(1, 5)
+    b = np.random.randn(1)
     np.testing.assert_allclose(
         _lstsq(A, b), np.linalg.lstsq(A, b, rcond=None)[0], rtol=1e-6
     )
@@ -148,7 +160,7 @@ def test_fixed_point(method):
     c2 = jnp.array([3.0, 5.0])
     x0 = jnp.array([1.2, 1.3])
     p, (converged, i) = fixed_point(
-        func, x0, (c1, c2), xtol=1e-8, method=method, full_output=True
+        func, x0, (c1, c2), tol=1e-8, method=method, full_output=True
     )
     assert converged
     np.testing.assert_allclose(p, [1.4920333, 1.37228132])

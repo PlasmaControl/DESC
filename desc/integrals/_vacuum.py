@@ -19,7 +19,7 @@ from desc.integrals.singularities import (
 )
 from desc.io import IOAble
 from desc.transform import Transform
-from desc.utils import errorif, setdefault
+from desc.utils import errorif, setdefault, warnif
 
 
 def _nonhomogenous_part(self, chunk_size):
@@ -27,9 +27,9 @@ def _nonhomogenous_part(self, chunk_size):
         -singular_integral(
             self._data["Phi"],
             self._data["src"],
-            _kernel_Bn_over_r,
-            self._interpolator["Phi"],
-            chunk_size,
+            interpolator=self._interpolator["Phi"],
+            kernel=_kernel_Bn_over_r,
+            chunk_size=chunk_size,
         ).squeeze()
         / (2 * jnp.pi)
     )
@@ -47,15 +47,15 @@ def _fourier_operator(self, m, n, chunk_size):
     return evl_Phi + singular_integral(
         eval_data=self._data["Phi"],
         source_data=src_data,
-        kernel=_kernel_Phi_dGp_dn,
         interpolator=self._interpolator["Phi"],
-        chunk_size=chunk_size,
+        kernel=_kernel_Phi_dGp_dn,
         known_map=("Phi", Phi),
+        chunk_size=chunk_size,
     ).squeeze() / (2 * jnp.pi)
 
 
 @partial(jit, static_argnames=["chunk_size"])
-def _fourier_compute_Phi_mn(self, *, chunk_size=None):
+def _fourier_compute_Phi(self, *, chunk_size=None):
     if "Phi_mn" in self._data["Phi"]:
         return self._data
 
@@ -65,7 +65,7 @@ def _fourier_compute_Phi_mn(self, *, chunk_size=None):
     assert F.shape == (self.Phi_grid.num_nodes, self.basis.num_modes)
     # Solving overdetermined system useful to reduce size of F while
     # retaining FFT interpolation accuracy in the singular integrals.
-    # TODO: use jax custom linear solve and ``jax.scipy.sparse.linalg.cg``.
+    # TODO: use ``jax.scipy.sparse.linalg.cg``
     self._data["Phi"]["Phi_mn"] = (
         jnp.linalg.solve(F, g)
         if (self.Phi_grid.num_nodes == self.basis.num_modes)
@@ -74,8 +74,9 @@ def _fourier_compute_Phi_mn(self, *, chunk_size=None):
     return self._data
 
 
+# TODO: iterate on Phi_mn
 def _fredholm_operator(Phi_k, g, self, chunk_size=None):
-    """Compute Fredholm integral fixed point operator Tf such that Tf = f.
+    """Compute Fredholm integral operator Tf such that Tf = f.
 
     Parameters
     ----------
@@ -87,42 +88,36 @@ def _fredholm_operator(Phi_k, g, self, chunk_size=None):
     Returns
     -------
     Tf : jnp.ndarray
-        Fredholm integral equation linear operator output.
+        Fredholm integral operator computed on ``self._Phi_grid``.
 
     """
-    s = (self.src_grid.num_theta, self.src_grid.num_zeta)
     src_data = self._data["src"].copy()
-    src_data["Phi"] = irfft2(
-        rfft2(self.evl_grid.meshgrid_reshape(Phi_k, "rtz")[0], norm="forward"),
-        s=s,
-        norm="forward",
-    ).ravel(order="F")
+    src_data["Phi"] = self._upsample_to_source(Phi_k)
     return g - singular_integral(
         eval_data=self._data["Phi"],
         source_data=src_data,
-        kernel=_kernel_Phi_dGp_dn,
         interpolator=self._interpolator["Phi"],
+        kernel=_kernel_Phi_dGp_dn,
         chunk_size=chunk_size,
     ).squeeze() / (2 * jnp.pi)
 
 
-@partial(jit, static_argnames=["xtol", "maxiter", "method", "chunk_size"])
+@partial(jit, static_argnames=["tol", "maxiter", "method", "chunk_size"])
 def _fixed_point_compute_Phi(
     self,
     Phi_0=None,
     *,
-    xtol=1e-6,
+    tol=1e-6,
     maxiter=20,
     method="del2",
     chunk_size=None,
 ):
-    if "Phi" in self._data["Phi"]:
+    assert self.Phi_grid.can_fft2
+    if "Phi_mn" in self._data["Phi"]:
         return self._data
 
     g = _nonhomogenous_part(self, chunk_size)
     if Phi_0 is None:
-        # Initial guess is nonvanishing first Fourier harmonic
-        # Should be low frequency compared to grid resolution.
         # TODO: Add option to set initial guess to first k
         #  terms of Fourier fit (output of ``_compute_Phi_mn``).
         #  Useful if k is small.
@@ -132,11 +127,12 @@ def _fixed_point_compute_Phi(
         _fredholm_operator,
         Phi_0,
         (g, self, chunk_size),
-        xtol,
+        tol,
         maxiter,
         method,
         scalar=True,
     )
+    self._data["Phi"]["Phi_mn"] = self._phi_transform.fit(self._data["Phi"]["Phi"])
     return self._data
 
 
@@ -254,17 +250,22 @@ class VacuumSolver(IOAble):
 
         # Compute data on source grid.
         position = ["R", "phi", "Z"]
-        self._src_transform = Transform(src_grid, basis, derivs=1)
+        self._src_transform = Transform(src_grid, basis, derivs=1, build_pinv=True)
         src_data = surface.compute(
             position + ["n_rho", "|e_theta x e_zeta|", "e_theta", "e_zeta"],
             grid=src_grid,
         )
         # Compute data on Phi grid.
-        Phi_data = (
-            src_data
-            if self._same_grid_phi_src
-            else surface.compute(position, grid=Phi_grid)
-        )
+        if self._same_grid_phi_src:
+            Phi_data = src_data
+            self._src_transform.build_pinv()
+            self._phi_transform = self._src_transform
+        else:
+            Phi_data = surface.compute(position, grid=Phi_grid)
+            self._phi_transform = Transform(
+                Phi_grid, basis, build=False, build_pinv=True
+            )
+
         # Compute data on evaluation grid.
         if evl_grid.equiv(Phi_grid):
             evl_data = Phi_data
@@ -309,20 +310,48 @@ class VacuumSolver(IOAble):
         """Return the source grid used by this solver."""
         return self._interpolator["Phi"]._eval_grid
 
+    def _upsample_to_source(self, x):
+        if not self._same_grid_phi_src:
+            x = self.Phi_grid.meshgrid_reshape(x, "rtz")[0]
+            x = irfft2(
+                rfft2(x, norm="forward", axes=(0, 1)),
+                s=(self.src_grid.num_theta, self.src_grid.num_zeta),
+                norm="forward",
+                axes=(0, 1),
+            ).reshape(self.src_grid.num_nodes, *x.shape[2:], order="F")
+        return x
+
     @property
     def basis(self):
         """Return the DoubleFourierBasis used by this solver."""
         return self._src_transform.basis
 
-    def compute_Phi_mn(self, chunk_size=None):
+    def compute_Phi(
+        self, chunk_size=None, maxiter=0, tol=1e-6, method="del2", Phi_0=None
+    ):
         """Compute Fourier coefficients of vacuum potential Φ on ∂D.
 
         Parameters
         ----------
         chunk_size : int or None
-            Size to split computation into chunks.
+            Size to split singular integral computation into chunks.
             If no chunking should be done or the chunk size is the full input
             then supply ``None``.
+        maxiter : int
+            Maximum number of fixed point iterations.
+            Set to zero to invert the system instead.
+        tol : float
+            Stopping tolerance for iteration.
+        method : {"del2", "simple"}
+            Method of finding the fixed-point, defaults to ``del2``,
+            which uses Steffensen's acceleration method.
+            The former typically converges quadratically and the latter converges
+            linearly.
+        Phi_0 : jnp.ndarray
+            Initial guess for Φ on ``self.Phi_grid`` for iteration.
+            In general, it is best to select the initial guess as truncated
+            Fourier series. Default is Fourier series with unit coefficients
+            for two modes (that have frequency zero and one).
 
         Returns
         -------
@@ -330,45 +359,18 @@ class VacuumSolver(IOAble):
              Fourier coefficients of Φ on ∂D stored in ``data["Phi"]["Phi_mn"]``.
 
         """
-        self._data = _fourier_compute_Phi_mn(self, chunk_size=chunk_size)
-        return self._data
-
-    def compute_Phi(
-        self, Phi_0=None, xtol=1e-6, maxiter=20, method="del2", chunk_size=None
-    ):
-        """Compute vacuum potential Φ on ∂D via fixed point iteration.
-
-        Parameters
-        ----------
-        Phi_0 : jnp.ndarray
-            Initial guess for Φ on ``self.Phi_grid``.
-        xtol : float
-            Stopping tolerance.
-        maxiter : int
-            Maximum number of fixed point iterations.
-        method : {"del2", "simple"}
-            Method of finding the fixed-point, defaults to ``del2``,
-            which uses Steffensen's acceleration method.
-            The former typically converges quadratically and the latter converges
-            linearly.
-        chunk_size : int or None
-            Size to split singular integral computation into chunks.
-            If no chunking should be done or the chunk size is the full input
-            then supply ``None``.
-
-        Returns
-        -------
-        data : dict
-             Vacuum potential Φ on ∂D stored in ``data["Phi"]["Phi"]``.
-
-        """
-        self._data = _fixed_point_compute_Phi(
-            self,
-            Phi_0,
-            xtol=xtol,
-            maxiter=maxiter,
-            method=method,
-            chunk_size=chunk_size,
+        warnif(maxiter > 0, msg="Still debugging")
+        self._data = (
+            _fixed_point_compute_Phi(
+                self,
+                Phi_0,
+                tol=tol,
+                maxiter=maxiter,
+                method=method,
+                chunk_size=chunk_size,
+            )
+            if (maxiter > 0)
+            else _fourier_compute_Phi(self, chunk_size=chunk_size)
         )
         return self._data
 
@@ -411,7 +413,7 @@ class VacuumSolver(IOAble):
         if "grad(Phi)" in self._data["evl"]:
             return self._data
 
-        self._data = self.compute_Phi_mn(chunk_size)
+        self._data = self.compute_Phi(chunk_size)
         self._data = self._compute_virtual_current()
         self._data["evl"]["grad(Phi)"] = (
             _nonsingular_part(
@@ -430,8 +432,8 @@ class VacuumSolver(IOAble):
             * singular_integral(
                 self._data["evl"],
                 self._data["src"],
-                kernel=_kernel_biot_savart_coulomb,
                 interpolator=self._interpolator["evl"],
+                kernel=_kernel_biot_savart_coulomb,
                 chunk_size=chunk_size,
             )
         )

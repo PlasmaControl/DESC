@@ -1,6 +1,9 @@
 Changelog
 =========
 
+v0.14.0
+-------
+
 New Features
 
 - Updates default parameters for partition support size in the singular surface integrals.
@@ -28,7 +31,6 @@ for compatibility with other codes which expect such files from the Booz_Xform c
 - Allows specification of Nyquist spectrum maximum modenumbers when using ``VMECIO.save`` to save a DESC .h5 file as a VMEC-format wout file
 - Adds a new objective ``desc.objectives.ExternalObjective`` for wrapping external codes with finite differences.
 - DESC/JAX version and device info is no longer printed by default, but can be accessed with the function `desc.backend.print_backend_info()`.
-- Adds support for Python 3.13 and removes support for 3.9 since new JAX versions require minimum Python 3.10.
 
 Performance Improvements
 
@@ -60,6 +62,11 @@ Bug Fixes
 - Fixes bug when setting current for a ``MixedCoilSet`` with an arbitrary tree structure.
 - Corrects Cholesky factorized least-squares solve for wide matrices used in root finding.
 - Fixes bug in the formula for computing ``"P_fusion"``.
+
+Breaking Changes
+
+- Adds support for Python 3.13 and removes support for 3.9 since new JAX versions require minimum Python 3.10.
+
 
 
 v0.13.0

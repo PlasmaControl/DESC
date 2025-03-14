@@ -322,9 +322,7 @@ class Optimizer(IOAble):
             print(f"{'Start  -->   End':>{PRINT_WIDTH+21}}")
             objective.print_value(objective.x(*state), objective.x(*state_0))
             for con in constraints:
-                arg_inds_for_this_con = [
-                    things.index(t) for t in things if t in con.things
-                ]
+                arg_inds_for_this_con = [things.index(t) for t in con.things]
                 args_for_this_con = [things[ind] for ind in arg_inds_for_this_con]
                 args0_for_this_con = [things0[ind] for ind in arg_inds_for_this_con]
                 con.print_value(con.xs(*args_for_this_con), con.xs(*args0_for_this_con))
@@ -452,9 +450,21 @@ def _maybe_wrap_nonlinear_constraints(
                 if hasattr(nonlinear_constraints[i], "_equilibrium"):
                     if nonlinear_constraints[i]._equilibrium:
                         eq_obj = nonlinear_constraints[i]
+
                 if hasattr(nonlinear_constraints[i], "_free_boundary"):
                     if nonlinear_constraints[i]._free_boundary:
                         eq_free_bdry_obj = nonlinear_constraints[i]
+            nonlinear_constraints = list(nonlinear_constraints)
+            nonlinear_constraints.pop(eq_free_bdry_obj)
+            nonlinear_constraints.pop(eq_obj)
+            nonlinear_constraints = tuple(nonlinear_constraints)
+
+            errorif(
+                len(nonlinear_constraints),
+                ValueError,
+                "ProximalProjection can only handle Equilibrium and "
+                f" Free Boundary objectives, got {nonlinear_constraints}",
+            )
 
             objective = objective = ProximalProjectionFB2(
                 objective,

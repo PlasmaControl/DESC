@@ -1934,6 +1934,10 @@ class ProximalProjectionFB2(ObjectiveFunction):
         during the projection step.
     name : str
         Name of the objective function.
+    constraint_fb : ObjectiveFunction
+        Free Boundary constraint to enforce. Should be an ObjectiveFunction with one of
+        the following objectives: {BoundaryError, VacuumBoundaryError}
+
     """
 
     def __init__(
@@ -1956,6 +1960,7 @@ class ProximalProjectionFB2(ObjectiveFunction):
         # TODO: check that the fb constraint objective has
         # field_fixed=True, since in the subproblem the
         # external field is not changing.
+        # TODO:
         for con in constraint.objectives:
             # TODO: add checks for constraints
             errorif(
@@ -2051,7 +2056,7 @@ class ProximalProjectionFB2(ObjectiveFunction):
             self._eq, self._linear_constraints
         )
 
-        self._fb_linear_constraints = get_free_boundary_constraints(eq)
+        self._fb_constraints = get_free_boundary_constraints(eq)
 
         # we don't always build here because in ~all cases the user doesn't interact
         # with this directly, so if the user wants to manually rebuild they should
@@ -2258,6 +2263,8 @@ class ProximalProjectionFB2(ObjectiveFunction):
                 constraints=None,
                 **self._solve_options,
             )
+            # to make the free boundary subproblem more robust,
+            # only solve up to M=N=2, then do whole boundary
             for k in [2, self._eq.M]:
                 R_modes = self._eq.surface.R_basis.modes[
                     jnp.max(jnp.abs(self._eq.surface.R_basis.modes), 1) > k, :
@@ -2271,7 +2278,7 @@ class ProximalProjectionFB2(ObjectiveFunction):
                 )
                 self._eq.optimize(
                     objective=self._constraint_fb,
-                    constraints=self._fb_linear_constraints + bdry_constraints,
+                    constraints=self._fb_constraints + bdry_constraints,
                     **self._fb_options,
                 )
             xeq = self._eq.pack_params(self._eq.params_dict)

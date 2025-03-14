@@ -400,6 +400,17 @@ class TestBasis:
         with pytest.raises(ValueError):
             _ = ChebyshevDoubleFourierBasis(L=3, M=1, N=1, NFP=1.0)
 
+    @pytest.mark.unit
+    def test_double_fourier_compute_mode(self, sym="cos"):
+        """Test that single mode compute function is correct."""
+        M, N, NFP = 3, 4, 2
+        basis = DoubleFourierSeries(M, N, NFP, sym=sym)
+        mode_idx = basis.num_modes - 2
+        _, m, n = basis.modes.T
+        f = basis._get_fun_mode(m[mode_idx], n[mode_idx])
+        grid = LinearGrid(M=M, N=N, NFP=NFP)
+        np.testing.assert_allclose(f(grid), basis.evaluate(grid)[:, mode_idx])
+
 
 @pytest.mark.unit
 def test_jacobi_jvp():

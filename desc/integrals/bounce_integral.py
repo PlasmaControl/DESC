@@ -693,7 +693,7 @@ class Bounce2D(Bounce):
         return result[0] if len(result) == 1 else result
 
     # TODO: Singularity subtraction quadrature enables more efficient algorithms.
-    #  To compute
+    #  for weakly singular integrals. To compute
     #    ∫ fh dζ where e.g. h = (1−λ|B|)⁰ᐧ⁵
     #  Taylor expand the singular part. For example, to first order
     #    g₁ = f(ζ₁) [−λ [∂|B|/∂ζ|ρ,α](ζ₁)]⁰ᐧ⁵ (ζ − ζ₁)⁰ᐧ⁵
@@ -707,7 +707,7 @@ class Bounce2D(Bounce):
     #     points to interpolate to is reduced by a factor of ``num_pitch*NFP``.
     #  3. Longer bounce orbits merit more quadrature points than short ones.
     #     This is now possible.
-    #  4. Uiform FFT can be used in toroidal direction. Combined with partial
+    #  4. Uniform FFT can be used in toroidal direction. Combined with partial
     #     summation the interpolation becomes cheap.
     #     (Same code as ``desc/integrals/_bounce_utils.py::cubic_spline``).
     #  5. The quadrature points are no longer functions of the solutions

@@ -97,7 +97,7 @@ Contribute
 - `Contributing guidelines <https://github.com/PlasmaControl/DESC/blob/master/CONTRIBUTING.rst>`_
 - `Issue Tracker <https://github.com/PlasmaControl/DESC/issues>`_
 - `Source Code <https://github.com/PlasmaControl/DESC/>`_
-- `Documentation <https://desc-docs.readthedocs.io/>`_
+- `Documentation <https://desc-docs.readthedocs.io/en/latest/>`_
 
 .. |License| image:: https://img.shields.io/github/license/PlasmaControl/desc?color=blue&logo=open-source-initiative&logoColor=white
     :target: https://github.com/PlasmaControl/DESC/blob/master/LICENSE

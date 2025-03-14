@@ -400,7 +400,7 @@ def contract_equilibrium(
                 UserWarning,
                 f"{profile} is not a PowerSeriesProfile or SplineProfile,"
                 " so cannot safely contract using the same profile type."
-                "falling back to fitting the values with a SplineProfile",
+                "Falling back to fitting the values with a SplineProfile",
             )
             x = np.linspace(0, 1, profile_num_points)
             grid = LinearGrid(rho=x / rho)

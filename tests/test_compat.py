@@ -388,18 +388,7 @@ def test_contract_equilibrium():
 
     # test geometry match btwn orig eq and new contracted eq
     data_keys = ["R", "Z", "lambda"]
-    contract_grid = LinearGrid(
-        rho=np.linspace(0, 1.0, eq.L),
-        M=eq.M_grid,
-        N=eq.N_grid,
-        NFP=eq.NFP,
-    )
-    grid = LinearGrid(
-        rho=np.linspace(0, rho, eq.L),
-        M=eq.M_grid,
-        N=eq.N_grid,
-        NFP=eq.NFP,
-    )
+
     contract_data = eq_half_rho_same_profiles.compute(data_keys, grid=contract_grid)
     data = eq.compute(data_keys, grid=grid)
     for key in data_keys:

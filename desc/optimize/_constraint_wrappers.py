@@ -1300,7 +1300,6 @@ class ProximalProjectionFreeBoundary(ObjectiveFunction):
         self._name = name
 
     def _set_eq_state_vector(self):
-        full_args = self._eq.optimizable_params.copy()
         self._args = self._eq.optimizable_params.copy()
         for arg in ["R_lmn", "Z_lmn", "L_lmn", "Ra_n", "Za_n", "Rb_lmn", "Zb_lmn"]:
             self._args.remove(arg)
@@ -1312,9 +1311,9 @@ class ProximalProjectionFreeBoundary(ObjectiveFunction):
             self._eq_solve_objective._unfixed_idx,
         )
 
-        # dx/dc - goes from the freeb reduced state to optimization variables for outermost
+        # dx/dc - goes from the freeb reduced state to optimization
+        # variables for outermost
         dxdc = []
-        xz = {arg: np.zeros(self._eq.dimensions[arg]) for arg in full_args}
 
         for arg in self._args:
             if arg not in ["Rb_lmn", "Zb_lmn"]:
@@ -1566,7 +1565,6 @@ class ProximalProjectionFreeBoundary(ObjectiveFunction):
         else:
             # reset to last good params
             self._eq.params_dict = self.history[-1][self._eq_idx]
-            # self._eq_solve_objective.update_constraint_target(self._eq)
 
         return xopt, xeq
 
@@ -1955,15 +1953,11 @@ class ProximalProjectionFB2(ObjectiveFunction):
         assert isinstance(constraint, ObjectiveFunction), (
             "constraint should be instance of ObjectiveFunction." ""
         )
+        # TODO: check that the fb constraint objective has
+        # field_fixed=True, since in the subproblem the
+        # external field is not changing.
         for con in constraint.objectives:
-            # errorif(
-            #     not con._equilibrium,
-            #     ValueError,
-            #     "ProximalProjection method cannot handle general "
-            #     + f"nonlinear constraint {con}.",
-            # )
-            # can't have bounds on constraint bc if constraint is satisfied then
-            # Fx == 0, and that messes with Gx @ Fx^-1 Fc etc.
+            # TODO: add checks for constraints
             errorif(
                 con.bounds is not None,
                 ValueError,
@@ -1984,7 +1978,7 @@ class ProximalProjectionFB2(ObjectiveFunction):
         perturb_options.setdefault("verbose", 0)
         perturb_options.setdefault("include_f", False)
         solve_options.setdefault("verbose", 0)
-        # fb_options.setdefault("verbose", 0)
+        fb_options.setdefault("verbose", 0)
         fb_options.setdefault("options", {})
 
         fb_options["options"].setdefault("solve_options", solve_options)
@@ -2300,7 +2294,6 @@ class ProximalProjectionFB2(ObjectiveFunction):
             # reset to last good params
             self._eq.params_dict = self.history[-1][self._eq_idx]
             self._eq_solve_objective.update_constraint_target(self._eq)
-
         return xopt, xeq
 
     def compute_scaled(self, x, constants=None):

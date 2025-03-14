@@ -101,25 +101,23 @@ def _lstsq(A, y):
 
     jnp.linalg.lstsq doesn't have JVP defined and is slower than needed,
     so we use regularized cholesky.
+
+    For square systems, solves Ax=y directly.
     """
     A = jnp.atleast_2d(A)
     y = jnp.atleast_1d(y)
+    eps = jnp.sqrt(jnp.finfo(A.dtype).eps)
     if A.shape[-2] == A.shape[-1]:
         return jnp.linalg.solve(A, y) if y.size > 1 else jnp.squeeze(y / A)
-
-    eps = jnp.sqrt(jnp.finfo(A.dtype).eps)
-    if A.shape[-2] > A.shape[-1]:
+    elif A.shape[-2] > A.shape[-1]:
         P = A.T @ A + eps * jnp.eye(A.shape[-1])
         return cho_solve(cho_factor(P), A.T @ y)
-
-    P = A @ A.T + eps * jnp.eye(A.shape[-2])
-    return A.T @ cho_solve(cho_factor(P), y)
+    else:
+        P = A @ A.T + eps * jnp.eye(A.shape[-2])
+        return A.T @ cho_solve(cho_factor(P), y)
 
 
 def _tangent_solve(g, y):
-    # For the singular integrals, the Jacobian will be inaccurate,
-    # since differentiating the quadrature is a poor approximation
-    # for differentiating a singular integral.
     return _lstsq(jax.jacfwd(g)(y), y)
 
 

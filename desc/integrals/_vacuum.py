@@ -65,7 +65,7 @@ def _fourier_compute_Phi(self, *, chunk_size=None):
     assert F.shape == (self.Phi_grid.num_nodes, self.basis.num_modes)
     # Solving overdetermined system useful to reduce size of F while
     # retaining FFT interpolation accuracy in the singular integrals.
-    # TODO: use jax custom linear solve and ``jax.scipy.sparse.linalg.cg``?
+    # TODO: use ``jax.scipy.sparse.linalg.cg``
     self._data["Phi"]["Phi_mn"] = (
         jnp.linalg.solve(F, g)
         if (self.Phi_grid.num_nodes == self.basis.num_modes)

@@ -88,6 +88,41 @@ class TestFourierRZCurve:
         np.testing.assert_allclose(B, np.array([[0, 0, 1]]), atol=1e-12)
 
     @pytest.mark.unit
+    def test_centroid_frame(self):
+        """Test centroid frame of circular curve."""
+        c = FourierRZCurve()
+        data = c.compute(
+            ["centroid_tangent", "centroid_normal", "centroid_binormal"],
+            basis="xyz",
+            grid=0,
+        )
+        T, N, B = (
+            data["centroid_tangent"],
+            data["centroid_normal"],
+            data["centroid_binormal"],
+        )
+        np.testing.assert_allclose(T, np.array([[0, 1, 0]]), atol=1e-12)
+        # note that the normal is flipped wrt the frenet direction
+        np.testing.assert_allclose(N, np.array([[1, 0, 0]]), atol=1e-12)
+        np.testing.assert_allclose(B, np.array([[0, 0, -1]]), atol=1e-12)
+        c.rotate(angle=np.pi)
+        c.flip([0, 1, 0])
+        c.translate([1, 1, 1])
+        data = c.compute(
+            ["centroid_tangent", "centroid_normal", "centroid_binormal"],
+            basis="xyz",
+            grid=0,
+        )
+        T, N, B = (
+            data["centroid_tangent"],
+            data["centroid_normal"],
+            data["centroid_binormal"],
+        )
+        np.testing.assert_allclose(T, np.array([[0, 1, 0]]), atol=1e-12)
+        np.testing.assert_allclose(N, np.array([[-1, 0, 0]]), atol=1e-12)
+        np.testing.assert_allclose(B, np.array([[0, 0, -1]]), atol=1e-12)
+
+    @pytest.mark.unit
     def test_coords(self):
         """Test lab frame coordinates of circular curve."""
         c = FourierRZCurve()
@@ -405,6 +440,41 @@ class TestFourierXYZCurve:
         np.testing.assert_allclose(B, np.array([[0, 1, 0]]), atol=1e-12)
 
     @pytest.mark.unit
+    def test_centroid_frame(self):
+        """Test centroid frame of circular curve."""
+        c = FourierXYZCurve()
+        data = c.compute(
+            ["centroid_tangent", "centroid_normal", "centroid_binormal"],
+            basis="xyz",
+            grid=0,
+        )
+        T, N, B = (
+            data["centroid_tangent"],
+            data["centroid_normal"],
+            data["centroid_binormal"],
+        )
+        np.testing.assert_allclose(T, np.array([[0, 0, -1]]), atol=1e-12)
+        # note that the normal is flipped wrt the frenet direction
+        np.testing.assert_allclose(N, np.array([[1, 0, 0]]), atol=1e-12)
+        np.testing.assert_allclose(B, np.array([[0, -1, 0]]), atol=1e-12)
+        c.rotate(angle=np.pi)
+        c.flip([0, 1, 0])
+        c.translate([1, 1, 1])
+        data = c.compute(
+            ["centroid_tangent", "centroid_normal", "centroid_binormal"],
+            basis="xyz",
+            grid=0,
+        )
+        T, N, B = (
+            data["centroid_tangent"],
+            data["centroid_normal"],
+            data["centroid_binormal"],
+        )
+        np.testing.assert_allclose(T, np.array([[0, 0, -1]]), atol=1e-12)
+        np.testing.assert_allclose(N, np.array([[-1, 0, 0]]), atol=1e-12)
+        np.testing.assert_allclose(B, np.array([[0, -1, 0]]), atol=1e-12)
+
+    @pytest.mark.unit
     def test_coords(self):
         """Test lab frame coordinates of circular curve."""
         c = FourierXYZCurve()
@@ -579,6 +649,41 @@ class TestFourierPlanarCurve:
         np.testing.assert_allclose(T, np.array([[0, 0, -1]]), atol=1e-12)
         np.testing.assert_allclose(N, np.array([[1, 0, 0]]), atol=1e-12)
         np.testing.assert_allclose(B, np.array([[0, 1, 0]]), atol=1e-12)
+
+    @pytest.mark.unit
+    def test_centroid_frame(self):
+        """Test centroid frame of circular curve."""
+        c = FourierPlanarCurve()
+        data = c.compute(
+            ["centroid_tangent", "centroid_normal", "centroid_binormal"],
+            basis="xyz",
+            grid=0,
+        )
+        T, N, B = (
+            data["centroid_tangent"],
+            data["centroid_normal"],
+            data["centroid_binormal"],
+        )
+        np.testing.assert_allclose(T, np.array([[0, 0, -1]]), atol=1e-12)
+        # note that the normal is flipped wrt the frenet direction
+        np.testing.assert_allclose(N, np.array([[1, 0, 0]]), atol=1e-12)
+        np.testing.assert_allclose(B, np.array([[0, -1, 0]]), atol=1e-12)
+        c.rotate(angle=np.pi)
+        c.flip([0, 1, 0])
+        c.translate([1, 1, 1])
+        data = c.compute(
+            ["centroid_tangent", "centroid_normal", "centroid_binormal"],
+            basis="xyz",
+            grid=0,
+        )
+        T, N, B = (
+            data["centroid_tangent"],
+            data["centroid_normal"],
+            data["centroid_binormal"],
+        )
+        np.testing.assert_allclose(T, np.array([[0, 0, -1]]), atol=1e-12)
+        np.testing.assert_allclose(N, np.array([[-1, 0, 0]]), atol=1e-12)
+        np.testing.assert_allclose(B, np.array([[0, -1, 0]]), atol=1e-12)
 
     @pytest.mark.unit
     def test_coords(self):

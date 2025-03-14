@@ -1035,7 +1035,8 @@ def _length_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
     label="\\mathbf{T}_{\\mathrm{Centroid}}",
     units="~",
     units_long="None",
-    description="Tangent unit vector to curve in centroid frame (see Singh et al. 2020, section 3.1)",
+    description="Tangent unit vector to curve in centroid frame "
+    "(see Singh et al. 2020, section 3.1)",
     dim=3,
     params=[],
     transforms={},
@@ -1057,21 +1058,29 @@ def _centroid_tangent(params, transforms, profiles, data, **kwargs):
     label="\\mathbf{N}_{\\mathrm{Centroid}}",
     units="~",
     units_long="None",
-    description="Normal unit vector to curve in centroid frame (see Singh et al. 2020, section 3.1)",
+    description="Normal unit vector to curve in centroid frame "
+    "(see Singh et al. 2020, section 3.1)",
     dim=3,
     params=[],
     transforms={},
     profiles=[],
     coordinates="s",
-    data=["x", "center", "centroid_tangent"],
+    data=["x", "center", "centroid_tangent", "phi"],
     parameterization="desc.geometry.core.Curve",
 )
 def _centroid_normal(params, transforms, profiles, data, **kwargs):
-    delta = data["x"] - data["center"]  # do I need to convert this to xyz?
+    x = rpz2xyz(data["x"])
+    center = rpz2xyz(data["center"])
+    delta = x - center
+
     delta_orth = (
         delta - dot(delta, data["centroid_tangent"])[:, None] * data["centroid_tangent"]
     )
     delta_orth = delta_orth / jnp.linalg.norm(delta_orth, axis=-1)[:, None]
+
+    # back to rpz frame
+    delta_orth = xyz2rpz_vec(delta_orth, phi=data["phi"])
+
     data["centroid_normal"] = delta_orth
 
     return data
@@ -1082,9 +1091,10 @@ def _centroid_normal(params, transforms, profiles, data, **kwargs):
     label="\\mathbf{B}_{\\mathrm{Centroid}}",
     units="~",
     units_long="None",
-    description="Binormal unit vector to curve in centroid frame (see Singh et al. 2020, section 3.1)",
+    description="Binormal unit vector to curve in centroid frame "
+    "(see Singh et al. 2020, section 3.1)",
     dim=3,
-    params=[],
+    params=["rotmat"],
     transforms={},
     profiles=[],
     coordinates="s",
@@ -1094,6 +1104,6 @@ def _centroid_normal(params, transforms, profiles, data, **kwargs):
 def _centroid_binormal(params, transforms, profiles, data, **kwargs):
     data["centroid_binormal"] = cross(
         data["centroid_tangent"], data["centroid_normal"]
-    )  # TODO: figure out if rotation is necessary for these unit vecs
+    ) * jnp.linalg.det(params["rotmat"].reshape((3, 3)))
 
     return data

@@ -783,18 +783,13 @@ class FourierRZToroidalSurface(Surface):
         else:
             return offset_surface
 
-    def get_axis(self, beta=None):
+    def get_axis(self):
         """Get the axis of the surface.
-
-        Parameters
-        ----------
-        beta : float
-            Beta value of the equilibrium to get some idea on the Shafranov shift.
 
         Returns
         -------
         axis : FourierRZCurve
-            Axis of the surface.
+            Axis of the surface passing through the geometric center.
 
         """
         from desc.geometry import FourierRZCurve
@@ -804,11 +799,12 @@ class FourierRZToroidalSurface(Surface):
         data = self.compute(["R", "Z"], grid=grid)
         R = data["R"]
         Z = data["Z"]
+        # Calculate the R and Z values at theta=0 and pi degrees for bunch of toroidal
+        # angles, find the mid point of them and fit a Fourier curve to it.
         Rout = R[::2]
         Rin = R[1::2]
         Zout = Z[::2]
         Zin = Z[1::2]
-        # TODO: depending on the beta value, shift the mid point to the outside
         Rmid = (Rout + Rin) / 2
         Zmid = (Zout + Zin) / 2
         phis = (
@@ -1112,18 +1108,13 @@ class ZernikeRZToroidalSection(Surface):
                 idxZ = self.Z_basis.get_idx(ll, mm, 0)
                 self.Z_lmn = put(self.Z_lmn, idxZ, ZZ)
 
-    def get_axis(self, beta=None):
+    def get_axis(self):
         """Get the axis of the surface.
-
-        Parameters
-        ----------
-        beta : float
-            Beta value of the equilibrium to get some idea on the Shafranov shift.
 
         Returns
         -------
         axis : FourierRZCurve
-            Axis of the surface.
+            Axis of the surface passing through the geometric center.
 
         """
         from desc.geometry import FourierRZCurve
@@ -1132,11 +1123,12 @@ class ZernikeRZToroidalSection(Surface):
         data = self.compute(["R", "Z"], grid=grid)
         R = data["R"]
         Z = data["Z"]
+        # Calculate the R and Z values at theta=0 and pi degrees for bunch of toroidal
+        # angles, find the mid point of them and fit a Fourier curve to it.
         Rout = R[::2]
         Rin = R[1::2]
         Zout = Z[::2]
         Zin = Z[1::2]
-        # TODO: depending on the beta value, shift the mid point to the outside
         Rmid = (Rout + Rin) / 2
         Zmid = (Zout + Zin) / 2
         phis = jnp.zeros_like(Rmid)

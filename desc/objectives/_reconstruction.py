@@ -1,4 +1,5 @@
 import numpy as np
+from scipy.constants import mu_0
 
 from desc.backend import jnp
 from desc.compute import get_profiles, get_transforms, xyz2rpz
@@ -443,8 +444,8 @@ class RogowskiLoop(_Objective):
     """
 
     _coordinates = "rtz"
-    _units = "(Wb)"
-    _print_value_fmt = "Toroidal Flux: "
+    _units = "(Tm)"
+    _print_value_fmt = "Net Enclosed Current: "
 
     def __init__(
         self,
@@ -524,7 +525,8 @@ class RogowskiLoop(_Objective):
         eq = self._eq
 
         if self._normalize:
-            self._normalization = eq.Psi
+            scales = compute_scaling_factors(eq)
+            self._normalization = scales["I"] * mu_0
         if self._vc_source_grid is None:
             # for axisymmetry we still need to know about toroidal effects, so its
             # cheapest to pretend there are extra field periods
@@ -907,6 +909,7 @@ class PointBMeasurement(_Objective):
             )
 
         self._constants = {
+            # TODO: should normalize also by the number of measurements
             "quad_weights": 1.0,
             "field_grid": self._field_grid,
             "measurement_coords": self._measurement_coords,

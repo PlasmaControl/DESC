@@ -1073,13 +1073,13 @@ def _centroid_normal(params, transforms, profiles, data, **kwargs):
     center = rpz2xyz(data["center"])
     delta = x - center
 
+    # back to rpz frame
+    delta = xyz2rpz_vec(delta, phi=data["phi"])
+
     delta_orth = (
         delta - dot(delta, data["centroid_tangent"])[:, None] * data["centroid_tangent"]
     )
     delta_orth = delta_orth / jnp.linalg.norm(delta_orth, axis=-1)[:, None]
-
-    # back to rpz frame
-    delta_orth = xyz2rpz_vec(delta_orth, phi=data["phi"])
 
     data["centroid_normal"] = delta_orth
 

@@ -14,6 +14,7 @@ from scipy.constants import mu_0
 from desc.backend import jnp
 
 from .data_index import register_compute_fun
+from .geom_utils import rpz2xyz, rpz2xyz_vec, xyz2rpz
 from .utils import (
     cross,
     dot,
@@ -3533,9 +3534,7 @@ def _K_vc(params, transforms, profiles, data, **kwargs):
     parameterization="desc.coils._FramedCoil",
 )
 def _p_frame(params, transforms, profiles, data, **kwargs):
-    alpha = transforms["alpha"].transform(
-        params["alpha_n"], dz=0
-    )  # TODO: check if this is right
+    alpha = transforms["alpha"].transform(params["alpha_n"], dz=0)
 
     p_frame = (
         data["centroid_normal"] * jnp.cos(alpha)[:, jnp.newaxis]
@@ -3634,10 +3633,10 @@ def _curv2_frame(params, transforms, profiles, data, **kwargs):
 )
 def _u_fb(params, transforms, profiles, data, **kwargs):
     grid = transforms["grid"]
-    # TODO: check that grid is LinearGrid?
+
     data["u_fb"] = (
-        (grid.nodes[:, 0] - 0.5) / (0.5) * 0.999
-    )  # rescale to [-0.999,0.999], as the finite build term is singular at the edge
+        (grid.nodes[:, 0] - 0.5) / (0.5) * 0.9999
+    )  # rescale to [-0.9999,0.9999], as the finite build term is singular at the edge
     return data
 
 
@@ -3657,10 +3656,10 @@ def _u_fb(params, transforms, profiles, data, **kwargs):
 )
 def _v_fb(params, transforms, profiles, data, **kwargs):
     grid = transforms["grid"]
-    # TODO: check that grid is LinearGrid?
+
     data["v_fb"] = (
-        (grid.nodes[:, 1] - jnp.pi) / (jnp.pi) * 0.999
-    )  # rescale to [-0.999,0.999]
+        (grid.nodes[:, 1] - jnp.pi) / (jnp.pi) * 0.9999
+    )  # rescale to [-0.9999,0.9999]
     return data
 
 
@@ -3809,7 +3808,7 @@ def _B_kappa_fb(params, transforms, profiles, data, **kwargs):
     params=["current", "cross_section_dims"],
     transforms={},
     profiles=[],
-    coordinates="r",
+    coordinates="z",
     data=["curvature", "frenet_binormal"],
     parameterization="desc.coils._FiniteBuildCoil",
 )
@@ -3854,7 +3853,7 @@ def _B_b_fb(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["p_frame", "q_frame", "u_fb", "v_fb"],
+    data=["p_frame", "q_frame", "u_fb", "v_fb", "phi"],
     parameterization="desc.coils._FiniteBuildCoil",
 )
 def _x_fb(params, transforms, profiles, data, **kwargs):
@@ -3872,6 +3871,14 @@ def _x_fb(params, transforms, profiles, data, **kwargs):
     u = u[:, jnp.newaxis]
     v = v[:, jnp.newaxis]
 
-    data["x_fb"] = x_centerline + a / 2 * u * p_frame + b / 2 * v * q_frame
+    # move everything to xyz
+    phi = data["phi"]
+    x_centerline = rpz2xyz(x_centerline)
+    p_frame = rpz2xyz_vec(p_frame, phi=phi)
+    q_frame = rpz2xyz_vec(q_frame, phi=phi)
+
+    x_fb = x_centerline + a / 2 * u * p_frame + b / 2 * v * q_frame
+
+    data["x_fb"] = xyz2rpz(x_fb)
 
     return data

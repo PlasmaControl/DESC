@@ -1248,7 +1248,8 @@ class _FiniteBuildCoil(_FramedCoil, Optimizable, ABC):
         Defaults to the standard single-filament Biot-Savart integral. If
         `multifilament` is set to `True` in the params dictionary,
         a multifilament integral is used instead. The coil current may be overridden
-        by including `current` in the `params` dictionary.
+        by including `current` in the `params` dictionary. The cross section
+        grid may be overridden by including `xsection_grid` in the `params` dictionary.
 
         Parameters
         ----------
@@ -1281,6 +1282,7 @@ class _FiniteBuildCoil(_FramedCoil, Optimizable, ABC):
         multifilament = False
         if params is not None:
             multifilament = params.pop("multifilament", False)
+            xsection_grid = params.pop("xsection_grid", None)
 
             # make params None if it's empty to correctly handle compute functions
             if not params:
@@ -1295,7 +1297,7 @@ class _FiniteBuildCoil(_FramedCoil, Optimizable, ABC):
                     coords,
                     params,
                     basis,
-                    xsection_grid=None,
+                    xsection_grid=xsection_grid,
                     centerline_grid=source_grid,
                     transforms=transforms,
                 )
@@ -1304,7 +1306,7 @@ class _FiniteBuildCoil(_FramedCoil, Optimizable, ABC):
                     coords,
                     params,
                     basis,
-                    xsection_grid=None,
+                    xsection_grid=xsection_grid,
                     centerline_grid=source_grid,
                     transforms=transforms,
                 )
@@ -1336,40 +1338,36 @@ class _FiniteBuildCoil(_FramedCoil, Optimizable, ABC):
         # set cross section grid if not provided for u,v cross sectional coordinates
         # L has a doubled grid size to be consistent with how M and N work
         if xsection_grid is None:
-            xsection_grid = LinearGrid(
-                L=50, M=25, endpoint=True
-            )  # high resolution for now for accuracy
+            L = 4
+            M = 2
         elif isinstance(xsection_grid, numbers.Integral):
-            xsection_grid = LinearGrid(
-                L=xsection_grid * 2, M=xsection_grid, endpoint=True
-            )
-        elif isinstance(xsection_grid, LinearGrid) and not xsection_grid.endpoint:
-            raise ValueError(
-                "The cross section grid must have endpoint=True to "
-                "compute the self field"
-            )
-        else:
-            xsection_grid = (
-                xsection_grid.copy()
-            )  # is this memory efficient? Don't want to mutate the input grid
+            L = xsection_grid * 2
+            M = xsection_grid
+        elif isinstance(xsection_grid, LinearGrid):
+            if not xsection_grid.endpoint:
+                raise ValueError(
+                    "The cross section grid must have endpoint=True to compute "
+                    "the self field"
+                )
+            elif xsection_grid.N != 1:
+                raise ValueError("The cross section grid must have dimension N=1")
+            else:
+                L = xsection_grid.L
+                M = xsection_grid.M
 
         # set centerline grid if not provided for phi cross sectional coordinates
         if centerline_grid is None:
-            centerline_grid = LinearGrid(N=500)  # high resolution for now for accuracy
+            centerline_grid = LinearGrid(N=50)
         elif isinstance(centerline_grid, numbers.Integral):
             centerline_grid = LinearGrid(N=centerline_grid)
-
-        # validate the grid dimensions
-        if xsection_grid.N != 1:
-            raise ValueError("The cross section grid must have dimension N=1")
-        if centerline_grid.L != 1 or centerline_grid.M != 1:
-            raise ValueError("The centerline grid must have dimension L=1 and M=1")
+        elif isinstance(centerline_grid, LinearGrid):
+            if centerline_grid.L != 1 or centerline_grid.M != 1:
+                raise ValueError("The centerline grid must have dimension L=1 and M=1")
 
         # expand the xsection grid to include the centerline grid dimensions
-        L = xsection_grid.L
-        M = xsection_grid.M
-        N = centerline_grid.N
-        xsection_grid.change_resolution(L, M, N)
+        # Can't just copy N, because there should be no endpoint in the centerline grid
+        zeta = centerline_grid.nodes[:, 2]
+        xsection_grid = LinearGrid(L=L, M=M, zeta=zeta)
 
         # pack the parameters for the self field computation
         B_fb_params = {
@@ -1399,6 +1397,8 @@ class _FiniteBuildCoil(_FramedCoil, Optimizable, ABC):
             params=B_fb_params,
             profiles={},
         )["x_fb"]
+
+        x_fb = rpz2xyz(x_fb)
 
         filament_count = xsection_grid.num_nodes // xsection_grid.num_zeta
 
@@ -1495,45 +1495,48 @@ class _FiniteBuildCoil(_FramedCoil, Optimizable, ABC):
         # set cross section grid if not provided for u,v cross sectional coordinates
         # L has a doubled grid size to be consistent with how M and N work
         if xsection_grid is None:
-            xsection_grid = LinearGrid(L=4, M=2, endpoint=True)
+            L = 4
+            M = 2
         elif isinstance(xsection_grid, numbers.Integral):
-            xsection_grid = LinearGrid(
-                L=xsection_grid * 2, M=xsection_grid, endpoint=True
-            )
-        elif isinstance(xsection_grid, LinearGrid) and not xsection_grid.endpoint:
-            raise ValueError(
-                "The cross section grid must have endpoint=True to compute "
-                "the self field"
-            )
-        else:
-            xsection_grid = (
-                xsection_grid.copy()
-            )  # is this memory efficient? Don't want to mutate the input grid
+            L = xsection_grid * 2
+            M = xsection_grid
+        elif isinstance(xsection_grid, LinearGrid):
+            if not xsection_grid.endpoint:
+                raise ValueError(
+                    "The cross section grid must have endpoint=True to compute "
+                    "the self field"
+                )
+            elif xsection_grid.N != 1:
+                raise ValueError("The cross section grid must have dimension N=1")
+            else:
+                L = xsection_grid.L
+                M = xsection_grid.M
 
         # set centerline grid if not provided for phi cross sectional coordinates
         if centerline_grid is None:
             centerline_grid = LinearGrid(N=50)
         elif isinstance(centerline_grid, numbers.Integral):
             centerline_grid = LinearGrid(N=centerline_grid)
-
-        # validate the grid dimensions
-        if xsection_grid.N != 1:
-            raise ValueError("The cross section grid must have dimension N=1")
-        if centerline_grid.L != 1 or centerline_grid.M != 1:
-            raise ValueError("The centerline grid must have dimension L=1 and M=1")
+        elif isinstance(centerline_grid, LinearGrid):
+            if centerline_grid.L != 1 or centerline_grid.M != 1:
+                raise ValueError("The centerline grid must have dimension L=1 and M=1")
 
         # expand the xsection grid to include the centerline grid dimensions
-        L = xsection_grid.L
-        M = xsection_grid.M
-        N = centerline_grid.N
-        xsection_grid.change_resolution(L, M, N)
+        # Can't just copy N, because there should be no endpoint in the centerline grid
+        zeta = centerline_grid.nodes[:, 2]
+        xsection_grid = LinearGrid(L=L, M=M, zeta=zeta)
 
         abdelta = finite_build_regularization_rect(
             cross_section_dims[0], cross_section_dims[1]
         )
 
         # B_b and B_reg are only computed on the centerline
-        B_b_fb = self.compute("B_b_fb", grid=centerline_grid, params=params)["B_b_fb"]
+        B_b_fb = self.compute(
+            "B_b_fb",
+            grid=centerline_grid,
+            params=params,
+            basis="xyz",
+        )["B_b_fb"]
 
         # compute regularized self field integral
         data = self.compute(
@@ -1589,12 +1592,6 @@ class _FiniteBuildCoil(_FramedCoil, Optimizable, ABC):
             profiles={},
         )["B_kappa_fb"]
 
-        # expand the vector series to include the cross section dimensions
-        B_b_fb = xsection_grid.expand(B_b_fb, "zeta")
-        B_reg_fb = xsection_grid.expand(B_reg_fb, "zeta")
-
-        B_self = B_0_fb + B_kappa_fb + B_b_fb + B_reg_fb
-
         # get position of field measurement points in lab frame
         x_fb = compute_fun(
             self,
@@ -1604,16 +1601,41 @@ class _FiniteBuildCoil(_FramedCoil, Optimizable, ABC):
             profiles={},
         )["x_fb"]
 
+        x_fb = rpz2xyz(x_fb)
+
+        x_center = xyz2rpz(data["x"])
+        x_center = xsection_grid.expand(x_center, "zeta")
+        phi = x_center[:, 1]
+        # the vectors for the B components are implicitly anchored to the CENTERLINE
+
+        B_0_fb = rpz2xyz_vec(B_0_fb, phi=phi)
+        B_kappa_fb = rpz2xyz_vec(B_kappa_fb, phi=phi)
+
+        # expand the vector series to include the cross section dimensions
+        B_b_fb = xsection_grid.expand(B_b_fb, "zeta")
+        B_reg_fb = xsection_grid.expand(B_reg_fb, "zeta")
+
+        B_self = B_0_fb + B_kappa_fb + B_b_fb + B_reg_fb
+
         if coil_frame:  # reproject the field to the t,p,q frame
             t_frame = self.compute(
-                "centroid_tangent", grid=centerline_grid, params=params
+                "centroid_tangent",
+                grid=centerline_grid,
+                params=params,
+                basis="xyz",
             )["centroid_tangent"]
-            p_frame = self.compute("p_frame", grid=centerline_grid, params=params)[
-                "p_frame"
-            ]
-            q_frame = self.compute("q_frame", grid=centerline_grid, params=params)[
-                "q_frame"
-            ]
+            p_frame = self.compute(
+                "p_frame",
+                grid=centerline_grid,
+                params=params,
+                basis="xyz",
+            )["p_frame"]
+            q_frame = self.compute(
+                "q_frame",
+                grid=centerline_grid,
+                params=params,
+                basis="xyz",
+            )["q_frame"]
 
             t_frame = xsection_grid.expand(t_frame, "zeta")
             p_frame = xsection_grid.expand(p_frame, "zeta")
@@ -1678,8 +1700,8 @@ class FourierPlanarFiniteBuildCoil(_FiniteBuildCoil, FourierPlanarCoil):
 
     def __init__(
         self,
-        cross_section_dims=[0.1],
-        cross_section_shape="circular",
+        cross_section_dims=[0.1, 0.1],
+        cross_section_shape="rectangular",
         current=1,
         center=[10, 0, 0],
         normal=[0, 1, 0],
@@ -1702,6 +1724,56 @@ class FourierPlanarFiniteBuildCoil(_FiniteBuildCoil, FourierPlanarCoil):
             modes,
             basis,
             name,
+        )
+
+    @classmethod
+    def from_FourierPlanarCoil(
+        cls,
+        coil,
+        cross_section_dims=[0.1, 0.1],
+        cross_section_shape="rectangular",
+        name="",
+    ):
+        """Given FourierPlanarCoil, create a FourierPlanarFiniteBuildCoil.
+
+        Preserves all coil properties, but adds cross sectional dimensions.
+
+        Parameters
+        ----------
+        coil : FourierPlanarCoil
+            Coil to copy properties from.
+        cross_section_dims : array-like
+            Dimensions of the coil cross section, with 1 or 2 dimensions depending on
+            the cross section shape (circular or rectangular).
+        cross_section_shape : str
+            Shape of the coil cross section, either 'circular' or 'rectangular'.
+        name : str
+            Name for this coil.
+
+
+        Returns
+        -------
+        coil : FourierPlanarFiniteBuildCoil
+            New representation of the coil with finite build dimensions.
+
+        """
+        current = coil.current
+        center = coil.center
+        normal = coil.normal
+        r_n = coil.r_n
+        r_basis = coil.r_basis
+        basis = coil.basis
+
+        return FourierPlanarFiniteBuildCoil(
+            cross_section_dims=cross_section_dims,
+            cross_section_shape=cross_section_shape,
+            current=current,
+            center=center,
+            normal=normal,
+            r_n=r_n,
+            modes=r_basis.modes[:, 2],
+            basis=basis,
+            name=name,
         )
 
 

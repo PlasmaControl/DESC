@@ -852,7 +852,7 @@ class CoilSetMinDistance(_Objective):
 
 
 class CoilSetMaxNormB(_Objective):
-    """Target the maximum magnetic field magnetic field on coil for a given coilset.
+    """Target the maximum magnetic field on coil for a given coilset.
 
     Self field on the coil is computed with the finite build method, and field from
     other coils on the coil is computed with the filamentary method.

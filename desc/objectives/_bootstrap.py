@@ -39,6 +39,10 @@ class BootstrapRedlConsistency(_Objective):
         First entry must be M=1. Second entry is the toroidal mode number N,
         used for evaluating the Redl bootstrap current formula. Set to 0 for axisymmetry
         or quasi-axisymmetry; set to +/-NFP for quasi-helical symmetry.
+    degree : int, optional
+        The `degree` kwarg to pass to the `<J*B>_Redl` compute call, which
+        controls the degree of polynomial fit to the Redl current derivative
+        before it is integrated.
 
     """
 
@@ -62,6 +66,7 @@ class BootstrapRedlConsistency(_Objective):
         deriv_mode="auto",
         grid=None,
         helicity=(1, 0),
+        degree=None,
         name="Bootstrap current self-consistency (Redl)",
         jac_chunk_size=None,
     ):
@@ -71,6 +76,7 @@ class BootstrapRedlConsistency(_Objective):
         assert helicity[0] == 1, "Redl bootstrap current model assumes helicity[0] == 1"
         self._grid = grid
         self.helicity = helicity
+        self._degree = degree
         super().__init__(
             things=eq,
             target=target,
@@ -124,6 +130,18 @@ class BootstrapRedlConsistency(_Objective):
             not (self.helicity[1] == 0 or abs(self.helicity[1]) == eq.NFP),
             ValueError,
             "Helicity toroidal mode number should be 0 (QA) or +/- NFP (QH)",
+        )
+        rho = grid.nodes[grid.unique_rho_idx, 0]
+        errorif(
+            np.any(np.isclose(rho, 0)),
+            ValueError,
+            "Redl formula is undefined" "at rho=0, but grid has grid points at rho=0",
+        )
+
+        errorif(
+            np.any(np.isclose(rho, 1)),
+            ValueError,
+            "Redl formula is undefined" "at rho=1, but grid has grid points at rho=1",
         )
 
         self._dim_f = grid.num_rho
@@ -197,6 +215,7 @@ class BootstrapRedlConsistency(_Objective):
             "transforms": transforms,
             "profiles": profiles,
             "helicity": self._helicity,
+            "degree": self._degree,
         }
 
         timer.stop("Precomputing transforms")
@@ -235,6 +254,7 @@ class BootstrapRedlConsistency(_Objective):
             transforms=constants["transforms"],
             profiles=constants["profiles"],
             helicity=constants["helicity"],
+            degree=constants["degree"],
         )
         return constants["transforms"]["grid"].compress(
             data["<J*B>"] - data["<J*B> Redl"]

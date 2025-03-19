@@ -1,0 +1,45 @@
+site_name: DESC Documentation
+theme:
+  name: material
+  logo: _static/images/logo_med_clear.png
+  favicon: _static/images/desc_icon.ico
+  palette:
+    # Dark Mode
+    - scheme: slate
+      primary: black
+      accent: deep purple
+      toggle:
+        icon: material/weather-sunny
+        name: Dark Mode
+
+    # Light Mode
+    - scheme: default
+      primary: deep purple
+      accent: green
+      toggle:
+        icon: material/weather-night
+        name: Light Mode
+
+copyright: Copyright 2020, Plasma Control Group at Princeton University
+
+nav:
+  - Home: index.md
+  - Theory: theory.md
+  - Installation: installation.md
+  - Performance Tips: performance_tips.md
+  - Outputs: output.md
+  - Command Line: command_line.md
+  - Inputs: input.md
+  - API:
+    - Magnetic Fields: api_fields.md
+
+plugins:
+  - search
+  - mkdocstrings
+
+markdown_extensions:
+  - pymdownx.arithmatex:
+      generic: true
+
+extra_javascript:
+  - https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-mml-chtml.js

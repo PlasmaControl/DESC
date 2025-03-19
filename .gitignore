@@ -1,12 +1,6 @@
 __pycache__/
-build/
-data/
-dist/
-docs/_api
-docs/_build
-htmlcov/
-local/
-matlab/
+site/
+jax-caches/
 tests/benchmarks/.benchmarks/
 .coverage
 .ipynb_checkpoints/

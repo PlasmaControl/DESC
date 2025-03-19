@@ -33,7 +33,13 @@ class BootstrapRedlConsistency(_Objective):
         Equilibrium that will be optimized to satisfy the Objective.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
-        Defaults to ``LinearGrid(eq.L_grid, eq.M_grid, eq.N_grid)``
+        Defaults to ``grid = LinearGrid(
+                M=eq.M_grid,
+                N=eq.N_grid,
+                NFP=eq.NFP,
+                sym=eq.sym,
+                rho=np.linspace(1 / eq.L, 1, eq.L) - 1 / (2 * eq.L),
+            )``
     helicity : tuple, optional
         Type of quasi-symmetry (M, N). Default = quasi-axisymmetry (1, 0).
         First entry must be M=1. Second entry is the toroidal mode number N,

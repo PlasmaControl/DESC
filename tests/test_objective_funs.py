@@ -2886,7 +2886,7 @@ class TestComputeScalarResolution:
         f = np.zeros_like(self.res_array, dtype=float)
         for i, res in enumerate(self.res_array):
             grid = LinearGrid(
-                M=int(self.eq.M * res), N=int(self.eq.N * res), NFP=self.eq.NFP
+                M=int(self.eq.M * res), N=int(self.eq.N * res), NFP=self.eq.NFP, rho=0.7
             )
             obj = ObjectiveFunction(
                 BootstrapRedlConsistency(eq=eq, grid=grid), use_jit=False

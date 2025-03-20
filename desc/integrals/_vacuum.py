@@ -6,7 +6,6 @@ from matplotlib import pyplot as plt
 
 from desc.backend import fixed_point, irfft2, jit, jnp, rfft2
 from desc.basis import DoubleFourierSeries
-from desc.batching import vmap_chunked
 from desc.grid import LinearGrid
 from desc.integrals.quad_utils import eta_zero
 from desc.integrals.singularities import (
@@ -22,84 +21,109 @@ from desc.transform import Transform
 from desc.utils import errorif, setdefault, warnif
 
 
+def _to_real_coef(grid, f):
+    f = rfft2(
+        f.reshape(grid.num_theta, grid.num_zeta),
+        norm="forward",
+        axes=(0, 1),
+    ).ravel()
+    return jnp.concatenate([f.real, f.imag])
+
+
+def _to_rfft(grid, f):
+    f = f[: f.size // 2] + 1j * f[f.size // 2 :]
+    f = f.reshape(grid.num_theta, grid.num_zeta // 2 + 1)
+    return f
+
+
 def _nonhomogenous_part(self, chunk_size):
-    return jnp.atleast_1d(
-        -singular_integral(
-            self._data["Phi"],
-            self._data["src"],
-            interpolator=self._interpolator["Phi"],
-            kernel=_kernel_Bn_over_r,
-            chunk_size=chunk_size,
-        ).squeeze()
-        / (2 * jnp.pi)
-    )
-
-
-@partial(vmap_chunked, in_axes=(None, 0, 0, None), chunk_size=None)
-def _fourier_operator(self, m, n, chunk_size):
-    # Finite-dimensional approximation of linear operator is
-    # _fourier_operator(Φₘₙ) = F @ Φₘₙ.
-    Phi = self.basis._get_fun_mode(m, n)
-    evl_Phi = Phi(self.Phi_grid)
-    src_data = self._data["src"].copy()
-    src_data["Phi"] = evl_Phi if self._same_grid_phi_src else Phi(self.src_grid)
-
-    return evl_Phi + singular_integral(
-        eval_data=self._data["Phi"],
-        source_data=src_data,
+    return -singular_integral(
+        self._data["Phi"],
+        self._data["src"],
         interpolator=self._interpolator["Phi"],
-        kernel=_kernel_Phi_dGp_dn,
-        known_map=("Phi", Phi),
+        kernel=_kernel_Bn_over_r,
         chunk_size=chunk_size,
-    ).squeeze() / (2 * jnp.pi)
+    ).squeeze(axis=-1) / (2 * jnp.pi)
 
 
 @partial(jit, static_argnames=["chunk_size"])
-def _fourier_compute_Phi(self, *, chunk_size=None):
+def _lsmr_compute_Phi(self, basis=None, *, chunk_size=None):
+    """Compute Fourier harmonics Φ_mn by solving least squares system.
+
+    This is an Adomian Decomposition method, but because the
+    integral equation is linear under Fourier decomposition
+    the formula for the coefficients is known (i.e. not recursive).
+    """
     if "Phi_mn" in self._data["Phi"]:
         return self._data
 
     g = _nonhomogenous_part(self, chunk_size)
-    _, m, n = self.basis.modes.T
-    F = _fourier_operator(self, m, n, chunk_size).T
-    assert F.shape == (self.Phi_grid.num_nodes, self.basis.num_modes)
+
+    basis = setdefault(basis, self.basis)
+    evl_Phi = basis.evaluate(self.Phi_grid)
+    src_data = self._data["src"].copy()
+    src_data["Phi"] = (
+        evl_Phi if self._same_grid_phi_src else basis.evaluate(self.src_grid)
+    )
+    F = evl_Phi + singular_integral(
+        eval_data=self._data["Phi"],
+        source_data=src_data,
+        interpolator=self._interpolator["Phi"],
+        kernel=_kernel_Phi_dGp_dn,
+        known_map=("Phi", basis.evaluate),
+        ndim=basis.num_modes,
+        chunk_size=chunk_size,
+    ) / (2 * jnp.pi)
+    assert F.shape == (self.Phi_grid.num_nodes, basis.num_modes)
+
     # Solving overdetermined system useful to reduce size of F while
     # retaining FFT interpolation accuracy in the singular integrals.
-    # TODO: use ``jax.scipy.sparse.linalg.cg``
+    # TODO: https://github.com/patrick-kidger/lineax/pull/86
+    #  JAX doesn't have lsmr yet, but apparently Rory is working on it.
     self._data["Phi"]["Phi_mn"] = (
         jnp.linalg.solve(F, g)
-        if (self.Phi_grid.num_nodes == self.basis.num_modes)
+        if (self.Phi_grid.num_nodes == basis.num_modes)
         else jnp.linalg.lstsq(F, g)[0]
     )
     return self._data
 
 
-# TODO: iterate on Phi_mn
 def _fredholm_operator(Phi_k, g, self, chunk_size=None):
-    """Compute Fredholm integral operator Tf such that Tf = f.
+    """Compute Fredholm integral operator such that T(Φ_mn) → Φ_mn.
+
+    Note that the iteration is on the Fourier coefficients to
+    bypass approximation error.
 
     Parameters
     ----------
     Phi_k : jnp.ndarray
-        Φ values on ``self._Phi_grid``.
+        Φ_mn values from ``self._Phi_grid``.
     g : jnp.ndarray
         Non-homogenous term on ``self._Phi_grid``.
 
     Returns
     -------
-    Tf : jnp.ndarray
+    Phi_k+1 : jnp.ndarray
         Fredholm integral operator computed on ``self._Phi_grid``.
 
     """
+    # Phi_k = _to_rfft(self.Phi_grid, Phi_k)  # noqa
+
     src_data = self._data["src"].copy()
-    src_data["Phi"] = self._upsample_to_source(Phi_k)
-    return g - singular_integral(
+    src_data["Phi"] = self._upsample_to_source(Phi_k, is_fourier=False)
+
+    # TODO: Don't need to re-interpolate Phi since we already have it.
+    #       Requires resolving issue described in _interpax_mod.py.
+    Phi_k = g - singular_integral(
         eval_data=self._data["Phi"],
         source_data=src_data,
         interpolator=self._interpolator["Phi"],
         kernel=_kernel_Phi_dGp_dn,
         chunk_size=chunk_size,
-    ).squeeze() / (2 * jnp.pi)
+    ).squeeze(axis=-1) / (2 * jnp.pi)
+
+    # Phi_k = _to_real_coef(self.Phi_grid, Phi_k)  # noqa
+    return Phi_k
 
 
 @partial(jit, static_argnames=["tol", "maxiter", "method", "chunk_size"])
@@ -116,23 +140,27 @@ def _fixed_point_compute_Phi(
     if "Phi_mn" in self._data["Phi"]:
         return self._data
 
-    g = _nonhomogenous_part(self, chunk_size)
     if Phi_0 is None:
-        # TODO: Add option to set initial guess to first k
-        #  terms of Fourier fit (output of ``_compute_Phi_mn``).
-        #  Useful if k is small.
-        _, m, n = self.basis.modes.T
-        Phi_0 = self.basis._get_fun_mode(m[1], n[1])(self.Phi_grid)
-    self._data["Phi"]["Phi"] = fixed_point(
+        # give initial guess from low resolution fourier solve
+        Phi_0 = self.basis.evaluate(self.Phi_grid).sum(axis=-1)
+    # Phi_0 = _to_real_coef(self.Phi_grid, Phi_0)   # noqa
+    Phi = fixed_point(
         _fredholm_operator,
         Phi_0,
-        (g, self, chunk_size),
+        (_nonhomogenous_part(self, chunk_size), self, chunk_size),
         tol,
         maxiter,
         method,
         scalar=True,
     )
-    self._data["Phi"]["Phi_mn"] = self._phi_transform.fit(self._data["Phi"]["Phi"])
+    # Phi = irfft2(   # noqa
+    #     _to_rfft(self.Phi_grid, Phi),  # noqa
+    #     s=(self.Phi_grid.num_theta, self.Phi_grid.num_zeta),  # noqa
+    #     norm="forward",  # noqa
+    #     axes=(0, 1),  # noqa
+    # ).reshape(self.Phi_grid.num_nodes, order="F")  # noqa
+
+    self._data["Phi"]["Phi_mn"] = self._phi_transform.fit(Phi)
     return self._data
 
 
@@ -310,11 +338,13 @@ class VacuumSolver(IOAble):
         """Return the source grid used by this solver."""
         return self._interpolator["Phi"]._eval_grid
 
-    def _upsample_to_source(self, x):
+    def _upsample_to_source(self, x, is_fourier=False):
         if not self._same_grid_phi_src:
-            x = self.Phi_grid.meshgrid_reshape(x, "rtz")[0]
+            if not is_fourier:
+                x = self.Phi_grid.meshgrid_reshape(x, "rtz")[0]
+                x = rfft2(x, norm="forward", axes=(0, 1))
             x = irfft2(
-                rfft2(x, norm="forward", axes=(0, 1)),
+                x,
                 s=(self.src_grid.num_theta, self.src_grid.num_zeta),
                 norm="forward",
                 axes=(0, 1),
@@ -327,7 +357,7 @@ class VacuumSolver(IOAble):
         return self._src_transform.basis
 
     def compute_Phi(
-        self, chunk_size=None, maxiter=0, tol=1e-6, method="del2", Phi_0=None
+        self, chunk_size=None, maxiter=0, tol=1e-6, method="del2", Phi_0=None, **kwargs
     ):
         """Compute Fourier coefficients of vacuum potential Φ on ∂D.
 
@@ -359,7 +389,7 @@ class VacuumSolver(IOAble):
              Fourier coefficients of Φ on ∂D stored in ``data["Phi"]["Phi_mn"]``.
 
         """
-        warnif(maxiter > 0, msg="Still debugging")
+        warnif(kwargs.get("warn", True) and (maxiter > 0), msg="Still debugging")
         self._data = (
             _fixed_point_compute_Phi(
                 self,
@@ -370,7 +400,7 @@ class VacuumSolver(IOAble):
                 chunk_size=chunk_size,
             )
             if (maxiter > 0)
-            else _fourier_compute_Phi(self, chunk_size=chunk_size)
+            else _lsmr_compute_Phi(self, chunk_size=chunk_size)
         )
         return self._data
 

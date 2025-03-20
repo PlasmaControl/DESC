@@ -1,6 +1,8 @@
 # Adapted from interpax.
 # to support https://github.com/f0uriest/interpax/issues/53
-# TODO: Use rfft2 and irfft2.
+# TODO: https://github.com/f0uriest/interpax/issues/75.
+from interpax._fourier import _pad_along_axis
+
 from desc.backend import jnp
 
 
@@ -55,21 +57,3 @@ def fft_interp2d(
     )
 
     return jnp.fft.fft2(c, axes=(0, 1)).real
-
-
-def _pad_along_axis(array, pad=(0, 0), axis=0):
-    """Pad with zeros or truncate a given dimension."""
-    array = jnp.moveaxis(array, axis, 0)
-
-    if pad[0] < 0:
-        array = array[abs(pad[0]) :]
-        pad = (0, pad[1])
-    if pad[1] < 0:
-        array = array[: -abs(pad[1])]
-        pad = (pad[0], 0)
-
-    npad = [(0, 0)] * array.ndim
-    npad[0] = pad
-
-    array = jnp.pad(array, pad_width=npad, mode="constant", constant_values=0)
-    return jnp.moveaxis(array, 0, axis)

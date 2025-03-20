@@ -1,6 +1,14 @@
 Changelog
 =========
 
+- Adds error for incorrect grids in Redl bootstrap current consistency objective
+- Allows Redl to use SplineProfile
+- Updates Redl bootstrap current consistency tutorial to include a ``SplineProfile`` optimization
+
+
+v0.14.1
+-------
+
 Bug Fixes
 - Fixes bug in ``desc.vmec.VMECIO.write_vmec_input`` for current-constrained equilibria, where DESC was incorrectly writing the ``s**0`` mode, where VMEC actually assumes it is zero and starts at the  ``s**1`` (which is different than the usual convention VMEC uses for its current profile when it uses the current derivative, where it starts with the ``s**0`` mode).
 

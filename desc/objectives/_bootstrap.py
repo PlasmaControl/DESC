@@ -33,18 +33,14 @@ class BootstrapRedlConsistency(_Objective):
         Equilibrium that will be optimized to satisfy the Objective.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
-        Defaults to ``grid = LinearGrid(
-                M=eq.M_grid,
-                N=eq.N_grid,
-                NFP=eq.NFP,
-                sym=eq.sym,
-                rho=np.linspace(1 / eq.L, 1, eq.L) - 1 / (2 * eq.L),
-            )``
+        Defaults to
+        ``grid = LinearGrid(M=eq.M_grid,N=eq.N_grid,NFP=eq.NFP,``
+        ``sym=eq.sym,rho=np.linspace(1 / eq.L, 1, eq.L) - 1 / (2 * eq.L),)``
     helicity : tuple, optional
         Type of quasi-symmetry (M, N). Default = quasi-axisymmetry (1, 0).
         First entry must be M=1. Second entry is the toroidal mode number N,
-        used for evaluating the Redl bootstrap current formula. Set to 0 for axisymmetry
-        or quasi-axisymmetry; set to +/-NFP for quasi-helical symmetry.
+        used for evaluating the Redl bootstrap current formula. Set to 0 for
+        axisymmetry or quasi-axisymmetry; set to +/-NFP for quasi-helical symmetry.
     degree : int, optional
         The `degree` kwarg to pass to the `<J*B>_Redl` compute call, which
         controls the degree of polynomial fit to the Redl current derivative

@@ -1546,7 +1546,12 @@ class VMECIO:
             f.write("  CURTOR = {:+14.8E}\n".format(float(current(1)[0])))  # AC scale
             if isinstance(current, PowerSeriesProfile) and current.sym:
                 f.write("  AC =")  # current power series coefficients
-                for ac in current.params:
+                # we skip the s**0 mode because VMEC assumes it to be
+                # zero, and so starts counting from s**1
+                params_power_greater_than_zero = current.params[
+                    np.where(current.basis.modes[:, 0] > 0)
+                ]
+                for ac in params_power_greater_than_zero:
                     f.write(" {:+14.8E}".format(ac))
                 f.write("\n  PCURR_TYPE = 'power_series_I'\n")
             else:

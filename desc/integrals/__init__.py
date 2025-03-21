@@ -1,5 +1,6 @@
 """Classes for function integration."""
 
+from ._vacuum import VacuumSolver
 from .bounce_integral import Bounce1D, Bounce2D
 from .singularities import (
     DFTInterpolator,

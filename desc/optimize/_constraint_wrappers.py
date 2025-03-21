@@ -4,7 +4,8 @@ import functools
 
 import numpy as np
 
-from desc.backend import jit, jnp
+from desc.backend import jit, jnp, put
+from desc.batching import batched_vectorize
 from desc.objectives import (
     BoundaryRSelfConsistency,
     BoundaryZSelfConsistency,
@@ -12,7 +13,12 @@ from desc.objectives import (
     get_fixed_boundary_constraints,
     maybe_add_self_consistency,
 )
-from desc.objectives.utils import factorize_linear_constraints
+from desc.objectives.utils import (
+    _Project,
+    _Recover,
+    factorize_linear_constraints,
+    remove_fixed_parameters,
+)
 from desc.utils import Timer, errorif, get_instance, setdefault
 
 from .utils import f_where_x
@@ -86,7 +92,7 @@ class LinearConstraintProjection(ObjectiveFunction):
 
         """
         timer = Timer()
-        timer.start("Linear constraint projection build")
+        timer.start(f"{self.name} build")
 
         # we don't always build here because in ~all cases the user doesn't interact
         # with this directly, so if the user wants to manually rebuild they should
@@ -103,25 +109,32 @@ class LinearConstraintProjection(ObjectiveFunction):
             self._A,
             self._b,
             self._Z,
+            self._D,
             self._unfixed_idx,
             self._project,
             self._recover,
+            self._ADinv,
+            self._A_nondegenerate,
+            self._degenerate_idx,
         ) = factorize_linear_constraints(
             self._objective,
             self._constraint,
         )
+        # inverse of the linear constraint matrix A without any scaling
+        self._Ainv = self._D[self._unfixed_idx, None] * self._ADinv
+        # nullspace of the linear constraint matrix A without any scaling
+        self._ZA = self._D[self._unfixed_idx, None] * self._Z
+        self._ZA = self._ZA / jnp.linalg.norm(self._ZA, axis=0)
         self._dim_x = self._objective.dim_x
         self._dim_x_reduced = self._Z.shape[1]
 
-        # equivalent matrix for A[unfixed_idx]@Z == A@unfixed_idx_mat
-        self._unfixed_idx_mat = (
-            jnp.eye(self._objective.dim_x)[:, self._unfixed_idx] @ self._Z
-        )
+        # equivalent matrix for A[unfixed_idx] @ D @ Z == A @ unfixed_idx_mat
+        self._unfixed_idx_mat = jnp.diag(self._D)[:, self._unfixed_idx] @ self._Z
 
         self._built = True
-        timer.stop("Linear constraint projection build")
+        timer.stop(f"{self.name} build")
         if verbose > 1:
-            timer.disp("Linear constraint projection build")
+            timer.disp(f"{self.name} build")
 
     def project(self, x):
         """Project full vector x into x_reduced that satisfies constraints."""
@@ -163,6 +176,60 @@ class LinearConstraintProjection(ObjectiveFunction):
             )
         x = self.recover(x)
         return self._objective.unpack_state(x, per_objective)
+
+    def update_constraint_target(self, eq_new):
+        """Update the target of the constraint.
+
+        Updates the particular solution (xp), nullspace (Z), scaling (D) and
+        the inverse of the scaled linear constraint matrix (ADinv) to reflect the new
+        equilibrium a.k.a. the new target of the constraint of system Ax=b. This
+        also updates the project and recover methods. Updating quantities in this way
+        is faster than calling factorize_linear_constraints again.
+
+        Parameters
+        ----------
+        eq_new : Equilibrium
+            New equilibrium to target for the constraints.
+        """
+        for con in self._constraint.objectives:
+            if hasattr(con, "update_target"):
+                con.update_target(eq_new)
+
+        dim_x = self._objective.dim_x
+        # particular solution to Ax=b
+        xp = jnp.zeros(dim_x)
+        x0 = jnp.zeros(dim_x)
+        A = self._A_nondegenerate
+        b = -self._constraint.compute_scaled_error(x0)
+        b = np.delete(b, self._degenerate_idx)
+
+        # There is probably a more clever way of doing this, but for now we just
+        # remove fixed parameters from A and b again by the same loop as in factorize
+        # Actually A (unscaled linear constraint matrix without any degenerate rows)
+        # does not change here, but still recompute it while updating others
+        A, b, xp, unfixed_idx, fixed_idx = remove_fixed_parameters(A, b, xp)
+
+        x_scale = self._objective.x(*self._objective.things)
+        self._D = jnp.where(jnp.abs(x_scale) < 1e2, 1, jnp.abs(x_scale))
+
+        # since D has changed, we need to update the ADinv
+        # as mentioned above A does not change, so we can use the same Ainv
+        # pinv(A) = Ainv, ADinv = pinv(A @ D) = Dinv @ Ainv, Dinv = 1 / D
+        self._ADinv = (1 / self._D)[unfixed_idx, None] * self._Ainv
+        # we also need to update the nullspace Z of AD in a similar way
+        # A @ ZA = 0 -> (A @ D) @ ((1 / D) @ ZA) = 0 -> Z = (1 / D) @ ZA
+        # where ZA is the nullspace of A, and Z is the nullspace of AD
+        self._Z = (1 / self._D)[self._unfixed_idx, None] * self._ZA
+        # we also normalize Z to make each column have unit norm
+        self._Z = self._Z / jnp.linalg.norm(self._Z, axis=0)
+
+        xp = put(xp, unfixed_idx, self._ADinv @ b)
+        xp = put(xp, fixed_idx, ((1 / self._D) * xp)[fixed_idx])
+        # cast to jnp arrays
+        self._xp = jnp.asarray(xp)
+
+        self._project = _Project(self._Z, self._D, self._xp, self._unfixed_idx)
+        self._recover = _Recover(self._Z, self._D, self._xp, self._unfixed_idx, dim_x)
 
     def compute_unscaled(self, x_reduced, constants=None):
         """Compute the unscaled form of the objective function.
@@ -261,7 +328,7 @@ class LinearConstraintProjection(ObjectiveFunction):
         """
         x = self.recover(x_reduced)
         df = self._objective.grad(x, constants)
-        return df[self._unfixed_idx] @ self._Z
+        return df[self._unfixed_idx] @ (self._Z * self._D[self._unfixed_idx, None])
 
     def hess(self, x_reduced, constants=None):
         """Compute Hessian of self.compute_scalar.
@@ -281,14 +348,14 @@ class LinearConstraintProjection(ObjectiveFunction):
         """
         x = self.recover(x_reduced)
         df = self._objective.hess(x, constants)
-        return self._Z.T @ df[self._unfixed_idx, :][:, self._unfixed_idx] @ self._Z
+        return (
+            (self._Z.T * (1 / self._D)[None, self._unfixed_idx])
+            @ df[self._unfixed_idx, :][:, self._unfixed_idx]
+            @ (self._Z * self._D[self._unfixed_idx, None])
+        )
 
     def _jac(self, x_reduced, constants=None, op="scaled"):
         x = self.recover(x_reduced)
-        if self._objective._deriv_mode == "blocked":
-            fun = getattr(self._objective, "jac_" + op)
-            return fun(x, constants)[:, self._unfixed_idx] @ self._Z
-
         v = self._unfixed_idx_mat
         df = getattr(self._objective, "jvp_" + op)(v.T, x, constants)
         return df.T
@@ -401,7 +468,7 @@ class LinearConstraintProjection(ObjectiveFunction):
     def _vjp(self, v, x_reduced, constants=None, op="vjp_scaled"):
         x = self.recover(x_reduced)
         df = getattr(self._objective, op)(v, x, constants)
-        return df[self._unfixed_idx] @ self._Z
+        return df[self._unfixed_idx] @ (self._Z * self._D[self._unfixed_idx, None])
 
     def vjp_scaled(self, v, x_reduced, constants=None):
         """Compute vector-Jacobian product of self.compute_scaled.
@@ -533,8 +600,10 @@ class ProximalProjection(ObjectiveFunction):
             self._args.remove(arg)
         linear_constraint = ObjectiveFunction(self._linear_constraints)
         linear_constraint.build()
-        _, A, _, self._Z, self._unfixed_idx, _, _ = factorize_linear_constraints(
-            self._constraint, linear_constraint
+        (self._Z, self._D, self._unfixed_idx) = (
+            self._eq_solve_objective._Z,
+            self._eq_solve_objective._D,
+            self._eq_solve_objective._unfixed_idx,
         )
 
         # dx/dc - goes from the full state to optimization variables for eq
@@ -592,6 +661,13 @@ class ProximalProjection(ObjectiveFunction):
         for constraint in self._linear_constraints:
             constraint.build(use_jit=use_jit, verbose=verbose)
 
+        self._eq_solve_objective = LinearConstraintProjection(
+            self._constraint,
+            ObjectiveFunction(self._linear_constraints),
+            name="Eq Update LinearConstraintProjection",
+        )
+        self._eq_solve_objective.build(use_jit=use_jit, verbose=verbose)
+
         errorif(
             self._constraint.things != [eq],
             ValueError,
@@ -618,14 +694,14 @@ class ProximalProjection(ObjectiveFunction):
         )
         self._dimx_per_thing = [t.dim_x for t in self.things]
 
-        # equivalent matrix for A[unfixed_idx]@Z == A@unfixed_idx_mat
+        # equivalent matrix for A[unfixed_idx] @ D @ Z == A @ unfixed_idx_mat
         self._unfixed_idx_mat = jnp.eye(self._objective.dim_x)
         self._unfixed_idx_mat = jnp.split(
             self._unfixed_idx_mat, np.cumsum([t.dim_x for t in self.things]), axis=-1
         )
-        self._unfixed_idx_mat[self._eq_idx] = (
-            self._unfixed_idx_mat[self._eq_idx][:, self._unfixed_idx] @ self._Z
-        )
+        self._unfixed_idx_mat[self._eq_idx] = self._unfixed_idx_mat[self._eq_idx][
+            :, self._unfixed_idx
+        ] @ (self._Z * self._D[self._unfixed_idx, None])
         self._unfixed_idx_mat = np.concatenate(
             [np.atleast_2d(foo) for foo in self._unfixed_idx_mat], axis=-1
         )
@@ -704,7 +780,7 @@ class ProximalProjection(ObjectiveFunction):
 
     def x(self, *things):
         """Return the full state vector from the Optimizable objects things."""
-        # TODO: also check resolution etc?
+        # TODO (#1392): also check resolution etc?
         things = things or self.things
         assert [type(t1) is type(t2) for t1, t2 in zip(things, self.things)]
         xs = []
@@ -759,15 +835,17 @@ class ProximalProjection(ObjectiveFunction):
             x_dict = x_list[self._eq_idx]
             x_dict_old = x_list_old[self._eq_idx]
             deltas = {str(key): x_dict[key] - x_dict_old[key] for key in x_dict}
+            # We pass in the LinearConstraintProjection object to skip some redundant
+            # computations in the perturb and solve methods
             self._eq = self._eq.perturb(
-                objective=self._constraint,
-                constraints=self._linear_constraints,
+                objective=self._eq_solve_objective,
+                constraints=None,
                 deltas=deltas,
                 **self._perturb_options,
             )
             self._eq.solve(
-                objective=self._constraint,
-                constraints=self._linear_constraints,
+                objective=self._eq_solve_objective,
+                constraints=None,
                 **self._solve_options,
             )
             xeq = self._eq.pack_params(self._eq.params_dict)
@@ -789,10 +867,7 @@ class ProximalProjection(ObjectiveFunction):
         else:
             # reset to last good params
             self._eq.params_dict = self.history[-1][self._eq_idx]
-
-        for con in self._linear_constraints:
-            if hasattr(con, "update_target"):
-                con.update_target(self._eq)
+            self._eq_solve_objective.update_constraint_target(self._eq)
 
         return xopt, xeq
 
@@ -836,6 +911,25 @@ class ProximalProjection(ObjectiveFunction):
         xopt, _ = self._update_equilibrium(x, store=False)
         return self._objective.compute_scaled_error(xopt, constants[0])
 
+    def compute_scalar(self, x, constants=None):
+        """Compute the sum of squares error.
+
+        Parameters
+        ----------
+        x : ndarray
+            State vector.
+        constants : list
+            Constant parameters passed to sub-objectives.
+
+        Returns
+        -------
+        f : float
+            Objective function scalar value.
+
+        """
+        f = jnp.sum(self.compute_scaled_error(x, constants=constants) ** 2) / 2
+        return f
+
     def compute_unscaled(self, x, constants=None):
         """Compute the raw value of the objective function.
 
@@ -872,7 +966,7 @@ class ProximalProjection(ObjectiveFunction):
             gradient vector.
 
         """
-        # TODO: figure out projected vjp to make this better
+        # TODO (#1393): figure out projected vjp to make this better
         f = jnp.atleast_1d(self.compute_scaled_error(x, constants))
         J = self.jac_scaled_error(x, constants)
         return f.T @ J
@@ -973,7 +1067,9 @@ class ProximalProjection(ObjectiveFunction):
         constants = setdefault(constants, self.constants)
         xg, xf = self._update_equilibrium(x, store=True)
         jvpfun = lambda u: self._jvp(u, xf, xg, constants, op="scaled")
-        return jnp.vectorize(jvpfun, signature="(n)->(k)")(v)
+        return batched_vectorize(
+            jvpfun, signature="(n)->(k)", chunk_size=self._objective._jac_chunk_size
+        )(v)
 
     def jvp_scaled_error(self, v, x, constants=None):
         """Compute Jacobian-vector product of self.compute_scaled_error.
@@ -993,7 +1089,9 @@ class ProximalProjection(ObjectiveFunction):
         constants = setdefault(constants, self.constants)
         xg, xf = self._update_equilibrium(x, store=True)
         jvpfun = lambda u: self._jvp(u, xf, xg, constants, op="scaled_error")
-        return jnp.vectorize(jvpfun, signature="(n)->(k)")(v)
+        return batched_vectorize(
+            jvpfun, signature="(n)->(k)", chunk_size=self._objective._jac_chunk_size
+        )(v)
 
     def jvp_unscaled(self, v, x, constants=None):
         """Compute Jacobian-vector product of self.compute_unscaled.
@@ -1013,22 +1111,10 @@ class ProximalProjection(ObjectiveFunction):
         constants = setdefault(constants, self.constants)
         xg, xf = self._update_equilibrium(x, store=True)
         jvpfun = lambda u: self._jvp(u, xf, xg, constants, op="unscaled")
-        return jnp.vectorize(jvpfun, signature="(n)->(k)")(v)
+        return batched_vectorize(
+            jvpfun, signature="(n)->(k)", chunk_size=self._objective._jac_chunk_size
+        )(v)
 
-    @functools.partial(jit, static_argnames=("self", "op"))
-    def _jvp_f(self, xf, dc, constants, op):
-        Fx = getattr(self._constraint, "jac_" + op)(xf, constants)
-        Fx_reduced = Fx[:, self._unfixed_idx] @ self._Z
-        Fc = Fx @ (self._dxdc @ dc)
-        Fxh = Fx_reduced
-        cutoff = jnp.finfo(Fxh.dtype).eps * max(Fxh.shape)
-        uf, sf, vtf = jnp.linalg.svd(Fxh, full_matrices=False)
-        sf += sf[-1]  # add a tiny bit of regularization
-        sfi = jnp.where(sf < cutoff * sf[0], 0, 1 / sf)
-        Fxh_inv = vtf.T @ (sfi[..., None] * uf.T)
-        return Fxh_inv @ Fc
-
-    @functools.partial(jit, static_argnames=("self", "op"))
     def _jvp(self, v, xf, xg, constants, op):
         # we're replacing stuff like this with jvps
         # Fx_reduced = Fx[:, unfixed_idx] @ Z               # noqa: E800
@@ -1041,7 +1127,17 @@ class ProximalProjection(ObjectiveFunction):
         # want jvp_f to only get parts from equilibrium, not other things
         vs = jnp.split(v, np.cumsum(self._dimc_per_thing))
         # this is Fx_reduced_inv @ Fc
-        dfdc = self._jvp_f(xf, vs[self._eq_idx], constants[1], op)
+        dfdc = _proximal_jvp_f_pure(
+            self._constraint,
+            xf,
+            constants[1],
+            vs[self._eq_idx],
+            self._unfixed_idx,
+            self._Z,
+            self._D,
+            self._dxdc,
+            op,
+        )
         # broadcasting against multiple things
         dfdcs = [jnp.zeros(dim) for dim in self._dimc_per_thing]
         dfdcs[self._eq_idx] = dfdc
@@ -1058,32 +1154,12 @@ class ProximalProjection(ObjectiveFunction):
             ]
         )
         tangent = self._unfixed_idx_mat @ dfdc - dxdcv
-        if self._objective._deriv_mode in ["batched", "looped"]:
+        if self._objective._deriv_mode in ["batched"]:
             out = getattr(self._objective, "jvp_" + op)(tangent, xg, constants[0])
         else:  # deriv_mode == "blocked"
             vgs = jnp.split(tangent, np.cumsum(self._dimx_per_thing))
             xgs = jnp.split(xg, np.cumsum(self._dimx_per_thing))
-            out = []
-            for obj, const in zip(
-                self._objective.objectives, self._objective.constants
-            ):
-                xi = [x for x, t in zip(xgs, self._objective.things) if t in obj.things]
-                vi = [v for v, t in zip(vgs, self._objective.things) if t in obj.things]
-                if obj._deriv_mode == "rev":
-                    # obj might now allow fwd mode, so compute full rev mode jacobian
-                    # and do matmul manually. This is slightly inefficient, but usually
-                    # when rev mode is used, dim_f <<< dim_x, so its not too bad.
-                    Ji = getattr(obj, "jac_" + op)(*xi, const)
-                    outi = jnp.array([Jii @ vii.T for Jii, vii in zip(Ji, vi)]).sum(
-                        axis=0
-                    )
-                    out.append(outi)
-                else:
-                    outi = getattr(obj, "jvp_" + op)(
-                        [_vi for _vi in vi], xi, constants=const
-                    ).T
-                    out.append(outi)
-            out = jnp.concatenate(out)
+            out = _proximal_jvp_blocked_pure(self._objective, vgs, xgs, op)
         return -out
 
     @property
@@ -1094,3 +1170,48 @@ class ProximalProjection(ObjectiveFunction):
     def __getattr__(self, name):
         """For other attributes we defer to the base objective."""
         return getattr(self._objective, name)
+
+
+# in ProximalProjection we have an explicit state that we keep track of (and add
+# to as we go) meaning if we jit anything with self static it doesn't update
+# correctly, while if we leave self unstatic then it recompiles every time because
+# the pytree structure of ProximalProjection is changing. To get around that we
+# define these helper functions that are stateless so we can safely jit them
+
+
+@functools.partial(jit, static_argnames=["op"])
+def _proximal_jvp_f_pure(constraint, xf, constants, dc, unfixed_idx, Z, D, dxdc, op):
+    Fx = getattr(constraint, "jac_" + op)(xf, constants)
+    Fx_reduced = Fx @ jnp.diag(D)[:, unfixed_idx] @ Z
+    Fc = Fx @ (dxdc @ dc)
+    Fxh = Fx_reduced
+    cutoff = jnp.finfo(Fxh.dtype).eps * max(Fxh.shape)
+    uf, sf, vtf = jnp.linalg.svd(Fxh, full_matrices=False)
+    sf += sf[-1]  # add a tiny bit of regularization
+    sfi = jnp.where(sf < cutoff * sf[0], 0, 1 / sf)
+    Fxh_inv = vtf.T @ (sfi[..., None] * uf.T)
+    return Fxh_inv @ Fc
+
+
+@functools.partial(jit, static_argnames=["op"])
+def _proximal_jvp_blocked_pure(objective, vgs, xgs, op):
+    out = []
+    for k, (obj, const) in enumerate(zip(objective.objectives, objective.constants)):
+        thing_idx = objective._things_per_objective_idx[k]
+        xi = [xgs[i] for i in thing_idx]
+        vi = [vgs[i] for i in thing_idx]
+        assert len(xi) > 0
+        assert len(vi) > 0
+        assert len(xi) == len(vi)
+        if obj._deriv_mode == "rev":
+            # obj might not allow fwd mode, so compute full rev mode jacobian
+            # and do matmul manually. This is slightly inefficient, but usually
+            # when rev mode is used, dim_f <<< dim_x, so its not too bad.
+            Ji = getattr(obj, "jac_" + op)(*xi, constants=const)
+            outi = jnp.array([Jii @ vii.T for Jii, vii in zip(Ji, vi)]).sum(axis=0)
+            out.append(outi)
+        else:
+            outi = getattr(obj, "jvp_" + op)([_vi for _vi in vi], xi, constants=const).T
+            out.append(outi)
+    out = jnp.concatenate(out)
+    return out

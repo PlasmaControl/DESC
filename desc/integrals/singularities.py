@@ -510,7 +510,9 @@ def _nonsingular_part(
     source_grid,
     st,
     sz,
+    *,
     kernel,
+    ndim=None,
     chunk_size=None,
     _eta=eta,
 ):
@@ -519,6 +521,7 @@ def _nonsingular_part(
     Generally follows sec 3.2.1 of [2].
     """
     assert source_grid.can_fft2
+    ndim = setdefault(ndim, kernel.ndim)
     source_data.setdefault("theta", source_grid.nodes[:, 1])
     # make sure source dict has zeta and phi to avoid
     # adding keys to dict during iteration
@@ -541,7 +544,7 @@ def _nonsingular_part(
         # nest this def and let JAX figure it out
         def eval_pt(eval_data_i):
             k = kernel(eval_data_i, source_data).reshape(
-                -1, source_grid.num_nodes, kernel.ndim
+                -1, source_grid.num_nodes, ndim
             )
             e = 1 - _eta(
                 source_data["theta"],
@@ -556,10 +559,10 @@ def _nonsingular_part(
             return jnp.sum(k * (e * w)[..., jnp.newaxis], axis=-2)
 
         return batch_map(eval_pt, eval_data, chunk_size).reshape(
-            eval_grid.num_nodes, kernel.ndim
+            eval_grid.num_nodes, ndim
         )
 
-    f = nfp_loop(source_grid, func, jnp.zeros((eval_grid.num_nodes, kernel.ndim)))
+    f = nfp_loop(source_grid, func, jnp.zeros((eval_grid.num_nodes, ndim)))
 
     # undo rotation of source_zeta
     source_data["zeta"] = source_zeta
@@ -626,7 +629,7 @@ def _singular_part(
         t = eval_theta + interpolator.shift_t[i]
         z = eval_zeta + interpolator.shift_z[i]
         if known_map is not None:
-            source_data_polar[map_name] = map_fun((t, z, eval_grid))
+            source_data_polar[map_name] = map_fun(eval_grid, t=t, z=z)
         source_data_polar["theta"] = t[eval_grid.inverse_theta_idx]
         source_data_polar["zeta"] = z[eval_grid.inverse_zeta_idx]
         if "omega" in keys:
@@ -639,7 +642,7 @@ def _singular_part(
             #  Prove otherwise or use uniform grid in θ, ϕ and map coordinates.
 
         k = kernel(eval_data, source_data_polar, diag=True).reshape(
-            eval_grid.num_nodes, kernel.ndim
+            eval_grid.num_nodes, -1
         )
         dS = v[i] * source_data_polar["|e_theta x e_zeta|"]
         fi = k * dS[:, jnp.newaxis]
@@ -651,7 +654,6 @@ def _singular_part(
         reduction=jnp.add,
         chunk_reduction=_add_reduce,
     )(jnp.arange(v.size))
-    assert f.shape == (eval_grid.num_nodes, kernel.ndim)
 
     # we sum vectors at different points, so they need to be in xyz for that to work
     # but then need to convert vectors back to rpz
@@ -673,6 +675,7 @@ def singular_integral(
     *,
     kernel,
     known_map=None,
+    ndim=None,
     chunk_size=None,
     **kwargs,
 ):
@@ -724,6 +727,9 @@ def singular_integral(
         First index should store the name of the map used in the kernel
         e.g. "Phi", and the second index should store the Python callable
         that accepts a grid argument.
+    ndim : int
+        Default is kernel.ndim.
+        In some applications it, may be useful to supply other values for batching.
     chunk_size : int or None
         Size to split computation into chunks.
         If no chunking should be done or the chunk size is the full input
@@ -753,16 +759,7 @@ def singular_integral(
     if isinstance(kernel, str):
         kernel = kernels[kernel]
 
-    return _nonsingular_part(
-        eval_data,
-        interpolator._eval_grid,
-        source_data,
-        interpolator._source_grid,
-        interpolator.st,
-        interpolator.sz,
-        kernel,
-        chunk_size,
-    ) + _singular_part(
+    out1 = _singular_part(
         eval_data,
         source_data,
         interpolator,
@@ -770,6 +767,18 @@ def singular_integral(
         known_map=known_map,
         chunk_size=chunk_size,
     )
+    out2 = _nonsingular_part(
+        eval_data,
+        interpolator._eval_grid,
+        source_data,
+        interpolator._source_grid,
+        interpolator.st,
+        interpolator.sz,
+        kernel=kernel,
+        ndim=ndim,
+        chunk_size=chunk_size,
+    )
+    return out1 + out2
 
 
 def _dx(eval_data, source_data, diag=False):
@@ -858,11 +867,11 @@ def _kernel_Phi_dGp_dn(eval_data, source_data, diag=False):
     dx = _dx(eval_data, source_data, diag)
     # Using n_rho works better than normalized e^rho*sqrt(g) here.
     n = rpz2xyz_vec(source_data["n_rho"], phi=source_data["phi"])
-    if diag:
-        numerator = source_data["Phi"] * dot(n, dx)
-    else:
-        numerator = dot(source_data["Phi"][..., jnp.newaxis] * n, dx)
-    return safediv(numerator, safenorm(dx, axis=-1) ** 3)
+    ndx_x3 = safediv(dot(n, dx), safenorm(dx, axis=-1) ** 3)[..., jnp.newaxis]
+    Phi = source_data["Phi"]
+    if Phi.ndim == 1:
+        Phi = Phi[:, jnp.newaxis]
+    return Phi * ndx_x3
 
 
 _kernel_Phi_dGp_dn.ndim = 1

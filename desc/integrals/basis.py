@@ -255,8 +255,7 @@ class FourierChebyshevSeries(IOAble):
             Real valued spectral coefficients for Fourier-Chebyshev series.
 
         """
-        a_mn = rfft_to_trig(cheb_from_dct(self._c), self.X, axis=-2)
-        return a_mn
+        return rfft_to_trig(cheb_from_dct(self._c), self.X, axis=-2)
 
     def compute_cheb(self, x):
         """Evaluate Fourier series at ``x`` to obtain set of 1D Chebyshev coefficients.

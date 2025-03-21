@@ -79,8 +79,8 @@ def bounce_points(pitch_inv, knots, B, dB_dz, num_well=None):
 
     """
     intersect = polyroot_vec(
-        c=B[..., jnp.newaxis, :, :],  # add num pitch axis
-        k=jnp.atleast_1d(pitch_inv)[..., jnp.newaxis],  # add polynomial axis
+        c=B[..., jnp.newaxis, :, :],
+        k=jnp.atleast_1d(pitch_inv)[..., jnp.newaxis],
         a_min=jnp.array([0.0]),
         a_max=jnp.diff(knots),
         sort=True,
@@ -95,8 +95,7 @@ def bounce_points(pitch_inv, knots, B, dB_dz, num_well=None):
     )
     # Only consider intersect if it is within knots that bound that polynomial.
     is_intersect = flatten_matrix(intersect) >= 0
-    # Following discussion on page 3 and 5 of https://doi.org/10.1063/1.873749,
-    # we ignore the bounce points of particles only assigned to a class that are
+    # We ignore the bounce points of particles only assigned to a class that are
     # trapped outside this snapshot of the field line.
     is_z1 = (dB_sign <= 0) & is_intersect
     is_z2 = (dB_sign >= 0) & _in_epigraph_and(is_intersect, dB_sign)
@@ -578,7 +577,7 @@ def interp_fft_to_argmin(T, h, points, knots, g, dg_dz, m, n, NFP=1):
     return jnp.take_along_axis(h[..., jnp.newaxis, :], argmin, axis=-1).squeeze(axis=-1)
 
 
-# TODO (#568): Generalize this beyond ζ = ϕ or just map to Clebsch with ϕ.
+# TODO (#568): Generalize this beyond ζ = ϕ
 def get_fieldline(alpha, iota, num_transit):
     """Get set of field line poloidal coordinates {Aᵢ | Aᵢ = (αᵢ₀, αᵢ₁, ..., αᵢ₍ₘ₋₁₎)}.
 

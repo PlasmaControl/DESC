@@ -145,7 +145,7 @@ class Bounce2D(Bounce):
     Notes
     -----
     Magnetic field line with label α, defined by B = ∇ψ × ∇α, is determined from
-      α : ρ, θ, ζ ↦ θ + λ(ρ,θ,ζ) − ι(ρ) [ζ + ω(ρ,θ,ζ)]
+      α : ρ, θ, ζ ↦ θ + Λ(ρ,θ,ζ) − ι(ρ) [ζ + ω(ρ,θ,ζ)]
     Interpolate Fourier-Chebyshev series to DESC poloidal coordinate.
       θ : ρ, α, ζ ↦ tₘₙ(ρ) exp(jmα) Tₙ(ζ)
     Compute bounce points.

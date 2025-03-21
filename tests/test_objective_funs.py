@@ -17,6 +17,7 @@ from desc.backend import jnp
 from desc.coils import (
     CoilSet,
     FourierPlanarCoil,
+    FourierPlanarFiniteBuildCoil,
     FourierRZCoil,
     FourierXYZCoil,
     MixedCoilSet,
@@ -42,6 +43,7 @@ from desc.objectives import (
     CoilCurrentLength,
     CoilCurvature,
     CoilLength,
+    CoilSetMaxB,
     CoilSetMinDistance,
     CoilTorsion,
     Elongation,
@@ -1136,6 +1138,35 @@ class TestObjectiveFunction:
         eq.change_resolution(L_grid=10, M_grid=10)
 
         test(eq, field, psi_from_field)
+
+    @pytest.mark.unit
+    def test_coil_maxB(self):
+        """Tests coil max field."""
+
+        def test(coil, component):
+            obj = CoilSetMaxB(
+                coil=coil,
+                component=component,
+            )
+            obj.build()
+            f = obj.compute(params=coil.params_dict)
+            np.testing.assert_allclose(f, 0, atol=1e-8)
+            assert len(f) == obj.dim_f
+
+        coil = FourierPlanarFiniteBuildCoil(
+            center=[10, 1, 1],
+            normal=[1, 1, 1],
+            cross_section_dims=[0.1, 0.2],
+            r_n=0.5,
+            modes=[0],
+            cross_section_shape="rectangular",
+            current=0,
+        )
+        coils = CoilSet.linspaced_linear(coil, n=3, displacement=[0, 3, 0])
+
+        test(coils, component="mag")
+        test(coils, component="p")
+        test(coils, component="q")
 
 
 @pytest.mark.regression

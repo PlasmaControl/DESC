@@ -851,14 +851,15 @@ class CoilSetMinDistance(_Objective):
         return min_dist_per_coil
 
 
-class CoilSetMaxNormB(_Objective):
+class CoilSetMaxB(_Objective):
     """Target the maximum magnetic field on coil for a given coilset.
 
     Self field on the coil is computed with the finite build method, and field from
     other coils on the coil is computed with the filamentary method.
     Will yield one value for each unique coil in the coilset, which is the maximum
-    magnitude of magnetic field on that coil. All coils in the coilset must inherit
-    from _FiniteBuildCoil.
+    magnetic field on that coil in the component chosen. Options for magnetic field are
+    magnitude or components projected in the coil frame. All coils in the coilset must
+    inherit from _FiniteBuildCoil.
 
     Parameters
     ----------
@@ -890,6 +891,10 @@ class CoilSetMaxNormB(_Objective):
         "auto" selects forward or reverse mode based on the size of the input and output
         of the objective. Has no effect on self.grad or self.hess which always use
         reverse mode and forward over reverse mode respectively.
+    component :  {'mag', 'p', 'q'}, optional
+        Component of magnetic field to be targeted. Can be 'mag' for field magnitude,
+        or 'p' or 'q' for the respective dimensions of the conductor cross section.
+        Default is 'mag'.
     xsection_grid : Grid, list, optional
         Collocation grid used to discretize each coil cross section. Defaults to the
         default grid for the given coil-type, see ``coils.py`` for more details.
@@ -905,7 +910,7 @@ class CoilSetMaxNormB(_Objective):
 
     _scalar = False
     _units = "(T)"
-    _print_value_fmt = "Maximum field magnitude on coil: {:10.3e} "
+    _print_value_fmt = "Maximum field on coil: {:10.3e} "
 
     def __init__(
         self,
@@ -917,9 +922,10 @@ class CoilSetMaxNormB(_Objective):
         normalize_target=True,
         loss_function=None,
         deriv_mode="auto",
+        component="mag",
         xsection_grid=None,
         centerline_grid=None,
-        name="field magnitude on coil distance",
+        name="field on coil",
     ):
         from desc.coils import CoilSet, _FiniteBuildCoil
 
@@ -940,6 +946,13 @@ class CoilSetMaxNormB(_Objective):
             ValueError,
             "All coils in the CoilSet must inherit from _FiniteBuildCoil",
         )
+        errorif(
+            component not in {"mag", "p", "q"},
+            ValueError,
+            "Component must be one of 'mag', 'p', 'q'.",
+        )
+        self._component = component
+
         super().__init__(
             things=coil,
             target=target,
@@ -963,14 +976,18 @@ class CoilSetMaxNormB(_Objective):
             Level of output.
 
         """
+        from desc.coils import _FiniteBuildCoil
+
         coilset = self.things[0]
-        xsection_grid = self._xsection_grid or None
-        centerline_grid = self._centerline_grid or None
+
+        finite_build_grid, centerline_grid = _FiniteBuildCoil.prep_grid(
+            self._xsection_grid, self._centerline_grid
+        )
 
         self._dim_f = coilset.num_coils
         self._constants = {
             "coilset": coilset,
-            "xsection_grid": xsection_grid,
+            "finite_build_grid": finite_build_grid,
             "centerline_grid": centerline_grid,
             "quad_weights": 1.0,
         }
@@ -1009,9 +1026,10 @@ class CoilSetMaxNormB(_Objective):
             # on the coil k
             coil = constants["coilset"][0]
             self_field, quad_points, centerline_mask = coil.compute_self_field(
-                xsection_grid=constants["xsection_grid"],
+                xsection_grid=constants["finite_build_grid"],
                 centerline_grid=constants["centerline_grid"],
                 params=x,  # just this coil's parameters
+                prep_grid=False,
             )
 
             quad_points = jnp.where(
@@ -1039,12 +1057,26 @@ class CoilSetMaxNormB(_Objective):
             # which is ok since the field is not maximal on the coil axis
             total_field = jnp.where(centerline_mask[:, None], 0, total_field)
 
-            field_mag = safenorm(total_field, axis=-1)
+            if self._component == "mag":
+                field_component = safenorm(total_field, axis=-1)
+            else:
+                total_field_reprojected = coil.project_coil_frame(
+                    total_field,
+                    finite_build_grid=constants["finite_build_grid"],
+                    centerline_grid=constants["centerline_grid"],
+                    params=x,  # just this coil's parameters
+                )
+                if self._component == "p":
+                    field_component = jnp.abs(total_field_reprojected[:, 1])
+                elif self._component == "q":
+                    field_component = jnp.abs(total_field_reprojected[:, 2])
+                else:
+                    field_component = jnp.zeros_like(total_field[:, 0])
 
             # return maximum field magnitude on the coil
-            max_mag = jnp.max(field_mag, initial=0)
+            max_comp = jnp.max(field_component, initial=0)
 
-            return 0, max_mag
+            return 0, max_comp
 
         _, max_field_per_coil = scan(body, 0, tree_stack(params))
 

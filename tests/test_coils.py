@@ -1308,3 +1308,34 @@ class TestFiniteBuildCoil:
         np.testing.assert_allclose(
             field_magnitude_labframe, field_magnitude_coilframe, atol=1e-10
         )
+
+    @pytest.mark.unit
+    def test_project_coil_frame(self):
+        """Test FourierPlanarFiniteBuildCoil vector projection to coil frame."""
+        coil = FourierPlanarFiniteBuildCoil(
+            current=1e7,
+            cross_section_dims=[0.1, 0.2],
+            cross_section_shape="rectangular",
+        )
+        centerline_grid = LinearGrid(N=10, endpoint=False)
+        xsection_grid = 2
+
+        finite_build_grid, centerline_grid = FourierPlanarFiniteBuildCoil.prep_grid(
+            xsection_grid, centerline_grid
+        )
+
+        coords = finite_build_grid.nodes
+
+        test_vecs_labframe = np.zeros_like(coords)
+        test_vecs_labframe[:, 1] = 1
+
+        test_vecs_coilframe = coil.project_coil_frame(
+            test_vecs_labframe,
+            finite_build_grid,
+            centerline_grid,
+        )
+
+        # q and y vectors are antiparallel
+        np.testing.assert_allclose(
+            test_vecs_labframe[:, 1], -test_vecs_coilframe[:, 2], atol=1e-10
+        )

@@ -5,12 +5,12 @@ from ._coils import (
     CoilCurrentLength,
     CoilCurvature,
     CoilLength,
+    CoilSetMaxB,
     CoilSetMinDistance,
     CoilTorsion,
     PlasmaCoilSetMinDistance,
     QuadraticFlux,
     ToroidalFlux,
-    CoilSetMaxNormB,
 )
 from ._equilibrium import (
     CurrentDensity,

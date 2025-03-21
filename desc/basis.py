@@ -664,7 +664,7 @@ class DoubleFourierSeries(_Basis):
 
         poloidal = fourier(t[:, np.newaxis], m, 1, derivatives[1])[:, moutidx]
         toroidal = fourier(z[:, np.newaxis], n, self.NFP, derivatives[2])[:, noutidx]
-        if grid.is_meshgrid:
+        if grid.is_meshgrid and grid.num_rho == 1:
             return (poloidal[:, np.newaxis] * toroidal[np.newaxis]).reshape(
                 -1, self.num_modes, order="F"
             )

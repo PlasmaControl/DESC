@@ -141,8 +141,14 @@ def _fixed_point_compute_Phi(
         return self._data
 
     if Phi_0 is None:
-        # give initial guess from low resolution fourier solve
-        Phi_0 = self.basis.evaluate(self.Phi_grid).sum(axis=-1)
+        basis = DoubleFourierSeries(
+            M=min(self.basis.M, 3),
+            N=min(self.basis.N, 3),
+            NFP=self.basis.NFP,
+            sym=self.basis.sym,
+        )
+        self._data = _lsmr_compute_Phi(self, basis, chunk_size=chunk_size)
+        Phi_0 = basis.evaluate(self.Phi_grid) @ self._data["Phi"]["Phi_mn"]
     # Phi_0 = _to_real_coef(self.Phi_grid, Phi_0)   # noqa
     Phi = fixed_point(
         _fredholm_operator,
@@ -380,8 +386,7 @@ class VacuumSolver(IOAble):
         Phi_0 : jnp.ndarray
             Initial guess for Φ on ``self.Phi_grid`` for iteration.
             In general, it is best to select the initial guess as truncated
-            Fourier series. Default is Fourier series with unit coefficients
-            for two modes (that have frequency zero and one).
+            Fourier series. Default is a fit to a low resolution solution.
 
         Returns
         -------

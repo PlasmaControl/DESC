@@ -6,13 +6,18 @@ import warnings
 import numpy as np
 import pytest
 
-from desc.coils import FourierPlanarCoil, FourierRZCoil, FourierXYZCoil, SplineXYZCoil
+from desc.coils import (
+    FourierPlanarCoil,
+    FourierRZCoil,
+    FourierXYZCoil,
+    SplineXYZCoil,
+    FourierPlanarFiniteBuildCoil,
+)
 from desc.compute import data_index, xyz2rpz, xyz2rpz_vec
 from desc.compute.utils import _grow_seeds
 from desc.examples import get
 from desc.geometry import (
     FourierPlanarCurve,
-    FourierPlanarFiniteBuildCoil,
     FourierRZCurve,
     FourierRZToroidalSurface,
     FourierXYZCurve,

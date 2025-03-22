@@ -727,7 +727,7 @@ class TestVacuumSolver:
             B0=None,
             evl_grid=LinearGrid(M=5, N=5, NFP=surf.NFP),
             src_grid=src_grid,
-            Phi_grid=LinearGrid(M=1, N=0, NFP=surf.NFP),
+            Phi_grid=LinearGrid(M=2, N=2, NFP=surf.NFP),
             Phi_M=1,
             Phi_N=0,
             interior=False,

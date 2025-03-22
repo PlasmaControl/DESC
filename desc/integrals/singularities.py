@@ -805,7 +805,7 @@ _kernel_1_over_r.keys = _dx.keys + ["|e_theta x e_zeta|"]
 def _kernel_nr_over_r3(eval_data, source_data, ds, diag=False):
     """Returns n ⋅ −∇G(x,x') dS = n ⋅ (x−x')|x−x'|⁻³ dS."""
     dx = _dx(eval_data, source_data, diag)
-    n = rpz2xyz_vec(source_data["e^rho*sqrt(g)"], phi=source_data["phi"])
+    n = rpz2xyz_vec(source_data["e_theta x e_zeta"], phi=source_data["phi"])
     return safediv(
         dot(n, dx) * ds,
         safenorm(dx, axis=-1) ** 3,
@@ -813,7 +813,7 @@ def _kernel_nr_over_r3(eval_data, source_data, ds, diag=False):
 
 
 _kernel_nr_over_r3.ndim = 1
-_kernel_nr_over_r3.keys = _dx.keys + ["e^rho*sqrt(g)"]
+_kernel_nr_over_r3.keys = _dx.keys + ["e_theta x e_zeta"]
 
 
 def _kernel_biot_savart(eval_data, source_data, ds, diag=False):
@@ -871,7 +871,7 @@ def _kernel_Phi_dGp_dn(eval_data, source_data, ds, diag=False):
     """
     dx = _dx(eval_data, source_data, diag)
     out = ds * safediv(
-        dot(rpz2xyz_vec(source_data["e^rho*sqrt(g)"], phi=source_data["phi"]), dx),
+        dot(rpz2xyz_vec(source_data["e_theta x e_zeta"], phi=source_data["phi"]), dx),
         safenorm(dx, axis=-1) ** 3,
     )
     if source_data["Phi"].ndim > 1:
@@ -882,7 +882,7 @@ def _kernel_Phi_dGp_dn(eval_data, source_data, ds, diag=False):
 
 
 _kernel_Phi_dGp_dn.ndim = 1
-_kernel_Phi_dGp_dn.keys = _dx.keys + ["e^rho*sqrt(g)", "Phi"]
+_kernel_Phi_dGp_dn.keys = _dx.keys + ["e_theta x e_zeta", "Phi"]
 
 
 def _kernel_biot_savart_coulomb(eval_data, source_data, ds, diag=False):

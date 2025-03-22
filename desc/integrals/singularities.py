@@ -535,7 +535,6 @@ def _nonsingular_part(
 
     ht = 2 * jnp.pi / source_grid.num_theta
     hz = 2 * jnp.pi / source_grid.num_zeta / source_grid.NFP
-    w = source_data["|e_theta x e_zeta|"][jnp.newaxis] * ht * hz
 
     def func(zeta_j):
         source_data["zeta"] = zeta_j
@@ -543,10 +542,7 @@ def _nonsingular_part(
 
         # nest this def and let JAX figure it out
         def eval_pt(eval_data_i):
-            k = kernel(eval_data_i, source_data).reshape(
-                -1, source_grid.num_nodes, ndim
-            )
-            e = 1 - _eta(
+            e = _eta(
                 source_data["theta"],
                 source_data["zeta"],
                 eval_data_i["theta"][:, jnp.newaxis],
@@ -556,21 +552,25 @@ def _nonsingular_part(
                 st,
                 sz,
             )
-            return jnp.sum(k * (e * w)[..., jnp.newaxis], axis=-2)
+            return (
+                kernel(eval_data_i, source_data, (ht * hz) * (1 - e))
+                .reshape(-1, source_grid.num_nodes, ndim)
+                .sum(axis=-2)
+            )
 
         return batch_map(eval_pt, eval_data, chunk_size).reshape(
             eval_grid.num_nodes, ndim
         )
 
     f = nfp_loop(source_grid, func, jnp.zeros((eval_grid.num_nodes, ndim)))
+    # we sum vectors at different points, so they need to be in xyz for that to work
+    # but then need to convert vectors back to rpzs
+    if kernel.ndim == 3:
+        f = xyz2rpz_vec(f, phi=eval_data["phi"])
 
     # undo rotation of source_zeta
     source_data["zeta"] = source_zeta
     source_data["phi"] = source_phi
-    # we sum vectors at different points, so they need to be in xyz for that to work
-    # but then need to convert vectors back to rpz
-    if kernel.ndim == 3:
-        f = xyz2rpz_vec(f, phi=eval_data["phi"])
 
     return f
 
@@ -592,16 +592,10 @@ def _singular_part(
     r, w, dr, dw = _get_polar_quadrature(interpolator.q)
     r = jnp.abs(r)
     # integrand of eq 38 in [2] except stuff that needs to be interpolated
-    v = (
-        chi(r)
-        * (interpolator.ht * interpolator.hz)
-        * (interpolator.st * interpolator.sz / 4)
-        * r
-        * dr
-        * dw
-    )
+    v = interpolator.ht * interpolator.hz * interpolator.st * interpolator.sz / 4
+    v = v * (chi(r) * r * dr * dw)
 
-    keys = set(["|e_theta x e_zeta|"] + kernel.keys)
+    keys = set(kernel.keys)
     if "phi" in keys:
         keys.remove("phi")  # ϕ is not a periodic map of θ, ζ.
         keys.add("omega")
@@ -641,20 +635,14 @@ def _singular_part(
             #  Hence the quadrature may not converge to the Hadamard finite part.
             #  Prove otherwise or use uniform grid in θ, ϕ and map coordinates.
 
-        k = kernel(eval_data, source_data_polar, diag=True).reshape(
-            eval_grid.num_nodes, -1
-        )
-        dS = v[i] * source_data_polar["|e_theta x e_zeta|"]
-        fi = k * dS[:, jnp.newaxis]
-        return fi
+        return kernel(eval_data, source_data_polar, v[i], diag=True)
 
     f = vmap_chunked(
         polar_pt,
         chunk_size=chunk_size,
         reduction=jnp.add,
         chunk_reduction=_add_reduce,
-    )(jnp.arange(v.size))
-
+    )(jnp.arange(v.size)).reshape(eval_grid.num_nodes, -1)
     # we sum vectors at different points, so they need to be in xyz for that to work
     # but then need to convert vectors back to rpz
     if kernel.ndim == 3:
@@ -704,14 +692,18 @@ def singular_integral(
         ``DFTInterpolator``
     kernel : str or callable
         Kernel function to evaluate. If str, one of the following:
-            '1_over_r' : 1 / |𝐫 − 𝐫'|
-            'nr_over_r3' : 𝐧'⋅(𝐫 − 𝐫') / |𝐫 − 𝐫'|³
-            'biot_savart' : μ₀/4π 𝐊'×(𝐫 − 𝐫') / |𝐫 − 𝐫'|³
-            'biot_savart_A' : μ₀/4π 𝐊' / |𝐫 − 𝐫'|
-        If callable, should take 3 arguments:
-            eval_data : dict of data at evaluation points (primed)
+            '1_over_r'      : 1 / |𝐫 − 𝐫'| dS
+            'nr_over_r3'    : 𝐧'⋅(𝐫 − 𝐫') / |𝐫 − 𝐫'|³ dS
+            'biot_savart'   : μ₀/4π 𝐊'×(𝐫 − 𝐫') / |𝐫 − 𝐫'|³ dS
+            'biot_savart_A' : μ₀/4π 𝐊' / |𝐫 − 𝐫'| dS
+        If callable, should take 4 arguments:
+            eval_data   : dict of data at evaluation points (primed)
             source_data : dict of data at source points (unprimed)
-            diag : boolean, whether to evaluate full cross interactions or just diagonal
+            ds          : Surface area element (not weighted by |e_theta x e_zeta|
+                          Jacobian). Broadcasts with shape
+                          (eval_grid.num_nodes, source_grid.num_nodes).
+            diag        : boolean, whether to evaluate full cross interactions
+                          or just diagonal
         If a callable, should also have the attributes ``ndim`` and ``keys`` defined.
         ``ndim`` is an integer representing the dimensionality of the output function f,
         1 if f is scalar, 3 if f is a vector, etc.
@@ -797,100 +789,118 @@ def _dx(eval_data, source_data, diag=False):
 _dx.keys = ["R", "phi", "Z"]
 
 
-def _kernel_1_over_r(eval_data, source_data, diag=False):
-    """Returns G(x,x') = |x−x'|⁻¹."""
+def _kernel_1_over_r(eval_data, source_data, ds, diag=False):
+    """Returns G(x,x') dS = |x−x'|⁻¹ dS."""
     dx = _dx(eval_data, source_data, diag)
-    return safediv(1, safenorm(dx, axis=-1))
+    return safediv(
+        source_data["|e_theta x e_zeta|"] * ds,
+        safenorm(dx, axis=-1),
+    )
 
 
 _kernel_1_over_r.ndim = 1
-_kernel_1_over_r.keys = _dx.keys
+_kernel_1_over_r.keys = _dx.keys + ["|e_theta x e_zeta|"]
 
 
-def _kernel_nr_over_r3(eval_data, source_data, diag=False):
-    """Returns n ⋅ −∇G(x,x') = n ⋅ (x−x')|x−x'|⁻³."""
+def _kernel_nr_over_r3(eval_data, source_data, ds, diag=False):
+    """Returns n ⋅ −∇G(x,x') dS = n ⋅ (x−x')|x−x'|⁻³ dS."""
     dx = _dx(eval_data, source_data, diag)
-    # Need to use instead of n_rho to pass Green's ID test;
-    # Fourier spectrum is much more concentrated for some reason.
-    n = (
-        source_data["e_theta x e_zeta"]
-        / source_data["|e_theta x e_zeta|"][:, jnp.newaxis]
+    n = rpz2xyz_vec(source_data["e_theta x e_zeta"], phi=source_data["phi"])
+    return safediv(
+        dot(n, dx) * ds,
+        safenorm(dx, axis=-1) ** 3,
     )
-    n = rpz2xyz_vec(n, phi=source_data["phi"])
-    return safediv(dot(n, dx), safenorm(dx, axis=-1) ** 3)
 
 
 _kernel_nr_over_r3.ndim = 1
-_kernel_nr_over_r3.keys = _dx.keys + ["e_theta x e_zeta", "|e_theta x e_zeta|"]
+_kernel_nr_over_r3.keys = _dx.keys + ["e_theta x e_zeta"]
 
 
-def _kernel_biot_savart(eval_data, source_data, diag=False):
-    """Returns (μ₀/4π) K × −∇G(x,x') = (μ₀/4π) K × (x−x')|x−x'|⁻³."""
+def _kernel_biot_savart(eval_data, source_data, ds, diag=False):
+    """Returns (μ₀/4π) K × −∇G(x,x') dS = (μ₀/4π) K × (x−x')|x−x'|⁻³ dS."""
     dx = _dx(eval_data, source_data, diag)
     K = rpz2xyz_vec(source_data["K_vc"], phi=source_data["phi"])
-    return safediv(
-        mu_0 / (4 * jnp.pi) * jnp.cross(K, dx),
+    if jnp.ndim(ds) > 0:
+        ds = ds[..., jnp.newaxis]
+    return ds * safediv(
+        jnp.cross(
+            mu_0 / (4 * jnp.pi) * K * source_data["|e_theta x e_zeta|"][:, jnp.newaxis],
+            dx,
+        ),
         safenorm(dx, axis=-1, keepdims=True) ** 3,
     )
 
 
 _kernel_biot_savart.ndim = 3
-_kernel_biot_savart.keys = _dx.keys + ["K_vc"]
+_kernel_biot_savart.keys = _dx.keys + ["K_vc", "|e_theta x e_zeta|"]
 
 
-def _kernel_biot_savart_A(eval_data, source_data, diag=False):
-    """Returns (μ₀/4π) K G(x,x') = (μ₀/4π) K |x−x'|⁻¹."""
+def _kernel_biot_savart_A(eval_data, source_data, ds, diag=False):
+    """Returns (μ₀/4π) K G(x,x') dS = (μ₀/4π) K |x−x'|⁻¹ dS."""
     dx = _dx(eval_data, source_data, diag)
     K = rpz2xyz_vec(source_data["K_vc"], phi=source_data["phi"])
-    return safediv(
-        mu_0 / (4 * jnp.pi) * K,
+    if jnp.ndim(ds) > 0:
+        ds = ds[..., jnp.newaxis]
+    return ds * safediv(
+        mu_0 / (4 * jnp.pi) * K * source_data["|e_theta x e_zeta|"][:, jnp.newaxis],
         safenorm(dx, axis=-1, keepdims=True),
     )
 
 
 _kernel_biot_savart_A.ndim = 3
-_kernel_biot_savart_A.keys = _dx.keys + ["K_vc"]
+_kernel_biot_savart_A.keys = _dx.keys + ["K_vc", "|e_theta x e_zeta|"]
 
 
-def _kernel_Bn_over_r(eval_data, source_data, diag=False):
-    """Returns Bₙ G(x,x') = Bₙ |x−x'|⁻¹."""
+def _kernel_Bn_over_r(eval_data, source_data, ds, diag=False):
+    """Returns Bₙ G(x,x') dS = Bₙ |x−x'|⁻¹ dS."""
     dx = _dx(eval_data, source_data, diag)
-    return safediv(source_data["Bn"], safenorm(dx, axis=-1))
+    return ds * safediv(
+        source_data["Bn"] * source_data["|e_theta x e_zeta|"],
+        safenorm(dx, axis=-1),
+    )
 
 
 _kernel_Bn_over_r.ndim = 1
-_kernel_Bn_over_r.keys = _dx.keys + ["Bn"]
+_kernel_Bn_over_r.keys = _dx.keys + ["Bn", "|e_theta x e_zeta|"]
 
 
-def _kernel_Phi_dGp_dn(eval_data, source_data, diag=False):
-    """Returns Φ n ⋅ −∇G(x,x') = Φ n ⋅ (x−x')|x−x'|⁻³. Phi has units Tesla-meters."""
+def _kernel_Phi_dGp_dn(eval_data, source_data, ds, diag=False):
+    """Returns Φ n ⋅ −∇G(x,x') dS = Φ n ⋅ (x−x')|x−x'|⁻³ dS.
+
+    Phi has units Tesla-meters.
+    """
     dx = _dx(eval_data, source_data, diag)
-    # Using n_rho works better than normalized e^rho*sqrt(g) here.
-    n = rpz2xyz_vec(source_data["n_rho"], phi=source_data["phi"])
-    ndx_x3 = safediv(dot(n, dx), safenorm(dx, axis=-1) ** 3)[..., jnp.newaxis]
-    Phi = source_data["Phi"]
-    if Phi.ndim == 1:
-        Phi = Phi[:, jnp.newaxis]
-    return Phi * ndx_x3
+    out = ds * safediv(
+        dot(rpz2xyz_vec(source_data["e_theta x e_zeta"], phi=source_data["phi"]), dx),
+        safenorm(dx, axis=-1) ** 3,
+    )
+    if source_data["Phi"].ndim > 1:
+        out = out[..., jnp.newaxis]
+    # Do operation with Phi at the end, so that the following
+    # outer product plus reduction is more likely to be fused.
+    return source_data["Phi"] * out
 
 
 _kernel_Phi_dGp_dn.ndim = 1
-_kernel_Phi_dGp_dn.keys = _dx.keys + ["n_rho", "Phi"]
+_kernel_Phi_dGp_dn.keys = _dx.keys + ["e_theta x e_zeta", "Phi"]
 
 
-def _kernel_biot_savart_coulomb(eval_data, source_data, diag=False):
-    """Returns [ K (Tesla) × −∇G(x,x') - Bₙ ∇G(x,x') ] / 4π."""
+def _kernel_biot_savart_coulomb(eval_data, source_data, ds, diag=False):
+    """Returns [ K (Tesla) × −∇G(x,x') - Bₙ ∇G(x,x') ] / 4π * dS."""
     dx = _dx(eval_data, source_data, diag)
     K = rpz2xyz_vec(source_data["K_vc"], phi=source_data["phi"])
-    numerator = jnp.cross(K, dx) + source_data["Bn"][:, jnp.newaxis] * dx
-    return safediv(
-        numerator / (4 * jnp.pi),
+    a = source_data["|e_theta x e_zeta|"] / (4 * jnp.pi)
+    if jnp.ndim(ds) > 0:
+        ds = ds[..., jnp.newaxis]
+    return ds * safediv(
+        jnp.cross(K * a[:, jnp.newaxis], dx)
+        + (source_data["Bn"] * a)[:, jnp.newaxis] * dx,
         safenorm(dx, axis=-1, keepdims=True) ** 3,
     )
 
 
 _kernel_biot_savart_coulomb.ndim = 3
-_kernel_biot_savart_coulomb.keys = _dx.keys + ["K_vc", "Bn"]
+_kernel_biot_savart_coulomb.keys = _dx.keys + ["K_vc", "Bn", "|e_theta x e_zeta|"]
 
 
 kernels = {

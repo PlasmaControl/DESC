@@ -234,6 +234,10 @@ class TestCoil:
         coil = FourierPlanarCoil(I)
         test(coil, grid_xyz, grid_rpz)
 
+        # FourierPlanarFiniteBuildCoil
+        coil = FourierPlanarFiniteBuildCoil(current=I)
+        test(coil, grid_xyz, grid_rpz)
+
         grid_xyz = np.atleast_2d([0, 0, y])
         grid_rpz = xyz2rpz(grid_xyz)
 
@@ -361,6 +365,20 @@ class TestCoil:
 
             # FourierPlanarCoil
             coil = FourierPlanarCoil(I, center=[0, 0, 0], normal=[0, 0, -1], r_n=R)
+            test(
+                coil,
+                grid_xyz,
+                grid_rpz,
+                A_true_rpz,
+                correct_flux,
+                rtol=1e-8,
+                atol=1e-12,
+            )
+
+            # FourierPlanarFiniteBuildCoil
+            coil = FourierPlanarFiniteBuildCoil(
+                current=I, center=[0, 0, 0], normal=[0, 0, -1], r_n=R
+            )
             test(
                 coil,
                 grid_xyz,

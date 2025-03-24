@@ -291,42 +291,6 @@ def finite_build_regularization_rect(a, b):
 
 
 @jit
-def biot_savart_quad_regularized(eval_pts, coil_pts, tangents, current, regularization):
-    """Regularized Biot-Savart law for filamentary coil using numerical quadrature.
-
-    Parameters
-    ----------
-    eval_pts : array-like shape(n,3)
-        Evaluation points in cartesian coordinates
-    coil_pts : array-like shape(m,3)
-        Points in cartesian space defining coil
-    tangents : array-like, shape(m,3)
-        Tangent vectors to the coil at coil_pts. If the curve is given
-        by x(s) with curve parameter s, coil_pts = x, tangents = dx/ds*ds where
-        ds is the spacing between points.
-    current : float
-        Current through the coil (in Amps).
-    regularization : float
-        Regularization term for the Biot Savart denominator
-
-    Returns
-    -------
-    B : ndarray, shape(n,3)
-        magnetic field in cartesian components at specified points
-    """
-    dl = tangents
-    R_vec = eval_pts[jnp.newaxis, :] - coil_pts[:, jnp.newaxis, :]
-    R_mag = jnp.linalg.norm(R_vec, axis=-1)
-
-    vec = jnp.cross(dl[:, jnp.newaxis, :], R_vec, axis=-1)
-    denom = (R_mag**2 + regularization) ** (3 / 2)
-
-    # 1e-7 == mu_0/(4 pi)
-    B = jnp.sum(1.0e-7 * current * vec / denom[:, :, None], axis=0)
-    return B
-
-
-@jit
 def biot_savart_quad_regularized_singularity_sub(
     ds,
     eval_pts,
@@ -1780,8 +1744,8 @@ class _FiniteBuildCoil(_FramedCoil, Optimizable, ABC):
                     params,
                     basis,
                     finite_build_grid,
-                    source_grid,
-                    transforms=transforms,
+                    transforms,
+                    chunk_size,
                 )
             if self.cross_section_shape == "rectangular":
                 return self.compute_magnetic_field_multifilament_rect(
@@ -1789,8 +1753,8 @@ class _FiniteBuildCoil(_FramedCoil, Optimizable, ABC):
                     params,
                     basis,
                     finite_build_grid,
-                    source_grid,
-                    transforms=transforms,
+                    transforms,
+                    chunk_size,
                 )
 
     def compute_magnetic_field_multifilament_rect(
@@ -1799,8 +1763,8 @@ class _FiniteBuildCoil(_FramedCoil, Optimizable, ABC):
         params=None,
         basis="rpz",
         finite_build_grid=None,
-        centerline_grid=None,
         transforms=None,
+        chunk_size=None,
     ):
         assert basis.lower() in ["rpz", "xyz"]
         coords = jnp.atleast_2d(jnp.asarray(coords))
@@ -1857,7 +1821,9 @@ class _FiniteBuildCoil(_FramedCoil, Optimizable, ABC):
             dx = (
                 jnp.roll(x, -1, axis=0) - x
             )  # using finite diff instead of analytic tangent
-            return biot_savart_quad(coords, x, dx, current / filament_count)
+            return biot_savart_quad(
+                coords, x, dx, current / filament_count, chunk_size=chunk_size
+            )
 
         B_vec = vmap(biot_savart_subfilament, in_axes=(0,), out_axes=0)(x_fb)
 
@@ -1873,8 +1839,8 @@ class _FiniteBuildCoil(_FramedCoil, Optimizable, ABC):
         params=None,
         basis="rpz",
         finite_build_grid=None,
-        centerline_grid=None,
         transforms=None,
+        chunk_size=None,
     ):
         return NotImplementedError(
             "Multifilament circular cross section coils are not yet implemented."

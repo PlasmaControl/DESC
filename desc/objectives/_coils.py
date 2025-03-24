@@ -23,7 +23,7 @@ from desc.utils import Timer, broadcast_tree, errorif, safenorm, setdefault, war
 
 from .normalization import compute_scaling_factors
 from .objective_funs import _Objective, collect_docs
-from .utils import softmin
+from .utils import softmax, softmin
 
 
 class _CoilObjective(_Objective):
@@ -884,14 +884,26 @@ class CoilSetMaxB(_Objective):
         Collocation grid used to discretize each coil centerline. Defaults to the
         default grid for the given coil-type, see ``coils.py`` and ``curve.py``
         for more details. If a list, must have the same structure as coils.
-    name : str, optional
-        Name of the objective function.
+    use_softmax: bool, optional
+        Use softmax or hard max. Softmax is a smooth approximation to the actual maximum
+        field that may give smoother gradients, at the expense of being slightly more
+        expensive and only an approximate maximum.
+    softmax_alpha: float, optional
+        Parameter used for softmax. The larger ``softmax_alpha``, the closer the
+        softmax approximates the hardmax. softmax -> hardmax as
+        ``softmax_alpha`` -> infinity.
 
     """
 
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``bounds=(0,20.0)``.",
+        bounds_default="``bounds=(0,20.0)``.",
+        coil=True,
+    )
+
     _scalar = False
     _units = "(T)"
-    _print_value_fmt = "Maximum field on coil: {:10.3e} "
+    _print_value_fmt = "Maximum field on coil: "
 
     def __init__(
         self,
@@ -907,6 +919,9 @@ class CoilSetMaxB(_Objective):
         xsection_grid=None,
         centerline_grid=None,
         name="field on coil",
+        jac_chunk_size=None,
+        use_softmax=False,
+        softmax_alpha=1.0,
     ):
         from desc.coils import CoilSet, _FiniteBuildCoil
 
@@ -915,6 +930,8 @@ class CoilSetMaxB(_Objective):
 
         self._xsection_grid = xsection_grid
         self._centerline_grid = centerline_grid
+        self._use_softmax = use_softmax
+        self._softmax_alpha = softmax_alpha
 
         errorif(
             not type(coil) is CoilSet,
@@ -944,6 +961,7 @@ class CoilSetMaxB(_Objective):
             loss_function=loss_function,
             deriv_mode=deriv_mode,
             name=name,
+            jac_chunk_size=jac_chunk_size,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -983,7 +1001,7 @@ class CoilSetMaxB(_Objective):
         super().build(use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
-        """Compute maximum field magnitude on each coil.
+        """Compute maximum field on each coil in predefined component.
 
         Parameters
         ----------
@@ -1055,7 +1073,10 @@ class CoilSetMaxB(_Objective):
                     field_component = jnp.zeros_like(total_field[:, 0])
 
             # return maximum field magnitude on the coil
-            max_comp = jnp.max(field_component, initial=0)
+            if self._use_softmax:
+                max_comp = softmax(field_component, self._softmax_alpha)
+            else:
+                max_comp = jnp.max(field_component, initial=0)
 
             return 0, max_comp
 

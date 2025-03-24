@@ -1835,10 +1835,20 @@ class TestObjectiveFunction:
                 coil=coil,
                 component=component,
             )
+            obj2 = CoilSetMaxB(
+                coil=coil, component=component, use_softmax=True, softmax_alpha=10
+            )
+
             obj.build()
+            obj2.build()
+
             f = obj.compute(params=coil.params_dict)
             np.testing.assert_allclose(f, 0, atol=1e-8)
             assert len(f) == obj.dim_f
+
+            f2 = obj.compute(params=coil.params_dict)
+            np.testing.assert_allclose(f2, 0, atol=1e-8)
+            assert len(f2) == obj.dim_f
 
         coil = FourierPlanarFiniteBuildCoil(
             center=[10, 1, 1],

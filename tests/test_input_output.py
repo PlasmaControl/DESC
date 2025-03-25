@@ -178,12 +178,14 @@ def test_desc_output_to_input(tmpdir_factory):
     tmp_path = tmpdir.join("input_iotest_HELIOTRON")
     tmpout_path = tmpdir.join("iotest_HELIOTRON.h5")
     shutil.copyfile(outfile_path, tmpout_path)
+    eq = load(outfile_path)[-1]
 
     ir1 = InputReader()
     ir1.desc_output_to_input(str(tmp_path), str(tmpout_path))
     ir1 = InputReader(cl_args=[str(tmp_path)])
     arr1 = ir1.parse_inputs()[-1]["surface"]
     pres1 = ir1.parse_inputs()[-1]["pressure"]
+    iota1 = ir1.parse_inputs()[-1]["iota"]
 
     arr1 = arr1[arr1[:, 1].argsort()]
     arr1mneg = arr1[arr1[:, 1] < 0]
@@ -193,6 +195,8 @@ def test_desc_output_to_input(tmpdir_factory):
     ir2 = InputReader(cl_args=[str(desc_input_truth)])
     arr2 = ir2.parse_inputs()[-1]["surface"]
     pres2 = ir2.parse_inputs()[-1]["pressure"]
+    iota2 = ir2.parse_inputs()[-1]["iota"]
+
     arr2 = arr2[arr2[:, 1].argsort()]
     arr2mneg = arr2[arr2[:, 1] < 0]
     arr2mpos = arr2[arr2[:, 1] >= 0]
@@ -215,7 +219,10 @@ def test_desc_output_to_input(tmpdir_factory):
         atol=1e-8,
     )
 
-    np.testing.assert_allclose(pres1[pres1[:, 1] > 0], pres2[pres2[:, 1] > 0])
+    np.testing.assert_allclose(pres1, pres2)
+    np.testing.assert_allclose(pres1[:, 1], eq.pressure.params)
+    np.testing.assert_allclose(iota1, iota2)
+    np.testing.assert_allclose(iota1[:, 1], eq.iota.params)
 
 
 @pytest.mark.unit

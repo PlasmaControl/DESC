@@ -3755,8 +3755,9 @@ class FixNearAxisR(_FixedObjective):
                         (np.flipud(self._nae_eq.zs[1:]), self._nae_eq.zc)
                     ),
                     NFP=self._nae_eq.nfp,
+                    sym=eq.sym,
                 )
-                axis.change_resolution(N=self._eq.N)
+                axis.change_resolution(N=self._eq.N, sym=eq.sym)
                 axis_target = axis.R_n
             else:  # else use eq axis a target
                 axis_target = self._eq.Ra_n
@@ -3904,8 +3905,9 @@ class FixNearAxisZ(_FixedObjective):
                         (np.flipud(self._nae_eq.zs[1:]), self._nae_eq.zc)
                     ),
                     NFP=self._nae_eq.nfp,
+                    sym=eq.sym,
                 )
-                axis.change_resolution(N=self._eq.N)
+                axis.change_resolution(N=self._eq.N, sym=eq.sym)
                 axis_target = axis.Z_n
             else:  # else use eq axis a target
                 axis_target = self._eq.Za_n

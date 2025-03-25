@@ -100,63 +100,25 @@ def factorize_linear_constraints(objective, constraint, x_scale="auto"):  # noqa
     A_augmented = np.hstack([A, np.reshape(b, (A.shape[0], 1))])
 
     # Find unique rows of A_augmented
-    unique_rows, unique_indices = np.unique(A_augmented, axis=0, return_index=True)
+    _, unique_indices = np.unique(A_augmented, axis=0, return_index=True)
 
     # Sort the indices to preserve the order of appearance
     unique_indices = np.sort(unique_indices)
+    # Find the indices of the degenerate rows
+    degenerate_idx = np.setdiff1d(np.arange(A_augmented.shape[0]), unique_indices)
 
     # Extract the unique rows
     A_augmented = A_augmented[unique_indices]
     A = A_augmented[:, :-1]
     b = np.atleast_1d(A_augmented[:, -1].squeeze())
 
-    # will store the global index of the unfixed rows, idx
-    indices_row = np.arange(A.shape[0])
-    indices_idx = np.arange(A.shape[1])
+    A_nondegenerate = A.copy()
 
-    while len(np.where(np.count_nonzero(A, axis=1) == 1)[0]):
-        # fixed just means there is a single element in A, so A_ij*x_j = b_i
-        fixed_rows = np.where(np.count_nonzero(A, axis=1) == 1)[0]
-        # indices of x that are fixed = cols of A where rows have 1 nonzero val.
-        _, fixed_idx = np.where(A[fixed_rows])
-        unfixed_rows = np.setdiff1d(np.arange(A.shape[0]), fixed_rows)
-        unfixed_idx = np.setdiff1d(np.arange(A.shape[1]), fixed_idx)
-
-        # find the global index of the fixed variables of this iteration
-        global_fixed_idx = indices_idx[fixed_idx]
-        # find the global index of the unfixed variables by removing the fixed variables
-        # from the indices arrays.
-        indices_idx = np.delete(indices_idx, fixed_idx)  # fixed indices are removed
-        indices_row = np.delete(indices_row, fixed_rows)  # fixed rows are removed
-
-        if len(fixed_rows):
-            # something like 0.5 x1 = 2 is the same as x1 = 4
-            b = put(b, fixed_rows, b[fixed_rows] / np.sum(A[fixed_rows], axis=1))
-            A = put(
-                A,
-                Index[fixed_rows, :],
-                A[fixed_rows] / np.sum(A[fixed_rows], axis=1)[:, None],
-            )
-            xp = put(xp, global_fixed_idx, b[fixed_rows])
-            # Some values might be fixed, but they still show up in other constraints
-            # this is where the fixed cols have >1 nonzero val.
-            # For fixed variables, we delete that row and col of A, but that means
-            # we need to subtract the fixed value from b so that the equation is
-            # balanced.
-            # e.g., 2 x1 + 3 x2 + 1 x3 = 4 ; 4 x1 = 2
-            # combining gives 3 x2 + 1 x3 = 3, with x1 now removed
-            b = put(
-                b,
-                unfixed_rows,
-                b[unfixed_rows] - A[unfixed_rows][:, fixed_idx] @ b[fixed_rows],
-            )
-        A = A[unfixed_rows][:, unfixed_idx]
-        b = b[unfixed_rows]
-
-    unfixed_idx = indices_idx
-    fixed_idx = np.delete(np.arange(xp.size), unfixed_idx)
+    # remove fixed parameters from A and b
+    A, b, xp, unfixed_idx, fixed_idx = remove_fixed_parameters(A, b, xp)
 
     # compute x_scale if not provided
+    # Note: this x_scale is not the same as the x_scale as in solve_options["x_scale"]
     if x_scale == "auto":
         x_scale = objective.x(*objective.things)
     errorif(
@@ -230,7 +192,19 @@ def factorize_linear_constraints(objective, constraint, x_scale="auto"):  # noqa
                 "or be due to floating point error.",
             )
 
-    return xp, A, b, Z, D, unfixed_idx, project, recover
+    return (
+        xp,
+        A,
+        b,
+        Z,
+        D,
+        unfixed_idx,
+        project,
+        recover,
+        A_inv,
+        A_nondegenerate,
+        degenerate_idx,
+    )
 
 
 class _Project(IOAble):
@@ -420,3 +394,83 @@ def check_if_points_are_inside_perimeter(R, Z, Rcheck, Zcheck):
     #                 assign negative distance
     pt_sign = jnp.where(jnp.isclose(pt_sign, 0), 1, -1)
     return pt_sign
+
+
+def remove_fixed_parameters(A, b, xp):
+    """Remove fixed parameters from the linear constraint matrix and RHS vector.
+
+    Given a linear constraint matrix A and RHS vector b, remove fixed parameters from A
+    and b. Fixed parameters are those that have only a single nonzero value in A, so
+    that the equation is already balanced. This function will remove the fixed
+    parameters from A and b, will also update the correcponding sections of the
+    particular solution xp.
+
+    Parameters
+    ----------
+    A : ndarray
+        Constraint matrix.
+    b : ndarray
+        RHS vector.
+    xp : ndarray
+        Particular solution vector for the constraint Ax=b.
+
+    Returns
+    -------
+    A : ndarray
+        Constraint matrix with fixed parameters removed.
+    b : ndarray
+        RHS vector with fixed parameters removed.
+    xp : ndarray
+        Particular solution with fixed parameters updated.
+    unfixed_idx : ndarray
+        Indices of the unfixed parameters.
+    fixed_idx : ndarray
+        Indices of the fixed parameters
+    """
+    # will store the global index of the unfixed rows, idx
+    indices_row = np.arange(A.shape[0])
+    indices_idx = np.arange(A.shape[1])
+
+    while len(np.where(np.count_nonzero(A, axis=1) == 1)[0]):
+        # fixed just means there is a single element in A, so A_ij*x_j = b_i
+        fixed_rows = np.where(np.count_nonzero(A, axis=1) == 1)[0]
+        # indices of x that are fixed = cols of A where rows have 1 nonzero val.
+        _, fixed_idx = np.where(A[fixed_rows])
+        unfixed_rows = np.setdiff1d(np.arange(A.shape[0]), fixed_rows)
+        unfixed_idx = np.setdiff1d(np.arange(A.shape[1]), fixed_idx)
+
+        # find the global index of the fixed variables of this iteration
+        global_fixed_idx = indices_idx[fixed_idx]
+        # find the global index of the unfixed variables by removing the fixed variables
+        # from the indices arrays.
+        indices_idx = np.delete(indices_idx, fixed_idx)  # fixed indices are removed
+        indices_row = np.delete(indices_row, fixed_rows)  # fixed rows are removed
+
+        if len(fixed_rows):
+            # something like 0.5 x1 = 2 is the same as x1 = 4
+            b = put(b, fixed_rows, b[fixed_rows] / np.sum(A[fixed_rows], axis=1))
+            A = put(
+                A,
+                Index[fixed_rows, :],
+                A[fixed_rows] / np.sum(A[fixed_rows], axis=1)[:, None],
+            )
+            xp = put(xp, global_fixed_idx, b[fixed_rows])
+            # Some values might be fixed, but they still show up in other constraints
+            # this is where the fixed cols have >1 nonzero val.
+            # For fixed variables, we delete that row and col of A, but that means
+            # we need to subtract the fixed value from b so that the equation is
+            # balanced.
+            # e.g., 2 x1 + 3 x2 + 1 x3 = 4 ; 4 x1 = 2
+            # combining gives 3 x2 + 1 x3 = 3, with x1 now removed
+            b = put(
+                b,
+                unfixed_rows,
+                b[unfixed_rows] - A[unfixed_rows][:, fixed_idx] @ b[fixed_rows],
+            )
+        A = A[unfixed_rows][:, unfixed_idx]
+        b = b[unfixed_rows]
+
+    unfixed_idx = indices_idx
+    fixed_idx = np.delete(np.arange(xp.size), unfixed_idx)
+
+    return A, b, xp, unfixed_idx, fixed_idx

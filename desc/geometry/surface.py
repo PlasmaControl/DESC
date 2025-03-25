@@ -821,12 +821,9 @@ class FourierRZToroidalSurface(Surface):
             if self.N > 0
             else jnp.zeros_like(Rmid)
         )
-        # FourierRZCurve constructor will usually throw this warning, so ignore it
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", UserWarning)
-            axis = FourierRZCurve.from_values(
-                jnp.vstack([Rmid, phis, Zmid]).T, N=self.N, NFP=self.NFP
-            )
+        axis = FourierRZCurve.from_values(
+            jnp.vstack([Rmid, phis, Zmid]).T, N=self.N, NFP=self.NFP
+        )
         return axis
 
 
@@ -1149,10 +1146,5 @@ class ZernikeRZToroidalSection(Surface):
         Rmid = (Rout + Rin) / 2
         Zmid = (Zout + Zin) / 2
         phis = jnp.zeros_like(Rmid)
-        # FourierRZCurve constructor will usually throw this warning, so ignore it
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", UserWarning)
-            axis = FourierRZCurve.from_values(
-                jnp.vstack([Rmid, phis, Zmid]).T, N=0, NFP=1
-            )
+        axis = FourierRZCurve.from_values(jnp.vstack([Rmid, phis, Zmid]).T, N=0, NFP=1)
         return axis

@@ -292,7 +292,7 @@ class FourierRZCurve(Curve):
             not np.all(np.diff(phi) > 0), ValueError, "Supplied phi must be monotonic"
         )
 
-        grid = LinearGrid(zeta=phi, NFP=1, sym=sym)
+        grid = LinearGrid(zeta=phi, NFP=NFP, sym=sym)
         basis = FourierSeries(N=N, NFP=NFP, sym=sym)
         transform = Transform(grid, basis, build_pinv=True)
         R_n = transform.fit(R)

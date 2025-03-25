@@ -44,7 +44,6 @@ for compatibility with other codes which expect such files from the Booz_Xform c
 - Adds a new objective ``desc.objectives.ExternalObjective`` for wrapping external codes with finite differences.
 - DESC/JAX version and device info is no longer printed by default, but can be accessed with the function `desc.backend.print_backend_info()`.
 
-
 Performance Improvements
 
 - A number of minor improvements to basis function evaluation and spectral transforms to improve speed. These will also enable future improvements for larger gains.

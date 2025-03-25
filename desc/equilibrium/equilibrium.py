@@ -495,13 +495,14 @@ class Equilibrium(IOAble, Optimizable):
 
     def __repr__(self):
         """String form of the object."""
+        vacuum = all(self.pressure.params == 0)
+        profile = "iota" if self.iota is not None else "current"
         return (
             type(self).__name__
             + " at "
             + str(hex(id(self)))
-            + " (L={}, M={}, N={}, NFP={}, sym={}, spectral_indexing={})".format(
-                self.L, self.M, self.N, self.NFP, self.sym, self.spectral_indexing
-            )
+            + f" (L={self.L}, M={self.M}, N={self.N}, NFP={self.NFP}, sym={self.sym},"
+            + f" spectral_indexing={self.spectral_indexing}, {vacuum=}, {profile=})"
         )
 
     def set_initial_guess(self, *args, ensure_nested=True, lcfs_surface=True):

@@ -32,7 +32,8 @@ class BootstrapRedlConsistency(_Objective):
     eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
     grid : Grid, optional
-        Collocation grid containing the nodes to evaluate at.
+        Collocation grid containing the nodes to evaluate at. Requires poloidal and
+        toroidal resolution as the objective must compute flux surface averages.
         Defaults to
         ``grid = LinearGrid(M=eq.M_grid,N=eq.N_grid,NFP=eq.NFP,``
         ``sym=eq.sym,rho=np.linspace(1 / eq.L, 1, eq.L) - 1 / (2 * eq.L),)``
@@ -137,7 +138,7 @@ class BootstrapRedlConsistency(_Objective):
         errorif(
             np.any(np.isclose(rho, 0)),
             ValueError,
-            "Redl formula is undefined" "at rho=0, but grid has grid points at rho=0",
+            "Redl formula is undefined at rho=0, but grid has grid points at rho=0",
         )
 
         self._dim_f = grid.num_rho

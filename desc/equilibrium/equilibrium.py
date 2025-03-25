@@ -858,6 +858,48 @@ class Equilibrium(IOAble, Optimizable):
             msg="must pass in a Grid object for argument grid!"
             f" instead got type {type(grid)}",
         )
+        # a check for Redl to prevent computing on-axis or
+        # at a rho=1.0 point where profiles vanish
+        if any(["Redl" in name for name in names]):
+            errorif(
+                grid.axis.size,
+                ValueError,
+                "Redl formula is undefined at rho=0, "
+                "but grid has grid points at rho=0",
+            )
+            # Try to catch cases in which density or temperatures are specified in the
+            # wrong units. Densities should be ~ 10^20, temperatures are ~ 10^3.
+            rho = grid.compress(grid.nodes[:, 0])
+            rhomax = np.max(rho)
+
+            # check last rho point, it may be at rho=1 and some profiles may go to zero
+            # there, if they are exactly zero this would cause NaNs since the profiles
+            # vanish.
+            errorif(
+                np.isclose(rhomax, 1.0)
+                and np.isclose(self.electron_density(rhomax), 0.0, atol=1e-8),
+                ValueError,
+                "Redl formula is undefined where kinetic profiles vanish, "
+                "but given electron density vanishes at rho=1.0 and grid has "
+                "grid points at rho=1",
+            )
+            errorif(
+                np.isclose(rhomax, 1.0)
+                and np.isclose(self.electron_temperature(rhomax), 0.0, atol=1e-8),
+                ValueError,
+                "Redl formula is undefined where kinetic profiles vanish, "
+                "but given electron temperature vanishes at rho=1.0 and grid has "
+                "grid points at rho=1",
+            )
+            errorif(
+                np.isclose(rhomax, 1.0)
+                and np.isclose(self.ion_temperature(rhomax), 0.0, atol=1e-8),
+                ValueError,
+                "Redl formula is undefined where kinetic profiles vanish, "
+                "but given ion temperature vanishes at rho=1.0 and grid has "
+                "grid points at rho=1",
+            )
+
         if grid.coordinates != "rtz":
             inbasis = {
                 "r": "rho",

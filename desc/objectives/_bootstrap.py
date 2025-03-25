@@ -140,12 +140,6 @@ class BootstrapRedlConsistency(_Objective):
             "Redl formula is undefined" "at rho=0, but grid has grid points at rho=0",
         )
 
-        errorif(
-            np.any(np.isclose(rho, 1)),
-            ValueError,
-            "Redl formula is undefined" "at rho=1, but grid has grid points at rho=1",
-        )
-
         self._dim_f = grid.num_rho
         self._data_keys = ["<J*B>", "<J*B> Redl"]
 
@@ -169,6 +163,35 @@ class BootstrapRedlConsistency(_Objective):
         # Try to catch cases in which density or temperatures are specified in the
         # wrong units. Densities should be ~ 10^20, temperatures are ~ 10^3.
         rho = eq.compute("rho", grid=grid)["rho"]
+        rhomax = np.max(rho)
+
+        # check last rho point, it may be at rho=1 and some profiles may go to zero
+        # there, if they are exactly zero this would cause NaNs since the profiles
+        # vanish.
+        errorif(
+            np.isclose(rhomax, 1.0)
+            and np.isclose(eq.electron_density(rhomax), 0.0, atol=1e-8),
+            ValueError,
+            "Redl formula is undefined where kinetic profiles vanish, "
+            "but given electron density vanishes at rho=1.0 and grid has "
+            "grid points at rho=1",
+        )
+        errorif(
+            np.isclose(rhomax, 1.0)
+            and np.isclose(eq.electron_temperature(rhomax), 0.0, atol=1e-8),
+            ValueError,
+            "Redl formula is undefined where kinetic profiles vanish, "
+            "but given electron temperature vanishes at rho=1.0 and grid has "
+            "grid points at rho=1",
+        )
+        errorif(
+            np.isclose(rhomax, 1.0)
+            and np.isclose(eq.ion_temperature(rhomax), 0.0, atol=1e-8),
+            ValueError,
+            "Redl formula is undefined where kinetic profiles vanish, "
+            "but given ion temperature vanishes at rho=1.0 and grid has "
+            "grid points at rho=1",
+        )
 
         warnif(
             jnp.any(eq.electron_density(rho) > 1e22),
@@ -186,7 +209,9 @@ class BootstrapRedlConsistency(_Objective):
             UserWarning,
             "Ion temperature is surprisingly high. It should have units of eV",
         )
-        # Profiles may go to 0 at rho=1, so exclude the last few grid points from lower
+
+        # Profiles may go to 0 at rho=1 (and we've already checked if our
+        #  grid has points there), so exclude the last few grid points from lower
         # bounds:
         rho = rho[rho < 0.85]
         warnif(

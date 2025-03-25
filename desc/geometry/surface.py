@@ -786,10 +786,19 @@ class FourierRZToroidalSurface(Surface):
     def get_axis(self):
         """Get the axis of the surface.
 
+        This method calculates the axis of the surface by finding the mid point of the
+        R and Z values at theta=0 and pi degrees for a bunch of toroidal angles and
+        fitting a Fourier curve to it.
+        For general non-convex surfaces, the geometric center (aka centroid) might not
+        be inside the given surface. Since we use the axis for the initial guess of the
+        magnetic axis, it is important to have the axis inside the surface, and form
+        good nested flux surfaces. This method is a simple way to get a good initial
+        guess for the axis.
+
         Returns
         -------
         axis : FourierRZCurve
-            Axis of the surface passing through the geometric center.
+            Axis of the surface.
 
         """
         from desc.geometry import FourierRZCurve
@@ -1111,24 +1120,32 @@ class ZernikeRZToroidalSection(Surface):
     def get_axis(self):
         """Get the axis of the surface.
 
+        This method calculates the axis of the surface by finding the mid point of the
+        R and Z values at theta=0 and pi degrees and creating a Fourier curve with it.
+        For general non-convex surfaces, the geometric center (aka centroid) might not
+        be inside the given surface. Since we use the axis for the initial guess of the
+        magnetic axis, it is important to have the axis inside the surface, and form
+        good nested flux surfaces. This method is a simple way to get a good initial
+        guess for the axis.
+
         Returns
         -------
         axis : FourierRZCurve
-            Axis of the surface passing through the geometric center.
+            Circular axis of the surface.
 
         """
         from desc.geometry import FourierRZCurve
 
-        grid = LinearGrid(rho=1, theta=2, zeta=self.N * 2)
+        grid = LinearGrid(rho=1, theta=2, zeta=1)
         data = self.compute(["R", "Z"], grid=grid)
         R = data["R"]
         Z = data["Z"]
-        # Calculate the R and Z values at theta=0 and pi degrees for bunch of toroidal
-        # angles, find the mid point of them and fit a Fourier curve to it.
-        Rout = R[::2]
-        Rin = R[1::2]
-        Zout = Z[::2]
-        Zin = Z[1::2]
+        # Calculate the R and Z values at theta=0 and pi degrees, find the
+        # mid point of them and fit a Fourier curve to it.
+        Rout = R[0]
+        Rin = R[1]
+        Zout = Z[0]
+        Zin = Z[1]
         Rmid = (Rout + Rin) / 2
         Zmid = (Zout + Zin) / 2
         phis = jnp.zeros_like(Rmid)

@@ -3458,7 +3458,7 @@ class TestObjectiveNaNGrad:
     @pytest.mark.unit
     def test_objective_no_nangrad_quadratic_flux_minimizing(self):
         """SurfaceQuadraticFlux."""
-        ext_field = ToroidalMagneticField(1.0, 1.0)
+        ext_field = FourierXYZCoil().to_SplineXYZ(grid=3)
 
         surf = FourierRZToroidalSurface(
             R_lmn=[4.0, 1.0],

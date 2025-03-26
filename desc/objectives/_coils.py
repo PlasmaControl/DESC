@@ -4,22 +4,18 @@ import warnings
 import numpy as np
 from scipy.constants import mu_0
 
-from desc.backend import (
-    fori_loop,
-    jnp,
-    tree_flatten,
-    tree_leaves,
-    tree_map,
-    tree_unflatten,
-)
+from desc.backend import jnp, tree_flatten, tree_leaves, tree_map, tree_unflatten
+from desc.batching import vmap_chunked
 from desc.compute import get_profiles, get_transforms, rpz2xyz
+from desc.compute.geom_utils import copy_rpz_periods
 from desc.compute.utils import _compute as compute_fun
 from desc.grid import LinearGrid, _Grid
 from desc.integrals import compute_B_plasma
-from desc.utils import Timer, broadcast_tree, errorif, safenorm, warnif
+from desc.utils import Timer, broadcast_tree, errorif, safenorm, setdefault, warnif
 
 from .normalization import compute_scaling_factors
 from .objective_funs import _Objective, collect_docs
+from .utils import softmin
 
 
 class _CoilObjective(_Objective):
@@ -720,6 +716,20 @@ class CoilSetMinDistance(_Objective):
         Collocation grid used to discretize each coil. Defaults to the default grid
         for the given coil-type, see ``coils.py`` and ``curve.py`` for more details.
         If a list, must have the same structure as coils.
+    use_softmin: bool, optional
+        Use softmin or hard min. Softmin is a smooth approximation to the actual minimum
+        distance that may give smoother gradients, at the expense of being slightly more
+        expensive and only an approximate minimum.
+    softmin_alpha: float, optional
+        Parameter used for softmin. The larger ``softmin_alpha``, the closer the
+        softmin approximates the hardmin. softmin -> hardmin as
+        ``softmin_alpha`` -> infinity.
+    dist_chunk_size : int > 0, optional
+        When computing distances, how many coils to consider at once. Default is all
+        coils, which is generally the fastest but requires the most memory. If there are
+        a large number of coils, or if the resolution is very high, setting this to a
+        small value will reduce peak memory usage at the cost of slightly increased
+        runtime.
 
     """
 
@@ -746,12 +756,18 @@ class CoilSetMinDistance(_Objective):
         grid=None,
         name="coil-coil minimum distance",
         jac_chunk_size=None,
+        use_softmin=False,
+        softmin_alpha=1.0,
+        dist_chunk_size=None,
     ):
         from desc.coils import CoilSet
 
         if target is None and bounds is None:
             bounds = (1, np.inf)
         self._grid = grid
+        self._use_softmin = use_softmin
+        self._softmin_alpha = softmin_alpha
+        self._dist_chunk_size = dist_chunk_size
         errorif(
             not isinstance(coil, CoilSet),
             ValueError,
@@ -818,20 +834,19 @@ class CoilSetMinDistance(_Objective):
         )
 
         def body(k):
+            # pts shape (ncoils, num_nodes, 3)
             # dist btwn all pts; shape(ncoils,num_nodes,num_nodes)
             # dist[i,j,n] is the distance from the jth point on the kth coil
             # to the nth point on the ith coil
-            dist = safenorm(pts[k][None, :, None] - pts[:, None, :], axis=-1)
-            # exclude distances between points on the same coil
-            mask = jnp.ones(self.dim_f).at[k].set(0)[:, None, None]
-            return jnp.min(dist, where=mask, initial=jnp.inf)
+            coil_pts = pts[k]
+            other_pts = jnp.delete(pts, k, axis=0, assume_unique_indices=True)
+            dist = safenorm(coil_pts[None, :, None] - other_pts[:, None], axis=-1)
+            if self._use_softmin:
+                return softmin(dist, self._softmin_alpha)
+            return jnp.min(dist)
 
-        min_dist_per_coil = fori_loop(
-            0,
-            self.dim_f,
-            lambda k, min_dist: min_dist.at[k].set(body(k)),
-            jnp.zeros(self.dim_f),
-        )
+        k = jnp.arange(self.dim_f)
+        min_dist_per_coil = vmap_chunked(body, chunk_size=self._dist_chunk_size)(k)
         return min_dist_per_coil
 
 
@@ -874,6 +889,20 @@ class PlasmaCoilSetMinDistance(_Objective):
         during optimization, and self.things = [eq] only.
         If False, the coil coordinates are computed at every iteration.
         False by default, so that self.things = [coil, eq].
+    use_softmin: bool, optional
+        Use softmin or hard min. Softmin is a smooth approximation to the actual minimum
+        distance that may give smoother gradients, at the expense of being slightly more
+        expensive and only an approximate minimum.
+    softmin_alpha: float, optional
+        Parameter used for softmin. The larger ``softmin_alpha``, the closer the
+        softmin approximates the hardmin. softmin -> hardmin as
+        ``softmin_alpha`` -> infinity.
+    dist_chunk_size : int > 0, optional
+        When computing distances, how many coils to consider at once. Default is all
+        coils, which is generally the fastest but requires the most memory. If there are
+        a large number of coils, or if the resolution is very high, setting this to a
+        small value will reduce peak memory usage at the cost of slightly increased
+        runtime.
 
     """
 
@@ -904,6 +933,9 @@ class PlasmaCoilSetMinDistance(_Objective):
         coils_fixed=False,
         name="plasma-coil minimum distance",
         jac_chunk_size=None,
+        use_softmin=False,
+        softmin_alpha=1.0,
+        dist_chunk_size=None,
     ):
         if target is None and bounds is None:
             bounds = (1, np.inf)
@@ -913,6 +945,9 @@ class PlasmaCoilSetMinDistance(_Objective):
         self._coil_grid = coil_grid
         self._eq_fixed = eq_fixed
         self._coils_fixed = coils_fixed
+        self._use_softmin = use_softmin
+        self._softmin_alpha = softmin_alpha
+        self._dist_chunk_size = dist_chunk_size
         errorif(eq_fixed and coils_fixed, ValueError, "Cannot fix both eq and coil")
         things = []
         if not eq_fixed:
@@ -952,7 +987,9 @@ class PlasmaCoilSetMinDistance(_Objective):
         else:
             eq = self.things[0]
             coil = self.things[1]
-        plasma_grid = self._plasma_grid or LinearGrid(M=eq.M_grid, N=eq.N_grid)
+        plasma_grid = self._plasma_grid or LinearGrid(
+            M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP
+        )
         coil_grid = self._coil_grid or None
         warnif(
             not np.allclose(plasma_grid.nodes[:, 0], 1),
@@ -984,7 +1021,9 @@ class PlasmaCoilSetMinDistance(_Objective):
                 transforms=eq_transforms,
                 profiles=eq_profiles,
             )
-            plasma_pts = rpz2xyz(jnp.array([data["R"], data["phi"], data["Z"]]).T)
+            rpz = jnp.array([data["R"], data["phi"], data["Z"]]).T
+            rpz = copy_rpz_periods(rpz, plasma_grid.NFP)
+            plasma_pts = rpz2xyz(rpz)
             self._constants["plasma_coords"] = plasma_pts
         if self._coils_fixed:
             coils_pts = coil._compute_position(params=coil.params_dict, grid=coil_grid)
@@ -1048,19 +1087,19 @@ class PlasmaCoilSetMinDistance(_Objective):
                 transforms=constants["eq_transforms"],
                 profiles=constants["eq_profiles"],
             )
-            plasma_pts = rpz2xyz(jnp.array([data["R"], data["phi"], data["Z"]]).T)
+            rpz = jnp.array([data["R"], data["phi"], data["Z"]]).T
+            rpz = copy_rpz_periods(rpz, constants["eq_transforms"]["grid"].NFP)
+            plasma_pts = rpz2xyz(rpz)
 
         def body(k):
             # dist btwn all pts; shape(ncoils,plasma_grid.num_nodes,coil_grid.num_nodes)
             dist = safenorm(coils_pts[k][None, :, :] - plasma_pts[:, None, :], axis=-1)
-            return jnp.min(dist, initial=jnp.inf)
+            if self._use_softmin:
+                return softmin(dist, self._softmin_alpha)
+            return jnp.min(dist)
 
-        min_dist_per_coil = fori_loop(
-            0,
-            self.dim_f,
-            lambda k, min_dist: min_dist.at[k].set(body(k)),
-            jnp.zeros(self.dim_f),
-        )
+        k = jnp.arange(self.dim_f)
+        min_dist_per_coil = vmap_chunked(body, chunk_size=self._dist_chunk_size)(k)
         return min_dist_per_coil
 
 
@@ -1220,6 +1259,14 @@ class QuadraticFlux(_Objective):
     vacuum : bool
         If true, B_plasma (the contribution to the normal field on the boundary from the
         plasma currents) is set to zero.
+    bs_chunk_size : int or None
+        Size to split Biot-Savart computation into chunks of evaluation points.
+        If no chunking should be done or the chunk size is the full input
+        then supply ``None``.
+    B_plasma_chunk_size : int or None
+        Size to split singular integral computation for B_plasma into chunks.
+        If no chunking should be done or the chunk size is the full input
+        then supply ``None``. Default is ``bs_chunk_size``.
 
     """
 
@@ -1249,6 +1296,10 @@ class QuadraticFlux(_Objective):
         vacuum=False,
         name="Quadratic flux",
         jac_chunk_size=None,
+        *,
+        bs_chunk_size=None,
+        B_plasma_chunk_size=None,
+        **kwargs,
     ):
         from desc.geometry import FourierRZToroidalSurface
 
@@ -1260,6 +1311,8 @@ class QuadraticFlux(_Objective):
         self._field = field
         self._field_grid = field_grid
         self._vacuum = vacuum
+        self._bs_chunk_size = bs_chunk_size
+        self._B_plasma_chunk_size = setdefault(B_plasma_chunk_size, bs_chunk_size)
         errorif(
             isinstance(eq, FourierRZToroidalSurface),
             TypeError,
@@ -1327,12 +1380,17 @@ class QuadraticFlux(_Objective):
         )
 
         # pre-compute B_plasma because we are assuming eq is fixed
-        if self._vacuum:
-            Bplasma = jnp.zeros(eval_grid.num_nodes)
-        else:
-            Bplasma = compute_B_plasma(
-                eq, eval_grid, self._source_grid, normal_only=True
+        Bplasma = (
+            jnp.zeros(eval_grid.num_nodes)
+            if self._vacuum
+            else compute_B_plasma(
+                eq,
+                eval_grid,
+                self._source_grid,
+                normal_only=True,
+                chunk_size=self._B_plasma_chunk_size,
             )
+        )
 
         self._constants = {
             "field": self._field,
@@ -1386,6 +1444,7 @@ class QuadraticFlux(_Objective):
             source_grid=constants["field_grid"],
             basis="rpz",
             params=field_params,
+            chunk_size=self._bs_chunk_size,
         )
         B_ext = jnp.sum(B_ext * eval_data["n_rho"], axis=-1)
         f = (B_ext + B_plasma) * jnp.sqrt(eval_data["|e_theta x e_zeta|"])
@@ -1424,6 +1483,10 @@ class SurfaceQuadraticFlux(_Objective):
         the docs of that object's ``compute_magnetic_field`` method for more detail.
     field_fixed : bool
         Whether or not to fix the magnetic field's DOFs during the optimization.
+    bs_chunk_size : int or None
+        Size to split Biot-Savart computation into chunks of evaluation points.
+        If no chunking should be done or the chunk size is the full input
+        then supply ``None``.
 
     """
 
@@ -1452,6 +1515,9 @@ class SurfaceQuadraticFlux(_Objective):
         name="Surface Quadratic Flux",
         field_fixed=False,
         jac_chunk_size=None,
+        *,
+        bs_chunk_size=None,
+        **kwargs,
     ):
         if target is None and bounds is None:
             target = 0
@@ -1460,6 +1526,7 @@ class SurfaceQuadraticFlux(_Objective):
         self._field = field
         self._field_grid = field_grid
         self._field_fixed = field_fixed
+        self._bs_chunk_size = bs_chunk_size
 
         things = [surface]
         if not field_fixed:
@@ -1582,9 +1649,10 @@ class SurfaceQuadraticFlux(_Objective):
             source_grid=constants["field_grid"],
             basis="rpz",
             params=field_params,
+            chunk_size=self._bs_chunk_size,
         )
         B_ext = jnp.sum(B_ext * eval_data["n_rho"], axis=-1)
-        f = (B_ext) * jnp.sqrt(eval_data["|e_theta x e_zeta|"])
+        f = B_ext * jnp.sqrt(eval_data["|e_theta x e_zeta|"])
         return f
 
 
@@ -1621,10 +1689,14 @@ class ToroidalFlux(_Objective):
         plasma geometry at. Defaults to a LinearGrid(L=eq.L_grid, M=eq.M_grid,
         zeta=jnp.array(0.0), NFP=eq.NFP).
     field_fixed : bool
-        Whether or not to fix the field's DOFs during the optimization.
+        Whether to fix the field's DOFs during the optimization.
     eq_fixed : bool
-        Whether or not to fix the equilibrium (or QFM surface) DOFs
+        Whether to fix the equilibrium (or QFM surface) DOFs
         during the optimization.
+    bs_chunk_size : int or None
+        Size to split Biot-Savart computation into chunks of evaluation points.
+        If no chunking should be done or the chunk size is the full input
+        then supply ``None``.
 
     """
 
@@ -1661,6 +1733,9 @@ class ToroidalFlux(_Objective):
         field_fixed=False,
         eq_fixed=False,
         jac_chunk_size=None,
+        *,
+        bs_chunk_size=None,
+        **kwargs,
     ):
         if target is None and bounds is None:
             target = 1.0 if not hasattr(eq, "Psi") else eq.Psi
@@ -1670,6 +1745,7 @@ class ToroidalFlux(_Objective):
         self._eq = eq
         self._field_fixed = field_fixed
         self._eq_fixed = eq_fixed
+        self._bs_chunk_size = bs_chunk_size
         errorif(
             eq_fixed and field_fixed,
             ValueError,
@@ -1709,7 +1785,9 @@ class ToroidalFlux(_Objective):
         eq = self._eq
         self._use_vector_potential = True
         try:
-            self._field.compute_magnetic_vector_potential([0, 0, 0])
+            self._field.compute_magnetic_vector_potential(
+                [0, 0, 0], chunk_size=self._bs_chunk_size
+            )
         except (NotImplementedError, ValueError) as e:
             self._use_vector_potential = False
             errorif(
@@ -1844,6 +1922,7 @@ class ToroidalFlux(_Objective):
                 basis="rpz",
                 source_grid=constants["field_grid"],
                 params=field_params,
+                chunk_size=self._bs_chunk_size,
             )
 
             A_dot_e_theta = jnp.sum(A * data["e_theta"], axis=1)
@@ -1854,6 +1933,7 @@ class ToroidalFlux(_Objective):
                 basis="rpz",
                 source_grid=constants["field_grid"],
                 params=field_params,
+                chunk_size=self._bs_chunk_size,
             )
 
             B_dot_n_zeta = jnp.sum(B * data["n_zeta"], axis=1)
@@ -2334,12 +2414,7 @@ class SurfaceCurrentRegularization(_Objective):
                 )
             else:  # it does not have I,G bc is CurrentPotentialField
                 Phi = surface_current_field.compute("Phi", grid=source_grid)["Phi"]
-                self._normalization = np.max(
-                    [
-                        np.mean(np.abs(Phi)),
-                        1,
-                    ]
-                )
+                self._normalization = np.max([np.mean(np.abs(Phi)), 1])
 
         self._constants = {
             "surface_transforms": surface_transforms,

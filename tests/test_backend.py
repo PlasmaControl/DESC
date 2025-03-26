@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 
-from desc.backend import jax, jnp, put, root, root_scalar, sign, vmap
+from desc.backend import _lstsq, jax, jnp, put, root, root_scalar, sign, vmap
 
 
 @pytest.mark.unit
@@ -109,3 +109,32 @@ def test_root_scalar():
     np.testing.assert_allclose(J_full, J_exact)
     np.testing.assert_allclose(J_rev, J_exact)
     np.testing.assert_allclose(J_full_rev, J_exact)
+
+
+@pytest.mark.unit
+def test_lstsq():
+    """Test cholesky factorization of least squares solution."""
+    # tall
+    A = np.random.randn(10, 5)
+    b = np.random.randn(10)
+    np.testing.assert_allclose(
+        _lstsq(A, b), np.linalg.lstsq(A, b, rcond=None)[0], rtol=1e-6
+    )
+    # wide
+    A = np.random.randn(5, 10)
+    b = np.random.randn(5)
+    np.testing.assert_allclose(
+        _lstsq(A, b), np.linalg.lstsq(A, b, rcond=None)[0], rtol=1e-6
+    )
+    # square
+    A = np.random.randn(5, 5)
+    b = np.random.randn(5)
+    np.testing.assert_allclose(
+        _lstsq(A, b), np.linalg.lstsq(A, b, rcond=None)[0], rtol=1e-6
+    )
+    # scalar
+    A = np.random.randn(1, 5)
+    b = np.random.randn(1)
+    np.testing.assert_allclose(
+        _lstsq(A, b), np.linalg.lstsq(A, b, rcond=None)[0], rtol=1e-6
+    )

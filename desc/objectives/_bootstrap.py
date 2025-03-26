@@ -161,39 +161,34 @@ class BootstrapRedlConsistency(_Objective):
             "Bootstrap current calculation requires an ion temperature profile.",
         )
 
-        # Try to catch cases in which density or temperatures are specified in the
-        # wrong units. Densities should be ~ 10^20, temperatures are ~ 10^3.
-        rho = eq.compute("rho", grid=grid)["rho"]
-        rhomax = np.max(rho)
+        rho = grid.compress(grid.nodes[:, 0], "rho")
 
-        # check last rho point, it may be at rho=1 and some profiles may go to zero
-        # there, if they are exactly zero this would cause NaNs since the profiles
+        # check if profiles may go to zero
+        # if they are exactly zero this would cause NaNs since the profiles
         # vanish.
         errorif(
-            np.isclose(rhomax, 1.0)
-            and np.isclose(eq.electron_density(rhomax), 0.0, atol=1e-8),
+            np.any(np.isclose(eq.electron_density(rho), 0.0, atol=1e-8)),
             ValueError,
             "Redl formula is undefined where kinetic profiles vanish, "
-            "but given electron density vanishes at rho=1.0 and grid has "
-            "grid points at rho=1",
+            "but given electron density vanishes at at least one provided"
+            "rho grid point.",
         )
         errorif(
-            np.isclose(rhomax, 1.0)
-            and np.isclose(eq.electron_temperature(rhomax), 0.0, atol=1e-8),
+            np.any(np.isclose(eq.electron_temperature(rho), 0.0, atol=1e-8)),
             ValueError,
             "Redl formula is undefined where kinetic profiles vanish, "
-            "but given electron temperature vanishes at rho=1.0 and grid has "
-            "grid points at rho=1",
+            "but given electron temperature vanishes at at least one provided"
+            "rho grid point.",
         )
         errorif(
-            np.isclose(rhomax, 1.0)
-            and np.isclose(eq.ion_temperature(rhomax), 0.0, atol=1e-8),
+            np.any(np.isclose(eq.ion_temperature(rho), 0.0, atol=1e-8)),
             ValueError,
             "Redl formula is undefined where kinetic profiles vanish, "
-            "but given ion temperature vanishes at rho=1.0 and grid has "
-            "grid points at rho=1",
+            "but given ion temperature vanishes at at least one provided"
+            "rho grid point.",
         )
-
+        # Try to catch cases in which density or temperatures are specified in the
+        # wrong units. Densities should be ~ 10^20, temperatures are ~ 10^3.
         warnif(
             jnp.any(eq.electron_density(rho) > 1e22),
             UserWarning,

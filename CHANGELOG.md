@@ -1,8 +1,8 @@
 Changelog
 =========
 
-- Adds error for incorrect grids in Redl bootstrap current consistency objective
-- Allows Redl to use SplineProfile
+- Adds error for incorrect grids in ``desc.objectives.BootstrapRedlConsistency`` and when computing ``current Redl`` and ``<J*B> Redl`` compute quantities
+- Allows Redl compute quantities to use SplineProfile
 - Updates Redl bootstrap current consistency tutorial to include a ``SplineProfile`` optimization
 
 

@@ -1073,7 +1073,7 @@ class TestBootstrapCompute:
         grid3 = LinearGrid(rho=1.0, M=eq.M, N=eq.N, NFP=eq.NFP)
         with pytest.raises(ValueError, match="rho=0"):
             eq.compute("<J*B> Redl", grid=grid2, helicity=helicity)
-        with pytest.raises(ValueError, match="1.0"):
+        with pytest.raises(ValueError, match="vanish"):
             eq.compute("<J*B> Redl", grid=grid3, helicity=helicity)
 
         J_dot_B_Redl = grid.compress(data["<J*B> Redl"])

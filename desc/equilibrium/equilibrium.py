@@ -495,7 +495,10 @@ class Equilibrium(IOAble, Optimizable):
 
     def __repr__(self):
         """String form of the object."""
-        vacuum = all(self.pressure.params == 0)
+        if self.pressure is not None and hasattr(self.pressure, "params"):
+            vacuum = all(self.pressure.params == 0)
+        else:
+            vacuum = "no pressure profile"
         profile = "iota" if self.iota is not None else "current"
         return (
             type(self).__name__

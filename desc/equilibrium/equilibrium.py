@@ -451,6 +451,8 @@ class Equilibrium(IOAble, Optimizable):
         if self._xsection is None:
             # eq.xsection property was added with Poincare BC support
             self._xsection = self.get_surface_at(zeta=0)
+        if not hasattr(self.surface, "_rho"):
+            self.surface._rho = 1.0
 
         # ensure things that should be ints are ints
         self._L = int(self._L)

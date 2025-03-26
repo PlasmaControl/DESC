@@ -1004,7 +1004,6 @@ class ZernikeRZToroidalSection(Surface):
         )  # NFP is not used but need to pop to avoid unexpected kwarg
         sym = kwargs.pop("sym", None)
         assert len(kwargs) == 0, "change_resolution got unexpected kwarg: {kwargs}"
-        self._sym = sym if sym is not None else self.sym
         if N is not None:
             warnings.warn(
                 "ZernikeRZToroidalSection does not have toroidal "
@@ -1017,13 +1016,13 @@ class ZernikeRZToroidalSection(Surface):
 
         L = check_nonnegint(L, "L")
         M = check_nonnegint(M, "M")
-        self._sym = sym if sym is not None else self.sym
 
         if (
             ((L is not None) and (L != self.L))
             or ((M is not None) and (M != self.M))
             or ((sym is not None) and (sym != self.sym))
         ):
+            self._sym = sym if sym is not None else self.sym
             L = int(L if L is not None else self.L)
             M = int(M if M is not None else self.M)
             R_modes_old = self.R_basis.modes

@@ -1,5 +1,6 @@
 """Tests for magnetic field classes."""
 
+import matplotlib.pyplot as plt
 import numpy as np
 import pytest
 from diffrax import Dopri5
@@ -28,8 +29,10 @@ from desc.magnetic_fields import (
     VerticalMagneticField,
     field_line_integrate,
     read_BNORM_file,
+    solve_regularized_surface_current,
 )
 from desc.magnetic_fields._dommaschk import CD_m_k, CN_m_k
+from desc.plotting import poincare_plot
 from desc.utils import dot
 
 
@@ -558,6 +561,136 @@ class TestMagneticFields:
         )
 
     @pytest.mark.unit
+    def test_fourier_current_potential_change_Phi_resolution(self):
+        """Test Fourier current potential changing Phi resolution."""
+        surface = FourierRZToroidalSurface(sym=False)
+        current_field = FourierCurrentPotentialField.from_surface(
+            surface, sym_Phi=False, M_Phi=4, N_Phi=0
+        )
+        assert current_field.M_Phi == 4
+        assert current_field.N_Phi == 0
+        current_field.change_Phi_resolution(M=8, N=0)
+        assert current_field.M_Phi == 8
+        assert current_field.N_Phi == 0
+
+    @pytest.mark.unit
+    @pytest.mark.mpl_image_compare(remove_text=True, tolerance=10)
+    def test_fourier_current_potential_field_modular_coil_cut(self):
+        """Test Fourier current potential coil cut against analytic solenoid."""
+        surface = FourierRZToroidalSurface(
+            R_lmn=jnp.array([20, 3]),
+            Z_lmn=jnp.array([0, -3]),
+            modes_R=jnp.array([[0, 0], [1, 0]]),
+            modes_Z=jnp.array([[0, 0], [-1, 0]]),
+            NFP=5,
+        )
+        # make a current potential corresponding a purely poloidal current
+        G = 1e4  # net poloidal current
+        correct_field = lambda R, phi, Z: jnp.array([[0, mu_0 * G / 2 / jnp.pi / R, 0]])
+
+        field = FourierCurrentPotentialField(
+            I=0,
+            G=-G,
+            sym_Phi="sin",
+            R_lmn=surface.R_lmn,
+            Z_lmn=surface.Z_lmn,
+            modes_R=surface._R_basis.modes[:, 1:],
+            modes_Z=surface._Z_basis.modes[:, 1:],
+            NFP=surface.NFP,
+        )
+        coils = field.to_CoilSet(10, stell_sym=True, show_plots=True).to_FourierXYZ(
+            N=2, grid=LinearGrid(N=8), check_intersection=False
+        )
+
+        np.testing.assert_allclose(
+            coils.compute_magnetic_field(
+                [20.0, 0, 0],
+            ),
+            correct_field(20.0, 0, 0),
+            atol=1e-8,
+            rtol=1e-8,
+        )
+        np.testing.assert_allclose(
+            coils.compute_magnetic_field([20.0, np.pi / 4, 0]),
+            correct_field(20.0, np.pi / 4, 0),
+            atol=1e-8,
+            rtol=1e-8,
+        )
+        return plt.gcf()
+
+    @pytest.mark.unit
+    def test_fourier_current_potential_field_helical_coil_cut(self):
+        """Test Fourier current potential helix coil cut against analytic solenoid."""
+        surface = FourierRZToroidalSurface(
+            R_lmn=jnp.array([20, 3]),
+            Z_lmn=jnp.array([0, -3]),
+            modes_R=jnp.array([[0, 0], [1, 0]]),
+            modes_Z=jnp.array([[0, 0], [-1, 0]]),
+            NFP=10,
+        )
+        # make a current potential corresponding a helical current
+        # with a sharp pitch (approximating a toroidal solenoid)
+        G = 2e2  # net poloidal current
+        I = 1
+        correct_field = lambda R, phi, Z: jnp.array([[0, mu_0 * G / 2 / jnp.pi / R, 0]])
+
+        field = FourierCurrentPotentialField(
+            I=I,
+            G=-G,
+            sym_Phi="sin",
+            R_lmn=surface.R_lmn,
+            Z_lmn=surface.Z_lmn,
+            modes_R=surface._R_basis.modes[:, 1:],
+            modes_Z=surface._Z_basis.modes[:, 1:],
+            NFP=10,
+        )
+
+        coils = field.to_CoilSet(1)
+
+        np.testing.assert_allclose(
+            coils.compute_magnetic_field([20.0, 0, 0], source_grid=LinearGrid(N=700)),
+            correct_field(20.0, 0, 0),
+            atol=2e-8,
+            rtol=1e-8,
+        )
+        np.testing.assert_allclose(
+            coils.compute_magnetic_field(
+                [20.0, np.pi / 4, 0], source_grid=LinearGrid(N=700)
+            ),
+            correct_field(20.0, np.pi / 4, 0),
+            atol=2e-8,
+            rtol=1e-8,
+        )
+        # check with opposite helicity current
+        field = FourierCurrentPotentialField(
+            I=I,
+            G=G,
+            sym_Phi="sin",
+            R_lmn=surface.R_lmn,
+            Z_lmn=surface.Z_lmn,
+            modes_R=surface._R_basis.modes[:, 1:],
+            modes_Z=surface._Z_basis.modes[:, 1:],
+            NFP=10,
+        )
+
+        coils = field.to_CoilSet(1)
+
+        np.testing.assert_allclose(
+            -coils.compute_magnetic_field([20.0, 0, 0], source_grid=LinearGrid(N=700)),
+            correct_field(20.0, 0, 0),
+            atol=2e-8,
+            rtol=1e-8,
+        )
+        np.testing.assert_allclose(
+            -coils.compute_magnetic_field(
+                [20.0, np.pi / 4, 0], source_grid=LinearGrid(N=700)
+            ),
+            correct_field(20.0, np.pi / 4, 0),
+            atol=2e-8,
+            rtol=1e-8,
+        )
+
+    @pytest.mark.unit
     def test_fourier_current_potential_vector_potential(self):
         """Test Fourier current potential vector potential against analytic result."""
         R0 = 10
@@ -901,15 +1034,36 @@ class TestMagneticFields:
         # ensure can compute field at a point without incompatible size error
         field.compute_magnetic_field([10.0, 0, 0])
 
+    @pytest.mark.unit
+    def test_fourier_current_potential_field_coil_cut_warnings(self):
+        """Test Fourier current potential coil cut method warning."""
+        curr = 1e4
+        # with this choice of Phi_mn, the constant Phi contours
+        # move so much that they intersect the boundaries of where we
+        # plot them, that should return a warning
+        # TODO: When we switch from the visual coil cutting method, remove this
+        field = FourierCurrentPotentialField(
+            I=curr,
+            G=curr,
+            Phi_mn=np.array([-4 * curr / 13]),
+            modes_Phi=np.array([[-1, 0]]),
+        )
+
+        with pytest.warns(
+            UserWarning,
+            match="Detected",
+        ):
+            field.to_CoilSet(2)
+
     @pytest.mark.slow
     @pytest.mark.unit
     def test_spline_field(self, tmpdir_factory):
         """Test accuracy of spline magnetic field."""
-        field1 = ScalarPotentialField(phi_lm, args)
+        field1 = ScalarPotentialField(phi_lm, args, NFP=5)
         R = np.linspace(0.5, 1.5, 20)
         Z = np.linspace(-1.5, 1.5, 20)
         p = np.linspace(0, 2 * np.pi / 5, 40)
-        field2 = SplineMagneticField.from_field(field1, R, p, Z, NFP=5)
+        field2 = SplineMagneticField.from_field(field1, R, p, Z)
 
         np.testing.assert_allclose(
             field1([1.0, 1.0, 1.0]), field2([1.0, 1.0, 1.0]), rtol=1e-2, atol=1e-2
@@ -1244,6 +1398,44 @@ class TestMagneticFields:
         np.testing.assert_allclose(B_half_lowres, B_half_highres, rtol=3e-3)
         np.testing.assert_allclose(B_lcfs_lowres, B_lcfs_highres, rtol=4e-3)
 
+    @pytest.mark.unit
+    def test_solve_current_potential_warnings_and_errors(self):
+        """Test solve current potential warnings/errors."""
+        field = FourierCurrentPotentialField(I=0, G=1, sym_Phi="sin")
+        eq = get("SOLOVEV")
+        with pytest.warns(UserWarning, match="Reducing radial"):
+            eq.change_resolution(L=1, M=1, N=1, L_grid=1, M_grid=1, N_grid=1)
+        with pytest.raises(ValueError, match="length"):
+            solve_regularized_surface_current(field, eq, current_helicity=(1, 1, 1))
+        with pytest.raises(ValueError, match="integer"):
+            solve_regularized_surface_current(field, eq, current_helicity=(1.2, 1))
+        with pytest.raises(ValueError, match="regularization"):
+            solve_regularized_surface_current(
+                field, eq, regularization_type="not a valid option"
+            )
+        with pytest.raises(ValueError, match="Expected Fourier"):
+            solve_regularized_surface_current(ToroidalMagneticField(1, 1), eq)
+        with pytest.raises(AssertionError, match="Expected MagneticField"):
+            solve_regularized_surface_current(field, eq, external_field=eq)
+        field = FourierCurrentPotentialField(I=0, G=1, sym_Phi="cos")
+        grid = LinearGrid(M=1, N=1)
+        # nested with pytest.warns, if a warning is not detected it is
+        # re-emitted and goes through the higher level context,
+        #  this lets us test 3 different warnings with one fxn
+        # call here
+        with pytest.warns(UserWarning, match="Detected"):
+            with pytest.warns(UserWarning, match="Pressure"):
+                with pytest.warns(UserWarning, match="Current"):
+                    solve_regularized_surface_current(
+                        field,
+                        eq,
+                        eval_grid=grid,
+                        source_grid=grid,
+                        vc_source_grid=grid,
+                        verbose=0,
+                        vacuum=True,
+                    )
+
 
 @pytest.mark.unit
 def test_dommaschk_CN_CD_m_0():
@@ -1272,11 +1464,13 @@ def test_dommaschk_field_errors():
     b_arr = [1]
     c_arr = [1]
     d_arr = [1, 1]  # length is not equal to the rest
-    with pytest.raises(AssertionError):
+    with pytest.raises(AssertionError, match="size"):
         DommaschkPotentialField(ms, ls, a_arr, b_arr, c_arr, d_arr)
-    d_arr = [1]
+    d_arr = [1]  # test with incorrect NFP
+    with pytest.raises(AssertionError, match="desired NFP"):
+        DommaschkPotentialField(ms, ls, a_arr, b_arr, c_arr, d_arr, NFP=2)
     ms = [-1]  # negative mode number
-    with pytest.raises(AssertionError):
+    with pytest.raises(AssertionError, match=">= 0"):
         DommaschkPotentialField(ms, ls, a_arr, b_arr, c_arr, d_arr)
 
 
@@ -1353,7 +1547,9 @@ def test_dommaschk_fit_vertical_and_toroidal_field():
 
     # only nonzero coefficient of the field should be the B0 and a_ml = a_01
     np.testing.assert_allclose(B._params["B0"], B0, atol=1e-13)
-    for coef, m, l in zip(B._params["a_arr"], B._params["ms"], B._params["ls"]):
+    for coef, m, l in zip(
+        B._params["a_arr"], B._full_params["ms"], B._full_params["ls"]
+    ):
         if m == 0 and l == 1:
             np.testing.assert_allclose(coef, B0_Z)
         else:
@@ -1378,3 +1574,95 @@ def test_domm_field_is_nonzero_and_continuous_across_Z_0():
     Bnew = new_field.compute_magnetic_field(np.vstack([Rs, phis, Zs]).T)
 
     assert not np.any(np.isclose(Bnew[:, 1], 0))
+
+
+@pytest.mark.mpl_image_compare(remove_text=True, tolerance=10)
+@pytest.mark.unit
+def test_domm_W7AS():
+    """Test getting flux surfaces from W7-AS Dommaschk coefficients."""
+    # W7-AS
+    # The coefficients are taken from IPP-Report IPP_0_48 by Dommaschk et al.
+    B0 = 1.00
+    # fmt: off
+    # toroidal harmonics
+    ms = [ 0, 5, 10, 15,
+        0, 5, 10, 15,
+        0, 5, 10, 15,
+        0, 5, 10, 15,
+        0, 5, 10, 15,
+        0, 5, 10, 15,
+        0, 5, 10, 15 ]
+    # poloidal harmonics
+    ls = [ 0, 0,  0,  0,
+        1, 1,  1,  1,
+        2, 2,  2,  2,
+        3, 3,  3,  3,
+        4, 4,  4,  4,
+        5, 5,  5,  5,
+        6, 6,  6,  6 ]
+    # Arrays:
+    # m      0          5         10         15           # l
+    a_w7as=[0.0      , 0.0      , 0.0       , 0.0,        # 0
+            0.0094324, 0.0112792, 0.0147238 ,-0.00100904, # 1
+            0.0      , 0.0      , 0.0       , 0.0,        # 2
+            0.0410242,-4.15263  ,-3.33006   , 0.0359866,  # 3
+            0.0      , 0.0      , 0.0       , 0.0,        # 4
+            -29.9792 ,-135.852  , 60.1416   ,-215.314 ,   # 5
+            0.0      , 0.0      , 0.0       , 0.0       ] # 6
+
+    #        0          5         10         15
+    b_w7as=[0.0      ,-0.0121413,0.000471873, 4.58071E-05,# 0
+            0.0      , 0.0      , 0.0       , 0.0     ,   # 1
+            0.0      , 1.25878  , 0.237015  , -0.0403158, # 2
+            0.0      , 0.0      , 0.0      , 0.0     ,    # 3
+            0.0      , 4.06992  , 38.1763  , 15.0701 ,    # 4
+            0.0      , 0.0      , 0.0      , 0.0     ,    # 5
+            0.0      ,-3192.22  , 376.945  , 2621.02  ]   # 6
+
+    #        0          5         10         15
+    c_w7as=[0.0      , 0.0      , 0.0      , 0.0,         # 0
+            0.0      , 0.0      , 0.0      , 0.0     ,    # 1
+            0.255341 , 1.35643  , 0.351854 , 0.0165178,   # 2
+            0.0      , 0.0      , 0.0      , 0.0     ,    # 3
+            -14.022  , -9.04059  , 40.75   , 5.76041 ,    # 4
+            0.0      , 0.0      , 0.0      , 0.0     ,    # 5
+            -3877.26 , -17583.9 ,-20976.   , 937.2     ]  # 6
+
+    #        0          5         10         15
+    d_w7as=[0.0      , 0.0     , 0.0      , 0.0,          # 0
+            0.0      , 0.190922,-0.0105725, 0.00335741,   # 1
+            0.0      , 0.0     , 0.0      , 0.0     ,     # 2
+            0.0      , 0.163836, 1.60217  ,-0.136241,     # 3
+            0.0      , 0.0     , 0.0      , 0.0     ,     # 4
+            0.0      , 120.441 , 344.756  , 193.934 ,     # 5
+            0.0      , 0.0     , 0.0      , 0.0       ]   # 6
+    # fmt: on
+    Bw7as_dom = DommaschkPotentialField(
+        B0=B0,
+        a_arr=a_w7as,
+        b_arr=b_w7as,
+        c_arr=c_w7as,
+        d_arr=d_w7as,
+        ms=ms,
+        ls=ls,
+        NFP=5,
+    )
+    ntransit = 300  # how many toroidal transits to trace
+    NFP = 5
+    r0 = np.linspace(0.88245, 1.0, 11)
+    z0 = np.zeros_like(r0)
+    fig, _ = poincare_plot(
+        field=Bw7as_dom,
+        R0=r0,  # initial R positions for the field line trajectories
+        Z0=z0,  # initial R positions for the field line trajectories
+        ntransit=ntransit,  # number of toroidal transits we want to trace
+        NFP=NFP,
+        # bounds_R and bounds_Z set a cylindrical shell where,
+        # if the B trajectory exits, it will stop the integration.
+        # this saves time by not tracking trajectories which are going off to infinity
+        bounds_R=[0.75, 1.25],
+        bounds_Z=[-0.25, 0.25],
+        size=0.10,  # markersize for the plotted points
+        marker="d",
+    )
+    return fig

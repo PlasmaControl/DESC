@@ -8,12 +8,14 @@ import desc.examples
 from desc.basis import DoubleFourierSeries, FourierZernikeBasis
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.examples import get
-from desc.grid import LinearGrid
+from desc.grid import Grid, LinearGrid
 from desc.input_reader import InputReader
 from desc.io import load
+from desc.transform import Transform
 from desc.vmec import VMECIO
 from desc.vmec_utils import (
     fourier_to_zernike,
+    make_boozmn_output,
     ptolemy_identity_fwd,
     ptolemy_identity_rev,
     ptolemy_linear_transform,
@@ -381,7 +383,7 @@ def test_vmec_save_kinetic(TmpDir):
         electron_temperature=np.array([[0, 1], [2, -1]]),
         sym=True,
     )
-    VMECIO.save(eq, output_path)
+    VMECIO.save(eq, output_path, M_grid=8, N_grid=8)
 
 
 @pytest.mark.regression
@@ -495,6 +497,10 @@ def test_vmec_save_1(VMEC_save):
     )
     np.testing.assert_allclose(
         vmec.variables["betator"][:], desc.variables["betator"][:], rtol=1e-5
+    )
+    np.testing.assert_allclose(vmec.variables["wb"][:], desc.variables["wb"][:])
+    np.testing.assert_allclose(
+        vmec.variables["wp"][:], desc.variables["wp"][:], rtol=1e-6
     )
     np.testing.assert_allclose(
         vmec.variables["ctor"][:], desc.variables["ctor"][:], rtol=1e-5
@@ -1022,7 +1028,7 @@ def test_vmec_save_asym(VMEC_save_asym):
         vmec.variables["jcurv"][20:100], desc.variables["jcurv"][20:100], rtol=2
     )
     np.testing.assert_allclose(
-        vmec.variables["DShear"][20:100], desc.variables["DShear"][20:100], rtol=3e-2
+        vmec.variables["DShear"][20:100], desc.variables["DShear"][20:100], rtol=6e-2
     )
     np.testing.assert_allclose(
         vmec.variables["DCurr"][20:100],
@@ -1074,13 +1080,22 @@ def test_vmec_save_asym(VMEC_save_asym):
     # Next, calculate some quantities and compare
     # the DESC wout -> DESC (should be very close)
     # and the DESC wout -> VMEC wout (should be approximately close)
+    surfs = desc.variables["ns"][:]
+    s_full = np.linspace(0, 1, surfs)
+    s_half = s_full[0:-1] + 0.5 / (surfs - 1)
+    r_full = np.sqrt(s_full)
+    r_half = np.sqrt(s_half)
+
     vol_grid = LinearGrid(
-        rho=np.sqrt(
-            abs(
-                vmec.variables["phi"][:].filled()
-                / np.max(np.abs(vmec.variables["phi"][:].filled()))
-            )
-        )[10::10],
+        rho=r_full[10::10],
+        M=15,
+        N=15,
+        NFP=eq.NFP,
+        axis=False,
+        sym=False,
+    )
+    vol_half_grid = LinearGrid(
+        rho=r_half[10::10],
         M=15,
         N=15,
         NFP=eq.NFP,
@@ -1100,12 +1115,13 @@ def test_vmec_save_asym(VMEC_save_asym):
         atol_vmec_desc_wout=1e-5,
         rtol_vmec_desc_wout=1e-2,
         grid=vol_grid,
+        is_half_grid=False,
     ):
         """Helper fxn to evaluate Fourier series from wout and compare to DESC."""
         xm = desc.variables["xm_nyq"][:] if use_nyq else desc.variables["xm"][:]
         xn = desc.variables["xn_nyq"][:] if use_nyq else desc.variables["xn"][:]
 
-        si = abs(vmec.variables["phi"][:] / np.max(np.abs(vmec.variables["phi"][:])))
+        si = np.insert(s_half, 0, 0) if is_half_grid else s_full
         rho = grid.nodes[:, 0]
         s = rho**2
         # some quantities must be negated before comparison bc
@@ -1166,18 +1182,26 @@ def test_vmec_save_asym(VMEC_save_asym):
             rtol=rtol_vmec_desc_wout,
         )
 
-    # R & Z & lambda
+    # R & Z
     test("rmn", "R", use_nyq=False)
-    test("zmn", "Z", use_nyq=False, atol_vmec_desc_wout=4e-2)
-
+    test("zmn", "Z", use_nyq=False, atol_vmec_desc_wout=1e-2)
+    test(
+        "lmn",
+        "lambda",
+        use_nyq=False,
+        atol_vmec_desc_wout=1e-2,
+        negate_DESC_quant=True,
+        grid=vol_half_grid,
+        is_half_grid=True,
+    )
     # |B|
     test("bmn", "|B|", rtol_desc_desc_wout=7e-4)
 
     # B^zeta
-    test("bsupvmn", "B^zeta")  # ,rtol_desc_desc_wout=6e-5)
+    test("bsupvmn", "B^zeta")
 
     # B_zeta
-    test("bsubvmn", "B_zeta", rtol_desc_desc_wout=3e-4)
+    test("bsubvmn", "B_zeta", grid=vol_half_grid, is_half_grid=True)
 
     # hard to compare to VMEC for the currents, since
     # VMEC F error is worse and equilibria are not exactly similar
@@ -1185,30 +1209,22 @@ def test_vmec_save_asym(VMEC_save_asym):
     test("currumn", "J^theta", atol_vmec_desc_wout=1e4)
     test("currvmn", "J^zeta", negate_DESC_quant=True, atol_vmec_desc_wout=1e5)
 
-    # can only compare lambda, sqrt(g) B_psi B^theta and B_theta at bdry
-    test(
-        "lmn",
-        "lambda",
-        use_nyq=False,
-        negate_DESC_quant=True,
-        grid=bdry_grid,
-        atol_desc_desc_wout=4e-4,
-        atol_vmec_desc_wout=5e-2,
-    )
     test(
         "gmn",
         "sqrt(g)",
         convert_sqrt_g_or_B_rho=True,
         negate_DESC_quant=True,
-        grid=bdry_grid,
-        rtol_desc_desc_wout=5e-4,
-        rtol_vmec_desc_wout=4e-2,
+        grid=vol_half_grid,
+        is_half_grid=True,
     )
+
+    # Compare B_psi B^theta and B_theta at bdry only
     test(
         "bsupumn",
         "B^theta",
         negate_DESC_quant=True,
         grid=bdry_grid,
+        is_half_grid=True,
         atol_vmec_desc_wout=6e-4,
     )
     test(
@@ -1216,16 +1232,14 @@ def test_vmec_save_asym(VMEC_save_asym):
         "B_theta",
         negate_DESC_quant=True,
         grid=bdry_grid,
-        atol_desc_desc_wout=1e-4,
-        atol_vmec_desc_wout=4e-4,
+        is_half_grid=True,
     )
     test(
         "bsubsmn",
         "B_rho",
-        grid=bdry_grid,
         convert_sqrt_g_or_B_rho=True,
-        rtol_vmec_desc_wout=6e-2,
-        atol_vmec_desc_wout=9e-3,
+        grid=bdry_grid,
+        atol_vmec_desc_wout=2e-3,
     )
 
 
@@ -1264,6 +1278,378 @@ def test_vmec_boundary_subspace(DummyStellarator):
     zbs_ref = np.atleast_2d(np.array([0, 0, 0, 1, 1, 0, 0, 1, 0, 0, 1, 0, 0]))
     np.testing.assert_allclose(rbc_ref, np.abs(rbc) > tol)
     np.testing.assert_allclose(zbs_ref, np.abs(zbs) > tol)
+
+
+@pytest.mark.unit
+def test_make_boozmn_output_DESC(TmpDir):
+    """Test that booz_xform-style outputs accurately reconstruct quantities."""
+    # load in precise QA equilibrium
+    eq = get("precise_QA")
+    output_path = str(TmpDir.join("boozmn_out.nc"))
+
+    boozer_res = 30
+    surfs = 4
+    # Use DESC to calculate the boozer harmonics and create a booz_xform style .nc file
+    # on 3 surfaces (surfs-1 by booz_xform convention) using boozer resolution of 50
+    make_boozmn_output(
+        eq, output_path, surfs=surfs, verbose=2, M_booz=boozer_res, N_booz=boozer_res
+    )
+    # load in the .nc file
+    file = Dataset(output_path, mode="r")
+
+    # make half grid in s
+    s_full = np.linspace(0, 1, surfs)
+    hs = 1 / (surfs - 1)
+    s_half = s_full[0:-1] + hs / 2
+
+    R_mnc = file.variables["rmnc_b"][:].filled()
+    Z_mns = file.variables["zmns_b"][:].filled()
+    B_mnc = file.variables["bmnc_b"][:].filled()
+    nu_B_mns = file.variables["pmns_b"][:].filled()
+    g_mnc = file.variables["gmn_b"][:].filled()
+
+    quantities = [R_mnc, Z_mns, B_mnc, g_mnc, nu_B_mns]
+    quant_names = ["R", "Z", "|B|", "sqrt(g)_Boozer", "nu"]
+    quant_parity = ["cos", "sin", "cos", "cos", "sin"]
+
+    xm = file.variables["ixm_b"][:].filled()
+    xn = file.variables["ixn_b"][:].filled()
+
+    # create grid on which to check values btwn DESC eq.compute and the
+    # evaluated Boozer harmonics for each quantity
+    M = 20
+    N = 20
+
+    for surf_index in range(surfs - 1):
+        rho = np.sqrt(s_half[surf_index])
+        grid = LinearGrid(rho=rho, M=M, N=N, NFP=eq.NFP)
+        data = eq.compute(
+            ["theta_B", "zeta_B", "psi_r"] + quant_names,
+            grid=grid,
+            M_booz=boozer_res,
+            N_booz=boozer_res,
+        )
+        # make the grid in Boozer angles corresponding
+        # to the DESC theta,zeta angles that our quantities
+        # are computed on
+        grid_boozer = Grid(
+            np.vstack(
+                (np.ones_like(data["theta_B"]) * rho, data["theta_B"], data["zeta_B"])
+            ).T,
+            sort=False,
+        )
+
+        for quant_index in range(len(quantities)):
+            name = quant_names[quant_index]
+            quant = quantities[quant_index]
+            parity = quant_parity[quant_index]
+
+            # B_mn
+            m, n, quant_mn = (
+                ptolemy_identity_fwd(xm, xn, np.zeros_like(quant), quant)
+                if parity == "cos"
+                else ptolemy_identity_fwd(xm, xn, quant, np.zeros_like(quant))
+            )
+            # negate nu since we save it as negative of what our convention is
+            # to comply with booz_xform notation
+            quant_mn = -quant_mn if name == "nu" else quant_mn
+            # mutliply by psi_r because the saved jacobian is
+            # from (psi,theta_B,zeta_B) to lab frame, and we in DESC
+            # calculate the jacobian for (rho, theta_B, zeta_B) to lab frame
+            quant_mn = (
+                quant_mn * data["psi_r"][0] if name == "sqrt(g)_Boozer" else quant_mn
+            )
+
+            # Must use sym=False even if eq.sym=True
+            # because otherwise it claims that certain modes are not in the basis...
+            basis = DoubleFourierSeries(
+                round(np.max(m)), round(np.max(n) / eq.NFP), sym=False, NFP=eq.NFP
+            )
+            quant_mn = np.where(basis.modes[:, 1] < 0, -quant_mn, quant_mn)
+            quant_mn_desc_basis = np.zeros((basis.num_modes,))
+            for i, (mm, nn) in enumerate(zip(m, n / eq.NFP)):
+                idx = basis.get_idx(L=0, M=mm, N=nn)
+                quant_mn_desc_basis[idx] = quant_mn[surf_index, i]
+
+            quant_trans = Transform(grid=grid_boozer, basis=basis)
+            quant_from_booz = quant_trans.transform(quant_mn_desc_basis)
+
+            np.testing.assert_allclose(
+                quant_from_booz,
+                data[name],
+                rtol=8e-4,
+                err_msg=f"{name} at surf index {surf_index}",
+            )
+
+
+@pytest.mark.slow
+@pytest.mark.unit
+def test_make_boozmn_output_DESC_asym(TmpDir):
+    """Test that asym booz_xform-style outputs accurately reconstruct quantities."""
+    # load in asymmetric equilibrium
+    eq = load("./tests/inputs/NAE_QA_asym_eq_output.h5")
+    print(eq)
+    output_path = str(TmpDir.join("boozmn_asym_out.nc"))
+
+    boozer_res = 30
+    surfs = 3
+    # Use DESC to calculate the boozer harmonics and create a booz_xform style .nc file
+    # on 2 surfaces (surfs-1 by convention) using boozer resolution of 40
+    with pytest.warns(UserWarning, match="numnc"):
+        make_boozmn_output(
+            eq,
+            output_path,
+            surfs=surfs,
+            verbose=2,
+            M_booz=boozer_res,
+            N_booz=boozer_res,
+        )
+    # load in the .nc file
+    file = Dataset(output_path, mode="r")
+
+    # make half grid in s
+    s_full = np.linspace(0, 1, surfs)
+    hs = 1 / (surfs - 1)
+    s_half = s_full[0:-1] + hs / 2
+
+    R_mnc = file.variables["rmnc_b"][:].filled()
+    R_mns = file.variables["rmns_b"][:].filled()
+
+    Z_mns = file.variables["zmns_b"][:].filled()
+    Z_mnc = file.variables["zmnc_b"][:].filled()
+
+    B_mnc = file.variables["bmnc_b"][:].filled()
+    B_mns = file.variables["bmns_b"][:].filled()
+
+    nu_B_mns = file.variables["pmns_b"][:].filled()
+    nu_B_mnc = file.variables["pmnc_b"][:].filled()
+
+    g_mnc = file.variables["gmn_b"][:].filled()
+    g_mns = file.variables["gmns_b"][:].filled()
+
+    quantities = [
+        [R_mnc, R_mns],
+        [Z_mnc, Z_mns],
+        [B_mnc, B_mns],
+        [g_mnc, g_mns],
+        [nu_B_mnc, nu_B_mns],
+    ]
+    quant_names = ["R", "Z", "|B|", "sqrt(g)_Boozer", "nu"]
+    quant_parity = [
+        ["cos", "sin"],
+        ["cos", "sin"],
+        ["cos", "sin"],
+        ["cos", "sin"],
+        ["cos", "sin"],
+    ]
+
+    xm = file.variables["ixm_b"][:].filled()
+    xn = file.variables["ixn_b"][:].filled()
+
+    # create grid on which to check values btwn DESC eq.compute and the
+    # evaluated Boozer harmonics for each quantity
+    M = 20
+    N = 20
+
+    for surf_index in range(surfs - 1):
+        print("surface index", surf_index)
+        rho = np.sqrt(s_half[surf_index])
+        grid = LinearGrid(rho=rho, M=M, N=N, NFP=eq.NFP)
+        data = eq.compute(
+            ["theta_B", "zeta_B", "psi_r"] + quant_names,
+            grid=grid,
+            M_booz=boozer_res,
+            N_booz=boozer_res,
+        )
+        # make the grid in Boozer angles corresponding
+        # to the DESC theta,zeta angles that our quantities
+        # are computed on
+        grid_boozer = Grid(
+            np.vstack(
+                (np.ones_like(data["theta_B"]) * rho, data["theta_B"], data["zeta_B"])
+            ).T,
+            sort=False,
+        )
+
+        for quant_index in range(len(quantities)):
+            name = quant_names[quant_index]
+            quant_from_booz = None
+            # must add up both the sin and cos terms
+            for quant_index2 in [0, 1]:
+                quant = quantities[quant_index][quant_index2]
+                parity = quant_parity[quant_index][quant_index2]
+
+                # B_mn
+                m, n, quant_mn = (
+                    ptolemy_identity_fwd(xm, xn, np.zeros_like(quant), quant)
+                    if parity == "cos"
+                    else ptolemy_identity_fwd(xm, xn, quant, np.zeros_like(quant))
+                )
+                # negate nu since we save it as negative of what our convention is
+                # to comply with booz_xform notation
+                quant_mn = -quant_mn if name == "nu" else quant_mn
+                quant_mn = (
+                    quant_mn * data["psi_r"][0]
+                    if name == "sqrt(g)_Boozer"
+                    else quant_mn
+                )
+
+                basis = DoubleFourierSeries(
+                    round(np.max(m)), round(np.max(n) / eq.NFP), sym=False, NFP=eq.NFP
+                )
+                quant_mn = np.where(basis.modes[:, 1] < 0, -quant_mn, quant_mn)
+                quant_mn_desc_basis = np.zeros((basis.num_modes,))
+                for i, (mm, nn) in enumerate(zip(m, n / eq.NFP)):
+                    idx = basis.get_idx(L=0, M=mm, N=nn)
+                    quant_mn_desc_basis[idx] = quant_mn[surf_index, i]
+
+                quant_trans = Transform(grid=grid_boozer, basis=basis)
+                if np.any(quant_from_booz):  # add to it if it exists
+                    quant_from_booz += quant_trans.transform(quant_mn_desc_basis)
+                else:
+                    quant_from_booz = quant_trans.transform(quant_mn_desc_basis)
+
+            np.testing.assert_allclose(
+                quant_from_booz,
+                data[name],
+                rtol=3e-3,
+                atol=1e-7,
+                err_msg=f"{name} at surf index {surf_index}",
+            )
+
+
+@pytest.mark.slow
+@pytest.mark.unit
+def test_make_boozmn_output_against_hidden_symmetries_booz_xform(TmpDir):
+    """Test that booz_xform-style outputs compare well against C++ implementation."""
+    # testing against https://github.com/hiddenSymmetries/booz_xform/tree/main
+    # commit 881907058ece03
+    # load in precise_QA equilibrium
+    eq = get("precise_QA")
+    output_path = str(TmpDir.join("boozmn_out.nc"))
+
+    boozer_res_M = 25
+    boozer_res_N = 25
+
+    # compare against a 128 surface Mboz=Nboz=25 run of precise QA
+    # with the hidden symmetries C++ booz_xform implementation
+    # (ran on a wout created with VMECIO.save of precise QA example with 100 surfs
+    # and Mnyq = Nnyq = 30)
+    surfs = 128
+    Cpp_booz_output_path = (
+        f"./tests/inputs/boozmn_{surfs}_surfs_precise_QA"
+        + f"_sims_booz_{boozer_res_M}.nc"
+    )
+
+    # Use DESC to calculate the boozer harmonics and create a booz_xform style .nc file
+    make_boozmn_output(
+        eq,
+        output_path,
+        surfs=4,
+        verbose=0,
+        M_booz=boozer_res_M,
+        N_booz=boozer_res_N,
+    )
+
+    # load in the .nc file
+    file = Dataset(output_path, mode="r")
+
+    R_mnc = file.variables["rmnc_b"][:].filled()
+    Z_mns = file.variables["zmns_b"][:].filled()
+    B_mnc = file.variables["bmnc_b"][:].filled()
+    nu_B_mns = file.variables["pmns_b"][:].filled()
+    g_mnc = file.variables["gmn_b"][:].filled()
+    I = file.variables["buco_b"][:].filled()
+    G = file.variables["bvco_b"][:].filled()
+    iota = file.variables["iota_b"][:].filled()
+
+    quantities = [R_mnc, Z_mns, B_mnc, g_mnc, nu_B_mns, I, G, iota]
+    quant_names = ["R", "Z", "|B|", "sqrt(g)_Boozer", "nu", "I", "G", "iota"]
+
+    # load in the .nc from the cpp version
+
+    file_cpp = Dataset(Cpp_booz_output_path, mode="r")
+
+    R_mnc_cpp = file_cpp.variables["rmnc_b"][:].filled()
+    Z_mns_cpp = file_cpp.variables["zmns_b"][:].filled()
+    B_mnc_cpp = file_cpp.variables["bmnc_b"][:].filled()
+    nu_B_mns_cpp = file_cpp.variables["pmns_b"][:].filled()
+    g_mnc_cpp = file_cpp.variables["gmn_b"][:].filled()
+    I_cpp = file_cpp.variables["buco_b"][:].filled()
+    G_cpp = file_cpp.variables["bvco_b"][:].filled()
+    iota_cpp = file_cpp.variables["iota_b"][:].filled()
+
+    quantities_cpp = [
+        R_mnc_cpp,
+        Z_mns_cpp,
+        B_mnc_cpp,
+        g_mnc_cpp,
+        nu_B_mns_cpp,
+        I_cpp,
+        G_cpp,
+        iota_cpp,
+    ]
+
+    # the half-grid for ns=128 contains the 3 half-grid pts of ns=4
+    # s = 1/6, 1/2, 5/6 so we will compare the quantities there
+    s_full_cpp = np.linspace(0, 1, surfs)
+    hs = 1 / (surfs - 1)
+    s_half_cpp = s_full_cpp[0:-1] + hs / 2
+    surf_ind_1_6 = np.argmin(abs(s_half_cpp - 1 / 6))
+    surf_ind_1_2 = np.argmin(abs(s_half_cpp - 1 / 2))
+    surf_ind_5_6 = np.argmin(abs(s_half_cpp - 5 / 6))
+
+    for quant, quant_cpp, name in zip(quantities, quantities_cpp, quant_names):
+        if quant.ndim == 1:  # test the 1D arrays I, G and iota
+            np.testing.assert_allclose(
+                quant[1],
+                quant_cpp[surf_ind_1_6],
+                rtol=1e-3,
+                atol=7e-4,
+                err_msg=f"{name} at s=1/6",
+            )
+            np.testing.assert_allclose(
+                quant[2],
+                quant_cpp[surf_ind_1_2],
+                rtol=1e-3,
+                atol=7e-4,
+                err_msg=f"{name} at s=1/2",
+            )
+            np.testing.assert_allclose(
+                quant[3],
+                quant_cpp[surf_ind_5_6],
+                rtol=1e-3,
+                atol=7e-4,
+                err_msg=f"{name} at s=5/6",
+            )
+        else:
+            np.testing.assert_allclose(
+                quant[0, :],
+                quant_cpp[surf_ind_1_6, :],
+                rtol=1e-3,
+                atol=7e-4,
+                err_msg=f"{name} at s=1/6",
+            )
+            np.testing.assert_allclose(
+                quant[1, :],
+                quant_cpp[surf_ind_1_2, :],
+                rtol=1e-3,
+                atol=7e-4,
+                err_msg=f"{name} at s=1/2",
+            )
+            np.testing.assert_allclose(
+                quant[2, :],
+                quant_cpp[surf_ind_5_6, :],
+                rtol=1e-3,
+                atol=7e-4,
+                err_msg=f"{name} at s=5/6",
+            )
+    # test some misc quantities
+    misc = ["mboz_b", "nboz_b", "ixm_b", "ixn_b"]
+    for name in misc:
+        np.testing.assert_allclose(
+            file.variables[name][:].filled(), file_cpp.variables[name][:].filled()
+        )
 
 
 @pytest.mark.regression

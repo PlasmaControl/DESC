@@ -205,13 +205,14 @@ class FourierRZToroidalSurface(Surface):
         N = check_nonnegint(N, "N")
         NFP = check_posint(NFP, "NFP")
         self._NFP = int(NFP if NFP is not None else self.NFP)
-        self._sym = sym if sym is not None else self.sym
 
         if (
             ((N is not None) and (N != self.N))
             or ((M is not None) and (M != self.M))
             or (NFP is not None)
+            or ((sym is not None) and (sym != self.sym))
         ):
+            self._sym = sym if sym is not None else self.sym
             M = int(M if M is not None else self.M)
             N = int(N if N is not None else self.N)
             R_modes_old = self.R_basis.modes
@@ -320,9 +321,13 @@ class FourierRZToroidalSurface(Surface):
             inputs = InputReader().parse_inputs(path)[-1]
         if (inputs["bdry_ratio"] is not None) and (inputs["bdry_ratio"] != 1):
             warnings.warn(
-                "boundary_ratio = {} != 1, surface may not be as expected".format(
-                    inputs["bdry_ratio"]
-                )
+                "`bdry_ratio` is intended as an input for the continuation method."
+                "`bdry_ratio`=1 uses the given surface modes as is, any other  "
+                "scalar value will scale the non-axisymmetric  modes by that "
+                "value. The final value of `bdry_ratio` in the input file is "
+                f"{inputs['bdry_ratio']}, this means the created "
+                "FourierRZToroidalSurface will be a scaled version of the "
+                "input file boundary."
             )
         surf = cls(
             inputs["surface"][:, 3],
@@ -335,7 +340,7 @@ class FourierRZToroidalSurface(Surface):
         )
         return surf
 
-    # TODO: add k value for number of rotations per field period
+    # TODO (#1385): add k value for number of rotations per field period
     @classmethod
     def from_qp_model(
         cls,
@@ -349,6 +354,8 @@ class FourierRZToroidalSurface(Surface):
         positive_iota=True,
     ):
         """Create a surface from a near-axis model for quasi-poloidal symmetry.
+
+        Model is based off of section III of Goodman et. al. [1]_
 
         Parameters
         ----------
@@ -375,6 +382,11 @@ class FourierRZToroidalSurface(Surface):
         -------
         surface : FourierRZToroidalSurface
             Surface with given geometric properties.
+
+        References
+        ----------
+        .. [1] Goodman, Alan, et al. "Constructing Precisely Quasi-Isodynamic
+          Magnetic Fields." Journal of Plasma Physics 89.5 (2023): 905890504.
 
         """
         assert mirror_ratio <= 1
@@ -734,10 +746,19 @@ class FourierRZToroidalSurface(Surface):
             n, r, r_offset = n_and_r_jax(nodes)
             return jnp.arctan(r_offset[0, 1] / r_offset[0, 0]) - zeta
 
-        vecroot = jit(vmap(lambda x0, *p: root_scalar(fun_jax, x0, jac=None, args=p)))
-        zetas, (res, niter) = vecroot(
-            grid.nodes[:, 2], grid.nodes[:, 1], grid.nodes[:, 2]
+        vecroot = jit(
+            vmap(
+                lambda x0, *p: root_scalar(
+                    fun_jax, x0, jac=None, args=p, full_output=full_output
+                )
+            )
         )
+        if full_output:
+            zetas, (res, niter) = vecroot(
+                grid.nodes[:, 2], grid.nodes[:, 1], grid.nodes[:, 2]
+            )
+        else:
+            zetas = vecroot(grid.nodes[:, 2], grid.nodes[:, 1], grid.nodes[:, 2])
 
         zetas = np.asarray(zetas)
         nodes = np.vstack((np.ones_like(grid.nodes[:, 1]), grid.nodes[:, 1], zetas)).T
@@ -955,9 +976,13 @@ class ZernikeRZToroidalSection(Surface):
 
         L = check_nonnegint(L, "L")
         M = check_nonnegint(M, "M")
-        self._sym = sym if sym is not None else self.sym
 
-        if ((L is not None) and (L != self.L)) or ((M is not None) and (M != self.M)):
+        if (
+            ((L is not None) and (L != self.L))
+            or ((M is not None) and (M != self.M))
+            or ((sym is not None) and (sym != self.sym))
+        ):
+            self._sym = sym if sym is not None else self.sym
             L = int(L if L is not None else self.L)
             M = int(M if M is not None else self.M)
             R_modes_old = self.R_basis.modes

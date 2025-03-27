@@ -1,6 +1,11 @@
 Changelog
 =========
 
+- Adds ``Rp_lmn``, ``Zp_lmn`` and ``Lp_lmn`` attributes to the ``Equilibrium`` class. If either `FixSectionR`, `FixSectionZ` or `FixSectionLambda` is added as constraint, they will become optimizable parameters. Since both fixing cross-section and the LCFS shape is not supported yet, once Poincare variables are added to the Equilibrium, boundary parameters `Rb_lmn` and `Zb_lmn` will not be optimizable anymore. With this change of optimizable parameters, if a user wants to solve LCFS and Poincare problems consecutively, they have to call `eq.xsection = eq.get_surface_at(zeta=0)` and `eq.surface = eq.get_surface_at(rho=1)` to update the variables after any type of optimization or solve.
+- Adds option to solve equilibrium problem using fixed Poincare cross-section boundary condition. Adds a new helper function to ``desc.objectives.getters`` called ``get_fixed_xsection_constraints`` which will automatically adds the required ``FixSectionR``, ``FixSectionZ``and optionally ``FixSectionLambda`` (if the argument ``fix_lambda=True`` default, it doesn't add it if set to ``fix_lambda=False``).
+- Adds ``L_lmn`` and ``L_basis`` attributes to the ``ZernikeRZToroidalSection`` class.
+
+
 Bug Fixes
 - Fixes bug in ``desc.vmec.VMECIO.write_vmec_input`` for current-constrained equilibria, where DESC was incorrectly writing the ``s**0`` mode, where VMEC actually assumes it is zero and starts at the  ``s**1`` (which is different than the usual convention VMEC uses for its current profile when it uses the current derivative, where it starts with the ``s**0`` mode).
 - Fixes error that occurs when using the default grid for ``SplineXYZCoil`` in an optimization.

@@ -459,16 +459,27 @@ class TestGetSurfaces:
     def test_get_zeta_surface(self):
         """Test getting a constant zeta surface."""
         eq = Equilibrium()
-        with pytest.raises(UserWarning):
-            surf = eq.get_surface_at(zeta=np.pi)
-            assert surf.zeta == np.pi
-            rho = 1
-            np.testing.assert_allclose(surf.compute("A")["A"], np.pi * rho**2)
+        surf = eq.get_surface_at(zeta=np.pi)
+        assert surf.zeta == np.pi
+        rho = 1
+        np.testing.assert_allclose(surf.compute("A")["A"], np.pi * rho**2)
 
         surf = eq.get_surface_at(zeta=0)
         assert surf.zeta == 0
         rho = 1
         np.testing.assert_allclose(surf.compute("A")["A"], np.pi * rho**2)
+
+        # check for non-symmetric section
+        eq1 = desc.examples.get("HELIOTRON")
+        zeta = 0.3 * np.pi / eq1.NFP
+        surf = eq1.get_surface_at(zeta=zeta)
+        eq_from_section = Equilibrium(xsection=surf)
+        grid = LinearGrid(zeta=zeta, rho=1, M=10, NFP=eq1.NFP)
+        data1 = eq_from_section.compute(["R", "Z", "lambda"], grid=grid)
+        data2 = eq1.compute(["R", "Z", "lambda"], grid=grid)
+        np.testing.assert_allclose(data1["R"], data2["R"])
+        np.testing.assert_allclose(data1["Z"], data2["Z"])
+        np.testing.assert_allclose(data1["lambda"], data2["lambda"])
 
     @pytest.mark.unit
     def test_get_theta_surface(self):

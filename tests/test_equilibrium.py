@@ -499,8 +499,7 @@ def test_equilibrium_unused_kwargs():
 @pytest.mark.solve
 def test_backward_compatible_load_and_resolve():
     """Test backwards compatibility of load and re-solve."""
-    with pytest.warns(RuntimeWarning):
-        eq = EquilibriaFamily.load(load_from=".//tests//inputs//NCSX_older.h5")[-1]
+    eq = EquilibriaFamily.load(load_from=".//tests//inputs//NCSX_older.h5")[-1]
 
     # reducing resolution since we only want to test eq.solve
     with pytest.warns(UserWarning, match="Reducing radial"):

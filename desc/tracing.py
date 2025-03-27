@@ -15,8 +15,11 @@ from scipy.constants import (
 from desc.backend import jnp
 from desc.compute import _compute as compute_fun
 from desc.compute.utils import get_profiles, get_transforms
+from desc.derivatives import Derivative
+from desc.equilibrium import Equilibrium
 from desc.grid import Grid
 from desc.io import IOAble
+from desc.magnetic_fields import _MagneticField
 from desc.utils import cross, dot
 
 JOULE_PER_EV = 11606 * Boltzmann
@@ -70,15 +73,15 @@ class AbstractTrajectoryModel(IOAble, ABC):
         pass
 
 
-class CollisionlessGuidingCenterTrajectory(AbstractTrajectoryModel):
-    """Guiding center trajectories without collisions, conserving energy and mu.
+class VacuumGuidingCenterTrajectory(AbstractTrajectoryModel):
+    """Guiding center trajectories in vacuum, conserving energy and mu.
 
     Parameters
     ----------
-    m : float or array-like, shape(num_particles,)
-        Mass of particles, in units of proton masses
-    q : float or array-like, shape(num_particles,)
-        Charge of particles, in units of elementary charge.
+    frame : {"lab", "flux"}
+        Which coordinate frame is used for tracing particles. Should correspond to the
+        source of the field. If tracing in an Equilibrium, set frame="flux". If tracing
+        in a CoilSet or MagneticField, choose "lab".
     """
 
     _data_keys = [
@@ -91,10 +94,14 @@ class CollisionlessGuidingCenterTrajectory(AbstractTrajectoryModel):
         "b",
     ]
 
+    def __init__(self, frame):
+        assert frame in ["lab", "flux"]
+        self._frame = frame
+
     @property
     def frame(self):
         """Which frame the model is defined in."""
-        return "flux"
+        return self._frame
 
     @property
     def vcoords(self):
@@ -106,21 +113,29 @@ class CollisionlessGuidingCenterTrajectory(AbstractTrajectoryModel):
         """Which additional args are needed by the model."""
         return ["m", "q", "mu"]
 
-    def compute(self, x, eq, m, q, mu):
+    def compute(self, x, eq_or_field, m, q, mu):
         """RHS of guiding center trajectories without collisions or slowing down.
 
         Parameters
         ----------
         x : jax.Array, shape(N,4)
             Position of particle in phase space (psi_n, theta, zeta, vpar).
-        eq : Equilibrium
-            Equilibrium object particles are being traced in.
+        eq_or_field : Equilibrium or MagneticField
+            Equilibrium or MagneticFieild object particles are being traced in.
 
         Returns
         -------
         dx : jax.Array, shape(N,4)
             Velocity of particles in phase space.
         """
+        if self.frame == "flux":
+            assert isinstance(eq_or_field, Equilibrium)
+            return self._compute_flux_coordinates(x, eq_or_field, m, q, mu)
+        elif self.frame == "lab":
+            assert isinstance(eq_or_field, _MagneticField)
+            return self._compute_lab_coordinates(x, eq_or_field, m, q, mu)
+
+    def _compute_flux_coordinates(self, x, eq, m, q, mu):
         assert eq.iota is not None
         psi, theta, zeta, vpar = x.T
         grid = Grid(
@@ -157,9 +172,45 @@ class CollisionlessGuidingCenterTrajectory(AbstractTrajectoryModel):
         dx = jnp.array([psidot, thetadot, zetadot, vpardot]).T
         return dx
 
+    def _compute_lab_coordinates(self, x, field_compute, m, q, mu):
+        # this is the one implemented in simsopt for method="gc_vac"
+        # should be equivalent to full lagrangian from Cary & Brizard in vacuum
+        m_over_q = m / q
+        vpar = x[-1]
+        x = x[:-1]
+        B = field_compute(x)
+        dB = jnp.vectorize(
+            Derivative(
+                field_compute,
+                mode="fwd",
+            ),
+            signature="(n)->(n,n)",
+        )(x).squeeze()
+
+        modB = jnp.linalg.norm(B, axis=-1)
+        b = B / modB
+        grad_B = jnp.sum(b[:, None] * dB, axis=0)
+        g1, g2, g3 = grad_B
+        # factor of R from grad in cylindrical coordinates
+        g2 /= x[0]
+        grad_B = jnp.array([g1, g2, g3])
+
+        dRdt = vpar * b + (m_over_q / modB**2 * (mu * modB + vpar**2)) * cross(
+            b, grad_B
+        )
+        d1, d2, d3 = dRdt
+        d2 /= x[0]
+        dRdt = jnp.array([d1, d2, d3])
+
+        dvdt = -mu * dot(b, grad_B)
+        dxdt = jnp.append(dRdt, dvdt)
+        return dxdt.flatten()
+
 
 class SlowingDownGuidingCenterTrajectory(AbstractTrajectoryModel):
     """Guiding center trajectories with slowing down on electrons and main ions.
+
+    Works only in flux coordinates.
 
     Parameters
     ----------

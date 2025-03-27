@@ -254,17 +254,39 @@ class AbstractParticleInitializer(ABC, IOAble):
 
 
 class ManualParticleInitializerFlux(AbstractParticleInitializer):
-    """Manually specify particle starting positions and energy in flux coordinates."""
+    """Manually specify particle starting positions and energy in flux coordinates.
 
-    def __init__(self, rho0, theta0, zeta0, lambda0, E=3.5e6, m=4, q=2, eq=None):
+    Parameters
+    ----------
+    rho0 : array-like
+        Initial radial coordinates
+    theta0 : array-like
+        Initial poloidal coordinates
+    zeta0 : array-like
+        Initial toroidal coordinates
+    xi0 : array-like
+        Initial normalized parallel velocity, xi=vpar/v
+    E : array-like
+        Initial particle energy, in eV
+    m : float
+        Particle mass, in proton masses
+    q : float
+        Particle charge, in units of elementary charge.
+    eq : Equilibrium, optional
+        Used to map initial flux coordinates to lab frame, if tracing particles in
+        lab frame.
+    """
+
+    def __init__(self, rho0, theta0, zeta0, xi0, E=3.5e6, m=4, q=2, eq=None):
         super().__init__(m, q)
-        self.E = E * JOULE_PER_EV
-        self.rho0 = jnp.asarray(rho0)
-        self.theta0 = jnp.asarray(theta0)
-        self.zeta0 = jnp.asarray(zeta0)
-        self.v0 = jnp.sqrt(2 * self.E / self.m)
-        vperp0 = jnp.sqrt(lambda0) * self.v0
-        self.vpar0 = jnp.sqrt(self.v0**2 - vperp0**2)
+        E = E * JOULE_PER_EV
+        rho0, theta0, zeta0, xi0, E = map(jnp.asarray, (rho0, theta0, zeta0, xi0, E))
+        rho0, theta0, zeta0, xi0, E = jnp.broadcast_arrays(rho0, theta0, zeta0, xi0, E)
+        self.rho0 = rho0
+        self.theta0 = theta0
+        self.zeta0 = zeta0
+        self.v0 = jnp.sqrt(2 * E / self.m)
+        self.vpar0 = xi0 * self.v0
         self.eq = eq
 
     def init_particles(self, N, model, seed=0):
@@ -280,6 +302,74 @@ class ManualParticleInitializerFlux(AbstractParticleInitializer):
                 )
             grid = Grid(x)
             x = self.eq.compute("x", grid=grid)["x"]
+        else:
+            raise NotImplementedError
+
+        vs = []
+        for vcoord in model.vcoords:
+            if vcoord == "vpar":
+                vs.append(self.vpar0)
+            elif vcoord == "v":
+                vs.append(self.v0)
+            else:
+                raise NotImplementedError
+        v = jnp.array(vs).T
+        return jnp.hstack([x, v])
+
+
+class ManualParticleInitializerLab(AbstractParticleInitializer):
+    """Manually specify particle starting positions and energy in lab coordinates.
+
+    Parameters
+    ----------
+    R0 : array-like
+        Initial radial coordinates
+    phi0 : array-like
+        Initial toroidal coordinates
+    Z0 : array-like
+        Initial vertical coordinates
+    xi0 : array-like
+        Initial normalized parallel velocity, xi=vpar/v
+    E : array-like
+        Initial particle energy, in eV
+    m : float
+        Particle mass, in proton masses
+    q : float
+        Particle charge, in units of elementary charge.
+    eq : Equilibrium, optional
+        Used to map initial lab coordinates to flux frame, if tracing particles in
+        flux frame.
+    """
+
+    def __init__(self, R0, phi0, Z0, xi0, E=3.5e6, m=4, q=2, eq=None):
+        super().__init__(m, q)
+        E = E * JOULE_PER_EV
+        R0, phi0, Z0, xi0, E = map(jnp.asarray, (R0, phi0, Z0, xi0, E))
+        R0, phi0, Z0, xi0, E = jnp.broadcast_arrays(R0, phi0, Z0, xi0, E)
+        self.R0 = R0
+        self.phi0 = phi0
+        self.Z0 = Z0
+        self.v0 = jnp.sqrt(2 * E / self.m)
+        self.vpar0 = xi0 * self.v0
+        self.eq = eq
+
+    def init_particles(self, N, model, seed=0):
+        """Initialize N random particles for a given trajectory model."""
+        x = jnp.array([self.R0, self.phi0, self.Z0]).T
+        assert N is None or N == x.shape[0], "got wrong number of requested particles"
+        if model.frame == "flux":
+            x = x
+        elif model.frame == "lab":
+            if self.eq is None:
+                raise ValueError(
+                    "Mapping lab coordinates to flux frame requires an Equilibrium"
+                )
+            x, _ = self.eq.map_coordinates(
+                x,
+                inbasis=["R", "phi", "Z"],
+                outbasis=["rho", "theta", "zeta"],
+                period=[np.inf, 2 * np.pi / self.eq.NFP, np.inf],
+            )
         else:
             raise NotImplementedError
 

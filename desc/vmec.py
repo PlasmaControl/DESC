@@ -192,7 +192,7 @@ class VMECIO:
         constraints = maybe_add_self_consistency(eq, constraints)
         objective = ObjectiveFunction(constraints)
         objective.build(verbose=0)
-        _, _, _, _, _, _, project, recover = factorize_linear_constraints(
+        _, _, _, _, _, _, project, recover, *_ = factorize_linear_constraints(
             objective, objective
         )
         args = objective.unpack_state(recover(project(objective.x(eq))), False)[0]
@@ -208,7 +208,18 @@ class VMECIO:
         return eq
 
     @classmethod
-    def save(cls, eq, path, surfs=128, verbose=1, M_nyq=None, N_nyq=None):  # noqa: C901
+    def save(  # noqa: C901
+        cls,
+        eq,
+        path,
+        surfs=128,
+        *,
+        M_nyq=None,
+        N_nyq=None,
+        M_grid=None,
+        N_grid=None,
+        verbose=1,
+    ):
         """Save an Equilibrium as a netCDF file in the VMEC format.
 
         Parameters
@@ -219,15 +230,18 @@ class VMECIO:
             File path of output data.
         surfs: int
             Number of flux surfaces to interpolate at (Default = 128).
+        M_nyq, N_nyq: int
+            The max poloidal and toroidal mode numbers to use in the Nyquist spectrum
+            that the derived quantities are Fourier fit with. Defaults to M+4 and N+2.
+        M_grid, N_grid: int
+            The max poloidal and toroidal resolution of the grid to evaluate quantities
+            in real space. Related to the VMEC inputs NTHETA and NZETA.
+            Defaults to eq.M_grid and eq.N_grid.
         verbose: int
             Level of output (Default = 1).
             * 0: no output
             * 1: status of quantities computed
             * 2: as above plus timing information
-        M_nyq, N_nyq: int
-            The max poloidal and toroidal modenumber to use in the
-            Nyquist spectrum that the derived quantities are Fourier
-            fit with. Defaults to M+4 and N+2.
 
         Returns
         -------
@@ -250,10 +264,24 @@ class VMECIO:
         warnif(
             N_nyq is not None and int(N) == 0,
             UserWarning,
-            "Passed in N_nyq but equilibrium is axisymmetric, setting N_nyq to zero",
+            "Passed in N_nyq but equilibrium is axisymmetric, setting N_nyq to zero.",
         )
         N_nyq = N + 2 if N_nyq is None else N_nyq
         N_nyq = 0 if int(N) == 0 else N_nyq
+        M_grid = eq.M_grid if M_grid is None else M_grid
+        N_grid = eq.N_grid if N_grid is None else N_grid
+        warnif(
+            M_grid < M_nyq,
+            UserWarning,
+            f"M_grid = {M_grid} < M_nyq = {M_nyq}, "
+            + "increase M_grid for a more accurate Fourier fit.",
+        )
+        warnif(
+            N_grid < N_nyq,
+            UserWarning,
+            f"N_grid = {N_grid} < N_nyq = {N_nyq}, "
+            + "increase N_grid for a more accurate Fourier fit.",
+        )
 
         # VMEC radial coordinate: s = rho^2 = Psi / Psi(LCFS)
         s_full = np.linspace(0, 1, surfs)
@@ -283,10 +311,10 @@ class VMECIO:
         if verbose > 0:
             print("Computing data")
 
-        grid_axis = LinearGrid(M=M_nyq, N=N_nyq, rho=np.array([0.0]), NFP=NFP)
-        grid_lcfs = LinearGrid(M=M_nyq, N=N_nyq, rho=np.array([1.0]), NFP=NFP)
-        grid_half = LinearGrid(M=M_nyq, N=N_nyq, NFP=NFP, rho=r_half)
-        grid_full = LinearGrid(M=M_nyq, N=N_nyq, NFP=NFP, rho=r_full)
+        grid_axis = LinearGrid(M=M_grid, N=N_grid, rho=np.array([0.0]), NFP=NFP)
+        grid_lcfs = LinearGrid(M=M_grid, N=N_grid, rho=np.array([1.0]), NFP=NFP)
+        grid_half = LinearGrid(M=M_grid, N=N_grid, NFP=NFP, rho=r_half)
+        grid_full = LinearGrid(M=M_grid, N=N_grid, NFP=NFP, rho=r_full)
 
         data_quad = eq.compute(
             [
@@ -1518,7 +1546,12 @@ class VMECIO:
             f.write("  CURTOR = {:+14.8E}\n".format(float(current(1)[0])))  # AC scale
             if isinstance(current, PowerSeriesProfile) and current.sym:
                 f.write("  AC =")  # current power series coefficients
-                for ac in current.params:
+                # we skip the s**0 mode because VMEC assumes it to be
+                # zero, and so starts counting from s**1
+                params_power_greater_than_zero = current.params[
+                    np.where(current.basis.modes[:, 0] > 0)
+                ]
+                for ac in params_power_greater_than_zero:
                     f.write(" {:+14.8E}".format(ac))
                 f.write("\n  PCURR_TYPE = 'power_series_I'\n")
             else:

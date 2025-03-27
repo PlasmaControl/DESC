@@ -842,15 +842,17 @@ class ZernikeRZToroidalSection(Surface):
         "_zeta",
     ]
 
-    _static_attrs = ["_R_basis", "_Z_basis"]
+    _static_attrs = ["_R_basis", "_Z_basis", "_L_basis"]
 
     @execute_on_cpu
     def __init__(
         self,
         R_lmn=None,
         Z_lmn=None,
+        L_lmn=None,
         modes_R=None,
         modes_Z=None,
+        modes_L=None,
         spectral_indexing="ansi",
         sym="auto",
         L=None,
@@ -858,8 +860,6 @@ class ZernikeRZToroidalSection(Surface):
         zeta=0.0,
         name="",
         check_orientation=True,
-        L_lmn=None,
-        modes_L=None,
     ):
         if R_lmn is None:
             R_lmn = np.array([10, 1])
@@ -1003,7 +1003,7 @@ class ZernikeRZToroidalSection(Surface):
             "NFP", None
         )  # NFP is not used but need to pop to avoid unexpected kwarg
         sym = kwargs.pop("sym", None)
-        assert len(kwargs) == 0, "change_resolution got unexpected kwarg: {kwargs}"
+        assert len(kwargs) == 0, f"change_resolution got unexpected kwarg: {kwargs}"
         if N is not None:
             warnings.warn(
                 "ZernikeRZToroidalSection does not have toroidal "

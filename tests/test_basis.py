@@ -16,7 +16,6 @@ from desc.basis import (
     _jacobi,
     chebyshev,
     fourier,
-    get_basis_poincare,
     polyder_vec,
     polyval_vec,
     powers,
@@ -25,9 +24,7 @@ from desc.basis import (
     zernike_radial_poly,
 )
 from desc.derivatives import Derivative
-from desc.examples import get
 from desc.grid import LinearGrid
-from desc.transform import Transform
 
 
 class TestBasis:
@@ -421,16 +418,3 @@ def test_jacobi_jvp():
         )
         f2 = _jacobi(n, alpha, beta, jacobi_arg[:, None], i + 1)
         np.testing.assert_allclose(f1, f2)
-
-
-@pytest.mark.unit
-def test_get_basis_poincare():
-    """Test FourierZernike to ZernikePolynomial utility function."""
-    eq = get("HELIOTRON")
-    eq.L_lmn = np.random.rand(*np.shape(eq.L_lmn))
-    Lp0_lmn, Lp0_basis = get_basis_poincare(eq.L_lmn, eq.L_basis)
-    grid = LinearGrid(L=50, M=50, zeta=0)
-    transf = Transform(grid=grid, basis=Lp0_basis, derivs=0)
-    L_2D = transf.transform(Lp0_lmn)
-    L_3D = eq.compute("lambda", grid=grid)["lambda"]
-    np.testing.assert_allclose(L_2D, L_3D, atol=1e-14)

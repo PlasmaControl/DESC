@@ -10,7 +10,7 @@ from scipy import special
 from scipy.constants import mu_0
 
 from desc.backend import execute_on_cpu, jnp
-from desc.basis import FourierZernikeBasis, fourier, get_basis_poincare, zernike_radial
+from desc.basis import FourierZernikeBasis, fourier, zernike_radial
 from desc.compat import ensure_positive_jacobian
 from desc.compute import compute as compute_fun
 from desc.compute import data_index
@@ -532,6 +532,11 @@ class Equilibrium(IOAble, Optimizable):
             If True, and the default initial guess does not produce nested surfaces,
             run a small optimization problem to attempt to refine initial guess to
             improve coordinate mapping.
+        lcfs_surface : bool
+            If True, and the initial guess will be created by scaling down the LCFS
+            surface(rho=1.0), to form nested surfaces. If False, the initial guess
+            will be created by rotating the given Poincare section(zeta=0) resulting in
+            an axisymmetric equilibrium. Default is True.
 
         Examples
         --------
@@ -747,21 +752,22 @@ class Equilibrium(IOAble, Optimizable):
             return surface
 
         if zeta is not None:
-            assert (zeta >= 0) and (zeta <= 2 * np.pi)
-            warnif(
-                zeta != 0,
-                UserWarning,
-                "The lambda value of the returned surface will not be correct "
-                "for zeta != 0. The lambda value is taken for zeta=0.",
+            errorif(
+                not ((zeta >= 0) and (zeta <= 2 * np.pi / self.NFP)),
+                ValueError,
+                "zeta must be between 0 and {2 * np.pi / self.NFP} (2pi/NFP), got "
+                + f"{zeta}. Did you forgot to divide by NFP?",
             )
+            # only zeta=0 and zeta=pi/NFP have stellarator symmetry
+            surface_sym = self.sym if zeta == 0 or zeta == np.pi / self.NFP else False
             surface = ZernikeRZToroidalSection(
-                sym=self.sym, zeta=zeta % (2 * np.pi / self.NFP)
+                sym=surface_sym, zeta=zeta % (2 * np.pi / self.NFP)
             )
             surface.change_resolution(self.L, self.M)
-            Lp_lmn, Lp_basis = get_basis_poincare(self.L_lmn, self.L_basis)
 
             AR = np.zeros((surface.R_basis.num_modes, self.R_basis.num_modes))
             AZ = np.zeros((surface.Z_basis.num_modes, self.Z_basis.num_modes))
+            AL = np.zeros((surface.L_basis.num_modes, self.L_basis.num_modes))
 
             for i, (l, m, n) in enumerate(self.R_basis.modes):
                 j = np.argwhere(
@@ -780,12 +786,22 @@ class Equilibrium(IOAble, Optimizable):
                     )
                 )
                 AZ[j, i] = fourier(zeta, n, self.NFP)
-            Rb = AR @ self.R_lmn
-            Zb = AZ @ self.Z_lmn
-            surface.R_lmn = Rb
-            surface.Z_lmn = Zb
-            surface.L_basis = Lp_basis
-            surface.L_lmn = Lp_lmn
+
+            for i, (l, m, n) in enumerate(self.L_basis.modes):
+                j = np.argwhere(
+                    np.logical_and(
+                        surface.L_basis.modes[:, 0] == l,
+                        surface.L_basis.modes[:, 1] == m,
+                    )
+                )
+                AL[j, i] = fourier(zeta, n, self.NFP)
+
+            Rp = AR @ self.R_lmn
+            Zp = AZ @ self.Z_lmn
+            Lp = AL @ self.L_lmn
+            surface.R_lmn = Rp
+            surface.Z_lmn = Zp
+            surface.L_lmn = Lp
             return surface
 
     def get_profile(self, name, grid=None, kind="spline", **kwargs):

@@ -217,13 +217,16 @@ def test_compute_everything():
         # Max resolution of master_compute_data_rpz.pkl limited by GitHub file
         # size cap at 100 mb, so can't hit suggested resolution for some things.
         warnings.filterwarnings("ignore", category=ResolutionWarning)
+
         for p in things:
 
             names = set(data_index[p].keys())
 
             def need_special(name):
-                return bool(data_index[p][name]["source_grid_requirement"]) or bool(
-                    data_index[p][name]["grid_requirement"]
+                return (
+                    bool(data_index[p][name]["source_grid_requirement"])
+                    or bool(data_index[p][name]["grid_requirement"])
+                    or "Redl" in name
                 )
 
             names -= _grow_seeds(p, set(filter(need_special, names)), names)

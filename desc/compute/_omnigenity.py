@@ -917,10 +917,6 @@ def _B_omni(params, transforms, profiles, data, **kwargs):
     )
     B = jnp.moveaxis(B, 0, 1)
     data["|B|"] = B.flatten(order="F")
-    import pdb
-
-    pdb.set_trace()
-    return data
 
 
 @register_compute_fun(
@@ -930,14 +926,15 @@ def _B_omni(params, transforms, profiles, data, **kwargs):
     units_long="Tesla",
     description="Magnitude of omnigenous magnetic field",
     dim=1,
-    params=["B_min", "B_max", "zeta_C", "theta_C", "t_1", "t_2", "w_2", "iota0"],
+    params=["B_min", "B_max", "zeta_C", "theta_C", "t_1", "t_2", "w_2"],
     transforms={"grid": []},
     profiles=[],
     coordinates="rtz",
-    data=[],  # Potential error, we want eq |B|
+    data=[],
     parameterization="desc.magnetic_fields._core.PiecewiseOmnigenousField",
 )
 def _B_piecewise_omni(params, transforms, profiles, data, **kwargs):
+    iota0 = kwargs.get("iota", 0.6)  # This way we ensure iota0 = iota
     theta_B = transforms["grid"].nodes[:, 1]
     zeta_B = transforms["grid"].nodes[:, 2]
     # NFP can't be a parameter. Must come from equilibrium
@@ -948,7 +945,6 @@ def _B_piecewise_omni(params, transforms, profiles, data, **kwargs):
     t_1 = params["t_1"]
     t_2 = params["t_2"]
     w_2 = params["w_2"]
-    iota0 = params["iota0"]
     w_1 = jnp.pi / NFP * (1 - t_1 * t_2) / (1 + t_2 / iota0)
     B_min = params["B_min"]
     B_max = params["B_max"]
@@ -973,21 +969,21 @@ def _B_piecewise_omni(params, transforms, profiles, data, **kwargs):
     units_long="None",
     description="Self-overlap of the target field",
     dim=1,
-    params=["t_1", "t_2", "w_2", "iota0"],
+    params=["t_1", "t_2", "w_2"],
     transforms={"grid": []},
     profiles=[],
     coordinates="rtz",
-    data=[],  # Potential error, we want eq |B|
+    data=[],
     parameterization="desc.magnetic_fields._core.PiecewiseOmnigenousField",
 )
 def _Q_piecewise_omni(params, transforms, profiles, data, **kwargs):
+    iota0 = kwargs.get("iota", 0.6)  # This way we ensure iota0 = iota
     # NFP can't be a parameter. Must come from equilibrium
     NFP = transforms["grid"].NFP
 
     t_1 = params["t_1"]
     t_2 = params["t_2"]
     w_2 = params["w_2"]
-    iota0 = params["iota0"]
     w_1 = jnp.pi / NFP * (1 - t_1 * t_2) / (1 + t_2 / iota0)
 
     zeta_pp = (w_1 - t_1 * w_2) / (1 - t_1 * t_2)
@@ -1022,7 +1018,7 @@ def _Q_piecewise_omni(params, transforms, profiles, data, **kwargs):
     units_long="None",
     description="Delta proxi for zero pwO Bootstrap current",
     dim=1,
-    params=["B_max", "t_1", "t_2", "w_2", "iota0"],
+    params=["B_max", "t_1", "t_2", "w_2"],
     transforms={"grid": []},
     profiles=[],
     coordinates="rtz",
@@ -1030,14 +1026,14 @@ def _Q_piecewise_omni(params, transforms, profiles, data, **kwargs):
     parameterization="desc.magnetic_fields._core.PiecewiseOmnigenousField",
 )
 def _Delta_bs_piecewiseomni(params, transforms, profiles, data, **kwargs):
-    # NFP can't be a parameter. Must come from equilibrium
+    iota0 = kwargs.get("iota", 0.6)  # This way we ensure iota0 = iota
 
+    # NFP can't be a parameter. Must come from equilibrium
     NFP = transforms["grid"].NFP
 
     t_1 = params["t_1"]
     t_2 = params["t_2"]
     w_2 = params["w_2"]
-    iota0 = params["iota0"]
     B_max = params["B_max"]
 
     w_1 = ((jnp.pi / NFP) * (1 - t_1 * t_2)) / (1 + t_2 / iota0)

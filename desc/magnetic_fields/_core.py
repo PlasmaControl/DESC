@@ -2702,7 +2702,7 @@ class PiecewiseOmnigenousField(Optimizable, IOAble):
         "_t_1",
         "_t_2",
         "_w_2",
-        "_iota0",
+        "_iota",
     ]
 
     def __init__(
@@ -2713,13 +2713,10 @@ class PiecewiseOmnigenousField(Optimizable, IOAble):
         theta_C=2 * jnp.pi,
         t_1=0.2,
         t_2=1.0,
-        iota0=0.66,
         w_2=0.7,
         NFP=1,
-        helicity=(1, 0),
     ):
         self._NFP = int(NFP)
-        self.helicity = helicity
 
         self._B_min = B_min
         self._B_max = B_max
@@ -2728,20 +2725,6 @@ class PiecewiseOmnigenousField(Optimizable, IOAble):
         self._t_1 = t_1
         self._t_2 = t_2
         self._w_2 = w_2
-        self._iota0 = iota0
-
-        helicity_sign = sign(helicity[0]) * sign(helicity[1])
-        warnif(
-            self.helicity != (0, self.NFP * helicity_sign)
-            and abs(self.helicity[0]) != 1,
-            UserWarning,
-            "Typical helicity (M,N) has M=1.",
-        )
-        warnif(
-            self.helicity != (helicity_sign, 0) and abs(self.helicity[1]) != self.NFP,
-            UserWarning,
-            "Typical helicity (M,N) has N=NFP.",
-        )
 
     def compute(
         self,
@@ -2810,7 +2793,6 @@ class PiecewiseOmnigenousField(Optimizable, IOAble):
             transforms=transforms,
             profiles=profiles,
             data=data,
-            helicity=kwargs.pop("helicity", self.helicity),
             **kwargs,
         )
         return data
@@ -2843,7 +2825,7 @@ class PiecewiseOmnigenousField(Optimizable, IOAble):
     @optimizable_parameter
     @property
     def theta_C(self):
-        """ndarray: Piecewise Omnigenity magnetic well shape parameters."""
+        """ndarray: Piecewise Omnigenity shape parameter."""
         return self._theta_C
 
     @theta_C.setter
@@ -2853,7 +2835,7 @@ class PiecewiseOmnigenousField(Optimizable, IOAble):
     @optimizable_parameter
     @property
     def zeta_C(self):
-        """ndarray: Piecewise Omnigenity magnetic well shape parameters."""
+        """ndarray: Piecewise Omnigenity shape parameter."""
         return self._zeta_C
 
     @zeta_C.setter
@@ -2863,7 +2845,7 @@ class PiecewiseOmnigenousField(Optimizable, IOAble):
     @optimizable_parameter
     @property
     def t_1(self):
-        """ndarray: Piecewise Omnigenity magnetic well shape parameters."""
+        """ndarray: Piecewise Omnigenity shape parameter."""
         return self._t_1
 
     @t_1.setter
@@ -2873,7 +2855,7 @@ class PiecewiseOmnigenousField(Optimizable, IOAble):
     @optimizable_parameter
     @property
     def t_2(self):
-        """ndarray: Piecewise Omnigenity magnetic well shape parameters."""
+        """ndarray: Piecewise Omnigenity shape parameter."""
         return self._t_2
 
     @t_2.setter
@@ -2883,33 +2865,9 @@ class PiecewiseOmnigenousField(Optimizable, IOAble):
     @optimizable_parameter
     @property
     def w_2(self):
-        """ndarray: Piecewise Omnigenity magnetic well shape parameters."""
+        """ndarray: Piecewise Omnigenity shape parameter."""
         return self._w_2
 
     @w_2.setter
     def w_2(self, w_2):
         self._w_2 = w_2
-
-    @optimizable_parameter
-    @property
-    def iota0(self):
-        """ndarray: Piecewise Omnigenity magnetic well shape parameters."""
-        return self._iota0
-
-    @iota0.setter
-    def iota0(self, iota0):
-        self._iota0 = iota0
-
-    @property
-    def helicity(self):
-        """tuple: Type of omnigenity (M, N)."""
-        return self._helicity
-
-    @helicity.setter
-    def helicity(self, helicity):
-        assert (
-            (len(helicity) == 2)
-            and (int(helicity[0]) == helicity[0])
-            and (int(helicity[1]) == helicity[1])
-        )
-        self._helicity = helicity

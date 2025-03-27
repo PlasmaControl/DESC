@@ -8,6 +8,7 @@ from scipy.constants import (
     electron_mass,
     elementary_charge,
     epsilon_0,
+    hbar,
     proton_mass,
 )
 
@@ -218,28 +219,8 @@ class SlowingDownGuidingCenterTrajectory(AbstractTrajectoryModel):
 
         # slowing eqns from McMillan, Matthew, and Samuel A. Lazerson. "BEAMS3D
         # neutral beam injection model." Plasma Physics and Controlled Fusion (2014)
-        me = electron_mass
-        mi = 2 * proton_mass  # assuming deuterium
-        Z = 1  # assuming hydrogenic species
-        Te = data["Te"] * JOULE_PER_EV  # in Joules
-        ne = data["ne"]  # in particles/m^3
-
-        vTe = jnp.sqrt(2 * Te / electron_mass)
-        vc = (3 * jnp.sqrt(jnp.pi) / 4 * me / mi) ** (1 / 3) * vTe
-
-        lnlambda = jnp.where(
-            data["Te"] > 10 * Z**2,
-            24 - jnp.log(jnp.sqrt(data["ne"]) / data["Te"]),
-            23 - jnp.log(jnp.sqrt(data["ne"] * Z * data["Te"] ** (-3 / 2))),
-        )
-
-        tau_s = (
-            (2 * proton_mass / electron_mass)
-            * (4 * jnp.pi * epsilon_0) ** 2
-            / (4 * jnp.sqrt(2 * jnp.pi))
-            * (3 * me ** (1 / 2) * Te ** (3 / 2))
-            / (ne * Z**2 * elementary_charge**4 * lnlambda)
-        )
+        tau_s = slowing_down_time(data["Te"], data["ne"])
+        vc = slowing_down_critical_velocity(data["Te"])
 
         psidot = (
             dot(cross(data["B"], data["grad(|B|)"]), data["grad(psi)"])
@@ -384,3 +365,190 @@ class CurveParticleInitializer(AbstractParticleInitializer):
                 raise NotImplementedError
         v = jnp.array(vs).T
         return jnp.hstack([x, v])
+
+
+def gc_radius(vperp, modB, m, q):
+    """Radius of guiding center orbit.
+
+    Parameters
+    ----------
+    vperp : array-like
+        Magnitude of perpendicular velocity, in m/s
+    modB : array-like
+        Magnitude of magnetic field, in T.
+    m : array-like
+        Mass of particle, in kg.
+    q : array-like
+        Charge of particle, in C.
+
+    Returns
+    -------
+    rho : jax.Array
+        Gyroradius, in meters.
+    """
+    return m * vperp / (jnp.abs(q) * modB)
+
+
+def slowing_down_time(Te, ne, m_eff=2.5, Z_eff=1):
+    """Slowing down time for fast ion friction with electrons.
+
+    Parameters
+    ----------
+    Te : array-like
+        Electron temperature, in eV
+    ne : array-like
+        Electron density, in particles/m^3
+    m_eff : array-like
+        Effective mass of the plasma main ions, in units of proton mass. Default is 2.5,
+        for a 50/50 DT plasma
+    Z_eff : array-like
+        Effective charge of the plasma main ions, in units of elementary charge.
+        Default is 1, for H/D/T plasmas.
+
+    Returns
+    -------
+    tau_s : jax.Array
+        Slowing down time, in seconds.
+    """
+    me = electron_mass
+    mi = m_eff * proton_mass
+
+    lnlambda = coulomb_logarithm(ne, ne / Z_eff, Te, Te, m_eff, Z_eff)
+
+    tau_s = (
+        (2 * mi / me)
+        * (4 * jnp.pi * epsilon_0) ** 2
+        / (4 * jnp.sqrt(2 * jnp.pi))
+        * (3 * me ** (1 / 2) * (Te * JOULE_PER_EV) ** (3 / 2))
+        / (ne * Z_eff**2 * elementary_charge**4 * lnlambda)
+    )
+    return tau_s
+
+
+def slowing_down_critical_velocity(Te, m_eff=2.5):
+    """Critical velocity for transition from slowing down on electrons to ions.
+
+    For fast ion speeds above the critical velocity the particles primarily slow down
+    due to friction with electrons, which reduces the particle speed exponentially.
+    Below the critical velocity friction with the ions dominates and the slowing down
+    is super-exponential.
+
+    Parameters
+    ----------
+    Te : array-like
+        Electron temperature, in eV
+    m_eff : array-like
+        Effective mass of the plasma main ions, in units of proton mass. Default is 2.5,
+        for a 50/50 DT plasma
+
+    Returns
+    -------
+    vc : jax.Array
+        Critical velocity.
+    """
+    me = electron_mass
+    mi = m_eff * proton_mass
+    vTe = jnp.sqrt(2 * Te * JOULE_PER_EV / me)
+    vc = (3 * jnp.sqrt(jnp.pi) / 4 * me / mi) ** (1 / 3) * vTe
+    return vc
+
+
+def coulomb_logarithm(ne, ni, Te, Ti, m_eff, Z_eff) -> float:
+    """Coulomb logarithm for collisions between species a and b.
+
+    Parameters
+    ----------
+    ne, ni : float
+        Density of electrons and ions in particles/m^3.
+    Te, Ti : float
+        Temperature of electrons and ions in eV.
+    m_eff : float
+        Effective mass of ions, in units of proton mass.
+    Z_eff : float
+        Effective charge of ions, in units of elementary charge.
+
+    Returns
+    -------
+    log(lambda) : float
+
+    """
+    bmin, bmax = impact_parameter(ne, ni, Te, Ti, m_eff, Z_eff)
+    return jnp.log(bmax / bmin)
+
+
+def impact_parameter(ne, ni, Te, Ti, m_eff, Z_eff) -> float:
+    """Impact parameters for classical Coulomb collision.
+
+    Parameters
+    ----------
+    ne, ni : float
+        Density of electrons and ions in particles/m^3.
+    Te, Ti : float
+        Temperature of electrons and ions in eV.
+    m_eff : float
+        Effective mass of ions, in units of proton mass.
+    Z_eff : float
+        Effective charge of ions, in units of elementary charge.
+    """
+    vte = jnp.sqrt(2 * Te * JOULE_PER_EV / electron_mass)
+    vti = jnp.sqrt(2 * Ti * JOULE_PER_EV / (m_eff * proton_mass))
+    bmin = jnp.maximum(
+        impact_parameter_perp(m_eff, Z_eff, vte, vti),
+        debroglie_length(m_eff, vte, vti),
+    )
+    bmax = debye_length(ne, ni, Te, Ti, Z_eff)
+    return bmin, bmax
+
+
+def impact_parameter_perp(m_eff, Z_eff, vte, vti) -> float:
+    """Distance of the closest approach for a 90° Coulomb collision.
+
+    Parameters
+    ----------
+    m_eff : float
+        Effective mass of ions, in units of proton mass.
+    Z_eff : float
+        Effective charge of ions, in units of elementary charge.
+    vte, vti : float
+        Thermal speeds of electrons and ions in m/s.
+    """
+    me = electron_mass
+    mi = m_eff * proton_mass
+    m_reduced = (mi * me) / (me + mi)
+    qe = -elementary_charge
+    qi = Z_eff * elementary_charge
+    return qe * qi / (4 * jnp.pi * epsilon_0 * m_reduced * (vte**2 + vti**2))
+
+
+def debroglie_length(m_eff, vte, vti) -> float:
+    """Thermal DeBroglie wavelength.
+
+    Parameters
+    ----------
+    m_eff : float
+        Effective mass of ions, in units of proton mass.
+    vte, vti : float
+        Thermal speeds of electrons and ions in m/s.
+    """
+    me = electron_mass
+    mi = m_eff * proton_mass
+    m_reduced = (mi * me) / (me + mi)
+    v_th = jnp.sqrt(vte**2 + vti**2)
+    return hbar / (2 * m_reduced * v_th)
+
+
+def debye_length(ne, ni, Te, Ti, Z_eff) -> float:
+    """Scale length for charge screening.
+
+    Parameters
+    ----------
+    ne, ni : float
+        Density of electrons and ions in particles/m^3
+    Te, Ti : float
+        Temperature of electrons and ions in eV
+    Z_eff : float
+        Effective charge of ions, in units of elementary charge.
+    """
+    den = ne * elementary_charge**2 / (Te * JOULE_PER_EV)
+    den += ni * Z_eff**2 * elementary_charge**2 / (Ti * JOULE_PER_EV)
+    return jnp.sqrt(epsilon_0 / den)

@@ -308,7 +308,6 @@ class VacuumBoundaryError(_Objective):
         nn = f.size // 2
         norms = [self.normalization[0], self.normalization[nn]]
         for i, (fmti, norm, units) in enumerate(zip(formats, norms, units)):
-            print(fmti)
             fi = f[i * nn : (i + 1) * nn]
             f0i = f0[i * nn : (i + 1) * nn]
             # target == 0 probably indicates f is some sort of error metric,
@@ -834,7 +833,6 @@ class BoundaryError(_Objective):
             units = units[:-1]
             norms = [self.normalization[0], self.normalization[nn]]
         for i, (fmti, norm, unit) in enumerate(zip(formats, norms, units)):
-            print(fmti)
             fi = f[i * nn : (i + 1) * nn]
             f0i = f0[i * nn : (i + 1) * nn]
             # target == 0 probably indicates f is some sort of error metric,

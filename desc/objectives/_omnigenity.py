@@ -946,7 +946,6 @@ class PiecewiseOmnigenity(_Objective):
         self._field = field
         self._eq_grid = eq_grid
         self._field_grid = field_grid
-        self.helicity = field.helicity
         self.M_booz = M_booz
         self.N_booz = N_booz
         self._eq_fixed = eq_fixed
@@ -1026,10 +1025,22 @@ class PiecewiseOmnigenity(_Objective):
             grid=eq_grid,
         )
 
+        # we need a uniform grid to get correct surface averages for iota
+        iota_grid = LinearGrid(
+            rho=eq_grid.nodes[eq_grid.unique_rho_idx, 0],
+            M=eq.M_grid,
+            N=eq.N_grid,
+            NFP=eq.NFP,
+        )
+        self._iota_keys = ["iota", "iota_r", "shear"]
+        iota_profiles = get_profiles(self._iota_keys, obj=eq, grid=iota_grid)
+        iota_transforms = get_transforms(self._iota_keys, obj=eq, grid=iota_grid)
+
         self._constants = {
             "eq_profiles": profiles,
             "eq_transforms": eq_transforms,
-            "helicity": self.helicity,
+            "iota_profiles": iota_profiles,
+            "iota_transforms": iota_transforms,
             "Ntheta_B": eq_grid.num_theta,
             "Nzeta_B": eq_grid.num_zeta,
             "overlap_penalty": self._overlap_penalty,
@@ -1096,6 +1107,15 @@ class PiecewiseOmnigenity(_Objective):
             field_params = params_2
             field = self.things[1]
 
+        # we first compute iota on a uniform grid to get correct averaging etc.
+        iota_data = compute_fun(
+            self._eq,
+            self._iota_keys,
+            params=eq_params,
+            transforms=constants["iota_transforms"],
+            profiles=constants["iota_profiles"],
+        )
+
         if self._eq_fixed:
             eq_data = constants["eq_data"]
         else:
@@ -1106,6 +1126,12 @@ class PiecewiseOmnigenity(_Objective):
                 transforms=constants["eq_transforms"],
                 profiles=constants["eq_profiles"],
             )
+
+        data = {
+            "iota": iota_data["iota"][0],
+            "iota_r": iota_data["iota_r"][0],
+            "shear": iota_data["shear"][0],
+        }
 
         ### Passing a Grid of Boozer coordinate values
         #### TODO: Have to account for NFP
@@ -1128,8 +1154,8 @@ class PiecewiseOmnigenity(_Objective):
                 params=self._field.params_dict,  # Should keep field params fixed
                 transforms=field_transforms,
                 profiles={},
-                helicity=constants["helicity"],
-                iota=jnp.mean(eq_data["iota"]),
+                data=data,
+                iota=data["iota"],
             )
         else:
             field_data = compute_fun(
@@ -1138,8 +1164,8 @@ class PiecewiseOmnigenity(_Objective):
                 params=field_params,
                 transforms=field_transforms,
                 profiles={},
-                helicity=constants["helicity"],
-                iota=jnp.mean(eq_data["iota"]),
+                data={},
+                iota=data["iota"],
             )
 
         Ntheta = constants["Ntheta_B"]

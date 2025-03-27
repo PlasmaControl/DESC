@@ -1842,7 +1842,7 @@ class TestObjectiveFunction:
 
         grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, L=2, axis=False)
         obj = BootstrapRedlConsistency(eq, grid=grid)
-        with pytest.raises(ValueError, match="rho=1"):
+        with pytest.raises(ValueError, match="vanish"):
             obj.build()
 
 

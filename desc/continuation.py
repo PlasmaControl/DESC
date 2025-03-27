@@ -695,8 +695,6 @@ def solve_continuation(  # noqa: C901
         NotImplementedError,
         "Continuation method with anisotropic pressure is not currently supported",
     )
-    # TODO: add warning for cases with Poincare BC. This needs a better
-    # inputreader for xsection
 
     timer = Timer()
     timer.start("Total time")

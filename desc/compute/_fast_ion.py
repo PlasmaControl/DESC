@@ -626,8 +626,9 @@ def _Gamma_a_Velasco(params, transforms, profiles, data, **kwargs):
             gamma_c = jnp.sum(gamma_c, axis=-1)  # summing over all the wells
             mask = _find_threshold_values(gamma_c, 0.2)
             return jnp.mean(
-                mask * jnp.sum(v_tau * poloidal_drift, axis=-1), axis=-2
-            )  # averaging over field lines
+                jnp.heaviside(mask * jnp.sum(v_tau * poloidal_drift, axis=-1), 0),
+                axis=-2,
+            )  # inner avg over lambda, outer avg over field lines
 
         return jnp.sum(
             batch_map(fun, data["pitch_inv"], pitch_batch_size)

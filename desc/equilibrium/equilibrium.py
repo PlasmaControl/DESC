@@ -1651,6 +1651,8 @@ class Equilibrium(IOAble, Optimizable):
     def Zb_lmn(self, Zb_lmn):
         self.surface.Z_lmn = Zb_lmn
 
+    # This will become optimizable parameter automatically if user adds
+    # one of the FixSection... constraints
     @property
     def Rp_lmn(self):
         """ndarray: Spectral coefficients of R at the cross-section."""
@@ -1660,6 +1662,8 @@ class Equilibrium(IOAble, Optimizable):
     def Rp_lmn(self, Rp_lmn):
         self.xsection.R_lmn = Rp_lmn
 
+    # This will become optimizable parameter automatically if user adds
+    # one of the FixSection... constraints
     @property
     def Zp_lmn(self):
         """ndarray: Spectral coefficients of Z at the cross-section."""
@@ -1669,6 +1673,8 @@ class Equilibrium(IOAble, Optimizable):
     def Zp_lmn(self, Zp_lmn):
         self.xsection.Z_lmn = Zp_lmn
 
+    # This will become optimizable parameter automatically if user adds
+    # one of the FixSection... constraints
     @property
     def Lp_lmn(self):
         """ndarray: Spectral coefficients of Lambda at the cross-section."""

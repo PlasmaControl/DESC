@@ -71,9 +71,9 @@ def get_deltas(things1, things2):  # noqa: C901
             if not jnp.allclose(a2.Z_n, a1.Z_n):
                 deltas["Za_n"] = a2.Z_n - a1.Z_n
 
-    if "surface_poincare" in things1:
-        s1 = things1.pop("surface_poincare")
-        s2 = things2.pop("surface_poincare")
+    if "xsection" in things1:
+        s1 = things1.pop("xsection")
+        s2 = things2.pop("xsection")
         if s1 is not None and s2 is not None:
             s1 = s1.copy()
             s2 = s2.copy()

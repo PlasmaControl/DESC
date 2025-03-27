@@ -249,8 +249,8 @@ def test_perturb_poincare():
     surf1 = eq_poin.xsection
     surf2 = eq.xsection
 
-    things1 = {"surface_poincare": surf1}
-    things2 = {"surface_poincare": surf2}
+    things1 = {"xsection": surf1}
+    things2 = {"xsection": surf2}
 
     deltas = get_deltas(things1, things2)
     constraints = get_fixed_xsection_constraints(eq=eq_poin)

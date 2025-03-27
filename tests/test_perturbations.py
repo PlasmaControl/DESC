@@ -219,7 +219,7 @@ def test_perturb_axis():
 @pytest.mark.unit
 def test_perturb_poincare():
     """Test that perturbing the Poincare section."""
-    # TODO: make it actually test perturbation
+    # TODO: make it actually test perturbation, or is it necessary?
     eq = desc.examples.get("HELIOTRON")
     eq_poin = Equilibrium(
         xsection=eq.get_surface_at(zeta=0),
@@ -236,10 +236,6 @@ def test_perturb_poincare():
         sym=eq.sym,  # explicitly enforce stellarator symmetry
         spectral_indexing=eq._spectral_indexing,
     )
-
-    eq_poin.change_resolution(eq.L, eq.M, eq.N)
-    eq_poin.axis = eq_poin.get_axis()
-    eq_poin.surface = eq_poin.get_surface_at(rho=1)
 
     eq_poin.L_lmn = eq_poin.L_lmn.at[:].set(0)
     eq_poin.R_lmn = eq_poin.R_lmn.at[eq_poin.R_basis.get_idx(1, 1, 1)].set(0.1)

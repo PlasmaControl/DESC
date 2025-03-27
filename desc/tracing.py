@@ -55,6 +55,15 @@ class AbstractTrajectoryModel(IOAble, ABC):
         """
         pass
 
+    @property
+    @abstractmethod
+    def args(self):
+        """Additional arguments needed by the model.
+
+        Eg, "m", "q", "mu", for mass, charge, magnetic moment.
+        """
+        pass
+
     @abstractmethod
     def compute(self, x, eq):
         """RHS of the particle trajectory ODE."""
@@ -82,10 +91,6 @@ class CollisionlessGuidingCenterTrajectory(AbstractTrajectoryModel):
         "b",
     ]
 
-    def __init__(self, m=4, q=2):
-        self.m = m * proton_mass
-        self.q = q * elementary_charge
-
     @property
     def frame(self):
         """Which frame the model is defined in."""
@@ -96,7 +101,12 @@ class CollisionlessGuidingCenterTrajectory(AbstractTrajectoryModel):
         """Which velocity coordinates the model uses."""
         return ["vpar"]
 
-    def compute(self, x, eq):
+    @property
+    def args(self):
+        """Which additional args are needed by the model."""
+        return ["m", "q", "mu"]
+
+    def compute(self, x, eq, m, q, mu):
         """RHS of guiding center trajectories without collisions or slowing down.
 
         Parameters
@@ -112,7 +122,7 @@ class CollisionlessGuidingCenterTrajectory(AbstractTrajectoryModel):
             Velocity of particles in phase space.
         """
         assert eq.iota is not None
-        psi, theta, zeta, vpar, v = x.T
+        psi, theta, zeta, vpar = x.T
         grid = Grid(
             jnp.array([jnp.sqrt(psi), theta, zeta]).T,
             spacing=jnp.zeros((3,)).T,
@@ -131,19 +141,20 @@ class CollisionlessGuidingCenterTrajectory(AbstractTrajectoryModel):
 
         psidot = (
             dot(cross(data["B"], data["grad(|B|)"]), data["grad(psi)"])
-            * ((self.m / self.q / data["|B|"] ** 3) * (v**2))
+            * ((m / q / data["|B|"] ** 3) * (mu * data["|B|"]) + vpar**2)
         ) * (2 * jnp.pi / eq.Psi)
         thetadot = vpar / data["|B|"] * dot(data["B"], data["e^theta"]) + (
-            self.m / self.q / data["|B|"] ** 3
-        ) * (v**2) * dot(cross(data["B"], data["grad(|B|)"]), data["e^theta"])
-        zetadot = vpar / data["|B|"] * dot(data["B"], data["e^zeta"]) + (
-            self.m / self.q / data["|B|"] ** 3
-        ) * (v**2) * dot(cross(data["B"], data["grad(|B|)"]), data["e^zeta"])
-        vpardot = (
-            -(v**2 - vpar**2) / (2 * data["|B|"]) * dot(data["b"], data["grad(|B|)"])
+            m / q / data["|B|"] ** 3
+        ) * ((mu * data["|B|"]) + vpar**2) * dot(
+            cross(data["B"], data["grad(|B|)"]), data["e^theta"]
         )
-        vdot = jnp.zeros_like(v)
-        dx = jnp.array([psidot, thetadot, zetadot, vpardot, vdot]).T
+        zetadot = vpar / data["|B|"] * dot(data["B"], data["e^zeta"]) + (
+            m / q / data["|B|"] ** 3
+        ) * ((mu * data["|B|"].T).T + vpar**2) * dot(
+            cross(data["B"], data["grad(|B|)"]), data["e^zeta"]
+        )
+        vpardot = -mu * dot(data["b"], data["grad(|B|)"])
+        dx = jnp.array([psidot, thetadot, zetadot, vpardot]).T
         return dx
 
 
@@ -168,10 +179,6 @@ class SlowingDownGuidingCenterTrajectory(AbstractTrajectoryModel):
         "ne",
     ]
 
-    def __init__(self, m=4, q=2):
-        self.m = m * proton_mass
-        self.q = q * elementary_charge
-
     @property
     def frame(self):
         """Which frame the model is defined in."""
@@ -182,7 +189,12 @@ class SlowingDownGuidingCenterTrajectory(AbstractTrajectoryModel):
         """Which velocity coordinates the model uses."""
         return ["vpar", "v"]
 
-    def compute(self, x, eq):
+    @property
+    def args(self):
+        """Which additional args are needed by the model."""
+        return ["m", "q"]
+
+    def compute(self, x, eq, m, q):
         """RHS of guiding center trajectories without collisions or slowing down.
 
         Parameters
@@ -224,13 +236,13 @@ class SlowingDownGuidingCenterTrajectory(AbstractTrajectoryModel):
 
         psidot = (
             dot(cross(data["B"], data["grad(|B|)"]), data["grad(psi)"])
-            * ((self.m / self.q / data["|B|"] ** 3) * (v**2))
+            * ((m / q / data["|B|"] ** 3) * (v**2))
         ) * (2 * jnp.pi / eq.Psi)
         thetadot = vpar / data["|B|"] * dot(data["B"], data["e^theta"]) + (
-            self.m / self.q / data["|B|"] ** 3
+            m / q / data["|B|"] ** 3
         ) * (v**2) * dot(cross(data["B"], data["grad(|B|)"]), data["e^theta"])
         zetadot = vpar / data["|B|"] * dot(data["B"], data["e^zeta"]) + (
-            self.m / self.q / data["|B|"] ** 3
+            m / q / data["|B|"] ** 3
         ) * (v**2) * dot(cross(data["B"], data["grad(|B|)"]), data["e^zeta"])
         vpardot = (
             -(v**2 - vpar**2) / (2 * data["|B|"]) * dot(data["b"], data["grad(|B|)"])

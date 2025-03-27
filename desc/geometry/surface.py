@@ -849,10 +849,8 @@ class ZernikeRZToroidalSection(Surface):
         self,
         R_lmn=None,
         Z_lmn=None,
-        L_lmn=None,
         modes_R=None,
         modes_Z=None,
-        modes_L=None,
         spectral_indexing="ansi",
         sym="auto",
         L=None,
@@ -860,6 +858,8 @@ class ZernikeRZToroidalSection(Surface):
         zeta=0.0,
         name="",
         check_orientation=True,
+        L_lmn=None,
+        modes_L=None,
     ):
         if R_lmn is None:
             R_lmn = np.array([10, 1])

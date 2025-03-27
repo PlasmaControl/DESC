@@ -182,7 +182,7 @@ def get_fixed_xsection_constraints(
     Returns
     -------
     constraints, tuple of _Objectives
-        A list of the linear constraints used in fixed-boundary problems.
+        A list of the linear constraints used in fixed cross-section problems.
 
     """
     kwargs = {"eq": eq, "normalize": normalize, "normalize_target": normalize}

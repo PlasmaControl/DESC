@@ -244,7 +244,6 @@ An initial guess for the magnetic axis can be supplied in the form:
 The coefficients :math:`R^{0}_{n}` and :math:`Z^{0}_{n}` are specified by the input variables ``R0`` and ``Z0``, respectively.
 The Fourier mode number :math:`n` is given by ``n``, which must be on the same input line as the coefficients.
 
-The magnetic axis initial guess is optional and only used if ``eq.surface.type = FourierRZToroidalSurface``.
 If no initial guess is provided for the magnetic axis, then the :math:`m = 0` modes of the fixed-boundary surface shape input are used.
 
 Fixed-Boundary Surface Shape
@@ -261,11 +260,11 @@ Fixed-Boundary Surface Shape
    m:  -1   n:   1  Z1 = -3.00000000E-01
 
 - ``m`` (int): Poloidal mode number.
-- ``n`` (int): Toroidal mode number. (Only used if ``eq.surface.type = FourierRZToroidalSurface``.)
+- ``n`` (int): Toroidal mode number.
 - ``R1`` (float): Fourier coefficient of the R coordinate of the boundary surface. :math:`R^{1}_{mn}`
 - ``Z1`` (float): Fourier coefficient of the Z coordinate of the boundary surface. :math:`Z^{1}_{mn}`
 
-If ``eq.surface.type = FourierRZToroidalSurface``, the shape of the last closed flux surface is given as a double Fourier series of the form:
+The shape of the last closed flux surface is given as a double Fourier series of the form:
 
 .. math::
    \begin{aligned}
@@ -290,6 +289,8 @@ The fixed-boundary surface shape given in this example is equivalent to (using P
    R_{1}(\theta,\phi) &= 10 + \cos\theta + 0.3 \cos(\theta+19\phi) \\
    Z_{1}(\theta,\phi) &= \sin\theta - 0.3 \sin(\theta+19\phi).
    \end{aligned}
+
+**Note**: Poincare boundary condition is not supported by input files.
 
 VMEC Inputs
 ***********

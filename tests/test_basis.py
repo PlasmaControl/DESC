@@ -401,6 +401,7 @@ class TestBasis:
             _ = ChebyshevDoubleFourierBasis(L=3, M=1, N=1, NFP=1.0)
 
 
+@pytest.mark.unit
 def test_jacobi_jvp():
     """Test that custom derivative rule for jacobi polynomials works."""
     basis = ZernikePolynomial(25, 25)

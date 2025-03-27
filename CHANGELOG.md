@@ -4,7 +4,6 @@ Changelog
 - Adds ``Rp_lmn``, ``Zp_lmn`` and ``Lp_lmn`` attributes to the ``Equilibrium`` class. If either `FixSectionR`, `FixSectionZ` or `FixSectionLambda` is added as constraint, they will become optimizable parameters. Since both fixing cross-section and the LCFS shape is not supported yet, once Poincare variables are added to the Equilibrium, boundary parameters `Rb_lmn` and `Zb_lmn` will not be optimizable anymore. With this change of optimizable parameters, if a user wants to solve LCFS and Poincare problems consecutively, they have to call `eq.xsection = eq.get_surface_at(zeta=0)` and `eq.surface = eq.get_surface_at(rho=1)` to update the variables after any type of optimization or solve.
 - Adds option to solve equilibrium problem using fixed Poincare cross-section boundary condition. Adds a new helper function to ``desc.objectives.getters`` called ``get_fixed_xsection_constraints`` which will automatically adds the required ``FixSectionR``, ``FixSectionZ``and optionally ``FixSectionLambda`` (if the argument ``fix_lambda=True`` default, it doesn't add it if set to ``fix_lambda=False``).
 - Adds ``L_lmn`` and ``L_basis`` attributes to the ``ZernikeRZToroidalSection`` class.
-- Adds batching feature to singular integrals.
 
 
 Bug Fixes
@@ -30,7 +29,6 @@ New Features
 - Changes implementation of Dommaschk potentials to use recursive algorithm and symbolic integration.
 - Adds an option to ``VMECIO.save`` to specify the grid resolution in real space.
 - Adds a new objective ``desc.objectives.CoilIntegratedCurvature`` for targeting convex coils.
-- ``desc.objectives.CoilSetMinDistance`` and ``desc.objectives.PlasmaCoilSetMinDistance`` now include the option to use a softmin which can give smoother gradients. They also both now have a ``dist_chunk_size`` option to break up the distance calculation into smaller pieces to save memory
 - `eq.solve` and `eq.perturb` now accept `LinearConstraintProjection` as objective. This option must be used without any constraints.
 - Adds the example "reactor_QA", which is similar to "precise_QA" but with self-consistent bootstrap current at finite beta.
 - Allows non-proximal optimizers to  handle optimizing more than one ``Equilibrium`` object simultaneously.

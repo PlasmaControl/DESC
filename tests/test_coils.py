@@ -1297,6 +1297,37 @@ def test_save_and_load_makegrid_coils_nested(tmpdir_factory):
 
 
 @pytest.mark.unit
+def test_save_and_load_makegrid_coils_sym(tmpdir_factory):
+    """Test saving and reloading a nested CoilSet from MAKEGRID file."""
+    tmpdir = tmpdir_factory.mktemp("coil_files")
+    path = tmpdir.join("coils.MAKEGRID_format_sym")
+
+    coil = FourierPlanarCoil()
+    coil2 = coil.copy()
+    coil.rotate(angle=np.pi / 8)
+    coil2.rotate(angle=np.pi / 6)
+    coil2.current = 10
+    coil_list = [coil, coil2]
+
+    coilset = CoilSet(coil_list, NFP=2, sym=True)
+
+    coilset.save_in_makegrid_format(path, grid=24, NFP=coilset.NFP)
+
+    coilset2 = CoilSet.from_makegrid_coilfile(str(path))
+
+    assert coilset2.num_coils == coilset.num_coils
+
+    # check length of each coil
+    correct_length = coilset.compute("length")[0]["length"]
+    loaded_coil_lengths = [c.compute("length")["length"] for c in coilset2]
+    np.testing.assert_allclose(correct_length, loaded_coil_lengths, rtol=1e-2)
+    # check current of each coil
+    correct_currents = coilset._all_currents()
+    loaded_coil_currents = coilset2.current
+    np.testing.assert_allclose(correct_currents, loaded_coil_currents, rtol=1e-8)
+
+
+@pytest.mark.unit
 def test_save_makegrid_coils_assert_NFP(tmpdir_factory):
     """Test saving CoilSet that with incompatible NFP throws an error."""
     Ncoils = 22

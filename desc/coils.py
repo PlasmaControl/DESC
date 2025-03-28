@@ -2100,7 +2100,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             else:
                 return [coilset]
 
-        coils = flatten_coils(self.coils)
+        coils = flatten_coils(self)
         # after flatten, should have as many elements in list as self.num_coils, if
         # flatten worked correctly.
         assert len(coils) == self.num_coils

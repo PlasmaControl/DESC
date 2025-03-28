@@ -1,8 +1,20 @@
 """Functions for tracing particles in magnetic fields."""
 
 from abc import ABC, abstractmethod
+from typing import Optional, Union
 
+import equinox as eqx
 import numpy as np
+from diffrax import (
+    AbstractSolver,
+    ODETerm,
+    PIDController,
+    RecursiveCheckpointAdjoint,
+    SaveAt,
+    Tsit5,
+    diffeqsolve,
+)
+from numpy.typing import ArrayLike
 from scipy.constants import (
     Boltzmann,
     electron_mass,
@@ -12,11 +24,12 @@ from scipy.constants import (
     proton_mass,
 )
 
-from desc.backend import jnp
+from desc.backend import jit, jnp, vmap
 from desc.compute import _compute as compute_fun
 from desc.compute.utils import get_profiles, get_transforms
 from desc.derivatives import Derivative
 from desc.equilibrium import Equilibrium
+from desc.geometry import Curve
 from desc.grid import Grid
 from desc.io import IOAble
 from desc.magnetic_fields import _MagneticField
@@ -26,16 +39,19 @@ JOULE_PER_EV = 11606 * Boltzmann
 EV_PER_JOULE = 1 / JOULE_PER_EV
 
 
-class AbstractTrajectoryModel(IOAble, ABC):
+class AbstractTrajectoryModel(ODETerm, ABC):
     """Abstract base class for particle trajectory models.
 
     Subclasses should implement the ``compute`` method to compute the RHS of the ODE,
     as well as the properties `frame`, `vcoords`, `args`
     """
 
+    def __init__(self):
+        super().__init__(self.compute)
+
     @property
     @abstractmethod
-    def frame(self):
+    def frame(self) -> str:
         """One of "flux" or "lab", indicating which frame the model is defined in.
 
         "flux" traces particles in (rho, theta, zeta) magnetic coordinates
@@ -46,7 +62,7 @@ class AbstractTrajectoryModel(IOAble, ABC):
 
     @property
     @abstractmethod
-    def vcoords(self):
+    def vcoords(self) -> list[str]:
         """Velocity coordinates used by the model, in order.
 
         Options are:
@@ -61,7 +77,7 @@ class AbstractTrajectoryModel(IOAble, ABC):
 
     @property
     @abstractmethod
-    def args(self):
+    def args(self) -> list[str]:
         """Additional arguments needed by the model.
 
         Eg, "m", "q", "mu", for mass, charge, magnetic moment.
@@ -69,7 +85,7 @@ class AbstractTrajectoryModel(IOAble, ABC):
         pass
 
     @abstractmethod
-    def compute(self, x, eq):
+    def compute(self, t: float, x: jnp.ndarray, args: tuple) -> jnp.ndarray:
         """RHS of the particle trajectory ODE."""
         pass
 
@@ -85,6 +101,8 @@ class VacuumGuidingCenterTrajectory(AbstractTrajectoryModel):
         in a CoilSet or MagneticField, choose "lab".
     """
 
+    _frame: str
+    _data_keys = eqx.field(static=True)
     _data_keys = [
         "B",
         "|B|",
@@ -95,48 +113,52 @@ class VacuumGuidingCenterTrajectory(AbstractTrajectoryModel):
         "b",
     ]
 
-    def __init__(self, frame):
+    def __init__(self, frame: str):
         assert frame in ["lab", "flux"]
         self._frame = frame
+        super().__init__()
 
     @property
-    def frame(self):
+    def frame(self) -> str:
         """Which frame the model is defined in."""
         return self._frame
 
     @property
-    def vcoords(self):
+    def vcoords(self) -> list[str]:
         """Which velocity coordinates the model uses."""
         return ["vpar"]
 
     @property
-    def args(self):
+    def args(self) -> list[str]:
         """Which additional args are needed by the model."""
         return ["m", "q", "mu"]
 
-    def compute(self, x, eq_or_field, m, q, mu):
+    def compute(self, t: float, x: jnp.ndarray, args: tuple) -> jnp.ndarray:
         """RHS of guiding center trajectories without collisions or slowing down.
 
         Parameters
         ----------
-        x : jax.Array, shape(N,4)
+        t : float
+            Time to evaluate RHS at.
+        x : jax.Array, shape(4,)
             Position of particle in phase space (psi_n, theta, zeta, vpar).
-        eq_or_field : Equilibrium or MagneticField
-            Equilibrium or MagneticFieild object particles are being traced in.
+        args : tuple
+            Additional arguments needed by model, (eq_or_field, m, q, mu, field_kwargs).
 
         Returns
         -------
         dx : jax.Array, shape(N,4)
             Velocity of particles in phase space.
         """
+        eq_or_field, m, q, mu, kwargs = args
         if self.frame == "flux":
             assert isinstance(eq_or_field, Equilibrium)
-            return self._compute_flux_coordinates(x, eq_or_field, m, q, mu)
+            return self._compute_flux_coordinates(x, eq_or_field, m, q, mu, **kwargs)
         elif self.frame == "lab":
             assert isinstance(eq_or_field, _MagneticField)
-            return self._compute_lab_coordinates(x, eq_or_field, m, q, mu)
+            return self._compute_lab_coordinates(x, eq_or_field, m, q, mu, **kwargs)
 
-    def _compute_flux_coordinates(self, x, eq, m, q, mu):
+    def _compute_flux_coordinates(self, x, eq, m, q, mu, **kwargs):
         assert eq.iota is not None
         psi, theta, zeta, vpar = x.T
         grid = Grid(
@@ -148,11 +170,7 @@ class VacuumGuidingCenterTrajectory(AbstractTrajectoryModel):
         transforms = get_transforms(self._data_keys, eq, grid, jitable=True)
         profiles = get_profiles(self._data_keys, eq, grid)
         data = compute_fun(
-            eq,
-            self._data_keys,
-            eq.params_dict,
-            transforms,
-            profiles,
+            eq, self._data_keys, eq.params_dict, transforms, profiles, **kwargs
         )
 
         psidot = (
@@ -173,12 +191,14 @@ class VacuumGuidingCenterTrajectory(AbstractTrajectoryModel):
         dx = jnp.array([psidot, thetadot, zetadot, vpardot]).T
         return dx
 
-    def _compute_lab_coordinates(self, x, field_compute, m, q, mu):
+    def _compute_lab_coordinates(self, x, field, m, q, mu, **kwargs):
         # this is the one implemented in simsopt for method="gc_vac"
         # should be equivalent to full lagrangian from Cary & Brizard in vacuum
         m_over_q = m / q
         vpar = x[-1]
         x = x[:-1]
+        field_compute = lambda y: field.compute_magnetic_field(y, **kwargs)
+
         B = field_compute(x)
         dB = jnp.vectorize(
             Derivative(
@@ -212,13 +232,9 @@ class SlowingDownGuidingCenterTrajectory(AbstractTrajectoryModel):
     """Guiding center trajectories with slowing down on electrons and main ions.
 
     Works only in flux coordinates.
-
-    Parameters
-    ----------
-    m_q : jax.Array
-        Mass/charge ratio of particles. Defaults to that of an alpha particle.
     """
 
+    _data_keys = eqx.field(static=True)
     _data_keys = [
         "B",
         "|B|",
@@ -231,36 +247,43 @@ class SlowingDownGuidingCenterTrajectory(AbstractTrajectoryModel):
         "ne",
     ]
 
+    def __init__(self, frame: str = "flux"):
+        assert frame == "flux"
+        super().__init__()
+
     @property
-    def frame(self):
+    def frame(self) -> "str":
         """Which frame the model is defined in."""
         return "flux"
 
     @property
-    def vcoords(self):
+    def vcoords(self) -> list[str]:
         """Which velocity coordinates the model uses."""
         return ["vpar", "v"]
 
     @property
-    def args(self):
+    def args(self) -> list[str]:
         """Which additional args are needed by the model."""
         return ["m", "q"]
 
-    def compute(self, x, eq, m, q):
+    def compute(self, t: float, x: jnp.ndarray, args: tuple) -> jnp.ndarray:
         """RHS of guiding center trajectories without collisions or slowing down.
 
         Parameters
         ----------
+        t : float
+            Time to evaluate RHS at.
         x : jax.Array, shape(N,5)
             Position of particle in phase space (psi_n, theta, zeta, vpar, v).
-        eq : Equilibrium
-            Equilibrium object particles are being traced in.
+        args : tuple
+            Additional arguments needed by model, (eq, m, q, kwargs).
 
         Returns
         -------
         dx : jax.Array, shape(N,5)
             Velocity of particles in phase space.
         """
+        eq, m, q, kwargs = args
         assert eq.iota is not None
         assert eq.electron_temperature is not None
 
@@ -279,6 +302,7 @@ class SlowingDownGuidingCenterTrajectory(AbstractTrajectoryModel):
             eq.params_dict,
             transforms,
             profiles,
+            **kwargs,
         )
 
         # slowing eqns from McMillan, Matthew, and Samuel A. Lazerson. "BEAMS3D
@@ -311,7 +335,9 @@ class AbstractParticleInitializer(ABC, IOAble):
     """
 
     @abstractmethod
-    def init_particles(self, model, field):
+    def init_particles(
+        self, model: AbstractTrajectoryModel, field: Union[Equilibrium, _MagneticField]
+    ) -> tuple[jnp.ndarray, tuple]:
         """Initialize a distribution of particles.
 
         Should return two things:
@@ -324,7 +350,7 @@ class AbstractParticleInitializer(ABC, IOAble):
         pass
 
 
-def _compute_modB(x, field):
+def _compute_modB(x, field, **kwargs):
     if isinstance(field, Equilibrium):
         psi, theta, zeta = x.T
         grid = Grid(
@@ -333,8 +359,8 @@ def _compute_modB(x, field):
             jitable=True,
             sort=False,
         )
-        return field.compute("|B|", grid=grid)["|B|"]
-    return jnp.linalg.norm(field(x), axis=-1)
+        return field.compute("|B|", grid=grid, **kwargs)["|B|"]
+    return jnp.linalg.norm(field.compute_magnetic_field(x, **kwargs), axis=-1)
 
 
 class ManualParticleInitializerFlux(AbstractParticleInitializer):
@@ -361,7 +387,17 @@ class ManualParticleInitializerFlux(AbstractParticleInitializer):
         lab frame.
     """
 
-    def __init__(self, rho0, theta0, zeta0, xi0, E=3.5e6, m=4, q=2, eq=None):
+    def __init__(
+        self,
+        rho0: ArrayLike,
+        theta0: ArrayLike,
+        zeta0: ArrayLike,
+        xi0: ArrayLike,
+        E: ArrayLike = 3.5e6,
+        m: float = 4,
+        q: float = 2,
+        eq: Optional[Equilibrium] = None,
+    ):
         self.m = m * proton_mass
         self.q = q * elementary_charge
         E = E * JOULE_PER_EV
@@ -374,7 +410,9 @@ class ManualParticleInitializerFlux(AbstractParticleInitializer):
         self.vpar0 = xi0 * self.v0
         self.eq = eq
 
-    def init_particles(self, model, field):
+    def init_particles(
+        self, model: AbstractTrajectoryModel, field: Union[Equilibrium, _MagneticField]
+    ) -> tuple[jnp.ndarray, tuple]:
         """Initialize N random particles for a given trajectory model."""
         x = jnp.array([self.rho0, self.theta0, self.zeta0]).T
         if model.frame == "flux":
@@ -437,7 +475,17 @@ class ManualParticleInitializerLab(AbstractParticleInitializer):
         flux frame.
     """
 
-    def __init__(self, R0, phi0, Z0, xi0, E=3.5e6, m=4, q=2, eq=None):
+    def __init__(
+        self,
+        R0: ArrayLike,
+        phi0: ArrayLike,
+        Z0: ArrayLike,
+        xi0: ArrayLike,
+        E: ArrayLike = 3.5e6,
+        m: float = 4,
+        q: float = 2,
+        eq: Optional[Equilibrium] = None,
+    ):
         self.m = m * proton_mass
         self.q = q * elementary_charge
         E = E * JOULE_PER_EV
@@ -450,7 +498,9 @@ class ManualParticleInitializerLab(AbstractParticleInitializer):
         self.vpar0 = xi0 * self.v0
         self.eq = eq
 
-    def init_particles(self, model, field):
+    def init_particles(
+        self, model: AbstractTrajectoryModel, field: Union[Equilibrium, _MagneticField]
+    ) -> tuple[jnp.ndarray, tuple]:
         """Initialize N random particles for a given trajectory model."""
         x = jnp.array([self.R0, self.phi0, self.Z0]).T
         if model.frame == "flux":
@@ -519,7 +569,16 @@ class CurveParticleInitializer(AbstractParticleInitializer):
     """
 
     def __init__(
-        self, curve, N, E=3.5e6, m=4, q=2, xi_min=-1, xi_max=1, grid=None, seed=0
+        self,
+        curve: Curve,
+        N: int,
+        E: float = 3.5e6,
+        m: float = 4,
+        q: float = 2,
+        xi_min: float = -1,
+        xi_max: float = 1,
+        grid: Grid = None,
+        seed: int = 0,
     ):
         self.curve = curve
         self.E = E * JOULE_PER_EV
@@ -531,7 +590,9 @@ class CurveParticleInitializer(AbstractParticleInitializer):
         self.N = N
         self.seed = seed
 
-    def init_particles(self, model, field):
+    def init_particles(
+        self, model: AbstractTrajectoryModel, field: Union[Equilibrium, _MagneticField]
+    ) -> tuple[jnp.ndarray, tuple]:
         """Initialize N random particles for a given trajectory model."""
         data = self.curve.compute(["x_s", "s", "ds"], grid=self.grid)
         sqrtg = jnp.linalg.norm(data["x_s"]) * data["ds"]
@@ -583,6 +644,99 @@ class CurveParticleInitializer(AbstractParticleInitializer):
                 args += [vperp2 / modB]
 
         return jnp.hstack([x, v]), tuple(args)
+
+
+def trace_particles(
+    field: Union[Equilibrium, _MagneticField],
+    initializer: AbstractParticleInitializer,
+    ts: ArrayLike,
+    model: AbstractTrajectoryModel,
+    rtol: float = 1e-8,
+    atol: float = 1e-8,
+    maxstep: int = 1000,
+    min_step_size: float = 1e-8,
+    solver: AbstractSolver = Tsit5(),
+    adjoint=RecursiveCheckpointAdjoint(),
+    source_grid: Grid = None,
+):
+    """Trace charged particles in an equilibrium or external magnetic field.
+
+    Parameters
+    ----------
+    field : MagneticField or Equilibrium
+        Source of magnetic field to integrate
+    initializer : AbstractParticleInitializer
+        Object to initialize particle distribution.
+    ts : array-like
+        Strictly increasing array of times where output is desired.
+    model : AbstractTrajectoryModel
+        Trajectory model to integrate.
+    rtol, atol : float
+        relative and absolute tolerances for ode integration
+    maxstep : int
+        maximum number of steps between different output times
+    min_step_size: float
+        minimum step size (in t) that the integration can take. default is 1e-8
+    solver: diffrax.AbstractSolver
+        diffrax Solver object to use in integration,
+        defaults to Tsit5(), a RK45 explicit solver.
+    adjoint : diffrax.AbstractAdjoint
+        How to take derivatives of the trajectories. ``RecursiveCheckpointAdjoint``
+        supports reverse mode AD and tends to be the most efficient. For forward mode AD
+        use ``diffrax.ForwardMode()``.
+    source_grid : Grid, optional
+        Grid to use to discretize field
+
+    Returns
+    -------
+    x : ndarray, shape(num_particles, num_timesteps, 3)
+        Position of each particle at each requested time, in
+        either r,phi,z or rho,theta,zeta depending ``model.frame``.
+    v : ndarray
+        Velocity of each particle at specified times. The exact number of meaning
+        will depend on ``model.vcoords``.
+
+    """
+    if isinstance(field, Equilibrium):
+        assert model.frame == "flux"
+    elif isinstance(field, _MagneticField):
+        assert model.frame == "lab"
+    else:
+        raise NotImplementedError
+
+    y0, args = initializer.init_particles
+    kwargs = {}
+    if source_grid:
+        kwargs["source_grid"] = source_grid
+    args = (*args, kwargs)
+    args = (field, *args)
+
+    stepsize_controller = PIDController(rtol=rtol, atol=atol, dtmin=min_step_size)
+
+    saveat = SaveAt(ts=ts)
+
+    intfun = lambda x, args: diffeqsolve(
+        model,
+        solver,
+        y0=x,
+        t0=ts[0],
+        t1=ts[-1],
+        saveat=saveat,
+        max_steps=maxstep * len(ts),
+        dt0=min_step_size,
+        args=args,
+        stepsize_controller=stepsize_controller,
+        adjoint=adjoint,
+    ).ys
+
+    yt = jit(vmap(intfun))(y0, args)
+
+    yt = jnp.where(jnp.isinf(yt), jnp.nan, yt)
+
+    x = yt[:, :, :3]
+    v = yt[:, :, 3:]
+
+    return x, v
 
 
 def gc_radius(vperp, modB, m, q):

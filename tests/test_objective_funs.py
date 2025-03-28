@@ -6,10 +6,12 @@ that is done in test_compute_functions or regression tests.
 This module primarily tests the constructing/building/calling methods.
 """
 
+import platform
 import warnings
 
 import numpy as np
 import pytest
+from packaging.version import Version
 from scipy.constants import elementary_charge, mu_0
 
 import desc.examples
@@ -20,6 +22,7 @@ from desc.coils import (
     FourierRZCoil,
     FourierXYZCoil,
     MixedCoilSet,
+    initialize_modular_coils,
 )
 from desc.compute import get_transforms
 from desc.equilibrium import Equilibrium
@@ -1733,6 +1736,7 @@ class TestObjectiveFunction:
             num_transit=num_transit,
             num_quad=num_quad,
             num_pitch=num_pitch,
+            jac_chunk_size=1,
         )
         obj.build()
         # TODO(#1094)
@@ -1749,6 +1753,7 @@ class TestObjectiveFunction:
             num_transit=num_transit,
             num_quad=num_quad,
             num_pitch=num_pitch,
+            jac_chunk_size=1,
         )
         obj.build()
         np.testing.assert_allclose(
@@ -1795,6 +1800,29 @@ class TestObjectiveFunction:
         np.testing.assert_allclose(p0_out, p1_out)
         np.testing.assert_allclose(p0_in, p1_in)
         np.testing.assert_allclose(q0, q1)
+
+    @pytest.mark.unit
+    def test_things_per_objective_idx(self):
+        """Test things_per_objective_idx. Related to GH Issue #1602."""
+        eq = desc.examples.get("reactor_QA")
+        coils = initialize_modular_coils(eq, num_coils=3, r_over_a=3.0)
+        grid = LinearGrid(rho=1.0, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
+        linking_current = 2 * np.pi * eq.compute("G", grid=grid)["G"][0] / mu_0
+        coils.current = linking_current / coils.num_coils
+
+        objective = ObjectiveFunction(
+            (
+                PlasmaCoilSetMinDistance(eq=eq, coil=coils, eq_fixed=False),
+                LinkingCurrentConsistency(eq=eq, coil=coils, eq_fixed=False),
+            )
+        )
+        objective.build()
+        x = objective.x(eq, coils)
+
+        np.testing.assert_allclose(
+            objective._things_per_objective_idx, [[0, 1], [1, 0]]
+        )
+        np.testing.assert_allclose(objective.compute_scaled_error(x), 0, atol=1e-15)
 
 
 @pytest.mark.regression
@@ -2752,6 +2780,7 @@ def _reduced_resolution_objective(eq, objective, **kwargs):
         kwargs["num_well"] = 15 * kwargs["num_transit"]
         kwargs["num_pitch"] = 16
         kwargs["num_quad"] = 16
+        kwargs["jac_chunk_size"] = 1
     return objective(eq=eq, **kwargs)
 
 
@@ -3429,7 +3458,7 @@ class TestObjectiveNaNGrad:
     @pytest.mark.unit
     def test_objective_no_nangrad_quadratic_flux_minimizing(self):
         """SurfaceQuadraticFlux."""
-        ext_field = ToroidalMagneticField(1.0, 1.0)
+        ext_field = FourierXYZCoil().to_SplineXYZ(grid=3)
 
         surf = FourierRZToroidalSurface(
             R_lmn=[4.0, 1.0],
@@ -3438,8 +3467,9 @@ class TestObjectiveNaNGrad:
             modes_Z=[[-1, 0]],
             NFP=1,
         )
-
-        obj = ObjectiveFunction(SurfaceQuadraticFlux(surf, ext_field), use_jit=False)
+        # have use_jit=True here to check that runs correctly with spline
+        # coils, see PR #1656
+        obj = ObjectiveFunction(SurfaceQuadraticFlux(surf, ext_field), use_jit=True)
         obj.build()
         g = obj.grad(obj.x(surf, ext_field))
         assert not np.any(np.isnan(g)), "quadratic flux"
@@ -3646,13 +3676,22 @@ def test_objective_print_widths():
 def test_objective_docstring():
     """Test that the objective docstring and collect_docs are consistent."""
     objective_docs = _Objective.__doc__.rstrip()
-    doc_header = (
-        "Objective (or constraint) used in the optimization of an Equilibrium.\n\n"
-        + "    Parameters\n"
-        + "    ----------\n"
-        + "    things : Optimizable or tuple/list of Optimizable\n"
-        + "        Objects that will be optimized to satisfy the Objective.\n"
-    )
+    if Version(platform.python_version()) >= Version("3.13"):
+        doc_header = (
+            "Objective (or constraint) used in the optimization of an Equilibrium.\n\n"
+            + "Parameters\n"
+            + "----------\n"
+            + "things : Optimizable or tuple/list of Optimizable\n"
+            + "    Objects that will be optimized to satisfy the Objective.\n"
+        )
+    else:
+        doc_header = (
+            "Objective (or constraint) used in the optimization of an Equilibrium.\n\n"
+            + "    Parameters\n"
+            + "    ----------\n"
+            + "    things : Optimizable or tuple/list of Optimizable\n"
+            + "        Objects that will be optimized to satisfy the Objective.\n"
+        )
     collected_docs = collect_docs().strip()
     collected_docs = doc_header + "    " + collected_docs
 

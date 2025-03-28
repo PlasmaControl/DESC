@@ -104,19 +104,10 @@ def _eta(theta, zeta, theta0, zeta0, ht, hz, st, sz):
     return _chi(r)
 
 
-def _get_default_params(grid):
-    k = max(min(grid.num_theta, grid.num_zeta * grid.NFP), 2)
-    s = k - 1
-    q = k // 2 + int(jnp.sqrt(k))
-    return s, s, q
+def _vanilla_params(grid):
+    """Parameters for support size and quadrature resolution.
 
-
-def _heuristic_support_params(grid):
-    """Parameters for heuristic support size and heuristic quadrature resolution.
-
-    Return parameters following the asymptotic rule of thumb
-    in Mahlotora [2], generalized for the partition to have the correct shape
-    for rectangular (e.g. perhaps not square) grids.
+    These parameters do not account for grid anisotropy.
 
     Parameters
     ----------
@@ -125,7 +116,45 @@ def _heuristic_support_params(grid):
 
     Returns
     -------
-    st, sz : int
+    st : int
+        Extent of support is an ``st`` × ``sz`` subset
+        of the full domain (θ,ζ) ∈ [0, 2π)² of ``grid``.
+        Subset of ``grid.num_theta`` × ``grid.num_zeta*grid.NFP``.
+    sz : int
+        Extent of support is an ``st`` × ``sz`` subset
+        of the full domain (θ,ζ) ∈ [0, 2π)² of ``grid``.
+        Subset of ``grid.num_theta`` × ``grid.num_zeta*grid.NFP``.
+    q : int
+        Order of quadrature in radial and azimuthal directions.
+
+    """
+    Nt = grid.num_theta
+    Nz = grid.num_zeta * grid.NFP
+    q = int(jnp.sqrt(grid.num_nodes) / 2)
+    s = min(q, Nt, Nz)
+    return s, s, q
+
+
+def best_params(grid, ratio):
+    """Parameters for heuristic support size and quadrature resolution.
+
+    These parameters account for global grid anisotropy which ensures
+    more robust convergence across a wider aspect ratio range.
+
+    Parameters
+    ----------
+    grid : LinearGrid
+        Grid that can fft2.
+    ratio : float
+        Mean best ratio.
+
+    Returns
+    -------
+    st : int
+        Extent of support is an ``st`` × ``sz`` subset
+        of the full domain (θ,ζ) ∈ [0, 2π)² of ``grid``.
+        Subset of ``grid.num_theta`` × ``grid.num_zeta*grid.NFP``.
+    sz : int
         Extent of support is an ``st`` × ``sz`` subset
         of the full domain (θ,ζ) ∈ [0, 2π)² of ``grid``.
         Subset of ``grid.num_theta`` × ``grid.num_zeta*grid.NFP``.
@@ -134,19 +163,93 @@ def _heuristic_support_params(grid):
 
     """
     assert grid.can_fft2
-    # TODO: Account for real space grid anisotropy by choosing
-    #   ratio = |e_zeta|/|e_theta|
-    #   ratio_avg = surface_average(ratio, jacobian=|e_theta x e_zeta|)
-    #   st/(sz*NFP) (at evaluation point i) = mean (ratio(i), ratio_avg).
-    #   Then we have ~circle in real space around each singular point.
-    #   The grid resolution can then still be chosen independently according
-    #   to the frequency content of R, Z, λ to net the best function approximation.
     Nt = grid.num_theta
     Nz = grid.num_zeta * grid.NFP
-    st = int(min(1 + jnp.sqrt(Nt), Nt))
-    sz = int(min(1 + jnp.sqrt(Nz), Nz))
-    q = int(1 + (Nt * Nz) ** 0.25)
+    if grid.num_zeta > 1:  # actually has toroidal resolution
+        q = int(jnp.sqrt(grid.num_nodes) / 2)
+    else:  # axisymmetry
+        q = int(jnp.sqrt(Nt * Nz) / 2)
+    s = min(q, Nt, Nz)
+    # Size of singular region in real space = s * h * |e_.|
+    # For it to be a circle, choose radius ~ equal
+    # s_t * h_t * |e_t| = s_z * h_z * |e_z|
+    # s_z / s_t = h_t / h_z  |e_t| / |e_z| = Nz*NFP/Nt |e_t| / |e_z|
+    # Denote ratio = < |e_z| / |e_t| > and
+    #      s_ratio = s_z / s_t = Nz*NFP/Nt / ratio
+    # Also want sqrt(s_z*s_t) ~ s = q.
+    s_ratio = jnp.sqrt(Nz / Nt / ratio)
+    st = min(Nt, int(jnp.ceil(s / s_ratio)))
+    sz = min(Nz, int(jnp.ceil(s * s_ratio)))
     return st, sz, q
+
+
+def _local_params(grid, ratio):
+    """Parameters for heuristic support size and quadrature resolution.
+
+    These parameters account for local grid anisotropy to ensure
+    more robust convergence across stronger geometric shaping.
+
+    Parameters
+    ----------
+    grid : LinearGrid
+        Grid that can fft2.
+    ratio : tuple
+        Mean best ratio and local ratio
+
+    Returns
+    -------
+    st : int
+        Extent of support is an ``st`` × ``sz`` subset
+        of the full domain (θ,ζ) ∈ [0, 2π)² of ``grid``.
+        Subset of ``grid.num_theta`` × ``grid.num_zeta*grid.NFP``.
+    sz : int
+        Extent of support is an ``st`` × ``sz`` subset
+        of the full domain (θ,ζ) ∈ [0, 2π)² of ``grid``.
+        Subset of ``grid.num_theta`` × ``grid.num_zeta*grid.NFP``.
+    q : int
+        Order of quadrature in radial and azimuthal directions.
+
+    """
+    assert grid.can_fft2
+    Nt = grid.num_theta
+    Nz = grid.num_zeta * grid.NFP
+    if grid.num_zeta > 1:  # actually has toroidal resolution
+        q = int(jnp.sqrt(grid.num_nodes) / 2)
+    else:  # axisymmetry
+        q = int(jnp.sqrt(Nt * Nz) / 2)
+    s = min(q, Nt, Nz)
+    ratio = (ratio[0] + ratio[1]) / 2
+    # same logic as heuristic params
+    s_ratio = jnp.sqrt(Nz / Nt / ratio)
+    st = min(Nt, int(jnp.ceil(s / s_ratio)))
+    sz = min(Nz, int(jnp.ceil(s * s_ratio)))
+    return st, sz, q
+
+
+def best_ratio(data, return_local=False):
+    """Ratio to make singular integration partition ~circle in real space.
+
+    Parameters
+    ----------
+    data : dict[str, jnp.ndarray]
+        Dictionary of data evaluated on single flux surface grid that
+        ``can_fft2`` with keys ``|e_theta x e_zeta|``, ``e_theta``, and ``e_zeta``.
+    return_local : bool
+        Whether to return the local ratio as well as the mean global ratio.
+
+    Returns
+    -------
+    mean : float
+        Mean best ratio.
+
+    """
+    local = jnp.linalg.norm(data["e_zeta"], axis=-1) / jnp.linalg.norm(
+        data["e_theta"], axis=-1
+    )
+    mean = jnp.mean(local * data["|e_theta x e_zeta|"]) / jnp.mean(
+        data["|e_theta x e_zeta|"]
+    )
+    return (mean, local) if return_local else mean
 
 
 def _get_quadrature_nodes(q):
@@ -848,7 +951,7 @@ kernels = {
 
 
 def virtual_casing_biot_savart(
-    eval_data, source_data, interpolator, chunk_size=1, **kwargs
+    eval_data, source_data, interpolator, chunk_size=None, **kwargs
 ):
     """Evaluate magnetic field on surface due to sheet current on surface.
 
@@ -889,9 +992,9 @@ def virtual_casing_biot_savart(
         source grid around each singular point. See ``FFTInterpolator`` or
         ``DFTInterpolator``
     chunk_size : int or None
-        Size to split computation into chunks.
+        Size to split singular integral computation into chunks.
         If no chunking should be done or the chunk size is the full input
-        then supply ``None``. Default is ``1``.
+        then supply ``None``.
 
     Returns
     -------
@@ -914,7 +1017,9 @@ def virtual_casing_biot_savart(
     )
 
 
-def compute_B_plasma(eq, eval_grid, source_grid=None, normal_only=False):
+def compute_B_plasma(
+    eq, eval_grid, source_grid=None, normal_only=False, chunk_size=None
+):
     """Evaluate magnetic field on surface due to enclosed plasma currents.
 
     The magnetic field due to the plasma current can be written as a Biot-Savart
@@ -949,6 +1054,10 @@ def compute_B_plasma(eq, eval_grid, source_grid=None, normal_only=False):
         Source points for integral.
     normal_only : bool
         If True, only compute and return the normal component of the plasma field 𝐁ᵥ⋅𝐧
+    chunk_size : int or None
+        Size to split singular integral computation into chunks.
+        If no chunking should be done or the chunk size is the full input
+        then supply ``None``.
 
     Returns
     -------
@@ -974,7 +1083,7 @@ def compute_B_plasma(eq, eval_grid, source_grid=None, normal_only=False):
     data_keys = ["K_vc", "B", "R", "phi", "Z", "e^rho", "n_rho", "|e_theta x e_zeta|"]
     eval_data = eq.compute(data_keys, grid=eval_grid)
     source_data = eq.compute(data_keys, grid=source_grid)
-    st, sz, q = _get_default_params(source_grid)
+    st, sz, q = best_params(source_grid, best_ratio(source_data))
     try:
         interpolator = FFTInterpolator(eval_grid, source_grid, st, sz, q)
     except AssertionError as e:
@@ -986,7 +1095,9 @@ def compute_B_plasma(eq, eval_grid, source_grid=None, normal_only=False):
         interpolator = DFTInterpolator(eval_grid, source_grid, st, sz, q)
     if hasattr(eq.surface, "Phi_mn"):
         source_data["K_vc"] += eq.surface.compute("K", grid=source_grid)["K"]
-    Bplasma = virtual_casing_biot_savart(eval_data, source_data, interpolator)
+    Bplasma = virtual_casing_biot_savart(
+        eval_data, source_data, interpolator, chunk_size
+    )
     # need extra factor of B/2 bc we're evaluating on plasma surface
     Bplasma = Bplasma + eval_data["B"] / 2
     if normal_only:

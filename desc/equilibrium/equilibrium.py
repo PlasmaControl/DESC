@@ -37,7 +37,7 @@ from desc.objectives import (
     get_fixed_boundary_constraints,
 )
 from desc.optimizable import Optimizable, optimizable_parameter
-from desc.optimize import Optimizer
+from desc.optimize import LinearConstraintProjection, Optimizer
 from desc.perturbations import perturb
 from desc.profiles import HermiteSplineProfile, PowerSeriesProfile, SplineProfile
 from desc.transform import Transform
@@ -163,6 +163,7 @@ class Equilibrium(IOAble, Optimizable):
         "_M_grid",
         "_N_grid",
     ]
+    _static_attrs = ["_R_basis", "_Z_basis", "_L_basis"]
 
     @execute_on_cpu
     def __init__(
@@ -264,8 +265,8 @@ class Equilibrium(IOAble, Optimizable):
         self._M_grid = setdefault(M_grid, 2 * self.M)
         self._N_grid = setdefault(N_grid, 2 * self.N)
 
-        self._surface.change_resolution(self.L, self.M, self.N)
-        self._axis.change_resolution(self.N)
+        self._surface.change_resolution(self.L, self.M, self.N, sym=self.sym)
+        self._axis.change_resolution(self.N, sym=self.sym)
 
         # bases
         self._R_basis = FourierZernikeBasis(
@@ -2140,6 +2141,7 @@ class Equilibrium(IOAble, Optimizable):
         ----------
         objective : {"force", "forces", "energy"}
             Objective function to solve. Default = force balance on unified grid.
+            ObjectiveFunction can also be passed.
         constraints : Tuple
             set of constraints to enforce. Default = fixed boundary/profiles
         optimizer : str or Optimizer (optional)
@@ -2177,13 +2179,19 @@ class Equilibrium(IOAble, Optimizable):
             `OptimizeResult` for a description of other attributes.
 
         """
-        if constraints is None:
+        is_linear_proj = isinstance(objective, LinearConstraintProjection)
+        if is_linear_proj and constraints is not None:
+            raise ValueError(
+                "If a LinearConstraintProjection is passed, "
+                "no constraints should be passed."
+            )
+        if constraints is None and not is_linear_proj:
             constraints = get_fixed_boundary_constraints(eq=self)
         if not isinstance(objective, ObjectiveFunction):
             objective = get_equilibrium_objective(eq=self, mode=objective)
         if not isinstance(optimizer, Optimizer):
             optimizer = Optimizer(optimizer)
-        if not isinstance(constraints, (list, tuple)):
+        if not isinstance(constraints, (list, tuple)) and not is_linear_proj:
             constraints = tuple([constraints])
 
         warnif(
@@ -2351,9 +2359,16 @@ class Equilibrium(IOAble, Optimizable):
             Perturbed equilibrium.
 
         """
+        is_linear_proj = isinstance(objective, LinearConstraintProjection)
+        if is_linear_proj and constraints is not None:
+            raise ValueError(
+                "If a LinearConstraintProjection is passed, "
+                "no constraints should be passed. Passed constraints:"
+                f"{constraints}."
+            )
         if objective is None:
             objective = get_equilibrium_objective(eq=self)
-        if constraints is None:
+        if constraints is None and not is_linear_proj:
             if "Ra_n" in deltas or "Za_n" in deltas:
                 constraints = get_fixed_axis_constraints(eq=self)
             else:
@@ -2361,9 +2376,9 @@ class Equilibrium(IOAble, Optimizable):
 
         eq = perturb(
             self,
-            objective,
-            constraints,
-            deltas,
+            objective=objective,
+            constraints=constraints,
+            deltas=deltas,
             order=order,
             tr_ratio=tr_ratio,
             weight=weight,

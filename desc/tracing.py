@@ -30,6 +30,7 @@ class AbstractTrajectoryModel(IOAble, ABC):
     """Abstract base class for particle trajectory models.
 
     Subclasses should implement the ``compute`` method to compute the RHS of the ODE,
+    as well as the properties `frame`, `vcoords`, `args`
     """
 
     @property
@@ -304,16 +305,36 @@ class SlowingDownGuidingCenterTrajectory(AbstractTrajectoryModel):
 
 
 class AbstractParticleInitializer(ABC, IOAble):
-    """ABC for initial distribution of particles for tracing."""
+    """ABC for initial distribution of particles for tracing.
 
-    def __init__(self, m=4, q=2):
-        self.m = m * proton_mass
-        self.q = q * elementary_charge
+    Subclasses should implement the `init_particles` method.
+    """
 
     @abstractmethod
-    def init_particles(self, N):
-        """Initialize a distribution of N particles."""
+    def init_particles(self, model, field):
+        """Initialize a distribution of particles.
+
+        Should return two things:
+        - an NxD array of initial particle positions and velocities,
+        where N is the number of particles and D is the dimensionality of the
+        trajectory model (4, 5, or 6).
+        - a tuple of additional arguments requested by the model, eg mass, charge,
+        magnetic moment of each particle.
+        """
         pass
+
+
+def _compute_modB(x, field):
+    if isinstance(field, Equilibrium):
+        psi, theta, zeta = x.T
+        grid = Grid(
+            jnp.array([jnp.sqrt(psi), theta, zeta]).T,
+            spacing=jnp.zeros((3,)).T,
+            jitable=True,
+            sort=False,
+        )
+        return field.compute("|B|", grid=grid)["|B|"]
+    return jnp.linalg.norm(field(x), axis=-1)
 
 
 class ManualParticleInitializerFlux(AbstractParticleInitializer):
@@ -341,7 +362,8 @@ class ManualParticleInitializerFlux(AbstractParticleInitializer):
     """
 
     def __init__(self, rho0, theta0, zeta0, xi0, E=3.5e6, m=4, q=2, eq=None):
-        super().__init__(m, q)
+        self.m = m * proton_mass
+        self.q = q * elementary_charge
         E = E * JOULE_PER_EV
         rho0, theta0, zeta0, xi0, E = map(jnp.asarray, (rho0, theta0, zeta0, xi0, E))
         rho0, theta0, zeta0, xi0, E = jnp.broadcast_arrays(rho0, theta0, zeta0, xi0, E)
@@ -352,10 +374,9 @@ class ManualParticleInitializerFlux(AbstractParticleInitializer):
         self.vpar0 = xi0 * self.v0
         self.eq = eq
 
-    def init_particles(self, N, model, seed=0):
+    def init_particles(self, model, field):
         """Initialize N random particles for a given trajectory model."""
         x = jnp.array([self.rho0, self.theta0, self.zeta0]).T
-        assert N is None or N == x.shape[0], "got wrong number of requested particles"
         if model.frame == "flux":
             x = x
         elif model.frame == "lab":
@@ -377,7 +398,19 @@ class ManualParticleInitializerFlux(AbstractParticleInitializer):
             else:
                 raise NotImplementedError
         v = jnp.array(vs).T
-        return jnp.hstack([x, v])
+
+        args = []
+        for arg in model.args:
+            if arg == "m":
+                args += [self.m]
+            elif arg == "q":
+                args += [self.q]
+            elif arg == "mu":
+                vperp2 = self.v0**2 - self.vpar0**2
+                modB = _compute_modB(x, field)
+                args += [vperp2 / modB]
+
+        return jnp.hstack([x, v]), tuple(args)
 
 
 class ManualParticleInitializerLab(AbstractParticleInitializer):
@@ -405,7 +438,8 @@ class ManualParticleInitializerLab(AbstractParticleInitializer):
     """
 
     def __init__(self, R0, phi0, Z0, xi0, E=3.5e6, m=4, q=2, eq=None):
-        super().__init__(m, q)
+        self.m = m * proton_mass
+        self.q = q * elementary_charge
         E = E * JOULE_PER_EV
         R0, phi0, Z0, xi0, E = map(jnp.asarray, (R0, phi0, Z0, xi0, E))
         R0, phi0, Z0, xi0, E = jnp.broadcast_arrays(R0, phi0, Z0, xi0, E)
@@ -416,10 +450,9 @@ class ManualParticleInitializerLab(AbstractParticleInitializer):
         self.vpar0 = xi0 * self.v0
         self.eq = eq
 
-    def init_particles(self, N, model, seed=0):
+    def init_particles(self, model, field):
         """Initialize N random particles for a given trajectory model."""
         x = jnp.array([self.R0, self.phi0, self.Z0]).T
-        assert N is None or N == x.shape[0], "got wrong number of requested particles"
         if model.frame == "flux":
             x = x
         elif model.frame == "lab":
@@ -445,7 +478,19 @@ class ManualParticleInitializerLab(AbstractParticleInitializer):
             else:
                 raise NotImplementedError
         v = jnp.array(vs).T
-        return jnp.hstack([x, v])
+
+        args = []
+        for arg in model.args:
+            if arg == "m":
+                args += [self.m]
+            elif arg == "q":
+                args += [self.q]
+            elif arg == "mu":
+                vperp2 = self.v0**2 - self.vpar0**2
+                modB = _compute_modB(x, field)
+                args += [vperp2 / modB]
+
+        return jnp.hstack([x, v]), tuple(args)
 
 
 class CurveParticleInitializer(AbstractParticleInitializer):
@@ -454,22 +499,28 @@ class CurveParticleInitializer(AbstractParticleInitializer):
     Parameters
     ----------
     curve : desc.geometry.Curve
-        Curve object to initialize samples on
+        Curve object to initialize samples on.
+    N : int
+        Number of samples to generate.
     E : float
-        Energy of particles, in eV
+        Energy of particles, in eV.
     m : float
-        Mass of particles, in proton masses
+        Mass of particles, in proton masses.
     q : float
         charge of particles, in units of elementary charge.
     xi_min, xi_max : float
         Minimum and maximum values for randomly sampled normalized parallel velocity.
-        xi = vpar/v
+        xi = vpar/v.
     grid : Grid
         Grid used to discretize curve.
+    seed : int
+        Seed for rng.
 
     """
 
-    def __init__(self, curve, E=3.5e6, m=4, q=2, xi_min=-1, xi_max=1, grid=None):
+    def __init__(
+        self, curve, N, E=3.5e6, m=4, q=2, xi_min=-1, xi_max=1, grid=None, seed=0
+    ):
         self.curve = curve
         self.E = E * JOULE_PER_EV
         self.m = m * proton_mass
@@ -477,24 +528,26 @@ class CurveParticleInitializer(AbstractParticleInitializer):
         self.grid = grid
         self.xi_min = xi_min
         self.xi_max = xi_max
+        self.N = N
+        self.seed = seed
 
-    def init_particles(self, N, model, seed=0):
+    def init_particles(self, model, field):
         """Initialize N random particles for a given trajectory model."""
         data = self.curve.compute(["x_s", "s", "ds"], grid=self.grid)
         sqrtg = jnp.linalg.norm(data["x_s"]) * data["ds"]
         sqrtg /= sqrtg.max()
-        nattempts = 10 * N  # 10x seems plenty in practice, but should fix
+        nattempts = 10 * self.N  # 10x seems plenty in practice, but should fix
         # rejection sampling according to pdf~sqrtg to get samples
         # roughly equally distributed in real space
         # TODO: use jax rng?
-        rng = np.random.default_rng(seed=seed)
+        rng = np.random.default_rng(seed=self.seed)
         idxs = rng.randint(0, sqrtg.shape[0], size=(nattempts,))
         accept = np.where(rng.uniform(low=0, high=1, size=(nattempts,)) < sqrtg[idxs])[
             0
         ]
         # TODO: figure out what to do if this fails, maybe iterate until enough samples?
-        assert len(accept) > N
-        idxs = np.sort(idxs[accept[:N]])
+        assert len(accept) > self.N
+        idxs = np.sort(idxs[accept[: self.N]])
         zeta = data["s"][idxs]
         theta = jnp.zeros_like(zeta)
         rho = jnp.zeros_like(zeta)
@@ -517,7 +570,19 @@ class CurveParticleInitializer(AbstractParticleInitializer):
             else:
                 raise NotImplementedError
         v = jnp.array(vs).T
-        return jnp.hstack([x, v])
+
+        args = []
+        for arg in model.args:
+            if arg == "m":
+                args += [self.m]
+            elif arg == "q":
+                args += [self.q]
+            elif arg == "mu":
+                vperp2 = v**2 - vpar**2
+                modB = _compute_modB(x, field)
+                args += [vperp2 / modB]
+
+        return jnp.hstack([x, v]), tuple(args)
 
 
 def gc_radius(vperp, modB, m, q):

@@ -4,7 +4,13 @@
 .wy-nav-content {
     max-width: 1200px !important;
 }
+.wy-nav-content-wrap {
+    background: #fcfcfc !important;
+}
 
+div.nbinput.container div.prompt, div.nboutput.container div.prompt {
+    width: 0px !important;
+}
 /* override table width restrictions */
 @media screen and (min-width: 767px) {
 

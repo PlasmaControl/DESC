@@ -783,6 +783,49 @@ class FourierRZToroidalSurface(Surface):
         else:
             return offset_surface
 
+    def get_axis(self):
+        """Get the axis of the surface.
+
+        This method calculates the axis of the surface by finding the mid point of the
+        R and Z values at theta=0 and pi degrees for a bunch of toroidal angles and
+        fitting a Fourier curve to it.
+        For general non-convex surfaces, the geometric center (aka centroid) might not
+        be inside the given surface. Since we use the axis for the initial guess of the
+        magnetic axis, it is important to have the axis inside the surface, and form
+        good nested flux surfaces. This method is a simple way to get a good initial
+        guess for the axis.
+
+        Returns
+        -------
+        axis : FourierRZCurve
+            Axis of the surface.
+
+        """
+        from desc.geometry import FourierRZCurve
+
+        # over-sample to get a good axis fit
+        grid = LinearGrid(rho=1, theta=2, zeta=self.N * 4, NFP=self.NFP)
+        data = self.compute(["R", "Z"], grid=grid)
+        R = data["R"]
+        Z = data["Z"]
+        # Calculate the R and Z values at theta=0 and pi degrees for bunch of toroidal
+        # angles, find the mid point of them and fit a Fourier curve to it.
+        Rout = R[::2]
+        Rin = R[1::2]
+        Zout = Z[::2]
+        Zin = Z[1::2]
+        Rmid = (Rout + Rin) / 2
+        Zmid = (Zout + Zin) / 2
+        phis = (
+            jnp.linspace(0, 2 * np.pi / self.NFP, len(Rmid), endpoint=False)
+            if self.N > 0
+            else jnp.zeros_like(Rmid)
+        )
+        axis = FourierRZCurve.from_values(
+            jnp.vstack([Rmid, phis, Zmid]).T, N=self.N, NFP=self.NFP
+        )
+        return axis
+
 
 class ZernikeRZToroidalSection(Surface):
     """A toroidal cross section represented by a Zernike polynomial in R,Z.
@@ -1070,3 +1113,38 @@ class ZernikeRZToroidalSection(Surface):
             if ZZ is not None:
                 idxZ = self.Z_basis.get_idx(ll, mm, 0)
                 self.Z_lmn = put(self.Z_lmn, idxZ, ZZ)
+
+    def get_axis(self):
+        """Get the axis of the surface.
+
+        This method calculates the axis of the surface by finding the mid point of the
+        R and Z values at theta=0 and pi degrees and creating a Fourier curve with it.
+        For general non-convex surfaces, the geometric center (aka centroid) might not
+        be inside the given surface. Since we use the axis for the initial guess of the
+        magnetic axis, it is important to have the axis inside the surface, and form
+        good nested flux surfaces. This method is a simple way to get a good initial
+        guess for the axis.
+
+        Returns
+        -------
+        axis : FourierRZCurve
+            Circular axis of the surface.
+
+        """
+        from desc.geometry import FourierRZCurve
+
+        grid = LinearGrid(rho=1, theta=2, zeta=1)
+        data = self.compute(["R", "Z"], grid=grid)
+        R = data["R"]
+        Z = data["Z"]
+        # Calculate the R and Z values at theta=0 and pi degrees, find the
+        # mid point of them and fit a Fourier curve to it.
+        Rout = R[0]
+        Rin = R[1]
+        Zout = Z[0]
+        Zin = Z[1]
+        Rmid = (Rout + Rin) / 2
+        Zmid = (Zout + Zin) / 2
+        phis = jnp.zeros_like(Rmid)
+        axis = FourierRZCurve.from_values(jnp.vstack([Rmid, phis, Zmid]).T, N=0, NFP=1)
+        return axis

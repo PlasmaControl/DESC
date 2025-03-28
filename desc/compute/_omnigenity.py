@@ -921,12 +921,12 @@ def _B_omni(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="|B|_pwO",
-    label="|\\mathbf{B}|",
+    label="|\\mathbf{B}_{pwO}|",
     units="T",
     units_long="Tesla",
     description="Magnitude of omnigenous magnetic field",
     dim=1,
-    params=["B_min", "B_max", "zeta_C", "theta_C", "t_1", "t_2", "w_2"],
+    params=["B_min", "B_max", "zeta_C", "theta_C", "t_1", "t_2"],
     transforms={"grid": []},
     profiles=[],
     coordinates="rtz",
@@ -944,8 +944,12 @@ def _B_piecewise_omni(params, transforms, profiles, data, **kwargs):
     theta_C = params["theta_C"]
     t_1 = params["t_1"]
     t_2 = params["t_2"]
-    w_2 = params["w_2"]
     w_1 = jnp.pi / NFP * (1 - t_1 * t_2) / (1 + t_2 / iota0)
+    
+    w_2 = jnp.pi**2 * (1- t_1 * t_2) / (
+        jnp.pi - (iota0 + t_2) * ((jnp.pi - NFP * w_1)  / (iota0 + 1/t_1) ) 
+    ) # Formula of w_2 to ensure Delta = 0
+    
     B_min = params["B_min"]
     B_max = params["B_max"]
     p = int(10)
@@ -964,12 +968,12 @@ def _B_piecewise_omni(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="Q_pwO",
-    label="|\\mathbf{B}|",
+    label="|\\Q_{pwO}|",
     units="~",
     units_long="None",
     description="Self-overlap of the target field",
     dim=1,
-    params=["t_1", "t_2", "w_2"],
+    params=["t_1", "t_2"],
     transforms={"grid": []},
     profiles=[],
     coordinates="rtz",
@@ -983,8 +987,11 @@ def _Q_piecewise_omni(params, transforms, profiles, data, **kwargs):
 
     t_1 = params["t_1"]
     t_2 = params["t_2"]
-    w_2 = params["w_2"]
     w_1 = jnp.pi / NFP * (1 - t_1 * t_2) / (1 + t_2 / iota0)
+
+    w_2 = jnp.pi**2 * (1- t_1 * t_2) / (
+        jnp.pi - (iota0 + t_2) * ((jnp.pi - NFP * w_1)  / (iota0 + 1/t_1) ) 
+    ) # Formula of w_2 to ensure Delta = 0
 
     zeta_pp = (w_1 - t_1 * w_2) / (1 - t_1 * t_2)
     zeta_pm = (w_1 + t_1 * w_2) / (1 - t_1 * t_2)
@@ -1013,12 +1020,12 @@ def _Q_piecewise_omni(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="Delta_BS",
-    label="|\\mathbf{B}|",
+    label="|\\Delta_{BS}|",
     units="~",
     units_long="None",
     description="Delta proxi for zero pwO Bootstrap current",
     dim=1,
-    params=["B_max", "t_1", "t_2", "w_2"],
+    params=["B_max", "t_1", "t_2"],
     transforms={"grid": []},
     profiles=[],
     coordinates="rtz",
@@ -1033,10 +1040,14 @@ def _Delta_bs_piecewiseomni(params, transforms, profiles, data, **kwargs):
 
     t_1 = params["t_1"]
     t_2 = params["t_2"]
-    w_2 = params["w_2"]
+    # w_2 = params["w_2"]
     B_max = params["B_max"]
 
     w_1 = ((jnp.pi / NFP) * (1 - t_1 * t_2)) / (1 + t_2 / iota0)
+    
+    w_2 = jnp.pi**2 * (1- t_1 * t_2) / (
+        jnp.pi - (iota0 + t_2) * ((jnp.pi - NFP * w_1)  / (iota0 + 1/t_1) ) 
+    ) # Formula of w_2 to ensure Delta = 0    
 
     A1 = jnp.abs((4 * w_2 * (w_1 - jnp.pi / NFP)) / (1 - t_1 * t_2))
 

@@ -3023,15 +3023,12 @@ class PiecewiseOmnigenousField(Optimizable, IOAble):
 
     _io_attrs_ = [
         "_NFP",
-        "_helicity",
         "_B_min",
         "_B_max",
         "_zeta_C",
         "_theta_C",
         "_t_1",
         "_t_2",
-        "_w_2",
-        "_iota",
     ]
 
     def __init__(
@@ -3042,7 +3039,6 @@ class PiecewiseOmnigenousField(Optimizable, IOAble):
         theta_C=2 * jnp.pi,
         t_1=0.2,
         t_2=1.0,
-        w_2=0.7,
         NFP=1,
     ):
         self._NFP = int(NFP)
@@ -3053,7 +3049,6 @@ class PiecewiseOmnigenousField(Optimizable, IOAble):
         self._theta_C = theta_C
         self._t_1 = t_1
         self._t_2 = t_2
-        self._w_2 = w_2
 
     def compute(
         self,
@@ -3190,13 +3185,3 @@ class PiecewiseOmnigenousField(Optimizable, IOAble):
     @t_2.setter
     def t_2(self, t_2):
         self._t_2 = t_2
-
-    @optimizable_parameter
-    @property
-    def w_2(self):
-        """ndarray: Piecewise Omnigenity shape parameter."""
-        return self._w_2
-
-    @w_2.setter
-    def w_2(self, w_2):
-        self._w_2 = w_2

@@ -34,6 +34,7 @@ __all__ = [
     "plotting",
     "profiles",
     "random",
+    "tracing",
     "transform",
     "vmec",
 ]

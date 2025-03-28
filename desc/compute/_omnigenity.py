@@ -945,11 +945,13 @@ def _B_piecewise_omni(params, transforms, profiles, data, **kwargs):
     t_1 = params["t_1"]
     t_2 = params["t_2"]
     w_1 = jnp.pi / NFP * (1 - t_1 * t_2) / (1 + t_2 / iota0)
-    
-    w_2 = jnp.pi**2 * (1- t_1 * t_2) / (
-        jnp.pi - (iota0 + t_2) * ((jnp.pi - NFP * w_1)  / (iota0 + 1/t_1) ) 
-    ) # Formula of w_2 to ensure Delta = 0
-    
+
+    w_2 = (
+        jnp.pi**2
+        * (1 - t_1 * t_2)
+        / (jnp.pi - (iota0 + t_2) * ((jnp.pi - NFP * w_1) / (iota0 + 1 / t_1)))
+    )  # Formula of w_2 to ensure Delta = 0
+
     B_min = params["B_min"]
     B_max = params["B_max"]
     p = int(10)
@@ -989,9 +991,11 @@ def _Q_piecewise_omni(params, transforms, profiles, data, **kwargs):
     t_2 = params["t_2"]
     w_1 = jnp.pi / NFP * (1 - t_1 * t_2) / (1 + t_2 / iota0)
 
-    w_2 = jnp.pi**2 * (1- t_1 * t_2) / (
-        jnp.pi - (iota0 + t_2) * ((jnp.pi - NFP * w_1)  / (iota0 + 1/t_1) ) 
-    ) # Formula of w_2 to ensure Delta = 0
+    w_2 = (
+        jnp.pi**2
+        * (1 - t_1 * t_2)
+        / (jnp.pi - (iota0 + t_2) * ((jnp.pi - NFP * w_1) / (iota0 + 1 / t_1)))
+    )  # Formula of w_2 to ensure Delta = 0
 
     zeta_pp = (w_1 - t_1 * w_2) / (1 - t_1 * t_2)
     zeta_pm = (w_1 + t_1 * w_2) / (1 - t_1 * t_2)
@@ -1040,14 +1044,15 @@ def _Delta_bs_piecewiseomni(params, transforms, profiles, data, **kwargs):
 
     t_1 = params["t_1"]
     t_2 = params["t_2"]
-    # w_2 = params["w_2"]
     B_max = params["B_max"]
 
     w_1 = ((jnp.pi / NFP) * (1 - t_1 * t_2)) / (1 + t_2 / iota0)
-    
-    w_2 = jnp.pi**2 * (1- t_1 * t_2) / (
-        jnp.pi - (iota0 + t_2) * ((jnp.pi - NFP * w_1)  / (iota0 + 1/t_1) ) 
-    ) # Formula of w_2 to ensure Delta = 0    
+
+    w_2 = (
+        jnp.pi**2
+        * (1 - t_1 * t_2)
+        / (jnp.pi - (iota0 + t_2) * ((jnp.pi - NFP * w_1) / (iota0 + 1 / t_1)))
+    )  # Formula of w_2 to ensure Delta = 0
 
     A1 = jnp.abs((4 * w_2 * (w_1 - jnp.pi / NFP)) / (1 - t_1 * t_2))
 

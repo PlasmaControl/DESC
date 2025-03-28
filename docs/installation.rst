@@ -10,12 +10,15 @@ In general, to install JAX with GPU support, please refer to the `JAX installati
 For information on using conda, see `here <https://conda.io/projects/conda/en/latest/user-guide/getting-started.html#starting-conda>`__.
 Other package managers like venv could be used instead of conda, we have just chosen conda as our package manager of choice, and only test with conda environments, so your mileage may vary with other managers.
 
-**NOTE: DESC requires python>=3.10.**
-**If you have python2 also locally installed, replace all `pip` commands with `pip3` and all `python` commands with `python3` to ensure the correct python version is used.**
+.. attention::
 
-**NOTE: If you are on Windows, consider using the Windows Subsystem for Linux (WSL) to install DESC.**
+    DESC requires ``python>=3.10``. If you have ``python2`` also locally installed, replace all ``pip`` commands with ``pip3`` and all ``python`` commands with ``python3`` to ensure the correct python version is used.
 
-We don't test or support DESC on Windows OS, and there have been some instances that numerical discrepancies on Windows can cause failures or wrong results. For these reasons, we recommend using WSL if you have a Windows machine. For instructions on how to install WSL see `here <https://learn.microsoft.com/en-us/windows/wsl/install>`__. For using WSL in VS Code see `here <https://code.visualstudio.com/docs/remote/wsl>`__.
+.. attention::
+
+    If you are on Windows, consider using the Windows Subsystem for Linux (WSL) to install DESC.
+
+    We don't test or support DESC on Windows OS, and there have been some instances that numerical discrepancies on Windows can cause failures or wrong results. For these reasons, we recommend using WSL if you have a Windows machine. For instructions on how to install WSL see `here <https://learn.microsoft.com/en-us/windows/wsl/install>`__. For using WSL in VS Code see `here <https://code.visualstudio.com/docs/remote/wsl>`__.
 
 
 On Your Local Machine
@@ -276,27 +279,33 @@ Troubleshooting
 We list here some common problems encountered during installation and their possible solutions.
 If you encounter issues during installation, please `leave us an issue on Github <https://github.com/PlasmaControl/DESC/issues>`__ and we will try our best to help!
 
-**Problem**: I've installed DESC, but when I check my installation I get an error :code:`ModuleNotFoundError: No module named 'desc'`.
+.. tip::
 
-**Solution**:
+    **Problem**: I've installed DESC, but when I check my installation I get an error :code:`ModuleNotFoundError: No module named 'desc'`.
 
-This may be caused by DESC not being on your PYTHONPATH, or your environment containing DESC not being activated.
+    **Solution**:
 
-Try adding the DESC directory to your PYTHONPATH manually by adding the line ``export PYTHONPATH="$PYTHONPATH:path/to/DESC"`` (where ``/path/to/DESC`` is the path to the DESC folder on your machine) to the end of your ``~/.bashrc`` (or other shell configuration) file. You will also need to run ``source ~/.bashrc`` after making the change to ensure that your path updates properly for your current terminal session.
+    This may be caused by DESC not being on your PYTHONPATH, or your environment containing DESC not being activated.
 
-Try ensuring you've activated the conda environment that DESC is in ( ``conda activate desc-env`` ), then retry using DESC.
+    Try adding the DESC directory to your PYTHONPATH manually by adding the line ``export PYTHONPATH="$PYTHONPATH:path/to/DESC"`` (where ``/path/to/DESC`` is the path to the DESC folder on your machine) to the end of your ``~/.bashrc`` (or other shell configuration) file. You will also need to run ``source ~/.bashrc`` after making the change to ensure that your path updates properly for your current terminal session.
 
-**Problem**: I've installed DESC, but when I check my installation I get an error ``ModuleNotFoundError: No module named 'termcolor'`` (or another module which is not ``desc``).
+    Try ensuring you've activated the conda environment that DESC is in ( ``conda activate desc-env`` ), then retry using DESC.
 
-**Solution**:
+.. tip::
 
-You likely are not running python from the environment in which you've installed DESC. Try ensuring you've activated the conda environment that DESC is in( ``conda activate desc-env`` ), then retry using DESC.
+    **Problem**: I've installed DESC, but when I check my installation I get an error ``ModuleNotFoundError: No module named 'termcolor'`` (or another module which is not ``desc``).
 
-**Problem**: I'm attempting to install jax with pip on a cluster, I get an error ``ERROR: pip's dependency resolver does not currently take into account all the packages that are installed. This behaviour is the source of the following dependency conflicts.
-desc-opt 0.9.2+587.gc0b44414.dirty...`` with a list of incompatiblities.
+    **Solution**:
 
-**Solution**:
+    You likely are not running python from the environment in which you've installed DESC. Try ensuring you've activated the conda environment that DESC is in( ``conda activate desc-env`` ), then retry using DESC.
 
-This may be caused by a version of DESC already having been installed in your base conda environment.
+.. tip::
 
-Try removing the ``DESC`` folder completely, ensuring that ``pip list`` in your base conda environment no longer lists ``desc-opt`` as a package, then redo the installation instructions.
+    **Problem**: I'm attempting to install jax with pip on a cluster, I get an error ``ERROR: pip's dependency resolver does not currently take into account all the packages that are installed. This behaviour is the source of the following dependency conflicts.
+    desc-opt 0.9.2+587.gc0b44414.dirty...`` with a list of incompatiblities.
+
+    **Solution**:
+
+    This may be caused by a version of DESC already having been installed in your base conda environment.
+
+    Try removing the ``DESC`` folder completely, ensuring that ``pip list`` in your base conda environment no longer lists ``desc-opt`` as a package, then redo the installation instructions.

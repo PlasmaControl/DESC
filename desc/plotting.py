@@ -948,7 +948,10 @@ def plot_3d(
 
     Examples
     --------
-    .. image:: ../../_static/images/plotting/plot_3d.png
+    .. raw:: html
+
+        <iframe src="../../_static/images/plotting/plot_3d.html"
+        width="100%" height="980" frameborder="0"></iframe>
 
     .. code-block:: python
 
@@ -1866,6 +1869,32 @@ def poincare_plot(
         Axes being plotted to.
     plot_data : dict
         Dictionary of the data plotted, only returned if ``return_data=True``
+
+    Examples
+    --------
+    .. image:: ../../_static/images/plotting/poincare_plot.png
+
+    .. code-block:: python
+
+        from desc.plotting import poincare_plot
+        grid_trace = LinearGrid(rho=np.linspace(0.4, 0.9, 7))
+        r0 = eq.compute("R", grid=grid_trace)["R"]
+        z0 = eq.compute("Z", grid=grid_trace)["Z"]
+        fig, ax = desc.plotting.poincare_plot(
+            field,
+            r0,
+            z0,
+            NFP=eq.NFP,
+            color="k",
+            size=0.5,
+            ntransit=100
+        )
+        grid_trace2 = LinearGrid(rho=np.linspace(0.52, 0.55, 4))
+        r0 = eq.compute("R", grid=grid_trace2)["R"]
+        z0 = eq.compute("Z", grid=grid_trace2)["Z"]
+        fig, ax = desc.plotting.poincare_plot(
+            field, r0, z0, NFP=eq.NFP, ax=ax, color="r", size=0.5, ntransit=250
+        )
     """
     fli_kwargs = {}
     for key in inspect.signature(field_line_integrate).parameters:
@@ -2500,6 +2529,20 @@ def plot_coils(coils, grid=None, fig=None, return_data=False, **kwargs):
         Figure being plotted to
     plot_data : dict
         Dictionary of the data plotted, only returned if ``return_data=True``
+
+    Examples
+    --------
+    .. raw:: html
+
+        <iframe src="../../_static/images/plotting/plot_coils.html"
+        width="100%" height="980" frameborder="0"></iframe>
+
+    .. code-block:: python
+
+        from desc.plotting import plot_coils
+        from desc.coils import initialize_modular_coils
+        coils = initialize_modular_coils(eq, num_coils=4, r_over_a=2)
+        plot_coils(coils)
 
     """
     lw = kwargs.pop("lw", 5)

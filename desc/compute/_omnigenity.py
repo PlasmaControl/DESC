@@ -935,8 +935,15 @@ def _B_omni(params, transforms, profiles, data, **kwargs):
 )
 def _B_piecewise_omni(params, transforms, profiles, data, **kwargs):
     iota0 = kwargs.get("iota", 0.6)  # This way we ensure iota0 = iota
-    theta_B = transforms["grid"].nodes[:, 1]
-    zeta_B = transforms["grid"].nodes[:, 2]
+
+    # RG: (theta_B, zeta_B) grid must be the same for all flux surfaces
+    # else this logic below will fail
+    Ntheta_B = len(jnp.unique(transforms["grid"].nodes[:, 1]))
+    Nzeta_B = len(jnp.unique(transforms["grid"].nodes[:, 2]))
+    gridsize = Ntheta_B * Nzeta_B
+    theta_B = transforms["grid"].nodes[:gridsize, 1]
+    zeta_B = transforms["grid"].nodes[:gridsize, 2]
+
     # NFP can't be a parameter. Must come from equilibrium
     NFP = transforms["grid"].NFP
 
@@ -955,12 +962,30 @@ def _B_piecewise_omni(params, transforms, profiles, data, **kwargs):
     B_min = params["B_min"]
     B_max = params["B_max"]
     p = int(10)
+
+    # shape (num surfaces, grid points)
     exponent = -1 * (
-        ((zeta_B - zeta_C + t_1 * (theta_B - theta_C)) / w_1) ** (2 * p)
-        + ((theta_B - theta_C + t_2 * (zeta_B - zeta_C)) / w_2) ** (2 * p)
+        (
+            (
+                zeta_B[None, :]
+                - zeta_C[:, None]
+                + t_1[:, None] * (theta_B[None, :] - theta_C[:, None])
+            )
+            / w_1[:, None]
+        )
+        ** (2 * p)
+        + (
+            (
+                theta_B[None, :]
+                - theta_C[:, None]
+                + t_2[:, None] * (zeta_B[None, :] - zeta_C[:, None])
+            )
+            / w_2[:, None]
+        )
+        ** (2 * p)
     )
 
-    B_pwO = B_min + (B_max - B_min) * jnp.exp(exponent)
+    B_pwO = B_min[:, None] + (B_max[:, None] - B_min[:, None]) * jnp.exp(exponent)
 
     # Flattened array. Reshaping may cause jit-related issues
     data["|B|_pwO"] = B_pwO

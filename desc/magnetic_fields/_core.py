@@ -3041,7 +3041,7 @@ class PiecewiseOmnigenousField(Optimizable, IOAble):
         t_2=1.0,
         NFP=1,
     ):
-        self._NFP = int(NFP)
+        self._NFP = NFP
 
         self._B_min = B_min
         self._B_max = B_max

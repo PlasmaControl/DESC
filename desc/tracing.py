@@ -29,7 +29,7 @@ from desc.compute import _compute as compute_fun
 from desc.compute.utils import get_profiles, get_transforms
 from desc.derivatives import Derivative
 from desc.equilibrium import Equilibrium
-from desc.geometry import Curve
+from desc.geometry import Curve, Surface
 from desc.grid import Grid
 from desc.io import IOAble
 from desc.magnetic_fields import _MagneticField
@@ -328,7 +328,7 @@ class SlowingDownGuidingCenterTrajectory(AbstractTrajectoryModel):
         return dx
 
 
-class AbstractParticleInitializer(ABC, IOAble):
+class AbstractParticleInitializer(IOAble, ABC):
     """ABC for initial distribution of particles for tracing.
 
     Subclasses should implement the `init_particles` method.
@@ -355,8 +355,12 @@ def _compute_modB(x, field, **kwargs):
         psi, theta, zeta = x.T
         grid = Grid(
             jnp.array([jnp.sqrt(psi), theta, zeta]).T,
-            spacing=jnp.zeros((3,)).T,
-            jitable=True,
+            spacing=jnp.zeros(
+                (
+                    x.shape[0],
+                    3,
+                )
+            ).T,
             sort=False,
         )
         return field.compute("|B|", grid=grid, **kwargs)["|B|"]
@@ -398,11 +402,17 @@ class ManualParticleInitializerFlux(AbstractParticleInitializer):
         q: float = 2,
         eq: Optional[Equilibrium] = None,
     ):
-        self.m = m * proton_mass
-        self.q = q * elementary_charge
+        m = m * proton_mass
+        q = q * elementary_charge
         E = E * JOULE_PER_EV
-        rho0, theta0, zeta0, xi0, E = map(jnp.asarray, (rho0, theta0, zeta0, xi0, E))
-        rho0, theta0, zeta0, xi0, E = jnp.broadcast_arrays(rho0, theta0, zeta0, xi0, E)
+        rho0, theta0, zeta0, xi0, E, m, q = map(
+            jnp.asarray, (rho0, theta0, zeta0, xi0, E, m, q)
+        )
+        rho0, theta0, zeta0, xi0, E, m, q = jnp.broadcast_arrays(
+            rho0, theta0, zeta0, xi0, E, m, q
+        )
+        self.m = m
+        self.q = q
         self.rho0 = rho0
         self.theta0 = theta0
         self.zeta0 = zeta0
@@ -486,11 +496,13 @@ class ManualParticleInitializerLab(AbstractParticleInitializer):
         q: float = 2,
         eq: Optional[Equilibrium] = None,
     ):
-        self.m = m * proton_mass
-        self.q = q * elementary_charge
+        m = m * proton_mass
+        q = q * elementary_charge
         E = E * JOULE_PER_EV
-        R0, phi0, Z0, xi0, E = map(jnp.asarray, (R0, phi0, Z0, xi0, E))
-        R0, phi0, Z0, xi0, E = jnp.broadcast_arrays(R0, phi0, Z0, xi0, E)
+        R0, phi0, Z0, xi0, E, m, q = map(jnp.asarray, (R0, phi0, Z0, xi0, E, m, q))
+        R0, phi0, Z0, xi0, E, m, q = jnp.broadcast_arrays(R0, phi0, Z0, xi0, E, m, q)
+        self.m = m
+        self.q = q
         self.R0 = R0
         self.phi0 = phi0
         self.Z0 = Z0
@@ -595,14 +607,14 @@ class CurveParticleInitializer(AbstractParticleInitializer):
     ) -> tuple[jnp.ndarray, tuple]:
         """Initialize N random particles for a given trajectory model."""
         data = self.curve.compute(["x_s", "s", "ds"], grid=self.grid)
-        sqrtg = jnp.linalg.norm(data["x_s"]) * data["ds"]
+        sqrtg = jnp.linalg.norm(data["x_s"], axis=-1) * data["ds"]
         sqrtg /= sqrtg.max()
         nattempts = 10 * self.N  # 10x seems plenty in practice, but should fix
         # rejection sampling according to pdf~sqrtg to get samples
         # roughly equally distributed in real space
         # TODO: use jax rng?
         rng = np.random.default_rng(seed=self.seed)
-        idxs = rng.randint(0, sqrtg.shape[0], size=(nattempts,))
+        idxs = rng.integers(0, sqrtg.shape[0], size=(nattempts,))
         accept = np.where(rng.uniform(low=0, high=1, size=(nattempts,)) < sqrtg[idxs])[
             0
         ]
@@ -635,9 +647,114 @@ class CurveParticleInitializer(AbstractParticleInitializer):
         args = []
         for arg in model.args:
             if arg == "m":
-                args += [self.m]
+                args += [jnp.full(x.shape[0], self.m)]
             elif arg == "q":
-                args += [self.q]
+                args += [jnp.full(x.shape[0], self.q)]
+            elif arg == "mu":
+                vperp2 = v**2 - vpar**2
+                modB = _compute_modB(x, field)
+                args += [vperp2 / modB]
+
+        return jnp.hstack([x, v]), tuple(args)
+
+
+class SurfaceParticleInitializer(AbstractParticleInitializer):
+    """Randomly sample particles starting on a surface.
+
+    Parameters
+    ----------
+    surface : desc.geometry.Surface
+        Surface object to initialize samples on.
+    N : int
+        Number of samples to generate.
+    E : float
+        Energy of particles, in eV.
+    m : float
+        Mass of particles, in proton masses.
+    q : float
+        charge of particles, in units of elementary charge.
+    xi_min, xi_max : float
+        Minimum and maximum values for randomly sampled normalized parallel velocity.
+        xi = vpar/v.
+    grid : Grid
+        Grid used to discretize curve.
+    seed : int
+        Seed for rng.
+
+    """
+
+    def __init__(
+        self,
+        surface: Surface,
+        N: int,
+        E: float = 3.5e6,
+        m: float = 4,
+        q: float = 2,
+        xi_min: float = -1,
+        xi_max: float = 1,
+        grid: Grid = None,
+        seed: int = 0,
+    ):
+        self.surface = surface
+        self.E = E * JOULE_PER_EV
+        self.m = m * proton_mass
+        self.q = q * elementary_charge
+        self.grid = grid
+        self.xi_min = xi_min
+        self.xi_max = xi_max
+        self.N = N
+        self.seed = seed
+
+    def init_particles(
+        self, model: AbstractTrajectoryModel, field: Union[Equilibrium, _MagneticField]
+    ) -> tuple[jnp.ndarray, tuple]:
+        """Initialize N random particles for a given trajectory model."""
+        data = self.surface.compute(
+            ["|e_theta x e_zeta|", "theta", "zeta"], grid=self.grid
+        )
+        sqrtg = data["|e_theta x e_zeta|"]
+        sqrtg /= sqrtg.max()
+        nattempts = 10 * self.N  # 10x seems plenty in practice, but should fix
+        # rejection sampling according to pdf~sqrtg to get samples
+        # roughly equally distributed in real space
+        # TODO: use jax rng?
+        rng = np.random.default_rng(seed=self.seed)
+        idxs = rng.integers(0, sqrtg.shape[0], size=(nattempts,))
+        accept = np.where(rng.uniform(low=0, high=1, size=(nattempts,)) < sqrtg[idxs])[
+            0
+        ]
+        # TODO: figure out what to do if this fails, maybe iterate until enough samples?
+        assert len(accept) > self.N
+        idxs = np.sort(idxs[accept[: self.N]])
+        zeta = data["zeta"][idxs]
+        theta = data["theta"][idxs]
+        rho = self.surface.rho * jnp.ones_like(zeta)
+
+        if model.frame == "flux":
+            x = jnp.array([rho, theta, zeta]).T
+        elif model.frame == "lab":
+            x = jnp.array([rho, theta, zeta]).T
+            grid = Grid(x)
+            x = self.surface.compute("x", grid=grid)["x"]
+
+        v = jnp.sqrt(2 * self.E / self.m) * jnp.ones_like(zeta)
+        vpar = np.random.uniform(self.xi_min, self.xi_max, v.size) * v
+        vs = []
+        for vcoord in model.vcoords:
+            if vcoord == "vpar":
+                vs.append(vpar)
+            elif vcoord == "v":
+                vs.append(v)
+            else:
+                raise NotImplementedError
+        v = jnp.array(vs).T
+
+        args = []
+        for arg in model.args:
+            if arg == "m":
+                args += [jnp.full(x.shape[0], self.m)]
+            elif arg == "q":
+                args += [jnp.full(x.shape[0], self.q)]
             elif arg == "mu":
                 vperp2 = v**2 - vpar**2
                 modB = _compute_modB(x, field)
@@ -704,7 +821,7 @@ def trace_particles(
     else:
         raise NotImplementedError
 
-    y0, args = initializer.init_particles
+    y0, args = initializer.init_particles(model, field)
     kwargs = {}
     if source_grid:
         kwargs["source_grid"] = source_grid

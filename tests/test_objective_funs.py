@@ -3458,7 +3458,7 @@ class TestObjectiveNaNGrad:
     @pytest.mark.unit
     def test_objective_no_nangrad_quadratic_flux_minimizing(self):
         """SurfaceQuadraticFlux."""
-        ext_field = ToroidalMagneticField(1.0, 1.0)
+        ext_field = FourierXYZCoil().to_SplineXYZ(grid=3)
 
         surf = FourierRZToroidalSurface(
             R_lmn=[4.0, 1.0],
@@ -3467,8 +3467,9 @@ class TestObjectiveNaNGrad:
             modes_Z=[[-1, 0]],
             NFP=1,
         )
-
-        obj = ObjectiveFunction(SurfaceQuadraticFlux(surf, ext_field), use_jit=False)
+        # have use_jit=True here to check that runs correctly with spline
+        # coils, see PR #1656
+        obj = ObjectiveFunction(SurfaceQuadraticFlux(surf, ext_field), use_jit=True)
         obj.build()
         g = obj.grad(obj.x(surf, ext_field))
         assert not np.any(np.isnan(g)), "quadratic flux"

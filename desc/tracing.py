@@ -3,11 +3,10 @@
 from abc import ABC, abstractmethod
 from typing import Optional, Union
 
-import equinox as eqx
 import numpy as np
 from diffrax import (
     AbstractSolver,
-    ODETerm,
+    AbstractTerm,
     PIDController,
     RecursiveCheckpointAdjoint,
     SaveAt,
@@ -24,8 +23,8 @@ from scipy.constants import (
     proton_mass,
 )
 
-from desc.backend import jit, jnp, vmap
-from desc.compute import _compute as compute_fun
+from desc.backend import jit, jnp, tree_map, vmap
+from desc.compute.utils import _compute as compute_fun
 from desc.compute.utils import get_profiles, get_transforms
 from desc.derivatives import Derivative
 from desc.equilibrium import Equilibrium
@@ -39,15 +38,12 @@ JOULE_PER_EV = 11606 * Boltzmann
 EV_PER_JOULE = 1 / JOULE_PER_EV
 
 
-class AbstractTrajectoryModel(ODETerm, ABC):
+class AbstractTrajectoryModel(AbstractTerm, ABC):
     """Abstract base class for particle trajectory models.
 
-    Subclasses should implement the ``compute`` method to compute the RHS of the ODE,
+    Subclasses should implement the ``vf`` method to compute the RHS of the ODE,
     as well as the properties `frame`, `vcoords`, `args`
     """
-
-    def __init__(self):
-        super().__init__(self.compute)
 
     @property
     @abstractmethod
@@ -85,9 +81,21 @@ class AbstractTrajectoryModel(ODETerm, ABC):
         pass
 
     @abstractmethod
-    def compute(self, t: float, x: jnp.ndarray, args: tuple) -> jnp.ndarray:
+    def vf(self, t: float, x: jnp.ndarray, args: tuple) -> jnp.ndarray:
         """RHS of the particle trajectory ODE."""
         pass
+
+    def contr(self, t0, t1, **kwargs):
+        """Needed by diffrax."""
+        return t1 - t0
+
+    def prod(self, vf, control):
+        """Needed by diffrax."""
+
+        def _mul(v):
+            return control * v
+
+        return tree_map(_mul, vf)
 
 
 class VacuumGuidingCenterTrajectory(AbstractTrajectoryModel):
@@ -102,21 +110,10 @@ class VacuumGuidingCenterTrajectory(AbstractTrajectoryModel):
     """
 
     _frame: str
-    _data_keys = eqx.field(static=True)
-    _data_keys = [
-        "B",
-        "|B|",
-        "grad(|B|)",
-        "grad(psi)",
-        "e^theta",
-        "e^zeta",
-        "b",
-    ]
 
     def __init__(self, frame: str):
         assert frame in ["lab", "flux"]
         self._frame = frame
-        super().__init__()
 
     @property
     def frame(self) -> str:
@@ -133,7 +130,7 @@ class VacuumGuidingCenterTrajectory(AbstractTrajectoryModel):
         """Which additional args are needed by the model."""
         return ["m", "q", "mu"]
 
-    def compute(self, t: float, x: jnp.ndarray, args: tuple) -> jnp.ndarray:
+    def vf(self, t: float, x: jnp.ndarray, args: tuple) -> jnp.ndarray:
         """RHS of guiding center trajectories without collisions or slowing down.
 
         Parameters
@@ -167,10 +164,20 @@ class VacuumGuidingCenterTrajectory(AbstractTrajectoryModel):
             jitable=True,
             sort=False,
         )
-        transforms = get_transforms(self._data_keys, eq, grid, jitable=True)
-        profiles = get_profiles(self._data_keys, eq, grid)
+        data_keys = [
+            "B",
+            "|B|",
+            "grad(|B|)",
+            "grad(psi)",
+            "e^theta",
+            "e^zeta",
+            "b",
+        ]
+
+        transforms = get_transforms(data_keys, eq, grid, jitable=True)
+        profiles = get_profiles(data_keys, eq, grid)
         data = compute_fun(
-            eq, self._data_keys, eq.params_dict, transforms, profiles, **kwargs
+            eq, data_keys, eq.params_dict, transforms, profiles, **kwargs
         )
 
         psidot = (
@@ -188,15 +195,15 @@ class VacuumGuidingCenterTrajectory(AbstractTrajectoryModel):
             cross(data["B"], data["grad(|B|)"]), data["e^zeta"]
         )
         vpardot = -mu * dot(data["b"], data["grad(|B|)"])
-        dx = jnp.array([psidot, thetadot, zetadot, vpardot]).T
+        dx = jnp.array([psidot, thetadot, zetadot, vpardot]).T.reshape(x.shape)
         return dx
 
-    def _compute_lab_coordinates(self, x, field, m, q, mu, **kwargs):
+    def _compute_lab_coordinates(self, y, field, m, q, mu, **kwargs):
         # this is the one implemented in simsopt for method="gc_vac"
         # should be equivalent to full lagrangian from Cary & Brizard in vacuum
         m_over_q = m / q
-        vpar = x[-1]
-        x = x[:-1]
+        vpar = y[-1]
+        x = y[:-1]
         field_compute = lambda y: field.compute_magnetic_field(y, **kwargs)
 
         B = field_compute(x)
@@ -225,7 +232,7 @@ class VacuumGuidingCenterTrajectory(AbstractTrajectoryModel):
 
         dvdt = -mu * dot(b, grad_B)
         dxdt = jnp.append(dRdt, dvdt)
-        return dxdt.flatten()
+        return dxdt.reshape(y.shape)
 
 
 class SlowingDownGuidingCenterTrajectory(AbstractTrajectoryModel):
@@ -234,22 +241,8 @@ class SlowingDownGuidingCenterTrajectory(AbstractTrajectoryModel):
     Works only in flux coordinates.
     """
 
-    _data_keys = eqx.field(static=True)
-    _data_keys = [
-        "B",
-        "|B|",
-        "grad(|B|)",
-        "grad(psi)",
-        "e^theta",
-        "e^zeta",
-        "b",
-        "Te",
-        "ne",
-    ]
-
     def __init__(self, frame: str = "flux"):
         assert frame == "flux"
-        super().__init__()
 
     @property
     def frame(self) -> "str":
@@ -266,7 +259,7 @@ class SlowingDownGuidingCenterTrajectory(AbstractTrajectoryModel):
         """Which additional args are needed by the model."""
         return ["m", "q"]
 
-    def compute(self, t: float, x: jnp.ndarray, args: tuple) -> jnp.ndarray:
+    def vf(self, t: float, x: jnp.ndarray, args: tuple) -> jnp.ndarray:
         """RHS of guiding center trajectories without collisions or slowing down.
 
         Parameters
@@ -294,11 +287,23 @@ class SlowingDownGuidingCenterTrajectory(AbstractTrajectoryModel):
             jitable=True,
             sort=False,
         )
-        transforms = get_transforms(self._data_keys, eq, grid, jitable=True)
-        profiles = get_profiles(self._data_keys, eq, grid)
+        data_keys = [
+            "B",
+            "|B|",
+            "grad(|B|)",
+            "grad(psi)",
+            "e^theta",
+            "e^zeta",
+            "b",
+            "Te",
+            "ne",
+        ]
+
+        transforms = get_transforms(data_keys, eq, grid, jitable=True)
+        profiles = get_profiles(data_keys, eq, grid)
         data = compute_fun(
             eq,
-            self._data_keys,
+            data_keys,
             eq.params_dict,
             transforms,
             profiles,
@@ -324,7 +329,7 @@ class SlowingDownGuidingCenterTrajectory(AbstractTrajectoryModel):
             -(v**2 - vpar**2) / (2 * data["|B|"]) * dot(data["b"], data["grad(|B|)"])
         )
         vdot = -v / tau_s * (1 + vc**3 / v**3)
-        dx = jnp.array([psidot, thetadot, zetadot, vpardot, vdot]).T
+        dx = jnp.array([psidot, thetadot, zetadot, vpardot, vdot]).T.reshape(x.shape)
         return dx
 
 
@@ -825,8 +830,6 @@ def trace_particles(
     kwargs = {}
     if source_grid:
         kwargs["source_grid"] = source_grid
-    args = (*args, kwargs)
-    args = (field, *args)
 
     stepsize_controller = PIDController(rtol=rtol, atol=atol, dtmin=min_step_size)
 
@@ -841,7 +844,7 @@ def trace_particles(
         saveat=saveat,
         max_steps=maxstep * len(ts),
         dt0=min_step_size,
-        args=args,
+        args=(field, *args, kwargs),
         stepsize_controller=stepsize_controller,
         adjoint=adjoint,
     ).ys

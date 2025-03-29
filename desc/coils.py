@@ -257,6 +257,7 @@ class _Coil(_MagneticField, Optimizable, ABC):
     """
 
     _io_attrs_ = _MagneticField._io_attrs_ + ["_current"]
+    _static_attrs = _MagneticField._static_attrs + Optimizable._static_attrs
 
     def __init__(self, current, *args, **kwargs):
         self._current = float(np.squeeze(current))
@@ -734,6 +735,7 @@ class FourierRZCoil(_Coil, FourierRZCurve):
     """
 
     _io_attrs_ = _Coil._io_attrs_ + FourierRZCurve._io_attrs_
+    _static_attrs = _Coil._static_attrs + FourierRZCurve._static_attrs
 
     def __init__(
         self,
@@ -841,6 +843,7 @@ class FourierXYZCoil(_Coil, FourierXYZCurve):
     """
 
     _io_attrs_ = _Coil._io_attrs_ + FourierXYZCurve._io_attrs_
+    _static_attrs = _Coil._static_attrs + FourierXYZCurve._static_attrs
 
     def __init__(
         self,
@@ -953,6 +956,7 @@ class FourierPlanarCoil(_Coil, FourierPlanarCurve):
     """
 
     _io_attrs_ = _Coil._io_attrs_ + FourierPlanarCurve._io_attrs_
+    _static_attrs = _Coil._static_attrs + FourierPlanarCurve._static_attrs
 
     def __init__(
         self,
@@ -1037,6 +1041,7 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
     """
 
     _io_attrs_ = _Coil._io_attrs_ + SplineXYZCurve._io_attrs_
+    _static_attrs = _Coil._static_attrs + SplineXYZCurve._static_attrs
 
     def __init__(self, current, X, Y, Z, knots=None, method="cubic", name=""):
         super().__init__(current, X, Y, Z, knots, method, name)
@@ -1353,7 +1358,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
 
     _io_attrs_ = _Coil._io_attrs_ + ["_coils", "_NFP", "_sym"]
     _io_attrs_.remove("_current")
-    _static_attrs = ["_NFP", "_sym"]
+    _static_attrs = ["_NFP", "_sym", "_name"]
 
     def __init__(self, *coils, NFP=1, sym=False, name="", check_intersection=True):
         coils = flatten_list(coils, flatten_tuple=True)
@@ -2494,7 +2499,6 @@ class MixedCoilSet(CoilSet):
     """
 
     _io_attrs_ = CoilSet._io_attrs_
-    _io_attrs_.remove("_current")
 
     def __init__(self, *coils, name="", check_intersection=True):
         coils = flatten_list(coils, flatten_tuple=True)

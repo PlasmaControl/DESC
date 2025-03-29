@@ -49,16 +49,18 @@ class _Grid(IOAble, ABC):
     ]
 
     _static_attrs = [
+        "_endpoint",
+        "_can_fft2",
         "_coordinates",
+        "_fft_poloidal",
+        "_fft_toroidal",
+        "_is_meshgrid",
         "_L",
         "_M",
         "_N",
         "_NFP",
+        "_node_pattern",
         "_sym",
-        "_is_meshgrid",
-        "_can_fft2",
-        "_fft_poloidal",
-        "_fft_toroidal",
     ]
 
     @abstractmethod

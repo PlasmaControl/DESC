@@ -91,9 +91,9 @@ class CurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
         ]
     )
 
-    _static_attrs_ = (
-        _MagneticField._static_attrs_
-        + FourierRZToroidalSurface._static_attrs_
+    _static_attrs = (
+        _MagneticField._static_attrs
+        + FourierRZToroidalSurface._static_attrs
         + ["_potential", "_potential_dtheta", "_potential_dzeta"]
     )
 
@@ -470,9 +470,9 @@ class FourierCurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
         + ["_Phi_mn", "_I", "_G", "_Phi_basis", "_M_Phi", "_N_Phi", "_sym_Phi"]
     )
 
-    _static_attrs_ = (
-        _MagneticField._static_attrs_
-        + FourierRZToroidalSurface._static_attrs_
+    _static_attrs = (
+        _MagneticField._static_attrs
+        + FourierRZToroidalSurface._static_attrs
         + ["_M_Phi", "_N_Phi", "_sym_Phi"]
     )
 

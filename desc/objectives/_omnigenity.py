@@ -549,6 +549,13 @@ class Omnigenity(_Objective):
         target_default="``target=0``.", bounds_default="``target=0``."
     )
 
+    _static_attrs = _Objective._static_attrs + [
+        "_eq_data_keys",
+        "_eq_fixed",
+        "_field_data_keys",
+        "_field_fixed",
+    ]
+
     _coordinates = "rtz"
     _units = "(T)"
     _print_value_fmt = "Omnigenity error: "

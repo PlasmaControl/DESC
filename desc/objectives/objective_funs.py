@@ -308,6 +308,8 @@ class ObjectiveFunction(IOAble):
                 setattr(
                     self, method, functools.partial(getattr(self, method)._fun, self)
                 )
+                if method not in self._static_attrs:
+                    self._static_attrs += [method]
             except AttributeError:
                 pass
 
@@ -1157,6 +1159,8 @@ class _Objective(IOAble, ABC):
                 setattr(
                     self, method, functools.partial(getattr(self, method)._fun, self)
                 )
+                if method not in self._static_attrs:
+                    self._static_attrs += [method]
             except AttributeError:
                 pass
 

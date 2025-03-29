@@ -1353,6 +1353,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
 
     _io_attrs_ = _Coil._io_attrs_ + ["_coils", "_NFP", "_sym"]
     _io_attrs_.remove("_current")
+    _static_attrs = ["_NFP", "_sym"]
 
     def __init__(self, *coils, NFP=1, sym=False, name="", check_intersection=True):
         coils = flatten_list(coils, flatten_tuple=True)
@@ -2493,6 +2494,7 @@ class MixedCoilSet(CoilSet):
     """
 
     _io_attrs_ = CoilSet._io_attrs_
+    _io_attrs_.remove("_current")
 
     def __init__(self, *coils, name="", check_intersection=True):
         coils = flatten_list(coils, flatten_tuple=True)

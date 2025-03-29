@@ -139,19 +139,25 @@ class _AutoRegisterPytree(type):
 
             # this allows classes to override the default static/dynamic stuff
             # if they need certain floats to be static or ints to by dynamic etc.
-            static_attrs = getattr(obj, "_static_attrs", [])
-            dynamic_attrs = getattr(obj, "_dynamic_attrs", [])
-            assert set(static_attrs).isdisjoint(set(dynamic_attrs))
+            if hasattr(obj, "_static_attrs") or hasattr(obj, "_dynamic_attrs"):
+                static_attrs = getattr(obj, "_static_attrs", [])
+                dynamic_attrs = getattr(obj, "_dynamic_attrs", [])
+                assert set(static_attrs).isdisjoint(set(dynamic_attrs))
 
-            for key, val in obj.__dict__.items():
-                if key in static_attrs:
-                    aux_data += [(key, _make_hashable(val))]
-                elif key in dynamic_attrs:
-                    children[key] = val
-                elif _unjittable(val):
-                    aux_data += [(key, _make_hashable(val))]
-                else:
-                    children[key] = val
+                for key, val in obj.__dict__.items():
+                    if key in static_attrs:
+                        aux_data += [(key, _make_hashable(val))]
+                    elif key in dynamic_attrs:
+                        children[key] = val
+                    else:
+                        children[key] = val
+
+            else:
+                for key, val in obj.__dict__.items():
+                    if _unjittable(val):
+                        aux_data += [(key, _make_hashable(val))]
+                    else:
+                        children[key] = val
 
             return ((children,), aux_data)
 

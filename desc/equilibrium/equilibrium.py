@@ -163,7 +163,23 @@ class Equilibrium(IOAble, Optimizable):
         "_M_grid",
         "_N_grid",
     ]
-    _static_attrs = ["_R_basis", "_Z_basis", "_L_basis"]
+    _static_attrs = [
+        "_R_basis",
+        "_Z_basis",
+        "_L_basis",
+        "_sym",
+        "_R_sym",
+        "_Z_sym",
+        "_NFP",
+        "_L",
+        "_M",
+        "_N",
+        "_L_grid",
+        "_M_grid",
+        "_N_grid",
+        "_spectral_indexing",
+        "_bdry_mode",
+    ]
 
     @execute_on_cpu
     def __init__(

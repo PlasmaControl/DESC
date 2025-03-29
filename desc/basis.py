@@ -36,6 +36,17 @@ class _Basis(IOAble, ABC):
         "_spectral_indexing",
     ]
 
+    _static_attrs = [
+        "_fft_poloidal",
+        "_fft_toroidal",
+        "_L",
+        "_M",
+        "_N",
+        "_NFP",
+        "_sym",
+        "_spectral_indexing",
+    ]
+
     def __init__(self):
         self._enforce_symmetry()
         self._sort_modes()

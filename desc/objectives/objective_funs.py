@@ -231,7 +231,7 @@ class ObjectiveFunction(IOAble):
 
     """
 
-    _io_attrs_ = ["_objectives"]
+    _io_attrs_ = ["_objectives", "_deriv_mode", "_jac_chunk_size", "_use_jit", "_name"]
 
     def __init__(
         self,

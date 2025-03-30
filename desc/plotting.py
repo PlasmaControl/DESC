@@ -46,6 +46,7 @@ __all__ = [
     "plot_section",
     "plot_surfaces",
     "poincare_plot",
+    "plot_field_lines",
 ]
 
 
@@ -3568,6 +3569,226 @@ def plot_basis(basis, return_data=False, **kwargs):
             return fig, ax, plot_data
 
         return fig, ax
+
+
+def plot_field_lines(
+    field,
+    R0,
+    Z0,
+    ntransit=1,
+    phi=None,
+    grid=None,
+    fig=None,
+    return_data=False,
+    **kwargs,
+):
+    """Field line plot from external magnetic field.
+
+    Parameters
+    ----------
+    field : MagneticField
+        External field, coilset, current potential etc to plot from.
+    R0, Z0 : array-like
+        Starting points at phi=0 for field line tracing.
+    ntransit : int
+        Number of transits to trace field lines for. Defaults to 1.
+    phi : float, int or array-like or None
+        Values of phi to plot field lines at.
+        If an integer, plot that many contours linearly spaced in (0,2pi).
+        Defaults to 50.
+    fig : plotly.graph_objs._figure.Figure, optional
+        Figure to plot on.
+    return_data : bool
+        If True, return the data plotted as well as fig,ax
+    **kwargs : dict, optional
+        Specify properties of the figure, axis, and plot appearance e.g.::
+
+            plot_X(figsize=(4,6),)
+
+        Valid keyword arguments are:
+
+        * ``color``: color to use for field lines, default is black.
+        * ``figsize``: tuple of length 2, the size of the figure in inches
+        * ``lw``: float, linewidth of plotted field lines
+        * ``ls``: str, linestyle of plotted field lines
+        * ``showgrid``: Bool, whether or not to show the coordinate grid lines.
+          True by default.
+        * ``showticklabels``: Bool, whether or not to show the coordinate tick labels.
+          True by default.
+        * ``showaxislabels``: Bool, whether or not to show the coordinate axis labels.
+          True by default.
+        * ``zeroline``: Bool, whether or not to show the zero coordinate axis lines.
+          True by default.
+
+        Additionally, any other keyword arguments will be passed on to
+        ``desc.magnetic_fields.field_line_integrate``
+
+    Returns
+    -------
+    fig : plotly.graph_objs._figure.Figure
+        Figure being plotted to.
+    plot_data : dict
+        Dictionary of the data plotted, only returned if ``return_data=True``
+
+    Examples
+    --------
+    .. raw:: html
+
+        <iframe src="../../_static/images/plotting/plot_field_lines.html"
+        width="100%" height="980" frameborder="0"></iframe>
+
+    .. code-block:: python
+
+        import desc
+        from desc.plotting import plot_field_lines
+
+        ext_field = desc.io.load("../tests/inputs/precise_QA_helical_coils.h5")
+        eq = desc.examples.get("precise_QA")
+        grid_trace = desc.grid.LinearGrid(rho=[1])
+        r0 = eq.compute("R", grid=grid_trace)["R"]
+        z0 = eq.compute("Z", grid=grid_trace)["Z"]
+
+        fig = plot_field_lines(ext_field, r0, z0, phi=100, ntransit=10, lw=10)
+        fig.show()
+    """
+    fli_kwargs = {}
+    for key in inspect.signature(field_line_integrate).parameters:
+        if key in kwargs:
+            fli_kwargs[key] = kwargs.pop(key)
+
+    figsize = kwargs.pop("figsize", None)
+    color = kwargs.pop("color", "black")
+    figsize = kwargs.pop("figsize", (10, 10))
+    title = kwargs.pop("title", "")
+    showgrid = kwargs.pop("showgrid", True)
+    zeroline = kwargs.pop("zeroline", True)
+    showticklabels = kwargs.pop("showticklabels", True)
+    showaxislabels = kwargs.pop("showaxislabels", True)
+    lw = kwargs.pop("lw", 5)
+    ls = kwargs.pop("ls", "solid")
+
+    assert (
+        len(kwargs) == 0
+    ), f"plot_field_lines got unexpected keyword argument: {kwargs.keys()}"
+
+    if not isinstance(lw, (list, tuple)):
+        lw = [lw]
+    if not isinstance(ls, (list, tuple)):
+        ls = [ls]
+    if not isinstance(color, (list, tuple)):
+        color = [color]
+
+    phi = 50 if phi is None else phi
+    if isinstance(phi, numbers.Integral):
+        phi = np.linspace(0, 2 * np.pi, phi, endpoint=False)
+    phi = np.atleast_1d(phi)
+    nplanes = len(phi) * ntransit
+
+    phis = (phi + np.arange(0, ntransit)[:, None] * 2 * np.pi).flatten()
+
+    R0, Z0 = np.atleast_1d(R0, Z0)
+
+    fieldR, fieldZ = field_line_integrate(
+        r0=R0,
+        z0=Z0,
+        phis=phis,
+        field=field,
+        source_grid=grid,
+        **fli_kwargs,
+    )
+
+    zs = fieldZ.reshape((nplanes, -1))
+    rs = fieldR.reshape((nplanes, -1))
+
+    signBT = np.sign(
+        field.compute_magnetic_field(np.array([R0.flat[0], 0.0, Z0.flat[0]]))[:, 1]
+    ).flat[0]
+    if signBT < 0:  # field lines are traced backwards when toroidal field < 0
+        rs, zs = rs[:, ::-1], zs[:, ::-1]
+        rs, zs = np.roll(rs, 1, 1), np.roll(zs, 1, 1)
+
+    if fig is None:
+        fig = go.Figure()
+
+    plot_data = {}
+    plot_data["X"] = []
+    plot_data["Y"] = []
+    plot_data["Z"] = []
+    for i in range(rs.shape[1]):  # iterate over each field line
+        x = rs[:, i] * np.cos(phis)
+        y = rs[:, i] * np.sin(phis)
+        z = zs[:, i]
+        plot_data["X"].append(x)
+        plot_data["Y"].append(y)
+        plot_data["Z"].append(z)
+        fig.add_trace(
+            go.Scatter3d(
+                x=x,
+                y=y,
+                z=z,
+                mode="lines",
+                line=dict(
+                    color=color[i % len(color)],
+                    width=lw[i % len(lw)],
+                    dash=ls[i % len(ls)],
+                ),
+                marker=dict(size=0),
+                name=f"FieldLine[{i}]",
+                hovertext=f"FieldLine[{i}]",
+                showlegend=False,
+            )
+        )
+    xaxis_title = (
+        LatexNodes2Text().latex_to_text(_AXIS_LABELS_XYZ[0]) if showaxislabels else ""
+    )
+    yaxis_title = (
+        LatexNodes2Text().latex_to_text(_AXIS_LABELS_XYZ[1]) if showaxislabels else ""
+    )
+    zaxis_title = (
+        LatexNodes2Text().latex_to_text(_AXIS_LABELS_XYZ[2]) if showaxislabels else ""
+    )
+    fig.update_layout(
+        scene=dict(
+            xaxis_title=xaxis_title,
+            yaxis_title=yaxis_title,
+            zaxis_title=zaxis_title,
+            aspectmode="data",
+            xaxis=dict(
+                backgroundcolor="white",
+                gridcolor="darkgrey",
+                showbackground=False,
+                zerolinecolor="darkgrey",
+                showgrid=showgrid,
+                zeroline=zeroline,
+                showticklabels=showticklabels,
+            ),
+            yaxis=dict(
+                backgroundcolor="white",
+                gridcolor="darkgrey",
+                showbackground=False,
+                zerolinecolor="darkgrey",
+                showgrid=showgrid,
+                zeroline=zeroline,
+                showticklabels=showticklabels,
+            ),
+            zaxis=dict(
+                backgroundcolor="white",
+                gridcolor="darkgrey",
+                showbackground=False,
+                zerolinecolor="darkgrey",
+                showgrid=showgrid,
+                zeroline=zeroline,
+                showticklabels=showticklabels,
+            ),
+        ),
+        width=figsize[0] * dpi,
+        height=figsize[1] * dpi,
+        title=dict(text=title, y=0.9, x=0.5, xanchor="center", yanchor="top"),
+        font=dict(family="Times"),
+    )
+    if return_data:
+        return fig, plot_data
+    return fig
 
 
 def plot_logo(save_path=None, **kwargs):

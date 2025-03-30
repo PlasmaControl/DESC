@@ -3,7 +3,7 @@ Changelog
 
 New Features
 
-- Adds `plot_field_lines` function
+- Adds `desc.plotting.plot_field_lines` function, which integrates and then plots magnetic field line trajectories in 3D.
 
 v0.14.1
 -------

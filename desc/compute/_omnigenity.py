@@ -1011,6 +1011,7 @@ def _Q_piecewise_omni(params, transforms, profiles, data, **kwargs):
     theta_pp = (w_2 - t_2 * w_1) / (1 - t_1 * t_2)
     theta_pm = (-w_2 - t_2 * w_1) / (1 - t_1 * t_2)
 
+    # stacking/max needs to be along a new dimension
     Q = (
         jnp.max(
             jnp.stack(

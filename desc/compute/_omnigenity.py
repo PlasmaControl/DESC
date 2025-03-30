@@ -934,7 +934,7 @@ def _B_omni(params, transforms, profiles, data, **kwargs):
     parameterization="desc.magnetic_fields._core.PiecewiseOmnigenousField",
 )
 def _B_piecewise_omni(params, transforms, profiles, data, **kwargs):
-    iota0 = kwargs.get("iota", 0.6)  # This way we ensure iota0 = iota
+    iota0 = kwargs.get("iota", 0.6)[:, None]  # This way we ensure iota0 = iota
 
     # RG: (theta_B, zeta_B) grid must be the same for all flux surfaces
     # else this logic below will fail
@@ -947,10 +947,10 @@ def _B_piecewise_omni(params, transforms, profiles, data, **kwargs):
     # NFP can't be a parameter. Must come from equilibrium
     NFP = transforms["grid"].NFP
 
-    zeta_C = params["zeta_C"]
-    theta_C = params["theta_C"]
-    t_1 = params["t_1"]
-    t_2 = params["t_2"]
+    zeta_C = params["zeta_C"][:, None]
+    theta_C = params["theta_C"][:, None]
+    t_1 = params["t_1"][:, None]
+    t_2 = params["t_2"][:, None]
     w_1 = jnp.pi / NFP * (1 - t_1 * t_2) / (1 + t_2 / iota0)
 
     w_2 = (
@@ -959,33 +959,17 @@ def _B_piecewise_omni(params, transforms, profiles, data, **kwargs):
         / (jnp.pi - (iota0 + t_2) * ((jnp.pi - NFP * w_1) / (iota0 + 1 / t_1)))
     )  # Formula of w_2 to ensure Delta = 0
 
-    B_min = params["B_min"]
-    B_max = params["B_max"]
+    B_min = params["B_min"][:, None]
+    B_max = params["B_max"][:, None]
     p = int(10)
 
     # shape (num surfaces, grid points)
     exponent = -1 * (
-        (
-            (
-                zeta_B[None, :]
-                - zeta_C[:, None]
-                + t_1[:, None] * (theta_B[None, :] - theta_C[:, None])
-            )
-            / w_1[:, None]
-        )
-        ** (2 * p)
-        + (
-            (
-                theta_B[None, :]
-                - theta_C[:, None]
-                + t_2[:, None] * (zeta_B[None, :] - zeta_C[:, None])
-            )
-            / w_2[:, None]
-        )
-        ** (2 * p)
+        ((zeta_B - zeta_C + t_1 * (theta_B - theta_C)) / w_1) ** (2 * p)
+        + ((theta_B - theta_C + t_2 * (zeta_B - zeta_C)) / w_2) ** (2 * p)
     )
 
-    B_pwO = B_min[:, None] + (B_max[:, None] - B_min[:, None]) * jnp.exp(exponent)
+    B_pwO = B_min + (B_max - B_min) * jnp.exp(exponent)
 
     # Flattened array. Reshaping may cause jit-related issues
     data["|B|_pwO"] = B_pwO
@@ -1008,12 +992,12 @@ def _B_piecewise_omni(params, transforms, profiles, data, **kwargs):
     parameterization="desc.magnetic_fields._core.PiecewiseOmnigenousField",
 )
 def _Q_piecewise_omni(params, transforms, profiles, data, **kwargs):
-    iota0 = kwargs.get("iota", 0.6)  # This way we ensure iota0 = iota
+    iota0 = kwargs.get("iota", 0.6)[:, None]  # This way we ensure iota0 = iota
     # NFP can't be a parameter. Must come from equilibrium
     NFP = transforms["grid"].NFP
 
-    t_1 = params["t_1"]
-    t_2 = params["t_2"]
+    t_1 = params["t_1"][:, None]
+    t_2 = params["t_2"][:, None]
     w_1 = jnp.pi / NFP * (1 - t_1 * t_2) / (1 + t_2 / iota0)
 
     w_2 = (
@@ -1037,7 +1021,8 @@ def _Q_piecewise_omni(params, transforms, profiles, data, **kwargs):
                     -theta_pm - jnp.pi,
                 ],
                 axis=0,
-            )
+            ),
+            axis=1,
         )
         / jnp.pi
     )
@@ -1058,20 +1043,18 @@ def _Q_piecewise_omni(params, transforms, profiles, data, **kwargs):
     transforms={"grid": []},
     profiles=[],
     coordinates="rtz",
-    data=["|B|_pwO"],  # Potential error, we want eq |B|
+    data=["|B|_pwO"],
     parameterization="desc.magnetic_fields._core.PiecewiseOmnigenousField",
 )
 def _Delta_bs_piecewiseomni(params, transforms, profiles, data, **kwargs):
-    iota0 = kwargs.get("iota", 0.6)  # This way we ensure iota0 = iota
-
+    iota0 = kwargs.get("iota", 0.6)[:, None]  # This way we ensure iota0 = iota
     # NFP can't be a parameter. Must come from equilibrium
     NFP = transforms["grid"].NFP
 
-    t_1 = params["t_1"]
-    t_2 = params["t_2"]
-    B_max = params["B_max"]
-
-    w_1 = ((jnp.pi / NFP) * (1 - t_1 * t_2)) / (1 + t_2 / iota0)
+    B_max = params["B_max"][:, None]
+    t_1 = params["t_1"][:, None]
+    t_2 = params["t_2"][:, None]
+    w_1 = jnp.pi / NFP * (1 - t_1 * t_2) / (1 + t_2 / iota0)
 
     w_2 = (
         jnp.pi**2
@@ -1079,6 +1062,9 @@ def _Delta_bs_piecewiseomni(params, transforms, profiles, data, **kwargs):
         / (jnp.pi - (iota0 + t_2) * ((jnp.pi - NFP * w_1) / (iota0 + 1 / t_1)))
     )  # Formula of w_2 to ensure Delta = 0
 
+    import pdb
+
+    pdb.set_trace()
     A1 = jnp.abs((4 * w_2 * (w_1 - jnp.pi / NFP)) / (1 - t_1 * t_2))
 
     A2 = jnp.abs((4 * jnp.pi**2 / NFP) - (4 * w_2 * jnp.pi) / (NFP * (1 - t_1 * t_2)))

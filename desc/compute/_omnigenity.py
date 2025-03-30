@@ -1062,16 +1062,13 @@ def _Delta_bs_piecewiseomni(params, transforms, profiles, data, **kwargs):
         / (jnp.pi - (iota0 + t_2) * ((jnp.pi - NFP * w_1) / (iota0 + 1 / t_1)))
     )  # Formula of w_2 to ensure Delta = 0
 
-    import pdb
-
-    pdb.set_trace()
     A1 = jnp.abs((4 * w_2 * (w_1 - jnp.pi / NFP)) / (1 - t_1 * t_2))
-
     A2 = jnp.abs((4 * jnp.pi**2 / NFP) - (4 * w_2 * jnp.pi) / (NFP * (1 - t_1 * t_2)))
 
+    # RG: Need to check if averaging is correct
     B_pwO_squared_averaged = surface_averages(
         transforms["grid"],
-        data["|B|_pwO"] ** 2,
+        (data["|B|_pwO"] ** 2).flatten(),
     )[0]
 
     Delta = (B_pwO_squared_averaged / (4 * jnp.pi**2 * B_max**2)) * (

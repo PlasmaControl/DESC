@@ -12,6 +12,7 @@ v0.14.1
 Bug Fixes
 - Fixes bug in ``desc.vmec.VMECIO.write_vmec_input`` for current-constrained equilibria, where DESC was incorrectly writing the ``s**0`` mode, where VMEC actually assumes it is zero and starts at the  ``s**1`` (which is different than the usual convention VMEC uses for its current profile when it uses the current derivative, where it starts with the ``s**0`` mode).
 - Fixes error that occurs when using the default grid for ``SplineXYZCoil`` in an optimization.
+- Fixes bug in ``desc.coils.CoilSet.save_in_makegrid_format`` for ``CoilSet`` objects with ``sym=True`` or ``NFP>1``
 
 v0.14.0
 -------

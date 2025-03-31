@@ -433,8 +433,8 @@ def contract_equilibrium(
         ion_temperature=ion_temperature,
         atomic_number=atomic_number,
         anisotropy=anisotropy,
-        Psi=float(
-            eq.compute("Psi", grid=LinearGrid(rho=inner_rho))["Psi"][0]
+        Psi=(
+            eq.Psi * inner_rho**2
         ),  # flux (in Webers) within the new last closed flux surface
         NFP=eq.NFP,
         L=eq.L,
@@ -460,6 +460,6 @@ def contract_equilibrium(
         nodes, inner_data["R"], inner_data["Z"], inner_data["lambda"]
     )
     if not copy:  # overwrite the original eq
-        eq = eq_inner
+        eq.__dict__.update(eq_inner.__dict__)
         return eq
     return eq_inner

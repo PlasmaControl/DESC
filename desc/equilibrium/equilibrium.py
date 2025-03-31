@@ -860,7 +860,10 @@ class Equilibrium(IOAble, Optimizable):
         )
         # a check for Redl to prevent computing on-axis or
         # at a rho=1.0 point where profiles vanish
-        if any(["Redl" in name for name in names]):
+        if (
+            any(["Redl" in name for name in names])
+            and self.electron_density is not None
+        ):
             warnif(
                 grid.axis.size,
                 UserWarning,

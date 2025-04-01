@@ -147,38 +147,10 @@ def parse_axis(axis, NFP=1, sym=True, surface=None):
             name="axis",
         )
     elif axis is None:  # use the center of surface
-        # TODO (#1384): make this method of surface, surface.get_axis()?
         if isinstance(surface, FourierRZToroidalSurface):
-            axis = FourierRZCurve(
-                R_n=surface.R_lmn[np.where(surface.R_basis.modes[:, 1] == 0)],
-                Z_n=surface.Z_lmn[np.where(surface.Z_basis.modes[:, 1] == 0)],
-                modes_R=surface.R_basis.modes[
-                    np.where(surface.R_basis.modes[:, 1] == 0)[0], -1
-                ],
-                modes_Z=surface.Z_basis.modes[
-                    np.where(surface.Z_basis.modes[:, 1] == 0)[0], -1
-                ],
-                NFP=NFP,
-            )
+            axis = surface.get_axis()
         elif isinstance(surface, ZernikeRZToroidalSection):
-            # TODO (#782): include m=0 l!=0 modes
-            axis = FourierRZCurve(
-                R_n=surface.R_lmn[
-                    np.where(
-                        (surface.R_basis.modes[:, 0] == 0)
-                        & (surface.R_basis.modes[:, 1] == 0)
-                    )
-                ].sum(),
-                Z_n=surface.Z_lmn[
-                    np.where(
-                        (surface.Z_basis.modes[:, 0] == 0)
-                        & (surface.Z_basis.modes[:, 1] == 0)
-                    )
-                ].sum(),
-                modes_R=[0],
-                modes_Z=[0],
-                NFP=NFP,
-            )
+            axis = surface.get_axis()
     else:
         raise TypeError("Got unknown axis type {}".format(axis))
     return axis

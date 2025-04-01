@@ -930,9 +930,9 @@ class PiecewiseOmnigenity(_Objective):
         normalize=True,
         normalize_target=True,
         loss_function=None,
-        deriv_mode="rev",
         eq_grid=None,
         field_grid=None,
+        deriv_mode="rev",
         M_booz=None,
         N_booz=None,
         eq_fixed=False,
@@ -942,6 +942,7 @@ class PiecewiseOmnigenity(_Objective):
     ):
         if target is None and bounds is None:
             target = 0
+
         self._eq = eq
         self._field = field
         self._eq_grid = eq_grid
@@ -1011,7 +1012,6 @@ class PiecewiseOmnigenity(_Objective):
         self._field_data_keys = ["|B|_pwO", "Q_pwO"]
 
         errorif(eq_grid.sym, msg="eq_grid must not be symmetric")
-        errorif(eq_grid.num_rho != 1, msg="eq_grid must be a single surface")
 
         timer = Timer()
         if verbose > 0:
@@ -1128,12 +1128,13 @@ class PiecewiseOmnigenity(_Objective):
             )
 
         data = {
-            "iota": iota_data["iota"][0],
-            "iota_r": iota_data["iota_r"][0],
-            "shear": iota_data["shear"][0],
+            "iota": jnp.unique(iota_data["iota"]),
+            "iota_r": jnp.unique(iota_data["iota_r"]),
+            "shear": jnp.unique(iota_data["shear"]),
         }
 
-        ### Passing a Grid of Boozer coordinate values
+        ### Passing a Grid of Boozer coordinate values because for the same
+        # DESC grid changing the eq changes the Boozer grid
         #### TODO: Have to account for NFP
         field_grid = Grid(
             jnp.array([eq_data["rho"], eq_data["theta_B"], eq_data["zeta_B"]]).T,
@@ -1177,7 +1178,10 @@ class PiecewiseOmnigenity(_Objective):
         # ReLU operation
         Q_pwO = (Q_pwO - 0.05) * (Q_pwO >= 0.05)
 
-        pwO_error = (eq_data["|B|"] - B_pwO) + constants["overlap_penalty"] * Q_pwO
+        # temporarily commenting the Q_pwO calculation
+        # --no-verify pwO_error = (eq_data["|B|"] - B_pwO)
+        # --no-verify constants["overlap_penalty"] * Q_pwO
+        pwO_error = eq_data["|B|"].flatten() - B_pwO.flatten()
 
         return pwO_error.ravel()
 

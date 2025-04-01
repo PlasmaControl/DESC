@@ -934,12 +934,15 @@ def _B_omni(params, transforms, profiles, data, **kwargs):
     parameterization="desc.magnetic_fields._core.PiecewiseOmnigenousField",
 )
 def _B_piecewise_omni(params, transforms, profiles, data, **kwargs):
-    iota0 = kwargs.get("iota", 0.6)[:, None]  # This way we ensure iota0 = iota
+    # RG:How does this objective change if iota < 0?
+    nsurfs = len(params["B_max"])
+    iota0 = kwargs.get("iota", 0.6 * jnp.ones((nsurfs,)))[:, None]
 
     # RG: (theta_B, zeta_B) grid must be the same for all flux surfaces
     # else this logic below will fail
-    Ntheta_B = len(jnp.unique(transforms["grid"].nodes[:, 1]))
-    Nzeta_B = len(jnp.unique(transforms["grid"].nodes[:, 2]))
+    # RG: Eerie logic here
+    Ntheta_B = len(transforms["grid"].nodes[:, 1]) / nsurfs
+    Nzeta_B = len(transforms["grid"].nodes[:, 2]) / nsurfs
     gridsize = Ntheta_B * Nzeta_B
     theta_B = transforms["grid"].nodes[:gridsize, 1]
     zeta_B = transforms["grid"].nodes[:gridsize, 2]
@@ -992,7 +995,11 @@ def _B_piecewise_omni(params, transforms, profiles, data, **kwargs):
     parameterization="desc.magnetic_fields._core.PiecewiseOmnigenousField",
 )
 def _Q_piecewise_omni(params, transforms, profiles, data, **kwargs):
-    iota0 = kwargs.get("iota", 0.6)[:, None]  # This way we ensure iota0 = iota
+    nsurfs = len(params["B_max"])
+    iota0 = kwargs.get("iota", 0.6 * jnp.ones((nsurfs,)))[
+        :, None
+    ]  # This way we ensure iota0 = iota
+
     # NFP can't be a parameter. Must come from equilibrium
     NFP = transforms["grid"].NFP
 
@@ -1021,9 +1028,9 @@ def _Q_piecewise_omni(params, transforms, profiles, data, **kwargs):
                     theta_pp - jnp.pi,
                     -theta_pm - jnp.pi,
                 ],
-                axis=0,
+                axis=2,
             ),
-            axis=1,
+            axis=2,
         )
         / jnp.pi
     )
@@ -1048,7 +1055,10 @@ def _Q_piecewise_omni(params, transforms, profiles, data, **kwargs):
     parameterization="desc.magnetic_fields._core.PiecewiseOmnigenousField",
 )
 def _Delta_bs_piecewiseomni(params, transforms, profiles, data, **kwargs):
-    iota0 = kwargs.get("iota", 0.6)[:, None]  # This way we ensure iota0 = iota
+    nsurfs = len(params["B_max"])
+    iota0 = kwargs.get("iota", 0.6 * jnp.ones((nsurfs,)))[
+        :, None
+    ]  # This way we ensure iota0 = iota
     # NFP can't be a parameter. Must come from equilibrium
     NFP = transforms["grid"].NFP
 

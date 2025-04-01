@@ -1645,7 +1645,7 @@ class VMECIO:
                     + f"  ZBS({n:3.0f},{m:3.0f}) = {zbs:+14.8E}\n"
                 )
 
-        f.write("/")
+        f.write("/\n")
         f.write("&END")
         f.close()
         return None

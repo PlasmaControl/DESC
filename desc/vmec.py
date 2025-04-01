@@ -11,6 +11,7 @@ from netCDF4 import Dataset, stringtochar
 from scipy import integrate, interpolate, optimize
 from scipy.constants import mu_0
 
+import desc
 from desc.basis import DoubleFourierSeries
 from desc.compat import ensure_positive_jacobian
 from desc.equilibrium import Equilibrium
@@ -1462,7 +1463,8 @@ class VMECIO:
             time = now.strftime("%H:%M:%S")
             # auto header
             header = (
-                " This VMEC input file was auto generated in DESC from a\n"
+                " This VMEC input file was auto generated in DESC"
+                + f" version {desc.__version__} from a\n"
                 + "! DESC Equilibrium using the method VMECIO.write_vmec_input\n"
                 + "! on {} at {}.\n".format(date, time)
             )

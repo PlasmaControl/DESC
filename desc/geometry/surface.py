@@ -1117,13 +1117,8 @@ class ZernikeRZToroidalSection(Surface):
     def get_axis(self):
         """Get the axis of the surface.
 
-        This method calculates the axis of the surface by finding the mid point of the
-        R and Z values at theta=0 and pi degrees and creating a Fourier curve with it.
-        For general non-convex surfaces, the geometric center (aka centroid) might not
-        be inside the given surface. Since we use the axis for the initial guess of the
-        magnetic axis, it is important to have the axis inside the surface, and form
-        good nested flux surfaces. This method is a simple way to get a good initial
-        guess for the axis.
+        Computes the R and Z value at rho=0 and creates N=0 FourierRZCurve
+        to represent the axis of the cross section.
 
         Returns
         -------

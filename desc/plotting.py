@@ -3578,6 +3578,7 @@ def plot_field_lines(
     Phi0=0,
     ntransit=1,
     nphi_per_transit=50,
+    endpoint=False,
     fig=None,
     return_data=False,
     **kwargs,
@@ -3598,6 +3599,9 @@ def plot_field_lines(
         Number of phi values to use for each transit. This is the number of
         points to plot for each field line per transit.
         Defaults to 50.
+    endpoint : bool
+        If True, [Phi0, Phi0+2*Pi*ntransit] is included in the field line.
+        If False, [Phi0, Phi0+2*Pi*ntransit). Defaults to False.
     fig : plotly.graph_objs._figure.Figure, optional
         Figure to plot on.
     return_data : bool
@@ -3686,7 +3690,7 @@ def plot_field_lines(
         f"nphi_per_transit must be an integer, got {nphi_per_transit}",
     )
     npts = int(nphi_per_transit * ntransit)
-    phis = np.linspace(0, 2 * np.pi * ntransit, npts, endpoint=False) + Phi0
+    phis = np.linspace(0, 2 * np.pi * ntransit, npts, endpoint=endpoint) + Phi0
 
     R0, Z0 = np.atleast_1d(R0, Z0)
 

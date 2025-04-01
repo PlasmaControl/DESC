@@ -203,51 +203,6 @@ On computing clusters you must ensure to `module load anaconda` in order to use 
                 pip install -r devtools/dev-requirements.txt
 
 
-        .. dropdown:: On Clusters with IBM Power Architecture
-
-            If pre-built JAX binaries are not available, you will first need to build JAX from source.
-            More info can be found here: https://jax.readthedocs.io/en/latest/developer.html
-
-            These instructions were tested and confirmed to work on the Traverse supercomputer at Princeton as of Nov. 6, 2023.
-
-            .. attention::
-                You must use an older version of DESC in order to use Traverse, as there are some compatibility issues with JAX and the architecture. Commit `a2fe711ffa3f` (an older version of the `master` branch) was tested to work fine on Traverse with these instructions.
-
-            .. code-block:: sh
-
-                git clone https://github.com/PlasmaControl/DESC.git
-                cd DESC
-
-                module load anaconda3/2020.11 cudatoolkit/11.1 cudnn/cuda-11.1/8.0.4
-
-                conda create --name desc-env python=3.10
-                conda activate desc-env
-                # install what you can of the requirements with conda, ends up being all but jax, jaxlib and nvgpu
-                conda install colorama "h5py>=3.0.0" "matplotlib>=3.3.0,<=3.6.0,!=3.4.3" "mpmath>=1.0.0" "netcdf4>=1.5.4" "numpy>=1.20.0,<1.25.0" psutil "scipy>=1.5.0,<1.11.0" termcolor
-                pip install nvgpu
-
-            Build and install JAX with GPU support:
-
-            .. code-block:: sh
-
-                cd ..
-                git clone https://github.com/google/jax.git
-                cd jax
-                # last commit of JAX that we got to work with Traverse
-                git checkout 6c08702489b33f6c51d5cf0ccadc45e997ab406e
-
-                python build/build.py --enable_cuda --cuda_path /usr/local/cuda-11.1 --cuda_version=11.1 --cudnn_version=8.0.4 --cudnn_path /usr/local/cudnn/cuda-11.1/8.0.4 --noenable_mkl_dnn --bazel_path /usr/bin/bazel --target_cpu=ppc
-                pip install dist/*.whl
-                pip install .
-
-            Add DESC to your Python path:
-
-            .. code-block:: sh
-
-                cd ../DESC
-                pip install --no-deps --editable .
-
-
 Checking your Installation
 **************************
 

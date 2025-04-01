@@ -1133,18 +1133,7 @@ class ZernikeRZToroidalSection(Surface):
         """
         from desc.geometry import FourierRZCurve
 
-        grid = LinearGrid(rho=1, theta=2, zeta=1)
+        grid = LinearGrid(rho=0)
         data = self.compute(["R", "Z"], grid=grid)
-        R = data["R"]
-        Z = data["Z"]
-        # Calculate the R and Z values at theta=0 and pi degrees, find the
-        # mid point of them and fit a Fourier curve to it.
-        Rout = R[0]
-        Rin = R[1]
-        Zout = Z[0]
-        Zin = Z[1]
-        Rmid = (Rout + Rin) / 2
-        Zmid = (Zout + Zin) / 2
-        phis = jnp.zeros_like(Rmid)
-        axis = FourierRZCurve.from_values(jnp.vstack([Rmid, phis, Zmid]).T, N=0, NFP=1)
+        axis = FourierRZCurve(R_n=data["R"][0], Z_n=data["Z"][0])
         return axis

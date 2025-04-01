@@ -3,6 +3,7 @@
 import io
 import os
 import warnings
+from datetime import datetime
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -1455,7 +1456,16 @@ class VMECIO:
         else:
             f = fname
         f.seek(0)
-
+        if header is None:
+            now = datetime.now()
+            date = now.strftime("%m/%d/%Y")
+            time = now.strftime("%H:%M:%S")
+            # auto header
+            header = (
+                " This VMEC input file was auto generated in DESC from a\n"
+                + "! DESC Equilibrium using the method VMECIO.write_vmec_input\n"
+                + "! on {} at {}.\n".format(date, time)
+            )
         f.write("! " + header + "\n")
         f.write("&INDATA\n")
 
@@ -1636,6 +1646,7 @@ class VMECIO:
                 )
 
         f.write("/")
+        f.write("&END")
         f.close()
         return None
 

@@ -10,7 +10,7 @@ In general, to install JAX with GPU support, please refer to the `JAX installati
 For information on using conda, see `here <https://conda.io/projects/conda/en/latest/user-guide/getting-started.html#starting-conda>`__.
 Other package managers like venv could be used instead of conda, we have just chosen conda as our package manager of choice, and only test with conda environments, so your mileage may vary with other managers.
 
-**NOTE: DESC requires python>=3.9.**
+**NOTE: DESC requires python>=3.10.**
 **If you have python2 also locally installed, replace all `pip` commands with `pip3` and all `python` commands with `python3` to ensure the correct python version is used.**
 
 **NOTE: If you are on Windows, consider using the Windows Subsystem for Linux (WSL) to install DESC.**
@@ -42,7 +42,7 @@ Now use pip to install packages (this will only install DESC + JAX with CPU capa
 
 .. code-block:: sh
 
-    conda create --name desc-env 'python>=3.9, <=3.12'
+    conda create --name desc-env 'python>=3.10, <=3.13'
     conda activate desc-env
     pip install --editable .
     # optionally install developer requirements (if you want to run tests)
@@ -54,6 +54,7 @@ On Most Linux Computing Clusters
 
 These examples use conda environments.
 On computing clusters you must ensure to `module load anaconda` in order to use conda (or in some clusters, you must specify the version of anaconda module you want).
+
 
 With CPU support only
 ---------------------
@@ -79,7 +80,7 @@ Now use pip to install packages (this will only install DESC + JAX with CPU capa
 
 .. code-block:: sh
 
-    conda create --name desc-env 'python>=3.9, <=3.12'
+    conda create --name desc-env 'python>=3.10, <=3.13'
     conda activate desc-env
     pip install --editable .
     # optionally install developer requirements (if you want to run tests)
@@ -141,25 +142,24 @@ Della and Stellar Clusters (Princeton)
 First, install JAX for the latest version of `jaxlib` available on the Princeton clusters.
 
 We base our instructions below off of `this tutorial <https://github.com/PrincetonUniversity/intro_ml_libs/tree/master/jax>`__, if the below instructions do not work please
-check the link to install JAX with the most up-to-date recommendations from the Princeton computing services:
+check the link to install JAX with the most up-to-date recommendations from the Princeton computing services. We first will install DESC as usual, then we will install the
+version of the gpu-compatible JAX.
 
 .. code-block:: sh
 
     conda create --name desc-env python=3.12 -y
     conda activate desc-env
-    pip install -U "jax[cuda12]"
-
-Then, install DESC,
-
-.. code-block:: sh
-
     git clone https://github.com/PlasmaControl/DESC.git
     cd DESC
+    # install DESC
     pip install --editable .
     # optionally install developer requirements (if you want to run tests)
     pip install -r devtools/dev-requirements.txt
+    # finally, install the gpu-compatible JAX that matches the version needed by the DESC requirements
+    # It is important to NOT use the --upgrade or -U flag here! otherwise you may get incompatible JAX versions
+    pip install "jax[cuda12]"
 
-Tested and confirmed to work on the Della and Stellar clusters at Princeton as of October 23, 2024.
+Tested and confirmed to work on the Della and Stellar clusters at Princeton as of January 30, 2025.
 
 
 RAVEN (IPP, Germany)
@@ -259,8 +259,8 @@ To check that you have properly installed DESC and its dependencies, try the fol
     python
     >>> from desc import set_device  # only needed if running on a GPU
     >>> set_device('gpu')  # only needed if running on a GPU
-    >>> import desc.equilibrium
-
+    >>> from desc.backend import print_backend_info
+    >>> print_backend_info()
 
 You should see an output stating the DESC version, the JAX version, and your device (CPU or GPU).
 
@@ -269,6 +269,7 @@ You can also try running an example input file (filepath shown here is from the 
 .. code-block:: console
 
     python -m desc -vv desc/examples/SOLOVEV
+
 
 Troubleshooting
 ***************

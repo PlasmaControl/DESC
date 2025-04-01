@@ -1433,7 +1433,7 @@ class VMECIO:
         return vmec_data
 
     @classmethod
-    def write_vmec_input(cls, eq, fname, header="", **kwargs):  # noqa: C901
+    def write_vmec_input(cls, eq, fname, header=None, **kwargs):  # noqa: C901
         """Write a VMEC input file for an equivalent DESC equilibrium.
 
         Parameters

@@ -3575,9 +3575,9 @@ def plot_field_lines(
     field,
     R0,
     Z0,
+    Phi0=0,
     ntransit=1,
-    phi=None,
-    grid=None,
+    nphi_per_transit=50,
     fig=None,
     return_data=False,
     **kwargs,
@@ -3589,17 +3589,19 @@ def plot_field_lines(
     field : MagneticField
         External field, coilset, current potential etc to plot from.
     R0, Z0 : array-like
-        Starting points at phi=0 for field line tracing.
-    ntransit : int
+        Starting points for field line tracing.
+    Phi0 : float
+        Starting value of phi for field line tracing in radians. Defaults to 0.
+    ntransit : int, float
         Number of transits to trace field lines for. Defaults to 1.
-    phi : float, int or array-like or None
-        Values of phi to plot field lines at.
-        If an integer, plot that many contours linearly spaced in (0,2pi).
+    nphi_per_transit : int
+        Number of phi values to use for each transit. This is the number of
+        points to plot for each field line per transit.
         Defaults to 50.
     fig : plotly.graph_objs._figure.Figure, optional
         Figure to plot on.
     return_data : bool
-        If True, return the data plotted as well as fig,ax
+        If True, return the data plotted as well as fig
     **kwargs : dict, optional
         Specify properties of the figure, axis, and plot appearance e.g.::
 
@@ -3648,7 +3650,7 @@ def plot_field_lines(
         r0 = eq.compute("R", grid=grid_trace)["R"]
         z0 = eq.compute("Z", grid=grid_trace)["Z"]
 
-        fig = plot_field_lines(ext_field, r0, z0, phi=100, ntransit=10, lw=10)
+        fig = plot_field_lines(ext_field, r0, z0, nphi_per_transit=100, ntransit=10)
         fig.show()
     """
     fli_kwargs = {}
@@ -3678,13 +3680,13 @@ def plot_field_lines(
     if not isinstance(color, (list, tuple)):
         color = [color]
 
-    phi = 50 if phi is None else phi
-    if isinstance(phi, numbers.Integral):
-        phi = np.linspace(0, 2 * np.pi, phi, endpoint=False)
-    phi = np.atleast_1d(phi)
-    nplanes = len(phi) * ntransit
-
-    phis = (phi + np.arange(0, ntransit)[:, None] * 2 * np.pi).flatten()
+    errorif(
+        not int(nphi_per_transit) == nphi_per_transit,
+        ValueError,
+        f"nphi_per_transit must be an integer, got {nphi_per_transit}",
+    )
+    npts = int(nphi_per_transit * ntransit)
+    phis = np.linspace(0, 2 * np.pi * ntransit, npts, endpoint=False) + Phi0
 
     R0, Z0 = np.atleast_1d(R0, Z0)
 
@@ -3693,12 +3695,11 @@ def plot_field_lines(
         z0=Z0,
         phis=phis,
         field=field,
-        source_grid=grid,
         **fli_kwargs,
     )
 
-    zs = fieldZ.reshape((nplanes, -1))
-    rs = fieldR.reshape((nplanes, -1))
+    zs = fieldZ.reshape((npts, -1))
+    rs = fieldR.reshape((npts, -1))
 
     signBT = np.sign(
         field.compute_magnetic_field(np.array([R0.flat[0], 0.0, Z0.flat[0]]))[:, 1]

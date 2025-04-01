@@ -1829,6 +1829,84 @@ def _gradrho_norm_fsa(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="<1>",  # same as S(r) / V_r(r)
+    label="\\langle \\vert \\nabla \\rho \\vert \\rangle",
+    units="m^{-1}",
+    units_long="inverse meters",
+    description="Magnitude of contravariant radial basis vector, flux surface average",
+    dim=1,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="r",
+    data=["sqrt(g)"],
+    axis_limit_data=["sqrt(g)_r"],
+    resolution_requirement="tz",
+)
+def _1_norm_fsa(params, transforms, profiles, data, **kwargs):
+    data["<1>"] = surface_averages(
+        transforms["grid"],
+        jnp.ones_like(data["sqrt(g)"]),
+        sqrt_g=transforms["grid"].replace_at_axis(
+            data["sqrt(g)"], lambda: data["sqrt(g)_r"], copy=True
+        ),
+    )
+    return data
+
+
+@register_compute_fun(
+    name="<1/|B|^2>",  # same as S(r) / V_r(r)
+    label="\\langle \\vert \\nabla \\rho \\vert \\rangle",
+    units="m^{-1}",
+    units_long="inverse meters",
+    description="Magnitude of contravariant radial basis vector, flux surface average",
+    dim=1,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="r",
+    data=["|B|^2", "sqrt(g)"],
+    axis_limit_data=["sqrt(g)_r"],
+    resolution_requirement="tz",
+)
+def _1_over_B2_norm_fsa(params, transforms, profiles, data, **kwargs):
+    data["<1/|B|^2>"] = surface_averages(
+        transforms["grid"],
+        1 / data["|B|^2"],
+        sqrt_g=transforms["grid"].replace_at_axis(
+            data["sqrt(g)"], lambda: data["sqrt(g)_r"], copy=True
+        ),
+    )
+    return data
+
+
+@register_compute_fun(
+    name="<1/|grad(rho)|^2>",  # same as S(r) / V_r(r)
+    label="\\langle \\vert \\nabla \\rho \\vert \\rangle",
+    units="m^{-1}",
+    units_long="inverse meters",
+    description="Magnitude of contravariant radial basis vector, flux surface average",
+    dim=1,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="r",
+    data=["|grad(rho)|", "sqrt(g)"],
+    axis_limit_data=["sqrt(g)_r"],
+    resolution_requirement="tz",
+)
+def _1_over_gradrho2_norm_fsa(params, transforms, profiles, data, **kwargs):
+    data["<1/|grad(rho)|^2>"] = surface_averages(
+        transforms["grid"],
+        1 / data["|grad(rho)|"] ^ 2,
+        sqrt_g=transforms["grid"].replace_at_axis(
+            data["sqrt(g)"], lambda: data["sqrt(g)_r"], copy=True
+        ),
+    )
+    return data
+
+
+@register_compute_fun(
     name="|grad(psi)|",
     label="|\\nabla\\psi|",
     units="Wb / m",

@@ -6,7 +6,7 @@ New Features
 - Adds a new utility function ``desc.compat.contract_equilibrium`` which takes in an ``Equilibrium`` object and an argument ``inner_rho``, and returns a new ``Equilibrium`` with original ``Equilibrium``'s ``inner_rho`` flux surface as its boundary.
 Optionally can also contract the profiles of the original ``Equilibrium`` so that the new ``Equilibrium``'s profiles match the original's in real space.
 - Adds second-order NAE constraints, accessible by passing ``order=2`` to ``desc.objectives.get_NAE_constraints``.
-- - `result` dictionary returned by `Optimizer.optimize` or `eq.optimize` now includes sub-dictionary `"Objective values"` containing summary info of objective values before and after optimization, the same info that is printed to the terminal by default.
+- `result` dictionary returned by `Optimizer.optimize` or `eq.optimize` now includes sub-dictionary `"Objective values"` containing summary info of objective values before and after optimization, the same info that is printed to the terminal by default.
 
 
 v0.14.1

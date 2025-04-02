@@ -209,7 +209,7 @@ class Transform(IOAble):
             (basis.modes[:, None, :2] == self.lm_modes[None, :, :]).all(axis=-1)
         )[1]
         col = np.where(
-            basis.modes[None, :, 2] == basis.modes[basis.unique_N_idx, None, 2]
+            basis.modes[None, :, 2] == np.arange(-basis.N, basis.N + 1)[:, None, None]
         )[0]
         self.fft_index = np.atleast_1d(
             np.squeeze(self.num_n_modes * row + col + offset)

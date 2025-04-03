@@ -204,16 +204,13 @@ class Transform(IOAble):
         self.num_n_modes = 2 * basis.N + 1  # number of toroidal modes
         self.pad_dim = self.grid.num_zeta - self.num_n_modes
         self.dk = basis.NFP * np.arange(-basis.N, basis.N + 1).reshape((1, -1))
-        offset = np.min(basis.modes[:, 2]) + basis.N  # N for sym="cos", 0 otherwise
         row = np.where(
             (basis.modes[:, None, :2] == self.lm_modes[None, :, :]).all(axis=-1)
         )[1]
         col = np.where(
-            basis.modes[None, :, 2] == basis.modes[basis.unique_N_idx, None, 2]
+            basis.modes[None, :, 2] == np.arange(-basis.N, basis.N + 1)[:, None, None]
         )[0]
-        self.fft_index = np.atleast_1d(
-            np.squeeze(self.num_n_modes * row + col + offset)
-        )
+        self.fft_index = np.atleast_1d(np.squeeze(self.num_n_modes * row + col))
         fft_nodes = np.hstack(
             [
                 grid.nodes[:, :2][: grid.num_nodes // self.grid.num_zeta],

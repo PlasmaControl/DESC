@@ -972,4 +972,3 @@ def test_plot_field_lines():
     )
     assert all(data["Z"][0] == 0)
     assert np.allclose((data["X"][0] ** 2 + data["Y"][0] ** 2), 1)
-

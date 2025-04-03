@@ -6,6 +6,8 @@ New Features
 - Adds a new utility function ``desc.compat.contract_equilibrium`` which takes in an ``Equilibrium`` object and an argument ``inner_rho``, and returns a new ``Equilibrium`` with original ``Equilibrium``'s ``inner_rho`` flux surface as its boundary.
 Optionally can also contract the profiles of the original ``Equilibrium`` so that the new ``Equilibrium``'s profiles match the original's in real space.
 - Adds second-order NAE constraints, accessible by passing ``order=2`` to ``desc.objectives.get_NAE_constraints``.
+- `ProximalProjection` now has distinct `blocked` and `batched` parts.
+- `ProximalProjection` uses jvp's for the derivative of the `ForceBalance` part instead of manually taking the matrix products. This reduces the jacobian time on CPU.
 
 
 v0.14.1
@@ -57,6 +59,7 @@ Performance Improvements
     - Adds ``chunk_size`` option to compute magnetic field methods to increase performance. Users may need to update their scripts to pass in ``bs_chunk_size=20`` or some other reasonable number if out of memory occurs as the default attempts to perform the entire computation at once.
     - ``desc.objectives.CoilSetMinDistance`` and ``desc.objectives.PlasmaCoilSetMinDistance`` now have a ``dist_chunk_size`` option to break up the distance calculation into smaller pieces to save memory.
     - Changes hessian computation to use chunked ``jacfwd`` and ``jacrev``, allowing ``jac_chunk_size`` to now reduce hessian memory usage as well.
+
 
 Bug Fixes
 

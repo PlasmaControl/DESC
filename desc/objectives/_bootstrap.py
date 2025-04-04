@@ -207,7 +207,7 @@ class BootstrapRedlConsistency(_Objective):
         )
 
         # Profiles may go to 0 at rho=1 (and we've already checked if our
-        #  grid has points there), so exclude the last few grid points from lower
+        # grid has points there), so exclude the last few grid points from lower
         # bounds:
         rho = rho[rho < 0.85]
         warnif(

@@ -14,7 +14,7 @@ from desc.basis import (
     ZernikePolynomial,
 )
 from desc.compute import get_transforms
-from desc.grid import ConcentricGrid, Grid, LinearGrid
+from desc.grid import ConcentricGrid, Grid, LinearGrid, QuadratureGrid
 from desc.transform import Transform
 
 
@@ -322,6 +322,143 @@ class TestTransform:
         Nnodes += 1
 
         grid = ConcentricGrid(Lnodes, Mnodes, Nnodes, NFP, sym=True)
+        basis1 = FourierZernikeBasis(L, M, N, NFP, sym="cos")
+        basis2 = FourierSeries(N, NFP, sym="sin")
+        basis3 = DoubleFourierSeries(M, N, NFP, sym="sin")
+
+        t1f.change_resolution(grid, basis1)
+        t2f.change_resolution(grid, basis2)
+        t3f.change_resolution(grid, basis3)
+        t1d1.change_resolution(grid, basis1)
+        t2d1.change_resolution(grid, basis2)
+        t3d1.change_resolution(grid, basis3)
+        t1d2.change_resolution(grid, basis1)
+        t2d2.change_resolution(grid, basis2)
+        t3d2.change_resolution(grid, basis3)
+
+        for d in t1f.derivatives:
+            dr = d[0]
+            dv = d[1]
+            dz = d[2]
+            x = np.random.random(basis1.num_modes)
+            y1 = t1f.transform(x, dr, dv, dz)
+            y2 = t1d1.transform(x, dr, dv, dz)
+            y3 = t1d2.transform(x, dr, dv, dz)
+            np.testing.assert_allclose(
+                y1,
+                y2,
+                atol=1e-12,
+                err_msg="failed on zernike after change, d={}".format(d),
+            )
+            np.testing.assert_allclose(
+                y3,
+                y2,
+                atol=1e-12,
+                err_msg="failed on zernike after change, d={}".format(d),
+            )
+            x = np.random.random(basis2.num_modes)
+            y1 = t2f.transform(x, dr, dv, dz)
+            y2 = t2d1.transform(x, dr, dv, dz)
+            y3 = t2d2.transform(x, dr, dv, dz)
+            np.testing.assert_allclose(
+                y1,
+                y2,
+                atol=1e-12,
+                err_msg="failed on fourier after change, d={}".format(d),
+            )
+            np.testing.assert_allclose(
+                y3,
+                y2,
+                atol=1e-12,
+                err_msg="failed on fourier after change, d={}".format(d),
+            )
+            x = np.random.random(basis3.num_modes)
+            y1 = t3f.transform(x, dr, dv, dz)
+            y2 = t3d1.transform(x, dr, dv, dz)
+            y3 = t3d2.transform(x, dr, dv, dz)
+            np.testing.assert_allclose(
+                y1,
+                y2,
+                atol=1e-12,
+                err_msg="failed on double fourier after change, d={}".format(d),
+            )
+            np.testing.assert_allclose(
+                y3,
+                y2,
+                atol=1e-12,
+                err_msg="failed on double fourier after change, d={}".format(d),
+            )
+
+    @pytest.mark.slow
+    @pytest.mark.unit
+    def test_direct_fft2_equal(self):
+        """Tests that the direct and fft2 method produce the same results."""
+        L = 4
+        M = 3
+        N = 2
+        Lnodes = 8
+        Mnodes = 4
+        Nnodes = 3
+        NFP = 4
+
+        grid = QuadratureGrid(Lnodes, Mnodes, Nnodes, NFP)
+        basis1 = FourierZernikeBasis(L, M, N, NFP)
+        basis2 = FourierSeries(N, NFP)
+        basis3 = DoubleFourierSeries(M, N, NFP)
+
+        t1f = Transform(grid, basis1, method="fft2")
+        t2f = Transform(grid, basis2, method="fft2")
+        t3f = Transform(grid, basis3, method="fft2")
+
+        t1d1 = Transform(grid, basis1, method="direct1")
+        t2d1 = Transform(grid, basis2, method="direct1")
+        t3d1 = Transform(grid, basis3, method="direct1")
+
+        t1d2 = Transform(grid, basis1, method="direct2")
+        t2d2 = Transform(grid, basis2, method="direct2")
+        t3d2 = Transform(grid, basis3, method="direct2")
+
+        for d in t1f.derivatives:
+            dr = d[0]
+            dv = d[1]
+            dz = d[2]
+            x = np.random.random(basis2.num_modes)
+            y1 = t2f.transform(x, dr, dv, dz)
+            y2 = t2d1.transform(x, dr, dv, dz)
+            y3 = t2d2.transform(x, dr, dv, dz)
+            np.testing.assert_allclose(
+                y1, y2, atol=1e-12, err_msg="failed on fourier, d={}".format(d)
+            )
+            np.testing.assert_allclose(
+                y3, y2, atol=1e-12, err_msg="failed on fourier, d={}".format(d)
+            )
+            x = np.random.random(basis3.num_modes)
+            y1 = t3f.transform(x, dr, dv, dz)
+            y2 = t3d1.transform(x, dr, dv, dz)
+            y3 = t3d2.transform(x, dr, dv, dz)
+            np.testing.assert_allclose(
+                y1, y2, atol=1e-12, err_msg="failed on double fourier, d={}".format(d)
+            )
+            np.testing.assert_allclose(
+                y3, y2, atol=1e-12, err_msg="failed on double fourier, d={}".format(d)
+            )
+            x = np.random.random(basis1.num_modes)
+            y1 = t1f.transform(x, dr, dv, dz)
+            y2 = t1d1.transform(x, dr, dv, dz)
+            y3 = t1d2.transform(x, dr, dv, dz)
+            np.testing.assert_allclose(
+                y1, y2, atol=1e-12, err_msg="failed on zernike, d={}".format(d)
+            )
+            np.testing.assert_allclose(
+                y3, y2, atol=1e-12, err_msg="failed on zernike, d={}".format(d)
+            )
+
+        M += 1
+        N += 1
+        Mnodes += 1
+        Nnodes += 1
+
+        grid = QuadratureGrid(Lnodes, Mnodes, Nnodes, NFP)
         basis1 = FourierZernikeBasis(L, M, N, NFP, sym="cos")
         basis2 = FourierSeries(N, NFP, sym="sin")
         basis3 = DoubleFourierSeries(M, N, NFP, sym="sin")

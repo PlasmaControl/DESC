@@ -71,6 +71,7 @@ not_finite_limits = {
     "|e^helical|",
     "|grad(theta)|",
     "<J*B> Redl",  # may not exist for all configurations
+    "current Redl",
 }
 not_implemented_limits = {
     # reliant limits will be added to this set automatically

@@ -1830,6 +1830,27 @@ class TestObjectiveFunction:
         )
         np.testing.assert_allclose(objective.compute_scaled_error(x), 0, atol=1e-15)
 
+    @pytest.mark.unit
+    def test_errors_bootstrap(self):
+        """Error checks for BootstrapRedlConsistency."""
+        eq = Equilibrium(
+            L=2,
+            M=2,
+            N=2,
+            electron_density=PowerSeriesProfile([1e19, 0, -1e19]),
+            electron_temperature=PowerSeriesProfile([1e3, 0, -1e3]),
+            current=PowerSeriesProfile([0, 0, -1]),
+        )
+        grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, L=2, axis=True)
+        obj = BootstrapRedlConsistency(eq, grid=grid)
+        with pytest.raises(ValueError, match="rho=0"):
+            obj.build()
+
+        grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, L=2, axis=False)
+        obj = BootstrapRedlConsistency(eq, grid=grid)
+        with pytest.raises(ValueError, match="vanish"):
+            obj.build()
+
 
 @pytest.mark.regression
 def test_derivative_modes():
@@ -2871,7 +2892,7 @@ class TestComputeScalarResolution:
         f = np.zeros_like(self.res_array, dtype=float)
         for i, res in enumerate(self.res_array):
             grid = LinearGrid(
-                M=int(self.eq.M * res), N=int(self.eq.N * res), NFP=self.eq.NFP
+                M=int(self.eq.M * res), N=int(self.eq.N * res), NFP=self.eq.NFP, rho=0.7
             )
             obj = ObjectiveFunction(
                 BootstrapRedlConsistency(eq=eq, grid=grid), use_jit=False

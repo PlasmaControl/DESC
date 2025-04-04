@@ -217,6 +217,8 @@ def test_compute_everything():
         # Max resolution of master_compute_data_rpz.pkl limited by GitHub file
         # size cap at 100 mb, so can't hit suggested resolution for some things.
         warnings.filterwarnings("ignore", category=ResolutionWarning)
+        warnings.filterwarnings("ignore", category=UserWarning, message="Redl")
+
         for p in things:
 
             names = set(data_index[p].keys())

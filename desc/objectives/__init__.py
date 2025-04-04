@@ -27,12 +27,7 @@ from ._equilibrium import (
 )
 from ._fast_ion import GammaC
 from ._free_boundary import BoundaryError, VacuumBoundaryError
-from ._generic import (
-    ExternalObjective,
-    GenericObjective,
-    LinearObjectiveFromUser,
-    ObjectiveFromUser,
-)
+from ._generic import GenericObjective, LinearObjectiveFromUser, ObjectiveFromUser
 from ._geometry import (
     AspectRatio,
     BScaleLength,
@@ -101,4 +96,5 @@ from .linear_objectives import (
     FixSumModesZ,
     FixThetaSFL,
 )
+from ._quadcoil import QuadcoilProxy
 from .objective_funs import ObjectiveFunction

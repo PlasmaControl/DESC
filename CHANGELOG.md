@@ -9,6 +9,7 @@ Optionally can also contract the profiles of the original ``Equilibrium`` so tha
 - Adds error for incorrect grids in ``desc.objectives.BootstrapRedlConsistency`` and when computing ``current Redl`` and ``<J*B> Redl`` compute quantities
 - Allows Redl compute quantities to use SplineProfile
 - Updates Redl bootstrap current consistency tutorial to include a ``SplineProfile`` optimization
+- Adds automatically generated header file showing date the input file was created with `desc.vmec.VMECIO.write_vmec_input`
 
 
 v0.14.1
@@ -18,6 +19,7 @@ Bug Fixes
 - Fixes bug in ``desc.vmec.VMECIO.write_vmec_input`` for current-constrained equilibria, where DESC was incorrectly writing the ``s**0`` mode, where VMEC actually assumes it is zero and starts at the  ``s**1`` (which is different than the usual convention VMEC uses for its current profile when it uses the current derivative, where it starts with the ``s**0`` mode).
 - Fixes error that occurs when using the default grid for ``SplineXYZCoil`` in an optimization.
 - Fixes bug in ``desc.coils.CoilSet.save_in_makegrid_format`` for ``CoilSet`` objects with ``sym=True`` or ``NFP>1``
+- Adds missing `&END` to the input file created from `desc.vmec.VMECIO.write_vmec_input`
 
 v0.14.0
 -------

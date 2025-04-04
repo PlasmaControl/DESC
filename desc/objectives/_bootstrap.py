@@ -136,7 +136,7 @@ class BootstrapRedlConsistency(_Objective):
         )
         rho = grid.nodes[grid.unique_rho_idx, 0]
         errorif(
-            np.any(np.isclose(rho, 0)),
+            grid.axis.size,
             ValueError,
             "Redl formula is undefined at rho=0, but grid has grid points at rho=0",
         )

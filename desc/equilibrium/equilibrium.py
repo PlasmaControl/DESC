@@ -883,7 +883,7 @@ class Equilibrium(IOAble, Optimizable):
                 "but given electron density vanishes at at least one provided"
                 "rho grid point.",
             )
-            Warning(
+            warnif(
                 np.any(np.isclose(self.electron_temperature(rho), 0.0, atol=1e-8)),
                 UserWarning,
                 "Redl formula is undefined where kinetic profiles vanish, "

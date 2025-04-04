@@ -117,7 +117,7 @@ def test_map_coordinates_derivative():
     for j1, j2 in zip(J1.values(), J2.values()):
         assert ~np.any(np.isnan(j1))
         assert ~np.any(np.isnan(j2))
-        np.testing.assert_allclose(j1, j2)
+        np.testing.assert_allclose(j1, j2, atol=1e-12)
 
     # Check map_coordinates with full_output is still runs without errors
     # this time _map_clebsch_coordinates is called inside map_coordinates

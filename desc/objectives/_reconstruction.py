@@ -1,3 +1,5 @@
+"""Objectives pertaining to experimental reconstruction."""
+
 import numpy as np
 from scipy.constants import mu_0
 
@@ -9,6 +11,8 @@ from desc.utils import Timer, dot
 
 from .normalization import compute_scaling_factors
 from .objective_funs import _Objective
+
+# Magnetics
 
 
 # TODO: should allow a CoilSet of flux loops, and the target

@@ -1106,8 +1106,8 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
 
         if source_grid is None:
             # NFP=1 to ensure points span the entire length of the coil
-            # multiply resolution by NFP to ensure Biot-Savart integration is accurate
-            source_grid = LinearGrid(zeta=self.knots)
+            # using more points than knots.size (self.N) to better sample coil
+            source_grid = LinearGrid(N=self.N * 2 + 5)
         else:
             # coil grids should have NFP=1. The only possible exception is FourierRZCoil
             # which in theory can be different as long as it matches the coils NFP.
@@ -2101,7 +2101,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             else:
                 return [coilset]
 
-        coils = flatten_coils(self.coils)
+        coils = flatten_coils(self)
         # after flatten, should have as many elements in list as self.num_coils, if
         # flatten worked correctly.
         assert len(coils) == self.num_coils

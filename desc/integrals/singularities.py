@@ -180,9 +180,9 @@ def get_interpolator(
                 msg="Could not build fft interpolator because:\n"
                 + str(e)
                 + "\nThe DFT interpolator is much less performant."
-                "\nIn some cases when the real domain grid is sparser than the "
-                "spectral domain grid because the DFT interpolator may be useful "
-                "as it is exact while FFT truncates higher frequencies.",
+                "\nIn some cases, when the real domain grid is sparser than the "
+                "spectral domain grid, the DFT interpolator may be useful as "
+                "it is exact unlike the FFT which truncates higher frequencies.",
             )
             f = DFTInterpolator(eval_grid, source_grid, st, sz, q)
             use_dft = True
@@ -190,9 +190,10 @@ def get_interpolator(
     warnif(
         use_dft and warn_dft,
         RuntimeWarning,
-        msg="Matrix multiplication may be performed incorrectly for large matrices. "
-        "Until this is fixed, it is recommended to validate results small chunk size "
-        "when using the DFT interpolator.",
+        msg="Matrix multiplication may be performed incorrectly for large matrices "
+        "due to open issues with JAX. Until this is fixed, it is recommended to "
+        "validate results against computations with small chunk size when using "
+        "the DFT interpolator.",
     )
     return f
 

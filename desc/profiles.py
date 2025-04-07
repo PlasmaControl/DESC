@@ -35,7 +35,7 @@ class _Profile(IOAble, ABC):
     Subclasses must also implement getter and setter methods for params
     """
 
-    _io_attrs_ = ["_name", "_params"]
+    _io_attrs_ = ["_name"]
 
     def __init__(self, name=""):
         self.name = name
@@ -673,7 +673,7 @@ class PowerSeriesProfile(_Profile):
 
     """
 
-    _io_attrs_ = _Profile._io_attrs_ + ["_basis"]
+    _io_attrs_ = _Profile._io_attrs_ + ["_params", "_basis"]
 
     def __init__(self, params=None, modes=None, sym="auto", name=""):
         super().__init__(name)
@@ -848,7 +848,7 @@ class TwoPowerProfile(_Profile):
 
     """
 
-    _io_attrs_ = _Profile._io_attrs_
+    _io_attrs_ = _Profile._io_attrs_ + ["_params"]
 
     def __init__(self, params=None, name=""):
         super().__init__(name)
@@ -954,7 +954,7 @@ class SplineProfile(_Profile):
 
     """
 
-    _io_attrs_ = _Profile._io_attrs_ + ["_knots", "_method"]
+    _io_attrs_ = _Profile._io_attrs_ + ["_params", "_knots", "_method"]
 
     def __init__(self, values=None, knots=None, method="cubic2", name=""):
         super().__init__(name)
@@ -1048,7 +1048,7 @@ class HermiteSplineProfile(_Profile):
 
     """
 
-    _io_attrs_ = _Profile._io_attrs_ + ["_knots", "_params"]
+    _io_attrs_ = _Profile._io_attrs_ + ["_params", "_knots"]
 
     def __init__(self, f, df, knots=None, name=""):
         super().__init__(name)
@@ -1148,6 +1148,8 @@ class MTanhProfile(_Profile):
         name of the profile
 
     """
+
+    _io_attrs_ = _Profile._io_attrs_ + ["_params"]
 
     def __init__(self, params=None, name=""):
         super().__init__(name)
@@ -1383,7 +1385,7 @@ class FourierZernikeProfile(_Profile):
 
     """
 
-    _io_attrs_ = _Profile._io_attrs_ + ["_basis"]
+    _io_attrs_ = _Profile._io_attrs_ + ["_params", "_basis"]
 
     def __init__(self, params=None, modes=None, sym="auto", NFP=1, name=""):
         super().__init__(name)
@@ -1496,7 +1498,7 @@ class FourierZernikeProfile(_Profile):
         """
         if params is None:
             params = self.params
-        A = self.basis.evaluate(grid.nodes, [dr, dt, dz])
+        A = self.basis.evaluate(grid, [dr, dt, dz])
         return A @ params
 
     @classmethod

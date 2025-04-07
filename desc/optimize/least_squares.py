@@ -3,7 +3,7 @@
 from scipy.optimize import OptimizeResult
 
 from desc.backend import jnp, qr
-from desc.utils import errorif, setdefault
+from desc.utils import errorif, safediv, setdefault
 
 from .bound_utils import (
     cl_scaling_vector,
@@ -178,7 +178,7 @@ def lsqtr(  # noqa: C901
     f = fun(x, *args)
     nfev += 1
     cost = 0.5 * jnp.dot(f, f)
-    J = jac(x, *args)
+    J = jac(x, *args).block_until_ready()  # FIXME: block is needed for jaxify util
     njev += 1
     g = jnp.dot(J.T, f)
 
@@ -208,14 +208,12 @@ def lsqtr(  # noqa: C901
     # conngould : norm of the cauchy point, as recommended in ch17 of Conn & Gould
     # scipy : norm of the scaled x, as used in scipy
     # mix : geometric mean of conngould and scipy
+    tr_scipy = jnp.linalg.norm(x * scale_inv / v**0.5)
+    conngould = safediv(jnp.sum(g_h**2), jnp.sum((J_h @ g_h) ** 2))
     init_tr = {
-        "scipy": jnp.linalg.norm(x * scale_inv / v**0.5),
-        "conngould": jnp.sum(g_h**2) / jnp.sum((J_h @ g_h) ** 2),
-        "mix": jnp.sqrt(
-            jnp.sum(g_h**2)
-            / jnp.sum((J_h @ g_h) ** 2)
-            * jnp.linalg.norm(x * scale_inv / v**0.5)
-        ),
+        "scipy": tr_scipy,
+        "conngould": conngould,
+        "mix": jnp.sqrt(conngould * tr_scipy),
     }
     trust_radius = options.pop("initial_trust_radius", "scipy")
     tr_ratio = options.pop("initial_trust_ratio", 1.0)
@@ -399,7 +397,7 @@ def lsqtr(  # noqa: C901
             )
 
             if g_norm < gtol:
-                success, message = True, STATUS_MESSAGES["gtol"]
+                success, message = True, STATUS_MESSAGES["gtol"] + f" ({gtol=:.2e})"
 
             if callback(jnp.copy(x), *args):
                 success, message = False, STATUS_MESSAGES["callback"]
@@ -414,7 +412,7 @@ def lsqtr(  # noqa: C901
             )
 
     if g_norm < gtol:
-        success, message = True, STATUS_MESSAGES["gtol"]
+        success, message = True, STATUS_MESSAGES["gtol"] + f" ({gtol=:.2e})"
     if (iteration == maxiter) and success is None:
         success, message = False, STATUS_MESSAGES["maxiter"]
     active_mask = find_active_constraints(x, lb, ub, rtol=xtol)

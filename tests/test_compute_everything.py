@@ -40,8 +40,8 @@ def _compare_against_master(
                 np.testing.assert_allclose(
                     actual=data[p][name],
                     desired=master_data[p][name],
-                    atol=1e-10 * mean + 1e-10,  # add 1e-10 for basically-zero things
-                    rtol=1e-10,
+                    atol=1e-8 * mean + 1e-9,  # add 1e-9 for basically-zero things
+                    rtol=1e-8,
                     err_msg=f"Parameterization: {p}. Name: {name}.",
                 )
             except AssertionError as e:
@@ -214,17 +214,19 @@ def test_compute_everything():
     no_xyz_things = ["desc.magnetic_fields._core.OmnigenousField"]
 
     with warnings.catch_warnings():
-        # Max resolution of master_compute_data.pkl limited by GitHub file
+        # Max resolution of master_compute_data_rpz.pkl limited by GitHub file
         # size cap at 100 mb, so can't hit suggested resolution for some things.
         warnings.filterwarnings("ignore", category=ResolutionWarning)
         for p in things:
 
             names = set(data_index[p].keys())
 
-            def need_src(name):
-                return bool(data_index[p][name]["source_grid_requirement"])
+            def need_special(name):
+                return bool(data_index[p][name]["source_grid_requirement"]) or bool(
+                    data_index[p][name]["grid_requirement"]
+                )
 
-            names -= _grow_seeds(p, set(filter(need_src, names)), names)
+            names -= _grow_seeds(p, set(filter(need_special, names)), names)
 
             this_branch_data_rpz[p] = things[p].compute(
                 list(names), **grid.get(p, {}), basis="rpz"

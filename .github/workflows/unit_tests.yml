@@ -22,14 +22,14 @@ jobs:
       GH_TOKEN: ${{ github.token }}
     strategy:
       matrix:
-        combos: [{group: 1, python_version: '3.9'},
+        combos: [{group: 1, python_version: '3.10'},
                  {group: 2, python_version: '3.10'},
                  {group: 3, python_version: '3.11'},
-                 {group: 4, python_version: '3.12'},
+                 {group: 4, python_version: '3.11'},
                  {group: 5, python_version: '3.12'},
                  {group: 6, python_version: '3.12'},
-                 {group: 7, python_version: '3.12'},
-                 {group: 8, python_version: '3.12'}]
+                 {group: 7, python_version: '3.13'},
+                 {group: 8, python_version: '3.13'}]
 
     steps:
       - uses: actions/checkout@v4
@@ -49,27 +49,34 @@ jobs:
 
       - name: Check for relevant changes
         id: check_changes
-        run: echo "has_changes=${{ steps.changes.outputs.has_changes }}" >> $GITHUB_ENV
+        run: echo "has_changes=${{ !contains(github.event.pull_request.labels.*.name, 'only-docs-comments') && steps.changes.outputs.has_changes}}" >> $GITHUB_ENV
 
       - name: Set up Python ${{ matrix.combos.python_version }}
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.combos.python_version }}
 
+      - name: Check full Python version
+        run: |
+          python --version
+          python_version=$(python --version 2>&1 | cut -d' ' -f2)
+          echo "Python version: $python_version"
+          echo "version=$python_version" >> $GITHUB_ENV
+
       - name: Restore Python environment cache
         if: env.has_changes == 'true'
         id: restore-env
         uses: actions/cache/restore@v4
         with:
-          path: .venv-${{ matrix.combos.python_version }}
-          key: ${{ runner.os }}-venv-${{ matrix.combos.python_version }}-${{ hashFiles('devtools/dev-requirements.txt', 'requirements.txt') }}
+          path: .venv-${{ env.version }}
+          key: ${{ runner.os }}-venv-${{ env.version }}-${{ hashFiles('devtools/dev-requirements.txt', 'requirements.txt') }}
 
       - name: Set up virtual environment if not restored from cache
         if: steps.restore-env.outputs.cache-hit != 'true' && env.has_changes == 'true'
         run: |
           gh cache list
-          python -m venv .venv-${{ matrix.combos.python_version }}
-          source .venv-${{ matrix.combos.python_version }}/bin/activate
+          python -m venv .venv-${{ env.version }}
+          source .venv-${{ env.version }}/bin/activate
           python -m pip install --upgrade pip
           pip install -r devtools/dev-requirements.txt
           pip install matplotlib==3.9.2
@@ -80,13 +87,20 @@ jobs:
         with:
           swap-size-gb: 10
 
-      - name: Test with pytest
+      - name: Action Details
         if: env.has_changes == 'true'
         run: |
-          source .venv-${{ matrix.combos.python_version }}/bin/activate
+          source .venv-${{ env.version }}/bin/activate
+          which python
+          python --version
           pwd
           lscpu
           pip list
+
+      - name: Test with pytest
+        if: env.has_changes == 'true'
+        run: |
+          source .venv-${{ env.version }}/bin/activate
           python -m pytest -v -m unit \
             --durations=0 \
             --cov-report xml:cov.xml \
@@ -113,14 +127,9 @@ jobs:
       - name: Upload coverage
         if: env.has_changes == 'true'
         id : codecov
-        uses: Wandalen/wretry.action@v3.5.0
+        uses: codecov/codecov-action@v5
         with:
-          action: codecov/codecov-action@v4
-          with: |
-            token: ${{ secrets.CODECOV_TOKEN }}
-            name: codecov-umbrella
-            files: ./cov.xml
-            fail_ci_if_error: true
-            verbose: true
-          attempt_limit: 10
-          attempt_delay: 60000 # ms, 1 min
+          name: codecov-umbrella
+          files: ./cov.xml
+          fail_ci_if_error: true
+          verbose: true

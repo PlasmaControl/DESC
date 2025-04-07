@@ -1,5 +1,4 @@
 """Base classes for objectives."""
-
 import functools
 from abc import ABC, abstractmethod
 
@@ -1159,11 +1158,12 @@ class _Objective(IOAble, ABC):
 
         # set quadrature weights if they haven't been
         if hasattr(self, "_constants") and ("quad_weights" not in self._constants):
-            grid = self._constants["transforms"]["grid"]
             if self._coordinates == "rtz":
+                grid = self._constants["transforms"]["grid"]
                 w = grid.weights
                 w *= jnp.sqrt(grid.num_nodes)
             elif self._coordinates == "r":
+                grid = self._constants["transforms"]["grid"]
                 w = grid.compress(grid.spacing[:, 0], surface_label="rho")
                 w = jnp.sqrt(w)
             else:

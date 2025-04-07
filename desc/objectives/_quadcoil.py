@@ -5,11 +5,16 @@ from desc.objectives.objective_funs import _Objective, collect_docs
 from desc.objectives.normalization import compute_scaling_factors
 from desc.compute import get_profiles, get_transforms
 from desc.compute.utils import _compute as compute_fun
+from desc.integrals import DFTInterpolator, FFTInterpolator
+from scipy.constants import mu_0
+from functools import partial
+from jax import jit
 import jax.numpy as jnp
 import jax # for printing
 import warnings
 import numpy as np
-import jax
+from quadcoil import QUADCOIL_STATIC_ARGNAMES, get_objective
+from quadcoil.io import gen_quadcoil_for_diff
 
 # ----- A QUADCOIL wrapper -----
 # A list of all inputs of quadoil.quadcoil
@@ -55,8 +60,6 @@ class QuadcoilProxy(_Objective):
     ----------
     eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
-    vacuum : bool
-        (Traced) Whether the optimization problem is vacuum.
     quadcoil_args : dict
         (Mixed, automatically handled) A dictionary containing all inputs for ``quadcoil.quadcoil``,
         except some that can be extracted from the equilibrium.
@@ -68,6 +71,10 @@ class QuadcoilProxy(_Objective):
         (static) The plasma poloidal quadrature resolution.
     plasma_N_phi : int
         (static) The plasma toroidal quadrature resolution.
+    enable_Bnormal_plasma : bool, optional, default=False
+        (Traced) By default, we assume :math:`\hat{\mathbf{n}} \cdot \mathbf{B}_{plasma}=0`. This is generally true
+        for surfaces bounding a fixed boundary equilibrium. When ``True``, we will no longer 
+        assume this for the ``eq.surface``. Here for the sake of generality.
     Bnormal_plasma_chunk_size
         (static)
     source_grid
@@ -86,12 +93,6 @@ class QuadcoilProxy(_Objective):
         (Static) : a list of all static variables. Generated based on 
         ``quadcoil.QUADCOIL_STATIC_ARGNAMES`` and ``quadcoil_args.keys()``.
         For use in the superclass.
-    _nondiff_args_name : tuple(str)
-        (Static) : a list of non-differentiable variables. Generated 
-        based on ``_DIFF_USER_ARGNAMES`` and ``quadcoil_args.keys()``.
-        For generating nondiff_args, the non-differentiable component of 
-        quadcoil.io.quadcoil_for_diff
-
     """
     # Most of the documentation is shared among all objectives, so we just inherit
     # the docstring from the base class and add a few details specific to this objective.
@@ -108,13 +109,13 @@ class QuadcoilProxy(_Objective):
     def __init__(
         self,
         eq,
-        vacuum:bool,
         quadcoil_args,
         metric_name,
         metric_target,
         metric_weight,
         plasma_M_theta:int,
         plasma_N_phi:int,
+        enable_Bnormal_plasma:bool=False,
         target=None,
         bounds=None,
         weight=1,
@@ -126,17 +127,7 @@ class QuadcoilProxy(_Objective):
         source_grid=None,
         jac_chunk_size=None,
     ):
-        # ----- Importing -----
-        try:
-            # We will use QUADCOIL_STATIC_ARGNAMES to tell DESC which argument
-            # in quadcoil_args is static. The rest are assumed traced.
-            from quadcoil import QUADCOIL_STATIC_ARGNAMES, get_objective
-            from quadcoil.io import quadcoil_for_diff, quadcoil_for_diff_full
-        except:
-            ModuleNotFoundError('quadcoil must be available for '\
-                                'this wrapper to work. Please visit '\
-                                'https://github.com/lankef/quadcoil.')
-        
+        quadcoil_args = quadcoil_args.copy()
         if target is None and bounds is None:
             target = 0 # default target value
             
@@ -154,9 +145,9 @@ class QuadcoilProxy(_Objective):
             metric_weight = jnp.array([metric_weight,])
             metric_target = jnp.array([metric_target,])
         elif isinstance(metric_name, tuple):
-            if len(metric_target) != len(quadcoil_args['metric_name']):
+            if len(metric_target) != len(metric_name):
                 raise KeyError('metric_name and metric_target have mismatching lengths!.')
-            if len(metric_weight) != len(quadcoil_args['metric_name']):
+            if len(metric_weight) != len(metric_name):
                 raise KeyError('metric_name and metric_weight have mismatching lengths!.')
         else:
             raise ValueError('When metric_name must be a tuple or a str.')   
@@ -179,17 +170,8 @@ class QuadcoilProxy(_Objective):
                 'or specified by other parameters. The provided values '\
                 'will be discarded.'
             )
-        
-        # ----- Setting attributes -----
-        self.metric_name = metric_name
-        self.metric_target = metric_target
-        self.metric_weight = metric_weight
-        self._verbose = verbose
-        self._plasma_M_theta = plasma_M_theta
-        self._plasma_N_phi = plasma_N_phi       
-        self._source_grid = source_grid # B_normal grids
-        self._Bnormal_plasma_chunk_size = Bnormal_plasma_chunk_size
-        self.vacuum = vacuum
+
+        # ----- Storing equilibrium-independent, differentiable variables -----
         # These are differentiable quantities that are not equilibrium-dependent. 
         # They can be user-provided, but they also all have default values, so 
         # we set them here. This is necessary because we're calling quadcoil through
@@ -198,7 +180,7 @@ class QuadcoilProxy(_Objective):
         if 'net_toroidal_current_amperes' in quadcoil_args.keys():
             self.net_toroidal_current_amperes = quadcoil_args.pop('net_toroidal_current_amperes')
         else:
-            self.net_toroidal_current_amperes = 0
+            self.net_toroidal_current_amperes = 0.
         if 'plasma_coil_distance' in quadcoil_args.keys():
             # A sign flip is necessary here!
             self.plasma_coil_distance = - quadcoil_args.pop('plasma_coil_distance')
@@ -217,76 +199,97 @@ class QuadcoilProxy(_Objective):
             self.constraint_value = quadcoil_args.pop('constraint_value')
         else:
             self.constraint_value = jnp.array([])
-            
-        # ----- Setting and registering keyword arguments -----
-        # loop over all keys in quadcoil_args, registering 
-        # every one of them as a class attribute. 
-        # - If user_key appear in _DESC_DERIVED_ARGNAMES, it will not be registered as an attribute. 
-        # - If user_key appear in QUADCOIL_STATIC_ARGNAMES, it will be registered as static. 
-        # - If user_key DOES NOT appear in _DIFF_USER_ARGNAMES, it will be added to the tuple of 
-        #     strings, _nondiff_args_name, that build() will use to construct nondiff_args
-        #     for quadcoil.io.quadcoil_for_diff
+        
+        # ----- Setting attributes -----
+        self.metric_name = metric_name
+        self.metric_target = metric_target
+        self.metric_weight = metric_weight
+        self._verbose = verbose  
+        self._source_grid = source_grid # B_normal grids
+        self._Bnormal_plasma_chunk_size = Bnormal_plasma_chunk_size
+        self.enable_Bnormal_plasma = enable_Bnormal_plasma
+        self._plasma_M_theta = plasma_M_theta
+        self._plasma_N_phi = plasma_N_phi
+        self._constants = {}
+        # These are differentiable quantities that are not equilibrium-dependent. 
+        # They can be user-provided, but they also all have default values, so 
+        # we set them here. This is necessary because we're calling quadcoil through
+        # quadcoil.io.quadcoil_for_diff, which cannot see their default value in 
+        # quadcoil.quadcoil.
+
+        # ----- Calculating DESC-derived, non-differentiable attrs -----
+        # eval_grid is used to generate quadrature points. 
+        # it is also used to calculate surface Bnormal_plasma
+        # when enable_Bnormal_plasma=True, along with surface_grid.
+        # because we the quadrature points must be calculated before generating
+        # quadcoil callable, it will be constructed here, instead of in the 
         # 
-        # Frank to developers: This seems convoluted, but it will allow users to use default values
-        # like passing a **kwargs.
-        # It will also allow developers to add new non-differentiable arguments, static or traced,
-        # to quadcoil.quadcoil without breaking this objective. Adding new differentiable arguments 
-        # will require modifications to quadcoil.io.quadcoil_for_diff, but I think the included list
-        # of differentiable is already fairly comprehensive.
-        _static_attrs = [
+        # quadrature points, and will still be computed
+        # when self.enable_Bnormal_plasma=False.
+        eval_grid = LinearGrid(
+            NFP=eq.NFP,
+            # If we set this to sym it'll only evaluate 
+            # theta from 0 to pi.
+            sym=False, 
+            M=self._plasma_M_theta,#Poloidal grid resolution.
+            N=self._plasma_N_phi,
+            rho=1.0
+        )
+        eval_profiles = get_profiles(_BPLASMA_DATA_KEYS, obj=eq, grid=eval_grid)
+        eval_transforms = get_transforms(_BPLASMA_DATA_KEYS, obj=eq, grid=eval_grid)
+        self._constants['eval_profiles'] = eval_profiles
+        self._constants['eval_transforms'] = eval_transforms
+        # The grid used to calculate net toroidal current
+        # desc_net_poloidal_current_amperes = (
+        #     -desc_eq.compute("G", grid=LinearGrid(rho=jnp.array(1.0)))["G"][0]
+        #     / mu_0
+        #     * 2
+        #     * jnp.pi
+        # )
+        self.nfp = eq.NFP
+        self.stellsym = eq.sym
+        quadcoil_args['metric_name'] = metric_name
+        quadcoil_args['nfp'] = eq.NFP
+        quadcoil_args['stellsym'] = eq.sym
+        quadcoil_args['plasma_mpol'] = eq.surface.M
+        quadcoil_args['plasma_ntor'] = eq.surface.N
+        quadcoil_args['plasma_quadpoints_phi'] = eval_grid.nodes[eval_grid.unique_zeta_idx, 2]/jnp.pi/2
+        quadcoil_args['plasma_quadpoints_theta'] = eval_grid.nodes[eval_grid.unique_theta_idx, 1]/jnp.pi/2
+        self.plasma_quadpoints_phi = tuple(quadcoil_args['plasma_quadpoints_phi'].tolist())
+        self.plasma_quadpoints_theta = tuple(quadcoil_args['plasma_quadpoints_theta'].tolist())
+        # ----- Generating quadcoil partial and its jvp rule -----
+        # quadcoil_args is a mixture of static and traced arguments.
+        # Because we likely will not adjust quadcoil settings dynamically,
+        # here we treat all of them like staic using 
+        # partial(quadcoil, **quadcoil_args), implemented in gen_quadcoil_for_diff.
+        # The function also generates the custom_jvp rule based on the static arguments.
+        # We store the resulting function as a static attribute.
+        _quadcoil_full, _quadcoil_for_diff = gen_quadcoil_for_diff(**quadcoil_args)
+        # Used later for Bnormal_plasma also
+        self._quadcoil_for_diff = jit(_quadcoil_for_diff)
+        self._quadcoil_full = jit(_quadcoil_full)
+        
+        # ----- Setting and registering keyword arguments -----
+        self._static_attrs = [
             '_verbose',
-            '_Bnormal_plasma_chunk_size'
-            '_nondiff_args_name',
-            '_plasma_M_theta',
-            '_plasma_N_phi',
-            'vacuum',
+            '_Bnormal_plasma_chunk_size',
+            'enable_Bnormal_plasma',
             'metric_name',
             'nfp',
             'stellsym',
-            '_desc_to_vmec_surf_R'
-            '_desc_to_vmec_surf_Z'
-        ]
-        # This will become a list of all non-differentiable 
-        # attributes that will be passed into quadcoil.io.quadcoil_for_diff.
-        # The current elements are the non-differentiable elements that cna
-        # be extracted from DESC.
-        _nondiff_args_name = [
-            'nfp',
-            'stellsym',
-            'plasma_mpol',
-            'plasma_ntor',
+            '_plasma_M_theta',
+            '_plasma_N_phi',
+            '_surf_R_A',
+            '_surf_R_c_indices',
+            '_surf_R_s_indices',
+            '_surf_Z_A',
+            '_surf_Z_c_indices',
+            '_surf_Z_s_indices',
+            '_quadcoil_for_diff',
+            '_quadcoil_full',
             'plasma_quadpoints_phi',
-            'plasma_quadpoints_theta',
+            'plasma_quadpoints_theta'
         ]
-        # loop over all user-provided arguments for quadcoil
-        for user_key, user_value in quadcoil_args.items():
-            if user_key in _DESC_DERIVED_ARGNAMES:
-                continue
-            if user_key in QUADCOIL_STATIC_ARGNAMES:
-                _static_attrs.append(user_key)
-            if user_key not in _DIFF_USER_ARGNAMES:
-                _nondiff_args_name.append(user_key)
-            # After registering static and non-differentiable
-            # attribute names, add the attributes to self.
-            setattr(self, user_key, user_value)
-        # This is a special exception: 'constraint_name' may not be in 
-        # quadcoil_args for unconstrained problems, because by default
-        # quadcoil is unconstrained. However, we still want to 
-        # use the convenient scaling function, generate_desc_scaling. 
-        # So we need to set a default for it. We set this default to 
-        # (''), because _Objective also happens to not like empty tuple
-        # attributes. We also modify constraint_value and unit to be the same 
-        # length.
-        if 'constraint_name' not in quadcoil_args.keys() or len(quadcoil_args['constraint_name'])==0:
-            self.constraint_name = ('',)
-            self.constraint_type = ('',)
-            self.constraint_unit = jnp.array([1.,])
-            self.constraint_value = jnp.array([0.,])
-            _static_attrs.append('constraint_name')
-            _static_attrs.append('constraint_type')
-        self._static_attrs = _static_attrs
-        # Convert the list to tuples, because lists are mutable.
-        self._nondiff_args_name = tuple(_nondiff_args_name)
         
         # ----- Superclass -----
         super().__init__(
@@ -311,6 +314,7 @@ class QuadcoilProxy(_Objective):
             Level of output.
 
         """
+        
         # ----- Starting and timing-----
         # things is the list of things that will be optimized,
         # we assigned things to be just eq in the init, so we know that the
@@ -325,21 +329,48 @@ class QuadcoilProxy(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        # ----- Building the desc surff -> quadcoil (simsopt) surf map -----
-        self._desc_to_vmec_surf_R = ptolemy_map_precomputation(eq.surface.R_basis.modes[:,1], eq.surface.R_basis.modes[:,2])
-        self._desc_to_vmec_surf_Z = ptolemy_map_precomputation(eq.surface.Z_basis.modes[:,1], eq.surface.Z_basis.modes[:,2])
-        
+        # ----- Building the desc surf -> quadcoil (simsopt) surf map -----
+        # self._desc_to_vmec_surf_R = ptolemy_identity_rev_jit_precomputation(eq.surface.R_basis.modes[:,1], eq.surface.R_basis.modes[:,2])
+        # self._desc_to_vmec_surf_Z = ptolemy_identity_rev_jit_precomputation(eq.surface.Z_basis.modes[:,1], eq.surface.Z_basis.modes[:,2])
+        self._surf_R_A, self._surf_R_c_indices, self._surf_R_s_indices = ptolemy_identity_rev_precompute(
+            eq.surface.R_basis.modes[:,1], 
+            eq.surface.R_basis.modes[:,2]
+        )
+        self._surf_Z_A, self._surf_Z_c_indices, self._surf_Z_s_indices = ptolemy_identity_rev_precompute(
+            eq.surface.Z_basis.modes[:,1], 
+            eq.surface.Z_basis.modes[:,2]
+        )
         # ----- Building grids and transforms -----
         # source_grid for Bnormal_plasma, and eval_grid.
-        # source_grid will only be generated when self.vacuum == False.
+        # Eval grid has a special role, in that it helps
+        # generate plasma_quadpoint_phi and theta. Therefore,
+        # it will be generated in init instead.
+        net_poloidal_current_grid = LinearGrid(rho=jnp.array(1.0))
+        net_poloidal_current_profiles = get_profiles(['G'], obj=eq, grid=net_poloidal_current_grid)
+        net_poloidal_current_transforms = get_transforms(['G'], obj=eq, grid=net_poloidal_current_grid)
+        # Storing transforms
+        # Attributes inside and outside _constants aren't really treated
+        # differently, except that self._constants is traced. Because quadcoil_arg
+        # is a mixture of traced and static inputs, we want to individually register
+        # all the static inputs. Moreover, dicts are not hashable, so the static 
+        # arguments in quadcoil_args must all be stored as individual attributes. 
+        # We might as well store everything in quadcoil_args as individual attributes,\
+        # and only store the transforms and profiles here in self._constants.
+
+        self._constants['net_poloidal_current_profiles'] = net_poloidal_current_profiles
+        self._constants['net_poloidal_current_transforms'] = net_poloidal_current_transforms
+        # Mose DESC objectives are fields, so they 
+        # hard-coded the superclass to ask for a weight 
+        # to integrate the field over a quadrature...
+
+        # source_grid will only be generated when self.enable_Bnormal_plasma == True.
         # Here, eval_grid is not only used to define Bnormal_plasma, 
         # but also used to generate plasma_quadpoints_phi and theta.
         # Therefore, it will be greated regardless self.valuum == True.
-        if self.vacuum:
-            source_profiles=None
-            source_transforms=None
-            interpolator=None
-        else:
+        if self.enable_Bnormal_plasma:
+            if verbose:
+                jax.debug.print('enable_Bnormal_plasma=True, QUADCOIL will no '\
+                                'longer assume zero Bnormal_plasma at the boundary.')
             if self._source_grid is None:
                 # for axisymmetry we still need to know about toroidal effects, so its
                 # cheapest to pretend there are extra field periods
@@ -355,6 +386,10 @@ class QuadcoilProxy(_Objective):
             else:
                 source_grid = self._source_grid
             # Creating interpolator for Bnormal_plasma
+            ratio_data = eq.compute(
+                ["|e_theta x e_zeta|", "e_theta", "e_zeta"], grid=source_grid
+            )
+            st, sz, q = best_params(source_grid, best_ratio(ratio_data))
             try:
                 interpolator = FFTInterpolator(eval_grid, source_grid, st, sz, q)
             except AssertionError as e:
@@ -364,58 +399,10 @@ class QuadcoilProxy(_Objective):
                     "\nReason: " + str(e),
                 )
                 interpolator = DFTInterpolator(eval_grid, source_grid, st, sz, q)
-        # eval_grid for Bnormal_plasma
-        # Unlike in DESC/desc/integrals/singularities.py, 
-        # we construct the eval_grid with 
-        eval_grid = LinearGrid(
-            NFP=eq.NFP,
-            # If we set this to sym it'll only evaluate 
-            # theta from 0 to pi.
-            sym=False, 
-            M=self._plasma_M_theta,#Poloidal grid resolution.
-            N=self._plasma_N_phi,
-            rho=1.0
-        )
-        eval_profiles = get_profiles(_BPLASMA_DATA_KEYS, obj=eq, grid=eval_grid)
-        eval_transforms = get_transforms(_BPLASMA_DATA_KEYS, obj=eq, grid=eval_grid)
-        # The grid used to calculate net toroidal current
-        net_poloidal_current_grid = LinearGrid(rho=jnp.array(1.0))
-        net_poloidal_current_profiles = get_profiles(['G'], obj=eq, grid=net_poloidal_current_grid)
-        net_poloidal_current_transforms = get_transforms(['G'], obj=eq, grid=net_poloidal_current_grid)
-        neq = 2 # The _sheet_current == False case in 
-        # Storing transforms
-        # Attributes inside and outside _constants aren't really treated
-        # differently, except that self._constants is traced. Because quadcoil_arg
-        # is a mixture of traced and static inputs, we want to individually register
-        # all the static inputs. Moreover, dicts are not hashable, so the static 
-        # arguments in quadcoil_args must all be stored as individual attributes. 
-        # We might as well store everything in quadcoil_args as individual attributes,\
-        # and only store the transforms and profiles here in self._constants.
-        self._constants = {
-            'source_profiles': source_profiles,
-            'source_transforms': source_transforms,
-            'eval_profiles': eval_profiles,
-            'eval_transforms': eval_transforms,
-            'net_poloidal_current_profiles': net_poloidal_current_profiles,
-            'net_poloidal_current_transforms': net_poloidal_current_transforms,
-            'interpolator': interpolator,
-            # Mose DESC objectives are fields, so they 
-            # hard-coded the superclass to ask for a weight 
-            # to integrate the field over a quadrature...
-            'quad_weights': 1., 
-        }
-        
-        # ----- Calculating DESC-derived, non-differentiable attrs -----
-        self.nfp = eq.NFP
-        self.stellsym = eq.sym
-        self.plasma_mpol = eq.surface.M
-        self.plasma_ntor = eq.surface.N
-        self.plasma_quadpoints_phi = eval_grid.nodes[eval_grid.unique_zeta_idx, 2]/jnp.pi/2
-        self.plasma_quadpoints_theta = eval_grid.nodes[eval_grid.unique_theta_idx, 1]/jnp.pi/2
-        # This far, we have evaluated all variables that must be included in 
-        # nondiff_args for quadcoil.io.quadcoil_for_diff. Because some of these 
-        # are static, and a dict is not hashable, we do not construct the full dictionary
-        # here, but instead in compute(), where quadcoil.io.quadcoil_for_diff is called.
+            self._constants['source_profiles'] = source_profiles
+            self._constants['source_transforms'] = source_transforms
+            self._constants['interpolator'] = interpolator
+            
         
         # ----- Normalization scales -----
         # We try to normalize things to order(1) by dividing things by some
@@ -464,27 +451,11 @@ class QuadcoilProxy(_Objective):
         -------
         f : scalar
         """ 
-        # ----- Constructing nondiff_dict -----
-        # Strape up all the non-differentiable, equilibrium-independent arguments,
-        # traced or static, into a dictionary to pass into quadcoil's custom_jvp wrapper.
-        # We do this here because some of these quantities are static, so we can't
-        # group them into one object during build.
-        # Besides the ones we catalogued earlier in self._nondiff_args_name, we 
-        # also need to add in the special exceptions: default values for 
-        # constraints.
-        nondiff_args = {
-            'constraint_name': self.constraint_name,
-            'constraint_type': self.constraint_type,
-            'constraint_unit': self.constraint_unit,
-            'constraint_value': self.constraint_value,
-        }
-        for nondiff_keys in self._nondiff_args_name:
-            nondiff_args[nondiff_keys] = getattr(self, nondiff_keys)
-        nondiff_args['verbose'] = self._verbose
         
         # ----- Constructing rz surface dofs in Simsopt convention -----
-        rs_raw, rc_raw = self._desc_to_vmec_surf_R(params['Rb_lmn'])
-        zs_raw, zc_raw = self._desc_to_vmec_surf_Z(params['Zb_lmn'])
+        rs_raw, rc_raw = ptolemy_identity_rev_compute(self._surf_R_A, self._surf_R_c_indices, self._surf_R_s_indices, params['Rb_lmn'])
+        zs_raw, zc_raw = ptolemy_identity_rev_compute(self._surf_Z_A, self._surf_Z_c_indices, self._surf_Z_s_indices, params['Zb_lmn'])
+        # Stellsym SurfaceRZFourier's dofs consists of 
         # [rc, zs]
         # Non-stellsym SurfaceRZFourier's dofs consists of 
         # [rc, rs, zc, zs]
@@ -504,7 +475,7 @@ class QuadcoilProxy(_Objective):
         # Copied from DESC/desc/objectives/_free_boundary.py
         constants = self._constants
         
-        if not self.vacuum:
+        if self.enable_Bnormal_plasma:
             # Using the stored transforms to calculate B_normal_plasma
             source_data = compute_fun(
                 "desc.equilibrium.equilibrium.Equilibrium",
@@ -543,32 +514,59 @@ class QuadcoilProxy(_Objective):
             transforms=constants['net_poloidal_current_transforms'],
             profiles=constants['net_poloidal_current_profiles'],
         )
-        
-        # ----- Calling the quadcoil wrapper with custom_vjp -----       
+        net_poloidal_current_amperes = - G_data["G"][0] / mu_0 * 2 * jnp.pi
+        # ----- Calling the quadcoil wrapper with custom_vjp -----  
         if full_mode:
-            # For testing if the parameters are carried through correctly
-            return quadcoil_for_diff_full(
+            out_dict, qp, cp_mn, solve_results = self._quadcoil_full(
                 plasma_dofs=plasma_dofs,
-                net_poloidal_current_amperes=G_data["G"][0],
+                net_poloidal_current_amperes=net_poloidal_current_amperes,
                 net_toroidal_current_amperes=self.net_toroidal_current_amperes, 
                 Bnormal_plasma=Bnormal_plasma,
                 plasma_coil_distance=self.plasma_coil_distance,
                 winding_dofs=self.winding_dofs,
                 objective_weight=self.objective_weight,
                 constraint_value=self.constraint_value,
-                nondiff_args=nondiff_args
             )
-            
-        metric_dict = quadcoil_for_diff(
+            # For testing if the parameters are carried through correctly
+            if self._verbose:
+                jax.debug.print('Solving complete!')
+                jax.debug.print('Final value of objective f: {x}', x=jax.block_until_ready(solve_results['inner_fin_f']))
+                jax.debug.print('* Total iteration number: {x}', x=jax.block_until_ready(solve_results['tot_niter']))
+                # jax.debug.print('* Outer grad f tol: {x}', x=jax.block_until_ready(gtol_outer))
+                jax.debug.print('  Final value of grad f: {x}', x=jax.block_until_ready(solve_results['inner_fin_grad_f']))
+                # jax.debug.print('* Outer constraint tol: {x}', x=jax.block_until_ready(ctol_outer))
+                jax.debug.print('  Final value of constraint g: {x}', x=jax.block_until_ready(solve_results['inner_fin_g']))
+                jax.debug.print('  Final value of constraint h: {x}', x=jax.block_until_ready(solve_results['inner_fin_h']))
+                # jax.debug.print('* Outer convergence rate limit in x: {x}', x=jax.block_until_ready(xstop_outer))
+                jax.debug.print('  Outer convergence rate in x, : {x}', x=jax.block_until_ready(solve_results['outer_dx'],))
+                # jax.debug.print('* Outer convergence rate limit in f: {x}', x=jax.block_until_ready(fstop_outer))
+                jax.debug.print(
+                    '  Outer convergence rate in f, g, h: {f}, {g}, {h}', 
+                    f=jax.block_until_ready(solve_results['outer_df']),
+                    g=jax.block_until_ready(solve_results['outer_dg']),
+                    h=jax.block_until_ready(solve_results['outer_dh']),
+                )
+                jax.debug.print('* Inner iteration number: {x}', x=jax.block_until_ready(solve_results['inner_fin_niter']))
+                # jax.debug.print('* Inner convergence rate limit in x: {x}', x=jax.block_until_ready(xstop_inner))
+                jax.debug.print(
+                    '  Inner convergence rate in x: {x}, {u}', 
+                    x=jax.block_until_ready(solve_results['inner_fin_dx']),
+                    u=jax.block_until_ready(solve_results['inner_fin_du']),
+                )
+                # jax.debug.print('* Inner convergence rate limit in f: {x}', x=jax.block_until_ready(fstop_inner))
+                jax.debug.print('  Inner convergence rate in l: {l}', l=jax.block_until_ready(solve_results['inner_fin_dl'],))
+            return out_dict, qp, cp_mn, solve_results
+        # ----- Calling the quadcoil wrapper with custom_vjp -----   
+        # If this can't show then the error is before this
+        metric_dict = self._quadcoil_for_diff(
             plasma_dofs=plasma_dofs,
-            net_poloidal_current_amperes=G_data["G"][0],
+            net_poloidal_current_amperes=net_poloidal_current_amperes,
             net_toroidal_current_amperes=self.net_toroidal_current_amperes, 
             Bnormal_plasma=Bnormal_plasma,
             plasma_coil_distance=self.plasma_coil_distance,
             winding_dofs=self.winding_dofs,
             objective_weight=self.objective_weight,
             constraint_value=self.constraint_value,
-            nondiff_args=nondiff_args
         )
 
         # ----- Thresholding and weighing -----
@@ -579,6 +577,7 @@ class QuadcoilProxy(_Objective):
             f_weight = self.metric_weight[i]
             f_target_eff = self.metric_target[i]
             f_val_eff = metric_dict[f_name]
+            # MEY NOT BE LOWERABLE?
             if self._normalize or self._normalize_target:
                 f_unit = get_objective(f_name + '_desc_unit')(self.scales)
             if self._normalize:
@@ -590,21 +589,27 @@ class QuadcoilProxy(_Objective):
         return f_out
 
 # ----- Helper functions -----
-def ptolemy_map_precomputation(m_1, n_1):
+def ptolemy_identity_rev_precompute(m_1, n_1):
     """
-    Precompute a map that converts from double-Fourier to double-angle form using Ptolemy's identity.
-    These pre-computed maps, along with some array manipulation, convert desc surfaces
-    to simsopt surfaces.
+    We have split ptolemy_identity_rev into two parts:
+    ``ptolemy_identity_rev_precompute`` and
+    ``ptolemy_identity_rev_compute``. The ``original ptolemy_identity_rev``
+    relies on numpy boolean indexing. Even when we set m_1, n_1 to static, 
+    they will still be converted to traced arrays once jit happens, and the 
+    numpy boolean indexing will break. Because of that, we perform all numpy
+    operations in ``ptolemy_identity_rev_precompute`` during ``build()``,
+    store the results as static, and then perform all jaxable operations in
+    ``ptolemy_identity_rev_compute`` during ``compute()``.
 
     .. code-block:: python
     
-        desc_to_vmec_surf_R = ptolemy_map_precomputation(
-            eq.surface.R_basis.modes[:,1], 
-            eq.surface.R_basis.modes[:,2]
+        desc_to_vmec_surf_R = ptolemy_identity_rev_jit_precomputation(
+            tuple(eq.surface.R_basis.modes[:,1]), 
+            tuple(eq.surface.R_basis.modes[:,2])
         )
-        desc_to_vmec_surf_Z = ptolemy_map_precomputation(
-            eq.surface.Z_basis.modes[:,1], 
-            eq.surface.Z_basis.modes[:,2]
+        desc_to_vmec_surf_Z = ptolemy_identity_rev_jit_precomputation(
+            tuple(eq.surface.Z_basis.modes[:,1]), 
+            tuple(eq.surface.Z_basis.modes[:,2])
         )
         rs_raw, rc_raw = desc_to_vmec_surf_R(eq.surface.R_lmn)
         zs_raw, zc_raw = desc_to_vmec_surf_Z(eq.surface.Z_lmn)# Stellsym SurfaceRZFourier's dofs consists of 
@@ -638,7 +643,7 @@ def ptolemy_map_precomputation(m_1, n_1):
 
     Returns
     -------
-    A, vec_modes : ndarray
+    A, c_indices, s_indices : tuples
         .. code-block:: python
 
             # For calculating rs_raw, rc_raw,
@@ -657,26 +662,123 @@ def ptolemy_map_precomputation(m_1, n_1):
     m_1, n_1 = map(np.atleast_1d, (m_1, n_1))
     desc_modes = np.vstack([np.zeros_like(m_1), m_1, n_1]).T
     A, vmec_modes = ptolemy_linear_transform(desc_modes)
+    cmask = vmec_modes[:, 0] == 1
+    smask = vmec_modes[:, 0] == -1
+    c_indices = np.where(cmask)[0]
+    s_indices = np.where(smask)[0]
+    # A is 2d, and this converts 2d arr to tuple.
+    A = tuple(map(tuple, A.tolist()))
+    c_indices = tuple(c_indices.tolist())
+    s_indices = tuple(s_indices.tolist())
+    return A, c_indices, s_indices
 
-    # Precomputing map
-    def transform(x):
-        y = (A @ x.T).T
-        cmask = vmec_modes[:, 0] == 1
-        smask = vmec_modes[:, 0] == -1
+@partial(jit, static_argnames=['A', 'c_indices', 's_indices', ])
+def ptolemy_identity_rev_compute(A, c_indices, s_indices, x):
+    A = jnp.array(A)
+    y = (A @ x.T).T
+    if len(c_indices):
+        c = (y.T[jnp.array(c_indices)]).T
+    if len(s_indices):
+        s = (y.T[jnp.array(s_indices)]).T
+        # if there are sin terms, add a zero for the m=n=0 mode
+        s = jnp.concatenate([jnp.zeros_like(s.T[:1]), s.T]).T
     
-        c_indices = np.where(cmask)[0]
-        s_indices = np.where(smask)[0]
+    if not len(s_indices):
+        s = jnp.zeros_like(c) 
+    if not len(c_indices):
+        c = jnp.zeros_like(s)
+    assert len(s.T) == len(c.T)
+    return s, c
+
+
+
+# def ptolemy_identity_rev_jit_precomputation(m_1, n_1):
+#     """
+#     Precompute a map that converts from double-Fourier to double-angle form using Ptolemy's identity.
+#     These pre-computed maps, along with some array manipulation, convert desc surfaces
+#     to simsopt surfaces. m_1, n_1 must be tuples
+
+#     .. code-block:: python
     
-        c = (y.T[c_indices]).T
-        s = (y.T[s_indices]).T
+#         desc_to_vmec_surf_R = ptolemy_identity_rev_jit_precomputation(
+#             tuple(eq.surface.R_basis.modes[:,1]), 
+#             tuple(eq.surface.R_basis.modes[:,2])
+#         )
+#         desc_to_vmec_surf_Z = ptolemy_identity_rev_jit_precomputation(
+#             tuple(eq.surface.Z_basis.modes[:,1]), 
+#             tuple(eq.surface.Z_basis.modes[:,2])
+#         )
+#         rs_raw, rc_raw = desc_to_vmec_surf_R(eq.surface.R_lmn)
+#         zs_raw, zc_raw = desc_to_vmec_surf_Z(eq.surface.Z_lmn)# Stellsym SurfaceRZFourier's dofs consists of 
+#         # [rc, zs]
+#         # Non-stellsym SurfaceRZFourier's dofs consists of 
+#         # [rc, rs, zc, zs]
+#         # Because rs, zs from ptolemy_identity_rev shares the same m, n 
+#         # arrays as rc, zc, they both have a zero as the first element 
+#         # that need to be removed.
+#         rc = rc_raw.flatten()
+#         rs = rs_raw.flatten()[1:]
+#         zc = zc_raw.flatten()
+#         zs = zs_raw.flatten()[1:]
+#         if eq.sym:
+#             dofs = jnp.concatenate([rc, zs])
+#         else:
+#             dofs = jnp.concatenate([rc, rs, zc, zs])
+    
+#     Converts from a double Fourier series of the form:
+#         ss * sin(m𝛉) * sin(n𝛟) + sc * sin(m𝛉) * cos(n𝛟) +
+#         cs * cos(m𝛉) * sin(n𝛟) + cc * cos(m𝛉) * cos(n𝛟)
+#     to the double-angle form:
+#         s * sin(m𝛉-n𝛟) + c * cos(m𝛉-n𝛟)
+#     using Ptolemy's sum and difference formulas.
+
+#     Parameters
+#     ----------
+#     m_1 : ndarray, shape(num_modes,)
+#     n_1 : ndarray, shape(num_modes,)
+#         ``R_basis_modes[:,1], R_basis_modes[:,2]`` or ``Z_basis_modes[:,1], Z_basis_modes[:,2]`` 
+
+#     Returns
+#     -------
+#     A, vec_modes : ndarray
+#         .. code-block:: python
+
+#             # For calculating rs_raw, rc_raw,
+#             x = np.atleast_2d(desc_surf.R_lmn)
+#             y = (A @ x.T).T
+#             rs_raw, rc_raw = _modes_x_to_mnsc(vmec_modes, y)
+
+#     """
+#     try:
+#         from desc.backend import jnp, sign
+#         # from desc.vmec_utils import ptolemy_linear_transform # , _modes_x_to_mnsc
+#     except:
+#         raise ModuleNotFoundError('desc.backend.jnp and desc.backend.sign unavailable.')
+
+#     # Precomputing linear operators
+#     m_1, n_1 = map(np.atleast_1d, (m_1, n_1))
+#     desc_modes = np.vstack([np.zeros_like(m_1), m_1, n_1]).T
+#     A, vmec_modes = ptolemy_linear_transform(desc_modes)
+
+#     # Precomputing map
+#     def transform(x):
+#         y = (A @ x.T).T
+#         cmask = vmec_modes[:, 0] == 1
+#         smask = vmec_modes[:, 0] == -1
+    
+#         c_indices = np.where(cmask)[0]
+#         s_indices = np.where(smask)[0]
+    
+#         c = (y.T[c_indices]).T
+#         s = (y.T[s_indices]).T
         
-        if not len(s.T):
-            s = jnp.zeros_like(c)
-        elif len(s.T):  # if there are sin terms, add a zero for the m=n=0 mode
-            s = jnp.concatenate([jnp.zeros_like(s.T[:1]), s.T]).T
-        if not len(c.T):
-            c = jnp.zeros_like(s)
-        assert len(s.T) == len(c.T)
-        return s, c
+#         if not len(s.T):
+#             s = jnp.zeros_like(c)
+#         elif len(s.T):  # if there are sin terms, add a zero for the m=n=0 mode
+#             s = jnp.concatenate([jnp.zeros_like(s.T[:1]), s.T]).T
+#         if not len(c.T):
+#             c = jnp.zeros_like(s)
+#         assert len(s.T) == len(c.T)
+#         return s, c
         
-    return transform
+#     return transform

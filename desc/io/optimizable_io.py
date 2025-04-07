@@ -107,7 +107,7 @@ def _make_hashable(x):
 
 def _unmake_hashable(x):
     # turn tuple of ints and shape to ndarray
-    if isinstance(x, tuple) and x[0] == "ndarray":
+    if isinstance(x, tuple) and len(x) and x[0] == "ndarray":
         return np.array(x[2]).reshape(x[1])
     if isinstance(x, list):
         return [_unmake_hashable(y) for y in x]

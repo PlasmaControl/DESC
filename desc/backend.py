@@ -5,6 +5,7 @@ import os
 import warnings
 
 import numpy as np
+from packaging.version import Version
 from termcolor import colored
 
 import desc
@@ -15,11 +16,6 @@ if os.environ.get("DESC_BACKEND") == "numpy":
     jnp = np
     use_jax = False
     set_device(kind="cpu")
-    print(
-        "DESC version {}, using numpy backend, version={}, dtype={}".format(
-            desc.__version__, np.__version__, np.linspace(0, 1).dtype
-        )
-    )
 else:
     if desc_config.get("device") is None:
         set_device("cpu")
@@ -41,12 +37,6 @@ else:
             x = jnp.linspace(0, 5)
             y = jnp.exp(x)
         use_jax = True
-        print(
-            f"DESC version {desc.__version__},"
-            + f"using JAX backend, jax version={jax.__version__}, "
-            + f"jaxlib version={jaxlib.__version__}, dtype={y.dtype}"
-        )
-        del x, y
     except ModuleNotFoundError:
         jnp = np
         x = jnp.linspace(0, 5)
@@ -54,16 +44,24 @@ else:
         use_jax = False
         set_device(kind="cpu")
         warnings.warn(colored("Failed to load JAX", "red"))
+
+
+def print_backend_info():
+    """Prints DESC version, backend type & version, device type & memory."""
+    print(f"DESC version={desc.__version__}.")
+    if use_jax:
         print(
-            "DESC version {}, using NumPy backend, version={}, dtype={}".format(
-                desc.__version__, np.__version__, y.dtype
-            )
+            f"Using JAX backend: jax version={jax.__version__}, "
+            + f"jaxlib version={jaxlib.__version__}, dtype={y.dtype}."
         )
-print(
-    "Using device: {}, with {:.2f} GB available memory".format(
-        desc_config.get("device"), desc_config.get("avail_mem")
+    else:
+        print(f"Using NumPy backend: version={np.__version__}, dtype={y.dtype}.")
+    print(
+        "Using device: {}, with {:.2f} GB available memory.".format(
+            desc_config.get("device"), desc_config.get("avail_mem")
+        )
     )
-)
+
 
 if use_jax:  # noqa: C901
     from jax import custom_jvp, jit, vmap
@@ -85,12 +83,34 @@ if use_jax:  # noqa: C901
         treedef_is_leaf,
     )
 
+    # TODO: update this when JAX min version >= 0.4.26
     if hasattr(jnp, "trapezoid"):
         trapezoid = jnp.trapezoid  # for JAX 0.4.26 and later
     elif hasattr(jax.scipy, "integrate"):
         trapezoid = jax.scipy.integrate.trapezoid
     else:
         trapezoid = jnp.trapz  # for older versions of JAX, deprecated by jax 0.4.16
+
+    # TODO: update this when JAX min version >= 0.4.35
+    if Version(jax.__version__) >= Version("0.4.35"):
+
+        def pure_callback(func, result_shape_dtype, *args, vectorized=False, **kwargs):
+            """Wrapper for jax.pure_callback for versions >=0.4.35."""
+            return jax.pure_callback(
+                func,
+                result_shape_dtype,
+                *args,
+                vmap_method="expand_dims" if vectorized else "sequential",
+                **kwargs,
+            )
+
+    else:
+
+        def pure_callback(func, result_shape_dtype, *args, vectorized=False, **kwargs):
+            """Wrapper for jax.pure_callback for versions <0.4.35."""
+            return jax.pure_callback(
+                func, result_shape_dtype, *args, vectorized=vectorized, **kwargs
+            )
 
     def execute_on_cpu(func):
         """Decorator to set default device to CPU for a function.
@@ -296,6 +316,29 @@ if use_jax:  # noqa: C901
             x = jax.lax.custom_root(res, x0, solve, tangent_solve, has_aux=False)
             return x
 
+    def _lstsq(A, y):
+        """Cholesky factorized least-squares.
+
+        jnp.linalg.lstsq doesn't have JVP defined and is slower than needed,
+        so we use regularized cholesky.
+
+        For square systems, solves Ax=y directly.
+        """
+        A = jnp.atleast_2d(A)
+        y = jnp.atleast_1d(y)
+        eps = jnp.sqrt(jnp.finfo(A.dtype).eps)
+        if A.shape[-2] == A.shape[-1]:
+            return jnp.linalg.solve(A, y) if y.size > 1 else jnp.squeeze(y / A)
+        elif A.shape[-2] > A.shape[-1]:
+            P = A.T @ A + eps * jnp.eye(A.shape[-1])
+            return cho_solve(cho_factor(P), A.T @ y)
+        else:
+            P = A @ A.T + eps * jnp.eye(A.shape[-2])
+            return A.T @ cho_solve(cho_factor(P), y)
+
+    def _tangent_solve(g, y):
+        return _lstsq(jax.jacfwd(g)(y), y)
+
     def root(
         fun,
         x0,
@@ -361,18 +404,6 @@ if use_jax:  # noqa: C901
 
         res = lambda x: jnp.atleast_1d(fun(x, *args)).flatten()
 
-        # want to use least squares for rank-defficient systems, but
-        # jnp.linalg.lstsq doesn't have JVP defined and is slower than needed
-        # so we use the normal equations with regularized cholesky
-        def _lstsq(a, b):
-            a = jnp.atleast_2d(a)
-            b = jnp.atleast_1d(b)
-            tall = a.shape[-2] >= a.shape[-1]
-            A = a.T @ a if tall else a @ a.T
-            B = a.T @ b if tall else b @ a
-            A += jnp.sqrt(jnp.finfo(A.dtype).eps) * jnp.eye(A.shape[0])
-            return cho_solve(cho_factor(A), B)
-
         def solve(resfun, guess):
             def condfun_ls(state_ls):
                 xk2, xk1, fk2, fk1, d, alphak2, k2 = state_ls
@@ -412,17 +443,13 @@ if use_jax:  # noqa: C901
             else:
                 return state[0]
 
-        def tangent_solve(g, y):
-            A = jnp.atleast_2d(jax.jacfwd(g)(y))
-            return _lstsq(A, jnp.atleast_1d(y))
-
         if full_output:
             x, (res, niter) = jax.lax.custom_root(
-                res, x0, solve, tangent_solve, has_aux=True
+                res, x0, solve, _tangent_solve, has_aux=True
             )
             return x, (safenorm(res), niter)
         else:
-            x = jax.lax.custom_root(res, x0, solve, tangent_solve, has_aux=False)
+            x = jax.lax.custom_root(res, x0, solve, _tangent_solve, has_aux=False)
             return x
 
 
@@ -480,6 +507,10 @@ else:  # pragma: no cover
 
         """
         return lambda xs: _map(fun, xs, in_axes=in_axes, out_axes=out_axes)
+
+    def pure_callback(*args, **kwargs):
+        """IO callback for numpy backend."""
+        raise NotImplementedError
 
     def tree_stack(*args, **kwargs):
         """Stack pytree for numpy backend."""
@@ -586,7 +617,7 @@ else:  # pragma: no cover
             val = body_fun(i, val)
         return val
 
-    def cond(pred, true_fun, false_fun, *operand):
+    def cond(pred, true_fun, false_fun, *operands):
         """Conditionally apply true_fun or false_fun.
 
         This version is for the numpy backend, for jax backend see jax.lax.cond
@@ -599,7 +630,7 @@ else:  # pragma: no cover
             Function (A -> B), to be applied if pred is True.
         false_fun: callable
             Function (A -> B), to be applied if pred is False.
-        operand: any
+        operands: any
             input to either branch depending on pred. The type can be a scalar, array,
             or any pytree (nested Python tuple/list/dict) thereof.
 
@@ -612,9 +643,9 @@ else:  # pragma: no cover
 
         """
         if pred:
-            return true_fun(*operand)
+            return true_fun(*operands)
         else:
-            return false_fun(*operand)
+            return false_fun(*operands)
 
     def switch(index, branches, operand):
         """Apply exactly one of branches given by index.

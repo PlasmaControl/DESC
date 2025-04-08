@@ -5,7 +5,7 @@ import pytest
 from qsc import Qsc
 
 import desc.examples
-from desc.backend import jnp
+from desc.backend import jnp, put
 from desc.coils import CoilSet, FourierXYZCoil
 from desc.equilibrium import Equilibrium
 from desc.geometry import FourierRZToroidalSurface
@@ -46,6 +46,7 @@ from desc.objectives import (
     FixSumModesR,
     FixSumModesZ,
     FixThetaSFL,
+    ForceBalance,
     GenericObjective,
     LinearObjectiveFromUser,
     ObjectiveFunction,
@@ -54,8 +55,10 @@ from desc.objectives import (
     get_fixed_axis_constraints,
     get_fixed_boundary_constraints,
     get_NAE_constraints,
+    maybe_add_self_consistency,
 )
 from desc.objectives.utils import factorize_linear_constraints
+from desc.optimize import LinearConstraintProjection
 from desc.profiles import PowerSeriesProfile
 
 # TODO (#1348): check for all bdryR things if work when False is passed in
@@ -447,7 +450,7 @@ def test_correct_indexing_passed_modes():
     constraint = ObjectiveFunction(constraints, use_jit=False)
     constraint.build()
 
-    xp, A, b, Z, D, unfixed_idx, project, recover = factorize_linear_constraints(
+    xp, A, b, Z, D, unfixed_idx, project, recover, *_ = factorize_linear_constraints(
         objective, constraint
     )
 
@@ -510,7 +513,7 @@ def test_correct_indexing_passed_modes_and_passed_target():
     constraint = ObjectiveFunction(constraints, use_jit=False)
     constraint.build()
 
-    xp, A, b, Z, D, unfixed_idx, project, recover = factorize_linear_constraints(
+    xp, A, b, Z, D, unfixed_idx, project, recover, *_ = factorize_linear_constraints(
         objective, constraint
     )
 
@@ -570,7 +573,7 @@ def test_correct_indexing_passed_modes_axis():
     constraint = ObjectiveFunction(constraints, use_jit=False)
     constraint.build()
 
-    xp, A, b, Z, D, unfixed_idx, project, recover = factorize_linear_constraints(
+    xp, A, b, Z, D, unfixed_idx, project, recover, *_ = factorize_linear_constraints(
         objective, constraint
     )
 
@@ -699,7 +702,7 @@ def test_correct_indexing_passed_modes_and_passed_target_axis():
     constraint = ObjectiveFunction(constraints, use_jit=False)
     constraint.build()
 
-    xp, A, b, Z, D, unfixed_idx, project, recover = factorize_linear_constraints(
+    xp, A, b, Z, D, unfixed_idx, project, recover, *_ = factorize_linear_constraints(
         objective, constraint
     )
 
@@ -1149,3 +1152,86 @@ def test_share_parameters_two_optimizable_collections_CoilSet():
     np.testing.assert_allclose(abs_J_row_sums, 2)
     np.testing.assert_allclose(J_row_sums, 0)
     # TODO: add more tests for when not every index of given param is fixed
+
+
+@pytest.mark.unit
+def test_linearconstraintprojection_update_target():
+    """Test that LinearConstraintProjection updates the target properly."""
+    eq = desc.examples.get("W7-X")
+    obj = ObjectiveFunction(ForceBalance(eq))
+    cons = get_fixed_boundary_constraints(eq)
+    cons = maybe_add_self_consistency(eq, cons)
+    con = ObjectiveFunction(cons)
+    lc = LinearConstraintProjection(objective=obj, constraint=con)
+    lc.build()
+
+    eqp = eq.copy()
+    # slighlty perturb the equilibrium
+    eqp.Rb_lmn = put(eqp.Rb_lmn, 0, eqp.Rb_lmn[0] + 1e-3)
+    eqp.Rb_lmn = put(eqp.Rb_lmn, 1, eqp.Rb_lmn[1] + 1e-3)
+    eqp.Zb_lmn = put(eqp.Zb_lmn, 0, eqp.Zb_lmn[0] + 1e-3)
+    eqp.p_l = put(eqp.p_l, 0, eqp.p_l[0] + 1e-3)
+
+    # fresh constraints for perturbed equilibrium
+    objp = ObjectiveFunction(ForceBalance(eqp))
+    consp = get_fixed_boundary_constraints(eqp)
+    consp = maybe_add_self_consistency(eqp, consp)
+    conp = ObjectiveFunction(consp)
+    lcp = LinearConstraintProjection(objective=objp, constraint=conp)
+    lcp.build()
+
+    # update the target without creating a new constraints as above
+    lc.update_constraint_target(eqp)
+
+    # perturb method is using this equivalently
+    obj0 = ObjectiveFunction(ForceBalance(eq))
+    cons0 = get_fixed_boundary_constraints(eq)
+    cons0 = maybe_add_self_consistency(eq, cons0)
+    con0 = ObjectiveFunction(cons0)
+    con0.build()
+    obj0.build()
+    for con in con0.objectives:
+        if hasattr(con, "update_target"):
+            con.update_target(eqp)
+    constraint = ObjectiveFunction(con0.objectives)
+    constraint.build()
+    (
+        xp,
+        A,
+        b,
+        Z,
+        D,
+        unfixed_idx,
+        project,
+        recover,
+        ADinv,
+        A_nondegenerate,
+        degenerate_idx,
+    ) = factorize_linear_constraints(obj0, constraint)
+
+    # check that the target is updated properly
+    np.testing.assert_allclose(lc._xp, lcp._xp)
+    np.testing.assert_allclose(xp, lcp._xp)
+    np.testing.assert_allclose(lc._ADinv, lcp._ADinv)
+    np.testing.assert_allclose(ADinv, lcp._ADinv)
+    np.testing.assert_allclose(lc._Z, lcp._Z)
+    np.testing.assert_allclose(Z, lcp._Z)
+    np.testing.assert_allclose(lc._D, lcp._D)
+    np.testing.assert_allclose(D, lcp._D)
+    np.testing.assert_allclose(lc._ZA, lcp._ZA)
+    np.testing.assert_allclose(lc._Ainv, lcp._Ainv)
+    np.testing.assert_allclose(lc._unfixed_idx_mat, lcp._unfixed_idx_mat)
+
+
+@pytest.mark.unit
+def test_NAE_asym_with_sym_axis():
+    """Test that asym NAE constraints are correct when axis is sym."""
+    qsc_eq = Qsc.from_paper("r2 section 5.5")
+    # this NAE solution has a symmetric axis but an asymmetric B variation
+    eq = Equilibrium(NFP=qsc_eq.nfp, N=4, sym=False)
+    conR = FixNearAxisR(eq, target=qsc_eq)
+    conZ = FixNearAxisZ(eq, target=qsc_eq)
+    conR.build()
+    conZ.build()
+    assert conR._A.shape[0] == conR.dim_f
+    assert conZ._A.shape[0] == conZ.dim_f

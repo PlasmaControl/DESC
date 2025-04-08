@@ -121,7 +121,7 @@ def interp_rfft(xq, f, domain=(0, 2 * jnp.pi), axis=-1):
     )
 
 
-def irfft_non_uniform(xq, a, n, domain=(0, 2 * jnp.pi), axis=-1):
+def irfft_non_uniform(xq, a, n, domain=(0, 2 * jnp.pi), axis=-1, _modes=None):
     """Evaluate Fourier coefficients ``a`` at ``xq``.
 
     Parameters
@@ -137,6 +137,10 @@ def irfft_non_uniform(xq, a, n, domain=(0, 2 * jnp.pi), axis=-1):
         Domain over which samples were taken.
     axis : int
         Axis along which to transform.
+    _modes : jnp.ndarray
+        If supplied, just builds the Vandermonde array and computes the dot product.
+        Assumes the Fourier coefficients have the correct factors for the DC and
+        Nyquist frequency. Assumes ``axis=-1``.
 
     Returns
     -------
@@ -144,15 +148,46 @@ def irfft_non_uniform(xq, a, n, domain=(0, 2 * jnp.pi), axis=-1):
         Real function value at query points.
 
     """
-    modes = jnp.fft.rfftfreq(n, (domain[1] - domain[0]) / (2 * jnp.pi * n))
-    if (n % 2) == 0:
-        i = (0, -1)
-    else:
-        i = 0
-    # |a| << |xq|, so move axis of a instead
-    a = jnp.moveaxis(a, axis, -1).at[..., i].divide(2) * 2
-    vander = jnp.exp(1j * modes * (xq - domain[0])[..., jnp.newaxis])
+    if _modes is None:
+        _modes = jnp.fft.rfftfreq(n, (domain[1] - domain[0]) / (2 * jnp.pi * n))
+        if (n % 2) == 0:
+            i = (0, -1)
+        else:
+            i = 0
+        a = jnp.moveaxis(a, axis, -1).at[..., i].divide(2) * 2
+    vander = jnp.exp(1j * _modes * (xq - domain[0])[..., jnp.newaxis])
     return (vander * a).real.sum(axis=-1)
+
+
+def ifft_non_uniform(xq, a, domain=(0, 2 * jnp.pi), axis=-1, _modes=None):
+    """Evaluate Fourier coefficients ``a`` at ``xq``.
+
+    Parameters
+    ----------
+    xq : jnp.ndarray
+        Real query points where interpolation is desired.
+        Shape of ``xq`` must broadcast with arrays of shape ``np.delete(a.shape,axis)``.
+    a : jnp.ndarray
+        Fourier coefficients ``a=fft(f,axis=axis,norm="forward")``.
+    domain : tuple[float]
+        Domain over which samples were taken.
+    axis : int
+        Axis along which to transform.
+    _modes : jnp.ndarray
+        Supply to avoid computing the modes.
+
+    Returns
+    -------
+    fq : jnp.ndarray
+        Function value at query points.
+
+    """
+    if _modes is None:
+        n = a.shape[axis]
+        _modes = jnp.fft.fftfreq(n, (domain[1] - domain[0]) / (2 * jnp.pi * n))
+    a = jnp.moveaxis(a, axis, -1)
+    vander = jnp.exp(-1j * _modes * (xq - domain[0])[..., jnp.newaxis])
+    return jnp.linalg.vecdot(vander, a)
 
 
 def interp_rfft2(
@@ -229,6 +264,8 @@ def _irfft2_non_uniform(
     a : jnp.ndarray
         Shape (..., a.shape[-2], a.shape[-1]).
         Fourier coefficients.
+        ``f=rfft2(f,axes=axes,norm="forward")``
+        ``a=jnp.moveaxis(f,axes,(-2,-1)).at[...,i].divide(2)*2``.
     n0 : int
         Spectral resolution of ``a`` for ``domain0``.
     n1 : int
@@ -464,7 +501,6 @@ def idct_non_uniform(xq, a, n, axis=-1):
 
     """
     n = jnp.arange(n)
-    # |a| << |xq|, so move axis of a instead
     a = jnp.moveaxis(a, axis, -1)
     # Same as Clenshaw recursion ``chebval(xq,a,tensor=False)`` but better on GPU.
     return jnp.linalg.vecdot(jnp.cos(n * jnp.arccos(xq)[..., jnp.newaxis]), a)
@@ -478,7 +514,7 @@ interp1d_vec = jnp.vectorize(
 
 @partial(jnp.vectorize, signature="(m),(n),(n),(n)->(m)")
 def interp1d_Hermite_vec(xq, x, f, fx, /):
-    """Vectorized cubic Hermite spline."""
+    """Vectorized cubic Hermite interpolation."""
     return interp1d(xq, x, f, method="cubic", fx=fx)
 
 

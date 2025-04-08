@@ -23,8 +23,10 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
     strategy:
+      # make sure that when you change the Python version here, you also change it in
+      # the compare_bench_results.py script
       matrix:
-        python-version: ['3.9']
+        python-version: ['3.12']
         group: [1, 2]
 
     steps:
@@ -44,14 +46,12 @@ jobs:
             has_changes:
               - 'desc/**'
               - 'tests/benchmarks/**'
-              - 'requirements.txt'
-              - 'devtools/dev-requirements.txt'
               - 'setup.cfg'
               - '.github/workflows/benchmark.yml'
 
       - name: Check for relevant changes
         id: check_changes
-        run: echo "has_changes=${{ steps.changes.outputs.has_changes }}" >> $GITHUB_ENV
+        run: echo "has_changes=${{ !contains(github.event.pull_request.labels.*.name, 'only-docs-comments') && steps.changes.outputs.has_changes}}" >> $GITHUB_ENV
 
       - name: Set up Python
         uses: actions/setup-python@v5

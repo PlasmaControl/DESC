@@ -981,7 +981,7 @@ def test_plot_field_lines():
     field1 = ToroidalMagneticField(B0=1.0, R0=1.0)
     field2 = PoloidalMagneticField(B0=1.0, R0=1.0, iota=3.0)
     field = SumMagneticField([field1, field2])
-    plot_field_lines(
+    _ = plot_field_lines(
         field,
         R0=[1.1],
         Z0=[0.0],

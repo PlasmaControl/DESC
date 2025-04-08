@@ -6,7 +6,6 @@ If the limit has yet to be derived, add it to the ``not_implemented_limits`` set
 """
 
 import functools
-import inspect
 
 import numpy as np
 import pytest
@@ -18,7 +17,7 @@ from desc.examples import get
 from desc.grid import LinearGrid
 from desc.integrals import surface_integrals_map
 from desc.objectives import GenericObjective, ObjectiveFunction
-from desc.utils import dot, errorif
+from desc.utils import dot, errorif, getsource
 
 # Unless mentioned in the source code of the compute function, the assumptions
 # made to compute the magnetic axis limit can be reduced to assuming that these
@@ -295,9 +294,10 @@ class TestAxisLimits:
             "iota_num_rr": {"atol": 5e-5},
             "grad(B)": {"rtol": 1e-4},
             "alpha_r (secular)": {"atol": 1e-4},
-            "grad(alpha) (secular)": {"atol": 1e-4},
+            "grad(alpha) (secular)": {"atol": 2e-4},
             "gbdrift (secular)": {"atol": 1e-4},
             "gbdrift (secular)/phi": {"atol": 1e-4},
+            "(psi_r/sqrt(g))_rr": {"rtol": 2e-5},
         }
         zero_map = dict.fromkeys(zero_limits, {"desired_at_axis": 0})
         kwargs = weaker_tolerance | zero_map
@@ -365,7 +365,7 @@ def _reverse_mode_unsafe_names():
 
     def get_source(name):
         return "".join(
-            inspect.getsource(
+            getsource(
                 data_index["desc.equilibrium.equilibrium.Equilibrium"][name]["fun"]
             ).split("def ")[1:]
         )

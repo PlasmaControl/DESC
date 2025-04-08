@@ -5,6 +5,7 @@ Rewritten to use JAX by DESC team.
 """
 
 import numpy as np
+from scipy.constants import mu_0
 
 from desc.backend import fori_loop, jnp, put
 from desc.grid import LinearGrid
@@ -141,7 +142,7 @@ def eval_axis_geometry(R_lmn, Z_lmn, Ra_transform, Za_transform, nzeta, NFP):
 
     axis = jnp.moveaxis(copy_vector_periods(axis, zeta_fp), -1, 1).reshape((3, -1))
     coords = {}
-    coords["R"] = jnp.sqrt(axis[0] ** 2 + axis[1] ** 2)
+    coords["R"] = jnp.hypot(axis[0], axis[1])
     coords["phi"] = jnp.arctan2(axis[1], axis[0])
     coords["Z"] = axis[2]
     return coords
@@ -250,8 +251,14 @@ def biot_savart(eval_pts, coil_pts, current):
     )
     Ri_p_Rf = Ri + Rf
 
-    # 1.0e-7 == mu_0/(4 pi)
-    Bmag = 1.0e-7 * current * 2.0 * Ri_p_Rf / (Ri * Rf * (Ri_p_Rf * Ri_p_Rf - L * L))
+    Bmag = (
+        mu_0
+        / (4 * jnp.pi)
+        * current
+        * 2.0
+        * Ri_p_Rf
+        / (Ri * Rf * (Ri_p_Rf * Ri_p_Rf - L * L))
+    )
 
     # cross product of L*hat(eps)==dvec with Ri_vec, scaled by Bmag
     vec = jnp.cross(dvec, Ri_vec, axis=0)

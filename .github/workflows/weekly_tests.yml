@@ -13,7 +13,8 @@ jobs:
       matrix:
         combos: [{group: 1, python_version: '3.10'},
                  {group: 2, python_version: '3.11'},
-                 {group: 3, python_version: '3.12'}]
+                 {group: 3, python_version: '3.12'},
+                 {group: 4, python_version: '3.13'}]
 
     steps:
       - uses: actions/checkout@v4
@@ -34,6 +35,7 @@ jobs:
         run: |
           pwd
           lscpu
+          pip list
           python -m pytest -v -m unit \
             --durations=0 \
             --splits 4 \

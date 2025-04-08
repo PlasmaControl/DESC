@@ -85,6 +85,8 @@ doc_jac_chunk_size = """
         ``t = t0+t1/jac_chunk_size`` so the larger the ``jac_chunk_size``, the faster
         the calculation takes, at the cost of requiring more memory.
         If ``None``, it will use the largest size i.e ``obj.dim_x``.
+        Can also help with Hessian computation memory, as Hessian is essentially
+        ``jacfwd(jacrev(f))``, and each of these operations may be chunked.
         Defaults to ``chunk_size=None``.
         Note: When running on a CPU (not a GPU) on a HPC cluster, DESC is unable to
         accurately estimate the available device memory, so the ``auto`` chunk_size
@@ -104,6 +106,10 @@ docs = {
 }
 
 
+# Note: If we ever switch to Python 3.13 for building the docs, there will probably
+# be some errors since 3.13 changed how tabs are handled in docstrings. This can be
+# resolved by deleting the tabs in the collected docstring above and the ones
+# that are defined in objectives. Check `test_objective_docstring`.
 def collect_docs(
     overwrite=None,
     target_default="",
@@ -215,7 +221,9 @@ class ObjectiveFunction(IOAble):
         ``t = t0+t1/jac_chunk_size`` so the larger the ``jac_chunk_size``, the faster
         the calculation takes, at the cost of requiring more memory.
         If ``None``, it will use the largest size i.e ``obj.dim_x``.
-        Defaults to ``chunk_size=None``.
+        Can also help with Hessian computation memory, as Hessian is essentially
+        ``jacfwd(jacrev(f))``, and each of these operations may be chunked.
+        Defaults to ``chunk_size="auto"``.
         Note: When running on a CPU (not a GPU) on a HPC cluster, DESC is unable to
         accurately estimate the available device memory, so the "auto" chunk_size
         option will yield a larger chunk size than may be needed. It is recommended
@@ -329,15 +337,24 @@ class ObjectiveFunction(IOAble):
         sub_obj_jac_chunk_sizes_are_ints = [
             isposint(obj._jac_chunk_size) for obj in self.objectives
         ]
+        sub_obj_chunk_sizes = [
+            (obj.__class__.__name__, obj._jac_chunk_size) for obj in self.objectives
+        ]
         errorif(
             any(sub_obj_jac_chunk_sizes_are_ints) and self._deriv_mode == "batched",
             ValueError,
-            "'jac_chunk_size' was passed into one or more sub-objectives, but the"
-            " ObjectiveFunction is using 'batched' deriv_mode, so sub-objective "
-            "'jac_chunk_size' will be ignored in favor of the ObjectiveFunction's "
-            f"'jac_chunk_size' of {self._jac_chunk_size}."
-            " Specify 'blocked' deriv_mode if each sub-objective is desired to have a "
-            "different 'jac_chunk_size' for its Jacobian computation.",
+            "'jac_chunk_size' was passed into one or more sub-objectives, but the\n"
+            "ObjectiveFunction is using 'batched' deriv_mode, so sub-objective \n"
+            "'jac_chunk_size' will be ignored in favor of the ObjectiveFunction's \n"
+            f"'jac_chunk_size' of {self._jac_chunk_size}.\n"
+            "Specify 'blocked' deriv_mode and don't pass `jac_chunk_size` for \n"
+            "ObjectiveFunction if each sub-objective is desired to have a \n"
+            "different 'jac_chunk_size' for its Jacobian computation. \n"
+            "`jac_chunk_size` of sub-objective(s): \n"
+            f"{sub_obj_chunk_sizes}\n"
+            f"Note: If you didn't specify 'jac_chunk_size' for the sub-objectives, \n"
+            "it might be that sub-objective has an internal logic to determine the \n"
+            "chunk size based on the available memory.",
         )
 
         if self._deriv_mode == "auto":
@@ -405,7 +422,7 @@ class ObjectiveFunction(IOAble):
         self._things_per_objective_idx = []
         for obj in self.objectives:
             self._things_per_objective_idx.append(
-                [i for i, t in enumerate(unique_) if t in obj.things]
+                [unique_.index(t) for t in obj.things]
             )
 
         self._unflatten = _ThingUnflattener(len(unique_), inds_, treedef_)
@@ -866,10 +883,8 @@ class ObjectiveFunction(IOAble):
         x = self.x()
 
         if verbose > 0:
-            print(
-                "Compiling objective function and derivatives: "
-                + f"{[obj.name for obj in self.objectives]}"
-            )
+            msg = "Compiling objective function and derivatives: "
+            print(msg + f"{[obj.name for obj in self.objectives]}")
         timer.start("Total compilation time")
 
         if mode in ["scalar", "bfgs", "all"]:
@@ -878,6 +893,7 @@ class ObjectiveFunction(IOAble):
             timer.stop("Objective compilation time")
             if verbose > 1:
                 timer.disp("Objective compilation time")
+
             timer.start("Gradient compilation time")
             _ = self.grad(x, self.constants).block_until_ready()
             timer.stop("Gradient compilation time")
@@ -891,12 +907,13 @@ class ObjectiveFunction(IOAble):
                 timer.disp("Hessian compilation time")
         if mode in ["lsq", "all"]:
             timer.start("Objective compilation time")
-            _ = self.compute_scaled(x, self.constants).block_until_ready()
+            _ = self.compute_scaled_error(x, self.constants).block_until_ready()
             timer.stop("Objective compilation time")
             if verbose > 1:
                 timer.disp("Objective compilation time")
+
             timer.start("Jacobian compilation time")
-            _ = self.jac_scaled(x, self.constants).block_until_ready()
+            _ = self.jac_scaled_error(x, self.constants).block_until_ready()
             timer.stop("Jacobian compilation time")
             if verbose > 1:
                 timer.disp("Jacobian compilation time")

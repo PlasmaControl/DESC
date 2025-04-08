@@ -252,7 +252,7 @@ def lsqtr(  # noqa: C901
     if verbose > 1:
         print_header_nonlinear()
         print_iteration_nonlinear(
-            iteration, nfev, cost, actual_reduction, step_norm, g_norm
+            iteration, nfev, cost, actual_reduction, step_norm, g_norm, jnp.max(jnp.abs(g)), jnp.max(jnp.abs(v)), jnp.max(jnp.abs(J)), jnp.max(jnp.abs(f))
         )
 
     allx = [x]

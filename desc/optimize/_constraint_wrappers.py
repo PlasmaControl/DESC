@@ -3,7 +3,7 @@
 import functools
 
 import numpy as np
-
+import jax
 from desc.backend import jit, jnp, put
 from desc.batching import batched_vectorize
 from desc.objectives import (
@@ -2133,6 +2133,11 @@ class ProximalProjectionFB2(ObjectiveFunction):
         timer.stop("Proximal fb projection build")
         if verbose > 1:
             timer.disp("Proximal fb projection build")
+        
+        print("here")
+        J = self.jac_scaled_error(self._x_old)
+        print(jnp.max(jnp.abs(J)))
+        print(J)
 
     def unpack_state(self, x, per_objective=True):
         """Unpack the state vector into its components.
@@ -2265,22 +2270,22 @@ class ProximalProjectionFB2(ObjectiveFunction):
             )
             # to make the free boundary subproblem more robust,
             # only solve up to M=N=2, then do whole boundary
-            for k in [2, self._eq.M]:
-                R_modes = self._eq.surface.R_basis.modes[
-                    jnp.max(jnp.abs(self._eq.surface.R_basis.modes), 1) > k, :
-                ]
-                Z_modes = self._eq.surface.Z_basis.modes[
-                    jnp.max(jnp.abs(self._eq.surface.Z_basis.modes), 1) > k, :
-                ]
-                bdry_constraints = (
-                    FixBoundaryR(eq=self._eq, modes=R_modes),
-                    FixBoundaryZ(eq=self._eq, modes=Z_modes),
-                )
-                self._eq.optimize(
-                    objective=self._constraint_fb,
-                    constraints=self._fb_constraints + bdry_constraints,
-                    **self._fb_options,
-                )
+            # for k in [2, self._eq.M]:
+            # R_modes = self._eq.surface.R_basis.modes[
+            #     jnp.max(jnp.abs(self._eq.surface.R_basis.modes), 1) > k, :
+            # ]
+            # Z_modes = self._eq.surface.Z_basis.modes[
+            #     jnp.max(jnp.abs(self._eq.surface.Z_basis.modes), 1) > k, :
+            # ]
+            # bdry_constraints = (
+            #     FixBoundaryR(eq=self._eq, modes=R_modes),
+            #     FixBoundaryZ(eq=self._eq, modes=Z_modes),
+            # )
+            self._eq.optimize(
+                objective=self._constraint_fb,
+                constraints=self._fb_constraints,# + bdry_constraints,
+                **self._fb_options,
+            )
             xeq = self._eq.pack_params(self._eq.params_dict)
             x_list[self._eq_idx] = self._eq.params_dict.copy()
             xopt = jnp.concatenate(
@@ -2297,6 +2302,8 @@ class ProximalProjectionFB2(ObjectiveFunction):
             self._eq.params_dict = xeq_dict
             x_list[self._eq_idx] = xeq_dict
             self.history.append(x_list)
+
+            
         else:
             # reset to last good params
             self._eq.params_dict = self.history[-1][self._eq_idx]
@@ -2461,7 +2468,9 @@ class ProximalProjectionFB2(ObjectiveFunction):
 
         """
         v = jnp.eye(x.shape[0])
-        return self.jvp_scaled_error(v, x, constants).T
+        J= self.jvp_scaled_error(v, x, constants).T
+        
+        return J
 
     def jac_unscaled(self, x, constants=None):
         """Compute Jacobian of self.compute_unscaled.

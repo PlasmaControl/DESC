@@ -2488,7 +2488,8 @@ def _B_sub_zeta_rz(params, transforms, profiles, data, **kwargs):
     label="\\langle |\\mathbf{B}| \\rangle_{axis}",
     units="T",
     units_long="Tesla",
-    description="Average magnitude of magnetic field on the magnetic axis",
+    description="Average magnitude of magnetic field on the innermost flux surface "
+    "on the given grid",
     dim=0,
     params=[],
     transforms={"grid": []},

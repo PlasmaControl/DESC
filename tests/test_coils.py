@@ -15,16 +15,19 @@ from desc.coils import (
     FourierXYZCoil,
     MixedCoilSet,
     SplineXYZCoil,
+    initialize_helical_coils,
     initialize_modular_coils,
     initialize_saddle_coils,
 )
 from desc.compute import get_params, get_transforms, rpz2xyz, xyz2rpz, xyz2rpz_vec
+from desc.compute.geom_utils import copy_rpz_periods
 from desc.equilibrium import Equilibrium
 from desc.examples import get
 from desc.geometry import FourierRZCurve, FourierRZToroidalSurface, FourierXYZCurve
 from desc.grid import Grid, LinearGrid
 from desc.io import load
 from desc.magnetic_fields import SumMagneticField, VerticalMagneticField
+from desc.objectives import LinkingCurrentConsistency
 from desc.utils import dot
 
 
@@ -456,6 +459,20 @@ class TestCoilSet:
     """Tests for sets of multiple coils."""
 
     @pytest.mark.unit
+    def test_current_setter(self):
+        """Test setting current for a MixedCoilSet."""
+        coil0 = FourierRZCoil()
+        coils0 = CoilSet.linspaced_linear(
+            coil0, displacement=[0, 0, 10], n=2, endpoint=True
+        )
+        coil1 = FourierPlanarCoil()
+        coils1 = CoilSet.linspaced_angular(coil1, n=3)
+        coilset = MixedCoilSet([coils0, coils1])
+        new_currents = [[1, 2], [3, 4, 5]]
+        coilset.current = [c for cs in new_currents for c in cs]  # must be 1D iterable
+        assert coilset.current == new_currents
+
+    @pytest.mark.unit
     def test_linspaced_linear(self):
         """Field from straight solenoid."""
         R = 10
@@ -469,6 +486,9 @@ class TestCoilSet:
             coil, displacement=[0, 0, 10], n=n, endpoint=True
         )
         coils.current = I
+        with pytest.raises(ValueError):
+            # we pass in a list less than len(coils), so throws a ValueError
+            coils.current = [I, I]
         np.testing.assert_allclose(coils.current, I)
         B_approx = coils.compute_magnetic_field(
             [0, 0, z[-1]], basis="xyz", source_grid=32
@@ -1241,6 +1261,73 @@ def test_save_and_load_makegrid_coils_rotated_int_grid(tmpdir_factory):
 
 
 @pytest.mark.unit
+def test_save_and_load_makegrid_coils_nested(tmpdir_factory):
+    """Test saving and reloading a nested CoilSet from MAKEGRID file."""
+    tmpdir = tmpdir_factory.mktemp("coil_files")
+    path = tmpdir.join("coils.MAKEGRID_format_nested")
+
+    # make a coilset with angular coilset
+    N = 22
+    coil = FourierPlanarCoil()
+    coil.current = 1
+    coilset_NFP = CoilSet(coil, NFP=N, sym=False)
+    coilset_sym = CoilSet(
+        FourierPlanarCoil(r_n=3, center=[10, 2 * np.pi / 7, 0], basis="rpz"),
+        NFP=1,
+        sym=True,
+    )
+    coilset = MixedCoilSet(coilset_NFP, coilset_sym)
+
+    grid = LinearGrid(N=25, endpoint=False)
+    coilset.save_in_makegrid_format(str(path), grid=grid, NFP=2)
+
+    coilset2 = CoilSet.from_makegrid_coilfile(str(path))
+
+    assert coilset2.num_coils == coilset.num_coils
+
+    # check length of each coil
+    # first 22 are the coilset_NFP coils
+    correct_length = coilset_NFP.compute("length")[0]["length"]
+    loaded_coil_lengths = [c.compute("length")["length"] for c in coilset2[:22]]
+    np.testing.assert_allclose(correct_length, loaded_coil_lengths, rtol=1e-2)
+    # last 2 are the coilset_sym coils
+    correct_length = coilset_sym.compute("length")[0]["length"]
+    loaded_coil_lengths = [c.compute("length")["length"] for c in coilset2[22:]]
+    np.testing.assert_allclose(correct_length, loaded_coil_lengths, rtol=1e-2)
+
+
+@pytest.mark.unit
+def test_save_and_load_makegrid_coils_sym(tmpdir_factory):
+    """Test saving and reloading a nested CoilSet from MAKEGRID file."""
+    tmpdir = tmpdir_factory.mktemp("coil_files")
+    path = tmpdir.join("coils.MAKEGRID_format_sym")
+
+    coil = FourierPlanarCoil()
+    coil2 = coil.copy()
+    coil.rotate(angle=np.pi / 8)
+    coil2.rotate(angle=np.pi / 6)
+    coil2.current = 10
+    coil_list = [coil, coil2]
+
+    coilset = CoilSet(coil_list, NFP=2, sym=True)
+
+    coilset.save_in_makegrid_format(path, grid=24, NFP=coilset.NFP)
+
+    coilset2 = CoilSet.from_makegrid_coilfile(str(path))
+
+    assert coilset2.num_coils == coilset.num_coils
+
+    # check length of each coil
+    correct_length = coilset.compute("length")[0]["length"]
+    loaded_coil_lengths = [c.compute("length")["length"] for c in coilset2]
+    np.testing.assert_allclose(correct_length, loaded_coil_lengths, rtol=1e-2)
+    # check current of each coil
+    correct_currents = coilset._all_currents()
+    loaded_coil_currents = coilset2.current
+    np.testing.assert_allclose(correct_currents, loaded_coil_currents, rtol=1e-8)
+
+
+@pytest.mark.unit
 def test_save_makegrid_coils_assert_NFP(tmpdir_factory):
     """Test saving CoilSet that with incompatible NFP throws an error."""
     Ncoils = 22
@@ -1386,3 +1473,32 @@ def test_initialize_saddle():
     np.testing.assert_allclose(x[:, 2], -offset)  # Z ~ -3
     np.testing.assert_allclose(x[:, 0].min(), -1, rtol=1e-2)  # xmin
     np.testing.assert_allclose(x[:, 0].max(), 1, rtol=1e-2)  # xmax
+
+
+@pytest.mark.unit
+def test_initialize_helical():
+    """Test initializing a helical coilset."""
+    eq = get("NCSX")
+    coilset = initialize_helical_coils(eq, 2, r_over_a=2.0, helicity=(3, 1), npts=100)
+    assert len(coilset) == 2
+    obj = LinkingCurrentConsistency(eq, coilset)
+    obj.build()
+    np.testing.assert_allclose(
+        obj.compute(coilset.params_dict, eq.params_dict), 0, atol=1e-8
+    )
+    assert obj.constants["link"][0] == 9  # M=3 per period * 3 periods
+
+    coils_pts = coilset._compute_position()
+    a = eq.compute("a")["a"]
+    data = eq.compute(
+        ["R", "phi", "Z"],
+        grid=LinearGrid(rho=1.0, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP),
+    )
+    rpz = jnp.array([data["R"], data["phi"], data["Z"]]).T
+    rpz = copy_rpz_periods(rpz, eq.NFP)
+    plasma_pts = rpz2xyz(rpz)
+    dist = np.linalg.norm(coils_pts[:, None, :, :] - plasma_pts[:, None, :], axis=-1)
+    # dist is distance from every point on the plasma to every point on the coil
+    # first take a min over plasma pts to get distance from each coil pt to plasma
+    # then we expect the avg of that to be ~a since r/a=2 so offset is 1*a
+    np.testing.assert_allclose(dist.min(axis=1).mean(axis=-1), a, rtol=3e-2)

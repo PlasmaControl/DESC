@@ -19,7 +19,12 @@ from desc.geometry import FourierRZToroidalSurface, FourierXYZCurve
 from desc.grid import ConcentricGrid, Grid, LinearGrid, QuadratureGrid
 from desc.integrals import surface_averages
 from desc.io import load
-from desc.magnetic_fields import OmnigenousField, ToroidalMagneticField
+from desc.magnetic_fields import (
+    OmnigenousField,
+    PoloidalMagneticField,
+    SumMagneticField,
+    ToroidalMagneticField,
+)
 from desc.plotting import (
     plot_1d,
     plot_2d,
@@ -966,9 +971,22 @@ def test_plot_poincare():
 @pytest.mark.unit
 def test_plot_field_lines():
     """Test plotting field lines."""
-    field = ToroidalMagneticField(1.0, 1.0)
+    field = ToroidalMagneticField(B0=-1.0, R0=1.0)
     fig, data = plot_field_lines(
         field, [1.0], [0.0], nphi_per_transit=10, ntransit=0.8, return_data=True
     )
     assert all(data["Z"][0] == 0)
     assert np.allclose((data["X"][0] ** 2 + data["Y"][0] ** 2), 1)
+
+    field1 = ToroidalMagneticField(B0=1.0, R0=1.0)
+    field2 = PoloidalMagneticField(B0=1.0, R0=1.0, iota=3.0)
+    field = SumMagneticField([field1, field2])
+    plot_field_lines(
+        field,
+        R0=[1.1],
+        Z0=[0.0],
+        nphi_per_transit=100,
+        ntransit=2,
+        endpoint=True,
+        chunk_size=10,
+    )

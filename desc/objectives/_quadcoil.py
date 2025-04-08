@@ -314,7 +314,6 @@ class QuadcoilProxy(_Objective):
             Level of output.
 
         """
-        
         # ----- Starting and timing-----
         # things is the list of things that will be optimized,
         # we assigned things to be just eq in the init, so we know that the
@@ -451,7 +450,6 @@ class QuadcoilProxy(_Objective):
         -------
         f : scalar
         """ 
-        
         # ----- Constructing rz surface dofs in Simsopt convention -----
         rs_raw, rc_raw = ptolemy_identity_rev_compute(self._surf_R_A, self._surf_R_c_indices, self._surf_R_s_indices, params['Rb_lmn'])
         zs_raw, zc_raw = ptolemy_identity_rev_compute(self._surf_Z_A, self._surf_Z_c_indices, self._surf_Z_s_indices, params['Zb_lmn'])

@@ -373,6 +373,7 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
     description="Second adiabatic invariant of motion.",
     coordinates="r",
     dim=1,
+    profiles=[],
     params=[],
     transforms={"grid": []},
     data=[
@@ -495,6 +496,7 @@ def _Jpar(params, transforms, profiles, data, **kwargs):
     description="Second adiabatic invariant of motion.",
     coordinates="r",
     dim=1,
+    profiles=[],
     params=[],
     data=[
         "min_tz |B|",
@@ -618,6 +620,7 @@ def _dJpar_dalpha(params, transforms, profiles, data, **kwargs):
     description="Second adiabatic invariant of motion.",
     coordinates="r",
     dim=1,
+    profiles=[],
     params=[],
     data=[
         "min_tz |B|",

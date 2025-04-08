@@ -211,6 +211,11 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
     return data
 
 
+def _Jpar_num(data, B, pitch):
+    """Numerator of the second adiabatic invariant J||."""
+    return jnp.sqrt(jnp.abs(1 - pitch * B))
+
+
 def _radial_drift(data, B, pitch):
     return safediv(
         data["cvdrift0"] * (1 - 0.5 * pitch * B), jnp.sqrt(jnp.abs(1 - pitch * B))
@@ -347,6 +352,374 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
             "gbdrift (periodic)": data["gbdrift (periodic)"],
             "gbdrift (secular)/phi": data["gbdrift (secular)/phi"],
         },
+        data,
+        theta,
+        grid,
+        num_pitch,
+        surf_batch_size,
+    )
+    return data
+
+
+@register_compute_fun(
+    name="Jpar",
+    label=(
+        # ε¹ᐧ⁵ = π/(8√2) R₀²〈|∇ψ|〉⁻² B₀⁻¹ ∫dλ λ⁻² 〈 ∑ⱼ Hⱼ²/Iⱼ 〉
+        "\\J_{\\parallel} = \\integrate v_{\\parallel} dl"
+        "\\integrate dl / v_{\\parallel}"
+    ),
+    units="~",
+    units_long="m^2-s^2",
+    description="Second adiabatic invariant of motion.",
+    coordinates="r",
+    dim=1,
+    params=[],
+    transforms={"grid": []},
+    data=[
+        "min_tz |B|",
+        "max_tz |B|",
+        "cvdrift0",
+        "gbdrift (periodic)",
+        "gbdrift (secular)/phi",
+    ]
+    + Bounce2D.required_names,
+    resolution_requirement="tz",
+    grid_requirement={"can_fft2": True},
+    **_bounce_doc,
+)
+@partial(
+    jit,
+    static_argnames=[
+        "Y_B",
+        "num_transit",
+        "num_well",
+        "num_quad",
+        "num_pitch",
+        "pitch_batch_size",
+        "surf_batch_size",
+        "spline",
+    ],
+)
+def _Jpar(params, transforms, profiles, data, **kwargs):
+    """Fast ion confinement proxy as defined by Velasco et al.
+
+    A model for the fast evaluation of prompt losses of energetic ions in stellarators.
+    J.L. Velasco et al. 2021 Nucl. Fusion 61 116059.
+    https://doi.org/10.1088/1741-4326/ac2994.
+    Equation 16.
+
+    This expression has a secular term that drives the result to zero as the number
+    of toroidal transits increases if the secular term is not averaged out from the
+    singular integrals. It is observed that this implementation does not average
+    out the secular term. Currently, an optimization using this metric may need
+    to be evaluated by measuring decrease in Γ_c at a fixed number of toroidal
+    transits.
+    """
+    # noqa: unused dependency
+    theta = kwargs["theta"]
+    Y_B = kwargs.get("Y_B", theta.shape[-1] * 2)
+    alpha = kwargs.get("alpha", jnp.array([0.0]))
+    num_transit = kwargs.get("num_transit", 20)
+    num_pitch = kwargs.get("num_pitch", 64)
+    num_well = kwargs.get("num_well", Y_B * num_transit)
+    pitch_batch_size = kwargs.get("pitch_batch_size", None)
+    surf_batch_size = kwargs.get("surf_batch_size", 1)
+    assert (
+        surf_batch_size == 1 or pitch_batch_size is None
+    ), f"Expected pitch_batch_size to be None, got {pitch_batch_size}."
+    spline = kwargs.get("spline", True)
+    fl_quad = (
+        kwargs["fieldline_quad"] if "fieldline_quad" in kwargs else leggauss(Y_B // 2)
+    )
+    quad = (
+        kwargs["quad"]
+        if "quad" in kwargs
+        else get_quadrature(
+            leggauss(kwargs.get("num_quad", 32)),
+            (automorphism_sin, grad_automorphism_sin),
+        )
+    )
+
+    def Jpar0(data):
+        bounce = Bounce2D(
+            grid,
+            data,
+            data["theta"],
+            Y_B,
+            alpha,
+            num_transit,
+            quad,
+            is_fourier=True,
+            spline=spline,
+        )
+
+        def fun(pitch_inv):
+            Jpar = bounce.integrate(
+                [_Jpar_num],
+                pitch_inv,
+                data,
+                bounce.points(pitch_inv, num_well),
+                is_fourier=True,
+            )
+            # Take sum over wells, mean in alpha
+            return jnp.sum(Jpar, axis=-1).mean(axis=-2)
+
+        return jnp.sum(
+            batch_map(fun, data["pitch_inv"], pitch_batch_size)
+            * data["pitch_inv weight"]
+            / data["pitch_inv"] ** 2,
+            axis=-1,
+        ) / (bounce.compute_fieldline_length(fl_quad) * 2**1.5 * jnp.pi)
+
+    grid = transforms["grid"]
+    data["Jpar"] = _compute(
+        Jpar0,
+        data,
+        theta,
+        grid,
+        num_pitch,
+        surf_batch_size,
+    )
+    return data
+
+
+@register_compute_fun(
+    name="dJpar_dalpha",
+    label=(
+        # ε¹ᐧ⁵ = π/(8√2) R₀²〈|∇ψ|〉⁻² B₀⁻¹ ∫dλ λ⁻² 〈 ∑ⱼ Hⱼ²/Iⱼ 〉
+        "\\J_{\\parallel} = \\integrate v_{\\parallel} dl"
+        "\\integrate dl / v_{\\parallel}"
+    ),
+    units="~",
+    units_long="m^2-s^2",
+    description="Second adiabatic invariant of motion.",
+    coordinates="r",
+    dim=1,
+    params=[],
+    data=[
+        "min_tz |B|",
+        "max_tz |B|",
+        "cvdrift0",
+        "gbdrift (periodic)",
+        "gbdrift (secular)/phi",
+    ]
+    + Bounce2D.required_names,
+    resolution_requirement="tz",
+    grid_requirement={"can_fft2": True},
+    **_bounce_doc,
+)
+@partial(
+    jit,
+    static_argnames=[
+        "Y_B",
+        "num_transit",
+        "num_well",
+        "num_quad",
+        "num_pitch",
+        "pitch_batch_size",
+        "surf_batch_size",
+        "spline",
+    ],
+)
+def _dJpar_dalpha(params, transforms, profiles, data, **kwargs):
+    """Fast ion confinement proxy as defined by Velasco et al.
+
+    A model for the fast evaluation of prompt losses of energetic ions in stellarators.
+    J.L. Velasco et al. 2021 Nucl. Fusion 61 116059.
+    https://doi.org/10.1088/1741-4326/ac2994.
+    Equation 16.
+
+    This expression has a secular term that drives the result to zero as the number
+    of toroidal transits increases if the secular term is not averaged out from the
+    singular integrals. It is observed that this implementation does not average
+    out the secular term. Currently, an optimization using this metric may need
+    to be evaluated by measuring decrease in Γ_c at a fixed number of toroidal
+    transits.
+    """
+    # noqa: unused dependency
+    theta = kwargs["theta"]
+    Y_B = kwargs.get("Y_B", theta.shape[-1] * 2)
+    alpha = kwargs.get("alpha", jnp.array([0.0]))
+    num_transit = kwargs.get("num_transit", 20)
+    num_pitch = kwargs.get("num_pitch", 64)
+    num_well = kwargs.get("num_well", Y_B * num_transit)
+    pitch_batch_size = kwargs.get("pitch_batch_size", None)
+    surf_batch_size = kwargs.get("surf_batch_size", 1)
+    assert (
+        surf_batch_size == 1 or pitch_batch_size is None
+    ), f"Expected pitch_batch_size to be None, got {pitch_batch_size}."
+    spline = kwargs.get("spline", True)
+    fl_quad = (
+        kwargs["fieldline_quad"] if "fieldline_quad" in kwargs else leggauss(Y_B // 2)
+    )
+    quad = (
+        kwargs["quad"]
+        if "quad" in kwargs
+        else get_quadrature(
+            leggauss(kwargs.get("num_quad", 32)),
+            (automorphism_sin, grad_automorphism_sin),
+        )
+    )
+
+    def dJpar_dalpha0(data):
+        bounce = Bounce2D(
+            grid,
+            data,
+            data["theta"],
+            Y_B,
+            alpha,
+            num_transit,
+            quad,
+            is_fourier=True,
+            spline=spline,
+        )
+
+        def fun(pitch_inv):
+            v_tau, radial_drift = bounce.integrate(
+                [_v_tau, _radial_drift],
+                pitch_inv,
+                data,
+                ["cvdrift0", "gbdrift (periodic)", "gbdrift (secular)/phi"],
+                bounce.points(pitch_inv, num_well),
+                is_fourier=True,
+            )
+            dJpar_dalpha = jnp.safediv(radial_drift, v_tau)
+            # Take sum over wells, mean in alpha
+            return jnp.sum(dJpar_dalpha, axis=-1).mean(axis=-2)
+
+        return jnp.sum(
+            batch_map(fun, data["pitch_inv"], pitch_batch_size)
+            * data["pitch_inv weight"]
+            / data["pitch_inv"] ** 2,
+            axis=-1,
+        ) / (bounce.compute_fieldline_length(fl_quad) * 2**1.5 * jnp.pi)
+
+    grid = transforms["grid"]
+    data["dJpar_dalpha"] = _compute(
+        dJpar_dalpha0,
+        data,
+        theta,
+        grid,
+        num_pitch,
+        surf_batch_size,
+    )
+    return data
+
+
+@register_compute_fun(
+    name="dJpar_ds",
+    label=(
+        # ε¹ᐧ⁵ = π/(8√2) R₀²〈|∇ψ|〉⁻² B₀⁻¹ ∫dλ λ⁻² 〈 ∑ⱼ Hⱼ²/Iⱼ 〉
+        "\\J_{\\parallel} = \\integrate v_{\\parallel} dl"
+        "\\integrate dl / v_{\\parallel}"
+    ),
+    units="~",
+    units_long="m^2-s^2",
+    description="Second adiabatic invariant of motion.",
+    coordinates="r",
+    dim=1,
+    params=[],
+    data=[
+        "min_tz |B|",
+        "max_tz |B|",
+        "cvdrift0",
+        "gbdrift (periodic)",
+        "gbdrift (secular)/phi",
+    ]
+    + Bounce2D.required_names,
+    resolution_requirement="tz",
+    grid_requirement={"can_fft2": True},
+    **_bounce_doc,
+)
+@partial(
+    jit,
+    static_argnames=[
+        "Y_B",
+        "num_transit",
+        "num_well",
+        "num_quad",
+        "num_pitch",
+        "pitch_batch_size",
+        "surf_batch_size",
+        "spline",
+    ],
+)
+def _dJpar_ds(params, transforms, profiles, data, **kwargs):
+    """Fast ion confinement proxy as defined by Velasco et al.
+
+    A model for the fast evaluation of prompt losses of energetic ions in stellarators.
+    J.L. Velasco et al. 2021 Nucl. Fusion 61 116059.
+    https://doi.org/10.1088/1741-4326/ac2994.
+    Equation 16.
+
+    This expression has a secular term that drives the result to zero as the number
+    of toroidal transits increases if the secular term is not averaged out from the
+    singular integrals. It is observed that this implementation does not average
+    out the secular term. Currently, an optimization using this metric may need
+    to be evaluated by measuring decrease in Γ_c at a fixed number of toroidal
+    transits.
+    """
+    # noqa: unused dependency
+    theta = kwargs["theta"]
+    Y_B = kwargs.get("Y_B", theta.shape[-1] * 2)
+    alpha = kwargs.get("alpha", jnp.array([0.0]))
+    num_transit = kwargs.get("num_transit", 20)
+    num_pitch = kwargs.get("num_pitch", 64)
+    num_well = kwargs.get("num_well", Y_B * num_transit)
+    pitch_batch_size = kwargs.get("pitch_batch_size", None)
+    surf_batch_size = kwargs.get("surf_batch_size", 1)
+    assert (
+        surf_batch_size == 1 or pitch_batch_size is None
+    ), f"Expected pitch_batch_size to be None, got {pitch_batch_size}."
+    spline = kwargs.get("spline", True)
+    fl_quad = (
+        kwargs["fieldline_quad"] if "fieldline_quad" in kwargs else leggauss(Y_B // 2)
+    )
+    quad = (
+        kwargs["quad"]
+        if "quad" in kwargs
+        else get_quadrature(
+            leggauss(kwargs.get("num_quad", 32)),
+            (automorphism_sin, grad_automorphism_sin),
+        )
+    )
+
+    def dJpar_ds0(data):
+        bounce = Bounce2D(
+            grid,
+            data,
+            data["theta"],
+            Y_B,
+            alpha,
+            num_transit,
+            quad,
+            is_fourier=True,
+            spline=spline,
+        )
+
+        def fun(pitch_inv):
+            v_tau, poloidal_drift = bounce.integrate(
+                [_v_tau, _poloidal_drift],
+                pitch_inv,
+                data,
+                ["cvdrift0", "gbdrift (periodic)", "gbdrift (secular)/phi"],
+                bounce.points(pitch_inv, num_well),
+                is_fourier=True,
+            )
+            dJpar_ds = jnp.safediv(poloidal_drift, v_tau)
+            # Take sum over wells, mean in alpha
+            return jnp.sum(dJpar_ds, axis=-1).mean(axis=-2)
+
+        return jnp.sum(
+            batch_map(fun, data["pitch_inv"], pitch_batch_size)
+            * data["pitch_inv weight"]
+            / data["pitch_inv"] ** 2,
+            axis=-1,
+        ) / (bounce.compute_fieldline_length(fl_quad) * 2**1.5 * jnp.pi)
+
+    grid = transforms["grid"]
+    data["dJpar_ds"] = _compute(
+        dJpar_ds0,
         data,
         theta,
         grid,

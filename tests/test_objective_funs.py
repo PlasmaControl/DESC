@@ -12,6 +12,7 @@ import warnings
 import numpy as np
 import pytest
 from packaging.version import Version
+from qsc import Qsc
 from scipy.constants import elementary_charge, mu_0
 
 import desc.examples
@@ -90,8 +91,13 @@ from desc.objectives import (
     ToroidalFlux,
     VacuumBoundaryError,
     Volume,
+    get_NAE_constraints,
 )
 from desc.objectives._free_boundary import BoundaryErrorNESTOR
+from desc.objectives.nae_utils import (
+    _calc_1st_order_NAE_coeffs,
+    _calc_2nd_order_NAE_coeffs,
+)
 from desc.objectives.normalization import compute_scaling_factors
 from desc.objectives.objective_funs import _Objective, collect_docs
 from desc.objectives.utils import softmax, softmin
@@ -3458,7 +3464,7 @@ class TestObjectiveNaNGrad:
     @pytest.mark.unit
     def test_objective_no_nangrad_quadratic_flux_minimizing(self):
         """SurfaceQuadraticFlux."""
-        ext_field = ToroidalMagneticField(1.0, 1.0)
+        ext_field = FourierXYZCoil().to_SplineXYZ(grid=3)
 
         surf = FourierRZToroidalSurface(
             R_lmn=[4.0, 1.0],
@@ -3467,8 +3473,9 @@ class TestObjectiveNaNGrad:
             modes_Z=[[-1, 0]],
             NFP=1,
         )
-
-        obj = ObjectiveFunction(SurfaceQuadraticFlux(surf, ext_field), use_jit=False)
+        # have use_jit=True here to check that runs correctly with spline
+        # coils, see PR #1656
+        obj = ObjectiveFunction(SurfaceQuadraticFlux(surf, ext_field), use_jit=True)
         obj.build()
         g = obj.grad(obj.x(surf, ext_field))
         assert not np.any(np.isnan(g)), "quadratic flux"
@@ -3695,3 +3702,47 @@ def test_objective_docstring():
     collected_docs = doc_header + "    " + collected_docs
 
     assert objective_docs == collected_docs
+
+
+@pytest.mark.unit
+def test_get_nae_constraint_asym_error():
+    """Test warning when using an asymmetric eq for NAE constraints."""
+    qsc = Qsc.from_paper("precise QA", rs=[1e-6, 1e-6])
+    with pytest.raises(NotImplementedError, match="asymmetric"):
+        get_NAE_constraints(get("precise_QA"), qsc, fix_lambda=0)
+
+
+@pytest.mark.unit
+def test_nae_coefficients_asym():
+    """Test that the asymmetric coefs of a symmetric NAE solution are 0."""
+    eq = Equilibrium(NFP=2, sym=False, L=6, M=6, N=12)
+    qsc_eq = Qsc.from_paper("precise QA")
+    qsc_eq.lasym = True
+    coefs, bases = _calc_1st_order_NAE_coeffs(qsc_eq, eq)
+    for key in coefs.keys():
+        if "L" in key:
+            continue
+        s1 = 1
+        s1 *= -1 if "R" in key else 1
+        s1 *= -1 if "neg1" in key else 1
+
+        inds_asym = (
+            np.where(bases["Rbasis_cos"].modes[:, 2] < 0)
+            if s1 < 0
+            else np.where(bases["Rbasis_cos"].modes[:, 2] >= 0)
+        )
+        np.testing.assert_allclose(coefs[key][inds_asym], 0, err_msg=key, atol=1e-13)
+    coefs, bases = _calc_2nd_order_NAE_coeffs(qsc_eq, eq)
+    for key in coefs.keys():
+        if "L" in key:
+            continue
+        s1 = 1
+        s1 *= -1 if "R" in key else 1
+        s1 *= -1 if "neg2" in key else 1
+
+        inds_asym = (
+            np.where(bases["Rbasis_cos"].modes[:, 2] < 0)
+            if s1 < 0
+            else np.where(bases["Rbasis_cos"].modes[:, 2] >= 0)
+        )
+        np.testing.assert_allclose(coefs[key][inds_asym], 0, err_msg=key, atol=1e-13)

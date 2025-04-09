@@ -281,11 +281,18 @@ class ShareParameters(_Objective):
         self._params = params
         assert len(things) > 1, "only makes sense for >1 thing"
         assert np.all([isinstance(things[0], type(t)) for t in things[1:]])
-        # TODO: some sort of check that all things are same resolution etc?
-        # something like _check_type for coilsets but more general...
-        # maybe can make a _check_type that takes in the user-inputted params.keys
-        # and just ensures that the params being fixed are the same resolution, that
-        # should be all we need to check I think
+
+        # ensure things are the same resolution
+        # TODO: might be too strict? could we only try to ensure
+        #  that the desired params passed are same res?
+        for t in things[1:]:
+            assert np.all(
+                [
+                    things[0].params_dict[k].shape == t.params_dict[k].shape
+                    for k in things[0].params_dict.keys()
+                ]
+            )
+
         super().__init__(
             things=things,
             target=target,

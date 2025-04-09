@@ -1,11 +1,12 @@
-from desc.utils import Timer
+from desc.utils import Timer, warnif
 from desc.vmec_utils import ptolemy_linear_transform
 from desc.grid import LinearGrid
 from desc.objectives.objective_funs import _Objective, collect_docs
 from desc.objectives.normalization import compute_scaling_factors
 from desc.compute import get_profiles, get_transforms
 from desc.compute.utils import _compute as compute_fun
-from desc.integrals import DFTInterpolator, FFTInterpolator
+from desc.integrals import DFTInterpolator, FFTInterpolator, virtual_casing_biot_savart
+from ..integrals.singularities import best_params, best_ratio
 from scipy.constants import mu_0
 from functools import partial
 from jax import jit
@@ -14,7 +15,7 @@ import jax # for printing
 import warnings
 import numpy as np
 from quadcoil import QUADCOIL_STATIC_ARGNAMES, get_objective
-from quadcoil.io import gen_quadcoil_for_diff
+from quadcoil.io import gen_quadcoil_for_diff, generate_desc_scaling
 
 # ----- A QUADCOIL wrapper -----
 # A list of all inputs of quadoil.quadcoil
@@ -390,14 +391,14 @@ class QuadcoilProxy(_Objective):
             )
             st, sz, q = best_params(source_grid, best_ratio(ratio_data))
             try:
-                interpolator = FFTInterpolator(eval_grid, source_grid, st, sz, q)
+                interpolator = FFTInterpolator(self._constants['eval_grid'], source_grid, st, sz, q)
             except AssertionError as e:
                 warnif(
                     True,
                     msg="Could not build fft interpolator, switching to dft which is slow."
                     "\nReason: " + str(e),
                 )
-                interpolator = DFTInterpolator(eval_grid, source_grid, st, sz, q)
+                interpolator = DFTInterpolator(self._constants['eval_grid'], source_grid, st, sz, q)
             self._constants['source_profiles'] = source_profiles
             self._constants['source_transforms'] = source_transforms
             self._constants['interpolator'] = interpolator
@@ -478,14 +479,14 @@ class QuadcoilProxy(_Objective):
             source_data = compute_fun(
                 "desc.equilibrium.equilibrium.Equilibrium",
                 _BPLASMA_DATA_KEYS,
-                params=eq_params,
+                params=params,
                 transforms=constants["source_transforms"],
                 profiles=constants["source_profiles"],
             )
             eval_data = compute_fun(
                 "desc.equilibrium.equilibrium.Equilibrium",
                 _BPLASMA_DATA_KEYS,
-                params=eq_params,
+                params=params,
                 transforms=constants["eval_transforms"],
                 profiles=constants["eval_profiles"],
             )
@@ -525,34 +526,6 @@ class QuadcoilProxy(_Objective):
                 objective_weight=self.objective_weight,
                 constraint_value=self.constraint_value,
             )
-            # For testing if the parameters are carried through correctly
-            if self._verbose:
-                jax.debug.print('Solving complete!')
-                jax.debug.print('Final value of objective f: {x}', x=jax.block_until_ready(solve_results['inner_fin_f']))
-                jax.debug.print('* Total iteration number: {x}', x=jax.block_until_ready(solve_results['tot_niter']))
-                # jax.debug.print('* Outer grad f tol: {x}', x=jax.block_until_ready(gtol_outer))
-                jax.debug.print('  Final value of grad f: {x}', x=jax.block_until_ready(solve_results['inner_fin_grad_f']))
-                # jax.debug.print('* Outer constraint tol: {x}', x=jax.block_until_ready(ctol_outer))
-                jax.debug.print('  Final value of constraint g: {x}', x=jax.block_until_ready(solve_results['inner_fin_g']))
-                jax.debug.print('  Final value of constraint h: {x}', x=jax.block_until_ready(solve_results['inner_fin_h']))
-                # jax.debug.print('* Outer convergence rate limit in x: {x}', x=jax.block_until_ready(xstop_outer))
-                jax.debug.print('  Outer convergence rate in x, : {x}', x=jax.block_until_ready(solve_results['outer_dx'],))
-                # jax.debug.print('* Outer convergence rate limit in f: {x}', x=jax.block_until_ready(fstop_outer))
-                jax.debug.print(
-                    '  Outer convergence rate in f, g, h: {f}, {g}, {h}', 
-                    f=jax.block_until_ready(solve_results['outer_df']),
-                    g=jax.block_until_ready(solve_results['outer_dg']),
-                    h=jax.block_until_ready(solve_results['outer_dh']),
-                )
-                jax.debug.print('* Inner iteration number: {x}', x=jax.block_until_ready(solve_results['inner_fin_niter']))
-                # jax.debug.print('* Inner convergence rate limit in x: {x}', x=jax.block_until_ready(xstop_inner))
-                jax.debug.print(
-                    '  Inner convergence rate in x: {x}, {u}', 
-                    x=jax.block_until_ready(solve_results['inner_fin_dx']),
-                    u=jax.block_until_ready(solve_results['inner_fin_du']),
-                )
-                # jax.debug.print('* Inner convergence rate limit in f: {x}', x=jax.block_until_ready(fstop_inner))
-                jax.debug.print('  Inner convergence rate in l: {l}', l=jax.block_until_ready(solve_results['inner_fin_dl'],))
             return out_dict, qp, cp_mn, solve_results
         # ----- Calling the quadcoil wrapper with custom_vjp -----   
         # If this can't show then the error is before this

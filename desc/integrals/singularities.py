@@ -1,14 +1,13 @@
 """High order method for singular surface integrals, from Malhotra 2019."""
 
 from abc import ABC, abstractmethod
-from functools import partial
 
 from scipy.constants import mu_0
 
-from desc.backend import jit, jnp, rfft2
+from desc.backend import jnp, rfft2
 from desc.batching import batch_map, vmap_chunked
 from desc.compute.geom_utils import rpz2xyz, rpz2xyz_vec, xyz2rpz_vec
-from desc.grid import LinearGrid
+from desc.grid import LinearGrid  # noqa: F401
 from desc.integrals._interp_utils import rfft2_modes, rfft2_vander
 from desc.integrals.quad_utils import _get_polar_quadrature, chi, eta, nfp_loop
 from desc.io import IOAble
@@ -692,15 +691,16 @@ def singular_integral(
         ``DFTInterpolator``
     kernel : str or callable
         Kernel function to evaluate. If str, one of the following:
-            '1_over_r'      : 1 / |𝐫 − 𝐫'| dS
-            'nr_over_r3'    : 𝐧'⋅(𝐫 − 𝐫') / |𝐫 − 𝐫'|³ dS
-            'biot_savart'   : μ₀/4π 𝐊'×(𝐫 − 𝐫') / |𝐫 − 𝐫'|³ dS
-            'biot_savart_A' : μ₀/4π 𝐊' / |𝐫 − 𝐫'| dS
+            '1_over_r'        : 1 / |𝐫 − 𝐫'| dS
+            'nr_over_r3'      : 𝐧'⋅(𝐫 − 𝐫') / |𝐫 − 𝐫'|³ dS
+            'biot_savart'     : μ₀/4π 𝐊'×(𝐫 − 𝐫') / |𝐫 − 𝐫'|³ dS
+            'biot_savart_A'   : μ₀/4π 𝐊' / |𝐫 − 𝐫'| dS
+            'magnetic_dipole' : 〈 Φ(y) ∇_y G(x−y), ds(y) 〉
         If callable, should take 4 arguments:
             eval_data   : dict of data at evaluation points (primed)
             source_data : dict of data at source points (unprimed)
-            ds          : Surface area element (not weighted by |e_theta x e_zeta|
-                          Jacobian). Broadcasts with shape
+            ds          : Surface area element (not weighted by ‖e_θ × e_ζ‖ Jacobian).
+                          Broadcasts with shape
                           (eval_grid.num_nodes, source_grid.num_nodes).
             diag        : boolean, whether to evaluate full cross interactions
                           or just diagonal
@@ -774,7 +774,25 @@ def singular_integral(
 
 
 def _dx(eval_data, source_data, diag=False):
-    """Returns dx = x−x'."""
+    """Compute distance vector between eval and source points.
+
+    Parameters
+    ----------
+    eval_data : dict[str, jnp.ndarray]
+        x data evaluated on eval grid.
+    source_data : dict[str, jnp.ndarray]
+        y data evaluated on source grid.
+    diag : bool
+        Set to True to bypass outer product.
+
+    Returns
+    -------
+    dx : jnp.ndarray
+        The vector x-y where y is a source point and x is eval point,
+        in Cartesian coordinates.
+        Shape (num eval, num source, 3).
+
+    """
     source_x = rpz2xyz(
         jnp.column_stack([source_data["R"], source_data["phi"], source_data["Z"]])
     )
@@ -786,15 +804,54 @@ def _dx(eval_data, source_data, diag=False):
     return eval_x - source_x
 
 
+def _1_over_G(dx, keepdims=False):
+    """1 over the fundamental solution to the Laplacian in ℝ³.
+
+    Parameters
+    ----------
+    dx : jnp.ndarray
+        The vector x-y where y is a source point and x is eval point,
+        in Cartesian coordinates.
+        Shape (num eval, num source, 3).
+
+    Returns
+    -------
+    _1_over_G : jnp.ndarray
+        1/G(x-y) = -4π ‖x−y‖.
+        Shape (num eval, num source).
+
+    """
+    return -4 * jnp.pi * safenorm(dx, axis=-1, keepdims=keepdims)
+
+
+def _grad_G(dx):
+    """∇_y G(x−y) where G is the fundamental solution to the Laplacian in ℝ³.
+
+    Parameters
+    ----------
+    dx : jnp.ndarray
+        The vector x-y where y is a source point and x is eval point,
+        in Cartesian coordinates.
+        Shape (num eval, num source, 3).
+
+    Returns
+    -------
+    grad_G : jnp.ndarray
+        ∇_y G(x−y) = -(4π)⁻¹ ‖x−y‖⁻³ (x-y).
+        Shape (num eval, num source).
+
+    """
+    return safediv(dx, -4 * jnp.pi * safenorm(dx, axis=-1, keepdims=True) ** 3)
+
+
 _dx.keys = ["R", "phi", "Z"]
 
 
 def _kernel_1_over_r(eval_data, source_data, ds, diag=False):
-    """Returns G(x,x') dS = |x−x'|⁻¹ dS."""
-    dx = _dx(eval_data, source_data, diag)
-    return safediv(
-        source_data["|e_theta x e_zeta|"] * ds,
-        safenorm(dx, axis=-1),
+    """Returns -4π da(y) G(x,y) = ‖e_θ × e_ζ‖ dθ dζ ‖x−y‖⁻¹."""
+    return (-4 * jnp.pi * ds) * safediv(
+        source_data["|e_theta x e_zeta|"],
+        _1_over_G(_dx(eval_data, source_data, diag)),
     )
 
 
@@ -802,13 +859,23 @@ _kernel_1_over_r.ndim = 1
 _kernel_1_over_r.keys = _dx.keys + ["|e_theta x e_zeta|"]
 
 
+def _kernel_Bn_over_r(eval_data, source_data, ds, diag=False):
+    """Returns -4π da(y) Bₙ(y) G(x,y) = da(y) Bₙ(y) ‖x−y‖⁻¹."""
+    return (-4 * jnp.pi * ds) * safediv(
+        source_data["|e_theta x e_zeta|"] * source_data["Bn"],
+        _1_over_G(_dx(eval_data, source_data, diag)),
+    )
+
+
+_kernel_Bn_over_r.ndim = 1
+_kernel_Bn_over_r.keys = _dx.keys + ["Bn", "|e_theta x e_zeta|"]
+
+
 def _kernel_nr_over_r3(eval_data, source_data, ds, diag=False):
-    """Returns n ⋅ −∇G(x,x') dS = n ⋅ (x−x')|x−x'|⁻³ dS."""
-    dx = _dx(eval_data, source_data, diag)
-    n = rpz2xyz_vec(source_data["e^rho*sqrt(g)"], phi=source_data["phi"])
-    return safediv(
-        dot(n, dx) * ds,
-        safenorm(dx, axis=-1) ** 3,
+    """Returns -4π ds(y) ⋅ ∇_y G(x−y) = ds(y) ⋅ ‖x−y‖⁻³ (x-y)."""
+    return (-4 * jnp.pi * ds) * dot(
+        rpz2xyz_vec(source_data["e^rho*sqrt(g)"], phi=source_data["phi"]),
+        _grad_G(_dx(eval_data, source_data, diag)),
     )
 
 
@@ -817,17 +884,13 @@ _kernel_nr_over_r3.keys = _dx.keys + ["e^rho*sqrt(g)"]
 
 
 def _kernel_biot_savart(eval_data, source_data, ds, diag=False):
-    """Returns (μ₀/4π) K × −∇G(x,x') dS = (μ₀/4π) K × (x−x')|x−x'|⁻³ dS."""
-    dx = _dx(eval_data, source_data, diag)
-    K = rpz2xyz_vec(source_data["K_vc"], phi=source_data["phi"])
+    """Returns ∇_y G(x−y) × μ₀ K(y) da(y) = (μ₀/4π) K(y) da(y) × (x-y) ‖x−y‖⁻³."""
     if jnp.ndim(ds) > 0:
         ds = ds[..., jnp.newaxis]
-    return ds * safediv(
-        jnp.cross(
-            mu_0 / (4 * jnp.pi) * K * source_data["|e_theta x e_zeta|"][:, jnp.newaxis],
-            dx,
-        ),
-        safenorm(dx, axis=-1, keepdims=True) ** 3,
+    K = rpz2xyz_vec(source_data["K_vc"], phi=source_data["phi"])
+    return ds * jnp.cross(
+        _grad_G(_dx(eval_data, source_data, diag)),
+        mu_0 * K * source_data["|e_theta x e_zeta|"][:, jnp.newaxis],
     )
 
 
@@ -836,14 +899,13 @@ _kernel_biot_savart.keys = _dx.keys + ["K_vc", "|e_theta x e_zeta|"]
 
 
 def _kernel_biot_savart_A(eval_data, source_data, ds, diag=False):
-    """Returns (μ₀/4π) K G(x,x') dS = (μ₀/4π) K |x−x'|⁻¹ dS."""
-    dx = _dx(eval_data, source_data, diag)
-    K = rpz2xyz_vec(source_data["K_vc"], phi=source_data["phi"])
+    """Returns ds(y) (-μ₀K)(y) G(x−y) = (μ₀/4π) ds(y) K(y) ‖x−y‖⁻¹."""
     if jnp.ndim(ds) > 0:
         ds = ds[..., jnp.newaxis]
+    K = rpz2xyz_vec(source_data["K_vc"], phi=source_data["phi"])
     return ds * safediv(
-        mu_0 / (4 * jnp.pi) * K * source_data["|e_theta x e_zeta|"][:, jnp.newaxis],
-        safenorm(dx, axis=-1, keepdims=True),
+        source_data["|e_theta x e_zeta|"][:, jnp.newaxis] * (-mu_0 * K),
+        _1_over_G(_dx(eval_data, source_data, diag)),
     )
 
 
@@ -851,56 +913,42 @@ _kernel_biot_savart_A.ndim = 3
 _kernel_biot_savart_A.keys = _dx.keys + ["K_vc", "|e_theta x e_zeta|"]
 
 
-def _kernel_Bn_over_r(eval_data, source_data, ds, diag=False):
-    """Returns Bₙ G(x,x') dS = Bₙ |x−x'|⁻¹ dS."""
-    dx = _dx(eval_data, source_data, diag)
-    return ds * safediv(
-        source_data["Bn"] * source_data["|e_theta x e_zeta|"],
-        safenorm(dx, axis=-1),
-    )
-
-
-_kernel_Bn_over_r.ndim = 1
-_kernel_Bn_over_r.keys = _dx.keys + ["Bn", "|e_theta x e_zeta|"]
-
-
-def _kernel_Phi_dGp_dn(eval_data, source_data, ds, diag=False):
-    """Returns Φ n ⋅ −∇G(x,x') dS = Φ n ⋅ (x−x')|x−x'|⁻³ dS.
-
-    Phi has units Tesla-meters.
-    """
-    dx = _dx(eval_data, source_data, diag)
-    out = ds * safediv(
-        dot(rpz2xyz_vec(source_data["e^rho*sqrt(g)"], phi=source_data["phi"]), dx),
-        safenorm(dx, axis=-1) ** 3,
-    )
-    if source_data["Phi"].ndim > 1:
-        out = out[..., jnp.newaxis]
-    # Do operation with Phi at the end, so that the following
-    # outer product plus reduction is more likely to be fused.
-    return source_data["Phi"] * out
-
-
-_kernel_Phi_dGp_dn.ndim = 1
-_kernel_Phi_dGp_dn.keys = _dx.keys + ["e^rho*sqrt(g)", "Phi"]
-
-
 def _kernel_biot_savart_coulomb(eval_data, source_data, ds, diag=False):
-    """Returns [ K (Tesla) × −∇G(x,x') - Bₙ ∇G(x,x') ] / 4π * dS."""
-    dx = _dx(eval_data, source_data, diag)
-    K = rpz2xyz_vec(source_data["K_vc"], phi=source_data["phi"])
-    a = source_data["|e_theta x e_zeta|"] / (4 * jnp.pi)
+    """Returns ∇_y G(x−y) × K(y) (Tesla) da(y) - ∇_y G(x−y) Bₙ(y) da(y)."""
     if jnp.ndim(ds) > 0:
         ds = ds[..., jnp.newaxis]
-    return ds * safediv(
-        jnp.cross(K * a[:, jnp.newaxis], dx)
-        + (source_data["Bn"] * a)[:, jnp.newaxis] * dx,
-        safenorm(dx, axis=-1, keepdims=True) ** 3,
+    K = rpz2xyz_vec(source_data["K_vc"], phi=source_data["phi"])
+    a = source_data["|e_theta x e_zeta|"]
+    grad_G = _grad_G(_dx(eval_data, source_data, diag))
+    return ds * (
+        jnp.cross(grad_G, K * a[:, jnp.newaxis])
+        - grad_G * (source_data["Bn"] * a)[:, jnp.newaxis]
     )
 
 
 _kernel_biot_savart_coulomb.ndim = 3
 _kernel_biot_savart_coulomb.keys = _dx.keys + ["K_vc", "Bn", "|e_theta x e_zeta|"]
+
+
+def _kernel_magnetic_dipole(eval_data, source_data, ds, diag=False):
+    """Returns 〈 Φ(y) ∇_y G(x−y), ds(y) 〉.
+
+    Φ has units Tesla-meters.
+    Φ is the magnetic dipole layer for the surface current K = −n × ∇Φ.
+    """
+    out = ds * dot(
+        rpz2xyz_vec(source_data["e^rho*sqrt(g)"], phi=source_data["phi"]),
+        _grad_G(_dx(eval_data, source_data, diag)),
+    )
+    if source_data["Phi"].ndim > 1:
+        out = out[..., jnp.newaxis]
+    # Do operation with Φ at the end, so that the following
+    # outer product plus reduction is more likely to be fused.
+    return source_data["Phi"] * out
+
+
+_kernel_magnetic_dipole.ndim = 1
+_kernel_magnetic_dipole.keys = _dx.keys + ["e^rho*sqrt(g)", "Phi"]
 
 
 kernels = {
@@ -909,155 +957,6 @@ kernels = {
     "biot_savart": _kernel_biot_savart,
     "biot_savart_A": _kernel_biot_savart_A,
     "Bn_over_r": _kernel_Bn_over_r,
-    "Phi_dGp_dn": _kernel_Phi_dGp_dn,
     "biot_savart_coulomb": _kernel_biot_savart_coulomb,
+    "magnetic_dipole": _kernel_magnetic_dipole,
 }
-
-
-@partial(jit, static_argnames=["chunk_size", "loop"])
-def virtual_casing_biot_savart(
-    eval_data, source_data, interpolator, chunk_size=None, **kwargs
-):
-    """Evaluate magnetic field on surface due to sheet current on surface.
-
-    The magnetic field due to the plasma current can be written as a Biot-Savart
-    integral over the plasma volume:
-
-    𝐁ᵥ(𝐫) = μ₀/4π ∫ 𝐉(𝐫') × (𝐫 − 𝐫')/|𝐫 − 𝐫'|³ d³𝐫'
-
-    Where 𝐉 is the plasma current density, 𝐫 is a point on the plasma surface, and 𝐫' is
-    a point in the plasma volume.
-
-    This 3D integral can be converted to a 2D integral over the plasma boundary using
-    the virtual casing principle [1]_
-
-    𝐁ᵥ(𝐫) = μ₀/4π ∫ (𝐧' ⋅ 𝐁(𝐫')) (𝐫 − 𝐫')/|𝐫 − 𝐫'|³ d²𝐫'
-            + μ₀/4π ∫ (𝐧' × 𝐁(𝐫') × (𝐫 − 𝐫')/ |𝐫 − 𝐫'|³ d²𝐫'
-            + 𝐁(𝐫)/2
-
-    Where 𝐁 is the total field on the surface and 𝐧' is the outward surface normal.
-    Because the total field is tangent, the first term in the integrand is zero leaving
-
-    𝐁ᵥ(𝐫) = μ₀/4π ∫ K_vc(𝐫') × (𝐫 − 𝐫')/ |𝐫 − 𝐫'|³ d²𝐫' + 𝐁(𝐫)/2
-
-    Where we have defined the virtual casing sheet current K_vc = 𝐧' × 𝐁(𝐫')
-
-    Parameters
-    ----------
-    eval_data : dict
-        Dictionary of data at evaluation points (eval_grid passed to interpolator).
-        Keys should be those required by kernel as kernel.keys. Vector data should be
-        in rpz basis.
-    source_data : dict
-        Dictionary of data at source points (source_grid passed to interpolator). Keys
-        should be those required by kernel as kernel.keys. Vector data should be in
-        rpz basis.
-    interpolator : _BIESTInterpolator
-        Function to interpolate from rectangular source grid to polar
-        source grid around each singular point. See ``FFTInterpolator`` or
-        ``DFTInterpolator``
-    chunk_size : int or None
-        Size to split singular integral computation into chunks.
-        If no chunking should be done or the chunk size is the full input
-        then supply ``None``.
-
-    Returns
-    -------
-    f : ndarray, shape(eval_grid.num_nodes, kernel.ndim)
-        Integral transform evaluated at eval_grid. Vectors are in rpz basis.
-
-    References
-    ----------
-    .. [1] Hanson, James D. "The virtual-casing principle and Helmholtz’s theorem."
-       Plasma Physics and Controlled Fusion 57.11 (2015): 115006.
-
-    """
-    return singular_integral(
-        eval_data,
-        source_data,
-        interpolator=interpolator,
-        kernel=_kernel_biot_savart,
-        chunk_size=chunk_size,
-        **kwargs,
-    )
-
-
-def compute_B_plasma(
-    eq, eval_grid, source_grid=None, normal_only=False, chunk_size=None
-):
-    """Evaluate magnetic field on surface due to enclosed plasma currents.
-
-    The magnetic field due to the plasma current can be written as a Biot-Savart
-    integral over the plasma volume:
-
-    𝐁ᵥ(𝐫) = μ₀/4π ∫ 𝐉(𝐫') × (𝐫 − 𝐫')/|𝐫 − 𝐫'|³ d³𝐫'
-
-    Where 𝐉 is the plasma current density, 𝐫 is a point on the plasma surface, and 𝐫' is
-    a point in the plasma volume.
-
-    This 3D integral can be converted to a 2D integral over the plasma boundary using
-    the virtual casing principle [1]_
-
-    𝐁ᵥ(𝐫) = μ₀/4π ∫ (𝐧' ⋅ 𝐁(𝐫')) (𝐫 − 𝐫')/|𝐫 − 𝐫'|³ d²𝐫'
-            + μ₀/4π ∫ (𝐧' × 𝐁(𝐫') × (𝐫 − 𝐫')/ |𝐫 − 𝐫'|³ d²𝐫'
-            + 𝐁(𝐫)/2
-
-    Where 𝐁 is the total field on the surface and 𝐧' is the outward surface normal.
-    Because the total field is tangent, the first term in the integrand is zero leaving
-
-    𝐁ᵥ(𝐫) = μ₀/4π ∫ K_vc(𝐫') × (𝐫 − 𝐫')/ |𝐫 − 𝐫'|³ d²𝐫' + 𝐁(𝐫)/2
-
-    Where we have defined the virtual casing sheet current K_vc = 𝐧' × 𝐁(𝐫')
-
-    Parameters
-    ----------
-    eq : Equilibrium
-        Equilibrium that is the source of the plasma current.
-    eval_grid : Grid
-        Evaluation points for the magnetic field.
-    source_grid : Grid, optional
-        Source points for integral.
-    normal_only : bool
-        If True, only compute and return the normal component of the plasma field 𝐁ᵥ⋅𝐧
-    chunk_size : int or None
-        Size to split singular integral computation into chunks.
-        If no chunking should be done or the chunk size is the full input
-        then supply ``None``.
-
-    Returns
-    -------
-    f : ndarray, shape(eval_grid.num_nodes, 3) or shape(eval_grid.num_nodes,)
-        Magnetic field evaluated at eval_grid.
-        If normal_only=False, vector B is in rpz basis.
-
-    References
-    ----------
-    .. [1] Hanson, James D. "The virtual-casing principle and Helmholtz’s theorem."
-       Plasma Physics and Controlled Fusion 57.11 (2015): 115006.
-
-    """
-    if source_grid is None:
-        source_grid = LinearGrid(
-            M=eq.M_grid,
-            N=eq.N_grid,
-            NFP=eq.NFP if eq.N > 0 else 64,
-            sym=False,
-        )
-
-    eval_data = eq.compute(_dx.keys + ["B", "n_rho"], grid=eval_grid)
-    source_data = eq.compute(
-        _kernel_biot_savart_A.keys + ["|e_theta x e_zeta|"], grid=source_grid
-    )
-    if hasattr(eq.surface, "Phi_mn"):
-        source_data = eq.surface.compute("K", grid=source_grid, data=source_data)
-        source_data["K_vc"] += source_data["K"]
-
-    interpolator = get_interpolator(eval_grid, source_grid, source_data)
-    Bplasma = virtual_casing_biot_savart(
-        eval_data, source_data, interpolator, chunk_size
-    )
-    # need extra factor of B/2 bc we're evaluating on plasma surface
-    Bplasma += eval_data["B"] / 2
-    if normal_only:
-        Bplasma = dot(Bplasma, eval_data["n_rho"])
-    return Bplasma

@@ -1,6 +1,7 @@
 """Classes for magnetic field coils."""
 
 import numbers
+import os
 from abc import ABC
 from collections.abc import MutableSequence
 from functools import partial
@@ -2078,6 +2079,8 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         # TODO(#1376): name each group based off of CoilSet name?
         # TODO(#1376): have CoilGroup be automatically assigned based off of
         # CoilSet if current coilset is a collection of coilsets?
+
+        coilsFilename = os.path.expanduser(coilsFilename)
 
         NFP = 1 if NFP is None else NFP
 

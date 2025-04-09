@@ -4,13 +4,13 @@ from desc.backend import fixed_point, irfft2, jit, jnp, rfft2
 from desc.basis import DoubleFourierSeries
 from desc.batching import vmap_chunked
 from desc.grid import LinearGrid
-from desc.integrals import singular_integral
 from desc.integrals._vacuum import _H
 from desc.integrals.singularities import (
     _dx,
     _kernel_biot_savart,
     _kernel_biot_savart_A,
     get_interpolator,
+    singular_integral,
 )
 from desc.io import IOAble
 from desc.transform import Transform
@@ -255,19 +255,21 @@ class FreeBoundarySolver(IOAble):
         )
 
         # Compute data on source grid.
-        position = ["R", "phi", "Z"]
-        src_data = surface.compute(
-            position + ["n_rho", "|e_theta x e_zeta|", "e_theta", "e_zeta"],
-            grid=src_grid,
-        )
+        geometric_names = [
+            "R",
+            "phi",
+            "Z",
+            "n_rho",
+            "|e_theta x e_zeta|",
+            "e_theta",
+            "e_zeta",
+        ]
+        src_data = surface.compute(geometric_names, grid=src_grid)
         # Compute data on Phi grid.
         if self._same_grid_phi_src:
             Phi_data = src_data
         else:
-            Phi_data = surface.compute(
-                position + ["n_rho", "|e_theta x e_zeta|", "e_theta", "e_zeta"],
-                grid=Phi_grid,
-            )
+            Phi_data = surface.compute(geometric_names, grid=Phi_grid)
         self._phi_transform = Transform(Phi_grid, basis, derivs=1, build_pinv=True)
         Phi_data["n x B_coil"] = cross(
             Phi_data["n_rho"],
@@ -288,7 +290,7 @@ class FreeBoundarySolver(IOAble):
             if not self._same_grid_phi_src and evl_grid.equiv(src_grid):
                 evl_data = src_data
             else:
-                evl_data = surface.compute(position, grid=evl_grid)
+                evl_data = surface.compute(geometric_names, grid=evl_grid)
 
         self._data = {"evl": evl_data, "Phi": Phi_data, "src": src_data}
         self._interpolator = {

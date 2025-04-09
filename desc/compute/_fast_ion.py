@@ -773,7 +773,7 @@ def _Gamma_d_Velasco(params, transforms, profiles, data, **kwargs):
             # v_tau shouldn't change too much across field lines
             v_tau = jnp.sum(v_tau, axis=-1).mean(axis=-2)
 
-            out = jnp.heaviside(gamma_c_max - 0.2, 0) / v_tau
+            out = jnp.heaviside(gamma_c_max - 0.2, 0) * v_tau
 
             return out
 
@@ -798,4 +798,5 @@ def _Gamma_d_Velasco(params, transforms, profiles, data, **kwargs):
         num_pitch,
         surf_batch_size,
     )
+
     return data

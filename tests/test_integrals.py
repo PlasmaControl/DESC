@@ -730,7 +730,6 @@ class TestVacuumSolver:
             Phi_grid=LinearGrid(M=2, N=2, NFP=surf.NFP),
             Phi_M=1,
             Phi_N=0,
-            interior=False,
             chunk_size=chunk_size,
             B0n=B0n,
             warn_fft=False,
@@ -791,7 +790,6 @@ class TestVacuumSolver:
             # Φ = Z, so this should be exact.
             Phi_M=surf.M,
             Phi_N=surf.N,
-            interior=False,
             chunk_size=chunk_size,
             B0n=-surf.compute("n_rho", grid=src_grid)["n_rho"][:, 2],
             use_dft=use_dft,
@@ -879,7 +877,6 @@ class TestVacuumSolver:
             Phi_grid=Phi_grid,
             Phi_M=8,
             Phi_N=8,
-            interior=False,
             chunk_size=chunk_size,
             warn_fft=False,
         )

@@ -501,7 +501,9 @@ def plot_coefficients(eq, L=True, M=True, N=True, ax=None, **kwargs):
     return fig, ax
 
 
-def plot_1d(eq, name, grid=None, log=False, ax=None, return_data=False, **kwargs):
+def plot_1d(  # noqa: C901
+    eq, name, grid=None, log=False, ax=None, return_data=False, **kwargs
+):
     """Plot 1D profiles.
 
     Parameters
@@ -616,32 +618,44 @@ def plot_1d(eq, name, grid=None, log=False, ax=None, return_data=False, **kwargs
     fig, ax = _format_ax(ax, figsize=kwargs.pop("figsize", None))
 
     ldata = []  # list of data to return
-    for eqi in eq:
+    linecolor = kwargs.pop("linecolor", colorblind_colors[: len(eq)])
+    ls = kwargs.pop("ls", "-")
+    lw = kwargs.pop("lw", 1)
+    label = kwargs.pop("label", None)
+    if not isinstance(label, (list, tuple)):
+        if len(eq) == 1:
+            label = [label]
+        else:
+            label = [f"{i}" for i in range(len(eq))]
+    if not isinstance(linecolor, (list, tuple)):
+        linecolor = [linecolor] * len(eq)
+    if not isinstance(ls, (list, tuple)):
+        ls = [ls] * len(eq)
+    if not isinstance(lw, (list, tuple)):
+        lw = [lw] * len(eq)
+
+    for i, eqi in enumerate(eq):
         data, ylabel = _compute(eqi, name, grid, kwargs.pop("component", None))
-        label = kwargs.pop("label", None)
         # reshape data to 1D
         data = data.flatten()
-        linecolor = kwargs.pop("linecolor", colorblind_colors[0])
-        ls = kwargs.pop("ls", "-")
-        lw = kwargs.pop("lw", 1)
         if log:
             data = np.abs(data)  # ensure data is positive for log plot
             ax.semilogy(
                 grid.nodes[:, plot_axes[0]],
                 data,
-                label=label,
-                color=linecolor,
-                ls=ls,
-                lw=lw,
+                label=label[i],
+                color=linecolor[i],
+                ls=ls[i],
+                lw=lw[i],
             )
         else:
             ax.plot(
                 grid.nodes[:, plot_axes[0]],
                 data,
-                label=label,
-                color=linecolor,
-                ls=ls,
-                lw=lw,
+                label=label[i],
+                color=linecolor[i],
+                ls=ls[i],
+                lw=lw[i],
             )
         ldata.append(data)
     xlabel_fontsize = kwargs.pop("xlabel_fontsize", None)
@@ -1284,7 +1298,7 @@ def plot_fsa(  # noqa: C901
         if len(eq) == 1:
             label = [label]
         else:
-            label = [f"Equilibrium {i}" for i in range(len(eq))]
+            label = [f"{i}" for i in range(len(eq))]
     if not isinstance(linecolor, (list, tuple)):
         linecolor = [linecolor] * len(eq)
     if not isinstance(ls, (list, tuple)):

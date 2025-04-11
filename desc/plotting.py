@@ -20,6 +20,7 @@ from desc.basis import fourier, zernike_radial_poly
 from desc.coils import CoilSet, _Coil
 from desc.compute import data_index, get_transforms
 from desc.compute.utils import _parse_parameterization
+from desc.equilibrium import Equilibrium
 from desc.equilibrium.coords import map_coordinates
 from desc.grid import Grid, LinearGrid
 from desc.integrals import surface_averages_map
@@ -505,8 +506,8 @@ def plot_1d(eq, name, grid=None, log=False, ax=None, return_data=False, **kwargs
 
     Parameters
     ----------
-    eq : Equilibrium, Surface, Curve
-        Object from which to plot.
+    eq : list of Equilibrium, Surface, Curve
+        Object from which to plot. Multiple objects can be passed in a list.
     name : str
         Name of variable to plot.
     grid : Grid, optional
@@ -554,12 +555,19 @@ def plot_1d(eq, name, grid=None, log=False, ax=None, return_data=False, **kwargs
         plot_1d(eq, 'p')
 
     """
+    if not isinstance(eq, (list, tuple)):
+        eq = [eq]
+    errorif(
+        any(not isinstance(eqi, type(eq[0])) for eqi in eq),
+        TypeError,
+        "All elements of eq must be of the same type.",
+    )
     # If the quantity is a flux surface function, call plot_fsa.
     # This is done because the computation of some quantities relies on a
     # surface average. Surface averages should be computed over a 2-D grid to
     # sample the entire surface. Computing this on a 1-D grid would return a
     # misleading plot.
-    parameterization = _parse_parameterization(eq)
+    parameterization = _parse_parameterization(eq[0])
     default_L = 100
     default_N = 0
     if data_index[parameterization][name]["coordinates"] == "r":
@@ -591,7 +599,13 @@ def plot_1d(eq, name, grid=None, log=False, ax=None, return_data=False, **kwargs
     elif data_index[parameterization][name]["coordinates"] == "s":  # curve qtys
         default_L = 0
         default_N = 100
-    NFP = getattr(eq, "NFP", 1)
+
+    errorif(
+        any(getattr(eqi, "NFP", 1) != getattr(eq[0], "NFP", 1) for eqi in eq),
+        ValueError,
+        "All elements of eq must have the same NFP.",
+    )
+    NFP = getattr(eq[0], "NFP", 1)
     if grid is None:
         grid_kwargs = {"L": default_L, "N": default_N, "NFP": NFP}
         grid = _get_grid(**grid_kwargs)
@@ -599,35 +613,37 @@ def plot_1d(eq, name, grid=None, log=False, ax=None, return_data=False, **kwargs
     if len(plot_axes) != 1:
         return ValueError(colored("Grid must be 1D", "red"))
 
-    data, ylabel = _compute(eq, name, grid, kwargs.pop("component", None))
-    label = kwargs.pop("label", None)
-
     fig, ax = _format_ax(ax, figsize=kwargs.pop("figsize", None))
 
-    # reshape data to 1D
-    data = data.flatten()
-    linecolor = kwargs.pop("linecolor", colorblind_colors[0])
-    ls = kwargs.pop("ls", "-")
-    lw = kwargs.pop("lw", 1)
-    if log:
-        data = np.abs(data)  # ensure data is positive for log plot
-        ax.semilogy(
-            grid.nodes[:, plot_axes[0]],
-            data,
-            label=label,
-            color=linecolor,
-            ls=ls,
-            lw=lw,
-        )
-    else:
-        ax.plot(
-            grid.nodes[:, plot_axes[0]],
-            data,
-            label=label,
-            color=linecolor,
-            ls=ls,
-            lw=lw,
-        )
+    ldata = []  # list of data to return
+    for eqi in eq:
+        data, ylabel = _compute(eqi, name, grid, kwargs.pop("component", None))
+        label = kwargs.pop("label", None)
+        # reshape data to 1D
+        data = data.flatten()
+        linecolor = kwargs.pop("linecolor", colorblind_colors[0])
+        ls = kwargs.pop("ls", "-")
+        lw = kwargs.pop("lw", 1)
+        if log:
+            data = np.abs(data)  # ensure data is positive for log plot
+            ax.semilogy(
+                grid.nodes[:, plot_axes[0]],
+                data,
+                label=label,
+                color=linecolor,
+                ls=ls,
+                lw=lw,
+            )
+        else:
+            ax.plot(
+                grid.nodes[:, plot_axes[0]],
+                data,
+                label=label,
+                color=linecolor,
+                ls=ls,
+                lw=lw,
+            )
+        ldata.append(data)
     xlabel_fontsize = kwargs.pop("xlabel_fontsize", None)
     ylabel_fontsize = kwargs.pop("ylabel_fontsize", None)
 
@@ -636,7 +652,10 @@ def plot_1d(eq, name, grid=None, log=False, ax=None, return_data=False, **kwargs
     ax.set_xlabel(xlabel, fontsize=xlabel_fontsize)
     ax.set_ylabel(ylabel, fontsize=ylabel_fontsize)
     _set_tight_layout(fig)
-    plot_data = {xlabel.strip("$").strip("\\"): grid.nodes[:, plot_axes[0]], name: data}
+    plot_data = {
+        xlabel.strip("$").strip("\\"): grid.nodes[:, plot_axes[0]],
+        name: ldata,
+    }
 
     if label is not None:
         ax.legend()
@@ -1145,8 +1164,8 @@ def plot_fsa(  # noqa: C901
 
     Parameters
     ----------
-    eq : Equilibrium
-        Object from which to plot.
+    eq : list of Equilibrium
+        Object from which to plot. Multiple objects can be passed in a list.
     name : str
         Name of variable to plot.
     with_sqrt_g : bool, optional
@@ -1217,24 +1236,61 @@ def plot_fsa(  # noqa: C901
         fig, ax = plot_fsa(eq, "B_theta", with_sqrt_g=False)
 
     """
-    if M is None:
-        M = eq.M_grid
-    if N is None:
-        N = eq.N_grid
+    if not isinstance(eq, (list, tuple)):
+        eq = [eq]
+    errorif(
+        any(not isinstance(eqi, Equilibrium) for eqi in eq),
+        TypeError,
+        "All elements of eq must be of the same type, got"
+        f" {[type(eqi) for eqi in eq]}.",
+    )
+
     if grid is None:
         if np.isscalar(rho) and (int(rho) == rho):
             rho = np.linspace(0, 1, rho + 1)
         rho = np.atleast_1d(rho)
-        grid = LinearGrid(M=M, N=N, NFP=eq.NFP, sym=eq.sym, rho=rho)
+        grid = [
+            LinearGrid(M=eqi.M_grid, N=eqi.N_grid, NFP=eqi.NFP, sym=eqi.sym, rho=rho)
+            for eqi in eq
+        ]
+        rho = [rho] * len(eq)
     else:
-        rho = grid.compress(grid.nodes[:, 0])
+        errorif(
+            not isinstance(grid, (list, tuple)) and len(eq) > 1,
+            TypeError,
+            "When multiple equilibria are passed, grid must be a list of grids.",
+        )
+        rho = [gridi.compress(gridi.nodes[:, 0]) for gridi in grid]
+    errorif(
+        any([grid[i].NFP != eq[i].NFP for i in range(len(eq))]),
+        ValueError,
+        "Grid and eq NFP's must match, got "
+        f"{[(grid[i].NFP,eq[i].NFP) for i in range(len(eq))]}.",
+    )
+    errorif(
+        any([grid[i].sym != eq[i].sym for i in range(len(eq))]),
+        ValueError,
+        "Grid and eq sym's must match, got "
+        f"{[(grid[i].sym ,eq[i].sym) for i in range(len(eq))]}.",
+    )
 
-    linecolor = kwargs.pop("linecolor", colorblind_colors[0])
+    linecolor = kwargs.pop("linecolor", colorblind_colors[: len(eq)])
     ls = kwargs.pop("ls", "-")
     lw = kwargs.pop("lw", 1)
     fig, ax = _format_ax(ax, figsize=kwargs.pop("figsize", (4, 4)))
 
     label = kwargs.pop("label", None)
+    if not isinstance(label, (list, tuple)):
+        if len(eq) == 1:
+            label = [label]
+        else:
+            label = [f"Equilibrium {i}" for i in range(len(eq))]
+    if not isinstance(linecolor, (list, tuple)):
+        linecolor = [linecolor] * len(eq)
+    if not isinstance(ls, (list, tuple)):
+        ls = [ls] * len(eq)
+    if not isinstance(lw, (list, tuple)):
+        lw = [lw] * len(eq)
     p = "desc.equilibrium.equilibrium.Equilibrium"
     if "<" + name + ">" in data_index[p]:
         # If we identify the quantity to plot as something in data_index, then
@@ -1248,75 +1304,91 @@ def plot_fsa(  # noqa: C901
             # surface average we have the recipe to compute in data_index is the
             # desired surface average.
             name = "<" + name + ">"
-    values, ylabel = _compute(
-        eq, name, grid, kwargs.pop("component", None), reshape=False
-    )
-    ylabel = ylabel.split("~")
-    if (
-        data_index[p][name]["coordinates"] == "r"
-        or data_index[p][name]["coordinates"] == ""
-    ):
-        # If the quantity is a surface function, averaging it again has no
-        # effect, regardless of whether sqrt(g) is used.
-        # So we avoid surface averaging it and forgo the <> around the ylabel.
-        ylabel = r"$ " + ylabel[0][1:] + r" ~" + "~".join(ylabel[1:])
-        plot_data_ylabel_key = f"{name}"
-        if data_index[p][name]["coordinates"] == "r":
-            values = grid.compress(values)
-    else:
-        compute_surface_averages = surface_averages_map(grid, expand_out=False)
-        if with_sqrt_g:  # flux surface average
-            sqrt_g = _compute(eq, "sqrt(g)", grid, reshape=False)[0]
-            # Attempt to compute the magnetic axis limit.
-            # Compute derivative depending on various naming schemes.
-            # e.g. B -> B_r, V(r) -> V_r(r), S_r(r) -> S_rr(r)
-            # psi_r/sqrt(g) -> (psi_r/sqrt(g))_r
-            schemes = (
-                name + "_r",
-                name[:-3] + "_r" + name[-3:],
-                name[:-3] + "r" + name[-3:],
-                "(" + name + ")_r",
-            )
-            values_r = next(
-                (
-                    _compute(eq, x, grid, reshape=False)[0]
-                    for x in schemes
-                    if x in data_index[p]
-                ),
-                np.nan,
-            )
-            if (np.isfinite(values) & np.isfinite(values_r))[grid.axis].all():
-                # Otherwise cannot compute axis limit in this agnostic manner.
-                sqrt_g = grid.replace_at_axis(
-                    sqrt_g, _compute(eq, "sqrt(g)_r", grid, reshape=False)[0], copy=True
-                )
-            averages = compute_surface_averages(values, sqrt_g=sqrt_g)
-            ylabel = r"$\langle " + ylabel[0][1:] + r" \rangle~" + "~".join(ylabel[1:])
-        else:  # theta average
-            averages = compute_surface_averages(values)
-            ylabel = (
-                r"$\langle "
-                + ylabel[0][1:]
-                + r" \rangle_{\theta}~"
-                + "~".join(ylabel[1:])
-            )
-        # True if values has nan on a given surface.
-        is_nan = compute_surface_averages(np.isnan(values)).astype(bool)
-        # The integration replaced nan with 0.
-        # Put them back to avoid misleading plot (e.g. cusp near the magnetic axis).
-        values = np.where(is_nan, np.nan, averages)
-        plot_data_ylabel_key = f"<{name}>_fsa"
 
-    if norm_F:
-        # normalize force by B pressure gradient
-        norm_name = kwargs.pop("norm_name", "<|grad(|B|^2)|/2mu0>_vol")
-        norm_data = _compute(eq, norm_name, grid, reshape=False)[0]
-        values = values / np.nanmean(np.abs(norm_data))  # normalize
-    if log:
-        values = np.abs(values)  # ensure data is positive for log plot
-        ax.semilogy(rho, values, label=label, color=linecolor, ls=ls, lw=lw)
-    else:
-        ax.plot(rho, values, label=label, color=linecolor, ls=ls, lw=lw)
+    all_values = []
+    norm_datas = []
+    for i, (eqi, gridi) in enumerate(zip(eq, grid)):
+        values, ylabel = _compute(
+            eqi, name, gridi, kwargs.pop("component", None), reshape=False
+        )
+        ylabel = ylabel.split("~")
+        if (
+            data_index[p][name]["coordinates"] == "r"
+            or data_index[p][name]["coordinates"] == ""
+        ):
+            # If the quantity is a surface function, averaging it again has no
+            # effect, regardless of whether sqrt(g) is used.
+            # So we avoid surface averaging it and forgo the <> around the ylabel.
+            ylabel = r"$ " + ylabel[0][1:] + r" ~" + "~".join(ylabel[1:])
+            plot_data_ylabel_key = f"{name}"
+            if data_index[p][name]["coordinates"] == "r":
+                values = gridi.compress(values)
+        else:
+            compute_surface_averages = surface_averages_map(gridi, expand_out=False)
+            if with_sqrt_g:  # flux surface average
+                sqrt_g = _compute(eqi, "sqrt(g)", gridi, reshape=False)[0]
+                # Attempt to compute the magnetic axis limit.
+                # Compute derivative depending on various naming schemes.
+                # e.g. B -> B_r, V(r) -> V_r(r), S_r(r) -> S_rr(r)
+                # psi_r/sqrt(g) -> (psi_r/sqrt(g))_r
+                schemes = (
+                    name + "_r",
+                    name[:-3] + "_r" + name[-3:],
+                    name[:-3] + "r" + name[-3:],
+                    "(" + name + ")_r",
+                )
+                values_r = next(
+                    (
+                        _compute(eqi, x, gridi, reshape=False)[0]
+                        for x in schemes
+                        if x in data_index[p]
+                    ),
+                    np.nan,
+                )
+                if (np.isfinite(values) & np.isfinite(values_r))[gridi.axis].all():
+                    # Otherwise cannot compute axis limit in this agnostic manner.
+                    sqrt_g = gridi.replace_at_axis(
+                        sqrt_g,
+                        _compute(eqi, "sqrt(g)_r", gridi, reshape=False)[0],
+                        copy=True,
+                    )
+                averages = compute_surface_averages(values, sqrt_g=sqrt_g)
+                ylabel = (
+                    r"$\langle " + ylabel[0][1:] + r" \rangle~" + "~".join(ylabel[1:])
+                )
+            else:  # theta average
+                averages = compute_surface_averages(values)
+                ylabel = (
+                    r"$\langle "
+                    + ylabel[0][1:]
+                    + r" \rangle_{\theta}~"
+                    + "~".join(ylabel[1:])
+                )
+            # True if values has nan on a given surface.
+            is_nan = compute_surface_averages(np.isnan(values)).astype(bool)
+            # The integration replaced nan with 0.
+            # Put them back to avoid misleading plot (e.g. cusp near the magnetic axis).
+            values = np.where(is_nan, np.nan, averages)
+            plot_data_ylabel_key = f"<{name}>_fsa"
+
+        if norm_F:
+            # normalize force by B pressure gradient
+            norm_name = kwargs.pop("norm_name", "<|grad(|B|^2)|/2mu0>_vol")
+            norm_data = _compute(eq, norm_name, gridi, reshape=False)[0]
+            values = values / np.nanmean(np.abs(norm_data))  # normalize
+            norm_datas.append(norm_data)
+        if log:
+            values = np.abs(values)  # ensure data is positive for log plot
+            ax.semilogy(
+                rho[i], values, label=label[i], color=linecolor[i], ls=ls[i], lw=lw[i]
+            )
+        else:
+            ax.plot(
+                rho[i], values, label=label[i], color=linecolor[i], ls=ls[i], lw=lw[i]
+            )
+
+        all_values.append(values)
+
     xlabel_fontsize = kwargs.pop("xlabel_fontsize", None)
     ylabel_fontsize = kwargs.pop("ylabel_fontsize", None)
     assert (
@@ -1336,12 +1408,12 @@ def plot_fsa(  # noqa: C901
         )
     _set_tight_layout(fig)
 
-    if label is not None:
+    if label[0] is not None:
         ax.legend()
 
-    plot_data = {"rho": rho, plot_data_ylabel_key: values}
+    plot_data = {"rho": rho, plot_data_ylabel_key: all_values}
     if norm_F:
-        plot_data["normalization"] = np.nanmean(np.abs(norm_data))
+        plot_data["normalization"] = norm_datas
     else:
         plot_data["normalization"] = 1
 

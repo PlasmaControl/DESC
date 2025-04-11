@@ -1438,7 +1438,7 @@ def plot_fsa(  # noqa: C901
 
 
 def plot_section(
-    eq, name, grid=None, log=False, norm_F=False, ax=None, return_data=False, **kwargs
+    eq, name, grid=None, log=False, normalize=None, ax=None, return_data=False, **kwargs
 ):
     """Plot Poincare sections.
 
@@ -1452,10 +1452,12 @@ def plot_section(
         Grid of coordinates to plot at.
     log : bool, optional
         Whether to use a log scale.
-    norm_F : bool, optional
-        Whether to normalize a plot of force error to be unitless.
-        Vacuum equilibria are normalized by the gradient of magnetic pressure,
-        while finite beta equilibria are normalized by the pressure gradient.
+    normalize : bool, optional
+        Whether to normalize a plot to be unitless. If `name`="|F|", defaults to
+        True, otherwise False.
+    norm_name : str, optional
+        Name of variable to normalize by. If `normalize`=True, defaults to
+        "<|grad(|B|^2)|/2mu0>_vol".
     ax : matplotlib AxesSubplot, optional
         Axis to plot on.
     return_data : bool
@@ -1546,7 +1548,9 @@ def plot_section(
     cols = np.ceil(nphi / rows).astype(int)
 
     data, label = _compute(eq, name, grid, kwargs.pop("component", None), reshape=False)
-    if norm_F:
+    if normalize is None:
+        normalize = True if name == "|F|" else False
+    if normalize:
         # normalize force by B pressure gradient
         norm_name = kwargs.pop("norm_name", "<|grad(|B|^2)|/2mu0>_vol")
         norm_data, _ = _compute(eq, norm_name, grid, reshape=False)
@@ -1574,7 +1578,7 @@ def plot_section(
     if log:
         data = np.abs(data)  # ensure data is positive for log plot
         contourf_kwargs["norm"] = matplotlib.colors.LogNorm()
-        if norm_F:
+        if normalize:
             contourf_kwargs["levels"] = kwargs.pop("levels", np.logspace(-6, 0, 7))
         else:
             logmin = np.floor(np.nanmin(np.log10(data))).astype(int)
@@ -1621,7 +1625,7 @@ def plot_section(
                 eq.NFP * phi[i] / (2 * np.pi)
             )
         )
-        if norm_F:
+        if normalize:
             ax[i].set_title(
                 "%s / %s, %s"
                 % (
@@ -1644,7 +1648,7 @@ def plot_section(
     _set_tight_layout(fig)
 
     plot_data = {"R": R, "Z": Z, name: data}
-    if norm_F:
+    if normalize:
         plot_data["normalization"] = np.nanmean(np.abs(norm_data))
     else:
         plot_data["normalization"] = 1

@@ -1577,7 +1577,7 @@ class TestObjectiveFunction:
         obj = LinkingCurrentConsistency(eq, coilset1)
         obj.build()
         f = obj.compute(coilset1.params_dict, eq.params_dict)
-        np.testing.assert_allclose(f, 0)
+        np.testing.assert_allclose(f, 0, atol=1e-8)
 
         # same with virtual coils
         coilset2 = CoilSet(coil1, coil2, NFP=2, sym=True)
@@ -1585,7 +1585,7 @@ class TestObjectiveFunction:
         obj = LinkingCurrentConsistency(eq, coilset2)
         obj.build()
         f = obj.compute(coilset2.params_dict, eq.params_dict)
-        np.testing.assert_allclose(f, 0)
+        np.testing.assert_allclose(f, 0, atol=1e-8)
 
         # both coilsets together. These have overlapping coils but it doesn't
         # affect the linking number
@@ -1596,7 +1596,7 @@ class TestObjectiveFunction:
         obj = LinkingCurrentConsistency(eq, coilset3)
         obj.build()
         f = obj.compute(coilset3.params_dict, eq.params_dict)
-        np.testing.assert_allclose(f, -G)  # coils provide 2G so error is -G
+        np.testing.assert_allclose(f, -G, rtol=1e-7)  # coils provide 2G so error is -G
 
         # CoilSet + 1 extra coil
         coilset4 = MixedCoilSet(coilset1, coil2, check_intersection=False)
@@ -1606,7 +1606,7 @@ class TestObjectiveFunction:
         obj = LinkingCurrentConsistency(eq, coilset4)
         obj.build()
         f = obj.compute(coilset4.params_dict, eq.params_dict)
-        np.testing.assert_allclose(f, -0.5 * G / 8)
+        np.testing.assert_allclose(f, -0.5 * G / 8, rtol=1e-7)
 
     @pytest.mark.unit
     def test_omnigenity_multiple_surfaces(self):

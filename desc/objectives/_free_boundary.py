@@ -450,7 +450,7 @@ class BoundaryError(_Objective):
         self._eval_grid = eval_grid
         self._st, self._sz = s if isinstance(s, (tuple, list)) else (s, s)
         self._q = q
-        self._field = field
+        self._field = [field] if not isinstance(field, list) else field
         self._field_grid = field_grid
         self._bs_chunk_size = bs_chunk_size
         B_plasma_chunk_size = parse_argname_change(
@@ -460,11 +460,9 @@ class BoundaryError(_Objective):
             B_plasma_chunk_size = None
         self._B_plasma_chunk_size = B_plasma_chunk_size
         self._sheet_current = hasattr(eq.surface, "Phi_mn")
-        if field_fixed:
-            things = [eq]
-        else:
-            things = [eq, field]
-
+        things = [eq]
+        if not field_fixed:
+            things = things.append(self._field)
         super().__init__(
             things=things,
             target=target,
@@ -489,6 +487,8 @@ class BoundaryError(_Objective):
             Level of output.
 
         """
+        from desc.magnetic_fields import SumMagneticField
+
         eq = self.things[0]
 
         if self._source_grid is None:
@@ -593,7 +593,7 @@ class BoundaryError(_Objective):
             "source_transforms": source_transforms,
             "source_profiles": source_profiles,
             "interpolator": interpolator,
-            "field": self._field,
+            "field": SumMagneticField(self._field),
             "quad_weights": np.sqrt(np.tile(eval_transforms["grid"].weights, neq)),
         }
 
@@ -633,7 +633,7 @@ class BoundaryError(_Objective):
 
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, eq_params, field_params=None, constants=None):
+    def compute(self, eq_params, *field_params, constants=None):
         """Compute boundary force error.
 
         Parameters

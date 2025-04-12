@@ -530,6 +530,9 @@ def _dJpar_dalpha(params, transforms, profiles, data, **kwargs):
         surf_batch_size == 1 or pitch_batch_size is None
     ), f"Expected pitch_batch_size to be None, got {pitch_batch_size}."
     spline = kwargs.get("spline", True)
+    fl_quad = (
+        kwargs["fieldline_quad"] if "fieldline_quad" in kwargs else leggauss(Y_B // 2)
+    )
     quad = (
         kwargs["quad"]
         if "quad" in kwargs
@@ -565,15 +568,12 @@ def _dJpar_dalpha(params, transforms, profiles, data, **kwargs):
             # Take sum over wells, max in alpha (max radial excursion)
             return jnp.sum(dJpar_dalpha, axis=-1).max(axis=-2)
 
-        return (
-            jnp.sum(
-                batch_map(fun, data["pitch_inv"], pitch_batch_size)
-                * data["pitch_inv weight"]
-                / data["pitch_inv"] ** 2,
-                axis=-1,
-            )
-            / num_transit
-        )
+        return jnp.sum(
+            batch_map(fun, data["pitch_inv"], pitch_batch_size)
+            * data["pitch_inv weight"]
+            / data["pitch_inv"] ** 2,
+            axis=-1,
+        ) / bounce.compute_fieldline_length(fl_quad)
 
     grid = transforms["grid"]
     data["dJpar_dalpha"] = _compute(
@@ -684,15 +684,16 @@ def _dJpar_ds(params, transforms, profiles, data, **kwargs):
                 is_fourier=True,
             )
             dJpar_ds = safediv(poloidal_drift, v_tau)
-            # Take sum over wells, mean in alpha
-            return jnp.sum(dJpar_ds, axis=-1).mean(axis=-2)
+            # Take sum over wells, max in alpha
+            # The idea is to have the max drift < 0
+            return jnp.sum(dJpar_ds, axis=-1).max(axis=-2)
 
         return jnp.sum(
             batch_map(fun, data["pitch_inv"], pitch_batch_size)
             * data["pitch_inv weight"]
             / data["pitch_inv"] ** 2,
             axis=-1,
-        ) / (bounce.compute_fieldline_length(fl_quad) * 2**1.5 * jnp.pi)
+        ) / bounce.compute_fieldline_length(fl_quad)
 
     grid = transforms["grid"]
     data["dJpar_ds"] = _compute(

@@ -572,7 +572,7 @@ def _dJpar_dalpha(params, transforms, profiles, data, **kwargs):
                 / data["pitch_inv"] ** 2,
                 axis=-1,
             )
-            / data["num_transits"]
+            / num_transit
         )
 
     grid = transforms["grid"]

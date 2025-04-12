@@ -238,7 +238,7 @@ class TestPlot2D:
         grid = LinearGrid(rho=np.array(0.8), M=20, N=2)
         eq = get("DSHAPE_CURRENT")
         fig, ax, data = plot_2d(
-            eq, "|F|", norm_F=True, figsize=(4, 4), return_data=True, grid=grid
+            eq, "|F|", normalize=True, figsize=(4, 4), return_data=True, grid=grid
         )
         for string in ["|F|", "theta", "zeta"]:
             assert string in data.keys()
@@ -420,7 +420,7 @@ class TestPlotFSA:
         """Test plotting flux surface average normalized force error on log scale."""
         eq = get("DSHAPE_CURRENT")
         fig, ax = plot_fsa(
-            eq, "|F|", log=True, norm_F=True, norm_name="<|grad(p)|>_vol"
+            eq, "|F|", log=True, normalize=True, norm_name="<|grad(p)|>_vol"
         )
         ax.set_ylim([1e-6, 1e-3])
         return fig
@@ -431,7 +431,9 @@ class TestPlotFSA:
         """Test plotting flux surface average normalized force error for multiple eq."""
         eq1 = get("DSHAPE_CURRENT")
         eq2 = get("DSHAPE")
-        fig, ax = plot_fsa([eq1, eq2], "|F|", norm_F=True, norm_name="<|grad(p)|>_vol")
+        fig, ax = plot_fsa(
+            [eq1, eq2], "|F|", normalize=True, norm_name="<|grad(p)|>_vol"
+        )
         ax.set_ylim([1e-6, 1e-3])
         return fig
 

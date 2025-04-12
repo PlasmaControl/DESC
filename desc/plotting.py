@@ -682,7 +682,15 @@ def plot_1d(  # noqa: C901
 
 
 def plot_2d(
-    eq, name, grid=None, log=False, norm_F=False, ax=None, return_data=False, **kwargs
+    eq,
+    name,
+    grid=None,
+    log=False,
+    normalize=False,
+    norm_name=None,
+    ax=None,
+    return_data=False,
+    **kwargs,
 ):
     """Plot 2D cross-sections.
 
@@ -696,12 +704,10 @@ def plot_2d(
         Grid of coordinates to plot at.
     log : bool, optional
         Whether to use a log scale.
-    norm_F : bool, optional
-        Whether to normalize a plot of force error to be unitless.
-        Vacuum equilibria are normalized by the gradient of magnetic pressure,
-        while finite beta equilibria are normalized by the pressure gradient.
+    normalize : bool, optional
+        Whether to normalize a plot to be unitless. Defaults to False
     norm_name : str, optional
-        Name of variable to normalize by. If `norm_F`=True, defaults to
+        Name of variable to normalize by. If `normalize`=True, defaults to
         `<|grad(|B|^2)|/2mu0>_vol`.
     ax : matplotlib AxesSubplot, optional
         Axis to plot on.
@@ -749,6 +755,7 @@ def plot_2d(
         plot_2d(eq, 'sqrt(g)')
 
     """
+    normalize = parse_argname_change(normalize, kwargs, "norm_F", "normalize")
     parameterization = _parse_parameterization(eq)
     if grid is None:
         grid_kwargs = {"M": 33, "N": 33, "NFP": eq.NFP, "axis": False}
@@ -777,9 +784,9 @@ def plot_2d(
     fig, ax = _format_ax(ax, figsize=kwargs.pop("figsize", None))
     divider = make_axes_locatable(ax)
 
-    if norm_F:
+    if normalize:
         # normalize force by B pressure gradient
-        norm_name = kwargs.pop("norm_name", "<|grad(|B|^2)|/2mu0>_vol")
+        norm_name = norm_name if norm_name is not None else "<|grad(|B|^2)|/2mu0>_vol"
         norm_data, _ = _compute(eq, norm_name, grid, reshape=False)
         data = data / np.nanmean(np.abs(norm_data))  # normalize
 
@@ -796,7 +803,7 @@ def plot_2d(
     if log:
         data = np.abs(data)  # ensure data is positive for log plot
         contourf_kwargs["norm"] = matplotlib.colors.LogNorm()
-        if norm_F:
+        if normalize:
             contourf_kwargs["levels"] = kwargs.pop("levels", np.logspace(-6, 0, 7))
         else:
             logmin = max(np.floor(np.nanmin(np.log10(data))).astype(int), -16)
@@ -841,7 +848,7 @@ def plot_2d(
     ax.set_xlabel(xlabel, fontsize=xlabel_fontsize)
     ax.set_ylabel(ylabel, fontsize=ylabel_fontsize)
     ax.set_title(label, fontsize=title_fontsize)
-    if norm_F:
+    if normalize:
         ax.set_title(
             "%s / %s"
             % (
@@ -856,7 +863,7 @@ def plot_2d(
         name: data,
     }
 
-    if norm_F:
+    if normalize:
         plot_data["normalization"] = np.nanmean(np.abs(norm_data))
     else:
         plot_data["normalization"] = 1
@@ -1172,7 +1179,8 @@ def plot_fsa(  # noqa: C901
     rho=20,
     M=None,
     N=None,
-    norm_F=False,
+    normalize=False,
+    norm_name=None,
     ax=None,
     return_data=False,
     grid=None,
@@ -1205,13 +1213,10 @@ def plot_fsa(  # noqa: C901
         Poloidal grid resolution. Default is eq.M_grid.
     N : int, optional
         Toroidal grid resolution. Default is eq.N_grid.
-    norm_F : bool, optional
-        Whether to normalize a plot of force error to be unitless.
-        Vacuum equilibria are normalized by the volume average of the gradient
-        of magnetic pressure, while finite beta equilibria are normalized by the
-        volume average of the pressure gradient.
+    normalize : bool, optional
+        Whether to normalize a plot to be unitless. Defaults to False.
     norm_name : str, optional
-        Name of variable to normalize by. If `norm_F`=True, defaults to
+        Name of variable to normalize by. If `normalize`=True, defaults to
         `<|grad(|B|^2)|/2mu0>_vol`.
     ax : matplotlib AxesSubplot, optional
         Axis to plot on.
@@ -1257,6 +1262,7 @@ def plot_fsa(  # noqa: C901
         fig, ax = plot_fsa(eq, "B_theta", with_sqrt_g=False)
 
     """
+    normalize = parse_argname_change(normalize, kwargs, "norm_F", "normalize")
     if not isinstance(eq, (list, tuple, EquilibriaFamily)):
         eq = [eq]
     errorif(
@@ -1402,9 +1408,11 @@ def plot_fsa(  # noqa: C901
             values = np.where(is_nan, np.nan, averages)
             plot_data_ylabel_key = f"<{name}>_fsa"
 
-        if norm_F:
+        if normalize:
             # normalize force by B pressure gradient
-            norm_name = kwargs.pop("norm_name", "<|grad(|B|^2)|/2mu0>_vol")
+            norm_name = (
+                norm_name if norm_name is not None else "<|grad(|B|^2)|/2mu0>_vol"
+            )
             norm_data = _compute(eqi, norm_name, gridi, reshape=False)[0]
             values = values / np.nanmean(np.abs(norm_data))  # normalize
             norm_datas.append(norm_data)
@@ -1426,7 +1434,7 @@ def plot_fsa(  # noqa: C901
 
     ax.set_xlabel(_AXIS_LABELS_RTZ[0], fontsize=xlabel_fontsize)
     ax.set_ylabel(ylabel, fontsize=ylabel_fontsize)
-    if norm_F:
+    if normalize:
         ax.set_ylabel(
             "%s / %s"
             % (
@@ -1441,7 +1449,7 @@ def plot_fsa(  # noqa: C901
         ax.legend()
 
     plot_data = {"rho": rho, plot_data_ylabel_key: all_values}
-    if norm_F:
+    if normalize:
         plot_data["normalization"] = norm_datas
     else:
         plot_data["normalization"] = 1
@@ -1453,7 +1461,15 @@ def plot_fsa(  # noqa: C901
 
 
 def plot_section(
-    eq, name, grid=None, log=False, normalize=None, ax=None, return_data=False, **kwargs
+    eq,
+    name,
+    grid=None,
+    log=False,
+    normalize=None,
+    norm_name=None,
+    ax=None,
+    return_data=False,
+    **kwargs,
 ):
     """Plot Poincare sections.
 
@@ -1518,13 +1534,7 @@ def plot_section(
         fig, ax = plot_section(eq, "J^rho")
 
     """
-    if "norm_F" in kwargs:
-        warnings.warn(
-            "`norm_F` is deprecated, use `normalize` instead. "
-            "Given value will be passed to `normalize`.",
-            DeprecationWarning,
-        )
-        normalize = kwargs.pop("norm_F", None)
+    normalize = parse_argname_change(normalize, kwargs, "norm_F", "normalize")
     phi = kwargs.pop("phi", (1 if eq.N == 0 else 6))
     phi = parse_argname_change(phi, kwargs, "nzeta", "phi")
     phi = parse_argname_change(phi, kwargs, "nphi", "phi")
@@ -1574,7 +1584,7 @@ def plot_section(
         normalize = True if name == "|F|" else False
     if normalize:
         # normalize force by B pressure gradient
-        norm_name = kwargs.pop("norm_name", "<|grad(|B|^2)|/2mu0>_vol")
+        norm_name = norm_name if norm_name is not None else "<|grad(|B|^2)|/2mu0>_vol"
         norm_data, _ = _compute(eq, norm_name, grid, reshape=False)
         data = data / np.nanmean(np.abs(norm_data))  # normalize
 

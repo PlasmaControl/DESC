@@ -3494,13 +3494,30 @@ def plot_grid(grid, return_data=False, **kwargs):
     return fig, ax
 
 
-def plot_basis(basis, return_data=False, **kwargs):
+def plot_basis(  # noqa : C901
+    basis,
+    derivative=np.array([0, 0, 0]),
+    return_data=False,
+    **kwargs,
+):
     """Plot basis functions.
+
+    Currently supported basis classes are:
+    - PowerSeries
+    - FourierSeries
+    - ChebyshevPolynomial
+    - DoubleFourierSeries
+    - ZernikePolynomial
+    - FourierZernikeBasis (only 2D in rho and theta)
+    - ChebyshevDoubleFourierBasis (only 2D in rho and theta)
 
     Parameters
     ----------
     basis : Basis
         basis to plot
+    derivative : (1,3), optional
+        Order of derivatives to compute in (rho,theta,zeta).
+        Default is [0,0,0] (no derivative).
     return_data : bool
         If True, return the data plotted as well as fig,ax
     **kwargs : dict, optional
@@ -3539,14 +3556,15 @@ def plot_basis(basis, return_data=False, **kwargs):
 
     """
     title_fontsize = kwargs.pop("title_fontsize", None)
+    no_derivative = (np.array([0, 0, 0]) == derivative).all()
 
-    # TODO(#1377): add all other Basis classes
+    # 1D BASIS
     if basis.__class__.__name__ == "PowerSeries":
         grid = LinearGrid(rho=100, endpoint=True)
         r = grid.nodes[:, 0]
         fig, ax = plt.subplots(figsize=kwargs.get("figsize", (6, 4)))
 
-        f = basis.evaluate(grid.nodes)
+        f = basis.evaluate(grid.nodes, derivatives=derivative)
         plot_data = {"l": basis.modes[:, 0], "amplitude": [], "rho": r}
 
         for fi, l in zip(f.T, basis.modes[:, 0]):
@@ -3556,7 +3574,8 @@ def plot_basis(basis, return_data=False, **kwargs):
         ax.set_ylabel("$f_l(\\rho)$")
         ax.legend(bbox_to_anchor=(1.04, 0.5), loc="center left", borderaxespad=0)
         ax.set_xticks([0, 0.25, 0.5, 0.75, 1])
-        ax.set_yticks([0, 0.25, 0.5, 0.75, 1])
+        if no_derivative:
+            ax.set_yticks([0, 0.25, 0.5, 0.75, 1])
         ax.set_title(
             "{}, $L={}$".format(basis.__class__.__name__, basis.L),
             fontsize=title_fontsize,
@@ -3572,7 +3591,7 @@ def plot_basis(basis, return_data=False, **kwargs):
         z = grid.nodes[:, 2]
         fig, ax = plt.subplots(figsize=kwargs.get("figsize", (6, 4)))
 
-        f = basis.evaluate(grid.nodes)
+        f = basis.evaluate(grid.nodes, derivatives=derivative)
         plot_data = {"n": basis.modes[:, 2], "amplitude": [], "zeta": z}
 
         for fi, n in zip(f.T, basis.modes[:, 2]):
@@ -3584,7 +3603,8 @@ def plot_basis(basis, return_data=False, **kwargs):
         ax.legend(bbox_to_anchor=(1.04, 0.5), loc="center left", borderaxespad=0)
         ax.set_xticks([0, np.pi / basis.NFP, 2 * np.pi / basis.NFP])
         ax.set_xticklabels(["$0$", "$\\pi/N_{{FP}}$", "$2\\pi/N_{{FP}}$"])
-        ax.set_yticks([-1, -0.5, 0, 0.5, 1])
+        if no_derivative:
+            ax.set_yticks([-1, -0.5, 0, 0.5, 1])
         ax.set_title(
             "{}, $N={}$, $N_{{FP}}={}$".format(
                 basis.__class__.__name__, basis.N, basis.NFP
@@ -3597,6 +3617,35 @@ def plot_basis(basis, return_data=False, **kwargs):
 
         return fig, ax
 
+    elif basis.__class__.__name__ == "ChebyshevPolynomial":
+        grid = LinearGrid(rho=100, endpoint=True)
+        r = grid.nodes[:, 0]
+        fig, ax = plt.subplots(figsize=kwargs.get("figsize", (6, 4)))
+
+        f = basis.evaluate(grid.nodes, derivatives=derivative)
+        plot_data = {"l": basis.modes[:, 0], "amplitude": [], "rho": r}
+
+        for fi, n in zip(f.T, basis.modes[:, 0]):
+            ax.plot(r, fi, label="$l={:d}$".format(int(n)))
+            plot_data["amplitude"].append(fi)
+
+        ax.set_xlabel("$\\rho$")
+        ax.set_ylabel("$f_l(\\rho)$")
+        ax.legend(bbox_to_anchor=(1.04, 0.5), loc="center left", borderaxespad=0)
+        ax.set_xticks([0, 0.25, 0.5, 0.75, 1])
+        if no_derivative:
+            ax.set_yticks([-1, -0.5, 0, 0.5, 1])
+        ax.set_title(
+            "{}, $L={}$".format(basis.__class__.__name__, basis.L),
+            fontsize=title_fontsize,
+        )
+        _set_tight_layout(fig)
+        if return_data:
+            return fig, ax, plot_data
+
+        return fig, ax
+
+    # 2D\3D BASIS
     elif basis.__class__.__name__ == "DoubleFourierSeries":
         nmax = abs(basis.modes[:, 2]).max()
         mmax = abs(basis.modes[:, 1]).max()
@@ -3614,7 +3663,7 @@ def plot_basis(basis, return_data=False, **kwargs):
             2 * mmax + 2, 2 * nmax + 2, width_ratios=wratios, height_ratios=hratios
         )
         ax = np.empty((2 * mmax + 1, 2 * nmax + 1), dtype=object)
-        f = basis.evaluate(grid.nodes)
+        f = basis.evaluate(grid.nodes, derivatives=derivative)
         plot_data = {
             "m": basis.modes[:, 1],
             "n": basis.modes[:, 2],
@@ -3663,7 +3712,8 @@ def plot_basis(basis, return_data=False, **kwargs):
                 )
         cb_ax = plt.subplot(gs[:, -1])
         cbar = fig.colorbar(im, cax=cb_ax)
-        cbar.set_ticks([-1, -0.5, 0, 0.5, 1])
+        if no_derivative:
+            cbar.set_ticks([-1, -0.5, 0, 0.5, 1])
         fig.suptitle(
             "{}, $M={}$, $N={}$, $N_{{FP}}={}$".format(
                 basis.__class__.__name__, basis.M, basis.N, basis.NFP
@@ -3675,6 +3725,64 @@ def plot_basis(basis, return_data=False, **kwargs):
             return fig, ax, plot_data
 
         return fig, ax
+
+    elif basis.__class__.__name__ == "ChebyshevDoubleFourierBasis":
+        lmax = abs(basis.modes[:, 0]).max().astype(int)
+        mmax = abs(basis.modes[:, 1]).max().astype(int)
+
+        grid = LinearGrid(rho=100, theta=100, endpoint=True)
+        r = grid.nodes[grid.unique_rho_idx, 0]
+        v = grid.nodes[grid.unique_theta_idx, 1]
+
+        fig = plt.figure(figsize=kwargs.get("figsize", (3 * mmax, 2 * lmax)))
+
+        plot_data = {"amplitude": [], "rho": r, "theta": v}
+
+        ax = {i: {} for i in range(lmax + 1)}
+        ratios = np.ones(2 * (mmax + 1) + 1)
+        ratios[-1] = kwargs.get("cbar_ratio", 0.15)
+        gs = matplotlib.gridspec.GridSpec(
+            lmax + 1, 2 * (mmax + 1) + 1, width_ratios=ratios
+        )
+
+        modes = basis.modes[basis.modes[:, 2] == 0]
+        plot_data["l"] = basis.modes[:, 0]
+        plot_data["m"] = basis.modes[:, 1]
+        Zs = basis.evaluate(grid.nodes, modes=modes, derivatives=derivative)
+        for i, (l, m) in enumerate(
+            zip(modes[:, 0].astype(int), modes[:, 1].astype(int))
+        ):
+            Z = Zs[:, i].reshape((grid.num_rho, grid.num_theta))
+            ax[l][m] = plt.subplot(gs[l, m + mmax : m + mmax + 2], projection="polar")
+            ax[l][m].set_title("$l={}, m={}$".format(l, m))
+            ax[l][m].axis("off")
+            im = ax[l][m].contourf(
+                v,
+                r,
+                Z,
+                levels=np.linspace(-1, 1, 100) if no_derivative else 100,
+                cmap=kwargs.get("cmap", "coolwarm"),
+            )
+            plot_data["amplitude"].append(Zs)
+
+        cb_ax = plt.subplot(gs[:, -1])
+        plt.subplots_adjust(right=0.9)
+        cbar = fig.colorbar(im, cax=cb_ax)
+        if no_derivative:
+            cbar.set_ticks(np.linspace(-1, 1, 9))
+        fig.suptitle(
+            "{}, $M={}$, $N={}$, $N_{{FP}}={}$".format(
+                basis.__class__.__name__, basis.M, basis.N, basis.NFP
+            ),
+            y=0.98,
+            fontsize=title_fontsize,
+        )
+        _set_tight_layout(fig)
+        if return_data:
+            return fig, ax, plot_data
+
+        return fig, ax
+
     elif basis.__class__.__name__ in ["ZernikePolynomial", "FourierZernikeBasis"]:
         lmax = abs(basis.modes[:, 0]).max().astype(int)
         mmax = abs(basis.modes[:, 1]).max().astype(int)
@@ -3683,35 +3791,33 @@ def plot_basis(basis, return_data=False, **kwargs):
         r = grid.nodes[grid.unique_rho_idx, 0]
         v = grid.nodes[grid.unique_theta_idx, 1]
 
-        fig = plt.figure(figsize=kwargs.get("figsize", (3 * mmax, 3 * lmax / 2)))
+        fig = plt.figure(figsize=kwargs.get("figsize", (3 * mmax, 4 * lmax / 2)))
 
         plot_data = {"amplitude": [], "rho": r, "theta": v}
 
         ax = {i: {} for i in range(lmax + 1)}
         ratios = np.ones(2 * (mmax + 1) + 1)
-        ratios[-1] = kwargs.get("cbar_ratio", 0.25)
+        ratios[-1] = kwargs.get("cbar_ratio", 0.15)
         gs = matplotlib.gridspec.GridSpec(
-            lmax + 2, 2 * (mmax + 1) + 1, width_ratios=ratios
+            lmax + 1, 2 * (mmax + 1) + 1, width_ratios=ratios
         )
 
         modes = basis.modes[basis.modes[:, 2] == 0]
         plot_data["l"] = basis.modes[:, 0]
         plot_data["m"] = basis.modes[:, 1]
-        Zs = basis.evaluate(grid.nodes, modes=modes)
+        Zs = basis.evaluate(grid.nodes, modes=modes, derivatives=derivative)
         for i, (l, m) in enumerate(
             zip(modes[:, 0].astype(int), modes[:, 1].astype(int))
         ):
             Z = Zs[:, i].reshape((grid.num_rho, grid.num_theta))
-            ax[l][m] = plt.subplot(
-                gs[l + 1, m + mmax : m + mmax + 2], projection="polar"
-            )
+            ax[l][m] = plt.subplot(gs[l, m + mmax : m + mmax + 2], projection="polar")
             ax[l][m].set_title("$l={}, m={}$".format(l, m))
             ax[l][m].axis("off")
             im = ax[l][m].contourf(
                 v,
                 r,
                 Z,
-                levels=np.linspace(-1, 1, 100),
+                levels=np.linspace(-1, 1, 100) if no_derivative else 100,
                 cmap=kwargs.get("cmap", "coolwarm"),
             )
             plot_data["amplitude"].append(Zs)
@@ -3719,7 +3825,8 @@ def plot_basis(basis, return_data=False, **kwargs):
         cb_ax = plt.subplot(gs[:, -1])
         plt.subplots_adjust(right=0.8)
         cbar = fig.colorbar(im, cax=cb_ax)
-        cbar.set_ticks(np.linspace(-1, 1, 9))
+        if no_derivative:
+            cbar.set_ticks(np.linspace(-1, 1, 9))
         fig.suptitle(
             "{}, $L={}$, $M={}$, spectral indexing = {}".format(
                 basis.__class__.__name__, basis.L, basis.M, basis.spectral_indexing

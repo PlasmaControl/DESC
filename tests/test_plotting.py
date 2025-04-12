@@ -7,10 +7,13 @@ import numpy as np
 import pytest
 
 from desc.basis import (
+    ChebyshevDoubleFourierBasis,
+    ChebyshevPolynomial,
     DoubleFourierSeries,
     FourierSeries,
     FourierZernikeBasis,
     PowerSeries,
+    ZernikePolynomial,
 )
 from desc.coils import CoilSet, FourierXYZCoil, MixedCoilSet
 from desc.compute import data_index
@@ -696,6 +699,36 @@ class TestPlotBasis:
 
     @pytest.mark.unit
     @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
+    def test_plot_basis_chebyshevpoly(self):
+        """Test plotting Chebyshev polynomial."""
+        basis = ChebyshevPolynomial(L=6)
+        fig, ax, data = plot_basis(basis, return_data=True)
+        for string in ["amplitude", "rho", "l"]:
+            assert string in data.keys()
+        return fig
+
+    @pytest.mark.unit
+    @pytest.mark.mpl_image_compare(remove_text=True, tolerance=26)
+    def test_plot_basis_zernikepoly(self):
+        """Test plotting zernike polynomial."""
+        basis = ZernikePolynomial(L=6, M=4)
+        fig, ax, data = plot_basis(basis, return_data=True)
+        for string in ["amplitude", "rho", "l"]:
+            assert string in data.keys()
+        return fig
+
+    @pytest.mark.unit
+    @pytest.mark.mpl_image_compare(remove_text=True, tolerance=26)
+    def test_plot_basis_zernikepoly_derivative(self):
+        """Test plotting zernike polynomial derivative."""
+        basis = ZernikePolynomial(L=6, M=4)
+        fig, ax, data = plot_basis(basis, derivative=[2, 0, 0], return_data=True)
+        for string in ["amplitude", "rho", "l"]:
+            assert string in data.keys()
+        return fig
+
+    @pytest.mark.unit
+    @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
     def test_plot_basis_fourierseries(self):
         """Test plotting fourier series basis."""
         basis = FourierSeries(N=3)
@@ -721,6 +754,28 @@ class TestPlotBasis:
     def test_plot_basis_fourierzernike(self):
         """Test plotting fourier-zernike basis."""
         basis = FourierZernikeBasis(L=8, M=3, N=2)
+        fig, ax, data = plot_basis(basis, return_data=True)
+        for string in ["amplitude", "l", "rho", "m", "theta"]:
+            assert string in data.keys()
+        return fig
+
+    @pytest.mark.unit
+    @pytest.mark.slow
+    @pytest.mark.mpl_image_compare(remove_text=True, tolerance=26)
+    def test_plot_basis_fourierzernike_derivative(self):
+        """Test plotting fourier-zernike basis derivative."""
+        basis = FourierZernikeBasis(L=8, M=3, N=2)
+        fig, ax, data = plot_basis(basis, derivative=[1, 0, 0], return_data=True)
+        for string in ["amplitude", "l", "rho", "m", "theta"]:
+            assert string in data.keys()
+        return fig
+
+    @pytest.mark.unit
+    @pytest.mark.slow
+    @pytest.mark.mpl_image_compare(remove_text=True, tolerance=26)
+    def test_plot_basis_chebyshevdoublefourier(self):
+        """Test plotting chebyshev-double fourier basis."""
+        basis = ChebyshevDoubleFourierBasis(L=8, M=3, N=2)
         fig, ax, data = plot_basis(basis, return_data=True)
         for string in ["amplitude", "l", "rho", "m", "theta"]:
             assert string in data.keys()

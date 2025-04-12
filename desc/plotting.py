@@ -3950,8 +3950,14 @@ def plot_adiabatic_invariant(
 
         # Copy the plasma colormap so we can edit it
         cmap = plt.get_cmap("plasma").copy()
-        plt.contour(data_full[:, :, pitch_idx])
+        rho_cosa = rhos[:, None] * np.cos(alphas)[None, :]
+        rho_sina = rhos[:, None] * np.sin(alphas)[None, :]
+        plt.contour(rho_cosa, rho_sina, data_full[:, :, pitch_idx], levels=len(rhos))
         # Control the number of ticks and format
         ax = plt.gca()  # Get current axis
+        # Label the axes
+        plt.xlabel(r"$\rho \cos(\alpha)$", fontsize=24)
+        plt.ylabel(r"$\rho \sin(\alpha)$", fontsize=24)
+        plt.title(r"$\mathca{J}_{\parallel}$", fontsize=24)
 
     return fig, ax

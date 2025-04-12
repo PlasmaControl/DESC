@@ -530,9 +530,6 @@ def _dJpar_dalpha(params, transforms, profiles, data, **kwargs):
         surf_batch_size == 1 or pitch_batch_size is None
     ), f"Expected pitch_batch_size to be None, got {pitch_batch_size}."
     spline = kwargs.get("spline", True)
-    fl_quad = (
-        kwargs["fieldline_quad"] if "fieldline_quad" in kwargs else leggauss(Y_B // 2)
-    )
     quad = (
         kwargs["quad"]
         if "quad" in kwargs
@@ -564,20 +561,28 @@ def _dJpar_dalpha(params, transforms, profiles, data, **kwargs):
                 bounce.points(pitch_inv, num_well),
                 is_fourier=True,
             )
-            dJpar_dalpha = jnp.safediv(radial_drift, v_tau)
-            # Take sum over wells, mean in alpha
-            return jnp.sum(dJpar_dalpha, axis=-1).mean(axis=-2)
+            dJpar_dalpha = safediv(radial_drift, v_tau)
+            # Take sum over wells, max in alpha (max radial excursion)
+            return jnp.sum(dJpar_dalpha, axis=-1).max(axis=-2)
 
-        return jnp.sum(
-            batch_map(fun, data["pitch_inv"], pitch_batch_size)
-            * data["pitch_inv weight"]
-            / data["pitch_inv"] ** 2,
-            axis=-1,
-        ) / (bounce.compute_fieldline_length(fl_quad) * 2**1.5 * jnp.pi)
+        return (
+            jnp.sum(
+                batch_map(fun, data["pitch_inv"], pitch_batch_size)
+                * data["pitch_inv weight"]
+                / data["pitch_inv"] ** 2,
+                axis=-1,
+            )
+            / data["num_transits"]
+        )
 
     grid = transforms["grid"]
     data["dJpar_dalpha"] = _compute(
         dJpar_dalpha0,
+        {
+            "cvdrift0": data["cvdrift0"],
+            "gbdrift (periodic)": data["gbdrift (periodic)"],
+            "gbdrift (secular)/phi": data["gbdrift (secular)/phi"],
+        },
         data,
         theta,
         grid,
@@ -678,7 +683,7 @@ def _dJpar_ds(params, transforms, profiles, data, **kwargs):
                 bounce.points(pitch_inv, num_well),
                 is_fourier=True,
             )
-            dJpar_ds = jnp.safediv(poloidal_drift, v_tau)
+            dJpar_ds = safediv(poloidal_drift, v_tau)
             # Take sum over wells, mean in alpha
             return jnp.sum(dJpar_ds, axis=-1).mean(axis=-2)
 
@@ -692,6 +697,11 @@ def _dJpar_ds(params, transforms, profiles, data, **kwargs):
     grid = transforms["grid"]
     data["dJpar_ds"] = _compute(
         dJpar_ds0,
+        {
+            "cvdrift0": data["cvdrift0"],
+            "gbdrift (periodic)": data["gbdrift (periodic)"],
+            "gbdrift (secular)/phi": data["gbdrift (secular)/phi"],
+        },
         data,
         theta,
         grid,

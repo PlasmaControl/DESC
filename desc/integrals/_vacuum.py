@@ -6,7 +6,7 @@ from matplotlib import pyplot as plt
 
 from desc.backend import fixed_point, irfft2, jit, jnp, rfft2
 from desc.basis import DoubleFourierSeries
-from desc.grid import LinearGrid
+from desc.grid import LinearGrid, _Grid
 from desc.integrals.quad_utils import eta_zero
 from desc.integrals.singularities import (
     _kernel_biot_savart_coulomb,
@@ -69,8 +69,9 @@ class VacuumSolver(IOAble):
     B0 : _MagneticField
         Magnetic field such that ∇ × B₀ = μ₀ J
         where 𝐉 is the current in amperes everywhere.
-    evl_grid : Grid
-        Evaluation points in 𝒳 for the magnetic field.
+    evl_grid : Grid or jnp.ndarray
+        Grid of evaluation points in flux coordinates in ∂𝒳.
+        Or ``coords`` array of evaluation points in 𝒳 in R,phi,Z coords.
     src_grid : Grid
         Source points on ∂𝒳 for quadrature of kernels.
         Default resolution is ``src_grid.M=surface.M*4`` and ``src_grid.N=surface.N*4``.
@@ -102,7 +103,7 @@ class VacuumSolver(IOAble):
         self,
         surface,
         B0,
-        evl_grid,
+        evl_grid=None,
         src_grid=None,
         Phi_grid=None,
         Phi_M=None,
@@ -177,12 +178,16 @@ class VacuumSolver(IOAble):
                 Phi_grid, basis, build=False, build_pinv=True
             )
         # Compute data on evaluation grid.
-        if evl_grid.equiv(Phi_grid):
-            evl_data = Phi_data
-        elif not self._same_grid_phi_src and evl_grid.equiv(src_grid):
-            evl_data = src_data
+        if self._evaluate_in_interior():
+            R, phi, Z = evl_grid.T
+            evl_data = {"R": R, "phi": phi, "Z": Z}
         else:
-            evl_data = surface.compute(position, grid=evl_grid)
+            if evl_grid.equiv(Phi_grid):
+                evl_data = Phi_data
+            elif not self._same_grid_phi_src and evl_grid.equiv(src_grid):
+                evl_data = src_data
+            else:
+                evl_data = surface.compute(position, grid=evl_grid)
 
         self._data = {"evl": evl_data, "Phi": Phi_data, "src": src_data}
         self._interpolator = {
@@ -194,7 +199,7 @@ class VacuumSolver(IOAble):
             )
 
     def _evaluate_in_interior(self):
-        return self._evl_grid.nodes[0, 0] < 1
+        return not isinstance(self.evl_grid, _Grid)
 
     @property
     def evl_grid(self):
@@ -296,7 +301,17 @@ class VacuumSolver(IOAble):
         )
         return self._data
 
-    def compute_vacuum_field(self, chunk_size=None):
+    def _set_new_evl_coords(self, coords):
+        R, phi, Z = coords.T
+        self._data["evl"]["R"] = R
+        self._data["evl"]["phi"] = phi
+        self._data["evl"]["Z"] = Z
+
+    def _set_old_evl_coords(self):
+        R, phi, Z = self.evl_grid.T
+        self._data["evl"] = {"R": R, "phi": phi, "Z": Z}
+
+    def compute_vacuum_field(self, chunk_size=None, coords=None):
         """Compute magnetic field due to vacuum potential Φ.
 
         Parameters
@@ -305,6 +320,8 @@ class VacuumSolver(IOAble):
             Size to split computation into chunks.
             If no chunking should be done or the chunk size is the full input
             then supply ``None``. Default is ``None``.
+        coords : jnp.ndarray
+            Optional, evaluation points in 𝒳 in coordinates of R, phi, Z basis.
 
         Returns
         -------
@@ -312,15 +329,18 @@ class VacuumSolver(IOAble):
              Vacuum field ∇Φ stored in ``data["evl"]["grad(Phi)"]``.
 
         """
-        if "grad(Phi)" in self._data["evl"]:
+        if coords is not None:
+            self._set_new_evl_coords(coords)
+        elif "grad(Phi)" in self._data["evl"]:
             return self._data
 
         self._data = self.compute_Phi(chunk_size)
         self._data = self._compute_virtual_current()
+
         self._data["evl"]["grad(Phi)"] = (
             _nonsingular_part(
                 self._data["evl"],
-                self.evl_grid,
+                self.src_grid,  # dummy grid
                 self._data["src"],
                 self.src_grid,
                 st=jnp.nan,
@@ -339,9 +359,11 @@ class VacuumSolver(IOAble):
                 chunk_size=chunk_size,
             )
         )
+        if coords is not None:
+            self._set_old_evl_coords()
         return self._data
 
-    def compute_current_field(self, chunk_size=None):
+    def compute_current_field(self, chunk_size=None, coords=None):
         """Compute magnetic field B₀ due to volume current sources.
 
         Parameters
@@ -350,6 +372,8 @@ class VacuumSolver(IOAble):
             Size to split computation into chunks.
             If no chunking should be done or the chunk size is the full input
             then supply ``None``. Default is ``None``.
+        coords : jnp.ndarray
+            Optional, evaluation points in 𝒳 in coordinates of R,phi,Z basis.
 
         Returns
         -------
@@ -357,18 +381,23 @@ class VacuumSolver(IOAble):
             B₀ stored in ``data["evl"]["B0"]``.
 
         """
-        if "B0" in self._data["evl"]:
+        if coords is not None:
+            self._set_new_evl_coords(coords)
+        elif "B0" in self._data["evl"]:
             return self._data
 
         data = self._data["evl"]
+
         data["B0"] = self._B0.compute_magnetic_field(
             coords=jnp.column_stack([data["R"], data["phi"], data["Z"]]),
             source_grid=self.src_grid,
             chunk_size=chunk_size,
         )
+        if coords is not None:
+            self._set_old_evl_coords()
         return self._data
 
-    def compute_magnetic_field(self, chunk_size=None):
+    def compute_magnetic_field(self, chunk_size=None, coords=None):
         """Compute magnetic field B = B₀ + ∇Φ.
 
         Parameters
@@ -377,6 +406,8 @@ class VacuumSolver(IOAble):
             Size to split computation into chunks.
             If no chunking should be done or the chunk size is the full input
             then supply ``None``. Default is ``None``.
+        coords : jnp.ndarray
+            Optional, evaluation points in 𝒳 in coordinates of R,phi,Z basis.
 
         Returns
         -------
@@ -384,7 +415,9 @@ class VacuumSolver(IOAble):
             B stored in ``data["evl"]["B0+grad(Phi)"]``.
 
         """
-        if "B0+grad(Phi)" in self._data["evl"]:
+        if coords is not None:
+            self._set_new_evl_coords(coords)
+        elif "B0+grad(Phi)" in self._data["evl"]:
             return self._data
 
         self._data = self.compute_current_field(chunk_size)
@@ -392,6 +425,8 @@ class VacuumSolver(IOAble):
         self._data["evl"]["B0+grad(Phi)"] = (
             self._data["evl"]["B0"] + self._data["evl"]["grad(Phi)"]
         )
+        if coords is not None:
+            self._set_old_evl_coords()
         return self._data
 
     def plot_Bn_error(self, Bn):

@@ -364,9 +364,8 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
 @register_compute_fun(
     name="Jpar",
     label=(
-        # ε¹ᐧ⁵ = π/(8√2) R₀²〈|∇ψ|〉⁻² B₀⁻¹ ∫dλ λ⁻² 〈 ∑ⱼ Hⱼ²/Iⱼ 〉
+        # J_∥ = ∮ dl v_∥
         "\\J_{\\parallel} = \\integrate v_{\\parallel} dl"
-        "\\integrate dl / v_{\\parallel}"
     ),
     units="~",
     units_long="m^2-s^2",
@@ -379,9 +378,7 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
     data=[
         "min_tz |B|",
         "max_tz |B|",
-        "cvdrift0",
-        "gbdrift (periodic)",
-        "gbdrift (secular)/phi",
+        "B^zeta",
     ]
     + Bounce2D.required_names,
     resolution_requirement="tz",
@@ -402,20 +399,7 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
     ],
 )
 def _Jpar(params, transforms, profiles, data, **kwargs):
-    """Fast ion confinement proxy as defined by Velasco et al.
-
-    A model for the fast evaluation of prompt losses of energetic ions in stellarators.
-    J.L. Velasco et al. 2021 Nucl. Fusion 61 116059.
-    https://doi.org/10.1088/1741-4326/ac2994.
-    Equation 16.
-
-    This expression has a secular term that drives the result to zero as the number
-    of toroidal transits increases if the secular term is not averaged out from the
-    singular integrals. It is observed that this implementation does not average
-    out the secular term. Currently, an optimization using this metric may need
-    to be evaluated by measuring decrease in Γ_c at a fixed number of toroidal
-    transits.
-    """
+    """Second adiabatic invariant."""
     # noqa: unused dependency
     theta = kwargs["theta"]
     Y_B = kwargs.get("Y_B", theta.shape[-1] * 2)
@@ -429,9 +413,6 @@ def _Jpar(params, transforms, profiles, data, **kwargs):
         surf_batch_size == 1 or pitch_batch_size is None
     ), f"Expected pitch_batch_size to be None, got {pitch_batch_size}."
     spline = kwargs.get("spline", True)
-    fl_quad = (
-        kwargs["fieldline_quad"] if "fieldline_quad" in kwargs else leggauss(Y_B // 2)
-    )
     quad = (
         kwargs["quad"]
         if "quad" in kwargs
@@ -459,22 +440,21 @@ def _Jpar(params, transforms, profiles, data, **kwargs):
                 [_Jpar_num],
                 pitch_inv,
                 data,
+                ["B^zeta"],
                 bounce.points(pitch_inv, num_well),
                 is_fourier=True,
             )
             # Take sum over wells, mean in alpha
-            return jnp.sum(Jpar, axis=-1).mean(axis=-2)
+            return jnp.sum(Jpar, axis=-1)
 
-        return jnp.sum(
-            batch_map(fun, data["pitch_inv"], pitch_batch_size)
-            * data["pitch_inv weight"]
-            / data["pitch_inv"] ** 2,
-            axis=-1,
-        ) / (bounce.compute_fieldline_length(fl_quad) * 2**1.5 * jnp.pi)
+        return batch_map(fun, data["pitch_inv"], pitch_batch_size)
 
     grid = transforms["grid"]
     data["Jpar"] = _compute(
         Jpar0,
+        {
+            "B^zeta": data["B^zeta"],
+        },
         data,
         theta,
         grid,
@@ -486,17 +466,14 @@ def _Jpar(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="dJpar_dalpha",
-    label=(
-        # ε¹ᐧ⁵ = π/(8√2) R₀²〈|∇ψ|〉⁻² B₀⁻¹ ∫dλ λ⁻² 〈 ∑ⱼ Hⱼ²/Iⱼ 〉
-        "\\J_{\\parallel} = \\integrate v_{\\parallel} dl"
-        "\\integrate dl / v_{\\parallel}"
-    ),
+    label=("\\partial_{\\alpha} \\J_{\\parallel}/"),
     units="~",
     units_long="m^2-s^2",
     description="Second adiabatic invariant of motion.",
     coordinates="r",
     dim=1,
     profiles=[],
+    transforms={"grid": []},
     params=[],
     data=[
         "min_tz |B|",
@@ -524,20 +501,7 @@ def _Jpar(params, transforms, profiles, data, **kwargs):
     ],
 )
 def _dJpar_dalpha(params, transforms, profiles, data, **kwargs):
-    """Fast ion confinement proxy as defined by Velasco et al.
-
-    A model for the fast evaluation of prompt losses of energetic ions in stellarators.
-    J.L. Velasco et al. 2021 Nucl. Fusion 61 116059.
-    https://doi.org/10.1088/1741-4326/ac2994.
-    Equation 16.
-
-    This expression has a secular term that drives the result to zero as the number
-    of toroidal transits increases if the secular term is not averaged out from the
-    singular integrals. It is observed that this implementation does not average
-    out the secular term. Currently, an optimization using this metric may need
-    to be evaluated by measuring decrease in Γ_c at a fixed number of toroidal
-    transits.
-    """
+    """Omnigenity measure."""
     # noqa: unused dependency
     theta = kwargs["theta"]
     Y_B = kwargs.get("Y_B", theta.shape[-1] * 2)
@@ -621,6 +585,7 @@ def _dJpar_dalpha(params, transforms, profiles, data, **kwargs):
     coordinates="r",
     dim=1,
     profiles=[],
+    transforms={"grid": []},
     params=[],
     data=[
         "min_tz |B|",

@@ -1394,7 +1394,7 @@ def plot_fsa(  # noqa: C901
         if norm_F:
             # normalize force by B pressure gradient
             norm_name = kwargs.pop("norm_name", "<|grad(|B|^2)|/2mu0>_vol")
-            norm_data = _compute(eq, norm_name, gridi, reshape=False)[0]
+            norm_data = _compute(eqi, norm_name, gridi, reshape=False)[0]
             values = values / np.nanmean(np.abs(norm_data))  # normalize
             norm_datas.append(norm_data)
         if log:

@@ -353,7 +353,7 @@ class TestPlotFSA:
             eq.compute(names="<" + name + ">", grid=grid)["<" + name + ">"]
         )
         np.testing.assert_allclose(
-            plot_data["<" + name + ">"], desired, equal_nan=False
+            plot_data["<" + name + ">"][0], desired, equal_nan=False
         )
 
         name = "psi_r/sqrt(g)"
@@ -379,7 +379,7 @@ class TestPlotFSA:
             expand_out=False,
         )
         np.testing.assert_allclose(
-            plot_data["<" + name + ">_fsa"], desired, equal_nan=False
+            plot_data["<" + name + ">_fsa"][0], desired, equal_nan=False
         )
 
         name = "|B|"
@@ -398,7 +398,7 @@ class TestPlotFSA:
         data = eq.compute(names=name, grid=grid)
         desired = surface_averages(grid=grid, q=data[name], expand_out=False)
         np.testing.assert_allclose(
-            plot_data["<" + name + ">_fsa"], desired, equal_nan=False
+            plot_data["<" + name + ">_fsa"][0], desired, equal_nan=False
         )
 
     @pytest.mark.unit

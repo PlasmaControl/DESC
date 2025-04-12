@@ -671,7 +671,7 @@ def plot_1d(  # noqa: C901
         name: ldata,
     }
 
-    if label is not None:
+    if label[0] is not None:
         ax.legend()
 
     if return_data:
@@ -701,7 +701,7 @@ def plot_2d(
         while finite beta equilibria are normalized by the pressure gradient.
     norm_name : str, optional
         Name of variable to normalize by. If `norm_F`=True, defaults to
-        "<|grad(|B|^2)|/2mu0>_vol".
+        `<|grad(|B|^2)|/2mu0>_vol`.
     ax : matplotlib AxesSubplot, optional
         Axis to plot on.
     return_data : bool
@@ -1211,7 +1211,7 @@ def plot_fsa(  # noqa: C901
         volume average of the pressure gradient.
     norm_name : str, optional
         Name of variable to normalize by. If `norm_F`=True, defaults to
-        "<|grad(|B|^2)|/2mu0>_vol".
+        `<|grad(|B|^2)|/2mu0>_vol`.
     ax : matplotlib AxesSubplot, optional
         Axis to plot on.
     return_data : bool
@@ -1459,11 +1459,11 @@ def plot_section(
     log : bool, optional
         Whether to use a log scale.
     normalize : bool, optional
-        Whether to normalize a plot to be unitless. If `name`="|F|", defaults to
+        Whether to normalize a plot to be unitless. If `name`=`|F|`, defaults to
         True, otherwise False.
     norm_name : str, optional
         Name of variable to normalize by. If `normalize`=True, defaults to
-        "<|grad(|B|^2)|/2mu0>_vol".
+        `<|grad(|B|^2)|/2mu0>_vol`.
     ax : matplotlib AxesSubplot, optional
         Axis to plot on.
     return_data : bool

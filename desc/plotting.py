@@ -20,7 +20,7 @@ from desc.basis import fourier, zernike_radial_poly
 from desc.coils import CoilSet, _Coil
 from desc.compute import data_index, get_transforms
 from desc.compute.utils import _parse_parameterization
-from desc.equilibrium import Equilibrium
+from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.equilibrium.coords import map_coordinates
 from desc.grid import Grid, LinearGrid
 from desc.integrals import surface_averages_map
@@ -508,7 +508,7 @@ def plot_1d(  # noqa: C901
 
     Parameters
     ----------
-    eq : list of Equilibrium, Surface, Curve
+    eq : array-like Equilibrium, Surface, Curve or EquilibriaFamily
         Object from which to plot. Multiple objects can be passed in a list.
     name : str
         Name of variable to plot.
@@ -557,7 +557,7 @@ def plot_1d(  # noqa: C901
         plot_1d(eq, 'p')
 
     """
-    if not isinstance(eq, (list, tuple)):
+    if not isinstance(eq, (list, tuple, EquilibriaFamily)):
         eq = [eq]
     errorif(
         any(not isinstance(eqi, type(eq[0])) for eqi in eq),
@@ -1182,7 +1182,7 @@ def plot_fsa(  # noqa: C901
 
     Parameters
     ----------
-    eq : list of Equilibrium
+    eq : array-like of Equilibrium or EquilibriaFamily
         Object from which to plot. Multiple objects can be passed in a list.
     name : str
         Name of variable to plot.
@@ -1257,7 +1257,7 @@ def plot_fsa(  # noqa: C901
         fig, ax = plot_fsa(eq, "B_theta", with_sqrt_g=False)
 
     """
-    if not isinstance(eq, (list, tuple)):
+    if not isinstance(eq, (list, tuple, EquilibriaFamily)):
         eq = [eq]
     errorif(
         any(not isinstance(eqi, Equilibrium) for eqi in eq),

@@ -2,6 +2,7 @@
 
 import copy
 import inspect
+import warnings
 
 import numpy as np
 
@@ -9,7 +10,7 @@ from desc.backend import execute_on_cpu, jnp
 from desc.grid import Grid
 
 from ..utils import errorif
-from .data_index import allowed_kwargs, data_index
+from .data_index import allowed_kwargs, data_index, deprecated_names
 
 # map from profile name to equilibrium parameter name
 profile_names = {
@@ -71,9 +72,21 @@ def compute(  # noqa: C901
         names = [names]
     if basis == "xyz" and "phi" not in names:
         names = names + ["phi"]
-    for name in names:
-        if name not in data_index[p]:
-            raise ValueError(f"Unrecognized value '{name}' for parameterization {p}.")
+    # this allows the DeprecationWarning to be thrown in this file
+    with warnings.catch_warnings():
+        warnings.simplefilter("always", DeprecationWarning)
+        for name in names:
+            if name not in data_index[p]:
+                raise ValueError(
+                    f"Unrecognized value '{name}' for parameterization {p}."
+                )
+            if name in list(deprecated_names.keys()):
+                warnings.warn(
+                    f"Variable name {name} is deprecated and will be removed in a "
+                    f"future DESC version, use name {deprecated_names[name]} "
+                    "instead.",
+                    DeprecationWarning,
+                )
     bad_kwargs = kwargs.keys() - allowed_kwargs
     if len(bad_kwargs) > 0:
         raise ValueError(f"Unrecognized argument(s): {bad_kwargs}")
@@ -581,11 +594,14 @@ def get_transforms(
                 grid_B = grid
             transforms["B"] = Transform(
                 grid_B,
-                DoubleFourierSeries(
-                    M=kwargs.get("M_booz", 2 * obj.M),
-                    N=kwargs.get("N_booz", 2 * obj.N),
-                    NFP=obj.NFP,
-                    sym=obj.R_basis.sym,
+                kwargs.get(
+                    "B_basis",
+                    DoubleFourierSeries(
+                        M=kwargs.get("M_booz", 2 * obj.M),
+                        N=kwargs.get("N_booz", 2 * obj.N),
+                        NFP=obj.NFP,
+                        sym=kwargs.get("sym", obj.R_basis.sym),
+                    ),
                 ),
                 derivs=derivs["B"],
                 build=False,
@@ -606,7 +622,7 @@ def get_transforms(
                     M=kwargs.get("M_booz", 2 * obj.M),
                     N=kwargs.get("N_booz", 2 * obj.N),
                     NFP=obj.NFP,
-                    sym=obj.Z_basis.sym,
+                    sym=kwargs.get("sym", obj.Z_basis.sym),
                 ),
                 derivs=derivs["w"],
                 build=False,

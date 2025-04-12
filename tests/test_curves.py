@@ -328,6 +328,20 @@ class TestFourierRZCurve:
         with pytest.raises(ValueError):
             xyz.to_FourierRZ(N=1, grid=grid)
 
+    @pytest.mark.unit
+    def test_change_symmetry(self):
+        """Test correct sym changes when only sym is passed to change_resolution."""
+        c = FourierRZCurve(sym=False)
+        c.change_resolution(sym=True)
+        assert c.sym
+        assert c.R_basis.sym == "cos"
+        assert c.Z_basis.sym == "sin"
+
+        c.change_resolution(sym=False)
+        assert c.sym is False
+        assert c.R_basis.sym is False
+        assert c.Z_basis.sym is False
+
 
 class TestRZWindingSurfaceCurve:
     """Tests for FourierRZWindingSurfaceCurve class."""
@@ -657,6 +671,18 @@ class TestFourierXYZCurve:
             _ = FourierXYZCurve(Y_n=[1], modes=[1, 2])
         with pytest.raises(AssertionError):
             _ = FourierXYZCurve(Z_n=[1], modes=[1, 2])
+
+    @pytest.mark.unit
+    def test_from_values_rpz(self):
+        """Test from_values method with rpz coords."""
+        t = np.linspace(0, 2 * np.pi, 10)
+        R = np.cos(t)
+        Z = np.sin(t)
+        phi = np.zeros_like(t)
+        coords = np.vstack([R, phi, Z]).T
+        coil = FourierXYZCurve.from_values(coords, basis="rpz", N=1)
+        np.testing.assert_allclose(coil.X_n[-1], 1.0)
+        np.testing.assert_allclose(coil.Z_n[0], 1.0)
 
 
 class TestFourierPlanarCurve:

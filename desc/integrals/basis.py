@@ -15,9 +15,9 @@ from desc.integrals._interp_utils import (
     chebroots_vec,
     dct_from_cheb,
     fourier_pts,
-    harmonic,
     idct_non_uniform,
     irfft_non_uniform,
+    rfft_to_trig,
 )
 from desc.integrals.quad_utils import bijection_from_disc, bijection_to_disc
 from desc.io import IOAble
@@ -30,6 +30,7 @@ from desc.utils import (
     isposint,
     setdefault,
     take_mask,
+    warnif,
 )
 
 
@@ -117,7 +118,7 @@ class FourierChebyshevSeries(IOAble):
     This is useful to interpolate f ≝ θ and use the map x, ζ ↦ θ(x, ζ) to
     compute quantities along field lines via evaluating Fourier series
     parameterized in DESC computational coordinates θ, ζ, where the Fourier
-    transform is more condensed when NFP > 1.
+    transform is more condensed, especially when NFP > 1.
 
     Notes
     -----
@@ -214,6 +215,18 @@ class FourierChebyshevSeries(IOAble):
             ``FourierChebyshevSeries.nodes(X,Y,L,self.domain,self.lobatto)``.
 
         """
+        warnif(
+            X < self.X,
+            msg="Frequency spectrum of FFT interpolation will be truncated because "
+            "the grid resolution is less than the Fourier resolution.\n"
+            f"Got X = {X} < {self.X} = self.X.",
+        )
+        warnif(
+            Y < self.Y,
+            msg="Frequency spectrum of DCT interpolation will be truncated because "
+            "the grid resolution is less than the Chebyshev resolution.\n"
+            f"Got Y = {Y} < {self.Y} = self.Y.",
+        )
         return idct(
             irfft(self._c, n=X, axis=-2, norm="forward"),
             type=2 - self.lobatto,
@@ -227,6 +240,14 @@ class FourierChebyshevSeries(IOAble):
         Transform Fourier interpolant harmonics to Nyquist trigonometric
         interpolant harmonics so that the coefficients are all real.
 
+        The order of the returned coefficient array
+        matches the Vandermonde matrix formed by an outer
+        product of Fourier and Chebyshev matrices with order
+        [sin(k𝐱), ..., sin(𝐱), 1, cos(𝐱), ..., cos(k𝐱)]
+        ⊗ [T₀(𝐲), T₁(𝐲), ..., Tₙ(𝐲)]
+
+        When ``self.X`` is even the sin(k𝐱) coefficient is zero and is excluded.
+
         Returns
         -------
         a_mn : jnp.ndarray
@@ -234,8 +255,7 @@ class FourierChebyshevSeries(IOAble):
             Real valued spectral coefficients for Fourier-Chebyshev series.
 
         """
-        a_mn = harmonic(cheb_from_dct(self._c), self.X, axis=-2)
-        assert a_mn.shape[-2:] == (self.X, self.Y)
+        a_mn = rfft_to_trig(cheb_from_dct(self._c), self.X, axis=-2)
         return a_mn
 
     def compute_cheb(self, x):
@@ -322,6 +342,12 @@ class PiecewiseChebyshevSeries(IOAble):
             Chebyshev series evaluated at Y Chebyshev points.
 
         """
+        warnif(
+            Y < self.Y,
+            msg="Frequency spectrum of DCT interpolation will be truncated because "
+            "the grid resolution is less than the Chebyshev resolution.\n"
+            f"Got Y = {Y} < {self.Y} = self.Y.",
+        )
         return idct(dct_from_cheb(self.cheb), type=2, n=Y, axis=-1) * Y
 
     def _isomorphism_to_C1(self, y):
@@ -501,9 +527,9 @@ class PiecewiseChebyshevSeries(IOAble):
             jnp.atleast_1d(k)[..., jnp.newaxis]
         )
         # Flatten so that last axis enumerates intersects along the piecewise spline.
-        y, is_intersect, df_dy_sign = map(
-            flatten_matrix, (self._isomorphism_to_C1(y), is_intersect, df_dy_sign)
-        )
+        y = flatten_matrix(self._isomorphism_to_C1(y))
+        is_intersect = flatten_matrix(is_intersect)
+        df_dy_sign = flatten_matrix(df_dy_sign)
 
         # Note for bounce point applications:
         # We ignore the degenerate edge case where the boundary shared by adjacent

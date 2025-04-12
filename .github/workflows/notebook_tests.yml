@@ -43,7 +43,7 @@ jobs:
 
       - name: Check for relevant changes
         id: check_changes
-        run: echo "has_changes=${{ steps.changes.outputs.has_changes }}" >> $GITHUB_ENV
+        run: echo "has_changes=${{ !contains(github.event.pull_request.labels.*.name, 'only-docs-comments') && steps.changes.outputs.has_changes }}" >> $GITHUB_ENV
 
 
       - name: Set up Python ${{ matrix.python-version }}
@@ -76,13 +76,20 @@ jobs:
           pip install -r devtools/dev-requirements.txt
           pip install matplotlib==3.9.2
 
+      - name: Action Details
+        if: env.has_changes == 'true'
+        run: |
+          source .venv-${{ env.version }}/bin/activate
+          which python
+          python --version
+          pwd
+          lscpu
+          pip list
+
       - name: Test notebooks with pytest and nbmake
         if: env.has_changes == 'true'
         run: |
           source .venv-${{ env.version }}/bin/activate
-          pwd
-          lscpu
-          pip list
           export PYTHONPATH=$(pwd)
           pytest -v --nbmake "./docs/notebooks" \
             --nbmake-timeout=2000 \

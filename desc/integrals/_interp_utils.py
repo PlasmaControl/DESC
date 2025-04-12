@@ -79,78 +79,6 @@ def fourier_pts(n):
     return 2 * jnp.pi * jnp.arange(n) / n
 
 
-def harmonic(a, n, axis=-1):
-    """Spectral coefficients of the Nyquist trigonometric interpolant.
-
-    Parameters
-    ----------
-    a : jnp.ndarray
-        Fourier coefficients ``a=rfft(f,norm="forward",axis=axis)``.
-    n : int
-        Spectral resolution of ``a``.
-    axis : int
-        Axis along which coefficients are stored.
-
-    Returns
-    -------
-    h : jnp.ndarray
-        Nyquist trigonometric interpolant coefficients.
-        Coefficients ordered along ``axis`` of size ``n`` to match ordering of
-        [1, cos(x), ..., cos(nx), sin(x), sin(2x), ..., sin(nx)] basis.
-
-    """
-    is_even = (n % 2) == 0
-    # cos(nx) coefficients
-    an = 2.0 * (
-        a.real.at[Index.get(0, axis, a.ndim)]
-        .divide(2.0)
-        .at[Index.get(-1, axis, a.ndim)]
-        .divide(1.0 + is_even)
-    )
-    # sin(nx) coefficients
-    bn = -2.0 * take(
-        a.imag,
-        jnp.arange(1, a.shape[axis] - is_even),
-        axis,
-        unique_indices=True,
-        indices_are_sorted=True,
-    )
-    h = jnp.concatenate([an, bn], axis=axis)
-    assert h.shape[axis] == n
-    return h
-
-
-def harmonic_vander(x, n, domain=(0, 2 * jnp.pi)):
-    """Nyquist trigonometric interpolant basis evaluated at ``x``.
-
-    Parameters
-    ----------
-    x : jnp.ndarray
-        Points at which to evaluate Vandermonde matrix.
-    n : int
-        Spectral resolution.
-    domain : tuple[float]
-        Domain over which samples will be taken.
-        This domain should span an open period of the function to interpolate.
-
-    Returns
-    -------
-    basis : jnp.ndarray
-        Shape (*x.shape, n).
-        Vandermonde matrix of degree ``n-1`` and sample points ``x``.
-        Last axis ordered as [1, cos(x), ..., cos(nx), sin(x), sin(2x), ..., sin(nx)].
-
-    """
-    is_even = (n % 2) == 0
-    n_rfft = jnp.fft.rfftfreq(n, d=(domain[-1] - domain[0]) / (2 * jnp.pi * n))
-    nx = n_rfft * (x - domain[0])[..., jnp.newaxis]
-    basis = jnp.concatenate(
-        [jnp.cos(nx), jnp.sin(nx[..., 1 : n_rfft.size - is_even])], axis=-1
-    )
-    assert basis.shape[-1] == n
-    return basis
-
-
 # TODO (#1294): For inverse transforms, use non-uniform fast transforms (NFFT).
 #   https://github.com/flatironinstitute/jax-finufft.
 #   Let spectral resolution be F, (e.g. F = M N for 2D transform),
@@ -188,11 +116,12 @@ def interp_rfft(xq, f, domain=(0, 2 * jnp.pi), axis=-1):
         Real function value at query points.
 
     """
-    a = rfft(f, axis=axis, norm="forward")
-    return irfft_non_uniform(xq, a, f.shape[axis], domain, axis)
+    return irfft_non_uniform(
+        xq, rfft(f, axis=axis, norm="forward"), f.shape[axis], domain, axis
+    )
 
 
-def irfft_non_uniform(xq, a, n, domain=(0, 2 * jnp.pi), axis=-1):
+def irfft_non_uniform(xq, a, n, domain=(0, 2 * jnp.pi), axis=-1, _modes=None):
     """Evaluate Fourier coefficients ``a`` at ``xq``.
 
     Parameters
@@ -208,6 +137,10 @@ def irfft_non_uniform(xq, a, n, domain=(0, 2 * jnp.pi), axis=-1):
         Domain over which samples were taken.
     axis : int
         Axis along which to transform.
+    _modes : jnp.ndarray
+        If supplied, just builds the Vandermonde array and computes the dot product.
+        Assumes the Fourier coefficients have the correct factors for the DC and
+        Nyquist frequency. Assumes ``axis=-1``.
 
     Returns
     -------
@@ -215,17 +148,46 @@ def irfft_non_uniform(xq, a, n, domain=(0, 2 * jnp.pi), axis=-1):
         Real function value at query points.
 
     """
-    # |a| << |xq|, so move a instead
-    a = (
-        jnp.moveaxis(a, axis, -1)
-        .at[..., 0]
-        .divide(2.0)
-        .at[..., -1]
-        .divide(1.0 + ((n % 2) == 0))
-    )
-    n = jnp.fft.rfftfreq(n, d=(domain[-1] - domain[0]) / (2 * jnp.pi * n))
-    basis = jnp.exp(1j * n * (xq - domain[0])[..., jnp.newaxis])
-    return 2.0 * (basis * a).real.sum(axis=-1)
+    if _modes is None:
+        _modes = jnp.fft.rfftfreq(n, (domain[1] - domain[0]) / (2 * jnp.pi * n))
+        if (n % 2) == 0:
+            i = (0, -1)
+        else:
+            i = 0
+        a = jnp.moveaxis(a, axis, -1).at[..., i].divide(2) * 2
+    vander = jnp.exp(1j * _modes * (xq - domain[0])[..., jnp.newaxis])
+    return (vander * a).real.sum(axis=-1)
+
+
+def ifft_non_uniform(xq, a, domain=(0, 2 * jnp.pi), axis=-1, _modes=None):
+    """Evaluate Fourier coefficients ``a`` at ``xq``.
+
+    Parameters
+    ----------
+    xq : jnp.ndarray
+        Real query points where interpolation is desired.
+        Shape of ``xq`` must broadcast with arrays of shape ``np.delete(a.shape,axis)``.
+    a : jnp.ndarray
+        Fourier coefficients ``a=fft(f,axis=axis,norm="forward")``.
+    domain : tuple[float]
+        Domain over which samples were taken.
+    axis : int
+        Axis along which to transform.
+    _modes : jnp.ndarray
+        Supply to avoid computing the modes.
+
+    Returns
+    -------
+    fq : jnp.ndarray
+        Function value at query points.
+
+    """
+    if _modes is None:
+        n = a.shape[axis]
+        _modes = jnp.fft.fftfreq(n, (domain[1] - domain[0]) / (2 * jnp.pi * n))
+    a = jnp.moveaxis(a, axis, -1)
+    vander = jnp.exp(-1j * _modes * (xq - domain[0])[..., jnp.newaxis])
+    return jnp.linalg.vecdot(vander, a)
 
 
 def interp_rfft2(
@@ -255,7 +217,7 @@ def interp_rfft2(
     axes : tuple[int]
         Axes along which to transform.
         The real transform is done along ``axes[1]``, so it will be more
-        efficient for that to denote the larger size axis in ``axes``.
+        efficient for that to denote the smaller size axis in ``axes``.
 
     Returns
     -------
@@ -263,14 +225,26 @@ def interp_rfft2(
         Real function value at query points.
 
     """
+    if (f.shape[axes[1]] % 2) == 0:
+        i = (0, -1)
+    else:
+        i = 0
     a = rfft2(f, axes=axes, norm="forward")
+    a = jnp.moveaxis(a, axes, (-2, -1)).at[..., i].divide(2) * 2
     n0, n1 = sorted(axes)
-    return irfft2_non_uniform(
-        xq0, xq1, a, f.shape[n0], f.shape[n1], domain0, domain1, axes
+    return _irfft2_non_uniform(
+        xq0,
+        xq1,
+        a,
+        f.shape[n0],
+        f.shape[n1],
+        domain0,
+        domain1,
+        axes,
     )
 
 
-def irfft2_non_uniform(
+def _irfft2_non_uniform(
     xq0, xq1, a, n0, n1, domain0=(0, 2 * jnp.pi), domain1=(0, 2 * jnp.pi), axes=(-2, -1)
 ):
     """Evaluate Fourier coefficients ``a`` at coordinates ``(xq0,xq1)``.
@@ -289,7 +263,9 @@ def irfft2_non_uniform(
         across axis ``max(axes)`` of the Fourier coefficients ``a``.
     a : jnp.ndarray
         Shape (..., a.shape[-2], a.shape[-1]).
-        Fourier coefficients ``a=rfft2(f,axes=axes,norm="forward")``.
+        Fourier coefficients.
+        ``f=rfft2(f,axes=axes,norm="forward")``
+        ``a=jnp.moveaxis(f,axes,(-2,-1)).at[...,i].divide(2)*2``.
     n0 : int
         Spectral resolution of ``a`` for ``domain0``.
     n1 : int
@@ -307,31 +283,129 @@ def irfft2_non_uniform(
         Real function value at query points.
 
     """
-    idx = np.argsort(axes)
-    d = (domain0, domain1)
+    xq = (xq0, xq1)
     n = (n0, n1)
-    d_fft, d_rfft = d[idx[0]], d[idx[1]]
-    n_fft, n_rfft = n[idx[0]], n[idx[1]]
+    d = (domain0, domain1)
+    f, r = np.argsort(axes)
+    modes_f, modes_r = rfft2_modes(n[f], n[r], d[f], d[r])
+    vander = rfft2_vander(xq[f], xq[r], modes_f, modes_r, d[f][0], d[r][0])
+    return (vander * a).real.sum(axis=(-2, -1))
 
-    # |a| << |xq|, so move a instead
-    a = (
-        jnp.moveaxis(a, source=axes, destination=(-2, -1))
-        .at[..., 0]
-        .divide(2.0)
-        .at[..., -1]
-        .divide(1.0 + ((n_rfft % 2) == 0))
+
+def rfft2_vander(
+    x_fft,
+    x_rfft,
+    modes_fft,
+    modes_rfft,
+    x_fft0=0,
+    x_rfft0=0,
+):
+    """Return Vandermonde matrix for complex Fourier modes.
+
+    Warnings
+    --------
+    It is vital to not perform any operations on Vandermonde array and immediately
+    reduce it. For example, to transform from spectral to real space do
+      ``a=jnp.fft.rfft2(f).at[...,i].divide(2)*2``
+
+      ``(vander*a).real.sum(axis=(-2,-1))``
+
+    Performing the scaling on the Vandermonde array would triple the memory consumption.
+    Perhaps this is required for the compiler to fuse operations.
+
+    Notes
+    -----
+    When the Vandermonde matrix is large, care needs to be taken to ensure the compiler
+    fuses the operation to transform from spectral to real space. For JAX, this is up
+    to the JIT compiler's whim, and it helps to make the code as suggestive as possible
+    for that. Basically do not do anything besides the relevant matmuls after making
+    the Vandermonde; even things like adding a new axis to the coefficient array or
+    creating local variables after the Vandermonde array is made can prevent this.
+
+    Parameters
+    ----------
+    x_fft : jnp.ndarray
+        Real query points of coordinate in ``domain_fft`` where interpolation is
+        desired.
+    x_rfft : jnp.ndarray
+        Real query points of coordinate in ``domain_rfft`` where interpolation is
+        desired.
+    modes_fft : jnp.ndarray
+        FFT Fourier modes.
+    modes_rfft : jnp.ndarray
+        Real FFT Fourier modes.
+    x_fft0 : float
+        Left boundary of domain of coordinate specified by ``x_fft`` over which
+        samples were taken.
+    x_rfft0 : float
+        Left boundary of domain of coordinate specified by ``x_rfft`` over which
+        samples were taken.
+
+    Returns
+    -------
+    vander : jnp.ndarray
+        Shape (..., modes_fft.size, modes_rfft.size).
+        Vandermonde matrix to evaluate complex Fourier series.
+
+    """
+    vander_f = jnp.exp(1j * modes_fft * (x_fft - x_fft0)[..., jnp.newaxis])
+    vander_r = jnp.exp(1j * modes_rfft * (x_rfft - x_rfft0)[..., jnp.newaxis])
+    return vander_f[..., jnp.newaxis] * vander_r[..., jnp.newaxis, :]
+    # Above logic makes the Vandermonde array faster than the commented logic.
+    # (See GitHub issue 1530).
+    # On the ``master`` branch, commit ``532215825933e4e256ee551f644110180ba7bf8b``
+    # 2025 January 22, running ``pytest --mpl -k test_effective_ripple_2D`` will
+    # consume a peak memory of 4 GB. Switching to above approach (that being the
+    # only change), peak memory was observed to increase to 4.3 GB. Now in pull
+    # request #1440, the bounce integration method was rewritten with the goal of
+    # reusing the Vandermonde array to interpolate while retaining fusion. It was
+    # observed that JIT can fuse the above logic at peak memory 4.3 GB, while the
+    # old logic could not be fused (peak memory 9.7 GB) unless the array is
+    # remade each time.
+    # return jnp.exp(  # noqa: E800
+    #     1j  # noqa: E800
+    #     * (  # noqa: E800
+    #         (modes_fft * (x_fft - x_fft0)[..., jnp.newaxis])[  # noqa: E800
+    #             ..., jnp.newaxis  # noqa: E800
+    #         ]  # noqa: E800
+    #         + (modes_rfft * (x_rfft - x_rfft0)[..., jnp.newaxis])[  # noqa: E800
+    #             ..., jnp.newaxis, :  # noqa: E800
+    #         ]  # noqa: E800
+    #     )  # noqa: E800
+    # )  # noqa: E800
+
+
+def rfft2_modes(n_fft, n_rfft, domain_fft=(0, 2 * jnp.pi), domain_rfft=(0, 2 * jnp.pi)):
+    """Modes for complex exponential basis for real Fourier transform.
+
+    Parameters
+    ----------
+    n_fft : int
+        Spectral resolution for ``domain_fft``.
+    n_rfft : int
+        Spectral resolution for ``domain_rfft``.
+    domain_fft : tuple[float]
+        Domain of coordinate over which samples are taken.
+    domain_rfft : tuple[float]
+        Domain of coordinate over which samples are taken.
+
+    Returns
+    -------
+    modes_fft : jnp.ndarray
+        Shape (n_fft, ).
+        FFT Fourier modes.
+    modes_rfft : jnp.ndarray
+        Shape (n_rfft // 2 + 1, ).
+        Real FFT Fourier modes.
+
+    """
+    modes_fft = jnp.fft.fftfreq(
+        n_fft, (domain_fft[1] - domain_fft[0]) / (2 * jnp.pi * n_fft)
     )
-    n_fft = jnp.fft.fftfreq(n_fft, d=(d_fft[1] - d_fft[0]) / (2 * jnp.pi * n_fft))
-    n_rfft = jnp.fft.rfftfreq(n_rfft, d=(d_rfft[1] - d_rfft[0]) / (2 * jnp.pi * n_rfft))
-    xq = (xq0 - domain0[0], xq1 - domain1[0])
-    basis = jnp.exp(
-        1j
-        * (
-            (n_fft * xq[idx[0]][..., jnp.newaxis])[..., jnp.newaxis]
-            + (n_rfft * xq[idx[1]][..., jnp.newaxis])[..., jnp.newaxis, :]
-        )
+    modes_rfft = jnp.fft.rfftfreq(
+        n_rfft, (domain_rfft[1] - domain_rfft[0]) / (2 * jnp.pi * n_rfft)
     )
-    return 2.0 * (basis * a).real.sum(axis=(-2, -1))
+    return modes_fft, modes_rfft
 
 
 def cheb_from_dct(a, axis=-1):
@@ -342,8 +416,6 @@ def cheb_from_dct(a, axis=-1):
     a : jnp.ndarray
         Discrete cosine transform coefficients, e.g.
         ``a=dct(f,type=2,axis=axis,norm="forward")``.
-        The discrete cosine transformation used by scipy is defined here:
-        https://docs.scipy.org/doc/scipy/reference/generated/scipy.fft.dct.html.
     axis : int
         Axis along which to transform.
 
@@ -353,7 +425,7 @@ def cheb_from_dct(a, axis=-1):
         Chebyshev coefficients along ``axis``.
 
     """
-    return a.at[Index.get(0, axis, a.ndim)].divide(2.0)
+    return a.at[Index.get(0, axis, a.ndim)].divide(2)
 
 
 def dct_from_cheb(cheb, axis=-1):
@@ -372,7 +444,7 @@ def dct_from_cheb(cheb, axis=-1):
         Chebyshev coefficients along ``axis``.
 
     """
-    return cheb.at[Index.get(0, axis, cheb.ndim)].multiply(2.0)
+    return cheb.at[Index.get(0, axis, cheb.ndim)].multiply(2)
 
 
 def interp_dct(xq, f, lobatto=False, axis=-1):
@@ -398,10 +470,13 @@ def interp_dct(xq, f, lobatto=False, axis=-1):
 
     """
     errorif(lobatto, NotImplementedError, "JAX hasn't implemented type 1 DCT.")
-    a = cheb_from_dct(dct(f, type=2 - lobatto, axis=axis), axis) / (
-        f.shape[axis] - lobatto
+    return idct_non_uniform(
+        xq,
+        cheb_from_dct(dct(f, type=2 - lobatto, axis=axis), axis)
+        / (f.shape[axis] - lobatto),
+        f.shape[axis],
+        axis,
     )
-    return idct_non_uniform(xq, a, f.shape[axis], axis)
 
 
 def idct_non_uniform(xq, a, n, axis=-1):
@@ -425,10 +500,9 @@ def idct_non_uniform(xq, a, n, axis=-1):
         Real function value at query points.
 
     """
-    # |a| << |xq|, so move a instead
+    n = jnp.arange(n)
     a = jnp.moveaxis(a, axis, -1)
     # Same as Clenshaw recursion ``chebval(xq,a,tensor=False)`` but better on GPU.
-    n = jnp.arange(n)
     return jnp.linalg.vecdot(jnp.cos(n * jnp.arccos(xq)[..., jnp.newaxis]), a)
 
 
@@ -440,7 +514,7 @@ interp1d_vec = jnp.vectorize(
 
 @partial(jnp.vectorize, signature="(m),(n),(n),(n)->(m)")
 def interp1d_Hermite_vec(xq, x, f, fx, /):
-    """Vectorized cubic Hermite spline."""
+    """Vectorized cubic Hermite interpolation."""
     return interp1d(xq, x, f, method="cubic", fx=fx)
 
 
@@ -726,3 +800,80 @@ def _concat_sentinel(r, sentinel, num=1):
     """Concatenate ``sentinel`` ``num`` times to ``r`` on last axis."""
     sent = jnp.broadcast_to(sentinel, (*r.shape[:-1], num))
     return jnp.append(r, sent, axis=-1)
+
+
+def rfft_to_trig(a, n, axis=-1):
+    """Spectral coefficients of the Nyquist trigonometric interpolant.
+
+    Parameters
+    ----------
+    a : jnp.ndarray
+        Fourier coefficients ``a=rfft(f,norm="forward",axis=axis)``.
+    n : int
+        Spectral resolution of ``a``.
+    axis : int
+        Axis along which coefficients are stored.
+
+    Returns
+    -------
+    h : jnp.ndarray
+        Nyquist trigonometric interpolant coefficients.
+
+        Coefficients are ordered along ``axis`` of size ``n`` to match
+        Vandermonde matrix with order
+        [sin(k𝐱), ..., sin(𝐱), 1, cos(𝐱), ..., cos(k𝐱)].
+        When ``n`` is even the sin(k𝐱) coefficient is zero and is excluded.
+
+    """
+    is_even = (n % 2) == 0
+    # sin(nx) coefficients
+    an = -2 * jnp.flip(
+        take(
+            a.imag,
+            jnp.arange(1, a.shape[axis] - is_even),
+            axis,
+            unique_indices=True,
+            indices_are_sorted=True,
+        ),
+        axis=axis,
+    )
+    if is_even:
+        i = (0, -1)
+    else:
+        i = 0
+    # cos(nx) coefficients
+    bn = a.real.at[Index.get(i, axis, a.ndim)].divide(2) * 2
+    h = jnp.concatenate([an, bn], axis=axis)
+    assert h.shape[axis] == n
+    return h
+
+
+def trig_vander(x, n, domain=(0, 2 * jnp.pi)):
+    """Nyquist trigonometric interpolant basis evaluated at ``x``.
+
+    Parameters
+    ----------
+    x : jnp.ndarray
+        Points at which to evaluate Vandermonde matrix.
+    n : int
+        Spectral resolution.
+    domain : tuple[float]
+        Domain over which samples will be taken.
+        This domain should span an open period of the function to interpolate.
+
+    Returns
+    -------
+    vander : jnp.ndarray
+        Shape (*x.shape, n).
+        Vandermonde matrix of degree ``n-1`` and sample points ``x``.
+        Last axis ordered as [sin(k𝐱), ..., sin(𝐱), 1, cos(𝐱), ..., cos(k𝐱)].
+        When ``n`` is even the sin(k𝐱) basis function is excluded.
+
+    """
+    is_even = (n % 2) == 0
+    n_rfft = jnp.fft.rfftfreq(n, d=(domain[-1] - domain[0]) / (2 * jnp.pi * n))
+    nx = n_rfft * (x - domain[0])[..., jnp.newaxis]
+    vander = jnp.concatenate(
+        [jnp.sin(nx[..., n_rfft.size - is_even - 1 : 0 : -1]), jnp.cos(nx)], axis=-1
+    )
+    return vander

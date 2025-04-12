@@ -885,6 +885,13 @@ class TestVacuumSolver:
         Bn = dot(data["B0+grad(Phi)"], data["n_rho"])
         np.testing.assert_allclose(Bn, 0, atol=4e-4)
 
+        # test off surface evaluation
+        mid_grid = LinearGrid(rho=0.5, M=10, N=10, NFP=eq.NFP, sym=eq.sym)
+        coords = eq.compute(["R", "phi", "Z"], grid=mid_grid)
+        coords = jnp.column_stack([coords["R"], coords["phi"], coords["Z"]])
+        data = vac.compute_magnetic_field(chunk_size, coords)
+        assert np.isfinite(data["evl"]["B0+grad(Phi)"]).all()
+
     @staticmethod
     def _merkel_surf(C_r, C_z):
         """Convert merkel coefficients to DESC coefficients."""

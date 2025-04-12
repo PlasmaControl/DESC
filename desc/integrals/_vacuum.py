@@ -6,7 +6,7 @@ from matplotlib import pyplot as plt
 
 from desc.backend import fixed_point, irfft2, jit, jnp, rfft2
 from desc.basis import DoubleFourierSeries
-from desc.grid import LinearGrid, _Grid
+from desc.grid import Grid, LinearGrid, _Grid
 from desc.integrals.quad_utils import eta_zero
 from desc.integrals.singularities import (
     _kernel_biot_savart_coulomb,
@@ -190,6 +190,7 @@ class VacuumSolver(IOAble):
                 evl_data = surface.compute(position, grid=evl_grid)
 
         self._data = {"evl": evl_data, "Phi": Phi_data, "src": src_data}
+        self._data_evl_old = self._data["evl"].copy()
         self._interpolator = {
             "Phi": get_interpolator(Phi_grid, src_grid, src_data, use_dft, **kwargs),
         }
@@ -198,8 +199,10 @@ class VacuumSolver(IOAble):
                 evl_grid, src_grid, src_data, use_dft, **kwargs
             )
 
-    def _evaluate_in_interior(self):
-        return not isinstance(self.evl_grid, _Grid)
+    def _evaluate_in_interior(self, coords=None):
+        # if coords was supplied assume in interior else check if eval grid was
+        # originally some coords array.
+        return coords is not None or not isinstance(self.evl_grid, _Grid)
 
     @property
     def evl_grid(self):
@@ -308,8 +311,9 @@ class VacuumSolver(IOAble):
         self._data["evl"]["Z"] = Z
 
     def _set_old_evl_coords(self):
-        R, phi, Z = self.evl_grid.T
-        self._data["evl"] = {"R": R, "phi": phi, "Z": Z}
+        self._data["evl"]["R"] = self._data_evl_old["R"]
+        self._data["evl"]["phi"] = self._data_evl_old["phi"]
+        self._data["evl"]["Z"] = self._data_evl_old["Z"]
 
     def compute_vacuum_field(self, chunk_size=None, coords=None):
         """Compute magnetic field due to vacuum potential Φ.
@@ -337,10 +341,11 @@ class VacuumSolver(IOAble):
         self._data = self.compute_Phi(chunk_size)
         self._data = self._compute_virtual_current()
 
-        self._data["evl"]["grad(Phi)"] = (
-            _nonsingular_part(
+        if self._evaluate_in_interior(coords):
+            dummy_grid = Grid(jnp.zeros_like(self._evl_grid))
+            self._data["evl"]["grad(Phi)"] = _nonsingular_part(
                 self._data["evl"],
-                self.src_grid,  # dummy grid
+                dummy_grid,
                 self._data["src"],
                 self.src_grid,
                 st=jnp.nan,
@@ -349,16 +354,14 @@ class VacuumSolver(IOAble):
                 chunk_size=chunk_size,
                 _eta=eta_zero,
             )
-            if self._evaluate_in_interior()
-            else 2
-            * singular_integral(
+        else:
+            self._data["evl"]["grad(Phi)"] = 2 * singular_integral(
                 self._data["evl"],
                 self._data["src"],
                 interpolator=self._interpolator["evl"],
                 kernel=_kernel_biot_savart_coulomb,
                 chunk_size=chunk_size,
             )
-        )
         if coords is not None:
             self._set_old_evl_coords()
         return self._data

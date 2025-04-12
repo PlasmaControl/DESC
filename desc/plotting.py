@@ -534,7 +534,7 @@ def plot_1d(  # noqa: C901
         * ``label``: str, label of the plotted line (e.g. to be shown with ax.legend())
         * ``xlabel_fontsize``: float, fontsize of the xlabel
         * ``ylabel_fontsize``: float, fontsize of the ylabel
-        * ``linecolor``: str or tuple, color to use for plot line
+        * ``color``: str or tuple, color to use for plot line
         * ``ls``: str, linestyle to use for plot line
         * ``lw``: float, linewidth to use for plot line
 
@@ -618,17 +618,18 @@ def plot_1d(  # noqa: C901
     fig, ax = _format_ax(ax, figsize=kwargs.pop("figsize", None))
 
     ldata = []  # list of data to return
-    linecolor = kwargs.pop("linecolor", colorblind_colors[: len(eq)])
+    color = kwargs.pop("color", colorblind_colors[: len(eq)])
     ls = kwargs.pop("ls", "-")
     lw = kwargs.pop("lw", 1)
     label = kwargs.pop("label", None)
+    color = parse_argname_change(color, kwargs, "linecolor", "color")
     if not isinstance(label, (list, tuple)):
         if len(eq) == 1:
             label = [label]
         else:
             label = [f"{i}" for i in range(len(eq))]
-    if not isinstance(linecolor, (list, tuple)):
-        linecolor = [linecolor] * len(eq)
+    if not isinstance(color, (list, tuple)):
+        color = [color] * len(eq)
     if not isinstance(ls, (list, tuple)):
         ls = [ls] * len(eq)
     if not isinstance(lw, (list, tuple)):
@@ -644,7 +645,7 @@ def plot_1d(  # noqa: C901
                 grid.nodes[:, plot_axes[0]],
                 data,
                 label=label[i],
-                color=linecolor[i],
+                color=color[i],
                 ls=ls[i],
                 lw=lw[i],
             )
@@ -653,7 +654,7 @@ def plot_1d(  # noqa: C901
                 grid.nodes[:, plot_axes[0]],
                 data,
                 label=label[i],
-                color=linecolor[i],
+                color=color[i],
                 ls=ls[i],
                 lw=lw[i],
             )
@@ -1233,7 +1234,7 @@ def plot_fsa(  # noqa: C901
         * ``label``: str, label of the plotted line (e.g. to be shown with ax.legend())
         * ``xlabel_fontsize``: float, fontsize of the xlabel
         * ``ylabel_fontsize``: float, fontsize of the ylabel
-        * ``linecolor``: str or tuple, color to use for plot line
+        * ``color``: str or tuple, color to use for plot line
         * ``ls``: str, linestyle to use for plot line
         * ``lw``: float, linewidth to use for plot line
 
@@ -1302,10 +1303,12 @@ def plot_fsa(  # noqa: C901
         f"{[(grid[i].sym ,eq[i].sym) for i in range(len(eq))]}.",
     )
 
-    linecolor = kwargs.pop("linecolor", colorblind_colors[: len(eq)])
+    color = kwargs.pop("color", colorblind_colors[: len(eq)])
     ls = kwargs.pop("ls", "-")
     lw = kwargs.pop("lw", 1)
     fig, ax = _format_ax(ax, figsize=kwargs.pop("figsize", (4, 4)))
+
+    color = parse_argname_change(color, kwargs, "linecolor", "color")
 
     label = kwargs.pop("label", None)
     if not isinstance(label, (list, tuple)):
@@ -1313,8 +1316,8 @@ def plot_fsa(  # noqa: C901
             label = [label]
         else:
             label = [f"{i}" for i in range(len(eq))]
-    if not isinstance(linecolor, (list, tuple)):
-        linecolor = [linecolor] * len(eq)
+    if not isinstance(color, (list, tuple)):
+        color = [color] * len(eq)
     if not isinstance(ls, (list, tuple)):
         ls = [ls] * len(eq)
     if not isinstance(lw, (list, tuple)):
@@ -1408,12 +1411,10 @@ def plot_fsa(  # noqa: C901
         if log:
             values = np.abs(values)  # ensure data is positive for log plot
             ax.semilogy(
-                rho[i], values, label=label[i], color=linecolor[i], ls=ls[i], lw=lw[i]
+                rho[i], values, label=label[i], color=color[i], ls=ls[i], lw=lw[i]
             )
         else:
-            ax.plot(
-                rho[i], values, label=label[i], color=linecolor[i], ls=ls[i], lw=lw[i]
-            )
+            ax.plot(rho[i], values, label=label[i], color=color[i], ls=ls[i], lw=lw[i])
 
         all_values.append(values)
 
@@ -3225,7 +3226,6 @@ def plot_qs_error(  # noqa: 16 fxn too complex
         * ``legend_kw``: dict, any keyword arguments to be passed to ax.legend()
         * ``xlabel_fontsize``: float, fontsize of the xlabel
         * ``ylabel_fontsize``: float, fontsize of the ylabel
-        * ``labels``: list of strs of length 3, labels to apply to each QS error metric
 
     Returns
     -------

@@ -364,12 +364,12 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
 @register_compute_fun(
     name="Jpar",
     label=(
-        # J_∥ = ∮ dl v_∥
-        "\\J_{\\parallel} = \\integrate v_{\\parallel} dl"
+        # J_∥ = ∫ dl v_∥ /(√E ∫ dl)
+        "\\J_{\\parallel} = \\integrate v_{\\parallel} dl/\\integrate dl/B"
     ),
     units="~",
-    units_long="m^2-s^2",
-    description="Second adiabatic invariant of motion.",
+    units_long="~",
+    description="Normalized second adiabatic invariant of motion.",
     coordinates="r",
     dim=1,
     profiles=[],
@@ -399,7 +399,12 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
     ],
 )
 def _Jpar(params, transforms, profiles, data, **kwargs):
-    """Second adiabatic invariant."""
+    """Second adiabatic invariant of particle motion.
+
+    The normalization requires a length for which we have uesd the fieldline
+    length ∫ dl/B.
+    Typically calculated as a function of (rho, alpha, lambda)
+    """
     # noqa: unused dependency
     theta = kwargs["theta"]
     Y_B = kwargs.get("Y_B", theta.shape[-1] * 2)
@@ -413,6 +418,9 @@ def _Jpar(params, transforms, profiles, data, **kwargs):
         surf_batch_size == 1 or pitch_batch_size is None
     ), f"Expected pitch_batch_size to be None, got {pitch_batch_size}."
     spline = kwargs.get("spline", True)
+    fl_quad = (
+        kwargs["fieldline_quad"] if "fieldline_quad" in kwargs else leggauss(Y_B // 2)
+    )
     quad = (
         kwargs["quad"]
         if "quad" in kwargs
@@ -447,7 +455,9 @@ def _Jpar(params, transforms, profiles, data, **kwargs):
             # Take sum over wells, mean in alpha
             return jnp.sum(Jpar, axis=-1)
 
-        return batch_map(fun, data["pitch_inv"], pitch_batch_size)
+        return batch_map(fun, data["pitch_inv"], pitch_batch_size) / (
+            bounce.compute_fieldline_length(fl_quad)
+        )
 
     grid = transforms["grid"]
     data["Jpar"] = _compute(
@@ -466,10 +476,12 @@ def _Jpar(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="dJpar_dalpha",
-    label=("\\partial_{\\alpha} \\J_{\\parallel}/"),
+    label=(  # ∂_α J_∥/∮ dl/v_∥ =  ∮ dl/v_∥ (v_d ⋅ ∇ρ)/∮ dl/v_∥
+        "\\partial_{\\alpha} \\J_{\\parallel}/\\oint dl / v_{\\parallel}"
+    ),
     units="~",
     units_long="m^2-s^2",
-    description="Second adiabatic invariant of motion.",
+    description="Bounce averaged binormal drift.",
     coordinates="r",
     dim=1,
     profiles=[],
@@ -501,7 +513,10 @@ def _Jpar(params, transforms, profiles, data, **kwargs):
     ],
 )
 def _dJpar_dalpha(params, transforms, profiles, data, **kwargs):
-    """Omnigenity measure."""
+    """Direct measure of omnigenity.
+
+    Exactly equivalent to the bounce-averaged radial drift.
+    """
     # noqa: unused dependency
     theta = kwargs["theta"]
     Y_B = kwargs.get("Y_B", theta.shape[-1] * 2)
@@ -575,13 +590,12 @@ def _dJpar_dalpha(params, transforms, profiles, data, **kwargs):
 @register_compute_fun(
     name="dJpar_ds",
     label=(
-        # ε¹ᐧ⁵ = π/(8√2) R₀²〈|∇ψ|〉⁻² B₀⁻¹ ∫dλ λ⁻² 〈 ∑ⱼ Hⱼ²/Iⱼ 〉
-        "\\J_{\\parallel} = \\integrate v_{\\parallel} dl"
-        "\\integrate dl / v_{\\parallel}"
+        # ∂ᵨ J_∥/∮ dl/v_∥ =  ∮ dl/v_∥ (v_d ⋅ ∇α)/∮ dl/v_∥
+        "\\partial_{\\rho} \\J_{\\parallel}/\\oint dl / v_{\\parallel}"
     ),
     units="~",
-    units_long="m^2-s^2",
-    description="Second adiabatic invariant of motion.",
+    units_long="m^-1",
+    description="max J term, binormal drift",
     coordinates="r",
     dim=1,
     profiles=[],
@@ -613,19 +627,9 @@ def _dJpar_dalpha(params, transforms, profiles, data, **kwargs):
     ],
 )
 def _dJpar_ds(params, transforms, profiles, data, **kwargs):
-    """Fast ion confinement proxy as defined by Velasco et al.
+    """The max-J term.
 
-    A model for the fast evaluation of prompt losses of energetic ions in stellarators.
-    J.L. Velasco et al. 2021 Nucl. Fusion 61 116059.
-    https://doi.org/10.1088/1741-4326/ac2994.
-    Equation 16.
-
-    This expression has a secular term that drives the result to zero as the number
-    of toroidal transits increases if the secular term is not averaged out from the
-    singular integrals. It is observed that this implementation does not average
-    out the secular term. Currently, an optimization using this metric may need
-    to be evaluated by measuring decrease in Γ_c at a fixed number of toroidal
-    transits.
+    Bounce-averaged binormal drift.
     """
     # noqa: unused dependency
     theta = kwargs["theta"]

@@ -2,6 +2,7 @@ import numbers
 import warnings
 
 import numpy as np
+from interpax import Interpolator2D, interp2d
 from scipy.constants import mu_0
 
 from desc.backend import jnp, tree_flatten, tree_leaves, tree_map, tree_unflatten
@@ -9,7 +10,7 @@ from desc.batching import vmap_chunked
 from desc.compute import get_profiles, get_transforms, rpz2xyz
 from desc.compute.geom_utils import copy_rpz_periods
 from desc.compute.utils import _compute as compute_fun
-from desc.grid import Grid, LinearGrid, _Grid
+from desc.grid import LinearGrid, _Grid
 from desc.integrals import compute_B_plasma
 from desc.utils import Timer, broadcast_tree, errorif, safenorm, setdefault, warnif
 
@@ -2460,7 +2461,7 @@ class SurfaceCurrentRegularization(_Objective):
         return K_mag * jnp.sqrt(surface_data["|e_theta x e_zeta|"])
 
 
-class FitCurrentPotentialContour(_Objective):
+class FitCurrentPotentialContourInterpolate(_Objective):
     """Fit target current potential contour.
 
     Parameters
@@ -2518,8 +2519,8 @@ class FitCurrentPotentialContour(_Objective):
     """
 
     _coordinates = "tz"
-    _units = "A/m"
-    _print_value_fmt = "Surface Current Regularization: {:10.3e} "
+    _units = "A"
+    _print_value_fmt = "Coil Current Potential : "
 
     def __init__(
         self,
@@ -2533,6 +2534,7 @@ class FitCurrentPotentialContour(_Objective):
         loss_function=None,
         deriv_mode="auto",
         source_grid=None,
+        interp_grid=None,
         name="surface-current-regularization",
     ):
         from desc.magnetic_fields import (
@@ -2551,6 +2553,7 @@ class FitCurrentPotentialContour(_Objective):
         self._coil = coil
         self._surface_current_field = surface_current_field
         self._source_grid = source_grid
+        self._interp_grid = interp_grid
 
         super().__init__(
             things=[coil],
@@ -2584,8 +2587,13 @@ class FitCurrentPotentialContour(_Objective):
             )  # grid along curve to make the Phi(theta,zeta) = target at
         else:
             source_grid = self._source_grid
-
-        # source_grid.num_nodes for the regularization cost
+        if self._interp_grid is None:
+            interp_grid = LinearGrid(
+                M=50, N=50, NFP=surface_current_field.NFP, sym=False
+            )
+        else:
+            interp_grid = self._interp_grid
+        self._dim_f = source_grid.num_nodes
         self._surface_data_keys = ["Phi"]
         self._coil_data_keys = ["theta", "zeta"]
 
@@ -2605,7 +2613,34 @@ class FitCurrentPotentialContour(_Objective):
             "surface_current_field": surface_current_field,
             "quad_weights": source_grid.weights * jnp.sqrt(source_grid.num_nodes),
             "coil_transforms": coil_transforms,
+            "interp_grid": interp_grid,
         }
+
+        theta_interp_knots = interp_grid.nodes[interp_grid.unique_poloidal_idx, 1]
+        zeta_interp_knots = interp_grid.nodes[interp_grid._unique_zeta_idx, 2]
+        Phi = surface_current_field.compute("Phi", grid=interp_grid)["Phi"]
+
+        Phi_secular = (
+            surface_current_field.G * interp_grid.nodes[:, 2] / 2 / jnp.pi
+            + surface_current_field.I * interp_grid.nodes[:, 1] / 2 / jnp.pi
+        ).squeeze()
+        Phi_periodic = Phi - Phi_secular
+        Phi_periodic = Phi_periodic.reshape(
+            (interp_grid.num_poloidal, interp_grid.num_zeta)
+        )
+        interp2d_Phi_periodic = Interpolator2D(
+            x=theta_interp_knots,
+            y=zeta_interp_knots,
+            f=Phi_periodic,
+            method="linear",
+            period=(2 * jnp.pi, 2j * np.pi / surface_current_field.NFP),
+        )
+
+        self._constants["fx"] = interp2d_Phi_periodic.derivs["fx"]
+        self._constants["fy"] = interp2d_Phi_periodic.derivs["fy"]
+        self._constants["fxy"] = interp2d_Phi_periodic.derivs["fxy"]
+
+        self._constants["Phi_periodic"] = Phi_periodic
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -2633,7 +2668,7 @@ class FitCurrentPotentialContour(_Objective):
         """
         if constants is None:
             constants = self.constants
-
+        interp_grid = constants["interp_grid"]
         coil_data = compute_fun(
             self._coil,
             self._coil_data_keys,
@@ -2642,29 +2677,26 @@ class FitCurrentPotentialContour(_Objective):
             profiles={},
         )
 
-        surface_transforms = get_transforms(
-            self._surface_data_keys,
-            obj=self._surface_current_field,
-            grid=Grid(
-                jnp.vstack(
-                    [
-                        jnp.zeros_like(
-                            coil_data["theta"], coil_data["theta"], coil_data["zeta"]
-                        )
-                    ]
-                ).T,
-                jitable=True,
-                sort=False,
-            ),
-            has_axis=False,
-            jitable=True,
+        Phi_along_curve = interp2d(
+            coil_data["theta"],
+            coil_data["zeta"],
+            interp_grid.nodes[interp_grid.unique_poloidal_idx, 1],
+            interp_grid.nodes[interp_grid._unique_zeta_idx, 2],
+            constants["Phi_periodic"],
+            "linear",
+            (0, 0),
+            False,
+            (2 * jnp.pi, 2 * jnp.pi / constants["surface_current_field"].NFP),
+            **{"fx": constants["fx"], "fy": constants["fy"], "fxy": constants["fxy"]},
         )
-        Phi_along_curve = compute_fun(
-            self._surface_current_field,
-            self._surface_data_keys,
-            params=constants["surface_current_field"].params_dict,
-            transforms=surface_transforms,
-            profiles={},
-        )["Phi"]
+
+        Phi_along_curve += (
+            (
+                constants["surface_current_field"].G * coil_data["zeta"]
+                + constants["surface_current_field"].I * coil_data["theta"]
+            )
+            / 2
+            / jnp.pi
+        )
 
         return Phi_along_curve

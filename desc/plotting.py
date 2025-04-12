@@ -23,6 +23,7 @@ from desc.compute.utils import _parse_parameterization
 from desc.equilibrium.coords import map_coordinates
 from desc.grid import Grid, LinearGrid
 from desc.integrals import surface_averages_map
+from desc.integrals.bounce_integral import Bounce2D
 from desc.magnetic_fields import field_line_integrate
 from desc.utils import errorif, islinspaced, only1, parse_argname_change, setdefault
 from desc.vmec_utils import ptolemy_linear_transform
@@ -3835,5 +3836,122 @@ def plot_logo(save_path=None, **kwargs):
 
     if save_path is not None:
         fig.savefig(save_path, facecolor=fig.get_facecolor(), edgecolor="none")
+
+    return fig, ax
+
+
+def plot_adiabatic_invariant(
+    eq, rhos, alphas, num_pitch, pitch_idx=-1, mode="single-rho"
+):
+    """Plotting the second adiabatic invariant.
+
+    Parameters
+    ----------
+    rho: np.array or float
+    pitch: np.array or float
+    alpha: np.array or float
+    mode: single-rho, multi-rho
+
+    """
+    X, Y = 16, 32
+    theta = Bounce2D.compute_theta(eq, X, Y, rhos)
+    grid = LinearGrid(rho=rhos, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False)
+
+    N_alpha = int(128)
+    alpha_arr = np.linspace(0, 2 * np.pi, N_alpha, endpoint=False)
+
+    num_transit = 1
+    num_well = 48 * num_transit
+    num_quad = 48
+
+    # partitions in which to calculate data
+    # Large value if low on memory and have a large N_alpha
+    partitions = 4
+    nalphas = int(N_alpha / partitions)
+    data_full = np.zeros((N_alpha, num_pitch))
+
+    for i in range(partitions):
+        data0 = eq.compute(
+            "Jpar",
+            grid=grid,
+            theta=theta,
+            Y_B=64,
+            num_transit=num_transit,
+            num_well=num_well,
+            num_quad=num_quad,
+            num_pitch=num_pitch,
+            alpha=alpha_arr[i * nalphas : (i + 1) * nalphas],
+        )
+
+        data_full[:, i * nalphas : (i + 1) * nalphas, :] = grid.compress(data0["Jpar"])
+
+    if mode == "single-rho":
+        minB = data0["minB"][0]  # shape: (nPitch,)
+        maxB = data0["maxB"][0]  # shape: (nPitch,)
+        inv_pitch = np.linspace(minB, maxB, data0["num_pitch"])
+        threshold = 1e-3
+
+        # Create a figure
+        fig = plt.figure(figsize=(6, 5))
+
+        # Copy the plasma colormap so we can edit it
+        cmap = plt.get_cmap("plasma").copy()
+
+        # Make any values below 'vmin' be displayed in white
+        cmap.set_under("white")
+
+        # Create a normalization that sets vmin = threshold
+        norm = plt.Normalize(vmin=threshold, vmax=data_full.max())
+        extent = [inv_pitch.min(), inv_pitch.max(), alpha_arr.min(), alpha_arr.max()]
+
+        # Plot the image with no interpolation so each cell is a solid color
+        plt.imshow(
+            data_full,
+            origin="lower",  # so alpha increases upward
+            extent=extent,
+            aspect="auto",  # allows the aspect ratio to stretch or shrink
+            cmap=cmap,
+            norm=norm,
+            interpolation="nearest",  # no smoothing/interpolation
+        )
+
+        # Add a colorbar to show the data_full scale
+        cbar = plt.colorbar()
+
+        # Increase colorbar tick label font size
+        cbar.ax.tick_params(labelsize=22)  # Increase colorbar tick font size
+
+        # Control the number of ticks and format
+        ax = plt.gca()  # Get current axis
+
+        # Format colorbar ticks to show only 3 significant digits
+        import matplotlib.ticker as ticker
+
+        cbar.ax.yaxis.set_major_formatter(ticker.ScalarFormatter(useMathText=True))
+        cbar.ax.yaxis.get_major_formatter().set_powerlimits(
+            (0, 0)
+        )  # Use scientific notation
+        cbar.ax.yaxis.set_major_locator(
+            ticker.MaxNLocator(6)
+        )  # Set maximum number of ticks
+
+        y_ticks = [0, np.pi / 2, np.pi, 3 * np.pi / 2, 2 * np.pi]
+        y_labels = ["0", r"$\pi/2$", r"$\pi$", r"$3\pi/2$", r"$2\pi$"]
+        ax.set_yticks(y_ticks)
+        ax.set_yticklabels(y_labels, fontsize=22)
+
+        # Label the axes
+        plt.xlabel(r"$1/\lambda$", fontsize=24)
+        plt.ylabel(r"$\alpha$", fontsize=26, labelpad=-3)
+
+    else:  # mode is "multiple-rho"
+        # Create a figure
+        fig = plt.figure(figsize=(6, 5))
+
+        # Copy the plasma colormap so we can edit it
+        cmap = plt.get_cmap("plasma").copy()
+        plt.contour(data_full[:, :, pitch_idx])
+        # Control the number of ticks and format
+        ax = plt.gca()  # Get current axis
 
     return fig, ax

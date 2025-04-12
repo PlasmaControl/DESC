@@ -699,6 +699,9 @@ def plot_2d(
         Whether to normalize a plot of force error to be unitless.
         Vacuum equilibria are normalized by the gradient of magnetic pressure,
         while finite beta equilibria are normalized by the pressure gradient.
+    norm_name : str, optional
+        Name of variable to normalize by. If `norm_F`=True, defaults to
+        "<|grad(|B|^2)|/2mu0>_vol".
     ax : matplotlib AxesSubplot, optional
         Axis to plot on.
     return_data : bool
@@ -1206,6 +1209,9 @@ def plot_fsa(  # noqa: C901
         Vacuum equilibria are normalized by the volume average of the gradient
         of magnetic pressure, while finite beta equilibria are normalized by the
         volume average of the pressure gradient.
+    norm_name : str, optional
+        Name of variable to normalize by. If `norm_F`=True, defaults to
+        "<|grad(|B|^2)|/2mu0>_vol".
     ax : matplotlib AxesSubplot, optional
         Axis to plot on.
     return_data : bool

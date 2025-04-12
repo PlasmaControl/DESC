@@ -472,7 +472,7 @@ class TestPlotSection:
     def test_plot_normF_section(self):
         """Test Poincare section plot of normalized force on log scale."""
         eq = get("DSHAPE_CURRENT")
-        fig, ax = plot_section(eq, "|F|", norm_F=True, log=True)
+        fig, ax = plot_section(eq, "|F|", normalize=True, log=True)
         return fig
 
 

@@ -1503,6 +1503,13 @@ def plot_section(
         fig, ax = plot_section(eq, "J^rho")
 
     """
+    if "norm_F" in kwargs:
+        warnings.warn(
+            "`norm_F` is deprecated, use `normalize` instead. "
+            "Given value will be passed to `normalize`.",
+            DeprecationWarning,
+        )
+        normalize = kwargs.pop("norm_F", None)
     phi = kwargs.pop("phi", (1 if eq.N == 0 else 6))
     phi = parse_argname_change(phi, kwargs, "nzeta", "phi")
     phi = parse_argname_change(phi, kwargs, "nphi", "phi")

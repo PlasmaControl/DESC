@@ -1264,14 +1264,22 @@ def plot_fsa(  # noqa: C901
         "All elements of eq must be of the same type, got"
         f" {[type(eqi) for eqi in eq]}.",
     )
+    if M is None:
+        M = [eqi.M_grid for eqi in eq]
+    if not isinstance(M, (list, tuple)):
+        M = [M] * len(eq)
+    if N is None:
+        N = [eqi.N_grid for eqi in eq]
+    if not isinstance(N, (list, tuple)):
+        N = [N] * len(eq)
 
     if grid is None:
         if np.isscalar(rho) and (int(rho) == rho):
             rho = np.linspace(0, 1, rho + 1)
         rho = np.atleast_1d(rho)
         grid = [
-            LinearGrid(M=eqi.M_grid, N=eqi.N_grid, NFP=eqi.NFP, sym=eqi.sym, rho=rho)
-            for eqi in eq
+            LinearGrid(M=M[i], N=N[i], NFP=eq[i].NFP, sym=eq[i].sym, rho=rho)
+            for i in range(len(eq))
         ]
         rho = [rho] * len(eq)
     else:

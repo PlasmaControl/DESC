@@ -1,4 +1,4 @@
-name: Dependecy test Matplotlib
+name: Dependency test Matplotlib
 
 on:
   pull_request:
@@ -12,37 +12,20 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        mpl-version: [3.5.0]
-        include:
-          - mpl-version: 3.5.1
-          - mpl-version: 3.5.2
-          - mpl-version: 3.5.3
-          - mpl-version: 3.6.0
-          - mpl-version: 3.6.1
-          - mpl-version: 3.6.2
-          - mpl-version: 3.6.3
-          - mpl-version: 3.7.0
-          - mpl-version: 3.7.1
-          - mpl-version: 3.7.2
-          - mpl-version: 3.7.3
-          - mpl-version: 3.7.4
-          - mpl-version: 3.7.5
-          - mpl-version: 3.8.0
-          - mpl-version: 3.8.1
-          - mpl-version: 3.8.2
-          - mpl-version: 3.8.3
-          - mpl-version: 3.8.4
-          - mpl-version: 3.9.0
-          - mpl-version: 3.9.2
-          - mpl-version: 3.9.3
-          - mpl-version: 3.10.0
+        mpl-version: [3.7.3, 3.7.4, 3.7.5, 3.8.0, 3.8.1, 3.8.2,
+                      3.8.3, 3.8.4, 3.9.0, 3.9.2, 3.9.3, 3.10.0,
+                      3.10.1]
+                      # Note: 3.10.0 and 3.10.1 have a slightly different
+                      # plot size which cause the test_plot_basis_fourierseries
+                      # to fail. If you change the version for unit/regression tests
+                      # you should change the benchmark image as well.
 
     steps:
       - uses: actions/checkout@v4
       - name: Set up Python 3.10
         uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
+          python-version: '3.12'
           cache: pip
       - name: Install dependencies with given Matplotlib version
         run: |
@@ -59,4 +42,4 @@ jobs:
 
       - name: Test with pytest
         run: |
-          python -m pytest tests/test_plotting.py --durations=0 --mpl --maxfail=1
+          python -m pytest tests/test_plotting.py --durations=0 --mpl

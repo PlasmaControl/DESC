@@ -2,6 +2,7 @@ import numbers
 import warnings
 
 import numpy as np
+from interpax import Interpolator2D, interp2d
 from scipy.constants import mu_0
 
 from desc.backend import jnp, tree_flatten, tree_leaves, tree_map, tree_unflatten
@@ -2458,3 +2459,244 @@ class SurfaceCurrentRegularization(_Objective):
 
         K_mag = safenorm(surface_data["K"], axis=-1)
         return K_mag * jnp.sqrt(surface_data["|e_theta x e_zeta|"])
+
+
+class FitCurrentPotentialContourInterpolate(_Objective):
+    """Fit target current potential contour.
+
+    Parameters
+    ----------
+    coil : FourierRZWindingSurfaceCoil
+        Coiil to optimize to match target current potential.
+    surface_current_field : CurrentPotentialField
+        Surface current whose potential to use to find the coil
+        that matches the target contour.
+    target : {float, ndarray}, optional
+        Target value(s) of the objective. Only used if bounds is None.
+        Must be broadcastable to Objective.dim_f.
+        Defaults to zero.
+        Should be the target current potential value, in A
+    bounds : tuple of {float, ndarray}, optional
+        Lower and upper bounds on the objective. Overrides target.
+        Both bounds must be broadcastable to to Objective.dim_f
+    weight : {float, ndarray}, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        Must be broadcastable to to Objective.dim_f
+        When used with QuadraticFlux objective, this acts as the regularization
+        parameter, with 0 corresponding to no regularization. The larger this
+        parameter is, the less complex the surface current will be, but the
+        worse the normal field.
+    normalize : bool, optional
+        Whether to compute the error in physical units or non-dimensionalize.
+        Note: has no effect on this objective.
+    normalize_target : bool
+        Whether target should be normalized before comparing to computed values.
+        if `normalize` is `True` and the target is in physical units, this should also
+        be set to True.
+        Note: has no effect on this objective.
+    loss_function : {None, 'mean', 'min', 'max'}, optional
+        Loss function to apply to the objective values once computed. This loss function
+        is called on the raw compute value, before any shifting, scaling, or
+        normalization.
+    deriv_mode : {"auto", "fwd", "rev"}
+        Specify how to compute jacobian matrix, either forward mode or reverse mode AD.
+        "auto" selects forward or reverse mode based on the size of the input and output
+        of the objective. Has no effect on self.grad or self.hess which always use
+        reverse mode and forward over reverse mode respectively.
+    source_grid : Grid, optional
+        Collocation grid containing the nodes to evaluate current source at on
+        the winding surface. If used in conjunction with the QuadraticFlux objective,
+        with the same ``source_grid``, this replicates the REGCOIL algorithm described
+        in [1]_.
+    name : str, optional
+        Name of the objective function.
+
+    References
+    ----------
+    .. [1] Landreman, An improved current potential method for fast computation
+        of stellarator coil shapes, Nuclear Fusion (2017)
+
+    """
+
+    _coordinates = "tz"
+    _units = "A"
+    _print_value_fmt = "Coil Current Potential : "
+
+    def __init__(
+        self,
+        coil,
+        surface_current_field,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        loss_function=None,
+        deriv_mode="auto",
+        source_grid=None,
+        interp_grid=None,
+        name="surface-current-regularization",
+    ):
+        from desc.magnetic_fields import (
+            CurrentPotentialField,
+            FourierCurrentPotentialField,
+        )
+
+        if target is None and bounds is None:
+            target = 0
+        assert isinstance(
+            surface_current_field, (CurrentPotentialField, FourierCurrentPotentialField)
+        ), (
+            "surface_current_field must be a CurrentPotentialField or "
+            + f"FourierCurrentPotentialField, instead got {type(surface_current_field)}"
+        )
+        self._coil = coil
+        self._surface_current_field = surface_current_field
+        self._source_grid = source_grid
+        self._interp_grid = interp_grid
+
+        super().__init__(
+            things=[coil],
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            loss_function=loss_function,
+            deriv_mode=deriv_mode,
+            name=name,
+        )
+
+    def build(self, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        coil = self.things[0]
+        surface_current_field = self._surface_current_field
+
+        if self._source_grid is None:
+            source_grid = LinearGrid(
+                N=100,
+            )  # grid along curve to make the Phi(theta,zeta) = target at
+        else:
+            source_grid = self._source_grid
+        if self._interp_grid is None:
+            interp_grid = LinearGrid(
+                M=50, N=50, NFP=surface_current_field.NFP, sym=False
+            )
+        else:
+            interp_grid = self._interp_grid
+        self._dim_f = source_grid.num_nodes
+        self._surface_data_keys = ["Phi"]
+        self._coil_data_keys = ["theta", "zeta"]
+
+        timer = Timer()
+        if verbose > 0:
+            print("Precomputing transforms")
+        timer.start("Precomputing transforms")
+
+        coil_transforms = get_transforms(
+            self._coil_data_keys,
+            obj=coil,
+            grid=source_grid,
+            has_axis=source_grid.axis.size,
+        )
+
+        self._constants = {
+            "surface_current_field": surface_current_field,
+            "quad_weights": source_grid.weights * jnp.sqrt(source_grid.num_nodes),
+            "coil_transforms": coil_transforms,
+            "interp_grid": interp_grid,
+        }
+
+        theta_interp_knots = interp_grid.nodes[interp_grid.unique_poloidal_idx, 1]
+        zeta_interp_knots = interp_grid.nodes[interp_grid._unique_zeta_idx, 2]
+        Phi = surface_current_field.compute("Phi", grid=interp_grid)["Phi"]
+
+        Phi_secular = (
+            surface_current_field.G * interp_grid.nodes[:, 2] / 2 / jnp.pi
+            + surface_current_field.I * interp_grid.nodes[:, 1] / 2 / jnp.pi
+        ).squeeze()
+        Phi_periodic = Phi - Phi_secular
+        Phi_periodic = Phi_periodic.reshape(
+            (interp_grid.num_poloidal, interp_grid.num_zeta)
+        )
+        interp2d_Phi_periodic = Interpolator2D(
+            x=theta_interp_knots,
+            y=zeta_interp_knots,
+            f=Phi_periodic,
+            method="linear",
+            period=(2 * jnp.pi, 2j * np.pi / surface_current_field.NFP),
+        )
+
+        self._constants["fx"] = interp2d_Phi_periodic.derivs["fx"]
+        self._constants["fy"] = interp2d_Phi_periodic.derivs["fy"]
+        self._constants["fxy"] = interp2d_Phi_periodic.derivs["fxy"]
+
+        self._constants["Phi_periodic"] = Phi_periodic
+
+        timer.stop("Precomputing transforms")
+        if verbose > 1:
+            timer.disp("Precomputing transforms")
+
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, coil_params=None, constants=None):
+        """Compute surface current regularization.
+
+        Parameters
+        ----------
+        coiL_params : dict
+            Dictionary of coil degrees of freedom,
+            eg Coil.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
+
+        Returns
+        -------
+        f : ndarray
+            The current potential Phi along the coil.
+
+        """
+        if constants is None:
+            constants = self.constants
+        interp_grid = constants["interp_grid"]
+        coil_data = compute_fun(
+            self._coil,
+            self._coil_data_keys,
+            params=coil_params,
+            transforms=constants["coil_transforms"],
+            profiles={},
+        )
+
+        Phi_along_curve = interp2d(
+            coil_data["theta"],
+            coil_data["zeta"],
+            interp_grid.nodes[interp_grid.unique_poloidal_idx, 1],
+            interp_grid.nodes[interp_grid._unique_zeta_idx, 2],
+            constants["Phi_periodic"],
+            "linear",
+            (0, 0),
+            False,
+            (2 * jnp.pi, 2 * jnp.pi / constants["surface_current_field"].NFP),
+            **{"fx": constants["fx"], "fy": constants["fy"], "fxy": constants["fxy"]},
+        )
+
+        Phi_along_curve += (
+            (
+                constants["surface_current_field"].G * coil_data["zeta"]
+                + constants["surface_current_field"].I * coil_data["theta"]
+            )
+            / 2
+            / jnp.pi
+        )
+
+        return Phi_along_curve

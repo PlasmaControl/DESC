@@ -425,6 +425,16 @@ class TestPlotFSA:
         ax.set_ylim([1e-6, 1e-3])
         return fig
 
+    @pytest.mark.unit
+    @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
+    def test_fsa_multiple_F_normalized(self):
+        """Test plotting flux surface average normalized force error for multiple eq."""
+        eq1 = get("DSHAPE_CURRENT")
+        eq2 = get("DSHAPE")
+        fig, ax = plot_fsa([eq1, eq2], "|F|", norm_F=True, norm_name="<|grad(p)|>_vol")
+        ax.set_ylim([1e-6, 1e-3])
+        return fig
+
 
 class TestPlotSection:
     """Tests for plot_section."""

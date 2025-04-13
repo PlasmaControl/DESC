@@ -133,15 +133,3 @@ jobs:
           files: ./cov.xml
           fail_ci_if_error: true
           verbose: true
-
-      - name: Upload empty coverage report
-        if: env.has_changes == 'false'
-        id : codecov
-        uses: codecov/codecov-action@v5
-        with:
-          name: codecov-umbrella
-          files: ./cov.xml
-          run_command: empty-upload
-          fail_ci_if_error: true
-          verbose: true
-          force: true

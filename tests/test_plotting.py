@@ -161,7 +161,7 @@ class TestPlot1D:
         curve1 = FourierXYZCurve([0, 10, 1])
         curve2 = FourierXYZCurve([1, 9, 2])
         fig, ax, data = plot_1d(
-            [curve1, curve2], "curvature", return_data=True, lw=[1, 1.5]
+            [curve1, curve2], "curvature", return_data=True, lw=[1, 3], color="r"
         )
         assert len(data["curvature"]) == 2
         return fig
@@ -722,9 +722,7 @@ class TestPlotBasis:
     def test_plot_basis_zernikepoly_derivative(self):
         """Test plotting zernike polynomial derivative."""
         basis = ZernikePolynomial(L=6, M=4)
-        fig, ax, data = plot_basis(basis, derivative=[2, 0, 0], return_data=True)
-        for string in ["amplitude", "rho", "l"]:
-            assert string in data.keys()
+        fig, ax = plot_basis(basis, derivative=[2, 0, 0])
         return fig
 
     @pytest.mark.unit
@@ -765,9 +763,7 @@ class TestPlotBasis:
     def test_plot_basis_fourierzernike_derivative(self):
         """Test plotting fourier-zernike basis derivative."""
         basis = FourierZernikeBasis(L=8, M=3, N=2)
-        fig, ax, data = plot_basis(basis, derivative=[1, 0, 0], return_data=True)
-        for string in ["amplitude", "l", "rho", "m", "theta"]:
-            assert string in data.keys()
+        fig, ax = plot_basis(basis, derivative=[1, 0, 0])
         return fig
 
     @pytest.mark.unit

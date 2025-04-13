@@ -3503,13 +3503,13 @@ def plot_basis(  # noqa : C901
     """Plot basis functions.
 
     Currently supported basis classes are:
-    - PowerSeries
-    - FourierSeries
-    - ChebyshevPolynomial
-    - DoubleFourierSeries
-    - ZernikePolynomial
-    - FourierZernikeBasis (only 2D in rho and theta)
-    - ChebyshevDoubleFourierBasis (only 2D in rho and theta)
+        - PowerSeries
+        - FourierSeries
+        - ChebyshevPolynomial
+        - DoubleFourierSeries
+        - ZernikePolynomial
+        - FourierZernikeBasis (only 2D in rho and theta)
+        - ChebyshevDoubleFourierBasis (only 2D in rho and theta)
 
     Parameters
     ----------

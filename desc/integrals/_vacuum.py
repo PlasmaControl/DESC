@@ -296,7 +296,7 @@ class VacuumSolver(IOAble):
         )
         return self._data
 
-    def compute_vacuum_field(self, chunk_size=None):
+    def compute_vacuum_field(self, coords, *, chunk_size=None):
         """Compute magnetic field due to vacuum potential Φ.
 
         Parameters
@@ -317,9 +317,15 @@ class VacuumSolver(IOAble):
 
         self._data = self.compute_Phi(chunk_size)
         self._data = self._compute_virtual_current()
+
+        data = self._data["evl"].copy()
+        data["R"] = coords[:, 0]
+        data["phi"] = coords[:, 1]
+        data["Z"] = coords[:, 2]
+
         self._data["evl"]["grad(Phi)"] = (
             _nonsingular_part(
-                self._data["evl"],
+                data,
                 self.evl_grid,
                 self._data["src"],
                 self.src_grid,
@@ -341,7 +347,7 @@ class VacuumSolver(IOAble):
         )
         return self._data
 
-    def compute_current_field(self, chunk_size=None):
+    def compute_current_field(self, coords, *, chunk_size=None):
         """Compute magnetic field B₀ due to volume current sources.
 
         Parameters
@@ -361,6 +367,10 @@ class VacuumSolver(IOAble):
             return self._data
 
         data = self._data["evl"]
+        data["R"] = coords[:, 0]
+        data["phi"] = coords[:, 1]
+        data["Z"] = coords[:, 2]
+
         data["B0"] = self._B0.compute_magnetic_field(
             coords=jnp.column_stack([data["R"], data["phi"], data["Z"]]),
             source_grid=self.src_grid,
@@ -368,7 +378,7 @@ class VacuumSolver(IOAble):
         )
         return self._data
 
-    def compute_magnetic_field(self, chunk_size=None):
+    def compute_magnetic_field(self, coords, *, chunk_size=None):
         """Compute magnetic field B = B₀ + ∇Φ.
 
         Parameters
@@ -387,8 +397,8 @@ class VacuumSolver(IOAble):
         if "B0+grad(Phi)" in self._data["evl"]:
             return self._data
 
-        self._data = self.compute_current_field(chunk_size)
-        self._data = self.compute_vacuum_field(chunk_size)
+        self._data = self.compute_current_field(coords, chunk_size=chunk_size)
+        self._data = self.compute_vacuum_field(coords, chunk_size=chunk_size)
         self._data["evl"]["B0+grad(Phi)"] = (
             self._data["evl"]["B0"] + self._data["evl"]["grad(Phi)"]
         )

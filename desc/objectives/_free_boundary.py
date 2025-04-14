@@ -654,6 +654,8 @@ class BoundaryError(_Objective):
             √g||μ₀𝐊 − 𝐧 × [𝐁]|| in T*m^2
 
         """
+        if field_params == ():  # common case for field_fixed=True
+            field_params = None
         if constants is None:
             constants = self.constants
         source_data = compute_fun(

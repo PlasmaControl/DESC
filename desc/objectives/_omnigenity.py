@@ -1133,9 +1133,16 @@ class PiecewiseOmnigenity(_Objective):
         ### Passing a Grid of Boozer coordinate values because for the same
         # DESC grid changing the eq changes the Boozer grid
         #### TODO: Have to account for NFP
+        NFP = constants["eq_transforms"]["grid"].NFP
         field_grid = Grid(
-            jnp.array([eq_data["rho"], eq_data["theta_B"], eq_data["zeta_B"]]).T,
-            NFP=constants["eq_transforms"]["grid"].NFP,
+            jnp.array(
+                [
+                    eq_data["rho"],
+                    eq_data["theta_B"],
+                    jnp.mod(eq_data["zeta_B"], 2 * jnp.pi / NFP),
+                ]
+            ).T,
+            NFP=NFP,
             jitable=True,
         )
 

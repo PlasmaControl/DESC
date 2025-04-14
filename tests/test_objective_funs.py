@@ -613,7 +613,15 @@ class TestObjectiveFunction:
         np.testing.assert_allclose(f, 0, atol=2e-3)
 
     @pytest.mark.unit
-    @pytest.mark.parametrize("objective", ["BoundaryError", "QuadraticFlux"])
+    @pytest.mark.parametrize(
+        "objective",
+        [
+            "BoundaryError",
+            "BoundaryErrorNESTOR",
+            "QuadraticFlux",
+            "VacuumBoundaryError",
+        ],
+    )
     def test_boundary_error_multiple_fields(self, objective):
         """Test calculation of boundary error objectives with multiple fields."""
         coil = FourierXYZCoil(5e5)
@@ -623,14 +631,17 @@ class TestObjectiveFunction:
         eq = Equilibrium(L=3, M=3, N=3, Psi=np.pi)
         eq.solve()
 
-        obj = getattr(desc.objectives, objective)
+        try:
+            obj = getattr(desc.objectives, objective)
+        except AttributeError:  # BoundaryErrorNESTOR
+            obj = getattr(desc.objectives._free_boundary, objective)
         obj0 = obj(eq, coilset, field_grid=coil_grid)
         obj1 = obj(eq, coils, field_grid=coil_grid)
         obj0.build()
         obj1.build()
         f0 = obj0.compute_scaled_error(*obj0.xs())
         f1 = obj1.compute_scaled_error(*obj1.xs())
-        np.testing.assert_allclose(f0, f1, err_msg=f"{objective}")
+        np.testing.assert_allclose(f0, f1, err_msg=f"{objective}", atol=1e-20)
 
     @pytest.mark.unit
     def test_target_mean_iota(self):

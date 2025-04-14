@@ -11,6 +11,10 @@ Optionally can also contract the profiles of the original ``Equilibrium`` so tha
 - Updates Redl bootstrap current consistency tutorial to include a ``SplineProfile`` optimization
 - Adds automatically generated header file showing date the input file was created with `desc.vmec.VMECIO.write_vmec_input`
 
+Performance Improvements
+
+- Couple memory management improvements to reduce the base memory used during optimization.
+
 
 v0.14.1
 -------

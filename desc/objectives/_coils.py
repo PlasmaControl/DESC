@@ -2395,7 +2395,7 @@ class SurfaceCurrentRegularization(_Objective):
 
         # source_grid.num_nodes for the regularization cost
         self._dim_f = source_grid.num_nodes
-        self._surface_data_keys = ["K", "|e_theta x e_zeta|"]
+        self._data_keys = ["K", "|e_theta x e_zeta|"]
 
         timer = Timer()
         if verbose > 0:
@@ -2403,7 +2403,7 @@ class SurfaceCurrentRegularization(_Objective):
         timer.start("Precomputing transforms")
 
         surface_transforms = get_transforms(
-            self._surface_data_keys,
+            self._data_keys,
             obj=surface_current_field,
             grid=source_grid,
             has_axis=source_grid.axis.size,
@@ -2451,7 +2451,7 @@ class SurfaceCurrentRegularization(_Objective):
 
         surface_data = compute_fun(
             self._surface_current_field,
-            self._surface_data_keys,
+            self._data_keys,
             params=surface_params,
             transforms=constants["surface_transforms"],
             profiles={},

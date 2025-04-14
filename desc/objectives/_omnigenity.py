@@ -854,9 +854,6 @@ class PiecewiseOmnigenity(_Objective):
     Errors are relative to a target field that is roughly omnigenous,
     and are computed on a collocation grid in Boozer coordinates.
 
-    This objective assumes that the collocation point (θ=0,ζ=0) lies on the contour of
-    maximum field strength ||B||=B_max.
-
     Parameters
     ----------
     eq : Equilibrium
@@ -1138,6 +1135,7 @@ class PiecewiseOmnigenity(_Objective):
         #### TODO: Have to account for NFP
         field_grid = Grid(
             jnp.array([eq_data["rho"], eq_data["theta_B"], eq_data["zeta_B"]]).T,
+            NFP=constants["eq_transforms"]["grid"].NFP,
             jitable=True,
         )
 

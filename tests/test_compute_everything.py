@@ -128,11 +128,7 @@ def test_compute_everything():
             center=[10, 1, 3], normal=[1, 2, 3], r_n=[1, 2, 3], modes=[0, 1, 2]
         ),
         "desc.geometry.curve.FourierXYCurve": FourierXYCurve(
-            center=[10, 1, 3],
-            normal=[1, 2, 3],
-            X_n=[0, 1, 0.8],
-            Y_n=[-1, 2, 0.0],
-            modes=[-1, 0, 1],
+            center=[10, 1, 3], normal=[1, 2, 3], X_n=[0, 2], Y_n=[-3, 1], modes=[-1, 1]
         ),
         "desc.geometry.curve.SplineXYZCurve": FourierXYZCurve(
             X_n=[5, 10, 2], Y_n=[1, 2, 3], Z_n=[-4, -5, -6]
@@ -186,9 +182,9 @@ def test_compute_everything():
             current=5,
             center=[10, 1, 3],
             normal=[1, 2, 3],
-            X_n=[0, 1, 0.8],
-            Y_n=[-1, 2, 0.0],
-            modes=[-1, 0, 1],
+            X_n=[0, 2],
+            Y_n=[-3, 1],
+            modes=[-1, 1],
         ),
         "desc.coils.SplineXYZCoil": SplineXYZCoil(
             current=5, X=[5, 10, 2, 5], Y=[1, 2, 3, 1], Z=[-4, -5, -6, -4]

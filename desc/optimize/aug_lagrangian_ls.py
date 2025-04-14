@@ -281,7 +281,11 @@ def lsq_auglag(  # noqa: C901
     diag_h = g * dv * scale
 
     g_h = g * d
-    J_h = J * d
+    J = J * d
+    # we don't need unscaled J anymore, so we overwrite
+    # it with J_h = J * d to avoid carrying so many J-sized matrices
+    # in memory, which can be large
+    J_h = J
     g_norm = jnp.linalg.norm(
         (g * v * scale if scaled_termination else g * v), ord=jnp.inf
     )
@@ -381,6 +385,10 @@ def lsq_auglag(  # noqa: C901
             else:
                 Q, R = qr(J_a.T, mode="economic")
                 p_newton = Q @ solve_triangular_regularized(R.T, -L_a, lower=True)
+            # We don't need the Q and R matrices anymore
+            # Trust region solver will solve the augmented system
+            # with a new Q and R
+            del Q, R
 
         actual_reduction = -1
         Lactual_reduction = -1
@@ -531,7 +539,11 @@ def lsq_auglag(  # noqa: C901
             d = v**0.5 * scale
             diag_h = g * dv * scale
             g_h = g * d
-            J_h = J * d
+            J = J * d
+            # we don't need unscaled J anymore this iteration, so we overwrite
+            # it with J_h = J * d to avoid carrying so many J-sized matrices
+            # in memory, which can be large
+            J_h = J
 
             if g_norm < gtol and constr_violation < ctol:
                 success, message = True, STATUS_MESSAGES["gtol"]
@@ -572,7 +584,7 @@ def lsq_auglag(  # noqa: C901
         fun=f,
         grad=g,
         v=v,
-        jac=J,
+        jac=J * 1 / d,  # after overwriting J_h, we have to revert back,
         optimality=g_norm,
         nfev=nfev,
         njev=njev,

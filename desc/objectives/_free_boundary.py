@@ -462,7 +462,7 @@ class BoundaryError(_Objective):
         self._sheet_current = hasattr(eq.surface, "Phi_mn")
         things = [eq]
         if not field_fixed:
-            things = things.append(self._field)
+            things.append(self._field)
         super().__init__(
             things=things,
             target=target,

@@ -1320,7 +1320,6 @@ class QuadraticFlux(_Objective):
             "if attempting to find a QFM surface, please use "
             "SurfaceQuadraticFlux objective instead.",
         )
-        things = [field]
         super().__init__(
             things=self._field,
             target=target,

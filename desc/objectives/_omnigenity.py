@@ -1174,7 +1174,7 @@ class PiecewiseOmnigenity(_Objective):
         Q_pwO = field_data["Q_pwO"]
 
         # ReLU operation
-        Q_pwO = (Q_pwO - 0.05) * (Q_pwO >= 0.05)
+        Q_pwO = (Q_pwO + 0.05) * (Q_pwO >= -0.05)
 
         # temporarily commenting the Q_pwO calculation
         # --no-verify pwO_error = (eq_data["|B|"] - B_pwO)

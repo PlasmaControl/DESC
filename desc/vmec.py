@@ -3,6 +3,7 @@
 import io
 import os
 import warnings
+from datetime import datetime
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -10,6 +11,7 @@ from netCDF4 import Dataset, stringtochar
 from scipy import integrate, interpolate, optimize
 from scipy.constants import mu_0
 
+import desc
 from desc.basis import DoubleFourierSeries
 from desc.compat import ensure_positive_jacobian
 from desc.equilibrium import Equilibrium
@@ -1432,7 +1434,7 @@ class VMECIO:
         return vmec_data
 
     @classmethod
-    def write_vmec_input(cls, eq, fname, header="", **kwargs):  # noqa: C901
+    def write_vmec_input(cls, eq, fname, header=None, **kwargs):  # noqa: C901
         """Write a VMEC input file for an equivalent DESC equilibrium.
 
         Parameters
@@ -1455,7 +1457,17 @@ class VMECIO:
         else:
             f = fname
         f.seek(0)
-
+        if header is None:
+            now = datetime.now()
+            date = now.strftime("%m/%d/%Y")
+            time = now.strftime("%H:%M:%S")
+            # auto header
+            header = (
+                " This VMEC input file was auto generated in DESC"
+                + f" version {desc.__version__} from a\n"
+                + "! DESC Equilibrium using the method VMECIO.write_vmec_input\n"
+                + "! on {} at {}.\n".format(date, time)
+            )
         f.write("! " + header + "\n")
         f.write("&INDATA\n")
 
@@ -1635,7 +1647,8 @@ class VMECIO:
                     + f"  ZBS({n:3.0f},{m:3.0f}) = {zbs:+14.8E}\n"
                 )
 
-        f.write("/")
+        f.write("/\n")
+        f.write("&END")
         f.close()
         return None
 

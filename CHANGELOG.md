@@ -7,6 +7,9 @@ New Features
 Optionally can also contract the profiles of the original ``Equilibrium`` so that the new ``Equilibrium``'s profiles match the original's in real space.
 - Adds second-order NAE constraints, accessible by passing ``order=2`` to ``desc.objectives.get_NAE_constraints``.
 - Adds `desc.plotting.plot_field_lines` function, which integrates and then plots magnetic field line trajectories in 3D.
+- Adds error for incorrect grids in ``desc.objectives.BootstrapRedlConsistency`` and when computing ``current Redl`` and ``<J*B> Redl`` compute quantities
+- Allows Redl compute quantities to use SplineProfile
+- Updates Redl bootstrap current consistency tutorial to include a ``SplineProfile`` optimization
 - Adds automatically generated header file showing date the input file was created with `desc.vmec.VMECIO.write_vmec_input`
 
 

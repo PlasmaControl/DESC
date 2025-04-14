@@ -141,8 +141,6 @@ On computing clusters you must ensure to `module load anaconda` in order to use 
 
         .. dropdown:: Della and Stellar Clusters (Princeton)
 
-            First, install JAX for the latest version of `jaxlib` available on the Princeton clusters.
-
             We base our instructions below off of `this tutorial <https://github.com/PrincetonUniversity/intro_ml_libs/tree/master/jax>`__, if the below instructions do not work please check the link to install JAX with the most up-to-date recommendations from the Princeton computing services. We first will install DESC as usual, then we will install the version of the gpu-compatible JAX.
 
             .. code-block:: sh

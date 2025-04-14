@@ -1183,18 +1183,19 @@ class FourierXYCurve(Curve):
         s = s[idx]
 
         # Fourier transform
-        basis = FourierSeries(N, NFP=1, sym="n0")
+        basis = FourierSeries(N, NFP=1, sym=False)
         grid = LinearGrid(zeta=s, NFP=1)
         transform = Transform(grid, basis, build_pinv=True)
+        idx = np.where(basis.modes[:, 2] != 0)  # exclude n=0 mode
         X_n = transform.fit(X)
         Y_n = transform.fit(Y)
 
         return FourierXYCurve(
-            center=center,
+            center=center + np.array([X_n[N], Y_n[N], 0]),  # add n=0 mode to center
             normal=normal,
-            X_n=X_n,
-            Y_n=Y_n,
-            modes=basis.modes[:, 2],
+            X_n=X_n[idx],
+            Y_n=Y_n[idx],
+            modes=basis.modes[:, 2][idx],
             basis="xyz",
             name=name,
         )

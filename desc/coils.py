@@ -1071,8 +1071,8 @@ class FourierXYCoil(_Coil, FourierXYCurve):
         current=1,
         center=[10, 0, 0],
         normal=[0, 1, 0],
-        X_n=[0, 1],
-        Y_n=[1, 0],
+        X_n=[0, 2],
+        Y_n=[2, 0],
         modes=None,
         basis="xyz",
         name="",
@@ -1110,7 +1110,7 @@ class FourierXYCoil(_Coil, FourierXYCurve):
             normal=curve.normal,
             X_n=curve.X_n,
             Y_n=curve.Y_n,
-            modes=curve.r_basis.modes[:, 2],
+            modes=curve.X_basis.modes[:, 2],
             basis="xyz",
             name=name,
         )
@@ -2341,6 +2341,45 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             check_intersection=check_intersection,
         )
 
+    def to_FourierXY(
+        self, N=10, grid=None, basis="xyz", name="", check_intersection=True
+    ):
+        """Convert all coils to FourierXYCoil.
+
+        Note that some types of coils may not be representable in this basis.
+        In this case, a least-squares fit will be done to find the
+        planar coil that best represents the coil.
+
+        Parameters
+        ----------
+        N : int
+            Fourier resolution of the new FourierXYCoil representation.
+        grid : Grid, int or None
+            Grid used to evaluate curve coordinates on to fit with FourierXYCoil.
+            If an integer, uses that many equally spaced points.
+        basis : {'xyz', 'rpz'}
+            Coordinate system for center and normal vectors. Default = 'xyz'.
+        name : str
+            Name for this coilset.
+        check_intersection: bool
+            Whether or not to check the coils in the new coilset for intersections.
+
+        Returns
+        -------
+        coilset : CoilSet
+            New representation of the coilset parameterized by Fourier series for the X
+            & Y coordinates in a plane specified by a center position and normal vector.
+
+        """
+        coils = [coil.to_FourierXY(N=N, grid=grid, basis=basis) for coil in self]
+        return self.__class__(
+            *coils,
+            NFP=self.NFP,
+            sym=self.sym,
+            name=name,
+            check_intersection=check_intersection,
+        )
+
     def to_FourierRZ(
         self, N=10, grid=None, NFP=None, sym=False, name="", check_intersection=True
     ):
@@ -2910,6 +2949,44 @@ class MixedCoilSet(CoilSet):
         """
         coils = [
             coil.to_FourierPlanar(
+                N=N, grid=grid, basis=basis, check_intersection=check_intersection
+            )
+            for coil in self
+        ]
+        return self.__class__(*coils, name=name, check_intersection=check_intersection)
+
+    def to_FourierXY(
+        self, N=10, grid=None, basis="xyz", name="", check_intersection=True
+    ):
+        """Convert all coils to FourierXYCoil.
+
+        Note that some types of coils may not be representable in this basis.
+        In this case, a least-squares fit will be done to find the
+        planar coil that best represents the coil.
+
+        Parameters
+        ----------
+        N : int
+            Fourier resolution of the new FourierXYCoil representation.
+        grid : Grid, int or None
+            Grid used to evaluate curve coordinates on to fit with FourierXYCoil.
+            If an integer, uses that many equally spaced points.
+        basis : {'xyz', 'rpz'}
+            Coordinate system for center and normal vectors. Default = 'xyz'.
+        name : str
+            Name for this coilset.
+        check_intersection: bool
+            Whether or not to check the coils in the new coilset for intersections.
+
+        Returns
+        -------
+        coilset : CoilSet
+            New representation of the coilset parameterized by Fourier series for the X
+            & Y coordinates in a plane specified by a center position and normal vector.
+
+        """
+        coils = [
+            coil.to_FourierXY(
                 N=N, grid=grid, basis=basis, check_intersection=check_intersection
             )
             for coil in self

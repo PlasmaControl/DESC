@@ -375,12 +375,7 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
     profiles=[],
     params=[],
     transforms={"grid": []},
-    data=[
-        "min_tz |B|",
-        "max_tz |B|",
-        "B^zeta",
-    ]
-    + Bounce2D.required_names,
+    data=["min_tz |B|", "max_tz |B|"] + Bounce2D.required_names,
     resolution_requirement="tz",
     grid_requirement={"can_fft2": True},
     **_bounce_doc,
@@ -462,9 +457,7 @@ def _Jpar(params, transforms, profiles, data, **kwargs):
     grid = transforms["grid"]
     data["Jpar"] = _compute(
         Jpar0,
-        {
-            "B^zeta": data["B^zeta"],
-        },
+        {},
         data,
         theta,
         grid,

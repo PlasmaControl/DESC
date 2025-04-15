@@ -294,11 +294,12 @@ class FourierRZCurve(Curve):
 
         grid = LinearGrid(zeta=phi, NFP=NFP, sym=sym)
         basis = FourierSeries(N=N, NFP=NFP, sym=sym)
-        with warnings.catch_warnings(): 
-        # grid and basis have uneven NFP because we want to allow the user to either pass in an 
-        # entire curve (in which case phi : 0-> 2pi) which has some field-periodicity, or
-        # only a portion of the curve (in which case phi: 0->2pi/NFP) and still have this fit work.
-            warnings.simplefilter("ignore", category=UserWarning)
+        with warnings.catch_warnings():
+            # grid and basis have uneven NFP because we want to allow the user to either
+            # pass in an entire curve (in which case phi : 0-> 2pi) which has some
+            # field-periodicity, or only a portion of the curve
+            # (in which case phi: 0->2pi/NFP) and still have this fit work.
+            warnings.simplefilter("ignore", message="Unequal number of field periods")
             transform = Transform(grid, basis, build_pinv=True)
         R_n = transform.fit(R)
         Z_n = transform.fit(Z)

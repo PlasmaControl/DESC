@@ -102,7 +102,7 @@ from desc.objectives.normalization import compute_scaling_factors
 from desc.objectives.objective_funs import _Objective, collect_docs
 from desc.objectives.utils import softmax, softmin
 from desc.profiles import FourierZernikeProfile, PowerSeriesProfile
-from desc.utils import PRINT_WIDTH
+from desc.utils import PRINT_WIDTH, safenorm
 from desc.vmec_utils import ptolemy_linear_transform
 
 
@@ -1712,6 +1712,37 @@ class TestObjectiveFunction:
         np.testing.assert_allclose(result1, result3)
         np.testing.assert_allclose(result1 * 2, result5)
         np.testing.assert_allclose(result2, result4)
+
+    @pytest.mark.unit
+    def test_surface_current_regularizations(self):
+        """Test SurfaceCurrentRegularization regularizations."""
+
+        def custom_norm(data, regularization):
+            if regularization == "K":
+                return safenorm(data[regularization], axis=-1)
+            elif regularization == "Phi":
+                return np.abs(data[regularization])
+            elif regularization == "sqrt(Phi)":
+                return np.sqrt(np.abs(data["Phi"]))
+
+        def test(field, grid, regularization):
+            reg = "Phi" if regularization == "sqrt(Phi)" else regularization
+            data = field.compute([reg, "|e_theta x e_zeta|"], grid=grid)
+            f0 = custom_norm(data, regularization) * np.sqrt(data["|e_theta x e_zeta|"])
+            obj = SurfaceCurrentRegularization(
+                field, regularization=regularization, source_grid=grid
+            )
+            obj.build()
+            f1 = obj.compute(*obj.xs(field))
+            np.testing.assert_allclose(f0, f1, err_msg=regularization)
+
+        field = FourierCurrentPotentialField(
+            I=0, G=10, NFP=4, Phi_mn=[1, -0.5], modes_Phi=[[0, 1], [2, 2]]
+        )
+        grid = LinearGrid(M=5, N=5, NFP=field.NFP)
+        test(field, grid, "K")
+        test(field, grid, "Phi")
+        test(field, grid, "sqrt(Phi)")
 
     @pytest.mark.unit
     def test_objective_compute(self):

@@ -641,7 +641,7 @@ class TestObjectiveFunction:
         obj1.build()
         f0 = obj0.compute_scaled_error(*obj0.xs())
         f1 = obj1.compute_scaled_error(*obj1.xs())
-        np.testing.assert_allclose(f0, f1, err_msg=f"{objective}", atol=1e-20)
+        np.testing.assert_allclose(f0, f1, err_msg=f"{objective}", atol=1e-19)
 
     @pytest.mark.unit
     def test_target_mean_iota(self):

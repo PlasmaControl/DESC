@@ -1037,7 +1037,7 @@ class FourierPlanarCoil(_Coil, FourierPlanarCurve):
 
 
 class FourierXYCoil(_Coil, FourierXYCurve):
-    """Coil that lines in a plane.
+    """Coil that lies in a plane.
 
     Parameterized by a point (the center of the coil), a vector (normal to the plane),
     and a Fourier series defining the X and Y coordinates in the plane as a function of

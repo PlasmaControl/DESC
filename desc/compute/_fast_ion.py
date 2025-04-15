@@ -2,6 +2,7 @@
 
 from functools import partial
 
+from orthax.chebyshev import chebgauss2
 from orthax.legendre import leggauss
 
 from desc.backend import jit, jnp
@@ -216,6 +217,11 @@ def _Jpar_num(data, B, pitch):
     return jnp.sqrt(jnp.abs(1 - pitch * B))
 
 
+def _dl(data, B, pitch):
+    """Numerator of the second adiabatic invariant J||."""
+    return 1.0
+
+
 def _radial_drift(data, B, pitch):
     return safediv(
         data["cvdrift0"] * (1 - 0.5 * pitch * B), jnp.sqrt(jnp.abs(1 - pitch * B))
@@ -363,8 +369,7 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="Jpar",
-    label=(
-        # J_∥ = ∫ dl v_∥ /(√E ∫ dl)
+    label=(  # J_∥ = ∫ dl v_∥/ (√2E/m) )/∫ dl
         "\\J_{\\parallel} = \\integrate v_{\\parallel} dl/\\integrate dl/B"
     ),
     units="~",
@@ -413,14 +418,11 @@ def _Jpar(params, transforms, profiles, data, **kwargs):
         surf_batch_size == 1 or pitch_batch_size is None
     ), f"Expected pitch_batch_size to be None, got {pitch_batch_size}."
     spline = kwargs.get("spline", True)
-    fl_quad = (
-        kwargs["fieldline_quad"] if "fieldline_quad" in kwargs else leggauss(Y_B // 2)
-    )
     quad = (
         kwargs["quad"]
         if "quad" in kwargs
         else get_quadrature(
-            leggauss(kwargs.get("num_quad", 32)),
+            chebgauss2(kwargs.get("num_quad", 32)),
             (automorphism_sin, grad_automorphism_sin),
         )
     )
@@ -439,20 +441,18 @@ def _Jpar(params, transforms, profiles, data, **kwargs):
         )
 
         def fun(pitch_inv):
-            Jpar = bounce.integrate(
-                [_Jpar_num],
+            Jpar, L = bounce.integrate(
+                [_Jpar_num, _dl],
                 pitch_inv,
                 data,
                 ["B^zeta"],
                 bounce.points(pitch_inv, num_well),
                 is_fourier=True,
             )
-            # Take sum over wells, mean in alpha
-            return jnp.sum(Jpar, axis=-1)
+            # Take sum over wells
+            return jnp.sum(Jpar / L, axis=-1)
 
-        return batch_map(fun, data["pitch_inv"], pitch_batch_size) / (
-            bounce.compute_fieldline_length(fl_quad)
-        )
+        return batch_map(fun, data["pitch_inv"], pitch_batch_size)
 
     grid = transforms["grid"]
     data["Jpar"] = _compute(

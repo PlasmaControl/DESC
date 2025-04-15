@@ -13,7 +13,7 @@ Optionally can also contract the profiles of the original ``Equilibrium`` so tha
 
 Performance Improvements
 
-- Couple memory management improvements to reduce the base memory used during optimization.
+- Improves memory management to reduce the base memory used during optimization while using `lsq-exact`, `lsq-auglag` and `fmin-auglag` optimizers.
 
 
 v0.14.1

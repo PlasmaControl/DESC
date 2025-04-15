@@ -2,7 +2,6 @@
 
 from functools import partial
 
-from orthax.chebyshev import chebgauss2
 from orthax.legendre import leggauss
 
 from desc.backend import jit, jnp
@@ -11,6 +10,7 @@ from ..batching import batch_map
 from ..integrals.bounce_integral import Bounce2D
 from ..integrals.quad_utils import (
     automorphism_sin,
+    chebgauss2,
     get_quadrature,
     grad_automorphism_sin,
 )

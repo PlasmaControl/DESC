@@ -214,6 +214,7 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
 
 def _Jpar_num(data, B, pitch):
     """Numerator of the second adiabatic invariant J||."""
+    # v_∥/ (√2E/m)
     return jnp.sqrt(jnp.abs(1 - pitch * B))
 
 

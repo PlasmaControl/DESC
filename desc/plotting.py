@@ -24,7 +24,14 @@ from desc.equilibrium.coords import map_coordinates
 from desc.grid import Grid, LinearGrid
 from desc.integrals import surface_averages_map
 from desc.magnetic_fields import field_line_integrate
-from desc.utils import errorif, islinspaced, only1, parse_argname_change, setdefault
+from desc.utils import (
+    check_posint,
+    errorif,
+    islinspaced,
+    only1,
+    parse_argname_change,
+    setdefault,
+)
 from desc.vmec_utils import ptolemy_linear_transform
 
 __all__ = [
@@ -3727,11 +3734,7 @@ def plot_field_lines(
     if not isinstance(color, (list, tuple)):
         color = [color]
 
-    errorif(
-        not int(nphi_per_transit) == nphi_per_transit,
-        ValueError,
-        f"nphi_per_transit must be an integer, got {nphi_per_transit}",
-    )
+    nphi_per_transit = check_posint(nphi_per_transit, "nphi_per_transit", False)
     npts = int(nphi_per_transit * ntransit)
     phis = np.linspace(0, 2 * np.pi * ntransit, npts, endpoint=endpoint) + Phi0
 

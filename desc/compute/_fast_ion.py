@@ -451,7 +451,8 @@ def _Jpar(params, transforms, profiles, data, **kwargs):
                 is_fourier=True,
             )
             # Take sum over wells, L is summed over wells and averaged over pitch
-            return jnp.sum(Jpar, axis=-1) / L.sum(axis=-1).mean(axis=-1)[:, jnp.newaxis]
+            # and alpha
+            return jnp.sum(Jpar, axis=-1) / jnp.mean(L.sum(axis=-1))[..., jnp.newaxis]
 
         return batch_map(fun, data["pitch_inv"], pitch_batch_size)
 

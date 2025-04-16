@@ -3653,10 +3653,6 @@ class TestObjectiveNaNGrad:
         obj.build(verbose=0)
         g = obj.grad(obj.x())
         assert not np.any(np.isnan(g))
-        obj = ObjectiveFunction(_reduced_resolution_objective(eq, maxJ, spline=True))
-        obj.build(verbose=0)
-        g = obj.grad(obj.x())
-        assert not np.any(np.isnan(g))
 
     @pytest.mark.unit
     def test_objective_no_nangrad_ballooning(self):

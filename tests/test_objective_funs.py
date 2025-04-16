@@ -92,6 +92,7 @@ from desc.objectives import (
     VacuumBoundaryError,
     Volume,
     get_NAE_constraints,
+    maxJ,
 )
 from desc.objectives._free_boundary import BoundaryErrorNESTOR
 from desc.objectives.nae_utils import (
@@ -1726,7 +1727,7 @@ class TestObjectiveFunction:
         num_quad = 16
         num_pitch = 16
         data = eq.compute(
-            ["effective ripple", "Gamma_c"],
+            ["effective ripple", "Gamma_c", "dJpar_ds"],
             grid=grid,
             theta=Bounce2D.compute_theta(eq, X=X, Y=Y, rho=rho),
             num_transit=num_transit,
@@ -1761,6 +1762,22 @@ class TestObjectiveFunction:
             num_pitch=num_pitch,
             jac_chunk_size=1,
         )
+        obj.build()
+        np.testing.assert_allclose(
+            obj.compute(eq.params_dict), grid.compress(data["Gamma_c"])
+        )
+
+        obj = maxJ(
+            eq,
+            grid=grid,
+            X=X,
+            Y=Y,
+            num_transit=num_transit,
+            num_quad=num_quad,
+            num_pitch=num_pitch,
+            jac_chunk_size=1,
+        )
+
         obj.build()
         np.testing.assert_allclose(
             obj.compute(eq.params_dict), grid.compress(data["Gamma_c"])

@@ -739,6 +739,8 @@ class CoilSetMinDistance(_Objective):
         coil=True,
     )
 
+    _static_attrs = _Objective._static_attrs + ["_dist_chunk_size", "_use_softmin"]
+
     _scalar = False
     _units = "(m)"
     _print_value_fmt = "Minimum coil-coil distance: "
@@ -911,6 +913,14 @@ class PlasmaCoilSetMinDistance(_Objective):
         bounds_default="``bounds=(1,np.inf)``.",
         coil=True,
     )
+
+    _static_attrs = _Objective._static_attrs + [
+        "_coils_fixed",
+        "_dist_chunk_size",
+        "_eq_fixed",
+        "_eq_data_keys",
+        "_use_softmin",
+    ]
 
     _scalar = False
     _units = "(m)"
@@ -1275,6 +1285,12 @@ class QuadraticFlux(_Objective):
         bounds_default="``target=0``.",
     )
 
+    _static_attrs = _Objective._static_attrs + [
+        "_B_plasma_chunk_size",
+        "_bs_chunk_size",
+        "_vacuum",
+    ]
+
     _scalar = False
     _linear = False
     _print_value_fmt = "Boundary normal field error: "
@@ -1495,6 +1511,8 @@ class SurfaceQuadraticFlux(_Objective):
         bounds_default="``target=0``.",
     )
 
+    _static_attrs = _Objective._static_attrs + ["_bs_chunk_size", "_field_fixed"]
+
     _scalar = False
     _linear = False
     _print_value_fmt = "QFM surface normal field error: "
@@ -1711,6 +1729,12 @@ class ToroidalFlux(_Objective):
         ),
         loss_detail=" Note: has no effect for this objective.",
     )
+
+    _static_attrs = _Objective._static_attrs + [
+        "_eq_fixed",
+        "_field_fixed",
+        "_use_vector_potential",
+    ]
 
     _coordinates = "rtz"
     _units = "(Wb)"
@@ -1978,6 +2002,8 @@ class LinkingCurrentConsistency(_Objective):
         target_default="``target=0``.",
         bounds_default="``target=0``.",
     )
+
+    _static_attrs = _Objective._static_attrs + ["_eq_fixed"]
 
     _scalar = True
     _units = "(A)"

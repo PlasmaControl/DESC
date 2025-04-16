@@ -927,8 +927,8 @@ class FourierXYCurve(Curve):
         assert basis.lower() in ["xyz", "rpz"]
 
         N = np.max(abs(modes))
-        self._X_basis = FourierSeries(N, NFP=1, sym="n0")
-        self._Y_basis = FourierSeries(N, NFP=1, sym="n0")
+        self._X_basis = FourierSeries(N, NFP=1, sym="no n=0")
+        self._Y_basis = FourierSeries(N, NFP=1, sym="no n=0")
         self._X_n = copy_coeffs(X_n, modes, self.X_basis.modes[:, 2])
         self._Y_n = copy_coeffs(Y_n, modes, self.Y_basis.modes[:, 2])
 

@@ -219,8 +219,8 @@ def _Jpar_num(data, B, pitch):
 
 
 def _dl(data, B, pitch):
-    """Numerator of the second adiabatic invariant J||."""
-    return 1.0
+    """Length integral."""
+    return jnp.ones_like(B)
 
 
 def _radial_drift(data, B, pitch):
@@ -450,8 +450,11 @@ def _Jpar(params, transforms, profiles, data, **kwargs):
                 bounce.points(pitch_inv, num_well),
                 is_fourier=True,
             )
-            # Take sum over wells
-            return jnp.sum(Jpar / L, axis=-1)
+            # Take sum over wells, L is summed over wells and averaged over pitch
+            return (
+                jnp.sum(Jpar, axis=-1)
+                / L.sum(axis=-1).mean(axis=-1)[:, jnp.newaxis, jnp.newaxis]
+            )
 
         return batch_map(fun, data["pitch_inv"], pitch_batch_size)
 

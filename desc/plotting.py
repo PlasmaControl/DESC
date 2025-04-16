@@ -3844,20 +3844,50 @@ def plot_logo(save_path=None, **kwargs):
 def plot_adiabatic_invariant(
     eq, rhos=None, alphas=None, num_pitch=None, pitch_idx=-1, mode="single-surface"
 ):
-    """Plotting the second adiabatic invariant.
+    """Plot the second adiabatic invariant J_|| (parallel action).
+
+    This function visualizes the parallel action invariant J_|| in either of two modes:
+    1. On a single flux surface as a function of fieldline label α and inverse
+       pitch angle 1/λ
+    2. As contours of J_|| for a fixed pitch angle across multiple flux surfaces
 
     Parameters
     ----------
-    rhos: np.array or float
-    alphas: np.array or float
-    num_pitch: np.array or float
-    mode: single-rho, multi-rho
+    eq : object
+        Equilibrium object containing magnetic field information
+    rhos : array_like or float, optional
+        Flux surface radii. If float, plots single surface.
+        Default: np.linspace(0.1, 1, 10)
+    alphas : array_like, optional
+        Fieldline label values (toroidal angle).
+        Default: np.linspace(0, 2π, 32, endpoint=True)
+    num_pitch : int, optional
+        Number of pitch angle values for bounce integral calculation.
+        Default: 16
+    pitch_idx : int, optional
+        Index of pitch angle to use for cross-section mode.
+        Default: -1 (last pitch angle)
+    mode : str, optional
+        Visualization mode, either "single-surface" or "cross-section".
+        Default: "single-surface"
 
+    Returns
+    -------
+    fig : matplotlib.figure.Figure
+        The figure object containing the plot
+    ax : matplotlib.axes.Axes
+        The axes object for further customization
+
+    Notes
+    -----
+    The second adiabatic invariant J_|| is calculated by integrating the parallel
+    velocity along the magnetic field line over a complete bounce period.
     """
+    # Handle default parameters
     if rhos is None:
         rhos = np.linspace(0.1, 1, 10)
     elif isinstance(rhos, float):
-        print("Single rho provided...\n Plotting J_||(alpha, pitch)")
+        print("Single rho provided...\n Plotting J_||(α, λ)")
         rhos = np.array([rhos])
 
     if alphas is None:
@@ -3866,96 +3896,88 @@ def plot_adiabatic_invariant(
     if num_pitch is None:
         num_pitch = 16
 
+    # Calculate dimensions
     N_rho = len(rhos)
-    N_alpha = len(alphas)
-
     X, Y = 32, 64
+
+    # Compute bounce integral
     theta = Bounce2D.compute_theta(eq, X, Y, rhos)
     grid = LinearGrid(rho=rhos, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False)
-
-    num_transit = 1
-    num_quad = 24
-
-    data_full = np.zeros((N_rho, N_alpha, num_pitch))
-
     data0 = eq.compute(
         "Jpar",
         grid=grid,
         theta=theta,
         Y_B=64,
-        num_transit=num_transit,
-        num_quad=num_quad,
+        num_transit=1,
+        num_quad=24,
         num_pitch=num_pitch,
         alpha=alphas,
     )
-
     data_full = grid.compress(data0["Jpar"])
 
+    # Plot based on selected mode
     if mode == "single-surface" or N_rho == 1:
+        # Extract pitch angle range
         minB = data0["minB"][0]  # shape: (Pitch,)
         maxB = data0["maxB"][0]
         inv_pitch = np.linspace(minB, maxB, data0["num_pitch"])
 
+        # Create figure and prepare colormap
         fig = plt.figure(figsize=(6, 5))
-
-        # Copy the plasma colormap so we can edit it
         cmap = plt.get_cmap("plasma").copy()
+        cmap.set_under("white")  # Make values below vmin display as white
 
-        # Make any values below 'vmin' be displayed in white
-        cmap.set_under("white")
-
+        # Plot J_|| as function of α and 1/λ
         extent = [inv_pitch.min(), inv_pitch.max(), alphas.min(), alphas.max()]
-
-        # Plot the image with no interpolation so each cell is a solid color
         plt.imshow(
             data_full,
-            origin="lower",  # so alpha increases upward
+            origin="lower",  # α increases upward
             extent=extent,
-            aspect="auto",  # allows the aspect ratio to stretch or shrink
+            aspect="auto",  # allows aspect ratio to adjust
             cmap=cmap,
-            interpolation="nearest",  # no smoothing/interpolation
+            interpolation="nearest",  # no smoothing
         )
 
+        # Configure colorbar
         cbar = plt.colorbar()
+        cbar.ax.tick_params(labelsize=22)
 
-        # Increase colorbar tick label font size
-        cbar.ax.tick_params(labelsize=22)  # Increase colorbar tick font size
-
-        ax = plt.gca()  # Get current axis
-
+        # Format scientific notation
         import matplotlib.ticker as ticker
 
         cbar.ax.yaxis.set_major_formatter(ticker.ScalarFormatter(useMathText=True))
-        cbar.ax.yaxis.get_major_formatter().set_powerlimits(
-            (0, 0)
-        )  # Use scientific notation
-        cbar.ax.yaxis.set_major_locator(ticker.MaxNLocator(6))  # Set max ticks
+        cbar.ax.yaxis.get_major_formatter().set_powerlimits((0, 0))
+        cbar.ax.yaxis.set_major_locator(ticker.MaxNLocator(6))
 
+        # Configure y-axis ticks as multiples of π
+        ax = plt.gca()
         y_ticks = [0, np.pi / 2, np.pi, 3 * np.pi / 2, 2 * np.pi]
         y_labels = ["0", r"$\pi/2$", r"$\pi$", r"$3\pi/2$", r"$2\pi$"]
         ax.set_yticks(y_ticks)
         ax.set_yticklabels(y_labels, fontsize=22)
 
-        # Label the axes
+        # Add labels
         plt.xlabel(r"$1/\lambda$", fontsize=24)
         plt.ylabel(r"$\alpha$", fontsize=26, labelpad=-3)
+        plt.title(r"$J_{\parallel}$", fontsize=26)
 
-    else:  # mode is "cross-section"
-        # Create a figure
+    else:  # "cross-section" mode
+        # Create figure
         fig = plt.figure(figsize=(6, 5))
-
-        # Copy the plasma colormap so we can edit it
         cmap = plt.get_cmap("plasma").copy()
+
+        # Calculate polar coordinates for plotting
         rho_cosa = rhos[:, None] * np.cos(alphas)[None, :]
         rho_sina = rhos[:, None] * np.sin(alphas)[None, :]
-        plt.contour(rho_cosa, rho_sina, data_full[:, :, pitch_idx], levels=len(rhos))
-        cbar = plt.colorbar()
 
-        # Control the number of ticks and format
-        ax = plt.gca()  # Get current axis
-        # Label the axes
+        # Plot contours of J_|| for fixed pitch angle
+        plt.contour(rho_cosa, rho_sina, data_full[:, :, pitch_idx], levels=len(rhos))
+
+        # Add colorbar and labels
+        cbar = plt.colorbar()
+        ax = plt.gca()
         plt.xlabel(r"$\rho \cos(\alpha)$", fontsize=24)
         plt.ylabel(r"$\rho \sin(\alpha)$", fontsize=24)
-        plt.title(r"$\mathcal{J}_{\parallel}$", fontsize=24)
+        plt.title(r"$J_{\parallel}$", fontsize=26)
 
     return fig, ax

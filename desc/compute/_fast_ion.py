@@ -452,6 +452,9 @@ def _Jpar(params, transforms, profiles, data, **kwargs):
             )
             # Jpar sum over wells
             # L is summed over wells and averaged over pitch and alpha
+            # For this calculation no batching should be done in pitch or alpha
+            # else L will be different for different batches.
+            # An elengant solution is needed.
             Jpar_wellsum = jnp.sum(Jpar, axis=-1)
             return Jpar_wellsum / jnp.mean(L.sum(axis=-1), axis=(1, 2))[:, None, None]
 

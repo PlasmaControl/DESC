@@ -13,7 +13,7 @@ Optionally can also contract the profiles of the original ``Equilibrium`` so tha
 
 Bug Fixes
 
-- Fixes bug when ``jac_chunk_size`` is given to a sub-objective but the ``ObjectiveFunction`` is still using a different value which is set by an heuristic based on available memory.
+- Fixes bug where ``ObjectiveFunction`` was incorrectly using ``deriv_mode="batched"`` and the heuristic-set ``jac_chunk_size`` when ``jac_chunk_size`` is given to a sub-objective, where it should have instead defaulted to ``deriv_mode="blocked"``. See #1687 
 
 
 v0.14.1

@@ -16,6 +16,7 @@ from desc.coils import (
     CoilSet,
     FourierPlanarCoil,
     FourierRZCoil,
+    FourierRZWindingSurfaceCoil,
     FourierXYZCoil,
     MixedCoilSet,
     _Coil,
@@ -2146,7 +2147,40 @@ def test_coilset_geometry_optimization():
 
 
 @pytest.mark.unit
+def test_optimize_FourierRZWindingSurfaceCoil_surface():
+    """Tests optimizing the surface of a winding surface coil."""
+    c = FourierRZWindingSurfaceCoil(secular_theta=1, secular_zeta=0)
+    # default surface has R0=10, a=1
+    target_a = 2
+    # target a minor radius of the surface of 2
+    obj = ObjectiveFunction(
+        CoilLength(c, target=2 * np.pi * target_a, grid=LinearGrid(N=40))
+    )
+    # we will fix all but the R_lmn, Z_lmn of the surface (which are
+    # params of the FourierRZWindingSurfaceCoil object)
+    # so that the surface geometry must change to satisfy the
+    # optimization problem
+    cons = (
+        FixCoilCurrent(c),
+        FixParameters(
+            c,
+            params={
+                "theta_n": True,
+                "zeta_n": True,
+                "secular_theta": True,
+                "secular_zeta": True,
+            },
+        ),
+    )
+
+    opt = Optimizer("fmintr")
+    (c,), _ = opt.optimize(c, objective=obj, constraints=cons, verbose=3)
+    np.testing.assert_allclose(c.R_lmn[c.surface.R_basis.get_idx(M=1, N=0)], target_a)
+    np.testing.assert_allclose(c.Z_lmn[c.surface.Z_basis.get_idx(M=-1, N=0)], -target_a)
+
+
 @pytest.mark.slow
+@pytest.mark.unit
 def test_external_vs_generic_objectives(tmpdir_factory):
     """Test ExternalObjective compared to GenericObjective."""
     target = np.array([6.2e-3, 1.1e-1, 6.5e-3, 0])  # values at p_l = [2e2, -2e2]
@@ -2257,6 +2291,7 @@ def test_external_vs_generic_objectives(tmpdir_factory):
 
 @pytest.mark.unit
 @pytest.mark.optimize
+@pytest.mark.unit
 def test_coil_arclength_optimization():
     """Test coil arclength variance optimization."""
     c1 = FourierXYZCoil()

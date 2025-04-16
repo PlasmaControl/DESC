@@ -3973,6 +3973,7 @@ def plot_adiabatic_invariant(
         # Add colorbar and labels
         cbar = plt.colorbar()
         ax = plt.gca()
+        ax.set_aspect("equal", adjustable="box")
         plt.xlabel(r"$\rho \cos(\alpha)$", fontsize=24)
         plt.ylabel(r"$\rho \sin(\alpha)$", fontsize=24)
         plt.title(r"$J_{\parallel}$", fontsize=26)

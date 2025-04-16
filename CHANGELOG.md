@@ -11,6 +11,10 @@ Optionally can also contract the profiles of the original ``Equilibrium`` so tha
 - Updates Redl bootstrap current consistency tutorial to include a ``SplineProfile`` optimization
 - Adds automatically generated header file showing date the input file was created with `desc.vmec.VMECIO.write_vmec_input`
 
+Bug Fixes
+
+- Fixes bug when ``jac_chunk_size`` is given to a sub-objective but the ``ObjectiveFunction`` is still using a different value which is set by an heuristic based on available memory.
+
 
 v0.14.1
 -------

@@ -96,3 +96,26 @@ def test_Gamma_c_Velasco_1D():
     fig, ax = plt.subplots()
     ax.plot(rho, grid.compress(data["old Gamma_c Velasco"]), marker="o")
     return fig
+
+
+@pytest.mark.unit
+@pytest.mark.slow
+@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
+def test_direct_omnigenity():
+    """Test Γ_c Velasco with W7-X."""
+    eq = get("W7-X")
+    rho = np.linspace(1e-12, 1, 10)
+    grid = LinearGrid(rho=rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False)
+    num_transit = 10
+    data = eq.compute(
+        "dJpar_dalpha",
+        grid=grid,
+        theta=Bounce2D.compute_theta(eq, X=32, Y=64, rho=rho),
+        Y_B=128,
+        num_transit=num_transit,
+        num_well=20 * num_transit,
+    )
+    assert np.isfinite(data["dJpar_dalpha"]).all()
+    fig, ax = plt.subplots()
+    ax.plot(rho, grid.compress(data["dJpar_dalpha"]), marker="o")
+    return fig

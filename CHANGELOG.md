@@ -9,7 +9,6 @@ Optionally can also contract the profiles of the original ``Equilibrium`` so tha
 - Adds error for incorrect grids in ``desc.objectives.BootstrapRedlConsistency`` and when computing ``current Redl`` and ``<J*B> Redl`` compute quantities
 - Allows Redl compute quantities to use SplineProfile
 - Updates Redl bootstrap current consistency tutorial to include a ``SplineProfile`` optimization
-- Allows the following objectives to take multiple optimizable "things" and internally sums their magnetic fields together: ``desc.objectives.BoundaryError``, ``desc.objectives.BoundaryErrorNESTOR``, ``desc.objectives.VacuumBoundaryError``, ``desc.objectives.QuadraticFlux``
 - Adds automatically generated header file showing date the input file was created with `desc.vmec.VMECIO.write_vmec_input`
 
 

@@ -332,7 +332,7 @@ class TestPlotFSA:
             eq.compute(names="<" + name + ">", grid=grid)["<" + name + ">"]
         )
         np.testing.assert_allclose(
-            plot_data["<" + name + ">"][0], desired, equal_nan=False
+            plot_data["<" + name + ">"], desired, equal_nan=False
         )
 
         name = "psi_r/sqrt(g)"
@@ -358,7 +358,7 @@ class TestPlotFSA:
             expand_out=False,
         )
         np.testing.assert_allclose(
-            plot_data["<" + name + ">_fsa"][0], desired, equal_nan=False
+            plot_data["<" + name + ">_fsa"], desired, equal_nan=False
         )
 
         name = "|B|"
@@ -377,7 +377,7 @@ class TestPlotFSA:
         data = eq.compute(names=name, grid=grid)
         desired = surface_averages(grid=grid, q=data[name], expand_out=False)
         np.testing.assert_allclose(
-            plot_data["<" + name + ">_fsa"][0], desired, equal_nan=False
+            plot_data["<" + name + ">_fsa"], desired, equal_nan=False
         )
 
     @pytest.mark.unit
@@ -400,18 +400,6 @@ class TestPlotFSA:
         eq = get("DSHAPE_CURRENT")
         fig, ax = plot_fsa(
             eq, "|F|", log=True, normalize=True, norm_name="<|grad(p)|>_vol"
-        )
-        ax.set_ylim([1e-6, 1e-3])
-        return fig
-
-    @pytest.mark.unit
-    @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
-    def test_fsa_multiple_F_normalized(self):
-        """Test plotting flux surface average normalized force error for multiple eq."""
-        eq1 = get("DSHAPE_CURRENT")
-        eq2 = get("DSHAPE")
-        fig, ax = plot_fsa(
-            [eq1, eq2], "|F|", normalize=True, norm_name="<|grad(p)|>_vol"
         )
         ax.set_ylim([1e-6, 1e-3])
         return fig

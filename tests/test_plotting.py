@@ -14,6 +14,7 @@ from desc.basis import (
 )
 from desc.coils import CoilSet, FourierXYZCoil, MixedCoilSet
 from desc.compute import data_index
+from desc.equilibrium import Equilibrium
 from desc.examples import get
 from desc.geometry import FourierRZToroidalSurface, FourierXYZCurve
 from desc.grid import ConcentricGrid, Grid, LinearGrid, QuadratureGrid
@@ -24,6 +25,7 @@ from desc.plotting import (
     plot_1d,
     plot_2d,
     plot_3d,
+    plot_adiabatic_invariant,
     plot_basis,
     plot_boozer_modes,
     plot_boozer_surface,
@@ -959,4 +961,20 @@ def test_plot_poincare():
     z0 = eq.compute("Z", grid=grid_trace)["Z"]
 
     fig, ax = poincare_plot(ext_field, r0, z0, ntransit=50, NFP=eq.NFP)
+    return fig
+
+
+@pytest.mark.unit
+@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
+def test_plot_adiabatic_invariant_cross_section():
+    """Test making a J_|| nested contour plot."""
+    # NFP2 OP equilibrium from omnigenity database
+    eq = Equilibrium.load(
+        ".//tests//inputs//OP_NFP2_A6_tor+0p0_mr0p0_sh0p0_wd+0p0_el2p0.h5"
+    )
+    rhos = np.linspace(0.1, 1, 10)
+    fig, ax = plot_adiabatic_invariant(
+        eq, rhos=rhos, num_pitch=24, pitch_idx=10, mode="cross-section"
+    )
+
     return fig

@@ -684,7 +684,8 @@ def _dJpar_ds(params, transforms, profiles, data, **kwargs):
             )
             dJpar_ds = safediv(poloidal_drift, v_tau)
             # Take sum over wells, max in alpha
-            # The idea is to have the max drift < 0
+            # max drift < 0 is favorable for TEM(trapped electron mode)
+            # stability for all rhos and pitches
             return jnp.sum(dJpar_ds, axis=-1).max(axis=-2)
 
         return jnp.sum(

@@ -3883,12 +3883,13 @@ def plot_adiabatic_invariant(
     The second adiabatic invariant J_|| is calculated by integrating the parallel
     velocity along the magnetic field line over a complete bounce period.
     """
-    # Handle default parameters
     if rhos is None:
         rhos = np.linspace(0.1, 1, 10)
     elif isinstance(rhos, float):
         print("Single rho provided...\n Plotting J_||(α, λ)")
-        rhos = np.array([rhos])
+        rhos = np.array(
+            [rhos, 1.0]
+        )  # BUG: Array of len 1 takes all the mem and never finishes
 
     if alphas is None:
         alphas = np.linspace(0, 2 * np.pi, 32, endpoint=True)
@@ -3896,7 +3897,6 @@ def plot_adiabatic_invariant(
     if num_pitch is None:
         num_pitch = 16
 
-    # Calculate dimensions
     N_rho = len(rhos)
     X, Y = 32, 64
 
@@ -3915,12 +3915,11 @@ def plot_adiabatic_invariant(
     )
     data_full = grid.compress(data0["Jpar"])
 
-    # Plot based on selected mode
     if mode == "single-surface" or N_rho == 1:
         # Extract pitch angle range
-        minB = data0["minB"][0]  # shape: (Pitch,)
-        maxB = data0["maxB"][0]
-        inv_pitch = np.linspace(minB, maxB, data0["num_pitch"])
+        minB = data0["min_tz |B|"][0]  # shape: (Pitch,)
+        maxB = data0["max_tz |B|"][0]
+        inv_pitch = np.linspace(minB, maxB, num_pitch)
 
         # Create figure and prepare colormap
         fig = plt.figure(figsize=(6, 5))
@@ -3930,7 +3929,7 @@ def plot_adiabatic_invariant(
         # Plot J_|| as function of α and 1/λ
         extent = [inv_pitch.min(), inv_pitch.max(), alphas.min(), alphas.max()]
         plt.imshow(
-            data_full,
+            data_full[0],
             origin="lower",  # α increases upward
             extent=extent,
             aspect="auto",  # allows aspect ratio to adjust
@@ -3938,7 +3937,6 @@ def plot_adiabatic_invariant(
             interpolation="nearest",  # no smoothing
         )
 
-        # Configure colorbar
         cbar = plt.colorbar()
         cbar.ax.tick_params(labelsize=22)
 
@@ -3949,7 +3947,6 @@ def plot_adiabatic_invariant(
         cbar.ax.yaxis.get_major_formatter().set_powerlimits((0, 0))
         cbar.ax.yaxis.set_major_locator(ticker.MaxNLocator(6))
 
-        # Configure y-axis ticks as multiples of π
         ax = plt.gca()
         y_ticks = [0, np.pi / 2, np.pi, 3 * np.pi / 2, 2 * np.pi]
         y_labels = ["0", r"$\pi/2$", r"$\pi$", r"$3\pi/2$", r"$2\pi$"]

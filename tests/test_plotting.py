@@ -966,6 +966,22 @@ def test_plot_poincare():
 
 @pytest.mark.unit
 @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
+def test_plot_adiabatic_invariant_single_surface():
+    """Test making a J_||(alpha, 1.lambda) plot."""
+    # NFP2 OP equilibrium from omnigenity database
+    eq = Equilibrium.load(
+        ".//tests//inputs//OP_NFP2_A6_tor+0p0_mr0p0_sh0p0_wd+0p0_el2p0.h5"
+    )
+    rhos = 0.5
+    fig, ax = plot_adiabatic_invariant(
+        eq, rhos=rhos, num_pitch=24, pitch_idx=10, mode="single-surface"
+    )
+
+    return fig
+
+
+@pytest.mark.unit
+@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
 def test_plot_adiabatic_invariant_cross_section():
     """Test making a J_|| nested contour plot."""
     # NFP2 OP equilibrium from omnigenity database

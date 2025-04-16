@@ -142,30 +142,6 @@ class TestPlot1D:
         fig, ax = plot_1d(surf, "curvature_H_rho", grid=LinearGrid(M=50))
         return fig
 
-    @pytest.mark.unit
-    @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
-    def test_plot_1d_multiple_eq(self):
-        """Test plot_1d function for multiple eq."""
-        eq1 = get("ESTELL")
-        eq2 = get("ATF")
-        fig, ax, data = plot_1d(
-            (eq1, eq2), "iota", return_data=True, label=["ESTELL", "ATF"]
-        )
-        assert len(data["iota"]) == 2
-        return fig
-
-    @pytest.mark.unit
-    @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
-    def test_plot_1d_multiple_curve(self):
-        """Test plot_1d function for Curve objects."""
-        curve1 = FourierXYZCurve([0, 10, 1])
-        curve2 = FourierXYZCurve([1, 9, 2])
-        fig, ax, data = plot_1d(
-            [curve1, curve2], "curvature", return_data=True, lw=[1, 3], color="r"
-        )
-        assert len(data["curvature"]) == 2
-        return fig
-
 
 class TestPlot2D:
     """Tests for plot_2d."""

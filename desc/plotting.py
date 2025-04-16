@@ -500,9 +500,7 @@ def plot_coefficients(eq, L=True, M=True, N=True, ax=None, **kwargs):
     return fig, ax
 
 
-def plot_1d(  # noqa: C901
-    eq, name, grid=None, log=False, ax=None, return_data=False, **kwargs
-):
+def plot_1d(eq, name, grid=None, log=False, ax=None, return_data=False, **kwargs):
     """Plot 1D profiles.
 
     Parameters
@@ -593,7 +591,6 @@ def plot_1d(  # noqa: C901
     elif data_index[parameterization][name]["coordinates"] == "s":  # curve qtys
         default_L = 0
         default_N = 100
-
     NFP = getattr(eq, "NFP", 1)
     if grid is None:
         grid_kwargs = {"L": default_L, "N": default_N, "NFP": NFP}
@@ -640,10 +637,7 @@ def plot_1d(  # noqa: C901
     ax.set_xlabel(xlabel, fontsize=xlabel_fontsize)
     ax.set_ylabel(ylabel, fontsize=ylabel_fontsize)
     _set_tight_layout(fig)
-    plot_data = {
-        xlabel.strip("$").strip("\\"): grid.nodes[:, plot_axes[0]],
-        name: data,
-    }
+    plot_data = {xlabel.strip("$").strip("\\"): grid.nodes[:, plot_axes[0]], name: data}
 
     if label is not None:
         ax.legend()

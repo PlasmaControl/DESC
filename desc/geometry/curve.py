@@ -1036,7 +1036,7 @@ class FourierXYCurve(Curve):
 
     def change_resolution(self, N=None):
         """Change the maximum angular resolution."""
-        N = check_nonnegint(N, "N")
+        N = check_posint(N, "N")
         if (N is not None) and (N != self.N):
             N = int(N)
             Xmodes_old = self.X_basis.modes

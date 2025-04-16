@@ -450,9 +450,10 @@ def _Jpar(params, transforms, profiles, data, **kwargs):
                 bounce.points(pitch_inv, num_well),
                 is_fourier=True,
             )
-            # Take sum over wells, L is summed over wells and averaged over pitch
-            # and alpha
-            return jnp.sum(Jpar, axis=-1) / jnp.mean(L.sum(axis=-1))[..., jnp.newaxis]
+            # Jpar sum over wells
+            # L is summed over wells and averaged over pitch and alpha
+            Jpar_wellsum = jnp.sum(Jpar, axis=-1)
+            return Jpar_wellsum / jnp.mean(L.sum(axis=-1), axis=(1, 2))[:, None, None]
 
         return batch_map(fun, data["pitch_inv"], pitch_batch_size)
 

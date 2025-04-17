@@ -588,12 +588,12 @@ def _dJ_dalpha(params, transforms, profiles, data, **kwargs):
 @register_compute_fun(
     name="dJ_ds",
     label=(
-        # ∂ᵨ J_∥/∮ dl/v_∥ =  ∮ dl/v_∥ (v_d ⋅ ∇α)/∮ dl/v_∥
+        # ∂ᵨ J_∥ =  ∮ dl/v_∥ (v_d ⋅ ∇α)
         "\\partial_{\\rho} \\J_{\\parallel}/\\oint dl / v_{\\parallel}"
     ),
     units="~",
     units_long="m^-1",
-    description="max J term, binormal drift",
+    description="max-J term, bounce-integrated binormal drift",
     coordinates="r",
     dim=1,
     profiles=[],
@@ -665,8 +665,8 @@ def _dJ_ds(params, transforms, profiles, data, **kwargs):
         )
 
         def fun(pitch_inv):
-            v_tau, poloidal_drift = bounce.integrate(
-                [_v_tau, _poloidal_drift],
+            poloidal_drift = bounce.integrate(
+                [_poloidal_drift],
                 pitch_inv,
                 data,
                 ["cvdrift0", "gbdrift (periodic)", "gbdrift (secular)/phi"],
@@ -675,7 +675,7 @@ def _dJ_ds(params, transforms, profiles, data, **kwargs):
             )
 
             # Take sum over wells, then divide
-            dJ_ds = safediv(jnp.sum(poloidal_drift, axis=-1), jnp.sum(v_tau, axis=-1))
+            dJ_ds = jnp.sum(poloidal_drift, axis=-1)
 
             # max drift < 0 provides TEM(trapped electron mode)
             # stability for all rhos and pitches

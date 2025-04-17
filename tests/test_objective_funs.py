@@ -614,6 +614,37 @@ class TestObjectiveFunction:
         np.testing.assert_allclose(f, 0, atol=2e-3)
 
     @pytest.mark.unit
+    @pytest.mark.parametrize(
+        "objective",
+        [
+            "BoundaryError",
+            "BoundaryErrorNESTOR",
+            "QuadraticFlux",
+            "VacuumBoundaryError",
+        ],
+    )
+    def test_boundary_error_multiple_fields(self, objective):
+        """Test calculation of boundary error objectives with multiple fields."""
+        coil = FourierXYZCoil(5e5)
+        coilset = CoilSet.linspaced_angular(coil, n=3, check_intersection=False)
+        coils = [coil for coil in coilset]
+        coil_grid = LinearGrid(N=20)
+        eq = Equilibrium(L=3, M=3, N=3, Psi=np.pi)
+        eq.solve()
+
+        try:
+            obj = getattr(desc.objectives, objective)
+        except AttributeError:  # BoundaryErrorNESTOR
+            obj = getattr(desc.objectives._free_boundary, objective)
+        obj0 = obj(eq, coilset, field_grid=coil_grid)
+        obj1 = obj(eq, coils, field_grid=coil_grid)
+        obj0.build()
+        obj1.build()
+        f0 = obj0.compute_scaled_error(*obj0.xs())
+        f1 = obj1.compute_scaled_error(*obj1.xs())
+        np.testing.assert_allclose(f0, f1, err_msg=f"{objective}", atol=1e-19)
+
+    @pytest.mark.unit
     def test_target_mean_iota(self):
         """Test calculation of iota profile average."""
 
@@ -1228,7 +1259,7 @@ class TestObjectiveFunction:
         eq = load("./tests/inputs/vacuum_circular_tokamak.h5")
         obj = QuadraticFlux(eq, t_field)
         obj.build(eq, verbose=2)
-        f = obj.compute(field_params=t_field.params_dict)
+        f = obj.compute(t_field.params_dict)
         np.testing.assert_allclose(f, 0, rtol=1e-14, atol=1e-14)
 
         # test non-axisymmetric surface
@@ -1273,7 +1304,7 @@ class TestObjectiveFunction:
         obj = QuadraticFlux(eq, t_field, vacuum=True, eval_grid=eval_grid)
         Bnorm = t_field.compute_Bnormal(eq.surface, eval_grid=eval_grid)[0]
         obj.build(eq)
-        f = obj.compute(field_params=t_field.params_dict)
+        f = obj.compute(t_field.params_dict)
         dA = eq.compute("|e_theta x e_zeta|", grid=eval_grid)["|e_theta x e_zeta|"]
         # check that they're the same since we set B_plasma = 0
         np.testing.assert_allclose(f, Bnorm * np.sqrt(dA), atol=1e-14)

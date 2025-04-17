@@ -108,14 +108,14 @@ def test_direct_omnigenity():
     grid = LinearGrid(rho=rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False)
     num_transit = 10
     data = eq.compute(
-        "dJpar_dalpha",
+        "dJ_dalpha",
         grid=grid,
         theta=Bounce2D.compute_theta(eq, X=32, Y=64, rho=rho),
         Y_B=128,
         num_transit=num_transit,
         num_well=20 * num_transit,
     )
-    assert np.isfinite(data["dJpar_dalpha"]).all()
+    assert np.isfinite(data["dJ_dalpha"]).all()
     fig, ax = plt.subplots()
-    ax.plot(rho, grid.compress(data["dJpar_dalpha"]), marker="o")
+    ax.plot(rho, grid.compress(data["dJ_dalpha"]), marker="o")
     return fig

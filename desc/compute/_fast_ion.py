@@ -466,7 +466,7 @@ def _adiabatic_J(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
-    name="dJpar_dalpha",
+    name="dJ_dalpha",
     label=(  # ∂_α J_∥/∮ dl/v_∥ =  ∮ dl/v_∥ (v_d ⋅ ∇ρ)/∮ dl/v_∥
         "\\partial_{\\alpha} \\J_{\\parallel}/\\oint dl / v_{\\parallel}"
     ),
@@ -503,7 +503,7 @@ def _adiabatic_J(params, transforms, profiles, data, **kwargs):
         "spline",
     ],
 )
-def _dJpar_dalpha(params, transforms, profiles, data, **kwargs):
+def _dJ_dalpha(params, transforms, profiles, data, **kwargs):
     """Direct measure of omnigenity.
 
     Exactly equivalent to the bounce-averaged radial drift.
@@ -533,7 +533,7 @@ def _dJpar_dalpha(params, transforms, profiles, data, **kwargs):
         )
     )
 
-    def dJpar_dalpha0(data):
+    def dJ_dalpha0(data):
         bounce = Bounce2D(
             grid,
             data,
@@ -555,9 +555,9 @@ def _dJpar_dalpha(params, transforms, profiles, data, **kwargs):
                 bounce.points(pitch_inv, num_well),
                 is_fourier=True,
             )
-            dJpar_dalpha = safediv(radial_drift, v_tau)
+            dJ_dalpha = safediv(radial_drift, v_tau)
             # Take sum over wells, max in alpha (max radial excursion)
-            return jnp.sum(dJpar_dalpha, axis=-1).max(axis=-2)
+            return jnp.sum(dJ_dalpha, axis=-1).max(axis=-2)
 
         return jnp.sum(
             batch_map(fun, data["pitch_inv"], pitch_batch_size)
@@ -567,8 +567,8 @@ def _dJpar_dalpha(params, transforms, profiles, data, **kwargs):
         ) / bounce.compute_fieldline_length(fl_quad)
 
     grid = transforms["grid"]
-    data["dJpar_dalpha"] = _compute(
-        dJpar_dalpha0,
+    data["dJ_dalpha"] = _compute(
+        dJ_dalpha0,
         {
             "cvdrift0": data["cvdrift0"],
             "gbdrift (periodic)": data["gbdrift (periodic)"],
@@ -584,7 +584,7 @@ def _dJpar_dalpha(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
-    name="dJpar_ds",
+    name="dJ_ds",
     label=(
         # ∂ᵨ J_∥/∮ dl/v_∥ =  ∮ dl/v_∥ (v_d ⋅ ∇α)/∮ dl/v_∥
         "\\partial_{\\rho} \\J_{\\parallel}/\\oint dl / v_{\\parallel}"
@@ -622,7 +622,7 @@ def _dJpar_dalpha(params, transforms, profiles, data, **kwargs):
         "spline",
     ],
 )
-def _dJpar_ds(params, transforms, profiles, data, **kwargs):
+def _dJ_ds(params, transforms, profiles, data, **kwargs):
     """The max-J term.
 
     Bounce-averaged binormal drift.
@@ -640,9 +640,6 @@ def _dJpar_ds(params, transforms, profiles, data, **kwargs):
         surf_batch_size == 1 or pitch_batch_size is None
     ), f"Expected pitch_batch_size to be None, got {pitch_batch_size}."
     spline = kwargs.get("spline", True)
-    fl_quad = (
-        kwargs["fieldline_quad"] if "fieldline_quad" in kwargs else leggauss(Y_B // 2)
-    )
     quad = (
         kwargs["quad"]
         if "quad" in kwargs
@@ -652,7 +649,7 @@ def _dJpar_ds(params, transforms, profiles, data, **kwargs):
         )
     )
 
-    def dJpar_ds0(data):
+    def dJ_ds0(data):
         bounce = Bounce2D(
             grid,
             data,
@@ -674,22 +671,18 @@ def _dJpar_ds(params, transforms, profiles, data, **kwargs):
                 bounce.points(pitch_inv, num_well),
                 is_fourier=True,
             )
-            dJpar_ds = safediv(poloidal_drift, v_tau)
-            # Take sum over wells, max in alpha
+            dJ_ds = safediv(poloidal_drift, v_tau)
+            # Take sum over wells
             # max drift < 0 provides TEM(trapped electron mode)
             # stability for all rhos and pitches
-            return jnp.sum(dJpar_ds, axis=-1)
+            return jnp.sum(dJ_ds, axis=-1)
 
-        return jnp.sum(
-            batch_map(fun, data["pitch_inv"], pitch_batch_size)
-            * data["pitch_inv weight"]
-            / data["pitch_inv"] ** 2,
-            axis=-1,
-        ) / bounce.compute_fieldline_length(fl_quad)
+        # Output dimension (rho, alpha, lambda)
+        return batch_map(fun, data["pitch_inv"], pitch_batch_size)
 
     grid = transforms["grid"]
-    data["dJpar_ds"] = _compute(
-        dJpar_ds0,
+    data["dJ_ds"] = _compute(
+        dJ_ds0,
         {
             "cvdrift0": data["cvdrift0"],
             "gbdrift (periodic)": data["gbdrift (periodic)"],

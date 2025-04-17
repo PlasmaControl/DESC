@@ -438,11 +438,6 @@ class maxJ(_Objective):
         Number of flux surfaces with which to compute simultaneously.
         If given ``None``, then ``surf_batch_size`` is ``grid.num_rho``.
         Default is ``1``. Only consider increasing if ``pitch_batch_size`` is ``None``.
-    spline : bool
-        Set to ``True`` to replace pseudo-spectral methods with local splines.
-        This can be efficient if ``num_transit`` and ``alpha.size`` are small,
-        depending on hardware and hardware features used by the JIT compiler.
-        If ``True``, then parameters ``X`` and ``Y`` are ignored.
     thresh0 : float
         Threshold for penalizing precession drift in metric above.
     w0, w1 : float
@@ -460,12 +455,11 @@ class maxJ(_Objective):
 
     _coordinates = "r"
     _units = "~"
-    _print_value_fmt = "maxJ: "
+    _print_value_fmt = "max-J: "
 
     def __init__(
         self,
         eq,
-        *,
         target=None,
         bounds=None,
         w0=1,
@@ -490,13 +484,10 @@ class maxJ(_Objective):
         num_pitch=64,
         pitch_batch_size=None,
         surf_batch_size=1,
-        spline=False,
-        Nemov=True,
     ):
         if target is None and bounds is None:
             target = 0.0
 
-        self._spline = spline
         self._grid = grid
 
         self._X = X
@@ -549,9 +540,6 @@ class maxJ(_Objective):
             Level of output.
 
         """
-        if self._spline:
-            return self._build_spline(use_jit, verbose)
-
         eq = self.things[0]
         if self._grid is None:
             self._grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False)
@@ -576,7 +564,7 @@ class maxJ(_Objective):
         super().build(use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
-        """Compute Γ_c.
+        """Compute dJ_ds.
 
         Parameters
         ----------
@@ -589,13 +577,10 @@ class maxJ(_Objective):
 
         Returns
         -------
-        Gamma_c : ndarray
-            Γ_c as a function of the flux surface label.
+        dJ_ds : ndarray
+            maxJ proxy a function of the flux surface label.
 
         """
-        if self._spline:
-            return self._compute_spline(params, constants)
-
         if constants is None:
             constants = self.constants
         eq = self.things[0]
@@ -626,77 +611,12 @@ class maxJ(_Objective):
             quad=constants["quad"],
             **self._hyperparam,
         )
-        return constants["transforms"]["grid"].compress(data[self._key])
-
-    def _build_spline(self, use_jit=True, verbose=1):
-        self._keys_1dr = ["iota", "iota_r", "min_tz |B|", "max_tz |B|"]
-        self._key = "old " + self._key
-        num_transit = self._hyperparam.pop("num_transit")
-        Y_B = self._hyperparam.pop("Y_B")
-
-        eq = self.things[0]
-        if self._grid is None:
-            self._grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
-        assert self._grid.is_meshgrid and eq.sym == self._grid.sym
-        self._constants["rho"] = self._grid.compress(self._grid.nodes[:, 0])
-        self._constants["zeta"] = np.linspace(
-            0, 2 * np.pi * num_transit, Y_B * num_transit
-        )
-        self._constants["quad"] = get_quadrature(
-            leggauss(self._hyperparam.pop("num_quad")),
-            (automorphism_sin, grad_automorphism_sin),
-        )
-        self._dim_f = self._grid.num_rho
-        self._target, self._bounds = _parse_callable_target_bounds(
-            self._target, self._bounds, self._constants["rho"]
-        )
-        self._constants["transforms_1dr"] = get_transforms(
-            self._keys_1dr, eq, self._grid
-        )
-        self._constants["profiles"] = get_profiles(
-            self._keys_1dr + [self._key], eq, self._grid
-        )
-        super().build(use_jit=use_jit, verbose=verbose)
-
-    def _compute_spline(self, params, constants=None):
-        if constants is None:
-            constants = self.constants
-        eq = self.things[0]
-        data = compute_fun(
-            eq,
-            self._keys_1dr,
-            params,
-            constants["transforms_1dr"],
-            constants["profiles"],
-        )
-        grid = eq._get_rtz_grid(
-            constants["rho"],
-            constants["alpha"],
-            constants["zeta"],
-            coordinates="raz",
-            iota=self._grid.compress(data["iota"]),
-            params=params,
-        )
-        data = {
-            key: grid.copy_data_from_other(data[key], self._grid)
-            for key in self._keys_1dr
-        }
-        data = compute_fun(
-            eq,
-            self._key,
-            params,
-            transforms=get_transforms(self._key, eq, grid, jitable=True),
-            profiles=constants["profiles"],
-            data=data,
-            quad=constants["quad"],
-            **self._hyperparam,
-        )
-        dJpar_ds = grid.compress(data[self._key])
+        dJ_ds = constants["transforms"]["grid"].compress(data[self._key])
 
         thresh0, w0, w1 = constants["thresh0"], constants["w0"], constants["w1"]
 
         # Shifted ReLU operation
-        dJpar_ds_filtrd = (dJpar_ds - thresh0) * (dJpar_ds >= thresh0)
-        results = w0 * jnp.sum(dJpar_ds_filtrd) + w1 * jnp.max(dJpar_ds_filtrd)
+        dJ_ds_filtrd = (dJ_ds - thresh0) * (dJ_ds >= thresh0)
+        results = w0 * jnp.sum(dJ_ds_filtrd) + w1 * jnp.max(dJ_ds_filtrd)
 
         return results

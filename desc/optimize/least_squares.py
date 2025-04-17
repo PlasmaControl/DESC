@@ -1,5 +1,7 @@
 """Function for solving nonlinear least squares problems."""
 
+import gc
+
 from scipy.optimize import OptimizeResult
 
 from desc.backend import jnp, qr
@@ -200,7 +202,7 @@ def lsqtr(  # noqa: C901
     diag_h = g * dv * scale
 
     g_h = g * d
-    J = J * d
+    J = J.at[:].set(J * d)
     # we don't need unscaled J anymore, so we overwrite
     # it with J_h = J * d to avoid carrying so many J-sized matrices
     # in memory, which can be large
@@ -396,7 +398,7 @@ def lsqtr(  # noqa: C901
             diag_h = g * dv * scale
 
             g_h = g * d
-            J = J * d
+            J = J.at[:].set(J * d)
             # we don't need unscaled J anymore this iteration, so we overwrite
             # it with J_h = J * d to avoid carrying so many J-sized matrices
             # in memory, which can be large
@@ -418,6 +420,9 @@ def lsqtr(  # noqa: C901
             step_norm = step_h_norm = actual_reduction = 0
 
         iteration += 1
+        # force garbage collection in between iterations to
+        # pre-empt any possible memory leaks
+        gc.collect()
         if verbose > 1:
             print_iteration_nonlinear(
                 iteration, nfev, cost, actual_reduction, step_norm, g_norm

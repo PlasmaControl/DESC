@@ -1,5 +1,7 @@
 """Function for minimizing a scalar function of multiple variables."""
 
+import gc
+
 from scipy.optimize import OptimizeResult
 
 from desc.backend import jnp
@@ -163,6 +165,9 @@ def sgd(
             success, message = False, STATUS_MESSAGES["callback"]
 
         iteration += 1
+        # force garbage collection in between iterations to
+        # pre-empt any possible memory leaks
+        gc.collect()
 
     result = OptimizeResult(
         x=x,

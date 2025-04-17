@@ -1,5 +1,7 @@
 """Augmented Lagrangian for scalar valued objectives."""
 
+import gc
+
 from scipy.optimize import BFGS, NonlinearConstraint, OptimizeResult
 
 from desc.backend import jnp
@@ -243,6 +245,7 @@ def fmin_auglag(  # noqa: C901
         yJ = constraint_wrapped.vjp(y - mu * c, z, *args)
         return grad_wrapped(z, *args) - yJ
 
+    H_is_numpy_array = False
     if isinstance(hess_wrapped, str) and hess_wrapped.lower() == "bfgs":
         bfgs = True
         hess_init_scale = options.pop("hessian_init_scale", "auto")
@@ -253,6 +256,8 @@ def fmin_auglag(  # noqa: C901
         hess_wrapped = BFGS(
             hess_exception_strategy, hess_min_curvature, hess_init_scale
         )
+        H_is_numpy_array = True
+
     if isinstance(hess_wrapped, BFGS):
         bfgs = True
         if hasattr(hess_wrapped, "n"):  # assume its already been initialized
@@ -261,6 +266,7 @@ def fmin_auglag(  # noqa: C901
         else:
             hess_wrapped.initialize(z0.size, "hess")
         laghess = hess_wrapped
+        H_is_numpy_array = True
 
     elif callable(constraint_wrapped.hess) and callable(hess_wrapped):
         bfgs = False
@@ -342,7 +348,14 @@ def fmin_auglag(  # noqa: C901
     diag_h = g * dv * scale
 
     g_h = g * d
-    H = d * H * d[:, None]
+    if H_is_numpy_array:
+        # doing operation H = d * H * d[:, None]
+        # with just in-place operations
+        H *= d[:, None]
+        H *= d
+    else:
+        H = H.at[:].set(d * H * d[:, None])
+
     # we don't need unscaled H anymore this iteration, so we overwrite
     # it with H_h = d * H * d[:, None] to avoid carrying so many H-sized matrices
     # in memory, which can be large
@@ -585,7 +598,13 @@ def fmin_auglag(  # noqa: C901
             d = v**0.5 * scale
             diag_h = g * dv * scale
             g_h = g * d
-            H = d * H * d[:, None]
+            if H_is_numpy_array:
+                # doing operation H = d * H * d[:, None]
+                # with just in-place operations
+                H *= d[:, None]
+                H *= d
+            else:
+                H = H.at[:].set(d * H * d[:, None])
             # we don't need unscaled H anymore this iteration, so we overwrite
             # it to avoid carrying so many H-sized matrices
             # in memory, which can be large
@@ -601,6 +620,9 @@ def fmin_auglag(  # noqa: C901
             step_norm = step_h_norm = actual_reduction = 0
 
         iteration += 1
+        # force garbage collection in between iterations to
+        # pre-empt any possible memory leaks
+        gc.collect()
         if verbose > 1:
             print_iteration_nonlinear(
                 iteration,

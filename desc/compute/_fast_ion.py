@@ -461,7 +461,7 @@ def _adiabatic_J(params, transforms, profiles, data, **kwargs):
         grid,
         num_pitch,
         surf_batch_size,
-    ) / (2 * jnp.pi * data["R0"])
+    ) / (2 * jnp.pi * num_transit * data["R0"])
     return data
 
 

@@ -865,7 +865,7 @@ def _P_fusion(params, transforms, profiles, data, **kwargs):
     fuel = kwargs.get("fuel", "DT")
     energy = energies.get(fuel)
 
-    reaction_rate = jnp.sum(
+    reaction_rate = 0.25 * jnp.sum(
         data["ni"] ** 2
         * data["<sigma*nu>"]
         * data["sqrt(g)"]

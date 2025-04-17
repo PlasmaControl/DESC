@@ -1,6 +1,5 @@
 """Generic objectives that don't belong anywhere else."""
 
-import inspect
 import re
 
 import numpy as np
@@ -11,7 +10,7 @@ from desc.compute.utils import _compute as compute_fun
 from desc.compute.utils import _parse_parameterization, get_profiles, get_transforms
 from desc.grid import QuadratureGrid
 from desc.optimizable import OptimizableCollection
-from desc.utils import errorif, jaxify, parse_argname_change, setdefault
+from desc.utils import errorif, getsource, jaxify, parse_argname_change, setdefault
 
 from .linear_objectives import _FixedObjective
 from .objective_funs import _Objective, collect_docs
@@ -557,7 +556,7 @@ class ObjectiveFromUser(_Objective):
 
         def get_vars(fun):
             pattern = r"data\[(.*?)\]"
-            src = inspect.getsource(fun)
+            src = getsource(fun)
             variables = re.findall(pattern, src)
             variables = list({s.strip().strip("'").strip('"') for s in variables})
             return variables

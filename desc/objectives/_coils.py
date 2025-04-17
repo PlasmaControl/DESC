@@ -1308,7 +1308,7 @@ class QuadraticFlux(_Objective):
         self._source_grid = source_grid
         self._eval_grid = eval_grid
         self._eq = eq
-        self._field = field
+        self._field = [field] if not isinstance(field, list) else field
         self._field_grid = field_grid
         self._vacuum = vacuum
         self._bs_chunk_size = bs_chunk_size
@@ -1320,9 +1320,8 @@ class QuadraticFlux(_Objective):
             "if attempting to find a QFM surface, please use "
             "SurfaceQuadraticFlux objective instead.",
         )
-        things = [field]
         super().__init__(
-            things=things,
+            things=self._field,
             target=target,
             bounds=bounds,
             weight=weight,
@@ -1343,6 +1342,8 @@ class QuadraticFlux(_Objective):
             Level of output.
 
         """
+        from desc.magnetic_fields import SumMagneticField
+
         eq = self._eq
 
         if self._eval_grid is None:
@@ -1393,7 +1394,7 @@ class QuadraticFlux(_Objective):
         )
 
         self._constants = {
-            "field": self._field,
+            "field": SumMagneticField(self._field),
             "field_grid": self._field_grid,
             "quad_weights": w,
             "eval_data": eval_data,
@@ -1412,7 +1413,7 @@ class QuadraticFlux(_Objective):
 
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, field_params, constants=None):
+    def compute(self, *field_params, constants=None):
         """Compute normal field error on boundary.
 
         Parameters
@@ -2394,7 +2395,7 @@ class SurfaceCurrentRegularization(_Objective):
 
         # source_grid.num_nodes for the regularization cost
         self._dim_f = source_grid.num_nodes
-        self._surface_data_keys = ["K", "|e_theta x e_zeta|"]
+        self._data_keys = ["K", "|e_theta x e_zeta|"]
 
         timer = Timer()
         if verbose > 0:
@@ -2402,7 +2403,7 @@ class SurfaceCurrentRegularization(_Objective):
         timer.start("Precomputing transforms")
 
         surface_transforms = get_transforms(
-            self._surface_data_keys,
+            self._data_keys,
             obj=surface_current_field,
             grid=source_grid,
             has_axis=source_grid.axis.size,
@@ -2450,7 +2451,7 @@ class SurfaceCurrentRegularization(_Objective):
 
         surface_data = compute_fun(
             self._surface_current_field,
-            self._surface_data_keys,
+            self._data_keys,
             params=surface_params,
             transforms=constants["surface_transforms"],
             profiles={},

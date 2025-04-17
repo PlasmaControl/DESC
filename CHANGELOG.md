@@ -10,7 +10,7 @@ Optionally can also contract the profiles of the original ``Equilibrium`` so tha
 - Allows Redl compute quantities to use SplineProfile
 - Updates Redl bootstrap current consistency tutorial to include a ``SplineProfile`` optimization
 - Adds automatically generated header file showing date the input file was created with `desc.vmec.VMECIO.write_vmec_input`
-- Adds maxJ, direct omnigenity, J\_|| compute, plotting and optimization objectives
+- Adds max-J(dJ\_ds), direct omnigenity(dJ\_dalpha), adiabaric J compute, plotting and optimization objectives
 
 v0.14.1
 -------

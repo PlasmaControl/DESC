@@ -1613,10 +1613,9 @@ class TestFiniteBuildCoil:
         coil = FourierPlanarFiniteBuildCoil(
             current=1e7,
             cross_section_dims=[0.1, 0.2],
-            cross_section_shape="rectangular",
         )
-        centerline_grid = LinearGrid(N=100, endpoint=False)
-        xsection_grid = 50
+        centerline_grid = LinearGrid(N=500, endpoint=False)
+        xsection_grid = 10
         grid_xyz = np.atleast_2d([10, 0, 0])
         grid_rpz = xyz2rpz(grid_xyz)
 
@@ -1656,11 +1655,11 @@ class TestFiniteBuildCoil:
             * np.log((alpha + (alpha**2 + beta**2) ** 0.5) / (1 + (1 + beta**2) ** 0.5))
         )
 
-        np.testing.assert_allclose(B_rpz_magnitude, B_analytic, rtol=2e-4, atol=1e-10)
+        np.testing.assert_allclose(B_rpz_magnitude, B_analytic, rtol=1e-5, atol=1e-10)
 
         B_analytic = np.array([0, B_analytic, 0]).reshape((1, 3))
 
-        np.testing.assert_allclose(B_xyz, B_analytic, rtol=2e-4, atol=1e-10)
+        np.testing.assert_allclose(B_xyz, B_analytic, rtol=1e-5, atol=1e-10)
 
     @pytest.mark.unit
     def test_self_field(self):
@@ -1668,7 +1667,6 @@ class TestFiniteBuildCoil:
         coil = FourierPlanarFiniteBuildCoil(
             current=1e7,
             cross_section_dims=[0.1, 0.2],
-            cross_section_shape="rectangular",
         )
         centerline_grid = LinearGrid(N=100, endpoint=False)
         xsection_grid = 50
@@ -1717,7 +1715,6 @@ class TestFiniteBuildCoil:
         coil = FourierPlanarFiniteBuildCoil(
             current=1e7,
             cross_section_dims=[0.1, 0.2],
-            cross_section_shape="rectangular",
         )
         centerline_grid = LinearGrid(N=10, endpoint=False)
         xsection_grid = 2

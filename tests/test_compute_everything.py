@@ -8,10 +8,10 @@ import pytest
 
 from desc.coils import (
     FourierPlanarCoil,
+    FourierPlanarFiniteBuildCoil,
     FourierRZCoil,
     FourierXYZCoil,
     SplineXYZCoil,
-    FourierPlanarFiniteBuildCoil,
 )
 from desc.compute import data_index, xyz2rpz, xyz2rpz_vec
 from desc.compute.utils import _grow_seeds
@@ -179,7 +179,6 @@ def test_compute_everything():
         ),
         "desc.coils.FourierPlanarFiniteBuildCoil": FourierPlanarFiniteBuildCoil(
             cross_section_dims=[0.1, 0.2],
-            cross_section_shape="rectangular",
             current=5,
             center=[10, 1, 3],
             normal=[1, 2, 3],

@@ -1856,7 +1856,6 @@ class TestObjectiveFunction:
             cross_section_dims=[0.1, 0.2],
             r_n=0.5,
             modes=[0],
-            cross_section_shape="rectangular",
             current=0,
         )
         coils = CoilSet.linspaced_linear(coil, n=3, displacement=[0, 3, 0])

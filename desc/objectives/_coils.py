@@ -866,7 +866,7 @@ class CoilSetMaxB(_Objective):
     Will yield one value for each unique coil in the coilset, which is the maximum
     magnetic field on that coil in the component chosen. Options for magnetic field are
     magnitude or components projected in the coil frame. All coils in the coilset must
-    inherit from _FiniteBuildCoil.
+    inherit from AbstractFiniteBuildCoil.
 
     Parameters
     ----------
@@ -923,7 +923,7 @@ class CoilSetMaxB(_Objective):
         use_softmax=False,
         softmax_alpha=1.0,
     ):
-        from desc.coils import CoilSet, _FiniteBuildCoil
+        from desc.coils import AbstractFiniteBuildCoil, CoilSet
 
         if target is None and bounds is None:
             bounds = (-0.0, 20.0)
@@ -940,9 +940,9 @@ class CoilSetMaxB(_Objective):
             "are not supported.",
         )
         errorif(
-            not all([isinstance(c, _FiniteBuildCoil) for c in coil.coils]),
+            not all([isinstance(c, AbstractFiniteBuildCoil) for c in coil.coils]),
             ValueError,
-            "All coils in the CoilSet must inherit from _FiniteBuildCoil",
+            "All coils in the CoilSet must inherit from AbstractFiniteBuildCoil",
         )
         errorif(
             component not in {"mag", "p", "q"},
@@ -975,11 +975,11 @@ class CoilSetMaxB(_Objective):
             Level of output.
 
         """
-        from desc.coils import _FiniteBuildCoil
+        from desc.coils import AbstractFiniteBuildCoil
 
         coilset = self.things[0]
 
-        finite_build_grid, centerline_grid = _FiniteBuildCoil.prep_grid(
+        finite_build_grid, centerline_grid = AbstractFiniteBuildCoil.prep_grid(
             self._xsection_grid, self._centerline_grid
         )
 

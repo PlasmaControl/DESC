@@ -3841,150 +3841,6 @@ def _K_vc(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
-    name="p_frame",
-    label="\\mathbf{p}_{\\mathrm{Frame}}",
-    units="~",
-    units_long="None",
-    description="P unit vector for framed coil with arbitrary rotation fourier series",
-    dim=3,
-    params=["alpha_n"],
-    transforms={"alpha": [[0, 0, 0]]},
-    profiles=[],
-    coordinates="s",
-    data=["centroid_normal", "centroid_binormal"],
-    parameterization="desc.coils._FramedCoil",
-)
-def _p_frame(params, transforms, profiles, data, **kwargs):
-    alpha = transforms["alpha"].transform(params["alpha_n"], dz=0)
-
-    p_frame = (
-        data["centroid_normal"] * jnp.cos(alpha)[:, jnp.newaxis]
-        + data["centroid_binormal"] * jnp.sin(alpha)[:, jnp.newaxis]
-    )
-
-    data["p_frame"] = p_frame
-    return data
-
-
-@register_compute_fun(
-    name="q_frame",
-    label="\\mathbf{q}_{\\mathrm{Frame}}",
-    units="~",
-    units_long="None",
-    description="Q unit vector for framed coil with arbitrary rotation fourier series",
-    dim=3,
-    params=["alpha_n"],
-    transforms={"alpha": [[0, 0, 0]]},
-    profiles=[],
-    coordinates="s",
-    data=["centroid_normal", "centroid_binormal"],
-    parameterization="desc.coils._FramedCoil",
-)
-def _q_frame(params, transforms, profiles, data, **kwargs):
-    alpha = transforms["alpha"].transform(params["alpha_n"], dz=0)
-
-    q_frame = (
-        -data["centroid_normal"] * jnp.sin(alpha)[:, jnp.newaxis]
-        + data["centroid_binormal"] * jnp.cos(alpha)[:, jnp.newaxis]
-    )
-
-    data["q_frame"] = q_frame
-    return data
-
-
-@register_compute_fun(
-    name="curv1_frame",
-    label="\\kappa_{1}}_{\\mathrm{Frame}",
-    units="~",
-    units_long="None",
-    description="Curvature component in the p-vector direction for a "
-    "rectangular cross section coil",
-    dim=1,
-    params=[],
-    transforms={},
-    profiles=[],
-    coordinates="s",
-    data=["curvature", "frenet_normal", "p_frame"],
-    parameterization="desc.coils._FramedCoil",
-)
-def _curv1_frame(params, transforms, profiles, data, **kwargs):
-    data["curv1_frame"] = data["curvature"] * dot(
-        data["frenet_normal"], data["p_frame"]
-    )
-
-    return data
-
-
-@register_compute_fun(
-    name="curv2_frame",
-    label="\\kappa_{2}}_{\\mathrm{Frame}",
-    units="~",
-    units_long="None",
-    description="Curvature component in the q-vector direction for a "
-    "rectangular cross section coil",
-    dim=1,
-    params=[],
-    transforms={},
-    profiles=[],
-    coordinates="s",
-    data=["curvature", "frenet_normal", "q_frame"],
-    parameterization="desc.coils._FramedCoil",
-)
-def _curv2_frame(params, transforms, profiles, data, **kwargs):
-    data["curv2_frame"] = data["curvature"] * dot(
-        data["frenet_normal"], data["q_frame"]
-    )
-
-    return data
-
-
-@register_compute_fun(
-    name="u_fb",
-    label="u_{FB}",
-    units="",
-    units_long="",
-    description="U coordinate for finite build expansion",
-    dim=1,
-    params=[],
-    transforms={"grid": []},
-    profiles=[],
-    coordinates="rt",  # just two degrees of freedom
-    data=[],
-    parameterization="desc.coils._FiniteBuildCoil",
-)
-def _u_fb(params, transforms, profiles, data, **kwargs):
-    grid = transforms["grid"]
-
-    data["u_fb"] = (
-        (grid.nodes[:, 0] - 0.5) / (0.5) * 0.9999
-    )  # rescale to [-0.9999,0.9999], as the finite build term is singular at the edge
-    return data
-
-
-@register_compute_fun(
-    name="v_fb",
-    label="v_{FB}",
-    units="",
-    units_long="",
-    description="V coordinate for finite build expansion",
-    dim=1,
-    params=[],
-    transforms={"grid": []},
-    profiles=[],
-    coordinates="rt",
-    data=[],
-    parameterization="desc.coils._FiniteBuildCoil",
-)
-def _v_fb(params, transforms, profiles, data, **kwargs):
-    grid = transforms["grid"]
-
-    data["v_fb"] = (
-        (grid.nodes[:, 1] - jnp.pi) / (jnp.pi) * 0.9999
-    )  # rescale to [-0.9999,0.9999]
-    return data
-
-
-@register_compute_fun(
     name="B_0_fb",
     label="B_{0,FB}",
     units="T",
@@ -3996,7 +3852,7 @@ def _v_fb(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["u_fb", "v_fb", "p_frame", "q_frame"],
-    parameterization="desc.coils._FiniteBuildCoil",
+    parameterization="desc.coils.AbstractFiniteBuildCoil",
 )
 def _B_0_fb(params, transforms, profiles, data, **kwargs):
     # scalars
@@ -4069,7 +3925,7 @@ def _B_0_fb(params, transforms, profiles, data, **kwargs):
         "curv1_frame",
         "curv2_frame",
     ],
-    parameterization="desc.coils._FiniteBuildCoil",
+    parameterization="desc.coils.AbstractFiniteBuildCoil",
 )
 def _B_kappa_fb(params, transforms, profiles, data, **kwargs):
     # scalars
@@ -4131,7 +3987,7 @@ def _B_kappa_fb(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="z",
     data=["curvature", "frenet_binormal"],
-    parameterization="desc.coils._FiniteBuildCoil",
+    parameterization="desc.coils.AbstractFiniteBuildCoil",
 )
 def _B_b_fb(params, transforms, profiles, data, **kwargs):
     # scalars, external
@@ -4175,7 +4031,7 @@ def _B_b_fb(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["p_frame", "q_frame", "u_fb", "v_fb", "phi"],
-    parameterization="desc.coils._FiniteBuildCoil",
+    parameterization="desc.coils.AbstractFiniteBuildCoil",
 )
 def _x_fb(params, transforms, profiles, data, **kwargs):
     # scalars

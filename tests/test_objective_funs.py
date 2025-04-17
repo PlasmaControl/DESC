@@ -1758,7 +1758,7 @@ class TestObjectiveFunction:
         num_quad = 16
         num_pitch = 16
         data = eq.compute(
-            ["effective ripple", "Gamma_c", "dJpar_ds"],
+            ["effective ripple", "Gamma_c", "dJ_ds"],
             grid=grid,
             theta=Bounce2D.compute_theta(eq, X=X, Y=Y, rho=rho),
             num_transit=num_transit,
@@ -1811,7 +1811,7 @@ class TestObjectiveFunction:
 
         obj.build()
         np.testing.assert_allclose(
-            obj.compute(eq.params_dict), grid.compress(data["dJpar_ds"])
+            obj.compute(eq.params_dict), grid.compress(data["dJ_ds"])
         )
 
     @pytest.mark.unit

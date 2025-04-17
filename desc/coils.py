@@ -1975,7 +1975,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         # always start at the 3rd line after periods
         coilnames = []  # the coilgroup each coil belongs to
         # corresponds to each coil in the coilinds list
-
+        coil_file = os.path.expanduser(coil_file)
         # read in the coils file
         headind = -1
         with open(coil_file) as f:

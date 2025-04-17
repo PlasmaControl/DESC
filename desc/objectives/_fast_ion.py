@@ -1213,7 +1213,7 @@ class Gamma_delta(_Objective):
             "pitch_batch_size": pitch_batch_size,
             "surf_batch_size": surf_batch_size,
         }
-        self._key = "Gamma_a Velasco"
+        self._key = "Gamma_d Velasco"
 
         super().__init__(
             things=eq,

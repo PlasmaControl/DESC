@@ -431,7 +431,7 @@ class Transform(IOAble):
 
         """
         errorif(
-            not self.built,
+            not self.built_pinv,
             RuntimeError,
             "Transform must be precomputed with transform.build_pinv() "
             "before being used.",

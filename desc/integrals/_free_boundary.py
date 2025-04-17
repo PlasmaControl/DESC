@@ -193,7 +193,8 @@ class FreeBoundarySolver(IOAble):
         Toroidal Fourier resolution to interpolate Φ on ∂𝒳.
         Should be at most ``Phi_grid.N``.
     sym
-        Symmetry for interpolation basis.
+        Symmetry for basis which interpolates Φ.
+        Default assumes no symmetry.
     chunk_size : int or None
         Size to split computation into chunks.
         If no chunking should be done or the chunk size is the full input
@@ -250,20 +251,11 @@ class FreeBoundarySolver(IOAble):
             M=setdefault(Phi_M, Phi_grid.M),
             N=setdefault(Phi_N, Phi_grid.N),
             NFP=surface.NFP,
-            # TODO: Reviewer should check this. Phi need not be NFP periodic.
             sym=setdefault(sym, False) and surface.sym,
         )
 
         # Compute data on source grid.
-        geometric_names = [
-            "R",
-            "phi",
-            "Z",
-            "n_rho",
-            "|e_theta x e_zeta|",
-            "e_theta",
-            "e_zeta",
-        ]
+        geometric_names = ["x", "n_rho", "|e_theta x e_zeta|", "e_theta", "e_zeta"]
         src_data = surface.compute(geometric_names, grid=src_grid)
         # Compute data on Phi grid.
         if self._same_grid_phi_src:
@@ -274,11 +266,7 @@ class FreeBoundarySolver(IOAble):
         Phi_data["n x B_coil"] = cross(
             Phi_data["n_rho"],
             B_coil.compute_magnetic_field(
-                coords=jnp.column_stack(
-                    [Phi_data["R"], Phi_data["phi"], Phi_data["Z"]]
-                ),
-                source_grid=src_grid,
-                chunk_size=chunk_size,
+                coords=Phi_data["x"], source_grid=src_grid, chunk_size=chunk_size
             ),
         )
         # Compute data on evaluation grid.
@@ -455,8 +443,8 @@ def _lsmr_Phi(self, basis=None, *, chunk_size=None):
     return self._data
 
 
-def _fredholm_Phi(Phi_k, self, chunk_size=None):
-    """Compute Fredholm integral operator T(Φ) = q⁻¹(γ - H Φ).
+def _iteration_operator(Phi_k, self, chunk_size=None):
+    """Compute iteration operator T(Φ).
 
     Parameters
     ----------
@@ -473,7 +461,7 @@ def _fredholm_Phi(Phi_k, self, chunk_size=None):
     src_data["Phi"] = self._upsample_to_source(Phi_k, is_fourier=False)
     gamma = self._data["Phi"]["gamma"]
     H = _H(self, src_data, chunk_size).squeeze(axis=-1)
-    return 2 * (gamma - H)
+    return -H + 0.5 * Phi_k + gamma
 
 
 @partial(jit, static_argnames=["tol", "maxiter", "method", "chunk_size"])
@@ -503,7 +491,7 @@ def _fixed_point_Phi(
         Phi_0 = basis.evaluate(self.Phi_grid) @ self._data["Phi"]["Phi_mn"]
 
     Phi = fixed_point(
-        _fredholm_Phi,
+        _iteration_operator,
         Phi_0,
         (self, chunk_size),
         tol,

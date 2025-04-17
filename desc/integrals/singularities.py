@@ -106,7 +106,7 @@ def best_params(grid, ratio):
     return st, sz, q
 
 
-def best_ratio(data, local=False):
+def best_ratio(data):
     """Ratio to make singular integration partition ~circle in real space.
 
     Parameters
@@ -114,17 +114,14 @@ def best_ratio(data, local=False):
     data : dict[str, jnp.ndarray]
         Dictionary of data evaluated on single flux surface grid that ``can_fft2``
         with keys ``|e_theta x e_zeta|``, ``e_theta``, and ``e_zeta``.
-    local : bool
-        Whether to average with local aspect ratio.
 
     """
     scale = jnp.linalg.norm(data["e_zeta"], axis=-1) / jnp.linalg.norm(
         data["e_theta"], axis=-1
     )
-    mean = jnp.mean(scale * data["|e_theta x e_zeta|"]) / jnp.mean(
+    return jnp.mean(scale * data["|e_theta x e_zeta|"]) / jnp.mean(
         data["|e_theta x e_zeta|"]
     )
-    return (0.5 * (mean + scale)) if local else mean
 
 
 def get_interpolator(
@@ -356,16 +353,16 @@ class FFTInterpolator(_BIESTInterpolator):
     def __init__(self, eval_grid, source_grid, st, sz, q, **kwargs):
         st = parse_argname_change(st, kwargs, "s", "st")
         assert eval_grid.can_fft2, "Got False for eval_grid.can_fft2."
-        warn = kwargs.get("warn_fft", True)
+        warn_fft = kwargs.get("warn_fft", True)
         warnif(
-            warn and eval_grid.num_theta < source_grid.num_theta,
+            warn_fft and eval_grid.num_theta < source_grid.num_theta,
             msg="Frequency spectrum of FFT interpolation will be truncated because "
             "the evaluation grid has less resolution than the source grid.\n"
             f"Got eval_grid.num_theta = {eval_grid.num_theta} < "
             f"{source_grid.num_theta} = source_grid.num_theta.",
         )
         warnif(
-            warn and eval_grid.num_zeta < source_grid.num_zeta,
+            warn_fft and eval_grid.num_zeta < source_grid.num_zeta,
             msg="Frequency spectrum of FFT interpolation will be truncated because "
             "the evaluation grid has less resolution than the source grid.\n"
             f"Got eval_grid.num_zeta = {eval_grid.num_zeta} < "
@@ -714,11 +711,12 @@ def singular_integral(
         should be in xyz.
     known_map : (str, callable)
         Optional. If map used in kernel of singular integral is known,
-        then may provide a callable to compute to avoid inefficient
-        interpolation and function approximation.
+        then it is more efficient to provide a callable to compute it
+        rather than interpolating and evaluating a Fourier series.
         First index should store the name of the map used in the kernel
         e.g. "Phi", and the second index should store the Python callable
         that accepts a grid argument.
+        Should broadcast with shapes (..., source_grid.num_nodes, ndim).
     ndim : int
         Default is kernel.ndim.
         In some applications it, may be useful to supply other values for batching.

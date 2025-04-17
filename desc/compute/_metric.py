@@ -1794,6 +1794,7 @@ def _g_sup_zz_z(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["g^rr"],
+    aliases=["|e^rho|"],
 )
 def _gradrho(params, transforms, profiles, data, **kwargs):
     data["|grad(rho)|"] = jnp.sqrt(data["g^rr"])
@@ -1874,6 +1875,7 @@ def _gradpsi_mag2(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["g^tt"],
+    aliases=["|e^theta|"],
 )
 def _gradtheta(params, transforms, profiles, data, **kwargs):
     data["|grad(theta)|"] = jnp.sqrt(data["g^tt"])
@@ -1892,6 +1894,7 @@ def _gradtheta(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["g^zz"],
+    aliases=["|e^zeta|"],
 )
 def _gradzeta(params, transforms, profiles, data, **kwargs):
     data["|grad(zeta)|"] = jnp.sqrt(data["g^zz"])

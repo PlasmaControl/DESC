@@ -212,15 +212,10 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
     return data
 
 
-def _Jpar_num(data, B, pitch):
+def _adiabatic_J_num(data, B, pitch):
     """Numerator of the second adiabatic invariant J||."""
     # v_∥/ (√2E/m)
     return jnp.sqrt(jnp.abs(1 - pitch * B))
-
-
-def _dl(data, B, pitch):
-    """Length integral."""
-    return jnp.ones_like(B)
 
 
 def _radial_drift(data, B, pitch):
@@ -369,7 +364,7 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
-    name="Jpar",
+    name="adiabatic J",
     label=(  # J_∥ = ∫ dl v_∥/ (√2E/m) )/∫ dl
         "\\J_{\\parallel} = \\integrate v_{\\parallel} dl/\\integrate dl/B"
     ),
@@ -381,7 +376,7 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
     profiles=[],
     params=[],
     transforms={"grid": []},
-    data=["min_tz |B|", "max_tz |B|"] + Bounce2D.required_names,
+    data=["min_tz |B|", "max_tz |B|", "R0"] + Bounce2D.required_names,
     resolution_requirement="tz",
     grid_requirement={"can_fft2": True},
     **_bounce_doc,
@@ -399,7 +394,7 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
         "spline",
     ],
 )
-def _Jpar(params, transforms, profiles, data, **kwargs):
+def _adiabatic_J(params, transforms, profiles, data, **kwargs):
     """Second adiabatic invariant of particle motion.
 
     The normalization requires a length for which we have uesd the fieldline
@@ -428,7 +423,7 @@ def _Jpar(params, transforms, profiles, data, **kwargs):
         )
     )
 
-    def Jpar0(data):
+    def adiabatic_J0(data):
         bounce = Bounce2D(
             grid,
             data,
@@ -442,8 +437,8 @@ def _Jpar(params, transforms, profiles, data, **kwargs):
         )
 
         def fun(pitch_inv):
-            Jpar, L = bounce.integrate(
-                [_Jpar_num, _dl],
+            adiabatic_J = bounce.integrate(
+                [_adiabatic_J_num],
                 pitch_inv,
                 data,
                 ["B^zeta"],
@@ -451,25 +446,22 @@ def _Jpar(params, transforms, profiles, data, **kwargs):
                 is_fourier=True,
             )
             # Jpar sum over wells
-            # L is summed over wells and averaged over pitch and alpha
-            # For this calculation no batching should be done in pitch or alpha
-            # else L will be different for different batches.
-            # An elengant solution is needed.
-            Jpar_wellsum = jnp.sum(Jpar, axis=-1)
-            return Jpar_wellsum / jnp.mean(L.sum(axis=-1), axis=(1, 2))[:, None, None]
+            Jpar_wellsum = jnp.sum(adiabatic_J, axis=-1)
+            return Jpar_wellsum
 
+        # We normalize with (2 pi R0)
         return batch_map(fun, data["pitch_inv"], pitch_batch_size)
 
     grid = transforms["grid"]
-    data["Jpar"] = _compute(
-        Jpar0,
+    data["adiabatic J"] = _compute(
+        adiabatic_J0,
         {},
         data,
         theta,
         grid,
         num_pitch,
         surf_batch_size,
-    )
+    ) / (2 * jnp.pi * data["R0"])
     return data
 
 

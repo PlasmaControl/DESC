@@ -3904,7 +3904,7 @@ def plot_adiabatic_invariant(
     theta = Bounce2D.compute_theta(eq, X, Y, rhos)
     grid = LinearGrid(rho=rhos, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False)
     data0 = eq.compute(
-        "Jpar",
+        "adiabatic J",
         grid=grid,
         theta=theta,
         Y_B=64,
@@ -3913,7 +3913,7 @@ def plot_adiabatic_invariant(
         num_pitch=num_pitch,
         alpha=alphas,
     )
-    data_full = grid.compress(data0["Jpar"])
+    data_full = grid.compress(data0["adiabatic J"])
 
     if mode == "single-surface" or N_rho == 1:
         # Extract pitch angle range

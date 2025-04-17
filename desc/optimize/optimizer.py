@@ -507,7 +507,10 @@ def get_combined_constraint_objectives(
 
     # wrap to handle linear constraints
     if linear_constraint is not None:
-        objective = LinearConstraintProjection(objective, linear_constraint)
+        linear_constraint_options = options.pop("linear_constraint_options", {})
+        objective = LinearConstraintProjection(
+            objective, linear_constraint, **linear_constraint_options
+        )
         objective.build(verbose=verbose)
         if nonlinear_constraint is not None:
             nonlinear_constraint = LinearConstraintProjection(

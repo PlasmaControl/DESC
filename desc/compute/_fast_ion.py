@@ -555,9 +555,11 @@ def _dJ_dalpha(params, transforms, profiles, data, **kwargs):
                 bounce.points(pitch_inv, num_well),
                 is_fourier=True,
             )
-            dJ_dalpha = safediv(radial_drift, v_tau)
-            # Take sum over wells, max in alpha (max radial excursion)
-            return jnp.sum(dJ_dalpha, axis=-1).max(axis=-2)
+            # Take sum over wells, then divide
+            dJ_dalpha = safediv(jnp.sum(radial_drift, axis=-1), jnp.sum(v_tau, axis=-1))
+
+            # Now take max in alpha (max radial excursion)
+            return dJ_dalpha.max(axis=-2)
 
         return jnp.sum(
             batch_map(fun, data["pitch_inv"], pitch_batch_size)
@@ -671,11 +673,13 @@ def _dJ_ds(params, transforms, profiles, data, **kwargs):
                 bounce.points(pitch_inv, num_well),
                 is_fourier=True,
             )
-            dJ_ds = safediv(poloidal_drift, v_tau)
-            # Take sum over wells
+
+            # Take sum over wells, then divide
+            dJ_ds = safediv(jnp.sum(poloidal_drift, axis=-1), jnp.sum(v_tau, axis=-1))
+
             # max drift < 0 provides TEM(trapped electron mode)
             # stability for all rhos and pitches
-            return jnp.sum(dJ_ds, axis=-1)
+            return dJ_ds
 
         # Output dimension (rho, alpha, lambda)
         return batch_map(fun, data["pitch_inv"], pitch_batch_size)

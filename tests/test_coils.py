@@ -467,6 +467,7 @@ class TestCoil:
         coil4 = coil1.to_FourierRZ(N=coil1.N)
         coil5 = coil1.to_FourierPlanar(N=10, basis="rpz")
         coil6 = FourierPlanarFiniteBuildCoil.from_FourierPlanarCoil(coil5)
+        coil7 = coil6.to_FourierPlanar()
 
         grid = LinearGrid(zeta=s)
         x1 = coil1.compute("x", grid=grid, basis="xyz")["x"]
@@ -480,6 +481,7 @@ class TestCoil:
         grid_planar = Grid(np.array([np.zeros_like(zeta), np.zeros_like(zeta), zeta]).T)
         x5 = coil5.compute("x", grid=grid_planar, basis="xyz")["x"]
         x6 = coil6.compute("x", grid=grid_planar, basis="xyz")["x"]
+        x7 = coil7.compute("x", grid=grid_planar, basis="xyz")["x"]
 
         B1 = coil1.compute_magnetic_field(
             np.zeros((1, 3)), source_grid=grid, basis="xyz"
@@ -499,17 +501,22 @@ class TestCoil:
         B6 = coil6.compute_magnetic_field(
             np.zeros((1, 3)), source_grid=grid, basis="xyz"
         )
+        B7 = coil7.compute_magnetic_field(
+            np.zeros((1, 3)), source_grid=grid, basis="xyz"
+        )
 
         np.testing.assert_allclose(x1, x2, atol=1e-12)
         np.testing.assert_allclose(x1, x3, atol=1e-12)
         np.testing.assert_allclose(x1, x4, atol=1e-12)
         np.testing.assert_allclose(x1, x5, atol=1e-12)
         np.testing.assert_allclose(x1, x6, atol=1e-12)
+        np.testing.assert_allclose(x1, x7, atol=1e-12)
         np.testing.assert_allclose(B1, B2, rtol=1e-8, atol=1e-8)
         np.testing.assert_allclose(B1, B3, rtol=1e-3, atol=1e-8)
         np.testing.assert_allclose(B1, B4, rtol=1e-8, atol=1e-8)
         np.testing.assert_allclose(B1, B5, rtol=1e-6, atol=1e-7)
         np.testing.assert_allclose(B1, B6, rtol=1e-8, atol=1e-8)
+        np.testing.assert_allclose(B1, B7, rtol=1e-8, atol=1e-8)
 
 
 class TestCoilSet:
@@ -1616,21 +1623,22 @@ class TestFiniteBuildCoil:
         )
         centerline_grid = LinearGrid(N=500, endpoint=False)
         xsection_grid = 10
+        finite_build_grid = FourierPlanarFiniteBuildCoil.prep_grid(
+            xsection_grid, centerline_grid
+        )
         grid_xyz = np.atleast_2d([10, 0, 0])
         grid_rpz = xyz2rpz(grid_xyz)
 
         B_xyz = coil.compute_magnetic_field(
             grid_xyz,
-            params={"multifilament": True, "xsection_grid": xsection_grid},
             basis="xyz",
-            source_grid=centerline_grid,
+            source_grid=finite_build_grid,
         )
 
         B_rpz = coil.compute_magnetic_field(
             grid_rpz,
-            params={"multifilament": True, "xsection_grid": xsection_grid},
             basis="rpz",
-            source_grid=centerline_grid,
+            source_grid=finite_build_grid,
         )
 
         B_rpz_magnitude = np.linalg.norm(B_rpz, axis=1)
@@ -1671,10 +1679,13 @@ class TestFiniteBuildCoil:
         centerline_grid = LinearGrid(N=100, endpoint=False)
         xsection_grid = 50
 
+        finite_build_grid = FourierPlanarFiniteBuildCoil.prep_grid(
+            xsection_grid, centerline_grid
+        )
+
         field_array_coilframe, field_positions, centerline_mask = (
             coil.compute_self_field(
-                xsection_grid=xsection_grid,
-                centerline_grid=centerline_grid,
+                finite_build_grid=finite_build_grid,
                 coil_frame=True,
             )
         )
@@ -1694,8 +1705,7 @@ class TestFiniteBuildCoil:
         )
 
         field_array_labframe, _, _ = coil.compute_self_field(
-            xsection_grid=xsection_grid,
-            centerline_grid=centerline_grid,
+            finite_build_grid=finite_build_grid,
             coil_frame=False,
         )
 
@@ -1719,7 +1729,7 @@ class TestFiniteBuildCoil:
         centerline_grid = LinearGrid(N=10, endpoint=False)
         xsection_grid = 2
 
-        finite_build_grid, centerline_grid = FourierPlanarFiniteBuildCoil.prep_grid(
+        finite_build_grid = FourierPlanarFiniteBuildCoil.prep_grid(
             xsection_grid, centerline_grid
         )
 
@@ -1729,9 +1739,7 @@ class TestFiniteBuildCoil:
         test_vecs_labframe[:, 1] = 1
 
         test_vecs_coilframe = coil.project_coil_frame(
-            test_vecs_labframe,
-            finite_build_grid,
-            centerline_grid,
+            test_vecs_labframe, finite_build_grid
         )
 
         # q and y vectors are antiparallel

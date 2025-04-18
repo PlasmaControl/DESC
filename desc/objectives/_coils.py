@@ -872,9 +872,9 @@ class CoilSetMaxB(_Objective):
     ----------
     coil : CoilSet
         Coil(s) that are to be optimized.
-    component :  {'mag', 'p', 'q'}, optional
+    component :  {'mag', 't', 'p', 'q'}, optional
         Component of magnetic field to be targeted. Can be 'mag' for field magnitude,
-        or 'p' or 'q' for the respective dimensions of the conductor cross section.
+        or 't', 'p', 'q' for the respective dimensions of the conductor cross section.
         Default is 'mag'.
     xsection_grid : Grid, list, optional
         Collocation grid used to discretize each coil cross section. Defaults to the
@@ -896,8 +896,8 @@ class CoilSetMaxB(_Objective):
     """
 
     __doc__ = __doc__.rstrip() + collect_docs(
-        target_default="``bounds=(0,20.0)``.",
-        bounds_default="``bounds=(0,20.0)``.",
+        target_default="``target=0``.",
+        bounds_default="``target=0``.",
         coil=True,
     )
 
@@ -926,7 +926,7 @@ class CoilSetMaxB(_Objective):
         from desc.coils import AbstractFiniteBuildCoil, CoilSet
 
         if target is None and bounds is None:
-            bounds = (-0.0, 20.0)
+            target = 0
 
         self._xsection_grid = xsection_grid
         self._centerline_grid = centerline_grid
@@ -945,9 +945,9 @@ class CoilSetMaxB(_Objective):
             "All coils in the CoilSet must inherit from AbstractFiniteBuildCoil",
         )
         errorif(
-            component not in {"mag", "p", "q"},
+            component not in {"mag", "t", "p", "q"},
             ValueError,
-            "Component must be one of 'mag', 'p', 'q'.",
+            "Component must be one of 'mag', 't', 'p', 'q'.",
         )
         self._component = component
 
@@ -979,7 +979,7 @@ class CoilSetMaxB(_Objective):
 
         coilset = self.things[0]
 
-        finite_build_grid, centerline_grid = AbstractFiniteBuildCoil.prep_grid(
+        finite_build_grid = AbstractFiniteBuildCoil.prep_grid(
             self._xsection_grid, self._centerline_grid
         )
 
@@ -987,7 +987,7 @@ class CoilSetMaxB(_Objective):
         self._constants = {
             "coilset": coilset,
             "finite_build_grid": finite_build_grid,
-            "centerline_grid": centerline_grid,
+            "centerline_grid": self._centerline_grid,
             "quad_weights": 1.0,
         }
 
@@ -1025,10 +1025,9 @@ class CoilSetMaxB(_Objective):
             # on the coil k
             coil = constants["coilset"][0]
             self_field, quad_points, centerline_mask = coil.compute_self_field(
-                xsection_grid=constants["finite_build_grid"],
-                centerline_grid=constants["centerline_grid"],
+                constants["finite_build_grid"],
+                coil_frame=False,
                 params=x,  # just this coil's parameters
-                prep_grid=False,
             )
 
             quad_points = jnp.where(
@@ -1062,10 +1061,11 @@ class CoilSetMaxB(_Objective):
                 total_field_reprojected = coil.project_coil_frame(
                     total_field,
                     finite_build_grid=constants["finite_build_grid"],
-                    centerline_grid=constants["centerline_grid"],
                     params=x,  # just this coil's parameters
                 )
-                if self._component == "p":
+                if self._component == "t":
+                    field_component = jnp.abs(total_field_reprojected[:, 0])
+                elif self._component == "p":
                     field_component = jnp.abs(total_field_reprojected[:, 1])
                 elif self._component == "q":
                     field_component = jnp.abs(total_field_reprojected[:, 2])

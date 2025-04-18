@@ -1830,39 +1830,48 @@ class TestObjectiveFunction:
     def test_coil_maxB(self):
         """Tests coil max field."""
 
-        def test(coil, component):
+        def test(coil, component, target=0):
             obj = CoilSetMaxB(
                 coil=coil,
                 component=component,
+                xsection_grid=5,
+                centerline_grid=50,
             )
             obj2 = CoilSetMaxB(
-                coil=coil, component=component, use_softmax=True, softmax_alpha=10
+                coil=coil,
+                component=component,
+                use_softmax=True,
+                softmax_alpha=10,
+                xsection_grid=5,
+                centerline_grid=50,
             )
 
             obj.build()
             obj2.build()
 
             f = obj.compute(params=coil.params_dict)
-            np.testing.assert_allclose(f, 0, atol=1e-8)
+            np.testing.assert_allclose(f, target, rtol=5e-4, atol=1e-4)
             assert len(f) == obj.dim_f
 
             f2 = obj.compute(params=coil.params_dict)
-            np.testing.assert_allclose(f2, 0, atol=1e-8)
+            np.testing.assert_allclose(f2, target, rtol=5e-4, atol=1e-4)
             assert len(f2) == obj.dim_f
 
         coil = FourierPlanarFiniteBuildCoil(
             center=[10, 1, 1],
-            normal=[1, 1, 1],
+            normal=[0, 1, 0],
             cross_section_dims=[0.1, 0.2],
-            r_n=0.5,
-            modes=[0],
-            current=0,
+            current=1e7,
         )
-        coils = CoilSet.linspaced_linear(coil, n=3, displacement=[0, 3, 0])
+        coils = CoilSet.linspaced_linear(
+            coil, n=2, displacement=[0, 2, 0], endpoint=True
+        )
 
-        test(coils, component="mag")
-        test(coils, component="p")
-        test(coils, component="q")
+        # Nominal values computed with the CoilForces package in Julia
+        test(coils, component="mag", target=25.687)
+        test(coils, component="t", target=0)
+        test(coils, component="p", target=24.489)
+        test(coils, component="q", target=25.619)
 
 
 @pytest.mark.regression

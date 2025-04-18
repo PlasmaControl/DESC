@@ -1617,8 +1617,6 @@ class AbstractFiniteBuildCoil(AbstractFramedCoil, Optimizable, ABC):
         -------
         finite_build_grid : LinearGrid
            3D grid over coil cross section and centerline length.
-        centerline_grid : LinearGrid
-            1D grid over coil centerline
 
         """
         # set cross section grid if not provided for u,v cross sectional coordinates
@@ -1655,7 +1653,7 @@ class AbstractFiniteBuildCoil(AbstractFramedCoil, Optimizable, ABC):
         zeta = centerline_grid.nodes[:, 2]
         finite_build_grid = LinearGrid(L=L, M=M, zeta=zeta, endpoint=True)
 
-        return finite_build_grid, centerline_grid
+        return finite_build_grid
 
     def compute_magnetic_field(
         self,
@@ -1668,14 +1666,12 @@ class AbstractFiniteBuildCoil(AbstractFramedCoil, Optimizable, ABC):
     ):
         """Compute magnetic field at a set of points.
 
-        Defaults to the standard single-filament Biot-Savart integral. If
-        `multifilament` is set to `True` in the params dictionary,
-        a multifilament integral is used instead. The coil current may be overridden
-        by including `current` in the `params` dictionary. The cross section
-        grid may be overridden by including `xsection_grid` in the `params` dictionary.
-        If a multifilament integral is performed, passing `prep_grid = False` in the
-        `params` dictionary along with a `finite_build_grid` key will bypass the
-        preparation of the finite build grid.
+        If a 1D grid or int is passed, the standard single-filament Biot-Savart integral
+        is used. If a 3D grid is passed, the first two dimensions are assumed to be the
+        cross section dimensions and the third dimension is the centerline length,
+        and the multifilament method is used. For more information on the setup of the
+        3D grid, refer to the prep_grid method. The coil current may be overridden
+        by including `current` in the `params` dictionary.
 
         Parameters
         ----------
@@ -1710,30 +1706,22 @@ class AbstractFiniteBuildCoil(AbstractFramedCoil, Optimizable, ABC):
 
         """
         multifilament = False
-        if params is not None:
-            multifilament = params.pop("multifilament", False)
-            xsection_grid = params.pop("xsection_grid", None)
-            prep_grid = params.pop("prep_grid", True)
-            finite_build_grid = params.pop("finite_build_grid", None)
+        if source_grid is not None:
+            if isinstance(source_grid, LinearGrid):
+                if source_grid.L > 1 or source_grid.M > 1:
+                    multifilament = True
 
-            # make params None if it's empty to correctly handle compute functions
-            if not params:
-                params = None
         if not multifilament:
             return super().compute_magnetic_field(
                 coords, params, basis, source_grid, transforms, chunk_size
             )
         else:
-            if prep_grid:
-                finite_build_grid, source_grid = self.prep_grid(
-                    xsection_grid, source_grid
-                )
             if self.cross_section_shape == "circular":
                 return self._compute_magnetic_field_multifilament_circ(
                     coords,
                     params,
                     basis,
-                    finite_build_grid,
+                    source_grid,
                     transforms,
                     chunk_size,
                 )
@@ -1742,7 +1730,7 @@ class AbstractFiniteBuildCoil(AbstractFramedCoil, Optimizable, ABC):
                     coords,
                     params,
                     basis,
-                    finite_build_grid,
+                    source_grid,
                     transforms,
                     chunk_size,
                 )
@@ -1855,12 +1843,10 @@ class AbstractFiniteBuildCoil(AbstractFramedCoil, Optimizable, ABC):
 
     def compute_self_field(
         self,
-        xsection_grid,
-        centerline_grid=None,
+        finite_build_grid,
         coil_frame=False,
         params=None,
         transforms=None,
-        prep_grid=True,
     ):
         """Compute the magnetic field from the coil on the coil itself.
 
@@ -1871,21 +1857,15 @@ class AbstractFiniteBuildCoil(AbstractFramedCoil, Optimizable, ABC):
 
         Parameters
         ----------
-        xsection_grid : LinearGrid, int or None
-            Refer to `prep_grid` method. If `prep_grid` is False, this is assumed to be
-            the full 3D finite build grid. Otherwise, this is assumed to be the 2D
-            grid of the cross section.
-        centerline_grid : LinearGrid or int, optional
-            Refer to `prep_grid` method. If `prep_grid` is False, this is assumed to
-            have the same toroidal dimension as the xsection grid.
+        finite_build_grid : LinearGrid
+            Refer to `prep_grid` method. This is the full 3D grid over the coil,
+            where the first two dimensions are the cross section dimensions and the
+            third dimension is the centerline length.
         coil_frame : bool, optional
-            Whether to compute the field in the t, p ,q coil frame. Default is False,
+            Whether to project the field into the t, p ,q coil frame. Default is False,
             which computes the field in the lab frame.
         params : dict, optional
             Parameters to pass to the coil object.
-        prep_grid : bool, optional
-            If True, `xsection_grid` and `centerline_grid` arguments will first be
-            passed to the `prep_grid` function for preprocessing. Default is True.
 
         Returns
         -------
@@ -1899,26 +1879,18 @@ class AbstractFiniteBuildCoil(AbstractFramedCoil, Optimizable, ABC):
             boolean mask indicating whether the field point is on the coil centerline
             or not.
         """
-        if prep_grid:
-            finite_build_grid, centerline_grid = self.prep_grid(
-                xsection_grid, centerline_grid
-            )
-        else:
-            finite_build_grid = xsection_grid
-
         if self.cross_section_shape == "circular":
             return self._compute_self_field_circ(
-                finite_build_grid, centerline_grid, coil_frame, params, transforms
+                finite_build_grid, coil_frame, params, transforms
             )
         if self.cross_section_shape == "rectangular":
             return self._compute_self_field_rect(
-                finite_build_grid, centerline_grid, coil_frame, params, transforms
+                finite_build_grid, coil_frame, params, transforms
             )
 
     def _compute_self_field_rect(
         self,
         finite_build_grid,
-        centerline_grid,
         coil_frame=False,
         params=None,
         transforms=None,
@@ -1935,6 +1907,10 @@ class AbstractFiniteBuildCoil(AbstractFramedCoil, Optimizable, ABC):
 
         L = finite_build_grid.L
         M = finite_build_grid.M
+
+        zeta = finite_build_grid.nodes[finite_build_grid.unique_zeta_idx, 2]
+
+        centerline_grid = LinearGrid(zeta=zeta)
 
         abdelta = finite_build_regularization_rect(
             cross_section_dims[0], cross_section_dims[1]
@@ -2037,9 +2013,7 @@ class AbstractFiniteBuildCoil(AbstractFramedCoil, Optimizable, ABC):
         B_self = B_0_fb + B_kappa_fb + B_b_fb + B_reg_fb
 
         if coil_frame:  # reproject the field to the t,p,q frame
-            B_self = self.project_coil_frame(
-                B_self, finite_build_grid, centerline_grid, params
-            )
+            B_self = self.project_coil_frame(B_self, finite_build_grid, params)
 
         # find mask for the grid axis to prevent downstream singularities with
         # biot savart
@@ -2053,7 +2027,6 @@ class AbstractFiniteBuildCoil(AbstractFramedCoil, Optimizable, ABC):
     def _compute_self_field_circ(
         self,
         finite_build_grid,
-        centerline_grid,
         coil_frame=False,
         params=None,
         transforms=None,
@@ -2066,7 +2039,6 @@ class AbstractFiniteBuildCoil(AbstractFramedCoil, Optimizable, ABC):
         self,
         vec,
         finite_build_grid,
-        centerline_grid,
         params=None,
     ):
         """Reprojects vector from lab xyz frame to tpq coil frame.
@@ -2078,9 +2050,6 @@ class AbstractFiniteBuildCoil(AbstractFramedCoil, Optimizable, ABC):
             same dimensionality as the finite_build_grid.
         finite_build_grid : LinearGrid, int or None
             Refer to `prep_grid` method. The full 3D finite build grid.
-        centerline_grid : LinearGrid or int, optional
-            Refer to `prep_grid` method. This is assumed to have the same toroidal
-            dimension as the finite_build_grid.
         params : dict, optional
             Parameters to pass to the coil object.
 
@@ -2091,6 +2060,9 @@ class AbstractFiniteBuildCoil(AbstractFramedCoil, Optimizable, ABC):
             centerline grid.
 
         """
+        zeta = finite_build_grid.nodes[finite_build_grid.unique_zeta_idx, 2]
+        centerline_grid = LinearGrid(zeta=zeta)
+
         t_frame = self.compute(
             "centroid_tangent",
             grid=centerline_grid,
@@ -2134,9 +2106,6 @@ class FourierPlanarFiniteBuildCoil(AbstractFiniteBuildCoil, FourierPlanarCoil):
 
     Parameters
     ----------
-    cross_section_dims : array-like
-        Dimensions of the coil cross section, with 1 or 2 dimensions depending on
-        the cross section shape (circular or rectangular).
     current : float
         Current through the coil, in Amperes.
     center : array-like, shape(3,)
@@ -2149,6 +2118,9 @@ class FourierPlanarFiniteBuildCoil(AbstractFiniteBuildCoil, FourierPlanarCoil):
         mode numbers associated with r_n
     basis : {'xyz', 'rpz'}
         Coordinate system for center and normal vectors. Default = 'xyz'.
+    cross_section_dims : array-like
+        Dimensions of the coil cross section, with 1 or 2 dimensions depending on
+        the cross section shape (circular or rectangular).
     name : str
         Name for this coil.
     """
@@ -2157,13 +2129,13 @@ class FourierPlanarFiniteBuildCoil(AbstractFiniteBuildCoil, FourierPlanarCoil):
 
     def __init__(
         self,
-        cross_section_dims=[0.1, 0.1],
         current=1,
         center=[10, 0, 0],
         normal=[0, 1, 0],
         r_n=2,
         modes=None,
         basis="xyz",
+        cross_section_dims=[0.1, 0.1],
         name="",
     ):
         alpha_n = [0, 0, 0]  # by default, this coil has no twist
@@ -2217,7 +2189,42 @@ class FourierPlanarFiniteBuildCoil(AbstractFiniteBuildCoil, FourierPlanarCoil):
         basis = coil.basis
 
         return FourierPlanarFiniteBuildCoil(
+            current=current,
+            center=center,
+            normal=normal,
+            r_n=r_n,
+            modes=r_basis.modes[:, 2],
+            basis=basis,
             cross_section_dims=cross_section_dims,
+            name=name,
+        )
+
+    def to_FourierPlanar(self, name="", **kwargs):
+        """Convert FourierPlanarFiniteBuildCoil to FourierPlanarCoil representation.
+
+        Overrides the base _Coil class method, preserving spectral resolution and mode
+        numbers from the finite build version.
+
+        Parameters
+        ----------
+        name : str
+            Name for this coil.
+
+        Returns
+        -------
+        coil : FourierPlanarCoil
+            New representation of the coil parameterized by Fourier series for minor
+            radius r, without the finite build cross section.
+
+        """
+        current = self.current
+        center = self.center
+        normal = self.normal
+        r_n = self.r_n
+        r_basis = self.r_basis
+        basis = self.basis
+
+        return FourierPlanarCoil(
             current=current,
             center=center,
             normal=normal,

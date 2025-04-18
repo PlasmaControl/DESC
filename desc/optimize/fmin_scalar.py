@@ -239,7 +239,20 @@ def fmintr(  # noqa: C901
     diag_h = g * dv * scale
 
     g_h = g * d
-    H_h = d * H * d[:, None]
+    # we don't need unscaled H anymore this iteration, so we overwrite
+    # it with H_h = d * H * d[:, None] to avoid carrying so many H-sized matrices
+    # in memory, which can be large
+    if callable(hess):  # H is a jax.numpy array
+        H = H.at[:].set(d * H * d[:, None])
+    else:
+        # H is a numpy array since comes from BFGS, so can just do in-place
+        # operation
+        # doing operation H = d * H * d[:, None]
+        # with just in-place operations
+        H *= d[:, None]
+        H *= d
+    H_h = H
+
     g_norm = jnp.linalg.norm(
         (g * v * scale if scaled_termination else g * v), ord=jnp.inf
     )
@@ -413,7 +426,20 @@ def fmintr(  # noqa: C901
             diag_h = g * dv * scale
 
             g_h = g * d
-            H_h = d * H * d[:, None]
+
+            # we don't need unscaled H anymore this iteration, so we overwrite
+            # it with H_h = d * H * d[:, None] to avoid carrying so many H-sized
+            # matrices in memory, which can be large
+            if callable(hess):  # H is a jax.numpy array
+                H = H.at[:].set(d * H * d[:, None])
+            else:
+                # H is a numpy array since comes from BFGS, so can just do in-place
+                # operation
+                # doing operation H = d * H * d[:, None]
+                # with just in-place operations
+                H *= d[:, None]
+                H *= d
+            H_h = H
 
             x_norm = jnp.linalg.norm(
                 ((x * scale_inv) if scaled_termination else x), ord=2

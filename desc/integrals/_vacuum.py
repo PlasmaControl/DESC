@@ -60,6 +60,10 @@ class VacuumSolver(IOAble):
     B0 : _MagneticField
         Magnetic field such that ∇ × B₀ = μ₀ J
         where 𝐉 is the current in amperes everywhere.
+
+        Assumes that ``B0.compute_Bnormal()`` computes <n,B₀> such that n is the
+        normal that points out of the plasma. We will automatically flip this normal
+        when the exterior problem is to be solved.
     evl_grid : Grid or jnp.ndarray
         Grid of evaluation points in flux coordinates in ∂𝒳.
         Or ``coords`` array of evaluation points in 𝒳 in R,phi,Z coords.
@@ -79,12 +83,19 @@ class VacuumSolver(IOAble):
     sym
         Symmetry for basis which interpolates Φ.
         Default assumes no symmetry.
+    exterior : bool
+        Whether to solve the exterior Neumann problem instead of the interior.
+        If true, then 𝒳 is exterior of plasma.
+        Default is false.
     chunk_size : int or None
         Size to split computation into chunks.
         If no chunking should be done or the chunk size is the full input
         then supply ``None``. Default is ``None``.
     B0n : jnp.ndarray
         Optional,  <n,B₀> on ``src_grid``.
+        Assumes <n,B₀> is such that n is the
+        normal that points out of the plasma. We will automatically flip this normal
+        when the exterior problem is to be solved.
     use_dft : bool
         Whether to use matrix multiplication transform from spectral to physical domain
         instead of inverse fast Fourier transform.
@@ -102,11 +113,13 @@ class VacuumSolver(IOAble):
         Phi_N=None,
         sym=None,
         *,
+        exterior=False,
         chunk_size=None,
         B0n=None,
         use_dft=False,
         **kwargs,
     ):
+        self._exterior = bool(exterior)
         errorif(B0 is None and B0n is None, msg="Did not supply B0 or <n,B₀>.")
         self._B0 = B0
         self._evl_grid = evl_grid
@@ -157,6 +170,8 @@ class VacuumSolver(IOAble):
                 chunk_size=chunk_size,
             )[0]
         )
+        if self._exterior:
+            src_data["Bn"] = -src_data["Bn"]
         # Compute data on Phi grid.
         if self._same_grid_phi_src:
             Phi_data = src_data
@@ -168,7 +183,7 @@ class VacuumSolver(IOAble):
                 Phi_grid, basis, build=False, build_pinv=True
             )
         # Compute data on evaluation grid.
-        if self._evaluate_in_interior():
+        if self._evaluate_in_X():
             R, phi, Z = evl_grid.T
             evl_data = {"R": R, "phi": phi, "Z": Z}
         else:
@@ -184,13 +199,13 @@ class VacuumSolver(IOAble):
         self._interpolator = {
             "Phi": get_interpolator(Phi_grid, src_grid, src_data, use_dft, **kwargs),
         }
-        if not self._evaluate_in_interior():
+        if not self._evaluate_in_X():
             self._interpolator["evl"] = get_interpolator(
                 evl_grid, src_grid, src_data, use_dft, **kwargs
             )
 
-    def _evaluate_in_interior(self, coords=None):
-        # if coords was supplied assume in interior else check if eval grid was
+    def _evaluate_in_X(self, coords=None):
+        # if coords was supplied assume in X else check if eval grid was
         # originally some coords array.
         return coords is not None or not isinstance(self.evl_grid, _Grid)
 
@@ -288,6 +303,9 @@ class VacuumSolver(IOAble):
         data["Phi_z"] = self._src_transform.transform(Phi_mn, dz=1)
         data["K^theta"] = data["Phi_z"] / data["|e_theta x e_zeta|"]
         data["K^zeta"] = -data["Phi_t"] / data["|e_theta x e_zeta|"]
+        if self._exterior:
+            data["K^theta"] = -data["K^theta"]
+            data["K^zeta"] = -data["K^zeta"]
         data["K_vc"] = (
             data["K^theta"][:, jnp.newaxis] * data["e_theta"]
             + data["K^zeta"][:, jnp.newaxis] * data["e_zeta"]
@@ -333,7 +351,7 @@ class VacuumSolver(IOAble):
         self._data = self.compute_Phi(chunk_size)
         self._data = self._compute_virtual_current()
 
-        if self._evaluate_in_interior(coords):
+        if self._evaluate_in_X(coords):
             dummy_grid = Grid(jnp.zeros_like(self._evl_grid))
             self._data["evl"]["grad(Phi)"] = _nonsingular_part(
                 self._data["evl"],
@@ -436,7 +454,7 @@ class VacuumSolver(IOAble):
             Matplotlib (fig, ax) tuple.
 
         """
-        errorif(self._evaluate_in_interior())
+        errorif(self._evaluate_in_X())
         grid = self.evl_grid
         theta = grid.meshgrid_reshape(grid.nodes[:, 1], "rtz")[0]
         zeta = grid.meshgrid_reshape(grid.nodes[:, 2], "rtz")[0]
@@ -461,7 +479,6 @@ def _boundary_condition(self, chunk_size):
         kernel=_kernel_Bn_over_r,
         chunk_size=chunk_size,
     ).squeeze(axis=-1) / (-4 * jnp.pi)
-
     return self._data
 
 
@@ -483,7 +500,7 @@ def _H(self, src_data, chunk_size, basis=None):
     if basis is not None:
         kwargs["known_map"] = ("Phi", basis.evaluate)
         kwargs["ndim"] = basis.num_modes
-    return singular_integral(
+    H = singular_integral(
         eval_data=self._data["Phi"],
         source_data=src_data,
         interpolator=self._interpolator["Phi"],
@@ -491,6 +508,9 @@ def _H(self, src_data, chunk_size, basis=None):
         chunk_size=chunk_size,
         **kwargs,
     )
+    if self._exterior:
+        H = -H
+    return H
 
 
 @partial(jit, static_argnames=["chunk_size"])

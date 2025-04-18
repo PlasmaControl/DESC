@@ -4,7 +4,7 @@ from desc.backend import fixed_point, irfft2, jit, jnp, rfft2
 from desc.basis import DoubleFourierSeries
 from desc.batching import vmap_chunked
 from desc.grid import LinearGrid
-from desc.integrals._vacuum import _H
+from desc.integrals._vacuum import _H, _iteration_operator
 from desc.integrals.singularities import (
     _dx,
     _kernel_biot_savart,
@@ -220,6 +220,7 @@ class FreeBoundarySolver(IOAble):
         use_dft=False,
         **kwargs,
     ):
+        self._exterior = True
         errorif(
             evl_grid.nodes[0, 0] < evl_grid.num_rho,
             msg="Evaluation grid must be on boundary.",
@@ -397,13 +398,18 @@ def _surface_gradient(data, transform, c):
 
 def _boundary_condition(self):
     """Returns γ = (n × ∇)⁻¹ (n × B_coil)."""
+    # TODO: I think it's better to do the approach titled pre-condition 1
+    #       rather than pre-condition 2 in the shared overleaf for the
+    #       reasons discussed there. Inverting this operator to high
+    #       order accuracy is probably best done by solving surface poisson
+    #       for sparse system (e.g. spline or spectral multigrid).
     if "gamma" in self._data["Phi"]:
         return self._data
 
     A = _surface_gradient(
         self._data["Phi"], self._phi_transform, jnp.eye(self.basis.num_modes)
     ).T
-    # check dims here
+    # This isn't going to work, fundamentally.
     assert A.shape == (3, self.Phi_grid.num_nodes, self.basis.num_modes)
     gamma_mn = (
         jnp.linalg.solve(A, self._data["Phi"]["n x B_coil"].T)
@@ -421,6 +427,7 @@ def _lsmr_Phi(self, basis=None, *, chunk_size=None):
     if "Phi_mn" in self._data["Phi"]:
         return self._data
 
+    # Same as function in _vacuum.py except this line.
     self._data = _boundary_condition(self)
     gamma = self._data["Phi"]["gamma"]
 
@@ -430,7 +437,7 @@ def _lsmr_Phi(self, basis=None, *, chunk_size=None):
     src_data["Phi"] = (
         evl_Phi if self._same_grid_phi_src else basis.evaluate(self.src_grid)
     )
-    A = evl_Phi / 2 + _H(self, src_data, chunk_size, basis)
+    A = evl_Phi / 2 - _H(self, src_data, chunk_size, basis)
     assert A.shape == (self.Phi_grid.num_nodes, basis.num_modes)
 
     # Solving overdetermined system useful to reduce size of A while
@@ -441,27 +448,6 @@ def _lsmr_Phi(self, basis=None, *, chunk_size=None):
         else jnp.linalg.lstsq(A, gamma)[0]
     )
     return self._data
-
-
-def _iteration_operator(Phi_k, self, chunk_size=None):
-    """Compute iteration operator T(Φ).
-
-    Parameters
-    ----------
-    Phi_k : jnp.ndarray
-        Φ values on ``self._Phi_grid``.
-
-    Returns
-    -------
-    Phi_k+1 : jnp.ndarray
-        Fredholm integral operator computed on ``self._Phi_grid``.
-
-    """
-    src_data = self._data["src"].copy()
-    src_data["Phi"] = self._upsample_to_source(Phi_k, is_fourier=False)
-    gamma = self._data["Phi"]["gamma"]
-    H = _H(self, src_data, chunk_size).squeeze(axis=-1)
-    return -H + 0.5 * Phi_k + gamma
 
 
 @partial(jit, static_argnames=["tol", "maxiter", "method", "chunk_size"])
@@ -478,6 +464,7 @@ def _fixed_point_Phi(
     if "Phi_mn" in self._data["Phi"]:
         return self._data
 
+    # Same as function in _vacuum.py except this line.
     self._data = _boundary_condition(self)
 
     if Phi_0 is None:

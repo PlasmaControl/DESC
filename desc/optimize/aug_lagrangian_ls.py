@@ -1,7 +1,5 @@
 """Augmented Lagrangian for vector valued objectives."""
 
-import gc
-
 from scipy.optimize import NonlinearConstraint, OptimizeResult
 
 from desc.backend import jnp, qr
@@ -557,9 +555,6 @@ def lsq_auglag(  # noqa: C901
             step_norm = step_h_norm = actual_reduction = 0
 
         iteration += 1
-        # force garbage collection in between iterations to
-        # pre-empt any possible memory leaks
-        gc.collect()
         if verbose > 1:
             print_iteration_nonlinear(
                 iteration,

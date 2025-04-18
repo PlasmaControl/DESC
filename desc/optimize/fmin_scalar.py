@@ -1,7 +1,5 @@
 """Function for minimizing a scalar function of multiple variables."""
 
-import gc
-
 from scipy.optimize import BFGS, OptimizeResult
 
 from desc.backend import jnp
@@ -461,9 +459,6 @@ def fmintr(  # noqa: C901
             step_norm = step_h_norm = actual_reduction = 0
 
         iteration += 1
-        # force garbage collection in between iterations to
-        # pre-empt any possible memory leaks
-        gc.collect()
         if verbose > 1:
             print_iteration_nonlinear(
                 iteration, nfev, f, actual_reduction, step_norm, g_norm

@@ -2,6 +2,7 @@
 
 import copy
 import numbers
+import os
 import warnings
 from collections.abc import MutableSequence
 
@@ -2130,6 +2131,7 @@ class Equilibrium(IOAble, Optimizable):
             Equilibrium generated from the given input file.
 
         """
+        path = os.path.expanduser(path)
         inputs = InputReader().parse_inputs(path)[-1]
         if (inputs["bdry_ratio"] is not None) and (inputs["bdry_ratio"] != 1):
             warnings.warn(

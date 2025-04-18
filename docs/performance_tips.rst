@@ -2,6 +2,25 @@
 Performance Tips
 ================
 
+Using more of the Available GPU Memory
+--------------------------------------
+By default, JAX will use only 75% of the available GPU memory. This is to allow other processes to run on the GPU at the same time. However, if you are running a single process and want to use all of the available memory (or some other amount of it), you can set the following environment variable:
+
+.. code-block:: python
+
+    import os
+    os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = "0.90"
+
+Alternatively, if you don't want to preallocate memory, you can set the following environment variable to allow JAX to allocate memory as needed:
+
+.. code-block:: python
+
+    import os
+    os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
+
+For more details on the memory allocation in JAX, refer to the official JAX documentation `here <https://jax.readthedocs.io/en/latest/gpu_memory_allocation.html>`__.
+
+
 Caching the Compiled (Jitted) Code
 ----------------------------------
 Although the compiled code is fast, it still takes time to compile. If you are running the same optimization, or some similar optimization, multiple times, you can save time by caching the compiled code. This automatically happens for a single session (for example, until you restart your kernel in Jupyter Notebook) but once you start using another session, the code will need to be recompiled. Fortunately, there is a way to bypass this. First create a cache directory (i.e. ``jax-caches``), and put the following code at the beginning of your script:
@@ -30,8 +49,31 @@ and low memory usage but slower with the ``jac_chunk_size`` keyword argument. By
 is when creating the overall ``ObjectiveFunction`` to be used in the optimization (where by default ``deriv_mode="batched"``). The Jacobian is a
 matrix of shape [``obj.dim_f`` x ``obj.dim_x``], and the calculation of the Jacobian is vectorized over
 the columns (the ``obj.dim_x`` dimension), where ``obj`` is the ``ObjectiveFunction`` object. Passing in the ``jac_chunk_size`` attribute allows one to split up
-the vectorized computation into chunks of ``jac_chunk_size`` columns at a time, allowing one to compute the Jacobian
-in a slightly slower, but more memory-efficient manner. The memory usage of the Jacobian calculation is
+the vectorized computation into chunks of ``jac_chunk_size`` columns at a time, allowing one to compute the Jacobian in a slightly slower, but more memory-efficient manner.
+
+.. code-block:: python
+
+    obj1 = QuasisymmetryTripleProduct(eq)
+    obj2 = MeanCurvature(eq)
+
+    obj = ObjectiveFunction((obj1, obj2), deriv_mode="batched", jac_chunk_size=100)
+
+The below Jacobian represents a ``batched`` execution with ``jac_chunk_size=2``, each color is computed sequantially.
+
+.. math::
+
+    \begin{equation}
+        \begin{bmatrix}
+            \color{red} \cfrac{\partial f_1}{\partial x_1} & \color{red}\cfrac{\partial f_1}{\partial x_2} & \cfrac{\partial f_1}{\partial x_3} & \cfrac{\partial f_1}{\partial x_4} & \color{blue}\cfrac{\partial f_1}{\partial x_5} & \color{blue}\cfrac{\partial f_1}{\partial x_6} & ... & \cfrac{\partial f_1}{\partial x_n}\\
+            \color{red}\cfrac{\partial f_2}{\partial x_1} & \color{red}\cfrac{\partial f_2}{\partial x_2} & \cfrac{\partial f_2}{\partial x_3} & \cfrac{\partial f_2}{\partial x_4} & \color{blue}\cfrac{\partial f_2}{\partial x_5} & \color{blue}\cfrac{\partial f_2}{\partial x_6}& ... & \cfrac{\partial f_2}{\partial x_n}\\
+            . & . & .& & .\\
+            . & . & .& & .\\
+            \color{red}\cfrac{\partial f_m}{\partial x_1} & \color{red}\cfrac{\partial f_m}{\partial x_2} & \cfrac{\partial f_m}{\partial x_3} & \cfrac{\partial f_m}{\partial x_4} & \color{blue}\cfrac{\partial f_m}{\partial x_5} & \color{blue}\cfrac{\partial f_m}{\partial x_6}& ... & \cfrac{\partial f_m}{\partial x_n}\\
+        \end{bmatrix}
+    \end{equation}
+
+
+The memory usage of the Jacobian calculation is
 ``memory usage = m0 + m1*jac_chunk_size``: the smaller the chunk size, the less memory the Jacobian calculation
 will require (with some baseline memory usage). The time to compute the Jacobian is roughly ``t=t0 +t1/jac_chunk_size``
 with some baseline time, so the larger the ``jac_chunk_size``, the faster the calculation takes,
@@ -41,8 +83,35 @@ that should make the calculation fit in memory based on a heuristic estimate of 
 
 If ``deriv_mode="blocked"`` is specified when the ``ObjectiveFunction`` is created, then the Jacobian will
 be calculated individually for each of the sub-objectives inside of the ``ObjectiveFunction``, and in that case
-the ``jac_chunk_size`` of the individual ``_Objective`` objects inside of the ``ObjectiveFunction`` will be used.
-For example, if ``obj1 = QuasisymmetryTripleProduct(eq, jac_chunk_size=100)``, ``obj2 = MeanCurvature(eq, jac_chunk_size=2000)``
-and ``obj = ObjectiveFunction((obj1, obj2), deriv_mode="blocked")``, then the Jacobian will be calculated with a
-``jac_chunk_size=100`` for the quasisymmetry part and a ``jac_chunk_size=2000`` for the curvature part, then the full Jacobian
+the ``jac_chunk_size`` of the individual ``_Objective`` objects inside of the ``ObjectiveFunction`` will be used. This can be thought as dividing the Jacobian into blocks as shown below, and then using the column chunking for each block.
+
+.. math::
+
+    \begin{equation}
+        \begin{bmatrix}
+        \color{red}\dfrac{\partial f_1}{\partial x_1} & \color{red}\dfrac{\partial f_1}{\partial x_2} & \color{red}\cdots & \color{red}\dfrac{\partial f_1}{\partial x_n}\\
+        \color{red}\dfrac{\partial f_2}{\partial x_1} & \color{red}\dfrac{\partial f_2}{\partial x_2} & \color{red}\cdots & \color{red}\dfrac{\partial f_2}{\partial x_n}\\
+        \dfrac{\partial f_3}{\partial x_1} & \dfrac{\partial f_3}{\partial x_2} & \cdots & \dfrac{\partial f_3}{\partial x_n}\\
+        \dfrac{\partial f_4}{\partial x_1} & \dfrac{\partial f_4}{\partial x_2} & \cdots & \dfrac{\partial f_4}{\partial x_n}\\
+        \dfrac{\partial f_5}{\partial x_1} & \dfrac{\partial f_5}{\partial x_2} & \cdots & \dfrac{\partial f_5}{\partial x_n}\\
+        \color{blue}\dfrac{\partial f_6}{\partial x_1} & \color{blue}\dfrac{\partial f_6}{\partial x_2} & \color{blue}\cdots & \color{blue}\dfrac{\partial f_6}{\partial x_n}
+        \end{bmatrix}
+    \end{equation}
+
+
+The syntax for this is,
+
+.. code-block:: python
+
+    obj1 = QuasisymmetryTripleProduct(eq, jac_chunk_size=100)
+    obj2 = MeanCurvature(eq, jac_chunk_size=2000)
+
+    # deriv_mode="blocked" will be chosen automatically if any of the sub-objectives has a jac_chunk_size
+    obj = ObjectiveFunction((obj1, obj2), deriv_mode="blocked")
+
+The Jacobian will be calculated with a ``jac_chunk_size=100`` for the quasisymmetry part and a ``jac_chunk_size=2000`` for the curvature part, then the full Jacobian
 will be formed as a blocked matrix with the individual Jacobians of these two objectives.
+
+.. tip::
+
+    Several other functions in DESC also have ``chunk_size`` or similar keywords arguments, which can be used to reduce memory usage.

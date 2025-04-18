@@ -2262,6 +2262,8 @@ class CoilSetLinkingNumber(_Objective):
 class SurfaceCurrentRegularization(_Objective):
     """Target the surface current magnitude.
 
+    If ``regularization="k"``:
+
     compute::
 
         w * ||K|| * sqrt(||e_theta x e_zeta||)
@@ -2276,6 +2278,18 @@ class SurfaceCurrentRegularization(_Objective):
         K = n x ∇ Φ
 
     i.e. a CurrentPotentialField
+
+    If ``regularization="Phi"``:
+
+    compute::
+
+        w * |Φ| * sqrt(||e_theta x e_zeta||)
+
+    If ``regularization="sqrt(Phi)"``:
+
+    compute::
+
+        w * sqrt(|Φ|) * sqrt(||e_theta x e_zeta||)
 
     Intended to be used with a QuadraticFlux objective, to form
     a problem similar to the REGCOIL algorithm described in [1]_ (if used with a
@@ -2318,7 +2332,6 @@ class SurfaceCurrentRegularization(_Objective):
     )
 
     _coordinates = "tz"
-    _units = "A/m"
     _print_value_fmt = "Surface Current Regularization: "
 
     def __init__(
@@ -2357,6 +2370,11 @@ class SurfaceCurrentRegularization(_Objective):
         self._regularization = regularization
         self._surface_current_field = surface_current_field
         self._source_grid = source_grid
+        self._units = (
+            "(A)"
+            if self._regularization == "K"
+            else "(A*m)" if self._regularization == "Phi" else "(sqrt(A)*m)"
+        )
 
         super().__init__(
             things=[surface_current_field],

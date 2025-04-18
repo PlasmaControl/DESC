@@ -10,6 +10,11 @@ Optionally can also contract the profiles of the original ``Equilibrium`` so tha
 - Allows Redl compute quantities to use SplineProfile
 - Updates Redl bootstrap current consistency tutorial to include a ``SplineProfile`` optimization
 - Adds automatically generated header file showing date the input file was created with `desc.vmec.VMECIO.write_vmec_input`
+- Multiple plotting related changes:
+    - `plot_section` when called with `name=|F|` is now defaults to show the normalized force error. To get the old behavor, user needs to pass in `normalize=False`.
+    - `plot_basis` can now plot every basis type. It can also plot the derivatives, if the derivative is implemented.
+    - Renames `norm_F` keyword argument to `normalize` to emphasize the more general usage of it.
+    - Renames `linecolor` keyword argument of `plot_1d` and `plot_fsa` to `color` for consistency among plotting functions.
 
 Bug Fixes
 

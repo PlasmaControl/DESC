@@ -204,7 +204,6 @@ class QuasisymmetryBoozer(_Objective):
             warnings.warn("Re-build objective after changing the helicity!")
         self._helicity = helicity
         if hasattr(self, "_print_value_fmt"):
-            self._units = "(T)"
             self._print_value_fmt = "Quasi-symmetry ({},{}) Boozer error: ".format(
                 self.helicity[0], self.helicity[1]
             )
@@ -370,7 +369,6 @@ class QuasisymmetryTwoTerm(_Objective):
             self._built = False
         self._helicity = helicity
         if hasattr(self, "_print_value_fmt"):
-            self._units = "(T^3)"
             self._print_value_fmt = "Quasi-symmetry ({},{}) error: ".format(
                 self.helicity[0], self.helicity[1]
             )

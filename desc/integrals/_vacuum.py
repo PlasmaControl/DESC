@@ -185,7 +185,7 @@ class VacuumSolver(IOAble):
         # Compute data on evaluation grid.
         if self._evaluate_in_X():
             R, phi, Z = evl_grid.T
-            evl_data = {"R": R, "phi": phi, "Z": Z}
+            evl_data = {"R": R, "phi": phi, "Z": Z, "x": evl_grid}
         else:
             if evl_grid.equiv(Phi_grid):
                 evl_data = Phi_data

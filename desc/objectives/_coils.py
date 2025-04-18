@@ -734,7 +734,10 @@ class CoilSetMinDistance(_Objective):
         Whether or not to only consider the coil centers, rather than the position
         along the coil itself. This can reduce the computational cost in situations
         where a coil's position is well-approximated by its center, for example
-        if the coils have a very small radius.
+        if the coils have a very small radius such as with dipole coils. Note that
+        this option only is logical for coils which do not link the plasma, and the
+        target minimum distance must be larger than the coil radius for this option
+        to work.
 
     """
 

@@ -10,7 +10,7 @@ Optionally can also contract the profiles of the original ``Equilibrium`` so tha
 - Allows Redl compute quantities to use SplineProfile
 - Updates Redl bootstrap current consistency tutorial to include a ``SplineProfile`` optimization
 - Adds automatically generated header file showing date the input file was created with `desc.vmec.VMECIO.write_vmec_input`
-- Adds center flag to ``CoilSetMinDistance`` and ``PlasmaCoilSetMinDistance`` which will use the center of the coil to compute distances from each coil, useful if the coils in the optimization are small enough to be well-approximated by their centers.
+- Adds center flag to ``CoilSetMinDistance`` and ``PlasmaCoilSetMinDistance`` which will use the ``center`` of the coil to compute distances from each coil, useful if the coils in the optimization are small enough to be well-approximated by their centers.
 
 
 v0.14.1

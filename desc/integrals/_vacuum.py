@@ -277,7 +277,7 @@ class VacuumSolver(IOAble):
              Fourier coefficients of Φ on ∂𝒳 stored in ``data["Phi"]["Phi_mn"]``.
 
         """
-        warnif(kwargs.get("warn", True) and (maxiter > 0), msg="Still debugging")
+        warnif(kwargs.get("warn", True) and (maxiter > 0), msg="This is experimental.")
         self._data = (
             _fixed_point_Phi(
                 self,
@@ -523,7 +523,26 @@ def _lsmr_Phi(
     basis=None,
     chunk_size=None,
 ):
-    """Compute Fourier harmonics Φ̃ by solving least squares system."""
+    """Compute Fourier harmonics Φ̃ by solving least squares system.
+
+    Parameters
+    ----------
+    self : VacuumSolver or FreeBoundarySolver
+    bc : callable
+        Signature should match bc(self, chunk_size)
+    basis : DoubleFourierSeries
+        Basis to interpolate periodic part of Φ.
+    chunk_size : int or None
+        Size to split computation into chunks.
+        If no chunking should be done or the chunk size is the full input
+        then supply ``None``. Default is ``None``.
+
+    Returns
+    -------
+    data : dict[str, jnp.ndarray]
+        Returns ``self._data`` with ``Phi_mn`` in ``self._data["Phi"]``.
+
+    """
     if "Phi_mn" in self._data["Phi"]:
         return self._data
 
@@ -557,11 +576,16 @@ def _iteration_operator(Phi_k, self, chunk_size=None):
     ----------
     Phi_k : jnp.ndarray
         Φ values on ``self._Phi_grid``.
+    self : VacuumSolver or FreeBoundarySolver
+    chunk_size : int or None
+        Size to split computation into chunks.
+        If no chunking should be done or the chunk size is the full input
+        then supply ``None``. Default is ``None``.
 
     Returns
     -------
     Phi_k+1 : jnp.ndarray
-        Fredholm integral operator computed on ``self._Phi_grid``.
+        Iteration operator applied to input.
 
     """
     # Phi_k = _to_rfft(self.Phi_grid, Phi_k)  # noqa

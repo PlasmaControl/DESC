@@ -1019,7 +1019,7 @@ class TestFreeBoundarySolver:
 
         free = FreeBoundarySolver(
             surface=surf,
-            B0=ToroidalMagneticField(B0=1, R0=1),
+            B_coil=ToroidalMagneticField(B0=1, R0=1),
             evl_grid=LinearGrid(M=5, N=5, NFP=surf.NFP),
             src_grid=src_grid,
             Phi_grid=LinearGrid(M=4, N=3, NFP=surf.NFP),

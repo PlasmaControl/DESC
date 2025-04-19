@@ -390,9 +390,9 @@ def _surf_grad(data, transform, c):
 def _surf_grad_mat(data, basis, grid):
     _t = basis.evaluate(grid, [0, 1, 0])[:, jnp.newaxis]
     _z = basis.evaluate(grid, [0, 0, 1])[:, jnp.newaxis]
-    return (
-        _t * data["e_zeta"][..., jnp.newaxis] - _z * data["e_theta"][..., jnp.newaxis]
-    ) / data["|e_theta x e_zeta|"][:, jnp.newaxis, jnp.newaxis]
+    e_t = data["e_theta"] / data["|e_theta x e_zeta|"][:, jnp.newaxis]
+    e_z = data["e_zeta"] / data["|e_theta x e_zeta|"][:, jnp.newaxis]
+    return _t * e_z[..., jnp.newaxis] - _z * e_t[..., jnp.newaxis]
 
 
 def _free_boundary_bc(self, chunk_size=None):

@@ -94,11 +94,11 @@ def bounce_points(pitch_inv, knots, B, dB_dz, num_well=None):
         jnp.sign(polyval_vec(x=intersect, c=dB_dz[..., jnp.newaxis, :, jnp.newaxis, :]))
     )
     # Only consider intersect if it is within knots that bound that polynomial.
-    is_intersect = flatten_matrix(intersect) >= 0
+    mask = flatten_matrix(intersect >= 0)
     # We ignore the bounce points of particles only assigned to a class that are
     # trapped outside this snapshot of the field line.
-    is_z1 = (dB_sign <= 0) & is_intersect
-    is_z2 = (dB_sign >= 0) & _in_epigraph_and(is_intersect, dB_sign)
+    is_z1 = (dB_sign <= 0) & mask
+    is_z2 = (dB_sign >= 0) & _in_epigraph_and(mask, dB_sign)
 
     # Transform out of local power basis expansion.
     intersect = flatten_matrix(intersect + knots[:-1, jnp.newaxis])
@@ -494,12 +494,12 @@ def interp_to_argmin(h, points, knots, g, dg_dz, method="cubic"):
         jnp.inf,
     )
     # shape is (..., num pitch, num well, 1)
-    argmin = jnp.argmin(where, axis=-1, keepdims=True)
+    where = jnp.argmin(where, axis=-1, keepdims=True)
 
     return jnp.take_along_axis(
         # adding axes to broadcast with num pitch and num well axes
         interp1d_vec(ext, knots, h, method=method)[..., jnp.newaxis, jnp.newaxis, :],
-        argmin,
+        where,
         axis=-1,
     ).squeeze(axis=-1)
 
@@ -566,7 +566,7 @@ def interp_fft_to_argmin(T, h, points, knots, g, dg_dz, m, n, NFP=1):
         jnp.inf,
     )
     # shape is (..., num well, 1)
-    argmin = jnp.argmin(where, axis=-1, keepdims=True)
+    where = jnp.argmin(where, axis=-1, keepdims=True)
 
     h = _irfft2_non_uniform(
         ext, T.eval1d(ext), h, n0=n, n1=m, domain0=(0, 2 * jnp.pi / NFP)
@@ -574,7 +574,7 @@ def interp_fft_to_argmin(T, h, points, knots, g, dg_dz, m, n, NFP=1):
     if z1.ndim == h.ndim + 1:
         h = h[jnp.newaxis]  # to broadcast with num pitch axis
     # add axis to broadcast with num well axis
-    return jnp.take_along_axis(h[..., jnp.newaxis, :], argmin, axis=-1).squeeze(axis=-1)
+    return jnp.take_along_axis(h[..., jnp.newaxis, :], where, axis=-1).squeeze(axis=-1)
 
 
 # TODO (#568): Generalize this beyond ζ = ϕ

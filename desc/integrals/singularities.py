@@ -511,11 +511,11 @@ def _nonsingular_part(
     kernel,
     ndim=None,
     chunk_size=None,
-    _eta=eta,
 ):
     """Integrate kernel over non-singular points.
 
     Generally follows sec 3.2.1 of [2].
+    If ``eval_grid`` is ``None``, then take eta = 0.
     """
     assert source_grid.can_fft2
     ndim = setdefault(ndim, kernel.ndim)
@@ -527,8 +527,9 @@ def _nonsingular_part(
 
     # slim down to skip batching quantities that aren't used
     eval_data = {key: eval_data[key] for key in kernel.keys if key in eval_data}
-    eval_data["theta"] = jnp.asarray(eval_grid.nodes[:, 1])
-    eval_data["zeta"] = jnp.asarray(eval_grid.nodes[:, 2])
+    if eval_grid is not None:
+        eval_data["theta"] = jnp.asarray(eval_grid.nodes[:, 1])
+        eval_data["zeta"] = jnp.asarray(eval_grid.nodes[:, 2])
 
     ht = 2 * jnp.pi / source_grid.num_theta
     hz = 2 * jnp.pi / source_grid.num_zeta / source_grid.NFP
@@ -539,27 +540,29 @@ def _nonsingular_part(
 
         # nest this def and let JAX figure it out
         def eval_pt(eval_data_i):
-            e = _eta(
-                source_data["theta"],
-                source_data["zeta"],
-                eval_data_i["theta"][:, jnp.newaxis],
-                eval_data_i["zeta"][:, jnp.newaxis],
-                ht,
-                hz,
-                st,
-                sz,
+            _eta = (
+                0
+                if eval_grid is None
+                else eta(
+                    source_data["theta"],
+                    source_data["zeta"],
+                    eval_data_i["theta"][:, jnp.newaxis],
+                    eval_data_i["zeta"][:, jnp.newaxis],
+                    ht,
+                    hz,
+                    st,
+                    sz,
+                )
             )
             return (
-                kernel(eval_data_i, source_data, (ht * hz) * (1 - e))
+                kernel(eval_data_i, source_data, (ht * hz) * (1 - _eta))
                 .reshape(-1, source_grid.num_nodes, ndim)
                 .sum(axis=-2)
             )
 
-        return batch_map(eval_pt, eval_data, chunk_size).reshape(
-            eval_grid.num_nodes, ndim
-        )
+        return batch_map(eval_pt, eval_data, chunk_size).reshape(-1, ndim)
 
-    f = nfp_loop(source_grid, func, jnp.zeros((eval_grid.num_nodes, ndim)))
+    f = nfp_loop(source_grid, func, jnp.zeros((eval_data["phi"].size, ndim)))
     # we sum vectors at different points, so they need to be in xyz for that to work
     # but then need to convert vectors back to rpzs
     if kernel.ndim == 3:

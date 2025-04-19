@@ -3810,13 +3810,15 @@ def _surface_gradient_theta(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["e_theta", "|e_theta x e_zeta|"],
+    axis_limit_data=["e_theta_r", "|e_theta x e_zeta|_r"],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.core.Surface",
     ],
 )
 def _surface_gradient_zeta(params, transforms, profiles, data, **kwargs):
-    data["n_rho x grad(zeta)"] = (
-        -data["e_theta"] / data["|e_theta x e_zeta|"][:, jnp.newaxis]
+    data["n_rho x grad(zeta)"] = transforms["grid"].replace_at_axis(
+        safediv(-data["e_theta"], data["|e_theta x e_zeta|"][:, jnp.newaxis]),
+        lambda: -data["e_theta_r"] / data["|e_theta x e_zeta|_r"][:, jnp.newaxis],
     )
     return data

@@ -165,7 +165,6 @@ def compute_B_plasma(
     return Bplasma
 
 
-# TODO: Constrain secular terms in potential.
 class FreeBoundarySolver(IOAble):
     """Compute exterior field for free boundary problem.
 

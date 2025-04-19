@@ -3770,3 +3770,53 @@ def _e_alpha_rp(params, transforms, profiles, data, **kwargs):
 def _e_alpha_rp_norm(params, transforms, profiles, data, **kwargs):
     data["|e_alpha|r,p|"] = jnp.linalg.norm(data["e_alpha|r,p"], axis=-1)
     return data
+
+
+@register_compute_fun(
+    name="n_rho x grad(theta)",
+    label="\\Vert \\mathbf{e}^{\\rho} \\Vert^{-1} \\mathbf{e}^{\\rho} "
+    "\times \\mathbf{e}^{\\theta}",
+    units="m^{-1}",
+    units_long="inverse meters",
+    description="Flux surface gradient of poloidal angle.",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["e_zeta", "|e_theta x e_zeta|"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.core.Surface",
+    ],
+)
+def _surface_gradient_theta(params, transforms, profiles, data, **kwargs):
+    data["n_rho x grad(theta)"] = (
+        data["e_zeta"] / data["|e_theta x e_zeta|"][:, jnp.newaxis]
+    )
+    return data
+
+
+@register_compute_fun(
+    name="n_rho x grad(zeta)",
+    label="\\Vert \\mathbf{e}^{\\rho} \\Vert^{-1} \\mathbf{e}^{\\rho} "
+    "\times \\mathbf{e}^{\\zeta}",
+    units="m^{-1}",
+    units_long="inverse meters",
+    description="Flux surface gradient of toroidal angle.",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["e_theta", "|e_theta x e_zeta|"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.core.Surface",
+    ],
+)
+def _surface_gradient_zeta(params, transforms, profiles, data, **kwargs):
+    data["n_rho x grad(zeta)"] = (
+        -data["e_theta"] / data["|e_theta x e_zeta|"][:, jnp.newaxis]
+    )
+    return data

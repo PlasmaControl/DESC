@@ -20,35 +20,6 @@ from desc.transform import Transform
 from desc.utils import errorif, setdefault, warnif
 
 
-def _to_real_coef(grid, f):
-    f = rfft2(
-        f.reshape(grid.num_theta, grid.num_zeta),
-        norm="forward",
-        axes=(0, 1),
-    ).ravel()
-    return jnp.concatenate([f.real, f.imag])
-
-
-def _to_rfft(grid, f):
-    f = f[: f.size // 2] + 1j * f[f.size // 2 :]
-    f = f.reshape(grid.num_theta, grid.num_zeta // 2 + 1)
-    return f
-
-
-def _upsample_to_source(self, x, is_fourier=False):
-    if not self._same_grid_phi_src:
-        if not is_fourier:
-            x = self.Phi_grid.meshgrid_reshape(x, "rtz")[0]
-            x = rfft2(x, norm="forward", axes=(0, 1))
-        x = irfft2(
-            x,
-            s=(self.src_grid.num_theta, self.src_grid.num_zeta),
-            norm="forward",
-            axes=(0, 1),
-        ).reshape(self.src_grid.num_nodes, *x.shape[2:], order="F")
-    return x
-
-
 class VacuumSolver(IOAble):
     """Compute vacuum field that satisfies LCFS boundary condition.
 
@@ -169,7 +140,15 @@ class VacuumSolver(IOAble):
         # Compute data on source grid.
         self._src_transform = Transform(src_grid, basis, derivs=1)
         src_data = surface.compute(
-            ["x", "n_rho", "|e_theta x e_zeta|", "e_theta", "e_zeta"],
+            [
+                "x",
+                "n_rho",
+                "|e_theta x e_zeta|",
+                "e_theta",
+                "e_zeta",
+                "n_rho x grad(theta)",
+                "n_rho x grad(zeta)",
+            ],
             grid=src_grid,
         )
         src_data["Bn"] = (
@@ -301,19 +280,12 @@ class VacuumSolver(IOAble):
         if "K_vc" in self._data["src"]:
             return self._data
 
-        Phi_mn = self._data["Phi"]["Phi_mn"]
         data = self._data["src"]
-        data["Phi_t"] = self._src_transform.transform(Phi_mn, dt=1)
-        data["Phi_z"] = self._src_transform.transform(Phi_mn, dz=1)
-        data["K^theta"] = data["Phi_z"] / data["|e_theta x e_zeta|"]
-        data["K^zeta"] = -data["Phi_t"] / data["|e_theta x e_zeta|"]
-        if self._exterior:
-            data["K^theta"] = -data["K^theta"]
-            data["K^zeta"] = -data["K^zeta"]
-        data["K_vc"] = (
-            data["K^theta"][:, jnp.newaxis] * data["e_theta"]
-            + data["K^zeta"][:, jnp.newaxis] * data["e_zeta"]
+        data["K_vc"] = -_surface_gradient(
+            data, self._src_transform, self._data["Phi"]["Phi_mn"]
         )
+        if self._exterior:
+            data["K_vc"] = -data["K_vc"]
         return self._data
 
     def _set_new_evl_coords(self, coords):
@@ -515,6 +487,12 @@ def _H(self, src_data, chunk_size, basis=None):
     return H
 
 
+# TODO: compute 5.14 action on secular basis.
+#  then multiply that by the known coefficient.
+#  then subtract this from the boundary condition.
+#  then interpolate phi periodic to gamma - action(phi secular)
+
+
 @partial(jit, static_argnames=["bc", "chunk_size"])
 def _lsmr_Phi(
     self,
@@ -648,3 +626,39 @@ def _fixed_point_Phi(
     # TODO: Reviewer should check that this is proper use of transform fit.
     self._data["Phi"]["Phi_mn"] = self._phi_transform.fit(Phi)
     return self._data
+
+
+def _to_real_coef(grid, f):
+    f = rfft2(
+        f.reshape(grid.num_theta, grid.num_zeta),
+        norm="forward",
+        axes=(0, 1),
+    ).ravel()
+    return jnp.concatenate([f.real, f.imag])
+
+
+def _to_rfft(grid, f):
+    f = f[: f.size // 2] + 1j * f[f.size // 2 :]
+    f = f.reshape(grid.num_theta, grid.num_zeta // 2 + 1)
+    return f
+
+
+def _upsample_to_source(self, x, is_fourier=False):
+    if not self._same_grid_phi_src:
+        if not is_fourier:
+            x = self.Phi_grid.meshgrid_reshape(x, "rtz")[0]
+            x = rfft2(x, norm="forward", axes=(0, 1))
+        x = irfft2(
+            x,
+            s=(self.src_grid.num_theta, self.src_grid.num_zeta),
+            norm="forward",
+            axes=(0, 1),
+        ).reshape(self.src_grid.num_nodes, *x.shape[2:], order="F")
+    return x
+
+
+def _surface_gradient(data, transform, c):
+    assert c.size == transform.basis.num_modes
+    f_t = transform.transform(c, dt=1)[:, jnp.newaxis]
+    f_z = transform.transform(c, dz=1)[:, jnp.newaxis]
+    return f_t * data["n_rho x grad(theta)"] + f_z * data["n_rho x grad(zeta)"]

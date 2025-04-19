@@ -866,6 +866,40 @@ def test_symmetry_position(DummyCoilSet):
 
 
 @pytest.mark.unit
+def test_symmetry_position_center(DummyCoilSet):
+    """Tests that compute centers is correct from symmetry."""
+    # same coil sets with vs without symmetry
+    coilset_sym = load(
+        load_from=str(DummyCoilSet["output_path_sym"]), file_format="hdf5"
+    )
+    coilset_asym = load(
+        load_from=str(DummyCoilSet["output_path_asym"]), file_format="hdf5"
+    )
+    coilset_mixed = MixedCoilSet(*coilset_asym)
+    grid = LinearGrid(N=30)
+
+    # check that positions of CoilSets are the same with xyz basis
+    x_sym = coilset_sym._compute_position(basis="xyz", grid=grid, center=True)
+    x_asym = coilset_asym._compute_position(basis="xyz", grid=grid, center=True)
+    x_mixed = coilset_mixed._compute_position(basis="xyz", grid=grid, center=True)
+
+    np.testing.assert_allclose(x_sym, x_asym)
+    np.testing.assert_allclose(x_sym, x_mixed)
+
+    # check that positions of CoilSets are the same with rpz basis
+    x_sym = coilset_sym._compute_position(basis="rpz", grid=grid, center=True)
+    x_asym = coilset_asym._compute_position(basis="rpz", grid=grid, center=True)
+    x_mixed = coilset_mixed._compute_position(basis="rpz", grid=grid, center=True)
+
+    np.testing.assert_allclose(x_sym, x_asym)
+    np.testing.assert_allclose(x_sym, x_mixed)
+
+    # test error for _compute_position
+    with pytest.raises(ValueError, match="dx1"):
+        coilset_sym._compute_position(basis="rpz", grid=grid, center=True, dx1=True)
+
+
+@pytest.mark.unit
 def test_symmetry_magnetic_field(DummyCoilSet):
     """Tests that compute magnetic field is correct from symmetry."""
     # same coil sets with vs without symmetry

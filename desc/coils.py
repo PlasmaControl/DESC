@@ -284,7 +284,9 @@ class _Coil(_MagneticField, Optimizable, ABC):
         """int: Number of coils."""
         return 1
 
-    def _compute_position(self, params=None, grid=None, dx1=False, **kwargs):
+    def _compute_position(
+        self, params=None, grid=None, dx1=False, center=False, **kwargs
+    ):
         """Compute coil positions accounting for stellarator symmetry.
 
         Parameters
@@ -295,21 +297,37 @@ class _Coil(_MagneticField, Optimizable, ABC):
             Grid of coordinates to evaluate at. Defaults to a Linear grid.
             If an integer, uses that many equally spaced points.
         dx1 : bool
-            If True, also return dx/ds for the curve.
+            If True, also return dx/ds for the curve. Cannot be used
+            with ``center=True``
+        center : bool
+            whether or not to compute just the center of the coil.
 
         Returns
         -------
         x : ndarray, shape(len(self),source_grid.num_nodes,3)
             Coil positions, in [R,phi,Z] or [X,Y,Z] coordinates.
+            2nd dimension will be size 1 if center=True, as only one
+            center per coil is needed.
         x_s : ndarray, shape(len(self),source_grid.num_nodes,3)
             Coil position derivatives, in [R,phi,Z] or [X,Y,Z] coordinates.
             Only returned if dx1=True.
 
         """
         kwargs.setdefault("basis", "xyz")
-        keys = ["x", "x_s"] if dx1 else ["x"]
+        if not center:
+            keys = ["x", "x_s"] if dx1 else ["x"]
+        else:  # just compute coil centers
+            keys = ["center"]
+            # does not make sense to compute d(center)_ds
+            errorif(dx1, ValueError, "``dx1=True`` cannot be used with ``center=True``")
         data = self.compute(keys, grid=grid, params=params, **kwargs)
-        x = jnp.transpose(jnp.atleast_3d(data["x"]), [2, 0, 1])  # shape=(1,num_nodes,3)
+        x = jnp.transpose(
+            jnp.atleast_3d(data[keys[0]]), [2, 0, 1]
+        )  # shape=(1,num_nodes,3)
+        if center:
+            # make sure only carrying around 1 center point per coil
+            x = x[:, 0, :]
+            x = x[:, None, :]
         if dx1:
             x_s = jnp.transpose(
                 jnp.atleast_3d(data["x_s"]), [2, 0, 1]
@@ -1487,7 +1505,9 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         """Flip the coils across a plane."""
         [coil.flip(*args, **kwargs) for coil in self.coils]
 
-    def _compute_position(self, params=None, grid=None, dx1=False, **kwargs):
+    def _compute_position(
+        self, params=None, grid=None, dx1=False, center=False, **kwargs
+    ):
         """Compute coil positions accounting for stellarator symmetry.
 
         Parameters
@@ -1498,24 +1518,38 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             Grid of coordinates to evaluate at. Defaults to a Linear grid.
             If an integer, uses that many equally spaced points.
         dx1 : bool
-            If True, also return dx/ds for each curve.
+            If True, also return dx/ds for each curve. Cannot be used
+            with ``center=True``
+        center : bool
+            whether or not to compute just the center of the coil.
 
         Returns
         -------
         x : ndarray, shape(len(self),source_grid.num_nodes,3)
             Coil positions, in [R,phi,Z] or [X,Y,Z] coordinates.
+            2nd dimension will be size 1 if center=True, as only one
+            center per coil is needed.
         x_s : ndarray, shape(len(self),source_grid.num_nodes,3)
             Coil position derivatives, in [R,phi,Z] or [X,Y,Z] coordinates.
             Only returned if dx1=True.
 
         """
         basis = kwargs.pop("basis", "xyz")
-        keys = ["x", "x_s"] if dx1 else ["x"]
+        if not center:
+            keys = ["x", "x_s"] if dx1 else ["x"]
+        else:  # just compute coil centers
+            keys = ["center"]
+            # does not make sense to compute d(center)_ds
+            errorif(dx1, ValueError, "``dx1=True`` cannot be used with ``center=True``")
         if params is None:
             params = [get_params(keys, coil, basis=basis) for coil in self]
         data = self.compute(keys, grid=grid, params=params, basis=basis, **kwargs)
         data = tree_leaves(data, is_leaf=lambda x: isinstance(x, dict))
-        x = jnp.dstack([d["x"].T for d in data]).T  # shape=(ncoils,num_nodes,3)
+        x = jnp.dstack([d[keys[0]].T for d in data]).T  # shape=(ncoils,num_nodes,3)
+        if center:
+            # make sure only carrying around 1 center point per coil
+            x = x[:, 0, :]
+            x = x[:, None, :]
         if dx1:
             x_s = jnp.dstack([d["x_s"].T for d in data]).T  # shape=(ncoils,num_nodes,3)
         # stellarator symmetry is easiest in [X,Y,Z] coordinates
@@ -2578,7 +2612,9 @@ class MixedCoilSet(CoilSet):
             )
         ]
 
-    def _compute_position(self, params=None, grid=None, dx1=False, **kwargs):
+    def _compute_position(
+        self, params=None, grid=None, dx1=False, center=False, **kwargs
+    ):
         """Compute coil positions accounting for stellarator symmetry.
 
         Parameters
@@ -2590,12 +2626,17 @@ class MixedCoilSet(CoilSet):
             If an integer, uses that many equally spaced points.
             If array-like, should be 1 value per coil.
         dx1 : bool
-            If True, also return dx/ds for each curve.
+            If True, also return dx/ds for each curve. Cannot be used
+            with ``center=True``
+        center : bool
+            whether or not to compute just the center of the coil.
 
         Returns
         -------
         x : ndarray, shape(len(self),source_grid.num_nodes,3)
             Coil positions, in [R,phi,Z] or [X,Y,Z] coordinates.
+            2nd dimension will be size 1 if center=True, as only one
+            center per coil is needed.
         x_s : ndarray, shape(len(self),source_grid.num_nodes,3)
             Coil position derivatives, in [R,phi,Z] or [X,Y,Z] coordinates.
             Only returned if dx1=True.
@@ -2608,11 +2649,16 @@ class MixedCoilSet(CoilSet):
             + "default grid for each coil could have a different number of nodes.",
         )
         kwargs.setdefault("basis", "xyz")
+        errorif(
+            dx1 and center,
+            ValueError,
+            "``dx1=True`` cannot be used with ``center=True``",
+        )
         params = self._make_arraylike(params)
         grid = self._make_arraylike(grid)
         out = []
         for coil, par, grd in zip(self.coils, params, grid):
-            out.append(coil._compute_position(par, grd, dx1, **kwargs))
+            out.append(coil._compute_position(par, grd, dx1, center, **kwargs))
         if dx1:
             x = jnp.vstack([foo[0] for foo in out])
             x_s = jnp.vstack([foo[1] for foo in out])

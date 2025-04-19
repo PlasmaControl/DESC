@@ -6,8 +6,7 @@ from matplotlib import pyplot as plt
 
 from desc.backend import fixed_point, irfft2, jit, jnp, rfft2
 from desc.basis import DoubleFourierSeries
-from desc.grid import LinearGrid
-from desc.integrals.quad_utils import eta_zero
+from desc.grid import LinearGrid, _Grid
 from desc.integrals.singularities import (
     _kernel_biot_savart_coulomb,
     _kernel_Bn_over_r,
@@ -36,6 +35,20 @@ def _to_rfft(grid, f):
     return f
 
 
+def _upsample_to_source(self, x, is_fourier=False):
+    if not self._same_grid_phi_src:
+        if not is_fourier:
+            x = self.Phi_grid.meshgrid_reshape(x, "rtz")[0]
+            x = rfft2(x, norm="forward", axes=(0, 1))
+        x = irfft2(
+            x,
+            s=(self.src_grid.num_theta, self.src_grid.num_zeta),
+            norm="forward",
+            axes=(0, 1),
+        ).reshape(self.src_grid.num_nodes, *x.shape[2:], order="F")
+    return x
+
+
 class VacuumSolver(IOAble):
     """Compute vacuum field that satisfies LCFS boundary condition.
 
@@ -53,15 +66,6 @@ class VacuumSolver(IOAble):
     finds the unique vacuum field ∇Φ such that B ⋅ n = 0 without assuming
     nested flux surfaces.
 
-    Examples
-    --------
-    In a vacuum, the magnetic field may be written B = ∇𝛷. The solution to
-    ∆𝛷 = 0, under a homogenous boundary condition <n,B> = 0, is 𝛷 = 0. To
-    obtain a non-trivial solution, the boundary condition may be modified.
-    Let B = B₀ + ∇Φ. If B₀ ≠ 0 and satisfies ∇ × B₀ = 0, then ∆Φ = 0 solved
-    under an inhomogeneous boundary condition yields a non-trivial solution.
-    If B₀ ≠ -∇Φ, then B ≠ 0.
-
     Parameters
     ----------
     surface : Surface
@@ -69,8 +73,13 @@ class VacuumSolver(IOAble):
     B0 : _MagneticField
         Magnetic field such that ∇ × B₀ = μ₀ J
         where 𝐉 is the current in amperes everywhere.
-    evl_grid : Grid
-        Evaluation points in 𝒳 for the magnetic field.
+
+        Assumes that ``B0.compute_Bnormal()`` computes <n,B₀> such that n is the
+        normal that points out of the plasma. We will automatically flip this normal
+        when the exterior problem is to be solved.
+    evl_grid : Grid or jnp.ndarray
+        Grid of evaluation points in flux coordinates in ∂𝒳.
+        Or ``coords`` array of evaluation points in 𝒳 in R,phi,Z coords.
     src_grid : Grid
         Source points on ∂𝒳 for quadrature of kernels.
         Default resolution is ``src_grid.M=surface.M*4`` and ``src_grid.N=surface.N*4``.
@@ -85,13 +94,21 @@ class VacuumSolver(IOAble):
         Toroidal Fourier resolution to interpolate Φ on ∂𝒳.
         Should be at most ``Phi_grid.N``.
     sym
-        Symmetry for interpolation basis.
+        Symmetry for basis which interpolates Φ.
+        Default assumes no symmetry.
+    exterior : bool
+        Whether to solve the exterior Neumann problem instead of the interior.
+        If true, then 𝒳 is exterior of plasma.
+        Default is false.
     chunk_size : int or None
         Size to split computation into chunks.
         If no chunking should be done or the chunk size is the full input
         then supply ``None``. Default is ``None``.
     B0n : jnp.ndarray
         Optional,  <n,B₀> on ``src_grid``.
+        Assumes <n,B₀> is such that n is the
+        normal that points out of the plasma. We will automatically flip this normal
+        when the exterior problem is to be solved.
     use_dft : bool
         Whether to use matrix multiplication transform from spectral to physical domain
         instead of inverse fast Fourier transform.
@@ -109,12 +126,14 @@ class VacuumSolver(IOAble):
         Phi_N=None,
         sym=None,
         *,
+        exterior=False,
         chunk_size=None,
         B0n=None,
         use_dft=False,
         **kwargs,
     ):
-        errorif(B0 is None and B0n is None)
+        self._exterior = bool(exterior)
+        errorif(B0 is None and B0n is None, msg="Did not supply B0 or <n,B₀>.")
         self._B0 = B0
         self._evl_grid = evl_grid
         # TODO (#1206)
@@ -144,15 +163,13 @@ class VacuumSolver(IOAble):
             M=setdefault(Phi_M, Phi_grid.M),
             N=setdefault(Phi_N, Phi_grid.N),
             NFP=surface.NFP,
-            # TODO: Reviewer should check this. Phi need not be NFP periodic.
             sym=setdefault(sym, False) and surface.sym,
         )
 
         # Compute data on source grid.
-        position = ["R", "phi", "Z"]
         self._src_transform = Transform(src_grid, basis, derivs=1)
         src_data = surface.compute(
-            position + ["n_rho", "|e_theta x e_zeta|", "e_theta", "e_zeta"],
+            ["x", "n_rho", "|e_theta x e_zeta|", "e_theta", "e_zeta"],
             grid=src_grid,
         )
         src_data["Bn"] = (
@@ -166,35 +183,44 @@ class VacuumSolver(IOAble):
                 chunk_size=chunk_size,
             )[0]
         )
+        if self._exterior:
+            src_data["Bn"] = -src_data["Bn"]
         # Compute data on Phi grid.
         if self._same_grid_phi_src:
             Phi_data = src_data
             self._src_transform.build_pinv()
             self._phi_transform = self._src_transform
         else:
-            Phi_data = surface.compute(position, grid=Phi_grid)
+            Phi_data = surface.compute("x", grid=Phi_grid)
             self._phi_transform = Transform(
                 Phi_grid, basis, build=False, build_pinv=True
             )
         # Compute data on evaluation grid.
-        if evl_grid.equiv(Phi_grid):
-            evl_data = Phi_data
-        elif not self._same_grid_phi_src and evl_grid.equiv(src_grid):
-            evl_data = src_data
+        if self._evaluate_in_X():
+            R, phi, Z = evl_grid.T
+            evl_data = {"R": R, "phi": phi, "Z": Z, "x": evl_grid}
         else:
-            evl_data = surface.compute(position, grid=evl_grid)
+            if evl_grid.equiv(Phi_grid):
+                evl_data = Phi_data
+            elif not self._same_grid_phi_src and evl_grid.equiv(src_grid):
+                evl_data = src_data
+            else:
+                evl_data = surface.compute("x", grid=evl_grid)
 
         self._data = {"evl": evl_data, "Phi": Phi_data, "src": src_data}
+        self._data_evl_old = self._data["evl"].copy()
         self._interpolator = {
             "Phi": get_interpolator(Phi_grid, src_grid, src_data, use_dft, **kwargs),
         }
-        if not self._evaluate_in_interior():
+        if not self._evaluate_in_X():
             self._interpolator["evl"] = get_interpolator(
                 evl_grid, src_grid, src_data, use_dft, **kwargs
             )
 
-    def _evaluate_in_interior(self):
-        return self._evl_grid.nodes[0, 0] < 1
+    def _evaluate_in_X(self, coords=None):
+        # if coords was supplied assume in X else check if eval grid was
+        # originally some coords array.
+        return coords is not None or not isinstance(self.evl_grid, _Grid)
 
     @property
     def evl_grid(self):
@@ -211,26 +237,19 @@ class VacuumSolver(IOAble):
         """Return the source grid used by this solver."""
         return self._interpolator["Phi"]._eval_grid
 
-    def _upsample_to_source(self, x, is_fourier=False):
-        if not self._same_grid_phi_src:
-            if not is_fourier:
-                x = self.Phi_grid.meshgrid_reshape(x, "rtz")[0]
-                x = rfft2(x, norm="forward", axes=(0, 1))
-            x = irfft2(
-                x,
-                s=(self.src_grid.num_theta, self.src_grid.num_zeta),
-                norm="forward",
-                axes=(0, 1),
-            ).reshape(self.src_grid.num_nodes, *x.shape[2:], order="F")
-        return x
-
     @property
     def basis(self):
         """Return the DoubleFourierBasis used by this solver."""
         return self._src_transform.basis
 
     def compute_Phi(
-        self, chunk_size=None, maxiter=0, tol=1e-6, method="del2", Phi_0=None, **kwargs
+        self,
+        chunk_size=None,
+        maxiter=0,
+        tol=1e-6,
+        method="simple",
+        Phi_0=None,
+        **kwargs,
     ):
         """Compute Fourier coefficients of vacuum potential Φ on ∂𝒳.
 
@@ -246,10 +265,7 @@ class VacuumSolver(IOAble):
         tol : float
             Stopping tolerance for iteration.
         method : {"del2", "simple"}
-            Method of finding the fixed-point, defaults to ``del2``,
-            which uses Steffensen's acceleration method.
-            The former typically converges quadratically and the latter converges
-            linearly.
+            Method of finding the fixed-point, defaults to ``simple``.
         Phi_0 : jnp.ndarray
             Initial guess for Φ on ``self.Phi_grid`` for iteration.
             In general, it is best to select the initial guess as truncated
@@ -265,14 +281,15 @@ class VacuumSolver(IOAble):
         self._data = (
             _fixed_point_Phi(
                 self,
-                Phi_0,
+                bc=_vacuum_bc,
                 tol=tol,
                 maxiter=maxiter,
                 method=method,
                 chunk_size=chunk_size,
+                Phi_0=Phi_0,
             )
             if (maxiter > 0)
-            else _lsmr_Phi(self, chunk_size=chunk_size)
+            else _lsmr_Phi(self, bc=_vacuum_bc, chunk_size=chunk_size)
         )
         return self._data
 
@@ -290,13 +307,29 @@ class VacuumSolver(IOAble):
         data["Phi_z"] = self._src_transform.transform(Phi_mn, dz=1)
         data["K^theta"] = data["Phi_z"] / data["|e_theta x e_zeta|"]
         data["K^zeta"] = -data["Phi_t"] / data["|e_theta x e_zeta|"]
+        if self._exterior:
+            data["K^theta"] = -data["K^theta"]
+            data["K^zeta"] = -data["K^zeta"]
         data["K_vc"] = (
             data["K^theta"][:, jnp.newaxis] * data["e_theta"]
             + data["K^zeta"][:, jnp.newaxis] * data["e_zeta"]
         )
         return self._data
 
-    def compute_vacuum_field(self, chunk_size=None):
+    def _set_new_evl_coords(self, coords):
+        R, phi, Z = coords.T
+        self._data["evl"]["R"] = R
+        self._data["evl"]["phi"] = phi
+        self._data["evl"]["Z"] = Z
+        self._data["evl"]["x"] = coords
+
+    def _set_old_evl_coords(self):
+        self._data["evl"]["R"] = self._data_evl_old["R"]
+        self._data["evl"]["phi"] = self._data_evl_old["phi"]
+        self._data["evl"]["Z"] = self._data_evl_old["Z"]
+        self._data["evl"]["x"] = self._data_evl_old["x"]
+
+    def compute_vacuum_field(self, chunk_size=None, coords=None):
         """Compute magnetic field due to vacuum potential Φ.
 
         Parameters
@@ -305,6 +338,8 @@ class VacuumSolver(IOAble):
             Size to split computation into chunks.
             If no chunking should be done or the chunk size is the full input
             then supply ``None``. Default is ``None``.
+        coords : jnp.ndarray
+            Optional, evaluation points in 𝒳 in coordinates of R, phi, Z basis.
 
         Returns
         -------
@@ -312,36 +347,38 @@ class VacuumSolver(IOAble):
              Vacuum field ∇Φ stored in ``data["evl"]["grad(Phi)"]``.
 
         """
-        if "grad(Phi)" in self._data["evl"]:
+        if coords is not None:
+            self._set_new_evl_coords(coords)
+        elif "grad(Phi)" in self._data["evl"]:
             return self._data
 
         self._data = self.compute_Phi(chunk_size)
         self._data = self._compute_virtual_current()
-        self._data["evl"]["grad(Phi)"] = (
-            _nonsingular_part(
+
+        if self._evaluate_in_X(coords):
+            self._data["evl"]["grad(Phi)"] = _nonsingular_part(
                 self._data["evl"],
-                self.evl_grid,
+                None,
                 self._data["src"],
                 self.src_grid,
                 st=jnp.nan,
                 sz=jnp.nan,
                 kernel=_kernel_biot_savart_coulomb,
                 chunk_size=chunk_size,
-                _eta=eta_zero,
             )
-            if self._evaluate_in_interior()
-            else 2
-            * singular_integral(
+        else:
+            self._data["evl"]["grad(Phi)"] = 2 * singular_integral(
                 self._data["evl"],
                 self._data["src"],
                 interpolator=self._interpolator["evl"],
                 kernel=_kernel_biot_savart_coulomb,
                 chunk_size=chunk_size,
             )
-        )
+        if coords is not None:
+            self._set_old_evl_coords()
         return self._data
 
-    def compute_current_field(self, chunk_size=None):
+    def compute_current_field(self, chunk_size=None, coords=None):
         """Compute magnetic field B₀ due to volume current sources.
 
         Parameters
@@ -350,6 +387,8 @@ class VacuumSolver(IOAble):
             Size to split computation into chunks.
             If no chunking should be done or the chunk size is the full input
             then supply ``None``. Default is ``None``.
+        coords : jnp.ndarray
+            Optional, evaluation points in 𝒳 in coordinates of R,phi,Z basis.
 
         Returns
         -------
@@ -357,18 +396,21 @@ class VacuumSolver(IOAble):
             B₀ stored in ``data["evl"]["B0"]``.
 
         """
-        if "B0" in self._data["evl"]:
+        if coords is not None:
+            self._set_new_evl_coords(coords)
+        elif "B0" in self._data["evl"]:
             return self._data
 
         data = self._data["evl"]
+
         data["B0"] = self._B0.compute_magnetic_field(
-            coords=jnp.column_stack([data["R"], data["phi"], data["Z"]]),
-            source_grid=self.src_grid,
-            chunk_size=chunk_size,
+            coords=data["x"], source_grid=self.src_grid, chunk_size=chunk_size
         )
+        if coords is not None:
+            self._set_old_evl_coords()
         return self._data
 
-    def compute_magnetic_field(self, chunk_size=None):
+    def compute_magnetic_field(self, chunk_size=None, coords=None):
         """Compute magnetic field B = B₀ + ∇Φ.
 
         Parameters
@@ -377,6 +419,8 @@ class VacuumSolver(IOAble):
             Size to split computation into chunks.
             If no chunking should be done or the chunk size is the full input
             then supply ``None``. Default is ``None``.
+        coords : jnp.ndarray
+            Optional, evaluation points in 𝒳 in coordinates of R,phi,Z basis.
 
         Returns
         -------
@@ -384,7 +428,9 @@ class VacuumSolver(IOAble):
             B stored in ``data["evl"]["B0+grad(Phi)"]``.
 
         """
-        if "B0+grad(Phi)" in self._data["evl"]:
+        if coords is not None:
+            self._set_new_evl_coords(coords)
+        elif "B0+grad(Phi)" in self._data["evl"]:
             return self._data
 
         self._data = self.compute_current_field(chunk_size)
@@ -392,6 +438,8 @@ class VacuumSolver(IOAble):
         self._data["evl"]["B0+grad(Phi)"] = (
             self._data["evl"]["B0"] + self._data["evl"]["grad(Phi)"]
         )
+        if coords is not None:
+            self._set_old_evl_coords()
         return self._data
 
     def plot_Bn_error(self, Bn):
@@ -408,7 +456,7 @@ class VacuumSolver(IOAble):
             Matplotlib (fig, ax) tuple.
 
         """
-        errorif(self._evaluate_in_interior())
+        errorif(self._evaluate_in_X())
         grid = self.evl_grid
         theta = grid.meshgrid_reshape(grid.nodes[:, 1], "rtz")[0]
         zeta = grid.meshgrid_reshape(grid.nodes[:, 2], "rtz")[0]
@@ -421,7 +469,7 @@ class VacuumSolver(IOAble):
         return fig, ax
 
 
-def _boundary_condition(self, chunk_size):
+def _vacuum_bc(self, chunk_size):
     """Returns γ = ∫_y 〈 G(x−y) B₀(y), ds(y) 〉."""
     if "gamma" in self._data["Phi"]:
         return self._data
@@ -433,12 +481,11 @@ def _boundary_condition(self, chunk_size):
         kernel=_kernel_Bn_over_r,
         chunk_size=chunk_size,
     ).squeeze(axis=-1) / (-4 * jnp.pi)
-
     return self._data
 
 
 def _H(self, src_data, chunk_size, basis=None):
-    """Compute H Φ(x) = ∫_y 〈 Φ(y) ∇_y G(x−y), ds(y) 〉 or, if basis is supplied, H Φ₁.
+    """Compute H Φ(x) = ∫_y 〈 ∇_y G(x−y), ds(y) 〉 Φ(y) or, if basis is supplied, H Φ₁.
 
     If ``basis`` is not supplied, then computes H Φ.
     If ``basis`` is supplied, then computes H Φ₁ = ℱ⁻¹ H̃ Φ̃₁
@@ -449,14 +496,13 @@ def _H(self, src_data, chunk_size, basis=None):
     ----------
     basis : DoubleFourierSeries
         Optional. If supplied changes the meaning of the output. See note.
-        # TODO: need secular terms
 
     """
     kwargs = {}
     if basis is not None:
         kwargs["known_map"] = ("Phi", basis.evaluate)
         kwargs["ndim"] = basis.num_modes
-    return singular_integral(
+    H = singular_integral(
         eval_data=self._data["Phi"],
         source_data=src_data,
         interpolator=self._interpolator["Phi"],
@@ -464,15 +510,24 @@ def _H(self, src_data, chunk_size, basis=None):
         chunk_size=chunk_size,
         **kwargs,
     )
+    if self._exterior:
+        H = -H
+    return H
 
 
-@partial(jit, static_argnames=["chunk_size"])
-def _lsmr_Phi(self, basis=None, *, chunk_size=None):
+@partial(jit, static_argnames=["bc", "chunk_size"])
+def _lsmr_Phi(
+    self,
+    *,
+    bc,
+    basis=None,
+    chunk_size=None,
+):
     """Compute Fourier harmonics Φ̃ by solving least squares system."""
     if "Phi_mn" in self._data["Phi"]:
         return self._data
 
-    self._data = _boundary_condition(self, chunk_size)
+    self._data = bc(self, chunk_size)
     gamma = self._data["Phi"]["gamma"]
 
     basis = setdefault(basis, self.basis)
@@ -487,7 +542,6 @@ def _lsmr_Phi(self, basis=None, *, chunk_size=None):
     # Solving overdetermined system useful to reduce size of A while
     # retaining FFT interpolation accuracy in the singular integrals.
     # TODO: https://github.com/patrick-kidger/lineax/pull/86
-    #  JAX doesn't have lsmr yet, but apparently Rory is working on it.
     self._data["Phi"]["Phi_mn"] = (
         jnp.linalg.solve(A, gamma)
         if (self.Phi_grid.num_nodes == basis.num_modes)
@@ -496,8 +550,8 @@ def _lsmr_Phi(self, basis=None, *, chunk_size=None):
     return self._data
 
 
-def _fredholm_Phi(Phi_k, self, chunk_size=None):
-    """Compute Fredholm integral operator T(Φ) = p⁻¹(γ + H Φ).
+def _iteration_operator(Phi_k, self, chunk_size=None):
+    """Compute iteration operator T(Φ).
 
     Parameters
     ----------
@@ -512,30 +566,34 @@ def _fredholm_Phi(Phi_k, self, chunk_size=None):
     """
     # Phi_k = _to_rfft(self.Phi_grid, Phi_k)  # noqa
     src_data = self._data["src"].copy()
-    src_data["Phi"] = self._upsample_to_source(Phi_k, is_fourier=False)
+    src_data["Phi"] = _upsample_to_source(self, Phi_k, is_fourier=False)
     # TODO: Don't need to re-interpolate Phi since we already have it.
     #       Requires resolving issue described in _interpax_mod.py.
     gamma = self._data["Phi"]["gamma"]
     H = _H(self, src_data, chunk_size).squeeze(axis=-1)
-    return 2 * (gamma + H)
-    # Phi_k1 = _to_real_coef(self.Phi_grid, 2 * (gamma + H))  # noqa
+    return H + 0.5 * Phi_k + gamma
+    # Phi_k1 = _to_real_coef(self.Phi_grid, H + 0.5 * Phi_k + gamma)  # noqa
 
 
-@partial(jit, static_argnames=["tol", "maxiter", "method", "chunk_size"])
+@partial(
+    jit,
+    static_argnames=["bc", "tol", "maxiter", "method", "chunk_size"],
+)
 def _fixed_point_Phi(
     self,
-    Phi_0=None,
     *,
+    bc,
     tol=1e-6,
     maxiter=20,
     method="del2",
     chunk_size=None,
+    Phi_0=None,
 ):
     assert self.Phi_grid.can_fft2
     if "Phi_mn" in self._data["Phi"]:
         return self._data
 
-    self._data = _boundary_condition(self, chunk_size)
+    self._data = bc(self, chunk_size)
 
     if Phi_0 is None:
         basis = DoubleFourierSeries(
@@ -544,11 +602,11 @@ def _fixed_point_Phi(
             NFP=self.basis.NFP,
             sym=self.basis.sym,
         )
-        self._data = _lsmr_Phi(self, basis, chunk_size=chunk_size)
+        self._data = _lsmr_Phi(self, bc=bc, basis=basis, chunk_size=chunk_size)
         Phi_0 = basis.evaluate(self.Phi_grid) @ self._data["Phi"]["Phi_mn"]
     # Phi_0 = _to_real_coef(self.Phi_grid, Phi_0)   # noqa
     Phi = fixed_point(
-        _fredholm_Phi,
+        _iteration_operator,
         Phi_0,
         (self, chunk_size),
         tol,

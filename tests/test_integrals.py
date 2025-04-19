@@ -26,6 +26,7 @@ from desc.integrals import (
     Bounce2D,
     DFTInterpolator,
     FFTInterpolator,
+    FreeBoundarySolver,
     VacuumSolver,
     line_integrals,
     singular_integral,
@@ -885,6 +886,13 @@ class TestVacuumSolver:
         Bn = dot(data["B0+grad(Phi)"], data["n_rho"])
         np.testing.assert_allclose(Bn, 0, atol=4e-4)
 
+        # test off surface evaluation
+        mid_grid = LinearGrid(rho=0.5, M=10, N=10, NFP=eq.NFP, sym=eq.sym)
+        coords = eq.compute(["R", "phi", "Z"], grid=mid_grid)
+        coords = jnp.column_stack([coords["R"], coords["phi"], coords["Z"]])
+        data = vac.compute_magnetic_field(chunk_size, coords)
+        assert np.isfinite(data["evl"]["B0+grad(Phi)"]).all()
+
     @staticmethod
     def _merkel_surf(C_r, C_z):
         """Convert merkel coefficients to DESC coefficients."""
@@ -993,6 +1001,35 @@ class TestVacuumSolver:
             * fun(m[:, np.newaxis] * theta + n[:, np.newaxis] * zeta),
             axis=0,
         )
+
+
+class TestFreeBoundarySolver:
+    """Test free boundary solver (standard Neumann and potential mapping)."""
+
+    # TODO: Figure out how to analytically test exterior Neumann solve.
+    #       We can't use same method as interior test done above because
+    #       we need our test harmonic function to vanish at infinity.
+    @pytest.mark.unit
+    def test_potential_map_free_boundary(self):
+        """Test potential map formulation of free boundary solver."""
+        chunk_size = 1000
+        resolution = 50
+        surf = FourierRZToroidalSurface()
+        src_grid = LinearGrid(M=resolution, N=resolution, NFP=surf.NFP)
+
+        free = FreeBoundarySolver(
+            surface=surf,
+            B0=ToroidalMagneticField(B0=1, R0=1),
+            evl_grid=LinearGrid(M=5, N=5, NFP=surf.NFP),
+            src_grid=src_grid,
+            Phi_grid=LinearGrid(M=4, N=3, NFP=surf.NFP),
+            Phi_M=2,
+            Phi_N=1,
+            chunk_size=chunk_size,
+            warn_fft=False,
+        )
+        data = free.compute_B2()
+        assert np.isfinite(data["evl"]["|B_out|^2"]).all()
 
 
 class TestBouncePoints:

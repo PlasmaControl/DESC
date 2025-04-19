@@ -613,6 +613,37 @@ class TestObjectiveFunction:
         np.testing.assert_allclose(f, 0, atol=2e-3)
 
     @pytest.mark.unit
+    @pytest.mark.parametrize(
+        "objective",
+        [
+            "BoundaryError",
+            "BoundaryErrorNESTOR",
+            "QuadraticFlux",
+            "VacuumBoundaryError",
+        ],
+    )
+    def test_boundary_error_multiple_fields(self, objective):
+        """Test calculation of boundary error objectives with multiple fields."""
+        coil = FourierXYZCoil(5e5)
+        coilset = CoilSet.linspaced_angular(coil, n=3, check_intersection=False)
+        coils = [coil for coil in coilset]
+        coil_grid = LinearGrid(N=20)
+        eq = Equilibrium(L=3, M=3, N=3, Psi=np.pi)
+        eq.solve()
+
+        try:
+            obj = getattr(desc.objectives, objective)
+        except AttributeError:  # BoundaryErrorNESTOR
+            obj = getattr(desc.objectives._free_boundary, objective)
+        obj0 = obj(eq, coilset, field_grid=coil_grid)
+        obj1 = obj(eq, coils, field_grid=coil_grid)
+        obj0.build()
+        obj1.build()
+        f0 = obj0.compute_scaled_error(*obj0.xs())
+        f1 = obj1.compute_scaled_error(*obj1.xs())
+        np.testing.assert_allclose(f0, f1, err_msg=f"{objective}", atol=1e-19)
+
+    @pytest.mark.unit
     def test_target_mean_iota(self):
         """Test calculation of iota profile average."""
 
@@ -1227,7 +1258,7 @@ class TestObjectiveFunction:
         eq = load("./tests/inputs/vacuum_circular_tokamak.h5")
         obj = QuadraticFlux(eq, t_field)
         obj.build(eq, verbose=2)
-        f = obj.compute(field_params=t_field.params_dict)
+        f = obj.compute(t_field.params_dict)
         np.testing.assert_allclose(f, 0, rtol=1e-14, atol=1e-14)
 
         # test non-axisymmetric surface
@@ -1272,7 +1303,7 @@ class TestObjectiveFunction:
         obj = QuadraticFlux(eq, t_field, vacuum=True, eval_grid=eval_grid)
         Bnorm = t_field.compute_Bnormal(eq.surface, eval_grid=eval_grid)[0]
         obj.build(eq)
-        f = obj.compute(field_params=t_field.params_dict)
+        f = obj.compute(t_field.params_dict)
         dA = eq.compute("|e_theta x e_zeta|", grid=eval_grid)["|e_theta x e_zeta|"]
         # check that they're the same since we set B_plasma = 0
         np.testing.assert_allclose(f, Bnorm * np.sqrt(dA), atol=1e-14)
@@ -1830,12 +1861,36 @@ class TestObjectiveFunction:
         )
         np.testing.assert_allclose(objective.compute_scaled_error(x), 0, atol=1e-15)
 
+    @pytest.mark.unit
+    def test_errors_bootstrap(self):
+        """Error checks for BootstrapRedlConsistency."""
+        eq = Equilibrium(
+            L=2,
+            M=2,
+            N=2,
+            electron_density=PowerSeriesProfile([1e19, 0, -1e19]),
+            electron_temperature=PowerSeriesProfile([1e3, 0, -1e3]),
+            current=PowerSeriesProfile([0, 0, -1]),
+        )
+        grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, L=2, axis=True)
+        obj = BootstrapRedlConsistency(eq, grid=grid)
+        with pytest.raises(ValueError, match="rho=0"):
+            obj.build()
+
+        grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, L=2, axis=False)
+        obj = BootstrapRedlConsistency(eq, grid=grid)
+        with pytest.raises(ValueError, match="vanish"):
+            obj.build()
+
 
 @pytest.mark.regression
 def test_derivative_modes():
     """Test equality of derivatives using batched, looped methods."""
     eq = Equilibrium(M=2, N=1, L=2)
     surf = FourierRZToroidalSurface()
+
+    # specifying chunk size for sub-objective with batched mode
+    # should raise error
     obj1 = ObjectiveFunction(
         [
             PlasmaVesselDistance(eq, surf, jac_chunk_size=1),
@@ -1845,6 +1900,8 @@ def test_derivative_modes():
         deriv_mode="batched",
         use_jit=False,
     )
+    # specifying chunk size for both objective and sub-objective
+    # should raise error
     obj2 = ObjectiveFunction(
         [
             PlasmaVesselDistance(eq, surf, jac_chunk_size=2),
@@ -1925,6 +1982,36 @@ def test_derivative_modes():
     j3 = obj3.jvp_scaled(v, x)
     np.testing.assert_allclose(j1, j2, atol=1e-10)
     np.testing.assert_allclose(j1, j3, atol=1e-10)
+
+    # specifying chunk size to sub-objective should make the deriv
+    # mode of the objective "blocked" automatically
+    obj1 = ObjectiveFunction(ForceBalance(eq, jac_chunk_size=2))
+    obj2 = ObjectiveFunction(
+        (
+            ForceBalance(eq, jac_chunk_size=5),
+            PlasmaVesselDistance(eq, surf, jac_chunk_size=100),
+        )
+    )
+    # reverse mode sub-objectives should be blocked and have the same
+    # chunk size as the objective
+    obj3 = ObjectiveFunction(
+        (
+            AspectRatio(eq, target=3),
+            ForceBalance(eq),
+        )
+    )
+    obj1.build()
+    obj2.build()
+    obj3.build()
+    assert obj1._deriv_mode == "blocked"
+    assert obj2._deriv_mode == "blocked"
+    assert obj3._deriv_mode == "blocked"
+    # check that the chunk size is set correctly
+    assert obj1.objectives[0]._jac_chunk_size == 2
+    assert obj2.objectives[0]._jac_chunk_size == 5
+    assert obj2.objectives[1]._jac_chunk_size == 100
+    assert obj3.objectives[0]._jac_chunk_size == obj3._jac_chunk_size
+    assert obj3.objectives[1]._jac_chunk_size == obj3._jac_chunk_size
 
 
 @pytest.mark.unit
@@ -2871,7 +2958,7 @@ class TestComputeScalarResolution:
         f = np.zeros_like(self.res_array, dtype=float)
         for i, res in enumerate(self.res_array):
             grid = LinearGrid(
-                M=int(self.eq.M * res), N=int(self.eq.N * res), NFP=self.eq.NFP
+                M=int(self.eq.M * res), N=int(self.eq.N * res), NFP=self.eq.NFP, rho=0.7
             )
             obj = ObjectiveFunction(
                 BootstrapRedlConsistency(eq=eq, grid=grid), use_jit=False

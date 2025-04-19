@@ -411,8 +411,8 @@ class Bounce2D(Bounce):
         # Hence, it more efficient to compute the real transform in the poloidal angle.
         # Likewise to perform partial summation in this application, the real transform
         # must be done in the poloidal angle and the complex transform in the toroidal.
-        a = rfft2(f, norm="forward").at[..., i].divide(2) * 2
-        return a[..., jnp.newaxis, :, :]
+        f = rfft2(f, norm="forward").at[..., i].divide(2) * 2
+        return f[..., jnp.newaxis, :, :]
 
     # TODO (#1034): Pass in the previous
     #  θ(α, ζ) coordinates as an initial guess for the next coordinate mapping.

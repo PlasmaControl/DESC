@@ -45,6 +45,7 @@ def _b(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["e_theta/sqrt(g)", "e_zeta"],
+    aliases=["grad(rho)"],
 )
 def _e_sup_rho(params, transforms, profiles, data, **kwargs):
     # At the magnetic axis, this function returns the multivalued map whose
@@ -521,6 +522,7 @@ def _e_sup_rho_zz(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["e^theta*sqrt(g)", "sqrt(g)"],
+    aliases=["grad(theta)"],
 )
 def _e_sup_theta(params, transforms, profiles, data, **kwargs):
     data["e^theta"] = (data["e^theta*sqrt(g)"].T / data["sqrt(g)"]).T
@@ -962,6 +964,7 @@ def _e_sup_theta_zz(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["e_rho", "e_theta/sqrt(g)"],
+    aliases=["grad(zeta)"],
 )
 def _e_sup_zeta(params, transforms, profiles, data, **kwargs):
     # At the magnetic axis, this function returns the multivalued map whose

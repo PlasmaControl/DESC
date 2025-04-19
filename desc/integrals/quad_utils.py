@@ -459,11 +459,6 @@ def eta(theta, zeta, theta0, zeta0, ht, hz, st, sz):
     return chi(r)
 
 
-def eta_zero(theta, zeta, theta0, zeta0, ht, hz, st, sz):
-    """Returns η = 0 to integrate smooth functions with ``_nonsingular_part``."""
-    return 0
-
-
 def _get_polar_quadrature(q):
     """Polar nodes for quadrature around singular point.
 

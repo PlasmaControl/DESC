@@ -1,10 +1,9 @@
 from functools import partial
 
-from desc.backend import fixed_point, irfft2, jit, jnp, rfft2
+from desc.backend import jit, jnp, vmap
 from desc.basis import DoubleFourierSeries
-from desc.batching import vmap_chunked
 from desc.grid import LinearGrid
-from desc.integrals._vacuum import _H
+from desc.integrals._vacuum import _fixed_point_Phi, _lsmr_Phi
 from desc.integrals.singularities import (
     _dx,
     _kernel_biot_savart,
@@ -14,7 +13,7 @@ from desc.integrals.singularities import (
 )
 from desc.io import IOAble
 from desc.transform import Transform
-from desc.utils import cross, dot, errorif, setdefault, warnif
+from desc.utils import cross, dot, errorif, flatten_matrix, setdefault, warnif
 
 
 @partial(jit, static_argnames=["chunk_size", "loop"])
@@ -166,6 +165,7 @@ def compute_B_plasma(
     return Bplasma
 
 
+# TODO: Constrain secular terms in potential.
 class FreeBoundarySolver(IOAble):
     """Compute exterior field for free boundary problem.
 
@@ -175,8 +175,12 @@ class FreeBoundarySolver(IOAble):
     ----------
     surface : Surface
         Geometry defining ∂𝒳.
-    B_coil : _MagneticField
-        Magnetic field produced by coils.
+    B0 : _MagneticField
+        Magnetic field produced by coils plus fields that generate
+        the net toroidal plasma current inside the plasma and
+        the net poloidal plasma current outside the plasma.
+        That is B0 = B_coil + B1 + B2 where B1, B2 produces ``I``, ``G``
+        as would be computed by ``eq.compute(["I","G"]).
     evl_grid : Grid
         Evaluation points on ∂𝒳 for the magnetic field.
     src_grid : Grid
@@ -193,7 +197,8 @@ class FreeBoundarySolver(IOAble):
         Toroidal Fourier resolution to interpolate Φ on ∂𝒳.
         Should be at most ``Phi_grid.N``.
     sym
-        Symmetry for interpolation basis.
+        Symmetry for basis which interpolates Φ.
+        Default assumes no symmetry.
     chunk_size : int or None
         Size to split computation into chunks.
         If no chunking should be done or the chunk size is the full input
@@ -207,7 +212,7 @@ class FreeBoundarySolver(IOAble):
     def __init__(
         self,
         surface,
-        B_coil,
+        B0,
         evl_grid,
         src_grid=None,
         Phi_grid=None,
@@ -219,6 +224,7 @@ class FreeBoundarySolver(IOAble):
         use_dft=False,
         **kwargs,
     ):
+        self._exterior = True
         errorif(
             evl_grid.nodes[0, 0] < evl_grid.num_rho,
             msg="Evaluation grid must be on boundary.",
@@ -250,20 +256,11 @@ class FreeBoundarySolver(IOAble):
             M=setdefault(Phi_M, Phi_grid.M),
             N=setdefault(Phi_N, Phi_grid.N),
             NFP=surface.NFP,
-            # TODO: Reviewer should check this. Phi need not be NFP periodic.
             sym=setdefault(sym, False) and surface.sym,
         )
 
         # Compute data on source grid.
-        geometric_names = [
-            "R",
-            "phi",
-            "Z",
-            "n_rho",
-            "|e_theta x e_zeta|",
-            "e_theta",
-            "e_zeta",
-        ]
+        geometric_names = ["x", "n_rho", "|e_theta x e_zeta|", "e_theta", "e_zeta"]
         src_data = surface.compute(geometric_names, grid=src_grid)
         # Compute data on Phi grid.
         if self._same_grid_phi_src:
@@ -271,14 +268,10 @@ class FreeBoundarySolver(IOAble):
         else:
             Phi_data = surface.compute(geometric_names, grid=Phi_grid)
         self._phi_transform = Transform(Phi_grid, basis, derivs=1, build_pinv=True)
-        Phi_data["n x B_coil"] = cross(
+        Phi_data["n x B0"] = cross(
             Phi_data["n_rho"],
-            B_coil.compute_magnetic_field(
-                coords=jnp.column_stack(
-                    [Phi_data["R"], Phi_data["phi"], Phi_data["Z"]]
-                ),
-                source_grid=src_grid,
-                chunk_size=chunk_size,
+            B0.compute_magnetic_field(
+                coords=Phi_data["x"], source_grid=src_grid, chunk_size=chunk_size
             ),
         )
         # Compute data on evaluation grid.
@@ -313,26 +306,19 @@ class FreeBoundarySolver(IOAble):
         """Return the source grid used by this solver."""
         return self._interpolator["Phi"]._eval_grid
 
-    def _upsample_to_source(self, x, is_fourier=False):
-        if not self._same_grid_phi_src:
-            if not is_fourier:
-                x = self.Phi_grid.meshgrid_reshape(x, "rtz")[0]
-                x = rfft2(x, norm="forward", axes=(0, 1))
-            x = irfft2(
-                x,
-                s=(self.src_grid.num_theta, self.src_grid.num_zeta),
-                norm="forward",
-                axes=(0, 1),
-            ).reshape(self.src_grid.num_nodes, *x.shape[2:], order="F")
-        return x
-
     @property
     def basis(self):
         """Return the DoubleFourierBasis used by this solver."""
         return self._phi_transform.basis
 
     def compute_Phi(
-        self, chunk_size=None, maxiter=0, tol=1e-6, method="del2", Phi_0=None, **kwargs
+        self,
+        chunk_size=None,
+        maxiter=0,
+        tol=1e-6,
+        method="simple",
+        Phi_0=None,
+        **kwargs,
     ):
         """Compute Fourier coefficients of vacuum potential Φ on ∂𝒳.
 
@@ -348,10 +334,7 @@ class FreeBoundarySolver(IOAble):
         tol : float
             Stopping tolerance for iteration.
         method : {"del2", "simple"}
-            Method of finding the fixed-point, defaults to ``del2``,
-            which uses Steffensen's acceleration method.
-            The former typically converges quadratically and the latter converges
-            linearly.
+            Method of finding the fixed-point, defaults to ``simple``.
         Phi_0 : jnp.ndarray
             Initial guess for Φ on ``self.Phi_grid`` for iteration.
             In general, it is best to select the initial guess as truncated
@@ -367,18 +350,19 @@ class FreeBoundarySolver(IOAble):
         self._data = (
             _fixed_point_Phi(
                 self,
-                Phi_0,
+                bc=_free_boundary_bc,
                 tol=tol,
                 maxiter=maxiter,
                 method=method,
                 chunk_size=chunk_size,
+                Phi_0=Phi_0,
             )
             if (maxiter > 0)
-            else _lsmr_Phi(self, chunk_size=chunk_size)
+            else _lsmr_Phi(self, bc=_free_boundary_bc, chunk_size=chunk_size)
         )
         return self._data
 
-    def compute_B_out(self):
+    def compute_B2(self, chunk_size=None):
         """Compute ‖B_out‖² on the evaluation grid.
 
         Returns
@@ -389,14 +373,17 @@ class FreeBoundarySolver(IOAble):
         """
         if "|B_out|^2" in self._data["evl"]:
             return self._data
+        self._data = self.compute_Phi(chunk_size)
         B_out_tan = _surface_gradient(
-            self._data["evl"], self._evl_transform, self._data["Phi"]["Phi_mn"]
-        )
+            self._data["evl"],
+            self._evl_transform,
+            self._data["Phi"]["Phi_mn"][jnp.newaxis],
+        ).squeeze(axis=0)
         self._data["evl"]["|B_out|^2"] = dot(B_out_tan, B_out_tan)
         return self._data
 
 
-@partial(vmap_chunked, in_axes=(None, None, 0), chunk_size=None)
+@partial(vmap, in_axes=(None, None, 0))
 def _surface_gradient(data, transform, c):
     # TODO (#1531): Can make this more efficient O(N) instead of O(N^2).
     assert c.size == transform.basis.num_modes
@@ -407,110 +394,21 @@ def _surface_gradient(data, transform, c):
     ]
 
 
-def _boundary_condition(self):
-    """Returns γ = (n × ∇)⁻¹ (n × B_coil)."""
+def _free_boundary_bc(self, chunk_size=None):
+    """Returns γ = (n × ∇)⁻¹ (n × B_coil).
+
+    Solved in an under-determined sense.
+    """
     if "gamma" in self._data["Phi"]:
         return self._data
 
-    A = _surface_gradient(
-        self._data["Phi"], self._phi_transform, jnp.eye(self.basis.num_modes)
-    ).T
-    # check dims here
-    assert A.shape == (3, self.Phi_grid.num_nodes, self.basis.num_modes)
-    gamma_mn = (
-        jnp.linalg.solve(A, self._data["Phi"]["n x B_coil"].T)
-        if (self.Phi_grid.num_nodes == self.basis.num_modes)
-        else jnp.linalg.lstsq(A, self._data["Phi"]["n x B_coil"].T)[0]
-    )
-    self._data["Phi"]["gamma"] = self._phi_transform.transform(gamma_mn)
-
-    return self._data
-
-
-@partial(jit, static_argnames=["chunk_size"])
-def _lsmr_Phi(self, basis=None, *, chunk_size=None):
-    """Compute Fourier harmonics Φ̃ by solving least squares system."""
-    if "Phi_mn" in self._data["Phi"]:
-        return self._data
-
-    self._data = _boundary_condition(self)
-    gamma = self._data["Phi"]["gamma"]
-
-    basis = setdefault(basis, self.basis)
-    evl_Phi = basis.evaluate(self.Phi_grid)
-    src_data = self._data["src"].copy()
-    src_data["Phi"] = (
-        evl_Phi if self._same_grid_phi_src else basis.evaluate(self.src_grid)
-    )
-    A = evl_Phi / 2 + _H(self, src_data, chunk_size, basis)
-    assert A.shape == (self.Phi_grid.num_nodes, basis.num_modes)
-
-    # Solving overdetermined system useful to reduce size of A while
-    # retaining FFT interpolation accuracy in the singular integrals.
-    self._data["Phi"]["Phi_mn"] = (
-        jnp.linalg.solve(A, gamma)
-        if (self.Phi_grid.num_nodes == basis.num_modes)
-        else jnp.linalg.lstsq(A, gamma)[0]
-    )
-    return self._data
-
-
-def _fredholm_Phi(Phi_k, self, chunk_size=None):
-    """Compute Fredholm integral operator T(Φ) = q⁻¹(γ - H Φ).
-
-    Parameters
-    ----------
-    Phi_k : jnp.ndarray
-        Φ values on ``self._Phi_grid``.
-
-    Returns
-    -------
-    Phi_k+1 : jnp.ndarray
-        Fredholm integral operator computed on ``self._Phi_grid``.
-
-    """
-    src_data = self._data["src"].copy()
-    src_data["Phi"] = self._upsample_to_source(Phi_k, is_fourier=False)
-    gamma = self._data["Phi"]["gamma"]
-    H = _H(self, src_data, chunk_size).squeeze(axis=-1)
-    return 2 * (gamma - H)
-
-
-@partial(jit, static_argnames=["tol", "maxiter", "method", "chunk_size"])
-def _fixed_point_Phi(
-    self,
-    Phi_0=None,
-    *,
-    tol=1e-6,
-    maxiter=20,
-    method="del2",
-    chunk_size=None,
-):
-    assert self.Phi_grid.can_fft2
-    if "Phi_mn" in self._data["Phi"]:
-        return self._data
-
-    self._data = _boundary_condition(self)
-
-    if Phi_0 is None:
-        basis = DoubleFourierSeries(
-            M=min(self.basis.M, 3),
-            N=min(self.basis.N, 3),
-            NFP=self.basis.NFP,
-            sym=self.basis.sym,
+    A = flatten_matrix(
+        _surface_gradient(
+            self._data["Phi"], self._phi_transform, jnp.eye(self.basis.num_modes)
         )
-        self._data = _lsmr_Phi(self, basis, chunk_size=chunk_size)
-        Phi_0 = basis.evaluate(self.Phi_grid) @ self._data["Phi"]["Phi_mn"]
+    ).T
+    assert A.shape == (self.Phi_grid.num_nodes * 3, self.basis.num_modes)
+    gamma = jnp.linalg.lstsq(A, self._data["Phi"]["n x B0"].ravel())[0]
+    self._data["Phi"]["gamma"] = self._phi_transform.transform(gamma)
 
-    Phi = fixed_point(
-        _fredholm_Phi,
-        Phi_0,
-        (self, chunk_size),
-        tol,
-        maxiter,
-        method,
-        scalar=True,
-    )
-
-    self._data["Phi"]["Phi_mn"] = self._phi_transform.fit(Phi)
     return self._data

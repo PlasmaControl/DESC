@@ -1,6 +1,6 @@
 from functools import partial
 
-from desc.backend import jit, jnp, vmap
+from desc.backend import jit, jnp
 from desc.basis import DoubleFourierSeries
 from desc.grid import LinearGrid
 from desc.integrals._vacuum import _fixed_point_Phi, _lsmr_Phi
@@ -13,7 +13,7 @@ from desc.integrals.singularities import (
 )
 from desc.io import IOAble
 from desc.transform import Transform
-from desc.utils import cross, dot, errorif, flatten_matrix, setdefault, warnif
+from desc.utils import cross, dot, errorif, setdefault, warnif
 
 
 @partial(jit, static_argnames=["chunk_size", "loop"])
@@ -175,11 +175,8 @@ class FreeBoundarySolver(IOAble):
     ----------
     surface : Surface
         Geometry defining ∂𝒳.
-    B0 : _MagneticField
-        Magnetic field produced by coils plus fields that generate
-        the net toroidal plasma current inside the plasma and
-        the net poloidal plasma current outside the plasma.
-        That is B0 = B_coil + B1 + B2 where B1, B2 produces ``I``, ``G``
+    B_coil : _MagneticField
+        Magnetic field produced by coils.
         as would be computed by ``eq.compute(["I","G"]).
     evl_grid : Grid
         Evaluation points on ∂𝒳 for the magnetic field.
@@ -212,7 +209,7 @@ class FreeBoundarySolver(IOAble):
     def __init__(
         self,
         surface,
-        B0,
+        B_coil,
         evl_grid,
         src_grid=None,
         Phi_grid=None,
@@ -268,9 +265,9 @@ class FreeBoundarySolver(IOAble):
         else:
             Phi_data = surface.compute(geometric_names, grid=Phi_grid)
         self._phi_transform = Transform(Phi_grid, basis, derivs=1, build_pinv=True)
-        Phi_data["n x B0"] = cross(
+        Phi_data["n x B_coil"] = cross(
             Phi_data["n_rho"],
-            B0.compute_magnetic_field(
+            B_coil.compute_magnetic_field(
                 coords=Phi_data["x"], source_grid=src_grid, chunk_size=chunk_size
             ),
         )
@@ -346,7 +343,7 @@ class FreeBoundarySolver(IOAble):
              Fourier coefficients of Φ on ∂𝒳 stored in ``data["Phi"]["Phi_mn"]``.
 
         """
-        warnif(kwargs.get("warn", True) and (maxiter > 0), msg="Still debugging")
+        warnif(kwargs.get("warn", True) and (maxiter > 0), msg="This is experimental.")
         self._data = (
             _fixed_point_Phi(
                 self,
@@ -374,18 +371,14 @@ class FreeBoundarySolver(IOAble):
         if "|B_out|^2" in self._data["evl"]:
             return self._data
         self._data = self.compute_Phi(chunk_size)
-        B_out_tan = _surface_gradient(
-            self._data["evl"],
-            self._evl_transform,
-            self._data["Phi"]["Phi_mn"][jnp.newaxis],
-        ).squeeze(axis=0)
+        B_out_tan = _surf_grad(
+            self._data["evl"], self._evl_transform, self._data["Phi"]["Phi_mn"]
+        )
         self._data["evl"]["|B_out|^2"] = dot(B_out_tan, B_out_tan)
         return self._data
 
 
-@partial(vmap, in_axes=(None, None, 0))
-def _surface_gradient(data, transform, c):
-    # TODO (#1531): Can make this more efficient O(N) instead of O(N^2).
+def _surf_grad(data, transform, c):
     assert c.size == transform.basis.num_modes
     f_t = transform.transform(c, dt=1)[:, jnp.newaxis]
     f_z = transform.transform(c, dz=1)[:, jnp.newaxis]
@@ -394,21 +387,22 @@ def _surface_gradient(data, transform, c):
     ]
 
 
-def _free_boundary_bc(self, chunk_size=None):
-    """Returns γ = (n × ∇)⁻¹ (n × B_coil).
+def _surf_grad_mat(data, basis, grid):
+    _t = basis.evaluate(grid, [0, 1, 0])[:, jnp.newaxis]
+    _z = basis.evaluate(grid, [0, 0, 1])[:, jnp.newaxis]
+    return (
+        _t * data["e_zeta"][..., jnp.newaxis] - _z * data["e_theta"][..., jnp.newaxis]
+    ) / data["|e_theta x e_zeta|"][:, jnp.newaxis, jnp.newaxis]
 
-    Solved in an under-determined sense.
-    """
+
+def _free_boundary_bc(self, chunk_size=None):
+    """Returns γ = (n × ∇)⁻¹ (n × B_coil)."""
     if "gamma" in self._data["Phi"]:
         return self._data
 
-    A = flatten_matrix(
-        _surface_gradient(
-            self._data["Phi"], self._phi_transform, jnp.eye(self.basis.num_modes)
-        )
-    ).T
-    assert A.shape == (self.Phi_grid.num_nodes * 3, self.basis.num_modes)
-    gamma = jnp.linalg.lstsq(A, self._data["Phi"]["n x B0"].ravel())[0]
+    mat = _surf_grad_mat(self._data["Phi"], self.basis, self.Phi_grid).reshape(
+        self.Phi_grid.num_nodes * 3, self.basis.num_modes
+    )
+    gamma = jnp.linalg.lstsq(mat, self._data["Phi"]["n x B_coil"].ravel())[0]
     self._data["Phi"]["gamma"] = self._phi_transform.transform(gamma)
-
     return self._data

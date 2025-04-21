@@ -1809,10 +1809,16 @@ class TestObjectiveFunction:
             jac_chunk_size=1,
         )
 
+        w0 = 1
+        w1 = 4
+        thresh0 = -1
+        dJ_ds = grid.compress(data["dJ_ds"])
+        # Shifted ReLU operation
+        dJ_ds_filtrd = (dJ_ds - thresh0) * (dJ_ds >= thresh0)
+        obj_value = w0 * jnp.sum(dJ_ds_filtrd) + w1 * jnp.max(dJ_ds_filtrd)
+
         obj.build()
-        np.testing.assert_allclose(
-            obj.compute(eq.params_dict), grid.compress(data["dJ_ds"])
-        )
+        np.testing.assert_allclose(obj.compute(eq.params_dict), obj_value)
 
     @pytest.mark.unit
     def test_generic_with_kwargs(self):

@@ -12,7 +12,7 @@ expensive computations.
 from interpax import interp1d
 from scipy.constants import elementary_charge, mu_0
 
-from desc.backend import jnp
+from desc.backend import jnp, np
 
 from ..integrals.surface_integral import surface_averages
 from ..utils import cross, dot, safediv, safenorm
@@ -522,6 +522,28 @@ def _F(params, transforms, profiles, data, **kwargs):
 )
 def _Fmag(params, transforms, profiles, data, **kwargs):
     data["|F|"] = safenorm(data["F"], axis=-1)
+    return data
+
+
+@register_compute_fun(
+    name="|F|_normalized",
+    label="|\\mathbf{J} \\times \\mathbf{B} - \\nabla p|/\\langle "
+    + "|\\nabla |B|^{2}/(2\\mu_0)| \\rangle_{vol}",
+    units="",
+    units_long="",
+    description="Magnitude of force balance error normalized by volume averaged "
+    + "magnetic pressure gradient",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["F", "<|grad(|B|^2)|/2mu0>_vol"],
+)
+def _Fmag_normalized(params, transforms, profiles, data, **kwargs):
+    data["|F|_normalized"] = data["|F|"] / np.nanmean(
+        np.abs(data["<|grad(|B|^2)|/2mu0>_vol"])
+    )
     return data
 
 

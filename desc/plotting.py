@@ -599,17 +599,18 @@ def plot_1d(eq, name, grid=None, log=False, ax=None, return_data=False, **kwargs
     if len(plot_axes) != 1:
         return ValueError(colored("Grid must be 1D", "red"))
 
+    data, ylabel = _compute(eq, name, grid, kwargs.pop("component", None))
+    label = kwargs.pop("label", None)
+
     fig, ax = _format_ax(ax, figsize=kwargs.pop("figsize", None))
 
-    color = kwargs.pop("color", colorblind_colors[0])
-    ls = kwargs.pop("ls", "-")
-    lw = kwargs.pop("lw", 1)
-    label = kwargs.pop("label", None)
-    color = parse_argname_change(color, kwargs, "linecolor", "color")
-
-    data, ylabel = _compute(eq, name, grid, kwargs.pop("component", None))
     # reshape data to 1D
     data = data.flatten()
+    ls = kwargs.pop("ls", "-")
+    lw = kwargs.pop("lw", 1)
+    color = kwargs.pop("color", colorblind_colors[0])
+    color = parse_argname_change(color, kwargs, "linecolor", "color")
+
     if log:
         data = np.abs(data)  # ensure data is positive for log plot
         ax.semilogy(
@@ -649,15 +650,7 @@ def plot_1d(eq, name, grid=None, log=False, ax=None, return_data=False, **kwargs
 
 
 def plot_2d(
-    eq,
-    name,
-    grid=None,
-    log=False,
-    normalize=False,
-    norm_name=None,
-    ax=None,
-    return_data=False,
-    **kwargs,
+    eq, name, grid=None, log=False, normalize=None, ax=None, return_data=False, **kwargs
 ):
     """Plot 2D cross-sections.
 
@@ -671,11 +664,8 @@ def plot_2d(
         Grid of coordinates to plot at.
     log : bool, optional
         Whether to use a log scale.
-    normalize : bool, optional
-        Whether to normalize a plot to be unitless. Defaults to False
-    norm_name : str, optional
-        Name of variable to normalize by. If `normalize`=True, defaults to
-        `<|grad(|B|^2)|/2mu0>_vol`.
+    normalize : str, optional
+        Name of the variable to normalize ``name`` by. Default is None.
     ax : matplotlib AxesSubplot, optional
         Axis to plot on.
     return_data : bool
@@ -722,7 +712,29 @@ def plot_2d(
         plot_2d(eq, 'sqrt(g)')
 
     """
-    normalize = parse_argname_change(normalize, kwargs, "norm_F", "normalize")
+    normalize = parse_argname_change(normalize, kwargs, "norm_name", "normalize")
+    if "norm_F" in kwargs:
+        _ = kwargs.pop("norm_F")
+        warnings.warn(
+            FutureWarning(
+                "Argument norm_F has been deprecated. If you are trying to "
+                + "normalize |F| by magnetic pressure gradient, use  "
+                + "`name=|F|_normalized` instead. If you want to normalize by "
+                + "another quantity, use the `normalize` keyword argument."
+            )
+        )
+        if normalize is None:
+            name = "|F|_normalized"
+        else:
+            raise ValueError(
+                "Cannot use both norm_F and normalize keyword arguments at "
+                + "the same time."
+            )
+    errorif(
+        not isinstance(normalize, str) or normalize is None,
+        ValueError,
+        "normalize must be a string",
+    )
     parameterization = _parse_parameterization(eq)
     if grid is None:
         grid_kwargs = {"M": 33, "N": 33, "NFP": eq.NFP, "axis": False}
@@ -752,9 +764,7 @@ def plot_2d(
     divider = make_axes_locatable(ax)
 
     if normalize:
-        # normalize force by B pressure gradient
-        norm_name = norm_name if norm_name is not None else "<|grad(|B|^2)|/2mu0>_vol"
-        norm_data, _ = _compute(eq, norm_name, grid, reshape=False)
+        norm_data, _ = _compute(eq, normalize, grid, reshape=False)
         data = data / np.nanmean(np.abs(norm_data))  # normalize
 
     # reshape data to 2D
@@ -770,14 +780,11 @@ def plot_2d(
     if log:
         data = np.abs(data)  # ensure data is positive for log plot
         contourf_kwargs["norm"] = matplotlib.colors.LogNorm()
-        if normalize:
-            contourf_kwargs["levels"] = kwargs.pop("levels", np.logspace(-6, 0, 7))
-        else:
-            logmin = max(np.floor(np.nanmin(np.log10(data))).astype(int), -16)
-            logmax = np.ceil(np.nanmax(np.log10(data))).astype(int)
-            contourf_kwargs["levels"] = kwargs.pop(
-                "levels", np.logspace(logmin, logmax, logmax - logmin + 1)
-            )
+        logmin = max(np.floor(np.nanmin(np.log10(data))).astype(int), -16)
+        logmax = np.ceil(np.nanmax(np.log10(data))).astype(int)
+        contourf_kwargs["levels"] = kwargs.pop(
+            "levels", np.logspace(logmin, logmax, logmax - logmin + 1)
+        )
     else:
         contourf_kwargs["norm"] = matplotlib.colors.Normalize()
         contourf_kwargs["levels"] = kwargs.pop(
@@ -820,7 +827,7 @@ def plot_2d(
             "%s / %s"
             % (
                 "$" + data_index[parameterization][name]["label"] + "$",
-                "$" + data_index[parameterization][norm_name]["label"] + "$",
+                "$" + data_index[parameterization][normalize]["label"] + "$",
             )
         )
     _set_tight_layout(fig)
@@ -1146,8 +1153,7 @@ def plot_fsa(  # noqa: C901
     rho=20,
     M=None,
     N=None,
-    normalize=False,
-    norm_name=None,
+    normalize=None,
     ax=None,
     return_data=False,
     grid=None,
@@ -1182,9 +1188,6 @@ def plot_fsa(  # noqa: C901
         Toroidal grid resolution. Default is eq.N_grid.
     normalize : bool, optional
         Whether to normalize a plot to be unitless. Defaults to False.
-    norm_name : str, optional
-        Name of variable to normalize by. If `normalize`=True, defaults to
-        `<|grad(|B|^2)|/2mu0>_vol`.
     ax : matplotlib AxesSubplot, optional
         Axis to plot on.
     return_data : bool
@@ -1229,7 +1232,29 @@ def plot_fsa(  # noqa: C901
         fig, ax = plot_fsa(eq, "B_theta", with_sqrt_g=False)
 
     """
-    normalize = parse_argname_change(normalize, kwargs, "norm_F", "normalize")
+    normalize = parse_argname_change(normalize, kwargs, "norm_name", "normalize")
+    if "norm_F" in kwargs:
+        _ = kwargs.pop("norm_F")
+        warnings.warn(
+            FutureWarning(
+                "Argument norm_F has been deprecated. If you are trying to "
+                + "normalize |F| by magnetic pressure gradient, use  "
+                + "`name=|F|_normalized` instead. If you want to normalize by "
+                + "another quantity, use the `normalize` keyword argument."
+            )
+        )
+        if normalize is None:
+            name = "|F|_normalized"
+        else:
+            raise ValueError(
+                "Cannot use both norm_F and normalize keyword arguments at "
+                + "the same time."
+            )
+    errorif(
+        not isinstance(normalize, str) or normalize is None,
+        ValueError,
+        "normalize must be a string",
+    )
     if M is None:
         M = eq.M_grid
     if N is None:
@@ -1326,9 +1351,7 @@ def plot_fsa(  # noqa: C901
         plot_data_ylabel_key = f"<{name}>_fsa"
 
     if normalize:
-        # normalize force by B pressure gradient
-        norm_name = norm_name if norm_name is not None else "<|grad(|B|^2)|/2mu0>_vol"
-        norm_data = _compute(eq, norm_name, grid, reshape=False)[0]
+        norm_data = _compute(eq, normalize, grid, reshape=False)[0]
         values = values / np.nanmean(np.abs(norm_data))  # normalize
     if log:
         values = np.abs(values)  # ensure data is positive for log plot
@@ -1349,7 +1372,7 @@ def plot_fsa(  # noqa: C901
             "%s / %s"
             % (
                 "$" + data_index[p][name]["label"] + "$",
-                "$" + data_index[p][norm_name]["label"] + "$",
+                "$" + data_index[p][normalize]["label"] + "$",
             ),
             fontsize=ylabel_fontsize,
         )
@@ -1371,15 +1394,7 @@ def plot_fsa(  # noqa: C901
 
 
 def plot_section(
-    eq,
-    name,
-    grid=None,
-    log=False,
-    normalize=None,
-    norm_name=None,
-    ax=None,
-    return_data=False,
-    **kwargs,
+    eq, name, grid=None, log=False, normalize=None, ax=None, return_data=False, **kwargs
 ):
     """Plot Poincare sections.
 
@@ -1396,9 +1411,6 @@ def plot_section(
     normalize : bool, optional
         Whether to normalize a plot to be unitless. If `name`=`|F|`, defaults to
         True, otherwise False.
-    norm_name : str, optional
-        Name of variable to normalize by. If `normalize`=True, defaults to
-        `<|grad(|B|^2)|/2mu0>_vol`.
     ax : matplotlib AxesSubplot, optional
         Axis to plot on.
     return_data : bool
@@ -1444,7 +1456,29 @@ def plot_section(
         fig, ax = plot_section(eq, "J^rho")
 
     """
-    normalize = parse_argname_change(normalize, kwargs, "norm_F", "normalize")
+    normalize = parse_argname_change(normalize, kwargs, "norm_name", "normalize")
+    if "norm_F" in kwargs:
+        _ = kwargs.pop("norm_F")
+        warnings.warn(
+            FutureWarning(
+                "Argument norm_F has been deprecated. If you are trying to "
+                + "normalize |F| by magnetic pressure gradient, use  "
+                + "`name=|F|_normalized` instead. If you want to normalize by "
+                + "another quantity, use the `normalize` keyword argument."
+            )
+        )
+        if normalize is None:
+            name = "|F|_normalized"
+        else:
+            raise ValueError(
+                "Cannot use both norm_F and normalize keyword arguments at "
+                + "the same time."
+            )
+    errorif(
+        not isinstance(normalize, str) or normalize is None,
+        ValueError,
+        "normalize must be a string",
+    )
     phi = kwargs.pop("phi", (1 if eq.N == 0 else 6))
     phi = parse_argname_change(phi, kwargs, "nzeta", "phi")
     phi = parse_argname_change(phi, kwargs, "nphi", "phi")
@@ -1490,12 +1524,8 @@ def plot_section(
     cols = np.ceil(nphi / rows).astype(int)
 
     data, label = _compute(eq, name, grid, kwargs.pop("component", None), reshape=False)
-    if normalize is None:
-        normalize = True if name == "|F|" else False
     if normalize:
-        # normalize force by B pressure gradient
-        norm_name = norm_name if norm_name is not None else "<|grad(|B|^2)|/2mu0>_vol"
-        norm_data, _ = _compute(eq, norm_name, grid, reshape=False)
+        norm_data, _ = _compute(eq, normalize, grid, reshape=False)
         data = data / np.nanmean(np.abs(norm_data))  # normalize
 
     figw = 5 * cols
@@ -1520,14 +1550,11 @@ def plot_section(
     if log:
         data = np.abs(data)  # ensure data is positive for log plot
         contourf_kwargs["norm"] = matplotlib.colors.LogNorm()
-        if normalize:
-            contourf_kwargs["levels"] = kwargs.pop("levels", np.logspace(-6, 0, 7))
-        else:
-            logmin = np.floor(np.nanmin(np.log10(data))).astype(int)
-            logmax = np.ceil(np.nanmax(np.log10(data))).astype(int)
-            contourf_kwargs["levels"] = kwargs.pop(
-                "levels", np.logspace(logmin, logmax, logmax - logmin + 1)
-            )
+        logmin = np.floor(np.nanmin(np.log10(data))).astype(int)
+        logmax = np.ceil(np.nanmax(np.log10(data))).astype(int)
+        contourf_kwargs["levels"] = kwargs.pop(
+            "levels", np.logspace(logmin, logmax, logmax - logmin + 1)
+        )
     else:
         contourf_kwargs["norm"] = matplotlib.colors.Normalize()
         contourf_kwargs["levels"] = kwargs.pop(
@@ -1577,7 +1604,7 @@ def plot_section(
                     ]
                     + "$",
                     "$"
-                    + data_index["desc.equilibrium.equilibrium.Equilibrium"][norm_name][
+                    + data_index["desc.equilibrium.equilibrium.Equilibrium"][normalize][
                         "label"
                     ]
                     + "$",

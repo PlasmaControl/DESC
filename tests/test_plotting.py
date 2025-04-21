@@ -443,7 +443,7 @@ class TestPlotSection:
     def test_section_logF(self):
         """Test plotting poincare section of force magnitude on log scale."""
         eq = get("DSHAPE_CURRENT")
-        fig, ax = plot_section(eq, "|F|", log=True, normalize=False)
+        fig, ax = plot_section(eq, "|F|", log=True)
         return fig
 
     @pytest.mark.unit
@@ -451,7 +451,7 @@ class TestPlotSection:
     def test_plot_normF_section(self):
         """Test Poincare section plot of normalized force on log scale."""
         eq = get("DSHAPE_CURRENT")
-        fig, ax = plot_section(eq, "|F|", normalize=True, log=True)
+        fig, ax = plot_section(eq, "|F|_normalized", log=True)
         return fig
 
 

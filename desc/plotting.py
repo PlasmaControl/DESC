@@ -3625,10 +3625,10 @@ def plot_field_lines(
     field,
     R0,
     Z0,
-    Phi0=0,
+    phi0=0,
     ntransit=1,
     nphi_per_transit=50,
-    endpoint=False,
+    endpoint=True,
     fig=None,
     return_data=False,
     **kwargs,
@@ -3641,7 +3641,7 @@ def plot_field_lines(
         External field, coilset, current potential etc to plot from.
     R0, Z0 : array-like
         Starting points for field line tracing.
-    Phi0 : float
+    phi0 : float
         Starting value of phi for field line tracing in radians. Defaults to 0.
     ntransit : int, float
         Number of transits to trace field lines for. Defaults to 1.
@@ -3650,8 +3650,8 @@ def plot_field_lines(
         points to plot for each field line per transit.
         Defaults to 50.
     endpoint : bool
-        If True, [Phi0, Phi0+2*Pi*ntransit] is included in the field line.
-        If False, [Phi0, Phi0+2*Pi*ntransit). Defaults to False.
+        If True, the point phi0+2*pi*ntransit is included, else the last point
+        is phi0 + 2*np.pi*(ntransit - 1/nphi_per_transit). Defaults to True.
     fig : plotly.graph_objs._figure.Figure, optional
         Figure to plot on.
     return_data : bool
@@ -3736,7 +3736,7 @@ def plot_field_lines(
 
     nphi_per_transit = check_posint(nphi_per_transit, "nphi_per_transit", False)
     npts = int(nphi_per_transit * ntransit)
-    phis = np.linspace(0, 2 * np.pi * ntransit, npts, endpoint=endpoint) + Phi0
+    phis = np.linspace(0, 2 * np.pi * ntransit, npts, endpoint=endpoint) + phi0
 
     R0, Z0 = np.atleast_1d(R0, Z0)
 

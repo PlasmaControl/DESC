@@ -1,5 +1,6 @@
 """Classes for parameterized 3D space curves."""
 
+import os
 import warnings
 
 import numpy as np
@@ -221,6 +222,7 @@ class FourierRZCurve(Curve):
             Axis with given Fourier coefficients.
 
         """
+        path = os.path.expanduser(path)
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             inputs = InputReader().parse_inputs(path)[-1]

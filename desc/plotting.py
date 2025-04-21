@@ -713,7 +713,7 @@ def plot_2d(
     """
     normalize = parse_argname_change(normalize, kwargs, "norm_name", "normalize")
     if "norm_F" in kwargs:
-        _ = kwargs.pop("norm_F")
+        norm_F = kwargs.pop("norm_F")
         warnings.warn(
             FutureWarning(
                 "Argument norm_F has been deprecated. If you are trying to "
@@ -722,15 +722,15 @@ def plot_2d(
                 + "another quantity, use the `normalize` keyword argument."
             )
         )
-        if normalize is None:
+        if normalize is None and norm_F:
             name = "|F|_normalized"
-        else:
+        elif normalize is not None and norm_F:
             raise ValueError(
                 "Cannot use both norm_F and normalize keyword arguments at "
                 + "the same time."
             )
     errorif(
-        not isinstance(normalize, str) or normalize is None,
+        not (isinstance(normalize, str) or normalize is None),
         ValueError,
         "normalize must be a string",
     )
@@ -1233,7 +1233,7 @@ def plot_fsa(  # noqa: C901
     """
     normalize = parse_argname_change(normalize, kwargs, "norm_name", "normalize")
     if "norm_F" in kwargs:
-        _ = kwargs.pop("norm_F")
+        norm_F = kwargs.pop("norm_F")
         warnings.warn(
             FutureWarning(
                 "Argument norm_F has been deprecated. If you are trying to "
@@ -1242,15 +1242,15 @@ def plot_fsa(  # noqa: C901
                 + "another quantity, use the `normalize` keyword argument."
             )
         )
-        if normalize is None:
+        if normalize is None and norm_F:
             name = "|F|_normalized"
-        else:
+        elif normalize is not None and norm_F:
             raise ValueError(
                 "Cannot use both norm_F and normalize keyword arguments at "
                 + "the same time."
             )
     errorif(
-        not isinstance(normalize, str) or normalize is None,
+        not (isinstance(normalize, str) or normalize is None),
         ValueError,
         "normalize must be a string",
     )
@@ -1451,7 +1451,7 @@ def plot_section(
     """
     normalize = parse_argname_change(normalize, kwargs, "norm_name", "normalize")
     if "norm_F" in kwargs:
-        _ = kwargs.pop("norm_F")
+        norm_F = kwargs.pop("norm_F")
         warnings.warn(
             FutureWarning(
                 "Argument norm_F has been deprecated. If you are trying to "
@@ -1460,15 +1460,15 @@ def plot_section(
                 + "another quantity, use the `normalize` keyword argument."
             )
         )
-        if normalize is None:
+        if normalize is None and norm_F:
             name = "|F|_normalized"
-        else:
+        elif normalize is not None and norm_F:
             raise ValueError(
                 "Cannot use both norm_F and normalize keyword arguments at "
                 + "the same time."
             )
     errorif(
-        not isinstance(normalize, str) or normalize is None,
+        not (isinstance(normalize, str) or normalize is None),
         ValueError,
         "normalize must be a string",
     )

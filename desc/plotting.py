@@ -1259,7 +1259,6 @@ def plot_fsa(  # noqa: C901
         M = eq.M_grid
     if N is None:
         N = eq.N_grid
-
     if grid is None:
         if np.isscalar(rho) and (int(rho) == rho):
             rho = np.linspace(0, 1, rho + 1)
@@ -1269,11 +1268,11 @@ def plot_fsa(  # noqa: C901
         rho = grid.compress(grid.nodes[:, 0])
 
     color = kwargs.pop("color", colorblind_colors[0])
+    color = parse_argname_change(color, kwargs, "linecolor", "color")
     ls = kwargs.pop("ls", "-")
     lw = kwargs.pop("lw", 1)
     fig, ax = _format_ax(ax, figsize=kwargs.pop("figsize", (4, 4)))
 
-    color = parse_argname_change(color, kwargs, "linecolor", "color")
     label = kwargs.pop("label", None)
     p = "desc.equilibrium.equilibrium.Equilibrium"
     if "<" + name + ">" in data_index[p]:
@@ -1288,7 +1287,6 @@ def plot_fsa(  # noqa: C901
             # surface average we have the recipe to compute in data_index is the
             # desired surface average.
             name = "<" + name + ">"
-
     values, ylabel = _compute(
         eq, name, grid, kwargs.pop("component", None), reshape=False
     )
@@ -1329,9 +1327,7 @@ def plot_fsa(  # noqa: C901
             if (np.isfinite(values) & np.isfinite(values_r))[grid.axis].all():
                 # Otherwise cannot compute axis limit in this agnostic manner.
                 sqrt_g = grid.replace_at_axis(
-                    sqrt_g,
-                    _compute(eq, "sqrt(g)_r", grid, reshape=False)[0],
-                    copy=True,
+                    sqrt_g, _compute(eq, "sqrt(g)_r", grid, reshape=False)[0], copy=True
                 )
             averages = compute_surface_averages(values, sqrt_g=sqrt_g)
             ylabel = r"$\langle " + ylabel[0][1:] + r" \rangle~" + "~".join(ylabel[1:])
@@ -1383,7 +1379,7 @@ def plot_fsa(  # noqa: C901
 
     plot_data = {"rho": rho, plot_data_ylabel_key: values}
     if normalize:
-        plot_data["normalization"] = norm_data
+        plot_data["normalization"] = np.nanmean(np.abs(norm_data))
     else:
         plot_data["normalization"] = 1
 

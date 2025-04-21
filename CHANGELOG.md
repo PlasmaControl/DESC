@@ -16,6 +16,10 @@ Optionally can also contract the profiles of the original ``Equilibrium`` so tha
     - Renames `norm_F` keyword argument to `normalize` to emphasize the more general usage of it.
     - Renames `linecolor` keyword argument of `plot_1d` and `plot_fsa` to `color` for consistency among plotting functions.
 
+Bug Fixes
+
+- Fixes bug where ``ObjectiveFunction`` was incorrectly using ``deriv_mode="batched"`` and the heuristic-set ``jac_chunk_size`` when ``jac_chunk_size`` is given to a sub-objective, where it should have instead defaulted to ``deriv_mode="blocked"``. See #1687 
+
 
 v0.14.1
 -------

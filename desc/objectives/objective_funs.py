@@ -358,7 +358,9 @@ class ObjectiveFunction(IOAble):
         )
 
         if self._deriv_mode == "auto":
-            if all((obj._deriv_mode == "fwd") for obj in self.objectives):
+            if all((obj._deriv_mode == "fwd") for obj in self.objectives) and not any(
+                sub_obj_jac_chunk_sizes_are_ints
+            ):
                 self._deriv_mode = "batched"
             else:
                 self._deriv_mode = "blocked"

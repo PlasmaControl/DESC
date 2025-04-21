@@ -441,7 +441,7 @@ def _adiabatic_J(params, transforms, profiles, data, **kwargs):
                 [_adiabatic_J_num],
                 pitch_inv,
                 data,
-                ["B^zeta"],
+                [],
                 bounce.points(pitch_inv, num_well),
                 is_fourier=True,
             )

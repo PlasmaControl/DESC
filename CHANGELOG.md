@@ -11,14 +11,13 @@ Optionally can also contract the profiles of the original ``Equilibrium`` so tha
 - Updates Redl bootstrap current consistency tutorial to include a ``SplineProfile`` optimization
 - Adds automatically generated header file showing date the input file was created with `desc.vmec.VMECIO.write_vmec_input`
 - Multiple plotting related changes:
-    - `plot_section` when called with `name=|F|` is now defaults to show the normalized force error. To get the old behavor, user needs to pass in `normalize=False`.
+    - Renames `norm_F` keyword argument to `normalize` and removes `norm_name`. `normalize` is a string to use for normalisation. If you want to get the old behavior `plot_section(eq, "|F|", norm_F=True)`, use instead `plot_section(eq, "|F|_normalized")`.
     - `plot_basis` can now plot every basis type. It can also plot the derivatives, if the derivative is implemented.
-    - Renames `norm_F` keyword argument to `normalize` to emphasize the more general usage of it.
     - Renames `linecolor` keyword argument of `plot_1d` and `plot_fsa` to `color` for consistency among plotting functions.
 
 Bug Fixes
 
-- Fixes bug where ``ObjectiveFunction`` was incorrectly using ``deriv_mode="batched"`` and the heuristic-set ``jac_chunk_size`` when ``jac_chunk_size`` is given to a sub-objective, where it should have instead defaulted to ``deriv_mode="blocked"``. See #1687 
+- Fixes bug where ``ObjectiveFunction`` was incorrectly using ``deriv_mode="batched"`` and the heuristic-set ``jac_chunk_size`` when ``jac_chunk_size`` is given to a sub-objective, where it should have instead defaulted to ``deriv_mode="blocked"``. See #1687
 
 
 v0.14.1

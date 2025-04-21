@@ -610,7 +610,6 @@ def plot_1d(eq, name, grid=None, log=False, ax=None, return_data=False, **kwargs
     lw = kwargs.pop("lw", 1)
     color = kwargs.pop("color", colorblind_colors[0])
     color = parse_argname_change(color, kwargs, "linecolor", "color")
-
     if log:
         data = np.abs(data)  # ensure data is positive for log plot
         ax.semilogy(
@@ -1354,7 +1353,6 @@ def plot_fsa(  # noqa: C901
         ax.semilogy(rho, values, label=label, color=color, ls=ls, lw=lw)
     else:
         ax.plot(rho, values, label=label, color=color, ls=ls, lw=lw)
-
     xlabel_fontsize = kwargs.pop("xlabel_fontsize", None)
     ylabel_fontsize = kwargs.pop("ylabel_fontsize", None)
     assert (

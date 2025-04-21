@@ -538,7 +538,7 @@ def _Fmag(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["F", "<|grad(|B|^2)|/2mu0>_vol"],
+    data=["|F|", "<|grad(|B|^2)|/2mu0>_vol"],
 )
 def _Fmag_normalized(params, transforms, profiles, data, **kwargs):
     data["|F|_normalized"] = data["|F|"] / jnp.nanmean(

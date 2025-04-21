@@ -3684,11 +3684,9 @@ def plot_basis(  # noqa : C901
         plot_data = {"amplitude": [], "rho": r, "theta": v}
 
         ax = {i: {} for i in range(lmax + 1)}
-        ratios = np.ones(2 * (mmax + 1) + 1)
+        ratios = np.ones(2 * (mmax + 1))
         ratios[-1] = kwargs.get("cbar_ratio", 0.15)
-        gs = matplotlib.gridspec.GridSpec(
-            lmax + 1, 2 * (mmax + 1) + 1, width_ratios=ratios
-        )
+        gs = matplotlib.gridspec.GridSpec(lmax + 1, 2 * (mmax + 1), width_ratios=ratios)
 
         modes = basis.modes[basis.modes[:, 2] == 0]
         plot_data["l"] = basis.modes[:, 0]
@@ -3698,8 +3696,7 @@ def plot_basis(  # noqa : C901
             zip(modes[:, 0].astype(int), modes[:, 1].astype(int))
         ):
             Z = Zs[:, i].reshape((grid.num_rho, grid.num_theta))
-            ax[l][m] = plt.subplot(gs[l, m + mmax : m + mmax + 2], projection="polar")
-            ax[l][m].set_title("$l={}, m={}$".format(l, m))
+            ax[l][m] = plt.subplot(gs[l, m + mmax : m + mmax + 1], projection="polar")
             ax[l][m].axis("off")
             im = ax[l][m].contourf(
                 v,
@@ -3708,6 +3705,7 @@ def plot_basis(  # noqa : C901
                 levels=np.linspace(-1, 1, 100) if no_derivative else 100,
                 cmap=kwargs.get("cmap", "coolwarm"),
             )
+            ax[l][m].set_title("$l={}, m={}$".format(l, m))
             plot_data["amplitude"].append(Zs)
 
         cb_ax = plt.subplot(gs[:, -1])

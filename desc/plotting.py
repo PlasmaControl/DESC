@@ -648,7 +648,7 @@ def plot_1d(eq, name, grid=None, log=False, ax=None, return_data=False, **kwargs
     return fig, ax
 
 
-def plot_2d(
+def plot_2d(  # noqa : C901
     eq, name, grid=None, log=False, normalize=None, ax=None, return_data=False, **kwargs
 ):
     """Plot 2D cross-sections.
@@ -729,6 +729,11 @@ def plot_2d(
                 "Cannot use both norm_F and normalize keyword arguments at "
                 + "the same time."
             )
+    # writing a compute function for this quantity is buggy because of the logic
+    # https://github.com/PlasmaControl/DESC/pull/1024#discussion_r1663080423.
+    if name == "|F|_normalized":
+        name = "|F|"
+        normalize = "<|grad(|B|^2)|/2mu0>_vol"
     errorif(
         not (isinstance(normalize, str) or normalize is None),
         ValueError,
@@ -1249,6 +1254,11 @@ def plot_fsa(  # noqa: C901
                 "Cannot use both norm_F and normalize keyword arguments at "
                 + "the same time."
             )
+    # writing a compute function for this quantity is buggy because of the logic
+    # https://github.com/PlasmaControl/DESC/pull/1024#discussion_r1663080423.
+    if name == "|F|_normalized":
+        name = "|F|"
+        normalize = "<|grad(|B|^2)|/2mu0>_vol"
     errorif(
         not (isinstance(normalize, str) or normalize is None),
         ValueError,
@@ -1467,6 +1477,11 @@ def plot_section(
                 "Cannot use both norm_F and normalize keyword arguments at "
                 + "the same time."
             )
+    # writing a compute function for this quantity is buggy because of the logic
+    # https://github.com/PlasmaControl/DESC/pull/1024#discussion_r1663080423.
+    if name == "|F|_normalized":
+        name = "|F|"
+        normalize = "<|grad(|B|^2)|/2mu0>_vol"
     errorif(
         not (isinstance(normalize, str) or normalize is None),
         ValueError,

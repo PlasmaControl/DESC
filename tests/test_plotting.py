@@ -219,7 +219,7 @@ class TestPlot2D:
         fig, ax, data = plot_2d(
             eq, "|F|_normalized", figsize=(4, 4), return_data=True, grid=grid
         )
-        for string in ["|F|", "theta", "zeta"]:
+        for string in ["|F|_normalized", "theta", "zeta"]:
             assert string in data.keys()
         return fig
 

@@ -1186,8 +1186,8 @@ def plot_fsa(  # noqa: C901
         Poloidal grid resolution. Default is eq.M_grid.
     N : int, optional
         Toroidal grid resolution. Default is eq.N_grid.
-    normalize : bool, optional
-        Whether to normalize a plot to be unitless. Defaults to False.
+    normalize : str, optional
+        Name of the variable to normalize ``name`` by. Default is None.
     ax : matplotlib AxesSubplot, optional
         Axis to plot on.
     return_data : bool
@@ -1408,9 +1408,8 @@ def plot_section(
         Grid of coordinates to plot at.
     log : bool, optional
         Whether to use a log scale.
-    normalize : bool, optional
-        Whether to normalize a plot to be unitless. If `name`=`|F|`, defaults to
-        True, otherwise False.
+    normalize : str, optional
+        Name of the variable to normalize ``name`` by. Default is None.
     ax : matplotlib AxesSubplot, optional
         Axis to plot on.
     return_data : bool

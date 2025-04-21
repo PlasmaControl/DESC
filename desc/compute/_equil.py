@@ -12,7 +12,7 @@ expensive computations.
 from interpax import interp1d
 from scipy.constants import elementary_charge, mu_0
 
-from desc.backend import jnp, np
+from desc.backend import jnp
 
 from ..integrals.surface_integral import surface_averages
 from ..utils import cross, dot, safediv, safenorm
@@ -541,8 +541,8 @@ def _Fmag(params, transforms, profiles, data, **kwargs):
     data=["F", "<|grad(|B|^2)|/2mu0>_vol"],
 )
 def _Fmag_normalized(params, transforms, profiles, data, **kwargs):
-    data["|F|_normalized"] = data["|F|"] / np.nanmean(
-        np.abs(data["<|grad(|B|^2)|/2mu0>_vol"])
+    data["|F|_normalized"] = data["|F|"] / jnp.nanmean(
+        jnp.abs(data["<|grad(|B|^2)|/2mu0>_vol"])
     )
     return data
 

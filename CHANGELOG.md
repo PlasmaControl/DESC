@@ -12,6 +12,11 @@ Optionally can also contract the profiles of the original ``Equilibrium`` so tha
 - Adds automatically generated header file showing date the input file was created with `desc.vmec.VMECIO.write_vmec_input`
 - Adds max-J(dJ\_ds), direct omnigenity(dJ\_dalpha), adiabaric J compute, plotting and optimization objectives
 
+Bug Fixes
+
+- Fixes bug where ``ObjectiveFunction`` was incorrectly using ``deriv_mode="batched"`` and the heuristic-set ``jac_chunk_size`` when ``jac_chunk_size`` is given to a sub-objective, where it should have instead defaulted to ``deriv_mode="blocked"``. See #1687
+
+
 v0.14.1
 -------
 

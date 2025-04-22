@@ -10,8 +10,8 @@ from numpy.polynomial.chebyshev import chebinterpolate, chebroots
 from numpy.polynomial.legendre import leggauss
 from scipy import integrate
 from scipy.interpolate import CubicHermiteSpline
-from scipy.special import ellipe, ellipkm1
-from tests.test_interp_utils import _f_1d, _f_1d_nyquist_freq
+from scipy.special import ellipe, ellipk, ellipkm1
+from tests.test_interp_utils import _f_1d, _f_1d_nyquist_freq, _f_2d, _f_2d_nyquist_freq
 from tests.test_plotting import tol_1d
 
 from desc.backend import jnp, vmap
@@ -53,7 +53,14 @@ from desc.integrals.quad_utils import (
     leggauss_lob,
     tanh_sinh,
 )
-from desc.integrals.singularities import _get_quadrature_nodes
+from desc.integrals.singularities import (
+    _get_quadrature_nodes,
+    _kernel_nr_over_r3,
+    _local_params,
+    _vanilla_params,
+    best_params,
+    best_ratio,
+)
 from desc.integrals.surface_integral import _get_grid_surface
 from desc.transform import Transform
 from desc.utils import dot, errorif, safediv
@@ -617,42 +624,40 @@ class TestSingularities:
 
         """
         eq = Equilibrium()
-        Nv = np.array([30, 45, 60, 90, 120, 150, 240])
-        Nu = np.array([13, 13, 13, 19, 19, 25, 37])
-        ss = np.array([13, 13, 13, 19, 19, 25, 37])
-        qs = np.array([10, 12, 12, 16, 18, 20, 24])
-        es = np.array([0.4, 2e-2, 3e-3, 5e-5, 4e-6, 1e-6, 1e-9])
-        eval_grid = LinearGrid(M=5, N=6, NFP=eq.NFP)
+        Nu = [13, 13, 13, 19, 19, 25, 37]
+        Nv = [30, 45, 60, 90, 120, 150, 240]
+        ss = [13, 13, 13, 19, 19, 25, 37]
+        qs = [10, 12, 12, 16, 18, 20, 24]
+        es = [0.4, 2e-2, 3e-3, 5e-5, 4e-6, 1e-6, 1e-9]
 
-        for i, (m, n) in enumerate(zip(Nu, Nv)):
-            source_grid = LinearGrid(M=m // 2, N=n // 2, NFP=eq.NFP)
-            source_data = eq.compute(
-                ["R", "Z", "phi", "e^rho", "|e_theta x e_zeta|"], grid=source_grid
+        for i in range(len(Nu)):
+            grid = LinearGrid(M=Nu[i] // 2, N=Nv[i] // 2, NFP=eq.NFP)
+            interpolator = FFTInterpolator(grid, grid, ss[i], ss[i], qs[i])
+            data = eq.compute(
+                _kernel_nr_over_r3.keys + ["|e_theta x e_zeta|"], grid=grid
             )
-            eval_data = eq.compute(
-                ["R", "Z", "phi", "e^rho", "|e_theta x e_zeta|"], grid=eval_grid
-            )
-            s = ss[i]
-            q = qs[i]
-            interpolator = FFTInterpolator(eval_grid, source_grid, s, q)
-
             err = singular_integral(
-                eval_data,
-                source_data,
-                "nr_over_r3",
-                interpolator,
-                loop=True,
+                data, data, "nr_over_r3", interpolator, chunk_size=50
             )
             np.testing.assert_array_less(np.abs(2 * np.pi + err), es[i])
 
+        eq = get("W7-X")
+        Nu = 100
+        Nv = 100
+        es = 6e-7
+        grid = LinearGrid(M=Nu // 2, N=Nv // 2, NFP=eq.NFP)
+        st, sz, q = best_params(grid, best_ratio(data))
+        interpolator = FFTInterpolator(grid, grid, st, sz, q)
+        data = eq.compute(_kernel_nr_over_r3.keys + ["|e_theta x e_zeta|"], grid=grid)
+        err = singular_integral(data, data, "nr_over_r3", interpolator, chunk_size=50)
+        np.testing.assert_array_less(np.abs(2 * np.pi + err), es)
+
     @pytest.mark.unit
-    def test_singular_integral_vac_estell(self):
+    @pytest.mark.parametrize("interpolator", [FFTInterpolator, DFTInterpolator])
+    def test_singular_integral_vac_estell(self, interpolator, vanilla=False):
         """Test calculating Bplasma for vacuum estell, which should be near 0."""
         eq = get("ESTELL")
-        eval_grid = LinearGrid(M=8, N=8, NFP=eq.NFP)
-
-        source_grid = LinearGrid(M=18, N=18, NFP=eq.NFP)
-
+        grid = LinearGrid(M=25, N=25, NFP=eq.NFP)
         keys = [
             "K_vc",
             "B",
@@ -664,64 +669,51 @@ class TestSingularities:
             "n_rho",
             "|e_theta x e_zeta|",
         ]
-
-        source_data = eq.compute(keys, grid=source_grid)
-        eval_data = eq.compute(keys, grid=eval_grid)
-
-        k = min(source_grid.num_theta, source_grid.num_zeta)
-        s = k // 2 + int(np.sqrt(k))
-        q = k // 2 + int(np.sqrt(k))
-
-        interpolator = FFTInterpolator(eval_grid, source_grid, s, q)
-        Bplasma = virtual_casing_biot_savart(
-            eval_data,
-            source_data,
-            interpolator,
-            loop=True,
-        )
+        data = eq.compute(keys, grid=grid)
+        if vanilla:
+            st, sz, q = _vanilla_params(grid)
+            # need to use lower tolerance since convergence is worse
+            atol = 0.015
+        else:
+            mean, local = best_ratio(data, return_local=True)
+            st, sz, q = _local_params(grid, (mean, local.mean()))  # TODO (#1609)
+            atol = 0.0054
+        interp = interpolator(grid, grid, st, sz, q)
+        Bplasma = virtual_casing_biot_savart(data, data, interp, chunk_size=50)
         # need extra factor of B/2 bc we're evaluating on plasma surface
-        Bplasma += eval_data["B"] / 2
+        Bplasma += data["B"] / 2
         Bplasma = np.linalg.norm(Bplasma, axis=-1)
         # scale by total field magnitude
-        B = Bplasma / np.mean(np.linalg.norm(eval_data["B"], axis=-1))
-        # this isn't a perfect vacuum equilibrium (|J| ~ 1e3 A/m^2), so increasing
-        # resolution of singular integral won't really make Bplasma less.
-        np.testing.assert_array_less(B, 0.05)
+        B = Bplasma / np.linalg.norm(data["B"], axis=-1).mean()
+        np.testing.assert_allclose(B, 0, atol=atol)
 
     @pytest.mark.unit
-    def test_biest_interpolators(self):
+    def test_vanilla_params(self):
+        """Test vanilla params that do not account for aspect ratio."""
+        return self.test_singular_integral_vac_estell(FFTInterpolator, vanilla=True)
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize("interpolator", [FFTInterpolator, DFTInterpolator])
+    def test_biest_interpolators(self, interpolator):
         """Test that FFT and DFT interpolation gives same result for standard grids."""
-        sgrid = LinearGrid(0, 5, 6)
-        egrid = LinearGrid(0, 4, 7)
-        s = 3
+        grid = LinearGrid(0, *_f_2d_nyquist_freq())
+        h_t = 2 * np.pi / grid.num_theta
+        h_z = 2 * np.pi / grid.num_zeta / grid.NFP
+
+        st = 3
+        sz = 5
         q = 4
-        r, w, dr, dw = _get_quadrature_nodes(q)
-        interp1 = FFTInterpolator(egrid, sgrid, s, q)
-        interp2 = DFTInterpolator(egrid, sgrid, s, q)
+        r, w, _, _ = _get_quadrature_nodes(q)
+        dt = st / 2 * h_t * r * np.sin(w)
+        dz = sz / 2 * h_z * r * np.cos(w)
 
-        f = lambda t, z: np.sin(4 * t) + np.cos(3 * z)
-
-        source_dtheta = sgrid.spacing[:, 1]
-        source_dzeta = sgrid.spacing[:, 2] / sgrid.NFP
-        source_theta = sgrid.nodes[:, 1]
-        source_zeta = sgrid.nodes[:, 2]
-        eval_theta = egrid.nodes[:, 1]
-        eval_zeta = egrid.nodes[:, 2]
-
-        h_t = np.mean(source_dtheta)
-        h_z = np.mean(source_dzeta)
-
-        for i in range(len(r)):
-            dt = s / 2 * h_t * r[i] * np.sin(w[i])
-            dz = s / 2 * h_z * r[i] * np.cos(w[i])
-            theta_i = eval_theta + dt
-            zeta_i = eval_zeta + dz
-            ff = f(theta_i, zeta_i)
-
-            g1 = interp1(f(source_theta, source_zeta), i)
-            g2 = interp2(f(source_theta, source_zeta), i)
-            np.testing.assert_allclose(g1, g2)
-            np.testing.assert_allclose(g1, ff)
+        interp = interpolator(grid, grid, st, sz, q)
+        theta = grid.nodes[:, 1]
+        zeta = grid.nodes[:, 2]
+        f = _f_2d(theta, zeta)
+        for i in range(dt.size):
+            truth = _f_2d(theta + dt[i], zeta + dz[i])
+            np.testing.assert_allclose(interp(f, i), truth)
 
 
 class TestBouncePoints:
@@ -1018,14 +1010,50 @@ class TestBounceQuadrature:
             E, TestBounceQuadrature._fixed_elliptic(E_integrand, k, 10)
         )
 
-        I_0 = 4 / k * K
-        I_1 = 4 * k * E
-        I_2 = 16 * k * E
-        I_3 = 16 * k / 9 * (2 * (-1 + 2 * k2) * E - (-1 + k2) * K)
-        I_4 = 16 * k / 3 * ((-1 + 2 * k2) * E - 2 * (-1 + k2) * K)
-        I_5 = 32 * k / 30 * (2 * (1 - k2 + k2**2) * E - (1 - 3 * k2 + 2 * k2**2) * K)
-        I_6 = 4 / k * (2 * k2 * E + (1 - 2 * k2) * K)
-        I_7 = 2 * k / 3 * ((-2 + 4 * k2) * E - 4 * (-1 + k2) * K)
+        E0 = ellipe(k2)
+        K0 = ellipk(k2)
+
+        I_00 = 4 / k * K  # Incomplete integral
+        I_0 = 4 * K0  # Complete integral
+
+        I_10 = 4 * k * E
+        I_1 = 4 * (E0 + (k2 - 1) * K0)
+
+        I_20 = 16 * k * E
+        I_2 = 16 * (E0 + (k2 - 1) * K0)
+
+        I_30 = 16 * k / 9 * (2 * (-1 + 2 * k2) * E - (-1 + k2) * K)
+        I_3 = 16 / 9 * (2 * (-1 + 2 * k2) * (E0 + (k2 - 1) * K0) - (-1 + k2) * k2 * K0)
+
+        I_40 = 16 * k / 3 * ((-1 + 2 * k2) * E - 2 * (-1 + k2) * K)
+        I_4 = 16 / 3 * ((-1 + 2 * k2) * E0 - (-1 + k2) * K0)
+
+        I_50 = 32 * k / 30 * (2 * (1 - k2 + k2**2) * E - (1 - 3 * k2 + 2 * k2**2) * K)
+        I_5 = (
+            32
+            / 30
+            * (
+                2 * (1 - k2 + k2**2) * (E0 + (k2 - 1) * K0)
+                - (1 - 3 * k2 + 2 * k2**2) * k2 * K0
+            )
+        )
+
+        I_60 = 4 / k * (2 * k2 * E + (1 - 2 * k2) * K)
+        I_6 = 4 * (2 * E0 - K0)
+
+        I_70 = 2 * k / 3 * ((-2 + 4 * k2) * E - 4 * (-1 + k2) * K)
+        I_7 = 4 / 3 * ((2 * k2 - 1) * E0 - (k2 - 1) * K0)
+
+        # Check if incomplete integral expressions match the complete integrals
+        np.testing.assert_allclose(I_0, I_00)
+        np.testing.assert_allclose(I_1, I_10)
+        np.testing.assert_allclose(I_2, I_20)
+        np.testing.assert_allclose(I_3, I_30)
+        np.testing.assert_allclose(I_4, I_40)
+        np.testing.assert_allclose(I_5, I_50)
+        np.testing.assert_allclose(I_6, I_60)
+        np.testing.assert_allclose(I_7, I_70)
+
         # Check for math mistakes.
         np.testing.assert_allclose(
             I_2,

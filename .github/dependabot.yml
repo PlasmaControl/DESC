@@ -7,6 +7,7 @@ updates:
     directory: "/" # Location of package manifests
     schedule:
       interval: "weekly"
+    labels: ["dependencies", "skip_changelog"]
     groups:
       # group similar dependencies together into fewer PRs
       docs:

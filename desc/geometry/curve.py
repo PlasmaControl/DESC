@@ -917,7 +917,8 @@ class FourierXYCurve(Curve):
         X_n, Y_n = np.atleast_1d(X_n), np.atleast_1d(Y_n)
         if modes is None:
             modes = np.arange(-(X_n.size // 2), X_n.size // 2 + 1)
-            modes = modes[modes != 0]
+            if len(X_n) % 2 == 0:
+                modes = modes[modes != 0]
         else:
             modes = np.asarray(modes)
 
@@ -925,6 +926,17 @@ class FourierXYCurve(Curve):
         assert X_n.size == modes.size, "X_n and modes must be the same size"
         assert Y_n.size == modes.size, "Y_n and modes must be the same size"
         assert basis.lower() in ["xyz", "rpz"]
+
+        idx0 = np.where(modes == 0)[0]
+        if len(idx0):
+            warnif(
+                True,
+                UserWarning,
+                "Ignoring n=0 mode because it is redundant with center.",
+            )
+            modes = np.delete(modes, idx0)
+            X_n = np.delete(X_n, idx0)
+            Y_n = np.delete(Y_n, idx0)
 
         N = np.max(abs(modes))
         self._X_basis = FourierSeries(N, NFP=1, sym="no n=0")

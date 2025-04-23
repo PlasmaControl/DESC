@@ -859,6 +859,13 @@ class TestFourierXYCurve:
         with pytest.raises(AssertionError):
             _ = FourierXYCurve(X_n=[1], modes=[1, 2])
 
+        with pytest.warns(UserWarning, match="Ignoring n=0 mode"):
+            c0 = FourierXYCurve(X_n=[0, 1, 2], Y_n=[2, -1, 0])
+        # check that curve is the same as default after n=0 mode is removed
+        x = c.compute("x", grid=0)["x"]
+        x0 = c0.compute("x", grid=0)["x"]
+        np.testing.assert_allclose(x, x0)
+
 
 class TestSplineXYZCurve:
     """Tests for SplineXYZCurve class."""

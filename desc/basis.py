@@ -441,7 +441,7 @@ class FourierSeries(_Basis):
     sym : {``'cos'``, ``'sin'``, ``'n0'``, False}
         * ``'cos'`` for cos(n*z) symmetry
         * ``'sin'`` for sin(n*z) symmetry
-        * ``'n0'`` for no n=0 mode
+        * ``'no n=0'`` for no n=0 mode
         * ``False`` for no symmetry (Default)
 
     """

@@ -1,5 +1,6 @@
 """Classes for magnetic fields."""
 
+import os
 import warnings
 from abc import ABC, abstractmethod
 from collections.abc import MutableSequence
@@ -504,7 +505,7 @@ class _MagneticField(IOAble, ABC):
             )
         if eval_grid is None:
             eval_grid = LinearGrid(M=2 * basis_M, N=2 * basis_N, NFP=surface.NFP)
-
+        fname = os.path.expanduser(fname)
         basis = DoubleFourierSeries(M=basis_M, N=basis_N, NFP=surface.NFP, sym=sym)
         trans = Transform(basis=basis, grid=eval_grid, build_pinv=True)
 
@@ -598,6 +599,7 @@ class _MagneticField(IOAble, ABC):
         None
 
         """
+        path = os.path.expanduser(path)
         # cylindrical coordinates grid
         NFP = self.NFP if hasattr(self, "_NFP") else 1
         R = np.linspace(Rmin, Rmax, nR)

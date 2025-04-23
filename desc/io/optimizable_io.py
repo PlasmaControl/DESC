@@ -35,6 +35,7 @@ def load(load_from, file_format=None):
     """
     if file_format is None and isinstance(load_from, (str, os.PathLike)):
         name = str(load_from)
+        load_from = os.path.expanduser(load_from)
         if name.endswith(".h5") or name.endswith(".hdf5"):
             file_format = "hdf5"
         elif name.endswith(".pkl") or name.endswith(".pickle"):
@@ -228,6 +229,7 @@ class IOAble(ABC, metaclass=_CombinedMeta):
         if file_format is None:
             if isinstance(file_name, (str, os.PathLike)):
                 name = str(file_name)
+                file_name = os.path.expanduser(file_name)
                 if name.endswith(".h5") or name.endswith(".hdf5"):
                     file_format = "hdf5"
                 elif name.endswith(".pkl") or name.endswith(".pickle"):

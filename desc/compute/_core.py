@@ -54,6 +54,28 @@ def _1(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="x",
+    label="\\mathbf{r}",
+    units="m",
+    units_long="meters",
+    description="Position vector",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["R", "phi", "Z"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.core.Surface",
+    ],
+)
+def _x(params, transforms, profiles, data, **kwargs):
+    data["x"] = jnp.column_stack([data["R"], data["phi"], data["Z"]])
+    return data
+
+
+@register_compute_fun(
     name="R",
     label="R",
     units="m",
@@ -65,6 +87,10 @@ def _1(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=[],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.core.Surface",
+    ],
 )
 def _R(params, transforms, profiles, data, **kwargs):
     data["R"] = transforms["R"].transform(params["R_lmn"], 0, 0, 0)
@@ -704,6 +730,10 @@ def _R_zzz(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["R", "phi"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.core.Surface",
+    ],
 )
 def _X(params, transforms, profiles, data, **kwargs):
     data["X"] = data["R"] * jnp.cos(data["phi"])
@@ -785,6 +815,10 @@ def _X_z(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["R", "phi"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.core.Surface",
+    ],
 )
 def _Y(params, transforms, profiles, data, **kwargs):
     data["Y"] = data["R"] * jnp.sin(data["phi"])
@@ -866,6 +900,10 @@ def _Y_z(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=[],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.core.Surface",
+    ],
 )
 def _Z(params, transforms, profiles, data, **kwargs):
     data["Z"] = transforms["Z"].transform(params["Z_lmn"], 0, 0, 0)
@@ -2752,6 +2790,10 @@ def _omega_zzz(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["zeta", "omega"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.core.Surface",
+    ],
 )
 def _phi(params, transforms, profiles, data, **kwargs):
     data["phi"] = data["zeta"] + data["omega"]

@@ -1546,7 +1546,7 @@ def plot_section(
 
     cax_kwargs = {"size": "5%", "pad": 0.05}
     units = (
-        f"(${data_index["desc.equilibrium.equilibrium.Equilibrium"][name]["units"]}$)"
+        f"(${data_index['desc.equilibrium.equilibrium.Equilibrium'][name]['units']}$)"
         if data_index["desc.equilibrium.equilibrium.Equilibrium"][name]["units"]
         else ""
     )

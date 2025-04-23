@@ -1056,7 +1056,7 @@ class FourierXYCoil(_Coil, FourierXYCurve):
     Y_n : array-like
         Fourier coefficients of the Y coordinate in the plane.
     modes : array-like
-        mode numbers associated with X_n and Y_n.
+        Mode numbers associated with X_n and Y_n. The n=0 mode will be ignored.
     basis : {'xyz', 'rpz'}
         Coordinate system for center and normal vectors. Default = 'xyz'.
     name : str

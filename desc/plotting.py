@@ -729,11 +729,6 @@ def plot_2d(  # noqa : C901
                 "Cannot use both norm_F and normalize keyword arguments at "
                 + "the same time."
             )
-    # writing a compute function for this quantity is buggy because of the logic
-    # https://github.com/PlasmaControl/DESC/pull/1024#discussion_r1663080423.
-    if name == "|F|_normalized":
-        name = "|F|"
-        normalize = "<|grad(|B|^2)|/2mu0>_vol"
     errorif(
         not (isinstance(normalize, str) or normalize is None),
         ValueError,
@@ -1254,11 +1249,6 @@ def plot_fsa(  # noqa: C901
                 "Cannot use both norm_F and normalize keyword arguments at "
                 + "the same time."
             )
-    # writing a compute function for this quantity is buggy because of the logic
-    # https://github.com/PlasmaControl/DESC/pull/1024#discussion_r1663080423.
-    if name == "|F|_normalized":
-        name = "|F|"
-        normalize = "<|grad(|B|^2)|/2mu0>_vol"
     errorif(
         not (isinstance(normalize, str) or normalize is None),
         ValueError,
@@ -1477,11 +1467,6 @@ def plot_section(
                 "Cannot use both norm_F and normalize keyword arguments at "
                 + "the same time."
             )
-    # writing a compute function for this quantity is buggy because of the logic
-    # https://github.com/PlasmaControl/DESC/pull/1024#discussion_r1663080423.
-    if name == "|F|_normalized":
-        name = "|F|"
-        normalize = "<|grad(|B|^2)|/2mu0>_vol"
     errorif(
         not (isinstance(normalize, str) or normalize is None),
         ValueError,
@@ -1494,7 +1479,7 @@ def plot_section(
     if isinstance(phi, numbers.Integral):
         phi = np.linspace(0, 2 * np.pi / eq.NFP, phi, endpoint=False)
     phi = np.atleast_1d(phi)
-    nphi = len(phi)
+
     if grid is None:
         grid_kwargs = {
             "L": 25,
@@ -1504,30 +1489,12 @@ def plot_section(
             "zeta": phi,
         }
         grid = _get_grid(**grid_kwargs)
-        nr, nt, nz = grid.num_rho, grid.num_theta, grid.num_zeta
-        coords = map_coordinates(
-            eq,
-            grid.nodes,
-            ["rho", "theta", "phi"],
-            ["rho", "theta", "zeta"],
-            period=(np.inf, 2 * np.pi, 2 * np.pi),
-            guess=grid.nodes,
-        )
-        grid = Grid(coords, sort=False)
+        # TODO(#568): Add conversion to rho, theta, zeta grid
+        # Using custom Grid Class will cause problems for "|F|_normalized"
 
-    else:
-        phi = np.unique(grid.nodes[:, 2])
-        nphi = phi.size
-        nr, nt, nz = grid.num_rho, grid.num_theta, grid.num_zeta
-        coords = map_coordinates(
-            eq,
-            grid.nodes,
-            ["rho", "theta", "phi"],
-            ["rho", "theta", "zeta"],
-            period=(np.inf, 2 * np.pi, 2 * np.pi),
-            guess=grid.nodes,
-        )
-        grid = Grid(coords, sort=False)
+    phi = np.unique(grid.nodes[:, 2])
+    nphi = phi.size
+    nr, nt, nz = grid.num_rho, grid.num_theta, grid.num_zeta
     rows = np.floor(np.sqrt(nphi)).astype(int)
     cols = np.ceil(nphi / rows).astype(int)
 
@@ -1578,7 +1545,11 @@ def plot_section(
     ), f"plot section got unexpected keyword argument: {kwargs.keys()}"
 
     cax_kwargs = {"size": "5%", "pad": 0.05}
-
+    units = (
+        f"(${data_index["desc.equilibrium.equilibrium.Equilibrium"][name]["units"]}$)"
+        if data_index["desc.equilibrium.equilibrium.Equilibrium"][name]["units"]
+        else ""
+    )
     for i in range(nphi):
         divider = make_axes_locatable(ax[i])
 
@@ -1592,12 +1563,11 @@ def plot_section(
         ax[i].set_xlabel(_AXIS_LABELS_RPZ[0], fontsize=xlabel_fontsize)
         ax[i].set_ylabel(_AXIS_LABELS_RPZ[2], fontsize=ylabel_fontsize)
         ax[i].tick_params(labelbottom=True, labelleft=True)
+
         ax[i].set_title(
             "$"
             + data_index["desc.equilibrium.equilibrium.Equilibrium"][name]["label"]
-            + "$ ($"
-            + data_index["desc.equilibrium.equilibrium.Equilibrium"][name]["units"]
-            + "$)"
+            + units
             + ", $\\phi \\cdot N_{{FP}}/2\\pi = {:.3f}$".format(
                 eq.NFP * phi[i] / (2 * np.pi)
             )

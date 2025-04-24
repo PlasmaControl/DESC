@@ -2262,7 +2262,7 @@ class CoilSetLinkingNumber(_Objective):
 class SurfaceCurrentRegularization(_Objective):
     """Target the surface current magnitude.
 
-    If ``regularization="k"``:
+    If ``regularization="K"``:
 
     compute::
 

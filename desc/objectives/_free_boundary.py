@@ -94,12 +94,15 @@ class VacuumBoundaryError(_Objective):
             target = 0
         self._eval_grid = eval_grid
         self._eq = eq
-        self._field = field
+        self._field = [field] if not isinstance(field, list) else field
         self._field_grid = field_grid
         self._field_fixed = field_fixed
         self._bs_chunk_size = bs_chunk_size
+        things = [eq]
+        if not field_fixed:
+            things.append(self._field)
         super().__init__(
-            things=[eq] if field_fixed else [eq, field],
+            things=things,
             target=target,
             bounds=bounds,
             weight=weight,
@@ -122,6 +125,8 @@ class VacuumBoundaryError(_Objective):
             Level of output.
 
         """
+        from desc.magnetic_fields import SumMagneticField
+
         eq = self.things[0]
         if self._eval_grid is None:
             grid = LinearGrid(
@@ -171,7 +176,7 @@ class VacuumBoundaryError(_Objective):
         self._constants = {
             "transforms": transforms,
             "profiles": profiles,
-            "field": self._field,
+            "field": SumMagneticField(self._field),
             "quad_weights": np.sqrt(np.tile(transforms["grid"].weights, 2)),
         }
 
@@ -191,7 +196,7 @@ class VacuumBoundaryError(_Objective):
 
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, eq_params, field_params=None, constants=None):
+    def compute(self, eq_params, *field_params, constants=None):
         """Compute boundary force error.
 
         Parameters
@@ -211,6 +216,8 @@ class VacuumBoundaryError(_Objective):
             √g[[B²]] in T^2*m^2.
 
         """
+        if field_params == ():  # common case for field_fixed=True
+            field_params = None
         if constants is None:
             constants = self.constants
         data = compute_fun(
@@ -467,7 +474,7 @@ class BoundaryError(_Objective):
         self._eval_grid = eval_grid
         self._st, self._sz = s if isinstance(s, (tuple, list)) else (s, s)
         self._q = q
-        self._field = field
+        self._field = [field] if not isinstance(field, list) else field
         self._field_grid = field_grid
         self._bs_chunk_size = bs_chunk_size
         B_plasma_chunk_size = parse_argname_change(
@@ -477,11 +484,9 @@ class BoundaryError(_Objective):
             B_plasma_chunk_size = None
         self._B_plasma_chunk_size = B_plasma_chunk_size
         self._sheet_current = hasattr(eq.surface, "Phi_mn")
-        if field_fixed:
-            things = [eq]
-        else:
-            things = [eq, field]
-
+        things = [eq]
+        if not field_fixed:
+            things.append(self._field)
         super().__init__(
             things=things,
             target=target,
@@ -506,6 +511,8 @@ class BoundaryError(_Objective):
             Level of output.
 
         """
+        from desc.magnetic_fields import SumMagneticField
+
         eq = self.things[0]
 
         if self._source_grid is None:
@@ -610,7 +617,7 @@ class BoundaryError(_Objective):
             "source_transforms": source_transforms,
             "source_profiles": source_profiles,
             "interpolator": interpolator,
-            "field": self._field,
+            "field": SumMagneticField(self._field),
             "quad_weights": np.sqrt(np.tile(eval_transforms["grid"].weights, neq)),
         }
 
@@ -650,7 +657,7 @@ class BoundaryError(_Objective):
 
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, eq_params, field_params=None, constants=None):
+    def compute(self, eq_params, *field_params, constants=None):
         """Compute boundary force error.
 
         Parameters
@@ -671,6 +678,8 @@ class BoundaryError(_Objective):
             √g||μ₀𝐊 − 𝐧 × [𝐁]|| in T*m^2
 
         """
+        if field_params == ():  # common case for field_fixed=True
+            field_params = None
         if constants is None:
             constants = self.constants
         source_data = compute_fun(
@@ -930,12 +939,12 @@ class BoundaryErrorNESTOR(_Objective):
     ):
         if target is None and bounds is None:
             target = 0
-        self.mf = mf
-        self.nf = nf
-        self.ntheta = ntheta
-        self.nzeta = nzeta
-        self.field = field
-        self.field_grid = field_grid
+        self._mf = mf
+        self._nf = nf
+        self._ntheta = ntheta
+        self._nzeta = nzeta
+        self._field = [field] if not isinstance(field, list) else field
+        self._field_grid = field_grid
         super().__init__(
             things=eq,
             target=target,
@@ -960,22 +969,24 @@ class BoundaryErrorNESTOR(_Objective):
             Level of output.
 
         """
+        from desc.magnetic_fields import SumMagneticField
+
         eq = self.things[0]
-        self.mf = eq.M + 1 if self.mf is None else self.mf
-        self.nf = eq.N if self.nf is None else self.nf
-        self.ntheta = 4 * eq.M + 1 if self.ntheta is None else self.ntheta
-        self.nzeta = 4 * eq.N + 1 if self.nzeta is None else self.nzeta
+        self._mf = eq.M + 1 if self._mf is None else self._mf
+        self._nf = eq.N if self._nf is None else self._nf
+        self._ntheta = 4 * eq.M + 1 if self._ntheta is None else self._ntheta
+        self._nzeta = 4 * eq.N + 1 if self._nzeta is None else self._nzeta
 
         nest = Nestor(
             eq,
-            self.field,
-            self.mf,
-            self.nf,
-            self.ntheta,
-            self.nzeta,
-            self.field_grid,
+            SumMagneticField(self._field),
+            self._mf,
+            self._nf,
+            self._ntheta,
+            self._nzeta,
+            self._field_grid,
         )
-        self.grid = LinearGrid(rho=1, theta=self.ntheta, zeta=self.nzeta, NFP=eq.NFP)
+        grid = LinearGrid(rho=1, theta=self._ntheta, zeta=self._nzeta, NFP=eq.NFP)
         self._data_keys = ["current", "|B|^2", "p", "|e_theta x e_zeta|"]
         self._args = get_params(
             self._data_keys,
@@ -988,13 +999,12 @@ class BoundaryErrorNESTOR(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        profiles = get_profiles(self._data_keys, obj=eq, grid=self.grid)
-        transforms = get_transforms(self._data_keys, obj=eq, grid=self.grid)
+        profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
+        transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
 
         self._constants = {
-            "profiles": profiles,
             "transforms": transforms,
-            "field": self.field,
+            "profiles": profiles,
             "nestor": nest,
             "quad_weights": np.sqrt(transforms["grid"].weights),
         }
@@ -1003,7 +1013,7 @@ class BoundaryErrorNESTOR(_Objective):
         if verbose > 1:
             timer.disp("Precomputing transforms")
 
-        self._dim_f = self.grid.num_nodes
+        self._dim_f = grid.num_nodes
 
         if self._normalize:
             scales = compute_scaling_factors(eq)

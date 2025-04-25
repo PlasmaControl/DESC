@@ -54,7 +54,7 @@ for i, name in enumerate(data_master.keys()):
     delta = peak_pr - peak_ma
     sign = "+" if delta >= 0 else "-"
     # only show color if the delta is significant
-    color = " " if abs((delta / peak_ma) * 100) < 7 else "-" if delta >= 0 else "+"
+    color = " " if abs((delta / peak_ma) * 100) < 10 else "-" if delta >= 0 else "+"
     percent_change = sign + f"{abs((delta / peak_ma) * 100):.2f}" + " %"
     delta = sign + f"{abs(delta):.2f}"
     msg += (

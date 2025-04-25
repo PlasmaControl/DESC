@@ -45,7 +45,7 @@ image_url = f"https://github.com/{repo}/actions/runs/{run_id}/artifacts"
 msg = "### Memory benchmark result\n\n```diff\n"
 msg += (
     f"| {'Test Name':^38} | {'%Δ':^12} | {'Master (MB)':^18} | "
-    + "{'PR (MB)':^18} | {'Δ (MB)':^12} |\n"
+    + f"{'PR (MB)':^18} | {'Δ (MB)':^12} |\n"
 )
 msg += f"| {'-'*38} | {'-'*12} | {'-'*18} | {'-'*18} | {'-'*12} |\n"
 for i, name in enumerate(data_master.keys()):

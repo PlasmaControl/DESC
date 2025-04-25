@@ -1,0 +1,106 @@
+name: Memory Benchmarks
+
+on:
+  pull_request:
+    types: [labeled]
+  workflow_dispatch:
+
+jobs:
+  benchmark:
+    if: ${{ github.event.label.name == 'mem_profile' && github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' }}
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    strategy:
+      # make sure that when you change the Python version here, you also change it in
+      # the compare_bench_results.py script
+      matrix:
+        python-version: ['3.12']
+
+    steps:
+      # Enable tmate debugging of manually-triggered workflows if the input option was provided
+      - name: Setup tmate session
+        uses: mxschmitt/action-tmate@v3
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Check full Python version
+        run: |
+          python --version
+          python_version=$(python --version 2>&1 | cut -d' ' -f2)
+          echo "Python version: $python_version"
+          echo "version=$python_version" >> $GITHUB_ENV
+
+      - name: Restore Python environment cache
+        id: restore-env
+        uses: actions/cache/restore@v4
+        with:
+          path: .venv-${{ env.version }}
+          key: ${{ runner.os }}-venv-${{ env.version }}-${{ hashFiles('devtools/dev-requirements.txt', 'requirements.txt') }}
+
+      - name: Set up virtual environment if not restored from cache
+        run: |
+          gh cache list
+          python -m venv .venv-${{ env.version }}
+          source .venv-${{ env.version }}/bin/activate
+          python -m pip install --upgrade pip
+          pip install -r devtools/dev-requirements.txt
+          pip install matplotlib==3.9.2
+
+      - name: Action Details
+        run: |
+          source .venv-${{ env.version }}/bin/activate
+          which python
+          python --version
+          pwd
+          lscpu
+          pip list
+
+      - name: Benchmark with pytest-benchmark (PR)
+        run: |
+          source .venv-${{ env.version }}/bin/activate
+          cd tests/benchmarks
+          python memory_benchmark_cpu.py pr
+
+      - name: Checkout current master
+        uses: actions/checkout@v4
+        with:
+          ref: master
+          clean: false
+
+      - name: Checkout benchmarks from PR head
+        run: git checkout ${{ github.event.pull_request.head.sha }} -- tests/benchmarks
+
+      - name: Benchmark with pytest-benchmark (MASTER)
+        run: |
+          source .venv-${{ env.version }}/bin/activate
+          cd tests/benchmarks
+          python memory_benchmark_cpu.py master
+
+      - name: Compare latest commit results to the master branch results
+        run: |
+          source .venv-${{ env.version }}/bin/activate
+          cd tests/benchmarks
+          pwd
+          python compare_mem_results.py
+          cat commit_msg.txt
+
+      - name: Upload memory comparison plot
+        uses: actions/upload-artifact@v4
+        with:
+          name: compare-plot
+          path: tests/benchmarks/compare.png
+
+      - name: Comment PR with the results
+        uses: thollander/actions-comment-pull-request@v3
+        env:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          file-path: tests/benchmarks/commit_msg.txt
+          comment-tag: memory-benchmark

@@ -18,9 +18,6 @@ jobs:
         python-version: ['3.12']
 
     steps:
-      # Enable tmate debugging of manually-triggered workflows if the input option was provided
-      - name: Setup tmate session
-        uses: mxschmitt/action-tmate@v3
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha }}

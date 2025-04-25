@@ -42,7 +42,6 @@ jobs:
             has_changes:
               - 'desc/**'
               - 'tests/**'
-              - '!tests/benchmarks/**'
               - 'requirements.txt'
               - 'devtools/dev-requirements.txt'
               - 'setup.cfg'

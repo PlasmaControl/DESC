@@ -44,7 +44,7 @@ image_url = f"https://github.com/{repo}/actions/runs/{run_id}/artifacts"
 # ---------- commit message ----------
 msg = "### Memory benchmark result\n\n```diff\n"
 msg += (
-    "| {'Test Name':^38} | {'%Δ':^12} | {'Master (MB)':^18} | "
+    f"| {'Test Name':^38} | {'%Δ':^12} | {'Master (MB)':^18} | "
     + "{'PR (MB)':^18} | {'Δ (MB)':^12} |\n"
 )
 msg += f"| {'-'*38} | {'-'*12} | {'-'*18} | {'-'*18} | {'-'*12} |\n"

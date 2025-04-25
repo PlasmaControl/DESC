@@ -140,7 +140,7 @@ class Optimizer(IOAble):
             settings. Options that are universal to all optimizers are:
 
             - ``"linear_constraint_options"`` : Dictionary of keyword arguments to pass
-            to ``LinearConstraintProjection``.
+              to ``LinearConstraintProjection``.
             - ``"perturb_options"`` : Dictionary of keyword arguments to pass to
             ``ProximalProjection`` as its ``perturb_options``.
             - ``"solve_options"`` : Dictionary of keyword arguments to pass to

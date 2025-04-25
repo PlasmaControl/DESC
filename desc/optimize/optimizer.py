@@ -144,7 +144,7 @@ class Optimizer(IOAble):
             - ``"perturb_options"`` : Dictionary of keyword arguments to pass to
               ``ProximalProjection`` as its ``perturb_options``.
             - ``"solve_options"`` : Dictionary of keyword arguments to pass to
-            ``ProximalProjection`` as its ``solve_options``.
+              ``ProximalProjection`` as its ``solve_options``.
 
             See the documentation page [Optimizers
             Supported](https://desc-docs.readthedocs.io/en/stable/optimizers.html)

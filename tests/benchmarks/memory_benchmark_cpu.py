@@ -13,7 +13,7 @@ import psutil
 
 def monitor_ram(proc, interval, ram_usage, timestamps):
     """Sample system RAM until *proc* finishes."""
-    while proc.poll() is None:  # child still running?
+    while proc.poll() is None:  # check if child still running
         info = psutil.virtual_memory()
         used_mb = (info.total - info.available) / 1024 / 1024
         ram_usage.append(used_mb)
@@ -31,7 +31,7 @@ def monitor_ram(proc, interval, ram_usage, timestamps):
 
 def monitor_vram(proc, interval, vram_usage, timestamps):
     """Sample total GPU memory until *proc* finishes."""
-    while proc.poll() is None:
+    while proc.poll() is None:  # check if child still running
         out = (
             subprocess.run(
                 [
@@ -50,7 +50,7 @@ def monitor_vram(proc, interval, vram_usage, timestamps):
         time.sleep(interval)
 
     # keep watching for an extra second
-    end = time.time() + 2.0
+    end = time.time() + 1.0
     while time.time() < end:
         out = (
             subprocess.run(
@@ -77,12 +77,11 @@ if __name__ == "__main__":
     data = {}
 
     funs = [
-        "test_objective_jac_atf",
-        "test_proximal_jac_atf_with_eq_update",
-        "test_perturb_2",
+        "test_objective_jac_w7x",
+        "test_proximal_jac_w7x_with_eq_update",
         "test_proximal_freeb_jac",
-        "test_objective_jac_ripple",
-        "test_objective_jac_ripple_spline",
+        "test_proximal_jac_ripple",
+        "test_proximal_jac_ripple_spline",
     ]
 
     for i in range(len(funs)):
@@ -103,10 +102,13 @@ if __name__ == "__main__":
         # wait until the child exits, then join the sampler
         child.wait()
         sampler.join()
+        # save the data
+        # make sure memory usage is 0 somewhere and t starts at 0
         data[funs[i]] = {}
         data[funs[i]]["mem"] = np.array(mem) - min(mem)
-        data[funs[i]]["t"] = np.array(t) - t[0]  # to start at 0
+        data[funs[i]]["t"] = np.array(t) - t[0]
 
+    # save the data to a pickle file
     branch = sys.argv[1]  # master or pr
-    with open(f"{branch}2.pickle", "wb") as f:
+    with open(f"{branch}.pickle", "wb") as f:
         pickle.dump(data, f, pickle.HIGHEST_PROTOCOL)

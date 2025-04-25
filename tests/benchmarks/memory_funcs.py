@@ -6,6 +6,7 @@ import sys
 import warnings
 
 import numpy as np
+import pytest
 
 sys.path.insert(0, os.path.abspath("."))
 sys.path.append(os.path.abspath("../../"))
@@ -37,13 +38,14 @@ from desc.objectives import (
     maybe_add_self_consistency,
 )
 from desc.optimize import LinearConstraintProjection, ProximalProjection
-from desc.perturbations import perturb
 
 
-def test_objective_jac_atf():
+@pytest.mark.skip()
+@pytest.mark.unit
+def test_objective_jac_w7x():
     """Benchmark computing jacobian."""
     jax.clear_caches()
-    eq = desc.examples.get("ATF")
+    eq = desc.examples.get("W7-X")
     objective = LinearConstraintProjection(
         get_equilibrium_objective(eq),
         ObjectiveFunction(
@@ -58,42 +60,12 @@ def test_objective_jac_atf():
         gc.collect()
 
 
-def test_perturb_2():
-    """Benchmark 2nd order perturbations."""
-    jax.clear_caches()
-    eq = desc.examples.get("SOLOVEV")
-    objective = get_equilibrium_objective(eq)
-    objective.build()
-    constraints = get_fixed_boundary_constraints(eq)
-    tr_ratio = [0.01, 0.25, 0.25]
-    dp = np.zeros_like(eq.p_l)
-    dp[np.array([0, 2])] = 8e3 * np.array([1, -1])
-    deltas = {"p_l": dp}
-
-    args = (
-        eq,
-        objective,
-        constraints,
-    )
-    kwargs = {
-        "deltas": deltas,
-        "tr_ratio": tr_ratio,
-        "order": 2,
-        "verbose": 0,
-        "copy": True,
-    }
-    for _ in range(3):
-        perturb(*args, **kwargs)
-        gc.collect()
-
-
-def test_proximal_jac_atf_with_eq_update():
+@pytest.mark.skip()
+@pytest.mark.unit
+def test_proximal_jac_w7x_with_eq_update():
     """Benchmark computing jacobian of constrained proximal projection."""
     jax.clear_caches()
-    eq = desc.examples.get("ATF")
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        eq.change_resolution(12, 12, 4, 24, 24, 8)
+    eq = desc.examples.get("W7-X")
     grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, rho=np.linspace(0.1, 1, 10))
     objective = ObjectiveFunction(QuasisymmetryTwoTerm(eq, grid=grid))
     constraint = ObjectiveFunction(ForceBalance(eq))
@@ -114,6 +86,8 @@ def test_proximal_jac_atf_with_eq_update():
         gc.collect()
 
 
+@pytest.mark.skip()
+@pytest.mark.unit
 def test_proximal_freeb_jac():
     """Benchmark computing free boundary jacobian with proximal constraint."""
     jax.clear_caches()
@@ -136,31 +110,37 @@ def test_proximal_freeb_jac():
         gc.collect()
 
 
-def test_objective_jac_ripple():
+@pytest.mark.skip()
+@pytest.mark.unit
+def test_proximal_jac_ripple():
     """Benchmark computing objective jacobian for effective ripple."""
-    _test_objective_ripple(False, "jac_scaled_error")
+    _test_proximal_ripple(False, "jac_scaled_error")
 
 
-def test_objective_jac_ripple_spline():
+@pytest.mark.skip()
+@pytest.mark.unit
+def test_proximal_jac_ripple_spline():
     """Benchmark computing objective jacobian for effective ripple."""
-    _test_objective_ripple(True, "jac_scaled_error")
+    _test_proximal_ripple(True, "jac_scaled_error")
 
 
-def _test_objective_ripple(spline, method):
-    eq = desc.examples.get("W7-X")
+@pytest.mark.skip()
+@pytest.mark.unit
+def _test_proximal_ripple(spline, method):
+    jax.clear_caches()
+    eq = desc.examples.get("HELIOTRON")
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        eq.change_resolution(L=eq.L // 2, M=eq.M // 2, N=eq.N // 2)
-    num_transit = 20
+        eq.change_resolution(L=8, M=8, N=8, L_grid=16, M_grid=16, N_grid=16)
+    num_transit = 30
     objective = ObjectiveFunction(
         [
             EffectiveRipple(
                 eq,
                 num_transit=num_transit,
                 num_well=10 * num_transit,
-                num_quad=16,
+                num_quad=32,
                 spline=spline,
-                jac_chunk_size=1,
             )
         ]
     )
@@ -178,17 +158,15 @@ if __name__ == "__main__":
     print(f"Running {func}...")
 
     # I know this is not the best way to do this, but just easy for now
-    if func == "test_objective_jac_atf":
-        test_objective_jac_atf()
-    elif func == "test_proximal_jac_atf_with_eq_update":
-        test_proximal_jac_atf_with_eq_update()
-    elif func == "test_perturb_2":
-        test_perturb_2()
+    if func == "test_objective_jac_w7x":
+        test_objective_jac_w7x()
+    elif func == "test_proximal_jac_w7x_with_eq_update":
+        test_proximal_jac_w7x_with_eq_update()
     elif func == "test_proximal_freeb_jac":
         test_proximal_freeb_jac()
-    elif func == "test_objective_jac_ripple":
-        test_objective_jac_ripple()
-    elif func == "test_objective_jac_ripple_spline":
-        test_objective_jac_ripple_spline()
+    elif func == "test_proximal_jac_ripple":
+        test_proximal_jac_ripple()
+    elif func == "test_proximal_jac_ripple_spline":
+        test_proximal_jac_ripple_spline()
     else:
         print(f"Invalid function name {func}.")

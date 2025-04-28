@@ -1113,7 +1113,7 @@ class ProximalProjection(ObjectiveFunction):
         # the optimization variables (c). Before taking the Jacobian, we update the
         # equilibrium such that
         # F(x+dx, c+dc) = 0 = F(x, c) + dF/dx * dx + dF/dc * dc
-        # where we already have F(x, c) = 0, so we can solve for dx and get
+        # so that we can set F(x, c) = 0, from here we can solve for dx and get
         # dx = - (dF/dx)^-1 * dF/dc * dc     # noqa : E800
         # We can then compute the Jacobian of the objective function with respect to c
         # G(x+dx, c+dc) = G(x, c) + dG/dx * dx + dG/dc * dc

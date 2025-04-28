@@ -684,7 +684,8 @@ def plot_2d(  # noqa : C901
         * ``xlabel_fontsize``: float, fontsize of the xlabel
         * ``ylabel_fontsize``: float, fontsize of the ylabel
         * ``cmap``: str, matplotlib colormap scheme to use, passed to ax.contourf
-        * ``levels``: int or array-like, passed to contourf
+        * ``levels``: int or array-like, passed to contourf.If ``name``="|F|_normalized"
+           and ``log``==True, default is np.logspace(-6, 0, 7)
         * ``field``: MagneticField, a magnetic field with which to calculate Bn on
           the surface, must be provided if Bn is entered as the variable to plot.
         * ``field_grid``: MagneticField, a Grid to pass to the field as a source grid
@@ -779,11 +780,14 @@ def plot_2d(  # noqa : C901
     if log:
         data = np.abs(data)  # ensure data is positive for log plot
         contourf_kwargs["norm"] = matplotlib.colors.LogNorm()
-        logmin = max(np.floor(np.nanmin(np.log10(data))).astype(int), -16)
-        logmax = np.ceil(np.nanmax(np.log10(data))).astype(int)
-        contourf_kwargs["levels"] = kwargs.pop(
-            "levels", np.logspace(logmin, logmax, logmax - logmin + 1)
-        )
+        if name == "|F|_normalized":
+            contourf_kwargs["levels"] = kwargs.pop("levels", np.logspace(-6, 0, 7))
+        else:
+            logmin = max(np.floor(np.nanmin(np.log10(data))).astype(int), -16)
+            logmax = np.ceil(np.nanmax(np.log10(data))).astype(int)
+            contourf_kwargs["levels"] = kwargs.pop(
+                "levels", np.logspace(logmin, logmax, logmax - logmin + 1)
+            )
     else:
         contourf_kwargs["norm"] = matplotlib.colors.Normalize()
         contourf_kwargs["levels"] = kwargs.pop(
@@ -1423,7 +1427,8 @@ def plot_section(
         * ``xlabel_fontsize``: float, fontsize of the xlabel
         * ``ylabel_fontsize``: float, fontsize of the ylabel
         * ``cmap``: str, matplotlib colormap scheme to use, passed to ax.contourf
-        * ``levels``: int or array-like, passed to contourf
+        * ``levels``: int or array-like, passed to contourf.If ``name``="|F|_normalized"
+           and ``log``==True, default is np.logspace(-6, 0, 7)
         * ``phi``: float, int or array-like. Toroidal angles to plot. If an integer,
           plot that number equally spaced in [0,2pi/NFP). Default 1 for axisymmetry and
           6 for non-axisymmetry
@@ -1525,11 +1530,14 @@ def plot_section(
     if log:
         data = np.abs(data)  # ensure data is positive for log plot
         contourf_kwargs["norm"] = matplotlib.colors.LogNorm()
-        logmin = np.floor(np.nanmin(np.log10(data))).astype(int)
-        logmax = np.ceil(np.nanmax(np.log10(data))).astype(int)
-        contourf_kwargs["levels"] = kwargs.pop(
-            "levels", np.logspace(logmin, logmax, logmax - logmin + 1)
-        )
+        if name == "|F|_normalized":
+            contourf_kwargs["levels"] = kwargs.pop("levels", np.logspace(-6, 0, 7))
+        else:
+            logmin = max(np.floor(np.nanmin(np.log10(data))).astype(int), -16)
+            logmax = np.ceil(np.nanmax(np.log10(data))).astype(int)
+            contourf_kwargs["levels"] = kwargs.pop(
+                "levels", np.logspace(logmin, logmax, logmax - logmin + 1)
+            )
     else:
         contourf_kwargs["norm"] = matplotlib.colors.Normalize()
         contourf_kwargs["levels"] = kwargs.pop(

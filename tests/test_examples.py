@@ -2552,7 +2552,12 @@ def test_share_parameters():
     )
     surf1.change_resolution(M=2, N=2)
     surf1 = FourierCurrentPotentialField.from_surface(
-        surf1, M_Phi=6, N_Phi=6, sym_Phi=False, I=0, G=necessary_G_for_eq1
+        surf1,
+        M_Phi=6,
+        N_Phi=6,
+        sym_Phi=False,
+        I=0,
+        G=necessary_G_for_eq1,
     )
     surf2 = surf1.copy()
     surf2.G = necessary_G_for_eq2
@@ -2599,7 +2604,7 @@ def test_share_parameters():
     )
     constraints = (
         ShareParameters(
-            [surf1, surf2], params={"R_lmn": True, "Z_lmn": True}
+            [surf1, surf2], params={"R_lmn": True, "Z_lmn": True, "Phi_mn": [0]}
         ),  # make the 2 surfaces have the same geometry
         FixParameters(surf1, {"I": True, "G": True}),
         FixParameters(surf2, {"I": True, "G": True}),
@@ -2620,7 +2625,9 @@ def test_share_parameters():
     np.testing.assert_allclose(surf1.Z_lmn, surf2.Z_lmn)
     # Phi should be different bc not shared and
     # the 2 target eqs are different
-    assert not np.allclose(surf1.Phi_mn, surf2.Phi_mn)
+    assert not np.allclose(surf1.Phi_mn[1:], surf2.Phi_mn[1:])
+    # index 0 Phi_mn should be same bc was shared
+    assert np.allclose(surf1.Phi_mn[0], surf2.Phi_mn[0])
 
 
 @pytest.mark.unit

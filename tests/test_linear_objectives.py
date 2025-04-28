@@ -1095,13 +1095,14 @@ def test_share_parameters_four_objects():
     eq3 = eq1.copy()
     eq4 = eq1.copy()
 
-    subobj = ShareParameters([eq1, eq2, eq3, eq4], {"p_l": True})
+    subobj = ShareParameters([eq1, eq2, eq3, eq4], {"p_l": True, "i_l": [1, 2]})
     subobj.build()
     obj = ObjectiveFunction(subobj)
     obj.build()
 
     # check dimensions
-    assert subobj.dim_f == 3 * eq1.params_dict["p_l"].size
+    # (len(things)-1) x p_l.size + (len(things)-1) x 2 for the 2 i_l indices
+    assert subobj.dim_f == 3 * eq1.params_dict["p_l"].size + 3 * 2
     np.testing.assert_allclose(subobj.target, 0)
 
     # check compute
@@ -1109,6 +1110,7 @@ def test_share_parameters_four_objects():
 
     # check the jacobian
     J = obj.jac_unscaled(obj.x(eq1, eq2, eq3, eq4))
+    assert J.shape[0] == subobj.dim_f
     # make sure Jacobian is not trivial
     assert not np.allclose(J, 0)
     # now, check that each row sums to zero, and abs(J) rows sum to 2,
@@ -1117,7 +1119,10 @@ def test_share_parameters_four_objects():
     abs_J_row_sums = np.abs(J).sum(axis=1)
     np.testing.assert_allclose(abs_J_row_sums, 2)
     np.testing.assert_allclose(J_row_sums, 0)
-    # TODO: add more tests for when not every index of given param is fixed
+    subobj = ShareParameters([eq1, eq2, eq3, eq4], {"p_l": [1, 3]})
+    subobj.build()
+    obj = ObjectiveFunction(subobj)
+    obj.build()
 
 
 @pytest.mark.unit
@@ -1126,15 +1131,15 @@ def test_share_parameters_two_optimizable_collections_CoilSet():
     coils1 = CoilSet.linspaced_angular(FourierXYZCoil(), n=2)
     coils2 = coils1.copy()
 
-    subobj = ShareParameters([coils1, coils2], {"X_n": True, "Y_n": True, "Z_n": True})
+    subobj = ShareParameters([coils1, coils2], {"X_n": True, "Y_n": True, "Z_n": [2]})
     subobj.build()
     obj = ObjectiveFunction(subobj)
     obj.build()
 
     # check dimensions
-    # dim_f should be 2 (for the 2 subcoils in each coilset) x 3 (for X_n, Y_n, Z_n)
-    # x params["X_n"].size
-    assert subobj.dim_f == 2 * 3 * coils1.params_dict[0]["X_n"].size
+    # dim_f should be 2 (for the 2 subcoils in each coilset) x 2 (for X_n, Y_n)
+    # x params["X_n"].size + 2 x 1 (Z_n) x 1 (bc only fixed idx=2)
+    assert subobj.dim_f == 2 * 2 * coils1.params_dict[0]["X_n"].size + 2
     np.testing.assert_allclose(subobj.target, 0)
 
     # check compute
@@ -1142,6 +1147,7 @@ def test_share_parameters_two_optimizable_collections_CoilSet():
 
     # check the jacobian
     J = obj.jac_unscaled(obj.x(coils1, coils2))
+    assert J.shape[0] == subobj.dim_f
 
     # make sure Jacobian is not trivial
     assert not np.allclose(J, 0)
@@ -1151,7 +1157,6 @@ def test_share_parameters_two_optimizable_collections_CoilSet():
     abs_J_row_sums = np.abs(J).sum(axis=1)
     np.testing.assert_allclose(abs_J_row_sums, 2)
     np.testing.assert_allclose(J_row_sums, 0)
-    # TODO: add more tests for when not every index of given param is fixed
 
 
 @pytest.mark.unit

@@ -684,8 +684,9 @@ def plot_2d(  # noqa : C901
         * ``xlabel_fontsize``: float, fontsize of the xlabel
         * ``ylabel_fontsize``: float, fontsize of the ylabel
         * ``cmap``: str, matplotlib colormap scheme to use, passed to ax.contourf
-        * ``levels``: int or array-like, passed to contourf.If ``name``="|F|_normalized"
-           and ``log``==True, default is np.logspace(-6, 0, 7)
+        * ``levels``: int or array-like, passed to contourf.
+          If ``name``="|F|_normalized" and ``log``==True, default is
+          np.logspace(-6, 0, 7). Pass None to use actual data min/max.
         * ``field``: MagneticField, a magnetic field with which to calculate Bn on
           the surface, must be provided if Bn is entered as the variable to plot.
         * ``field_grid``: MagneticField, a Grid to pass to the field as a source grid
@@ -1427,8 +1428,9 @@ def plot_section(
         * ``xlabel_fontsize``: float, fontsize of the xlabel
         * ``ylabel_fontsize``: float, fontsize of the ylabel
         * ``cmap``: str, matplotlib colormap scheme to use, passed to ax.contourf
-        * ``levels``: int or array-like, passed to contourf.If ``name``="|F|_normalized"
-           and ``log``==True, default is np.logspace(-6, 0, 7)
+        * ``levels``: int or array-like, passed to contourf.
+          If ``name``="|F|_normalized" and ``log``==True, default is
+          np.logspace(-6, 0, 7). Pass None to use actual data min/max.
         * ``phi``: float, int or array-like. Toroidal angles to plot. If an integer,
           plot that number equally spaced in [0,2pi/NFP). Default 1 for axisymmetry and
           6 for non-axisymmetry

@@ -111,6 +111,9 @@ if __name__ == "__main__":
         data[funs[i]] = {}
         data[funs[i]]["mem"] = np.array(mem) - min(mem)
         data[funs[i]]["t"] = np.array(t) - t[0]
+        # wait a bit before starting the next function to release memory
+        # just in case child process didn't yet.
+        time.sleep(2)
 
     # save the data to a pickle file
     branch = sys.argv[1]  # master or pr

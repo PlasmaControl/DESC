@@ -56,7 +56,7 @@ def test_objective_jac_w7x():
     x = objective.x(eq)
 
     for _ in range(3):
-        objective.jac_scaled_error(x, objective.constants).block_until_ready()
+        _ = objective.jac_scaled_error(x, objective.constants).block_until_ready()
 
 
 @pytest.mark.memory
@@ -90,7 +90,7 @@ def test_proximal_freeb_jac():
     jax.clear_caches()
     gc.collect()
     eq = desc.examples.get("ESTELL")
-    res = 8
+    res = 7
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         eq.change_resolution(res, res, res, 2 * res, 2 * res, 2 * res)
@@ -104,7 +104,7 @@ def test_proximal_freeb_jac():
     obj.build(verbose=0)
     x = obj.x(eq)
     for _ in range(2):
-        obj.jac_scaled_error(x, prox.constants).block_until_ready()
+        _ = obj.jac_scaled_error(x, prox.constants).block_until_ready()
 
 
 @pytest.mark.memory
@@ -113,13 +113,13 @@ def test_proximal_freeb_jac_batched():
     jax.clear_caches()
     gc.collect()
     eq = desc.examples.get("ESTELL")
-    res = 9
+    res = 7
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         eq.change_resolution(res, res, res, 2 * res, 2 * res, 2 * res)
     field = ToroidalMagneticField(1.0, 1.0)  # just a dummy field for benchmarking
     objective = ObjectiveFunction(
-        BoundaryError(eq, field=field), deriv_mode="batched", jac_chunk_size=100
+        BoundaryError(eq, field=field), deriv_mode="batched", jac_chunk_size=50
     )
     constraint = ObjectiveFunction(ForceBalance(eq))
     prox = ProximalProjection(objective, constraint, eq)
@@ -129,7 +129,7 @@ def test_proximal_freeb_jac_batched():
     obj.build(verbose=0)
     x = obj.x(eq)
     for _ in range(2):
-        obj.jac_scaled_error(x, prox.constants).block_until_ready()
+        _ = obj.jac_scaled_error(x, prox.constants).block_until_ready()
 
 
 @pytest.mark.memory
@@ -138,13 +138,13 @@ def test_proximal_freeb_jac_blocked():
     jax.clear_caches()
     gc.collect()
     eq = desc.examples.get("ESTELL")
-    res = 9
+    res = 7
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         eq.change_resolution(res, res, res, 2 * res, 2 * res, 2 * res)
     field = ToroidalMagneticField(1.0, 1.0)  # just a dummy field for benchmarking
     objective = ObjectiveFunction(
-        BoundaryError(eq, field=field, jac_chunk_size=100), deriv_mode="blocked"
+        BoundaryError(eq, field=field, jac_chunk_size=50), deriv_mode="blocked"
     )
     constraint = ObjectiveFunction(ForceBalance(eq))
     prox = ProximalProjection(objective, constraint, eq)
@@ -154,7 +154,7 @@ def test_proximal_freeb_jac_blocked():
     obj.build(verbose=0)
     x = obj.x(eq)
     for _ in range(2):
-        obj.jac_scaled_error(x, prox.constants).block_until_ready()
+        _ = obj.jac_scaled_error(x, prox.constants).block_until_ready()
 
 
 @pytest.mark.memory

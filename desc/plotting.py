@@ -1895,6 +1895,10 @@ def poincare_plot(
         fig, ax = desc.plotting.poincare_plot(
             field, r0, z0, NFP=eq.NFP, ax=ax, color="r", size=0.5, ntransit=250
         )
+        # if one wants to follow the field lines in reverse, can simply use
+        field_reversed = ScaledMagneticField(-1.0, field)
+        # and use this field_reversed instead of field.
+
     """
     fli_kwargs = {}
     for key in inspect.signature(field_line_integrate).parameters:

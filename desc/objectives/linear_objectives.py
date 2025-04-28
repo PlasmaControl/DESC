@@ -286,12 +286,7 @@ class ShareParameters(_Objective):
         # TODO: might be too strict? could we only try to ensure
         #  that the desired params passed are same res?
         for t in things[1:]:
-            assert np.all(
-                [
-                    things[0].params_dict[k].shape == t.params_dict[k].shape
-                    for k in things[0].params_dict.keys()
-                ]
-            )
+            assert np.all([things[0].dimensions == t.dimensions])
 
         super().__init__(
             things=things,

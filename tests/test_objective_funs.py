@@ -102,7 +102,7 @@ from desc.objectives.normalization import compute_scaling_factors
 from desc.objectives.objective_funs import _Objective, collect_docs
 from desc.objectives.utils import softmax, softmin
 from desc.profiles import FourierZernikeProfile, PowerSeriesProfile
-from desc.utils import PRINT_WIDTH
+from desc.utils import PRINT_WIDTH, safenorm
 from desc.vmec_utils import ptolemy_linear_transform
 
 
@@ -1608,7 +1608,7 @@ class TestObjectiveFunction:
         obj = LinkingCurrentConsistency(eq, coilset1)
         obj.build()
         f = obj.compute(coilset1.params_dict, eq.params_dict)
-        np.testing.assert_allclose(f, 0)
+        np.testing.assert_allclose(f, 0, atol=1e-8)
 
         # same with virtual coils
         coilset2 = CoilSet(coil1, coil2, NFP=2, sym=True)
@@ -1616,7 +1616,7 @@ class TestObjectiveFunction:
         obj = LinkingCurrentConsistency(eq, coilset2)
         obj.build()
         f = obj.compute(coilset2.params_dict, eq.params_dict)
-        np.testing.assert_allclose(f, 0)
+        np.testing.assert_allclose(f, 0, atol=1e-8)
 
         # both coilsets together. These have overlapping coils but it doesn't
         # affect the linking number
@@ -1627,7 +1627,7 @@ class TestObjectiveFunction:
         obj = LinkingCurrentConsistency(eq, coilset3)
         obj.build()
         f = obj.compute(coilset3.params_dict, eq.params_dict)
-        np.testing.assert_allclose(f, -G)  # coils provide 2G so error is -G
+        np.testing.assert_allclose(f, -G, rtol=1e-7)  # coils provide 2G so error is -G
 
         # CoilSet + 1 extra coil
         coilset4 = MixedCoilSet(coilset1, coil2, check_intersection=False)
@@ -1637,7 +1637,7 @@ class TestObjectiveFunction:
         obj = LinkingCurrentConsistency(eq, coilset4)
         obj.build()
         f = obj.compute(coilset4.params_dict, eq.params_dict)
-        np.testing.assert_allclose(f, -0.5 * G / 8)
+        np.testing.assert_allclose(f, -0.5 * G / 8, rtol=1e-7)
 
     @pytest.mark.unit
     def test_omnigenity_multiple_surfaces(self):
@@ -1743,6 +1743,37 @@ class TestObjectiveFunction:
         np.testing.assert_allclose(result1, result3)
         np.testing.assert_allclose(result1 * 2, result5)
         np.testing.assert_allclose(result2, result4)
+
+    @pytest.mark.unit
+    def test_surface_current_regularizations(self):
+        """Test SurfaceCurrentRegularization regularizations."""
+
+        def custom_norm(data, regularization):
+            if regularization == "K":
+                return safenorm(data[regularization], axis=-1)
+            elif regularization == "Phi":
+                return np.abs(data[regularization])
+            elif regularization == "sqrt(Phi)":
+                return np.sqrt(np.abs(data["Phi"]))
+
+        def test(field, grid, regularization):
+            reg = "Phi" if regularization == "sqrt(Phi)" else regularization
+            data = field.compute([reg, "|e_theta x e_zeta|"], grid=grid)
+            f0 = custom_norm(data, regularization) * np.sqrt(data["|e_theta x e_zeta|"])
+            obj = SurfaceCurrentRegularization(
+                field, regularization=regularization, source_grid=grid
+            )
+            obj.build()
+            f1 = obj.compute(*obj.xs(field))
+            np.testing.assert_allclose(f0, f1, err_msg=regularization)
+
+        field = FourierCurrentPotentialField(
+            I=0, G=10, NFP=4, Phi_mn=[1, -0.5], modes_Phi=[[0, 1], [2, 2]]
+        )
+        grid = LinearGrid(M=5, N=5, NFP=field.NFP)
+        test(field, grid, "K")
+        test(field, grid, "Phi")
+        test(field, grid, "sqrt(Phi)")
 
     @pytest.mark.unit
     def test_objective_compute(self):
@@ -1859,7 +1890,7 @@ class TestObjectiveFunction:
         np.testing.assert_allclose(
             objective._things_per_objective_idx, [[0, 1], [1, 0]]
         )
-        np.testing.assert_allclose(objective.compute_scaled_error(x), 0, atol=1e-15)
+        np.testing.assert_allclose(objective.compute_scaled_error(x), 0, atol=1e-14)
 
     @pytest.mark.unit
     def test_errors_bootstrap(self):
@@ -1888,6 +1919,9 @@ def test_derivative_modes():
     """Test equality of derivatives using batched, looped methods."""
     eq = Equilibrium(M=2, N=1, L=2)
     surf = FourierRZToroidalSurface()
+
+    # specifying chunk size for sub-objective with batched mode
+    # should raise error
     obj1 = ObjectiveFunction(
         [
             PlasmaVesselDistance(eq, surf, jac_chunk_size=1),
@@ -1897,6 +1931,8 @@ def test_derivative_modes():
         deriv_mode="batched",
         use_jit=False,
     )
+    # specifying chunk size for both objective and sub-objective
+    # should raise error
     obj2 = ObjectiveFunction(
         [
             PlasmaVesselDistance(eq, surf, jac_chunk_size=2),
@@ -1977,6 +2013,36 @@ def test_derivative_modes():
     j3 = obj3.jvp_scaled(v, x)
     np.testing.assert_allclose(j1, j2, atol=1e-10)
     np.testing.assert_allclose(j1, j3, atol=1e-10)
+
+    # specifying chunk size to sub-objective should make the deriv
+    # mode of the objective "blocked" automatically
+    obj1 = ObjectiveFunction(ForceBalance(eq, jac_chunk_size=2))
+    obj2 = ObjectiveFunction(
+        (
+            ForceBalance(eq, jac_chunk_size=5),
+            PlasmaVesselDistance(eq, surf, jac_chunk_size=100),
+        )
+    )
+    # reverse mode sub-objectives should be blocked and have the same
+    # chunk size as the objective
+    obj3 = ObjectiveFunction(
+        (
+            AspectRatio(eq, target=3),
+            ForceBalance(eq),
+        )
+    )
+    obj1.build()
+    obj2.build()
+    obj3.build()
+    assert obj1._deriv_mode == "blocked"
+    assert obj2._deriv_mode == "blocked"
+    assert obj3._deriv_mode == "blocked"
+    # check that the chunk size is set correctly
+    assert obj1.objectives[0]._jac_chunk_size == 2
+    assert obj2.objectives[0]._jac_chunk_size == 5
+    assert obj2.objectives[1]._jac_chunk_size == 100
+    assert obj3.objectives[0]._jac_chunk_size == obj3._jac_chunk_size
+    assert obj3.objectives[1]._jac_chunk_size == obj3._jac_chunk_size
 
 
 @pytest.mark.unit

@@ -76,10 +76,14 @@ if __name__ == "__main__":
 
     data = {}
 
+    # list of functions to benchmark
+    # CI benchmark will be more valuable if the tests use at least couple GBs
     funs = [
         "test_objective_jac_w7x",
         "test_proximal_jac_w7x_with_eq_update",
         "test_proximal_freeb_jac",
+        "test_proximal_freeb_jac_blocked",
+        "test_proximal_freeb_jac_batched",
         "test_proximal_jac_ripple",
         "test_proximal_jac_ripple_spline",
     ]

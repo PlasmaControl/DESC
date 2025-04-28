@@ -40,11 +40,11 @@ from desc.objectives import (
 from desc.optimize import LinearConstraintProjection, ProximalProjection
 
 
-@pytest.mark.skip()
-@pytest.mark.unit
+@pytest.mark.memory
 def test_objective_jac_w7x():
     """Benchmark computing jacobian."""
     jax.clear_caches()
+    gc.collect()
     eq = desc.examples.get("W7-X")
     objective = LinearConstraintProjection(
         get_equilibrium_objective(eq),
@@ -57,14 +57,13 @@ def test_objective_jac_w7x():
 
     for _ in range(3):
         objective.jac_scaled_error(x, objective.constants).block_until_ready()
-        gc.collect()
 
 
-@pytest.mark.skip()
-@pytest.mark.unit
+@pytest.mark.memory
 def test_proximal_jac_w7x_with_eq_update():
     """Benchmark computing jacobian of constrained proximal projection."""
     jax.clear_caches()
+    gc.collect()
     eq = desc.examples.get("W7-X")
     grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, rho=np.linspace(0.1, 1, 10))
     objective = ObjectiveFunction(QuasisymmetryTwoTerm(eq, grid=grid))
@@ -83,14 +82,13 @@ def test_proximal_jac_w7x_with_eq_update():
         # this one will compile everything inside the function
         x = x.at[0].add(np.random.rand() * 0.001)
         _ = prox.jac_scaled_error(x, prox.constants).block_until_ready()
-        gc.collect()
 
 
-@pytest.mark.skip()
-@pytest.mark.unit
+@pytest.mark.memory
 def test_proximal_freeb_jac():
     """Benchmark computing free boundary jacobian with proximal constraint."""
     jax.clear_caches()
+    gc.collect()
     eq = desc.examples.get("ESTELL")
     res = 8
     with warnings.catch_warnings():
@@ -105,29 +103,76 @@ def test_proximal_freeb_jac():
     )
     obj.build(verbose=0)
     x = obj.x(eq)
-    for _ in range(3):
+    for _ in range(2):
         obj.jac_scaled_error(x, prox.constants).block_until_ready()
-        gc.collect()
 
 
-@pytest.mark.skip()
-@pytest.mark.unit
+@pytest.mark.memory
+def test_proximal_freeb_jac_batched():
+    """Benchmark computing free boundary jacobian with proximal constraint."""
+    jax.clear_caches()
+    gc.collect()
+    eq = desc.examples.get("ESTELL")
+    res = 9
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        eq.change_resolution(res, res, res, 2 * res, 2 * res, 2 * res)
+    field = ToroidalMagneticField(1.0, 1.0)  # just a dummy field for benchmarking
+    objective = ObjectiveFunction(
+        BoundaryError(eq, field=field), deriv_mode="batched", jac_chunk_size=100
+    )
+    constraint = ObjectiveFunction(ForceBalance(eq))
+    prox = ProximalProjection(objective, constraint, eq)
+    obj = LinearConstraintProjection(
+        prox, ObjectiveFunction((FixCurrent(eq), FixPressure(eq), FixPsi(eq)))
+    )
+    obj.build(verbose=0)
+    x = obj.x(eq)
+    for _ in range(2):
+        obj.jac_scaled_error(x, prox.constants).block_until_ready()
+
+
+@pytest.mark.memory
+def test_proximal_freeb_jac_blocked():
+    """Benchmark computing free boundary jacobian with proximal constraint."""
+    jax.clear_caches()
+    gc.collect()
+    eq = desc.examples.get("ESTELL")
+    res = 9
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        eq.change_resolution(res, res, res, 2 * res, 2 * res, 2 * res)
+    field = ToroidalMagneticField(1.0, 1.0)  # just a dummy field for benchmarking
+    objective = ObjectiveFunction(
+        BoundaryError(eq, field=field, jac_chunk_size=100), deriv_mode="blocked"
+    )
+    constraint = ObjectiveFunction(ForceBalance(eq))
+    prox = ProximalProjection(objective, constraint, eq)
+    obj = LinearConstraintProjection(
+        prox, ObjectiveFunction((FixCurrent(eq), FixPressure(eq), FixPsi(eq)))
+    )
+    obj.build(verbose=0)
+    x = obj.x(eq)
+    for _ in range(2):
+        obj.jac_scaled_error(x, prox.constants).block_until_ready()
+
+
+@pytest.mark.memory
 def test_proximal_jac_ripple():
     """Benchmark computing objective jacobian for effective ripple."""
     _test_proximal_ripple(False, "jac_scaled_error")
 
 
-@pytest.mark.skip()
-@pytest.mark.unit
+@pytest.mark.memory
 def test_proximal_jac_ripple_spline():
     """Benchmark computing objective jacobian for effective ripple."""
     _test_proximal_ripple(True, "jac_scaled_error")
 
 
-@pytest.mark.skip()
-@pytest.mark.unit
+@pytest.mark.memory
 def _test_proximal_ripple(spline, method):
     jax.clear_caches()
+    gc.collect()
     eq = desc.examples.get("HELIOTRON")
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
@@ -150,7 +195,6 @@ def _test_proximal_ripple(spline, method):
     x = prox.x(eq)
     for _ in range(3):
         _ = getattr(prox, method)(x, prox.constants).block_until_ready()
-        gc.collect()
 
 
 if __name__ == "__main__":
@@ -164,6 +208,10 @@ if __name__ == "__main__":
         test_proximal_jac_w7x_with_eq_update()
     elif func == "test_proximal_freeb_jac":
         test_proximal_freeb_jac()
+    elif func == "test_proximal_freeb_jac_batched":
+        test_proximal_freeb_jac_batched()
+    elif func == "test_proximal_freeb_jac_blocked":
+        test_proximal_freeb_jac_blocked()
     elif func == "test_proximal_jac_ripple":
         test_proximal_jac_ripple()
     elif func == "test_proximal_jac_ripple_spline":

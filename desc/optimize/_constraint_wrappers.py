@@ -1110,7 +1110,7 @@ class ProximalProjection(ObjectiveFunction):
 
     def _jvp(self, v, x, constants=None, op="scaled_error"):
         # The goal is to compute the Jacobian of the objective function with respect to
-        # the optimization variables (c). Before taking the jacobian, we update the
+        # the optimization variables (c). Before taking the Jacobian, we update the
         # equilibrium such that
         # F(x+dx, c+dc) = 0 = F(x, c) + dF/dx * dx + dF/dc * dc
         # where we already have F(x, c) = 0, so we can solve for dx and get
@@ -1120,6 +1120,10 @@ class ProximalProjection(ObjectiveFunction):
         # substituting in dx we get
         # G(x+dx, c+dc) = G(x, c) + [ dG/dc - dG/dx * (dF/dx)^-1 * dF/dc ]* dc
         # and the Jacobian we want is dG/dc - dG/dx * (dF/dx)^-1 * dF/dc
+
+        # Note: This Jacobian can be obtained using JVPs in proper tangent directions.
+        # First we will compute the tangent direction (see _get_tangent for details),
+        # then we will compute the Jacobian.
         v = v[0] if isinstance(v, (tuple, list)) else v
         constants = setdefault(constants, self.constants)
         xg, xf = self._update_equilibrium(x, store=True)
@@ -1148,6 +1152,9 @@ class ProximalProjection(ObjectiveFunction):
             )(tangents)
 
     def _get_tangent(self, v, xf, constants, op):
+        # Note: This function is vectorized over v. So, v is expected to be 1D array
+        # of size self.dim_x.
+
         # v contains "boundary" dofs from eq and other objects (like coils, surfaces
         # etc) want jvp_f to only get parts from equilibrium, not other things
         vs = jnp.split(v, np.cumsum(self._dimc_per_thing))
@@ -1157,9 +1164,7 @@ class ProximalProjection(ObjectiveFunction):
             xf,
             constants[1],
             vs[self._eq_idx],
-            self._eq_unfixed_idx,
-            self._eq_Z,
-            self._eq_D,
+            self._eq_solve_objective._unfixed_idx_mat,
             self._dxdc,
             op,
         )
@@ -1170,7 +1175,7 @@ class ProximalProjection(ObjectiveFunction):
 
         # We try to find dG/dc - dG/dx * (dF/dx)^-1 * dF/dc
         # where G is the objective function. Since DESC stores x and c in the same
-        # vector, instead of multiple jvp calls, we will just find a tangent direction
+        # vector, instead of multiple JVP calls, we will just find a tangent direction
         # that will give us the same result.
         # For making the explanation clear, assume J is the Jacobian of the objective
         # function with respect to the full state vector (both x and c). Then,
@@ -1208,12 +1213,14 @@ class ProximalProjection(ObjectiveFunction):
 
 
 @functools.partial(jit, static_argnames=["op"])
-def _proximal_jvp_f_pure(constraint, xf, constants, dc, unfixed_idx, Z, D, dxdc, op):
+def _proximal_jvp_f_pure(constraint, xf, constants, dc, eq_unfixed_idx_mat, dxdc, op):
+    # Note: This function is called by _get_tangent which is vectorized over v
+    # (which is called dc in this function). So, dc is expected to be 1D array
+    # of size full equilibrium state vector.
+
     # here we are forming (dF/dx)^-1 @ dF/dc
     # where Fxh is dF/dx and Fc is dF/dc
-    Fxh = getattr(constraint, "jvp_" + op)(
-        (jnp.diag(D)[:, unfixed_idx] @ Z).T, xf, constants
-    ).T
+    Fxh = getattr(constraint, "jvp_" + op)(eq_unfixed_idx_mat.T, xf, constants).T
     Fc = getattr(constraint, "jvp_" + op)(dxdc @ dc, xf, constants)
     cutoff = jnp.finfo(Fxh.dtype).eps * max(Fxh.shape)
     uf, sf, vtf = jnp.linalg.svd(Fxh, full_matrices=False)

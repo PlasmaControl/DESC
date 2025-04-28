@@ -43,11 +43,18 @@ class LinearConstraintProjection(ObjectiveFunction):
         Objective function to optimize.
     constraint : ObjectiveFunction
         Objective function of linear constraints to enforce.
+    x_scale : array_like or ``'auto'``, optional
+        Characteristic scale of each variable. Setting ``x_scale`` is equivalent
+        to reformulating the problem in scaled variables ``xs = x / x_scale``.
+        If set to ``'auto'``, the scale is determined from the initial state vector.
     name : str
         Name of the objective function.
+
     """
 
-    def __init__(self, objective, constraint, name="LinearConstraintProjection"):
+    def __init__(
+        self, objective, constraint, x_scale="auto", name="LinearConstraintProjection"
+    ):
         errorif(
             not isinstance(objective, ObjectiveFunction),
             ValueError,
@@ -73,6 +80,7 @@ class LinearConstraintProjection(ObjectiveFunction):
 
         self._objective = objective
         self._constraint = constraint
+        self._x_scale = x_scale
         self._built = False
         # don't want to compile this, just use the compiled objective
         self._use_jit = False
@@ -119,6 +127,7 @@ class LinearConstraintProjection(ObjectiveFunction):
         ) = factorize_linear_constraints(
             self._objective,
             self._constraint,
+            self._x_scale,
         )
         # inverse of the linear constraint matrix A without any scaling
         self._Ainv = self._D[self._unfixed_idx, None] * self._ADinv

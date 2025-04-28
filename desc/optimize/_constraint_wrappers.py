@@ -1142,14 +1142,8 @@ class ProximalProjection(ObjectiveFunction):
             return getattr(self._objective, "jvp_" + op)(tangents, xg, constants[0])
         else:
             xgs = jnp.split(xg, np.cumsum(self._dimx_per_thing))
-            jvpfun = lambda u: _proximal_jvp_blocked_pure(
-                self._objective, jnp.split(u, np.cumsum(self._dimx_per_thing)), xgs, op
-            )
-            return batched_vectorize(
-                jvpfun,
-                signature="(n)->(k)",
-                chunk_size=self._objective._jac_chunk_size,
-            )(tangents)
+            vgs = jnp.split(tangents, np.cumsum(self._dimx_per_thing), axis=-1)
+            return _proximal_jvp_blocked_pure(self._objective, vgs, xgs, op)
 
     def _get_tangent(self, v, xf, constants, op):
         # Note: This function is vectorized over v. So, v is expected to be 1D array
@@ -1215,12 +1209,18 @@ class ProximalProjection(ObjectiveFunction):
 @functools.partial(jit, static_argnames=["op"])
 def _proximal_jvp_f_pure(constraint, xf, constants, dc, eq_unfixed_idx_mat, dxdc, op):
     # Note: This function is called by _get_tangent which is vectorized over v
-    # (which is called dc in this function). So, dc is expected to be 1D array
-    # of size full equilibrium state vector.
+    # (v is called dc in this function). So, dc is expected to be 1D array
+    # of same size as full equilibrium state vector. This function returns a 1D array.
 
     # here we are forming (dF/dx)^-1 @ dF/dc
     # where Fxh is dF/dx and Fc is dF/dc
     Fxh = getattr(constraint, "jvp_" + op)(eq_unfixed_idx_mat.T, xf, constants).T
+    # Our compute functions never include variables like Rb_lmn, Zb_lmn etc. So,
+    # taking the JVP in just dc direction will give 0. To prevent this, we use dxdc
+    # which is the dx/dc matrix and convert the Rb_lmn to R_lmn entries etc.
+    # For example, if we want the derivative wrt Rb_023, we should take the derivative
+    # wrt all R_lmn coefficients that contribute to Rb_023. See BoundaryRSelfConsistency
+    # for the relation between Rb_lmn and R_lmn.
     Fc = getattr(constraint, "jvp_" + op)(dxdc @ dc, xf, constants)
     cutoff = jnp.finfo(Fxh.dtype).eps * max(Fxh.shape)
     uf, sf, vtf = jnp.linalg.svd(Fxh, full_matrices=False)
@@ -1231,6 +1231,13 @@ def _proximal_jvp_f_pure(constraint, xf, constants, dc, eq_unfixed_idx_mat, dxdc
 
 @functools.partial(jit, static_argnames=["op"])
 def _proximal_jvp_blocked_pure(objective, vgs, xgs, op):
+    # Note: This function is not vectorized and takes the full set of tangents, and
+    # returns a matrix.
+
+    # vgs and xgs are list of arrays (not same size necessarily), that are split by the
+    # things in the objective. If there are multiple things for the ObjectiveFunction,
+    # each split belongs to a different thing. The information about which thing is used
+    # by which sub-objective is stored in _things_per_objective_idx.
     out = []
     for k, (obj, const) in enumerate(zip(objective.objectives, objective.constants)):
         thing_idx = objective._things_per_objective_idx[k]
@@ -1249,4 +1256,4 @@ def _proximal_jvp_blocked_pure(objective, vgs, xgs, op):
         else:
             outi = getattr(obj, "jvp_" + op)([_vi for _vi in vi], xi, constants=const).T
             out.append(outi)
-    return jnp.concatenate(out)
+    return jnp.concatenate(out).T

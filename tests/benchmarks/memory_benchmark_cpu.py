@@ -84,8 +84,8 @@ if __name__ == "__main__":
         "test_proximal_freeb_jac",
         "test_proximal_freeb_jac_blocked",
         "test_proximal_freeb_jac_batched",
-        "test_proximal_jac_ripple",
-        "test_proximal_jac_ripple_spline",
+        # "test_proximal_jac_ripple",
+        # "test_proximal_jac_ripple_spline",
     ]
 
     for i in range(len(funs)):
@@ -109,7 +109,7 @@ if __name__ == "__main__":
         # save the data
         # make sure memory usage is 0 somewhere and t starts at 0
         data[funs[i]] = {}
-        data[funs[i]]["mem"] = np.array(mem) - min(mem)
+        data[funs[i]]["mem"] = np.array(mem)  # - min(mem)
         data[funs[i]]["t"] = np.array(t) - t[0]
         # wait a bit before starting the next function to release memory
         # just in case child process didn't yet.

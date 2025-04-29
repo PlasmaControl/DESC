@@ -55,7 +55,7 @@ def test_objective_jac_w7x():
     objective.build(verbose=0)
     x = objective.x(eq)
 
-    for _ in range(2):
+    for _ in range(3):
         _ = objective.jac_scaled_error(x, objective.constants).block_until_ready()
 
 
@@ -77,7 +77,7 @@ def test_proximal_jac_w7x_with_eq_update():
     )
     prox.build(verbose=0)
     x = prox.x(eq)
-    for _ in range(2):
+    for _ in range(3):
         # we change x slightly to profile solve/perturb equilibrium too
         # this one will compile everything inside the function
         x = x.at[0].add(np.random.rand() * 0.001)
@@ -103,7 +103,7 @@ def test_proximal_freeb_jac():
     )
     obj.build(verbose=0)
     x = obj.x(eq)
-    for _ in range(2):
+    for _ in range(3):
         _ = obj.jac_scaled_error(x, prox.constants).block_until_ready()
 
 
@@ -131,7 +131,7 @@ def test_proximal_freeb_jac_batched():
     )
     obj.build(verbose=0)
     x = obj.x(eq)
-    for _ in range(2):
+    for _ in range(3):
         _ = obj.jac_scaled_error(x, prox.constants).block_until_ready()
 
 
@@ -158,7 +158,7 @@ def test_proximal_freeb_jac_blocked():
     )
     obj.build(verbose=0)
     x = obj.x(eq)
-    for _ in range(2):
+    for _ in range(3):
         _ = obj.jac_scaled_error(x, prox.constants).block_until_ready()
 
 
@@ -179,18 +179,18 @@ def _test_proximal_ripple(spline, method):
     jax.clear_caches()
     gc.collect()
     eq = desc.examples.get("HELIOTRON")
-    res = 7
+    res = 8
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         eq.change_resolution(res, res, res, 2 * res, 2 * res, 2 * res)
-    num_transit = 30
+    num_transit = 20
     objective = ObjectiveFunction(
         [
             EffectiveRipple(
                 eq,
                 num_transit=num_transit,
                 num_well=10 * num_transit,
-                num_quad=32,
+                num_quad=16,
                 spline=spline,
             )
         ]
@@ -199,7 +199,7 @@ def _test_proximal_ripple(spline, method):
     prox = ProximalProjection(objective, constraint, eq)
     prox.build(verbose=0)
     x = prox.x(eq)
-    for _ in range(2):
+    for _ in range(3):
         _ = getattr(prox, method)(x, prox.constants).block_until_ready()
 
 

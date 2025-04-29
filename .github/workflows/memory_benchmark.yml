@@ -49,10 +49,11 @@ jobs:
           pip install -r devtools/dev-requirements.txt
           pip install matplotlib==3.9.2
 
+      # Add more memory just in case
       - name: Set Swap Space
         uses: pierotofy/set-swap-space@master
         with:
-          swap-size-gb: 15
+          swap-size-gb: 10
 
       - name: Action Details
         run: |

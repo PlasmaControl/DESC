@@ -40,6 +40,7 @@ jobs:
           key: ${{ runner.os }}-venv-${{ env.version }}-${{ hashFiles('devtools/dev-requirements.txt', 'requirements.txt') }}
 
       - name: Set up virtual environment if not restored from cache
+        if: steps.restore-env.outputs.cache-hit != 'true'
         run: |
           gh cache list
           python -m venv .venv-${{ env.version }}

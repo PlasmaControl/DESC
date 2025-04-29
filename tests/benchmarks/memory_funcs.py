@@ -120,9 +120,9 @@ def test_proximal_freeb_jac_batched():
     field = ToroidalMagneticField(1.0, 1.0)  # just a dummy field for benchmarking
     # TODO(1623): Once the memory issue is fixed, reduce the amount of chunking
     objective = ObjectiveFunction(
-        BoundaryError(eq, field=field, B_plasma_chunk_size=100),
+        BoundaryError(eq, field=field),
         deriv_mode="batched",
-        jac_chunk_size=1,
+        jac_chunk_size=100,
     )
     constraint = ObjectiveFunction(ForceBalance(eq))
     prox = ProximalProjection(objective, constraint, eq)
@@ -148,7 +148,7 @@ def test_proximal_freeb_jac_blocked():
     field = ToroidalMagneticField(1.0, 1.0)  # just a dummy field for benchmarking
     # TODO(1623): Once the memory issue is fixed, reduce the amount of chunking
     objective = ObjectiveFunction(
-        BoundaryError(eq, field=field, jac_chunk_size=1, B_plasma_chunk_size=100),
+        BoundaryError(eq, field=field, jac_chunk_size=100),
         deriv_mode="blocked",
     )
     constraint = ObjectiveFunction(ForceBalance(eq))

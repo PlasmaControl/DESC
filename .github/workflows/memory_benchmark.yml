@@ -6,14 +6,13 @@ on:
   workflow_dispatch:
 
 jobs:
-  benchmark:
+  memory-benchmark:
     if: ${{ github.event.label.name == 'mem_profile' && github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     env:
       GH_TOKEN: ${{ github.token }}
     strategy:
-      # make sure that when you change the Python version here, you also change it in
-      # the compare_bench_results.py script
       matrix:
         python-version: ['3.12']
 

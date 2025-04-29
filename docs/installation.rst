@@ -60,7 +60,7 @@ This will show how to set up a new ``uv`` project with DESC as an editable depen
 and with the ability to use DESC in a jupyter notebook.
 
 .. code-block:: sh
-   
+
     # Download UV; it installs into .local/bin
     curl -LsSf https://astral.sh/uv/install.sh | sh
 
@@ -72,7 +72,8 @@ and with the ability to use DESC in a jupyter notebook.
 
     # add dependencies
     uv add --editable "../DESC"
-    uv add "jax[cpu]" # or jax[cuda12] or similar on a platform with a GPU
+    # to install a special jax version, for GPU:
+    # uv add "jax[cuda12]"
 
     # run a python REPL
     uv run python

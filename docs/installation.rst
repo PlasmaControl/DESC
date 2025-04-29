@@ -51,22 +51,23 @@ Now use pip to install packages (this will only install DESC + JAX with CPU capa
     # optionally install developer requirements (if you want to run tests)
     pip install -r devtools/dev-requirements.txt
 
-** Or using uv instead of pip **
+**Or using uv instead of pip**
 
 One could use `uv <https://docs.astral.sh/uv>`_, a new python package management tool, instead of pip.
-For a project that uses and possibly modifies DESC, and also uses it to perform analysis,
+For a project that modifies DESC and also uses it to perform analysis,
 it can be nice to separate the DESC folder from the project's data, scripts, jupyter notebooks, etc.
 This will show how to set up a new ``uv`` project with DESC as an editable dependency,
 and with the ability to use DESC in a jupyter notebook.
 
 .. code-block:: sh
 
-    # Download UV; it installs into .local/bin
+    # download UV; it installs into .local/bin
     curl -LsSf https://astral.sh/uv/install.sh | sh
 
     # the depth=1 option reduces the quantity of older data downloaded
     git clone --depth=1 git@github.com:PlasmaControl/DESC.git
 
+    # initialize a project
     uv init myproject
     cd myproject
 
@@ -78,6 +79,8 @@ and with the ability to use DESC in a jupyter notebook.
     # run a python REPL
     uv run python
 
+    # Jupyter Notebooks
+    # ----------------
     # install a jupyter kernel
     uv add --dev ipykernel
     uv run ipython kernel install --user --env VIRTUAL_ENV $(pwd)/.venv --name=myproject

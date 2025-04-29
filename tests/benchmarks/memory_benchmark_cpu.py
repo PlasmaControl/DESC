@@ -113,7 +113,8 @@ if __name__ == "__main__":
         data[funs[i]]["t"] = np.array(t) - t[0]
         print(
             f"{funs[i]} used max {max(data[funs[i]]['mem'])} MB and took "
-            + f"{data[funs[i]]['t'][-1]} s"
+            + f"{data[funs[i]]['t'][-1]} s",
+            flush=True,
         )
         # wait a bit before starting the next function to release memory
         # just in case child process didn't yet.

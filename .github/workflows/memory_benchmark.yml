@@ -2,12 +2,12 @@ name: Memory Benchmarks
 
 on:
   pull_request:
-    types: [labeled]
+    types: [labeled, synchronize]
   workflow_dispatch:
 
 jobs:
   memory-benchmark:
-    if: ${{ github.event.label.name == 'mem_profile' && github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' }}
+    if: ${{ contains(github.event.pull_request.labels.*.name, 'mem_profile') || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ github.token }}

@@ -49,6 +49,11 @@ jobs:
           pip install -r devtools/dev-requirements.txt
           pip install matplotlib==3.9.2
 
+      - name: Set Swap Space
+        uses: pierotofy/set-swap-space@master
+        with:
+          swap-size-gb: 15
+
       - name: Action Details
         run: |
           source .venv-${{ env.version }}/bin/activate

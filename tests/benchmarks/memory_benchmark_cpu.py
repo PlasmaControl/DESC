@@ -112,8 +112,8 @@ if __name__ == "__main__":
         data[funs[i]]["mem"] = np.array(mem) - min(mem)
         data[funs[i]]["t"] = np.array(t) - t[0]
         print(
-            f"{funs[i]} used max {max(data[funs[i]]['mem'])} MB and took "
-            + f"{data[funs[i]]['t'][-1]} s",
+            f"{funs[i]} used max {max(data[funs[i]]['mem']):.2f} MB and took "
+            + f"{data[funs[i]]['t'][-1]:.2f} s",
             flush=True,
         )
         # wait a bit before starting the next function to release memory

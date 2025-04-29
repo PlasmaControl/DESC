@@ -55,7 +55,7 @@ def test_objective_jac_w7x():
     objective.build(verbose=0)
     x = objective.x(eq)
 
-    for _ in range(3):
+    for _ in range(2):
         _ = objective.jac_scaled_error(x, objective.constants).block_until_ready()
 
 
@@ -77,7 +77,7 @@ def test_proximal_jac_w7x_with_eq_update():
     )
     prox.build(verbose=0)
     x = prox.x(eq)
-    for _ in range(3):
+    for _ in range(2):
         # we change x slightly to profile solve/perturb equilibrium too
         # this one will compile everything inside the function
         x = x.at[0].add(np.random.rand() * 0.001)
@@ -179,9 +179,10 @@ def _test_proximal_ripple(spline, method):
     jax.clear_caches()
     gc.collect()
     eq = desc.examples.get("HELIOTRON")
+    res = 7
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        eq.change_resolution(L=8, M=8, N=8, L_grid=16, M_grid=16, N_grid=16)
+        eq.change_resolution(res, res, res, 2 * res, 2 * res, 2 * res)
     num_transit = 30
     objective = ObjectiveFunction(
         [
@@ -198,7 +199,7 @@ def _test_proximal_ripple(spline, method):
     prox = ProximalProjection(objective, constraint, eq)
     prox.build(verbose=0)
     x = prox.x(eq)
-    for _ in range(3):
+    for _ in range(2):
         _ = getattr(prox, method)(x, prox.constants).block_until_ready()
 
 

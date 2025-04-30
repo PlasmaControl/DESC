@@ -39,7 +39,8 @@ if os.path.exists("master.pickle") and os.path.exists("pr.pickle"):
     msg = "### Memory benchmark result\n\n```diff\n"
     msg += (
         f"| {'Test Name':^38} | {'%Δ':^12} | {'Master (MB)':^18} | "
-        + f"{'PR (MB)':^18} | {'Δ (MB)':^12} |\n"
+        + f"{'PR (MB)':^18} | {'Δ (MB)':^12} | {'Time PR (s)':^18} | "
+        + f"{'Time Master (s)':^18} |\n"
     )
     msg += f"| {'-'*38} | {'-'*12} | {'-'*18} | {'-'*18} | {'-'*12} |\n"
     for i, name in enumerate(data_master.keys()):
@@ -50,9 +51,12 @@ if os.path.exists("master.pickle") and os.path.exists("pr.pickle"):
         color = " " if abs((delta / peak_ma) * 100) < 10 else "-" if delta >= 0 else "+"
         percent_change = f"{(delta / peak_ma) * 100:.2f}" + " %"
         delta = f"{delta:.2f}"
+        time_pr = data_pr[name]["t"][-1]
+        time_ma = data_master[name]["t"][-1]
         msg += (
-            f"{color} {name:<38} | {percent_change:^12} | {peak_ma:^18.1f} | "
-            + f"{peak_pr:^18.1f} | {delta:^12} |\n"
+            f"{color} {name:<38} | {percent_change:^12} | {peak_ma:^18.3e} | "
+            + f"{peak_pr:^18.3e} | {delta:^12} | {time_pr:^18.2f} | "
+            + f"{time_ma:^18.2f} |\n"
         )
 
     msg += "```"

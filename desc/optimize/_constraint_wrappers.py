@@ -1150,9 +1150,12 @@ class ProximalProjection(ObjectiveFunction):
             # objective's method already know about its jac_chunk_size
             return getattr(self._objective, "jvp_" + op)(tangents, xg, constants[0])
         else:
-            xgs = jnp.split(xg, np.cumsum(self._dimx_per_thing))
-            vgs = jnp.split(tangents, np.cumsum(self._dimx_per_thing), axis=-1)
-            return _proximal_jvp_blocked_pure(self._objective, vgs, xgs, op)
+            return _proximal_jvp_blocked_pure(
+                self._objective,
+                jnp.split(tangents, np.cumsum(self._dimx_per_thing), axis=-1),
+                jnp.split(xg, np.cumsum(self._dimx_per_thing)),
+                op,
+            )
 
     def _get_tangent(self, v, xf, constants, op):
         # Note: This function is vectorized over v. So, v is expected to be 1D array

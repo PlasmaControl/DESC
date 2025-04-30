@@ -4,7 +4,7 @@ on:
   pull_request_target:
     branches:
       - master
-    types: [opened, synchronize]
+    types: [opened, reopened]
   workflow_dispatch:
     inputs:
       debug_enabled:
@@ -19,6 +19,7 @@ concurrency:
 
 jobs:
   benchmark:
+    if: ${{ contains(github.event.pull_request.labels.*.name, 'run_benchmarks') || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ github.token }}

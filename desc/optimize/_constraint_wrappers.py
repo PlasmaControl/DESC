@@ -43,11 +43,18 @@ class LinearConstraintProjection(ObjectiveFunction):
         Objective function to optimize.
     constraint : ObjectiveFunction
         Objective function of linear constraints to enforce.
+    x_scale : array_like or ``'auto'``, optional
+        Characteristic scale of each variable. Setting ``x_scale`` is equivalent
+        to reformulating the problem in scaled variables ``xs = x / x_scale``.
+        If set to ``'auto'``, the scale is determined from the initial state vector.
     name : str
         Name of the objective function.
+
     """
 
-    def __init__(self, objective, constraint, name="LinearConstraintProjection"):
+    def __init__(
+        self, objective, constraint, x_scale="auto", name="LinearConstraintProjection"
+    ):
         errorif(
             not isinstance(objective, ObjectiveFunction),
             ValueError,
@@ -73,6 +80,7 @@ class LinearConstraintProjection(ObjectiveFunction):
 
         self._objective = objective
         self._constraint = constraint
+        self._x_scale = x_scale
         self._built = False
         # don't want to compile this, just use the compiled objective
         self._use_jit = False
@@ -119,6 +127,7 @@ class LinearConstraintProjection(ObjectiveFunction):
         ) = factorize_linear_constraints(
             self._objective,
             self._constraint,
+            self._x_scale,
         )
         # inverse of the linear constraint matrix A without any scaling
         self._Ainv = self._D[self._unfixed_idx, None] * self._ADinv
@@ -1110,16 +1119,20 @@ class ProximalProjection(ObjectiveFunction):
 
     def _jvp(self, v, x, constants=None, op="scaled_error"):
         # The goal is to compute the Jacobian of the objective function with respect to
-        # the optimization variables (c). Before taking the jacobian, we update the
+        # the optimization variables (c). Before taking the Jacobian, we update the
         # equilibrium such that
         # F(x+dx, c+dc) = 0 = F(x, c) + dF/dx * dx + dF/dc * dc
-        # where we already have F(x, c) = 0, so we can solve for dx and get
+        # so that we can set F(x, c) = 0, from here we can solve for dx and get
         # dx = - (dF/dx)^-1 * dF/dc * dc     # noqa : E800
         # We can then compute the Jacobian of the objective function with respect to c
         # G(x+dx, c+dc) = G(x, c) + dG/dx * dx + dG/dc * dc
         # substituting in dx we get
         # G(x+dx, c+dc) = G(x, c) + [ dG/dc - dG/dx * (dF/dx)^-1 * dF/dc ]* dc
         # and the Jacobian we want is dG/dc - dG/dx * (dF/dx)^-1 * dF/dc
+
+        # Note: This Jacobian can be obtained using JVPs in proper tangent directions.
+        # First we will compute the tangent direction (see _get_tangent for details),
+        # then we will compute the Jacobian.
         v = v[0] if isinstance(v, (tuple, list)) else v
         constants = setdefault(constants, self.constants)
         xg, xf = self._update_equilibrium(x, store=True)
@@ -1138,16 +1151,13 @@ class ProximalProjection(ObjectiveFunction):
             return getattr(self._objective, "jvp_" + op)(tangents, xg, constants[0])
         else:
             xgs = jnp.split(xg, np.cumsum(self._dimx_per_thing))
-            jvpfun = lambda u: _proximal_jvp_blocked_pure(
-                self._objective, jnp.split(u, np.cumsum(self._dimx_per_thing)), xgs, op
-            )
-            return batched_vectorize(
-                jvpfun,
-                signature="(n)->(k)",
-                chunk_size=self._objective._jac_chunk_size,
-            )(tangents)
+            vgs = jnp.split(tangents, np.cumsum(self._dimx_per_thing), axis=-1)
+            return _proximal_jvp_blocked_pure(self._objective, vgs, xgs, op)
 
     def _get_tangent(self, v, xf, constants, op):
+        # Note: This function is vectorized over v. So, v is expected to be 1D array
+        # of size self.dim_x.
+
         # v contains "boundary" dofs from eq and other objects (like coils, surfaces
         # etc) want jvp_f to only get parts from equilibrium, not other things
         vs = jnp.split(v, np.cumsum(self._dimc_per_thing))
@@ -1157,9 +1167,7 @@ class ProximalProjection(ObjectiveFunction):
             xf,
             constants[1],
             vs[self._eq_idx],
-            self._eq_unfixed_idx,
-            self._eq_Z,
-            self._eq_D,
+            self._eq_solve_objective._unfixed_idx_mat,
             self._dxdc,
             op,
         )
@@ -1170,7 +1178,7 @@ class ProximalProjection(ObjectiveFunction):
 
         # We try to find dG/dc - dG/dx * (dF/dx)^-1 * dF/dc
         # where G is the objective function. Since DESC stores x and c in the same
-        # vector, instead of multiple jvp calls, we will just find a tangent direction
+        # vector, instead of multiple JVP calls, we will just find a tangent direction
         # that will give us the same result.
         # For making the explanation clear, assume J is the Jacobian of the objective
         # function with respect to the full state vector (both x and c). Then,
@@ -1208,12 +1216,20 @@ class ProximalProjection(ObjectiveFunction):
 
 
 @functools.partial(jit, static_argnames=["op"])
-def _proximal_jvp_f_pure(constraint, xf, constants, dc, unfixed_idx, Z, D, dxdc, op):
+def _proximal_jvp_f_pure(constraint, xf, constants, dc, eq_unfixed_idx_mat, dxdc, op):
+    # Note: This function is called by _get_tangent which is vectorized over v
+    # (v is called dc in this function). So, dc is expected to be 1D array
+    # of same size as full equilibrium state vector. This function returns a 1D array.
+
     # here we are forming (dF/dx)^-1 @ dF/dc
     # where Fxh is dF/dx and Fc is dF/dc
-    Fxh = getattr(constraint, "jvp_" + op)(
-        (jnp.diag(D)[:, unfixed_idx] @ Z).T, xf, constants
-    ).T
+    Fxh = getattr(constraint, "jvp_" + op)(eq_unfixed_idx_mat.T, xf, constants).T
+    # Our compute functions never include variables like Rb_lmn, Zb_lmn etc. So,
+    # taking the JVP in just dc direction will give 0. To prevent this, we use dxdc
+    # which is the dx/dc matrix and convert the Rb_lmn to R_lmn entries etc.
+    # For example, if we want the derivative wrt Rb_023, we should take the derivative
+    # wrt all R_lmn coefficients that contribute to Rb_023. See BoundaryRSelfConsistency
+    # for the relation between Rb_lmn and R_lmn.
     Fc = getattr(constraint, "jvp_" + op)(dxdc @ dc, xf, constants)
     cutoff = jnp.finfo(Fxh.dtype).eps * max(Fxh.shape)
     uf, sf, vtf = jnp.linalg.svd(Fxh, full_matrices=False)
@@ -1224,6 +1240,13 @@ def _proximal_jvp_f_pure(constraint, xf, constants, dc, unfixed_idx, Z, D, dxdc,
 
 @functools.partial(jit, static_argnames=["op"])
 def _proximal_jvp_blocked_pure(objective, vgs, xgs, op):
+    # Note: This function is not vectorized and takes the full set of tangents, and
+    # returns a matrix.
+
+    # vgs and xgs are list of arrays (not same size necessarily), that are split by the
+    # things in the objective. If there are multiple things for the ObjectiveFunction,
+    # each split belongs to a different thing. The information about which thing is used
+    # by which sub-objective is stored in _things_per_objective_idx.
     out = []
     for k, (obj, const) in enumerate(zip(objective.objectives, objective.constants)):
         thing_idx = objective._things_per_objective_idx[k]
@@ -1242,4 +1265,4 @@ def _proximal_jvp_blocked_pure(objective, vgs, xgs, op):
         else:
             outi = getattr(obj, "jvp_" + op)([_vi for _vi in vi], xi, constants=const).T
             out.append(outi)
-    return jnp.concatenate(out)
+    return jnp.concatenate(out).T

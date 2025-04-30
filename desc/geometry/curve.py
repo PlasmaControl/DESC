@@ -797,7 +797,7 @@ class FourierPlanarCurve(Curve):
         )
 
     @classmethod
-    def from_values(cls, coords, N=10, basis="xyz", name=""):
+    def from_values(cls, coords, N=10, s=None, basis="xyz", name=""):
         """Fit coordinates to FourierPlanarCurve representation.
 
         Parameters
@@ -807,6 +807,11 @@ class FourierPlanarCurve(Curve):
             corresponding to xyz or rpz depending on the basis argument.
         N : int
             Fourier resolution of the new r representation.
+        s : ndarray or "arclength"
+            Arbitrary curve parameter to use for the fitting.
+            Should be monotonic, 1D array of same length as
+            coords. if None, defaults linearly spaced in [0,2pi)
+            Alternative, can pass "arclength" to use normalized distance between points.
         basis : {"rpz", "xyz"}
             Basis for input coordinates. Defaults to "xyz".
         name : str
@@ -838,23 +843,42 @@ class FourierPlanarCurve(Curve):
         rotmat = rotation_matrix(axis, angle)
         coords = coords @ rotmat  # rotate to X-Y plane
 
+        X, Y, Z = coords[:, 0], coords[:, 1], coords[:, 2]
+        X, Y, Z, closedX, closedY, closedZ, input_curve_was_closed = _unclose_curve(
+            X, Y, Z
+        )
         warnif(
-            np.max(np.abs(coords[:, 2])) > 1e-14,  # check that Z=0 for all points
+            np.max(np.abs(Z)) > 1e-14,  # check that Z=0 for all points
             UserWarning,
             "Curve values are not planar! Using the projection onto a plane.",
         )
 
-        # polar radius and angle
-        r = np.sqrt(coords[:, 0] ** 2 + coords[:, 1] ** 2)
-        s = np.arctan2(coords[:, 1], coords[:, 0])
-        s = np.mod(s + 2 * np.pi, 2 * np.pi)  # mod angle to range [0, 2*pi)
-        idx = np.argsort(s)  # sort angle to be monotonically increasing
-        r = r[idx]
-        s = s[idx]
+        if isinstance(s, str):
+            assert s == "arclength", f"got unknown specification for s {s}"
+            # find equal arclength angle-like variable, and use that as theta
+            # L_along_curve / L = theta / 2pi
+            lengths = np.sqrt(np.diff(closedX) ** 2 + np.diff(closedY) ** 2)
+            thetas = 2 * np.pi * np.cumsum(lengths) / np.sum(lengths)
+            thetas = np.insert(thetas, 0, 0)
+            s = thetas[:-1]
+        elif s is None:
+            s = np.linspace(0, 2 * np.pi, X.size, endpoint=False)
+        else:
+            s = np.atleast_1d(s)
+            s = s[:-1] if input_curve_was_closed else s
+            errorif(
+                not np.all(np.diff(s) > 0),
+                ValueError,
+                "supplied s must be monotonically increasing",
+            )
+            errorif(s[0] < 0, ValueError, "s must lie in [0, 2pi]")
+            errorif(s[-1] > 2 * np.pi, ValueError, "s must lie in [0, 2pi]")
+
+        r = np.sqrt(X**2 + Y**2)  # polar radius
 
         # Fourier transform
-        basis = FourierSeries(N, NFP=1, sym=False)
         grid = LinearGrid(zeta=s, NFP=1)
+        basis = FourierSeries(N, NFP=1, sym=False)
         transform = Transform(grid, basis, build_pinv=True)
         r_n = transform.fit(r)
 
@@ -1140,7 +1164,7 @@ class FourierXYCurve(Curve):
         )
 
     @classmethod
-    def from_values(cls, coords, N=10, basis="xyz", name=""):
+    def from_values(cls, coords, N=10, s=None, basis="xyz", name=""):
         """Fit coordinates to FourierXYCurve representation.
 
         Parameters
@@ -1150,6 +1174,11 @@ class FourierXYCurve(Curve):
             corresponding to xyz or rpz depending on the basis argument.
         N : int
             Fourier resolution of the new X & Y representation.
+        s : ndarray or "arclength"
+            Arbitrary curve parameter to use for the fitting.
+            Should be monotonic, 1D array of same length as
+            coords. if None, defaults linearly spaced in [0,2pi)
+            Alternative, can pass "arclength" to use normalized distance between points.
         basis : {"rpz", "xyz"}
             Basis for input coordinates. Defaults to "xyz".
         name : str
@@ -1181,31 +1210,48 @@ class FourierXYCurve(Curve):
         rotmat = rotation_matrix(axis, angle)
         coords = coords @ rotmat  # rotate to X-Y plane
 
+        X, Y, Z = coords[:, 0], coords[:, 1], coords[:, 2]
+        X, Y, Z, closedX, closedY, closedZ, input_curve_was_closed = _unclose_curve(
+            X, Y, Z
+        )
         warnif(
-            np.max(np.abs(coords[:, 2])) > 1e-14,  # check that Z=0 for all points
+            np.max(np.abs(Z)) > 1e-14,  # check that Z=0 for all points
             UserWarning,
             "Curve values are not planar! Using the projection onto a plane.",
         )
 
-        # polar radius and angle
-        X, Y = coords[:, 0], coords[:, 1]
-        s = np.arctan2(coords[:, 1], coords[:, 0])
-        s = np.mod(s + 2 * np.pi, 2 * np.pi)  # mod angle to range [0, 2*pi)
-        idx = np.argsort(s)  # sort angle to be monotonically increasing
-        X = X[idx]
-        Y = Y[idx]
-        s = s[idx]
+        if isinstance(s, str):
+            assert s == "arclength", f"got unknown specification for s {s}"
+            # find equal arclength angle-like variable, and use that as theta
+            # L_along_curve / L = theta / 2pi
+            lengths = np.sqrt(np.diff(closedX) ** 2 + np.diff(closedY) ** 2)
+            thetas = 2 * np.pi * np.cumsum(lengths) / np.sum(lengths)
+            thetas = np.insert(thetas, 0, 0)
+            s = thetas[:-1]
+        elif s is None:
+            s = np.linspace(0, 2 * np.pi, X.size, endpoint=False)
+        else:
+            s = np.atleast_1d(s)
+            s = s[:-1] if input_curve_was_closed else s
+            errorif(
+                not np.all(np.diff(s) > 0),
+                ValueError,
+                "supplied s must be monotonically increasing",
+            )
+            errorif(s[0] < 0, ValueError, "s must lie in [0, 2pi]")
+            errorif(s[-1] > 2 * np.pi, ValueError, "s must lie in [0, 2pi]")
 
         # Fourier transform
-        basis = FourierSeries(N, NFP=1, sym=False)
         grid = LinearGrid(zeta=s, NFP=1)
+        basis = FourierSeries(N, NFP=1, sym=False)
         transform = Transform(grid, basis, build_pinv=True)
         idx = np.where(basis.modes[:, 2] != 0)  # exclude n=0 mode
         X_n = transform.fit(X)
         Y_n = transform.fit(Y)
+        center_from_n0 = np.array([X_n[N], Y_n[N], 0]) @ np.linalg.inv(rotmat)
 
         return FourierXYCurve(
-            center=center + np.array([X_n[N], Y_n[N], 0]),  # add n=0 mode to center
+            center=center + center_from_n0,  # add n=0 mode to center
             normal=normal,
             X_n=X_n[idx],
             Y_n=Y_n[idx],

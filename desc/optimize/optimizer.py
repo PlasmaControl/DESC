@@ -140,9 +140,19 @@ class Optimizer(IOAble):
             Maximum number of iterations. Defaults to 100.
         options : dict, optional
             Dictionary of optional keyword arguments to override default solver
-            settings. See the documentation page ``Optimizers Supported`` for
-            more details (https://desc-docs.readthedocs.io/en/stable/optimizers.html)
-            to check the options for each specific available optimizer.
+            settings. Options that are universal to all optimizers are:
+
+            - ``"linear_constraint_options"`` : Dictionary of keyword arguments to pass
+              to ``LinearConstraintProjection``.
+            - ``"perturb_options"`` : Dictionary of keyword arguments to pass to
+              ``ProximalProjection`` as its ``perturb_options``.
+            - ``"solve_options"`` : Dictionary of keyword arguments to pass to
+              ``ProximalProjection`` as its ``solve_options``.
+
+            See the documentation page [Optimizers
+            Supported](https://desc-docs.readthedocs.io/en/stable/optimizers.html)
+            for more details on the options available to each specific optimizer.
+
         copy : bool
             Whether to return the current things or a copy (leaving the original
             unchanged).
@@ -528,7 +538,10 @@ def get_combined_constraint_objectives(
 
     # wrap to handle linear constraints
     if linear_constraint is not None:
-        objective = LinearConstraintProjection(objective, linear_constraint)
+        linear_constraint_options = options.pop("linear_constraint_options", {})
+        objective = LinearConstraintProjection(
+            objective, linear_constraint, **linear_constraint_options
+        )
         objective.build(verbose=verbose)
         if nonlinear_constraint is not None:
             nonlinear_constraint = LinearConstraintProjection(

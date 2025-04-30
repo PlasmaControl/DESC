@@ -677,6 +677,7 @@ class InputReader:
         """
         # open the file, unless its already open
         if not isinstance(filename, io.IOBase):
+            filename = os.path.expanduser(filename)
             f = open(filename, "w+")
         else:
             f = filename

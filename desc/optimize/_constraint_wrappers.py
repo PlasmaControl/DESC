@@ -146,6 +146,9 @@ class LinearConstraintProjection(ObjectiveFunction):
         # For example, let's say the full state vector X has constraints X1=X2 and
         # X = [X1 X2 X3]. The reduced state vector of this is Y = [Y1 Y2]. We can take
         # Y1=X1=X2 and Y2=X3. Then df/dY1 = df/dX1 + df/dX2 and df/dY2 = df/dX3.
+        # in this case, unfixed_idx_mat = [ [1 , 0], [1, 0], [0,1]] 
+        # and is a shape 3x2 matrix equivalent to dx/dy
+        # s.t. df/dy = df/dx @ dx/dy
         self._unfixed_idx_mat = jnp.diag(self._D)[:, self._unfixed_idx] @ self._Z
 
         self._built = True

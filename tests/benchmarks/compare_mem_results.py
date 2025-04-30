@@ -42,7 +42,8 @@ if os.path.exists("master.pickle") and os.path.exists("pr.pickle"):
         + f"{'PR (MB)':^18} | {'Δ (MB)':^12} | {'Time PR (s)':^18} | "
         + f"{'Time Master (s)':^18} |\n"
     )
-    msg += f"| {'-'*38} | {'-'*12} | {'-'*18} | {'-'*18} | {'-'*12} |\n"
+    msg += f"| {'-'*38} | {'-'*12} | {'-'*18} | {'-'*18} | {'-'*12} |"
+    msg += f" {'-'*18} | {'-'*18} |\n"
     for i, name in enumerate(data_master.keys()):
         peak_pr = data_pr[name]["mem"].max()
         peak_ma = data_master[name]["mem"].max()

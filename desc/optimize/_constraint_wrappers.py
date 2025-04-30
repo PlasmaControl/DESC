@@ -1139,26 +1139,11 @@ class ProximalProjection(ObjectiveFunction):
 
         # we don't need to divide this part into blocked and batched because
         # self._constraint._deriv_mode will handle it
-        idx_min = int(jnp.sum(jnp.asarray(self._dimc_per_thing[: self._eq_idx])))
-        idx_max = int(idx_min + self._dimc_per_thing[self._eq_idx])
-        jvpfun = lambda u: _get_tangent(
-            self._constraint,
-            u,
-            xf,
-            constants[1],
-            self._dxdc,
-            self._eq_solve_objective._unfixed_idx_mat,
-            self._unfixed_idx_mat,
-            idx_min,
-            idx_max,
-            op=op,
-        )
-        tangents = jit(
-            batched_vectorize(
-                jvpfun,
-                signature="(n)->(k)",
-                chunk_size=self._constraint._jac_chunk_size,
-            )
+        jvpfun = lambda u: self._get_tangent(u, xf, constants, op=op)
+        tangents = batched_vectorize(
+            jvpfun,
+            signature="(n)->(k)",
+            chunk_size=self._constraint._jac_chunk_size,
         )(v)
 
         if self._objective._deriv_mode == "batched":
@@ -1171,6 +1156,50 @@ class ProximalProjection(ObjectiveFunction):
                 jnp.split(xg, np.cumsum(self._dimx_per_thing)),
                 op,
             )
+
+    def _get_tangent(self, v, xf, constants, op):
+        # Note: This function is vectorized over v. So, v is expected to be 1D array
+        # of size self.dim_x.
+
+        # v contains "boundary" dofs from eq and other objects (like coils, surfaces
+        # etc) want jvp_f to only get parts from equilibrium, not other things
+        vs = jnp.split(v, np.cumsum(self._dimc_per_thing))
+        # This is (dF/dx)^-1 * dF/dc  # noqa : E800
+        dfdc = _proximal_jvp_f_pure(
+            self._constraint,
+            xf,
+            constants[1],
+            vs[self._eq_idx],
+            self._eq_solve_objective._unfixed_idx_mat,
+            self._dxdc,
+            op,
+        )
+        # broadcasting against multiple things
+        dfdcs = [jnp.zeros(dim) for dim in self._dimc_per_thing]
+        dfdcs[self._eq_idx] = dfdc
+        dfdc = jnp.concatenate(dfdcs)
+
+        # We try to find dG/dc - dG/dx * (dF/dx)^-1 * dF/dc
+        # where G is the objective function. Since DESC stores x and c in the same
+        # vector, instead of multiple JVP calls, we will just find a tangent direction
+        # that will give us the same result.
+        # For making the explanation clear, assume J is the Jacobian of the objective
+        # function with respect to the full state vector (both x and c). Then,
+        # dG/dc = J @ (tangent vectors in c direction)
+        # dG/dx = J @ (tangent vectors in x direction)
+        # So, dG/dc - dG/dx * (dF/dx)^-1 * dF/dc can be written as
+        # J @ [(tangent vectors in c direction) - (tangent vectors in x direction)@dfdc]
+        # Note: We will never form full Jacobian J, we will just compute the above
+        # expression by JVPs.
+        dxdcv = jnp.concatenate(
+            [
+                *vs[: self._eq_idx],
+                self._dxdc @ vs[self._eq_idx],
+                *vs[self._eq_idx + 1 :],
+            ]
+        )
+        tangent = dxdcv - self._unfixed_idx_mat @ dfdc
+        return tangent
 
     @property
     def constants(self):
@@ -1187,65 +1216,6 @@ class ProximalProjection(ObjectiveFunction):
 # correctly, while if we leave self unstatic then it recompiles every time because
 # the pytree structure of ProximalProjection is changing. To get around that we
 # define these helper functions that are stateless so we can safely jit them
-
-
-@functools.partial(jit, static_argnames=["idx_min", "idx_max", "op"])
-def _get_tangent(
-    constraint,
-    v,
-    xf,
-    constant,
-    dxdc,
-    eq_unfixed_idx_mat,
-    unfixed_idx_mat,
-    idx_min,
-    idx_max,
-    op,
-):
-    # Note: This function is vectorized over v. So, v is expected to be 1D array
-    # of size self.dim_x.
-
-    # v contains "boundary" dofs from eq and other objects (like coils, surfaces
-    # etc) want jvp_f to only get parts from equilibrium, not other things
-    # This is (dF/dx)^-1 * dF/dc  # noqa : E800
-    dfdc = _proximal_jvp_f_pure(
-        constraint,
-        xf,
-        constant,
-        v[idx_min:idx_max],
-        eq_unfixed_idx_mat,
-        dxdc,
-        op,
-    )
-    # broadcasting against multiple things
-    dfdcs = jnp.concatenate(
-        [
-            jnp.zeros(idx_min),
-            dfdc,
-            jnp.zeros(v.size - idx_max),
-        ]
-    )
-    # We try to find dG/dc - dG/dx * (dF/dx)^-1 * dF/dc
-    # where G is the objective function. Since DESC stores x and c in the same
-    # vector, instead of multiple JVP calls, we will just find a tangent direction
-    # that will give us the same result.
-    # For making the explanation clear, assume J is the Jacobian of the objective
-    # function with respect to the full state vector (both x and c). Then,
-    # dG/dc = J @ (tangent vectors in c direction)
-    # dG/dx = J @ (tangent vectors in x direction)
-    # So, dG/dc - dG/dx * (dF/dx)^-1 * dF/dc can be written as
-    # J @ [(tangent vectors in c direction) - (tangent vectors in x direction)@dfdc]
-    # Note: We will never form full Jacobian J, we will just compute the above
-    # expression by JVPs.
-    dxdcv = jnp.concatenate(
-        [
-            jnp.atleast_1d(v[:idx_min]),
-            dxdc @ v[idx_min:idx_max],
-            jnp.atleast_1d(v[idx_max:]),
-        ]
-    )
-    tangent = dxdcv - unfixed_idx_mat @ dfdcs
-    return tangent
 
 
 @functools.partial(jit, static_argnames=["op"])

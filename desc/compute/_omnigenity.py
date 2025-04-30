@@ -918,6 +918,8 @@ def _B_omni(params, transforms, profiles, data, **kwargs):
     B = jnp.moveaxis(B, 0, 1)
     data["|B|"] = B.flatten(order="F")
 
+    return data
+
 
 @register_compute_fun(
     name="|B|_pwO",

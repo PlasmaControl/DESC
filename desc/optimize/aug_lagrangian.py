@@ -604,6 +604,7 @@ def fmin_auglag(  # noqa: C901
             # it to avoid carrying so many H-sized matrices
             # in memory, which can be large
             H_h = H
+            del H
 
             if g_norm < gtol and constr_violation < ctol:
                 success, message = True, STATUS_MESSAGES["gtol"]

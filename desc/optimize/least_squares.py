@@ -200,11 +200,14 @@ def lsqtr(  # noqa: C901
     diag_h = g * dv * scale
 
     g_h = g * d
+    # Note that this will not be in place with JAX unless
+    # this function is placed under JIT
     J = J.at[:].set(J * d)
     # we don't need unscaled J anymore, so we overwrite
     # it with J_h = J * d to avoid carrying so many J-sized matrices
     # in memory, which can be large
     J_h = J
+    del J
     g_norm = jnp.linalg.norm(
         (g * v * scale if scaled_termination else g * v), ord=jnp.inf
     )
@@ -396,11 +399,14 @@ def lsqtr(  # noqa: C901
             diag_h = g * dv * scale
 
             g_h = g * d
+            # Note that this will not be in place with JAX unless
+            # this function is placed under JIT
             J = J.at[:].set(J * d)
             # we don't need unscaled J anymore this iteration, so we overwrite
             # it with J_h = J * d to avoid carrying so many J-sized matrices
             # in memory, which can be large
             J_h = J
+            del J
             x_norm = jnp.linalg.norm(
                 ((x * scale_inv) if scaled_termination else x), ord=2
             )
@@ -435,7 +441,7 @@ def lsqtr(  # noqa: C901
         fun=f,
         grad=g,
         v=v,
-        jac=J * 1 / d,  # after overwriting J_h, we have to revert back
+        jac=J_h * 1 / d,  # after overwriting J_h, we have to revert back
         optimality=g_norm,
         nfev=nfev,
         njev=njev,

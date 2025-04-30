@@ -247,6 +247,7 @@ def fmintr(  # noqa: C901
     H *= d[:, None]
     H *= d
     H_h = H
+    del H
 
     g_norm = jnp.linalg.norm(
         (g * v * scale if scaled_termination else g * v), ord=jnp.inf
@@ -430,6 +431,7 @@ def fmintr(  # noqa: C901
             H *= d[:, None]
             H *= d
             H_h = H
+            del H
 
             x_norm = jnp.linalg.norm(
                 ((x * scale_inv) if scaled_termination else x), ord=2
@@ -458,18 +460,17 @@ def fmintr(  # noqa: C901
         success, message = True, STATUS_MESSAGES["gtol"]
     if (iteration == maxiter) and success is None:
         success, message = False, STATUS_MESSAGES["maxiter"]
-    del H_h  # remove unneeded scaled H
     active_mask = find_active_constraints(x, lb, ub, rtol=xtol)
     # we overwrote the H inside the iteration, so unscale here
-    H /= d[:, None]
-    H /= d
+    H_h /= d[:, None]
+    H_h /= d
     result = OptimizeResult(
         x=x,
         success=success,
         fun=f,
         grad=g,
         v=v,
-        hess=H,
+        hess=H_h,
         optimality=g_norm,
         nfev=nfev,
         ngev=ngev,

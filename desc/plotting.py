@@ -685,8 +685,9 @@ def plot_2d(  # noqa : C901
         * ``ylabel_fontsize``: float, fontsize of the ylabel
         * ``cmap``: str, matplotlib colormap scheme to use, passed to ax.contourf
         * ``levels``: int or array-like, passed to contourf.
-          If ``name``="|F|_normalized" and ``log``==True, default is
-          np.logspace(-6, 0, 7). Pass None to use actual data min/max.
+          If ``name="|F|_normalized"`` and ``log=True``, default is
+          ``np.logspace(-6, 0, 7)``. Otherwise the default (``None``) uses the min/max
+          values of the data.
         * ``field``: MagneticField, a magnetic field with which to calculate Bn on
           the surface, must be provided if Bn is entered as the variable to plot.
         * ``field_grid``: MagneticField, a Grid to pass to the field as a source grid
@@ -725,12 +726,10 @@ def plot_2d(  # noqa : C901
             )
         )
         if normalize is None and norm_F:
-            name = "|F|_normalized"
+            # replicate old behavior before #1683
+            normalize = "<|grad(|B|^2)|/2mu0>_vol"
         elif normalize is not None and norm_F:
-            raise ValueError(
-                "Cannot use both norm_F and normalize keyword arguments at "
-                + "the same time."
-            )
+            raise ValueError("Cannot use both norm_F and normalize keyword arguments.")
     errorif(
         not (isinstance(normalize, str) or normalize is None),
         ValueError,
@@ -1248,12 +1247,10 @@ def plot_fsa(  # noqa: C901
             )
         )
         if normalize is None and norm_F:
-            name = "|F|_normalized"
+            # replicate old behavior before #1683
+            normalize = "<|grad(|B|^2)|/2mu0>_vol"
         elif normalize is not None and norm_F:
-            raise ValueError(
-                "Cannot use both norm_F and normalize keyword arguments at "
-                + "the same time."
-            )
+            raise ValueError("Cannot use both norm_F and normalize keyword arguments.")
     errorif(
         not (isinstance(normalize, str) or normalize is None),
         ValueError,
@@ -1429,8 +1426,9 @@ def plot_section(
         * ``ylabel_fontsize``: float, fontsize of the ylabel
         * ``cmap``: str, matplotlib colormap scheme to use, passed to ax.contourf
         * ``levels``: int or array-like, passed to contourf.
-          If ``name``="|F|_normalized" and ``log``==True, default is
-          np.logspace(-6, 0, 7). Pass None to use actual data min/max.
+          If ``name="|F|_normalized"`` and ``log=True``, default is
+          ``np.logspace(-6, 0, 7)``. Otherwise the default (``None``) uses the min/max
+          values of the data.
         * ``phi``: float, int or array-like. Toroidal angles to plot. If an integer,
           plot that number equally spaced in [0,2pi/NFP). Default 1 for axisymmetry and
           6 for non-axisymmetry
@@ -1468,12 +1466,10 @@ def plot_section(
             )
         )
         if normalize is None and norm_F:
-            name = "|F|_normalized"
+            # replicate old behavior before #1683
+            normalize = "<|grad(|B|^2)|/2mu0>_vol"
         elif normalize is not None and norm_F:
-            raise ValueError(
-                "Cannot use both norm_F and normalize keyword arguments at "
-                + "the same time."
-            )
+            raise ValueError("Cannot use both norm_F and normalize keyword arguments.")
     errorif(
         not (isinstance(normalize, str) or normalize is None),
         ValueError,

@@ -242,15 +242,10 @@ def fmintr(  # noqa: C901
     # we don't need unscaled H anymore this iteration, so we overwrite
     # it with H_h = d * H * d[:, None] to avoid carrying so many H-sized matrices
     # in memory, which can be large
-    if callable(hess):  # H is a jax.numpy array
-        H = H.at[:].set(d * H * d[:, None])
-    else:
-        # H is a numpy array since comes from BFGS, so can just do in-place
-        # operation
-        # doing operation H = d * H * d[:, None]
-        # with just in-place operations
-        H *= d[:, None]
-        H *= d
+    # doing operation H = d * H * d[:, None]
+    # with just in-place operations
+    H *= d[:, None]
+    H *= d
     H_h = H
 
     g_norm = jnp.linalg.norm(
@@ -430,15 +425,10 @@ def fmintr(  # noqa: C901
             # we don't need unscaled H anymore this iteration, so we overwrite
             # it with H_h = d * H * d[:, None] to avoid carrying so many H-sized
             # matrices in memory, which can be large
-            if callable(hess):  # H is a jax.numpy array
-                H = H.at[:].set(d * H * d[:, None])
-            else:
-                # H is a numpy array since comes from BFGS, so can just do in-place
-                # operation
-                # doing operation H = d * H * d[:, None]
-                # with just in-place operations
-                H *= d[:, None]
-                H *= d
+            # doing operation H = d * H * d[:, None]
+            # with just in-place operations
+            H *= d[:, None]
+            H *= d
             H_h = H
 
             x_norm = jnp.linalg.norm(
@@ -468,7 +458,11 @@ def fmintr(  # noqa: C901
         success, message = True, STATUS_MESSAGES["gtol"]
     if (iteration == maxiter) and success is None:
         success, message = False, STATUS_MESSAGES["maxiter"]
+    del H_h  # remove unneeded scaled H
     active_mask = find_active_constraints(x, lb, ub, rtol=xtol)
+    # we overwrote the H inside the iteration, so unscale here
+    H /= d[:, None]
+    H /= d
     result = OptimizeResult(
         x=x,
         success=success,

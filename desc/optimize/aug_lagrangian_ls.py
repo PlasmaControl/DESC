@@ -574,6 +574,8 @@ def lsq_auglag(  # noqa: C901
         success, message = False, STATUS_MESSAGES["maxiter"]
     x, s = z2xs(z)
     active_mask = find_active_constraints(z, zbounds[0], zbounds[1], rtol=xtol)
+    # don't need scaled Jacobian anymore
+    del J_h
     result = OptimizeResult(
         x=x,
         s=s,

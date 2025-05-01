@@ -973,9 +973,10 @@ def test_plot_poincare():
 def test_plot_field_lines():
     """Test plotting field lines."""
     field = ToroidalMagneticField(B0=-1.0, R0=1.0)
-    fig, data = plot_field_lines(
-        field, [1.0], [0.0], nphi_per_transit=10, ntransit=0.8, return_data=True
-    )
+    with pytest.warns(UserWarning, match="Field lines are traced backwards"):
+        fig, data = plot_field_lines(
+            field, [1.0], [0.0], nphi_per_transit=10, ntransit=0.8, return_data=True
+        )
     assert all(data["Z"][0] == 0)
     assert np.allclose((data["X"][0] ** 2 + data["Y"][0] ** 2), 1)
 

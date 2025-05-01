@@ -114,27 +114,29 @@ def test_root_scalar():
 @pytest.mark.unit
 def test_lstsq():
     """Test cholesky factorization of least squares solution."""
+    rng = np.random.default_rng(seed=0)
+
     # tall
-    A = np.random.randn(10, 5)
-    b = np.random.randn(10)
+    A = rng.standard_normal((10, 5))
+    b = rng.standard_normal(10)
     np.testing.assert_allclose(
         _lstsq(A, b), np.linalg.lstsq(A, b, rcond=None)[0], rtol=1e-6
     )
     # wide
-    A = np.random.randn(5, 10)
-    b = np.random.randn(5)
+    A = rng.standard_normal((5, 10))
+    b = rng.standard_normal(5)
     np.testing.assert_allclose(
         _lstsq(A, b), np.linalg.lstsq(A, b, rcond=None)[0], rtol=1e-6
     )
     # square
-    A = np.random.randn(5, 5)
-    b = np.random.randn(5)
+    A = rng.standard_normal((5, 5))
+    b = rng.standard_normal(5)
     np.testing.assert_allclose(
         _lstsq(A, b), np.linalg.lstsq(A, b, rcond=None)[0], rtol=1e-6
     )
     # scalar
-    A = np.random.randn(1, 5)
-    b = np.random.randn(1)
+    A = rng.standard_normal((1, 5))
+    b = rng.standard_normal(1)
     np.testing.assert_allclose(
         _lstsq(A, b), np.linalg.lstsq(A, b, rcond=None)[0], rtol=1e-6
     )

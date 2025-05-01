@@ -92,16 +92,14 @@ def _sqrtg_clebsch(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["e_theta", "e_zeta"],
+    data=["e^rho*sqrt(g)"],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.core.Surface",
     ],
 )
 def _e_theta_x_e_zeta(params, transforms, profiles, data, **kwargs):
-    data["|e_theta x e_zeta|"] = safenorm(
-        cross(data["e_theta"], data["e_zeta"]), axis=-1
-    )
+    data["|e_theta x e_zeta|"] = safenorm(data["e^rho*sqrt(g)"], axis=-1)
     return data
 
 
@@ -1796,6 +1794,7 @@ def _g_sup_zz_z(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["g^rr"],
+    aliases=["|e^rho|"],
 )
 def _gradrho(params, transforms, profiles, data, **kwargs):
     data["|grad(rho)|"] = jnp.sqrt(data["g^rr"])
@@ -1876,6 +1875,7 @@ def _gradpsi_mag2(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["g^tt"],
+    aliases=["|e^theta|"],
 )
 def _gradtheta(params, transforms, profiles, data, **kwargs):
     data["|grad(theta)|"] = jnp.sqrt(data["g^tt"])
@@ -1894,6 +1894,7 @@ def _gradtheta(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["g^zz"],
+    aliases=["|e^zeta|"],
 )
 def _gradzeta(params, transforms, profiles, data, **kwargs):
     data["|grad(zeta)|"] = jnp.sqrt(data["g^zz"])

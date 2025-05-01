@@ -618,8 +618,7 @@ class ProximalProjection(ObjectiveFunction):
         self._args = self._eq.optimizable_params.copy()
         for arg in ["R_lmn", "Z_lmn", "L_lmn", "Ra_n", "Za_n"]:
             self._args.remove(arg)
-        linear_constraint = ObjectiveFunction(self._linear_constraints)
-        linear_constraint.build()
+
         (self._eq_Z, self._eq_D, self._eq_unfixed_idx) = (
             self._eq_solve_objective._Z,
             self._eq_solve_objective._D,
@@ -681,6 +680,12 @@ class ProximalProjection(ObjectiveFunction):
         for constraint in self._linear_constraints:
             constraint.build(use_jit=use_jit, verbose=verbose)
 
+        # Here we create and build the LinearConstraintProjection
+        # for the equilibrium subproblem using the self._constraint as objective
+        # and our fixed-bdry constraints we just made. This will
+        # be passed as the objective for the eq subproblem, which saves
+        # some time as by building it here we can avoid re-computing the
+        # constraint matrix A and its SVD for the feasible direction method
         self._eq_solve_objective = LinearConstraintProjection(
             self._constraint,
             ObjectiveFunction(self._linear_constraints),
@@ -721,7 +726,9 @@ class ProximalProjection(ObjectiveFunction):
         )
         self._unfixed_idx_mat[self._eq_idx] = self._unfixed_idx_mat[self._eq_idx][
             :, self._eq_unfixed_idx
-        ] @ (self._eq_Z * self._eq_D[self._eq_unfixed_idx, None])
+        ] @ (
+            self._eq_Z
+        )  # .eq_Z is already scaled by D, so can just use it alone here
         self._unfixed_idx_mat = jnp.concatenate(
             [np.atleast_2d(foo) for foo in self._unfixed_idx_mat], axis=-1
         )

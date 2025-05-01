@@ -23,7 +23,6 @@ Bug Fixes
 - Allows ``x_scale`` to be passed to ``factorize_linear_constraints`` in ``Optimizer.optimize`` through the new ``"linear_constraint_options"``.
 - Fixes bug where `ProximalProjection` was using wrong `jac_chunk_size` internally and using more memory than one would expect given the `jac_chunk_size`. This fix gives separate `blocked` and `batched` methods to `ProximalProjection`.
 
-
 v0.14.1
 -------
 

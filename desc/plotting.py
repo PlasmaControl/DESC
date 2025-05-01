@@ -1903,6 +1903,10 @@ def poincare_plot(
         fig, ax = desc.plotting.poincare_plot(
             field, r0, z0, NFP=eq.NFP, ax=ax, color="r", size=0.5, ntransit=250
         )
+
+        # if one wants to follow the field lines in reverse, can simply use
+        field_reversed = ScaledMagneticField(-1.0, field)
+        # and use this field_reversed instead of field.
     """
     fli_kwargs = {}
     for key in inspect.signature(field_line_integrate).parameters:
@@ -1952,6 +1956,11 @@ def poincare_plot(
     if signBT < 0:  # field lines are traced backwards when toroidal field < 0
         rs, zs = rs[:, ::-1], zs[:, ::-1]
         rs, zs = np.roll(rs, 1, 1), np.roll(zs, 1, 1)
+        phi *= -1
+        warnings.warn(
+            "Field lines are traced backwards since the toroidal field is negative.",
+            UserWarning,
+        )
 
     data = {
         "R": rs,
@@ -3698,14 +3707,18 @@ def plot_field_lines(
         import desc
         from desc.plotting import plot_field_lines
 
-        ext_field = desc.io.load("../tests/inputs/precise_QA_helical_coils.h5")
+        field = desc.io.load("../tests/inputs/precise_QA_helical_coils.h5")
         eq = desc.examples.get("precise_QA")
         grid_trace = desc.grid.LinearGrid(rho=[1])
         r0 = eq.compute("R", grid=grid_trace)["R"]
         z0 = eq.compute("Z", grid=grid_trace)["Z"]
 
-        fig = plot_field_lines(ext_field, r0, z0, nphi_per_transit=100, ntransit=10)
+        fig = plot_field_lines(field, r0, z0, nphi_per_transit=100, ntransit=10)
         fig.show()
+
+        # if one wants to follow the field lines in reverse, can simply use
+        field_reversed = ScaledMagneticField(-1.0, field)
+        # and use this field_reversed instead of field.
     """
     fli_kwargs = {}
     for key in inspect.signature(field_line_integrate).parameters:
@@ -3757,6 +3770,11 @@ def plot_field_lines(
     if signBT < 0:  # field lines are traced backwards when toroidal field < 0
         rs, zs = rs[:, ::-1], zs[:, ::-1]
         rs, zs = np.roll(rs, 1, 1), np.roll(zs, 1, 1)
+        phis *= -1
+        warnings.warn(
+            "Field lines are traced backwards since the toroidal field is negative.",
+            UserWarning,
+        )
 
     if fig is None:
         fig = go.Figure()

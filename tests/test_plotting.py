@@ -13,7 +13,7 @@ from desc.basis import (
     PowerSeries,
 )
 from desc.coils import CoilSet, FourierXYZCoil, MixedCoilSet
-from desc.compute import data_index
+from desc.compute import data_index, xyz2rpz
 from desc.examples import get
 from desc.geometry import FourierRZToroidalSurface, FourierXYZCurve
 from desc.grid import ConcentricGrid, Grid, LinearGrid, QuadratureGrid
@@ -22,6 +22,7 @@ from desc.io import load
 from desc.magnetic_fields import (
     OmnigenousField,
     PoloidalMagneticField,
+    ScaledMagneticField,
     SumMagneticField,
     ToroidalMagneticField,
 )
@@ -990,3 +991,47 @@ def test_plot_field_lines():
         endpoint=True,
         chunk_size=10,
     )
+
+
+@pytest.mark.unit
+def test_plot_field_lines_reversed():
+    """Test plotting field lines with reversed direction."""
+    field = load("tests/inputs/precise_QA_helical_coils.h5")
+    # reverse the field
+    field_reversed = ScaledMagneticField(-1.0, field)
+    eq = get("precise_QA")
+    grid_trace = LinearGrid(rho=[1])
+    r0 = eq.compute("R", grid=grid_trace)["R"]
+    z0 = eq.compute("Z", grid=grid_trace)["Z"]
+
+    fig, data1 = plot_field_lines(
+        field, r0, z0, nphi_per_transit=100, ntransit=1, return_data=True
+    )
+    # get the last point of the field line
+    pt_end = np.array([data1["X"][0][-1], data1["Y"][0][-1], data1["Z"][0][-1]])
+    # convert to RPZ coordinates (actually not necessary since phi0=0)
+    pt_end_rpz = xyz2rpz(pt_end)
+    # plot the field line in the reversed direction starting from the end point
+    # and going backwards, this should overlap with the previous field line
+    with pytest.warns(UserWarning, match="Field lines are traced backwards"):
+        fig, data2 = plot_field_lines(
+            field_reversed,
+            pt_end_rpz[0],
+            pt_end_rpz[2],
+            nphi_per_transit=100,
+            ntransit=1,
+            return_data=True,
+            fig=fig,
+            color="red",
+            lw=10,
+        )
+    x1 = data1["X"][0]
+    y1 = data1["Y"][0]
+    z1 = data1["Z"][0]
+    x2 = data2["X"][0]
+    y2 = data2["Y"][0]
+    z2 = data2["Z"][0]
+    # we should flip the second field line to compare with the first one
+    assert np.allclose(x1, np.flip(x2), atol=1e-7)
+    assert np.allclose(y1, np.flip(y2), atol=1e-7)
+    assert np.allclose(z1, np.flip(z2), atol=1e-7)

@@ -256,7 +256,8 @@ class VacuumBoundaryError(_Objective):
         return jnp.concatenate([Bn_err, Bsq_err])
 
     def print_value(self, args, args0=None, **kwargs):
-        """Print the value of the objective."""
+        """Print the value of the objective and return a dict of values."""
+        out = {}
         # this objective is really 2 residuals concatenated so its helpful to print
         # them individually
         f = self.compute_unscaled(*args, **kwargs)
@@ -319,7 +320,7 @@ class VacuumBoundaryError(_Objective):
         units = ["(T*m^2)", "(T^2*m^2)"]
         nn = f.size // 2
         norms = [self.normalization[0], self.normalization[nn]]
-        for i, (fmt, norm, units) in enumerate(zip(formats, norms, units)):
+        for i, (fmti, norm, units) in enumerate(zip(formats, norms, units)):
             fi = f[i * nn : (i + 1) * nn]
             f0i = f0[i * nn : (i + 1) * nn]
             # target == 0 probably indicates f is some sort of error metric,
@@ -334,12 +335,28 @@ class VacuumBoundaryError(_Objective):
             f0max = jnp.max(f0i)
             f0min = jnp.min(f0i)
             f0mean = jnp.mean(f0i * wi) / jnp.mean(wi)
+            out[fmti] = {
+                "f_max": fmax,
+                "f_min": fmin,
+                "f_mean": fmean,
+                "f_max_norm": fmax / norm,
+                "f_min_norm": fmin / norm,
+                "f_mean_norm": fmean / norm,
+            }
+            if args0 is not None:
+                out[fmti]["f0_max"] = f0max
+                out[fmti]["f0_min"] = f0min
+                out[fmti]["f0_mean"] = f0mean
+                out[fmti]["f0_max_norm"] = f0max / norm
+                out[fmti]["f0_min_norm"] = f0min / norm
+                out[fmti]["f0_mean_norm"] = f0mean / norm
             fmt = (
-                f"{fmt:<{PRINT_WIDTH-pre_width}}" + "{:10.3e}  -->  {:10.3e} "
+                f"{fmti:<{PRINT_WIDTH-pre_width}}" + "{:10.3e}  -->  {:10.3e} "
                 if args0 is not None
-                else f"{fmt:<{PRINT_WIDTH-pre_width}}" + "{:10.3e} "
+                else f"{fmti:<{PRINT_WIDTH-pre_width}}" + "{:10.3e} "
             )
             _print(fmt, fmax, fmin, fmean, f0max, f0min, f0mean, norm, units)
+        return out
 
 
 class BoundaryError(_Objective):
@@ -766,7 +783,8 @@ class BoundaryError(_Objective):
             return jnp.concatenate([Bn_err, Bsq_err])
 
     def print_value(self, args, args0=None, **kwargs):
-        """Print the value of the objective."""
+        """Print the value of the objective and return a dict of values."""
+        out = {}
         # this objective is really 3 residuals concatenated so its helpful to print
         # them individually
         f = self.compute_unscaled(*args, **kwargs)
@@ -840,7 +858,7 @@ class BoundaryError(_Objective):
             formats = formats[:-1]
             units = units[:-1]
             norms = [self.normalization[0], self.normalization[nn]]
-        for i, (fmt, norm, unit) in enumerate(zip(formats, norms, units)):
+        for i, (fmti, norm, unit) in enumerate(zip(formats, norms, units)):
             fi = f[i * nn : (i + 1) * nn]
             f0i = f0[i * nn : (i + 1) * nn]
             # target == 0 probably indicates f is some sort of error metric,
@@ -855,12 +873,28 @@ class BoundaryError(_Objective):
             f0max = jnp.max(f0i)
             f0min = jnp.min(f0i)
             f0mean = jnp.mean(f0i * wi) / jnp.mean(wi)
+            out[fmti] = {
+                "f_max": fmax,
+                "f_min": fmin,
+                "f_mean": fmean,
+                "f_max_norm": fmax / norm,
+                "f_min_norm": fmin / norm,
+                "f_mean_norm": fmean / norm,
+            }
+            if args0 is not None:
+                out[fmti]["f0_max"] = f0max
+                out[fmti]["f0_min"] = f0min
+                out[fmti]["f0_mean"] = f0mean
+                out[fmti]["f0_max_norm"] = f0max / norm
+                out[fmti]["f0_min_norm"] = f0min / norm
+                out[fmti]["f0_mean_norm"] = f0mean / norm
             fmt = (
-                f"{fmt:<{PRINT_WIDTH-pre_width}}" + "{:10.3e}  -->  {:10.3e} "
+                f"{fmti:<{PRINT_WIDTH-pre_width}}" + "{:10.3e}  -->  {:10.3e} "
                 if args0 is not None
-                else f"{fmt:<{PRINT_WIDTH-pre_width}}" + "{:10.3e} "
+                else f"{fmti:<{PRINT_WIDTH-pre_width}}" + "{:10.3e} "
             )
             _print(fmt, fmax, fmin, fmean, f0max, f0min, f0mean, norm, unit)
+        return out
 
 
 class BoundaryErrorNESTOR(_Objective):

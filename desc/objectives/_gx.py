@@ -11,10 +11,9 @@ from scipy.interpolate import interp1d
 from desc.backend import jnp
 from desc.compute import compute as compute_fun
 from desc.compute import get_params, get_profiles, get_transforms
-from desc.compute.utils import cross, dot
 from desc.derivatives import FiniteDiffDerivative
 from desc.grid import Grid, QuadratureGrid
-from desc.utils import Timer
+from desc.utils import Timer, cross, dot
 
 from .objective_funs import _Objective
 

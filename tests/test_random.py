@@ -1,4 +1,5 @@
 """Tests for random surfaces, profiles etc."""
+
 import numpy as np
 import pytest
 

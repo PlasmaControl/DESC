@@ -4,6 +4,8 @@ import inspect
 import warnings
 from abc import ABC
 
+import numpy as np
+
 from desc.backend import jnp
 
 
@@ -86,6 +88,7 @@ class Optimizable(ABC):
         x : ndarray
             optimizable parameters concatenated into a single array, with indices
             given by ``x_idx``
+
         """
         return jnp.concatenate(
             [jnp.atleast_1d(jnp.asarray(p[key])) for key in self.optimizable_params]
@@ -104,6 +107,7 @@ class Optimizable(ABC):
         -------
         p : dict
             Dictionary of ndarray of optimizable parameters.
+
         """
         x_idx = self.x_idx
         params = {}
@@ -115,7 +119,8 @@ class Optimizable(ABC):
         """Put arguments in a canonical order. Returns unique sorted elements.
 
         Actual order doesn't really matter as long as its consistent, though subclasses
-        may override this method to enforce a specific ordering
+        may override this method to enforce a specific ordering.
+
         """
         return sorted(set(list(args)))
 
@@ -177,6 +182,7 @@ class OptimizableCollection(Optimizable):
         x : ndarray
             optimizable parameters concatenated into a single array, with indices
             given by ``x_idx``
+
         """
         return jnp.concatenate([s.pack_params(p) for s, p in zip(self, params)])
 
@@ -193,8 +199,9 @@ class OptimizableCollection(Optimizable):
         -------
         p : list dict
             list of dictionary of ndarray of optimizable parameters.
+
         """
-        split_idx = jnp.cumsum(jnp.array([s.dim_x for s in self]))
+        split_idx = np.cumsum([s.dim_x for s in self])  # must be np not jnp
         xs = jnp.split(x, split_idx)
         params = [s.unpack_params(xi) for s, xi in zip(self, xs)]
         return params

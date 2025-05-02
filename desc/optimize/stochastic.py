@@ -1,8 +1,7 @@
 """Function for minimizing a scalar function of multiple variables."""
 
-from scipy.optimize import OptimizeResult
-
 import numpy as np
+from scipy.optimize import OptimizeResult
 
 from desc.backend import jnp
 from desc.utils import errorif, setdefault
@@ -16,7 +15,7 @@ from .utils import (
 
 
 def sgd(
-    obj,
+    fun,
     x0,
     grad,
     args=(),
@@ -101,9 +100,9 @@ def sgd(
     fd_step = options.pop("fd_step", 0.01)
     num_grad = options.pop("num_grad", 1)
     fd_step0 = fd_step
-    
-    fx = obj.compute_scaled_error(x, *args)
-    f = np.linalg.norm(fx)**2/2
+
+    fx = fun.compute_scaled_error(x, *args)
+    f = np.linalg.norm(fx) ** 2 / 2
     nfev += 1
     grad_args = (fx, fd_step, num_grad)
     g = grad(x, *grad_args)
@@ -122,7 +121,7 @@ def sgd(
         print("g too big!")
         print("g_norm is " + str(g_norm))
         alpha = alpha / 10
-#    alpha = options.pop("alpha", 5.0e-3 * x_norm/ g_norm)
+    #    alpha = options.pop("alpha", 5.0e-3 * x_norm/ g_norm)             # noqa: E800
     print("alpha is " + str(alpha))
     beta = options.pop("beta", 0.9)
     alpha0 = alpha
@@ -149,8 +148,8 @@ def sgd(
     print("x old is " + str(x))
     x = x - alpha * v
     print("x new is " + str(x))
-    obj._objective._update_equilibrium(obj.recover(x),store=True)
-    fx = obj.compute_scaled_error(x, *args)
+    fun._objective._update_equilibrium(fun.recover(x), store=True)
+    fx = fun.compute_scaled_error(x, *args)
 
     iteration += 1
 
@@ -172,20 +171,20 @@ def sgd(
         )
         if success is not None:
             break
-        
-        alpha = alpha0/(1+iteration)**0.602
-        fd_step = fd_step0/(iteration+1)**0.101
+
+        alpha = alpha0 / (1 + iteration) ** 0.602
+        fd_step = fd_step0 / (iteration + 1) ** 0.101
         grad_args = (fx, fd_step, num_grad)
 
         g = grad(x, *grad_args)
         print("g is " + str(g))
         v = beta * v + (1 - beta) * g
         x = x - alpha * v
-        obj._objective._update_equilibrium(obj.recover(x),store=True)
+        fun._objective._update_equilibrium(fun.recover(x), store=True)
         ngev += 1
         step_norm = jnp.linalg.norm(alpha * v, ord=2)
         g_norm = jnp.linalg.norm(g, ord=jnp.inf)
-        fx = obj.compute_scaled_error(x, *args)
+        fx = fun.compute_scaled_error(x, *args)
         fnew = fun(x, *args)
         nfev += 1
         df = f - fnew
@@ -199,7 +198,7 @@ def sgd(
             success, message = False, STATUS_MESSAGES["callback"]
 
         iteration += 1
-    obj._objective._update_equilibrium(obj.recover(x),store=True)
+    fun._objective._update_equilibrium(fun.recover(x), store=True)
 
     success = True
 

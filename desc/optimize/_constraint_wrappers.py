@@ -714,6 +714,10 @@ class ProximalProjection(ObjectiveFunction):
         # however, sub-objectives only need the part for their thing. We will
         # use this to split the state vector into its components
         self._dimx_per_thing = [t.dim_x for t in self.things]
+        self._dimx_per_thing[self._eq_idx] = np.sum(
+            [self._eq.dimensions[arg] for arg in self._args]
+        )
+        self._dimx_per_thing = [t.dim_x for t in self.things]
 
         # equivalent matrix for A[unfixed_idx] @ D @ Z == A @ unfixed_idx_mat
         self._unfixed_idx_mat = jnp.eye(self._objective.dim_x)

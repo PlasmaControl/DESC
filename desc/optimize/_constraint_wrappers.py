@@ -659,12 +659,10 @@ class ProximalProjection(ObjectiveFunction):
             Level of output.
 
         """
-        eq = self._eq
         timer = Timer()
         timer.start("Proximal projection build")
 
-        self._eq = eq
-        self._linear_constraints = get_fixed_boundary_constraints(eq=eq)
+        self._linear_constraints = get_fixed_boundary_constraints(eq=self._eq)
         self._linear_constraints = maybe_add_self_consistency(
             self._eq, self._linear_constraints
         )
@@ -694,7 +692,7 @@ class ProximalProjection(ObjectiveFunction):
         self._eq_solve_objective.build(use_jit=use_jit, verbose=verbose)
 
         errorif(
-            self._constraint.things != [eq],
+            self._constraint.things != [self._eq],
             ValueError,
             "ProximalProjection can only handle constraints on the equilibrium.",
         )

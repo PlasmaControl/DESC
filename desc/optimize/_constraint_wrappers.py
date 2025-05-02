@@ -713,8 +713,8 @@ class ProximalProjection(ObjectiveFunction):
         # the full state vector includes all the parameters from all the things
         # however, sub-objectives only need the part for their thing. We will
         # use this to split the state vector into its components
-        self._dimx_per_thing = [t.dim_x for t in self.things]
-        self._dimx_per_thing[self._eq_idx] = np.sum(
+        self._dimc_per_thing = [t.dim_x for t in self.things]
+        self._dimc_per_thing[self._eq_idx] = np.sum(
             [self._eq.dimensions[arg] for arg in self._args]
         )
         self._dimx_per_thing = [t.dim_x for t in self.things]
@@ -1173,7 +1173,7 @@ class ProximalProjection(ObjectiveFunction):
 
         # v contains "boundary" dofs from eq and other objects (like coils, surfaces
         # etc) want jvp_f to only get parts from equilibrium, not other things
-        vs = jnp.split(v, np.cumsum(self._dimx_per_thing))
+        vs = jnp.split(v, np.cumsum(self._dimc_per_thing))
         # This is (dF/dx)^-1 * dF/dc  # noqa : E800
         dfdc = _proximal_jvp_f_pure(
             self._constraint,
@@ -1185,7 +1185,7 @@ class ProximalProjection(ObjectiveFunction):
             op,
         )
         # broadcasting against multiple things
-        dfdcs = [jnp.zeros(dim) for dim in self._dimx_per_thing]
+        dfdcs = [jnp.zeros(dim) for dim in self._dimc_per_thing]
         dfdcs[self._eq_idx] = dfdc
         # note that size.dfdc != size.vs[self._eq_idx]
         # so, the above line is not a simple assignment where you just change the value

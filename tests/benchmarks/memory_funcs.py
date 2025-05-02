@@ -206,7 +206,9 @@ def _test_proximal_ripple(spline, method):
 @pytest.mark.memory
 def test_eq_solve():
     """Benchmark equilibrium solve with 2 steps."""
-    eq = desc.examples.get("W7-X")
+    res = 12
+    eq = desc.examples.get("precise_QA")
+    eq.change_resolution(L=res, M=res, L_grid=2 * res, M_grid=2 * res)
     # this test is mostly for intermediate operations, so having a chunk size
     # of 100 will be fine to see their effect
     obj = ObjectiveFunction(ForceBalance(eq), jac_chunk_size=100, deriv_mode="batched")

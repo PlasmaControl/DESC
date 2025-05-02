@@ -712,11 +712,9 @@ class ProximalProjection(ObjectiveFunction):
 
         self._set_eq_state_vector()
 
-        # map from eq c to full c
-        self._dimc_per_thing = [t.dim_x for t in self.things]
-        self._dimc_per_thing[self._eq_idx] = np.sum(
-            [self._eq.dimensions[arg] for arg in self._args]
-        )
+        # the full state vector includes all the parameters from all the things
+        # however, sub-objectives only need the part for their thing. We will
+        # use this to split the state vector into its components
         self._dimx_per_thing = [t.dim_x for t in self.things]
 
         # equivalent matrix for A[unfixed_idx] @ D @ Z == A @ unfixed_idx_mat
@@ -1173,7 +1171,7 @@ class ProximalProjection(ObjectiveFunction):
 
         # v contains "boundary" dofs from eq and other objects (like coils, surfaces
         # etc) want jvp_f to only get parts from equilibrium, not other things
-        vs = jnp.split(v, np.cumsum(self._dimc_per_thing))
+        vs = jnp.split(v, np.cumsum(self._dimx_per_thing))
         # This is (dF/dx)^-1 * dF/dc  # noqa : E800
         dfdc = _proximal_jvp_f_pure(
             self._constraint,
@@ -1185,8 +1183,12 @@ class ProximalProjection(ObjectiveFunction):
             op,
         )
         # broadcasting against multiple things
-        dfdcs = [jnp.zeros(dim) for dim in self._dimc_per_thing]
+        dfdcs = [jnp.zeros(dim) for dim in self._dimx_per_thing]
         dfdcs[self._eq_idx] = dfdc
+        # note that size.dfdc != size.vs[self._eq_idx]
+        # so, the above line is not a simple assignment where you just change the value
+        # of the array, but we actually change the size of it too
+        # the size change will be handled by multiplication by the unfixed_idx_mat later
         dfdc = jnp.concatenate(dfdcs)
 
         # We try to find dG/dc - dG/dx * (dF/dx)^-1 * dF/dc
@@ -1260,6 +1262,9 @@ def _proximal_jvp_blocked_pure(objective, vgs, xgs, op):
     # things in the objective. If there are multiple things for the ObjectiveFunction,
     # each split belongs to a different thing. The information about which thing is used
     # by which sub-objective is stored in _things_per_objective_idx.
+
+    # Note: This function is very similar to _jvp_blocked in ObjectiveFunction with
+    # some naming differences to account for ProximalProjection.
     out = []
     for k, (obj, const) in enumerate(zip(objective.objectives, objective.constants)):
         thing_idx = objective._things_per_objective_idx[k]

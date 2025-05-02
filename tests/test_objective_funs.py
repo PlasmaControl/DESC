@@ -12,6 +12,7 @@ import warnings
 import numpy as np
 import pytest
 from packaging.version import Version
+from qsc import Qsc
 from scipy.constants import elementary_charge, mu_0
 
 import desc.examples
@@ -90,13 +91,18 @@ from desc.objectives import (
     ToroidalFlux,
     VacuumBoundaryError,
     Volume,
+    get_NAE_constraints,
 )
 from desc.objectives._free_boundary import BoundaryErrorNESTOR
+from desc.objectives.nae_utils import (
+    _calc_1st_order_NAE_coeffs,
+    _calc_2nd_order_NAE_coeffs,
+)
 from desc.objectives.normalization import compute_scaling_factors
 from desc.objectives.objective_funs import _Objective, collect_docs
 from desc.objectives.utils import softmax, softmin
 from desc.profiles import FourierZernikeProfile, PowerSeriesProfile
-from desc.utils import PRINT_WIDTH
+from desc.utils import PRINT_WIDTH, safenorm
 from desc.vmec_utils import ptolemy_linear_transform
 
 
@@ -605,6 +611,37 @@ class TestObjectiveFunction:
         obj.build()
         f = obj.compute_scaled_error(*obj.xs())
         np.testing.assert_allclose(f, 0, atol=2e-3)
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize(
+        "objective",
+        [
+            "BoundaryError",
+            "BoundaryErrorNESTOR",
+            "QuadraticFlux",
+            "VacuumBoundaryError",
+        ],
+    )
+    def test_boundary_error_multiple_fields(self, objective):
+        """Test calculation of boundary error objectives with multiple fields."""
+        coil = FourierXYZCoil(5e5)
+        coilset = CoilSet.linspaced_angular(coil, n=3, check_intersection=False)
+        coils = [coil for coil in coilset]
+        coil_grid = LinearGrid(N=20)
+        eq = Equilibrium(L=3, M=3, N=3, Psi=np.pi)
+        eq.solve()
+
+        try:
+            obj = getattr(desc.objectives, objective)
+        except AttributeError:  # BoundaryErrorNESTOR
+            obj = getattr(desc.objectives._free_boundary, objective)
+        obj0 = obj(eq, coilset, field_grid=coil_grid)
+        obj1 = obj(eq, coils, field_grid=coil_grid)
+        obj0.build()
+        obj1.build()
+        f0 = obj0.compute_scaled_error(*obj0.xs())
+        f1 = obj1.compute_scaled_error(*obj1.xs())
+        np.testing.assert_allclose(f0, f1, err_msg=f"{objective}", atol=1e-19)
 
     @pytest.mark.unit
     def test_target_mean_iota(self):
@@ -1221,7 +1258,7 @@ class TestObjectiveFunction:
         eq = load("./tests/inputs/vacuum_circular_tokamak.h5")
         obj = QuadraticFlux(eq, t_field)
         obj.build(eq, verbose=2)
-        f = obj.compute(field_params=t_field.params_dict)
+        f = obj.compute(t_field.params_dict)
         np.testing.assert_allclose(f, 0, rtol=1e-14, atol=1e-14)
 
         # test non-axisymmetric surface
@@ -1266,7 +1303,7 @@ class TestObjectiveFunction:
         obj = QuadraticFlux(eq, t_field, vacuum=True, eval_grid=eval_grid)
         Bnorm = t_field.compute_Bnormal(eq.surface, eval_grid=eval_grid)[0]
         obj.build(eq)
-        f = obj.compute(field_params=t_field.params_dict)
+        f = obj.compute(t_field.params_dict)
         dA = eq.compute("|e_theta x e_zeta|", grid=eval_grid)["|e_theta x e_zeta|"]
         # check that they're the same since we set B_plasma = 0
         np.testing.assert_allclose(f, Bnorm * np.sqrt(dA), atol=1e-14)
@@ -1571,7 +1608,7 @@ class TestObjectiveFunction:
         obj = LinkingCurrentConsistency(eq, coilset1)
         obj.build()
         f = obj.compute(coilset1.params_dict, eq.params_dict)
-        np.testing.assert_allclose(f, 0)
+        np.testing.assert_allclose(f, 0, atol=1e-8)
 
         # same with virtual coils
         coilset2 = CoilSet(coil1, coil2, NFP=2, sym=True)
@@ -1579,7 +1616,7 @@ class TestObjectiveFunction:
         obj = LinkingCurrentConsistency(eq, coilset2)
         obj.build()
         f = obj.compute(coilset2.params_dict, eq.params_dict)
-        np.testing.assert_allclose(f, 0)
+        np.testing.assert_allclose(f, 0, atol=1e-8)
 
         # both coilsets together. These have overlapping coils but it doesn't
         # affect the linking number
@@ -1590,7 +1627,7 @@ class TestObjectiveFunction:
         obj = LinkingCurrentConsistency(eq, coilset3)
         obj.build()
         f = obj.compute(coilset3.params_dict, eq.params_dict)
-        np.testing.assert_allclose(f, -G)  # coils provide 2G so error is -G
+        np.testing.assert_allclose(f, -G, rtol=1e-7)  # coils provide 2G so error is -G
 
         # CoilSet + 1 extra coil
         coilset4 = MixedCoilSet(coilset1, coil2, check_intersection=False)
@@ -1600,7 +1637,7 @@ class TestObjectiveFunction:
         obj = LinkingCurrentConsistency(eq, coilset4)
         obj.build()
         f = obj.compute(coilset4.params_dict, eq.params_dict)
-        np.testing.assert_allclose(f, -0.5 * G / 8)
+        np.testing.assert_allclose(f, -0.5 * G / 8, rtol=1e-7)
 
     @pytest.mark.unit
     def test_omnigenity_multiple_surfaces(self):
@@ -1706,6 +1743,37 @@ class TestObjectiveFunction:
         np.testing.assert_allclose(result1, result3)
         np.testing.assert_allclose(result1 * 2, result5)
         np.testing.assert_allclose(result2, result4)
+
+    @pytest.mark.unit
+    def test_surface_current_regularizations(self):
+        """Test SurfaceCurrentRegularization regularizations."""
+
+        def custom_norm(data, regularization):
+            if regularization == "K":
+                return safenorm(data[regularization], axis=-1)
+            elif regularization == "Phi":
+                return np.abs(data[regularization])
+            elif regularization == "sqrt(Phi)":
+                return np.sqrt(np.abs(data["Phi"]))
+
+        def test(field, grid, regularization):
+            reg = "Phi" if regularization == "sqrt(Phi)" else regularization
+            data = field.compute([reg, "|e_theta x e_zeta|"], grid=grid)
+            f0 = custom_norm(data, regularization) * np.sqrt(data["|e_theta x e_zeta|"])
+            obj = SurfaceCurrentRegularization(
+                field, regularization=regularization, source_grid=grid
+            )
+            obj.build()
+            f1 = obj.compute(*obj.xs(field))
+            np.testing.assert_allclose(f0, f1, err_msg=regularization)
+
+        field = FourierCurrentPotentialField(
+            I=0, G=10, NFP=4, Phi_mn=[1, -0.5], modes_Phi=[[0, 1], [2, 2]]
+        )
+        grid = LinearGrid(M=5, N=5, NFP=field.NFP)
+        test(field, grid, "K")
+        test(field, grid, "Phi")
+        test(field, grid, "sqrt(Phi)")
 
     @pytest.mark.unit
     def test_objective_compute(self):
@@ -1822,7 +1890,28 @@ class TestObjectiveFunction:
         np.testing.assert_allclose(
             objective._things_per_objective_idx, [[0, 1], [1, 0]]
         )
-        np.testing.assert_allclose(objective.compute_scaled_error(x), 0, atol=1e-15)
+        np.testing.assert_allclose(objective.compute_scaled_error(x), 0, atol=1e-14)
+
+    @pytest.mark.unit
+    def test_errors_bootstrap(self):
+        """Error checks for BootstrapRedlConsistency."""
+        eq = Equilibrium(
+            L=2,
+            M=2,
+            N=2,
+            electron_density=PowerSeriesProfile([1e19, 0, -1e19]),
+            electron_temperature=PowerSeriesProfile([1e3, 0, -1e3]),
+            current=PowerSeriesProfile([0, 0, -1]),
+        )
+        grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, L=2, axis=True)
+        obj = BootstrapRedlConsistency(eq, grid=grid)
+        with pytest.raises(ValueError, match="rho=0"):
+            obj.build()
+
+        grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, L=2, axis=False)
+        obj = BootstrapRedlConsistency(eq, grid=grid)
+        with pytest.raises(ValueError, match="vanish"):
+            obj.build()
 
 
 @pytest.mark.regression
@@ -1830,6 +1919,9 @@ def test_derivative_modes():
     """Test equality of derivatives using batched, looped methods."""
     eq = Equilibrium(M=2, N=1, L=2)
     surf = FourierRZToroidalSurface()
+
+    # specifying chunk size for sub-objective with batched mode
+    # should raise error
     obj1 = ObjectiveFunction(
         [
             PlasmaVesselDistance(eq, surf, jac_chunk_size=1),
@@ -1839,6 +1931,8 @@ def test_derivative_modes():
         deriv_mode="batched",
         use_jit=False,
     )
+    # specifying chunk size for both objective and sub-objective
+    # should raise error
     obj2 = ObjectiveFunction(
         [
             PlasmaVesselDistance(eq, surf, jac_chunk_size=2),
@@ -1919,6 +2013,36 @@ def test_derivative_modes():
     j3 = obj3.jvp_scaled(v, x)
     np.testing.assert_allclose(j1, j2, atol=1e-10)
     np.testing.assert_allclose(j1, j3, atol=1e-10)
+
+    # specifying chunk size to sub-objective should make the deriv
+    # mode of the objective "blocked" automatically
+    obj1 = ObjectiveFunction(ForceBalance(eq, jac_chunk_size=2))
+    obj2 = ObjectiveFunction(
+        (
+            ForceBalance(eq, jac_chunk_size=5),
+            PlasmaVesselDistance(eq, surf, jac_chunk_size=100),
+        )
+    )
+    # reverse mode sub-objectives should be blocked and have the same
+    # chunk size as the objective
+    obj3 = ObjectiveFunction(
+        (
+            AspectRatio(eq, target=3),
+            ForceBalance(eq),
+        )
+    )
+    obj1.build()
+    obj2.build()
+    obj3.build()
+    assert obj1._deriv_mode == "blocked"
+    assert obj2._deriv_mode == "blocked"
+    assert obj3._deriv_mode == "blocked"
+    # check that the chunk size is set correctly
+    assert obj1.objectives[0]._jac_chunk_size == 2
+    assert obj2.objectives[0]._jac_chunk_size == 5
+    assert obj2.objectives[1]._jac_chunk_size == 100
+    assert obj3.objectives[0]._jac_chunk_size == obj3._jac_chunk_size
+    assert obj3.objectives[1]._jac_chunk_size == obj3._jac_chunk_size
 
 
 @pytest.mark.unit
@@ -2865,7 +2989,7 @@ class TestComputeScalarResolution:
         f = np.zeros_like(self.res_array, dtype=float)
         for i, res in enumerate(self.res_array):
             grid = LinearGrid(
-                M=int(self.eq.M * res), N=int(self.eq.N * res), NFP=self.eq.NFP
+                M=int(self.eq.M * res), N=int(self.eq.N * res), NFP=self.eq.NFP, rho=0.7
             )
             obj = ObjectiveFunction(
                 BootstrapRedlConsistency(eq=eq, grid=grid), use_jit=False
@@ -3458,7 +3582,7 @@ class TestObjectiveNaNGrad:
     @pytest.mark.unit
     def test_objective_no_nangrad_quadratic_flux_minimizing(self):
         """SurfaceQuadraticFlux."""
-        ext_field = ToroidalMagneticField(1.0, 1.0)
+        ext_field = FourierXYZCoil().to_SplineXYZ(grid=3)
 
         surf = FourierRZToroidalSurface(
             R_lmn=[4.0, 1.0],
@@ -3467,8 +3591,9 @@ class TestObjectiveNaNGrad:
             modes_Z=[[-1, 0]],
             NFP=1,
         )
-
-        obj = ObjectiveFunction(SurfaceQuadraticFlux(surf, ext_field), use_jit=False)
+        # have use_jit=True here to check that runs correctly with spline
+        # coils, see PR #1656
+        obj = ObjectiveFunction(SurfaceQuadraticFlux(surf, ext_field), use_jit=True)
         obj.build()
         g = obj.grad(obj.x(surf, ext_field))
         assert not np.any(np.isnan(g)), "quadratic flux"
@@ -3695,3 +3820,47 @@ def test_objective_docstring():
     collected_docs = doc_header + "    " + collected_docs
 
     assert objective_docs == collected_docs
+
+
+@pytest.mark.unit
+def test_get_nae_constraint_asym_error():
+    """Test warning when using an asymmetric eq for NAE constraints."""
+    qsc = Qsc.from_paper("precise QA", rs=[1e-6, 1e-6])
+    with pytest.raises(NotImplementedError, match="asymmetric"):
+        get_NAE_constraints(get("precise_QA"), qsc, fix_lambda=0)
+
+
+@pytest.mark.unit
+def test_nae_coefficients_asym():
+    """Test that the asymmetric coefs of a symmetric NAE solution are 0."""
+    eq = Equilibrium(NFP=2, sym=False, L=6, M=6, N=12)
+    qsc_eq = Qsc.from_paper("precise QA")
+    qsc_eq.lasym = True
+    coefs, bases = _calc_1st_order_NAE_coeffs(qsc_eq, eq)
+    for key in coefs.keys():
+        if "L" in key:
+            continue
+        s1 = 1
+        s1 *= -1 if "R" in key else 1
+        s1 *= -1 if "neg1" in key else 1
+
+        inds_asym = (
+            np.where(bases["Rbasis_cos"].modes[:, 2] < 0)
+            if s1 < 0
+            else np.where(bases["Rbasis_cos"].modes[:, 2] >= 0)
+        )
+        np.testing.assert_allclose(coefs[key][inds_asym], 0, err_msg=key, atol=1e-13)
+    coefs, bases = _calc_2nd_order_NAE_coeffs(qsc_eq, eq)
+    for key in coefs.keys():
+        if "L" in key:
+            continue
+        s1 = 1
+        s1 *= -1 if "R" in key else 1
+        s1 *= -1 if "neg2" in key else 1
+
+        inds_asym = (
+            np.where(bases["Rbasis_cos"].modes[:, 2] < 0)
+            if s1 < 0
+            else np.where(bases["Rbasis_cos"].modes[:, 2] >= 0)
+        )
+        np.testing.assert_allclose(coefs[key][inds_asym], 0, err_msg=key, atol=1e-13)

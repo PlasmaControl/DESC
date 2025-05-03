@@ -3431,6 +3431,7 @@ class TestComputeScalarResolution:
         """Tests point B measurement scalar resolution from plasma and coilset."""
         # B from a toroidal field 1/R, and a vacuum stell (should be just 1/R field)
         eq = get("ESTELL")
+        eq.surface = FourierCurrentPotentialField.from_surface(eq.surface)
 
         field = ToroidalMagneticField(B0=1, R0=1)
         coords_R = np.concatenate([np.linspace(0.2, 0.8, 5), np.linspace(1.9, 2.5, 5)])

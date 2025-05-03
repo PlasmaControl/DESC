@@ -713,22 +713,23 @@ class ProximalProjection(ObjectiveFunction):
         # the full state vector includes all the parameters from all the things
         # however, sub-objectives only need the part for their thing. We will
         # use this to split the state vector into its components
+        self._dimx_per_thing = [t.dim_x for t in self.things]
+        # we remove the R_lmn, Z_lmn, L_lmn, Ra_n, Za_n from the equilibrium params
+        # dimc_per_thing accounts for that, don't confuse it with reduced state vector
         self._dimc_per_thing = [t.dim_x for t in self.things]
         self._dimc_per_thing[self._eq_idx] = np.sum(
             [self._eq.dimensions[arg] for arg in self._args]
         )
-        self._dimx_per_thing = [t.dim_x for t in self.things]
 
         # equivalent matrix for A[unfixed_idx] @ D @ Z == A @ unfixed_idx_mat
         self._unfixed_idx_mat = jnp.eye(self._objective.dim_x)
         self._unfixed_idx_mat = jnp.split(
-            self._unfixed_idx_mat, np.cumsum([t.dim_x for t in self.things]), axis=-1
+            self._unfixed_idx_mat, np.cumsum(self._dimx_per_thing), axis=-1
         )
+        # eq_Z is already scaled by D, so can just use it alone here
         self._unfixed_idx_mat[self._eq_idx] = self._unfixed_idx_mat[self._eq_idx][
             :, self._eq_unfixed_idx
-        ] @ (
-            self._eq_Z
-        )  # .eq_Z is already scaled by D, so can just use it alone here
+        ] @ (self._eq_Z)
         self._unfixed_idx_mat = jnp.concatenate(
             [np.atleast_2d(foo) for foo in self._unfixed_idx_mat], axis=-1
         )
@@ -773,12 +774,7 @@ class ProximalProjection(ObjectiveFunction):
                 + f"{self.dim_x} got {x.size}."
             )
 
-        xs_splits = [t.dim_x for t in self.things]
-        xs_splits[self._eq_idx] = np.sum(
-            [self._eq.dimensions[arg] for arg in self._args]
-        )
-        xs_splits = np.cumsum(xs_splits)
-        xs = jnp.split(x, xs_splits)
+        xs = jnp.split(x, np.cumsum(self._dimc_per_thing))
         params = []
         for t, xi in zip(self.things, xs):
             if t is self._eq:

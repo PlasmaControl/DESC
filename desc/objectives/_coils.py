@@ -730,6 +730,14 @@ class CoilSetMinDistance(_Objective):
         a large number of coils, or if the resolution is very high, setting this to a
         small value will reduce peak memory usage at the cost of slightly increased
         runtime.
+    use_centers : bool
+        Whether or not to only consider the coil centers, rather than the position
+        along the coil itself. This can reduce the computational cost in situations
+        where a coil's position is well-approximated by its center, for example
+        if the coils have a very small radius such as with dipole coils. Note that
+        this option only is logical for coils which do not link the plasma, and the
+        target minimum distance must be larger than the coil radius for this option
+        to work.
 
     """
 
@@ -759,6 +767,7 @@ class CoilSetMinDistance(_Objective):
         use_softmin=False,
         softmin_alpha=1.0,
         dist_chunk_size=None,
+        use_centers=False,
     ):
         from desc.coils import CoilSet
 
@@ -768,6 +777,7 @@ class CoilSetMinDistance(_Objective):
         self._use_softmin = use_softmin
         self._softmin_alpha = softmin_alpha
         self._dist_chunk_size = dist_chunk_size
+        self._use_centers = use_centers
         errorif(
             not isinstance(coil, CoilSet),
             ValueError,
@@ -830,7 +840,7 @@ class CoilSetMinDistance(_Objective):
         if constants is None:
             constants = self.constants
         pts = constants["coilset"]._compute_position(
-            params=params, grid=constants["grid"], basis="xyz"
+            params=params, grid=constants["grid"], basis="xyz", center=self._use_centers
         )
 
         def body(k):
@@ -903,6 +913,11 @@ class PlasmaCoilSetMinDistance(_Objective):
         a large number of coils, or if the resolution is very high, setting this to a
         small value will reduce peak memory usage at the cost of slightly increased
         runtime.
+    use_centers : bool
+        Whether or not to only consider the coil centers, rather than the position
+        along the coil itself. This can reduce the computational cost in situations
+        where a coil's position is well-approximated by its center, for example
+        if the coils have a very small radius.
 
     """
 
@@ -936,6 +951,7 @@ class PlasmaCoilSetMinDistance(_Objective):
         use_softmin=False,
         softmin_alpha=1.0,
         dist_chunk_size=None,
+        use_centers=False,
     ):
         if target is None and bounds is None:
             bounds = (1, np.inf)
@@ -948,6 +964,7 @@ class PlasmaCoilSetMinDistance(_Objective):
         self._use_softmin = use_softmin
         self._softmin_alpha = softmin_alpha
         self._dist_chunk_size = dist_chunk_size
+        self._use_centers = use_centers
         errorif(eq_fixed and coils_fixed, ValueError, "Cannot fix both eq and coil")
         things = []
         if not eq_fixed:
@@ -1026,7 +1043,9 @@ class PlasmaCoilSetMinDistance(_Objective):
             plasma_pts = rpz2xyz(rpz)
             self._constants["plasma_coords"] = plasma_pts
         if self._coils_fixed:
-            coils_pts = coil._compute_position(params=coil.params_dict, grid=coil_grid)
+            coils_pts = coil._compute_position(
+                params=coil.params_dict, grid=coil_grid, center=self._use_centers
+            )
             self._constants["coil_coords"] = coils_pts
 
         if self._normalize:
@@ -1069,11 +1088,14 @@ class PlasmaCoilSetMinDistance(_Objective):
             coils_params = params_2
 
         # coil pts; shape(ncoils,coils_grid.num_nodes,3)
+        # or shape(ncoils, 1, 3) if self._use_centers == True
         if self._coils_fixed:
             coils_pts = constants["coil_coords"]
         else:
             coils_pts = constants["coil"]._compute_position(
-                params=coils_params, grid=constants["coil_grid"]
+                params=coils_params,
+                grid=constants["coil_grid"],
+                center=self._use_centers,
             )
 
         # plasma pts; shape(plasma_grid.num_nodes,3)

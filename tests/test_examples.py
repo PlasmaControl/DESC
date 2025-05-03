@@ -19,6 +19,7 @@ from desc.coils import (
     FourierXYZCoil,
     MixedCoilSet,
     _Coil,
+    initialize_saddle_coils,
 )
 from desc.continuation import solve_continuation_automatic
 from desc.equilibrium import EquilibriaFamily, Equilibrium
@@ -2143,6 +2144,92 @@ def test_coilset_geometry_optimization():
         abs(surf_opt.Z_lmn[surf_opt.Z_basis.get_idx(M=-1, N=0)]) + offset,
         rtol=2e-2,
     )
+
+
+@pytest.mark.unit
+def test_coilset_geometry_center_optimization():
+    """Test center=True with PlasmaCoilSetMinDistance and CoilSetMinDistance."""
+    R0 = 5  # major radius of plasma
+    a = 1.2  # minor radius of plasma
+    offset = 0.75  # target plasma-coil distance
+
+    # circular tokamak
+    surf = FourierRZToroidalSurface(
+        R_lmn=np.array([R0, a]),
+        Z_lmn=np.array([0, -a]),
+        modes_R=np.array([[0, 0], [1, 0]]),
+        modes_Z=np.array([[0, 0], [-1, 0]]),
+        NFP=2,
+    )
+    eq = Equilibrium(Psi=3, surface=surf, NFP=2, M=2, N=0, sym=True)
+
+    # symmetric coilset with 1 unique coil + 7 virtual coils
+    # initial radius is too large for target plasma-coil distance
+    # initial toroidal angle is too small for target coil-coil distance
+    coils = initialize_saddle_coils(
+        eq, 1, r_over_a=0.1, offset=2
+    )  # offset is in units of plasma-coil distance
+    coils[0].current = 1e6
+    assert len(coils) == 1
+    assert coils.num_coils == 4
+    # grids
+    plasma_grid = LinearGrid(M=16, zeta=64)
+    coil_grid = LinearGrid(N=2)
+    # don't need more than one pt bc center is only one pt per coil
+    # and FourierPlanarCoil can compute center without any resolution in grid
+    # I choose more than one pt here to test it works
+
+    #### optimize coils with fixed equilibrium ####
+    # optimizing for target coil-plasma distance and maximum coil-coil distance
+    coil_coil_dist = (R0 + a + offset) * 2 / np.sqrt(2)
+    objective = ObjectiveFunction(
+        (
+            PlasmaCoilSetMinDistance(
+                eq=eq,
+                coil=coils,
+                target=offset,
+                weight=2,
+                plasma_grid=plasma_grid,
+                coil_grid=coil_grid,
+                eq_fixed=True,
+                coils_fixed=False,
+                use_centers=True,
+            ),
+            CoilSetMinDistance(
+                coils, target=coil_coil_dist, grid=coil_grid, use_centers=True
+            ),
+        )
+    )
+    # only free optimization variables are coil center position R of the first unique
+    # and R, Z of outer coil
+    constraints = (
+        FixCoilCurrent(coils),
+        FixParameters(
+            coils,
+            [
+                {"center": np.array([1, 2]), "normal": True, "r_n": True},
+            ],
+        ),
+    )
+    optimizer = Optimizer("scipy-trf")
+    [coils_opt], _ = optimizer.optimize(
+        things=coils,
+        objective=objective,
+        constraints=constraints,
+        verbose=2,
+        copy=True,
+        ftol=1e-10,
+    )
+    np.testing.assert_allclose(coils_opt[0].current, 1e6)  # current was fixed
+    np.testing.assert_allclose(  # check coils are equally spaced in toroidal angle phi
+        coils_opt[0].center,
+        [R0 + a + offset, np.pi / (coils_opt.num_coils), 0],
+        rtol=1e-5,
+    )
+    np.testing.assert_allclose(coils_opt[0].normal, coils[0].normal)  # normal was fixed
+    np.testing.assert_allclose(
+        coils_opt[0].r_n, coils[0].r_n, rtol=1e-2
+    )  # coil radius was fixed
 
 
 @pytest.mark.unit

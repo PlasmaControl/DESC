@@ -242,6 +242,7 @@ def fmintr(  # noqa: C901
     # we don't need unscaled H anymore this iteration, so we overwrite
     # it with H_h = d * H * d[:, None] to avoid carrying so many H-sized matrices
     # in memory, which can be large
+    # TODO: place this function under JIT (#1669)
     # doing operation H = d * H * d[:, None]
     # with just in-place operations
     H *= d[:, None]

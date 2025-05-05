@@ -281,11 +281,10 @@ def lsq_auglag(  # noqa: C901
     diag_h = g * dv * scale
 
     g_h = g * d
+    # TODO: place this function under JIT (#1669)
     # we don't need unscaled J anymore, so we overwrite
     # it with J_h = J * d to avoid carrying so many J-sized matrices
     # in memory, which can be large
-    # Note that this will not be in place with JAX unless
-    # this function is placed under JIT
     J = J.at[:].set(J * d)
     J_h = J
     del J
@@ -545,8 +544,6 @@ def lsq_auglag(  # noqa: C901
             # we don't need unscaled J anymore, so we overwrite
             # it with J_h = J * d to avoid carrying so many J-sized matrices
             # in memory, which can be large
-            # Note that this will not be in place with JAX unless
-            # this function is placed under JIT
             J = J.at[:].set(J * d)
             J_h = J
             del J

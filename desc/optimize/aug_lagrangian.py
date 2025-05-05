@@ -344,10 +344,9 @@ def fmin_auglag(  # noqa: C901
 
     g_h = g * d
 
+    # TODO: place this function under JIT (#1669)
     # doing operation H = d * H * d[:, None]
     # with just in-place operations
-    # Note that this will not be in place with JAX unless
-    # this function is placed under JIT
     H *= d[:, None]
     H *= d
 

@@ -872,6 +872,8 @@ class CoilSetMaxB(_Objective):
     ----------
     coil : CoilSet
         Coil(s) that are to be optimized.
+    field : MagneticField, optional
+        External field to be added to the coil field. Defaults to None.
     component :  {'mag', 't', 'p', 'q'}, optional
         Component of magnetic field to be targeted. Can be 'mag' for field magnitude,
         or 't', 'p', 'q' for the respective dimensions of the conductor cross section.
@@ -892,6 +894,10 @@ class CoilSetMaxB(_Objective):
         Parameter used for softmax. The larger ``softmax_alpha``, the closer the
         softmax approximates the hardmax. softmax -> hardmax as
         ``softmax_alpha`` -> infinity.
+    bs_chunk_size : int or None
+        Size to split Biot-Savart computation into chunks of evaluation points.
+        If no chunking should be done or the chunk size is the full input
+        then supply ``None``.
 
     """
 
@@ -915,6 +921,7 @@ class CoilSetMaxB(_Objective):
         normalize_target=True,
         loss_function=None,
         deriv_mode="auto",
+        field=None,
         component="mag",
         xsection_grid=None,
         centerline_grid=None,
@@ -922,6 +929,7 @@ class CoilSetMaxB(_Objective):
         jac_chunk_size=None,
         use_softmax=False,
         softmax_alpha=1.0,
+        bs_chunk_size=None,
     ):
         from desc.coils import AbstractFiniteBuildCoil, CoilSet
 
@@ -932,6 +940,9 @@ class CoilSetMaxB(_Objective):
         self._centerline_grid = centerline_grid
         self._use_softmax = use_softmax
         self._softmax_alpha = softmax_alpha
+        self._has_field = field is not None
+        self._field = [field] if not isinstance(field, list) else field
+        self._bs_chunk_size = bs_chunk_size
 
         errorif(
             not type(coil) is CoilSet,
@@ -976,6 +987,7 @@ class CoilSetMaxB(_Objective):
 
         """
         from desc.coils import AbstractFiniteBuildCoil
+        from desc.magnetic_fields import SumMagneticField
 
         coilset = self.things[0]
 
@@ -990,6 +1002,9 @@ class CoilSetMaxB(_Objective):
             "centerline_grid": self._centerline_grid,
             "quad_weights": 1.0,
         }
+
+        if self._has_field:
+            self._constants["field"] = SumMagneticField(self._field)
 
         if self._normalize:
             coils = tree_leaves(coilset, is_leaf=lambda x: not hasattr(x, "__len__"))
@@ -1041,13 +1056,23 @@ class CoilSetMaxB(_Objective):
                 params=params,  # all coils' parameters
                 basis="xyz",
                 source_grid=constants["centerline_grid"],
+                chunk_size=self._bs_chunk_size,
             )
             other_field -= coil.compute_magnetic_field(
                 quad_points,
                 params=x,
                 basis="xyz",
                 source_grid=constants["centerline_grid"],
+                chunk_size=self._bs_chunk_size,
             )
+
+            if self._has_field:
+                other_field += constants["field"].compute_magnetic_field(
+                    quad_points,
+                    basis="xyz",
+                    source_grid=constants["centerline_grid"],
+                    chunk_size=self._bs_chunk_size,
+                )
 
             total_field = self_field + other_field
 

@@ -731,7 +731,7 @@ class ZernikePolynomial(_Basis):
 
     """
 
-    _fft_poloidal = False
+    _fft_poloidal = True
     _fft_toroidal = True
 
     def __init__(self, L, M, sym=False, spectral_indexing="ansi"):
@@ -1127,7 +1127,7 @@ class FourierZernikeBasis(_Basis):
 
     """
 
-    _fft_poloidal = False
+    _fft_poloidal = True
     _fft_toroidal = True
 
     def __init__(self, L, M, N, NFP=1, sym=False, spectral_indexing="ansi"):

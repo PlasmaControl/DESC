@@ -81,7 +81,7 @@ def compute_scaling_factors(thing):
 
         if isinstance(thing, _Coil):
             scales["B"] = (
-                mu_0 * thing.current / (2 * scales["a"])
+                mu_0 * np.abs(thing.current) / (2 * scales["a"])
             )  # field at center of equivalent loop
 
     # replace 0 scales to avoid normalizing by zero

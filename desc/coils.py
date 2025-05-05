@@ -1909,9 +1909,8 @@ class AbstractFiniteBuildCoil(AbstractFramedCoil, Optimizable, ABC):
         L = finite_build_grid.L
         M = finite_build_grid.M
 
-        zeta = finite_build_grid.nodes[finite_build_grid.unique_zeta_idx, 2]
-
-        centerline_grid = LinearGrid(zeta=zeta)
+        centerline_grid = finite_build_grid.copy()
+        centerline_grid.change_resolution(L=0, M=0, N=finite_build_grid.N)
 
         abdelta = finite_build_regularization_rect(
             cross_section_dims[0], cross_section_dims[1]
@@ -2061,8 +2060,8 @@ class AbstractFiniteBuildCoil(AbstractFramedCoil, Optimizable, ABC):
             centerline grid.
 
         """
-        zeta = finite_build_grid.nodes[finite_build_grid.unique_zeta_idx, 2]
-        centerline_grid = LinearGrid(zeta=zeta)
+        centerline_grid = finite_build_grid.copy()
+        centerline_grid.change_resolution(L=0, M=0, N=finite_build_grid.N)
 
         t_frame = self.compute(
             "centroid_tangent",

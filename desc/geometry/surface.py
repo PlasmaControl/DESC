@@ -1,5 +1,6 @@
 """Classes for 2D surfaces embedded in 3D space."""
 
+import os
 import warnings
 
 import numpy as np
@@ -65,6 +66,7 @@ class FourierRZToroidalSurface(Surface):
         "_NFP",
         "_rho",
     ]
+    _static_attrs = ["_R_basis", "_Z_basis"]
 
     @execute_on_cpu
     def __init__(
@@ -316,6 +318,7 @@ class FourierRZToroidalSurface(Surface):
             Surface with given Fourier coefficients.
 
         """
+        path = os.path.expanduser(path)
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             inputs = InputReader().parse_inputs(path)[-1]
@@ -836,6 +839,8 @@ class ZernikeRZToroidalSection(Surface):
         "_spectral_indexing",
         "_zeta",
     ]
+
+    _static_attrs = ["_R_basis", "_Z_basis"]
 
     @execute_on_cpu
     def __init__(

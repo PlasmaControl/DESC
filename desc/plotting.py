@@ -320,7 +320,9 @@ def _compute(eq, name, grid, component=None, reshape=True):
     return data, label
 
 
-def _compute_Bn(eq, field, plot_grid, field_grid):
+def _compute_Bn(
+    eq, field, plot_grid, field_grid, chunk_size=None, B_plasma_chunk_size=None
+):
     """Compute normal field from virtual casing + coils, using correct grids."""
     errorif(
         field is None,
@@ -372,7 +374,12 @@ def _compute_Bn(eq, field, plot_grid, field_grid):
         warnings.simplefilter("ignore")
 
         data, _ = field.compute_Bnormal(
-            eq, eval_grid=eval_grid, source_grid=field_grid, vc_source_grid=source_grid
+            eq,
+            eval_grid=eval_grid,
+            source_grid=field_grid,
+            vc_source_grid=source_grid,
+            chunk_size=chunk_size,
+            B_plasma_chunk_size=B_plasma_chunk_size,
         )
     data = data.reshape((eval_grid.num_theta, eval_grid.num_zeta), order="F")
     if theta_endpoint:
@@ -722,7 +729,12 @@ def plot_2d(
         )
     else:
         data, label = _compute_Bn(
-            eq, kwargs.pop("field", None), grid, kwargs.pop("field_grid", None)
+            eq=eq,
+            field=kwargs.pop("field", None),
+            plot_grid=grid,
+            field_grid=kwargs.pop("field_grid", None),
+            chunk_size=kwargs.pop("chunk_size", None),
+            B_plasma_chunk_size=kwargs.pop("B_plasma_chunk_size", None),
         )
 
     fig, ax = _format_ax(ax, figsize=kwargs.pop("figsize", None))
@@ -936,7 +948,10 @@ def plot_3d(
 
     Examples
     --------
-    .. image:: ../../_static/images/plotting/plot_3d.png
+    .. raw:: html
+
+        <iframe src="../../_static/images/plotting/plot_3d.html"
+        width="100%" height="980" frameborder="0"></iframe>
 
     .. code-block:: python
 
@@ -979,7 +994,12 @@ def plot_3d(
         )
     else:
         data, label = _compute_Bn(
-            eq, kwargs.pop("field", None), grid, kwargs.pop("field_grid", None)
+            eq=eq,
+            field=kwargs.pop("field", None),
+            plot_grid=grid,
+            field_grid=kwargs.pop("field_grid", None),
+            chunk_size=kwargs.pop("chunk_size", None),
+            B_plasma_chunk_size=kwargs.pop("B_plasma_chunk_size", None),
         )
 
     errorif(
@@ -1849,6 +1869,32 @@ def poincare_plot(
         Axes being plotted to.
     plot_data : dict
         Dictionary of the data plotted, only returned if ``return_data=True``
+
+    Examples
+    --------
+    .. image:: ../../_static/images/plotting/poincare_plot.png
+
+    .. code-block:: python
+
+        from desc.plotting import poincare_plot
+        grid_trace = LinearGrid(rho=np.linspace(0.4, 0.9, 7))
+        r0 = eq.compute("R", grid=grid_trace)["R"]
+        z0 = eq.compute("Z", grid=grid_trace)["Z"]
+        fig, ax = desc.plotting.poincare_plot(
+            field,
+            r0,
+            z0,
+            NFP=eq.NFP,
+            color="k",
+            size=0.5,
+            ntransit=100
+        )
+        grid_trace2 = LinearGrid(rho=np.linspace(0.52, 0.55, 4))
+        r0 = eq.compute("R", grid=grid_trace2)["R"]
+        z0 = eq.compute("Z", grid=grid_trace2)["Z"]
+        fig, ax = desc.plotting.poincare_plot(
+            field, r0, z0, NFP=eq.NFP, ax=ax, color="r", size=0.5, ntransit=250
+        )
     """
     fli_kwargs = {}
     for key in inspect.signature(field_line_integrate).parameters:
@@ -2483,6 +2529,20 @@ def plot_coils(coils, grid=None, fig=None, return_data=False, **kwargs):
         Figure being plotted to
     plot_data : dict
         Dictionary of the data plotted, only returned if ``return_data=True``
+
+    Examples
+    --------
+    .. raw:: html
+
+        <iframe src="../../_static/images/plotting/plot_coils.html"
+        width="100%" height="980" frameborder="0"></iframe>
+
+    .. code-block:: python
+
+        from desc.plotting import plot_coils
+        from desc.coils import initialize_modular_coils
+        coils = initialize_modular_coils(eq, num_coils=4, r_over_a=2)
+        plot_coils(coils)
 
     """
     lw = kwargs.pop("lw", 5)

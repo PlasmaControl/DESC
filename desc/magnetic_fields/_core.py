@@ -1,5 +1,6 @@
 """Classes for magnetic fields."""
 
+import os
 import warnings
 from abc import ABC, abstractmethod
 from collections.abc import MutableSequence
@@ -34,7 +35,15 @@ from desc.integrals import compute_B_plasma
 from desc.io import IOAble
 from desc.optimizable import Optimizable, OptimizableCollection, optimizable_parameter
 from desc.transform import Transform
-from desc.utils import copy_coeffs, errorif, flatten_list, safediv, setdefault, warnif
+from desc.utils import (
+    copy_coeffs,
+    dot,
+    errorif,
+    flatten_list,
+    safediv,
+    setdefault,
+    warnif,
+)
 from desc.vmec_utils import ptolemy_identity_fwd, ptolemy_identity_rev
 
 
@@ -326,6 +335,7 @@ class _MagneticField(IOAble, ABC):
         params=None,
         basis="rpz",
         chunk_size=None,
+        B_plasma_chunk_size=None,
     ):
         """Compute Bnormal from self on the given surface.
 
@@ -357,13 +367,17 @@ class _MagneticField(IOAble, ABC):
             basis for returned coordinates on the surface
             cylindrical "rpz" by default
         chunk_size : int or None
-            Size to split computation into chunks of evaluation points.
+            Size to split Biot-Savart computation into chunks of evaluation points.
             If no chunking should be done or the chunk size is the full input
-            then supply ``None``. Default is ``None``.
+            then supply ``None``.
+        B_plasma_chunk_size : int or None
+            Size to split singular integral computation for B_plasma into chunks.
+            If no chunking should be done or the chunk size is the full input
+            then supply ``None``. Default is ``chunk_size``.
 
         Returns
         -------
-        Bnorm : ndarray
+        Bnormal : ndarray
             The normal magnetic field to the surface given, as an array of
             size ``grid.num_nodes``.
         coords: ndarray
@@ -379,13 +393,10 @@ class _MagneticField(IOAble, ABC):
             eq = surface
             surface = eq.surface
         if eval_grid is None:
-            eval_grid = LinearGrid(
-                rho=jnp.array(1.0), M=2 * surface.M, N=2 * surface.N, NFP=surface.NFP
-            )
+            eval_grid = LinearGrid(M=2 * surface.M, N=2 * surface.N, NFP=surface.NFP)
 
         data = surface.compute(["x", "n_rho"], grid=eval_grid, basis="rpz")
         coords = data["x"]
-        surf_normal = data["n_rho"]
         B = self.compute_magnetic_field(
             coords,
             basis="rpz",
@@ -393,16 +404,21 @@ class _MagneticField(IOAble, ABC):
             params=params,
             chunk_size=chunk_size,
         )
-        Bnorm = jnp.sum(B * surf_normal, axis=-1)
+        Bnormal = dot(B, data["n_rho"])
 
         if calc_Bplasma:
-            Bplasma = compute_B_plasma(eq, eval_grid, vc_source_grid, normal_only=True)
-            Bnorm += Bplasma
+            Bnormal += compute_B_plasma(
+                eq,
+                eval_grid,
+                vc_source_grid,
+                normal_only=True,
+                chunk_size=setdefault(B_plasma_chunk_size, chunk_size),
+            )
 
         if basis.lower() == "xyz":
             coords = rpz2xyz(coords)
 
-        return Bnorm, coords
+        return Bnormal, coords
 
     def save_BNORM_file(
         self,
@@ -415,6 +431,8 @@ class _MagneticField(IOAble, ABC):
         params=None,
         sym="sin",
         scale_by_curpol=True,
+        chunk_size=None,
+        B_plasma_chunk_size=None,
     ):
         """Create BNORM-style .txt file containing Bnormal Fourier coefficients.
 
@@ -450,9 +468,17 @@ class _MagneticField(IOAble, ABC):
             non-symmetric Bnormal distribution, as only the sin-symmetric modes
             will be saved.
         scale_by_curpol : bool, optional
-            Whether or not to scale the Bnormal coefficients by curpol
+            Whether to scale the Bnormal coefficients by curpol
             which is expected by most other codes that accept BNORM files,
             by default True
+        chunk_size : int or None
+            Size to split Biot-Savart computation into chunks of evaluation points.
+            If no chunking should be done or the chunk size is the full input
+            then supply ``None``.
+        B_plasma_chunk_size : int or None
+            Size to split singular integral computation for B_plasma into chunks.
+            If no chunking should be done or the chunk size is the full input
+            then supply ``None``. Default is ``chunk_size``.
 
         Returns
         -------
@@ -477,16 +503,19 @@ class _MagneticField(IOAble, ABC):
                 "an Equilibrium must be supplied when scale_by_curpol is True!"
             )
         if eval_grid is None:
-            eval_grid = LinearGrid(
-                rho=jnp.array(1.0), M=2 * basis_M, N=2 * basis_N, NFP=surface.NFP
-            )
-
+            eval_grid = LinearGrid(M=2 * basis_M, N=2 * basis_N, NFP=surface.NFP)
+        fname = os.path.expanduser(fname)
         basis = DoubleFourierSeries(M=basis_M, N=basis_N, NFP=surface.NFP, sym=sym)
         trans = Transform(basis=basis, grid=eval_grid, build_pinv=True)
 
         # compute Bnormal on the grid
         Bnorm, _ = self.compute_Bnormal(
-            surface, eval_grid=eval_grid, source_grid=source_grid, params=params
+            surface,
+            eval_grid=eval_grid,
+            source_grid=source_grid,
+            params=params,
+            chunk_size=chunk_size,
+            B_plasma_chunk_size=B_plasma_chunk_size,
         )
 
         # fit Bnorm with Fourier Series
@@ -535,6 +564,7 @@ class _MagneticField(IOAble, ABC):
         nphi=90,
         save_vector_potential=True,
         chunk_size=None,
+        source_grid=None,
     ):
         """Save the magnetic field to an mgrid NetCDF file in "raw" format.
 
@@ -563,12 +593,19 @@ class _MagneticField(IOAble, ABC):
             Size to split computation into chunks of evaluation points.
             If no chunking should be done or the chunk size is the full input
             then supply ``None``. Default is ``None``.
+        source_grid : Grid
+            What grid to use to discretize the source magnetic field. Will be passed
+            into the ``source_grid`` argument of ``compute_magnetic_field`` and
+            ``compute_magnetic_vector_potential``. If None,
+            defaults to whatever the default is for the given magnetic field,
+            specified in the docstring for that magnetic field.
 
         Returns
         -------
         None
 
         """
+        path = os.path.expanduser(path)
         # cylindrical coordinates grid
         NFP = self.NFP if hasattr(self, "_NFP") else 1
         R = np.linspace(Rmin, Rmax, nR)
@@ -578,7 +615,9 @@ class _MagneticField(IOAble, ABC):
         grid = np.array([RR.flatten(), PHI.flatten(), ZZ.flatten()]).T
 
         # evaluate magnetic field on grid
-        field = self.compute_magnetic_field(grid, basis="rpz", chunk_size=chunk_size)
+        field = self.compute_magnetic_field(
+            grid, basis="rpz", chunk_size=chunk_size, source_grid=source_grid
+        )
         B_R = field[:, 0].reshape(nphi, nZ, nR)
         B_phi = field[:, 1].reshape(nphi, nZ, nR)
         B_Z = field[:, 2].reshape(nphi, nZ, nR)
@@ -586,7 +625,7 @@ class _MagneticField(IOAble, ABC):
         # evaluate magnetic vector potential on grid
         if save_vector_potential:
             field = self.compute_magnetic_vector_potential(
-                grid, basis="rpz", chunk_size=chunk_size
+                grid, basis="rpz", chunk_size=chunk_size, source_grid=source_grid
             )
             A_R = field[:, 0].reshape(nphi, nZ, nR)
             A_phi = field[:, 1].reshape(nphi, nZ, nR)
@@ -2525,7 +2564,7 @@ def field_line_integrate(
         initial starting coordinates for r,z on phi=phis[0] plane
     phis : array-like
         strictly increasing array of toroidal angles to output r,z at
-        Note that phis is the geometric toroidal angle for positive Bphi,
+        Note that phis is the geometric toroidal agitngle for positive Bphi,
         and the negative toroidal angle for negative Bphi
     field : MagneticField
         source of magnetic field to integrate

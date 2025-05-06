@@ -11,7 +11,7 @@ from desc.compute.geom_utils import copy_rpz_periods
 from desc.compute.utils import _compute as compute_fun
 from desc.grid import LinearGrid, _Grid
 from desc.integrals import compute_B_plasma
-from desc.utils import Timer, broadcast_tree, errorif, safenorm, warnif
+from desc.utils import Timer, broadcast_tree, errorif, safenorm, setdefault, warnif
 
 from .normalization import compute_scaling_factors
 from .objective_funs import _Objective, collect_docs
@@ -1281,6 +1281,10 @@ class QuadraticFlux(_Objective):
         Size to split Biot-Savart computation into chunks of evaluation points.
         If no chunking should be done or the chunk size is the full input
         then supply ``None``.
+    B_plasma_chunk_size : int or None
+        Size to split singular integral computation for B_plasma into chunks.
+        If no chunking should be done or the chunk size is the full input
+        then supply ``None``. Default is ``bs_chunk_size``.
 
     """
 
@@ -1313,6 +1317,7 @@ class QuadraticFlux(_Objective):
         device_id=0,
         *,
         bs_chunk_size=None,
+        B_plasma_chunk_size=None,
         **kwargs,
     ):
         from desc.geometry import FourierRZToroidalSurface
@@ -1322,10 +1327,11 @@ class QuadraticFlux(_Objective):
         self._source_grid = source_grid
         self._eval_grid = eval_grid
         self._eq = eq
-        self._field = field
+        self._field = [field] if not isinstance(field, list) else field
         self._field_grid = field_grid
         self._vacuum = vacuum
         self._bs_chunk_size = bs_chunk_size
+        self._B_plasma_chunk_size = setdefault(B_plasma_chunk_size, bs_chunk_size)
         errorif(
             isinstance(eq, FourierRZToroidalSurface),
             TypeError,
@@ -1333,9 +1339,8 @@ class QuadraticFlux(_Objective):
             "if attempting to find a QFM surface, please use "
             "SurfaceQuadraticFlux objective instead.",
         )
-        things = [field]
         super().__init__(
-            things=things,
+            things=self._field,
             target=target,
             bounds=bounds,
             weight=weight,
@@ -1357,6 +1362,8 @@ class QuadraticFlux(_Objective):
             Level of output.
 
         """
+        from desc.magnetic_fields import SumMagneticField
+
         eq = self._eq
 
         if self._eval_grid is None:
@@ -1394,15 +1401,20 @@ class QuadraticFlux(_Objective):
         )
 
         # pre-compute B_plasma because we are assuming eq is fixed
-        if self._vacuum:
-            Bplasma = jnp.zeros(eval_grid.num_nodes)
-        else:
-            Bplasma = compute_B_plasma(
-                eq, eval_grid, self._source_grid, normal_only=True
+        Bplasma = (
+            jnp.zeros(eval_grid.num_nodes)
+            if self._vacuum
+            else compute_B_plasma(
+                eq,
+                eval_grid,
+                self._source_grid,
+                normal_only=True,
+                chunk_size=self._B_plasma_chunk_size,
             )
+        )
 
         self._constants = {
-            "field": self._field,
+            "field": SumMagneticField(self._field),
             "field_grid": self._field_grid,
             "quad_weights": w,
             "eval_data": eval_data,
@@ -1421,7 +1433,7 @@ class QuadraticFlux(_Objective):
 
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, field_params, constants=None):
+    def compute(self, *field_params, constants=None):
         """Compute normal field error on boundary.
 
         Parameters
@@ -2278,6 +2290,8 @@ class CoilSetLinkingNumber(_Objective):
 class SurfaceCurrentRegularization(_Objective):
     """Target the surface current magnitude.
 
+    If ``regularization="K"``:
+
     compute::
 
         w * ||K|| * sqrt(||e_theta x e_zeta||)
@@ -2292,6 +2306,18 @@ class SurfaceCurrentRegularization(_Objective):
         K = n x ∇ Φ
 
     i.e. a CurrentPotentialField
+
+    If ``regularization="Phi"``:
+
+    compute::
+
+        w * |Φ| * sqrt(||e_theta x e_zeta||)
+
+    If ``regularization="sqrt(Phi)"``:
+
+    compute::
+
+        w * sqrt(|Φ|) * sqrt(||e_theta x e_zeta||)
 
     Intended to be used with a QuadraticFlux objective, to form
     a problem similar to the REGCOIL algorithm described in [1]_ (if used with a
@@ -2308,6 +2334,8 @@ class SurfaceCurrentRegularization(_Objective):
     surface_current_field : CurrentPotentialField
         Surface current which is producing the magnetic field, the parameters
         of this will be optimized to minimize the objective.
+    regularization : str, optional
+        Regularization method. One of {'K', 'Phi', 'sqrt(Phi)'}. Default = 'K'.
     source_grid : Grid, optional
         Collocation grid containing the nodes to evaluate current source at on
         the winding surface. If used in conjunction with the QuadraticFlux objective,
@@ -2332,7 +2360,6 @@ class SurfaceCurrentRegularization(_Objective):
     )
 
     _coordinates = "tz"
-    _units = "A/m"
     _print_value_fmt = "Surface Current Regularization: "
 
     def __init__(
@@ -2345,6 +2372,7 @@ class SurfaceCurrentRegularization(_Objective):
         normalize_target=True,
         loss_function=None,
         deriv_mode="auto",
+        regularization="K",
         source_grid=None,
         name="surface-current-regularization",
         device_id=0,
@@ -2354,6 +2382,12 @@ class SurfaceCurrentRegularization(_Objective):
             FourierCurrentPotentialField,
         )
 
+        errorif(
+            regularization not in ["K", "Phi", "sqrt(Phi)"],
+            ValueError,
+            "regularization must be one of ['K', 'Phi', 'sqrt(Phi)'], "
+            + f"got {regularization}.",
+        )
         if target is None and bounds is None:
             target = 0
         assert isinstance(
@@ -2362,8 +2396,14 @@ class SurfaceCurrentRegularization(_Objective):
             "surface_current_field must be a CurrentPotentialField or "
             + f"FourierCurrentPotentialField, instead got {type(surface_current_field)}"
         )
+        self._regularization = regularization
         self._surface_current_field = surface_current_field
         self._source_grid = source_grid
+        self._units = (
+            "(A)"
+            if self._regularization == "K"
+            else "(A*m)" if self._regularization == "Phi" else "(sqrt(A)*m)"
+        )
 
         super().__init__(
             things=[surface_current_field],
@@ -2413,7 +2453,7 @@ class SurfaceCurrentRegularization(_Objective):
 
         # source_grid.num_nodes for the regularization cost
         self._dim_f = source_grid.num_nodes
-        self._surface_data_keys = ["K", "|e_theta x e_zeta|"]
+        self._data_keys = ["Phi", "K", "|e_theta x e_zeta|"]
 
         timer = Timer()
         if verbose > 0:
@@ -2421,7 +2461,7 @@ class SurfaceCurrentRegularization(_Objective):
         timer.start("Precomputing transforms")
 
         surface_transforms = get_transforms(
-            self._surface_data_keys,
+            self._data_keys,
             obj=surface_current_field,
             grid=source_grid,
             has_axis=source_grid.axis.size,
@@ -2469,11 +2509,16 @@ class SurfaceCurrentRegularization(_Objective):
 
         surface_data = compute_fun(
             self._surface_current_field,
-            self._surface_data_keys,
+            self._data_keys,
             params=surface_params,
             transforms=constants["surface_transforms"],
             profiles={},
         )
 
-        K_mag = safenorm(surface_data["K"], axis=-1)
-        return K_mag * jnp.sqrt(surface_data["|e_theta x e_zeta|"])
+        if self._regularization == "K":
+            K = safenorm(surface_data["K"], axis=-1)
+        elif self._regularization == "Phi":
+            K = jnp.abs(surface_data["Phi"])
+        elif self._regularization == "sqrt(Phi)":
+            K = jnp.sqrt(jnp.abs(surface_data["Phi"]))
+        return K * jnp.sqrt(surface_data["|e_theta x e_zeta|"])

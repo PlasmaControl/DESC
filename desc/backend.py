@@ -336,6 +336,29 @@ if use_jax:  # noqa: C901
             x = jax.lax.custom_root(res, x0, solve, tangent_solve, has_aux=False)
             return x
 
+    def _lstsq(A, y):
+        """Cholesky factorized least-squares.
+
+        jnp.linalg.lstsq doesn't have JVP defined and is slower than needed,
+        so we use regularized cholesky.
+
+        For square systems, solves Ax=y directly.
+        """
+        A = jnp.atleast_2d(A)
+        y = jnp.atleast_1d(y)
+        eps = jnp.sqrt(jnp.finfo(A.dtype).eps)
+        if A.shape[-2] == A.shape[-1]:
+            return jnp.linalg.solve(A, y) if y.size > 1 else jnp.squeeze(y / A)
+        elif A.shape[-2] > A.shape[-1]:
+            P = A.T @ A + eps * jnp.eye(A.shape[-1])
+            return cho_solve(cho_factor(P), A.T @ y)
+        else:
+            P = A @ A.T + eps * jnp.eye(A.shape[-2])
+            return A.T @ cho_solve(cho_factor(P), y)
+
+    def _tangent_solve(g, y):
+        return _lstsq(jax.jacfwd(g)(y), y)
+
     def root(
         fun,
         x0,
@@ -401,18 +424,6 @@ if use_jax:  # noqa: C901
 
         res = lambda x: jnp.atleast_1d(fun(x, *args)).flatten()
 
-        # want to use least squares for rank-defficient systems, but
-        # jnp.linalg.lstsq doesn't have JVP defined and is slower than needed
-        # so we use the normal equations with regularized cholesky
-        def _lstsq(a, b):
-            a = jnp.atleast_2d(a)
-            b = jnp.atleast_1d(b)
-            tall = a.shape[-2] >= a.shape[-1]
-            A = a.T @ a if tall else a @ a.T
-            B = a.T @ b if tall else b @ a
-            A += jnp.sqrt(jnp.finfo(A.dtype).eps) * jnp.eye(A.shape[0])
-            return cho_solve(cho_factor(A), B)
-
         def solve(resfun, guess):
             def condfun_ls(state_ls):
                 xk2, xk1, fk2, fk1, d, alphak2, k2 = state_ls
@@ -452,17 +463,13 @@ if use_jax:  # noqa: C901
             else:
                 return state[0]
 
-        def tangent_solve(g, y):
-            A = jnp.atleast_2d(jax.jacfwd(g)(y))
-            return _lstsq(A, jnp.atleast_1d(y))
-
         if full_output:
             x, (res, niter) = jax.lax.custom_root(
-                res, x0, solve, tangent_solve, has_aux=True
+                res, x0, solve, _tangent_solve, has_aux=True
             )
             return x, (safenorm(res), niter)
         else:
-            x = jax.lax.custom_root(res, x0, solve, tangent_solve, has_aux=False)
+            x = jax.lax.custom_root(res, x0, solve, _tangent_solve, has_aux=False)
             return x
 
     def pconcat(arrays, mode="concat"):  # pragma: no cover

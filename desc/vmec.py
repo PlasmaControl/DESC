@@ -769,6 +769,7 @@ class VMECIO:
             sqrt_g=data_full["sqrt(g)"],
             expand_out=False,
         )
+        # TODO: VMEC extrapolates to the axis
         jcuru[0] = 0
 
         jcurv = file.createVariable("jcurv", np.float64, ("radius",))
@@ -782,6 +783,7 @@ class VMECIO:
             sqrt_g=data_full["sqrt(g)"],
             expand_out=False,
         )
+        # TODO: VMEC extrapolates to the axis
         jcurv[0] = 0
 
         DShear = file.createVariable("DShear", np.float64, ("radius",))

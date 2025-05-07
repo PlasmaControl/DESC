@@ -2,8 +2,9 @@
 
 import functools
 
-import numpy as np
 import jax
+import numpy as np
+
 from desc.backend import jit, jnp, put
 from desc.batching import batched_vectorize
 from desc.objectives import (
@@ -2004,7 +2005,9 @@ class ProximalProjectionFB2(ObjectiveFunction):
         self._args = self._eq.optimizable_params.copy()
         for arg in ["R_lmn", "Z_lmn", "L_lmn", "Ra_n", "Za_n", "Rb_lmn", "Zb_lmn"]:
             self._args.remove(arg)
-        linear_constraint = ObjectiveFunction(self._linear_constraints)
+        # TODO: should this not be self._linear_constraints but something else?
+        # the fb constraints maybe?
+        linear_constraint = ObjectiveFunction(self._fb_constraints)
         linear_constraint.build()
         (self._Z, self._D, self._unfixed_idx) = (
             self._eq_solve_objective._Z,
@@ -2013,6 +2016,7 @@ class ProximalProjectionFB2(ObjectiveFunction):
         )
 
         # dx/dc - goes from the full state to optimization variables for eq
+        # which
         dxdc = []
         xz = {arg: np.zeros(self._eq.dimensions[arg]) for arg in full_args}
 
@@ -2056,6 +2060,7 @@ class ProximalProjectionFB2(ObjectiveFunction):
             self._eq, self._linear_constraints
         )
 
+        # don't need add self consistency for the free bdry constraints
         self._fb_constraints = get_free_boundary_constraints(eq)
 
         # we don't always build here because in ~all cases the user doesn't interact
@@ -2078,7 +2083,9 @@ class ProximalProjectionFB2(ObjectiveFunction):
         )
         self._eq_solve_objective.build(use_jit=use_jit, verbose=verbose)
 
-        self._constraint_fb.build()
+        for constraint in self._fb_constraints:
+            constraint.build(use_jit=use_jit, verbose=verbose)
+        self._constraint_combined.build()
 
         errorif(
             self._constraint.things != [eq],
@@ -2086,13 +2093,20 @@ class ProximalProjectionFB2(ObjectiveFunction):
             "ProximalProjection can only handle constraints on the equilibrium.",
         )
 
+        errorif(
+            self._constraint_combined.things != [eq],
+            ValueError,
+            "ProximalProjectionFB can only handle constraints on the equilibrium.",
+        )
+
         self._objectives = [
-            self._objective,
-            self._constraint,
-            self._constraint_combined,
+            self._objective,  # physics obj
+            self._constraint,  # eq constraint forcebalance
+            self._constraint_combined,  # combined eq constraint force + free bdry
         ]
         self._set_things()
 
+        # where the eq is in things
         self._eq_idx = self.things.index(self._eq)
 
         self._dim_f = self._objective.dim_f
@@ -2133,7 +2147,7 @@ class ProximalProjectionFB2(ObjectiveFunction):
         timer.stop("Proximal fb projection build")
         if verbose > 1:
             timer.disp("Proximal fb projection build")
-        
+
         print("here")
         J = self.jac_scaled_error(self._x_old)
         print(jnp.max(jnp.abs(J)))
@@ -2283,7 +2297,7 @@ class ProximalProjectionFB2(ObjectiveFunction):
             # )
             self._eq.optimize(
                 objective=self._constraint_fb,
-                constraints=self._fb_constraints,# + bdry_constraints,
+                constraints=self._fb_constraints,  # + bdry_constraints,
                 **self._fb_options,
             )
             xeq = self._eq.pack_params(self._eq.params_dict)
@@ -2303,7 +2317,6 @@ class ProximalProjectionFB2(ObjectiveFunction):
             x_list[self._eq_idx] = xeq_dict
             self.history.append(x_list)
 
-            
         else:
             # reset to last good params
             self._eq.params_dict = self.history[-1][self._eq_idx]
@@ -2468,8 +2481,8 @@ class ProximalProjectionFB2(ObjectiveFunction):
 
         """
         v = jnp.eye(x.shape[0])
-        J= self.jvp_scaled_error(v, x, constants).T
-        
+        J = self.jvp_scaled_error(v, x, constants).T
+
         return J
 
     def jac_unscaled(self, x, constants=None):

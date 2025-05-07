@@ -146,6 +146,9 @@ class LinearConstraintProjection(ObjectiveFunction):
         # For example, let's say the full state vector X has constraints X1=X2 and
         # X = [X1 X2 X3]. The reduced state vector of this is Y = [Y1 Y2]. We can take
         # Y1=X1=X2 and Y2=X3. Then df/dY1 = df/dX1 + df/dX2 and df/dY2 = df/dX3.
+        # in this case, unfixed_idx_mat = [ [1 , 0], [1, 0], [0,1]]
+        # and is a shape 3x2 matrix equivalent to dx/dy
+        # s.t. df/dy = df/dx @ dx/dy
         self._unfixed_idx_mat = jnp.diag(self._D)[:, self._unfixed_idx] @ self._Z
 
         self._built = True
@@ -615,8 +618,7 @@ class ProximalProjection(ObjectiveFunction):
         self._args = self._eq.optimizable_params.copy()
         for arg in ["R_lmn", "Z_lmn", "L_lmn", "Ra_n", "Za_n"]:
             self._args.remove(arg)
-        linear_constraint = ObjectiveFunction(self._linear_constraints)
-        linear_constraint.build()
+
         (self._eq_Z, self._eq_D, self._eq_unfixed_idx) = (
             self._eq_solve_objective._Z,
             self._eq_solve_objective._D,
@@ -657,12 +659,10 @@ class ProximalProjection(ObjectiveFunction):
             Level of output.
 
         """
-        eq = self._eq
         timer = Timer()
         timer.start("Proximal projection build")
 
-        self._eq = eq
-        self._linear_constraints = get_fixed_boundary_constraints(eq=eq)
+        self._linear_constraints = get_fixed_boundary_constraints(eq=self._eq)
         self._linear_constraints = maybe_add_self_consistency(
             self._eq, self._linear_constraints
         )
@@ -678,6 +678,12 @@ class ProximalProjection(ObjectiveFunction):
         for constraint in self._linear_constraints:
             constraint.build(use_jit=use_jit, verbose=verbose)
 
+        # Here we create and build the LinearConstraintProjection
+        # for the equilibrium subproblem using the self._constraint as objective
+        # and our fixed-bdry constraints we just made. This will
+        # be passed as the objective for the eq subproblem, which saves
+        # some time as by building it here we can avoid re-computing the
+        # constraint matrix A and its SVD for the feasible direction method
         self._eq_solve_objective = LinearConstraintProjection(
             self._constraint,
             ObjectiveFunction(self._linear_constraints),
@@ -686,7 +692,7 @@ class ProximalProjection(ObjectiveFunction):
         self._eq_solve_objective.build(use_jit=use_jit, verbose=verbose)
 
         errorif(
-            self._constraint.things != [eq],
+            self._constraint.things != [self._eq],
             ValueError,
             "ProximalProjection can only handle constraints on the equilibrium.",
         )
@@ -704,21 +710,26 @@ class ProximalProjection(ObjectiveFunction):
 
         self._set_eq_state_vector()
 
-        # map from eq c to full c
+        # the full state vector includes all the parameters from all the things
+        # however, sub-objectives only need the part for their thing. We will
+        # use this to split the state vector into its components
+        self._dimx_per_thing = [t.dim_x for t in self.things]
+        # we remove the R_lmn, Z_lmn, L_lmn, Ra_n, Za_n from the equilibrium params
+        # dimc_per_thing accounts for that, don't confuse it with reduced state vector
         self._dimc_per_thing = [t.dim_x for t in self.things]
         self._dimc_per_thing[self._eq_idx] = np.sum(
             [self._eq.dimensions[arg] for arg in self._args]
         )
-        self._dimx_per_thing = [t.dim_x for t in self.things]
 
         # equivalent matrix for A[unfixed_idx] @ D @ Z == A @ unfixed_idx_mat
         self._unfixed_idx_mat = jnp.eye(self._objective.dim_x)
         self._unfixed_idx_mat = jnp.split(
-            self._unfixed_idx_mat, np.cumsum([t.dim_x for t in self.things]), axis=-1
+            self._unfixed_idx_mat, np.cumsum(self._dimx_per_thing), axis=-1
         )
+        # eq_Z is already scaled by D, so can just use it alone here
         self._unfixed_idx_mat[self._eq_idx] = self._unfixed_idx_mat[self._eq_idx][
             :, self._eq_unfixed_idx
-        ] @ (self._eq_Z * self._eq_D[self._eq_unfixed_idx, None])
+        ] @ (self._eq_Z)
         self._unfixed_idx_mat = jnp.concatenate(
             [np.atleast_2d(foo) for foo in self._unfixed_idx_mat], axis=-1
         )
@@ -763,12 +774,7 @@ class ProximalProjection(ObjectiveFunction):
                 + f"{self.dim_x} got {x.size}."
             )
 
-        xs_splits = [t.dim_x for t in self.things]
-        xs_splits[self._eq_idx] = np.sum(
-            [self._eq.dimensions[arg] for arg in self._args]
-        )
-        xs_splits = np.cumsum(xs_splits)
-        xs = jnp.split(x, xs_splits)
+        xs = jnp.split(x, np.cumsum(self._dimc_per_thing))
         params = []
         for t, xi in zip(self.things, xs):
             if t is self._eq:
@@ -1150,9 +1156,12 @@ class ProximalProjection(ObjectiveFunction):
             # objective's method already know about its jac_chunk_size
             return getattr(self._objective, "jvp_" + op)(tangents, xg, constants[0])
         else:
-            xgs = jnp.split(xg, np.cumsum(self._dimx_per_thing))
-            vgs = jnp.split(tangents, np.cumsum(self._dimx_per_thing), axis=-1)
-            return _proximal_jvp_blocked_pure(self._objective, vgs, xgs, op)
+            return _proximal_jvp_blocked_pure(
+                self._objective,
+                jnp.split(tangents, np.cumsum(self._dimx_per_thing), axis=-1),
+                jnp.split(xg, np.cumsum(self._dimx_per_thing)),
+                op,
+            )
 
     def _get_tangent(self, v, xf, constants, op):
         # Note: This function is vectorized over v. So, v is expected to be 1D array
@@ -1174,6 +1183,10 @@ class ProximalProjection(ObjectiveFunction):
         # broadcasting against multiple things
         dfdcs = [jnp.zeros(dim) for dim in self._dimc_per_thing]
         dfdcs[self._eq_idx] = dfdc
+        # note that size.dfdc != size.vs[self._eq_idx]
+        # so, the above line is not a simple assignment where you just change the value
+        # of the array, but we actually change the size of it too
+        # the size change will be handled by multiplication by the unfixed_idx_mat later
         dfdc = jnp.concatenate(dfdcs)
 
         # We try to find dG/dc - dG/dx * (dF/dx)^-1 * dF/dc
@@ -1247,6 +1260,9 @@ def _proximal_jvp_blocked_pure(objective, vgs, xgs, op):
     # things in the objective. If there are multiple things for the ObjectiveFunction,
     # each split belongs to a different thing. The information about which thing is used
     # by which sub-objective is stored in _things_per_objective_idx.
+
+    # Note: This function is very similar to _jvp_blocked in ObjectiveFunction with
+    # some naming differences to account for ProximalProjection.
     out = []
     for k, (obj, const) in enumerate(zip(objective.objectives, objective.constants)):
         thing_idx = objective._things_per_objective_idx[k]

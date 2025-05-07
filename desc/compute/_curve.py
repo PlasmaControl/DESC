@@ -1088,7 +1088,7 @@ def _frenet_binormal(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="s",
-    data=["center", "x", "x_s", "x_ss", "frenet_normal"],
+    data=["center", "x", "x_s", "x_ss", "frenet_normal", "phi"],
     parameterization="desc.geometry.core.Curve",
 )
 def _curvature(params, transforms, profiles, data, **kwargs):
@@ -1096,7 +1096,8 @@ def _curvature(params, transforms, profiles, data, **kwargs):
     dxn = jnp.linalg.norm(data["x_s"], axis=-1)[:, jnp.newaxis]
     curvature = jnp.linalg.norm(cross(data["x_s"], data["x_ss"]) / dxn**3, axis=-1)
     # sign of curvature (positive = "convex", negative = "concave")
-    r = data["center"] - data["x"]
+    r = rpz2xyz(data["center"]) - rpz2xyz(data["x"])
+    r = xyz2rpz_vec(r, phi=data["phi"])
     data["curvature"] = curvature * sign(dot(r, data["frenet_normal"]))
     return data
 

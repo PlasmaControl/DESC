@@ -777,6 +777,8 @@ class VMECIO:
         jcurv[:] = surface_averages(
             grid_full,
             data_full["sqrt(g)"] * data_full["J^zeta"] / (2 * data_full["rho"]),
+            # TODO: VMEC seems to NOT divide by the surface area, so
+            # our equivalent to match that would be setting `sqrt_g=1` here
             sqrt_g=data_full["sqrt(g)"],
             expand_out=False,
         )

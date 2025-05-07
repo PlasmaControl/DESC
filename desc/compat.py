@@ -12,6 +12,14 @@ from desc.utils import errorif, setdefault, warnif
 def ensure_positive_jacobian(eq):
     """Convert an Equilibrium to have a positive coordinate Jacobian.
 
+    This will be done while also preserving the physical quantities of the
+    Equilibrium, such as iota magnitude, B magnitude and direction in real
+    space, net toroidal current, toroidal magnetic flux Psi, etc.
+
+    This means that if the Equilibrium is iota-constrained and the boundary
+    orientation is flipped, the iota profile will be negated to preserve
+    the direction of B.
+
     Parameters
     ----------
     eq : Equilibrium or iterable of Equilibrium

@@ -2522,6 +2522,8 @@ def plot_coils(coils, grid=None, fig=None, return_data=False, **kwargs):
           True by default.
         * ``zeroline``: Bool, whether or not to show the zero coordinate axis lines.
           True by default.
+        * ``check_intersection``: Bool, whether or not to check the intersection of
+          the coils before plotting. False by default.
 
     Returns
     -------
@@ -2554,6 +2556,7 @@ def plot_coils(coils, grid=None, fig=None, return_data=False, **kwargs):
     zeroline = kwargs.pop("zeroline", True)
     showticklabels = kwargs.pop("showticklabels", True)
     showaxislabels = kwargs.pop("showaxislabels", True)
+    check_intersection = kwargs.pop("check_intersection", False)
     errorif(
         len(kwargs) != 0,
         ValueError,
@@ -2574,13 +2577,13 @@ def plot_coils(coils, grid=None, fig=None, return_data=False, **kwargs):
     if grid is None:
         grid = LinearGrid(N=400, endpoint=True)
 
-    def flatten_coils(coilset):
+    def flatten_coils(coilset, check_intersection=check_intersection):
         if hasattr(coilset, "__len__"):
             if hasattr(coilset, "_NFP") and hasattr(coilset, "_sym"):
                 if not unique and (coilset.NFP > 1 or coilset.sym):
                     # plot all coils for symmetric coil sets
                     coilset = CoilSet.from_symmetry(
-                        coilset, NFP=coilset.NFP, sym=coilset.sym
+                        coilset, NFP=coilset.NFP, sym=coilset.sym, check_intersection=check_intersection
                     )
             return [a for i in coilset for a in flatten_coils(i)]
         else:

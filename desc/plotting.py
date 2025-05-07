@@ -3694,6 +3694,10 @@ def plot_field_lines(
         Figure being plotted to.
     plot_data : dict
         Dictionary of the data plotted, only returned if ``return_data=True``
+        Contains keys ``["X","Y","Z","R","phi"]``, each entry in the dict is a list
+        of length `R0.size` corresponding to the number of field lines, and each
+        element of that list is an array of size `phis.size` corresponding to the
+        coordinate values along that field line.
 
     Examples
     --------
@@ -3783,6 +3787,8 @@ def plot_field_lines(
     plot_data["X"] = []
     plot_data["Y"] = []
     plot_data["Z"] = []
+    plot_data["R"] = []
+    plot_data["phi"] = []
     for i in range(rs.shape[1]):  # iterate over each field line
         x = rs[:, i] * np.cos(phis)
         y = rs[:, i] * np.sin(phis)
@@ -3790,6 +3796,9 @@ def plot_field_lines(
         plot_data["X"].append(x)
         plot_data["Y"].append(y)
         plot_data["Z"].append(z)
+        plot_data["R"].append(rs[:, i])
+        plot_data["phi"].append(phis)
+
         fig.add_trace(
             go.Scatter3d(
                 x=x,

@@ -462,16 +462,13 @@ def fmintr(  # noqa: C901
     if (iteration == maxiter) and success is None:
         success, message = False, STATUS_MESSAGES["maxiter"]
     active_mask = find_active_constraints(x, lb, ub, rtol=xtol)
-    # we overwrote the H inside the iteration, so unscale here
-    H_h /= d[:, None]
-    H_h /= d
     result = OptimizeResult(
         x=x,
         success=success,
         fun=f,
         grad=g,
         v=v,
-        hess=H_h,
+        hess=H_h / d[:, None] / d,  # unscale the hessian
         optimality=g_norm,
         nfev=nfev,
         ngev=ngev,

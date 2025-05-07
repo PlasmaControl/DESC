@@ -232,6 +232,7 @@ class VMECIO:
         M_grid=None,
         N_grid=None,
         verbose=1,
+        match_VMEC_wout=False,
     ):
         """Save an Equilibrium as a netCDF file in the VMEC format.
 
@@ -240,6 +241,15 @@ class VMECIO:
         DESC will also save quantities in the VMEC left-handed convention, so
         quantities like iota or the poloidal B field (bsupumns) will be opposite of
         their sign in DESC.
+
+        NOTE: We do not claim to match every VMEC version, nor do we claim every
+        quantity us the same in the wout. Please see the source to see exactly how
+        DESC is computing each output quantity. The `match_VMEC_wout` flag changes
+        some of these computations to better match VMEC (which we believe erroneously
+        computes some quantities). This was done comparing against VMEC version 9.0
+        installed on the `portal` PPPL cluster as of March 2025.
+        If any of these quantities are in error or conflict, please submit an issue
+        detailing exactly what and why you believe things are different.
 
         Parameters
         ----------
@@ -261,6 +271,16 @@ class VMECIO:
             * 0: no output
             * 1: status of quantities computed
             * 2: as above plus timing information
+        match_VMEC_wout : bool
+            Whether or not to perform calculations to match what VMEC does.
+            There are some quirk to how VMEC computes certain quantities, which
+            are not obvious/consistent/do not match what the descriptions are
+            for the quantities. By default this is False, and DESC will compute
+            things faithful to what the quantity descriptions are. If True, some
+            calculations will be modified in order to match how the DESC developers
+            think that VMEC computes them.
+            The affected quantities are `jdotb` and `jcurv`.
+
 
         Returns
         -------
@@ -736,29 +756,34 @@ class VMECIO:
         jdotb = file.createVariable("jdotb", np.float64, ("radius",))
         jdotb.long_name = "flux surface average of J*B, on full mesh"
         jdotb.units = "N/m^3"
-        # in VMEC, they use the form of parallel current from
-        # assuming Boozer coordinates, which is what we will also use here.
-        # this can differ a lot from our <J*B> quantity
-        JB = (
-            (
-                data_full["G"] * data_full["I_r"] / data_full["psi_r"]
-                - data_full["G_r"] * data_full["I"] / data_full["psi_r"]
-            )
-            / data_full["sqrt(g)_Boozer"]
-            * data_full["psi_r"]
-        )
-        JB = (
-            surface_averages(
-                grid_full, JB, sqrt_g=data_full["sqrt(g)"], expand_out=False
-            )
-            / mu_0
-        )
 
-        jdotb[:] = JB
-        jdotb[0] = (
-            0  # NOTE: This does not actually match VMEC wouts,
-            # they have it instead extrapolated to axis
-        )
+        if match_VMEC_wout:
+            # in VMEC, they use the form of parallel current from
+            # assuming Boozer coordinates, which is what we will also use here.
+            # this can differ a lot from our <J*B> quantity
+            JB = (
+                (
+                    data_full["G"] * data_full["I_r"] / data_full["psi_r"]
+                    - data_full["G_r"] * data_full["I"] / data_full["psi_r"]
+                )
+                / data_full["sqrt(g)_Boozer"]
+                * data_full["psi_r"]
+            )
+            JB = (
+                surface_averages(
+                    grid_full, JB, sqrt_g=data_full["sqrt(g)"], expand_out=False
+                )
+                / mu_0
+            )
+            jdotb[:] = JB
+        else:
+            JB = grid_full.compress(data_full["<J*B>"])
+
+            jdotb[:] = JB
+            jdotb[0] = (
+                0  # NOTE: This does not actually match VMEC wouts,
+                # they have it instead extrapolated to axis
+            )
 
         jcuru = file.createVariable("jcuru", np.float64, ("radius",))
         jcuru.long_name = "flux surface average of sqrt(g)*J^theta, on full mesh"
@@ -775,12 +800,14 @@ class VMECIO:
         jcurv = file.createVariable("jcurv", np.float64, ("radius",))
         jcuru.long_name = "flux surface average of sqrt(g)*J^zeta, on full mesh"
         jcurv.units = "A/m^3"
+        # VMEC seems to NOT divide by the surface area, so
+        # our equivalent to match that would be setting `sqrt_g=1`
+        # in surface_averages fxn call
+        fsa_sqrt_g = 1 if match_VMEC_wout else data_full["sqrt(g)"]
         jcurv[:] = surface_averages(
             grid_full,
             data_full["sqrt(g)"] * data_full["J^zeta"] / (2 * data_full["rho"]),
-            # TODO: VMEC seems to NOT divide by the surface area, so
-            # our equivalent to match that would be setting `sqrt_g=1` here
-            sqrt_g=data_full["sqrt(g)"],
+            sqrt_g=fsa_sqrt_g,
             expand_out=False,
         )
         # TODO: VMEC extrapolates to the axis

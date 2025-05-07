@@ -47,8 +47,8 @@ of the cost function. This memory cost comes from attempting to calculate the en
 matrix in one vectorized operation. However, this can be tuned between high memory usage but quick (default)
 and low memory usage but slower with the ``jac_chunk_size`` keyword argument. By default, where this matters
 is when creating the overall ``ObjectiveFunction`` to be used in the optimization (where by default ``deriv_mode="batched"``). The Jacobian is a
-matrix of shape [``obj.dim_f`` x ``obj.dim_x``], and the calculation of the Jacobian is vectorized over
-the columns (the ``obj.dim_x`` dimension), where ``obj`` is the ``ObjectiveFunction`` object. Passing in the ``jac_chunk_size`` attribute allows one to split up
+matrix of shape [``obj.dim_f`` x ``x_opt.size``] (to see the size of ``x_opt``, one can check the printed ``Number of parameters:`` line, before optimization), and the calculation of the Jacobian is vectorized over
+the columns (the ``x_opt.size`` dimension), where ``obj`` is the ``ObjectiveFunction`` object. Passing in the ``jac_chunk_size`` attribute allows one to split up
 the vectorized computation into chunks of ``jac_chunk_size`` columns at a time, allowing one to compute the Jacobian in a slightly slower, but more memory-efficient manner.
 
 .. code-block:: python
@@ -111,6 +111,19 @@ The syntax for this is,
 
 The Jacobian will be calculated with a ``jac_chunk_size=100`` for the quasisymmetry part and a ``jac_chunk_size=2000`` for the curvature part, then the full Jacobian
 will be formed as a blocked matrix with the individual Jacobians of these two objectives.
+
+
+.. attention:: How to choose the ``jac_chunk_size``?
+
+    The ``jac_chunk_size`` should be chosen based on the available memory and the size of the Jacobian. A good starting point is to set it to a value that allows the Jacobian to fit in memory, and then adjust it based on the performance of the optimization. One can choose it by looking at the printed output of the optimization, which will show the Jacobian size by these 2 lines,
+
+    .. code-block:: bash
+
+        Number of parameters: 250
+        Number of objectives: 3000
+
+    The Jacobian size is 3000 x 250, where 250 is the optimization variable (aka. reduced state vector) and 3000 is the number of objectives (for example, for a grid with 1500 nodes, ``ForceBalance`` objective will have 2x1500=3000 rows). When considering the ``jac_chunk_size``, one should use a value smaller than ``Number of parameters``, otherwise chunking will do nothing!
+
 
 .. tip::
 

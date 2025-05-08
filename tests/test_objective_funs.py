@@ -1981,8 +1981,8 @@ def test_derivative_modes():
     obj2.build()
     # check that default size works for blocked
     assert obj2.objectives[0]._jac_chunk_size == 2
-    assert obj2.objectives[1]._jac_chunk_size > 0
-    assert obj2.objectives[2]._jac_chunk_size > 0
+    assert obj2.objectives[1]._jac_chunk_size is None
+    assert obj2.objectives[2]._jac_chunk_size is None
     # hard to say what size auto will give, just check it is >0
     assert obj1._jac_chunk_size > 0
     obj3.build()

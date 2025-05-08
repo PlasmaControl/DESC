@@ -78,7 +78,12 @@ class ExternalObjective(_Objective):
 
     _units = "(Unknown)"
     _print_value_fmt = "External objective value: "
-    _static_attrs = ["_fun_wrapped", "_fun_kwargs"]
+    _static_attrs = _Objective._static_attrs + [
+        "_fun",
+        "_fun_kwargs",
+        "_fun_wrapped",
+        "_vectorized",
+    ]
 
     def __init__(
         self,
@@ -207,7 +212,7 @@ class GenericObjective(_Objective):
     )
 
     _print_value_fmt = "Generic objective value: "
-    _static_attrs = ["_compute_kwargs"]
+    _static_attrs = _Objective._static_attrs + ["_compute_kwargs", "f", "_p"]
 
     def __init__(
         self,
@@ -348,6 +353,8 @@ class LinearObjectiveFromUser(_FixedObjective):
         target_default="``target=0``.", bounds_default="``target=0``."
     )
 
+    _static_attrs = _Objective._static_attrs + ["_fun"]
+
     _scalar = False
     _linear = True
     _fixed = True
@@ -486,7 +493,7 @@ class ObjectiveFromUser(_Objective):
 
     _units = "(Unknown)"
     _print_value_fmt = "Custom objective value: "
-    _static_attrs = ["_compute_kwargs"]
+    _static_attrs = _Objective._static_attrs + ["_compute_kwargs", "_fun", "_p"]
 
     def __init__(
         self,

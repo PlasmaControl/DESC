@@ -2,25 +2,6 @@
 Performance Tips
 ================
 
-Using more of the Available GPU Memory
---------------------------------------
-By default, JAX will use only 75% of the available GPU memory. This is to allow other processes to run on the GPU at the same time. However, if you are running a single process and want to use all of the available memory (or some other amount of it), you can set the following environment variable:
-
-.. code-block:: python
-
-    import os
-    os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = "0.90"
-
-Alternatively, if you don't want to preallocate memory, you can set the following environment variable to allow JAX to allocate memory as needed:
-
-.. code-block:: python
-
-    import os
-    os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
-
-For more details on the memory allocation in JAX, refer to the official JAX documentation `here <https://jax.readthedocs.io/en/latest/gpu_memory_allocation.html>`__.
-
-
 Caching the Compiled (Jitted) Code
 ----------------------------------
 Although the compiled code is fast, it still takes time to compile. If you are running the same optimization, or some similar optimization, multiple times, you can save time by caching the compiled code. This automatically happens for a single session (for example, until you restart your kernel in Jupyter Notebook) but once you start using another session, the code will need to be recompiled. Fortunately, there is a way to bypass this. First create a cache directory (i.e. ``jax-caches``), and put the following code at the beginning of your script:
@@ -39,17 +20,38 @@ This will use a directory called ``jax-caches`` in the parent directory of the s
 Note: Updating JAX version might re-compile some previously cached code, and this might increase the cache size. Every once in a while, you might need to clear your cache directory.
 
 
-Reducing Memory Size of Objective Jacobian Calculation
-------------------------------------------------------
+GPU Memory Allocation
+---------------------
+By default, JAX will pre-allocate only 75% of the available GPU memory and hence, XLA compiler will do its optimizations based on that. This also allows other JAX/XLA processes to run on the GPU at the same time. However, if you are running a single process and want to pre-allocate all of the available memory (or some other amount of it), you can set the following environment variable:
+
+.. code-block:: python
+
+    import os
+    os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = "0.90"
+
+We have seen that increasing the fraction can resolve Out of Memory (OOM) errors for many cases.
+
+Alternatively, if you don't want to preallocate memory (for debugging or memory profiling, see `profiler <https://github.com/PlasmaControl/DESC/blob/master/tests/benchmarks/memory_benchmark_cpu.py>`__ and `script <https://github.com/PlasmaControl/DESC/blob/master/tests/benchmarks/memory_funcs.py>`__ files for example memory profiling), you can set the following environment variable to allow JAX to allocate memory as needed:
+
+.. code-block:: python
+
+    import os
+    os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
+
+Note that each environment variable has their pros and cons for XLA compiler, and can prevent different types of OOM errors. For example, the second option presented above is documented to have a slight performance hit due to allocation and de-allocation of GPU memory, hence we recommend it for only memory profiling. For more details on the memory allocation in JAX, we strongly recommend refering to the official JAX documentation `here <https://jax.readthedocs.io/en/latest/gpu_memory_allocation.html>`__.
+
+
+Reducing Memory Usage of Objective Jacobian Calculation
+-------------------------------------------------------
 
 During optimization, one of the most memory-intensive steps is the calculation of the Jacobian
 of the cost function. This memory cost comes from attempting to calculate the entire Jacobian
 matrix in one vectorized operation. However, this can be tuned between high memory usage but quick (default)
 and low memory usage but slower with the ``jac_chunk_size`` keyword argument. By default, where this matters
-is when creating the overall ``ObjectiveFunction`` to be used in the optimization (where by default ``deriv_mode="batched"``). The Jacobian is a
+is when creating the overall ``ObjectiveFunction`` to be used in the optimization. The Jacobian is a
 matrix of shape [``obj.dim_f`` x ``x_opt.size``] (to see the size of ``x_opt``, one can check the printed ``Number of parameters:`` line, before optimization), and the calculation of the Jacobian is vectorized over
 the columns (the ``x_opt.size`` dimension), where ``obj`` is the ``ObjectiveFunction`` object. Passing in the ``jac_chunk_size`` attribute allows one to split up
-the vectorized computation into chunks of ``jac_chunk_size`` columns at a time, allowing one to compute the Jacobian in a slightly slower, but more memory-efficient manner.
+the vectorized computation into chunks of ``jac_chunk_size`` columns at a time, allowing one to compute the Jacobian in a slightly slower, but more memory-efficient manner. The syntax for creating an ``ObjectiveFunction`` with ``batched`` mode is:
 
 .. code-block:: python
 
@@ -115,14 +117,14 @@ will be formed as a blocked matrix with the individual Jacobians of these two ob
 
 .. attention:: How to choose the ``jac_chunk_size``?
 
-    The ``jac_chunk_size`` should be chosen based on the available memory and the size of the Jacobian. A good starting point is to set it to a value that allows the Jacobian to fit in memory, and then adjust it based on the performance of the optimization. One can choose it by looking at the printed output of the optimization, which will show the Jacobian size by these 2 lines,
+    A good starting point for ``jac_chunk_size`` is to set it to a value that allows the Jacobian to fit in memory, and then adjust it based on the performance of the optimization. One can choose it by looking at the printed output of the optimization, which will show the Jacobian size by these 2 lines,
 
     .. code-block:: bash
 
         Number of parameters: 250
         Number of objectives: 3000
 
-    The Jacobian size is 3000 x 250, where 250 is the optimization variable (aka. reduced state vector) and 3000 is the number of objectives (for example, for a grid with 1500 nodes, ``ForceBalance`` objective will have 2x1500=3000 rows). When considering the ``jac_chunk_size``, one should use a value smaller than ``Number of parameters``, otherwise chunking will do nothing!
+    The Jacobian size is 3000 x 250, where 250 is the optimization variable (aka. reduced state vector) and 3000 is the number of objectives (for example, for a grid with 1500 nodes, ``ForceBalance`` objective will have 2x1500=3000 rows). **When considering the ``jac_chunk_size``, one should use a value smaller than ``Number of parameters``, otherwise chunking will do nothing!**
 
 
 .. tip::

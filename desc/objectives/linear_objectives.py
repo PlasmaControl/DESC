@@ -460,7 +460,7 @@ class BoundaryWSelfConsistency(_Objective):
     _linear = True
     _fixed = False
     _units = "(rad)"
-    _print_value_fmt = "omega boundary self consistency error: {:10.3e} "
+    _print_value_fmt = "omega boundary self consistency error: "
 
     def __init__(
         self,
@@ -731,7 +731,8 @@ class AxisWSelfConsistency(_Objective):
     _scalar = False
     _linear = True
     _fixed = False
-    _print_value_fmt = "omega axis self consistency error: {:10.3e} (rad)"
+    _units = "(rad)"
+    _print_value_fmt = "omega axis self consistency error: "
 
     def __init__(
         self,
@@ -1003,7 +1004,7 @@ class FixBoundaryW(_FixedObjective):
 
     _target_arg = "Wb_lmn"
     _units = "(rad)"
-    _print_value_fmt = "omega boundary error: {:10.3e} "
+    _print_value_fmt = "omega boundary error: "
 
     def __init__(
         self,
@@ -1169,7 +1170,7 @@ class FixOmegaGauge(_Objective):
     _linear = True
     _fixed = False
     _units = "(rad)"
-    _print_value_fmt = "omega gauge error: {:10.3e} "
+    _print_value_fmt = "omega gauge error: "
 
     def __init__(
         self,
@@ -1309,7 +1310,7 @@ class FixZetaSFL(FixParameters):
     """
 
     _units = "(rad)"
-    _print_value_fmt = "phi - zeta error: {:10.3e} "
+    _print_value_fmt = "phi - zeta error: "
 
     def __init__(
         self,
@@ -1528,7 +1529,7 @@ class FixAxisW(FixParameters):
     """
 
     _units = "(rad)"
-    _print_value_fmt = "omega axis error: {:10.3e} "
+    _print_value_fmt = "omega axis error: "
 
     def __init__(
         self,

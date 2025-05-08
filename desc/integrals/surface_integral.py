@@ -8,8 +8,8 @@ from desc.backend import cond, fori_loop, jnp, put
 from desc.grid import ConcentricGrid, LinearGrid
 from desc.utils import errorif, warnif
 
-# TODO: Make the surface integral stuff objects with a callable method instead of
-#       returning functions. Would make simpler, allow users to actually see the
+# TODO (#1389): Make the surface integral stuff objects with a callable method instead
+#       of returning functions. Would make simpler, allow users to actually see the
 #       docstrings of the methods, and less bookkeeping to default to more
 #       efficient methods on tensor product grids.
 
@@ -100,7 +100,7 @@ def line_integrals(
         The coordinate curve to compute the integration over.
         To clarify, a theta (poloidal) curve is the intersection of a
         rho surface (flux surface) and zeta (toroidal) surface.
-    fix_surface : str, float
+    fix_surface : (str, float)
         A tuple of the form: label, value.
         ``fix_surface`` label should differ from ``line_label``.
         By default, ``fix_surface`` is chosen to be the flux surface at rho=1.
@@ -227,8 +227,6 @@ def surface_integrals_map(grid, surface_label="rho", expand_out=True, tol=1e-14)
     )
     spacing = jnp.prod(spacing, axis=1)
 
-    # Todo: Define mask as a sparse matrix once sparse matrices are no longer
-    #       experimental in jax.
     if has_idx:
         # The ith row of masks is True only at the indices which correspond to the
         # ith surface. The integral over the ith surface is the dot product of the
@@ -256,7 +254,7 @@ def surface_integrals_map(grid, surface_label="rho", expand_out=True, tol=1e-14)
             has_endpoint_dupe,
             lambda _: put(mask, jnp.array([0, -1]), mask[0] | mask[-1]),
             lambda _: mask,
-            operand=None,
+            None,
         )
     else:
         # If we don't have the idx attributes, we are forced to expand out.

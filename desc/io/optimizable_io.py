@@ -37,6 +37,7 @@ def load(load_from, file_format=None):
     """
     if file_format is None and isinstance(load_from, (str, os.PathLike)):
         name = str(load_from)
+        load_from = os.path.expanduser(load_from)
         if name.endswith(".h5") or name.endswith(".hdf5"):
             file_format = "hdf5"
         elif name.endswith(".pkl") or name.endswith(".pickle"):
@@ -82,9 +83,9 @@ def _unjittable(x):
     # strings and functions can't be args to jitted functions, and ints/bools are pretty
     # much always flags or array sizes which also need to be a compile time constant
     if isinstance(x, (list, tuple)):
-        return any([_unjittable(y) for y in x])
+        return all([_unjittable(y) or y is None for y in x])
     if isinstance(x, dict):
-        return any([_unjittable(y) for y in x.values()])
+        return all([_unjittable(y) or y is None for y in x.values()])
     if hasattr(x, "dtype") and np.ndim(x) == 0:
         return np.issubdtype(x.dtype, np.bool_) or np.issubdtype(x.dtype, np.int_)
     return isinstance(
@@ -94,6 +95,12 @@ def _unjittable(x):
 
 def _make_hashable(x):
     # turn unhashable ndarray of ints into a hashable tuple
+    if isinstance(x, list):
+        return [_make_hashable(y) for y in x]
+    if isinstance(x, tuple):
+        return tuple([_make_hashable(y) for y in x])
+    if isinstance(x, dict):
+        return {key: _make_hashable(val) for key, val in x.items()}
     if hasattr(x, "shape"):
         return ("ndarray", x.shape, tuple(x.flatten()))
     return x
@@ -103,6 +110,12 @@ def _unmake_hashable(x):
     # turn tuple of ints and shape to ndarray
     if isinstance(x, tuple) and x[0] == "ndarray":
         return np.array(x[2]).reshape(x[1])
+    if isinstance(x, list):
+        return [_unmake_hashable(y) for y in x]
+    if isinstance(x, tuple):
+        return tuple([_unmake_hashable(y) for y in x])
+    if isinstance(x, dict):
+        return {key: _unmake_hashable(val) for key, val in x.items()}
     return x
 
 
@@ -169,16 +182,17 @@ class IOAble(ABC, metaclass=_CombinedMeta):
     """Abstract Base Class for savable and loadable objects.
 
     Objects inheriting from this class can be saved and loaded via hdf5 or pickle.
-    To save properly, each object should have an attribute `_io_attrs_` which
+    To save properly, each object should have an attribute ``_io_attrs_`` which
     is a list of strings of the object attributes or properties that should be
     saved and loaded.
 
-    For saved objects to be loaded correctly, the __init__ method of any custom
-    types being saved should only assign attributes that are listed in `_io_attrs_`.
+    For saved objects to be loaded correctly, the ``__init__`` method of any custom
+    types being saved should only assign attributes that are listed in ``_io_attrs_``.
     Other attributes or other initialization should be done in a separate
-    `set_up()` method that can be called during __init__. The loading process
-    will involve creating an empty object, bypassing init, then setting any `_io_attrs_`
-    of the object, then calling `_set_up()` without any arguments, if it exists.
+    ``set_up()`` method that can be called during ``__init__``. The loading process
+    will involve creating an empty object, bypassing init, then setting any
+    ``_io_attrs_`` of the object, then calling ``_set_up()`` without any arguments,
+    if it exists.
 
     """
 
@@ -239,6 +253,7 @@ class IOAble(ABC, metaclass=_CombinedMeta):
         if file_format is None:
             if isinstance(file_name, (str, os.PathLike)):
                 name = str(file_name)
+                file_name = os.path.expanduser(file_name)
                 if name.endswith(".h5") or name.endswith(".hdf5"):
                     file_format = "hdf5"
                 elif name.endswith(".pkl") or name.endswith(".pickle"):

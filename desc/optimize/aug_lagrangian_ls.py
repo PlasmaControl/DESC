@@ -281,11 +281,11 @@ def lsq_auglag(  # noqa: C901
     diag_h = g * dv * scale
 
     g_h = g * d
-    # TODO: place this function under JIT (#1669)
+    # TODO: place this function under JIT to use in-place operation (#1669)
     # we don't need unscaled J anymore, so we overwrite
     # it with J_h = J * d to avoid carrying so many J-sized matrices
     # in memory, which can be large
-    J = J.at[:].set(J * d)
+    J *= d
     J_h = J
     del J
     g_norm = jnp.linalg.norm(
@@ -544,7 +544,7 @@ def lsq_auglag(  # noqa: C901
             # we don't need unscaled J anymore, so we overwrite
             # it with J_h = J * d to avoid carrying so many J-sized matrices
             # in memory, which can be large
-            J = J.at[:].set(J * d)
+            J *= d
             J_h = J
             del J
 

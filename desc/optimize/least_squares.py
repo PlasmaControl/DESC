@@ -200,9 +200,8 @@ def lsqtr(  # noqa: C901
     diag_h = g * dv * scale
 
     g_h = g * d
-    # TODO: place this function under JIT (#1669)
-    # using in-place operations to save memory
-    J = J.at[:].set(J * d)
+    # TODO: place this function under JIT to use in-place operation (#1669)
+    J *= d
 
     # we don't need unscaled J anymore, so we overwrite
     # it with J_h = J * d to avoid carrying so many J-sized matrices
@@ -400,7 +399,7 @@ def lsqtr(  # noqa: C901
             diag_h = g * dv * scale
 
             g_h = g * d
-            J = J.at[:].set(J * d)
+            J *= d
             # we don't need unscaled J anymore this iteration, so we overwrite
             # it with J_h = J * d to avoid carrying so many J-sized matrices
             # in memory, which can be large

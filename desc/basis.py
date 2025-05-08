@@ -438,7 +438,7 @@ class FourierSeries(_Basis):
         Maximum toroidal resolution.
     NFP : int
         number of field periods
-    sym : {``'cos'``, ``'sin'``, ``'n0'``, False}
+    sym : {``'cos'``, ``'sin'``, ``'no n0'``, False}
         * ``'cos'`` for cos(n*z) symmetry
         * ``'sin'`` for sin(n*z) symmetry
         * ``'no n=0'`` for no n=0 mode

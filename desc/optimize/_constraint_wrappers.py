@@ -741,7 +741,7 @@ class ProximalProjection(ObjectiveFunction):
         )
         self._feasible_tangents[self._eq_idx] = self._feasible_tangents[self._eq_idx][
             :, self._eq_unfixed_idx
-        ] @ (self._Z * self._D[self._unfixed_idx, None])
+        ] @ (self._eq_Z * self._eq_D[self._unfixed_idx, None])
         self._feasible_tangents = jnp.concatenate(
             [np.atleast_2d(foo) for foo in self._feasible_tangents], axis=-1
         )

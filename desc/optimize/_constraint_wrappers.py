@@ -149,7 +149,10 @@ class LinearConstraintProjection(ObjectiveFunction):
         # in this case, unfixed_idx_mat = [ [1 , 0], [1, 0], [0,1]]
         # and is a shape 3x2 matrix equivalent to dx/dy
         # s.t. df/dy = df/dx @ dx/dy
-        self._unfixed_idx_mat = jnp.diag(self._D)[:, self._unfixed_idx] @ self._Z
+        # Since Z is already scaled by D, we can just use it directly
+        self._unfixed_idx_mat = (
+            jnp.eye(self._objective.dim_x)[:, self._unfixed_idx] @ self._Z
+        )
 
         self._built = True
         timer.stop(f"{self.name} build")

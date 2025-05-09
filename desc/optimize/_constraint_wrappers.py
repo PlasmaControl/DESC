@@ -642,8 +642,11 @@ class ProximalProjection(ObjectiveFunction):
                 dxdc.append(np.eye(self._eq.dim_x)[:, x_idx])
             if arg == "Rb_lmn":
                 c = get_instance(self._eq_linear_constraints, BoundaryRSelfConsistency)
+                # We have A @ R_lmn = Rb_lmn
                 A = c.jac_unscaled(xz)[0]["R_lmn"]
                 Ainv = np.linalg.pinv(A)
+                # Once this is multipled by Rb_lmn, we get the full eq state vector
+                # with the R_lmn but rest is 0
                 dxdRb = np.eye(self._eq.dim_x)[:, self._eq.x_idx["R_lmn"]] @ Ainv
                 dxdc.append(dxdRb)
             if arg == "Zb_lmn":
@@ -652,6 +655,9 @@ class ProximalProjection(ObjectiveFunction):
                 Ainv = np.linalg.pinv(A)
                 dxdZb = np.eye(self._eq.dim_x)[:, self._eq.x_idx["Z_lmn"]] @ Ainv
                 dxdc.append(dxdZb)
+        # dxdc a matrix when multiplied by the optimization variables
+        # gives the full state vector (Rb_lmn and Zb_lmn part will be 0, but they will
+        # be represented by the equivalent R_lmn and Z_lmn)
         self._dxdc = jnp.hstack(dxdc)
 
     def build(self, use_jit=None, verbose=1):  # noqa: C901

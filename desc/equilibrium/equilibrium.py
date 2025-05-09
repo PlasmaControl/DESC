@@ -295,10 +295,6 @@ class Equilibrium(IOAble, Optimizable):
             )
         )
 
-        self._Lz_grid = self._L_grid
-        self._Mz_grid = self._M_grid
-        self._Nz_grid = self._N_grid
-
         self._surface.change_resolution(
             self.L, self.M, self.N, self.Lz, self.Mz, self.Nz, sym=self.sym
         )
@@ -329,6 +325,8 @@ class Equilibrium(IOAble, Optimizable):
             sym=self._Z_sym,
             spectral_indexing=self.spectral_indexing,
         )
+        # RG: This is just the basis and doesn't decide the grid on
+        # which omega is evaluated
         self._W_basis = FourierZernikeBasis(
             L=self.Lz,
             M=self.Mz,
@@ -475,9 +473,6 @@ class Equilibrium(IOAble, Optimizable):
         self._Lz = int(self._Lz)
         self._Mz = int(self._Mz)
         self._Nz = int(self._Nz)
-        self._Lz_grid = int(self._L_grid)
-        self._Mz_grid = int(self._M_grid)
-        self._Nz_grid = int(self._N_grid)
 
     def _sort_args(self, args):
         """Put arguments in a canonical order. Returns unique sorted elements.
@@ -606,9 +601,6 @@ class Equilibrium(IOAble, Optimizable):
         L_grid=None,
         M_grid=None,
         N_grid=None,
-        Lz_grid=None,
-        Mz_grid=None,
-        Nz_grid=None,
         NFP=None,
         sym=None,
     ):
@@ -650,9 +642,6 @@ class Equilibrium(IOAble, Optimizable):
         self._L_grid = int(setdefault(L_grid, self.L_grid))
         self._M_grid = int(setdefault(M_grid, self.M_grid))
         self._N_grid = int(setdefault(N_grid, self.N_grid))
-        self._Lz_grid = int(setdefault(Lz_grid, self.L_grid))
-        self._Mz_grid = int(setdefault(Mz_grid, self.M_grid))
-        self._Nz_grid = int(setdefault(Nz_grid, self.N_grid))
 
         self._NFP = int(setdefault(NFP, self.NFP))
         self._sym = bool(setdefault(sym, self.sym))
@@ -2140,6 +2129,9 @@ class Equilibrium(IOAble, Optimizable):
             "L": self.L,
             "M": self.M,
             "N": self.N,
+            "Lz": self.Lz,
+            "Mz": self.Mz,
+            "Nz": self.Nz,
             "L_grid": self.L_grid,
             "M_grid": self.M_grid,
             "N_grid": self.N_grid,
@@ -2149,6 +2141,11 @@ class Equilibrium(IOAble, Optimizable):
         """Print a summary of the spectral and real space resolution."""
         print("Spectral indexing: {}".format(self.spectral_indexing))
         print("Spectral resolution (L,M,N)=({},{},{})".format(self.L, self.M, self.N))
+        print(
+            "Spectral resolution omega (Lz,Mz,Nz)=({},{},{})".format(
+                self.Lz, self.Mz, self.Nz
+            )
+        )
         print(
             "Node resolution (L,M,N)=({},{},{})".format(
                 self.L_grid, self.M_grid, self.N_grid

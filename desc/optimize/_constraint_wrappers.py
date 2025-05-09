@@ -616,6 +616,13 @@ class ProximalProjection(ObjectiveFunction):
     def _set_eq_state_vector(self):
         full_args = self._eq.optimizable_params.copy()
         self._args = self._eq.optimizable_params.copy()
+        # the optimizable variables for proximal are the Rb, Zb and profile
+        # coefficients. Once these are chosen, we will solve the equilibrium to
+        # find the R_lmn, Z_lmn, L_lmn, Ra_n, Za_n. That is why we remove them
+        # from the list of optimizable variables. This is accompanied by not including
+        # self-consistency constraints (see get_combined_constraint_objectives) and
+        # also removing columns corresponding to these variables from the constraint
+        # matrix A in factorize_linear_constraints.
         for arg in ["R_lmn", "Z_lmn", "L_lmn", "Ra_n", "Za_n"]:
             self._args.remove(arg)
 
@@ -634,13 +641,13 @@ class ProximalProjection(ObjectiveFunction):
                 x_idx = self._eq.x_idx[arg]
                 dxdc.append(np.eye(self._eq.dim_x)[:, x_idx])
             if arg == "Rb_lmn":
-                c = get_instance(self._linear_constraints, BoundaryRSelfConsistency)
+                c = get_instance(self._eq_linear_constraints, BoundaryRSelfConsistency)
                 A = c.jac_unscaled(xz)[0]["R_lmn"]
                 Ainv = np.linalg.pinv(A)
                 dxdRb = np.eye(self._eq.dim_x)[:, self._eq.x_idx["R_lmn"]] @ Ainv
                 dxdc.append(dxdRb)
             if arg == "Zb_lmn":
-                c = get_instance(self._linear_constraints, BoundaryZSelfConsistency)
+                c = get_instance(self._eq_linear_constraints, BoundaryZSelfConsistency)
                 A = c.jac_unscaled(xz)[0]["Z_lmn"]
                 Ainv = np.linalg.pinv(A)
                 dxdZb = np.eye(self._eq.dim_x)[:, self._eq.x_idx["Z_lmn"]] @ Ainv
@@ -662,9 +669,9 @@ class ProximalProjection(ObjectiveFunction):
         timer = Timer()
         timer.start("Proximal projection build")
 
-        self._linear_constraints = get_fixed_boundary_constraints(eq=self._eq)
-        self._linear_constraints = maybe_add_self_consistency(
-            self._eq, self._linear_constraints
+        self._eq_linear_constraints = get_fixed_boundary_constraints(eq=self._eq)
+        self._eq_linear_constraints = maybe_add_self_consistency(
+            self._eq, self._eq_linear_constraints
         )
 
         # we don't always build here because in ~all cases the user doesn't interact
@@ -675,7 +682,7 @@ class ProximalProjection(ObjectiveFunction):
         if not self._constraint.built:
             self._constraint.build(use_jit=use_jit, verbose=verbose)
 
-        for constraint in self._linear_constraints:
+        for constraint in self._eq_linear_constraints:
             constraint.build(use_jit=use_jit, verbose=verbose)
 
         # Here we create and build the LinearConstraintProjection
@@ -686,7 +693,7 @@ class ProximalProjection(ObjectiveFunction):
         # constraint matrix A and its SVD for the feasible direction method
         self._eq_solve_objective = LinearConstraintProjection(
             self._constraint,
-            ObjectiveFunction(self._linear_constraints),
+            ObjectiveFunction(self._eq_linear_constraints),
             name="Eq Update LinearConstraintProjection",
         )
         self._eq_solve_objective.build(use_jit=use_jit, verbose=verbose)
@@ -1183,7 +1190,7 @@ class ProximalProjection(ObjectiveFunction):
         # broadcasting against multiple things
         dfdcs = [jnp.zeros(dim) for dim in self._dimc_per_thing]
         dfdcs[self._eq_idx] = dfdc
-        # note that size.dfdc != size.vs[self._eq_idx]
+        # note that dfdc.size != vs[self._eq_idx].size
         # so, the above line is not a simple assignment where you just change the value
         # of the array, but we actually change the size of it too
         # the size change will be handled by multiplication by the unfixed_idx_mat later
@@ -1256,10 +1263,11 @@ def _proximal_jvp_blocked_pure(objective, vgs, xgs, op):
     # Note: This function is not vectorized and takes the full set of tangents, and
     # returns a matrix.
 
-    # vgs and xgs are list of arrays (not same size necessarily), that are split by the
-    # things in the objective. If there are multiple things for the ObjectiveFunction,
-    # each split belongs to a different thing. The information about which thing is used
-    # by which sub-objective is stored in _things_per_objective_idx.
+    # vgs and xgs are list of arrays (each element of the list is not same size
+    # necessarily), that are split by the things in the objective. If there are multiple
+    # things for the ObjectiveFunction, each split belongs to a different thing. The
+    # information about which thing is used by which sub-objective is stored in
+    # _things_per_objective_idx.
 
     # Note: This function is very similar to _jvp_blocked in ObjectiveFunction with
     # some naming differences to account for ProximalProjection.

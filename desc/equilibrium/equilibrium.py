@@ -142,6 +142,9 @@ class Equilibrium(IOAble, Optimizable):
         "_L",
         "_M",
         "_N",
+        "_Lz",
+        "_Mz",
+        "_Nz",
         "_R_lmn",
         "_Z_lmn",
         "_L_lmn",
@@ -179,6 +182,9 @@ class Equilibrium(IOAble, Optimizable):
         L_grid=None,
         M_grid=None,
         N_grid=None,
+        Lz=0,
+        Mz=0,
+        Nz=0,
         pressure=None,
         iota=None,
         current=None,
@@ -201,6 +207,10 @@ class Equilibrium(IOAble, Optimizable):
             f"Psi should be a real integer or float, got {type(Psi)}",
         )
         self._Psi = float(Psi)
+
+        self._Lz = Lz
+        self._Mz = Mz
+        self._Nz = Nz
 
         errorif(
             spectral_indexing
@@ -253,6 +263,11 @@ class Equilibrium(IOAble, Optimizable):
         M_grid = check_nonnegint(M_grid, "M_grid")
         N_grid = check_nonnegint(N_grid, "N_grid")
 
+        # resolution
+        Lz = check_nonnegint(Lz, "Lz")
+        Mz = check_nonnegint(Mz, "Mz")
+        Nz = check_nonnegint(Nz, "Nz")
+
         self._N = int(setdefault(N, self.surface.N))
         self._M = int(setdefault(M, self.surface.M))
         self._L = int(
@@ -268,8 +283,26 @@ class Equilibrium(IOAble, Optimizable):
         self._M_grid = setdefault(M_grid, 2 * self.M)
         self._N_grid = setdefault(N_grid, 2 * self.N)
 
-        self._surface.change_resolution(self.L, self.M, self.N, sym=self.sym)
-        self._axis.change_resolution(self.N, sym=self.sym)
+        self._Nz = int(setdefault(Nz, self.surface.Nz))
+        self._Mz = int(setdefault(Mz, self.surface.Mz))
+        self._Lz = int(
+            setdefault(
+                Lz,
+                max(
+                    self.surface.Lz,
+                    self.Mz if (self.spectral_indexing == "ansi") else 2 * self.Mz,
+                ),
+            )
+        )
+
+        self._Lz_grid = self._L_grid
+        self._Mz_grid = self._M_grid
+        self._Nz_grid = self._N_grid
+
+        self._surface.change_resolution(
+            self.L, self.M, self.N, self.Lz, self.Mz, self.Nz, sym=self.sym
+        )
+        self._axis.change_resolution(self.N, self.Nz, sym=self.sym)
 
         # bases
         self._R_basis = FourierZernikeBasis(
@@ -297,9 +330,9 @@ class Equilibrium(IOAble, Optimizable):
             spectral_indexing=self.spectral_indexing,
         )
         self._W_basis = FourierZernikeBasis(
-            L=self.L,
-            M=self.M,
-            N=self.N,
+            L=self.Lz,
+            M=self.Mz,
+            N=self.Nz,
             NFP=self.NFP,
             sym=self._Z_sym,
             spectral_indexing=self.spectral_indexing,
@@ -439,6 +472,12 @@ class Equilibrium(IOAble, Optimizable):
         self._L_grid = int(self._L_grid)
         self._M_grid = int(self._M_grid)
         self._N_grid = int(self._N_grid)
+        self._Lz = int(self._Lz)
+        self._Mz = int(self._Mz)
+        self._Nz = int(self._Nz)
+        self._Lz_grid = int(self._L_grid)
+        self._Mz_grid = int(self._M_grid)
+        self._Nz_grid = int(self._N_grid)
 
     def _sort_args(self, args):
         """Put arguments in a canonical order. Returns unique sorted elements.
@@ -561,6 +600,9 @@ class Equilibrium(IOAble, Optimizable):
         L=None,
         M=None,
         N=None,
+        Lz=0,
+        Mz=0,
+        Nz=0,
         L_grid=None,
         M_grid=None,
         N_grid=None,
@@ -598,6 +640,9 @@ class Equilibrium(IOAble, Optimizable):
         self._L = int(setdefault(L, self.L))
         self._M = int(setdefault(M, self.M))
         self._N = int(setdefault(N, self.N))
+        self._Lz = int(setdefault(Lz, self.Lz))
+        self._Mz = int(setdefault(Mz, self.Mz))
+        self._Nz = int(setdefault(Nz, self.Nz))
         self._L_grid = int(setdefault(L_grid, self.L_grid))
         self._M_grid = int(setdefault(M_grid, self.M_grid))
         self._N_grid = int(setdefault(N_grid, self.N_grid))

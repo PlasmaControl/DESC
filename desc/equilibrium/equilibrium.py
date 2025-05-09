@@ -518,10 +518,10 @@ class Equilibrium(IOAble, Optimizable):
             type(self).__name__
             + " at "
             + str(hex(id(self)))
-            + " (L={}, M={}, N={}, NFP={}, sym={}, spectral_indexing={})".format(
-                self.L, self.M, self.N, self.NFP, self.sym, self.spectral_indexing
-            )
-        )
+            + f" (L={self.L}, M={self.M}, N={self.N}, Lz={self.Lz}, Mz={self.Mz},"
+            + "Nz={self.Nz}, NFP={self.NFP}, sym={self.sym},"
+            + "spectral_indexing={self.spectral_indexing})"
+        )  # RG: not sure if this change is needed
 
     def set_initial_guess(self, *args, ensure_nested=True):
         """Set the initial guess for the flux surfaces, eg R_lmn, Z_lmn, L_lmn.
@@ -606,6 +606,9 @@ class Equilibrium(IOAble, Optimizable):
         L_grid=None,
         M_grid=None,
         N_grid=None,
+        Lz_grid=None,
+        Mz_grid=None,
+        Nz_grid=None,
         NFP=None,
         sym=None,
     ):
@@ -643,9 +646,14 @@ class Equilibrium(IOAble, Optimizable):
         self._Lz = int(setdefault(Lz, self.Lz))
         self._Mz = int(setdefault(Mz, self.Mz))
         self._Nz = int(setdefault(Nz, self.Nz))
+
         self._L_grid = int(setdefault(L_grid, self.L_grid))
         self._M_grid = int(setdefault(M_grid, self.M_grid))
         self._N_grid = int(setdefault(N_grid, self.N_grid))
+        self._Lz_grid = int(setdefault(Lz_grid, self.L_grid))
+        self._Mz_grid = int(setdefault(Mz_grid, self.M_grid))
+        self._Nz_grid = int(setdefault(Nz_grid, self.N_grid))
+
         self._NFP = int(setdefault(NFP, self.NFP))
         self._sym = bool(setdefault(sym, self.sym))
 
@@ -664,7 +672,14 @@ class Equilibrium(IOAble, Optimizable):
             self.L, self.M, self.N, NFP=self.NFP, sym="sin" if self.sym else self.sym
         )
         self.W_basis.change_resolution(
-            self.L, self.M, self.N, NFP=self.NFP, sym="sin" if self.sym else self.sym
+            self.L,
+            self.M,
+            self.N,
+            self.Lz,
+            self.Mz,
+            self.Nz,
+            NFP=self.NFP,
+            sym="sin" if self.sym else self.sym,
         )
 
         for profile in [
@@ -682,9 +697,16 @@ class Equilibrium(IOAble, Optimizable):
                 p.change_resolution(max(p.basis.L, self.L))
 
         self.surface.change_resolution(
-            self.L, self.M, self.N, NFP=self.NFP, sym=self.sym
+            self.L,
+            self.M,
+            self.N,
+            self.Lz,
+            self.Mz,
+            self.Nz,
+            NFP=self.NFP,
+            sym=self.sym,
         )
-        self.axis.change_resolution(self.N, NFP=self.NFP, sym=self.sym)
+        self.axis.change_resolution(self.N, self.Nz, NFP=self.NFP, sym=self.sym)
 
         self._R_lmn = copy_coeffs(self.R_lmn, old_modes_R, self.R_basis.modes)
         self._Z_lmn = copy_coeffs(self.Z_lmn, old_modes_Z, self.Z_basis.modes)
@@ -787,7 +809,7 @@ class Equilibrium(IOAble, Optimizable):
             surface.W_lmn = Wb
             return surface
 
-        if zeta is not None:
+        if zeta is not None:  # RG: Not sure if this needs zeta or phi (zeta-omega)
             assert (zeta >= 0) and (zeta <= 2 * np.pi)
             surface = ZernikeRZToroidalSection(sym=self.sym, zeta=zeta)
             surface.change_resolution(self.L, self.M)
@@ -866,6 +888,7 @@ class Equilibrium(IOAble, Optimizable):
         """
         # value of Zernike polynomials at rho=0 for unique radial modes (+/-1)
         sign_l = np.atleast_2d(((np.arange(0, self.L + 1, 2) / 2) % 2) * -2 + 1).T
+        sign_lz = np.atleast_2d(((np.arange(0, self.Lz + 1, 2) / 2) % 2) * -2 + 1).T
         # indices where m=0
         idx0_R = np.where(self.R_basis.modes[:, 1] == 0)[0]
         idx0_Z = np.where(self.Z_basis.modes[:, 1] == 0)[0]
@@ -891,7 +914,7 @@ class Equilibrium(IOAble, Optimizable):
             modes_Z = 0
         if len(idx00_W):
             W_n = np.sum(
-                sign_l * np.reshape(self.W_lmn[idx0_W], (-1, idx00_W.size), order="F"),
+                sign_lz * np.reshape(self.W_lmn[idx0_W], (-1, idx00_W.size), order="F"),
                 axis=0,
             )
             modes_W = self.W_basis.modes[idx00_W, 2]
@@ -1428,6 +1451,7 @@ class Equilibrium(IOAble, Optimizable):
             self, radial, poloidal, toroidal, coordinates, period, jitable, **kwargs
         )
 
+    # RG: Should be modified for the case where W_lmn is non-zero
     def compute_theta_coords(
         self, flux_coords, L_lmn=None, tol=1e-6, maxiter=20, full_output=False, **kwargs
     ):
@@ -1573,7 +1597,7 @@ class Equilibrium(IOAble, Optimizable):
             self.sym == new.sym
         ), "Surface and Equilibrium must have the same symmetry"
         assert self.NFP == new.NFP, "Surface and Equilibrium must have the same NFP"
-        new.change_resolution(self.L, self.M, self.N)
+        new.change_resolution(self.L, self.M, self.N, self.Lz, self.Mz, self.Nz)  # RG
         self._surface = new
 
     @property
@@ -1588,7 +1612,7 @@ class Equilibrium(IOAble, Optimizable):
         ), f"axis should be of type FourierRZCurve or a subclass, got {new}"
         assert self.sym == new.sym, "Axis and Equilibrium must have the same symmetry"
         assert self.NFP == new.NFP, "Axis and Equilibrium must have the same NFP"
-        new.change_resolution(self.N)
+        new.change_resolution(self.N, self.Nz)  # RG: Adding Nz here
         self._axis = new
 
     @property
@@ -1635,6 +1659,21 @@ class Equilibrium(IOAble, Optimizable):
     def N(self):
         """int: Maximum toroidal fourier mode number."""
         return self._N
+
+    @property
+    def Lz(self):
+        """int: Maximum radial mode number for omega."""
+        return self._Lz
+
+    @property
+    def Mz(self):
+        """int: Maximum poloidal fourier mode number for omega."""
+        return self._Mz
+
+    @property
+    def Nz(self):
+        """int: Maximum toroidal fourier mode number for omega."""
+        return self._Nz
 
     @optimizable_parameter
     @property

@@ -637,21 +637,19 @@ class ProximalProjection(ObjectiveFunction):
         xz = {arg: np.zeros(self._eq.dimensions[arg]) for arg in full_args}
 
         for arg in self._args:
+            x_idx = self._eq.x_idx[arg]
             if arg not in ["Rb_lmn", "Zb_lmn"]:
-                x_idx = self._eq.x_idx[arg]
                 dxdc.append(np.eye(self._eq.dim_x)[:, x_idx])
-            if arg == "Rb_lmn":
-                c = get_instance(self._eq_linear_constraints, BoundaryRSelfConsistency)
-                A = c.jac_unscaled(xz)[0]["R_lmn"]
+            else:
+                if arg == "Rb_lmn":
+                    consistency = BoundaryRSelfConsistency
+                if arg == "Zb_lmn":
+                    consistency = BoundaryZSelfConsistency
+                c = get_instance(self._eq_linear_constraints, consistency)
+                A = c.jac_unscaled(xz)[0][arg]
                 Ainv = np.linalg.pinv(A)
-                dxdRb = np.eye(self._eq.dim_x)[:, self._eq.x_idx["R_lmn"]] @ Ainv
-                dxdc.append(dxdRb)
-            if arg == "Zb_lmn":
-                c = get_instance(self._eq_linear_constraints, BoundaryZSelfConsistency)
-                A = c.jac_unscaled(xz)[0]["Z_lmn"]
-                Ainv = np.linalg.pinv(A)
-                dxdZb = np.eye(self._eq.dim_x)[:, self._eq.x_idx["Z_lmn"]] @ Ainv
-                dxdc.append(dxdZb)
+                dxdXb = np.eye(self._eq.dim_x)[:, x_idx] @ Ainv
+                dxdc.append(dxdXb)
         self._dxdc = jnp.hstack(dxdc)
 
     def build(self, use_jit=None, verbose=1):  # noqa: C901

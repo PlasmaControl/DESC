@@ -150,7 +150,7 @@ class LinearConstraintProjection(ObjectiveFunction):
         # and is a shape 3x2 matrix equivalent to dx/dy
         # s.t. df/dy = df/dx @ dx/dy
         # Since Z is already scaled by D, we can just use it directly
-        self._unfixed_idx_mat = (
+        self._feasible_tangents = (
             jnp.eye(self._objective.dim_x)[:, self._unfixed_idx] @ self._Z
         )
 
@@ -379,7 +379,7 @@ class LinearConstraintProjection(ObjectiveFunction):
 
     def _jac(self, x_reduced, constants=None, op="scaled"):
         x = self.recover(x_reduced)
-        v = self._unfixed_idx_mat
+        v = self._feasible_tangents
         df = getattr(self._objective, "jvp_" + op)(v.T, x, constants)
         return df.T
 
@@ -439,7 +439,7 @@ class LinearConstraintProjection(ObjectiveFunction):
 
     def _jvp(self, v, x_reduced, constants=None, op="jvp_scaled"):
         x = self.recover(x_reduced)
-        v = self._unfixed_idx_mat @ v
+        v = self._feasible_tangents @ v
         df = getattr(self._objective, op)(v, x, constants)
         return df
 
@@ -738,16 +738,16 @@ class ProximalProjection(ObjectiveFunction):
         )
 
         # equivalent matrix for A[unfixed_idx] @ D @ Z == A @ unfixed_idx_mat
-        self._unfixed_idx_mat = jnp.eye(self._objective.dim_x)
-        self._unfixed_idx_mat = jnp.split(
-            self._unfixed_idx_mat, np.cumsum(self._dimx_per_thing), axis=-1
+        self._feasible_tangents = jnp.eye(self._objective.dim_x)
+        self._feasible_tangents = jnp.split(
+            self._feasible_tangents, np.cumsum(self._dimx_per_thing), axis=-1
         )
         # eq_Z is already scaled by D, so can just use it alone here
-        self._unfixed_idx_mat[self._eq_idx] = self._unfixed_idx_mat[self._eq_idx][
+        self._feasible_tangents[self._eq_idx] = self._feasible_tangents[self._eq_idx][
             :, self._eq_unfixed_idx
         ] @ (self._eq_Z)
-        self._unfixed_idx_mat = jnp.concatenate(
-            [np.atleast_2d(foo) for foo in self._unfixed_idx_mat], axis=-1
+        self._feasible_tangents = jnp.concatenate(
+            [np.atleast_2d(foo) for foo in self._feasible_tangents], axis=-1
         )
 
         # history and caching
@@ -1192,7 +1192,7 @@ class ProximalProjection(ObjectiveFunction):
             xf,
             constants[1],
             vs[self._eq_idx],
-            self._eq_solve_objective._unfixed_idx_mat,
+            self._eq_solve_objective._feasible_tangents,
             self._dxdc,
             op,
         )
@@ -1224,7 +1224,7 @@ class ProximalProjection(ObjectiveFunction):
                 *vs[self._eq_idx + 1 :],
             ]
         )
-        tangent = dxdcv - self._unfixed_idx_mat @ dfdc
+        tangent = dxdcv - self._feasible_tangents @ dfdc
         return tangent
 
     @property
@@ -1245,14 +1245,14 @@ class ProximalProjection(ObjectiveFunction):
 
 
 @functools.partial(jit, static_argnames=["op"])
-def _proximal_jvp_f_pure(constraint, xf, constants, dc, eq_unfixed_idx_mat, dxdc, op):
+def _proximal_jvp_f_pure(constraint, xf, constants, dc, eq_feasible_tangents, dxdc, op):
     # Note: This function is called by _get_tangent which is vectorized over v
     # (v is called dc in this function). So, dc is expected to be 1D array
     # of same size as full equilibrium state vector. This function returns a 1D array.
 
     # here we are forming (dF/dx)^-1 @ dF/dc
     # where Fxh is dF/dx and Fc is dF/dc
-    Fxh = getattr(constraint, "jvp_" + op)(eq_unfixed_idx_mat.T, xf, constants).T
+    Fxh = getattr(constraint, "jvp_" + op)(eq_feasible_tangents.T, xf, constants).T
     # Our compute functions never include variables like Rb_lmn, Zb_lmn etc. So,
     # taking the JVP in just dc direction will give 0. To prevent this, we use dxdc
     # which is the dx/dc matrix and convert the Rb_lmn to R_lmn entries etc.

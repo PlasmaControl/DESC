@@ -1151,7 +1151,7 @@ def test_linearconstraintprojection_update_target():
     np.testing.assert_allclose(D, lcp._D)
     np.testing.assert_allclose(lc._ZA, lcp._ZA)
     np.testing.assert_allclose(lc._Ainv, lcp._Ainv)
-    np.testing.assert_allclose(lc._unfixed_idx_mat, lcp._unfixed_idx_mat)
+    np.testing.assert_allclose(lc._feasible_tangents, lcp._feasible_tangents)
 
 
 @pytest.mark.unit

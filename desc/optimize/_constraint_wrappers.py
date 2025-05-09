@@ -137,7 +137,7 @@ class LinearConstraintProjection(ObjectiveFunction):
         self._dim_x = self._objective.dim_x
         self._dim_x_reduced = self._Z.shape[1]
 
-        # equivalent matrix for A[unfixed_idx] @ D @ Z == A @ unfixed_idx_mat
+        # equivalent matrix for A[unfixed_idx] @ D @ Z == A @ feasible_tangents
         # Represents the tangent directions of the reduced parameters in full space
         # During optimization, we have the reduced parameters x_reduced, and we need
         # to compute the derivatives for that, but since compute functions are written
@@ -146,13 +146,10 @@ class LinearConstraintProjection(ObjectiveFunction):
         # For example, let's say the full state vector X has constraints X1=X2 and
         # X = [X1 X2 X3]. The reduced state vector of this is Y = [Y1 Y2]. We can take
         # Y1=X1=X2 and Y2=X3. Then df/dY1 = df/dX1 + df/dX2 and df/dY2 = df/dX3.
-        # in this case, unfixed_idx_mat = [ [1 , 0], [1, 0], [0,1]]
+        # in this case, feasible_tangents = [ [1 , 0], [1, 0], [0,1]]
         # and is a shape 3x2 matrix equivalent to dx/dy
         # s.t. df/dy = df/dx @ dx/dy
-        # Since Z is already scaled by D, we can just use it directly
-        self._feasible_tangents = (
-            jnp.eye(self._objective.dim_x)[:, self._unfixed_idx] @ self._Z
-        )
+        self._feasible_tangents = jnp.diag(self._D)[:, self._unfixed_idx] @ self._Z
 
         self._built = True
         timer.stop(f"{self.name} build")
@@ -658,7 +655,7 @@ class ProximalProjection(ObjectiveFunction):
                 Ainv = np.linalg.pinv(A)
                 dxdZb = np.eye(self._eq.dim_x)[:, self._eq.x_idx["Z_lmn"]] @ Ainv
                 dxdc.append(dxdZb)
-        # dxdc a matrix when multiplied by the optimization variables
+        # dxdc is a matrix when multiplied by the optimization variables
         # gives the full state vector (Rb_lmn and Zb_lmn part will be 0, but they will
         # be represented by the equivalent R_lmn and Z_lmn)
         self._dxdc = jnp.hstack(dxdc)
@@ -737,15 +734,14 @@ class ProximalProjection(ObjectiveFunction):
             [self._eq.dimensions[arg] for arg in self._args]
         )
 
-        # equivalent matrix for A[unfixed_idx] @ D @ Z == A @ unfixed_idx_mat
+        # equivalent matrix for A[unfixed_idx] @ D @ Z == A @ feasible_tangents
         self._feasible_tangents = jnp.eye(self._objective.dim_x)
         self._feasible_tangents = jnp.split(
             self._feasible_tangents, np.cumsum(self._dimx_per_thing), axis=-1
         )
-        # eq_Z is already scaled by D, so can just use it alone here
         self._feasible_tangents[self._eq_idx] = self._feasible_tangents[self._eq_idx][
             :, self._eq_unfixed_idx
-        ] @ (self._eq_Z)
+        ] @ (self._Z * self._D[self._unfixed_idx, None])
         self._feasible_tangents = jnp.concatenate(
             [np.atleast_2d(foo) for foo in self._feasible_tangents], axis=-1
         )
@@ -1201,8 +1197,8 @@ class ProximalProjection(ObjectiveFunction):
         dfdcs[self._eq_idx] = dfdc
         # note that dfdc.size != vs[self._eq_idx].size
         # so, the above line is not a simple assignment where you just change the value
-        # of the array, but we actually change the size of it too
-        # the size change will be handled by multiplication by the unfixed_idx_mat later
+        # of the array, but we actually change the size of it too the size change will
+        # be handled by multiplication by the feasible_tangents later
         dfdc = jnp.concatenate(dfdcs)
 
         # We try to find dG/dc - dG/dx * (dF/dx)^-1 * dF/dc
@@ -1220,7 +1216,7 @@ class ProximalProjection(ObjectiveFunction):
         dxdcv = jnp.concatenate(
             [
                 *vs[: self._eq_idx],
-                self._dxdc @ vs[self._eq_idx],
+                self._dxdc @ vs[self._eq_idx],  # Rb_lmn, Zb_lmn to full eq state vector
                 *vs[self._eq_idx + 1 :],
             ]
         )

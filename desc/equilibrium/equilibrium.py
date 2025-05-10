@@ -283,13 +283,13 @@ class Equilibrium(IOAble, Optimizable):
         self._M_grid = setdefault(M_grid, 2 * self.M)
         self._N_grid = setdefault(N_grid, 2 * self.N)
 
-        self._Nz = int(setdefault(Nz, self.surface.Nz))
-        self._Mz = int(setdefault(Mz, self.surface.Mz))
+        self._Nz = int(setdefault(Nz, self.surface._Nz))
+        self._Mz = int(setdefault(Mz, self.surface._Mz))
         self._Lz = int(
             setdefault(
                 Lz,
                 max(
-                    self.surface.Lz,
+                    self.surface._Lz,
                     self.Mz if (self.spectral_indexing == "ansi") else 2 * self.Mz,
                 ),
             )

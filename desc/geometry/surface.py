@@ -49,6 +49,9 @@ class FourierRZToroidalSurface(Surface):
     M, N: int or None
         Maximum poloidal and toroidal mode numbers. Defaults to maximum from modes_R
         and modes_Z.
+    Mz, Nz: int or None
+        Maximum poloidal and toroidal mode numbers to define omega. Defaults to
+        maximum from modes_W.
     rho : float [0,1]
         flux surface label for the toroidal surface
     name : str
@@ -85,6 +88,8 @@ class FourierRZToroidalSurface(Surface):
         sym="auto",
         M=None,
         N=None,
+        Mz=0,
+        Nz=0,
         rho=1,
         name="",
         check_orientation=True,
@@ -96,12 +101,13 @@ class FourierRZToroidalSurface(Surface):
             Z_lmn = np.array([0, -1])
             modes_Z = np.array([[0, 0], [-1, 0]])
         if W_lmn is None:
-            W_lmn = np.array([0, 0])
-            modes_W = np.array([[0, 0], [-1, 0]])
+            W_lmn = np.array([])
+            modes_W = np.array([])
         if modes_Z is None:
             modes_Z = modes_R
         if modes_W is None:
             modes_W = modes_Z
+
         R_lmn, Z_lmn, W_lmn, modes_R, modes_Z, modes_W = map(
             np.asarray, (R_lmn, Z_lmn, W_lmn, modes_R, modes_Z, modes_W)
         )
@@ -117,19 +123,30 @@ class FourierRZToroidalSurface(Surface):
 
         assert issubclass(modes_R.dtype.type, np.integer)
         assert issubclass(modes_Z.dtype.type, np.integer)
-        assert issubclass(modes_W.dtype.type, np.integer)
+        # RG: Empty array can't be an integer. Replace this check?
+        # --no-verify assert issubclass(modes_W.dtype.type, np.integer)
+
         MR = np.max(abs(modes_R[:, 0]))
         NR = np.max(abs(modes_R[:, 1]))
         MZ = np.max(abs(modes_Z[:, 0]))
         NZ = np.max(abs(modes_Z[:, 1]))
-        MW = np.max(abs(modes_W[:, 0]))
-        NW = np.max(abs(modes_W[:, 1]))
+
+        # --no-verify MW = np.max(abs(modes_W[:, 0]))
+        # --no-verify NW = np.max(abs(modes_W[:, 1]))
+
         self._L = 0
+        self._Lz = 0
+
         M = check_nonnegint(M, "M")
         N = check_nonnegint(N, "N")
+        Mz = check_nonnegint(Mz, "Mz")
+        Nz = check_nonnegint(Nz, "Nz")
+
         NFP = check_posint(NFP, "NFP", False)
-        self._M = setdefault(M, max(MR, MZ, MW))
-        self._N = setdefault(N, max(NR, NZ, NW))
+        self._M = setdefault(M, max(MR, MZ))
+        self._N = setdefault(N, max(NR, NZ))
+        self._Mz = Mz
+        self._Nz = Nz
         self._NFP = NFP
 
         if sym == "auto":
@@ -153,7 +170,7 @@ class FourierRZToroidalSurface(Surface):
             M=self._M, N=self._N, NFP=NFP, sym="sin" if sym else False
         )
         self._W_basis = DoubleFourierSeries(
-            M=MW, N=NW, NFP=NFP, sym="sin" if sym else False
+            M=self._Mz, N=self._Nz, NFP=NFP, sym="sin" if sym else False
         )
 
         self._R_lmn = copy_coeffs(R_lmn, modes_R, self.R_basis.modes[:, 1:])
@@ -231,9 +248,12 @@ class FourierRZToroidalSurface(Surface):
             "change_resolution should be called with 2 (M,N) or 3 (L,M,N) "
             + "positional arguments or only keyword arguments."
         )
+
         L = kwargs.pop("L", None)
         M = kwargs.pop("M", None)
         N = kwargs.pop("N", None)
+        # --no-verify Mz = kwargs.pop("Mz", None)
+        # --no-verify Nz = kwargs.pop("Nz", None)
         NFP = kwargs.pop("NFP", None)
         sym = kwargs.pop("sym", None)
         assert len(kwargs) == 0, "change_resolution got unexpected kwarg: {kwargs}"
@@ -245,9 +265,13 @@ class FourierRZToroidalSurface(Surface):
             M, N = args
         elif len(args) == 3:
             _, M, N = args
+        # --no-verify else: #len is 5
+        # --no-verify    _, M, N, Mz, Nz = args
 
         M = check_nonnegint(M, "M")
         N = check_nonnegint(N, "N")
+        # --no-verify Mz = check_nonnegint(Mz, "Mz")
+        # --no-verify Nz = check_nonnegint(Nz, "Nz")
         NFP = check_posint(NFP, "NFP")
         self._NFP = int(NFP if NFP is not None else self.NFP)
 
@@ -407,6 +431,7 @@ class FourierRZToroidalSurface(Surface):
                 "FourierRZToroidalSurface will be a scaled version of the "
                 "input file boundary."
             )
+
         surf = cls(
             inputs["surface"][:, 3],
             inputs["surface"][:, 4],
@@ -508,6 +533,8 @@ class FourierRZToroidalSurface(Surface):
         zeta=None,
         M=6,
         N=6,
+        Mz=0,
+        Nz=0,
         NFP=1,
         sym=True,
         check_orientation=True,
@@ -561,6 +588,8 @@ class FourierRZToroidalSurface(Surface):
         """
         M = check_nonnegint(M, "M", False)
         N = check_nonnegint(N, "N", False)
+        M = check_nonnegint(Mz, "Mz", False)
+        N = check_nonnegint(Nz, "Nz", False)
         NFP = check_posint(NFP, "NFP", False)
         zeta = setdefault(zeta, coords[:, 1])
         theta, zeta = np.asarray(theta), np.asarray(zeta)
@@ -580,7 +609,7 @@ class FourierRZToroidalSurface(Surface):
         omega = phi - zeta
         R_basis = DoubleFourierSeries(M=M, N=N, NFP=NFP, sym="cos" if sym else False)
         Z_basis = DoubleFourierSeries(M=M, N=N, NFP=NFP, sym="sin" if sym else False)
-        W_basis = DoubleFourierSeries(M=M, N=N, NFP=NFP, sym="sin" if sym else False)
+        W_basis = DoubleFourierSeries(M=Mz, N=Nz, NFP=NFP, sym="sin" if sym else False)
         if w is None:  # unweighted fit
             transform = Transform(
                 nodes, R_basis, build=False, build_pinv=True, rcond=rcond

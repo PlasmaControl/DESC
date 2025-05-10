@@ -1648,10 +1648,10 @@ def _alpha_tz(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["theta_PEST_z", "phi_z", "iota"],
+    data=["theta_PEST_z", "zeta_z", "iota"],
 )
 def _alpha_z(params, transforms, profiles, data, **kwargs):
-    data["alpha_z"] = data["theta_PEST_z"] - data["iota"] * data["phi_z"]
+    data["alpha_z"] = data["theta_PEST_z"] - data["iota"] * data["zeta_z"]
     return data
 
 

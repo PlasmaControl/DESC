@@ -848,7 +848,8 @@ class ProximalProjection(ObjectiveFunction):
         Parameters
         ----------
         x : ndarray
-            New values of optimization variables.
+            New values of the state vector of equilibrium except R_lmn, Z_lmn,
+            L_lmn, Ra_n, Za_n  and all the parameters of the other things.
         store : bool
             Whether the new x should be stored in self.history
 
@@ -858,6 +859,11 @@ class ProximalProjection(ObjectiveFunction):
         solution when store was True
 
         """
+        # xopt is the full state vector of all the things
+        # xeq is the full state vector of the equilibrium only
+
+        # TODO: We don't need to check the whole state vector, just the
+        # equilibrium parameters should be enough.
         # first check if its something we've seen before, if it is just return
         # cached value, no need to perturb + resolve
         xopt = f_where_x(x, self._allx, self._allxopt)
@@ -865,11 +871,13 @@ class ProximalProjection(ObjectiveFunction):
         if xopt.size > 0 and xeq.size > 0:
             pass
         else:
+            # After unpack_state, R_lmn, Z_lmn, L_lmn, Ra_n and Za_n in below lists
+            # will be 0s
             x_list = self.unpack_state(x, False)
             x_list_old = self.unpack_state(self._x_old, False)
-            x_dict = x_list[self._eq_idx]
-            x_dict_old = x_list_old[self._eq_idx]
-            deltas = {str(key): x_dict[key] - x_dict_old[key] for key in x_dict}
+            xeq_dict = x_list[self._eq_idx]
+            xeq_dict_old = x_list_old[self._eq_idx]
+            deltas = {str(key): xeq_dict[key] - xeq_dict_old[key] for key in xeq_dict}
             # We pass in the LinearConstraintProjection object to skip some redundant
             # computations in the perturb and solve methods
             self._eq = self._eq.perturb(
@@ -1179,7 +1187,7 @@ class ProximalProjection(ObjectiveFunction):
         # Note: This function is vectorized over v. So, v is expected to be 1D array
         # of size self.dim_x.
 
-        # v contains "boundary" dofs from eq and other objects (like coils, surfaces
+        # v contains self._args DoFs from eq and other objects (like coils, surfaces
         # etc) want jvp_f to only get parts from equilibrium, not other things
         vs = jnp.split(v, np.cumsum(self._dimc_per_thing))
         # This is (dF/dx)^-1 * dF/dc  # noqa : E800
@@ -1196,9 +1204,8 @@ class ProximalProjection(ObjectiveFunction):
         dfdcs = [jnp.zeros(dim) for dim in self._dimc_per_thing]
         dfdcs[self._eq_idx] = dfdc
         # note that dfdc.size != vs[self._eq_idx].size
-        # so, the above line is not a simple assignment where you just change the value
-        # of the array, but we actually change the size of it too the size change will
-        # be handled by multiplication by the feasible_tangents later
+        # dfdc has the size of reduced state vector of the equilibrium
+        # but vs[self._eq_idx] has the size of self._args DoFs
         dfdc = jnp.concatenate(dfdcs)
 
         # We try to find dG/dc - dG/dx * (dF/dx)^-1 * dF/dc

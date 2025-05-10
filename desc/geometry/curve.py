@@ -850,13 +850,19 @@ class FourierPlanarCurve(Curve):
         s = np.arctan2(coords[:, 1], coords[:, 0])
         s = np.mod(s + 2 * np.pi, 2 * np.pi)  # mod angle to range [0, 2*pi)
         idx = np.argsort(s)  # sort angle to be monotonically increasing
-        # have to track if we end up re-sorting it, bc if we did, then
+        # have to track if we end up reversing s, bc if we did, then
         # we have effectively reversed the direction that the curve is being
-        # traversed (i.e. we reversed the sign of x_s)
-        was_sorted = np.allclose(s, s[idx])
-        # if it was sorted, negate the normal so that
+        # traversed (i.e. we reversed the sign of x_s), which we want to
+        # try to keep the same as original curve
+        # second logical is to avoid falsely flagging a non-reversing
+        # shift like [3, 0, 1, 2] -> [0,1,2,3]   (in which case np.diff(s)<0
+        # only at the jump from max(s)->0 but is monotonic increasing otherwise)
+        was_reversed = (
+            not np.allclose(s, s[idx]) and np.where(np.diff(s) < 0.0)[0].size > 1
+        )
+        # if it was reversed, negate the normal so that
         # the fitted curve is traversed in same direction as original
-        normal = -normal if was_sorted else normal
+        normal = -normal if was_reversed else normal
         r = r[idx]
         s = s[idx]
 

@@ -505,6 +505,7 @@ def get_combined_constraint_objectives(
     for t in things:
         if isinstance(t, Equilibrium) and is_prox:
             # don't add Equilibrium self-consistency if proximal is used
+            # see ProximalProjection._set_eq_state_vector
             continue
         linear_constraints = maybe_add_self_consistency(t, linear_constraints)
     linear_constraint = _combine_constraints(linear_constraints)

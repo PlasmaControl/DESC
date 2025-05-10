@@ -1257,7 +1257,7 @@ class TestObjectiveFunction:
         # test that torus (axisymmetric) Bnorm is exactly 0
         eq = load("./tests/inputs/vacuum_circular_tokamak.h5")
         obj = QuadraticFlux(eq, t_field)
-        obj.build(eq, verbose=2)
+        obj.build(verbose=2)
         f = obj.compute(t_field.params_dict)
         np.testing.assert_allclose(f, 0, rtol=1e-14, atol=1e-14)
 
@@ -1284,7 +1284,7 @@ class TestObjectiveFunction:
         Bnorm = t_field.compute_Bnormal(
             eq, eval_grid=eval_grid, source_grid=source_grid
         )[0]
-        obj.build(eq)
+        obj.build()
         dA = eq.compute("|e_theta x e_zeta|", grid=eval_grid)["|e_theta x e_zeta|"]
         f = obj.compute_unscaled(t_field.params_dict)
 
@@ -1302,7 +1302,7 @@ class TestObjectiveFunction:
         )
         obj = QuadraticFlux(eq, t_field, vacuum=True, eval_grid=eval_grid)
         Bnorm = t_field.compute_Bnormal(eq.surface, eval_grid=eval_grid)[0]
-        obj.build(eq)
+        obj.build()
         f = obj.compute(t_field.params_dict)
         dA = eq.compute("|e_theta x e_zeta|", grid=eval_grid)["|e_theta x e_zeta|"]
         # check that they're the same since we set B_plasma = 0
@@ -1317,7 +1317,7 @@ class TestObjectiveFunction:
         eq = load("./tests/inputs/vacuum_circular_tokamak.h5")
         surf = eq.surface
         obj = SurfaceQuadraticFlux(surf, t_field)
-        obj.build(eq, verbose=2)
+        obj.build(verbose=2)
         f = obj.compute(params_1=surf.params_dict, params_2=t_field.params_dict)
         np.testing.assert_allclose(f, 0, rtol=1e-14, atol=1e-14)
 
@@ -1981,8 +1981,8 @@ def test_derivative_modes():
     obj2.build()
     # check that default size works for blocked
     assert obj2.objectives[0]._jac_chunk_size == 2
-    assert obj2.objectives[1]._jac_chunk_size > 0
-    assert obj2.objectives[2]._jac_chunk_size > 0
+    assert obj2.objectives[1]._jac_chunk_size is None
+    assert obj2.objectives[2]._jac_chunk_size is None
     # hard to say what size auto will give, just check it is >0
     assert obj1._jac_chunk_size > 0
     obj3.build()

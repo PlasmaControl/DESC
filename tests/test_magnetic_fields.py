@@ -1084,6 +1084,9 @@ class TestMagneticFields:
             nR=field3._R.size,
             nZ=field3._Z.size,
             nphi=field3._phi.size,
+            # just to test the source_grid function, the
+            # field is independent of source_Grid
+            source_grid=LinearGrid(N=0),
         )
         # no need for extcur b/c is saved in "raw" format, no need to scale again
         field4 = SplineMagneticField.from_mgrid(path)

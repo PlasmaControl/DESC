@@ -296,7 +296,13 @@ class FourierRZCurve(Curve):
 
         grid = LinearGrid(zeta=phi, NFP=1, sym=sym)
         basis = FourierSeries(N=N, NFP=NFP, sym=sym)
-        transform = Transform(grid, basis, build_pinv=True)
+        with warnings.catch_warnings():
+            # grid and basis have uneven NFP because we want to allow the user to either
+            # pass in an entire curve (in which case phi : 0-> 2pi) which has some
+            # field-periodicity, or only a portion of the curve
+            # (in which case phi: 0->2pi/NFP) and still have this fit work.
+            warnings.filterwarnings("ignore", message="Unequal number of field periods")
+            transform = Transform(grid, basis, build_pinv=True)
         R_n = transform.fit(R)
         Z_n = transform.fit(Z)
         return FourierRZCurve(
@@ -311,7 +317,10 @@ class FourierRZCurve(Curve):
 
 
 def _unclose_curve(X, Y, Z):
-    if np.allclose([X[0], Y[0], Z[0]], [X[-1], Y[-1], Z[-1]], atol=1e-14):
+    if (
+        np.allclose([X[0], Y[0], Z[0]], [X[-1], Y[-1], Z[-1]], atol=1e-14)
+        and X.size != 1
+    ):
         closedX, closedY, closedZ = X.copy(), Y.copy(), Z.copy()
         X, Y, Z = X[:-1], Y[:-1], Z[:-1]
         flag = True

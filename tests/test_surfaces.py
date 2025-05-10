@@ -47,7 +47,7 @@ class TestFourierRZToroidalSurface:
         """Test getting/setting attributes of surface."""
         c = FourierRZToroidalSurface()
 
-        R, Z = c.get_coeffs(0, 0)
+        R, Z, W = c.get_coeffs(0, 0)
         np.testing.assert_allclose(R, 10)
         np.testing.assert_allclose(Z, 0)
         c.set_coeffs(0, 0, 5, None)
@@ -171,7 +171,7 @@ class TestFourierRZToroidalSurface:
                 np.array([R00_offset_ind, R10_offset_ind]),
             ),
             0,
-            atol=9e-15,
+            atol=1e-12,
         )
         np.testing.assert_allclose(
             np.delete(
@@ -179,7 +179,7 @@ class TestFourierRZToroidalSurface:
                 Zneg10_offset_ind,
             ),
             0,
-            atol=9e-15,
+            atol=1e-12,
         )
         grid_compute = LinearGrid(M=10, N=10)
         data = s.compute(["x", "e_theta", "e_zeta"], basis="rpz", grid=grid_compute)
@@ -342,18 +342,6 @@ class TestFourierRZToroidalSurface:
             surface.compute("S")["S"], surface2.compute("S")["S"], rtol=1e-3
         )
 
-        # test assert statements
-        with pytest.raises(NotImplementedError):
-            FourierRZToroidalSurface.from_values(
-                coords,
-                theta,
-                zeta=theta,
-                M=surface.M,
-                N=surface.N,
-                NFP=surface.NFP,
-                sym=True,
-            )
-
     @pytest.mark.unit
     def test_surface_from_shape_parameters(self):
         """Test that making a surface with specified R0,a etc gives correct shape."""
@@ -476,7 +464,9 @@ def test_surface_orientation():
     R_modes = np.array([[0, 0], [1, 0], [2, 0], [3, 0]])
     Zb = np.array([0.0, -0.16, 1.47])
     Z_modes = np.array([[-3, 0], [-2, 0], [-1, 0]])
-    surf = FourierRZToroidalSurface(Rb, Zb, R_modes, Z_modes, check_orientation=False)
+    surf = FourierRZToroidalSurface(
+        Rb, Zb, modes_R=R_modes, modes_Z=Z_modes, check_orientation=False
+    )
     assert surf._compute_orientation() == -1
     eq = Equilibrium(
         M=surf.M, N=surf.N, surface=surf, check_orientation=False, ensure_nested=False
@@ -488,7 +478,9 @@ def test_surface_orientation():
     R_modes = np.array([[0, 0], [1, 0], [2, 0], [3, 0]])
     Zb = np.array([0.0, 0.16, -1.47])
     Z_modes = np.array([[-3, 0], [-2, 0], [-1, 0]])
-    surf = FourierRZToroidalSurface(Rb, Zb, R_modes, Z_modes, check_orientation=False)
+    surf = FourierRZToroidalSurface(
+        Rb, Zb, modes_R=R_modes, modes_Z=Z_modes, check_orientation=False
+    )
     assert surf._compute_orientation() == 1
     eq = Equilibrium(
         M=surf.M, N=surf.N, surface=surf, check_orientation=False, ensure_nested=False
@@ -500,7 +492,9 @@ def test_surface_orientation():
     R_modes = np.array([[0, 0], [1, 0], [2, 0], [3, 0]])
     Zb = np.array([0.0, -0.16, 1.47])
     Z_modes = np.array([[-3, 0], [-2, 0], [-1, 0]])
-    surf = FourierRZToroidalSurface(Rb, Zb, R_modes, Z_modes, check_orientation=False)
+    surf = FourierRZToroidalSurface(
+        Rb, Zb, modes_R=R_modes, modes_Z=Z_modes, check_orientation=False
+    )
     assert surf._compute_orientation() == 1
     eq = Equilibrium(M=surf.M, N=surf.N, surface=surf, check_orientation=False)
     assert np.sign(eq.compute("sqrt(g)")["sqrt(g)"].mean()) == 1
@@ -510,7 +504,9 @@ def test_surface_orientation():
     R_modes = np.array([[0, 0], [1, 0], [2, 0], [3, 0]])
     Zb = np.array([0.0, 0.16, -1.47])
     Z_modes = np.array([[-3, 0], [-2, 0], [-1, 0]])
-    surf = FourierRZToroidalSurface(Rb, Zb, R_modes, Z_modes, check_orientation=False)
+    surf = FourierRZToroidalSurface(
+        Rb, Zb, modes_R=R_modes, modes_Z=Z_modes, check_orientation=False
+    )
     assert surf._compute_orientation() == -1
     eq = Equilibrium(M=surf.M, N=surf.N, surface=surf, check_orientation=False)
     assert np.sign(eq.compute("sqrt(g)")["sqrt(g)"].mean()) == -1

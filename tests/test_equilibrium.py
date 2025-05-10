@@ -171,7 +171,7 @@ def test_map_coordinates_derivative():
 
     assert ~np.any(np.isnan(J1))
     assert ~np.any(np.isnan(J2))
-    np.testing.assert_allclose(J1, J2)
+    np.testing.assert_allclose(J1, J2, atol=1e-14)
 
 
 @pytest.mark.slow

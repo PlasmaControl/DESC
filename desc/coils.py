@@ -2442,9 +2442,9 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
 
     def __add__(self, other):
         if isinstance(other, (CoilSet)):
-            return CoilSet(*self.coils, *other.coils)
+            return CoilSet(*self.coils, *other.coils, check_intersection=False)
         if isinstance(other, (list, tuple)):
-            return CoilSet(*self.coils, *other)
+            return CoilSet(*self.coils, *other, check_intersection=False)
         else:
             return NotImplemented
 
@@ -2918,9 +2918,9 @@ class MixedCoilSet(CoilSet):
 
     def __add__(self, other):
         if isinstance(other, (CoilSet, MixedCoilSet)):
-            return MixedCoilSet(*self.coils, *other.coils)
+            return MixedCoilSet(*self.coils, *other.coils, check_intersection=False)
         if isinstance(other, (list, tuple)):
-            return MixedCoilSet(*self.coils, *other)
+            return MixedCoilSet(*self.coils, *other, check_intersection=False)
         else:
             return NotImplemented
 

@@ -1766,7 +1766,7 @@ class AbstractFiniteBuildCoil(AbstractFramedCoil, Optimizable, ABC):
         num_rho = finite_build_grid.num_rho
         num_theta = finite_build_grid.num_theta
 
-        cross_section_dims_rescale = np.array(
+        cross_section_dims_rescale = jnp.array(
             [
                 cross_section_dims[0] * (num_rho - 1) / num_rho,
                 cross_section_dims[1] * (num_theta - 1) / num_theta,

@@ -1754,11 +1754,13 @@ class AbstractFiniteBuildCoil(AbstractFramedCoil, Optimizable, ABC):
         if params is None:
             current = self.current
             cross_section_dims = self.cross_section_dims
+            alpha_n = self.alpha_n
         else:
             current = params.pop("current", self.current)
             cross_section_dims = params.pop(
                 "cross_section_dims", self.cross_section_dims
             )
+            alpha_n = params.pop("alpha_n", self.alpha_n)
 
         # this is a somewhat hacky solution, but the points for the cross section must
         # lie on the centerline of the coil segments, NOT the edges, so the cross
@@ -1780,11 +1782,13 @@ class AbstractFiniteBuildCoil(AbstractFramedCoil, Optimizable, ABC):
             fb_params = params | {
                 "current": current,
                 "cross_section_dims": cross_section_dims_rescale,
+                "alpha_n": alpha_n,
             }
         else:
             fb_params = get_params(names, obj=self, basis="rpz") | {
                 "current": current,
                 "cross_section_dims": cross_section_dims_rescale,
+                "alpha_n": alpha_n,
             }
 
         transforms = get_transforms(

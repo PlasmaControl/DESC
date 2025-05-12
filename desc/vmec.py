@@ -681,6 +681,25 @@ class VMECIO:
         )
         vp[0] = 0
 
+        # over_r
+        over_r = file.createVariable("over_r", np.float64, ("radius",))
+        over_r.long_name = "average over each surface of sqrt(g)/R divided"
+        " by dV/ds and then multiplied by 4*pi^2, on half mesh"
+        over_r[:] = (
+            np.insert(
+                surface_averages(
+                    grid_half,
+                    data_half["sqrt(g)"] / data_half["R"] / data_half["V_r(r)"],
+                    sqrt_g=1,  # set to 1 here to do a simple average
+                    expand_out=False,
+                ),
+                [0],
+                [0.0],
+            )
+            * 4
+            * np.pi**2
+        )  # divide by 4pi^2 bc the V' is normalized
+
         # full mesh quantities
 
         presf = file.createVariable("presf", np.float64, ("radius",))
@@ -1458,9 +1477,6 @@ class VMECIO:
 
         niter = file.createVariable("niter", np.int32)
         niter[:] = 1
-
-        over_r = file.createVariable("over_r", np.float64, ("radius",))
-        over_r[:] = np.zeros((file.dimensions["radius"].size,))
 
         specw = file.createVariable("specw", np.float64, ("radius",))
         specw[:] = np.zeros((file.dimensions["radius"].size,))

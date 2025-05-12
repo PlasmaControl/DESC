@@ -932,6 +932,12 @@ def test_vmec_save_1(VMEC_save):
         vmec.variables["vp"][20:230], desc.variables["vp"][20:230], rtol=1e-6
     )
     np.testing.assert_allclose(
+        vmec.variables["over_r"][20:230], desc.variables["over_r"][20:230], rtol=1e-6
+    )
+    np.testing.assert_allclose(
+        vmec.variables["over_r"][0], desc.variables["over_r"][0], rtol=1e-6
+    )
+    np.testing.assert_allclose(
         vmec.variables["bdotb"][20:230], desc.variables["bdotb"][20:230], rtol=1e-6
     )
     np.testing.assert_allclose(
@@ -1130,6 +1136,12 @@ def test_vmec_save_1_LH_current(VMEC_save_LH_current):
     )
     np.testing.assert_allclose(
         vmec.variables["vp"][20:236], desc.variables["vp"][20:236], rtol=1e-6
+    )
+    np.testing.assert_allclose(
+        vmec.variables["over_r"][20:236], desc.variables["over_r"][20:236], rtol=1e-6
+    )
+    np.testing.assert_allclose(
+        vmec.variables["over_r"][0], desc.variables["over_r"][0], rtol=1e-6
     )
     np.testing.assert_allclose(
         vmec.variables["bdotb"][20:236], desc.variables["bdotb"][20:236], rtol=1e-6

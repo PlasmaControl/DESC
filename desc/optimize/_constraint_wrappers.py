@@ -620,9 +620,10 @@ class ProximalProjection(ObjectiveFunction):
         # coefficients. Once these are chosen, we will solve the equilibrium to
         # find the R_lmn, Z_lmn, L_lmn, Ra_n, Za_n. That is why we remove them
         # from the list of optimizable variables. This is accompanied by not including
-        # self-consistency constraints (see desc.optimize.optimizer.get_combined_constraint_objectives) and
-        # also removing columns corresponding to these variables from the constraint
-        # matrix A in desc.objectives.utils.factorize_linear_constraints.
+        # self-consistency constraints (see get_combined_constraint_objectives in
+        # desc.optimize.optimizer) and also removing columns corresponding to these
+        # variables from the constraint matrix A in
+        # desc.objectives.utils.factorize_linear_constraints.
         for arg in ["R_lmn", "Z_lmn", "L_lmn", "Ra_n", "Za_n"]:
             self._args.remove(arg)
 

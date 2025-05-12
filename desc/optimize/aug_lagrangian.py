@@ -346,7 +346,6 @@ def fmin_auglag(  # noqa: C901
 
     # TODO: place this function under JIT (#1669)
     # doing operation H = d * H * d[:, None]
-    # with just in-place operations
     H *= d[:, None]
     H *= d
 
@@ -595,7 +594,6 @@ def fmin_auglag(  # noqa: C901
             g_h = g * d
 
             # doing operation H = d * H * d[:, None]
-            # with just in-place operations
             H *= d[:, None]
             H *= d
 

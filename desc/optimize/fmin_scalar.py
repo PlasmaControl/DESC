@@ -244,7 +244,6 @@ def fmintr(  # noqa: C901
     # in memory, which can be large
     # TODO: place this function under JIT (#1669)
     # doing operation H = d * H * d[:, None]
-    # with just in-place operations
     H *= d[:, None]
     H *= d
     H_h = H
@@ -428,7 +427,6 @@ def fmintr(  # noqa: C901
             # it with H_h = d * H * d[:, None] to avoid carrying so many H-sized
             # matrices in memory, which can be large
             # doing operation H = d * H * d[:, None]
-            # with just in-place operations
             H *= d[:, None]
             H *= d
             H_h = H

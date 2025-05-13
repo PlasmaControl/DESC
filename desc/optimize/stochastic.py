@@ -125,7 +125,19 @@ def sgd(
 
     allx = [x]
 
-    while True:
+    while iteration < maxiter and success is None:
+
+        v = beta * v + (1 - beta) * g
+        x = x - alpha * v
+        g = grad(x, *args)
+        ngev += 1
+        step_norm = jnp.linalg.norm(alpha * v, ord=2)
+        g_norm = jnp.linalg.norm(g, ord=jnp.inf)
+        fnew = fun(x, *args)
+        nfev += 1
+        df = f - fnew
+        f = fnew
+
         success, message = check_termination(
             df_norm,
             f,
@@ -141,19 +153,6 @@ def sgd(
             nfev,
             jnp.inf,
         )
-        if success is not None:
-            break
-
-        v = beta * v + (1 - beta) * g
-        x = x - alpha * v
-        g = grad(x, *args)
-        ngev += 1
-        step_norm = jnp.linalg.norm(alpha * v, ord=2)
-        g_norm = jnp.linalg.norm(g, ord=jnp.inf)
-        fnew = fun(x, *args)
-        nfev += 1
-        df = f - fnew
-        f = fnew
 
         allx.append(x)
         if verbose > 1:

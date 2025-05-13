@@ -863,7 +863,7 @@ class ProximalProjection(ObjectiveFunction):
         # xopt is the full state vector of all the things
         # xeq is the full state vector of the equilibrium only
 
-        # TODO: We don't need to check the whole state vector, just the
+        # TODO (#1720): We don't need to check the whole state vector, just the
         # equilibrium parameters should be enough.
         # first check if its something we've seen before, if it is just return
         # cached value, no need to perturb + resolve

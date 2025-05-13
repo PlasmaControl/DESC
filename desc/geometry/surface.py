@@ -72,7 +72,6 @@ class FourierRZToroidalSurface(Surface):
         "_W_basis",
         "_NFP",
         "_rho",
-        "_Lz",
         "_Mz",
         "_Nz",
     ]
@@ -142,7 +141,6 @@ class FourierRZToroidalSurface(Surface):
             NW = np.max(abs(modes_W[:, 1]))
 
         self._L = 0
-        self._Lz = 0
 
         M = check_nonnegint(M, "M")
         N = check_nonnegint(N, "N")

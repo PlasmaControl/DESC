@@ -619,7 +619,7 @@ class ProximalProjection(ObjectiveFunction):
     def _set_eq_state_vector(self):
         full_args = self._eq.optimizable_params.copy()
         self._args = self._eq.optimizable_params.copy()
-        # the optimizable variables for proximal are the Rb, Zb and profile
+        # the eq optimizable variables for proximal are the Rb, Zb and profile
         # coefficients. Once these are chosen, we will solve the equilibrium to
         # find the R_lmn, Z_lmn, L_lmn, Ra_n, Za_n. That is why we remove them
         # from the list of optimizable variables. This is accompanied by not including
@@ -636,7 +636,6 @@ class ProximalProjection(ObjectiveFunction):
             self._eq_solve_objective._unfixed_idx,
         )
 
-        # dx/dc - goes from the full state to optimization variables for eq
         dxdc = []
         xz = {arg: np.zeros(self._eq.dimensions[arg]) for arg in full_args}
 
@@ -659,8 +658,8 @@ class ProximalProjection(ObjectiveFunction):
                 Ainv = np.linalg.pinv(A)
                 dxdZb = np.eye(self._eq.dim_x)[:, self._eq.x_idx["Z_lmn"]] @ Ainv
                 dxdc.append(dxdZb)
-        # dxdc is a matrix that when multiplied by the optimization variables only
-        # (Rb_lmn, Zb_lmn) gives the full state vector of the equilibrium (Rb_lmn and
+        # dxdc is a matrix that when multiplied by the optimization variables (only
+        # Rb_lmn, Zb_lmn) gives the full state vector of the equilibrium (Rb_lmn and
         # Zb_lmn part will be 0, but they will be represented by the equivalent
         # R_lmn and Z_lmn). For example, let's say the eq optimization variables are
         # ceq = [Rb_lmn, Zb_lmn, p_l, i_l].T                      # noqa : E800
@@ -864,8 +863,8 @@ class ProximalProjection(ObjectiveFunction):
         Parameters
         ----------
         x : ndarray
-            New values of the state vector of equilibrium except R_lmn, Z_lmn,
-            L_lmn, Ra_n, Za_n  and all the parameters of the other things.
+            New values of the state vector of equilibrium (except R_lmn, Z_lmn,
+            L_lmn, Ra_n, Za_n) and all the parameters of the other things.
         store : bool
             Whether the new x should be stored in self.history
 
@@ -1204,7 +1203,7 @@ class ProximalProjection(ObjectiveFunction):
         # of size self.dim_x.
 
         # v contains self._args DoFs from eq and other objects (like coils, surfaces
-        # etc) want jvp_f to only get parts from equilibrium, not other things
+        # etc), we want jvp_f to only get parts from equilibrium, not other things
         vs = jnp.split(v, np.cumsum(self._dimc_per_thing))
         # This is (dF/dx)^-1 * dF/dc  # noqa : E800
         dfdc = _proximal_jvp_f_pure(

@@ -140,6 +140,9 @@ def parse_axis(axis, NFP=1, sym=True, surface=None, xsection=None):
             axis = surface.get_axis()
         elif isinstance(xsection, ZernikeRZToroidalSection):
             axis = xsection.get_axis()
+            # ZernikeRZToroidalSection doesn't have NFP, so we need to
+            # set it manually
+            axis._NFP = NFP
     else:
         raise TypeError("Got unknown axis type {}".format(axis))
     return axis

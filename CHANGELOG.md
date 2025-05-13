@@ -3,10 +3,12 @@ Changelog
 
 New Features
 
+- Updates ``Equilibrium`` initial guess to use geometric center as the axis. This will allow non-convex cross-sections to be initialized without having to solve to achieve nested surfaces.
 - Adds new regularization options to ``desc.objectives.SurfaceCurrentRegularization``.
 - Adds a new utility function ``desc.compat.contract_equilibrium`` which takes in an ``Equilibrium`` object and an argument ``inner_rho``, and returns a new ``Equilibrium`` with original ``Equilibrium``'s ``inner_rho`` flux surface as its boundary.
 Optionally can also contract the profiles of the original ``Equilibrium`` so that the new ``Equilibrium``'s profiles match the original's in real space.
 - Adds second-order NAE constraints, accessible by passing ``order=2`` to ``desc.objectives.get_NAE_constraints``.
+- `result` dictionary returned by `Optimizer.optimize` or `eq.optimize` now includes sub-dictionary `"Objective values"` containing summary info of objective values before and after optimization, the same info that is printed to the terminal by default.
 - Adds error for incorrect grids in ``desc.objectives.BootstrapRedlConsistency`` and when computing ``current Redl`` and ``<J*B> Redl`` compute quantities
 - Allows Redl compute quantities to use SplineProfile
 - Updates Redl bootstrap current consistency tutorial to include a ``SplineProfile`` optimization
@@ -14,11 +16,11 @@ Optionally can also contract the profiles of the original ``Equilibrium`` so tha
 - Adds ``Rp_lmn``, ``Zp_lmn`` and ``Lp_lmn`` attributes to the ``Equilibrium`` class. If either `FixSectionR`, `FixSectionZ` or `FixSectionLambda` is added as constraint, they will become optimizable parameters. Since both fixing cross-section and the LCFS shape is not supported yet, once Poincare variables are added to the Equilibrium, boundary parameters `Rb_lmn` and `Zb_lmn` will not be optimizable anymore. With this change of optimizable parameters, if a user wants to solve LCFS and Poincare problems consecutively, they have to call `eq.xsection = eq.get_surface_at(zeta=0)` and `eq.surface = eq.get_surface_at(rho=1)` to update the variables after any type of optimization or solve.
 - Adds option to solve equilibrium problem using fixed Poincare cross-section boundary condition. Adds a new helper function to ``desc.objectives.getters`` called ``get_fixed_xsection_constraints`` which will automatically adds the required ``FixSectionR``, ``FixSectionZ``and optionally ``FixSectionLambda`` (if the argument ``fix_lambda=True`` default, it doesn't add it if set to ``fix_lambda=False``).
 - Adds ``L_lmn`` and ``L_basis`` attributes to the ``ZernikeRZToroidalSection`` class.
-
+- Adds ``source_grid`` argument to ``desc.magnetic_fields._MagneticField.save_mgrid function`` to allow user to control the discretization of the magnetic field object being used to construct the ``mgrid`` output.
 
 Bug Fixes
 
-- Fixes bug where ``ObjectiveFunction`` was incorrectly using ``deriv_mode="batched"`` and the heuristic-set ``jac_chunk_size`` when ``jac_chunk_size`` is given to a sub-objective, where it should have instead defaulted to ``deriv_mode="blocked"``. See #1687 
+- Fixes bug where ``ObjectiveFunction`` was incorrectly using ``deriv_mode="batched"`` and the heuristic-set ``jac_chunk_size`` when ``jac_chunk_size`` is given to a sub-objective, where it should have instead defaulted to ``deriv_mode="blocked"``. See #1687
 - Allows ``x_scale`` to be passed to ``factorize_linear_constraints`` in ``Optimizer.optimize`` through the new ``"linear_constraint_options"``.
 
 
@@ -31,6 +33,7 @@ Bug Fixes
 - Fixes error that occurs when using the default grid for ``SplineXYZCoil`` in an optimization.
 - Fixes bug in ``desc.coils.CoilSet.save_in_makegrid_format`` for ``CoilSet`` objects with ``sym=True`` or ``NFP>1``
 - Adds missing `&END` to the input file created from `desc.vmec.VMECIO.write_vmec_input`
+
 
 v0.14.0
 -------

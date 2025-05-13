@@ -128,17 +128,10 @@ def test_LambdaGauge_asym():
     omega_con = FixOmegaGauge(eq)
     omega_con.build()
 
-    import scipy
-
-    from desc.grid import LinearGrid
-
-    # make sure that any omega in the null space gives omega==0 at theta=zeta=0
-    Z = scipy.linalg.null_space(lam_con._A)
-    grid = LinearGrid(L=10, theta=[0], zeta=[0])
-    for z in Z.T:
-        eq.W_lmn = z
-        omega = eq.compute("omega", grid=grid)["omega"]
-        np.testing.assert_allclose(omega, 0, atol=1e-15)
+    indices = np.where(
+        np.logical_and(eq.W_basis.modes[:, 1] == 0, eq.W_basis.modes[:, 2] == 0)
+    )[0]
+    np.testing.assert_allclose(indices, omega_con._params["W_lmn"])
 
 
 @pytest.mark.regression

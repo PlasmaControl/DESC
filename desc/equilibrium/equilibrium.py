@@ -812,6 +812,7 @@ class Equilibrium(IOAble, Optimizable):
 
             AR = np.zeros((surface.R_basis.num_modes, self.R_basis.num_modes))
             AZ = np.zeros((surface.Z_basis.num_modes, self.Z_basis.num_modes))
+            AW = np.zeros((surface.W_basis.num_modes, self.W_basis.num_modes))
 
             for i, (l, m, n) in enumerate(self.R_basis.modes):
                 j = np.argwhere(
@@ -830,10 +831,23 @@ class Equilibrium(IOAble, Optimizable):
                     )
                 )
                 AZ[j, i] = fourier(zeta, n, self.NFP)
+
+            for i, (l, m, n) in enumerate(self.W_basis.modes):
+                j = np.argwhere(
+                    np.logical_and(
+                        surface.W_basis.modes[:, 0] == l,
+                        surface.W_basis.modes[:, 1] == m,
+                    )
+                )
+                AW[j, i] = fourier(zeta, n, self.NFP)
+
             Rb = AR @ self.R_lmn
             Zb = AZ @ self.Z_lmn
             surface.R_lmn = Rb
             surface.Z_lmn = Zb
+
+            Wb = AW @ self.W_lmn
+            surface.W_lmn = Wb
             return surface
 
     def get_profile(self, name, grid=None, kind="spline", **kwargs):

@@ -1157,6 +1157,13 @@ class ZernikeRZToroidalSection(Surface):
             sym="sin" if sym else False,
         )
 
+        self._W_basis = ZernikePolynomial(
+            L=self._Lz,
+            M=self._Mz,
+            spectral_indexing=spectral_indexing,
+            sym="sin" if sym else False,
+        )
+
         self._R_lmn = copy_coeffs(R_lmn, modes_R, self.R_basis.modes[:, :2])
         self._Z_lmn = copy_coeffs(Z_lmn, modes_Z, self.Z_basis.modes[:, :2])
         self._sym = bool(sym)

@@ -149,6 +149,9 @@ class LinearConstraintProjection(ObjectiveFunction):
         # in this case, feasible_tangents = [ [1 , 0], [1, 0], [0,1]]
         # and is a shape 3x2 matrix equivalent to dx/dy
         # s.t. df/dy = df/dx @ dx/dy
+
+        # TODO (1721):: Z is already scaled by D, so we don't need to scale it again.
+        # Update the weights of the coil tests
         self._feasible_tangents = jnp.diag(self._D)[:, self._unfixed_idx] @ self._Z
 
         self._built = True
@@ -740,6 +743,8 @@ class ProximalProjection(ObjectiveFunction):
         self._feasible_tangents = jnp.split(
             self._feasible_tangents, np.cumsum(self._dimx_per_thing), axis=-1
         )
+        # TODO (1721): eq_Z is already scaled by eq_D, so we don't need to scale
+        # it again. Update the weights of the coil tests
         self._feasible_tangents[self._eq_idx] = self._feasible_tangents[self._eq_idx][
             :, self._eq_unfixed_idx
         ] @ (self._eq_Z * self._eq_D[self._eq_unfixed_idx, None])

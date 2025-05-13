@@ -243,13 +243,13 @@ class VMECIO:
         their sign in DESC.
 
         NOTE: We do not claim to match every VMEC version, nor do we claim every
-        quantity us the same in the wout. Please see the source to see exactly how
+        quantity is the same in the wout. Please see the source to see exactly how
         DESC is computing each output quantity. The `match_VMEC_wout` flag changes
-        some of these computations to better match VMEC (which we believe erroneously
-        computes some quantities). This was done comparing against VMEC version 9.0
+        some of these computations to better match VMEC (which computes some quantities
+        with different assumption). This was done comparing against VMEC version 9.0
         installed on the `portal` PPPL cluster as of March 2025.
         If any of these quantities are in error or conflict, please submit an issue
-        detailing exactly what and why you believe things are different.
+        detailing the quantity and what is different.
 
         Parameters
         ----------
@@ -272,15 +272,14 @@ class VMECIO:
             * 1: status of quantities computed
             * 2: as above plus timing information
         match_VMEC_wout : bool
-            Whether or not to perform calculations to match what VMEC does.
-            There are some quirk to how VMEC computes certain quantities, which
-            are not obvious/consistent/do not match what the descriptions are
+            Whether or not to change some calculations to match what VMEC does.
+            There are some differences to how VMEC computes certain quantities, which
+            are not obvious/consistent with what the descriptions are
             for the quantities. By default this is False, and DESC will compute
             things faithful to what the quantity descriptions are. If True, some
             calculations will be modified in order to match how the DESC developers
-            think that VMEC computes them.
+            understand that VMEC computes them.
             The affected quantities are `jdotb` and `jcurv`.
-
 
         Returns
         -------
@@ -799,10 +798,6 @@ class VMECIO:
             JB = grid_full.compress(data_full["<J*B>"])
 
             jdotb[:] = JB
-            jdotb[0] = (
-                0  # NOTE: This does not actually match VMEC wouts,
-                # they have it instead extrapolated to axis
-            )
 
         jcuru = file.createVariable("jcuru", np.float64, ("radius",))
         jcuru.long_name = "flux surface average of sqrt(g)*J^theta, on full mesh"

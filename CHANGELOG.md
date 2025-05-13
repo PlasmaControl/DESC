@@ -13,9 +13,9 @@ Optionally can also contract the profiles of the original ``Equilibrium`` so tha
 - Updates Redl bootstrap current consistency tutorial to include a ``SplineProfile`` optimization
 - Adds automatically generated header file showing date the input file was created with `desc.vmec.VMECIO.write_vmec_input`
 - Adds ``source_grid`` argument to ``desc.magnetic_fields._MagneticField.save_mgrid function`` to allow user to control the discretization of the magnetic field object being used to construct the ``mgrid`` output.
-- - No longer negates the current profile in ``desc.compat.ensure_nested_jacobian`` when flipping from a left-handed to a right-handed coordinate system
-  -Does, however, negate current in ``desc.vmec.VMECIO.load`` if the boundary is left-handed, since we get it from the ``buco`` ``wout`` variable, and the sign of that quantity is opposite the toroidal current profile's sign if the boundary is left-handed.
-- Changes the formula for the ``jdotb`` variable to better match VMEC outputted ``jdotb`` when using ``desc.vmec.VMECIO.save``
+  - No longer negates the current profile in ``desc.compat.ensure_nested_jacobian`` when flipping from a left-handed to a right-handed coordinate system
+  - Does, however, negate current in ``desc.vmec.VMECIO.load`` if the boundary is left-handed, since we get it from the ``buco`` ``wout`` variable, and the sign of that quantity is opposite the toroidal current profile's sign if the boundary is left-handed.
+- Adds``match_VMEC_wout`` flag to ``desc.vmec.VMECIO.save``, which changes the formula for the ``jdotb`` and ``jcurv`` variables to better match VMEC when using
 
 Bug Fixes
 

@@ -288,14 +288,11 @@ class Equilibrium(IOAble, Optimizable):
         self._Lz = int(
             setdefault(
                 Lz,
-                max(
-                    self.surface._Lz,
-                    self.Mz if (self.spectral_indexing == "ansi") else 2 * self.Mz,
-                ),
+                self.Mz if (self.spectral_indexing == "ansi") else 2 * self.Mz,
             )
         )
 
-        # NFP, sym, Lz, Mz, Nz passed as kwargs, order is sacrosanct
+        # RG: NFP, sym, Lz, Mz, Nz passed as kwargs, order is sacrosanct
         self._surface.change_resolution(
             self.L,
             self.M,

@@ -155,19 +155,32 @@ class FourierRZToroidalSurface(Surface):
 
         self._NFP = NFP
 
+        # Adding another conditional for the case where modes_Z is empty
         if sym == "auto":
-            if (
-                np.all(R_lmn[np.where(sign(modes_R[:, 0]) != sign(modes_R[:, 1]))] == 0)
-                and np.all(
+            if modes_W.size == 0:
+                if np.all(
+                    R_lmn[np.where(sign(modes_R[:, 0]) != sign(modes_R[:, 1]))] == 0
+                ) and np.all(
                     Z_lmn[np.where(sign(modes_Z[:, 0]) == sign(modes_Z[:, 1]))] == 0
-                )
-                and np.all(
-                    W_lmn[np.where(sign(modes_W[:, 0]) == sign(modes_W[:, 1]))] == 0
-                )
-            ):
-                sym = True
+                ):
+                    sym = True
+                else:
+                    sym = False
             else:
-                sym = False
+                if (
+                    np.all(
+                        R_lmn[np.where(sign(modes_R[:, 0]) != sign(modes_R[:, 1]))] == 0
+                    )
+                    and np.all(
+                        Z_lmn[np.where(sign(modes_Z[:, 0]) == sign(modes_Z[:, 1]))] == 0
+                    )
+                    and np.all(
+                        W_lmn[np.where(sign(modes_W[:, 0]) == sign(modes_W[:, 1]))] == 0
+                    )
+                ):
+                    sym = True
+                else:
+                    sym = False
 
         self._R_basis = DoubleFourierSeries(
             M=self._M, N=self._N, NFP=NFP, sym="cos" if sym else False

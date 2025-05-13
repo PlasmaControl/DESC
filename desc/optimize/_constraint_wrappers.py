@@ -656,7 +656,7 @@ class ProximalProjection(ObjectiveFunction):
                 Ainv = np.linalg.pinv(A)
                 dxdZb = np.eye(self._eq.dim_x)[:, self._eq.x_idx["Z_lmn"]] @ Ainv
                 dxdc.append(dxdZb)
-        # dxdc is a matrix when multiplied by the optimization variables
+        # dxdc is a matrix that when multiplied by the optimization variables
         # gives the full state vector (Rb_lmn and Zb_lmn part will be 0, but they will
         # be represented by the equivalent R_lmn and Z_lmn)
         self._dxdc = jnp.hstack(dxdc)

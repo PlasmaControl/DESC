@@ -14,7 +14,6 @@ from termcolor import colored
 from desc.backend import execute_on_cpu, jnp, tree_leaves, tree_map, tree_structure
 from desc.basis import (  # RG: There may be a simpler way to write FixOmegaGauge
     zernike_radial,
-    zernike_radial_coeffs,
 )
 from desc.geometry import FourierRZCurve
 from desc.utils import broadcast_tree, errorif, setdefault
@@ -1151,7 +1150,7 @@ class FixLambdaGauge(FixParameters):
         )
 
 
-class FixOmegaGauge(_Objective):
+class FixOmegaGauge(FixParameters):
     """Fixes gauge freedom for omega: omega(theta=0,zeta=0)=0.
 
     Note: this constraint is automatically applied when needed, and does not need to be
@@ -1166,86 +1165,32 @@ class FixOmegaGauge(_Objective):
 
     """
 
-    _scalar = False
-    _linear = True
-    _fixed = False
     _units = "(rad)"
     _print_value_fmt = "omega gauge error: "
 
     def __init__(
         self,
         eq,
+        normalize=True,
+        normalize_target=True,
         name="omega gauge",
     ):
+
+        if eq.sym:
+            indices = False
+        else:
+            indices = np.where(
+                np.logical_and(eq.W_basis.modes[:, 1] == 0, eq.W_basis.modes[:, 2] == 0)
+            )[0]
+
         super().__init__(
-            things=eq,
+            thing=eq,
+            params={"W_lmn": indices},
             target=0,
-            bounds=None,
-            weight=1,
-            normalize=False,
-            normalize_target=False,
+            normalize=normalize,
+            normalize_target=normalize_target,
             name=name,
         )
-
-    def build(self, use_jit=False, verbose=1):
-        """Build constant arrays.
-
-        Parameters
-        ----------
-        use_jit : bool, optional
-            Whether to just-in-time compile the objective and derivatives.
-        verbose : int, optional
-            Level of output.
-
-        """
-        eq = self.things[0]
-        W_basis = eq.W_basis
-
-        if W_basis.sym:
-            self._A = np.zeros((0, W_basis.num_modes))
-        else:
-            # w(rho,0,0) = 0
-            # at theta=zeta=0, basis for omega reduces to just a polynomial in rho
-            # what this constraint does is make all the coefficients of each power
-            # of rho equal to zero
-            # i.e. if omega = (W_200 + 2*W_310) rho**2 + (W_100 + 2*W_210)*rho
-            # this constraint will make
-            # W_200 + 2*W_310 = 0
-            # W_100 + 2*W_210 = 0
-            W_modes = W_basis.modes
-            mnpos = np.where((W_modes[:, 1:] >= [0, 0]).all(axis=1))[0]
-            w_lmn = W_modes[mnpos, :]
-            if len(w_lmn) > 0:
-                c = zernike_radial_coeffs(w_lmn[:, 0], w_lmn[:, 1])
-            else:
-                c = np.zeros((0, 0))
-
-            A = np.zeros((c.shape[1], W_basis.num_modes))
-            A[:, mnpos] = c.T
-            self._A = A
-
-        self._dim_f = self._A.shape[0]
-
-        super().build(use_jit=use_jit, verbose=verbose)
-
-    def compute(self, params, constants=None):
-        """Compute omega gauge freedom errors.
-
-        Parameters
-        ----------
-        params : dict
-            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
-        constants : dict
-            Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
-
-        Returns
-        -------
-        f : ndarray
-            gauge freedom errors.
-
-        """
-        return jnp.dot(self._A, params["W_lmn"])
 
 
 class FixThetaSFL(FixParameters):

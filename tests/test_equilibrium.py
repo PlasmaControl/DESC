@@ -196,9 +196,7 @@ def test_continuation_resolution(tmpdir_factory):
     input_path = ".//tests//inputs//res_test"
     output_dir = tmpdir_factory.mktemp("result")
 
-    # TODO: RG: resave the file with Lz, Mz, Nz to get rid of the warning
-    with pytest.warns((UserWarning, RuntimeWarning)):
-        desc_h5_path = output_dir.join("res_test_out.h5")
+    desc_h5_path = output_dir.join("res_test_out.h5")
 
     cwd = os.path.dirname(__file__)
     exec_dir = os.path.join(cwd, "..")

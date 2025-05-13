@@ -788,14 +788,19 @@ class Equilibrium(IOAble, Optimizable):
                     )
                 )
                 Js.append(j.flatten())
+
             Js = np.array(Js)
-            # Broadcasting at once is faster. We need to use np.arange to avoid
-            # setting the value to the whole row.
-            AW[Js[:, 0], np.arange(self.W_basis.num_modes)] = zernikeW
+            if Js.size == 0:  # RG: If Js empty, Wb should be empty too
+                Wb = np.array([])
+            else:
+                # Broadcasting at once is faster. We need to use np.arange to avoid
+                # setting the value to the whole row.
+                AW[Js[:, 0], np.arange(self.W_basis.num_modes)] = zernikeW
+                Wb = AW @ self.W_lmn
 
             Rb = AR @ self.R_lmn
             Zb = AZ @ self.Z_lmn
-            Wb = AW @ self.W_lmn
+
             surface.R_lmn = Rb
             surface.Z_lmn = Zb
             surface.W_lmn = Wb
@@ -1589,7 +1594,7 @@ class Equilibrium(IOAble, Optimizable):
             self.sym == new.sym
         ), "Surface and Equilibrium must have the same symmetry"
         assert self.NFP == new.NFP, "Surface and Equilibrium must have the same NFP"
-        new.change_resolution(self.L, self.M, self.N, self.Lz, self.Mz, self.Nz)  # RG
+        new.change_resolution(self.L, self.M, self.N, Mz=self.Mz, Nz=self.Nz)  # RG
         self._surface = new
 
     @property
@@ -1604,7 +1609,7 @@ class Equilibrium(IOAble, Optimizable):
         ), f"axis should be of type FourierRZCurve or a subclass, got {new}"
         assert self.sym == new.sym, "Axis and Equilibrium must have the same symmetry"
         assert self.NFP == new.NFP, "Axis and Equilibrium must have the same NFP"
-        new.change_resolution(self.N, self.Nz)  # RG: Adding Nz here
+        new.change_resolution(self.N, Nz=self.Nz)  # RG: Adding Nz here
         self._axis = new
 
     @property

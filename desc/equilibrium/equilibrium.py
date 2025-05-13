@@ -297,12 +297,14 @@ class Equilibrium(IOAble, Optimizable):
             self.L,
             self.M,
             self.N,
-            NFP=self.NFP,
+            NFP=self._surface.NFP,
             sym=self.sym,
             Mz=self.Mz,
             Nz=self.Nz,
         )
-        self._axis.change_resolution(self.N, NFP=self.NFP, sym=self.sym, Nz=self.Nz)
+
+        # RG: If you must specify NFP here, specify the NFP of the axis
+        self._axis.change_resolution(self.N, sym=self.sym, Nz=self.Nz)
 
         # bases
         self._R_basis = FourierZernikeBasis(

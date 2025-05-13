@@ -659,9 +659,19 @@ class ProximalProjection(ObjectiveFunction):
                 Ainv = np.linalg.pinv(A)
                 dxdZb = np.eye(self._eq.dim_x)[:, self._eq.x_idx["Z_lmn"]] @ Ainv
                 dxdc.append(dxdZb)
-        # dxdc is a matrix that when multiplied by the optimization variables
-        # gives the full state vector (Rb_lmn and Zb_lmn part will be 0, but they will
-        # be represented by the equivalent R_lmn and Z_lmn)
+        # dxdc is a matrix that when multiplied by the optimization variables only
+        # (Rb_lmn, Zb_lmn) gives the full state vector of the equilibrium (Rb_lmn and
+        # Zb_lmn part will be 0, but they will be represented by the equivalent
+        # R_lmn and Z_lmn). For example, let's say the eq optimization variables are
+        # ceq = [Rb_lmn, Zb_lmn, p_l, i_l].T                      # noqa : E800
+        # Then, we will use dxdc for the following:
+        # xeq = dxdc @ ceq                                        # noqa : E800
+        # And xeq will be,
+        # xeq = [                                                 # noqa : E800
+        #     R_lmn, Z_lmn, jnp.zeros_like(L_lmn)                 # noqa : E800
+        #     jnp.zeros_like(Rb_lmn), jnp.zeros_like(Zb_lmn),     # noqa : E800
+        #     p_l, i_l,                                           # noqa : E800
+        # ]                                                       # noqa : E800
         self._dxdc = jnp.hstack(dxdc)
 
     def build(self, use_jit=None, verbose=1):  # noqa: C901

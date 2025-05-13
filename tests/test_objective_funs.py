@@ -1304,9 +1304,11 @@ class TestObjectiveFunction:
         coil_grid = LinearGrid(N=8)
 
         # planar toroidal coils without symmetry, around fixed circular tokamak
+        # shifted over slightly to get an intersting max distance
         R0 = 3
         a = 1
         offset = 0.5
+        shift = 0.3
         surf = FourierRZToroidalSurface(
             R_lmn=np.array([R0, a]),
             Z_lmn=np.array([0, -a]),
@@ -1314,12 +1316,14 @@ class TestObjectiveFunction:
             modes_Z=np.array([[0, 0], [-1, 0]]),
         )
         eq = Equilibrium(surface=surf, NFP=1, M=2, N=0, sym=True)
-        coil = FourierPlanarCoil(center=[R0, 0, 0], normal=[0, 1, 0], r_n=[a + offset])
+        coil = FourierPlanarCoil(
+            center=[R0 + shift, 0, 0], normal=[0, 1, 0], r_n=[a + offset]
+        )
         coils = CoilSet.linspaced_angular(coil, n=8, check_intersection=False)
         test(
             eq,
             coils,
-            offset,
+            offset + shift,
             plasma_grid=plasma_grid,
             coil_grid=coil_grid,
             eq_fixed=True,
@@ -1327,7 +1331,7 @@ class TestObjectiveFunction:
         test(
             eq.surface,
             coils,
-            offset,
+            offset + shift,
             plasma_grid=plasma_grid,
             coil_grid=coil_grid,
             eq_fixed=True,
@@ -1337,6 +1341,7 @@ class TestObjectiveFunction:
         R0 = 5
         a = 1.5
         offset = 0.75
+        shift = 0.5
         surf = FourierRZToroidalSurface(
             R_lmn=np.array([R0, a]),
             Z_lmn=np.array([0, -a]),
@@ -1344,7 +1349,9 @@ class TestObjectiveFunction:
             modes_Z=np.array([[0, 0], [-1, 0]]),
         )
         eq = Equilibrium(surface=surf, NFP=1, M=2, N=0, sym=True)
-        coil = FourierPlanarCoil(center=[R0, 0, 0], normal=[0, 1, 0], r_n=[a + offset])
+        coil = FourierPlanarCoil(
+            center=[R0 + shift, 0, 0], normal=[0, 1, 0], r_n=[a + offset]
+        )
         coils = CoilSet.linspaced_angular(
             coil, angle=np.pi / 2, n=5, endpoint=True, check_intersection=False
         )
@@ -1352,7 +1359,7 @@ class TestObjectiveFunction:
         test(
             eq,
             coils,
-            offset,
+            offset + shift,
             plasma_grid=plasma_grid,
             coil_grid=coil_grid,
             eq_fixed=False,
@@ -1360,7 +1367,7 @@ class TestObjectiveFunction:
         test(
             eq.surface,
             coils,
-            offset,
+            offset + shift,
             plasma_grid=plasma_grid,
             coil_grid=coil_grid,
             eq_fixed=False,
@@ -1370,6 +1377,7 @@ class TestObjectiveFunction:
         R0 = 5
         a = 1.5
         offset = 0.75
+        shift = 0.5
         surf = FourierRZToroidalSurface(
             R_lmn=np.array([R0, a]),
             Z_lmn=np.array([0, -a]),
@@ -1377,7 +1385,9 @@ class TestObjectiveFunction:
             modes_Z=np.array([[0, 0], [-1, 0]]),
         )
         eq = Equilibrium(surface=surf, NFP=1, M=2, N=0, sym=True)
-        coil = FourierPlanarCoil(center=[R0, 0, 0], normal=[0, 1, 0], r_n=[a + offset])
+        coil = FourierPlanarCoil(
+            center=[R0 + shift, 0, 0], normal=[0, 1, 0], r_n=[a + offset]
+        )
         coils = CoilSet.linspaced_angular(
             coil, angle=np.pi / 2, n=5, endpoint=True, check_intersection=False
         )
@@ -1385,7 +1395,7 @@ class TestObjectiveFunction:
         test(
             eq,
             coils,
-            offset,
+            offset + shift,
             plasma_grid=plasma_grid,
             coil_grid=coil_grid,
             eq_fixed=False,
@@ -3081,6 +3091,7 @@ class TestComputeScalarResolution:
         LinkingCurrentConsistency,
         Omnigenity,
         PlasmaCoilSetMinDistance,
+        PlasmaCoilSetMaxDistance,
         PlasmaVesselDistance,
         QuadraticFlux,
         SurfaceQuadraticFlux,
@@ -3569,6 +3580,7 @@ class TestObjectiveNaNGrad:
         LinkingCurrentConsistency,
         Omnigenity,
         PlasmaCoilSetMinDistance,
+        PlasmaCoilSetMaxDistance,
         PlasmaVesselDistance,
         QuadraticFlux,
         SurfaceCurrentRegularization,

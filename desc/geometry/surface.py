@@ -1039,10 +1039,15 @@ class ZernikeRZToroidalSection(Surface):
     _io_attrs_ = Surface._io_attrs_ + [
         "_R_lmn",
         "_Z_lmn",
+        "_W_lmn",
         "_R_basis",
         "_Z_basis",
+        "_W_basis",
         "_spectral_indexing",
         "_zeta",
+        "_Lz",
+        "_Mz",
+        "_Nz",
     ]
 
     _static_attrs = ["_R_basis", "_Z_basis"]
@@ -1052,12 +1057,17 @@ class ZernikeRZToroidalSection(Surface):
         self,
         R_lmn=None,
         Z_lmn=None,
+        W_lmn=None,
         modes_R=None,
         modes_Z=None,
+        modes_W=None,
         spectral_indexing="ansi",
         sym="auto",
         L=None,
         M=None,
+        Lz=None,
+        Mz=None,
+        Nz=None,
         zeta=0.0,
         name="",
         check_orientation=True,
@@ -1070,8 +1080,14 @@ class ZernikeRZToroidalSection(Surface):
             modes_Z = np.array([[0, 0], [1, -1]])
         if modes_Z is None:
             modes_Z = modes_R
-        R_lmn, Z_lmn, modes_R, modes_Z = map(
-            np.asarray, (R_lmn, Z_lmn, modes_R, modes_Z)
+
+        if W_lmn is None:
+            W_lmn = np.array([])
+        if modes_W is None:
+            modes_W = np.array([])
+
+        R_lmn, Z_lmn, W_lmn, modes_R, modes_Z, modes_W = map(
+            np.asarray, (R_lmn, Z_lmn, W_lmn, modes_R, modes_Z, modes_W)
         )
 
         assert (
@@ -1080,9 +1096,14 @@ class ZernikeRZToroidalSection(Surface):
         assert (
             Z_lmn.size == modes_Z.shape[0]
         ), "Z_lmn size and modes_Z.shape[0] must be the same size!"
+        assert (
+            W_lmn.size == modes_W.shape[0]
+        ), "W_lmn size and modes_W.shape[0] must be the same size!"
 
         assert issubclass(modes_R.dtype.type, np.integer)
         assert issubclass(modes_Z.dtype.type, np.integer)
+        # RG: Empty array can't be an integer. Replace this check?
+        # --no-verify assert issubclass(modes_W.dtype.type, np.integer)
 
         LR = np.max(abs(modes_R[:, 0]))
         MR = np.max(abs(modes_R[:, 1]))
@@ -1090,9 +1111,28 @@ class ZernikeRZToroidalSection(Surface):
         MZ = np.max(abs(modes_Z[:, 1]))
         L = check_nonnegint(L, "L")
         M = check_nonnegint(M, "M")
+
         self._L = setdefault(L, max(LR, LZ))
         self._M = setdefault(M, max(MR, MZ))
         self._N = 0
+
+        if len(np.shape(modes_W)) == 1:  # modes_W is empty
+            LW = 0
+            NW = 0
+            MW = 0
+        else:
+            print("Specifying Omega doesn't make sense in ZernikeRZToroidalSection!")
+
+        # RG: Bending over backwards so we don't have to add conditionals
+        # in equilibrium.py. Currently FourierRZToroidalSurface is treated the
+        # same way as ZernikeToroidalSection
+        Lz = check_nonnegint(Lz, "Lz")
+        Mz = check_nonnegint(Mz, "Nz")
+        Nz = check_nonnegint(Nz, "Nz")
+
+        self._Lz = setdefault(Lz, LW)
+        self._Mz = setdefault(Mz, MW)
+        self._Nz = setdefault(Nz, NW)
 
         if sym == "auto":
             if np.all(
@@ -1151,6 +1191,11 @@ class ZernikeRZToroidalSection(Surface):
         return self._Z_basis
 
     @property
+    def W_basis(self):
+        """DoubleFourierSeries: Spectral basis for omega."""
+        return self._W_basis
+
+    @property
     def zeta(self):
         """float: Toroidal angle."""
         return self._zeta
@@ -1164,7 +1209,7 @@ class ZernikeRZToroidalSection(Surface):
         """Change the maximum radial and poloidal resolution."""
         assert (
             ((len(args) in [2, 3]) and len(kwargs) == 0)
-            or ((len(args) in [2, 3]) and len(kwargs) in [1, 2])
+            or ((len(args) in [2, 3]) and len(kwargs) in [1, 2, 4, 5])
             or (len(args) == 0)
         ), (
             "change_resolution should be called with 2 (M,N) or 3 (L,M,N) "
@@ -1173,7 +1218,11 @@ class ZernikeRZToroidalSection(Surface):
         L = kwargs.pop("L", None)
         M = kwargs.pop("M", None)
         N = kwargs.pop("N", None)
+        NFP = kwargs.pop("NFP", None)
         sym = kwargs.pop("sym", None)
+        Mz = kwargs.pop("Mz", None)
+        Nz = kwargs.pop("Nz", None)
+
         assert len(kwargs) == 0, "change_resolution got unexpected kwarg: {kwargs}"
         if N is not None:
             warnings.warn(
@@ -1205,8 +1254,12 @@ class ZernikeRZToroidalSection(Surface):
             )
             self.R_lmn = copy_coeffs(self.R_lmn, R_modes_old, self.R_basis.modes)
             self.Z_lmn = copy_coeffs(self.Z_lmn, Z_modes_old, self.Z_basis.modes)
+            self.W_lmn = np.array([])
+            self._NFP = NFP
             self._L = L
             self._M = M
+            self._Mz = Mz
+            self._Nz = Nz
 
     @optimizable_parameter
     @property
@@ -1234,6 +1287,22 @@ class ZernikeRZToroidalSection(Surface):
     def Z_lmn(self, new):
         if len(new) == self.Z_basis.num_modes:
             self._Z_lmn = jnp.asarray(new)
+        else:
+            raise ValueError(
+                f"Z_lmn should have the same size as the basis, got {len(new)} for "
+                + f"basis with {self.R_basis.num_modes} modes."
+            )
+
+    @optimizable_parameter
+    @property
+    def W_lmn(self):
+        """ndarray: Spectral coefficients for W."""
+        return self._W_lmn
+
+    @W_lmn.setter
+    def W_lmn(self, new):
+        if len(new) == self.W_basis.num_modes:
+            self._W_lmn = jnp.asarray(new)
         else:
             raise ValueError(
                 f"Z_lmn should have the same size as the basis, got {len(new)} for "

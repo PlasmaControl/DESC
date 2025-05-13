@@ -292,12 +292,12 @@ class Equilibrium(IOAble, Optimizable):
             )
         )
 
-        # RG: NFP, sym, Lz, Mz, Nz passed as kwargs, order is sacrosanct
+        # RG: NFP, sym, Mz, Nz passed as kwargs, order is sacrosanct
         self._surface.change_resolution(
             self.L,
             self.M,
             self.N,
-            NFP=self._surface.NFP,
+            NFP=self._surface.NFP if hasattr(self._surface, "NFP") else self.NFP,
             sym=self.sym,
             Mz=self.Mz,
             Nz=self.Nz,

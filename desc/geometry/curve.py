@@ -62,6 +62,7 @@ class FourierRZCurve(Curve):
         modes_Z=None,
         modes_W=None,
         NFP=1,
+        Nz=0,
         sym="auto",
         name="",
     ):
@@ -72,7 +73,7 @@ class FourierRZCurve(Curve):
         if modes_Z is None:
             modes_Z = np.arange(-(Z_n.size // 2), Z_n.size // 2 + 1)
         if modes_W is None:
-            modes_W = np.arange(-(W_n.size // 2), W_n.size // 2 + 1)
+            modes_W = np.array([0])
 
         if R_n.size == 0:
             raise ValueError("At least 1 coefficient for R must be supplied")
@@ -159,20 +160,28 @@ class FourierRZCurve(Curve):
     @property
     def N(self):
         """Maximum mode number."""
-        return max(self.R_basis.N, self.Z_basis.N, self.W_basis.N)
+        return max(self.R_basis.N, self.Z_basis.N)
 
-    def change_resolution(self, N=None, NFP=None, sym=None):
+    @property
+    def Nz(self):
+        """Maximum mode number."""
+        return self.W_basis.N
+
+    def change_resolution(self, N=None, NFP=None, sym=None, Nz=None):
         """Change the maximum toroidal resolution."""
         N = check_nonnegint(N, "N")
+        Nz = check_nonnegint(Nz, "Nz")
         NFP = check_posint(NFP, "NFP")
         if (
             ((N is not None) and (N != self.N))
+            or ((Nz is not None) and (Nz != self.Nz))
             or ((NFP is not None) and (NFP != self.NFP))
             or ((sym is not None) and (sym != self.sym))
         ):
             self._NFP = int(NFP if NFP is not None else self.NFP)
             self._sym = bool(sym) if sym is not None else self.sym
             N = int(N if N is not None else self.N)
+            Nz = int(Nz if Nz is not None else self.Nz)
             R_modes_old = self.R_basis.modes
             Z_modes_old = self.Z_basis.modes
             W_modes_old = self.W_basis.modes
@@ -183,41 +192,44 @@ class FourierRZCurve(Curve):
                 N=N, NFP=self.NFP, sym="sin" if self.sym else self.sym
             )
             self.W_basis.change_resolution(
-                N=N, NFP=self.NFP, sym="sin" if self.sym else self.sym
+                N=Nz, NFP=self.NFP, sym="sin" if self.sym else self.sym
             )
             self.R_n = copy_coeffs(self.R_n, R_modes_old, self.R_basis.modes)
             self.Z_n = copy_coeffs(self.Z_n, Z_modes_old, self.Z_basis.modes)
             self.W_n = copy_coeffs(self.W_n, W_modes_old, self.W_basis.modes)
 
-    def get_coeffs(self, n):
+    def get_coeffs(self, n, nz=0):
         """Get Fourier coefficients for given mode number(s)."""
         n = np.atleast_1d(n).astype(int)
+        nz = np.atleast_1d(nz).astype(int)
         R = np.zeros_like(n).astype(float)
         Z = np.zeros_like(n).astype(float)
-        W = np.zeros_like(n).astype(float)
+        W = np.zeros_like(nz).astype(float)
 
         idxR = np.where(n[:, np.newaxis] == self.R_basis.modes[:, 2])
         idxZ = np.where(n[:, np.newaxis] == self.Z_basis.modes[:, 2])
-        idxW = np.where(n[:, np.newaxis] == self.W_basis.modes[:, 2])
+        idxW = np.where(nz[:, np.newaxis] == self.W_basis.modes[:, 2])
 
         R[idxR[0]] = self.R_n[idxR[1]]
         Z[idxZ[0]] = self.Z_n[idxZ[1]]
         W[idxZ[0]] = self.W_n[idxW[1]]
         return R, Z, W
 
-    def set_coeffs(self, n, R=None, Z=None, W=None):
+    def set_coeffs(self, n, nz=0, R=None, Z=None, W=None):
         """Set specific Fourier coefficients."""
-        n, R, Z, W = map(np.atleast_1d, (n, R, Z, W))
+        n, nz, R, Z, W = map(np.atleast_1d, (n, nz, R, Z, W))
         R = np.broadcast_to(R, n.shape)
         Z = np.broadcast_to(Z, n.shape)
-        W = np.broadcast_to(W, n.shape)
-        for nn, RR, ZZ, WW in zip(n, R, Z, W):
+        W = np.broadcast_to(W, nz.shape)
+        for nn, RR, ZZ in zip(n, R, Z):
             if RR is not None:
                 idxR = self.R_basis.get_idx(0, 0, nn)
                 self.R_n = put(self.R_n, idxR, RR)
             if ZZ is not None:
                 idxZ = self.Z_basis.get_idx(0, 0, nn)
                 self.Z_n = put(self.Z_n, idxZ, ZZ)
+
+        for nnz, WW in zip(nz, W):
             if WW is not None:
                 idxW = self.W_basis.get_idx(0, 0, nn)
                 self.W_n = put(self.W_n, idxW, WW)

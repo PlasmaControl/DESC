@@ -295,10 +295,17 @@ class Equilibrium(IOAble, Optimizable):
             )
         )
 
+        # NFP, sym, Lz, Mz, Nz passed as kwargs, order is sacrosanct
         self._surface.change_resolution(
-            self.L, self.M, self.N, self.Lz, self.Mz, self.Nz, sym=self.sym
+            self.L,
+            self.M,
+            self.N,
+            NFP=self.NFP,
+            sym=self.sym,
+            Mz=self.Mz,
+            Nz=self.Nz,
         )
-        self._axis.change_resolution(self.N, self.Nz, sym=self.sym)
+        self._axis.change_resolution(self.N, NFP=self.NFP, sym=self.sym, Nz=self.Nz)
 
         # bases
         self._R_basis = FourierZernikeBasis(
@@ -325,7 +332,7 @@ class Equilibrium(IOAble, Optimizable):
             sym=self._Z_sym,
             spectral_indexing=self.spectral_indexing,
         )
-        # RG: This is just the basis and doesn't decide the grid on
+        # RG: This is just the basis and doesn't determine the grid on
         # which omega is evaluated
         self._W_basis = FourierZernikeBasis(
             L=self.Lz,
@@ -595,12 +602,12 @@ class Equilibrium(IOAble, Optimizable):
         L=None,
         M=None,
         N=None,
-        Lz=0,
-        Mz=0,
-        Nz=0,
         L_grid=None,
         M_grid=None,
         N_grid=None,
+        Lz=0,
+        Mz=0,
+        Nz=0,
         NFP=None,
         sym=None,
     ):
@@ -661,9 +668,6 @@ class Equilibrium(IOAble, Optimizable):
             self.L, self.M, self.N, NFP=self.NFP, sym="sin" if self.sym else self.sym
         )
         self.W_basis.change_resolution(
-            self.L,
-            self.M,
-            self.N,
             self.Lz,
             self.Mz,
             self.Nz,
@@ -689,13 +693,12 @@ class Equilibrium(IOAble, Optimizable):
             self.L,
             self.M,
             self.N,
-            self.Lz,
-            self.Mz,
-            self.Nz,
             NFP=self.NFP,
             sym=self.sym,
+            Mz=self.Mz,
+            Nz=self.Nz,
         )
-        self.axis.change_resolution(self.N, self.Nz, NFP=self.NFP, sym=self.sym)
+        self.axis.change_resolution(self.N, NFP=self.NFP, sym=self.sym, Nz=self.Nz)
 
         self._R_lmn = copy_coeffs(self.R_lmn, old_modes_R, self.R_basis.modes)
         self._Z_lmn = copy_coeffs(self.Z_lmn, old_modes_Z, self.Z_basis.modes)

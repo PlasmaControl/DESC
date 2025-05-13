@@ -72,6 +72,9 @@ class FourierRZToroidalSurface(Surface):
         "_W_basis",
         "_NFP",
         "_rho",
+        "_Lz",
+        "_Mz",
+        "_Nz",
     ]
     _static_attrs = ["_R_basis", "_Z_basis"]
 
@@ -102,11 +105,11 @@ class FourierRZToroidalSurface(Surface):
             modes_Z = np.array([[0, 0], [-1, 0]])
         if W_lmn is None:
             W_lmn = np.array([])
-            modes_W = np.array([])
         if modes_Z is None:
             modes_Z = modes_R
         if modes_W is None:
-            modes_W = modes_Z
+            # --no-verify modes_W = modes_Z
+            modes_W = np.array([])
 
         R_lmn, Z_lmn, W_lmn, modes_R, modes_Z, modes_W = map(
             np.asarray, (R_lmn, Z_lmn, W_lmn, modes_R, modes_Z, modes_W)
@@ -131,8 +134,12 @@ class FourierRZToroidalSurface(Surface):
         MZ = np.max(abs(modes_Z[:, 0]))
         NZ = np.max(abs(modes_Z[:, 1]))
 
-        # --no-verify MW = np.max(abs(modes_W[:, 0]))
-        # --no-verify NW = np.max(abs(modes_W[:, 1]))
+        if len(np.shape(modes_W)) == 1:  # modes_W is empty
+            NW = 0
+            MW = 0
+        else:
+            MW = np.max(abs(modes_W[:, 0]))
+            NW = np.max(abs(modes_W[:, 1]))
 
         self._L = 0
         self._Lz = 0
@@ -145,8 +152,9 @@ class FourierRZToroidalSurface(Surface):
         NFP = check_posint(NFP, "NFP", False)
         self._M = setdefault(M, max(MR, MZ))
         self._N = setdefault(N, max(NR, NZ))
-        self._Mz = Mz
-        self._Nz = Nz
+        self._Mz = setdefault(Mz, MW)
+        self._Nz = setdefault(Nz, NW)
+
         self._NFP = NFP
 
         if sym == "auto":
@@ -242,7 +250,7 @@ class FourierRZToroidalSurface(Surface):
         """Change the maximum poloidal and toroidal resolution."""
         assert (
             ((len(args) in [2, 3]) and len(kwargs) == 0)
-            or ((len(args) in [2, 3]) and len(kwargs) in [1, 2])
+            or ((len(args) in [2, 3]) and len(kwargs) in [1, 2, 3, 4])
             or (len(args) == 0)
         ), (
             "change_resolution should be called with 2 (M,N) or 3 (L,M,N) "
@@ -252,11 +260,13 @@ class FourierRZToroidalSurface(Surface):
         L = kwargs.pop("L", None)
         M = kwargs.pop("M", None)
         N = kwargs.pop("N", None)
-        # --no-verify Mz = kwargs.pop("Mz", None)
-        # --no-verify Nz = kwargs.pop("Nz", None)
         NFP = kwargs.pop("NFP", None)
         sym = kwargs.pop("sym", None)
-        assert len(kwargs) == 0, "change_resolution got unexpected kwarg: {kwargs}"
+        Mz = kwargs.pop("Mz", None)
+        Nz = kwargs.pop("Nz", None)
+
+        # RG: Once all kwargs have been popped, none should remain
+        assert len(kwargs) == 0, f"change_resolution got unexpected kwarg: {kwargs}"
         if L is not None:
             warnings.warn(
                 "FourierRZToroidalSurface does not have radial resolution, ignoring L"
@@ -265,25 +275,30 @@ class FourierRZToroidalSurface(Surface):
             M, N = args
         elif len(args) == 3:
             _, M, N = args
-        # --no-verify else: #len is 5
-        # --no-verify    _, M, N, Mz, Nz = args
 
         M = check_nonnegint(M, "M")
         N = check_nonnegint(N, "N")
-        # --no-verify Mz = check_nonnegint(Mz, "Mz")
-        # --no-verify Nz = check_nonnegint(Nz, "Nz")
+        Mz = check_nonnegint(Mz, "Mz")
+        Nz = check_nonnegint(Nz, "Nz")
         NFP = check_posint(NFP, "NFP")
         self._NFP = int(NFP if NFP is not None else self.NFP)
 
         if (
             ((N is not None) and (N != self.N))
             or ((M is not None) and (M != self.M))
+            # or ((Mz is not None) and (Mz != self.Mz))
+            # or ((Nz is not None) and (Nz != self.Nz))
             or (NFP is not None)
             or ((sym is not None) and (sym != self.sym))
         ):
             self._sym = sym if sym is not None else self.sym
             M = int(M if M is not None else self.M)
             N = int(N if N is not None else self.N)
+
+            Mz = int(Mz if Mz is not None else self._Mz)
+            Nz = int(Nz if Nz is not None else self._Nz)
+
+            # RG: There maybe a case that I have missed here
             R_modes_old = self.R_basis.modes
             Z_modes_old = self.Z_basis.modes
             W_modes_old = self.W_basis.modes
@@ -296,13 +311,15 @@ class FourierRZToroidalSurface(Surface):
                 M=M, N=N, NFP=self.NFP, sym="sin" if self.sym else self.sym
             )
             self.W_basis.change_resolution(
-                M=M, N=N, NFP=self.NFP, sym="sin" if self.sym else self.sym
+                M=Mz, N=Nz, NFP=self.NFP, sym="sin" if self.sym else self.sym
             )
             self.R_lmn = copy_coeffs(self.R_lmn, R_modes_old, self.R_basis.modes)
             self.Z_lmn = copy_coeffs(self.Z_lmn, Z_modes_old, self.Z_basis.modes)
             self.W_lmn = copy_coeffs(self.W_lmn, W_modes_old, self.W_basis.modes)
             self._M = M
             self._N = N
+            self._Mz = Mz
+            self._Nz = Nz
 
     @optimizable_parameter
     @property
@@ -352,7 +369,7 @@ class FourierRZToroidalSurface(Surface):
                 + f"basis with {self.W_basis.num_modes} modes."
             )
 
-    def get_coeffs(self, m, n=0):
+    def get_coeffs(self, m, n=0, mz=0, nz=0):
         """Get Fourier coefficients for given mode number(s)."""
         n = np.atleast_1d(n).astype(int)
         m = np.atleast_1d(m).astype(int)
@@ -360,7 +377,11 @@ class FourierRZToroidalSurface(Surface):
         m, n = np.broadcast_arrays(m, n)
         R = np.zeros_like(m).astype(float)
         Z = np.zeros_like(m).astype(float)
-        W = np.zeros_like(m).astype(float)
+
+        nz = np.atleast_1d(nz).astype(int)
+        mz = np.atleast_1d(mz).astype(int)
+        mz, nz = np.broadcast_arrays(mz, nz)
+        W = np.zeros_like(mz).astype(float)
 
         mn = np.array([m, n]).T
         idxR = np.where(
@@ -369,8 +390,12 @@ class FourierRZToroidalSurface(Surface):
         idxZ = np.where(
             (mn[:, np.newaxis, :] == self.Z_basis.modes[np.newaxis, :, 1:]).all(axis=-1)
         )
+
+        mnz = np.array([mz, nz]).T
         idxW = np.where(
-            (mn[:, np.newaxis, :] == self.W_basis.modes[np.newaxis, :, 1:]).all(axis=-1)
+            (mnz[:, np.newaxis, :] == self.W_basis.modes[np.newaxis, :, 1:]).all(
+                axis=-1
+            )
         )
 
         R[idxR[0]] = self.R_lmn[idxR[1]]
@@ -378,25 +403,33 @@ class FourierRZToroidalSurface(Surface):
         W[idxW[0]] = self.W_lmn[idxW[1]]
         return R, Z, W
 
-    def set_coeffs(self, m, n=0, R=None, Z=None, W=None):
+    def set_coeffs(self, m, n=0, mz=0, nz=0, R=None, Z=None, W=None):
         """Set specific Fourier coefficients."""
-        m, n, R, Z, W = (
+        m, n, R, Z = (
             np.atleast_1d(m),
             np.atleast_1d(n),
             np.atleast_1d(R),
             np.atleast_1d(Z),
-            np.atleast_1d(W),
         )
-        m, n, R, Z, W = np.broadcast_arrays(m, n, R, Z, W)
-        for mm, nn, RR, ZZ, WW in zip(m, n, R, Z, W):
+
+        m, n, R, Z = np.broadcast_arrays(m, n, R, Z)
+        for mm, nn, RR, ZZ in zip(m, n, R, Z):
             if RR is not None:
                 idxR = self.R_basis.get_idx(0, mm, nn)
                 self.R_lmn = put(self.R_lmn, idxR, RR)
             if ZZ is not None:
                 idxZ = self.Z_basis.get_idx(0, mm, nn)
                 self.Z_lmn = put(self.Z_lmn, idxZ, ZZ)
+
+        mz, nz, W = (
+            np.atleast_1d(mz),
+            np.atleast_1d(nz),
+            np.atleast_1d(W),
+        )
+        mz, nz, W = np.broadcast_arrays(mz, nz, W)
+        for mmz, nnz, WW in zip(mz, nz, W):
             if WW is not None:
-                idxW = self.W_basis.get_idx(0, mm, nn)
+                idxW = self.W_basis.get_idx(0, mmz, nnz)
                 self.W_lmn = put(self.W_lmn, idxW, WW)
 
     @classmethod
@@ -432,6 +465,7 @@ class FourierRZToroidalSurface(Surface):
                 "input file boundary."
             )
 
+        # RG: I'll try to decipher this encryption
         surf = cls(
             inputs["surface"][:, 3],
             inputs["surface"][:, 4],

@@ -454,63 +454,6 @@ class TestCoil:
         np.testing.assert_allclose(B1, B4, rtol=1e-8, atol=1e-8)
         np.testing.assert_allclose(B1, B5, rtol=1e-6, atol=1e-7)
 
-    @pytest.mark.unit
-    def test_SplineXYZ_to_FourierPlanar(self):
-        """Test converting SplineXYZCoil to FourierPlanarCoil object."""
-        # Necessary as SplineXYZ can be either clockwise or counterclockwise
-        npts = 1000
-        N = 50
-
-        # Create a SplineXYZCoil of a planar ellipse
-        s = np.linspace(0, 2 * np.pi, npts)
-        X = 2 * np.cos(s)
-        Y = np.ones(npts)
-        Z = 1 * np.sin(s)
-        c = SplineXYZCoil(X=X, Y=Y, Z=Z, current=1e6)
-
-        # Create a backwards SplineXYZCoil by flipping the coordinates
-        c_backwards = SplineXYZCoil(
-            X=np.flip(X),
-            Y=np.flip(Y),
-            Z=np.flip(Z),
-            current=1e6,
-        )
-
-        # Convert to FourierPlanarCoil
-        c_planar = c.to_FourierPlanar(N=N, grid=npts, basis="xyz")
-        c_backwards_planar = c_backwards.to_FourierPlanar(N=N, grid=npts, basis="xyz")
-
-        grid = LinearGrid(zeta=100)
-
-        field_spline = c.compute_magnetic_field(
-            np.zeros((1, 3)), source_grid=grid, basis="xyz"
-        )
-        field_planar = c_planar.compute_magnetic_field(
-            np.zeros((1, 3)), source_grid=grid, basis="xyz"
-        )
-        field_backwards_spline = c_backwards.compute_magnetic_field(
-            np.zeros((1, 3)), source_grid=grid, basis="xyz"
-        )
-        field_backwards_planar = c_backwards_planar.compute_magnetic_field(
-            np.zeros((1, 3)), source_grid=grid, basis="xyz"
-        )
-
-        np.testing.assert_allclose(
-            field_spline,
-            field_planar,
-            atol=1e-5,
-        )
-        np.testing.assert_allclose(
-            field_backwards_spline,
-            field_backwards_planar,
-            atol=1e-5,
-        )
-        np.testing.assert_allclose(
-            field_planar,
-            -field_backwards_planar,
-            atol=1e-5,
-        )
-
 
 class TestCoilSet:
     """Tests for sets of multiple coils."""
@@ -1559,3 +1502,21 @@ def test_initialize_helical():
     # first take a min over plasma pts to get distance from each coil pt to plasma
     # then we expect the avg of that to be ~a since r/a=2 so offset is 1*a
     np.testing.assert_allclose(dist.min(axis=1).mean(axis=-1), a, rtol=3e-2)
+
+
+@pytest.mark.unit
+def test_FourierPlanarCoil_from_values_orientation():
+    """Test that fitting with FourierPlanarCoil preserves orientation."""
+    # easiest to check this is working using a coil, as can use
+    # biot savart to see if B is same or not
+    # tests fix for GH #1715
+    coil_XYZ = FourierXYZCoil(
+        current=1e6, X_n=[0, 10, 2], Y_n=[-2, 0, 0], Z_n=[0, 0, 0.1]
+    )
+    coil_planar = coil_XYZ.to_FourierPlanar(N=1)
+
+    coords = [[1, 1, 1]]
+    grid = LinearGrid(N=40)
+    B_XYZ = coil_XYZ.compute_magnetic_field(coords, source_grid=grid)
+    B_planar = coil_planar.compute_magnetic_field(coords, source_grid=grid)
+    np.testing.assert_allclose(B_XYZ, B_planar, rtol=1e-3)

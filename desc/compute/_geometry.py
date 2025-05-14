@@ -441,7 +441,7 @@ def _R0_over_a(params, transforms, profiles, data, **kwargs):
     data=["rho", "e_theta|r,p"],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
-        "desc.geometry.core.Surface",
+        "desc.geometry.surface.FourierRZToroidalSurface",
     ],
     resolution_requirement="rt",  # just need max(rho) near 1
 )
@@ -455,6 +455,46 @@ def _perimeter_of_z(params, transforms, profiles, data, **kwargs):
             #  we need to integrate over theta at constant phi.
             #  Should be simple once we have coordinate mapping and source grid
             #  logic from GitHub pull request #1024.
+            line_label="theta",
+            fix_surface=("rho", max_rho),
+            expand_out=True,
+        )
+        # To approximate perimeter at ρ ~ 1, we scale by ρ⁻¹, assuming the integrand
+        # varies little from ρ = max_rho to ρ = 1.
+        / max_rho
+    )
+    return data
+
+
+@register_compute_fun(
+    name="perimeter(z)",
+    label="P(\\zeta)",
+    units="m",
+    units_long="meters",
+    description="Perimeter of enclosed cross-section (enclosed constant zeta surface), "
+    "scaled by max(ρ)⁻¹, as function of zeta",
+    dim=1,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="z",
+    data=["rho", "e_theta"],
+    parameterization=[
+        "desc.geometry.surface.ZernikeRZToroidalSection",
+    ],
+    resolution_requirement="rt",  # just need max(rho) near 1
+)
+def _perimeter_of_z_ZernikeRZToroidalSection(
+    params, transforms, profiles, data, **kwargs
+):
+    # NOTE: this is perimeter of a constant zeta XS
+    # as a ZernikeRZToroidalSection is defined at constant zeta, so
+    # doing a perimeter at constant phi would make no sense.
+    max_rho = jnp.max(data["rho"])
+    data["perimeter(z)"] = (
+        line_integrals(
+            transforms["grid"],
+            safenorm(data["e_theta"], axis=-1),
             line_label="theta",
             fix_surface=("rho", max_rho),
             expand_out=True,

@@ -6,7 +6,6 @@ If the limit has yet to be derived, add it to the ``not_implemented_limits`` set
 """
 
 import functools
-import inspect
 
 import numpy as np
 import pytest
@@ -18,7 +17,7 @@ from desc.examples import get
 from desc.grid import LinearGrid
 from desc.integrals import surface_integrals_map
 from desc.objectives import GenericObjective, ObjectiveFunction
-from desc.utils import dot, errorif
+from desc.utils import dot, errorif, getsource
 
 # Unless mentioned in the source code of the compute function, the assumptions
 # made to compute the magnetic axis limit can be reduced to assuming that these
@@ -72,6 +71,7 @@ not_finite_limits = {
     "|e^helical|",
     "|grad(theta)|",
     "<J*B> Redl",  # may not exist for all configurations
+    "current Redl",
 }
 not_implemented_limits = {
     # reliant limits will be added to this set automatically
@@ -368,7 +368,7 @@ def _reverse_mode_unsafe_names():
 
     def get_source(name):
         return "".join(
-            inspect.getsource(
+            getsource(
                 data_index["desc.equilibrium.equilibrium.Equilibrium"][name]["fun"]
             ).split("def ")[1:]
         )

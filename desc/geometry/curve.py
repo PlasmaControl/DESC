@@ -1,5 +1,6 @@
 """Classes for parameterized 3D space curves."""
 
+import os
 import warnings
 
 import numpy as np
@@ -47,6 +48,8 @@ class FourierRZCurve(Curve):
         "_sym",
         "_NFP",
     ]
+
+    _static_attrs = ["_R_basis", "_Z_basis"]
 
     def __init__(
         self,
@@ -127,8 +130,7 @@ class FourierRZCurve(Curve):
         if (
             ((N is not None) and (N != self.N))
             or ((NFP is not None) and (NFP != self.NFP))
-            or (sym is not None)
-            and (sym != self.sym)
+            or ((sym is not None) and (sym != self.sym))
         ):
             self._NFP = int(NFP if NFP is not None else self.NFP)
             self._sym = bool(sym) if sym is not None else self.sym
@@ -220,6 +222,7 @@ class FourierRZCurve(Curve):
             Axis with given Fourier coefficients.
 
         """
+        path = os.path.expanduser(path)
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             inputs = InputReader().parse_inputs(path)[-1]
@@ -293,7 +296,13 @@ class FourierRZCurve(Curve):
 
         grid = LinearGrid(zeta=phi, NFP=1, sym=sym)
         basis = FourierSeries(N=N, NFP=NFP, sym=sym)
-        transform = Transform(grid, basis, build_pinv=True)
+        with warnings.catch_warnings():
+            # grid and basis have uneven NFP because we want to allow the user to either
+            # pass in an entire curve (in which case phi : 0-> 2pi) which has some
+            # field-periodicity, or only a portion of the curve
+            # (in which case phi: 0->2pi/NFP) and still have this fit work.
+            warnings.filterwarnings("ignore", message="Unequal number of field periods")
+            transform = Transform(grid, basis, build_pinv=True)
         R_n = transform.fit(R)
         Z_n = transform.fit(Z)
         return FourierRZCurve(
@@ -308,7 +317,10 @@ class FourierRZCurve(Curve):
 
 
 def _unclose_curve(X, Y, Z):
-    if np.allclose([X[0], Y[0], Z[0]], [X[-1], Y[-1], Z[-1]], atol=1e-14):
+    if (
+        np.allclose([X[0], Y[0], Z[0]], [X[-1], Y[-1], Z[-1]], atol=1e-14)
+        and X.size != 1
+    ):
         closedX, closedY, closedZ = X.copy(), Y.copy(), Z.copy()
         X, Y, Z = X[:-1], Y[:-1], Z[:-1]
         flag = True
@@ -344,6 +356,8 @@ class FourierXYZCurve(Curve):
         "_Y_basis",
         "_Z_basis",
     ]
+
+    _static_attrs = ["_X_basis", "_Y_basis", "_Z_basis"]
 
     def __init__(
         self,
@@ -527,7 +541,7 @@ class FourierXYZCurve(Curve):
         if basis == "xyz":
             coords_xyz = coords
         else:
-            coords_xyz = rpz2xyz(coords, phi=coords[:, 1])
+            coords_xyz = rpz2xyz(coords)
         X = coords_xyz[:, 0]
         Y = coords_xyz[:, 1]
         Z = coords_xyz[:, 2]
@@ -595,6 +609,8 @@ class FourierPlanarCurve(Curve):
     """
 
     _io_attrs_ = Curve._io_attrs_ + ["_r_n", "_center", "_normal", "_r_basis", "_basis"]
+
+    _static_attrs = ["_r_basis", "_basis"]
 
     # Reference frame is centered at the origin with normal in the +Z direction.
     # Curve is computed in reference frame, then displaced/rotated to the desired frame.
@@ -810,10 +826,10 @@ class FourierPlanarCurve(Curve):
 
         # center
         center = np.mean(coords, axis=0)
-        coords = coords - center  # shift to origin
+        coords_centered = coords - center  # shift to origin
 
         # normal
-        U, _, _ = np.linalg.svd(coords.T)
+        U, _, _ = np.linalg.svd(coords_centered.T)
         normal = U[:, -1].T  # left singular vector of the least singular value
 
         # axis and angle of rotation
@@ -821,17 +837,43 @@ class FourierPlanarCurve(Curve):
         axis = np.cross(Z_axis, normal)
         angle = np.arccos(np.dot(Z_axis, normal))
         rotmat = rotation_matrix(axis, angle)
-        coords = coords @ rotmat  # rotate to X-Y plane
+        coords_rotated = coords_centered @ rotmat  # rotate to X-Y plane
 
         warnif(
-            np.max(np.abs(coords[:, 2])) > 1e-14,  # check that Z=0 for all points
+            np.max(np.abs(coords_rotated[:, 2]))
+            > 1e-14,  # check that Z=0 for all points
             UserWarning,
             "Curve values are not planar! Using the projection onto a plane.",
         )
 
+        # polar angle
+        s = np.arctan2(coords_rotated[:, 1], coords_rotated[:, 0])
+        unwrapped_s = np.unwrap(s)
+        # Determine if the sequence is monotonically increasing or decreasing
+        if np.all(np.diff(unwrapped_s) > 0):
+            curve_sign = 1
+        elif np.all(np.diff(unwrapped_s) < 0):
+            curve_sign = -1
+        else:
+            warnings.warn(
+                "The curve parameter s is not strictly increasing or decreasing. "
+                "Assuming default direction.",
+                UserWarning,
+            )
+            curve_sign = 1
+
+        if curve_sign == -1:
+            # original curve was parameterized "backwards" (clockwise),
+            # compared to FourierPlanarCurve assumption
+            normal = -normal  # flip normal vector direction
+            rotmat = rotation_matrix(axis, np.pi)
+            coords_rotated = (
+                coords_rotated @ rotmat
+            )  # flip on X-Y plane to match normal vector
+
         # polar radius and angle
-        r = np.sqrt(coords[:, 0] ** 2 + coords[:, 1] ** 2)
-        s = np.arctan2(coords[:, 1], coords[:, 0])
+        r = np.sqrt(coords_rotated[:, 0] ** 2 + coords_rotated[:, 1] ** 2)
+        s = np.arctan2(coords_rotated[:, 1], coords_rotated[:, 0])
         s = np.mod(s + 2 * np.pi, 2 * np.pi)  # mod angle to range [0, 2*pi)
         idx = np.argsort(s)  # sort angle to be monotonically increasing
         r = r[idx]

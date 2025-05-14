@@ -561,6 +561,19 @@ class TestMagneticFields:
         )
 
     @pytest.mark.unit
+    def test_fourier_current_potential_change_Phi_resolution(self):
+        """Test Fourier current potential changing Phi resolution."""
+        surface = FourierRZToroidalSurface(sym=False)
+        current_field = FourierCurrentPotentialField.from_surface(
+            surface, sym_Phi=False, M_Phi=4, N_Phi=0
+        )
+        assert current_field.M_Phi == 4
+        assert current_field.N_Phi == 0
+        current_field.change_Phi_resolution(M=8, N=0)
+        assert current_field.M_Phi == 8
+        assert current_field.N_Phi == 0
+
+    @pytest.mark.unit
     @pytest.mark.mpl_image_compare(remove_text=True, tolerance=10)
     def test_fourier_current_potential_field_modular_coil_cut(self):
         """Test Fourier current potential coil cut against analytic solenoid."""
@@ -1071,6 +1084,9 @@ class TestMagneticFields:
             nR=field3._R.size,
             nZ=field3._Z.size,
             nphi=field3._phi.size,
+            # just to test the source_grid function, the
+            # field is independent of source_Grid
+            source_grid=LinearGrid(N=0),
         )
         # no need for extcur b/c is saved in "raw" format, no need to scale again
         field4 = SplineMagneticField.from_mgrid(path)

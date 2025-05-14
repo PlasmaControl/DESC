@@ -327,6 +327,20 @@ class TestFourierRZCurve:
         with pytest.raises(ValueError):
             xyz.to_FourierRZ(N=1, grid=grid)
 
+    @pytest.mark.unit
+    def test_change_symmetry(self):
+        """Test correct sym changes when only sym is passed to change_resolution."""
+        c = FourierRZCurve(sym=False)
+        c.change_resolution(sym=True)
+        assert c.sym
+        assert c.R_basis.sym == "cos"
+        assert c.Z_basis.sym == "sin"
+
+        c.change_resolution(sym=False)
+        assert c.sym is False
+        assert c.R_basis.sym is False
+        assert c.Z_basis.sym is False
+
 
 class TestFourierXYZCurve:
     """Tests for FourierXYZCurve class."""
@@ -485,6 +499,18 @@ class TestFourierXYZCurve:
             _ = FourierXYZCurve(Y_n=[1], modes=[1, 2])
         with pytest.raises(AssertionError):
             _ = FourierXYZCurve(Z_n=[1], modes=[1, 2])
+
+    @pytest.mark.unit
+    def test_from_values_rpz(self):
+        """Test from_values method with rpz coords."""
+        t = np.linspace(0, 2 * np.pi, 10)
+        R = np.cos(t)
+        Z = np.sin(t)
+        phi = np.zeros_like(t)
+        coords = np.vstack([R, phi, Z]).T
+        coil = FourierXYZCurve.from_values(coords, basis="rpz", N=1)
+        np.testing.assert_allclose(coil.X_n[-1], 1.0)
+        np.testing.assert_allclose(coil.Z_n[0], 1.0)
 
 
 class TestFourierPlanarCurve:
@@ -657,6 +683,49 @@ class TestFourierPlanarCurve:
             c.normal = [4]
         with pytest.raises(AssertionError):
             _ = FourierPlanarCurve(r_n=[1], modes=[1, 2])
+
+    @pytest.mark.unit
+    def test_to_FourierPlanarCurve(self):
+        """Test converting SplineXYZCurve to FourierPlanarCurve object."""
+        npts = 1000
+        N = 5
+
+        # Create a SplineXYZCurve of a planar circle
+        s = np.linspace(0, 2 * np.pi, npts)
+        X = 2 * np.cos(s)
+        Y = np.ones(npts)
+        Z = 2 * np.sin(s)
+        c = SplineXYZCurve(X=X, Y=Y, Z=Z)
+
+        # Create a backwards SplineXYZCurve by flipping the coordinates
+        c_backwards = SplineXYZCurve(
+            X=np.flip(X),
+            Y=np.flip(Y),
+            Z=np.flip(Z),
+        )
+
+        # Convert to FourierPlanarCurve
+        c_planar = c.to_FourierPlanar(N=N, grid=npts, basis="xyz")
+        c_backwards_planar = c_backwards.to_FourierPlanar(N=N, grid=npts, basis="xyz")
+
+        grid = LinearGrid(N=20, endpoint=True)
+
+        coords_spline = c.compute("x", grid=grid)["x"]
+        coords_planar = c_planar.compute("x", grid=grid)["x"]
+        coords_backwards_spline = c_backwards.compute("x", grid=grid)["x"]
+        coords_backwards_planar = c_backwards_planar.compute("x", grid=grid)["x"]
+
+        # Assertions for point positions
+        np.testing.assert_allclose(coords_spline, coords_planar, atol=1e-10)
+        np.testing.assert_allclose(
+            coords_backwards_spline,
+            coords_backwards_planar,
+            atol=1e-10,
+        )
+        # backwards coordinate order is important for Biot-Savart current
+        np.testing.assert_allclose(
+            coords_planar, np.flip(coords_backwards_planar, axis=0), atol=1e-10
+        )
 
 
 class TestSplineXYZCurve:

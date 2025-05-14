@@ -11,6 +11,7 @@ import numpy as np
 import plotly.graph_objects as go
 from matplotlib import cycler, rcParams
 from mpl_toolkits.axes_grid1 import make_axes_locatable
+from packaging.version import Version
 from pylatexenc.latex2text import LatexNodes2Text
 
 from desc.backend import sign
@@ -22,7 +23,7 @@ from desc.equilibrium.coords import map_coordinates
 from desc.grid import Grid, LinearGrid
 from desc.integrals import surface_averages_map
 from desc.magnetic_fields import field_line_integrate
-from desc.utils import errorif, only1, parse_argname_change, setdefault
+from desc.utils import errorif, islinspaced, only1, parse_argname_change, setdefault
 from desc.vmec_utils import ptolemy_linear_transform
 
 __all__ = [
@@ -109,28 +110,24 @@ _AXIS_LABELS_XYZ = [r"$X ~(\mathrm{m})$", r"$Y ~(\mathrm{m})$", r"$Z ~(\mathrm{m
 
 
 def _set_tight_layout(fig):
-    version = matplotlib.__version__.split(".")
-    major = int(version[0])
-    minor = int(version[1])
+    # TODO: update this when matplotlib min version >= 3.6.0
     # compat layer to deal with API changes in mpl 3.6.0
-    if major == 3 and minor < 6:
-        fig.set_tight_layout(True)
-    else:
+    if Version(matplotlib.__version__) >= Version("3.6.0"):
         fig.set_layout_engine("tight")
+    else:
+        fig.set_tight_layout(True)
 
 
 def _get_cmap(name, n=None):
-    version = matplotlib.__version__.split(".")
-    major = int(version[0])
-    minor = int(version[1])
+    # TODO: update this when matplotlib min version >= 3.6.0
     # compat layer to deal with API changes in mpl 3.6.0
-    if major == 3 and minor < 6:
-        return matplotlib.cm.get_cmap(name, n)
-    else:
+    if Version(matplotlib.__version__) >= Version("3.6.0"):
         c = matplotlib.colormaps[name]
         if n is not None:
             c = c.resampled(n)
         return c
+    else:
+        return matplotlib.cm.get_cmap(name, n)
 
 
 def _format_ax(ax, is3d=False, rows=1, cols=1, figsize=None, equal=False):
@@ -215,20 +212,19 @@ def _get_grid(**kwargs):
 
     """
     grid_args = {
-        "L": None,
-        "M": None,
-        "N": None,
         "NFP": 1,
         "sym": False,
         "axis": True,
         "endpoint": True,
-        "rho": np.array([1.0]),
-        "theta": np.array([0.0]),
-        "zeta": np.array([0.0]),
     }
-    for key in kwargs.keys():
-        if key in grid_args.keys():
-            grid_args[key] = kwargs[key]
+    grid_args.update(kwargs)
+    if ("L" not in grid_args) and ("rho" not in grid_args):
+        grid_args["rho"] = np.array([1.0])
+    if ("M" not in grid_args) and ("theta" not in grid_args):
+        grid_args["theta"] = np.array([0.0])
+    if ("N" not in grid_args) and ("zeta" not in grid_args):
+        grid_args["zeta"] = np.array([0.0])
+
     grid = LinearGrid(**grid_args)
 
     return grid
@@ -314,6 +310,80 @@ def _compute(eq, name, grid, component=None, reshape=True):
     if reshape:
         data = data.reshape((grid.num_theta, grid.num_rho, grid.num_zeta), order="F")
 
+    return data, label
+
+
+def _compute_Bn(
+    eq, field, plot_grid, field_grid, chunk_size=None, B_plasma_chunk_size=None
+):
+    """Compute normal field from virtual casing + coils, using correct grids."""
+    errorif(
+        field is None,
+        ValueError,
+        "If B*n is entered as the variable to plot, a magnetic field"
+        " must be provided.",
+    )
+    errorif(
+        not np.all(np.isclose(plot_grid.nodes[:, 0], 1)),
+        ValueError,
+        "If B*n is entered as the variable to plot, "
+        "the grid nodes must be at rho=1.",
+    )
+
+    theta_endpoint = zeta_endpoint = False
+
+    if plot_grid.fft_poloidal and plot_grid.fft_toroidal:
+        source_grid = eval_grid = plot_grid
+    # often plot_grid is still linearly spaced but includes endpoints. In that case
+    # make a temp grid that just leaves out the endpoint so we can FFT
+    elif (
+        isinstance(plot_grid, LinearGrid)
+        and not plot_grid.sym
+        and islinspaced(plot_grid.nodes[plot_grid.unique_theta_idx, 1])
+        and islinspaced(plot_grid.nodes[plot_grid.unique_zeta_idx, 2])
+    ):
+        if plot_grid._poloidal_endpoint:
+            theta_endpoint = True
+            theta = plot_grid.nodes[plot_grid.unique_theta_idx[0:-1], 1]
+        if plot_grid._toroidal_endpoint:
+            zeta_endpoint = True
+            zeta = plot_grid.nodes[plot_grid.unique_zeta_idx[0:-1], 2]
+        vc_grid = LinearGrid(
+            theta=theta,
+            zeta=zeta,
+            NFP=plot_grid.NFP,
+            endpoint=False,
+        )
+        # override attr since we know fft is ok even with custom nodes
+        vc_grid._fft_poloidal = vc_grid._fft_toroidal = True
+        source_grid = eval_grid = vc_grid
+    else:
+        eval_grid = plot_grid
+        source_grid = LinearGrid(
+            M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False, endpoint=False
+        )
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+
+        data, _ = field.compute_Bnormal(
+            eq,
+            eval_grid=eval_grid,
+            source_grid=field_grid,
+            vc_source_grid=source_grid,
+            chunk_size=chunk_size,
+            B_plasma_chunk_size=B_plasma_chunk_size,
+        )
+    data = data.reshape((eval_grid.num_theta, eval_grid.num_zeta), order="F")
+    if theta_endpoint:
+        data = np.vstack((data, data[0, :]))
+    if zeta_endpoint:
+        data = np.hstack((data, np.atleast_2d(data[:, 0]).T))
+    data = data.reshape(
+        (plot_grid.num_theta, plot_grid.num_rho, plot_grid.num_zeta), order="F"
+    )
+
+    label = r"$\mathbf{B} \cdot \hat{n} ~(\mathrm{T})$"
     return data, label
 
 
@@ -653,42 +723,14 @@ def plot_2d(
             component=component,
         )
     else:
-        field = kwargs.pop("field", None)
-        errorif(
-            field is None,
-            msg="If B*n is entered as the variable to plot, a magnetic field"
-            " must be provided.",
+        data, label = _compute_Bn(
+            eq=eq,
+            field=kwargs.pop("field", None),
+            plot_grid=grid,
+            field_grid=kwargs.pop("field_grid", None),
+            chunk_size=kwargs.pop("chunk_size", None),
+            B_plasma_chunk_size=kwargs.pop("B_plasma_chunk_size", None),
         )
-        errorif(
-            not np.all(np.isclose(grid.nodes[:, 0], 1)),
-            msg="If B*n is entered as the variable to plot, "
-            "the grid nodes must be at rho=1.",
-        )
-
-        field_grid = kwargs.pop("field_grid", None)
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-
-            if grid.endpoint:
-                # cannot use a grid with endpoint=True for FFT interpolator
-                vc_grid = LinearGrid(
-                    theta=grid.nodes[grid.unique_theta_idx[0:-1], 1],
-                    zeta=grid.nodes[grid.unique_zeta_idx[0:-1], 2],
-                    NFP=grid.NFP,
-                    endpoint=False,
-                )
-            else:
-                vc_grid = grid
-            data, _ = field.compute_Bnormal(
-                eq, eval_grid=vc_grid, source_grid=field_grid, vc_source_grid=vc_grid
-            )
-        data = data.reshape((vc_grid.num_theta, vc_grid.num_zeta), order="F")
-        if grid.endpoint:
-            data = np.hstack((data, np.atleast_2d(data[:, 0]).T))
-            data = np.vstack((data, data[0, :]))
-        data = data.reshape((grid.num_theta, grid.num_rho, grid.num_zeta), order="F")
-
-        label = r"$\mathbf{B} \cdot \hat{n} ~(\mathrm{T})$"
 
     fig, ax = _format_ax(ax, figsize=kwargs.pop("figsize", None))
     divider = make_axes_locatable(ax)
@@ -901,7 +943,10 @@ def plot_3d(
 
     Examples
     --------
-    .. image:: ../../_static/images/plotting/plot_3d.png
+    .. raw:: html
+
+        <iframe src="../../_static/images/plotting/plot_3d.html"
+        width="100%" height="980" frameborder="0"></iframe>
 
     .. code-block:: python
 
@@ -943,42 +988,14 @@ def plot_3d(
             component=component,
         )
     else:
-        field = kwargs.pop("field", None)
-        errorif(
-            field is None,
-            msg="If B*n is entered as the variable to plot, a magnetic field"
-            " must be provided.",
+        data, label = _compute_Bn(
+            eq=eq,
+            field=kwargs.pop("field", None),
+            plot_grid=grid,
+            field_grid=kwargs.pop("field_grid", None),
+            chunk_size=kwargs.pop("chunk_size", None),
+            B_plasma_chunk_size=kwargs.pop("B_plasma_chunk_size", None),
         )
-        errorif(
-            not np.all(np.isclose(grid.nodes[:, 0], 1)),
-            msg="If B*n is entered as the variable to plot, "
-            "the grid nodes must be at rho=1.",
-        )
-
-        field_grid = kwargs.pop("field_grid", None)
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-
-            if grid.endpoint:
-                # cannot use a grid with endpoint=True for FFT interpolator
-                vc_grid = LinearGrid(
-                    theta=grid.nodes[grid.unique_theta_idx[0:-1], 1],
-                    zeta=grid.nodes[grid.unique_zeta_idx[0:-1], 2],
-                    NFP=grid.NFP,
-                    endpoint=False,
-                )
-            else:
-                vc_grid = grid
-            data, _ = field.compute_Bnormal(
-                eq, eval_grid=vc_grid, source_grid=field_grid, vc_source_grid=vc_grid
-            )
-        data = data.reshape((vc_grid.num_theta, vc_grid.num_zeta), order="F")
-        if grid.endpoint:
-            data = np.hstack((data, np.atleast_2d(data[:, 0]).T))
-            data = np.vstack((data, data[0, :]))
-        data = data.reshape((grid.num_theta, grid.num_rho, grid.num_zeta), order="F")
-
-        label = r"$\mathbf{B} \cdot \hat{n} ~(\mathrm{T})$"
 
     errorif(
         len(kwargs) != 0,
@@ -1846,6 +1863,32 @@ def poincare_plot(
         Axes being plotted to.
     plot_data : dict
         Dictionary of the data plotted, only returned if ``return_data=True``
+
+    Examples
+    --------
+    .. image:: ../../_static/images/plotting/poincare_plot.png
+
+    .. code-block:: python
+
+        from desc.plotting import poincare_plot
+        grid_trace = LinearGrid(rho=np.linspace(0.4, 0.9, 7))
+        r0 = eq.compute("R", grid=grid_trace)["R"]
+        z0 = eq.compute("Z", grid=grid_trace)["Z"]
+        fig, ax = desc.plotting.poincare_plot(
+            field,
+            r0,
+            z0,
+            NFP=eq.NFP,
+            color="k",
+            size=0.5,
+            ntransit=100
+        )
+        grid_trace2 = LinearGrid(rho=np.linspace(0.52, 0.55, 4))
+        r0 = eq.compute("R", grid=grid_trace2)["R"]
+        z0 = eq.compute("Z", grid=grid_trace2)["Z"]
+        fig, ax = desc.plotting.poincare_plot(
+            field, r0, z0, NFP=eq.NFP, ax=ax, color="r", size=0.5, ntransit=250
+        )
     """
     fli_kwargs = {}
     for key in inspect.signature(field_line_integrate).parameters:
@@ -2473,6 +2516,8 @@ def plot_coils(coils, grid=None, fig=None, return_data=False, **kwargs):
           True by default.
         * ``zeroline``: Bool, whether or not to show the zero coordinate axis lines.
           True by default.
+        * ``check_intersection``: Bool, whether or not to check the intersection of
+          the coils before plotting. False by default.
 
     Returns
     -------
@@ -2480,6 +2525,20 @@ def plot_coils(coils, grid=None, fig=None, return_data=False, **kwargs):
         Figure being plotted to
     plot_data : dict
         Dictionary of the data plotted, only returned if ``return_data=True``
+
+    Examples
+    --------
+    .. raw:: html
+
+        <iframe src="../../_static/images/plotting/plot_coils.html"
+        width="100%" height="980" frameborder="0"></iframe>
+
+    .. code-block:: python
+
+        from desc.plotting import plot_coils
+        from desc.coils import initialize_modular_coils
+        coils = initialize_modular_coils(eq, num_coils=4, r_over_a=2)
+        plot_coils(coils)
 
     """
     lw = kwargs.pop("lw", 5)
@@ -2491,6 +2550,7 @@ def plot_coils(coils, grid=None, fig=None, return_data=False, **kwargs):
     zeroline = kwargs.pop("zeroline", True)
     showticklabels = kwargs.pop("showticklabels", True)
     showaxislabels = kwargs.pop("showaxislabels", True)
+    check_intersection = kwargs.pop("check_intersection", False)
     errorif(
         len(kwargs) != 0,
         msg=f"plot_coils got unexpected keyword argument: {kwargs.keys()}",
@@ -2510,13 +2570,16 @@ def plot_coils(coils, grid=None, fig=None, return_data=False, **kwargs):
     if grid is None:
         grid = LinearGrid(N=400, endpoint=True)
 
-    def flatten_coils(coilset):
+    def flatten_coils(coilset, check_intersection=check_intersection):
         if hasattr(coilset, "__len__"):
             if hasattr(coilset, "_NFP") and hasattr(coilset, "_sym"):
                 if not unique and (coilset.NFP > 1 or coilset.sym):
                     # plot all coils for symmetric coil sets
                     coilset = CoilSet.from_symmetry(
-                        coilset, NFP=coilset.NFP, sym=coilset.sym
+                        coilset,
+                        NFP=coilset.NFP,
+                        sym=coilset.sym,
+                        check_intersection=check_intersection,
                     )
             return [a for i in coilset for a in flatten_coils(i)]
         else:

@@ -855,9 +855,10 @@ class PlasmaCoilSetDistanceBound(_Objective):
 
     Will yield one or two values per coil in the coilset, depending on the mode
     variable, which is the minimum and/or maximum distance from that coil to the
-    plasma boundary surface. If max or min mode is selected, only one value is returned.
-    If bound mode is selected, two values are returned per coil, which are the minimum
-    and maximum distance from the coil to the plasma boundary surface.
+    plasma boundary surface. If ``max`` or ``min`` mode is selected, only one value
+    is returned. If ``bound`` mode is selected, two values are returned per coil,
+    which are the minimum and maximum distance from the coil to the plasma boundary
+    surface.
 
     NOTE: By default, assumes the plasma boundary is not fixed and its coordinates are
     computed at every iteration, for example if the equilibrium is changing in a
@@ -1012,7 +1013,10 @@ class PlasmaCoilSetDistanceBound(_Objective):
             "Plasma/Surface grid includes interior points, should be rho=1.",
         )
 
-        self._dim_f = coil.num_coils
+        if self._ismax or self._ismin:
+            self._dim_f = coil.num_coils
+        else:
+            self._dim_f = 2 * coil.num_coils
         self._eq_data_keys = ["R", "phi", "Z"]
 
         eq_profiles = get_profiles(self._eq_data_keys, obj=eq, grid=plasma_grid)
@@ -1126,8 +1130,16 @@ class PlasmaCoilSetDistanceBound(_Objective):
                 return min
             return jnp.array([min, max])
 
-        k = jnp.arange(self.dim_f)
+        if self._ismax or self._ismin:
+            k = jnp.arange(self.dim_f)
+        else:
+            k = jnp.arange(self.dim_f // 2)
+
         extreme_dist_per_coil = vmap_chunked(body, chunk_size=self._dist_chunk_size)(k)
+
+        # if mode is bound, flatten the output
+        extreme_dist_per_coil = extreme_dist_per_coil.flatten()
+
         return extreme_dist_per_coil
 
 

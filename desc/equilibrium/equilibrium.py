@@ -2290,7 +2290,8 @@ class Equilibrium(IOAble, Optimizable):
         objective : ObjectiveFunction
             Objective function to optimize.
         constraints : Objective or tuple of Objective
-            Objective function to satisfy. Default = fixed-boundary force balance.
+            Objective function to satisfy. By default, force-balance is placed
+            as a constraint, but every other DOF (boundary, profiles, Psi) is free.
         optimizer : str or Optimizer (optional)
             optimizer to use
         ftol, xtol, gtol, ctol : float
@@ -2331,8 +2332,13 @@ class Equilibrium(IOAble, Optimizable):
         if not isinstance(optimizer, Optimizer):
             optimizer = Optimizer(optimizer)
         if constraints is None:
-            constraints = get_fixed_boundary_constraints(eq=self)
-            constraints = (ForceBalance(eq=self), *constraints)
+            warnings.warn(
+                "No constraints passed in, by default only ForceBalance is"
+                "used as a constraint, and every other DOF is free (boundary, profiles "
+                "Psi), this is not recommended for most optimization problems.",
+                UserWarning,
+            )
+            constraints = (ForceBalance(eq=self),)
         if not isinstance(constraints, (list, tuple)):
             constraints = tuple([constraints])
 

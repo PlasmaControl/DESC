@@ -2136,7 +2136,7 @@ def _omega(params, transforms, profiles, data, **kwargs):
     data=["0"],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
-        "desc.geometry.surface.ZernikeRZToroidalSection",
+        "desc.geometry.core.Surface",
     ],
 )
 def _omega_r(params, transforms, profiles, data, **kwargs):
@@ -2805,7 +2805,7 @@ def _phi(params, transforms, profiles, data, **kwargs):
     data=["omega_r"],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
-        "desc.geometry.surface.ZernikeRZToroidalSection",
+        "desc.geometry.core.Surface",
     ],
 )
 def _phi_r(params, transforms, profiles, data, **kwargs):

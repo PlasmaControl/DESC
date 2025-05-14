@@ -162,7 +162,8 @@ def sgd(
             success, message = False, STATUS_MESSAGES["callback"]
 
         iteration += 1
-
+    if (iteration == maxiter) and success is None:
+        success, message = False, STATUS_MESSAGES["maxiter"]
     result = OptimizeResult(
         x=x,
         success=success,

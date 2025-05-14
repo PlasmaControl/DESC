@@ -850,13 +850,14 @@ class CoilSetMinDistance(_Objective):
         return min_dist_per_coil
 
 
-class PlasmaCoilSetDistance(_Objective):
+class PlasmaCoilSetDistanceBound(_Objective):
     """Target the distance between the plasma and coilset.
 
-    Will yield one value per coil in the coilset, which is the distance from
-    that coil to the plasma boundary surface. Can be penalized as maximum
-    or minimum distance. Note that maximum plasma coil distance is the maximum over the
-    coil, not over the plasma.
+    Will yield one or two values per coil in the coilset, depending on the mode
+    variable, which is the minimum and/or maximum distance from that coil to the
+    plasma boundary surface. If max or min mode is selected, only one value is returned.
+    If bound mode is selected, two values are returned per coil, which are the minimum
+    and maximum distance from the coil to the plasma boundary surface.
 
     NOTE: By default, assumes the plasma boundary is not fixed and its coordinates are
     computed at every iteration, for example if the equilibrium is changing in a
@@ -871,8 +872,10 @@ class PlasmaCoilSetDistance(_Objective):
         to satisfy the Objective.
     coil : CoilSet
         Coil(s) that are to be optimized.
-    mode: string
-        Either `max` or `min` for targeting max or min plasma-coil distance.
+    mode: string, optional
+        One of ``bound``, ``min``, or ``max`` for bounding both min and max plasma-coil
+        distance or targeting only min or max plasma-coil distance.
+        Defaults to ``bound``.
     plasma_grid : Grid, optional
         Collocation grid containing the nodes to evaluate plasma geometry at.
         Defaults to ``LinearGrid(M=eq.M_grid, N=eq.N_grid)``.
@@ -924,7 +927,7 @@ class PlasmaCoilSetDistance(_Objective):
         self,
         eq,
         coil,
-        mode,
+        mode="bound",
         target=None,
         bounds=None,
         weight=1,
@@ -944,10 +947,15 @@ class PlasmaCoilSetDistance(_Objective):
     ):
         if target is None and bounds is None:
             bounds = (1, np.inf)
-        errorif(mode not in ["max", "min"], ValueError, "mode must be 'max' or 'min'")
+        errorif(
+            mode not in ["bound", "max", "min"],
+            ValueError,
+            "mode must be 'bound', 'max', or 'min'",
+        )
         self._eq = eq
         self._coil = coil
         self._ismax = mode == "max"
+        self._ismin = mode == "min"
         self._plasma_grid = plasma_grid
         self._coil_grid = coil_grid
         self._eq_fixed = eq_fixed
@@ -1101,24 +1109,29 @@ class PlasmaCoilSetDistance(_Objective):
         def body(k):
             # dist btwn all pts; shape(ncoils,plasma_grid.num_nodes,coil_grid.num_nodes)
             dist = safenorm(coils_pts[k][None, :, :] - plasma_pts[:, None, :], axis=-1)
-            if self._ismax:
-                if self._use_softmin:
-                    # minimum over plasma points, then max over coil points
-                    return softmax(
-                        softmin(dist, self._softmin_alpha, axis=0), self._softmin_alpha
-                    )
-                return jnp.max(jnp.min(dist, axis=0))
+            if self._use_softmin:
+                # minimum over plasma points, then max over coil points
+                max = softmax(
+                    softmin(dist, self._softmin_alpha, axis=0), self._softmin_alpha
+                )
+                # minimum over all points
+                min = softmin(dist, self._softmin_alpha)
             else:
-                if self._use_softmin:
-                    return softmin(dist, self._softmin_alpha)
-                return jnp.min(dist)
+                max = jnp.max(jnp.min(dist, axis=0))
+                min = jnp.min(dist)
+
+            if self._ismax:
+                return max
+            if self._ismin:
+                return min
+            return jnp.array([min, max])
 
         k = jnp.arange(self.dim_f)
         extreme_dist_per_coil = vmap_chunked(body, chunk_size=self._dist_chunk_size)(k)
         return extreme_dist_per_coil
 
 
-class PlasmaCoilSetMinDistance(PlasmaCoilSetDistance):
+class PlasmaCoilSetMinDistance(PlasmaCoilSetDistanceBound):
     """Target the minimum distance between the plasma and coilset.
 
     Will yield one value per coil in the coilset, which is the minimum distance from
@@ -1224,117 +1237,6 @@ class PlasmaCoilSetMinDistance(PlasmaCoilSetDistance):
             jac_chunk_size=jac_chunk_size,
             use_softmin=use_softmin,
             softmin_alpha=softmin_alpha,
-            dist_chunk_size=dist_chunk_size,
-        )
-
-
-class PlasmaCoilSetMaxDistance(PlasmaCoilSetDistance):
-    """Target the maximum distance between the plasma and coilset.
-
-    Will yield one value per coil in the coilset, which is the maximum distance from
-    that coil to the plasma boundary surface. Note that maximum plasma coil distance
-    is the maximum over the coil, not over the plasma.
-
-    NOTE: By default, assumes the plasma boundary is not fixed and its coordinates are
-    computed at every iteration, for example if the equilibrium is changing in a
-    single-stage optimization.
-    If the plasma boundary is fixed, set eq_fixed=True to precompute the last closed
-    flux surface coordinates and improve the efficiency of the calculation.
-
-    Parameters
-    ----------
-    eq : Equilibrium or FourierRZToroidalSurface
-        Equilibrium (or FourierRZToroidalSurface) that will be optimized
-        to satisfy the Objective.
-    coil : CoilSet
-        Coil(s) that are to be optimized.
-    plasma_grid : Grid, optional
-        Collocation grid containing the nodes to evaluate plasma geometry at.
-        Defaults to ``LinearGrid(M=eq.M_grid, N=eq.N_grid)``.
-    coil_grid : Grid, list, optional
-        Collocation grid containing the nodes to evaluate coilset geometry at.
-        Defaults to the default grid for the given coil-type, see ``coils.py``
-        and ``curve.py`` for more details.
-        If a list, must have the same structure as coils.
-    eq_fixed: bool, optional
-        Whether the equilibrium is fixed or not. If True, the last closed flux surface
-        is fixed and its coordinates are precomputed, which saves on computation time
-        during optimization, and self.things = [coil] only.
-        If False, the surface coordinates are computed at every iteration.
-        False by default, so that self.things = [coil, eq].
-    coils_fixed: bool, optional
-        Whether the coils are fixed or not. If True, the coils
-        are fixed and their coordinates are precomputed, which saves on computation time
-        during optimization, and self.things = [eq] only.
-        If False, the coil coordinates are computed at every iteration.
-        False by default, so that self.things = [coil, eq].
-    use_softmax: bool, optional
-        Use softmax or hard max. Softmax is a smooth approximation to the actual maximum
-        distance that may give smoother gradients, at the expense of being slightly more
-        expensive and only an approximate maximum.
-    softmax_alpha: float, optional
-        Parameter used for softmax. The larger ``softmax_alpha``, the closer the
-        softmax approximates the hardmax. softmax -> hardmax as
-        ``softmax_alpha`` -> infinity.
-    dist_chunk_size : int > 0, optional
-        When computing distances, how many coils to consider at once. Default is all
-        coils, which is generally the fastest but requires the most memory. If there are
-        a large number of coils, or if the resolution is very high, setting this to a
-        small value will reduce peak memory usage at the cost of slightly increased
-        runtime.
-
-    """
-
-    __doc__ = __doc__.rstrip() + collect_docs(
-        target_default="``bounds=(0,1)``.",
-        bounds_default="``bounds=(0,1)``.",
-        coil=True,
-    )
-
-    _scalar = False
-    _units = "(m)"
-    _print_value_fmt = "Maximum plasma-coil distance: "
-
-    def __init__(
-        self,
-        eq,
-        coil,
-        target=None,
-        bounds=None,
-        weight=1,
-        normalize=True,
-        normalize_target=True,
-        loss_function=None,
-        deriv_mode="auto",
-        plasma_grid=None,
-        coil_grid=None,
-        eq_fixed=False,
-        coils_fixed=False,
-        name="plasma-coil maximum distance",
-        jac_chunk_size=None,
-        use_softmax=False,
-        softmax_alpha=1.0,
-        dist_chunk_size=None,
-    ):
-        super().__init__(
-            eq=eq,
-            coil=coil,
-            mode="max",
-            target=target,
-            bounds=bounds,
-            weight=weight,
-            normalize=normalize,
-            normalize_target=normalize_target,
-            loss_function=loss_function,
-            deriv_mode=deriv_mode,
-            plasma_grid=plasma_grid,
-            coil_grid=coil_grid,
-            eq_fixed=eq_fixed,
-            coils_fixed=coils_fixed,
-            name=name,
-            jac_chunk_size=jac_chunk_size,
-            use_softmin=use_softmax,
-            softmin_alpha=softmax_alpha,
             dist_chunk_size=dist_chunk_size,
         )
 

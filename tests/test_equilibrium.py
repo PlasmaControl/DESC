@@ -465,5 +465,10 @@ def test_eq_optimize_default_constraints_warning(DummyStellarator):
     """Tests default constraints warning for eq.optimize."""
     eq = load(load_from=str(DummyStellarator["output_path"]), file_format="hdf5")
     eq.change_resolution(M=1, N=0, M_grid=2, N_grid=0)
-    with pytest.warns(UserWarning, match="DOF is free"):
-        eq.optimize(ObjectiveFunction(ForceBalance(eq)), maxiter=0)
+    with pytest.warns(UserWarning, match="no equil"):
+        eq.optimize(
+            ObjectiveFunction(ForceBalance(eq)),
+            constraints=(),
+            optimizer="lsq-exact",
+            maxiter=0,
+        )

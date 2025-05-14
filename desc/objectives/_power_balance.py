@@ -38,6 +38,8 @@ class FusionPower(_Objective):
         loss_detail=" Note: Has no effect for this objective.",
     )
 
+    _static_attrs = _Objective._static_attrs + ["_fuel"]
+
     _scalar = True
     _units = "(W)"
     _print_value_fmt = "Fusion power: "

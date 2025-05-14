@@ -396,7 +396,7 @@ def _R0(params, transforms, profiles, data, **kwargs):
     data=["A"],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
-        "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.core.Surface",
     ],
 )
 def _a(params, transforms, profiles, data, **kwargs):

@@ -518,7 +518,6 @@ def _e_sup_theta(params, transforms, profiles, data, **kwargs):
     data=["e_rho", "e_zeta"],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
-        "desc.geometry.core.Surface",
     ],
 )
 def _e_sup_theta_times_sqrt_g(params, transforms, profiles, data, **kwargs):
@@ -1398,7 +1397,6 @@ def _e_sup_zeta_zz(params, transforms, profiles, data, **kwargs):
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.FourierRZToroidalSurface",
-        "desc.geometry.core.Surface",
     ],
     aliases=["e_phi"],
     # Our usual notation implies e_phi = (∂X/∂ϕ)|R,Z = R ϕ̂, but we need to alias e_phi
@@ -3225,7 +3223,7 @@ def _e_sub_zeta_zz(params, transforms, profiles, data, **kwargs):
     data=["R", "0"],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
-        "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.core.Surface",
     ],
 )
 def _grad_phi(params, transforms, profiles, data, **kwargs):
@@ -3334,7 +3332,7 @@ def _gradpsi(params, transforms, profiles, data, **kwargs):
     axis_limit_data=["e_theta_r", "|e_theta x e_zeta|_r"],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
-        "desc.geometry.core.Surface",
+        "desc.geometry.core.FourierRZToroidalSurface",
     ],
 )
 def _n_rho(params, transforms, profiles, data, **kwargs):
@@ -3374,7 +3372,7 @@ def _n_rho(params, transforms, profiles, data, **kwargs):
     ],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
-        "desc.geometry.core.Surface",
+        "desc.geometry.core.FourierRZToroidalSurface",
     ],
 )
 def _n_rho_z(params, transforms, profiles, data, **kwargs):
@@ -3403,7 +3401,6 @@ def _n_rho_z(params, transforms, profiles, data, **kwargs):
     data=["e_rho", "e_zeta", "|e_zeta x e_rho|"],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
-        "desc.geometry.core.Surface",
     ],
 )
 def _n_theta(params, transforms, profiles, data, **kwargs):
@@ -3430,7 +3427,7 @@ def _n_theta(params, transforms, profiles, data, **kwargs):
     axis_limit_data=["e_theta_r", "|e_rho x e_theta|_r"],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
-        "desc.geometry.core.Surface",
+        "desc.geometry.surface.ZernikeRZToroidalSection",
     ],
 )
 def _n_zeta(params, transforms, profiles, data, **kwargs):

@@ -365,33 +365,29 @@ def maybe_add_self_consistency(thing, constraints):
     params = set(unique_list(flatten_list(thing.optimizable_params))[0])
 
     # Equilibrium
-    if {"W_lmn", "Wb_lmn"} <= params and not add_if_multiple(
-        constraints, BoundaryWSelfConsistency
-    ):
-        constraints = add_if_multiple(constraints, BoundaryZSelfConsistency)
-
-    if {"W_lmn"} <= params and not add_if_multiple(constraints, FixOmegaGauge):
-        constraints = add_if_multiple(constraints, FixOmegaGauge)
-
-    if {"W_lmn", "Wa_n"} <= params and not add_if_multiple(
-        constraints, AxisWSelfConsistency
-    ):
-        constraints = add_if_multiple(constraints, AxisZSelfConsistency)
-
     if {"R_lmn", "Rb_lmn"} <= params:
         constraints = add_if_multiple(constraints, BoundaryRSelfConsistency)
 
     if {"Z_lmn", "Zb_lmn"} <= params:
         constraints = add_if_multiple(constraints, BoundaryZSelfConsistency)
 
+    if {"W_lmn", "Wb_lmn"} <= params:
+        constraints = add_if_multiple(constraints, BoundaryWSelfConsistency)
+
     if {"L_lmn"} <= params:
         constraints = add_if_multiple(constraints, FixLambdaGauge)
+
+    if {"W_lmn"} <= params:
+        constraints = add_if_multiple(constraints, FixOmegaGauge)
 
     if {"R_lmn", "Ra_n"} <= params:
         constraints = add_if_multiple(constraints, AxisRSelfConsistency)
 
     if {"Z_lmn", "Za_n"} <= params:
         constraints = add_if_multiple(constraints, AxisZSelfConsistency)
+
+    if {"W_lmn", "Wa_n"} <= params:
+        constraints = add_if_multiple(constraints, AxisWSelfConsistency)
 
     # Curve
     if {"shift"} <= params:

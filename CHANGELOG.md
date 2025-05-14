@@ -20,6 +20,7 @@ Bug Fixes
 
 - Fixes bug where ``ObjectiveFunction`` was incorrectly using ``deriv_mode="batched"`` and the heuristic-set ``jac_chunk_size`` when ``jac_chunk_size`` is given to a sub-objective, where it should have instead defaulted to ``deriv_mode="blocked"``. See #1687
 - Allows ``x_scale`` to be passed to ``factorize_linear_constraints`` in ``Optimizer.optimize`` through the new ``"linear_constraint_options"``.
+- Fixes issue in ``desc.geometry.curve.FourierPlanarCurve.from_values`` where the orientation of the fitted curve can be the reverse of the original curve, which can be problematic for coils (the current is not negated, so the resulting fitted coil would have field opposite of the initial).
 
 
 v0.14.1

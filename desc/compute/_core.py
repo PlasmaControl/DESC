@@ -2113,12 +2113,12 @@ def _lambda_zzz(params, transforms, profiles, data, **kwargs):
     data=["0"],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
-        # TODO: what does omega !=0 mean for ZernikeRZToroidalXS?
         "desc.geometry.core.Surface",
     ],
 )
 def _omega(params, transforms, profiles, data, **kwargs):
     data["omega"] = data["0"]
+    # TODO: what does omega !=0 mean for ZernikeRZToroidalXS?
     return data
 
 

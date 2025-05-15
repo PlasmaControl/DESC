@@ -1,9 +1,10 @@
 name: Memory Benchmarks
 
 on:
-  pull_request:
+  pull_request_target:
     branches:
       - master
+    types: [opened, synchronize]
   workflow_dispatch:
 
 jobs:
@@ -53,7 +54,7 @@ jobs:
       - name: Set Swap Space
         uses: pierotofy/set-swap-space@master
         with:
-          swap-size-gb: 10
+          swap-size-gb: 4
 
       - name: Action Details
         run: |

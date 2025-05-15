@@ -425,7 +425,7 @@ class BoundaryZSelfConsistency(_Objective):
         ----------
         params : dict
             Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
-        constants : dict
+        constants : dictx`
             Dictionary of constant data, eg transforms, profiles etc. Defaults to
             self.constants
 
@@ -497,20 +497,22 @@ class BoundaryWSelfConsistency(_Objective):
 
         self._dim_f = idx.size
         self._A = np.zeros((self._dim_f, eq.W_basis.num_modes))
+        Js = []
+        surf = eq.surface.rho if self._surface_label is None else self._surface_label
         for i, (l, m, n) in enumerate(eq.W_basis.modes):
             if eq.bdry_mode == "lcfs":
                 j = np.argwhere((modes[:, 1:] == [m, n]).all(axis=1))
-                surf = (
-                    eq.surface.rho
-                    if self._surface_label is None
-                    else self._surface_label
-                )
-                self._A[j, i] = zernike_radial(surf, l, m)
+                Js.append(j.flatten())
             else:
                 raise NotImplementedError(
                     "bdry_mode is not lcfs, yell at Dario to finish poincare stuff"
                 )
-
+        Js = np.array(Js)
+        # Broadcasting at once is faster. We need to use np.arange to avoid
+        # setting the value to the whole row.
+        self._A[Js[:, 0], np.arange(eq.W_basis.num_modes)] = zernike_radial(
+            surf, eq.W_basis.modes[:, 0], eq.W_basis.modes[:, 1]
+        )
         super().build(use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
@@ -1014,14 +1016,17 @@ class FixBoundaryW(_FixedObjective):
         normalize=True,
         normalize_target=True,
         modes=True,
-        surface_label=None,
         name="lcfs omega",
     ):
-        self._modes = modes
-        self._target_from_user = setdefault(bounds, target)
-        self._surface_label = surface_label
+        if isinstance(modes, bool):
+            indices = modes
+        else:
+            indices = np.array([], dtype=int)
+            for mode in np.atleast_2d(modes):
+                indices = np.append(indices, eq.surface.Z_basis.get_idx(*mode))
         super().__init__(
-            things=eq,
+            thing=eq,
+            params={"Wb_lmn": indices},
             target=target,
             bounds=bounds,
             weight=weight,
@@ -1042,67 +1047,10 @@ class FixBoundaryW(_FixedObjective):
 
         """
         eq = self.things[0]
-        if self._modes is False or self._modes is None:  # no modes
-            modes = np.array([[]], dtype=int)
-            idx = np.array([], dtype=int)
-            modes_idx = idx
-        elif self._modes is True:  # all modes
-            modes = eq.surface.W_basis.modes
-            idx = np.arange(eq.surface.W_basis.num_modes)
-            modes_idx = idx
-        else:  # specified modes
-            modes = np.atleast_2d(self._modes)
-            dtype = {
-                "names": ["f{}".format(i) for i in range(3)],
-                "formats": 3 * [modes.dtype],
-            }
-            _, idx, modes_idx = np.intersect1d(
-                eq.surface.W_basis.modes.astype(modes.dtype).view(dtype),
-                modes.view(dtype),
-                return_indices=True,
-            )
-            # rearrange modes to match order of eq.surface.W_basis.modes
-            # and eq.surface.W_lmn,
-            # necessary so that the A matrix rows match up with the target b
-            modes = np.atleast_2d(eq.surface.W_basis.modes[idx, :])
-
-            if idx.size < modes.shape[0]:
-                warnings.warn(
-                    colored(
-                        "Some of the given modes are not in the surface, "
-                        + "these modes will not be fixed.",
-                        "yellow",
-                    )
-                )
-
-        self._dim_f = idx.size
-        # Wb_lmn -> Wb optimization space
-        self._A = np.eye(eq.surface.W_basis.num_modes)[idx, :]
-
-        self.target, self.bounds = self._parse_target_from_user(
-            self._target_from_user, eq.surface.W_lmn[idx], None, modes_idx
-        )
-
+        if self._normalize:
+            scales = compute_scaling_factors(eq)
+            self._normalization = scales["a"]
         super().build(use_jit=use_jit, verbose=verbose)
-
-    def compute(self, params, constants=None):
-        """Compute boundary omega errors.
-
-        Parameters
-        ----------
-        params : dict
-            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
-        constants : dict
-            Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
-
-        Returns
-        -------
-        f : ndarray
-            boundary omega errors.
-
-        """
-        return jnp.dot(self._A, params["Wb_lmn"])
 
 
 class FixLambdaGauge(FixParameters):

@@ -1223,8 +1223,8 @@ def test_proximal_jacobian():
     # for scaled jacobian
     Fx = con1.jac_scaled(xf)
     Gx = obj1.jac_scaled(xg)
-    Fxh = Fx[:, prox1._unfixed_idx] @ prox1._Z
-    Gxh = Gx[:, prox1._unfixed_idx] @ prox1._Z
+    Fxh = Fx[:, prox1._eq_unfixed_idx] @ prox1._eq_Z
+    Gxh = Gx[:, prox1._eq_unfixed_idx] @ prox1._eq_Z
     Fc = Fx @ prox1._dxdc
     Gc = Gx @ prox1._dxdc
     cutoff = np.finfo(Fxh.dtype).eps * np.max(Fxh.shape)
@@ -1236,8 +1236,8 @@ def test_proximal_jacobian():
     # for unscaled jacobian
     Fx = con1.jac_unscaled(xf)
     Gx = obj1.jac_unscaled(xg)
-    Fxh = Fx[:, prox1._unfixed_idx] @ prox1._Z
-    Gxh = Gx[:, prox1._unfixed_idx] @ prox1._Z
+    Fxh = Fx[:, prox1._eq_unfixed_idx] @ prox1._eq_Z
+    Gxh = Gx[:, prox1._eq_unfixed_idx] @ prox1._eq_Z
     Fc = Fx @ prox1._dxdc
     Gc = Gx @ prox1._dxdc
     cutoff = np.finfo(Fxh.dtype).eps * np.max(Fxh.shape)

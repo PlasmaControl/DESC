@@ -1158,7 +1158,6 @@ class ProximalProjection(ObjectiveFunction):
         op = "unscaled"
         return self._jvp(v, x, constants, op)
 
-      
     def _jvp(self, v, x, constants=None, op="scaled_error"):
         # The goal is to compute the Jacobian of the objective function with respect to
         # the optimization variables (c). Before taking the Jacobian, we update the
@@ -1297,7 +1296,7 @@ def jit_if_not_parallel(func):
             return func(*args, **kwargs)
 
     return wrapper
- 
+
 
 @functools.partial(jit, static_argnames=["op"])
 def _proximal_jvp_f_pure(constraint, xf, constants, dc, eq_feasible_tangents, dxdc, op):
@@ -1353,8 +1352,8 @@ def _proximal_jvp_blocked_pure(objective, vgs, xgs, op):
         else:
             outi = getattr(obj, "jvp_" + op)([_vi for _vi in vi], xi, constants=const).T
             out.append(outi)
-        return jnp.concatenate(out).T
-      
+    return jnp.concatenate(out).T
+
 
 def _proximal_jvp_blocked_parallel(objective, vgs, xgs, op):
     if objective.rank == 0:

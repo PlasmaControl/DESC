@@ -501,16 +501,10 @@ class ObjectiveFunction(IOAble):
         self._set_things()
 
         # setting derivative mode and chunking.
-        errorif(
-            isposint(self._jac_chunk_size) and self._deriv_mode in ["auto", "blocked"],
-            ValueError,
-            "\n'jac_chunk_size' was passed into ObjectiveFunction, but the \n"
-            "ObjectiveFunction is not using 'batched' deriv_mode",
-        )
         sub_obj_jac_chunk_sizes_are_ints = [
             isposint(obj._jac_chunk_size) for obj in self.objectives
         ]
-        sub_obj_chunk_sizes = [
+        sub_obj_chunk_sizes_names = [
             (obj.__class__.__name__, obj._jac_chunk_size) for obj in self.objectives
         ]
         errorif(
@@ -524,7 +518,7 @@ class ObjectiveFunction(IOAble):
             "ObjectiveFunction if each sub-objective is desired to have a \n"
             "different 'jac_chunk_size' for its Jacobian computation. \n"
             "`jac_chunk_size` of sub-objective(s): \n"
-            f"{sub_obj_chunk_sizes}\n"
+            f"{sub_obj_chunk_sizes_names}\n"
             f"Note: If you didn't specify 'jac_chunk_size' for the sub-objectives, \n"
             "it might be that sub-objective has an internal logic to determine the \n"
             "chunk size based on the available memory.",
@@ -548,6 +542,12 @@ class ObjectiveFunction(IOAble):
         )
         if self._is_multi_device:
             self._deriv_mode = "blocked"
+        errorif(
+            isposint(self._jac_chunk_size) and self._deriv_mode in ["blocked"],
+            ValueError,
+            "'jac_chunk_size' was passed into ObjectiveFunction, but the "
+            "ObjectiveFunction is not using 'batched' deriv_mode",
+        )
 
         if self._jac_chunk_size == "auto":
             # Heuristic estimates of fwd mode Jacobian memory usage,
@@ -558,19 +558,16 @@ class ObjectiveFunction(IOAble):
                 (mem_avail / estimated_memory_usage - 0.22) / 0.85 * self.dim_x
             )
             self._jac_chunk_size = max([1, max_chunk_size])
-            if self._deriv_mode == "blocked":
-                for obj in self.objectives:
-                    if obj._jac_chunk_size is None:
-                        estimated_memory_usage = (
-                            2.4e-7 * obj.dim_f * obj.things[0].dim_x + 1
-                        )  # in GB
-                        mem_avail = desc_config["avail_mems"][obj._device_id]  # in GB
-                        max_chunk_size = round(
-                            (mem_avail / estimated_memory_usage - 0.22)
-                            / 0.85
-                            * obj.things[0].dim_x
-                        )
-                        obj._jac_chunk_size = max([1, max_chunk_size])
+
+        if self._deriv_mode == "blocked" and len(self.objectives) > 1:
+            # blocked mode should never use this chunk size if there
+            # are multiple sub-objectives
+            self._jac_chunk_size = None
+        elif self._deriv_mode == "blocked" and len(self.objectives) == 1:
+            # if there is only one objective i.e. wrapped ForceBalance in
+            # ProximalProjection, we can use the chunk size of
+            # that objective as if this is batched mode
+            self._jac_chunk_size = self.objectives[0]._jac_chunk_size
 
         if not use_jit_wrapper:
             self._unjit()

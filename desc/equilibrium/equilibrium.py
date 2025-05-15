@@ -519,9 +519,9 @@ class Equilibrium(IOAble, Optimizable):
             type(self).__name__
             + " at "
             + str(hex(id(self)))
-            + f" (L={self.L}, M={self.M}, N={self.N}, Lz={self.Lz}, Mz={self.Mz},"
-            + "Nz={self.Nz}, NFP={self.NFP}, sym={self.sym},"
-            + "spectral_indexing={self.spectral_indexing})"
+            + f" (L={self.L}, M={self.M}, N={self.N}, Lz={self.Lz}, Mz={self.Mz},\
+                    Nz={self.Nz}, NFP={self.NFP}, sym={self.sym},\
+                    spectral_indexing={self.spectral_indexing})"
         )  # RG: not sure if this change is needed
 
     def set_initial_guess(self, *args, ensure_nested=True):

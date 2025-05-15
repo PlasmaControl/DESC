@@ -2599,7 +2599,8 @@ def field_line_integrate(
     Returns
     -------
     r, z, phi : ndarray
-        arrays of r, z and phi coordinates of the field line.
+        arrays of r, z and phi coordinates of the field line, where `phi` is the geometric toroidal angle. 
+        Note that `phi` will be equal to the negative of the input `phis` array if Bphi<0.
 
     """
     r0, z0, phis = map(jnp.asarray, (r0, z0, phis))

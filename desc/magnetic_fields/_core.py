@@ -2599,8 +2599,9 @@ def field_line_integrate(
     Returns
     -------
     r, z, phi : ndarray
-        arrays of r, z and phi coordinates of the field line, where `phi` is the geometric toroidal angle. 
-        Note that `phi` will be equal to the negative of the input `phis` array if Bphi<0.
+        arrays of r, z and phi coordinates of the field line, where `phi` is the
+        geometric toroidal angle. Note that `phi` will be equal to the negative
+        of the input array `phis` if Bphi<0.
 
     """
     r0, z0, phis = map(jnp.asarray, (r0, z0, phis))
@@ -2613,12 +2614,15 @@ def field_line_integrate(
     signBT = np.sign(field.compute_magnetic_field(x0)[0, 1])
     if signBT < 0:
         warnings.warn(
-            "Field has negative toroidal component. Field line integration is being "
-            "done in the negative toroidal direction, hence the output is not in phis "
-            "but in negative phis. Use the outputed phis to get the correct "
-            "positions. This may not be what you want. If you want to integrate in the "
-            "positive direction, please reverse the field by \n"
-            "field_reversed = ScaledMagneticField(-1.0, field)",
+            "Toroidal component of the field is negative. Since field line integration "
+            "follows the direction of the magnetic field vector, the resulting "
+            "toroidal angle array (phi) from the integration will be in descending "
+            "order — effectively becoming the negative of the input array (phis). If "
+            "you want to integrate along the same field trajectory but "
+            "in the positive toroidal direction, you can flip the sign of the field \n"
+            "field_reversed = ScaledMagneticField(-1.0, field)\n"
+            "This allows you to integrate in the opposite direction while still "
+            "following the same field line geometry.",
             UserWarning,
         )
 

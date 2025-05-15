@@ -1941,7 +1941,7 @@ def poincare_plot(
     with warnings.catch_warnings():
         # we throw the same warning below with a message that is more
         # appropriate for this function
-        warnings.filterwarnings("ignore", message="Field has negative")
+        warnings.filterwarnings("ignore", message="Toroidal component of the field")
         fieldR, fieldZ, _ = field_line_integrate(
             r0=R0,
             z0=Z0,
@@ -3785,7 +3785,7 @@ def plot_field_lines(
     with warnings.catch_warnings():
         # we throw the same warning above with a message that is more
         # appropriate for this function
-        warnings.filterwarnings("ignore", message="Field has negative")
+        warnings.filterwarnings("ignore", message="Toroidal component of the field")
         fieldR, fieldZ, fieldPhi = field_line_integrate(
             r0=R0,
             z0=Z0,

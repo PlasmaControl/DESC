@@ -2565,7 +2565,10 @@ def field_line_integrate(
     phis : array-like
         strictly increasing array of time-like coordinate to output r,z at
         Note that phis is the geometric toroidal angle for positive Bphi,
-        and the negative toroidal angle for negative Bphi
+        however for negative Bphi, the integration will start at phis[0]
+        but will end at phis[0]-(phis[-1]-phis[0]). This is because the
+        integration follows the direction of the magnetic field vector not the
+        geometric toroidal angle.
     field : MagneticField
         source of magnetic field to integrate
     params: dict, optional
@@ -2600,8 +2603,9 @@ def field_line_integrate(
     -------
     r, z, phi : ndarray
         arrays of r, z and phi coordinates of the field line, where `phi` is the
-        geometric toroidal angle. Note that `phi` will be equal to the negative
-        of the input array `phis` if Bphi<0.
+        geometric toroidal angle. Note that `phi` will start from phis[0] and end with
+        phis[0]-(phis[-1]-phis[0]) if Bphi<0, otherwise it will start and end
+        at phis[0] and phis[-1] respectively.
 
     """
     r0, z0, phis = map(jnp.asarray, (r0, z0, phis))
@@ -2616,10 +2620,10 @@ def field_line_integrate(
         warnings.warn(
             "Toroidal component of the field is negative. Since field line integration "
             "follows the direction of the magnetic field vector, the resulting "
-            "toroidal angle array (phi) from the integration will be in descending "
-            "order — effectively becoming the negative of the input array (phis). If "
-            "you want to integrate along the same field trajectory but "
-            "in the positive toroidal direction, you can flip the sign of the field \n"
+            "toroidal angle array (phi) from the integration will start from phis[0] "
+            "and end with phis[0]-(phis[-1]-phis[0]). If you want to integrate along "
+            "the same field trajectory but in the positive toroidal direction, you "
+            "can flip the sign of the field \n"
             "field_reversed = ScaledMagneticField(-1.0, field)\n"
             "This allows you to integrate in the opposite direction while still "
             "following the same field line geometry.",

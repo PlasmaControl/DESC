@@ -8,6 +8,7 @@ from desc.backend import jit, jnp, put
 from desc.batching import batched_vectorize
 from desc.objectives import (
     BoundaryRSelfConsistency,
+    BoundaryWSelfConsistency,
     BoundaryZSelfConsistency,
     ObjectiveFunction,
     get_fixed_boundary_constraints,
@@ -605,37 +606,46 @@ class ProximalProjection(ObjectiveFunction):
     def _set_eq_state_vector(self):
         full_args = self._eq.optimizable_params.copy()
         self._args = self._eq.optimizable_params.copy()
-        for arg in ["R_lmn", "Z_lmn", "L_lmn", "Ra_n", "Za_n"]:
+        for arg in ["R_lmn", "Z_lmn", "L_lmn", "W_lmn", "Ra_n", "Za_n", "Wa_n"]:
             self._args.remove(arg)
+
         linear_constraint = ObjectiveFunction(self._linear_constraints)
         linear_constraint.build()
-        (self._Z, self._D, self._unfixed_idx) = (
+
+        (self._eq_Z, self._eq_D, self._eq_unfixed_idx) = (
             self._eq_solve_objective._Z,
             self._eq_solve_objective._D,
             self._eq_solve_objective._unfixed_idx,
         )
 
-        # dx/dc - goes from the full state to optimization variables for eq
         dxdc = []
         xz = {arg: np.zeros(self._eq.dimensions[arg]) for arg in full_args}
 
         for arg in self._args:
-            if arg not in ["Rb_lmn", "Zb_lmn"]:
+            if arg not in ["Rb_lmn", "Zb_lmn", "Wb_lmn"]:
                 x_idx = self._eq.x_idx[arg]
                 dxdc.append(np.eye(self._eq.dim_x)[:, x_idx])
             if arg == "Rb_lmn":
-                c = get_instance(self._linear_constraints, BoundaryRSelfConsistency)
+                c = get_instance(self._eq_linear_constraints, BoundaryRSelfConsistency)
+                # We have A @ R_lmn = Rb_lmn
                 A = c.jac_unscaled(xz)[0]["R_lmn"]
                 Ainv = np.linalg.pinv(A)
+                # Once this is multipled by Rb_lmn, we get the full eq state vector
+                # with the R_lmn but rest is 0
                 dxdRb = np.eye(self._eq.dim_x)[:, self._eq.x_idx["R_lmn"]] @ Ainv
                 dxdc.append(dxdRb)
             if arg == "Zb_lmn":
-                c = get_instance(self._linear_constraints, BoundaryZSelfConsistency)
+                c = get_instance(self._eq_linear_constraints, BoundaryZSelfConsistency)
                 A = c.jac_unscaled(xz)[0]["Z_lmn"]
                 Ainv = np.linalg.pinv(A)
                 dxdZb = np.eye(self._eq.dim_x)[:, self._eq.x_idx["Z_lmn"]] @ Ainv
                 dxdc.append(dxdZb)
-        self._dxdc = np.hstack(dxdc)
+            if arg == "Wb_lmn":
+                c = get_instance(self._eq_linear_constraints, BoundaryWSelfConsistency)
+                A = c.jac_unscaled(xz)[0]["W_lmn"]
+                Ainv = np.linalg.pinv(A)
+                dxdWb = np.eye(self._eq.dim_x)[:, self._eq.x_idx["W_lmn"]] @ Ainv
+                dxdc.append(dxdWb)
 
     def build(self, use_jit=None, verbose=1):  # noqa: C901
         """Build the objective.

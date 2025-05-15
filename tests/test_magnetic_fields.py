@@ -1191,7 +1191,7 @@ class TestMagneticFields:
         r0 = [10.001]
         z0 = [0.0]
         phis = [0, 2 * np.pi]
-        r, z = field_line_integrate(r0, z0, phis, field)
+        r, z, phi = field_line_integrate(r0, z0, phis, field)
         np.testing.assert_allclose(r[-1], 10, rtol=1e-6, atol=1e-6)
         np.testing.assert_allclose(z[-1], 0.001, rtol=1e-6, atol=1e-6)
 
@@ -1204,7 +1204,7 @@ class TestMagneticFields:
         r0 = [10.001]
         z0 = [0.0]
         phis = [0, 2 * np.pi * 25]
-        r, z = field_line_integrate(r0, z0, phis, field, solver=Dopri5())
+        r, z, phi = field_line_integrate(r0, z0, phis, field, solver=Dopri5())
         np.testing.assert_allclose(r[-1], 10, rtol=1e-6, atol=1e-6)
         np.testing.assert_allclose(z[-1], 0.001, rtol=1e-6, atol=1e-6)
 
@@ -1227,7 +1227,7 @@ class TestMagneticFields:
         z0 = [0.0]
         phis = [0, 2 * np.pi, 2 * np.pi * 2]
 
-        r, z = field_line_integrate(
+        r, z, phi = field_line_integrate(
             r0,
             z0,
             phis,

@@ -973,7 +973,7 @@ def test_plot_poincare():
 def test_plot_field_lines():
     """Test plotting field lines."""
     field = ToroidalMagneticField(B0=-1.0, R0=1.0)
-    with pytest.warns(UserWarning, match="Field lines are traced backwards"):
+    with pytest.warns(UserWarning, match="Field lines are traced"):
         fig, data = plot_field_lines(
             field, [1.0], [0.0], nphi_per_transit=10, ntransit=0.8, return_data=True
         )
@@ -1014,7 +1014,7 @@ def test_plot_field_lines_reversed():
     pt_end_rpz = xyz2rpz(pt_end)
     # plot the field line in the reversed direction starting from the end point
     # and going backwards, this should overlap with the previous field line
-    with pytest.warns(UserWarning, match="Field lines are traced backwards"):
+    with pytest.warns(UserWarning, match="Field lines are traced"):
         fig, data2 = plot_field_lines(
             field_reversed,
             pt_end_rpz[0],

@@ -1938,14 +1938,18 @@ def poincare_plot(
 
     R0, Z0 = np.atleast_1d(R0, Z0)
 
-    fieldR, fieldZ = field_line_integrate(
-        r0=R0,
-        z0=Z0,
-        phis=phis,
-        field=field,
-        source_grid=grid,
-        **fli_kwargs,
-    )
+    with warnings.catch_warnings():
+        # we throw the same warning below with a message that is more
+        # appropriate for this function
+        warnings.filterwarnings("ignore", message="Field has negative")
+        fieldR, fieldZ, _ = field_line_integrate(
+            r0=R0,
+            z0=Z0,
+            phis=phis,
+            field=field,
+            source_grid=grid,
+            **fli_kwargs,
+        )
 
     zs = fieldZ.reshape((ntransit, nplanes, -1))
     rs = fieldR.reshape((ntransit, nplanes, -1))
@@ -1953,14 +1957,19 @@ def poincare_plot(
     signBT = np.sign(
         field.compute_magnetic_field(np.array([R0.flat[0], 0.0, Z0.flat[0]]))[:, 1]
     ).flat[0]
-    if signBT < 0:  # field lines are traced backwards when toroidal field < 0
-        rs, zs = rs[:, ::-1], zs[:, ::-1]
-        rs, zs = np.roll(rs, 1, 1), np.roll(zs, 1, 1)
-        phi *= -1
+    if signBT < 0:
         warnings.warn(
-            "Field lines are traced backwards since the toroidal field is negative.",
+            "Field lines are traced in negative toroidal angle since the toroidal "
+            "field is negative.",
             UserWarning,
         )
+        # technically, these doesn't belong to phi angles but
+        # [ 0, -300, -240, -180, -120,  -60 ]/NFP degrees
+        # however, for the purpose of this plot, it doesn't matter
+        # and sticking to this convention is more convenient for titles
+        # see plot_field_lines for corrected phi angles
+        rs, zs = rs[:, ::-1], zs[:, ::-1]
+        rs, zs = np.roll(rs, 1, 1), np.roll(zs, 1, 1)
 
     data = {
         "R": rs,
@@ -3763,28 +3772,31 @@ def plot_field_lines(
 
     R0, Z0 = np.atleast_1d(R0, Z0)
 
-    fieldR, fieldZ = field_line_integrate(
-        r0=R0,
-        z0=Z0,
-        phis=phis,
-        field=field,
-        **fli_kwargs,
-    )
+    signBT = np.sign(
+        field.compute_magnetic_field(np.array([R0.flat[0], phi0, Z0.flat[0]]))[:, 1]
+    ).flat[0]
+    if signBT < 0:
+        warnings.warn(
+            "Field lines are traced in negative toroidal angle since the toroidal "
+            "field is negative.",
+            UserWarning,
+        )
+
+    with warnings.catch_warnings():
+        # we throw the same warning above with a message that is more
+        # appropriate for this function
+        warnings.filterwarnings("ignore", message="Field has negative")
+        fieldR, fieldZ, fieldPhi = field_line_integrate(
+            r0=R0,
+            z0=Z0,
+            phis=phis,
+            field=field,
+            **fli_kwargs,
+        )
 
     zs = fieldZ.reshape((npts, -1))
     rs = fieldR.reshape((npts, -1))
-
-    signBT = np.sign(
-        field.compute_magnetic_field(np.array([R0.flat[0], 0.0, Z0.flat[0]]))[:, 1]
-    ).flat[0]
-    if signBT < 0:  # field lines are traced backwards when toroidal field < 0
-        rs, zs = rs[:, ::-1], zs[:, ::-1]
-        rs, zs = np.roll(rs, 1, 1), np.roll(zs, 1, 1)
-        phis *= -1
-        warnings.warn(
-            "Field lines are traced backwards since the toroidal field is negative.",
-            UserWarning,
-        )
+    phis = fieldPhi.reshape((npts, -1))
 
     if fig is None:
         fig = go.Figure()
@@ -3796,14 +3808,14 @@ def plot_field_lines(
     plot_data["R"] = []
     plot_data["phi"] = []
     for i in range(rs.shape[1]):  # iterate over each field line
-        x = rs[:, i] * np.cos(phis)
-        y = rs[:, i] * np.sin(phis)
+        x = rs[:, i] * np.cos(phis[:, i])
+        y = rs[:, i] * np.sin(phis[:, i])
         z = zs[:, i]
         plot_data["X"].append(x)
         plot_data["Y"].append(y)
         plot_data["Z"].append(z)
         plot_data["R"].append(rs[:, i])
-        plot_data["phi"].append(phis)
+        plot_data["phi"].append(phis[:, i])
 
         fig.add_trace(
             go.Scatter3d(

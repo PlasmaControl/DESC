@@ -2563,8 +2563,8 @@ def field_line_integrate(
     r0, z0 : array-like
         initial starting coordinates for r,z on phi=phis[0] plane
     phis : array-like
-        strictly increasing array of toroidal angles to output r,z at
-        Note that phis is the geometric toroidal agitngle for positive Bphi,
+        strictly increasing array of time-like coordinate to output r,z at
+        Note that phis is the geometric toroidal angle for positive Bphi,
         and the negative toroidal angle for negative Bphi
     field : MagneticField
         source of magnetic field to integrate
@@ -2598,8 +2598,8 @@ def field_line_integrate(
 
     Returns
     -------
-    r, z : ndarray
-        arrays of r, z coordinates at specified phi angles
+    r, z, phi : ndarray
+        arrays of r, z and phi coordinates of the field line.
 
     """
     r0, z0, phis = map(jnp.asarray, (r0, z0, phis))
@@ -2608,6 +2608,18 @@ def field_line_integrate(
     r0 = r0.flatten()
     z0 = z0.flatten()
     x0 = jnp.array([r0, phis[0] * jnp.ones_like(r0), z0]).T
+
+    signBT = np.sign(field.compute_magnetic_field(x0)[0, 1])
+    if signBT < 0:
+        warnings.warn(
+            "Field has negative toroidal component. Field line integration is being "
+            "done in the negative toroidal direction, hence the output is not in phis "
+            "but in negative phis. Use the outputed phis to get the correct "
+            "positions. This may not be what you want. If you want to integrate in the "
+            "positive direction, please reverse the field by \n"
+            "field_reversed = ScaledMagneticField(-1.0, field)",
+            UserWarning,
+        )
 
     @jit
     def odefun(s, rpz, args):
@@ -2661,8 +2673,9 @@ def field_line_integrate(
     x = jnp.where(jnp.isinf(x), jnp.nan, x)
     r = x[:, :, 0].squeeze().T.reshape((len(phis), *rshape))
     z = x[:, :, 2].squeeze().T.reshape((len(phis), *rshape))
+    phi = x[:, :, 1].squeeze().T.reshape((len(phis), *rshape))
 
-    return r, z
+    return r, z, phi
 
 
 class OmnigenousField(Optimizable, IOAble):

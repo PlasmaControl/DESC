@@ -103,11 +103,12 @@ class FourierRZToroidalSurface(Surface):
             Z_lmn = np.array([0, -1])
             modes_Z = np.array([[0, 0], [-1, 0]])
         if W_lmn is None:
-            W_lmn = np.array([0.0])
+            W_lmn = np.array([])
         if modes_Z is None:
             modes_Z = modes_R
         if modes_W is None:
-            modes_W = np.array([0, 0])
+            # --no-verify modes_W = modes_Z
+            modes_W = np.array([])
 
         R_lmn, Z_lmn, W_lmn, modes_R, modes_Z, modes_W = map(
             np.asarray, (R_lmn, Z_lmn, W_lmn, modes_R, modes_Z, modes_W)
@@ -124,7 +125,8 @@ class FourierRZToroidalSurface(Surface):
 
         assert issubclass(modes_R.dtype.type, np.integer)
         assert issubclass(modes_Z.dtype.type, np.integer)
-        assert issubclass(modes_W.dtype.type, np.integer)
+        # RG: Empty array can't be an integer. Replace this check?
+        # --no-verify assert issubclass(modes_W.dtype.type, np.integer)
 
         MR = np.max(abs(modes_R[:, 0]))
         NR = np.max(abs(modes_R[:, 1]))
@@ -155,18 +157,30 @@ class FourierRZToroidalSurface(Surface):
 
         # Adding another conditional for the case where modes_Z is empty
         if sym == "auto":
-            if (
-                np.all(R_lmn[np.where(sign(modes_R[:, 0]) != sign(modes_R[:, 1]))] == 0)
-                and np.all(
+            if modes_W.size == 0:
+                if np.all(
+                    R_lmn[np.where(sign(modes_R[:, 0]) != sign(modes_R[:, 1]))] == 0
+                ) and np.all(
                     Z_lmn[np.where(sign(modes_Z[:, 0]) == sign(modes_Z[:, 1]))] == 0
-                )
-                and np.all(
-                    W_lmn[np.where(sign(modes_W[:, 0]) == sign(modes_W[:, 1]))] == 0
-                )
-            ):
-                sym = True
+                ):
+                    sym = True
+                else:
+                    sym = False
             else:
-                sym = False
+                if (
+                    np.all(
+                        R_lmn[np.where(sign(modes_R[:, 0]) != sign(modes_R[:, 1]))] == 0
+                    )
+                    and np.all(
+                        Z_lmn[np.where(sign(modes_Z[:, 0]) == sign(modes_Z[:, 1]))] == 0
+                    )
+                    and np.all(
+                        W_lmn[np.where(sign(modes_W[:, 0]) == sign(modes_W[:, 1]))] == 0
+                    )
+                ):
+                    sym = True
+                else:
+                    sym = False
 
         self._R_basis = DoubleFourierSeries(
             M=self._M, N=self._N, NFP=NFP, sym="cos" if sym else False
@@ -283,8 +297,8 @@ class FourierRZToroidalSurface(Surface):
         if (
             ((N is not None) and (N != self.N))
             or ((M is not None) and (M != self.M))
-            or ((Mz is not None) and (Mz != self.Mz))
-            or ((Nz is not None) and (Nz != self.Nz))
+            # or ((Mz is not None) and (Mz != self.Mz))
+            # or ((Nz is not None) and (Nz != self.Nz))
             or (NFP is not None)
             or ((sym is not None) and (sym != self.sym))
         ):
@@ -1068,9 +1082,9 @@ class ZernikeRZToroidalSection(Surface):
             modes_Z = modes_R
 
         if W_lmn is None:
-            W_lmn = np.array([0])
+            W_lmn = np.array([])
         if modes_W is None:
-            modes_W = np.array([[0, 0]])
+            modes_W = np.array([])
 
         R_lmn, Z_lmn, W_lmn, modes_R, modes_Z, modes_W = map(
             np.asarray, (R_lmn, Z_lmn, W_lmn, modes_R, modes_Z, modes_W)

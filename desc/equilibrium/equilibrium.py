@@ -303,7 +303,7 @@ class Equilibrium(IOAble, Optimizable):
             Nz=self.Nz,
         )
 
-        # RG: If you must specify NFP here, specify axis.NFP
+        # RG: If you must specify NFP here, specify the NFP of the axis
         self._axis.change_resolution(self.N, sym=self.sym, Nz=self.Nz)
 
         # bases

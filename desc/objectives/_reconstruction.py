@@ -3,13 +3,13 @@
 import numpy as np
 
 from desc.backend import jnp
-from desc.compute import get_profiles, get_transforms, xyz2rpz
+from desc.compute import get_profiles, get_transforms, xyz2rpz, xyz2rpz_vec
 from desc.compute.utils import _compute as compute_fun
 from desc.grid import LinearGrid
 from desc.utils import Timer, dot
 
 from .normalization import compute_scaling_factors
-from .objective_funs import _Objective
+from .objective_funs import _Objective, collect_docs
 
 
 class PointBMeasurement(_Objective):
@@ -18,7 +18,7 @@ class PointBMeasurement(_Objective):
     This objective will calculate the magnetic field at a point,
     intended for use to compare to experimental measurements for reconstruction.
 
-    The equilibrium and possibly a coilset are allowed to vary, but the
+    The equilibrium and possibly a MagneticField are allowed to vary, but the
     measurement location in real space is held fixed.
 
     The measurement point should be at a point outside the plasma, otherwise
@@ -29,11 +29,10 @@ class PointBMeasurement(_Objective):
     eq : Equilibrium
         Equilibrium from which the plasma constribution to the magnetic field will
         be calculated, if not vacuum.
-    coils : CoilSet
-        Coilset that supports the equilibrium. If coils_fixed is True,
-        their contribution to the magnetic field measurements will be pre-calculated.
+    field : MagneticField
+        External field produced by coils or other sources outside the plasma.
     measurement_coords : (n,3) ndarray
-        Array of points at which the magnetic field B is measured.
+        Array of n points at which the magnetic field B is measured.
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
         Must be broadcastable to Objective.dim_f which is the
@@ -45,53 +44,26 @@ class PointBMeasurement(_Objective):
     bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
         Both bounds must be broadcastable to to Objective.dim_f
-    weight : {float, ndarray}, optional
-        Weighting to apply to the Objective, relative to other Objectives.
-        Must be broadcastable to to Objective.dim_f
-    normalize : bool, optional
-        Whether to compute the error in physical units or non-dimensionalize.
-    normalize_target : bool
-        Whether target should be normalized before comparing to computed values.
-        if `normalize` is `True` and the target is in physical units, this should also
-        be set to True.
-    loss_function : {None, 'mean', 'min', 'max'}, optional
-        Loss function to apply to the objective values once computed. This function
-        is called on the raw compute value, before any shifting, scaling, or
-        normalization. Note: has no effect for this objective
-    deriv_mode : {"auto", "fwd", "rev"}
-        Specify how to compute jacobian matrix, either forward mode or reverse mode AD.
-        "auto" selects forward or reverse mode based on the size of the input and output
-        of the objective. Has no effect on self.grad or self.hess which always use
-        reverse mode and forward over reverse mode respectively.
     field_grid : Grid, optional
         Grid containing the nodes to evaluate field source.
         Defaults to the default for the
         given field, see the docstring of the field object for the specific default.
     vc_source_grid : LinearGrid
-        LinearGrid to use for the (non-singular) integral for the virtual casing
-        principle to calculate the flux loop contribution from the
+        LinearGrid to use for the (non-singular) integral over the virtual casing
+        principle current to calculate the flux loop contribution from the
         plasma currents. Must have endpoint=False and sym=False and be linearly
         spaced in theta and zeta, with nodes only at rho=1.0
     basis : {"rpz","xyz"}
-        the basis used for measurement_coords, assumed to be "rpz" by default.
-    name : str, optional
-        Name of the objective function.
-    jac_chunk_size : int , optional
-        Will calculate the Jacobian for this objective ``jac_chunk_size``
-        columns at a time, instead of all at once. The memory usage of the
-        Jacobian calculation is roughly ``memory usage = m0 + m1*jac_chunk_size``:
-        the smaller the chunk size, the less memory the Jacobian calculation
-        will require (with some baseline memory usage). The time to compute the
-        Jacobian is roughly ``t=t0 +t1/jac_chunk_size``, so the larger the
-        ``jac_chunk_size``, the faster the calculation takes, at the cost of
-        requiring more memory. A ``jac_chunk_size`` of 1 corresponds to the least
-        memory intensive, but slowest method of calculating the Jacobian.
-        If None, it will use the largest size i.e ``obj.dim_x``.
-    coils_fixed : bool, optional
-        whether or not to fix the coilset DOFs during optimization. False by default
+        the basis used for ``measurement_coords``, ``directions`` and ``target``,
+        assumed to be "rpz" by default. if "xyz", will convert the input arrays
+        into "rpz".
+    field_fixed : bool, optional
+        whether or not to fix the external field's DOFs during optimization.
+        False by default. Set to True if the field is not changing during the
+        optimization.
     vacuum : bool, optional
-        whether eq is vacuum, in which case plasma contribution to B won't be
-        calculated.
+        whether the Equilibrium is vacuum, in which case plasma contribution to B won't
+        be calculated.
     directions : array (n,3), optional
         the directions of the measured B field for each of the n sensors, i.e. if a
         sensor is measuring the poloidal field and is located at (R,phi,Z) = (1,0,0),
@@ -100,6 +72,8 @@ class PointBMeasurement(_Objective):
 
     """
 
+    __doc__ = __doc__.rstrip() + collect_docs()
+
     _coordinates = "rtz"
     _units = "(T)"
     _print_value_fmt = "Point B Measurement: "
@@ -107,15 +81,16 @@ class PointBMeasurement(_Objective):
     def __init__(
         self,
         eq,
-        coilset,
+        field,
         measurement_coords,
+        target,
+        *,
         field_grid=None,
         vc_source_grid=None,
-        coils_fixed=False,
+        field_fixed=False,
         vacuum=False,
         directions=None,
         basis="rpz",
-        target=None,
         bounds=None,
         weight=1,
         normalize=True,
@@ -130,31 +105,40 @@ class PointBMeasurement(_Objective):
         # target should be zero, but I'd like target to be the diagnostic targets.
         # could also just define a custom print_value to use
         # compute - target instead of just compute
-        # TODO: change coils name to field and make naming consistent
-        # TODO: use new docstring collect fxn
-        if target is None and bounds is None:
-            target = 0
-        self._coils = coilset
+        self._field = field
         self._field_grid = field_grid
         self._vc_source_grid = vc_source_grid
-        if basis == "rpz":
-            self._measurement_coords = measurement_coords
-        elif basis == "xyz":
-            self._measurement_coords = xyz2rpz(measurement_coords)
-        else:
-            raise ValueError(f"basis must be either rpz or xyz, instead got {basis}")
         if directions is not None:
             assert (
                 directions.shape == measurement_coords.shape
             ), "Must pass in same number of direction vectors as measurements"
-        self._directions = directions
+        if basis == "rpz":
+            self._measurement_coords = measurement_coords
+            self._directions = directions
+        elif basis == "xyz":
+            if directions:
+                # convert directions to rpz
+                self._directions = xyz2rpz_vec(
+                    directions, x=measurement_coords[:, 0], y=measurement_coords[:, 1]
+                )
+                # no need to change target as is already a scalar
+            else:
+                # convert target B field vectors to rpz
+                target = xyz2rpz_vec(
+                    target, x=measurement_coords[:, 0], y=measurement_coords[:, 1]
+                )
+
+            self._measurement_coords = xyz2rpz(measurement_coords)
+        else:
+            raise ValueError(f"basis must be either rpz or xyz, instead got {basis}")
+
         self._eq = eq
         self._vacuum = vacuum
         self._sheet_current = hasattr(self._eq.surface, "Phi_mn")
         things = [eq]
-        self._coils_fixed = coils_fixed
-        if not coils_fixed:
-            things.append(coilset)
+        self._field_fixed = field_fixed
+        if not field_fixed:
+            things.append(field)
         super().__init__(
             things=things,
             target=target,
@@ -226,11 +210,9 @@ class PointBMeasurement(_Objective):
             else self._measurement_coords.shape[0]
         )
 
-        # TODO: should probably call this "field" since doesn't need to
-        # be coils
-        # pre-calc coil contrib to B if coils are fixed
-        if self._coils_fixed:
-            B_from_coils = self._coils.compute_magnetic_field(
+        # pre-calc field contrib to B if field are fixed
+        if self._field_fixed:
+            B_from_field = self._field.compute_magnetic_field(
                 self._measurement_coords,
                 basis="rpz",
                 source_grid=self._field_grid,
@@ -245,11 +227,11 @@ class PointBMeasurement(_Objective):
             "vc_source_grid": self._vc_source_grid,
             "directions": self._directions,
         }
-        if self._coils_fixed:
-            self._constants["B_from_coils"] = (
-                B_from_coils
+        if self._field_fixed:
+            self._constants["B_from_field"] = (
+                B_from_field
                 if self._directions is None
-                else dot(B_from_coils, self._directions)
+                else dot(B_from_field, self._directions)
             )
         if self._sheet_current:
             self._sheet_data_keys = ["K"]
@@ -274,7 +256,7 @@ class PointBMeasurement(_Objective):
             eg Equilibrium.params_dict
         field_params : dict
             Dictionary of field degrees of freedom,
-            eg FourierCurrentPotential.params_dict or CoilSet.params_dict
+            eg FourierCurrentPotentialField.params_dict or CoilSet.params_dict
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc. Defaults to
             self.constants
@@ -316,9 +298,10 @@ class PointBMeasurement(_Objective):
             plasma_surf_data["K_vc"] += sheet_source_data["K"]
         plasma_surf_data["K"] = plasma_surf_data["K_vc"]
 
-        # calc B at measurement points
-        if not self._coils_fixed:
-            Bcoil = self._coils.compute_magnetic_field(
+        ## calc B at measurement points
+        # field contribution
+        if not self._field_fixed:
+            Bcoil = self._field.compute_magnetic_field(
                 constants["measurement_coords"],
                 basis="rpz",
                 source_grid=constants["field_grid"],
@@ -330,7 +313,7 @@ class PointBMeasurement(_Objective):
         # get plasma contribution
         if not self._vacuum:
             Bplasma = self._compute_A_or_B_from_CurrentPotentialField(
-                self._coils,  # this is unused, just pass a dummy variable in
+                self._field,  # this is unused, just pass a dummy variable in
                 constants["measurement_coords"],
                 source_grid=constants["vc_source_grid"],
                 compute_A_or_B="B",
@@ -342,6 +325,9 @@ class PointBMeasurement(_Objective):
         if constants["directions"] is not None:
             B = dot(B, constants["directions"])
 
-        if self._coils_fixed:
-            B += constants["B_from_coils"]
+        if self._field_fixed:
+            # add fixed field contribution at end, after we've already
+            # dotted Bplasma, as it is already dotted with the directions,
+            # if passed in.
+            B += constants["B_from_field"]
         return B.flatten()

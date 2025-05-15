@@ -1262,21 +1262,27 @@ class TestObjectiveFunction:
             directions=None,
             vc_source_grid=None,
             coil_grid=None,
-            coils_fixed=False,
+            field_fixed=False,
             vacuum=False,
         ):
+            target = (
+                np.zeros_like(coords).flatten()
+                if directions is None
+                else np.zeros(coords.shape[0])
+            )
             obj = PointBMeasurement(
                 eq=eq,
-                coilset=coils,
+                field=coils,
+                target=target,
                 measurement_coords=coords,
                 directions=directions,
                 vc_source_grid=vc_source_grid,
                 field_grid=coil_grid,
-                coils_fixed=coils_fixed,
+                field_fixed=field_fixed,
                 vacuum=vacuum,
             )
             obj.build()
-            if coils_fixed:
+            if field_fixed:
                 f = obj.compute(eq_params=eq.params_dict)
             else:
                 f = obj.compute(
@@ -1308,7 +1314,7 @@ class TestObjectiveFunction:
             correct_B.flatten(),
             coords,
             vc_source_grid=plasma_grid,
-            coils_fixed=True,
+            field_fixed=True,
         )
         test(
             eq,
@@ -1316,7 +1322,7 @@ class TestObjectiveFunction:
             correct_B.flatten(),
             coords,
             vc_source_grid=plasma_grid,
-            coils_fixed=True,
+            field_fixed=True,
             vacuum=True,
         )
         test(
@@ -1325,7 +1331,7 @@ class TestObjectiveFunction:
             correct_B.flatten(),
             coords,
             vc_source_grid=None,
-            coils_fixed=False,
+            field_fixed=False,
         )
         # test dotted with R hat direction
         directions = np.zeros_like(coords)
@@ -1337,7 +1343,7 @@ class TestObjectiveFunction:
             coords,
             directions=directions,
             vc_source_grid=plasma_grid,
-            coils_fixed=True,
+            field_fixed=True,
         )
         # test dotted with phi hat direction
         directions = np.zeros_like(coords)
@@ -1349,7 +1355,7 @@ class TestObjectiveFunction:
             coords,
             directions=directions,
             vc_source_grid=plasma_grid,
-            coils_fixed=False,
+            field_fixed=False,
         )
         # test dotted with Z hat direction
         directions = np.zeros_like(coords)
@@ -1361,7 +1367,7 @@ class TestObjectiveFunction:
             coords,
             directions=directions,
             vc_source_grid=plasma_grid,
-            coils_fixed=True,
+            field_fixed=True,
         )
 
     @pytest.mark.unit

@@ -6,7 +6,7 @@ from desc.backend import jnp
 from desc.compute import get_profiles, get_transforms, xyz2rpz, xyz2rpz_vec
 from desc.compute.utils import _compute as compute_fun
 from desc.grid import LinearGrid
-from desc.utils import Timer, dot
+from desc.utils import Timer, dot, errorif
 
 from .normalization import compute_scaling_factors
 from .objective_funs import _Objective, collect_docs
@@ -112,26 +112,33 @@ class PointBMeasurement(_Objective):
             assert (
                 directions.shape == measurement_coords.shape
             ), "Must pass in same number of direction vectors as measurements"
+        errorif(
+            basis not in ["xyz", "rpz"],
+            ValueError,
+            f"basis must be either rpz or xyz, instead got {basis}",
+        )
+
         if basis == "rpz":
-            self._measurement_coords = measurement_coords
-            self._directions = directions
+            pass
         elif basis == "xyz":
             if directions:
                 # convert directions to rpz
-                self._directions = xyz2rpz_vec(
+                directions = xyz2rpz_vec(
                     directions, x=measurement_coords[:, 0], y=measurement_coords[:, 1]
                 )
                 # no need to change target as is already a scalar
             else:
                 # convert target B field vectors to rpz
+                target = target.reshape(measurement_coords.shape)
                 target = xyz2rpz_vec(
                     target, x=measurement_coords[:, 0], y=measurement_coords[:, 1]
                 )
+                target = target.flatten()
 
-            self._measurement_coords = xyz2rpz(measurement_coords)
-        else:
-            raise ValueError(f"basis must be either rpz or xyz, instead got {basis}")
+            measurement_coords = xyz2rpz(measurement_coords)
 
+        self._measurement_coords = measurement_coords
+        self._directions = directions
         self._eq = eq
         self._vacuum = vacuum
         self._sheet_current = hasattr(self._eq.surface, "Phi_mn")
@@ -247,7 +254,7 @@ class PointBMeasurement(_Objective):
         super().build(use_jit=use_jit, verbose=verbose)
 
     def compute(self, eq_params=None, field_params=None, constants=None):
-        """Compute point B measurements.
+        """Compute point B measurements in "rpz" basis.
 
         Parameters
         ----------
@@ -264,7 +271,10 @@ class PointBMeasurement(_Objective):
         Returns
         -------
         f : array
-            B from plasma and external field at given measurement coordinates.
+            B from plasma and external field at given measurement coordinates. These
+            are always returned in rpz basis, and if ``directions`` is None, this
+            is equal to ``B.flatten()`` where ``B`` is an ``(n,3)`` array corresponding
+            to the magnetic field at the given measurement coordinates.
 
         """
         if constants is None:

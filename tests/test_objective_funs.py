@@ -1263,6 +1263,7 @@ class TestObjectiveFunction:
             vc_source_grid=None,
             coil_grid=None,
             coils_fixed=False,
+            vacuum=False,
         ):
             obj = PointBMeasurement(
                 eq=eq,
@@ -1272,6 +1273,7 @@ class TestObjectiveFunction:
                 vc_source_grid=vc_source_grid,
                 field_grid=coil_grid,
                 coils_fixed=coils_fixed,
+                vacuum=vacuum,
             )
             obj.build()
             if coils_fixed:
@@ -1284,7 +1286,7 @@ class TestObjectiveFunction:
                 assert f.size == coords.size
             else:
                 assert f.size == coords.shape[0]
-            np.testing.assert_allclose(f, correct_B, atol=1e-1, rtol=1e-5)
+            np.testing.assert_allclose(f, correct_B, atol=3e-3, rtol=1e-5)
 
         # B from a toroidal field 1/R, and a vacuum stell (should be just 1/R field)
         eq = get("ESTELL")
@@ -1307,6 +1309,15 @@ class TestObjectiveFunction:
             coords,
             vc_source_grid=plasma_grid,
             coils_fixed=True,
+        )
+        test(
+            eq,
+            field,
+            correct_B.flatten(),
+            coords,
+            vc_source_grid=plasma_grid,
+            coils_fixed=True,
+            vacuum=True,
         )
         test(
             eq,

@@ -9,6 +9,7 @@ New Features
 Optionally can also contract the profiles of the original ``Equilibrium`` so that the new ``Equilibrium``'s profiles match the original's in real space.
 - Adds second-order NAE constraints, accessible by passing ``order=2`` to ``desc.objectives.get_NAE_constraints``.
 - Adds `desc.plotting.plot_field_lines` function, which integrates and then plots magnetic field line trajectories in 3D.
+- `desc.magnetic_fields.field_line_integrate` now returns the `phi` values where the `r` and `z` values belong to. Although the documentation was mentioning that the output can be in negative `phis`, it was not clear and open to misinterpretation.
 - `result` dictionary returned by `Optimizer.optimize` or `eq.optimize` now includes sub-dictionary `"Objective values"` containing summary info of objective values before and after optimization, the same info that is printed to the terminal by default.
 - Adds error for incorrect grids in ``desc.objectives.BootstrapRedlConsistency`` and when computing ``current Redl`` and ``<J*B> Redl`` compute quantities
 - Allows Redl compute quantities to use SplineProfile

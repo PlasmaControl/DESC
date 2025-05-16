@@ -1063,7 +1063,10 @@ class TestMagneticFields:
         R = np.linspace(0.5, 1.5, 20)
         Z = np.linspace(-1.5, 1.5, 20)
         p = np.linspace(0, 2 * np.pi / 5, 40)
-        field2 = SplineMagneticField.from_field(field1, R, p, Z)
+        # add source_grid here just for code coverage
+        field2 = SplineMagneticField.from_field(
+            field1, R, p, Z, source_grid=LinearGrid(N=1)
+        )
 
         np.testing.assert_allclose(
             field1([1.0, 1.0, 1.0]), field2([1.0, 1.0, 1.0]), rtol=1e-2, atol=1e-2

@@ -2164,6 +2164,7 @@ class SplineMagneticField(_MagneticField, Optimizable):
         extrap=False,
         NFP=None,
         chunk_size=None,
+        source_grid=None,
     ):
         """Create a splined magnetic field from another field for faster evaluation.
 
@@ -2187,6 +2188,9 @@ class SplineMagneticField(_MagneticField, Optimizable):
             Size to split computation into chunks of evaluation points.
             If no chunking should be done or the chunk size is the full input
             then supply ``None``. Default is ``None``.
+        source_grid : Grid, optional
+            Grid used to discretize field. Defaults to the default grid for given field.
+
 
         """
         R, phi, Z = map(np.asarray, (R, phi, Z))
@@ -2194,12 +2198,16 @@ class SplineMagneticField(_MagneticField, Optimizable):
         shp = rr.shape
         coords = np.array([rr.flatten(), pp.flatten(), zz.flatten()]).T
         BR, BP, BZ = field.compute_magnetic_field(
-            coords, params, basis="rpz", chunk_size=chunk_size
+            coords, params, basis="rpz", chunk_size=chunk_size, source_grid=source_grid
         ).T
         NFP = getattr(field, "_NFP", 1)
         try:
             AR, AP, AZ = field.compute_magnetic_vector_potential(
-                coords, params, basis="rpz", chunk_size=chunk_size
+                coords,
+                params,
+                basis="rpz",
+                chunk_size=chunk_size,
+                source_grid=source_grid,
             ).T
             AR = AR.reshape(shp)
             AP = AP.reshape(shp)

@@ -1502,3 +1502,21 @@ def test_initialize_helical():
     # first take a min over plasma pts to get distance from each coil pt to plasma
     # then we expect the avg of that to be ~a since r/a=2 so offset is 1*a
     np.testing.assert_allclose(dist.min(axis=1).mean(axis=-1), a, rtol=3e-2)
+
+
+@pytest.mark.unit
+def test_FourierPlanarCoil_from_values_orientation():
+    """Test that fitting with FourierPlanarCoil preserves orientation."""
+    # easiest to check this is working using a coil, as can use
+    # biot savart to see if B is same or not
+    # tests fix for GH #1715
+    coil_XYZ = FourierXYZCoil(
+        current=1e6, X_n=[0, 10, 2], Y_n=[-2, 0, 0], Z_n=[0, 0, 0.1]
+    )
+    coil_planar = coil_XYZ.to_FourierPlanar(N=1)
+
+    coords = [[1, 1, 1]]
+    grid = LinearGrid(N=40)
+    B_XYZ = coil_XYZ.compute_magnetic_field(coords, source_grid=grid)
+    B_planar = coil_planar.compute_magnetic_field(coords, source_grid=grid)
+    np.testing.assert_allclose(B_XYZ, B_planar, rtol=1e-3)

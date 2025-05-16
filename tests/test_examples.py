@@ -16,6 +16,7 @@ from desc.coils import (
     CoilSet,
     FourierPlanarCoil,
     FourierRZCoil,
+    FourierXYCoil,
     FourierXYZCoil,
     MixedCoilSet,
     _Coil,
@@ -1892,6 +1893,7 @@ def test_second_stage_optimization_CoilSet():
     [
         "FourierPlanarCoil",
         "FourierRZCoil",
+        "FourierXYCoil",
         "FourierXYZCoil",
         "SplineXYZCoil",
         "CoilSet sym",
@@ -1921,6 +1923,7 @@ def test_optimize_with_all_coil_types(DummyCoilSet, DummyMixedCoilSet, coil_type
     types = {
         "FourierPlanarCoil": (FourierPlanarCoil(), "fmintr"),
         "FourierRZCoil": (FourierRZCoil(), "fmintr"),
+        "FourierXYCoil": (FourierXYCoil(), "fmintr"),
         "FourierXYZCoil": (FourierXYZCoil(), "fmintr"),
         "SplineXYZCoil": (spline_coil, "fmintr"),
         "CoilSet sym": (sym_coils, "lsq-exact"),

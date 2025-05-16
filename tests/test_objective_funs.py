@@ -3493,7 +3493,7 @@ class TestComputeScalarResolution:
             obj = ObjectiveFunction(
                 PointBMeasurement(
                     eq=eq,
-                    coilset=field,
+                    field=field,
                     measurement_coords=coords,
                 )
             )

@@ -4,6 +4,7 @@ import os
 import warnings
 
 import numpy as np
+from map2disc import BCM
 
 from desc.backend import fori_loop, jit, jnp, put
 from desc.basis import zernike_radial
@@ -19,7 +20,6 @@ from desc.objectives import (
 from desc.transform import Transform
 from desc.utils import copy_coeffs, warnif
 from desc.vmec_utils import ptolemy_identity_rev
-from map2disc import BCM
 
 
 def set_initial_guess(eq, *args, ensure_nested=True):  # noqa: C901
@@ -372,7 +372,7 @@ def _initial_guess_points(nodes, x, x_basis):
     return x_lmn
 
 
-def convert_bdry(eq):
+def _convert_bdry(eq):
     # convert boundary in desc representation lmn to vmecs rbmnc/zbmns
     eps = 1e-15  # to filter very low values after ptolemy's identity
     M, N, _, RBC = ptolemy_identity_rev(
@@ -408,18 +408,28 @@ def convert_bdry(eq):
 
 
 def mn_to_tz(theta1d, zeta1d, m1d, n1d, xc2d=None, xs2d=None):
-    """
-    evaluate a 2d fourier series x(theta,zeta) = sum_mn (xc_mn cos(m*theta-n*zeta)+ xs_mn sin(m*theta-n*zeta) ) on a meshgrid of theta1d X zeta1d
+    """Evaluate a 2d fourier series.
+
+    x(theta,zeta) = sum_mn (xc_mn cos(m*theta-n*zeta)+ xs_mn sin(m*theta-n*zeta) )
+    on a meshgrid of theta1d X zeta1d
     making use of the tensor product to speed up the evaluation
+
     Input:
     theta1d : 1d array of angle in 2pi in poloidal direction
     zeta1d  : 1d array of angle in 2pi in toroidal direction
-    m1d     : 1d array of integer poloidal mode numbers, size must be equal to first dimension of xc2d, xs2d
-    n1d     : 1d array of integer toroidal mode numbers, size must be equal to second dimension of xc2d, xs2d
-    xc2d    : 2d array of coefficients m,n for cos(m*theta-n*zeta),  dimension is of len(m1d) X  len(n1d)
-    xs2d    : 2d array of coefficients m,n for sin(m*theta-n*zeta),  dimension is of len(m1d) X  len(n1d)
+    m1d     : 1d array of integer poloidal mode numbers, size must be equal to first
+      dimension of xc2d, xs2d
+    n1d     : 1d array of integer toroidal mode numbers, size must be equal to second
+      dimension of xc2d, xs2d
+    xc2d    : 2d array of coefficients m,n for cos(m*theta-n*zeta),  dimension is of
+      len(m1d) X  len(n1d)
+    xs2d    : 2d array of coefficients m,n for sin(m*theta-n*zeta),  dimension is of
+    len(m1d) X  len(n1d)
+
     Output:
-    x2d     : 2d array of values of the 2d fourier series, dimension is of len(theta1d) X len(zeta1d)
+    x2d     : 2d array of values of the 2d fourier series, dimension is of
+      len(theta1d) X len(zeta1d)
+
     """
     assert (xc2d is not None) or (xs2d is not None)
     if xc2d is not None:
@@ -439,8 +449,10 @@ def mn_to_tz(theta1d, zeta1d, m1d, n1d, xc2d=None, xs2d=None):
     #  xout= (  cos_mt @ xc2d @ cos_nz + sin_mt @ xc2d @ sin_nz
     #         + sin_mt @ xs2d @ cos_nz - cos_mt @ xs2d @ sin_nz )
     # performance, number of multiplications:
-    # - first bracket m*theta then apply n*zeta: [1,2]*Lt*Lm*Ln + Lt*Ln*Lz = Lt*Ln*([1,2]*Lm+Lz)
-    # - first bracket n*zeta then apply m*theta: [1,2]*Lm*Ln*Lz + Lt*Lm*Lz = Lz*Lm*([1,2]*Ln+Lt)
+    # - first bracket m*theta then apply n*zeta:
+    #  [1,2]*Lt*Lm*Ln + Lt*Ln*Lz = Lt*Ln*([1,2]*Lm+Lz)
+    # - first bracket n*zeta then apply m*theta:
+    #  [1,2]*Lm*Ln*Lz + Lt*Lm*Lz = Lz*Lm*([1,2]*Ln+Lt)
     onetwo = (xc2d is not None) * 1 + (xs2d is not None) * 1
     mfirst = Lt * Ln * (onetwo * Lm + Lz) < Lz * Lm * (onetwo * Ln + Lt)
     if xc2d is not None:
@@ -452,11 +464,11 @@ def mn_to_tz(theta1d, zeta1d, m1d, n1d, xc2d=None, xs2d=None):
         else:  # xc2d and xs2d
             if mfirst:
                 xout = (cos_mt @ xc2d + sin_mt @ xs2d) @ cos_nz + (
-                        sin_mt @ xc2d - cos_mt @ xs2d
+                    sin_mt @ xc2d - cos_mt @ xs2d
                 ) @ sin_nz
             else:
                 xout = cos_mt @ (xc2d @ cos_nz - xs2d @ sin_nz) + sin_mt @ (
-                        xc2d @ sin_nz + xs2d @ cos_nz
+                    xc2d @ sin_nz + xs2d @ cos_nz
                 )
     else:  # only xs2d
         if mfirst:
@@ -468,23 +480,37 @@ def mn_to_tz(theta1d, zeta1d, m1d, n1d, xc2d=None, xs2d=None):
 
 
 def tz_to_mn(theta1d, zeta1d, m1d, n1d, x2d=None, sincos=None, testmass=True):
-    """
-    project a 2d data given on a meshgrid of theta1d X zeta1d to a 2d real fourier series:
+    """Project a 2d data given on a meshgrid.
+
+       of theta1d X zeta1d to a 2d real fourier series:
         xc_mn = 1/norm_mn * sum_tz (x(theta,zeta)* cos(m*theta-n*zeta)
     or
         xs_mn = 1/norm_mn *sum_tz (x(theta,zeta) sin(m*theta-n*zeta)
     making use of the tensor product to speed up the evaluation
+
     Input:
-    theta1d : 1d array of angle in 2pi in poloidal direction: careful, this is now an integration, so it has to be equidistant without the periodic endpoint, [0,2pi[
-    zeta1d  : 1d array of angle in 2pi in toroidal direction  careful, this is now an integration, so it has to be equidistant [0,2pi[
-    m1d     : 1d array of integer poloidal mode numbers, size equals first dimension of xc2d, xs2d
-    n1d     : 1d array of integer toroidal mode numbers, size equals second dimension of xc2d, xs2d
+    theta1d : 1d array of angle in 2pi in poloidal direction: careful,
+      this is now an integration, so it has to be equidistant without
+        the periodic endpoint, [0,2pi]
+    zeta1d  : 1d array of angle in 2pi in toroidal direction  careful,
+      this is now an integration, so it has to be equidistant [0,2pi[
+    m1d     : 1d array of integer poloidal mode numbers, size equals
+      first dimension of xc2d, xs2d
+    n1d     : 1d array of integer toroidal mode numbers, size equals
+      second dimension of xc2d, xs2d
     x2d    : 2d array of values on the meshgrid (theta1d) X (zeta1d)
     sincos : either sine,cosine or both to be projected!
-    testmass : check if mass matrix (int(cos_m1,cos_m2)  , int(cos_n1,cos_n2)) is diagonal with the chosen poloidal / toroidal points
+    testmass : check if mass matrix (int(cos_m1,cos_m2)  , int(cos_n1,cos_n2))
+    is diagonal with the chosen poloidal / toroidal points
+
     Output:
-    xc2d    : 2d array of coefficients m,n for cos(m*theta-n*zeta),  dimension is of len(m1d) X  len(n1d) (single output if sincos="cos" or first output when sincos="sincos")
-    xs2d    : 2d array of coefficients m,n for sin(m*theta-n*zeta),  dimension is of len(m1d) X  len(n1d) (single output if sincos="sin" or second output if sincos="sincos")
+    xc2d    : 2d array of coefficients m,n for cos(m*theta-n*zeta),
+        dimension is of len(m1d) X  len(n1d) (single output if sincos="cos"
+          or first output when sincos="sincos")
+    xs2d    : 2d array of coefficients m,n for sin(m*theta-n*zeta),
+        dimension is of len(m1d) X  len(n1d) (single output if sincos="sin"
+          or second output if sincos="sincos")
+
     """
     assert sincos == "sin" or sincos == "cos" or sincos == "sincos"
     assert x2d is not None
@@ -507,13 +533,14 @@ def tz_to_mn(theta1d, zeta1d, m1d, n1d, x2d=None, sincos=None, testmass=True):
     # check mass matrix to be diagonal, extract the diagonal
     for key, base in bases.items():
         mass = base["mat"] @ base["mat"].T
-        # check mass matrix,  equal absolute mode numbers => non-zero entry in mass matrix (includes diagonal)
+        # check mass matrix,  equal absolute mode numbers =>
+        #  non-zero entry in mass matrix (includes diagonal)
         filter = (
-                         np.abs(base["mode1d"][:, None]) - np.abs(base["mode1d"][None, :]) == 0
-                 ) * 1
+            np.abs(base["mode1d"][:, None]) - np.abs(base["mode1d"][None, :]) == 0
+        ) * 1
         maxerr = np.amax(np.abs(mass - mass * filter))
         assert (
-                maxerr < 1e-10
+            maxerr < 1e-10
         ), f" {key} mass matrix not diagonal, maxerr = {maxerr} > 1e-10"
 
     # divide by norm of cosine / sine of each mode m,n (use cosine since)
@@ -539,13 +566,12 @@ def tz_to_mn(theta1d, zeta1d, m1d, n1d, x2d=None, sincos=None, testmass=True):
         return xc2d, xs2d
 
 
-def boundary_cut(rbc, zbs, zeta):
+def _boundary_cut(rbc, zbs, zeta):
     M, N = rbc.shape[0] - 1, (rbc.shape[1] - 1) // 2
     assert rbc.shape == zbs.shape == (M + 1, 2 * N + 1)  # m = 0..M, n = -N..N
 
     def curve(theta):
         theta = np.asarray(theta)
-        test = True
 
         Rslow, Zslow = np.zeros((2, theta.size))
         for m in range(M + 1):
@@ -561,10 +587,13 @@ def boundary_cut(rbc, zbs, zeta):
 
 
 def real_dft_mat(x_in, x_out, nfp=1, modes=None, deriv=0):
-    """
-    Flexible Direct Fourier Transform for real data
+    """Flexible Direct Fourier Transform for real data.
+
     takes an input array of equidistant points in [0,2pi/nfp[ (exclude endpoint!),
-    evaluate the discrete fourier transform with the given 1d mode vector (all >=0) using the input points x_in, then evaluate the inverse transform (or its derivative deriv>0) on the output points x_out anywhere...
+    evaluate the discrete fourier transform with the given 1d mode vector (all >=0)
+    using the input points x_in, then evaluate the inverse transform
+    (or its derivative deriv>0) on the output points x_out anywhere...
+
     len(x_in) must be > 2*max(modes)
     output is the matrix that transforms real function to real function [derivative]:
      f^deriv(x_out) = Mat f(x_in) (can then be used to do 2d transforms with matmul!)
@@ -575,14 +604,14 @@ def real_dft_mat(x_in, x_out, nfp=1, modes=None, deriv=0):
     if modes is None:
         modes = np.arange((len(x_in) - 1) // 2 + 1)  # all modes up to Nyquist
     assert (
-            np.abs(x_in[-1] + (x_in[1] - x_in[0]) - x_in[0] - 2 * np.pi / nfp) < 1.0e-8
+        np.abs(x_in[-1] + (x_in[1] - x_in[0]) - x_in[0] - 2 * np.pi / nfp) < 1.0e-8
     ), "x_in must be equidistant in [0,2pi/nfp["
     assert np.all(modes >= 0), "modes must be positive"
     zeromode = np.where(modes == 0)
     assert len(zeromode) <= 1, "only one zero mode allowed"
     maxmode = np.amax(modes)
     assert (
-            len(x_in) > 2 * maxmode
+        len(x_in) > 2 * maxmode
     ), f"number of sampling points ({len(x_in)}) > 2*maxmodenumber/nfp ({maxmode})"
     # matrix for forward transform
     modes_forward = np.exp(1j * nfp * (modes[:, None] * x_in[None, :]))
@@ -603,8 +632,8 @@ def real_dft_mat(x_in, x_out, nfp=1, modes=None, deriv=0):
 
     # inverse mass matrix applied (for real and imag)
     modes_forward_mod = (
-            np.diag(1 / diag_re) @ modes_forward.real
-            + np.diag(1j / diag_im) @ modes_forward.imag
+        np.diag(1 / diag_re) @ modes_forward.real
+        + np.diag(1j / diag_im) @ modes_forward.imag
     )
     if deriv == 0:
         modes_back = np.exp(-1j * nfp * (modes[None, :] * x_out[:, None]))
@@ -616,7 +645,7 @@ def real_dft_mat(x_in, x_out, nfp=1, modes=None, deriv=0):
     return Mat
 
 
-def babin_init(rbc, zbs, M, N, nrho, m_out, n_out):
+def _babin_init(rbc, zbs, M, N, nrho, m_out, n_out):
     # what about nfp?
     rbc = np.array(rbc)
     zbs = np.array(zbs)
@@ -633,7 +662,6 @@ def babin_init(rbc, zbs, M, N, nrho, m_out, n_out):
     # M_filter = M set on 11.24 because mass test of tz_to_mn fails otherwise
     M_filter = M
     m1d_filter = np.arange(0, M_filter + 1)
-    # theta1d_filter = np.linspace(0, 2 * np.pi, 2 * M_filter + 1, endpoint=False)
     N_filter = N
     n1d_filter = np.arange(-N_filter, N_filter + 1)
     m1d = np.arange(0, M + 1)
@@ -661,7 +689,7 @@ def babin_init(rbc, zbs, M, N, nrho, m_out, n_out):
 
     all_bcm = {}
     for z, zeta in enumerate(zeta_cut):
-        curve = boundary_cut(rbc_filter, zbs_filter, zeta)
+        curve = _boundary_cut(rbc_filter, zbs_filter, zeta)
         bcm = BCM(curve, MZernike)
         bcm.solve("interpolate")
         all_bcm[z] = bcm
@@ -681,7 +709,9 @@ def babin_init(rbc, zbs, M, N, nrho, m_out, n_out):
     # use bcm for evaluation of zernike polynomial (coefficients cx, cy)
     Rout = np.zeros((nrho, 2 * M_out + 1, 2 * N_out + 1))
     Zout = np.zeros((nrho, 2 * M_out + 1, 2 * N_out + 1))
-    curve = boundary_cut(rbc_filter, zbs_filter, 0.0)  # not used in evaluation of cx,cy
+    curve = _boundary_cut(
+        rbc_filter, zbs_filter, 0.0
+    )  # not used in evaluation of cx,cy
     bcm = BCM(curve, MZernike)
     scaledjac = 0 * zeta1d_out - 1
     for z, zeta in enumerate(zeta1d_out):
@@ -692,9 +722,11 @@ def babin_init(rbc, zbs, M, N, nrho, m_out, n_out):
         jac = bcm.eval_Jac_rt_1d(rho1d_out, theta1d_out)
         scaledjac[z] = np.amin(jac) / np.amax(jac)
 
-    assert np.all(
-        scaledjac > 1e-4
-    ), f"Problem with invertibility, scaled 2d jacobian in cross-sections is <1.0e-4... min(scaledjac(zeta))={np.amin(scaledjac)}, max(scaledjac(zeta))={np.amax(scaledjac)}"
+    assert np.all(scaledjac > 1e-4), (
+        "Problem with invertibility, scaled 2d jacobian in cross-sections is"
+        f"<1.0e-4... min(scaledjac(zeta))={np.amin(scaledjac)},"
+        f"max(scaledjac(zeta))={np.amax(scaledjac)}"
+    )
 
     rbc_out = np.zeros((nrho, M_out + 1, 2 * N_out + 1))
     zbs_out = np.zeros((nrho, M_out + 1, 2 * N_out + 1))
@@ -721,54 +753,30 @@ def babin_init(rbc, zbs, M, N, nrho, m_out, n_out):
     )
 
 
-def babin_initial_guess(eq):
+def ___babin_initial_guess(eq):
     print("Using babin init")
-    n_babin_init = 2
-    M_bdry, N_bdry, rbc_bdry, zbs_bdry = convert_bdry(eq)
-    xm_init, xn_init, rmnc, zmns, rhos = babin_init(
-        rbc_bdry, zbs_bdry, np.max(M_bdry), np.max(N_bdry), 7, 0, n_babin_init
+    n__babin_init = 2
+    M_bdry, N_bdry, rbc_bdry, zbs_bdry = _convert_bdry(eq)
+    xm_init, xn_init, rmnc, zmns, rhos = _babin_init(
+        rbc_bdry, zbs_bdry, np.max(M_bdry), np.max(N_bdry), 7, 0, n__babin_init
     )
     ramnc = rmnc[0]
     zamns = zmns[0]
 
-    # babin_axis = FourierRZCurve(
-    #     R_n=ramnc[0],
-    #     Z_n=zamns[0],
-    #     modes_R=np.arange(0, n_babin_init + 1),
-    #     modes_Z=np.arange(0, n_babin_init + 1),
-    #     sym=True,
-    #     NFP=model_eq.NFP,
-    # )
+    eq.axis = FourierRZCurve(
+        R_n=ramnc[0],
+        Z_n=zamns[0],
+        modes_R=np.arange(0, n__babin_init + 1),
+        modes_Z=np.arange(0, n__babin_init + 1),
+        sym=True,
+        NFP=eq.NFP,
+    )
     rax = np.concatenate([-np.zeros_like(ramnc)[1:][::-1], ramnc])
     zax = np.concatenate([-zamns[1:][::-1], np.zeros_like(zamns)])
     nax = len(ramnc) - 1
     nax = np.arange(-nax, nax + 1)
-    # inputs["axis"] = np.vstack([nax, rax, zax]).T
 
     # how to set the new axis?
     eq.axis = np.vstack([nax, rax, zax]).T
-    # eq = Equilibrium(
-    #     Psi=eq.Psi,
-    #     NFP=eq.NFP,
-    #     M=eq.M,
-    #     N=eq.N,
-    #     L=eq.L,
-    #     L_grid=eq.L_grid,
-    #     M_grid=eq.M_grid,
-    #     N_grid=eq.N_grid,
-    #     pressure=eq.pressure,
-    #     iota=eq.iota,
-    #     current=eq.current,
-    #     surface=eq.surface,
-    #     sym=eq.sym,
-    #     axis=np.vstack([nax, rax, zax]).T,
-    # )
 
     return eq
-
-
-if __name__ == "__main__":
-    import desc
-
-    p = "/Users/tthun/prog/git/mhdinn/data/raw/equilibria/iota_prescribed/toks/HirshManDSHAPE_beta3/output_DSHAPE.h5"
-    eq = babin_initial_guess(desc.io.load(p))

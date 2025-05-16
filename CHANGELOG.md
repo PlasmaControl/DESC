@@ -3,6 +3,7 @@ Changelog
 
 New Features
 
+- Updates ``Equilibrium`` initial guess to use geometric center as the axis. This will allow non-convex cross-sections to be initialized without having to solve to achieve nested surfaces.
 - Adds new regularization options to ``desc.objectives.SurfaceCurrentRegularization``.
 - Adds a new utility function ``desc.compat.contract_equilibrium`` which takes in an ``Equilibrium`` object and an argument ``inner_rho``, and returns a new ``Equilibrium`` with original ``Equilibrium``'s ``inner_rho`` flux surface as its boundary.
 Optionally can also contract the profiles of the original ``Equilibrium`` so that the new ``Equilibrium``'s profiles match the original's in real space.
@@ -13,6 +14,7 @@ Optionally can also contract the profiles of the original ``Equilibrium`` so tha
 - Allows Redl compute quantities to use SplineProfile
 - Updates Redl bootstrap current consistency tutorial to include a ``SplineProfile`` optimization
 - Adds automatically generated header file showing date the input file was created with `desc.vmec.VMECIO.write_vmec_input`
+- Adds ``source_grid`` argument to ``desc.magnetic_fields._MagneticField.save_mgrid function`` to allow user to control the discretization of the magnetic field object being used to construct the ``mgrid`` output.
 
 Bug Fixes
 
@@ -29,6 +31,7 @@ Bug Fixes
 - Fixes error that occurs when using the default grid for ``SplineXYZCoil`` in an optimization.
 - Fixes bug in ``desc.coils.CoilSet.save_in_makegrid_format`` for ``CoilSet`` objects with ``sym=True`` or ``NFP>1``
 - Adds missing `&END` to the input file created from `desc.vmec.VMECIO.write_vmec_input`
+
 
 v0.14.0
 -------

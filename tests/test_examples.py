@@ -263,9 +263,7 @@ def test_qh_optimization():
         NFP=4,
     )
     eq = Equilibrium(M=5, N=5, Psi=0.04, surface=surf)
-    eq = solve_continuation_automatic(eq, objective="force", bdry_step=0.5, verbose=3)[
-        -1
-    ]
+    eq.solve(verbose=3)
 
     eq1 = run_qh_step(0, eq)
 

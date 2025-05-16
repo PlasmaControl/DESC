@@ -460,20 +460,20 @@ class TestCoil:
         coil2 = coil1.to_FourierXYZ(s=s)
         coil3 = coil1.to_SplineXYZ(knots=s)
         coil4 = coil1.to_FourierRZ(N=coil1.N)
-        coil5 = coil1.to_FourierPlanar(N=10, basis="rpz")
-        coil6 = coil1.to_FourierXY(N=10, basis="rpz")
+        coil5 = coil1.to_FourierXY(N=10, basis="rpz")
+        coil6 = coil1.to_FourierPlanar(N=10, basis="rpz")
 
         grid = LinearGrid(zeta=s)
         x1 = coil1.compute("x", grid=grid, basis="xyz")["x"]
         x2 = coil2.compute("x", grid=grid, basis="xyz")["x"]
         x3 = coil3.compute("x", grid=grid, basis="xyz")["x"]
         x4 = coil4.compute("x", grid=grid, basis="xyz")["x"]
+        x5 = coil5.compute("x", grid=grid, basis="xyz")["x"]
         zeta = np.arctan2(  # zeta = polar angle for planar coil for same points
             x1[:, 1] - coil5.center[1],
             x1[:, 0] - coil5.center[0],
         )  # use Grid instead of LinearGrid to prevent node sorting
         grid_planar = Grid(np.array([np.zeros_like(zeta), np.zeros_like(zeta), zeta]).T)
-        x5 = coil5.compute("x", grid=grid_planar, basis="xyz")["x"]
         x6 = coil6.compute("x", grid=grid_planar, basis="xyz")["x"]
 
         B1 = coil1.compute_magnetic_field(
@@ -815,25 +815,25 @@ class TestCoilSet:
         coils0 = MixedCoilSet.linspaced_linear(coil, displacement=[0, 0, 2.5], n=4)
         coils1 = coils0.to_SplineXYZ(grid=grid, check_intersection=False)
         coils2 = coils0.to_FourierXYZ(grid=grid, check_intersection=False)
-        coils3 = coils0.to_FourierPlanar(grid=grid, check_intersection=False)
-        coils4 = coils0.to_FourierXY(grid=grid, check_intersection=False)
+        coils3 = coils0.to_FourierXY(grid=grid, check_intersection=False)
+        coils4 = coils0.to_FourierPlanar(grid=grid, check_intersection=False)
         assert isinstance(coils1, MixedCoilSet)
         assert isinstance(coils2, MixedCoilSet)
         assert isinstance(coils3, MixedCoilSet)
         assert isinstance(coils4, MixedCoilSet)
         assert all(isinstance(coil, SplineXYZCoil) for coil in coils1)
         assert all(isinstance(coil, FourierXYZCoil) for coil in coils2)
-        assert all(isinstance(coil, FourierPlanarCoil) for coil in coils3)
-        assert all(isinstance(coil, FourierXYCoil) for coil in coils4)
+        assert all(isinstance(coil, FourierXYCoil) for coil in coils3)
+        assert all(isinstance(coil, FourierPlanarCoil) for coil in coils4)
         x0 = coils0.compute("x", grid=grid, basis="xyz")
         x1 = coils1.compute("x", grid=grid, basis="xyz")
         x2 = coils2.compute("x", grid=grid, basis="xyz")
+        x3 = coils3.compute("x", grid=grid, basis="xyz")
         zeta = np.arctan2(  # zeta = polar angle for planar coil for same points
             x0[0]["x"][:, 1] - coils3[0].center[1],
             x0[0]["x"][:, 0] - coils3[0].center[0],
         )  # use Grid instead of LinearGrid to prevent node sorting
         grid_planar = Grid(np.array([np.zeros_like(zeta), np.zeros_like(zeta), zeta]).T)
-        x3 = coils3.compute("x", grid=grid_planar, basis="xyz")
         x4 = coils4.compute("x", grid=grid_planar, basis="xyz")
         np.testing.assert_allclose(
             [xi["x"] for xi in x0], [xi["x"] for xi in x1], atol=1e-12
@@ -862,25 +862,25 @@ class TestCoilSet:
         coils5 = CoilSet.linspaced_linear(coil, displacement=[0, 0, 3.5], n=6)
         coils6 = coils5.to_SplineXYZ(grid=grid, check_intersection=False)
         coils7 = coils5.to_FourierRZ(grid=grid, check_intersection=False)
-        coils8 = coils5.to_FourierPlanar(grid=grid, check_intersection=False)
-        coils9 = coils5.to_FourierXY(grid=grid, check_intersection=False)
+        coils8 = coils5.to_FourierXY(grid=grid, check_intersection=False)
+        coils9 = coils5.to_FourierPlanar(grid=grid, check_intersection=False)
         assert isinstance(coils6, CoilSet)
         assert isinstance(coils7, CoilSet)
         assert isinstance(coils8, CoilSet)
         assert isinstance(coils9, CoilSet)
         assert all(isinstance(coil, SplineXYZCoil) for coil in coils6)
         assert all(isinstance(coil, FourierRZCoil) for coil in coils7)
-        assert all(isinstance(coil, FourierPlanarCoil) for coil in coils8)
-        assert all(isinstance(coil, FourierXYCoil) for coil in coils9)
+        assert all(isinstance(coil, FourierXYCoil) for coil in coils8)
+        assert all(isinstance(coil, FourierPlanarCoil) for coil in coils9)
         x5 = coils5.compute("x", grid=grid, basis="xyz")
         x6 = coils6.compute("x", grid=grid, basis="xyz")
         x7 = coils7.compute("x", grid=grid, basis="xyz")
+        x8 = coils8.compute("x", grid=grid, basis="xyz")
         zeta = np.arctan2(  # zeta = polar angle for planar coil for same points
             x5[0]["x"][:, 1] - coils8[0].center[1],
             x5[0]["x"][:, 0] - coils8[0].center[0],
         )  # use Grid instead of LinearGrid to prevent node sorting
         grid_planar = Grid(np.array([np.zeros_like(zeta), np.zeros_like(zeta), zeta]).T)
-        x8 = coils8.compute("x", grid=grid_planar, basis="xyz")
         x9 = coils9.compute("x", grid=grid_planar, basis="xyz")
         np.testing.assert_allclose(
             [xi["x"] for xi in x5], [xi["x"] for xi in x6], atol=1e-12
@@ -1575,18 +1575,21 @@ def test_initialize_helical():
 
 
 @pytest.mark.unit
-def test_FourierPlanarCoil_from_values_orientation():
-    """Test that fitting with FourierPlanarCoil preserves orientation."""
+def test_planar_coil_from_values_orientation():
+    """Test that fitting to a planar coils preserves orientation."""
     # easiest to check this is working using a coil, as can use
     # biot savart to see if B is same or not
     # tests fix for GH #1715
     coil_XYZ = FourierXYZCoil(
         current=1e6, X_n=[0, 10, 2], Y_n=[-2, 0, 0], Z_n=[0, 0, 0.1]
     )
-    coil_planar = coil_XYZ.to_FourierPlanar(N=1)
+    coil_planar1 = coil_XYZ.to_FourierPlanar(N=1)
+    coil_planar2 = coil_XYZ.to_FourierXY(N=1)
 
     coords = [[1, 1, 1]]
     grid = LinearGrid(N=40)
     B_XYZ = coil_XYZ.compute_magnetic_field(coords, source_grid=grid)
-    B_planar = coil_planar.compute_magnetic_field(coords, source_grid=grid)
-    np.testing.assert_allclose(B_XYZ, B_planar, rtol=1e-3)
+    B_planar1 = coil_planar1.compute_magnetic_field(coords, source_grid=grid)
+    B_planar2 = coil_planar2.compute_magnetic_field(coords, source_grid=grid)
+    np.testing.assert_allclose(B_XYZ, B_planar1, rtol=1e-3)
+    np.testing.assert_allclose(B_XYZ, B_planar2, rtol=1e-3)

@@ -806,7 +806,7 @@ class FourierPlanarCurve(Curve):
         )
 
     @classmethod
-    def from_values(cls, coords, N=10, s=None, basis="xyz", name=""):
+    def from_values(cls, coords, N=10, basis="xyz", name=""):
         """Fit coordinates to FourierPlanarCurve representation.
 
         Parameters
@@ -816,11 +816,6 @@ class FourierPlanarCurve(Curve):
             corresponding to xyz or rpz depending on the basis argument.
         N : int
             Fourier resolution of the new r representation.
-        s : ndarray or "arclength"
-            Arbitrary curve parameter to use for the fitting.
-            Should be monotonic, 1D array of same length as
-            coords. if None, defaults linearly spaced in [0,2pi)
-            Alternative, can pass "arclength" to use normalized distance between points.
         basis : {"rpz", "xyz"}
             Basis for input coordinates. Defaults to "xyz".
         name : str
@@ -852,44 +847,50 @@ class FourierPlanarCurve(Curve):
         rotmat = rotation_matrix(axis, angle)
         coords_rotated = coords_centered @ rotmat  # rotate to X-Y plane
 
-        X, Y, Z = coords[:, 0], coords[:, 1], coords[:, 2]
-        X, Y, Z, closedX, closedY, closedZ, input_curve_was_closed = _unclose_curve(
-            X, Y, Z
-        )
         warnif(
-            np.max(np.abs(Z)) > 1e-14,  # check that Z=0 for all points
+            np.max(np.abs(coords_rotated[:, 2])) > 1e-14,  # check Z=0 for all points
             UserWarning,
             "Curve values are not planar! Using the projection onto a plane.",
         )
 
-        if isinstance(s, str):
-            assert s == "arclength", f"got unknown specification for s {s}"
-            # find equal arclength angle-like variable, and use that as theta
-            # L_along_curve / L = theta / 2pi
-            lengths = np.sqrt(np.diff(closedX) ** 2 + np.diff(closedY) ** 2)
-            thetas = 2 * np.pi * np.cumsum(lengths) / np.sum(lengths)
-            thetas = np.insert(thetas, 0, 0)
-            s = thetas[:-1]
-        elif s is None:
-            s = np.linspace(0, 2 * np.pi, X.size, endpoint=False)
+        # polar angle
+        s = np.arctan2(coords_rotated[:, 1], coords_rotated[:, 0])
+        unwrapped_s = np.unwrap(s)
+        # Determine if the sequence is monotonically increasing or decreasing
+        if np.all(np.diff(unwrapped_s) > 0):
+            curve_sign = 1
+        elif np.all(np.diff(unwrapped_s) < 0):
+            curve_sign = -1
         else:
-            s = np.atleast_1d(s)
-            s = s[:-1] if input_curve_was_closed else s
-            errorif(
-                not np.all(np.diff(s) > 0),
-                ValueError,
-                "supplied s must be monotonically increasing",
+            warnings.warn(
+                "The curve parameter s is not strictly increasing or decreasing. "
+                "Assuming default direction.",
+                UserWarning,
             )
-            errorif(s[0] < 0, ValueError, "s must lie in [0, 2pi]")
-            errorif(s[-1] > 2 * np.pi, ValueError, "s must lie in [0, 2pi]")
+            curve_sign = 1
 
-        r = np.sqrt(X**2 + Y**2)  # polar radius
+        if curve_sign == -1:
+            # original curve was parameterized "backwards" (clockwise),
+            # compared to FourierPlanarCurve assumption
+            normal = -normal  # flip normal vector direction
+            rotmat = rotation_matrix(axis, np.pi)
+            coords_rotated = (
+                coords_rotated @ rotmat
+            )  # flip on X-Y plane to match normal vector
+
+        # polar radius and angle
+        r = np.sqrt(coords_rotated[:, 0] ** 2 + coords_rotated[:, 1] ** 2)
+        s = np.arctan2(coords_rotated[:, 1], coords_rotated[:, 0])
+        s = np.mod(s + 2 * np.pi, 2 * np.pi)  # mod angle to range [0, 2*pi)
+        idx = np.argsort(s)  # sort angle to be monotonically increasing
+        r = r[idx]
+        s = s[idx]
 
         # Fourier transform
-        grid = LinearGrid(zeta=s, NFP=1)
         basis = FourierSeries(N, NFP=1, sym=False)
-        transform = Transform(grid, basis, build_pinv=True)
-        r_n = transform.fit(r)
+        grid_fit = LinearGrid(zeta=s, NFP=1)
+        transform_fit = Transform(grid_fit, basis, build_pinv=True)
+        r_n = transform_fit.fit(r)
 
         return FourierPlanarCurve(
             center=center,

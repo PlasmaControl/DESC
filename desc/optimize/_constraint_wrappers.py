@@ -4,7 +4,7 @@ import functools
 
 import numpy as np
 
-from desc.backend import jit, jnp, put
+from desc.backend import jit, jnp, pconcat, put
 from desc.batching import batched_vectorize
 from desc.objectives import (
     BoundaryRSelfConsistency,
@@ -1180,18 +1180,36 @@ class ProximalProjection(ObjectiveFunction):
 
         # we don't need to divide this part into blocked and batched because
         # self._constraint._deriv_mode will handle it
-        jvpfun = lambda u: self._get_tangent(u, xf, constants, op=op)
-        tangents = batched_vectorize(
-            jvpfun,
-            signature="(n)->(k)",
-            chunk_size=self._constraint._jac_chunk_size,
-        )(v)
+        if not self._constraint._is_mpi:
+            jvpfun = lambda u: self._get_tangent(u, xf, constants, op=op)
+            tangents = batched_vectorize(
+                jvpfun,
+                signature="(n)->(k)",
+                chunk_size=self._constraint._jac_chunk_size,
+            )(v)
+        else:
+            # TODO: implement parallel constraint for ProximalProjection
+            raise NotImplementedError(
+                "Parallel constraint for ProximalProjection not implemented yet. Note: "
+                "This would require putting workers into a second infinite loop which "
+                "break things. One way to do this could be to give pre-build objective "
+                "and constraint to the optimizer and use 2 context managers. Also, "
+                "divide workers for force balance constraint loop and objective loop. "
+                "This is probably a rare use case, so not a priority for now."
+            )
 
         if self._objective._deriv_mode == "batched":
             # objective's method already know about its jac_chunk_size
             return getattr(self._objective, "jvp_" + op)(tangents, xg, constants[0])
-        else:
+        elif not self._objective._is_mpi:
             return _proximal_jvp_blocked_pure(
+                self._objective,
+                jnp.split(tangents, np.cumsum(self._dimx_per_thing), axis=-1),
+                jnp.split(xg, np.cumsum(self._dimx_per_thing)),
+                op,
+            )
+        else:
+            return _proximal_jvp_blocked_parallel(
                 self._objective,
                 jnp.split(tangents, np.cumsum(self._dimx_per_thing), axis=-1),
                 jnp.split(xg, np.cumsum(self._dimx_per_thing)),
@@ -1262,6 +1280,24 @@ class ProximalProjection(ObjectiveFunction):
 # define these helper functions that are stateless so we can safely jit them
 
 
+# currently not in use but might be useful later
+def jit_if_not_parallel(func):
+    """Jit a function if not in parallel mode."""
+
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        obj = args[0]
+        if not getattr(obj, "_is_multi_device", False):
+            # Apply jit if jittable
+            jitted_func = functools.partial(jit, static_argnames=["op"])(func)
+            return jitted_func(*args, **kwargs)
+        else:
+            # Run normally if not jittable
+            return func(*args, **kwargs)
+
+    return wrapper
+
+
 @functools.partial(jit, static_argnames=["op"])
 def _proximal_jvp_f_pure(constraint, xf, constants, dc, eq_feasible_tangents, dxdc, op):
     # Note: This function is called by _get_tangent which is vectorized over v
@@ -1317,3 +1353,38 @@ def _proximal_jvp_blocked_pure(objective, vgs, xgs, op):
             outi = getattr(obj, "jvp_" + op)([_vi for _vi in vi], xi, constants=const).T
             out.append(outi)
     return jnp.concatenate(out).T
+
+
+def _proximal_jvp_blocked_parallel(objective, vgs, xgs, op):
+    if objective.rank == 0:
+        message = ("proximal_jvp_" + op, xgs, vgs)
+        objective.comm.bcast(message, root=0)
+
+        obj_idx_rank = jnp.where(objective._rank_per_objective == 0)[0]
+        J_rank = []
+        for idx in obj_idx_rank:
+            obj = objective.objectives[idx]
+            const = objective.constants[idx]
+
+            thing_idx = objective._things_per_objective_idx[idx]
+            xi = [xgs[i] for i in thing_idx]
+            vi = [vgs[i] for i in thing_idx]
+            assert len(xi) > 0
+            assert len(vi) > 0
+            assert len(xi) == len(vi)
+            if obj._deriv_mode == "rev":
+                # obj might not allow fwd mode, so compute full rev mode jacobian
+                # and do matmul manually. This is slightly inefficient, but usually
+                # when rev mode is used, dim_f <<< dim_x, so its not too bad.
+                Ji = getattr(obj, "jac_" + op)(*xi, constants=const)
+                J_rank += jnp.array([Jii @ vii.T for Jii, vii in zip(Ji, vi)]).sum(
+                    axis=0
+                )
+            else:
+                J_rank += getattr(obj, "jvp_" + op)(
+                    [_vi for _vi in vi], xi, constants=const
+                ).T
+        J_rank = jnp.concatenate(J_rank).T
+        print(f"Rank {objective.rank} waiting to gather")
+        J = objective.comm.gather(J_rank, root=0)
+        return pconcat(J).T

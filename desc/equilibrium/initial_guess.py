@@ -525,9 +525,6 @@ def tz_to_mn(theta1d, zeta1d, m1d, n1d, x2d=None, sincos=None, testmass=True):
     filter_m0_nneg = ((m1d[:, None] == 0) * (n1d[None, :] < 0)) * (-1) + 1
     sdiag *= filter_m0_nneg
 
-    #  xc2d=   cos_mt @ x2D @ cos_nz + sin_mt @ x2d @ sin_nz
-    #  xs2d=   sin_mt @ x2d @ cos_nz - cos_mt @ x2d @ sin_nz )
-
     xtz_cos_nz = x2d @ cos_nz
     xtz_sin_nz = x2d @ sin_nz
     if sincos == "cos":
@@ -546,10 +543,6 @@ def boundary_cut(rbc, zbs, zeta):
     M, N = rbc.shape[0] - 1, (rbc.shape[1] - 1) // 2
     assert rbc.shape == zbs.shape == (M + 1, 2 * N + 1)  # m = 0..M, n = -N..N
 
-    # assert np.isnan(rbc).sum() == 0
-    # assert np.isnan(zbs).sum() == 0
-    # mg,ng=np.meshgrid(np.arange(M + 1), np.arange(-N, N + 1), indexing="ij")
-
     def curve(theta):
         theta = np.asarray(theta)
         test = True
@@ -561,14 +554,6 @@ def boundary_cut(rbc, zbs, zeta):
                     continue
                 Rslow += rbc[m, n + N] * np.cos(m * theta - n * zeta)
                 Zslow += zbs[m, n + N] * np.sin(m * theta - n * zeta)
-
-        # R, Z = np.zeros((2, theta.size))
-
-        # R  = np.cos(np.outer(theta,mg.flatten()) - np.outer(zeta,ng.flatten())) @ rbc.flatten()
-        # Z  = np.sin(np.outer(theta,mg.flatten()) - np.outer(zeta,ng.flatten())) @ zbs.flatten()
-        # if(test):
-        #    assert(np.allclose(R, Rslow))
-        #    assert(np.allclose(Z, Zslow))
 
         return Rslow, Zslow
 

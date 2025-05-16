@@ -58,8 +58,8 @@ def test_multidevice_jac():
     obj1.build()
     obj2.build()
 
-    assert obj1._is_multi_device
-    assert not obj2._is_multi_device
+    assert obj1._is_mpi
+    assert not obj2._is_mpi
 
     np.testing.assert_allclose(obj1.x(eq1), obj2.x(eq2))
 

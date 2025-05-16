@@ -839,10 +839,10 @@ class FourierPlanarCurve(Curve):
 
         # center
         center = np.mean(coords, axis=0)
-        coords = coords - center  # shift to origin
+        coords_centered = coords - center  # shift to origin
 
         # normal
-        U, _, _ = np.linalg.svd(coords.T)
+        U, _, _ = np.linalg.svd(coords_centered.T)
         normal = U[:, -1].T  # left singular vector of the least singular value
 
         # axis and angle of rotation
@@ -850,7 +850,7 @@ class FourierPlanarCurve(Curve):
         axis = np.cross(Z_axis, normal)
         angle = np.arccos(np.dot(Z_axis, normal))
         rotmat = rotation_matrix(axis, angle)
-        coords = coords @ rotmat  # rotate to X-Y plane
+        coords_rotated = coords_centered @ rotmat  # rotate to X-Y plane
 
         X, Y, Z = coords[:, 0], coords[:, 1], coords[:, 2]
         X, Y, Z, closedX, closedY, closedZ, input_curve_was_closed = _unclose_curve(

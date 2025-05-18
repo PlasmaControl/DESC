@@ -240,6 +240,10 @@ class ObjectiveFunction(IOAble):
         to manually choose a chunk_size if an OOM error is experienced in this case.
     mpi : MPI object, optional
         MPI communicator. Required when using multiple devices.
+    rank_per_objective : ndarray, optional
+        Specifies which rank each objective should run on. This will allow for multiple
+        objectives to run on the same rank. By default, each objective will be assigned
+        to different ranks.
 
     """
 
@@ -288,14 +292,18 @@ class ObjectiveFunction(IOAble):
             # we cannot put objectives to different devices. Instead, we will
             # run each objective on a different rank. That is also why we will
             # run 1 objective per process.
-            # TODO: add an argument for node of the objective. FOr example, let's say
+            # TODO: add an argument for node of the objective. For example, let's say
             # we have 3 nodes and 4 GPUs per node. First of all there should be 12
             # objectives in total. We should create 4 processes per node and each
             # process should run 1 objective. This way we can utilize all the GPUs.
             # Alternatively, we can specify the rank for the objective. This way, we
             # can have multiple objectives on the same rank.
             self._is_mpi = True
-            self._rank_per_objective = rank_per_objective
+            self._rank_per_objective = (
+                rank_per_objective
+                if rank_per_objective is not None
+                else np.arange(len(objectives))
+            )
             errorif(
                 (
                     np.mod(self._rank_per_objective, max(device_ids) + 1) != device_ids
@@ -305,16 +313,37 @@ class ObjectiveFunction(IOAble):
                 f"ranks {self._rank_per_objective} and device ids {device_ids} are "
                 "not compatible.",
             )
+            warnif(
+                max(device_ids) != desc_config["num_device"] - 1,
+                UserWarning,
+                "You are not using all the devices available. You asked for "
+                f"{desc_config['num_device']} devices, but the maximum device id is "
+                f"{max(device_ids)}. This means that some devices are not being used.",
+            )
             self.mpi = mpi
             self.comm = self.mpi.COMM_WORLD
             self.rank = self.comm.Get_rank()
             self.size = self.comm.Get_size()
             self.running = True
-            if self.size != len(self._objectives):
-                raise NotImplementedError(
-                    "Number of objectives should be equal to the number of ranks. "
-                    "Running multiple objectives per rank is not supported yet."
-                )
+            warnif(
+                (
+                    np.unique(device_ids, return_counts=True)[1]
+                    < self.size // desc_config["num_device"]
+                ).any(),
+                UserWarning,
+                "You are not using all the devices available. You asked for "
+                f"{self.size // desc_config["num_device"]} nodes, but there are "
+                f"{np.unique(device_ids, return_counts=True)[1]} objectives per "
+                "same device_id. Note that for multiple nodes, each node has same "
+                "number of devices and their indices start from 0. So, device_id=0 "
+                "on node 1 is not same as device_id=0 on node 2. ",
+            )
+            errorif(
+                max(self._rank_per_objective) > self.size,
+                ValueError,
+                "The maximum value of rank_per_objective is greater than the number "
+                "of ranks. There are not enough ranks to run the objectives.",
+            )
 
         if self._is_mpi and mpi is None:
             raise ValueError(
@@ -385,7 +414,10 @@ class ObjectiveFunction(IOAble):
                 print(f"Rank {self.rank} STOPPING")
                 break
             elif "jvp" in message[0] and "proximal" not in message[0]:
-                print(f"Rank {self.rank} : {message[0]} for objectives {obj_idx_rank}")
+                print(
+                    f"Rank {self.rank} : {message[0]} for objectives ids: "
+                    + f"{obj_idx_rank}"
+                )
                 # inputs to jitted functions must live on the same device. Need to
                 # put xi and vi on the same device as the objective
                 J_rank = []
@@ -397,22 +429,28 @@ class ObjectiveFunction(IOAble):
                     vi = [message[2][i] for i in thing_idx]
                     xi = jax.device_put(xi, obj._device)
                     vi = jax.device_put(vi, obj._device)
-                    J_rank += getattr(obj, message[0])(vi, xi, constants=const)
+                    J_rank.append(getattr(obj, message[0])(vi, xi, constants=const))
                 J_rank = np.hstack(J_rank)
                 self.comm.gather(J_rank, root=0)
             elif "compute" in message[0]:
-                print(f"Rank {self.rank} : {message[0]} for objectives {obj_idx_rank}")
+                print(
+                    f"Rank {self.rank} : {message[0]} for objectives ids: "
+                    + f"{obj_idx_rank}"
+                )
                 f_rank = []
                 for idx in obj_idx_rank:
                     obj = self.objectives[idx]
                     const = self.constants[idx]
                     par = message[1][idx]
                     par = jax.device_put(par, obj._device)
-                    f_rank += getattr(obj, message[0])(*par, constants=const)
+                    f_rank.append(getattr(obj, message[0])(*par, constants=const))
                 f_rank = np.concatenate(f_rank)
                 self.comm.gather(f_rank, root=0)
             elif "proximal_jvp" in message[0]:
-                print(f"Rank {self.rank} : {message[0]} for objectives {obj_idx_rank}")
+                print(
+                    f"Rank {self.rank} : {message[0]} for objectives ids: "
+                    + f"{obj_idx_rank}"
+                )
                 J_rank = []
                 for idx in obj_idx_rank:
                     obj = self.objectives[idx]
@@ -431,13 +469,17 @@ class ObjectiveFunction(IOAble):
                         # inefficient, but usuallywhen rev mode is used,
                         # dim_f <<< dim_x, so its not too bad.
                         Ji = getattr(obj, "jac_" + op)(*xi, constants=const)
-                        J_rank += jnp.array(
-                            [Jii @ vii.T for Jii, vii in zip(Ji, vi)]
-                        ).sum(axis=0)
+                        J_rank.append(
+                            jnp.array([Jii @ vii.T for Jii, vii in zip(Ji, vi)]).sum(
+                                axis=0
+                            )
+                        )
                     else:
-                        J_rank += getattr(obj, "jvp_" + op)(
-                            [_vi for _vi in vi], xi, constants=const
-                        ).T
+                        J_rank.append(
+                            getattr(obj, "jvp_" + op)(
+                                [_vi for _vi in vi], xi, constants=const
+                            ).T
+                        )
                 J_rank = np.hstack(J_rank)
                 self.comm.gather(J_rank, root=0)
 
@@ -597,6 +639,23 @@ class ObjectiveFunction(IOAble):
                 # use the chunk size of the first objective
                 self._jac_chunk_size = self.objectives[0]._jac_chunk_size
 
+        if self._is_mpi and verbose > 0:
+            if self.rank == 0:
+                objective_ids_per_rank = [
+                    np.where(self._rank_per_objective == i)[0] for i in range(self.size)
+                ]
+                objective_names_per_rank = [
+                    [self._objectives[i].__class__.__name__ for i in objective_ids]
+                    for objective_ids in objective_ids_per_rank
+                ]
+                print("-" * 60)
+                for rank in range(self.size):
+                    print(
+                        f"Rank {rank} will run objective(s): "
+                        f"{objective_names_per_rank[rank]}"
+                    )
+                print("-" * 60)
+
         if not use_jit_wrapper:
             self._unjit()
 
@@ -681,12 +740,16 @@ class ObjectiveFunction(IOAble):
                 self.comm.bcast(message, root=0)
 
                 obj_idx_rank = jnp.where(self._rank_per_objective == 0)[0]
+                print(
+                    f"Rank {self.rank} : {message[0]} for objectives ids: "
+                    + f"{obj_idx_rank}"
+                )
                 f_rank = []
                 for idx in obj_idx_rank:
                     par = params[idx]
                     obj = self.objectives[idx]
                     const = self.constants[idx]
-                    f_rank += obj.compute_unscaled(*par, constants=const)
+                    f_rank.append(obj.compute_unscaled(*par, constants=const))
                 f_rank = jnp.concatenate(f_rank)
                 print(f"Rank {self.rank} waiting to gather")
                 fs = self.comm.gather(f_rank, root=0)
@@ -727,12 +790,16 @@ class ObjectiveFunction(IOAble):
                 self.comm.bcast(message, root=0)
 
                 obj_idx_rank = jnp.where(self._rank_per_objective == 0)[0]
+                print(
+                    f"Rank {self.rank} : {message[0]} for objectives ids: "
+                    + f"{obj_idx_rank}"
+                )
                 f_rank = []
                 for idx in obj_idx_rank:
                     par = params[idx]
                     obj = self.objectives[idx]
                     const = self.constants[idx]
-                    f_rank += obj.compute_scaled(*par, constants=const)
+                    f_rank.append(obj.compute_scaled(*par, constants=const))
                 f_rank = jnp.concatenate(f_rank)
                 print(f"Rank {self.rank} waiting to gather")
                 fs = self.comm.gather(f_rank, root=0)
@@ -773,12 +840,16 @@ class ObjectiveFunction(IOAble):
                 self.comm.bcast(message, root=0)
 
                 obj_idx_rank = jnp.where(self._rank_per_objective == 0)[0]
+                print(
+                    f"Rank {self.rank} : {message[0]} for objectives ids: "
+                    + f"{obj_idx_rank}"
+                )
                 f_rank = []
                 for idx in obj_idx_rank:
                     par = params[idx]
                     obj = self.objectives[idx]
                     const = self.constants[idx]
-                    f_rank += obj.compute_scaled_error(*par, constants=const)
+                    f_rank.append(obj.compute_scaled_error(*par, constants=const))
                 f_rank = jnp.concatenate(f_rank)
                 print(f"Rank {self.rank} waiting to gather")
                 fs = self.comm.gather(f_rank, root=0)
@@ -1018,6 +1089,10 @@ class ObjectiveFunction(IOAble):
                 self.comm.bcast(message, root=0)
 
                 obj_idx_rank = jnp.where(self._rank_per_objective == 0)[0]
+                print(
+                    f"Rank {self.rank} : {message[0]} for objectives ids: "
+                    + f"{obj_idx_rank}"
+                )
                 J_rank = []
                 for idx in obj_idx_rank:
                     obj = self.objectives[idx]
@@ -1025,7 +1100,7 @@ class ObjectiveFunction(IOAble):
                     thing_idx = self._things_per_objective_idx[idx]
                     xi = [xs[i] for i in thing_idx]
                     vi = [vs[i] for i in thing_idx]
-                    J_rank += getattr(obj, "jvp_" + op)(vi, xi, constants=const)
+                    J_rank.append(getattr(obj, "jvp_" + op)(vi, xi, constants=const))
                 J_rank = jnp.hstack(J_rank)
                 print(f"Rank {self.rank} waiting to gather")
                 J = self.comm.gather(J_rank, root=0)

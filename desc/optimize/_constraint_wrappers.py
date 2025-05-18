@@ -1361,6 +1361,9 @@ def _proximal_jvp_blocked_parallel(objective, vgs, xgs, op):
         objective.comm.bcast(message, root=0)
 
         obj_idx_rank = jnp.where(objective._rank_per_objective == 0)[0]
+        print(
+            f"Rank {objective.rank} : {message[0]} for objectives ids: {obj_idx_rank}"
+        )
         J_rank = []
         for idx in obj_idx_rank:
             obj = objective.objectives[idx]
@@ -1377,14 +1380,16 @@ def _proximal_jvp_blocked_parallel(objective, vgs, xgs, op):
                 # and do matmul manually. This is slightly inefficient, but usually
                 # when rev mode is used, dim_f <<< dim_x, so its not too bad.
                 Ji = getattr(obj, "jac_" + op)(*xi, constants=const)
-                J_rank += jnp.array([Jii @ vii.T for Jii, vii in zip(Ji, vi)]).sum(
-                    axis=0
+                J_rank.append(
+                    jnp.array([Jii @ vii.T for Jii, vii in zip(Ji, vi)]).sum(axis=0)
                 )
             else:
-                J_rank += getattr(obj, "jvp_" + op)(
-                    [_vi for _vi in vi], xi, constants=const
-                ).T
-        J_rank = jnp.concatenate(J_rank).T
+                J_rank.append(
+                    getattr(obj, "jvp_" + op)(
+                        [_vi for _vi in vi], xi, constants=const
+                    ).T
+                )
+        J_rank = jnp.concatenate(J_rank)
         print(f"Rank {objective.rank} waiting to gather")
         J = objective.comm.gather(J_rank, root=0)
         return pconcat(J).T

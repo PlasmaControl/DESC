@@ -16,7 +16,7 @@ _set_cpu_count(num_device)
 set_device("cpu", num_device=num_device)
 
 # ====== Using GPUs ======
-# When we have multiple processing using the same devices (for example, 3 processes
+# When we have multiple processes using the same devices (for example, 3 processes
 # using 3 GPUs), each process will try to pre-allocate 75% of the GPU memory which will
 # cause the memory allocation to fail. To avoid this, we can set the memory fraction
 # to 1/(num_device + 2) which will allow each process to allocate 1/(num_device + 2) of
@@ -51,14 +51,17 @@ if __name__ == "__main__":
     if desc_config["kind"] == "gpu":
         print(
             f"Rank {rank} is running on {jax.local_devices(backend="gpu")} "
-            f"and {jax.local_devices(backend="cpu")}"
+            f"and {jax.local_devices(backend="cpu")}\n"
         )
     else:
-        print(f"Rank {rank} is running on {jax.local_devices(backend='cpu')}")
-    print_backend_info()
+        print(f"Rank {rank} is running on {jax.local_devices(backend='cpu')}\n")
+    if rank == 0:
+        print(f"====== BACKEND INFO ======")
+        print_backend_info()
+        print("\n")
 
     eq = get("HELIOTRON")
-    eq.change_resolution(6, 6, 6, 12, 12, 12)
+    eq.change_resolution(M=3, N=2, M_grid=6, N_grid=4)
 
     # this will create a parallel objective function
     # user can create their own parallel objective function as well which will be

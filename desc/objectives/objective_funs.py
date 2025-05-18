@@ -581,19 +581,21 @@ class ObjectiveFunction(IOAble):
             )
             self._jac_chunk_size = max([1, max_chunk_size])
 
-        if self._deriv_mode == "blocked" and len(self.objectives) > 1:
-            # blocked mode should never use this chunk size if there
-            # are multiple sub-objectives
-            self._jac_chunk_size = (
-                "ObjectiveFunction is using `blocked` mode, you shouldn't "
-                "try to use this jac_chunk_size. Instead use the sub-objective's "
-                "`jac_chunk_size`."
-            )
-        elif self._deriv_mode == "blocked" and len(self.objectives) == 1:
-            # if there is only one objective i.e. wrapped ForceBalance in
-            # ProximalProjection, we can use the chunk size of
-            # that objective as if this is batched mode
-            self._jac_chunk_size = self.objectives[0]._jac_chunk_size
+        if self._deriv_mode == "blocked":
+            chunk_sizes = [obj._jac_chunk_size for obj in self.objectives]
+            if len(set(chunk_sizes)) > 1:
+                # blocked mode should never use this chunk size if there
+                # are multiple sub-objectives with different chunk sizes
+                self._jac_chunk_size = (
+                    "ObjectiveFunction is using `blocked` mode, you shouldn't "
+                    "try to use this jac_chunk_size. Instead use the sub-objective's "
+                    "`jac_chunk_size`."
+                )
+            else:
+                # if there is only one objective i.e. wrapped ForceBalance in
+                # ProximalProjection or only one value of jac_chunk_size, we can
+                # use the chunk size of the first objective
+                self._jac_chunk_size = self.objectives[0]._jac_chunk_size
 
         if not use_jit_wrapper:
             self._unjit()

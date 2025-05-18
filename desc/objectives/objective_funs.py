@@ -332,7 +332,7 @@ class ObjectiveFunction(IOAble):
                 ).any(),
                 UserWarning,
                 "You are not using all the devices available. You asked for "
-                f"{self.size // desc_config["num_device"]} nodes, but there are "
+                f"{self.size // desc_config['num_device']} nodes, but there are "
                 f"{np.unique(device_ids, return_counts=True)[1]} objectives per "
                 "same device_id. Note that for multiple nodes, each node has same "
                 "number of devices and their indices start from 0. So, device_id=0 "

@@ -756,7 +756,6 @@ class BoundaryError(_Objective):
 
         g = eval_data["|e_theta x e_zeta|"]
         Bn_err = Bn * g
-        Bsq_err = (bsq_in - bsq_out) * g
         Bsq_err = jnp.where(
             eval_data["p"] == 0,
             (bsq_in - bsq_out) * g,

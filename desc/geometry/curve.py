@@ -343,7 +343,7 @@ def _unclose_curve(X, Y, Z):
 
 
 class FourierXYZCurve(Curve):
-    """Curve parameterized by Fourier series for X,Y,Z in terms of arbitrary angle s.
+    """Curve parameterized by Fourier series for X,Y,Z in terms of an arbitrary angle s.
 
     Parameters
     ----------
@@ -906,7 +906,8 @@ class FourierXYCurve(Curve):
     """Curve that lies in a plane.
 
     Parameterized by a point (the center of the curve), a vector (normal to the plane),
-    and Fourier series defining the X and Y coordinates in the plane.
+    and Fourier series defining the X and Y coordinates in the plane as a function of
+    an arbitrary angle s.
 
     Parameters
     ----------
@@ -987,7 +988,7 @@ class FourierXYCurve(Curve):
     @optimizable_parameter
     @property
     def center(self):
-        """Center of planar curve polar coordinates."""
+        """Center of planar curve."""
         return self._center
 
     @center.setter

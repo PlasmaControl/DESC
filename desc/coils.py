@@ -828,7 +828,7 @@ class FourierRZCoil(_Coil, FourierRZCurve):
 
 
 class FourierXYZCoil(_Coil, FourierXYZCurve):
-    """Coil parameterized by fourier series for X,Y,Z in terms of arbitrary angle s.
+    """Coil parameterized by Fourier series for X,Y,Z in terms of an arbitrary angle s.
 
     Parameters
     ----------
@@ -1041,8 +1041,8 @@ class FourierXYCoil(_Coil, FourierXYCurve):
     """Coil that lies in a plane.
 
     Parameterized by a point (the center of the coil), a vector (normal to the plane),
-    and a Fourier series defining the X and Y coordinates in the plane as a function of
-    the polar angle theta.
+    and Fourier series defining the X and Y coordinates in the plane as a function of
+    an arbitrary angle s.
 
     Parameters
     ----------

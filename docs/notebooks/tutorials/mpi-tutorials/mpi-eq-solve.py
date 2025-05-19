@@ -18,12 +18,11 @@ set_device("cpu", num_device=num_device)
 # ====== Using GPUs ======
 # When we have multiple processes using the same devices (for example, 3 processes
 # using 3 GPUs), each process will try to pre-allocate 75% of the GPU memory which will
-# cause the memory allocation to fail. To avoid this, we can set the memory fraction
-# to 1/(num_device + 2) which will allow each process to allocate 1/(num_device + 2) of
-# the GPU memory. This is a bit conservative, but if a process needs more memory, it can
-# allocate more memory on the fly.
+# cause the memory allocation to fail. To avoid this, we can set the allocator to `platform`
+# such that there is no pre-allocation. This is a bit conservative (and probably there is room
+# for improvement), but if a process needs more memory, it can use more memory on the fly.
 #
-# os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = str(1 / (num_device + 2))
+# os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
 # set_device("gpu", num_device=num_device)
 
 from mpi4py import MPI

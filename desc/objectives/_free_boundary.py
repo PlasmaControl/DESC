@@ -405,10 +405,6 @@ class BoundaryError(_Objective):
     field_fixed : bool
         Whether to assume the field is fixed. For free boundary solve, should
         be fixed. For single stage optimization, should be False (default).
-    finite_pressure : bool
-        Whether to assume the plasma pressure at the boundary is finite (True) or always
-        vanishes (Fasle). If False, the plasma pressure term is removed from the
-        pressure balance equation. Default is True.
     bs_chunk_size : int or None
         Size to split Biot-Savart computation into chunks of evaluation points.
         If no chunking should be done or the chunk size is the full input
@@ -468,7 +464,6 @@ class BoundaryError(_Objective):
         name="Boundary error",
         jac_chunk_size=None,
         *,
-        finite_pressure=True,
         bs_chunk_size=None,
         B_plasma_chunk_size=None,
         **kwargs,
@@ -481,7 +476,6 @@ class BoundaryError(_Objective):
         self._q = q
         self._field = [field] if not isinstance(field, list) else field
         self._field_grid = field_grid
-        self._finite_pressure = finite_pressure
         self._bs_chunk_size = bs_chunk_size
         B_plasma_chunk_size = parse_argname_change(
             B_plasma_chunk_size, kwargs, "loop", "B_plasma_chunk_size"
@@ -598,9 +592,8 @@ class BoundaryError(_Objective):
             "e^rho",
             "n_rho",
             "|e_theta x e_zeta|",
+            "p",
         ]
-        if self._finite_pressure:
-            self._eq_data_keys += ["p"]
 
         timer = Timer()
         if verbose > 0:
@@ -762,9 +755,13 @@ class BoundaryError(_Objective):
         bsq_in = jnp.sum(Bin_total * Bin_total, axis=-1)
 
         g = eval_data["|e_theta x e_zeta|"]
-        pressure = eval_data["p"] * (2 * mu_0) if self._finite_pressure else 0
         Bn_err = Bn * g
-        Bsq_err = (bsq_in + pressure - bsq_out) * g
+        Bsq_err = (bsq_in - bsq_out) * g
+        Bsq_err = jnp.where(
+            eval_data["p"] == 0,
+            (bsq_in - bsq_out) * g,
+            (bsq_in - bsq_out + eval_data["p"] * 2 * mu_0) * g,
+        )
         Bjump = Bex_total - Bin_total
         if self._sheet_current:
             Kerr = mu_0 * sheet_eval_data["K"] - jnp.cross(eval_data["n_rho"], Bjump)

@@ -1022,7 +1022,7 @@ class FixBoundaryW(FixParameters):
         else:
             indices = np.array([], dtype=int)
             for mode in np.atleast_2d(modes):
-                indices = np.append(indices, eq.surface.Z_basis.get_idx(*mode))
+                indices = np.append(indices, eq.surface.W_basis.get_idx(*mode))
         super().__init__(
             thing=eq,
             params={"Wb_lmn": indices},

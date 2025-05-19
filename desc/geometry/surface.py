@@ -692,6 +692,11 @@ class FourierRZToroidalSurface(Surface):
             )
             AW = transform.matrices[transform.method][0][0][0]
 
+            # RG: No one is ever going to specify an omega. The correct way would be
+            # to find an omega that improves the fit. Therefore, I think the
+            # matrix A should be like [[W@AW, 0, W @ AW], [0, W@AR, W @ AW]]
+            # and b like np.concatenate((w * R, w * Z))
+            # This will give us the best omega
             A = block_diag(W @ AR, W @ AZ, W @ AW)
             b = np.concatenate([w * R, w * Z, w * omega])
             x_lmn = np.linalg.lstsq(A, b, rcond=rcond)[0]

@@ -2571,9 +2571,12 @@ def field_line_integrate(
     r0, z0 : array-like
         initial starting coordinates for r,z on phi=phis[0] plane
     phis : array-like
-        strictly increasing array of toroidal angles to output r,z at
-        Note that phis is the geometric toroidal agitngle for positive Bphi,
-        and the negative toroidal angle for negative Bphi
+        strictly increasing array of time-like coordinate to output r,z at
+        Note that phis is the geometric toroidal angle for positive Bphi,
+        however for negative Bphi, the integration will start at phis[0]
+        but will end at phis[0]-(phis[-1]-phis[0]). This is because the
+        integration follows the direction of the magnetic field vector not the
+        geometric toroidal angle.
     field : MagneticField
         source of magnetic field to integrate
     params: dict, optional
@@ -2606,8 +2609,11 @@ def field_line_integrate(
 
     Returns
     -------
-    r, z : ndarray
-        arrays of r, z coordinates at specified phi angles
+    r, z, phi : ndarray
+        arrays of r, z and phi coordinates of the field line, where `phi` is the
+        geometric toroidal angle. Note that `phi` will start from phis[0] and end with
+        phis[0]-(phis[-1]-phis[0]) if Bphi<0, otherwise it will start and end
+        at phis[0] and phis[-1] respectively.
 
     """
     r0, z0, phis = map(jnp.asarray, (r0, z0, phis))
@@ -2616,6 +2622,21 @@ def field_line_integrate(
     r0 = r0.flatten()
     z0 = z0.flatten()
     x0 = jnp.array([r0, phis[0] * jnp.ones_like(r0), z0]).T
+
+    signBT = np.sign(field.compute_magnetic_field(x0)[0, 1])
+    if signBT < 0:
+        warnings.warn(
+            "Toroidal component of the field is negative. Since field line integration "
+            "follows the direction of the magnetic field vector, the resulting "
+            "toroidal angle array (phi) from the integration will start from phis[0] "
+            "and end with phis[0]-(phis[-1]-phis[0]). If you want to integrate along "
+            "the same field trajectory but in the positive toroidal direction, you "
+            "can flip the sign of the field \n"
+            "field_reversed = ScaledMagneticField(-1.0, field)\n"
+            "This allows you to integrate in the opposite direction while still "
+            "following the same field line geometry.",
+            UserWarning,
+        )
 
     @jit
     def odefun(s, rpz, args):
@@ -2669,8 +2690,9 @@ def field_line_integrate(
     x = jnp.where(jnp.isinf(x), jnp.nan, x)
     r = x[:, :, 0].squeeze().T.reshape((len(phis), *rshape))
     z = x[:, :, 2].squeeze().T.reshape((len(phis), *rshape))
+    phi = x[:, :, 1].squeeze().T.reshape((len(phis), *rshape))
 
-    return r, z
+    return r, z, phi
 
 
 class OmnigenousField(Optimizable, IOAble):

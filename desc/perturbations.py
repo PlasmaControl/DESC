@@ -192,7 +192,7 @@ def perturb(  # noqa: C901
         deltas[key] = jnp.atleast_1d(deltas[key])
 
     if not objective.built:
-        objective.build(eq, verbose=verbose)
+        objective.build(verbose=verbose)
 
     if is_linear_proj:
         obj = objective
@@ -559,9 +559,9 @@ def optimal_perturb(  # noqa: C901
         )
 
     if not objective_f.built:
-        objective_f.build(eq, verbose=verbose)
+        objective_f.build(verbose=verbose)
     if not objective_g.built:
-        objective_g.build(eq, verbose=verbose)
+        objective_g.build(verbose=verbose)
 
     argmap = {
         "R_lmn": dR,

@@ -157,7 +157,10 @@ def set_device(kind="cpu", gpuid=None, num_device=1):  # noqa: C901
 
                 jax_cpu = jax.devices("cpu")
                 assert len(jax_cpu) == num_device
-                config["devices"] = [f"{dev}" for dev in jax_cpu]
+                # These CPUs doesn't have to be the same model, but I think slurm will
+                # always give same model
+                config["devices"] = [f"{cpu_info + " " + dev}" for dev in jax_cpu]
+                # This memory is not individual but the total memory
                 config["avail_mems"] = [cpu_mem for _ in range(num_device)]
             except ModuleNotFoundError:
                 raise ValueError(

@@ -56,7 +56,7 @@ Now use pip to install packages (this will only install DESC + JAX with CPU capa
 One could use `uv <https://docs.astral.sh/uv>`_, a new python package management tool, instead of pip.
 For a project that modifies DESC and also uses it to perform analysis,
 it can be nice to separate the DESC folder from the project's data, scripts, jupyter notebooks, etc.
-This will show how to set up a new ``uv`` project with DESC as an editable dependency (Either on local machine or on the cluster, this method can work with both),
+This will show how to set up a new ``uv`` project called ``myproject`` with DESC as an editable dependency (Either on local machine or on the cluster, this method can work with both),
 and with the ability to use DESC in a jupyter notebook.
 
 .. code-block:: sh
@@ -73,11 +73,12 @@ and with the ability to use DESC in a jupyter notebook.
 
     # add dependencies
     uv add --editable "../DESC"
-    # to install a special jax version, for GPU:
-    # uv add "jax[cuda12]"
 
-    # run a python REPL
+    # test the installation
     uv run python
+
+    >>> from desc.backend import print_backend_info
+    >>> print_backend_info()
 
     # Jupyter Notebooks
     # ----------------

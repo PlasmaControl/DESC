@@ -344,6 +344,9 @@ class ObjectiveFunction(IOAble):
                 "The maximum value of rank_per_objective is greater than the number "
                 "of ranks. There are not enough ranks to run the objectives.",
             )
+            self._obj_per_rank = [
+                np.where(self._rank_per_objective == i)[0] for i in range(self.size)
+            ]
 
         if self._is_mpi and mpi is None:
             raise ValueError(
@@ -409,7 +412,7 @@ class ObjectiveFunction(IOAble):
             # message[2] is the output (for only jvp's)
             message = (None, None, None)
             message = self.comm.bcast(message, root=0)
-            obj_idx_rank = jnp.where(self._rank_per_objective == self.rank)[0]
+            obj_idx_rank = self._obj_per_rank[self.rank]
             if message[0] == "STOP":
                 print(f"Rank {self.rank} STOPPING")
                 break
@@ -641,12 +644,9 @@ class ObjectiveFunction(IOAble):
 
         if self._is_mpi and verbose > 0:
             if self.rank == 0:
-                objective_ids_per_rank = [
-                    np.where(self._rank_per_objective == i)[0] for i in range(self.size)
-                ]
                 objective_names_per_rank = [
                     [self._objectives[i].__class__.__name__ for i in objective_ids]
-                    for objective_ids in objective_ids_per_rank
+                    for objective_ids in self._obj_per_rank
                 ]
                 print("-" * 60)
                 for rank in range(self.size):
@@ -739,7 +739,7 @@ class ObjectiveFunction(IOAble):
                 message = ("compute_unscaled", params, None)
                 self.comm.bcast(message, root=0)
 
-                obj_idx_rank = jnp.where(self._rank_per_objective == 0)[0]
+                obj_idx_rank = self._obj_per_rank[self.rank]
                 print(
                     f"Rank {self.rank} : {message[0]} for objectives ids: "
                     + f"{obj_idx_rank}"
@@ -789,7 +789,7 @@ class ObjectiveFunction(IOAble):
                 message = ("compute_scaled", params, None)
                 self.comm.bcast(message, root=0)
 
-                obj_idx_rank = jnp.where(self._rank_per_objective == 0)[0]
+                obj_idx_rank = self._obj_per_rank[self.rank]
                 print(
                     f"Rank {self.rank} : {message[0]} for objectives ids: "
                     + f"{obj_idx_rank}"
@@ -839,7 +839,7 @@ class ObjectiveFunction(IOAble):
                 message = ("compute_scaled_error", params, None)
                 self.comm.bcast(message, root=0)
 
-                obj_idx_rank = jnp.where(self._rank_per_objective == 0)[0]
+                obj_idx_rank = self._obj_per_rank[self.rank]
                 print(
                     f"Rank {self.rank} : {message[0]} for objectives ids: "
                     + f"{obj_idx_rank}"
@@ -1088,7 +1088,7 @@ class ObjectiveFunction(IOAble):
                 message = ("jvp_" + op, xs, vs)
                 self.comm.bcast(message, root=0)
 
-                obj_idx_rank = jnp.where(self._rank_per_objective == 0)[0]
+                obj_idx_rank = self._obj_per_rank[self.rank]
                 print(
                     f"Rank {self.rank} : {message[0]} for objectives ids: "
                     + f"{obj_idx_rank}"

@@ -1360,7 +1360,7 @@ def _proximal_jvp_blocked_parallel(objective, vgs, xgs, op):
         message = ("proximal_jvp_" + op, xgs, vgs)
         objective.comm.bcast(message, root=0)
 
-        obj_idx_rank = jnp.where(objective._rank_per_objective == 0)[0]
+        obj_idx_rank = objective._obj_per_rank[objective.rank]
         print(
             f"Rank {objective.rank} : {message[0]} for objectives ids: {obj_idx_rank}"
         )

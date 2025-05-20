@@ -158,7 +158,7 @@ def _V_rrr_of_r(params, transforms, profiles, data, **kwargs):
     label="A(\\zeta)",
     units="m^{2}",
     units_long="square meters",
-    description="Cross-sectional area as function of zeta",
+    description="Cross-sectional area (constant zeta surface) as function of zeta",
     dim=1,
     params=[],
     transforms={"grid": []},
@@ -186,17 +186,16 @@ def _A_of_z(params, transforms, profiles, data, **kwargs):
     label="A(\\zeta)",
     units="m^{2}",
     units_long="square meters",
-    description="Area of enclosed cross-section (enclosed constant phi surface), "
+    description="Area of enclosed cross-section (enclosed constant zeta surface), "
     "scaled by max(ρ)⁻², as function of zeta",
     dim=1,
     params=[],
     transforms={"grid": []},
     profiles=[],
     coordinates="z",
-    data=["Z", "n_rho", "e_theta|r,p", "rho"],
+    data=["Z", "n_rho", "e_theta", "rho"],
     parameterization=["desc.geometry.surface.FourierRZToroidalSurface"],
     resolution_requirement="rt",  # just need max(rho) near 1
-    # TODO(#568): Add source grid requirement once omega is nonzero.
 )
 def _A_of_z_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs):
     # Denote any vector v = [vᴿ, v^ϕ, vᶻ] with a tuple of its contravariant components.
@@ -214,11 +213,7 @@ def _A_of_z_FourierRZToroidalSurface(params, transforms, profiles, data, **kwarg
     data["A(z)"] = jnp.abs(
         line_integrals(
             transforms["grid"],
-            data["Z"] * n[:, 2] * safenorm(data["e_theta|r,p"], axis=-1),
-            # TODO(#568): Works currently for omega = zero, but for nonzero omega
-            #  we need to integrate over theta at constant phi.
-            #  Should be simple once we have coordinate mapping and source grid
-            #  logic from GitHub pull request #1024.
+            data["Z"] * n[:, 2] * safenorm(data["e_theta"], axis=-1),
             line_label="theta",
             fix_surface=("rho", max_rho),
             expand_out=True,
@@ -235,7 +230,7 @@ def _A_of_z_FourierRZToroidalSurface(params, transforms, profiles, data, **kwarg
     label="A",
     units="m^{2}",
     units_long="square meters",
-    description="Average cross-sectional area",
+    description="Average cross-sectional (constant zeta surface) area",
     dim=0,
     params=[],
     transforms={"grid": []},
@@ -260,7 +255,8 @@ def _A(params, transforms, profiles, data, **kwargs):
     label="A(\\rho)",
     units="m^{2}",
     units_long="square meters",
-    description="Average cross-sectional area enclosed by flux surfaces",
+    description="Average area of enclosed cross-section (enclosed constant zeta "
+    "surface), as function of rho",
     dim=1,
     params=[],
     transforms={"grid": []},
@@ -431,46 +427,6 @@ def _R0_over_a(params, transforms, profiles, data, **kwargs):
     label="P(\\zeta)",
     units="m",
     units_long="meters",
-    description="Perimeter of enclosed cross-section (enclosed constant phi surface), "
-    "scaled by max(ρ)⁻¹, as function of zeta",
-    dim=1,
-    params=[],
-    transforms={"grid": []},
-    profiles=[],
-    coordinates="z",
-    data=["rho", "e_theta|r,p"],
-    parameterization=[
-        "desc.equilibrium.equilibrium.Equilibrium",
-        "desc.geometry.surface.FourierRZToroidalSurface",
-    ],
-    resolution_requirement="rt",  # just need max(rho) near 1
-)
-def _perimeter_of_z(params, transforms, profiles, data, **kwargs):
-    max_rho = jnp.max(data["rho"])
-    data["perimeter(z)"] = (
-        line_integrals(
-            transforms["grid"],
-            safenorm(data["e_theta|r,p"], axis=-1),
-            # TODO(#568): Works currently for omega = zero, but for nonzero omega
-            #  we need to integrate over theta at constant phi.
-            #  Should be simple once we have coordinate mapping and source grid
-            #  logic from GitHub pull request #1024.
-            line_label="theta",
-            fix_surface=("rho", max_rho),
-            expand_out=True,
-        )
-        # To approximate perimeter at ρ ~ 1, we scale by ρ⁻¹, assuming the integrand
-        # varies little from ρ = max_rho to ρ = 1.
-        / max_rho
-    )
-    return data
-
-
-@register_compute_fun(
-    name="perimeter(z)",
-    label="P(\\zeta)",
-    units="m",
-    units_long="meters",
     description="Perimeter of enclosed cross-section (enclosed constant zeta surface), "
     "scaled by max(ρ)⁻¹, as function of zeta",
     dim=1,
@@ -480,16 +436,12 @@ def _perimeter_of_z(params, transforms, profiles, data, **kwargs):
     coordinates="z",
     data=["rho", "e_theta"],
     parameterization=[
-        "desc.geometry.surface.ZernikeRZToroidalSection",
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.core.Surface",
     ],
     resolution_requirement="rt",  # just need max(rho) near 1
 )
-def _perimeter_of_z_ZernikeRZToroidalSection(
-    params, transforms, profiles, data, **kwargs
-):
-    # NOTE: this is perimeter of a constant zeta XS
-    # as a ZernikeRZToroidalSection is defined at constant zeta, so
-    # doing a perimeter at constant phi would make no sense.
+def _perimeter_of_z(params, transforms, profiles, data, **kwargs):
     max_rho = jnp.max(data["rho"])
     data["perimeter(z)"] = (
         line_integrals(
@@ -511,7 +463,7 @@ def _perimeter_of_z_ZernikeRZToroidalSection(
     label="a_{\\mathrm{major}} / a_{\\mathrm{minor}}",
     units="~",
     units_long="None",
-    description="Elongation at a toroidal cross-section",
+    description="Elongation at a toroidal cross-section (constant zeta surface)",
     dim=1,
     params=[],
     transforms={"grid": []},

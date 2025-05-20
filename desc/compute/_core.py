@@ -2118,7 +2118,6 @@ def _lambda_zzz(params, transforms, profiles, data, **kwargs):
 )
 def _omega(params, transforms, profiles, data, **kwargs):
     data["omega"] = data["0"]
-    # TODO: what does omega !=0 mean for ZernikeRZToroidalXS?
     return data
 
 

@@ -3,7 +3,6 @@
 from desc.backend import jnp
 
 from .data_index import register_compute_fun
-from .geom_utils import rpz2xyz
 
 
 @register_compute_fun(
@@ -3470,8 +3469,5 @@ def _x_Equilibrium(params, transforms, profiles, data, **kwargs):
     R = transforms["R"].transform(params["R_lmn"])
     Z = transforms["Z"].transform(params["Z_lmn"])
     phi = transforms["grid"].nodes[:, 2]
-    coords = jnp.stack([R, phi, Z], axis=1)
-    if kwargs.get("basis", "rpz").lower() == "xyz":
-        coords = rpz2xyz(coords)
-    data["x"] = coords
+    data["x"] = jnp.stack([R, phi, Z], axis=1)
     return data

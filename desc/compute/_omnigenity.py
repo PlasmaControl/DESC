@@ -939,12 +939,13 @@ def _B_piecewise_omni(params, transforms, profiles, data, **kwargs):
     # RG:How does this objective change if iota < 0?
     nsurfs = len(params["B_max"])
     iota0 = kwargs.get("iota", 0.6 * jnp.ones((nsurfs,)))[:, None]
+    p = kwargs.get("p", 10)
 
     # RG: (theta_B, zeta_B) grid must be the same for all flux surfaces
     # else this logic below will fail
-    # RG: Eerie logic here
-    Ntheta_B = len(transforms["grid"].nodes[:, 1]) / nsurfs
-    Nzeta_B = len(transforms["grid"].nodes[:, 2]) / nsurfs
+    # RG: Sensitive logic here
+    Ntheta_B = int(len(transforms["grid"].nodes[:, 1]) / nsurfs)
+    Nzeta_B = int(len(transforms["grid"].nodes[:, 2]) / nsurfs)
     gridsize = Ntheta_B * Nzeta_B
     theta_B = transforms["grid"].nodes[:gridsize, 1]
     zeta_B = transforms["grid"].nodes[:gridsize, 2]
@@ -966,7 +967,6 @@ def _B_piecewise_omni(params, transforms, profiles, data, **kwargs):
 
     B_min = params["B_min"][:, None]
     B_max = params["B_max"][:, None]
-    p = int(10)
 
     # shape (num surfaces, grid points)
     exponent = -1 * (

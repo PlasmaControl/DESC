@@ -933,6 +933,7 @@ class PiecewiseOmnigenity(_Objective):
         eq_fixed=False,
         field_fixed=False,
         overlap_penalty=1.0,
+        p=10,
         name="Piecewise omnigenity",
     ):
         if target is None and bounds is None:
@@ -947,6 +948,7 @@ class PiecewiseOmnigenity(_Objective):
         self._eq_fixed = eq_fixed
         self._field_fixed = field_fixed
         self._overlap_penalty = overlap_penalty
+        self._p = p
 
         if not eq_fixed and not field_fixed:
             things = [eq, field]
@@ -1040,6 +1042,7 @@ class PiecewiseOmnigenity(_Objective):
             "Nzeta_B": eq_grid.num_zeta,
             "overlap_penalty": self._overlap_penalty,
             "quad_weights": 1.0,
+            "p": self._p,
         }
 
         if self._eq_fixed:  # if equilibrium fixed, calculate data in build
@@ -1160,6 +1163,7 @@ class PiecewiseOmnigenity(_Objective):
                 profiles={},
                 data=data,
                 iota=data["iota"],
+                p=constants["p"],
             )
         else:
             field_data = compute_fun(
@@ -1170,6 +1174,7 @@ class PiecewiseOmnigenity(_Objective):
                 profiles={},
                 data={},
                 iota=data["iota"],
+                p=constants["p"],
             )
 
         Ntheta = constants["Ntheta_B"]

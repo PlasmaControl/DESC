@@ -1,197 +1,8 @@
 from desc.backend import jnp
 
 from .data_index import register_compute_fun
-from .geom_utils import rpz2xyz
 
-
-@register_compute_fun(
-    name="x",
-    label="\\mathbf{r}",
-    units="m",
-    units_long="meters",
-    description="Position vector along surface",
-    dim=3,
-    params=["R_lmn", "Z_lmn"],
-    transforms={
-        "R": [[0, 0, 0]],
-        "Z": [[0, 0, 0]],
-        "grid": [],
-    },
-    profiles=[],
-    coordinates="tz",
-    data=[],
-    parameterization="desc.geometry.surface.FourierRZToroidalSurface",
-)
-def _x_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs):
-    R = transforms["R"].transform(params["R_lmn"])
-    Z = transforms["Z"].transform(params["Z_lmn"])
-    phi = transforms["grid"].nodes[:, 2]
-    coords = jnp.stack([R, phi, Z], axis=1)
-    # default basis for "x" is rpz, the conversion will be done
-    # in the main _compute function
-    data["x"] = coords
-    return data
-
-
-@register_compute_fun(
-    name="X",
-    label="X",
-    units="m",
-    units_long="meters",
-    description="Cartesian X coordinate.",
-    dim=1,
-    params=[],
-    transforms={},
-    profiles=[],
-    coordinates="rtz",
-    data=["x"],
-    parameterization="desc.geometry.core.Surface",
-)
-def _X_Surface(params, transforms, profiles, data, **kwargs):
-    coords = data["x"]
-    coords = rpz2xyz(coords)
-    data["X"] = coords[:, 0]
-    return data
-
-
-@register_compute_fun(
-    name="Y",
-    label="Y",
-    units="m",
-    units_long="meters",
-    description="Cartesian Y coordinate.",
-    dim=1,
-    params=[],
-    transforms={},
-    profiles=[],
-    coordinates="rtz",
-    data=["x"],
-    parameterization="desc.geometry.core.Surface",
-)
-def _Y_Surface(params, transforms, profiles, data, **kwargs):
-    coords = data["x"]
-    coords = rpz2xyz(coords)
-    data["Y"] = coords[:, 1]
-    return data
-
-
-@register_compute_fun(
-    name="R",
-    label="R",
-    units="m",
-    units_long="meters",
-    description="Cylindrical radial position along surface",
-    dim=1,
-    params=[],
-    transforms={},
-    profiles=[],
-    coordinates="rtz",
-    data=["x"],
-    parameterization="desc.geometry.core.Surface",
-)
-def _R_Surface(params, transforms, profiles, data, **kwargs):
-    coords = data["x"]
-    data["R"] = coords[:, 0]
-    return data
-
-
-@register_compute_fun(
-    name="phi",
-    label="\\phi",
-    units="rad",
-    units_long="radians",
-    description="Toroidal phi position along surface",
-    dim=1,
-    params=[],
-    transforms={},
-    profiles=[],
-    coordinates="rtz",
-    data=["x"],
-    parameterization="desc.geometry.core.Surface",
-)
-def _phi_Surface(params, transforms, profiles, data, **kwargs):
-    coords = data["x"]
-    data["phi"] = coords[:, 1]
-    return data
-
-
-@register_compute_fun(
-    name="phi_r",
-    label="\\partial_{\\rho} \\phi",
-    units="rad",
-    units_long="radians",
-    description="Toroidal angle in lab frame, derivative wrt radial coordinate",
-    dim=1,
-    params=[],
-    transforms={},
-    profiles=[],
-    coordinates="rtz",
-    data=["e_rho"],
-    parameterization="desc.geometry.core.Surface",
-)
-def _phi_r_Surface(params, transforms, profiles, data, **kwargs):
-    coords_r = data["e_rho"]
-    data["phi_r"] = coords_r[:, 1]
-    return data
-
-
-@register_compute_fun(
-    name="phi_t",
-    label="\\partial_{\\theta} \\phi",
-    units="rad",
-    units_long="radians",
-    description="Toroidal angle in lab frame, derivative wrt poloidal coordinate",
-    dim=1,
-    params=[],
-    transforms={},
-    profiles=[],
-    coordinates="rtz",
-    data=["e_theta"],
-    parameterization="desc.geometry.core.Surface",
-)
-def _phi_t_Surface(params, transforms, profiles, data, **kwargs):
-    coords_t = data["e_theta"]
-    data["phi_t"] = coords_t[:, 1]
-    return data
-
-
-@register_compute_fun(
-    name="phi_z",
-    label="\\partial_{\\zeta} \\phi",
-    units="rad",
-    units_long="radians",
-    description="Toroidal angle in lab frame, derivative wrt toroidal coordinate",
-    dim=1,
-    params=[],
-    transforms={},
-    profiles=[],
-    coordinates="rtz",
-    data=["e_zeta"],
-    parameterization="desc.geometry.core.Surface",
-)
-def _phi_z_Surface(params, transforms, profiles, data, **kwargs):
-    coords_z = data["e_zeta"]
-    data["phi_z"] = coords_z[:, 1]
-    return data
-
-
-@register_compute_fun(
-    name="Z",
-    label="Z",
-    units="m",
-    units_long="meters",
-    description="Cylindrical vertical position along surface",
-    dim=1,
-    params=[],
-    transforms={},
-    profiles=[],
-    coordinates="rtz",
-    data=["x"],
-    parameterization="desc.geometry.core.Surface",
-)
-def _Z_Surface(params, transforms, profiles, data, **kwargs):
-    data["Z"] = data["x"][:, 2]
-    return data
+# TODO(#568): review when zeta no longer equals phi
 
 
 @register_compute_fun(
@@ -439,8 +250,8 @@ def _Phi_z_FourierCurrentPotentialField(params, transforms, profiles, data, **kw
     units_long="Amperes",
     description="Surface current potential",
     dim=1,
-    params=["params"],
-    transforms={"grid": [], "potential": []},
+    params=[],
+    transforms={"grid": [], "potential": [], "params": []},
     profiles=[],
     coordinates="tz",
     data=[],
@@ -450,7 +261,7 @@ def _Phi_CurrentPotentialField(params, transforms, profiles, data, **kwargs):
     data["Phi"] = transforms["potential"](
         transforms["grid"].nodes[:, 1],
         transforms["grid"].nodes[:, 2],
-        **params["params"]
+        **transforms["params"]
     )
     return data
 
@@ -462,8 +273,8 @@ def _Phi_CurrentPotentialField(params, transforms, profiles, data, **kwargs):
     units_long="Amperes",
     description="Surface current potential, poloidal derivative",
     dim=1,
-    params=["params"],
-    transforms={"grid": [], "potential_dtheta": []},
+    params=[],
+    transforms={"grid": [], "potential_dtheta": [], "params": []},
     profiles=[],
     coordinates="tz",
     data=[],
@@ -473,7 +284,7 @@ def _Phi_t_CurrentPotentialField(params, transforms, profiles, data, **kwargs):
     data["Phi_t"] = transforms["potential_dtheta"](
         transforms["grid"].nodes[:, 1],
         transforms["grid"].nodes[:, 2],
-        **params["params"]
+        **transforms["params"]
     )
     return data
 
@@ -485,8 +296,8 @@ def _Phi_t_CurrentPotentialField(params, transforms, profiles, data, **kwargs):
     units_long="Amperes",
     description="Surface current potential, toroidal derivative",
     dim=1,
-    params=["params"],
-    transforms={"grid": [], "potential_dzeta": []},
+    params=[],
+    transforms={"grid": [], "potential_dzeta": [], "params": []},
     profiles=[],
     coordinates="tz",
     data=[],
@@ -496,8 +307,52 @@ def _Phi_z_CurrentPotentialField(params, transforms, profiles, data, **kwargs):
     data["Phi_z"] = transforms["potential_dzeta"](
         transforms["grid"].nodes[:, 1],
         transforms["grid"].nodes[:, 2],
-        **params["params"]
+        **transforms["params"]
     )
+    return data
+
+
+@register_compute_fun(
+    name="K^theta",
+    label="K^{\\theta}",
+    units="A/m^2",
+    units_long="Amperes per square meter",
+    description="Contravariant poloidal component of surface current density",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="tz",
+    data=["Phi_z", "|e_theta x e_zeta|"],
+    parameterization=[
+        "desc.magnetic_fields._current_potential.CurrentPotentialField",
+        "desc.magnetic_fields._current_potential.FourierCurrentPotentialField",
+    ],
+)
+def _K_sup_theta_CurrentPotentialField(params, transforms, profiles, data, **kwargs):
+    data["K^theta"] = -data["Phi_z"] * (1 / data["|e_theta x e_zeta|"])
+    return data
+
+
+@register_compute_fun(
+    name="K^zeta",
+    label="K^{\\zeta}",
+    units="A/m^2",
+    units_long="Amperes per square meter",
+    description="Contravariant toroidal component of surface current density",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="tz",
+    data=["Phi_t", "|e_theta x e_zeta|"],
+    parameterization=[
+        "desc.magnetic_fields._current_potential.CurrentPotentialField",
+        "desc.magnetic_fields._current_potential.FourierCurrentPotentialField",
+    ],
+)
+def _K_sup_zeta_CurrentPotentialField(params, transforms, profiles, data, **kwargs):
+    data["K^zeta"] = data["Phi_t"] * (1 / data["|e_theta x e_zeta|"])
     return data
 
 
@@ -513,43 +368,16 @@ def _Phi_z_CurrentPotentialField(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="tz",
-    data=["Phi_t", "Phi_z", "e_theta", "e_zeta", "|e_theta x e_zeta|"],
+    data=["K^theta", "K^zeta", "e_theta", "e_zeta"],
     parameterization=[
         "desc.magnetic_fields._current_potential.CurrentPotentialField",
         "desc.magnetic_fields._current_potential.FourierCurrentPotentialField",
     ],
 )
 def _K_CurrentPotentialField(params, transforms, profiles, data, **kwargs):
-    data["K"] = (
-        data["Phi_t"] * (1 / data["|e_theta x e_zeta|"]) * data["e_zeta"].T
-    ).T - (data["Phi_z"] * (1 / data["|e_theta x e_zeta|"]) * data["e_theta"].T).T
-    return data
-
-
-@register_compute_fun(
-    name="x",
-    label="\\mathbf{r}",
-    units="m",
-    units_long="meters",
-    description="Position vector along surface",
-    dim=3,
-    params=["R_lmn", "Z_lmn"],
-    transforms={
-        "R": [[0, 0, 0]],
-        "Z": [[0, 0, 0]],
-        "grid": [],
-    },
-    profiles=[],
-    coordinates="rt",
-    data=[],
-    parameterization="desc.geometry.surface.ZernikeRZToroidalSection",
-)
-def _x_ZernikeRZToroidalSection(params, transforms, profiles, data, **kwargs):
-    R = transforms["R"].transform(params["R_lmn"])
-    Z = transforms["Z"].transform(params["Z_lmn"])
-    phi = transforms["grid"].nodes[:, 2]
-    coords = jnp.stack([R, phi, Z], axis=1)
-    data["x"] = coords
+    data["K"] = (data["K^zeta"] * data["e_zeta"].T).T + (
+        data["K^theta"] * data["e_theta"].T
+    ).T
     return data
 
 

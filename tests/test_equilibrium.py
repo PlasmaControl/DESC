@@ -1,18 +1,18 @@
 """Tests for Equilibrium class."""
 
 import os
-import pickle
 import warnings
 
 import numpy as np
 import pytest
+from qic import Qic
 
 from desc.__main__ import main
 from desc.backend import sign
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.examples import get
 from desc.grid import Grid, LinearGrid
-from desc.io import InputReader
+from desc.io import InputReader, load
 from desc.objectives import ForceBalance, ObjectiveFunction, get_equilibrium_objective
 from desc.profiles import PowerSeriesProfile
 
@@ -20,8 +20,8 @@ from .utils import area_difference, compute_coords
 
 
 @pytest.mark.unit
-def test_compute_theta_coords():
-    """Test root finding for theta(theta*,lambda(theta))."""
+def test_map_PEST_coordinates():
+    """Test root finding for theta(theta_PEST,lambda(theta))."""
     eq = get("DSHAPE_CURRENT")
     with pytest.warns(UserWarning, match="Reducing radial"):
         eq.change_resolution(3, 3, 0, 6, 6, 0)
@@ -34,7 +34,7 @@ def test_compute_theta_coords():
     flux_coords = nodes.copy()
     flux_coords[:, 1] += coords["lambda"]
 
-    geom_coords = eq.compute_theta_coords(flux_coords)
+    geom_coords = eq.map_coordinates(flux_coords, inbasis=("rho", "theta_PEST", "zeta"))
     geom_coords = np.array(geom_coords)
 
     # catch difference between 0 and 2*pi
@@ -53,13 +53,8 @@ def test_map_coordinates():
         eq.change_resolution(3, 3, 3, 6, 6, 6)
     n = 100
     coords = np.array([np.ones(n), np.zeros(n), np.linspace(0, 10 * np.pi, n)]).T
-    out = eq.map_coordinates(
-        coords,
-        ["rho", "alpha", "zeta"],
-        ["rho", "theta", "zeta"],
-        period=(np.inf, 2 * np.pi, 10 * np.pi),
-    )
-    assert not np.any(np.isnan(out))
+    out = eq.map_coordinates(coords, inbasis=["rho", "alpha", "zeta"])
+    assert np.isfinite(out).all()
 
     eq = get("DSHAPE")
 
@@ -72,9 +67,9 @@ def test_map_coordinates():
 
     grid = Grid(np.vstack([rho, theta, zeta]).T, sort=False)
     in_data = eq.compute(inbasis, grid=grid)
-    in_coords = np.stack([in_data[k] for k in inbasis], axis=-1)
+    in_coords = np.column_stack([in_data[k] for k in inbasis])
     out_data = eq.compute(outbasis, grid=grid)
-    out_coords = np.stack([out_data[k] for k in outbasis], axis=-1)
+    out_coords = np.column_stack([out_data[k] for k in outbasis])
 
     out = eq.map_coordinates(
         in_coords,
@@ -92,8 +87,7 @@ def test_map_coordinates_derivative():
     eq = get("DSHAPE")
     with pytest.warns(UserWarning, match="Reducing radial"):
         eq.change_resolution(3, 3, 0, 6, 6, 0)
-    inbasis = ["alpha", "phi", "rho"]
-    outbasis = ["rho", "theta_PEST", "zeta"]
+    inbasis = ["rho", "alpha", "phi"]
 
     rho = np.linspace(0.01, 0.99, 20)
     theta = np.linspace(0, np.pi, 20, endpoint=False)
@@ -110,11 +104,38 @@ def test_map_coordinates_derivative():
         out = eq.map_coordinates(
             in_coords,
             inbasis,
-            outbasis,
+            ("rho", "theta_PEST", "zeta"),
             np.array([rho, theta, zeta]).T,
             params,
             period=(2 * np.pi, 2 * np.pi, np.inf),
             maxiter=40,
+        )
+        return out
+
+    J1 = jax.jit(jax.jacfwd(foo))(eq.params_dict, in_coords)
+    J2 = jax.jit(jax.jacrev(foo))(eq.params_dict, in_coords)
+    for j1, j2 in zip(J1.values(), J2.values()):
+        assert ~np.any(np.isnan(j1))
+        assert ~np.any(np.isnan(j2))
+        np.testing.assert_allclose(j1, j2, atol=1e-12)
+
+    # Check map_coordinates with full_output is still runs without errors
+    # this time _map_clebsch_coordinates is called inside map_coordinates
+    inbasis2 = ["rho", "alpha", "zeta"]
+    in_data = eq.compute(inbasis2, grid=grid)
+    in_coords = np.stack([in_data[k] for k in inbasis2], axis=-1)
+
+    @jax.jit
+    def foo(params, in_coords):
+        out, (_, _) = eq.map_coordinates(
+            in_coords,
+            inbasis2,
+            ("rho", "theta", "zeta"),
+            np.array([rho, theta, zeta]).T,
+            params,
+            period=(2 * np.pi, 2 * np.pi, np.inf),
+            maxiter=40,
+            full_output=True,
         )
         return out
 
@@ -134,9 +155,15 @@ def test_map_coordinates_derivative():
     flux_coords = nodes.copy()
     flux_coords[:, 1] += coords["lambda"]
 
+    # this will call _map_PEST_coordinates inside map_coordinates
     @jax.jit
     def bar(L_lmn):
-        geom_coords = eq.compute_theta_coords(flux_coords, L_lmn)
+        params = {"L_lmn": L_lmn}
+        geom_coords = eq.map_coordinates(
+            flux_coords,
+            inbasis=("rho", "theta_PEST", "zeta"),
+            params=params,
+        )
         return geom_coords
 
     J1 = jax.jit(jax.jacfwd(bar))(eq.params_dict["L_lmn"])
@@ -236,6 +263,9 @@ def test_eq_change_symmetry():
     assert eq.surface.sym
     assert eq.surface.R_basis.sym == "cos"
     assert eq.surface.Z_basis.sym == "sin"
+    assert eq.axis.sym
+    assert eq.axis.R_basis.sym == "cos"
+    assert eq.axis.Z_basis.sym == "sin"
 
     # undo symmetry
     eq.change_resolution(sym=False)
@@ -249,6 +279,9 @@ def test_eq_change_symmetry():
     assert not eq.surface.sym
     assert not eq.surface.R_basis.sym
     assert not eq.surface.Z_basis.sym
+    assert eq.axis.sym is False
+    assert eq.axis.R_basis.sym is False
+    assert eq.axis.Z_basis.sym is False
 
 
 @pytest.mark.unit
@@ -265,20 +298,58 @@ def test_resolution():
 @pytest.mark.unit
 def test_equilibrium_from_near_axis():
     """Test loading a solution from pyQSC/pyQIC."""
-    qsc_path = "./tests/inputs/qsc_r2section5.5.pkl"
-    file = open(qsc_path, "rb")
-    na = pickle.load(file)
-    file.close()
+    na = Qic.from_paper("r2 section 5.5", rs=[0, 1e-5], zc=[0, 1e-5])
 
     r = 1e-2
     eq = Equilibrium.from_near_axis(na, r=r, M=8, N=8)
     grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
     data = eq.compute("|B|", grid=grid)
 
+    # get the sin/cos modes
+    eq_rc = eq.Ra_n[
+        np.where(
+            np.logical_and(
+                eq.axis.R_basis.modes[:, 2] >= 0,
+                eq.axis.R_basis.modes[:, 2] < na.nfourier,
+            )
+        )
+    ]
+    eq_zc = eq.Za_n[
+        np.where(
+            np.logical_and(
+                eq.axis.Z_basis.modes[:, 2] >= 0,
+                eq.axis.Z_basis.modes[:, 2] < na.nfourier,
+            )
+        )
+    ]
+    eq_rs = np.flipud(
+        eq.Ra_n[
+            np.where(
+                np.logical_and(
+                    eq.axis.R_basis.modes[:, 2] < 0,
+                    eq.axis.R_basis.modes[:, 2] > -na.nfourier,
+                )
+            )
+        ]
+    )
+    eq_zs = np.flipud(
+        eq.Za_n[
+            np.where(
+                np.logical_and(
+                    eq.axis.Z_basis.modes[:, 2] < 0,
+                    eq.axis.Z_basis.modes[:, 2] > -na.nfourier,
+                )
+            )
+        ]
+    )
+
     assert eq.is_nested()
     assert eq.NFP == na.nfp
-    np.testing.assert_allclose(eq.Ra_n[:2], na.rc, atol=1e-10)
-    np.testing.assert_allclose(eq.Za_n[-2:], na.zs, atol=1e-10)
+    np.testing.assert_allclose(eq_rc, na.rc, atol=1e-10)
+    # na.zs[0] is always 0, which DESC doesn't include
+    np.testing.assert_allclose(eq_zs, na.zs[1:], atol=1e-10)
+    np.testing.assert_allclose(eq_rs, na.rs[1:], atol=1e-10)
+    np.testing.assert_allclose(eq_zc, na.zc, atol=1e-10)
     np.testing.assert_allclose(data["|B|"][0], na.B_mag(r, 0, 0), rtol=2e-2)
 
 
@@ -375,3 +446,29 @@ def test_backward_compatible_load_and_resolve():
     f_obj = ForceBalance(eq=eq)
     obj = ObjectiveFunction(f_obj, use_jit=False)
     eq.solve(maxiter=1, objective=obj)
+
+
+@pytest.mark.unit
+def test_assigning_profile_iota_current():
+    """Test assigning current to iota-constrained eq and vice-versa."""
+    eq = get("HELIOTRON")  # iota-constrained
+    with pytest.warns(UserWarning, match="existing rotational"):
+        eq.current = PowerSeriesProfile()
+    assert eq.iota is None
+    with pytest.warns(UserWarning, match="existing toroidal"):
+        eq.iota = PowerSeriesProfile()
+    assert eq.current is None
+
+
+@pytest.mark.unit
+def test_eq_optimize_default_constraints_warning(DummyStellarator):
+    """Tests default constraints warning for eq.optimize."""
+    eq = load(load_from=str(DummyStellarator["output_path"]), file_format="hdf5")
+    eq.change_resolution(M=1, N=0, M_grid=2, N_grid=0)
+    with pytest.warns(UserWarning, match="no equil"):
+        eq.optimize(
+            ObjectiveFunction(ForceBalance(eq)),
+            constraints=(),
+            optimizer="lsq-exact",
+            maxiter=0,
+        )

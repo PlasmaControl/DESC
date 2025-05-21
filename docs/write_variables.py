@@ -51,6 +51,8 @@ def write_csv(parameterization):
                 }
                 # stuff like |x| is interpreted as a substitution by rst, need to escape
                 d["Description"] = _escape(d["Description"])
+                if "old" in d["Name"]:
+                    continue
                 writer.writerow(d)
 
 
@@ -77,6 +79,19 @@ available for plotting / analysis.
 All vector quantities are computed in toroidal coordinates :math:`(R,\phi,Z)` by default.
 The keyword argument ``basis='xyz'`` can be used to convert the variables into Cartesian
 coordinates :math:`(X,Y,Z)`. ``basis`` must be one of ``{'rpz', 'xyz'}``.
+
+Our convention to denote partial derivatives is an underscore followed by the first
+letter of the coordinate that the partial derivative is taken with respect to. Unless
+otherwise specified or implied by the variable name, these partial derivatives are
+those of the DESC :math:`\rho, \theta, \zeta` coordinate system. For example, ``|B|_z``
+is :math:`(\partial \vert B \vert / \partial\zeta)|_{\rho, \theta}`.
+
+Many quantities require special grids to compute accurately.
+To not burden users with such bookkeeping,
+when an object method such as ``eq.compute(...,override_grid=True)`` is called,
+DESC will automatically use a set of best grids for the computation.
+However, when writing objectives developers must perform the bookkeeping
+and ensure everything can be computed accurately on the chosen grid.
 
 """
 

@@ -82,7 +82,7 @@ def _get_processor_name():
 
 
 def _set_cpu_count(n):
-    """Set the number of CPUs visible to JAX.
+    """Divide 1 physical CPU into multiple virtual CPUs.
 
     By default, JAX sees the whole CPU as a single device, regardless of the number of
     cores or threads. It then uses multiple cores and threads for lower level
@@ -93,6 +93,8 @@ def _set_cpu_count(n):
     multiple objective functions.)
 
     This function is mainly for testing on CI purposes of the parallelism in DESC.
+    It won't use multiple CPUs even if there are multiple CPUs available on the
+    machine. It will just divide the first CPU into multiple virtual CPUs.
 
     Parameters
     ----------
@@ -155,10 +157,29 @@ def set_device(kind="cpu", gpuid=None, num_device=1):  # noqa: C901
             try:
                 import jax
 
+                # by default, Jax only sees 1 CPU (host), to make it see other CPUs that
+                # are being used by the same MPI process, we need to initialize the
+                # distributed environment. This is not needed if we are in GPU mode
+                # (we have another syntax for device_id etc). By seeing other CPUs, our
+                # logic for moving objectives to different devices will work correctly.
+                # Note that this is different from _set_cpu_count which is for testing
+                # purposes only by emulating multiple CPUs.
+                if (
+                    os.environ.get("XLA_FLAGS", "").find(
+                        "--xla_force_host_platform_device_count="
+                    )
+                    == -1
+                ):
+                    # this condition basically detects if there are actual CPUs
+                    # or fake ones created by _set_cpu_count
+                    # Fake CPUs are already visible to JAX
+                    jax.distributed.initialize()
+
                 jax_cpu = jax.devices("cpu")
                 assert len(jax_cpu) == num_device
-                # These CPUs doesn't have to be the same model, but I think slurm will
-                # always give same model
+                # These CPUs might not be the same model, but I think slurm will
+                # always give same model (and getting model of each CPU is not
+                # straightforward)
                 config["devices"] = [f"{cpu_info + ' ' + str(dev)}" for dev in jax_cpu]
                 # This memory is not individual but the total memory
                 config["avail_mems"] = [cpu_mem for _ in range(num_device)]

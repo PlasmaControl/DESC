@@ -52,7 +52,7 @@ def print_backend_info():
     if use_jax:
         print(
             f"Using JAX backend: jax version={jax.__version__}, "
-            + f"jaxlib version={jaxlib.__version__}, dtype={y.dtype}."
+            f"jaxlib version={jaxlib.__version__}, dtype={y.dtype}."
         )
     else:
         print(f"Using NumPy backend: version={np.__version__}, dtype={y.dtype}.")
@@ -63,12 +63,12 @@ def print_backend_info():
             "GB available memory"
         )
     elif desc_config["kind"] == "cpu":
-        print(f"Using {desc_config['num_device']} CPUs:")
+        print(
+            f"Using {desc_config['num_device']} CPUs with "
+            + f"{desc_config['avail_mems'][0]:.2f} GB total available memory:"
+        )
         for i, dev in enumerate(desc_config["devices"]):
-            print(
-                f"\t CPU {i}: {dev} with {desc_config['avail_mems'][i]:.2f} "
-                "GB available memory"
-            )
+            print(f"\t CPU {i}: {dev}")
 
     if desc_config["kind"] == "gpu":
         print(

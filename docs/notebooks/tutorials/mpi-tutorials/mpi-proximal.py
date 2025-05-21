@@ -11,7 +11,8 @@ from desc import _set_cpu_count, set_device
 num_device = 2
 # These will be used for diving the single CPU into multiple virtual CPUs
 # such that JAX and XLA thinks there are multiple devices
-# If you have multiple CPUs, you don't need to call `_set_cpu_count`
+
+# !!! If you have multiple CPUs, you shouldn't call `_set_cpu_count` !!!
 _set_cpu_count(num_device)
 set_device("cpu", num_device=num_device)
 

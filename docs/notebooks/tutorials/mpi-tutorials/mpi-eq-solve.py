@@ -8,7 +8,7 @@ sys.path.append(os.path.abspath("../../../"))
 from desc import _set_cpu_count, set_device
 
 # ====== Using CPUs ======
-num_device = 2
+num_device = 4
 # These will be used for diving the single CPU into multiple virtual CPUs
 # such that JAX and XLA thinks there are multiple devices
 
@@ -50,11 +50,11 @@ if __name__ == "__main__":
     # to see which devices are available to each process.
     if desc_config["kind"] == "gpu":
         print(
-            f"Rank {rank} is running on {jax.local_devices(backend='gpu')} "
+            f"Rank {rank} can see {jax.local_devices(backend='gpu')} "
             f"and {jax.local_devices(backend='cpu')}\n"
         )
     else:
-        print(f"Rank {rank} is running on {jax.local_devices(backend='cpu')}\n")
+        print(f"Rank {rank} can see {jax.local_devices(backend='cpu')}\n")
     if rank == 0:
         print(f"====== BACKEND INFO ======")
         print_backend_info()

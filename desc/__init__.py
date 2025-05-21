@@ -156,7 +156,7 @@ def set_device(kind="cpu", gpuid=None, num_device=1):  # noqa: C901
         else:
             try:
                 import jax
-                # from jax._src import xla_bridge
+                from jax._src import xla_bridge
 
                 # by default, Jax only sees 1 CPU (host), to make it see other CPUs that
                 # are being used by the same MPI process, we need to initialize the
@@ -165,20 +165,21 @@ def set_device(kind="cpu", gpuid=None, num_device=1):  # noqa: C901
                 # logic for moving objectives to different devices will work correctly.
                 # Note that this is different from _set_cpu_count which is for testing
                 # purposes only by emulating multiple CPUs.
-                # if (
-                #     os.environ.get("XLA_FLAGS", "").find(
-                #         "--xla_force_host_platform_device_count="
-                #     )
-                #     == -1
-                #     and not xla_bridge.backends_are_initialized()
-                # ):
-                #     # this condition basically detects if there are actual CPUs
-                #     # or fake ones created by _set_cpu_count
-                #     # Fake CPUs are already visible to JAX
-                #     jax.distributed.initialize()
+                if (
+                    os.environ.get("XLA_FLAGS", "").find(
+                        "--xla_force_host_platform_device_count="
+                    )
+                    == -1
+                    and not xla_bridge.backends_are_initialized()
+                ):
+                    print("Initializing JAX distributed environment ...")
+                    # this condition basically detects if there are actual CPUs
+                    # or fake ones created by _set_cpu_count
+                    # Fake CPUs are already visible to JAX
+                    jax.distributed.initialize()
 
-                jax_cpu = [jax.devices("cpu") for _ in range(num_device)]
-                # assert len(jax_cpu) == num_device
+                jax_cpu = jax.devices("cpu")
+                assert len(jax_cpu) == num_device
                 # These CPUs might not be the same model, but I think slurm will
                 # always give same model (and getting model of each CPU is not
                 # straightforward)

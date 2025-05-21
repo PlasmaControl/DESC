@@ -339,10 +339,12 @@ class ObjectiveFunction(IOAble):
                 "on node 1 is not same as device_id=0 on node 2. ",
             )
             errorif(
-                max(self._rank_per_objective) > self.size,
+                max(self._rank_per_objective) != self.size - 1,
                 ValueError,
-                "The maximum value of rank_per_objective is greater than the number "
-                "of ranks. There are not enough ranks to run the objectives.",
+                "The maximum value of rank_per_objective "
+                f"({max(self._rank_per_objective)+1}) "
+                f"is not equal to the number of ranks ({self.size}). There "
+                "should be at least 1 objective per rank.",
             )
             self._obj_per_rank = [
                 np.where(self._rank_per_objective == i)[0] for i in range(self.size)

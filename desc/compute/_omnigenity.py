@@ -941,14 +941,19 @@ def _B_piecewise_omni(params, transforms, profiles, data, **kwargs):
     iota0 = kwargs.get("iota", 0.6 * jnp.ones((nsurfs,)))[:, None]
     p = kwargs.get("p", 10)
 
-    # RG: (theta_B, zeta_B) grid must be the same for all flux surfaces
-    # else this logic below will fail
-    # RG: Sensitive logic here
-    Ntheta_B = int(len(transforms["grid"].nodes[:, 1]) / nsurfs)
-    Nzeta_B = int(len(transforms["grid"].nodes[:, 2]) / nsurfs)
-    gridsize = Ntheta_B * Nzeta_B
-    theta_B = transforms["grid"].nodes[:gridsize, 1]
-    zeta_B = transforms["grid"].nodes[:gridsize, 2]
+    # RG: (theta_B, zeta_B) grid shape must be the same for all flux surfaces
+    nodes = transforms["grid"].nodes
+    surfaces, inverse = jnp.unique(nodes[:, 0], return_inverse=True)
+    num_surfaces = len(surfaces)
+
+    sort_idx = jnp.argsort(inverse)
+    sorted_data = nodes[sort_idx]
+
+    N = jnp.shape(nodes)[0] // nsurfs
+    reshaped_data = sorted_data.reshape(num_surfaces, N, 3)
+
+    theta_B = reshaped_data[:, :, 1]  # (num_surfaces, N)
+    zeta_B = reshaped_data[:, :, 2]
 
     # NFP can't be a parameter. Must come from equilibrium
     NFP = transforms["grid"].NFP

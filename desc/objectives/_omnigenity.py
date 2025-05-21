@@ -1164,6 +1164,8 @@ class PiecewiseOmnigenity(_Objective):
                 data=data,
                 iota=data["iota"],
                 p=constants["p"],
+                Ntheta_B=constants["Ntheta_B"],
+                Nzeta_B=constants["Nzeta_B"],
             )
         else:
             field_data = compute_fun(
@@ -1175,6 +1177,8 @@ class PiecewiseOmnigenity(_Objective):
                 data={},
                 iota=data["iota"],
                 p=constants["p"],
+                Ntheta_B=constants["Ntheta_B"],
+                Nzeta_B=constants["Nzeta_B"],
             )
 
         Ntheta = constants["Ntheta_B"]

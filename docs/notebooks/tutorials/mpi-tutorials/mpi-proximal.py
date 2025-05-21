@@ -61,8 +61,8 @@ if __name__ == "__main__":
     # to see which devices are available to each process.
     if desc_config["kind"] == "gpu":
         print(
-            f"Rank {rank} is running on {jax.local_devices(backend="gpu")} "
-            f"and {jax.local_devices(backend="cpu")}\n"
+            f"Rank {rank} is running on {jax.local_devices(backend='gpu')} "
+            f"and {jax.local_devices(backend='cpu')}\n"
         )
     else:
         print(f"Rank {rank} is running on {jax.local_devices(backend='cpu')}\n")

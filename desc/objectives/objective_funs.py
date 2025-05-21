@@ -347,6 +347,12 @@ class ObjectiveFunction(IOAble):
             self._obj_per_rank = [
                 np.where(self._rank_per_objective == i)[0] for i in range(self.size)
             ]
+            errorif(
+                np.unique(self._rank_per_objective).size == 1,
+                ValueError,
+                "There is only one rank. You cannot use MPI for this case. Call "
+                "ObjectiveFunction with `mpi=None`.",
+            )
 
         if self._is_mpi and mpi is None:
             raise ValueError(

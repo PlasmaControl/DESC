@@ -938,21 +938,18 @@ def _B_omni(params, transforms, profiles, data, **kwargs):
 def _B_piecewise_omni(params, transforms, profiles, data, **kwargs):
     # RG:How does this objective change if iota < 0?
     nsurfs = len(params["B_max"])
-    iota0 = kwargs.get("iota", 0.6 * jnp.ones((nsurfs,)))[:, None]
     p = kwargs.get("p", 10)
+    iota0 = kwargs.get("iota", 0.6 * jnp.ones((nsurfs,)))[:, None]
 
     # RG: (theta_B, zeta_B) grid shape must be the same for all flux surfaces
     nodes = transforms["grid"].nodes
-    surfaces, inverse = jnp.unique(nodes[:, 0], return_inverse=True)
-    num_surfaces = len(surfaces)
-
-    sort_idx = jnp.argsort(inverse)
+    sort_idx = jnp.argsort(nodes[:, 0])
     sorted_data = nodes[sort_idx]
 
     N = jnp.shape(nodes)[0] // nsurfs
-    reshaped_data = sorted_data.reshape(num_surfaces, N, 3)
+    reshaped_data = sorted_data.reshape(nsurfs, N, 3)
 
-    theta_B = reshaped_data[:, :, 1]  # (num_surfaces, N)
+    theta_B = reshaped_data[:, :, 1]  # (nsurfs, N)
     zeta_B = reshaped_data[:, :, 2]
 
     # NFP can't be a parameter. Must come from equilibrium
@@ -981,7 +978,8 @@ def _B_piecewise_omni(params, transforms, profiles, data, **kwargs):
 
     B_pwO = B_min + (B_max - B_min) * jnp.exp(exponent)
 
-    # Flattened array. Reshaping may cause jit-related issues
+    # Flattened array on each surface.
+    # Reshaping may cause jit-related issues
     data["|B|_pwO"] = B_pwO
 
     return data

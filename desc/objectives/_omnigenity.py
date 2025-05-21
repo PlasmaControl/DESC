@@ -1038,6 +1038,7 @@ class PiecewiseOmnigenity(_Objective):
             "eq_transforms": eq_transforms,
             "iota_profiles": iota_profiles,
             "iota_transforms": iota_transforms,
+            "nsurfs": eq_grid.num_rho,
             "Ntheta_B": eq_grid.num_theta,
             "Nzeta_B": eq_grid.num_zeta,
             "overlap_penalty": self._overlap_penalty,
@@ -1064,7 +1065,9 @@ class PiecewiseOmnigenity(_Objective):
 
         if self._normalize:
             # normalized with max |B|_pwO
-            self._normalization = (field.B_min + field.B_max) / 2
+            # not working with multiple surfaces
+            # --no-verify self._normalization = (field.B_min+field.B_max).flatten() / 2
+            self._normalization = field.B_min.flatten()[0]
 
         super().build(use_jit=use_jit, verbose=0)
 
@@ -1126,9 +1129,11 @@ class PiecewiseOmnigenity(_Objective):
             )
 
         data = {
-            "iota": jnp.unique(iota_data["iota"]),
-            "iota_r": jnp.unique(iota_data["iota_r"]),
-            "shear": jnp.unique(iota_data["shear"]),
+            "iota": constants["iota_transforms"]["grid"].compress(iota_data["iota"]),
+            "iota_r": constants["iota_transforms"]["grid"].compress(
+                iota_data["iota_r"]
+            ),
+            "shear": constants["iota_transforms"]["grid"].compress(iota_data["shear"]),
         }
 
         ### Passing a Grid of Boozer coordinate values because for the same
@@ -1164,8 +1169,6 @@ class PiecewiseOmnigenity(_Objective):
                 data=data,
                 iota=data["iota"],
                 p=constants["p"],
-                Ntheta_B=constants["Ntheta_B"],
-                Nzeta_B=constants["Nzeta_B"],
             )
         else:
             field_data = compute_fun(
@@ -1177,14 +1180,12 @@ class PiecewiseOmnigenity(_Objective):
                 data={},
                 iota=data["iota"],
                 p=constants["p"],
-                Ntheta_B=constants["Ntheta_B"],
-                Nzeta_B=constants["Nzeta_B"],
             )
 
         Ntheta = constants["Ntheta_B"]
 
         # Rolling ensures max(B) occurs in the corners
-        B_pwO = jnp.roll(field_data["|B|_pwO"], Ntheta / 2)
+        B_pwO = jnp.roll(field_data["|B|_pwO"], Ntheta / 2, axis=1)
         Q_pwO = field_data["Q_pwO"]
 
         # ReLU operation
@@ -1194,7 +1195,6 @@ class PiecewiseOmnigenity(_Objective):
         # --no-verify pwO_error = (eq_data["|B|"] - B_pwO)
         # --no-verify constants["overlap_penalty"] * Q_pwO
         pwO_error = eq_data["|B|"].flatten() - B_pwO.flatten()
-
         return pwO_error.ravel()
 
 

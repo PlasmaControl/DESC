@@ -1044,6 +1044,11 @@ class PiecewiseOmnigenity(_Objective):
             "overlap_penalty": self._overlap_penalty,
             "quad_weights": 1.0,
             "p": self._p,
+            "B0": (
+                (field.B_min + field.B_max)[:, None]
+                / 2
+                * jnp.ones((eq_grid.num_rho, eq_grid.num_zeta * eq_grid.num_theta))
+            ).flatten(),
         }
 
         if self._eq_fixed:  # if equilibrium fixed, calculate data in build
@@ -1067,7 +1072,8 @@ class PiecewiseOmnigenity(_Objective):
             # normalized with max |B|_pwO
             # not working with multiple surfaces
             # --no-verify self._normalization = (field.B_min+field.B_max).flatten() / 2
-            self._normalization = field.B_min.flatten()[0]
+            # RG: For now, I'll normalize manually in the compute function below
+            self._normalization = 1.0
 
         super().build(use_jit=use_jit, verbose=0)
 
@@ -1186,15 +1192,18 @@ class PiecewiseOmnigenity(_Objective):
 
         # Rolling ensures max(B) occurs in the corners
         B_pwO = jnp.roll(field_data["|B|_pwO"], Ntheta / 2, axis=1)
+        B_pwO = B_pwO.flatten() / constants["B0"]
+
         Q_pwO = field_data["Q_pwO"]
+        B_eq = eq_data["|B|"] / constants["B0"]
 
         # ReLU operation
         Q_pwO = (Q_pwO + 0.05) * (Q_pwO >= -0.05)
 
         # temporarily commenting the Q_pwO calculation
-        # --no-verify pwO_error = (eq_data["|B|"] - B_pwO)
         # --no-verify constants["overlap_penalty"] * Q_pwO
-        pwO_error = eq_data["|B|"].flatten() - B_pwO.flatten()
+        pwO_error = B_eq - B_pwO
+
         return pwO_error.ravel()
 
 

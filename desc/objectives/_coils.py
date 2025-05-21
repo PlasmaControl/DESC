@@ -5,6 +5,7 @@ import numpy as np
 from scipy.constants import mu_0
 
 from desc.backend import jnp, tree_flatten, tree_leaves, tree_map, tree_unflatten
+from desc.basis import DoubleFourierSeries
 from desc.batching import vmap_chunked
 from desc.compute import get_profiles, get_transforms, rpz2xyz
 from desc.compute.geom_utils import copy_rpz_periods
@@ -1397,6 +1398,237 @@ class QuadraticFlux(_Objective):
             "field": SumMagneticField(self._field),
             "field_grid": self._field_grid,
             "quad_weights": w,
+            "eval_data": eval_data,
+            "eval_transforms": eval_transforms,
+            "eval_profiles": eval_profiles,
+            "B_plasma": Bplasma,
+        }
+
+        timer.stop("Precomputing transforms")
+        if verbose > 1:
+            timer.disp("Precomputing transforms")
+
+        if self._normalize:
+            scales = compute_scaling_factors(eq)
+            self._normalization = scales["B"] * scales["R0"] * scales["a"]
+
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, *field_params, constants=None):
+        """Compute normal field error on boundary.
+
+        Parameters
+        ----------
+        field_params : dict
+            Dictionary of the external field's degrees of freedom.
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
+
+        Returns
+        -------
+        f : ndarray
+            Bnorm from B_ext and B_plasma
+
+        """
+        if constants is None:
+            constants = self.constants
+
+        # B_plasma from equilibrium precomputed
+        eval_data = constants["eval_data"]
+        B_plasma = constants["B_plasma"]
+
+        x = jnp.array([eval_data["R"], eval_data["phi"], eval_data["Z"]]).T
+
+        # B_ext is not pre-computed because field is not fixed
+        B_ext = constants["field"].compute_magnetic_field(
+            x,
+            source_grid=constants["field_grid"],
+            basis="rpz",
+            params=field_params,
+            chunk_size=self._bs_chunk_size,
+        )
+        B_ext = jnp.sum(B_ext * eval_data["n_rho"], axis=-1)
+        f = (B_ext + B_plasma) * jnp.sqrt(eval_data["|e_theta x e_zeta|"])
+        return f
+
+
+class QuadraticFluxFourier(_Objective):
+    """Target Fourier coefficients of (B*n) = 0 on LCFS.
+
+    Uses virtual casing to find plasma component of B and penalizes
+    (B_coil + B_plasma)*n. The equilibrium is kept fixed while the
+    field is unfixed.
+
+    Note: This objective is intended for coil optimization. For finding the surface
+    that minimizes the normal field error, use the SurfaceQuadraticFlux objective.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Equilibrium upon whose surface the normal field error
+        will be minimized. The equilibrium is kept fixed during the optimization
+        with this objective.
+    field : MagneticField
+        External field produced by coils or other source, which will be optimized to
+        minimize the normal field error on the provided equilibrium's surface.
+    basis: DoubleFourierSeries
+        basis with which to fit the B*n computed on the eval_grid. These fitted
+        Fourier coefficients of B*n are what will be minimized. Preferential weighting
+        of the coefficients can be applied with the ``weight`` keyword arg.
+    source_grid : Grid, optional
+        Collocation grid containing the nodes for plasma source terms.
+        Default grid is detailed in the docs for ``compute_B_plasma``
+    eval_grid : Grid, optional
+        Collocation grid containing the nodes on the surface at which the
+        magnetic field is being calculated and where to evaluate Bn errors.
+        Default grid is: ``LinearGrid(rho=np.array([1.0]), M=eq.M_grid, N=eq.N_grid,
+        NFP=eq.NFP, sym=False)``
+    field_grid : Grid, optional
+        Grid used to discretize field (e.g. grid for the magnetic field source from
+        coils). Default grid is determined by the specific MagneticField object, see
+        the docs of that object's ``compute_magnetic_field`` method for more detail.
+    vacuum : bool
+        If true, B_plasma (the contribution to the normal field on the boundary from the
+        plasma currents) is set to zero.
+    bs_chunk_size : int or None
+        Size to split Biot-Savart computation into chunks of evaluation points.
+        If no chunking should be done or the chunk size is the full input
+        then supply ``None``.
+    B_plasma_chunk_size : int or None
+        Size to split singular integral computation for B_plasma into chunks.
+        If no chunking should be done or the chunk size is the full input
+        then supply ``None``. Default is ``bs_chunk_size``.
+
+    """
+
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``target=0``.",
+        bounds_default="``target=0``.",
+    )
+
+    _scalar = False
+    _linear = False
+    _print_value_fmt = "Boundary normal field error: "
+    _units = "(T m^2)"
+    _coordinates = "rtz"
+
+    def __init__(
+        self,
+        eq,
+        field,
+        basis=None,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        source_grid=None,
+        eval_grid=None,
+        field_grid=None,
+        vacuum=False,
+        name="Quadratic flux",
+        jac_chunk_size=None,
+        *,
+        bs_chunk_size=None,
+        B_plasma_chunk_size=None,
+        **kwargs,
+    ):
+        from desc.geometry import FourierRZToroidalSurface
+
+        if target is None and bounds is None:
+            target = 0
+        if basis is None:
+            basis = DoubleFourierSeries(M=10, N=10, sym=False)
+        self._basis = basis
+        self._source_grid = source_grid
+        self._eval_grid = eval_grid
+        self._eq = eq
+        self._field = [field] if not isinstance(field, list) else field
+        self._field_grid = field_grid
+        self._vacuum = vacuum
+        self._bs_chunk_size = bs_chunk_size
+        self._B_plasma_chunk_size = setdefault(B_plasma_chunk_size, bs_chunk_size)
+        errorif(
+            isinstance(eq, FourierRZToroidalSurface),
+            TypeError,
+            "Detected FourierRZToroidalSurface object "
+            "if attempting to find a QFM surface, please use "
+            "SurfaceQuadraticFlux objective instead.",
+        )
+        super().__init__(
+            things=self._field,
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            name=name,
+            jac_chunk_size=jac_chunk_size,
+        )
+
+    def build(self, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        from desc.magnetic_fields import SumMagneticField
+
+        eq = self._eq
+
+        if self._eval_grid is None:
+            eval_grid = LinearGrid(
+                rho=np.array([1.0]),
+                M=eq.M_grid,
+                N=eq.N_grid,
+                NFP=eq.NFP,
+                sym=False,
+            )
+            self._eval_grid = eval_grid
+        else:
+            eval_grid = self._eval_grid
+
+        self._data_keys = ["R", "Z", "n_rho", "phi", "|e_theta x e_zeta|"]
+
+        timer = Timer()
+        if verbose > 0:
+            print("Precomputing transforms")
+        timer.start("Precomputing transforms")
+
+        self._dim_f = self._basis.num_modes
+
+        eval_profiles = get_profiles(self._data_keys, obj=eq, grid=eval_grid)
+        eval_transforms = get_transforms(self._data_keys, obj=eq, grid=eval_grid)
+        eval_data = compute_fun(
+            eq,
+            self._data_keys,
+            params=eq.params_dict,
+            transforms=eval_transforms,
+            profiles=eval_profiles,
+        )
+
+        # pre-compute B_plasma because we are assuming eq is fixed
+        Bplasma = (
+            jnp.zeros(eval_grid.num_nodes)
+            if self._vacuum
+            else compute_B_plasma(
+                eq,
+                eval_grid,
+                self._source_grid,
+                normal_only=True,
+                chunk_size=self._B_plasma_chunk_size,
+            )
+        )
+
+        self._constants = {
+            "field": SumMagneticField(self._field),
+            "field_grid": self._field_grid,
             "eval_data": eval_data,
             "eval_transforms": eval_transforms,
             "eval_profiles": eval_profiles,

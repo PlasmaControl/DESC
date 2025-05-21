@@ -8,7 +8,7 @@ sys.path.append(os.path.abspath("../../../"))
 from desc import _set_cpu_count, set_device
 
 # ====== Using CPUs ======
-num_device = 4
+num_device = 2
 # These will be used for diving the single CPU into multiple virtual CPUs
 # such that JAX and XLA thinks there are multiple devices
 

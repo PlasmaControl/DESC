@@ -1488,9 +1488,13 @@ class _Objective(IOAble, ABC):
         # _device to a jaxlib.xla_extension.Device type, jit will throw error expecting
         # it to be static. So we set _device to None in that case which is simpler then
         # making it static.
-        if device_id != 0:
-            self._device = jax.devices(desc_config["kind"])[device_id]
+        if device_id != 0 and desc_config["kind"] == "gpu":
+            # jax.device_put cannot put data to other CPUs
+            # it can only transfer data to local devices
+            self._device = jax.local_devices("gpu")[device_id]
         else:
+            # we won't transfer data for multiple CPUs because their rank should
+            # already have that data. This is annoying but during hackathon can be fixed
             self._device = None
 
         self._target = target

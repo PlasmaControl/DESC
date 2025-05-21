@@ -177,9 +177,7 @@ def set_device(kind="cpu", gpuid=None, num_device=1):  # noqa: C901
                 #     # Fake CPUs are already visible to JAX
                 #     jax.distributed.initialize()
 
-                jax_cpu = [
-                    str(jax.local_devices("cpu")[0]) + i for i in range(num_device)
-                ]
+                jax_cpu = [str(jax.devices("cpu")[0]) + i for i in range(num_device)]
                 # assert len(jax_cpu) == num_device
                 # These CPUs might not be the same model, but I think slurm will
                 # always give same model (and getting model of each CPU is not

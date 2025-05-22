@@ -155,35 +155,12 @@ def set_device(kind="cpu", gpuid=None, num_device=1):  # noqa: C901
             config["avail_mems"] = [cpu_mem]
         else:
             try:
-                import jax
-                from jax._src import xla_bridge
-
-                # by default, Jax only sees 1 CPU (host), to make it see other CPUs that
-                # are being used by the same MPI process, we need to initialize the
-                # distributed environment. This is not needed if we are in GPU mode
-                # (we have another syntax for device_id etc). By seeing other CPUs, our
-                # logic for moving objectives to different devices will work correctly.
-                # Note that this is different from _set_cpu_count which is for testing
-                # purposes only by emulating multiple CPUs.
-                if (
-                    os.environ.get("XLA_FLAGS", "").find(
-                        "--xla_force_host_platform_device_count="
-                    )
-                    == -1
-                    and not xla_bridge.backends_are_initialized()
-                ):
-                    print("Initializing JAX distributed environment ...")
-                    # this condition basically detects if there are actual CPUs
-                    # or fake ones created by _set_cpu_count
-                    # Fake CPUs are already visible to JAX
-                    jax.distributed.initialize()
-
-                jax_cpu = jax.devices("cpu")
-                assert len(jax_cpu) == num_device
                 # These CPUs might not be the same model, but I think slurm will
                 # always give same model (and getting model of each CPU is not
                 # straightforward)
-                config["devices"] = [f"{cpu_info + ' ' + str(dev)}" for dev in jax_cpu]
+                config["devices"] = [
+                    f"{cpu_info + ' ' + str(i)}" for i in range(num_device)
+                ]
                 # This memory is not individual but the total memory
                 config["avail_mems"] = [cpu_mem for _ in range(num_device)]
             except ModuleNotFoundError:

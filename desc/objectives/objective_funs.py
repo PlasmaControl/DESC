@@ -290,19 +290,18 @@ class ObjectiveFunction(IOAble):
         if mpi is not None:
             # for multiple node cases, each process sees 1 CPU, for those cases,
             # we cannot put objectives to different devices. Instead, we will
-            # run each objective on a different rank. That is also why we will
-            # run 1 objective per process.
-            # TODO: add an argument for node of the objective. For example, let's say
-            # we have 3 nodes and 4 GPUs per node. First of all there should be 12
-            # objectives in total. We should create 4 processes per node and each
-            # process should run 1 objective. This way we can utilize all the GPUs.
-            # Alternatively, we can specify the rank for the objective. This way, we
-            # can have multiple objectives on the same rank.
+            # run each objective on the given rank.
             self._is_mpi = True
             self._rank_per_objective = (
                 rank_per_objective
                 if rank_per_objective is not None
                 else np.arange(len(objectives))
+            )
+            errorif(
+                np.unique(self._rank_per_objective).size == 1,
+                ValueError,
+                "There is only one rank. You cannot use MPI for this case. Call "
+                "ObjectiveFunction with `mpi=None`.",
             )
             errorif(
                 (
@@ -325,19 +324,6 @@ class ObjectiveFunction(IOAble):
             self.rank = self.comm.Get_rank()
             self.size = self.comm.Get_size()
             self.running = True
-            warnif(
-                (
-                    np.unique(device_ids, return_counts=True)[1]
-                    < self.size // desc_config["num_device"]
-                ).any(),
-                UserWarning,
-                "You are not using all the devices available. You asked for "
-                f"{self.size // desc_config['num_device']} nodes, but there are "
-                f"{np.unique(device_ids, return_counts=True)[1]} objectives per "
-                "same device_id. Note that for multiple nodes, each node has same "
-                "number of devices and their indices start from 0. So, device_id=0 "
-                "on node 1 is not same as device_id=0 on node 2. ",
-            )
             errorif(
                 max(self._rank_per_objective) != self.size - 1,
                 ValueError,
@@ -350,10 +336,10 @@ class ObjectiveFunction(IOAble):
                 np.where(self._rank_per_objective == i)[0] for i in range(self.size)
             ]
             errorif(
-                np.unique(self._rank_per_objective).size == 1,
+                np.array([foo == [] for foo in self._obj_per_rank]).any(),
                 ValueError,
-                "There is only one rank. You cannot use MPI for this case. Call "
-                "ObjectiveFunction with `mpi=None`.",
+                "There is at least one rank that does not have any objective assigned. "
+                f"Objectives per rank are {self._obj_per_rank}.",
             )
 
         if self._is_mpi and mpi is None:
@@ -1496,7 +1482,7 @@ class _Objective(IOAble, ABC):
             self._device = jax.local_devices("gpu")[device_id]
         else:
             # we won't transfer data for multiple CPUs because their rank should
-            # already have that data. This is annoying but during hackathon can be fixed
+            # already have that data.
             self._device = None
 
         self._target = target

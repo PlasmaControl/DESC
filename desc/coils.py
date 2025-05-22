@@ -1081,7 +1081,7 @@ class FourierXYCoil(_Coil, FourierXYCurve):
         super().__init__(current, center, normal, X_n, Y_n, modes, basis, name)
 
     @classmethod
-    def from_values(cls, current, coords, N=10, basis="xyz", name=""):
+    def from_values(cls, current, coords, N=10, s=None, basis="xyz", name=""):
         """Fit coordinates to FourierXYCoil representation.
 
         Parameters
@@ -1093,6 +1093,11 @@ class FourierXYCoil(_Coil, FourierXYCurve):
             corresponding to xyz or rpz depending on the basis argument.
         N : int
             Fourier resolution of the new X & Y representation.
+        s : ndarray or "arclength"
+            Arbitrary curve parameter to use for the fitting.
+            Should be monotonic, 1D array of same length as
+            coords. if None, defaults linearly spaced in [0,2pi)
+            Alternative, can pass "arclength" to use normalized distance between points.
         basis : {"rpz", "xyz"}
             Basis for input coordinates. Defaults to "xyz".
         name : str
@@ -1104,7 +1109,7 @@ class FourierXYCoil(_Coil, FourierXYCurve):
             New representation of the coil parameterized by a Fourier series for X & Y.
 
         """
-        curve = super().from_values(coords=coords, N=N, basis=basis, name=name)
+        curve = super().from_values(coords=coords, N=N, s=s, basis=basis, name=name)
         return FourierXYCoil(
             current=current,
             center=curve.center,

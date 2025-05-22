@@ -115,7 +115,7 @@ def _set_cpu_count(n):
     )
 
 
-def set_device(kind="cpu", gpuid=None, num_device=1):  # noqa: C901
+def set_device(kind="cpu", gpuid=None, num_device=1, mpi=None):  # noqa: C901
     """Sets the device to use for computation.
 
     If kind==``'gpu'`` and a gpuid is specified, uses the specified GPU. If
@@ -155,12 +155,23 @@ def set_device(kind="cpu", gpuid=None, num_device=1):  # noqa: C901
             config["avail_mems"] = [cpu_mem]
         else:
             try:
+                if mpi is None:
+                    warnings.warn(
+                        "To get the fu list of CPUs, provide the MPI communicator.",
+                        UserWarning,
+                    )
+                    cpu_names = [
+                        f"{str(i) + ' ' + cpu_info}" for i in range(num_device)
+                    ]
+                else:
+                    comm = mpi.COMM_WORLD
+                    rank = comm.Get_rank()
+                    cpu_name = f"{str(rank) + ' ' + cpu_info}"
+                    cpu_names = comm.allgather(cpu_name)
                 # These CPUs might not be the same model, but I think slurm will
                 # always give same model (and getting model of each CPU is not
                 # straightforward)
-                config["devices"] = [
-                    f"{cpu_info + ' ' + str(i)}" for i in range(num_device)
-                ]
+                config["devices"] = [name for name in cpu_names]
                 # This memory is not individual but the total memory
                 config["avail_mems"] = [cpu_mem for _ in range(num_device)]
             except ModuleNotFoundError:

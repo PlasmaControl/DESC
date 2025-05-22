@@ -68,7 +68,7 @@ def print_backend_info():
             + f"{desc_config['avail_mems'][0]:.2f} GB total available memory:"
         )
         for i, dev in enumerate(desc_config["devices"]):
-            print(f"\t CPU {i}: {dev}")
+            print(f"\t CPU : {dev}")
 
     if desc_config["kind"] == "gpu":
         print(
@@ -78,7 +78,7 @@ def print_backend_info():
         print(f"Using {desc_config['num_device']} device:")
         for i, dev in enumerate(desc_config["devices"]):
             print(
-                f"\t Device {i}: {dev} with {desc_config['avail_mems'][i]:.2f} "
+                f"\t Device : {dev} with {desc_config['avail_mems'][i]:.2f} "
                 "GB available memory"
             )
 

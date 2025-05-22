@@ -5,6 +5,8 @@ import sys
 sys.path.insert(0, os.path.abspath("."))
 sys.path.append(os.path.abspath("../../../"))
 
+from mpi4py import MPI
+
 from desc import _set_cpu_count, set_device
 
 # ====== Using CPUs ======
@@ -14,7 +16,7 @@ num_device = 4
 
 # !!! If you have multiple CPUs, you shouldn't call `_set_cpu_count` !!!
 _set_cpu_count(num_device)
-set_device("cpu", num_device=num_device)
+set_device("cpu", num_device=num_device, mpi=MPI)
 
 # ====== Using GPUs ======
 # When we have multiple processes using the same devices (for example, 3 processes
@@ -25,8 +27,6 @@ set_device("cpu", num_device=num_device)
 #
 # os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
 # set_device("gpu", num_device=num_device)
-
-from mpi4py import MPI
 
 from desc import config as desc_config
 from desc.backend import jax, print_backend_info
@@ -55,8 +55,9 @@ if __name__ == "__main__":
         )
     else:
         print(f"Rank {rank} can see {jax.local_devices(backend='cpu')}\n")
+
     if rank == 0:
-        print(f"====== BACKEND INFO ======")
+        print("====== BACKEND INFO ======")
         print_backend_info()
         print("\n")
 

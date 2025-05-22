@@ -428,7 +428,7 @@ class TestInitialGuess:
         R_modes = np.array([[0, 0], [1, 0], [2, 0], [3, 0]])
         Zb = np.array([0.0, 0.16, -2])
         Z_modes = np.array([[-3, 0], [-2, 0], [-1, 0]])
-        surf = FourierRZToroidalSurface(Rb, Zb, R_modes, Z_modes)
+        surf = FourierRZToroidalSurface(Rb, Zb, modes_R=R_modes, modes_Z=Z_modes)
         eq = Equilibrium(M=surf.M, N=surf.N, surface=surf)
 
         assert eq.is_nested()
@@ -443,7 +443,8 @@ class TestInitialGuess:
         R_modes = np.array([[0, 0], [1, 0], [2, 0], [3, 1], [2, 1], [2, 2]])
         Zb = np.array([0.01, 0.2, -1.5, 0.2])
         Z_modes = np.array([[-3, -2], [2, -1], [-1, 0], [1, 1]])
-        surf = FourierRZToroidalSurface(Rb, Zb, R_modes, Z_modes)
+
+        surf = FourierRZToroidalSurface(Rb, Zb, modes_R=R_modes, modes_Z=Z_modes)
         eq = Equilibrium(M=surf.M, N=surf.N, surface=surf)
 
         assert eq.is_nested()

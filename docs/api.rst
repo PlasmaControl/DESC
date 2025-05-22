@@ -26,9 +26,10 @@ Coils
     :template: class.rst
 
     desc.coils.CoilSet
-    desc.coils.FourierRZCoil
-    desc.coils.FourierXYZCoil
     desc.coils.FourierPlanarCoil
+    desc.coils.FourierRZCoil
+    desc.coils.FourierXYCoil
+    desc.coils.FourierXYZCoil
     desc.coils.MixedCoilSet
     desc.coils.SplineXYZCoil
     desc.coils.initialize_modular_coils
@@ -97,10 +98,11 @@ Geometry
    :recursive:
    :template: class.rst
 
-    desc.geometry.FourierRZCurve
-    desc.geometry.FourierXYZCurve
     desc.geometry.FourierPlanarCurve
+    desc.geometry.FourierRZCurve
     desc.geometry.FourierRZToroidalSurface
+    desc.geometry.FourierXYCurve
+    desc.geometry.FourierXYZCurve
     desc.geometry.SplineXYZCurve
     desc.geometry.ZernikeRZToroidalSection
 

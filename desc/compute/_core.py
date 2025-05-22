@@ -3444,30 +3444,3 @@ def _theta_PEST_ttz(params, transforms, profiles, data, **kwargs):
 def _zeta(params, transforms, profiles, data, **kwargs):
     data["zeta"] = transforms["grid"].nodes[:, 2]
     return data
-
-
-@register_compute_fun(
-    name="x",
-    label="\\mathbf{r}",
-    units="m",
-    units_long="meters",
-    description="Position vector in plasma volume",
-    dim=3,
-    params=["R_lmn", "Z_lmn"],
-    transforms={
-        "R": [[0, 0, 0]],
-        "Z": [[0, 0, 0]],
-        "grid": [],
-    },
-    profiles=[],
-    coordinates="rt",
-    data=[],
-    parameterization="desc.equilibrium.equilibrium.Equilibrium",
-    basis="{'rpz', 'xyz'}: Basis for returned vectors, Default 'rpz'",
-)
-def _x_Equilibrium(params, transforms, profiles, data, **kwargs):
-    R = transforms["R"].transform(params["R_lmn"])
-    Z = transforms["Z"].transform(params["Z_lmn"])
-    phi = transforms["grid"].nodes[:, 2]
-    data["x"] = jnp.stack([R, phi, Z], axis=1)
-    return data

@@ -682,7 +682,7 @@ class _Coil(_MagneticField, Optimizable, ABC):
             self.current, coords, N=N, basis=basis, name=name
         )
 
-    def to_FourierXY(self, N=10, grid=None, basis="xyz", name="", **kwargs):
+    def to_FourierXY(self, N=10, grid=None, s=None, basis="xyz", name="", **kwargs):
         """Convert Coil to FourierXYCoil representation.
 
         Note that some types of coils may not be representable in this basis.
@@ -696,6 +696,11 @@ class _Coil(_MagneticField, Optimizable, ABC):
         grid : Grid, int or None
             Grid used to evaluate curve coordinates on to fit with FourierXYCoil.
             If an integer, uses that many equally spaced points.
+        s : ndarray or "arclength"
+            Arbitrary curve parameter to use for the fitting.
+            Should be monotonic, 1D array of same length as
+            coords. if None, defaults linearly spaced in [0,2pi)
+            Alternative, can pass "arclength" to use normalized distance between points.
         basis : {'xyz', 'rpz'}
             Coordinate system for center and normal vectors. Default = 'xyz'.
         name : str
@@ -708,11 +713,13 @@ class _Coil(_MagneticField, Optimizable, ABC):
             Y coordinates in a plane specified by a center position and normal vector.
 
         """
+        if (grid is None) and (s is not None) and (not isinstance(s, str)):
+            grid = LinearGrid(zeta=s)
         if grid is None:
             grid = LinearGrid(N=2 * N + 1)
         coords = self.compute("x", grid=grid, basis=basis)["x"]
         return FourierXYCoil.from_values(
-            self.current, coords, N=N, basis=basis, name=name
+            self.current, coords, N=N, s=s, basis=basis, name=name
         )
 
 
@@ -2350,7 +2357,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         )
 
     def to_FourierXY(
-        self, N=10, grid=None, basis="xyz", name="", check_intersection=True
+        self, N=10, grid=None, s=None, basis="xyz", name="", check_intersection=True
     ):
         """Convert all coils to FourierXYCoil.
 
@@ -2365,6 +2372,11 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         grid : Grid, int or None
             Grid used to evaluate curve coordinates on to fit with FourierXYCoil.
             If an integer, uses that many equally spaced points.
+        s : ndarray or "arclength"
+            Arbitrary curve parameter to use for the fitting.
+            Should be monotonic, 1D array of same length as
+            coords. if None, defaults linearly spaced in [0,2pi)
+            Alternative, can pass "arclength" to use normalized distance between points.
         basis : {'xyz', 'rpz'}
             Coordinate system for center and normal vectors. Default = 'xyz'.
         name : str
@@ -2379,7 +2391,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             & Y coordinates in a plane specified by a center position and normal vector.
 
         """
-        coils = [coil.to_FourierXY(N=N, grid=grid, basis=basis) for coil in self]
+        coils = [coil.to_FourierXY(N=N, grid=grid, s=s, basis=basis) for coil in self]
         return self.__class__(
             *coils,
             NFP=self.NFP,
@@ -2964,7 +2976,7 @@ class MixedCoilSet(CoilSet):
         return self.__class__(*coils, name=name, check_intersection=check_intersection)
 
     def to_FourierXY(
-        self, N=10, grid=None, basis="xyz", name="", check_intersection=True
+        self, N=10, grid=None, s=None, basis="xyz", name="", check_intersection=True
     ):
         """Convert all coils to FourierXYCoil.
 
@@ -2979,6 +2991,11 @@ class MixedCoilSet(CoilSet):
         grid : Grid, int or None
             Grid used to evaluate curve coordinates on to fit with FourierXYCoil.
             If an integer, uses that many equally spaced points.
+        s : ndarray or "arclength"
+            Arbitrary curve parameter to use for the fitting.
+            Should be monotonic, 1D array of same length as
+            coords. if None, defaults linearly spaced in [0,2pi)
+            Alternative, can pass "arclength" to use normalized distance between points.
         basis : {'xyz', 'rpz'}
             Coordinate system for center and normal vectors. Default = 'xyz'.
         name : str
@@ -2995,7 +3012,7 @@ class MixedCoilSet(CoilSet):
         """
         coils = [
             coil.to_FourierXY(
-                N=N, grid=grid, basis=basis, check_intersection=check_intersection
+                N=N, grid=grid, s=s, basis=basis, check_intersection=check_intersection
             )
             for coil in self
         ]

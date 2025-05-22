@@ -906,8 +906,9 @@ class TestFourierXYCurve:
         np.testing.assert_allclose(x, x0)
 
     @pytest.mark.unit
-    def test_to_FourierXYCurve(self):
+    def test_to_FourierXYCurve_orientation(self):
         """Test converting SplineXYZCurve to FourierXYCurve object."""
+        # specifically checking that orientation is preserved
         npts = 1000
         N = 5
 
@@ -943,6 +944,73 @@ class TestFourierXYCurve:
         np.testing.assert_allclose(
             coords_planar, np.flip(coords_backwards_planar, axis=0), atol=1e-10
         )
+
+    @pytest.mark.unit
+    def test_to_FourierXYCurve(self):
+        """Test converting FourierRZCurve to FourierXYCurve."""
+        # test different options for passing in s
+        rz = FourierRZCurve(R_n=[0, 10, 0], Z_n=[-1, 0, 0])
+        grid = LinearGrid(N=20, endpoint=False)
+        xyz = rz.to_FourierXY(N=2, grid=grid, s=grid.nodes[:, 2])
+
+        np.testing.assert_allclose(
+            rz.compute("curvature", grid=grid)["curvature"],
+            xyz.compute("curvature", grid=grid)["curvature"],
+        )
+        np.testing.assert_allclose(
+            rz.compute("torsion", grid=grid)["torsion"],
+            xyz.compute("torsion", grid=grid)["torsion"],
+            atol=1e-16,
+        )
+        np.testing.assert_allclose(
+            rz.compute("length", grid=grid)["length"],
+            xyz.compute("length", grid=grid)["length"],
+            atol=1e-16,
+        )
+        np.testing.assert_allclose(
+            rz.compute("x", grid=grid, basis="xyz")["x"],
+            xyz.compute("x", basis="xyz", grid=grid)["x"],
+            atol=1e-12,
+        )
+        # same thing but pass in a closed grid
+        grid = LinearGrid(N=20, endpoint=True)
+        xyz = rz.to_FourierXY(N=2, grid=grid, s=grid.nodes[:, 2])
+
+        np.testing.assert_allclose(
+            rz.compute("curvature", grid=grid)["curvature"],
+            xyz.compute("curvature", grid=grid)["curvature"],
+        )
+        np.testing.assert_allclose(
+            rz.compute("torsion", grid=grid)["torsion"],
+            xyz.compute("torsion", grid=grid)["torsion"],
+            atol=1e-16,
+        )
+        np.testing.assert_allclose(
+            rz.compute("length", grid=grid)["length"],
+            xyz.compute("length", grid=grid)["length"],
+        )
+        np.testing.assert_allclose(
+            rz.compute("x", grid=grid, basis="xyz")["x"],
+            xyz.compute("x", basis="xyz", grid=grid)["x"],
+            atol=1e-12,
+        )
+
+        # same thing but with arclength angle
+        grid = LinearGrid(N=20, endpoint=False)
+        xyz = rz.to_FourierXY(N=2, grid=grid, s="arclength")
+
+        np.testing.assert_allclose(
+            rz.compute("length", grid=grid)["length"],
+            xyz.compute("length", grid=grid)["length"],
+            rtol=1e-5,
+        )
+
+        # pass in non-monotonic s
+        grid = LinearGrid(N=20, endpoint=False)
+        s = grid.nodes[:, 2]
+        s[-2] = s[-1]
+        with pytest.raises(ValueError):
+            xyz = rz.to_FourierXY(N=2, grid=grid, s=s)
 
 
 class TestSplineXYZCurve:

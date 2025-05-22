@@ -70,6 +70,12 @@ def print_backend_info():
         for i, dev in enumerate(desc_config["devices"]):
             print(f"\t CPU : {dev}")
 
+        print(
+            "\nNote: The backend information assumes that the user has 1 "
+            "process per CPU (node). Using multiple processes per CPU (node) is "
+            "not the most efficient way to use MPI with purely CPUs."
+        )
+
     if desc_config["kind"] == "gpu":
         print(
             f"CPU Info: {desc_config['cpu_info']} with {desc_config['cpu_mem']:.2f} "
@@ -80,6 +86,13 @@ def print_backend_info():
             print(
                 f"\t Device : {dev} with {desc_config['avail_mems'][i]:.2f} "
                 "GB available memory"
+            )
+
+        if desc_config["num_device"] != 1:
+            print(
+                "\nNote: The backend information only reflects the devices for "
+                "the current process. The full set of devices used by other processes "
+                "may be different."
             )
 
 

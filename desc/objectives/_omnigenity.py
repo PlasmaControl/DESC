@@ -1194,8 +1194,16 @@ class PiecewiseOmnigenity(_Objective):
         B_pwO = jnp.roll(field_data["|B|_pwO"], Ntheta / 2, axis=1)
         B_pwO = B_pwO.flatten() / constants["B0"]
 
+        # --no-verify meshgrid_reshape(nodes0, order="zrt")
+        # will be exactly the same as nodes0
         Q_pwO = field_data["Q_pwO"]
-        B_eq = eq_data["|B|"] / constants["B0"]
+
+        B_eq = (
+            constants["eq_transforms"]["grid"]
+            .meshgrid_reshape(eq_data["|B|"], order="rtz")
+            .flatten()
+            / constants["B0"]
+        )
 
         # ReLU operation
         Q_pwO = (Q_pwO + 0.05) * (Q_pwO >= -0.05)

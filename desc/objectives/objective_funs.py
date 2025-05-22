@@ -336,7 +336,7 @@ class ObjectiveFunction(IOAble):
                 np.where(self._rank_per_objective == i)[0] for i in range(self.size)
             ]
             errorif(
-                np.array([foo == [] for foo in self._obj_per_rank]).any(),
+                np.array([foo.size == 0 for foo in self._obj_per_rank]).any(),
                 ValueError,
                 "There is at least one rank that does not have any objective assigned. "
                 f"Objectives per rank are {self._obj_per_rank}.",

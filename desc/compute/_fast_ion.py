@@ -397,7 +397,7 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
 def _adiabatic_J(params, transforms, profiles, data, **kwargs):
     """Second adiabatic invariant of particle motion.
 
-    The normalization requires a length for which we have uesd the fieldline
+    The normalization requires a length for which we have used the fieldline
     length ∫ dl.
     Typically calculated as a function of (rho, alpha, lambda)
     """

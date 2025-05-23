@@ -101,7 +101,12 @@ from desc.objectives.nae_utils import (
 from desc.objectives.normalization import compute_scaling_factors
 from desc.objectives.objective_funs import _Objective, collect_docs
 from desc.objectives.utils import softmax, softmin
-from desc.profiles import FourierZernikeProfile, PowerSeriesProfile
+from desc.profiles import (
+    FourierZernikeProfile,
+    PowerProfile,
+    PowerSeriesProfile,
+    ScaledProfile,
+)
 from desc.utils import PRINT_WIDTH, safenorm
 from desc.vmec_utils import ptolemy_linear_transform
 
@@ -3529,6 +3534,28 @@ class TestObjectiveNaNGrad:
         obj.build()
         g = obj.grad(obj.x(eq, ext_field))
         assert not np.any(np.isnan(g)), "boundary error"
+
+    @pytest.mark.unit
+    def test_objective_no_nanjac_boundary_error_kinetic_profiles(self):
+        """Test BoundaryError with kinetic profiles. Related to GH Issue #1712."""
+        eq = get("DSHAPE")
+        density = PowerProfile(0.5, ScaledProfile(0.5 / elementary_charge, eq.pressure))
+        temperature = PowerProfile(
+            0.5, ScaledProfile(0.5 / elementary_charge, eq.pressure)
+        )
+        eq.pressure = None
+        eq.atomic_number = PowerSeriesProfile([1], [0])
+        eq.electron_density = density
+        eq.electron_temperature = temperature
+        eq.ion_temperature = temperature
+
+        field = ToroidalMagneticField(B0=0.2, R0=3.5)
+        objective = ObjectiveFunction(
+            BoundaryError(eq=eq, field=field, field_fixed=True)
+        )
+        objective.build()
+        J = objective.jac_unscaled(objective.x(eq))
+        assert not np.any(np.isnan(J)), "boundary error, kinetic"
 
     @pytest.mark.unit
     def test_objective_no_nangrad_vacuum_boundary_error(self):

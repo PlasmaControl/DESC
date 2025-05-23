@@ -55,6 +55,7 @@ from ._omnigenity import (
 from ._power_balance import FusionPower, HeatingPowerISS04
 from ._profiles import Pressure, RotationalTransform, Shear, ToroidalCurrent
 from ._stability import BallooningStability, MagneticWell, MercierStability
+from ._turbulence import EffectiveRadius, GradRho, ParallelConnectionLength
 from .getters import (
     get_equilibrium_objective,
     get_fixed_axis_constraints,

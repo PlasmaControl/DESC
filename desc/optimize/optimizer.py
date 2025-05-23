@@ -122,7 +122,7 @@ class Optimizer(IOAble):
             Stopping tolerance on infinity norm of the constraint violation.
             Optimization will stop when ctol and one of the other tolerances
             are satisfied. If None, defaults to 1e-4.
-        x_scale : array_like or ``'auto'``, optional
+        x_scale : array_like or ``'auto'`` or ``'ess'``, optional
             Characteristic scale of each variable. Setting ``x_scale`` is equivalent
             to reformulating the problem in scaled variables ``xs = x / x_scale``.
             An alternative view is that the size of a trust region along jth
@@ -131,6 +131,12 @@ class Optimizer(IOAble):
             along any of the scaled variables has a similar effect on the cost
             function. If set to ``'auto'``, the scale is iteratively updated using the
             inverse norms of the columns of the Jacobian or Hessian matrix.
+            If set to ``'ess'``, the scale is set using Exponential Spectral Scaling,
+            this scaling is set with two parameters, ``ess_alpha`` and ``ess_type``.
+            ``ess_alpha`` is the decay rate of the scaling, and ``ess_type`` is the type
+            of scaling, which can be ``'L1'``, ``'L2'``, or ``'Linf'``.
+            Default is ``'Linf'`` and ``ess_alpha`` is 1.2. ``ess_min_value`` is the
+            minimum allowed scale value. Default is 1e-7.
         verbose : integer, optional
             * 0  : work silently.
             * 1 : display a termination report.
@@ -147,6 +153,14 @@ class Optimizer(IOAble):
               ``ProximalProjection`` as its ``perturb_options``.
             - ``"solve_options"`` : Dictionary of keyword arguments to pass to
               ``ProximalProjection`` as its ``solve_options``.
+
+            - ``"ess_alpha"`` : float, optional
+              Decay rate of the scaling. Default is 1.2.
+            - ``"ess_type"`` : str, optional
+              Type of scaling, which can be ``'L1'``, ``'L2'``, or ``'Linf'``.
+              Default is ``'Linf'``.
+            - ``"ess_min_value"`` : float, optional
+              Minimum allowed scale value. Default is 1e-7.
 
             See the documentation page [Optimizers
             Supported](https://desc-docs.readthedocs.io/en/stable/optimizers.html)
@@ -210,6 +224,15 @@ class Optimizer(IOAble):
                 )
             # save these for later
             eq_params_init = eq.params_dict.copy()
+
+            if x_scale == "ess":
+                options = {} if options is None else options
+                ess_alpha = options.pop("ess_alpha", 1.2)
+                ess_type = options.pop("ess_type", "Linf")
+                ess_min_value = options.pop("ess_min_value", 1e-7)
+                x_scale = _create_exponential_spectral_scale(
+                    eq=eq, alpha=ess_alpha, scale_type=ess_type, min_value=ess_min_value
+                )
 
         options = {} if options is None else options
         timer = Timer()
@@ -611,6 +634,61 @@ def _get_default_tols(
     stoptol["max_nfev"] = options.pop("max_nfev", 5 * stoptol["maxiter"] + 1)
 
     return stoptol
+
+
+def _create_exponential_spectral_scale(
+    eq, alpha=1.2, scale_type="Linf", min_value=1e-7
+):
+    """Create x_scale using exponential spectral scaling.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Equilibrium object to create scaling for
+    alpha : float, optional
+        Decay rate of the scaling. Default is 1.2
+    scale_type : str, optional
+        Type of scaling to use. Options are:
+        - 'L1': Diamond pattern using |m| + |n|
+        - 'L2': Circular pattern using sqrt(m² + n²)
+        - 'Linf': Square pattern using max(|m|,|n|)
+        Default is 'Linf'
+    min_value : float, optional
+        Minimum allowed scale value. Default is 1e-7
+
+    Returns
+    -------
+    ndarray
+        Array of scale values for each parameter
+    """
+    # Initialize x_scale array
+    total_size = (
+        len(eq.p_l) + len(eq.c_l) + len(eq.i_l) + 1 + len(eq.Rb_lmn) + len(eq.Zb_lmn)
+    )
+    x_scale = np.ones(total_size)
+
+    # Get R and Z modes (m,n pairs)
+    R_modes = np.abs(eq.surface.R_basis.modes[:, 1:])
+    Z_modes = np.abs(eq.surface.Z_basis.modes[:, 1:])
+
+    # Calculate mode scales based on scale_type
+    def get_mode_scales(modes):
+        if scale_type == "L1":
+            mode_level = np.sum(modes, axis=1)  # |m| + |n|
+        elif scale_type == "L2":
+            mode_level = np.sqrt(np.sum(modes**2, axis=1))  # sqrt(m² + n²)
+        elif scale_type == "Linf":
+            mode_level = np.max(modes, axis=1)  # max(|m|,|n|)
+        return np.maximum(np.exp(-alpha * mode_level) / np.exp(-alpha), min_value)
+
+    R_scales = get_mode_scales(R_modes)
+    Z_scales = get_mode_scales(Z_modes)
+
+    start_idx = len(eq.p_l) + len(eq.c_l) + len(eq.i_l) + 1
+    x_scale[start_idx : start_idx + len(eq.Rb_lmn)] = R_scales
+    x_scale[start_idx + len(eq.Rb_lmn) :] = Z_scales
+
+    return x_scale
 
 
 optimizers = {}

@@ -14,6 +14,9 @@ Optionally can also contract the profiles of the original ``Equilibrium`` so tha
 - Allows Redl compute quantities to use SplineProfile
 - Updates Redl bootstrap current consistency tutorial to include a ``SplineProfile`` optimization
 - Adds automatically generated header file showing date the input file was created with `desc.vmec.VMECIO.write_vmec_input`
+- Adds ``Rp_lmn``, ``Zp_lmn`` and ``Lp_lmn`` attributes to the ``Equilibrium`` class. If either `FixSectionR`, `FixSectionZ` or `FixSectionLambda` is added as constraint, they will become optimizable parameters. Since both fixing cross-section and the LCFS shape is not supported yet, once Poincare variables are added to the Equilibrium, boundary parameters `Rb_lmn` and `Zb_lmn` will not be optimizable anymore. With this change of optimizable parameters, if a user wants to solve LCFS and Poincare problems consecutively, they have to call `eq.xsection = eq.get_surface_at(zeta=0)` and `eq.surface = eq.get_surface_at(rho=1)` to update the variables after any type of optimization or solve.
+- Adds option to solve equilibrium problem using fixed Poincare cross-section boundary condition. Adds a new helper function to ``desc.objectives.getters`` called ``get_fixed_xsection_constraints`` which will automatically adds the required ``FixSectionR``, ``FixSectionZ``and optionally ``FixSectionLambda`` (if the argument ``fix_lambda=True`` default, it doesn't add it if set to ``fix_lambda=False``).
+- Adds ``L_lmn`` and ``L_basis`` attributes to the ``ZernikeRZToroidalSection`` class.
 - Adds ``source_grid`` argument to ``desc.magnetic_fields._MagneticField.save_mgrid function`` to allow user to control the discretization of the magnetic field object being used to construct the ``mgrid`` output.
 - Removes default objective and constraints for ``desc.equilibrium.Equilibrium.optimize``, so now user is required to pass in the constraints and objective when using this method.
 

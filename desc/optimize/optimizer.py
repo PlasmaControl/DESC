@@ -208,6 +208,7 @@ class Optimizer(IOAble):
 
         # need local import to avoid circular dependencies
         from desc.equilibrium import Equilibrium
+        from desc.magnetic_fields import OmnigenousField
         from desc.objectives import QuadraticFlux
 
         # eq may be None
@@ -233,6 +234,10 @@ class Optimizer(IOAble):
                 x_scale = _create_exponential_spectral_scale(
                     eq=eq, alpha=ess_alpha, scale_type=ess_type, min_value=ess_min_value
                 )
+                # This assumes that Equilibrium is first in things
+                for i, t in enumerate(things):
+                    if isinstance(t, OmnigenousField):
+                        x_scale = np.concatenate([x_scale, np.ones(t.dim_x)])
 
         options = {} if options is None else options
         timer = Timer()
@@ -636,6 +641,7 @@ def _get_default_tols(
     return stoptol
 
 
+##TODO: Add Diagnostics for x_scale to track what modes are being scaled
 def _create_exponential_spectral_scale(
     eq, alpha=1.2, scale_type="Linf", min_value=1e-7
 ):
@@ -665,7 +671,7 @@ def _create_exponential_spectral_scale(
     total_size = (
         len(eq.p_l) + len(eq.c_l) + len(eq.i_l) + 1 + len(eq.Rb_lmn) + len(eq.Zb_lmn)
     )
-    x_scale = np.ones(total_size)
+    x_scale = np.zeros(total_size)
 
     # Get R and Z modes (m,n pairs)
     R_modes = np.abs(eq.surface.R_basis.modes[:, 1:])

@@ -479,11 +479,11 @@ def _adiabatic_J(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="J_dalpha",
-    label=(  # ∂_α J_∥ = (√2E/m) ∮ dl/|v_∥| (v_d ⋅ ∇s) /∫dl, s=ρ²
+    label=(  # ∂_α J_∥ /∫dl = ∮ dl/|v_∥| (v_d ⋅ ∇s) /∫dl, s=ρ²
         "\\partial_{\\alpha} \\J_{\\parallel}"
     ),
     units="~",
-    units_long="m^2-s^2",
+    units_long="m^{-2}",
     description="Bounce averaged binormal drift.",
     coordinates="r",
     dim=1,
@@ -597,11 +597,11 @@ def _dJ_dalpha(params, transforms, profiles, data, **kwargs):
 @register_compute_fun(
     name="J_s",
     label=(
-        # (√2E/m) ∂ₛJ_∥ /∫dl = -(√2E/m) ∫ dl/|v_∥| (v_d ⋅ ∇α) /∫dl
+        # ∂ₛJ_∥ /∫dl = - ∫ dl/|v_∥| (v_d ⋅ ∇α) /∫dl
         "\\partial_{\\s} \\J_{\\parallel}/\\oint dl"
     ),
     units="~",
-    units_long="~",
+    units_long="m-1",
     description="max-J term, bounce-integrated binormal drift",
     coordinates="r",
     dim=1,

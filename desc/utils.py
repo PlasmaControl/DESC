@@ -560,7 +560,7 @@ class ResolutionWarning(UserWarning):
 def warnif(cond, err=UserWarning, msg=""):
     """Throw a warning if condition is met."""
     if cond:
-        warnings.warn(colored(msg, "yellow"), err)
+        warnings.warn(msg, err)
 
 
 def check_nonnegint(x, name="", allow_none=True):

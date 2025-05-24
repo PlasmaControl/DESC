@@ -3923,7 +3923,7 @@ def plot_adiabatic_invariant(
 
     if mode == "single-surface" or N_rho == 1:
         # Extract pitch angle range
-        minB = data0["min_tz |B|"][0]  # shape: (Pitch,)
+        minB = data0["min_tz |B|"][0]
         maxB = data0["max_tz |B|"][0]
         inv_pitch = np.linspace(minB, maxB, num_pitch)
 

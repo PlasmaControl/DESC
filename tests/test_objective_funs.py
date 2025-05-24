@@ -1789,7 +1789,7 @@ class TestObjectiveFunction:
         num_quad = 16
         num_pitch = 16
         data = eq.compute(
-            ["effective ripple", "Gamma_c", "dJ_ds"],
+            ["effective ripple", "Gamma_c", "J_s"],
             grid=grid,
             theta=Bounce2D.compute_theta(eq, X=X, Y=Y, rho=rho),
             num_transit=num_transit,
@@ -1843,7 +1843,7 @@ class TestObjectiveFunction:
         w0 = 1
         w1 = 4
         thresh0 = -1
-        dJ_ds = grid.compress(data["dJ_ds"])
+        dJ_ds = grid.compress(data["J_s"])
         # Shifted ReLU operation
         dJ_ds_filtrd = (dJ_ds - thresh0) * (dJ_ds >= thresh0)
         obj_value = w0 * jnp.sum(dJ_ds_filtrd) + w1 * jnp.max(dJ_ds_filtrd)

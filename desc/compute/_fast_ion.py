@@ -232,6 +232,18 @@ def _poloidal_drift(data, B, pitch):
     )
 
 
+def _binormal_drift(data, B, pitch):
+    return safediv(
+        (data["gbdrift (periodic)"] + data["gbdrift (secular)/phi"] * data["zeta"])
+        * (1 - 0.5 * pitch * B)
+        + (
+            data["cvdrift (periodic)"] - data["gbdrift (periodic)"]
+        )  # pressure gradient term
+        * (1 - pitch * B),
+        jnp.sqrt(jnp.abs(1 - pitch * B)),
+    )
+
+
 @register_compute_fun(
     name="Gamma_c Velasco",
     label=(
@@ -331,7 +343,7 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
                 [_v_tau, _radial_drift, _poloidal_drift],
                 pitch_inv,
                 data,
-                ["cvdrift0", "gbdrift (periodic)", "gbdrift (secular)/phi"],
+                ["gbdrift (periodic)", "gbdrift (secular)/phi", "cvdrft0"],
                 bounce.points(pitch_inv, num_well),
                 is_fourier=True,
             )
@@ -466,9 +478,9 @@ def _adiabatic_J(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
-    name="dJ_dalpha",
-    label=(  # ∂_α J_∥/∮ dl/v_∥ =  ∮ dl/v_∥ (v_d ⋅ ∇ρ)/∮ dl/v_∥
-        "\\partial_{\\alpha} \\J_{\\parallel}/\\oint dl / v_{\\parallel}"
+    name="J_dalpha",
+    label=(  # ∂_α J_∥ = (√2E/m) ∮ dl/|v_∥| (v_d ⋅ ∇s) /∫dl, s=ρ²
+        "\\partial_{\\alpha} \\J_{\\parallel}"
     ),
     units="~",
     units_long="m^2-s^2",
@@ -482,8 +494,7 @@ def _adiabatic_J(params, transforms, profiles, data, **kwargs):
         "min_tz |B|",
         "max_tz |B|",
         "cvdrift0",
-        "gbdrift (periodic)",
-        "gbdrift (secular)/phi",
+        "R0",
     ]
     + Bounce2D.required_names,
     resolution_requirement="tz",
@@ -551,7 +562,7 @@ def _dJ_dalpha(params, transforms, profiles, data, **kwargs):
                 [_v_tau, _radial_drift],
                 pitch_inv,
                 data,
-                ["cvdrift0", "gbdrift (periodic)", "gbdrift (secular)/phi"],
+                ["cvdrift0"],
                 bounce.points(pitch_inv, num_well),
                 is_fourier=True,
             )
@@ -569,30 +580,28 @@ def _dJ_dalpha(params, transforms, profiles, data, **kwargs):
         ) / bounce.compute_fieldline_length(fl_quad)
 
     grid = transforms["grid"]
-    data["dJ_dalpha"] = _compute(
+    data["J_dalpha"] = _compute(
         dJ_dalpha0,
         {
             "cvdrift0": data["cvdrift0"],
-            "gbdrift (periodic)": data["gbdrift (periodic)"],
-            "gbdrift (secular)/phi": data["gbdrift (secular)/phi"],
         },
         data,
         theta,
         grid,
         num_pitch,
         surf_batch_size,
-    )
+    ) / (2 * jnp.pi * num_transit * data["R0"])
     return data
 
 
 @register_compute_fun(
-    name="dJ_ds",
+    name="J_s",
     label=(
-        # ∂ᵨ J_∥ =  ∮ dl/v_∥ (v_d ⋅ ∇α)
-        "\\partial_{\\rho} \\J_{\\parallel}/\\oint dl / v_{\\parallel}"
+        # (√2E/m) ∂ₛJ_∥ /∫dl = -(√2E/m) ∫ dl/|v_∥| (v_d ⋅ ∇α) /∫dl
+        "\\partial_{\\s} \\J_{\\parallel}/\\oint dl"
     ),
     units="~",
-    units_long="m^-1",
+    units_long="~",
     description="max-J term, bounce-integrated binormal drift",
     coordinates="r",
     dim=1,
@@ -602,9 +611,10 @@ def _dJ_dalpha(params, transforms, profiles, data, **kwargs):
     data=[
         "min_tz |B|",
         "max_tz |B|",
-        "cvdrift0",
         "gbdrift (periodic)",
         "gbdrift (secular)/phi",
+        "cvdrift (periodic)",
+        "R0",
     ]
     + Bounce2D.required_names,
     resolution_requirement="tz",
@@ -628,6 +638,8 @@ def _dJ_ds(params, transforms, profiles, data, **kwargs):
     """The max-J term.
 
     Bounce-averaged binormal drift.
+    Normalization has been chosen to eliminate dependence on
+    num_transits.
     """
     # noqa: unused dependency
     theta = kwargs["theta"]
@@ -669,12 +681,12 @@ def _dJ_ds(params, transforms, profiles, data, **kwargs):
                 [_poloidal_drift],
                 pitch_inv,
                 data,
-                ["cvdrift0", "gbdrift (periodic)", "gbdrift (secular)/phi"],
+                ["cvdrift (periodic)", "gbdrift (periodic)", "gbdrift (secular)/phi"],
                 bounce.points(pitch_inv, num_well),
                 is_fourier=True,
             )
 
-            # Take sum over wells, then divide
+            # Take sum over wells
             dJ_ds = jnp.sum(poloidal_drift, axis=-1)
 
             # max drift < 0 provides TEM(trapped electron mode)
@@ -685,10 +697,10 @@ def _dJ_ds(params, transforms, profiles, data, **kwargs):
         return batch_map(fun, data["pitch_inv"], pitch_batch_size)
 
     grid = transforms["grid"]
-    data["dJ_ds"] = _compute(
+    data["J_s"] = _compute(
         dJ_ds0,
         {
-            "cvdrift0": data["cvdrift0"],
+            "cvdrift (periodic)": data["cvdrift (periodic)"],
             "gbdrift (periodic)": data["gbdrift (periodic)"],
             "gbdrift (secular)/phi": data["gbdrift (secular)/phi"],
         },
@@ -697,5 +709,5 @@ def _dJ_ds(params, transforms, profiles, data, **kwargs):
         grid,
         num_pitch,
         surf_batch_size,
-    )
+    ) / (2 * jnp.pi * num_transit * data["R0"])
     return data

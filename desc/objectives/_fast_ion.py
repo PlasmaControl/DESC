@@ -511,7 +511,7 @@ class maxJ(_Objective):
             "pitch_batch_size": pitch_batch_size,
             "surf_batch_size": surf_batch_size,
         }
-        self._key = "dJ_ds"
+        self._key = "J_s"
 
         super().__init__(
             things=eq,

@@ -532,9 +532,6 @@ def _dJ_dalpha(params, transforms, profiles, data, **kwargs):
         surf_batch_size == 1 or pitch_batch_size is None
     ), f"Expected pitch_batch_size to be None, got {pitch_batch_size}."
     spline = kwargs.get("spline", True)
-    fl_quad = (
-        kwargs["fieldline_quad"] if "fieldline_quad" in kwargs else leggauss(Y_B // 2)
-    )
     quad = (
         kwargs["quad"]
         if "quad" in kwargs
@@ -567,7 +564,9 @@ def _dJ_dalpha(params, transforms, profiles, data, **kwargs):
                 is_fourier=True,
             )
             # Take sum over wells, then divide
-            dJ_dalpha = safediv(jnp.sum(radial_drift, axis=-1), jnp.sum(v_tau, axis=-1))
+            dJ_dalpha = jnp.sum(radial_drift, axis=-1)
+            # --no-verify dJ_dalpha = safediv(jnp.sum(radial_drift, axis=-1)
+            # , jnp.sum(v_tau, axis=-1))
 
             # Now take max in alpha (max radial excursion)
             return dJ_dalpha.max(axis=-2)
@@ -577,7 +576,8 @@ def _dJ_dalpha(params, transforms, profiles, data, **kwargs):
             * data["pitch_inv weight"]
             / data["pitch_inv"] ** 2,
             axis=-1,
-        ) / bounce.compute_fieldline_length(fl_quad)
+        )
+        # ) / bounce.compute_fieldline_length(fl_quad)
 
     grid = transforms["grid"]
     data["J_alpha"] = _compute(
@@ -598,6 +598,7 @@ def _dJ_dalpha(params, transforms, profiles, data, **kwargs):
     name="J_s",
     label=(
         # ∂ₛJ_∥ /∫dl = - ∫ dl/|v_∥| (v_d ⋅ ∇α) /∫dl
+        # The ∫dl might go away later
         "\\partial_{\\s} \\J_{\\parallel}/\\oint dl"
     ),
     units="~",
@@ -697,7 +698,7 @@ def _dJ_ds(params, transforms, profiles, data, **kwargs):
         return batch_map(fun, data["pitch_inv"], pitch_batch_size)
 
     grid = transforms["grid"]
-    data["J_s"] = _compute(
+    data["J_s"] = -1 * _compute(
         dJ_ds0,
         {
             "cvdrift (periodic)": data["cvdrift (periodic)"],
@@ -709,5 +710,7 @@ def _dJ_ds(params, transforms, profiles, data, **kwargs):
         grid,
         num_pitch,
         surf_batch_size,
-    ) / (2 * jnp.pi * num_transit * data["R0"])
+    )
+    # --no-verify ) / (2 * jnp.pi * num_transit * data["R0"])
+    data["J_s"] = data["J_s"] / jnp.max(jnp.abs(data["J_s"]))
     return data

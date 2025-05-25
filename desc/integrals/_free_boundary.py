@@ -195,14 +195,14 @@ class FreeBoundarySolver(IOAble):
         Default resolution is ``src_grid.M=surface.M*4`` and ``src_grid.N=surface.N*4``.
     Phi_grid : Grid
         Interpolation points on ∂𝒳.
-        Resolution determines accuracy of Φ interpolation.
-        Default resolution is ``Phi_grid.M=surface.M*2`` and ``Phi_grid.N=surface.N*2``.
+        Resolution determines accuracy of interpolation for quadrature.
+        Default is same as source grid; lower will slow convergence.
     Phi_M : int
         Poloidal Fourier resolution to interpolate Φ on ∂𝒳.
-        Should be at most ``Phi_grid.M``.
+        Should be at most ``Phi_grid.M``, recommended to be less.
     Phi_N : int
         Toroidal Fourier resolution to interpolate Φ on ∂𝒳.
-        Should be at most ``Phi_grid.N``.
+        Should be at most ``Phi_grid.N``, recommended to be less.
     sym
         Symmetry for basis which interpolates Φ.
         Default assumes no symmetry.
@@ -210,6 +210,8 @@ class FreeBoundarySolver(IOAble):
         Size to split computation into chunks.
         If no chunking should be done or the chunk size is the full input
         then supply ``None``. Default is ``None``.
+        Recommend to verify computation with ``chunk_size`` set to a small number
+        due to bugs in Google's JAX or the XLA software.
     use_dft : bool
         Whether to use matrix multiplication transform from spectral to physical domain
         instead of inverse fast Fourier transform.
@@ -245,12 +247,7 @@ class FreeBoundarySolver(IOAble):
                 N=surface.N * 4,
                 NFP=surface.NFP if surface.N > 0 else 64,
             )
-        if Phi_grid is None:
-            Phi_grid = LinearGrid(
-                M=surface.M * 2,
-                N=surface.N * 2,
-                NFP=surface.NFP if surface.N > 0 else 64,
-            )
+        Phi_grid = setdefault(Phi_grid, src_grid)
         self._same_grid_phi_src = src_grid.equiv(Phi_grid)
 
         errorif(

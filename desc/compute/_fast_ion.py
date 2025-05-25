@@ -478,7 +478,7 @@ def _adiabatic_J(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
-    name="J_dalpha",
+    name="J_alpha",
     label=(  # ∂_α J_∥ /∫dl = ∮ dl/|v_∥| (v_d ⋅ ∇s) /∫dl, s=ρ²
         "\\partial_{\\alpha} \\J_{\\parallel}"
     ),
@@ -580,7 +580,7 @@ def _dJ_dalpha(params, transforms, profiles, data, **kwargs):
         ) / bounce.compute_fieldline_length(fl_quad)
 
     grid = transforms["grid"]
-    data["J_dalpha"] = _compute(
+    data["J_alpha"] = _compute(
         dJ_dalpha0,
         {
             "cvdrift0": data["cvdrift0"],

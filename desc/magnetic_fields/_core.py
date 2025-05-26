@@ -564,6 +564,7 @@ class _MagneticField(IOAble, ABC):
         nphi=90,
         save_vector_potential=True,
         chunk_size=None,
+        source_grid=None,
     ):
         """Save the magnetic field to an mgrid NetCDF file in "raw" format.
 
@@ -592,6 +593,12 @@ class _MagneticField(IOAble, ABC):
             Size to split computation into chunks of evaluation points.
             If no chunking should be done or the chunk size is the full input
             then supply ``None``. Default is ``None``.
+        source_grid : Grid
+            What grid to use to discretize the source magnetic field. Will be passed
+            into the ``source_grid`` argument of ``compute_magnetic_field`` and
+            ``compute_magnetic_vector_potential``. If None,
+            defaults to whatever the default is for the given magnetic field,
+            specified in the docstring for that magnetic field.
 
         Returns
         -------
@@ -608,7 +615,9 @@ class _MagneticField(IOAble, ABC):
         grid = np.array([RR.flatten(), PHI.flatten(), ZZ.flatten()]).T
 
         # evaluate magnetic field on grid
-        field = self.compute_magnetic_field(grid, basis="rpz", chunk_size=chunk_size)
+        field = self.compute_magnetic_field(
+            grid, basis="rpz", chunk_size=chunk_size, source_grid=source_grid
+        )
         B_R = field[:, 0].reshape(nphi, nZ, nR)
         B_phi = field[:, 1].reshape(nphi, nZ, nR)
         B_Z = field[:, 2].reshape(nphi, nZ, nR)
@@ -616,7 +625,7 @@ class _MagneticField(IOAble, ABC):
         # evaluate magnetic vector potential on grid
         if save_vector_potential:
             field = self.compute_magnetic_vector_potential(
-                grid, basis="rpz", chunk_size=chunk_size
+                grid, basis="rpz", chunk_size=chunk_size, source_grid=source_grid
             )
             A_R = field[:, 0].reshape(nphi, nZ, nR)
             A_phi = field[:, 1].reshape(nphi, nZ, nR)
@@ -2155,6 +2164,7 @@ class SplineMagneticField(_MagneticField, Optimizable):
         extrap=False,
         NFP=None,
         chunk_size=None,
+        source_grid=None,
     ):
         """Create a splined magnetic field from another field for faster evaluation.
 
@@ -2178,6 +2188,9 @@ class SplineMagneticField(_MagneticField, Optimizable):
             Size to split computation into chunks of evaluation points.
             If no chunking should be done or the chunk size is the full input
             then supply ``None``. Default is ``None``.
+        source_grid : Grid, optional
+            Grid used to discretize field. Defaults to the default grid for given field.
+
 
         """
         R, phi, Z = map(np.asarray, (R, phi, Z))
@@ -2185,12 +2198,16 @@ class SplineMagneticField(_MagneticField, Optimizable):
         shp = rr.shape
         coords = np.array([rr.flatten(), pp.flatten(), zz.flatten()]).T
         BR, BP, BZ = field.compute_magnetic_field(
-            coords, params, basis="rpz", chunk_size=chunk_size
+            coords, params, basis="rpz", chunk_size=chunk_size, source_grid=source_grid
         ).T
         NFP = getattr(field, "_NFP", 1)
         try:
             AR, AP, AZ = field.compute_magnetic_vector_potential(
-                coords, params, basis="rpz", chunk_size=chunk_size
+                coords,
+                params,
+                basis="rpz",
+                chunk_size=chunk_size,
+                source_grid=source_grid,
             ).T
             AR = AR.reshape(shp)
             AP = AP.reshape(shp)
@@ -2555,7 +2572,7 @@ def field_line_integrate(
         initial starting coordinates for r,z on phi=phis[0] plane
     phis : array-like
         strictly increasing array of toroidal angles to output r,z at
-        Note that phis is the geometric toroidal angle for positive Bphi,
+        Note that phis is the geometric toroidal agitngle for positive Bphi,
         and the negative toroidal angle for negative Bphi
     field : MagneticField
         source of magnetic field to integrate

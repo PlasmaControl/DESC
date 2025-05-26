@@ -344,7 +344,7 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
                 [_v_tau, _radial_drift, _poloidal_drift],
                 pitch_inv,
                 data,
-                ["gbdrift (periodic)", "gbdrift (secular)/phi", "cvdrft0"],
+                ["gbdrift (periodic)", "gbdrift (secular)/phi", "cvdrift0"],
                 bounce.points(pitch_inv, num_well),
                 is_fourier=True,
             )

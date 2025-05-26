@@ -2069,9 +2069,6 @@ def _periodic_cvdrift(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="cvdrift0",
-    # Exact definition of the magnetic drifts taken from
-    # eqn. 48 of Introduction to Quasisymmetry by Landreman
-    # https://tinyurl.com/54udvaa4 up to dimensionless factors.
     label="\\mathrm{cvdrift0} = 1/B^{2} (\\mathbf{b}\\times\\nabla B)"
     + "\\cdot (2 \\rho \\nabla \\rho)",
     units="1 / Wb",

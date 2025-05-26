@@ -410,10 +410,6 @@ class maxJ(_Objective):
         field lines until the surface is covered sufficiently.
     num_transit : int
         Number of toroidal transits to follow field line.
-        In an axisymmetric device, field line integration over a single poloidal
-        transit is sufficient to capture a surface average. For a 3D
-        configuration, more transits will approximate surface averages on an
-        irrational magnetic surface better, with diminishing returns.
     num_well : int
         Maximum number of wells to detect for each pitch and field line.
         Giving ``None`` will detect all wells but due to current limitations in
@@ -446,8 +442,8 @@ class maxJ(_Objective):
     """
 
     __doc__ = __doc__.rstrip() + collect_docs(
-        target_default="``target=-1``.",
-        bounds_default="``target=-1``.",
+        target_default="``target=-0.06``.",
+        bounds_default="``target=-0.06``.",
         normalize_detail=" Note: Has no effect for this objective.",
         normalize_target_detail=" Note: Has no effect for this objective.",
         overwrite=_bounce_overwrite,
@@ -460,11 +456,12 @@ class maxJ(_Objective):
     def __init__(
         self,
         eq,
+        *,
         target=None,
         bounds=None,
         w0=1,
         w1=4,
-        thresh0=-1,
+        thresh0=-0.06,
         weight=1,
         normalize=True,
         normalize_target=True,
@@ -486,7 +483,7 @@ class maxJ(_Objective):
         surf_batch_size=1,
     ):
         if target is None and bounds is None:
-            target = 0.0
+            target = -0.06
 
         self._grid = grid
 
@@ -514,7 +511,7 @@ class maxJ(_Objective):
             "pitch_batch_size": pitch_batch_size,
             "surf_batch_size": surf_batch_size,
         }
-        self._key = "dJ_ds"
+        self._key = "J_s"
 
         super().__init__(
             things=eq,

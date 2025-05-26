@@ -126,7 +126,7 @@ def _compute(
         simp=simp,
     )
     out = batch_map(fun, fun_data, surf_batch_size)
-    # --no-verify assert out.ndim == 1
+
     return grid.expand(out)
 
 

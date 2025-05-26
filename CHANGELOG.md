@@ -18,6 +18,7 @@ Optionally can also contract the profiles of the original ``Equilibrium`` so tha
 
 - Adds ``source_grid`` argument to ``desc.magnetic_fields._MagneticField.save_mgrid function`` to allow user to control the discretization of the magnetic field object being used to construct the ``mgrid`` output.
 - Removes default objective and constraints for ``desc.equilibrium.Equilibrium.optimize``, so now user is required to pass in the constraints and objective when using this method.
+- Adds ``desc.objectives.maxJ`` objective function which is proxy that optimized stellarators agains Trapped Electron Modes (TEM). Also adds compute function J\_s, J\_alpha, adiabatic\_J functions related to the second adiabatic invariant J\_||. Also adds a plotting function called plot\_adiabatic\_invariant.
 
 Performance Improvements
 

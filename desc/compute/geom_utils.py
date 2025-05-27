@@ -28,10 +28,6 @@ def reflection_matrix(normal):
 def rotation_matrix(axis, angle=None):
     """Matrix to rotate points about axis by given angle.
 
-    NOTE: not correct if a and b are antiparallel, will
-    simply return identity when in reality negative identity
-    is correct.
-
     Parameters
     ----------
     axis : array-like, shape(3,)

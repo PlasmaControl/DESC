@@ -859,11 +859,18 @@ def safediv(a, b, fill=0, threshold=0):
         Value to return where b is zero.
     threshold : float >= 0
         How small is b allowed to be.
+
     """
     mask = jnp.abs(b) <= threshold
     num = jnp.where(mask, fill, a)
     den = jnp.where(mask, 1, b)
     return num / den
+
+
+def safearccos(angle):
+    """Like jnp.arccos, but without nan gradient at angle=1."""
+    safe_angle = jnp.where(angle == 1, 0, angle)
+    return jnp.where(angle == 1, jnp.inf, jnp.arccos(safe_angle))
 
 
 def ensure_tuple(x):

@@ -4,7 +4,7 @@ import functools
 
 from desc.backend import jnp
 
-from ..utils import cross, dot, safediv, safenorm, safenormalize
+from ..utils import safenorm, safenormalize
 
 
 def reflection_matrix(normal):
@@ -51,51 +51,6 @@ def rotation_matrix(axis, angle=None):
     R2 = jnp.sin(angle) * jnp.cross(axis, jnp.identity(axis.shape[0]) * -1)
     R3 = (1 - jnp.cos(angle)) * jnp.outer(axis, axis)
     return jnp.where(norm < eps, jnp.eye(3), R1 + R2 + R3)  # if axis=0, no rotation
-
-
-def _skew_matrix(a):
-    return jnp.array([[0, -a[2], a[1]], [a[2], 0, -a[0]], [-a[1], a[0], 0]])
-
-
-def rotation_matrix_vector_vector(a, b):
-    """Matrix to rotate vector a onto b.
-
-    NOTE: not correct if a and b are antiparallel, will
-    simply return identity when in reality negative identity
-    is correct.
-
-    Parameters
-    ----------
-    a,b : array-like, shape(3,)
-        Vectors, in cartesian (X,Y,Z) coordinates
-        Matrix will correspond to rotating a onto b
-
-    Returns
-    -------
-    rotmat : ndarray, shape(3,3)
-        Matrix to rotate points in cartesian (X,Y,Z) coordinates.
-
-    """
-    a = jnp.asarray(a)
-    b = jnp.asarray(b)
-    a_plus_b = a + b
-    a = safenormalize(a)
-    b = safenormalize(b)
-    axis = cross(a, b)
-    norm = safenorm(axis)
-    eps = 1e2 * jnp.finfo(axis.dtype).eps
-    skew = _skew_matrix(axis)
-    R1 = jnp.eye(3)
-    R2 = skew
-    c = dot(a, b)
-    R3 = (skew @ skew) * safediv(1, 1 + c)
-    R = R1 + R2 + R3
-    R = jnp.where(norm < eps, jnp.eye(3), R1 + R2 + R3)  # if axis=0, no rotation
-    # if vectors were antiparallel, negate last two columns so has correct signs
-    # (reflection about plane perpendicular to the first axis, a)
-    return jnp.where(
-        jnp.allclose(a_plus_b, 0.0), jnp.diag(jnp.array([1.0, -1.0, -1.0])), R
-    )
 
 
 def xyz2rpz(pts):

@@ -122,22 +122,11 @@ def sgd(
 
     if verbose > 1:
         print_header_nonlinear()
+        print_iteration_nonlinear(iteration, nfev, f, None, step_norm, g_norm)
 
     allx = [x]
 
-    while iteration < maxiter and success is None:
-
-        v = beta * v + (1 - beta) * g
-        x = x - alpha * v
-        g = grad(x, *args)
-        ngev += 1
-        step_norm = jnp.linalg.norm(alpha * v, ord=2)
-        g_norm = jnp.linalg.norm(g, ord=jnp.inf)
-        fnew = fun(x, *args)
-        nfev += 1
-        df = f - fnew
-        f = fnew
-
+    while True:
         success, message = check_termination(
             df_norm,
             f,
@@ -153,17 +142,28 @@ def sgd(
             nfev,
             jnp.inf,
         )
+        if success is not None:
+            break
+
+        v = beta * v + (1 - beta) * g
+        x = x - alpha * v
+        g = grad(x, *args)
+        ngev += 1
+        step_norm = jnp.linalg.norm(alpha * v, ord=2)
+        g_norm = jnp.linalg.norm(g, ord=jnp.inf)
+        fnew = fun(x, *args)
+        nfev += 1
+        df = f - fnew
+        f = fnew
 
         allx.append(x)
+        iteration += 1
         if verbose > 1:
             print_iteration_nonlinear(iteration, nfev, f, df, step_norm, g_norm)
 
         if callback(jnp.copy(x), *args):
             success, message = False, STATUS_MESSAGES["callback"]
 
-        iteration += 1
-    if (iteration == maxiter) and success is None:
-        success, message = False, STATUS_MESSAGES["maxiter"]
     result = OptimizeResult(
         x=x,
         success=success,

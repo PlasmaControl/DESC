@@ -858,7 +858,8 @@ class PlasmaCoilSetDistanceBound(_Objective):
     plasma boundary surface. If ``max`` or ``min`` mode is selected, only one value
     is returned. If ``bound`` mode is selected, two values are returned per coil,
     which are the minimum and maximum distance from the coil to the plasma boundary
-    surface.
+    surface. The minima for all coils are returned first, then the maxima in a
+    flattened array as applicable.
 
     NOTE: By default, assumes the plasma boundary is not fixed and its coordinates are
     computed at every iteration, for example if the equilibrium is changing in a
@@ -915,8 +916,8 @@ class PlasmaCoilSetDistanceBound(_Objective):
     """
 
     __doc__ = __doc__.rstrip() + collect_docs(
-        target_default="``bounds=(1,np.inf)``.",
-        bounds_default="``bounds=(1,np.inf)``.",
+        target_default="``bounds=(0,1)``.",
+        bounds_default="``bounds=(0,1)``.",
         coil=True,
     )
 
@@ -947,7 +948,7 @@ class PlasmaCoilSetDistanceBound(_Objective):
         dist_chunk_size=None,
     ):
         if target is None and bounds is None:
-            bounds = (1, np.inf)
+            bounds = (0, 1)
         errorif(
             mode not in ["bound", "max", "min"],
             ValueError,
@@ -955,8 +956,7 @@ class PlasmaCoilSetDistanceBound(_Objective):
         )
         self._eq = eq
         self._coil = coil
-        self._ismax = mode == "max"
-        self._ismin = mode == "min"
+        self._mode = mode
         self._plasma_grid = plasma_grid
         self._coil_grid = coil_grid
         self._eq_fixed = eq_fixed
@@ -1013,10 +1013,10 @@ class PlasmaCoilSetDistanceBound(_Objective):
             "Plasma/Surface grid includes interior points, should be rho=1.",
         )
 
-        if self._ismax or self._ismin:
-            self._dim_f = coil.num_coils
-        else:
+        if self._mode == "bound":
             self._dim_f = 2 * coil.num_coils
+        else:  # min or max mode
+            self._dim_f = coil.num_coils
         self._eq_data_keys = ["R", "phi", "Z"]
 
         eq_profiles = get_profiles(self._eq_data_keys, obj=eq, grid=plasma_grid)
@@ -1124,16 +1124,16 @@ class PlasmaCoilSetDistanceBound(_Objective):
                 max = jnp.max(jnp.min(dist, axis=0))
                 min = jnp.min(dist)
 
-            if self._ismax:
+            if self._mode == "max":
                 return max
-            if self._ismin:
+            if self._mode == "min":
                 return min
             return jnp.array([min, max])
 
-        if self._ismax or self._ismin:
-            k = jnp.arange(self.dim_f)
-        else:
+        if self._mode == "bound":
             k = jnp.arange(self.dim_f // 2)
+        else:
+            k = jnp.arange(self.dim_f)
 
         extreme_dist_per_coil = vmap_chunked(body, chunk_size=self._dist_chunk_size)(k)
 
@@ -1230,6 +1230,8 @@ class PlasmaCoilSetMinDistance(PlasmaCoilSetDistanceBound):
         softmin_alpha=1.0,
         dist_chunk_size=None,
     ):
+        if target is None and bounds is None:
+            bounds = (1, np.inf)
         super().__init__(
             eq=eq,
             coil=coil,

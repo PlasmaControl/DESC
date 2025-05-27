@@ -1259,9 +1259,8 @@ class CoilArclengthVariance(_CoilObjective):
     This objective is meant to combat any issues corresponding to non-uniqueness of
     the representation of a curve, in that the same physical curve can be represented
     by different parametrizations by changing the curve parameter [1]_. Note that this
-    objective has no effect for ``FourierRZCoil`` and ``FourierPlanarCoil`` which have
-    a single unique parameterization (the objective will always return 0 for these
-    types).
+    objective has no effect for ``FourierRZCoil`` and ``FourierPlanarCoil`` which have a
+    single unique parameterization (the objective will always return 0 for these types).
 
     References
     ----------
@@ -1279,9 +1278,7 @@ class CoilArclengthVariance(_CoilObjective):
     """
 
     __doc__ = __doc__.rstrip() + collect_docs(
-        target_default="``target=0``.",
-        bounds_default="``target=0``.",
-        coil=True,
+        target_default="``target=0``.", bounds_default="``target=0``.", coil=True
     )
 
     _scalar = False  # Not always a scalar, if a coilset is passed in
@@ -2494,6 +2491,7 @@ class SurfaceCurrentRegularization(_Objective):
         normalize_target=True,
         loss_function=None,
         deriv_mode="auto",
+        jac_chunk_size=None,
         regularization="K",
         source_grid=None,
         name="surface-current-regularization",
@@ -2535,6 +2533,7 @@ class SurfaceCurrentRegularization(_Objective):
             normalize_target=normalize_target,
             loss_function=loss_function,
             deriv_mode=deriv_mode,
+            jac_chunk_size=jac_chunk_size,
             name=name,
         )
 

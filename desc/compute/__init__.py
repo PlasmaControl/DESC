@@ -31,12 +31,12 @@ from . import (
     _bootstrap,
     _core,
     _curve,
-    _deprecated,
     _equil,
     _field,
     _geometry,
     _metric,
     _neoclassical,
+    _old,
     _omnigenity,
     _profiles,
     _stability,
@@ -69,7 +69,6 @@ def _build_data_index():
                 "profiles": get_profiles(key, p, has_axis=False, basis="rpz"),
             }
             data_index[p][key]["full_dependencies"] = full
-
             full_with_axis_data = get_data_deps(key, p, has_axis=True)
             if len(full["data"]) >= len(full_with_axis_data):
                 # Then this quantity and all its dependencies do not need anything

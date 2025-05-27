@@ -1,9 +1,10 @@
 """Classes for magnetic field coils."""
 
-import functools
 import numbers
+import os
 from abc import ABC
 from collections.abc import MutableSequence
+from functools import partial
 
 import numpy as np
 from scipy.constants import mu_0
@@ -13,8 +14,10 @@ from desc.backend import (
     jit,
     jnp,
     scan,
+    tree_flatten,
     tree_leaves,
     tree_stack,
+    tree_unflatten,
     tree_unstack,
     vmap,
 )
@@ -24,22 +27,32 @@ from desc.compute.utils import _compute as compute_fun
 from desc.geometry import (
     FourierPlanarCurve,
     FourierRZCurve,
+    FourierXYCurve,
     FourierXYZCurve,
     SplineXYZCurve,
 )
-from desc.grid import LinearGrid
+from desc.grid import Grid, LinearGrid
 from desc.magnetic_fields import _MagneticField
+from desc.magnetic_fields._core import (
+    biot_savart_general,
+    biot_savart_general_vector_potential,
+)
 from desc.optimizable import Optimizable, OptimizableCollection, optimizable_parameter
 from desc.utils import cross, dot, equals, errorif, flatten_list, safenorm, warnif
 
 
-@jit
-def biot_savart_hh(eval_pts, coil_pts_start, coil_pts_end, current):
+@partial(jit, static_argnames=["chunk_size"])
+def biot_savart_hh(eval_pts, coil_pts_start, coil_pts_end, current, *, chunk_size=None):
     """Biot-Savart law for filamentary coils following [1].
 
     The coil is approximated by a series of straight line segments
     and an analytic expression is used to evaluate the field from each
     segment.
+
+    References
+    ----------
+    [1] Hanson & Hirshman, "Compact expressions for the Biot-Savart
+        fields of a filamentary segment" (2002)
 
     Parameters
     ----------
@@ -51,14 +64,17 @@ def biot_savart_hh(eval_pts, coil_pts_start, coil_pts_end, current):
         though this is not checked.
     current : float
         Current through the coil (in Amps).
+    chunk_size : int or None
+        Unused by this function, only kept for API compatibility.
+        Size to split computation into chunks of evaluation points.
+        If no chunking should be done or the chunk size is the full input
+        then supply ``None``. Default is ``None``.
 
     Returns
     -------
     B : ndarray, shape(n,3)
         magnetic field in cartesian components at specified points
 
-    [1] Hanson & Hirshman, "Compact expressions for the Biot-Savart
-    fields of a filamentary segment" (2002)
     """
     d_vec = coil_pts_end - coil_pts_start
     L = jnp.linalg.norm(d_vec, axis=-1)
@@ -84,13 +100,20 @@ def biot_savart_hh(eval_pts, coil_pts_start, coil_pts_end, current):
     return B
 
 
-@jit
-def biot_savart_vector_potential_hh(eval_pts, coil_pts_start, coil_pts_end, current):
+@partial(jit, static_argnames=["chunk_size"])
+def biot_savart_vector_potential_hh(
+    eval_pts, coil_pts_start, coil_pts_end, current, *, chunk_size=None
+):
     """Biot-Savart law for vector potential for filamentary coils following [1].
 
     The coil is approximated by a series of straight line segments
     and an analytic expression is used to evaluate the vector potential from each
     segment. This expression assumes the Coulomb gauge.
+
+    References
+    ----------
+    [1] Hanson & Hirshman, "Compact expressions for the Biot-Savart
+        fields of a filamentary segment" (2002)
 
     Parameters
     ----------
@@ -102,14 +125,17 @@ def biot_savart_vector_potential_hh(eval_pts, coil_pts_start, coil_pts_end, curr
         though this is not checked.
     current : float
         Current through the coil (in Amps).
+    chunk_size : int or None
+        Unused by this function, only kept for API compatibility.
+        Size to split computation into chunks of evaluation points.
+        If no chunking should be done or the chunk size is the full input
+        then supply ``None``. Default is ``None``.
 
     Returns
     -------
     A : ndarray, shape(n,3)
         Magnetic vector potential in cartesian components at specified points
 
-    [1] Hanson & Hirshman, "Compact expressions for the Biot-Savart
-    fields of a filamentary segment" (2002)
     """
     d_vec = coil_pts_end - coil_pts_start
     L = jnp.linalg.norm(d_vec, axis=-1)
@@ -131,27 +157,9 @@ def biot_savart_vector_potential_hh(eval_pts, coil_pts_start, coil_pts_end, curr
     return A
 
 
-@jit
-def biot_savart_quad(eval_pts, coil_pts, tangents, current):
+@partial(jit, static_argnames=["chunk_size"])
+def biot_savart_quad(eval_pts, coil_pts, tangents, current, *, chunk_size=None):
     """Biot-Savart law for filamentary coil using numerical quadrature.
-
-    Parameters
-    ----------
-    eval_pts : array-like shape(n,3)
-        Evaluation points in cartesian coordinates
-    coil_pts : array-like shape(m,3)
-        Points in cartesian space defining coil
-    tangents : array-like, shape(m,3)
-        Tangent vectors to the coil at coil_pts. If the curve is given
-        by x(s) with curve parameter s, coil_pts = x, tangents = dx/ds*ds where
-        ds is the spacing between points.
-    current : float
-        Current through the coil (in Amps).
-
-    Returns
-    -------
-    B : ndarray, shape(n,3)
-        magnetic field in cartesian components at specified points
 
     Notes
     -----
@@ -159,51 +167,77 @@ def biot_savart_quad(eval_pts, coil_pts, tangents, current):
     scales the same as the error in B itself, so will only be zero when fully
     converged. However in practice, for smooth curves described by Fourier series,
     this method converges exponentially in the number of coil points.
+
+    Parameters
+    ----------
+    eval_pts : array-like
+        Shape (n, 3).
+        Evaluation points in cartesian coordinates.
+    coil_pts : array-like
+        Shape (m, 3).
+        Points in cartesian space defining coil.
+    tangents : array-like
+        Shape (m, 3).
+        Tangent vectors to the coil at coil_pts. If the curve is given
+        by x(s) with curve parameter s, coil_pts = x, tangents = dx/ds*ds where
+        ds is the spacing between points.
+    current : float
+        Current through the coil (in Amps).
+    chunk_size : int or None
+        Size to split computation into chunks of evaluation points.
+        If no chunking should be done or the chunk size is the full input
+        then supply ``None``. Default is ``None``.
+
+    Returns
+    -------
+    B : ndarray
+        Shape(n, 3).
+        Magnetic field in cartesian components at specified points.
+
     """
-    dl = tangents
-    R_vec = eval_pts[jnp.newaxis, :] - coil_pts[:, jnp.newaxis, :]
-    R_mag = jnp.linalg.norm(R_vec, axis=-1)
-
-    vec = jnp.cross(dl[:, jnp.newaxis, :], R_vec, axis=-1)
-    denom = R_mag**3
-
-    B = jnp.sum(mu_0 / (4 * jnp.pi) * current * vec / denom[:, :, None], axis=0)
-    return B
+    return biot_savart_general(
+        eval_pts, coil_pts, current * tangents, chunk_size=chunk_size
+    )
 
 
-@jit
-def biot_savart_vector_potential_quad(eval_pts, coil_pts, tangents, current):
+@partial(jit, static_argnames=["chunk_size"])
+def biot_savart_vector_potential_quad(
+    eval_pts, coil_pts, tangents, current, *, chunk_size=None
+):
     """Biot-Savart law (for A) for filamentary coil using numerical quadrature.
 
     This expression assumes the Coulomb gauge.
 
     Parameters
     ----------
-    eval_pts : array-like shape(n,3)
-        Evaluation points in cartesian coordinates
-    coil_pts : array-like shape(m,3)
-        Points in cartesian space defining coil
-    tangents : array-like, shape(m,3)
+    eval_pts : array-like
+        Shape (n, 3).
+        Evaluation points in cartesian coordinates.
+    coil_pts : array-like
+        Shape (m, 3).
+        Points in cartesian space defining coil.
+    tangents : array-like
+        Shape (m, 3).
         Tangent vectors to the coil at coil_pts. If the curve is given
         by x(s) with curve parameter s, coil_pts = x, tangents = dx/ds*ds where
         ds is the spacing between points.
     current : float
         Current through the coil (in Amps).
+    chunk_size : int or None
+        Size to split computation into chunks of evaluation points.
+        If no chunking should be done or the chunk size is the full input
+        then supply ``None``. Default is ``None``.
 
     Returns
     -------
-    A : ndarray, shape(n,3)
+    A : ndarray
+        Shape (n, 3).
         Magnetic vector potential in cartesian components at specified points.
+
     """
-    dl = tangents
-    R_vec = eval_pts[jnp.newaxis, :] - coil_pts[:, jnp.newaxis, :]
-    R_mag = jnp.linalg.norm(R_vec, axis=-1)
-
-    vec = dl[:, jnp.newaxis, :]
-    denom = R_mag
-
-    A = jnp.sum(mu_0 / (4 * jnp.pi) * current * vec / denom[:, :, None], axis=0)
-    return A
+    return biot_savart_general_vector_potential(
+        eval_pts, coil_pts, current * tangents, chunk_size=chunk_size
+    )
 
 
 class _Coil(_MagneticField, Optimizable, ABC):
@@ -229,6 +263,11 @@ class _Coil(_MagneticField, Optimizable, ABC):
     def __init__(self, current, *args, **kwargs):
         self._current = float(np.squeeze(current))
         super().__init__(*args, **kwargs)
+
+    def _set_up(self):
+        for attribute in self._io_attrs_:
+            if not hasattr(self, attribute):
+                setattr(self, attribute, None)
 
     @optimizable_parameter
     @property
@@ -291,6 +330,7 @@ class _Coil(_MagneticField, Optimizable, ABC):
         source_grid=None,
         transforms=None,
         compute_A_or_B="B",
+        chunk_size=None,
     ):
         """Compute magnetic field or vector potential at a set of points.
 
@@ -313,7 +353,10 @@ class _Coil(_MagneticField, Optimizable, ABC):
         compute_A_or_B: {"A", "B"}, optional
             whether to compute the magnetic vector potential "A" or the magnetic field
             "B". Defaults to "B"
-
+        chunk_size : int or None
+            Size to split computation into chunks of evaluation points.
+            If no chunking should be done or the chunk size is the full input
+            then supply ``None``. Default is ``None``.
 
         Returns
         -------
@@ -345,10 +388,19 @@ class _Coil(_MagneticField, Optimizable, ABC):
             current = self.current
         else:
             current = params.pop("current", self.current)
+        NFP = getattr(self, "NFP", 1)
         if source_grid is None:
             # NFP=1 to ensure points span the entire length of the coil
             # multiply resolution by NFP to ensure Biot-Savart integration is accurate
-            source_grid = LinearGrid(N=2 * self.N * getattr(self, "NFP", 1) + 5)
+            source_grid = LinearGrid(N=2 * self.N * NFP + 5)
+        else:
+            # coil grids should have NFP=1. The only possible exception is FourierRZCoil
+            # which in theory can be different as long as it matches the coils NFP.
+            errorif(
+                getattr(source_grid, "NFP", 1) not in [1, NFP],
+                ValueError,
+                f"source_grid for coils must have NFP=1 or NFP={NFP}",
+            )
 
         if not params or not transforms:
             data = self.compute(
@@ -369,14 +421,26 @@ class _Coil(_MagneticField, Optimizable, ABC):
             data["x_s"] = rpz2xyz_vec(data["x_s"], phi=data["x"][:, 1])
             data["x"] = rpz2xyz(data["x"])
 
-        AB = op(coords, data["x"], data["x_s"] * data["ds"][:, None], current)
+        AB = op(
+            coords,
+            data["x"],
+            data["x_s"] * data["ds"][:, None],
+            current,
+            chunk_size=chunk_size,
+        )
 
         if basis.lower() == "rpz":
             AB = xyz2rpz_vec(AB, phi=phi)
         return AB
 
     def compute_magnetic_field(
-        self, coords, params=None, basis="rpz", source_grid=None, transforms=None
+        self,
+        coords,
+        params=None,
+        basis="rpz",
+        source_grid=None,
+        transforms=None,
+        chunk_size=None,
     ):
         """Compute magnetic field at a set of points.
 
@@ -396,6 +460,10 @@ class _Coil(_MagneticField, Optimizable, ABC):
             points. Should NOT include endpoint at 2pi.
         transforms : dict of Transform or array-like
             Transforms for R, Z, lambda, etc. Default is to build from grid.
+        chunk_size : int or None
+            Size to split computation into chunks of evaluation points.
+            If no chunking should be done or the chunk size is the full input
+            then supply ``None``. Default is ``None``.
 
 
         Returns
@@ -411,10 +479,18 @@ class _Coil(_MagneticField, Optimizable, ABC):
         may not be zero if not fully converged.
 
         """
-        return self._compute_A_or_B(coords, params, basis, source_grid, transforms, "B")
+        return self._compute_A_or_B(
+            coords, params, basis, source_grid, transforms, "B", chunk_size=chunk_size
+        )
 
     def compute_magnetic_vector_potential(
-        self, coords, params=None, basis="rpz", source_grid=None, transforms=None
+        self,
+        coords,
+        params=None,
+        basis="rpz",
+        source_grid=None,
+        transforms=None,
+        chunk_size=None,
     ):
         """Compute magnetic vector potential at a set of points.
 
@@ -434,6 +510,10 @@ class _Coil(_MagneticField, Optimizable, ABC):
             points. Should NOT include endpoint at 2pi.
         transforms : dict of Transform or array-like
             Transforms for R, Z, lambda, etc. Default is to build from grid.
+        chunk_size : int or None
+            Size to split computation into chunks of evaluation points.
+            If no chunking should be done or the chunk size is the full input
+            then supply ``None``. Default is ``None``.
 
         Returns
         -------
@@ -449,7 +529,9 @@ class _Coil(_MagneticField, Optimizable, ABC):
         may not be zero if not fully converged.
 
         """
-        return self._compute_A_or_B(coords, params, basis, source_grid, transforms, "A")
+        return self._compute_A_or_B(
+            coords, params, basis, source_grid, transforms, "A", chunk_size=chunk_size
+        )
 
     def __repr__(self):
         """Get the string form of the object."""
@@ -476,7 +558,7 @@ class _Coil(_MagneticField, Optimizable, ABC):
             coords. if None, defaults linearly spaced in [0,2pi)
             Alternative, can pass "arclength" to use normalized distance between points.
         name : str
-            name for this coil
+            Name for this coil
 
         Returns
         -------
@@ -518,7 +600,7 @@ class _Coil(_MagneticField, Optimizable, ABC):
             - `'cubic2'`: C2 cubic splines (aka natural splines)
             - `'catmull-rom'`: C1 cubic centripetal "tension" splines
         name : str
-            name for this coil
+            Name for this coil
 
         Returns
         -------
@@ -600,6 +682,46 @@ class _Coil(_MagneticField, Optimizable, ABC):
             self.current, coords, N=N, basis=basis, name=name
         )
 
+    def to_FourierXY(self, N=10, grid=None, s=None, basis="xyz", name="", **kwargs):
+        """Convert Coil to FourierXYCoil representation.
+
+        Note that some types of coils may not be representable in this basis.
+        In this case, a least-squares fit will be done to find the
+        planar coil that best represents the coil.
+
+        Parameters
+        ----------
+        N : int
+            Fourier resolution of the new FourierXYCoil representation.
+        grid : Grid, int or None
+            Grid used to evaluate curve coordinates on to fit with FourierXYCoil.
+            If an integer, uses that many equally spaced points.
+        s : ndarray or "arclength"
+            Arbitrary curve parameter to use for the fitting.
+            Should be monotonic, 1D array of same length as
+            coords. if None, defaults linearly spaced in [0,2pi)
+            Alternative, can pass "arclength" to use normalized distance between points.
+        basis : {'xyz', 'rpz'}
+            Coordinate system for center and normal vectors. Default = 'xyz'.
+        name : str
+            Name for this coil.
+
+        Returns
+        -------
+        coil : FourierXYCoil
+            New representation of the coil parameterized by Fourier series for the X and
+            Y coordinates in a plane specified by a center position and normal vector.
+
+        """
+        if (grid is None) and (s is not None) and (not isinstance(s, str)):
+            grid = LinearGrid(zeta=s)
+        if grid is None:
+            grid = LinearGrid(N=2 * N + 1)
+        coords = self.compute("x", grid=grid, basis=basis)["x"]
+        return FourierXYCoil.from_values(
+            self.current, coords, N=N, s=s, basis=basis, name=name
+        )
+
 
 class FourierRZCoil(_Coil, FourierRZCurve):
     """Coil parameterized by fourier series for R,Z in terms of toroidal angle phi.
@@ -619,7 +741,7 @@ class FourierRZCoil(_Coil, FourierRZCurve):
     sym : bool
         whether to enforce stellarator symmetry
     name : str
-        name for this coil
+        Name for this coil
 
     Examples
     --------
@@ -689,8 +811,7 @@ class FourierRZCoil(_Coil, FourierRZCurve):
         sym : bool
             Whether to enforce stellarator symmetry.
         name : str
-            name for this coil
-
+            Name for this coil.
 
         Returns
         -------
@@ -714,7 +835,7 @@ class FourierRZCoil(_Coil, FourierRZCurve):
 
 
 class FourierXYZCoil(_Coil, FourierXYZCurve):
-    """Coil parameterized by fourier series for X,Y,Z in terms of arbitrary angle s.
+    """Coil parameterized by Fourier series for X,Y,Z in terms of an arbitrary angle s.
 
     Parameters
     ----------
@@ -725,7 +846,7 @@ class FourierXYZCoil(_Coil, FourierXYZCurve):
     modes : array-like
         mode numbers associated with X_n etc.
     name : str
-        name for this coil
+        Name for this coil
 
     Examples
     --------
@@ -758,7 +879,6 @@ class FourierXYZCoil(_Coil, FourierXYZCurve):
             np.array([0, 0, mu0 * I / 2 * R_coil**2 / (R_coil**2 + z0**2) ** (3 / 2)]),
             atol=1e-8,
         )
-
 
     """
 
@@ -795,6 +915,9 @@ class FourierXYZCoil(_Coil, FourierXYZCurve):
             if None, defaults to normalized arclength
         basis : {"rpz", "xyz"}
             basis for input coordinates. Defaults to "xyz"
+        name : str
+            Name for this coil.
+
         Returns
         -------
         coil : FourierXYZCoil
@@ -813,10 +936,10 @@ class FourierXYZCoil(_Coil, FourierXYZCurve):
 
 
 class FourierPlanarCoil(_Coil, FourierPlanarCurve):
-    """Coil that lines in a plane.
+    """Coil that lies in a plane.
 
     Parameterized by a point (the center of the coil), a vector (normal to the plane),
-    and a fourier series defining the radius from the center as a function of a polar
+    and a Fourier series defining the radius from the center as a function of the polar
     angle theta.
 
     Parameters
@@ -834,7 +957,7 @@ class FourierPlanarCoil(_Coil, FourierPlanarCurve):
     basis : {'xyz', 'rpz'}
         Coordinate system for center and normal vectors. Default = 'xyz'.
     name : str
-        Name for this coil.
+        Name for this coil
 
     Examples
     --------
@@ -921,6 +1044,91 @@ class FourierPlanarCoil(_Coil, FourierPlanarCurve):
         )
 
 
+class FourierXYCoil(_Coil, FourierXYCurve):
+    """Coil that lies in a plane.
+
+    Parameterized by a point (the center of the coil), a vector (normal to the plane),
+    and Fourier series defining the X and Y coordinates in the plane as a function of
+    an arbitrary angle s.
+
+    Parameters
+    ----------
+    current : float
+        Current through the coil, in Amperes.
+    center : array-like, shape(3,)
+        Coordinates of center of curve, in system determined by basis.
+    normal : array-like, shape(3,)
+        Components of normal vector to planar surface, in system determined by basis.
+    X_n : array-like
+        Fourier coefficients of the X coordinate in the plane.
+    Y_n : array-like
+        Fourier coefficients of the Y coordinate in the plane.
+    modes : array-like
+        Mode numbers associated with X_n and Y_n. The n=0 mode will be ignored.
+    basis : {'xyz', 'rpz'}
+        Coordinate system for center and normal vectors. Default = 'xyz'.
+    name : str
+        Name for this coil.
+
+    """
+
+    _io_attrs_ = _Coil._io_attrs_ + FourierXYCurve._io_attrs_
+
+    def __init__(
+        self,
+        current=1,
+        center=[10, 0, 0],
+        normal=[0, 1, 0],
+        X_n=[0, 2],
+        Y_n=[2, 0],
+        modes=None,
+        basis="xyz",
+        name="",
+    ):
+        super().__init__(current, center, normal, X_n, Y_n, modes, basis, name)
+
+    @classmethod
+    def from_values(cls, current, coords, N=10, s=None, basis="xyz", name=""):
+        """Fit coordinates to FourierXYCoil representation.
+
+        Parameters
+        ----------
+        current : float
+            Current through the coil, in Amperes.
+        coords: ndarray, shape (num_coords,3)
+            Coordinates to fit a FourierXYCurve object with each column
+            corresponding to xyz or rpz depending on the basis argument.
+        N : int
+            Fourier resolution of the new X & Y representation.
+        s : ndarray or "arclength"
+            Arbitrary curve parameter to use for the fitting.
+            Should be monotonic, 1D array of same length as
+            coords. if None, defaults linearly spaced in [0,2pi)
+            Alternative, can pass "arclength" to use normalized distance between points.
+        basis : {"rpz", "xyz"}
+            Basis for input coordinates. Defaults to "xyz".
+        name : str
+            Name for this curve.
+
+        Returns
+        -------
+        curve : FourierXYCoil
+            New representation of the coil parameterized by a Fourier series for X & Y.
+
+        """
+        curve = super().from_values(coords=coords, N=N, s=s, basis=basis, name=name)
+        return FourierXYCoil(
+            current=current,
+            center=curve.center,
+            normal=curve.normal,
+            X_n=curve.X_n,
+            Y_n=curve.Y_n,
+            modes=curve.X_basis.modes[:, 2],
+            basis="xyz",
+            name=name,
+        )
+
+
 class SplineXYZCoil(_Coil, SplineXYZCurve):
     """Coil parameterized by spline points in X,Y,Z.
 
@@ -950,24 +1158,14 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
           data, and will not introduce new extrema in the interpolated points
         - ``'monotonic-0'``: same as `'monotonic'` but with 0 first derivatives at both
           endpoints
-
     name : str
-        name for this curve
+        Name for this coil
 
     """
 
     _io_attrs_ = _Coil._io_attrs_ + SplineXYZCurve._io_attrs_
 
-    def __init__(
-        self,
-        current,
-        X,
-        Y,
-        Z,
-        knots=None,
-        method="cubic",
-        name="",
-    ):
+    def __init__(self, current, X, Y, Z, knots=None, method="cubic", name=""):
         super().__init__(current, X, Y, Z, knots, method, name)
 
     def _compute_A_or_B(
@@ -978,6 +1176,7 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
         source_grid=None,
         transforms=None,
         compute_A_or_B="B",
+        chunk_size=None,
     ):
         """Compute magnetic field or vector potential at a set of points.
 
@@ -1000,6 +1199,10 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
         compute_A_or_B: {"A", "B"}, optional
             whether to compute the magnetic vector potential "A" or the magnetic field
             "B". Defaults to "B"
+        chunk_size : int or None
+            Size to split computation into chunks of evaluation points.
+            If no chunking should be done or the chunk size is the full input
+            then supply ``None``. Default is ``None``.
 
         Returns
         -------
@@ -1028,6 +1231,19 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
         else:
             current = params.pop("current", self.current)
 
+        if source_grid is None:
+            # NFP=1 to ensure points span the entire length of the coil
+            # using more points than knots.size (self.N) to better sample coil
+            source_grid = LinearGrid(N=self.N * 2 + 5)
+        else:
+            # coil grids should have NFP=1. The only possible exception is FourierRZCoil
+            # which in theory can be different as long as it matches the coils NFP.
+            errorif(
+                getattr(source_grid, "NFP", 1) != 1,
+                ValueError,
+                "source_grid for coils must have NFP=1",
+            )
+
         data = self.compute(
             ["x"], grid=source_grid, params=params, basis="xyz", transforms=transforms
         )
@@ -1041,14 +1257,20 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
         # coils curvature which is a 2nd derivative of the position, and doing that
         # with only possibly c1 cubic splines is inaccurate, so we don't do it
         # (for now, maybe in the future?)
-        AB = op(coords, coil_pts_start, coil_pts_end, current)
+        AB = op(coords, coil_pts_start, coil_pts_end, current, chunk_size=chunk_size)
 
         if basis == "rpz":
             AB = xyz2rpz_vec(AB, x=coords[:, 0], y=coords[:, 1])
         return AB
 
     def compute_magnetic_field(
-        self, coords, params=None, basis="rpz", source_grid=None, transforms=None
+        self,
+        coords,
+        params=None,
+        basis="rpz",
+        source_grid=None,
+        transforms=None,
+        chunk_size=None,
     ):
         """Compute magnetic field at a set of points.
 
@@ -1068,6 +1290,10 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
             points. Should NOT include endpoint at 2pi.
         transforms : dict of Transform or array-like
             Transforms for R, Z, lambda, etc. Default is to build from grid.
+        chunk_size : int or None
+            Size to split computation into chunks of evaluation points.
+            If no chunking should be done or the chunk size is the full input
+            then supply ``None``. Default is ``None``.
 
         Returns
         -------
@@ -1081,10 +1307,18 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
         is approximately quadratic in the number of coil points.
 
         """
-        return self._compute_A_or_B(coords, params, basis, source_grid, transforms, "B")
+        return self._compute_A_or_B(
+            coords, params, basis, source_grid, transforms, "B", chunk_size=chunk_size
+        )
 
     def compute_magnetic_vector_potential(
-        self, coords, params=None, basis="rpz", source_grid=None, transforms=None
+        self,
+        coords,
+        params=None,
+        basis="rpz",
+        source_grid=None,
+        transforms=None,
+        chunk_size=None,
     ):
         """Compute magnetic vector potential at a set of points.
 
@@ -1105,6 +1339,10 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
             points. Should NOT include endpoint at 2pi.
         transforms : dict of Transform or array-like
             Transforms for R, Z, lambda, etc. Default is to build from grid.
+        chunk_size : int or None
+            Size to split computation into chunks of evaluation points.
+            If no chunking should be done or the chunk size is the full input
+            then supply ``None``. Default is ``None``.
 
         Returns
         -------
@@ -1119,7 +1357,9 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
         Convergence is approximately quadratic in the number of coil points.
 
         """
-        return self._compute_A_or_B(coords, params, basis, source_grid, transforms, "A")
+        return self._compute_A_or_B(
+            coords, params, basis, source_grid, transforms, "A", chunk_size=chunk_size
+        )
 
     @classmethod
     def from_values(
@@ -1152,7 +1392,8 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
             - `'catmull-rom'`: C1 cubic centripetal "tension" splines
 
         name : str
-            name for this curve
+            Name for this curve
+
         basis : {"rpz", "xyz"}
             basis for input coordinates. Defaults to "xyz"
 
@@ -1194,9 +1435,10 @@ def _check_type(coil0, coil):
         ),
     )
     attrs = {
-        FourierRZCoil: ["R_basis", "Z_basis", "NFP", "sym"],
-        FourierXYZCoil: ["X_basis", "Y_basis", "Z_basis"],
         FourierPlanarCoil: ["r_basis"],
+        FourierRZCoil: ["R_basis", "Z_basis", "NFP", "sym"],
+        FourierXYCoil: ["X_basis", "Y_basis"],
+        FourierXYZCoil: ["X_basis", "Y_basis", "Z_basis"],
         SplineXYZCoil: ["method", "N", "knots"],
     }
 
@@ -1240,14 +1482,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
     _io_attrs_ = _Coil._io_attrs_ + ["_coils", "_NFP", "_sym"]
     _io_attrs_.remove("_current")
 
-    def __init__(
-        self,
-        *coils,
-        NFP=1,
-        sym=False,
-        name="",
-        check_intersection=True,
-    ):
+    def __init__(self, *coils, NFP=1, sym=False, name="", check_intersection=True):
         coils = flatten_list(coils, flatten_tuple=True)
         assert all([isinstance(coil, (_Coil)) for coil in coils])
         [_check_type(coil, coils[0]) for coil in coils]
@@ -1295,8 +1530,11 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
 
     @current.setter
     def current(self, new):
-        if jnp.isscalar(new):
-            new = [new] * len(self)
+        # new must be a 1D iterable regardless of the tree structure of the CoilSet
+        old, tree = tree_flatten(self.current)
+        new = jnp.atleast_1d(new).flatten()
+        new = jnp.broadcast_to(new, (len(old),))
+        new = tree_unflatten(tree, new)
         for coil, cur in zip(self.coils, new):
             coil.current = cur
 
@@ -1320,13 +1558,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         return x
 
     def compute(
-        self,
-        names,
-        grid=None,
-        params=None,
-        transforms=None,
-        data=None,
-        **kwargs,
+        self, names, grid=None, params=None, transforms=None, data=None, **kwargs
     ):
         """Compute the quantity given by name on grid, for each coil in the coilset.
 
@@ -1495,6 +1727,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         source_grid=None,
         transforms=None,
         compute_A_or_B="B",
+        chunk_size=None,
     ):
         """Compute magnetic field at a set of points.
 
@@ -1514,6 +1747,10 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         compute_A_or_B: {"A", "B"}, optional
             whether to compute the magnetic vector potential "A" or the magnetic field
             "B". Defaults to "B"
+        chunk_size : int or None
+            Size to split computation into chunks of evaluation points.
+            If no chunking should be done or the chunk size is the full input
+            then supply ``None``. Default is ``None``.
 
         Returns
         -------
@@ -1526,6 +1763,13 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             compute_A_or_B not in ["A", "B"],
             ValueError,
             f'Expected "A" or "B" for compute_A_or_B, instead got {compute_A_or_B}',
+        )
+        # NFP symmetry applies to coilset as a whole, not individual coils, so the grid
+        # should have NFP=1.
+        errorif(
+            getattr(source_grid, "NFP", 1) != 1,
+            ValueError,
+            "source_grid for CoilSet must have NFP=1",
         )
         assert basis.lower() in ["rpz", "xyz"]
         coords = jnp.atleast_2d(jnp.asarray(coords))
@@ -1566,7 +1810,13 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             coords_nfp = coords_rpz + jnp.array([0, 2 * jnp.pi * k / self.NFP, 0])
 
             def body(AB, x):
-                AB += op(coords_nfp, params=x, basis="rpz", source_grid=source_grid)
+                AB += op(
+                    coords_nfp,
+                    params=x,
+                    basis="rpz",
+                    source_grid=source_grid,
+                    chunk_size=chunk_size,
+                )
                 return AB, None
 
             AB += scan(body, jnp.zeros(coords_nfp.shape), tree_stack(params))[0]
@@ -1586,7 +1836,13 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         return AB
 
     def compute_magnetic_field(
-        self, coords, params=None, basis="rpz", source_grid=None, transforms=None
+        self,
+        coords,
+        params=None,
+        basis="rpz",
+        source_grid=None,
+        transforms=None,
+        chunk_size=None,
     ):
         """Compute magnetic field at a set of points.
 
@@ -1603,6 +1859,10 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             points. Should NOT include endpoint at 2pi.
         transforms : dict of Transform or array-like
             Transforms for R, Z, lambda, etc. Default is to build from grid.
+        chunk_size : int or None
+            Size to split computation into chunks of evaluation points.
+            If no chunking should be done or the chunk size is the full input
+            then supply ``None``. Default is ``None``.
 
         Returns
         -------
@@ -1610,10 +1870,18 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             Magnetic field at specified nodes, in [R,phi,Z] or [X,Y,Z] coordinates.
 
         """
-        return self._compute_A_or_B(coords, params, basis, source_grid, transforms, "B")
+        return self._compute_A_or_B(
+            coords, params, basis, source_grid, transforms, "B", chunk_size=chunk_size
+        )
 
     def compute_magnetic_vector_potential(
-        self, coords, params=None, basis="rpz", source_grid=None, transforms=None
+        self,
+        coords,
+        params=None,
+        basis="rpz",
+        source_grid=None,
+        transforms=None,
+        chunk_size=None,
     ):
         """Compute magnetic vector potential at a set of points.
 
@@ -1630,6 +1898,10 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             points. Should NOT include endpoint at 2pi.
         transforms : dict of Transform or array-like
             Transforms for R, Z, lambda, etc. Default is to build from grid.
+        chunk_size : int or None
+            Size to split computation into chunks of evaluation points.
+            If no chunking should be done or the chunk size is the full input
+            then supply ``None``. Default is ``None``.
 
         Returns
         -------
@@ -1638,7 +1910,9 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             or xyz coordinates
 
         """
-        return self._compute_A_or_B(coords, params, basis, source_grid, transforms, "A")
+        return self._compute_A_or_B(
+            coords, params, basis, source_grid, transforms, "A", chunk_size=chunk_size
+        )
 
     @classmethod
     def linspaced_angular(
@@ -1828,7 +2102,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         # always start at the 3rd line after periods
         coilnames = []  # the coilgroup each coil belongs to
         # corresponds to each coil in the coilinds list
-
+        coil_file = os.path.expanduser(coil_file)
         # read in the coils file
         headind = -1
         with open(coil_file) as f:
@@ -1933,6 +2207,8 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         # TODO(#1376): have CoilGroup be automatically assigned based off of
         # CoilSet if current coilset is a collection of coilsets?
 
+        coilsFilename = os.path.expanduser(coilsFilename)
+
         NFP = 1 if NFP is None else NFP
 
         def flatten_coils(coilset):
@@ -1954,7 +2230,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             else:
                 return [coilset]
 
-        coils = flatten_coils(self.coils)
+        coils = flatten_coils(self)
         # after flatten, should have as many elements in list as self.num_coils, if
         # flatten worked correctly.
         assert len(coils) == self.num_coils
@@ -2072,6 +2348,50 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
 
         """
         coils = [coil.to_FourierPlanar(N=N, grid=grid, basis=basis) for coil in self]
+        return self.__class__(
+            *coils,
+            NFP=self.NFP,
+            sym=self.sym,
+            name=name,
+            check_intersection=check_intersection,
+        )
+
+    def to_FourierXY(
+        self, N=10, grid=None, s=None, basis="xyz", name="", check_intersection=True
+    ):
+        """Convert all coils to FourierXYCoil.
+
+        Note that some types of coils may not be representable in this basis.
+        In this case, a least-squares fit will be done to find the
+        planar coil that best represents the coil.
+
+        Parameters
+        ----------
+        N : int
+            Fourier resolution of the new FourierXYCoil representation.
+        grid : Grid, int or None
+            Grid used to evaluate curve coordinates on to fit with FourierXYCoil.
+            If an integer, uses that many equally spaced points.
+        s : ndarray or "arclength"
+            Arbitrary curve parameter to use for the fitting.
+            Should be monotonic, 1D array of same length as
+            coords. if None, defaults linearly spaced in [0,2pi)
+            Alternative, can pass "arclength" to use normalized distance between points.
+        basis : {'xyz', 'rpz'}
+            Coordinate system for center and normal vectors. Default = 'xyz'.
+        name : str
+            Name for this coilset.
+        check_intersection: bool
+            Whether or not to check the coils in the new coilset for intersections.
+
+        Returns
+        -------
+        coilset : CoilSet
+            New representation of the coilset parameterized by Fourier series for the X
+            & Y coordinates in a plane specified by a center position and normal vector.
+
+        """
+        coils = [coil.to_FourierXY(N=N, grid=grid, s=s, basis=basis) for coil in self]
         return self.__class__(
             *coils,
             NFP=self.NFP,
@@ -2478,6 +2798,7 @@ class MixedCoilSet(CoilSet):
         source_grid=None,
         transforms=None,
         compute_A_or_B="B",
+        chunk_size=None,
     ):
         """Compute magnetic field or vector potential at a set of points.
 
@@ -2499,6 +2820,10 @@ class MixedCoilSet(CoilSet):
         compute_A_or_B: {"A", "B"}, optional
             whether to compute the magnetic vector potential "A" or the magnetic field
             "B". Defaults to "B"
+        chunk_size : int or None
+            Size to split computation into chunks of evaluation points.
+            If no chunking should be done or the chunk size is the full input
+            then supply ``None``. Default is ``None``.
 
         Returns
         -------
@@ -2520,17 +2845,23 @@ class MixedCoilSet(CoilSet):
         if compute_A_or_B == "B":
             for coil, par, grd, tr in zip(self.coils, params, source_grid, transforms):
                 AB += coil.compute_magnetic_field(
-                    coords, par, basis, grd, transforms=tr
+                    coords, par, basis, grd, transforms=tr, chunk_size=chunk_size
                 )
         elif compute_A_or_B == "A":
             for coil, par, grd, tr in zip(self.coils, params, source_grid, transforms):
                 AB += coil.compute_magnetic_vector_potential(
-                    coords, par, basis, grd, transforms=tr
+                    coords, par, basis, grd, transforms=tr, chunk_size=chunk_size
                 )
         return AB
 
     def compute_magnetic_field(
-        self, coords, params=None, basis="rpz", source_grid=None, transforms=None
+        self,
+        coords,
+        params=None,
+        basis="rpz",
+        source_grid=None,
+        transforms=None,
+        chunk_size=None,
     ):
         """Compute magnetic field at a set of points.
 
@@ -2549,6 +2880,10 @@ class MixedCoilSet(CoilSet):
             If array-like, should be 1 value per coil.
         transforms : dict of Transform or array-like
             Transforms for R, Z, lambda, etc. Default is to build from grid.
+        chunk_size : int or None
+            Size to split computation into chunks of evaluation points.
+            If no chunking should be done or the chunk size is the full input
+            then supply ``None``. Default is ``None``.
 
         Returns
         -------
@@ -2556,10 +2891,18 @@ class MixedCoilSet(CoilSet):
             magnetic field at specified points, in either rpz or xyz coordinates
 
         """
-        return self._compute_A_or_B(coords, params, basis, source_grid, transforms, "B")
+        return self._compute_A_or_B(
+            coords, params, basis, source_grid, transforms, "B", chunk_size=chunk_size
+        )
 
     def compute_magnetic_vector_potential(
-        self, coords, params=None, basis="rpz", source_grid=None, transforms=None
+        self,
+        coords,
+        params=None,
+        basis="rpz",
+        source_grid=None,
+        transforms=None,
+        chunk_size=None,
     ):
         """Compute magnetic vector potential at a set of points.
 
@@ -2578,6 +2921,10 @@ class MixedCoilSet(CoilSet):
             If array-like, should be 1 value per coil.
         transforms : dict of Transform or array-like
             Transforms for R, Z, lambda, etc. Default is to build from grid.
+        chunk_size : int or None
+            Size to split computation into chunks of evaluation points.
+            If no chunking should be done or the chunk size is the full input
+            then supply ``None``. Default is ``None``.
 
         Returns
         -------
@@ -2586,7 +2933,9 @@ class MixedCoilSet(CoilSet):
             or xyz coordinates
 
         """
-        return self._compute_A_or_B(coords, params, basis, source_grid, transforms, "A")
+        return self._compute_A_or_B(
+            coords, params, basis, source_grid, transforms, "A", chunk_size=chunk_size
+        )
 
     def to_FourierPlanar(
         self, N=10, grid=None, basis="xyz", name="", check_intersection=True
@@ -2621,6 +2970,49 @@ class MixedCoilSet(CoilSet):
         coils = [
             coil.to_FourierPlanar(
                 N=N, grid=grid, basis=basis, check_intersection=check_intersection
+            )
+            for coil in self
+        ]
+        return self.__class__(*coils, name=name, check_intersection=check_intersection)
+
+    def to_FourierXY(
+        self, N=10, grid=None, s=None, basis="xyz", name="", check_intersection=True
+    ):
+        """Convert all coils to FourierXYCoil.
+
+        Note that some types of coils may not be representable in this basis.
+        In this case, a least-squares fit will be done to find the
+        planar coil that best represents the coil.
+
+        Parameters
+        ----------
+        N : int
+            Fourier resolution of the new FourierXYCoil representation.
+        grid : Grid, int or None
+            Grid used to evaluate curve coordinates on to fit with FourierXYCoil.
+            If an integer, uses that many equally spaced points.
+        s : ndarray or "arclength"
+            Arbitrary curve parameter to use for the fitting.
+            Should be monotonic, 1D array of same length as
+            coords. if None, defaults linearly spaced in [0,2pi)
+            Alternative, can pass "arclength" to use normalized distance between points.
+        basis : {'xyz', 'rpz'}
+            Coordinate system for center and normal vectors. Default = 'xyz'.
+        name : str
+            Name for this coilset.
+        check_intersection: bool
+            Whether or not to check the coils in the new coilset for intersections.
+
+        Returns
+        -------
+        coilset : CoilSet
+            New representation of the coilset parameterized by Fourier series for the X
+            & Y coordinates in a plane specified by a center position and normal vector.
+
+        """
+        coils = [
+            coil.to_FourierXY(
+                N=N, grid=grid, s=s, basis=basis, check_intersection=check_intersection
             )
             for coil in self
         ]
@@ -2926,7 +3318,7 @@ class MixedCoilSet(CoilSet):
         return cset
 
 
-@functools.partial(jnp.vectorize, signature="(m,3),(n,3),(m,3),(n,3),(m),(n)->()")
+@partial(jnp.vectorize, signature="(m,3),(n,3),(m,3),(n,3),(m),(n)->()")
 def _linking_number(x1, x2, x1_s, x2_s, dx1, dx2):
     """Linking number between curves x1 and x2 with tangents x1_s, x2_s."""
     x1_s *= dx1[:, None]
@@ -2982,7 +3374,7 @@ def initialize_modular_coils(eq, num_coils, r_over_a=2.0):
     unique_coils = []
     for k in range(num_coils):
         coil = FourierPlanarCoil(
-            current=G / (mu_0 * eq.NFP * num_coils * (eq.sym + 1)),
+            current=2 * np.pi * G / (mu_0 * eq.NFP * num_coils * (eq.sym + 1)),
             center=centers[k, :],
             normal=normals[k, :],
             r_n=minor_radius * r_over_a,
@@ -3067,3 +3459,85 @@ def initialize_saddle_coils(eq, num_coils, r_over_a=0.5, offset=2.0, position="o
 
     windowpane_coilset = CoilSet(windowpane_coils, NFP=int(eq.NFP), sym=eq.sym)
     return windowpane_coilset
+
+
+def initialize_helical_coils(eq, num_coils, r_over_a=2.0, helicity=(1, 1), npts=100):
+    """Initialize a CoilSet of helical coils for stage 2 optimization.
+
+    The coils will be roughly a constant distance from the plasma surface as they wind
+    around. The currents will be set to match the equilibrium required poloidal
+    linking current.
+
+    The coils will be ``SplineXYZCoil``, if another type is desired use
+    ``coilset.to_FourierXYZ(N=...)``, etc.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Stage 1 equilibrium the coils are being optimized for.
+    num_coils : int
+        Number of coils to create.
+    r_over_a : float
+        Approximate minor radius of the coils, in units of equilibrium minor radius.
+        The approximate minor radius will be r_over_a * equilibrium minor radius. The
+        actual coils will be contoured to keep a roughly constant offset from the plasma
+        surface.
+    helicity : tuple of int
+        (M,N) - How many times each coil should link the plasma poloidally and
+        toroidally. Note that M is the poloidal linking number per field period, so the
+        total linking number will be M*NFP.
+    npts : int
+        How many points to use when creating the coils. Equilibria with very high NFP
+        may need more points.
+
+    Returns
+    -------
+    coilset : CoilSet of FourierPlanarCoil
+        Planar coils centered on magnetic axis, with appropriate symmetry.
+    """
+    M = helicity[0] * eq.NFP
+    N = helicity[1]
+
+    errorif(
+        int(M) != M or int(N) != N,
+        TypeError,
+        f"helicity should be a tuple of two integers, got {helicity}",
+    )
+    warnif(
+        N == 0 and M != 0,
+        UserWarning,
+        "Toroidal helicity is zero, meaning these are modular coils. Consider using "
+        "desc.coils.initialize_modular_coils",
+    )
+    warnif(
+        N == 0 and M == 0,
+        UserWarning,
+        "Toroidal and poloidal helicity are zero, meaning these are windowpane/saddle "
+        "coils. Consider using desc.coils.initialize_saddle_coils",
+    )
+    # for M=0 these are technically PF coils not helical, but we don't have a specific
+    # function for PF coils so don't bother warning.
+
+    a = eq.compute("a")["a"]
+    G = eq.compute("G", grid=LinearGrid(rho=1.0))["G"]
+    s = np.linspace(0, 2 * np.pi, npts, endpoint=False)
+
+    theta = M * s
+    zeta = N * s
+
+    theta %= 2 * np.pi
+    zeta %= 2 * np.pi
+
+    theta_offset = np.linspace(0, 2 * np.pi, num_coils, endpoint=False)
+
+    coils = []
+    for t in theta_offset:
+        grid = Grid(np.array([np.ones_like(s), (theta + t) % (2 * np.pi), zeta]).T)
+        data = eq.surface.compute(["x", "n_rho"], grid=grid, basis="xyz")
+        offset = r_over_a * a - a
+        x = data["x"] + offset * data["n_rho"]
+        coil = SplineXYZCoil(
+            2 * np.pi * G / mu_0 / num_coils / M, x[:, 0], x[:, 1], x[:, 2]
+        )
+        coils.append(coil)
+    return CoilSet(*coils)

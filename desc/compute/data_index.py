@@ -237,6 +237,9 @@ _class_inheritance = {
     "desc.geometry.curve.FourierPlanarCurve": [
         "desc.geometry.core.Curve",
     ],
+    "desc.geometry.curve.FourierXYCurve": [
+        "desc.geometry.core.Curve",
+    ],
     "desc.geometry.curve.SplineXYZCurve": [
         "desc.geometry.core.Curve",
     ],
@@ -258,6 +261,10 @@ _class_inheritance = {
         "desc.geometry.curve.FourierPlanarCurve",
         "desc.geometry.core.Curve",
     ],
+    "desc.coils.FourierXYCoil": [
+        "desc.geometry.curve.FourierXYCurve",
+        "desc.geometry.core.Curve",
+    ],
     "desc.magnetic_fields._current_potential.CurrentPotentialField": [
         "desc.geometry.surface.FourierRZToroidalSurface",
         "desc.geometry.core.Surface",
@@ -277,6 +284,11 @@ _class_inheritance = {
 data_index = {p: {} for p in _class_inheritance.keys()}
 all_kwargs = {p: {} for p in _class_inheritance.keys()}
 allowed_kwargs = {"basis"}
+# dictionary of {deprecated_name: new_name} for deprecated compute quantities
+deprecated_names = {
+    "sqrt(g)_B": "sqrt(g)_Boozer_DESC",
+    "|B|_mn": "|B|_mn_B",
+}
 
 
 def is_0d_vol_grid(name, p="desc.equilibrium.equilibrium.Equilibrium"):

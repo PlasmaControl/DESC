@@ -1840,9 +1840,9 @@ class TestObjectiveFunction:
             jac_chunk_size=1,
         )
 
-        w0 = 1
-        w1 = 4
-        thresh0 = -1
+        w0 = obj._w0
+        w1 = obj._w1
+        thresh0 = obj._thresh0
         dJ_ds = grid.compress(data["J_s"])
         # Shifted ReLU operation
         dJ_ds_filtrd = (dJ_ds - thresh0) * (dJ_ds >= thresh0)

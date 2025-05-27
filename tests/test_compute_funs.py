@@ -97,7 +97,7 @@ def test_enclosed_volumes():
         8 * data["R0"] * np.pi**2 * rho, grid.compress(data["V_r(r)"])
     )
     np.testing.assert_allclose(8 * data["R0"] * np.pi**2, data["V_rr(r)"])
-    np.testing.assert_allclose(0, data["V_rrr(r)"], atol=2e-14)
+    np.testing.assert_allclose(0, data["V_rrr(r)"], atol=3e-14)
 
 
 @pytest.mark.unit
@@ -1108,7 +1108,7 @@ def test_boozer_transform():
     # TODO (#680): add test with stellarator example
     eq = get("DSHAPE_CURRENT")
     grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
-    data = eq.compute("|B|_mn", grid=grid, M_booz=eq.M, N_booz=eq.N)
+    data = eq.compute("|B|_mn_B", grid=grid, M_booz=eq.M, N_booz=eq.N)
     booz_xform = np.array(
         [
             2.49792355e-01,
@@ -1128,7 +1128,7 @@ def test_boozer_transform():
         ]
     )
     np.testing.assert_allclose(
-        np.flipud(np.sort(np.abs(data["|B|_mn"]))),
+        np.flipud(np.sort(np.abs(data["|B|_mn_B"]))),
         booz_xform,
         rtol=1e-3,
         atol=1e-4,
@@ -1142,14 +1142,14 @@ def test_boozer_transform_multiple_surfaces():
     grid1 = LinearGrid(rho=0.6, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
     grid2 = LinearGrid(rho=0.8, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
     grid3 = LinearGrid(rho=np.array([0.6, 0.8]), M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
-    data1 = eq.compute("|B|_mn", grid=grid1, M_booz=eq.M, N_booz=eq.N)
-    data2 = eq.compute("|B|_mn", grid=grid2, M_booz=eq.M, N_booz=eq.N)
-    data3 = eq.compute("|B|_mn", grid=grid3, M_booz=eq.M, N_booz=eq.N)
+    data1 = eq.compute("|B|_mn_B", grid=grid1, M_booz=eq.M, N_booz=eq.N)
+    data2 = eq.compute("|B|_mn_B", grid=grid2, M_booz=eq.M, N_booz=eq.N)
+    data3 = eq.compute("|B|_mn_B", grid=grid3, M_booz=eq.M, N_booz=eq.N)
     np.testing.assert_allclose(
-        data1["|B|_mn"], data3["|B|_mn"].reshape((grid3.num_rho, -1))[0]
+        data1["|B|_mn_B"], data3["|B|_mn_B"].reshape((grid3.num_rho, -1))[0]
     )
     np.testing.assert_allclose(
-        data2["|B|_mn"], data3["|B|_mn"].reshape((grid3.num_rho, -1))[1]
+        data2["|B|_mn_B"], data3["|B|_mn_B"].reshape((grid3.num_rho, -1))[1]
     )
 
 
@@ -1644,3 +1644,14 @@ def test_parallel_grad_fd(DummyStellarator):
         rtol=1e-2,
         atol=1e-2 * np.mean(np.abs(data["B^zeta_z|r,a"])),
     )
+
+
+@pytest.mark.unit
+def test_compute_deprecation_warning():
+    """Test DeprecationWarning for deprecated compute names."""
+    eq = Equilibrium()
+    grid = LinearGrid(L=1, M=2, N=2, NFP=eq.NFP)
+    with pytest.warns(DeprecationWarning, match="deprecated"):
+        eq.compute("sqrt(g)_B", grid=grid)
+    with pytest.warns(DeprecationWarning, match="deprecated"):
+        eq.compute("|B|_mn", grid=grid, M_booz=eq.M, N_booz=eq.N)

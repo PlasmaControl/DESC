@@ -1427,21 +1427,14 @@ def test_initialize_saddle():
 @pytest.mark.unit
 def test_opposing_normals_fourier_planar_coil_fields():
     """Test that FourierPlanarCoils with opposing normals have opposing fields."""
-    coil = FourierPlanarCoil(
-        current=1e6,
-        center=[0, 0, 0],
-        normal=[0, 0, 1],
-        r_n=2,
-        modes=[0],
+    coil1 = FourierPlanarCoil(
+        current=1e6, center=[0, 0, 0], normal=[0, 0, 1], r_n=2, modes=[0]
     )
-    coil2 = coil.copy()
+    coil2 = coil1.copy()
     coil2.normal = np.array([0, 0, -1])
 
     grid = LinearGrid(N=20)
-    field1 = coil.compute_magnetic_field(
-        [0, 0, 0],
-        source_grid=grid,
-    )
+    field1 = coil1.compute_magnetic_field([0, 0, 0], source_grid=grid)
     field2 = coil2.compute_magnetic_field([0, 0, 0], source_grid=grid)
     # because the normals are opposite directions, the "positive" current direction
     # for each coil is opposite the other, so their fields should be exactly opposite

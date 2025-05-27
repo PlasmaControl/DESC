@@ -9,7 +9,7 @@ import numpy as np
 from scipy.special import factorial
 from termcolor import colored
 
-from desc.backend import flatnonzero, fori_loop, jit, jnp, take
+from desc.backend import flatnonzero, fori_loop, jit, jnp, sign, take
 
 
 class Timer:
@@ -867,10 +867,10 @@ def safediv(a, b, fill=0, threshold=0):
     return num / den
 
 
-def safearccos(angle):
-    """Like jnp.arccos, but without nan gradient at angle=1."""
-    safe_angle = jnp.where(angle == 1, 0, angle)
-    return jnp.where(angle == 1, jnp.inf, jnp.arccos(safe_angle))
+def safearccos(x):
+    """Like jnp.arccos, but without nan gradient at x=1."""
+    safe_x = jnp.where(jnp.abs(x) == 1, 0, x)
+    return jnp.where(jnp.abs(x) == 1, sign(x) * jnp.inf, jnp.arccos(safe_x))
 
 
 def ensure_tuple(x):

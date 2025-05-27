@@ -210,7 +210,10 @@ def _x_FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
     Zaxis = jnp.array([0.0, 0.0, 1.0])  # 2D curve in X-Y plane has normal = +Z axis
     axis = cross(Zaxis, normal)
     angle = safearccos(dot(Zaxis, safenormalize(normal)))
-    A = rotation_matrix(axis=axis, angle=angle)
+    if jnp.allclose(Zaxis + normal, 0.0):  # normal is anti-parallel to +Z axis
+        A = jnp.diag(jnp.array([1.0, -1.0, -1.0]))
+    else:
+        A = rotation_matrix(axis=axis, angle=angle)
     coords = jnp.matmul(coords, A.T) + center
     coords = jnp.matmul(coords, params["rotmat"].reshape((3, 3)).T) + params["shift"]
     # convert back to rpz
@@ -250,7 +253,10 @@ def _x_s_FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
     Zaxis = jnp.array([0.0, 0.0, 1.0])  # 2D curve in X-Y plane has normal = +Z axis
     axis = cross(Zaxis, normal)
     angle = safearccos(dot(Zaxis, safenormalize(normal)))
-    A = rotation_matrix(axis=axis, angle=angle)
+    if jnp.allclose(Zaxis + normal, 0.0):  # normal is anti-parallel to +Z axis
+        A = jnp.diag(jnp.array([1.0, -1.0, -1.0]))
+    else:
+        A = rotation_matrix(axis=axis, angle=angle)
     coords = jnp.matmul(coords, A.T)
     coords = jnp.matmul(coords, params["rotmat"].reshape((3, 3)).T)
     # convert back to rpz
@@ -295,7 +301,10 @@ def _x_ss_FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
     Zaxis = jnp.array([0.0, 0.0, 1.0])  # 2D curve in X-Y plane has normal = +Z axis
     axis = cross(Zaxis, normal)
     angle = safearccos(dot(Zaxis, safenormalize(normal)))
-    A = rotation_matrix(axis=axis, angle=angle)
+    if jnp.allclose(Zaxis + normal, 0.0):  # normal is anti-parallel to +Z axis
+        A = jnp.diag(jnp.array([1.0, -1.0, -1.0]))
+    else:
+        A = rotation_matrix(axis=axis, angle=angle)
     coords = jnp.matmul(coords, A.T)
     coords = jnp.matmul(coords, params["rotmat"].reshape((3, 3)).T)
     # convert back to rpz
@@ -347,7 +356,10 @@ def _x_sss_FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
     Zaxis = jnp.array([0.0, 0.0, 1.0])  # 2D curve in X-Y plane has normal = +Z axis
     axis = cross(Zaxis, normal)
     angle = safearccos(dot(Zaxis, safenormalize(normal)))
-    A = rotation_matrix(axis=axis, angle=angle)
+    if jnp.allclose(Zaxis + normal, 0.0):  # normal is anti-parallel to +Z axis
+        A = jnp.diag(jnp.array([1.0, -1.0, -1.0]))
+    else:
+        A = rotation_matrix(axis=axis, angle=angle)
     coords = jnp.matmul(coords, A.T)
     coords = jnp.matmul(coords, params["rotmat"].reshape((3, 3)).T)
     # convert back to rpz

@@ -214,11 +214,11 @@ def _x_FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
     axis = cross(Zaxis, normal)
     dotprod = dot(Zaxis, safenormalize(normal))
     angle = safearccos(dotprod)
-    A = jnp.where(
+    A = jnp.where(  # handle the case where normal is aligned with the -Z axis
         jnp.allclose(dotprod, -1.0),
         jnp.diag(jnp.array([1.0, -1.0, -1.0])),
         rotation_matrix(axis, angle),
-    )  # Handle the case of 180 degree rotation
+    )
     coords = jnp.matmul(coords, A.T) + center
     coords = jnp.matmul(coords, params["rotmat"].reshape((3, 3)).T) + params["shift"]
     # convert back to rpz
@@ -259,11 +259,11 @@ def _x_s_FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
     axis = cross(Zaxis, normal)
     dotprod = dot(Zaxis, safenormalize(normal))
     angle = safearccos(dotprod)
-    A = jnp.where(
+    A = jnp.where(  # handle the case where normal is aligned with the -Z axis
         jnp.allclose(dotprod, -1.0),
         jnp.diag(jnp.array([1.0, -1.0, -1.0])),
         rotation_matrix(axis, angle),
-    )  # Handle the case of 180 degree rotation
+    )
     coords = jnp.matmul(coords, A.T)
     coords = jnp.matmul(coords, params["rotmat"].reshape((3, 3)).T)
     # convert back to rpz
@@ -309,11 +309,11 @@ def _x_ss_FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
     axis = cross(Zaxis, normal)
     dotprod = dot(Zaxis, safenormalize(normal))
     angle = safearccos(dotprod)
-    A = jnp.where(
+    A = jnp.where(  # handle the case where normal is aligned with the -Z axis
         jnp.allclose(dotprod, -1.0),
         jnp.diag(jnp.array([1.0, -1.0, -1.0])),
         rotation_matrix(axis, angle),
-    )  # Handle the case of 180 degree rotation
+    )
     coords = jnp.matmul(coords, A.T)
     coords = jnp.matmul(coords, params["rotmat"].reshape((3, 3)).T)
     # convert back to rpz
@@ -366,11 +366,11 @@ def _x_sss_FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
     axis = cross(Zaxis, normal)
     dotprod = dot(Zaxis, safenormalize(normal))
     angle = safearccos(dotprod)
-    A = jnp.where(
+    A = jnp.where(  # handle the case where normal is aligned with the -Z axis
         jnp.allclose(dotprod, -1.0),
         jnp.diag(jnp.array([1.0, -1.0, -1.0])),
         rotation_matrix(axis, angle),
-    )  # Handle the case of 180 degree rotation
+    )
     coords = jnp.matmul(coords, A.T)
     coords = jnp.matmul(coords, params["rotmat"].reshape((3, 3)).T)
     # convert back to rpz
@@ -412,11 +412,11 @@ def _x_FourierXYCurve(params, transforms, profiles, data, **kwargs):
     axis = cross(Zaxis, normal)
     dotprod = dot(Zaxis, safenormalize(normal))
     angle = safearccos(dotprod)
-    A = jnp.where(
+    A = jnp.where(  # handle the case where normal is aligned with the -Z axis
         jnp.allclose(dotprod, -1.0),
         jnp.diag(jnp.array([1.0, -1.0, -1.0])),
         rotation_matrix(axis, angle),
-    )  # Handle the case of 180 degree rotation
+    )
     coords = jnp.matmul(coords, A.T) + center
     coords = jnp.matmul(coords, params["rotmat"].reshape((3, 3)).T) + params["shift"]
     # convert back to rpz
@@ -455,11 +455,11 @@ def _x_s_FourierXYCurve(params, transforms, profiles, data, **kwargs):
     axis = cross(Zaxis, normal)
     dotprod = dot(Zaxis, safenormalize(normal))
     angle = safearccos(dotprod)
-    A = jnp.where(
+    A = jnp.where(  # handle the case where normal is aligned with the -Z axis
         jnp.allclose(dotprod, -1.0),
         jnp.diag(jnp.array([1.0, -1.0, -1.0])),
         rotation_matrix(axis, angle),
-    )  # Handle the case of 180 degree rotation
+    )
     coords = jnp.matmul(coords, A.T)
     coords = jnp.matmul(coords, params["rotmat"].reshape((3, 3)).T)
     # convert back to rpz
@@ -498,11 +498,11 @@ def _x_ss_FourierXYCurve(params, transforms, profiles, data, **kwargs):
     axis = cross(Zaxis, normal)
     dotprod = dot(Zaxis, safenormalize(normal))
     angle = safearccos(dotprod)
-    A = jnp.where(
+    A = jnp.where(  # handle the case where normal is aligned with the -Z axis
         jnp.allclose(dotprod, -1.0),
         jnp.diag(jnp.array([1.0, -1.0, -1.0])),
         rotation_matrix(axis, angle),
-    )  # Handle the case of 180 degree rotation
+    )
     coords = jnp.matmul(coords, A.T)
     coords = jnp.matmul(coords, params["rotmat"].reshape((3, 3)).T)
     # convert back to rpz
@@ -541,11 +541,11 @@ def _x_sss_FourierXYCurve(params, transforms, profiles, data, **kwargs):
     axis = cross(Zaxis, normal)
     dotprod = dot(Zaxis, safenormalize(normal))
     angle = safearccos(dotprod)
-    A = jnp.where(
+    A = jnp.where(  # handle the case where normal is aligned with the -Z axis
         jnp.allclose(dotprod, -1.0),
         jnp.diag(jnp.array([1.0, -1.0, -1.0])),
         rotation_matrix(axis, angle),
-    )  # Handle the case of 180 degree rotation
+    )
     coords = jnp.matmul(coords, A.T)
     coords = jnp.matmul(coords, params["rotmat"].reshape((3, 3)).T)
     # convert back to rpz

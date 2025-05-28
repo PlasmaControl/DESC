@@ -845,11 +845,11 @@ class FourierPlanarCurve(Curve):
         axis = np.cross(Z_axis, normal)
         dotprod = np.dot(Z_axis, normal)
         angle = np.arccos(dotprod)
-        rotmat = np.where(
+        rotmat = np.where(  # handle the case where normal is aligned with the -Z axis
             np.allclose(dotprod, -1.0),
             np.diag(np.array([1.0, -1.0, -1.0])),
             rotation_matrix(axis, angle),
-        )  # Handle the case of 180 degree rotation
+        )
         coords_rotated = coords_centered @ rotmat  # rotate to X-Y plane
 
         warnif(
@@ -1224,11 +1224,11 @@ class FourierXYCurve(Curve):
         axis = np.cross(Z_axis, normal)
         dotprod = np.dot(Z_axis, normal)
         angle = np.arccos(dotprod)
-        rotmat = np.where(
+        rotmat = np.where(  # handle the case where normal is aligned with the -Z axis
             np.allclose(dotprod, -1.0),
             np.diag(np.array([1.0, -1.0, -1.0])),
             rotation_matrix(axis, angle),
-        )  # Handle the case of 180 degree rotation
+        )
         coords = coords @ rotmat  # rotate to X-Y plane
 
         X, Y, Z = coords[:, 0], coords[:, 1], coords[:, 2]

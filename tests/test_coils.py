@@ -1596,18 +1596,23 @@ def test_planar_coil_from_values_orientation():
 
 
 @pytest.mark.unit
-def test_opposing_normals_fourier_planar_coil_fields():
-    """Test that FourierPlanarCoils with opposing normals have opposing fields."""
-    coil1 = FourierPlanarCoil(
-        current=1e6, center=[0, 0, 0], normal=[0, 0, 1], r_n=2, modes=[0]
+def test_planar_coil_opposing_normals_fields():
+    """Test that planar coils with opposing normals have opposing fields."""
+    coil_r = FourierPlanarCoil(current=1e6, center=[0, 0, 0], normal=[0, 0, 1], r_n=[2])
+    coil_xy = FourierXYCoil(
+        current=1e6, center=[0, 0, 0], normal=[0, 0, 1], X_n=[0, 2], Y_n=[2, 0]
     )
-    coil2 = coil1.copy()
-    coil2.normal = np.array([0, 0, -1])
 
-    grid = LinearGrid(N=20)
-    field1 = coil1.compute_magnetic_field([0, 0, 0], source_grid=grid)
-    field2 = coil2.compute_magnetic_field([0, 0, 0], source_grid=grid)
-    # because the normals are opposite directions, the "positive" current direction
-    # for each coil is opposite the other, so their fields should be exactly opposite
-    # in direction but equal in magnitude (as the geometry is the same)
-    np.testing.assert_allclose(field1, -field2)
+    def test(coil1):
+        coil2 = coil1.copy()
+        coil2.normal = -coil1.normal
+        grid = LinearGrid(N=20)
+        field1 = coil1.compute_magnetic_field([0, 0, 0], source_grid=grid)
+        field2 = coil2.compute_magnetic_field([0, 0, 0], source_grid=grid)
+        # because the normals are opposite directions, the "positive" current direction
+        # for each coil is opposite the other, so their fields should be exactly
+        # opposite in direction but equal in magnitude (as the geometry is the same)
+        np.testing.assert_allclose(field1, -field2)
+
+    test(coil_r)
+    test(coil_xy)

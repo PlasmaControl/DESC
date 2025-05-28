@@ -678,22 +678,26 @@ def _dJ_dalpha(params, transforms, profiles, data, **kwargs):
             spline=spline,
         )
 
+        # Find the most "leaky"/"lossy" fieldline and pick that,
+        # then integrate over the pitch angle
         return jnp.sum(
-            data["<v_dot_grads>"] * data["pitch_inv weight"] / data["pitch_inv"] ** 2,
+            jnp.max(jnp.abs(grid.compress(data["radial_drift"])), axis=1)
+            * data["pitch_inv weight"]
+            / data["pitch_inv"] ** 2,
             axis=-1,
         ) / bounce.compute_fieldline_length(fl_quad)
 
     grid = transforms["grid"]
+    fourier_transformed_data = {}
     data["J_alpha"] = _compute(
         dJ_dalpha0,
-        {
-            "<v_dot_grads>": data["<v_dot_grads>"],
-        },
+        fourier_transformed_data,
         data,
         theta,
         grid,
         num_pitch,
         surf_batch_size,
+        radial_drift=data["<v_dot_grads>"],
     )
     # )--no-verify / (2 * jnp.pi * num_transit * data["R0"])
     return data

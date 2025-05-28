@@ -378,8 +378,8 @@ class TestCoil:
                 coil,
                 grid_xyz,
                 grid_rpz,
-                A_true_rpz,
-                correct_flux,
+                -A_true_rpz,
+                -correct_flux,
                 rtol=1e-8,
                 atol=1e-12,
             )

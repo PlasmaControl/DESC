@@ -3903,6 +3903,7 @@ def plot_adiabatic_invariant(
     if num_pitch is None:
         num_pitch = 16
 
+    # TODO(#1352)
     N_rho = len(rhos)
     X, Y = 32, 64
 

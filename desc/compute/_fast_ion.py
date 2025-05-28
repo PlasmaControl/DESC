@@ -577,9 +577,10 @@ def _bounceavg_v_dot_grads(params, transforms, profiles, data, **kwargs):
             # from omnigenity, hence the abs
             return v_dot_grads
 
-        return batch_map(
-            fun, data["pitch_inv"], pitch_batch_size
-        ) / bounce.compute_fieldline_length(fl_quad)
+        return (
+            batch_map(fun, data["pitch_inv"], pitch_batch_size)
+            / bounce.compute_fieldline_length(fl_quad)[:, None, None]
+        )
 
     grid = transforms["grid"]
     data["<v_dot_grads>"] = _compute(
@@ -615,6 +616,7 @@ def _bounceavg_v_dot_grads(params, transforms, profiles, data, **kwargs):
         "max_tz |B|",
         "cvdrift0",
         "R0",
+        "<v_dot_grads>",
     ]
     + Bounce2D.required_names,
     resolution_requirement="tz",
@@ -645,7 +647,6 @@ def _dJ_dalpha(params, transforms, profiles, data, **kwargs):
     alpha = kwargs.get("alpha", jnp.array([0.0]))
     num_transit = kwargs.get("num_transit", 20)
     num_pitch = kwargs.get("num_pitch", 64)
-    num_well = kwargs.get("num_well", Y_B * num_transit)
     pitch_batch_size = kwargs.get("pitch_batch_size", None)
     surf_batch_size = kwargs.get("surf_batch_size", 1)
     assert (
@@ -677,28 +678,8 @@ def _dJ_dalpha(params, transforms, profiles, data, **kwargs):
             spline=spline,
         )
 
-        def fun(pitch_inv):
-            v_tau, radial_drift = bounce.integrate(
-                [_v_tau, _radial_drift],
-                pitch_inv,
-                data,
-                ["cvdrift0"],
-                bounce.points(pitch_inv, num_well),
-                is_fourier=True,
-            )
-            # Take sum over wells, then divide
-            # --no-verify dJ_dalpha = jnp.sum(radial_drift, axis=-1)
-            dJ_dalpha = safediv(jnp.sum(radial_drift, axis=-1), jnp.sum(v_tau, axis=-1))
-
-            # Now take max in alpha (max radial excursion)
-            # Negative or positive radial excursion is both departure
-            # from omnigenity, hence the abs
-            return jnp.abs(dJ_dalpha).max(axis=-2)
-
         return jnp.sum(
-            batch_map(fun, data["pitch_inv"], pitch_batch_size)
-            * data["pitch_inv weight"]
-            / data["pitch_inv"] ** 2,
+            data["<v_dot_grads>"] * data["pitch_inv weight"] / data["pitch_inv"] ** 2,
             axis=-1,
         ) / bounce.compute_fieldline_length(fl_quad)
 
@@ -706,7 +687,7 @@ def _dJ_dalpha(params, transforms, profiles, data, **kwargs):
     data["J_alpha"] = _compute(
         dJ_dalpha0,
         {
-            "cvdrift0": data["cvdrift0"],
+            "<v_dot_grads>": data["<v_dot_grads>"],
         },
         data,
         theta,

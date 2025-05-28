@@ -1580,7 +1580,7 @@ class VMECIO:
                         " {:+14.8E}".format(
                             0
                             if np.abs(r) < np.finfo(r.dtype).eps
-                            else float(current(r, dr=1) / (2 * r))
+                            else float(current(r, dr=1)[0] / (2 * r))
                         )
                     )
                 f.write("\n  PCURR_TYPE = 'cubic_spline_Ip'\n")

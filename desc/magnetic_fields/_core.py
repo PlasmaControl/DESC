@@ -2605,7 +2605,7 @@ def field_line_integrate(
 
     Returns
     -------
-    r, z, phi : ndarray
+    r, z : ndarray
         arrays of r and z coordinates of the field line, corresponding to the
         input phis
     """

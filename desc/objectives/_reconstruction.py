@@ -101,15 +101,12 @@ class PointBMeasurement(_Objective):
         name="Magnetic-Point-Measurement-Error",
         jac_chunk_size=None,
     ):
-        # TODO: I want the output to be like "measurement error", but that means
-        # having the compute method subtract the measured values, and then the
-        # target should be zero, but I'd like target to be the diagnostic targets.
-        # could also just define a custom print_value to use
-        # compute - target instead of just compute
         self._field = field
         self._field_grid = field_grid
         self._vc_source_grid = vc_source_grid
+        measurement_coords = np.atleast_2d(measurement_coords)
         if directions is not None:
+            directions = np.atleast_2d(directions)
             assert (
                 directions.shape == measurement_coords.shape
             ), "Must pass in same number of direction vectors as measurements"

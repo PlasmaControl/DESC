@@ -112,6 +112,8 @@ class PointBMeasurement(_Objective):
             assert (
                 directions.shape == measurement_coords.shape
             ), "Must pass in same number of direction vectors as measurements"
+            # make the direction vectors unit norm
+            directions = directions / jnp.linalg.norm(directions, axis=1)[:, None]
         errorif(
             basis not in ["xyz", "rpz"],
             ValueError,
@@ -139,9 +141,8 @@ class PointBMeasurement(_Objective):
 
         self._measurement_coords = measurement_coords
         self._directions = directions
-        self._eq = eq
         self._vacuum = vacuum
-        self._sheet_current = hasattr(self._eq.surface, "Phi_mn")
+        self._sheet_current = hasattr(eq.surface, "Phi_mn")
         things = [eq]
         self._field_fixed = field_fixed
         if not field_fixed:
@@ -177,7 +178,7 @@ class PointBMeasurement(_Objective):
         self._compute_A_or_B_from_CurrentPotentialField = (
             _compute_A_or_B_from_CurrentPotentialField
         )
-        eq = self._eq
+        eq = self.things[0]
 
         if self._normalize:
             scales = compute_scaling_factors(eq)

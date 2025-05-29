@@ -1482,7 +1482,7 @@ def plot_section(
     if isinstance(phi, numbers.Integral):
         phi = np.linspace(0, 2 * np.pi / eq.NFP, phi, endpoint=False)
     phi = np.atleast_1d(phi)
-
+    nphi = len(phi)
     if grid is None:
         grid_kwargs = {
             "L": 25,
@@ -1492,12 +1492,30 @@ def plot_section(
             "zeta": phi,
         }
         grid = _get_grid(**grid_kwargs)
-        # TODO(#568): Add conversion to rho, theta, zeta grid
-        # Using custom Grid Class will cause problems for "|F|_normalized"
+        nr, nt, nz = grid.num_rho, grid.num_theta, grid.num_zeta
+        coords = map_coordinates(
+            eq,
+            grid.nodes,
+            ["rho", "theta", "phi"],
+            ["rho", "theta", "zeta"],
+            period=(np.inf, 2 * np.pi, 2 * np.pi),
+            guess=grid.nodes,
+        )
+        grid = Grid(coords, sort=False)
+    else:
+        phi = np.unique(grid.nodes[:, 2])
+        nphi = phi.size
+        nr, nt, nz = grid.num_rho, grid.num_theta, grid.num_zeta
+        coords = map_coordinates(
+            eq,
+            grid.nodes,
+            ["rho", "theta", "phi"],
+            ["rho", "theta", "zeta"],
+            period=(np.inf, 2 * np.pi, 2 * np.pi),
+            guess=grid.nodes,
+        )
+        grid = Grid(coords, sort=False)
 
-    phi = np.unique(grid.nodes[:, 2])
-    nphi = phi.size
-    nr, nt, nz = grid.num_rho, grid.num_theta, grid.num_zeta
     rows = np.floor(np.sqrt(nphi)).astype(int)
     cols = np.ceil(nphi / rows).astype(int)
 

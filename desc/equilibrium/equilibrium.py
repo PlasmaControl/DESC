@@ -968,26 +968,7 @@ class Equilibrium(IOAble, Optimizable):
         dep0d = {
             dep for dep in deps if is_0d_vol_grid(dep) and dep not in need_src_deps
         }
-        # Unless user asks, don't try to recompute stuff which are only dependencies
-        # of dep0d. Example, suppose the user supplied grid is a field-line following
-        # grid, and the user would like to compute the effective ripple, which requires
-        # the scalar R0 as a dependency. The scalar R0 has the following dependencies:
-        # R0 <- A <- A(z). Each of these are computable on the quadrature grid, and
-        # since R0 is a scalar we can trivially interpolate it back to the user-supplied
-        # grid. We don't need to additionally compute A(z) and interpolate it back;
-        # it was only needed to compute R0, so we should remove it from the dep1dz list.
-        # If we don't remove it from the dep1dz list, then the code would try to create
-        # a linear grid with cross-sections at all the unique zeta values in the
-        # user-supplied grids. Typically, the user-supplied grid lacks unique_zeta_idx
-        # attribute, so this would cause an error.
-        dep0d_deps = set(
-            get_data_deps(dep0d, obj=p, has_axis=grid.axis.size, data=data)
-        )
-        # This filter is stronger than the name implies, but the false positives
-        # that are filtered out will still get computed with the logic in
-        # compute.utils.compute
-        # https://github.com/PlasmaControl/DESC/pull/1024#discussion_r1663080423.
-        just_dep0d_dep = lambda name: name in dep0d_deps and name not in names
+        just_dep0d_dep = lambda name: name in dep0d and name not in names
         dep1dr = {
             dep
             for dep in deps
@@ -1145,8 +1126,12 @@ class Equilibrium(IOAble, Optimizable):
             data.update(data1dr)
 
         if calc1dz and override_grid:
+            if hasattr(grid, "unique_zeta_idx"):
+                unique_zeta = grid.compress(grid.nodes[:, 2], surface_label="zeta")
+            else:
+                unique_zeta = np.unique(grid.nodes[:, 2])
             grid1dz = LinearGrid(
-                zeta=grid.compress(grid.nodes[:, 2], surface_label="zeta"),
+                zeta=unique_zeta,
                 L=self.L_grid,
                 M=self.M_grid,
                 NFP=grid.NFP,  # ex: self.NFP>1 but grid.NFP=1 for plot_3d

@@ -1903,10 +1903,6 @@ def poincare_plot(
         fig, ax = desc.plotting.poincare_plot(
             field, r0, z0, NFP=eq.NFP, ax=ax, color="r", size=0.5, ntransit=250
         )
-
-        # if one wants to follow the field lines in reverse, can simply use
-        field_reversed = ScaledMagneticField(-1.0, field)
-        # and use this field_reversed instead of field.
     """
     fli_kwargs = {}
     for key in inspect.signature(field_line_integrate).parameters:
@@ -1938,38 +1934,17 @@ def poincare_plot(
 
     R0, Z0 = np.atleast_1d(R0, Z0)
 
-    with warnings.catch_warnings():
-        # we throw the same warning below with a message that is more
-        # appropriate for this function
-        warnings.filterwarnings("ignore", message="Toroidal component of the field")
-        fieldR, fieldZ, _ = field_line_integrate(
-            r0=R0,
-            z0=Z0,
-            phis=phis,
-            field=field,
-            source_grid=grid,
-            **fli_kwargs,
-        )
+    fieldR, fieldZ = field_line_integrate(
+        r0=R0,
+        z0=Z0,
+        phis=phis,
+        field=field,
+        source_grid=grid,
+        **fli_kwargs,
+    )
 
     zs = fieldZ.reshape((ntransit, nplanes, -1))
     rs = fieldR.reshape((ntransit, nplanes, -1))
-
-    signBT = np.sign(
-        field.compute_magnetic_field(np.array([R0.flat[0], 0.0, Z0.flat[0]]))[:, 1]
-    ).flat[0]
-    if signBT < 0:
-        warnings.warn(
-            "Field lines are traced in negative toroidal angle since the toroidal "
-            "field is negative.",
-            UserWarning,
-        )
-        # technically, these doesn't belong to phi angles but
-        # [ 0, -300, -240, -180, -120,  -60 ]/NFP degrees
-        # however, for the purpose of this plot, it doesn't matter
-        # and sticking to this convention is more convenient for titles
-        # see plot_field_lines for corrected phi angles
-        rs, zs = rs[:, ::-1], zs[:, ::-1]
-        rs, zs = np.roll(rs, 1, 1), np.roll(zs, 1, 1)
 
     data = {
         "R": rs,
@@ -3668,11 +3643,11 @@ def plot_field_lines(
     phi0 : float
         Starting value of phi for field line tracing in radians. Defaults to 0.
     ntransit : int, float
-        Number of transits to trace field lines for. Defaults to 1.
+        Number of transits to trace field lines for. Defaults to 1. To trace the field
+        in negative toroidal direction, use a negative value.
     nphi_per_transit : int
-        Number of phi values to use for each transit. This is the number of
-        points to plot for each field line per transit.
-        Defaults to 50.
+        Number of equidistant toroidal points to plot for each field line per
+        transit. Must be positive integer. Defaults to 50.
     endpoint : bool
         If True, the point phi0+2*pi*ntransit is included, else the last point
         is phi0 + 2*np.pi*(ntransit - 1/nphi_per_transit). Defaults to True.
@@ -3733,11 +3708,6 @@ def plot_field_lines(
         z0 = eq.compute("Z", grid=grid_trace)["Z"]
 
         fig = plot_field_lines(field, r0, z0, nphi_per_transit=100, ntransit=10)
-        fig.show()
-
-        # if one wants to follow the field lines in reverse, can simply use
-        field_reversed = ScaledMagneticField(-1.0, field)
-        # and use this field_reversed instead of field.
     """
     fli_kwargs = {}
     for key in inspect.signature(field_line_integrate).parameters:
@@ -3767,36 +3737,21 @@ def plot_field_lines(
         color = [color]
 
     nphi_per_transit = check_posint(nphi_per_transit, "nphi_per_transit", False)
-    npts = int(nphi_per_transit * ntransit)
+    npts = int(np.abs(nphi_per_transit * ntransit))
     phis = np.linspace(0, 2 * np.pi * ntransit, npts, endpoint=endpoint) + phi0
 
     R0, Z0 = np.atleast_1d(R0, Z0)
 
-    signBT = np.sign(
-        field.compute_magnetic_field(np.array([R0.flat[0], phi0, Z0.flat[0]]))[:, 1]
-    ).flat[0]
-    if signBT < 0:
-        warnings.warn(
-            "Field lines are traced in negative toroidal angle since the toroidal "
-            "field is negative.",
-            UserWarning,
-        )
-
-    with warnings.catch_warnings():
-        # we throw the same warning above with a message that is more
-        # appropriate for this function
-        warnings.filterwarnings("ignore", message="Toroidal component of the field")
-        fieldR, fieldZ, fieldPhi = field_line_integrate(
-            r0=R0,
-            z0=Z0,
-            phis=phis,
-            field=field,
-            **fli_kwargs,
-        )
+    fieldR, fieldZ = field_line_integrate(
+        r0=R0,
+        z0=Z0,
+        phis=phis,
+        field=field,
+        **fli_kwargs,
+    )
 
     zs = fieldZ.reshape((npts, -1))
     rs = fieldR.reshape((npts, -1))
-    phis = fieldPhi.reshape((npts, -1))
 
     if fig is None:
         fig = go.Figure()
@@ -3806,16 +3761,15 @@ def plot_field_lines(
     plot_data["Y"] = []
     plot_data["Z"] = []
     plot_data["R"] = []
-    plot_data["phi"] = []
+    plot_data["phi"] = phis
     for i in range(rs.shape[1]):  # iterate over each field line
-        x = rs[:, i] * np.cos(phis[:, i])
-        y = rs[:, i] * np.sin(phis[:, i])
+        x = rs[:, i] * np.cos(phis)
+        y = rs[:, i] * np.sin(phis)
         z = zs[:, i]
         plot_data["X"].append(x)
         plot_data["Y"].append(y)
         plot_data["Z"].append(z)
         plot_data["R"].append(rs[:, i])
-        plot_data["phi"].append(phis[:, i])
 
         fig.add_trace(
             go.Scatter3d(

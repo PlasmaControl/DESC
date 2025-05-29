@@ -968,12 +968,14 @@ class Equilibrium(IOAble, Optimizable):
         dep0d = {
             dep for dep in deps if is_0d_vol_grid(dep) and dep not in need_src_deps
         }
-        just_dep0d_dep = lambda name: name in dep0d and name not in names
+        dep0d_deps = set(
+            get_data_deps(dep0d, obj=p, has_axis=grid.axis.size, data=data)
+        )
         dep1dr = {
             dep
             for dep in deps
             if is_1dr_rad_grid(dep)
-            and not just_dep0d_dep(dep)
+            and not (dep in dep0d and dep not in names)
             and dep not in need_src_deps
         }
         dep1dz = {
@@ -984,12 +986,15 @@ class Equilibrium(IOAble, Optimizable):
             # compute things like A(z) when it was only needed to compute R0, as in the
             # example above.
             if is_1dz_tor_grid(dep)
-            and not just_dep0d_dep(dep)
+            and not not (dep in dep0d_deps and dep not in names)
             and dep not in need_src_deps
             # These don't need a special grid, since the transforms are always
             # built on the (rho, theta, zeta) coordinate grid.
             and dep not in ["phi", "zeta"]
         }
+        print("dep0d:", dep0d)
+        print("dep1dr:", dep1dr)
+        print("dep1dz:", dep1dz)
 
         # Whether we need to calculate any dependencies on a special grid.
         calc0d = bool(dep0d)
@@ -1134,7 +1139,7 @@ class Equilibrium(IOAble, Optimizable):
                 zeta=unique_zeta,
                 L=self.L_grid,
                 M=self.M_grid,
-                NFP=grid.NFP,  # ex: self.NFP>1 but grid.NFP=1 for plot_3d
+                NFP=self.NFP,  # ex: self.NFP>1 but grid.NFP=1 for plot_3d
                 sym=self.sym
                 and all(
                     data_index[p][dep]["grid_requirement"].get("sym", True)

@@ -286,10 +286,18 @@ def test_safenormalize():
 
     np.testing.assert_allclose(a_norm, a_safenorm)
     np.testing.assert_allclose(np.linalg.norm(a_safenorm, axis=-1), 1)
-    # multiple vectors
+    # 2d array of vectors
     a = np.array([[1, 2, 3], [4, 5, 6], [7, 8, 9], [11, 0, 2]])
     a_norm = a / np.linalg.norm(a, axis=-1)[:, None]
     a_safenorm = safenormalize(a, axis=-1)
 
     np.testing.assert_allclose(a_norm, a_safenorm)
     np.testing.assert_allclose(np.linalg.norm(a_safenorm, axis=-1), 1)
+
+    # 3d array
+    a = np.ones((2, 2, 2))
+    a_norm = a / np.linalg.norm(a, axis=1, keepdims=True)
+    a_safenorm = safenormalize(a, axis=1)
+
+    np.testing.assert_allclose(a_norm, a_safenorm)
+    np.testing.assert_allclose(np.linalg.norm(a_safenorm, axis=1), 1)

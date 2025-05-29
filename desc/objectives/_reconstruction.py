@@ -76,7 +76,8 @@ class PointBMeasurement(_Objective):
 
     _coordinates = "rtz"
     _units = "(T)"
-    _print_value_fmt = "Point B Measurement: "
+    _print_value_fmt = "Point B Measurement Error: "
+    _print_error = True
 
     def __init__(
         self,
@@ -97,7 +98,7 @@ class PointBMeasurement(_Objective):
         normalize_target=True,
         loss_function=None,
         deriv_mode="auto",
-        name="Magnetic-Point-Measurement",
+        name="Magnetic-Point-Measurement-Error",
         jac_chunk_size=None,
     ):
         # TODO: I want the output to be like "measurement error", but that means
@@ -138,7 +139,6 @@ class PointBMeasurement(_Objective):
                 target = target.flatten()
 
             measurement_coords = xyz2rpz(measurement_coords)
-
         self._measurement_coords = measurement_coords
         self._directions = directions
         self._vacuum = vacuum
@@ -270,8 +270,8 @@ class PointBMeasurement(_Objective):
         Returns
         -------
         f : array
-            B from plasma and external field at given measurement coordinates. These
-            are always returned in rpz basis, and if ``directions`` is None, this
+            B from plasma and external field at given measurement coordinates,
+            These are always returned in rpz basis, and if ``directions`` is None, this
             is equal to ``B.flatten()`` where ``B`` is an ``(n,3)`` array corresponding
             to the magnetic field at the given measurement coordinates.
 

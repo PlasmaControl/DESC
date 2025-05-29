@@ -51,6 +51,9 @@ The best place to start learning about DESC is our tutorials:
 For details on the various objectives, constraints, optimizable objects and more, see
 the full `api documentation`_.
 
+The (rapidly growing) list of physics and engineering objectives offered by the DESC optimization suite
+can be found `here <https://docs.google.com/spreadsheets/d/1vZq-ZxtaXdE2YhJ9xpWGrfAqH2qXZQazcTtSdi65Znk/edit?gid=0#gid=0>`_.
+
 If all you need is an equilibrium solution, the simplest method is through the command
 line by giving an input file specifying the equilibrium and solver options, this
 way can also can also accept VMEC input files.

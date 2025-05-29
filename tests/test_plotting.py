@@ -22,7 +22,6 @@ from desc.io import load
 from desc.magnetic_fields import (
     OmnigenousField,
     PoloidalMagneticField,
-    ScaledMagneticField,
     SumMagneticField,
     ToroidalMagneticField,
 )
@@ -998,8 +997,6 @@ def test_plot_field_lines():
 def test_plot_field_lines_reversed():
     """Test plotting field lines with reversed direction."""
     field = load("tests/inputs/precise_QA_helical_coils.h5")
-    # reverse the field
-    field_reversed = ScaledMagneticField(-1.0, field)
     eq = get("precise_QA")
     grid_trace = LinearGrid(rho=[1])
     r0 = eq.compute("R", grid=grid_trace)["R"]
@@ -1014,18 +1011,17 @@ def test_plot_field_lines_reversed():
     pt_end_rpz = xyz2rpz(pt_end)
     # plot the field line in the reversed direction starting from the end point
     # and going backwards, this should overlap with the previous field line
-    with pytest.warns(UserWarning, match="Field lines are traced"):
-        fig, data2 = plot_field_lines(
-            field_reversed,
-            pt_end_rpz[0],
-            pt_end_rpz[2],
-            nphi_per_transit=100,
-            ntransit=1,
-            return_data=True,
-            fig=fig,
-            color="red",
-            lw=10,
-        )
+    fig, data2 = plot_field_lines(
+        field,
+        pt_end_rpz[0],
+        pt_end_rpz[2],
+        nphi_per_transit=100,
+        ntransit=-1,
+        return_data=True,
+        fig=fig,
+        color="red",
+        lw=10,
+    )
     x1 = data1["X"][0]
     y1 = data1["Y"][0]
     z1 = data1["Z"][0]

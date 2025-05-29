@@ -919,6 +919,7 @@ def safenorm(x, ord=None, axis=None, fill=0, threshold=0, keepdims=False):
     n = jnp.linalg.norm(y, ord=ord, axis=axis)
     n = jnp.where(is_zero.squeeze(), fill, n)  # replace norm with zero if is_zero
     if keepdims:
+        axis = 0 if axis is None else axis
         n = jnp.expand_dims(n, axis)
     return n
 

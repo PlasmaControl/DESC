@@ -780,7 +780,9 @@ def plot_2d(  # noqa : C901
     if log:
         data = np.abs(data)  # ensure data is positive for log plot
         contourf_kwargs["norm"] = matplotlib.colors.LogNorm()
-        if name == "|F|_normalized":
+        if name == "|F|_normalized" or (
+            name == "|F|" and normalize == "<|grad(|B|^2)|/2mu0>_vol"
+        ):
             contourf_kwargs["levels"] = kwargs.pop("levels", np.logspace(-6, 0, 7))
         else:
             logmin = max(np.floor(np.nanmin(np.log10(data))).astype(int), -16)
@@ -1546,7 +1548,9 @@ def plot_section(
     if log:
         data = np.abs(data)  # ensure data is positive for log plot
         contourf_kwargs["norm"] = matplotlib.colors.LogNorm()
-        if name == "|F|_normalized":
+        if name == "|F|_normalized" or (
+            name == "|F|" and normalize == "<|grad(|B|^2)|/2mu0>_vol"
+        ):
             contourf_kwargs["levels"] = kwargs.pop("levels", np.logspace(-6, 0, 7))
         else:
             logmin = max(np.floor(np.nanmin(np.log10(data))).astype(int), -16)

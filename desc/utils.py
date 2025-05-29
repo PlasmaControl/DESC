@@ -944,9 +944,7 @@ def safenormalize(x, ord=None, axis=None, fill=0, threshold=0):
     y = jnp.where(is_zero, jnp.ones_like(x), x)  # replace x with ones if is_zero
     n = safenorm(x, ord, axis, fill, threshold, keepdims=True) * jnp.ones_like(x)
     # return unit vector with equal components if norm <= threshold
-    return jnp.where(
-        n <= threshold, jnp.ones_like(y) / jnp.sqrt(y.size), y / n
-    ).squeeze()
+    return jnp.where(n <= threshold, jnp.ones_like(y) / jnp.sqrt(y.size), y / n)
 
 
 def safediv(a, b, fill=0, threshold=0):

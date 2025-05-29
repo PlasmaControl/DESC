@@ -3486,7 +3486,7 @@ class TestComputeScalarResolution:
         coords = np.vstack([coords_R, coords_phi, coords_Z]).T
 
         f = np.zeros_like(self.res_array, dtype=float)
-        for i, res in enumerate(self.res_array): 
+        for i, res in enumerate(self.res_array):
             eq.change_resolution(
                 L_grid=int(eq.L * res), M_grid=int(eq.M * res), N_grid=int(eq.N * res)
             )
@@ -3495,6 +3495,7 @@ class TestComputeScalarResolution:
                     eq=eq,
                     field=field,
                     measurement_coords=coords,
+                    target=0,
                 )
             )
             obj.build(verbose=0)

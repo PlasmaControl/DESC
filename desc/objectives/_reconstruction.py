@@ -202,10 +202,10 @@ class PointBMeasurement(_Objective):
             )
 
         eq_transforms = get_transforms(
-            self._eq_vc_data_keys, self._eq, grid=self._vc_source_grid
+            self._eq_vc_data_keys, self.things[0], grid=self._vc_source_grid
         )
         eq_profiles = get_profiles(
-            self._eq_vc_data_keys, self._eq, grid=self._vc_source_grid
+            self._eq_vc_data_keys, self.things[0], grid=self._vc_source_grid
         )
 
         # dim_f is number of B components we  have,
@@ -228,11 +228,9 @@ class PointBMeasurement(_Objective):
 
         self._constants = {
             "quad_weights": 1.0,
-            "field_grid": self._field_grid,
             "measurement_coords": self._measurement_coords,
             "equil_transforms": eq_transforms,
             "equil_profiles": eq_profiles,
-            "vc_source_grid": self._vc_source_grid,
             "directions": self._directions,
         }
         if self._field_fixed:
@@ -282,7 +280,7 @@ class PointBMeasurement(_Objective):
             constants = self.constants
 
         plasma_surf_data = compute_fun(
-            self._eq,
+            self.things[0],
             self._eq_vc_data_keys,
             params=eq_params,
             profiles=constants["equil_profiles"],
@@ -315,7 +313,7 @@ class PointBMeasurement(_Objective):
             Bcoil = self._field.compute_magnetic_field(
                 constants["measurement_coords"],
                 basis="rpz",
-                source_grid=constants["field_grid"],
+                source_grid=self._field_grid,
                 params=field_params,
             )
         else:
@@ -326,7 +324,7 @@ class PointBMeasurement(_Objective):
             Bplasma = self._compute_A_or_B_from_CurrentPotentialField(
                 self._field,  # this is unused, just pass a dummy variable in
                 constants["measurement_coords"],
-                source_grid=constants["vc_source_grid"],
+                source_grid=self._vc_source_grid,
                 compute_A_or_B="B",
                 data=plasma_surf_data,
             )

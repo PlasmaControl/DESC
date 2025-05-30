@@ -968,33 +968,60 @@ class Equilibrium(IOAble, Optimizable):
         dep0d = {
             dep for dep in deps if is_0d_vol_grid(dep) and dep not in need_src_deps
         }
-        dep0d_deps = set(
-            get_data_deps(dep0d, obj=p, has_axis=grid.axis.size, data=data)
+        # dependencies of 0d stuff
+        dep0d_deps = (
+            set(get_data_deps(dep0d, obj=p, has_axis=grid.axis.size, data=data)) | dep0d
+        ) - need_src_deps
+        # find the dependencies that are not dependencies of 0d stuff and any other
+        # special case
+        other_deps = deps - dep0d_deps - set(names) - need_src_deps
+        deps_other_deps = set(
+            get_data_deps(other_deps, obj=p, has_axis=grid.axis.size, data=data)
         )
+        # if a quantity depends on a 0d quantity, then it 'deps_other_deps' will
+        # contain the dependencies of that 0d quantity, but we don't need to
+        # compute them again. But let's say it depends on some dependency of a
+        # 0d quantity but not the 0d quantity itself, then those should stay.
+        # Example:
+        # 0D stuff: "a", "b"
+        #    - "a" depends on "c", "d", "e"
+        #    - "b" depends on "d", "f"
+        # Say,
+        #    - "X" depends on "a", "c", "d", "e", "f"
+        # Since "X" depends on "a", it will have "c", "d", "e" automatically. So, we
+        # can remove them. Although, "X" does depend on "d" and "f", it doesn't depend
+        # on "b", so we keep "d" and "f".
+        # So, to compute ["X", "a", "b"], we will compute "a", "b" and their
+        # dependencies with the special volume grid. Then, we will compute "d" and "f"
+        # again (because maybe there is a better grid for them), and finally get "X".
+        for d0 in dep0d:
+            if d0 in deps_other_deps:
+                deps_other_deps -= set(
+                    get_data_deps(d0, obj=p, has_axis=grid.axis.size, data=data)
+                )
+                deps_other_deps -= {d0}
+        # substract the dependencies of the not 0d stuff from the dependencies
+        # of the 0d stuff to get deps that are just required for computing 0d stuff
+        # These will not be necessary for other dependencies, so no need to compute
+        # again
+        only_dep0d_deps = dep0d_deps - deps_other_deps
         dep1dr = {
             dep
             for dep in deps
             if is_1dr_rad_grid(dep)
-            and not (dep in dep0d and dep not in names)
+            and not (dep in only_dep0d_deps and dep not in names)
             and dep not in need_src_deps
         }
         dep1dz = {
             dep
             for dep in deps
-            # By including the additional requirement that dep is not just a dependency
-            # of some scalar (0d) quantity, we are ensuring that we do not unnecessarily
-            # compute things like A(z) when it was only needed to compute R0, as in the
-            # example above.
             if is_1dz_tor_grid(dep)
-            and not not (dep in dep0d_deps and dep not in names)
+            and not (dep in only_dep0d_deps and dep not in names)
             and dep not in need_src_deps
             # These don't need a special grid, since the transforms are always
             # built on the (rho, theta, zeta) coordinate grid.
             and dep not in ["phi", "zeta"]
         }
-        print("dep0d:", dep0d)
-        print("dep1dr:", dep1dr)
-        print("dep1dz:", dep1dz)
 
         # Whether we need to calculate any dependencies on a special grid.
         calc0d = bool(dep0d)
@@ -1139,7 +1166,7 @@ class Equilibrium(IOAble, Optimizable):
                 zeta=unique_zeta,
                 L=self.L_grid,
                 M=self.M_grid,
-                NFP=self.NFP,  # ex: self.NFP>1 but grid.NFP=1 for plot_3d
+                NFP=grid.NFP,  # ex: self.NFP>1 but grid.NFP=1 for plot_3d
                 sym=self.sym
                 and all(
                     data_index[p][dep]["grid_requirement"].get("sym", True)

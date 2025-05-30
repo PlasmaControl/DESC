@@ -48,6 +48,7 @@ Contour Plots of 2-D data
 
     desc.plotting.plot_3d
     desc.plotting.plot_coils
+    desc.plotting.plot_field_lines
 
 
 Specialized Plots for QS Metrics

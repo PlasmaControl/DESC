@@ -2571,9 +2571,8 @@ def field_line_integrate(
     r0, z0 : array-like
         initial starting coordinates for r,z on phi=phis[0] plane
     phis : array-like
-        strictly increasing array of toroidal angles to output r,z at
-        Note that phis is the geometric toroidal agitngle for positive Bphi,
-        and the negative toroidal angle for negative Bphi
+        geometric toroidal angle values to output r,z at. Can be strictly increasing
+        or decreasing, but must be monotonic.
     field : MagneticField
         source of magnetic field to integrate
     params: dict, optional
@@ -2607,8 +2606,8 @@ def field_line_integrate(
     Returns
     -------
     r, z : ndarray
-        arrays of r, z coordinates at specified phi angles
-
+        arrays of r and z coordinates of the field line, corresponding to the
+        input phis
     """
     r0, z0, phis = map(jnp.asarray, (r0, z0, phis))
     assert r0.shape == z0.shape, "r0 and z0 must have the same shape"
@@ -2617,11 +2616,25 @@ def field_line_integrate(
     z0 = z0.flatten()
     x0 = jnp.array([r0, phis[0] * jnp.ones_like(r0), z0]).T
 
+    pos_BT = np.sign(field.compute_magnetic_field(x0)[0, 1]) > 0
+    pos_phi = phis[-1] > phis[0]
+
+    if not pos_BT:
+        # if Bphi is negative, we need to flip the field direction
+        # this doesn't change the field-line, but useful for integration
+        field_in_phi = ScaledMagneticField(-1.0, field)
+    else:
+        field_in_phi = field
+    if not pos_phi:
+        # if phis is decreasing, we need to use negative steps size
+        # to integrate in the right direction
+        min_step_size = -jnp.abs(min_step_size)
+
     @jit
     def odefun(s, rpz, args):
         rpz = rpz.reshape((3, -1)).T
         r = rpz[:, 0]
-        br, bp, bz = field.compute_magnetic_field(
+        br, bp, bz = field_in_phi.compute_magnetic_field(
             rpz, params, basis="rpz", source_grid=source_grid, chunk_size=chunk_size
         ).T
         return jnp.array(

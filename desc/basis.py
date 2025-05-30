@@ -90,6 +90,7 @@ class _Basis(IOAble, ABC):
             "cosine",
             "even",
             "cos(t)",
+            "no n=0",
             False,
             None,
         ], f"Unknown symmetry type {self.sym}"
@@ -105,6 +106,8 @@ class _Basis(IOAble, ABC):
             self._modes = self.modes[np.asarray(self.modes[:, 0] % 2 == 0)]
         elif self.sym == "cos(t)":  # cos(m*t) terms only
             self._modes = self.modes[np.asarray(sign(self.modes[:, 1]) >= 0)]
+        elif self.sym == "no n=0":  # no n=0 mode
+            self._modes = self.modes[np.asarray(self.modes[:, 2] != 0)]
         elif self.sym is None:
             self._sym = False
 
@@ -435,9 +438,10 @@ class FourierSeries(_Basis):
         Maximum toroidal resolution.
     NFP : int
         number of field periods
-    sym : {``'cos'``, ``'sin'``, False}
-        * ``'cos'`` for cos(m*t-n*z) symmetry
-        * ``'sin'`` for sin(m*t-n*z) symmetry
+    sym : {``'cos'``, ``'sin'``, ``'no n0'``, False}
+        * ``'cos'`` for cos(n*z) symmetry
+        * ``'sin'`` for sin(n*z) symmetry
+        * ``'no n=0'`` for no n=0 mode
         * ``False`` for no symmetry (Default)
 
     """
@@ -539,7 +543,7 @@ class FourierSeries(_Basis):
         """
         NFP = check_posint(NFP, "NFP")
         self._NFP = NFP if NFP is not None else self.NFP
-        if N != self.N:
+        if N != self.N or (sym is not None and sym != self.sym):
             self._N = check_nonnegint(N, "N", False)
             self._sym = sym if sym is not None else self.sym
             self._modes = self._get_modes(self.N)
@@ -690,7 +694,7 @@ class DoubleFourierSeries(_Basis):
         """
         NFP = check_posint(NFP, "NFP")
         self._NFP = NFP if NFP is not None else self.NFP
-        if M != self.M or N != self.N or sym != self.sym:
+        if M != self.M or N != self.N or (sym is not None and sym != self.sym):
             self._M = check_nonnegint(M, "M", False)
             self._N = check_nonnegint(N, "N", False)
             self._sym = sym if sym is not None else self.sym
@@ -898,7 +902,7 @@ class ZernikePolynomial(_Basis):
         None
 
         """
-        if L != self.L or M != self.M or sym != self.sym:
+        if L != self.L or M != self.M or (sym is not None and sym != self.sym):
             self._L = check_nonnegint(L, "L", False)
             self._M = check_nonnegint(M, "M", False)
             self._sym = sym if sym is not None else self.sym
@@ -1073,7 +1077,12 @@ class ChebyshevDoubleFourierBasis(_Basis):
         """
         NFP = check_posint(NFP, "NFP")
         self._NFP = NFP if NFP is not None else self.NFP
-        if L != self.L or M != self.M or N != self.N or sym != self.sym:
+        if (
+            L != self.L
+            or M != self.M
+            or N != self.N
+            or (sym is not None and sym != self.sym)
+        ):
             self._L = check_nonnegint(L, "L", False)
             self._M = check_nonnegint(M, "M", False)
             self._N = check_nonnegint(N, "N", False)
@@ -1311,7 +1320,12 @@ class FourierZernikeBasis(_Basis):
         """
         NFP = check_posint(NFP, "NFP")
         self._NFP = NFP if NFP is not None else self.NFP
-        if L != self.L or M != self.M or N != self.N or sym != self.sym:
+        if (
+            L != self.L
+            or M != self.M
+            or N != self.N
+            or (sym is not None and sym != self.sym)
+        ):
             self._L = check_nonnegint(L, "L", False)
             self._M = check_nonnegint(M, "M", False)
             self._N = check_nonnegint(N, "N", False)

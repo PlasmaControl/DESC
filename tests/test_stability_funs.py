@@ -683,7 +683,9 @@ def test_ballooning_stability_eval():
         data_keys = ["ideal ballooning lambda", "Newcomb ballooning metric"]
         data = eq.compute(data_keys, grid=grid)
 
-        lam2 = np.max(data["ideal ballooning lambda"])
+        lam2 = np.max(
+            jnp.reshape(data["ideal ballooning lambda"], (N_zeta - 2, -1))[:, 0]
+        )
         Newcomb_metric = data["Newcomb ballooning metric"]
 
         np.testing.assert_allclose(lam1, lam2, rtol=5e-5)
@@ -787,7 +789,9 @@ def test_ballooning_compare_with_COBRAVMEC():
         data_keys = ["ideal ballooning lambda"]
         data = eq.compute(data_keys, grid=grid)
 
-        lam2_array[i] = np.max(data["ideal ballooning lambda"])
+        lam2_array[i] = np.max(
+            np.reshape(data["ideal ballooning lambda"], (N0 - 2, -1))[:, 0]
+        )
 
     root_DESC = find_root_simple(np.array(surfaces), lam2_array)
     np.testing.assert_allclose(root_COBRAVMEC, root_DESC, rtol=4e-4)

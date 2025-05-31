@@ -2421,7 +2421,9 @@ def test_ballooning_stability_opt():
         data_keys = ["ideal ballooning lambda"]
         data = eq.compute(data_keys, grid=grid)
 
-        lam2_optimized[i] = np.max(data["ideal ballooning lambda"])
+        lam2_optimized[i] = np.max(
+            np.reshape(data["ideal ballooning lambda"], (N0 - 2, -1))[:, 0]
+        )
 
     assert lam2_initial - lam2_optimized >= 1.8e-2
 

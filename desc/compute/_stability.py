@@ -11,7 +11,7 @@ expensive computations.
 
 from scipy.constants import mu_0
 
-from desc.backend import jit, jnp, scan, vmap
+from desc.backend import jax, jit, jnp, scan, vmap
 
 from ..integrals.surface_integral import surface_integrals_map
 from ..utils import dot
@@ -265,7 +265,10 @@ def _magnetic_well(params, transforms, profiles, data, **kwargs):
     source_grid_requirement={"coordinates": "raz", "is_meshgrid": True},
     zeta0="array: points of vanishing integrated local shear to scan over. "
     "Default 15 points linearly spaced in [-π/2,π/2]",
+    # --no-verify Neigvals="int: Number of top eigenvalues to retain. "
+    # --no-verify "Default is 1",
 )
+# Neigvals above works for compute but not optimization
 def _ideal_ballooning_gamma2(params, transforms, profiles, data, **kwargs):
     """
     Ideal-ballooning growth rate finder.
@@ -398,11 +401,26 @@ def _ideal_ballooning_gamma2(params, transforms, profiles, data, **kwargs):
 
     A_redo = B_inv @ A @ jnp.transpose(B_inv, axes=(0, 1, 3, 2))
 
-    w, _ = jnp.linalg.eigh(A_redo)
-    # max over "zeta" axis, still a function of rho, alpha, zeta0
-    gamma = jnp.real(jnp.max(w, axis=(2,)))
+    # TODO: Try jax.scipy.eigh_tridiagonal for increased performance
+    w, v = jnp.linalg.eigh(A_redo)
 
-    data["ideal ballooning lambda"] = gamma.flatten()
+    flat_w = w.flatten()
+
+    top_eigvals, top_flat_indices = jax.lax.top_k(flat_w, k=N_zeta - 2)
+
+    # convert back to original shape
+    alpha_idx, zeta0_idx, theta_idx = jnp.unravel_index(top_flat_indices, w.shape)
+
+    # v becomes less than the precision at some theta points which gives NaNs
+    # stop_gradient prevents that. Not sure how it will affect an objective that
+    # requires both the eigenvalue and eigenfunction
+    top_eigenfuns = jnp.transpose(jax.lax.stop_gradient(v), axes=(0, 1, 3, 2))[
+        alpha_idx, zeta0_idx, theta_idx
+    ]
+    # Combine eigenvalue and eigenfunction data (Neigvals, Ntheta-1)
+    # Eigenvalues are on the top row
+    top_eigvals_and_eigfuns = jnp.concat((top_eigvals[:, None], top_eigenfuns), axis=1)
+    data["ideal ballooning lambda"] = top_eigvals_and_eigfuns.flatten()
 
     return data
 
@@ -626,5 +644,4 @@ def _Newcomb_ball_metric(params, transforms, profiles, data, **kwargs):
     )
 
     data["Newcomb ballooning metric"] = jnp.min(metric)
-
     return data

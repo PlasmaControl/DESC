@@ -373,6 +373,9 @@ class BallooningStability(_Objective):
     zeta0 : array-like
         Points of vanishing integrated local shear to scan over.
         Default 15 points in [-π/2,π/2]
+    Neigvals : int
+        Number of top eigenvalues to select.
+        Default is 1
     lambda0 : float
         Threshold for penalizing growth rates in metric above.
     w0, w1 : float
@@ -409,6 +412,7 @@ class BallooningStability(_Objective):
         nturns=3,
         nzetaperturn=200,
         zeta0=None,
+        Neigvals=None,
         lambda0=0.0,
         w0=1.0,
         w1=10.0,
@@ -423,6 +427,7 @@ class BallooningStability(_Objective):
         self._nturns = nturns
         self._nzetaperturn = nzetaperturn
         self._zeta0 = zeta0
+        self._Neigvals = Neigvals
         self._lambda0 = lambda0
         self._w0 = w0
         self._w1 = w1
@@ -504,6 +509,7 @@ class BallooningStability(_Objective):
         self._zeta0 = setdefault(
             self._zeta0, jnp.linspace(-0.5 * jnp.pi, 0.5 * jnp.pi, 15)
         )
+        self._Neigvals = setdefault(self._Neigvals, 1)
         self._dim_f = 1
         self._data_keys = ["ideal ballooning lambda"]
 
@@ -522,6 +528,7 @@ class BallooningStability(_Objective):
             "alpha": self._alpha,
             "zeta": zeta,
             "zeta0": self._zeta0,
+            "Neigvals": self._Neigvals,
             "lambda0": self._lambda0,
             "w0": self._w0,
             "w1": self._w1,
@@ -591,7 +598,7 @@ class BallooningStability(_Objective):
             iota=data["iota"],
         )
 
-        lam = compute_fun(
+        full_data = compute_fun(
             eq,
             self._data_keys,
             params,
@@ -602,6 +609,12 @@ class BallooningStability(_Objective):
         )["ideal ballooning lambda"]
 
         lambda0, w0, w1 = constants["lambda0"], constants["w0"], constants["w1"]
+
+        # If I used constants["Neigvals"], I get an error about static argnums
+        # Neigvals doesn't sit well with jit compilation
+        lam_idxs = jnp.arange(self._Neigvals, dtype=int) * (len(constants["zeta"]) - 1)
+
+        lam = full_data[lam_idxs]
 
         # Shifted ReLU operation
         data = (lam - lambda0) * (lam >= lambda0)

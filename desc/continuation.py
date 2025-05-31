@@ -36,6 +36,7 @@ def _solve_axisym(
 
     surface = eq.surface
     pressure = eq.pressure
+
     L, M, L_grid, M_grid = eq.L, eq.M, eq.L_grid, eq.M_grid
     spectral_indexing = eq.spectral_indexing
 
@@ -94,11 +95,14 @@ def _solve_axisym(
             Li = int(np.ceil(L / M * Mi))
             L_gridi = np.ceil(L_grid / L * Li).astype(int)
             M_gridi = np.ceil(M_grid / M * Mi).astype(int)
-            eqi.change_resolution(Li, Mi, Ni, L_gridi, M_gridi, N_gridi)
+            eqi.change_resolution(
+                L=Li, M=Mi, N=Ni, L_grid=L_gridi, M_grid=M_gridi, N_grid=N_gridi
+            )
 
             surf_i = eqi.surface
             surf_i2 = surface.copy()
             surf_i2.change_resolution(Li, Mi, Ni)
+
             deltas = get_deltas({"surface": surf_i}, {"surface": surf_i2})
             surf_i = surf_i2
 

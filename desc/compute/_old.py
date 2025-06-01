@@ -64,7 +64,7 @@ def _compute(fun, fun_data, data, grid, num_pitch, surf_batch_size=1, simp=False
         simp=simp,
     )
     out = batch_map(fun, fun_data, surf_batch_size)
-    # --no-verify assert out.ndim == 1
+    assert out.ndim == 1
     return grid.expand(out)
 
 
@@ -370,136 +370,6 @@ def _Gamma_c_Velasco_1D(params, transforms, profiles, data, **kwargs):
     data["old Gamma_c Velasco"] = (
         _compute(
             Gamma_c,
-            {"cvdrift0": data["cvdrift0"], "gbdrift": data["gbdrift"]},
-            data,
-            grid,
-            num_pitch,
-            surf_batch_size,
-        )
-        / data["fieldline length"]
-    )
-    return data
-
-
-@register_compute_fun(
-    name="effective ripple",
-    label="\\epsilon_{\\mathrm{eff}}",
-    units="~",
-    units_long="None",
-    description="Neoclassical transport in the banana regime",
-    dim=1,
-    params=[],
-    transforms={},
-    profiles=[],
-    coordinates="r",
-    data=["effective ripple 3/2"],
-)
-def _effective_ripple(params, transforms, profiles, data, **kwargs):
-    """Proxy for neoclassical transport in the banana regime.
-
-    A 3D stellarator magnetic field admits ripple wells that lead to enhanced
-    radial drift of trapped particles. In the banana regime, neoclassical (thermal)
-    transport from ripple wells can become the dominant transport channel.
-    The effective ripple (ε) proxy estimates the neoclassical transport
-    coefficients in the banana regime.
-    """
-    data["effective ripple"] = data["effective ripple 3/2"] ** (2 / 3)
-    return data
-
-
-@register_compute_fun(
-    name="old Gamma_d Velasco",
-    label=(
-        # Γ_c = π/(8√2) ∫dλ 〈 ∑ⱼ [v τ γ_c²]ⱼ 〉
-        "\\Gamma_d = \\frac{\\pi}{8 \\sqrt{2}} "
-        "\\int d\\lambda \\langle \\sum_j (v \\tau \\gamma_c^2)_j \\rangle"
-    ),
-    units="~",
-    units_long="None",
-    description="Fast ion confinement proxy "
-    "as defined by Velasco et al. (doi:10.1088/1741-4326/ac2994)",
-    dim=1,
-    params=[],
-    transforms={"grid": []},
-    profiles=[],
-    coordinates="r",
-    data=["min_tz |B|", "max_tz |B|", "cvdrift0", "gbdrift", "fieldline length"]
-    + Bounce1D.required_names,
-    source_grid_requirement={"coordinates": "raz", "is_meshgrid": True},
-    **_bounce1D_doc,
-)
-@partial(
-    jit,
-    static_argnames=[
-        "num_well",
-        "num_quad",
-        "num_pitch",
-        "surf_batch_size",
-        "gammac_thresh",
-    ],
-)
-def _old_Gamma_d_Velasco(params, transforms, profiles, data, **kwargs):
-    """Energetic ion confinement proxy as defined by Velasco et al.
-
-    A model for the fast evaluation of prompt losses of energetic ions in stellarators.
-    J.L. Velasco et al. 2021 Nucl. Fusion 61 116059.
-    https://doi.org/10.1088/1741-4326/ac2994.
-    Equation 22.
-
-    Gamma_d incorporates a step function on the Gamma_c proxy to detect whether
-    a superbanana exists or not for that value of λ.
-    """
-    # noqa: unused dependency
-    num_well = kwargs.get("num_well", None)
-    num_pitch = kwargs.get("num_pitch", 64)
-    surf_batch_size = kwargs.get("surf_batch_size", 1)
-    gammac_thresh = kwargs.get("gammac_thresh", 0.2)
-    quad = (
-        kwargs["quad"]
-        if "quad" in kwargs
-        else get_quadrature(
-            leggauss(kwargs.get("num_quad", 32)),
-            (automorphism_sin, grad_automorphism_sin),
-        )
-    )
-
-    def Gamma_d(data):
-        bounce = Bounce1D(grid, data, quad, is_reshaped=True)
-        points = bounce.points(data["pitch_inv"], num_well)
-        v_tau, radial_drift, poloidal_drift = bounce.integrate(
-            [_v_tau, _radial_drift, _poloidal_drift],
-            data["pitch_inv"],
-            data,
-            ["cvdrift0", "gbdrift"],
-            points,
-        )
-        # This is γ_c.
-        gamma_c = (
-            2 / jnp.pi * jnp.arctan(safediv(radial_drift, poloidal_drift)).sum(axis=-1)
-        )
-        v_tau = v_tau.sum(axis=-1)
-
-        # Shape of gamma_d (alpha, rho, lambda, wells)
-        # Summing over all the wells (the inner most sum),
-        # finding the maximum over all alphas.
-        # filtering out values above threshold in lambda.
-        # After these operations, array should be of the type (rho, 1, lambda)
-        max_indices = jnp.argmax(gamma_c, axis=-2)
-        broadcast_indices = jnp.expand_dims(max_indices, axis=-2)
-        gamma_c_max = jnp.take_along_axis(gamma_c, broadcast_indices, axis=-2)
-        gamma_c_1 = jnp.heaviside(gamma_c_max - gammac_thresh, 0.0)
-        v_tau = v_tau.mean(axis=-2)
-        gamma_c_1 = gamma_c_1 / v_tau
-
-        return jnp.sum(
-            gamma_c_1 * data["pitch_inv weight"] / data["pitch_inv"] ** 2,
-            axis=-1,
-        )
-
-    grid = transforms["grid"].source_grid
-    data["old Gamma_d Velasco"] = (
-        _compute(
-            Gamma_d,
             {"cvdrift0": data["cvdrift0"], "gbdrift": data["gbdrift"]},
             data,
             grid,

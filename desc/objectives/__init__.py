@@ -26,7 +26,7 @@ from ._equilibrium import (
     HelicalForceBalance,
     RadialForceBalance,
 )
-from ._fast_ion import Gamma_alpha, Gamma_delta, GammaC, GammaC_Velasco
+from ._fast_ion import GammaC
 from ._free_boundary import BoundaryError, VacuumBoundaryError
 from ._generic import (
     ExternalObjective,

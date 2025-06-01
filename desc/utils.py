@@ -956,6 +956,7 @@ def safediv(a, b, fill=0, threshold=0):
         Value to return where b is zero.
     threshold : float >= 0
         How small is b allowed to be.
+
     """
     mask = jnp.abs(b) <= threshold
     num = jnp.where(mask, fill, a)

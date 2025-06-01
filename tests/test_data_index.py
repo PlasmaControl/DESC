@@ -129,7 +129,7 @@ def test_data_index_deps():
                 name not in queried_deps[p],
                 AssertionError,
                 "Did you reuse the function name (i.e. def_...) for"
-                f" '{name}' for some other quantity?",
+                f" '{err_msg}' for some other quantity?",
             )
             # assert correct dependencies are queried
             if not queried_deps[p][name]["ignore"]:

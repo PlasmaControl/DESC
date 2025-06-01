@@ -234,6 +234,7 @@ Objective Functions
     desc.objectives.ObjectiveFromUser
     desc.objectives.ObjectiveFunction
     desc.objectives.Omnigenity
+    desc.objectives.PlasmaCoilSetDistanceBound
     desc.objectives.PlasmaCoilSetMinDistance
     desc.objectives.PlasmaVesselDistance
     desc.objectives.Pressure

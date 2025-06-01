@@ -948,7 +948,10 @@ def plot_3d(
 
     Examples
     --------
-    .. image:: ../../_static/images/plotting/plot_3d.png
+    .. raw:: html
+
+        <iframe src="../../_static/images/plotting/plot_3d.html"
+        width="100%" height="980" frameborder="0"></iframe>
 
     .. code-block:: python
 
@@ -1866,6 +1869,32 @@ def poincare_plot(
         Axes being plotted to.
     plot_data : dict
         Dictionary of the data plotted, only returned if ``return_data=True``
+
+    Examples
+    --------
+    .. image:: ../../_static/images/plotting/poincare_plot.png
+
+    .. code-block:: python
+
+        from desc.plotting import poincare_plot
+        grid_trace = LinearGrid(rho=np.linspace(0.4, 0.9, 7))
+        r0 = eq.compute("R", grid=grid_trace)["R"]
+        z0 = eq.compute("Z", grid=grid_trace)["Z"]
+        fig, ax = desc.plotting.poincare_plot(
+            field,
+            r0,
+            z0,
+            NFP=eq.NFP,
+            color="k",
+            size=0.5,
+            ntransit=100
+        )
+        grid_trace2 = LinearGrid(rho=np.linspace(0.52, 0.55, 4))
+        r0 = eq.compute("R", grid=grid_trace2)["R"]
+        z0 = eq.compute("Z", grid=grid_trace2)["Z"]
+        fig, ax = desc.plotting.poincare_plot(
+            field, r0, z0, NFP=eq.NFP, ax=ax, color="r", size=0.5, ntransit=250
+        )
     """
     fli_kwargs = {}
     for key in inspect.signature(field_line_integrate).parameters:
@@ -2493,6 +2522,8 @@ def plot_coils(coils, grid=None, fig=None, return_data=False, **kwargs):
           True by default.
         * ``zeroline``: Bool, whether or not to show the zero coordinate axis lines.
           True by default.
+        * ``check_intersection``: Bool, whether or not to check the intersection of
+          the coils before plotting. False by default.
 
     Returns
     -------
@@ -2500,6 +2531,20 @@ def plot_coils(coils, grid=None, fig=None, return_data=False, **kwargs):
         Figure being plotted to
     plot_data : dict
         Dictionary of the data plotted, only returned if ``return_data=True``
+
+    Examples
+    --------
+    .. raw:: html
+
+        <iframe src="../../_static/images/plotting/plot_coils.html"
+        width="100%" height="980" frameborder="0"></iframe>
+
+    .. code-block:: python
+
+        from desc.plotting import plot_coils
+        from desc.coils import initialize_modular_coils
+        coils = initialize_modular_coils(eq, num_coils=4, r_over_a=2)
+        plot_coils(coils)
 
     """
     lw = kwargs.pop("lw", 5)
@@ -2511,6 +2556,7 @@ def plot_coils(coils, grid=None, fig=None, return_data=False, **kwargs):
     zeroline = kwargs.pop("zeroline", True)
     showticklabels = kwargs.pop("showticklabels", True)
     showaxislabels = kwargs.pop("showaxislabels", True)
+    check_intersection = kwargs.pop("check_intersection", False)
     errorif(
         len(kwargs) != 0,
         ValueError,
@@ -2531,13 +2577,16 @@ def plot_coils(coils, grid=None, fig=None, return_data=False, **kwargs):
     if grid is None:
         grid = LinearGrid(N=400, endpoint=True)
 
-    def flatten_coils(coilset):
+    def flatten_coils(coilset, check_intersection=check_intersection):
         if hasattr(coilset, "__len__"):
             if hasattr(coilset, "_NFP") and hasattr(coilset, "_sym"):
                 if not unique and (coilset.NFP > 1 or coilset.sym):
                     # plot all coils for symmetric coil sets
                     coilset = CoilSet.from_symmetry(
-                        coilset, NFP=coilset.NFP, sym=coilset.sym
+                        coilset,
+                        NFP=coilset.NFP,
+                        sym=coilset.sym,
+                        check_intersection=check_intersection,
                     )
             return [a for i in coilset for a in flatten_coils(i)]
         else:

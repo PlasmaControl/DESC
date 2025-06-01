@@ -24,7 +24,7 @@ from .data_index import register_compute_fun
     label="V",
     units="m^{3}",
     units_long="cubic meters",
-    description="Volume scaled by max(ρ)⁻² to extrapolate to last closed flux surface",
+    description="Volume extrapolated to last closed flux surface",
     dim=0,
     params=[],
     transforms={"grid": []},
@@ -210,7 +210,7 @@ def _compute_A_of_z(grid, data, extrap=False, mean=False, expand_out=False):
     units="m^{2}",
     units_long="square meters",
     description="Area of enclosed cross-section (enclosed constant zeta surface), "
-    "scaled by max(ρ)⁻² to extrapolate to last closed flux surface",
+    "extrapolated to last closed flux surface",
     dim=1,
     params=[],
     transforms={"grid": []},
@@ -235,7 +235,7 @@ def _A_of_z(params, transforms, profiles, data, **kwargs):
     units="m^{2}",
     units_long="square meters",
     description="Average enclosed cross-sectional (constant zeta surface) area, "
-    "scaled by max(ρ)⁻² to extrapolate to last closed flux surface",
+    "extrapolated to last closed flux surface",
     dim=0,
     params=[],
     transforms={"grid": []},
@@ -257,7 +257,7 @@ def _A(params, transforms, profiles, data, **kwargs):
     units="m^{2}",
     units_long="square meters",
     description="Area of enclosed cross-section (enclosed constant zeta surface), "
-    "scaled by max(ρ)⁻² to extrapolate to last closed flux surface",
+    "extrapolated to last closed flux surface",
     dim=1,
     params=[],
     transforms={"grid": []},
@@ -282,7 +282,7 @@ def _A_of_z_cross_section_surface(params, transforms, profiles, data, **kwargs):
     units="m^{2}",
     units_long="square meters",
     description="Average enclosed cross-sectional (constant zeta surface) area, "
-    "scaled by max(ρ)⁻² to extrapolate to last closed flux surface",
+    "extrapolated to last closed flux surface",
     dim=0,
     params=[],
     transforms={"grid": []},
@@ -373,8 +373,8 @@ def _A_of_r(params, transforms, profiles, data, **kwargs):
     label="S",
     units="m^{2}",
     units_long="square meters",
-    description="Surface area of outermost flux surface, scaled by max(ρ)⁻¹"
-    " to extrapolate to last closed flux surface",
+    description="Surface area of outermost flux surface, "
+    "extrapolated to last closed flux surface",
     dim=0,
     params=[],
     transforms={"grid": []},
@@ -547,7 +547,7 @@ def _R0_over_a(params, transforms, profiles, data, **kwargs):
     units="m",
     units_long="meters",
     description="Perimeter of enclosed cross-section (enclosed constant zeta surface), "
-    "scaled by max(ρ)⁻¹, as function of zeta",
+    "extrapolated to last closed flux surface",
     dim=1,
     params=[],
     transforms={"grid": []},

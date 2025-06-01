@@ -20,11 +20,13 @@ Optionally can also contract the profiles of the original ``Equilibrium`` so tha
 
 Performance Improvements
 
+- [Integrate on boundary to compute length scale quantities](https://github.com/PlasmaControl/DESC/pull/1094#issue-2387036357).
 - `ProximalProjection` uses jvp's for the derivative of the `ForceBalance` part instead of manually taking the matrix products. This reduces the jacobian time on CPU.
 - Improves memory management to reduce the base memory used during optimization while using `lsq-exact`, `lsq-auglag` and `fmin-auglag` optimizers.
 
 Bug Fixes
 
+- Some quantities require a grid that samples the full flux surface for correct computation. Attempts to compute these quantities on grids which lack sufficient coverage of the surface will now error.
 - Fixes bug where ``ObjectiveFunction`` was incorrectly using ``deriv_mode="batched"`` and the heuristic-set ``jac_chunk_size`` when ``jac_chunk_size`` is given to a sub-objective, where it should have instead defaulted to ``deriv_mode="blocked"``. See #1687
 - Allows ``x_scale`` to be passed to ``factorize_linear_constraints`` in ``Optimizer.optimize`` through the new ``"linear_constraint_options"``.
 - Fixes bug where `ProximalProjection` was using wrong `jac_chunk_size` internally and using more memory than one would expect given the `jac_chunk_size`. This fix gives separate `blocked` and `batched` methods to `ProximalProjection`.

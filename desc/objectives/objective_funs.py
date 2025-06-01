@@ -328,16 +328,10 @@ class ObjectiveFunction(IOAble):
         self._set_things()
 
         # setting derivative mode and chunking.
-        errorif(
-            isposint(self._jac_chunk_size) and self._deriv_mode in ["auto", "blocked"],
-            ValueError,
-            "'jac_chunk_size' was passed into ObjectiveFunction, but the "
-            "ObjectiveFunction is not using 'batched' deriv_mode",
-        )
         sub_obj_jac_chunk_sizes_are_ints = [
             isposint(obj._jac_chunk_size) for obj in self.objectives
         ]
-        sub_obj_chunk_sizes = [
+        sub_obj_chunk_sizes_names = [
             (obj.__class__.__name__, obj._jac_chunk_size) for obj in self.objectives
         ]
         errorif(
@@ -351,7 +345,7 @@ class ObjectiveFunction(IOAble):
             "ObjectiveFunction if each sub-objective is desired to have a \n"
             "different 'jac_chunk_size' for its Jacobian computation. \n"
             "`jac_chunk_size` of sub-objective(s): \n"
-            f"{sub_obj_chunk_sizes}\n"
+            f"{sub_obj_chunk_sizes_names}\n"
             f"Note: If you didn't specify 'jac_chunk_size' for the sub-objectives, \n"
             "it might be that sub-objective has an internal logic to determine the \n"
             "chunk size based on the available memory.",
@@ -365,6 +359,13 @@ class ObjectiveFunction(IOAble):
             else:
                 self._deriv_mode = "blocked"
 
+        errorif(
+            isposint(self._jac_chunk_size) and self._deriv_mode in ["blocked"],
+            ValueError,
+            "'jac_chunk_size' was passed into ObjectiveFunction, but the "
+            "ObjectiveFunction is not using 'batched' deriv_mode",
+        )
+
         if self._jac_chunk_size == "auto":
             # Heuristic estimates of fwd mode Jacobian memory usage,
             # slightly conservative, based on using ForceBalance as the objective
@@ -375,10 +376,15 @@ class ObjectiveFunction(IOAble):
                 * self.dim_x
             )
             self._jac_chunk_size = max([1, max_chunk_size])
-            if self._deriv_mode == "blocked":
-                for obj in self.objectives:
-                    if obj._jac_chunk_size is None:
-                        obj._jac_chunk_size = self._jac_chunk_size
+        if self._deriv_mode == "blocked" and len(self.objectives) > 1:
+            # blocked mode should never use this chunk size if there
+            # are multiple sub-objectives
+            self._jac_chunk_size = None
+        elif self._deriv_mode == "blocked" and len(self.objectives) == 1:
+            # if there is only one objective i.e. wrapped ForceBalance in
+            # ProximalProjection, we can use the chunk size of
+            # that objective as if this is batched mode
+            self._jac_chunk_size = self.objectives[0]._jac_chunk_size
 
         if not self.use_jit:
             self._unjit()
@@ -549,7 +555,12 @@ class ObjectiveFunction(IOAble):
         constants : list
             Constant parameters passed to sub-objectives.
 
+        Returns
+        -------
+        values: dict
+            Dictionary mapping objective titles/names to residual values.
         """
+        out = {}
         if constants is None:
             constants = self.constants
         if self.compiled and self._compile_mode in {"scalar", "all"}:
@@ -567,10 +578,13 @@ class ObjectiveFunction(IOAble):
                 f"{'Total (sum of squares): ':<{PRINT_WIDTH}}"
                 + "{:10.3e}  -->  {:10.3e}, ".format(f0, f)
             )
+            temp_out = {"f": f, "f0": f0}
         else:
             print(
                 f"{'Total (sum of squares): ':<{PRINT_WIDTH}}" + "{:10.3e}, ".format(f)
             )
+            temp_out = {"f": f}
+        out["Total (sum of squares)"] = temp_out
         params = self.unpack_state(x)
         assert len(params) == len(constants) == len(self.objectives)
         if x0 is not None:
@@ -579,11 +593,19 @@ class ObjectiveFunction(IOAble):
             for par, par0, obj, const in zip(
                 params, params0, self.objectives, constants
             ):
-                obj.print_value(par, par0, constants=const)
+                outi = obj.print_value(par, par0, constants=const)
+                if obj._print_value_fmt in out:
+                    out[obj._print_value_fmt].append(outi)
+                else:
+                    out[obj._print_value_fmt] = [outi]
         else:
             for par, obj, const in zip(params, self.objectives, constants):
-                obj.print_value(par, constants=const)
-        return None
+                outi = obj.print_value(par, constants=const)
+                if obj._print_value_fmt in out:
+                    out[obj._print_value_fmt].append(outi)
+                else:
+                    out[obj._print_value_fmt] = [outi]
+        return out
 
     def unpack_state(self, x, per_objective=True):
         """Unpack the state vector into its components.
@@ -1386,9 +1408,10 @@ class _Objective(IOAble, ABC):
         """
         return self._jvp(v, x, constants, "unscaled")
 
-    def print_value(self, args, args0=None, **kwargs):
-        """Print the value of the objective."""
+    def print_value(self, args, args0=None, **kwargs):  # noqa: C901
+        """Print the value of the objective and return a dict of values."""
         # compute_unscaled is jitted so better to use than than bare compute
+        out = {}
         if args0 is not None:
             f = self.compute_unscaled(*args, **kwargs)
             f0 = self.compute_unscaled(*args0, **kwargs)
@@ -1410,16 +1433,26 @@ class _Objective(IOAble, ABC):
             f = jnp.linalg.norm(self._shift(f))
             f0 = jnp.linalg.norm(self._shift(f0))
             print(print_value_fmt.format(f0, f) + self._units)
+            out["f"] = f
+            if args0 is not None:
+                out["f0"] = f0
 
         elif self.scalar:
             # dont need min/max/mean of a scalar
             fs = f.squeeze()
             f0s = f0.squeeze()
             print(print_value_fmt.format(f0s, fs) + self._units)
+            out["f"] = fs
+            if args0 is not None:
+                out["f0"] = f0s
             if self._normalize and self._units != "(dimensionless)":
                 fs_norm = self._scale(self._shift(f)).squeeze()
                 f0s_norm = self._scale(self._shift(f0)).squeeze()
                 print(print_value_fmt.format(f0s_norm, fs_norm) + "(normalized error)")
+                out["f_norm"] = fs_norm
+                if args0 is not None:
+                    out["f0_norm"] = f0s_norm
+
         else:
             # try to do weighted mean if possible
             constants = kwargs.get("constants", self.constants)
@@ -1457,18 +1490,27 @@ class _Objective(IOAble, ABC):
                 + print_value_fmt.format(f0max, fmax)
                 + self._units
             )
+            out["f_max"] = fmax
+            if args0 is not None:
+                out["f0_max"] = f0max
             print(
                 "Minimum "
                 + ("absolute " if abserr else "")
                 + print_value_fmt.format(f0min, fmin)
                 + self._units
             )
+            out["f_min"] = fmin
+            if args0 is not None:
+                out["f0_min"] = f0min
             print(
                 "Average "
                 + ("absolute " if abserr else "")
                 + print_value_fmt.format(f0mean, fmean)
                 + self._units
             )
+            out["f_mean"] = fmean
+            if args0 is not None:
+                out["f0_mean"] = f0mean
 
             if self._normalize and self._units != "(dimensionless)":
                 fmax_norm = fmax / jnp.mean(self.normalization)
@@ -1485,18 +1527,28 @@ class _Objective(IOAble, ABC):
                     + print_value_fmt.format(f0max_norm, fmax_norm)
                     + "(normalized)"
                 )
+                out["f_max_norm"] = fmax_norm
+                if args0 is not None:
+                    out["f0_max_norm"] = f0max_norm
                 print(
                     "Minimum "
                     + ("absolute " if abserr else "")
                     + print_value_fmt.format(f0min_norm, fmin_norm)
                     + "(normalized)"
                 )
+                out["f_min_norm"] = fmin_norm
+                if args0 is not None:
+                    out["f0_min_norm"] = f0min_norm
                 print(
                     "Average "
                     + ("absolute " if abserr else "")
                     + print_value_fmt.format(f0mean_norm, fmean_norm)
                     + "(normalized)"
                 )
+                out["f_mean_norm"] = fmean_norm
+                if args0 is not None:
+                    out["f0_mean_norm"] = f0mean_norm
+        return out
 
     def xs(self, *things):
         """Return a tuple of args required by this objective from optimizable things."""

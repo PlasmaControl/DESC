@@ -3,7 +3,7 @@ from functools import partial
 from desc.backend import jit, jnp
 from desc.basis import DoubleFourierSeries
 from desc.grid import LinearGrid
-from desc.integrals._vacuum import _fixed_point_Phi, _lsmr_Phi
+from desc.integrals._vacuum import _fixed_point_Phi, _lsmr_Phi, _surface_gradient
 from desc.integrals.singularities import (
     _dx,
     _kernel_biot_savart,
@@ -44,6 +44,11 @@ def virtual_casing_biot_savart(
 
     Where we have defined the virtual casing sheet current K_vc = 𝐧' × 𝐁(𝐫')
 
+    References
+    ----------
+       [1] Hanson, James D. "The virtual-casing principle and Helmholtz’s theorem."
+       Plasma Physics and Controlled Fusion 57.11 (2015): 115006.
+
     Parameters
     ----------
     eval_data : dict
@@ -67,11 +72,6 @@ def virtual_casing_biot_savart(
     -------
     f : ndarray, shape(eval_grid.num_nodes, kernel.ndim)
         Integral transform evaluated at eval_grid. Vectors are in rpz basis.
-
-    References
-    ----------
-    .. [1] Hanson, James D. "The virtual-casing principle and Helmholtz’s theorem."
-       Plasma Physics and Controlled Fusion 57.11 (2015): 115006.
 
     """
     return singular_integral(
@@ -111,6 +111,11 @@ def compute_B_plasma(
 
     Where we have defined the virtual casing sheet current K_vc = 𝐧' × 𝐁(𝐫')
 
+    References
+    ----------
+       [1] Hanson, James D. "The virtual-casing principle and Helmholtz’s theorem."
+       Plasma Physics and Controlled Fusion 57.11 (2015): 115006.
+
     Parameters
     ----------
     eq : Equilibrium
@@ -131,11 +136,6 @@ def compute_B_plasma(
     f : ndarray, shape(eval_grid.num_nodes, 3) or shape(eval_grid.num_nodes,)
         Magnetic field evaluated at eval_grid.
         If normal_only=False, vector B is in rpz basis.
-
-    References
-    ----------
-    .. [1] Hanson, James D. "The virtual-casing principle and Helmholtz’s theorem."
-       Plasma Physics and Controlled Fusion 57.11 (2015): 115006.
 
     """
     if source_grid is None:
@@ -165,11 +165,13 @@ def compute_B_plasma(
     return Bplasma
 
 
-# TODO: Constrain secular terms in potential.
 class FreeBoundarySolver(IOAble):
     """Compute exterior field for free boundary problem.
 
-    See shared article for detailed description.
+    References
+    ----------
+       [1] Unalmis et al. New high-order accurate free surface stellarator
+           equilibria optimization and boundary integral methods in DESC.
 
     Parameters
     ----------
@@ -177,7 +179,15 @@ class FreeBoundarySolver(IOAble):
         Geometry defining ∂𝒳.
     B_coil : _MagneticField
         Magnetic field produced by coils.
-        as would be computed by ``eq.compute(["I","G"]).
+    G_coil : float or None
+        Net poloidal coil current.
+        If given ``None`` will be computed via A.3 in [1].
+    G_plasma : float
+        Net poloidal plasma current.
+        May be computed via A.3 in [1] with V = B_plasma.
+        For parallel free boundary computations this parameter must be consistent
+        with the rotational transform and flux given to the inner free boundary
+        solver. See section 5.2.3 in [1].
     evl_grid : Grid
         Evaluation points on ∂𝒳 for the magnetic field.
     src_grid : Grid
@@ -185,14 +195,14 @@ class FreeBoundarySolver(IOAble):
         Default resolution is ``src_grid.M=surface.M*4`` and ``src_grid.N=surface.N*4``.
     Phi_grid : Grid
         Interpolation points on ∂𝒳.
-        Resolution determines accuracy of Φ interpolation.
-        Default resolution is ``Phi_grid.M=surface.M*2`` and ``Phi_grid.N=surface.N*2``.
+        Resolution determines accuracy of interpolation for quadrature.
+        Default is same as source grid; lower will slow convergence.
     Phi_M : int
         Poloidal Fourier resolution to interpolate Φ on ∂𝒳.
-        Should be at most ``Phi_grid.M``.
+        Should be at most ``Phi_grid.M``, recommended to be less.
     Phi_N : int
         Toroidal Fourier resolution to interpolate Φ on ∂𝒳.
-        Should be at most ``Phi_grid.N``.
+        Should be at most ``Phi_grid.N``, recommended to be less.
     sym
         Symmetry for basis which interpolates Φ.
         Default assumes no symmetry.
@@ -200,6 +210,8 @@ class FreeBoundarySolver(IOAble):
         Size to split computation into chunks.
         If no chunking should be done or the chunk size is the full input
         then supply ``None``. Default is ``None``.
+        Recommend to verify computation with ``chunk_size`` set to a small number
+        due to bugs in Google's JAX or the XLA software.
     use_dft : bool
         Whether to use matrix multiplication transform from spectral to physical domain
         instead of inverse fast Fourier transform.
@@ -210,6 +222,8 @@ class FreeBoundarySolver(IOAble):
         self,
         surface,
         B_coil,
+        G_coil,
+        G_plasma,
         evl_grid,
         src_grid=None,
         Phi_grid=None,
@@ -233,12 +247,7 @@ class FreeBoundarySolver(IOAble):
                 N=surface.N * 4,
                 NFP=surface.NFP if surface.N > 0 else 64,
             )
-        if Phi_grid is None:
-            Phi_grid = LinearGrid(
-                M=surface.M * 2,
-                N=surface.N * 2,
-                NFP=surface.NFP if surface.N > 0 else 64,
-            )
+        Phi_grid = setdefault(Phi_grid, src_grid)
         self._same_grid_phi_src = src_grid.equiv(Phi_grid)
 
         errorif(
@@ -257,20 +266,36 @@ class FreeBoundarySolver(IOAble):
         )
 
         # Compute data on source grid.
-        geometric_names = ["x", "n_rho", "|e_theta x e_zeta|", "e_theta", "e_zeta"]
-        src_data = surface.compute(geometric_names, grid=src_grid)
+        names = [
+            "x",
+            "n_rho",
+            "|e_theta x e_zeta|",
+            "e_theta",
+            "e_zeta",
+            "n_rho x grad(theta)",
+            "n_rho x grad(zeta)",
+        ]
+        src_data = surface.compute(names, grid=src_grid)
         # Compute data on Phi grid.
         if self._same_grid_phi_src:
             Phi_data = src_data
         else:
-            Phi_data = surface.compute(geometric_names, grid=Phi_grid)
+            Phi_data = surface.compute(names, grid=Phi_grid)
         self._phi_transform = Transform(Phi_grid, basis, derivs=1, build_pinv=True)
-        Phi_data["n x B_coil"] = cross(
-            Phi_data["n_rho"],
-            B_coil.compute_magnetic_field(
-                coords=Phi_data["x"], source_grid=src_grid, chunk_size=chunk_size
-            ),
+
+        Bcoil = B_coil.compute_magnetic_field(
+            coords=Phi_data["x"], source_grid=src_grid, chunk_size=chunk_size
         )
+        Phi_data["n_rho x B_coil"] = cross(Phi_data["n_rho"], Bcoil)
+        if G_coil is None:
+            assert Phi_grid.can_fft2
+            # A.3 in [1] averaged over all χ_θ for increased accuracy since we
+            # only have discrete interpolation to true B_coil.
+            # (l2 norm error of fourier series better than max pointwise).
+            self._G_coil = dot(Bcoil, Phi_data["e_zeta"]).mean()
+        else:
+            self._G_coil = G_coil
+
         # Compute data on evaluation grid.
         if evl_grid.equiv(Phi_grid):
             evl_data = Phi_data
@@ -280,7 +305,7 @@ class FreeBoundarySolver(IOAble):
             if not self._same_grid_phi_src and evl_grid.equiv(src_grid):
                 evl_data = src_data
             else:
-                evl_data = surface.compute(geometric_names, grid=evl_grid)
+                evl_data = surface.compute(names, grid=evl_grid)
 
         self._data = {"evl": evl_data, "Phi": Phi_data, "src": src_data}
         self._interpolator = {
@@ -371,38 +396,37 @@ class FreeBoundarySolver(IOAble):
         if "|B_out|^2" in self._data["evl"]:
             return self._data
         self._data = self.compute_Phi(chunk_size)
-        B_out_tan = _surf_grad(
+        B_out_tan = _surface_gradient(
             self._data["evl"], self._evl_transform, self._data["Phi"]["Phi_mn"]
         )
         self._data["evl"]["|B_out|^2"] = dot(B_out_tan, B_out_tan)
         return self._data
 
 
-def _surf_grad(data, transform, c):
-    assert c.size == transform.basis.num_modes
-    f_t = transform.transform(c, dt=1)[:, jnp.newaxis]
-    f_z = transform.transform(c, dz=1)[:, jnp.newaxis]
-    return (f_t * data["e_zeta"] - f_z * data["e_theta"]) / data["|e_theta x e_zeta|"][
-        :, jnp.newaxis
-    ]
-
-
-def _surf_grad_mat(data, basis, grid):
+def _sg_mat(data, basis, grid):
+    """Returns n × ∇ in shape (num nodes * 3, num modes)."""
     _t = basis.evaluate(grid, [0, 1, 0])[:, jnp.newaxis]
     _z = basis.evaluate(grid, [0, 0, 1])[:, jnp.newaxis]
-    return (
-        _t * data["e_zeta"][..., jnp.newaxis] - _z * data["e_theta"][..., jnp.newaxis]
-    ) / data["|e_theta x e_zeta|"][:, jnp.newaxis, jnp.newaxis]
+    sg = (
+        _t * data["n_rho x grad(theta)"][..., jnp.newaxis]
+        + _z * data["n_rho x grad(zeta)"][..., jnp.newaxis]
+    )
+    return sg.reshape(grid.num_nodes * 3, basis.num_modes)
 
 
 def _free_boundary_bc(self, chunk_size=None):
     """Returns γ = (n × ∇)⁻¹ (n × B_coil)."""
-    if "gamma" in self._data["Phi"]:
+    data = self._data["Phi"]
+    if "gamma" in data:
         return self._data
 
-    mat = _surf_grad_mat(self._data["Phi"], self.basis, self.Phi_grid).reshape(
-        self.Phi_grid.num_nodes * 3, self.basis.num_modes
-    )
-    gamma = jnp.linalg.lstsq(mat, self._data["Phi"]["n x B_coil"].ravel())[0]
-    self._data["Phi"]["gamma"] = self._phi_transform.transform(gamma)
+    sg_gamma_periodic = (
+        data["n_rho x B_coil"] - self._G_coil * data["n_rho x grad(zeta)"]
+    ).ravel()
+    gamma_periodic = jnp.linalg.lstsq(
+        _sg_mat(data, self.basis, self.Phi_grid), sg_gamma_periodic
+    )[0]
+    gamma_periodic = self._phi_transform.transform(gamma_periodic)
+    gamma_secular = self._G_coil * self.Phi_grid.nodes[:, 2]
+    self._data["Phi"]["gamma"] = gamma_periodic + gamma_secular
     return self._data

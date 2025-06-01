@@ -72,6 +72,7 @@ not_finite_limits = {
     "|grad(theta)|",
     "<J*B> Redl",  # may not exist for all configurations
     "current Redl",
+    "n_rho x grad(theta)",
 }
 not_implemented_limits = {
     # reliant limits will be added to this set automatically

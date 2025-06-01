@@ -31,7 +31,6 @@ from desc.grid import Grid, LinearGrid, QuadratureGrid, _Grid
 from desc.input_reader import InputReader
 from desc.io import IOAble
 from desc.objectives import (
-    ForceBalance,
     ObjectiveFunction,
     get_equilibrium_objective,
     get_fixed_axis_constraints,
@@ -2219,6 +2218,8 @@ class Equilibrium(IOAble, Optimizable):
             Boolean flag indicating if the optimizer exited successfully and
             ``message`` which describes the cause of the termination. See
             `OptimizeResult` for a description of other attributes.
+            Additionally, stores the before and after values of the objectives
+            and constraints in the ``Objective values`` key.
 
         """
         is_linear_proj = isinstance(objective, LinearConstraintProjection)
@@ -2269,8 +2270,8 @@ class Equilibrium(IOAble, Optimizable):
 
     def optimize(
         self,
-        objective=None,
-        constraints=None,
+        objective,
+        constraints,
         optimizer="proximal-lsq-exact",
         ftol=None,
         xtol=None,
@@ -2289,7 +2290,7 @@ class Equilibrium(IOAble, Optimizable):
         objective : ObjectiveFunction
             Objective function to optimize.
         constraints : Objective or tuple of Objective
-            Objective function to satisfy. Default = fixed-boundary force balance.
+            Objective function representing the constraints to satisfy.
         optimizer : str or Optimizer (optional)
             optimizer to use
         ftol, xtol, gtol, ctol : float
@@ -2323,15 +2324,22 @@ class Equilibrium(IOAble, Optimizable):
             Boolean flag indicating if the optimizer exited successfully and
             ``message`` which describes the cause of the termination. See
             `OptimizeResult` for a description of other attributes.
+            Additionally, stores the before and after values of the objectives
+            and constraints in the ``Objective values`` key.
 
         """
         if not isinstance(optimizer, Optimizer):
             optimizer = Optimizer(optimizer)
-        if constraints is None:
-            constraints = get_fixed_boundary_constraints(eq=self)
-            constraints = (ForceBalance(eq=self), *constraints)
         if not isinstance(constraints, (list, tuple)):
             constraints = tuple([constraints])
+        warnif(
+            not any([con._equilibrium for con in constraints]),
+            UserWarning,
+            "Detected no equilibrium constraints passed, equilibrium optimization "
+            "problems usually require equilibrium constraints in order to produce "
+            "meaningful, physical results. Consider adding `ForceBalance` as a "
+            "constraint.",
+        )
 
         things, result = optimizer.optimize(
             self,

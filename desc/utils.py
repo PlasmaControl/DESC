@@ -560,7 +560,7 @@ class ResolutionWarning(UserWarning):
 def warnif(cond, err=UserWarning, msg=""):
     """Throw a warning if condition is met."""
     if cond:
-        warnings.warn(colored(msg, "yellow"), err)
+        warnings.warn(msg, err)
 
 
 def check_nonnegint(x, name="", allow_none=True):
@@ -956,6 +956,7 @@ def safediv(a, b, fill=0, threshold=0):
         Value to return where b is zero.
     threshold : float >= 0
         How small is b allowed to be.
+
     """
     mask = jnp.abs(b) <= threshold
     num = jnp.where(mask, fill, a)

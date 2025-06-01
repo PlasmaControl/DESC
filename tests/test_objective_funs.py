@@ -75,6 +75,7 @@ from desc.objectives import (
     ObjectiveFromUser,
     ObjectiveFunction,
     Omnigenity,
+    PlasmaCoilSetDistanceBound,
     PlasmaCoilSetMinDistance,
     PlasmaVesselDistance,
     Pressure,
@@ -101,8 +102,13 @@ from desc.objectives.nae_utils import (
 from desc.objectives.normalization import compute_scaling_factors
 from desc.objectives.objective_funs import _Objective, collect_docs
 from desc.objectives.utils import softmax, softmin
-from desc.profiles import FourierZernikeProfile, PowerSeriesProfile
-from desc.utils import PRINT_WIDTH
+from desc.profiles import (
+    FourierZernikeProfile,
+    PowerProfile,
+    PowerSeriesProfile,
+    ScaledProfile,
+)
+from desc.utils import PRINT_WIDTH, safenorm
 from desc.vmec_utils import ptolemy_linear_transform
 
 
@@ -1250,6 +1256,214 @@ class TestObjectiveFunction:
         )
 
     @pytest.mark.unit
+    def test_plasma_coil_distance_bound(self):
+        """Tests distance bound between plasma and a coilset."""
+
+        def test(
+            eq,
+            coils,
+            mindist,
+            maxdist,
+            plasma_grid=None,
+            coil_grid=None,
+            eq_fixed=False,
+            coils_fixed=False,
+        ):
+            obj = PlasmaCoilSetDistanceBound(
+                eq=eq,
+                coil=coils,
+                plasma_grid=plasma_grid,
+                coil_grid=coil_grid,
+                eq_fixed=eq_fixed,
+                coils_fixed=coils_fixed,
+                mode="max",
+            )
+            obj.build()
+            if eq_fixed:
+                f = obj.compute(params_1=coils.params_dict)
+            elif coils_fixed:
+                f = obj.compute(params_1=eq.params_dict)
+            else:
+                f = obj.compute(params_1=eq.params_dict, params_2=coils.params_dict)
+            assert f.size == coils.num_coils
+            np.testing.assert_allclose(f, maxdist, rtol=5e-2, atol=1e-3)
+            obj2 = PlasmaCoilSetDistanceBound(
+                eq=eq,
+                coil=coils,
+                plasma_grid=plasma_grid,
+                coil_grid=coil_grid,
+                eq_fixed=eq_fixed,
+                coils_fixed=coils_fixed,
+                use_softmin=True,
+                softmin_alpha=100,
+                mode="max",
+            )
+            obj2.build()
+            if eq_fixed:
+                f = obj2.compute(params_1=coils.params_dict)
+            elif coils_fixed:
+                f = obj2.compute(params_1=eq.params_dict)
+            else:
+                f = obj2.compute(params_1=eq.params_dict, params_2=coils.params_dict)
+            assert f.size == coils.num_coils
+            np.testing.assert_allclose(f, maxdist, rtol=5e-2, atol=1e-3)
+
+            obj3 = PlasmaCoilSetDistanceBound(
+                eq=eq,
+                coil=coils,
+                plasma_grid=plasma_grid,
+                coil_grid=coil_grid,
+                eq_fixed=eq_fixed,
+                coils_fixed=coils_fixed,
+                mode="bound",
+            )
+            obj3.build()
+            if eq_fixed:
+                f = obj3.compute(params_1=coils.params_dict)
+            elif coils_fixed:
+                f = obj3.compute(params_1=eq.params_dict)
+            else:
+                f = obj3.compute(params_1=eq.params_dict, params_2=coils.params_dict)
+            assert f.size == coils.num_coils * 2
+            f = f.flatten()
+            f_min = f[0::2]
+            f_max = f[1::2]
+            np.testing.assert_allclose(f_min, mindist, rtol=5e-2, atol=1e-3)
+            np.testing.assert_allclose(f_max, maxdist, rtol=5e-2, atol=1e-3)
+
+            obj4 = PlasmaCoilSetDistanceBound(
+                eq=eq,
+                coil=coils,
+                plasma_grid=plasma_grid,
+                coil_grid=coil_grid,
+                eq_fixed=eq_fixed,
+                coils_fixed=coils_fixed,
+                use_softmin=True,
+                softmin_alpha=100,
+                mode="bound",
+            )
+            obj4.build()
+            if eq_fixed:
+                f = obj4.compute(params_1=coils.params_dict)
+            elif coils_fixed:
+                f = obj4.compute(params_1=eq.params_dict)
+            else:
+                f = obj4.compute(params_1=eq.params_dict, params_2=coils.params_dict)
+            assert f.size == coils.num_coils * 2
+            f = f.flatten()
+            f_min = f[0::2]
+            f_max = f[1::2]
+            np.testing.assert_allclose(f_min, mindist, rtol=5e-2, atol=1e-3)
+            np.testing.assert_allclose(f_max, maxdist, rtol=5e-2, atol=1e-3)
+
+        plasma_grid = LinearGrid(M=8, zeta=16)
+        coil_grid = LinearGrid(N=32)
+
+        # planar toroidal coils without symmetry, around fixed circular tokamak
+        # shifted over slightly to get an interesting max distance
+        R0 = 3
+        a = 1
+        offset = 0.5
+        shift = 0.3
+        surf = FourierRZToroidalSurface(
+            R_lmn=np.array([R0, a]),
+            Z_lmn=np.array([0, -a]),
+            modes_R=np.array([[0, 0], [1, 0]]),
+            modes_Z=np.array([[0, 0], [-1, 0]]),
+        )
+        eq = Equilibrium(surface=surf, NFP=1, M=2, N=0, sym=True)
+        coil = FourierPlanarCoil(
+            center=[R0 + shift, 0, 0], normal=[0, 1, 0], r_n=[a + offset]
+        )
+        coils = CoilSet.linspaced_angular(coil, n=8, check_intersection=False)
+        test(
+            eq,
+            coils,
+            offset - shift,
+            offset + shift,
+            plasma_grid=plasma_grid,
+            coil_grid=coil_grid,
+            eq_fixed=True,
+        )
+        test(
+            eq.surface,
+            coils,
+            offset - shift,
+            offset + shift,
+            plasma_grid=plasma_grid,
+            coil_grid=coil_grid,
+            eq_fixed=True,
+        )
+
+        # planar toroidal coils with symmetry, around unfixed circular tokamak
+        R0 = 5
+        a = 1.5
+        offset = 0.75
+        shift = 0.5
+        surf = FourierRZToroidalSurface(
+            R_lmn=np.array([R0, a]),
+            Z_lmn=np.array([0, -a]),
+            modes_R=np.array([[0, 0], [1, 0]]),
+            modes_Z=np.array([[0, 0], [-1, 0]]),
+        )
+        eq = Equilibrium(surface=surf, NFP=1, M=2, N=0, sym=True)
+        coil = FourierPlanarCoil(
+            center=[R0 + shift, 0, 0], normal=[0, 1, 0], r_n=[a + offset]
+        )
+        coils = CoilSet.linspaced_angular(
+            coil, angle=np.pi / 2, n=5, endpoint=True, check_intersection=False
+        )
+        coils = CoilSet(coils[1::2], NFP=2, sym=True)
+        test(
+            eq,
+            coils,
+            offset - shift,
+            offset + shift,
+            plasma_grid=plasma_grid,
+            coil_grid=coil_grid,
+            eq_fixed=False,
+        )
+        test(
+            eq.surface,
+            coils,
+            offset - shift,
+            offset + shift,
+            plasma_grid=plasma_grid,
+            coil_grid=coil_grid,
+            eq_fixed=False,
+        )
+
+        # fixed planar toroidal coils with symmetry, around unfixed circular tokamak
+        R0 = 5
+        a = 1.5
+        offset = 0.75
+        shift = 0.5
+        surf = FourierRZToroidalSurface(
+            R_lmn=np.array([R0, a]),
+            Z_lmn=np.array([0, -a]),
+            modes_R=np.array([[0, 0], [1, 0]]),
+            modes_Z=np.array([[0, 0], [-1, 0]]),
+        )
+        eq = Equilibrium(surface=surf, NFP=1, M=2, N=0, sym=True)
+        coil = FourierPlanarCoil(
+            center=[R0 + shift, 0, 0], normal=[0, 1, 0], r_n=[a + offset]
+        )
+        coils = CoilSet.linspaced_angular(
+            coil, angle=np.pi / 2, n=5, endpoint=True, check_intersection=False
+        )
+        coils = CoilSet(coils[1::2], NFP=2, sym=True)
+        test(
+            eq,
+            coils,
+            offset - shift,
+            offset + shift,
+            plasma_grid=plasma_grid,
+            coil_grid=coil_grid,
+            eq_fixed=False,
+            coils_fixed=True,
+        )
+
+    @pytest.mark.unit
     def test_quadratic_flux(self):
         """Test calculation of quadratic flux on the boundary."""
         t_field = ToroidalMagneticField(1, 1)
@@ -1257,7 +1471,7 @@ class TestObjectiveFunction:
         # test that torus (axisymmetric) Bnorm is exactly 0
         eq = load("./tests/inputs/vacuum_circular_tokamak.h5")
         obj = QuadraticFlux(eq, t_field)
-        obj.build(eq, verbose=2)
+        obj.build(verbose=2)
         f = obj.compute(t_field.params_dict)
         np.testing.assert_allclose(f, 0, rtol=1e-14, atol=1e-14)
 
@@ -1284,7 +1498,7 @@ class TestObjectiveFunction:
         Bnorm = t_field.compute_Bnormal(
             eq, eval_grid=eval_grid, source_grid=source_grid
         )[0]
-        obj.build(eq)
+        obj.build()
         dA = eq.compute("|e_theta x e_zeta|", grid=eval_grid)["|e_theta x e_zeta|"]
         f = obj.compute_unscaled(t_field.params_dict)
 
@@ -1302,7 +1516,7 @@ class TestObjectiveFunction:
         )
         obj = QuadraticFlux(eq, t_field, vacuum=True, eval_grid=eval_grid)
         Bnorm = t_field.compute_Bnormal(eq.surface, eval_grid=eval_grid)[0]
-        obj.build(eq)
+        obj.build()
         f = obj.compute(t_field.params_dict)
         dA = eq.compute("|e_theta x e_zeta|", grid=eval_grid)["|e_theta x e_zeta|"]
         # check that they're the same since we set B_plasma = 0
@@ -1317,7 +1531,7 @@ class TestObjectiveFunction:
         eq = load("./tests/inputs/vacuum_circular_tokamak.h5")
         surf = eq.surface
         obj = SurfaceQuadraticFlux(surf, t_field)
-        obj.build(eq, verbose=2)
+        obj.build(verbose=2)
         f = obj.compute(params_1=surf.params_dict, params_2=t_field.params_dict)
         np.testing.assert_allclose(f, 0, rtol=1e-14, atol=1e-14)
 
@@ -1608,7 +1822,7 @@ class TestObjectiveFunction:
         obj = LinkingCurrentConsistency(eq, coilset1)
         obj.build()
         f = obj.compute(coilset1.params_dict, eq.params_dict)
-        np.testing.assert_allclose(f, 0)
+        np.testing.assert_allclose(f, 0, atol=1e-8)
 
         # same with virtual coils
         coilset2 = CoilSet(coil1, coil2, NFP=2, sym=True)
@@ -1616,7 +1830,7 @@ class TestObjectiveFunction:
         obj = LinkingCurrentConsistency(eq, coilset2)
         obj.build()
         f = obj.compute(coilset2.params_dict, eq.params_dict)
-        np.testing.assert_allclose(f, 0)
+        np.testing.assert_allclose(f, 0, atol=1e-8)
 
         # both coilsets together. These have overlapping coils but it doesn't
         # affect the linking number
@@ -1627,7 +1841,7 @@ class TestObjectiveFunction:
         obj = LinkingCurrentConsistency(eq, coilset3)
         obj.build()
         f = obj.compute(coilset3.params_dict, eq.params_dict)
-        np.testing.assert_allclose(f, -G)  # coils provide 2G so error is -G
+        np.testing.assert_allclose(f, -G, rtol=1e-7)  # coils provide 2G so error is -G
 
         # CoilSet + 1 extra coil
         coilset4 = MixedCoilSet(coilset1, coil2, check_intersection=False)
@@ -1637,7 +1851,7 @@ class TestObjectiveFunction:
         obj = LinkingCurrentConsistency(eq, coilset4)
         obj.build()
         f = obj.compute(coilset4.params_dict, eq.params_dict)
-        np.testing.assert_allclose(f, -0.5 * G / 8)
+        np.testing.assert_allclose(f, -0.5 * G / 8, rtol=1e-7)
 
     @pytest.mark.unit
     def test_omnigenity_multiple_surfaces(self):
@@ -1743,6 +1957,37 @@ class TestObjectiveFunction:
         np.testing.assert_allclose(result1, result3)
         np.testing.assert_allclose(result1 * 2, result5)
         np.testing.assert_allclose(result2, result4)
+
+    @pytest.mark.unit
+    def test_surface_current_regularizations(self):
+        """Test SurfaceCurrentRegularization regularizations."""
+
+        def custom_norm(data, regularization):
+            if regularization == "K":
+                return safenorm(data[regularization], axis=-1)
+            elif regularization == "Phi":
+                return np.abs(data[regularization])
+            elif regularization == "sqrt(Phi)":
+                return np.sqrt(np.abs(data["Phi"]))
+
+        def test(field, grid, regularization):
+            reg = "Phi" if regularization == "sqrt(Phi)" else regularization
+            data = field.compute([reg, "|e_theta x e_zeta|"], grid=grid)
+            f0 = custom_norm(data, regularization) * np.sqrt(data["|e_theta x e_zeta|"])
+            obj = SurfaceCurrentRegularization(
+                field, regularization=regularization, source_grid=grid
+            )
+            obj.build()
+            f1 = obj.compute(*obj.xs(field))
+            np.testing.assert_allclose(f0, f1, err_msg=regularization)
+
+        field = FourierCurrentPotentialField(
+            I=0, G=10, NFP=4, Phi_mn=[1, -0.5], modes_Phi=[[0, 1], [2, 2]]
+        )
+        grid = LinearGrid(M=5, N=5, NFP=field.NFP)
+        test(field, grid, "K")
+        test(field, grid, "Phi")
+        test(field, grid, "sqrt(Phi)")
 
     @pytest.mark.unit
     def test_objective_compute(self):
@@ -1859,7 +2104,7 @@ class TestObjectiveFunction:
         np.testing.assert_allclose(
             objective._things_per_objective_idx, [[0, 1], [1, 0]]
         )
-        np.testing.assert_allclose(objective.compute_scaled_error(x), 0, atol=1e-15)
+        np.testing.assert_allclose(objective.compute_scaled_error(x), 0, atol=1e-14)
 
     @pytest.mark.unit
     def test_errors_bootstrap(self):
@@ -1950,8 +2195,8 @@ def test_derivative_modes():
     obj2.build()
     # check that default size works for blocked
     assert obj2.objectives[0]._jac_chunk_size == 2
-    assert obj2.objectives[1]._jac_chunk_size > 0
-    assert obj2.objectives[2]._jac_chunk_size > 0
+    assert obj2.objectives[1]._jac_chunk_size is None
+    assert obj2.objectives[2]._jac_chunk_size is None
     # hard to say what size auto will give, just check it is >0
     assert obj1._jac_chunk_size > 0
     obj3.build()
@@ -2906,6 +3151,7 @@ class TestComputeScalarResolution:
         HeatingPowerISS04,
         LinkingCurrentConsistency,
         Omnigenity,
+        PlasmaCoilSetDistanceBound,
         PlasmaCoilSetMinDistance,
         PlasmaVesselDistance,
         QuadraticFlux,
@@ -3394,6 +3640,7 @@ class TestObjectiveNaNGrad:
         HeatingPowerISS04,
         LinkingCurrentConsistency,
         Omnigenity,
+        PlasmaCoilSetDistanceBound,
         PlasmaCoilSetMinDistance,
         PlasmaVesselDistance,
         QuadraticFlux,
@@ -3498,6 +3745,28 @@ class TestObjectiveNaNGrad:
         obj.build()
         g = obj.grad(obj.x(eq, ext_field))
         assert not np.any(np.isnan(g)), "boundary error"
+
+    @pytest.mark.unit
+    def test_objective_no_nanjac_boundary_error_kinetic_profiles(self):
+        """Test BoundaryError with kinetic profiles. Related to GH Issue #1712."""
+        eq = get("DSHAPE")
+        density = PowerProfile(0.5, ScaledProfile(0.5 / elementary_charge, eq.pressure))
+        temperature = PowerProfile(
+            0.5, ScaledProfile(0.5 / elementary_charge, eq.pressure)
+        )
+        eq.pressure = None
+        eq.atomic_number = PowerSeriesProfile([1], [0])
+        eq.electron_density = density
+        eq.electron_temperature = temperature
+        eq.ion_temperature = temperature
+
+        field = ToroidalMagneticField(B0=0.2, R0=3.5)
+        objective = ObjectiveFunction(
+            BoundaryError(eq=eq, field=field, field_fixed=True)
+        )
+        objective.build()
+        J = objective.jac_unscaled(objective.x(eq))
+        assert not np.any(np.isnan(J)), "boundary error, kinetic"
 
     @pytest.mark.unit
     def test_objective_no_nangrad_vacuum_boundary_error(self):

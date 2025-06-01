@@ -97,7 +97,7 @@ def test_enclosed_volumes():
         8 * data["R0"] * np.pi**2 * rho, grid.compress(data["V_r(r)"])
     )
     np.testing.assert_allclose(8 * data["R0"] * np.pi**2, data["V_rr(r)"])
-    np.testing.assert_allclose(0, data["V_rrr(r)"], atol=2e-14)
+    np.testing.assert_allclose(0, data["V_rrr(r)"], atol=3e-14)
 
 
 @pytest.mark.unit

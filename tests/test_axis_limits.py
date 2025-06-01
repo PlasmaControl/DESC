@@ -196,20 +196,19 @@ def assert_is_continuous(
     p = "desc.equilibrium.equilibrium.Equilibrium"
     if kwargs is None:
         kwargs = {}
-    # TODO ( #671, #1206):currently skip Boozer quants because it need sym=False
-    #      grid (#1206) and Boozer axis limits are not yet implemented (#671)
-    names = [
-        name
-        for name in names
-        if not (
-            "Boozer" in name
-            or "_mn" in name
-            or name == "B modes"
-            or _skip_this(eq, name)
-            # skip if require full grid (sym false)
-            or not data_index[p][name]["grid_requirement"].get("sym", True)
-        )
-    ]
+    names = set(names)
+    names -= _grow_seeds(
+        parameterization=p,
+        seeds={
+            name
+            for name in names
+            if _skip_this(eq, name)
+            # TODO (#671): Boozer axis limits are not yet implemented
+            or ("Boozer" in name or "_mn" in name or name == "B modes")
+        },
+        search_space=names,
+    )
+    names = list(names)
 
     num_points = 12
     rho = np.linspace(start=0, stop=delta, num=num_points)

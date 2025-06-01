@@ -628,7 +628,7 @@ def _ramanujan(A, P):
 
 @register_compute_fun(
     name="a_major/a_minor",
-    label="a_{\\mathrm{major}} / a_{\\mathrm{minor}} ",
+    label="a_{\\mathrm{major}} / a_{\\mathrm{minor}}",
     units="~",
     units_long="None",
     description="Elongation at a toroidal cross-section (constant zeta surface), "
@@ -656,7 +656,7 @@ def _a_major_over_a_minor(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="a_major/a_minor",
-    label="a_{\\mathrm{major}} / a_{\\mathrm{minor}} ",
+    label="a_{\\mathrm{major}} / a_{\\mathrm{minor}}",
     units="~",
     units_long="None",
     description="Elongation at a toroidal cross-section (constant zeta surface)",

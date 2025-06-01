@@ -1419,7 +1419,7 @@ def plot_section(
     nphi = len(phi)
     if grid is None:
         grid_kwargs = {
-            "L": 25,
+            "L": max(25, eq.L_grid),
             "NFP": 1,
             "axis": False,
             "theta": np.linspace(0, 2 * np.pi, 91, endpoint=True),

@@ -153,7 +153,7 @@ def _V_rrr_of_r(params, transforms, profiles, data, **kwargs):
     return data
 
 
-def _compute_A_of_z(grid, data, extrapolate=True, mean=False, expand_out=False):
+def _compute_A_of_z(grid, data, extrap=False, mean=False, expand_out=False):
     max_rho = jnp.max(data["rho"])
     # TODO: Find new vector field v such that surface divergence
     #  div_S v = (1 / √g) [ ∂/∂ρ (√g v^ρ) + ∂/∂θ (√g v^θ) ]
@@ -194,7 +194,7 @@ def _compute_A_of_z(grid, data, extrapolate=True, mean=False, expand_out=False):
         # Simple toroidal average A₀ = ∫ A(ζ) dζ / (2π) matches the convention for the
         # average major radius R₀ = ∫ R(ρ=0) dζ / (2π).
         A = jnp.mean(A)
-    if extrapolate:
+    if extrap:
         # To approximate area at ρ ~ 1, we scale by ρ⁻², assuming the integrand
         # varies little from max ρ to ρ = 1 and a roughly circular cross-section.
         A /= max_rho**2
@@ -222,7 +222,9 @@ def _compute_A_of_z(grid, data, extrapolate=True, mean=False, expand_out=False):
 )
 def _A_of_z(params, transforms, profiles, data, **kwargs):
     # noqa: unused dependency
-    data["A(z)"] = _compute_A_of_z(transforms["grid"], data, expand_out=True)
+    data["A(z)"] = _compute_A_of_z(
+        transforms["grid"], data, extrap=True, expand_out=True
+    )
     return data
 
 
@@ -244,7 +246,7 @@ def _A_of_z(params, transforms, profiles, data, **kwargs):
 )
 def _A(params, transforms, profiles, data, **kwargs):
     # noqa: unused dependency
-    data["A"] = _compute_A_of_z(transforms["grid"], data, mean=True)
+    data["A"] = _compute_A_of_z(transforms["grid"], data, extrap=True, mean=True)
     return data
 
 
@@ -267,7 +269,9 @@ def _A(params, transforms, profiles, data, **kwargs):
 )
 def _A_of_z_cross_section_surface(params, transforms, profiles, data, **kwargs):
     # noqa: unused dependency
-    data["A(z)"] = _compute_A_of_z(transforms["grid"], data, expand_out=True)
+    data["A(z)"] = _compute_A_of_z(
+        transforms["grid"], data, extrap=True, expand_out=True
+    )
     return data
 
 
@@ -291,7 +295,7 @@ def _A_of_z_cross_section_surface(params, transforms, profiles, data, **kwargs):
 )
 def _A_cross_section_surface(params, transforms, profiles, data, **kwargs):
     # noqa: unused dependency
-    data["A"] = _compute_A_of_z(transforms["grid"], data, mean=True)
+    data["A"] = _compute_A_of_z(transforms["grid"], data, extrap=True, mean=True)
     return data
 
 
@@ -300,8 +304,7 @@ def _A_cross_section_surface(params, transforms, profiles, data, **kwargs):
     label="A(\\zeta)",
     units="m^{2}",
     units_long="square meters",
-    description="Area of enclosed cross-section (enclosed constant zeta surface), "
-    "scaled by max(ρ)⁻² to extrapolate to last closed flux surface",
+    description="Area of enclosed cross-section (enclosed constant zeta surface)",
     dim=1,
     params=[],
     transforms={"grid": []},
@@ -314,7 +317,9 @@ def _A_cross_section_surface(params, transforms, profiles, data, **kwargs):
 )
 def _A_of_z_flux_surface(params, transforms, profiles, data, **kwargs):
     # noqa: unused dependency
-    data["A(z)"] = _compute_A_of_z(transforms["grid"], data, expand_out=True)
+    data["A(z)"] = _compute_A_of_z(
+        transforms["grid"], data, extrap=False, expand_out=True
+    )
     return data
 
 
@@ -323,8 +328,7 @@ def _A_of_z_flux_surface(params, transforms, profiles, data, **kwargs):
     label="A",
     units="m^{2}",
     units_long="square meters",
-    description="Average enclosed cross-sectional (constant zeta surface) area, "
-    "scaled by max(ρ)⁻² to extrapolate to last closed flux surface",
+    description="Average enclosed cross-sectional (constant zeta surface) area",
     dim=0,
     params=[],
     transforms={"grid": []},
@@ -336,7 +340,7 @@ def _A_of_z_flux_surface(params, transforms, profiles, data, **kwargs):
 )
 def _A_flux_surface(params, transforms, profiles, data, **kwargs):
     # noqa: unused dependency
-    data["A"] = _compute_A_of_z(transforms["grid"], data, mean=True)
+    data["A"] = _compute_A_of_z(transforms["grid"], data, extrap=False, mean=True)
     return data
 
 
@@ -353,6 +357,10 @@ def _A_flux_surface(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="r",
     data=["R0", "V(r)"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.surface.FourierRZToroidalSurface",
+    ],
 )
 def _A_of_r(params, transforms, profiles, data, **kwargs):
     data["A(r)"] = data["V(r)"] / (2 * jnp.pi * data["R0"])
@@ -547,7 +555,7 @@ def _R0_over_a(params, transforms, profiles, data, **kwargs):
     data=["rho", "e_theta"],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
-        "desc.geometry.core.Surface",
+        "desc.geometry.surface.ZernikeRZToroidalSection",
     ],
     resolution_requirement="t",
     grid_requirement={"sym": False},
@@ -565,6 +573,34 @@ def _perimeter_of_z(params, transforms, profiles, data, **kwargs):
         # To approximate perimeter at ρ ~ 1, we scale by ρ⁻¹, assuming the integrand
         # varies little from max ρ to ρ = 1.
         / max_rho
+    )
+    return data
+
+
+@register_compute_fun(
+    name="perimeter(z)",
+    label="P(\\zeta)",
+    units="m",
+    units_long="meters",
+    description="Perimeter of enclosed cross-section (enclosed constant zeta surface)",
+    dim=1,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="z",
+    data=["rho", "e_theta"],
+    parameterization=["desc.geometry.surface.FourierRZToroidalSurface"],
+    resolution_requirement="t",
+    grid_requirement={"sym": False},
+)
+def _perimeter_of_z_flux_surface(params, transforms, profiles, data, **kwargs):
+    max_rho = jnp.max(data["rho"])
+    data["perimeter(z)"] = line_integrals(
+        transforms["grid"],
+        safenorm(data["e_theta"], axis=-1),
+        line_label="theta",
+        fix_surface=("rho", max_rho),
+        expand_out=True,
     )
     return data
 
@@ -604,8 +640,9 @@ def _ramanujan(A, P):
     data=["A(z)", "perimeter(z)"],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
-        "desc.geometry.core.Surface",
+        "desc.geometry.surface.ZernikeRZToroidalSection",
     ],
+    aliases=["a_major/a_minor LCFS"],
 )
 def _a_major_over_a_minor(params, transforms, profiles, data, **kwargs):
     A = transforms["grid"].compress(data["A(z)"], surface_label="zeta")
@@ -617,8 +654,8 @@ def _a_major_over_a_minor(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
-    name="a_major/a_minor (no extrapolation)",
-    label="a_{\\mathrm{major}} / a_{\\mathrm{minor}}",
+    name="a_major/a_minor",
+    label="a_{\\mathrm{major}} / a_{\\mathrm{minor}} ",
     units="~",
     units_long="None",
     description="Elongation at a toroidal cross-section (constant zeta surface)",
@@ -627,13 +664,36 @@ def _a_major_over_a_minor(params, transforms, profiles, data, **kwargs):
     transforms={"grid": []},
     profiles=[],
     coordinates="z",
-    data=["A(z)", "perimeter(z)", "rho"],
-    parameterization=[
-        "desc.equilibrium.equilibrium.Equilibrium",
-        "desc.geometry.core.Surface",
-    ],
+    data=["A(z)", "perimeter(z)"],
+    parameterization=["desc.geometry.surface.FourierRZToroidalSurface"],
 )
-def _a_major_over_a_minor_surface_lcfs(params, transforms, profiles, data, **kwargs):
+def _a_major_over_a_minor_flux_surface(params, transforms, profiles, data, **kwargs):
+    A = transforms["grid"].compress(data["A(z)"], surface_label="zeta")
+    P = transforms["grid"].compress(data["perimeter(z)"], surface_label="zeta")
+    data["a_major/a_minor"] = transforms["grid"].expand(
+        _ramanujan(A, P), surface_label="zeta"
+    )
+    return data
+
+
+@register_compute_fun(
+    name="a_major/a_minor LCFS",
+    label="a_{\\mathrm{major}} / a_{\\mathrm{minor}}",
+    units="~",
+    units_long="None",
+    description="Elongation at a toroidal cross-section (constant zeta surface), "
+    "extrapolated to last closed flux surface.",
+    dim=1,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="z",
+    data=["A(z)", "perimeter(z)", "rho"],
+    parameterization=["desc.geometry.surface.FourierRZToroidalSurface"],
+)
+def _a_major_over_a_minor_flux_surface_lcfs(
+    params, transforms, profiles, data, **kwargs
+):
     max_rho = jnp.max(data["rho"])
     A = transforms["grid"].compress(data["A(z)"], surface_label="zeta") / max_rho**2
     P = (

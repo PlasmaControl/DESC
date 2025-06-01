@@ -56,161 +56,6 @@ def _drift2(data, B, pitch):
 
 
 @register_compute_fun(
-    name="gamma_c",
-    label=(
-        # Γ_c = π/(8√2) ∫ dλ 〈 ∑ⱼ [v τ γ_c²]ⱼ 〉
-        "small gamma_c"
-    ),
-    units="~",
-    units_long="None",
-    description="Fast ion confinement proxy",
-    dim=1,
-    params=[],
-    transforms={"grid": []},
-    profiles=[],
-    coordinates="r",
-    data=[
-        "min_tz |B|",
-        "max_tz |B|",
-        "B^phi",
-        "B^phi_r|v,p",
-        "|B|_r|v,p",
-        "b",
-        "grad(phi)",
-        "grad(psi)",
-        "|grad(psi)|",
-        "|grad(rho)|",
-        "|e_alpha|r,p|",
-        "kappa_g",
-        "iota_r",
-    ]
-    + Bounce2D.required_names,
-    resolution_requirement="tz",
-    grid_requirement={"can_fft2": True},
-    **_bounce_doc,
-)
-@partial(
-    jit,
-    static_argnames=[
-        "Y_B",
-        "num_transit",
-        "num_well",
-        "num_quad",
-        "num_pitch",
-        "pitch_batch_size",
-        "surf_batch_size",
-        "spline",
-    ],
-)
-def _gamma_c(params, transforms, profiles, data, **kwargs):
-    """Fast ion confinement proxy as defined by Nemov et al.
-
-    Poloidal motion of trapped particle orbits in real-space coordinates.
-    V. V. Nemov, S. V. Kasilov, W. Kernbichler, G. O. Leitold.
-    Phys. Plasmas 1 May 2008; 15 (5): 052501.
-    https://doi.org/10.1063/1.2912456.
-    Equation 61.
-
-    A 3D stellarator magnetic field admits ripple wells that lead to enhanced
-    radial drift of trapped particles. The energetic particle confinement
-    metric γ_c quantifies whether the contours of the second adiabatic invariant
-    close on the flux surfaces. In the limit where the poloidal drift velocity
-    majorizes the radial drift velocity, the contours lie parallel to flux
-    surfaces. The optimization metric Γ_c averages γ_c² over the distribution
-    of trapped particles on each flux surface.
-
-    The radial electric field has a negligible effect, since fast particles
-    have high energy with collisionless orbits, so it is assumed to be zero.
-    """
-    # noqa: unused dependency
-    theta = kwargs["theta"]
-    Y_B = kwargs.get("Y_B", theta.shape[-1] * 2)
-    alpha = kwargs.get("alpha", jnp.array([0.0]))
-    num_transit = kwargs.get("num_transit", 20)
-    num_pitch = kwargs.get("num_pitch", 64)
-    num_well = kwargs.get("num_well", Y_B * num_transit)
-    pitch_batch_size = kwargs.get("pitch_batch_size", None)
-    surf_batch_size = kwargs.get("surf_batch_size", 1)
-    assert (
-        surf_batch_size == 1 or pitch_batch_size is None
-    ), f"Expected pitch_batch_size to be None, got {pitch_batch_size}."
-    spline = kwargs.get("spline", True)
-    quad = (
-        kwargs["quad"]
-        if "quad" in kwargs
-        else get_quadrature(
-            leggauss(kwargs.get("num_quad", 32)),
-            (automorphism_sin, grad_automorphism_sin),
-        )
-    )
-
-    def gamma_c0(data):
-        bounce = Bounce2D(
-            grid,
-            data,
-            data["theta"],
-            Y_B,
-            alpha,
-            num_transit,
-            quad,
-            is_fourier=True,
-            spline=spline,
-        )
-
-        def fun(pitch_inv):
-            points = bounce.points(pitch_inv, num_well)
-            v_tau, drift1, drift2 = bounce.integrate(
-                [_v_tau, _drift1, _drift2],
-                pitch_inv,
-                data,
-                ["|grad(psi)|*kappa_g", "|B|_r|v,p", "K"],
-                points,
-                is_fourier=True,
-            )
-
-            # This is γ_c π/2.
-            gamma_c = jnp.arctan(
-                safediv(
-                    drift1,
-                    drift2
-                    * bounce.interp_to_argmin(
-                        data["|grad(rho)|*|e_alpha|r,p|"], points, is_fourier=True
-                    ),
-                )
-            )
-
-            # TODO: return v_tau as well?
-            # --no-verify return jnp.sum(v_tau * gamma_c**2, axis=-1).mean(axis=-2)
-            # --no-verify return gamma_c, v_tau
-            return jnp.sum(gamma_c, axis=-1)
-
-        return batch_map(fun, data["pitch_inv"], pitch_batch_size)
-
-    # It is assumed the grid is sufficiently dense to reconstruct |B|,
-    # so anything smoother than |B| may be captured accurately as a single
-    # Fourier series rather than transforming each component.
-    # Last term in K behaves as ∂log(|B|²/B^ϕ)/∂ρ |B| if one ignores the issue
-    # of a log argument with units. Smoothness determined by positive lower bound
-    # of log argument, and hence behaves as ∂log(|B|)/∂ρ |B| = ∂|B|/∂ρ.
-    fun_data = {
-        "|grad(psi)|*kappa_g": data["|grad(psi)|"] * data["kappa_g"],
-        "|grad(rho)|*|e_alpha|r,p|": data["|grad(rho)|"] * data["|e_alpha|r,p|"],
-        "|B|_r|v,p": data["|B|_r|v,p"],
-        "K": data["iota_r"]
-        * dot(cross(data["grad(psi)"], data["b"]), data["grad(phi)"])
-        - (2 * data["|B|_r|v,p"] - data["|B|"] * data["B^phi_r|v,p"] / data["B^phi"]),
-    }
-
-    grid = transforms["grid"]
-
-    data["gamma_c"] = _compute(
-        gamma_c0, fun_data, data, theta, grid, num_pitch, surf_batch_size
-    )
-
-    return data
-
-
-@register_compute_fun(
     name="Gamma_c",
     label=(
         # Γ_c = π/(8√2) ∫ dλ 〈 ∑ⱼ [v τ γ_c²]ⱼ 〉
@@ -381,6 +226,274 @@ def _poloidal_drift(data, B, pitch):
 
 
 @register_compute_fun(
+    name="gamma_c",
+    label=(
+        # Γ_c = π/(8√2) ∫ dλ 〈 ∑ⱼ [v τ γ_c²]ⱼ 〉
+        "small gamma_c"
+    ),
+    units="~",
+    units_long="None",
+    description="Fast ion confinement proxy",
+    dim=1,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="r",
+    data=[
+        "min_tz |B|",
+        "max_tz |B|",
+        "B^phi",
+        "B^phi_r|v,p",
+        "|B|_r|v,p",
+        "b",
+        "grad(phi)",
+        "grad(psi)",
+        "|grad(psi)|",
+        "|grad(rho)|",
+        "|e_alpha|r,p|",
+        "kappa_g",
+        "iota_r",
+    ]
+    + Bounce2D.required_names,
+    resolution_requirement="tz",
+    grid_requirement={"can_fft2": True},
+    **_bounce_doc,
+)
+@partial(
+    jit,
+    static_argnames=[
+        "Y_B",
+        "num_transit",
+        "num_well",
+        "num_quad",
+        "num_pitch",
+        "pitch_batch_size",
+        "surf_batch_size",
+        "spline",
+    ],
+)
+def _gamma_c_fun(params, transforms, profiles, data, **kwargs):
+    """Fast ion confinement proxy as defined by Velasco et al.
+
+    Poloidal motion of trapped particle orbits in real-space coordinates.
+    V. V. Nemov, S. V. Kasilov, W. Kernbichler, G. O. Leitold.
+    Phys. Plasmas 1 May 2008; 15 (5): 052501.
+    https://doi.org/10.1063/1.2912456.
+    Equation 61.
+
+    A 3D stellarator magnetic field admits ripple wells that lead to enhanced
+    radial drift of trapped particles. The energetic particle confinement
+    metric γ_c quantifies whether the contours of the second adiabatic invariant
+    close on the flux surfaces. In the limit where the poloidal drift velocity
+    majorizes the radial drift velocity, the contours lie parallel to flux
+    surfaces. The optimization metric Γ_c averages γ_c² over the distribution
+    of trapped particles on each flux surface.
+
+    The radial electric field has a negligible effect, since fast particles
+    have high energy with collisionless orbits, so it is assumed to be zero.
+    """
+    # noqa: unused dependency
+    theta = kwargs["theta"]
+    Y_B = kwargs.get("Y_B", theta.shape[-1] * 2)
+    alpha = kwargs.get("alpha", jnp.array([0.0]))
+    num_transit = kwargs.get("num_transit", 20)
+    num_pitch = kwargs.get("num_pitch", 64)
+    num_well = kwargs.get("num_well", Y_B * num_transit)
+    pitch_batch_size = kwargs.get("pitch_batch_size", None)
+    surf_batch_size = kwargs.get("surf_batch_size", 1)
+    assert (
+        surf_batch_size == 1 or pitch_batch_size is None
+    ), f"Expected pitch_batch_size to be None, got {pitch_batch_size}."
+    spline = kwargs.get("spline", True)
+    quad = (
+        kwargs["quad"]
+        if "quad" in kwargs
+        else get_quadrature(
+            leggauss(kwargs.get("num_quad", 32)),
+            (automorphism_sin, grad_automorphism_sin),
+        )
+    )
+
+    def gamma_c0(data):
+        bounce = Bounce2D(
+            grid,
+            data,
+            data["theta"],
+            Y_B,
+            alpha,
+            num_transit,
+            quad,
+            is_fourier=True,
+            spline=spline,
+        )
+
+        def fun(pitch_inv):
+            points = bounce.points(pitch_inv, num_well)
+            drift1, drift2 = bounce.integrate(
+                [_drift1, _drift2],
+                pitch_inv,
+                data,
+                ["|grad(psi)|*kappa_g", "|B|_r|v,p", "K"],
+                points,
+                is_fourier=True,
+            )
+
+            # This is γ_c π/2.
+            gamma_c = jnp.arctan(
+                safediv(
+                    drift1,
+                    drift2
+                    * bounce.interp_to_argmin(
+                        data["|grad(rho)|*|e_alpha|r,p|"], points, is_fourier=True
+                    ),
+                )
+            )
+
+            return gamma_c
+
+        return batch_map(fun, data["pitch_inv"], pitch_batch_size)
+
+    # It is assumed the grid is sufficiently dense to reconstruct |B|,
+    # so anything smoother than |B| may be captured accurately as a single
+    # Fourier series rather than transforming each component.
+    # Last term in K behaves as ∂log(|B|²/B^ϕ)/∂ρ |B| if one ignores the issue
+    # of a log argument with units. Smoothness determined by positive lower bound
+    # of log argument, and hence behaves as ∂log(|B|)/∂ρ |B| = ∂|B|/∂ρ.
+    fun_data = {
+        "|grad(psi)|*kappa_g": data["|grad(psi)|"] * data["kappa_g"],
+        "|grad(rho)|*|e_alpha|r,p|": data["|grad(rho)|"] * data["|e_alpha|r,p|"],
+        "|B|_r|v,p": data["|B|_r|v,p"],
+        "K": data["iota_r"]
+        * dot(cross(data["grad(psi)"], data["b"]), data["grad(phi)"])
+        - (2 * data["|B|_r|v,p"] - data["|B|"] * data["B^phi_r|v,p"] / data["B^phi"]),
+    }
+
+    grid = transforms["grid"]
+
+    data["gamma_c"] = _compute(
+        gamma_c0, fun_data, data, theta, grid, num_pitch, surf_batch_size
+    )
+
+    return data
+
+
+@register_compute_fun(
+    name="v_tau",
+    label=(
+        # v_τ
+        "the denominator in a bounce-averaging operation"
+    ),
+    units="~",
+    units_long="None",
+    description="Fast ion confinement proxy",
+    dim=1,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="r",
+    data=[
+        "min_tz |B|",
+        "max_tz |B|",
+    ]
+    + Bounce2D.required_names,
+    resolution_requirement="tz",
+    grid_requirement={"can_fft2": True},
+    **_bounce_doc,
+)
+@partial(
+    jit,
+    static_argnames=[
+        "Y_B",
+        "num_transit",
+        "num_well",
+        "num_quad",
+        "num_pitch",
+        "pitch_batch_size",
+        "surf_batch_size",
+        "spline",
+    ],
+)
+def _v_tau1(params, transforms, profiles, data, **kwargs):
+    """Fast ion confinement proxy as defined by Nemov et al.
+
+    Poloidal motion of trapped particle orbits in real-space coordinates.
+    V. V. Nemov, S. V. Kasilov, W. Kernbichler, G. O. Leitold.
+    Phys. Plasmas 1 May 2008; 15 (5): 052501.
+    https://doi.org/10.1063/1.2912456.
+    Equation 61.
+
+    A 3D stellarator magnetic field admits ripple wells that lead to enhanced
+    radial drift of trapped particles. The energetic particle confinement
+    metric γ_c quantifies whether the contours of the second adiabatic invariant
+    close on the flux surfaces. In the limit where the poloidal drift velocity
+    majorizes the radial drift velocity, the contours lie parallel to flux
+    surfaces. The optimization metric Γ_c averages γ_c² over the distribution
+    of trapped particles on each flux surface.
+
+    The radial electric field has a negligible effect, since fast particles
+    have high energy with collisionless orbits, so it is assumed to be zero.
+    """
+    # noqa: unused dependency
+    theta = kwargs["theta"]
+    Y_B = kwargs.get("Y_B", theta.shape[-1] * 2)
+    alpha = kwargs.get("alpha", jnp.array([0.0]))
+    num_transit = kwargs.get("num_transit", 20)
+    num_pitch = kwargs.get("num_pitch", 64)
+    num_well = kwargs.get("num_well", Y_B * num_transit)
+    pitch_batch_size = kwargs.get("pitch_batch_size", None)
+    surf_batch_size = kwargs.get("surf_batch_size", 1)
+    assert (
+        surf_batch_size == 1 or pitch_batch_size is None
+    ), f"Expected pitch_batch_size to be None, got {pitch_batch_size}."
+    spline = kwargs.get("spline", True)
+    quad = (
+        kwargs["quad"]
+        if "quad" in kwargs
+        else get_quadrature(
+            leggauss(kwargs.get("num_quad", 32)),
+            (automorphism_sin, grad_automorphism_sin),
+        )
+    )
+
+    def v_tau0(data):
+        bounce = Bounce2D(
+            grid,
+            data,
+            data["theta"],
+            Y_B,
+            alpha,
+            num_transit,
+            quad,
+            is_fourier=True,
+            spline=spline,
+        )
+
+        def fun(pitch_inv):
+            points = bounce.points(pitch_inv, num_well)
+            v_tau = bounce.integrate(
+                [_v_tau],
+                pitch_inv,
+                data,
+                [],
+                points,
+                is_fourier=True,
+            )
+
+            return v_tau
+
+        return batch_map(fun, data["pitch_inv"], pitch_batch_size)
+
+    fun_data = {}
+
+    grid = transforms["grid"]
+    data["v_tau"] = _compute(
+        v_tau0, fun_data, data, theta, grid, num_pitch, surf_batch_size
+    )
+
+    return data
+
+
+@register_compute_fun(
     name="Gamma_c Velasco",
     label=(
         # Γ_c = π/(8√2) ∫ dλ 〈 ∑ⱼ [v τ γ_c²]ⱼ 〉
@@ -399,9 +512,8 @@ def _poloidal_drift(data, B, pitch):
     data=[
         "min_tz |B|",
         "max_tz |B|",
-        "cvdrift0",
-        "gbdrift (periodic)",
-        "gbdrift (secular)/phi",
+        "gamma_c",
+        "v_tau",
     ]
     + Bounce2D.required_names,
     resolution_requirement="tz",
@@ -442,7 +554,6 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
     alpha = kwargs.get("alpha", jnp.array([0.0]))
     num_transit = kwargs.get("num_transit", 20)
     num_pitch = kwargs.get("num_pitch", 64)
-    num_well = kwargs.get("num_well", Y_B * num_transit)
     pitch_batch_size = kwargs.get("pitch_batch_size", None)
     surf_batch_size = kwargs.get("surf_batch_size", 1)
     assert (
@@ -461,7 +572,7 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
         )
     )
 
-    def Gamma_c(data):
+    def Gamma_c1(data):
         bounce = Bounce2D(
             grid,
             data,
@@ -474,39 +585,30 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
             spline=spline,
         )
 
-        def fun(pitch_inv):
-            v_tau, radial_drift, poloidal_drift = bounce.integrate(
-                [_v_tau, _radial_drift, _poloidal_drift],
-                pitch_inv,
-                data,
-                ["cvdrift0", "gbdrift (periodic)", "gbdrift (secular)/phi"],
-                bounce.points(pitch_inv, num_well),
-                is_fourier=True,
-            )
-            # This is γ_c π/2.
-            gamma_c = jnp.arctan(safediv(radial_drift, poloidal_drift))
-            return jnp.sum(v_tau * gamma_c**2, axis=-1).mean(axis=-2)
+        gamma_c = data["gamma_c1"]
+        v_tau = data["v_tau1"]
+
+        # sum over all the well and mean over all the fieldlines
+        integrand = jnp.sum(v_tau * gamma_c**2, axis=-1).mean(axis=-2)
 
         return jnp.sum(
-            batch_map(fun, data["pitch_inv"], pitch_batch_size)
-            * data["pitch_inv weight"]
-            / data["pitch_inv"] ** 2,
+            integrand * data["pitch_inv weight"] / data["pitch_inv"] ** 2,
             axis=-1,
         ) / (bounce.compute_fieldline_length(fl_quad) * 2**1.5 * jnp.pi)
 
     grid = transforms["grid"]
+    fourier_transformed_data = {}
+
     data["Gamma_c Velasco"] = _compute(
-        Gamma_c,
-        {
-            "cvdrift0": data["cvdrift0"],
-            "gbdrift (periodic)": data["gbdrift (periodic)"],
-            "gbdrift (secular)/phi": data["gbdrift (secular)/phi"],
-        },
+        Gamma_c1,
+        fourier_transformed_data,
         data,
         theta,
         grid,
         num_pitch,
         surf_batch_size,
+        gamma_c1=grid.compress(data["gamma_c"]),
+        v_tau1=grid.compress(data["v_tau"]),
     )
     return data
 
@@ -530,10 +632,11 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
     data=[
         "min_tz |B|",
         "max_tz |B|",
+        "gamma_c",
+        "v_tau",
         "cvdrift0",
         "gbdrift (periodic)",
         "gbdrift (secular)/phi",
-        "gamma_c",
     ]
     + Bounce2D.required_names,
     resolution_requirement="tz",
@@ -612,8 +715,8 @@ def _Gamma_a_Velasco(params, transforms, profiles, data, **kwargs):
             return mask
 
         def fun(pitch_inv):
-            v_tau, radial_drift, poloidal_drift = bounce.integrate(
-                [_v_tau, _radial_drift, _poloidal_drift],
+            radial_drift, poloidal_drift = bounce.integrate(
+                [_radial_drift, _poloidal_drift],
                 pitch_inv,
                 data,
                 ["cvdrift0", "gbdrift (periodic)", "gbdrift (secular)/phi"],
@@ -621,9 +724,11 @@ def _Gamma_a_Velasco(params, transforms, profiles, data, **kwargs):
                 is_fourier=True,
             )
 
-            gamma_c = jnp.arctan(safediv(radial_drift, poloidal_drift))
+            gamma_c = data["gamma_c"]
             gamma_c = jnp.sum(gamma_c, axis=-1)  # summing over all the wells
             mask = _find_threshold_values(gamma_c, 0.2)
+
+            v_tau = data["v_tau"]
             return jnp.mean(
                 jnp.heaviside(mask * jnp.sum(v_tau * poloidal_drift, axis=-1), 0),
                 axis=-2,
@@ -672,10 +777,8 @@ def _Gamma_a_Velasco(params, transforms, profiles, data, **kwargs):
     data=[
         "min_tz |B|",
         "max_tz |B|",
-        "cvdrift0",
-        "gbdrift (periodic)",
-        "gbdrift (secular)/phi",
         "gamma_c",
+        "v_tau",
     ]
     + Bounce2D.required_names,
     resolution_requirement="tz",
@@ -716,7 +819,6 @@ def _Gamma_d_Velasco(params, transforms, profiles, data, **kwargs):
     alpha = kwargs.get("alpha", jnp.array([0.0]))
     num_transit = kwargs.get("num_transit", 20)
     num_pitch = kwargs.get("num_pitch", 64)
-    num_well = kwargs.get("num_well", Y_B * num_transit)
     pitch_batch_size = kwargs.get("pitch_batch_size", None)
     surf_batch_size = kwargs.get("surf_batch_size", 1)
     assert (
@@ -749,20 +851,12 @@ def _Gamma_d_Velasco(params, transforms, profiles, data, **kwargs):
         )
 
         def fun(pitch_inv):
-            v_tau, radial_drift, poloidal_drift = bounce.integrate(
-                [_v_tau, _radial_drift, _poloidal_drift],
-                pitch_inv,
-                data,
-                ["cvdrift0", "gbdrift (periodic)", "gbdrift (secular)/phi"],
-                bounce.points(pitch_inv, num_well),
-                is_fourier=True,
-            )
-
-            gamma_c = jnp.arctan(safediv(radial_drift, poloidal_drift))
+            gamma_c = data["gamma_c"]
             gamma_c = (
                 2 / jnp.pi * jnp.sum(gamma_c, axis=-1)
             )  # summing over all the wells
 
+            v_tau = data["v_tau"]
             # First, find the maximum along the alpha axis
             # Then determine if greater than threshold using heaviside function
             # Then divide by sqrt(1 - lambda B) factor
@@ -787,11 +881,7 @@ def _Gamma_d_Velasco(params, transforms, profiles, data, **kwargs):
     grid = transforms["grid"]
     data["Gamma_d Velasco"] = _compute(
         Gamma_d,
-        {
-            "cvdrift0": data["cvdrift0"],
-            "gbdrift (periodic)": data["gbdrift (periodic)"],
-            "gbdrift (secular)/phi": data["gbdrift (secular)/phi"],
-        },
+        {},
         data,
         theta,
         grid,

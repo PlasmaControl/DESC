@@ -1233,7 +1233,6 @@ def _curvature_H_zeta(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="r",
     data=["B^zeta"],
-    resolution_requirement="z",
     source_grid_requirement={"coordinates": "raz", "is_meshgrid": True},
 )
 def _fieldline_length(data, transforms, profiles, **kwargs):
@@ -1263,7 +1262,6 @@ def _fieldline_length(data, transforms, profiles, **kwargs):
     profiles=[],
     coordinates="r",
     data=["B^zeta", "sqrt(g)"],
-    resolution_requirement="z",
     source_grid_requirement={"coordinates": "raz", "is_meshgrid": True},
 )
 def _fieldline_length_over_volume(data, transforms, profiles, **kwargs):

@@ -754,6 +754,8 @@ def _Gamma_a_Velasco(params, transforms, profiles, data, **kwargs):
         grid,
         num_pitch,
         surf_batch_size,
+        gamma_c=grid.compress(data["gamma_c"]),
+        v_tau=grid.compress(data["v_tau"]),
     )
     return data
 
@@ -887,6 +889,8 @@ def _Gamma_d_Velasco(params, transforms, profiles, data, **kwargs):
         grid,
         num_pitch,
         surf_batch_size,
+        gamma_c=grid.compress(data["gamma_c"]),
+        v_tau=grid.compress(data["v_tau"]),
     )
 
     return data

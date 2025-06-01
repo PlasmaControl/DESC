@@ -162,6 +162,7 @@ def _compute_A_of_z(grid, data, extrap=False, mean=False, expand_out=False):
     #  OR make sure that integration contour is along constant phi surface
     #     using source_grid_requirement="rtp" and use e_theta|r,p.
     if isinstance(grid, QuadratureGrid):
+        assert extrap
         A = surface_integrals(
             grid,
             data["|e_rho x e_theta|"],
@@ -190,14 +191,14 @@ def _compute_A_of_z(grid, data, extrap=False, mean=False, expand_out=False):
                 expand_out=False,
             )
         )
+        if extrap:
+            # To approximate area at ρ ~ 1, we scale by ρ⁻², assuming the integrand
+            # varies little from max ρ to ρ = 1 and a roughly circular cross-section.
+            A /= max_rho**2
     if mean:
         # Simple toroidal average A₀ = ∫ A(ζ) dζ / (2π) matches the convention for the
         # average major radius R₀ = ∫ R(ρ=0) dζ / (2π).
         A = jnp.mean(A)
-    if extrap:
-        # To approximate area at ρ ~ 1, we scale by ρ⁻², assuming the integrand
-        # varies little from max ρ to ρ = 1 and a roughly circular cross-section.
-        A /= max_rho**2
     if expand_out:
         A = grid.expand(A, surface_label="zeta")
     return A

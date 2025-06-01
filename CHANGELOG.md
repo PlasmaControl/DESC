@@ -16,6 +16,7 @@ Optionally can also contract the profiles of the original ``Equilibrium`` so tha
 - Adds automatically generated header file showing date the input file was created with `desc.vmec.VMECIO.write_vmec_input`
 - Adds ``source_grid`` argument to ``desc.magnetic_fields._MagneticField.save_mgrid function`` to allow user to control the discretization of the magnetic field object being used to construct the ``mgrid`` output.
 - Removes default objective and constraints for ``desc.equilibrium.Equilibrium.optimize``, so now user is required to pass in the constraints and objective when using this method.
+- Adds ``PlasmaCoilSetDistanceBound`` objective to allow a simultaneous constraint on minimum and maximum distance between the plasma and coils.
 
 Performance Improvements
 
@@ -28,6 +29,7 @@ Bug Fixes
 - Allows ``x_scale`` to be passed to ``factorize_linear_constraints`` in ``Optimizer.optimize`` through the new ``"linear_constraint_options"``.
 - Fixes bug where `ProximalProjection` was using wrong `jac_chunk_size` internally and using more memory than one would expect given the `jac_chunk_size`. This fix gives separate `blocked` and `batched` methods to `ProximalProjection`.
 - Fixes issue in ``desc.geometry.curve.FourierPlanarCurve.from_values`` where the orientation of the fitted curve can be the reverse of the original curve, which can be problematic for coils (the current is not negated, so the resulting fitted coil would have field opposite of the initial).
+- Fixes an issue in ``desc.objectives.BoundaryError`` where an equilibrium with kinetic profiles could result in undefined Jacobian values.
 
 
 v0.14.1

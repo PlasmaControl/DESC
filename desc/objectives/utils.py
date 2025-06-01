@@ -242,7 +242,7 @@ class _Recover(IOAble):
         return jnp.atleast_1d(jnp.squeeze(x_full))
 
 
-def softmax(arr, alpha):
+def softmax(arr, alpha, axis=None):
     """JAX softmax implementation.
 
     Parameters
@@ -253,6 +253,9 @@ def softmax(arr, alpha):
         The parameter smoothly transitioning the function to a hardmax.
         as alpha increases, the value returned will come closer and closer to
         max(arr).
+    axis : int, optional
+        Axis along which the softmax is computed. The default is None, which
+        computes the softmax over the entire array.
 
     Returns
     -------
@@ -260,12 +263,16 @@ def softmax(arr, alpha):
         The soft-maximum of the array.
 
     """
-    arr = arr.flatten()
-    arr_times_alpha = alpha * arr
-    return softargmax(arr_times_alpha).dot(arr)
+    if axis is None:
+        arr = arr.flatten()
+        arr_times_alpha = alpha * arr
+        return softargmax(arr_times_alpha).dot(arr)
+    else:
+        arr_times_alpha = alpha * arr
+        return jnp.sum(arr * softargmax(arr_times_alpha, axis=axis), axis=axis)
 
 
-def softmin(arr, alpha):
+def softmin(arr, alpha, axis=None):
     """JAX softmin implementation, by taking negative of softmax(-arr).
 
     Parameters
@@ -276,6 +283,9 @@ def softmin(arr, alpha):
         The parameter smoothly transitioning the function to a hardmin.
         as alpha increases, the value returned will come closer and closer to
         min(arr).
+    axis : int, optional
+        Axis along which the softmax is computed. The default is None, which
+        computes the softmax over the entire array.
 
     Returns
     -------
@@ -283,7 +293,7 @@ def softmin(arr, alpha):
         The soft-minimum of the array.
 
     """
-    return -softmax(-arr, alpha)
+    return -softmax(-arr, alpha, axis)
 
 
 def combine_args(*objectives):

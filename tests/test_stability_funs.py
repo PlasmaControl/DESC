@@ -789,9 +789,7 @@ def test_ballooning_compare_with_COBRAVMEC():
         data_keys = ["ideal ballooning lambda"]
         data = eq.compute(data_keys, grid=grid)
 
-        lam2_array[i] = np.max(
-            np.reshape(data["ideal ballooning lambda"], (N0 - 2, -1))[:, 0]
-        )
+        lam2_array[i] = data["ideal ballooning lambda"]
 
     root_DESC = find_root_simple(np.array(surfaces), lam2_array)
     np.testing.assert_allclose(root_COBRAVMEC, root_DESC, rtol=4e-4)

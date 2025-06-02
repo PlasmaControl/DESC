@@ -528,7 +528,6 @@ class BallooningStability(_Objective):
             "alpha": self._alpha,
             "zeta": zeta,
             "zeta0": self._zeta0,
-            "Neigvals": self._Neigvals,
             "lambda0": self._lambda0,
             "w0": self._w0,
             "w1": self._w1,
@@ -598,7 +597,7 @@ class BallooningStability(_Objective):
             iota=data["iota"],
         )
 
-        full_data = compute_fun(
+        lam = compute_fun(
             eq,
             self._data_keys,
             params,
@@ -606,19 +605,13 @@ class BallooningStability(_Objective):
             profiles=get_profiles(self._data_keys, eq, grid),
             data=data,
             zeta0=constants["zeta0"],
+            Neigvals=self._Neigvals,
         )["ideal ballooning lambda"]
 
         lambda0, w0, w1 = constants["lambda0"], constants["w0"], constants["w1"]
 
-        # If I used constants["Neigvals"], I get an error about static argnums
-        # Neigvals doesn't sit well with jit compilation
-        lam_idxs = jnp.arange(self._Neigvals, dtype=int) * (len(constants["zeta"]) - 1)
-
-        lam = full_data[lam_idxs]
-
         # Shifted ReLU operation
         data = (lam - lambda0) * (lam >= lambda0)
-
         results = w0 * jnp.sum(data) + w1 * jnp.max(data)
 
         return results

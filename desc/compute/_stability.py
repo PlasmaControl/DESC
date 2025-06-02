@@ -265,8 +265,10 @@ def _magnetic_well(params, transforms, profiles, data, **kwargs):
     source_grid_requirement={"coordinates": "raz", "is_meshgrid": True},
     zeta0="array: points of vanishing integrated local shear to scan over. "
     "Default 15 points linearly spaced in [-π/2,π/2]",
+    Neigvals="int: number of largest eigenvalues to return, default value is 1.`"
+    "If `Neigvals=2` eigenvalues are `[-1, 0, 1]` we get `[1, 0]`",
 )
-def _ideal_ballooning_gamma2(params, transforms, profiles, data, **kwargs):
+def _ideal_ballooning_lambda(params, transforms, profiles, data, **kwargs):
     """
     Ideal-ballooning growth rate finder.
 
@@ -309,7 +311,9 @@ def _ideal_ballooning_gamma2(params, transforms, profiles, data, **kwargs):
     - p_r: dp/drho, pressure gradient
     - phi: coordinate describing the position in the toroidal angle
     along a field line
+
     """
+    Neigvals = kwargs.get("Neigvals", 1)
     source_grid = transforms["grid"].source_grid
     # Vectorize in rho later
     rho = source_grid.meshgrid_reshape(data["rho"], "arz")
@@ -399,27 +403,43 @@ def _ideal_ballooning_gamma2(params, transforms, profiles, data, **kwargs):
     A_redo = B_inv @ A @ jnp.transpose(B_inv, axes=(0, 1, 3, 2))
 
     # TODO: Issue #1750
-    # Try jax.scipy.eigh_tridiagonal for increased performance
+    # Try jax.scipy.eigh_tridiagonal or a better solver for improved performance
     w, v = jnp.linalg.eigh(A_redo)
 
     flat_w = w.flatten()
 
-    top_eigvals, top_flat_indices = jax.lax.top_k(flat_w, k=N_zeta - 2)
+    # Find the top_k eigenvalues.
+    top_eigvals, top_flat_indices = jax.lax.top_k(flat_w, k=Neigvals)
 
     # convert back to original shape
     alpha_idx, zeta0_idx, theta_idx = jnp.unravel_index(top_flat_indices, w.shape)
 
-    # v becomes less than the precision at some theta points which gives NaNs
+    # v becomes less than the machine precision at some theta points which gives NaNs
     # stop_gradient prevents that. Not sure how it will affect an objective that
     # requires both the eigenvalue and eigenfunction
     top_eigenfuns = jnp.transpose(jax.lax.stop_gradient(v), axes=(0, 1, 3, 2))[
         alpha_idx, zeta0_idx, theta_idx
     ]
-    # Combine eigenvalue and eigenfunction data (Neigvals, Ntheta-1)
-    # Eigenvalues are on the top row
-    top_eigvals_and_eigfuns = jnp.concat((top_eigvals[:, None], top_eigenfuns), axis=1)
-    data["ideal ballooning lambda"] = top_eigvals_and_eigfuns.flatten()
+    data["ideal ballooning lambda"] = top_eigvals
+    data["ideal ballooning eigenfunction"] = top_eigenfuns
 
+    return data
+
+
+@register_compute_fun(
+    name="ideal ballooning eigenfunction",
+    label="X_{\\mathrm{ballooning}}",
+    units="~",
+    units_long="None",
+    description="Ideal ballooning eigenfunction",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["ideal ballooning lambda"],
+)
+def _ideal_ballooning_eigenfunction(params, transforms, profiles, data, **kwargs):
     return data
 
 

@@ -978,22 +978,44 @@ class Equilibrium(IOAble, Optimizable):
         deps_other_deps = set(
             get_data_deps(other_deps, obj=p, has_axis=grid.axis.size, data=data)
         )
-        # if a quantity depends on a 0d quantity, then it 'deps_other_deps' will
+        # if a quantity depends on a 0d quantity, then its 'deps_other_deps' will
         # contain the dependencies of that 0d quantity, but we don't need to
-        # compute them again. But let's say it depends on some dependency of a
-        # 0d quantity but not the 0d quantity itself, then those should stay.
+        # compute them again.
         # Example:
         # 0D stuff: "a", "b"
-        #    - "a" depends on "c", "d", "e"
-        #    - "b" depends on "d", "f"
+        #       a
+        #       ├── c
+        #       ├── d
+        #       └── e
+        #       b
+        #       ├── f
+        #       └── g
         # Say,
-        #    - "X" depends on "a", "c", "d", "e", "f"
+        #    - "X" has deps = {"a", "c", "d", "e", "f", "g"}
         # Since "X" depends on "a", it will have "c", "d", "e" automatically. So, we
-        # can remove them. Although, "X" does depend on "d" and "f", it doesn't depend
-        # on "b", so we keep "d" and "f".
+        # can remove them once "a" is computed. Although, "X" does depend on "d" and
+        # "f", it doesn't depend on "b", so we keep "d" and "f".
+        #       X
+        #       ├── a
+        #       │   ├── c    (implicit via a)
+        #       │   ├── d    (implicit via a)
+        #       │   └── e    (implicit via a)
+        #       ├── f
+        #       └── g
         # So, to compute ["X", "a", "b"], we will compute "a", "b" and their
-        # dependencies with the special volume grid. Then, we will compute "d" and "f"
+        # dependencies with the special volume grid. Then, we will compute "f" and "g"
         # again (because maybe there is a better grid for them), and finally get "X".
+        # TODO (1752): There are still edge cases where this logic does not work, i.e.
+        # If the formula for "X" is "X" = "a" / "c" and "c" is not 0D. Dependency tree,
+        #       X
+        #       ├── a
+        #       │   ├── c    (implicit via a)
+        #       │   ├── d    (implicit via a)
+        #       │   └── e    (implicit via a)
+        #       └── c        (explicit from the formula)
+        # If "c" requires a special grid (like dep1dr or dep1dz), this logic will fail.
+        # Currently, we don't have this case for any compute function, but if we have
+        # one, we will need to change this logic to be more general.
         for d0 in dep0d:
             if d0 in deps_other_deps:
                 deps_other_deps -= set(

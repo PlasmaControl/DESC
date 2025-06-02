@@ -1135,20 +1135,66 @@ def compute_B_plasma_vol(eq, eval_grid, source_grid=None):
     eval_grid = np.atleast_2d(eval_grid)
     assert eval_grid.shape[1] == 3
     if source_grid is None:
-        # TODO: N resolution should also be dependent on NFP
-        source_grid = QuadratureGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid)
+        source_grid = QuadratureGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid * eq.NFP)
 
     data_keys = ["J", "phi", "sqrt(g)", "x"]
     data = eq.compute(data_keys, grid=source_grid)
 
     B = np.zeros_like(eval_grid)
-    for k, x in enumerate(rpz2xyz(eval_grid)):
-        dx = x - rpz2xyz(data["x"])
+    for k, x in enumerate(eval_grid):
+        dx = rpz2xyz(x) - rpz2xyz(data["x"])
         B[k, :] = np.sum(
             cross(rpz2xyz_vec(data["J"], phi=data["phi"]), dx)
-            / np.linalg.norm(dx).T ** 3
+            / np.atleast_2d(np.linalg.norm(dx, axis=1)).T ** 3
             * np.atleast_2d(data["sqrt(g)"]).T
             * np.atleast_2d(source_grid.weights).T,
             axis=0,
         )
     return mu_0 / (4 * np.pi) * xyz2rpz_vec(B, phi=eval_grid[:, 1])
+
+
+def compute_A_plasma_vol(eq, eval_grid, source_grid=None):
+    """Evaluate magnetic vector potential in a volume due to enclosed plasma currents.
+
+    The magnetic vector potential due to the plasma current can be written as an
+    integral over the plasma volume:
+
+    𝐀ᵥ(𝐫) = μ₀/4π ∫ 𝐉(𝐫')/|𝐫 − 𝐫'| d³𝐫'
+
+    Where 𝐉 is the plasma current density, 𝐫 is the evaluation point, and 𝐫' is a point
+    in the plasma volume.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Equilibrium that is the source of the plasma current.
+    eval_grid : ndarray, shape(num_nodes, 3)
+        Evaluation points for the magnetic field in (R,phi,Z) coordinates.
+    source_grid : Grid, optional
+        Source points for integral. Defaults to the equilibrium QuadratureGrid.
+
+    Returns
+    -------
+    f : ndarray, shape(eval_grid.num_nodes, 3) or shape(eval_grid.num_nodes,)
+        Magnetic vector potential evaluated at eval_grid in (R,phi,Z) components.
+
+    """
+    eval_grid = np.atleast_2d(eval_grid)
+    assert eval_grid.shape[1] == 3
+    if source_grid is None:
+        source_grid = QuadratureGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid * eq.NFP)
+
+    data_keys = ["J", "phi", "sqrt(g)", "x"]
+    data = eq.compute(data_keys, grid=source_grid)
+
+    A = np.zeros_like(eval_grid)
+    for k, x in enumerate(eval_grid):
+        dx = rpz2xyz(x) - rpz2xyz(data["x"])
+        A[k, :] = np.sum(
+            rpz2xyz_vec(data["J"], phi=data["phi"])
+            / np.atleast_2d(np.linalg.norm(dx, axis=1)).T
+            * np.atleast_2d(data["sqrt(g)"]).T
+            * np.atleast_2d(source_grid.weights).T,
+            axis=0,
+        )
+    return mu_0 / (4 * np.pi) * xyz2rpz_vec(A, phi=eval_grid[:, 1])

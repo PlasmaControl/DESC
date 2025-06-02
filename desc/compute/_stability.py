@@ -265,10 +265,7 @@ def _magnetic_well(params, transforms, profiles, data, **kwargs):
     source_grid_requirement={"coordinates": "raz", "is_meshgrid": True},
     zeta0="array: points of vanishing integrated local shear to scan over. "
     "Default 15 points linearly spaced in [-π/2,π/2]",
-    # --no-verify Neigvals="int: Number of top eigenvalues to retain. "
-    # --no-verify "Default is 1",
 )
-# Neigvals above works for compute but not optimization
 def _ideal_ballooning_gamma2(params, transforms, profiles, data, **kwargs):
     """
     Ideal-ballooning growth rate finder.
@@ -401,7 +398,8 @@ def _ideal_ballooning_gamma2(params, transforms, profiles, data, **kwargs):
 
     A_redo = B_inv @ A @ jnp.transpose(B_inv, axes=(0, 1, 3, 2))
 
-    # TODO: Try jax.scipy.eigh_tridiagonal for increased performance
+    # TODO: Issue #1750
+    # Try jax.scipy.eigh_tridiagonal for increased performance
     w, v = jnp.linalg.eigh(A_redo)
 
     flat_w = w.flatten()

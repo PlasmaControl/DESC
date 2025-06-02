@@ -518,7 +518,6 @@ def _e_sup_theta(params, transforms, profiles, data, **kwargs):
     data=["e_rho", "e_zeta"],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
-        "desc.geometry.core.Surface",
     ],
 )
 def _e_sup_theta_times_sqrt_g(params, transforms, profiles, data, **kwargs):
@@ -1398,7 +1397,6 @@ def _e_sup_zeta_zz(params, transforms, profiles, data, **kwargs):
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.FourierRZToroidalSurface",
-        "desc.geometry.core.Surface",
     ],
     aliases=["e_phi"],
     # Our usual notation implies e_phi = (∂X/∂ϕ)|R,Z = R ϕ̂, but we need to alias e_phi
@@ -3225,7 +3223,7 @@ def _e_sub_zeta_zz(params, transforms, profiles, data, **kwargs):
     data=["R", "0"],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
-        "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.core.Surface",
     ],
 )
 def _grad_phi(params, transforms, profiles, data, **kwargs):
@@ -3334,7 +3332,6 @@ def _gradpsi(params, transforms, profiles, data, **kwargs):
     axis_limit_data=["e_theta_r", "|e_theta x e_zeta|_r"],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
-        "desc.geometry.core.Surface",
     ],
 )
 def _n_rho(params, transforms, profiles, data, **kwargs):
@@ -3348,6 +3345,32 @@ def _n_rho(params, transforms, profiles, data, **kwargs):
             cross(data["e_theta_r"], data["e_zeta"]).T, data["|e_theta x e_zeta|_r"]
         ).T,
     )
+    return data
+
+
+@register_compute_fun(
+    name="n_rho",
+    label="\\hat{\\mathbf{n}}_{\\rho}",
+    units="~",
+    units_long="None",
+    description="Unit vector normal to constant rho surface (direction of e^rho)",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["e_theta", "e_zeta", "|e_theta x e_zeta|"],
+    parameterization=[
+        "desc.geometry.surface.FourierRZToroidalSurface",
+    ],
+)
+def _n_rho_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs):
+    # Equal to 𝐞^ρ / ‖𝐞^ρ‖ but works correctly for surfaces as well that don't
+    # have contravariant basis defined.
+    data["n_rho"] = safediv(
+        cross(data["e_theta"], data["e_zeta"]).T, data["|e_theta x e_zeta|"]
+    ).T
+
     return data
 
 
@@ -3374,7 +3397,7 @@ def _n_rho(params, transforms, profiles, data, **kwargs):
     ],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
-        "desc.geometry.core.Surface",
+        "desc.geometry.surface.FourierRZToroidalSurface",
     ],
 )
 def _n_rho_z(params, transforms, profiles, data, **kwargs):
@@ -3403,7 +3426,6 @@ def _n_rho_z(params, transforms, profiles, data, **kwargs):
     data=["e_rho", "e_zeta", "|e_zeta x e_rho|"],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
-        "desc.geometry.core.Surface",
     ],
 )
 def _n_theta(params, transforms, profiles, data, **kwargs):
@@ -3430,7 +3452,7 @@ def _n_theta(params, transforms, profiles, data, **kwargs):
     axis_limit_data=["e_theta_r", "|e_rho x e_theta|_r"],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
-        "desc.geometry.core.Surface",
+        "desc.geometry.surface.ZernikeRZToroidalSection",
     ],
 )
 def _n_zeta(params, transforms, profiles, data, **kwargs):
@@ -3466,7 +3488,6 @@ def _n_zeta(params, transforms, profiles, data, **kwargs):
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.FourierRZToroidalSurface",
-        "desc.geometry.core.Surface",
     ],
 )
 def _e_sub_theta_rp(params, transforms, profiles, data, **kwargs):

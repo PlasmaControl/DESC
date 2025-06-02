@@ -2340,7 +2340,7 @@ def test_ballooning_stability_opt():
         data_keys = ["ideal ballooning lambda"]
         data = eq.compute(data_keys, grid=grid)
 
-        lam2_initial[i] = np.max(data["ideal ballooning lambda"])
+        lam2_initial[i] = data["ideal ballooning lambda"][0]
 
     # Flux surfaces on which to evaluate ballooning stability
     surfaces_ball = surfaces
@@ -2421,7 +2421,7 @@ def test_ballooning_stability_opt():
         data_keys = ["ideal ballooning lambda"]
         data = eq.compute(data_keys, grid=grid)
 
-        lam2_optimized[i] = data["ideal ballooning lambda"]
+        lam2_optimized[i] = data["ideal ballooning lambda"][0]
 
     assert lam2_initial - lam2_optimized >= 1.8e-2
 

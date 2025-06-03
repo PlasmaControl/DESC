@@ -17,3 +17,5 @@ scikit-image <= 0.25.1
 scipy >= 1.7.0, <= 1.15.3
 termcolor <= 3.1.0
 sympy
+# for ensuring initial guesses are nested
+map2disc @ git+https://gitlab.mpcdf.mpg.de/gvec-group/map2disc.git

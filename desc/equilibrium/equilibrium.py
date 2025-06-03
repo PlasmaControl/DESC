@@ -994,7 +994,7 @@ class Equilibrium(IOAble, Optimizable):
         #    - "X" has deps = {"a", "c", "d", "e", "f", "g"}
         # Since "X" depends on "a", it will have "c", "d", "e" automatically. So, we
         # can remove them once "a" is computed. Although, "X" does depend on "g" and
-        # "f", it doesn't depend on "b", so we keep "d" and "f".
+        # "f", it doesn't depend on "b", so we keep "g" and "f".
         #       X
         #       ├── a
         #       │   ├── c    (implicit via a)

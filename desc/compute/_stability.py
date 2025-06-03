@@ -442,7 +442,7 @@ def _ideal_ballooning_lambda(params, transforms, profiles, data, **kwargs):
     source_grid_requirement={"coordinates": "raz", "is_meshgrid": True},
 )
 def _ideal_ballooning_eigenfunction(params, transforms, profiles, data, **kwargs):
-    return data
+    return data  # noqa: unused dependency
 
 
 @register_compute_fun(

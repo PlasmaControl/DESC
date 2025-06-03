@@ -7,7 +7,7 @@ sys.path.append(os.path.abspath("../../../../"))
 
 from mpi4py import MPI
 
-from desc import _set_cpu_count, set_device
+from desc import set_device
 
 # ====== Using CPUs ======
 num_device = 2
@@ -76,7 +76,6 @@ if __name__ == "__main__":
 
     with nvtx.annotate("setup"):
         eq = get("precise_QA")
-        eq.change_resolution(M=3, N=2, M_grid=6, N_grid=4)
 
         # create two grids with different rho values, this will effectively separate
         # the quasisymmetry objective into two parts

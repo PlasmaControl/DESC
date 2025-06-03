@@ -438,6 +438,8 @@ def _ideal_ballooning_lambda(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["ideal ballooning lambda"],
+    parameterization=["desc.equilibrium.equilibrium.Equilibrium"],
+    source_grid_requirement={"coordinates": "raz", "is_meshgrid": True},
 )
 def _ideal_ballooning_eigenfunction(params, transforms, profiles, data, **kwargs):
     return data

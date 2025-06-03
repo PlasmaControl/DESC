@@ -30,6 +30,7 @@ set_device("gpu", num_device=num_device)
 
 
 import numpy as np
+import nvtx
 
 from desc import config as desc_config
 from desc.backend import jax, jnp, print_backend_info
@@ -73,34 +74,48 @@ if __name__ == "__main__":
         print_backend_info()
         print("\n")
 
-    eq = get("precise_QA")
-    eq.change_resolution(M=3, N=2, M_grid=6, N_grid=4)
+    with nvtx.annotate("setup"):
+        eq = get("precise_QA")
+        eq.change_resolution(M=3, N=2, M_grid=6, N_grid=4)
 
-    # create two grids with different rho values, this will effectively separate
-    # the quasisymmetry objective into two parts
-    grid1 = LinearGrid(
-        M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, rho=jnp.linspace(0.2, 0.5, 4), sym=True
-    )
-    grid2 = LinearGrid(
-        M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, rho=jnp.linspace(0.6, 1.0, 6), sym=True
-    )
+        # create two grids with different rho values, this will effectively separate
+        # the quasisymmetry objective into two parts
+        grid1 = LinearGrid(
+            M=eq.M_grid,
+            N=eq.N_grid,
+            NFP=eq.NFP,
+            rho=jnp.linspace(0.2, 0.5, 4),
+            sym=True,
+        )
+        grid2 = LinearGrid(
+            M=eq.M_grid,
+            N=eq.N_grid,
+            NFP=eq.NFP,
+            rho=jnp.linspace(0.6, 1.0, 6),
+            sym=True,
+        )
 
-    # when using parallel objectives, the user needs to supply the device_id
-    obj1 = QuasisymmetryTwoTerm(eq=eq, helicity=(1, eq.NFP), grid=grid1, device_id=0)
-    obj2 = QuasisymmetryTwoTerm(eq=eq, helicity=(1, eq.NFP), grid=grid2, device_id=1)
-    obj3 = AspectRatio(eq=eq, target=8, weight=100, device_id=0)
-    objs = [obj1, obj2, obj3]
+        # when using parallel objectives, the user needs to supply the device_id
+        obj1 = QuasisymmetryTwoTerm(
+            eq=eq, helicity=(1, eq.NFP), grid=grid1, device_id=0
+        )
+        obj2 = QuasisymmetryTwoTerm(
+            eq=eq, helicity=(1, eq.NFP), grid=grid2, device_id=1
+        )
+        obj3 = AspectRatio(eq=eq, target=8, weight=100, device_id=0)
+        objs = [obj1, obj2, obj3]
 
-    # Parallel objective function needs the MPI communicator
-    # If you don't specify `deriv_mode=blocked`, you will get a warning and DESC will
-    # automatically switch to `blocked`.
-    objective = ObjectiveFunction(
-        objs, deriv_mode="blocked", mpi=MPI, rank_per_objective=np.array([0, 1, 0])
-    )
-    if rank == 0:
-        objective.build(verbose=3)
-    else:
-        objective.build(verbose=0)
+    with nvtx.annotate("Build Objectives"):
+        # Parallel objective function needs the MPI communicator
+        # If you don't specify `deriv_mode=blocked`, you will get a warning and DESC will
+        # automatically switch to `blocked`.
+        objective = ObjectiveFunction(
+            objs, deriv_mode="blocked", mpi=MPI, rank_per_objective=np.array([0, 1, 0])
+        )
+        if rank == 0:
+            objective.build(verbose=3)
+        else:
+            objective.build(verbose=0)
 
     # we will fix some modes as usual
     k = 1
@@ -131,19 +146,20 @@ if __name__ == "__main__":
 
     # this context manager will put the workers in a loop to listen to the master
     # to compute the objective function and its derivatives
-    with objective as objective:
-        # apart from cost evaluation and derivatives, everything else will be only
-        # performed on the master rank
-        if rank == 0:
-            eq.optimize(
-                objective=objective,
-                constraints=constraints,
-                optimizer=optimizer,
-                maxiter=3,
-                verbose=3,
-                options={
-                    "initial_trust_ratio": 1.0,
-                },
-            )
+    with nvtx.annotate("Optimization"):
+        with objective as objective:
+            # apart from cost evaluation and derivatives, everything else will be only
+            # performed on the master rank
+            if rank == 0:
+                eq.optimize(
+                    objective=objective,
+                    constraints=constraints,
+                    optimizer=optimizer,
+                    maxiter=3,
+                    verbose=3,
+                    options={
+                        "initial_trust_ratio": 1.0,
+                    },
+                )
 
     # if you put a code here, it will be performed on all ranks

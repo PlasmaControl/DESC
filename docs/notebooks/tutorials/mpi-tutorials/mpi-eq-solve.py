@@ -3,7 +3,7 @@ import sys
 
 # Add the path to the parent directory to augment search for module
 sys.path.insert(0, os.path.abspath("."))
-sys.path.append(os.path.abspath("../../../"))
+sys.path.append(os.path.abspath("../../../../"))
 
 from mpi4py import MPI
 

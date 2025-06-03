@@ -403,7 +403,7 @@ class ObjectiveFunction(IOAble):
             # The message contains 3 parts,
             # message[0] is the operation to be performed
             # message[1] is the state vector (for compute and jvp's)
-            # message[2] is the output (for only jvp's)
+            # message[2] is the tangents (for only jvp's)
             message = (None, None, None)
             message = self.comm.bcast(message, root=0)
             obj_idx_rank = self._obj_per_rank[self.rank]

@@ -1140,16 +1140,15 @@ def compute_B_plasma_vol(eq, eval_grid, source_grid=None):
     data_keys = ["J", "phi", "sqrt(g)", "x"]
     data = eq.compute(data_keys, grid=source_grid)
 
-    B = np.zeros_like(eval_grid)
-    for k, x in enumerate(eval_grid):
-        dx = rpz2xyz(x) - rpz2xyz(data["x"])
-        B[k, :] = np.sum(
-            cross(rpz2xyz_vec(data["J"], phi=data["phi"]), dx)
-            / np.atleast_2d(np.linalg.norm(dx, axis=1)).T ** 3
-            * np.atleast_2d(data["sqrt(g)"]).T
-            * np.atleast_2d(source_grid.weights).T,
-            axis=0,
-        )
+    # shape = (source_grid.num_nodes, eval_grid.num_nodes, 3)  # noqa: E800
+    dx = rpz2xyz(eval_grid)[None, :, :] - rpz2xyz(data["x"])[:, None, :]
+    B = np.sum(  # sum over source_grid nodes
+        cross(rpz2xyz_vec(data["J"], phi=data["phi"])[:, None, :], dx)
+        / np.linalg.norm(dx, axis=2)[:, :, None] ** 3
+        * data["sqrt(g)"][:, None, None]
+        * source_grid.weights[:, None, None],
+        axis=0,
+    )
     return mu_0 / (4 * np.pi) * xyz2rpz_vec(B, phi=eval_grid[:, 1])
 
 
@@ -1187,14 +1186,13 @@ def compute_A_plasma_vol(eq, eval_grid, source_grid=None):
     data_keys = ["J", "phi", "sqrt(g)", "x"]
     data = eq.compute(data_keys, grid=source_grid)
 
-    A = np.zeros_like(eval_grid)
-    for k, x in enumerate(eval_grid):
-        dx = rpz2xyz(x) - rpz2xyz(data["x"])
-        A[k, :] = np.sum(
-            rpz2xyz_vec(data["J"], phi=data["phi"])
-            / np.atleast_2d(np.linalg.norm(dx, axis=1)).T
-            * np.atleast_2d(data["sqrt(g)"]).T
-            * np.atleast_2d(source_grid.weights).T,
-            axis=0,
-        )
+    # shape = (source_grid.num_nodes, eval_grid.num_nodes, 3)  # noqa: E800
+    dx = rpz2xyz(eval_grid)[None, :, :] - rpz2xyz(data["x"])[:, None, :]
+    A = np.sum(  # sum over source_grid nodes
+        rpz2xyz_vec(data["J"], phi=data["phi"])[:, None, :]
+        / np.linalg.norm(dx, axis=2)[:, :, None]
+        * data["sqrt(g)"][:, None, None]
+        * source_grid.weights[:, None, None],
+        axis=0,
+    )
     return mu_0 / (4 * np.pi) * xyz2rpz_vec(A, phi=eval_grid[:, 1])

@@ -237,6 +237,9 @@ _class_inheritance = {
     "desc.geometry.curve.FourierPlanarCurve": [
         "desc.geometry.core.Curve",
     ],
+    "desc.geometry.curve.FourierXYCurve": [
+        "desc.geometry.core.Curve",
+    ],
     "desc.geometry.curve.SplineXYZCurve": [
         "desc.geometry.core.Curve",
     ],
@@ -256,6 +259,10 @@ _class_inheritance = {
     ],
     "desc.coils.FourierPlanarCoil": [
         "desc.geometry.curve.FourierPlanarCurve",
+        "desc.geometry.core.Curve",
+    ],
+    "desc.coils.FourierXYCoil": [
+        "desc.geometry.curve.FourierXYCurve",
         "desc.geometry.core.Curve",
     ],
     "desc.magnetic_fields._current_potential.CurrentPotentialField": [

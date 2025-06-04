@@ -4,6 +4,7 @@ import functools
 from abc import ABC, abstractmethod
 
 import numpy as np
+import nvtx
 
 from desc.backend import (
     desc_config,
@@ -328,7 +329,8 @@ class ObjectiveFunction(IOAble):
                 max(self._rank_per_objective) != self.size - 1,
                 ValueError,
                 "The maximum value of rank_per_objective "
-                f"({max(self._rank_per_objective)+1}) "
+                f"({max(self._rank_per_objective)+1}, supplied as "
+                f"({max(self._rank_per_objective)} in the array) "
                 f"is not equal to the number of ranks ({self.size}). There "
                 "should be at least 1 objective per rank.",
             )
@@ -407,6 +409,7 @@ class ObjectiveFunction(IOAble):
             message = (None, None, None)
             message = self.comm.bcast(message, root=0)
             obj_idx_rank = self._obj_per_rank[self.rank]
+
             if message[0] == "STOP":
                 print(f"Rank {self.rank} STOPPING")
                 break
@@ -418,6 +421,7 @@ class ObjectiveFunction(IOAble):
                 # inputs to jitted functions must live on the same device. Need to
                 # put xi and vi on the same device as the objective
                 J_rank = []
+                rng_rank = nvtx.start_range(message="Worker Job JVP", color="red")
                 for idx in obj_idx_rank:
                     obj = self.objectives[idx]
                     const = self.constants[idx]
@@ -428,6 +432,7 @@ class ObjectiveFunction(IOAble):
                     vi = jax.device_put(vi, obj._device)
                     J_rank.append(getattr(obj, message[0])(vi, xi, constants=const))
                 J_rank = np.hstack(J_rank)
+                nvtx.end_range(rng_rank)
                 self.comm.gather(J_rank, root=0)
             elif "compute" in message[0]:
                 print(
@@ -435,6 +440,7 @@ class ObjectiveFunction(IOAble):
                     + f"{obj_idx_rank}"
                 )
                 f_rank = []
+                rng_rank = nvtx.start_range(message="Worker Job Compute", color="red")
                 for idx in obj_idx_rank:
                     obj = self.objectives[idx]
                     const = self.constants[idx]
@@ -442,6 +448,7 @@ class ObjectiveFunction(IOAble):
                     par = jax.device_put(par, obj._device)
                     f_rank.append(getattr(obj, message[0])(*par, constants=const))
                 f_rank = np.concatenate(f_rank)
+                nvtx.end_range(rng_rank)
                 self.comm.gather(f_rank, root=0)
             elif "proximal_jvp" in message[0]:
                 print(
@@ -449,6 +456,9 @@ class ObjectiveFunction(IOAble):
                     + f"{obj_idx_rank}"
                 )
                 J_rank = []
+                rng_rank = nvtx.start_range(
+                    message="Worker Job JVP Proximal", color="red"
+                )
                 for idx in obj_idx_rank:
                     obj = self.objectives[idx]
                     const = self.constants[idx]
@@ -478,6 +488,7 @@ class ObjectiveFunction(IOAble):
                             ).T
                         )
                 J_rank = np.hstack(J_rank)
+                nvtx.end_range(rng_rank)
                 self.comm.gather(J_rank, root=0)
 
     def _unjit(self):

@@ -11,7 +11,7 @@ from mpi4py import MPI
 from desc import set_device
 
 # ====== Using CPUs ======
-num_device = 4
+num_device = 2
 # These will be used for diving the single CPU into multiple virtual CPUs
 # such that JAX and XLA thinks there are multiple devices
 

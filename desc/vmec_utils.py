@@ -5,7 +5,7 @@ from netCDF4 import Dataset, stringtochar
 from scipy.constants import mu_0
 from scipy.linalg import null_space
 
-from desc.backend import block_diag, jnp, sign
+from desc.backend import block_diag, jit, jnp, sign
 from desc.basis import DoubleFourierSeries, zernike_radial
 from desc.compute import get_transforms
 from desc.grid import LinearGrid
@@ -49,7 +49,7 @@ def ptolemy_identity_fwd(m_0, n_0, s, c):
     m_0, n_0 = map(np.atleast_1d, (m_0, n_0))
     vmec_modes, x = _mnsc_to_modes_x(m_0, n_0, s, c)
     desc_modes = _desc_modes_from_vmec_modes(vmec_modes)
-    A, _ = ptolemy_linear_transform(desc_modes, vmec_modes)
+    A, _ = _ptolemy_linear_transform_matrix(desc_modes, vmec_modes)
     y = np.linalg.solve(A, x.T).T
     return desc_modes[:, 1], desc_modes[:, 2], y
 
@@ -90,7 +90,7 @@ def ptolemy_identity_rev(m_1, n_1, x):
     x = np.atleast_2d(x)
     m_1, n_1 = map(np.atleast_1d, (m_1, n_1))
     desc_modes = np.vstack([np.zeros_like(m_1), m_1, n_1]).T
-    A, vmec_modes = ptolemy_linear_transform(desc_modes)
+    A, vmec_modes = _ptolemy_linear_transform_matrix(desc_modes)
     y = (A @ x.T).T
     xm, xn, s, c = _modes_x_to_mnsc(vmec_modes, y)
     return xm, xn, s, c
@@ -143,39 +143,47 @@ def _modes_x_to_mnsc(vmec_modes, x):
     return xm, xn, s, c
 
 
+@jit
 def _vmec_modes_from_desc_modes(desc_modes):
     """Finds the VMEC modes corresponding to a given set of DESC modes.
 
     input order: [l,m,n]
     output order : [+1 for cos/-1 for sin, m, n]
     """
-    vmec_modes = np.vstack(
+    vmec_modes = jnp.vstack(
         [
             sign(desc_modes[:, 2]) * sign(desc_modes[:, 1]),
             abs(desc_modes[:, 1]),
             desc_modes[:, 2],
         ]
     ).T
-    vmec_modes[vmec_modes[:, 1] == 0, 2] = abs(vmec_modes[vmec_modes[:, 1] == 0, 2])
-    vmec_modes = vmec_modes[np.lexsort(vmec_modes.T[np.array([0, 2, 1])])]
+    # where m==0, abs(n)
+    m = vmec_modes[:, 1]
+    n = vmec_modes[:, 2]
+    vmec_modes = vmec_modes.at[:, 2].set(jnp.where(m == 0, jnp.abs(n), n))
+    vmec_modes = vmec_modes[jnp.lexsort(vmec_modes.T[np.array([0, 2, 1])])]
     return vmec_modes
 
 
+@jit
 def _desc_modes_from_vmec_modes(vmec_modes):
     """Finds the DESC modes corresponding to a given set of VMEC modes.
 
     input order: [+1 for cos/-1 for sin, m, n]
     output order : [l,m,n]
     """
-    desc_modes = np.vstack(
+    desc_modes = jnp.vstack(
         [
             np.zeros(len(vmec_modes)),
             sign(vmec_modes[:, 2]) * vmec_modes[:, 0] * vmec_modes[:, 1],
             vmec_modes[:, 2],
         ]
     ).T
-    desc_modes[desc_modes[:, 1] == 0, 2] *= vmec_modes[desc_modes[:, 1] == 0, 0]
-    desc_modes = desc_modes[np.lexsort(desc_modes.T[np.array([1, 0, 2])])]
+    # where m==0, multiply n by sign
+    m = desc_modes[:, 1]
+    sgn = vmec_modes[:, 0]
+    desc_modes = desc_modes.at[:, 2].multiply(jnp.where(m == 0, sgn, 1))
+    desc_modes = desc_modes[jnp.lexsort(desc_modes.T[jnp.array([1, 0, 2])])]
     return desc_modes
 
 
@@ -211,6 +219,54 @@ def ptolemy_linear_transform(desc_modes, vmec_modes=None, helicity=None, NFP=Non
         Only returned if helicity is specified.
 
     """
+    matrix, vmec_modes = _ptolemy_linear_transform_matrix(desc_modes, vmec_modes)
+    # helicity stuff requires dynamic shapes so doesn't work under jax,
+    # we built the matrix first with jax then do additional stuff with regular np.
+
+    # indices of non-quasi-symmetric modes
+    if helicity is not None:
+        assert NFP is not None, "NFP must be supplied when specifying helicity"
+        assert isinstance(helicity, tuple) and len(helicity) == 2
+        M = np.abs(helicity[0])
+        N = np.abs(helicity[1]) / NFP * sign(np.prod(helicity))
+        idx = np.ones((vmec_modes.shape[0],), bool)
+        idx[0] = False  # m=0,n=0 mode
+        if N == 0:
+            idx_MN = np.nonzero(vmec_modes[:, 2] == 0)[0]
+        else:
+            idx_MN = np.nonzero(vmec_modes[:, 1] * N == vmec_modes[:, 2] * M)[0]
+        idx[idx_MN] = False
+        idx = np.nonzero(idx)[0]
+        return matrix, vmec_modes, idx
+
+    return matrix, vmec_modes
+
+
+@jit
+def _ptolemy_linear_transform_matrix(desc_modes, vmec_modes=None):
+    """JAX-able way to get a matrix for transforming between DESC and VMEC coeffs.
+
+    Parameters
+    ----------
+    desc_modes : ndarray, shape(num_modes, 3)
+        Mode numbers [l,m,n] of the double-Fourier series.
+    vmec_modes : ndarray, shape(num_modes,3), optional
+        Desired order of modes of the double-angle basis.
+        First column: +1/-1 for cos/sin term.
+        Second column: poloidal mode number m (range 0 to M).
+        Third column: toroidal mode number n (range -N to N).
+        If None, determined automatically.
+
+    Returns
+    -------
+    matrix : ndarray
+        Transform matrix such that M*a=b, where a are the double-Fourier coefficients
+        and b are the double-angle coefficients.
+    vmec_modes : ndarray, shape(num_modes,3)
+        Modes of the double-angle basis. First column: +1/-1 for cos/sin term.
+        Second column: poloidal mode number m (range 0 to M).
+        Third column: toroidal mode number n (range -N to N).
+    """
     if vmec_modes is None:
         vmec_modes = _vmec_modes_from_desc_modes(desc_modes)
 
@@ -231,50 +287,33 @@ def ptolemy_linear_transform(desc_modes, vmec_modes=None, helicity=None, NFP=Non
     both_zero = m_zero * n_zero
     either_zero = m_zero + n_zero
 
-    mat = np.zeros((len(desc_modes), len(vmec_modes)))
+    mat = jnp.zeros((len(desc_modes), len(vmec_modes)))
     # pattern for m!=0, n!=0:
     # vmec smn- = 1/2 desc m,n + 1/2 desc -m,-n
     # vmec smn+ = -1/2 desc m,-n + 1/2 desc -m,n
     # vmec cmn- = -1/2 desc -m,n + 1/2 desc m,-n
     # vmec cmn+ = 1/2 desc -m,-n + 1/2 desc m,n
-    mat[idx_smn_m1] = 0.5
-    mat[idx_smn_m2] = 0.5
-    mat[idx_smn_p1] = -0.5
-    mat[idx_smn_p2] = 0.5
-    mat[idx_cmn_m1] = -0.5
-    mat[idx_cmn_m2] = 0.5
-    mat[idx_cmn_p1] = 0.5
-    mat[idx_cmn_p2] = 0.5
+    mat = jnp.where(idx_smn_m1, 0.5, mat)
+    mat = jnp.where(idx_smn_m2, 0.5, mat)
+    mat = jnp.where(idx_smn_p1, -0.5, mat)
+    mat = jnp.where(idx_smn_p2, 0.5, mat)
+    mat = jnp.where(idx_cmn_m1, -0.5, mat)
+    mat = jnp.where(idx_cmn_m2, 0.5, mat)
+    mat = jnp.where(idx_cmn_p1, 0.5, mat)
+    mat = jnp.where(idx_cmn_p2, 0.5, mat)
     # above stuff is wrong when m or n is 0 so reset those
-    mat[either_zero] = 0
+    mat = jnp.where(either_zero, 0, mat)
     # for m=0, cos terms get +1 where n1==n2
-    mat[m_zero * (n1 == n2[:, None]) * (cs == 1)] = 1
+    mat = jnp.where(m_zero * (n1 == n2[:, None]) * (cs == 1), 1, mat)
     # and sin terms get -1 where n1==-n2
-    mat[m_zero * (n1 == -n2[:, None]) * (cs == -1)] = -1
+    mat = jnp.where(m_zero * (n1 == -n2[:, None]) * (cs == -1), -1, mat)
     # for n=0, sin terms get +1 where n1==-n2
-    mat[n_zero * (m1 == -m2[:, None]) * (cs == -1)] = 1
+    mat = jnp.where(n_zero * (m1 == -m2[:, None]) * (cs == -1), 1, mat)
     # and cos terms get 1 where n1==n2
-    mat[n_zero * (m1 == m2[:, None]) * (cs == 1)] = 1
+    mat = jnp.where(n_zero * (m1 == m2[:, None]) * (cs == 1), 1, mat)
     # m=n=0 is always 1
-    mat[both_zero] = 1
+    mat = jnp.where(both_zero, 1, mat)
     matrix = mat.T
-
-    # indices of non-quasi-symmetric modes
-    if helicity is not None:
-        assert NFP is not None, "NFP must be supplied when specifying helicity"
-        assert isinstance(helicity, tuple) and len(helicity) == 2
-        M = np.abs(helicity[0])
-        N = np.abs(helicity[1]) / NFP * sign(np.prod(helicity))
-        idx = np.ones((vmec_modes.shape[0],), bool)
-        idx[0] = False  # m=0,n=0 mode
-        if N == 0:
-            idx_MN = np.nonzero(vmec_modes[:, 2] == 0)[0]
-        else:
-            idx_MN = np.nonzero(vmec_modes[:, 1] * N == vmec_modes[:, 2] * M)[0]
-        idx[idx_MN] = False
-        idx = np.nonzero(idx)[0]
-        return matrix, vmec_modes, idx
-
     return matrix, vmec_modes
 
 

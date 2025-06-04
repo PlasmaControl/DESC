@@ -10,7 +10,16 @@ import numpy as np
 from scipy.special import factorial
 from termcolor import colored
 
-from desc.backend import flatnonzero, fori_loop, jax, jit, jnp, pure_callback, take
+from desc.backend import (
+    flatnonzero,
+    fori_loop,
+    jax,
+    jit,
+    jnp,
+    pure_callback,
+    sign,
+    take,
+)
 
 PRINT_WIDTH = 60  # current longest name is BootstrapRedlConsistency with pre-text
 
@@ -965,6 +974,12 @@ def safediv(a, b, fill=0, threshold=0):
     num = jnp.where(mask, fill, a)
     den = jnp.where(mask, 1, b)
     return num / den
+
+
+def safearccos(x):
+    """Like jnp.arccos, but without nan gradient at x=1."""
+    safe_x = jnp.where(jnp.abs(x) == 1, 0, x)
+    return jnp.where(jnp.abs(x) == 1, sign(x) * jnp.inf, jnp.arccos(safe_x))
 
 
 def ensure_tuple(x):

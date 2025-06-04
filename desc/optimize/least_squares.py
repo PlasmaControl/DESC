@@ -277,7 +277,7 @@ def lsqtr(  # noqa: C901
         J_a = jnp.vstack([J_h, jnp.diag(diag_h**0.5)]) if bounded else J_h
         f_a = jnp.concatenate([f, jnp.zeros(diag_h.size)]) if bounded else f
 
-        if tr_method == "svd":
+        if tr_method == "svd" or iteration == 0:
             U, s, Vt = jnp.linalg.svd(J_a, full_matrices=False)
         elif tr_method == "cho":
             B_h = jnp.dot(J_a.T, J_a)
@@ -305,7 +305,7 @@ def lsqtr(  # noqa: C901
             # This gives us the proposed step relative to the current position
             # and it tells us whether the proposed step
             # has reached the trust region boundary or not.
-            if tr_method == "svd":
+            if tr_method == "svd" or iteration == 0:
                 step_h, hits_boundary, alpha = trust_region_step_exact_svd(
                     f_a, U, s, Vt.T, trust_radius, alpha
                 )

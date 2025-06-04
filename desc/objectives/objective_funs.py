@@ -668,6 +668,27 @@ class ObjectiveFunction(IOAble):
             Derivative(self.compute_scalar, mode="hess")(x, constants).squeeze()
         )
 
+    # @jit
+    # def hvp_gauss_newton(self, x, v, constants=None):
+    #     """Compute approximate Hessian-vector product of compute_scalar.
+
+    #     Computes the Gauss-Newton approximation of the Hessian, valid for
+    #     least-squares problems.
+    #     """
+    #     if constants is None:
+    #         constants = self.constants
+
+    #     def hvp(f, x, v):
+    #         _, Jv = jax.jvp(f, (x,), (v,))
+    #         print(Jv)
+    #         _,vjpfun = jax.vjp(f, x)
+    #         JtJv = vjpfun(Jv)[0]
+    #         return JtJv
+
+    #     Jv = self.jvp_scaled_error()
+
+    #     return
+
     @jit
     def jac_scaled(self, x, constants=None):
         """Compute Jacobian matrix of self.compute_scaled wrt x."""

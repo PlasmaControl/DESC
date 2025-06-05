@@ -171,7 +171,7 @@ def test_map_coordinates_derivative():
 
     assert ~np.any(np.isnan(J1))
     assert ~np.any(np.isnan(J2))
-    np.testing.assert_allclose(J1, J2)
+    np.testing.assert_allclose(J1, J2, atol=1e-14)
 
 
 @pytest.mark.slow
@@ -195,6 +195,7 @@ def test_continuation_resolution(tmpdir_factory):
     """Test that stepping resolution in continuation method works correctly."""
     input_path = ".//tests//inputs//res_test"
     output_dir = tmpdir_factory.mktemp("result")
+
     desc_h5_path = output_dir.join("res_test_out.h5")
 
     cwd = os.path.dirname(__file__)

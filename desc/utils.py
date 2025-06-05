@@ -10,7 +10,16 @@ import numpy as np
 from scipy.special import factorial
 from termcolor import colored
 
-from desc.backend import flatnonzero, fori_loop, jax, jit, jnp, pure_callback, take
+from desc.backend import (
+    flatnonzero,
+    fori_loop,
+    jax,
+    jit,
+    jnp,
+    pure_callback,
+    sign,
+    take,
+)
 
 PRINT_WIDTH = 60  # current longest name is BootstrapRedlConsistency with pre-text
 
@@ -908,14 +917,18 @@ def safenorm(x, ord=None, axis=None, fill=0, threshold=0, keepdims=False):
         Value to return where x is zero.
     threshold : float >= 0
         How small is x allowed to be.
+    keepdims : bool, optional
+        If this is set to True, the axes which are normed over are left in the result
+        as dimensions with size one. With this option the result will broadcast
+        correctly against the original x.
 
     """
     is_zero = (jnp.abs(x) <= threshold).all(axis=axis, keepdims=True)
-    y = jnp.where(is_zero, jnp.ones_like(x), x)  # replace x with ones if is_zero
+    y = jnp.where(is_zero, jnp.ones_like(x), x)
     if not keepdims:
         is_zero = is_zero.squeeze(axis=axis)
     n = jnp.linalg.norm(y, ord=ord, axis=axis, keepdims=keepdims)
-    n = jnp.where(is_zero, fill, n)  # replace norm with zero if is_zero
+    n = jnp.where(is_zero, fill, n)
     return n
 
 
@@ -939,7 +952,7 @@ def safenormalize(x, ord=None, axis=None, fill=0, threshold=0):
 
     """
     is_zero = (jnp.abs(x) <= threshold).all(axis=axis, keepdims=True)
-    y = jnp.where(is_zero, jnp.ones_like(x), x)  # replace x with ones if is_zero
+    y = jnp.where(is_zero, jnp.ones_like(x), x)
     n = safenorm(x, ord, axis, fill, threshold, keepdims=True)
     # return unit vector with equal components if norm <= threshold
     return jnp.where(n <= threshold, jnp.reciprocal(jnp.sqrt(x.size)), y / n)
@@ -962,6 +975,12 @@ def safediv(a, b, fill=0, threshold=0):
     num = jnp.where(mask, fill, a)
     den = jnp.where(mask, 1, b)
     return num / den
+
+
+def safearccos(x):
+    """Like jnp.arccos, but without nan gradient at x=1."""
+    safe_x = jnp.where(jnp.abs(x) == 1, 0, x)
+    return jnp.where(jnp.abs(x) == 1, sign(x) * jnp.inf, jnp.arccos(safe_x))
 
 
 def ensure_tuple(x):

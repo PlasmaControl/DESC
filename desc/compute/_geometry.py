@@ -155,7 +155,7 @@ def _V_rrr_of_r(params, transforms, profiles, data, **kwargs):
 
 def _compute_A_of_z(grid, data, extrap=False, mean=False, expand_out=False):
     max_rho = jnp.max(data["rho"])
-    if isinstance(grid, QuadratureGrid) or grid.num_zeta == 1:  # TODO(#1761)
+    if isinstance(grid, QuadratureGrid) or "n_rho" not in data:  # TODO(#1761)
         assert extrap
         A = surface_integrals(
             grid,

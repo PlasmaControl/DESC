@@ -5,6 +5,7 @@ import os
 import warnings
 
 import numpy as np
+import nvtx
 from packaging.version import Version
 from termcolor import colored
 
@@ -17,7 +18,7 @@ if os.environ.get("DESC_BACKEND") == "numpy":
     use_jax = False
     set_device(kind="cpu")
 else:
-    if desc_config.get("device") is None:
+    if desc_config.get("devices") is None:
         set_device("cpu")
     try:
         with warnings.catch_warnings():
@@ -52,15 +53,48 @@ def print_backend_info():
     if use_jax:
         print(
             f"Using JAX backend: jax version={jax.__version__}, "
-            + f"jaxlib version={jaxlib.__version__}, dtype={y.dtype}."
+            f"jaxlib version={jaxlib.__version__}, dtype={y.dtype}."
         )
     else:
         print(f"Using NumPy backend: version={np.__version__}, dtype={y.dtype}.")
-    print(
-        "Using device: {}, with {:.2f} GB available memory.".format(
-            desc_config.get("device"), desc_config.get("avail_mem")
+
+    if desc_config["num_device"] == 1:
+        print(
+            f"CPU Info: {desc_config['cpu_info']} with {desc_config['cpu_mem']:.2f} "
+            "GB available memory"
         )
-    )
+    elif desc_config["kind"] == "cpu":
+        print(
+            f"Using {desc_config['num_device']} CPUs with "
+            + f"{desc_config['avail_mems'][0]:.2f} GB total available memory:"
+        )
+        for i, dev in enumerate(desc_config["devices"]):
+            print(f"\t CPU : {dev}")
+
+        print(
+            "\nNote: The backend information assumes that the user has 1 "
+            "process per CPU (node). Using multiple processes per CPU (node) is "
+            "not the most efficient way to use MPI with purely CPUs."
+        )
+
+    if desc_config["kind"] == "gpu":
+        print(
+            f"CPU Info: {desc_config['cpu_info']} with {desc_config['cpu_mem']:.2f} "
+            "GB available memory"
+        )
+        print(f"Using {desc_config['num_device']} device:")
+        for i, dev in enumerate(desc_config["devices"]):
+            print(
+                f"\t Device : {dev} with {desc_config['avail_mems'][i]:.2f} "
+                "GB available memory"
+            )
+
+        if desc_config["num_device"] != 1:
+            print(
+                "\nNote: The backend information only reflects the devices for "
+                "the current process. The full set of devices used by other processes "
+                "may be different."
+            )
 
 
 if use_jax:  # noqa: C901
@@ -452,11 +486,87 @@ if use_jax:  # noqa: C901
             x = jax.lax.custom_root(res, x0, solve, _tangent_solve, has_aux=False)
             return x
 
+    def pconcat(arrays, mode="concat"):  # pragma: no cover
+        """Concatenate arrays that live on different devices.
+
+        Parameters
+        ----------
+        arrays : list of jnp.ndarray
+            Arrays to concatenate.
+        mode : str
+            "concat:, "hstack" or "vstack. Default is "concat"
+
+        Returns
+        -------
+        out : jnp.ndarray
+            Concatenated array that lives on GPU[id=0]. If thre is not enough memory
+            the array will be stored on CPU.
+        """
+        # we will use either CPU or GPU[0] for the matrix decompositions, so the
+        # array of float64 should fit into single device
+        rng_pconcat = nvtx.start_range(message="Print Last", color="red")
+        size = jnp.array([x.size for x in arrays])
+        size = jnp.sum(size)
+        if (
+            size * 8 / (1024**3) > desc_config["avail_mems"][0]
+            or desc_config["kind"] == "cpu"
+        ):
+            if (
+                getattr(desc_config, "SUPPRESS_CPU_WARNING", False)
+                and desc_config["kind"] == "gpu"
+            ):
+                warnings.warn(
+                    "The total size of the arrays exceeds the available memory of the "
+                    "GPU[id=0]. Moving the array to CPU. This may cause performance "
+                    "degredation. To suppress this warning, use "
+                    "`from desc import config as desc_config` \n"
+                    "`desc_config['SUPPRESS_CPU_WARNING'] = True`"
+                )
+            device = jax.devices("cpu")[0]
+        else:
+            device = jax.devices("gpu")[0]
+
+        if mode == "concat":
+            out = jnp.concatenate([jax.device_put(x, device=device) for x in arrays])
+        elif mode == "hstack":
+            out = jnp.hstack(
+                [jnp.atleast_2d(jax.device_put(x, device=device)) for x in arrays]
+            )
+        elif mode == "vstack":
+            out = jnp.vstack([jax.device_put(x, device=device) for x in arrays])
+
+        nvtx.end_range(rng_pconcat)
+        return out
+
+    def jit_with_device(method):
+        """Decorator to Just-in-time compile a class method with a dynamic device.
+
+        Decorates a method of a class with a dynamic device, allowing the method to be
+        compiled with jax.jit for the specific device. This is needed since
+        @functools.partial(jax.jit, device=obj._device) is not
+        allowed in a class definition.
+
+        Parameters
+        ----------
+        method : callable
+            Class method to decorate. If DESC is running on GPU, the class should have
+            a device_id attribute.
+        """
+
+        @functools.wraps(method)
+        def wrapper(self, *args, **kwargs):
+            # Compile the method with jax.jit for the specific device
+            wrapped = jax.jit(method, device=self._device)
+            return wrapped(self, *args, **kwargs)
+
+        return wrapper
+
 
 # we can't really test the numpy backend stuff in automated testing, so we ignore it
 # for coverage purposes
 else:  # pragma: no cover
     jit = lambda func, *args, **kwargs: func
+    jit_with_device = jit
     execute_on_cpu = lambda func: func
     import scipy.optimize
     from numpy.fft import ifft, irfft, irfft2, rfft, rfft2  # noqa: F401
@@ -912,4 +1022,14 @@ else:  # pragma: no cover
             )
         else:
             out = np.take(a, indices, axis, out, mode)
+        return out
+
+    def pconcat(arrays, mode="concat"):
+        """Numpy implementation of desc.backend.pconcat."""
+        if mode == "concat":
+            out = np.concatenate(arrays)
+        elif mode == "hstack":
+            out = np.hstack(arrays)
+        elif mode == "vstack":
+            out = np.vstack(arrays)
         return out

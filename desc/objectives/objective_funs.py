@@ -4,12 +4,16 @@ import functools
 from abc import ABC, abstractmethod
 
 import numpy as np
+import nvtx
 
 from desc.backend import (
     desc_config,
     execute_on_cpu,
+    jax,
     jit,
+    jit_with_device,
     jnp,
+    pconcat,
     tree_flatten,
     tree_map,
     tree_unflatten,
@@ -93,6 +97,12 @@ doc_jac_chunk_size = """
         option will yield a larger chunk size than may be needed. It is recommended
         to manually choose a chunk_size if an OOM error is experienced in this case.
 """
+doc_device_id = """
+    device_id : int, optional
+        Device ID to run the objective on. Defaults to 0. If different objectives
+        are on different devices, the ObjectiveFunction will run each sub-objective
+        on the device specified in the sub-objective.
+"""
 docs = {
     "target": doc_target,
     "bounds": doc_bounds,
@@ -103,6 +113,7 @@ docs = {
     "deriv_mode": doc_deriv_mode,
     "name": doc_name,
     "jac_chunk_size": doc_jac_chunk_size,
+    "device_id": doc_device_id,
 }
 
 
@@ -228,6 +239,12 @@ class ObjectiveFunction(IOAble):
         accurately estimate the available device memory, so the "auto" chunk_size
         option will yield a larger chunk size than may be needed. It is recommended
         to manually choose a chunk_size if an OOM error is experienced in this case.
+    mpi : MPI object, optional
+        MPI communicator. Required when using multiple devices.
+    rank_per_objective : ndarray, optional
+        Specifies which rank each objective should run on. This will allow for multiple
+        objectives to run on the same rank. By default, each objective will be assigned
+        to different ranks.
 
     """
 
@@ -240,6 +257,8 @@ class ObjectiveFunction(IOAble):
         deriv_mode="auto",
         name="ObjectiveFunction",
         jac_chunk_size="auto",
+        mpi=None,
+        rank_per_objective=None,
     ):
         if not isinstance(objectives, (tuple, list)):
             objectives = (objectives,)
@@ -267,6 +286,210 @@ class ObjectiveFunction(IOAble):
         self._built = False
         self._compiled = False
         self._name = name
+        device_ids = [obj._device_id for obj in objectives]
+        self._is_mpi = len(set(device_ids)) > 1
+        if mpi is not None:
+            # for multiple node cases, each process sees 1 CPU, for those cases,
+            # we cannot put objectives to different devices. Instead, we will
+            # run each objective on the given rank.
+            self._is_mpi = True
+            self._rank_per_objective = (
+                rank_per_objective
+                if rank_per_objective is not None
+                else np.arange(len(objectives))
+            )
+            errorif(
+                np.unique(self._rank_per_objective).size == 1,
+                ValueError,
+                "There is only one rank. You cannot use MPI for this case. Call "
+                "ObjectiveFunction with `mpi=None`.",
+            )
+            errorif(
+                (
+                    np.mod(self._rank_per_objective, max(device_ids) + 1) != device_ids
+                ).any(),
+                ValueError,
+                "Same rank objectives should also have the same device id. Supplied "
+                f"ranks {self._rank_per_objective} and device ids {device_ids} are "
+                "not compatible.",
+            )
+            warnif(
+                max(device_ids) != desc_config["num_device"] - 1,
+                UserWarning,
+                "You are not using all the devices available. You asked for "
+                f"{desc_config['num_device']} devices, but the maximum device id is "
+                f"{max(device_ids)}. This means that some devices are not being used.",
+            )
+            self.mpi = mpi
+            self.comm = self.mpi.COMM_WORLD
+            self.rank = self.comm.Get_rank()
+            self.size = self.comm.Get_size()
+            self.running = True
+            errorif(
+                max(self._rank_per_objective) != self.size - 1,
+                ValueError,
+                "The maximum value of rank_per_objective "
+                f"({max(self._rank_per_objective)+1}, supplied as "
+                f"({max(self._rank_per_objective)} in the array) "
+                f"is not equal to the number of ranks ({self.size}). There "
+                "should be at least 1 objective per rank.",
+            )
+            self._obj_per_rank = [
+                np.where(self._rank_per_objective == i)[0] for i in range(self.size)
+            ]
+            errorif(
+                np.array([foo.size == 0 for foo in self._obj_per_rank]).any(),
+                ValueError,
+                "There is at least one rank that does not have any objective assigned. "
+                f"Objectives per rank are {self._obj_per_rank}.",
+            )
+
+        if self._is_mpi and mpi is None:
+            raise ValueError(
+                "When using multiple devices, MPI communicator must be passed."
+            )
+
+    def __enter__(self):
+        errorif(
+            not self._built,
+            RuntimeError,
+            "In parallel mode, ObjectiveFunction must be built before entering "
+            "context manager.",
+        )
+        errorif(
+            not self._is_mpi,
+            RuntimeError,
+            "ObjectiveFunction must be parallel to be used as a context manager.",
+        )
+        # when entering the context manager, we start the worker loop
+        # this will allow the root rank to send messages to the workers
+        # to compute and to stop
+        self._worker_loop()
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        # this will be called when the context manager exits
+        # we send a stop message to the workers
+        if self.rank == 0:
+            # only the root rank can send the stop message
+            # in general, the message contains 3 parts, but for the stop message
+            # we only need the first part
+            message = ("STOP", None, None)
+            self.comm.bcast(message, root=0)
+        self.running = False
+
+    def _worker_loop(self):
+        """Worker loop for MPI parallelization.
+
+        This function is called when the ObjectiveFunction is used as a context manager.
+
+            with ObjectiveFunction(...) as obj:
+                if rank == 0:
+                    eq.optimize(objective=obj)
+
+        Worker processes will be in a loop waiting for messages from the root rank
+        during the context manager. The root rank will send messages to the workers
+        to compute the objective function and its derivatives, and to stop. The workers
+        will then broadcast the results back to the root rank. Once the context manager
+        exits, the loop will be terminated by the root rank.
+
+        This way, we can still use MPI parallelization with the ObjectiveFunction, but
+        prevent execution of redundant calculations multiple times on different ranks.
+        This is very similar to the strategy used in Simsopt.
+
+        """
+        if self.rank == 0:
+            # Root rank won't enter worker loop
+            return
+        while self.running:
+            # The message contains 3 parts,
+            # message[0] is the operation to be performed
+            # message[1] is the state vector (for compute and jvp's)
+            # message[2] is the tangents (for only jvp's)
+            message = (None, None, None)
+            message = self.comm.bcast(message, root=0)
+            obj_idx_rank = self._obj_per_rank[self.rank]
+
+            if message[0] == "STOP":
+                print(f"Rank {self.rank} STOPPING")
+                break
+            elif "jvp" in message[0] and "proximal" not in message[0]:
+                print(
+                    f"Rank {self.rank} : {message[0]} for objectives ids: "
+                    + f"{obj_idx_rank}"
+                )
+                # inputs to jitted functions must live on the same device. Need to
+                # put xi and vi on the same device as the objective
+                J_rank = []
+                rng_rank = nvtx.start_range(message="Worker Job JVP", color="red")
+                for idx in obj_idx_rank:
+                    obj = self.objectives[idx]
+                    const = self.constants[idx]
+                    thing_idx = self._things_per_objective_idx[idx]
+                    xi = [message[1][i] for i in thing_idx]
+                    vi = [message[2][i] for i in thing_idx]
+                    xi = jax.device_put(xi, obj._device)
+                    vi = jax.device_put(vi, obj._device)
+                    J_rank.append(getattr(obj, message[0])(vi, xi, constants=const))
+                J_rank = np.hstack(J_rank)
+                nvtx.end_range(rng_rank)
+                self.comm.gather(J_rank, root=0)
+            elif "compute" in message[0]:
+                print(
+                    f"Rank {self.rank} : {message[0]} for objectives ids: "
+                    + f"{obj_idx_rank}"
+                )
+                f_rank = []
+                rng_rank = nvtx.start_range(message="Worker Job Compute", color="red")
+                for idx in obj_idx_rank:
+                    obj = self.objectives[idx]
+                    const = self.constants[idx]
+                    par = message[1][idx]
+                    par = jax.device_put(par, obj._device)
+                    f_rank.append(getattr(obj, message[0])(*par, constants=const))
+                f_rank = np.concatenate(f_rank)
+                nvtx.end_range(rng_rank)
+                self.comm.gather(f_rank, root=0)
+            elif "proximal_jvp" in message[0]:
+                print(
+                    f"Rank {self.rank} : {message[0]} for objectives ids: "
+                    + f"{obj_idx_rank}"
+                )
+                J_rank = []
+                rng_rank = nvtx.start_range(
+                    message="Worker Job JVP Proximal", color="red"
+                )
+                for idx in obj_idx_rank:
+                    obj = self.objectives[idx]
+                    const = self.constants[idx]
+                    op = message[0].replace("proximal_jvp_", "")
+
+                    thing_idx = self._things_per_objective_idx[idx]
+                    xi = [message[1][i] for i in thing_idx]
+                    vi = [message[2][i] for i in thing_idx]
+                    assert len(xi) > 0
+                    assert len(vi) > 0
+                    assert len(xi) == len(vi)
+                    if obj._deriv_mode == "rev":
+                        # obj might not allow fwd mode, so compute full rev mode
+                        # jacobian and do matmul manually. This is slightly
+                        # inefficient, but usuallywhen rev mode is used,
+                        # dim_f <<< dim_x, so its not too bad.
+                        Ji = getattr(obj, "jac_" + op)(*xi, constants=const)
+                        J_rank.append(
+                            jnp.array([Jii @ vii.T for Jii, vii in zip(Ji, vi)]).sum(
+                                axis=0
+                            )
+                        )
+                    else:
+                        J_rank.append(
+                            getattr(obj, "jvp_" + op)(
+                                [_vi for _vi in vi], xi, constants=const
+                            ).T
+                        )
+                J_rank = np.hstack(J_rank)
+                nvtx.end_range(rng_rank)
+                self.comm.gather(J_rank, root=0)
 
     def _unjit(self):
         """Remove jit compiled methods."""
@@ -296,30 +519,52 @@ class ObjectiveFunction(IOAble):
                 pass
 
     @execute_on_cpu
-    def build(self, use_jit=None, verbose=1):
+    def build(self, use_jit=None, verbose=1):  # noqa:  C901
         """Build the objective.
 
         Parameters
         ----------
         use_jit : bool, optional
-            Whether to just-in-time compile the objective and derivatives.
+            Whether to just-in-time compile the objective and derivatives. If using
+            multiple GPUs, instead of jitting the ObjectiveFunction, the sub-objectives
+            will be jitted individually, independent of the value of `use_jit`.
         verbose : int, optional
             Level of output.
 
         """
+        use_jit_wrapper = True
         if use_jit is not None:
             self._use_jit = use_jit
+            # use_jit_wrapper is used to determine if we jit the ObjectiveFunction
+            # methods. If we are using multiple GPUs, we don't want to jit them.
+            use_jit_wrapper = use_jit
+
+        device_ids = [obj._device_id for obj in self._objectives]
+        is_multi_device = len(set(device_ids)) > 1
+        # we must be able to jit, if the device ids are the same?
+        if self._is_mpi and is_multi_device:
+            use_jit_wrapper = False
+
         timer = Timer()
         timer.start("Objective build")
 
         # build objectives
         self._dim_f = 0
         for objective in self.objectives:
+            obj_things = objective._things
             if not objective.built:
                 if verbose > 0:
                     print("Building objective: " + objective.name)
                 objective.build(use_jit=self.use_jit, verbose=verbose)
             self._dim_f += objective.dim_f
+            if objective._device_id != 0:
+                if verbose > 0 and self.rank == 0:
+                    print(
+                        f"Putting objective {objective.name} on device "
+                        f"{objective._device_id}"
+                    )
+                objective = jax.device_put(objective, objective._device)
+                objective._things = obj_things
         if self._dim_f == 1:
             self._scalar = True
         else:
@@ -359,6 +604,16 @@ class ObjectiveFunction(IOAble):
             else:
                 self._deriv_mode = "blocked"
 
+        warnif(
+            self._is_mpi and self._deriv_mode != "blocked",
+            UserWarning,
+            "\nWhen using multiple devices, the ObjectiveFunction will run each \n"
+            "sub-objective on the device specified in the sub-objective. \n"
+            "Setting the deriv_mode to 'blocked' to ensure that each sub-objective\n"
+            "runs on the correct device.",
+        )
+        if self._is_mpi:
+            self._deriv_mode = "blocked"
         errorif(
             isposint(self._jac_chunk_size) and self._deriv_mode in ["blocked"],
             ValueError,
@@ -370,23 +625,43 @@ class ObjectiveFunction(IOAble):
             # Heuristic estimates of fwd mode Jacobian memory usage,
             # slightly conservative, based on using ForceBalance as the objective
             estimated_memory_usage = 2.4e-7 * self.dim_f * self.dim_x + 1  # in GB
+            mem_avail = desc_config["avail_mems"][0]  # in GB
             max_chunk_size = round(
-                (desc_config.get("avail_mem") / estimated_memory_usage - 0.22)
-                / 0.85
-                * self.dim_x
+                (mem_avail / estimated_memory_usage - 0.22) / 0.85 * self.dim_x
             )
             self._jac_chunk_size = max([1, max_chunk_size])
-        if self._deriv_mode == "blocked" and len(self.objectives) > 1:
-            # blocked mode should never use this chunk size if there
-            # are multiple sub-objectives
-            self._jac_chunk_size = None
-        elif self._deriv_mode == "blocked" and len(self.objectives) == 1:
-            # if there is only one objective i.e. wrapped ForceBalance in
-            # ProximalProjection, we can use the chunk size of
-            # that objective as if this is batched mode
-            self._jac_chunk_size = self.objectives[0]._jac_chunk_size
 
-        if not self.use_jit:
+        if self._deriv_mode == "blocked":
+            chunk_sizes = [obj._jac_chunk_size for obj in self.objectives]
+            if len(set(chunk_sizes)) > 1:
+                # blocked mode should never use this chunk size if there
+                # are multiple sub-objectives with different chunk sizes
+                self._jac_chunk_size = (
+                    "ObjectiveFunction is using `blocked` mode, you shouldn't "
+                    "try to use this jac_chunk_size. Instead use the sub-objective's "
+                    "`jac_chunk_size`."
+                )
+            else:
+                # if there is only one objective i.e. wrapped ForceBalance in
+                # ProximalProjection or only one value of jac_chunk_size, we can
+                # use the chunk size of the first objective
+                self._jac_chunk_size = self.objectives[0]._jac_chunk_size
+
+        if self._is_mpi and verbose > 0:
+            if self.rank == 0:
+                objective_names_per_rank = [
+                    [self._objectives[i].__class__.__name__ for i in objective_ids]
+                    for objective_ids in self._obj_per_rank
+                ]
+                print("-" * 60)
+                for rank in range(self.size):
+                    print(
+                        f"Rank {rank} will run objective(s): "
+                        f"{objective_names_per_rank[rank]}"
+                    )
+                print("-" * 60)
+
+        if not use_jit_wrapper:
             self._unjit()
 
         self._built = True
@@ -457,12 +732,33 @@ class ObjectiveFunction(IOAble):
         if constants is None:
             constants = self.constants
         assert len(params) == len(constants) == len(self.objectives)
-        f = jnp.concatenate(
-            [
-                obj.compute_unscaled(*par, constants=const)
-                for par, obj, const in zip(params, self.objectives, constants)
-            ]
-        )
+        if not self._is_mpi:
+            f = jnp.concatenate(
+                [
+                    obj.compute_unscaled(*par, constants=const)
+                    for par, obj, const in zip(params, self.objectives, constants)
+                ]
+            )
+        else:  # pragma: no cover
+            if self.rank == 0:
+                message = ("compute_unscaled", params, None)
+                self.comm.bcast(message, root=0)
+
+                obj_idx_rank = self._obj_per_rank[self.rank]
+                print(
+                    f"Rank {self.rank} : {message[0]} for objectives ids: "
+                    + f"{obj_idx_rank}"
+                )
+                f_rank = []
+                for idx in obj_idx_rank:
+                    par = params[idx]
+                    obj = self.objectives[idx]
+                    const = self.constants[idx]
+                    f_rank.append(obj.compute_unscaled(*par, constants=const))
+                f_rank = jnp.concatenate(f_rank)
+                print(f"Rank {self.rank} waiting to gather")
+                fs = self.comm.gather(f_rank, root=0)
+                f = pconcat(fs)
         return f
 
     @jit
@@ -486,12 +782,33 @@ class ObjectiveFunction(IOAble):
         if constants is None:
             constants = self.constants
         assert len(params) == len(constants) == len(self.objectives)
-        f = jnp.concatenate(
-            [
-                obj.compute_scaled(*par, constants=const)
-                for par, obj, const in zip(params, self.objectives, constants)
-            ]
-        )
+        if not self._is_mpi:
+            f = jnp.concatenate(
+                [
+                    obj.compute_scaled(*par, constants=const)
+                    for par, obj, const in zip(params, self.objectives, constants)
+                ]
+            )
+        else:  # pragma: no cover
+            if self.rank == 0:
+                message = ("compute_scaled", params, None)
+                self.comm.bcast(message, root=0)
+
+                obj_idx_rank = self._obj_per_rank[self.rank]
+                print(
+                    f"Rank {self.rank} : {message[0]} for objectives ids: "
+                    + f"{obj_idx_rank}"
+                )
+                f_rank = []
+                for idx in obj_idx_rank:
+                    par = params[idx]
+                    obj = self.objectives[idx]
+                    const = self.constants[idx]
+                    f_rank.append(obj.compute_scaled(*par, constants=const))
+                f_rank = jnp.concatenate(f_rank)
+                print(f"Rank {self.rank} waiting to gather")
+                fs = self.comm.gather(f_rank, root=0)
+                f = pconcat(fs)
         return f
 
     @jit
@@ -515,12 +832,33 @@ class ObjectiveFunction(IOAble):
         if constants is None:
             constants = self.constants
         assert len(params) == len(constants) == len(self.objectives)
-        f = jnp.concatenate(
-            [
-                obj.compute_scaled_error(*par, constants=const)
-                for par, obj, const in zip(params, self.objectives, constants)
-            ]
-        )
+        if not self._is_mpi:
+            f = jnp.concatenate(
+                [
+                    obj.compute_scaled_error(*par, constants=const)
+                    for par, obj, const in zip(params, self.objectives, constants)
+                ]
+            )
+        else:  # pragma: no cover
+            if self.rank == 0:
+                message = ("compute_scaled_error", params, None)
+                self.comm.bcast(message, root=0)
+
+                obj_idx_rank = self._obj_per_rank[self.rank]
+                print(
+                    f"Rank {self.rank} : {message[0]} for objectives ids: "
+                    + f"{obj_idx_rank}"
+                )
+                f_rank = []
+                for idx in obj_idx_rank:
+                    par = params[idx]
+                    obj = self.objectives[idx]
+                    const = self.constants[idx]
+                    f_rank.append(obj.compute_scaled_error(*par, constants=const))
+                f_rank = jnp.concatenate(f_rank)
+                print(f"Rank {self.rank} waiting to gather")
+                fs = self.comm.gather(f_rank, root=0)
+                f = pconcat(fs)
         return f
 
     @jit
@@ -593,13 +931,18 @@ class ObjectiveFunction(IOAble):
             for par, par0, obj, const in zip(
                 params, params0, self.objectives, constants
             ):
+                if self._is_mpi:  # pragma: no cover
+                    par = jax.device_put(par, obj._device)
+                    par0 = jax.device_put(par0, obj._device)
                 outi = obj.print_value(par, par0, constants=const)
                 if obj._print_value_fmt in out:
                     out[obj._print_value_fmt].append(outi)
                 else:
                     out[obj._print_value_fmt] = [outi]
-        else:
+        else:  # pragma: no cover
             for par, obj, const in zip(params, self.objectives, constants):
+                if self._is_mpi:
+                    par = jax.device_put(par, obj._device)
                 outi = obj.print_value(par, constants=const)
                 if obj._print_value_fmt in out:
                     out[obj._print_value_fmt].append(outi)
@@ -709,32 +1052,72 @@ class ObjectiveFunction(IOAble):
         return self.jvp_unscaled(v, x, constants).T
 
     def _jvp_blocked(self, v, x, constants=None, op="scaled"):
-        v = ensure_tuple(v)
-        if len(v) > 1:
-            # using blocked for higher order derivatives is a pain, and only really
-            # is needed for perturbations. Just pass that to jvp_batched for now
-            return self._jvp_batched(v, x, constants, op)
+        if not self._is_mpi:
+            v = ensure_tuple(v)
+            if len(v) > 1:
+                # using blocked for higher order derivatives is a pain, and only really
+                # is needed for perturbations. Just pass that to jvp_batched for now
+                return self._jvp_batched(v, x, constants, op)
 
-        if constants is None:
-            constants = self.constants
-        xs_splits = np.cumsum([t.dim_x for t in self.things])
-        xs = jnp.split(x, xs_splits)
-        vs = jnp.split(v[0], xs_splits, axis=-1)
-        J = []
-        assert len(self.objectives) == len(self.constants)
-        # basic idea is we compute the jacobian of each objective wrt each thing
-        # one by one, and assemble into big block matrix
-        # if objective doesn't depend on a given thing, that part is set to 0.
-        for k, (obj, const) in enumerate(zip(self.objectives, constants)):
-            # get the xs that go to that objective
-            thing_idx = self._things_per_objective_idx[k]
-            xi = [xs[i] for i in thing_idx]
-            vi = [vs[i] for i in thing_idx]
-            Ji_ = getattr(obj, "jvp_" + op)(vi, xi, constants=const)
-            J += [Ji_]
+            if constants is None:
+                constants = self.constants
+            xs_splits = np.cumsum([t.dim_x for t in self.things])
+            xs = jnp.split(x, xs_splits)
+            vs = jnp.split(v[0], xs_splits, axis=-1)
+            J = []
+            assert len(self.objectives) == len(self.constants)
+            # basic idea is we compute the jacobian of each objective wrt each thing
+            # one by one, and assemble into big block matrix
+            # if objective doesn't depend on a given thing, that part is set to 0.
+            for k, (obj, const) in enumerate(zip(self.objectives, constants)):
+                # get the xs that go to that objective
+                thing_idx = self._things_per_objective_idx[k]
+                xi = [xs[i] for i in thing_idx]
+                vi = [vs[i] for i in thing_idx]
+                Ji_ = getattr(obj, "jvp_" + op)(vi, xi, constants=const)
+                J += [Ji_]
+        else:
+            if self.rank == 0:
+                v = ensure_tuple(v)
+                if len(v) > 1:
+                    # using blocked for higher order derivatives is a pain, and only
+                    # really is needed for perturbations. Just pass that to
+                    # jvp_batched for now
+                    return self._jvp_batched(v, x, constants, op)
+
+                if constants is None:
+                    constants = self.constants
+                xs_splits = np.cumsum([t.dim_x for t in self.things])
+                xs = jnp.split(x, xs_splits)
+                vs = jnp.split(v[0], xs_splits, axis=-1)
+                message = ("jvp_" + op, xs, vs)
+                self.comm.bcast(message, root=0)
+
+                obj_idx_rank = self._obj_per_rank[self.rank]
+                print(
+                    f"Rank {self.rank} : {message[0]} for objectives ids: "
+                    + f"{obj_idx_rank}"
+                )
+                J_rank = []
+                for idx in obj_idx_rank:
+                    obj = self.objectives[idx]
+                    const = self.constants[idx]
+                    thing_idx = self._things_per_objective_idx[idx]
+                    xi = [xs[i] for i in thing_idx]
+                    vi = [vs[i] for i in thing_idx]
+                    J_rank.append(getattr(obj, "jvp_" + op)(vi, xi, constants=const))
+                J_rank = jnp.hstack(J_rank)
+                print(f"Rank {self.rank} waiting to gather")
+                J = self.comm.gather(J_rank, root=0)
+
         # this is the transpose of the jvp when v is a matrix, for consistency with
         # jvp_batched
-        J = jnp.hstack(J)
+        if not self._is_mpi:
+            J = jnp.hstack(J)
+        else:
+            # this will handle the device placement of the J matrix
+            J = pconcat(J, mode="hstack")
+
         return J
 
     def _jvp_batched(self, v, x, constants=None, op="scaled"):
@@ -1068,6 +1451,9 @@ class _Objective(IOAble, ABC):
         "_normalization",
         "_deriv_mode",
     ]
+    # _device is of type 'jaxlib.xla_extension.Device' which cannot be an argument
+    # to a jitted function.
+    _static_attrs = ["_device"]
 
     def __init__(
         self,
@@ -1081,6 +1467,7 @@ class _Objective(IOAble, ABC):
         deriv_mode="auto",
         name=None,
         jac_chunk_size=None,
+        device_id=0,
     ):
         if self._scalar:
             assert self._coordinates == ""
@@ -1094,6 +1481,18 @@ class _Objective(IOAble, ABC):
         assert jac_chunk_size is None or isposint(jac_chunk_size)
 
         self._jac_chunk_size = jac_chunk_size
+        self._device_id = device_id
+        # if device_id is not 0, this typically means we are using multiple devices and
+        # we won't jit the ObjectiveFunction methods. For single device, if we set
+        # _device to a jaxlib.xla_extension.Device type, jit will throw error expecting
+        # it to be static. So we set _device to None in that case which is simpler then
+        # making it static.
+        if device_id != 0 and desc_config["kind"] == "gpu":
+            self._device = jax.devices("gpu")[device_id]
+        else:
+            # we won't transfer data for multiple CPUs because their rank should
+            # already have that data.
+            self._device = None
 
         self._target = target
         self._bounds = bounds
@@ -1222,7 +1621,7 @@ class _Objective(IOAble, ABC):
                 argsout += (arg,)
         return argsout
 
-    @jit
+    @jit_with_device
     def compute_unscaled(self, *args, **kwargs):
         """Compute the raw value of the objective."""
         args = self._maybe_array_to_params(*args)
@@ -1231,7 +1630,7 @@ class _Objective(IOAble, ABC):
             f = self._loss_function(f)
         return jnp.atleast_1d(f)
 
-    @jit
+    @jit_with_device
     def compute_scaled(self, *args, **kwargs):
         """Compute and apply weighting and normalization."""
         args = self._maybe_array_to_params(*args)
@@ -1240,7 +1639,7 @@ class _Objective(IOAble, ABC):
             f = self._loss_function(f)
         return jnp.atleast_1d(self._scale(f, **kwargs))
 
-    @jit
+    @jit_with_device
     def compute_scaled_error(self, *args, **kwargs):
         """Compute and apply the target/bounds, weighting, and normalization."""
         args = self._maybe_array_to_params(*args)
@@ -1283,7 +1682,7 @@ class _Objective(IOAble, ABC):
         f_norm = jnp.atleast_1d(f) / self.normalization  # normalization
         return f_norm * w * self.weight
 
-    @jit
+    @jit_with_device
     def compute_scalar(self, *args, **kwargs):
         """Compute the scalar form of the objective."""
         if self.scalar:
@@ -1292,19 +1691,19 @@ class _Objective(IOAble, ABC):
             f = jnp.sum(self.compute_scaled_error(*args, **kwargs) ** 2) / 2
         return f.squeeze()
 
-    @jit
+    @jit_with_device
     def grad(self, *args, **kwargs):
         """Compute gradient vector of self.compute_scalar wrt x."""
         argnums = tuple(range(len(self.things)))
         return Derivative(self.compute_scalar, argnums, mode="grad")(*args, **kwargs)
 
-    @jit
+    @jit_with_device
     def hess(self, *args, **kwargs):
         """Compute Hessian matrix of self.compute_scalar wrt x."""
         argnums = tuple(range(len(self.things)))
         return Derivative(self.compute_scalar, argnums, mode="hess")(*args, **kwargs)
 
-    @jit
+    @jit_with_device
     def jac_scaled(self, *args, **kwargs):
         """Compute Jacobian matrix of self.compute_scaled wrt x."""
         argnums = tuple(range(len(self.things)))
@@ -1315,7 +1714,7 @@ class _Objective(IOAble, ABC):
             chunk_size=self._jac_chunk_size,
         )(*args, **kwargs)
 
-    @jit
+    @jit_with_device
     def jac_scaled_error(self, *args, **kwargs):
         """Compute Jacobian matrix of self.compute_scaled_error wrt x."""
         argnums = tuple(range(len(self.things)))
@@ -1326,7 +1725,7 @@ class _Objective(IOAble, ABC):
             chunk_size=self._jac_chunk_size,
         )(*args, **kwargs)
 
-    @jit
+    @jit_with_device
     def jac_unscaled(self, *args, **kwargs):
         """Compute Jacobian matrix of self.compute_unscaled wrt x."""
         argnums = tuple(range(len(self.things)))
@@ -1360,7 +1759,7 @@ class _Objective(IOAble, ABC):
             # sum over different things.
             return jnp.sum(jnp.asarray(Jv), axis=0).T
 
-    @jit
+    @jit_with_device
     def jvp_scaled(self, v, x, constants=None):
         """Compute Jacobian-vector product of self.compute_scaled.
 
@@ -1376,7 +1775,7 @@ class _Objective(IOAble, ABC):
         """
         return self._jvp(v, x, constants, "scaled")
 
-    @jit
+    @jit_with_device
     def jvp_scaled_error(self, v, x, constants=None):
         """Compute Jacobian-vector product of self.compute_scaled_error.
 
@@ -1392,7 +1791,7 @@ class _Objective(IOAble, ABC):
         """
         return self._jvp(v, x, constants, "scaled_error")
 
-    @jit
+    @jit_with_device
     def jvp_unscaled(self, v, x, constants=None):
         """Compute Jacobian-vector product of self.compute_unscaled.
 

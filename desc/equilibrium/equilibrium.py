@@ -968,42 +968,77 @@ class Equilibrium(IOAble, Optimizable):
         dep0d = {
             dep for dep in deps if is_0d_vol_grid(dep) and dep not in need_src_deps
         }
-        # Unless user asks, don't try to recompute stuff which are only dependencies
-        # of dep0d. Example, suppose the user supplied grid is a field-line following
-        # grid, and the user would like to compute the effective ripple, which requires
-        # the scalar R0 as a dependency. The scalar R0 has the following dependencies:
-        # R0 <- A <- A(z). Each of these are computable on the quadrature grid, and
-        # since R0 is a scalar we can trivially interpolate it back to the user-supplied
-        # grid. We don't need to additionally compute A(z) and interpolate it back;
-        # it was only needed to compute R0, so we should remove it from the dep1dz list.
-        # If we don't remove it from the dep1dz list, then the code would try to create
-        # a linear grid with cross-sections at all the unique zeta values in the
-        # user-supplied grids. Typically, the user-supplied grid lacks unique_zeta_idx
-        # attribute, so this would cause an error.
-        dep0d_deps = set(
-            get_data_deps(dep0d, obj=p, has_axis=grid.axis.size, data=data)
+        # dependencies of 0d stuff
+        dep0d_deps = (
+            set(get_data_deps(dep0d, obj=p, has_axis=grid.axis.size, data=data)) | dep0d
+        ) - need_src_deps
+        # find the dependencies that are not dependencies of 0d stuff and any other
+        # special case
+        other_deps = deps - dep0d_deps - set(names) - need_src_deps
+        deps_other_deps = set(
+            get_data_deps(other_deps, obj=p, has_axis=grid.axis.size, data=data)
         )
-        # This filter is stronger than the name implies, but the false positives
-        # that are filtered out will still get computed with the logic in
-        # compute.utils.compute
-        # https://github.com/PlasmaControl/DESC/pull/1024#discussion_r1663080423.
-        just_dep0d_dep = lambda name: name in dep0d_deps and name not in names
+        # if a quantity depends on a 0d quantity, then its 'deps_other_deps' will
+        # contain the dependencies of that 0d quantity, but we don't need to
+        # compute them again.
+        # Example:
+        # 0D stuff: "a", "b"
+        #       a
+        #       ├── c
+        #       ├── d
+        #       └── e
+        #       b
+        #       ├── f
+        #       └── g
+        # Say,
+        #    - "X" has deps = {"a", "c", "d", "e", "f", "g"}
+        # Since "X" depends on "a", it will have "c", "d", "e" automatically. So, we
+        # can remove them once "a" is computed. Although, "X" does depend on "g" and
+        # "f", it doesn't depend on "b", so we keep "g" and "f".
+        #       X
+        #       ├── a
+        #       │   ├── c    (implicit via a)
+        #       │   ├── d    (implicit via a)
+        #       │   └── e    (implicit via a)
+        #       ├── f
+        #       └── g
+        # So, to compute ["X", "a", "b"], we will compute "a", "b" and their
+        # dependencies with the special volume grid. Then, we will compute "f" and "g"
+        # again (because maybe there is a better grid for them), and finally get "X".
+        # TODO (1752): There are still edge cases where this logic does not work, i.e.
+        # If the formula for "X" is "X" = "a" / "c" and "c" is not 0D. Dependency tree,
+        #       X
+        #       ├── a
+        #       │   ├── c    (implicit via a)
+        #       │   ├── d    (implicit via a)
+        #       │   └── e    (implicit via a)
+        #       └── c        (explicit from the formula)
+        # If "c" requires a special grid (like dep1dr or dep1dz), this logic will fail.
+        # Currently, we don't have this case for any compute function, but if we have
+        # one, we will need to change this logic to be more general.
+        for d0 in dep0d:
+            if d0 in deps_other_deps:
+                deps_other_deps -= set(
+                    get_data_deps(d0, obj=p, has_axis=grid.axis.size, data=data)
+                )
+                deps_other_deps -= {d0}
+        # substract the dependencies of the not 0d stuff from the dependencies
+        # of the 0d stuff to get deps that are just required for computing 0d stuff
+        # These will not be necessary for other dependencies, so no need to compute
+        # again
+        only_dep0d_deps = dep0d_deps - deps_other_deps
         dep1dr = {
             dep
             for dep in deps
             if is_1dr_rad_grid(dep)
-            and not just_dep0d_dep(dep)
+            and not (dep in only_dep0d_deps and dep not in names)
             and dep not in need_src_deps
         }
         dep1dz = {
             dep
             for dep in deps
-            # By including the additional requirement that dep is not just a dependency
-            # of some scalar (0d) quantity, we are ensuring that we do not unnecessarily
-            # compute things like A(z) when it was only needed to compute R0, as in the
-            # example above.
             if is_1dz_tor_grid(dep)
-            and not just_dep0d_dep(dep)
+            and not (dep in only_dep0d_deps and dep not in names)
             and dep not in need_src_deps
             # These don't need a special grid, since the transforms are always
             # built on the (rho, theta, zeta) coordinate grid.
@@ -1145,8 +1180,12 @@ class Equilibrium(IOAble, Optimizable):
             data.update(data1dr)
 
         if calc1dz and override_grid:
+            if hasattr(grid, "unique_zeta_idx"):
+                unique_zeta = grid.compress(grid.nodes[:, 2], surface_label="zeta")
+            else:
+                unique_zeta = np.unique(grid.nodes[:, 2])
             grid1dz = LinearGrid(
-                zeta=grid.compress(grid.nodes[:, 2], surface_label="zeta"),
+                zeta=unique_zeta,
                 L=self.L_grid,
                 M=self.M_grid,
                 NFP=grid.NFP,  # ex: self.NFP>1 but grid.NFP=1 for plot_3d

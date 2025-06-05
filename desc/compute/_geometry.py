@@ -155,13 +155,7 @@ def _V_rrr_of_r(params, transforms, profiles, data, **kwargs):
 
 def _compute_A_of_z(grid, data, extrap=False, mean=False, expand_out=False):
     max_rho = jnp.max(data["rho"])
-    # TODO: Find new vector field v such that surface divergence
-    #  div_S v = (1 / √g) [ ∂/∂ρ (√g v^ρ) + ∂/∂θ (√g v^θ) ]
-    #  on constant zeta surface (not constant phi) is 1.
-    #  Then integrate n dot (v - v^ζ) per below instructions.
-    #  OR make sure that integration contour is along constant phi surface
-    #     using source_grid_requirement="rtp" and use e_theta|r,p.
-    if isinstance(grid, QuadratureGrid):
+    if isinstance(grid, QuadratureGrid) or grid.num_zeta == 1:  # TODO(#1761)
         assert extrap
         A = surface_integrals(
             grid,
@@ -170,15 +164,18 @@ def _compute_A_of_z(grid, data, extrap=False, mean=False, expand_out=False):
             expand_out=False,
         )
     else:
-        # Denote any vector v = v¹ R̂ + v² ϕ̂ + v³ Ẑ by v = [v¹, v², v³] where
+        # Denote vector v = v¹ R̂ + v² ϕ̂ + v³ Ẑ by v = [v¹, v², v³] where
         # R̂, ϕ̂, Ẑ are the normalized basis vectors of the cylindrical coordinates
-        # R, ϕ, Z. We use a 2D divergence theorem over constant ϕ toroidal surface
-        # (i.e. R, Z plane). In this geometry, the divergence operator in this
-        # coordinate system is div = ([∂_R, ∂_ϕ, ∂_Z] ⊗ [1, 0, 1]) dot .
-        # ∫ dA div v = ∫ dℓ n dot v where n is the unit normal such that
-        # n dot e_θ|ρ,ϕ = 0 and n dot e_ϕ|R,Z = 0, and the labels following
-        # | denote those coordinates are fixed. Now choose v = [0, 0, Z], and
-        # n in the direction (e_θ|ρ,ζ × e_ζ|ρ,θ) ⊗ [1, 0, 1].
+        # R, ϕ, Z. On a constant ϕ toroidal surface, the
+        # surface divergence operator in this coordinate system is
+        # div_S = ([∂_R, ∂_ϕ, ∂_Z] ⊗ [1, 0, 1]) dot .
+        # ∫ dS div_S v = ∫ dℓ n dot v where n is the unit normal such that
+        # n dot e_θ|ρ,ϕ = 0 and n dot e_ϕ|R,Z = 0.
+        # TODO (#465): Find new vector field v such that surface divergence
+        #  div_S w = (1 / √g) [ ∂/∂ρ (√g w^ρ) + ∂/∂θ (√g w^θ) ]
+        #  on constant ζ surface is 1. Then choose v = (w - w^ζ).
+        #  OR make sure that integration contour is along constant ϕ surface
+        #     using source_grid_requirement="rtp" and use e_rho|t,p and e_theta|r,p.
         n = data["n_rho"]
         n = n.at[:, 1].set(0)
         n = n / jnp.linalg.norm(n, axis=-1)[:, jnp.newaxis]

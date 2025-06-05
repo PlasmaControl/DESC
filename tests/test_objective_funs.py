@@ -3818,7 +3818,6 @@ class TestObjectiveNaNGrad:
     def test_objective_no_nangrad_quadratic_flux_minimizing(self):
         """SurfaceQuadraticFlux."""
         ext_field = FourierXYZCoil().to_SplineXYZ(grid=3)
-
         surf = FourierRZToroidalSurface(
             R_lmn=[4.0, 1.0],
             modes_R=[[0, 0], [1, 0]],
@@ -3826,6 +3825,21 @@ class TestObjectiveNaNGrad:
             modes_Z=[[-1, 0]],
             NFP=1,
         )
+
+        def test(normal):
+            ext_field = FourierPlanarCoil(center=[0, 0, 3.0], normal=normal)
+            obj = ObjectiveFunction(
+                SurfaceQuadraticFlux(surf, ext_field), use_jit=False
+            )
+            obj.build()
+            g = obj.grad(obj.x(surf, ext_field))
+            assert not np.any(np.isnan(g)), "quadratic flux"
+
+        test([0, 0, 1])  # normal parallel to Z-axis
+        test([0, 0, -1])  # antiparallel
+        test([0, 1e-4, 1])  # nearly parallel
+        test([0, 1e-4, -1])  # nearly antiparallel
+
         # have use_jit=True here to check that runs correctly with spline
         # coils, see PR #1656
         obj = ObjectiveFunction(SurfaceQuadraticFlux(surf, ext_field), use_jit=True)

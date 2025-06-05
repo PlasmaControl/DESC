@@ -1132,7 +1132,7 @@ def compute_B_plasma_vol(eq, eval_grid, source_grid=None):
         Magnetic field evaluated at eval_grid in (R,phi,Z) components.
 
     """
-    eval_grid = np.atleast_2d(eval_grid)
+    eval_grid = jnp.atleast_2d(eval_grid)
     assert eval_grid.shape[1] == 3
     if source_grid is None:
         source_grid = QuadratureGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid * eq.NFP)
@@ -1142,14 +1142,14 @@ def compute_B_plasma_vol(eq, eval_grid, source_grid=None):
 
     # shape = (source_grid.num_nodes, eval_grid.num_nodes, 3)  # noqa: E800
     dx = rpz2xyz(eval_grid)[None, :, :] - rpz2xyz(data["x"])[:, None, :]
-    B = np.sum(  # sum over source_grid nodes
+    B = jnp.sum(  # sum over source_grid nodes
         cross(rpz2xyz_vec(data["J"], phi=data["phi"])[:, None, :], dx)
-        / np.linalg.norm(dx, axis=2)[:, :, None] ** 3
+        / safenorm(dx, axis=2)[:, :, None] ** 3
         * data["sqrt(g)"][:, None, None]
         * source_grid.weights[:, None, None],
         axis=0,
     )
-    return mu_0 / (4 * np.pi) * xyz2rpz_vec(B, phi=eval_grid[:, 1])
+    return mu_0 / (4 * jnp.pi) * xyz2rpz_vec(B, phi=eval_grid[:, 1])
 
 
 def compute_A_plasma_vol(eq, eval_grid, source_grid=None):
@@ -1178,7 +1178,7 @@ def compute_A_plasma_vol(eq, eval_grid, source_grid=None):
         Magnetic vector potential evaluated at eval_grid in (R,phi,Z) components.
 
     """
-    eval_grid = np.atleast_2d(eval_grid)
+    eval_grid = jnp.atleast_2d(eval_grid)
     assert eval_grid.shape[1] == 3
     if source_grid is None:
         source_grid = QuadratureGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid * eq.NFP)
@@ -1188,11 +1188,11 @@ def compute_A_plasma_vol(eq, eval_grid, source_grid=None):
 
     # shape = (source_grid.num_nodes, eval_grid.num_nodes, 3)  # noqa: E800
     dx = rpz2xyz(eval_grid)[None, :, :] - rpz2xyz(data["x"])[:, None, :]
-    A = np.sum(  # sum over source_grid nodes
+    A = jnp.sum(  # sum over source_grid nodes
         rpz2xyz_vec(data["J"], phi=data["phi"])[:, None, :]
-        / np.linalg.norm(dx, axis=2)[:, :, None]
+        / safenorm(dx, axis=2)[:, :, None]
         * data["sqrt(g)"][:, None, None]
         * source_grid.weights[:, None, None],
         axis=0,
     )
-    return mu_0 / (4 * np.pi) * xyz2rpz_vec(A, phi=eval_grid[:, 1])
+    return mu_0 / (4 * jnp.pi) * xyz2rpz_vec(A, phi=eval_grid[:, 1])

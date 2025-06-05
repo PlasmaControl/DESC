@@ -140,6 +140,15 @@ class GammaC(_Objective):
         overwrite=_bounce_overwrite,
     )
 
+    _static_attrs = _Objective._static_attrs + [
+        "_hyperparam",
+        "_key",
+        "_keys_1dr",
+        "_spline",
+        "_X",
+        "_Y",
+    ]
+
     _coordinates = "r"
     _units = "~"
     _print_value_fmt = "Γ_c: "

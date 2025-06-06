@@ -1144,7 +1144,7 @@ def compute_B_plasma_vol(eq, eval_grid, source_grid=None):
     dx = rpz2xyz(eval_grid)[None, :, :] - rpz2xyz(data["x"])[:, None, :]
     B = jnp.sum(  # sum over source_grid nodes
         cross(rpz2xyz_vec(data["J"], phi=data["phi"])[:, None, :], dx)
-        / safenorm(dx, axis=2)[:, :, None] ** 3
+        / jnp.linalg.norm(dx, axis=2)[:, :, None] ** 3
         * data["sqrt(g)"][:, None, None]
         * source_grid.weights[:, None, None],
         axis=0,
@@ -1190,7 +1190,7 @@ def compute_A_plasma_vol(eq, eval_grid, source_grid=None):
     dx = rpz2xyz(eval_grid)[None, :, :] - rpz2xyz(data["x"])[:, None, :]
     A = jnp.sum(  # sum over source_grid nodes
         rpz2xyz_vec(data["J"], phi=data["phi"])[:, None, :]
-        / safenorm(dx, axis=2)[:, :, None]
+        / jnp.linalg.norm(dx, axis=2)[:, :, None]
         * data["sqrt(g)"][:, None, None]
         * source_grid.weights[:, None, None],
         axis=0,

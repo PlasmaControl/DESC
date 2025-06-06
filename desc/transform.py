@@ -142,6 +142,7 @@ class Transform(IOAble):
                 for i in range(n + 1)
             },
             "fft": {i: {j: {} for j in range(n + 1)} for i in range(n + 1)},
+            "fft2": {i: {} for i in range(n + 1)},
             "direct2": {i: {} for i in range(n + 1)},
         }
         return matrices
@@ -215,6 +216,120 @@ class Transform(IOAble):
             [
                 grid.nodes[:, :2][: grid.num_nodes // self.grid.num_zeta],
                 np.zeros((grid.num_nodes // self.grid.num_zeta, 1)),
+            ]
+        )
+        # temp grid only used for building transforms, don't need any indexing etc
+        self.fft_grid = Grid(fft_nodes, sort=False, jitable=True, axis_shift=0)
+
+    def _check_inputs_fft2(self, grid, basis):
+        """Check that inputs are formatted correctly for fft2 method."""
+        if grid.num_nodes == 0 or basis.num_modes == 0:
+            # trivial case where we just return all zeros, so it doesn't matter
+            self._method = "direct1"
+            return
+
+        # if we can't do fft in poloidal direction we may still be able to do toroidal
+        # fft, so we fall back to method="fft" here
+        if not grid.fft_poloidal:
+            warnings.warn(
+                colored(
+                    "fft2 method requires compatible grid, got {}".format(grid)
+                    + "falling back to fft method",
+                    "yellow",
+                )
+            )
+            self.method = "fft"
+            return
+        if not basis.fft_poloidal:
+            warnings.warn(
+                colored(
+                    "fft2 method requires compatible basis, got {}".format(basis)
+                    + "falling back to fft method",
+                    "yellow",
+                )
+            )
+            self.method = "fft"
+            return
+        if grid.num_theta < 2 * basis.M + 1:
+            warnings.warn(
+                colored(
+                    "fft2 method can not undersample in theta, "
+                    + "num_poloidal_modes={}, num_poloidal_angles={}, ".format(
+                        basis.M, grid.num_theta
+                    )
+                    + "falling back to fft method",
+                    "yellow",
+                )
+            )
+            self.method = "fft"
+            return
+
+        # if we can't do toroidal fft then fall back to direct2
+        if not grid.fft_toroidal:
+            warnings.warn(
+                colored(
+                    "fft2 method requires compatible grid, got {}".format(grid)
+                    + "falling back to direct2 method",
+                    "yellow",
+                )
+            )
+            self.method = "direct2"
+            return
+        if not basis.fft_toroidal:
+            warnings.warn(
+                colored(
+                    "fft2 method requires compatible basis, got {}".format(basis)
+                    + "falling back to direct2 method",
+                    "yellow",
+                )
+            )
+            self.method = "direct2"
+            return
+        if grid.num_zeta < 2 * basis.N + 1:
+            warnings.warn(
+                colored(
+                    "fft2 method can not undersample in zeta, "
+                    + "num_toroidal_modes={}, num_toroidal_angles={}, ".format(
+                        basis.N, grid.num_zeta
+                    )
+                    + "falling back to direct2 method",
+                    "yellow",
+                )
+            )
+            self.method = "direct2"
+            return
+        if (basis.N > 0) and (grid.NFP != basis.NFP):
+            warnings.warn(
+                colored(
+                    "fft2 method requires grid and basis to have the same NFP, got "
+                    + f"grid.NFP={grid.NFP}, basis.NFP={basis.NFP}, "
+                    + "falling back to direct2 method",
+                    "yellow",
+                )
+            )
+            self.method = "direct2"
+            return
+
+        self.lm_modes = basis.modes[basis.unique_LM_idx, :2]
+        self.num_lm_modes = self.lm_modes.shape[0]  # number of radial/poloidal modes
+        self.num_n_modes = 2 * basis.N + 1  # number of toroidal modes
+        self.pad_dim = self.grid.num_zeta - self.num_n_modes
+        self.dk = basis.NFP * np.arange(-basis.N, basis.N + 1).reshape((1, -1))
+        offset = np.min(basis.modes[:, 2]) + basis.N  # N for sym="cos", 0 otherwise
+        row = np.where(
+            (basis.modes[:, None, :2] == self.lm_modes[None, :, :]).all(axis=-1)
+        )[1]
+        col = np.where(
+            basis.modes[None, :, 2] == basis.modes[basis.unique_N_idx, None, 2]
+        )[0]
+        self.fft_index = np.atleast_1d(
+            np.squeeze(self.num_n_modes * row + col + offset)
+        )
+        self.l_modes = basis.modes[basis.unique_L_idx, 1]
+        fft_nodes = np.hstack(
+            [
+                grid.nodes[grid.unique_rho_idx, 0][:, None],
+                np.zeros((grid.num_rho, 2)),
             ]
         )
         # temp grid only used for building transforms, don't need any indexing etc
@@ -300,6 +415,19 @@ class Transform(IOAble):
                 self.matrices["fft"][d[0]][d[1]] = self.basis.evaluate(
                     self.fft_grid, d, modes=temp_modes
                 )
+
+        if self.method in ["fft2"]:
+            temp_d = np.hstack(
+                [self.derivatives[:, :1], np.zeros((len(self.derivatives), 2))]
+            ).astype(int)
+            temp_modes = np.hstack(
+                [self.l_modes[:, None], np.zeros((self.l_modes.shape[0], 2))]
+            )
+            for d in temp_d:
+                self.matrices["fft2"][d[0]] = self.basis.evaluate(
+                    self.fft_grid, d, modes=temp_modes
+                )
+
         if self.method == "direct2":
             temp_d = np.hstack(
                 [np.zeros((len(self.derivatives), 2)), self.derivatives[:, 2:]]
@@ -349,6 +477,15 @@ class Transform(IOAble):
             self.matrices["pinvA"] = (
                 jnp.linalg.pinv(A, rtol=rcond) if A.size else np.zeros_like(A.T)
             )
+        elif self.method == "fft2":
+            temp_modes = np.hstack([self.lm_modes, np.zeros((self.num_lm_modes, 1))])
+            A = self.basis.evaluate(
+                self.fft_nodes, np.array([0, 0, 0]), modes=temp_modes, unique=True
+            )
+            self.matrices["pinvA"] = (
+                jnp.linalg.pinv(A, rtol=rcond) if A.size else np.zeros_like(A.T)
+            )
+
         self._built_pinv = True
 
     def transform(self, c, dr=0, dt=0, dz=0):
@@ -407,12 +544,7 @@ class Transform(IOAble):
             cc = A @ c_mtrx
             return (cc @ B.T).flatten(order="F")
 
-        elif self.method == "fft":
-            A = self.matrices["fft"].get(dr, {}).get(dt, {})
-            if isinstance(A, dict):
-                raise ValueError(
-                    colored("Derivative orders are out of initialized bounds", "red")
-                )
+        elif self.method in ["fft", "fft2"]:
             # reshape coefficients
             c_mtrx = jnp.zeros((self.num_lm_modes * self.num_n_modes,))
             c_mtrx = put(c_mtrx, self.fft_index, c).reshape((-1, self.num_n_modes))
@@ -432,7 +564,40 @@ class Transform(IOAble):
             )
             # transform coefficients
             c_fft = jnp.real(jnp.fft.ifft(c_pad))
-            return (A @ c_fft).flatten(order="F")
+            if self.method == "fft":
+                A = self.matrices["fft"].get(dr, {}).get(dt, {})
+                if isinstance(A, dict):
+                    raise ValueError(
+                        colored(
+                            "Derivative orders are out of initialized bounds", "red"
+                        )
+                    )
+                return (A @ c_fft).flatten(order="F")
+            else:  # self.method is fft2
+                A = self.matrices["fft2"].get(dr, {})
+                if isinstance(A, dict):
+                    raise ValueError(
+                        colored(
+                            "Derivative orders are out of initialized bounds", "red"
+                        )
+                    )
+
+                c_fft2 = jnp.zeros(
+                    (self.basis.L + 1, self.grid.num_theta, self.grid.num_zeta),
+                    dtype=(1j * c[:1]).dtype,
+                )
+                l, m = self.lm_modes.T
+                c_fft2 = c_fft2.at[l, m, :].set(c_fft)
+                c_fft2 = c_fft2.at[:, m, :].multiply(
+                    jnp.where(m < 0, -1j, 1)[None, :, None]
+                )
+                c_fft2 = jnp.fft.fft(c_fft2, axis=1).real
+
+                ffn = (A @ c_fft2.reshape((self.basis.L + 1, -1))).reshape(
+                    (self.grid.num_rho, self.grid.num_theta, self.grid.num_zeta)
+                )
+                ffn = jnp.moveaxis(ffn, 1, 0).flatten(order="F")
+                return ffn
 
     def fit(self, x):
         """Transform from physical domain to spectral using weighted least squares fit.
@@ -471,6 +636,8 @@ class Transform(IOAble):
             c1 = -c_unpad.imag[:, ::-1] / (self.grid.num_zeta / 2)
             c_diff = jnp.hstack([c1, c0, c2])
             c = c_diff.flatten()[self.fft_index]
+        elif self.method == "fft2":
+            raise NotImplementedError
         return c
 
     def project(self, y):
@@ -524,6 +691,8 @@ class Transform(IOAble):
                 [-cr.imag[:, ::-1], cdn.real[:, np.newaxis], cr.real]
             ).flatten()[self.fft_index]
             return b
+        elif self.method == "fft2":
+            raise NotImplementedError
 
     def change_resolution(
         self, grid=None, basis=None, build=True, build_pinv=False, method="auto"
@@ -701,9 +870,11 @@ class Transform(IOAble):
         elif method == "auto":
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
-                self.method = "fft"
+                self.method = "fft2"
         elif method == "fft":
             self._check_inputs_fft(self.grid, self.basis)
+        elif method == "fft2":
+            self._check_inputs_fft2(self.grid, self.basis)
         elif method == "direct2":
             self._check_inputs_direct2(self.grid, self.basis)
         elif method == "direct1":

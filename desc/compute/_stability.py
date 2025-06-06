@@ -406,22 +406,18 @@ def _ideal_ballooning_lambda(params, transforms, profiles, data, **kwargs):
     # Try jax.scipy.eigh_tridiagonal or a better solver for improved performance
     w, v = jnp.linalg.eigh(A_redo)
 
-    flat_w = w.flatten()
-
     # Find the top_k eigenvalues.
-    top_eigvals, top_flat_indices = jax.lax.top_k(flat_w, k=Neigvals)
-
-    # convert back to original shape
-    alpha_idx, zeta0_idx, theta_idx = jnp.unravel_index(top_flat_indices, w.shape)
+    top_eigvals, top_theta_idxs = jax.lax.top_k(w, k=Neigvals)
 
     # v becomes less than the machine precision at some theta points which gives NaNs
     # stop_gradient prevents that. Not sure how it will affect an objective that
     # requires both the eigenvalue and eigenfunction
-    top_eigenfuns = jnp.transpose(jax.lax.stop_gradient(v), axes=(0, 1, 3, 2))[
-        alpha_idx, zeta0_idx, theta_idx
-    ]
+    v_T = jnp.transpose(jax.lax.stop_gradient(v), axes=(0, 1, 3, 2))
+
+    top_eigfuns = jnp.take_along_axis(v_T, top_theta_idxs[..., None], axis=2)
+
     data["ideal ballooning lambda"] = top_eigvals
-    data["ideal ballooning eigenfunction"] = top_eigenfuns
+    data["ideal ballooning eigenfunction"] = top_eigfuns
 
     return data
 

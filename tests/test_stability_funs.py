@@ -683,7 +683,24 @@ def test_ballooning_stability_eval():
         data_keys = ["ideal ballooning lambda", "Newcomb ballooning metric"]
         data = eq.compute(data_keys, grid=grid)
 
-        lam2 = data["ideal ballooning lambda"][0]
+        lam2_full = data["ideal ballooning lambda"]
+
+        X0_full = data["ideal ballooning eigenfunction"]
+
+        assert np.shape(lam2_full) == (
+            N_alpha,
+            N_zeta0,
+            1,
+        ), "output eigenvalue spectrum does not have the right shape"
+
+        assert np.shape(X0_full) == (
+            N_alpha,
+            N_zeta0,
+            1,
+            N_zeta - 2,
+        ), "output eigenfunction spectrum does not have the right shape"
+
+        lam2 = jnp.max(lam2_full)
 
         Newcomb_metric = data["Newcomb ballooning metric"]
 
@@ -788,7 +805,7 @@ def test_ballooning_compare_with_COBRAVMEC():
         data_keys = ["ideal ballooning lambda"]
         data = eq.compute(data_keys, grid=grid)
 
-        lam2_array[i] = data["ideal ballooning lambda"][0]
+        lam2_array[i] = np.max(data["ideal ballooning lambda"])
 
     root_DESC = find_root_simple(np.array(surfaces), lam2_array)
     np.testing.assert_allclose(root_COBRAVMEC, root_DESC, rtol=4e-4)

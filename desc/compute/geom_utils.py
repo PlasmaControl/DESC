@@ -94,19 +94,19 @@ def rpz2xyz(pts):
 
 
 def xyz2rpz_vec(vec, x=None, y=None, phi=None):
-    """Transform vectors from cartesian (X,Y,Z) to polar (R,phi,Z) form.
+    """Transform from cartesian (X,Y,Z) to polar (R,phi,Z) form.
 
     Parameters
     ----------
     vec : ndarray, shape(...,3)
-        vectors, in cartesian (X,Y,Z) form
+        coordinate triplet, in cartesian (X,Y,Z) form
     x, y, phi : ndarray, shape(...,)
-        anchor points for vectors. Either x and y, or phi must be supplied
+        anchor points for coordinates. Either x and y, or phi must be supplied
 
     Returns
     -------
     vec : ndarray, shape(...,3)
-        vectors, in polar (R,phi,Z) form
+        coordinates, in polar (R,phi,Z) form
 
     """
     if x is not None and y is not None:
@@ -129,19 +129,19 @@ def xyz2rpz_vec(vec, x=None, y=None, phi=None):
 
 
 def rpz2xyz_vec(vec, x=None, y=None, phi=None):
-    """Transform vectors from polar (R,phi,Z) to cartesian (X,Y,Z) form.
+    """Transform coordinates from polar (R,phi,Z) to cartesian (X,Y,Z) form.
 
     Parameters
     ----------
     vec : ndarray, shape(n,3)
-        vectors, in polar (R,phi,Z) form
+        coordinates, in polar (R,phi,Z) form
     x, y, phi : ndarray, shape(n,)
-        anchor points for vectors. Either x and y, or phi must be supplied
+        anchor points for coordinates. Either x and y, or phi must be supplied
 
     Returns
     -------
     vec : ndarray, shape(n,3)
-        vectors, in cartesian (X,Y,Z) form
+        coordinates, in cartesian (X,Y,Z) form
 
     """
     if x is not None and y is not None:
@@ -164,7 +164,7 @@ def rpz2xyz_vec(vec, x=None, y=None, phi=None):
 
 
 def copy_rpz_periods(rpz, NFP):
-    """Copy a rpz vector into multiple field periods."""
+    """Copy a rpz coordinate triplet into multiple field periods."""
     r, p, z = rpz.T
     r = jnp.tile(r, NFP)
     z = jnp.tile(z, NFP)

@@ -4030,7 +4030,7 @@ def _B_b_fb(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["p_frame", "q_frame", "u_fb", "v_fb", "phi"],
+    data=["p_frame", "q_frame", "u_fb", "v_fb", "phi", "x"],
     parameterization="desc.coils.AbstractFiniteBuildCoil",
 )
 def _x_fb(params, transforms, profiles, data, **kwargs):

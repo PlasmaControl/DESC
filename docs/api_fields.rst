@@ -100,6 +100,7 @@ classes, can also use the same ``Curve`` conversion methods to convert between c
     desc.coils.FourierPlanarCoil
     desc.coils.FourierXYCoil
     desc.coils.SplineXYZCoil
+    desc.coils.FourierPlanarFiniteBuildCoil
 
 There are also objects for holding a collection of coils with efficient methods for
 evaluating the combined field. A ``CoilSet`` must consist of members with the same

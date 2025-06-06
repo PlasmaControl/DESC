@@ -21,6 +21,7 @@ from ..integrals.surface_integral import (
 )
 from ..utils import cross, dot, safediv, safenorm
 from .data_index import register_compute_fun
+from .geom_utils import rpz2xyz, rpz2xyz_vec, xyz2rpz
 
 
 @register_compute_fun(
@@ -3836,4 +3837,225 @@ def _L_grad_B(params, transforms, profiles, data, **kwargs):
 )
 def _K_vc(params, transforms, profiles, data, **kwargs):
     data["K_vc"] = cross(data["n_rho"], data["B"]) / mu_0
+    return data
+
+
+@register_compute_fun(
+    name="B_0_fb",
+    label="B_{0,FB}",
+    units="T",
+    units_long="Tesla",
+    description="B_0 term in finite build expansion",
+    dim=3,
+    params=["current", "cross_section_dims"],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["u_fb", "v_fb", "p_frame", "q_frame"],
+    parameterization="desc.coils.AbstractFiniteBuildCoil",
+)
+def _B_0_fb(params, transforms, profiles, data, **kwargs):
+    # scalars
+    current = params["current"]
+    a = params["cross_section_dims"][0]
+    b = params["cross_section_dims"][1]
+
+    # kind of a trick, the p and q frame computations are only done on the centerline
+    # dimension
+    p_frame = data["p_frame"]
+    q_frame = data["q_frame"]
+    u = data["u_fb"]
+    v = data["v_fb"]
+
+    # add dimension to u and v to accomodate vectorized operations
+    u = u[:, jnp.newaxis]
+    v = v[:, jnp.newaxis]
+
+    def G(x, y):
+        return y * jnp.arctan(x / y) + x / 2 * jnp.log(1 + (y / x) ** 2)
+
+    data["B_0_fb"] = (
+        mu_0
+        * current
+        / (4 * jnp.pi * a * b)
+        * (
+            (
+                q_frame * G(b * (v + 1), a * (u + 1))
+                - p_frame * G(a * (u + 1), b * (v + 1))
+            )
+            + (-1)
+            * (
+                q_frame * G(b * (v + 1), a * (u - 1))
+                - p_frame * G(a * (u - 1), b * (v + 1))
+            )
+            + (-1)
+            * (
+                q_frame * G(b * (v - 1), a * (u + 1))
+                - p_frame * G(a * (u + 1), b * (v - 1))
+            )
+            + (
+                q_frame * G(b * (v - 1), a * (u - 1))
+                - p_frame * G(a * (u - 1), b * (v - 1))
+            )
+        )
+    )
+
+    return data
+
+
+@register_compute_fun(
+    name="B_kappa_fb",
+    label="B_{\\kappa,FB}",
+    units="T",
+    units_long="Tesla",
+    description="B_kappa term in finite build expansion",
+    dim=3,
+    params=[
+        "current",
+        "cross_section_dims",
+    ],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=[
+        "u_fb",
+        "v_fb",
+        "p_frame",
+        "q_frame",
+        "curv1_frame",
+        "curv2_frame",
+    ],
+    parameterization="desc.coils.AbstractFiniteBuildCoil",
+)
+def _B_kappa_fb(params, transforms, profiles, data, **kwargs):
+    # scalars
+    current = params["current"]
+    a = params["cross_section_dims"][0]
+    b = params["cross_section_dims"][1]
+
+    p_frame = data["p_frame"]
+    q_frame = data["q_frame"]
+    curv1_frame = data["curv1_frame"]
+    curv2_frame = data["curv2_frame"]
+    u = data["u_fb"]
+    v = data["v_fb"]
+
+    # add dimension to scalars to accomodate vectorized operations
+    u = u[:, jnp.newaxis]
+    v = v[:, jnp.newaxis]
+    curv1_frame = curv1_frame[:, jnp.newaxis]
+    curv2_frame = curv2_frame[:, jnp.newaxis]
+
+    def K(U, V):
+        return (
+            -2
+            * U
+            * V
+            * (curv1_frame * q_frame - curv2_frame * p_frame)
+            * jnp.log(a / b * U**2 + b / a * V**2)
+            + (curv2_frame * q_frame - curv1_frame * p_frame)
+            * (a / b * U**2 + b / a * V**2)
+            * jnp.log(a / b * U**2 + b / a * V**2)
+            + 4 * a / b * curv2_frame * p_frame * U**2 * jnp.arctan(b * V / (a * U))
+            - 4 * b / a * curv1_frame * q_frame * V**2 * jnp.arctan(a * U / (b * V))
+        )
+
+    data["B_kappa_fb"] = (
+        mu_0
+        * current
+        / (64 * jnp.pi)
+        * (
+            K(u + 1, v + 1)
+            + K(u - 1, v - 1)
+            + (-1) * K(u - 1, v + 1)
+            + (-1) * K(u + 1, v - 1)
+        )
+    )
+
+    return data
+
+
+@register_compute_fun(
+    name="B_b_fb",
+    label="B_{b,FB}",
+    units="T",
+    units_long="Tesla",
+    description="B_b term in finite build expansion",
+    dim=3,
+    params=["current", "cross_section_dims"],
+    transforms={},
+    profiles=[],
+    coordinates="z",
+    data=["curvature", "frenet_binormal"],
+    parameterization="desc.coils.AbstractFiniteBuildCoil",
+)
+def _B_b_fb(params, transforms, profiles, data, **kwargs):
+    # scalars, external
+    current = params["current"]
+    a = params["cross_section_dims"][0]
+    b = params["cross_section_dims"][1]
+
+    # u and v are computed
+    curvature = data["curvature"][:, jnp.newaxis]
+    binormal = data["frenet_binormal"]
+
+    k = -(a**4 - 6 * a**2 * b**2 + b**4) / (6 * a**2 * b**2) * jnp.log(a / b + b / a)
+    +b * b / (6 * a * a) * jnp.log(b / a)
+    +a * a / (6 * b * b) * jnp.log(a / b)
+    +(4.0 * b) / (3 * a) * jnp.arctan(a / b)
+    +(4.0 * a) / (3 * b) * jnp.arctan(b / a)
+
+    delta = jnp.exp(-(25.0 / 6) + k)
+
+    data["B_b_fb"] = (
+        mu_0
+        * current
+        / (8 * jnp.pi)
+        * curvature
+        * binormal
+        * (4 + 2 * jnp.log(2) + jnp.log(delta))
+    )
+
+    return data
+
+
+@register_compute_fun(
+    name="x_fb",
+    label="x_{FB}",
+    units="m",
+    units_long="meters",
+    description="Position vector in lab frame for finite build coil cross section",
+    dim=3,
+    params=["cross_section_dims"],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["p_frame", "q_frame", "u_fb", "v_fb", "phi", "x"],
+    parameterization="desc.coils.AbstractFiniteBuildCoil",
+)
+def _x_fb(params, transforms, profiles, data, **kwargs):
+    # scalars
+    a = params["cross_section_dims"][0]
+    b = params["cross_section_dims"][1]
+
+    p_frame = data["p_frame"]
+    q_frame = data["q_frame"]
+    x_centerline = data["x"]
+    u = data["u_fb"]
+    v = data["v_fb"]
+
+    # add dimension to scalars to accomodate vectorized operations
+    u = u[:, jnp.newaxis]
+    v = v[:, jnp.newaxis]
+
+    # move everything to xyz
+    phi = data["phi"]
+    x_centerline = rpz2xyz(x_centerline)
+    p_frame = rpz2xyz_vec(p_frame, phi=phi)
+    q_frame = rpz2xyz_vec(q_frame, phi=phi)
+
+    x_fb = x_centerline + a / 2 * u * p_frame + b / 2 * v * q_frame
+
+    data["x_fb"] = xyz2rpz(x_fb)
+
     return data

@@ -58,6 +58,8 @@ from desc.integrals.quad_utils import (
     tanh_sinh,
 )
 from desc.integrals.singularities import (
+    _1_over_G,
+    _grad_G,
     _kernel_nr_over_r3,
     _vanilla_params,
     best_params,
@@ -709,7 +711,7 @@ class TestVacuumSolver:
         Define boundary R_b(θ,ζ) = R₀ + a cos θ and Z_b(θ,ζ) = -a sin θ.
         θ = 0 is outboard side and θ increases clockwise.
         Define harmonic map Φ: ρ,θ,ζ ↦ Z(ρ,θ,ζ).
-        Choose b.c. 𝐁₀⋅𝐧 = -∇ϕ⋅𝐧
+        Choose b.c. 𝐁₀⋅𝐧 = -∇Z⋅𝐧
                          = -[0, 0, 1]⋅[cos(θ)cos(ζ), cos(θ)sin(ζ), -sin(θ)]
                          = sin(θ)
         and test that ‖ Φ − Z ‖_∞ → 0.
@@ -725,22 +727,21 @@ class TestVacuumSolver:
         B0n = np.sin(theta)
         vac = VacuumSolver(
             surface=surf,
-            B0=None,
             evl_grid=LinearGrid(M=5, N=5, NFP=surf.NFP),
             src_grid=src_grid,
             Phi_grid=LinearGrid(M=2, N=2, NFP=surf.NFP),
             Phi_M=1,
             Phi_N=0,
-            chunk_size=chunk_size,
             B0n=B0n,
+            chunk_size=chunk_size,
             warn_fft=False,
         )
         np.testing.assert_allclose(vac._data["src"]["Z"], -a * np.sin(theta))
         np.testing.assert_allclose(vac._data["src"]["n_rho"][:, 2], -B0n, atol=1e-12)
 
         data = vac.compute_Phi(chunk_size, maxiter, warn=False)
-        Z = data["evl"]["Z"]
         Phi = Transform(vac.evl_grid, vac.basis).transform(data["Phi"]["Phi_mn"])
+        Z = data["evl"]["Z"]
         np.testing.assert_allclose(np.ptp(Z - Phi), 0, atol=atol)
 
         data = vac.compute_vacuum_field(chunk_size)["evl"].copy()
@@ -764,12 +765,12 @@ class TestVacuumSolver:
             ),
         ],
     )
-    def test_harmonic_general(self, use_dft, chunk_size):
+    def test_harmonic_interior(self, use_dft, chunk_size):
         """Test that Laplace solution recovers expected analytic result.
 
         Define boundary R_b(θ,ζ) and Z_b(θ,ζ).
         Define harmonic map Φ: ρ,θ,ζ ↦ Z(ρ,θ,ζ).
-        Choose b.c. 𝐁₀⋅𝐧 = -∇ϕ⋅𝐧 and test that ‖ Φ − Z ‖_∞ → 0.
+        Choose b.c. 𝐁₀⋅𝐧 = -∇Z⋅𝐧 and test that ‖ Φ − Z ‖_∞ → 0.
         """
         atol = 4e-5
         # elliptic cross-section with torsion
@@ -784,7 +785,6 @@ class TestVacuumSolver:
 
         vac = VacuumSolver(
             surface=surf,
-            B0=None,
             evl_grid=Phi_grid,
             src_grid=src_grid,
             Phi_grid=Phi_grid,
@@ -799,13 +799,61 @@ class TestVacuumSolver:
         )
 
         data = vac.compute_Phi(chunk_size)
-        Z = data["evl"]["Z"]
         Phi = Transform(vac.evl_grid, vac.basis).transform(data["Phi"]["Phi_mn"])
+        Z = data["evl"]["Z"]
         np.testing.assert_allclose(np.ptp(Z - Phi), 0, atol=atol)
 
         data = vac.compute_vacuum_field(chunk_size)["evl"].copy()
         data = surf.compute("n_rho", grid=vac.evl_grid, data=data)
         B0n = -data["n_rho"][:, 2]
+        dPhi_dn = dot(data["grad(Phi)"], data["n_rho"])
+        np.testing.assert_allclose(B0n + dPhi_dn, 0, atol=atol)
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize("chunk_size", [25])
+    def test_harmonic_exterior(self, chunk_size):
+        """Test that Laplace solution recovers expected analytic result.
+
+        Define harmonic map Φ: ρ,θ,ζ ↦ G(ρ,θ,ζ).
+        Choose b.c. 𝐁₀⋅𝐧 = -∇G⋅𝐧 and test that ‖ Φ − G ‖_∞ → 0.
+        """
+        atol = 4e-5
+        # elliptic cross-section with torsion
+        surf = FourierRZToroidalSurface(
+            R_lmn=[10, 1, 0.2],
+            Z_lmn=[-2, -0.2],
+            modes_R=[[0, 0], [1, 0], [0, 1]],
+            modes_Z=[[-1, 0], [0, -1]],
+        )
+        src_grid = LinearGrid(M=50, N=50, NFP=surf.NFP)
+        Phi_grid = LinearGrid(M=50, N=50, NFP=surf.NFP)
+
+        src_data = surf.compute(["x", "n_rho"], grid=src_grid)
+
+        vac = VacuumSolver(
+            surface=surf,
+            evl_grid=Phi_grid,
+            src_grid=src_grid,
+            Phi_grid=Phi_grid,
+            Phi_M=20,
+            Phi_N=20,
+            exterior=True,
+            chunk_size=chunk_size,
+            B0n=dot(_grad_G(src_data["x"]), src_data["n_rho"]),  # = -∇G⋅𝐧
+            use_dft=False,
+            warn_dft=False,
+            warn_fft=False,
+        )
+
+        data = vac.compute_Phi(chunk_size)
+        Phi = Transform(vac.evl_grid, vac.basis).transform(data["Phi"]["Phi_mn"])
+        x = surf.compute(["x"], grid=vac.evl_grid)["x"]
+        G = np.reciprocal(_1_over_G(x))
+        np.testing.assert_allclose(np.ptp(G - Phi), 0, atol=atol)
+
+        data = vac.compute_vacuum_field(chunk_size)["evl"].copy()
+        data = surf.compute("n_rho", grid=vac.evl_grid, data=data)
+        B0n = _grad_G(x)
         dPhi_dn = dot(data["grad(Phi)"], data["n_rho"])
         np.testing.assert_allclose(B0n + dPhi_dn, 0, atol=atol)
 
@@ -865,19 +913,19 @@ class TestVacuumSolver:
 
         Phi_grid = LinearGrid(M=20, N=20, NFP=eq.NFP if eq.N > 0 else 64)
         src_grid = LinearGrid(M=50, N=50, NFP=eq.NFP)
-        src_data = eq.compute(["G", "R0"], grid=src_grid)
-        B0 = ToroidalMagneticField(
-            B0=src_grid.compress(src_data["G"])[-1] / src_data["R0"],
-            R0=src_data["R0"],
-        )
+        src_data = eq.compute(["G"], grid=src_grid)
+        R0 = 1
+        Y = src_grid.compress(src_data["G"])[-1]
+        B0 = ToroidalMagneticField(B0=Y / R0, R0=R0)
         vac = VacuumSolver(
             surface=eq.surface,
-            B0=B0,
             evl_grid=Phi_grid,
             src_grid=src_grid,
             Phi_grid=Phi_grid,
             Phi_M=8,
             Phi_N=8,
+            B0=B0,
+            # Y=Y, # noqa: E800
             chunk_size=chunk_size,
             warn_fft=False,
         )

@@ -605,7 +605,11 @@ def _singular_part(
     # Note that it is necessary to take the Fourier transforms of the
     # vector components of the orthonormal polar basis vectors R̂, ϕ̂, Ẑ.
     # Vector components of the Cartesian basis are not NFP periodic.
-    fsource = [(key, interpolator.fourier(source_data[key])) for key in keys]
+    fsource = [
+        (key, interpolator.fourier(source_data[key]))
+        for key in keys
+        if key in source_data
+    ]
 
     def polar_pt(i):
         """See sec 3.2.2 of [2].
@@ -863,7 +867,7 @@ _kernel_1_over_r.keys = _dx.keys + ["|e_theta x e_zeta|"]
 def _kernel_Bn_over_r(eval_data, source_data, ds, diag=False):
     """Returns -4π da(y) Bₙ(y) G(x,y) = da(y) Bₙ(y) ‖x−y‖⁻¹."""
     return (-4 * jnp.pi * ds) * safediv(
-        source_data["|e_theta x e_zeta|"] * source_data["Bn"],
+        source_data["|e_theta x e_zeta|"] * source_data.get("Bn", 0),
         _1_over_G(_dx(eval_data, source_data, diag)),
     )
 
@@ -923,7 +927,7 @@ def _kernel_biot_savart_coulomb(eval_data, source_data, ds, diag=False):
     grad_G = _grad_G(_dx(eval_data, source_data, diag))
     return ds * (
         jnp.cross(grad_G, K * a[:, jnp.newaxis])
-        - grad_G * (source_data["Bn"] * a)[:, jnp.newaxis]
+        - grad_G * (source_data.get("Bn", 0) * a)[:, jnp.newaxis]
     )
 
 

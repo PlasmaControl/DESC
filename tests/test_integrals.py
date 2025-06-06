@@ -810,7 +810,7 @@ class TestVacuumSolver:
         np.testing.assert_allclose(B0n + dPhi_dn, 0, atol=atol)
 
     @pytest.mark.unit
-    @pytest.mark.parametrize("chunk_size", [25])
+    @pytest.mark.parametrize("chunk_size", [10])
     def test_harmonic_exterior(self, chunk_size):
         """Test that Laplace solution recovers expected analytic result.
 
@@ -826,20 +826,25 @@ class TestVacuumSolver:
             modes_Z=[[-1, 0], [0, -1]],
         )
         src_grid = LinearGrid(M=50, N=50, NFP=surf.NFP)
-        Phi_grid = LinearGrid(M=50, N=50, NFP=surf.NFP)
+        Phi_grid = LinearGrid(M=40, N=40, NFP=surf.NFP)
 
         src_data = surf.compute(["x", "n_rho"], grid=src_grid)
+
+        def grad_G(x):
+            # ∇G(x) = -∇_y G(x-y)
+            y = 0
+            return -_grad_G(x - y)
 
         vac = VacuumSolver(
             surface=surf,
             evl_grid=Phi_grid,
             src_grid=src_grid,
             Phi_grid=Phi_grid,
-            Phi_M=20,
-            Phi_N=20,
+            Phi_M=30,
+            Phi_N=30,
             exterior=True,
             chunk_size=chunk_size,
-            B0n=dot(_grad_G(src_data["x"]), src_data["n_rho"]),  # = -∇G⋅𝐧
+            B0n=-dot(grad_G(src_data["x"]), src_data["n_rho"]),
             use_dft=False,
             warn_dft=False,
             warn_fft=False,
@@ -853,9 +858,9 @@ class TestVacuumSolver:
 
         data = vac.compute_vacuum_field(chunk_size)["evl"].copy()
         data = surf.compute("n_rho", grid=vac.evl_grid, data=data)
-        B0n = _grad_G(x)
-        dPhi_dn = dot(data["grad(Phi)"], data["n_rho"])
-        np.testing.assert_allclose(B0n + dPhi_dn, 0, atol=atol)
+        np.testing.assert_allclose(
+            dot(grad_G(x) - data["grad(Phi)"], data["n_rho"]), 0, atol=atol
+        )
 
     @pytest.mark.unit
     @pytest.mark.slow

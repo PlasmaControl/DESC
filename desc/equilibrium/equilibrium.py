@@ -15,6 +15,7 @@ from desc.basis import FourierZernikeBasis, fourier, zernike_radial
 from desc.compat import ensure_positive_jacobian
 from desc.compute import compute as compute_fun
 from desc.compute import data_index
+from desc.compute.geom_utils import rpz2xyz, rpz2xyz_vec, xyz2rpz_vec
 from desc.compute.utils import (
     _grow_seeds,
     get_data_deps,
@@ -30,6 +31,11 @@ from desc.geometry import (
 from desc.grid import Grid, LinearGrid, QuadratureGrid, _Grid
 from desc.input_reader import InputReader
 from desc.io import IOAble
+from desc.magnetic_fields import (
+    _MagneticField,
+    biot_savart_general,
+    biot_savart_general_vector_potential,
+)
 from desc.objectives import (
     ObjectiveFunction,
     get_equilibrium_objective,
@@ -58,7 +64,7 @@ from .initial_guess import set_initial_guess
 from .utils import parse_axis, parse_profile, parse_surface
 
 
-class Equilibrium(IOAble, Optimizable):
+class Equilibrium(IOAble, Optimizable, _MagneticField):
     """Equilibrium is an object that represents a plasma equilibrium.
 
     It contains information about a plasma state, including the shapes of flux surfaces
@@ -1204,6 +1210,126 @@ class Equilibrium(IOAble, Optimizable):
             **kwargs,
         )
         return data
+
+    def compute_magnetic_field(
+        self,
+        coords,
+        params=None,
+        basis="rpz",
+        source_grid=None,
+        transforms=None,
+        chunk_size=None,
+    ):
+        """Compute magnetic field at a set of points.
+
+        Parameters
+        ----------
+        coords : array-like shape(n,3)
+            Nodes to evaluate field at in [R,phi,Z] or [X,Y,Z] coordinates.
+        params : dict or array-like of dict, optional
+            Dictionary of optimizable parameters, eg field.params_dict.
+        basis : {"rpz", "xyz"}
+            Basis for input coordinates and returned magnetic field.
+        source_grid : Grid, int or None or array-like, optional
+            Grid used to discretize MagneticField object if calculating B from
+            Biot-Savart. Should NOT include endpoint at 2pi.
+        transforms : dict of Transform
+            Transforms for R, Z, lambda, etc. Default is to build from source_grid
+        chunk_size : int or None
+            Size to split computation into chunks of evaluation points.
+            If no chunking should be done or the chunk size is the full input
+            then supply ``None``. Default is ``None``.
+
+        Returns
+        -------
+        field : ndarray, shape(n,3)
+            magnetic field at specified points
+
+        """
+        coords = jnp.atleast_2d(coords)
+        eval_xyz = rpz2xyz(coords) if basis.lower() == "rpz" else coords
+        if source_grid is None:
+            source_grid = QuadratureGrid(
+                L=self.L_grid, M=self.M_grid, N=self.N_grid * self.NFP
+            )
+
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message="Unequal number of field periods")
+            data = self.compute(
+                ["J", "phi", "sqrt(g)", "x"],
+                grid=source_grid,
+                params=params,
+                transforms=transforms,
+            )
+        source_xyz = rpz2xyz(data["x"])
+        J = rpz2xyz_vec(data["J"], phi=data["phi"])
+        dV = data["sqrt(g)"] * source_grid.weights
+
+        B = biot_savart_general(eval_xyz, source_xyz, J=J, dV=dV, chunk_size=chunk_size)
+        if basis.lower() == "rpz":
+            B = xyz2rpz_vec(B, phi=coords[:, 1])
+        return B
+
+    def compute_magnetic_vector_potential(
+        self,
+        coords,
+        params=None,
+        basis="rpz",
+        source_grid=None,
+        transforms=None,
+        chunk_size=None,
+    ):
+        """Compute magnetic vector potential at a set of points.
+
+        Parameters
+        ----------
+        coords : array-like shape(n,3)
+            Nodes to evaluate vector potential at in [R,phi,Z] or [X,Y,Z] coordinates.
+        params : dict or array-like of dict, optional
+            Dictionary of optimizable parameters, eg field.params_dict.
+        basis : {"rpz", "xyz"}
+            Basis for input coordinates and returned magnetic vector potential.
+        source_grid : Grid, int or None or array-like, optional
+            Grid used to discretize MagneticField object if calculating A from
+            Biot-Savart. Should NOT include endpoint at 2pi.
+        transforms : dict of Transform
+            Transforms for R, Z, lambda, etc. Default is to build from source_grid
+        chunk_size : int or None
+            Size to split computation into chunks of evaluation points.
+            If no chunking should be done or the chunk size is the full input
+            then supply ``None``. Default is ``None``.
+
+        Returns
+        -------
+        A : ndarray, shape(n,3)
+            magnetic vector potential at specified points
+
+        """
+        coords = jnp.atleast_2d(coords)
+        eval_xyz = rpz2xyz(coords) if basis.lower() == "rpz" else coords
+        if source_grid is None:
+            source_grid = QuadratureGrid(
+                L=self.L_grid, M=self.M_grid, N=self.N_grid * self.NFP
+            )
+
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message="Unequal number of field periods")
+            data = self.compute(
+                ["J", "phi", "sqrt(g)", "x"],
+                grid=source_grid,
+                params=params,
+                transforms=transforms,
+            )
+        source_xyz = rpz2xyz(data["x"])
+        J = rpz2xyz_vec(data["J"], phi=data["phi"])
+        dV = data["sqrt(g)"] * source_grid.weights
+
+        A = biot_savart_general_vector_potential(
+            eval_xyz, source_xyz, J=J, dV=dV, chunk_size=chunk_size
+        )
+        if basis.lower() == "rpz":
+            A = xyz2rpz_vec(A, phi=coords[:, 1])
+        return A
 
     def map_coordinates(
         self,

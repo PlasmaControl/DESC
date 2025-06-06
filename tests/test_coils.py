@@ -422,7 +422,7 @@ class TestCoil:
 
             # FourierPlanarFiniteBuildCoil
             coil = FourierPlanarFiniteBuildCoil(
-                current=I, center=[0, 0, 0], normal=[0, 0, -1], r_n=R
+                current=I, center=[0, 0, 0], normal=[0, 0, 1], r_n=R
             )
             test(
                 coil,

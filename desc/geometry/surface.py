@@ -702,10 +702,10 @@ class FourierRZToroidalSurface(Surface):
             dictionary containing  the following data, in the cylindrical basis:
                 ``n`` : (``grid.num_nodes`` x 3) array of the unit surface normal on
                     the base_surface evaluated at the input ``grid``
-                ``x`` : (``grid.num_nodes`` x 3) array of the position vectors on
+                ``x`` : (``grid.num_nodes`` x 3) array of coordinates on
                     the base_surface evaluated at the input ``grid``
                 ``x_offset_surface`` : (``grid.num_nodes`` x 3) array of the
-                    position vectors on the offset surface, corresponding to the
+                    coordinates on the offset surface, corresponding to the
                     ``x`` points on the base_surface (i.e. the points to which the
                     offset surface was fit)
         info : tuple

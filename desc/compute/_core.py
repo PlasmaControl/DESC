@@ -55,10 +55,11 @@ def _1(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="x",
-    label="\\mathbf{r}",
+    label="\\mathbf{x}",
     units="m",
     units_long="meters",
-    description="Position vector",
+    description="Coordinate vector. "
+    "This is not a position vector unless basis is cartesian.",
     dim=3,
     params=[],
     transforms={},

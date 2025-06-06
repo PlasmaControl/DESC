@@ -98,6 +98,7 @@ classes, can also use the same ``Curve`` conversion methods to convert between c
     desc.coils.FourierRZCoil
     desc.coils.FourierXYZCoil
     desc.coils.FourierPlanarCoil
+    desc.coils.FourierXYCoil
     desc.coils.SplineXYZCoil
     desc.coils.FourierPlanarFiniteBuildCoil
 

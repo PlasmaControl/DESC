@@ -683,7 +683,25 @@ def test_ballooning_stability_eval():
         data_keys = ["ideal ballooning lambda", "Newcomb ballooning metric"]
         data = eq.compute(data_keys, grid=grid)
 
-        lam2 = np.max(data["ideal ballooning lambda"])
+        lam2_full = data["ideal ballooning lambda"]
+
+        X0_full = data["ideal ballooning eigenfunction"]
+
+        assert np.shape(lam2_full) == (
+            N_alpha,
+            N_zeta0,
+            1,
+        ), "output eigenvalue spectrum does not have the right shape"
+
+        assert np.shape(X0_full) == (
+            N_alpha,
+            N_zeta0,
+            1,
+            N_zeta - 2,
+        ), "output eigenfunction spectrum does not have the right shape"
+
+        lam2 = jnp.max(lam2_full)
+
         Newcomb_metric = data["Newcomb ballooning metric"]
 
         np.testing.assert_allclose(lam1, lam2, rtol=5e-5)

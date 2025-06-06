@@ -2337,7 +2337,7 @@ def test_ballooning_stability_opt():
             period=(np.inf, 2 * np.pi, np.inf),
         )
 
-        data_keys = ["ideal ballooning lambda"]
+        data_keys = ["ideal ballooning lambda", "ideal ballooning lambda"]
         data = eq.compute(data_keys, grid=grid)
 
         lam2_initial[i] = np.max(data["ideal ballooning lambda"])
@@ -2418,7 +2418,9 @@ def test_ballooning_stability_opt():
             period=(np.inf, 2 * np.pi, np.inf),
         )
 
-        data_keys = ["ideal ballooning lambda"]
+        data_keys = [
+            "ideal ballooning lambda",
+        ]
         data = eq.compute(data_keys, grid=grid)
 
         lam2_optimized[i] = np.max(data["ideal ballooning lambda"])

@@ -56,10 +56,10 @@ def _1(params, transforms, profiles, data, **kwargs):
 @register_compute_fun(
     name="x",
     label="\\mathbf{x}",
-    units="m",
-    units_long="meters",
+    units="~",
+    units_long="not applicable",
     description="Coordinate triplet. "
-    "This is not a vector unless basis is cartesian.",
+    "This is not a position vector unless basis is cartesian.",
     dim=3,
     params=[],
     transforms={},

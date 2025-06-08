@@ -267,7 +267,7 @@ class FreeBoundarySolver(IOAble):
             M=setdefault(Phi_M, Phi_grid.M),
             N=setdefault(Phi_N, Phi_grid.N),
             NFP=surface.NFP,
-            sym=setdefault(sym, False) and surface.sym,
+            sym=setdefault(sym, False),
         )
 
         # Compute data on source grid.

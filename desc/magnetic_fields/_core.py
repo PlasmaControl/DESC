@@ -2616,6 +2616,7 @@ def field_line_integrate(
     z0 = z0.flatten()
     x0 = jnp.array([r0, phis[0] * jnp.ones_like(r0), z0]).T
 
+    # scale to make toroidal field (bp) positive
     scale = jnp.sign(field.compute_magnetic_field(x0)[0, 1])
     min_step_size = jnp.where(
         phis[-1] > phis[0], min_step_size, -jnp.abs(min_step_size)

@@ -234,18 +234,22 @@ def _magnetic_well(params, transforms, profiles, data, **kwargs):
     return data
 
 
+def _dim(f, axis=(-1, -2)):
+    """Identical to jnp.expand_dims."""
+    return jnp.expand_dims(f, axis)
+
+
 @register_compute_fun(
     name="ideal ballooning lambda",
     label="\\lambda_{\\mathrm{ballooning}}=\\gamma^2",
     units="~",
     units_long="None",
-    description="Normalized squared ideal ballooning growth rate, "
-    "requires data along a field line",
+    description="Normalized squared ideal ballooning growth rate",
     dim=1,
     params=["Psi"],
     transforms={"grid": []},
     profiles=[],
-    coordinates="rtz",
+    coordinates="rtz",  # TODO:
     data=[
         "a",
         "g^aa",
@@ -261,6 +265,7 @@ def _magnetic_well(params, transforms, profiles, data, **kwargs):
         "psi",
         "psi_r",
         "rho",
+        "phi",
     ],
     source_grid_requirement={"coordinates": "raz", "is_meshgrid": True},
     zeta0="array: points of vanishing integrated local shear to scan over. "
@@ -269,8 +274,7 @@ def _magnetic_well(params, transforms, profiles, data, **kwargs):
     "If `Neigvals=2` eigenvalues are `[-1, 0, 1]` we get `[1, 0]`",
 )
 def _ideal_ballooning_lambda(params, transforms, profiles, data, **kwargs):
-    """
-    Ideal-ballooning growth rate finder.
+    """Ideal-ballooning growth rate finder.
 
     This function uses a finite-difference method
     to calculate the maximum growth rate against the
@@ -312,113 +316,103 @@ def _ideal_ballooning_lambda(params, transforms, profiles, data, **kwargs):
     - phi: coordinate describing the position in the toroidal angle
     along a field line
 
+    Returns
+    -------
+    Ideal-ballooning lambda eigenvalues
+        Shape (num zeta0, num_rho, num alpha, num eigvals).
+    Ideal-ballooning lambda eigenfunctions
+        Shape (num zeta0, num_rho, num alpha, num eigvals, num zeta - 2).
+
     """
     Neigvals = kwargs.get("Neigvals", 1)
-    source_grid = transforms["grid"].source_grid
-    # Vectorize in rho later
-    rho = source_grid.meshgrid_reshape(data["rho"], "arz")
-
-    psi_b = params["Psi"] / (2 * jnp.pi)
-    a_N = data["a"]
-    B_N = 2 * psi_b / a_N**2
-
     zeta0 = kwargs.get("zeta0", jnp.linspace(-0.5 * jnp.pi, 0.5 * jnp.pi, 15))
-    N_zeta0 = len(zeta0)
+    zeta0 = zeta0.reshape(-1, 1, 1, 1)
 
-    # This would fail with rho vectorization
-    iota = jnp.mean(data["iota"])
-    shear = jnp.mean(data["shear"])
-    psi = jnp.mean(data["psi"])
+    grid = transforms["grid"].source_grid
+    # toroidal step size between points along field lines
+    dz = 2 * jnp.pi / grid.num_zeta
+
+    # scalars
+    a_N = data["a"]
+    psi_b = params["Psi"] / (2 * jnp.pi)
+    B_N = 2 * psi_b / a_N**2
+    constant1 = a_N * B_N**3
+    constant2 = a_N**3 * B_N
+
+    # flux surface maps
+    rho = grid.compress(data["rho"])
+    iota = grid.compress(data["iota"])
+    shear = grid.compress(data["shear"])
+    dpdpsi = mu_0 * grid.compress(data["p_r"] / data["psi_r"])
+    psi = grid.compress(data["psi"])
     sign_psi = jnp.sign(psi)
     sign_iota = jnp.sign(iota)
 
-    N_rho = int(source_grid.num_rho)
-    N_alpha = int(source_grid.num_alpha)
-
-    # phi is the same for each alpha
-    phi = source_grid.nodes[:: N_rho * N_alpha, 2]
-    N_zeta = len(phi)
-
-    B = source_grid.meshgrid_reshape(data["|B|"], "arz")
-    B_sup_zeta = source_grid.meshgrid_reshape(data["B^zeta"], "arz")
+    # spatial maps
+    B = grid.meshgrid_reshape(data["|B|"], "raz")
+    B_sup_zeta = grid.meshgrid_reshape(data["B^zeta"], "raz")
     gradpar = B_sup_zeta / B
+    g_sup_aa = grid.meshgrid_reshape(data["g^aa"], "raz")
+    g_sup_ra = grid.meshgrid_reshape(data["g^ra"], "raz")
+    g_sup_rr = grid.meshgrid_reshape(data["g^rr"], "raz")
+    cvdrift = grid.meshgrid_reshape(data["cvdrift"], "raz")
+    cvdrift0 = grid.meshgrid_reshape(data["cvdrift0"], "raz")
 
-    # This would fail with rho vectorization
-    dpdpsi = jnp.mean(mu_0 * data["p_r"] / data["psi_r"])
-
-    g_sup_aa = source_grid.meshgrid_reshape(data["g^aa"], "arz")[None, ...]
-    g_sup_ra = source_grid.meshgrid_reshape(data["g^ra"], "arz")[None, ...]
-    g_sup_rr = source_grid.meshgrid_reshape(data["g^rr"], "arz")[None, ...]
-
-    gds2 = jnp.reshape(
-        rho**2
-        * (
-            g_sup_aa
-            - 2 * sign_iota * shear / rho * zeta0[:, None, None, None] * g_sup_ra
-            + zeta0[:, None, None, None] ** 2 * (shear / rho) ** 2 * g_sup_rr
-        ),
-        (N_alpha, N_zeta0, N_zeta),
+    # higher dimensional maps
+    gds2 = (
+        _dim(rho**2) * g_sup_aa
+        - _dim(2 * rho * sign_iota * shear) * g_sup_ra * zeta0
+        + _dim(shear**2) * g_sup_rr * zeta0**2
     )
-
-    f = a_N * B_N**3 * gds2 / B**3 * 1 / gradpar
-    g = a_N**3 * B_N * gds2 / B * gradpar
-    g_half = (g[:, :, 1:] + g[:, :, :-1]) / 2
-
-    cvdrift = source_grid.meshgrid_reshape(data["cvdrift"], "arz")[None, ...]
-    cvdrift0 = source_grid.meshgrid_reshape(data["cvdrift0"], "arz")[None, ...]
-
+    f = (constant1 / (B**3 * gradpar)) * gds2
+    g = (constant2 / B * gradpar) * gds2
+    g_half = (g[..., 1:] + g[..., :-1]) / 2
     c = (
-        a_N**3
-        * B_N
-        * jnp.reshape(
-            2
-            / B_sup_zeta[None, ...]
-            * sign_psi
-            * rho**2
-            * dpdpsi
-            * (cvdrift - shear / (2 * rho**2) * zeta0[:, None, None, None] * cvdrift0),
-            (N_alpha, N_zeta0, N_zeta),
-        )
+        _dim(constant2 * sign_psi * dpdpsi)
+        / B_sup_zeta
+        * (_dim(2 * rho**2) * cvdrift - (_dim(shear) * cvdrift0) * zeta0)
+    )
+    assert (
+        gds2.shape
+        == f.shape
+        == g.shape
+        == c.shape
+        == (zeta0.size, grid.num_rho, grid.num_alpha, grid.num_zeta)
     )
 
-    h = phi[1] - phi[0]
-
-    i = jnp.arange(N_alpha)[:, None, None, None]
-    l = jnp.arange(N_zeta0)[None, :, None, None]
-    j = jnp.arange(N_zeta - 2)[None, None, :, None]
-    k = jnp.arange(N_zeta - 2)[None, None, None, :]
-
-    A = jnp.zeros((N_alpha, N_zeta0, N_zeta - 2, N_zeta - 2))
-    B_inv = jnp.zeros((N_alpha, N_zeta0, N_zeta - 2, N_zeta - 2))
-
-    A = A.at[i, l, j, k].set(
-        g_half[i, l, k] / h**2 * (j - k == -1)
-        + (-(g_half[i, l, j + 1] + g_half[i, l, j]) / h**2 + c[i, l, j + 1])
-        * (j - k == 0)
-        + g_half[i, l, j] / h**2 * (j - k == 1)
+    j = jnp.arange(grid.num_zeta - 2)
+    diag_inner = c[..., 1:-1] - (g_half[..., 1:-1] + g_half[..., 2:]) / dz**2
+    diag_outer = g_half[..., 1:-2] / dz**2
+    A = jnp.zeros(
+        (zeta0.size, grid.num_rho, grid.num_alpha, grid.num_zeta - 2, grid.num_zeta - 2)
     )
-
-    B_inv = B_inv.at[i, l, j, k].set(1 / jnp.sqrt(f[i, l, j + 1]) * (j - k == 0))
-
-    A_redo = B_inv @ A @ jnp.transpose(B_inv, axes=(0, 1, 3, 2))
+    A = A.at[..., j, j].set(diag_inner)
+    A = A.at[..., j[:-1], j[1:]].set(diag_outer)
+    A = A.at[..., j[1:], j[:-1]].set(diag_outer)
+    B_inv = jnp.zeros(A.shape).at[..., j, j].set(jnp.reciprocal(f[..., 1:-1]))
 
     # TODO: Issue #1750
     # Try jax.scipy.eigh_tridiagonal or a better solver for improved performance
-    w, v = jnp.linalg.eigh(A_redo)
-
-    # Find the top_k eigenvalues.
-    top_eigvals, top_theta_idxs = jax.lax.top_k(w, k=Neigvals)
-
+    w, v = jnp.linalg.eigh(B_inv @ A)
     # v becomes less than the machine precision at some theta points which gives NaNs
     # stop_gradient prevents that. Not sure how it will affect an objective that
     # requires both the eigenvalue and eigenfunction
-    v_T = jnp.transpose(jax.lax.stop_gradient(v), axes=(0, 1, 3, 2))
+    v = jax.lax.stop_gradient(v)
 
-    top_eigfuns = jnp.take_along_axis(v_T, top_theta_idxs[..., None], axis=2)
+    top_eigvals, top_idxs = jax.lax.top_k(w, k=Neigvals)
+    top_eigfuns = jnp.take_along_axis(v, top_idxs[..., jnp.newaxis, :], axis=-2)
+
+    assert top_eigvals.shape == (zeta0.size, grid.num_rho, grid.num_alpha, Neigvals)
+    assert top_eigfuns.shape == (
+        zeta0.size,
+        grid.num_rho,
+        grid.num_alpha,
+        Neigvals,
+        grid.num_zeta - 2,
+    )
 
     data["ideal ballooning lambda"] = top_eigvals
     data["ideal ballooning eigenfunction"] = top_eigfuns
-
     return data
 
 
@@ -515,6 +509,7 @@ def _Newcomb_ball_metric(params, transforms, profiles, data, **kwargs):
     This idea behind Newcomb's method is explained further in Appendix D of
     [Gaur _et al._](https://doi.org/10.1017/S0022377823000107)
     """
+    zeta0 = kwargs.get("zeta0", jnp.linspace(-0.5 * jnp.pi, 0.5 * jnp.pi, 15))
     source_grid = transforms["grid"].source_grid
     # Vectorize in rho later
     rho = source_grid.meshgrid_reshape(data["rho"], "arz")
@@ -523,7 +518,6 @@ def _Newcomb_ball_metric(params, transforms, profiles, data, **kwargs):
     a_N = data["a"]
     B_N = 2 * psi_b / a_N**2
 
-    zeta0 = kwargs.get("zeta0", jnp.linspace(-0.5 * jnp.pi, 0.5 * jnp.pi, 15))
     N_zeta0 = len(zeta0)
 
     # This would fail with rho vectorization

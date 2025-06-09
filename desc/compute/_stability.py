@@ -392,7 +392,7 @@ def _ideal_ballooning_lambda(params, transforms, profiles, data, **kwargs):
     # Try jax.scipy.eigh_tridiagonal or a better solver for improved performance
     if eigfuns:
         B_inv = jnp.reciprocal(jnp.sqrt(f[..., 1:-1]))
-        w, v = jnp.linalg.eigh(B_inv[..., jnp.newaxis] * A * B[..., jnp.newaxis, :])
+        w, v = jnp.linalg.eigh(B_inv[..., jnp.newaxis] * A * B_inv[..., jnp.newaxis, :])
     else:
         # We may seek eigenvalues of B⁻¹ @ A because for diagonal matrices,
         # e.g. B, and symmetric matrices A, it holds that B @ A = transpose(A @ B).

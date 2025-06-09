@@ -52,8 +52,8 @@ __all__ = [
     "plot_qs_error",
     "plot_section",
     "plot_surfaces",
-    "poincare_plot",
     "plot_field_lines",
+    "poincare_plot",
 ]
 
 

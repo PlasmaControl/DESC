@@ -556,5 +556,5 @@ class BallooningStability(_Objective):
         lambda0, w0, w1 = constants["lambda0"], constants["w0"], constants["w1"]
         # shifted ReLU
         lam = (lam - lambda0) * (lam >= lambda0)
-        lam = w0 * lam.sum(axis=(-1, -2, 0)) + w1 * lam.max(axis=(-1, -2, 0))
+        lam = w0 * lam.sum(axis=(-1, -2, -3)) + w1 * lam.max(axis=(-1, -2, -3))
         return lam

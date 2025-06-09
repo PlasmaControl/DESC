@@ -234,11 +234,6 @@ def _magnetic_well(params, transforms, profiles, data, **kwargs):
     return data
 
 
-def _dim(f, axis=(-1, -2)):
-    """Identical to jnp.expand_dims."""
-    return jnp.expand_dims(f, axis)
-
-
 @register_compute_fun(
     name="ideal ballooning lambda",
     label="\\lambda_{\\mathrm{ballooning}}=\\gamma^2",
@@ -257,7 +252,7 @@ def _dim(f, axis=(-1, -2)):
         "g^rr",
         "cvdrift",
         "cvdrift0",
-        "|B|",
+        "|B|^2",
         "B^zeta",
         "p_r",
         "iota",
@@ -301,7 +296,7 @@ def _ideal_ballooning_lambda(params, transforms, profiles, data, **kwargs):
 
     To obtain the parameters g, c, and f, we need a set of parameters
     along a field line provided in the list ``data`` above.
-    Here's a description of these parameters:
+    Here's a description of some of these parameters:
 
     - a: minor radius of the device
     - g^aa: |grad alpha|^2, field line bending term
@@ -309,80 +304,72 @@ def _ideal_ballooning_lambda(params, transforms, profiles, data, **kwargs):
     - g^rr: |grad rho|^2 flux expansion term
     - cvdrift: geometric factor of the curvature drift
     - cvdrift0: geometric factor of curvature drift 2
-    - |B|: magnitude of the magnetic field
     - B^zeta:  B dot grad zeta
     - p_r: dp/drho, pressure gradient
 
     Returns
     -------
     Ideal-ballooning lambda eigenvalues
-        Shape (num zeta0, num_rho, num alpha, num eigvals).
+        Shape (num_rho, num alpha, num zeta0, num eigvals).
     Ideal-ballooning lambda eigenfunctions
-        Shape (num zeta0, num_rho, num alpha, num zeta - 2, num eigvals).
+        Shape (num_rho, num alpha, num zeta0, num zeta - 2, num eigvals).
 
     """
     Neigvals = kwargs.get("Neigvals", 1)
     eigfuns = kwargs.get("eigfuns", True)
     zeta0 = kwargs.get("zeta0", jnp.linspace(-0.5 * jnp.pi, 0.5 * jnp.pi, 15))
-    zeta0 = zeta0.reshape(-1, 1, 1, 1)
-
+    zeta0 = zeta0.reshape(-1, 1)
     grid = transforms["grid"].source_grid
+
+    # scalars
+    psi_boundary = params["Psi"] / (2 * jnp.pi)
+    a_N = data["a"]
+    B_N = 2 * psi_boundary / a_N**2
+    constant1 = a_N * B_N**3
+    constant2 = a_N**3 * B_N
     # toroidal step size between points along field lines is assumed uniform
     dz = grid.nodes[grid.unique_zeta_idx[:2], 2]
     dz = dz[1] - dz[0]
 
-    # scalars
-    psi_b = params["Psi"] / (2 * jnp.pi)
-    B_N = 2 * psi_b / data["a"] ** 2
-    constant1 = data["a"] * B_N**3
-    constant2 = data["a"] ** 3 * B_N
-
-    # flux surface maps
-    rho = grid.compress(data["rho"])
-    iota = grid.compress(data["iota"])
-    shear = grid.compress(data["shear"])
-    dp_dpsi = mu_0 * grid.compress(data["p_r"] / data["psi_r"])
-    psi = grid.compress(data["psi"])
-    sign_psi = jnp.sign(psi)
-    sign_iota = jnp.sign(iota)
-
-    # spatial maps
-    B = grid.meshgrid_reshape(data["|B|"], "raz")
-    B_sup_zeta = grid.meshgrid_reshape(data["B^zeta"], "raz")
-    gradpar = B_sup_zeta / B
-    g_sup_aa = grid.meshgrid_reshape(data["g^aa"], "raz")
-    g_sup_ra = grid.meshgrid_reshape(data["g^ra"], "raz")
-    g_sup_rr = grid.meshgrid_reshape(data["g^rr"], "raz")
-    cvdrift = grid.meshgrid_reshape(data["cvdrift"], "raz")
-    cvdrift0 = grid.meshgrid_reshape(data["cvdrift0"], "raz")
-
     # higher dimensional maps
     gds2 = (
-        _dim(rho**2) * g_sup_aa
-        - _dim(2 * rho * sign_iota * shear) * g_sup_ra * zeta0
-        + _dim(shear**2) * g_sup_rr * zeta0**2
+        data["rho"] ** 2 * data["g^aa"]
+        - 2
+        * data["rho"]
+        * jnp.sign(data["iota"])
+        * data["shear"]
+        * data["g^ra"]
+        * zeta0
+        + data["shear"] ** 2 * data["g^rr"] * zeta0**2
     )
-    f = (constant1 / (B**3 * gradpar)) * gds2
-    g = (constant2 / B * gradpar) * gds2
+    f = (constant1 / data["|B|^2"] / data["B^zeta"]) * gds2
+    g = (constant2 / data["|B|^2"] * data["B^zeta"]) * gds2
     g_half = (g[..., 1:] + g[..., :-1]) / 2
     c = (
-        _dim(constant2 * sign_psi * dp_dpsi)
-        / B_sup_zeta
-        * (_dim(2 * rho**2) * cvdrift - (_dim(shear) * cvdrift0) * zeta0)
+        (constant2 * mu_0)
+        * data["p_r"]
+        / data["psi_r"]
+        * jnp.sign(data["psi"])
+        / data["B^zeta"]
+        * (
+            2 * data["rho"] ** 2 * data["cvdrift"]
+            - data["shear"] * data["cvdrift0"] * zeta0
+        )
     )
-    assert (
-        gds2.shape
-        == f.shape
-        == g.shape
-        == c.shape
-        == (zeta0.size, grid.num_rho, grid.num_alpha, grid.num_zeta)
-    )
+
+    def reshape(f):
+        assert f.shape == (zeta0.size, grid.num_nodes)
+        f = jnp.swapaxes(grid.meshgrid_reshape(f.T, "raz"), -1, -2)
+        assert f.shape == (grid.num_rho, grid.num_alpha, zeta0.size, grid.num_zeta)
+        return f
+
+    f, g_half, c = map(reshape, (f, g_half, c))
 
     j = jnp.arange(grid.num_zeta - 2)
     diag_inner = c[..., 1:-1] - (g_half[..., 1:-1] + g_half[..., 2:]) / dz**2
     diag_outer = g_half[..., 1:-2] / dz**2
     A = jnp.zeros(
-        (zeta0.size, grid.num_rho, grid.num_alpha, grid.num_zeta - 2, grid.num_zeta - 2)
+        (grid.num_rho, grid.num_alpha, zeta0.size, grid.num_zeta - 2, grid.num_zeta - 2)
     )
     A = A.at[..., j, j].set(diag_inner)
     A = A.at[..., j[:-1], j[1:]].set(diag_outer)
@@ -397,11 +384,12 @@ def _ideal_ballooning_lambda(params, transforms, profiles, data, **kwargs):
         # We may seek eigenvalues of B⁻¹ @ A because for diagonal matrices,
         # e.g. B, and symmetric matrices A, it holds that B @ A = transpose(A @ B).
         # Eigenvalues are preserved under transpose.
+        # TODO: Check again if ballooning equation can be simplified.
         B_inv = jnp.reciprocal(f[..., 1:-1])
         w = jnp.linalg.eigvalsh(B_inv[..., jnp.newaxis] * A)
 
     w, top_idx = jax.lax.top_k(w, k=Neigvals)
-    assert w.shape == (zeta0.size, grid.num_rho, grid.num_alpha, Neigvals)
+    assert w.shape == (grid.num_rho, grid.num_alpha, zeta0.size, Neigvals)
     data["ideal ballooning lambda"] = w
 
     if eigfuns:
@@ -410,9 +398,9 @@ def _ideal_ballooning_lambda(params, transforms, profiles, data, **kwargs):
         v = jax.lax.stop_gradient(v)
         v = jnp.take_along_axis(v, top_idx[..., jnp.newaxis, :], axis=-1)
         assert v.shape == (
-            zeta0.size,
             grid.num_rho,
             grid.num_alpha,
+            zeta0.size,
             grid.num_zeta - 2,
             Neigvals,
         )

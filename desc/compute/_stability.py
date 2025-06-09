@@ -271,6 +271,7 @@ def _dim(f, axis=(-1, -2)):
     "Default 15 points linearly spaced in [-π/2,π/2]",
     Neigvals="int: number of largest eigenvalues to return, default value is 1.`"
     "If `Neigvals=2` eigenvalues are `[-1, 0, 1]` we get `[1, 0]`",
+    eigfuns="bool: Whether to return eigenfunctions. Default is true.",
 )
 def _ideal_ballooning_lambda(params, transforms, profiles, data, **kwargs):
     """Ideal-ballooning growth rate finder.
@@ -288,10 +289,9 @@ def _ideal_ballooning_lambda(params, transforms, profiles, data, **kwargs):
     c = a_N^3 * B_N * (1/ b ⋅∇ζ) * (dψ_N/dρ)² * dp/dψ * (b × 𝛋) ⋅|∇α|/ B**2,
     f = a_N * B_N^3 * (dψ_N/dρ)² * |∇α|² / B^3 * (1/ b ⋅∇ζ) ,
 
-    are needed along a field line to solve the ballooning equation once and
-    find
+    are needed along a field line to solve the ballooning equation once and find
 
-    λ = a_N^2 / v_A^2 * γ²,
+    λ = a_N^2 / v_A^2 * γ²
 
     where
 
@@ -300,8 +300,8 @@ def _ideal_ballooning_lambda(params, transforms, profiles, data, **kwargs):
     ψ_b = 0.5*(B_N * a_N**2) is the total enclosed toroidal flux.
 
     To obtain the parameters g, c, and f, we need a set of parameters
-    provided in the list ``data`` above. Here's a description of
-    these parameters:
+    along a field line provided in the list ``data`` above.
+    Here's a description of these parameters:
 
     - a: minor radius of the device
     - g^aa: |grad alpha|^2, field line bending term
@@ -312,8 +312,6 @@ def _ideal_ballooning_lambda(params, transforms, profiles, data, **kwargs):
     - |B|: magnitude of the magnetic field
     - B^zeta:  B dot grad zeta
     - p_r: dp/drho, pressure gradient
-    - phi: coordinate describing the position in the toroidal angle
-    along a field line
 
     Returns
     -------
@@ -324,12 +322,14 @@ def _ideal_ballooning_lambda(params, transforms, profiles, data, **kwargs):
 
     """
     Neigvals = kwargs.get("Neigvals", 1)
+    eigfuns = kwargs.get("eigfuns", True)
     zeta0 = kwargs.get("zeta0", jnp.linspace(-0.5 * jnp.pi, 0.5 * jnp.pi, 15))
     zeta0 = zeta0.reshape(-1, 1, 1, 1)
 
     grid = transforms["grid"].source_grid
-    # toroidal step size between points along field lines
-    dz = 2 * jnp.pi / grid.num_zeta
+    # toroidal step size between points along field lines is assumed uniform
+    dz = grid.nodes[grid.unique_zeta_idx[:2], 2]
+    dz = dz[1] - dz[0]
 
     # scalars
     psi_b = params["Psi"] / (2 * jnp.pi)
@@ -341,7 +341,7 @@ def _ideal_ballooning_lambda(params, transforms, profiles, data, **kwargs):
     rho = grid.compress(data["rho"])
     iota = grid.compress(data["iota"])
     shear = grid.compress(data["shear"])
-    dpdpsi = mu_0 * grid.compress(data["p_r"] / data["psi_r"])
+    dp_dpsi = mu_0 * grid.compress(data["p_r"] / data["psi_r"])
     psi = grid.compress(data["psi"])
     sign_psi = jnp.sign(psi)
     sign_iota = jnp.sign(iota)
@@ -366,7 +366,7 @@ def _ideal_ballooning_lambda(params, transforms, profiles, data, **kwargs):
     g = (constant2 / B * gradpar) * gds2
     g_half = (g[..., 1:] + g[..., :-1]) / 2
     c = (
-        _dim(constant2 * sign_psi * dpdpsi)
+        _dim(constant2 * sign_psi * dp_dpsi)
         / B_sup_zeta
         * (_dim(2 * rho**2) * cvdrift - (_dim(shear) * cvdrift0) * zeta0)
     )
@@ -387,30 +387,37 @@ def _ideal_ballooning_lambda(params, transforms, profiles, data, **kwargs):
     A = A.at[..., j, j].set(diag_inner)
     A = A.at[..., j[:-1], j[1:]].set(diag_outer)
     A = A.at[..., j[1:], j[:-1]].set(diag_outer)
-    B_inv = jnp.zeros(A.shape).at[..., j, j].set(jnp.reciprocal(f[..., 1:-1]))
+    B_inv = jnp.reciprocal(f[..., 1:-1])
 
     # TODO: Issue #1750
     # Try jax.scipy.eigh_tridiagonal or a better solver for improved performance
-    w, v = jnp.linalg.eigh(B_inv @ A)
-    # v becomes less than the machine precision at some theta points which gives NaNs
-    # stop_gradient prevents that. Not sure how it will affect an objective that
-    # requires both the eigenvalue and eigenfunction
-    v = jax.lax.stop_gradient(v)
+    if eigfuns:
+        B_inv = jnp.sqrt(B_inv)
+        w, v = jnp.linalg.eigh(B_inv[..., jnp.newaxis] * A * B[..., jnp.newaxis, :])
+    else:
+        # We may seek eigenvalues of B⁻¹ @ A because for diagonal matrices,
+        # e.g. B, and symmetric matrices A, it holds that B @ A = transpose(A @ B).
+        # Eigenvalues are preserved under transpose.
+        w = jnp.linalg.eigvalsh(B_inv[..., jnp.newaxis] * A)
 
-    top_eigvals, top_idxs = jax.lax.top_k(w, k=Neigvals)
-    top_eigfuns = jnp.take_along_axis(v, top_idxs[..., jnp.newaxis, :], axis=-1)
+    w, top_idx = jax.lax.top_k(w, k=Neigvals)
+    assert w.shape == (zeta0.size, grid.num_rho, grid.num_alpha, Neigvals)
+    data["ideal ballooning lambda"] = w
 
-    assert top_eigvals.shape == (zeta0.size, grid.num_rho, grid.num_alpha, Neigvals)
-    assert top_eigfuns.shape == (
-        zeta0.size,
-        grid.num_rho,
-        grid.num_alpha,
-        grid.num_zeta - 2,
-        Neigvals,
-    )
+    if eigfuns:
+        # v becomes less than the machine precision at some points which gives NaNs.
+        # stop_gradient prevents that.
+        v = jax.lax.stop_gradient(v)
+        v = jnp.take_along_axis(v, top_idx[..., jnp.newaxis, :], axis=-1)
+        assert v.shape == (
+            zeta0.size,
+            grid.num_rho,
+            grid.num_alpha,
+            grid.num_zeta - 2,
+            Neigvals,
+        )
+        data["ideal ballooning eigenfunction"] = v
 
-    data["ideal ballooning lambda"] = top_eigvals
-    data["ideal ballooning eigenfunction"] = top_eigfuns
     return data
 
 
@@ -430,6 +437,7 @@ def _ideal_ballooning_lambda(params, transforms, profiles, data, **kwargs):
     source_grid_requirement={"coordinates": "raz", "is_meshgrid": True},
 )
 def _ideal_ballooning_eigenfunction(params, transforms, profiles, data, **kwargs):
+    assert kwargs.get("eigfuns", True)
     return data  # noqa: unused dependency
 
 
@@ -484,8 +492,8 @@ def _Newcomb_ball_metric(params, transforms, profiles, data, **kwargs):
     ψ_b = 0.5*(B_N * a_N**2) is the enclosed toroidal flux by the boundary.
 
     To obtain the parameters g, c, and f, we need a set of parameters
-    provided in the list ``data`` above. Here's a description of
-    these parameters:
+    along a field line provided in the list ``data`` above.
+    Here's a description of these parameters:
 
     - a: minor radius of the device
     - g^aa: |grad alpha|^2, field line bending term
@@ -497,8 +505,6 @@ def _Newcomb_ball_metric(params, transforms, profiles, data, **kwargs):
     - B^zeta: B dot grad zeta
     - p_r: dp/drho, pressure gradient
     - psi_r: radial gradient of the toroidal flux
-    - phi: coordinate describing the position in the toroidal angle
-    along a field line
 
     Here's how we define the Newcomb metric:
     If zero crossing is at -inf (root finder failed), use the Y coordinate

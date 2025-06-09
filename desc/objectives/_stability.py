@@ -550,6 +550,7 @@ class BallooningStability(_Objective):
             data=data,
             zeta0=constants["zeta0"],
             Neigvals=self._Neigvals,
+            eigfuns=False,
         )
         lam = data["ideal ballooning lambda"]
         lambda0, w0, w1 = constants["lambda0"], constants["w0"], constants["w1"]

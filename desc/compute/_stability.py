@@ -249,7 +249,7 @@ def _dim(f, axis=(-1, -2)):
     params=["Psi"],
     transforms={"grid": []},
     profiles=[],
-    coordinates="rtz",  # TODO:
+    coordinates="rtz",
     data=[
         "a",
         "g^aa",
@@ -265,7 +265,6 @@ def _dim(f, axis=(-1, -2)):
         "psi",
         "psi_r",
         "rho",
-        "phi",
     ],
     source_grid_requirement={"coordinates": "raz", "is_meshgrid": True},
     zeta0="array: points of vanishing integrated local shear to scan over. "
@@ -321,7 +320,7 @@ def _ideal_ballooning_lambda(params, transforms, profiles, data, **kwargs):
     Ideal-ballooning lambda eigenvalues
         Shape (num zeta0, num_rho, num alpha, num eigvals).
     Ideal-ballooning lambda eigenfunctions
-        Shape (num zeta0, num_rho, num alpha, num eigvals, num zeta - 2).
+        Shape (num zeta0, num_rho, num alpha, num zeta - 2, num eigvals).
 
     """
     Neigvals = kwargs.get("Neigvals", 1)
@@ -333,11 +332,10 @@ def _ideal_ballooning_lambda(params, transforms, profiles, data, **kwargs):
     dz = 2 * jnp.pi / grid.num_zeta
 
     # scalars
-    a_N = data["a"]
     psi_b = params["Psi"] / (2 * jnp.pi)
-    B_N = 2 * psi_b / a_N**2
-    constant1 = a_N * B_N**3
-    constant2 = a_N**3 * B_N
+    B_N = 2 * psi_b / data["a"] ** 2
+    constant1 = data["a"] * B_N**3
+    constant2 = data["a"] ** 3 * B_N
 
     # flux surface maps
     rho = grid.compress(data["rho"])
@@ -400,15 +398,15 @@ def _ideal_ballooning_lambda(params, transforms, profiles, data, **kwargs):
     v = jax.lax.stop_gradient(v)
 
     top_eigvals, top_idxs = jax.lax.top_k(w, k=Neigvals)
-    top_eigfuns = jnp.take_along_axis(v, top_idxs[..., jnp.newaxis, :], axis=-2)
+    top_eigfuns = jnp.take_along_axis(v, top_idxs[..., jnp.newaxis, :], axis=-1)
 
     assert top_eigvals.shape == (zeta0.size, grid.num_rho, grid.num_alpha, Neigvals)
     assert top_eigfuns.shape == (
         zeta0.size,
         grid.num_rho,
         grid.num_alpha,
-        Neigvals,
         grid.num_zeta - 2,
+        Neigvals,
     )
 
     data["ideal ballooning lambda"] = top_eigvals

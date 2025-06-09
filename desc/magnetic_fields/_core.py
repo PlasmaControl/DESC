@@ -2616,27 +2616,21 @@ def field_line_integrate(
     z0 = z0.flatten()
     x0 = jnp.array([r0, phis[0] * jnp.ones_like(r0), z0]).T
 
-    pos_BT = np.sign(field.compute_magnetic_field(x0)[0, 1]) > 0
-    pos_phi = phis[-1] > phis[0]
-
-    if not pos_BT:
-        # if Bphi is negative, we need to flip the field direction
-        # this doesn't change the field-line, but useful for integration
-        field_in_phi = ScaledMagneticField(-1.0, field)
-    else:
-        field_in_phi = field
-    if not pos_phi:
-        # if phis is decreasing, we need to use negative steps size
-        # to integrate in the right direction
-        min_step_size = -jnp.abs(min_step_size)
+    scale = jnp.sign(field.compute_magnetic_field(x0)[0, 1])
+    min_step_size = jnp.where(
+        phis[-1] > phis[0], min_step_size, -jnp.abs(min_step_size)
+    )
 
     @jit
     def odefun(s, rpz, args):
         rpz = rpz.reshape((3, -1)).T
         r = rpz[:, 0]
-        br, bp, bz = field_in_phi.compute_magnetic_field(
-            rpz, params, basis="rpz", source_grid=source_grid, chunk_size=chunk_size
-        ).T
+        br, bp, bz = (
+            scale
+            * field.compute_magnetic_field(
+                rpz, params, basis="rpz", source_grid=source_grid, chunk_size=chunk_size
+            ).T
+        )
         return jnp.array(
             [r * br / bp * jnp.sign(bp), jnp.sign(bp), r * bz / bp * jnp.sign(bp)]
         ).squeeze()
@@ -2644,9 +2638,9 @@ def field_line_integrate(
     # diffrax parameters
 
     def default_terminating_event_fxn(state, **kwargs):
-        R_out = jnp.any(jnp.array([state.y[0] < bounds_R[0], state.y[0] > bounds_R[1]]))
-        Z_out = jnp.any(jnp.array([state.y[2] < bounds_Z[0], state.y[2] > bounds_Z[1]]))
-        return jnp.any(jnp.array([R_out, Z_out]))
+        R_out = jnp.logical_or(state.y[0] < bounds_R[0], state.y[0] > bounds_R[1])
+        Z_out = jnp.logical_or(state.y[2] < bounds_Z[0], state.y[2] > bounds_Z[1])
+        return jnp.logical_or(R_out, Z_out)
 
     kwargs.setdefault(
         "stepsize_controller", PIDController(rtol=rtol, atol=atol, dtmin=min_step_size)
@@ -2680,8 +2674,8 @@ def field_line_integrate(
         x = jnp.vectorize(intfun, signature="(k)->(n,k)")(x0)
 
     x = jnp.where(jnp.isinf(x), jnp.nan, x)
-    r = x[:, :, 0].squeeze().T.reshape((len(phis), *rshape))
-    z = x[:, :, 2].squeeze().T.reshape((len(phis), *rshape))
+    r = x[:, :, 0].squeeze().T.reshape((phis.size, *rshape))
+    z = x[:, :, 2].squeeze().T.reshape((phis.size, *rshape))
 
     return r, z
 

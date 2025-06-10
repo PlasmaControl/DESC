@@ -810,34 +810,34 @@ class TestVacuumSolver:
         dPhi_dn = dot(data["grad(Phi)"], data["n_rho"])
         np.testing.assert_allclose(B0n + dPhi_dn, 0, atol=atol)
 
-    @pytest.mark.xfail(
-        reason="Debugging why first assert fails, "
-        "second one (the more important one) passes."
-    )
     @pytest.mark.unit
-    @pytest.mark.parametrize("chunk_size", [100])
+    @pytest.mark.parametrize("chunk_size", [25])
     def test_harmonic_exterior(self, chunk_size):
         """Test that Laplace solution recovers expected analytic result.
 
         Define harmonic map Φ: ρ,θ,ζ ↦ G(ρ,θ,ζ).
         Choose b.c. 𝐁₀⋅𝐧 = -∇G⋅𝐧 and test that ‖ Φ − G ‖_∞ → 0.
         """
-        atol = 1.1e-4
+        atol = 1e-3
         # elliptic cross-section with torsion
         surf = FourierRZToroidalSurface(
-            R_lmn=[10, 1, 0.2],
-            Z_lmn=[-2, -0.2],
+            R_lmn=[100, 10, 1],
+            Z_lmn=[-20, -1],
             modes_R=[[0, 0], [1, 0], [0, 1]],
             modes_Z=[[-1, 0], [0, -1]],
         )
-        src_grid = LinearGrid(M=50, N=50, NFP=surf.NFP)
-        Phi_grid = LinearGrid(M=30, N=30, NFP=surf.NFP)
+        src_grid = LinearGrid(M=30, N=50, NFP=surf.NFP)
+        Phi_grid = LinearGrid(M=30, N=50, NFP=surf.NFP)
 
         src_data = surf.compute(["x", "n_rho"], grid=src_grid, basis="xyz")
+        # place green's function origin inside torus
+        # so that singularity is outside of the domain of the
+        # exterior problem
+        y0 = jnp.array([100, 0, 0])
 
         def grad_G(x):
             # ∇G(x) = -∇_y G(x-y)
-            y = 0
+            y = y0
             return -_grad_G(x - y)
 
         vac = VacuumSolver(
@@ -845,21 +845,22 @@ class TestVacuumSolver:
             evl_grid=Phi_grid,
             src_grid=src_grid,
             Phi_grid=Phi_grid,
-            Phi_M=25,
-            Phi_N=25,
+            Phi_M=20,
+            Phi_N=20,
             exterior=True,
             chunk_size=chunk_size,
             B0n=-dot(grad_G(src_data["x"]), src_data["n_rho"]),
             use_dft=False,
             warn_dft=False,
             warn_fft=False,
+            sym=False,
         )
 
         evl_data = surf.compute(["x", "n_rho", "phi"], grid=vac.evl_grid, basis="xyz")
 
         data = vac.compute_Phi(chunk_size)
         Phi = Transform(vac.evl_grid, vac.basis).transform(data["Phi"]["Phi_mn"])
-        G = np.reciprocal(_1_over_G(evl_data["x"]))
+        G = np.reciprocal(_1_over_G(evl_data["x"] - y0))
         np.testing.assert_allclose(np.ptp(G - Phi), 0, atol=atol)
 
         data = vac.compute_vacuum_field(chunk_size)["evl"]

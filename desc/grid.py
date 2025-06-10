@@ -698,7 +698,7 @@ class _Grid(IOAble, ABC):
     def meshgrid_flatten(self, x, order):
         """Flatten data to match standard ordering. Inverse of grid.meshgrid_reshape.
 
-        Given 3d data on a tensor product grid, flatten the data in the standard DESC
+        Given data on a tensor product grid, flatten the data in the standard DESC
         ordering.
 
         Parameters

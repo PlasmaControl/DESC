@@ -338,7 +338,7 @@ def lsqtr(  # noqa: C901
             step_norm = jnp.linalg.norm(step, ord=2)
 
             x_new = make_strictly_feasible(x + step, lb, ub, rstep=0)
-            f_new = fun(x_new, *args)
+            f_new = fun(x_new)
             nfev += 1
 
             cost_new = 0.5 * jnp.dot(f_new, f_new)
@@ -388,7 +388,7 @@ def lsqtr(  # noqa: C901
             allx.append(x)
             f = f_new
             cost = cost_new
-            J = jac(x, *args)
+            J = jac(x)
             njev += 1
             g = jnp.dot(J.T, f)
 

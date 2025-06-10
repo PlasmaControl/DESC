@@ -203,7 +203,7 @@ def fmintr(  # noqa: C901
         hess_min_curvature = options.pop("hessian_minimum_curvature", None)
         hess = BFGS(hess_exception_strategy, hess_min_curvature, hess_init_scale)
     if callable(hess):
-        H = hess(x, *args)
+        H = hess(x)
         nhev += 1
         bfgs = False
     elif isinstance(hess, BFGS):
@@ -356,7 +356,7 @@ def fmintr(  # noqa: C901
             step_norm = jnp.linalg.norm(step, ord=2)
 
             x_new = make_strictly_feasible(x + step, lb, ub, rstep=0)
-            f_new = fun(x_new, *args)
+            f_new = fun(x_new)
             nfev += 1
             actual_reduction = f - f_new
 
@@ -404,13 +404,13 @@ def fmintr(  # noqa: C901
             x = x_new
             f = f_new
             g_old = g
-            g = grad(x, *args)
+            g = grad(x)
             ngev += 1
             if bfgs:
                 hess.update(x - x_old, g - g_old)
                 H = hess.get_matrix()
             else:
-                H = hess(x, *args)
+                H = hess(x)
                 nhev += 1
 
             if hess_scale:

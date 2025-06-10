@@ -147,11 +147,11 @@ def sgd(
 
         v = beta * v + (1 - beta) * g
         x = x - alpha * v
-        g = grad(x, *args)
+        g = grad(x)
         ngev += 1
         step_norm = jnp.linalg.norm(alpha * v, ord=2)
         g_norm = jnp.linalg.norm(g, ord=jnp.inf)
-        fnew = fun(x, *args)
+        fnew = fun(x)
         nfev += 1
         df = f - fnew
         f = fnew

@@ -73,27 +73,27 @@ def inequality_to_bounds(x0, fun, grad, hess, constraint, bounds, *args):
 
     def fun_wrapped(z, *args):
         x, s = z2xs(z)
-        return fun(x, *args)
+        return fun(x)
 
     if hess is None:
         # assume grad is really jac of least squares
         def grad_wrapped(z, *args):
             x, s = z2xs(z)
-            g = grad(x, *args)
+            g = grad(x)
             return jnp.hstack([g, jnp.zeros((g.shape[0], nslack))])
 
     else:
 
         def grad_wrapped(z, *args):
             x, s = z2xs(z)
-            g = grad(x, *args)
+            g = grad(x)
             return jnp.concatenate([g, jnp.zeros(nslack)])
 
     if callable(hess):
 
         def hess_wrapped(z, *args):
             x, s = z2xs(z)
-            H = hess(x, *args)
+            H = hess(x)
             return jnp.pad(H, (0, nslack))
 
     else:  # using BFGS
@@ -101,14 +101,14 @@ def inequality_to_bounds(x0, fun, grad, hess, constraint, bounds, *args):
 
     def confun_wrapped(z, *args):
         x, s = z2xs(z)
-        c = constraint.fun(x, *args)
+        c = constraint.fun(x)
         sbig = jnp.zeros(ncon)
         sbig = put(sbig, ineq_mask, s)
         return c - sbig - target
 
     def conjac_wrapped(z, *args):
         x, s = z2xs(z)
-        J = constraint.jac(x, *args)
+        J = constraint.jac(x)
         I = jnp.eye(nslack)
         Js = jnp.zeros((ncon, nslack))
         Js = put(Js, Index[ineq_mask, :], -I)
@@ -131,7 +131,7 @@ def inequality_to_bounds(x0, fun, grad, hess, constraint, bounds, *args):
             I = jnp.eye(nslack)
             Js = jnp.zeros((ncon, nslack))
             Js = put(Js, Index[ineq_mask, :], -I)
-            vjpx = constraint.vjp(y, x, *args)
+            vjpx = constraint.vjp(y, x)
             vjps = jnp.dot(y, Js)
             return jnp.concatenate([vjpx, vjps])
 

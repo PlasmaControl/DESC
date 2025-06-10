@@ -265,8 +265,8 @@ if use_jax:  # noqa: C901
             fixup = lambda x, *args: x
         if jac is None:
             jac = jax.jacfwd(fun)
-        jac2 = lambda x: jac(x, *args)
-        res = lambda x: fun(x, *args)
+        jac2 = lambda x: jac(x)
+        res = lambda x: fun(x)
 
         def solve(resfun, guess):
             def condfun_ls(state_ls):
@@ -398,11 +398,11 @@ if use_jax:  # noqa: C901
         if fixup is None:
             fixup = lambda x, *args: x
         if jac is None:
-            jac2 = lambda x: jnp.atleast_2d(jax.jacfwd(fun)(x, *args))
+            jac2 = lambda x: jnp.atleast_2d(jax.jacfwd(fun)(x))
         else:
-            jac2 = lambda x: jnp.atleast_2d(jac(x, *args))
+            jac2 = lambda x: jnp.atleast_2d(jac(x))
 
-        res = lambda x: jnp.atleast_1d(fun(x, *args)).flatten()
+        res = lambda x: jnp.atleast_1d(fun(x)).flatten()
 
         def solve(resfun, guess):
             def condfun_ls(state_ls):

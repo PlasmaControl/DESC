@@ -740,7 +740,7 @@ class _Grid(IOAble, ABC):
         if vec:
             newax += (3,)
         x = jnp.transpose(x, newax)
-        # swap to change shape from trz/arz to rtz/raz etc.
+        # swap to change shape from rtz/raz to trz/arz etc.
         x = jnp.swapaxes(x, 1, 0)
 
         shape = (self.num_poloidal * self.num_rho * self.num_zeta,)

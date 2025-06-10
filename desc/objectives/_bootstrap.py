@@ -251,7 +251,7 @@ class BootstrapRedlConsistency(_Objective):
 
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, params, constants=None):
+    def compute(self, params):
         """Compute the bootstrap current self-consistency objective.
 
         Parameters
@@ -268,8 +268,7 @@ class BootstrapRedlConsistency(_Objective):
             Bootstrap current self-consistency residual on each rho grid point.
 
         """
-        if constants is None:
-            constants = self.constants
+        constants = self.constants
         data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,

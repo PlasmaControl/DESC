@@ -125,7 +125,7 @@ class AspectRatio(_Objective):
 
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, params, constants=None):
+    def compute(self, params):
         """Compute aspect ratio.
 
         Parameters
@@ -143,8 +143,7 @@ class AspectRatio(_Objective):
             Aspect ratio, dimensionless.
 
         """
-        if constants is None:
-            constants = self.constants
+        constants = self.constants
         data = compute_fun(
             self.things[0],
             self._data_keys,
@@ -268,7 +267,7 @@ class Elongation(_Objective):
 
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, params, constants=None):
+    def compute(self, params):
         """Compute elongation.
 
         Parameters
@@ -286,8 +285,7 @@ class Elongation(_Objective):
             Elongation, dimensionless.
 
         """
-        if constants is None:
-            constants = self.constants
+        constants = self.constants
         data = compute_fun(
             self.things[0],
             self._data_keys,
@@ -413,7 +411,7 @@ class Volume(_Objective):
 
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, params, constants=None):
+    def compute(self, params):
         """Compute plasma volume.
 
         Parameters
@@ -431,8 +429,7 @@ class Volume(_Objective):
             Plasma volume (m^3).
 
         """
-        if constants is None:
-            constants = self.constants
+        constants = self.constants
         data = compute_fun(
             self.things[0],
             self._data_keys,
@@ -702,7 +699,7 @@ class PlasmaVesselDistance(_Objective):
 
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, params_1, params_2=None, constants=None):
+    def compute(self, params_1, params_2=None):
         """Compute plasma-surface distance.
 
         Parameters
@@ -723,8 +720,7 @@ class PlasmaVesselDistance(_Objective):
             For each point in the surface grid, approximate distance to plasma.
 
         """
-        if constants is None:
-            constants = self.constants
+        constants = self.constants
         if self._eq_fixed:
             surface_params = params_1
         elif self._surface_fixed:
@@ -916,7 +912,7 @@ class MeanCurvature(_Objective):
 
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, params, constants=None):
+    def compute(self, params):
         """Compute mean curvature.
 
         Parameters
@@ -934,8 +930,7 @@ class MeanCurvature(_Objective):
             Mean curvature at each point (m^-1).
 
         """
-        if constants is None:
-            constants = self.constants
+        constants = self.constants
         data = compute_fun(
             self.things[0],
             self._data_keys,
@@ -1056,7 +1051,7 @@ class PrincipalCurvature(_Objective):
 
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, params, constants=None):
+    def compute(self, params):
         """Compute max absolute principal curvature.
 
         Parameters
@@ -1074,8 +1069,7 @@ class PrincipalCurvature(_Objective):
             Max absolute principal curvature at each point (m^-1).
 
         """
-        if constants is None:
-            constants = self.constants
+        constants = self.constants
         data = compute_fun(
             self.things[0],
             self._data_keys,
@@ -1186,7 +1180,7 @@ class BScaleLength(_Objective):
 
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, params, constants=None):
+    def compute(self, params):
         """Compute magnetic field scale length.
 
         Parameters
@@ -1203,8 +1197,7 @@ class BScaleLength(_Objective):
             Magnetic field scale length at each point (m).
 
         """
-        if constants is None:
-            constants = self.constants
+        constants = self.constants
         data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
@@ -1321,7 +1314,7 @@ class GoodCoordinates(_Objective):
 
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, params, constants=None):
+    def compute(self, params):
         """Compute coordinate goodness error.
 
         Parameters
@@ -1338,8 +1331,7 @@ class GoodCoordinates(_Objective):
             coordinate goodness error, (m^6)
 
         """
-        if constants is None:
-            constants = self.constants
+        constants = self.constants
         data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
@@ -1467,7 +1459,7 @@ class MirrorRatio(_Objective):
 
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, params, constants=None):
+    def compute(self, params):
         """Compute mirror ratio.
 
         Parameters
@@ -1485,8 +1477,7 @@ class MirrorRatio(_Objective):
             Mirror ratio on each surface.
 
         """
-        if constants is None:
-            constants = self.constants
+        constants = self.constants
         data = compute_fun(
             self.things[0],
             self._data_keys,

@@ -153,7 +153,7 @@ A full example objective with comments describing the key points is given below:
             # finally, call ``super.build()``
             super().build(use_jit=use_jit, verbose=verbose)
 
-        def compute(self, params, constants=None):
+        def compute(self, params):
             """Signature should take params (or possibly multiple params, one for each thing in self.things),
                which is the params_dict of the expected thing(s) to be optimized.
                It also takes in constants, which is a dictionary of any other constant data needed to compute

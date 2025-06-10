@@ -155,7 +155,7 @@ class QuasisymmetryBoozer(_Objective):
 
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, params, constants=None):
+    def compute(self, params):
         """Compute quasi-symmetry Boozer harmonics error.
 
         Parameters
@@ -172,8 +172,7 @@ class QuasisymmetryBoozer(_Objective):
             Symmetry breaking harmonics of B (T).
 
         """
-        if constants is None:
-            constants = self.constants
+        constants = self.constants
         data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
@@ -324,7 +323,7 @@ class QuasisymmetryTwoTerm(_Objective):
 
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, params, constants=None):
+    def compute(self, params):
         """Compute quasi-symmetry two-term errors.
 
         Parameters
@@ -341,8 +340,7 @@ class QuasisymmetryTwoTerm(_Objective):
             Quasi-symmetry flux function error at each node (T^3).
 
         """
-        if constants is None:
-            constants = self.constants
+        constants = self.constants
         data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
@@ -467,7 +465,7 @@ class QuasisymmetryTripleProduct(_Objective):
 
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, params, constants=None):
+    def compute(self, params):
         """Compute quasi-symmetry triple product errors.
 
         Parameters
@@ -484,8 +482,7 @@ class QuasisymmetryTripleProduct(_Objective):
             Quasi-symmetry flux function error at each node (T^4/m^2).
 
         """
-        if constants is None:
-            constants = self.constants
+        constants = self.constants
         data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
@@ -737,7 +734,7 @@ class Omnigenity(_Objective):
 
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, params_1=None, params_2=None, constants=None):
+    def compute(self, params_1=None, params_2=None):
         """Compute omnigenity errors.
 
         Parameters
@@ -759,8 +756,7 @@ class Omnigenity(_Objective):
             Omnigenity error at each node (T).
 
         """
-        if constants is None:
-            constants = self.constants
+        constants = self.constants
 
         # sort parameters
         if self._eq_fixed:
@@ -940,7 +936,7 @@ class Isodynamicity(_Objective):
 
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, params, constants=None):
+    def compute(self, params):
         """Compute isodynamicity errors.
 
         Parameters
@@ -957,8 +953,7 @@ class Isodynamicity(_Objective):
             Isodynamicity error at each node (~).
 
         """
-        if constants is None:
-            constants = self.constants
+        constants = self.constants
         data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,

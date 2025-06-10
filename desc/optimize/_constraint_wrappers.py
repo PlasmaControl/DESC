@@ -254,7 +254,7 @@ class LinearConstraintProjection(ObjectiveFunction):
         self._project = _Project(self._Z, self._D, self._xp, self._unfixed_idx)
         self._recover = _Recover(self._Z, self._D, self._xp, self._unfixed_idx, dim_x)
 
-    def compute_unscaled(self, x_reduced, constants=None):
+    def compute_unscaled(self, x_reduced):
         """Compute the unscaled form of the objective function.
 
         Parameters
@@ -274,7 +274,7 @@ class LinearConstraintProjection(ObjectiveFunction):
         f = self._objective.compute_unscaled(x, constants)
         return f
 
-    def compute_scaled(self, x_reduced, constants=None):
+    def compute_scaled(self, x_reduced):
         """Compute the objective function and apply weighting / normalization.
 
         Parameters
@@ -294,7 +294,7 @@ class LinearConstraintProjection(ObjectiveFunction):
         f = self._objective.compute_scaled(x, constants)
         return f
 
-    def compute_scaled_error(self, x_reduced, constants=None):
+    def compute_scaled_error(self, x_reduced):
         """Compute the objective function and apply weighting / bounds.
 
         Parameters
@@ -314,7 +314,7 @@ class LinearConstraintProjection(ObjectiveFunction):
         f = self._objective.compute_scaled_error(x, constants)
         return f
 
-    def compute_scalar(self, x_reduced, constants=None):
+    def compute_scalar(self, x_reduced):
         """Compute the scalar form of the objective function.
 
         Parameters
@@ -333,7 +333,7 @@ class LinearConstraintProjection(ObjectiveFunction):
         x = self.recover(x_reduced)
         return self._objective.compute_scalar(x, constants)
 
-    def grad(self, x_reduced, constants=None):
+    def grad(self, x_reduced):
         """Compute gradient of self.compute_scalar.
 
         Parameters
@@ -353,7 +353,7 @@ class LinearConstraintProjection(ObjectiveFunction):
         df = self._objective.grad(x, constants)
         return df[self._unfixed_idx] @ (self._Z * self._D[self._unfixed_idx, None])
 
-    def hess(self, x_reduced, constants=None):
+    def hess(self, x_reduced):
         """Compute Hessian of self.compute_scalar.
 
         Parameters
@@ -383,7 +383,7 @@ class LinearConstraintProjection(ObjectiveFunction):
         df = getattr(self._objective, "jvp_" + op)(v.T, x, constants)
         return df.T
 
-    def jac_scaled(self, x_reduced, constants=None):
+    def jac_scaled(self, x_reduced):
         """Compute Jacobian of self.compute_scaled.
 
         Parameters
@@ -401,7 +401,7 @@ class LinearConstraintProjection(ObjectiveFunction):
         """
         return self._jac(x_reduced, constants, "scaled")
 
-    def jac_scaled_error(self, x_reduced, constants=None):
+    def jac_scaled_error(self, x_reduced):
         """Compute Jacobian of self.compute_scaled_error.
 
         Parameters
@@ -419,7 +419,7 @@ class LinearConstraintProjection(ObjectiveFunction):
         """
         return self._jac(x_reduced, constants, "scaled_error")
 
-    def jac_unscaled(self, x_reduced, constants=None):
+    def jac_unscaled(self, x_reduced):
         """Compute Jacobian of self.compute_unscaled.
 
         Parameters
@@ -443,7 +443,7 @@ class LinearConstraintProjection(ObjectiveFunction):
         df = getattr(self._objective, op)(v, x, constants)
         return df
 
-    def jvp_scaled(self, v, x_reduced, constants=None):
+    def jvp_scaled(self, v, x_reduced):
         """Compute Jacobian-vector product of self.compute_scaled.
 
         Parameters
@@ -458,7 +458,7 @@ class LinearConstraintProjection(ObjectiveFunction):
         """
         return self._jvp(v, x_reduced, constants, "jvp_scaled")
 
-    def jvp_scaled_error(self, v, x_reduced, constants=None):
+    def jvp_scaled_error(self, v, x_reduced):
         """Compute Jacobian-vector product of self.compute_scaled_error.
 
         Parameters
@@ -473,7 +473,7 @@ class LinearConstraintProjection(ObjectiveFunction):
         """
         return self._jvp(v, x_reduced, constants, "jvp_scaled_error")
 
-    def jvp_unscaled(self, v, x_reduced, constants=None):
+    def jvp_unscaled(self, v, x_reduced):
         """Compute Jacobian-vector product of self.compute_unscaled.
 
         Parameters
@@ -493,7 +493,7 @@ class LinearConstraintProjection(ObjectiveFunction):
         df = getattr(self._objective, op)(v, x, constants)
         return df[self._unfixed_idx] @ (self._Z * self._D[self._unfixed_idx, None])
 
-    def vjp_scaled(self, v, x_reduced, constants=None):
+    def vjp_scaled(self, v, x_reduced):
         """Compute vector-Jacobian product of self.compute_scaled.
 
         Parameters
@@ -508,7 +508,7 @@ class LinearConstraintProjection(ObjectiveFunction):
         """
         return self._vjp(v, x_reduced, constants, "vjp_scaled")
 
-    def vjp_scaled_error(self, v, x_reduced, constants=None):
+    def vjp_scaled_error(self, v, x_reduced):
         """Compute vector-Jacobian product of self.compute_scaled_error.
 
         Parameters
@@ -523,7 +523,7 @@ class LinearConstraintProjection(ObjectiveFunction):
         """
         return self._vjp(v, x_reduced, constants, "vjp_scaled_error")
 
-    def vjp_unscaled(self, v, x_reduced, constants=None):
+    def vjp_unscaled(self, v, x_reduced):
         """Compute vector-Jacobian product of self.compute_unscaled.
 
         Parameters
@@ -929,7 +929,7 @@ class ProximalProjection(ObjectiveFunction):
 
         return xopt, xeq
 
-    def compute_scaled(self, x, constants=None):
+    def compute_scaled(self, x):
         """Compute the objective function and apply weights/normalization.
 
         Parameters
@@ -949,7 +949,7 @@ class ProximalProjection(ObjectiveFunction):
         xopt, _ = self._update_equilibrium(x, store=False)
         return self._objective.compute_scaled(xopt, constants[0])
 
-    def compute_scaled_error(self, x, constants=None):
+    def compute_scaled_error(self, x):
         """Compute the error between target and objective and apply weights etc.
 
         Parameters
@@ -969,7 +969,7 @@ class ProximalProjection(ObjectiveFunction):
         xopt, _ = self._update_equilibrium(x, store=False)
         return self._objective.compute_scaled_error(xopt, constants[0])
 
-    def compute_scalar(self, x, constants=None):
+    def compute_scalar(self, x):
         """Compute the sum of squares error.
 
         Parameters
@@ -988,7 +988,7 @@ class ProximalProjection(ObjectiveFunction):
         f = jnp.sum(self.compute_scaled_error(x, constants=constants) ** 2) / 2
         return f
 
-    def compute_unscaled(self, x, constants=None):
+    def compute_unscaled(self, x):
         """Compute the raw value of the objective function.
 
         Parameters
@@ -1008,7 +1008,7 @@ class ProximalProjection(ObjectiveFunction):
         xopt, _ = self._update_equilibrium(x, store=False)
         return self._objective.compute_unscaled(xopt, constants[0])
 
-    def grad(self, x, constants=None):
+    def grad(self, x):
         """Compute gradient of self.compute_scalar.
 
         Parameters
@@ -1029,7 +1029,7 @@ class ProximalProjection(ObjectiveFunction):
         J = self.jac_scaled_error(x, constants)
         return f.T @ J
 
-    def hess(self, x, constants=None):
+    def hess(self, x):
         """Compute Hessian of self.compute_scalar.
 
         Uses the "small residual approximation" where the Hessian is replaced by
@@ -1051,7 +1051,7 @@ class ProximalProjection(ObjectiveFunction):
         J = self.jac_scaled_error(x, constants)
         return J.T @ J
 
-    def jac_scaled(self, x, constants=None):
+    def jac_scaled(self, x):
         """Compute Jacobian of self.compute_scaled.
 
         Parameters
@@ -1070,7 +1070,7 @@ class ProximalProjection(ObjectiveFunction):
         v = jnp.eye(x.shape[0])
         return self.jvp_scaled(v, x, constants).T
 
-    def jac_scaled_error(self, x, constants=None):
+    def jac_scaled_error(self, x):
         """Compute Jacobian of self.compute_scaled_error.
 
         Parameters
@@ -1089,7 +1089,7 @@ class ProximalProjection(ObjectiveFunction):
         v = jnp.eye(x.shape[0])
         return self.jvp_scaled_error(v, x, constants).T
 
-    def jac_unscaled(self, x, constants=None):
+    def jac_unscaled(self, x):
         """Compute Jacobian of self.compute_unscaled.
 
         Parameters
@@ -1107,7 +1107,7 @@ class ProximalProjection(ObjectiveFunction):
         v = jnp.eye(x.shape[0])
         return self.jvp_unscaled(v, x, constants).T
 
-    def jvp_scaled(self, v, x, constants=None):
+    def jvp_scaled(self, v, x):
         """Compute Jacobian-vector product of self.compute_scaled.
 
         Parameters
@@ -1124,7 +1124,7 @@ class ProximalProjection(ObjectiveFunction):
         op = "scaled"
         return self._jvp(v, x, constants, op)
 
-    def jvp_scaled_error(self, v, x, constants=None):
+    def jvp_scaled_error(self, v, x):
         """Compute Jacobian-vector product of self.compute_scaled_error.
 
         Parameters
@@ -1141,7 +1141,7 @@ class ProximalProjection(ObjectiveFunction):
         op = "scaled_error"
         return self._jvp(v, x, constants, op)
 
-    def jvp_unscaled(self, v, x, constants=None):
+    def jvp_unscaled(self, v, x):
         """Compute Jacobian-vector product of self.compute_unscaled.
 
         Parameters

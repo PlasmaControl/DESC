@@ -396,7 +396,7 @@ def test_overstepping():
             self._dim_f = sum(np.asarray(x).size for x in self._x0.values())
             super().build()
 
-        def compute(self, params, constants=None):
+        def compute(self, params):
             x = jnp.concatenate(
                 [jnp.atleast_1d(params[arg] - self._x0[arg]) for arg in params]
             )

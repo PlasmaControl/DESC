@@ -134,7 +134,7 @@ class ForceBalance(_Objective):
 
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, params, constants=None):
+    def compute(self, params):
         """Compute MHD force balance errors.
 
         Parameters
@@ -151,8 +151,7 @@ class ForceBalance(_Objective):
             MHD force balance error at each node (N).
 
         """
-        if constants is None:
-            constants = self.constants
+        constants = self.constants
         data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
@@ -283,7 +282,7 @@ class ForceBalanceAnisotropic(_Objective):
 
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, params, constants=None):
+    def compute(self, params):
         """Compute MHD force balance errors.
 
         Parameters
@@ -300,8 +299,7 @@ class ForceBalanceAnisotropic(_Objective):
             MHD force balance error at each node (N).
 
         """
-        if constants is None:
-            constants = self.constants
+        constants = self.constants
         data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
@@ -420,7 +418,7 @@ class RadialForceBalance(_Objective):
 
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, params, constants=None):
+    def compute(self, params):
         """Compute radial MHD force balance errors.
 
         Parameters
@@ -437,8 +435,7 @@ class RadialForceBalance(_Objective):
             Radial MHD force balance error at each node (N).
 
         """
-        if constants is None:
-            constants = self.constants
+        constants = self.constants
         data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
@@ -557,7 +554,7 @@ class HelicalForceBalance(_Objective):
 
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, params, constants=None):
+    def compute(self, params):
         """Compute helical MHD force balance errors.
 
         Parameters
@@ -574,8 +571,7 @@ class HelicalForceBalance(_Objective):
             Helical MHD force balance error at each node (N).
 
         """
-        if constants is None:
-            constants = self.constants
+        constants = self.constants
         data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
@@ -695,7 +691,7 @@ class Energy(_Objective):
 
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, params, constants=None):
+    def compute(self, params):
         """Compute MHD energy.
 
         Parameters
@@ -712,8 +708,7 @@ class Energy(_Objective):
             Total MHD energy in the plasma volume (J).
 
         """
-        if constants is None:
-            constants = self.constants
+        constants = self.constants
         data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
@@ -838,7 +833,7 @@ class CurrentDensity(_Objective):
 
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, params, constants=None):
+    def compute(self, params):
         """Compute toroidal current density.
 
         Parameters
@@ -855,8 +850,7 @@ class CurrentDensity(_Objective):
             Toroidal current at each node (A*m).
 
         """
-        if constants is None:
-            constants = self.constants
+        constants = self.constants
         data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,

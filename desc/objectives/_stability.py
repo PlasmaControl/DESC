@@ -156,7 +156,7 @@ class MercierStability(_Objective):
 
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, params, constants=None):
+    def compute(self, params):
         """Compute the Mercier stability criterion.
 
         Parameters
@@ -173,8 +173,7 @@ class MercierStability(_Objective):
             Mercier stability criterion.
 
         """
-        if constants is None:
-            constants = self.constants
+        constants = self.constants
         data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
@@ -309,7 +308,7 @@ class MagneticWell(_Objective):
 
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, params, constants=None):
+    def compute(self, params):
         """Compute a magnetic well parameter.
 
         Parameters
@@ -326,8 +325,7 @@ class MagneticWell(_Objective):
             Magnetic well parameter.
 
         """
-        if constants is None:
-            constants = self.constants
+        constants = self.constants
 
         data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
@@ -529,7 +527,7 @@ class BallooningStability(_Objective):
         }
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, params, constants=None):
+    def compute(self, params):
         """
         Compute the ballooning stability growth rate.
 
@@ -549,8 +547,7 @@ class BallooningStability(_Objective):
         """
         eq = self.things[0]
 
-        if constants is None:
-            constants = self.constants
+        constants = self.constants
         # we first compute iota on a uniform grid to get correct averaging etc.
         iota_data = compute_fun(
             eq,

@@ -196,7 +196,7 @@ class VacuumBoundaryError(_Objective):
 
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, eq_params, *field_params, constants=None):
+    def compute(self, eq_params, *field_params):
         """Compute boundary force error.
 
         Parameters
@@ -218,8 +218,7 @@ class VacuumBoundaryError(_Objective):
         """
         if field_params == ():  # common case for field_fixed=True
             field_params = None
-        if constants is None:
-            constants = self.constants
+        constants = self.constants
         data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
             self._eq_data_keys,
@@ -657,7 +656,7 @@ class BoundaryError(_Objective):
 
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, eq_params, *field_params, constants=None):
+    def compute(self, eq_params, *field_params):
         """Compute boundary force error.
 
         Parameters
@@ -680,8 +679,7 @@ class BoundaryError(_Objective):
         """
         if field_params == ():  # common case for field_fixed=True
             field_params = None
-        if constants is None:
-            constants = self.constants
+        constants = self.constants
         source_data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
             self._eq_data_keys,
@@ -1025,7 +1023,7 @@ class BoundaryErrorNESTOR(_Objective):
 
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, params, constants=None):
+    def compute(self, params):
         """Compute boundary magnetic pressure error.
 
         Parameters
@@ -1042,8 +1040,7 @@ class BoundaryErrorNESTOR(_Objective):
             Boundary magnetic pressure error (T^2*m^2).
 
         """
-        if constants is None:
-            constants = self.constants
+        constants = self.constants
         data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,

@@ -165,7 +165,7 @@ class ExternalObjective(_Objective):
 
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, params, constants=None):
+    def compute(self, params):
         """Compute the quantity.
 
         Parameters
@@ -292,7 +292,7 @@ class GenericObjective(_Objective):
         }
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, params, constants=None):
+    def compute(self, params):
         """Compute the quantity.
 
         Parameters
@@ -309,8 +309,7 @@ class GenericObjective(_Objective):
             Computed quantity.
 
         """
-        if constants is None:
-            constants = self.constants
+        constants = self.constants
         data = compute_fun(
             self._p,
             self.f,
@@ -409,7 +408,7 @@ class LinearObjectiveFromUser(_FixedObjective):
 
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, params, constants=None):
+    def compute(self, params):
         """Compute fixed degree of freedom errors.
 
         Parameters
@@ -588,7 +587,7 @@ class ObjectiveFromUser(_Objective):
 
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, params, constants=None):
+    def compute(self, params):
         """Compute the quantity.
 
         Parameters
@@ -605,8 +604,7 @@ class ObjectiveFromUser(_Objective):
             Computed quantity.
 
         """
-        if constants is None:
-            constants = self.constants
+        constants = self.constants
         data = compute_fun(
             self._p,
             self._data_keys,

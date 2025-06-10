@@ -129,7 +129,7 @@ class FusionPower(_Objective):
 
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, params, constants=None):
+    def compute(self, params):
         """Compute fusion power.
 
         Parameters
@@ -147,8 +147,7 @@ class FusionPower(_Objective):
             Fusion power (W).
 
         """
-        if constants is None:
-            constants = self.constants
+        constants = self.constants
         data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
@@ -291,7 +290,7 @@ class HeatingPowerISS04(_Objective):
 
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, params, constants=None):
+    def compute(self, params):
         """Compute heating power.
 
         Parameters
@@ -309,8 +308,7 @@ class HeatingPowerISS04(_Objective):
             Heating power required by the ISS04 energy confinement time scaling (W).
 
         """
-        if constants is None:
-            constants = self.constants
+        constants = self.constants
         data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,

@@ -159,7 +159,7 @@ class _CoilObjective(_Objective):
         if self._normalize:
             self._scales = [compute_scaling_factors(coil) for coil in coils]
 
-    def compute(self, params, constants=None):
+    def compute(self, params):
         """Compute data of coil for given data key.
 
         Parameters
@@ -266,7 +266,7 @@ class CoilLength(_CoilObjective):
 
         _Objective.build(self, use_jit=use_jit, verbose=verbose)
 
-    def compute(self, params, constants=None):
+    def compute(self, params):
         """Compute coil length.
 
         Parameters
@@ -367,7 +367,7 @@ class CoilCurvature(_CoilObjective):
 
         _Objective.build(self, use_jit=use_jit, verbose=verbose)
 
-    def compute(self, params, constants=None):
+    def compute(self, params):
         """Compute coil curvature.
 
         Parameters
@@ -466,7 +466,7 @@ class CoilTorsion(_CoilObjective):
 
         _Objective.build(self, use_jit=use_jit, verbose=verbose)
 
-    def compute(self, params, constants=None):
+    def compute(self, params):
         """Compute coil torsion.
 
         Parameters
@@ -573,7 +573,7 @@ class CoilCurrentLength(CoilLength):
 
         _Objective.build(self, use_jit=use_jit, verbose=verbose)
 
-    def compute(self, params, constants=None):
+    def compute(self, params):
         """Compute coil current length (current * length).
 
         Parameters
@@ -672,7 +672,7 @@ class CoilIntegratedCurvature(_CoilObjective):
 
         _Objective.build(self, use_jit=use_jit, verbose=verbose)
 
-    def compute(self, params, constants=None):
+    def compute(self, params):
         """Compute integrated curvature.
 
         Parameters
@@ -810,7 +810,7 @@ class CoilSetMinDistance(_Objective):
 
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, params, constants=None):
+    def compute(self, params):
         """Compute minimum distances between coils.
 
         Parameters
@@ -827,8 +827,7 @@ class CoilSetMinDistance(_Objective):
             Minimum distance to another coil for each coil in the coilset.
 
         """
-        if constants is None:
-            constants = self.constants
+        constants = self.constants
         pts = constants["coilset"]._compute_position(
             params=params, grid=constants["grid"], basis="xyz"
         )
@@ -1054,7 +1053,7 @@ class PlasmaCoilSetDistanceBound(_Objective):
 
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, params_1, params_2=None, constants=None):
+    def compute(self, params_1, params_2=None):
         """Compute minimum/maximum distance between coils and the plasma/surface.
 
         Parameters
@@ -1077,8 +1076,7 @@ class PlasmaCoilSetDistanceBound(_Objective):
             Minimum/maximum distance from coil to surface for each coil in the coilset.
 
         """
-        if constants is None:
-            constants = self.constants
+        constants = self.constants
         if self._eq_fixed:
             coils_params = params_1
         elif self._coils_fixed:
@@ -1350,7 +1348,7 @@ class CoilArclengthVariance(_CoilObjective):
 
         _Objective.build(self, use_jit=use_jit, verbose=verbose)
 
-    def compute(self, params, constants=None):
+    def compute(self, params):
         """Compute coil arclength variance.
 
         Parameters
@@ -1366,8 +1364,7 @@ class CoilArclengthVariance(_CoilObjective):
         f : float or array of floats
             Coil arclength variance.
         """
-        if constants is None:
-            constants = self.constants
+        constants = self.constants
         data = super().compute(params, constants=constants)
         data = tree_leaves(data, is_leaf=lambda x: isinstance(x, dict))
         out = jnp.array([jnp.var(jnp.linalg.norm(dat["x_s"], axis=1)) for dat in data])
@@ -1562,7 +1559,7 @@ class QuadraticFlux(_Objective):
 
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, *field_params, constants=None):
+    def compute(self, *field_params):
         """Compute normal field error on boundary.
 
         Parameters
@@ -1579,8 +1576,7 @@ class QuadraticFlux(_Objective):
             Bnorm from B_ext and B_plasma
 
         """
-        if constants is None:
-            constants = self.constants
+        constants = self.constants
 
         # B_plasma from equilibrium precomputed
         eval_data = constants["eval_data"]
@@ -1759,7 +1755,7 @@ class SurfaceQuadraticFlux(_Objective):
 
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, params_1, params_2=None, constants=None):
+    def compute(self, params_1, params_2=None):
         """Compute normal field on surface.
 
         Parameters
@@ -1779,8 +1775,7 @@ class SurfaceQuadraticFlux(_Objective):
             Bnorm on the QFM surface from the external field
 
         """
-        if constants is None:
-            constants = self.constants
+        constants = self.constants
         field_params = params_2 if not self._field_fixed else None
         surf_params = params_1
 
@@ -2023,7 +2018,7 @@ class ToroidalFlux(_Objective):
 
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, params_1, params_2=None, constants=None):
+    def compute(self, params_1, params_2=None):
         """Compute toroidal flux.
 
         Parameters
@@ -2043,8 +2038,7 @@ class ToroidalFlux(_Objective):
             Toroidal flux from coils and external field
 
         """
-        if constants is None:
-            constants = self.constants
+        constants = self.constants
         field_params = params_2 if not self._eq_fixed else params_1
         field_params = (
             constants["field"].params_dict if self._field_fixed else field_params
@@ -2248,7 +2242,7 @@ class LinkingCurrentConsistency(_Objective):
 
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, coil_params, eq_params=None, constants=None):
+    def compute(self, coil_params, eq_params=None):
         """Compute linking current error.
 
         Parameters
@@ -2268,8 +2262,7 @@ class LinkingCurrentConsistency(_Objective):
             Linking current error.
 
         """
-        if constants is None:
-            constants = self.constants
+        constants = self.constants
         if self._eq_fixed:
             eq_linking_current = constants["eq_linking_current"]
         else:
@@ -2380,7 +2373,7 @@ class CoilSetLinkingNumber(_Objective):
 
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, params, constants=None):
+    def compute(self, params):
         """Compute linking numbers between coils.
 
         Parameters
@@ -2399,8 +2392,7 @@ class CoilSetLinkingNumber(_Objective):
             number of coils linked with that coil.
 
         """
-        if constants is None:
-            constants = self.constants
+        constants = self.constants
         link = constants["coilset"]._compute_linking_number(
             params=params, grid=constants["grid"]
         )
@@ -2607,7 +2599,7 @@ class SurfaceCurrentRegularization(_Objective):
 
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, surface_params=None, constants=None):
+    def compute(self, surface_params=None):
         """Compute surface current regularization.
 
         Parameters
@@ -2625,8 +2617,7 @@ class SurfaceCurrentRegularization(_Objective):
             The surface current density magnitude on the source surface.
 
         """
-        if constants is None:
-            constants = self.constants
+        constants = self.constants
 
         surface_data = compute_fun(
             self._surface_current_field,

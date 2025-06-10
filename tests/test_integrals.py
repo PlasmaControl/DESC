@@ -61,10 +61,13 @@ from desc.integrals.quad_utils import (
 from desc.integrals.singularities import (
     _1_over_G,
     _grad_G,
+    _kernel_Bn_over_r,
+    _kernel_magnetic_dipole,
     _kernel_nr_over_r3,
     _vanilla_params,
     best_params,
     best_ratio,
+    get_interpolator,
 )
 from desc.integrals.surface_integral import _get_grid_surface
 from desc.magnetic_fields import ToroidalMagneticField
@@ -870,6 +873,47 @@ class TestVacuumSolver:
             0,
             atol=atol,
         )
+
+    @pytest.mark.unit
+    def test_secular_splitting(self, chunk_size=100, I=5, Y=12):  # noqa: E741
+        """Test splitting of potential into periodic and secular parts.
+
+        Φ(periodic)/2 + Φ(secular)/2 = H [Φ(periodic) +    Φ(secular)]
+        Φ(periodic)/2                = H  Φ(periodic) + γ ∇Φ(secular)
+                        Φ(secular)/2 = H  Φ(secular)  - γ ∇Φ(secular)
+
+        This test confirms the last relation.
+        """
+        surf = FourierRZToroidalSurface(
+            R_lmn=[10, 1, 0.2],
+            Z_lmn=[-2, -0.2],
+            modes_R=[[0, 0], [1, 0], [0, 1]],
+            modes_Z=[[-1, 0], [0, -1]],
+        )
+        eq = Equilibrium(surface=surf)
+        grid = LinearGrid(M=25, N=25)
+        data = eq.compute(["n_rho", "e^theta", "e^zeta", "R", "phi", "Z"], grid=grid)
+        Phi_secular = I * grid.nodes[:, 1] + Y * grid.nodes[:, 2]
+        data["Phi"] = Phi_secular
+        data["Bn"] = dot(I * data["e^theta"] + Y * data["e^zeta"], data["n_rho"])
+
+        interpolator = get_interpolator(grid, grid, data)
+        H_secular = singular_integral(
+            data,
+            data,
+            interpolator,
+            kernel=_kernel_magnetic_dipole,
+            chunk_size=chunk_size,
+        ).squeeze()
+        gamma_secular = singular_integral(
+            data,
+            data,
+            interpolator,
+            kernel=_kernel_Bn_over_r,
+            chunk_size=chunk_size,
+        ).squeeze() / (-4 * jnp.pi)
+
+        np.testing.assert_allclose(Phi_secular / 2, H_secular - gamma_secular)
 
     @pytest.mark.unit
     @pytest.mark.slow

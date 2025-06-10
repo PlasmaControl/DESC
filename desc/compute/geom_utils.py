@@ -94,7 +94,7 @@ def rpz2xyz(pts):
 
 
 def xyz2rpz_vec(vec, x=None, y=None, phi=None):
-    """Transform from cartesian (X,Y,Z) to polar (R,phi,Z) form.
+    """Transform vectors from Cartesian (X,Y,Z) to polar (R,phi,Z) form.
 
     Parameters
     ----------
@@ -129,7 +129,7 @@ def xyz2rpz_vec(vec, x=None, y=None, phi=None):
 
 
 def rpz2xyz_vec(vec, x=None, y=None, phi=None):
-    """Transform coordinates from polar (R,phi,Z) to cartesian (X,Y,Z) form.
+    """Transform vectors from polar (R,phi,Z) to Cartesian (X,Y,Z) form.
 
     Parameters
     ----------

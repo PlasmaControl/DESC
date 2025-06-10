@@ -348,6 +348,8 @@ def _gamma_c_fun(params, transforms, profiles, data, **kwargs):
                     ),
                 )
             )
+            # Summed over all the wells
+            gamma_c = gamma_c.sum(axis=-1)
 
             return gamma_c
 

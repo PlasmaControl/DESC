@@ -154,6 +154,9 @@ def _V_rrr_of_r(params, transforms, profiles, data, **kwargs):
 
 
 def _compute_A_of_z(grid, data, extrap=False, mean=False, expand_out=False):
+    if "A(z)" in data and mean:
+        return jnp.mean(grid.compress(data["A(z)"]), surface_label="zeta")
+
     max_rho = jnp.max(data["rho"])
     if isinstance(grid, QuadratureGrid) or "n_rho" not in data:  # TODO(#1761)
         assert extrap
@@ -640,7 +643,6 @@ def _ramanujan(A, P):
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.ZernikeRZToroidalSection",
     ],
-    aliases=["a_major/a_minor LCFS"],
 )
 def _a_major_over_a_minor(params, transforms, profiles, data, **kwargs):
     A = transforms["grid"].compress(data["A(z)"], surface_label="zeta")
@@ -669,36 +671,6 @@ def _a_major_over_a_minor_flux_surface(params, transforms, profiles, data, **kwa
     A = transforms["grid"].compress(data["A(z)"], surface_label="zeta")
     P = transforms["grid"].compress(data["perimeter(z)"], surface_label="zeta")
     data["a_major/a_minor"] = transforms["grid"].expand(
-        _ramanujan(A, P), surface_label="zeta"
-    )
-    return data
-
-
-@register_compute_fun(
-    name="a_major/a_minor LCFS",
-    label="a_{\\mathrm{major}} / a_{\\mathrm{minor}}",
-    units="~",
-    units_long="None",
-    description="Elongation at a toroidal cross-section (constant zeta surface), "
-    "extrapolated to last closed flux surface.",
-    dim=1,
-    params=[],
-    transforms={"grid": []},
-    profiles=[],
-    coordinates="z",
-    data=["A(z)", "perimeter(z)", "rho"],
-    parameterization=["desc.geometry.surface.FourierRZToroidalSurface"],
-)
-def _a_major_over_a_minor_flux_surface_lcfs(
-    params, transforms, profiles, data, **kwargs
-):
-    max_rho = jnp.max(data["rho"])
-    A = transforms["grid"].compress(data["A(z)"], surface_label="zeta") / max_rho**2
-    P = (
-        transforms["grid"].compress(data["perimeter(z)"], surface_label="zeta")
-        / max_rho
-    )
-    data["a_major/a_minor LCFS"] = transforms["grid"].expand(
         _ramanujan(A, P), surface_label="zeta"
     )
     return data

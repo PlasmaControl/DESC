@@ -15,7 +15,7 @@ from tests.test_interp_utils import _f_1d, _f_1d_nyquist_freq, _f_2d, _f_2d_nyqu
 from tests.test_plotting import tol_1d
 
 from desc.backend import jnp, vmap
-from desc.basis import FourierZernikeBasis
+from desc.basis import DoubleFourierSeries, FourierZernikeBasis
 from desc.compute.geom_utils import rpz2xyz_vec
 from desc.equilibrium import Equilibrium
 from desc.equilibrium.coords import get_rtz_grid
@@ -891,20 +891,29 @@ class TestVacuumSolver:
             modes_Z=[[-1, 0], [0, -1]],
         )
         eq = Equilibrium(surface=surf)
-        grid = LinearGrid(M=25, N=25)
-        data = eq.compute(["n_rho", "e^theta", "e^zeta", "R", "phi", "Z"], grid=grid)
-        Phi_secular = I * grid.nodes[:, 1] + Y * grid.nodes[:, 2]
-        data["Phi"] = Phi_secular
-        data["Bn"] = dot(I * data["e^theta"] + Y * data["e^zeta"], data["n_rho"])
-
+        grid = LinearGrid(M=50, N=50)
+        data = eq.compute(
+            ["n_rho", "e^theta", "e^zeta", "R", "phi", "Z", "theta", "zeta"], grid=grid
+        )
         interpolator = get_interpolator(grid, grid, data)
+
+        Phi_secular = I * data["theta"] + Y * data["zeta"]
+        gradPhi_secular = I * data["e^theta"] + Y * data["e^zeta"]
+        basis = DoubleFourierSeries(M=0, N=0)
+        data["Phi"] = basis.evaluate(grid, secular=True)
+
         H_secular = singular_integral(
             data,
             data,
             interpolator,
             kernel=_kernel_magnetic_dipole,
+            known_map=("Phi", partial(basis.evaluate, secular=True)),
+            ndim=basis.num_modes + 2,
             chunk_size=chunk_size,
-        ).squeeze()
+        )
+        H_secular = I * H_secular[:, 1] + Y * H_secular[:, 2]
+
+        data["Bn"] = dot(gradPhi_secular, data["n_rho"])
         gamma_secular = singular_integral(
             data,
             data,

@@ -253,6 +253,7 @@ def fmin_auglag(  # noqa: C901
         hess_wrapped = BFGS(
             hess_exception_strategy, hess_min_curvature, hess_init_scale
         )
+
     if isinstance(hess_wrapped, BFGS):
         bfgs = True
         if hasattr(hess_wrapped, "n"):  # assume its already been initialized
@@ -342,7 +343,17 @@ def fmin_auglag(  # noqa: C901
     diag_h = g * dv * scale
 
     g_h = g * d
-    H_h = d * H * d[:, None]
+
+    # TODO: place this function under JIT (#1669)
+    # doing operation H = d * H * d[:, None]
+    H *= d[:, None]
+    H *= d
+
+    # we don't need unscaled H anymore this iteration, so we overwrite
+    # it with H_h = d * H * d[:, None] to avoid carrying so many H-sized matrices
+    # in memory, which can be large
+    H_h = H
+    del H
     g_norm = jnp.linalg.norm(
         (g * v * scale if scaled_termination else g * v), ord=jnp.inf
     )
@@ -581,7 +592,16 @@ def fmin_auglag(  # noqa: C901
             d = v**0.5 * scale
             diag_h = g * dv * scale
             g_h = g * d
-            H_h = d * H * d[:, None]
+
+            # doing operation H = d * H * d[:, None]
+            H *= d[:, None]
+            H *= d
+
+            # we don't need unscaled H anymore this iteration, so we overwrite
+            # it to avoid carrying so many H-sized matrices
+            # in memory, which can be large
+            H_h = H
+            del H
 
             if g_norm < gtol and constr_violation < ctol:
                 success, message = True, STATUS_MESSAGES["gtol"]

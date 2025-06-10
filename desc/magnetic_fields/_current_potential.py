@@ -1,5 +1,6 @@
 """Magnetic field due to sheet current on a winding surface."""
 
+import os
 import warnings
 
 import matplotlib.pyplot as plt
@@ -194,6 +195,7 @@ class CurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
             mode for save file. Only used if file_name is a file path
 
         """
+        file_name = os.path.expanduser(file_name)
         raise OSError(
             "Saving CurrentPotentialField is not supported,"
             " as the potential function cannot be serialized."

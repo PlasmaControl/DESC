@@ -122,6 +122,7 @@ def sgd(
 
     if verbose > 1:
         print_header_nonlinear()
+        print_iteration_nonlinear(iteration, nfev, f, None, step_norm, g_norm)
 
     allx = [x]
 
@@ -156,13 +157,12 @@ def sgd(
         f = fnew
 
         allx.append(x)
+        iteration += 1
         if verbose > 1:
             print_iteration_nonlinear(iteration, nfev, f, df, step_norm, g_norm)
 
         if callback(jnp.copy(x), *args):
             success, message = False, STATUS_MESSAGES["callback"]
-
-        iteration += 1
 
     result = OptimizeResult(
         x=x,

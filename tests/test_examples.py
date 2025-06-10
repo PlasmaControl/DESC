@@ -16,6 +16,7 @@ from desc.coils import (
     CoilSet,
     FourierPlanarCoil,
     FourierRZCoil,
+    FourierXYCoil,
     FourierXYZCoil,
     MixedCoilSet,
     _Coil,
@@ -262,9 +263,7 @@ def test_qh_optimization():
         NFP=4,
     )
     eq = Equilibrium(M=5, N=5, Psi=0.04, surface=surf)
-    eq = solve_continuation_automatic(eq, objective="force", bdry_step=0.5, verbose=3)[
-        -1
-    ]
+    eq.solve(verbose=3)
 
     eq1 = run_qh_step(0, eq)
 
@@ -1894,6 +1893,7 @@ def test_second_stage_optimization_CoilSet():
     [
         "FourierPlanarCoil",
         "FourierRZCoil",
+        "FourierXYCoil",
         "FourierXYZCoil",
         "SplineXYZCoil",
         "CoilSet sym",
@@ -1923,6 +1923,7 @@ def test_optimize_with_all_coil_types(DummyCoilSet, DummyMixedCoilSet, coil_type
     types = {
         "FourierPlanarCoil": (FourierPlanarCoil(), "fmintr"),
         "FourierRZCoil": (FourierRZCoil(), "fmintr"),
+        "FourierXYCoil": (FourierXYCoil(), "fmintr"),
         "FourierXYZCoil": (FourierXYZCoil(), "fmintr"),
         "SplineXYZCoil": (spline_coil, "fmintr"),
         "CoilSet sym": (sym_coils, "lsq-exact"),

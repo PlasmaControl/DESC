@@ -1,5 +1,7 @@
 """Class for wrapping a number of common optimization methods."""
 
+import contextlib
+import io
 import warnings
 
 import numpy as np
@@ -137,9 +139,19 @@ class Optimizer(IOAble):
             Maximum number of iterations. Defaults to 100.
         options : dict, optional
             Dictionary of optional keyword arguments to override default solver
-            settings. See the documentation page ``Optimizers Supported`` for
-            more details (https://desc-docs.readthedocs.io/en/stable/optimizers.html)
-            to check the options for each specific available optimizer.
+            settings. Options that are universal to all optimizers are:
+
+            - ``"linear_constraint_options"`` : Dictionary of keyword arguments to pass
+              to ``LinearConstraintProjection``.
+            - ``"perturb_options"`` : Dictionary of keyword arguments to pass to
+              ``ProximalProjection`` as its ``perturb_options``.
+            - ``"solve_options"`` : Dictionary of keyword arguments to pass to
+              ``ProximalProjection`` as its ``solve_options``.
+
+            See the documentation page [Optimizers
+            Supported](https://desc-docs.readthedocs.io/en/stable/optimizers.html)
+            for more details on the options available to each specific optimizer.
+
         copy : bool
             Whether to return the current things or a copy (leaving the original
             unchanged).
@@ -154,6 +166,8 @@ class Optimizer(IOAble):
             Boolean flag indicating if the optimizer exited successfully and
             ``message`` which describes the cause of the termination. See
             `OptimizeResult` for a description of other attributes.
+            Additionally, stores the before and after values of the objectives
+            and constraints in the ``Objective values`` key.
 
         """
         is_linear_proj = isinstance(objective, LinearConstraintProjection)
@@ -306,25 +320,14 @@ class Optimizer(IOAble):
             ind = things.index(thing)
             things[ind].params_dict = params
 
+        # we always want to populate result dict with before/after values, but may
+        # not always want to print, so we first capture the output and then decide
+        # what to do about it.
+        with io.StringIO() as buf, contextlib.redirect_stdout(buf):
+            result = _print_output(things, things0, objective, constraints, result)
+            text_out = buf.getvalue()
         if verbose > 0:
-            state_0 = [things0[things.index(t)] for t in objective.things]
-            state = [things[things.index(t)] for t in objective.things]
-
-            # put a divider
-            w_divider = 50
-            print("{:=<{}}".format("", PRINT_WIDTH + w_divider))
-
-            print(f"{'Start  -->   End':>{PRINT_WIDTH+21}}")
-            objective.print_value(objective.x(*state), objective.x(*state_0))
-            for con in constraints:
-                arg_inds_for_this_con = [
-                    things.index(t) for t in things if t in con.things
-                ]
-                args_for_this_con = [things[ind] for ind in arg_inds_for_this_con]
-                args0_for_this_con = [things0[ind] for ind in arg_inds_for_this_con]
-                con.print_value(con.xs(*args_for_this_con), con.xs(*args0_for_this_con))
-
-            print("{:=<{}}".format("", PRINT_WIDTH + w_divider))
+            print(text_out)
 
         if copy:
             # need to swap things and things0, since things should be unchanged
@@ -336,6 +339,31 @@ class Optimizer(IOAble):
             return things0, result
 
         return things, result
+
+
+def _print_output(things, things0, objective, constraints, result):
+    """Print summary stats after optimization."""
+    state_0 = [things0[things.index(t)] for t in objective.things]
+    state = [things[things.index(t)] for t in objective.things]
+
+    # put a divider
+    w_divider = 50
+    print("{:=<{}}".format("", PRINT_WIDTH + w_divider))
+
+    print(f"{'Start  -->   End':>{PRINT_WIDTH+21}}")
+    values = objective.print_value(objective.x(*state), objective.x(*state_0))
+    for con in constraints:
+        arg_inds_for_this_con = [things.index(t) for t in things if t in con.things]
+        args_for_this_con = [things[ind] for ind in arg_inds_for_this_con]
+        args0_for_this_con = [things0[ind] for ind in arg_inds_for_this_con]
+        _val = con.print_value(con.xs(*args_for_this_con), con.xs(*args0_for_this_con))
+        if con._print_value_fmt in values:
+            values[con._print_value_fmt].append(_val)
+        else:
+            values[con._print_value_fmt] = [_val]
+    print("{:=<{}}".format("", PRINT_WIDTH + w_divider))
+    result["Objective values"] = values
+    return result
 
 
 def _parse_method(method):
@@ -477,6 +505,7 @@ def get_combined_constraint_objectives(
     for t in things:
         if isinstance(t, Equilibrium) and is_prox:
             # don't add Equilibrium self-consistency if proximal is used
+            # see ProximalProjection._set_eq_state_vector
             continue
         linear_constraints = maybe_add_self_consistency(t, linear_constraints)
     linear_constraint = _combine_constraints(linear_constraints)
@@ -507,7 +536,10 @@ def get_combined_constraint_objectives(
 
     # wrap to handle linear constraints
     if linear_constraint is not None:
-        objective = LinearConstraintProjection(objective, linear_constraint)
+        linear_constraint_options = options.pop("linear_constraint_options", {})
+        objective = LinearConstraintProjection(
+            objective, linear_constraint, **linear_constraint_options
+        )
         objective.build(verbose=verbose)
         if nonlinear_constraint is not None:
             nonlinear_constraint = LinearConstraintProjection(

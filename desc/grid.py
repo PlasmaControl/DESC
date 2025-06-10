@@ -220,10 +220,11 @@ class _Grid(IOAble, ABC):
 
     @property
     def sym(self):
-        """bool: True for poloidal symmetry, False otherwise.
+        """bool: ``True`` for poloidal up/down symmetry, ``False`` otherwise.
 
-        If true, the poloidal domain of this grid is [0, π] ⊂ [0, 2π).
-        Note that this is distinct from stellarator symmetry.
+        Whether the poloidal domain of this grid is truncated to [0, π] ⊂ [0, 2π)
+        to take advantage of poloidal up/down symmetry,
+        which is a stronger condition than stellarator symmetry.
         Still, when stellarator symmetry exists, flux surface integrals and
         volume integrals are invariant to this truncation.
         """
@@ -998,11 +999,13 @@ class LinearGrid(_Grid):
         Change this only if your nodes are placed within one field period
         or should be interpreted as spanning one field period.
     sym : bool
-        Whether to truncate the poloidal domain to [0, π] ⊂ [0, 2π).
-        Note that this is distinct from stellarator symmetry.
+        ``True`` for poloidal up/down symmetry, ``False`` otherwise.
+        Default is ``False``.
+        Whether to truncate the poloidal domain to [0, π] ⊂ [0, 2π)
+        to take advantage of poloidal up/down symmetry,
+        which is a stronger condition than stellarator symmetry.
         Still, when stellarator symmetry exists, flux surface integrals and
-        volume integrals are invariant to this truncation, so setting this flag
-        to true will reduce memory consumption. (Default = False).
+        volume integrals are invariant to this truncation.
     axis : bool
         True to include a point at rho=0 (default), False for rho[0] = rho[1]/2.
     endpoint : bool
@@ -1495,11 +1498,13 @@ class ConcentricGrid(_Grid):
     NFP : int
         number of field periods (Default = 1)
     sym : bool
-        Whether to truncate the poloidal domain to [0, π] ⊂ [0, 2π).
-        Note that this is distinct from stellarator symmetry.
+        ``True`` for poloidal up/down symmetry, ``False`` otherwise.
+        Default is ``False``.
+        Whether to truncate the poloidal domain to [0, π] ⊂ [0, 2π)
+        to take advantage of poloidal up/down symmetry,
+        which is a stronger condition than stellarator symmetry.
         Still, when stellarator symmetry exists, flux surface integrals and
-        volume integrals are invariant to this truncation, so setting this flag
-        to true will reduce memory consumption. (Default = False).
+        volume integrals are invariant to this truncation.
     axis : bool
         True to include the magnetic axis, False otherwise (Default = False)
     node_pattern : {``'cheb1'``, ``'cheb2'``, ``'jacobi'``, ``linear``}

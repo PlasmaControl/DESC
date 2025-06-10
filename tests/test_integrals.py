@@ -16,6 +16,7 @@ from tests.test_plotting import tol_1d
 
 from desc.backend import jnp, vmap
 from desc.basis import FourierZernikeBasis
+from desc.compute.geom_utils import rpz2xyz_vec
 from desc.equilibrium import Equilibrium
 from desc.equilibrium.coords import get_rtz_grid
 from desc.examples import get
@@ -58,6 +59,8 @@ from desc.integrals.quad_utils import (
     tanh_sinh,
 )
 from desc.integrals.singularities import (
+    _1_over_G,
+    _grad_G,
     _kernel_nr_over_r3,
     _vanilla_params,
     best_params,
@@ -709,7 +712,7 @@ class TestVacuumSolver:
         Define boundary R_b(θ,ζ) = R₀ + a cos θ and Z_b(θ,ζ) = -a sin θ.
         θ = 0 is outboard side and θ increases clockwise.
         Define harmonic map Φ: ρ,θ,ζ ↦ Z(ρ,θ,ζ).
-        Choose b.c. 𝐁₀⋅𝐧 = -∇ϕ⋅𝐧
+        Choose b.c. 𝐁₀⋅𝐧 = -∇Z⋅𝐧
                          = -[0, 0, 1]⋅[cos(θ)cos(ζ), cos(θ)sin(ζ), -sin(θ)]
                          = sin(θ)
         and test that ‖ Φ − Z ‖_∞ → 0.
@@ -725,22 +728,21 @@ class TestVacuumSolver:
         B0n = np.sin(theta)
         vac = VacuumSolver(
             surface=surf,
-            B0=None,
             evl_grid=LinearGrid(M=5, N=5, NFP=surf.NFP),
             src_grid=src_grid,
             Phi_grid=LinearGrid(M=2, N=2, NFP=surf.NFP),
             Phi_M=1,
             Phi_N=0,
-            chunk_size=chunk_size,
             B0n=B0n,
+            chunk_size=chunk_size,
             warn_fft=False,
         )
         np.testing.assert_allclose(vac._data["src"]["Z"], -a * np.sin(theta))
         np.testing.assert_allclose(vac._data["src"]["n_rho"][:, 2], -B0n, atol=1e-12)
 
         data = vac.compute_Phi(chunk_size, maxiter, warn=False)
-        Z = data["evl"]["Z"]
         Phi = Transform(vac.evl_grid, vac.basis).transform(data["Phi"]["Phi_mn"])
+        Z = data["evl"]["Z"]
         np.testing.assert_allclose(np.ptp(Z - Phi), 0, atol=atol)
 
         data = vac.compute_vacuum_field(chunk_size)["evl"].copy()
@@ -764,12 +766,12 @@ class TestVacuumSolver:
             ),
         ],
     )
-    def test_harmonic_general(self, use_dft, chunk_size):
+    def test_harmonic_interior(self, use_dft, chunk_size):
         """Test that Laplace solution recovers expected analytic result.
 
         Define boundary R_b(θ,ζ) and Z_b(θ,ζ).
         Define harmonic map Φ: ρ,θ,ζ ↦ Z(ρ,θ,ζ).
-        Choose b.c. 𝐁₀⋅𝐧 = -∇ϕ⋅𝐧 and test that ‖ Φ − Z ‖_∞ → 0.
+        Choose b.c. 𝐁₀⋅𝐧 = -∇Z⋅𝐧 and test that ‖ Φ − Z ‖_∞ → 0.
         """
         atol = 4e-5
         # elliptic cross-section with torsion
@@ -784,7 +786,6 @@ class TestVacuumSolver:
 
         vac = VacuumSolver(
             surface=surf,
-            B0=None,
             evl_grid=Phi_grid,
             src_grid=src_grid,
             Phi_grid=Phi_grid,
@@ -799,8 +800,8 @@ class TestVacuumSolver:
         )
 
         data = vac.compute_Phi(chunk_size)
-        Z = data["evl"]["Z"]
         Phi = Transform(vac.evl_grid, vac.basis).transform(data["Phi"]["Phi_mn"])
+        Z = data["evl"]["Z"]
         np.testing.assert_allclose(np.ptp(Z - Phi), 0, atol=atol)
 
         data = vac.compute_vacuum_field(chunk_size)["evl"].copy()
@@ -808,6 +809,66 @@ class TestVacuumSolver:
         B0n = -data["n_rho"][:, 2]
         dPhi_dn = dot(data["grad(Phi)"], data["n_rho"])
         np.testing.assert_allclose(B0n + dPhi_dn, 0, atol=atol)
+
+    @pytest.mark.xfail(
+        reason="Debugging why first assert fails, "
+        "second one (the more important one) passes."
+    )
+    @pytest.mark.unit
+    @pytest.mark.parametrize("chunk_size", [10])
+    def test_harmonic_exterior(self, chunk_size):
+        """Test that Laplace solution recovers expected analytic result.
+
+        Define harmonic map Φ: ρ,θ,ζ ↦ G(ρ,θ,ζ).
+        Choose b.c. 𝐁₀⋅𝐧 = -∇G⋅𝐧 and test that ‖ Φ − G ‖_∞ → 0.
+        """
+        atol = 4e-5
+        # elliptic cross-section with torsion
+        surf = FourierRZToroidalSurface(
+            R_lmn=[10, 1, 0.2],
+            Z_lmn=[-2, -0.2],
+            modes_R=[[0, 0], [1, 0], [0, 1]],
+            modes_Z=[[-1, 0], [0, -1]],
+        )
+        src_grid = LinearGrid(M=50, N=50, NFP=surf.NFP)
+        Phi_grid = LinearGrid(M=40, N=40, NFP=surf.NFP)
+
+        src_data = surf.compute(["x", "n_rho"], grid=src_grid, basis="xyz")
+
+        def grad_G(x):
+            # ∇G(x) = -∇_y G(x-y)
+            y = 0
+            return -_grad_G(x - y)
+
+        vac = VacuumSolver(
+            surface=surf,
+            evl_grid=Phi_grid,
+            src_grid=src_grid,
+            Phi_grid=Phi_grid,
+            Phi_M=30,
+            Phi_N=30,
+            exterior=True,
+            chunk_size=chunk_size,
+            B0n=-dot(grad_G(src_data["x"]), src_data["n_rho"]),
+            use_dft=False,
+            warn_dft=False,
+            warn_fft=False,
+        )
+
+        evl_data = surf.compute(["x", "n_rho", "phi"], grid=vac.evl_grid, basis="xyz")
+
+        data = vac.compute_Phi(chunk_size)
+        Phi = Transform(vac.evl_grid, vac.basis).transform(data["Phi"]["Phi_mn"])
+        G = np.reciprocal(_1_over_G(evl_data["x"]))
+        np.testing.assert_allclose(np.ptp(G - Phi), 0, atol=atol)
+
+        data = vac.compute_vacuum_field(chunk_size)["evl"]
+        grad_Phi = rpz2xyz_vec(data["grad(Phi)"], phi=evl_data["phi"])
+        np.testing.assert_allclose(
+            dot(grad_G(evl_data["x"]) - grad_Phi, evl_data["n_rho"]),
+            0,
+            atol=atol,
+        )
 
     @pytest.mark.unit
     @pytest.mark.slow
@@ -865,19 +926,19 @@ class TestVacuumSolver:
 
         Phi_grid = LinearGrid(M=20, N=20, NFP=eq.NFP if eq.N > 0 else 64)
         src_grid = LinearGrid(M=50, N=50, NFP=eq.NFP)
-        src_data = eq.compute(["G", "R0"], grid=src_grid)
-        B0 = ToroidalMagneticField(
-            B0=src_grid.compress(src_data["G"])[-1] / src_data["R0"],
-            R0=src_data["R0"],
-        )
+        src_data = eq.compute(["G"], grid=src_grid)
+        R0 = 1
+        Y = src_grid.compress(src_data["G"])[-1]
+        B0 = ToroidalMagneticField(B0=Y / R0, R0=R0)
         vac = VacuumSolver(
             surface=eq.surface,
-            B0=B0,
             evl_grid=Phi_grid,
             src_grid=src_grid,
             Phi_grid=Phi_grid,
             Phi_M=8,
             Phi_N=8,
+            B0=B0,
+            # Y=Y, # noqa: E800
             chunk_size=chunk_size,
             warn_fft=False,
         )

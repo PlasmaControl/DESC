@@ -177,26 +177,15 @@ class FreeBoundarySolver(IOAble):
     ----------
     surface : Surface
         Geometry defining ∂𝒳.
-    B_coil : _MagneticField
-        Magnetic field produced by coils.
-    G_coil : float or None
-        Net poloidal coil current.
-        If given ``None`` will be computed via A.3 in [1].
-    G_plasma : float
-        Net poloidal plasma current.
-        May be computed via A.3 in [1] with V = B_plasma.
-        For parallel free boundary computations this parameter must be consistent
-        with the rotational transform and flux given to the inner free boundary
-        solver. See section 5.2.3 in [1].
     evl_grid : Grid
-        Evaluation points on ∂𝒳 for the magnetic field.
+        Evaluation points on ∂𝒳.
     src_grid : Grid
         Source points on ∂𝒳 for quadrature of kernels.
         Default resolution is ``src_grid.M=surface.M*4`` and ``src_grid.N=surface.N*4``.
     Phi_grid : Grid
         Interpolation points on ∂𝒳.
         Resolution determines accuracy of interpolation for quadrature.
-        Default is same as source grid; lower will slow convergence.
+        Default is ``src_grid``; lower often slows convergence.
     Phi_M : int
         Poloidal Fourier resolution to interpolate Φ on ∂𝒳.
         Should be at most ``Phi_grid.M``, recommended to be less.
@@ -206,6 +195,17 @@ class FreeBoundarySolver(IOAble):
     sym
         Symmetry for basis which interpolates Φ.
         Default assumes no symmetry.
+    B_coil : _MagneticField
+        Magnetic field produced by coils.
+    Y_coil : float or None
+        Net poloidal coil current.
+        If given ``None`` will be computed via A.3 in [1].
+    Y_plasma : float
+        Net poloidal plasma current.
+        May be computed via A.3 in [1] with V = B_plasma.
+        For parallel free boundary computations this parameter must be consistent
+        with the rotational transform and flux given to the inner free boundary
+        solver. See section 5.2.3 in [1].
     chunk_size : int or None
         Size to split computation into chunks.
         If no chunking should be done or the chunk size is the full input
@@ -221,9 +221,6 @@ class FreeBoundarySolver(IOAble):
     def __init__(
         self,
         surface,
-        B_coil,
-        G_coil,
-        G_plasma,
         evl_grid,
         src_grid=None,
         Phi_grid=None,
@@ -231,24 +228,32 @@ class FreeBoundarySolver(IOAble):
         Phi_N=None,
         sym=None,
         *,
+        B_coil,
+        Y_coil,
+        Y_plasma,
         chunk_size=None,
         use_dft=False,
         **kwargs,
     ):
         self._exterior = True
+        self._I = 0
+        self._Y = Y_coil + Y_plasma
         errorif(
             evl_grid.nodes[0, 0] < evl_grid.num_rho,
             msg="Evaluation grid must be on boundary.",
         )
-        # TODO (#1206)
         if src_grid is None:
             src_grid = LinearGrid(
                 M=surface.M * 4,
                 N=surface.N * 4,
                 NFP=surface.NFP if surface.N > 0 else 64,
+                sym=False,  # TODO (#1206)
             )
-        Phi_grid = setdefault(Phi_grid, src_grid)
-        self._same_grid_phi_src = src_grid.equiv(Phi_grid)
+        if Phi_grid is None:
+            Phi_grid = src_grid
+            self._src_grid_equals_Phi_grid = True
+        else:
+            self._src_grid_equals_Phi_grid = src_grid.equiv(Phi_grid)
 
         errorif(
             Phi_M is not None and Phi_M > Phi_grid.M,
@@ -262,7 +267,7 @@ class FreeBoundarySolver(IOAble):
             M=setdefault(Phi_M, Phi_grid.M),
             N=setdefault(Phi_N, Phi_grid.N),
             NFP=surface.NFP,
-            sym=setdefault(sym, False) and surface.sym,
+            sym=setdefault(sym, False),
         )
 
         # Compute data on source grid.
@@ -287,14 +292,14 @@ class FreeBoundarySolver(IOAble):
             coords=Phi_data["x"], source_grid=src_grid, chunk_size=chunk_size
         )
         Phi_data["n_rho x B_coil"] = cross(Phi_data["n_rho"], Bcoil)
-        if G_coil is None:
+        if Y_coil is None:
             assert Phi_grid.can_fft2
             # A.3 in [1] averaged over all χ_θ for increased accuracy since we
             # only have discrete interpolation to true B_coil.
             # (l2 norm error of fourier series better than max pointwise).
-            self._G_coil = dot(Bcoil, Phi_data["e_zeta"]).mean()
+            self._Y_coil = dot(Bcoil, Phi_data["e_zeta"]).mean()
         else:
-            self._G_coil = G_coil
+            self._Y_coil = Y_coil
 
         # Compute data on evaluation grid.
         if evl_grid.equiv(Phi_grid):
@@ -421,12 +426,12 @@ def _free_boundary_bc(self, chunk_size=None):
         return self._data
 
     sg_gamma_periodic = (
-        data["n_rho x B_coil"] - self._G_coil * data["n_rho x grad(zeta)"]
+        data["n_rho x B_coil"] - self._Y_coil * data["n_rho x grad(zeta)"]
     ).ravel()
     gamma_periodic = jnp.linalg.lstsq(
         _sg_mat(data, self.basis, self.Phi_grid), sg_gamma_periodic
     )[0]
     gamma_periodic = self._phi_transform.transform(gamma_periodic)
-    gamma_secular = self._G_coil * self.Phi_grid.nodes[:, 2]
+    gamma_secular = self._Y_coil * self.Phi_grid.nodes[:, 2]
     self._data["Phi"]["gamma"] = gamma_periodic + gamma_secular
     return self._data

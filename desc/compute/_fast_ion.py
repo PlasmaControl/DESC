@@ -229,7 +229,7 @@ def _poloidal_drift(data, B, pitch):
     name="gamma_c",
     label=(
         # 2⁄π · arctan(<v_ds · ∇ψ> ⁄ <v_ds · ∇α>)
-        "small gamma_c"
+        "\\gamma_c"
     ),
     units="~",
     units_long="None",
@@ -347,8 +347,10 @@ def _gamma_c_fun(params, transforms, profiles, data, **kwargs):
                         data["|grad(rho)|*|e_alpha|r,p|"], points, is_fourier=True
                     ),
                 )
-            )
-            # Summed over all the wells
+            )  # Output shape (num_rho, num_alpha, num_pitch, num_well)
+
+            # Summed over all the wells so the
+            # final shape (num_rho, num_alpha, num_pitch)
             gamma_c = gamma_c.sum(axis=-1)
 
             return gamma_c

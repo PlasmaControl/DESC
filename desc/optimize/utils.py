@@ -118,10 +118,7 @@ def inequality_to_bounds(x0, fun, grad, hess, constraint, bounds):
 
         def conhess_wrapped(z, y):
             x, s = z2xs(z)
-            H = constraint.hess(
-                x,
-                y,
-            )
+            H = constraint.hess(x, y)
             return jnp.pad(H, (0, nslack))
 
     else:  # using BFGS

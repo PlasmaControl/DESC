@@ -76,24 +76,24 @@ def _optimize_desc_aug_lagrangian(
         options.setdefault("initial_trust_ratio", 1e-3)
         options.setdefault("max_trust_radius", 1.0)
     options["max_nfev"] = stoptol["max_nfev"]
-    hess = (lambda x: objective.hess(x)) if "bfgs" not in method else "bfgs"
+    hess = objective.hess if "bfgs" not in method else "bfgs"
 
     if constraint is not None:
         lb, ub = constraint.bounds_scaled
         constraint_wrapped = NonlinearConstraint(
-            lambda x: constraint.compute_scaled(x),
+            constraint.compute_scaled,
             lb,
             ub,
-            lambda x: constraint.jac_scaled(x),
+            constraint.jac_scaled,
         )
         constraint_wrapped.vjp = lambda v, x, *args: constraint.vjp_scaled(v, x)
     else:
         constraint_wrapped = None
 
     result = fmin_auglag(
-        lambda x: objective.compute_scalar(x),
+        objective.compute_scalar,
         x0=x0,
-        grad=lambda x: objective.grad(x),
+        grad=objective.grad,
         hess=hess,
         bounds=(-jnp.inf, jnp.inf),
         constraint=constraint_wrapped,
@@ -174,18 +174,18 @@ def _optimize_desc_aug_lagrangian_least_squares(
     if constraint is not None:
         lb, ub = constraint.bounds_scaled
         constraint_wrapped = NonlinearConstraint(
-            lambda x: constraint.compute_scaled(x),
+            constraint.compute_scaled,
             lb,
             ub,
-            lambda x: constraint.jac_scaled(x),
+            constraint.jac_scaled,
         )
     else:
         constraint_wrapped = None
 
     result = lsq_auglag(
-        lambda x: objective.compute_scaled_error(x),
+        objective.compute_scaled_error,
         x0=x0,
-        jac=lambda x: objective.jac_scaled_error(x),
+        jac=objective.jac_scaled_error,
         bounds=(-jnp.inf, jnp.inf),
         constraint=constraint_wrapped,
         args=None,

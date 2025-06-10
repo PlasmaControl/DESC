@@ -822,5 +822,5 @@ def _dJ_ds(params, transforms, profiles, data, **kwargs):
 
     # Since there isn't a standard method of normalization, I choose this.
     # Gives the right result (J_s < 0 everywhere) for Goodman's elongated QI.
-    data["J_s"] = data["J_s"] / jnp.max(jnp.abs(data["J_s"]))
+    data["J_s"] = data["J_s"]
     return data

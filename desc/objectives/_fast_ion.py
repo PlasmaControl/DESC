@@ -362,7 +362,7 @@ class GammaC(_Objective):
         return grid.compress(data[self._key])
 
 
-class maxJ(_Objective):
+class MaximumJ(_Objective):
     """Proxy for TEM(Trapped Electron Mode) stability.
 
     TEMs are excited when a drift wave resonates with the precession of the electrons
@@ -614,6 +614,8 @@ class maxJ(_Objective):
 
         # Shifted ReLU operation
         dJ_ds_filtrd = (dJ_ds - thresh0) * (dJ_ds >= thresh0)
-        results = w0 * jnp.sum(dJ_ds_filtrd) + w1 * jnp.max(dJ_ds_filtrd)
+        results = w0 * jnp.sum(dJ_ds_filtrd, axis=jnp.array([1, 2])) + w1 * jnp.max(
+            dJ_ds_filtrd, axis=jnp.array([1, 2])
+        )
 
         return results

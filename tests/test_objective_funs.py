@@ -69,6 +69,7 @@ from desc.objectives import (
     LinearObjectiveFromUser,
     LinkingCurrentConsistency,
     MagneticWell,
+    MaximumJ,
     MeanCurvature,
     MercierStability,
     MirrorRatio,
@@ -92,7 +93,6 @@ from desc.objectives import (
     VacuumBoundaryError,
     Volume,
     get_NAE_constraints,
-    maxJ,
 )
 from desc.objectives._free_boundary import BoundaryErrorNESTOR
 from desc.objectives.nae_utils import (
@@ -1829,7 +1829,7 @@ class TestObjectiveFunction:
             obj.compute(eq.params_dict), grid.compress(data["Gamma_c"])
         )
 
-        obj = maxJ(
+        obj = MaximumJ(
             eq,
             grid=grid,
             X=X,
@@ -2920,7 +2920,7 @@ def test_loss_function_asserts():
 
 def _reduced_resolution_objective(eq, objective, **kwargs):
     """Speed up testing suite by defining rules to reduce objective resolution."""
-    if objective in {EffectiveRipple, GammaC, maxJ}:
+    if objective in {EffectiveRipple, GammaC, MaximumJ}:
         kwargs["X"] = 8
         kwargs["Y"] = 16
         kwargs["num_transit"] = 4
@@ -3747,12 +3747,12 @@ class TestObjectiveNaNGrad:
         assert not np.any(np.isnan(g))
 
     @pytest.mark.unit
-    def test_objective_no_nangrad_maxJ(self):
-        """maxJ."""
+    def test_objective_no_nangrad_MaximumJ(self):
+        """MaximumJ."""
         eq = get("ESTELL")
         with pytest.warns(UserWarning, match="Reducing radial"):
             eq.change_resolution(2, 2, 2, 4, 4, 4)
-        obj = ObjectiveFunction(_reduced_resolution_objective(eq, maxJ))
+        obj = ObjectiveFunction(_reduced_resolution_objective(eq, MaximumJ))
         obj.build(verbose=0)
         g = obj.grad(obj.x())
         assert not np.any(np.isnan(g))

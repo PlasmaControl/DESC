@@ -68,10 +68,9 @@ def sgd(
         Called after each iteration. Should be a callable with
         the signature:
 
-            ``callback(xk, *args) -> bool``
+            ``callback(xk) -> bool``
 
-        where ``xk`` is the current parameter vector. and ``args``
-        are the same arguments passed to fun and grad. If callback returns True
+        where ``xk`` is the current parameter vector. If callback returns True
         the algorithm execution is terminated.
     options : dict, optional
         dictionary of optional keyword arguments to override default solver settings.
@@ -161,7 +160,7 @@ def sgd(
         if verbose > 1:
             print_iteration_nonlinear(iteration, nfev, f, df, step_norm, g_norm)
 
-        if callback(jnp.copy(x), *args):
+        if callback(jnp.copy(x)):
             success, message = False, STATUS_MESSAGES["callback"]
 
     result = OptimizeResult(

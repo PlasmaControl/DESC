@@ -93,10 +93,9 @@ def lsqtr(  # noqa: C901
         Called after each iteration. Should be a callable with
         the signature:
 
-            ``callback(xk, *args) -> bool``
+            ``callback(xk) -> bool``
 
-        where ``xk`` is the current parameter vector, and ``args``
-        are the same arguments passed to fun and jac. If callback returns True
+        where ``xk`` is the current parameter vector. If callback returns True
         the algorithm execution is terminated.
     options : dict, optional
         dictionary of optional keyword arguments to override default solver settings.
@@ -417,7 +416,7 @@ def lsqtr(  # noqa: C901
             if g_norm < gtol:
                 success, message = True, STATUS_MESSAGES["gtol"] + f" ({gtol=:.2e})"
 
-            if callback(jnp.copy(x), *args):
+            if callback(jnp.copy(x)):
                 success, message = False, STATUS_MESSAGES["callback"]
 
         else:

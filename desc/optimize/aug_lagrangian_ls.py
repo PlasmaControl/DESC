@@ -105,10 +105,9 @@ def lsq_auglag(  # noqa: C901
         Called after each iteration. Should be a callable with
         the signature:
 
-            ``callback(xk, *args) -> bool``
+            ``callback(xk) -> bool``
 
-        where ``xk`` is the current parameter vector, and ``args``
-        are the same arguments passed to fun and jac. If callback returns True
+        where ``xk`` is the current parameter vector. If callback returns True
         the algorithm execution is terminated.
     options : dict, optional
         dictionary of optional keyword arguments to override default solver settings.
@@ -192,10 +191,10 @@ def lsq_auglag(  # noqa: C901
     constraint = setdefault(
         constraint,
         NonlinearConstraint(  # create a dummy constraint
-            fun=lambda x, *args: jnp.array([0.0]),
+            fun=lambda x: jnp.array([0.0]),
             lb=0.0,
             ub=0.0,
-            jac=lambda x, *args: jnp.zeros((1, x.size)),
+            jac=lambda x: jnp.zeros((1, x.size)),
         ),
     )
 
@@ -551,7 +550,7 @@ def lsq_auglag(  # noqa: C901
             if g_norm < gtol and constr_violation < ctol:
                 success, message = True, STATUS_MESSAGES["gtol"]
 
-            if callback(jnp.copy(z2xs(z)[0]), *args):
+            if callback(jnp.copy(z2xs(z)[0])):
                 success, message = False, STATUS_MESSAGES["callback"]
 
         else:

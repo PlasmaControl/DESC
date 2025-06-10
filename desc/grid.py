@@ -695,6 +695,60 @@ class _Grid(IOAble, ABC):
         x = jnp.transpose(x, newax)
         return x
 
+    def meshgrid_flatten(self, x, order):
+        """Flatten data to match standard ordering. Inverse of grid.meshgrid_reshape.
+
+        Given 3d data on a tensor product grid, flatten the data in the standard DESC
+        ordering.
+
+        Parameters
+        ----------
+        x : ndarray, shape(n1, n2, n3,...)
+            Data to reshape.
+        order : str
+            Order of axes for input data. Should be a permutation of
+            ``grid.coordinates``, eg ``order="rtz"`` has the first axis of the data
+            correspond to different rho coordinates, the second axis to different
+            theta, etc.  ``order="trz"`` would have the first axis correspond to theta,
+            and so on.
+
+        Returns
+        -------
+        x : ndarray, shape(n1*n2*n3,...)
+            Data flattened in standard DESC ordering.
+
+        """
+        errorif(
+            not self.is_meshgrid,
+            ValueError,
+            "grid is not a tensor product grid, so meshgrid_flatten doesn't "
+            "make any sense",
+        )
+        errorif(
+            sorted(order) != sorted(self.coordinates),
+            ValueError,
+            f"order should be a permutation of {self.coordinates}, got {order}",
+        )
+        errorif(
+            not ((x.ndim == 3) or (x.ndim == 4)),
+            ValueError,
+            f"x should be 3d or 4d, got shape {x.shape}",
+        )
+        vec = x.ndim == 4
+        # reshape to radial/poloidal/toroidal
+        newax = tuple(order.index(c) for c in self.coordinates)
+        if vec:
+            newax += (3,)
+        x = jnp.transpose(x, newax)
+        # swap to change shape from trz/arz to rtz/raz etc.
+        x = jnp.swapaxes(x, 1, 0)
+
+        shape = (self.num_poloidal * self.num_rho * self.num_zeta,)
+        if vec:
+            shape += (-1,)
+        x = x.reshape(shape, order="F")
+        return x
+
 
 class Grid(_Grid):
     """Collocation grid with custom node placement.

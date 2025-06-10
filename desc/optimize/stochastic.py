@@ -37,13 +37,13 @@ def sgd(
     Parameters
     ----------
     fun : callable
-        objective to be minimized. Should have a signature like fun(x,*args)-> float
+        objective to be minimized. Should have a signature like fun(x)-> float
     x0 : array-like
         initial guess
     grad : callable
         function to compute gradient, df/dx. Should take the same arguments as fun
     args : tuple
-        additional arguments passed to fun and grad
+        additional arguments passed to fun and grad (not used)
     method : str
         Step size update rule. Currently only the default "sgd" is available. Future
         updates may include RMSProp, Adam, etc.

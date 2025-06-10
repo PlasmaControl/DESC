@@ -48,7 +48,7 @@ def lsqtr(  # noqa: C901
     Parameters
     ----------
     fun : callable
-        objective to be minimized. Should have a signature like fun(x,*args)-> 1d array
+        objective to be minimized. Should have a signature like fun(x)-> 1d array
     x0 : array-like
         initial guess
     jac : callable:
@@ -59,7 +59,7 @@ def lsqtr(  # noqa: C901
         bound will be the same for all variables. Use np.inf with an appropriate sign
         to disable bounds on all or some variables.
     args : tuple
-        additional arguments passed to fun, grad, and jac
+        additional arguments passed to fun, grad, and jac (not used)
     x_scale : array_like or ``'jac'``, optional
         Characteristic scale of each variable. Setting ``x_scale`` is equivalent
         to reformulating the problem in scaled variables ``xs = x / x_scale``.

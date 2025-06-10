@@ -67,7 +67,7 @@ def lsq_auglag(  # noqa: C901
     constraint : scipy.optimize.NonlinearConstraint
         constraint to be satisfied
     args : tuple
-        additional arguments passed to fun, grad, and hess
+        additional arguments passed to fun, grad, and hess (not used)
     x_scale : array_like or ``'hess'``, optional
         Characteristic scale of each variable. Setting ``x_scale`` is equivalent
         to reformulating the problem in scaled variables ``xs = x / x_scale``.

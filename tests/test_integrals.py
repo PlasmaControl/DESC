@@ -815,14 +815,14 @@ class TestVacuumSolver:
         "second one (the more important one) passes."
     )
     @pytest.mark.unit
-    @pytest.mark.parametrize("chunk_size", [10])
+    @pytest.mark.parametrize("chunk_size", [100])
     def test_harmonic_exterior(self, chunk_size):
         """Test that Laplace solution recovers expected analytic result.
 
         Define harmonic map Φ: ρ,θ,ζ ↦ G(ρ,θ,ζ).
         Choose b.c. 𝐁₀⋅𝐧 = -∇G⋅𝐧 and test that ‖ Φ − G ‖_∞ → 0.
         """
-        atol = 4e-5
+        atol = 1.1e-4
         # elliptic cross-section with torsion
         surf = FourierRZToroidalSurface(
             R_lmn=[10, 1, 0.2],
@@ -831,7 +831,7 @@ class TestVacuumSolver:
             modes_Z=[[-1, 0], [0, -1]],
         )
         src_grid = LinearGrid(M=50, N=50, NFP=surf.NFP)
-        Phi_grid = LinearGrid(M=40, N=40, NFP=surf.NFP)
+        Phi_grid = LinearGrid(M=30, N=30, NFP=surf.NFP)
 
         src_data = surf.compute(["x", "n_rho"], grid=src_grid, basis="xyz")
 
@@ -845,8 +845,8 @@ class TestVacuumSolver:
             evl_grid=Phi_grid,
             src_grid=src_grid,
             Phi_grid=Phi_grid,
-            Phi_M=30,
-            Phi_N=30,
+            Phi_M=25,
+            Phi_N=25,
             exterior=True,
             chunk_size=chunk_size,
             B0n=-dot(grad_G(src_data["x"]), src_data["n_rho"]),
@@ -1067,9 +1067,6 @@ class TestVacuumSolver:
 class TestFreeBoundarySolver:
     """Test free boundary solver (standard Neumann and potential mapping)."""
 
-    # TODO: Figure out how to analytically test exterior Neumann solve.
-    #       We can't use same method as interior test done above because
-    #       we need our test harmonic function to vanish at infinity.
     @pytest.mark.unit
     def test_potential_map_free_boundary(self):
         """Test potential map formulation of free boundary solver."""

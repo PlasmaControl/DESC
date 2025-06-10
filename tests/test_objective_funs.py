@@ -2060,7 +2060,9 @@ class TestObjectiveFunction:
         dJ_ds = grid.compress(data["J_s"])
         # Shifted ReLU operation
         dJ_ds_filtrd = (dJ_ds - thresh0) * (dJ_ds >= thresh0)
-        obj_value = w0 * jnp.sum(dJ_ds_filtrd) + w1 * jnp.max(dJ_ds_filtrd)
+        obj_value = w0 * jnp.sum(dJ_ds_filtrd, axis=jnp.array([1, 2])) + w1 * jnp.max(
+            dJ_ds_filtrd, axis=jnp.array([1, 2])
+        )
 
         obj.build()
         np.testing.assert_allclose(obj.compute(eq.params_dict), obj_value)

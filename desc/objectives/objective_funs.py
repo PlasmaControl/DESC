@@ -487,7 +487,7 @@ class ObjectiveFunction(IOAble):
                                 [_vi for _vi in vi], xi, constants=const
                             ).T
                         )
-                J_rank = np.hstack(J_rank)
+                J_rank = np.vstack(J_rank)
                 nvtx.end_range(rng_rank)
                 self.comm.gather(J_rank, root=0)
 

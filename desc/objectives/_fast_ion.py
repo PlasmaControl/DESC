@@ -3,7 +3,6 @@
 import numpy as np
 from orthax.legendre import leggauss
 
-from desc.backend import jnp
 from desc.compute import get_profiles, get_transforms
 from desc.compute.utils import _compute as compute_fun
 from desc.grid import LinearGrid
@@ -614,8 +613,13 @@ class MaximumJ(_Objective):
 
         # Shifted ReLU operation
         dJ_ds_filtrd = (dJ_ds - thresh0) * (dJ_ds >= thresh0)
-        results = w0 * jnp.sum(dJ_ds_filtrd, axis=jnp.array([1, 2])) + w1 * jnp.max(
-            dJ_ds_filtrd, axis=jnp.array([1, 2])
+
+        # RG: doing something like this will throw ConcretizationTypeError
+        # --no-verify jnp.sum(dJ_ds_filtrd, axis=jnp.array([1, 2]))
+
+        # so we do this
+        results = w0 * dJ_ds_filtrd.sum(axis=(1, 2)) + w1 * dJ_ds_filtrd.max(
+            axis=(1, 2)
         )
 
         return results

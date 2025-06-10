@@ -444,8 +444,6 @@ class ObjectiveFunction(IOAble):
         ----------
         x : ndarray
             State vector.
-        constants : list
-            Constant parameters passed to sub-objectives.
 
         Returns
         -------
@@ -468,8 +466,6 @@ class ObjectiveFunction(IOAble):
         ----------
         x : ndarray
             State vector.
-        constants : list
-            Constant parameters passed to sub-objectives.
 
         Returns
         -------
@@ -492,8 +488,6 @@ class ObjectiveFunction(IOAble):
         ----------
         x : ndarray
             State vector.
-        constants : list
-            Constant parameters passed to sub-objectives.
 
         Returns
         -------
@@ -519,8 +513,6 @@ class ObjectiveFunction(IOAble):
         ----------
         x : ndarray
             State vector.
-        constants : list
-            Constant parameters passed to sub-objectives.
 
         Returns
         -------
@@ -540,8 +532,6 @@ class ObjectiveFunction(IOAble):
             State vector.
         x0 : ndarray, optional
             Initial state vector before optimization.
-        constants : list
-            Constant parameters passed to sub-objectives.
 
         Returns
         -------
@@ -745,9 +735,6 @@ class ObjectiveFunction(IOAble):
             The number of vectors given determines the order of derivative taken.
         x : ndarray
             Optimization variables.
-        constants : list
-            Constant parameters passed to sub-objectives.
-
         """
         if self._deriv_mode == "batched":
             J = self._jvp_batched(v, x, "scaled")
@@ -766,9 +753,6 @@ class ObjectiveFunction(IOAble):
             The number of vectors given determines the order of derivative taken.
         x : ndarray
             Optimization variables.
-        constants : list
-            Constant parameters passed to sub-objectives.
-
         """
         if self._deriv_mode == "batched":
             J = self._jvp_batched(v, x, "scaled_error")
@@ -787,9 +771,6 @@ class ObjectiveFunction(IOAble):
             The number of vectors given determines the order of derivative taken.
         x : ndarray
             Optimization variables.
-        constants : list
-            Constant parameters passed to sub-objectives.
-
         """
         if self._deriv_mode == "batched":
             J = self._jvp_batched(v, x, "unscaled")
@@ -811,9 +792,6 @@ class ObjectiveFunction(IOAble):
             Vector to left-multiply the Jacobian by.
         x : ndarray
             Optimization variables.
-        constants : list
-            Constant parameters passed to sub-objectives.
-
         """
         return self._vjp(v, x, "scaled")
 
@@ -827,11 +805,8 @@ class ObjectiveFunction(IOAble):
             Vector to left-multiply the Jacobian by.
         x : ndarray
             Optimization variables.
-        constants : list
-            Constant parameters passed to sub-objectives.
-
         """
-        return self._vjp(v, x, constants, "scaled_error")
+        return self._vjp(v, x, "scaled_error")
 
     @jit
     def vjp_unscaled(self, v, x):
@@ -843,11 +818,8 @@ class ObjectiveFunction(IOAble):
             Vector to left-multiply the Jacobian by.
         x : ndarray
             Optimization variables.
-        constants : list
-            Constant parameters passed to sub-objectives.
-
         """
-        return self._vjp(v, x, constants, "unscaled")
+        return self._vjp(v, x, "unscaled")
 
     def compile(self, mode="auto", verbose=1):
         """Call the necessary functions to ensure the function is compiled.
@@ -884,31 +856,31 @@ class ObjectiveFunction(IOAble):
 
         if mode in ["scalar", "bfgs", "all"]:
             timer.start("Objective compilation time")
-            _ = self.compute_scalar(x, self.constants).block_until_ready()
+            _ = self.compute_scalar(x).block_until_ready()
             timer.stop("Objective compilation time")
             if verbose > 1:
                 timer.disp("Objective compilation time")
 
             timer.start("Gradient compilation time")
-            _ = self.grad(x, self.constants).block_until_ready()
+            _ = self.grad(x).block_until_ready()
             timer.stop("Gradient compilation time")
             if verbose > 1:
                 timer.disp("Gradient compilation time")
         if mode in ["scalar", "all"]:
             timer.start("Hessian compilation time")
-            _ = self.hess(x, self.constants).block_until_ready()
+            _ = self.hess(x).block_until_ready()
             timer.stop("Hessian compilation time")
             if verbose > 1:
                 timer.disp("Hessian compilation time")
         if mode in ["lsq", "all"]:
             timer.start("Objective compilation time")
-            _ = self.compute_scaled_error(x, self.constants).block_until_ready()
+            _ = self.compute_scaled_error(x).block_until_ready()
             timer.stop("Objective compilation time")
             if verbose > 1:
                 timer.disp("Objective compilation time")
 
             timer.start("Jacobian compilation time")
-            _ = self.jac_scaled_error(x, self.constants).block_until_ready()
+            _ = self.jac_scaled_error(x).block_until_ready()
             timer.stop("Jacobian compilation time")
             if verbose > 1:
                 timer.disp("Jacobian compilation time")
@@ -917,11 +889,6 @@ class ObjectiveFunction(IOAble):
         if verbose > 1:
             timer.disp("Total compilation time")
         self._compiled = True
-
-    @property
-    def constants(self):
-        """list: constant parameters for each sub-objective."""
-        return [obj.constants for obj in self.objectives]
 
     @property
     def objectives(self):
@@ -1246,7 +1213,7 @@ class _Objective(IOAble, ABC):
 
     def _scale(self, f, *args, **kwargs):
         """Apply weighting, normalization etc."""
-        constants = kwargs.get("constants", self.constants)
+        constants = self.constants
         if constants is None:
             w = jnp.ones_like(f)
         else:
@@ -1308,13 +1275,13 @@ class _Objective(IOAble, ABC):
             chunk_size=self._jac_chunk_size,
         )(*args, **kwargs)
 
-    def _jvp(self, v, x, constants=None, op="scaled"):
+    def _jvp(self, v, x, op="scaled"):
         v = ensure_tuple(v)
         x = ensure_tuple(x)
         assert len(x) == len(v)
 
         if self._deriv_mode == "fwd":
-            fun = lambda *x: getattr(self, "compute_" + op)(*x, constants=constants)
+            fun = lambda *x: getattr(self, "compute_" + op)(*x)
             jvpfun = lambda *dx: Derivative.compute_jvp(
                 fun, tuple(range(len(x))), dx, *x
             )
@@ -1324,7 +1291,7 @@ class _Objective(IOAble, ABC):
             )(*v)
         else:  # rev mode. We compute full jacobian and manually do mv. In this case
             # the jacobian should be wide so this isn't very expensive.
-            jac = getattr(self, "jac_" + op)(*x, constants=constants)
+            jac = getattr(self, "jac_" + op)(*x)
             # jac is a tuple, 1 array for each thing. Transposes here and below make it
             # equivalent to fwd mode above, which batches over the first axis
             Jv = tree_map(lambda a, b: jnp.dot(a, b.T), jac, v)
@@ -1341,11 +1308,8 @@ class _Objective(IOAble, ABC):
             Vectors to right-multiply the Jacobian by.
         x : tuple of ndarray
             Optimization variables.
-        constants : list
-            Constant parameters passed to sub-objectives.
-
         """
-        return self._jvp(v, x, constants, "scaled")
+        return self._jvp(v, x, "scaled")
 
     @jit
     def jvp_scaled_error(self, v, x):
@@ -1357,11 +1321,8 @@ class _Objective(IOAble, ABC):
             Vectors to right-multiply the Jacobian by.
         x : tuple of ndarray
             Optimization variables.
-        constants : list
-            Constant parameters passed to sub-objectives.
-
         """
-        return self._jvp(v, x, constants, "scaled_error")
+        return self._jvp(v, x, "scaled_error")
 
     @jit
     def jvp_unscaled(self, v, x):
@@ -1373,11 +1334,8 @@ class _Objective(IOAble, ABC):
             Vectors to right-multiply the Jacobian by.
         x : tuple of ndarray
             Optimization variables.
-        constants : list
-            Constant parameters passed to sub-objectives.
-
         """
-        return self._jvp(v, x, constants, "unscaled")
+        return self._jvp(v, x, "unscaled")
 
     def print_value(self, args, args0=None, **kwargs):  # noqa: C901
         """Print the value of the objective and return a dict of values."""
@@ -1426,7 +1384,7 @@ class _Objective(IOAble, ABC):
 
         else:
             # try to do weighted mean if possible
-            constants = kwargs.get("constants", self.constants)
+            constants = self.constants
             if constants is None:
                 w = jnp.ones_like(f)
             else:

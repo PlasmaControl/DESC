@@ -137,9 +137,6 @@ class FusionPower(_Objective):
         params : dict
             Dictionary of equilibrium or surface degrees of freedom, eg
             Equilibrium.params_dict
-        constants : dict
-            Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
 
         Returns
         -------
@@ -298,9 +295,6 @@ class HeatingPowerISS04(_Objective):
         params : dict
             Dictionary of equilibrium or surface degrees of freedom, eg
             Equilibrium.params_dict
-        constants : dict
-            Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
 
         Returns
         -------

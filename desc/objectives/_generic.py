@@ -172,8 +172,6 @@ class ExternalObjective(_Objective):
         ----------
         params : list of dict
             List of dictionaries of degrees of freedom, eg CoilSet.params_dict
-        constants : dict
-            Unused by this Objective.
 
         Returns
         -------
@@ -299,9 +297,6 @@ class GenericObjective(_Objective):
         ----------
         params : dict
             Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
-        constants : dict
-            Dictionary of constant data, eg transforms, profiles etc.
-            Defaults to self.constants
 
         Returns
         -------
@@ -415,9 +410,6 @@ class LinearObjectiveFromUser(_FixedObjective):
         ----------
         params : dict
             Dictionary of equilibrium degrees of freedom, eg thing.params_dict
-        constants : dict
-            Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
 
         Returns
         -------
@@ -594,9 +586,6 @@ class ObjectiveFromUser(_Objective):
         ----------
         params : dict
             Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
-        constants : dict
-            Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
 
         Returns
         -------

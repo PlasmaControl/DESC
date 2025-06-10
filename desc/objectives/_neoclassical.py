@@ -238,9 +238,6 @@ class EffectiveRipple(_Objective):
         params : dict
             Dictionary of equilibrium degrees of freedom, e.g.
             ``Equilibrium.params_dict``.
-        constants : dict
-            Dictionary of constant data, e.g. transforms, profiles etc.
-            Defaults to ``self.constants``.
 
         Returns
         -------
@@ -249,7 +246,7 @@ class EffectiveRipple(_Objective):
 
         """
         if self._spline:
-            return self._compute_spline(params, constants)
+            return self._compute_spline(params)
 
         constants = self.constants
         eq = self.things[0]

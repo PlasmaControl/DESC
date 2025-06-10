@@ -205,9 +205,6 @@ class VacuumBoundaryError(_Objective):
             Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
         field_params : dict
             Dictionary of field parameters, if field is not fixed.
-        constants : dict
-            Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
 
         Returns
         -------
@@ -256,7 +253,7 @@ class VacuumBoundaryError(_Objective):
         f = self.compute_unscaled(*args, **kwargs)
         f0 = self.compute_unscaled(*args0, **kwargs) if args0 is not None else f
         # try to do weighted mean if possible
-        constants = kwargs.get("constants", self.constants)
+        constants = self.constants
         if constants is None:
             w = jnp.ones_like(f)
         else:
@@ -665,9 +662,6 @@ class BoundaryError(_Objective):
             Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
         field_params : dict
             Dictionary of field parameters, if field is not fixed.
-        constants : dict
-            Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
 
         Returns
         -------
@@ -775,7 +769,7 @@ class BoundaryError(_Objective):
         f = self.compute_unscaled(*args, **kwargs)
         f0 = self.compute_unscaled(*args0, **kwargs) if args0 is not None else f
         # try to do weighted mean if possible
-        constants = kwargs.get("constants", self.constants)
+        constants = self.constants
         if constants is None:
             w = jnp.ones_like(f)
         else:
@@ -1030,9 +1024,6 @@ class BoundaryErrorNESTOR(_Objective):
         ----------
         params : dict
             Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
-        constants : dict
-            Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
 
         Returns
         -------

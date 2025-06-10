@@ -466,19 +466,19 @@ class TestObjectiveFunction:
         # precise_QA should have lower QA than QH
         obj = QuasisymmetryTwoTerm(eq=eq1, helicity=helicity_QA)
         obj.build()
-        f1 = obj.compute_scalar(*obj.xs(eq1), constants=obj.constants)
+        f1 = obj.compute_scalar(*obj.xs(eq1))
         obj.helicity = helicity_QH
         obj.build()
-        f2 = obj.compute_scalar(*obj.xs(eq1), constants=obj.constants)
+        f2 = obj.compute_scalar(*obj.xs(eq1))
         assert f1 < f2
 
         # precise_QH should have lower QH than QA
         obj = QuasisymmetryTwoTerm(eq=eq2, helicity=helicity_QH)
         obj.build()
-        f1 = obj.compute_scalar(*obj.xs(eq2), constants=obj.constants)
+        f1 = obj.compute_scalar(*obj.xs(eq2))
         obj.helicity = helicity_QA
         obj.build()
-        f2 = obj.compute_scalar(*obj.xs(eq2), constants=obj.constants)
+        f2 = obj.compute_scalar(*obj.xs(eq2))
         assert f1 < f2
 
     @pytest.mark.unit

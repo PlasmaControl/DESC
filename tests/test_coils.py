@@ -5,7 +5,7 @@ import shutil
 import numpy as np
 import pytest
 import scipy
-import scipy.constants
+from scipy.constants import mu_0
 
 from desc.backend import jnp
 from desc.coils import (
@@ -44,8 +44,8 @@ class TestCoil:
         y = 1
         I = 1e7
 
-        By_true = scipy.constants.mu_0 / 2 * R**2 * I / (y**2 + R**2) ** (3 / 2)
-        Bz_true = scipy.constants.mu_0 / 2 * R**2 * I / (y**2 + R**2) ** (3 / 2)
+        By_true = mu_0 / 2 * R**2 * I / (y**2 + R**2) ** (3 / 2)
+        Bz_true = mu_0 / 2 * R**2 * I / (y**2 + R**2) ** (3 / 2)
 
         B_true_xyz = np.atleast_2d([0, By_true, 0])
         grid_xyz = np.atleast_2d([10, y, 0])
@@ -265,7 +265,7 @@ class TestCoil:
             # error in original paper and apparently in Jackson EM book too.
             theta = np.pi / 2
             arg = R**2 + r**2 + 2 * r * R * np.sin(theta)
-            term_1_num = I * R * scipy.constants.mu_0 / np.pi
+            term_1_num = I * R * mu_0 / np.pi
             term_1_den = np.sqrt(arg)
             k_sqd = 4 * r * R * np.sin(theta) / arg
             term_2_num = (2 - k_sqd) * scipy.special.ellipk(
@@ -413,7 +413,7 @@ class TestCoil:
         y = 1
         I = 1e7
         B_Z = 2  # add constant vertical field of 2T
-        By_true = scipy.constants.mu_0 / 2 * R**2 * I / (y**2 + R**2) ** (3 / 2)
+        By_true = mu_0 / 2 * R**2 * I / (y**2 + R**2) ** (3 / 2)
         B_true = np.array([0, By_true, 2])
         coil = FourierXYZCoil(I)
 
@@ -430,7 +430,7 @@ class TestCoil:
         y = 1
         I = 1e7
         B_Z = 2  # add constant vertical field of 2T
-        By_true = scipy.constants.mu_0 / 2 * R**2 * I / (y**2 + R**2) ** (3 / 2)
+        By_true = mu_0 / 2 * R**2 * I / (y**2 + R**2) ** (3 / 2)
         B_true = np.array([0, By_true, 2])
         coil = FourierXYZCoil(I)
         coilset = CoilSet(coil)
@@ -531,7 +531,7 @@ class TestCoilSet:
         z = np.linspace(0, 10, 10)
         I = 1e7
         n = 10
-        Bz_true = np.sum(scipy.constants.mu_0 / 2 * R**2 * I / (z**2 + R**2) ** (3 / 2))
+        Bz_true = np.sum(mu_0 / 2 * R**2 * I / (z**2 + R**2) ** (3 / 2))
         B_true = np.array([0, 0, Bz_true])
         coil = FourierRZCoil(0.1)
         coils = CoilSet.linspaced_linear(
@@ -553,7 +553,7 @@ class TestCoilSet:
         R = 10
         N = 50
         I = 1e7
-        Bp_true = np.sum(scipy.constants.mu_0 * N * I / 2 / np.pi / R)
+        Bp_true = np.sum(mu_0 * N * I / 2 / np.pi / R)
         B_true = np.array([0, Bp_true, 0])
         coil = FourierPlanarCoil()
         coil.current = I
@@ -581,7 +581,7 @@ class TestCoilSet:
         R = 10
         N = 48
         I = 1e7
-        Bp_true = np.sum(scipy.constants.mu_0 * N * I / 2 / np.pi / R)
+        Bp_true = np.sum(mu_0 * N * I / 2 / np.pi / R)
         B_true = np.array([0, Bp_true, 0])
         coil = FourierPlanarCoil(I)
         coils = CoilSet.linspaced_angular(coil, angle=np.pi / 2, n=N // 4)

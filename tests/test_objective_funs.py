@@ -69,6 +69,7 @@ from desc.objectives import (
     LinearObjectiveFromUser,
     LinkingCurrentConsistency,
     MagneticWell,
+    MaximumJ,
     MeanCurvature,
     MercierStability,
     MirrorRatio,
@@ -2002,7 +2003,7 @@ class TestObjectiveFunction:
         num_quad = 16
         num_pitch = 16
         data = eq.compute(
-            ["effective ripple", "Gamma_c"],
+            ["effective ripple", "Gamma_c", "J_s"],
             grid=grid,
             theta=Bounce2D.compute_theta(eq, X=X, Y=Y, rho=rho),
             num_transit=num_transit,
@@ -2041,6 +2042,30 @@ class TestObjectiveFunction:
         np.testing.assert_allclose(
             obj.compute(eq.params_dict), grid.compress(data["Gamma_c"])
         )
+
+        obj = MaximumJ(
+            eq,
+            grid=grid,
+            X=X,
+            Y=Y,
+            num_transit=num_transit,
+            num_quad=num_quad,
+            num_pitch=num_pitch,
+            jac_chunk_size=1,
+        )
+
+        w0 = obj._w0
+        w1 = obj._w1
+        thresh0 = obj._thresh0
+        dJ_ds = grid.compress(data["J_s"])
+        # Shifted ReLU operation
+        dJ_ds_filtrd = (dJ_ds - thresh0) * (dJ_ds >= thresh0)
+        obj_value = w0 * jnp.sum(dJ_ds_filtrd, axis=jnp.array([1, 2])) + w1 * jnp.max(
+            dJ_ds_filtrd, axis=jnp.array([1, 2])
+        )
+
+        obj.build()
+        np.testing.assert_allclose(obj.compute(eq.params_dict), obj_value)
 
     @pytest.mark.unit
     def test_generic_with_kwargs(self):
@@ -3111,7 +3136,7 @@ def test_loss_function_asserts():
 
 def _reduced_resolution_objective(eq, objective, **kwargs):
     """Speed up testing suite by defining rules to reduce objective resolution."""
-    if objective in {EffectiveRipple, GammaC}:
+    if objective in {EffectiveRipple, GammaC, MaximumJ}:
         kwargs["X"] = 8
         kwargs["Y"] = 16
         kwargs["num_transit"] = 4
@@ -3971,6 +3996,17 @@ class TestObjectiveNaNGrad:
         g = obj.grad(obj.x())
         assert not np.any(np.isnan(g))
         obj = ObjectiveFunction(_reduced_resolution_objective(eq, GammaC, spline=True))
+        obj.build(verbose=0)
+        g = obj.grad(obj.x())
+        assert not np.any(np.isnan(g))
+
+    @pytest.mark.unit
+    def test_objective_no_nangrad_MaximumJ(self):
+        """MaximumJ."""
+        eq = get("ESTELL")
+        with pytest.warns(UserWarning, match="Reducing radial"):
+            eq.change_resolution(2, 2, 2, 4, 4, 4)
+        obj = ObjectiveFunction(_reduced_resolution_objective(eq, MaximumJ))
         obj.build(verbose=0)
         g = obj.grad(obj.x())
         assert not np.any(np.isnan(g))

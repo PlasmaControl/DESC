@@ -359,3 +359,267 @@ class GammaC(_Objective):
             **self._hyperparam,
         )
         return grid.compress(data[self._key])
+
+
+class MaximumJ(_Objective):
+    """Proxy for TEM(Trapped Electron Mode) stability.
+
+    TEMs are excited when a drift wave resonates with the precession of the electrons
+    along a flux surface. To avoid this resonance and further destabilitzation of
+    electrons, we want to ensure that the direction of precession of electrons is
+    opposite to that of the drift waves. This property is called max-J for some
+    reason.
+
+    References
+    ----------
+    Destabilization of the trapped-electron mode by magnetic curvature drift resonances
+    Adam, Tang, Rutherford, PoF, 1976
+    https://doi.org/10.1063/1.861489
+
+    Notes
+    -----
+    Normalization scheme must be understood better before deploying this proxy
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        ``Equilibrium`` to be optimized.
+    grid : Grid
+        Tensor-product grid in (ρ, θ, ζ) with uniformly spaced nodes
+        (θ, ζ) ∈ [0, 2π) × [0, 2π/NFP).
+        Number of poloidal and toroidal nodes preferably rounded down to powers of two.
+        Determines the flux surfaces to compute on and resolution of FFTs.
+        Default grid samples the boundary surface at ρ=1.
+    X : int
+        Poloidal Fourier grid resolution to interpolate the poloidal coordinate.
+        Preferably rounded down to power of 2.
+    Y : int
+        Toroidal Chebyshev grid resolution to interpolate the poloidal coordinate.
+        Preferably rounded down to power of 2.
+    Y_B : int
+        Desired resolution for algorithm to compute bounce points.
+        Default is double ``Y``. Something like 100 is usually sufficient.
+        Currently, this is the number of knots per toroidal transit over
+        to approximate B with cubic splines.
+    alpha : np.ndarray
+        Shape (num alpha, ).
+        Starting field line poloidal labels.
+        Default is single field line. To compute a surface average
+        on a rational surface, it is necessary to average over multiple
+        field lines until the surface is covered sufficiently.
+    num_transit : int
+        Number of toroidal transits to follow field line.
+    num_well : int
+        Maximum number of wells to detect for each pitch and field line.
+        Giving ``None`` will detect all wells but due to current limitations in
+        JAX this will have worse performance.
+        Specifying a number that tightly upper bounds the number of wells will
+        increase performance. In general, an upper bound on the number of wells
+        per toroidal transit is ``Aι+B`` where ``A``, ``B`` are the poloidal and
+        toroidal Fourier resolution of B, respectively, in straight-field line
+        PEST coordinates, and ι is the rotational transform normalized by 2π.
+        A tighter upper bound than ``num_well=(Aι+B)*num_transit`` is preferable.
+        The ``check_points`` or ``plot`` methods in ``desc.integrals.Bounce2D``
+        are useful to select a reasonable value.
+    num_quad : int
+        Resolution for quadrature of bounce integrals. Default is 32.
+    num_pitch : int
+        Resolution for quadrature over velocity coordinate. Default is 64.
+    pitch_batch_size : int
+        Number of pitch values with which to compute simultaneously.
+        If given ``None``, then ``pitch_batch_size`` is ``num_pitch``.
+        Default is ``num_pitch``.
+    surf_batch_size : int
+        Number of flux surfaces with which to compute simultaneously.
+        If given ``None``, then ``surf_batch_size`` is ``grid.num_rho``.
+        Default is ``1``. Only consider increasing if ``pitch_batch_size`` is ``None``.
+    thresh0 : float
+        Threshold for penalizing precession drift in metric above.
+    w0, w1 : float
+        Weights for sum and max terms in metric above.
+
+    """
+
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``target=-0.06``.",
+        bounds_default="``target=-0.06``.",
+        normalize_detail=" Note: Has no effect for this objective.",
+        normalize_target_detail=" Note: Has no effect for this objective.",
+        overwrite=_bounce_overwrite,
+    )
+
+    _coordinates = "r"
+    _units = "~"
+    _print_value_fmt = "max-J: "
+
+    def __init__(
+        self,
+        eq,
+        *,
+        target=None,
+        bounds=None,
+        w0=1,
+        w1=4,
+        thresh0=-0.06,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        loss_function=None,
+        deriv_mode="auto",
+        jac_chunk_size=None,
+        name="maxJ",
+        grid=None,
+        X=16,
+        Y=32,
+        # Y_B is expensive to increase if one does not fix num well per transit.
+        Y_B=None,
+        alpha=np.array([0.0]),
+        num_transit=20,
+        num_well=None,
+        num_quad=32,
+        num_pitch=64,
+        pitch_batch_size=None,
+        surf_batch_size=1,
+    ):
+        if target is None and bounds is None:
+            target = -0.06
+
+        self._grid = grid
+
+        self._X = X
+        self._Y = Y
+        Y_B = setdefault(Y_B, 2 * Y)
+        self._thresh0 = thresh0
+        self._w0 = w0
+        self._w1 = w1
+
+        self._constants = {
+            "quad_weights": 1.0,
+            "alpha": alpha,
+            "thresh0": self._thresh0,
+            "w0": self._w0,
+            "w1": self._w1,
+        }
+
+        self._hyperparam = {
+            "Y_B": Y_B,
+            "num_transit": num_transit,
+            "num_well": setdefault(num_well, Y_B * num_transit),
+            "num_quad": num_quad,
+            "num_pitch": num_pitch,
+            "pitch_batch_size": pitch_batch_size,
+            "surf_batch_size": surf_batch_size,
+        }
+        self._key = "J_s"
+
+        super().__init__(
+            things=eq,
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            loss_function=loss_function,
+            deriv_mode=deriv_mode,
+            name=name,
+            jac_chunk_size=jac_chunk_size,
+        )
+
+    def build(self, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        eq = self.things[0]
+        if self._grid is None:
+            self._grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False)
+        assert self._grid.can_fft2
+        self._constants["clebsch"] = FourierChebyshevSeries.nodes(
+            self._X,
+            self._Y,
+            self._grid.compress(self._grid.nodes[:, 0]),
+            domain=(0, 2 * np.pi),
+        )
+        self._constants["fieldline quad"] = leggauss(self._hyperparam["Y_B"] // 2)
+        self._constants["quad"] = get_quadrature(
+            leggauss(self._hyperparam.pop("num_quad")),
+            (automorphism_sin, grad_automorphism_sin),
+        )
+        self._dim_f = self._grid.num_rho
+        self._target, self._bounds = _parse_callable_target_bounds(
+            self._target, self._bounds, self._grid.compress(self._grid.nodes[:, 0])
+        )
+        self._constants["transforms"] = get_transforms(self._key, eq, grid=self._grid)
+        self._constants["profiles"] = get_profiles(self._key, eq, grid=self._grid)
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, params, constants=None):
+        """Compute dJ_ds.
+
+        Parameters
+        ----------
+        params : dict
+            Dictionary of equilibrium degrees of freedom, e.g.
+            ``Equilibrium.params_dict``.
+        constants : dict
+            Dictionary of constant data, e.g. transforms, profiles etc.
+            Defaults to ``self.constants``.
+
+        Returns
+        -------
+        dJ_ds : ndarray
+            maxJ proxy a function of the flux surface label.
+
+        """
+        if constants is None:
+            constants = self.constants
+        eq = self.things[0]
+        data = compute_fun(
+            eq, "iota", params, constants["transforms"], constants["profiles"]
+        )
+        # TODO (#1034): Use old theta values as initial guess.
+        theta = Bounce2D.compute_theta(
+            eq,
+            self._X,
+            self._Y,
+            iota=constants["transforms"]["grid"].compress(data["iota"]),
+            clebsch=constants["clebsch"],
+            # Pass in params so that root finding is done with the new
+            # perturbed λ coefficients and not the original equilibrium's.
+            params=params,
+        )
+        data = compute_fun(
+            eq,
+            self._key,
+            params,
+            constants["transforms"],
+            constants["profiles"],
+            data,
+            theta=theta,
+            alpha=constants["alpha"],
+            fieldline_quad=constants["fieldline quad"],
+            quad=constants["quad"],
+            **self._hyperparam,
+        )
+        dJ_ds = constants["transforms"]["grid"].compress(data[self._key])
+
+        thresh0, w0, w1 = constants["thresh0"], constants["w0"], constants["w1"]
+
+        # Shifted ReLU operation
+        dJ_ds_filtrd = (dJ_ds - thresh0) * (dJ_ds >= thresh0)
+
+        # RG: doing something like this will throw ConcretizationTypeError
+        # --no-verify jnp.sum(dJ_ds_filtrd, axis=jnp.array([1, 2]))
+
+        # so we do this
+        results = w0 * dJ_ds_filtrd.sum(axis=(1, 2)) + w1 * dJ_ds_filtrd.max(
+            axis=(1, 2)
+        )
+
+        return results

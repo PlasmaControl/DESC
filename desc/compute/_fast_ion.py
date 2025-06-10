@@ -10,6 +10,7 @@ from ..batching import batch_map
 from ..integrals.bounce_integral import Bounce2D
 from ..integrals.quad_utils import (
     automorphism_sin,
+    chebgauss2,
     get_quadrature,
     grad_automorphism_sin,
 )
@@ -211,6 +212,12 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
     return data
 
 
+def _adiabatic_J_num(data, B, pitch):
+    """Numerator of the second adiabatic invariant J||."""
+    # v_∥/ (√2E/m)
+    return jnp.sqrt(jnp.abs(1 - pitch * B))
+
+
 def _radial_drift(data, B, pitch):
     return safediv(
         data["cvdrift0"] * (1 - 0.5 * pitch * B), jnp.sqrt(jnp.abs(1 - pitch * B))
@@ -221,6 +228,18 @@ def _poloidal_drift(data, B, pitch):
     return safediv(
         (data["gbdrift (periodic)"] + data["gbdrift (secular)/phi"] * data["zeta"])
         * (1 - 0.5 * pitch * B),
+        jnp.sqrt(jnp.abs(1 - pitch * B)),
+    )
+
+
+def _binormal_drift(data, B, pitch):
+    return safediv(
+        (data["gbdrift (periodic)"] + data["gbdrift (secular)/phi"] * data["zeta"])
+        * (1 - 0.5 * pitch * B)
+        + (
+            data["cvdrift (periodic)"] - data["gbdrift (periodic)"]
+        )  # pressure gradient term
+        * (1 - pitch * B),
         jnp.sqrt(jnp.abs(1 - pitch * B)),
     )
 
@@ -297,6 +316,7 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
     fl_quad = (
         kwargs["fieldline_quad"] if "fieldline_quad" in kwargs else leggauss(Y_B // 2)
     )
+
     quad = (
         kwargs["quad"]
         if "quad" in kwargs
@@ -324,7 +344,7 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
                 [_v_tau, _radial_drift, _poloidal_drift],
                 pitch_inv,
                 data,
-                ["cvdrift0", "gbdrift (periodic)", "gbdrift (secular)/phi"],
+                ["gbdrift (periodic)", "gbdrift (secular)/phi", "cvdrift0"],
                 bounce.points(pitch_inv, num_well),
                 is_fourier=True,
             )
@@ -353,4 +373,454 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
         num_pitch,
         surf_batch_size,
     )
+    return data
+
+
+@register_compute_fun(
+    name="adiabatic J",
+    label=(  # J_∥ = ∫ dl v_∥/ (√2E/m) )/∫ dl
+        "\\J_{\\parallel} = \\integrate v_{\\parallel} dl/\\integrate dl/B"
+    ),
+    units="~",
+    units_long="~",
+    description="Normalized second adiabatic invariant of motion.",
+    coordinates="r",
+    dim=1,
+    profiles=[],
+    params=[],
+    transforms={"grid": []},
+    data=["min_tz |B|", "max_tz |B|", "R0"] + Bounce2D.required_names,
+    resolution_requirement="tz",
+    grid_requirement={"can_fft2": True},
+    **_bounce_doc,
+)
+@partial(
+    jit,
+    static_argnames=[
+        "Y_B",
+        "num_transit",
+        "num_well",
+        "num_quad",
+        "num_pitch",
+        "pitch_batch_size",
+        "surf_batch_size",
+        "spline",
+    ],
+)
+def _adiabatic_J(params, transforms, profiles, data, **kwargs):
+    """Second adiabatic invariant of particle motion.
+
+    The normalization requires a length for which we have used the fieldline
+    length ∫ dl.
+    Typically calculated as a function of (rho, alpha, lambda)
+    """
+    # noqa: unused dependency
+    theta = kwargs["theta"]
+    Y_B = kwargs.get("Y_B", theta.shape[-1] * 2)
+    alpha = kwargs.get("alpha", jnp.array([0.0]))
+    num_transit = kwargs.get("num_transit", 20)
+    num_pitch = kwargs.get("num_pitch", 64)
+    num_well = kwargs.get("num_well", Y_B * num_transit)
+    pitch_batch_size = kwargs.get("pitch_batch_size", None)
+    surf_batch_size = kwargs.get("surf_batch_size", 1)
+    assert (
+        surf_batch_size == 1 or pitch_batch_size is None
+    ), f"Expected pitch_batch_size to be None, got {pitch_batch_size}."
+    spline = kwargs.get("spline", True)
+    quad = (
+        kwargs["quad"]
+        if "quad" in kwargs
+        else get_quadrature(
+            chebgauss2(kwargs.get("num_quad", 32)),
+            (automorphism_sin, grad_automorphism_sin),
+        )
+    )
+
+    def adiabatic_J0(data):
+        bounce = Bounce2D(
+            grid,
+            data,
+            data["theta"],
+            Y_B,
+            alpha,
+            num_transit,
+            quad,
+            is_fourier=True,
+            spline=spline,
+        )
+
+        def fun(pitch_inv):
+            adiabatic_J = bounce.integrate(
+                [_adiabatic_J_num],
+                pitch_inv,
+                data,
+                [],
+                bounce.points(pitch_inv, num_well),
+                is_fourier=True,
+            )
+            # Jpar sum over wells
+            Jpar_wellsum = jnp.sum(adiabatic_J, axis=-1)
+            return Jpar_wellsum
+
+        # We normalize with (2 pi R0)
+        return batch_map(fun, data["pitch_inv"], pitch_batch_size)
+
+    grid = transforms["grid"]
+    data["adiabatic J"] = _compute(
+        adiabatic_J0,
+        {},
+        data,
+        theta,
+        grid,
+        num_pitch,
+        surf_batch_size,
+    ) / (2 * jnp.pi * num_transit * data["R0"])
+    return data
+
+
+@register_compute_fun(
+    name="<v_dot_grads>",
+    label=(  # <v⋅∇s> = ∮ dl/|v_∥| (v_d ⋅ ∇s), s=ρ²
+        "\\langle v \\cdot \\nabla s \\rangle"
+    ),
+    units="~",
+    units_long="m^{-2}",
+    description="Bounce integrated radial drift.",
+    coordinates="r",
+    dim=1,
+    profiles=[],
+    transforms={"grid": []},
+    params=[],
+    data=[
+        "min_tz |B|",
+        "max_tz |B|",
+        "cvdrift0",
+        "R0",
+    ]
+    + Bounce2D.required_names,
+    resolution_requirement="tz",
+    grid_requirement={"can_fft2": True},
+    **_bounce_doc,
+)
+@partial(
+    jit,
+    static_argnames=[
+        "Y_B",
+        "num_transit",
+        "num_well",
+        "num_quad",
+        "num_pitch",
+        "pitch_batch_size",
+        "surf_batch_size",
+        "spline",
+    ],
+)
+def _bounceavg_v_dot_grads(params, transforms, profiles, data, **kwargs):
+    """Direct measure of omnigenity.
+
+    Exactly equivalent to the bounce-averaged radial drift.
+    """
+    # noqa: unused dependency
+    theta = kwargs["theta"]
+    Y_B = kwargs.get("Y_B", theta.shape[-1] * 2)
+    alpha = kwargs.get("alpha", jnp.array([0.0]))
+    num_transit = kwargs.get("num_transit", 20)
+    num_pitch = kwargs.get("num_pitch", 64)
+    num_well = kwargs.get("num_well", Y_B * num_transit)
+    pitch_batch_size = kwargs.get("pitch_batch_size", None)
+    surf_batch_size = kwargs.get("surf_batch_size", 1)
+    assert (
+        surf_batch_size == 1 or pitch_batch_size is None
+    ), f"Expected pitch_batch_size to be None, got {pitch_batch_size}."
+    spline = kwargs.get("spline", True)
+    fl_quad = (
+        kwargs["fieldline_quad"] if "fieldline_quad" in kwargs else leggauss(Y_B // 2)
+    )
+    quad = (
+        kwargs["quad"]
+        if "quad" in kwargs
+        else get_quadrature(
+            leggauss(kwargs.get("num_quad", 32)),
+            (automorphism_sin, grad_automorphism_sin),
+        )
+    )
+
+    def v_dot_grads0(data):
+        bounce = Bounce2D(
+            grid,
+            data,
+            data["theta"],
+            Y_B,
+            alpha,
+            num_transit,
+            quad,
+            is_fourier=True,
+            spline=spline,
+        )
+
+        def fun(pitch_inv):
+            v_tau, radial_drift = bounce.integrate(
+                [_v_tau, _radial_drift],
+                pitch_inv,
+                data,
+                ["cvdrift0"],
+                bounce.points(pitch_inv, num_well),
+                is_fourier=True,
+            )
+            # Take sum over wells, then divide
+            v_dot_grads = safediv(
+                jnp.sum(radial_drift, axis=-1), jnp.sum(v_tau, axis=-1)
+            )
+
+            # Now take max in alpha (max radial excursion)
+            # Negative or positive radial excursion is both departure
+            # from omnigenity, hence the abs
+            return v_dot_grads
+
+        return (
+            batch_map(fun, data["pitch_inv"], pitch_batch_size)
+            / bounce.compute_fieldline_length(fl_quad)[:, None, None]
+        )
+
+    grid = transforms["grid"]
+    data["<v_dot_grads>"] = _compute(
+        v_dot_grads0,
+        {
+            "cvdrift0": data["cvdrift0"],
+        },
+        data,
+        theta,
+        grid,
+        num_pitch,
+        surf_batch_size,
+    )
+    # )--no-verify / (2 * jnp.pi * num_transit * data["R0"])
+    return data
+
+
+@register_compute_fun(
+    name="J_alpha",
+    label=(  # ∂_α J_∥ /∫dl = ∮ dl/|v_∥| (v_d ⋅ ∇s) /∫dl, s=ρ²
+        "\\partial_{\\alpha} \\J_{\\parallel}"
+    ),
+    units="~",
+    units_long="m^{-2}",
+    description="Bounce-averaged radial drift.",
+    coordinates="r",
+    dim=1,
+    profiles=[],
+    transforms={"grid": []},
+    params=[],
+    data=[
+        "min_tz |B|",
+        "max_tz |B|",
+        "cvdrift0",
+        "R0",
+        "<v_dot_grads>",
+    ]
+    + Bounce2D.required_names,
+    resolution_requirement="tz",
+    grid_requirement={"can_fft2": True},
+    **_bounce_doc,
+)
+@partial(
+    jit,
+    static_argnames=[
+        "Y_B",
+        "num_transit",
+        "num_well",
+        "num_quad",
+        "num_pitch",
+        "pitch_batch_size",
+        "surf_batch_size",
+        "spline",
+    ],
+)
+def _dJ_dalpha(params, transforms, profiles, data, **kwargs):
+    """Direct measure of omnigenity.
+
+    Exactly equivalent to the bounce-averaged radial drift.
+    """
+    # noqa: unused dependency
+    theta = kwargs["theta"]
+    Y_B = kwargs.get("Y_B", theta.shape[-1] * 2)
+    alpha = kwargs.get("alpha", jnp.array([0.0]))
+    num_transit = kwargs.get("num_transit", 20)
+    num_pitch = kwargs.get("num_pitch", 64)
+    pitch_batch_size = kwargs.get("pitch_batch_size", None)
+    surf_batch_size = kwargs.get("surf_batch_size", 1)
+    assert (
+        surf_batch_size == 1 or pitch_batch_size is None
+    ), f"Expected pitch_batch_size to be None, got {pitch_batch_size}."
+    spline = kwargs.get("spline", True)
+    fl_quad = (
+        kwargs["fieldline_quad"] if "fieldline_quad" in kwargs else leggauss(Y_B // 2)
+    )
+    quad = (
+        kwargs["quad"]
+        if "quad" in kwargs
+        else get_quadrature(
+            leggauss(kwargs.get("num_quad", 32)),
+            (automorphism_sin, grad_automorphism_sin),
+        )
+    )
+
+    def dJ_dalpha0(data):
+        bounce = Bounce2D(
+            grid,
+            data,
+            data["theta"],
+            Y_B,
+            alpha,
+            num_transit,
+            quad,
+            is_fourier=True,
+            spline=spline,
+        )
+
+        # Find the most "leaky"/"lossy" fieldline and pick that,
+        # then integrate over the pitch angle
+        return jnp.sum(
+            jnp.max(jnp.abs(data["radial_drift"]), axis=1)
+            * data["pitch_inv weight"]
+            / data["pitch_inv"] ** 2,
+            axis=-1,
+        ) / bounce.compute_fieldline_length(fl_quad)
+
+    grid = transforms["grid"]
+
+    fourier_transformed_data = {}
+    data["J_alpha"] = _compute(
+        dJ_dalpha0,
+        fourier_transformed_data,
+        data,
+        theta,
+        grid,
+        num_pitch,
+        surf_batch_size,
+        radial_drift=grid.compress(data["<v_dot_grads>"]),
+    )
+    # )--no-verify / (2 * jnp.pi * num_transit * data["R0"])
+    return data
+
+
+@register_compute_fun(
+    name="J_s",
+    label=(
+        # ∂ₛJ_∥ /max|∂ₛJ_∥| = - ∫ dl/|v_∥| (v_d ⋅ ∇α) /max|∫ dl/|v_∥| (v_d ⋅ ∇α)|
+        "\\partial_{\\s} \\J_{\\parallel}/\\oint dl"
+    ),
+    units="~",
+    units_long="m-1",
+    description="max-J term, bounce-integrated binormal drift",
+    coordinates="r",
+    dim=1,
+    profiles=[],
+    transforms={"grid": []},
+    params=[],
+    data=[
+        "min_tz |B|",
+        "max_tz |B|",
+        "gbdrift (periodic)",
+        "gbdrift (secular)/phi",
+        "cvdrift (periodic)",
+    ]
+    + Bounce2D.required_names,
+    resolution_requirement="tz",
+    grid_requirement={"can_fft2": True},
+    **_bounce_doc,
+)
+@partial(
+    jit,
+    static_argnames=[
+        "Y_B",
+        "num_transit",
+        "num_well",
+        "num_quad",
+        "num_pitch",
+        "pitch_batch_size",
+        "surf_batch_size",
+        "spline",
+    ],
+)
+def _dJ_ds(params, transforms, profiles, data, **kwargs):
+    """The max-J term.
+
+    Bounce-averaged binormal drift.
+    Normalization has been chosen to eliminate dependence on
+    num_transits.
+    """
+    # noqa: unused dependency
+    theta = kwargs["theta"]
+    Y_B = kwargs.get("Y_B", theta.shape[-1] * 2)
+    alpha = kwargs.get("alpha", jnp.array([0.0]))
+    num_transit = kwargs.get("num_transit", 20)
+    num_pitch = kwargs.get("num_pitch", 64)
+    num_well = kwargs.get("num_well", Y_B * num_transit)
+    pitch_batch_size = kwargs.get("pitch_batch_size", None)
+    surf_batch_size = kwargs.get("surf_batch_size", 1)
+    assert (
+        surf_batch_size == 1 or pitch_batch_size is None
+    ), f"Expected pitch_batch_size to be None, got {pitch_batch_size}."
+    spline = kwargs.get("spline", True)
+    quad = (
+        kwargs["quad"]
+        if "quad" in kwargs
+        else get_quadrature(
+            leggauss(kwargs.get("num_quad", 32)),
+            (automorphism_sin, grad_automorphism_sin),
+        )
+    )
+
+    def dJ_ds0(data):
+        bounce = Bounce2D(
+            grid,
+            data,
+            data["theta"],
+            Y_B,
+            alpha,
+            num_transit,
+            quad,
+            is_fourier=True,
+            spline=spline,
+        )
+
+        def fun(pitch_inv):
+            poloidal_drift = bounce.integrate(
+                [_poloidal_drift],
+                pitch_inv,
+                data,
+                ["cvdrift (periodic)", "gbdrift (periodic)", "gbdrift (secular)/phi"],
+                bounce.points(pitch_inv, num_well),
+                is_fourier=True,
+            )
+
+            # Take sum over wells
+            dJ_ds = jnp.sum(poloidal_drift, axis=-1)
+
+            # max drift < 0 provides TEM(trapped electron mode)
+            # stability for all rhos and pitches
+            return dJ_ds
+
+        # Output dimension (rho, alpha, lambda)
+        return batch_map(fun, data["pitch_inv"], pitch_batch_size)
+
+    grid = transforms["grid"]
+    data["J_s"] = -1 * _compute(
+        dJ_ds0,
+        {
+            "cvdrift (periodic)": data["cvdrift (periodic)"],
+            "gbdrift (periodic)": data["gbdrift (periodic)"],
+            "gbdrift (secular)/phi": data["gbdrift (secular)/phi"],
+        },
+        data,
+        theta,
+        grid,
+        num_pitch,
+        surf_batch_size,
+    )
+
+    # Since there isn't a standard method of normalization, I choose this.
+    # Gives the right result (J_s < 0 everywhere) for Goodman's elongated QI.
+    data["J_s"] = data["J_s"]
     return data

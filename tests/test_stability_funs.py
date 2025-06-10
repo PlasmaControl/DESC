@@ -688,16 +688,18 @@ def test_ballooning_stability_eval():
         X0_full = data["ideal ballooning eigenfunction"]
 
         assert np.shape(lam2_full) == (
+            1,
             N_alpha,
             N_zeta0,
             1,
         ), "output eigenvalue spectrum does not have the right shape"
 
         assert np.shape(X0_full) == (
+            1,
             N_alpha,
             N_zeta0,
-            1,
             N_zeta - 2,
+            1,
         ), "output eigenfunction spectrum does not have the right shape"
 
         lam2 = jnp.max(lam2_full)
@@ -708,12 +710,12 @@ def test_ballooning_stability_eval():
 
         if lam2 > 0:
             assert Newcomb_metric <= 0, (
-                "Newcomb metric indicates stabiliy for an unstable equilibrium, "
+                "Newcomb metric indicates stability for an unstable equilibrium, "
                 f"surface = {rho}, lam = {lam2}, newcomb = {Newcomb_metric}"
             )
         else:
             assert Newcomb_metric > 0, (
-                "Newcomb metric indicates instabiliy for a stable equilibrium, "
+                "Newcomb metric indicates instability for a stable equilibrium, "
                 f"surface = {rho}, lam = {lam2}, newcomb = {Newcomb_metric}"
             )
 

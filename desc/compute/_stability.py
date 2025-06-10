@@ -9,6 +9,7 @@ computational grid has a node on the magnetic axis to avoid potentially
 expensive computations.
 """
 
+import numpy as np
 from scipy.constants import mu_0
 
 from desc.backend import jax, jit, jnp, scan, vmap
@@ -332,6 +333,18 @@ def _ideal_ballooning_lambda(params, transforms, profiles, data, **kwargs):
     dz = dz[1] - dz[0]
 
     # higher dimensional maps
+    c = (
+        constant2
+        * mu_0
+        * data["p_r"]
+        / data["psi_r"]
+        * jnp.sign(data["psi"])
+        / data["B^zeta"]
+        * (
+            2 * data["rho"] ** 2 * data["cvdrift"]
+            - data["shear"] * data["cvdrift0"] * zeta0
+        )
+    )
     gds2 = (
         data["rho"] ** 2 * data["g^aa"]
         - 2
@@ -344,18 +357,6 @@ def _ideal_ballooning_lambda(params, transforms, profiles, data, **kwargs):
     )
     f = (constant1 / data["|B|^2"] / data["B^zeta"]) * gds2
     g = (constant2 / data["|B|^2"] * data["B^zeta"]) * gds2
-    g_half = (g[..., 1:] + g[..., :-1]) / 2
-    c = (
-        (constant2 * mu_0)
-        * data["p_r"]
-        / data["psi_r"]
-        * jnp.sign(data["psi"])
-        / data["B^zeta"]
-        * (
-            2 * data["rho"] ** 2 * data["cvdrift"]
-            - data["shear"] * data["cvdrift0"] * zeta0
-        )
-    )
 
     def reshape(f):
         assert f.shape == (zeta0.size, grid.num_nodes)
@@ -363,17 +364,29 @@ def _ideal_ballooning_lambda(params, transforms, profiles, data, **kwargs):
         assert f.shape == (grid.num_rho, grid.num_alpha, zeta0.size, grid.num_zeta)
         return f
 
-    f, g_half, c = map(reshape, (f, g_half, c))
+    f, g, c = map(reshape, (f, g, c))
+    g_half = (g[..., 1:] + g[..., :-1]) / 2
+    diag_inner = c[..., 1:-1] - (g_half[..., 1:] + g_half[..., :-1]) / dz**2
+    diag_outer = g_half[..., 1:-1] / dz**2
 
-    j = jnp.arange(grid.num_zeta - 2)
-    diag_inner = c[..., 1:-1] - (g_half[..., 1:-1] + g_half[..., 2:]) / dz**2
-    diag_outer = g_half[..., 1:-2] / dz**2
-    A = jnp.zeros(
-        (grid.num_rho, grid.num_alpha, zeta0.size, grid.num_zeta - 2, grid.num_zeta - 2)
+    j = np.arange(grid.num_zeta - 2)
+    A = (
+        jnp.zeros(
+            (
+                grid.num_rho,
+                grid.num_alpha,
+                zeta0.size,
+                grid.num_zeta - 2,
+                grid.num_zeta - 2,
+            )
+        )
+        .at[..., j, j]
+        .set(diag_inner, indices_are_sorted=True, unique_indices=True)
+        .at[..., j[:-1], j[1:]]
+        .set(diag_outer, indices_are_sorted=True, unique_indices=True)
+        .at[..., j[1:], j[:-1]]
+        .set(diag_outer, indices_are_sorted=True, unique_indices=True)
     )
-    A = A.at[..., j, j].set(diag_inner)
-    A = A.at[..., j[:-1], j[1:]].set(diag_outer)
-    A = A.at[..., j[1:], j[:-1]].set(diag_outer)
 
     # TODO: Issue #1750
     # Try jax.scipy.eigh_tridiagonal or a better solver for improved performance

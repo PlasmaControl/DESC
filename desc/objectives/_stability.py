@@ -6,7 +6,7 @@ from desc.backend import jnp
 from desc.compute import get_profiles, get_transforms
 from desc.compute.utils import _compute as compute_fun
 from desc.grid import LinearGrid
-from desc.utils import Timer, setdefault, warnif
+from desc.utils import ResolutionWarning, Timer, setdefault, warnif
 
 from .normalization import compute_scaling_factors
 from .objective_funs import _Objective, collect_docs
@@ -116,13 +116,13 @@ class MercierStability(_Objective):
 
         warnif(
             (grid.num_theta * (1 + eq.sym)) < 2 * eq.M,
-            RuntimeWarning,
+            ResolutionWarning,
             "MercierStability objective grid requires poloidal "
             "resolution for surface averages",
         )
         warnif(
             grid.num_zeta < 2 * eq.N,
-            RuntimeWarning,
+            ResolutionWarning,
             "MercierStability objective grid requires toroidal "
             "resolution for surface averages",
         )
@@ -273,13 +273,13 @@ class MagneticWell(_Objective):
 
         warnif(
             (grid.num_theta * (1 + eq.sym)) < 2 * eq.M,
-            RuntimeWarning,
+            ResolutionWarning,
             "MagneticWell objective grid requires poloidal "
             "resolution for surface averages",
         )
         warnif(
             grid.num_zeta < 2 * eq.N,
-            RuntimeWarning,
+            ResolutionWarning,
             "MagneticWell objective grid requires toroidal "
             "resolution for surface averages",
         )
@@ -358,7 +358,7 @@ class BallooningStability(_Objective):
     eq : Equilibrium
         ``Equilibrium`` to be optimized.
     rho : float
-        Flux surface to optimize on.
+        Flux surface to optimize on. Should include the last closed flux surface.
     alpha : float, ndarray
         Field line labels to optimize. Values should be in [0, 2π). Default is
         ``alpha=0`` for axisymmetric equilibria, or 8 field lines linearly spaced
@@ -469,6 +469,14 @@ class BallooningStability(_Objective):
             rho=self._rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym
         )
         assert not iota_grid.axis.size
+        warnif(
+            not np.isclose(iota_grid.nodes[iota_grid.unique_rho_idx[-1]], 1),
+            ResolutionWarning,
+            "This objective strongly depends on accurate computation of length scale "
+            "quantities. This implementation requires that the grid contains a flux "
+            "surface near the boundary to achieve this. "
+            "Please include a surface near or at rho=1.",
+        )
         self._dim_f = iota_grid.num_rho
         transforms = get_transforms(self._iota_keys, eq, iota_grid)
         profiles = get_profiles(

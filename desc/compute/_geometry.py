@@ -155,7 +155,7 @@ def _V_rrr_of_r(params, transforms, profiles, data, **kwargs):
 
 def _compute_A_of_z(grid, data, extrap=False, mean=False, expand_out=False):
     if "A(z)" in data and mean:
-        return jnp.mean(grid.compress(data["A(z)"]), surface_label="zeta")
+        return jnp.mean(grid.compress(data["A(z)"], surface_label="zeta"))
 
     max_rho = jnp.max(data["rho"])
     if isinstance(grid, QuadratureGrid) or "n_rho" not in data:  # TODO(#1761)

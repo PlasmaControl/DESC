@@ -3,6 +3,7 @@
 import numpy as np
 from orthax.legendre import leggauss
 
+from desc.backend import jnp
 from desc.compute import get_profiles, get_transforms
 from desc.compute.utils import _compute as compute_fun
 from desc.grid import LinearGrid
@@ -210,24 +211,22 @@ class EffectiveRipple(_Objective):
         if self._grid is None:
             self._grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False)
         assert self._grid.can_fft2
-        self._constants["clebsch"] = FourierChebyshevSeries.nodes(
-            self._X,
-            self._Y,
-            self._grid.compress(self._grid.nodes[:, 0]),
-            domain=(0, 2 * np.pi),
-        )
-        self._constants["fieldline quad"] = leggauss(self._hyperparam["Y_B"] // 2)
-        self._constants["quad"] = chebgauss2(self._hyperparam.pop("num_quad"))
         self._dim_f = self._grid.num_rho
         self._target, self._bounds = _parse_callable_target_bounds(
             self._target, self._bounds, self._grid.compress(self._grid.nodes[:, 0])
         )
-        self._constants["transforms"] = get_transforms(
-            "effective ripple", eq, grid=self._grid
-        )
-        self._constants["profiles"] = get_profiles(
-            "effective ripple", eq, grid=self._grid
-        )
+        self._constants = {
+            "clebsch": FourierChebyshevSeries.nodes(
+                self._X,
+                self._Y,
+                self._grid.compress(self._grid.nodes[:, 0]),
+                domain=(0, 2 * np.pi),
+            ),
+            "fieldline quad": leggauss(self._hyperparam["Y_B"] // 2),
+            "quad": chebgauss2(self._hyperparam.pop("num_quad")),
+            "transforms": get_transforms("effective ripple", eq, grid=self._grid),
+            "profiles": get_profiles("effective ripple", eq, grid=self._grid),
+        }
         super().build(use_jit=use_jit, verbose=verbose)
 
     def compute(self, params):
@@ -295,20 +294,19 @@ class EffectiveRipple(_Objective):
         if self._grid is None:
             self._grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
         assert self._grid.is_meshgrid and eq.sym == self._grid.sym
-        self._constants["rho"] = self._grid.compress(self._grid.nodes[:, 0])
-        self._constants["zeta"] = np.linspace(
-            0, 2 * np.pi * num_transit, Y_B * num_transit
-        )
-        self._constants["quad"] = chebgauss2(self._hyperparam.pop("num_quad"))
         self._dim_f = self._grid.num_rho
+
+        self._constants = {
+            "rho": self._grid.compress(self._grid.nodes[:, 0]),
+            "zeta": jnp.linspace(0, 2 * jnp.pi * num_transit, Y_B * num_transit),
+            "quad": chebgauss2(self._hyperparam.pop("num_quad")),
+            "transforms_1dr": get_transforms(self._keys_1dr, eq, self._grid),
+            "profiles": get_profiles(
+                self._keys_1dr + ["old effective ripple"], eq, self._grid
+            ),
+        }
         self._target, self._bounds = _parse_callable_target_bounds(
             self._target, self._bounds, self._constants["rho"]
-        )
-        self._constants["transforms_1dr"] = get_transforms(
-            self._keys_1dr, eq, self._grid
-        )
-        self._constants["profiles"] = get_profiles(
-            self._keys_1dr + ["old effective ripple"], eq, self._grid
         )
         super().build(use_jit=use_jit, verbose=verbose)
 

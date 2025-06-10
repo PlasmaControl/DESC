@@ -231,16 +231,15 @@ def fmin_auglag(  # noqa: C901
         hess,
         constraint,
         bounds,
-        *args,
     )
 
-    def lagfun(f, c, y, mu, *args):
+    def lagfun(f, c, y, mu):
         return f - jnp.dot(y, c) + jnp.sum(mu / 2 * c * c)
 
-    def laggrad(z, y, mu, *args):
-        c = constraint_wrapped.fun(z, *args)
-        yJ = constraint_wrapped.vjp(y - mu * c, z, *args)
-        return grad_wrapped(z, *args) - yJ
+    def laggrad(z, y, mu):
+        c = constraint_wrapped.fun(z)
+        yJ = constraint_wrapped.vjp(y - mu * c, z)
+        return grad_wrapped(z) - yJ
 
     if isinstance(hess_wrapped, str) and hess_wrapped.lower() == "bfgs":
         bfgs = True
@@ -265,10 +264,10 @@ def fmin_auglag(  # noqa: C901
     elif callable(constraint_wrapped.hess) and callable(hess_wrapped):
         bfgs = False
 
-        def laghess(z, y, mu, *args):
-            c = constraint_wrapped.fun(z, *args)
-            Hf = hess_wrapped(z, *args)
-            Jc = constraint_wrapped.jac(z, *args)
+        def laghess(z, y, mu):
+            c = constraint_wrapped.fun(z)
+            Hf = hess_wrapped(z)
+            Jc = constraint_wrapped.jac(z)
             Hc1 = constraint_wrapped.hess(z, y)
             Hc2 = constraint_wrapped.hess(z, c * mu)
             return Hf - Hc1 + Hc2 + jnp.dot(mu * Jc.T, Jc)
@@ -276,9 +275,9 @@ def fmin_auglag(  # noqa: C901
     elif callable(hess_wrapped):
         bfgs = False
 
-        def laghess(z, y, mu, *args):
-            H = hess_wrapped(z, *args)
-            J = constraint_wrapped.jac(z, *args)
+        def laghess(z, y, mu):
+            H = hess_wrapped(z)
+            J = constraint_wrapped.jac(z)
             # ignoring higher order derivatives of constraints for now
             return H + jnp.dot(mu * J.T, J)
 
@@ -294,8 +293,8 @@ def fmin_auglag(  # noqa: C901
     iteration = 0
 
     z = z0.copy()
-    f = fun_wrapped(z, *args)
-    c = constraint_wrapped.fun(z, *args)
+    f = fun_wrapped(z)
+    c = constraint_wrapped.fun(z)
     constr_violation = jnp.linalg.norm(c, ord=jnp.inf)
     nfev += 1
 
@@ -307,19 +306,19 @@ def fmin_auglag(  # noqa: C901
     mu = options.pop("initial_penalty_parameter", 10 * jnp.ones_like(c))
     y = options.pop("initial_multipliers", jnp.zeros_like(c))
     if y == "least_squares":  # use least squares multiplier estimates
-        _J = constraint_wrapped.jac(z, *args)
-        _g = grad_wrapped(z, *args)
+        _J = constraint_wrapped.jac(z)
+        _g = grad_wrapped(z)
         y = jnp.linalg.lstsq(_J.T, _g)[0]
         y = jnp.nan_to_num(y, nan=0.0, posinf=0.0, neginf=0.0)
     y, mu, c = jnp.broadcast_arrays(y, mu, c)
 
     L = lagfun(f, c, y, mu)
-    g = laggrad(z, y, mu, *args)
+    g = laggrad(z, y, mu)
     ngev += 1
     if bfgs:
         H = laghess.get_matrix()
     else:
-        H = laghess(z, y, mu, *args)
+        H = laghess(z, y, mu)
         nhev += 1
 
     allx = []
@@ -479,8 +478,8 @@ def fmin_auglag(  # noqa: C901
             step_norm = jnp.linalg.norm(step, ord=2)
 
             z_new = make_strictly_feasible(z + step, lb, ub, rstep=0)
-            f_new = fun_wrapped(z_new, *args)
-            c_new = constraint_wrapped.fun(z_new, *args)
+            f_new = fun_wrapped(z_new)
+            c_new = constraint_wrapped.fun(z_new)
             L_new = lagfun(f_new, c_new, y, mu)
             nfev += 1
 
@@ -537,13 +536,13 @@ def fmin_auglag(  # noqa: C901
             constr_violation = jnp.linalg.norm(c, ord=jnp.inf)
             L = L_new
             g_old = g
-            g = laggrad(z, y, mu, *args)
+            g = laggrad(z, y, mu)
             ngev += 1
             if bfgs:
                 laghess.update(z - z_old, g - g_old)
                 H = laghess.get_matrix()
             else:
-                H = laghess(z, y, mu, *args)
+                H = laghess(z, y, mu)
                 nhev += 1
 
             if hess_scale:
@@ -566,14 +565,14 @@ def fmin_auglag(  # noqa: C901
                     gtolk = max(omega / (jnp.mean(mu) ** alpha_omega), gtol)
                 # if we update lagrangian params, need to recompute L and J
                 L = lagfun(f, c, y, mu)
-                g = laggrad(z, y, mu, *args)
+                g = laggrad(z, y, mu)
                 ngev += 1
 
                 if bfgs:
                     laghess.update(z - z_old, g - g_old)
                     H = laghess.get_matrix()
                 else:
-                    H = laghess(z, y, mu, *args)
+                    H = laghess(z, y, mu)
                     nhev += 1
 
                 if hess_scale:

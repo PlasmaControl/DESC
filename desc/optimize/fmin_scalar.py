@@ -190,9 +190,9 @@ def fmintr(  # noqa: C901
     assert in_bounds(x, lb, ub), "x0 is infeasible"
     x = make_strictly_feasible(x, lb, ub)
 
-    f = fun(x, *args)
+    f = fun(x)
     nfev += 1
-    g = grad(x, *args)
+    g = grad(x)
     ngev += 1
 
     if isinstance(hess, str) and hess.lower() == "bfgs":

@@ -175,12 +175,12 @@ def lsqtr(  # noqa: C901
     assert in_bounds(x, lb, ub), "x0 is infeasible"
     x = make_strictly_feasible(x, lb, ub)
 
-    f = fun(x, *args)
+    f = fun(x)
     nfev += 1
     cost = 0.5 * jnp.dot(f, f)
     # block is needed for jaxify util which uses jax functions inside
     # jax.pure_callback and gets stuck due to async dispatch
-    J = jac(x, *args).block_until_ready()
+    J = jac(x).block_until_ready()
     njev += 1
     g = jnp.dot(J.T, f)
 

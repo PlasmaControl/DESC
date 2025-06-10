@@ -96,9 +96,9 @@ def sgd(
     N = x0.size
     x = x0.copy()
     v = jnp.zeros_like(x)
-    f = fun(x, *args)
+    f = fun(x)
     nfev += 1
-    g = grad(x, *args)
+    g = grad(x)
     ngev += 1
 
     maxiter = setdefault(maxiter, N * 100)

@@ -1,6 +1,8 @@
 Changelog
 =========
 
+- Removes `constants` argument from the methods of `_Objective` and `ObjectiveFunction` classes. This was not necessary, and the code will still work if user doesn't pass it.
+
 New Features
 
 - Updates ``Equilibrium`` initial guess to use geometric center as the axis. This will allow non-convex cross-sections to be initialized without having to solve to achieve nested surfaces.

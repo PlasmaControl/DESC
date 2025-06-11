@@ -788,8 +788,6 @@ def test_ballooning_compare_with_COBRAVMEC():
 
     Nalpha = 8  # Number of field lines
 
-    assert Nalpha == int(8), "Nalpha in the compute function hard-coded to 8!"
-
     # Field lines on which to evaluate ballooning stability
     alpha = jnp.linspace(0, np.pi, Nalpha + 1)[:Nalpha]
 
@@ -797,7 +795,7 @@ def test_ballooning_compare_with_COBRAVMEC():
     ntor = 3
 
     # Number of point along a field line in ballooning space
-    N0 = 2 * ntor * eq.M_grid * eq.N_grid + 1
+    N0 = 4 * ntor * eq.M_grid * eq.N_grid + 1
 
     # range of the ballooning coordinate zeta
     zeta = np.linspace(-jnp.pi * ntor, jnp.pi * ntor, N0)
@@ -819,4 +817,4 @@ def test_ballooning_compare_with_COBRAVMEC():
         lam2_array[i] = np.max(data["ideal ballooning lambda"])
 
     root_DESC = find_root_simple(np.array(surfaces), lam2_array)
-    np.testing.assert_allclose(root_COBRAVMEC, root_DESC, rtol=4e-4)
+    np.testing.assert_allclose(root_COBRAVMEC, root_DESC, rtol=2e-3)

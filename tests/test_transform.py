@@ -254,7 +254,7 @@ class TestTransform:
 
     @pytest.mark.slow
     @pytest.mark.unit
-    @pytest.mark.parametrize("method", ["direct2", "fft"])
+    @pytest.mark.parametrize("method", ["direct2", "direct3", "fft"])
     def test_transform_methods_equal(self, method):
         """Tests that different methods for transform gives the same results."""
         L = 4

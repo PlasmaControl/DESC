@@ -143,7 +143,11 @@ class Transform(IOAble):
             },
             "fft": {i: {j: {} for j in range(n + 1)} for i in range(n + 1)},
             "fft2": {i: {} for i in range(n + 1)},
-            "direct2": {i: {} for i in range(n + 1)},
+            "direct2rt": {i: {j: {} for j in range(n + 1)} for i in range(n + 1)},
+            "direct2z": {i: {} for i in range(n + 1)},
+            "direct3r": {i: {} for i in range(n + 1)},
+            "direct3t": {i: {} for i in range(n + 1)},
+            "direct3z": {i: {} for i in range(n + 1)},
         }
         return matrices
 
@@ -203,8 +207,8 @@ class Transform(IOAble):
         self.lm_modes = basis.modes[basis.unique_LM_idx, :2]
         self.num_lm_modes = self.lm_modes.shape[0]  # number of radial/poloidal modes
         self.num_n_modes = 2 * basis.N + 1  # number of toroidal modes
-        self.pad_dim = self.grid.num_zeta - self.num_n_modes
-        self.dk = basis.NFP * np.arange(-basis.N, basis.N + 1).reshape((1, -1))
+        self.pad_dimz = self.grid.num_zeta - self.num_n_modes
+        self.dkz = basis.NFP * np.arange(-basis.N, basis.N + 1).reshape((1, -1))
         offset = np.min(basis.modes[:, 2]) + basis.N  # N for sym="cos", 0 otherwise
         row = np.where(
             (basis.modes[:, None, :2] == self.lm_modes[None, :, :]).all(axis=-1)
@@ -253,12 +257,12 @@ class Transform(IOAble):
             )
             self.method = "fft"
             return
-        if grid.num_theta < 2 * basis.M + 1:
+        if grid.num_poloidal < 2 * basis.M + 1:
             warnings.warn(
                 colored(
                     "fft2 method can not undersample in theta, "
                     + "num_poloidal_modes={}, num_poloidal_angles={}, ".format(
-                        basis.M, grid.num_theta
+                        basis.M, grid.num_poloidal
                     )
                     + "falling back to fft method",
                     "yellow",
@@ -316,8 +320,10 @@ class Transform(IOAble):
         self.lm_modes = basis.modes[basis.unique_LM_idx, :2]
         self.num_lm_modes = self.lm_modes.shape[0]  # number of radial/poloidal modes
         self.num_n_modes = 2 * basis.N + 1  # number of toroidal modes
-        self.pad_dim = self.grid.num_zeta - self.num_n_modes
-        self.dk = basis.NFP * np.arange(-basis.N, basis.N + 1).reshape((1, -1))
+        self.pad_dimz = self.grid.num_zeta - self.num_n_modes
+        self.pad_dimt = self.grid.num_poloidal - (2 * self.basis.M + 1)
+        self.dkz = basis.NFP * np.arange(-basis.N, basis.N + 1).reshape((1, -1))
+        self.dkt = np.arange(-basis.M, basis.M + 1).reshape((1, -1))
         offset = np.min(basis.modes[:, 2]) + basis.N  # N for sym="cos", 0 otherwise
         row = np.where(
             (basis.modes[:, None, :2] == self.lm_modes[None, :, :]).all(axis=-1)
@@ -381,18 +387,72 @@ class Transform(IOAble):
         col = np.where(
             basis.modes[None, :, 2] == basis.modes[basis.unique_N_idx, None, 2]
         )[0]
-        self.fft_index = np.atleast_1d(np.squeeze(self.num_n_modes * row + col))
-        fft_nodes = np.hstack(
+        self.dftz_index = np.atleast_1d(np.squeeze(self.num_n_modes * row + col))
+        dftrt_nodes = np.hstack(
             [
                 grid.nodes[:, :2][: grid.num_nodes // grid.num_zeta],
                 np.zeros((grid.num_nodes // grid.num_zeta, 1)),
             ]
         )
-        self.fft_grid = Grid(fft_nodes, sort=False, jitable=True, axis_shift=0)
-        dft_nodes = np.hstack(
+        self.dftrt_grid = Grid(dftrt_nodes, sort=False, jitable=True, axis_shift=0)
+        dftz_nodes = np.hstack(
             [np.zeros((self.zeta_nodes.size, 2)), self.zeta_nodes[:, np.newaxis]]
         )
-        self.dft_grid = Grid(dft_nodes, sort=False, jitable=True, axis_shift=0)
+        self.dftz_grid = Grid(dftz_nodes, sort=False, jitable=True, axis_shift=0)
+
+    def _check_inputs_direct3(self, grid, basis):
+        """Check that inputs are formatted correctly for direct3 method."""
+        if grid.num_nodes == 0 or basis.num_modes == 0:
+            # trivial case where we just return all zeros, so it doesn't matter
+            self._method = "direct1"
+            return
+
+        if not (grid.is_meshgrid):
+            warnings.warn(
+                colored(
+                    "direct3 method requires compatible grid, got {}".format(grid)
+                    + "falling back to direct1 method",
+                    "yellow",
+                )
+            )
+            self.method = "direct1"
+            return
+        if not (basis.fft_toroidal and basis.fft_poloidal):
+            warnings.warn(
+                colored(
+                    "direct3 method requires compatible basis, got {}".format(basis)
+                    + "falling back to direct1 method",
+                    "yellow",
+                )
+            )
+            self.method = "direct1"
+            return
+
+        self._method = "direct3"
+        self.lm_modes = basis.modes[basis.unique_LM_idx, :2]
+        self.m_modes = basis.modes[basis.unique_M_idx, 1]
+        self.n_modes = basis.modes[basis.unique_N_idx, 2]
+        radial_nodes = grid.nodes[grid.unique_rho_idx, 0]
+        poloidal_nodes = grid.nodes[grid.unique_poloidal_idx, 1]
+        toroidal_nodes = grid.nodes[grid.unique_zeta_idx, 2]
+        self.radial_grid = Grid(
+            np.pad(radial_nodes[:, None], ((0, 0), (0, 2))),
+            sort=False,
+            jitable=True,
+            axis_shift=0,
+        )
+        self.poloidal_grid = Grid(
+            np.pad(poloidal_nodes[:, None], ((0, 0), (1, 1))),
+            sort=False,
+            jitable=True,
+            axis_shift=0,
+        )
+        self.toroidal_grid = Grid(
+            np.pad(toroidal_nodes[:, None], ((0, 0), (2, 0))),
+            sort=False,
+            jitable=True,
+            axis_shift=0,
+        )
 
     def build(self):
         """Build the transform matrices for each derivative order."""
@@ -404,46 +464,95 @@ class Transform(IOAble):
             return
 
         if self.method in ["direct1", "jitable"]:
-            for d in self.derivatives:
-                self.matrices["direct1"][d[0]][d[1]][d[2]] = self.basis.evaluate(
-                    self.grid, d
-                )
+            self._build_direct1()
 
-        if self.method in ["fft", "direct2"]:
-            temp_d = np.hstack(
-                [self.derivatives[:, :2], np.zeros((len(self.derivatives), 1))]
-            ).astype(int)
-            temp_modes = np.hstack([self.lm_modes, np.zeros((self.num_lm_modes, 1))])
-            for d in temp_d:
-                self.matrices["fft"][d[0]][d[1]] = self.basis.evaluate(
-                    self.fft_grid, d, modes=temp_modes
-                )
+        if self.method in ["fft"]:
+            self._build_fft()
 
         if self.method in ["fft2"]:
             temp_d = np.hstack(
                 [self.derivatives[:, :1], np.zeros((len(self.derivatives), 2))]
             ).astype(int)
-            temp_modes = np.hstack(
-                [self.l_modes[:, None], np.zeros((self.l_modes.shape[0], 2))]
-            )
+            temp_modes = jnp.pad(self.lm_modes, ((0, 0), (0, 1)))
             for d in temp_d:
-                self.matrices["fft2"][d[0]] = self.basis.evaluate(
-                    self.fft_grid, d, modes=temp_modes
-                )
+                A = self.basis.evaluate(self.fft_grid, d, modes=temp_modes, partial="r")
+                B = jnp.zeros((A.shape[0], self.basis.L + 1, 2 * self.basis.M + 1))
+                B = B.at[:, *self.lm_modes.T].set(A)
+                self.matrices["fft2"][d[0]] = B
 
         if self.method == "direct2":
-            temp_d = np.hstack(
-                [np.zeros((len(self.derivatives), 2)), self.derivatives[:, 2:]]
-            ).astype(int)
-            temp_modes = np.hstack(
-                [np.zeros((self.num_n_modes, 2)), self.n_modes[:, np.newaxis]]
-            )
-            for d in temp_d:
-                self.matrices["direct2"][d[2]] = self.basis.evaluate(
-                    self.dft_grid, d, modes=temp_modes
-                )
+            self._build_direct2()
+        if self.method == "direct3":
+            self._build_direct3()
 
         self._built = True
+
+    def _build_direct1(self):
+        for d in self.derivatives:
+            self.matrices["direct1"][d[0]][d[1]][d[2]] = self.basis.evaluate(
+                self.grid, d
+            )
+
+    def _build_fft(self):
+        temp_modes = np.pad(self.lm_modes, ((0, 0), (0, 1)))
+        for dr in range(self.derivatives[:, 0].max() + 1):
+            for dt in range(self.derivatives[:, 1].max() + 1):
+                if (np.array([dr, dt]) == self.derivatives[:, :2]).all(axis=1).any():
+                    temp_d = np.array([dr, dt, 0]).astype(int)
+                    self.matrices["fft"][dr][dt] = self.basis.evaluate(
+                        self.fft_grid, temp_d, modes=temp_modes, partial="rt"
+                    )
+
+    def _build_direct2(self):
+        temp_modes = np.pad(self.n_modes[:, None], ((0, 0), (2, 0)))
+        for dz in range(self.derivatives[:, 2].max() + 1):
+            if dz in self.derivatives[:, 2]:
+                d = np.array([0, 0, dz]).astype(int)
+                self.matrices["direct2z"][dz] = self.basis.evaluate(
+                    self.dftz_grid, d, modes=temp_modes, partial="z"
+                )
+        temp_modes = np.pad(self.lm_modes, ((0, 0), (0, 1)))
+        for dr in range(self.derivatives[:, 0].max() + 1):
+            for dt in range(self.derivatives[:, 1].max() + 1):
+                if (np.array([dr, dt]) == self.derivatives[:, :2]).all(axis=1).any():
+                    temp_d = np.array([dr, dt, 0]).astype(int)
+                    self.matrices["direct2rt"][dr][dt] = self.basis.evaluate(
+                        self.dftrt_grid, temp_d, modes=temp_modes, partial="rt"
+                    )
+
+    def _build_direct3(self):
+        temp_modes = np.pad(self.n_modes[:, None], ((0, 0), (2, 0)))
+        for dz in range(self.derivatives[:, 2].max() + 1):
+            if dz in self.derivatives[:, 2]:
+                d = np.array([0, 0, dz]).astype(int)
+                A = self.basis.evaluate(
+                    self.toroidal_grid, d, modes=temp_modes, partial="z"
+                )
+                B = jnp.zeros((A.shape[0], 2 * self.basis.N + 1))
+                B = B.at[:, self.basis.modes[self.basis.unique_N_idx, 2]].set(A)
+                self.matrices["direct3z"][dz] = B
+
+        temp_modes = np.pad(self.m_modes[:, None], ((0, 0), (1, 1)))
+        for dt in range(self.derivatives[:, 1].max() + 1):
+            if dt in self.derivatives[:, 1]:
+                d = np.array([0, dt, 0]).astype(int)
+                A = self.basis.evaluate(
+                    self.poloidal_grid, d, modes=temp_modes, partial="t"
+                )
+                B = jnp.zeros((A.shape[0], 2 * self.basis.M + 1))
+                B = B.at[:, self.basis.modes[self.basis.unique_M_idx, 1]].set(A)
+                self.matrices["direct3t"][dt] = B
+
+        temp_modes = np.pad(self.lm_modes, ((0, 0), (0, 1)))
+        for dr in range(self.derivatives[:, 0].max() + 1):
+            if dr in self.derivatives[:, 0]:
+                d = np.array([dr, 0, 0]).astype(int)
+                A = self.basis.evaluate(
+                    self.radial_grid, d, modes=temp_modes, partial="r"
+                )
+                B = jnp.zeros((A.shape[0], self.basis.L + 1, 2 * self.basis.M + 1))
+                B = B.at[:, *self.basis.modes[self.basis.unique_LM_idx, :2].T].set(A)
+                self.matrices["direct3r"][dr] = B
 
     def build_pinv(self):
         """Build the pseudoinverse for fitting."""
@@ -458,13 +567,13 @@ class Transform(IOAble):
         elif self.method == "direct2":
             temp_modes = np.hstack([self.lm_modes, np.zeros((self.num_lm_modes, 1))])
             A = self.basis.evaluate(
-                self.fft_grid, np.array([0, 0, 0]), modes=temp_modes
+                self.dftrt_grid, np.array([0, 0, 0]), modes=temp_modes, partial="rt"
             )
             temp_modes = np.hstack(
                 [np.zeros((self.num_n_modes, 2)), self.n_modes[:, np.newaxis]]
             )
             B = self.basis.evaluate(
-                self.dft_grid, np.array([0, 0, 0]), modes=temp_modes
+                self.dftz_grid, np.array([0, 0, 0]), modes=temp_modes, partial="z"
             )
             self.matrices["pinvA"] = (
                 jnp.linalg.pinv(A, rtol=rcond) if A.size else np.zeros_like(A.T)
@@ -536,23 +645,40 @@ class Transform(IOAble):
             return A @ c
 
         elif self.method == "direct2":
-            A = self.matrices["fft"].get(dr, {}).get(dt, {})
-            B = self.matrices["direct2"].get(dz, {})
+            A = self.matrices["direct2rt"].get(dr, {}).get(dt, {})
+            B = self.matrices["direct2z"].get(dz, {})
             if isinstance(A, dict) or isinstance(B, dict):
                 raise ValueError(
                     colored("Derivative orders are out of initialized bounds", "red")
                 )
             c_mtrx = jnp.zeros((self.num_lm_modes * self.num_n_modes,))
-            c_mtrx = put(c_mtrx, self.fft_index, c).reshape((-1, self.num_n_modes))
+            c_mtrx = put(c_mtrx, self.dftz_index, c).reshape((-1, self.num_n_modes))
             cc = A @ c_mtrx
             return (cc @ B.T).flatten(order="F")
+
+        elif self.method == "direct3":
+            Ar = self.matrices["direct3r"].get(dr, {})
+            At = self.matrices["direct3t"].get(dt, {})
+            Az = self.matrices["direct3z"].get(dz, {})
+            if isinstance(Ar, dict) or isinstance(At, dict) or isinstance(Az, dict):
+                raise ValueError(
+                    colored("Derivative orders are out of initialized bounds", "red")
+                )
+            X = jnp.zeros(
+                (self.basis.L + 1, 2 * self.basis.M + 1, 2 * self.basis.N + 1)
+            )
+            X = X.at[*self.basis.modes.T].set(c)
+
+            X = jnp.einsum("rlm,lmn->rmn", Ar, X)
+            X = jnp.einsum("tm,zn,rmn", At, Az, X)
+            return jnp.moveaxis(X, 0, 1).flatten(order="F")
 
         elif self.method in ["fft", "fft2"]:
             # reshape coefficients
             c_mtrx = jnp.zeros((self.num_lm_modes * self.num_n_modes,))
             c_mtrx = put(c_mtrx, self.fft_index, c).reshape((-1, self.num_n_modes))
             # differentiate
-            c_diff = c_mtrx[:, :: (-1) ** dz] * self.dk**dz * (-1) ** (dz > 1)
+            c_diff = c_mtrx[:, :: (-1) ** dz] * self.dkz**dz * (-1) ** (dz > 1)
             # re-format in complex notation
             c_cplx = (self.grid.num_zeta / 2) * (
                 c_diff[:, self.basis.N + 1 :] - 1j * c_diff[:, self.basis.N - 1 :: -1]
@@ -561,7 +687,7 @@ class Transform(IOAble):
                 (
                     self.grid.num_zeta * c_diff[:, self.basis.N, jnp.newaxis],
                     c_cplx,
-                    jnp.zeros((c_cplx.shape[0], self.pad_dim)),
+                    jnp.zeros((c_cplx.shape[0], self.pad_dimz)),
                     jnp.fliplr(jnp.conj(c_cplx)),
                 )
             )
@@ -586,20 +712,41 @@ class Transform(IOAble):
                     )
 
                 c_fft2 = jnp.zeros(
-                    (self.basis.L + 1, self.grid.num_theta, self.grid.num_zeta),
+                    (self.basis.L + 1, 2 * self.basis.M + 1, self.grid.num_zeta),
                     dtype=(1j * c[:1]).dtype,
                 )
                 l, m = self.lm_modes.T
-                c_fft2 = c_fft2.at[l, m, :].set(c_fft)
-                c_fft2 = c_fft2.at[:, m, :].multiply(
-                    jnp.where(m < 0, -1j, 1)[None, :, None]
-                )
-                c_fft2 = jnp.fft.fft(c_fft2, axis=1).real
+                c_fft2 = c_fft2.at[l, m, :].set(c_fft)  # shape(L, M, zeta)
+                c_fft2 = (
+                    A[:, :, :, None] * c_fft2[None, :, :, :]
+                )  # shape(rho, L, M, zeta)
+                c_fft2 = c_fft2.sum(axis=1)  # sum over L to get shape (rho, M, zeta)
 
-                ffn = (A @ c_fft2.reshape((self.basis.L + 1, -1))).reshape(
-                    (self.grid.num_rho, self.grid.num_theta, self.grid.num_zeta)
+                # move axis to be transformed to the back, flatten other axes
+                c_fft2 = jnp.moveaxis(c_fft2, 1, 2)  # order (rho, zeta, M)
+                c_fft2 = c_fft2.reshape((self.grid.num_rho * self.grid.num_zeta, -1))
+                # now shape (rho*zeta, M)
+                c_diff = c_fft2[:, :: (-1) ** dt] * self.dkt**dt * (-1) ** (dt > 1)
+                # re-format in complex notation
+                c_cplx = (self.grid.num_poloidal / 2) * (
+                    c_diff[:, self.basis.M + 1 :]
+                    - 1j * c_diff[:, self.basis.M - 1 :: -1]
                 )
-                ffn = jnp.moveaxis(ffn, 1, 0).flatten(order="F")
+                c_pad = jnp.hstack(
+                    (
+                        self.grid.num_poloidal * c_diff[:, self.basis.M, jnp.newaxis],
+                        c_cplx,
+                        jnp.zeros((c_cplx.shape[0], self.pad_dimt)),
+                        jnp.fliplr(jnp.conj(c_cplx)),
+                    )
+                )
+                # transform coefficients
+                c_fft = jnp.real(jnp.fft.ifft(c_pad))
+                c_fft = c_fft.reshape(
+                    (self.grid.num_rho, self.grid.num_zeta, self.grid.num_poloidal)
+                )
+
+                ffn = jnp.moveaxis(c_fft, 2, 0).flatten(order="F")
                 return ffn
 
     def fit(self, x):
@@ -628,12 +775,12 @@ class Transform(IOAble):
             Ainv = self.matrices["pinvA"]
             Binv = self.matrices["pinvB"]
             yy = jnp.matmul(Ainv, x.reshape((-1, self.grid.num_zeta), order="F"))
-            c = jnp.matmul(Binv, yy.T).T.flatten()[self.fft_index]
+            c = jnp.matmul(Binv, yy.T).T.flatten()[self.dftz_index]
         elif self.method == "fft":
             Ainv = self.matrices["pinvA"]
             c_fft = jnp.matmul(Ainv, x.reshape((Ainv.shape[1], -1), order="F"))
             c_cplx = jnp.fft.fft(c_fft)
-            c_unpad = c_cplx[:, 1 : (c_cplx.shape[1] - self.pad_dim - 1) // 2 + 1]
+            c_unpad = c_cplx[:, 1 : (c_cplx.shape[1] - self.pad_dimz - 1) // 2 + 1]
             c0 = c_cplx[:, :1].real / self.grid.num_zeta
             c2 = c_unpad.real / (self.grid.num_zeta / 2)
             c1 = -c_unpad.imag[:, ::-1] / (self.grid.num_zeta / 2)
@@ -678,10 +825,10 @@ class Transform(IOAble):
             return jnp.matmul(A.T, y)
 
         elif self.method == "direct2":
-            A = self.matrices["fft"][0][0]
-            B = self.matrices["direct2"][0]
+            A = self.matrices["direct2rt"][0][0]
+            B = self.matrices["direct2z"][0]
             yy = jnp.matmul(A.T, y.reshape((-1, self.grid.num_zeta), order="F"))
-            return jnp.matmul(yy, B).flatten()[self.fft_index]
+            return jnp.matmul(yy, B).flatten()[self.dftz_index]
 
         elif self.method == "fft":
             A = self.matrices["fft"][0][0]
@@ -698,7 +845,7 @@ class Transform(IOAble):
             raise NotImplementedError
 
     def change_resolution(
-        self, grid=None, basis=None, build=True, build_pinv=False, method="auto"
+        self, grid=None, basis=None, build=True, build_pinv=False, method="same"
     ):
         """Re-build the matrices with a new grid and basis.
 
@@ -711,7 +858,7 @@ class Transform(IOAble):
         build : bool
             whether to recompute matrices now or wait until requested
         method : {"auto", "direct1", "direct2", "fft"}
-            method to use for computing transforms
+            method to use for computing transforms. "same" keeps the method the same.
 
         """
         if grid is None:
@@ -727,6 +874,9 @@ class Transform(IOAble):
             self._basis = basis
             self._built = False
             self._built_pinv = False
+        if method == "same":
+            method = self.method
+        # this is needed to trigger recalculation of any hyperparams etc. before build
         self.method = method
         if build:
             self.build()
@@ -880,6 +1030,8 @@ class Transform(IOAble):
             self._check_inputs_fft2(self.grid, self.basis)
         elif method == "direct2":
             self._check_inputs_direct2(self.grid, self.basis)
+        elif method == "direct3":
+            self._check_inputs_direct3(self.grid, self.basis)
         elif method == "direct1":
             self._method = "direct1"
         elif method == "jitable":

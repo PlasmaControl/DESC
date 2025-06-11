@@ -351,11 +351,14 @@ def _ideal_ballooning_lambda(params, transforms, profiles, data, **kwargs):
     g_sup_rr = source_grid.meshgrid_reshape(data["g^rr"], "arz")[None, ...]
 
     gds2 = jnp.reshape(
-        rho**2
-        * (
-            g_sup_aa
-            - 2 * sign_iota * shear / rho * zeta0[:, None, None, None] * g_sup_ra
-            + zeta0[:, None, None, None] ** 2 * (shear / rho) ** 2 * g_sup_rr
+        jnp.transpose(
+            rho**2
+            * (
+                g_sup_aa
+                - 2 * sign_iota * shear / rho * zeta0[:, None, None, None] * g_sup_ra
+                + zeta0[:, None, None, None] ** 2 * (shear / rho) ** 2 * g_sup_rr
+            ),
+            axes=(1, 0, 2, 3),
         ),
         (N_alpha, N_zeta0, N_zeta),
     )
@@ -371,12 +374,18 @@ def _ideal_ballooning_lambda(params, transforms, profiles, data, **kwargs):
         a_N**3
         * B_N
         * jnp.reshape(
-            2
-            / B_sup_zeta[None, ...]
-            * sign_psi
-            * rho**2
-            * dpdpsi
-            * (cvdrift - shear / (2 * rho**2) * zeta0[:, None, None, None] * cvdrift0),
+            jnp.transpose(
+                2
+                / B_sup_zeta[None, ...]
+                * sign_psi
+                * rho**2
+                * dpdpsi
+                * (
+                    cvdrift
+                    - shear / (2 * rho**2) * zeta0[:, None, None, None] * cvdrift0
+                ),
+                axes=(1, 0, 2, 3),
+            ),
             (N_alpha, N_zeta0, N_zeta),
         )
     )

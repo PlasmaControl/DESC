@@ -34,6 +34,7 @@ from jax._src.numpy.vectorize import (
     _parse_input_dimensions,
 )
 from jax._src.util import wraps
+from jax.sharding import NamedSharding, PartitionSpec
 from jax.tree_util import (
     tree_flatten,
     tree_leaves,
@@ -43,7 +44,7 @@ from jax.tree_util import (
 )
 
 from desc.backend import jax, jnp, scan
-from desc.utils import errorif
+from desc.utils import Index, errorif
 
 if jax.__version_info__ >= (0, 4, 16):
     from jax.extend import linear_util as lu
@@ -153,6 +154,8 @@ def _evaluate_in_chunks(
             for i, a in enumerate(args)
         ]
     )
+    # TODO: call make_shardable on scan_y and compute each chunk simaltanously
+    #       across devices
     scan_y = _scanmap(vmapped_fun, argnums, reduction, chunk_reduction)(
         *scan_x, **kwargs
     )
@@ -564,3 +567,48 @@ def jacrev_chunked(
             return jac_tree, aux
 
     return jacfun
+
+
+def make_shardable(f, axis=0, num_devices=None):
+    """Return sharded and remainder portions of ``f``.
+
+    Parameters
+    ----------
+    f : jnp.ndarray
+        Array to shard.
+    axis : int
+        Axis across which ``f`` should be sharded.
+    num_devices : int
+        Number of devices to shard on.
+        If not given, then determined according to ``jax_device_count()``.
+
+    Return
+    ------
+    sf : jnp.ndarray
+        Sharded portion of ``f``.
+    rf : jnp.ndarray
+        Remainder portion of ``f``.
+
+    """
+    if num_devices is None:
+        num_devices = jax.device_count()
+    print(jax.device_count())
+
+    mesh = jax.make_mesh((num_devices,), ("x"))
+
+    remainder_size = f.shape[axis] % num_devices
+    sf = f[Index.get(slice(0, f.shape[axis] - remainder_size), axis, f.ndim)]
+    rf = f[
+        Index.get(slice(f.shape[axis] - remainder_size, f.shape[axis]), axis, f.ndim)
+    ]
+
+    sf = jax.device_put(
+        sf,
+        NamedSharding(
+            mesh,
+            PartitionSpec(
+                "x",
+            ),
+        ),
+    )
+    return sf, rf

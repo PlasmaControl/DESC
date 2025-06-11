@@ -166,7 +166,6 @@ class EffectiveRipple(_Objective):
 
         self._spline = spline
         self._grid = grid
-        self._constants = {"quad_weights": 1.0, "alpha": alpha}
         self._X = X
         self._Y = Y
         Y_B = setdefault(Y_B, 2 * Y)
@@ -178,6 +177,8 @@ class EffectiveRipple(_Objective):
             "num_pitch": num_pitch,
             "pitch_batch_size": pitch_batch_size,
             "surf_batch_size": surf_batch_size,
+            "alpha": alpha,
+            "quad_weights": 1.0,
         }
 
         super().__init__(
@@ -224,6 +225,8 @@ class EffectiveRipple(_Objective):
             ),
             "fieldline quad": leggauss(self._hyperparam["Y_B"] // 2),
             "quad": chebgauss2(self._hyperparam.pop("num_quad")),
+            "alpha": self._hyperparam.pop("alpha"),
+            "quad_weights": self._hyperparam.pop("quad_weights"),
             "transforms": get_transforms("effective ripple", eq, grid=self._grid),
             "profiles": get_profiles("effective ripple", eq, grid=self._grid),
         }
@@ -310,6 +313,8 @@ class EffectiveRipple(_Objective):
             "rho": self._grid.compress(self._grid.nodes[:, 0]),
             "zeta": jnp.linspace(0, 2 * jnp.pi * num_transit, Y_B * num_transit),
             "quad": chebgauss2(self._hyperparam.pop("num_quad")),
+            "alpha": self._hyperparam.pop("alpha"),
+            "quad_weights": self._hyperparam.pop("quad_weights"),
             "transforms_1dr": get_transforms(self._keys_1dr, eq, self._grid),
             "profiles": get_profiles(
                 self._keys_1dr + ["old effective ripple"], eq, self._grid

@@ -216,6 +216,7 @@ if use_jax:  # noqa: C901
         x0,
         jac=None,
         args=(),
+        prev_aux=None,
         tol=1e-6,
         maxiter=20,
         maxiter_ls=5,
@@ -237,6 +238,8 @@ if use_jax:  # noqa: C901
             Defaults to using jax.jacfwd
         args : tuple, optional
             Additional arguments to pass to fun and jac.
+        If `prev_aux` is supplied (a dict with keys 'root' and 'jac'),
+        it is used to form a warmed-up initial guess; otherwise x0 is used.
         tol : float, optional
             Stopping tolerance. Stops when norm(fun(x)) < tol.
         maxiter : int > 0, optional
@@ -259,62 +262,66 @@ if use_jax:  # noqa: C901
             Root, or best approximation
         info : tuple of (float, int)
             Residual of fun at xk and number of iterations of outer loop
-
         """
         if fixup is None:
-            fixup = lambda x, *args: x
+            fixup = lambda x, *_: x
         if jac is None:
             jac = jax.jacfwd(fun)
-        jac2 = lambda x: jac(x, *args)
+
         res = lambda x: fun(x, *args)
+        jac2 = lambda x: jac(x, *args)
 
-        def solve(resfun, guess):
-            def condfun_ls(state_ls):
-                xk2, xk1, fk2, fk1, d, alphak2, k2 = state_ls
-                return (k2 <= maxiter_ls) & (jnp.dot(fk2, fk2) >= jnp.dot(fk1, fk1))
-
-            def bodyfun_ls(state_ls):
-                xk2, xk1, fk2, fk1, d, alphak2, k2 = state_ls
-                xk2 = fixup(xk1 - alphak2 * d, *args)
-                fk2 = resfun(xk2)
-                return xk2, xk1, fk2, fk1, d, alpha * alphak2, k2 + 1
-
-            def backtrack(xk1, fk1, d):
-                state_ls = (xk1, xk1, fk1, fk1, d, 1.0, 0)
-                state_ls = jax.lax.while_loop(condfun_ls, bodyfun_ls, state_ls)
-                xk2, xk1, fk2, fk1, d, alphak2, k2 = state_ls
-                return xk2, fk2
-
-            def condfun(state):
-                xk1, fk1, k1 = state
-                return (k1 < maxiter) & (jnp.dot(fk1, fk1) > tol**2)
-
-            def bodyfun(state):
-                xk1, fk1, k1 = state
-                J = jac2(xk1)
-                d = fk1 / J
-                xk1, fk1 = backtrack(xk1, fk1, d)
-                return xk1, fk1, k1 + 1
-
-            state = guess, res(guess), 0.0
-            state = jax.lax.while_loop(condfun, bodyfun, state)
-            if full_output:
-                return state[0], state[1:]
-            else:
-                return state[0]
-
-        def tangent_solve(g, y):
-            A = jax.jacfwd(g)(y)
-            return y / A
-
-        if full_output:
-            x, (res, niter) = jax.lax.custom_root(
-                res, x0, solve, tangent_solve, has_aux=True
-            )
-            return x, (abs(res), niter)
+        # ---------- pick starting point ----------
+        if prev_aux is not None:
+            # quasi-Newton one-shot: x₀ - f(x₀)/f′(x₀)
+            pr = prev_aux["root"]
+            pj = prev_aux["jac"]
+            x0_eff = fixup(pr - res(pr) / pj, *args)
         else:
-            x = jax.lax.custom_root(res, x0, solve, tangent_solve, has_aux=False)
-            return x
+            x0_eff = x0
+
+        # ---------- nonlinear solve that RETURNS AUX ----------
+        def solve(resfun, guess):
+
+            def cond_ls(state):
+                x2, x1, f2, f1, d, a, k = state
+                return (k <= maxiter_ls) & (jnp.dot(f2, f2) >= jnp.dot(f1, f1))
+
+            def body_ls(state):
+                x2, x1, f2, f1, d, a, k = state
+                x2 = fixup(x1 - a * d, *args)
+                f2 = resfun(x2)
+                return x2, x1, f2, f1, d, a * alpha, k + 1
+
+            def backtrack(x, f, d):
+                state = (x, x, f, f, d, 1.0, 0)
+                x_new, *_ = jax.lax.while_loop(cond_ls, body_ls, state)
+                return x_new, resfun(x_new)
+
+            def cond_outer(state):
+                x, f, k = state
+                return (k < maxiter) & (jnp.dot(f, f) > tol**2)
+
+            def body_outer(state):
+                x, f, k = state
+                d = f / jac2(x)
+                x, f = backtrack(x, f, d)
+                return x, f, k + 1
+
+            xk, fk, nit = jax.lax.while_loop(
+                cond_outer, body_outer, (guess, res(guess), 0)
+            )
+
+            aux = {"root": xk, "jac": jac2(xk), "n_iter": nit}
+            return xk, aux
+
+        # ---------- linear solve for implicit differentiation ----------
+        def tangent_solve(g, y):
+            return y / g(jnp.array(1.0, dtype=y.dtype))  # scalar
+
+        root, aux = jax.lax.custom_root(res, x0_eff, solve, tangent_solve, has_aux=True)
+
+        return (root, aux) if full_output else root
 
     def _lstsq(A, y):
         """Cholesky factorized least-squares.

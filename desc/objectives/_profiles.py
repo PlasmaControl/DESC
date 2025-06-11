@@ -144,7 +144,7 @@ class Pressure(_Objective):
             Computed quantity.
 
         """
-        constants = self.constants
+        constants = self._constants
         data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
@@ -286,7 +286,7 @@ class RotationalTransform(_Objective):
             Computed quantity.
 
         """
-        constants = self.constants
+        constants = self._constants
         data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
@@ -428,7 +428,7 @@ class Shear(_Objective):
             Computed quantity.
 
         """
-        constants = self.constants
+        constants = self._constants
         data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
@@ -570,7 +570,7 @@ class ToroidalCurrent(_Objective):
             Computed quantity.
 
         """
-        constants = self.constants
+        constants = self._constants
         data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,

@@ -170,7 +170,7 @@ class MercierStability(_Objective):
             Mercier stability criterion.
 
         """
-        constants = self.constants
+        constants = self._constants
         data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
@@ -319,7 +319,7 @@ class MagneticWell(_Objective):
             Magnetic well parameter.
 
         """
-        constants = self.constants
+        constants = self._constants
 
         data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
@@ -538,7 +538,7 @@ class BallooningStability(_Objective):
         """
         eq = self.things[0]
 
-        constants = self.constants
+        constants = self._constants
         # we first compute iota on a uniform grid to get correct averaging etc.
         iota_data = compute_fun(
             eq,

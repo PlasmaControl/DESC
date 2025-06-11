@@ -805,7 +805,7 @@ class CoilSetMinDistance(_Objective):
             Minimum distance to another coil for each coil in the coilset.
 
         """
-        constants = self.constants
+        constants = self._constants
         pts = constants["coilset"]._compute_position(
             params=params, grid=constants["grid"], basis="xyz"
         )
@@ -1051,7 +1051,7 @@ class PlasmaCoilSetDistanceBound(_Objective):
             Minimum/maximum distance from coil to surface for each coil in the coilset.
 
         """
-        constants = self.constants
+        constants = self._constants
         if self._eq_fixed:
             coils_params = params_1
         elif self._coils_fixed:
@@ -1336,7 +1336,7 @@ class CoilArclengthVariance(_CoilObjective):
         f : float or array of floats
             Coil arclength variance.
         """
-        constants = self.constants
+        constants = self._constants
         data = super().compute(params)
         data = tree_leaves(data, is_leaf=lambda x: isinstance(x, dict))
         out = jnp.array([jnp.var(jnp.linalg.norm(dat["x_s"], axis=1)) for dat in data])
@@ -1545,7 +1545,7 @@ class QuadraticFlux(_Objective):
             Bnorm from B_ext and B_plasma
 
         """
-        constants = self.constants
+        constants = self._constants
 
         # B_plasma from equilibrium precomputed
         eval_data = constants["eval_data"]
@@ -1741,7 +1741,7 @@ class SurfaceQuadraticFlux(_Objective):
             Bnorm on the QFM surface from the external field
 
         """
-        constants = self.constants
+        constants = self._constants
         field_params = params_2 if not self._field_fixed else None
         surf_params = params_1
 
@@ -2001,7 +2001,7 @@ class ToroidalFlux(_Objective):
             Toroidal flux from coils and external field
 
         """
-        constants = self.constants
+        constants = self._constants
         field_params = params_2 if not self._eq_fixed else params_1
         field_params = (
             constants["field"].params_dict if self._field_fixed else field_params
@@ -2222,7 +2222,7 @@ class LinkingCurrentConsistency(_Objective):
             Linking current error.
 
         """
-        constants = self.constants
+        constants = self._constants
         if self._eq_fixed:
             eq_linking_current = constants["eq_linking_current"]
         else:
@@ -2349,7 +2349,7 @@ class CoilSetLinkingNumber(_Objective):
             number of coils linked with that coil.
 
         """
-        constants = self.constants
+        constants = self._constants
         link = constants["coilset"]._compute_linking_number(
             params=params, grid=constants["grid"]
         )
@@ -2571,7 +2571,7 @@ class SurfaceCurrentRegularization(_Objective):
             The surface current density magnitude on the source surface.
 
         """
-        constants = self.constants
+        constants = self._constants
 
         surface_data = compute_fun(
             self._surface_current_field,

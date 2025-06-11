@@ -304,7 +304,7 @@ class GenericObjective(_Objective):
             Computed quantity.
 
         """
-        constants = self.constants
+        constants = self._constants
         data = compute_fun(
             self._p,
             self.f,
@@ -593,7 +593,7 @@ class ObjectiveFromUser(_Objective):
             Computed quantity.
 
         """
-        constants = self.constants
+        constants = self._constants
         data = compute_fun(
             self._p,
             self._data_keys,

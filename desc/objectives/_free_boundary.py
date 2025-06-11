@@ -215,7 +215,7 @@ class VacuumBoundaryError(_Objective):
         """
         if field_params == ():  # common case for field_fixed=True
             field_params = None
-        constants = self.constants
+        constants = self._constants
         data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
             self._eq_data_keys,
@@ -253,11 +253,10 @@ class VacuumBoundaryError(_Objective):
         f = self.compute_unscaled(*args, **kwargs)
         f0 = self.compute_unscaled(*args0, **kwargs) if args0 is not None else f
         # try to do weighted mean if possible
-        constants = self.constants
-        if constants is None:
+        if not hasattr(self, "_constants"):
             w = jnp.ones_like(f)
         else:
-            w = constants["quad_weights"]
+            w = self._constants["quad_weights"]
 
         abserr = jnp.all(self.target == 0)
         pre_width = len("Maximum absolute ") if abserr else len("Maximum ")
@@ -673,7 +672,7 @@ class BoundaryError(_Objective):
         """
         if field_params == ():  # common case for field_fixed=True
             field_params = None
-        constants = self.constants
+        constants = self._constants
         source_data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
             self._eq_data_keys,
@@ -769,11 +768,10 @@ class BoundaryError(_Objective):
         f = self.compute_unscaled(*args, **kwargs)
         f0 = self.compute_unscaled(*args0, **kwargs) if args0 is not None else f
         # try to do weighted mean if possible
-        constants = self.constants
-        if constants is None:
+        if not hasattr(self, "_constants"):
             w = jnp.ones_like(f)
         else:
-            w = constants["quad_weights"]
+            w = self._constants["quad_weights"]
 
         abserr = jnp.all(self.target == 0)
         pre_width = len("Maximum absolute ") if abserr else len("Maximum ")
@@ -1031,7 +1029,7 @@ class BoundaryErrorNESTOR(_Objective):
             Boundary magnetic pressure error (T^2*m^2).
 
         """
-        constants = self.constants
+        constants = self._constants
         data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,

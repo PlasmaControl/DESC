@@ -148,7 +148,7 @@ class ForceBalance(_Objective):
             MHD force balance error at each node (N).
 
         """
-        constants = self.constants
+        constants = self._constants
         data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
@@ -293,7 +293,7 @@ class ForceBalanceAnisotropic(_Objective):
             MHD force balance error at each node (N).
 
         """
-        constants = self.constants
+        constants = self._constants
         data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
@@ -426,7 +426,7 @@ class RadialForceBalance(_Objective):
             Radial MHD force balance error at each node (N).
 
         """
-        constants = self.constants
+        constants = self._constants
         data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
@@ -559,7 +559,7 @@ class HelicalForceBalance(_Objective):
             Helical MHD force balance error at each node (N).
 
         """
-        constants = self.constants
+        constants = self._constants
         data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
@@ -693,7 +693,7 @@ class Energy(_Objective):
             Total MHD energy in the plasma volume (J).
 
         """
-        constants = self.constants
+        constants = self._constants
         data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
@@ -832,7 +832,7 @@ class CurrentDensity(_Objective):
             Toroidal current at each node (A*m).
 
         """
-        constants = self.constants
+        constants = self._constants
         data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,

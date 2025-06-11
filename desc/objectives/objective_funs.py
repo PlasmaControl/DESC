@@ -1,6 +1,7 @@
 """Base classes for objectives."""
 
 import functools
+import warnings
 from abc import ABC, abstractmethod
 
 import numpy as np
@@ -1213,11 +1214,10 @@ class _Objective(IOAble, ABC):
 
     def _scale(self, f, *args, **kwargs):
         """Apply weighting, normalization etc."""
-        constants = self.constants
-        if constants is None:
+        if not hasattr(self, "_constants"):
             w = jnp.ones_like(f)
         else:
-            w = constants["quad_weights"]
+            w = self._constants["quad_weights"]
         f_norm = jnp.atleast_1d(f) / self.normalization  # normalization
         return f_norm * w * self.weight
 
@@ -1384,7 +1384,7 @@ class _Objective(IOAble, ABC):
 
         else:
             # try to do weighted mean if possible
-            constants = self.constants
+            constants = self._constants
             if constants is None:
                 w = jnp.ones_like(f)
             else:
@@ -1500,6 +1500,13 @@ class _Objective(IOAble, ABC):
     @property
     def constants(self):
         """dict: Constant parameters such as transforms and profiles."""
+        warnings.warn(
+            "constants is deprecated and will be removed in a future "
+            "release. Users should not include constants in the arguments "
+            "of their objective compute methods. Instead declare all the "
+            "constants in the build method and use as self._constants.",
+            DeprecationWarning,
+        )
         if hasattr(self, "_constants"):
             return self._constants
         return None

@@ -169,7 +169,7 @@ class QuasisymmetryBoozer(_Objective):
             Symmetry breaking harmonics of B (T).
 
         """
-        constants = self.constants
+        constants = self._constants
         data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
@@ -334,7 +334,7 @@ class QuasisymmetryTwoTerm(_Objective):
             Quasi-symmetry flux function error at each node (T^3).
 
         """
-        constants = self.constants
+        constants = self._constants
         data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
@@ -473,7 +473,7 @@ class QuasisymmetryTripleProduct(_Objective):
             Quasi-symmetry flux function error at each node (T^4/m^2).
 
         """
-        constants = self.constants
+        constants = self._constants
         data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
@@ -744,7 +744,7 @@ class Omnigenity(_Objective):
             Omnigenity error at each node (T).
 
         """
-        constants = self.constants
+        constants = self._constants
 
         # sort parameters
         if self._eq_fixed:
@@ -938,7 +938,7 @@ class Isodynamicity(_Objective):
             Isodynamicity error at each node (~).
 
         """
-        constants = self.constants
+        constants = self._constants
         data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,

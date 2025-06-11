@@ -169,7 +169,7 @@ A full example objective with comments describing the key points is given below:
 
             """
             # these are defined in the build method
-            constants = self.constants
+            constants = self._constants
 
             # here we get the physics quantities from ``desc.compute.utils._compute``
             data = compute_fun(

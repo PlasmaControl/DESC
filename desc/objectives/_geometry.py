@@ -140,7 +140,7 @@ class AspectRatio(_Objective):
             Aspect ratio, dimensionless.
 
         """
-        constants = self.constants
+        constants = self._constants
         data = compute_fun(
             self.things[0],
             self._data_keys,
@@ -279,7 +279,7 @@ class Elongation(_Objective):
             Elongation, dimensionless.
 
         """
-        constants = self.constants
+        constants = self._constants
         data = compute_fun(
             self.things[0],
             self._data_keys,
@@ -420,7 +420,7 @@ class Volume(_Objective):
             Plasma volume (m^3).
 
         """
-        constants = self.constants
+        constants = self._constants
         data = compute_fun(
             self.things[0],
             self._data_keys,
@@ -708,7 +708,7 @@ class PlasmaVesselDistance(_Objective):
             For each point in the surface grid, approximate distance to plasma.
 
         """
-        constants = self.constants
+        constants = self._constants
         if self._eq_fixed:
             surface_params = params_1
         elif self._surface_fixed:
@@ -915,7 +915,7 @@ class MeanCurvature(_Objective):
             Mean curvature at each point (m^-1).
 
         """
-        constants = self.constants
+        constants = self._constants
         data = compute_fun(
             self.things[0],
             self._data_keys,
@@ -1051,7 +1051,7 @@ class PrincipalCurvature(_Objective):
             Max absolute principal curvature at each point (m^-1).
 
         """
-        constants = self.constants
+        constants = self._constants
         data = compute_fun(
             self.things[0],
             self._data_keys,
@@ -1176,7 +1176,7 @@ class BScaleLength(_Objective):
             Magnetic field scale length at each point (m).
 
         """
-        constants = self.constants
+        constants = self._constants
         data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
@@ -1307,7 +1307,7 @@ class GoodCoordinates(_Objective):
             coordinate goodness error, (m^6)
 
         """
-        constants = self.constants
+        constants = self._constants
         data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
@@ -1450,7 +1450,7 @@ class MirrorRatio(_Objective):
             Mirror ratio on each surface.
 
         """
-        constants = self.constants
+        constants = self._constants
         data = compute_fun(
             self.things[0],
             self._data_keys,

@@ -263,7 +263,7 @@ class GammaC(_Objective):
         if self._spline:
             return self._compute_spline(params)
 
-        constants = self.constants
+        constants = self._constants
         eq = self.things[0]
         data = compute_fun(
             eq, "iota", params, constants["transforms"], constants["profiles"]
@@ -322,7 +322,7 @@ class GammaC(_Objective):
         super().build(use_jit=use_jit, verbose=verbose)
 
     def _compute_spline(self, params):
-        constants = self.constants
+        constants = self._constants
         eq = self.things[0]
         data = compute_fun(
             eq,

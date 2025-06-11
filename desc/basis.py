@@ -55,6 +55,8 @@ class _Basis(IOAble, ABC):
             self._inverse_N_idx,
             self._unique_LM_idx,
             self._inverse_LM_idx,
+            self._unique_MN_idx,
+            self._inverse_MN_idx,
         ) = self._find_unique_inverse_modes()
 
     def _set_up(self):
@@ -79,6 +81,8 @@ class _Basis(IOAble, ABC):
             self._inverse_N_idx,
             self._unique_LM_idx,
             self._inverse_LM_idx,
+            self._unique_MN_idx,
+            self._inverse_MN_idx,
         ) = self._find_unique_inverse_modes()
 
     def _enforce_symmetry(self):
@@ -122,6 +126,9 @@ class _Basis(IOAble, ABC):
         __, unique_LM_idx, inverse_LM_idx = np.unique(
             self.modes[:, :2], axis=0, return_index=True, return_inverse=True
         )
+        __, unique_MN_idx, inverse_MN_idx = np.unique(
+            self.modes[:, 1:], axis=0, return_index=True, return_inverse=True
+        )
 
         return (
             unique_L_idx,
@@ -132,6 +139,8 @@ class _Basis(IOAble, ABC):
             inverse_N_idx,
             unique_LM_idx,
             inverse_LM_idx,
+            unique_MN_idx,
+            inverse_MN_idx,
         )
 
     def _sort_modes(self):
@@ -284,6 +293,11 @@ class _Basis(IOAble, ABC):
         return self._unique_LM_idx
 
     @property
+    def unique_MN_idx(self):
+        """ndarray: Indices of unique poloidal/toroidal mode pairs."""
+        return self._unique_MN_idx
+
+    @property
     def inverse_L_idx(self):
         """ndarray: Indices of unique_L_idx that recover the radial modes."""
         return self._inverse_L_idx
@@ -302,6 +316,11 @@ class _Basis(IOAble, ABC):
     def inverse_LM_idx(self):
         """ndarray: Indices of unique_LM_idx that recover the LM mode pairs."""
         return self._inverse_LM_idx
+
+    @property
+    def inverse_MN_idx(self):
+        """ndarray: Indices of unique_MN_idx that recover the MN mode pairs."""
+        return self._inverse_MN_idx
 
     def __repr__(self):
         """Get the string form of the object."""

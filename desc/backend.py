@@ -275,8 +275,7 @@ if use_jax:  # noqa: C901
         if prev_aux is not None:
             # quasi-Newton one-shot: x₀ - f(x₀)/f′(x₀)
             pr = prev_aux["root"]
-            pj = prev_aux["jac"]
-            x0_eff = fixup(pr - res(pr) / pj, *args)
+            x0_eff = fixup(pr, *args)
         else:
             x0_eff = x0
 
@@ -312,7 +311,7 @@ if use_jax:  # noqa: C901
                 cond_outer, body_outer, (guess, res(guess), 0)
             )
 
-            aux = {"root": xk, "jac": jac2(xk), "n_iter": nit}
+            aux = {"root": xk}
             return xk, aux
 
         # ---------- linear solve for implicit differentiation ----------

@@ -294,7 +294,7 @@ def _map_PEST_coordinates(
     coords,
     L_lmn,
     L_basis,
-    guess,
+    guess=None,
     period=np.inf,
     tol=1e-6,
     maxiter=30,
@@ -360,42 +360,39 @@ def _map_PEST_coordinates(
     def fixup(x, *args):
         return _periodic(x, period)
 
-    vecroot = jit(
-        vmap(
-            lambda x0, *p: root_scalar(
-                rootfun,
-                x0,
-                jac=jacfun,
-                args=p,
-                fixup=fixup,
-                tol=tol,
-                maxiter=maxiter,
-                full_output=full_output,
-                **kwargs,
-            )
+    # ---------------------------------------------------------------------
+    def solve_one(theta0, theta_PEST, rho, zeta):
+        root, aux = root_scalar(
+            rootfun,
+            theta0,
+            jac=jacfun,
+            args=(theta_PEST, rho, zeta),
+            fixup=fixup,
+            tol=tol,
+            maxiter=maxiter,
+            full_output=True,
+            **kwargs,
         )
-    )
+        return root, aux  # aux = (residual, n_iter)
+
+    vec_solve = jit(vmap(solve_one))
+
+    # ---------------------------------------------------------------------
     rho, theta_PEST, zeta = coords.T
+
+    # Choose initial guesses: use `guess` if supplied, otherwise ϑ
+    theta0 = fixup(guess, period) if guess is not None else theta_PEST
+
+    # Vectorised Newton solve
+    theta, aux = vec_solve(theta0, theta_PEST, rho, zeta)
+
+    out = jnp.column_stack([rho, theta.squeeze(), zeta])
+
     if full_output:
-        theta, (res, niter) = vecroot(
-            # Assume λ=0 for default initial guess.
-            setdefault(guess, theta_PEST),
-            theta_PEST,
-            rho,
-            zeta,
-        )
-    else:
-        theta = vecroot(
-            # Assume λ=0 for default initial guess.
-            setdefault(guess, theta_PEST),
-            theta_PEST,
-            rho,
-            zeta,
-        )
-    out = jnp.column_stack([rho, jnp.atleast_1d(theta.squeeze()), zeta])
-    if full_output:
+        res, niter = aux  # each is shape-(k,)
         return out, (res, niter)
-    return out
+    else:
+        return out
 
 
 # TODO(#568): decide later whether to assume given phi instead of zeta.

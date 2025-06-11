@@ -178,7 +178,6 @@ class GammaC(_Objective):
 
         self._spline = spline
         self._grid = grid
-        self._constants = {"quad_weights": 1.0, "alpha": alpha}
         self._X = X
         self._Y = Y
         Y_B = setdefault(Y_B, 2 * Y)
@@ -190,6 +189,8 @@ class GammaC(_Objective):
             "num_pitch": num_pitch,
             "pitch_batch_size": pitch_batch_size,
             "surf_batch_size": surf_batch_size,
+            "alpha": alpha,
+            "quad_weights": 1.0,
         }
         self._key = "Gamma_c" if Nemov else "Gamma_c Velasco"
 
@@ -240,7 +241,9 @@ class GammaC(_Objective):
                 leggauss(self._hyperparam.pop("num_quad")),
                 (automorphism_sin, grad_automorphism_sin),
             ),
-            "tranforms": get_transforms(self._key, eq, grid=self._grid),
+            "alpha": self._hyperparam.pop("alpha"),
+            "quad_weights": self._hyperparam.pop("quad_weights"),
+            "transforms": get_transforms(self._key, eq, grid=self._grid),
             "profiles": get_profiles(self._key, eq, grid=self._grid),
         }
         super().build(use_jit=use_jit, verbose=verbose)
@@ -313,6 +316,8 @@ class GammaC(_Objective):
                 leggauss(self._hyperparam.pop("num_quad")),
                 (automorphism_sin, grad_automorphism_sin),
             ),
+            "alpha": self._hyperparam.pop("alpha"),
+            "quad_weights": self._hyperparam.pop("quad_weights"),
             "transforms_1dr": get_transforms(self._keys_1dr, eq, self._grid),
             "profiles": get_profiles(self._keys_1dr + [self._key], eq, self._grid),
         }

@@ -1556,7 +1556,7 @@ def test_initialize_helical():
     np.testing.assert_allclose(
         obj.compute(coilset.params_dict, eq.params_dict), 0, atol=1e-8
     )
-    assert obj.constants["link"][0] == 9  # M=3 per period * 3 periods
+    assert obj._constants["link"][0] == 9  # M=3 per period * 3 periods
 
     coils_pts = coilset._compute_position()
     a = eq.compute("a")["a"]

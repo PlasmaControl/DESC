@@ -156,7 +156,7 @@ class MercierStability(_Objective):
 
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, params):
+    def compute(self, params, constants=None):
         """Compute the Mercier stability criterion.
 
         Parameters
@@ -170,7 +170,17 @@ class MercierStability(_Objective):
             Mercier stability criterion.
 
         """
-        constants = self._constants
+        if constants is None:
+            constants = self._constants
+        else:
+            warnif(
+                True,
+                DeprecationWarning,
+                "constants is deprecated and will be removed in a future "
+                "release. Users should not include constants in the arguments "
+                "of their objective compute methods. Instead declare all the "
+                "constants in the build method and use as self._constants.",
+            )
         data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
@@ -305,7 +315,7 @@ class MagneticWell(_Objective):
 
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, params):
+    def compute(self, params, constants=None):
         """Compute a magnetic well parameter.
 
         Parameters
@@ -319,7 +329,17 @@ class MagneticWell(_Objective):
             Magnetic well parameter.
 
         """
-        constants = self._constants
+        if constants is None:
+            constants = self._constants
+        else:
+            warnif(
+                True,
+                DeprecationWarning,
+                "constants is deprecated and will be removed in a future "
+                "release. Users should not include constants in the arguments "
+                "of their objective compute methods. Instead declare all the "
+                "constants in the build method and use as self._constants.",
+            )
 
         data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
@@ -521,7 +541,7 @@ class BallooningStability(_Objective):
         }
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, params):
+    def compute(self, params, constants=None):
         """
         Compute the ballooning stability growth rate.
 
@@ -538,7 +558,17 @@ class BallooningStability(_Objective):
         """
         eq = self.things[0]
 
-        constants = self._constants
+        if constants is None:
+            constants = self._constants
+        else:
+            warnif(
+                True,
+                DeprecationWarning,
+                "constants is deprecated and will be removed in a future "
+                "release. Users should not include constants in the arguments "
+                "of their objective compute methods. Instead declare all the "
+                "constants in the build method and use as self._constants.",
+            )
         # we first compute iota on a uniform grid to get correct averaging etc.
         iota_data = compute_fun(
             eq,

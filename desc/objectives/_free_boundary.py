@@ -196,7 +196,7 @@ class VacuumBoundaryError(_Objective):
 
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, eq_params, *field_params):
+    def compute(self, eq_params, *field_params, constants=None):
         """Compute boundary force error.
 
         Parameters
@@ -215,7 +215,17 @@ class VacuumBoundaryError(_Objective):
         """
         if field_params == ():  # common case for field_fixed=True
             field_params = None
-        constants = self._constants
+        if constants is None:
+            constants = self._constants
+        else:
+            warnif(
+                True,
+                DeprecationWarning,
+                "constants is deprecated and will be removed in a future "
+                "release. Users should not include constants in the arguments "
+                "of their objective compute methods. Instead declare all the "
+                "constants in the build method and use as self._constants.",
+            )
         data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
             self._eq_data_keys,
@@ -652,7 +662,7 @@ class BoundaryError(_Objective):
 
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, eq_params, *field_params):
+    def compute(self, eq_params, *field_params, constants=None):
         """Compute boundary force error.
 
         Parameters
@@ -672,7 +682,17 @@ class BoundaryError(_Objective):
         """
         if field_params == ():  # common case for field_fixed=True
             field_params = None
-        constants = self._constants
+        if constants is None:
+            constants = self._constants
+        else:
+            warnif(
+                True,
+                DeprecationWarning,
+                "constants is deprecated and will be removed in a future "
+                "release. Users should not include constants in the arguments "
+                "of their objective compute methods. Instead declare all the "
+                "constants in the build method and use as self._constants.",
+            )
         source_data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
             self._eq_data_keys,
@@ -1015,7 +1035,7 @@ class BoundaryErrorNESTOR(_Objective):
 
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, params):
+    def compute(self, params, constants=None):
         """Compute boundary magnetic pressure error.
 
         Parameters
@@ -1029,7 +1049,17 @@ class BoundaryErrorNESTOR(_Objective):
             Boundary magnetic pressure error (T^2*m^2).
 
         """
-        constants = self._constants
+        if constants is None:
+            constants = self._constants
+        else:
+            warnif(
+                True,
+                DeprecationWarning,
+                "constants is deprecated and will be removed in a future "
+                "release. Users should not include constants in the arguments "
+                "of their objective compute methods. Instead declare all the "
+                "constants in the build method and use as self._constants.",
+            )
         data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,

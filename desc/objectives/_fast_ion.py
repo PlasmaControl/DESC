@@ -7,7 +7,7 @@ from desc.backend import jnp
 from desc.compute import get_profiles, get_transforms
 from desc.compute.utils import _compute as compute_fun
 from desc.grid import LinearGrid
-from desc.utils import setdefault
+from desc.utils import setdefault, warnif
 
 from ..integrals import Bounce2D
 from ..integrals.basis import FourierChebyshevSeries
@@ -248,7 +248,7 @@ class GammaC(_Objective):
         }
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, params):
+    def compute(self, params, constants=None):
         """Compute Γ_c.
 
         Parameters
@@ -266,7 +266,17 @@ class GammaC(_Objective):
         if self._spline:
             return self._compute_spline(params)
 
-        constants = self._constants
+        if constants is None:
+            constants = self._constants
+        else:
+            warnif(
+                True,
+                DeprecationWarning,
+                "constants is deprecated and will be removed in a future "
+                "release. Users should not include constants in the arguments "
+                "of their objective compute methods. Instead declare all the "
+                "constants in the build method and use as self._constants.",
+            )
         eq = self.things[0]
         data = compute_fun(
             eq, "iota", params, constants["transforms"], constants["profiles"]
@@ -326,8 +336,18 @@ class GammaC(_Objective):
         )
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def _compute_spline(self, params):
-        constants = self._constants
+    def _compute_spline(self, params, constants=None):
+        if constants is None:
+            constants = self._constants
+        else:
+            warnif(
+                True,
+                DeprecationWarning,
+                "constants is deprecated and will be removed in a future "
+                "release. Users should not include constants in the arguments "
+                "of their objective compute methods. Instead declare all the "
+                "constants in the build method and use as self._constants.",
+            )
         eq = self.things[0]
         data = compute_fun(
             eq,

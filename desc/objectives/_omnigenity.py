@@ -155,7 +155,7 @@ class QuasisymmetryBoozer(_Objective):
 
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, params):
+    def compute(self, params, constants=None):
         """Compute quasi-symmetry Boozer harmonics error.
 
         Parameters
@@ -169,7 +169,17 @@ class QuasisymmetryBoozer(_Objective):
             Symmetry breaking harmonics of B (T).
 
         """
-        constants = self._constants
+        if constants is None:
+            constants = self._constants
+        else:
+            warnif(
+                True,
+                DeprecationWarning,
+                "constants is deprecated and will be removed in a future "
+                "release. Users should not include constants in the arguments "
+                "of their objective compute methods. Instead declare all the "
+                "constants in the build method and use as self._constants.",
+            )
         data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
@@ -320,7 +330,7 @@ class QuasisymmetryTwoTerm(_Objective):
 
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, params):
+    def compute(self, params, constants=None):
         """Compute quasi-symmetry two-term errors.
 
         Parameters
@@ -334,7 +344,17 @@ class QuasisymmetryTwoTerm(_Objective):
             Quasi-symmetry flux function error at each node (T^3).
 
         """
-        constants = self._constants
+        if constants is None:
+            constants = self._constants
+        else:
+            warnif(
+                True,
+                DeprecationWarning,
+                "constants is deprecated and will be removed in a future "
+                "release. Users should not include constants in the arguments "
+                "of their objective compute methods. Instead declare all the "
+                "constants in the build method and use as self._constants.",
+            )
         data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
@@ -459,7 +479,7 @@ class QuasisymmetryTripleProduct(_Objective):
 
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, params):
+    def compute(self, params, constants=None):
         """Compute quasi-symmetry triple product errors.
 
         Parameters
@@ -473,7 +493,17 @@ class QuasisymmetryTripleProduct(_Objective):
             Quasi-symmetry flux function error at each node (T^4/m^2).
 
         """
-        constants = self._constants
+        if constants is None:
+            constants = self._constants
+        else:
+            warnif(
+                True,
+                DeprecationWarning,
+                "constants is deprecated and will be removed in a future "
+                "release. Users should not include constants in the arguments "
+                "of their objective compute methods. Instead declare all the "
+                "constants in the build method and use as self._constants.",
+            )
         data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
@@ -725,7 +755,7 @@ class Omnigenity(_Objective):
 
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, params_1=None, params_2=None):
+    def compute(self, params_1, params_2=None, constants=None):
         """Compute omnigenity errors.
 
         Parameters
@@ -744,7 +774,17 @@ class Omnigenity(_Objective):
             Omnigenity error at each node (T).
 
         """
-        constants = self._constants
+        if constants is None:
+            constants = self._constants
+        else:
+            warnif(
+                True,
+                DeprecationWarning,
+                "constants is deprecated and will be removed in a future "
+                "release. Users should not include constants in the arguments "
+                "of their objective compute methods. Instead declare all the "
+                "constants in the build method and use as self._constants.",
+            )
 
         # sort parameters
         if self._eq_fixed:
@@ -924,7 +964,7 @@ class Isodynamicity(_Objective):
 
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, params):
+    def compute(self, params, constants=None):
         """Compute isodynamicity errors.
 
         Parameters
@@ -938,7 +978,17 @@ class Isodynamicity(_Objective):
             Isodynamicity error at each node (~).
 
         """
-        constants = self._constants
+        if constants is None:
+            constants = self._constants
+        else:
+            warnif(
+                True,
+                DeprecationWarning,
+                "constants is deprecated and will be removed in a future "
+                "release. Users should not include constants in the arguments "
+                "of their objective compute methods. Instead declare all the "
+                "constants in the build method and use as self._constants.",
+            )
         data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,

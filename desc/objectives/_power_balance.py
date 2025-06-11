@@ -3,7 +3,7 @@
 from desc.compute.utils import _compute as compute_fun
 from desc.compute.utils import get_profiles, get_transforms
 from desc.grid import QuadratureGrid
-from desc.utils import Timer, errorif
+from desc.utils import Timer, errorif, warnif
 
 from .normalization import compute_scaling_factors
 from .objective_funs import _Objective, collect_docs
@@ -129,7 +129,7 @@ class FusionPower(_Objective):
 
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, params):
+    def compute(self, params, constants=None):
         """Compute fusion power.
 
         Parameters
@@ -144,7 +144,17 @@ class FusionPower(_Objective):
             Fusion power (W).
 
         """
-        constants = self._constants
+        if constants is None:
+            constants = self._constants
+        else:
+            warnif(
+                True,
+                DeprecationWarning,
+                "constants is deprecated and will be removed in a future "
+                "release. Users should not include constants in the arguments "
+                "of their objective compute methods. Instead declare all the "
+                "constants in the build method and use as self._constants.",
+            )
         data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
@@ -287,7 +297,7 @@ class HeatingPowerISS04(_Objective):
 
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, params):
+    def compute(self, params, constants=None):
         """Compute heating power.
 
         Parameters
@@ -302,7 +312,17 @@ class HeatingPowerISS04(_Objective):
             Heating power required by the ISS04 energy confinement time scaling (W).
 
         """
-        constants = self._constants
+        if constants is None:
+            constants = self._constants
+        else:
+            warnif(
+                True,
+                DeprecationWarning,
+                "constants is deprecated and will be removed in a future "
+                "release. Users should not include constants in the arguments "
+                "of their objective compute methods. Instead declare all the "
+                "constants in the build method and use as self._constants.",
+            )
         data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,

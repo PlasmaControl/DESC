@@ -198,7 +198,7 @@ class FixParameters(_Objective):
 
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, params):
+    def compute(self, params, constants=None):
         """Compute fixed degree of freedom errors.
 
         Parameters
@@ -309,7 +309,7 @@ class BoundaryRSelfConsistency(_Objective):
         )
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, params):
+    def compute(self, params, constants=None):
         """Compute boundary R self-consistency errors.
 
         IE, the mismatch between the Fourier-Zernike basis evaluated at rho=1 and the
@@ -407,7 +407,7 @@ class BoundaryZSelfConsistency(_Objective):
         )
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, params):
+    def compute(self, params, constants=None):
         """Compute boundary Z self-consistency errors.
 
         IE, the mismatch between the Fourier-Zernike basis evaluated at rho=1 and the
@@ -491,7 +491,7 @@ class AxisRSelfConsistency(_Objective):
 
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, params):
+    def compute(self, params, constants=None):
         """Compute axis R self-consistency errors.
 
         IE, the mismatch between the Fourier-Zernike basis evaluated at rho=0 and the
@@ -576,7 +576,7 @@ class AxisZSelfConsistency(_Objective):
 
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, params):
+    def compute(self, params, constants=None):
         """Compute axis Z self-consistency errors.
 
         IE, the mismatch between the Fourier-Zernike basis evaluated at rho=0 and the
@@ -1378,7 +1378,7 @@ class FixSumModesR(_FixedObjective):
 
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, params):
+    def compute(self, params, constants=None):
         """Compute Sum mode R errors.
 
         Parameters
@@ -1542,7 +1542,7 @@ class FixSumModesZ(_FixedObjective):
         )
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, params):
+    def compute(self, params, constants=None):
         """Compute Sum mode Z errors.
 
         Parameters
@@ -1708,7 +1708,7 @@ class FixSumModesLambda(_FixedObjective):
 
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, params):
+    def compute(self, params, constants=None):
         """Compute Sum mode lambda errors.
 
         Parameters
@@ -2775,7 +2775,7 @@ class FixSumCoilCurrent(FixCoilCurrent):
         if self._default_target:
             self.update_target(thing=self.things[0])
 
-    def compute(self, params):
+    def compute(self, params, constants=None):
         """Compute sum of coil currents.
 
         Parameters
@@ -2989,7 +2989,7 @@ class FixOmniBmax(_FixedObjective):
 
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, params):
+    def compute(self, params, constants=None):
         """Compute fixed omnigenity B_max error.
 
         Parameters
@@ -3193,7 +3193,7 @@ class FixNearAxisR(_FixedObjective):
         self._dim_f = self.target.size
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, params):
+    def compute(self, params, constants=None):
         """Compute fixed near axis R behavior errors.
 
         Parameters
@@ -3342,7 +3342,7 @@ class FixNearAxisZ(_FixedObjective):
 
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, params):
+    def compute(self, params, constants=None):
         """Compute fixed near axis Z behavior errors.
 
         Parameters
@@ -3465,7 +3465,7 @@ class FixNearAxisLambda(_FixedObjective):
 
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, params):
+    def compute(self, params, constants=None):
         """Compute fixed near axis Lambda behavior errors.
 
         Parameters

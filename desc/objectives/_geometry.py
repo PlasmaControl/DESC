@@ -125,7 +125,7 @@ class AspectRatio(_Objective):
 
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, params):
+    def compute(self, params, constants=None):
         """Compute aspect ratio.
 
         Parameters
@@ -140,7 +140,17 @@ class AspectRatio(_Objective):
             Aspect ratio, dimensionless.
 
         """
-        constants = self._constants
+        if constants is None:
+            constants = self._constants
+        else:
+            warnif(
+                True,
+                DeprecationWarning,
+                "constants is deprecated and will be removed in a future "
+                "release. Users should not include constants in the arguments "
+                "of their objective compute methods. Instead declare all the "
+                "constants in the build method and use as self._constants.",
+            )
         data = compute_fun(
             self.things[0],
             self._data_keys,
@@ -264,7 +274,7 @@ class Elongation(_Objective):
 
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, params):
+    def compute(self, params, constants=None):
         """Compute elongation.
 
         Parameters
@@ -279,7 +289,17 @@ class Elongation(_Objective):
             Elongation, dimensionless.
 
         """
-        constants = self._constants
+        if constants is None:
+            constants = self._constants
+        else:
+            warnif(
+                True,
+                DeprecationWarning,
+                "constants is deprecated and will be removed in a future "
+                "release. Users should not include constants in the arguments "
+                "of their objective compute methods. Instead declare all the "
+                "constants in the build method and use as self._constants.",
+            )
         data = compute_fun(
             self.things[0],
             self._data_keys,
@@ -405,7 +425,7 @@ class Volume(_Objective):
 
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, params):
+    def compute(self, params, constants=None):
         """Compute plasma volume.
 
         Parameters
@@ -420,7 +440,17 @@ class Volume(_Objective):
             Plasma volume (m^3).
 
         """
-        constants = self._constants
+        if constants is None:
+            constants = self._constants
+        else:
+            warnif(
+                True,
+                DeprecationWarning,
+                "constants is deprecated and will be removed in a future "
+                "release. Users should not include constants in the arguments "
+                "of their objective compute methods. Instead declare all the "
+                "constants in the build method and use as self._constants.",
+            )
         data = compute_fun(
             self.things[0],
             self._data_keys,
@@ -690,7 +720,7 @@ class PlasmaVesselDistance(_Objective):
 
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, params_1, params_2=None):
+    def compute(self, params_1, params_2=None, constants=None):
         """Compute plasma-surface distance.
 
         Parameters
@@ -708,7 +738,17 @@ class PlasmaVesselDistance(_Objective):
             For each point in the surface grid, approximate distance to plasma.
 
         """
-        constants = self._constants
+        if constants is None:
+            constants = self._constants
+        else:
+            warnif(
+                True,
+                DeprecationWarning,
+                "constants is deprecated and will be removed in a future "
+                "release. Users should not include constants in the arguments "
+                "of their objective compute methods. Instead declare all the "
+                "constants in the build method and use as self._constants.",
+            )
         if self._eq_fixed:
             surface_params = params_1
         elif self._surface_fixed:
@@ -900,7 +940,7 @@ class MeanCurvature(_Objective):
 
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, params):
+    def compute(self, params, constants=None):
         """Compute mean curvature.
 
         Parameters
@@ -915,7 +955,17 @@ class MeanCurvature(_Objective):
             Mean curvature at each point (m^-1).
 
         """
-        constants = self._constants
+        if constants is None:
+            constants = self._constants
+        else:
+            warnif(
+                True,
+                DeprecationWarning,
+                "constants is deprecated and will be removed in a future "
+                "release. Users should not include constants in the arguments "
+                "of their objective compute methods. Instead declare all the "
+                "constants in the build method and use as self._constants.",
+            )
         data = compute_fun(
             self.things[0],
             self._data_keys,
@@ -1036,7 +1086,7 @@ class PrincipalCurvature(_Objective):
 
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, params):
+    def compute(self, params, constants=None):
         """Compute max absolute principal curvature.
 
         Parameters
@@ -1051,7 +1101,17 @@ class PrincipalCurvature(_Objective):
             Max absolute principal curvature at each point (m^-1).
 
         """
-        constants = self._constants
+        if constants is None:
+            constants = self._constants
+        else:
+            warnif(
+                True,
+                DeprecationWarning,
+                "constants is deprecated and will be removed in a future "
+                "release. Users should not include constants in the arguments "
+                "of their objective compute methods. Instead declare all the "
+                "constants in the build method and use as self._constants.",
+            )
         data = compute_fun(
             self.things[0],
             self._data_keys,
@@ -1162,7 +1222,7 @@ class BScaleLength(_Objective):
 
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, params):
+    def compute(self, params, constants=None):
         """Compute magnetic field scale length.
 
         Parameters
@@ -1176,7 +1236,17 @@ class BScaleLength(_Objective):
             Magnetic field scale length at each point (m).
 
         """
-        constants = self._constants
+        if constants is None:
+            constants = self._constants
+        else:
+            warnif(
+                True,
+                DeprecationWarning,
+                "constants is deprecated and will be removed in a future "
+                "release. Users should not include constants in the arguments "
+                "of their objective compute methods. Instead declare all the "
+                "constants in the build method and use as self._constants.",
+            )
         data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
@@ -1293,7 +1363,7 @@ class GoodCoordinates(_Objective):
 
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, params):
+    def compute(self, params, constants=None):
         """Compute coordinate goodness error.
 
         Parameters
@@ -1307,7 +1377,17 @@ class GoodCoordinates(_Objective):
             coordinate goodness error, (m^6)
 
         """
-        constants = self._constants
+        if constants is None:
+            constants = self._constants
+        else:
+            warnif(
+                True,
+                DeprecationWarning,
+                "constants is deprecated and will be removed in a future "
+                "release. Users should not include constants in the arguments "
+                "of their objective compute methods. Instead declare all the "
+                "constants in the build method and use as self._constants.",
+            )
         data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
@@ -1435,7 +1515,7 @@ class MirrorRatio(_Objective):
 
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, params):
+    def compute(self, params, constants=None):
         """Compute mirror ratio.
 
         Parameters
@@ -1450,7 +1530,17 @@ class MirrorRatio(_Objective):
             Mirror ratio on each surface.
 
         """
-        constants = self._constants
+        if constants is None:
+            constants = self._constants
+        else:
+            warnif(
+                True,
+                DeprecationWarning,
+                "constants is deprecated and will be removed in a future "
+                "release. Users should not include constants in the arguments "
+                "of their objective compute methods. Instead declare all the "
+                "constants in the build method and use as self._constants.",
+            )
         data = compute_fun(
             self.things[0],
             self._data_keys,

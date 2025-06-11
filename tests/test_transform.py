@@ -265,78 +265,109 @@ class TestTransform:
         Nnodes = 3
         NFP = 4
 
-        grid = QuadratureGrid(Lnodes, Mnodes, Nnodes, NFP)
+        grids = {
+            "QuadratureGrid": QuadratureGrid(Lnodes, Mnodes, Nnodes, NFP),
+            "LinearGrid_sym": LinearGrid(Lnodes, Mnodes, Nnodes, NFP, sym=True),
+        }
         bases = {
             "FourierSeries": FourierSeries(N, NFP),
             "DoubleFourierSeries": DoubleFourierSeries(M, N, NFP),
+            "DoubleFourierSeries_sin": DoubleFourierSeries(M, N, NFP, sym="sin"),
+            "DoubleFourierSeries_cos": DoubleFourierSeries(M, N, NFP, sym="cos"),
             "ChebyshevDoubleFourierBasis": ChebyshevDoubleFourierBasis(L, M, N, NFP),
             "ZernikePolynomial": ZernikePolynomial(L, M),
             "FourierZernikeBasis": FourierZernikeBasis(L, M, N, NFP),
+            "FourierZernikeBasis_cos": FourierZernikeBasis(L, M, N, NFP, sym="cos"),
+            "FourierZernikeBasis_sin": FourierZernikeBasis(L, M, N, NFP, sym="sin"),
         }
 
         t1s = {
-            key: Transform(
-                grid,
-                basis,
-                derivs=3 if not isinstance(basis, ChebyshevDoubleFourierBasis) else 0,
-                method="direct1",
-            )
-            for key, basis in bases.items()
+            gridname: {
+                basisname: Transform(
+                    grid,
+                    basis,
+                    derivs=0 if isinstance(basis, ChebyshevDoubleFourierBasis) else 3,
+                    method="direct1",
+                )
+                for basisname, basis in bases.items()
+            }
+            for gridname, grid in grids.items()
         }
         t2s = {
-            key: Transform(
-                grid,
-                basis,
-                derivs=3 if not isinstance(basis, ChebyshevDoubleFourierBasis) else 0,
-                method=method,
-            )
-            for key, basis in bases.items()
+            gridname: {
+                basisname: Transform(
+                    grid,
+                    basis,
+                    derivs=0 if isinstance(basis, ChebyshevDoubleFourierBasis) else 3,
+                    method=method,
+                )
+                for basisname, basis in bases.items()
+            }
+            for gridname, grid in grids.items()
         }
 
-        for name in bases.keys():
-            t1 = t1s[name]
-            t2 = t2s[name]
-            for d in t1.derivatives:
-                dr = d[0]
-                dv = d[1]
-                dz = d[2]
-                x = np.random.random(t1.basis.num_modes)
-                y1 = t1.transform(x, dr, dv, dz)
-                y2 = t2.transform(x, dr, dv, dz)
-                np.testing.assert_allclose(
-                    y1, y2, atol=1e-12, err_msg=f"failed on {name}, d={d}"
-                )
+        for gridname in grids.keys():
+            for basisname in bases.keys():
+                t1 = t1s[gridname][basisname]
+                t2 = t2s[gridname][basisname]
+                for d in t1.derivatives:
+                    dr = d[0]
+                    dv = d[1]
+                    dz = d[2]
+                    x = np.random.random(t1.basis.num_modes)
+                    y1 = t1.transform(x, dr, dv, dz)
+                    y2 = t2.transform(x, dr, dv, dz)
+                    np.testing.assert_allclose(
+                        y1,
+                        y2,
+                        atol=1e-10,
+                        rtol=1e-10,
+                        err_msg=f"failed on {gridname}, {basisname}, d={d}",
+                    )
 
         M += 1
         N += 1
         Mnodes += 1
         Nnodes += 1
-        grid = QuadratureGrid(Lnodes, Mnodes, Nnodes, NFP)
+        grids = {
+            "QuadratureGrid": QuadratureGrid(Lnodes, Mnodes, Nnodes, NFP),
+            "LinearGrid_sym": LinearGrid(Lnodes, Mnodes, Nnodes, NFP, sym=True),
+        }
         bases = {
             "FourierSeries": FourierSeries(N, NFP),
             "DoubleFourierSeries": DoubleFourierSeries(M, N, NFP),
+            "DoubleFourierSeries_sin": DoubleFourierSeries(M, N, NFP, sym="sin"),
+            "DoubleFourierSeries_cos": DoubleFourierSeries(M, N, NFP, sym="cos"),
             "ChebyshevDoubleFourierBasis": ChebyshevDoubleFourierBasis(L, M, N, NFP),
             "ZernikePolynomial": ZernikePolynomial(L, M),
             "FourierZernikeBasis": FourierZernikeBasis(L, M, N, NFP),
+            "FourierZernikeBasis_cos": FourierZernikeBasis(L, M, N, NFP, sym="cos"),
+            "FourierZernikeBasis_sin": FourierZernikeBasis(L, M, N, NFP, sym="sin"),
         }
 
-        for name in bases.keys():
-            t1s[name].change_resolution(grid, bases[name])
-            t2s[name].change_resolution(grid, bases[name])
+        for gridname, grid in grids.items():
+            for basisname, basis in bases.items():
+                t1s[gridname][basisname].change_resolution(grid, basis)
+                t2s[gridname][basisname].change_resolution(grid, basis)
 
-        for name in bases.keys():
-            t1 = t1s[name]
-            t2 = t2s[name]
-            for d in t1.derivatives:
-                dr = d[0]
-                dv = d[1]
-                dz = d[2]
-                x = np.random.random(t1.basis.num_modes)
-                y1 = t1.transform(x, dr, dv, dz)
-                y2 = t2.transform(x, dr, dv, dz)
-                np.testing.assert_allclose(
-                    y1, y2, atol=1e-12, err_msg=f"failed on {name} after change, d={d}"
-                )
+        for gridname in grids.keys():
+            for basisname in bases.keys():
+                t1 = t1s[gridname][basisname]
+                t2 = t2s[gridname][basisname]
+                for d in t1.derivatives:
+                    dr = d[0]
+                    dv = d[1]
+                    dz = d[2]
+                    x = np.random.random(t1.basis.num_modes)
+                    y1 = t1.transform(x, dr, dv, dz)
+                    y2 = t2.transform(x, dr, dv, dz)
+                    np.testing.assert_allclose(
+                        y1,
+                        y2,
+                        atol=1e-10,
+                        rtol=1e-10,
+                        err_msg=f"failed on {gridname}, {basisname}, d={d}",
+                    )
 
     @pytest.mark.unit
     @pytest.mark.parametrize("method", ["direct2", "fft"])

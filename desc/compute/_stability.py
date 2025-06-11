@@ -272,41 +272,37 @@ def _magnetic_well(params, transforms, profiles, data, **kwargs):
 def _ideal_ballooning_lambda(params, transforms, profiles, data, **kwargs):
     """Ideal-ballooning growth rate finder.
 
-    This function uses a finite-difference method
-    to calculate the maximum growth rate against the
-    infinite-n ideal ballooning mode. The equation being solved is
+    A finite-difference method is used to calculate the maximum
+    growth rate against the infinite-n ideal ballooning mode.
+    The equation being solved is
 
     d/dζ(g dX/dζ) + c X = λ f X, g, f > 0
 
     where
 
-    𝛋 = b ⋅∇ b
-    g = a_N^3 * B_N * (b ⋅∇ζ) * (dψ_N/dρ)² * |∇α|², / B,
-    c = a_N^3 * B_N * (1/ b ⋅∇ζ) * (dψ_N/dρ)² * dp/dψ * (b × 𝛋) ⋅|∇α|/ B**2,
-    f = a_N * B_N^3 * (dψ_N/dρ)² * |∇α|² / B^3 * (1/ b ⋅∇ζ) ,
+    𝛋 = b ⋅ ∇b
+    g = a³ Bₙ  * b⋅∇ζ (dψ_N/dρ)² |∇α|² / B
+    c = a³ Bₙ  / b⋅∇ζ (dψ_N/dρ)² dp/dψ (b × 𝛋) ⋅ |∇α|/B²
+    f = a  Bₙ³ / b⋅∇ζ (dψ_N/dρ)² |∇α|² / B³
+    λ = a² / v_A² * γ²
 
-    are needed along a field line to solve the ballooning equation once and find
+    and
 
-    λ = a_N^2 / v_A^2 * γ²
-
-    where
-
-    v_A = B_N /sqrt(mu_0 * n0 * M) is the Alfven speed, and
-    ψ_N = ψ/ψ_b is the normalized toroidal flux, and
-    ψ_b = 0.5*(B_N * a_N**2) is the total enclosed toroidal flux.
+    v_A = Bₙ / sqrt(μ₀ n₀ M) is the Alfven speed
+    ψ_N = ψ/ψ_b     is the normalized toroidal flux
+    ψ_b = a² Bₙ / 2 is the total enclosed toroidal flux
 
     To obtain the parameters g, c, and f, we need a set of parameters
     along a field line provided in the list ``data`` above.
-    Here's a description of some of these parameters:
+    Here is a description of some of these parameters.
 
     - a: minor radius of the device
-    - g^aa: |grad alpha|^2, field line bending term
-    - g^ra: (grad alpha dot grad rho) integrated local shear
-    - g^rr: |grad rho|^2 flux expansion term
+    - g^aa: |∇α|², field line bending term
+    - g^ra: ∇α dot ∇ρ, integrated local shear
+    - g^rr: |∇ρ|², flux expansion term
     - cvdrift: geometric factor of the curvature drift
     - cvdrift0: geometric factor of curvature drift 2
-    - B^zeta:  B dot grad zeta
-    - p_r: dp/drho, pressure gradient
+    - p_r: dp/dρ, pressure gradient
 
     Returns
     -------
@@ -324,10 +320,9 @@ def _ideal_ballooning_lambda(params, transforms, profiles, data, **kwargs):
 
     # scalars
     psi_boundary = params["Psi"] / (2 * jnp.pi)
-    a_N = data["a"]
-    B_N = 2 * psi_boundary / a_N**2
-    constant1 = a_N * B_N**3
-    constant2 = a_N**3 * B_N
+    B_n = 2 * psi_boundary / data["a"] ** 2
+    constant1 = data["a"] * B_n**3
+    constant2 = data["a"] ** 3 * B_n
     # toroidal step size between points along field lines is assumed uniform
     dz = grid.nodes[grid.unique_zeta_idx[:2], 2]
     dz = dz[1] - dz[0]
@@ -470,46 +465,48 @@ def _ideal_ballooning_eigenfunction(params, transforms, profiles, data, **kwargs
     "Default 15 points linearly spaced in [-π/2,π/2]",
 )
 def _Newcomb_ball_metric(params, transforms, profiles, data, **kwargs):
-    """
-    Ideal-ballooning growth rate proxy.
+    """Ideal-ballooning growth rate proxy.
 
-    This function uses a finite-difference method to integrate the
+    A finite-difference method is used to integrate the
     marginal stability ideal-ballooning equation
 
     d/dζ(g dX/dζ) + c X = 0, g > 0
 
-    using the Newcomb's stability criterion. The geometric factors
+    where
 
-    𝛋 = b ⋅∇ b
-    g = a_N^3 * B_N * (b ⋅∇ζ) * (dψ_N/dρ)² * |∇α|², / B,
-    c = a_N^3 * B_N * (1/ b ⋅∇ζ) * (dψ_N/dρ)² * dp/dψ * (b × 𝛋) ⋅|∇α|/ B**2,
+    𝛋 = b ⋅ ∇b
+    g = a³ Bₙ  * b⋅∇ζ (dψ_N/dρ)² |∇α|² / B
+    c = a³ Bₙ  / b⋅∇ζ (dψ_N/dρ)² dp/dψ (b × 𝛋) ⋅ |∇α|/B²
+    f = a  Bₙ³ / b⋅∇ζ (dψ_N/dρ)² |∇α|² / B³
+    λ = a² / v_A² * γ²
 
-    are needed along a field line to solve the ballooning equation and
-    ψ_N = ψ/ψ_b is the normalized toroidal flux, and
-    ψ_b = 0.5*(B_N * a_N**2) is the enclosed toroidal flux by the boundary.
+    and
+
+    v_A = Bₙ / sqrt(μ₀ n₀ M) is the Alfven speed
+    ψ_N = ψ/ψ_b     is the normalized toroidal flux
+    ψ_b = a² Bₙ / 2 is the total enclosed toroidal flux
 
     To obtain the parameters g, c, and f, we need a set of parameters
     along a field line provided in the list ``data`` above.
-    Here's a description of these parameters:
+    Here is a description of some of these parameters.
 
     - a: minor radius of the device
-    - g^aa: |grad alpha|^2, field line bending term
-    - g^ra: (grad alpha dot grad rho) integrated local shear
-    - g^rr: |grad rho|^2 flux expansion term
+    - g^aa: |∇α|², field line bending term
+    - g^ra: ∇α dot ∇ρ, integrated local shear
+    - g^rr: |∇ρ|², flux expansion term
     - cvdrift: geometric factor of the curvature drift
     - cvdrift0: geometric factor of curvature drift 2
-    - |B|: magnitude of the magnetic field
-    - B^zeta: B dot grad zeta
-    - p_r: dp/drho, pressure gradient
-    - psi_r: radial gradient of the toroidal flux
+    - p_r: dp/dρ, pressure gradient
 
-    Here's how we define the Newcomb metric:
-    If zero crossing is at -inf (root finder failed), use the Y coordinate
-    as a metric of stability else use the zero-crossing point on the X-axis
-    as the metric
+    The Newcomb's stability criterion is used.
+    We define the Newcomb metric as follows:
+    If zero crossing is at -inf (root finder failed), use the Y coordinate as a
+    metric of stability. Otherwise use the zero-crossing point on the X-axis.
     This idea behind Newcomb's method is explained further in Appendix D of
     [Gaur _et al._](https://doi.org/10.1017/S0022377823000107)
+
     """
+    # FIXME: same issue
     zeta0 = kwargs.get("zeta0", jnp.linspace(-0.5 * jnp.pi, 0.5 * jnp.pi, 15))
     source_grid = transforms["grid"].source_grid
     # Vectorize in rho later

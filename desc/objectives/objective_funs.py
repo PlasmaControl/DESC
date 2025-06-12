@@ -450,6 +450,9 @@ class ObjectiveFunction(IOAble):
                     [self.constants[i] for i in obj_idx_rank],
                     op=message[0],
                 )
+                rng_np = nvtx.start_range(message="numpy", color="red")
+                J_rank = np.asarray(J_rank)
+                nvtx.end_range(rng_np)
                 nvtx.end_range(rng_rank)
                 rng = nvtx.start_range(message="send to master", color="blue")
                 self.comm.gather(J_rank, root=0)
@@ -474,6 +477,9 @@ class ObjectiveFunction(IOAble):
                     [self.constants[i] for i in obj_idx_rank],
                     op=message[0],
                 )
+                rng_np = nvtx.start_range(message="numpy", color="red")
+                f_rank = np.asarray(f_rank)
+                nvtx.end_range(rng_np)
                 nvtx.end_range(rng_rank)
                 rng = nvtx.start_range(message="send to master", color="blue")
                 self.comm.gather(f_rank, root=0)
@@ -484,44 +490,36 @@ class ObjectiveFunction(IOAble):
                     + f"{obj_idx_rank}"
                 )
                 op = message[0].replace("proximal_jvp_", "")
-                x = jax.device_put(message[1], self.objectives[obj_idx_rank[0]]._device)
-                v = jax.device_put(message[2], self.objectives[obj_idx_rank[0]]._device)
+                xs = jax.device_put(
+                    message[1], self.objectives[obj_idx_rank[0]]._device
+                )
+                vs = jax.device_put(
+                    message[2], self.objectives[obj_idx_rank[0]]._device
+                )
 
                 rng_rank = nvtx.start_range(
                     message="Worker Job JVP Proximal", color="green"
                 )
-
-                # TODO: jit this one too as above functions!!!!
-                @functools.partial(jit, device=self.objectives[obj_idx_rank[0]]._device)
-                def body(x, v):
-                    J_rank = []
-                    for idx in obj_idx_rank:
-                        obj = self.objectives[idx]
-                        const = self.constants[idx]
-
-                        thing_idx = self._things_per_objective_idx[idx]
-                        xi = [x[i] for i in thing_idx]
-                        vi = [v[i] for i in thing_idx]
-                        if obj._deriv_mode == "rev":
-                            # obj might not allow fwd mode, so compute full rev mode
-                            # jacobian and do matmul manually. This is slightly
-                            # inefficient, but usuallywhen rev mode is used,
-                            # dim_f <<< dim_x, so its not too bad.
-                            Ji = getattr(obj, "jac_" + op)(*xi, constants=const)
-                            J_rank.append(
-                                jnp.array(
-                                    [Jii @ vii.T for Jii, vii in zip(Ji, vi)]
-                                ).sum(axis=0)
-                            )
-                        else:
-                            J_rank.append(
-                                getattr(obj, "jvp_" + op)(
-                                    [_vi for _vi in vi], xi, constants=const
-                                ).T
-                            )
-                    return jnp.vstack(J_rank)
-
-                J_rank = body(x, v)
+                J_rank = jit(
+                    jvp_proximal_per_process,
+                    device=self.objectives[obj_idx_rank[0]]._device,
+                    static_argnames="op",
+                )(
+                    [
+                        [xs[i] for i in self._things_per_objective_idx[idx]]
+                        for idx in obj_idx_rank
+                    ],
+                    [
+                        [vs[i] for i in self._things_per_objective_idx[idx]]
+                        for idx in obj_idx_rank
+                    ],
+                    [self.objectives[i] for i in obj_idx_rank],
+                    [self.constants[i] for i in obj_idx_rank],
+                    op=op,
+                )
+                rng_np = nvtx.start_range(message="numpy", color="red")
+                J_rank = np.asarray(J_rank)
+                nvtx.end_range(rng_np)
                 nvtx.end_range(rng_rank)
                 rng = nvtx.start_range(message="send to master", color="blue")
                 self.comm.gather(J_rank, root=0)
@@ -2224,3 +2222,26 @@ def jvp_per_process(x, v, objectives, constants, op="jvp_scaled_error"):
         ]
     )
     return J_rank
+
+
+@functools.partial(jit, static_argnames="op")
+def jvp_proximal_per_process(x, v, objectives, constants, op="scaled_error"):
+    """Compute the Jacobian-vector product on each process, for proximal."""
+    J_rank = []
+    for idx, (obj, constant) in enumerate(zip(objectives, constants)):
+        if obj._deriv_mode == "rev":
+            # obj might not allow fwd mode, so compute full rev mode
+            # jacobian and do matmul manually. This is slightly
+            # inefficient, but usuallywhen rev mode is used,
+            # dim_f <<< dim_x, so its not too bad.
+            Ji = getattr(obj, "jac_" + op)(*x[idx], constants=constant)
+            J_rank.append(
+                jnp.array([Jii @ vii.T for Jii, vii in zip(Ji, v[idx])]).sum(axis=0)
+            )
+        else:
+            J_rank.append(
+                getattr(obj, "jvp_" + op)(
+                    [_vi for _vi in v[idx]], x[idx], constants=constant
+                ).T
+            )
+    return jnp.vstack(J_rank)
